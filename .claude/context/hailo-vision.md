@@ -937,13 +937,13 @@ or a bin — but the CPU argument for it is gone. Do not repeat it to the team.
 
 End to end through `make_detector`, bus.jpg, on the vehicle:
 
-| arrangement | rate |
-|---|---|
-| seg alone, with masks | 77.1 Hz |
-| seg alone, boxes only | 103.5 Hz |
-| `gate_rescue_repair` alone | 85.4 Hz |
-| both alternating every frame | 32.6 Hz per pair |
-| `gate_rescue_repair` **after** the swaps | 85.4 Hz |
+| arrangement | before the letterbox fix | after |
+|---|---|---|
+| seg alone, with masks | 77.1 Hz | **85.2 Hz** |
+| seg alone, boxes only | 103.5 Hz | **113.3 Hz** |
+| `gate_rescue_repair` alone | 85.4 Hz | **95.3 Hz** |
+| both alternating every frame | 32.6 Hz | **37.5 Hz** per pair |
+| `gate_rescue_repair` **after** the swaps | 85.4 Hz | **95.1 Hz** |
 
 The last row is the one that answers "does segmentation slow the pipeline
 down": **no.** A resident, swapping seg model leaves the detection path at the
@@ -957,10 +957,22 @@ image through `yolov8n-seg.pt` on the dev box and through the HEF on the chip:
 areas within 0.2 %. A transposed DFL read or a swapped letterbox pad produces
 boxes that are plausible and wrong, and nothing raises.
 
-**Where the host time goes now.** Boxes-only is 9.66 ms end to end against
-6.28 ms of chip and 0.93 ms of decode. The remaining ~2.4 ms is **letterbox and
-buffer copy** — preprocessing, not decode. That is the next thing to attack, if
-anything needs attacking.
+**Where the host time went next, and it was preprocessing.** With the decode
+at 0.93 ms and the chip at 6.28 ms, boxes-only still measured 9.66 ms end to
+end — so ~2.4 ms was letterbox and buffer copy. The shipped letterbox allocated
+a 640×640×3 canvas per frame, memset all 1.23 MB of it to 114, resized into the
+middle, then copied the whole thing into the bound buffer: two full-frame
+passes for a border that never changes. `_letterbox_into_bound` paints the bars
+once per source-frame SIZE and lets `cv2.resize` write into the buffer's
+interior ROI. Measured 2.054 → 1.265 ms, and it lifts the DETECTION path too,
+which is where the 85.4 → 95.3 Hz in the table above comes from.
+
+⛔ The bars must be repainted when the frame shape changes. Only the interior
+is written, so otherwise a differently-shaped frame is framed by the previous
+geometry's image data instead of grey — a border of stale pixels the detector
+is free to find objects in. Tested, and the test was injection-verified against
+three defects including "repaint every frame", which is correct output with the
+optimisation silently not in effect.
 
 **Routing.** `emits_raw_heads()` decides which backend loads a `.hef` by
 **output count** — one output means the NMS ran on-chip, more than one means a
