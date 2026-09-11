@@ -363,6 +363,10 @@ class DuburiMission:
         # one, resumes the new, points the HUD at it, and settles -- see
         # _activate_camera. None = nothing resumed yet (launch starts both paused).
         self._live_camera: str | None = None
+        # Cameras whose detector we have already probed for the first-query
+        # resume. Probing is not free (DDS discovery settle), and a repeat
+        # probe cannot tell us anything new inside one mission.
+        self._resume_probed: set[str] = set()
         self._active_cam_pub = None   # lazily-created latched String publisher (HUD follow)
         # Scoreboard: ordered list of (cmd, success, elapsed_s, message)
         self._scoreboard: list[dict] = []
@@ -483,6 +487,45 @@ class DuburiMission:
         if msg.width and msg.height:
             self._img_size[camera] = (float(msg.width), float(msg.height))
 
+    def _resume_default_detector(self, camera: str) -> None:
+        """Resume the default camera's detector, once, at first use.
+
+        ⛔ WHY THIS IS NOT INSIDE THE QUERY. Every query funnels through
+        `_pump_detections`, and none of them reached `_activate_camera` -- only
+        `use_camera` and the vision verbs did. So against a launch that starts
+        both detectors paused (which is the correct default: two live models
+        alternate on one Hailo at 37.5 Hz per pair against 95.3 Hz for one),
+        `while not duburi.detected('gate')` polls a detector that will never
+        infer: an empty cache, forever, no error and no timeout.
+
+        ⛔ AND WHY THE SETTLE IS SHORTER THAN THE RECENCY WINDOW. Finding the
+        detector means waiting for DDS discovery, and the wait happens INSIDE
+        the caller's query. At 1.5 s it made `detected(stale_after=1.0)` --
+        "seen within the last second" -- meaningless: frames that arrived just
+        before the call aged out DURING it, and `wait_for('red_pipe',
+        timeout=3.0)` returned False against five frames published moments
+        earlier. `_DISCOVERY_SETTLE_S` must stay well under the 1.0 s default
+        `stale_after`, and it is paid at most ONCE PER CAMERA -- a repeat probe
+        cannot learn anything new inside one mission, and paying it per query
+        would make a `while not detected(...)` search crawl.
+
+        Best-effort by construction: no detector on the graph (a pure-control
+        mission, a bag replay) means there is nothing to resume, and the
+        mission proceeds exactly as it did before.
+        """
+        if self._live_camera is not None or camera in self._resume_probed:
+            return
+        # Frames already in hand beat any graph probe: a cache entry for this
+        # camera IS the detector, alive and publishing. Skipping here keeps the
+        # settle out of every query after the first frame lands -- which is
+        # what stops it eating the recency window a later query measures.
+        if self._det_cache.get(camera) is not None:
+            self._resume_probed.add(camera)
+            return
+        self._resume_probed.add(camera)             # once per camera, win or lose
+        if self._detector_present(camera, settle=self._DISCOVERY_SETTLE_S):
+            self._activate_camera(camera)
+
     def _pump_detections(self, camera: str) -> None:
         """Spin the node until a /detections frame newer than now arrives.
 
@@ -490,28 +533,8 @@ class DuburiMission:
         frame within one frame period; a stalled or just-subscribed pipeline
         times out and the caller reads no (or stale) data -> correctly absent.
         """
-        # ⛔ A QUERY IS THE FIRST PERCEPTION CALL IN MOST MISSIONS, and nothing
-        # had resumed a detector by then. `_activate_camera` is reached only
-        # from `use_camera` and the vision verbs, so `while not detected('gate')`
-        # against a launch that starts both detectors paused polls a detector
-        # that will never infer: an empty cache, forever, no error, no timeout
-        # -- the mission just searches and never finds. That is the whole reason
-        # `vision_pi.launch.py` shipped `paused:=false` against its own
-        # description, which cost ~60 Hz to chip contention instead.
-        #
-        # Resume on the FIRST query only. A later query naming the OTHER camera
-        # must NOT switch: a mission polling both would pay the 1.5 s
-        # `_CAM_SWITCH_SETTLE_S` every iteration, and a query is not a statement
-        # about which camera the mission steers on. `use_camera` still is.
-        # Gated on the detector being PRESENT, and that gate is load-bearing:
-        # `resume_detector` -> `_ensure_detector` blocks 5 s on wait_for_service
-        # for a node that is not there, and the pump's freshness window opens
-        # AFTER it -- so on a graph with no detector (a pure-control sim, or a
-        # test publishing its own /detections) every query would miss frames
-        # that were live the whole time. Nothing to resume means nothing to do.
-        if self._live_camera is None and self._detector_present(
-                camera, settle=self._DISCOVERY_SETTLE_S):
-            self._activate_camera(camera)
+        # BEFORE the timing reference below: see `_resume_default_detector`.
+        self._resume_default_detector(camera)
         node = self.client.node
         start = _time.monotonic()
         budget = self._PUMP_WARM_S if camera in self._det_warm else self._PUMP_COLD_S
@@ -1038,7 +1061,7 @@ class DuburiMission:
 
     # How long `_detector_present` may spin waiting for DDS discovery. Only the
     # FIRST query pays it, and only when the node has not been seen yet.
-    _DISCOVERY_SETTLE_S = 1.5
+    _DISCOVERY_SETTLE_S = 0.4
 
     def _detector_present(self, camera: str, *, settle: float = 0.0) -> bool:
         """Graph check: is the ``camera`` detector node currently up?
