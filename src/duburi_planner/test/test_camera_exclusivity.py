@@ -108,3 +108,13 @@ def test_a_repeat_query_on_the_live_camera_does_not_re_activate():
     fake = _pump_fake(live='forward')
     DuburiMission._pump_detections(fake, 'forward')
     fake._activate_camera.assert_not_called()
+
+
+def test_a_query_with_no_detector_node_never_activates():
+    # A pure-control sim (or a test publishing its own /detections) has no
+    # detector to resume, and _activate_camera would spend 5 s in
+    # wait_for_service before the pump's freshness window even opens.
+    fake = _pump_fake(live=None)
+    fake._detector_present.return_value = False
+    DuburiMission._pump_detections(fake, 'forward')
+    fake._activate_camera.assert_not_called()

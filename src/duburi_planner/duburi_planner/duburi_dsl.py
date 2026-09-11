@@ -503,7 +503,13 @@ class DuburiMission:
         # must NOT switch: a mission polling both would pay the 1.5 s
         # `_CAM_SWITCH_SETTLE_S` every iteration, and a query is not a statement
         # about which camera the mission steers on. `use_camera` still is.
-        if self._live_camera is None:
+        # Gated on the detector being PRESENT, and that gate is load-bearing:
+        # `resume_detector` -> `_ensure_detector` blocks 5 s on wait_for_service
+        # for a node that is not there, and the pump's freshness window opens
+        # AFTER it -- so on a graph with no detector (a pure-control sim, or a
+        # test publishing its own /detections) every query would miss frames
+        # that were live the whole time. Nothing to resume means nothing to do.
+        if self._live_camera is None and self._detector_present(camera):
             self._activate_camera(camera)
         node = self.client.node
         start = _time.monotonic()
