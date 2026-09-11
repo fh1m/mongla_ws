@@ -1223,6 +1223,24 @@ class DuburiMission:
             ros_node.destroy_client(cli)
         self._detector_ok.add(node)
 
+    def _refuse_duplicate_node(self, node: str) -> None:
+        """Raise if `node`'s name is on the graph more than once.
+
+        Best-effort on the graph read itself: a discovery hiccup must not block
+        a legitimate write, so an unreadable graph is treated as "one".
+        """
+        want = node.lstrip('/')
+        try:
+            names = list(self.client.node.get_node_names())
+        except Exception:   # noqa: BLE001 -- graph read is best-effort
+            return
+        n = sum(1 for x in names if x.lstrip('/') == want)
+        if n > 1:
+            raise RuntimeError(
+                f'{n} nodes named {node!r} are on the graph -- a parameter '
+                f'write would land on an arbitrary one. Stop the duplicate '
+                f'stack (orphaned launch?) before tuning.')
+
     def _set_detector_param(self, node: str, name: str, value) -> None:
         """Set one DETECTOR parameter, aborting loudly if the node is absent.
 
@@ -1244,6 +1262,18 @@ class DuburiMission:
         task's behaviour depends on.
         """
         ros_node = self.client.node
+        # ⛔ A DUPLICATE NODE NAME MAKES THIS WRITE A COIN FLIP. Two processes
+        # can hold the same node name -- an orphaned launch, a second stack
+        # started by mistake -- and ROS does not arbitrate: the service call
+        # lands on whichever answers, which may be the one NOT driving the
+        # vehicle. The setting then reads back correctly from one instance and
+        # does nothing to the pipeline, which is indistinguishable from a knob
+        # that was never wired. Measured on the vehicle: ten
+        # `duburi_tracker_forward` nodes on one graph after repeated launches.
+        #
+        # Refuse instead. A tuning call that might not take is worse than one
+        # that says it cannot.
+        self._refuse_duplicate_node(node)
         cli = self._param_clients.get(node)
         if cli is None:
             cli = ros_node.create_client(SetParameters, f'{node}/set_parameters')
