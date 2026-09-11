@@ -1013,3 +1013,37 @@ optimisation silently not in effect.
 raw head. Not by file name: a name convention puts the two decodes one typo
 apart, and an NMS decode of a raw head reads convolution activations as box
 coordinates without raising.
+
+### Running a detector and a segmentation model together
+
+Verified on the vehicle 2026-09-11 through the real launch, not through a
+harness:
+
+```bash
+ros2 launch duburi_vision vision_pi.launch.py \
+  fwd_models:=gate_rescue_repair,yolov8n_seg \
+  fwd_active:=gate_rescue_repair,yolov8n_seg \
+  dwn_models:=bin_fire_blood
+```
+
+brings up both models on the forward camera beside the downward detector —
+three network groups resident — and logs
+
+    [DET  ] running 2 models on every frame: 'gate_rescue_repair' +
+    ['yolov8n_seg']. ... the frame rate is the SUM plus the swaps
+
+⛔ **`*_active` selects FROM `*_models`**, so a multi-model launch needs both
+arguments. A single-model launch (`fwd_model:=`) has no registry and the node
+refuses any `active_model` that is not the loaded stem — which is the correct
+refusal and not a bug.
+
+From the DSL it is the same value widened: `duburi.use(['a', 'b'])`.
+
+⚠ **A non-interactive `ssh` session on this Pi cannot see ROS topics.**
+`ros2 topic hz` reports "does not appear to be published yet" for
+`camera_info` and `image_raw` as well as for `detections` and `contours`,
+while the node logs 492 live detections — so it is DDS discovery in that
+session, not the pipeline, and it is not specific to anything added here. Live
+topic checks need an interactive session or a node started from the same
+shell; in-process verification and the launch log are what a remote session
+can actually establish.
