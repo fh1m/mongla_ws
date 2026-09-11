@@ -151,10 +151,11 @@ def generate_launch_description():
         DeclareLaunchArgument('preprocess_clip', default_value='0.0'),
         DeclareLaunchArgument('imgsz',     default_value='640'),
         DeclareLaunchArgument(
-            'paused', default_value='false',
+            'paused', default_value='true',
             description='Start both detectors paused. The mission resumes the '
                         'one it needs; leaving BOTH live makes them compete '
-                        'for the chip (~35 Hz each instead of ~98).'),
+                        'for the chip (~35 Hz each instead of ~98). '
+                        'paused:=false to watch both streams with no mission.'),
         DeclareLaunchArgument('viewer',    default_value='false'),
         DeclareLaunchArgument('tracking',  default_value='true'),
         DeclareLaunchArgument('tracker_type', default_value='ocsort'),

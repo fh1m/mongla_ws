@@ -67,3 +67,44 @@ def test_absent_counterpart_is_skipped_without_pause_call():
     _activate(fake, 'forward')
     fake.pause_detector.assert_not_called()
     fake.resume_detector.assert_called_once_with('forward')
+
+
+# --- a QUERY is the first perception call, and it must resume something ------
+#
+# `detected()` / `wait_for()` / `where()` all funnel through _pump_detections.
+# None of them reached _activate_camera, so against a launch that starts both
+# detectors paused they polled a detector that would never infer: empty cache,
+# forever, no error. That is why `vision_pi.launch.py` shipped `paused:=false`
+# against its own description and paid ~60 Hz in chip contention instead.
+
+
+def _pump_fake(live=None):
+    m = MagicMock()
+    m._live_camera = live
+    m._det_warm = set()
+    m._det_cache = {}
+    m._PUMP_WARM_S = 0.0
+    m._PUMP_COLD_S = 0.0          # deadline already passed -> no spin loop
+    m._PUMP_SLICE_S = 0.0
+    return m
+
+
+def test_the_first_query_resumes_the_camera_it_reads():
+    fake = _pump_fake(live=None)
+    DuburiMission._pump_detections(fake, 'forward')
+    fake._activate_camera.assert_called_once_with('forward')
+
+
+def test_a_later_query_on_the_other_camera_does_not_switch():
+    # A query is not a statement about which camera the mission steers on.
+    # Switching here would cost the 1.5 s settle on EVERY iteration of a
+    # mission that polls both cameras. `use_camera` is the way to switch.
+    fake = _pump_fake(live='forward')
+    DuburiMission._pump_detections(fake, 'downward')
+    fake._activate_camera.assert_not_called()
+
+
+def test_a_repeat_query_on_the_live_camera_does_not_re_activate():
+    fake = _pump_fake(live='forward')
+    DuburiMission._pump_detections(fake, 'forward')
+    fake._activate_camera.assert_not_called()

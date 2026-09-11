@@ -198,6 +198,17 @@ def generate_launch_description():
         DeclareLaunchArgument('lock',        default_value='true',
                               description='vision_stack:=pi -- start lock_node '
                                           '(follower + XFeat anchor continuity ladder).'),
+        # ⛔ EXPOSED BECAUSE THE MISSION PATH IS THE ONE THAT PAYS FOR IT. Two
+        # live detectors alternate on one Hailo: measured 37.5 Hz per pair
+        # against 95.3 Hz for a single resident model, and the chip logs
+        # 'has taken the activation N times'. The mission resumes the detector
+        # it needs (`use_camera`, a vision verb, or the first `detected()`), so
+        # the default costs a mission nothing. Pass paused:=false to watch both
+        # streams on the console with no mission running.
+        DeclareLaunchArgument('paused',      default_value='true',
+                              description='vision_stack:=pi -- start both detectors '
+                                          'paused; the mission resumes the one it '
+                                          'needs. false = both infer and compete.'),
         DeclareLaunchArgument('camera',     default_value='forward',
                               description='Camera ROLE -- names the topics and nodes '
                                           '(forward|downward). Change `camera_profile`, '
@@ -339,6 +350,7 @@ def generate_launch_description():
             'pool_depth_m':  LaunchConfiguration('pool_depth_m'),
             'medium':        LaunchConfiguration('medium'),
             'lock':          LaunchConfiguration('lock'),
+            'paused':        LaunchConfiguration('paused'),
         }.items(),
         condition=_stack_is('pi'),
     )
