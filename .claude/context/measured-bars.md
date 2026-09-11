@@ -2343,3 +2343,25 @@ TRANSLATION ONLY and this clip has median |image rotation| 0.270°, max 0.970°
 — the rotation limitation is untested, not cleared. Do not treat the 1.551 ms
 figure as a replacement for the similarity fit, which also returns yaw rate
 and scale rate.
+
+## Mask coefficients as an identity descriptor (2026-09-11, vehicle)
+
+`yolov8n_seg` on the chip, INT8 coefficients. Ground truth from a known affine
+warp of a real frame — a tracker cannot supply it, because a tracker's own
+associations are what is under test. Rank-1 = does the true match score highest
+among all same-class candidates.
+
+| displacement | rank-1 IoU | rank-1 coefficients |
+|---|---|---|
+| 4–60 px | 1.00 | 1.00 |
+| 120 px | 0.50 | **1.00** |
+| 200 px | 0.50 | **1.00** |
+
+Within-object cosine 0.93–0.98, across-object 0.65–0.82, and the gap survives
++5° rotation, ×1.15 scale, ×0.85 exposure, noise and JPEG 70 — the control
+that matters, because a pixel-identical translated copy matches trivially.
+
+⚠ **n = 2–4 pairs per row, one scene, street imagery.** A demonstration that
+the mechanism works, not a statistic, and the COCO head is not our head. The
+gate on using it for association is one clip with two instances of the SAME
+prop visible together for ≥100 frames.
