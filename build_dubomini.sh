@@ -67,7 +67,7 @@ source /opt/ros/humble/setup.bash 2>/dev/null || true
 
 # Wipe stale Python package dirs so colcon sees a clean slate.
 # duburi_interfaces is ament_cmake so its install dir is managed correctly by CMake.
-for pkg in duburi_control duburi_manager duburi_sensors duburi_planner duburi_vision; do
+for pkg in duburi_control duburi_manager duburi_sensors duburi_localization duburi_planner duburi_vision; do
     rm -rf "install/$pkg" "build/$pkg"
 done
 
@@ -102,12 +102,12 @@ source install/setup.bash
 
 # Step 2: build the Python packages (control + sensors + manager + planner + vision)
 colcon build --packages-select \
-    duburi_control duburi_sensors duburi_manager duburi_planner duburi_vision "$@"
+    duburi_control duburi_sensors duburi_manager duburi_localization duburi_planner duburi_vision "$@"
 
 INSTALL="$(pwd)/install"
 PY=python3.10
 
-for pkg in duburi_control duburi_manager duburi_sensors duburi_planner duburi_vision; do
+for pkg in duburi_control duburi_manager duburi_sensors duburi_localization duburi_planner duburi_vision; do
     PREFIX="$INSTALL/$pkg"
     DIST="$PREFIX/local/lib/$PY/dist-packages"
     SITE="$PREFIX/lib/$PY/site-packages"
