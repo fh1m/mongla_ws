@@ -391,6 +391,9 @@ class DuburiMission:
         # None until a landmark anchors the heading. Never assumed.
         self._heading_offset: float | None = None
         self._active_cam_pub = None   # lazily-created latched String publisher (HUD follow)
+        self._fix_pub = None          # lazily-created PointStamped publisher (pool fix -> filter)
+        self._odom_sub = None         # lazily-created Odometry subscription (filter -> mission)
+        self._odom = None             # latest Odometry, or None if the filter is not running
         # Scoreboard: ordered list of (cmd, success, elapsed_s, message)
         self._scoreboard: list[dict] = []
         self._mission_start: float = _time.monotonic()
@@ -1021,6 +1024,12 @@ class DuburiMission:
             sightings[name] = bearing
         got = fix_from_bearings(sightings, positions)
         if got.ok:
+            # FEED THE FILTER, not just the log. `update_position` is the only
+            # channel that bounds horizontal drift, and until this line the fix
+            # was computed, printed, and thrown away -- the filter had no
+            # caller for the one measurement it cannot replace. Best-effort:
+            # a missing localization node must not fail a mission step.
+            self._publish_fix(got.x_m, got.y_m)
             self.log.info(
                 f'[FIX  ] pool position ({got.x_m:+.2f}, {got.y_m:+.2f}) m from '
                 f'{got.used} props, residual {got.residual_m:.3f} m, '
@@ -1028,6 +1037,64 @@ class DuburiMission:
         else:
             self.log.warning(f'[FIX  ] no position fix: {got.reason}')
         return got
+
+    def pose(self, *, timeout: float = 2.0):
+        """Where the filter thinks we are: `(x_m, y_m, depth_m, yaw_deg)` or None.
+
+        The mission-facing read of `/duburi/odom`. Returns None when the
+        localization node is not running or has not published yet -- never a
+        zero, because (0, 0) is a legitimate pool position and would be
+        indistinguishable from "no answer".
+
+            here = duburi.pose()
+            if here and here[0] > 4.0:
+                duburi.turn(180)
+
+        Pairs with `fix_position()`, which pushes a resected position INTO the
+        filter; this reads the fused result back out.
+        """
+        import math
+        import time as _t
+        from nav_msgs.msg import Odometry
+        node = self.client.node
+        if self._odom_sub is None:
+            def _keep(msg):
+                self._odom = msg
+            self._odom_sub = node.create_subscription(
+                Odometry, '/duburi/odom', _keep, 10)
+        deadline = _t.monotonic() + float(timeout)
+        # Pump rather than sleep: the mission thread owns this executor, so a
+        # bare sleep here would spin the clock and receive nothing.
+        while self._odom is None and _t.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.05)
+        if self._odom is None:
+            return None
+        p = self._odom.pose.pose.position
+        q = self._odom.pose.pose.orientation
+        yaw = math.degrees(math.atan2(2.0 * (q.w * q.z + q.x * q.y),
+                                      1.0 - 2.0 * (q.y * q.y + q.z * q.z)))
+        return (float(p.x), float(p.y), float(p.z), yaw)
+
+    def _publish_fix(self, x_m: float, y_m: float) -> None:
+        """Hand a resected pool position to the invariant filter.
+
+        A topic rather than a direct call, because the filter runs in its own
+        process on its own thread and the mission is a client. Lazily created,
+        same pattern as `_publish_active_camera`.
+        """
+        try:
+            from geometry_msgs.msg import PointStamped
+            if getattr(self, '_fix_pub', None) is None:
+                self._fix_pub = self.client.node.create_publisher(
+                    PointStamped, '/duburi/localization/fix', 10)
+            m = PointStamped()
+            m.header.stamp = self.client.node.get_clock().now().to_msg()
+            m.header.frame_id = 'pool'
+            m.point.x = float(x_m)
+            m.point.y = float(y_m)
+            self._fix_pub.publish(m)
+        except Exception as exc:            # noqa: BLE001 -- best-effort
+            self.log.warning(f'[FIX  ] fix not published to the filter: {exc}')
 
     def focal_px(self, width_px: float = 640.0) -> float:
         """In-water focal length, DERIVED from the measured field of view.

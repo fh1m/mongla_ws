@@ -1,0 +1,264 @@
+"""The vehicle's own answer to "where am I", fused from every sensor it has.
+
+⛔ WHY THIS NODE EXISTS AT ALL. `inekf.py` landed as a tested library with no
+caller -- 19 unit tests, a converging filter, and nothing on the vehicle ever
+constructing one. That is the failure the bumblebee doctrine names directly:
+effort is not points, and a module nothing calls scores zero however good it
+is. This file is the wiring, and it is deliberately thin. Every decision worth
+arguing about lives in `inekf.py` and is tested without ROS.
+
+THE SPLIT, which is the point. The SROT board runs a 500 Hz attitude loop with
+the BNO085 in hand and owns every inner loop. It is not trying to know where it
+is in the pool, and it has neither the cameras nor the memory to. This node is
+the outer half: it takes the board's inertial stream, the downward camera's
+optical flow, the barometer, and pool-frame position fixes resected off props,
+and produces one pose. Board fuses what is fast; Pi fuses what is wide.
+
+TIME. Every board-sourced sample is stamped through `flow_timing.ClockMap` in
+the manager, not on arrival -- measured on this vehicle, the board's ATTITUDE
+interval has sd 0.00 ms where host arrival has sd 6.67 ms and p2p 35.12. This
+node reads `header.stamp` and never `now()`, or it would put all of that
+jitter back into dt.
+
+NO IMU, NO PREDICT. There is deliberately no synthetic propagation when the
+inertial stream stops. A filter that holds its state and keeps taking depth,
+yaw and flow updates is honest about having no new inertial information; one
+that invents `a = 0` to keep a timer fed is dead-reckoning on an assumption
+and says nothing about it. Measured 2026-09-11: after a bad boot the board
+streamed ATTITUDE and SCALED_IMU2 as exact 0.0 in every field while reporting
+3D_GYRO and 3D_ACCEL unhealthy -- so "zeros arrived" and "the hull is still"
+are the same bytes, and only the health bit separates them. `SrotFC.get_imu`
+returns None in that state, no message is published, and this node coasts.
+"""
+from __future__ import annotations
+
+import math
+
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy
+
+from geometry_msgs.msg import PointStamped, TwistWithCovarianceStamped
+from nav_msgs.msg import Odometry
+from sensor_msgs.msg import Imu
+
+from duburi_interfaces.msg import DuburiState
+
+from duburi_localization.inekf import RIEKF
+
+# A dt longer than this is a GAP, not a long step. Integrating one 2 s
+# interval as a single Euler step is not the same estimate as 100 steps of
+# 20 ms, and the error is worst exactly when it matters -- after a dropout.
+# 0.25 s is 12 missed samples at the board's 50 Hz.
+MAX_PREDICT_DT_S = 0.25
+
+# Below this the step is numerically pointless and only amplifies stamp noise.
+MIN_PREDICT_DT_S = 1e-4
+
+
+def _stamp_s(header) -> float:
+    return float(header.stamp.sec) + float(header.stamp.nanosec) * 1e-9
+
+
+class LocalizationNode(Node):
+    def __init__(self, **kw):
+        super().__init__('duburi_localization', **kw)
+
+        self._filter = RIEKF()
+        self._last_imu_t: float | None = None
+        self._imu_gap_warned = False
+        # Counters, published in the diagnostic line. Which channel is feeding
+        # the filter is the first question when a pose looks wrong, and a rate
+        # of zero on one input is invisible in the pose itself.
+        self._n = {'imu': 0, 'depth': 0, 'yaw': 0, 'flow': 0, 'fix': 0,
+                   'gap': 0}
+
+        cam = str(self.declare_parameter('flow_camera', 'downward').value)
+        self._flow_sigma = float(self.declare_parameter('flow_sigma', 0.05).value)
+        self._depth_sigma = float(self.declare_parameter('depth_sigma', 0.02).value)
+        self._yaw_sigma_deg = float(self.declare_parameter('yaw_sigma_deg', 2.0).value)
+        self._fix_sigma = float(self.declare_parameter('fix_sigma', 0.5).value)
+        # Off by default. The board's yaw is already a fused 500 Hz solution and
+        # feeding it back in as a measurement makes this filter agree with it by
+        # construction -- which looks like convergence and measures nothing.
+        # Turn it on when the anchor has made heading absolute, not before.
+        self._use_yaw = bool(self.declare_parameter('use_yaw', False).value)
+
+        sensor_qos = QoSProfile(depth=20,
+                                reliability=QoSReliabilityPolicy.BEST_EFFORT)
+
+        self.create_subscription(Imu, '/duburi/imu', self._on_imu, sensor_qos)
+        self.create_subscription(DuburiState, '/duburi/state', self._on_state, 10)
+        self.create_subscription(
+            TwistWithCovarianceStamped,
+            f'/duburi/vision/{cam}/velocity', self._on_flow, sensor_qos)
+        # The pool-frame fix from `duburi.fix_position()` -- prop resection.
+        # This is the only channel that bounds horizontal drift, so it is the
+        # one whose absence is worth noticing in the diagnostic line.
+        self.create_subscription(
+            PointStamped, '/duburi/localization/fix', self._on_fix, 10)
+
+        self._pub = self.create_publisher(Odometry, '/duburi/odom', 10)
+        self.create_timer(0.1, self._publish)
+        self.create_timer(5.0, self._diagnose)
+        self.get_logger().info(
+            f'[LOCAL] invariant filter up: imu=/duburi/imu '
+            f'flow=/duburi/vision/{cam}/velocity use_yaw={self._use_yaw}')
+
+    # ---- inputs ---------------------------------------------------------
+
+    def _on_imu(self, msg: Imu) -> None:
+        t = _stamp_s(msg.header)
+        prev, self._last_imu_t = self._last_imu_t, t
+        if prev is None:
+            return
+        dt = t - prev
+        if dt <= MIN_PREDICT_DT_S:
+            # Also catches a non-monotonic stamp, which a refitted ClockMap can
+            # produce: the mapping moves, so two samples can arrive out of
+            # order in host time. Dropping the step is right -- a negative dt
+            # integrates the state BACKWARDS and nothing downstream would show
+            # it as anything but drift.
+            return
+        if dt > MAX_PREDICT_DT_S:
+            self._n['gap'] += 1
+            if not self._imu_gap_warned:
+                self._imu_gap_warned = True
+                self.get_logger().warning(
+                    f'[LOCAL] inertial gap {dt:.2f} s > {MAX_PREDICT_DT_S} s: '
+                    f'skipping the step rather than integrating it as one. '
+                    f'Position is coasting on flow and depth alone.')
+            return
+        self._filter.predict(
+            (msg.angular_velocity.x, msg.angular_velocity.y,
+             msg.angular_velocity.z),
+            (msg.linear_acceleration.x, msg.linear_acceleration.y,
+             msg.linear_acceleration.z),
+            dt)
+        self._n['imu'] += 1
+
+    def _on_state(self, msg: DuburiState) -> None:
+        depth = float(msg.depth_m)
+        if not math.isnan(depth):
+            self._filter.update_depth(depth, sigma=self._depth_sigma)
+            self._n['depth'] += 1
+        yaw = float(msg.yaw_deg)
+        # NaN is the documented absence sentinel, and on srot it is now what a
+        # board with an unhealthy BNO actually publishes. Feeding NaN into the
+        # update would poison every state through the gain, silently.
+        if self._use_yaw and not math.isnan(yaw):
+            self._filter.update_yaw(yaw, sigma_deg=self._yaw_sigma_deg)
+            self._n['yaw'] += 1
+
+    def _on_flow(self, msg: TwistWithCovarianceStamped) -> None:
+        v = msg.twist.twist.linear
+        if math.isnan(v.x) or math.isnan(v.y) or math.isnan(v.z):
+            return
+        # The EXACT update: body-frame velocity is the one measurement whose
+        # innovation is left-invariant, so it needs no approximation. This is
+        # the reason the filter is right-invariant at all -- see inekf.py.
+        self._filter.update_body_velocity((v.x, v.y, v.z),
+                                          sigma=self._flow_sigma)
+        self._n['flow'] += 1
+
+    def _on_fix(self, msg: PointStamped) -> None:
+        self._filter.update_position((msg.point.x, msg.point.y),
+                                     sigma=self._fix_sigma)
+        self._n['fix'] += 1
+
+    # ---- output ---------------------------------------------------------
+
+    def _publish(self) -> None:
+        st = self._filter.X
+        m = Odometry()
+        m.header.stamp = self.get_clock().now().to_msg()
+        m.header.frame_id = 'pool'
+        m.child_frame_id = 'duburi'
+        m.pose.pose.position.x = float(st.p[0])
+        m.pose.pose.position.y = float(st.p[1])
+        m.pose.pose.position.z = float(st.p[2])
+        qw, qx, qy, qz = _quat_from_R(st.R)
+        m.pose.pose.orientation.w = qw
+        m.pose.pose.orientation.x = qx
+        m.pose.pose.orientation.y = qy
+        m.pose.pose.orientation.z = qz
+        # Velocity in the BODY frame, which is what `child_frame_id` means in
+        # nav_msgs/Odometry and what every consumer of it assumes. The filter
+        # carries world velocity (it has to, or the error dynamics stop being
+        # log-linear), so rotate on the way out rather than storing it rotated.
+        v_body = st.R.T @ st.v
+        m.twist.twist.linear.x = float(v_body[0])
+        m.twist.twist.linear.y = float(v_body[1])
+        m.twist.twist.linear.z = float(v_body[2])
+        _fill_covariance(m, self._filter)
+        self._pub.publish(m)
+
+    def _diagnose(self) -> None:
+        n = self._n
+        self.get_logger().info(
+            f"[LOCAL] imu={n['imu']} flow={n['flow']} depth={n['depth']} "
+            f"yaw={n['yaw']} fix={n['fix']} gaps={n['gap']} | "
+            f"yaw={self._filter.X.yaw_deg():+.1f} deg "
+            f"p=({self._filter.X.p[0]:+.2f},{self._filter.X.p[1]:+.2f},"
+            f"{self._filter.X.p[2]:+.2f}) m")
+
+
+def _quat_from_R(R):
+    """(w, x, y, z) from a rotation matrix, via the largest-diagonal branch.
+
+    The naive `w = sqrt(1+trace)/2` form divides by `w`, so it loses all
+    precision near a 180 degree rotation and can take a sqrt of a small
+    negative from rounding. Branching on the largest diagonal element keeps the
+    divisor bounded away from zero for every input.
+    """
+    m00, m11, m22 = R[0, 0], R[1, 1], R[2, 2]
+    tr = m00 + m11 + m22
+    if tr > 0.0:
+        s = math.sqrt(tr + 1.0) * 2.0
+        return (0.25 * s, (R[2, 1] - R[1, 2]) / s,
+                (R[0, 2] - R[2, 0]) / s, (R[1, 0] - R[0, 1]) / s)
+    if m00 > m11 and m00 > m22:
+        s = math.sqrt(1.0 + m00 - m11 - m22) * 2.0
+        return ((R[2, 1] - R[1, 2]) / s, 0.25 * s,
+                (R[0, 1] + R[1, 0]) / s, (R[0, 2] + R[2, 0]) / s)
+    if m11 > m22:
+        s = math.sqrt(1.0 + m11 - m00 - m22) * 2.0
+        return ((R[0, 2] - R[2, 0]) / s, (R[0, 1] + R[1, 0]) / s,
+                0.25 * s, (R[1, 2] + R[2, 1]) / s)
+    s = math.sqrt(1.0 + m22 - m00 - m11) * 2.0
+    return ((R[1, 0] - R[0, 1]) / s, (R[0, 2] + R[2, 0]) / s,
+            (R[1, 2] + R[2, 1]) / s, 0.25 * s)
+
+
+def _fill_covariance(msg: Odometry, filt: RIEKF) -> None:
+    """Copy the filter's own position and attitude blocks into the message.
+
+    BumblebeeAS moved four nodes from `PoseWithCovarianceStamped` to
+    `PoseStamped` in 2026 -- they threw the covariance away. Publishing a
+    correctly-scaled one is us going past them, and it costs nothing here
+    because the filter already maintains it. The state order is
+    [theta | v | p | bg | ba], so attitude is block 0:3 and position 6:9.
+    """
+    P = filt.P
+    for r in range(3):
+        for c in range(3):
+            msg.pose.covariance[r * 6 + c] = float(P[6 + r, 6 + c])
+            msg.pose.covariance[(r + 3) * 6 + (c + 3)] = float(P[r, c])
+            msg.twist.covariance[r * 6 + c] = float(P[3 + r, 3 + c])
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = LocalizationNode()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()

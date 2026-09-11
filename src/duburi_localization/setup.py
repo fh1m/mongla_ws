@@ -23,6 +23,7 @@ setup(
             # Both produce a POSE, which is why they live here and not beside
             # the detector. The launch files still start them; only the
             # package they are fetched from changed.
+            'localization_node = duburi_localization.localization_node:main',
             'pnp_node       = duburi_localization.pnp_node:main',
             'pose_fuse_node = duburi_localization.pose_fuse_node:main',
         ],

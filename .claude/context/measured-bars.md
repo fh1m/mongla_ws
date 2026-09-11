@@ -2614,3 +2614,50 @@ crossover between the two regimes is computable per prop, which is why
 `standoff_for` takes the minimum of the two and a visibility figure that is
 NOT ours to assume. 6 m is an optimistic competition-pool default; measure it
 at the venue and override it.
+
+---
+
+## SROT sensor health: the zeros that are not a reading (2026-09-11)
+
+Measured on the hull over USB-C at 115200, after a bad boot, then again after
+the operator power-cycled the board.
+
+| field | bad boot | after power cycle |
+|---|---|---|
+| `SYS_STATUS.health` | `0x2408` | `0x240b` (gyro+accel set) |
+| `ATTITUDE` roll/pitch/yaw | `0.0 / 0.0 / 0.0` | `0.015 / -0.277 / -2.949` rad |
+| `ATTITUDE` rates | `0.0 / 0.0 / 0.0` | `0.004 / 0.359 / -0.123` rad/s |
+| `SCALED_IMU2` accel | `0, 0, 0` mG | `-27, -179, 978` mG |
+| `SCALED_IMU2` gyro | `0, 0, 0` mrad/s | `9, -11, -3` mrad/s |
+| `MAGACC` / `COMP_SEEN` / `YAW_REF` | `0.0` / `0.0` / `0.0` | — |
+
+**The bar: an accel magnitude of 0.995 g is a live sensor; exactly 0 is not.**
+The firmware packs accel as `(s.lx + s.grx)` (`mav_stream.cpp:230`), so gravity
+is included and a level hull at rest owes ~1000 mG on one axis. All-zero is
+therefore detectable, and it is the only distinguishing feature — `0.0 rad` of
+yaw is a perfectly legal heading.
+
+`0x2408` clears `MAV_SYS_STATUS_SENSOR_3D_GYRO` (0x01) and `..._3D_ACCEL`
+(0x02) while `present` (`0x80203c0b`) sets both, so **the board reported the
+fault correctly on a field nothing read**, and kept streaming ATTITUDE at
+10 Hz and SCALED_IMU2 at 50 Hz regardless.
+
+Gate shipped on our side: `SrotFC._ahrs_healthy()` — tri-state, exactly like
+`_baro_healthy()`, so a firmware revision that never sets the bits still
+passes. `get_attitude()` returns NaN yaw/roll/pitch with **depth intact** (the
+Bar30 is independent and is usually fine); `get_angular_rates()` and
+`get_imu()` return `None`. The consumer half is in
+`_effective_yaw_deg`, which used to pass NaN straight through on srot because
+that backend has no second AHRS to fall back to.
+
+Requested upstream as
+`Mongla_others/srot-control-board/PR_SENSOR_HEALTH_AND_TIME_2026-09-11.md`.
+
+### Inertial data we had been discarding
+
+`SCALED_IMU2` arrives at 50 Hz and this stack read exactly one field off it —
+`temperature`, for the water-temp readout. Six axes of accel and gyro were
+decoded by pymavlink and thrown away every frame. Same shape as the ESC-RPM
+finding. Now published as `sensor_msgs/Imu` on `/duburi/imu`, stamped through
+the same `ClockMap` mapping as `/duburi/imu_rates` (the board's ATTITUDE
+interval has sd 0.00 ms against 6.67 ms of host arrival jitter).

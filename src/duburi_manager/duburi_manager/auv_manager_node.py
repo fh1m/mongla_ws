@@ -893,6 +893,16 @@ class AUVManagerNode(Node):
         self._Vector3Stamped = Vector3Stamped
         self.imu_rates_publisher = self.create_publisher(
             Vector3Stamped, '/duburi/imu_rates', 10)
+        # The FULL inertial sample, for the invariant filter in
+        # duburi_localization. A SEPARATE topic from `/duburi/imu_rates`
+        # deliberately: that one is the flow node's de-rotation feed, shaped
+        # (pitch, roll, yaw) for its interpolator, and re-shaping it would
+        # break a working consumer to save one publisher. This one is standard
+        # `sensor_msgs/Imu` in body axes, which is what every estimator and
+        # every ROS tool already expects.
+        from sensor_msgs.msg import Imu
+        self._Imu = Imu
+        self.imu_publisher = self.create_publisher(Imu, '/duburi/imu', 10)
         # Board-clock -> host-clock mapping for the IMU stamp. See
         # _imu_rates_tick: the board's own interval has sd 0.00 ms where
         # arrival has sd 6.67, so the sender's clock is the better time base.
@@ -1662,6 +1672,39 @@ class AUVManagerNode(Node):
         m.vector.y = rates['roll_rate']
         m.vector.z = rates['yaw_rate']
         self.imu_rates_publisher.publish(m)
+        self._publish_imu(stamp_s)
+
+    def _publish_imu(self, stamp_s: float) -> None:
+        """Publish the 6-DoF sample on `/duburi/imu`, on the SAME mapped stamp.
+
+        Shares `_imu_rates_tick`'s clock work rather than fitting a second
+        `ClockMap`: ATTITUDE and SCALED_IMU2 are packed from one `Snap` in the
+        same firmware tick (`mav_stream.cpp`), so they are the same instant and
+        giving them two independently-fitted mappings would invent a lag
+        between two halves of one sample.
+
+        Silently absent when the backend has no `get_imu` (Pixhawk) or when the
+        board says the IMU is unhealthy -- a filter that gets no message coasts,
+        which is correct; one that gets zeros integrates a lie.
+        """
+        getter = getattr(self.pixhawk, 'get_imu', None)
+        if getter is None:
+            return
+        imu = getter()
+        if imu is None:
+            return
+        msg = self._Imu()
+        msg.header.stamp.sec = int(stamp_s)
+        msg.header.stamp.nanosec = int((stamp_s - int(stamp_s)) * 1e9)
+        msg.header.frame_id = 'duburi'
+        msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z = imu['gyro']
+        (msg.linear_acceleration.x, msg.linear_acceleration.y,
+         msg.linear_acceleration.z) = imu['accel']
+        # -1 in element 0 is the ROS convention for "this field carries no
+        # data". The board sends no orientation covariance and inventing one
+        # would let a consumer weight it.
+        msg.orientation_covariance[0] = -1.0
+        self.imu_publisher.publish(msg)
 
     def _effective_yaw_deg(self, attitude):
         """Return ``(yaw_deg, label)`` -- the SAME yaw the control loops
@@ -1684,7 +1727,16 @@ class AUVManagerNode(Node):
                 label = 'AHRS' if raw_name == 'MAVLINK_AHRS' else raw_name
                 return float(yaw), label
         if attitude is not None:
-            return float(attitude['yaw']), 'AHRS'
+            # NaN IS ABSENCE HERE, and this branch used to pass it straight out.
+            # `SrotFC.get_attitude` returns NaN yaw when the board reports the
+            # BNO unhealthy (measured live after a bad boot); on srot there is
+            # no second AHRS to fall through to, so without this check the
+            # gate upstream would be a knob wired to nothing -- NaN would reach
+            # `/duburi/state.yaw_deg` and `heading_lock` exactly where 0.0 used
+            # to, and NaN comparisons are silently False in every guard.
+            yaw = float(attitude['yaw'])
+            if not math.isnan(yaw):
+                return yaw, 'AHRS'
         return None, 'N/A'
 
     def telemetry_tick(self):
