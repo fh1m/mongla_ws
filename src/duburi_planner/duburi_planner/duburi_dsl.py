@@ -1168,21 +1168,33 @@ class DuburiMission:
         self._detector_ok.add(node)
 
     def _set_detector_param(self, node: str, name: str, value) -> None:
-        """Set one detector parameter in-process via SetParameters (reliable).
+        """Set one DETECTOR parameter, aborting loudly if the node is absent.
 
-        Replaces the old ``subprocess('ros2 param set')`` which spun up a fresh
-        CLI node that had to re-discover the detector every call (the flaky,
-        silent "Node not found" source). Raises on absence (via _ensure_detector)
-        or rejection so failures are loud, not swallowed warnings.
+        `_ensure_detector` is the detector-specific half: "someone forgot to
+        start the vision stack" must stop the mission rather than warn, because
+        every vision verb after it would idle on err=+inf. The wire work is
+        shared with every other node -- see `_set_node_param`.
         """
         self._ensure_detector(node)
+        self._set_node_param(node, name, value)
+
+    def _set_node_param(self, node: str, name: str, value) -> None:
+        """Set one parameter on ANY node, in-process via SetParameters.
+
+        Replaces the old ``subprocess('ros2 param set')`` which spun up a fresh
+        CLI node that had to re-discover the target every call (the flaky,
+        silent "Node not found" source). Raises on rejection or timeout so a
+        failure is loud rather than a swallowed warning: these are the knobs a
+        task's behaviour depends on.
+        """
         ros_node = self.client.node
         cli = self._param_clients.get(node)
         if cli is None:
             cli = ros_node.create_client(SetParameters, f'{node}/set_parameters')
             self._param_clients[node] = cli
         if not cli.wait_for_service(timeout_sec=3.0):
-            raise RuntimeError(f'{node}/set_parameters unavailable')
+            raise RuntimeError(
+                f'{node}/set_parameters unavailable -- is that node running?')
         req = SetParameters.Request(
             parameters=[Parameter(name=name, value=_param_value(value))])
         fut = cli.call_async(req)
@@ -1302,6 +1314,63 @@ class DuburiMission:
         else:
             self._set_detector_param(node, 'model_conf', f'{model}={float(conf)}')
             self.log.info(f"[DSL  ] {node} conf[{model!r}] → {float(conf):.3f}")
+
+    # Per-camera node names, one rule for the whole stack. A subsystem the
+    # mission can tune is a subsystem it can adapt mid-run; one that is
+    # launch-only is frozen at the value someone typed before the water.
+    _NODE_SUFFIX = {
+        'detector': 'duburi_detector_{cam}',
+        'camera':   'duburi_camera_{cam}',
+        'tracker':  'duburi_tracker_{cam}',
+        'lock':     'duburi_lock_{cam}',
+        'pnp':      'duburi_pnp_{cam}',
+        'flow':     'duburi_flow_velocity',      # one node, not per camera
+        'manager':  'duburi_manager',            # ditto
+    }
+
+    def _subsystem_node(self, kind: str, camera: str | None = None) -> str:
+        try:
+            pattern = self._NODE_SUFFIX[kind]
+        except KeyError:
+            raise ValueError(
+                f'unknown subsystem {kind!r}; known: '
+                f'{sorted(self._NODE_SUFFIX)}') from None
+        cam = str(camera or self.camera).strip().lower()
+        return '/' + pattern.format(cam=cam)
+
+    def set_node(self, kind: str, *, camera: str | None = None, **params) -> None:
+        """Set parameters on ANY node in the stack, by subsystem name.
+
+        ⛔ WHY THIS EXISTS. A census of the tree found 164 declared parameters
+        across 13 nodes and a DSL that could write two groups of them: the
+        detector, and the manager's ``vision.*``. Everything else -- the
+        tracker's coast and Kalman noise, the camera's exposure and rate, the
+        lock ladder's anchor and authority windows, the flow front end's 31
+        knobs, PnP's reprojection gate -- was launch-only, which means frozen at
+        whatever someone typed before the vehicle went in the water. A
+        capability the mission cannot reach is a capability the mission does not
+        have.
+
+        One method, seven subsystems, no new layer::
+
+            duburi.set_node('tracker', coast_s=1.2)      # hold a flickering lock
+            duburi.set_node('camera',  exposure_us=4000) # kill motion blur
+            duburi.set_node('lock',    full_authority_s=3.0)
+            duburi.set_node('pnp',     max_reproj_px=15.0)
+            duburi.set_node('flow',    max_baseline_s=0.4)
+            duburi.set_node('manager', **{'vision.kp_yaw': 70.0})
+
+        ``camera`` selects which per-camera instance; ``flow`` and ``manager``
+        are single nodes and ignore it. Raises on a rejected or undeclared
+        parameter, for the same reason ``set_detector`` does: a silent no-op is
+        a mission believing it changed something.
+        """
+        if not params:
+            raise ValueError('set_node() needs at least one parameter')
+        node = self._subsystem_node(kind, camera)
+        for name, value in params.items():
+            self._set_node_param(node, name, value)
+            self.log.info(f'[DSL  ] {node} {name} → {value!r}')
 
     def set_detector(self, *, camera: str | None = None,
                      node: str | None = None, **params) -> None:

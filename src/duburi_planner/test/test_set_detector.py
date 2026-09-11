@@ -51,3 +51,63 @@ def test_the_camera_selects_the_node():
     fake = _fake()
     DuburiMission.set_detector(fake, camera='downward', masks=True)
     assert fake._detector_node.call_args.args[0] == 'downward'
+
+
+# --- set_node: every subsystem in the stack, not just the detector ----------
+#
+# A census of the tree found 164 declared parameters across 13 nodes and a DSL
+# that could write two groups: the detector, and the manager's vision.*. The
+# tracker's coast, the camera's exposure, the lock ladder's authority windows,
+# the flow front end and PnP were launch-only -- frozen at whatever was typed
+# before the vehicle went in the water.
+
+
+def _node_fake(camera='forward'):
+    m = MagicMock()
+    m.camera = camera
+    m._NODE_SUFFIX = DuburiMission._NODE_SUFFIX
+    m._subsystem_node = lambda kind, cam=None: DuburiMission._subsystem_node(
+        m, kind, cam)
+    return m
+
+
+@pytest.mark.parametrize('kind,expect', [
+    ('detector', '/duburi_detector_forward'),
+    ('camera',   '/duburi_camera_forward'),
+    ('tracker',  '/duburi_tracker_forward'),
+    ('lock',     '/duburi_lock_forward'),
+    ('pnp',      '/duburi_pnp_forward'),
+    ('flow',     '/duburi_flow_velocity'),
+    ('manager',  '/duburi_manager'),
+])
+def test_each_subsystem_resolves_to_its_node(kind, expect):
+    assert DuburiMission._subsystem_node(_node_fake(), kind) == expect
+
+
+def test_the_camera_selects_the_per_camera_instance():
+    fake = _node_fake()
+    assert DuburiMission._subsystem_node(
+        fake, 'tracker', 'downward') == '/duburi_tracker_downward'
+
+
+def test_single_instance_nodes_ignore_the_camera():
+    fake = _node_fake()
+    assert DuburiMission._subsystem_node(
+        fake, 'flow', 'downward') == '/duburi_flow_velocity'
+
+
+def test_an_unknown_subsystem_is_refused_by_name():
+    with pytest.raises(ValueError):
+        DuburiMission._subsystem_node(_node_fake(), 'sonar')
+
+
+def test_set_node_writes_to_the_resolved_node():
+    fake = _node_fake()
+    DuburiMission.set_node(fake, 'tracker', coast_s=1.2)
+    fake._set_node_param.assert_called_once_with(
+        '/duburi_tracker_forward', 'coast_s', 1.2)
+
+
+def test_set_node_refuses_an_empty_call():
+    with pytest.raises(ValueError):
+        DuburiMission.set_node(_node_fake(), 'tracker')
