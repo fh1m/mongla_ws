@@ -2299,9 +2299,14 @@ and breaks under rotation.
 | host decode, boxes only | **0.93 ms** | 80 classes, no gating | — |
 | host decode, boxes only | 0.62 ms | gated to 3 classes | — |
 | host decode, with masks | **2.98 ms** | **6 detections**, 80 classes | — |
-| end to end, with masks | 12.7 ms (77.1 Hz) | 6 detections, incl. letterbox | ≥ 30 Hz |
-| end to end, boxes only | 9.66 ms (103.5 Hz) | 80 classes | ≥ 30 Hz |
-| detection path, seg resident | **85.4 Hz** | identical to seg-absent | no regression |
+| end to end, with masks | **11.74 ms (85.2 Hz)** | 6 detections, incl. letterbox | ≥ 30 Hz |
+| end to end, boxes only | **8.82 ms (113.3 Hz)** | 80 classes | ≥ 30 Hz |
+| detection path, seg resident | **95.1 Hz** | vs 95.3 Hz seg-absent | no regression |
+| letterbox into the bound buffer | **1.265 ms** | was 2.054 ms; 810×1080 source | — |
+
+The last row lifts every Hailo backend, not just segmentation: the detection
+path measured 85.4 Hz before it and 95.3 Hz after. The two end-to-end rows
+above are the post-fix figures; pre-fix they were 77.1 and 103.5 Hz.
 
 ⚠ **Mask cost is LINEAR in detection count and the figures above are SIX
 detections.** Measured on the same frame: 1 detection 10.2 ms end to end,
