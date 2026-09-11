@@ -12,9 +12,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from duburi_planner.course_map import Course, Prop
+from duburi_localization.course_map import Course, Prop
 from duburi_planner.duburi_dsl import DuburiMission
-from duburi_vision.resection import Fix
+from duburi_localization.resection import Fix
 
 
 def _course(**placed):

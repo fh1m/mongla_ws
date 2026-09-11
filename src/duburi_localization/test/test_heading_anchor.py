@@ -10,10 +10,10 @@ import math
 
 import pytest
 
-from duburi_vision.heading_anchor import (
+from duburi_localization.heading_anchor import (
     Anchor, absolute_heading, anchor_from, apply_offset,
 )
-from duburi_vision.pose_cluster import Fused
+from duburi_localization.pose_cluster import Fused
 
 
 def _fused(yaw, support=10, spread=1.0, decided=True, rule='egomotion'):

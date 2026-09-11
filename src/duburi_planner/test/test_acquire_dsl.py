@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from duburi_planner.duburi_dsl import DuburiMission
-from duburi_vision.resection import Fix
+from duburi_localization.resection import Fix
 
 
 def _fake(seen_after=None, fix_ok=True):

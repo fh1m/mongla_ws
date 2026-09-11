@@ -11,7 +11,7 @@ import math
 
 import pytest
 
-from duburi_vision.pose_cluster import (
+from duburi_localization.pose_cluster import (
     Fused, PoseCluster, PoseSample, _circular_median, _wrap180, slope_of,
 )
 

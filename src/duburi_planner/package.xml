@@ -16,6 +16,7 @@
   <depend>rclpy</depend>
   <depend>duburi_control</depend>
   <depend>duburi_interfaces</depend>
+  <depend>duburi_localization</depend>
   <depend>duburi_manager</depend>
   <depend>vision_msgs</depend>
   <depend>yasmin</depend>
