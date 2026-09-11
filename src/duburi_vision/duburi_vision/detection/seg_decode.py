@@ -202,15 +202,28 @@ def nms(xyxy: np.ndarray, scores: np.ndarray, cids: np.ndarray,
 
 
 def masks_for(coeff: np.ndarray, proto_u8: np.ndarray, quant: Quant,
-              boxes_net: np.ndarray, *, size: int,
-              thresh: float = 0.5) -> List[np.ndarray]:
+              boxes_net: np.ndarray, *, size: int) -> List[np.ndarray]:
     """Per-detection binary masks, each cropped to its own box.
 
-    The prototype tensor is 160x160x32 and shared by every detection, so the
-    whole cost here is one (P, 32) x (32, N) matmul plus a crop. Returned
-    per-box rather than as a full-frame layer because a full-frame mask is
-    640x640 per detection of mostly zeros, and every consumer wants the box
-    anyway.
+    ⛔ NEITHER THE SIGMOID NOR THE DEQUANTISATION IS COMPUTED, AND BOTH
+    OMISSIONS ARE EXACT.
+
+    A prototype mask is `sigmoid(proto . coeff)` thresholded at 0.5. Two
+    monotone maps sit between the bytes and that decision, and a threshold
+    commutes with both:
+
+      * sigmoid(x) >= 0.5  <=>  x >= 0. The exp over 25,600 x N floats that
+        every published decode computes decides nothing.
+      * the dot product is LINEAR, so the affine dequantisation can be folded
+        into the threshold instead of applied to the tensor:
+            ((u8 - zp) * s) . c >= 0   <=>   u8 . c >= zp * sum(c)
+        because s > 0. So the 160x160x32 prototype never becomes float at all;
+        only the cropped patch does, on its way into one small matmul.
+
+    The crop happens BEFORE the matmul for the same reason: a detection covers
+    a fraction of the prototype plane, and multiplying the whole plane by every
+    detection's coefficients computes a mask for pixels that are about to be
+    discarded.
 
     Each mask is uint8 0/1 at the resolution of its own integer box in NETWORK
     (letterboxed) pixels -- the caller lifts it to frame coordinates with the
@@ -220,28 +233,28 @@ def masks_for(coeff: np.ndarray, proto_u8: np.ndarray, quant: Quant,
     if coeff.shape[0] == 0:
         return []
     ph, pw, _ = proto_u8.shape
-    proto = quant.dequant(proto_u8).reshape(ph * pw, MASK_DIM)
-    logits = proto @ coeff.T                       # (P, N)
-    np.clip(logits, -30.0, 30.0, out=logits)
-    prob = 1.0 / (1.0 + np.exp(-logits))
-    prob = prob.reshape(ph, pw, -1)
-
     sx, sy = pw / float(size), ph / float(size)
+    # One threshold per detection, because it depends on that detection's own
+    # coefficient sum. Cheap: N * 32 additions.
+    thr = quant.zp * coeff.sum(axis=1)
+
     out: List[np.ndarray] = []
     for n in range(coeff.shape[0]):
         x1, y1, x2, y2 = boxes_net[n]
-        # Crop in PROTOTYPE space first: resizing the whole 160x160 plane to
-        # box size and then cropping does the interpolation on pixels that are
-        # about to be thrown away.
         px1 = int(np.clip(math.floor(x1 * sx), 0, pw - 1))
         py1 = int(np.clip(math.floor(y1 * sy), 0, ph - 1))
         px2 = int(np.clip(math.ceil(x2 * sx), px1 + 1, pw))
         py2 = int(np.clip(math.ceil(y2 * sy), py1 + 1, ph))
         bw = max(1, int(round(x2 - x1)))
         bh = max(1, int(round(y2 - y1)))
-        patch = prob[py1:py2, px1:px2, n]
-        patch = cv2.resize(patch, (bw, bh), interpolation=cv2.INTER_LINEAR)
-        out.append((patch >= thresh).astype(np.uint8))
+        patch = proto_u8[py1:py2, px1:px2].astype(np.float32)
+        score = patch.reshape(-1, MASK_DIM) @ coeff[n]
+        score = score.reshape(py2 - py1, px2 - px1) - thr[n]
+        # Resize the SCORE, not the decision: a bilinear stretch of a 0/1 field
+        # has nothing to interpolate between and quantises the boundary to the
+        # prototype's 4 px grid.
+        score = cv2.resize(score, (bw, bh), interpolation=cv2.INTER_LINEAR)
+        out.append((score >= 0.0).astype(np.uint8))
     return out
 
 
