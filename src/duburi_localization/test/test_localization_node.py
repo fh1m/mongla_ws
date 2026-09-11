@@ -66,6 +66,10 @@ def _node():
     obj._still = deque(maxlen=ln.STILL_WINDOW)
     obj._last_flow_t = 0.0
     obj._attitude_seeded = False
+    obj._anchored = False
+    obj._last_input_t = 0.0
+    obj._aided_at_last_diag = -1
+    obj._yaw_sigma_deg = 2.0
     # The node genuinely logs on the seed path; give the stub a sink rather
     # than removing the log, which is operator-facing.
     obj.get_logger = lambda: _NullLogger()
@@ -423,3 +427,72 @@ def test_the_first_attitude_is_ADOPTED_not_corrected_into():
         n._on_imu(sample(t))
     assert n._filter.rejected == 0, f'{n._filter.rejected} rejects from a seed'
     assert np.linalg.norm(n._filter.X.p[:2]) < 0.05
+
+
+# --------------------------------------------------------------------------- #
+#  the frame is a claim, and the anchor is what makes it true
+# --------------------------------------------------------------------------- #
+def test_the_frame_is_odom_until_the_heading_is_anchored():
+    """The board's yaw is excellent and is not a pool bearing -- it is
+    boot-relative, or magnetic through a reference that may not have locked.
+    Labelling the output `pool` before an anchor is not a naming nicety: flow
+    integrates into position through the same rotation, so every dead-reckoned
+    metre walks off along an offset nobody measured."""
+    n = _node()
+    assert n._anchored is False
+
+
+def test_an_anchor_reaches_the_filter_and_flips_the_frame():
+    n = _node()
+    n._on_heading(type('F', (), {'data': 137.0})())
+    assert n._anchored is True
+    assert n._n['yaw'] == 1
+
+
+def test_the_odom_stamp_is_the_inputs_not_the_wall_clock():
+    """Every input is stamped on the board's clock through ClockMap. Stamping
+    the output on host time puts back the 6.67 ms sd of transport jitter that
+    the mapping exists to remove."""
+    n = _node()
+    n._on_imu(_Imu(1000.0))
+    n._on_imu(_Imu(1000.02))
+    assert n._last_input_t == pytest.approx(1000.02)
+
+
+def test_no_velocity_aiding_is_announced():
+    """⛔ MEASURED: with ZUPT off and no flow, the vehicle's position ran to
+    635 m in 95 s while the filter published a healthy-looking pose the entire
+    time. Attitude and depth leave horizontal velocity completely unobserved.
+    A filter in that state is not degraded, it is not an estimate."""
+    warned = []
+
+    class _Logger:
+        def info(self, *_a, **_k):
+            pass
+
+        def warning(self, msg, *_a, **_k):
+            warned.append(msg)
+
+    n = _node()
+    n.get_logger = lambda: _Logger()
+    n._diagnose()
+    n._diagnose()
+    assert any('NO VELOCITY AIDING' in m for m in warned)
+
+
+def test_aiding_present_is_not_announced():
+    warned = []
+
+    class _Logger:
+        def info(self, *_a, **_k):
+            pass
+
+        def warning(self, msg, *_a, **_k):
+            warned.append(msg)
+
+    n = _node()
+    n.get_logger = lambda: _Logger()
+    n._diagnose()
+    n._n['zupt'] += 1
+    n._diagnose()
+    assert not any('NO VELOCITY AIDING' in m for m in warned)
