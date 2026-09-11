@@ -118,3 +118,39 @@ def test_a_query_with_no_detector_node_never_activates():
     fake._detector_present.return_value = False
     DuburiMission._pump_detections(fake, 'forward')
     fake._activate_camera.assert_not_called()
+
+
+# --- discovery settle: an instant graph read lies about a running node -------
+
+
+def _present_fake(names_over_time):
+    """`names_over_time` is popped one list per get_node_names() call."""
+    m = MagicMock()
+    m._detector_node.return_value = '/duburi_detector_forward'
+    m.client.node.get_node_names.side_effect = list(names_over_time)
+    return m
+
+
+def test_presence_waits_for_discovery_when_asked():
+    # First read is empty (discovery not settled), second finds the node.
+    fake = _present_fake([[], ['duburi_detector_forward']])
+    with patch('duburi_planner.duburi_dsl.rclpy.spin_once'):
+        got = DuburiMission._detector_present(fake, 'forward', settle=1.0)
+    assert got is True
+
+
+def test_presence_without_settle_does_not_spin():
+    # The exclusivity loop keeps the instant read: a false absent only skips a
+    # pause it can redo, and the 5 s service wait is what it exists to avoid.
+    fake = _present_fake([[]])
+    with patch('duburi_planner.duburi_dsl.rclpy.spin_once') as spin:
+        got = DuburiMission._detector_present(fake, 'forward')
+    assert got is False
+    spin.assert_not_called()
+
+
+def test_presence_gives_up_at_the_budget():
+    fake = _present_fake([[], [], [], [], [], [], [], [], [], [], [], []])
+    with patch('duburi_planner.duburi_dsl.rclpy.spin_once'):
+        got = DuburiMission._detector_present(fake, 'forward', settle=0.05)
+    assert got is False

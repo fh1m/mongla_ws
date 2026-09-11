@@ -509,7 +509,8 @@ class DuburiMission:
         # AFTER it -- so on a graph with no detector (a pure-control sim, or a
         # test publishing its own /detections) every query would miss frames
         # that were live the whole time. Nothing to resume means nothing to do.
-        if self._live_camera is None and self._detector_present(camera):
+        if self._live_camera is None and self._detector_present(
+                camera, settle=self._DISCOVERY_SETTLE_S):
             self._activate_camera(camera)
         node = self.client.node
         start = _time.monotonic()
@@ -1035,21 +1036,43 @@ class DuburiMission:
             return node
         return f'/duburi_detector_{camera or self.camera}'
 
-    def _detector_present(self, camera: str) -> bool:
-        """Fast graph check: is the ``camera`` detector node currently up?
+    # How long `_detector_present` may spin waiting for DDS discovery. Only the
+    # FIRST query pays it, and only when the node has not been seen yet.
+    _DISCOVERY_SETTLE_S = 1.5
 
-        Reads the discovery graph (``get_node_names``) -- instant, no service
-        wait -- so the exclusivity loop can SKIP an absent counterpart instead of
-        paying ``_ensure_detector``'s 5 s ``wait_for_service`` on every switch of a
+    def _detector_present(self, camera: str, *, settle: float = 0.0) -> bool:
+        """Graph check: is the ``camera`` detector node currently up?
+
+        Reads the discovery graph (``get_node_names``) -- no service wait -- so
+        the exclusivity loop can SKIP an absent counterpart instead of paying
+        ``_ensure_detector``'s 5 s ``wait_for_service`` on every switch of a
         single-camera run. Best-effort: any error -> treat as absent (skip).
+
+        ⛔ `settle` EXISTS BECAUSE AN INSTANT GRAPH READ ANSWERS "ABSENT" FOR A
+        NODE THAT IS RUNNING. `get_node_names` reports what DDS discovery has
+        found SO FAR, and a mission's first query runs a fraction of a second
+        after its own node is created -- before the detector has been
+        discovered. Measured on the vehicle: `detected('gate')` returned in
+        0.61 s with `live_camera=None` while `ros2 param get
+        /duburi_detector_forward paused` answered fine from the same shell.
+        A caller that must not act on a false "absent" passes `settle` and
+        spins until the node appears or the budget runs out. The exclusivity
+        loop keeps the instant read: there, a false absent only skips a pause
+        it can redo, and the 5 s service wait is the thing being avoided.
         """
         node = self._detector_node(camera)
         want = node.lstrip('/')
-        try:
-            names = self.client.node.get_node_names()
-        except Exception:   # noqa: BLE001 -- graph read is best-effort
-            return False
-        return want in names or node in names
+        deadline = _time.monotonic() + max(0.0, float(settle))
+        while True:
+            try:
+                names = self.client.node.get_node_names()
+            except Exception:   # noqa: BLE001 -- graph read is best-effort
+                return False
+            if want in names or node in names:
+                return True
+            if _time.monotonic() >= deadline:
+                return False
+            rclpy.spin_once(self.client.node, timeout_sec=0.05)
 
     def _ensure_detector(self, node: str, *, timeout: float = 5.0) -> None:
         """Abort the mission LOUDLY if detector ``node`` is not on the graph.
