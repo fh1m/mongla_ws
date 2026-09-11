@@ -177,3 +177,40 @@ def test_frames_in_hand_beat_the_probe():
     _resume(fake, 'forward')
     fake._detector_present.assert_not_called()
     fake._activate_camera.assert_not_called()
+
+
+# --- camera_available: the branch a mission needs before it commits ----------
+
+
+def _avail_fake(present):
+    m = MagicMock()
+    m.camera = 'forward'
+    m._camera_available = {}
+    m._DISCOVERY_SETTLE_S = 0.0
+    m._detector_present.return_value = present
+    return m
+
+
+def test_camera_available_reports_a_live_detector():
+    fake = _avail_fake(True)
+    assert DuburiMission.camera_available(fake, 'downward') is True
+
+
+def test_camera_available_reports_an_absent_detector_and_warns():
+    fake = _avail_fake(False)
+    assert DuburiMission.camera_available(fake, 'downward') is False
+    assert fake.log.warning.called, 'an absent camera must be said out loud'
+
+
+def test_camera_available_is_cached():
+    fake = _avail_fake(False)
+    DuburiMission.camera_available(fake, 'downward')
+    DuburiMission.camera_available(fake, 'downward')
+    assert fake._detector_present.call_count == 1
+
+
+def test_camera_available_defaults_to_the_sticky_camera():
+    fake = _avail_fake(True)
+    DuburiMission.camera_available(fake)
+    fake._detector_present.assert_called_once()
+    assert fake._detector_present.call_args.args[0] == 'forward'
