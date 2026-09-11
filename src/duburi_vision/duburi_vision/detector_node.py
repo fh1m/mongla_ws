@@ -672,7 +672,10 @@ class DetectorNode(Node):
         what a subscriber will mint. The single-model path does not go through
         here and is byte-identical to before.
         """
-        if not self._extra:
+        # `getattr`, not `self._extra`: a node built by a harness that
+        # bypasses both init paths has no such attribute, and an AttributeError
+        # here would surface as an inference failure rather than as itself.
+        if not getattr(self, '_extra', None):
             return detections
         from .detection.messages import remint_class_ids
         out = list(detections)
@@ -961,11 +964,19 @@ class DetectorNode(Node):
                 infer_frame, crop_state = self._crop.apply(frame)
             try:
                 detections = det.infer(infer_frame)
-                detections = self._merge_extra(infer_frame, detections)
                 self._infer_fails = 0
             except Exception as exc:
                 self._on_infer_failure(exc)
                 continue
+            # ⛔ AFTER the counter is cleared, and outside this try. The
+            # failure counter escalates to REBUILDING THE PRIMARY DETECTOR,
+            # and the primary just succeeded -- letting a secondary model's
+            # exception land in the same counter would tear down a healthy
+            # model because a different one misbehaved. Caught by
+            # `test_a_SUCCESSFUL_inference_in_the_LOOP_resets_the_counter`,
+            # which went from 0 failures to 5.
+            detections = self._merge_extra(infer_frame, detections)
+
             if crop_state is not None and crop_state.active and detections:
                 # BACK TO FULL-FRAME COORDINATES. Everything downstream -- the
                 # pixel error, the bearing, the HUD -- is full-frame, and a

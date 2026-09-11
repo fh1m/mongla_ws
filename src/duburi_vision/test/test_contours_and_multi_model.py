@@ -188,3 +188,74 @@ class TestMergedClassIds:
         d = remint_class_ids([Detection(class_id=99, class_name='bin',
                                         score=0.5, xyxy=(0, 0, 1, 1))])[0]
         assert d.class_id == class_index('bin')
+
+
+class TestASecondaryModelCannotTearDownThePrimary:
+    """The failure counter escalates to REBUILDING the primary detector.
+
+    A second model running beside it must not be able to reach that counter:
+    the primary succeeded, and tearing down a healthy model because a different
+    one misbehaved is a mission lost to the wrong cause. Found by the recovery
+    suite when the merge was inside the same `try` -- 0 failures became 5.
+    """
+
+    def _node(self, monkeypatch, extra_infer):
+        import queue as q
+        import threading
+        from types import SimpleNamespace
+        import duburi_vision.detector_node as D
+
+        n = D.DetectorNode.__new__(D.DetectorNode)
+        logs = []
+        n._log = SimpleNamespace(info=logs.append, warn=logs.append,
+                                 warning=logs.append, error=logs.append,
+                                 fatal=logs.append, debug=logs.append)
+        n.get_logger = lambda: n._log
+        n._infer_fails = 0
+        n._want = threading.Event()
+        n._infer_q = q.Queue()
+        n._bridge = n._pre = n._crop = None
+        n._publish_dbg = False
+        n._pub_contours = None
+        n._det = SimpleNamespace(infer=lambda _f: [])
+        n._build_kwargs = None
+        n._extra = [SimpleNamespace(infer=extra_infer)]
+        n._extra_names = ['seg']
+        n.get_parameter = lambda _k: SimpleNamespace(value=False)
+        n._rebuild_detector = lambda: None
+        monkeypatch.setattr(
+            D, 'rclpy', SimpleNamespace(ok=lambda: n._infer_q.qsize() > 0))
+        return n, D
+
+    def test_anything_the_merge_raises_leaves_the_counter_at_zero(self, monkeypatch):
+        """The merge must sit OUTSIDE the primary's failure `try`.
+
+        ⛔ An earlier version of this test made the secondary detector raise,
+        and the injection that moved the merge back inside the `try` still
+        passed -- because `_merge_extra` catches a detector exception itself,
+        so that test could never distinguish the two placements. It checked the
+        inner guard and called it the outer one. Raising from the merge as a
+        whole is what actually separates them.
+        """
+        n, D = self._node(monkeypatch, lambda _f: [])
+
+        def explode(_frame, _dets):
+            raise RuntimeError('merge exploded')
+        n._merge_extra = explode
+
+        for _ in range(4):
+            n._infer_q.put(D._DirectFrame(frame=object(), header=None))
+        try:
+            n._infer_loop()
+        except Exception:
+            pass
+        assert n._infer_fails == 0, (
+            'a secondary-model fault reached the counter that rebuilds the '
+            'PRIMARY detector')
+
+    def test_a_node_with_no_extras_attribute_still_infers(self, monkeypatch):
+        """A harness that bypasses both init paths has no `_extra`; an
+        AttributeError there would surface as an inference failure."""
+        n, _D = self._node(monkeypatch, lambda _f: [])
+        del n._extra
+        assert n._merge_extra(object(), ['a']) == ['a']
