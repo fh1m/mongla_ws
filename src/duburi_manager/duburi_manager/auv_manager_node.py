@@ -920,6 +920,7 @@ class AUVManagerNode(Node):
         from sensor_msgs.msg import Imu
         self._Imu = Imu
         self.imu_publisher = self.create_publisher(Imu, '/duburi/imu', 10)
+        self._imu_rpy_warned = False
         # Board-clock -> host-clock mapping for the IMU stamp. See
         # _imu_rates_tick: the board's own interval has sd 0.00 ms where
         # arrival has sd 6.67, so the sender's clock is the better time base.
@@ -1733,6 +1734,18 @@ class AUVManagerNode(Node):
         rpy = imu.get('rpy')
         if rpy is None:
             msg.orientation_covariance[0] = -1.0
+            # SAY SO, ONCE. Without the board's attitude the filter propagates
+            # its own from a 50 Hz gyro with nothing aiding it, and that was
+            # MEASURED to diverge to 7.1e6 m in 35 s. Publishing a valid
+            # message with the orientation quietly marked absent is exactly
+            # the failure this stack keeps repeating: the consumer degrades
+            # correctly and nobody is told the degraded path is live.
+            if not self._imu_rpy_warned:
+                self._imu_rpy_warned = True
+                self.get_logger().warning(
+                    '[SENS ] /duburi/imu carries NO orientation: the backend '
+                    'gave no attitude with the inertial sample. Localization '
+                    'will propagate attitude itself and WILL drift.')
         else:
             qw, qx, qy, qz = _quat_from_rpy(*rpy)
             msg.orientation.w, msg.orientation.x = qw, qx
