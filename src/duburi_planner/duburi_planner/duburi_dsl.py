@@ -1029,6 +1029,77 @@ class DuburiMission:
             self.log.warning(f'[FIX  ] no position fix: {got.reason}')
         return got
 
+    def goto_prop(self, prop: str, *, standoff_m: float = 2.0,
+                  gain: float = 50.0, max_leg_m: float = 12.0):
+        """Dead-reckon to within `standoff_m` of a prop, then hand to perception.
+
+        ⛔ THE WHOLE POINT IS THAT IT STOPS SHORT. This does not arrive at the
+        prop, it arrives in DETECTION RANGE of it, which is all a prior map can
+        honestly deliver: the map is a rulebook and a tape measure, and the last
+        couple of metres belong to the camera. That is how the team that wins
+        does waypoints -- and on the task where perception was hardest they
+        shipped plain waypoints and never ran the filter they had built.
+
+        Everything it needs is refused loudly rather than guessed:
+
+          * a loaded course with a MEASURED position for the prop;
+          * an anchored heading, or the turn would be in a boot-relative frame;
+          * a position fix, which needs two visible props and real geometry;
+          * a closed-loop distance verb. ⛔ It never falls back to a timed
+            guess -- that fallback once drove 2.361 m for a 1.0 m command and
+            reported success, which is worse than refusing because the mission
+            believes it arrived.
+
+        Returns the `Attempt` of the leg, or a refusal naming the missing part.
+        """
+        from duburi_planner.resilience import Attempt
+        from duburi_vision.resection import _wrap180
+        from duburi_planner.course_map import bearing_to, range_to
+        import math as _math
+
+        course = getattr(self, '_course', None)
+        if course is None:
+            return Attempt(f'goto:{prop}', False,
+                           error='no course loaded: use_course(<name>) first')
+        try:
+            target = course.position_of(prop)       # raises when unmeasured
+        except (KeyError, ValueError) as exc:
+            return Attempt(f'goto:{prop}', False, error=str(exc))
+
+        fix = self.fix_position()
+        if not fix.ok:
+            return Attempt(f'goto:{prop}', False,
+                           error=f'no position fix, so nothing to reckon from: '
+                                 f'{fix.reason}')
+
+        here = (fix.x_m, fix.y_m)
+        bearing = bearing_to(here, target)
+        leg = range_to(here, target) - float(standoff_m)
+        if leg <= 0.0:
+            self.log.info(f'[GOTO ] already inside the {standoff_m:.1f} m '
+                          f'standoff of {prop!r}; perception takes it from here')
+            return Attempt(f'goto:{prop}', True, branch='already_there')
+        if leg > float(max_leg_m):
+            return Attempt(
+                f'goto:{prop}', False,
+                error=f'{leg:.1f} m leg exceeds max_leg_m={max_leg_m:.0f}; a '
+                      f'dead-reckoned run that long accumulates more error than '
+                      f'the standoff it is aiming for')
+
+        self.log.info(
+            f'[GOTO ] {prop!r} at ({target[0]:+.1f}, {target[1]:+.1f}) is '
+            f'{bearing:.0f} deg and {leg + standoff_m:.1f} m away; turning and '
+            f'running {leg:.1f} m to a {standoff_m:.1f} m standoff')
+        self.turn(self.absolute_to_relative(bearing))
+        res = self.move_forward_dist(leg, gain=gain)
+        ok = bool(res)
+        if not ok:
+            self.log.warning(
+                f'[GOTO ] the distance leg did not close. There is no timed '
+                f'fallback here on purpose: search for {prop!r} instead of '
+                f'assuming the vehicle arrived.')
+        return Attempt(f'goto:{prop}', ok, branch='dead_reckon')
+
     def use_course(self, name: str):
         """Load the prop priors for a course. Returns the `Course`.
 
