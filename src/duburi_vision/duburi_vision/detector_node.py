@@ -249,6 +249,9 @@ class DetectorNode(Node):
         # against a ~10.5 ms frame, so this exists for an operator who wants
         # the topic gone, not because the cost forces a choice.
         self.declare_parameter('publish_contours',    True)
+        # Mask decoding, live. Only a segmentation model can honour it; a box
+        # detector has no masks and says so rather than accepting silently.
+        self.declare_parameter('masks',               True)
         self.declare_parameter('publish_debug_image', True)
         self.declare_parameter('debug_image_hz',      5.0)
         self.declare_parameter('alignment_deadband',  0.05)
@@ -1214,6 +1217,25 @@ class DetectorNode(Node):
                 # registry entries and persists across active_model switches.
                 self._pending_model_conf = str(p.value)
                 self._apply_model_conf(self._pending_model_conf)
+
+            elif p.name == 'masks':
+                want = bool(p.value)
+                takers = [d for d in (self._registry.values() if self._registry
+                                      else ([self._det] if self._det is not None else []))
+                          if hasattr(d, 'set_masks')]
+                for det in takers:
+                    det.set_masks(want)
+                if takers:
+                    self.get_logger().info(
+                        f"[DET  ] masks → {want} ({len(takers)} segmentation "
+                        f"model(s))")
+                else:
+                    # Not an error: a box-only launch is a valid configuration.
+                    # But saying nothing would let a mission believe it had
+                    # turned outlines on when no loaded model can produce one.
+                    self.get_logger().warning(
+                        f"[DET  ] masks → {want} IGNORED: no loaded model is a "
+                        f"segmentation model. Contours will stay box corners.")
 
             elif p.name == 'max_det':
                 new_max = int(p.value)
