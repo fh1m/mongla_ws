@@ -242,6 +242,13 @@ class DetectorNode(Node):
         self.declare_parameter('imgsz',               640)
         self.declare_parameter('max_det',             100)   # post-NMS cap (live-tunable)
         self.declare_parameter('classes',             'person')
+        # Outlines are EVIDENCE, and evidence should be switchable at the
+        # pool rather than in a branch -- the same argument as `claw_required:
+        # false` in the champions' configs. Measured cost at the counts a
+        # mission produces: 0.075 ms for one box and 0.46 ms for three masks
+        # against a ~10.5 ms frame, so this exists for an operator who wants
+        # the topic gone, not because the cost forces a choice.
+        self.declare_parameter('publish_contours',    True)
         self.declare_parameter('publish_debug_image', True)
         self.declare_parameter('debug_image_hz',      5.0)
         self.declare_parameter('alignment_deadband',  0.05)
@@ -524,13 +531,14 @@ class DetectorNode(Node):
         # the two are one message. Optional: a workspace without
         # duburi_interfaces built keeps detecting.
         self._pub_contours = None
-        try:
-            from duburi_interfaces.msg import TargetContours
-            self._pub_contours = self.create_publisher(
-                TargetContours, f'{ns_out}/contours', qos.DETECTIONS)
-        except Exception as exc:                            # noqa: BLE001
-            self.get_logger().warning(
-                f'[DET  ] no {ns_out}/contours topic: {exc!r}')
+        if bool(self.get_parameter('publish_contours').value):
+            try:
+                from duburi_interfaces.msg import TargetContours
+                self._pub_contours = self.create_publisher(
+                    TargetContours, f'{ns_out}/contours', qos.DETECTIONS)
+            except Exception as exc:                        # noqa: BLE001
+                self.get_logger().warning(
+                    f'[DET  ] no {ns_out}/contours topic: {exc!r}')
         # LATCHED: the HUD and the console both join AFTER the detector and
         # must still learn the allowlist. This topic being VOLATILE is exactly
         # why the console polls `get_parameters` for `classes` instead.

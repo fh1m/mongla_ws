@@ -111,6 +111,11 @@ def generate_launch_description():
         # measured 37.5 Hz for a pair against 95 Hz for one.
         DeclareLaunchArgument('fwd_active',  default_value=''),
         DeclareLaunchArgument('dwn_active',  default_value=''),
+        # The outline topic. On by default and cheap -- measured 0.075 ms for
+        # one box and 0.46 ms for three masks against a ~10.5 ms frame -- but
+        # switchable, because an evidence topic should be a parameter rather
+        # than a branch.
+        DeclareLaunchArgument('contours',    default_value='true'),
         DeclareLaunchArgument('fwd_classes', default_value=''),
         DeclareLaunchArgument('dwn_classes', default_value=''),
         DeclareLaunchArgument(
@@ -365,6 +370,7 @@ def generate_launch_description():
             'dwn_models':     LaunchConfiguration('dwn_models'),
             'fwd_active_model': LaunchConfiguration('fwd_active'),
             'dwn_active_model': LaunchConfiguration('dwn_active'),
+            'publish_contours': LaunchConfiguration('contours'),
             'fwd_classes':    LaunchConfiguration('fwd_classes'),
             'dwn_classes':    LaunchConfiguration('dwn_classes'),
             'fwd_conf':       LaunchConfiguration('conf'),
