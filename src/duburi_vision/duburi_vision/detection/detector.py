@@ -25,7 +25,7 @@ space (top-left origin), matching ultralytics.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -36,6 +36,14 @@ class Detection:
     class_name: str
     score:      float                  # 0..1
     xyxy:       tuple                  # (x1, y1, x2, y2) in pixels
+
+    # Instance mask, or None when the backend does not produce one. A uint8
+    # 0/1 array the size of the INTEGER bbox and anchored at its top-left, not
+    # a full-frame layer: a frame-sized mask per detection is mostly zeros, and
+    # every consumer needs the box anyway. Optional with a None default so a
+    # box-only backend and every existing construction site are unchanged --
+    # `mask is None` means "this backend cannot", never "empty mask".
+    mask:       Optional[np.ndarray] = None
 
     # ----- Convenience derived getters -- cheap, just for readability ----- #
     @property

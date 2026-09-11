@@ -60,8 +60,9 @@ def make_detector(*, model_path: str, logger=None, **kwargs) -> Detector:
         # this module -- the same reason yolo.py does not import torch at module
         # scope. A missing runtime must fail when you ask for a .hef, not when
         # you import the package.
-        from .hailo import HailoDetector
-        return HailoDetector(model_path=resolved, logger=logger, **kwargs)
+        from .hailo import HailoDetector, HailoSegDetector, emits_raw_heads
+        cls = HailoSegDetector if emits_raw_heads(resolved) else HailoDetector
+        return cls(model_path=resolved, logger=logger, **kwargs)
 
     from .yolo import YoloDetector
     return YoloDetector(model_path=resolved, logger=logger, **kwargs)
