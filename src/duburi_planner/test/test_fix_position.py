@@ -104,3 +104,29 @@ def test_bearing_to_uses_the_WATER_field_of_view():
     fake = _fake(seen={'gate': 1.0}, heading=0.0)
     fake.bearing_to = DuburiMission.bearing_to.__get__(fake)
     assert fake.bearing_to('gate') == pytest.approx(46.7 / 2.0)
+
+
+# --------------------------------------------------------------------------- #
+#  the single-prop fix: EXECUTE the success path, do not grep for it
+# --------------------------------------------------------------------------- #
+def test_the_success_Fix_can_actually_be_constructed():
+    """`fix_from_prop` ends in a five-kwarg `Fix(...)` that no test had ever
+    run. A grep for the function name passes whether or not that line raises,
+    which is the grep-versus-execute gap this register already records.
+    """
+    from duburi_localization.resection import Fix
+
+    got = Fix(True, x_m=1.25, y_m=-0.5, used=1, residual_m=0.0,
+              separation_deg=0.0)
+    assert got.ok is True
+    assert got.x_m == 1.25
+    assert got.y_m == -0.5
+    assert got.used == 1
+
+
+def test_a_refusal_Fix_carries_its_reason():
+    from duburi_localization.resection import Fix
+
+    got = Fix(False, reason='not visible')
+    assert got.ok is False
+    assert 'not visible' in got.reason

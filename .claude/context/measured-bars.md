@@ -2678,6 +2678,38 @@ Final run: `imu=2924 att=2924 zupt=58 depth=1540 gaps=0`, yaw held at
 
 **The bar: a stationary hull must stay under 5 cm.** Each row is one change.
 
+⛔ **AND THE CONTROL, WHICH OVERTURNS THE OBVIOUS READING OF THE TABLE.** The
+same 95 s run with `zupt:=false`, everything else identical:
+
+| | horizontal position after 95 s | rejects |
+|---|---|---|
+| `zupt:=false` (control) | **635.77 / 289.92 m** | 342 |
+| `zupt:=true` (treatment) | **0.07 / 0.04 m** | 7 |
+
+So **4 cm is ZUPT's number, not the propagation's.** The filter was never
+shown to dead-reckon well; it was shown to hold still when something told it
+it was still. Stated plainly because the three-row table above reads like a
+filter-quality result and is not one.
+
+Why it must be so, rather than being a defect: with only attitude and depth,
+HORIZONTAL VELOCITY IS COMPLETELY UNOBSERVED. Depth constrains z, attitude
+constrains R, and nothing at all constrains vx/vy -- so accelerometer bias and
+attitude residual integrate twice, without bound. That is textbook unaided
+INS behaviour on a MEMS sensor, and 635 m in 95 s is the right order.
+
+The consequence for the vehicle: **the filter requires a velocity channel to
+be meaningful, and has exactly two** -- downward optical flow in water, ZUPT
+when the hull is still and flow is absent. Neither is optional. A run with the
+downward camera unable to see the floor and the hull moving has NO velocity
+aiding, and the position output must not be trusted; the `flow=` counter in
+the `[LOCAL]` line is how an operator sees that.
+
+**Bar30 noise, measured the same session:** n=617 over 28 s, mean 1.1977 m,
+**sd 0.0164 m**, p2p 0.0620 m. `depth_sigma` defaults to 0.02, which is just
+conservative of the measured sd -- correct direction. The ~0.2 % gated
+rejection rate is consistent with a 99th-percentile gate, not a mis-set
+parameter.
+
 * **Row 1 → 2.** An unaided inertial attitude error grows through the gravity
   coupling, the accelerometer's gravity component leaks into horizontal
   acceleration, and the depth update's gain pumps it into x and y. The board

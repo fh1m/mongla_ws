@@ -39,11 +39,13 @@ from collections import deque
 import numpy as np
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy
+from rclpy.qos import (QoSDurabilityPolicy, QoSProfile,
+                       QoSReliabilityPolicy)
 
 from geometry_msgs.msg import PointStamped, TwistWithCovarianceStamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu
+from std_msgs.msg import Float32
 
 from duburi_interfaces.msg import DuburiState
 
@@ -91,6 +93,9 @@ class LocalizationNode(Node):
         self._still: deque = deque(maxlen=STILL_WINDOW)
         self._last_flow_t = 0.0
         self._attitude_seeded = False
+        self._anchored = False
+        self._last_input_t = 0.0
+        self._aided_at_last_diag = -1
 
         cam = str(self.declare_parameter('flow_camera', 'downward').value)
         self._flow_sigma = float(self.declare_parameter('flow_sigma', 0.05).value)
@@ -124,6 +129,15 @@ class LocalizationNode(Node):
         # one whose absence is worth noticing in the diagnostic line.
         self.create_subscription(
             PointStamped, '/duburi/localization/fix', self._on_fix, 10)
+        # The anchored world heading, latched by `anchor_on()`. Until one
+        # arrives the filter's attitude is the BOARD's, which is boot-relative
+        # or magnetic -- a perfectly good attitude in a frame that is not the
+        # pool's. Receiving this is what makes the output frame honest.
+        latched = QoSProfile(depth=1,
+                             reliability=QoSReliabilityPolicy.RELIABLE,
+                             durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
+        self.create_subscription(Float32, '/duburi/localization/heading',
+                                 self._on_heading, latched)
 
         self._pub = self.create_publisher(Odometry, '/duburi/odom', 10)
         self.create_timer(0.1, self._publish)
@@ -163,6 +177,7 @@ class LocalizationNode(Node):
              msg.linear_acceleration.z),
             dt)
         self._n['imu'] += 1
+        self._last_input_t = t
 
         # ⛔ THE SPLIT, ENFORCED HERE. The board owns attitude; without this
         # line the companion propagates its own and DIVERGES -- measured on
@@ -293,6 +308,28 @@ class LocalizationNode(Node):
         self._n['zupt'] += 1
         self._still.clear()
 
+    def _on_heading(self, msg: Float32) -> None:
+        """An absolute world heading from the landmark anchor.
+
+        ⛔ THIS IS WHAT MAKES `frame_id` TRUE. The board's yaw is excellent and
+        is not a pool bearing: it is relative to boot, or to magnetic north
+        through a reference that may not have locked (`MAGACC` 0.0, `YAW_REF`
+        0.0, `COMP_SEEN` 0.0 on this hull, measured). Until an anchor arrives
+        the estimate is in the board's frame and the output says `odom`; after
+        it, the frame really is the course's and the output says `pool`.
+
+        Publishing `pool` before that point would not be a labelling nicety:
+        flow integrates into position through the SAME rotation, so every
+        dead-reckoned metre would walk off along an offset nobody measured.
+        """
+        self._filter.update_yaw(float(msg.data), sigma_deg=self._yaw_sigma_deg)
+        self._n['yaw'] += 1
+        if not self._anchored:
+            self._anchored = True
+            self.get_logger().info(
+                f'[LOCAL] heading anchored at {float(msg.data):+.1f} deg: the '
+                f'output frame is the POOL from here on.')
+
     def _on_fix(self, msg: PointStamped) -> None:
         """A pool-frame position, from `fix_position()` or `fix_from_prop()`.
 
@@ -313,8 +350,21 @@ class LocalizationNode(Node):
     def _publish(self) -> None:
         st = self._filter.X
         m = Odometry()
-        m.header.stamp = self.get_clock().now().to_msg()
-        m.header.frame_id = 'pool'
+        # ⛔ THE STAMP IS THE LATEST INPUT'S, NOT `now()`. Every input to this
+        # filter is stamped on the BOARD's clock through `ClockMap`, and
+        # stamping the output on the host wall clock reintroduces exactly the
+        # transport jitter that mapping exists to remove -- measured at 6.67 ms
+        # sd, 35.12 ms p2p. This stack has now made the wrong-clock mistake in
+        # six places; this was nearly the seventh, on the output of the one
+        # node that was careful at all four inputs.
+        if self._last_input_t > 0.0:
+            m.header.stamp.sec = int(self._last_input_t)
+            m.header.stamp.nanosec = int(
+                (self._last_input_t - int(self._last_input_t)) * 1e9)
+        else:
+            m.header.stamp = self.get_clock().now().to_msg()
+        # `pool` is a CLAIM, and it is only true once the heading is anchored.
+        m.header.frame_id = 'pool' if self._anchored else 'odom'
         m.child_frame_id = 'duburi'
         m.pose.pose.position.x = float(st.p[0])
         m.pose.pose.position.y = float(st.p[1])
@@ -337,6 +387,24 @@ class LocalizationNode(Node):
 
     def _diagnose(self) -> None:
         n = self._n
+        # ⛔ THE ONE DEGRADATION AN OPERATOR MUST BE TOLD ABOUT. With attitude
+        # and depth alone, horizontal velocity is COMPLETELY unobserved --
+        # depth constrains z, attitude constrains R, nothing constrains vx/vy
+        # -- so bias and attitude residual integrate twice without bound.
+        # Measured on this vehicle with ZUPT disabled and no flow: 635 m of
+        # position in 95 s, while the filter published a pose the whole time
+        # and looked entirely healthy.
+        #
+        # Flow in water or ZUPT when still. Neither is optional, and having
+        # neither is not a degraded estimate, it is not an estimate.
+        aided = n['flow'] + n['zupt']
+        if aided == self._aided_at_last_diag:
+            self.get_logger().warning(
+                '[LOCAL] NO VELOCITY AIDING in the last window: no optical '
+                'flow, no ZUPT. Horizontal position is unobserved and will '
+                'run away -- do not act on it. (Downward camera seeing the '
+                'floor? Hull genuinely moving?)')
+        self._aided_at_last_diag = aided
         self.get_logger().info(
             f"[LOCAL] imu={n['imu']} att={n['att']} flow={n['flow']} "
             f"zupt={n['zupt']} depth={n['depth']} "

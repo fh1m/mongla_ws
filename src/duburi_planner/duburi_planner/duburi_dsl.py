@@ -394,6 +394,7 @@ class DuburiMission:
         self._fix_pub = None          # lazily-created PointStamped publisher (pool fix -> filter)
         self._odom_sub = None         # lazily-created Odometry subscription (filter -> mission)
         self._odom = None             # latest Odometry, or None if the filter is not running
+        self._heading_pub = None      # lazily-created latched Float32 (anchored heading)
         # Scoreboard: ordered list of (cmd, success, elapsed_s, message)
         self._scoreboard: list[dict] = []
         self._mission_start: float = _time.monotonic()
@@ -1476,6 +1477,15 @@ class DuburiMission:
         got = anchor_from(fused, self.head(), float(bearing_deg))
         if got.ok:
             self._heading_offset = got.offset_deg
+            # TELL THE FILTER. Until this line the anchor was a mission-local
+            # variable: `absolute_heading()` used it, `bearing_to()` used it,
+            # and the estimator -- the one component whose whole output is
+            # labelled with a frame -- never heard about it. Its attitude came
+            # from the board, which is boot-relative or magnetic, so
+            # `/duburi/odom` claimed a pool frame it had no way to be in, and
+            # flow would have dead-reckoned off along that unmeasured offset.
+            # Same no-caller defect as the filter itself, one layer up.
+            self._publish_heading(got.absolute_deg)
             self.log.info(
                 f'[ANCH ] heading anchored: relative {self.head():.1f} is truly '
                 f'{got.absolute_deg:.1f} (offset {got.offset_deg:+.1f}, '
@@ -1483,6 +1493,27 @@ class DuburiMission:
         else:
             self.log.warning(f'[ANCH ] heading NOT anchored: {got.reason}')
         return got
+
+    def _publish_heading(self, absolute_deg: float) -> None:
+        """Hand the anchored world heading to the invariant filter.
+
+        Latched, because the anchor is a one-shot event and the filter may
+        start after the mission does -- a VOLATILE publish would be heard by
+        nobody and leave the estimator in the boot frame while every log line
+        said it was anchored.
+        """
+        try:
+            from std_msgs.msg import Float32
+            if getattr(self, '_heading_pub', None) is None:
+                qos = QoSProfile(
+                    depth=1,
+                    reliability=QoSReliabilityPolicy.RELIABLE,
+                    durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
+                self._heading_pub = self.client.node.create_publisher(
+                    Float32, '/duburi/localization/heading', qos)
+            self._heading_pub.publish(Float32(data=float(absolute_deg)))
+        except Exception as exc:            # noqa: BLE001 -- best-effort
+            self.log.warning(f'[ANCH ] heading not published to the filter: {exc}')
 
     def absolute_heading(self) -> float:
         """The hull's heading in WORLD terms, or the relative one if unanchored.
