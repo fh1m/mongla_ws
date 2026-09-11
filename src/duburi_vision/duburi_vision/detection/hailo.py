@@ -494,6 +494,11 @@ class HailoDetector(Detector):
     # (SIGSEGV on a concurrent evict, SRAM_MEMORY_FULL on a per-swap
     # configure). So the subclass overrides exactly these two.
     def _configure_outputs(self) -> None:
+        # Imported HERE, not taken from __init__'s scope. Extracting this hook
+        # out of __init__ left the name behind and every detection HEF raised
+        # `NameError: FormatType` at construction -- caught on the vehicle, not
+        # by any test, because nothing off the chip exercises this line.
+        from hailo_platform import FormatType
         self._model.output().set_format_type(FormatType.FLOAT32)
         self._out_shape = tuple(self._model.output().shape)
 
