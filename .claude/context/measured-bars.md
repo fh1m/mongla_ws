@@ -2661,3 +2661,39 @@ decoded by pymavlink and thrown away every frame. Same shape as the ESC-RPM
 finding. Now published as `sensor_msgs/Imu` on `/duburi/imu`, stamped through
 the same `ClockMap` mapping as `/duburi/imu_rates` (the board's ATTITUDE
 interval has sd 0.00 ms against 6.67 ms of host arrival jitter).
+
+## The invariant filter on the vehicle, stationary rig (2026-09-11)
+
+Manager + `localization_node` on the Pi against the live SROT board, hull on
+the table, ~95 s per run. No thrusters, no water.
+
+| configuration | horizontal position | rejects | lockout breaks |
+|---|---|---|---|
+| companion propagates its own attitude | **7.1e6 m** in 35 s | — | — |
+| board attitude consumed, filter starts at identity | 0.42 / 0.75 m | 345 | 1 |
+| board attitude consumed, first sample ADOPTED | **0.04 / 0.02 m** | 8 | 0 |
+
+Final run: `imu=2924 att=2924 zupt=58 depth=1540 gaps=0`, yaw held at
+**−168.3°** matching the board, `/duburi/imu` at **50.001 Hz** (sd 0.44 ms).
+
+**The bar: a stationary hull must stay under 5 cm.** Each row is one change.
+
+* **Row 1 → 2.** An unaided inertial attitude error grows through the gravity
+  coupling, the accelerometer's gravity component leaks into horizontal
+  acceleration, and the depth update's gain pumps it into x and y. The board
+  fuses the same quantity at 500 Hz to under 0.01 °/min. Propagating it again
+  on the companion is strictly worse, and the divergence is the proof.
+* **Row 2 → 3.** Starting at identity against a hull at −168.3° is a large
+  standing innovation: 345 gated rejections, one lockout break, and ~0.9 m of
+  position laid down during the transient. That error is PERMANENT until a
+  position fix arrives, because nothing else observes horizontal position. An
+  estimator with no prior should adopt its first measurement.
+
+ZUPT fired 58 times in 95 s with flow absent. Stillness is measured from the
+gyro and the peak-to-peak of specific force, never from mission intent — a
+hull station-keeping against a current is commanded still and is not.
+
+⚠ **`pkill -f auv_manager` matches nothing**; the executable is `start`. An
+orphaned manager held `/dev/ttyUSB0` and kept publishing the pre-attitude
+message format, so new code read as broken while never having run. Same family
+as the orphaned trackers: `ros2 run`'s child outlives its parent.
