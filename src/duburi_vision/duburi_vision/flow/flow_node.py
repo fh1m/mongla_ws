@@ -391,6 +391,11 @@ class FlowVelocityNode(Node):
         self._pub_vel = self.create_publisher(
             TwistWithCovarianceStamped, f'{ns}/velocity', 10)
         self._pub_quality = self.create_publisher(UInt8, f'{ns}/flow_quality', 10)
+        # The floor's grid orientation, absolute in the POOL frame modulo 90
+        # degrees. Its own topic rather than folded into the velocity message,
+        # because it is a different quantity measured at a different rate and a
+        # consumer wanting one rarely wants the other.
+        self._pub_grid = self.create_publisher(Float32, f'{ns}/floor_grid_deg', 10)
         self._pub_dist = self.create_publisher(Float32, f'{ns}/distance_traveled', 10)
         self._pub_debug = self.create_publisher(Float32MultiArray,
                                                 f'{ns}/distance_debug', 10)
@@ -1033,6 +1038,7 @@ class FlowVelocityNode(Node):
             return
         self._tile_height = g.height_m(f_px, self._tile_m)
         self._tile_angle = g.heading_deg()
+        self._pub_grid.publish(Float32(data=float(self._tile_angle)))
         # Report the disagreement, never silently pick. Same rule the existing
         # optical cross-check follows: a divergence does not say WHICH input is
         # wrong, and `pool_depth_m` is the one nobody measures.

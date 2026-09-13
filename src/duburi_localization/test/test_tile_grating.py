@@ -283,3 +283,63 @@ def test_measure_handles_no_frame():
     from duburi_localization.tile_grating import measure
 
     assert measure(None) is None
+
+
+# --------------------------------------------------------------------------- #
+#  snap_to_grid: a DRIFT BOUND, not a heading source
+# --------------------------------------------------------------------------- #
+def test_a_small_drift_is_pulled_back_onto_the_grid():
+    """A free-running BNO drifts without bound. The grid's residual should be
+    constant, so a moving residual IS the drift and can be removed."""
+    from duburi_localization.tile_grating import snap_to_grid
+
+    # Hull truly on the grid at 30 deg; gyro has drifted 3 deg.
+    assert snap_to_grid(33.0, 30.0) == pytest.approx(30.0)
+    assert snap_to_grid(27.0, 30.0) == pytest.approx(30.0)
+
+
+def test_it_does_not_move_a_heading_already_on_the_grid():
+    from duburi_localization.tile_grating import snap_to_grid
+
+    assert snap_to_grid(30.0, 30.0) == pytest.approx(30.0)
+
+
+def test_the_four_fold_ambiguity_is_respected_not_resolved():
+    """A square grid looks identical from four directions, so the correction
+    is to the NEAREST grid line -- never to 'the' grid line."""
+    from duburi_localization.tile_grating import snap_to_grid
+
+    # Facing ~120 deg with the grid reading 30: 120 is already on a grid line
+    # (30 + 90), so nothing should move.
+    assert snap_to_grid(120.0, 30.0) == pytest.approx(120.0)
+    assert snap_to_grid(122.0, 30.0) == pytest.approx(120.0)
+
+
+def test_a_large_disagreement_is_REFUSED_not_applied():
+    """⛔ THE SAFETY. A correction beyond the bound means the estimate and the
+    floor disagree about WHICH grid line is which -- a four-fold aliasing
+    error. Applying it snaps the hull 90 degrees onto the wrong branch. A
+    drifting heading is still roughly right; a confidently wrong one is not."""
+    from duburi_localization.tile_grating import snap_to_grid
+
+    assert snap_to_grid(30.0 + 40.0, 30.0, max_correction_deg=20.0) is None
+
+
+def test_the_correction_never_exceeds_half_a_cell():
+    """Whatever the inputs, the pull is bounded by 45 deg -- so a drifting yaw
+    can never be moved further than half a grid cell."""
+    from duburi_localization.tile_grating import snap_to_grid
+
+    for yaw in range(0, 360, 7):
+        for grid_a in (0.0, 13.0, 44.0, 89.0):
+            got = snap_to_grid(float(yaw), grid_a, max_correction_deg=90.0)
+            assert got is not None
+            assert abs(got - yaw) <= 45.0 + 1e-9
+
+
+def test_nan_and_none_are_refused():
+    from duburi_localization.tile_grating import snap_to_grid
+
+    assert snap_to_grid(float('nan'), 30.0) is None
+    assert snap_to_grid(30.0, float('nan')) is None
+    assert snap_to_grid(None, 30.0) is None

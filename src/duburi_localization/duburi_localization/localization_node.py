@@ -50,6 +50,7 @@ from std_msgs.msg import Float32
 from duburi_interfaces.msg import DuburiState
 
 from duburi_localization.inekf import RIEKF
+from duburi_localization.tile_grating import snap_to_grid
 
 # A dt longer than this is a GAP, not a long step. Integrating one 2 s
 # interval as a single Euler step is not the same estimate as 100 steps of
@@ -89,7 +90,8 @@ class LocalizationNode(Node):
         # the filter is the first question when a pose looks wrong, and a rate
         # of zero on one input is invisible in the pose itself.
         self._n = {'imu': 0, 'att': 0, 'depth': 0, 'yaw': 0, 'flow': 0,
-                   'fix': 0, 'zupt': 0, 'gap': 0}
+                   'fix': 0, 'zupt': 0, 'grid': 0, 'grid_refused': 0,
+                   'gap': 0}
         self._still: deque = deque(maxlen=STILL_WINDOW)
         self._last_flow_t = 0.0
         self._attitude_seeded = False
@@ -110,6 +112,13 @@ class LocalizationNode(Node):
             self.declare_parameter('attitude_sigma_deg', 0.5).value)
         self._zupt_sigma = float(self.declare_parameter('zupt_sigma', 0.01).value)
         self._zupt_enabled = bool(self.declare_parameter('zupt', True).value)
+        # The grid is geometry, not a compass: when it applies it is very
+        # precise (measured +/-1.0 deg against known truth), so a tight sigma
+        # is honest. The correction bound is the safety, not the sigma.
+        self._grid_sigma_deg = float(
+            self.declare_parameter('grid_sigma_deg', 1.0).value)
+        self._grid_max_corr_deg = float(
+            self.declare_parameter('grid_max_correction_deg', 20.0).value)
         # Off by default. The board's yaw is already a fused 500 Hz solution and
         # feeding it back in as a measurement makes this filter agree with it by
         # construction -- which looks like convergence and measures nothing.
@@ -138,6 +147,10 @@ class LocalizationNode(Node):
                              durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(Float32, '/duburi/localization/heading',
                                  self._on_heading, latched)
+        # The floor's grid, which BOUNDS yaw drift without a magnetometer.
+        self.create_subscription(
+            Float32, f'/duburi/vision/{cam}/floor_grid_deg',
+            self._on_floor_grid, 10)
 
         self._pub = self.create_publisher(Odometry, '/duburi/odom', 10)
         self.create_timer(0.1, self._publish)
@@ -330,6 +343,36 @@ class LocalizationNode(Node):
                 f'[LOCAL] heading anchored at {float(msg.data):+.1f} deg: the '
                 f'output frame is the POOL from here on.')
 
+    def _on_floor_grid(self, msg: Float32) -> None:
+        """The floor's tile grid: a DRIFT BOUND on yaw, not a heading source.
+
+        ⛔ WHAT THIS CAN AND CANNOT DO. A square grid is identical from four
+        directions, so it can never say which way the hull faces. What it can
+        say is that the residual between our heading and the grid should be
+        CONSTANT -- so any movement of that residual is accumulated gyro drift,
+        and removing it bounds the drift without a magnetometer. Our hull
+        deliberately never fuses one, because the thrusters sit beside it.
+
+        Gated hard: a correction larger than `grid_max_correction_deg` means
+        the estimate and the floor disagree about which grid line is which, and
+        applying it would snap the hull 90 degrees onto the wrong branch. A
+        drifting heading is still roughly right; a confidently wrong one is
+        not. So a large disagreement is REFUSED and counted, never applied.
+
+        Only while anchored. Before the anchor our yaw is in the board's boot
+        frame, and pulling a boot-frame heading onto a pool-frame grid would
+        combine two unrelated angles into a confident wrong one.
+        """
+        if not self._anchored:
+            return
+        snapped = snap_to_grid(self._filter.X.yaw_deg(), float(msg.data),
+                               max_correction_deg=self._grid_max_corr_deg)
+        if snapped is None:
+            self._n['grid_refused'] += 1
+            return
+        self._filter.update_yaw(snapped, sigma_deg=self._grid_sigma_deg)
+        self._n['grid'] += 1
+
     def _on_fix(self, msg: PointStamped) -> None:
         """A pool-frame position, from `fix_position()` or `fix_from_prop()`.
 
@@ -408,7 +451,8 @@ class LocalizationNode(Node):
         self.get_logger().info(
             f"[LOCAL] imu={n['imu']} att={n['att']} flow={n['flow']} "
             f"zupt={n['zupt']} depth={n['depth']} "
-            f"yaw={n['yaw']} fix={n['fix']} gaps={n['gap']} "
+            f"yaw={n['yaw']} grid={n['grid']}/{n['grid'] + n['grid_refused']} "
+            f"fix={n['fix']} gaps={n['gap']} "
             f"rej={self._filter.rejected} brk={self._filter.lockout_breaks} | "
             f"yaw={self._filter.X.yaw_deg():+.1f} deg "
             f"p=({self._filter.X.p[0]:+.2f},{self._filter.X.p[1]:+.2f},"
