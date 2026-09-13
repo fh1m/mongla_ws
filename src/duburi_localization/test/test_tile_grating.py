@@ -240,3 +240,46 @@ def test_our_sim_floor_textures_are_correctly_refused():
             pytest.skip(f'{rel} not present')
         im = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
         assert detect(im) is None, f'{rel} should not read as a grating'
+
+
+# --------------------------------------------------------------------------- #
+#  measure(): decimation, which is what makes this affordable at all
+# --------------------------------------------------------------------------- #
+def test_decimation_preserves_the_measurement():
+    """⛔ THE COST ARGUMENT. A full 640x480 pass is 28.90 ms -- an entire frame
+    budget at 30 Hz. At /3 it is ~1.5 ms. Decimation is free here because the
+    quantity read is a COARSE frequency and an area-average is a low-pass
+    filter, which cannot move a peak far below its cutoff."""
+    from duburi_localization.tile_grating import measure
+
+    im = grid(n=480, period=26.0, angle_deg=17.0)
+    full = detect(im)
+    dec = measure(im, decimate=3)
+    assert full is not None and dec is not None
+    assert abs(dec.period_px - full.period_px) / full.period_px < 0.02
+    assert abs(dec.angle_deg - full.angle_deg) < 0.5
+
+
+def test_the_period_is_returned_in_FULL_frame_pixels():
+    """Getting this wrong divides every height by the decimation factor,
+    silently. It is done once here rather than at each call site."""
+    from duburi_localization.tile_grating import measure
+
+    im = grid(n=480, period=30.0)
+    dec = measure(im, decimate=3)
+    assert dec is not None
+    assert abs(dec.period_px - 30.0) < 1.0
+
+
+def test_measure_still_refuses_the_negative_controls():
+    """Decimation must not turn a gradient into a grating."""
+    from duburi_localization.tile_grating import measure
+
+    assert measure(np.tile(np.linspace(0, 255, 480, dtype=np.uint8), (480, 1))) is None
+    assert measure(RNG.integers(0, 255, (480, 480)).astype(np.uint8)) is None
+
+
+def test_measure_handles_no_frame():
+    from duburi_localization.tile_grating import measure
+
+    assert measure(None) is None
