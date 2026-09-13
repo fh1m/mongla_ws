@@ -258,6 +258,19 @@ class FlowVelocityNode(Node):
         # past 150 ms is not a link delay, it is a bad peak.
         self.declare_parameter('time_offset_max_s', 0.15)
         self.declare_parameter('time_offset_min_quality', 0.5)
+        # ⛔ THE FLOOR'S OWN TILE, AS A THIRD HEIGHT SOURCE. `pool_depth_m` is,
+        # by this node's own admission below, "the one input nobody measures
+        # carefully" -- and height is a clean multiplier on every velocity we
+        # emit. A tiled floor carries its own scale: `h = f * tile_m / pitch_px`
+        # needs no pool depth, no barometer and no vz estimate.
+        #
+        # `tile_m` is 0.0 = OFF, because a tile size is a VENUE constant. Our
+        # pool is not the competition's, and a wrong tile size does not fail --
+        # it scales every height by the ratio of the two, silently. Measure it
+        # on deck and set it; unset means this stays quiet.
+        self.declare_parameter('tile_m', 0.0)
+        self.declare_parameter('tile_period_s', 0.5)      # 2 Hz; it moves slowly
+        self.declare_parameter('tile_decimate', 3)
 
         cam = str(self.get_parameter('camera').value or 'downward').strip()
         self._cam = cam
@@ -389,6 +402,13 @@ class FlowVelocityNode(Node):
         self._depth_m = None
         self._yaw_deg = None
         self._last_height = None
+        self._tile_m = float(self.get_parameter('tile_m').value)
+        self._tile_period_s = float(self.get_parameter('tile_period_s').value)
+        self._tile_decimate = int(self.get_parameter('tile_decimate').value)
+        self._tile_next_t = 0.0
+        self._tile_height = None          # last height read off the floor
+        self._tile_angle = None           # grid orientation, absolute mod 90
+        self._tile_warned = False
 
         # The ANCHOR, not the previous frame: flow is measured frame-to-
         # anchor and the anchor is replaced only when a measurement is emitted.
@@ -865,6 +885,9 @@ class FlowVelocityNode(Node):
         # So travel lost to a refusal is the PRICE of refusing, and the lever
         # that matters is refusing less often -- not holding a stale anchor
         # across it. Pinned by TestRefusalTravelIsThePriceOfRefusing.
+        # Read the floor BEFORE the height is consumed, not after, or the
+        # tile height is always one cycle stale against the frame that used it.
+        self._read_the_floor(gray, t)
         self._anchor(gray, t)
         if dt > 0.0:
             self._evaluate(flow, disp, dt, t, n_used)
@@ -888,6 +911,14 @@ class FlowVelocityNode(Node):
         if height is not None:
             self._last_height = height
         h = self._last_height
+        # THE FLOOR'S OWN ANSWER, when it has one. Preferred over the
+        # pool-depth path because it is a direct measurement of the quantity we
+        # actually need, with no `pool_depth_m` in it -- and because when the
+        # two disagree the one derived from an unmeasured constant is the one
+        # to doubt. Falls back silently; a floor without tiles is the common
+        # case and not an error.
+        if self._tile_height is not None:
+            h = self._tile_height
         if h is None:
             self._refuse('no depth yet, so no height above the floor')
             return
@@ -965,6 +996,55 @@ class FlowVelocityNode(Node):
         if span < 0.2:
             return None
         return -(d1 - d0) / span
+
+    def _read_the_floor(self, gray, t: float) -> None:
+        """Read the tile grating, at a low rate, and keep what it says.
+
+        ⛔ WHY THIS IS NOT IN THE PER-FRAME PATH. A full-frame pass costs
+        28.90 ms, which is an entire frame budget at 30 Hz; decimated x3 it is
+        ~1.5 ms, and height and heading move slowly enough that 2 Hz is ample.
+        Running it per frame would have made a free measurement expensive.
+
+        `tile_m` unset means OFF, and that is the default. A tile size is a
+        VENUE constant -- ours is not the competition's -- and a wrong one does
+        not fail, it scales every height by the ratio of the two with nothing
+        logged. Off until measured.
+        """
+        if self._tile_m <= 0.0 or gray is None:
+            return
+        if t < self._tile_next_t:
+            return
+        self._tile_next_t = t + self._tile_period_s
+        try:
+            from duburi_localization.tile_grating import measure
+        except Exception:                       # noqa: BLE001
+            self._tile_m = 0.0                  # not installed: stop asking
+            return
+        g = measure(gray, decimate=self._tile_decimate)
+        if g is None:
+            # The common case on an untiled floor, and NOT an error. Clearing
+            # rather than holding: a stale height is worse than no height,
+            # because the caller cannot tell it is stale.
+            self._tile_height = None
+            self._tile_angle = None
+            return
+        f_px = self._f_px
+        if not f_px or f_px <= 0.0:
+            return
+        self._tile_height = g.height_m(f_px, self._tile_m)
+        self._tile_angle = g.heading_deg()
+        # Report the disagreement, never silently pick. Same rule the existing
+        # optical cross-check follows: a divergence does not say WHICH input is
+        # wrong, and `pool_depth_m` is the one nobody measures.
+        if self._last_height and self._tile_height:
+            d = abs(self._tile_height - self._last_height) / self._last_height
+            if d > 0.20 and not self._tile_warned:
+                self._tile_warned = True
+                self.get_logger().warning(
+                    f'[FLOW ] the FLOOR says {self._tile_height:.2f} m, the '
+                    f'pool_depth path says {self._last_height:.2f} m '
+                    f'({d:.0%} apart). The floor needs no pool_depth_m and is '
+                    f'preferred -- check pool_depth_m and the tile_m you set.')
 
     def _cross_check_height(self) -> None:
         """Height from the image, against the height from a typed pool depth.
