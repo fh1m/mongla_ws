@@ -395,6 +395,7 @@ class DuburiMission:
         self._odom_sub = None         # lazily-created Odometry subscription (filter -> mission)
         self._odom = None             # latest Odometry, or None if the filter is not running
         self._heading_pub = None      # lazily-created latched Float32 (anchored heading)
+        self._pose_frame_warned = False
         # Scoreboard: ordered list of (cmd, success, elapsed_s, message)
         self._scoreboard: list[dict] = []
         self._mission_start: float = _time.monotonic()
@@ -1039,20 +1040,43 @@ class DuburiMission:
             self.log.warning(f'[FIX  ] no position fix: {got.reason}')
         return got
 
-    def pose(self, *, timeout: float = 2.0):
+    def pose(self, *, timeout: float = 2.0, any_frame: bool = False):
         """Where the filter thinks we are: `(x_m, y_m, depth_m, yaw_deg)` or None.
 
-        The mission-facing read of `/duburi/odom`. Returns None when the
-        localization node is not running or has not published yet -- never a
-        zero, because (0, 0) is a legitimate pool position and would be
-        indistinguishable from "no answer".
+        The mission-facing read of `/duburi/odom`. None when the localization
+        node is not running, has not published yet, or -- the part that
+        matters -- when its answer is not yet in the POOL frame.
 
             here = duburi.pose()
             if here and here[0] > 4.0:
                 duburi.turn(180)
 
-        Pairs with `fix_position()`, which pushes a resected position INTO the
-        filter; this reads the fused result back out.
+        ⛔ NONE IS ALSO THE ANSWER FOR A POSITION THAT EXISTS AND IS WRONG.
+        Two ways that happens, and neither looks any different from a good
+        reading at this interface:
+
+          * BEFORE THE HEADING IS ANCHORED the estimate is in the board's boot
+            frame, so comparing it against a course coordinate is a comparison
+            in a rotated frame. The node says so in `header.frame_id` -- it
+            publishes `odom` until an anchor arrives and `pool` after -- and
+            this reads that field rather than trusting the numbers.
+          * WITH NO VELOCITY AIDING the position runs away. Measured on the
+            vehicle with flow absent and ZUPT off: 635 m in 95 s, while the
+            node published a healthy-looking pose at 10 Hz throughout. The
+            node warns in ITS log; a mission holding a bare tuple cannot hear
+            that, which is this repo's recurring defect with the roles
+            reversed -- an honest producer and a deaf consumer.
+
+        Returning None rather than a tuple is the same rule already applied to
+        a NaN yaw in `_effective_yaw_deg`: absence is safe, a plausible wrong
+        number is not.
+
+        `any_frame=True` returns the unanchored reading anyway, for a
+        diagnostic that genuinely wants to watch the filter converge. It is
+        opt-in precisely so it cannot be the thing a mission does by accident.
+
+        Pairs with `fix_position()` / `fix_from_prop()`, which push a resected
+        position INTO the filter; this reads the fused result back out.
         """
         import math
         import time as _t
@@ -1069,6 +1093,15 @@ class DuburiMission:
         while self._odom is None and _t.monotonic() < deadline:
             rclpy.spin_once(node, timeout_sec=0.05)
         if self._odom is None:
+            return None
+        frame = str(self._odom.header.frame_id)
+        if frame != 'pool' and not any_frame:
+            if not self._pose_frame_warned:
+                self._pose_frame_warned = True
+                self.log.warning(
+                    f'[LOCAL] pose() withheld: the filter is publishing in '
+                    f'{frame!r}, not the pool frame. anchor_on(<prop>) makes '
+                    f'it absolute. (pose(any_frame=True) to read it anyway.)')
             return None
         p = self._odom.pose.pose.position
         q = self._odom.pose.pose.orientation
