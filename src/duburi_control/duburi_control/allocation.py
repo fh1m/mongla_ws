@@ -33,6 +33,7 @@ vehicle's attitude authority, in the manoeuvre where you want it most.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Sequence, Tuple
 
@@ -170,3 +171,57 @@ def largest_axis_within_budget(axis: str, *, others: dict | None = None
             if x >= 0.0:
                 best = min(best, x)
     return max(0.0, min(1.0, best))
+
+
+# Priority when the horizontal group runs out. The order is a CONTROL decision
+# and is stated here rather than buried in a caller.
+#
+# ⛔ YAW FIRST, AND THAT IS THE OPPOSITE OF WHAT UNIFORM SCALING DOES. The
+# board scales the whole group together, so a large forward demand steals yaw
+# in the same proportion -- and yaw is the axis a launcher, a dropper and a
+# gate transit all depend on. Heading error points the tool at the wrong place;
+# a slightly slow approach does not. The quadrotor literature reaches the same
+# conclusion for the same reason (attitude before position before yaw, because
+# attitude error is unrecoverable and a position error is merely late); ours
+# ranks differently only because our "attitude" is held by a separate group.
+HORIZONTAL_PRIORITY = ('yaw', 'lateral', 'forward')
+VERTICAL_PRIORITY = ('roll', 'pitch', 'throttle')
+
+_AXIS_NAMES = ('roll', 'pitch', 'yaw', 'throttle', 'forward', 'lateral')
+
+
+def prioritise(demand: dict, *, horizontal_priority: Sequence[str] = HORIZONTAL_PRIORITY,
+               vertical_priority: Sequence[str] = VERTICAL_PRIORITY) -> dict:
+    """Fit a demand inside the mixer by sacrificing the LEAST important axis.
+
+    Uniform scaling is the wrong response to saturation and the reason is
+    concrete: it degrades every axis equally, including the one the manoeuvre
+    exists to get right. Asking for 100 % forward while holding a heading does
+    not just arrive slowly -- it arrives slowly AND off-heading, because the
+    board scaled the yaw down by the same factor.
+
+    This gives the high-priority axes what they ask for and spends whatever is
+    left on the rest, in order. Returns a NEW demand dict; the input is not
+    modified, so a caller can log both and see what it gave up.
+
+    Purely host-side: it changes the numbers we send, not how the board mixes
+    them, so it needs no firmware and cannot desynchronise from one.
+    """
+    out = {name: float(demand.get(name, 0.0)) for name in _AXIS_NAMES}
+    for group in (horizontal_priority, vertical_priority):
+        _fit_group(out, group)
+    return out
+
+
+def _fit_group(out: dict, order: Sequence[str]) -> None:
+    """Give each axis in `order` the most it can have, high priority first."""
+    granted = {name: 0.0 for name in order}
+    for name in order:
+        want = out[name]
+        if want == 0.0:
+            continue
+        # The most this axis may have, with everything already granted in
+        # place and everything not yet considered set to zero.
+        room = largest_axis_within_budget(name, others=dict(granted))
+        granted[name] = math.copysign(min(abs(want), room), want)
+    out.update(granted)

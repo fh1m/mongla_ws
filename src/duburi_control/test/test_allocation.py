@@ -179,3 +179,92 @@ def test_a_demand_at_the_budget_does_NOT_saturate():
 def test_an_unknown_axis_raises_rather_than_returning_a_number():
     with pytest.raises(KeyError):
         largest_axis_within_budget('sideways')
+
+
+# --------------------------------------------------------------------------- #
+#  prioritised allocation: sacrifice the least important axis, not all of them
+# --------------------------------------------------------------------------- #
+def test_uniform_scaling_COSTS_MORE_THAN_HALF_THE_YAW():
+    """⛔ THE MEASUREMENT THAT JUSTIFIES THE WHOLE IDEA.
+
+    Ask for forward 0.9, lateral 0.9, yaw 0.3 -- a hard corner with a heading
+    to hold. The board scales the group uniformly by 0.476, so yaw arrives at
+    0.143: over half the heading authority gone, in the manoeuvre that needs it
+    most. Prioritising keeps yaw whole and spends the shortfall on forward,
+    which is the axis whose error is merely 'late' rather than 'pointing the
+    tool at the wrong place'.
+    """
+    ask = {'forward': 0.9, 'lateral': 0.9, 'yaw': 0.3}
+    uniform = allocate(**ask)
+    assert uniform.delivered[2] < 0.15, 'the board should be clipping yaw hard'
+
+    from duburi_control.allocation import prioritise
+    kept = allocate(**prioritise(ask))
+    assert kept.delivered[2] == pytest.approx(0.3), 'yaw was not protected'
+    assert not kept.saturated, 'the prioritised demand should fit exactly'
+
+
+def test_a_prioritised_demand_never_saturates():
+    """The contract. If it still clipped, the board would scale it uniformly
+    again and the prioritisation would be undone."""
+    from duburi_control.allocation import prioritise
+
+    for ask in ({'forward': 1.0, 'yaw': 0.5},
+                {'lateral': 0.8, 'yaw': 0.6},
+                {'forward': 1.0, 'lateral': 1.0, 'yaw': 1.0},
+                {'roll': 1.0, 'pitch': 1.0, 'throttle': 1.0}):
+        a = allocate(**prioritise(ask))
+        assert a.horizontal_scale == pytest.approx(1.0, abs=1e-9), ask
+        assert a.vertical_scale == pytest.approx(1.0, abs=1e-9), ask
+
+
+def test_a_feasible_demand_is_returned_UNCHANGED():
+    """Prioritising must cost nothing when nothing is saturated, or every
+    ordinary manoeuvre pays for a case that is not happening."""
+    from duburi_control.allocation import prioritise
+
+    ask = {'forward': 0.3, 'yaw': 0.2, 'lateral': 0.1}
+    got = prioritise(ask)
+    for k, v in ask.items():
+        assert got[k] == pytest.approx(v), k
+
+
+def test_the_sign_of_every_axis_survives():
+    """A sacrificed axis must be reduced, never reversed. Reversing thrust on
+    an axis the mission asked to push is the worst possible failure."""
+    from duburi_control.allocation import prioritise
+
+    got = prioritise({'forward': -1.0, 'lateral': -0.9, 'yaw': 0.4})
+    assert got['forward'] <= 0.0 and got['lateral'] <= 0.0
+    assert got['yaw'] >= 0.0
+
+
+def test_no_axis_is_ever_INCREASED():
+    """Prioritising redistributes what was asked for; it must never invent
+    authority the mission did not request."""
+    from duburi_control.allocation import prioritise
+
+    ask = {'forward': 0.9, 'lateral': 0.9, 'yaw': 0.3}
+    got = prioritise(ask)
+    for k, v in ask.items():
+        assert abs(got[k]) <= abs(v) + 1e-9, k
+
+
+def test_the_groups_are_prioritised_INDEPENDENTLY():
+    """A vertical saturation must not cost the horizontals anything, and the
+    reverse -- the same block-diagonal property the mixer has."""
+    from duburi_control.allocation import prioritise
+
+    got = prioritise({'roll': 1.0, 'pitch': 1.0, 'throttle': 1.0,
+                      'forward': 0.4, 'yaw': 0.2})
+    assert got['forward'] == pytest.approx(0.4)
+    assert got['yaw'] == pytest.approx(0.2)
+
+
+def test_the_input_dict_is_not_mutated():
+    """A caller must be able to log what it asked for beside what it sent."""
+    from duburi_control.allocation import prioritise
+
+    ask = {'forward': 1.0, 'yaw': 0.5}
+    prioritise(ask)
+    assert ask == {'forward': 1.0, 'yaw': 0.5}
