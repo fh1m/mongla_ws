@@ -596,6 +596,25 @@ def _loop_hz(fc) -> float:
     return VISION_LOOP_HZ_SROT if _is_srot(fc) else LOOP_HZ
 
 
+def _mixer_saturated(lat_pct: float, yaw_pct: float, fwd_pct: float) -> bool:
+    """True when the board will scale this demand down before it reaches water.
+
+    Percent-thrust in, normalised axes out -- the mixer works in [-1, 1] and
+    this loop in percent, and getting that conversion wrong would make the
+    check fire either never or always.
+
+    Best-effort: a failure here must never stop a vision verb, so it degrades
+    to "not saturated", which is exactly the behaviour that existed before
+    this function and therefore cannot be a regression.
+    """
+    try:
+        from duburi_control.allocation import allocate
+        return allocate(yaw=yaw_pct / 100.0, forward=fwd_pct / 100.0,
+                        lateral=lat_pct / 100.0).saturated
+    except Exception:                       # noqa: BLE001
+        return False
+
+
 def _srot_drive(fc, *, fwd_pct: float, lat_pct: float, yaw_pct: float) -> None:
     """Write one MANUAL_CONTROL frame for the srot board.
 
@@ -956,6 +975,16 @@ def align_loop(*,
     surge_ema   = 0.0   # downward: trailing EMA of the signed Ch5 surge command -> brake proxy
     fill_deficit = 0.0  # downward fill->depth: (target_fill - fill), carried into the 5 Hz step
     lat_i       = 0.0   # lateral integral accumulator (Layer 2; 0 unless ki_lat>0)
+    # ⛔ THE MIXER'S OWN LIMIT, WHICH THE EXISTING ANTI-WINDUP CANNOT SEE.
+    # `abs(p_lat + lat_i) < g_lat` watches the SOFTWARE gain cap. The board
+    # scales a whole thruster group down when any motor in it passes full
+    # (`mixer.cpp`), and it never reports that -- so with yaw already spending
+    # horizontal authority the hull can be clipping at an effective lateral
+    # well below `g_lat`, while the integrator happily winds against a wall it
+    # has no way to detect. Carried from the previous tick because yaw is
+    # computed after lateral in this loop; one tick of lag on a limit that
+    # persists for many is immaterial.
+    was_saturated = False
     loop_hz     = _loop_hz(pixhawk)          # backend-dependent; see motion_rates
     # Nominal tick. Used to SEED the measured dt below and as its ceiling;
     # the loop no longer sleeps a fixed period (see `_tick`), so treating this
@@ -1141,7 +1170,8 @@ def align_loop(*,
                 # the hold (aligned_at set), conditional on the output not being
                 # saturated (anti-windup), clamped. ki_lat=0 -> exactly P.
                 if ki_lat > 0.0 and aligned_at is not None \
-                        and abs(p_lat + lat_i) < g_lat:
+                        and abs(p_lat + lat_i) < g_lat \
+                        and not was_saturated:
                     lat_i = _clamp(lat_i + ki_lat * ctrl * dt,
                                    -i_lat_max, i_lat_max)
                 lat_pct = _clamp(p_lat + lat_i, -g_lat, g_lat)
@@ -1273,6 +1303,10 @@ def align_loop(*,
             _warn_low_fps(log, fresh, sample)   # F3: surface FPS-starvation, don't stall silently
             lat_pct *= fresh
             fwd_pct *= fresh   # forward shares the freshness/coast decay (never braked)
+            # What the mixer will do to what we just asked for. Computed from
+            # OUR demand and the frame's published matrix, so it needs nothing
+            # from the board -- which is the only reason it is available at all.
+            was_saturated = _mixer_saturated(lat_pct, yaw_pct, fwd_pct)
             _drive(lat_pct, yaw_pct, fwd_pct)
             # Brake EMA tracks the PROPORTIONAL command only (a travel-momentum
             # proxy), NOT the full lat_pct: a hull holding STILL against a steady
