@@ -116,6 +116,42 @@ class Grating:
         return (self.angle_deg - float(mount_yaw_deg)) % 90.0
 
 
+def snap_to_grid(current_yaw_deg: float, grid_angle_deg: float,
+                 *, max_correction_deg: float = 20.0) -> Optional[float]:
+    """Pull a drifting yaw back onto the floor's grid. None if it is too far.
+
+    ⛔ THIS IS THE HALF THAT MATTERS, AND IT IS NOT A HEADING SOURCE -- IT IS A
+    DRIFT BOUND. The grid gives orientation modulo 90 degrees, so it cannot
+    tell you which way you are facing; a square floor looks identical from four
+    directions. What it CAN do is say that whatever your heading is, its
+    residual against the grid should be constant -- so any accumulated gyro
+    drift shows up as that residual moving, and can be removed.
+
+    A free-running BNO drifts without bound. With this, it cannot drift further
+    than half a grid cell (45 degrees) before the correction is unambiguous,
+    and in practice `max_correction_deg` keeps it far tighter than that. No
+    magnetometer, which our hull deliberately does not fuse because of the
+    thrusters; no prop in view; no detection.
+
+    `max_correction_deg` is the safety. A correction larger than this means the
+    estimate and the floor disagree about which grid line is which -- a
+    four-fold aliasing error -- and applying it would snap the hull 90 degrees
+    onto the wrong branch. Refusing is the only safe answer: a wrong heading is
+    worse than a drifting one, because a drifting one is still roughly right.
+    """
+    if grid_angle_deg is None or current_yaw_deg is None:
+        return None
+    if not (math.isfinite(current_yaw_deg) and math.isfinite(grid_angle_deg)):
+        return None
+    # Residual of the current estimate against the grid, wrapped to +/-45.
+    resid = (float(current_yaw_deg) - float(grid_angle_deg)) % 90.0
+    if resid > 45.0:
+        resid -= 90.0
+    if abs(resid) > float(max_correction_deg):
+        return None
+    return float(current_yaw_deg) - resid
+
+
 def measure(gray, *, decimate: int = 3,
             min_strength: float = MIN_PEAK_FRACTION) -> Optional[Grating]:
     """`detect` on a decimated frame, with the period scaled back to full pixels.

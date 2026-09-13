@@ -59,7 +59,7 @@ def _node():
     obj._last_imu_t = None
     obj._imu_gap_warned = True          # suppress the logger call
     obj._n = {'imu': 0, 'att': 0, 'depth': 0, 'yaw': 0, 'flow': 0, 'fix': 0,
-              'zupt': 0, 'gap': 0}
+              'zupt': 0, 'grid': 0, 'grid_refused': 0, 'gap': 0}
     obj._attitude_sigma_deg = 0.5
     obj._zupt_sigma = 0.01
     obj._zupt_enabled = True
@@ -67,6 +67,8 @@ def _node():
     obj._last_flow_t = 0.0
     obj._attitude_seeded = False
     obj._anchored = False
+    obj._grid_sigma_deg = 1.0
+    obj._grid_max_corr_deg = 20.0
     obj._last_input_t = 0.0
     obj._aided_at_last_diag = -1
     obj._yaw_sigma_deg = 2.0
@@ -496,3 +498,56 @@ def test_aiding_present_is_not_announced():
     n._n['zupt'] += 1
     n._diagnose()
     assert not any('NO VELOCITY AIDING' in m for m in warned)
+
+
+# --------------------------------------------------------------------------- #
+#  the floor grid as a DRIFT BOUND on yaw
+# --------------------------------------------------------------------------- #
+def test_the_grid_is_ignored_until_the_heading_is_anchored():
+    """Before the anchor our yaw is in the board's boot frame. Pulling a
+    boot-frame heading onto a pool-frame grid combines two unrelated angles
+    into a confident wrong one."""
+    n = _node()
+    n._anchored = False
+    # ⛔ 0.0 DELIBERATELY, and the choice is the test. The filter starts at yaw
+    # 0, so a grid at 0 needs NO correction and sails through the aliasing
+    # guard -- leaving the anchored check as the only thing that can stop it.
+    # An earlier version of this test used 30.0, which the aliasing guard
+    # refused on its own, so the test passed with the anchored gate deleted.
+    n._on_floor_grid(type('F', (), {'data': 0.0})())
+    assert n._n['grid'] == 0, 'the grid was applied in the boot frame'
+    assert n._n['grid_refused'] == 0, 'it should not even be considered'
+
+
+def test_a_small_drift_is_corrected_by_the_floor():
+    """⛔ NO MAGNETOMETER, NO PROP, NO DETECTION. Our hull deliberately never
+    fuses a magnetometer -- the thrusters sit beside it -- so a free-running
+    BNO drifts without bound. The floor's grid bounds it."""
+    n = _node()
+    n._anchored = True
+    n._on_floor_grid(type('F', (), {'data': 0.0})())
+    assert n._n['grid'] == 1
+    assert n._n['grid_refused'] == 0
+
+
+def test_a_large_disagreement_is_REFUSED_and_COUNTED():
+    """A correction beyond the bound means the estimate and the floor disagree
+    about which grid line is which. Applying it snaps the hull 90 degrees onto
+    the wrong branch -- worse than the drift it was fixing."""
+    n = _node()
+    n._anchored = True
+    n._filter.X.R = np.array([[0.0, -1.0, 0.0],      # yaw = +90 deg
+                              [1.0, 0.0, 0.0],
+                              [0.0, 0.0, 1.0]])
+    n._grid_max_corr_deg = 5.0
+    n._on_floor_grid(type('F', (), {'data': 60.0})())
+    assert n._n['grid'] == 0
+    assert n._n['grid_refused'] == 1
+
+
+def test_the_refusal_is_visible_in_the_diagnostic():
+    """A channel that silently refuses half its measurements looks exactly like
+    one that is not running."""
+    import inspect
+    src = inspect.getsource(ln.LocalizationNode._diagnose)
+    assert 'grid' in src
