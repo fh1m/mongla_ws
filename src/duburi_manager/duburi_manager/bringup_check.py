@@ -996,6 +996,45 @@ def _stack_headroom_verdict(named: dict) -> tuple[str, str, str]:
             f'lowest {name}={int(low)} bytes ({detail}){tail}')
 
 
+# Free heap as the board reports it: ESP.getFreeHeap(), CURRENT free bytes, not a
+# low-water mark. MEASURED 156180 B, flat across 48 samples in two recorded bench
+# sessions on the Pi (~/duburi_runs/bench_20260902_224032.tlog, txrx_...224254).
+HEAP_BASELINE_BYTES = 156180
+# A quarter gone from a value that never moved at rest is a leak or a new
+# allocation path; either should be known before a run. Derived from the
+# measured baseline, not from a failure point.
+HEAP_WARN_FRACTION = 0.75
+# Conventional floor, NOT a measured failure point: below this an ESP32 task or
+# queue allocation can fail at runtime, which on this board is a reset.
+HEAP_FAIL_BYTES = 32768
+
+
+def _heap_verdict(named: dict) -> tuple[str, str, str]:
+    """Is the control board running out of heap?
+
+    ⛔ SENT SINCE THE TELEMETRY EXISTED, READ BY NOTHING BUT A PRINTOUT. Same
+    story as the stack marks beside it. Limit: this is CURRENT free heap, so a
+    leak that recovers between reads is invisible -- the right instrument is
+    ESP.getMinFreeHeap(), the heap's own high-water mark, which is a one-line
+    firmware PR (queued in the research queue).
+    """
+    heap = named.get('HEAP')
+    if heap is None:
+        return (WARN, 'board heap unknown',
+                'no HEAP value -- firmware does not report it, or none arrived')
+    heap = int(heap)
+    if heap < HEAP_FAIL_BYTES:
+        return (FAIL, 'board heap nearly exhausted',
+                f'{heap} B free (< {HEAP_FAIL_BYTES}). An allocation failure on the '
+                'ESP32 resets the control board mid-run')
+    floor = int(HEAP_BASELINE_BYTES * HEAP_WARN_FRACTION)
+    if heap < floor:
+        return (WARN, 'board heap below its measured baseline',
+                f'{heap} B free vs {HEAP_BASELINE_BYTES} B measured at rest '
+                f'(warn under {floor}). A leak or a new allocation path')
+    return (PASS, 'board heap', f'{heap} B free (baseline {HEAP_BASELINE_BYTES} B)')
+
+
 def _resolve_srot_for_check(device: str = '') -> tuple[str, str]:
     """(conn, probe_state) for the SROT board. `probe_state` is '', 'mavlink',
     'busy' or 'silent' -- '' when the operator named the endpoint explicitly.
@@ -1169,6 +1208,7 @@ def _check_srot(skip_mav: bool, device: str = '') -> list[tuple[str, str, str]]:
                                        _read_param(conn, 'DEPTH_P')))
         out.append(_yaw_ref_verdict(named.get('YAW_REF')))
         out.append(_stack_headroom_verdict(named))
+        out.append(_heap_verdict(named))
 
         # GAIN halves MANUAL_CONTROL until it is 1.0, and fw R14 means a PARAM_SET may
         # never have persisted on a board flashed before 8cb4203.
