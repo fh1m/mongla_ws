@@ -52,6 +52,17 @@ MIN_SAMPLES = 100          # excited samples per axis before it may predict
 MAX_RESIDUAL_MPS = 0.10    # predictive RMS above this: the model does not fit
 SIGMA_FLOOR_MPS = 0.05     # never claim better than the flow it learned from
 UNREADY_VAR = 1.0e4        # variance handed on for an unready axis
+# ⛔ INNOVATION GATE. Once an axis is ready, a sample more than this many sigmas
+# off the prediction is REJECTED, not learned and not scored. Without it a hull
+# held against a pipe raised the residual RMS inside one second, the axis
+# declared itself unready, and the blocked check went UNKNOWN before it could
+# fire -- while the samples dragged the gain toward zero (0.55 -> 0.33 in 6 s).
+GATE_SIGMAS = 4.0
+GATE_FLOOR_MPS = 0.02      # the gate's own floor: flow noise, not the aid's floor
+# A real change of regime (a current appears, a battery sags, a thruster
+# weakens) is also persistently rejected. After this many consecutive
+# rejections the fit is stale: forget it and relearn, unready meanwhile.
+RELEARN_AFTER = 200
 
 
 class _Axis:
@@ -63,12 +74,19 @@ class _Axis:
         self.P = np.eye(2) * 100.0
         self.n = 0
         self.sq = 0.0          # EMA of squared a-priori residual
+        self.rejected_run = 0  # consecutive innovation-gate rejections
 
     def learn(self, u: float, v: float) -> None:
         if not (math.isfinite(u) and math.isfinite(v)) or abs(u) < MIN_EXCITATION:
             return
         phi = np.array([u, 1.0])
         resid = v - float(phi @ self.theta)
+        if self.ready and abs(resid) > GATE_SIGMAS * max(self.rms, GATE_FLOOR_MPS):
+            self.rejected_run += 1
+            if self.rejected_run >= RELEARN_AFTER:
+                self.__init__(self.lam)
+            return
+        self.rejected_run = 0
         Pphi = self.P @ phi
         k = Pphi / (self.lam + float(phi @ Pphi))
         self.theta = self.theta + k * resid
@@ -76,7 +94,10 @@ class _Axis:
         self.n += 1
         # Residual BEFORE the update: predictive. The post-update residual
         # flatters a model that merely memorises the last sample.
-        a = 0.05 if self.n > 20 else 1.0 / self.n
+        # SLOW (about 100 samples). A fast average chased a slowly growing
+        # residual -- a hull decelerating into a wall -- and widened the gate
+        # faster than the residual grew, so the wall leaked in under it.
+        a = 0.01 if self.n > 100 else 1.0 / self.n
         self.sq += a * (resid * resid - self.sq)
 
     @property
@@ -144,3 +165,68 @@ class CommandVelocityModel:
             else:
                 out.append((0.0, UNREADY_VAR))
         return out[0][0], out[1][0], out[0][1], out[1][1]
+
+
+# --------------------------------------------------------------------------- #
+#  The same model, read backwards: commanded motion that did not happen
+# --------------------------------------------------------------------------- #
+# ⛔ WHY THIS LIVES HERE. Once the model knows what a demand SHOULD produce,
+# a floor that does not move under a strong demand is a measurement: the hull
+# is against a prop, snagged, or a thruster is dead. A timed `move_forward`
+# into a gate leg reports success today; nothing in the stack can tell a hull
+# that travelled from one that pushed on a pipe for four seconds. This needs
+# no sensor we do not have -- demand in, flow out, the model between them.
+#
+# Thresholds are deliberately coarse: this is a "the mission is wrong about
+# where it is" alarm, not a fine fault isolator. Their failure is written here:
+MIN_DEMAND = 0.20          # below this the expected speed is inside flow noise
+MIN_EXPECTED_MPS = 0.10    # and so is a prediction this small
+BLOCKED_FRACTION = 0.30    # measured < 30 % of expected along the commanded axis
+BLOCKED_HOLD_S = 1.0       # sustained; one frame of lag or a turn is not a wall
+
+OK, BLOCKED, UNKNOWN = 'ok', 'blocked', 'unknown'
+
+
+class MotionCheck:
+    """Is the hull moving the way it is being told to? `ok`/`blocked`/`unknown`."""
+
+    def __init__(self):
+        self._held = [0.0, 0.0]
+        self.state = UNKNOWN
+        self.axis = None           # 'x' or 'y' when blocked
+
+    def observe(self, model: CommandVelocityModel, vx: float, vy: float,
+                dt: float) -> str:
+        pred = model.predict()
+        if pred is None or not (math.isfinite(vx) and math.isfinite(vy)):
+            self._held = [0.0, 0.0]
+            self.state, self.axis = UNKNOWN, None
+            return self.state
+        dt = max(0.0, float(dt))
+        judged = False
+        for i, (name, axis, meas, exp) in enumerate(
+                (('x', model.x, vx, pred[0]), ('y', model.y, vy, pred[1]))):
+            if not axis.ready or abs(model._w[i]) < MIN_DEMAND or abs(exp) < MIN_EXPECTED_MPS:
+                self._held[i] = 0.0
+                continue
+            judged = True
+            along = meas * math.copysign(1.0, exp)
+            if along < BLOCKED_FRACTION * abs(exp):
+                self._held[i] += dt
+            else:
+                self._held[i] = 0.0
+        worst = max(range(2), key=lambda i: self._held[i])
+        if self._held[worst] >= BLOCKED_HOLD_S:
+            self.state, self.axis = BLOCKED, 'xy'[worst]
+        elif judged:
+            self.state, self.axis = OK, None
+        else:
+            self.state, self.axis = UNKNOWN, None
+        return self.state
+
+    @property
+    def suspect(self) -> bool:
+        """Accumulating toward BLOCKED. The model must not learn from these
+        samples, or a hull held against a pipe teaches it that thrust makes
+        no speed -- and then nothing is ever blocked again."""
+        return any(h > 0.0 for h in self._held)
