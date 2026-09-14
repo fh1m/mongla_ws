@@ -547,6 +547,15 @@ class DetectorNode(Node):
         # why the console polls `get_parameters` for `classes` instead.
         self._pub_classes  = self.create_publisher(
             String, f'{ns_out}/classes_filter', qos.LATCHED)
+        # CAN THIS CAMERA SEE? 'ok' | 'covered' | 'washout' | 'glare' | 'frozen',
+        # latched, on change. No boxes means nothing is there OR the camera is
+        # blind, and a mission cannot tell those apart without this. Thresholds
+        # measured on the real 2025 archive; see duburi_vision/seeing.py.
+        from duburi_vision.seeing import Seeing
+        self._seeing = Seeing()
+        self._seeing_state = None
+        self._pub_seeing = self.create_publisher(
+            String, f'{ns_out}/seeing', qos.LATCHED)
         # ⛔ WHICH MODEL PRODUCED THE DETECTIONS YOU ARE HOLDING. A mission
         # switches the detector mid-run -- gate, then rescue, then red_pipe --
         # and a consumer acting on a box that a PREVIOUS model produced is
@@ -943,6 +952,7 @@ class DetectorNode(Node):
                         f"[DET  ] cv_bridge decode failed: {exc!r}")
                     continue
 
+            self._report_seeing(frame)
             t0 = time.monotonic()
             # Age of this frame at the instant the chip starts on it. The
             # floor is capture->available plus the decode; anything beyond
@@ -1246,6 +1256,31 @@ class DetectorNode(Node):
                 self.get_logger().info(f"[DET  ] max_det → {new_max}")
 
         return SetParametersResult(successful=True)
+
+    def _report_seeing(self, frame) -> None:
+        """~0.6 ms per 640x480 frame. NEVER allowed to stop detection.
+
+        The WHOLE body is guarded, not just the check: this runs inside the
+        worker loop, and an exception anywhere here -- the log line, the
+        publish -- escaped and ended the loop in the first draft's test.
+        """
+        try:
+            state = self._seeing.observe(frame)
+            if state == self._seeing_state:
+                return
+            self._seeing_state = state
+            if state != 'ok':
+                self.get_logger().warning(
+                    f'[DET  ] camera {getattr(self, "_cam_name", "?")} is BLIND '
+                    f'({state}): no boxes from here mean "cannot see", not '
+                    f'"nothing there".')
+            from std_msgs.msg import String
+            self._pub_seeing.publish(String(data=state))
+        except Exception as exc:                        # noqa: BLE001
+            try:
+                self.get_logger().warning(f'[DET  ] seeing check failed: {exc!r}')
+            except Exception:                           # noqa: BLE001
+                pass
 
     def _log_alignment(self, primary, frame) -> None:
         """Always-on operator BEARING line for the currently-loaded class.

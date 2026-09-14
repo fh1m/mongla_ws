@@ -653,6 +653,42 @@ class DuburiMission:
         self._pump_detections(cam)
         return self._present(cam, target_class, stale_after)
 
+    def can_see(self, camera: str | None = None, *, timeout: float = 1.0):
+        """Can `camera` see at all? `'ok'`, a blind reason, or None if unknown.
+
+        Blind reasons: `'covered'`, `'washout'`, `'glare'`, `'frozen'`. Use it
+        to tell "the target is not there" from "the camera cannot show it":
+
+            while not duburi.detected('gate'):
+                if duburi.can_see() not in ('ok', None):
+                    break          # searching blind wastes the whole budget
+                duburi.yaw_right(20)
+
+        ⛔ `'ok'` MEANS NONE OF THOSE FAULTS, NOT A GOOD IMAGE. Defocus and mild
+        fog are NOT detectable from the image alone without firing on ordinary
+        murky footage -- measured on the real 2025 archive, see seeing.py.
+        None = the detector has not published (paused camera, not running).
+        """
+        import time as _t
+        from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
+        from std_msgs.msg import String
+        cam = camera or self.camera
+        node = self.client.node
+        subs = self.__dict__.setdefault('_seeing_subs', {})
+        vals = self.__dict__.setdefault('_seeing_vals', {})
+        if cam not in subs:
+            def _keep(msg, cam=cam):
+                vals[cam] = str(msg.data)
+            latched = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.RELIABLE,
+                                 durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
+            subs[cam] = node.create_subscription(
+                String, f'/duburi/vision/{cam}/seeing', _keep, latched)
+        deadline = _t.monotonic() + float(timeout)
+        while cam not in vals and _t.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.05)
+        rclpy.spin_once(node, timeout_sec=0.0)
+        return vals.get(cam)
+
     def wait_for(self, target_class, *,
                  timeout: float = 10.0,
                  camera: str | None = None,
