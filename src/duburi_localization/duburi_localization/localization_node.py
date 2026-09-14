@@ -42,13 +42,15 @@ from rclpy.node import Node
 from rclpy.qos import (QoSDurabilityPolicy, QoSProfile,
                        QoSReliabilityPolicy)
 
-from geometry_msgs.msg import PointStamped, TwistWithCovarianceStamped
+from geometry_msgs.msg import (PointStamped, TwistWithCovarianceStamped,
+                               Vector3Stamped)
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Float32
 
 from duburi_interfaces.msg import DuburiState
 
+from duburi_localization.command_velocity import CommandVelocityModel
 from duburi_localization.inekf import RIEKF
 from duburi_localization.tile_grating import snap_to_grid
 
@@ -91,7 +93,7 @@ class LocalizationNode(Node):
         # of zero on one input is invisible in the pose itself.
         self._n = {'imu': 0, 'att': 0, 'depth': 0, 'yaw': 0, 'flow': 0,
                    'fix': 0, 'zupt': 0, 'grid': 0, 'grid_refused': 0,
-                   'lane': 0, 'lane_refused': 0, 'gap': 0}
+                   'lane': 0, 'lane_refused': 0, 'model': 0, 'gap': 0}
         self._still: deque = deque(maxlen=STILL_WINDOW)
         self._last_flow_t = 0.0
         self._attitude_seeded = False
@@ -124,6 +126,13 @@ class LocalizationNode(Node):
         # construction -- which looks like convergence and measures nothing.
         # Turn it on when the anchor has made heading absolute, not before.
         self._use_yaw = bool(self.declare_parameter('use_yaw', False).value)
+        # Velocity from commanded demand, learned against flow. ON by default
+        # because it is silent until it has LEARNED: an unready model aids
+        # with nothing, so the default cannot inject a guessed gain.
+        self._model = CommandVelocityModel(
+            tau_s=float(self.declare_parameter('demand_tau_s', 1.0).value))
+        self._model_aid = bool(self.declare_parameter('demand_aid', True).value)
+        self._last_demand_t = None
 
         sensor_qos = QoSProfile(depth=20,
                                 reliability=QoSReliabilityPolicy.BEST_EFFORT)
@@ -147,6 +156,8 @@ class LocalizationNode(Node):
                              durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
         self.create_subscription(Float32, '/duburi/localization/heading',
                                  self._on_heading, latched)
+        self.create_subscription(Vector3Stamped, '/duburi/demand',
+                                 self._on_demand, sensor_qos)
         # The floor's grid, which BOUNDS yaw drift without a magnetometer.
         self.create_subscription(
             Float32, f'/duburi/vision/{cam}/floor_grid_deg',
@@ -293,6 +304,42 @@ class LocalizationNode(Node):
                                              max(var_y, 1e-6))
         self._n['flow'] += 1
         self._last_flow_t = time.monotonic()
+        self._model.learn(v.x, v.y)          # the easy regime teaches the hard one
+
+    def _on_demand(self, msg) -> None:
+        """The thruster demand in force (NaN = unknown). Advances the model's lag.
+
+        Arrival time on `monotonic()`, not the header: the lag integrates a
+        host-side quantity the manager sampled on its own timer, and the gap is
+        capped so a stalled publisher cannot become one enormous step.
+        """
+        now = time.monotonic()
+        dt = 0.0 if self._last_demand_t is None else min(now - self._last_demand_t, 0.25)
+        self._last_demand_t = now
+        x, y = float(msg.vector.x), float(msg.vector.y)
+        if math.isfinite(x) and math.isfinite(y):
+            self._model.step(x, y, dt)
+        else:
+            self._model.step(None, None, dt)
+
+    def _maybe_model_aid(self) -> None:
+        """When flow has gone quiet, aid velocity from the learned demand model.
+
+        ⛔ ONLY WHILE FLOW IS STALE, on the same `FLOW_FRESH_S` the ZUPT uses, so
+        there is one notion of "flow is dead". With flow live the model would
+        be fed back the numbers it was fitted to -- agreement by construction.
+        """
+        if not self._model_aid:
+            return
+        if time.monotonic() - self._last_flow_t < FLOW_FRESH_S:
+            return
+        if self._last_demand_t is None or time.monotonic() - self._last_demand_t > 0.5:
+            return
+        p = self._model.predict()
+        if p is None:
+            return
+        self._filter.update_body_velocity_xy(p[0], p[1], p[2], p[3])
+        self._n['model'] += 1
 
     def _maybe_zupt(self) -> None:
         """Stand still and the filter learns from it -- but only if it IS still.
@@ -409,6 +456,7 @@ class LocalizationNode(Node):
     # ---- output ---------------------------------------------------------
 
     def _publish(self) -> None:
+        self._maybe_model_aid()          # 10 Hz: one aid per output, not per IMU
         st = self._filter.X
         m = Odometry()
         # ⛔ THE STAMP IS THE LATEST INPUT'S, NOT `now()`. Every input to this
@@ -471,7 +519,7 @@ class LocalizationNode(Node):
             f"zupt={n['zupt']} depth={n['depth']} "
             f"yaw={n['yaw']} grid={n['grid']}/{n['grid'] + n['grid_refused']} "
             f"lane={n['lane']}/{n['lane'] + n['lane_refused']} "
-            f"fix={n['fix']} gaps={n['gap']} "
+            f"model={n['model']} fix={n['fix']} gaps={n['gap']} "
             f"rej={self._filter.rejected} brk={self._filter.lockout_breaks} | "
             f"yaw={self._filter.X.yaw_deg():+.1f} deg "
             f"p=({self._filter.X.p[0]:+.2f},{self._filter.X.p[1]:+.2f},"

@@ -1614,3 +1614,36 @@ def test_every_facade_fc_call_resolves_on_srot_or_its_verb_is_handled():
         'these facade calls do not exist on SrotFC and their verbs are not '
         'collapsed/refused/ported, so they would AttributeError on the vehicle: '
         + '; '.join(f'{a} (in {", ".join(o)})' for a, o in offenders))
+
+
+# --------------------------------------------------------------------------- #
+#  demand(): what was SENT, for the command-velocity model                      #
+# --------------------------------------------------------------------------- #
+def test_demand_is_None_before_any_frame():
+    assert _fc().demand() is None
+
+
+def test_demand_is_what_was_SENT_after_clamping():
+    """The model must learn from the frame on the wire, not the request: a 1.7
+    request leaves as 1.0 and a NaN as 0."""
+    fc = _fc()
+    fc.manual(fwd=1.7, lat=float('nan'), up=0.0, yaw=0.0)
+    assert fc.demand() == (1.0, 0.0)
+    fc.manual(fwd=-0.25, lat=0.5, up=0.0, yaw=0.1)
+    assert fc.demand() == (-0.25, 0.5)
+
+
+def test_a_board_primitive_makes_the_demand_UNKNOWN():
+    """SROT_MOVE ramps its own demand on the board and reports none."""
+    fc = _fc()
+    fc.manual(fwd=0.4, lat=0.0, up=0.0, yaw=0.0)
+    fc.stop_motion()
+    assert fc.demand() is None
+
+
+def test_a_stale_demand_is_not_a_demand(monkeypatch):
+    fc = _fc()
+    fc.manual(fwd=0.4, lat=0.0, up=0.0, yaw=0.0)
+    real = time.monotonic
+    monkeypatch.setattr(time, 'monotonic', lambda: real() + fc.DEMAND_FRESH_S + 0.1)
+    assert fc.demand() is None

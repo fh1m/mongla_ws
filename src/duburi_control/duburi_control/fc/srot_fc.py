@@ -344,6 +344,10 @@ class SrotFC(FlightController):
     # ------------------------------------------------------------------ #
     def _command_long(self, command, p1=0.0, p2=0.0, p3=0.0, p4=0.0,
                       p5=0.0, p6=0.0, p7=0.0, confirmation=0):
+        if command == sp.CMD_SROT_MOVE:
+            # An on-board primitive ramps its own demand and reports none, so
+            # from here the host no longer knows what the thrusters are asked.
+            self._demand = None
         with self._tx_lock:
             self.master.mav.command_long_send(
                 sp.VEHICLE_SYSID, sp.VEHICLE_COMPID, command, confirmation,
@@ -726,6 +730,27 @@ class SrotFC(FlightController):
         z = sp.unit_to_mc_z(_safe(up))
         with self._tx_lock:
             self.master.mav.manual_control_send(sp.VEHICLE_SYSID, x, y, z, r, 0)
+        # What was SENT, after coercion and clamping -- the one funnel every
+        # srot writer passes through. Read by `demand()`.
+        self._demand = (x / sp.MC_AXIS_MAX, y / sp.MC_AXIS_MAX, time.monotonic())
+
+    # A MANUAL_CONTROL frame older than this is not a demand in force: the
+    # board's own pilot-input timeout is longer, but a writer that stopped
+    # streaming has stopped commanding, and a stale demand would be modelled
+    # as a live one.
+    DEMAND_FRESH_S = 0.25
+
+    def demand(self):
+        """(fwd, lat) last sent in [-1, 1], or None when it is not known.
+
+        None after any SROT_MOVE (the board owns the demand), before the first
+        frame, and once the stream is older than DEMAND_FRESH_S. Consumed by the
+        command-velocity model, which must predict nothing from an unknown.
+        """
+        d = getattr(self, '_demand', None)
+        if d is None or time.monotonic() - d[2] > self.DEMAND_FRESH_S:
+            return None
+        return d[0], d[1]
 
     def stop_motion(self) -> None:
         """Bring the vehicle to an actual halt.
