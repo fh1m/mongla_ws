@@ -1109,6 +1109,43 @@ class DuburiMission:
                                       1.0 - 2.0 * (q.y * q.y + q.z * q.z)))
         return (float(p.x), float(p.y), float(p.z), yaw)
 
+    def motion(self, *, timeout: float = 1.0):
+        """Is the hull moving the way it is being told to?
+
+        `'ok'` | `'blocked'` | `'unknown'`, or None when localization is not
+        running. `'blocked'` means thrust is commanded and the floor is not
+        moving: against a prop, snagged, or a thruster is dead.
+
+            duburi.vision.move('gate', fwd=80)
+            if duburi.motion() == 'blocked':
+                duburi.move_back(duration=2)
+
+        ⛔ A TIMED MOVE REPORTS SUCCESS WHETHER OR NOT THE HULL WENT ANYWHERE.
+        This is the only reading that can tell them apart without a detection.
+        `'unknown'` is common and honest: no flow, no learned model, or a board
+        primitive running (the host does not know its demand). Treat unknown as
+        "no evidence", never as "ok".
+        """
+        import time as _t
+        from rclpy.qos import QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy
+        from std_msgs.msg import String
+        node = self.client.node
+        if getattr(self, '_motion_sub', None) is None:
+            self._motion = None
+
+            def _keep(msg):
+                self._motion = str(msg.data)
+            latched = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.RELIABLE,
+                                 durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
+            self._motion_sub = node.create_subscription(
+                String, '/duburi/localization/motion', _keep, latched)
+        deadline = _t.monotonic() + float(timeout)
+        while self._motion is None and _t.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.05)
+        # Pump once more so a change since the last call is seen.
+        rclpy.spin_once(node, timeout_sec=0.0)
+        return self._motion
+
     def range_to(self, prop_class: str, *, camera: str | None = None,
                  stale_after: float = 1.0):
         """Metres to a visible prop of known width, or None. Also its sigma.

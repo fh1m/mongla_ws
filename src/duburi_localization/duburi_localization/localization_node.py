@@ -46,11 +46,12 @@ from geometry_msgs.msg import (PointStamped, TwistWithCovarianceStamped,
                                Vector3Stamped)
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, String
 
 from duburi_interfaces.msg import DuburiState
 
-from duburi_localization.command_velocity import CommandVelocityModel
+from duburi_localization.command_velocity import (BLOCKED, CommandVelocityModel,
+                                                  MotionCheck)
 from duburi_localization.inekf import RIEKF
 from duburi_localization.tile_grating import snap_to_grid
 
@@ -133,6 +134,8 @@ class LocalizationNode(Node):
             tau_s=float(self.declare_parameter('demand_tau_s', 1.0).value))
         self._model_aid = bool(self.declare_parameter('demand_aid', True).value)
         self._last_demand_t = None
+        self._motion = MotionCheck()
+        self._motion_state = None
 
         sensor_qos = QoSProfile(depth=20,
                                 reliability=QoSReliabilityPolicy.BEST_EFFORT)
@@ -170,6 +173,10 @@ class LocalizationNode(Node):
             self._on_lane_line, 10)
 
         self._pub = self.create_publisher(Odometry, '/duburi/odom', 10)
+        # 'ok' | 'blocked' | 'unknown', latched and published on change. Read
+        # by `duburi.motion()`: a timed move into a prop reports success, and
+        # this is the only thing that can tell the mission it went nowhere.
+        self._pub_motion = self.create_publisher(String, '/duburi/localization/motion', latched)
         self.create_timer(0.1, self._publish)
         self.create_timer(5.0, self._diagnose)
         self.get_logger().info(
@@ -303,8 +310,28 @@ class LocalizationNode(Node):
                                              max(var_x, 1e-6),
                                              max(var_y, 1e-6))
         self._n['flow'] += 1
-        self._last_flow_t = time.monotonic()
-        self._model.learn(v.x, v.y)          # the easy regime teaches the hard one
+        now = time.monotonic()
+        dt = min(now - self._last_flow_t, 0.25) if self._last_flow_t > 0.0 else 0.0
+        self._last_flow_t = now
+        state = self._motion.observe(self._model, v.x, v.y, dt)
+        # Never learn from a hull that is not moving as told: a pinned hull
+        # would teach the model that thrust makes no speed.
+        if not self._motion.suspect and state != BLOCKED:
+            self._model.learn(v.x, v.y)      # the easy regime teaches the hard one
+        self._report_motion(state)
+
+    def _report_motion(self, state: str) -> None:
+        if state == self._motion_state:
+            return
+        self._motion_state = state
+        if state == BLOCKED:
+            self.get_logger().warning(
+                f'[LOCAL] BLOCKED on body {self._motion.axis}: thrust is '
+                f'commanded and the floor is not moving. Against a prop, '
+                f'snagged, or a thruster is dead.')
+        pub = getattr(self, '_pub_motion', None)
+        if pub is not None:
+            pub.publish(String(data=state))
 
     def _on_demand(self, msg) -> None:
         """The thruster demand in force (NaN = unknown). Advances the model's lag.

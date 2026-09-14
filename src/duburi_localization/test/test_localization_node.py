@@ -84,6 +84,8 @@ def _node():
     obj._model = ln.CommandVelocityModel()
     obj._model_aid = True
     obj._last_demand_t = None
+    obj._motion = ln.MotionCheck()
+    obj._motion_state = None
     return obj
 
 
@@ -662,3 +664,25 @@ def test_the_filter_drifts_LESS_through_a_flow_outage_with_the_aid():
 
     free, aided = run(False), run(True)
     assert free > 5.0 * aided, (free, aided)
+
+
+def test_a_hull_pinned_on_a_prop_is_REPORTED_and_does_not_poison_the_model():
+    """Through `_on_flow`, the path the vehicle runs: demand held, flow at 0."""
+    n = _node()
+    _taught(n)
+    g0 = n._model.x.theta[0]
+    published = []
+    n._pub_motion = type('P', (), {'publish': lambda self, m: published.append(m.data)})()
+    # 15 s: LONGER than RELEARN_AFTER rejections. The model's own innovation
+    # gate holds a short block; past it the model would reset and relearn the
+    # wall, and only the node refusing to feed a blocked hull prevents that.
+    for _ in range(300):                      # 15 s at 20 Hz of demand 0.6, no motion
+        n._model.step(0.6, 0.0, 0.05)
+        n._last_flow_t = time.monotonic() - 0.05
+        twist = type('T', (), {})()
+        twist.twist = type('T2', (), {'covariance': [0.0004] * 36})()
+        twist.twist.twist = type('T3', (), {})()
+        twist.twist.twist.linear = type('L', (), {'x': 0.0, 'y': 0.0, 'z': 0.0})()
+        n._on_flow(twist)
+    assert published and published[-1] == 'blocked', published
+    assert n._model.x.theta[0] == pytest.approx(g0, rel=0.05)

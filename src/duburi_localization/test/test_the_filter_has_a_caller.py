@@ -146,3 +146,12 @@ def test_the_demand_reaches_the_command_velocity_model():
     assert "'/duburi/demand'" in mgr and 'self._publish_demand()' in mgr
     assert "'/duburi/demand'" in node
     assert 'self._model.learn(' in node and 'self._maybe_model_aid()' in node
+
+
+def test_the_blocked_check_is_published_and_readable_from_a_mission():
+    node = (PKG / 'duburi_localization' / 'localization_node.py').read_text()
+    dsl = (ROOT / 'src' / 'duburi_planner' / 'duburi_planner'
+           / 'duburi_dsl.py').read_text()
+    assert 'self._motion.observe(' in node
+    assert "'/duburi/localization/motion'" in node
+    assert "'/duburi/localization/motion'" in dsl and 'def motion(self' in dsl
