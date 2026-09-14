@@ -60,7 +60,7 @@ def _node():
     obj._imu_gap_warned = True          # suppress the logger call
     obj._n = {'imu': 0, 'att': 0, 'depth': 0, 'yaw': 0, 'flow': 0, 'fix': 0,
               'zupt': 0, 'grid': 0, 'grid_refused': 0,
-              'lane': 0, 'lane_refused': 0, 'gap': 0}
+              'lane': 0, 'lane_refused': 0, 'model': 0, 'gap': 0}
     obj._attitude_sigma_deg = 0.5
     obj._zupt_sigma = 0.01
     obj._zupt_enabled = True
@@ -81,6 +81,9 @@ def _node():
     obj._yaw_sigma_deg = 2.0
     obj._fix_sigma = 0.5
     obj._use_yaw = True
+    obj._model = ln.CommandVelocityModel()
+    obj._model_aid = True
+    obj._last_demand_t = None
     return obj
 
 
@@ -585,3 +588,77 @@ def test_the_refusal_is_visible_in_the_diagnostic():
     import inspect
     src = inspect.getsource(ln.LocalizationNode._diagnose)
     assert 'grid' in src
+
+
+# --------------------------------------------------------------------------- #
+#  velocity from commanded demand, when flow is dead
+# --------------------------------------------------------------------------- #
+def _taught(n):
+    """Teach the node's model on a simulated hull, the way flow would."""
+    import sys, pathlib
+    sys.path.insert(0, str(pathlib.Path(__file__).parent))
+    from test_command_velocity import _fly
+    _fly(n._model, 120.0)
+    n._last_demand_t = time.monotonic()
+
+
+def test_the_model_aids_ONLY_when_flow_is_stale():
+    """With flow live the model would be handed back the numbers it was
+    fitted to: agreement by construction, measuring nothing."""
+    n = _node()
+    _taught(n)
+    n._last_flow_t = time.monotonic()          # flow live
+    n._maybe_model_aid()
+    assert n._n['model'] == 0
+    n._last_flow_t = time.monotonic() - 2.0 * ln.FLOW_FRESH_S
+    n._maybe_model_aid()
+    assert n._n['model'] == 1
+
+
+def test_an_UNTAUGHT_model_aids_with_nothing():
+    """ON by default is safe only because an unready model is silent."""
+    n = _node()
+    n._last_demand_t = time.monotonic()
+    n._model.step(0.5, 0.0, 5.0)
+    n._maybe_model_aid()
+    assert n._n['model'] == 0
+
+
+def test_an_UNKNOWN_demand_on_the_wire_silences_the_aid():
+    n = _node()
+    _taught(n)
+    n._last_flow_t = 0.0
+    nan = type('V', (), {'x': float('nan'), 'y': float('nan')})()
+    n._on_demand(type('M', (), {'vector': nan})())
+    n._maybe_model_aid()
+    assert n._n['model'] == 0
+
+
+def test_a_STALE_demand_stream_silences_the_aid():
+    n = _node()
+    _taught(n)
+    n._last_flow_t = 0.0
+    n._last_demand_t = time.monotonic() - 5.0
+    n._maybe_model_aid()
+    assert n._n['model'] == 0
+
+
+def test_the_filter_drifts_LESS_through_a_flow_outage_with_the_aid():
+    """Closed loop, scored against truth: 30 s with no flow, a 0.02 m/s^2
+    accelerometer bias, the hull cruising at 0.3 m/s. The aid is the model's
+    own prediction error level (~0.02 m/s), not the truth."""
+    rng = np.random.default_rng(3)
+
+    def run(aid):
+        f = RIEKF()
+        f.X = State(v=np.array([0.3, 0.0, 0.0]))
+        dt = 0.02
+        for k in range(int(30.0 / dt)):
+            f.predict((0.0, 0.0, 0.0), (0.02, 0.0, 9.80665), dt)
+            if aid and k % 5 == 0:
+                f.update_body_velocity_xy(0.3 + rng.normal(0, 0.02), rng.normal(0, 0.02),
+                                          0.05 ** 2, 0.05 ** 2)
+        return abs(f.X.p[0] - 0.3 * 30.0)
+
+    free, aided = run(False), run(True)
+    assert free > 5.0 * aided, (free, aided)

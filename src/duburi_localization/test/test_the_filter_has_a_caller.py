@@ -131,3 +131,18 @@ def test_prioritised_allocation_reaches_the_srot_frame():
     body = mv[mv.index('def _srot_drive'):mv.index('def _read_depth')]
     assert 'prioritise(' in body and 'fc.manual(' in body
     assert body.index('prioritise(') < body.index('fc.manual(')
+
+
+def test_the_demand_reaches_the_command_velocity_model():
+    """Board funnel -> manager topic -> localization model -> filter. Any link
+    missing and the model learns nothing and aids with nothing, silently."""
+    fc = (ROOT / 'src' / 'duburi_control' / 'duburi_control' / 'fc'
+          / 'srot_fc.py').read_text()
+    mgr = (ROOT / 'src' / 'duburi_manager' / 'duburi_manager'
+           / 'auv_manager_node.py').read_text()
+    node = (PKG / 'duburi_localization' / 'localization_node.py').read_text()
+    manual = fc[fc.index('    def manual('):fc.index('    def stop_motion(')]
+    assert 'self._demand = (' in manual
+    assert "'/duburi/demand'" in mgr and 'self._publish_demand()' in mgr
+    assert "'/duburi/demand'" in node
+    assert 'self._model.learn(' in node and 'self._maybe_model_aid()' in node

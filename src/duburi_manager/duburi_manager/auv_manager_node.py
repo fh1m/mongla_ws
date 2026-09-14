@@ -920,6 +920,14 @@ class AUVManagerNode(Node):
         from sensor_msgs.msg import Imu
         self._Imu = Imu
         self.imu_publisher = self.create_publisher(Imu, '/duburi/imu', 10)
+        # The demand last SENT to the thrusters (srot only): x = forward,
+        # y = lateral, in [-1, 1]; NaN = unknown (a board primitive owns it, or
+        # no frame is in force). The command-velocity model in
+        # duburi_localization learns speed from it while flow works and aids
+        # the filter with it when flow refuses. Unknown must reach the consumer
+        # as unknown -- silence would read as "the last value still holds".
+        self.demand_publisher = self.create_publisher(
+            Vector3Stamped, '/duburi/demand', 10)
         self._imu_rpy_warned = False
         # Board-clock -> host-clock mapping for the IMU stamp. See
         # _imu_rates_tick: the board's own interval has sd 0.00 ms where
@@ -1600,6 +1608,7 @@ class AUVManagerNode(Node):
         Reads fresh attitude from the Pixhawk cache (AHRS2 pinned to 50 Hz)
         and reuses the last-known armed/mode/battery from telemetry_tick.
         """
+        self._publish_demand()
         attitude = self.pixhawk.get_attitude()
         if attitude is None:
             return
@@ -1613,6 +1622,18 @@ class AUVManagerNode(Node):
         msg.depth_m         = float(attitude['depth'])
         msg.battery_voltage = self._fast_batt_v
         self.state_publisher.publish(msg)
+
+    def _publish_demand(self):
+        """20 Hz: the thruster demand in force, or NaN when it is not known."""
+        demand = getattr(self.fc, 'demand', None)
+        if demand is None:
+            return                       # backend has no demand funnel
+        d = demand()
+        m = self._Vector3Stamped()
+        m.header.stamp = self.get_clock().now().to_msg()
+        m.header.frame_id = 'duburi'
+        m.vector.x, m.vector.y = (math.nan, math.nan) if d is None else d
+        self.demand_publisher.publish(m)
 
     def _imu_rates_tick(self):
         """Publish body-frame angular rates (ATTITUDE) at 50 Hz.
