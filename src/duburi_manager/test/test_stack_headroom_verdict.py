@@ -50,3 +50,17 @@ def test_a_missing_task_is_named_in_a_pass():
     grade, _t, detail = _stack_headroom_verdict(named)
     assert grade == PASS
     assert 'STK_LORA' in detail
+
+
+def test_the_implausible_depth_line_uses_the_telemetry_sign():
+    """⛔ Measured 2026-09-14: one preflight printed "depth telemetry +1.19 m" and
+    "board reads -1.22 m" -- the same baro offset in two sign conventions. The
+    board is positive-down internally; the operator's convention is negative =
+    submerged. A baro that thinks it is ABOVE zero must print a POSITIVE number."""
+    from duburi_manager.bringup_check import _depth_loop_verdict
+
+    # DEPTH_CMD -0.66 at DEPTH_P 0.5 is the live reading: board depth -1.22 m
+    # positive-down, i.e. 1.22 m above zero.
+    grade, _t, detail = _depth_loop_verdict(-0.66, 0.5)
+    assert grade == FAIL
+    assert '+1.22 m' in detail, detail

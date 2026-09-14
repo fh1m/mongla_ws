@@ -911,16 +911,26 @@ def _depth_loop_verdict(depth_cmd: float | None,
     # far is the barometer from zero" -- which is the question, and which stops a
     # healthy in-air board from spending a third of the budget on a constant.
     depth_m = depth_cmd / gain + sp.DEPTH_PREVIEW_TARGET_M
+    # ⛔ REPORT IN THIS STACK'S SIGN, NOT THE BOARD'S. `depth_m` is the board's
+    # internal POSITIVE-DOWN depth; everything an operator reads here -- the
+    # `depth telemetry` line printed a few rows above, DuburiState, set_depth -- is
+    # NEGATIVE below the surface. Measured on the vehicle 2026-09-14, the same
+    # preflight printed "depth telemetry +1.19 m" as PASS and "board reads -1.22 m"
+    # as FAIL: one fact, 1.19 vs 1.22 m, with opposite signs in one report. An
+    # operator cannot tell from that whether the baro thinks it is above or below
+    # zero, which is precisely the question the line exists to answer.
+    shown = -depth_m
     if abs(depth_m) >= sp.DEPTH_ERR_ARM_LIMIT_M:
         return (FAIL, 'barometer IMPLAUSIBLE',
-                f'board reads {depth_m:+.2f} m of depth at the surface (limit '
+                f'board reads {shown:+.2f} m at the surface (negative = submerged, the '
+                f'same sign as the depth telemetry line; limit '
                 f'{sp.DEPTH_ERR_ARM_LIMIT_M:.2f} m, DEPTH_CMD={depth_cmd:+.2f}, '
                 f'DEPTH_P={gain:g}). Arming would command FULL vertical thrust '
                 '(mixer throttle column is -1 on all four verticals) with the '
                 'horizontals idle. DO NOT ARM')
     if abs(depth_m) > sp.DEPTH_OFFSET_WARN_M:
         return (WARN, 'barometer offset at the surface',
-                f'{depth_m:+.2f} m while disarmed in air -- run '
+                f'{shown:+.2f} m while disarmed in air (negative = submerged) -- run '
                 '`ros2 run duburi_planner duburi calibrate_depth` before diving')
     return (PASS, 'barometer at surface',
             f'{depth_m:+.2f} m (DEPTH_CMD={depth_cmd:+.2f})')
