@@ -64,3 +64,35 @@ def test_the_implausible_depth_line_uses_the_telemetry_sign():
     grade, _t, detail = _depth_loop_verdict(-0.66, 0.5)
     assert grade == FAIL
     assert '+1.22 m' in detail, detail
+
+
+# --------------------------------------------------------------------------- #
+#  free heap, beside the stacks
+# --------------------------------------------------------------------------- #
+from duburi_manager.bringup_check import (                    # noqa: E402
+    HEAP_BASELINE_BYTES, HEAP_FAIL_BYTES, _heap_verdict,
+)
+
+
+def test_the_measured_heap_passes():
+    """156180 B is what both recorded Pi bench sessions show, flat."""
+    assert _heap_verdict({'HEAP': 156180.0})[0] == PASS
+
+
+def test_a_quarter_gone_warns():
+    assert _heap_verdict({'HEAP': HEAP_BASELINE_BYTES * 0.70})[0] == WARN
+    assert _heap_verdict({'HEAP': HEAP_BASELINE_BYTES * 0.80})[0] == PASS
+
+
+def test_near_exhaustion_fails():
+    assert _heap_verdict({'HEAP': HEAP_FAIL_BYTES - 1.0})[0] == FAIL
+
+
+def test_no_heap_is_unknown_not_healthy():
+    assert _heap_verdict({})[0] == WARN
+
+
+def test_the_heap_verdict_is_actually_graded_in_the_srot_section():
+    src = (Path(__file__).resolve().parents[1] / 'duburi_manager'
+           / 'bringup_check.py').read_text()
+    assert 'out.append(_heap_verdict(named))' in src
