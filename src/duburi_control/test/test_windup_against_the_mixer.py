@@ -71,3 +71,34 @@ def test_the_flag_starts_false():
     """The first tick has no previous allocation, and assuming saturation
     would suppress the integral for one tick of every alignment."""
     assert 'was_saturated = False' in SRC
+
+
+class _FakeFC:
+    def __init__(self):
+        self.frames = []
+
+    def manual(self, **kw):
+        self.frames.append(kw)
+
+
+def test_the_srot_frame_is_PRIORITISED_yaw_first_when_saturated():
+    """Executed, not grepped: the frame that reaches the board must keep yaw
+    when the group saturates. Uniform scaling would have delivered 0.143 of
+    the 0.300 asked for in this corner."""
+    from duburi_control.motion_vision import _srot_drive
+    fc = _FakeFC()
+    _srot_drive(fc, fwd_pct=90.0, lat_pct=90.0, yaw_pct=30.0)
+    sent = fc.frames[-1]
+    assert abs(sent['yaw'] - 0.30) < 1e-9, sent
+    assert not allocate(yaw=sent['yaw'], forward=sent['fwd'],
+                        lateral=sent['lat']).saturated
+    assert sent['up'] == 0.0
+
+
+def test_an_unsaturated_srot_frame_is_UNCHANGED():
+    """Below the limit the host must not touch the demand, or every existing
+    tuning silently shifts."""
+    from duburi_control.motion_vision import _srot_drive
+    fc = _FakeFC()
+    _srot_drive(fc, fwd_pct=20.0, lat_pct=-10.0, yaw_pct=5.0)
+    assert fc.frames[-1] == {'fwd': 0.20, 'lat': -0.10, 'up': 0.0, 'yaw': 0.05}
