@@ -946,6 +946,46 @@ def _yaw_ref_verdict(raw: float | None) -> tuple[str, str, str]:
             'prefer relative turns')
 
 
+STACK_TASKS = ('STK_MAV', 'STK_SEN', 'STK_CTL', 'STK_UI', 'STK_LORA', 'STK_DSH')
+# Bytes of stack a FreeRTOS task has NEVER dipped below (uxTaskGetStackHighWaterMark
+# on ESP-IDF reports bytes). Conventional margins, NOT measured failure points: on this
+# board the lowest seen was STK_DSH = 2868 bytes on a quiet bench, 2026-09-11.
+STACK_FAIL_BYTES = 512
+STACK_WARN_BYTES = 1024
+
+
+def _stack_headroom_verdict(named: dict) -> tuple[str, str, str]:
+    """Is any board task close to overflowing its stack?
+
+    ⛔ THE BOARD HAS ALWAYS SENT THIS AND NOTHING READ IT. Six per-task high-water
+    marks go out as NAMED_VALUE_FLOAT; a stack overflow on the ESP32 is a hard
+    reset of the control board -- thrusters stop mid-run -- and it is the one crash
+    that announces itself in advance, in a number we were already receiving.
+
+    It is a HIGH-WATER mark: the minimum ever seen since boot, so it only gets
+    worse as more code paths run. A bench value is optimistic; the grade is a
+    floor, not a certificate.
+    """
+    got = {n: named.get(n) for n in STACK_TASKS}
+    seen = {n: v for n, v in got.items() if v is not None}
+    if not seen:
+        return (WARN, 'board stack headroom unknown',
+                'no STK_* values -- firmware does not report them, or none arrived')
+    name, low = min(seen.items(), key=lambda kv: kv[1])
+    detail = ', '.join(f'{n[4:]}={int(v)}' for n, v in sorted(seen.items()))
+    if low < STACK_FAIL_BYTES:
+        return (FAIL, 'board stack nearly exhausted',
+                f'{name} has {int(low)} bytes left ({detail}). A stack overflow '
+                'hard-resets the control board mid-run')
+    if low < STACK_WARN_BYTES:
+        return (WARN, 'board stack low',
+                f'{name} has {int(low)} bytes left ({detail})')
+    missing = [n for n, v in got.items() if v is None]
+    tail = f'; not reported: {", ".join(missing)}' if missing else ''
+    return (PASS, 'board stack headroom',
+            f'lowest {name}={int(low)} bytes ({detail}){tail}')
+
+
 def _resolve_srot_for_check(device: str = '') -> tuple[str, str]:
     """(conn, probe_state) for the SROT board. `probe_state` is '', 'mavlink',
     'busy' or 'silent' -- '' when the operator named the endpoint explicitly.
@@ -1118,6 +1158,7 @@ def _check_srot(skip_mav: bool, device: str = '') -> list[tuple[str, str, str]]:
         out.append(_depth_loop_verdict(named.get('DEPTH_CMD'),
                                        _read_param(conn, 'DEPTH_P')))
         out.append(_yaw_ref_verdict(named.get('YAW_REF')))
+        out.append(_stack_headroom_verdict(named))
 
         # GAIN halves MANUAL_CONTROL until it is 1.0, and fw R14 means a PARAM_SET may
         # never have persisted on a board flashed before 8cb4203.
