@@ -213,3 +213,47 @@ def test_the_inference_counter_does_not_count_frames_it_never_inferred():
     guard = src[max(0, i - 260):i]
     assert 'self._det is not None' in guard, \
         'the inference counter is not gated on having a detector'
+
+
+# --------------------------------------------------------------------------- #
+#  "Can this camera see?" runs in the LOOP, not beside it
+# --------------------------------------------------------------------------- #
+def test_the_LOOP_reports_a_blind_camera(monkeypatch):
+    """Executed through `_infer_loop`: a covered lens must be published as
+    blind, so a mission can tell "cannot see" from "nothing there"."""
+    import numpy as np
+    from duburi_vision.seeing import Seeing
+    # A failing infer keeps the loop stepping frame after frame (the publish
+    # path after a successful infer is not stubbed and would end the loop).
+    n = _loop_node(lambda _f: (_ for _ in ()).throw(RuntimeError('x')),
+                   monkeypatch)
+    n._seeing = Seeing()
+    n._seeing_state = None
+    sent = []
+    n._pub_seeing = SimpleNamespace(publish=lambda m: sent.append(m.data))
+    rng = np.random.default_rng(0)
+    for _ in range(4):
+        dark = rng.integers(0, 4, (480, 640, 3), dtype=np.uint8)
+        n._infer_q.put(D._DirectFrame(frame=dark, header=None))
+    try:
+        n._infer_loop()
+    except Exception:
+        pass
+    assert sent and sent[-1] == 'covered', sent
+
+
+def test_a_FAULT_in_the_seeing_check_never_stops_detection(monkeypatch):
+    """The check runs inside the worker loop; any exception there must not end
+    the loop. The first draft's log line raised and did exactly that."""
+    import numpy as np
+    n = _loop_node(lambda _f: (_ for _ in ()).throw(RuntimeError('x')),
+                   monkeypatch)
+    n._seeing = SimpleNamespace(observe=lambda _f: (_ for _ in ()).throw(ValueError('boom')))
+    n._seeing_state = None
+    for _ in range(4):
+        n._infer_q.put(D._DirectFrame(frame=np.zeros((4, 4, 3), np.uint8), header=None))
+    try:
+        n._infer_loop()
+    except Exception:
+        pass
+    assert n._infer_fails == 4, 'the seeing fault ended the loop'

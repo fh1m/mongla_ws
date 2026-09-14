@@ -155,3 +155,14 @@ def test_the_blocked_check_is_published_and_readable_from_a_mission():
     assert 'self._motion.observe(' in node
     assert "'/duburi/localization/motion'" in node
     assert "'/duburi/localization/motion'" in dsl and 'def motion(self' in dsl
+
+
+def test_the_seeing_check_runs_in_the_detector_and_is_readable_from_a_mission():
+    det = (ROOT / 'src' / 'duburi_vision' / 'duburi_vision'
+           / 'detector_node.py').read_text()
+    dsl = (ROOT / 'src' / 'duburi_planner' / 'duburi_planner'
+           / 'duburi_dsl.py').read_text()
+    loop = det[det.index('    def _infer_loop('):]
+    assert 'self._report_seeing(frame)' in loop
+    assert "f'{ns_out}/seeing'" in det
+    assert "/seeing'" in dsl and 'def can_see(self' in dsl
