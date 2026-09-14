@@ -1630,9 +1630,12 @@ class AUVManagerNode(Node):
             return                       # backend has no demand funnel
         d = demand()
         m = self._Vector3Stamped()
+        # ⛔ INFORMATIONAL ONLY. This is REALTIME, which can step (first NTP
+        # sync on the Pi did, mid-run). The consumer times the lag on its own
+        # arrival monotonic() and must never subtract these stamps.
         m.header.stamp = self.get_clock().now().to_msg()
         m.header.frame_id = 'duburi'
-        m.vector.x, m.vector.y = (math.nan, math.nan) if d is None else d
+        m.vector.x, m.vector.y =(math.nan, math.nan) if d is None else d
         self.demand_publisher.publish(m)
 
     def _imu_rates_tick(self):
