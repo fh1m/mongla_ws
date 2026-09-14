@@ -91,7 +91,7 @@ class LocalizationNode(Node):
         # of zero on one input is invisible in the pose itself.
         self._n = {'imu': 0, 'att': 0, 'depth': 0, 'yaw': 0, 'flow': 0,
                    'fix': 0, 'zupt': 0, 'grid': 0, 'grid_refused': 0,
-                   'gap': 0}
+                   'lane': 0, 'lane_refused': 0, 'gap': 0}
         self._still: deque = deque(maxlen=STILL_WINDOW)
         self._last_flow_t = 0.0
         self._attitude_seeded = False
@@ -151,6 +151,12 @@ class LocalizationNode(Node):
         self.create_subscription(
             Float32, f'/duburi/vision/{cam}/floor_grid_deg',
             self._on_floor_grid, 10)
+        # The lane line: the same drift bound with HALF the aliasing (a line
+        # is identical from two directions, a grid from four). Shares the
+        # grid's sigma and correction bound -- one floor-geometry pair, not two.
+        self.create_subscription(
+            Float32, f'/duburi/vision/{cam}/lane_heading_deg',
+            self._on_lane_line, 10)
 
         self._pub = self.create_publisher(Odometry, '/duburi/odom', 10)
         self.create_timer(0.1, self._publish)
@@ -363,15 +369,27 @@ class LocalizationNode(Node):
         frame, and pulling a boot-frame heading onto a pool-frame grid would
         combine two unrelated angles into a confident wrong one.
         """
+        self._bound_yaw(float(msg.data), 90.0, 'grid')
+
+    def _on_lane_line(self, msg: Float32) -> None:
+        """The lane line's heading, modulo 180: the grid's drift bound, but
+        a line is identical from two ends rather than four, so a wrong branch
+        is 180 degrees away instead of 90 -- the bound is far harder to alias.
+        """
+        self._bound_yaw(float(msg.data), 180.0, 'lane')
+
+    def _bound_yaw(self, angle_deg: float, period_deg: float, key: str) -> None:
+        """Pull yaw onto a floor feature of symmetry `period_deg`, or refuse."""
         if not self._anchored:
             return
-        snapped = snap_to_grid(self._filter.X.yaw_deg(), float(msg.data),
-                               max_correction_deg=self._grid_max_corr_deg)
+        snapped = snap_to_grid(self._filter.X.yaw_deg(), angle_deg,
+                               max_correction_deg=self._grid_max_corr_deg,
+                               period_deg=period_deg)
         if snapped is None:
-            self._n['grid_refused'] += 1
+            self._n[f'{key}_refused'] += 1
             return
         self._filter.update_yaw(snapped, sigma_deg=self._grid_sigma_deg)
-        self._n['grid'] += 1
+        self._n[key] += 1
 
     def _on_fix(self, msg: PointStamped) -> None:
         """A pool-frame position, from `fix_position()` or `fix_from_prop()`.
@@ -452,6 +470,7 @@ class LocalizationNode(Node):
             f"[LOCAL] imu={n['imu']} att={n['att']} flow={n['flow']} "
             f"zupt={n['zupt']} depth={n['depth']} "
             f"yaw={n['yaw']} grid={n['grid']}/{n['grid'] + n['grid_refused']} "
+            f"lane={n['lane']}/{n['lane'] + n['lane_refused']} "
             f"fix={n['fix']} gaps={n['gap']} "
             f"rej={self._filter.rejected} brk={self._filter.lockout_breaks} | "
             f"yaw={self._filter.X.yaw_deg():+.1f} deg "

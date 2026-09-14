@@ -271,6 +271,9 @@ class FlowVelocityNode(Node):
         self.declare_parameter('tile_m', 0.0)
         self.declare_parameter('tile_period_s', 0.5)      # 2 Hz; it moves slowly
         self.declare_parameter('tile_decimate', 3)
+        # Lane-line heading (mod 180) for the yaw drift bound. OFF: a path
+        # marker is also a dark band. See `_read_the_lane`.
+        self.declare_parameter('lane_lines', False)
 
         cam = str(self.get_parameter('camera').value or 'downward').strip()
         self._cam = cam
@@ -396,6 +399,7 @@ class FlowVelocityNode(Node):
         # because it is a different quantity measured at a different rate and a
         # consumer wanting one rarely wants the other.
         self._pub_grid = self.create_publisher(Float32, f'{ns}/floor_grid_deg', 10)
+        self._pub_lane = self.create_publisher(Float32, f'{ns}/lane_heading_deg', 10)
         self._pub_dist = self.create_publisher(Float32, f'{ns}/distance_traveled', 10)
         self._pub_debug = self.create_publisher(Float32MultiArray,
                                                 f'{ns}/distance_debug', 10)
@@ -414,6 +418,8 @@ class FlowVelocityNode(Node):
         self._tile_height = None          # last height read off the floor
         self._tile_angle = None           # grid orientation, absolute mod 90
         self._tile_warned = False
+        self._lane_lines = bool(self.get_parameter('lane_lines').value)
+        self._lane_angle = None           # lane heading, pool frame mod 180
 
         # The ANCHOR, not the previous frame: flow is measured frame-to-
         # anchor and the anchor is replaced only when a measurement is emitted.
@@ -1015,11 +1021,15 @@ class FlowVelocityNode(Node):
         not fail, it scales every height by the ratio of the two with nothing
         logged. Off until measured.
         """
-        if self._tile_m <= 0.0 or gray is None:
+        if gray is None or (self._tile_m <= 0.0 and not self._lane_lines):
             return
         if t < self._tile_next_t:
             return
         self._tile_next_t = t + self._tile_period_s
+        if self._lane_lines:
+            self._read_the_lane(gray)
+        if self._tile_m <= 0.0:
+            return
         try:
             from duburi_localization.tile_grating import measure
         except Exception:                       # noqa: BLE001
@@ -1051,6 +1061,37 @@ class FlowVelocityNode(Node):
                     f'pool_depth path says {self._last_height:.2f} m '
                     f'({d:.0%} apart). The floor needs no pool_depth_m and is '
                     f'preferred -- check pool_depth_m and the tile_m you set.')
+
+    def _read_the_lane(self, gray) -> None:
+        """Publish the lane line's heading, modulo 180, or nothing.
+
+        Decimated by `tile_decimate`: 27.5 ms full-frame at 720p against
+        3.4 ms at x3, with the heading unchanged to 0.01 deg -- orientation is
+        invariant under isotropic scaling, so the pixels bought nothing.
+
+        ⛔ OFF BY DEFAULT, AND NOT BECAUSE LANE LINES VARY. World Aquatics fixes
+        them. It is off because a PATH MARKER is also a dark elongated band on
+        the floor, and a heading pulled toward one is wrong by exactly the
+        angle the marker was laid at. Localization bounds the pull at
+        `lane_max_correction_deg` and only applies it while anchored, but that
+        bounds the damage; it does not remove it. Turn it on where the floor is
+        known to carry lanes and no markers.
+        """
+        try:
+            import cv2
+            from duburi_localization.pool_lines import detect
+        except Exception:                       # noqa: BLE001
+            self._lane_lines = False            # not installed: stop asking
+            return
+        d = max(1, int(self._tile_decimate))
+        small = gray if d == 1 else cv2.resize(
+            gray, None, fx=1.0 / d, fy=1.0 / d, interpolation=cv2.INTER_AREA)
+        line = detect(small)
+        if line is None:
+            self._lane_angle = None             # bare floor: say nothing
+            return
+        self._lane_angle = line.heading_deg()
+        self._pub_lane.publish(Float32(data=float(self._lane_angle)))
 
     def _cross_check_height(self) -> None:
         """Height from the image, against the height from a typed pool depth.

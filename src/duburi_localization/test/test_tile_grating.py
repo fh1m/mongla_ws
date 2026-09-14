@@ -343,3 +343,15 @@ def test_nan_and_none_are_refused():
     assert snap_to_grid(float('nan'), 30.0) is None
     assert snap_to_grid(30.0, float('nan')) is None
     assert snap_to_grid(None, 30.0) is None
+
+
+def test_snap_period_180_is_the_lane_lines_symmetry():
+    """A line is identical from both ends, so its residual wraps at +/-90,
+    not +/-45: a hull 60 deg off a lane is NOT on another branch."""
+    from duburi_localization.tile_grating import snap_to_grid
+    assert snap_to_grid(3.0, 0.0, period_deg=180.0) == pytest.approx(0.0)
+    assert snap_to_grid(183.0, 0.0, period_deg=180.0) == pytest.approx(180.0)
+    # 60 off: the grid reads it as -30 onto another branch; the line refuses.
+    assert snap_to_grid(60.0, 0.0, max_correction_deg=40.0) == pytest.approx(90.0)
+    assert snap_to_grid(60.0, 0.0, max_correction_deg=40.0,
+                        period_deg=180.0) is None
