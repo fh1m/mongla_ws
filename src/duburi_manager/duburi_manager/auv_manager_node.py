@@ -1675,7 +1675,17 @@ class AUVManagerNode(Node):
         if board_ms is not None:
             board_s = board_ms * 1e-3
             if recv_s is not None:
+                steps = self._imu_clock.steps
                 self._imu_clock.add(board_s, recv_s)
+                if self._imu_clock.steps != steps:
+                    # The host clock stepped (NTP) or the board rebooted. The
+                    # map dropped the other clock's pairs; stamps fall back to
+                    # arrival until it refits, and `_imu_clock_ok` re-announces.
+                    self._imu_clock_ok = False
+                    self.get_logger().warning(
+                        f'[SENS ] clock STEP detected (#{self._imu_clock.steps}): '
+                        f'host or board time jumped. IMU stamps on arrival '
+                        f'until the board clock is re-mapped (~2 s).')
             now = time.monotonic()
             if now - self._imu_clock_fit_t >= 2.0:
                 self._imu_clock_fit_t = now
