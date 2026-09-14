@@ -641,9 +641,23 @@ def _srot_drive(fc, *, fwd_pct: float, lat_pct: float, yaw_pct: float) -> None:
     `up` is always 0. The depth axis needs `set_target_depth`, which SrotFC does
     not implement; `vision_verbs` refuses a depth-axis align on this backend
     rather than letting it silently do nothing.
+
+    ⛔ PRIORITISED BEFORE IT LEAVES. The board scales a saturated horizontal
+    group UNIFORMLY, so a large lateral correction steals yaw in the same
+    proportion -- measured on the mixer at fwd 0.9 / lat 0.9 / yaw 0.3, yaw
+    arrives at 0.143. `prioritise` fits the demand host-side, yaw first, so the
+    axis the tool points with keeps what it asked for. Below saturation it
+    returns the demand unchanged, so an unsaturated frame is identical to
+    before. A failure degrades to the raw demand, which is the old behaviour.
     """
-    fc.manual(fwd=fwd_pct / 100.0, lat=lat_pct / 100.0,
-              up=0.0, yaw=yaw_pct / 100.0)
+    fwd, lat, yaw = fwd_pct / 100.0, lat_pct / 100.0, yaw_pct / 100.0
+    try:
+        from duburi_control.allocation import prioritise
+        fit = prioritise({'forward': fwd, 'lateral': lat, 'yaw': yaw})
+        fwd, lat, yaw = fit['forward'], fit['lateral'], fit['yaw']
+    except Exception:                       # noqa: BLE001
+        pass
+    fc.manual(fwd=fwd, lat=lat, up=0.0, yaw=yaw)
 
 
 def _read_depth(pixhawk) -> float:
