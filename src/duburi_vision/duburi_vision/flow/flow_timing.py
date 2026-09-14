@@ -69,7 +69,19 @@ class ClockMap:
     """
 
     __slots__ = ('_pairs', '_window_s', '_min_pairs', '_skew', '_offset',
-                 '_n_fit', '_resid_ms')
+                 '_n_fit', '_resid_ms', 'steps')
+
+    # ⛔ A STEP IN THE HOST CLOCK IS NOT DELAY. `host - board` is offset plus a
+    # NON-NEGATIVE transport delay, so it can rise by a stall but can only FALL
+    # by as much delay as the previous sample carried -- milliseconds. A fall
+    # past STEP_BACK_S, or a rise past STEP_FWD_S, is the host clock jumping
+    # (measured 2026-09-14: the Pi's first NTP sync stepped CLOCK_REALTIME
+    # mid-run). The pairs before it describe a different clock and are dropped.
+    # Without this a BACKWARD step pruned nothing, since pruning is by host
+    # age, and the fit mixed both clocks for the size of the step plus the
+    # window -- hours for an hour.
+    STEP_BACK_S = 0.5
+    STEP_FWD_S = 2.0
 
     def __init__(self, window_s: float = 20.0, min_pairs: int = 40):
         self._pairs: deque = deque()          # (board_s, host_s)
@@ -79,10 +91,18 @@ class ClockMap:
         self._offset = 0.0
         self._n_fit = 0
         self._resid_ms = float('nan')
+        self.steps = 0                        # host-clock steps detected
 
     def add(self, board_s: float, host_s: float) -> None:
         if not (math.isfinite(board_s) and math.isfinite(host_s)):
             return
+        if self._pairs:
+            lb, lh = self._pairs[-1]
+            jump = (host_s - board_s) - (lh - lb)
+            if jump < -self.STEP_BACK_S or jump > self.STEP_FWD_S:
+                self._pairs.clear()
+                self._n_fit = 0               # the old fit is the other clock's
+                self.steps += 1
         self._pairs.append((board_s, host_s))
         while self._pairs and (host_s - self._pairs[0][1]) > self._window_s:
             self._pairs.popleft()

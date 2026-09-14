@@ -206,3 +206,57 @@ class TestTimeOffset:
         broad = self._est(0.080, freq=0.15)
         broad.estimate()
         assert sharp.quality > broad.quality
+
+
+# --------------------------------------------------------------------------- #
+#  a step in the HOST clock (first NTP sync on a Pi with no RTC)
+# --------------------------------------------------------------------------- #
+def _feed(cm, t0_board, t0_host, seconds, rate=50.0, delay=0.004):
+    rng = np.random.default_rng(7)
+    n = int(seconds * rate)
+    for i in range(n):
+        b = t0_board + i / rate
+        cm.add(b, t0_host + i / rate + delay + abs(rng.normal(0, 0.003)))
+    return t0_board + n / rate, t0_host + n / rate
+
+
+def _err_ms(cm, board_s, host_truth):
+    return abs(cm.to_host(board_s) - host_truth) * 1e3
+
+
+@pytest.mark.parametrize('step_s', [-3600.0, -5.0, +5.0, +3600.0])
+def test_a_HOST_clock_step_is_not_mapped_through_stale_pairs(step_s):
+    """⛔ Measured 2026-09-14: the Pi's first NTP sync stepped CLOCK_REALTIME
+    mid-run. A BACKWARD step pruned nothing -- pruning is by host age -- so
+    pre- and post-step pairs mixed for the step plus 20 s, i.e. HOURS for an
+    hour-sized step, and every mapped stamp was wrong for all of it."""
+    from duburi_vision.flow.flow_timing import ClockMap
+    cm = ClockMap(window_s=20.0, min_pairs=40)
+    b, h = _feed(cm, 1000.0, 5000.0, 10.0)
+    assert cm.fit() and _err_ms(cm, b, h) < 10.0
+    # The host clock jumps; the board clock does not.
+    h2 = h + step_s
+    b, h2 = _feed(cm, b, h2, 3.0)
+    cm.fit()
+    assert _err_ms(cm, b, h2) < 10.0, (step_s, cm)
+
+
+def test_a_step_clears_readiness_until_refit():
+    """After a step the OLD fit must not keep answering as ready."""
+    from duburi_vision.flow.flow_timing import ClockMap
+    cm = ClockMap(window_s=20.0, min_pairs=40)
+    b, h = _feed(cm, 1000.0, 5000.0, 10.0)
+    assert cm.fit() and cm.ready
+    cm.add(b, h - 3600.0)
+    assert not cm.ready
+    assert cm.steps == 1
+
+
+def test_ordinary_transport_hiccups_are_NOT_steps():
+    """A 300 ms scheduling stall is a positive delay, not a clock step."""
+    from duburi_vision.flow.flow_timing import ClockMap
+    cm = ClockMap(window_s=20.0, min_pairs=40)
+    b, h = _feed(cm, 1000.0, 5000.0, 5.0)
+    cm.add(b, h + 0.300)
+    b, h = _feed(cm, b + 0.02, h + 0.02, 5.0)
+    assert cm.fit() and cm.ready and cm.steps == 0
