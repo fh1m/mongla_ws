@@ -284,6 +284,17 @@ def generate_launch_description():
             description='Water depth in metres. REQUIRED with flow:=true -- '
                         'the node refuses to publish velocity without it.'),
         DeclareLaunchArgument(
+            'tile_m', default_value='0.0',
+            description='Floor tile pitch in metres, measured on deck. 0 = '
+                        'OFF. Sets height from the floor and publishes the '
+                        'grid angle that bounds yaw drift. A wrong value '
+                        'rescales every height silently -- measure it.'),
+        DeclareLaunchArgument(
+            'lane_lines', default_value='false',
+            description='Read the lane line (heading mod 180) for the yaw '
+                        'drift bound. OFF: a path marker is also a dark band. '
+                        'Enable on a floor with lanes and no markers.'),
+        DeclareLaunchArgument(
             'medium', default_value='water',
             description="The medium the VEHICLE is in. 'water' engages the "
                         "flat-port rectification in flow_node, lock_node AND "
@@ -526,6 +537,11 @@ def generate_launch_description():
                  # The SAME calibration the downward camera_node gets. Passing
                  # them separately is how they came to disagree.
                  'calibration':  LaunchConfiguration('dwn_calibration'),
+                 # Floor instruments. Both OFF by default; see flow_node.
+                 'tile_m':       ParameterValue(
+                     LaunchConfiguration('tile_m'), value_type=float),
+                 'lane_lines':   ParameterValue(
+                     LaunchConfiguration('lane_lines'), value_type=bool),
              }],
              condition=IfCondition(LaunchConfiguration('flow'))),
         ladder('forward',  'lock_class'),

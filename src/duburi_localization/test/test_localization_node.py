@@ -59,7 +59,8 @@ def _node():
     obj._last_imu_t = None
     obj._imu_gap_warned = True          # suppress the logger call
     obj._n = {'imu': 0, 'att': 0, 'depth': 0, 'yaw': 0, 'flow': 0, 'fix': 0,
-              'zupt': 0, 'grid': 0, 'grid_refused': 0, 'gap': 0}
+              'zupt': 0, 'grid': 0, 'grid_refused': 0,
+              'lane': 0, 'lane_refused': 0, 'gap': 0}
     obj._attitude_sigma_deg = 0.5
     obj._zupt_sigma = 0.01
     obj._zupt_enabled = True
@@ -543,6 +544,39 @@ def test_a_large_disagreement_is_REFUSED_and_COUNTED():
     n._on_floor_grid(type('F', (), {'data': 60.0})())
     assert n._n['grid'] == 0
     assert n._n['grid_refused'] == 1
+
+
+
+def test_the_lane_line_uses_its_OWN_symmetry_not_the_grids():
+    """⛔ THE DISCRIMINATING CASE. Hull at yaw 90, feature at 0. For a square
+    grid that is zero residual (90 is a grid direction) and applies. For a
+    lane line, 90 degrees is the WRONG BRANCH -- the line runs across the hull
+    -- and must be refused. If the node passed the grid's period to the lane,
+    this would be applied and the test fails."""
+    n = _node()
+    n._anchored = True
+    n._filter.X.R = np.array([[0.0, -1.0, 0.0],      # yaw = +90 deg
+                              [1.0, 0.0, 0.0],
+                              [0.0, 0.0, 1.0]])
+    n._on_floor_grid(type('F', (), {'data': 0.0})())
+    assert n._n['grid'] == 1
+    n._on_lane_line(type('F', (), {'data': 0.0})())
+    assert n._n['lane'] == 0
+    assert n._n['lane_refused'] == 1
+
+
+def test_a_lane_line_along_the_hull_is_applied_and_counted():
+    n = _node()
+    n._anchored = True
+    n._on_lane_line(type('F', (), {'data': 0.0})())
+    assert n._n['lane'] == 1
+
+
+def test_the_lane_line_is_ignored_until_anchored():
+    n = _node()
+    n._anchored = False
+    n._on_lane_line(type('F', (), {'data': 0.0})())
+    assert n._n['lane'] == 0 and n._n['lane_refused'] == 0
 
 
 def test_the_refusal_is_visible_in_the_diagnostic():

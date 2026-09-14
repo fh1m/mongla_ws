@@ -105,3 +105,29 @@ def test_the_filter_reports_what_it_rejected():
     is merely drifting."""
     src = (PKG / 'duburi_localization' / 'localization_node.py').read_text()
     assert 'rejected' in src and 'lockout_breaks' in src
+
+
+def test_every_floor_instrument_is_published_AND_consumed():
+    """⛔ `pool_lines` shipped with 28 tests and no caller, the same round the
+    guard above was written. A floor instrument counts only if the flow node
+    runs it, publishes it, the launch can turn it on, and the filter reads it."""
+    flow = (ROOT / 'src' / 'duburi_vision' / 'duburi_vision' / 'flow'
+            / 'flow_node.py').read_text()
+    launch = (ROOT / 'src' / 'duburi_vision' / 'launch'
+              / 'vision_pi.launch.py').read_text()
+    node = (PKG / 'duburi_localization' / 'localization_node.py').read_text()
+    for module, topic, knob in (('tile_grating', 'floor_grid_deg', 'tile_m'),
+                                ('pool_lines', 'lane_heading_deg', 'lane_lines')):
+        assert f'duburi_localization.{module} import' in flow, module
+        assert f"/{topic}'" in flow and f"/{topic}'" in node, topic
+        assert f"'{knob}'" in launch, knob
+
+
+def test_prioritised_allocation_reaches_the_srot_frame():
+    """`allocation.prioritise` must be on the path to `fc.manual`, or the
+    board keeps scaling yaw down with the rest of a saturated group."""
+    mv = (ROOT / 'src' / 'duburi_control' / 'duburi_control'
+          / 'motion_vision.py').read_text()
+    body = mv[mv.index('def _srot_drive'):mv.index('def _read_depth')]
+    assert 'prioritise(' in body and 'fc.manual(' in body
+    assert body.index('prioritise(') < body.index('fc.manual(')

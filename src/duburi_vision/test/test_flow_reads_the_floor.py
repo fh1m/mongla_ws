@@ -61,3 +61,84 @@ def test_a_missing_localization_package_disables_it_instead_of_crashing():
     """The flow node must still run if the estimation package is absent."""
     block = SRC[SRC.index('def _read_the_floor'):SRC.index('def _cross_check_height')]
     assert 'self._tile_m = 0.0' in block
+
+
+# --------------------------------------------------------------------------- #
+#  EXECUTED -- the grep tests above pass whether or not the body raises
+# --------------------------------------------------------------------------- #
+import math                                                     # noqa: E402
+
+import numpy as np                                              # noqa: E402
+import pytest                                                   # noqa: E402
+
+pytest.importorskip('rclpy')
+pytest.importorskip('cv_bridge')
+pytest.importorskip('duburi_localization.tile_grating')
+
+
+@pytest.fixture(scope='module', autouse=True)
+def _ros():
+    import rclpy
+    rclpy.init()
+    yield
+    rclpy.shutdown()
+
+
+def _node(**params):
+    from test_flow_node import _make                            # noqa: E402
+    n = _make(**params)
+    n.published = {'grid': [], 'lane': []}
+    n._pub_grid.publish = lambda m: n.published['grid'].append(m.data)
+    n._pub_lane.publish = lambda m: n.published['lane'].append(m.data)
+    return n
+
+
+def _tiles(n=720, period=18.0, angle_deg=0.0):
+    y, x = np.mgrid[0:n, 0:n].astype(np.float32)
+    t = math.radians(angle_deg)
+    u = x * math.cos(t) + y * math.sin(t)
+    v = -x * math.sin(t) + y * math.cos(t)
+    im = 128 + 50 * (np.sign(np.sin(2 * np.pi * u / period))
+                     + np.sign(np.sin(2 * np.pi * v / period)))
+    return np.clip(im, 0, 255).astype(np.uint8)
+
+
+def _lane(n=720, angle_deg=33.0, width_px=60):
+    yy, xx = np.mgrid[0:n, 0:n].astype(np.float32)
+    t = math.radians(angle_deg)
+    d = -(xx - n / 2) * math.sin(t) + (yy - n / 2) * math.cos(t)
+    im = np.full((n, n), 190, np.float32)
+    im[np.abs(d) <= width_px / 2] = 45
+    return im.astype(np.uint8)
+
+
+def test_with_tile_m_set_the_floor_is_READ_and_the_grid_PUBLISHED():
+    n = _node(tile_m=0.025)
+    try:
+        n._read_the_floor(_tiles(angle_deg=10.0), 1.0)
+        assert n._tile_height is not None and n._tile_height > 0.0
+        assert len(n.published['grid']) == 1
+        assert abs(n.published['grid'][0] - 10.0) < 1.5, n.published['grid']
+    finally:
+        n.destroy_node()
+
+
+def test_with_lane_lines_on_the_lane_heading_is_PUBLISHED():
+    n = _node(lane_lines=True)
+    try:
+        n._read_the_floor(_lane(angle_deg=33.0), 1.0)
+        assert len(n.published['lane']) == 1, n.published
+        assert abs(n.published['lane'][0] - 33.0) < 1.0, n.published['lane']
+        assert n.published['grid'] == []          # tile_m still off
+    finally:
+        n.destroy_node()
+
+
+def test_both_OFF_by_default_publish_nothing():
+    n = _node()
+    try:
+        n._read_the_floor(_lane(), 1.0)
+        n._read_the_floor(_tiles(), 2.0)
+        assert n.published == {'grid': [], 'lane': []}
+    finally:
+        n.destroy_node()

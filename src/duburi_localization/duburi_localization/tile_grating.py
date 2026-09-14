@@ -117,7 +117,8 @@ class Grating:
 
 
 def snap_to_grid(current_yaw_deg: float, grid_angle_deg: float,
-                 *, max_correction_deg: float = 20.0) -> Optional[float]:
+                 *, max_correction_deg: float = 20.0,
+                 period_deg: float = 90.0) -> Optional[float]:
     """Pull a drifting yaw back onto the floor's grid. None if it is too far.
 
     ⛔ THIS IS THE HALF THAT MATTERS, AND IT IS NOT A HEADING SOURCE -- IT IS A
@@ -138,15 +139,19 @@ def snap_to_grid(current_yaw_deg: float, grid_angle_deg: float,
     four-fold aliasing error -- and applying it would snap the hull 90 degrees
     onto the wrong branch. Refusing is the only safe answer: a wrong heading is
     worse than a drifting one, because a drifting one is still roughly right.
+
+    `period_deg` is the feature's symmetry: 90 for a square grid, 180 for a
+    lane line (identical from both ends). Same bound, half the aliasing.
     """
     if grid_angle_deg is None or current_yaw_deg is None:
         return None
     if not (math.isfinite(current_yaw_deg) and math.isfinite(grid_angle_deg)):
         return None
-    # Residual of the current estimate against the grid, wrapped to +/-45.
-    resid = (float(current_yaw_deg) - float(grid_angle_deg)) % 90.0
-    if resid > 45.0:
-        resid -= 90.0
+    period = float(period_deg)
+    # Residual of the current estimate against the feature, wrapped to +/-P/2.
+    resid = (float(current_yaw_deg) - float(grid_angle_deg)) % period
+    if resid > period / 2.0:
+        resid -= period
     if abs(resid) > float(max_correction_deg):
         return None
     return float(current_yaw_deg) - resid
