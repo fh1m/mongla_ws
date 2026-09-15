@@ -17,7 +17,8 @@ from duburi_planner.duburi_dsl import DuburiMission
 
 
 class _Odom:
-    def __init__(self, frame='pool', x=1.5, y=-2.0, z=-1.2, yaw_deg=30.0):
+    def __init__(self, frame='pool', x=1.5, y=-2.0, z=1.2, yaw_deg=30.0):
+        # /duburi/odom is NED: position.z is +depth (1.2 m down)
         r = math.radians(yaw_deg) * 0.5
         self.header = type('H', (), {'frame_id': frame})()
         pos = type('P', (), {'x': x, 'y': y, 'z': z})()
@@ -45,7 +46,7 @@ def test_a_pool_frame_pose_is_returned_and_decoded():
     x, y, z, yaw = got
     assert x == pytest.approx(1.5)
     assert y == pytest.approx(-2.0)
-    assert z == pytest.approx(-1.2)
+    assert z == pytest.approx(-1.2)     # pose() returns depth negative, as the stack does
     assert yaw == pytest.approx(30.0, abs=1e-6)
 
 

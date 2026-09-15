@@ -1143,7 +1143,8 @@ class DuburiMission:
         q = self._odom.pose.pose.orientation
         yaw = math.degrees(math.atan2(2.0 * (q.w * q.z + q.x * q.y),
                                       1.0 - 2.0 * (q.y * q.y + q.z * q.z)))
-        return (float(p.x), float(p.y), float(p.z), yaw)
+        # /duburi/odom is NED: z is +depth, and this API returns depth negative.
+        return (float(p.x), float(p.y), -float(p.z), yaw)
 
     def motion(self, *, timeout: float = 1.0):
         """Is the hull moving the way it is being told to?

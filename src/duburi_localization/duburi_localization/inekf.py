@@ -68,7 +68,12 @@ from typing import Optional, Tuple
 
 import numpy as np
 
-GRAVITY = np.array([0.0, 0.0, -9.80665])
+# ⛔ WORLD IS NED (z DOWN), BODY IS FRD. The board's ATTITUDE is aerospace
+# Z-Y-X Euler in NED, its gyro and (host-mapped) accel are FRD, flow's +y is
+# starboard. This was z-up until 2026-09-15 while the rotation fed in was NED:
+# replayed through 50 s of real board data at rest, that ran to 583 m; NED,
+# 0.036 m. At rest the accelerometer reads (0, 0, -g) level.
+GRAVITY = np.array([0.0, 0.0, 9.80665])
 
 # Below this rotation angle the closed-form exponential divides by ~0, so the
 # series expansion is used instead. Not a tuning knob -- a numerical boundary.
@@ -279,7 +284,9 @@ class RIEKF:
         return self.update_body_velocity((0.0, 0.0, 0.0), sigma=sigma)
 
     def update_depth(self, depth_m: float, sigma: float = 0.02) -> bool:
-        """Bar30 depth: world z, NEGATIVE below the surface in this stack.
+        """Bar30 depth, NEGATIVE below the surface as everywhere in this stack.
+
+        World z is DOWN (NED), so the state holds +depth: z = -depth_m.
 
         ⚠ An IMPERFECT measurement for a right-invariant filter -- world-frame,
         so the log-linear property is approximate here. Accepted, and named, as
@@ -287,7 +294,7 @@ class RIEKF:
         """
         H = np.zeros((1, self.DIM))
         H[0, 8] = 1.0
-        y = np.array([float(depth_m) - self.X.p[2]])
+        y = np.array([-float(depth_m) - self.X.p[2]])
         return self._apply(H, y, np.array([[sigma ** 2]]))
 
     def update_yaw(self, yaw_deg: float, sigma_deg: float = 2.0) -> bool:

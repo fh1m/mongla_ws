@@ -2180,17 +2180,103 @@ class SrotFC(FlightController):
         att = self._cache('ATTITUDE')
         rpy = None if att is None else (float(att.roll), float(att.pitch),
                                         float(att.yaw))
+        raw = (float(imu.xacc) * g, float(imu.yacc) * g, float(imu.zacc) * g)
         return {
             'rpy': rpy,
             'gyro': (float(imu.xgyro) * 1e-3,
                      float(imu.ygyro) * 1e-3,
                      float(imu.zgyro) * 1e-3),
-            'accel': (float(imu.xacc) * g,
-                      float(imu.yacc) * g,
-                      float(imu.zacc) * g),
+            # VEHICLE frame (FRD), or None until the frame is proven -- see
+            # `_accel_in_vehicle_frame`. None, never the raw axes: a consumer
+            # handed the wrong frame integrates gravity sideways.
+            'accel': self._accel_in_vehicle_frame(raw, rpy),
+            'accel_frame': getattr(self, '_accel_frame', None),
             'board_ms': None if boot is None else int(boot),
             'host_recv_s': float(getattr(imu, '_timestamp', 0.0)) or None,
         }
+
+    def _accel_in_vehicle_frame(self, raw, rpy):
+        """SCALED_IMU2 accel, rotated into the frame its own gyro and ATTITUDE use.
+
+        ⛔ THE BOARD SENDS THEM IN TWO DIFFERENT FRAMES. `bno085.cpp` (under
+        `BNO_SWAP_ROLL_PITCH`) maps the attitude and the gyro from the sensor's
+        axes into the vehicle's FRD frame with (x, y, z) -> (y, x, -z), a proper
+        180 deg rotation about x=y. The gravity and linear-acceleration reports
+        get NO remap, and `mav_stream.cpp` packs `lx + grx` straight into
+        `xacc`. So the accel alone is still in the sensor's axes.
+
+        Measured on the vehicle 2026-09-15, still on the bench:
+          ATTITUDE roll +1.57 deg, pitch -15.10 deg
+          predicted FRD specific force  (-2.54, -0.26, -9.47) m/s^2
+          SCALED_IMU2 accel             (-0.41, -2.56, +9.38)
+          ... mapped (y, x, -z)         (-2.56, -0.41, -9.38)
+        Fed unmapped to the localization filter, 50 s of that board at rest
+        ran to 583 m with 39 of 40 ZUPTs rejected; mapped, 0.036 m and 0 of 40.
+
+        ⛔ NOT HARD-CODED, PROVEN AT RUNTIME. If the firmware ever remaps the
+        accel too, applying the swap again would put gravity UP -- 180 deg off,
+        and exactly as silent. So both hypotheses are scored against the
+        gravity direction the board's own attitude predicts, and the frame is
+        latched only after `_ACCEL_FRAME_VOTES` consecutive samples agree
+        unambiguously. The two differ by the sign of z, so they are separable
+        at any tilt. Until latched this returns None and the filter coasts on
+        attitude, depth and flow -- absence, not a guess.
+        """
+        frame = getattr(self, '_accel_frame', None)
+        if frame is None:
+            frame = self._vote_accel_frame(raw, rpy)
+        if frame is None:
+            return None
+        if frame == 'sensor':
+            return (raw[1], raw[0], -raw[2])
+        return raw
+
+    _ACCEL_FRAME_VOTES = 25          # 0.5 s at the board's 50 Hz
+    _ACCEL_FRAME_AGREE_DEG = 10.0    # level-trim offsets measured at ~1 deg
+    _ACCEL_FRAME_REJECT_DEG = 60.0
+
+    def _vote_accel_frame(self, raw, rpy):
+        if rpy is None or any(math.isnan(c) for c in rpy):
+            return None
+        mag = math.sqrt(sum(c * c for c in raw))
+        # Only a hull near rest says where gravity is; a hard manoeuvre does not.
+        if not (0.8 * 9.80665 < mag < 1.2 * 9.80665):
+            self._accel_votes = (None, 0)
+            return None
+        r, p, _ = rpy
+        g = 9.80665
+        # Specific force at rest in FRD for aerospace Z-Y-X Euler angles.
+        exp = (g * math.sin(p), -g * math.sin(r) * math.cos(p),
+               -g * math.cos(r) * math.cos(p))
+
+        def ang(v):
+            c = sum(a * b for a, b in zip(v, exp)) / (mag * g)
+            return math.degrees(math.acos(max(-1.0, min(1.0, c))))
+
+        e_sensor = ang((raw[1], raw[0], -raw[2]))
+        e_vehicle = ang(raw)
+        if e_sensor < self._ACCEL_FRAME_AGREE_DEG and e_vehicle > self._ACCEL_FRAME_REJECT_DEG:
+            vote = 'sensor'
+        elif e_vehicle < self._ACCEL_FRAME_AGREE_DEG and e_sensor > self._ACCEL_FRAME_REJECT_DEG:
+            vote = 'vehicle'
+        else:
+            self._accel_votes = (None, 0)
+            return None
+        last, n = getattr(self, '_accel_votes', (None, 0))
+        n = n + 1 if vote == last else 1
+        self._accel_votes = (vote, n)
+        if n < self._ACCEL_FRAME_VOTES:
+            return None
+        self._accel_frame = vote
+        log = getattr(self, '_log', None)
+        if log is not None:
+            try:
+                log.info(f'[SROT ] SCALED_IMU2 accel frame proven: {vote!r} '
+                         f'(sensor {e_sensor:.1f} deg vs vehicle {e_vehicle:.1f} '
+                         f'deg from the attitude-predicted gravity)')
+            except Exception:       # noqa: BLE001 -- logging must not break telemetry
+                pass
+        return vote
 
     def heartbeat_age(self):
         hb = self._vehicle_hb()
