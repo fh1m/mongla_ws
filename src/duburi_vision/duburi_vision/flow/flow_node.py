@@ -50,7 +50,7 @@ from rclpy.executors import ExternalShutdownException
 from cv_bridge import CvBridge
 from rclpy.node import Node
 from rclpy.qos import (QoSDurabilityPolicy, QoSProfile, QoSReliabilityPolicy)
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, Range
 from std_msgs.msg import Float32, Float32MultiArray, String, UInt8
 from geometry_msgs.msg import TwistWithCovarianceStamped, Vector3Stamped
 
@@ -400,6 +400,13 @@ class FlowVelocityNode(Node):
         # because it is a different quantity measured at a different rate and a
         # consumer wanting one rarely wants the other.
         self._pub_grid = self.create_publisher(Float32, f'{ns}/floor_grid_deg', 10)
+        # HEIGHT ABOVE THE FLOOR, when the floor itself says so. It was measured
+        # here to scale velocity and then thrown away, while every floor task
+        # (a bin drop, a floor search, a sloped SAUVC floor) wants exactly this
+        # rather than depth below the surface. Published ONLY from the tile
+        # grating: the pool_depth path is depth minus a typed constant, which
+        # is not a measurement of the floor at all. Absent means unknown.
+        self._pub_floor_h = self.create_publisher(Range, f'{ns}/floor_height', 10)
         self._pub_lane = self.create_publisher(Float32, f'{ns}/lane_heading_deg', 10)
         self._pub_dist = self.create_publisher(Float32, f'{ns}/distance_traveled', 10)
         self._pub_debug = self.create_publisher(Float32MultiArray,
@@ -1081,6 +1088,16 @@ class FlowVelocityNode(Node):
             return
         self._tile_height = g.height_m(f_px, self._tile_m)
         self._tile_angle = g.heading_deg()
+        if self._tile_height and math.isfinite(self._tile_height):
+            r = Range()
+            r.header.stamp.sec = int(t)
+            r.header.stamp.nanosec = int((t - int(t)) * 1e9)
+            r.header.frame_id = f'{self._cam}_cam'
+            r.field_of_view = 0.0
+            r.min_range = 0.0
+            r.max_range = float('inf')
+            r.range = float(self._tile_height)
+            self._pub_floor_h.publish(r)
         self._pub_grid.publish(Float32(data=float(self._tile_angle)))
         # Report the disagreement, never silently pick. Same rule the existing
         # optical cross-check follows: a divergence does not say WHICH input is

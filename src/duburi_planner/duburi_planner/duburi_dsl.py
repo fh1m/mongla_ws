@@ -1183,6 +1183,39 @@ class DuburiMission:
         rclpy.spin_once(node, timeout_sec=0.0)
         return self._motion
 
+    def floor_height(self, *, max_age_s: float = 1.0, timeout: float = 1.0):
+        """Height above the floor in metres, from the floor's own tiles, or None.
+
+        Measured by the downward camera off the tile grating (`tile_m` must be
+        set for the venue), NOT depth minus a typed pool depth. None when no
+        tiles are visible or the last reading is older than `max_age_s`:
+        a stale height reads as a fresh one to every comparison.
+
+            h = duburi.floor_height()
+            if h is None:
+                ...                     # no tiles in view: do not guess
+            elif h < 0.6:
+                ...                     # too close to the floor for the drop
+        """
+        import time as _t
+        from sensor_msgs.msg import Range
+        node = self.client.node
+        if getattr(self, '_floor_h_sub', None) is None:
+            self._floor_h = None
+
+            def _keep(msg):
+                self._floor_h = (float(msg.range), _t.time())
+            self._floor_h_sub = node.create_subscription(
+                Range, '/duburi/vision/downward/floor_height', _keep, 10)
+        deadline = _t.monotonic() + float(timeout)
+        while self._floor_h is None and _t.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.05)
+        rclpy.spin_once(node, timeout_sec=0.0)
+        if self._floor_h is None:
+            return None
+        h, rx = self._floor_h
+        return h if _t.time() - rx <= float(max_age_s) else None
+
     def range_to(self, prop_class: str, *, camera: str | None = None,
                  stale_after: float = 1.0):
         """Metres to a visible prop of known width, or None. Also its sigma.
