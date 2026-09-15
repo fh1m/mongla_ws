@@ -933,8 +933,10 @@ working all along.**
 
 ### What shipped instead: `SunlightField` and `SurfaceGlare`
 
-Both competitions are run in **outdoor pools under direct sun**, so the moving
-light net and surface glare are the normal appearance of a frame, not an extra.
+RoboSub is run in an **outdoor pool under direct sun** (its 2025 downward footage is covered in
+caustics), so there the moving light net and surface glare are the normal appearance of a frame.
+SAUVC's 2026 rulebook says **indoor** (25 m x 16 m), although earlier SAUVC finals ran outdoors
+at Singapore Polytechnic. Check the venue before choosing a lighting preset.
 
 **Caustics are world-anchored, which is the whole difficulty.** A pattern
 painted in image space swims with the camera and reads as a dirty lens. These
