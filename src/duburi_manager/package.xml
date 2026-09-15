@@ -11,6 +11,7 @@
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
   <depend>sensor_msgs</depend>
+  <depend>nav_msgs</depend>
   <depend>vision_msgs</depend>
   <depend>duburi_control</depend>
   <depend>duburi_interfaces</depend>

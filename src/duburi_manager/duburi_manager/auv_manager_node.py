@@ -327,6 +327,13 @@ class AUVManagerNode(Node):
         # 'water' is the default because that is where the vehicle operates;
         # 'air' is the exact identity, for a bench run.
         self.declare_parameter('vision_uplink_medium', 'water')
+        # VELOCITY uplink: the RIEKF's body velocity (/duburi/odom) to the
+        # board as VISION_SPEED_ESTIMATE, at the rate localization publishes
+        # it. The Pi measures; the board integrates at 500 Hz and closes the
+        # distance loop. OFF by default for the same reason as the bearing
+        # uplink: the board drops msgid 103 until the firmware PR lands, and
+        # the link is 51.8 % full at idle.
+        self.declare_parameter('velocity_uplink', False)
         # payload_channels: OPTIONAL per-instance labels, "<board_channel>:<name>",
         # e.g. "9:torpedo_1, 10:torpedo_2, 11:dropper_1".
         #
@@ -1004,6 +1011,14 @@ class AUVManagerNode(Node):
                 f'[VIS  ] LANDING_TARGET uplink armed @ {hz:.0f} Hz, '
                 f'camera={cam0 or "(none -- idle until set)"} '
                 f'(the board does not consume msgid 149 yet -- producer only)')
+            # Subscribed unconditionally, gated per message on the parameter, so
+            # `ros2 param set ... velocity_uplink true` works mid-run -- the
+            # startup-only-timer defect this file has already had once.
+            from nav_msgs.msg import Odometry
+            self._vel_uplink_n = 0
+            self.create_subscription(Odometry, '/duburi/odom',
+                                     self._on_odom_uplink, 10,
+                                     callback_group=self.timer_group)
 
         # BNO->EKF3 mocap injection is an ArduSub/BlueOS feature; SROT fuses the
         # BNO on-board, so there is no external EKF to feed (skip on the srot path).
@@ -1591,7 +1606,8 @@ class AUVManagerNode(Node):
                 target_num=srot_uplink_class_num(
                     getattr(sample, 'class_name', '') or want),
                 coasted=bool(getattr(sample, 'coasted', False)),
-                gap_age_s=float(getattr(sample, 'age_s', 0.0) or 0.0))
+                gap_age_s=float(getattr(sample, 'age_s', 0.0) or 0.0),
+                board_capture_s=self._board_capture_s(sample))
         except Exception as exc:                      # noqa: BLE001
             self.get_logger().warn(f'[VIS  ] landing_target send failed: {exc}')
 
@@ -2144,6 +2160,59 @@ class AUVManagerNode(Node):
             stamp.nanosec = int((bs[0] - sec) * 1e9)
             return stamp
         return self.get_clock().now().to_msg()
+
+    def _on_odom_uplink(self, msg) -> None:
+        """Forward one RIEKF body velocity to the board, stamped on ITS clock.
+
+        The odom stamp is the filter's latest INPUT instant on this host's wall
+        clock (localization maps every input through the same board<->host
+        fit), so the inverse lands it on the board's `time_boot_ms` base.
+        Nothing is sent until that fit is good: an unstamped velocity would be
+        integrated at the wrong instant.
+        """
+        if not bool(self.get_parameter('velocity_uplink').value):
+            return
+        if not getattr(self, '_imu_clock_ok', False):
+            return
+        host_s = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        if host_s <= 0.0:
+            return
+        cov = msg.twist.covariance
+        try:
+            sent = self.fc.send_speed_estimate(
+                float(msg.twist.twist.linear.x), float(msg.twist.twist.linear.y),
+                float(cov[0]), float(cov[7]),
+                self._imu_clock.to_board(host_s))
+        except Exception as exc:                            # noqa: BLE001
+            self.get_logger().warn(f'[VEL  ] speed_estimate send failed: {exc}')
+            return
+        if sent:
+            self._vel_uplink_n += 1
+            if self._vel_uplink_n == 1:
+                self.get_logger().info(
+                    '[VEL  ] velocity uplink live: RIEKF body velocity -> board '
+                    '(VISION_SPEED_ESTIMATE, board-clock stamped)')
+
+    def _board_capture_s(self, sample):
+        """The frame's capture instant on the BOARD's clock, or None.
+
+        `sample.age_s` runs from capture on this host's clock; `ClockMap` holds
+        the board<->host fit built from ATTITUDE.time_boot_ms, so the inverse
+        puts the capture where the board's gyro history can find it. None until
+        that fit is announced good, and None for a COASTED box, whose bearing
+        is a prediction for now rather than an observation from the past --
+        de-rotating it would count the same turn twice.
+        """
+        if getattr(sample, 'coasted', False) or not getattr(self, '_imu_clock_ok', False):
+            return None
+        age = float(getattr(sample, 'age_s', 0.0) or 0.0)
+        if not (math.isfinite(age) and age >= 0.0):
+            return None
+        try:
+            board_s = self._imu_clock.to_board(time.time() - age)
+        except Exception:                                   # noqa: BLE001
+            return None
+        return board_s if math.isfinite(board_s) and board_s > 0.0 else None
 
     def _uplink_n(self) -> float:
         """Refractive index for the uplink bearing, from the ONE source of it.

@@ -387,6 +387,16 @@ GAIN_FOR_AUTONOMY = 1.0   # MANUAL_CONTROL is halved until GAIN=1.0 (boots at 0.
 # the field was either meaningless or model-dependent, and neither is a wire
 # contract. Proposed upstream in PR #2 (VISION_API §6, answering their Q5).
 UPLINK_CLASS_UNSPECIFIED = 0
+# LANDING_TARGET.z: which clock `time_usec` is on. 0.0 = host wall clock,
+# advisory (VISION_API §1.2, the original contract). 1.0 = microseconds since
+# BOARD boot, the frame's capture instant mapped through ClockMap, so the board
+# can de-rotate the bearing by its own gyro. Proposed upstream; the board
+# ignores z today, so sending it is harmless before the PR merges.
+UPLINK_TIME_BOARD = 1.0
+# VISION_SPEED_ESTIMATE.covariance[8]: vertical velocity variance. A downward
+# camera cannot see vertical motion, so it is sent as unobserved (1e6 m^2/s^2)
+# rather than as a confident zero that would fight the board's depth loop.
+SPEED_Z_UNOBSERVED_VAR = 1.0e6
 UPLINK_CLASSES = {
     'gate':       1,
     'flare':      2,

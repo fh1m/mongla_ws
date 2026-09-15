@@ -260,3 +260,15 @@ def test_ordinary_transport_hiccups_are_NOT_steps():
     cm.add(b, h + 0.300)
     b, h = _feed(cm, b + 0.02, h + 0.02, 5.0)
     assert cm.fit() and cm.ready and cm.steps == 0
+
+
+def test_to_board_is_the_exact_inverse_of_to_host():
+    """The uplink stamps a camera capture on the BOARD clock with this; an
+    inverse that is off by the skew misplaces it by ms per minute of uptime."""
+    cm = ClockMap(window_s=30.0, min_pairs=10)
+    for i in range(300):
+        b = 100.0 + i * 0.02
+        cm.add(b, b * (1 + 50e-6) + 1.7e9 + 0.003)
+    assert cm.fit()
+    for b in (100.0, 104.321, 105.98):
+        assert abs(cm.to_board(cm.to_host(b)) - b) < 1e-5   # 10 us; float64 at 1.7e9 s

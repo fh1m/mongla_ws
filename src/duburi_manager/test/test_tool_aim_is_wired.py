@@ -34,7 +34,7 @@ def test_it_is_resolved_PER_TICK_because_the_range_moves():
     """A constant offset computed once would be right at one range only -- and
     the correction is largest exactly where a mission spends its final second."""
     i = _MV.index('tool_du = tool_dv = 0.0')
-    j = _MV.index("ctrl = sample.ex - (offsets.get('lat', 0.0) + tool_du)")
+    j = _MV.index("ctrl = ex_now - (offsets.get('lat', 0.0) + tool_du)")
     assert i < j, 'the offset is resolved after it is used'
     # inside the loop body: same indent as the axis blocks that follow it
     line = _MV[_MV.rindex('\n', 0, i) + 1:i]

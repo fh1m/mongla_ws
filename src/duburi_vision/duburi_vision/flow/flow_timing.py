@@ -160,6 +160,15 @@ class ClockMap:
         """Board clock -> host clock."""
         return board_s * self._skew + self._offset
 
+    def to_board(self, host_s: float) -> float:
+        """Host clock -> board clock. The exact inverse of `to_host`.
+
+        For stamping something the BOARD must act on at a past instant -- a
+        camera capture -- in the board's own time base, which is the only one
+        its 500 Hz gyro history is indexed by.
+        """
+        return (host_s - self._offset) / self._skew
+
     @property
     def ready(self) -> bool:
         return self._n_fit >= 3

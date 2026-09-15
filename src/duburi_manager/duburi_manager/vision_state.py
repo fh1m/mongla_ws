@@ -246,6 +246,23 @@ class VisionState:
             return (list(self._K) if self._K else None,
                     list(self._D) if self._D else None)
 
+    def px_per_rad(self):
+        """Pixels per radian of ray angle at frame centre, in the vehicle's
+        medium -- fx * n -- or None when either is unknown.
+
+        The calibration is taken in AIR, and a flat port makes the water ray
+        angle 1/n of the air one near the centre, so bare fx under-corrects by
+        25 % under water. The index comes from the manager's one medium
+        parameter (`_uplink_n`), the same the board uplink uses, so the host
+        loop and the board cannot disagree about the optics. No medium source
+        means no correction, not a guess of air.
+        """
+        K, _D = self.calibration()
+        n_fn = getattr(self._node, '_uplink_n', None)
+        if not K or not (K[0] > 0.0) or not callable(n_fn):
+            return None
+        return float(K[0]) * float(n_fn())
+
     def _on_vis_range(self, msg: Float32MultiArray) -> None:
         with self._lock:
             self._vis_range_vals = list(msg.data)
