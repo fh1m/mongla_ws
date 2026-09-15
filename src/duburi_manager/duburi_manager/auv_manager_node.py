@@ -22,6 +22,7 @@ import signal
 import sys
 import threading
 import time
+from collections import deque
 
 # Drop ROS2's default `[INFO] [1776530611.533365998] [duburi_manager]:` prefix
 # in favour of a compact `[INFO] <message>` so our [CMD  ]/[YAW  ]/[STATE] tags
@@ -939,6 +940,7 @@ class AUVManagerNode(Node):
         self.demand_publisher = self.create_publisher(
             Vector3Stamped, '/duburi/demand', 10)
         self._imu_rpy_warned = False
+        self._imu_last_ms = None
         # Board-clock -> host-clock mapping for the IMU stamp. See
         # _imu_rates_tick: the board's own interval has sd 0.00 ms where
         # arrival has sd 6.67, so the sender's clock is the better time base.
@@ -1135,6 +1137,21 @@ class AUVManagerNode(Node):
         note_text = getattr(self.fc, 'note_statustext', None)
         _DEMUX = {'NAMED_VALUE_FLOAT': note, 'BATTERY_STATUS': note_batt,
                   'STATUSTEXT': note_text}
+        # SCALED_IMU2 + ATTITUDE: EVERY sample, not whichever one a 50 Hz timer
+        # happens to find in a one-slot cache. Polling a 50 Hz stream at 50 Hz
+        # aliases -- measured 2026-09-15: 384 of 2501 `/duburi/imu` messages
+        # were repeats and 42.4 of the board's 44.0 Hz got out, with 40 ms holes.
+        # Queued: 2160 of 2160 unique, 44.0 Hz, largest interval 30 ms (the
+        # board's own 20/30 ms cadence).
+        # ⛔ Created HERE, not in __init__: this thread starts before __init__
+        # reaches the IMU publisher, and a later reassignment would orphan the
+        # bound `append` captured below. Filled here (deque.append is atomic),
+        # drained by the 50 Hz tick; maxlen bounds a stalled executor to ~1.3 s.
+        self._imu_q = deque(maxlen=64)
+        self._att_q = deque(maxlen=64)
+        if getattr(self.fc, 'get_imu', None) is not None:
+            _DEMUX['SCALED_IMU2'] = self._imu_q.append
+            _DEMUX['ATTITUDE'] = self._att_q.append
         # ⛔ THE BODY IS GUARDED, AND THE THREAD'S DEATH IS OBSERVABLE (B40).
         #
         # This is a bare `threading.Thread` target and it is the ONLY thing
@@ -1743,9 +1760,46 @@ class AUVManagerNode(Node):
         m.vector.y = rates['roll_rate']
         m.vector.z = rates['yaw_rate']
         self.imu_rates_publisher.publish(m)
-        self._publish_imu(stamp_s)
+        self._drain_imu()
 
-    def _publish_imu(self, stamp_s: float) -> None:
+    def _drain_imu(self) -> None:
+        """Publish every queued SCALED_IMU2 once, paired with its own ATTITUDE.
+
+        Pairs by `time_boot_ms`: both are packed from one firmware tick, but
+        the wire order is not a contract, so the cached ATTITUDE at the moment
+        SCALED_IMU2 arrives may be the previous tick's. Each sample is stamped
+        from ITS OWN board time, never the tick's.
+        """
+        q, aq = getattr(self, '_imu_q', None), getattr(self, '_att_q', None)
+        if q is None or aq is None:
+            return
+        if not self._imu_clock.ready:
+            q.clear()                    # no board-clock stamp to give them
+            return
+        atts = {}
+        while aq:
+            a = aq.popleft()
+            atts[getattr(a, 'time_boot_ms', None)] = a
+        self._att_by_ms = getattr(self, '_att_by_ms', {})
+        self._att_by_ms.update(atts)
+        if len(self._att_by_ms) > 64:
+            for k in sorted(k for k in self._att_by_ms if k is not None)[:-32]:
+                del self._att_by_ms[k]
+        while q:
+            imu = q.popleft()
+            ms = getattr(imu, 'time_boot_ms', None)
+            if ms is None or (self._imu_last_ms is not None and ms <= self._imu_last_ms):
+                continue
+            att = self._att_by_ms.get(ms)
+            if att is None:
+                # previous tick's attitude, never a later one
+                older = [k for k in self._att_by_ms if k is not None and k < ms]
+                att = self._att_by_ms[max(older)] if older else None
+            self._imu_last_ms = ms
+            self._publish_imu(self._imu_clock.to_host(ms * 1e-3),
+                              imu_msg=imu, att_msg=att)
+
+    def _publish_imu(self, stamp_s: float, imu_msg=None, att_msg=None) -> None:
         """Publish the 6-DoF sample on `/duburi/imu`, on the SAME mapped stamp.
 
         ⛔ FRAME: body FRD, world NED -- MAVLink's and the board's, NOT ROS
@@ -1767,7 +1821,7 @@ class AUVManagerNode(Node):
         getter = getattr(self.pixhawk, 'get_imu', None)
         if getter is None:
             return
-        imu = getter()
+        imu = getter() if imu_msg is None else getter(imu_msg=imu_msg, att_msg=att_msg)
         # accel None = the board's accel frame is not proven yet (SrotFC).
         # Publishing without it would hand the filter gravity in the wrong axes.
         if imu is None or imu.get('accel') is None:
