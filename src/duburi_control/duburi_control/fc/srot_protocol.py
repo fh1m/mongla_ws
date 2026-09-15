@@ -397,6 +397,16 @@ UPLINK_TIME_BOARD = 1.0
 # camera cannot see vertical motion, so it is sent as unobserved (1e6 m^2/s^2)
 # rather than as a confident zero that would fight the board's depth loop.
 SPEED_Z_UNOBSERVED_VAR = 1.0e6
+
+# VISION_POSITION_ESTIMATE.covariance is the upper triangle of the 6x6 over
+# (x, y, z, roll, pitch, yaw), row-major, 21 entries. These are the diagonal
+# slots; (0,1) is the x-y cross term. A mistake here swaps confidence between
+# axes with no error anywhere, which is why they are named rather than inlined.
+POS_COV_IDX = {'xx': 0, 'xy': 1, 'yy': 6, 'zz': 11, 'rr': 15, 'pp': 18, 'yawyaw': 20}
+# A position that jumps further than this between two estimates is a RESET (a
+# prop fix, a heading anchor), not motion at any speed the hull can reach at
+# 10 Hz. MAVLink's reset_counter tells the board to drop its deltas across it.
+POS_RESET_JUMP_M = 0.5
 UPLINK_CLASSES = {
     'gate':       1,
     'flare':      2,
