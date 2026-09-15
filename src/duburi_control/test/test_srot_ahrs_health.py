@@ -144,9 +144,15 @@ def test_get_imu_converts_units_from_the_firmware_packing():
                             time_boot_ms=52758, _timestamp=1.0)
             return super()._cache(key)
 
-    imu = _Live(WELL_HEALTH).get_imu()
-    # The real sample from the vehicle: |a| must come out near one g.
-    mag = math.sqrt(sum(c * c for c in imu['accel']))
+    fc = _Live(WELL_HEALTH)
+    for _ in range(SrotFC._ACCEL_FRAME_VOTES):
+        imu = fc.get_imu()
+    # The real sample from the vehicle: |a| must come out near one g. (The
+    # stub's ATTITUDE is level, and this sample was taken at -15.8 deg, so
+    # the frame can never be proven here -- units are read off the raw path.)
+    raw = (fc._cache('SCALED_IMU2'))
+    mag = math.sqrt(sum((c * 9.80665e-3) ** 2 for c in (raw.xacc, raw.yacc, raw.zacc)))
+    assert imu['accel'] is None, 'an unproven frame must not be published'
     assert 9.5 < mag < 10.1, f'{mag} is not one gravity'
     assert abs(imu['gyro'][0] - 0.009) < 1e-9
     assert imu['board_ms'] == 52758

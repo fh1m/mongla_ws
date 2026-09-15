@@ -35,7 +35,7 @@ class _Header:
 
 
 class _Imu:
-    def __init__(self, t, gyro=(0.0, 0.0, 0.0), accel=(0.0, 0.0, 9.80665),
+    def __init__(self, t, gyro=(0.0, 0.0, 0.0), accel=(0.0, 0.0, -9.80665),
                  attitude=True):
         self.header = _Header(t)
         self.angular_velocity = type('V', (), dict(
@@ -106,7 +106,7 @@ def test_a_long_gap_is_skipped_not_integrated():
     """
     n = _node()
     n._on_imu(_Imu(100.0))
-    n._on_imu(_Imu(102.0, accel=(2.0, 0.0, 9.80665)))
+    n._on_imu(_Imu(102.0, accel=(2.0, 0.0, -9.80665)))
     assert n._n['imu'] == 0
     assert n._n['gap'] == 1
     assert np.allclose(n._filter.X.p, np.zeros(3))
@@ -280,7 +280,7 @@ def test_a_TILTED_hull_at_rest_does_not_accelerate():
     pitch = math.radians(-15.8)
     R_true = _R_pitch(pitch)
     # What an accelerometer on that hull reads: gravity in BODY axes.
-    a_body = R_true.T @ np.array([0.0, 0.0, 9.80665])
+    a_body = R_true.T @ np.array([0.0, 0.0, -9.80665])
     qw, qx, qy, qz = ln._quat_from_R(R_true)
 
     n = _node()
@@ -416,7 +416,7 @@ def test_the_first_attitude_is_ADOPTED_not_corrected_into():
                        [math.sin(yaw), math.cos(yaw), 0.0],
                        [0.0, 0.0, 1.0]])
     qw, qx, qy, qz = ln._quat_from_R(R_true)
-    a_body = R_true.T @ np.array([0.0, 0.0, 9.80665])
+    a_body = R_true.T @ np.array([0.0, 0.0, -9.80665])
 
     def sample(tt):
         m = _Imu(tt, accel=tuple(a_body))
@@ -656,7 +656,7 @@ def test_the_filter_drifts_LESS_through_a_flow_outage_with_the_aid():
         f.X = State(v=np.array([0.3, 0.0, 0.0]))
         dt = 0.02
         for k in range(int(30.0 / dt)):
-            f.predict((0.0, 0.0, 0.0), (0.02, 0.0, 9.80665), dt)
+            f.predict((0.0, 0.0, 0.0), (0.02, 0.0, -9.80665), dt)
             if aid and k % 5 == 0:
                 f.update_body_velocity_xy(0.3 + rng.normal(0, 0.02), rng.normal(0, 0.02),
                                           0.05 ** 2, 0.05 ** 2)

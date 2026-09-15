@@ -501,6 +501,7 @@ class LocalizationNode(Node):
             m.header.stamp = self.get_clock().now().to_msg()
         # `pool` is a CLAIM, and it is only true once the heading is anchored.
         m.header.frame_id = 'pool' if self._anchored else 'odom'
+        # Both frames are NED (z down: position.z is +depth) with an FRD child.
         m.child_frame_id = 'duburi'
         m.pose.pose.position.x = float(st.p[0])
         m.pose.pose.position.y = float(st.p[1])

@@ -139,7 +139,7 @@ def test_depth_moves_z_and_leaves_x_alone():
     f = RIEKF()
     for _ in range(50):
         f.update_depth(-1.5, sigma=0.02)
-    assert f.X.p[2] == pytest.approx(-1.5, abs=0.02)
+    assert f.X.p[2] == pytest.approx(1.5, abs=0.02)      # NED: z is +depth
     assert abs(f.X.p[0]) < 1e-6
 
 

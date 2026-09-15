@@ -1748,6 +1748,12 @@ class AUVManagerNode(Node):
     def _publish_imu(self, stamp_s: float) -> None:
         """Publish the 6-DoF sample on `/duburi/imu`, on the SAME mapped stamp.
 
+        ⛔ FRAME: body FRD, world NED -- MAVLink's and the board's, NOT ROS
+        REP-103 (FLU/ENU). Everything that meets this topic is FRD already:
+        flow velocity (+y right), the command model (starboard), course
+        bearings, MANUAL_CONTROL. One convention end to end beats a REP-103
+        conversion at each of those, any one of which can be missed silently.
+
         Shares `_imu_rates_tick`'s clock work rather than fitting a second
         `ClockMap`: ATTITUDE and SCALED_IMU2 are packed from one `Snap` in the
         same firmware tick (`mav_stream.cpp`), so they are the same instant and
@@ -1762,7 +1768,9 @@ class AUVManagerNode(Node):
         if getter is None:
             return
         imu = getter()
-        if imu is None:
+        # accel None = the board's accel frame is not proven yet (SrotFC).
+        # Publishing without it would hand the filter gravity in the wrong axes.
+        if imu is None or imu.get('accel') is None:
             return
         msg = self._Imu()
         msg.header.stamp.sec = int(stamp_s)
