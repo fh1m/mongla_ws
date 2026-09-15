@@ -18,9 +18,13 @@ A message is accepted only when the SAME three distinct colours are received
 twice in a row between long gaps. One flash misread, one dropped frame, or a
 red prop drifting through view cannot produce two identical framed messages.
 
-Thresholds here are NOT measured on real footage. They are placeholders to be
-set on the bench with the real light and the real camera, and are parameters
-for that reason.
+MEASURED ON THE REAL 2025 ARCHIVE (33 clips, 96,781 frames, no light flashed):
+the FRAMING RULE held -- zero orders decoded. The PER-FRAME classifier did not:
+15 % of frames read as a colour (R 3267, B 9768, Y 1616), from sun caustics
+(yellow), blue water and glare, and red props. So a real flash competes with
+the scene: hold the vehicle looking at the operator's light, close, against a
+plain background, and expect to need more repeats in a bright or coloured view.
+Thresholds are still not set with a real light and camera.
 """
 from __future__ import annotations
 
