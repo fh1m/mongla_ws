@@ -2144,8 +2144,13 @@ class SrotFC(FlightController):
                 'board_ms': None if boot is None else int(boot),
                 'host_recv_s': float(getattr(att, '_timestamp', 0.0)) or None}
 
-    def get_imu(self):
+    def get_imu(self, imu_msg=None, att_msg=None):
         """Full 6-DoF inertial sample from SCALED_IMU2, or None.
+
+        `imu_msg` / `att_msg`: a specific SCALED_IMU2 and its ATTITUDE, as the
+        manager's reader thread queued them. Omitted, the one-slot cache is read
+        -- which a 50 Hz poller of the board's ~44 Hz stream aliases (measured: 384
+        of 2501 publishes were repeats, and 42.4 of 44.0 Hz of samples got out).
 
         {'gyro': (x,y,z) rad/s, 'accel': (x,y,z) m/s^2 INCLUDING gravity,
          'board_ms': int|None, 'host_recv_s': float|None}
@@ -2167,7 +2172,7 @@ class SrotFC(FlightController):
         `board_ms` is the board's own capture time, the jitter-free base
         `flow_timing.ClockMap` maps onto host time. None when absent, never 0.
         """
-        imu = self._cache('SCALED_IMU2')
+        imu = self._cache('SCALED_IMU2') if imu_msg is None else imu_msg
         if imu is None:
             return None
         if self._ahrs_healthy() is False:
@@ -2177,7 +2182,7 @@ class SrotFC(FlightController):
         # The board's OWN fused attitude, carried alongside the raw axes.
         # ATTITUDE and SCALED_IMU2 are packed from one `Snap` in one firmware
         # tick, so this is the same instant and needs no second stamp.
-        att = self._cache('ATTITUDE')
+        att = self._cache('ATTITUDE') if imu_msg is None else att_msg
         rpy = None if att is None else (float(att.roll), float(att.pitch),
                                         float(att.yaw))
         raw = (float(imu.xacc) * g, float(imu.yacc) * g, float(imu.zacc) * g)
