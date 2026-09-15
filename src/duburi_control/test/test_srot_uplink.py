@@ -160,3 +160,50 @@ def test_a_non_finite_bearing_is_dropped_entirely():
     b.angle_x = float('nan')
     fc.send_landing_target(b)
     assert not [n for n, _, _ in fc.master.mav.sent if n == 'landing_target_send']
+
+
+# --------------------------------------------------------------------------- #
+#  The capture instant on the BOARD's clock, so it can de-rotate by its gyro
+# --------------------------------------------------------------------------- #
+def test_board_capture_time_rides_time_usec_and_z_says_which_clock():
+    args = _send(board_capture_s=1234.5678)
+    assert args[0] == 1234567800               # microseconds since board boot
+    assert args[10] == pytest.approx(sp.UPLINK_TIME_BOARD)
+
+
+def test_without_a_board_time_the_old_bytes_are_unchanged():
+    """A receiver must never read a host wall stamp as board time."""
+    for bad in (None, float('nan'), 0.0, -3.0):
+        args = _send(board_capture_s=bad)
+        assert args[10] == 0.0
+        assert args[0] > 1_600_000_000 * 10**6   # host wall clock, microseconds
+
+
+# --------------------------------------------------------------------------- #
+#  Velocity to the board (VISION_SPEED_ESTIMATE, 103)
+# --------------------------------------------------------------------------- #
+def _speed(*a):
+    fc = SrotFC(_Master(), log=None)
+    ok = fc.send_speed_estimate(*a)
+    sent = [x for n, x, _ in fc.master.mav.sent if n == 'vision_speed_estimate_send']
+    return ok, (sent[-1] if sent else None)
+
+
+def test_speed_estimate_carries_body_velocity_board_time_and_variances():
+    ok, args = _speed(0.31, -0.07, 0.0004, 0.0009, 812.25)
+    assert ok
+    usec, vx, vy, vz, cov = args[0], args[1], args[2], args[3], args[4]
+    assert usec == 812250000
+    assert (vx, vy, vz) == (pytest.approx(0.31), pytest.approx(-0.07), 0.0)
+    assert cov[0] == pytest.approx(0.0004) and cov[4] == pytest.approx(0.0009)
+    assert cov[8] == sp.SPEED_Z_UNOBSERVED_VAR   # z unobserved, never a confident 0
+
+
+def test_no_board_time_or_bad_numbers_sends_nothing():
+    for a in [(0.3, 0.0, 1e-4, 1e-4, None),
+              (0.3, 0.0, 1e-4, 1e-4, float('nan')),
+              (float('nan'), 0.0, 1e-4, 1e-4, 10.0),
+              (0.3, 0.0, 0.0, 1e-4, 10.0),          # zero variance = no data
+              (0.3, 0.0, -1.0, 1e-4, 10.0)]:
+        ok, args = _speed(*a)
+        assert not ok and args is None, a

@@ -68,6 +68,26 @@ def _parse_channels(csv: str):
     return out
 
 
+# An ATTITUDE older than this is not "the rate now". Two 50 Hz periods.
+_DEROTATE_RATE_MAX_AGE_S = 0.04
+
+
+def _derotation_inputs(fc, vstate):
+    """`(yaw_rate rad/s, px_per_rad)` for `align_loop`, or None.
+
+    ABSENCE IS NOT ZERO. `get_angular_rates()` already returns None for an
+    unhealthy BNO (whose rates read exactly 0.0), and a stale sample is the
+    same claim with an extra delay -- so both mean "no correction".
+    """
+    rates = fc.get_angular_rates() if hasattr(fc, 'get_angular_rates') else None
+    if not rates or rates.get('age_s', 1.0) > _DEROTATE_RATE_MAX_AGE_S:
+        return None
+    ppr = vstate.px_per_rad()
+    if ppr is None:
+        return None
+    return float(rates['yaw_rate']), float(ppr)
+
+
 def _srot_backend(fc) -> bool:
     """True when actuation goes to the srot board rather than ArduSub."""
     return getattr(fc, 'name', '') == 'srot'
@@ -388,6 +408,11 @@ class VisionVerbs:
                         tool_offset_fn=((lambda: vstate.tool_offset_px(tool))
                                         if tool and hasattr(vstate, 'tool_offset_px')
                                         else None),
+                        # Steer on where the target is NOW: the board's gyro
+                        # rate x the box's age since capture. None (no fresh
+                        # rate, no calibration) = the historical behaviour.
+                        derotate_fn=((lambda: _derotation_inputs(self.pixhawk, vstate))
+                                     if hasattr(vstate, 'px_per_rad') else None),
                         depth_step=float(depth_step) or _MAX_DEPTH_NUDGE,
                         downward=is_downward,
                         # SIGN-ONLY: coerce to exactly +1/-1 (rosidl-0 -> +1) so it can

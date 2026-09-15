@@ -2233,8 +2233,21 @@ class SrotFC(FlightController):
     def send_landing_target(self, bearing, *, target_num: int = 0,
                             distance_m: float = 0.0,
                             coasted: bool = False,
-                            gap_age_s: float = 0.0) -> None:
+                            gap_age_s: float = 0.0,
+                            board_capture_s: Optional[float] = None) -> None:
         """Publish one selected target as a body-frame bearing. Fire-and-forget.
+
+        ⛔ `board_capture_s`: WHEN THE FRAME WAS EXPOSED, ON THE BOARD'S CLOCK.
+        A bearing is already tens of ms old when it lands, and the link adds a
+        variable delay on top (arrival jitter measured at 6.67 ms sd, 35 ms
+        p2p). The board holds its gyro at 500 Hz, so given the capture instant
+        in its OWN `time_boot_ms` base it can de-rotate the bearing exactly by
+        the angle it turned since -- something no host-side estimate matches.
+        The host knows that instant because `ClockMap` already maps board time
+        to host time; this is the inverse. When given, `time_usec` carries it
+        (microseconds since board boot) and `z` = `UPLINK_TIME_BOARD` says so,
+        so a receiver can never mistake it for the old advisory host stamp.
+        None (clock map not fitted) keeps the previous bytes exactly.
 
         `bearing` is a `duburi_control.bearing.Bearing`. One message per frame
         for the ONE currently-selected target: the board never sees candidate
@@ -2269,21 +2282,61 @@ class SrotFC(FlightController):
         if not all(math.isfinite(float(v)) for v in vals):
             self._log_info('[SROT ] landing_target: non-finite bearing, dropped')
             return
+        on_board = (board_capture_s is not None
+                    and math.isfinite(board_capture_s) and board_capture_s > 0.0)
         with self._tx_lock:
             self.master.mav.landing_target_send(
-                int(time.time() * 1e6),          # advisory only, per the spec
+                (int(board_capture_s * 1e6) if on_board
+                 else int(time.time() * 1e6)),   # advisory host stamp otherwise
                 int(target_num) & 0xFF,
                 self._MAV_FRAME_BODY_FRD,
                 float(bearing.angle_x), float(bearing.angle_y),
                 float(distance_m),               # 0 = unknown
                 float(bearing.size_x), float(bearing.size_y),
                 # x = coasted flag, y = seconds since the last REAL detection.
-                # See the docstring; z stays 0 (reserved).
+                # z = which clock time_usec is on (see the docstring).
                 1.0 if coasted else 0.0,
                 float(max(0.0, gap_age_s)) if math.isfinite(gap_age_s) else 0.0,
-                0.0, (0.0, 0.0, 0.0, 0.0),
+                sp.UPLINK_TIME_BOARD if on_board else 0.0, (0.0, 0.0, 0.0, 0.0),
                 self._LANDING_TARGET_TYPE_VISION_OTHER,
                 0)                               # position_valid = 0, angle-only
+
+    def send_speed_estimate(self, vx: float, vy: float, var_x: float,
+                            var_y: float, board_s: Optional[float]) -> bool:
+        """Our filtered BODY velocity to the board, as VISION_SPEED_ESTIMATE (103).
+
+        ⛔ THE PI MEASURES, THE BOARD CLOSES THE LOOP. A distance move is an
+        integral of velocity along the leg. The board can integrate at 500 Hz
+        against its own fused heading between our 10 Hz updates; the host
+        cannot close that loop through a 115200-baud link with 35 ms p2p
+        arrival jitter. So this sends the one thing only the Pi has -- velocity
+        over ground, from flow + the command model through the RIEKF -- and
+        nothing else.
+
+        FRAME: body FRD (x forward, y right), NOT the local frame the MAVLink
+        spec names for 103, stated in the upstream PR. z is unobserved by a
+        downward camera and says so with an enormous variance, never a
+        confident 0.
+
+        `usec` is the estimate's instant on the BOARD clock. Without a fitted
+        `ClockMap` there is no honest stamp, so nothing is sent: an unstamped
+        velocity lets the board integrate it at the wrong instant, which is a
+        distance error that grows with every update.
+
+        Returns whether it was sent. Non-finite input is refused, not clamped.
+        """
+        vals = (vx, vy, var_x, var_y)
+        if board_s is None or not (math.isfinite(board_s) and board_s > 0.0):
+            return False
+        if not all(math.isfinite(float(v)) for v in vals) or var_x <= 0.0 or var_y <= 0.0:
+            return False
+        cov = (float(var_x), 0.0, 0.0,
+               0.0, float(var_y), 0.0,
+               0.0, 0.0, sp.SPEED_Z_UNOBSERVED_VAR)
+        with self._tx_lock:
+            self.master.mav.vision_speed_estimate_send(
+                int(board_s * 1e6), float(vx), float(vy), 0.0, cov, 0)
+        return True
 
     def set_message_rate(self, message_id, hz):
         """MAV_CMD_SET_MESSAGE_INTERVAL (511). Fire-and-forget, like Pixhawk's.

@@ -412,6 +412,36 @@ def _fresh_bounds(interval_s: float = 0.0, pipe_age_s: float = 0.0):
     return full, zero
 
 
+# ⛔ A BOX IS WHERE THE TARGET WAS. `sample.age_s` runs from CAPTURE (median
+# 22 ms forward, 46 ms downward on the vehicle, and it keeps growing while a
+# 20 Hz loop re-reads one frame). The hull keeps yawing in that time, so a
+# world-fixed target has moved f*tan(w*age) in the image. At 0.5 rad/s over
+# 30 ms that is ~15 px of phantom error the loop chases -- and when the loop is
+# the one yawing, the phantom points the way the hull is already going: the
+# overshoot-past-the-target the operator reported. Attenuating by age
+# (`_freshness`) shrinks a wrong number; this makes it right.
+#
+# Capped: beyond ~0.25 s a constant-rate extrapolation is a guess, and
+# `_freshness` has already removed most of the authority by then.
+DEROTATE_MAX_AGE_S = 0.25
+
+
+def _derotated_ex(ex: float, age_s: float, yaw_rate: float,
+                  px_per_rad: float, half_w: float) -> float:
+    """`ex` moved to where a world-fixed target is NOW. Identity when unknown.
+
+    Positive yaw rate is a turn to the RIGHT (MAVLink FRD), which moves the
+    target LEFT. `px_per_rad` maps a ray angle to pixels in the medium the
+    camera is in (fx * n in water).
+    """
+    if not (age_s > 0.0 and half_w > 0.0 and px_per_rad > 0.0
+            and math.isfinite(yaw_rate) and math.isfinite(ex)):
+        return ex
+    dtheta = yaw_rate * min(age_s, DEROTATE_MAX_AGE_S)
+    theta = math.atan(ex * half_w / px_per_rad)
+    return px_per_rad * math.tan(theta - dtheta) / half_w
+
+
 def _freshness(age_s: float, interval_s: float = 0.0,
                pipe_age_s: float = 0.0) -> float:
     """Translational-command authority [0,1] as a function of sample age.
@@ -751,6 +781,7 @@ def align_loop(*,
                tilt_gate_fn=None,
                standoff_max_tilt_deg: float = 0.0,
                tool_offset_fn=None,
+               derotate_fn=None,
                obliquity_fn=None,
                report_fn=None,
                writers=None,
@@ -1174,8 +1205,22 @@ def align_loop(*,
                 if _to is not None:
                     tool_du, tool_dv = float(_to[0]), float(_to[1])
 
+            # Horizontal bearing NOW, not at capture. Forward camera only: a
+            # yaw spins the downward image about its centre rather than
+            # shifting it. Never on a coasted box -- the tracker already
+            # extrapolated it. Absent rate or focal = the historical behaviour.
+            ex_now = sample.ex
+            if derotate_fn is not None and not downward and not sample.coasted:
+                try:
+                    _dr = derotate_fn()
+                except Exception:                             # noqa: BLE001
+                    _dr = None
+                if _dr is not None:
+                    ex_now = _derotated_ex(sample.ex, sample.age_s,
+                                           float(_dr[0]), float(_dr[1]), half_w)
+
             if 'lat' in axes:
-                ctrl = sample.ex - (offsets.get('lat', 0.0) + tool_du) / half_w
+                ctrl = ex_now - (offsets.get('lat', 0.0) + tool_du) / half_w
                 epx  = abs(ctrl) * half_w
                 worst = max(worst, epx)
                 p_lat = ctrl * kp_lat * rgain
@@ -1192,7 +1237,7 @@ def align_loop(*,
                 in_band.append(epx <= eff_err)
 
             if 'yaw' in axes:
-                ctrl = sample.ex - (offsets.get('yaw', 0.0) + tool_du) / half_w
+                ctrl = ex_now - (offsets.get('yaw', 0.0) + tool_du) / half_w
                 epx  = abs(ctrl) * half_w
                 worst = max(worst, epx)
                 # Polarity: un-negated, same as the lateral axis (ex > 0 ->
