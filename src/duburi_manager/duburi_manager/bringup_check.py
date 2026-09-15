@@ -999,6 +999,10 @@ def _stack_headroom_verdict(named: dict) -> tuple[str, str, str]:
 # Free heap as the board reports it: ESP.getFreeHeap(), CURRENT free bytes, not a
 # low-water mark. MEASURED 156180 B, flat across 48 samples in two recorded bench
 # sessions on the Pi (~/duburi_runs/bench_20260902_224032.tlog, txrx_...224254).
+# RE-MEASURED 2026-09-15 on the live board (newer firmware: STK_DSH moved 2868 ->
+# 2900): 156628 B in three separate `connect --json` reads, +0.3 %. Re-measure
+# after any firmware flash that adds a task or a buffer; the stack check beside
+# this grades absolute margin and needs no baseline, this one does.
 HEAP_BASELINE_BYTES = 156180
 # A quarter gone from a value that never moved at rest is a leak or a new
 # allocation path; either should be known before a run. Derived from the
