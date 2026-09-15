@@ -1183,6 +1183,61 @@ class DuburiMission:
         rclpy.spin_once(node, timeout_sec=0.0)
         return self._motion
 
+    def receive_flare_order(self, camera: str | None = None, *, timeout: float = 30.0):
+        """SAUVC Task 4: read the flare order the team flashes at the camera.
+
+        Returns a tuple such as ('R', 'B', 'Y'), or None if no order was
+        confirmed within `timeout`. The operator flashes three colours (about
+        0.6 s on, 0.4 s off, then at least 1.5 s dark) and repeats; an order is
+        accepted only after the same framed message arrives twice. See
+        `duburi_vision.optical_order` for the protocol and its limits.
+
+            duburi.vision.align('gate', ...)             # Task 1 done
+            order = duburi.receive_flare_order(timeout=40)
+            for colour in (order or ('R', 'B', 'Y')):    # no order: still bump all three
+                ...
+
+        Hold the vehicle still and facing the operator while this runs: frames
+        are decoded in this process, at whatever rate the camera publishes.
+        """
+        import time as _t
+        import numpy as np
+        from sensor_msgs.msg import Image
+        from duburi_vision import qos as vqos
+        from duburi_vision.optical_order import OrderDecoder, classify_frame
+        cam = camera or self.camera
+        node = self.client.node
+        dec = OrderDecoder()
+
+        def _on(msg):
+            if dec.order is not None:
+                return
+            t = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+            # Decoded by hand, not cv_bridge: this runs in the mission process,
+            # where cv_bridge's numpy ABI is not guaranteed (it segfaulted on the
+            # dev box under numpy 2). The camera node publishes bgr8.
+            if msg.encoding not in ('bgr8', 'rgb8') or msg.height * msg.width == 0:
+                return
+            frame = np.frombuffer(bytes(msg.data), np.uint8).reshape(
+                msg.height, msg.width, 3)
+            if msg.encoding == 'rgb8':
+                frame = frame[..., ::-1]
+            dec.feed(t if t > 0.0 else _t.monotonic(), classify_frame(frame))
+
+        sub = node.create_subscription(Image, f'/duburi/vision/{cam}/image_raw', _on,
+                                       vqos.IMAGE)
+        try:
+            deadline = _t.monotonic() + float(timeout)
+            while dec.order is None and _t.monotonic() < deadline:
+                rclpy.spin_once(node, timeout_sec=0.05)
+        finally:
+            node.destroy_subscription(sub)
+        if dec.order is None:
+            self.log.warning(f'[COMMS] no flare order confirmed on {cam} in {timeout:.0f} s')
+        else:
+            self.log.info(f'[COMMS] flare order received: {"-".join(dec.order)}')
+        return dec.order
+
     def floor_height(self, *, max_age_s: float = 1.0, timeout: float = 1.0):
         """Height above the floor in metres, from the floor's own tiles, or None.
 
