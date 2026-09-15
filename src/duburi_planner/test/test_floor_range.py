@@ -25,7 +25,7 @@ def _drum_at(range_m, below_m, h_px=60.0):
 
 def test_the_foot_on_the_floor_gives_the_range_with_no_width():
     got = DuburiMission.floor_range(_m([_drum_at(3.0, 1.0)]), 'drum',
-                                    plane_below_m=1.0)
+                                    plane_below_m=1.0, pitch_deg=0.0)
     assert got[0] == pytest.approx(3.0, rel=1e-9)
     assert got[1] > 0.0
 
@@ -33,29 +33,49 @@ def test_the_foot_on_the_floor_gives_the_range_with_no_width():
 def test_it_reads_the_FOOT_not_the_box_centre():
     # Same foot, twice the box height: the centre moves, the range must not.
     a = DuburiMission.floor_range(_m([_drum_at(3.0, 1.0, 40.0)]), 'drum',
-                                  plane_below_m=1.0)
+                                  plane_below_m=1.0, pitch_deg=0.0)
     b = DuburiMission.floor_range(_m([_drum_at(3.0, 1.0, 120.0)]), 'drum',
-                                  plane_below_m=1.0)
+                                  plane_below_m=1.0, pitch_deg=0.0)
     assert a[0] == pytest.approx(b[0], rel=1e-9)
 
 
 def test_a_surface_hung_target_reads_its_TOP_edge():
     top_v = 240.0 - F * 0.3 / 2.5   # 6.8 deg; at 4 m it is 4.3 and REFUSED
     box = ('gate', 320.0, top_v + 50.0, 300.0, 100.0, 0.9)
-    got = DuburiMission.floor_range(_m([box]), 'gate', plane_below_m=-0.3)
+    got = DuburiMission.floor_range(_m([box]), 'gate', plane_below_m=-0.3, pitch_deg=0.0)
     assert got[0] == pytest.approx(2.5, rel=1e-9)
 
 
 def test_a_foot_cut_by_the_frame_bottom_is_refused():
     box = ('drum', 320.0, 440.0, 40.0, 80.0, 0.8)      # bottom edge at 480
-    assert DuburiMission.floor_range(_m([box]), 'drum', plane_below_m=1.0) is None
+    assert DuburiMission.floor_range(_m([box]), 'drum', plane_below_m=1.0, pitch_deg=0.0) is None
 
 
 def test_nothing_visible_is_None():
-    assert DuburiMission.floor_range(_m([]), 'drum', plane_below_m=1.0) is None
+    assert DuburiMission.floor_range(_m([]), 'drum', plane_below_m=1.0, pitch_deg=0.0) is None
 
 
 def test_a_gate_bar_too_far_to_graze_is_refused_not_guessed():
     top_v = 240.0 - F * 0.3 / 4.0                      # 4.3 deg < MIN_GRAZING_DEG
     box = ('gate', 320.0, top_v + 50.0, 300.0, 100.0, 0.9)
-    assert DuburiMission.floor_range(_m([box]), 'gate', plane_below_m=-0.3) is None
+    assert DuburiMission.floor_range(_m([box]), 'gate', plane_below_m=-0.3, pitch_deg=0.0) is None
+
+
+def test_pitch_has_no_default_because_a_level_hull_is_an_assumption():
+    with pytest.raises(TypeError):
+        DuburiMission.floor_range(_m([_drum_at(3.0, 1.0)]), 'drum', plane_below_m=1.0)
+
+
+def test_a_nose_up_hull_is_corrected_by_passing_negative_pitch():
+    # Hull pitched 2 deg nose-up: the level-camera answer is wrong, the corrected one is right.
+    import math
+    p = math.radians(-2.0)
+    a, b = 0.0, 1.0 / 3.0                      # truth: floor point 3 m ahead, 1 m below
+    # pixel row for the hull-frame ray (1, 0, 1/3) seen by a camera pitched p below horizontal
+    zc = math.cos(p) * 1.0 + math.sin(p) * b
+    yc = -math.sin(p) * 1.0 + math.cos(p) * b
+    box = ('drum', 320.0, 240.0 + F * yc / zc - 30.0, 40.0, 60.0, 0.8)
+    right = DuburiMission.floor_range(_m([box]), 'drum', plane_below_m=1.0, pitch_deg=-2.0)
+    level = DuburiMission.floor_range(_m([box]), 'drum', plane_below_m=1.0, pitch_deg=0.0)
+    assert right[0] == pytest.approx(3.0, rel=1e-9)
+    assert abs(level[0] - 3.0) > 0.2

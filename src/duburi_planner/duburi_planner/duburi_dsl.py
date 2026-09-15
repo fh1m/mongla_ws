@@ -1227,8 +1227,8 @@ class DuburiMission:
         sigma = (z * z) * 1.0 / (f_px * real_w)
         return (z, sigma)
 
-    def floor_range(self, target: str, *, plane_below_m: float,
-                    camera: str | None = None, pitch_deg: float = 0.0,
+    def floor_range(self, target: str, *, plane_below_m: float, pitch_deg: float,
+                    camera: str | None = None,
                     plane_sigma_m: float = 0.0, stale_after: float = 1.0):
         """Metres to a target standing on (or hanging from) a known plane.
 
@@ -1240,6 +1240,23 @@ class DuburiMission:
         unknown width, or a box cut by the frame side -- and take whichever
         sigma is smaller when both answer. Detail and failure modes:
         `duburi_localization.floor_plane`.
+
+        ⛔ BOTH GEOMETRY ARGUMENTS ARE REQUIRED, ON PURPOSE. Pitch is the
+        dominant error term (17 cm per degree at h 1 m, R 3 m), and the bench
+        hull read +1.77 deg nose-up, so a silent level-camera default would be
+        a ~30 cm bias no test sees. `pitch_deg` is the optical axis BELOW
+        horizontal: mount pitch minus the hull's nose-up pitch (forward camera
+        on a hull pitched 1.77 deg nose-up: `pitch_deg=-1.77`).
+
+        ⛔ SIGNS. Depths here are negative below the surface, and getting the
+        subtraction backwards yields a NEGATIVE plane, which is read as a
+        surface-hung target -- a confident wrong answer, not a refusal:
+
+            hull = duburi.pose()[2]                   # e.g. -0.60
+            plane_below_m = abs(-1.60) - abs(hull)    # floor 1.60 m -> 1.00
+
+        Pixels are assumed square (`focal_px` is fx and is passed as fy too),
+        which holds for the cameras we fly.
 
         ⛔ A box touching the frame edge on the side we read is REFUSED: the
         foot is outside the image and the box edge is not the foot, which would
