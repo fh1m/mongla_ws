@@ -542,7 +542,7 @@ Static, flat, 250 samples at 10 Hz:
 A 20 kg hull cruising at 0.65 m/s is buried by its own accelerometer inside
 five seconds. **Velocity must be OBSERVED, never propagated** — which is what
 RD-VIO (Applied Ocean Research 2023) and DeepVL (ICRA 2025) both conclude for
-underwater vehicles, and what `nav_estimator.py` is built on.
+underwater vehicles, and what the RIEKF's flow aiding is built on (`nav_estimator.py`, retired 2026-09-15).
 
 **The gyro sets the floor on flow de-rotation.** At h = 0.5 m, f = 514 px,
 dt = 33 ms, the measured gyro noise costs:

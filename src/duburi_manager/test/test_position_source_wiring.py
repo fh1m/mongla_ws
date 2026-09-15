@@ -112,7 +112,8 @@ class _Inner:
 class _FakeNode:
     """Enough of the manager for `_wrap_position_source` to run for real."""
 
-    def __init__(self, pos='flow', yaw='bno085'):
+    def __init__(self, pos='flow', yaw='bno085', srot=False):
+        self._is_srot = srot
         self._pos_src_name = pos
         self._yaw_src_name = yaw
         self.yaw_source = _Inner()
@@ -165,6 +166,14 @@ def test_an_untrusted_heading_warns_because_it_becomes_cross_track_error():
     node = _wrap(_FakeNode(pos='flow', yaw='mavlink_ahrs'))
     assert hasattr(node.yaw_source, 'get_position'), 'it should still wrap'
     assert 'cross-track' in node._log.text()
+
+
+def test_on_srot_mavlink_ahrs_is_the_board_bno_and_does_not_warn():
+    """On srot the RIEKF attitude that rotates the displacement comes from
+    the board's fused BNO085, not a hull compass."""
+    node = _wrap(_FakeNode(pos='flow', yaw='mavlink_ahrs', srot=True))
+    assert hasattr(node.yaw_source, 'get_position')
+    assert 'cross-track' not in node._log.text()
 
 
 def test_a_trusted_heading_does_not_warn():

@@ -686,3 +686,20 @@ def test_a_hull_pinned_on_a_prop_is_REPORTED_and_does_not_poison_the_model():
         n._on_flow(twist)
     assert published and published[-1] == 'blocked', published
     assert n._model.x.theta[0] == pytest.approx(g0, rel=0.05)
+
+
+def test_twist_covariance_is_in_the_body_frame_like_the_twist():
+    """World-frame velocity variance (x tight, y loose) on a 90 deg heading
+    is body x LOOSE, body y TIGHT. An unrotated copy reports the opposite."""
+    import numpy as np
+    from nav_msgs.msg import Odometry
+    from duburi_localization.inekf import RIEKF
+    from duburi_localization.localization_node import _fill_covariance
+    f = RIEKF()
+    c, s = 0.0, 1.0
+    f.X.R = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
+    f.P[3:6, 3:6] = np.diag([1e-4, 4e-2, 1e-3])
+    m = Odometry()
+    _fill_covariance(m, f)
+    assert abs(m.twist.covariance[0] - 4e-2) < 1e-9
+    assert abs(m.twist.covariance[7] - 1e-4) < 1e-9

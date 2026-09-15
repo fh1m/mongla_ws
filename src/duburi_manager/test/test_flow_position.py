@@ -1,4 +1,5 @@
-"""FlowPositionSource -- the bottom camera standing in for the DVL.
+"""FlowPositionSource -- the bottom camera standing in for the DVL, read off
+the RIEKF's `/duburi/odom`.
 
 Driven with a fake node and a fake yaw source, so these exercise the real
 class rather than a description of it.
@@ -9,12 +10,18 @@ import time
 import pytest
 
 pytest.importorskip('geometry_msgs')
+pytest.importorskip('nav_msgs')
 pytest.importorskip('rclpy')
 
 from geometry_msgs.msg import TwistWithCovarianceStamped   # noqa: E402
+from nav_msgs.msg import Odometry                          # noqa: E402
 from std_msgs.msg import UInt8                             # noqa: E402
 
 from duburi_manager.flow_position import FlowPositionSource  # noqa: E402
+
+ODOM = '/duburi/odom'
+VEL = '/duburi/vision/downward/velocity'
+QUAL = '/duburi/vision/downward/flow_quality'
 
 
 class _Log:
@@ -61,49 +68,61 @@ def _src(**kw):
     return s, node, inner
 
 
-def _feed(node, vx, vy, sigma=0.01, quality=200, stamp_wall=None):
-    """Deliver one velocity fix.
+def _stamp(msg, t):
+    msg.header.stamp.sec = int(t)
+    msg.header.stamp.nanosec = int((t - int(t)) * 1e9)
 
-    `stamp_wall` is the WALL-clock capture instant `flow_node` puts in the
-    header (it stamps the capture-interval MIDPOINT). Defaults to "now", which
-    is what a healthy live pipeline looks like. Pass `stamp_wall=0.0` for an
-    unstamped publisher.
 
-    ⛔ This helper did NOT set a stamp at all until the timing fix, so every
-    test here ran the fallback branch and none of them could see which clock
-    the integrator used. A harness that cannot observe the property under test
-    passes identically before and after the fix.
-    """
+def _flow(node, quality=200, stamp_wall=None):
     q = UInt8()
     q.data = quality
-    node.subs['/duburi/vision/downward/flow_quality'](q)
+    node.subs[QUAL](q)
     m = TwistWithCovarianceStamped()
+    _stamp(m, time.time() if stamp_wall is None else stamp_wall)
+    node.subs[VEL](m)
+
+
+def _odom(node, vx, vy=0.0, yaw_deg=0.0, sigma=0.03, stamp_wall=None,
+          px=0.0, py=0.0):
+    """One RIEKF output: BODY velocity, attitude, velocity covariance."""
+    m = Odometry()
+    _stamp(m, time.time() if stamp_wall is None else stamp_wall)
+    h = math.radians(yaw_deg) / 2.0
+    m.pose.pose.orientation.w = math.cos(h)
+    m.pose.pose.orientation.z = math.sin(h)
+    m.pose.pose.position.x = float(px)
+    m.pose.pose.position.y = float(py)
     m.twist.twist.linear.x = float(vx)
     m.twist.twist.linear.y = float(vy)
-    m.twist.covariance[0] = float(sigma) ** 2
-    t = time.time() if stamp_wall is None else float(stamp_wall)
-    m.header.stamp.sec = int(t)
-    m.header.stamp.nanosec = int((t - int(t)) * 1e9)
-    node.subs['/duburi/vision/downward/velocity'](m)
+    m.twist.covariance[0] = sigma ** 2
+    m.twist.covariance[7] = sigma ** 2
+    node.subs[ODOM](m)
+
+
+def _healthy(node, n=3, **kw):
+    for _ in range(n):
+        _flow(node)
+        _odom(node, 0.0, **kw)
 
 
 # --------------------------------------------------------------------------- #
 #  the duck-typed contract the motion layer checks
 # --------------------------------------------------------------------------- #
 def test_it_satisfies_the_contract_drive_forward_dist_looks_for():
-    """`drive_forward_dist` gates on exactly these two attributes. If this
-    ever fails the verb refuses with 'no DVL position source' and the whole
-    fold is inert -- while every other test here still passes."""
     s, _, _ = _src()
     assert hasattr(s, 'get_position') and hasattr(s, 'reset_position')
 
 
 def test_it_delegates_everything_else_to_the_real_yaw_source():
-    """It wraps, it does not replace. Heading, calibration state and any
-    source-specific method must still reach the inner object."""
     s, _, inner = _src()
     assert s.read_yaw() == inner.deg
     assert s.calibrated == 'sentinel'
+
+
+def test_it_reads_the_one_estimator():
+    """The point of the merge: the RIEKF is the only velocity."""
+    _s, node, _ = _src()
+    assert ODOM in node.subs
 
 
 # --------------------------------------------------------------------------- #
@@ -121,7 +140,7 @@ class TestRefusal:
     def test_it_refuses_when_the_last_fix_is_stale(self):
         from duburi_control.errors import MovementError
         s, node, _ = _src(fix_stale_s=0.05)
-        _feed(node, 0.2, 0.0)
+        _healthy(node)
         assert s.position_ready()[0]
         time.sleep(0.08)
         ok, why = s.position_ready()
@@ -129,9 +148,39 @@ class TestRefusal:
         with pytest.raises(MovementError):
             s.reset_position()
 
+    def test_it_refuses_without_the_localization_node(self):
+        from duburi_control.errors import MovementError
+        s, node, _ = _src()
+        _flow(node)
+        ok, why = s.position_ready()
+        assert not ok and '/duburi/odom' in why, why
+        with pytest.raises(MovementError):
+            s.reset_position()
+
+    def test_it_refuses_when_odometry_is_stale_but_flow_is_live(self):
+        s, node, _ = _src(fix_stale_s=0.3)
+        _odom(node, 0.0, stamp_wall=time.time() - 0.6)
+        _flow(node)
+        ok, why = s.position_ready()
+        assert not ok and 'odom' in why and 'old' in why, why
+
+    def test_it_refuses_an_unaided_velocity(self):
+        """The RIEKF publishes whether or not anything observes velocity; its
+        own sigma is the only thing that says so."""
+        from duburi_control.errors import MovementError
+        s, node, _ = _src()
+        _healthy(node, sigma=0.5)
+        ok, why = s.position_ready()
+        assert not ok and 'sigma' in why, why
+        with pytest.raises(MovementError):
+            s.reset_position()
+
+    def test_an_unfilled_covariance_is_absence_not_confidence(self):
+        s, node, _ = _src()
+        _healthy(node, sigma=0.0)
+        assert not s.position_ready()[0]
+
     def test_the_refusal_names_what_to_check(self):
-        """An operator reading this at the poolside needs the next action, not
-        a category."""
         from duburi_control.errors import MovementError
         s, _, _ = _src()
         with pytest.raises(MovementError) as e:
@@ -139,119 +188,117 @@ class TestRefusal:
         msg = str(e.value)
         assert 'flow_quality' in msg and 'move_forward' in msg
 
-    def test_arming_succeeds_once_flow_is_healthy(self):
+    def test_arming_succeeds_once_both_inputs_are_healthy(self):
         s, node, _ = _src()
-        for _ in range(5):
-            _feed(node, 0.2, 0.0)
+        _healthy(node)
         ok, why = s.position_ready()
         assert ok, why
-        s.reset_position()          # must not raise
-        # Near zero, not exactly: the filter holds a live 0.2 m/s and
-        # `get_position` predicts to NOW, so a moving hull has genuinely
-        # travelled between the two calls. Asserting an exact zero here would
-        # be asserting that time does not pass.
+        s.reset_position()
         x, y = s.get_position()
-        assert math.hypot(x, y) < 0.02, (x, y)
+        assert math.hypot(x, y) < 1e-9, (x, y)
 
 
 # --------------------------------------------------------------------------- #
-#  the frame -- the part most likely to be silently wrong
+#  the frame and the integral
 # --------------------------------------------------------------------------- #
 class TestLatchedFrame:
-    """`NucleusDVLSource.get_position` is documented as 'body-frame position
-    since last reset'. NavEstimator integrates in a LOCAL frame, so the two
-    differ by the heading at the reset. Drop that rotation and forward travel
-    leaks into the lateral channel -- a plausible number, no error, and
-    `drive_forward_dist` reads the wrong axis."""
+    """Body velocity rotated by the RIEKF's own attitude into world, then back
+    into the frame latched at the reset. Drop either rotation and forward
+    travel leaks into the lateral channel -- a plausible number, no error."""
 
-    def _travel(self, yaw_deg, seconds=0.4, vx=0.5):
-        s, node, inner = _src()
-        inner.deg = yaw_deg
-        for _ in range(3):
-            _feed(node, vx, 0.0)
+    def _travel(self, yaw_deg, seconds=1.0, vx=0.5, hz=20):
+        # the whole leg is replayed from the past, so the origin is older
+        # than the default freshness bound
+        s, node, _ = _src(fix_stale_s=4.0)
+        t0 = time.time() - seconds - 0.05
+        _flow(node)
+        _odom(node, vx, yaw_deg=yaw_deg, stamp_wall=t0)
         s.reset_position()
-        t_end = time.monotonic() + seconds
-        while time.monotonic() < t_end:
-            _feed(node, vx, 0.0)
-            time.sleep(0.01)
+        for k in range(1, int(seconds * hz) + 1):
+            _odom(node, vx, yaw_deg=yaw_deg, stamp_wall=t0 + k / hz)
         return s.get_position()
 
-    def test_on_a_north_heading_forward_travel_is_the_x_channel(self):
-        x, y = self._travel(0.0)
-        assert x > 0.05
-        assert abs(y) < 0.2 * abs(x)
+    @pytest.mark.parametrize('yaw', [0.0, 90.0, 225.0, -135.0])
+    def test_forward_travel_is_the_x_channel_on_any_heading(self, yaw):
+        x, y = self._travel(yaw)
+        assert 0.45 < x < 0.60, (yaw, x, y)
+        assert abs(y) < 0.01, (yaw, x, y)
 
-    def test_on_an_EAST_heading_forward_travel_is_STILL_the_x_channel(self):
-        """The one that catches a missing rotation. At yaw=90 the LOCAL
-        displacement is almost entirely in py, so an unrotated read reports
-        the travel as lateral and the along-track channel as ~0."""
-        x, y = self._travel(90.0)
-        assert x > 0.05, 'along-track travel vanished -- frame not rotated'
-        assert abs(y) < 0.2 * abs(x)
+    def test_a_yaw_mid_leg_puts_travel_where_it_happened(self):
+        """Hull drives 1 m, turns 90 deg right, drives 1 m. In the frame
+        latched at the start that is (+1, +1) -- right is +y."""
+        s, node, _ = _src(fix_stale_s=4.0)
+        t0 = time.time() - 2.2
+        _flow(node)
+        _odom(node, 1.0, yaw_deg=0.0, stamp_wall=t0)
+        s.reset_position()
+        for k in range(1, 21):
+            _odom(node, 1.0, yaw_deg=0.0, stamp_wall=t0 + k * 0.05)
+        for k in range(21, 41):
+            _odom(node, 1.0, yaw_deg=90.0, stamp_wall=t0 + k * 0.05)
+        x, y = s.get_position()
+        # one trapezoid step straddles the turn
+        assert abs(x - 1.0) < 0.06 and abs(y - 1.0) < 0.06, (x, y)
 
-    def test_and_on_a_south_west_heading_too(self):
-        x, y = self._travel(225.0)
-        assert x > 0.05
-        assert abs(y) < 0.2 * abs(x)
+    def test_a_position_fix_mid_leg_does_not_move_the_leg(self):
+        """Why velocity and not p_now - p_reset: a fix corrects error laid down
+        before the reset, and that correction is not this leg's travel."""
+        s, node, _ = _src()
+        t0 = time.time() - 0.6
+        _flow(node)
+        _odom(node, 0.0, stamp_wall=t0, px=0.0)
+        s.reset_position()
+        for k in range(1, 11):
+            _odom(node, 0.0, stamp_wall=t0 + k * 0.05, px=3.0 if k > 5 else 0.0)
+        x, y = s.get_position()
+        assert abs(x) < 1e-9 and abs(y) < 1e-9, (x, y)
+
+    def test_a_gap_is_skipped_and_counted_not_integrated(self):
+        s, node, _ = _src()
+        t0 = time.time() - 0.9
+        _flow(node)
+        _odom(node, 1.0, stamp_wall=t0)
+        s.reset_position()
+        _odom(node, 1.0, stamp_wall=t0 + 0.8)
+        assert s.status()['n_gap'] == 1
+        x, _ = s.get_position()
+        assert x < 0.3, x      # at most the capped extrapolation, never 0.8 m
 
 
 # --------------------------------------------------------------------------- #
-#  diagnostics
+#  diagnostics and clocks
 # --------------------------------------------------------------------------- #
 def test_status_reports_absence_as_absence():
-    """`fix_age_s` must be inf, never 0.0, before any fix -- 0.0 reads as
-    'perfectly fresh', which is the absence-is-not-zero trap that has already
-    caught the barometer and the ESC gate here."""
     s, _, _ = _src()
     st = s.status()
-    assert st['fix_age_s'] == math.inf
-    assert st['n_fixes'] == 0
-    assert st['quality'] == 0
+    assert st['fix_age_s'] == math.inf and st['odom_age_s'] == math.inf
+    assert st['n_fixes'] == 0 and st['quality'] == 0
+    assert st['vel_sigma_ms'] == math.inf
 
 
 def test_status_counts_zero_quality_intervals():
     s, node, _ = _src()
-    _feed(node, 0.2, 0.0, quality=0)
-    _feed(node, 0.2, 0.0, quality=180)
+    _flow(node, quality=0)
+    _flow(node, quality=180)
     assert s.status()['n_zero_quality'] == 1
 
 
-# --------------------------------------------------------------------------- #
-#  WHICH CLOCK the position integrates on
-# --------------------------------------------------------------------------- #
-def test_dt_comes_from_the_capture_stamp_not_arrival_time():
-    """The discriminating test for the timing fix.
-
-    Two fixes whose CAPTURE stamps are 1.0 s apart, delivered back to back in
-    real time. Integrating on arrival time gives a dt of microseconds and so
-    essentially zero displacement; integrating on the stamp gives ~1 s of
-    travel at the commanded speed.
-
-    `flow_node` stamps the capture-interval MIDPOINT because flow measures an
-    AVERAGE velocity over an interval, and with an adaptive baseline reaching
-    0.75 s that correction is worth up to 375 ms. Reading a local clock here
-    discarded it.
-    """
+def test_dt_comes_from_the_odom_stamp_not_arrival_time():
+    """Two outputs whose stamps are 0.2 s apart, delivered back to back.
+    Arrival time gives microseconds of dt and no travel."""
     s, node, _ = _src()
-    # Both stamps must be INSIDE fix_stale_s of now, or reset_position()
-    # rightly refuses -- staleness is measured from the capture instant, which
-    # is the same fix under test.
-    t0 = time.time() - 0.5
-    _feed(node, 0.5, 0.0, stamp_wall=t0)
+    t0 = time.time() - 0.3
+    _flow(node)
+    _odom(node, 0.5, stamp_wall=t0)
     s.reset_position()
-    _feed(node, 0.5, 0.0, stamp_wall=t0 + 0.5)
-    x, _y = s.get_position()
-    assert x > 0.15, (
-        f'travelled {x:.3f} m over a 0.5 s stamped interval at 0.5 m/s -- '
-        'the integrator is using arrival time, not the capture stamp')
+    _odom(node, 0.5, stamp_wall=t0 + 0.2)
+    x, _ = s.get_position()
+    assert x > 0.09, x
     assert s.status()['n_stamp_fallback'] == 0
 
 
 def test_an_unstamped_publisher_falls_back_loudly_and_is_counted():
-    """Fail safe, not fail silent. A publisher that stamps nothing still has
-    to work -- arrival time is the honest answer there -- but it must be
-    visible in `status()` rather than silently degrading every distance."""
     s, node, _ = _src()
-    _feed(node, 0.2, 0.0, stamp_wall=0.0)
-    _feed(node, 0.2, 0.0, stamp_wall=0.0)
+    _odom(node, 0.2, stamp_wall=0.0)
+    _odom(node, 0.2, stamp_wall=0.0)
     assert s.status()['n_stamp_fallback'] == 2

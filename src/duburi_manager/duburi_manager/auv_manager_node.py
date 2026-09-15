@@ -671,7 +671,10 @@ class AUVManagerNode(Node):
                 f'[FLOWP] position_source:=flow ignored -- '
                 f'{self.yaw_source.name!r} already supplies a position.')
             return
-        if self._yaw_src_name not in self._POSITION_TRUSTED_YAW:
+        # The displacement is rotated by the RIEKF's attitude, which is seeded
+        # from `/duburi/imu`. On srot that is the board's fused BNO085 -- not a
+        # hull compass -- so the warning is for the pixhawk path only.
+        if not self._is_srot and self._yaw_src_name not in self._POSITION_TRUSTED_YAW:
             self.get_logger().warning(
                 f'[FLOWP] position_source:=flow with yaw_source='
                 f'{self._yaw_src_name!r}. Flow gives velocity in the BODY '
