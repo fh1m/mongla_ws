@@ -2749,7 +2749,13 @@ floors (`final_run/bin.mkv`, `octagon_Bottom.mkv`, `Salom_red.mkv`) moved by a K
 when the frame is caustic. **NOT fixed:** a floor with no dark texture of its own (slalom,
 plain) still reports the waves. Patch NCC after erosion separated those on the composites
 (0.41-0.42 bad vs 0.52-0.61 good) but real caustic clips read 0.87-0.96, so there is no
-real-data threshold yet. QUEUED; it needs downward footage in sun over a plain floor.
+real-data threshold yet. **Refusal added the same day (real data, provisional):** median NCC of
+the tracked 15x15 patches after erosion, on the SAME RoboSub sun frames (`octagon_1.mp4`,
+B = 2 and 6): plain-concrete region p50 0.53-0.58, max **0.646**; lane-tile region p10 0.797;
+whole sun frames (4 segments, props or lanes in view) min **0.774**; whole shaded frames min
+0.950. Refuse below **0.71**, in sun only. One clip carries the plain side of the gap.
+Composites read lower (0.41 bad / 0.52-0.61 good) and were NOT used to set it; a refused good
+fix costs a measurement, and an accepted bad one costs a position.
 
 **Detector:** top-hat(9x9) mean / frame mean, one frame every 5 s:
 caustic-free (Mirpur indoor x3, final_run x5) max **0.051**; RoboSub downward in sun

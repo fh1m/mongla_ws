@@ -749,3 +749,36 @@ class TestSunCausticsReachTheNode:
             assert n._anchor_gray is a
         finally:
             n.destroy_node()
+
+
+class TestSunOnABareFloorRefuses:
+    """When erosion leaves only boiling caustic cells, the node refuses."""
+
+    def _run(self, ncc, sun=True):
+        import test_flow_sun_caustics as tc
+        n = _make(pool_depth_m=4.0)
+        reasons = []
+        try:
+            n._refuse = lambda why: reasons.append(why)
+            n._is_ripe = lambda *a, **k: True
+            n._anchor(tc._frame(0, 2.0, 1.0, sun), 0.0)
+            n._frame_i = 5
+            with mock.patch('duburi_vision.flow.flow_node.patch_ncc_median',
+                            return_value=ncc):
+                n._process(tc._frame(5, 2.0, 1.0, sun), 0.5, 1)
+        finally:
+            n.destroy_node()
+        return reasons
+
+    def test_boiling_cells_are_refused_and_named(self):
+        r = self._run(0.55)
+        assert r and 'sun caustics' in r[-1]
+
+    def test_a_textured_floor_in_sun_is_not_refused_for_it(self):
+        r = self._run(0.90)
+        assert not any('sun caustics' in x for x in r)
+
+    def test_the_patch_gate_is_only_for_the_sun(self):
+        """Shaded floors keep their own refusals; this gate was measured in sun."""
+        r = self._run(0.30, sun=False)
+        assert not any('sun caustics' in x for x in r)
