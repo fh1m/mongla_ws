@@ -711,3 +711,41 @@ class TestRefusalTravelIsThePriceOfRefusing:
         assert truth > a > b > c, (
             f'distance should fall as refusals rise: {truth:.4f} > {a:.4f} > '
             f'{b:.4f} > {c:.4f}')
+
+
+class TestSunCausticsReachTheNode:
+    """The filter must be APPLIED by the node, to both images of a pair --
+    a helper nobody calls fixes nothing (see test_flow_sun_caustics)."""
+
+    def test_a_caustic_anchor_and_its_partner_are_both_eroded(self):
+        from duburi_vision.flow.flow_math import suppress_caustics
+        import test_flow_sun_caustics as tc
+        n = _make(pool_depth_m=4.0)
+        try:
+            a, b = tc._frame(0, 2.0, 1.0, True), tc._frame(5, 2.0, 1.0, True)
+            n._anchor(a, 0.0)
+            assert n._anchor_caustic
+            assert np.array_equal(n._anchor_gray, suppress_caustics(a))
+            n._frame_i = 5
+            seen = {}
+            real = cv2.calcOpticalFlowPyrLK
+
+            def spy(prev, nxt, pts, *args, **kw):
+                seen.setdefault('next', nxt)
+                return real(prev, nxt, pts, *args, **kw)
+            with mock.patch.object(cv2, 'calcOpticalFlowPyrLK', side_effect=spy):
+                n._process(b, 0.5, 1)
+            assert np.array_equal(seen['next'], suppress_caustics(b))
+        finally:
+            n.destroy_node()
+
+    def test_a_shaded_floor_is_tracked_raw(self):
+        import test_flow_sun_caustics as tc
+        n = _make(pool_depth_m=4.0)
+        try:
+            a = tc._frame(0, 2.0, 1.0, False)
+            n._anchor(a, 0.0)
+            assert not n._anchor_caustic
+            assert n._anchor_gray is a
+        finally:
+            n.destroy_node()

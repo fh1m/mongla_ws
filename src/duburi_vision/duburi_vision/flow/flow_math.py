@@ -142,6 +142,53 @@ def interp_rate(buffer: Sequence[Tuple[float, float, float]],
     return buffer[-1][1], buffer[-1][2]
 
 
+# ── sun caustics ─────────────────────────────────────────────────────────────
+# ⛔ AN OUTDOOR POOL LIGHTS ITS FLOOR THROUGH A MOVING LENS. Refracted sunlight
+# draws bright filaments that sweep across the floor at the surface waves'
+# speed, independent of the hull -- and a corner detector prefers exactly those
+# filaments. Measured 2026-09-15 on REAL caustics (RoboSub 2025 downward
+# footage, `octagon_1.mp4`) composited over three REAL floors moved by a KNOWN
+# 13.4 px baseline:
+#
+#     floor          raw LK        eroded 5x5    eroded 7x7     no caustics
+#     tiles         11.19 px        0.18 px       0.09 px        0.000 px
+#     octagon mat    1.01           0.14          0.11           0.000
+#     slalom floor  13.31          12.86         12.47           0.000
+#
+# Zero refusals in every row: the node would have published the WAVES' speed as
+# the hull's. The filaments are bright and thinner than the kernel, so a grey
+# erosion (a local minimum) removes them while every dark feature a pool floor
+# actually has -- grout, lane tiles, prop outlines -- survives. On a floor with
+# no dark texture of its own (the slalom row) nothing is left to track and this
+# does NOT fix it; see `CAUSTIC_TOPHAT_MAX`.
+CAUSTIC_ERODE_PX = 7
+
+# Bright thin-structure energy, top-hat(9x9) mean / frame mean. MEASURED on the
+# real archive, one frame every 5 s:
+#   caustic-free (Mirpur indoor x3, final_run x5)     max 0.051
+#   RoboSub downward in sun (bin+oct_1, octagon_1/2)  min 0.090, up to 0.21
+# 0.07 sits in the gap. RoboSub FORWARD clips read 0.04-0.06, so a forward
+# camera is near the line; this is for the DOWNWARD camera.
+CAUSTIC_TOPHAT_MAX = 0.07
+
+
+def caustic_score(gray) -> float:
+    """Bright thin-structure energy relative to brightness: sun caustics score high."""
+    import cv2
+    g = np.asarray(gray, dtype=np.float32)
+    mean = float(g.mean())
+    if mean < 1.0:
+        return 0.0
+    ker = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
+    return float(cv2.morphologyEx(g, cv2.MORPH_TOPHAT, ker).mean()) / mean
+
+
+def suppress_caustics(gray, size: int = CAUSTIC_ERODE_PX):
+    """Grey erosion: removes bright filaments thinner than `size`, keeps dark texture."""
+    import cv2
+    return cv2.erode(gray, np.ones((size, size), np.uint8))
+
+
 def detect_corners(gray, *, want: int = 80, max_corners: int = 200,
                    min_distance: int = 8, block: int = 7,
                    quality_ladder=(0.01, 0.004, 0.0015),
