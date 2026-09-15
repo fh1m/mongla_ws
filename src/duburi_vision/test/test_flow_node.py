@@ -782,3 +782,36 @@ class TestSunOnABareFloorRefuses:
         """Shaded floors keep their own refusals; this gate was measured in sun."""
         r = self._run(0.30, sun=False)
         assert not any('sun caustics' in x for x in r)
+
+
+class TestFloorHeightIsPublished:
+    """Height above the floor was measured to scale velocity and thrown away."""
+
+    class _G:
+        def height_m(self, f_px, tile_m):
+            return 0.83
+
+        def heading_deg(self):
+            return 12.0
+
+    def _read(self, grating):
+        n = _make(pool_depth_m=4.0, tile_m=0.25)
+        out = []
+        try:
+            n._pub_floor_h = mock.MagicMock()
+            n._pub_floor_h.publish.side_effect = out.append
+            with mock.patch('duburi_localization.tile_grating.measure',
+                            return_value=grating):
+                n._read_the_floor(np.zeros((360, 640), np.uint8), 1234.5)
+        finally:
+            n.destroy_node()
+        return out
+
+    def test_a_tile_reading_is_published_on_its_capture_stamp(self):
+        out = self._read(self._G())
+        assert len(out) == 1
+        assert out[0].range == pytest.approx(0.83)
+        assert out[0].header.stamp.sec == 1234 and out[0].header.stamp.nanosec == 500000000
+
+    def test_no_tiles_publishes_nothing_rather_than_a_stale_height(self):
+        assert self._read(None) == []
