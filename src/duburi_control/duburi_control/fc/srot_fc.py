@@ -2431,6 +2431,39 @@ class SrotFC(FlightController):
                 int(board_s * 1e6), float(vx), float(vy), 0.0, cov, 0)
         return True
 
+    def send_position_estimate(self, x: float, y: float, z: float, yaw: float,
+                               cov6, board_s: Optional[float],
+                               reset_counter: int) -> bool:
+        """Our fused POSITION to the board, as VISION_POSITION_ESTIMATE (102).
+
+        x, y, z metres in the localization frame (NED: z is +depth), yaw rad.
+        `cov6` is the 6x6 (x, y, z, roll, pitch, yaw) covariance as nested
+        rows; only the upper triangle is sent, which is the message's layout.
+        roll and pitch are sent as 0 with their covariance: the board owns
+        attitude and must not take ours.
+
+        `reset_counter` must increase whenever the estimate jumped (a frame
+        change, a prop fix): the board integrates deltas, and a delta across a
+        reset is a teleport. Stamped on the BOARD clock; nothing is sent without
+        one, and non-finite input is refused, not clamped.
+        """
+        if board_s is None or not (math.isfinite(board_s) and board_s > 0.0):
+            return False
+        if not all(math.isfinite(float(v)) for v in (x, y, z, yaw)):
+            return False
+        try:
+            c = [[float(cov6[r][k]) for k in range(6)] for r in range(6)]
+        except (TypeError, IndexError, ValueError):
+            return False
+        if any(not math.isfinite(c[i][i]) or c[i][i] <= 0.0 for i in (0, 1, 2, 5)):
+            return False
+        tri = [c[r][k] for r in range(6) for k in range(r, 6)]
+        with self._tx_lock:
+            self.master.mav.vision_position_estimate_send(
+                int(board_s * 1e6), float(x), float(y), float(z),
+                0.0, 0.0, float(yaw), tri, int(reset_counter) & 0xFF)
+        return True
+
     def set_message_rate(self, message_id, hz):
         """MAV_CMD_SET_MESSAGE_INTERVAL (511). Fire-and-forget, like Pixhawk's.
 

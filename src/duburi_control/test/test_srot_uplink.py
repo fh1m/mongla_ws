@@ -207,3 +207,46 @@ def test_no_board_time_or_bad_numbers_sends_nothing():
               (0.3, 0.0, -1.0, 1e-4, 10.0)]:
         ok, args = _speed(*a)
         assert not ok and args is None, a
+
+
+# --------------------------------------------------------------------------- #
+#  Position to the board (VISION_POSITION_ESTIMATE, 102)
+# --------------------------------------------------------------------------- #
+def _pos(*a):
+    fc = SrotFC(_Master(), log=None)
+    ok = fc.send_position_estimate(*a)
+    sent = [x for n, x, _ in fc.master.mav.sent if n == 'vision_position_estimate_send']
+    return ok, (sent[-1] if sent else None)
+
+
+def _cov6():
+    c = [[0.0] * 6 for _ in range(6)]
+    for i, v in enumerate((0.04, 0.05, 0.0004, 0.001, 0.002, 0.003)):
+        c[i][i] = v
+    c[0][1] = c[1][0] = 0.01
+    return c
+
+
+def test_position_estimate_packs_the_upper_triangle_in_the_named_slots():
+    ok, args = _pos(1.5, -2.0, 0.9, 0.7, _cov6(), 812.25, 3)
+    assert ok
+    usec, x, y, z, roll, pitch, yaw, cov, reset = args
+    assert usec == 812250000 and (x, y, z) == (1.5, -2.0, 0.9)
+    assert (roll, pitch) == (0.0, 0.0), 'the board owns attitude'
+    assert yaw == pytest.approx(0.7)
+    assert len(cov) == 21
+    I = sp.POS_COV_IDX
+    assert cov[I['xx']] == 0.04 and cov[I['yy']] == 0.05 and cov[I['xy']] == 0.01
+    assert cov[I['zz']] == 0.0004 and cov[I['rr']] == 0.001
+    assert cov[I['pp']] == 0.002 and cov[I['yawyaw']] == 0.003
+    assert reset == 3
+
+
+def test_position_estimate_refuses_what_it_cannot_stand_behind():
+    bad_cov = _cov6(); bad_cov[0][0] = 0.0
+    for a in ((1, 2, 0.5, 0.1, _cov6(), None, 0),
+              (float('nan'), 2, 0.5, 0.1, _cov6(), 5.0, 0),
+              (1, 2, 0.5, 0.1, bad_cov, 5.0, 0),
+              (1, 2, 0.5, 0.1, [[0.0]], 5.0, 0)):
+        ok, args = _pos(*a)
+        assert not ok and args is None

@@ -36,9 +36,14 @@ def test_coasted_or_unmapped_is_none():
 #  The velocity uplink handler
 # --------------------------------------------------------------------------- #
 class _FC:
-    def __init__(self): self.calls = []
+    def __init__(self):
+        self.calls = []
+        self.pos = []
     def send_speed_estimate(self, *a):
         self.calls.append(a)
+        return True
+    def send_position_estimate(self, *a):
+        self.pos.append(a)
         return True
 
 
@@ -46,21 +51,33 @@ class _Param:
     def __init__(self, v): self.value = v
 
 
-def _odom(stamp_s, vx=0.2, vy=-0.1, vx_var=1e-3, vy_var=2e-3):
+def _odom(stamp_s, vx=0.2, vy=-0.1, vx_var=1e-3, vy_var=2e-3,
+          px=1.0, py=2.0, pz=0.8, frame='odom', yaw=0.0):
+    import math
     cov = [0.0] * 36
     cov[0], cov[7] = vx_var, vy_var
+    pcov = [0.0] * 36
+    for i, v in enumerate((0.04, 0.05, 0.0004, 0.001, 0.001, 0.003)):
+        pcov[i * 6 + i] = v
+    pcov[1] = pcov[6] = 0.01
     return SimpleNamespace(
-        header=SimpleNamespace(stamp=SimpleNamespace(
+        header=SimpleNamespace(frame_id=frame, stamp=SimpleNamespace(
             sec=int(stamp_s), nanosec=int((stamp_s % 1) * 1e9))),
+        pose=SimpleNamespace(pose=SimpleNamespace(
+            position=SimpleNamespace(x=px, y=py, z=pz),
+            orientation=SimpleNamespace(w=math.cos(yaw / 2), x=0.0, y=0.0,
+                                        z=math.sin(yaw / 2))),
+            covariance=pcov),
         twist=SimpleNamespace(twist=SimpleNamespace(
             linear=SimpleNamespace(x=vx, y=vy)), covariance=cov))
 
 
-def _unode(enabled=True, ok=True):
+def _unode(enabled=True, ok=True, position=False):
     n = _node(ok)
     n.fc = _FC()
     n._vel_uplink_n = 0
-    n.get_parameter = lambda name: _Param(enabled)
+    params = {'velocity_uplink': enabled, 'position_uplink': position}
+    n.get_parameter = lambda name: _Param(params[name])
     n.get_logger = lambda: SimpleNamespace(info=lambda m: None, warn=lambda m: None)
     return n
 
@@ -77,3 +94,33 @@ def test_velocity_uplink_off_or_unmapped_sends_nothing():
     for n in (_unode(enabled=False), _unode(ok=False)):
         n._on_odom_uplink(_odom(1.7e9 + 42.5))
         assert n.fc.calls == []
+
+
+# --------------------------------------------------------------------------- #
+#  The position uplink handler
+# --------------------------------------------------------------------------- #
+def test_position_uplink_sends_pose_yaw_and_board_time():
+    import math
+    n = _unode(enabled=False, position=True)
+    n._on_odom_uplink(_odom(1.7e9 + 10.0, yaw=math.radians(30)))
+    (x, y, z, yaw, cov6, board_s, reset), = n.fc.pos
+    assert (x, y, z) == (1.0, 2.0, 0.8)
+    assert abs(math.degrees(yaw) - 30.0) < 1e-6
+    assert abs(board_s - 10.0) < 1e-3 and reset == 0
+    assert cov6[0][0] == 0.04 and cov6[0][1] == 0.01 and cov6[5][5] == 0.003
+    assert n.fc.calls == [], 'velocity is independent of the position switch'
+
+
+def test_a_frame_change_or_a_jump_bumps_the_reset_counter_and_motion_does_not():
+    n = _unode(enabled=False, position=True)
+    n._on_odom_uplink(_odom(1.7e9 + 10.0, px=1.0))
+    n._on_odom_uplink(_odom(1.7e9 + 10.1, px=1.05))           # motion
+    n._on_odom_uplink(_odom(1.7e9 + 10.2, px=1.05, frame='pool'))  # anchor
+    n._on_odom_uplink(_odom(1.7e9 + 10.3, px=3.0, frame='pool'))   # prop fix
+    assert [c[-1] for c in n.fc.pos] == [0, 0, 1, 2]
+
+
+def test_position_uplink_off_or_unmapped_sends_nothing():
+    for n in (_unode(enabled=False, position=False), _unode(ok=False, position=True)):
+        n._on_odom_uplink(_odom(1.7e9 + 1.0))
+        assert n.fc.pos == []

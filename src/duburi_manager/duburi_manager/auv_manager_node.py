@@ -335,6 +335,11 @@ class AUVManagerNode(Node):
         # uplink: the board drops msgid 103 until the firmware PR lands, and
         # the link is 51.8 % full at idle.
         self.declare_parameter('velocity_uplink', False)
+        # POSITION uplink: the RIEKF pose as VISION_POSITION_ESTIMATE, same
+        # clock and gating as velocity. OFF by default: no firmware consumes
+        # msgid 102 yet. With `reset_counter` bumped on frame changes and fix
+        # jumps, so a board integrating deltas never integrates a teleport.
+        self.declare_parameter('position_uplink', False)
         # payload_channels: OPTIONAL per-instance labels, "<board_channel>:<name>",
         # e.g. "9:torpedo_1, 10:torpedo_2, 11:dropper_1".
         #
@@ -1021,6 +1026,9 @@ class AUVManagerNode(Node):
             # startup-only-timer defect this file has already had once.
             from nav_msgs.msg import Odometry
             self._vel_uplink_n = 0
+            self._pos_uplink_n = 0
+            self._pos_reset = 0
+            self._pos_last = None
             self.create_subscription(Odometry, '/duburi/odom',
                                      self._on_odom_uplink, 10,
                                      callback_group=self.timer_group)
@@ -2235,12 +2243,14 @@ class AUVManagerNode(Node):
         Nothing is sent until that fit is good: an unstamped velocity would be
         integrated at the wrong instant.
         """
-        if not bool(self.get_parameter('velocity_uplink').value):
-            return
         if not getattr(self, '_imu_clock_ok', False):
             return
         host_s = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
         if host_s <= 0.0:
+            return
+        if bool(self.get_parameter('position_uplink').value):
+            self._send_position_uplink(msg, self._imu_clock.to_board(host_s))
+        if not bool(self.get_parameter('velocity_uplink').value):
             return
         cov = msg.twist.covariance
         try:
@@ -2257,6 +2267,39 @@ class AUVManagerNode(Node):
                 self.get_logger().info(
                     '[VEL  ] velocity uplink live: RIEKF body velocity -> board '
                     '(VISION_SPEED_ESTIMATE, board-clock stamped)')
+
+    def _send_position_uplink(self, msg, board_s) -> None:
+        """One RIEKF pose to the board, with a reset counter that is honest.
+
+        The counter increments when the frame changes (odom -> pool, when the
+        heading anchor lands) and when the position jumps further than any
+        motion could explain between two 10 Hz estimates (a prop fix).
+        """
+        from duburi_control.fc import srot_protocol as sp
+        p = msg.pose.pose.position
+        q = msg.pose.pose.orientation
+        frame = str(getattr(msg.header, 'frame_id', ''))
+        last = getattr(self, '_pos_last', None)
+        if last is not None:
+            jump = math.hypot(p.x - last[1], p.y - last[2])
+            if frame != last[0] or jump > sp.POS_RESET_JUMP_M:
+                self._pos_reset = getattr(self, '_pos_reset', 0) + 1
+        self._pos_last = (frame, p.x, p.y)
+        yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+        c = msg.pose.covariance
+        cov6 = [[c[r * 6 + k] for k in range(6)] for r in range(6)]
+        try:
+            sent = self.fc.send_position_estimate(p.x, p.y, p.z, yaw, cov6, board_s,
+                                                  getattr(self, '_pos_reset', 0))
+        except Exception as exc:                            # noqa: BLE001
+            self.get_logger().warn(f'[POS  ] position_estimate send failed: {exc}')
+            return
+        if sent:
+            self._pos_uplink_n = getattr(self, '_pos_uplink_n', 0) + 1
+            if self._pos_uplink_n == 1:
+                self.get_logger().info(
+                    f'[POS  ] position uplink live: RIEKF pose -> board '
+                    f'(VISION_POSITION_ESTIMATE, frame {frame!r}, board-clock stamped)')
 
     def _board_capture_s(self, sample):
         """The frame's capture instant on the BOARD's clock, or None.
