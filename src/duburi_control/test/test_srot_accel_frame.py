@@ -98,3 +98,22 @@ def test_a_manoeuvre_does_not_vote():
 def test_an_ambiguous_board_never_latches():
     """Neither hypothesis near the attitude's gravity: refuse, do not pick."""
     assert _settle(_FC(0.0, 0.0, (9.80665, 0.0, 0.0)), 200)['accel'] is None
+
+
+def test_a_board_reflashed_mid_session_is_re_proven_not_trusted():
+    """One SrotFC lives for the whole manager process. If the accel frame
+    changes under it, a new unambiguous streak must win."""
+    fc = _FC(1.57, -15.10, (-0.41, -2.56, 9.38))
+    assert _settle(fc)['accel_frame'] == 'sensor'
+    fc.acc = _frd_rest(1.57, -15.10)           # firmware now sends FRD
+    imu = _settle(fc)
+    assert imu['accel_frame'] == 'vehicle'
+    assert imu['accel'][2] < -9.0
+
+
+def test_a_single_odd_sample_does_not_flip_a_proven_frame():
+    fc = _FC(1.57, -15.10, (-0.41, -2.56, 9.38))
+    _settle(fc)
+    fc.acc = _frd_rest(1.57, -15.10)
+    for _ in range(SrotFC._ACCEL_FRAME_VOTES - 1):
+        assert fc.get_imu()['accel_frame'] == 'sensor'

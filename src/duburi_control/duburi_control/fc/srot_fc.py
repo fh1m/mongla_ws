@@ -2222,9 +2222,22 @@ class SrotFC(FlightController):
         at any tilt. Until latched this returns None and the filter coasts on
         attitude, depth and flow -- absence, not a guess.
         """
+        # Voting never stops. The manager builds one SrotFC per process, so a
+        # board reflashed mid-session would otherwise keep a stale latch.
         frame = getattr(self, '_accel_frame', None)
-        if frame is None:
-            frame = self._vote_accel_frame(raw, rpy)
+        proven = self._vote_accel_frame(raw, rpy)
+        if proven is not None and proven != frame:
+            log = getattr(self, '_log', None)
+            if log is not None:
+                try:
+                    (log.info if frame is None else log.warning)(
+                        f'[SROT ] SCALED_IMU2 accel frame '
+                        f'{"proven" if frame is None else "CHANGED from " + repr(frame) + " to"}: '
+                        f'{proven!r} ({self._ACCEL_FRAME_VOTES} consecutive samples '
+                        f'against the attitude-predicted gravity)')
+                except Exception:   # noqa: BLE001 -- logging must not break telemetry
+                    pass
+            self._accel_frame = frame = proven
         if frame is None:
             return None
         if frame == 'sensor':
@@ -2265,18 +2278,7 @@ class SrotFC(FlightController):
         last, n = getattr(self, '_accel_votes', (None, 0))
         n = n + 1 if vote == last else 1
         self._accel_votes = (vote, n)
-        if n < self._ACCEL_FRAME_VOTES:
-            return None
-        self._accel_frame = vote
-        log = getattr(self, '_log', None)
-        if log is not None:
-            try:
-                log.info(f'[SROT ] SCALED_IMU2 accel frame proven: {vote!r} '
-                         f'(sensor {e_sensor:.1f} deg vs vehicle {e_vehicle:.1f} '
-                         f'deg from the attitude-predicted gravity)')
-            except Exception:       # noqa: BLE001 -- logging must not break telemetry
-                pass
-        return vote
+        return vote if n >= self._ACCEL_FRAME_VOTES else None
 
     def heartbeat_age(self):
         hb = self._vehicle_hb()
