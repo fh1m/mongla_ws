@@ -1,7 +1,8 @@
 """Eight signed ESC RPMs -> a body-frame acceleration for the estimator.
 
-This is the `accel_body` input `NavEstimator.predict()` has always accepted and
-nothing has ever supplied. It is a PURE function of numbers already on our wire,
+Its consumer is the RIEKF's velocity aiding in `duburi_localization` (the
+private `NavEstimator` that once took it as `accel_body` is gone), and nothing
+has ever supplied it. It is a PURE function of numbers already on our wire,
 so all of it is testable on a bench with no thrusters attached -- which is the
 only reason it exists this round.
 

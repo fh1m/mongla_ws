@@ -608,11 +608,18 @@ def _fill_covariance(msg: Odometry, filt: RIEKF) -> None:
     [theta | v | p | bg | ba], so attitude is block 0:3 and position 6:9.
     """
     P = filt.P
+    # The twist is published in the BODY frame, so its covariance must be too.
+    # The filter's velocity block is WORLD-frame; copying it unrotated swaps
+    # the x and y variances on a 90 degree heading, and every consumer that
+    # weights by axis (the board's distance leg, flow position) gets the
+    # other axis's confidence.
+    R = filt.X.R
+    Pv_body = R.T @ P[3:6, 3:6] @ R
     for r in range(3):
         for c in range(3):
             msg.pose.covariance[r * 6 + c] = float(P[6 + r, 6 + c])
             msg.pose.covariance[(r + 3) * 6 + (c + 3)] = float(P[r, c])
-            msg.twist.covariance[r * 6 + c] = float(P[3 + r, 3 + c])
+            msg.twist.covariance[r * 6 + c] = float(Pv_body[r, c])
 
 
 def main(args=None):
