@@ -88,3 +88,14 @@ def test_erosion_costs_nothing_without_caustics():
     a, b = _frame(0, vx, vy, False), _frame(B, vx, vy, False)
     f = _flow(suppress_caustics(a), suppress_caustics(b))
     assert np.hypot(f[0] - vx * B, f[1] - vy * B) < 0.3
+
+
+def test_patch_ncc_is_one_for_a_rigid_shift_and_low_for_new_noise():
+    from duburi_vision.flow.flow_math import patch_ncc_median
+    rng = np.random.default_rng(3)
+    a = (rng.random((120, 120)) * 255).astype(np.uint8)
+    b = np.roll(a, 3, axis=1)
+    pts = np.array([[40.0, 40.0], [60.0, 70.0], [80.0, 50.0]])
+    assert patch_ncc_median(a, b, pts, pts + [3.0, 0.0]) > 0.99
+    c = (rng.random((120, 120)) * 255).astype(np.uint8)
+    assert abs(patch_ncc_median(a, c, pts, pts)) < 0.3

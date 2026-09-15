@@ -59,8 +59,8 @@ from duburi_vision.flow.flow_timing import (
     TimeOffset, exposure_offset_s, interval_midpoint,
 )
 from duburi_vision.flow.flow_math import (
-    CAUSTIC_TOPHAT_MAX, DistanceAccumulator, HeightFromDivergence, Intrinsics,
-    caustic_score, detect_corners, suppress_caustics,
+    CAUSTIC_NCC_MIN, CAUSTIC_TOPHAT_MAX, DistanceAccumulator, HeightFromDivergence, Intrinsics,
+    caustic_score, detect_corners, patch_ncc_median, suppress_caustics,
     flow_dispersion, forward_backward_error,
     RefractiveRectifier, height_above_floor, integrate_rate, interp_rate,
     robust_flow,
@@ -825,6 +825,23 @@ class FlowVelocityNode(Node):
                 st &= (fb <= self._fb_px)
                 status = st.astype(np.uint8).reshape(-1, 1)
                 n_used = int(st.sum())
+
+        # ⛔ SUN ON A BARE FLOOR. Erosion strips the filaments, but on a floor
+        # with no dark texture of its own what is left are the caustic CELLS,
+        # which boil between frames and still move with the waves. A rigid
+        # floor keeps its patches; cells do not. Refuse rather than publish
+        # the waves' speed as the hull's.
+        if getattr(self, '_anchor_caustic', False) and nxt is not None:
+            keep = np.asarray(status).reshape(-1).astype(bool)
+            ncc = patch_ncc_median(self._anchor_gray, track,
+                                   np.asarray(self._anchor_pts).reshape(-1, 2)[keep],
+                                   np.asarray(nxt).reshape(-1, 2)[keep])
+            if ncc < CAUSTIC_NCC_MIN:
+                self._anchor(gray, t)
+                self._refuse(f'sun caustics over a floor with no texture of its '
+                             f'own (patch NCC {ncc:.2f} < {CAUSTIC_NCC_MIN}): the '
+                             f'motion is the waves, not the hull')
+                return
 
         disp = flow_dispersion(self._anchor_pts, nxt, status)
 

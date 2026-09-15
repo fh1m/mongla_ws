@@ -159,8 +159,8 @@ def interp_rate(buffer: Sequence[Tuple[float, float, float]],
 # the hull's. The filaments are bright and thinner than the kernel, so a grey
 # erosion (a local minimum) removes them while every dark feature a pool floor
 # actually has -- grout, lane tiles, prop outlines -- survives. On a floor with
-# no dark texture of its own (the slalom row) nothing is left to track and this
-# does NOT fix it; see `CAUSTIC_TOPHAT_MAX`.
+# no dark texture of its own (the slalom row) this does NOT fix it; the node
+# refuses that case instead, see `CAUSTIC_NCC_MIN`.
 CAUSTIC_ERODE_PX = 7
 
 # Bright thin-structure energy, top-hat(9x9) mean / frame mean. MEASURED on the
@@ -170,6 +170,34 @@ CAUSTIC_ERODE_PX = 7
 # 0.07 sits in the gap. RoboSub FORWARD clips read 0.04-0.06, so a forward
 # camera is near the line; this is for the DOWNWARD camera.
 CAUSTIC_TOPHAT_MAX = 0.07
+
+
+# ...and when erosion leaves nothing of the floor. Caustic CELLS survive the
+# erosion and change shape between frames; a real floor does not. Median NCC of
+# the tracked 15x15 patches, eroded, on REAL RoboSub footage in sun
+# (`octagon_1.mp4`, the same frames, two regions, B = 2 and 6):
+#   plain concrete   p50 0.53-0.58, max 0.646
+#   lane tiles       p10 0.797, p50 0.83
+#   whole sun frames (4 segments, props/lanes in view)   min 0.774
+#   whole shaded frames (4 segments)                      min 0.950
+# PROVISIONAL: one clip carries the plain-floor side of the gap.
+CAUSTIC_NCC_MIN = 0.71
+
+
+def patch_ncc_median(a, b, p0, p1, half: int = 7) -> float:
+    """Median zero-mean NCC between each point's patch in `a` and its match in `b`."""
+    import cv2
+    size = (2 * half + 1, 2 * half + 1)
+    vals = []
+    for (x0, y0), (x1, y1) in zip(np.asarray(p0).reshape(-1, 2),
+                                  np.asarray(p1).reshape(-1, 2)):
+        pa = cv2.getRectSubPix(a, size, (float(x0), float(y0))).astype(np.float64)
+        pb = cv2.getRectSubPix(b, size, (float(x1), float(y1))).astype(np.float64)
+        pa -= pa.mean()
+        pb -= pb.mean()
+        d = math.sqrt(float((pa * pa).sum() * (pb * pb).sum()))
+        vals.append(float((pa * pb).sum()) / d if d > 1e-9 else 0.0)
+    return float(np.median(vals)) if vals else 0.0
 
 
 def caustic_score(gray) -> float:
