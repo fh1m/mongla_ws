@@ -1227,6 +1227,48 @@ class DuburiMission:
         sigma = (z * z) * 1.0 / (f_px * real_w)
         return (z, sigma)
 
+    def floor_range(self, target: str, *, plane_below_m: float,
+                    camera: str | None = None, pitch_deg: float = 0.0,
+                    plane_sigma_m: float = 0.0, stale_after: float = 1.0):
+        """Metres to a target standing on (or hanging from) a known plane.
+
+        Returns `(range_m, sigma_m)` like `range_to`, or None. Needs NO prop
+        width: the ray through the box's foot meets the floor at one point.
+        `plane_below_m` = floor depth under the target minus the camera's
+        depth (positive); pass a negative value for a surface-hung target and
+        its TOP edge is used instead. Use when `range_to` has nothing to say --
+        unknown width, or a box cut by the frame side -- and take whichever
+        sigma is smaller when both answer. Detail and failure modes:
+        `duburi_localization.floor_plane`.
+
+        ⛔ A box touching the frame edge on the side we read is REFUSED: the
+        foot is outside the image and the box edge is not the foot, which would
+        return a confident range to the frame border.
+        """
+        from duburi_localization.floor_plane import intersect
+
+        if isinstance(target, ClassRef):
+            target = target.class_name
+        cam = camera or self.camera
+        self._subscribe_detections(cam)
+        self._pump_detections(cam)
+        name = str(target).strip().lower()
+        boxes = [r for r in self._records(cam, stale_after) if r[0] == name]
+        if not boxes:
+            return None
+        _, cx, cy, w, h, _ = max(boxes, key=lambda r: r[3] * r[4])
+        img_w, img_h = self._img_size.get(cam, (0.0, 0.0))
+        img_w, img_h = (img_w or 640.0), (img_h or 480.0)
+        v = cy + h / 2.0 if plane_below_m > 0.0 else cy - h / 2.0
+        if v >= img_h - 2.0 or v <= 2.0:
+            return None
+        f_px = self.focal_px(img_w)
+        hit = intersect(cx, v, fx=f_px, fy=f_px, cx=img_w / 2.0, cy=img_h / 2.0,
+                        plane_below_m=float(plane_below_m),
+                        pitch_deg=float(pitch_deg),
+                        plane_sigma_m=float(plane_sigma_m))
+        return None if hit is None else (hit.range_m, hit.sigma_m)
+
     def fix_from_prop(self, prop: str, *, camera: str | None = None):
         """Pool position from ONE surveyed prop: range and bearing together.
 
