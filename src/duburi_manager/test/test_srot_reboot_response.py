@@ -77,6 +77,9 @@ class _Node:
     def _maybe_print_srot_block(self, tel):
         pass
 
+    def _publish_flare_order(self):
+        pass
+
     def _reapply_srot_config(self):
         """B43: a reboot must also RE-PUSH the config it cleared.
 

@@ -399,6 +399,9 @@ class DuburiMission:
         # Scoreboard: ordered list of (cmd, success, elapsed_s, message)
         self._scoreboard: list[dict] = []
         self._mission_start: float = _time.monotonic()
+        # Wall clock of the same instant: the board's latched flare order is stamped in
+        # wall clock, and an order from before this mission must be refused.
+        self._mission_start_wall: float = _time.time()
         # Eager-subscribe the default camera so DDS discovery completes before
         # the first detected()/where() -- otherwise the first poll false-negates
         # (discovery takes 50-500 ms) and a `while not detected()` loop hangs.
@@ -1215,6 +1218,51 @@ class DuburiMission:
             return None
         h, rx = self._floor_h
         return h if _t.time() - rx <= float(max_age_s) else None
+
+    def flare_order(self, *, timeout: float = 0.0, max_age_s: float = 3.0):
+        """The flare order the operator sent over LoRa this mission, or None.
+
+        Returns a tuple of colour names, e.g. ('red', 'blue', 'yellow'). Blocks up to
+        `timeout` seconds for one to arrive (0 = just look). None when no order has been
+        received, when the manager stopped republishing it more than `max_age_s` ago,
+        or when the board latched it BEFORE this mission started -- a practice order
+        still in the board's RAM must never stand in for this run's.
+
+            order = duburi.flare_order(timeout=45.0)   # hold at the listen station
+            if order is None:
+                ...                                    # no order: bump all, earn 20 each
+        """
+        import json
+        import time as _t
+        from std_msgs.msg import String
+        from rclpy.qos import QoSProfile, DurabilityPolicy
+        node = self.client.node
+        if getattr(self, '_flare_sub', None) is None:
+            self._flare = None
+
+            def _keep(msg):
+                try:
+                    d = json.loads(msg.data)
+                    self._flare = (tuple(d['colours']), float(d['latched_at']), _t.time())
+                except (ValueError, KeyError, TypeError):
+                    pass
+            self._flare_sub = node.create_subscription(
+                String, '/duburi/flare_order', _keep,
+                QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+
+        def _current():
+            if self._flare is None:
+                return None
+            colours, latched_at, rx = self._flare
+            if latched_at < self._mission_start_wall or _t.time() - rx > float(max_age_s):
+                return None
+            return colours
+
+        deadline = _t.monotonic() + float(timeout)
+        rclpy.spin_once(node, timeout_sec=0.0)
+        while _current() is None and _t.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.05)
+        return _current()
 
     def range_to(self, prop_class: str, *, camera: str | None = None,
                  stale_after: float = 1.0):

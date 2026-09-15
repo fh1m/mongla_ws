@@ -404,6 +404,21 @@ class SrotFC(FlightController):
         value, stamp = hit
         return value if (time.time() - stamp) <= max_age_s else None
 
+    def flare_order(self, max_age_s: float = 3.0):
+        """The run order the board latched, or None.
+
+        Returns {'colours': (...), 'nonce': int, 'age_s': float}, where age_s is the
+        board's own count of seconds since the latch. None until all three FLARE_* values
+        are fresh and FLARE_ORD decodes -- the board publishes nothing before an order
+        arrives, so None is the honest "no order", never a default.
+        """
+        colours = sp.flare_order_from_digits(self._named_value('FLARE_ORD', max_age_s))
+        nonce = self._named_value('FLARE_NON', max_age_s)
+        age = self._named_value('FLARE_AGE', max_age_s)
+        if colours is None or nonce is None or age is None:
+            return None
+        return {'colours': colours, 'nonce': int(nonce), 'age_s': float(age)}
+
     def _drain_named(self):
         """Fold the currently-cached NAMED_VALUE_FLOAT into our per-name table.
 
