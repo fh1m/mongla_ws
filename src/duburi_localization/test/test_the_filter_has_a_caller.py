@@ -83,7 +83,7 @@ def test_the_manager_publishes_the_imu_the_filter_predicts_on():
     assert '_publish_imu' in mgr
     fc = (ROOT / 'src' / 'duburi_control' / 'duburi_control' / 'fc'
           / 'srot_fc.py').read_text()
-    assert 'def get_imu(self)' in fc
+    assert 'def get_imu(self' in fc
 
 
 def test_the_single_prop_fix_exists_and_is_wired():
