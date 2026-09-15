@@ -972,6 +972,7 @@ class AUVManagerNode(Node):
         # field is unsigned) and direction lives in the commanded value, so a
         # consumer must not read these as signed velocity.
         self.esc_rpm_publisher = None
+        self.flare_order_publisher = None
         self._leak_latched = False
         self._srot_block_last = 0.0
         self._srot_prev_fields = None
@@ -982,6 +983,16 @@ class AUVManagerNode(Node):
             self._Int32MultiArray = Int32MultiArray
             self.esc_rpm_publisher = self.create_publisher(
                 Int32MultiArray, '/duburi/esc_rpm', 10)
+            # The flare order the operator sent over LoRa (fw comms/flare_order.h).
+            # TRANSIENT_LOCAL so a mission that subscribes late still gets the last one;
+            # the JSON carries latched_at, so a late reader can refuse an old order.
+            from std_msgs.msg import String
+            from rclpy.qos import QoSProfile, DurabilityPolicy
+            self._String = String
+            self.flare_order_publisher = self.create_publisher(
+                String, '/duburi/flare_order',
+                QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+            self._flare_key = None
 
         # HEALTH. 1 Hz, and it only speaks when the vehicle's overall state
         # CHANGES -- a board that logs every second is a board nobody reads,
@@ -1532,6 +1543,31 @@ class AUVManagerNode(Node):
     def heartbeat_tick(self):
         self.pixhawk.send_heartbeat()
 
+    def _publish_flare_order(self) -> None:
+        """Republish the board's latched flare order, if it has one.
+
+        Nothing is published until an order exists; a mission reads silence as "no
+        order", never a default. latched_at is host wall-clock, derived from the board's
+        own FLARE_AGE, so a consumer can refuse an order from before its mission started.
+        """
+        if self.flare_order_publisher is None:
+            return
+        order = self.fc.flare_order()
+        if order is None:
+            return
+        import json
+        latched_at = time.time() - order['age_s']
+        msg = self._String()
+        msg.data = json.dumps({'colours': list(order['colours']),
+                               'nonce': order['nonce'], 'latched_at': latched_at})
+        self.flare_order_publisher.publish(msg)
+        key = (order['colours'], order['nonce'])
+        if key != self._flare_key:
+            self._flare_key = key
+            self.get_logger().info(
+                f"[ORDER] flare order {'-'.join(order['colours'])} "
+                f"nonce {order['nonce']} (latched {order['age_s']:.1f} s ago)")
+
     def _verify_extnav_params(self) -> None:
         """Confirm ArduSub will actually fuse the ATT_POS_MOCAP yaw we stream.
 
@@ -2033,6 +2069,7 @@ class AUVManagerNode(Node):
             msg = self._Int32MultiArray()
             msg.data = [int(r) for r in tel.rpm]
             self.esc_rpm_publisher.publish(msg)
+        self._publish_flare_order()
 
         # LEAK is edge-latched, not spammed: the board streams it as a
         # NAMED_VALUE_FLOAT and this tick runs at 2 Hz, so an un-latched log would

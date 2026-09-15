@@ -18,6 +18,8 @@ References (all under Mongla_others/srot-control-board/):
 
 from __future__ import annotations
 
+import re
+
 # ---------------------------------------------------------------------- #
 #  Link identity (JETSON_COMMS.md §1)                                     #
 # ---------------------------------------------------------------------- #
@@ -102,6 +104,68 @@ CMD_USER_2    = 31011      # pitch spin (stunt)
 CMD_USER_3    = 31012      # roll spin (stunt)
 CMD_USER_4    = 31013      # pattern
 CMD_USER_5    = 31014      # autotune start
+
+# MAV_CMD_SROT_FLARE_ORDER -- an ordered colour sequence latched in the board's RAM
+# (fw src/comms/flare_order.h). The operator sends it through the LoRa ground station
+# during a run (SAUVC Task 4: the order is told to the team after Navigation). p1..p4 are
+# colour codes per position, 0 ends the sequence; p7 is a nonce. The board reports the
+# latch back as NAMED_VALUE_FLOAT FLARE_ORD (packed digits, position 1 most significant),
+# FLARE_NON and FLARE_AGE, and publishes nothing named FLARE_* until an order arrives.
+CMD_SROT_FLARE_ORDER = 31020
+FLARE_MAX_SLOTS = 4
+# The ONE colour table. The board stores digits only, so adding a colour is host-only.
+FLARE_COLOURS = {'red': 1, 'blue': 2, 'yellow': 3, 'green': 4, 'orange': 5,
+                 'white': 6, 'black': 7, 'purple': 8, 'pink': 9}
+FLARE_LETTERS = {'R': 'red', 'B': 'blue', 'Y': 'yellow', 'G': 'green',
+                 'O': 'orange', 'W': 'white'}
+
+
+def flare_order_params(colours, nonce: int) -> list:
+    """COMMAND_LONG params for an order; raises ValueError on anything the board refuses.
+
+    Mirrors fw flare_order::pack(): 1..FLARE_MAX_SLOTS known colours, no repeats (a
+    repeat is an operator typo, never a real order), nonce an integer in 0..65535.
+    """
+    names = [str(c).strip().lower() for c in colours]
+    if not 1 <= len(names) <= FLARE_MAX_SLOTS:
+        raise ValueError(f'an order has 1..{FLARE_MAX_SLOTS} colours, got {len(names)}')
+    unknown = [n for n in names if n not in FLARE_COLOURS]
+    if unknown:
+        raise ValueError(f'unknown colour(s) {unknown}; known: {sorted(FLARE_COLOURS)}')
+    if len(set(names)) != len(names):
+        raise ValueError(f'repeated colour in {names}')
+    if not (isinstance(nonce, int) and 0 <= nonce <= 65535):
+        raise ValueError(f'nonce must be an int in 0..65535, got {nonce!r}')
+    codes = [float(FLARE_COLOURS[n]) for n in names]
+    return codes + [0.0] * (FLARE_MAX_SLOTS - len(codes)) + [0.0, 0.0, float(nonce)]
+
+
+def flare_order_from_digits(value):
+    """FLARE_ORD's packed digits -> tuple of colour names, or None if it is not an order."""
+    if value is None or value != value or value <= 0 or value != int(value):
+        return None
+    by_code = {code: name for name, code in FLARE_COLOURS.items()}
+    digits = str(int(value))
+    if len(digits) > FLARE_MAX_SLOTS or len(set(digits)) != len(digits):
+        return None
+    try:
+        return tuple(by_code[int(d)] for d in digits)
+    except KeyError:
+        return None
+
+
+def parse_flare_order(text: str) -> tuple:
+    """Operator text -> colour names. Accepts 'R-B-Y', 'RBY', 'red,blue,yellow'."""
+    tokens = [t for t in re.split(r'[\s,\-/>]+', text.strip()) if t]
+    if len(tokens) == 1 and len(tokens[0]) > 1 and tokens[0].isupper():
+        tokens = list(tokens[0])
+    out = []
+    for t in tokens:
+        name = FLARE_LETTERS.get(t.upper()) if len(t) == 1 else t.lower()
+        if name is None:
+            raise ValueError(f'unknown colour letter {t!r}; letters: {FLARE_LETTERS}')
+        out.append(name)
+    return tuple(out)
 
 # MAV_CMD_DO_MOTOR_TEST -- fully implemented on the board and unused by us until
 # now. Standard ArduPilot semantics: p1 = motor (1-BASED), p2 = throttle type
