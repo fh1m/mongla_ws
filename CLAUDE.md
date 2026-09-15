@@ -771,8 +771,11 @@ ros2 run duburi_sim_bringup duburi_sim lab
 > are not "new" keys, so fired shots reported `NO MODEL`). Bins stay **5/5**.
 >
 > **SUNLIGHT: MOVING CAUSTICS AND SURFACE GLARE — and the engine question,
-> answered with numbers.** Both competitions run in **outdoor pools under direct
-> sun**, and the sim had neither. `underwater_fx` gained `SunlightField` and
+> answered with numbers.** RoboSub runs in an **outdoor pool under direct sun**
+> (verified in 2025 downward footage, heavy caustics). SAUVC is **not settled**: the 2026
+> rulebook says "indoor swimming pool (25m x 16m)", while earlier SAUVC write-ups place the
+> finals in Singapore Polytechnic's outdoor Olympic pool. Confirm the venue before tuning for
+> it. The sim had neither caustics nor glare. `underwater_fx` gained `SunlightField` and
 > `SurfaceGlare`, on by default via the lighting presets (clear 0.70/0.45,
 > competition 0.50/0.35, murky 0.22/0.15 — murky water scatters the net out).
 > **Caustics are WORLD-ANCHORED**, sampled at the world position each pixel
