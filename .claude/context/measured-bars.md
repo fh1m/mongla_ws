@@ -2754,7 +2754,7 @@ real-data threshold yet. QUEUED; it needs downward footage in sun over a plain f
 **Detector:** top-hat(9x9) mean / frame mean, one frame every 5 s:
 caustic-free (Mirpur indoor x3, final_run x5) max **0.051**; RoboSub downward in sun
 min **0.090**, up to 0.21. Threshold **0.07**. RoboSub FORWARD clips read 0.04-0.06, so
-the threshold is for the downward camera only. Cost 1.24 ms per 640x480 on the dev box,
+the threshold is for the downward camera only. Cost 1.24 ms (dev) and 4.73 ms (Pi) per 640x480,
 once per anchor.
 **Rejected:** grey opening (5 or 9 px) is worse than erosion at full strength (6.93 / 3.62 px on
 tiles), because opening restores the dark gaps between filaments. Black-hat energy rose
