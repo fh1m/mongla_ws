@@ -2729,3 +2729,33 @@ hull station-keeping against a current is commanded still and is not.
 orphaned manager held `/dev/ttyUSB0` and kept publishing the pre-attitude
 message format, so new code read as broken while never having run. Same family
 as the orphaned trackers: `ros2 run`'s child outlives its parent.
+
+## Sun caustics on the floor: flow tracks the waves (2026-09-15, real archive)
+
+**Harness:** REAL caustics (RoboSub 2025 downward `robosub/clips/octagon/octagon_1.mp4`,
+58-62 s, a plain-concrete crop, normalised by a 25 px blur) multiplied over three REAL
+floors (`final_run/bin.mkv`, `octagon_Bottom.mkv`, `Salom_red.mkv`) moved by a KNOWN
+13.4 px baseline (B = 6 frames). 27 pairs per row, the production `detect_corners` + LK +
+`robust_flow`.
+
+| floor | raw | erode 3 | erode 5 | erode 7 | no caustics |
+|---|---|---|---|---|---|
+| tiles | 11.19 px | 2.40 | 0.18 | **0.09** | 0.000 |
+| octagon mat | 1.01 | 0.22 | 0.14 | **0.11** | 0.000 |
+| slalom floor | 13.31 | 12.82 | 12.86 | 12.47 | 0.000 |
+| plain (synthetic) | 13.13 | 13.48 | 13.07 | 14.10 | refuses |
+
+**Zero refusals in every caustic row.** Shipped: grey erosion 7x7, applied per anchor only
+when the frame is caustic. **NOT fixed:** a floor with no dark texture of its own (slalom,
+plain) still reports the waves. Patch NCC after erosion separated those on the composites
+(0.41-0.42 bad vs 0.52-0.61 good) but real caustic clips read 0.87-0.96, so there is no
+real-data threshold yet. QUEUED; it needs downward footage in sun over a plain floor.
+
+**Detector:** top-hat(9x9) mean / frame mean, one frame every 5 s:
+caustic-free (Mirpur indoor x3, final_run x5) max **0.051**; RoboSub downward in sun
+min **0.090**, up to 0.21. Threshold **0.07**. RoboSub FORWARD clips read 0.04-0.06, so
+the threshold is for the downward camera only. Cost 1.24 ms per 640x480 on the dev box,
+once per anchor.
+**Rejected:** grey opening (5 or 9 px) is worse than erosion at full strength (6.93 / 3.62 px on
+tiles), because opening restores the dark gaps between filaments. Black-hat energy rose
+with caustics too, so it cannot flag a textureless floor.

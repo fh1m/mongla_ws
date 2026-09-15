@@ -59,7 +59,8 @@ from duburi_vision.flow.flow_timing import (
     TimeOffset, exposure_offset_s, interval_midpoint,
 )
 from duburi_vision.flow.flow_math import (
-    DistanceAccumulator, HeightFromDivergence, Intrinsics, detect_corners,
+    CAUSTIC_TOPHAT_MAX, DistanceAccumulator, HeightFromDivergence, Intrinsics,
+    caustic_score, detect_corners, suppress_caustics,
     flow_dispersion, forward_backward_error,
     RefractiveRectifier, height_above_floor, integrate_rate, interp_rate,
     robust_flow,
@@ -735,8 +736,11 @@ class FlowVelocityNode(Node):
             self._anchor(gray, t)
             return
 
+        # The regime is the ANCHOR's: both images of a pair go through the same
+        # filter, or LK compares an eroded patch against a raw one.
+        track = suppress_caustics(gray) if getattr(self, '_anchor_caustic', False) else gray
         nxt, status, _err = cv2.calcOpticalFlowPyrLK(
-            self._anchor_gray, gray, self._anchor_pts, None, **_LK_PARAMS)
+            self._anchor_gray, track, self._anchor_pts, None, **_LK_PARAMS)
 
         flow = robust_flow(self._anchor_pts, nxt, status,
                            min_tracks=_MIN_TRACKS)
@@ -814,7 +818,7 @@ class FlowVelocityNode(Node):
         # reports status=1, returning a clean multiple of the tile pitch --
         # indistinguishable from a correct match by residual or status alone.
         if self._fb_px > 0.0 and nxt is not None and status is not None:
-            fb = forward_backward_error(self._anchor_gray, gray,
+            fb = forward_backward_error(self._anchor_gray, track,
                                         self._anchor_pts, nxt, _LK_PARAMS)
             if fb is not None:
                 st = np.asarray(status).reshape(-1).astype(bool)
@@ -906,6 +910,18 @@ class FlowVelocityNode(Node):
             self._refuse('non-positive baseline')
 
     def _anchor(self, gray, t) -> None:
+        # Sun caustics: decided once per anchor (see flow_math.CAUSTIC_*).
+        score = caustic_score(gray)
+        caustic = score > CAUSTIC_TOPHAT_MAX
+        if caustic != getattr(self, '_anchor_caustic', False):
+            self.get_logger().info(
+                f'[FLOW ] sun caustics {"ON" if caustic else "OFF"} '
+                f'(score {score:.3f} vs {CAUSTIC_TOPHAT_MAX}): tracking the '
+                f'{"ERODED" if caustic else "raw"} floor')
+        self._anchor_caustic = caustic
+        self._caustic_score = score
+        if caustic:
+            gray = suppress_caustics(gray)
         self._anchor_gray = gray
         self._anchor_pts = self._bucketed_corners(gray)
         self._anchor_t = t
