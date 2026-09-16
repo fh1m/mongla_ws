@@ -109,13 +109,13 @@ re-ask.
 
 | # | Item | State | Note |
 |---|---|---|---|
-| L1 | `message_filters` time-synced pairing | OPEN (0 uses) | stamps are now correct on every board input, so pairing is meaningful |
+| L1 | Time-correct fusion | **DONE 2026-09-17 (opt-in)** | the defect was stamp MISUSE, not missing synchronizers: flow/depth/fix/heading were applied on arrival. `retro.Retrodictor` + `retrodict:=true`; fixes carry the detection capture stamp; `pose_fuse` pairs the heading in effect at capture. Pi cost not yet measured |
 | L2 | Battery voltage as a demand-model input | OPEN | `command_velocity` uses demand only |
 | L3 | DeepVL evaluation | OPEN, wants G2 | only a docstring mention |
 | L4 | Magnetometer / MAG_CAL consumers | OPEN | mag-free by design; landmark anchor + tile grid bound drift instead |
 | L5 | Course priors with measured positions | **DATA OPEN** | only `courses/robosub26.yaml` exists and **every prop position is `None`**; **no SAUVC course file exists**, so `fix_position` / `fix_from_prop` cannot succeed anywhere yet |
 | L6 | `floor_range` validated at taped range in water | OPEN (measurement) | `rounds/round17-range-without-size.md` |
-| L7 | Rewind-and-replay lag correction | OPEN | stamps are right; no replay |
+| L7 | Rewind-and-replay lag correction | **DONE 2026-09-17 (opt-in)** | merged into L1: every filter event buffered with its prior snapshot, late ones inserted and the tail replayed |
 
 ### Perception
 
@@ -258,6 +258,7 @@ declared but not forwarded (a knob wired to nothing).
 | `zupt` | `true` | zero-velocity updates when still | localization |
 | `demand_aid` | `true` | velocity from commanded demand on a blank floor | localization |
 | `use_yaw` | `false` | fuse the landmark heading anchor | localization |
+| `retrodict` | `false` | apply flow/depth/fixes at their own stamp, replaying later events (dev: 0.8 ms per sample 60 ms late) | localization |
 | `caustics` | `true` | sun-caustic erosion + bare-floor refusal | flow `caustic_suppression` |
 | `lane_lines` | `false` | lane-line heading (mod 180) yaw bound | flow |
 | `tile_m` | `0.0` | tile grating height + yaw bound (0 = off; the venue's tile size = on) | flow |

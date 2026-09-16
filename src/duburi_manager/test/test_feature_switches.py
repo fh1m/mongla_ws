@@ -24,6 +24,7 @@ SWITCHES = {
     'zupt':            ('duburi_localization/duburi_localization/localization_node.py', 'zupt', _BRINGUP),
     'demand_aid':      ('duburi_localization/duburi_localization/localization_node.py', 'demand_aid', _BRINGUP),
     'use_yaw':         ('duburi_localization/duburi_localization/localization_node.py', 'use_yaw', _BRINGUP),
+    'retrodict':       ('duburi_localization/duburi_localization/localization_node.py', 'retrodict', _BRINGUP),
     'caustics':        ('duburi_vision/duburi_vision/flow/flow_node.py', 'caustic_suppression', _VISION_PI),
     'lane_lines':      ('duburi_vision/duburi_vision/flow/flow_node.py', 'lane_lines', _VISION_PI),
     'tile_m':          ('duburi_vision/duburi_vision/flow/flow_node.py', 'tile_m', _VISION_PI),
