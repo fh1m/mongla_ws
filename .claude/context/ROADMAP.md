@@ -103,7 +103,7 @@ re-ask.
 | C3 | Altitude HOLD verb (height above floor as a Z mode) | OPEN | height is published (`floor_height`, `duburi.floor_height()`); holding it needs G1 |
 | C4 | Near-surface gain set | OPEN | no code |
 | C5 | Autotune driven from a mission | OPEN | `SrotFC.autotune` exists for the operator only |
-| C6 | Goal id on goal/feedback/result; time-margin signal to missions | OPEN | no `trajectory_id`; see M3 |
+| C6 | Goal id on goal/feedback/result; time-margin signal to missions | **DONE 2026-09-17** | scoreboard rows carry the first 8 hex of the action goal UUID, the manager logs the same on `[ACT]`; time margin = `duburi.task(deadline_s=)` / budget `remaining_s()` |
 
 ### Localization
 
@@ -136,7 +136,7 @@ re-ask.
 | M1 | Port missions + FSM off Pixhawk-era verbs | OPEN | operator ruling: no fallback audit until they run on srot |
 | M2 | SAUVC Task 4: listen station → `duburi.flare_order(timeout=)` → bump in order, else bump all | OPEN | host API and operator tool built (`09cf744`); needs H1 and #24 |
 | M3 | Use `run_budget` in a real mission | OPEN (API done) | `duburi.use_budget()` / `duburi.worth_attempting()` wired 2026-09-16, opt-in; no mission calls it yet (missions are Pixhawk-era, M1) |
-| M4 | Score-aware abandonment mid-task | OPEN | no code |
+| M4 | Score-aware abandonment mid-task | **DONE 2026-09-17 (opt-in)** | `with duburi.task(name, deadline_s=)` cancels the goal in flight at the deadline and raises `TaskAbandoned` for the fallback; defaults to what the budget has left; safety verbs never blocked |
 | M5 | Scorecard records the perception state behind each verb | **DONE 2026-09-17** | each vision row carries `vision: {target, camera, outcome, saw_target, x_px, y_px, fill, fired, model}` |
 | M6 | Real-pool auto-labelling | OPEN | new work; Bumblebee's is dead code |
 
@@ -278,6 +278,7 @@ declared but not forwarded (a knob wired to nothing).
 | Call | Adds |
 |---|---|
 | `use_budget(total_s, reserve_s=)` + `worth_attempting(...)` | run clock, full/fallback/skip |
+| `with task(name, deadline_s=)` | cancel the goal in flight at the deadline, raise `TaskAbandoned` |
 | `set_model(name, confirm_s=N)` | wait for the model to be live, drop pre-switch detections |
 | `active_models(cam)` / `outline(cls)` | model provenance / polygon + OBB angle |
 | `flare_order(timeout=)` | SAUVC order received over LoRa this mission |
