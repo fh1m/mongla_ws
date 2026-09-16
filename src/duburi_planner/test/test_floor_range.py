@@ -81,13 +81,56 @@ def test_a_nose_up_hull_is_corrected_by_passing_negative_pitch():
     assert abs(level[0] - 3.0) > 0.2
 
 
-def test_the_calibrated_principal_point_is_used_not_the_frame_centre():
-    # The forward camera's cy sits 70 px above centre at 720 p. A foot placed
-    # for THAT principal point must range true; the frame-centre reading would
-    # be ~6 deg of pitch off.
-    m = _m([], size=(1280.0, 720.0))
-    m._cam_k = {'forward': (F, F, 675.4, 290.3)}
-    foot_v = 290.3 + F * 1.0 / 3.0
-    m._records.return_value = [('drum', 675.4, foot_v - 30.0, 40.0, 60.0, 0.8)]
-    got = DuburiMission.floor_range(m, 'drum', plane_below_m=1.0, pitch_deg=0.0)
-    assert got[0] == pytest.approx(3.0, rel=1e-6)
+def _through_port(X, Y, Z, fx, fy, cx, cy, n=1.333):
+    """Pixel of a WATER point seen through a flat port (ray trace, not the code)."""
+    import math
+    rw = math.hypot(X / Z, Y / Z)
+    if rw == 0.0:
+        return cx, cy
+    ra = math.tan(math.asin(n * math.sin(math.atan(rw))))
+    return cx + fx * (X / Z) * ra / rw, cy + fy * (Y / Z) * ra / rw
+
+
+FANTECH = (851.23, 858.15, 675.42, 290.28)     # pi_forward_1280x720.json, air
+
+
+def test_floor_range_is_true_through_a_flat_port_off_centre():
+    """A drum 3.0 m ahead and 1.0 m right, its foot 1.0 m below the camera, seen
+    by the forward camera through the port. Ray-traced pixels; the answer must be
+    the true horizontal range, not the range of a pinhole with one focal."""
+    import math
+    fx, fy, cx, cy = FANTECH
+    fwd, right, below = 3.0, 1.0, 1.0
+    u, v = _through_port(right, below, fwd, fx, fy, cx, cy)
+    m = _m([('drum', u, v - 30.0, 40.0, 60.0, 0.8)], size=(1280.0, 720.0))
+    m._cam_k = {'forward': FANTECH}
+    got = DuburiMission.floor_range(m, 'drum', plane_below_m=below, pitch_deg=0.0)
+    assert got[0] == pytest.approx(math.hypot(fwd, right), rel=0.005)
+
+
+def test_range_to_is_true_through_a_flat_port_off_centre(monkeypatch):
+    """A 1.5 m gate at 4.0 m, 1.2 m off-axis: edges ray-traced through the port."""
+    import duburi_vision.target_geometry as tg
+    monkeypatch.setattr(tg, 'width_for', lambda name: 1.5)
+    fx, fy, cx, cy = FANTECH
+    Z, X = 4.0, 1.2
+    ul, v = _through_port(X - 0.75, 0.0, Z, fx, fy, cx, cy)
+    ur, _ = _through_port(X + 0.75, 0.0, Z, fx, fy, cx, cy)
+    m = _m([('gate', (ul + ur) / 2.0, v, ur - ul, 200.0, 0.9)], size=(1280.0, 720.0))
+    m._cam_k = {'forward': FANTECH}
+    got = DuburiMission.range_to(m, 'gate')
+    assert got[0] == pytest.approx(Z, rel=0.01)
+
+
+def test_air_uses_the_calibration_as_a_plain_pinhole():
+    """On the bench (medium=air) nothing is refracted: a pinhole-projected foot
+    must range true with the same K, or a bench check would read ~25 % short."""
+    import math
+    fx, fy, cx, cy = FANTECH
+    fwd, right, below = 3.0, 1.0, 1.0
+    u, v = cx + fx * right / fwd, cy + fy * below / fwd
+    m = _m([('drum', u, v - 30.0, 40.0, 60.0, 0.8)], size=(1280.0, 720.0))
+    m._cam_k = {'forward': FANTECH}
+    m.medium = 'air'
+    got = DuburiMission.floor_range(m, 'drum', plane_below_m=below, pitch_deg=0.0)
+    assert got[0] == pytest.approx(math.hypot(fwd, right), rel=1e-6)
