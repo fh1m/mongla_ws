@@ -113,7 +113,7 @@ re-ask.
 | L2 | Battery voltage as a demand-model input | OPEN | `command_velocity` uses demand only |
 | L3 | DeepVL evaluation | OPEN, wants G2 | only a docstring mention |
 | L4 | Magnetometer / MAG_CAL consumers | OPEN | mag-free by design; landmark anchor + tile grid bound drift instead |
-| L5 | Course priors with measured positions | **DATA OPEN** | only `courses/robosub26.yaml` exists and **every prop position is `None`**; **no SAUVC course file exists**, so `fix_position` / `fix_from_prop` cannot succeed anywhere yet |
+| L5 | Course priors with measured positions | **TOOLING DONE 2026-09-17; DATA OPEN** | `courses/sauvc26.yaml` template (classes, rulebook dims, positions unset -- the rulebook gives zones, not points); `ros2 run duburi_localization course_survey --course sauvc26 --prop final_gate --x .. --y .. --bearing ..` writes the deck copy (`measured: true`) the loader reads first. Positions still need measuring at the venue |
 | L6 | `floor_range` validated at taped range in water | OPEN (measurement) | `rounds/round17-range-without-size.md` |
 | L7 | Rewind-and-replay lag correction | **DONE 2026-09-17 (opt-in)** | merged into L1: every filter event buffered with its prior snapshot, late ones inserted and the tail replayed |
 

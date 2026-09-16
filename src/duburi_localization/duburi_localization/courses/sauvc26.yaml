@@ -1,0 +1,80 @@
+# SAUVC 2026 course prior -- WHERE the props are, not what they look like.
+#
+# ⛔ EVERY POSITION HERE IS UNSET, AND THAT IS THE SHIPPED STATE.
+# The rulebook gives ZONES, not points: the gate "anywhere on a horizontal line
+# ... approximately 16m away from the starting zone", the orange flare "anywhere
+# in a rectangular zone 4m-8m from side of the arena", the bump flares
+# "anywhere" in the 8-16 m band, the drum order unstated. The sim course
+# (`sim/.../courses/sauvc26_final.yaml`) is "one legal arrangement", not the
+# venue. So this file ships structure, classes and dimensions only.
+#
+# Fill it in AT THE VENUE with the survey tool, no rebuild:
+#
+#     ros2 run duburi_localization course_survey --course sauvc26 \
+#         --prop final_gate --x 16.0 --y 0.0 --bearing 0
+#
+# which writes ~/.duburi/courses/sauvc26.yaml (or $DUBURI_COURSE_DIR) with
+# measured: true. The loader reads that copy first.
+#
+# ⛔ FRAME, STATED ONCE. Origin: the centre of the starting zone. +x runs from
+# the starting zone toward the gate and is bearing 0. +y is to the right of it
+# and is bearing 90. `depth_m` is NEGATIVE below the surface. `bearing_deg` is
+# the compass direction the prop's FACE points.
+#
+# Classes are those of the SAUVC detection model (`sauvc_sim` sidecar). The
+# pool is 25 x 16 m and 1.6 m deep at the centre, 1.2 m at the ends.
+
+course: sauvc26
+frame: "pool: origin starting-zone centre, +x toward the gate (bearing 0), +y right (bearing 90)"
+
+props:
+  starting_zone:
+    detect_class: starting_zone
+    measured: false
+    note: "1.40 x 1.40 m, marked on the water surface. The origin of this frame."
+
+  qual_gate:
+    detect_class: qual_gate
+    measured: false
+    note: "Qualification gate, 1.50 m wide."
+
+  orange_flare:
+    detect_class: orange_flare
+    measured: false
+    note: "0.15 m diameter, floor to surface. Touching it ABORTS the attempt.
+           Rulebook zone 4-8 m from the starting side, before the gate."
+
+  final_gate:
+    detect_class: final_gate
+    measured: false
+    note: "1.50 m wide x 1.00 m high, ~16 m from the starting zone. bearing_deg
+           = the direction a vehicle passes through it; set it and the gate is
+           this course's heading anchor."
+
+  flare_red:
+    detect_class: flare_red
+    measured: false
+    note: "Bump flare, 0.80 m tall, 0.016 m pole with a golf ball on top.
+           Anywhere in the 8-16 m band. Detectable only within ~0.9 m on the
+           forward camera (16 mm against a 10 px floor) -- position matters."
+
+  flare_yellow:
+    detect_class: flare_yellow
+    measured: false
+    note: "Bump flare, as flare_red."
+
+  flare_blue:
+    detect_class: flare_blue
+    measured: false
+    note: "Bump flare, as flare_red."
+
+  target_mat:
+    detect_class: target_mat
+    measured: false
+    note: "6.0 x 2.2 m mat carrying four drums at 1.6 m pitch."
+
+  drum_red_pinger:
+    detect_class: drum_red_pinger
+    measured: false
+    note: "0.60 m diameter x 0.30 m. The pinger drum (50 points) is separable
+           only acoustically on the real course (45 kHz)."

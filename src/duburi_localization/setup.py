@@ -26,6 +26,7 @@ setup(
             'localization_node = duburi_localization.localization_node:main',
             'pnp_node       = duburi_localization.pnp_node:main',
             'pose_fuse_node = duburi_localization.pose_fuse_node:main',
+            'course_survey  = duburi_localization.course_survey:main',
         ],
     },
 )
