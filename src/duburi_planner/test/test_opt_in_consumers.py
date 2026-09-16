@@ -183,3 +183,29 @@ def test_set_model_without_confirm_never_waits_or_flushes():
     DuburiMission.set_model(m, 'gate')
     m.active_models.assert_not_called()
     m._confirm_model.assert_not_called()
+
+
+def test_side_on_with_an_outline_uses_the_symbols_visible_pixels():
+    """A placard half occluded: its BOX straddles the gate midline ('centre'),
+    its visible outline sits right of it."""
+    from duburi_planner.duburi_dsl import _outline_view
+    from duburi_vision.identity import identify
+    import duburi_planner.duburi_dsl as d
+    Outline = SimpleNamespace
+    o = Outline(class_name='rescue', score=0.9, angle_deg=0, area_px=100,
+                points=[(55, 40), (70, 40), (70, 60), (55, 60)])
+    view = _outline_view(o)
+    gate = d._DetView(('gate', 50.0, 50.0, 100.0, 100.0, 0.9))
+    box = d._DetView(('rescue', 50.0, 50.0, 40.0, 20.0, 0.9))     # centred box
+    assert identify(gate, [box]).side == 'centre'
+    assert identify(gate, [view]).side == 'right'
+
+
+def test_side_on_without_the_flag_never_reads_outlines():
+    m = MagicMock()
+    m._records.return_value = [('gate', 50.0, 50.0, 100.0, 100.0, 0.9),
+                               ('rescue', 70.0, 50.0, 20.0, 20.0, 0.9)]
+    m.camera = 'forward'
+    del m._resolve_camera
+    assert DuburiMission.side_on(m, 'rescue') == 'right'
+    m.outline.assert_not_called()

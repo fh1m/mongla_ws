@@ -123,7 +123,7 @@ re-ask.
 |---|---|---|---|
 | P1 | Hailo model LIFECYCLE release between tasks | OPEN (no `LifecycleNode`) | the resident-group SRAM ceiling; Bumblebee `yolo_ros_trt` pattern |
 | P2 | Consumers for published-but-unread topics | **DONE 2026-09-16** | `duburi.outline(cls)` reads `*/contours` (polygon, area, OBB angle); `duburi.active_models(cam)` + `set_model(..., confirm_s=)` read `*/vision_info`. Both opt-in (subscribe on first call) |
-| P3 | OBB angle / class posterior on the wire | OPEN | contours yes, posterior no |
+| P3 | OBB angle / class posterior on the wire | **CLOSED 2026-09-17** | OBB angle already on `contours` (`duburi.outline().angle_deg`). Posterior: detection HEFs run NMS on-chip per class, so no distribution survives to send. Masks now used in `identity` (symbol pixels vs structure BOX -- a gate's mask is its pipes); `side_on(..., use_outline=True)` opt-in |
 | P4 | Monocular depth on the vehicle launch | OPEN | node only in `vision.launch.py` |
 | P5 | Verify the actuation by looking | **PARTIAL 2026-09-17** | `VisionResult.fired` = board outcome per channel (`ch1:FIRED`/`none`/`pending`); opt-in `align(evidence=True)` / `duburi.save_evidence()` writes the annotated frame to the run folder. An automatic hit/miss judgement still needs a model class for the shot itself |
 | P6 | Per-class observed detection range from real class widths | OPEN (data) | by-product of the rejected water-clarity study |
@@ -281,6 +281,7 @@ declared but not forwarded (a knob wired to nothing).
 | `with task(name, deadline_s=)` | cancel the goal in flight at the deadline, raise `TaskAbandoned` |
 | `set_model(name, confirm_s=N)` | wait for the model to be live, drop pre-switch detections |
 | `active_models(cam)` / `outline(cls)` | model provenance / polygon + OBB angle |
+| `side_on(sym, use_outline=True)` | side of the structure from the symbol's segmentation outline, not its box |
 | `flare_order(timeout=)` | SAUVC order received over LoRa this mission |
 | `floor_height()` / `floor_range(...)` / `range_to(...)` | metric range from the floor and the props (rectified) |
 | `anchor_on(prop)` / `fix_position()` / `fix_from_prop(prop)` | absolute heading and pool fixes (need a course with positions, L5) |
