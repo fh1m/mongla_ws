@@ -38,6 +38,25 @@ class MoveFailed(RuntimeError):
     (timeout, mode rejected, exception, ...)."""
 
 
+class TaskAbandoned(RuntimeError):
+    """A `duburi.task(...)` deadline passed: the in-flight goal was cancelled."""
+
+
+# Verbs a passed task deadline never blocks: stopping, surfacing and releasing
+# the vehicle must always be sendable, especially from the fallback that runs
+# BECAUSE a task was abandoned.
+_DEADLINE_EXEMPT = frozenset({'disarm', 'stop', 'surface', 'unlock_heading',
+                              'mission_reset', 'pause', 'set_mode'})
+
+
+def goal_uuid_hex(goal_handle) -> str:
+    """The action goal's UUID as hex, or '' -- joins a scorecard row to manager logs."""
+    try:
+        return bytes(bytearray(goal_handle.goal_id.uuid)).hex()
+    except Exception:                   # noqa: BLE001
+        return ''
+
+
 class MoveTimeout(MoveFailed):
     """The client's OWN deadline elapsed before the server returned a result
     (server crashed/wedged, or a goal overran its limit). The goal is
@@ -78,6 +97,9 @@ class DuburiClient:
         # Search-interrupt state (armed only around a vision-verb fallback):
         self._interrupt_check   = None   # callable() -> bool; polled each spin slice
         self._interrupt_tripped = False  # set once the predicate fires -> short-circuit
+        # OPT-IN task deadline (monotonic seconds), set by `duburi.task(...)`.
+        self._task_deadline = None
+        self.last_goal_id = ''
 
     # ------------------------------------------------------------------ #
     #  Deadline helpers                                                   #
@@ -168,6 +190,10 @@ class DuburiClient:
         # tripped flag, which end_search_interrupt() clears before the verb re-enters.
         if self._interrupt_tripped:
             return self._search_interrupted_result(cmd)
+        import time as _t
+        if (self._task_deadline is not None and cmd not in _DEADLINE_EXEMPT
+                and _t.monotonic() >= self._task_deadline):
+            raise TaskAbandoned(f'task deadline passed before "{cmd}" was sent')
 
         goal = Move.Goal()
         goal.cmd = cmd
@@ -199,6 +225,7 @@ class DuburiClient:
             raise MoveRejected(f'Goal "{cmd}" was REJECTED by action server')
 
         self._active_goal_handle = goal_handle
+        self.last_goal_id = goal_uuid_hex(goal_handle)
         try:
             result_future = goal_handle.get_result_async()
             deadline = self._result_deadline(goal)
@@ -208,7 +235,8 @@ class DuburiClient:
             # read) sees the fresh sighting without a second thread. On a trip we
             # return a synthesized result DIRECTLY -- bypassing the success-raise
             # below, since a cancelled goal reports success=False.
-            if self._interrupt_check is not None:
+            if self._interrupt_check is not None or (
+                    self._task_deadline is not None and cmd not in _DEADLINE_EXEMPT):
                 if self._spin_with_interrupt(result_future, goal_handle, deadline):
                     return self._search_interrupted_result(cmd)
                 result = result_future.result().result
@@ -298,6 +326,12 @@ class DuburiClient:
                 return False
             # Predicate reads _det_seen, refreshed by the spin above (single-thread,
             # no nested pump). First True -> cancel + trip.
+            if (self._task_deadline is not None
+                    and time.monotonic() >= self._task_deadline):
+                self._cancel(goal_handle)
+                rclpy.spin_until_future_complete(
+                    self.node, result_future, timeout_sec=_CANCEL_RESOLVE_S)
+                raise TaskAbandoned('task deadline passed mid-goal; goal cancelled')
             if self._interrupt_check is not None and self._interrupt_check():
                 self._interrupt_tripped = True
                 self._cancel(goal_handle)

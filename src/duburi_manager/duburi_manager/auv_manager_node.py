@@ -1275,7 +1275,11 @@ class AUVManagerNode(Node):
             return result
 
         self.command_active = True
-        self.get_logger().info(f'[ACT  ] {cmd} -> EXECUTING')
+        try:
+            gid = bytes(bytearray(goal_handle.goal_id.uuid)).hex()[:8]
+        except Exception:                   # noqa: BLE001 -- a log field only
+            gid = '?'
+        self.get_logger().info(f'[ACT  ] {cmd} -> EXECUTING (goal {gid})')
 
         try:
             with FeedbackPump(self.pixhawk, goal_handle,

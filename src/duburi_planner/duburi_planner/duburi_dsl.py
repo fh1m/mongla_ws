@@ -134,6 +134,7 @@ Tunable live (between runs, no rebuild):
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import subprocess
@@ -151,7 +152,7 @@ from vision_msgs.msg import Detection2DArray
 from .model_context import ClassRef, ModelRegistry
 from .vision_dsl import _VisionDSL  # noqa: F401 -- re-exported; used by DuburiMission
 
-from .client import MoveFailed          # arm() raises this on refusal
+from .client import MoveFailed, TaskAbandoned   # arm() raises MoveFailed; task() raises TaskAbandoned
 
 
 def _format_outcome(cmd: str, result) -> str:
@@ -482,6 +483,9 @@ class DuburiMission:
             'success': bool(getattr(result, 'success', False)),
             'elapsed': round(elapsed, 2),
             'msg':     str(getattr(result, 'message', '')),
+            # First 8 hex of the action goal UUID -- the manager logs the same
+            # 8 on its [ACT] line, so a row can be found in the vehicle log.
+            'goal':    str(getattr(self.client, 'last_goal_id', '') or '')[:8],
         })
         return result
 
@@ -967,6 +971,52 @@ class DuburiMission:
             {'cmd': f'evidence:{tag}', 'success': path is not None,
              'elapsed': 0.0, 'msg': path or f'no image_debug frame from {cam}'})
         return path
+
+    @contextlib.contextmanager
+    def task(self, name: str, *, deadline_s: float | None = None):
+        """Bound a block of verbs by time, and abandon it cleanly when it runs out.
+
+        OPT-IN. When the deadline passes, the goal in flight is CANCELLED (the
+        manager brakes and neutralises as for any cancel) and `TaskAbandoned`
+        is raised out of the block, so the mission takes its fallback::
+
+            try:
+                with duburi.task('torpedo', deadline_s=90):
+                    duburi.vision.align('hole', ...)
+            except TaskAbandoned:
+                duburi.fire(1)                      # blind shot, keep the points
+
+        With no `deadline_s` and a budget on (`use_budget`), the deadline is what
+        the budget has left. With neither, the block only records its outcome.
+        Nested tasks keep the EARLIER deadline. `stop`/`surface`/`disarm`/`pause`
+        are never blocked by a passed deadline.
+        """
+        import time as _t
+        from duburi_planner.client import TaskAbandoned
+        budget = getattr(self, '_budget', None)
+        if deadline_s is None and budget is not None and budget.started:
+            deadline_s = budget.remaining_s()
+        start = _t.monotonic()
+        outer = getattr(self.client, '_task_deadline', None)
+        mine = start + float(deadline_s) if deadline_s is not None else None
+        eff = mine if outer is None else (outer if mine is None else min(outer, mine))
+        self.client._task_deadline = eff
+        outcome = 'done'
+        try:
+            yield
+        except TaskAbandoned:
+            outcome = 'abandoned'
+            self.log.warning(f'[TASK ] {name}: ABANDONED at deadline '
+                             f'({_t.monotonic() - start:.1f} s)')
+            raise
+        except Exception as exc:
+            outcome = f'failed: {exc}'
+            raise
+        finally:
+            self.client._task_deadline = outer
+            self.__dict__.setdefault('_scoreboard', []).append({
+                'cmd': f'task:{name}', 'success': outcome == 'done',
+                'elapsed': round(_t.monotonic() - start, 2), 'msg': outcome})
 
     def use_budget(self, total_s: float = 900.0, *, reserve_s: float = 45.0):
         """Ration the run by the clock. OPT-IN: nothing is rationed until this is called.
