@@ -59,6 +59,25 @@ def _area(box: Sequence[float]) -> float:
     return max(0.0, box[2] - box[0]) * max(0.0, box[3] - box[1])
 
 
+def _mask_pixels(det):
+    """(xs, ys) frame pixels of a detection's mask, or None without a usable mask.
+
+    The mask is a 0/1 array the size of the INTEGER box, anchored at its
+    top-left (`detection/detector.py`).
+    """
+    m = getattr(det, 'mask', None)
+    if m is None:
+        return None
+    try:
+        import numpy as np
+        ys, xs = np.nonzero(np.asarray(m))
+    except Exception:                   # noqa: BLE001 -- a malformed mask is no mask
+        return None
+    if xs.size == 0:
+        return None
+    return xs + int(det.xyxy[0]), ys + int(det.xyxy[1])
+
+
 def overlap_frac(symbol, structure) -> float:
     """Fraction of the SYMBOL that lies inside the structure's box.
 
@@ -66,8 +85,20 @@ def overlap_frac(symbol, structure) -> float:
     between them is tiny however perfectly the placard sits on the gate -- an
     IoU gate would reject every correct pairing. What the question actually is:
     how much of the symbol is on the structure.
+
+    With a symbol MASK the fraction is counted over the symbol's own pixels, not
+    its box: a placard's box includes the water around it, so a symbol at the
+    edge of a structure over-reads as off it. The structure stays a BOX region
+    on purpose -- a gate's mask is its pipes, and a placard hangs in the opening,
+    so intersecting two masks would reject every correct gate pairing.
     """
-    s, t = _xyxy(symbol), _xyxy(structure)
+    t = _xyxy(structure)
+    px = _mask_pixels(symbol)
+    if px is not None:
+        xs, ys = px
+        inside = ((xs >= t[0]) & (xs < t[2]) & (ys >= t[1]) & (ys < t[3])).sum()
+        return float(inside) / float(xs.size)
+    s = _xyxy(symbol)
     ix1, iy1 = max(s[0], t[0]), max(s[1], t[1])
     ix2, iy2 = min(s[2], t[2]), min(s[3], t[3])
     inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
@@ -87,7 +118,10 @@ def side_of(symbol, structure, *, deadband: float = SIDE_DEADBAND) -> tuple:
     half = 0.5 * (t[2] - t[0])
     if half <= 0.0:
         return 'unknown', 0.0
-    cx = 0.5 * (s[0] + s[2])
+    px = _mask_pixels(symbol)
+    # The mask CENTROID when there is one: a symbol half-occluded by a bin wall
+    # keeps a full-width box whose centre is not where the visible symbol is.
+    cx = float(px[0].mean()) if px is not None else 0.5 * (s[0] + s[2])
     offset = (cx - mid) / half
     if abs(offset) < deadband:
         return 'centre', offset

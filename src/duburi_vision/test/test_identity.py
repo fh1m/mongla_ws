@@ -117,3 +117,58 @@ def test_no_structure_is_distinct_from_no_symbol():
     # states and a mission branches differently on them.
     assert pick_structure([_d('rescue', 1, 1, 2, 2)], 'gate') is None
     assert identify(GATE, []).reason != ''
+
+
+# --------------------------------------------------------------------------- #
+#  masks: the symbol's own pixels, the structure's box region                   #
+# --------------------------------------------------------------------------- #
+
+def _masked(name, xyxy, mask, score=0.9):
+    import numpy as np
+    from duburi_vision.detection.detector import Detection
+    return Detection(0, name, score, xyxy, np.asarray(mask, dtype=np.uint8))
+
+
+def test_a_mask_counts_the_symbols_pixels_not_its_box():
+    import numpy as np
+    from duburi_vision.identity import overlap_frac
+    from duburi_vision.detection.detector import Detection
+    gate = Detection(0, 'gate', 0.9, (0, 0, 100, 100))
+    # Box half outside the gate, but the symbol's pixels are all in its left half.
+    m = np.zeros((20, 40), np.uint8)
+    m[:, :20] = 1
+    sym = _masked('rescue', (80, 10, 120, 30), m)
+    box_only = Detection(0, 'rescue', 0.9, (80, 10, 120, 30))
+    assert overlap_frac(box_only, gate) == 0.5
+    assert overlap_frac(sym, gate) == 1.0
+
+
+def test_a_hollow_structure_mask_does_not_reject_a_symbol_in_its_opening():
+    import numpy as np
+    from duburi_vision.identity import overlap_frac
+    ring = np.zeros((100, 100), np.uint8)       # a gate is its pipes
+    ring[:5, :] = ring[:, :5] = ring[:, -5:] = 1
+    gate = _masked('gate', (0, 0, 100, 100), ring)
+    sym = _masked('rescue', (40, 40, 60, 60), np.ones((20, 20), np.uint8))
+    assert overlap_frac(sym, gate) == 1.0
+
+
+def test_the_side_uses_the_visible_symbol_not_its_box():
+    import numpy as np
+    from duburi_vision.identity import side_of
+    from duburi_vision.detection.detector import Detection
+    gate = Detection(0, 'gate', 0.9, (0, 0, 100, 100))
+    m = np.zeros((20, 30), np.uint8)
+    m[:, 20:] = 1                               # visible part is right of the box centre
+    sym = _masked('rescue', (40, 40, 70, 60), m)
+    side, off = side_of(sym, gate)
+    assert side == 'right' and off > 0.10
+
+
+def test_an_empty_mask_falls_back_to_the_box():
+    import numpy as np
+    from duburi_vision.identity import overlap_frac
+    from duburi_vision.detection.detector import Detection
+    gate = Detection(0, 'gate', 0.9, (0, 0, 100, 100))
+    sym = _masked('rescue', (80, 10, 120, 30), np.zeros((20, 40), np.uint8))
+    assert overlap_frac(sym, gate) == 0.5

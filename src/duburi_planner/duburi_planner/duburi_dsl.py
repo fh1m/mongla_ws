@@ -265,13 +265,41 @@ class _DetView:
     geometry module stays free of the DSL's storage choices.
     """
 
-    __slots__ = ('class_name', 'score', 'xyxy')
+    __slots__ = ('class_name', 'score', 'xyxy', 'mask')
 
     def __init__(self, rec):
         cls, cx, cy, w, h, score = rec
         self.class_name = cls
         self.score = float(score)
         self.xyxy = (cx - w * 0.5, cy - h * 0.5, cx + w * 0.5, cy + h * 0.5)
+        self.mask = None
+
+
+def _outline_view(outline):
+    """An `Outline` polygon as a Detection-shaped view with a filled mask.
+
+    The mask is the polygon rasterised at its integer bounding box -- the same
+    anchoring `Detection.mask` uses, so `identity` reads both the same way.
+    None for a degenerate polygon.
+    """
+    import numpy as np
+    pts = np.asarray(outline.points, dtype=np.int32).reshape(-1, 2)
+    if len(pts) < 3:
+        return None
+    x1, y1 = pts.min(axis=0)
+    x2, y2 = pts.max(axis=0)
+    w, h = int(x2 - x1 + 1), int(y2 - y1 + 1)
+    try:
+        import cv2
+        mask = np.zeros((h, w), np.uint8)
+        cv2.fillPoly(mask, [pts - [x1, y1]], 1)
+    except Exception:                   # noqa: BLE001 -- no cv2: box only
+        return None
+    v = _DetView((outline.class_name, (x1 + x2) / 2.0, (y1 + y2) / 2.0,
+                  float(x2 - x1), float(y2 - y1), outline.score))
+    v.xyxy = (float(x1), float(y1), float(x2 + 1), float(y2 + 1))
+    v.mask = mask
+    return v
 
 
 def _eval_detected(records: list, needle: str) -> bool:
@@ -810,7 +838,8 @@ class DuburiMission:
         return label
 
     def side_on(self, symbol: str, *, structure: str = 'gate',
-                camera: str | None = None, stale_after: float = 1.0) -> str:
+                camera: str | None = None, stale_after: float = 1.0,
+                use_outline: bool = False) -> str:
         """Which side OF THE STRUCTURE the symbol is on: left/right/centre.
 
         ⛔ NOT `where()`, AND THE DIFFERENCE DECIDES THE GATE. `where()` answers
@@ -844,7 +873,17 @@ class DuburiMission:
         if struct is None:
             return 'unknown'
         want = str(symbol).strip().lower()
-        got = identify(struct, [d for d in dets if d.class_name == want])
+        symbols = [d for d in dets if d.class_name == want]
+        if use_outline:
+            # OPT-IN: the symbol's segmentation OUTLINE (contours topic) instead
+            # of its box -- its visible pixels decide overlap and side, which a
+            # half-occluded placard's box cannot. Falls back to boxes silently
+            # when no outline is available (box model, contours off).
+            o = self.outline(want, camera=cam, stale_after=stale_after)
+            view = _outline_view(o) if o is not None else None
+            if view is not None:
+                symbols = [view]
+        got = identify(struct, symbols)
         return got.side if got.label else 'unknown'
 
     def where_offset(self, target_class, *,
