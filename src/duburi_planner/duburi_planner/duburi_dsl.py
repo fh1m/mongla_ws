@@ -333,6 +333,32 @@ def _param_value(value) -> ParameterValue:
     return ParameterValue(type=ParameterType.PARAMETER_STRING, string_value=str(value))
 
 
+Outline = None
+
+
+def _pick_outline(msg, target_class: str):
+    """Largest-area outline of `target_class` in a TargetContours message, or None."""
+    global Outline
+    if Outline is None:
+        from collections import namedtuple
+        Outline = namedtuple('Outline', 'class_name score angle_deg area_px points')
+    want = target_class.strip().lower()
+    names = list(msg.class_name)
+    offs, pts = list(msg.offset), list(msg.points)
+    best = None
+    for i, n in enumerate(names):
+        if str(n).strip().lower() != want or i + 1 >= len(offs):
+            continue
+        a, b = int(offs[i]), int(offs[i + 1])
+        poly = [(int(pts[2 * k]), int(pts[2 * k + 1])) for k in range(a, b)
+                if 2 * k + 1 < len(pts)]
+        area = int(msg.area_px[i]) if i < len(msg.area_px) else 0
+        if best is None or area > best.area_px:
+            best = Outline(str(n), float(msg.score[i]), int(msg.angle_deg[i]),
+                           area, poly)
+    return best
+
+
 class DuburiMission:
     """Mission-author API. Wraps DuburiClient with human verbs + sticky context.
 
@@ -403,6 +429,9 @@ class DuburiMission:
         self._pose_frame_warned = False
         # Scoreboard: ordered list of (cmd, success, elapsed_s, message)
         self._scoreboard: list[dict] = []
+        # OPT-IN run clock (`use_budget`). None = no rationing: every
+        # `worth_attempting` says attempt, exactly as before it existed.
+        self._budget = None
         self._mission_start: float = _time.monotonic()
         # Wall clock of the same instant: the board's latched flare order is stamped in
         # wall clock, and an order from before this mission must be refused.
@@ -845,7 +874,59 @@ class DuburiMission:
                 f'[MISS ] ARM FAILED -- aborting instead of running the mission '
                 f'disarmed. Reason: {reason}')
             raise MoveFailed(f'arm failed: {reason}')
+        budget = getattr(self, '_budget', None)
+        if budget is not None and not budget.started and bool(getattr(result, 'success', False)):
+            budget.start()
+            self.log.info(f'[BUDG ] run clock started on arm: '
+                          f'{budget.remaining_s():.0f} s usable '
+                          f'(+{budget.reserve_s:.0f} s reserve)')
         return result
+
+    # ================================================================== #
+    #  Run budget -- OPT-IN (Tier 5.1)                                    #
+    # ================================================================== #
+
+    def use_budget(self, total_s: float = 900.0, *, reserve_s: float = 45.0):
+        """Ration the run by the clock. OPT-IN: nothing is rationed until this is called.
+
+        The clock starts on a SUCCESSFUL `arm()`, not on script start -- time
+        spent waiting for a tether to come off is not run time. `reserve_s` is
+        the surface-and-disarm allowance and is never offered to a task.
+        Returns the `RunBudget` so a mission can also call `plan()` on it.
+
+            duburi.use_budget(900, reserve_s=60)
+            v = duburi.worth_attempting('torpedo', points=300, worst_case_s=120,
+                                        fallback_s=25, fallback_points=100)
+            if v.mode == 'full': ...
+            elif v.mode == 'fallback': ...          # e.g. blind fire
+        """
+        from duburi_planner.run_budget import RunBudget
+        self._budget = RunBudget(float(total_s), reserve_s=float(reserve_s))
+        self.log.info(f'[BUDG ] run budget ON: {total_s:.0f} s total, '
+                      f'{reserve_s:.0f} s reserve, clock starts on arm')
+        return self._budget
+
+    def worth_attempting(self, name: str, *, points: int, worst_case_s: float,
+                         fallback_s: float = 0.0, fallback_points: int = 0):
+        """`Verdict(attempt, mode='full'|'fallback'|'skip', reason, remaining_s)`.
+
+        With no `use_budget()` the answer is always attempt/full -- the opt-out
+        IS not calling `use_budget`. The verdict goes on the scoreboard, so a
+        skipped task explains itself after the run.
+        """
+        from duburi_planner.run_budget import Task, Verdict
+        budget = getattr(self, '_budget', None)
+        if budget is None:
+            v = Verdict(True, 'full', 'no run budget configured', float('inf'))
+        else:
+            v = budget.verdict(Task(str(name), int(points), float(worst_case_s),
+                                    fallback_s=float(fallback_s),
+                                    fallback_points=int(fallback_points)))
+            (self.log.info if v.attempt else self.log.warning)(
+                f'[BUDG ] {name}: {v.mode} -- {v.reason}')
+        self._scoreboard.append({'cmd': f'budget:{name}', 'success': bool(v.attempt),
+                                 'elapsed': 0.0, 'msg': f'{v.mode}: {v.reason}'})
+        return v
 
     def disarm(self, *, timeout: float = 20.0):
         return self._send('disarm', timeout=timeout)
@@ -1261,6 +1342,107 @@ class DuburiMission:
         # Pump once more so a change since the last call is seen.
         rclpy.spin_once(node, timeout_sec=0.0)
         return self._motion
+
+    # ------------------------------------------------------------------ #
+    #  Model provenance -- `vision_info` (OPT-IN: subscribed on first use) #
+    # ------------------------------------------------------------------ #
+
+    def active_models(self, camera: str | None = None, *, timeout: float = 1.0):
+        """`(model_stems, epoch)` the detector says is live on `camera`, or None.
+
+        Read from the detector's latched `vision_info`: `database_location` is the
+        comma list of live stems (primary first) and `database_version` an epoch
+        bumped on every switch. None when the detector has not announced one.
+        """
+        import time as _t
+        from vision_msgs.msg import VisionInfo
+        from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy
+        cam = camera or self.camera
+        subs = self.__dict__.setdefault('_vinfo_subs', {})
+        latest = self.__dict__.setdefault('_vinfo', {})
+        node = self.client.node
+        if cam not in subs:
+            def _keep(msg, c=cam):
+                stems = tuple(x for x in str(msg.database_location).split(',') if x)
+                latest[c] = (stems, int(msg.database_version))
+            subs[cam] = node.create_subscription(
+                VisionInfo, f'/duburi/vision/{cam}/vision_info', _keep,
+                QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                           durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        deadline = _t.monotonic() + float(timeout)
+        rclpy.spin_once(node, timeout_sec=0.0)
+        while cam not in latest and _t.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.05)
+        return latest.get(cam)
+
+    def _confirm_model(self, camera: str, name: str, before, timeout_s: float) -> None:
+        """Block until `vision_info` shows `name` live with a NEW epoch, then drop
+        every detection cached before it. Raises if the detector never confirms.
+
+        ⛔ WHY: the parameter set returning is not the model running. Until the
+        detector republishes `vision_info`, frames in the cache came from the OLD
+        model, and a `detected()` right after a switch can answer about a class
+        the new model does not even have.
+        """
+        import time as _t
+        want = [x.strip() for x in name.split(',') if x.strip()]
+        if before and list(before[0][:len(want)]) == want:
+            # Already the live selection: the detector does not re-announce a
+            # no-op, and nothing cached came from a different model.
+            self.log.info(f'[DSL  ] {camera}: model {name!r} was already live')
+            return
+        # Names, not the epoch: the epoch resets to 1 when a detector restarts,
+        # so "newer epoch" would refuse a real switch on a respawned node.
+        deadline = _t.monotonic() + timeout_s
+        got = None
+        while _t.monotonic() < deadline:
+            got = self.active_models(camera, timeout=0.05)
+            if got and list(got[0][:len(want)]) == want:
+                self._det_cache.pop(camera, None)
+                self._det_seen.pop(camera, None)
+                self.log.info(f'[DSL  ] {camera}: model {name!r} confirmed live '
+                              f'(epoch {got[1]}); pre-switch detections dropped')
+                return
+        raise RuntimeError(f'set_model({name!r}): detector on {camera!r} did not confirm '
+                           f'within {timeout_s:.1f} s (last vision_info: {got})')
+
+    # ------------------------------------------------------------------ #
+    #  Outlines -- `contours` (OPT-IN: subscribed on first use)            #
+    # ------------------------------------------------------------------ #
+
+    def outline(self, target_class, *, camera: str | None = None,
+                stale_after: float = 1.0, timeout: float = 1.0):
+        """The largest outline of `target_class` in the latest contours frame, or None.
+
+        Returns `Outline(class_name, score, angle_deg, area_px, points)`, `points`
+        a list of (x, y) image pixels. A box model gives 4 corners, a segmentation
+        model the mask outline -- same call either way. `angle_deg` is the
+        oriented-box angle (a path marker's direction). Needs the detector's
+        `publish_contours` on (`contours:=true`, the vehicle launch default).
+        """
+        import time as _t
+        from duburi_interfaces.msg import TargetContours
+        from rclpy.qos import QoSProfile, ReliabilityPolicy
+        if isinstance(target_class, ClassRef):
+            target_class = target_class.class_name
+        cam = camera or self.camera
+        subs = self.__dict__.setdefault('_contour_subs', {})
+        frames = self.__dict__.setdefault('_contours', {})
+        node = self.client.node
+        if cam not in subs:
+            def _keep(msg, c=cam):
+                frames[c] = (_t.monotonic(), msg)
+            subs[cam] = node.create_subscription(
+                TargetContours, f'/duburi/vision/{cam}/contours', _keep,
+                QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE))
+        deadline = _t.monotonic() + float(timeout)
+        rclpy.spin_once(node, timeout_sec=0.0)
+        while cam not in frames and _t.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.05)
+        entry = frames.get(cam)
+        if entry is None or _t.monotonic() - entry[0] > float(stale_after):
+            return None
+        return _pick_outline(entry[1], str(target_class))
 
     def floor_height(self, *, max_age_s: float = 1.0, timeout: float = 1.0):
         """Height above the floor in metres, from the floor's own tiles, or None.
@@ -2257,7 +2439,8 @@ class DuburiMission:
             raise RuntimeError(f'set {node}.{name}={value!r} rejected: {res.reason}')
 
     def set_model(self, name, *,
-                  camera: str | None = None, node: str | None = None) -> None:
+                  camera: str | None = None, node: str | None = None,
+                  confirm_s: float = 0.0) -> None:
         """Switch the active detector model, or run SEVERAL at once.
 
         ``name`` is the model **stem** (e.g. ``'gate_rescue_repair'``) or a
@@ -2293,6 +2476,8 @@ class DuburiMission:
         if isinstance(name, (list, tuple)):
             name = ','.join(str(n).strip() for n in name if str(n).strip())
         node = self._detector_node(camera, node)
+        cam = camera or self.camera
+        before = self.active_models(cam, timeout=0.0) if confirm_s > 0.0 else None
         try:
             self._set_detector_param(node, 'active_model', str(name))
         except RuntimeError as exc:
@@ -2302,6 +2487,8 @@ class DuburiMission:
                     f'to enable hot model switching') from None
             raise
         self.log.info(f'[DSL  ] {node} active_model → {name!r}')
+        if confirm_s > 0.0:
+            self._confirm_model(cam, str(name), before, float(confirm_s))
 
     def use(self, model: str, classes: str | list | None = None, *,
             camera: str | None = None, node: str | None = None) -> None:

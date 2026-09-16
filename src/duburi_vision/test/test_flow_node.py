@@ -751,6 +751,20 @@ class TestSunCausticsReachTheNode:
             n.destroy_node()
 
 
+    def test_the_switch_turns_caustic_handling_off(self):
+        """caustic_suppression:=false (launch `caustics:=false`) tracks the raw
+        floor even when the sun is painting it -- the A/B opt-out."""
+        import test_flow_sun_caustics as tc
+        n = _make(pool_depth_m=4.0, caustic_suppression=False)
+        try:
+            a = tc._frame(0, 2.0, 1.0, True)
+            n._anchor(a, 0.0)
+            assert not n._anchor_caustic
+            assert n._anchor_gray is a
+        finally:
+            n.destroy_node()
+
+
 class TestSunOnABareFloorRefuses:
     """When erosion leaves only boiling caustic cells, the node refuses."""
 

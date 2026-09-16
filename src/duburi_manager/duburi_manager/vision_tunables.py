@@ -101,6 +101,12 @@ VISION_PARAM_DEFAULTS: Dict[str, Any] = {
     # horizon -- the horizon lives in the node, derived from the measured gap
     # distribution (full authority to 0.70 s, zero at 2.50 s).
     'vision.lock_s':               1.0,
+    # mixer_aware: on srot, fit each vision frame to the mixer yaw-first
+    # (`allocation.prioritise`) and hold the lateral integral while the mixer is
+    # saturated. True = ON (shipped). False = send the raw demand and let the
+    # board scale uniformly -- the pre-2026-09-14 behaviour, kept as an A/B
+    # switch. Not a goal field: the manager hands it to the facade per goal.
+    'vision.mixer_aware':          True,
     # --- downward-camera / depth-bound tunables (moved off per-align kwargs) ---
     # surge_sign: polarity of the DOWNWARD Ch5 SURGE axis (image-Y -> fore/aft) for
     # the bottom-cam mount. This hull needs -1 (a target AHEAD must drive FORWARD);

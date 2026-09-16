@@ -275,6 +275,11 @@ class FlowVelocityNode(Node):
         # Lane-line heading (mod 180) for the yaw drift bound. OFF: a path
         # marker is also a dark band. See `_read_the_lane`.
         self.declare_parameter('lane_lines', False)
+        # Sun-caustic handling: erode the floor when the top-hat score says the
+        # sun is painting it, and refuse a bare floor under caustics. ON by
+        # default; OFF tracks the raw floor always (an A/B switch, and the right
+        # setting in an indoor pool where the detector has nothing to find).
+        self.declare_parameter('caustic_suppression', True)
 
         cam = str(self.get_parameter('camera').value or 'downward').strip()
         self._cam = cam
@@ -936,7 +941,8 @@ class FlowVelocityNode(Node):
     def _anchor(self, gray, t) -> None:
         # Sun caustics: decided once per anchor (see flow_math.CAUSTIC_*).
         score = caustic_score(gray)
-        caustic = score > CAUSTIC_TOPHAT_MAX
+        caustic = score > CAUSTIC_TOPHAT_MAX and bool(
+            self.get_parameter('caustic_suppression').value)
         if caustic != getattr(self, '_anchor_caustic', False):
             self.get_logger().info(
                 f'[FLOW ] sun caustics {"ON" if caustic else "OFF"} '

@@ -125,12 +125,21 @@ def test_every_floor_instrument_is_published_AND_consumed():
 
 def test_prioritised_allocation_reaches_the_srot_frame():
     """`allocation.prioritise` must be on the path to `fc.manual`, or the
-    board keeps scaling yaw down with the rest of a saturated group."""
-    mv = (ROOT / 'src' / 'duburi_control' / 'duburi_control'
-          / 'motion_vision.py').read_text()
-    body = mv[mv.index('def _srot_drive'):mv.index('def _read_depth')]
-    assert 'prioritise(' in body and 'fc.manual(' in body
-    assert body.index('prioritise(') < body.index('fc.manual(')
+    board keeps scaling yaw down with the rest of a saturated group. EXECUTED
+    on the frame actually sent, and the opt-out (`vision.mixer_aware` false)
+    must send the raw demand."""
+    import sys
+    sys.path.insert(0, str(ROOT / 'src' / 'duburi_control'))
+    from duburi_control.motion_vision import _srot_drive
+
+    class _FC:
+        def manual(self, **kw):
+            self.sent = kw
+    on, off = _FC(), _FC()
+    _srot_drive(on, fwd_pct=90.0, lat_pct=90.0, yaw_pct=30.0)
+    _srot_drive(off, fwd_pct=90.0, lat_pct=90.0, yaw_pct=30.0, prioritise=False)
+    assert on.sent['yaw'] == 0.3 and on.sent['forward' if 'forward' in on.sent else 'fwd'] < 0.9
+    assert (off.sent['fwd'], off.sent['lat'], off.sent['yaw']) == (0.9, 0.9, 0.3)
 
 
 def test_the_demand_reaches_the_command_velocity_model():
