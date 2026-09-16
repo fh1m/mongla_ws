@@ -703,3 +703,60 @@ def test_twist_covariance_is_in_the_body_frame_like_the_twist():
     _fill_covariance(m, f)
     assert abs(m.twist.covariance[0] - 4e-2) < 1e-9
     assert abs(m.twist.covariance[7] - 1e-4) < 1e-9
+
+
+# --------------------------------------------------------------------------- #
+#  retrodict: measurements applied at the instant they describe                #
+# --------------------------------------------------------------------------- #
+
+def _flow_at(t, vx=0.4, vy=-0.1, var=1e-3):
+    m = type('T', (), {})()
+    m.header = _Header(t)
+    m.twist = type('T2', (), {})()
+    m.twist.twist = type('T3', (), {})()
+    m.twist.twist.linear = type('L', (), {'x': vx, 'y': vy, 'z': 0.0})()
+    m.twist.covariance = [0.0] * 36
+    m.twist.covariance[0] = var
+    m.twist.covariance[7] = var
+    return m
+
+
+def _run(retro, flow_arrives_after, n=80, flow_index=50):
+    """IMU at 50 Hz with a forward push; one flow sample measured at IMU
+    `flow_index` and delivered after IMU `flow_index + flow_arrives_after`."""
+    from duburi_localization.retro import Retrodictor
+    node = _node()
+    node._zupt_enabled = False
+    node._model_aid = False
+    node._retro = Retrodictor(node._filter, horizon_s=1.0) if retro else None
+    t0 = 1000.0
+    for k in range(n):
+        t = t0 + k * 0.02
+        node._on_imu(_Imu(t, accel=(0.3, 0.0, -9.80665)))
+        if k == flow_index + flow_arrives_after:
+            node._on_flow(_flow_at(t0 + flow_index * 0.02 + 1e-4))
+    return node
+
+
+def test_retrodict_makes_a_late_flow_sample_land_where_an_on_time_one_would():
+    on_time = _run(retro=True, flow_arrives_after=0)
+    late = _run(retro=True, flow_arrives_after=3)          # 60 ms late
+    arrival = _run(retro=False, flow_arrives_after=3)      # today's default
+    np.testing.assert_allclose(late._filter.X.v, on_time._filter.X.v, atol=1e-9)
+    np.testing.assert_allclose(late._filter.X.p, on_time._filter.X.p, atol=1e-9)
+    assert late._retro.late == 1 and late._retro.replayed > 0
+    assert np.abs(arrival._filter.X.v - on_time._filter.X.v).max() > 1e-4
+
+
+def test_retrodict_off_is_exactly_the_old_on_arrival_path():
+    a = _run(retro=False, flow_arrives_after=3)
+    b = _node()
+    b._zupt_enabled = False
+    b._model_aid = False
+    t0 = 1000.0
+    for k in range(80):
+        t = t0 + k * 0.02
+        b._on_imu(_Imu(t, accel=(0.3, 0.0, -9.80665)))
+        if k == 53:
+            b._on_flow(_flow_at(t))
+    np.testing.assert_allclose(a._filter.X.v, b._filter.X.v, atol=1e-12)

@@ -53,6 +53,7 @@ from duburi_interfaces.msg import DuburiState
 from duburi_localization.command_velocity import (BLOCKED, CommandVelocityModel,
                                                   MotionCheck)
 from duburi_localization.inekf import RIEKF
+from duburi_localization.retro import Retrodictor
 from duburi_localization.tile_grating import snap_to_grid
 
 # A dt longer than this is a GAP, not a long step. Integrating one 2 s
@@ -80,6 +81,19 @@ FLOW_FRESH_S = 1.0
 
 def _stamp_s(header) -> float:
     return float(header.stamp.sec) + float(header.stamp.nanosec) * 1e-9
+
+
+def _opt_stamp(msg):
+    """A message's stamp in seconds, or None when it has no usable one."""
+    h = getattr(msg, 'header', None)
+    if h is None:
+        return None
+    t = _stamp_s(h)
+    return t if t > 0.0 else None
+
+
+def _now_or(t_newest, fallback: float) -> float:
+    return t_newest if t_newest is not None else fallback
 
 
 class LocalizationNode(Node):
@@ -133,6 +147,14 @@ class LocalizationNode(Node):
         self._model = CommandVelocityModel(
             tau_s=float(self.declare_parameter('demand_tau_s', 1.0).value))
         self._model_aid = bool(self.declare_parameter('demand_aid', True).value)
+        # Apply every measurement at the instant it describes (retro.py). OFF by
+        # default until its Pi cost is measured: flow ~0.8 ms per sample 60 ms
+        # late and a fix ~19 ms per second late, on the dev box.
+        self._retro = None
+        if bool(self.declare_parameter('retrodict', False).value):
+            self._retro = Retrodictor(
+                self._filter,
+                horizon_s=float(self.declare_parameter('retro_horizon_s', 2.0).value))
         self._last_demand_t = None
         self._motion = MotionCheck()
         self._motion_state = None
@@ -185,6 +207,20 @@ class LocalizationNode(Node):
 
     # ---- inputs ---------------------------------------------------------
 
+    def _apply(self, t, fn) -> bool:
+        """Run `fn(filter)` as of time `t` (retrodicted), or now (default).
+
+        `t=None` means the input carries no stamp: it is applied at the newest
+        event time, which is what on-arrival meant all along.
+        """
+        retro = getattr(self, '_retro', None)
+        if retro is None:
+            fn(self._filter)
+            return True
+        if t is None:
+            t = _now_or(retro.newest_t(), self._last_imu_t or 0.0)
+        return retro.run(float(t), fn)
+
     def _on_imu(self, msg: Imu) -> None:
         t = _stamp_s(msg.header)
         prev, self._last_imu_t = self._last_imu_t, t
@@ -207,12 +243,11 @@ class LocalizationNode(Node):
                     f'skipping the step rather than integrating it as one. '
                     f'Position is coasting on flow and depth alone.')
             return
-        self._filter.predict(
-            (msg.angular_velocity.x, msg.angular_velocity.y,
-             msg.angular_velocity.z),
-            (msg.linear_acceleration.x, msg.linear_acceleration.y,
-             msg.linear_acceleration.z),
-            dt)
+        gyro = (msg.angular_velocity.x, msg.angular_velocity.y,
+                msg.angular_velocity.z)
+        accel = (msg.linear_acceleration.x, msg.linear_acceleration.y,
+                 msg.linear_acceleration.z)
+        self._apply(t, lambda f, g=gyro, a=accel, d=dt: f.predict(g, a, d))
         self._n['imu'] += 1
         self._last_input_t = t
 
@@ -246,12 +281,13 @@ class LocalizationNode(Node):
                 # An estimator with no prior information should ADOPT the
                 # first measurement, not argue with it.
                 self._attitude_seeded = True
-                self._filter.X.R = R_meas
+                # An EVENT, so a replay from before the seed re-applies it.
+                self._apply(t, lambda f, R=R_meas: setattr(f.X, 'R', R.copy()))
                 self.get_logger().info(
                     f'[LOCAL] seeded attitude from the board: '
                     f'yaw {self._filter.X.yaw_deg():+.1f} deg')
-            self._filter.update_attitude(
-                R_meas, sigma_deg=self._attitude_sigma_deg)
+            self._apply(t, lambda f, R=R_meas, s=self._attitude_sigma_deg:
+                        f.update_attitude(R, sigma_deg=s))
             self._n['att'] += 1
 
         # Stationarity evidence for the ZUPT, kept per sample. |a| rather than
@@ -266,16 +302,19 @@ class LocalizationNode(Node):
             self._maybe_zupt()
 
     def _on_state(self, msg: DuburiState) -> None:
+        t = _opt_stamp(msg)
         depth = float(msg.depth_m)
         if not math.isnan(depth):
-            self._filter.update_depth(depth, sigma=self._depth_sigma)
+            self._apply(t, lambda f, d=depth, s=self._depth_sigma:
+                        f.update_depth(d, sigma=s))
             self._n['depth'] += 1
         yaw = float(msg.yaw_deg)
         # NaN is the documented absence sentinel, and on srot it is now what a
         # board with an unhealthy BNO actually publishes. Feeding NaN into the
         # update would poison every state through the gain, silently.
         if self._use_yaw and not math.isnan(yaw):
-            self._filter.update_yaw(yaw, sigma_deg=self._yaw_sigma_deg)
+            self._apply(t, lambda f, y=yaw, s=self._yaw_sigma_deg:
+                        f.update_yaw(y, sigma_deg=s))
             self._n['yaw'] += 1
 
     def _on_flow(self, msg: TwistWithCovarianceStamped) -> None:
@@ -306,9 +345,9 @@ class LocalizationNode(Node):
             var_x = floor
         if not (var_y > 0.0) or not math.isfinite(var_y):
             var_y = floor
-        self._filter.update_body_velocity_xy(v.x, v.y,
-                                             max(var_x, 1e-6),
-                                             max(var_y, 1e-6))
+        self._apply(_opt_stamp(msg),
+                    lambda f, vx=v.x, vy=v.y, a=max(var_x, 1e-6), b=max(var_y, 1e-6):
+                    f.update_body_velocity_xy(vx, vy, a, b))
         self._n['flow'] += 1
         now = time.monotonic()
         dt = min(now - self._last_flow_t, 0.25) if self._last_flow_t > 0.0 else 0.0
@@ -365,7 +404,7 @@ class LocalizationNode(Node):
         p = self._model.predict()
         if p is None:
             return
-        self._filter.update_body_velocity_xy(p[0], p[1], p[2], p[3])
+        self._apply(None, lambda f, p=p: f.update_body_velocity_xy(p[0], p[1], p[2], p[3]))
         self._n['model'] += 1
 
     def _maybe_zupt(self) -> None:
@@ -397,7 +436,7 @@ class LocalizationNode(Node):
         # there and a tilted hull reads a large constant. Variation is motion.
         if (max(acc) - min(acc)) > STILL_ACCEL_SPREAD:
             return
-        self._filter.update_zero_velocity(sigma=self._zupt_sigma)
+        self._apply(None, lambda f, s=self._zupt_sigma: f.update_zero_velocity(sigma=s))
         self._n['zupt'] += 1
         self._still.clear()
 
@@ -415,7 +454,8 @@ class LocalizationNode(Node):
         flow integrates into position through the SAME rotation, so every
         dead-reckoned metre would walk off along an offset nobody measured.
         """
-        self._filter.update_yaw(float(msg.data), sigma_deg=self._yaw_sigma_deg)
+        self._apply(None, lambda f, y=float(msg.data), s=self._yaw_sigma_deg:
+                    f.update_yaw(y, sigma_deg=s))
         self._n['yaw'] += 1
         if not self._anchored:
             self._anchored = True
@@ -462,7 +502,8 @@ class LocalizationNode(Node):
         if snapped is None:
             self._n[f'{key}_refused'] += 1
             return
-        self._filter.update_yaw(snapped, sigma_deg=self._grid_sigma_deg)
+        self._apply(None, lambda f, y=snapped, s=self._grid_sigma_deg:
+                    f.update_yaw(y, sigma_deg=s))
         self._n[key] += 1
 
     def _on_fix(self, msg: PointStamped) -> None:
@@ -477,7 +518,10 @@ class LocalizationNode(Node):
         sigma = float(msg.point.z)
         if not (sigma > 0.0) or not math.isfinite(sigma):
             sigma = self._fix_sigma
-        self._filter.update_position((msg.point.x, msg.point.y), sigma=sigma)
+        if not self._apply(_opt_stamp(msg),
+                           lambda f, xy=(msg.point.x, msg.point.y), s=sigma:
+                           f.update_position(xy, sigma=s)):
+            return                      # older than the replay horizon: refused
         self._n['fix'] += 1
 
     # ---- output ---------------------------------------------------------
@@ -548,7 +592,10 @@ class LocalizationNode(Node):
             f"yaw={n['yaw']} grid={n['grid']}/{n['grid'] + n['grid_refused']} "
             f"lane={n['lane']}/{n['lane'] + n['lane_refused']} "
             f"model={n['model']} fix={n['fix']} gaps={n['gap']} "
-            f"rej={self._filter.rejected} brk={self._filter.lockout_breaks} | "
+            f"rej={self._filter.rejected} brk={self._filter.lockout_breaks} "
+            + (f"late={self._retro.late} replay={self._retro.replayed} "
+               f"too_old={self._retro.refused} " if getattr(self, '_retro', None) else '')
+            + f"| "
             f"yaw={self._filter.X.yaw_deg():+.1f} deg "
             f"p=({self._filter.X.p[0]:+.2f},{self._filter.X.p[1]:+.2f},"
             f"{self._filter.X.p[2]:+.2f}) m")

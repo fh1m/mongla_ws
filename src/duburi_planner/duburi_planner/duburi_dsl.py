@@ -543,6 +543,12 @@ class DuburiMission:
         now     = _time.monotonic()
         records = _parse_detections(msg)
         self._det_cache[camera] = (now, records)        # latest frame: where() reads this
+        # The frame's CAPTURE stamp, so a fix computed from it can say when it
+        # was true (the filter applies it there with `retrodict:=true`).
+        stamp = getattr(getattr(msg, 'header', None), 'stamp', None)
+        if stamp is not None:
+            caps = self.__dict__.setdefault('_det_capture', {})
+            caps[camera] = (int(stamp.sec), int(stamp.nanosec))
         seen = self._det_seen.setdefault(camera, {})    # per-class last-seen: detected() reads this
         for rec in records:
             seen[rec[0]] = now                          # rec[0] = lowercased class
@@ -1227,7 +1233,7 @@ class DuburiMission:
             # was computed, printed, and thrown away -- the filter had no
             # caller for the one measurement it cannot replace. Best-effort:
             # a missing localization node must not fail a mission step.
-            self._publish_fix(got.x_m, got.y_m)
+            self._publish_fix(got.x_m, got.y_m, camera=camera or self.camera)
             self.log.info(
                 f'[FIX  ] pool position ({got.x_m:+.2f}, {got.y_m:+.2f}) m from '
                 f'{got.used} props, residual {got.residual_m:.3f} m, '
@@ -1697,7 +1703,7 @@ class DuburiMission:
         rad = _m.radians(bearing)
         x = float(p.x_m) - rng * _m.cos(rad)
         y = float(p.y_m) - rng * _m.sin(rad)
-        self._publish_fix(x, y, sigma=sigma)
+        self._publish_fix(x, y, sigma=sigma, camera=camera or self.camera)
         self.log.info(
             f'[FIX  ] pool position ({x:+.2f}, {y:+.2f}) m from {prop!r} at '
             f'{rng:.2f} m bearing {bearing:.0f} deg (sigma {sigma:.2f} m)')
@@ -1705,7 +1711,7 @@ class DuburiMission:
                    separation_deg=0.0)
 
     def _publish_fix(self, x_m: float, y_m: float,
-                     sigma: float | None = None) -> None:
+                     sigma: float | None = None, camera: str | None = None) -> None:
         """Hand a resected pool position to the invariant filter.
 
         A topic rather than a direct call, because the filter runs in its own
@@ -1719,6 +1725,11 @@ class DuburiMission:
                     PointStamped, '/duburi/localization/fix', 10)
             m = PointStamped()
             m.header.stamp = self.client.node.get_clock().now().to_msg()
+            # When the fix came from a camera frame, stamp it with THAT frame's
+            # capture time: the hull was there then, not at publish time.
+            cap = self.__dict__.get('_det_capture', {}).get(camera) if camera else None
+            if cap and (cap[0] or cap[1]):
+                m.header.stamp.sec, m.header.stamp.nanosec = cap
             m.header.frame_id = 'pool'
             m.point.x = float(x_m)
             m.point.y = float(y_m)

@@ -13,6 +13,9 @@ publish.
 """
 from __future__ import annotations
 
+import bisect
+from collections import deque
+
 import rclpy
 from rclpy.node import Node
 
@@ -43,11 +46,12 @@ class PoseFuseNode(Node):
         self.create_subscription(TargetPose, f'{ns}/target_pose', self._on_pose, 10)
         # The hull's own heading, which is what turns counting into evidence:
         # the true branch's pose yaw moves OPPOSITE the hull's and the mirrored
-        # one moves with it. `/duburi/state` publishes on change plus a ~1 Hz
-        # heartbeat, so the freshest value is held rather than interpolated --
-        # a pose is stamped at capture and the heading nearest it is the honest
-        # pairing until this stack has real time-synced pairing.
+        # one moves with it. `/duburi/state` publishes ON CHANGE plus a ~1 Hz
+        # heartbeat, so the heading in effect at a pose's capture instant is the
+        # LAST state stamped at or before it -- not the latest to arrive, which
+        # during a turn is a heading from after the frame was taken.
         self._yaw_deg = None
+        self._yaw_hist: deque = deque(maxlen=256)     # (capture-domain t, yaw)
         self.create_subscription(DuburiState, '/duburi/state', self._on_state, 10)
         self.get_logger().info(
             f'[FUSE ] {cam}: {ns}/target_pose -> {ns}/target_pose_fused '
@@ -59,6 +63,14 @@ class PoseFuseNode(Node):
         # NaN is this stack's "missing numeric" convention, and feeding one in
         # would poison the regression with a silent NaN slope.
         self._yaw_deg = None if yaw != yaw else yaw
+        t, _ = capture_monotonic(getattr(msg, 'header', None))
+        self._yaw_hist.append((t, self._yaw_deg))
+
+    def yaw_at(self, t: float):
+        """Heading in effect at `t`: the last state stamped at or before it."""
+        hist = sorted(self._yaw_hist)
+        i = bisect.bisect_right([h[0] for h in hist], t)
+        return hist[i - 1][1] if i else None
 
     def _on_pose(self, msg: TargetPose) -> None:
         # A pose the solver already disowned carries no vote. Publishing the
@@ -69,7 +81,7 @@ class PoseFuseNode(Node):
         self._cluster.add(PoseSample(
             t=t, yaw_deg=float(msg.yaw_deg), range_m=float(msg.range_m),
             ambiguity=float(msg.ambiguity), reproj_px=float(msg.reproj_px),
-            n_points=int(msg.n_points), vehicle_yaw_deg=self._yaw_deg))
+            n_points=int(msg.n_points), vehicle_yaw_deg=self.yaw_at(t)))
 
         out = TargetPose()
         out.header = msg.header

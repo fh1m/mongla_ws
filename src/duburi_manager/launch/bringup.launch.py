@@ -203,6 +203,9 @@ def generate_launch_description():
         DeclareLaunchArgument('demand_aid', default_value='true',
                               description='localization: velocity from commanded demand '
                                           'when the floor goes blank.'),
+        DeclareLaunchArgument('retrodict', default_value='false',
+                              description='localization: apply flow/depth/fixes at the '
+                                          'instant they describe, replaying later events.'),
         DeclareLaunchArgument('use_yaw', default_value='false',
                               description='localization: fuse the landmark heading anchor.'),
         DeclareLaunchArgument('caustics', default_value='true',
@@ -433,6 +436,7 @@ def generate_launch_description():
             'zupt':       ParameterValue(LaunchConfiguration('zupt'), value_type=bool),
             'demand_aid': ParameterValue(LaunchConfiguration('demand_aid'), value_type=bool),
             'use_yaw':    ParameterValue(LaunchConfiguration('use_yaw'), value_type=bool),
+            'retrodict':  ParameterValue(LaunchConfiguration('retrodict'), value_type=bool),
         }],
         condition=IfCondition(LaunchConfiguration('localization')),
     )
