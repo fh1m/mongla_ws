@@ -51,7 +51,9 @@ def test_the_water_bearing_matches_snell_exactly(u_off):
     K, d = _K()
     fx, cx = K[0], K[2]
     w, h = d['image_width'], d['image_height']
-    got = bearing_from_pixels(cx + u_off, h / 2, 40, 40,
+    # On the principal ROW (v = cy), so the ray is purely horizontal and the
+    # 1-D Snell form is exact; off that row the polar angle is what refracts.
+    got = bearing_from_pixels(cx + u_off, K[5], 40, 40,
                               width=w, height=h, K=K, n_medium=N)
     ta = math.atan(u_off / fx)
     want = math.asin(math.sin(ta) / N)
@@ -93,7 +95,7 @@ def test_the_ANGULAR_SIZE_is_refracted_per_edge():
     fx, cx = K[0], K[2]
     w, h = d['image_width'], d['image_height']
     u, box = cx + 400.0, 120.0
-    got = bearing_from_pixels(u, h / 2, box, box, width=w, height=h, K=K, n_medium=N)
+    got = bearing_from_pixels(u, K[5], box, box, width=w, height=h, K=K, n_medium=N)
     e1 = math.asin(math.sin(math.atan((u - box / 2 - cx) / fx)) / N)
     e2 = math.asin(math.sin(math.atan((u + box / 2 - cx) / fx)) / N)
     assert got.size_x == pytest.approx(abs(e2 - e1), rel=1e-9)
@@ -198,3 +200,27 @@ def test_the_correction_REDUCES_the_error_it_claims_to_fix():
     assert worst_raw / max(worst_corr, 1e-9) > 20, (
         f'the correction only improved things {worst_raw / worst_corr:.1f}x -- '
         f'expected ~100x; suspect a sign or a scale error')
+
+
+def test_an_off_axis_corner_matches_a_ray_traced_flat_port():
+    """Truth by construction: a point in WATER, traced through a flat port.
+
+    The water ray to (X, Y, Z) enters the port and bends in its own plane, so
+    the pixel it lands on has the SAME azimuth and a larger polar angle. Put the
+    target at a frame corner, where both axes are off, and the bearing must
+    return the water angles exactly -- per-axis refraction does not.
+    """
+    import math
+    from duburi_control.bearing import bearing_from_pixels
+    n = 1.333
+    fx = fy = 851.2
+    cx, cy = 640.0, 360.0
+    X, Y, Z = 1.2, 0.7, 2.0                       # water, camera frame
+    rw = math.hypot(X / Z, Y / Z)
+    ra = math.tan(math.asin(n * math.sin(math.atan(rw))))
+    u = cx + fx * (X / Z) * ra / rw
+    v = cy + fy * (Y / Z) * ra / rw
+    b = bearing_from_pixels(u, v, 1.0, 1.0, width=1280, height=720,
+                            K=[fx, 0, cx, 0, fy, cy, 0, 0, 1], n_medium=n)
+    assert math.degrees(b.angle_x) == pytest.approx(math.degrees(math.atan(X / Z)), abs=1e-6)
+    assert math.degrees(b.angle_y) == pytest.approx(math.degrees(math.atan(Y / Z)), abs=1e-6)

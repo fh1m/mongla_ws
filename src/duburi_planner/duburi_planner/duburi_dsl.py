@@ -368,6 +368,7 @@ class DuburiMission:
         self._det_subs:  dict[str, object] = {}   # detection subs (kept alive)
         self._info_subs: dict[str, object] = {}   # camera_info subs (kept alive)
         self._img_size:  dict[str, tuple] = {}    # camera -> (width, height)
+        self._cam_k:     dict[str, tuple] = {}    # camera -> (fx, fy, cx, cy), in AIR, at _img_size
         self._det_warm:  set[str] = set()         # cameras that have produced a frame
         # Detector parameter control (in-process, reliable -- replaces flaky
         # subprocess `ros2 param set`). node-name -> SetParameters client; the
@@ -517,6 +518,11 @@ class DuburiMission:
     def _on_info(self, camera: str, msg) -> None:
         if msg.width and msg.height:
             self._img_size[camera] = (float(msg.width), float(msg.height))
+            k = [float(x) for x in msg.k]
+            # A zeroed K is what CameraInfo carries before a calibration loads:
+            # present is not usable, so only a positive focal is kept.
+            if len(k) >= 9 and k[0] > 0.0 and k[4] > 0.0:
+                self._cam_k[camera] = (k[0], k[4], k[2], k[5])
 
     def _resume_default_detector(self, camera: str) -> None:
         """Resume the default camera's detector, once, at first use.
@@ -998,11 +1004,39 @@ class DuburiMission:
     # an absent one is a quiet no-op, so single-camera runs are unaffected.
     _KNOWN_CAMERAS = ('forward', 'downward')
 
-    # Measured on this vehicle: 63.8 deg in air, 46.7 deg through the flat
-    # port in water, +/- 0.7. The WATER figure is the default because that is
-    # where the vehicle works, and a bearing computed with the air number would
-    # be 37 % too wide -- every fix stretched, no fault logged.
-    HFOV_WATER_DEG = 46.7
+    # In-water horizontal FOV per camera, used ONLY when that camera has not
+    # published a calibrated CameraInfo. Derived from the committed calibration
+    # files through the flat port (`optics.fov_air_to_water`):
+    #   downward  Microdia global shutter, fx 1027.87 @1280: 63.8 air -> 46.7 water
+    #   forward   Fantech Luminous C30,    fx  851.23 @1280: 73.9 air -> 53.6 water
+    # ⛔ This was ONE constant, 46.7, measured on the global-shutter unit when it
+    # was still called "forward". The cameras were re-assigned on 2026-09-07 and
+    # the constant stayed, so every forward-camera range read 17 % long and every
+    # forward bearing 13 % short, with nothing logging a fault.
+    HFOV_WATER_DEG_BY_CAMERA = {'forward': 53.6, 'downward': 46.7}
+
+    def _optics(self, camera):
+        """(fx, fy, cx, cy, width, height) in AIR from CameraInfo, or None."""
+        ks = getattr(self, '_cam_k', None)
+        sizes = getattr(self, '_img_size', None)
+        if not isinstance(ks, dict) or not isinstance(sizes, dict):
+            return None
+        k, wh = ks.get(camera), sizes.get(camera)
+        if not k or not wh or not wh[0]:
+            return None
+        return (*k, float(wh[0]), float(wh[1]))
+
+    def hfov_water_deg(self, camera: str | None = None) -> float:
+        """In-water horizontal FOV of `camera`: its live calibration, else its fallback."""
+        import math as _math
+        from duburi_vision.optics import fov_air_to_water
+        cam = camera or getattr(self, 'camera', 'forward')
+        o = DuburiMission._optics(self, cam)
+        if o is not None:
+            fx, _fy, _cx, _cy, w, _h = o
+            return fov_air_to_water(2.0 * _math.degrees(_math.atan(w / 2.0 / fx)))
+        return float(DuburiMission.HFOV_WATER_DEG_BY_CAMERA.get(
+            str(cam), DuburiMission.HFOV_WATER_DEG_BY_CAMERA['forward']))
 
     def bearing_to(self, prop_class: str, *, camera: str | None = None,
                    hfov_deg: float | None = None) -> float | None:
@@ -1022,7 +1056,8 @@ class DuburiMission:
         off = self.where_offset(prop_class, camera=camera)
         if off is None:
             return None
-        half = float(hfov_deg if hfov_deg is not None else self.HFOV_WATER_DEG) / 2.0
+        half = float(hfov_deg if hfov_deg is not None
+                     else DuburiMission.hfov_water_deg(self, camera)) / 2.0
         return (self.absolute_heading() + float(off) * half) % 360.0
 
     def fix_position(self, *, props: list | None = None,
@@ -1302,7 +1337,7 @@ class DuburiMission:
         if w_px <= 0.0:
             return None
         img_w = self._img_size.get(cam, (0.0, 0.0))[0] or 640.0
-        f_px = self.focal_px(img_w)
+        f_px = self.focal_px(img_w, camera=cam)
         z = f_px * real_w / w_px
         # One pixel of box-width noise, which is optimistic for a YOLO box and
         # stated as such rather than padded with an invented factor.
@@ -1361,8 +1396,16 @@ class DuburiMission:
         v = cy + h / 2.0 if plane_below_m > 0.0 else cy - h / 2.0
         if v >= img_h - 2.0 or v <= 2.0:
             return None
-        f_px = self.focal_px(img_w)
-        hit = intersect(cx, v, fx=f_px, fy=f_px, cx=img_w / 2.0, cy=img_h / 2.0,
+        f_px = self.focal_px(img_w, camera=cam)
+        # The principal point from the calibration, not the frame centre: the
+        # forward camera's cy sits 70 px above centre at 720 p, which through
+        # the pitch term is ~6 deg -- about a metre of range at 3 m.
+        o = DuburiMission._optics(self, cam)
+        if o is not None and o[4] == img_w:
+            pcx, pcy, fy_px = o[2], o[3], f_px * o[1] / o[0]
+        else:
+            pcx, pcy, fy_px = img_w / 2.0, img_h / 2.0, f_px
+        hit = intersect(cx, v, fx=f_px, fy=fy_px, cx=pcx, cy=pcy,
                         plane_below_m=float(plane_below_m),
                         pitch_deg=float(pitch_deg),
                         plane_sigma_m=float(plane_sigma_m))
@@ -1450,21 +1493,19 @@ class DuburiMission:
         except Exception as exc:            # noqa: BLE001 -- best-effort
             self.log.warning(f'[FIX  ] fix not published to the filter: {exc}')
 
-    def focal_px(self, width_px: float = 640.0) -> float:
-        """In-water focal length, DERIVED from the measured field of view.
+    def focal_px(self, width_px: float = 640.0, *, camera: str | None = None) -> float:
+        """In-water focal length of `camera`, DERIVED from its field of view.
 
-        `fx = (W/2) / tan(HFOV/2)`. Not a second calibration constant: the FOV
-        was measured (46.7 deg in water, +/- 0.7) and this is the same number
-        in the units the pinhole relation wants. At 640 px wide it gives
-        741 px, which is what the flow node independently reports as its water
-        focal -- two derivations of one measurement agreeing.
+        `fx = (W/2) / tan(HFOV/2)` with the camera's own in-water FOV
+        (`hfov_water_deg`). For the downward camera at 640 px that is 741 px,
+        which the flow node independently reports; the forward camera is 634 px.
         """
         import math as _math
         return (float(width_px) / 2.0) / _math.tan(
-            _math.radians(self.HFOV_WATER_DEG / 2.0))
+            _math.radians(DuburiMission.hfov_water_deg(self, camera) / 2.0))
 
     def standoff_for_prop(self, prop_class: str, *, visibility_m: float | None = None,
-                          width_px: float = 640.0) -> float:
+                          width_px: float = 640.0, camera: str | None = None) -> float:
         """How close we must be for `prop_class` to be comfortably detectable.
 
         Arithmetic, not a habit: a prop of known width projects to a box of
@@ -1481,7 +1522,7 @@ class DuburiMission:
         if w <= 0.0:
             return float(visibility_m if visibility_m is not None else VISIBILITY_M)
         return standoff_for(
-            w, self.focal_px(width_px),
+            w, self.focal_px(width_px, camera=camera),
             visibility_m=(VISIBILITY_M if visibility_m is None else visibility_m))
 
     def acquire(self, prop: str, *, camera: str | None = None,
@@ -1520,7 +1561,8 @@ class DuburiMission:
         if course is not None and cls in course.props:
             detect_class = course.props[cls].detect_class or cls
 
-        standoff = self.standoff_for_prop(detect_class, visibility_m=visibility_m)
+        standoff = self.standoff_for_prop(detect_class, visibility_m=visibility_m,
+                                          camera=camera)
         self.log.info(f'[ACQ  ] {cls!r}: computed standoff {standoff:.2f} m '
                       f'(class {detect_class!r})')
 

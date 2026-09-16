@@ -1,3 +1,5 @@
+> ⛔ **SUPERSEDED FOR STATUS (2026-09-16)** by `Ros_workspaces/duburi_ws/.claude/context/ROADMAP.md` — the one verified list of where we are headed and what is left. Detail and evidence here still stand; status here does not.
+
 # Development Board — Mongla / Duburi (RoboSub 2026)
 
 > **Single source of truth for status, open work, bugs, and fixes.** Start here.

@@ -43,6 +43,7 @@ from launch.event_handlers        import OnProcessExit
 from launch.events                import Shutdown
 from launch.substitutions         import LaunchConfiguration, PythonExpression
 from launch_ros.actions           import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 # Quiet by default: camera/tracker/depth emit only warnings+ so the console
 # isn't flooded during a mission (YOLO itself is already verbose=False). The
@@ -171,11 +172,12 @@ def generate_launch_description():
                               description='Tracker engine: ocsort (default) | bytetrack | legacy_bytetrack'),
         DeclareLaunchArgument('track_buffer',  default_value='30'),
         DeclareLaunchArgument('min_hits',      default_value='1'),
-        # max_predict is the 4th rung of the coast ladder: the Kalman smoother
-        # drops a track (filters it off /tracks) after this many predicted
-        # frames, so it MUST exceed vision.coast_s in frames or the control coast
-        # truncates early. 30 frames = 1.5 s at 20 Hz, headroom over coast_s~0.8.
-        DeclareLaunchArgument('max_predict',   default_value='30'),
+        # max_predict_s is the 4th rung of the coast ladder: the Kalman smoother
+        # drops a track (filters it off /tracks) after this long predicted, so it
+        # MUST exceed vision.coast_s or the control coast truncates early.
+        # SECONDS: the node renamed `max_predict_frames` to `max_predict_s`, and
+        # this launch kept passing the old name -- which rclpy ignores silently.
+        DeclareLaunchArgument('max_predict_s', default_value='1.5'),
         DeclareLaunchArgument('depth',         default_value='false',
                               description='Start depth_estimation_node (monocular vis_range)'),
         DeclareLaunchArgument('depth_model',   default_value='',
@@ -276,7 +278,7 @@ def generate_launch_description():
             'detector_conf':      LaunchConfiguration('conf'),
             'track_buffer':       LaunchConfiguration('track_buffer'),
             'min_hits':           LaunchConfiguration('min_hits'),
-            'max_predict_frames': LaunchConfiguration('max_predict'),
+            'max_predict_s': ParameterValue(LaunchConfiguration('max_predict_s'), value_type=float),
         }],
         condition=IfCondition(LaunchConfiguration('tracking')),
     )

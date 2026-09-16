@@ -53,8 +53,11 @@
 > The workspace name, the `/duburi/*` namespace, and "4.2" in hardware tables are
 > deliberately kept for back-compat — **do not bulk-rename them.**
 >
-> **Central development board (start here for status/bugs/fixes/tickets):**
-> [`.claude/context/development-board.md`](.claude/context/development-board.md).
+> **★ START HERE for where we are headed and what is left:**
+> [`.claude/context/ROADMAP.md`](.claude/context/ROADMAP.md) — verified against the tree
+> 2026-09-16; supersedes the development board, the capability map, the findings ledger and the
+> plan files for STATUS. The old board
+> [`.claude/context/development-board.md`](.claude/context/development-board.md) is Pixhawk-era.
 > Supporting detail: full audit + gap matrix
 > [`.claude/context/robosub-2026-audit.md`](.claude/context/robosub-2026-audit.md);
 > phase schedule [`.claude/context/robosub-2026-roadmap.md`](.claude/context/robosub-2026-roadmap.md).
@@ -169,9 +172,11 @@ constants). `PixhawkFC` **is-a** `Pixhawk`, so the pixhawk path is byte-identica
 - §13.7 payload "NOT through the Pixhawk" — on srot the payload **is** MAVLink
   `DO_SET_SERVO`/`DO_SET_RELAY` to the board's PCA9685; there is no separate USB ESP32.
 
-**Verb support on srot is partial.** `vision_align`/`vision_move`, `move_*_dist`,
-`lock_heading`, `arc`, `style_yaw` are **refused** with a clear message
-(`srot_fc.UNSUPPORTED_VERBS`) — they are not ported yet. *(`move_back` was un-refused
+**Verb support on srot is partial.** `move_*_dist`, `lock_heading`, `arc`, `style_yaw` are
+**refused** with a clear message (`srot_fc.UNSUPPORTED_VERBS`). *(Corrected 2026-09-16:
+`vision_align`/`vision_move` came OUT of that set on 2026-09-03 and actuate through
+`MANUAL_CONTROL`; `move_*_dist` is planned to be un-refused once firmware PR #23 merges — see
+`ROADMAP.md` C1.)* *(`move_back` was un-refused
 2026-08-01: `MOVE_BACK = 1` was always valid on the wire and the refusal was only a missing
 `_build_params` branch. `move_*_dist` stay refused permanently — DVL distance is
 unavailable, see `vehicle-spec.md` "DVL status".)*
@@ -190,7 +195,7 @@ not decelerate 20 kg of hull, with nothing in any log. `0` means "older than 202
 not "unknown", and fails closed; a board that answers *nothing* warns hard but is allowed
 through. Override: `allow_fw_behaviour_mismatch:=true`.
 
-**Firmware is at behaviour rev 7 (`d6f1da5`, flashed 2026-08-07); the host floor stays at 2
+**Firmware is at behaviour rev 14 (`config.h:805`, verified 2026-09-16; this line said rev 7 until then); the host floor stays at 2
 deliberately** (every rev since has been additive *for the host*, and raising it would strand a
 working rev-2 board). ⚠ **Rev 7 ships `FRAME_REVERSE`** — a param, default 0 but **set to 1 on
 our hull**, that negates all six axis demands before the mixer. It fixes "every axis is
