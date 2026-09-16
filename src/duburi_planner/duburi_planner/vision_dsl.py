@@ -115,6 +115,10 @@ class VisionResult:
     y_px:        float = math.nan
     saw_target:  bool  = False
     elapsed_s:   float = 0.0
+    # Payload outcome when the verb was asked to fire: 'ch1:FIRED', 'none' (never
+    # locked long enough to fire), 'pending' (still firing when the verb ended),
+    # or None when no fire was requested.
+    fired:       Optional[str] = None
 
     @property
     def status(self) -> str:
@@ -194,6 +198,7 @@ class _VisionDSL:
               max_depth_m: Optional[float] = None,
               depth_ceiling: Optional[float] = None,
               fire_gap: Optional[float] = None,
+              evidence: bool = False,
               fallback: Optional[Callable] = None,
               camera: Optional[str] = None) -> VisionResult:
         """Hold ``target`` at the requested pixel offset on each active axis.
@@ -389,8 +394,10 @@ class _VisionDSL:
                 depth_ceiling_m=float(depth_ceiling) if depth_ceiling is not None else 0.0,
                 fire_gap=float(fire_gap) if fire_gap is not None else 0.0)
 
-        return self._orchestrate('align', tgt, cam, duration, fallback,
-                                 _one_shot)
+        res = self._orchestrate('align', tgt, cam, duration, fallback, _one_shot)
+        if evidence:                 # opt-in: one annotated frame of how it ended
+            self._dsl.save_evidence(cam, f'align_{tgt}')
+        return res
 
     # ================================================================== #
     #  move -- drive forward to a bbox fill ratio                         #
@@ -523,10 +530,14 @@ class _VisionDSL:
             fill   = float(getattr(result, 'fill_frac', 0.0))
             elapsed = float(getattr(result, 'elapsed_s', 0.0))
             saw    = not math.isnan(x_px)
+            msg    = str(getattr(result, 'message', '') or '')
+            fired  = msg.split(' fired=', 1)[1].split()[0] if ' fired=' in msg else None
 
             def _mk(ok, reason):
-                return VisionResult(ok, reason, code, err_px, fill,
-                                    x_px, y_px, saw, elapsed)
+                res = VisionResult(ok, reason, code, err_px, fill,
+                                   x_px, y_px, saw, elapsed, fired)
+                self._dsl._record_vision(verb, target, camera, res)
+                return res
 
             # Where/how it ended -- logged on EVERY terminal outcome (success too)
             # so practice notes are automatic.

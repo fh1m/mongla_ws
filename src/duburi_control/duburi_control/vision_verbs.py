@@ -160,6 +160,29 @@ def _require_srot_vision_mode(fc, log, verb: str) -> None:
             f'put it there -- check LEAK, thruster battery, and the GCS link.)')
 
 
+
+# How long a verb waits, after its loop ends, for an in-flight fire to report.
+# `payload.fire` can sleep ~2 s on a CH340 reconnect; longer than that is a
+# fire the result reports as `pending` rather than a verb that hangs.
+_FIRE_REPORT_WAIT_S = 2.5
+
+
+def _fired_suffix(channels, fire_state) -> str:
+    """` fired=ch1:FIRED,...` | ` fired=none` | ` fired=pending` | '' (no fire asked).
+
+    Carried in the result MESSAGE so no action field changes; the DSL parses it
+    into `VisionResult.fired`.
+    """
+    if not channels:
+        return ''
+    th = fire_state.get('thread')
+    if th is None:
+        return ' fired=none'
+    th.join(timeout=_FIRE_REPORT_WAIT_S)
+    if th.is_alive() and not fire_state['outcomes']:
+        return ' fired=pending'
+    return ' fired=' + ','.join(fire_state['outcomes'] or ['none'])
+
 class VisionVerbs:
     """Camera-driven verbs for the Duburi facade. Never instantiated alone."""
 
@@ -284,7 +307,14 @@ class VisionVerbs:
         # solenoid launcher misfires if two go together, so space them fire_gap s
         # apart (0 = back-to-back; single-channel fires are unaffected).
         gap_s = float(fire_gap) if float(fire_gap) > 0.0 else 0.0
-        on_locked = (lambda: self._fire_async(channels, gap_s)) if channels else None
+        # The fire's own outcome, so the RESULT can say whether a shot left
+        # (it used to exist only as a log line from a daemon thread).
+        fire_state = {'thread': None, 'outcomes': []}
+
+        def _fire_and_keep():
+            fire_state['thread'] = self._fire_async(channels, gap_s,
+                                                    outcomes=fire_state['outcomes'])
+        on_locked = _fire_and_keep if channels else None
 
         with self._command_scope('vision_align'):
             self._send_neutral_and_settle()
@@ -434,13 +464,14 @@ class VisionVerbs:
                 self._retarget_heading_lock(self._current_heading())
             self._send_neutral_and_settle()
             return self._make_result(
-                True, f'vision_align: {outcome.reason}',
+                True, f'vision_align: {outcome.reason}'
+                      + _fired_suffix(channels, fire_state),
                 final_value=float(outcome.code),
                 error_value=float(outcome.last_err_px),
                 end_x_px=outcome.end_x_px, end_y_px=outcome.end_y_px,
                 fill_frac=0.0, elapsed_s=outcome.elapsed_s)
 
-    def _fire_async(self, channels, gap_s: float = 0.0):
+    def _fire_async(self, channels, gap_s: float = 0.0, outcomes=None):
         """Fire payload ``channels`` one-by-one on a daemon thread (non-blocking).
 
         Called from inside the align hold loop via ``on_locked``; returns
@@ -487,6 +518,8 @@ class VisionVerbs:
                         waited += 0.1
                 try:
                     res = self._fire_payload(ch)
+                    if outcomes is not None:
+                        outcomes.append(f'ch{ch}:{getattr(res, "code_name", "DONE")}')
                     # The shot is the whole point of the hold, so a refusal must be
                     # loud. This used to be discarded: a channel the board calls the
                     # ARM was refused deep in the driver and the mission sailed on
@@ -498,9 +531,12 @@ class VisionVerbs:
                                        f'{res.code_name}: {res.reason}')
                 except Exception as exc:   # noqa: BLE001 -- thread must not crash silently
                     self.log.error(f'[FIRE ] ch={ch} raised {exc!r}')
+                    if outcomes is not None:
+                        outcomes.append(f'ch{ch}:RAISED')
 
-        threading.Thread(target=_run, name='vision_align_fire',
-                         daemon=True).start()
+        th = threading.Thread(target=_run, name='vision_align_fire', daemon=True)
+        th.start()
+        return th
 
     # ================================================================== #
     #  vision_move -- drive forward to a bbox fill ratio                  #

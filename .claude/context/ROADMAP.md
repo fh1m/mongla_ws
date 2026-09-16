@@ -125,7 +125,7 @@ re-ask.
 | P2 | Consumers for published-but-unread topics | **DONE 2026-09-16** | `duburi.outline(cls)` reads `*/contours` (polygon, area, OBB angle); `duburi.active_models(cam)` + `set_model(..., confirm_s=)` read `*/vision_info`. Both opt-in (subscribe on first call) |
 | P3 | OBB angle / class posterior on the wire | OPEN | contours yes, posterior no |
 | P4 | Monocular depth on the vehicle launch | OPEN | node only in `vision.launch.py` |
-| P5 | Verify the actuation by looking (post-fire ROI check) | OPEN | we fire and assume |
+| P5 | Verify the actuation by looking | **PARTIAL 2026-09-17** | `VisionResult.fired` = board outcome per channel (`ch1:FIRED`/`none`/`pending`); opt-in `align(evidence=True)` / `duburi.save_evidence()` writes the annotated frame to the run folder. An automatic hit/miss judgement still needs a model class for the shot itself |
 | P6 | Per-class observed detection range from real class widths | OPEN (data) | by-product of the rejected water-clarity study |
 | P7 | SAUVC bump flares are 16 mm wide | **RISK** | at 2 m the forward camera (634 px focal at 640 wide) sees ~5 px, against a measured ~10 px detection cliff; plan the approach from `standoff_for_prop`, not habit |
 
@@ -137,7 +137,7 @@ re-ask.
 | M2 | SAUVC Task 4: listen station → `duburi.flare_order(timeout=)` → bump in order, else bump all | OPEN | host API and operator tool built (`09cf744`); needs H1 and #24 |
 | M3 | Use `run_budget` in a real mission | OPEN (API done) | `duburi.use_budget()` / `duburi.worth_attempting()` wired 2026-09-16, opt-in; no mission calls it yet (missions are Pixhawk-era, M1) |
 | M4 | Score-aware abandonment mid-task | OPEN | no code |
-| M5 | Scorecard records the perception state behind each verb | OPEN | verbs only today |
+| M5 | Scorecard records the perception state behind each verb | **DONE 2026-09-17** | each vision row carries `vision: {target, camera, outcome, saw_target, x_px, y_px, fill, fired, model}` |
 | M6 | Real-pool auto-labelling | OPEN | new work; Bumblebee's is dead code |
 
 ### Ops / tooling
@@ -284,5 +284,6 @@ declared but not forwarded (a knob wired to nothing).
 | `floor_height()` / `floor_range(...)` / `range_to(...)` | metric range from the floor and the props (rectified) |
 | `anchor_on(prop)` / `fix_position()` / `fix_from_prop(prop)` | absolute heading and pool fixes (need a course with positions, L5) |
 | `can_see()` / `motion()` | blind-camera and BLOCKED-hull checks |
+| `align(..., evidence=True)` / `save_evidence(cam, tag)` | annotated frame of how a task ended, saved beside the scorecard |
 | `DUBURI_MEDIUM=air` (env) | DSL metric vision as a plain pinhole for bench runs |
 | `align(..., lock_on=, settle=, hold_heading=, fire_pass=, tool=)` | per-call precision knobs |

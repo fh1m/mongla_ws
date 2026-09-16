@@ -359,6 +359,24 @@ def _pick_outline(msg, target_class: str):
     return best
 
 
+def _write_ppm(img, folder: str, stem: str):
+    """sensor_msgs/Image (rgb8 | bgr8) -> binary PPM. None for other encodings."""
+    enc = str(img.encoding).lower()
+    if enc not in ('rgb8', 'bgr8'):
+        return None
+    w, h, step = int(img.width), int(img.height), int(img.step)
+    data = bytes(img.data)
+    rows = [data[r * step:r * step + 3 * w] for r in range(h)]
+    if enc == 'bgr8':
+        rows = [bytes(b for i in range(0, 3 * w, 3) for b in (row[i + 2], row[i + 1], row[i]))
+                for row in rows]
+    path = os.path.join(folder, f'{stem}_{_time.strftime("%Y%m%d_%H%M%S")}.ppm')
+    with open(path, 'wb') as fh:
+        fh.write(f'P6 {w} {h} 255\n'.encode())
+        fh.write(b''.join(rows))
+    return path
+
+
 class DuburiMission:
     """Mission-author API. Wraps DuburiClient with human verbs + sticky context.
 
@@ -891,6 +909,64 @@ class DuburiMission:
     # ================================================================== #
     #  Run budget -- OPT-IN (Tier 5.1)                                    #
     # ================================================================== #
+
+    def _record_vision(self, verb: str, target: str, camera: str, res) -> None:
+        """Put WHERE and HOW a vision verb ended on its scoreboard row.
+
+        The scorecard used to carry only cmd/success/elapsed/msg, and the vision
+        server always reports success -- so a run that never saw the gate and
+        one that centred it looked identical afterwards. Updates the verb's own
+        row (the last `vision_<verb>`); adds one if the verb never reached the
+        server.
+        """
+        import math as _math
+        info = self.__dict__.get('_vinfo', {}).get(camera)
+        evidence = {
+            'target': str(target), 'camera': str(camera),
+            'outcome': res.reason, 'saw_target': bool(res.saw_target),
+            'x_px': None if _math.isnan(res.x_px) else round(res.x_px, 1),
+            'y_px': None if _math.isnan(res.y_px) else round(res.y_px, 1),
+            'fill': round(float(res.fill), 3), 'fired': res.fired,
+            'model': list(info[0]) if info else None,
+        }
+        board = self.__dict__.setdefault('_scoreboard', [])
+        for row in reversed(board):
+            if row.get('cmd') == f'vision_{verb}' and 'vision' not in row:
+                row['vision'] = evidence
+                return
+        board.append({'cmd': f'vision_{verb}', 'success': bool(res.ok),
+                      'elapsed': round(float(res.elapsed_s), 2),
+                      'msg': res.reason, 'vision': evidence})
+
+    def save_evidence(self, camera: str | None = None, tag: str = 'evidence', *,
+                      timeout: float = 2.0):
+        """Save the next `image_debug` frame (boxes drawn) into the run folder.
+
+        OPT-IN. Returns the file path, or None when no frame arrived. Written as
+        binary PPM: no OpenCV or cv_bridge needed (both fail under numpy 2), and
+        any viewer opens it. The path goes on the scoreboard so the scorecard row
+        and the picture of how the task ended travel together.
+        """
+        import time as _t
+        from sensor_msgs.msg import Image
+        cam = camera or self.camera
+        node = self.client.node
+        got = {}
+        sub = node.create_subscription(
+            Image, f'/duburi/vision/{cam}/image_debug',
+            lambda m: got.setdefault('img', m), 1)
+        try:
+            deadline = _t.monotonic() + float(timeout)
+            while 'img' not in got and _t.monotonic() < deadline:
+                rclpy.spin_once(node, timeout_sec=0.05)
+        finally:
+            node.destroy_subscription(sub)
+        img = got.get('img')
+        path = _write_ppm(img, _run_dir(), f'{tag}_{cam}') if img is not None else None
+        self.__dict__.setdefault('_scoreboard', []).append(
+            {'cmd': f'evidence:{tag}', 'success': path is not None,
+             'elapsed': 0.0, 'msg': path or f'no image_debug frame from {cam}'})
+        return path
 
     def use_budget(self, total_s: float = 900.0, *, reserve_s: float = 45.0):
         """Ration the run by the clock. OPT-IN: nothing is rationed until this is called.
