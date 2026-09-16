@@ -1283,8 +1283,10 @@ class AUVManagerNode(Node):
                               vision_provider=self.duburi.vision_telemetry):
                 # Re-snapshot params for every goal so freshly-set
                 # `vision.*` values land on the very next command.
-                runtime = runtime_defaults_for_command(
-                    cmd, snapshot_from_node(self))
+                snap = snapshot_from_node(self)
+                runtime = runtime_defaults_for_command(cmd, snap)
+                self.duburi.vision_mixer_aware = bool(
+                    snap.get('vision.mixer_aware', True))
                 kwargs = fields_for(cmd, request, runtime_defaults=runtime)
                 if self._is_srot and cmd in SROT_UNSUPPORTED_VERBS:
                     # Refuse BEFORE dispatch. Left to fall through, these reach

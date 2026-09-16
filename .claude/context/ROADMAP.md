@@ -122,7 +122,7 @@ re-ask.
 | # | Item | State | Note |
 |---|---|---|---|
 | P1 | Hailo model LIFECYCLE release between tasks | OPEN (no `LifecycleNode`) | the resident-group SRAM ceiling; Bumblebee `yolo_ros_trt` pattern |
-| P2 | Consumers for published-but-unread topics | OPEN | `*/contours` (segmentation outlines) and `*/vision_info` (model provenance) have **no subscriber** in `src/` |
+| P2 | Consumers for published-but-unread topics | **DONE 2026-09-16** | `duburi.outline(cls)` reads `*/contours` (polygon, area, OBB angle); `duburi.active_models(cam)` + `set_model(..., confirm_s=)` read `*/vision_info`. Both opt-in (subscribe on first call) |
 | P3 | OBB angle / class posterior on the wire | OPEN | contours yes, posterior no |
 | P4 | Monocular depth on the vehicle launch | OPEN | node only in `vision.launch.py` |
 | P5 | Verify the actuation by looking (post-fire ROI check) | OPEN | we fire and assume |
@@ -135,7 +135,7 @@ re-ask.
 |---|---|---|---|
 | M1 | Port missions + FSM off Pixhawk-era verbs | OPEN | operator ruling: no fallback audit until they run on srot |
 | M2 | SAUVC Task 4: listen station → `duburi.flare_order(timeout=)` → bump in order, else bump all | OPEN | host API and operator tool built (`09cf744`); needs H1 and #24 |
-| M3 | Wire `run_budget` into a real mission | OPEN | `run_budget.py` has **no production caller** |
+| M3 | Use `run_budget` in a real mission | OPEN (API done) | `duburi.use_budget()` / `duburi.worth_attempting()` wired 2026-09-16, opt-in; no mission calls it yet (missions are Pixhawk-era, M1) |
 | M4 | Score-aware abandonment mid-task | OPEN | no code |
 | M5 | Scorecard records the perception state behind each verb | OPEN | verbs only today |
 | M6 | Real-pool auto-labelling | OPEN | new work; Bumblebee's is dead code |
@@ -209,12 +209,17 @@ own formula. Dev suite before any change: 3220 passed, 0 failed.
 - Every argument `bringup.launch.py` forwards is declared by its target launch.
 - Every `fwd_*` / `dwn_*` / shared parameter the Pi launch passes to the dual detector is declared.
 
-### Built but not used — recorded, not deleted
+### Built but not used — RESOLVED 2026-09-16
 
-- `run_budget.py` (Tier 5.1) — no production caller (M3).
-- `duburi_control/nav_filter.py` — no production caller since `e9528ad` (2026-09-03).
-- `estimator/thrust_model.py` — uncalled on purpose until G2.
-- Topics `*/contours`, `*/vision_info` — no subscriber (P2).
+| Item | Resolution |
+|---|---|
+| `run_budget.py` (Tier 5.1) | wired into the DSL, opt-in: `use_budget(total_s, reserve_s)` starts the clock on a successful `arm()`; `worth_attempting(name, points=, worst_case_s=, fallback_s=, fallback_points=)` returns full / fallback / skip and logs it on the scoreboard. No budget = always attempt |
+| `duburi_control/nav_filter.py` | **false positive** of the `src/`-only census: `tools/srot_console_server.py` and `tools/srot_replay.py` import it. Kept |
+| `estimator/thrust_model.py` | stays uncalled on purpose until G2 (thrusters fitted) |
+| topic `*/vision_info` | `duburi.active_models(cam)`; `set_model(name, confirm_s=N)` waits for the detector to announce `name`, then drops detections cached from the old model. Matched by NAME, not epoch (a restarted detector resets the epoch). `confirm_s=0` (default) is the old behaviour |
+| topic `*/contours` | `duburi.outline(cls)` → largest `Outline(class_name, score, angle_deg, area_px, points)`; a box model gives 4 corners, a seg model the mask outline |
+
+Tests: `test_opt_in_consumers.py` (9, real rclpy publishers), each injection-verified.
 
 ---
 
@@ -227,3 +232,56 @@ own formula. Dev suite before any change: 3220 passed, 0 failed.
 | `CLAUDE.md` §2b | `move_*_dist` "stay refused permanently" | planned un-refusal after PR #23 (C1) |
 | `development-board.md` | "single source of truth", updated 2026-06-24 | Pixhawk era; superseded by this file |
 | `CAPABILITY-MAP.md` body | "Nothing is built yet" | Tiers 0–5 largely built; §4 lists what is not |
+
+---
+
+## 9. Feature switches — test each alone, then in combinations
+
+Every switch defaults to what ships, so a plain launch is unchanged. Flip ONE at a time first.
+`test_feature_switches.py` fails if a bringup switch's default drifts from its node's, or if it is
+declared but not forwarded (a knob wired to nothing).
+
+### Launch (`ros2 launch duburi_manager bringup.launch.py <arg>:=<value>`)
+
+| Switch | Default | Gates | Lands on |
+|---|---|---|---|
+| `vision` | `false` | the whole vision stack | include |
+| `vision_stack` | `pi` | `pi` (dual camera + Hailo) or `generic` | include |
+| `localization` | `true` | the RIEKF node | `duburi_localization` |
+| `flow` | `false` | downward-camera velocity (needs `pool_depth_m`) | `flow_node` |
+| `lock` | `true` | XFeat anchor + LK follower ladder | `lock_node` |
+| `paused` | `true` | detectors idle until a mission resumes one | detectors |
+| `medium` | `water` | flat-port rectification in flow, lock, pnp | three nodes |
+| `velocity_uplink` | `false` | RIEKF body velocity → board (103) | manager |
+| `position_uplink` | `false` | RIEKF pose → board (102) | manager |
+| `mixer_aware` | `true` | srot vision frames prioritised yaw-first + saturation-aware anti-windup | manager `vision.mixer_aware` |
+| `zupt` | `true` | zero-velocity updates when still | localization |
+| `demand_aid` | `true` | velocity from commanded demand on a blank floor | localization |
+| `use_yaw` | `false` | fuse the landmark heading anchor | localization |
+| `caustics` | `true` | sun-caustic erosion + bare-floor refusal | flow `caustic_suppression` |
+| `lane_lines` | `false` | lane-line heading (mod 180) yaw bound | flow |
+| `tile_m` | `0.0` | tile grating height + yaw bound (0 = off; the venue's tile size = on) | flow |
+| `baro_calibration` | `true` | re-zero the Bar30 in `mission_reset` | manager |
+| `foxglove` | `false` | telemetry bridge | include |
+| `viewer` | `false` | on-vehicle HUD | vision |
+| `allow_fw_behaviour_mismatch` | `false` | arm below firmware rev 2 (safety override) | manager |
+
+### Live (`ros2 param set /duburi_manager vision.<name> <value>`, next goal)
+
+`vision.coast_s` (0.8, 0 = off), `vision.lock_s` (1.0, 0 = ladder off), `vision.mixer_aware`
+(true), `vision.range_gain_floor` (1.0 = off), `vision.ki_lat` (0 = off), `vision.ctrl_conf`
+(0 = off).
+
+### Mission DSL (opt-in by calling; not calling = old behaviour)
+
+| Call | Adds |
+|---|---|
+| `use_budget(total_s, reserve_s=)` + `worth_attempting(...)` | run clock, full/fallback/skip |
+| `set_model(name, confirm_s=N)` | wait for the model to be live, drop pre-switch detections |
+| `active_models(cam)` / `outline(cls)` | model provenance / polygon + OBB angle |
+| `flare_order(timeout=)` | SAUVC order received over LoRa this mission |
+| `floor_height()` / `floor_range(...)` / `range_to(...)` | metric range from the floor and the props (rectified) |
+| `anchor_on(prop)` / `fix_position()` / `fix_from_prop(prop)` | absolute heading and pool fixes (need a course with positions, L5) |
+| `can_see()` / `motion()` | blind-camera and BLOCKED-hull checks |
+| `DUBURI_MEDIUM=air` (env) | DSL metric vision as a plain pinhole for bench runs |
+| `align(..., lock_on=, settle=, hold_heading=, fire_pass=, tool=)` | per-call precision knobs |

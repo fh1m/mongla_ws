@@ -290,6 +290,10 @@ def generate_launch_description():
                         'grid angle that bounds yaw drift. A wrong value '
                         'rescales every height silently -- measure it.'),
         DeclareLaunchArgument(
+            'caustics', default_value='true',
+            description='flow: erode sun caustics and refuse a bare floor under them '
+                        '(false = always track the raw floor; A/B switch)'),
+        DeclareLaunchArgument(
             'lane_lines', default_value='false',
             description='Read the lane line (heading mod 180) for the yaw '
                         'drift bound. OFF: a path marker is also a dark band. '
@@ -542,6 +546,8 @@ def generate_launch_description():
                      LaunchConfiguration('tile_m'), value_type=float),
                  'lane_lines':   ParameterValue(
                      LaunchConfiguration('lane_lines'), value_type=bool),
+                 'caustic_suppression': ParameterValue(
+                     LaunchConfiguration('caustics'), value_type=bool),
              }],
              condition=IfCondition(LaunchConfiguration('flow'))),
         ladder('forward',  'lock_class'),

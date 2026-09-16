@@ -379,6 +379,7 @@ class VisionVerbs:
                         range_gain_floor=float(range_gain_floor) or 1.0,
                         ki_lat=float(ki_lat),
                         coast_s=float(coast_s),
+                        mixer_aware=bool(getattr(self, 'vision_mixer_aware', True)),
                         # ⛔ WITHOUT THIS LINE THE LADDER IS UNREACHABLE.
                         # `align_loop` has accepted `lock_s` since the ladder
                         # was built and NO caller ever passed it, so it kept its
@@ -577,6 +578,7 @@ class VisionVerbs:
                 release_yaw=True,
                 range_gain_floor=float(range_gain_floor) or 1.0,
                 coast_s=float(coast_s),
+                mixer_aware=bool(getattr(self, 'vision_mixer_aware', True)),
                 # The ladder, same as align -- `move_loop` took `lock_s` and
                 # nobody passed it either.
                 lock_s=float(lock_s),

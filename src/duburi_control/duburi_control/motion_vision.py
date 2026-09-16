@@ -645,7 +645,8 @@ def _mixer_saturated(lat_pct: float, yaw_pct: float, fwd_pct: float) -> bool:
         return False
 
 
-def _srot_drive(fc, *, fwd_pct: float, lat_pct: float, yaw_pct: float) -> None:
+def _srot_drive(fc, *, fwd_pct: float, lat_pct: float, yaw_pct: float,
+                prioritise: bool = True) -> None:
     """Write one MANUAL_CONTROL frame for the srot board.
 
     WHY THIS IS NOT `PixhawkFC.manual()` FOR BOTH BACKENDS. The HAL's `manual()`
@@ -681,12 +682,13 @@ def _srot_drive(fc, *, fwd_pct: float, lat_pct: float, yaw_pct: float) -> None:
     before. A failure degrades to the raw demand, which is the old behaviour.
     """
     fwd, lat, yaw = fwd_pct / 100.0, lat_pct / 100.0, yaw_pct / 100.0
-    try:
-        from duburi_control.allocation import prioritise
-        fit = prioritise({'forward': fwd, 'lateral': lat, 'yaw': yaw})
-        fwd, lat, yaw = fit['forward'], fit['lateral'], fit['yaw']
-    except Exception:                       # noqa: BLE001
-        pass
+    if prioritise:                          # vision.mixer_aware; False = raw demand
+        try:
+            from duburi_control.allocation import prioritise as _fit
+            fit = _fit({'forward': fwd, 'lateral': lat, 'yaw': yaw})
+            fwd, lat, yaw = fit['forward'], fit['lateral'], fit['yaw']
+        except Exception:                   # noqa: BLE001
+            pass
     fc.manual(fwd=fwd, lat=lat, up=0.0, yaw=yaw)
 
 
@@ -765,6 +767,7 @@ def align_loop(*,
                i_lat_max: float = VISION_I_LAT_MAX,
                coast_s: float = 0.0,
                lock_s: float = 0.0,
+               mixer_aware: bool = True,
                fwd_fill: float = 0.0,
                fwd_mode: str = 'area',
                kp_forward: float = KP_FORWARD_DEFAULT,
@@ -968,7 +971,8 @@ def align_loop(*,
         if _is_srot(pixhawk):
             # release_yaw -> command 0 yaw; the board holds heading at 500 Hz.
             _srot_drive(pixhawk, fwd_pct=fwd_pct, lat_pct=lat_pct,
-                        yaw_pct=0.0 if release_yaw else yaw_pct)
+                        yaw_pct=0.0 if release_yaw else yaw_pct,
+                        prioritise=mixer_aware)
         elif release_yaw:
             pixhawk.send_rc_translation(
                 throttle=throttle_ch, forward=Pixhawk.percent_to_pwm(fwd_pct),
@@ -1365,7 +1369,8 @@ def align_loop(*,
             # What the mixer will do to what we just asked for. Computed from
             # OUR demand and the frame's published matrix, so it needs nothing
             # from the board -- which is the only reason it is available at all.
-            was_saturated = _mixer_saturated(lat_pct, yaw_pct, fwd_pct)
+            was_saturated = (_mixer_saturated(lat_pct, yaw_pct, fwd_pct)
+                             if mixer_aware else False)
             _drive(lat_pct, yaw_pct, fwd_pct)
             # Brake EMA tracks the PROPORTIONAL command only (a travel-momentum
             # proxy), NOT the full lat_pct: a hull holding STILL against a steady
@@ -1610,6 +1615,7 @@ def move_loop(*,
               range_gain_floor: float = 1.0,
               coast_s: float = 0.0,
               lock_s: float = 0.0,
+              mixer_aware: bool = True,
               report_fn=None,
               writers=None,
               log=None,
@@ -1654,7 +1660,8 @@ def move_loop(*,
     def _drive(fwd_pct: float, lat_pct: float) -> None:
         if _is_srot(pixhawk):
             # move never commands yaw on either backend.
-            _srot_drive(pixhawk, fwd_pct=fwd_pct, lat_pct=lat_pct, yaw_pct=0.0)
+            _srot_drive(pixhawk, fwd_pct=fwd_pct, lat_pct=lat_pct, yaw_pct=0.0,
+                        prioritise=mixer_aware)
             return
         if release_yaw:
             pixhawk.send_rc_translation(

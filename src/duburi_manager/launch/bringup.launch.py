@@ -186,6 +186,32 @@ def generate_launch_description():
                                           'camera to the floor. Required: without '
                                           'it flow_node publishes quality 0 and '
                                           'refuses, by design.'),
+        # --- FEATURE SWITCHES: every one defaults to what the node ships, so a
+        # plain launch is unchanged; flip one at a time to test it alone. The
+        # full list and what each one gates: .claude/context/ROADMAP.md §9.
+        DeclareLaunchArgument('velocity_uplink', default_value='false',
+                              description='manager: RIEKF body velocity -> board '
+                                          '(VISION_SPEED_ESTIMATE). Needs fw PR #23 to act.'),
+        DeclareLaunchArgument('position_uplink', default_value='false',
+                              description='manager: RIEKF pose -> board '
+                                          '(VISION_POSITION_ESTIMATE).'),
+        DeclareLaunchArgument('mixer_aware', default_value='true',
+                              description='manager: srot vision frames fitted to the '
+                                          'mixer yaw-first + saturation-aware anti-windup.'),
+        DeclareLaunchArgument('zupt', default_value='true',
+                              description='localization: zero-velocity updates when still.'),
+        DeclareLaunchArgument('demand_aid', default_value='true',
+                              description='localization: velocity from commanded demand '
+                                          'when the floor goes blank.'),
+        DeclareLaunchArgument('use_yaw', default_value='false',
+                              description='localization: fuse the landmark heading anchor.'),
+        DeclareLaunchArgument('caustics', default_value='true',
+                              description='flow: sun-caustic erosion + bare-floor refusal.'),
+        DeclareLaunchArgument('lane_lines', default_value='false',
+                              description='flow: lane-line heading (mod 180) yaw bound.'),
+        DeclareLaunchArgument('tile_m', default_value='0.0',
+                              description='flow: pool tile size in metres; 0 = tile '
+                                          'grating (height + yaw bound) OFF.'),
         DeclareLaunchArgument('medium',  default_value='water',
                               choices=['water', 'air'],
                               description='The medium the VEHICLE is in. Read by '
@@ -312,6 +338,9 @@ def generate_launch_description():
             # no brake, so a wrongly-true value means `stop` does not decelerate.
             'allow_fw_behaviour_mismatch': ParameterValue(
                 LaunchConfiguration('allow_fw_behaviour_mismatch'), value_type=bool),
+            'velocity_uplink':  ParameterValue(LaunchConfiguration('velocity_uplink'), value_type=bool),
+            'position_uplink':  ParameterValue(LaunchConfiguration('position_uplink'), value_type=bool),
+            'vision.mixer_aware': ParameterValue(LaunchConfiguration('mixer_aware'), value_type=bool),
         }],
     )
 
@@ -357,6 +386,9 @@ def generate_launch_description():
             'medium':        LaunchConfiguration('medium'),
             'lock':          LaunchConfiguration('lock'),
             'paused':        LaunchConfiguration('paused'),
+            'caustics':      LaunchConfiguration('caustics'),
+            'lane_lines':    LaunchConfiguration('lane_lines'),
+            'tile_m':        LaunchConfiguration('tile_m'),
         }.items(),
         condition=_stack_is('pi'),
     )
@@ -398,6 +430,9 @@ def generate_launch_description():
                        '--log-level', 'duburi_localization:=info'],
         parameters=[{
             'flow_camera': 'downward',
+            'zupt':       ParameterValue(LaunchConfiguration('zupt'), value_type=bool),
+            'demand_aid': ParameterValue(LaunchConfiguration('demand_aid'), value_type=bool),
+            'use_yaw':    ParameterValue(LaunchConfiguration('use_yaw'), value_type=bool),
         }],
         condition=IfCondition(LaunchConfiguration('localization')),
     )
