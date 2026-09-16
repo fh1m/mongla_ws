@@ -52,7 +52,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Sequence
+from typing import Tuple, Optional, Sequence
 
 
 @dataclass(frozen=True)
@@ -136,6 +136,28 @@ def _refract(angle_rad: float, n: float) -> float:
     return math.asin(s)
 
 
+def _refract_point(xu: float, yu: float, n: float) -> Tuple[float, float]:
+    """Normalised air ray (xu, yu, 1) -> the water ray's (x, y), through a flat port.
+
+    ⛔ A FLAT PORT REFRACTS THE POLAR ANGLE, NOT EACH AXIS. Snell bends the ray
+    in the plane containing it and the port normal, so the azimuth is kept and
+    only `r = hypot(x, y)` shrinks: `r_w = tan(asin(sin(atan r) / n))`. Refracting
+    x and y as two independent angles (what this module used to do) over-reads
+    both off-axis; measured on the forward calibration it was +0.7 / +1.4 deg at
+    the frame corner. Same map as `duburi_vision.optics.RefractiveRectifier`.
+    """
+    if n <= 1.0:
+        return xu, yu
+    r = math.hypot(xu, yu)
+    if r == 0.0:
+        return xu, yu
+    s = math.sin(math.atan(r)) / n
+    if s >= 1.0:                     # unreachable for n > 1; refuse, do not clamp
+        return xu, yu
+    k = math.tan(math.asin(s)) / r
+    return xu * k, yu * k
+
+
 def bearing_from_pixels(u: float, v: float, w_px: float, h_px: float,
                         *, width: int, height: int,
                         K: Optional[Sequence[float]] = None,
@@ -182,27 +204,29 @@ def bearing_from_pixels(u: float, v: float, w_px: float, h_px: float,
         # ratio wrong. `test_bearing_resolution_invariant.py` pins both halves.
         xn, yn = (u - cx) / fx, (v - cy) / fy
         xu, yu = _undistort(xn, yn, D or ())
-        ax = _refract(math.atan(xu), n_medium)
-        ay = _refract(math.atan(yu), n_medium)
+        xw, yw = _refract_point(xu, yu, n_medium)
+        ax, ay = math.atan(xw), math.atan(yw)
         # Angular size from the box EDGES, not `atan(w/fx)`. The naive form
         # implicitly measures a box centred on the optical axis, so an
         # off-centre target reports a size that shrinks with eccentricity --
         # and size_x is the standoff measure, so that reads as "further away"
         # purely because the target drifted sideways.
-        x1, _ = _undistort((u - w_px / 2 - cx) / fx, yn, D or ())
-        x2, _ = _undistort((u + w_px / 2 - cx) / fx, yn, D or ())
-        _, y1 = _undistort(xn, (v - h_px / 2 - cy) / fy, D or ())
-        _, y2 = _undistort(xn, (v + h_px / 2 - cy) / fy, D or ())
+        x1, e1 = _undistort((u - w_px / 2 - cx) / fx, yn, D or ())
+        x2, e2 = _undistort((u + w_px / 2 - cx) / fx, yn, D or ())
+        f1, y1 = _undistort(xn, (v - h_px / 2 - cy) / fy, D or ())
+        f2, y2 = _undistort(xn, (v + h_px / 2 - cy) / fy, D or ())
         # The SIZE is refracted per EDGE and then differenced. Refracting the
         # difference instead would be wrong for an off-centre box: the two
         # edges sit at different field angles, so they compress by different
         # amounts -- which is the same eccentricity error the edge-based form
         # above exists to avoid, reintroduced one step later.
+        # Each EDGE point is refracted as a whole ray (both of its coordinates),
+        # because the compression depends on the full off-axis angle.
         return Bearing(ax, ay,
-                       abs(_refract(math.atan(x2), n_medium)
-                           - _refract(math.atan(x1), n_medium)),
-                       abs(_refract(math.atan(y2), n_medium)
-                           - _refract(math.atan(y1), n_medium)),
+                       abs(math.atan(_refract_point(x2, e2, n_medium)[0])
+                           - math.atan(_refract_point(x1, e1, n_medium)[0])),
+                       abs(math.atan(_refract_point(f2, y2, n_medium)[1])
+                           - math.atan(_refract_point(f1, y1, n_medium)[1])),
                        calibrated=True)
 
     if hfov_rad > 0.0 and vfov_rad > 0.0:

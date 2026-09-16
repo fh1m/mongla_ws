@@ -79,3 +79,15 @@ def test_a_nose_up_hull_is_corrected_by_passing_negative_pitch():
     level = DuburiMission.floor_range(_m([box]), 'drum', plane_below_m=1.0, pitch_deg=0.0)
     assert right[0] == pytest.approx(3.0, rel=1e-9)
     assert abs(level[0] - 3.0) > 0.2
+
+
+def test_the_calibrated_principal_point_is_used_not_the_frame_centre():
+    # The forward camera's cy sits 70 px above centre at 720 p. A foot placed
+    # for THAT principal point must range true; the frame-centre reading would
+    # be ~6 deg of pitch off.
+    m = _m([], size=(1280.0, 720.0))
+    m._cam_k = {'forward': (F, F, 675.4, 290.3)}
+    foot_v = 290.3 + F * 1.0 / 3.0
+    m._records.return_value = [('drum', 675.4, foot_v - 30.0, 40.0, 60.0, 0.8)]
+    got = DuburiMission.floor_range(m, 'drum', plane_below_m=1.0, pitch_deg=0.0)
+    assert got[0] == pytest.approx(3.0, rel=1e-6)

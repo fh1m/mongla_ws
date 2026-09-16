@@ -234,13 +234,16 @@ class RIEKF:
     def update_body_velocity(self, v_body, sigma: float = 0.05) -> bool:
         """The flow DVL: velocity measured in the BODY frame.
 
-        Right-invariant and exact for this filter, which is why the handedness
-        was chosen this way: three of our five measurements have this shape.
+        ⛔ NO ATTITUDE TERM. Under this filter's error (`_inject`: R <- dR R,
+        v <- dR v + dv) the prediction R^T v is (dR R)^T (dR v + dv) =
+        R^T v + R^T dR^T dv: the attitude error cancels exactly. An
+        `R^T [v]x` block used to sit here and made every flow innovation
+        steer attitude in proportion to speed. `test_inekf_jacobians.py`
+        checks each H against a finite difference through `_inject`.
         """
         z = np.asarray(v_body, dtype=float).reshape(3)
         H = np.zeros((3, self.DIM))
         H[:, 3:6] = self.X.R.T
-        H[:, 0:3] = self.X.R.T @ skew(self.X.v)
         y = z - self.X.R.T @ self.X.v
         return self._apply(H, y, np.eye(3) * (sigma ** 2))
 
@@ -262,8 +265,7 @@ class RIEKF:
         """
         H = np.zeros((2, self.DIM))
         R_T = self.X.R.T
-        H[:, 3:6] = R_T[:2, :]
-        H[:, 0:3] = (R_T @ skew(self.X.v))[:2, :]
+        H[:, 3:6] = R_T[:2, :]              # no attitude term, see update_body_velocity
         y = np.array([vx, vy]) - (R_T @ self.X.v)[:2]
         return self._apply(H, y, np.diag([var_x, var_y]))
 
@@ -294,6 +296,10 @@ class RIEKF:
         """
         H = np.zeros((1, self.DIM))
         H[0, 8] = 1.0
+        # p <- dR p + dp, so an attitude error moves predicted depth by
+        # (dtheta x p)_z: rows of -[p]x. Zero at the origin, a real coupling
+        # once the hull is metres away from it.
+        H[0, 0:3] = -skew(self.X.p)[2]
         y = np.array([-float(depth_m) - self.X.p[2]])
         return self._apply(H, y, np.array([[sigma ** 2]]))
 
@@ -305,7 +311,16 @@ class RIEKF:
         """
         err = math.radians(_wrap180(float(yaw_deg) - self.X.yaw_deg()))
         H = np.zeros((1, self.DIM))
-        H[0, 2] = 1.0
+        # d(yaw)/d(dtheta) for R <- dR R. [0, 0, 1] only when the hull is
+        # level; roll and pitch mix the axes otherwise.
+        R = self.X.R
+        c0 = R[:, 0]
+        dc = -skew(c0)                      # d(dtheta x c0)/d(dtheta)
+        den = R[0, 0] ** 2 + R[1, 0] ** 2
+        if den > 1e-9:
+            H[0, 0:3] = (R[0, 0] * dc[1] - R[1, 0] * dc[0]) / den
+        else:
+            H[0, 2] = 1.0
         return self._apply(H, np.array([err]),
                            np.array([[math.radians(sigma_deg) ** 2]]))
 
@@ -320,6 +335,7 @@ class RIEKF:
         H = np.zeros((2, self.DIM))
         H[0, 6] = 1.0
         H[1, 7] = 1.0
+        H[:, 0:3] = -skew(self.X.p)[:2]     # same coupling as update_depth
         return self._apply(H, z - self.X.p[:2], np.eye(2) * (sigma ** 2))
 
     def update_attitude(self, R_meas, sigma_deg: float = 1.0) -> bool:

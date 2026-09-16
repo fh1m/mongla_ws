@@ -27,13 +27,13 @@ def _fake(course=None, offset=150.0, heading=0.0, seen=None):
     m = MagicMock()
     m._course = course
     m._heading_offset = offset
-    m.HFOV_WATER_DEG = DuburiMission.HFOV_WATER_DEG
+    m.HFOV_WATER_DEG_BY_CAMERA = DuburiMission.HFOV_WATER_DEG_BY_CAMERA
     m.absolute_heading.return_value = heading
     seen = seen or {}
     m.where_offset.side_effect = lambda cls, camera=None: seen.get(cls)
     m.bearing_to.side_effect = lambda cls, camera=None: (
         None if seen.get(cls) is None
-        else (heading + seen[cls] * DuburiMission.HFOV_WATER_DEG / 2.0) % 360.0)
+        else (heading + seen[cls] * DuburiMission.HFOV_WATER_DEG_BY_CAMERA['forward'] / 2.0) % 360.0)
     return m
 
 
@@ -99,11 +99,14 @@ def test_bearing_to_returns_none_for_an_unseen_prop():
     assert fake.bearing_to('gate') is None
 
 
-def test_bearing_to_uses_the_WATER_field_of_view():
-    # The air figure is 63.8 deg and would stretch every bearing by 37 %.
+def test_bearing_to_uses_the_WATER_field_of_view_of_THAT_camera():
+    # Water, not air (air would stretch every bearing by ~37 %), and per camera:
+    # forward is the Fantech at 53.6 deg, downward the global shutter at 46.7.
     fake = _fake(seen={'gate': 1.0}, heading=0.0)
     fake.bearing_to = DuburiMission.bearing_to.__get__(fake)
-    assert fake.bearing_to('gate') == pytest.approx(46.7 / 2.0)
+    fake.where_offset.side_effect = lambda cls, camera=None: 1.0
+    assert fake.bearing_to('gate', camera='forward') == pytest.approx(53.6 / 2.0)
+    assert fake.bearing_to('gate', camera='downward') == pytest.approx(46.7 / 2.0)
 
 
 # --------------------------------------------------------------------------- #

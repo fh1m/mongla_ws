@@ -19,7 +19,7 @@ from duburi_localization.resection import Fix
 def _fake(seen_after=None, fix_ok=True):
     """`seen_after` = number of detected() calls before the class appears."""
     m = MagicMock()
-    m.HFOV_WATER_DEG = DuburiMission.HFOV_WATER_DEG
+    m.HFOV_WATER_DEG_BY_CAMERA = DuburiMission.HFOV_WATER_DEG_BY_CAMERA
     m._course = None
     m.focal_px = DuburiMission.focal_px.__get__(m)
     m.standoff_for_prop = DuburiMission.standoff_for_prop.__get__(m)
@@ -41,10 +41,42 @@ def _fake(seen_after=None, fix_ok=True):
 
 
 def test_the_focal_is_derived_from_the_measured_field_of_view():
-    # 640 px wide at 46.7 deg gives 741 px, which is what the flow node
-    # independently reports as its water focal. Two derivations, one number.
-    f = DuburiMission.focal_px(_fake(), 640.0)
-    assert f == pytest.approx(741.0, abs=1.5)
+    # Downward (global shutter): 640 px at 46.7 deg water gives 741 px, which
+    # the flow node independently reports as its water focal.
+    m = _fake()
+    m.camera = 'downward'
+    assert DuburiMission.focal_px(m, 640.0) == pytest.approx(741.0, abs=1.5)
+
+
+def test_each_camera_has_its_own_focal():
+    # The forward camera is the Fantech (73.9 deg air -> 53.6 water). One shared
+    # 46.7 constant made every forward range 17 % long.
+    m = _fake()
+    assert DuburiMission.focal_px(m, 640.0, camera='forward') == pytest.approx(634.0, abs=2.0)
+    assert DuburiMission.focal_px(m, 640.0, camera='downward') == pytest.approx(741.0, abs=1.5)
+
+
+def test_a_live_calibration_beats_the_fallback():
+    # CameraInfo for the forward camera at 1280x720, fx 851.23 (air). Through
+    # the port that is 53.6 deg; a DIFFERENT K must move the focal with it.
+    m = _fake()
+    m._img_size = {'forward': (1280.0, 720.0)}
+    m._cam_k = {'forward': (851.23, 858.15, 675.42, 290.28)}
+    assert DuburiMission.hfov_water_deg(m, 'forward') == pytest.approx(53.6, abs=0.1)
+    m._cam_k = {'forward': (1027.87, 1033.86, 617.3, 373.0)}
+    assert DuburiMission.hfov_water_deg(m, 'forward') == pytest.approx(46.7, abs=0.1)
+
+
+def test_the_fallback_table_matches_the_committed_calibrations():
+    import json, math
+    from pathlib import Path
+    from duburi_vision.optics import fov_air_to_water
+    cal = Path(__file__).resolve().parents[2] / 'duburi_vision' / 'config' / 'calibration'
+    for cam in ('forward', 'downward'):
+        d = json.loads((cal / f'pi_{cam}_1280x720.json').read_text())
+        fx, w = d['camera_matrix'][0][0], d['image_width']
+        water = fov_air_to_water(2.0 * math.degrees(math.atan(w / 2.0 / fx)))
+        assert DuburiMission.HFOV_WATER_DEG_BY_CAMERA[cam] == pytest.approx(water, abs=0.1), cam
 
 
 # --- the standoff comes from the prop ---------------------------------------

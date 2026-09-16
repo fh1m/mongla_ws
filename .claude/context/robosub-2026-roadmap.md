@@ -1,3 +1,5 @@
+> ⛔ **SUPERSEDED FOR STATUS (2026-09-16)** by `Ros_workspaces/duburi_ws/.claude/context/ROADMAP.md` — the one verified list of where we are headed and what is left. Detail and evidence here still stand; status here does not.
+
 # RoboSub 2026 — Development Roadmap
 
 **Competition date:** July 11, 2026  
