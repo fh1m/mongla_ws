@@ -369,6 +369,10 @@ class DuburiMission:
         self._info_subs: dict[str, object] = {}   # camera_info subs (kept alive)
         self._img_size:  dict[str, tuple] = {}    # camera -> (width, height)
         self._cam_k:     dict[str, tuple] = {}    # camera -> (fx, fy, cx, cy), in AIR, at _img_size
+        # 'water' (default) rectifies pixels through the flat port before any
+        # metric use; 'air' uses the calibration K as a plain pinhole (bench).
+        # Same parameter, same default as lock_node / pnp_node / flow_node.
+        self.medium: str = str(os.environ.get('DUBURI_MEDIUM', 'water')).strip().lower()
         self._det_warm:  set[str] = set()         # cameras that have produced a frame
         # Detector parameter control (in-process, reliable -- replaces flaky
         # subprocess `ros2 param set`). node-name -> SetParameters client; the
@@ -1026,6 +1030,33 @@ class DuburiMission:
             return None
         return (*k, float(wh[0]), float(wh[1]))
 
+    def _water_camera(self, camera):
+        """(rectifier, K_rect) for `camera` from its live CameraInfo, or None.
+
+        ⛔ A FLAT PORT HAS NO SINGLE FOCAL LENGTH. The in-water focal grows with
+        field angle (forward camera at 640 px: ~567 px at the centre, ~634 at the
+        edge), so ANY one focal -- the old shared 46.7 deg, or a per-camera FOV --
+        is wrong by up to ~12 % somewhere in the frame. Rectified pixels ARE a
+        pinhole at `K_rect`, which is the model `lock_node` and `pnp_node` use;
+        the DSL now uses the same one instead of a second copy.
+        """
+        o = DuburiMission._optics(self, camera)
+        if o is None:
+            return None
+        from duburi_vision.optics import rectifier_for
+        fx, fy, cx, cy, _w, _h = o
+        medium = getattr(self, 'medium', 'water')
+        medium = medium if isinstance(medium, str) else 'water'
+        rect, K_rect, _note = rectifier_for(
+            [[fx, 0.0, cx], [0.0, fy, cy], [0.0, 0.0, 1.0]], medium)
+        if rect is None:                          # air: K is already the pinhole
+            class _Identity:
+                @staticmethod
+                def rectify(pts):
+                    return pts
+            rect = _Identity()
+        return rect, K_rect
+
     def hfov_water_deg(self, camera: str | None = None) -> float:
         """In-water horizontal FOV of `camera`: its live calibration, else its fallback."""
         import math as _math
@@ -1056,6 +1087,16 @@ class DuburiMission:
         off = self.where_offset(prop_class, camera=camera)
         if off is None:
             return None
+        cam = camera or getattr(self, 'camera', 'forward')
+        wc = None if hfov_deg is not None else DuburiMission._water_camera(self, cam)
+        if wc is not None:
+            import math as _math
+            rect, K_rect = wc
+            w = DuburiMission._optics(self, cam)[4]
+            u = (float(off) + 1.0) * w / 2.0
+            u_r = float(rect.rectify([[u, K_rect[1][2]]])[0][0])
+            rel = _math.degrees(_math.atan((u_r - K_rect[0][2]) / K_rect[0][0]))
+            return (self.absolute_heading() + rel) % 360.0
         half = float(hfov_deg if hfov_deg is not None
                      else DuburiMission.hfov_water_deg(self, camera)) / 2.0
         return (self.absolute_heading() + float(off) * half) % 360.0
@@ -1333,9 +1374,22 @@ class DuburiMission:
         # The LARGEST box, not the most confident -- size is what the range is
         # read off, and a small confident box is a worse range than a large
         # doubtful one. Same rule as `identity.pick_structure`.
-        w_px = max(float(r[3]) for r in boxes)
+        big = max(boxes, key=lambda r: float(r[3]))
+        w_px = float(big[3])
         if w_px <= 0.0:
             return None
+        wc = DuburiMission._water_camera(self, cam)
+        if wc is not None:
+            # Both EDGES through the port, then the pinhole at K_rect: the box
+            # width compresses by the refraction at ITS field angle.
+            rect, K_rect = wc
+            e = rect.rectify([[big[1] - w_px / 2.0, big[2]], [big[1] + w_px / 2.0, big[2]]])
+            w_px = abs(float(e[1][0]) - float(e[0][0]))
+            f_px = float(K_rect[0][0])
+            if w_px <= 0.0:
+                return None
+            z = f_px * real_w / w_px
+            return (z, (z * z) * 1.0 / (f_px * real_w))
         img_w = self._img_size.get(cam, (0.0, 0.0))[0] or 640.0
         f_px = self.focal_px(img_w, camera=cam)
         z = f_px * real_w / w_px
@@ -1396,14 +1450,17 @@ class DuburiMission:
         v = cy + h / 2.0 if plane_below_m > 0.0 else cy - h / 2.0
         if v >= img_h - 2.0 or v <= 2.0:
             return None
-        f_px = self.focal_px(img_w, camera=cam)
-        # The principal point from the calibration, not the frame centre: the
-        # forward camera's cy sits 70 px above centre at 720 p, which through
-        # the pitch term is ~6 deg -- about a metre of range at 3 m.
-        o = DuburiMission._optics(self, cam)
-        if o is not None and o[4] == img_w:
-            pcx, pcy, fy_px = o[2], o[3], f_px * o[1] / o[0]
+        wc = DuburiMission._water_camera(self, cam)
+        if wc is not None:
+            # The foot through the port, then the pinhole at K_rect -- which also
+            # carries the calibrated principal point: the forward camera's cy sits
+            # 70 px above centre at 720 p, ~6 deg of pitch, about a metre at 3 m.
+            rect, K_rect = wc
+            cx, v = (float(x) for x in rect.rectify([[cx, v]])[0])
+            f_px, fy_px = float(K_rect[0][0]), float(K_rect[1][1])
+            pcx, pcy = float(K_rect[0][2]), float(K_rect[1][2])
         else:
+            f_px = self.focal_px(img_w, camera=cam)
             pcx, pcy, fy_px = img_w / 2.0, img_h / 2.0, f_px
         hit = intersect(cx, v, fx=f_px, fy=fy_px, cx=pcx, cy=pcy,
                         plane_below_m=float(plane_below_m),
