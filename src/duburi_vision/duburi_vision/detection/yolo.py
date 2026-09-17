@@ -247,6 +247,7 @@ class YoloDetector(Detector):
                         f"{sorted(self._names.values())[:10]}...")
 
         self._ready = False
+        self.warmup_ms = None
         if warmup:
             self._do_warmup()
         self._ready = True
@@ -266,8 +267,11 @@ class YoloDetector(Detector):
     def _do_warmup(self, warmup_passes: int = 3):
         # Run multiple passes at full imgsz so cuDNN benchmarks and caches the
         # optimal convolution algorithm before real inference begins.
+        import time as _t
         dummy = np.zeros((self._imgsz, self._imgsz, 3), dtype=np.uint8)
+        times = []
         for i in range(warmup_passes):
+            t0 = _t.perf_counter()
             try:
                 self._model.predict(
                     dummy, conf=self._conf, iou=self._iou, imgsz=self._imgsz,
@@ -278,6 +282,12 @@ class YoloDetector(Detector):
                     self._log.warning(
                         f"[YOLO ] warmup pass {i+1}/{warmup_passes} failed (non-fatal): {exc!r}")
                 break
+            times.append((_t.perf_counter() - t0) * 1e3)
+        # First pass = one-time kernel setup; last = steady. MEASURED, logged.
+        self.warmup_ms = (times[0], times[-1]) if times else None
+        if self._log and times:
+            self._log.info(f"[YOLO ] warmup: first pass {times[0]:.0f} ms, "
+                           f"last {times[-1]:.0f} ms over {len(times)} passes")
 
     def infer(self, frame_bgr: np.ndarray) -> List[Detection]:
         if frame_bgr is None or frame_bgr.size == 0:

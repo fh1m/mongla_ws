@@ -2042,6 +2042,13 @@ resident at once and the chip logs `has taken the activation 20 times --
 another detector is competing for the chip`: that is the 2-group SRAM ceiling,
 still open.
 
+> **CORRECTED 2026-09-17.** Not a ceiling: `detection/hailo.py:611-626` records three
+> network groups (`yolov8n_seg` + `gate_rescue_repair` + `bin_fire_blood`) configuring
+> together with no SRAM error (2026-09-11), and the earlier `SRAM_MEMORY_FULL` was
+> configure-on-every-swap, a leak since fixed. The "activation 20 times" line is the
+> two detectors TAKING TURNS on one chip (4.15 ms per swap), which is expected.
+> Where the real ceiling is has still not been measured.
+
 ## Tool aim, and the Ruckig feasibility numbers (2026-09-10)
 
 ### The tool is not at the camera's optical centre
@@ -2600,6 +2607,29 @@ wide, derived from the 46.7 deg FOV and independently reported by `flow_node`):
 | torpedo board | 0.600 m | 30.8 m | 6.00 m (water binds) |
 | bin | 0.335 m | 17.2 m | 4.30 m (pixels bind) |
 | slalom pipe | 0.033 m | **1.7 m** | 0.80 m (pixels bind) |
+
+> **CORRECTED 2026-09-17 — the ranges above used the wrong focal.** They work out to
+> f ≈ 514 px, the downward camera's AIR focal at 640 wide, not the 741 px the
+> sentence claims. A flat port also has no single focal: the in-water focal is
+> smallest at the image centre (`optics.RefractiveRectifier`), and the camera
+> matters. Pixel-limited range at the 10 px floor, CENTRE of frame, 640 wide,
+> from the committed calibrations (`fx·n·640/1280`):
+>
+> | prop | width | forward (567 px) | downward (685 px) |
+> |---|---|---|---|
+> | gate | 3.000 m | 170 m | 206 m |
+> | torpedo board / drum | 0.600 m | 34.0 m | 41.1 m |
+> | bin | 0.335 m | 19.0 m | 23.0 m |
+> | slalom pipe | 0.033 m | **1.9 m** | 2.3 m |
+> | SAUVC orange flare | 0.150 m | 8.5 m | 10.3 m |
+> | golf ball on a bump flare | 0.043 m | 2.4 m | 2.9 m |
+> | **SAUVC bump flare pole** | **0.016 m** | **0.91 m** | 1.10 m |
+>
+> The conclusions stand (slalom pipes are near-field; water binds for big props) and
+> one is new: **a SAUVC bump-flare POLE is detectable only inside ~0.9 m** on the
+> forward camera. The golf ball on top doubles that. Plan the Task 4 approach from
+> course priors, not from a detection at range. The 10 px floor itself was measured
+> on COCO `person` and must be re-run per competition model.
 
 ★ **A slalom pipe is detectable from 1.7 m and no further, whatever the water
 does.** No prior map can put a hull "in detection range" of one from across the
