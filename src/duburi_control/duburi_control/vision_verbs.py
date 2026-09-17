@@ -340,13 +340,23 @@ class VisionVerbs:
             # it is descending onto a bin and is not is the dangerous version.
             # STABILIZE is the mode here: the board holds attitude and heading
             # at 500 Hz and lat/yaw/fwd servo on top of it.
+            #
+            # What srot refuses is only what MOVES the depth setpoint: the forward
+            # 'depth' axis and the downward fill->depth descent (`fwd_fill` on
+            # the downward camera). A downward lat + surge align is plain
+            # MANUAL_CONTROL translation -- the firmware computes fwd/lat before
+            # its mode switch, identically to the forward align that already
+            # runs here -- so refusing it inherited an ArduSub-only reason.
             if _srot_backend(self.pixhawk):
-                if touches_depth or is_downward:
+                moves_setpoint = ((touches_depth and not is_downward) or
+                                  (is_downward and float(fwd_fill) > 0.0))
+                if moves_setpoint:
                     raise MovementError(
-                        "vision_align: the 'depth' axis (and any downward align) "
-                        "is not supported on the SROT backend -- it needs a "
-                        "streamed depth setpoint, which this board does not take. "
-                        "Use lat/yaw/fwd, or drive depth with a separate "
+                        "vision_align: a depth-setpoint axis (forward 'depth', or "
+                        "the downward fill->depth descent) is not supported on "
+                        "the SROT backend -- it needs a streamed depth setpoint, "
+                        "which this board does not take. Use lat/yaw/fwd (and "
+                        "lat + surge on downward), or drive depth with a separate "
                         "set_depth once the depth loop is water-verified.")
             elif touches_depth or is_downward or float(fwd_fill) > 0.0:
                 self._ensure_alt_hold('vision_align')

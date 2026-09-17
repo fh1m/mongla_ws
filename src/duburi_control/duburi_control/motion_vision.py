@@ -936,7 +936,11 @@ def align_loop(*,
     # holds depth via ArduSub's position controller -- the SAME proven mechanism the
     # forward torpedo-standoff depth axis already uses. Release Ch3 exactly when we stream
     # (so ArduSub's depth PID is the sole Ch3 consumer); otherwise hold neutral 1500.
-    stream_depth = use_vdepth or downward
+    # SROT: no setpoint stream exists (SrotFC has no `set_target_depth`; every
+    # MANUAL_CONTROL frame carries up=0 and the board's mode owns depth), so a
+    # downward lat/surge align streams nothing. Without this a downward align on
+    # srot raises AttributeError on the first 5 Hz tick or the first blind frame.
+    stream_depth = (use_vdepth or downward) and not _is_srot(pixhawk)
     throttle_ch = 65535 if stream_depth else 1500
     # depth_step is the per-UPDATE setpoint resolution (m): the depth axis moves the
     # ArduSub ALT_HOLD setpoint by AT MOST this each 5 Hz update, so max slew =
