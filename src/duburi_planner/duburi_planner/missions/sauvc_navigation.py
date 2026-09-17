@@ -82,7 +82,11 @@ def run(duburi, log=None):
 
 
 def navigate(duburi, log=None):
-    """The task itself. Assumes armed and at search depth."""
+    """The task itself. Assumes armed and at search depth.
+
+    Returns True only when the vision transit reported the pass; a blind
+    transit or no attempt returns False (the run may still proceed on it).
+    """
     duburi.resume_detector('forward')
     duburi.set_model(_MODEL, node=_FWD)
     duburi.set_classes(_GATE, node=_FWD)
@@ -128,6 +132,7 @@ def navigate(duburi, log=None):
         duburi.move_forward(SAUVC_BLIND_TRANSIT_S, gain=SAUVC_BLIND_GAIN)
 
     duburi.pause_detector('forward')
+    return bool(passed)
 
 
 # ── Mission-authored fallback search pattern (pure control) ────────────────────

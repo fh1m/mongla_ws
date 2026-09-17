@@ -1077,6 +1077,16 @@ class DuburiMission:
                       f'{reserve_s:.0f} s reserve, clock starts on arm')
         return self._budget
 
+    def note(self, name: str, msg: str, *, success: bool = True) -> None:
+        """Put a mission-level fact on the scoreboard that no verb reports.
+
+        e.g. `note('navigation', 'unconfirmed: blind transit', success=False)` --
+        a run that proceeds on an attempt must not read as a confirmed pass.
+        """
+        (self.log.info if success else self.log.warning)(f'[NOTE ] {name}: {msg}')
+        self._scoreboard.append({'cmd': f'note:{name}', 'success': bool(success),
+                                 'elapsed': 0.0, 'msg': str(msg)})
+
     def worth_attempting(self, name: str, *, points: int, worst_case_s: float,
                          fallback_s: float = 0.0, fallback_points: int = 0):
         """`Verdict(attempt, mode='full'|'fallback'|'skip', reason, remaining_s)`.

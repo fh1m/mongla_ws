@@ -48,6 +48,23 @@ def resolve(node, consts):
     raise AssertionError(f'cannot resolve argument {ast.dump(node)}')
 
 
+def literal_pool(node):
+    """Every string in top-level dict/tuple/list/set literals of the module.
+
+    For a call whose class argument is a VARIABLE (a loop over a colour->class
+    map): the guard cannot know which value flows in, so it assumes any of them
+    can. Over-approximating is the safe direction for a "never steers on X" sweep.
+    """
+    out = set()
+    for stmt in node.body:
+        if isinstance(stmt, ast.Assign) and isinstance(
+                stmt.value, (ast.Dict, ast.Tuple, ast.List, ast.Set)):
+            for sub in ast.walk(stmt.value):
+                if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                    out.add(sub.value)
+    return out
+
+
 def calls(node, attr):
     """Every `<anything>.<attr>(...)` call under `node`."""
     return [n for n in ast.walk(node)

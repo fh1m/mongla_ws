@@ -31,13 +31,23 @@ def _steered_classes(mission):
     """Every class string a mission actually steers on, from call arguments."""
     node = MA.tree(mission)
     consts = MA.module_consts(node)
+    pool = MA.literal_pool(node)
     out = set()
+
+    def _value(arg):
+        # A variable argument could be any literal the module holds; with no
+        # literals to draw from it stays unresolvable and the guard fails loudly.
+        if isinstance(arg, ast.Name) and arg.id not in consts and pool \
+                and not hasattr(MA.CFG, arg.id):
+            return set(pool)
+        return set(str(MA.resolve(arg, consts)).split(','))
+
     for call in MA.calls(node, 'set_classes'):
-        out.update(str(MA.resolve(call.args[0], consts)).split(','))
+        out |= _value(call.args[0])
     for attr in ('align', 'move'):
         for call in MA.calls(node, attr):
             if call.args:
-                out.add(str(MA.resolve(call.args[0], consts)))
+                out |= _value(call.args[0])
     return out
 
 
