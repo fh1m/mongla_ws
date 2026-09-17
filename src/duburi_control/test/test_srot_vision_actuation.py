@@ -254,7 +254,7 @@ def test_an_unknown_mode_is_refused_not_assumed_fine():
 # guard says nothing about whether the guarded path invokes it.
 #
 # So this drives the REAL verb against a board in SURFACE.
-from contextlib import contextmanager                # noqa: E402
+from contextlib import contextmanager, nullcontext   # noqa: E402
 from duburi_control.vision_verbs import VisionVerbs  # noqa: E402
 
 
@@ -475,3 +475,81 @@ def test_no_test_in_this_file_may_fake_the_writers_for_srot():
     assert 'make_writers(fc)' in src, \
         'no srot test exercises the real make_writers; that is precisely the ' \
         'hole B30 went through'
+
+
+# --------------------------------------------------------------------------- #
+#  Downward on srot: lat + surge run, the setpoint axes are refused
+# --------------------------------------------------------------------------- #
+# The downward refusal used to be blanket, inherited from ArduSub (a downward
+# align releases Ch3 and must stream a setpoint). On srot every MANUAL_CONTROL
+# frame carries up=0 and there is no stream at all, so lat + surge is the same
+# translation the forward align already sends. What stays refused is anything
+# that MOVES the setpoint: the forward 'depth' axis and the downward descent.
+
+def test_a_downward_lat_surge_align_runs_on_srot_through_blind_frames():
+    """Executes BOTH depth-stream sites: the 5 Hz tick (target present) and
+    the blind branch (target absent). `_FakeSrot` has no `set_target_depth`,
+    so either site reaching for it raises AttributeError here -- the honest
+    outcome a permissive mock would hide."""
+    present = _sample(ex=0.4, ey=0.3)
+    samples = [present] * 12 + [None] * 6 + [present] * 12
+    fc = _run_align(vision_state=_FakeVision(samples), axes={'lat', 'depth'},
+                    downward=True, depth_sign=-1, duration=0.8,
+                    lost_grace_s=5.0)
+    assert fc.manual_calls, 'downward align drove nothing on srot'
+    assert any(abs(c[0]) > 0.01 for c in fc.manual_calls), (
+        'the surge axis never commanded fwd for a target at ey=+0.3')
+    assert all(c[2] == 0.0 for c in fc.manual_calls)
+
+
+class _Reached(Exception):
+    pass
+
+
+class _GateHarness(_VerbHarness):
+    """Passes the mode gate and camera resolve; stops at the loop."""
+
+    def _resolve_vision_state(self, _camera):
+        return object()
+
+    def _suspend_heading_lock(self):
+        return nullcontext()
+
+    def _set_lock_hold(self, _on):
+        pass
+
+    report_vision = _abort_fn = None
+
+    def _writers(self):
+        return None
+
+
+@pytest.fixture
+def _stop_at_loop(monkeypatch):
+    import duburi_control.vision_verbs as vv
+
+    def _loop(**_kw):
+        raise _Reached()
+    monkeypatch.setattr(vv, 'align_loop', _loop)
+
+
+@pytest.mark.parametrize('kw', [
+    dict(camera='forward', axes='lat,depth'),
+    dict(camera='downward', axes='lat,depth', fwd_fill=30.0),
+])
+def test_setpoint_axes_are_refused_on_srot(kw, _stop_at_loop):
+    h = _GateHarness(_ModeFC(mode='STABILIZE'))
+    with pytest.raises(MovementError) as exc:
+        h.vision_align(target_class='gate', **kw)
+    assert 'depth-setpoint' in str(exc.value)
+
+
+@pytest.mark.parametrize('kw', [
+    dict(camera='downward', axes='lat,depth'),     # lat + surge (bin centre)
+    dict(camera='downward', axes='lat'),
+    dict(camera='forward', axes='lat,yaw', fwd_fill=40.0),
+])
+def test_translation_only_aligns_reach_the_loop_on_srot(kw, _stop_at_loop):
+    h = _GateHarness(_ModeFC(mode='STABILIZE'))
+    with pytest.raises(_Reached):
+        h.vision_align(target_class='gate', **kw)
