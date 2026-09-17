@@ -28,6 +28,11 @@ Navigation is currently the whole run. A future SAUVC combinator should call
 shipped sauvc_sim model, that its depths respect the sloping floor and that its
 durations fit the run budget. The detector is sim-trained and unvalidated on
 real water; SAUVC_BLIND_TRANSIT_S is an unmeasured guess.
+
+⛔ ON SROT, `move_*`, `set_depth`, `pause` and `stop` are SROT_MOVE primitives: they
+enter AUTO, which closes the never-closed depth loop, so the board denies them until
+the two bench checks pass. That includes the search creep fallback. The vision
+verbs themselves run in STABILIZE and are not gated (test_sauvc_srot_port.py).
 """
 
 from duburi_planner.missions.competition_config import (

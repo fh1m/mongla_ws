@@ -30,6 +30,11 @@ Run it:
     ros2 run duburi_planner mission sauvc_target_acquisition
 
 ⚠ NOT FLOWN. Guards check names, depths and budgets only.
+
+⛔ ON SROT, `move_*`, `set_depth`, `pause` and `stop` are SROT_MOVE primitives: they
+enter AUTO, which closes the never-closed depth loop, so the board denies them until
+the two bench checks pass. That includes the search creep fallback. The vision
+verbs themselves run in STABILIZE and are not gated (test_sauvc_srot_port.py).
 """
 
 from duburi_planner.missions.competition_config import (
