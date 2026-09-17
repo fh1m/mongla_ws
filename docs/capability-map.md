@@ -1,3 +1,9 @@
+---
+layout: default
+title: Capability Map
+description: What this vehicle can do, what it could do before, and the evidence behind every claim.
+---
+
 # Capability Map
 
 ### What this vehicle can do, what it could do before, and how we know
@@ -17,7 +23,7 @@ the bottom, and **no row in this document is 🟢 yet** — this platform has no
 
 ![The capability stack](assets/diagrams/capability-stack.svg)
 
-New here? Read **[The Shift](the-shift.md)** first — it explains the two halves of the system
+New here? Read **[The Shift](the-shift.html)** first — it explains the two halves of the system
 and why the split exists.
 
 ---

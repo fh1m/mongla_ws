@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ page.title }} — Mongla</title>
+<meta name="description" content="{{ page.description }}">
+<link rel="icon" href="{{ '/imgs/mongla-logo-dark.png' | relative_url }}">
+<style>
+  :root{--bg:#0a0f1c;--panel:#101a2b;--line:#22314d;--ink:#e6edf7;--ink-2:#9fb2cc;--ink-3:#7386a3;
+        --teal:#37d6a8;--violet:#8b7cf6;--amber:#f2b134;
+        --mono:ui-monospace,SFMono-Regular,"JetBrains Mono",Menlo,monospace;
+        --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.68}
+  a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
+  header.top{position:sticky;top:0;z-index:20;background:rgba(10,15,28,.88);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  header.top .bar{max-width:920px;margin:0 auto;padding:0 24px;height:58px;display:flex;align-items:center;gap:22px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700}
+  .brand img{height:22px}
+  header.top nav{margin-left:auto;display:flex;gap:18px;font-size:14px}
+  header.top nav a{color:var(--ink-2)}header.top nav a:hover{color:var(--ink)}
+  main{max-width:920px;margin:0 auto;padding:52px 24px 90px}
+  h1{font-size:clamp(30px,4.4vw,44px);line-height:1.1;letter-spacing:-.02em;margin:0 0 10px}
+  h2{font-size:clamp(21px,2.8vw,28px);margin:56px 0 12px;letter-spacing:-.015em;padding-top:10px;border-top:1px solid var(--line)}
+  h3{font-size:18.5px;margin:34px 0 8px}
+  p,li{color:#cfdcec}
+  hr{border:0;border-top:1px solid var(--line);margin:44px 0}
+  img{max-width:100%;height:auto;border-radius:12px;border:1px solid var(--line);background:var(--panel);padding:10px;display:block;margin:26px 0}
+  table{width:100%;border-collapse:collapse;font-size:14.5px;margin:18px 0;display:block;overflow-x:auto}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--ink-3);font-size:12.5px;letter-spacing:.7px;text-transform:uppercase;font-weight:600}
+  code{font-family:var(--mono);font-size:13px;background:#0d1728;border:1px solid var(--line);border-radius:5px;padding:1.5px 6px;color:#bcd2ea}
+  pre{background:#0c1424;border:1px solid var(--line);border-radius:11px;padding:16px 18px;overflow:auto}
+  pre code{background:none;border:0;padding:0;color:#cfe0f2}
+  blockquote{margin:22px 0;padding:12px 20px;border-left:3px solid var(--amber);background:#1a1712;border-radius:0 10px 10px 0;color:#e0cfa8}
+  blockquote p{color:inherit;margin:6px 0}
+  em{color:var(--ink-2)}
+  footer{max-width:920px;margin:0 auto;padding:0 24px 70px;color:var(--ink-3);font-size:14px}
+</style>
+</head>
+<body>
+<header class="top"><div class="bar">
+  <a class="brand" href="{{ '/' | relative_url }}"><img src="{{ '/imgs/mongla-logo-dark.png' | relative_url }}" alt="">Mongla</a>
+  <nav>
+    <a href="{{ '/the-shift.html' | relative_url }}">The Shift</a>
+    <a href="{{ '/capability-map.html' | relative_url }}">Capabilities</a>
+    <a href="https://github.com/fh1m/duburi_ws">GitHub</a>
+  </nav>
+</div></header>
+<main>{{ content }}</main>
+<footer>Built by BRAC University Duburi · MIT licensed · <a href="https://github.com/fh1m/duburi_ws">source</a></footer>
+</body>
+</html>
