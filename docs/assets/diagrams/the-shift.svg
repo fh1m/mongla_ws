@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 660" width="1160" height="660" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0c1322"/>
+      <stop offset="1" stop-color="#0a0f1c"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#93a4bd"/>
+    </marker>
+    <marker id="arrowT" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#37d6a8"/>
+    </marker>
+  </defs>
+
+  <rect width="1160" height="660" fill="url(#bg)"/>
+
+  <text x="40" y="52" fill="#e6edf7" font-size="25" font-weight="700">What moved, and why it matters</text>
+  <text x="40" y="78" fill="#93a4bd" font-size="14">Every box below is a thing that must be bought, powered, wired and trusted. Fewer boxes is not the point — owning them is.</text>
+
+  <!-- ============ LEFT: the old stack ============ -->
+  <g>
+    <rect x="40" y="104" width="500" height="486" rx="14" fill="#101a2b" stroke="#2a3a55"/>
+    <rect x="40" y="104" width="500" height="40" rx="14" fill="#16223a"/>
+    <rect x="40" y="130" width="500" height="14" fill="#16223a"/>
+    <text x="62" y="131" fill="#cbd7e8" font-size="15" font-weight="700">BEFORE · RoboSub 2023 &amp; 2025</text>
+    <text x="432" y="131" fill="#7d8ea8" font-size="12.5" font-family="ui-monospace, monospace">4 computers</text>
+
+    <rect x="70" y="168" width="200" height="66" rx="9" fill="#17243b" stroke="#35476a"/>
+    <text x="86" y="193" fill="#e6edf7" font-size="14.5" font-weight="600">Jetson Orin Nano</text>
+    <text x="86" y="213" fill="#8fa2bd" font-size="12">vision + all ROS 2 nodes</text>
+    <text x="86" y="229" fill="#8fa2bd" font-size="12">YOLO on the GPU</text>
+
+    <rect x="310" y="168" width="200" height="66" rx="9" fill="#17243b" stroke="#35476a"/>
+    <text x="326" y="193" fill="#e6edf7" font-size="14.5" font-weight="600">Raspberry Pi</text>
+    <text x="326" y="213" fill="#8fa2bd" font-size="12">BlueOS — MAVLink router</text>
+    <text x="326" y="229" fill="#8fa2bd" font-size="12">a hop, not a brain</text>
+
+    <rect x="70" y="288" width="440" height="78" rx="9" fill="#17243b" stroke="#35476a"/>
+    <text x="86" y="313" fill="#e6edf7" font-size="14.5" font-weight="600">Pixhawk 2.4.8 · ArduSub 4.x</text>
+    <text x="86" y="333" fill="#8fa2bd" font-size="12">400 Hz inner loop + EKF3 — closed to us</text>
+    <text x="86" y="353" fill="#8fa2bd" font-size="12">the flight modes are the vendor's; we drive RC channels</text>
+
+    <rect x="70" y="414" width="440" height="60" rx="9" fill="#17243b" stroke="#35476a"/>
+    <text x="86" y="438" fill="#e6edf7" font-size="14.5" font-weight="600">8 × T200 through stock BLHeli_S ESCs</text>
+    <text x="86" y="458" fill="#f2617a" font-size="12">no RPM telemetry — the motors never answer back</text>
+
+    <line x1="170" y1="234" x2="170" y2="284" stroke="#93a4bd" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <line x1="410" y1="234" x2="410" y2="284" stroke="#93a4bd" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <line x1="290" y1="366" x2="290" y2="410" stroke="#93a4bd" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <text x="178" y="264" fill="#7d8ea8" font-size="11.5" font-family="ui-monospace, monospace">UDP 14550</text>
+    <text x="418" y="264" fill="#7d8ea8" font-size="11.5" font-family="ui-monospace, monospace">USB</text>
+
+    <rect x="70" y="500" width="440" height="66" rx="9" fill="#1b1520" stroke="#6b3a4a"/>
+    <text x="86" y="524" fill="#f2b134" font-size="13" font-weight="700">The ceiling</text>
+    <text x="86" y="544" fill="#c9b6a0" font-size="12">Our fastest control was a 20 Hz loop on the host, steering</text>
+    <text x="86" y="561" fill="#c9b6a0" font-size="12">a black box we could not open, change or measure inside.</text>
+  </g>
+
+  <line x1="556" y1="345" x2="602" y2="345" stroke="#37d6a8" stroke-width="2.4" marker-end="url(#arrowT)"/>
+
+  <!-- ============ RIGHT: the new stack ============ -->
+  <g>
+    <rect x="620" y="104" width="500" height="486" rx="14" fill="#0f1c2a" stroke="#27544c"/>
+    <rect x="620" y="104" width="500" height="40" rx="14" fill="#123028"/>
+    <rect x="620" y="130" width="500" height="14" fill="#123028"/>
+    <text x="642" y="131" fill="#9ff0d3" font-size="15" font-weight="700">NOW · SROT + AI HAT</text>
+    <text x="1000" y="131" fill="#6fbfa5" font-size="12.5" font-family="ui-monospace, monospace">2 computers</text>
+
+    <rect x="650" y="168" width="440" height="66" rx="9" fill="#13263a" stroke="#3c5f7a"/>
+    <text x="666" y="193" fill="#e6edf7" font-size="14.5" font-weight="600">Raspberry Pi 5 + Hailo-8 AI HAT</text>
+    <text x="666" y="213" fill="#93b6cf" font-size="12">perception only: cameras, detection, segmentation,</text>
+    <text x="666" y="229" fill="#93b6cf" font-size="12">optical flow, localization, mission logic</text>
+
+    <rect x="650" y="288" width="440" height="126" rx="9" fill="#12291f" stroke="#2f6b52"/>
+    <text x="666" y="313" fill="#e6edf7" font-size="14.5" font-weight="600">SROT board · firmware Hengla</text>
+    <text x="666" y="333" fill="#8fd7b8" font-size="12">ESP32 core 1: sensors, control and DShot at 500 Hz;</text>
+    <text x="666" y="350" fill="#8fd7b8" font-size="12">core 0: MAVLink, LoRa, display — they cannot starve it</text>
+    <text x="666" y="370" fill="#8fd7b8" font-size="12">RP2350 Pico: bidirectional DShot, so every ESC reports RPM</text>
+    <text x="666" y="387" fill="#8fd7b8" font-size="12">IMU · depth · leak · kill · two battery packs · water temp</text>
+    <text x="666" y="405" fill="#5fae8d" font-size="11.5" font-family="ui-monospace, monospace">we hold the source: a missing feature is a pull request</text>
+
+    <rect x="650" y="452" width="440" height="60" rx="9" fill="#13263a" stroke="#3c5f7a"/>
+    <text x="666" y="476" fill="#e6edf7" font-size="14.5" font-weight="600">8 × T200 through Bluejay ESCs</text>
+    <text x="666" y="496" fill="#8fd7b8" font-size="12">reflashed with our own tool — the motors answer with RPM</text>
+
+    <line x1="870" y1="234" x2="870" y2="284" stroke="#37d6a8" stroke-width="1.8" marker-end="url(#arrowT)"/>
+    <text x="880" y="264" fill="#6fbfa5" font-size="11.5" font-family="ui-monospace, monospace">one USB-C cable · MAVLink</text>
+    <line x1="870" y1="414" x2="870" y2="448" stroke="#37d6a8" stroke-width="1.8" marker-end="url(#arrowT)"/>
+
+    <rect x="650" y="530" width="440" height="42" rx="9" fill="#12291f" stroke="#2f6b52"/>
+    <text x="666" y="557" fill="#9ff0d3" font-size="12.5">Same hull, same thrusters. Every layer between them is now ours.</text>
+  </g>
+</svg>
