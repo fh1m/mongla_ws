@@ -383,12 +383,25 @@ class HailoDetector(Detector):
                 f'baked={baked}')
         self._warn_conf(self._conf)
 
+        # (cold ms, warm ms) of the warmup, or None: logged so the one-time setup
+        # cost is a MEASURED number, not an assumed one.
+        self.warmup_ms = None
         if warmup:
             # The first infer pays one-time setup. Paying it here keeps it out
             # of the first mission frame, where it reads as a dropped frame.
+            import time as _t
             blank = np.zeros((self._size, self._size, 3), np.uint8)
             try:
+                t0 = _t.perf_counter()
                 self.infer(blank)
+                t1 = _t.perf_counter()
+                self.infer(blank)
+                t2 = _t.perf_counter()
+                self.warmup_ms = ((t1 - t0) * 1e3, (t2 - t1) * 1e3)
+                if self._log:
+                    self._log.info(
+                        f'[HAILO] {Path(self._path).name} warmup: first infer '
+                        f'{self.warmup_ms[0]:.1f} ms, then {self.warmup_ms[1]:.1f} ms')
             except Exception:
                 pass
 

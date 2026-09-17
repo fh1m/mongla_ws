@@ -1,0 +1,89 @@
+{
+  "configById": {
+    "Plot!pos": {
+      "paths": [
+        {
+          "value": "/duburi/odom.pose.pose.position.x",
+          "enabled": true,
+          "label": "x"
+        },
+        {
+          "value": "/duburi/odom.pose.pose.position.y",
+          "enabled": true,
+          "label": "y"
+        },
+        {
+          "value": "/duburi/odom.pose.pose.position.z",
+          "enabled": true,
+          "label": "z (+depth)"
+        }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!vel": {
+      "paths": [
+        {
+          "value": "/duburi/odom.twist.twist.linear.x",
+          "enabled": true,
+          "label": "odom vx body"
+        },
+        {
+          "value": "/duburi/vision/downward/velocity.twist.twist.linear.x",
+          "enabled": true,
+          "label": "flow vx"
+        },
+        {
+          "value": "/duburi/odom.twist.twist.linear.y",
+          "enabled": true,
+          "label": "odom vy body"
+        },
+        {
+          "value": "/duburi/vision/downward/velocity.twist.twist.linear.y",
+          "enabled": true,
+          "label": "flow vy"
+        }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!floor": {
+      "paths": [
+        {
+          "value": "/duburi/vision/downward/floor_height.range",
+          "enabled": true,
+          "label": "floor height m"
+        }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "RawMessages!motion": {
+      "topicPath": "/duburi/localization/motion"
+    }
+  },
+  "layout": {
+    "direction": "column",
+    "first": {
+      "direction": "row",
+      "first": "Plot!pos",
+      "second": "Plot!vel",
+      "splitPercentage": 50
+    },
+    "second": {
+      "direction": "row",
+      "first": "Plot!floor",
+      "second": "RawMessages!motion",
+      "splitPercentage": 60
+    },
+    "splitPercentage": 60
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  }
+}

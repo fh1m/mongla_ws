@@ -101,7 +101,7 @@ re-ask.
 | C1 | `move_*_dist`, `arc`, `style_yaw`, `lock_heading` on srot | REFUSED (`srot_fc.UNSUPPORTED_VERBS`) | un-refuse `move_*_dist` ONLY after #23 merges, and in that same change flip `velocity_uplink` default to true (DIST refuses to start with no velocity) |
 | C2 | `velocity_uplink` / `position_uplink` on by default | OFF (both `False`) | gated on #23 and G1 |
 | C3 | Altitude HOLD verb (height above floor as a Z mode) | OPEN | height is published (`floor_height`, `duburi.floor_height()`); holding it needs G1 |
-| C4 | Near-surface gain set | OPEN | no code |
+| C4 | Near-surface gain set | **DEFERRED (evidence) 2026-09-17** | board depth PID is one fixed gain set (`depth_control.cpp:40`); near-surface suction/wave coupling is a moving-body-in-waves effect and SAUVC 2026 is indoor. After G1, log `DEPTH_ERR` vs depth; add gains (firmware PR) only if the data show a near-surface error |
 | C5 | Autotune entry point | **DONE 2026-09-17 (operator, not mission)** | `ros2 run duburi_manager autotune` prints the live PID briefing; `--confirm "RUN AUTOTUNE IN WATER"` runs it; Ctrl-C aborts to STABILIZE + disarm; refuses a port the manager holds. Deliberately NOT a mission verb. Needs G1 before it is useful |
 | C6 | Goal id on goal/feedback/result; time-margin signal to missions | **DONE 2026-09-17** | scoreboard rows carry the first 8 hex of the action goal UUID, the manager logs the same on `[ACT]`; time margin = `duburi.task(deadline_s=)` / budget `remaining_s()` |
 
@@ -110,9 +110,9 @@ re-ask.
 | # | Item | State | Note |
 |---|---|---|---|
 | L1 | Time-correct fusion | **DONE 2026-09-17 (opt-in)** | the defect was stamp MISUSE, not missing synchronizers: flow/depth/fix/heading were applied on arrival. `retro.Retrodictor` + `retrodict:=true`; fixes carry the detection capture stamp; `pose_fuse` pairs the heading in effect at capture. Pi cost not yet measured |
-| L2 | Battery voltage as a demand-model input | OPEN | `command_velocity` uses demand only |
+| L2 | Battery voltage as a demand-model input | **CLOSED 2026-09-17** | the board mixer already scales thrust by PM2 voltage (`mixer.cpp:77-125`, `MOT_BAT_V_MAX=16.8` set 2026-09-15); host compensation would double-count |
 | L3 | DeepVL evaluation | OPEN, wants G2 | only a docstring mention |
-| L4 | Magnetometer / MAG_CAL consumers | OPEN | mag-free by design; landmark anchor + tile grid bound drift instead |
+| L4 | Magnetometer / MAG_CAL consumers | **CLOSED (by design) 2026-09-17** | board `yaw_ref` does the one-shot mag alignment (`MAG_YAW_REF=1`); host reads `YAW_REF` for health; drift bounded by landmark anchor + tile grid |
 | L5 | Course priors with measured positions | **TOOLING DONE 2026-09-17; DATA OPEN** | `courses/sauvc26.yaml` template (classes, rulebook dims, positions unset -- the rulebook gives zones, not points); `ros2 run duburi_localization course_survey --course sauvc26 --prop final_gate --x .. --y .. --bearing ..` writes the deck copy (`measured: true`) the loader reads first. Positions still need measuring at the venue |
 | L6 | `floor_range` validated at taped range in water | OPEN (measurement) | `rounds/round17-range-without-size.md` |
 | L7 | Rewind-and-replay lag correction | **DONE 2026-09-17 (opt-in)** | merged into L1: every filter event buffered with its prior snapshot, late ones inserted and the tail replayed |
@@ -121,13 +121,13 @@ re-ask.
 
 | # | Item | State | Note |
 |---|---|---|---|
-| P1 | Hailo model LIFECYCLE release between tasks | OPEN (no `LifecycleNode`) | the resident-group SRAM ceiling; Bumblebee `yolo_ros_trt` pattern |
+| P1 | Hailo model release between tasks | **RE-SCOPED 2026-09-17** | not a binding limit today: configure-once, activate-per-turn, **≥3 groups measured resident together** (`hailo.py:611-626`; the "2-group ceiling" in `measured-bars.md` corrected). Opt-in `release_model(stem)` only if a 4th model is needed -- Pi measurement first (plan C1) |
 | P2 | Consumers for published-but-unread topics | **DONE 2026-09-16** | `duburi.outline(cls)` reads `*/contours` (polygon, area, OBB angle); `duburi.active_models(cam)` + `set_model(..., confirm_s=)` read `*/vision_info`. Both opt-in (subscribe on first call) |
 | P3 | OBB angle / class posterior on the wire | **CLOSED 2026-09-17** | OBB angle already on `contours` (`duburi.outline().angle_deg`). Posterior: detection HEFs run NMS on-chip per class, so no distribution survives to send. Masks now used in `identity` (symbol pixels vs structure BOX -- a gate's mask is its pipes); `side_on(..., use_outline=True)` opt-in |
-| P4 | Monocular depth on the vehicle launch | OPEN | node only in `vision.launch.py` |
+| P4 | Monocular depth on the vehicle launch | **MEASURE FIRST** | relative (per-frame min-max) depth, ONNX CPU, no control consumer, Pi cost never measured -- default stays off the vehicle launch unless a Pi measurement and a consumer justify it |
 | P5 | Verify the actuation by looking | **PARTIAL 2026-09-17** | `VisionResult.fired` = board outcome per channel (`ch1:FIRED`/`none`/`pending`); opt-in `align(evidence=True)` / `duburi.save_evidence()` writes the annotated frame to the run folder. An automatic hit/miss judgement still needs a model class for the shot itself |
-| P6 | Per-class observed detection range from real class widths | OPEN (data) | by-product of the rejected water-clarity study |
-| P7 | SAUVC bump flares are 16 mm wide | **RISK** | at 2 m the forward camera (634 px focal at 640 wide) sees ~5 px, against a measured ~10 px detection cliff; plan the approach from `standoff_for_prop`, not habit |
+| P6 | Detection range per prop | **TABLE CORRECTED 2026-09-17; DATA OPEN** | `measured-bars.md` range table used the downward AIR focal (≈514 px); recomputed per camera at the rectified centre focal. The 10 px floor is still a COCO `person` number -- re-run per competition model |
+| P7 | SAUVC bump flares are 16 mm wide | **RISK (quantified)** | pole detectable only inside **~0.91 m** on the forward camera (567 px centre focal, 10 px floor); golf ball ~2.4 m. Task 4 approach must come from course priors (`course_survey`), not detection at range |
 
 ### Missions / autonomy (all blocked on porting missions to srot)
 
@@ -144,10 +144,10 @@ re-ask.
 
 | # | Item | State |
 |---|---|---|
-| O1 | Per-task Foxglove/Lichtblick layouts | OPEN |
-| O2 | `ImageAnnotations` from perception | OPEN (0 uses) |
-| O3 | `warmup()` before a node advertises | OPEN |
-| O4 | Tiled sim floor texture (so the tile grating can be rehearsed in sim) | OPEN |
+| O1 | Per-task Foxglove/Lichtblick layouts | **DONE 2026-09-17** -- `foxglove/{bins_downward,localization,board_health}.json`; `test_foxglove_layouts.py` fails when a layout plots a topic nothing publishes |
+| O2 | `ImageAnnotations` from perception | **DEFERRED** -- `foxglove_msgs` not installed; burned-in `image_debug` covers it |
+| O3 | Warmup | **DONE 2026-09-17** -- warmup already existed; now TIMED: Hailo logs first vs second infer ms, YOLO first vs last pass (`warmup_ms`) |
+| O4 | Tiled sim floor texture | **DROPPED** -- sim deprioritised by the operator |
 
 ---
 
