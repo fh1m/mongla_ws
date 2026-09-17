@@ -1,3 +1,3 @@
-title: Mongla — AUV Control Stack
-description: ROS 2 Humble · ArduSub · YOLO11 · one action surface, axis-isolated control, vision in the same loop. Mongla — the soul; Duburi 4.5 + Dubomini 2.0 — the bodies.
+title: Mongla — an AUV that owns its whole stack
+description: ROS 2 autonomy for BRAC University Duburi. SROT control board (firmware Hengla) + Raspberry Pi 5 and a Hailo-8 AI HAT — a 500 Hz loop we wrote, vision on dedicated silicon, and every capability claim carrying its evidence.
 theme: null

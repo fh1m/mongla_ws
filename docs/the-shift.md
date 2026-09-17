@@ -1,3 +1,9 @@
+---
+layout: default
+title: The Shift
+description: From Pixhawk + Jetson to the SROT board and a Hailo-8 AI HAT: what changed, and why it changed everything.
+---
+
 # The Shift
 
 ### From Pixhawk + Jetson to SROT + AI HAT — what changed, and why it changed everything
@@ -185,7 +191,7 @@ measure and ask for.
 | "Is the vehicle moving?" — inferred | measured, from the downward camera and from thruster RPM |
 
 The full, evidence-backed list — including what is verified in water, what is verified only
-on a bench, and what is built but never flown — is the **[Capability Map](capability-map.md)**.
+on a bench, and what is built but never flown — is the **[Capability Map](capability-map.html)**.
 
 ---
 
@@ -202,13 +208,13 @@ Two things from that era are deliberately still here and are not leftovers:
 - The **simulator** runs ArduSub SITL by design — it is a physics environment, not the
   vehicle.
 
-Both are described in [Legacy: the Pixhawk backend and SITL](legacy-pixhawk-and-sitl.md).
+Both are described in [Legacy: the Pixhawk backend and SITL](legacy-pixhawk-and-sitl.html).
 
 ---
 
 ## Where to go next
 
-- **[Capability Map](capability-map.md)** — everything the vehicle can do, each row with its
+- **[Capability Map](capability-map.html)** — everything the vehicle can do, each row with its
   evidence and its honest verification state.
 - **Package documentation** — one page per package, under
   [`.claude/context/packages/`](https://github.com/fh1m/duburi_ws/tree/main/.claude/context/packages).
