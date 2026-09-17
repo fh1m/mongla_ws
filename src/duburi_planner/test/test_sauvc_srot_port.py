@@ -94,3 +94,27 @@ def test_an_unreadable_or_unknown_backend_raises(monkeypatch, value):
     m, _ = _dsl_reading(monkeypatch, value)
     with pytest.raises(RuntimeError):
         _ = m.backend
+
+
+# ── The second refusal layer: verbs the BOARD can deny ──────────────────────
+# Passing the sweep above means no verb is refused by the host. It does NOT mean
+# every verb moves the hull: these are dispatched as SROT_MOVE, which enters
+# AUTO, and AUTO closes the depth loop that has never run closed. With the two
+# bench checks not passed, the board denies them -- and the vision verbs' creep
+# fallback, the blind gate transit and the flare push are all among them.
+# Frozen, so a new depth-gated call is a visible diff, not a pool-day surprise.
+_DEPTH_GATED_ON_SROT = {
+    'sauvc_full':               {'move_back', 'move_forward', 'pause', 'set_depth', 'stop'},
+    'sauvc_navigation':         {'move_forward', 'pause', 'set_depth', 'stop'},
+    'sauvc_target_acquisition': {'move_forward', 'pause', 'set_depth'},
+}
+
+
+def test_the_depth_gated_calls_per_mission_are_the_frozen_list():
+    import mission_ast as MA
+    from duburi_control.fc.srot_fc import MOVE_VERBS
+    found = {}
+    for m in MA.sauvc_mission_names():
+        tree = MA.tree(m)
+        found[m] = {v for v in MOVE_VERBS if MA.calls(tree, v)}
+    assert found == _DEPTH_GATED_ON_SROT
