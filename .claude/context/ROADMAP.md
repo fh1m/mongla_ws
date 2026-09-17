@@ -102,7 +102,7 @@ re-ask.
 | C2 | `velocity_uplink` / `position_uplink` on by default | OFF (both `False`) | gated on #23 and G1 |
 | C3 | Altitude HOLD verb (height above floor as a Z mode) | OPEN | height is published (`floor_height`, `duburi.floor_height()`); holding it needs G1 |
 | C4 | Near-surface gain set | OPEN | no code |
-| C5 | Autotune driven from a mission | OPEN | `SrotFC.autotune` exists for the operator only |
+| C5 | Autotune entry point | **DONE 2026-09-17 (operator, not mission)** | `ros2 run duburi_manager autotune` prints the live PID briefing; `--confirm "RUN AUTOTUNE IN WATER"` runs it; Ctrl-C aborts to STABILIZE + disarm; refuses a port the manager holds. Deliberately NOT a mission verb. Needs G1 before it is useful |
 | C6 | Goal id on goal/feedback/result; time-margin signal to missions | **DONE 2026-09-17** | scoreboard rows carry the first 8 hex of the action goal UUID, the manager logs the same on `[ACT]`; time margin = `duburi.task(deadline_s=)` / budget `remaining_s()` |
 
 ### Localization
