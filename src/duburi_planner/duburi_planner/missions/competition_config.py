@@ -188,6 +188,27 @@ SAUVC_DRUM_DESCEND_FILL  = 0      # 0 = OFF: hold the hover depth. A fill-driven
 SAUVC_DRUM_DEPTH_CEILING_M = -0.4 # surface guard on the downward align
 SAUVC_DROPPER_CHANNEL    = 3      # 3 = dropper_1, 4 = dropper_2
 
+# ── SAUVC combinator (sauvc_full) ─────────────────────────────────────────────
+SAUVC_RESERVE_S          = 45.0   # surface + disarm allowance, never offered to a task
+SAUVC_DRUM_WORST_S       = 90.0   # hover dive + downward align + settle + release
+
+# Task 4, Communication & Localization: 20 per bump flare, +60 for all three in
+# the order sent over LoRa. ⛔ OFF by default. A 16 mm pole at the 10 px floor is
+# detectable at <= ~0.9 m on the forward camera (measured-bars.md, P6 DATA OPEN),
+# so an align on a flare from transit is expected NOT to acquire. Enable after
+# the pool measurement, not before.
+SAUVC_FLARES_ENABLED     = False
+SAUVC_FLARE_LISTEN_S     = 45.0   # hold for the LoRa order; None -> default order
+SAUVC_FLARE_DEFAULT_ORDER = ('red', 'yellow', 'blue')   # bump-all when no order
+SAUVC_FLARE_ALIGN_S      = 40.0   # ⚠ UNMEASURED
+SAUVC_FLARE_MOVE_S       = 30.0   # ⚠ UNMEASURED
+SAUVC_FLARE_STOP_FILL    = 85     # % of frame HEIGHT: a 0.8 m pole fills it at contact range
+SAUVC_FLARE_GAIN         = 25     # slow: a bump, not a ram
+SAUVC_FLARE_PUSH_S       = 2.0    # ⚠ UNMEASURED short push to tip the ball
+SAUVC_FLARE_BACKOFF_S    = 3.0    # ⚠ UNMEASURED
+SAUVC_FLARES_WORST_S     = (SAUVC_FLARE_LISTEN_S + 3 * (
+    SAUVC_FLARE_ALIGN_S + SAUVC_FLARE_MOVE_S + SAUVC_FLARE_PUSH_S + SAUVC_FLARE_BACKOFF_S))
+
 # ⛔ Task 3 (Target Reacquisition, 60 pts) is NOT implemented and has no config
 # here. "The AUV has to hold on to the ball till the end of attempt" -- that needs
 # a gripper or a retaining mechanism this vehicle does not carry. Recording the
