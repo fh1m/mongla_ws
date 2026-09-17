@@ -30,6 +30,7 @@ setup(
             'bringup_check    = duburi_manager.bringup_check:main',
             'connect          = duburi_manager.srot_connect:main',
             'flare_order      = duburi_manager.flare_order_send:main',
+            'autotune         = duburi_manager.srot_autotune:main',
         ],
     },
 )
