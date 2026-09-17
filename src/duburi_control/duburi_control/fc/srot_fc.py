@@ -2837,8 +2837,9 @@ UNSUPPORTED_VERBS = frozenset({
 # `heading_lock`, `motion_yaw`, `motion_depth` are all still present and
 # imported by `duburi.py`. Removing an entry re-arms whatever that verb touches.
 # For these two that is bounded and checked:
-#   * the depth axis is REFUSED in `vision_verbs` (it needs `set_target_depth`,
-#     which this class does not implement) rather than silently doing nothing;
+#   * the depth-SETPOINT axes are REFUSED in `vision_verbs` (forward `depth` and
+#     the downward fill->depth descent need `set_target_depth`, which this class
+#     does not implement); downward lat + surge runs and streams no setpoint;
 #   * `_ensure_alt_hold` is skipped -- ALT_HOLD is an ArduSub mode this board
 #     does not have, and hitting the facade's mode gate is what made `surface`
 #     do nothing on this backend;

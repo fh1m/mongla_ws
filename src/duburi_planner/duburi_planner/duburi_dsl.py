@@ -2906,6 +2906,37 @@ class DuburiMission:
         if not res.successful:
             raise RuntimeError(f'set {node_name}.{name}={value!r} rejected: {res.reason}')
 
+    _backend_cache = None
+
+    @property
+    def backend(self) -> str:
+        """The manager's `flight_controller` ('srot' or 'pixhawk'), read once.
+
+        Missions branch on it for verbs one backend refuses (`lock_heading` on
+        srot, where the board holds heading itself). Raises when the manager
+        cannot be read: guessing a backend would send a refused verb or skip a
+        needed one, and neither is safe to discover mid-run.
+        """
+        if self._backend_cache is None:
+            node_name = self._MANAGER_NODE
+            ros_node = self.client.node
+            cli = ros_node.create_client(GetParameters, f'{node_name}/get_parameters')
+            try:
+                if not cli.wait_for_service(timeout_sec=3.0):
+                    raise RuntimeError(f'{node_name}/get_parameters unavailable')
+                fut = cli.call_async(GetParameters.Request(names=['flight_controller']))
+                rclpy.spin_until_future_complete(ros_node, fut, timeout_sec=5.0)
+                resp = fut.result()
+                if resp is None or not resp.values:
+                    raise RuntimeError(f'{node_name}.flight_controller unreadable')
+                kind = str(resp.values[0].string_value).strip().lower()
+                if kind not in ('srot', 'pixhawk'):
+                    raise RuntimeError(f'{node_name}.flight_controller={kind!r} unknown')
+            finally:
+                ros_node.destroy_client(cli)
+            self._backend_cache = kind
+        return self._backend_cache
+
     def pause_detector(self, camera: str | None = None, *,
                        node: str | None = None) -> None:
         """Pause inference on a detector node (frame still consumed from queue)."""

@@ -66,7 +66,11 @@ def run(duburi, log=None):
         duburi.pause(SAUVC_TETHER_PAUSE_S)
         duburi.arm()
         duburi.set_depth(SAUVC_SEARCH_DEPTH_M, timeout=30)
-        duburi.lock_heading(0.0, timeout=SAUVC_NAV_BUDGET_S)
+        # srot refuses `lock_heading`: the board holds heading itself at 500 Hz
+        # (STABILIZE for vision, AUTO for moves). On ArduSub the host lock is
+        # what keeps the blind-transit line straight.
+        if duburi.backend != 'srot':
+            duburi.lock_heading(0.0, timeout=SAUVC_NAV_BUDGET_S)
         navigate(duburi, log)
     finally:
         duburi.release_heading()
