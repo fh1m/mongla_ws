@@ -16,7 +16,7 @@ This is the operator guide for the close-in robustness layer added after the
 
 They generalise to every close-in task (torpedo, bins, gate-through). All of this
 is YOLO-bbox control on `main` — it is **not** the anchor/XFeat lock (that's a
-separate `lock`-branch tool; see [`anchor-system.md`](anchor-system.md)).
+separate `lock`-branch tool; see [`detection-continuity.md`](detection-continuity.md)).
 
 ---
 
