@@ -1,5 +1,11 @@
 # `duburi.detected()` paradigm — complete reference
 
+> **Backend note.** The vehicle is the SROT board (firmware Hengla) + a Raspberry Pi 5 with a
+> Hailo-8. `lock_heading`, `move_*_dist`, `arc` and `style_yaw` are **refused** there, `ALT_HOLD`
+> is not one of its modes, and the depth-setpoint vision axes are refused. Where this page shows
+> an older idiom, the current contract is [`command-reference.md`](command-reference.md) and the
+> legacy path is [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md).
+
 > **Purpose of this file:** Every fact, rule, gotcha, and test procedure
 > for the `duburi.detected()` conditional-loop paradigm. Read this before
 > writing any mission that uses `while not duburi.detected(...)` or branches

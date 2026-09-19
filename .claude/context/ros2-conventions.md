@@ -1,5 +1,11 @@
 # ROS2 Conventions — Duburi AUV Codebase
 
+> **Backend note.** The vehicle is the SROT board (firmware Hengla) + a Raspberry Pi 5 with a
+> Hailo-8. `lock_heading`, `move_*_dist`, `arc` and `style_yaw` are **refused** there, `ALT_HOLD`
+> is not one of its modes, and the depth-setpoint vision axes are refused. Where this page shows
+> an older idiom, the current contract is [`command-reference.md`](command-reference.md) and the
+> legacy path is [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md).
+
 ROS2 surface and coding standards for `duburi_ws`. The surface is
 deliberately tiny: **one action, one telemetry topic, and a small set of
 manager ROS params** (the manager declares 14 + a `vision.*` tuning layer).

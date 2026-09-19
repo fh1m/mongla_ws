@@ -1,5 +1,11 @@
 # Launch Combinations — the "so we never fail" master reference
 
+> **Backend note.** The vehicle is the SROT board (firmware Hengla) + a Raspberry Pi 5 with a
+> Hailo-8. `lock_heading`, `move_*_dist`, `arc` and `style_yaw` are **refused** there, `ALT_HOLD`
+> is not one of its modes, and the depth-setpoint vision axes are refused. Where this page shows
+> an older idiom, the current contract is [`command-reference.md`](command-reference.md) and the
+> legacy path is [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md).
+
 > Every launch / run command for the **tested competition path**, with all args and
 > combinations. Copy-paste ready. Scope (per pool-day decision): **controls (all), object-detection
 > vision, DSL, CLI, mission_web viewer.** The experimental estimators (`depth:=`, `distance:=`,

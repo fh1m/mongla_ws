@@ -1,5 +1,11 @@
 # Mongla FSM Guide — YASMIN State Machine Planning Layer
 
+> **Backend note.** The vehicle is the SROT board (firmware Hengla) + a Raspberry Pi 5 with a
+> Hailo-8. `lock_heading`, `move_*_dist`, `arc` and `style_yaw` are **refused** there, `ALT_HOLD`
+> is not one of its modes, and the depth-setpoint vision axes are refused. Where this page shows
+> an older idiom, the current contract is [`command-reference.md`](command-reference.md) and the
+> legacy path is [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md).
+
 > **Status:** BUILT & TESTED (phase-2, commit 4a94231, 2026-06-02).
 > Runs alongside `detected()` scripted missions — both use the same
 > `run(duburi, log)` drop-in interface and auto-discovery.
