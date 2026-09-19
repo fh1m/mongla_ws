@@ -144,6 +144,7 @@ re-ask.
 
 | # | Item | State |
 |---|---|---|
+| D1 | **Documentation pass (2026-09-19)** | **DONE** | `docs/the-shift.md` (the platform change from first principles) and `docs/capability-map.md` (every capability with evidence and a verification state) published; six diagrams drawn; a page per package under `.claude/context/packages/` plus a stub in each `src/<pkg>/`; command and DSL references rewritten srot-first; README, CLAUDE.md and the Pages site rebuilt; 23 Pixhawk-era documents retired to the `pixhawk` branch with one `legacy-pixhawk-and-sitl.md` kept for the simulator; `test_docs_contract.py` guards links, package pages and the entry points (4 injections bite) |
 | O1 | Per-task Foxglove/Lichtblick layouts | **DONE 2026-09-17** -- `foxglove/{bins_downward,localization,board_health}.json`; `test_foxglove_layouts.py` fails when a layout plots a topic nothing publishes |
 | O2 | `ImageAnnotations` from perception | **DEFERRED** -- `foxglove_msgs` not installed; burned-in `image_debug` covers it |
 | O3 | Warmup | **DONE 2026-09-17** -- warmup already existed; now TIMED: Hailo logs first vs second infer ms, YOLO first vs last pass (`warmup_ms`) |
