@@ -572,7 +572,7 @@ ros2 run duburi_vision tracker_check --camera laptop --class person
 
 ### Performance notes
 
-- `tracker_node` runs on the same Jetson Orin Nano as the detector.
+- `tracker_node` runs on the same Raspberry Pi 5 as the detector.
   ByteTrack state is cheap (~10 µs per update); Kalman adds ~5 µs per track.
 - At 30 fps with 5 tracked objects the combined overhead is < 1 ms, well
   within the 33 ms frame budget.
@@ -741,7 +741,7 @@ duburi.countdown(15, message='Stand clear. Starting autonomous run.')
 ```
 
 Prints an ASCII box countdown to stdout. The mission continues immediately
-after. All onboard compute (Jetson, Pi, DVL, Pixhawk) is self-sufficient —
+after. All onboard compute (Pi, Pi, DVL, Pixhawk) is self-sufficient —
 removing the tether during this window leaves the AUV fully autonomous.
 
 ### Offline pre-pool testing with a video file
@@ -1741,7 +1741,7 @@ ros2 run duburi_planner mission task_full_2026   # detected-paradigm
 ros2 run duburi_planner mission fsm_full_2026    # YASMIN FSM (recommended)
 ```
 
-See `testing-guide.md §3` for per-chunk expected outputs and `models/README.md §Competition models` for model status.
+See `packages/README.md §3` for per-chunk expected outputs and `models/README.md §Competition models` for model status.
 
 ---
 
@@ -1807,8 +1807,8 @@ See `testing-guide.md §3` for per-chunk expected outputs and `models/README.md 
 - Vision state cache:             `src/duburi_manager/duburi_manager/vision_state.py`
 - DSL surface:                    `src/duburi_planner/duburi_planner/duburi_dsl.py`
 - ROS param defaults:             `src/duburi_manager/config/vision_tunables.yaml`
-- DVL integration reference:      `.claude/context/dvl-integration.md`
+- DVL integration reference:      `.claude/context/legacy-pixhawk-and-sitl.md`
 - Sensors pipeline design:        `.claude/context/sensors-pipeline.md`
 - CLI cookbook (deck one-liners): `README.md` §9
 - Architecture (visual flow):     `.claude/context/vision-architecture.md`
-- Roadmap (what's next):          `.claude/context/vision-roadmap.md`
+- Roadmap (what's next):          `.claude/context/ROADMAP.md`

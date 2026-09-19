@@ -41,5 +41,5 @@ ros2 run duburi_planner duburi <verb_name> --help   # CLI auto-generated from CO
 colcon test --packages-select duburi_control --pytest-args -k commands
 ```
 
-If the verb closes a control axis, ask the `mavlink-reviewer` agent to check mode
+If the verb closes a control axis, ask the `srot-reviewer` agent to check mode
 preconditions and RC channel direction before pool use.

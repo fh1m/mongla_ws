@@ -54,6 +54,6 @@ safety. Output one line per finding, severity-tagged, `path:line: <severity>: <p
 - `.claude/context/detected-paradigm.md` — `detected()` mechanics, orbit trap, templates
 - `.claude/context/mission-cookbook.md` — working principles + ready-to-steal samples
 - `.claude/context/client-and-dsl-api.md` — DSL + vision verb semantics
-- `.claude/context/robosub-2026-roadmap.md` — task-by-task mission targets
+- `.claude/context/ROADMAP.md` — task-by-task mission targets
 
 Report only. Do not edit files.

@@ -12,7 +12,7 @@ say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 say "1/6  Python: undo the two traps that break cv_bridge"
 # Noble ships numpy 1.26.4 and cv2 4.6.0, and ROS Jazzy's cv_bridge is compiled
 # against numpy 1.x. A pip numpy>=2 or a pip opencv-python in ~/.local shadows
-# them and cv_bridge dies with "_ARRAY_API not found". jetson-and-env-traps.md E1-E3.
+# them and cv_bridge dies with "_ARRAY_API not found". pi-and-env-traps.md E1-E3.
 python3 -m pip uninstall -y -q --break-system-packages numpy opencv-python 2>/dev/null || true
 echo 'numpy<2' > ~/duburi_constraints.txt
 

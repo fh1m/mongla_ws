@@ -32,7 +32,7 @@ The single node that owns the autopilot link + `/duburi/move` action. One of the
 ```bash
 ros2 run duburi_manager start                              # auto-resolve link, bench/sim
 ros2 run duburi_manager start --ros-args -p mode:=sim      # Gazebo / SITL
-ros2 run duburi_manager start --ros-args -p mode:=pool     # Jetson on AUV, BlueOS pushes 14550
+ros2 run duburi_manager start --ros-args -p mode:=pool     # Pi on AUV, BlueOS pushes 14550
 ros2 run duburi_manager start --ros-args -p mode:=desk     # Pixhawk USB via BlueOS
 ros2 run duburi_manager start --ros-args -p mode:=laptop   # tether laptop on the switch
 ros2 run duburi_manager start --ros-args -p debug:=true    # [MAV ...] frame trace
@@ -220,7 +220,7 @@ Available: `task_{gate,slalom,bin,torpedo,return}`, `task_full_2026`,
 
 ---
 
-## 7. Detection FPS (Jetson) — build TensorRT engines ON THE JETSON
+## 7. Detection FPS (Pi) — build TensorRT engines ON THE JETSON
 
 ```bash
 sudo nvpmodel -m 0 && sudo jetson_clocks          # MAXN (~2x); bringup_check warns if not set

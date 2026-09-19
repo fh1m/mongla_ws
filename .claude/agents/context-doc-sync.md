@@ -18,7 +18,7 @@ rule is explicit: **package layout wins** when docs and code disagree.
 - **ROS params** — param names + defaults in CLAUDE.md §8 vs `auv_manager_node` and
   `config/*.yaml`. Flag drifted defaults.
 - **Topic/action surface** — `/duburi/move`, `/duburi/state`, vision topics vs reality.
-- **Roadmap status** — `robosub-2026-roadmap.md` task statuses vs what's actually shipped.
+- **Roadmap status** — `ROADMAP.md` task statuses vs what's actually shipped.
 
 ## Output
 

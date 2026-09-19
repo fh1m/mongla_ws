@@ -178,10 +178,10 @@ Canary log line (grep for this on every machine):
 [VIS ] using cuda:0 (NVIDIA GeForce RTX 2060)  torch=2.11.0+cu128  cuda=12.8
 ```
 
-### TensorRT engine (Jetson FPS)
+### TensorRT engine (Pi FPS)
 
 `_resolve_model_path` **prefers `<stem>.engine` over `<stem>.pt`** when both
-sit in `models/`. On the Jetson Orin Nano raw PyTorch @640 is ~3-4 Hz
+sit in `models/`. On the Pi 5 raw PyTorch @640 is ~3-4 Hz
 (inference-bound); a TensorRT FP16 engine is ~20-30 Hz (nano/small) / ~10-15 Hz
 (medium). Confirm the fast path via the backend canary:
 
@@ -190,7 +190,7 @@ sit in `models/`. On the Jetson Orin Nano raw PyTorch @640 is ~3-4 Hz
 [YOLO ] backend=PyTorch .pt       (gate_flare_medium_100ep.pt)     ← fallback
 ```
 
-Engines are **device + TRT/JetPack-version locked** — build them ON the Jetson
+Engines are **device + TRT/JetPack-version locked** — build them ON the Pi
 (`ros2 run duburi_vision export_engine --all`, FP16, imgsz must match the
 detector's `imgsz`), rebuild after a JetPack/TRT upgrade, and never commit them
 (`*.engine` gitignored). A dev box without an engine falls back to `.pt`

@@ -15,7 +15,7 @@ is exactly what the sim's own docs warn against.
 | Known sim issues | [`../../sim/.context/AUDIT.md`](../../sim/.context/AUDIT.md) |
 | Lab HTTP API | [`../../sim/.context/LAB_API.md`](../../sim/.context/LAB_API.md) |
 
-`sim-setup.md` in this directory is the **legacy** bring-up against the sibling
+`duburi-sim.md` in this directory is the **legacy** bring-up against the sibling
 `~/Ros_workspaces/colcon_ws` tree. Superseded — kept for history only.
 
 ## The three things that bite

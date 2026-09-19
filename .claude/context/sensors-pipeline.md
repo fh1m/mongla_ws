@@ -66,7 +66,7 @@ discussion. Don't relax them without a new conversation.
 |                                               | operator picked BNO085, they want to KNOW when it  |
 |                                               | dies. Loud failure > quiet wrong-answer.           |
 | **No fusion**                                 | BNO085 is already 9DoF-fused on-chip. Re-fusing on |
-|                                               | the Jetson side adds latency without new info.     |
+|                                               | the Pi side adds latency without new info.     |
 |                                               | Fusion belongs in a future `robot_localization`    |
 |                                               | layer, not here.                                   |
 | **Yaw-only firmware (BNO085)**                | Cheaper to flash, easier to debug, smaller wire    |
@@ -294,6 +294,6 @@ manual override regardless of auto-connect state.
 - `[../../src/duburi_sensors/firmware/esp32c3_bno085.md](../../src/duburi_sensors/firmware/esp32c3_bno085.md)` — BNO085 wire contract
 - `[../../src/duburi_sensors/duburi_sensors/sources/nucleus_dvl.py](../../src/duburi_sensors/duburi_sensors/sources/nucleus_dvl.py)` — Nucleus 1000 DVL driver
 - `[../../src/duburi_sensors/duburi_sensors/sources/composite_bno_dvl.py](../../src/duburi_sensors/duburi_sensors/sources/composite_bno_dvl.py)` — BNO085+DVL composite
-- `[./dvl-integration.md](./dvl-integration.md)` — DVL hardware spec, packet format, smoke tests
-- `[./yaw-stability-and-fusion.md](./yaw-stability-and-fusion.md)` — research notes on yaw drift sources
-- `[./proven-patterns.md](./proven-patterns.md)` — 2023/2025 codebase patterns we draw from
+- `[./legacy-pixhawk-and-sitl.md](./legacy-pixhawk-and-sitl.md)` — DVL hardware spec, packet format, smoke tests
+- `[./sensors-pipeline.md](./sensors-pipeline.md)` — research notes on yaw drift sources
+- `[./legacy-pixhawk-and-sitl.md](./legacy-pixhawk-and-sitl.md)` — 2023/2025 codebase patterns we draw from

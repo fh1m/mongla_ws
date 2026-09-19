@@ -14,7 +14,7 @@ as actionable insights for the Mongla / Duburi AUV vision and autonomy stack.
 1. After each competition season, add a new file: `<teamname>-<year>.md`
 2. Extract **transferable techniques** — not just what they did, but WHY it beats our current approach
 3. Map each insight to a planned Mongla implementation in the "Adoption Plan" section of each file
-4. Update `robosub-2026-roadmap.md` with prioritized items
+4. Update `ROADMAP.md` with prioritized items
 
 ## Adoption priority guide
 

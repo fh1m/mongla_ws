@@ -206,7 +206,7 @@ duburi_ws/src/
 
 There are **no** `duburi_driver`, `duburi_bringup`, `duburi_teleop`, or `duburi_mission`
 packages. The 2023/2025 reference codebases had several of those names; that history is
-captured in `proven-patterns.md` for pattern reference, not for layout.
+captured in `legacy-pixhawk-and-sitl.md` for pattern reference, not for layout.
 
 ---
 

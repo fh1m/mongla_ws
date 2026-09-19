@@ -25,7 +25,7 @@ fits the existing stack — never propose net-new architecture when a pattern ex
 
 ## References
 
-- `.claude/context/robosub-2026-roadmap.md` — timeline, task table, skeletons (authoritative)
+- `.claude/context/ROADMAP.md` — timeline, task table, skeletons (authoritative)
 - `.claude/context/mission-cookbook.md`, `detected-paradigm.md`, `command-reference.md`
 - `.claude/context/vision-architecture.md` — detector/topic contract
 
