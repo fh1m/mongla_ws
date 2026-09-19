@@ -1,21 +1,12 @@
-# Jetson / Pi environment traps — dependency pitfalls that take down the vision launch
+# Environment traps — dependency pitfalls that take down the vision launch
 
-> Extracted verbatim from the retired `known-issues.md` on 2026-09-08, because
-> these are **environment** problems, not code bugs, and `requirements-jetson.txt`,
-> `docs/JETSON_SETUP.md`, `docs/JETSON_ONESHOT_15W.md` and `tools/setup_pi_hailo.sh`
-> all point at them. Code defects now live in [`BUGS.md`](BUGS.md).
-
-These are **environment** problems, not code bugs — but they take down the whole
-vision launch (`vision.launch.py`) with confusing tracebacks, so they live here.
-All three were hit on the Orin Nano on the same day; symptom was every node dying
-before the camera frame loop started.
-
-> **Live-checked on the Jetson (Orin Nano, JetPack 6.2, py3.10) — 2026-06-30, by Claude.**
-> After the three fixes below, `ros2 launch duburi_vision vision.launch.py` was run on
-> the actual hardware and came up healthy: all 3 TensorRT engines loaded
-> (`slalom_red_pipe` / `gate_rescue_repair` / `torpedo_blood_hole`) and the display
-> reported `cam=OK det=OK trk=OK`. `trackers==2.4.0` confirmed importing and building
-> `engine=ocsort` on numpy 1.26.4 on-device.
+> These are **environment** problems, not code bugs, but each one takes down the whole vision
+> launch with a confusing traceback. Code defects live in [`BUGS.md`](BUGS.md).
+>
+> E1–E3 were first hit on the old companion computer and are **still live on the Pi**: they
+> are Python packaging traps (NumPy ABI, a shadowed OpenCV, a broken wheel), not properties of
+> any one board. `tools/setup_pi_hailo.sh` and
+> [`pi-hailo-vision-box.md`](pi-hailo-vision-box.md) both point here.
 
 ### E1. NumPy 2.x ABI break kills every vision node (`_ARRAY_API not found`)
 - **Symptom:** every node (`camera_node`/`detector_node`/`vision_display`) crashes at
@@ -34,11 +25,11 @@ before the camera frame loop started.
 - **Symptom:** `cv2.error: (-2:Unspecified error) The function is not implemented.
   Rebuild the library with … GTK+ … support` at `cv2.namedWindow`, then `exit code -6`.
 - **Root cause:** pip `opencv-python-headless` (no GUI) + `opencv-python` were
-  installed in user-site and **shadowed** the GUI-capable JetPack system OpenCV.
+  installed in user-site and **shadowed** the GUI-capable system OpenCV.
   The headless wheel wins → no window backend. (These wheels also want numpy≥2,
   compounding E1.)
 - **Fix:** `pip3 uninstall -y opencv-python opencv-python-headless` → import falls
-  back to the system `cv2` (4.12.0, **GTK3** build, numpy-1.x compatible). Verify:
+  back to the system `cv2` (GTK build, numpy-1.x compatible). Verify:
   `python3 -c "import cv2; print(cv2.__file__)"` should be under `/usr/local/lib` or
   `/usr/lib`, **not** `~/.local`.
 
@@ -149,7 +140,7 @@ before the camera frame loop started.
 * **Source:** https://github.com/BumblebeeAS/ardupilot_fix
 * **State vs upstream:** **1 commit ahead, 3911 commits behind** `ArduPilot/master`. 0 stars, 0 forks. No CI configured.
 * **The single commit** (`xelisce`, 2025-05-23, "hard code variables into file fix, passed all tests"): adds 9 unused declarations to `libraries/AP_DDS/AP_DDS_Client.cpp`. No semantic ArduSub change. No new mode, no new failsafe, no new MAVLink behaviour.
-* **Verdict:** nothing to learn or pull. The fork name suggests a fix for something interesting but the diff is non-semantic. Stay on the upstream Sub-stable-V4.5.x branch documented in [`ardusub-canon.md`](./ardusub-canon.md).
+* **Verdict:** nothing to learn or pull. The fork name suggests a fix for something interesting but the diff is non-semantic. Stay on the upstream Sub-stable-V4.5.x branch documented in [`legacy-pixhawk-and-sitl.md`](./legacy-pixhawk-and-sitl.md).
 * **Re-evaluate when:** the fork's `xelisce` author (or `BumblebeeAS` org) ships a second semantic commit. Until then, do not spend an evening "evaluating" this again.
 
 ---

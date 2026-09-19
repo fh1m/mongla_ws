@@ -1,1679 +1,363 @@
-# Mongla — AUV ROS2 Control Stack
+# Mongla — the AUV autonomy stack
 
-> **Project**: Mongla — a ROS2 / ArduSub control stack for `vectored_6dof` AUVs.
-> **Test platform**: Duburi 4.2 (`vectored_6dof`, 8x T200, Pixhawk 2.4.8 + ArduSub 4.x).
-> **This codebase**: `~/Ros_workspaces/duburi_ws` (ROS2 Humble, Ubuntu 22.04 in distrobox).
-> Workspace folder name and the `/duburi/*` action namespace are kept for backwards compatibility with the test vehicle's tooling.
+> **Project**: Mongla — ROS 2 control / mission / vision for BRAC University Duburi's AUVs.
+> **This codebase**: `duburi_ws`. **Default platform**: the **SROT board** (firmware
+> **Hengla**) + **Raspberry Pi 5 with a Hailo-8 AI HAT**.
+> The folder name `duburi_ws` and the `/duburi/*` namespace are kept for the test vehicle's
+> tooling — **do not bulk-rename them.**
 
-> **Precedence note for agents:** if anything below contradicts the
-> actual package layout in `src/`, the package layout wins. The
-> canonical hardware reference is
-> [`.claude/context/vehicle-spec.md`](.claude/context/vehicle-spec.md);
-> tracked code bugs are in
-> [`.claude/context/BUGS.md`](.claude/context/BUGS.md).
->
-> ⚠ **[`BUGS.md`](.claude/context/BUGS.md) is the SINGLE bug register** as of the
-> 2026-09-08 system-wide audit — 23 defects (B01–B23) plus 3 design findings
-> (D01–D03), graded by consequence on the vehicle, with the reproduced ones
-> marked. `BUGS.md` is retained ONLY because 19 files point at it,
-> two of them source (`vision_state.py`, `tools/setup_pi_hailo.sh`); its bug
-> content is superseded by `BUGS.md`. Read `BUGS.md` first.
-> Some legacy `.claude/context/*.md` files (notably `proven-patterns.md`)
-> describe historical 2023/2025 codebases, not this workspace.
+**Read first, in this order:**
 
-> **Mongla = the soul; Duburi 4.5 + Dubomini 2.0 = the bodies.** Mongla is the
-> codebase (`duburi_ws`) — one ROS 2 Humble control/mission/vision/sim brain that
-> runs on two competition bodies: **Duburi 4.5** (primary; sensors + manipulators)
-> and **Dubomini 2.0** (agile, manipulator-free). The Duburi 4.5 public spec itself
-> names the software "Mongla (duburi_ws)". `duburi_ws`, `/duburi/*`, and "4.2" are
-> kept for back-compat — **do not bulk-rename them.**
->
-> **RoboSub 2026 framing (committed scope vs what's built — read before trusting either).**
-> Per the tech-lead reconciliation decision (2026-05-31, P0.1), the **committed
-> 2026 target** is the full TDR (`TDR26_BRACU_Duburi.pdf`): a dual-vehicle run —
-> **Duburi 4.5** (primary; sensors + grabber/dropper/torpedo) and **Dubomini 2.0**
-> (agile, 8-thruster, no DVL/manipulators) — coordinated over **IVC**, sequenced by
-> a **YASMIN FSM**, with the full 7-task set. The detector is **YOLO11** (this
-> *corrects* the TDR's YOLO26 line — YOLO11 is the committed family; YOLO26 is
-> legacy/backwards-compat only).
->
-> Read every doc through **three states, never blurred:**
-> - **BUILT & TESTED (phase 1, today):** the proven 4.2-derived **single-vehicle**
->   Duburi stack — imperative `detected()` missions, YOLO11, Gate / Return /
->   search-align (≈800 pt), the control / MAVLink / vision core. This is what runs.
-> - **COMMITTED, NOT YET IMPLEMENTED (phase 2):** Dubomini control path, **IVC**,
->   the **YASMIN FSM**, the remaining tasks (Slalom / Bins / Torpedo / Octagon /
->   path-markers), underwater preprocessing, and ESP32-serial payload actuation.
->   These are committed build tickets with **zero or partial code today** — never
->   describe them as running.
-> - **`detected()` is NOT "instead of an FSM":** it is the prototyping +
->   per-subsystem unit-test + FSM-fallback layer. The committed YASMIN FSM (phase 2)
->   wraps these same DSL verbs as states.
->
-> The workspace name, the `/duburi/*` namespace, and "4.2" in hardware tables are
-> deliberately kept for back-compat — **do not bulk-rename them.**
->
-> **★ START HERE for where we are headed and what is left:**
-> [`.claude/context/ROADMAP.md`](.claude/context/ROADMAP.md) — verified against the tree
-> 2026-09-16; supersedes the development board, the capability map, the findings ledger and the
-> plan files for STATUS. The old board
-> [`.claude/context/development-board.md`](.claude/context/development-board.md) is Pixhawk-era.
-> Supporting detail: full audit + gap matrix
-> [`.claude/context/robosub-2026-audit.md`](.claude/context/robosub-2026-audit.md);
-> phase schedule [`.claude/context/robosub-2026-roadmap.md`](.claude/context/robosub-2026-roadmap.md).
-> When docs and the TDR disagree, **code is ground truth** — fix the gap or mark the
-> claim as committed-phase-2; never edit docs to assert a capability the code lacks.
-
----
-
-## 1. Hardware Overview (test platform: Duburi 4.2 hull → 4.5 build)
-
-> Full spec lives in [`.claude/context/vehicle-spec.md`](.claude/context/vehicle-spec.md). Short table here.
-
-| Component             | Spec                                                         |
-|-----------------------|--------------------------------------------------------------|
-| Hull                  | Octagonal, **Marine 5083 aluminum**, in-house                |
-| Frame type (ArduSub)  | `vectored_6dof` (8× T200) — same as BlueROV2 Heavy           |
-| Flight controller     | Pixhawk 2.4.8 running ArduSub 4.x                            |
-| Companion             | Raspberry Pi running BlueOS                                  |
-| Main SBC              | Nvidia Jetson Orin Nano (all ROS2 nodes live here)           |
-| Depth sensor          | Bar30 (read via ArduSub `AHRS2.altitude`)                    |
-| External IMU          | ⚠️ **REMOVED 2026-08-01** — the BNO085 is on the SROT board (I2C0, fused at 500 Hz); read it via `yaw_source:=mavlink_ahrs`. The ESP32-C3 USB board is no longer fitted. |
-| DVL                   | Nortek Nucleus1000 @ `192.168.2.201` — **not fitted, never validated in water**; treat distance as unavailable (`vehicle-spec.md` "DVL status") |
-| Cameras               | Blue Robotics Low-Light HD USB (forward + downward)          |
-| Tether                | FathomX power-over-Ethernet                                  |
-| Power                 | Dual LiPo (propulsion + compute on isolated rails)           |
-| Payload               | Slingshot torpedo, aluminum grabber (current-sensed), solenoid dropper |
-
-> **Sim proxy:** Gazebo runs a BlueROV2 Heavy-derived model because it shares the `vectored_6dof` frame. Hull shape and exact mass differ; control behavior matches. The simulator is **in this repo** at [`sim/`](sim/) — see §3a.
-
-> **Why no VectorNav**: TDR Appendix A lists VN200; we use BNO085 instead — see `vehicle-spec.md` §"Why BNO085 instead of the TDR's VectorNav VN200".
-
----
-
-## 2. Network Topology (AUV Internal Ethernet)
-
-```
-[Onboard Ethernet Switch]
-       ├── Jetson Orin Nano  → 192.168.2.69   (static, ROS2 host, UDP 14550 listener)
-       ├── Raspberry Pi 4B   → 192.168.2.2    (BlueOS — MAVLink router, web UI; also the gateway)
-       ├── Topside / dev box → 192.168.2.1    (ground station on the internal switch)
-       ├── DVL Nucleus1000   → 192.168.2.201  (driver TODO)
-       └── Pixhawk 2.4.8     → via BlueOS over USB
-
-MAVLink endpoint (configured in BlueOS web UI):
-  Name: "inspector"  |  Type: UDP Client
-  IP: 192.168.2.69 (Jetson)  |  Port: 14550
-
-Ground Station → Remote Desktop / SSH to Jetson (192.168.2.69)
-              → BlueOS UI via http://192.168.2.2
-```
-
-> ⚠ **`.1` and `.2` were swapped in this table until 2026-08-03.** Measured on the
-> vehicle: the Pi answers on **192.168.2.2** (Raspberry Pi MAC OUI, full BlueOS 1.4.2
-> service set) and **192.168.2.1 is the topside box** — which is Blue Robotics' own
-> convention. `NETWORK` in `connection_config.py` is corrected to match.
-
-Connection strings live in `src/duburi_manager/duburi_manager/connection_config.py` under `PROFILES`. Default for every profile is `udpin:0.0.0.0:14550` (Jetson is the listener; BlueOS pushes to it).
-
----
-
-## 2b. ⚠ Flight-controller backends — READ BEFORE §2, §3, §5, §6
-
-**Everything else in this file describes the Pixhawk/ArduSub/BlueOS path, and that is no
-longer the default.** Since the 2027 season there is a second backend, and as of 2026-09-08
-**`srot` is the DEFAULT on `main`** — the hull is the SROT board running Hengla.
-
-| `flight_controller:=` | Autopilot | Transport | Where it's default |
-|---|---|---|---|
-| **`srot`** | **SROT board, firmware Hengla** | **direct USB Type-C @115200** (no Pi, no BlueOS, no UDP) | **`main` (default), `srot` branch** |
-| `pixhawk` | Pixhawk 2.4.8 + ArduSub 4.x | BlueOS → UDP 14550 | **`pixhawk` branch**; on `main` pass it explicitly (the sim does) |
-
-> **The RoboSub 2025 8th-place configuration lives on the `pixhawk` branch** (`b483722`, the
-> tree exactly as it stood before the srot→main merge). It is a preserved snapshot, not a
-> working branch — go there to read or resurrect that configuration rather than reconstructing
-> it from parameters on `main`.
-
-Both sit behind the `FlightController` HAL in `src/duburi_control/duburi_control/fc/`
-(`base.py` ABC, `pixhawk_fc.py`, `srot_fc.py`, `srot_protocol.py` = the one copy of the wire
-constants). `PixhawkFC` **is-a** `Pixhawk`, so the pixhawk path is byte-identical to history.
-
-> **⚠ Transitional third case (verified on hardware 2026-08-03): SROT *through* BlueOS over
-> UDP.** While the hull is still wired Pi-first, the board hangs off the **Pi's USB** and
-> reaches us as UDP via a BlueOS **Bridget** raw serial↔UDP bridge — so "srot = no Pi, no
-> BlueOS, no UDP" is the *designed* case, not the only one. No code change was needed
-> (`resolve_srot_profile()` takes any conn string; `SrotFC` is transport-agnostic):
-> `-p mav_device:=udpin:0.0.0.0:14550`, and `--srot-device=` on `bringup_check`.
-> **Link quality is measurably worse than direct serial (~8–9 % `BAD_DATA` across three
-> fixed-rate runs, vs zero on USB-C — and the lost frames are `NAMED_VALUE_FLOAT` /
-> `VFR_HUD` / `ATTITUDE` / `BATTERY_STATUS`, not the already-undecodable `ESC_STATUS(291)`).
-> So this is a bench/bring-up rig — put the board back on the Jetson's USB-C for water.**
-> Bridget also targets one `ip:port`, so **Bondor cannot share the link** without a router.
-> Full setup + the measurement: [`srot-integration.md`](.claude/context/srot-integration.md)
-> "Transitional rig".
-
-**Claims below that are Pixhawk-only and WRONG on srot:**
-- §2 network topology, BlueOS, UDP 14550, gateway `192.168.2.2` — srot is one USB cable.
-- §3 the `mode`/profile table — `resolve_srot_profile()` bypasses `PROFILES` entirely.
-- §4.2 telemetry rates — the pinning **does** apply on srot, via its own
-  `SROT_MESSAGE_RATES` table (no AHRS2, no RC_CHANNELS). *(Corrected 2026-08-01: this used
-  to say "SROT has no 511". Firmware behaviour rev 2 implements 511 and 510, and
-  `ATTITUDE` measures ~11 → ~55 Hz. The board clamps any request to a 20 ms floor and
-  refuses a HEARTBEAT disable with `DENIED`.)*
-- §5 `set_mode("ALT_HOLD")`, `send_rc_override`, `send_rc_yaw_only`, `set_target_depth` —
-  **none exist on SROT.** Modes are STABILIZE/ACRO/DEPTH_HOLD/SURFACE/MANUAL/AUTO;
-  actuation is one `MANUAL_CONTROL` frame (all 4 axes, no per-channel release) or an
-  on-board `MAV_CMD_SROT_MOVE`(31000) primitive.
-- §5 depth via `AHRS2.altitude` — srot reads `VFR_HUD.alt` (same sign: **negative below
-  surface**).
-- §6 "ArduSub's onboard 400 Hz stabilizer owns the inner loop" + the BNO→EKF3 mocap feed —
-  SROT runs its own 500 Hz loop and fuses the BNO on-board; the mocap timer is skipped.
-- §6 the whole per-axis `RC_CHANNELS_OVERRIDE` Ch4/Ch5/Ch6 table.
-- §13.7 payload "NOT through the Pixhawk" — on srot the payload **is** MAVLink
-  `DO_SET_SERVO`/`DO_SET_RELAY` to the board's PCA9685; there is no separate USB ESP32.
-
-**Verb support on srot is partial.** `move_*_dist`, `lock_heading`, `arc`, `style_yaw` are
-**refused** with a clear message (`srot_fc.UNSUPPORTED_VERBS`). *(Corrected 2026-09-16:
-`vision_align`/`vision_move` came OUT of that set on 2026-09-03 and actuate through
-`MANUAL_CONTROL`; `move_*_dist` is planned to be un-refused once firmware PR #23 merges — see
-`ROADMAP.md` C1.)* *(`move_back` was un-refused
-2026-08-01: `MOVE_BACK = 1` was always valid on the wire and the refusal was only a missing
-`_build_params` branch. `move_*_dist` stay refused permanently — DVL distance is
-unavailable, see `vehicle-spec.md` "DVL status".)*
-
-**⛔ The board's depth loop has never run closed** (fw `AUDIT.md` R1: the sign was inverted
-until 2026-07-30 and the Bar30 wasn't fitted). Two bench checks gate **every AUTO move, `move_forward`
-included** (not just dive verbs — see the depth-gate note below) —
-`.claude/context/srot-integration.md`.
-
-**⚠ There is now a firmware-version interlock, and it is a hull-safety one.** The board
-reports `SROT_FW_BEHAVIOUR_REV` in `AUTOPILOT_VERSION.middleware_sw_version` (request msgid
-148); `SrotFC.check_behaviour_rev()` runs at connect **and inside `arm()`** and **refuses to
-arm below rev 2**. Reason: rev 2 made `MOVE_STOP` brake on-board, so the host-side
-reverse-leg brake was removed — on pre-rev-2 firmware `stop` and every abort would simply
-not decelerate 20 kg of hull, with nothing in any log. `0` means "older than 2026-08-01",
-not "unknown", and fails closed; a board that answers *nothing* warns hard but is allowed
-through. Override: `allow_fw_behaviour_mismatch:=true`.
-
-**Firmware is at behaviour rev 14 (`config.h:805`, verified 2026-09-16; this line said rev 7 until then); the host floor stays at 2
-deliberately** (every rev since has been additive *for the host*, and raising it would strand a
-working rev-2 board). ⚠ **Rev 7 ships `FRAME_REVERSE`** — a param, default 0 but **set to 1 on
-our hull**, that negates all six axis demands before the mixer. It fixes "every axis is
-backwards" at the axis layer instead of via `MOT_n_DIRECTION`, which means the `[-1] × 8` motor
-directions we restored on 2026-08-06 are **no longer the intended configuration** and would
-cancel it. **Read the params before arming** — the check is in
-[`srot-integration.md`](.claude/context/srot-integration.md) "Rev 7: FRAME_REVERSE changes what
-MOT_n_DIRECTION should be". Rev 3's theme (still live) is that
-the board **refuses to report data it cannot stand behind**, which creates one brand-new deck
-symptom: an unhealthy/stale Bar30 now refuses `DEPTH_HOLD`/`AUTO`/`PATTERN`, and since
-`SROT_MOVE` enters `AUTO`, **every move verb is denied** — it arms and then simply will not
-move. `bringup_check --srot` reads that off `SYS_STATUS` (`_baro_health_verdict`). ⚠ `VFR_HUD`
-is *not* gated on baro health and is where we read depth, so **never infer sensor health from
-the presence of a depth value**. LEAK moved to `SYS_STATUS` extended health, which **pymavlink
-cannot decode** (13 fields, no extensions — the `ESC_STATUS(291)` trap again), so LEAK is still
-read from `NAMED_VALUE_FLOAT` — via a per-name table fed by the manager's reader thread,
-because all seven names burst inside one 500 ms tick and pymavlink's single slot keeps only the
-last (`GAIN`). Details: [`srot-integration.md`](.claude/context/srot-integration.md).
-
-**✅ RESOLVED 2026-08-03 — the Bar30 connector was refitted and the fault is gone.** Re-measured
-on the vehicle: `press_abs` 978.8..987.7 mbar (**sd 1.97**, was a 557 mbar spread), water temp
-31.68..31.71 °C (**0.03**, was 6..30), depth **−0.05..+0.07 m in air** (was +0.9..+6.8), and
-`DEPTH_OUT` **0.000** (was pinned −1.00). `bringup_check --srot` grades barometer variance and
-the disarmed depth loop PASS. The arming-spin-up hazard described below is therefore **cleared**.
-**⛔ But that is the barometer, not the loop.** On rev 4, `DEPTH_CMD` read −0.329 while
-`DEPTH_OUT`/`DEPTH_ERR` read *exactly* 0.000 across 90+ samples — a live controller cannot
-produce zero error against a −0.33 m command, so the loop was not running while disarmed.
-**Re-measured on rev 5 (2026-08-06) they are FROZEN NON-ZERO instead** — `DEPTH_OUT` −0.115
-and `DEPTH_ERR` −0.029, zero variance over 74 samples, while `DEPTH_CMD` moved. A loop
-tracking a moving command cannot hold a constant error to three decimals, so both readings
-say the same thing for opposite reasons. `check_depth_loop_settled` only ever proved
-`|DEPTH_OUT| < 0.90` — which −0.115 also passes; it is an anti-saturation guard, not a proof
-the loop works. **The depth loop has still never run closed**, it gates every AUTO move including
-`move_forward`, and the two armed bench checks remain the gate. Do not read "Bar30 fixed" as
-"depth verified". The original finding is kept below for the diagnostic pattern:
-
-**⛔ BENCH-MEASURED 2026-08-02 (superseded — see above).** The Bar30 was
-producing **noise**: 317..874 mbar on a still bench (sea level ~1013), water temp 6..30 °C,
-depth reading +0.9..+6.8 m **in air**. It was not an offset or a drift but per-sample garbage —
-a connector/I2C fault. **The board reported the barometer HEALTHY throughout**, because the
-firmware's plausibility band is applied per sample and every reading is individually inside it;
-a per-sample band cannot see variance. That phantom depth **saturates the depth controller**
-(`DEPTH_OUT` pinned at −1.00, `DEPTH_ERR` −3..−7 m while disarmed), and since `mixer.cpp` is
-block-diagonal with a −1 throttle column on all four verticals and 0 on all four horizontals,
-arming turns that into **full vertical thrust with the horizontals idle** — which is exactly
-the firmware team's unexplained arming spin-up. A level-cal/attitude explanation was
-**refuted** on the same probe (roll −0.81°, pitch +1.77°). Guards added: `bringup_check --srot`
-grades barometer variance and the disarmed depth loop; `SrotFC.check_depth_loop_settled`
-refuses to arm while `|DEPTH_OUT| ≥ 0.90`. Detail:
-[`srot-integration.md`](.claude/context/srot-integration.md) and
-`Mongla_others/srot-control-board/BENCH_FINDINGS_FROM_DUBURI_WS_2026-08-02.md`.
-
-**★ Reading the board: `ros2 run duburi_manager connect`** — opens the SROT serial link and
-prints everything it sends (both batteries — PM1 electronics + PM2 thruster pack over ESP-NOW;
-per-ESC RPM/temp; `DEPTH_CMD/ERR/OUT`, `MIX_VERT/VSGN`; `MAGACC`, `LEAK`, `KILL`, `WTEMP`;
-heap and per-task stacks). `--watch` for live, `--json` for machine-readable. Needs no ROS
-graph and not even a fully-built workspace. **`connect` reports and always exits 0;
-`bringup_check --srot` grades and gates** — use the first to look, the second to decide.
-**Absence renders `--`, never `0.0`**: from rev 3 the board suppresses values it cannot stand
-behind, and rendering that as zero recreates the bug the suppression fixed. The manager logs
-the same block periodically (`srot_telemetry_period_s`, default 2 s, `0` disables).
-⚠ **`BATTERY_STATUS` is instanced and pymavlink caches per msgid** — sampling that slot
-alternates between PM1 (~1.35 V) and PM2 (~14.7 V). De-multiplex by `id`, as
-`SrotFC.note_battery` does.
-
-**★ The architecture change itself — read this first:**
-[`.claude/context/auv-architecture-2026.md`](.claude/context/auv-architecture-2026.md).
-Written by the board side: no Pixhawk, no Pi, no BlueOS, no UDP, no separate IMU board;
-every sensor on the control board, one USB-C cable to the Jetson, Jetson = GPU/vision only.
-
-Full detail, verb table, workarounds and bench runbook:
-[`.claude/context/srot-integration.md`](.claude/context/srot-integration.md).
-Feedback we sent the firmware team: `Mongla_others/srot-control-board/JETSON_FEEDBACK.md`
-(the Round 6 reply at the end answers their three open decisions). Their reply to us:
-`Mongla_others/srot-control-board/FIRMWARE_CHANGELOG_FOR_DUBURI.md`.
-What we sent the three sibling agents on 2026-08-01 (what we changed, what we need back, and
-the bench measurements we owe them): `DUBURI_WS_HANDOFF_2026-08-01.md` in **each** of
-`srot-control-board` / `srot-ground-station` / `srot-esc-flasher`. The firmware agent's
-**executable run sheet** is `srot-control-board/TASKS_FROM_DUBURI_WS.md` — their work lands as
-a PR back into this branch, and **that PR merging is the last gate before water**.
-
-**We are on MAVLink compid 191** (`MAV_COMP_ID_ONBOARD_COMPUTER`), srot path only, so the
-firmware can key `FS_GCS_SYSID`/`FS_GCS_COMPID` on the companion specifically. Until it does, a
-dead Jetson with Bondor connected holds the GCS failsafe open and the vehicle station-keeps
-instead of surfacing. Safe in both directions — the board counts any heartbeat whose id is not
-its own (fw `mav_commands.cpp:687`).
-
-**⛔ The depth gate is wider than "dive verbs".** `SROT_MOVE` auto-enters `AUTO`, and the `AUTO`
-branch closes the depth loop under **every** primitive (fw `task_control_loop.cpp:236-237`) —
-there is no depth-free path through it. So a plain `move_forward` runs the loop that has never
-run closed. Both bench checks gate **every AUTO move**, not just `set_depth`/vision-depth, and
-an **in-air** `move_forward` is not partial validation (at ~0 m target and measurement agree).
-
-**Cross-repo rules (start here before touching anything shared):**
-[`.claude/context/cross-repo-contract.md`](.claude/context/cross-repo-contract.md) — the
-co-owned wire invariants, mirrored verbatim as `AGENTS.md` in each sibling repo. The one
-non-negotiable: **`srot_protocol.py` is our single copy of the wire constants, and
-`test_srot_protocol_drift.py` reads the firmware headers directly to prove it hasn't drifted.**
-
-**The vision↔control split (designed, NOT built):**
-[`.claude/context/vision-control-split.md`](.claude/context/vision-control-split.md) +
-the firmware spec `Mongla_others/srot-control-board/VISION_API.md`. Target architecture is
-**Jetson = perception only, SROT = every control loop**: we stream one `LANDING_TARGET` (149)
-per frame as a **bearing in radians** (not pixels — so the board's gains have units and survive
-a lens change) and the board closes the loop at 500 Hz. Until the firmware implements it,
-`vision_align`/`vision_move` stay **refused** on srot and the 20 Hz host loop is unchanged.
-
----
-
-## 3. Operating Modes
-
-`auv_manager_node` ships with `mode:=auto` as the default. The
-`resolve_mode` helper in
-`src/duburi_manager/duburi_manager/connection_config.py` probes the
-runtime environment and picks one of the four legacy profiles below
-without operator intervention:
-
-| Probe                                                  | Picked profile |
-|--------------------------------------------------------|----------------|
-| UDP `14550` already in use (BlueOS pushing MAVLink)    | `pool`         |
-| Pixhawk USB CDC present (`/dev/serial/by-id/*ardupilot*` or `/dev/ttyACM0`) | `desk` |
-| Neither                                                | `sim`          |
-
-| `mode:=`   | Connection string         | Use case                                         |
-|------------|---------------------------|--------------------------------------------------|
-| `auto`     | (resolved at startup)     | Plug-and-play default. Banner prints what was picked. |
-| `sim`      | `udpin:0.0.0.0:14550`     | Docker dev + Gazebo SITL (ArduSub `--out` to us) |
-| `pool`     | `udpin:0.0.0.0:14550`     | Pool testing — Jetson on AUV, BlueOS pushes      |
-| `laptop`   | `udpin:0.0.0.0:14550`     | Tether laptop on the switch instead of Jetson    |
-| `desk`     | `udpin:0.0.0.0:14550`     | Pixhawk plugged directly via USB through BlueOS  |
-
-> All four explicit profiles use the same listener line. The difference is
-> documentation + the printed startup banner / sanity hints. There is
-> **no** `HARDWARE` mode.
-
-Run `ros2 run duburi_manager bringup_check` at the start of every
-session — a RoboSub-proof per-subsystem preflight (12 sections, A–L) that
-verifies each subsystem is not just present but **usable**: compute/env
-(ROS sourced, duburi pkgs import, disk), vision deps (numpy<2, system cv2,
-trackers — the JetPack E1–E3 traps), serial drivers (**ch341 present +
-brltty absent** — the payload CH340 trap, E5), network, **MAVLink** (real
-autopilot heartbeat, ARMED state, flight mode, battery V — filters out
-BlueOS/GCS heartbeats), Pixhawk USB (BNO/payload VID excluded), BNO085,
-DVL, **payload** (auto-detect + safe serial-link verify with the `'0'`
-byte), cameras (forward+downward by-path count), vision models (TensorRT
-`.engine` vs slow `.pt`), and Jetson MAXN power. Each line is PASS/WARN/FAIL;
-exit `0` unless a FAIL. `--strict` makes any WARN exit non-zero (hard
-pre-mission gate); `--skip-mavlink` skips the UDP 14550 probe.
-
-### 3a. Simulator (`sim/`) — in-repo Gazebo + ArduSub SITL
-
-The simulator lives at [`sim/`](sim/): a **second colcon workspace inside this
-repo** — Gazebo Harmonic, ArduSub SITL, the SAUVC pool with courses and props,
-front + bottom cameras, ground truth, and a FastAPI/React operator lab.
-
-```text
-duburi_ws/
-  src/   autonomy  — six packages; UNCHANGED, same test set
-  sim/   simulator — six duburi_sim_* packages
-    COLCON_IGNORE  — keeps the root colcon build at exactly six packages
-    build_sim.sh   — colcon build --base-paths src (the marker self-ignores otherwise)
-```
-
-Build autonomy first, then the sim; source in the same order (the sim's
-`stack.launch.py` includes autonomy launch files by share directory):
-
-```bash
-./build_dubomini.sh
-cd sim && ./build_sim.sh
-
-source /opt/ros/humble/setup.bash
-source ~/Ros_workspaces/duburi_ws/install/setup.bash
-source ~/Ros_workspaces/duburi_ws/sim/install/setup.bash
-export GZ_IP=127.0.0.1
-```
-
-Terminal by terminal (full walkthrough: [README](README.md#-simulator--gazebo--ardusub-sitl),
-operator detail: [`sim/README.md`](sim/README.md)):
-
-```bash
-# T1 — world + SITL. `stop` FIRST, always: one sim only.
-ros2 run duburi_sim_bringup duburi_sim stop
-ros2 run duburi_sim_bringup duburi_sim sim          # --headless / course:=sauvc26_final
-
-# T2 — this codebase against the sim (MAVLink UDP 14550)
-export DUBURI_WS=~/Ros_workspaces/duburi_ws
-ros2 run duburi_sim_bringup duburi_sim stack --no-vision
-
-# T3 — prove the loop before trusting a mission
-ros2 run duburi_sim_bridge contract_check
-ros2 run duburi_sim_bringup duburi_sim smoke
-
-# T4 — operator lab (binds 127.0.0.1; port in /tmp/duburi-$USER/lab_port.txt)
-ros2 run duburi_sim_bringup duburi_sim lab
-```
-
-> **`mavlink_check` runs with the stack DOWN** — it binds 14550 too, so against a
-> live manager it silently steals the autonomy link and looks like a sim fault.
->
-> **`flight_controller:=pixhawk`** is required on `srot` and **inert on `main`**:
-> `IncludeLaunchDescription.execute()` raises only for *missing required* args, so
-> extra keys are dropped with no log line. [`test_sim_contract_drift.py`](src/duburi_manager/test/test_sim_contract_drift.py)
-> asserts on it for exactly that reason — the launch itself will never complain.
->
-> **The sim has a DVL** (Gazebo ships one natively). `duburi_sim stack` defaults
-> to `yaw_source=sim_dvl` — MAVLink AHRS heading + DVL position — so the `*_dist`
-> verbs close a real loop in sim. Without a DVL they now **RAISE** rather than
-> falling back to a timed guess: that fallback drove 2.361 m for a 1.0 m command
-> and reported success. See [`sim/.context/DVL_AND_SONAR.md`](sim/.context/DVL_AND_SONAR.md)
-> — especially the axis mapping and the sim-time-vs-wall-clock trap, both of
-> which produce a sensor that looks fine and reads wrong. **Sonar does not exist
-> in Gazebo Harmonic**; use `gpu_lidar` or the DVL's altitude.
->
-> **RViz** (`duburi_sim rviz`) draws the robot model, TF, DVL beams and — the
-> point — **ground truth and the stack's believed pose at once**, so the AHRS2
-> offset is visible rather than tabulated. URDF is GENERATED from the same
-> `configs.yaml` as the SDF; there is no hand-written robot description to drift.
-> Nothing published TF before this, which is why RViz was previously unusable.
->
-> **End-to-end check:** `ros2 run duburi_planner mission sim_shakedown` — arm,
-> hold depth, out, back, surface, disarm. Symmetric legs *are* the return-to-origin
-> mechanism; measure the residual against `/duburi/sim/ground_truth`. Measured
-> 0.266 m and 0.200 m horizontal, along-track only 0.037/0.011 m — cross-track
-> heading drift dominates.
->
-> **Depth readback was offset because every course SPAWNED THE HULL SUBMERGED —
-> fixed 2026-08-31.** Depth comes from `AHRS2.altitude`, and on the pool that
-> reads true because the hull is powered on *floating*, capturing its reference
-> at the surface. Each sim course spawned at its own depth, so the reference was
-> captured under water and the offset **tracked the spawn z**: −0.344 m at spawn
-> −0.8, −0.044 at −0.5, +0.016 at −0.3 (constant with depth, and identical armed
-> or disarmed — the earlier "0.33 at the surface, 0.16 at depth" was a
-> point-sampling artifact and is retracted). `surface()` never confirmed and
-> `mission_reset`'s re-zero was REFUSED (`|−0.38| > 0.30`), interlocking. Every
-> course now spawns at **−0.4 m**; measured after: offset **+0.017 m**,
-> `surface()` confirms in 12.3 s genuinely surfaced, readback tracks truth to
-> 7 mm at −0.95 m. `depth_reference` re-checks this at every startup and fails
-> loudly if a new course spawns too deep. **Two non-fixes, both measured:**
-> `BARO_ALT_OFFSET` zeroes the surface reading and then the baro **stops tracking
-> depth** (frozen at −0.03 m with the hull at −1.21 m — `surface()` CONFIRMED
-> while submerged); and ArduSub SITL **ACKs `PREFLIGHT_CALIBRATION` as ACCEPTED
-> without calibrating**, at worst re-zeroing ground pressure as *air* (+20.3 m of
-> apparent altitude), which is why the sim passes `baro_calibration:=false` —
-> **the pool default stays `true`**. Do NOT change the depth source or widen
-> `_BARO_SURFACE_BOUND_M`; both exist for real pool faults. Pool floor is
-> **1.6 m**; deeper targets bottom out.
-> Full table: [`sim/.context/TROUBLESHOOTING.md`](sim/.context/TROUBLESHOOTING.md).
->
-> **Water turbidity comes from `underwater_fx`, NOT the world's `<fog>`.** Measured
-> 2026-08-28: gz-sim 8 ignores `<scene><fog>` on camera renders entirely — 18 m →
-> 3 m left the far wall crisp — so the `lighting:` presets were decorative and every
-> dataset had identical clarity whatever preset its course named. Each preset now
-> also carries an `fx` block, written beside the world as `<course>.fx.yaml` and
-> loaded by `bridge.launch.py`. Check it took with
-> `ros2 param get /underwater_fx turbidity` (murky→0.8, competition→0.45). Never
-> tune turbidity in a `.world`; nothing changes. **Attenuation IS per-pixel** —
-> `underwater_fx` attenuates along the path the light actually travelled
-> (verified: 124 grey levels between near and far), and it is dark only because
-> the vehicle's `depth_camera` sensors are stripped unless
-> `configs.yaml: range_cameras: true`. (This line previously said "still
-> uniform, not per-pixel" — **retracted**; that was corrected in `.context/`
-> and never propagated here.) See
-> [`sim/.context/PHYSICS.md`](sim/.context/PHYSICS.md).
->
-> **Pointing vision at a sim camera topic used to receive NOTHING.** `RosTopicCamera`
-> subscribed RELIABLE; every camera publisher (`ros_gz` image_bridge, `underwater_fx`,
-> BlueOS) is BEST_EFFORT, and rclpy answers a QoS mismatch with one WARN and then
-> silence — clean launch, healthy nodes, zero frames. Now `qos_profile_sensor_data`.
-> Run the full pipeline on Gazebo cameras with
-> `vision_dual.launch.py fwd_topic:=…/front_camera/image_fx dwn_topic:=…/bottom_camera/image_fx paused:=false`
-> — **`paused:=false` matters**: the launch defaults to paused (missions resume the
-> detector they need), so without it the HUD reads `det=ERR dets=0` and looks broken.
->
-> **Vision in sim runs BOTH cameras** — `duburi_sim stack` gives
-> `/duburi_detector_forward` (sim front cam) and `/duburi_detector_downward`
-> (bottom cam). Until 2026-08-28 `vision:=true` started **nothing**:
-> `IncludeLaunchDescription` does not scope `launch_arguments`, so the manager
-> include's `vision: 'false'` leaked out and disabled the vision include via its
-> own `IfCondition`, silently. A `GroupAction(scoped=True)` fixes it and a drift
-> test asserts the scope survives. Any sim note saying "run `--no-vision`"
-> predates this.
->
-> **`bin_fire_blood.pt` has NO `bin` class** — embedded names are
-> `{0: blood, 1: fire}`. Asking for `classes:=bin` detects nothing, silently.
->
-> **Thrusters follow the REAL T200 curve** (Blue Robotics' published data), not
-> a straight line — which was wrong by 12.24 N, 24 % of full thrust. ±28 µs
-> deadband, reverse at 78 % of forward, quadratic ramp, 0.15 s spin-up. Measured
-> A/B: at `--gain 30` behaviour is unchanged (ArduSub closes a loop and asks for
-> more PWM), but at `--gain 15` the vehicle now **does not move at all** where it
-> used to travel 0.37 m. Transit verbs are unaffected; fine alignment and
-> station-keeping are, and that is the pool behaviour the sim was missing.
-> **Water current** is live too (`current_speed:=0.08`) — 0.12 m/s drifts the
-> hull 1.374 m in 40 s, which is what `vision.ki_lat` exists to fight and
-> previously had nothing to fight. Both in
-> [`sim/.context/PHYSICS.md`](sim/.context/PHYSICS.md).
->
-> **Sim vision + datasets: one page has every combination** —
-> [`sim/.context/VISION_AND_DATASETS.md`](sim/.context/VISION_AND_DATASETS.md):
-> all 13 courses, how to author a new course or prop, single/dual camera ×
-> single/multi model, Gazebo bounding-box labelling (occlusion-correct, free)
-> vs hand labelling, OpenCV, and running full missions. **Ground-truth labels
-> now come from Gazebo's `boundingbox_camera`**, not a geometric projector —
-> `prop_library.DETECTION_CLASSES` is both the YOLO class index and the Gazebo
-> semantic label, and a prop missing from it is **invisible** to the sensor.
-> Measured cost: none (12.83 Hz vs a 12.75 Hz baseline).
->
-> **GAMEPAD TELEOP** — fly the hull with a stick for dataset collection and
-> feel-testing. Two places a pad can live, both supported and both driving the
-> **same `TeleopStreamer`** (never a second RC writer, and it uses **tcp:5763**
-> so it cannot fight `udpin:14550`): on the **browser** machine (lab UI, Gamepad
-> API — the QGC arrangement, works when the lab is remote) or on the **lab**
-> machine (`DUBURI_JOYSTICK=/dev/input/js0`). The UI shows a **CONTROLLER ACTIVE**
-> panel with live axis bars; `duburi_sim joystick` is the terminal equivalent.
-> F310-verified map: left stick fwd/strafe, right stick yaw/vertical, A=arm,
-> B=disarm, LB/RB=gain. **A held stick emits NO events** — pushing only on events
-> let `TeleopStreamer`'s 0.35 s watchdog centre the hull mid-command: 6 s of full
-> forward moved **0.188 m** instead of **1.220 m**. Now pushed at 50 Hz.
-> **js axis/button numbers are not universal** (a pad without triggers shifts
-> every later index), which is why the map is a parameter.
-> [`sim/.context/JOYSTICK.md`](sim/.context/JOYSTICK.md).
->
-> **SCORED ELEMENTS ARE SCORED NOW** — `/duburi/sim/score` publishes style points,
-> gate side, the coin flip and the SAUVC flare sequence, read-only from ground
-> truth. **Style follows the handbook's awkward clause** ("returning to the last
-> previous orientation won't count"): a barrel roll scores 8, oscillating 90↔0
-> four times scores **+2 with 3 returns rejected**. `ros2 param set /scoring coin
-> flip` places the vehicle per the rulebook and **breaks any mission that
-> hard-codes its start heading**. Flare order is settable at runtime and
-> out-of-order hits are caught. **Bin lights are NOT modelled** — no rule text in
-> the 2025 handbook to implement against.
-> [`sim/.context/SCORING.md`](sim/.context/SCORING.md).
->
-> **`yaw_source:=bno085` RUNS IN SIM** — the sim supported 2 of the 4 yaw
-> sources, and the missing two (`bno085`, `bno085_dvl`) are the ones the vehicle
-> flies, so the whole heading loop could only be tuned against a sensor it does
-> not use. `bno085_sim` presents a **PTY** speaking the firmware's JSON-line
-> contract, so the **unmodified** `BNO085Source` runs — including the Pixhawk
-> calibration handshake (`[SENS ] BNO085 calibrated pixhawk=90.00° bno_raw=36.79°
-> offset=+53.21°`). Measured against Gazebo ground truth through four turns:
-> **worst error 0.16°**, and `turn` now *terminates* on this path (impossible
-> with a real BNO on a desk). Drift is the datasheet's **0.5 °/min** (BNO08X rev
-> 1.17 Fig 6-14, Gaming RV — our `SH2_GYRO_INTEGRATED_RV` is mag-free per §2.2.6)
-> as a **fixed per-run ZRO bias**, so error grows *linearly* (~5° in 10 min).
-> **Two conventions are silent if wrong**: the board emits **+CCW sensor-frame**
-> (the driver negates once) and **boot-relative** (or the calibration handshake
-> becomes a no-op). One flight-code fix: `dtr=True` on a device with no modem
-> control lines raised ENOTTY and killed the sensors node — now caught.
-> **`bno085_sim_dvl`** is the sim twin of the pool's `bno085_dvl` (BNO heading +
-> Gazebo DVL position) — measured turn 177.8°, forward 1.02/1.00 m, lateral
-> 0.82/0.80 m. `duburi_sim stack` now takes `key:=value` passthrough; launching
-> `stack.launch.py` by hand skips its kill of prior stacks, and **two managers on
-> 14550 look exactly like a broken sensor**.
-> [`sim/.context/BNO085.md`](sim/.context/BNO085.md).
->
-> **FAULTS CAN BE INJECTED NOW** — DVL dropout, camera loss, MAVLink loss,
-> battery sag and a dead thruster. Every one of those recovery paths existed in
-> the code and had **never run in sim**. Arm with a duration, which self-clears:
-> `ros2 param set /faults dvl_dropout_s 6.0` (also `camera_loss_s`,
-> `mavlink_loss_s`, `battery_sag_v`; dead thruster is
-> `ros2 param set /t200_curve dead_thrusters "[3]"`). Measured: a DVL dropout
-> makes `move_forward_dist` **refuse** instead of dead-reckoning; camera loss
-> gives `vision_align` **NO_CAMERA (3)** vs the **LOST (1)** it returns when the
-> target merely is not there; a cut link makes `arm` return **NO_ACK**; 16→13 V
-> costs **14.2 %** of the distance; thruster 3 goes 12.72 N → 0.00 N with
-> thruster 1 untouched. **`/faults` is load-bearing**: the DVL sensor now emits
-> `dvl/velocity_raw` and that node republishes `dvl/velocity`, so without it
-> every `*_dist` verb refuses. MAVLink cutting needs opt-in
-> `mavlink_relay:=true`. **`/duburi/state` is NOT a link probe** — with
-> `yaw_source=sim_dvl` its yaw comes from Gazebo and it ran at 22 Hz through a
-> fully cut link. [`sim/.context/FAULTS.md`](sim/.context/FAULTS.md).
->
-> **FIRED ROUNDS FLY LIKE ROUNDS NOW, AND ARE SCORED.** The torpedo is the
-> rulebook's own article (51×152 mm, 325 g against 311 g displaced — 14 g
-> negative) with **added mass** modelled (1.0× displacement broadside, 0.1×
-> nose-on), so it decelerates and turns like a body in water rather than one in
-> air. Measured: **2.63 m of flight**, ~17 mm of drop over a 1.5 m shot. Two
-> bugs made the launcher look feeble and neither logged anything: the burn was
-> **wall time**, so at this RTF the round got a quarter of its impulse (1.0 m/s
-> instead of 4.5), and **gz-transport drops a publish before discovery**, so
-> early shots got no impulse at all. **The torpedo board's openings are
-> physically open** — collision tiled in strips with the circles cut out — so
-> `/duburi/sim/score` grades a shot the way the handbook does: `through` vs
-> `miss`, which opening, and the range **at the moment of firing** banded
-> against the two standoff bars. (**That was written true of the two-opening
-> board and was FALSE from the four-opening rewrite until round 13** — the
-> grader kept the old openings and called every real shot `past_board`. It
-> derives them from `prop_library` now; see the scorer note below.) **Trace a shot off the pose stream, never
-> `gz model -m` (~2 s/call)** — too slow to resolve a half-second flight, and it
-> reads a *recycled* slot as the new shot.
-> [`sim/.context/PAYLOAD.md`](sim/.context/PAYLOAD.md).
->
-> **GAMEPAD X = FIRE, Y = DROP**, with the rulebook's magazine: "up to two
-> markers" and "up to two torpedoes" (p. 64), so X walks channels 1→2 and Y
-> walks 3→4, then reports the tube empty; **disarm reloads**. Routed through the
-> same handler the UI buttons use, so the **disarmed interlock still refuses a
-> fire before arm** — and **a refused shot does not cost a round** (it burned
-> torpedo 1 before the fix, leaving one shot where the operator expected two).
-> Works from the browser pad and the lab-host pad alike. **Two `lab_server`
-> processes look exactly like a stale readout** — one serves the API while the
-> other reads the pad; same family as two managers on 14550.
->
-> **DVL and camera are datasheet-grounded now (round 5).** The DVL noise was
-> `0.002` copied from gz's own `dvl_world`; Nortek quote the Nucleus1000 at
-> **~1 % accuracy** (the 0.3 % variant is export-controlled and not what we
-> carry), bottom-track **0.1–75 m**. Gazebo's `<stddev>` is a fixed floor while
-> a real DVL's error is **proportional to velocity**, so `0.0065` is 1 % at this
-> hull's 0.65 m/s cruise — right at cruise, pessimistic slower, optimistic
-> faster, and said so rather than left to be discovered.
-> **The camera FOV was the in-air number.** Blue Robotics specify 80°
-> horizontal *in air*; through a flat port Snell's law gives
-> `2·asin(sin 40°/1.333)` = **57.7°**, 28 % narrower. It ran the wrong way: the
-> sim showed more of the course than the vehicle ever sees, so every search
-> pattern was calibrated against a view that does not exist. Verified through
-> `camera_info` (fx 581.3 → 57.7°).
->
-> **Bar30 noise is the datasheet's.** `SIM_BARO_RND` is in **metres**, and ours
-> was `0.02` — ten times too noisy on the one sensor every mission depends on.
-> The Bar30 is a TE MS5837-30BA: 0.2 mbar resolution, which its datasheet states
-> as **2 mm of water depth**. Now `0.002`.
->
-> **`fire()` NOW RUNS IN SIM** — the payload was the one autonomy path with no
-> simulated equivalent, so `align(fire=…, fire_t=…)` had never executed outside
-> the pool. `payload_sim` presents a **PTY** that the **unmodified** `PayloadDriver`
-> opens exactly as it opens the CH340 (`payload_port:=/tmp/duburi-$USER/payload`);
-> each shot lands on `/duburi/sim/payload/fired` **and** spawns a buoyant, dragged,
-> colliding body, so a hit is decided by physics. Check it with
-> `payload_check.py`. **Ballistics are approximate, not calibrated** (no added-mass
-> model; nothing published to fit), and **pass-through is not scorable on the
-> generated board** — its openings are printed on a solid plate, so a good shot
-> *strikes* it; use the vendored mesh variant for real holes.
-> Traps, all measured: a spawned model **cannot be given an initial velocity**
-> (hence an `ApplyLinkWrench` burn); **buoyancy is a whitelist read once at world
-> load**, so shots reuse pre-baked `payload_shot_*` names or they sink instantly;
-> the round must clear the hull's collision box or the vehicle punts it; and drag
-> coefficients ride **body** axes on a round pitched 90°, so flight is body-z.
-> [`sim/.context/PAYLOAD.md`](sim/.context/PAYLOAD.md).
->
-> **Cylinder props were not solid.** DART's own collision detector returns false
-> for `[CylinderShape]-[BoxShape]` — the hull's collision shape is a box and every
-> pipe prop is a cylinder, so the vehicle drove through gate legs, slalom pipes and
-> flare poles. Measured A/B into a gate leg vs open water: `dart` gave 1.739 m vs
-> 1.715 m at a flat 0.656 m/s (no contact); `bullet` decelerates at the predicted
-> contact point. Now `collision_detector: bullet`. This **overturns** an earlier
-> choice made on a 5 % RTF sample — that measured the wrong quantity. Consequence:
-> the RoboSub gate is solid now, so a mission transiting it at 0.8 m will hit the
-> legs where it used to pass through. **Changing this setting requires re-running
-> the collision A/B, not an RTF sample** ([`sim/.context/PHYSICS.md`](sim/.context/PHYSICS.md)).
->
-> **The RoboSub gate hangs from the SURFACE, and you pass UNDER it.** Handbook p. 32:
-> *"It is buoyant, floating just below the surface and moored to the bottom… The AUV
-> can pass through the gate at any depth from the floor to just below the gate"* and
-> *"chooses a marine animal by passing under a specific side."* It was modelled
-> standing on the floor, which put the top bar at 0.58 m and blocked the bottom.
-> Now the bar sits 0.1 m deep, the legs reach 1.62 m, and the clear water is the
-> ~0.5 m beneath — which is the one number a gate mission must get right.
->
-> **Gazebo particle emitters do NOT reach camera sensors** — the same GUI-scene /
-> sensor-scene split that makes `<scene><fog>` inert. 0.4 m particles at 4000/s left
-> `image_fx` pixel-identical (per-frame stddev 1.4700 with vs 1.4678 without). Raising
-> a course's `snow:` rate changes the GUI and **no dataset**. The particulate the
-> vision pipeline sees is composited in `underwater_fx.ParticleField`
-> (`ros2 param set /underwater_fx particulate 0.6`; 4.6 % frame-rate cost) and it
-> **drifts coherently** rather than resampling — a per-frame speckle is just `noise`,
-> which a detector ignores.
->
-> **The SAUVC floor SLOPES** — 1.6 m centre, 1.2 m ends. Props sit on the floor
-> at their own x and are pitched to match it; a flat −1.6 m left target-zone
-> drums 0.34 m in the air.
->
-> **TWO COMPETITIONS now.** `spec/arena.yaml` split into `spec/sauvc.yaml` +
-> `spec/robosub.yaml`; a course picks one with `competition: robosub`. RoboSub's
-> pool is **2.1 m** deep vs SAUVC's 1.6 m, which is why this needed a refactor and
-> not a config line: depth-spanning props bake pool depth in at generation time,
-> and textures are sized from the pool (one shared set stretched over a different
-> pool is wrong with **no error**). 14 RoboSub props + 6 courses
-> (`robosub26_full`, `rs_task_*`). The gate's red/black **asymmetry** and the
-> torpedo board's two **openings** are real geometry, because scoring depends on
-> them. Acoustics: `ros2 run duburi_sim_bridge hydrophone` reports bearing /
-> elevation / SNR per ping with dropouts, range-growing noise and **multipath
-> ghosts** (a confident wrong bearing, not noise — it is what breaks homing that
-> averages). Verified against ground truth: median 5.4° error, 7 % ghosts. Full
-> detail: [`sim/.context/ROBOSUB_AND_ACOUSTICS.md`](sim/.context/ROBOSUB_AND_ACOUSTICS.md).
->
-> **PROPS REACT NOW.** Every prop but the balls was `<static>true</static>` — a
-> static body *generates* contact (so the hull stopped dead at a flare) but has
-> no mass in the solver and **cannot be pushed**. The knockable set (SAUVC bump
-> flares, RoboSub slalom) is dynamic, and the links a hull was driving straight
-> through are solid again: gate role signs, the gate's red divider, bin panels
-> and the **whole bins pipework**. The design is **net weight negative + centre
-> of buoyancy above centre of mass** — "buoyant and moored" does not work,
-> because a net-buoyant free body just rises. Flare: 0.348 kg down, CoB 0.230 m
-> above CoM, righting couple 0.513·sinθ N·m. **A dynamic multi-link model must
-> be WELDED** (`<static>` was the implicit weld; without joints an 11-link
-> flare is 11 free bodies). **And it needs drag or it rings forever** — measured
-> 87.6° peak still swinging 25° at t=24 s without, 15.4° and at rest by t=3 s
-> with. The registry `dynamic` flag and the `<static>` tag are set in two places
-> and `build_props` now **refuses** when they disagree (silent zero-buoyancy
-> otherwise). [`sim/.context/PHYSICS.md`](sim/.context/PHYSICS.md).
->
-> **The torpedo board's holes are the holes you can shoot through.** The texture
-> drew **four** openings, the collision cut **two**, in different places — a
-> shot lined up on the artwork struck solid board. Both now come from
-> `prop_library.torpedo_openings()`. The streaky washed-out render was
-> **z-fighting**: the 40 collision strips and the printed face were coplanar at
-> the same thickness and both drawn; strips are collision-only now, **45 visuals
-> → 3**. The two red standoff bars are gone — a bar's *height* cannot encode a
-> firing *distance*.
->
-> **THE BOARD'S COLUMNS ARE PACKED, NOT TYPED — AND THE BIN IMAGE IS THE CRATE
-> FLOOR.** Four column centres 0.235 apart while a large ring's outer radius
-> (0.157) plus an image's half-width (0.105) needs 0.262: the overlap was
-> guaranteed by arithmetic, and the large ring ran 0.006 **off the board**.
-> Nothing checked it. `spec/robosub.yaml` now declares only the row's slot
-> ORDER; `prop_library.torpedo_layout()` packs the positions from the same
-> radii the mesh cuts and the texture paints, and a test fails on any overlap
-> or non-positive gap (verified: `image_size_m: 0.18` → `gap -0.0328 m`).
-> `image_size` → **`image_size_m`** because its unit changed. The plate is a
-> **mesh**, so Ogre's box-face UV convention stopped applying and every ring
-> was painted on the mirrored side — settled with a **four-quadrant diagnostic
-> texture**, not reasoning: `sampled_u = vt_u`, `sampled_v = 1 - vt_v`. Flip
-> BOTH the mesh and `_plate_uv` and nothing changes; the error cancels. The
-> kickstand braces raked the wrong way (`atan2` → **`pi - atan2`**); the foot
-> pad was already right and did NOT move. **The bin placards and their posts
-> are deleted** — a post ran through the middle of its own sign face — and the
-> role image is the `crate_{tag}_floor` texture, the handbook read literally.
-> **Consequence: only the DOWNWARD camera can read a bin's role now**, which is
-> already how the bin mission works. And `pvc_material()` — the gate, slalom,
-> bins pipework, torpedo frame, octagon, table and every path marker — was a
-> **flat colour with no maps at all**; `pvc_textured_material()` was added last
-> round to fix that and called by nothing. Folded in, plus normal maps on the
-> mats, stripes, pinger and collectibles, and the SAUVC branch that had never
-> written normal maps at all. Measured: **32.5 / 12.3 / 7.0 %** of pixels change
-> at the gate / slalom / bins, RTF **0.0158 vs 0.0160** (no cost).
-> **The opening camera was above the water** (`camera_pose` z = +0.9, surface at
-> z = 0) — now `-9.5 0 -0.7` with a follow z of 0.25, and a test asserts no
-> camera offset surfaces at the −0.4 m spawn.
->
-> **GAIN IS A PERCENTAGE, AND 100 % IS THE DEFAULT.** Nothing was clamping the
-> vehicle (full stick = PWM 1900 = `MOT_PWM_MAX`); it was `GAIN_DEFAULT = 0.55`
-> plus the T200 deadband, which makes 55 % of stick **39 % of thrust** and the
-> old 0.15 slider floor **4 %**. The UI now reads 1–100 % and shows what a
-> setting actually delivers. One floor (`teleop.GAIN_MIN = 0.10`) replaces three
-> that disagreed. **The view starts underwater behind the hull and follows it** —
-> `CameraTracking` was loaded with an empty body and tracked nothing; the target
-> is `duburi`, the world *instance* name (the model is `duburi_heavy`, which
-> silently follows nothing). `duburi_sim view free|chase` breaks out and back.
->
-> **THE WHOLE COURSE IS SCORED NOW, against both rulebooks.** `rulebook.py`
-> holds each published line item with its citation, and the lab has a **score**
-> page: what was earned, the evidence, what remains. **Both maxima are always
-> shown** — SAUVC 230 reachable of 310, RoboSub 14700 of 21800 — because a total
-> that quietly counts unreachable points reads like a competition result.
-> Not modelled and *said so*: octagon object handling (**5,100** — the 4,900
-> once quoted here was wrong; `rulebook.maxima()` computes 5,100 — **no manipulator
-> on the sim vehicle**), IVC (1000, phase 2), bin lights (1000, no rule text).
-> **Geometry now comes from the course**: the launch passed only the world name,
-> so every geometry param ran at its `robosub26_full` default and the scorer
-> watched for a gate at x=−5 on all 13 courses. **Penalties are edge-triggered**
-> from ground truth (two touches over 8.0 s gave exactly two −5s, not sixty).
-> The run clock **starts on arm**, and the card is written to `DUBURI_RUN_DIR`
-> beside the mission scorecards. [`sim/.context/SCORING.md`](sim/.context/SCORING.md).
->
-> **THE TORPEDO RIG WENT 1/4 → 3/4, AND THE CAUSE WAS CALL ORDERING.**
-> `score_check` read its shot count with a `ros2 topic echo` (~2 s) and fired
-> with another (~2 s) — **after** the pose check — leaving ~4 s of drift between
-> verifying the aim and pulling the trigger, on an armed hull in ALT_HOLD.
-> Shot 1 fires soon after placement and later ones accumulate the delay, so it
-> looked like a first-shot-only defect. **The previously-recorded hypothesis
-> (`ros2 topic echo` vs a live gz-transport subscription) is RETRACTED** — a
-> guess written up as a lead. Three hypotheses have now been wrong on this one
-> defect (impulse loss, shot spacing, transport) and all three are kept in the
-> source so nobody re-runs them. Also: the pre-trigger tolerance is now the
-> **opening's** (a third of its radius) not the rig's 50 mm — which exceeds a
-> small opening's 47.5 mm radius — and the hull must be **still**, not merely in
-> place, the same idea as `align(settle=)`. **Opening 2 still fails and is NOT
-> isolated**; an attempt to test it alone was my own bug (recycled slot names
-> are not "new" keys, so fired shots reported `NO MODEL`). Bins stay **5/5**.
->
-> **SUNLIGHT: MOVING CAUSTICS AND SURFACE GLARE — and the engine question,
-> answered with numbers.** RoboSub runs in an **outdoor pool under direct sun**
-> (verified in 2025 downward footage, heavy caustics). SAUVC is **not settled**: the 2026
-> rulebook says "indoor swimming pool (25m x 16m)", while earlier SAUVC write-ups place the
-> finals in Singapore Polytechnic's outdoor Olympic pool. Confirm the venue before tuning for
-> it. The sim had neither caustics nor glare. `underwater_fx` gained `SunlightField` and
-> `SurfaceGlare`, on by default via the lighting presets (clear 0.70/0.45,
-> competition 0.50/0.35, murky 0.22/0.15 — murky water scatters the net out).
-> **Caustics are WORLD-ANCHORED**, sampled at the world position each pixel
-> looks at via the range image; painted in image space they swim with the camera
-> and read as a dirty lens. Measured: **55.8 % of floor pixels change**, floor
-> mean 93.33 → 92.86 (brightness preserved — caustics redistribute light, they
-> do not add it). Three defects on the way, each of which looked like it worked:
-> the raw wave sum drove frame gain to **−0.082** (negative light — take the
-> positive part, light focuses where the surface is concave); soft blotches
-> instead of filaments (a caustic is an *envelope where rays cross*, far peakier
-> than the surface making it); and **a parameter declared but missing from
-> `_on_params` is silently un-tunable** — `ros2 param set` says success, the
-> node keeps its construction-time value.
-> **`LensFlare` JOINS `<fog>` AND THE PARTICLE EMITTER as a third feature that
-> does not reach these sensors.** It loads and binds (`gz -v 4` prints "Lens
-> flare attached to camera named") and produces **nothing**: flare off mean 99.8
-> / p99 118, on 99.5 / 117, with a positional light 99.3 / 117. Wiring kept and
-> documented so nobody retries it. **The trap: the sim runs `gz -v 2`, which
-> hides info messages — "no flare log" was not evidence of failure.**
-> **GPU IS ALREADY USED AND IS NOT THE BOTTLENECK**: measured live at **23–29 %,
-> 416 MiB of 6144** while the gz server sat at **207 % CPU**. The sim is
-> CPU-bound, so GPU shader work is nearly free — which is the quantitative
-> reason to stay on Gazebo rather than switch engines. More CPU post-processing
-> is the expensive direction. [`sim/.context/PHYSICS.md`](sim/.context/PHYSICS.md).
->
-> **THE `dubomini` SIM MODEL IS GONE (round 23) — RETRACTING WHAT THIS FILE
-> SAID ABOUT IT.** Rounds 19-21 built the team's own `hullv3.stl` into the sim
-> as the `dubomini` model and made it the default on all 13 courses. **That is
-> no longer true**: the model, its meshes, `gen_vehicle_mesh.py` and
-> `added_mass.py` are deleted, and **`duburi_heavy` is the vehicle on every
-> course again**. The team is preparing a proper URDF with full information, and
-> one known-good vehicle beats a half-specified one waiting to be replaced.
-> **Consequence, stated so it is not rediscovered:** every number measured on
-> that hull is stale — `verb_audit` and `score_check` results (torpedo 3/4, bins
-> 5/5), the 0.16 m/s uncalibrated speed, and the RTF 0.0169 baseline. The
-> revert also **re-validates** `payload_sim`'s `muzzle_forward_m = 0.40`, which
-> is derived from the BlueROV2's 0.229 m collision reach and was never
-> re-derived for the other hull.
-> **Two findings survive because they will apply again to the incoming URDF**,
-> and the full record is kept at
-> [`sim/.context/DUBOMINI.md`](sim/.context/DUBOMINI.md):
-> **a mesh gives an axis LINE, not a push direction** — CAD-literal thruster
-> yaws made ArduSub's measured forward mix `[-33,-27,+33,+27]` sum to
-> **(0.0, -8.5) N, zero forward thrust**, while nothing logged a fault because
-> nothing was faulty; and **buoyancy cannot come from a shell mesh** — 6.58 L of
-> signed volume against a 14.6 kg vehicle is **8 kg negative, a rock**, because
-> the sealed air that floats it is not in the mesh at all.
->
-> **THE LIVERY ERASED THE VEHICLE, AND A PIXEL-DIFF IS WHAT HID IT.** A single
-> SDF `<material>` on the hull visual A/B'd at 33.8 % of pixels changed — and it
-> was **wrong**: the `.dae` carries **49 distinct materials** and one SDF
-> material collapses all of them, so the AUV came out **white and featureless —
-> not recoloured, ERASED**. The diff proved the override reached the renderer
-> and said nothing about whether the result was *better*. Fixed by recolouring
-> the **mesh's own materials** (`gen_livery_mesh.py`, run by
-> `generate_model.py` so it cannot drift): 45 materials and the full luminance
-> range preserved. **Two further passes were also arithmetically correct and
-> visually nothing** — tinting greys toward a **grey** hull at preserved
-> luminance is the *identity map* (2.2 %), and forcing accents to preserve
-> luminance only made the stock cyan *brighter* (4.5 %). Settled at **3.0 %**
-> with a sqrt brightness modulation; a subtle livery, said to be subtle.
-> **The Sketchfab DuboMini is not usable** (checked while hunting for a hull):
-> no download, no licence stated, **2.9 M triangles**.
->
-> **PER-PIXEL ATTENUATION IS FREE, AND THE OLD TRADE IS RETRACTED.** The depth
-> cameras **mirrored the colour cameras** (640×480 @ 30) and *that* was the
-> cost. Measured: off **7.740 Hz**, 640×480@30 **6.468** (−16 %), 320×240@10
-> **7.674** (−0.9 %), 160×120@5 **7.543**. `range_cameras` is **ON by default**
-> at 320×240@10. This retires the "12 Hz → 4 Hz, set it deliberately per
-> session" line — the frame rate went on a second full-resolution render pass,
-> not on the attenuation.
->
-> **THE GRIPPER IS GEOMETRY, MASS AND TRIM — NOTHING COMMANDS IT.** A Newton
-> Subsea Gripper from the published datasheet (62 mm jaw, 524 g air / 267 g
-> submerged, 1.6 s), because **no public URDF or Gazebo model of it exists**.
-> `gripper: enabled: false`; when off it is **textually stripped**, not merely
-> disabled — that is how the range cameras cost 12 Hz → 4 Hz "switched off".
-> **The buoyancy trap caught a real error of mine**: `buoyancy_adjustment` is
-> the NET figure, so adding the gripper's mass already adds its displacement
-> implicitly; adding the displacement again put the hull at **+0.624 kg** —
-> over-buoyant, from a part that sinks. The correction is only the shortfall
-> (0.524 − 0.257 = **0.267 kg**, its submerged weight). Measured after:
-> **+0.0999 kg net both with and without**. **No `DetachableJoint` yet** — the
-> plugin names its child model at LOAD time and a gripper does not know what it
-> will grab; the first draft's `__model__` attached the jaw to the vehicle
-> itself, so it was removed rather than left looking finished. The octagon's
-> object-handling points stay `NOT_MODELLED`.
->
-> **THE COLOURED PROPS WERE WASHED OUT BECAUSE A ROUGHNESS MAP WAS BEING USED
-> AS THE ALBEDO.** `pvc_material` passed `rough_pvc.png` as the `albedo_map` as
-> well as the roughness map, and `stripe_`/`plastic_`/`fabric_material` were
-> called with `rough_*.png` as their albedo at five more sites. A roughness map
-> is a mid-grey noise field — `rough_pvc` means **0.618** — and Ogre multiplies
-> albedo by diffuse, so every coloured prop rendered at 62 % of its own colour;
-> then a **flat grey `<emissive>`** was added on top, which lifts all three
-> channels equally and desaturates what is left. A slalom pipe specified
-> `[0.72, 0.11, 0.13]` arrived near `[0.65, 0.27, 0.28]` — pale pink. Fixed with
-> real near-white albedos (`make_albedo`, sharing each surface's height field
-> with its normal map) and a **per-channel** emissive. A round-10 regression,
-> and it hit every coloured pipe including the gate divider.
->
-> **THE TORPEDO BOARD IS WHITE, ITS RINGS ARE BRIGHT RED, AND IT STANDS ON TWO
-> LEGS.** `colour` was `[0.56,0.57,0.59]` "matching the CAD" — **retracted**: the
-> official *Task 4 — Deploy (Torpedoes)* slide shows a white printed field with
-> thin bright-red rings, and a slide of the printed board beats a proportions
-> drawing on what colour the print is. Ring red `(0.72,0.06,0.09)` →
-> `(0.93,0.11,0.14)`, since red is the first channel a pool takes and brick red
-> arrives brown. **Consequence, stated not discovered: a white board is an
-> EASIER detect than grey, so sim-tuned thresholds for this prop are
-> optimistic.** Images `0.10` → **`0.12` m** — 0.12 because that is what the row
-> fits; 0.16 was tried and `test_torpedo_board.py` caught it at **−0.0195 m**
-> (usable 0.52 m, rings eat 0.2585). The rear kickstand is **deleted**: two
-> raking braces plus foot pads read as a four-legged trestle, so this round
-> removes the geometry whose rake last round had fixed, and `brace_rake` goes
-> with it. **Rejected on measurement:** lifting the panel emissive 0.10 → 0.22
-> brightened the face 22 % and cost the artwork **27 % of its redness** — the
-> same grey-emissive desaturation just removed from `pvc_material`.
->
-> **THE WATER SURFACE IS A MESH NOW, AND STILL NOT ANIMATED — AND "A FAILING
-> SHADER LOGS NOTHING" IS RETRACTED.** The surface was a `<box>`: 8 vertices,
-> which is the whole reason an animated bounded surface was carried and cut
-> across rounds 12, 13, 14, 19 and 22 — a vertex-displacement shader had nothing
-> to displace. It is a **subdivided, double-sided grid** now (0.25 m cells, one
-> mesh per pool), verified equivalent to the box it replaced (probe-camera mean
-> **111.452 vs 111.424**). The Gerstner shader on top is **NOT shipped**: it
-> compiles and it is applied (**100 % of pixels** differ from the plugin-stripped
-> control) but **its fragment stage never runs**: a shader consisting of nothing
-> but `fragColor = vec4(1,0,1,1)`, with **no uniforms at all**, renders
-> **0.00 % magenta** and the same mean **97.667**. Three means bracket it —
-> 122.836 with no surface, 111.452 with the surface's own material, 97.667 with
-> ShaderParam attached. The Fuel wiring it was copied from is authored for
-> **ign-gazebo6**, not gz-sim 8, which is the first thing to check.
-> **This round's own first answer — "every `<param>` arrives as zero" — is
-> RETRACTED**; it was inferred from two experiments that could not tell the
-> hypotheses apart (both shaders reduce to the same output under it, and `tau`
-> only scales an amplitude that was already zero). A **fourth** wrong diagnosis
-> in the same round, on top of the three below.
-> **`gz -v 2` DOES report a shader compile failure — by aborting the server**
-> (`OGRE EXCEPTION … failed to compile`, `exit code -6`). So a live sim is
-> positive evidence the GLSL compiled, which is the opposite of the old
-> "renders nothing and logs nothing" line and is what proved the shader above
-> was running.
-> **Three defects were found on the way and every one returned a plausible
-> NUMBER rather than an error**: the surface was never in frame (a pinned,
-> pitched-up hull **rights itself in milliseconds** — CoB above CoM); the visual
-> had **no `<geometry>` wrapper**, so SDF dropped it silently; and the sheet was
-> **single-sided facing +z** while every camera here is underneath, so Ogre2
-> culled it. The tool that caught all three was **painting the surface opaque
-> magenta and counting magenta pixels** — a frame-to-frame diff cannot tell a
-> static surface from an absent one, and it kept returning numbers that read as
-> findings. `test_water_containment.py` now reads the span off the **OBJ's own
-> vertices** and asserts the `<geometry>` wrapper; both guards were verified to
-> bite, along with a grid too coarse for the shortest wave.
->
-> **WATER IS IN THE POOL NOW, NOT EVERYWHERE.** `water_surface` defaulted to
-> `gerstner`, which includes `openrobotics/waves` — an **unbounded** ocean at
-> z = 0 — so the pool sat in an open sea and every view outside the walls was
-> underwater. Default is back to **`plane`**, which `prop_library.pool` builds at
-> exactly the pool's `length × width`; `gerstner` stays selectable and is simply
-> the wrong default for a pool (`<include>` has no reliable scale for a Fuel
-> model, so bounding it is not a config change). The reason the default had been
-> flipped away from `plane` was real and is fixed rather than reverted around:
-> at **0.62 transparency** the plane was effectively not there and the pool read
-> as **EMPTY** — now `0.18` and blue-tinted, because from underneath a water
-> surface is a dim mirror, not a window. `test_water_containment.py` guards all
-> three properties across every world and **all three were verified to bite**.
-> Its pool lookup reads each course's own `pool:` key: three courses say
-> `pool: sauvc` with no "sauvc" in the filename.
->
-> **THE WASH IS ON BY DEFAULT** (`wash:=false` to disable). The scorer has no
-> prop-displacement rule, `contract_check` and `smoke` pass with it on, and RTF
-> is unchanged — **median 0.0132 both ways** over ~370 samples per arm (read the
-> median; the means differ on startup transient alone).
->
-> **THE HULL'S WASH MOVES PROPS NOW — and the thing that hid it was a frame,
-> not the physics.** `thruster_wash` was built two rounds ago, wired, and never
-> once shown to move anything. Parked 0.7 m upstream of a slalom set at the
-> node's own +103.52 N of net forward thrust: **wash off 0.001°, wash on
-> 7.331°**. Three real bugs were fixed on the way — hull speed used as the jet
-> speed (a vehicle holding station has zero speed and full wash), a
-> `node.publish()` that **does not exist** on `gz.transport13.Node` and raised
-> into a swallowed callback, and `entity.type = 2  # LINK` when **2 is MODEL and
-> LINK is 3**, which made every wrench address a model that does not exist.
-> But the reason it still looked dead afterwards was the measurement:
-> **`/world/<w>/pose/info` reports a link's pose RELATIVE TO ITS MODEL FRAME,
-> and that frame rides the model's CANONICAL link** — the first one authored.
-> So the pipe that swings reads 0.00° forever, its neighbours report its
-> counter-rotation and appear to move, and pushing all three collapses every
-> reading to ~0 *precisely because it is working*. Two symptoms, one artifact;
-> the tell was an **identical** 49.48° on two different bodies.
-> `dynamic_pose/info` shares the convention and does not save you — compose
-> model × link, or watch the model's own pose. Also measured: persistent
-> wrenches on different links **coexist** (49.9° and 55.6° at once), publish
-> **rate is irrelevant** to a persistent wrench (10 Hz 51.0° vs 5 Hz 50.0°), and
-> **four equal thruster commands are a pure YAW** — the A/B rig drove exactly
-> that and the node rightly reported 0.00 N of jet. It stays **off by default**
-> (`wash:=true`): demonstrated, not yet regressed against a full mission, and
-> `targets` covers **only the slalom pipes**.
-> [`sim/.context/PHYSICS.md`](sim/.context/PHYSICS.md).
->
-> **THE SCORER COULD NOT AWARD THE TWO TASKS IT EXISTS TO SCORE — FIXED, AND
-> THE EARLIER CLAIM IS RETRACTED.** Asked whether torpedo-through-hole and
-> bin-drop scoring worked, both were TESTED rather than trusted, and both were
-> broken. A torpedo fired dead-centre through a real opening from 1.00 m graded
-> **PAST_BOARD**; a marker landing squarely in a crate graded **OUTSIDE_BIN**.
-> Neither logged anything, because nothing *was* wrong — the scorer was looking
-> exactly where it had been told. `board_openings` was a hand-typed **two**-
-> opening default left behind by the 2026 four-opening rewrite (radii 0.10/0.065
-> vs the real 0.07/0.0475, absolute z vs plate-relative), and nothing derived it
-> from the geometry; `'large' if idx == 0 else 'small'` cannot label a board
-> with **two of each**. The drop target was a single 0.61×0.305 box (an older
-> rule; the 2026 crate is **0.335 square**) at the bins **model origin**, while
-> four crates hang **±0.52 m** off the pipeline — so no crate was ever inside
-> it, and the origin, open water on the pipework *between* the crates, was the
-> only place that scored. Both now derive from **`prop_library`** — the module
-> that cuts the mesh and paints the texture — because a second copy of a number
-> is exactly how this happened. `_check_bin_lights` had the same disease: it
-> used a **crate** dimension (`bin_size[0]`) to place detectors along the
-> **pipeline**, so they now read `pipeline_span` (±0.325 m, not ±0.15). Measured
-> after: **TORPEDO THROUGH opening large**, **DROPPER IN_BIN** at two different
-> crates, and **OUTSIDE_BIN** on the pipework — the negative control. **Two
-> rclpy traps:** an empty-list parameter default infers **BYTE_ARRAY**, after
-> which a double array set over it is silently discarded (`ros2 param get`
-> answers "Byte values are: []") — defaults are `[0.0]`; and a `set_pose` with
-> no `orientation` leaves the hull at whatever heading it drifted to, which
-> fires rounds parallel to the board and reads as a scorer fault.
->
-> **Props follow the SAUVC rulebook** and every prop can be spawned anywhere at
-> runtime: `ros2 run duburi_sim_scenarios props add <model> <name> <x> <y>`.
-> Six courses, three of them single-task. Textures are generated
-> (`gen_world.py --all`), never hand-committed.
->
-> **Vision in sim has two silent failure modes.** `duburi_sim stack` defaults to
-> `model:=gate_rescue_repair`; the `.pt` is gitignored (mirrored from `~/models`)
-> and a missing `.yaml` sidecar yields an empty allowlist and a silent `[]` every
-> frame. Require the model stem, a non-empty allowlist, AND the `[ align … ]` line.
-
-**Bare SITL without Gazebo** still works for arming/depth/motion-verb checks:
-
-```bash
-sim_vehicle.py -L RATBeach -v ArduSub -f vectored_6dof --model=JSON \
-  --out=udp:0.0.0.0:14550 --out=udp:127.0.0.1:14551 --console
-```
-
-Sim-tuned **detection thresholds and vision gains do not transfer** — sim imagery
-is too clean. Control behaviour and every `/duburi/move` verb do.
-
----
-
-## 4. Software Architecture
-
-### 4.1 Package Map (real, today)
-
-```
-duburi_ws/src/
-├── duburi_interfaces/    # ROS2 message + action defs
-│   ├── action/Move.action        # single dispatcher action
-│   └── msg/DuburiState.msg       # typed state snapshot for /duburi/state
-├── duburi_control/       # MAVLink layer + Duburi facade
-│   └── duburi_control/
-│       ├── pixhawk.py            # Pixhawk class — arm / mode / RC / setpoints + [MAV ] DEBUG trace
-│       ├── commands.py           # COMMANDS registry (single source of truth)
-│       ├── motion_easing.py      # smoothstep / smootherstep / trapezoid_ramp
-│       ├── motion_writers.py     # shared constants + Writers (lock-aware) + thrust_loop
-│       ├── motion_yaw.py         # yaw_snap + yaw_glide (Ch4 rate override)
-│       ├── motion_forward.py     # drive_forward_* + arc (Ch5 / Ch5+Ch4 RC override)
-│       ├── motion_lateral.py     # drive_lateral_* (Ch6 RC override)
-│       ├── motion_depth.py       # hold_depth + prime_alt_hold (one-shot SET_POSITION_TARGET, then ALT_HOLD)
-│       ├── motion_vision.py      # align_loop + move_loop (P-on-pixel, gain=speed cap, Outcome codes)
-│       ├── heading_lock.py       # background Ch4 yaw-rate streamer (yaw_source-driven)
-│       ├── heartbeat.py          # 5 Hz neutral RC override -- prevents FS_PILOT_INPUT disarm
-│       ├── vision_verbs.py       # VisionVerbs mixin -- vision_align / vision_move on Duburi (release_yaw aware)
-│       ├── duburi.py             # Duburi facade: lock + dispatch + heading_lock + heartbeat owner
-│       └── errors.py             # MovementError / MovementTimeout / ModeChangeError
-├── duburi_manager/       # ROS2 node, action server, telemetry
-│   └── duburi_manager/
-│       ├── auv_manager_node.py   # owns MAVLink + /duburi/move ActionServer + VisionState pool
-│       ├── vision_state.py       # per-camera Detection2DArray subscriber + bbox_error()
-│       └── connection_config.py  # PROFILES + NETWORK constants
-├── duburi_planner/       # mission planner: Python client + CLI + mission scripts
-│   └── duburi_planner/
-│       ├── client.py             # blocking ActionClient wrapper (DuburiClient)
-│       ├── duburi_dsl.py         # DuburiMission DSL (duburi.* open-loop verbs + .vision facade)
-│       ├── vision_dsl.py         # duburi.vision.align + duburi.vision.move (+ fallback orchestration)
-│       ├── model_context.py      # duburi.models registry + ClassRef (auto model+class switch)
-│       ├── cli.py                # argparse auto-built from COMMANDS (`duburi` entry)
-│       ├── mission.py            # `mission` runner that dispatches into missions/<name>.run
-│       ├── missions/
-│       │   ├── competition_config.py          # pool-day headings / depths / tuning
-│       │   ├── task_{gate,slalom,bin,torpedo,return}.py  # detected()-paradigm task chunks
-│       │   ├── task_full_2026.py              # flat combinator (chains all 5 chunks)
-│       │   ├── fsm_{slalom,bin,torpedo,return,full_2026}.py  # ★ YASMIN FSM launchers
-│       │   ├── {gate_flare_fsm,prequal_fsm,gate_then_bin_fsm}.py  # prior FSM missions (kept)
-│       │   ├── {gate_prequal,robosub_prequal,gate_flare_prequal,gate_flare_autonomous}.py
-│       │   ├── {robosub_gate_rescue,pool_day_practice,pool_day_torpedo}.py  # pool-day runs
-│       │   └── demo_{arc,find_person,heading_lock,move_see,square,pursue}.py
-│       └── state_machines/       # YASMIN FSM layer (BUILT) — see fsm-guide.md
-│           ├── core/{outcomes,blackboard,vehicle_profile,base_state}.py
-│           ├── states/{navigation,vision,utility}.py   # nav: Arm/Disarm/SetDepth/LockHeading/Move*/Turn/Surface; vision: VisionSearch/VisionAlign/VisionMove; utility: Countdown/Pause/LogScore/SetDetector/Fire/StyleRoll
-│           └── plans/{gate_flare,prequal,gate_then_bin,slalom,bin_drop,torpedo_fire,return_gate,full_competition}.py
-├── duburi_sensors/       # YawSource abstraction (sensors-only, read-only)
-│   ├── duburi_sensors/
-│   │   ├── factory.py            # make_yaw_source(name) — dvl|bno085|bno085_dvl|mavlink_ahrs
-│   │   ├── sensors_node.py       # standalone diagnostic node (no thrusters)
-│   │   └── sources/{base,mavlink_ahrs,bno085,nucleus_dvl,nucleus_parser,composite_bno_dvl}.py
-│   ├── firmware/esp32c3_bno085.md
-│   └── config/sensors.yaml       # yaw_source / bno085_port / nucleus_dvl_* / dvl_auto_connect
-└── duburi_vision/        # Camera factory + YOLO11 detector + viz + depth estimation
-    ├── duburi_vision/
-    │   ├── camera_node.py / detector_node.py / tracker_node.py / depth_estimation_node.py
-    │   ├── cameras/{webcam,ros_topic,jetson_stub,blueos_stub}.py
-    │   ├── detection/{detector,yolo,gpu,messages}.py
-    │   ├── tracking/             # Roboflow OC-SORT/ByteTrack (Tracker ABC) + Kalman smoother
-    │   ├── depth/depth_estimation_node.py   # ONNX Depth Anything V2-Small + bbox fallback
-    │   └── utils/{check_pipeline,check_thrust}.py
-    ├── config/{cameras,detector}.yaml
-    ├── models/                   # *.pt weights (gitignored) + committed class-index YAMLs
-    └── launch/{vision,vision_dual,video}.launch.py  # 1-cam + 2-cam live + 2-cam dataset-video preset; detector node = duburi_detector_<camera>
-```
-
-> **Adding a new command**: add a row in `duburi_control/commands.py` and a same-named method on `Duburi`. The action server, the `duburi` CLI, and the Python `DuburiClient` all pick it up automatically — no other file needs editing.
-
-> **Mission DSL**: prefer
-> [`DuburiMission`](src/duburi_planner/duburi_planner/duburi_dsl.py) over
-> the raw client when authoring missions. `duburi.move_forward(...)` and
-> `duburi.vision.align(...)` / `duburi.vision.move(...)` share one object with
-> sticky `duburi.camera` + `duburi.target` context. Vision verbs fall back to
-> live `vision.*` ROS params when overrides are unset, so deck-side tuning works
-> without editing mission code. Full cookbook + samples:
-> [`.claude/context/mission-cookbook.md`](.claude/context/mission-cookbook.md).
-
-> Packages **not** in this repo (despite older context files mentioning them): `duburi_bringup`, `duburi_driver`, `duburi_teleop`, `duburi_mission`. They were aspirational sketches; ignore them when you read `proven-patterns.md` etc.
-
-### 4.2 Data flow (real)
-
-```
-[duburi CLI]   ──┐
-[mission run]  ──┤
-[Python client]──┼──/duburi/move (action goal)──→ [auv_manager_node]
-                                                      │
-                                                      ├──→ Duburi facade (lock + dispatch via COMMANDS)
-                                                      │       ├── motion_yaw     (Ch4 RC rate override ×10 Hz)
-                                                      │       ├── motion_forward (Ch5 RC override; arc = Ch5+Ch4 ×20 Hz)
-                                                      │       ├── motion_lateral (Ch6 RC override ×20 Hz)
-                                                      │       ├── motion_depth   (SET_POSITION_TARGET_GLOBAL_INT ×5 Hz)
-                                                      │       └── heading_lock   (Ch4 RC rate override ×50 Hz, background)
-                                                      │
-                                                      ├──→ Pixhawk ──UDP 14550──→ [BlueOS] ──USB──→ [Pixhawk / ArduSub]
-                                                      │                                         telemetry: AHRS2 50Hz, RC 5Hz, BAT 1Hz
-                                                      └──→ /duburi/state (DuburiState, on change)
-
-[duburi_sensors.sensors_node]   ←── separate, diagnostic-only, never runs in mission path
-```
-
-> Telemetry rates above are explicitly pinned at startup via `MAV_CMD_SET_MESSAGE_INTERVAL` in `auv_manager_node.MESSAGE_RATES` — without this, ArduSub picks defaults (~4 Hz for AHRS2) which silently caps loop tightness.
-
-### 4.3 Node responsibilities
-
-| Node                             | Package         | Owns                                                      |
-|----------------------------------|-----------------|-----------------------------------------------------------|
-| `auv_manager_node` / `auv_manager` | `duburi_manager` | The single MAVLink connection, `/duburi/move` ActionServer, telemetry publisher, ROS params |
-| `sensors_node`                   | `duburi_sensors`| Standalone yaw-source diagnostic — does NOT touch thrusters or arming |
-| `camera_node`                    | `duburi_vision` | Camera source → `/duburi/vision/<cam>/image_raw` + `camera_info` |
-| `detector_node`                  | `duburi_vision` | Subscribe `image_raw` -> YOLO11 (yolov11n) -> `/duburi/vision/<cam>/detections` + `image_debug` + `classes_filter` |
-| `tracker_node`                   | `duburi_vision` | **Roboflow `trackers`** (OC-SORT default, `tracker_type=`) + Kalman smoother; `detections` → `tracks` (stable IDs + coasted boxes during gaps). OC-SORT re-associates the same id after a dropout (vs ByteTrack spawning a duplicate) |
-| `depth_estimation_node`          | `duburi_vision` | Monocular proximity (`vis_range`); ONNX Depth Anything V2-Small + bbox-area fallback. `depth:=true`. |
-| `vision_display`                 | `duburi_vision` | Mission-control HUD; overlays detections/tracks/vis_range + UI strip. **D** toggles depth inset. |
-| `vision_node`                    | `duburi_vision` | In-process camera+detector smoke test (cousin of `sensors_node`) |
-
-There is exactly **one** node that touches `pymavlink` in the live mission path: `auv_manager_node`. The `duburi` CLI, the `mission` runner, and any custom Python script are ROS2 ActionClients of `/duburi/move` -- all live in `duburi_planner`.
-
----
-
-## 5. MAVLink / ArduSub Patterns (live code)
-
-> Full detail: [`.claude/context/mavlink-reference.md`](.claude/context/mavlink-reference.md) · [`ardusub-canon.md`](.claude/context/ardusub-canon.md).
-> Implementation source: `src/duburi_control/duburi_control/pixhawk.py`.
-
-| Call | What it does |
+| Document | What it gives you |
 |---|---|
-| `pixhawk.arm()` / `pixhawk.disarm()` | Returns `(ok, reason)`; reason is MAV_RESULT name, NO_ACK, or `NOT_ARMED_AFTER_ACK: <pre-arm STATUSTEXT>`. **Client deadline covers the real budget** — the DuburiClient result-backstop is a floor not a ceiling (arm→30 s, disarm→35 s), so a slow-but-legit arm no longer trips a false 12 s "doesn't arm" timeout ([`BUGS.md`](.claude/context/BUGS.md) P1). arm honours a mid-arm abort with a **verified, fail-closed** disarm (P2). |
-| `pixhawk.set_mode("ALT_HOLD")` | Polls heartbeat for ACK (SET_MODE gives no direct ACK) |
-| `pixhawk.send_rc_override(forward, lateral, throttle, yaw)` | PWM 1100–1900; 1500=neutral; 65535=release |
-| `pixhawk.send_rc_override(yaw=pwm)` | Ch4 yaw-rate; ArduSub treats Ch4≠1500 as a pilot yaw-rate command (bypasses its compass-driven heading hold). `send_rc_yaw_only(pwm)` writes only Ch4 (heading-lock path). |
-| `pixhawk.set_target_depth(-1.5)` | Negative = below surface; requires ALT_HOLD |
-| `pixhawk.get_attitude()` | `{'yaw': deg, 'depth': m, ...}` — AHRS2-backed, cached |
-| `duburi.fire(n)` | Activate payload **BOARD channel n** (1..16 — the same n as `SERVO{n}_ROLE`; **no host-side map**). On srot the board's role decides: a SWITCH channel fires, a **PWM channel is REFUSED** (it is the on-board arm). Returns a typed outcome (`FIRED` / `REJECTED_ARM_CHANNEL` / `DENIED` / `NO_ACK` / `BUSY` / `NOT_READY`) in `final_value`. `ros2 run duburi_manager connect` lists which channels are fireable |
-| `duburi.mission_reset()` | **Call at start of every `run()`.** Stops heading lock, clears `_abort_event`, sends RC neutral, **and re-zeroes the barometer (auto `calibrate_depth`, disarmed-gated)** so depth starts true. Safe before arm (`_UNARM_SAFE`). Prevents state carry-over across back-to-back pool runs. |
-| `duburi.calibrate_depth()` | Re-zero the Bar30 at the **surface** (baro ground-pressure, QGC "Calibrate Pressure") so `depth` reads 0 before a dive — fixes the +0.01..0.1 m pre-dive drift. DISARMED-only (surface proxy); reads fresh depth **before/after** and verifies the re-zero took (`[BARO ] pre→post`); >0.30 m pre = refused. Auto-run by `mission_reset`; standalone `ros2 run duburi_planner duburi calibrate_depth`. `MAV_CMD_PREFLIGHT_CALIBRATION` p3=1 → `AP::baro().calibrate()`, ~2.5 s settle, **no reboot**. |
+| [`docs/the-shift.md`](docs/the-shift.md) | the architecture from first principles: why reflexes live on the board and thinking on the Pi |
+| [`docs/capability-map.md`](docs/capability-map.md) | every capability with its evidence and an honest verification state |
+| [`.claude/context/ROADMAP.md`](.claude/context/ROADMAP.md) | **the one status file** — where we are, what is left, what is blocked |
+| [`.claude/context/packages/`](.claude/context/packages/README.md) | one page per package |
+| [`.claude/context/BUGS.md`](.claude/context/BUGS.md) | **the single defect register** |
 
-**RC direction (current Duburi hull, pool-verified 2026-06):** Ch4 > 1500 = yaw RIGHT; Ch5 > 1500 = forward; Ch6 > 1500 = strafe RIGHT. (The 2023 reference hull was RC4-reversed — Ch4 > 1500 = LEFT there; polarity is an `RC4_REVERSED`/frame-config property, so re-confirm per hull with a bare `Ch4=1600` check. `heading_lock`/`motion_yaw` are polarity-correct regardless — they derive Ch4 sign from `heading_error` math, never from this label.)
-**Yaw settle (`yaw_left/right/turn`):** `motion_yaw._YawPID` closes Ch4 on `yaw_source` (BNO) with a stiction-breaking speed floor that **tapers to 0 across an approach band** (`YAW_APPROACH_BAND_DEG`) so the hull eases into the `YAW_TOL_DEG` (2°) lock instead of limit-cycling on a hard floor. If yaw wobbles/TIMEOUTs on pool day, tune in this order: confirm it declares locked → tighten `YAW_TOL_DEG` for precision → adjust band / `YAW_KI`. See [`BUGS.md`](.claude/context/BUGS.md) (yaw-wobble entry). `heading_lock` is a separate 50 Hz continuous hold.
-**Heartbeat:** owned by `auv_manager_node` ROS2 timer — do not roll your own.
-**Stream rates:** pinned at startup via `MAV_CMD_SET_MESSAGE_INTERVAL` (AHRS2=50 Hz, RC=5 Hz, BAT=1 Hz).
+**Precedence:** if anything here contradicts `src/`, the code wins. If a doc contradicts a
+measurement, the measurement wins — and both belong in
+[`measured-bars.md`](.claude/context/measured-bars.md).
 
----
-
-## 6. Control philosophy — ArduSub does the inner loop
-
-ArduSub's onboard 400 Hz stabilizer + EKF3 owns the **inner** loop. **Depth** is
-owned entirely by ArduSub (we stream a setpoint). **Yaw is split:** ArduSub's rate
-loop closes the *yaw rate* from our Ch4 stick, but the *absolute heading* loop is
-closed in Python against `yaw_source` (BNO085/AHRS) — ArduSub's compass is untrusted
-inside the aluminum hull, so we drive Ch4 as a rate command and never hand ArduSub
-an absolute-attitude setpoint. (There is no `SET_ATTITUDE_TARGET` anywhere in the code.)
-
-> **Parallel BNO→EKF3 feed (live).** Independently of the Ch4 heading loop, when
-> `yaw_source` is BNO-based the manager's `_mocap_tick` streams BNO yaw into ArduSub's
-> EKF3 at 20 Hz via `ATT_POS_MOCAP` (quaternion built with `math.radians()` —
-> unitless on the wire, so no radians caveat). It only takes effect with FC params
-> `VISO_TYPE=1` + `EK3_SRC1_YAW=6` on a 2 MB fmuv3 build; the manager verifies these
-> at startup and WARNs on mismatch. This is an *EKF correction*, not the heading
-> authority — `HeadingLock` (Python Ch4) is still primary. See
-> [`future/future-bno-into-ekf.md`](.claude/context/future/future-bno-into-ekf.md).
-
-| Axis      | Setpoint message                  | Loop that closes it           | Our role                       |
-|-----------|-----------------------------------|-------------------------------|--------------------------------|
-| Yaw       | `RC_CHANNELS_OVERRIDE` Ch4 rate (10 Hz) | ArduSub rate loop + Python heading PID | close heading on yaw_source |
-| Depth     | `SET_POSITION_TARGET_GLOBAL_INT` (5 Hz) | ArduSub ALT_HOLD position PID | stream + watch AHRS depth      |
-| Forward   | `RC_CHANNELS_OVERRIDE` Ch5 (20 Hz)| open loop (timed thrust)      | shape the thrust envelope      |
-| Lateral   | `RC_CHANNELS_OVERRIDE` Ch6 (20 Hz)| open loop (timed thrust)      | shape the thrust envelope      |
-| Arc       | `RC_CHANNELS_OVERRIDE` Ch5 + Ch4 (20 Hz, single packet) | open loop | curved car-style trajectory    |
-| Heading lock | `RC_CHANNELS_OVERRIDE` Ch4 rate (50 Hz, background) | ArduSub rate loop + Python P-loop | continuous yaw hold across other commands |
-| Vision lateral | `RC_CHANNELS_OVERRIDE` Ch6 (20 Hz) | vision loop inside manager | +ex → Ch6 > 1500 → strafe RIGHT (no negation) |
-| Vision yaw     | `RC_CHANNELS_OVERRIDE` Ch4 rate (20 Hz) | vision loop inside manager | +ex → yaw toward target (no negation; same polarity as vision lateral — pool-verified 2026-06) |
-
-The two ROS params `smooth_yaw` / `smooth_translate` (both default `false`) optionally shape the *setpoint* (smootherstep / trapezoid_ramp) before it reaches the autopilot — they don't replace the autopilot's inner loop.
-
-> Earlier revisions kept `movement_pids.py` (`DepthPID` / `YawPID`) as a "hot-fix fallback" reference. That file has been removed — ArduSub's inner loop is the only PID in the live path. If you need the math again, see `.claude/context/pid-theory.md` or pull it from git history.
+**Three states, never blurred.** Say which one you mean:
+**RUNS TODAY** (on the bench / on footage) · **BUILT, NEVER FLOWN** · **BLOCKED** (on
+hardware, water, or a firmware merge). Nothing on this platform has been in water.
 
 ---
 
-## 7. JSF-AV Principles (still apply)
+## 1. The vehicle
 
-Adapted for our context:
+| Part | What |
+|---|---|
+| Flight controller | **SROT board**, firmware **Hengla** — ESP32 (dual core) + RP2350 Pico |
+| Control loop | **500 Hz** on ESP32 core 1 (sensors, control, DShot). Core 0: MAVLink 100 Hz, LoRa/SD 20 Hz, display 30 Hz |
+| Companion | **Raspberry Pi 5 + Hailo-8 AI HAT** (ROS 2 Jazzy on the vehicle; Humble on dev boxes) |
+| Link | **one USB-C cable**, MAVLink 2 at 115200, compid **191** (`MAV_COMP_ID_ONBOARD_COMPUTER`) |
+| IMU / depth / leak / kill / batteries / ESC RPM | all **on the board** |
+| Thrusters | 8 × T200, vectored (M1–M4 horizontal at 45°, M5–M8 vertical), Bluejay ESCs with bidirectional DShot |
+| Cameras | forward + downward USB; measured calibration in `duburi_vision/config/calibration/` |
+| Velocity / distance | **the downward camera** — no DVL is fitted, and none has ever been validated in water |
+| Payload | board channels over MAVLink (`fire(N)` = **board channel N**, 1–16) |
 
-| Principle                       | What it means here                                                  |
-|---------------------------------|---------------------------------------------------------------------|
-| Single entry / exit             | Each motion helper has one return path; facade is a dispatch table  |
-| No dynamic allocation in loop   | RC arrays are reused, no list-comp inside 20 Hz loops               |
-| Bounded loops                   | Every `while` has an explicit timeout                               |
-| Fail-safe defaults              | On any error → `Duburi.stop()` (active RC neutral) or `pause()` (release) |
-| Clear interfaces                | Cross-package surface = `Move.action` + `DuburiState.msg` + `Pixhawk` verbs |
-| No global mutable state         | All state lives on `Duburi` / `Pixhawk` instances                   |
-| Defensive input validation      | `percent_to_pwm` clamps; CLI argparse rejects out-of-range values   |
-| Deterministic timing            | ROS timers + `time.monotonic()`; no `time.sleep` in callbacks       |
+Full hardware detail: [`vehicle-spec.md`](.claude/context/vehicle-spec.md) ·
+[`srot-architecture.md`](.claude/context/srot-architecture.md) ·
+[`srot-board-soul.md`](.claude/context/srot-board-soul.md)
+
+### The other three repositories
+
+`srot-control-board` (**Hengla**, firmware) · `srot-ground-station` (**Bondor**, GCS +
+LoRa bridge) · `srot-esc-flasher` (bench tool). **Firmware development team lead: Rakibul
+Islam.**
+
+⛔ **We never commit to their repos; they never commit here.** Pull requests only. The shared
+wire constants are frozen on both sides, `fc/srot_protocol.py` is our **single copy**, and
+`test_srot_protocol_drift.py` reads the firmware headers to prove it has not drifted.
+Asks we have sent: [`upstream/`](.claude/context/upstream/README.md). Rules:
+[`cross-repo-contract.md`](.claude/context/cross-repo-contract.md).
+
+**A missing low-level feature is a pull request, not a host workaround.** The hardware is not
+final either — a capability that needs a new sensor is a conversation with the hardware team.
 
 ---
 
-## 8. ROS2 surface (real, today)
+## 2. Working with the board — the traps that cost us runs
 
-### Action
+⛔ **The depth loop has never run closed.** `SROT_MOVE` enters the board's automatic mode and
+**every** primitive there closes the depth loop — including a plain `move_forward`. Two armed
+bench checks gate all of them. An in-air move is *not* partial validation (at ~0 m, target and
+measurement agree). [`srot-integration.md`](.claude/context/srot-integration.md)
 
-- `/duburi/move` — `duburi_interfaces/action/Move`
-  - One verb per goal; `auv_manager_node.execute_callback` dispatches via the `COMMANDS` registry.
-  - See [`.claude/context/ros2-conventions.md`](.claude/context/ros2-conventions.md) for the verb list and field semantics.
+⛔ **Firmware version is a hull-safety interlock.** The board reports `SROT_FW_BEHAVIOUR_REV`;
+`SrotFC.check_behaviour_rev()` runs at connect **and inside `arm()`**. The floor is
+`FW_BEHAVIOUR_REV_REQUIRED` in `srot_protocol.py` — **not** a number to quote from memory,
+because revision 10 **inverted yaw** and a board below the floor takes every turn backwards.
+The board currently reports rev 14. `test_doc_drift.py` fails any doc that states a stale
+value. Override (knowing all this): `allow_fw_behaviour_mismatch:=true`.
 
-### Topic
+⛔ **Rev 7 shipped `FRAME_REVERSE`** — a parameter, default 0 but **set to 1 on our hull**,
+that negates all six axis demands before the mixer. It fixes "every axis is backwards" at the
+axis layer, so the `[-1] × 8` motor directions restored on 2026-08-06 are **no longer the
+intended configuration** and would cancel it. Read the parameters before arming.
 
-- `/duburi/state` — `duburi_interfaces/msg/DuburiState`
-  - Typed snapshot (`armed`, `mode`, `yaw_deg`, `depth_m`, `battery_voltage`) with `std_msgs/Header`. Missing numerics are `NaN`, missing strings are `''`. Published only when something changes (or every ~1 s as a heartbeat).
+⛔ **An unhealthy barometer refuses `DEPTH_HOLD`/`AUTO`/`PATTERN`** — and since `SROT_MOVE`
+enters `AUTO`, that means **every move verb is denied**: the vehicle arms and simply will not
+move. `bringup_check --srot` reads this off `SYS_STATUS`. ⚠ `VFR_HUD` is *not* gated on baro
+health and is where we read depth, so **never infer sensor health from the presence of a depth
+value**.
 
-### Key ROS params on `auv_manager_node`
+⛔ **`AUTO` never exits by itself.** After a move, MANUAL_CONTROL frames are discarded until
+the mode changes. The vision verbs handle this by setting the mode and **verifying it took**
+(`set_mode` is best-effort on this wire — a silent refusal looks exactly like success).
 
-> **Default column = `bringup.launch.py` (operator) default.** Extracted from
-> both files and compared 2026-09-08: of the ten params declared in both places,
-> exactly **one** differs — `mode` (launch `pool`, node `auto`). This note used
-> to claim two, naming `yaw_source` as launch-`dvl` vs node-`mavlink_ahrs`; the
-> launch file says **`mavlink_ahrs`**, the same as the node, so the table row and
-> this note were both wrong. It mattered: the DVL is not fitted, and a reader
-> would have believed the pool launch brings the vehicle up on a heading source
-> that does not exist. Pass `yaw_source:=bno085` (or `dvl`) explicitly. Full
-> param table: [`ros2-conventions.md`](.claude/context/ros2-conventions.md).
+**pymavlink decoding traps, each of which returns a plausible number:**
+- `BATTERY_STATUS` is instanced and pymavlink caches per msgid — sampling that slot alternates
+  between the electronics pack (~1.35 V) and the thruster pack (~14.7 V). De-multiplex by
+  `id`, as `SrotFC.note_battery` does.
+- `SYS_STATUS` extended health (where LEAK moved) **cannot be decoded** by pymavlink, so LEAK
+  is read from `NAMED_VALUE_FLOAT` — through a per-name table fed by the reader thread,
+  because seven names burst inside one tick and pymavlink's single slot keeps only the last.
+- `ESC_STATUS(291)` is undecodable here; per-ESC RPM comes through the manager's own path.
+  **958/958 frames read exactly 0 with nothing attached**, so a message count can never prove
+  a thruster is alive.
 
-| Param | Default (launch) | Notes |
-|---|---|---|
-| `mode` | `pool` | `pool`\|`sim`\|`auto`\|`laptop`\|`desk` (see §3); **node default `auto`** |
-| `yaw_source` | `mavlink_ahrs` | `dvl`\|`bno085_dvl`\|`bno085`\|`mavlink_ahrs` — also drives VehicleProfile.auto(); **node default is the same**, so this is one value, not a split. The DVL is not fitted — pass `bno085` for pool work |
-| `dvl_auto_connect` | `true` | Background retry loop; `dvl_connect` verb for manual override |
-| `nucleus_dvl_host` | `192.168.2.201` | DVL TCP host; port `9000`, password `nortek` |
-| `bno085_port` | `auto` | ESP32-C3 HWCDC port; `auto` = VID/PID scan (303a:1001); explicit path skips scan |
-| `payload_port` | `auto` | CH340 payload board; `auto` = VID/PID scan (1a86:7523); explicit path skips scan |
-| `smooth_yaw` / `smooth_translate` | `false` | Enable smootherstep/trapezoid shaping |
+**Absence renders `--`, never `0.0`.** From rev 3 the board suppresses values it cannot stand
+behind; rendering that as zero recreates the bug the suppression fixed. Same rule on our side:
+a missing number in `DuburiState` is `NaN`.
 
-### Yaw source selection
-
-| `yaw_source`   | Heading from | Position (DVL dist) | Recommended for          |
-|----------------|--------------|---------------------|--------------------------|
-| `mavlink_ahrs` | ArduSub AHRS | none                | bench / Gazebo sim       |
-| `bno085`       | BNO085 IMU   | none                | pool without DVL         |
-| `dvl`          | Nucleus AHRS | Nucleus DVL         | pool with DVL (heading + position in one) |
-| `bno085_dvl`   | BNO085 IMU   | Nucleus DVL         | pool when BNO heading preferred + DVL position |
-
-> DVL sources connect automatically at startup when `dvl_auto_connect:=true`. The `dvl_connect` verb still works as a manual override.
-> **Heading lock stays ACTIVE during `move_forward_dist` / `move_lateral_dist`** — the lock owns Ch4 (yaw rate) while DVL drives Ch5/Ch6. This keeps the AUV on-heading during distance moves.
-
-> Older context files reference `/duburi/arm`, `/duburi/depth_cmd`, `/duburi/attitude`, `Attitude.msg`, `RCOverride.msg`, `VehicleState.msg`. **None of these exist.** Single action + single state topic + ROS params is the entire surface.
-
-### Vision-driven verbs — TWO verbs (`vision_align` + `vision_move` on `/duburi/move`)
-
-> Full DSL + verb reference: [`command-reference.md`](.claude/context/command-reference.md) · [`client-and-dsl-api.md`](.claude/context/client-and-dsl-api.md).
-> **Reading the result (where/how a verb finished) + mid-hold fire + live feedback:
-> [`vision-results.md`](.claude/context/vision-results.md) — read this before writing a vision mission.**
-> Vision architecture: [`vision-architecture.md`](.claude/context/vision-architecture.md).
-> FSM state wrappers: [`fsm-guide.md`](.claude/context/fsm-guide.md) §4.
-
-The 2026-06 rewrite replaced the 9-verb API with **exactly two** pixel-native verbs.
-Engine: `motion_vision.align_loop` / `move_loop`. Source of truth for signatures:
-[`vision_dsl.py`](src/duburi_planner/duburi_planner/vision_dsl.py).
-
-| DSL method | Action verb | What it does |
-|---|---|---|
-| `vision.align(target, lat=, yaw=, depth=, fwd=, fwd_mode=, err=, duration=, gain=, lat_gain=, yaw_gain=, depth_step=, brake=, hold=, fire=, fire_t=, fire_gap=, lock_on=, settle=, fire_pass=, hold_heading=, surge_sign=, max_depth_m=, depth_ceiling=, camera=, fallback=)` | `vision_align` | Centre target on the named axes; each value is a **signed pixel offset** from centre (`0`=centre). At least one of lat/yaw/depth. `hold=`s turns it into an **active station-keep**: keeps correcting on-target for `hold` s (fights water inertia for a torpedo/dropper shot) before exiting; counts against `duration` (budget `duration ≥ approach + hold`). **`fwd=`** (% fill, `fwd_mode=`area/width/height) adds a **forward range-hold axis**: align ALSO drives forward to that standoff fill and HOLDS it, so **one verb** does forward-standoff + lat/depth centering + station-keep + mid-hold fire (the unified **torpedo standoff shot**). The forward term is **one-sided** (drives forward while too far, neutral at/past standoff — never reverses, no reverse-kick/ramming), and the fire is gated on reaching the standoff too; `fwd` unset = no forward axis (lat/yaw/depth-only, e.g. a coarse board centre). **Depth axis** has no `%` cap — its rate is **`depth_step=`** (m/update, 0.02 slow .. 0.10 coarse); depth steps the ArduSub setpoint at 5 Hz and **freezes inside the deadband** so there's no z-wobble. **`fire=`** (int or list, **BOARD channels 1..16** — see `duburi.fire`) + **`fire_t=`** (s into the hold) fire the payload **mid-hold while still correcting** — gated on alignment (no off-target shot) **and on `is_new_frame`** (fires on the tick a new LIVE box lands — FPS-robust, never a tracker-coasted/predicted box or a frozen detector's re-read stale frame), non-blocking, needs `fire_t < hold`. **`fire=[a,b]` fires a LIST** spaced **`fire_gap=`** s apart (default `FIRE_GAP_S=1.0`) — the solenoid launcher misfires if two go together; single-channel unaffected. **`camera='downward'`** (bottom cam) **rotates the frame AND remaps the kwargs** so `fwd` is always fore/aft and `depth` always the real depth axis: `lat`→Ch6 strafe (same as forward), **`fwd`→Ch5 SURGE** fore/aft (signed px, image-Y, `0`=centre), **`depth`→DEPTH DESCENT** (a fill %, measured by `fwd_mode`; `depth_step` logic, one-sided-deeper). So the forward-cam `depth`/`fwd` meanings **swap** on downward: a bin drop reads `align('fire', camera='downward', lat=0, fwd=0, depth=30, fwd_mode='height', …)` (lat+fwd centre over the bin, depth=30% descends). Centring axes on downward are `lat`+`fwd`; `depth` is the optional approach (a `depth`-only call raises). Physically identical to the old `lat/depth/fwd` downward form — pure kwarg remap, `align_loop`+wire+**Ch5 sign** all unchanged (a previously-verified `surge_sign` stays valid; the DISARMED check just confirms you're driving surge with the new `fwd=` kwarg). **`surge_sign=`** (+1/-1) flips fore/aft for the mount (**verify DISARMED**); **`max_depth_m=`** (deep floor, must be <0 for the descent) + **`depth_ceiling=`** (shallow surface-guard — alignment can't surface the hull) bound the descent. Auto-switches the live detector + HUD to downward. **Full axis-flip table: [`downward-camera.md`](.claude/context/downward-camera.md)**; hardware: [`dual-camera-setup.md`](.claude/context/dual-camera-setup.md). **`fire_pass=True`** fires anyway at command end if the strict lock never fired, provided the target was seen live+recently (guaranteed partial-points shot). **`hold_heading=True`** widens the heading-lock deadband for the hold (yaw-released path) so the launcher heading holds steady (no terminal yaw jitter). See [`vision-results.md`](.claude/context/vision-results.md) §4. **`lock_on=True`** = continuity lock: steer to the box **nearest the last centre** (not the largest) so a 2nd hole / spurious box can't steal the aim on a close-in shot — see [`precision-alignment.md`](.claude/context/precision-alignment.md). |
-| `vision.move(target, fwd=, mode=, maintain=, hold=, err=, duration=, gain=, lat_gain=, brake=, fallback=)` | `vision_move` | Drive forward until bbox fills `fwd`% (`mode`=area/width/height). `maintain`=±px lateral offset; never re-centres yaw/depth. |
-
-- **`gain` is a hard max-speed cap** (% thrust), not a target speed — the AUV never exceeds it.
-- **Per-axis caps** `lat_gain`/`yaw_gain` (align) and `lat_gain` (move's `maintain` strafe) override `gain` on one axis; **unset = inherit `gain`, NOT disable** (to drop an axis, omit `lat`/`yaw`/`depth`). **Depth has no `%` cap** — its rate is `depth_step` (m/update). Use a low `yaw_gain` for slow, stable micro-alignment of a 20 kg hull against a small/distant target (e.g. `align('hole', yaw=0, lat=0, gain=25, yaw_gain=10)`). The yaw spin-up floor (`VISION_YAW_MIN_PCT`) only engages when the bbox is large (close: `VISION_YAW_FLOOR_FILL`) and is now **tapered** to 0 at the deadband edge (mirrors `heading_lock`/`motion_yaw`) so it eases in instead of relay-slamming — far-field yaw stays pure-proportional so it can't limit-cycle/wobble.
-- **Inertial arrival brake** (`brake=`, **on by default**): on arrival the hull would otherwise coast on water inertia off the planned position, throwing off the next mission step. The verb reverse-kicks the translational axes to bleed that momentum — `align` brakes lateral; `move` brakes forward+`maintain` on a **fill-stop** arrival. **Yaw/depth never brake** (Ch4 is a rate ArduSub bleeds; depth is ArduSub hold). The kick scales to a trailing EMA of the exit velocity and is **self-gating**: a gently-converged lock that ramps down into the band usually exits with ~0 momentum and is **not** kicked. A *fast snap-in* (high lateral drive then an abrupt centre) can still cross the gate — so **on the torpedo fire-from-lock path pass `brake=False`** (no benefit when firing, and it removes any 0.2 s pre-shot nudge). **PASS-THROUGH (`move(fwd=None)`) and abort/loss exits never brake.** `brake=False` to coast; `brake_gain` scales the kick. `VISION_BRAKE_GAIN`/`VISION_BRAKE_MIN_PCT` are pool-tunable. (Default-on shifts the stopping point of pre-existing vision missions that were tuned assuming coast — re-verify standoffs.)
-- **Never-fail contract:** neither verb raises; the server always returns `success=True` with an outcome code in `Move.Result.final_value` (`ALIGNED`=0, `LOST`=1, `TIMEOUT`=2, `NO_CAMERA`=3, `ABORTED`=4). The DSL returns a `VisionResult` (truthy only on `ALIGNED`); a server/setup error surfaces as non-fatal `FAILED`.
-- **Rich result — branch on WHERE/HOW it finished (the hybrid vision+control paradigm).** `VisionResult` carries, on success AND failure: `x_px`/`y_px` (**signed** px of the target from frame **centre** at the last seen frame; `+x`=ended right, `+y`=ended below; `NaN`=never seen), `saw_target` (bool), `last_err_px` (residual from goal), `fill` (move bbox fill), `elapsed_s`, `status`. **Recovery sign matches `align` itself** — `x_px>0` (target right) → `move_right`; `x_px<0` → `move_left`. **Always check `saw_target` before reading `x_px`** (`NaN<threshold` is silently False → a never-seen target slips a guard). Full contract + worked recovery patterns + pitfalls: [`vision-results.md`](.claude/context/vision-results.md). `bool(res)` is unchanged (back-compat).
-- **Live feedback:** during a verb, `Move.Feedback.err_x_px`/`err_y_px` stream the live signed target-from-centre px at ~2.5 Hz (`ros2 topic echo /duburi/move/_action/feedback`; `NaN` when no vision verb / no fresh frame) so you can watch convergence in real time. [`vision-results.md`](.claude/context/vision-results.md) §5.
-- **Precision terminal alignment (close-in robustness, all opt-in/off by default):** `align(lock_on=True)` (continuity lock — kills last-moment misclassification), three deck ROS params — `vision.range_gain_floor` (softens lat/depth gain as the bbox fills → stops the 20 kg hull overshooting up close; `1.0`=off, `~0.3`=gentle), `vision.ctrl_conf` (control-side conf floor, distinct from the detector's `conf`), `vision.ki_lat` (lateral-only integral, nulls a steady current during the hold; enable **after** damping) — and the **per-call** `align(settle=<px>)` **settle gate** (only declare aligned once the hull is in-band **and** barely moving, so `align` ends *settled* on target like `vision.move`'s held lateral instead of exiting mid-pass and coasting off; keyed on error velocity so a steady current doesn't block it — that's `ki_lat`'s job). `settle` is per-call (not a deck param) and **for coarse exit-and-move-on aligns only — never the terminal fire-lock**, since the mid-hold `fire` rides the same stable-frame counter and a too-tight `settle` can suppress the shot. At the hole, **drop the `yaw` axis** and let `heading_lock` hold Ch4 (no vision-yaw wobble). **Three per-call terminal knobs (2026-07-01, D12) for the fire-lock:** `align(hold_heading=True)` widens the heading-lock deadband for the hold (1°→3°) so the launcher heading holds steady instead of micro-correcting sub-deg noise (the terminal yaw jitter — use it on the yaw-dropped hole-lock); `align(depth_step=<m>)` sets the per-update depth-setpoint resolution (0.02 slow .. 0.10 coarse) — depth steps at 5 Hz and **freezes inside the deadband** so ArduSub settles (no z-wobble); `align(fire_pass=True)` fires the payload at command end even if never fully aligned, provided the target was seen live+recently (a guaranteed partial-points shot). The **fire itself is gated on `is_new_frame`** (fires on the tick a new live box lands — FPS-robust yet never on a frozen/coasted box). Full guide + pool runbook + "what NOT to do": [`precision-alignment.md`](.claude/context/precision-alignment.md).
-- **Ch4 / yaw arbitration (2026-06-29):** a vision verb writes Ch4 **only when `yaw` is a requested align axis**. `align` without a `yaw` axis (and **all** `move`) take the `release_yaw` path (`send_rc_translation`, lateral-only) and never touch Ch4 — so the verb never commands yaw the operator didn't ask for, and never fights a live `heading_lock`. **The align-yaw jitter** during a lat/depth align was `heading_lock`'s hard min-PWM floor relay limit-cycling against the lateral-strafe yaw moment; fixed by **tapering** the lock floor (mirrors the `motion_yaw` `ab2014f` fix). **Don't "fix" it by releasing the lock** — that hands yaw to ArduSub's untrusted hull compass; keep the BNO lock. See [`BUGS.md`](.claude/context/BUGS.md) D7/D8.
-- **`err=<px>` deadband is honest, not literal-zero:** a **small positive** `err` is the tight knob (`err=8`); **`err=0` means "use default / `vision.err_px` param"** (rosidl `0==unset` live-tuning, *not* zero tolerance — explicit 0 and omitted are indistinguishable on the wire). Effective deadband is floored at `MIN_ALIGN_ERR_PX` (≈5px) so an over-tight `err` can't perpetually TIMEOUT; it's printed at align start and stated in the outcome (`aligned (N/Mpx)`). The detector's always-on `[ offset … ] '<class>' bearing (live)` line is **raw offset telemetry**, NOT the verb's verdict — don't conflate them. [`BUGS.md`](.claude/context/BUGS.md) D9.
-- **`fallback`** = mission-authored search `fn(duburi)` / `fn(duburi, should_stop)`; runs on target loss, then the verb re-enters — all inside `duration`.
-- Control path always reads `/detections` (tracker `/tracks` feeds the HUD only; no `--tracking` flag).
-
-Gains are live-tunable (apply on the NEXT goal): `ros2 param set /duburi_manager vision.kp_yaw 80.0`.
-Key vision ROS params (all on `/duburi_manager`): `vision.kp_lat`/`kp_yaw` (60.0), `vision.kp_depth` (0.05), `vision.kp_forward` (200.0), `vision.lost_grace_s` (1.0), `vision.frame_fill_default` (95.0), `vision.align_stable_frames` (3.0 — **distinct in-band detections**, not loop ticks, so one lucky frame at low FPS can't declare aligned or arm the fire); precision knobs (off by default) `vision.range_gain_floor` (1.0), `vision.ki_lat` (0.0), `vision.ctrl_conf` (0.0); **downward/depth tunables** (moved off per-`align` kwargs) `vision.surge_sign` (**−1**, PERMANENT downward Ch5 fore/aft polarity — missions omit `surge_sign`), `vision.max_depth_m` (**0.0**=off; a `<0` value is the deep floor **and** enables the downward fill→depth descent), `vision.depth_ceiling` (**0.0**=off→engine `_MIN_DEPTH_M` surface guard) — a mission sets the last two **once at start** via `duburi.set_vision_param('max_depth_m', −1.6)` instead of on every call, and `0.0` defaults keep the FORWARD torpedo align unchanged — plus the **per-call** `align(settle=<px>)` settle gate (coarse aligns only; see [`precision-alignment.md`](.claude/context/precision-alignment.md)). Deck defaults live in [`vision_tunables.py`](src/duburi_manager/duburi_manager/vision_tunables.py).
-
-**Tracking + gap-bridging coast (Roboflow `trackers`).** `tracker_node` runs OC-SORT (default) / ByteTrack via the Roboflow `trackers` lib behind the `Tracker` ABC, publishing stable ids + coasted (Kalman-predicted) boxes on `/tracks`. **`vision.coast_s` (default `0.8` s — ON; `0`=OFF)** lets the control loop steer on the coasted box of the **locked target id** for up to `coast_s` after a real detection drops — so a brief YOLO flicker doesn't lose a torpedo-hole lock or drift the hull off a slalom pipe. **Opt-in, pool-gated** (it reverses an earlier fix; see [`BUGS.md`](.claude/context/BUGS.md) D10). Anti-bug invariants: a live `/detections` box ALWAYS overrides a coast; coast authority decays by **true detection-age** (not message age); a coasted box is conf-exempt **only for the locked id**. **Three distinct conf gates** (don't conflate): detector `conf` (what YOLO emits) → tracker `track_activation_threshold`/`high_conf_det_threshold` (spawn-id vs two-stage association) → control `vision.ctrl_conf` (what the loop steers on; the coast is exempt for the locked id). **Coast timeout ladder:** `_freshness` (0.4s) < `vision.coast_s` (~0.8) < `vision.lost_grace_s` (1.0) < tracker `max_predict`/buffer wall-time (the 4th rung — keep `max_predict` ≥ `coast_s` in frames or the coast truncates early).
-**Vision queries** (client-side cache reads, distinct from the two action verbs; each pumps the node before answering — the default camera is subscribed eagerly so the first call never false-negates): `duburi.detected('gate', stale_after=1.0)` — "seen within the last `stale_after` s?" (True/False, **case-insensitive**). detected()/wait_for() use a **per-class last-seen recency window** (`stale_after`, default 1.0 s), NOT just the single latest raw frame — so a class that flickers out of individual `/detections` frames at low FPS still counts as present until the window lapses (the reacquire-side analogue of the control loop's `lost_grace_s`; the HUD looks continuous because it overlays Kalman-smoothed `/tracks`, while these queries read raw `/detections`). `duburi.wait_for('gate', timeout=8)` — block until seen/timeout (loop-free acquire). `duburi.where('gate')` → `'left'`|`'center'`|`'right'`|`'unknown'` (+ `where_offset` for signed `[-1,+1]`) — **where() reads the current frame** (bearing must be live, never a remembered spot). An `if detected()` runs once — a moving search needs a `while`. All three work inside a vision `fallback`.
-`duburi.models(gate='gate_flare_medium_100ep')` — model registry; `duburi.models.gate.gate` returns `ClassRef` (auto-switches model+class when passed as `target`). **Model identity is the STEM** (`.pt` basename): a `ClassRef`/`set_model('<stem>')`/`use('<stem>')` works on a **single-model launch** (`vision.launch.py model:=<stem>` — no `models:=` needed; switching *to the loaded model* is a no-op, any *other* name is a clear "relaunch to switch" reject) AND on a **registry launch** (`models:=` accepts the key OR the stem). A registry is now **resilient** — a model whose `.pt` is missing is SKIPPED with a loud ERROR (pipeline stays up), not a fatal crash; use `models:=` only for genuine mid-mission multi-model switching (prefer bare stems so key==stem). See [`BUGS.md`](.claude/context/BUGS.md) D14.
-
-**Detection FPS (Jetson Orin Nano):** the detector prefers a TensorRT `<stem>.engine` over the `<stem>.pt` automatically (`yolo._resolve_model_path`); raw PyTorch @640 is ~3-4 Hz (inference-bound), TensorRT FP16 is ~20-30 Hz (nano/small) / ~10-15 Hz (medium). Build engines **on the Jetson** (device + JetPack-version locked): `ros2 run duburi_vision export_engine --all` — confirm the `[YOLO ] backend=TensorRT engine` log. Also run `sudo nvpmodel -m 0 && sudo jetson_clocks` (MAXN; ~2× alone — `bringup_check` warns if not set). On a dev box without an engine it falls back to `.pt` transparently. **A `.engine` is transparent to the model-identity fix** (D14/D15): identity is the extension-less **stem**, so `model:=`/`models:=`/ClassRef/`set_model('<stem>')` all match; and live `conf`/`classes`/`max_det` tuning **does** apply to an engine (per-`predict()`, not baked). **Only `imgsz`/`half` are export-baked** — `imgsz:=` re-scales the `.pt` fallback only; re-export the engine (`export_engine --all --imgsz <N>`) to change it. **Keep each `<stem>.yaml` sidecar beside the exported `<stem>.engine`** — class labels come from it (a missing sidecar on an engine with no embedded `names` → empty allowlist → silent `[]` every frame). The debug overlay is skipped when no viewer is subscribed (`viewer:=false`). **Control/FPS coupling:** the 20 Hz vision loop **freshness-decays** the translational command (lat/fwd, not yaw/depth) by `sample.age_s` — full authority on a fresh frame, decaying to neutral when blind — so low/variable FPS can't make it blind-drive on a stale bbox. Raising FPS (TensorRT) is the primary fix; this is the per-frame guard.
-
-> **Jetson Python deps (JetPack 6.2) — pin or the vision launch dies.** This stack
-> needs **`numpy<2`** (`1.26.4`): ROS Humble `cv_bridge` + system `cv2` are NumPy-1.x
-> ABI (numpy 2 → `_ARRAY_API not found`, every node crashes). Do **not** install pip
-> `opencv-python*` — they shadow the GUI-capable system OpenCV (headless → `cv2.namedWindow`
-> "rebuild with GTK" kills `vision_display`). For OC-SORT, install **`trackers==2.4.0
-> --no-deps`** — the `2.5.0` PyPI wheel is a broken 9.7 kB dud with no module (its
-> `numpy>=2` pin is a red herring; 2.4.0 runs fine on numpy 1.26.4). Full symptoms +
-> one-shot recovery: [`BUGS.md`](.claude/context/BUGS.md) §E1–E3.
-
-**Logging (per-logger levels, not a quiet flag):** the launch files pin each node's *own* logger to `info` while leaving the **process default at `warn`** — so framework/`rcl`/`rmw` "gibberish" is silenced but every Mongla log shows. The manager keeps all its telemetry (`[STATE]`/`[ARDUB]`/`[RC ]`/`[ACT]`) at info always (no `mission_quiet` — plain `ros2 run duburi_manager start` shows it too). The **always-on operator alignment line** is owned by the **detector node** (`detector_node._log_alignment`): `[ align lat=<px> depth=<px>px ] (cx,cy) align ['class'] center -> (0,0)` — emitted continuously (throttled ~0.5 s) for the **currently-loaded class** whenever it's detected, **regardless of whether a vision verb is running**. `lat`=bbox-centre x offset from frame centre, `depth`=y offset. The per-verb `align_loop`/`move_loop` copies are at debug (detector owns the live line); `move` still prints its control-specific `[ move fill=…% lat=…px ]` feedback at info. Full framework/debug output: `--log-level debug` on the relevant node.
+### Reading and gating the board
 
 ```bash
-ros2 run duburi_manager bringup_check          # network + serial + Jetson power preflight
-ros2 run duburi_vision vision_check            # topic-only health probe
-ros2 run duburi_vision vision_thrust_check     # detection → RC echo (disarmed safe)
-ros2 run duburi_vision export_engine --all     # build TensorRT engines (ON THE JETSON)
-ros2 launch duburi_vision mission_web.launch.py  # ★ mission console: 2-cam streams + detections + live control, auto-opens browser
+ros2 run duburi_manager connect --watch      # everything the board sends; no ROS graph needed
+ros2 run duburi_manager bringup_check --srot # grades each subsystem, exits non-zero on a fault
 ```
 
-> **Mission console (`mission_web`)** — the pool-day browser surface. One command starts camera(s) +
-> detector(s) + `web_video_server` (MJPEG video pipe, `:8080`) + the `mission_web` node (console + SSE data,
-> `:8090`) and auto-opens `http://localhost:8090`. **`cameras:=both`** (default → vision_dual) shows both
-> `image_debug` streams side-by-side; **`cameras:=forward|downward`** launches the one-camera `vision.launch.py`
-> and the console shows a single panel (a box with only ONE camera never crashes on an absent second device).
-> Boxes are burned in server-side (frame-synced, zero browser overlay); panels show a live detection table
-> (class · conf · dx/dy px · fill% · vis_range), per-class counts, `/duburi/state`, the latched-`active_camera`
-> **mission-camera indicator**, and live control (active-camera switch, model dropdown, conf slider, class chips,
-> pause/resume). Control writes the **same surface the DSL writes** — `SetParameters` on `/duburi_detector_<cam>`
-> + the latched `active_camera` publish + pause-others/resume-target — so UI and a running DSL mission stay in
-> sync. The console **polls** the detector params it reflects (`active_model`/`conf`/`models`/`paused`/`classes`
-> via `get_parameters`, 1 Hz) rather than the `classes_filter` topic — that topic is VOLATILE, so a
-> durability-mismatched/late-join sub gets nothing; polling is join-order-proof. "STREAM NOT AVAILABLE" (absent
-> detector **or** web_video_server down) vs "PAUSED" (present, not inferring) vs live is derived from
-> `get_node_names` + the polled `paused`. **Robust to a missing `web_video_server`** (apt pkg, not a repo dep):
-> the launch degrades to console-only with an `apt install` hint instead of failing. Full command matrix
-> (single/double × single/multi-model × dataset-video): JETSON_SETUP §5 Option D.
-> Node: `duburi_vision/web/mission_web_node.py` (+ pure helpers `web/dashboard_state.py`, SPA `web/static/`).
+`connect` **reports** (always exits 0); `bringup_check` **grades and gates**. Use the first to
+look, the second to decide.
 
-**Operator debugging / practice tooling (all OFF the mission path — see [`foxglove-and-bags.md`](.claude/context/foxglove-and-bags.md)):**
+### Verb routing on srot
 
-```bash
-source scripts/pool_session.sh gate_am         # SOURCE in every terminal — pins DUBURI_RUN_DIR + ROS_LOG_DIR (one folder/run)
-ros2 launch duburi_manager bringup.launch.py mode:=pool yaw_source:=bno085 vision:=true foxglove:=true  # vehicle + vision + Foxglove (ws://<ip>:8765)
-# ^ vision:=true now starts the VEHICLE stack (vision_pi.launch.py): BOTH cameras,
-#   the measured calibration JSONs, Hailo .hef at conf 0.15. Add flow:=true for the
-#   downward velocity path. vision_stack:=generic is the old single-camera CUDA path.
-#   viewer defaults to FALSE -- the vehicle is headless (Qt aborts there).
-scripts/pool_record.sh record gate_am          # rosbag (MCAP) a run → the pinned folder (replay offline to tune)
-scripts/pool_record.sh replay <bag-dir>        # play a recorded run back (Foxglove/vision_display against it)
-scripts/pool_record.sh list                    # list recorded runs + recent scorecards
+| Group | Verbs | Where it runs |
+|---|---|---|
+| On the board | `move_forward` `move_back` `move_left` `move_right` `yaw_left` `yaw_right` `turn` `set_depth` `stop` `pause` `style_roll` | one `SROT_MOVE`, braked on the board |
+| Host | `arm` `disarm` `set_mode` `head` `surface` `mission_reset` `calibrate_depth` `calc_distance` `fire` `vision_align` `vision_move` … | a loop here, or one message |
+| **Refused** | `lock_heading` `move_forward_dist` `move_back_dist` `move_lateral_dist` `arc` `style_yaw` | `srot_fc.UNSUPPORTED_VERBS` — refused *before* dispatch |
+
+`vision_align` / `vision_move` came out of the refusal set on 2026-09-03 and actuate through
+`MANUAL_CONTROL` in STABILIZE. ⛔ On srot the **depth-setpoint axes are refused**: the forward
+`depth` axis, and the downward fill-driven descent. Downward lat + surge runs normally.
+
+There is **no** `set_target_depth`, no `ALT_HOLD`, no `RC_CHANNELS_OVERRIDE` and no
+per-channel release on this backend. Modes are STABILIZE · ACRO · DEPTH_HOLD · SURFACE ·
+MANUAL · AUTO plus the tuning modes. Depth is reported as altitude: **negative below the
+surface**.
+
+---
+
+## 3. Architecture
+
 ```
-> Full per-run workflow (which terminal runs what, live Foxglove + offline replay-to-tune):
-> [`foxglove-and-bags.md`](.claude/context/foxglove-and-bags.md) §0. `bringup.launch.py` is the
-> `ros2 run duburi_manager start` equivalent that also wires vision + Foxglove; the bare
-> `start` has no `foxglove` arg (launch the bridge yourself if you use it).
+[duburi CLI] ─┐
+[mission]    ─┼── /duburi/move (one action, 30 verbs) ──► auv_manager_node ──USB-C──► SROT board
+[FSM state]  ─┘                                              │                         (500 Hz)
+                                                             └──► /duburi/state, /duburi/imu,
+                                                                  /duburi/esc_rpm, /duburi/demand
+[vision nodes] ──► detections · lock · velocity ──► [localization] ──► /duburi/odom
+```
 
-Scorecards auto-write to `DUBURI_RUN_DIR` (default `~/duburi_runs`) as `<mission>_<ts>.json`
-(mission + ISO timestamp + git SHA + per-verb phases) on every mission exit.
+**Exactly one node touches the board**: `auv_manager_node`. Everything else is a client.
 
-The **ground-station viewer is Lichtblick** (offline-safe Foxglove Studio fork — no login wall
-at the venue), connecting to `ws://<jetson-ip>:8765`; the dev box also runs `foxglove_bridge`
-for local-sim dry practice. Dev-box install + connect steps: `foxglove-and-bags.md` §4.
+Seven packages, one page each in [`.claude/context/packages/`](.claude/context/packages/README.md):
+`duburi_control` (verbs + the flight-controller boundary) · `duburi_manager` (the node) ·
+`duburi_vision` · `duburi_localization` · `duburi_planner` (CLI, DSL, missions) ·
+`duburi_sensors` · `duburi_interfaces` (one action, one state topic).
 
----
+**Adding a verb** touches two files: a row in `duburi_control/commands.py` and a method of the
+same name on the facade. The CLI, the action server and the Python client pick it up
+automatically.
 
-## 9. ArduSub modes reference
+**Vision verbs**: two, pixel-native, never raise —
+[`command-reference.md`](.claude/context/command-reference.md) ·
+[`vision-results.md`](.claude/context/vision-results.md) ·
+[`precision-alignment.md`](.claude/context/precision-alignment.md).
+**Mission DSL**: [`client-and-dsl-api.md`](.claude/context/client-and-dsl-api.md) ·
+[`mission-cookbook.md`](.claude/context/mission-cookbook.md) ·
+[`detected-paradigm.md`](.claude/context/detected-paradigm.md).
 
-| Mode      | Use case in this stack                                              |
-|-----------|---------------------------------------------------------------------|
-| `MANUAL`  | Raw RC override, arm/disarm                                         |
-| `STABILIZE` | Attitude-stabilized; `SET_ATTITUDE_TARGET` is interpreted as a *rate* (so we avoid it for absolute yaw) |
-| `ALT_HOLD` | The only mode we use during a mission. Depth-hold + absolute yaw setpoints both work. |
-| `POSHOLD` | XY position hold via DVL/EKF3. Requires Nortek BlueOS extension + ArduSub params `EK3_SRC1_POSXY=3`, `EK3_SRC1_VELXY=5`, `VISO_TYPE=1`. See [`dvl-reference.md`](.claude/context/dvl-reference.md) §POSHOLD. |
-| `GUIDED`  | Waypoint following from GCS — not used today                        |
-| `SURFACE` | Emergency surface — manual fallback only                            |
+### ROS surface
 
-Typical mission sequence: `MANUAL` → `arm` → first `set_depth` engages `ALT_HOLD` → mission verbs (`yaw_left`, `move_forward`, ...) → `disarm`.
+- **Action** `/duburi/move` (`duburi_interfaces/action/Move`) — one verb per goal.
+- **Topic** `/duburi/state` (`DuburiState`) — armed, mode, yaw, depth, battery; `NaN` when
+  absent, published on change.
+- Params: `flight_controller` (`srot` default), `mode`, `yaw_source` (`mavlink_ahrs` — reads
+  the board), plus the `vision.*` tunables in `vision_tunables.py`.
 
----
-
-## 10. Reference codebases (study these for patterns, not for package layout)
-
-| Location                                  | Era              | Lessons                                                   |
-|-------------------------------------------|------------------|-----------------------------------------------------------|
-| `Reference CodeBase/2023/`                | RoboSub 2nd 2023 | Core pymavlink patterns, heading PID, depth PID           |
-| `Reference CodeBase/Robosub-2025-Duburi/` | RoboSub 8th 2025 | YASMIN FSM, DVL integration                                |
-| `Reference CodeBase/ardusub-interface/`   | BumblebeeAS      | ROS2 + behavior trees, setpoint-based control             |
-| `Reference CodeBase/BareMinimum/`         | Internal         | Minimal working pymavlink                                  |
-| `Reference CodeBase/` (team archives)     | BRACU Duburi     | Joy → ROS2 → pymavlink bridge; standalone mission scripts; time-based movements |
-
-> **The 2023 codebase is the ground truth for proven MAVLink patterns.** Names like `duburi_driver` etc that appear in `proven-patterns.md` come from those eras — *not* from this workspace.
+Older context files mention `/duburi/arm`, `/duburi/depth_cmd`, `Attitude.msg`,
+`RCOverride.msg`. **None of these exist.**
 
 ---
 
-## 11. Development workflow
+## 4. Vision, in brief
 
-### Step 1: Sim first
+Hailo-8 detection (measured **80.9 Hz** standalone, **53.9 Hz** through the ROS graph, 18.0 ms
+photon-to-detection), a camera **mailbox** that keeps the newest frame (16.9 ms stale vs
+396 ms for a queue), per-camera calibration measured in water (**46.7°**, not the datasheet's
+63.8° in air), flat-port refraction correction in `optics.py`, and a lock ladder sized against
+**71 real detection gaps**.
+
+⛔ **Image preprocessing stays off.** Measured in 17 configurations across four props and three
+venues: never positive; on the gate it destroyed 95 % of detections. A test keeps it off.
+
+⛔ **A model's `<stem>.yaml` sidecar must ship beside the artifact.** Missing sidecar → empty
+allowlist → a silent `[]` every frame, with the pipeline looking healthy.
+
+Detail: [`hailo-vision.md`](.claude/context/hailo-vision.md) ·
+[`vision-architecture.md`](.claude/context/vision-architecture.md) ·
+[`underwater-vision.md`](.claude/context/underwater-vision.md) ·
+[`camera-and-calibration.md`](.claude/context/camera-and-calibration.md) ·
+[`downward-camera.md`](.claude/context/downward-camera.md) (the axis remap) ·
+environment pins: [`pi-and-env-traps.md`](.claude/context/pi-and-env-traps.md).
+
+---
+
+## 5. Localization
+
+No GPS, no DVL. A right-invariant EKF predicts on the board's IMU and corrects with depth,
+optical-flow velocity, headings and prop fixes; late measurements are **replayed at the
+instant they describe** rather than applied on arrival. Course priors are per venue and
+overridable on the deck (`~/.duburi/courses`) with a survey tool to measure the real thing.
+
+Verified: the downward camera as a velocity sensor — three 30 cm slides, worst error
+**1.09 cm**, implied height 0.72 / 0.69 / 0.70 m against a 0.72 m tape.
+
+[`packages/duburi_localization`](.claude/context/packages/duburi_localization/README.md)
+
+---
+
+## 6. Running it
 
 ```bash
-# Bring up sim (in docker terminals — see §3)
-cd ~/Ros_workspaces/duburi_ws
-./build_dubomini.sh
+./build_dubomini.sh                 # mirrors ~/models and ~/missions in, then builds
 source install/setup.bash
-ros2 run duburi_manager start --ros-args -p mode:=sim
+
+ros2 launch duburi_manager bringup.launch.py vision:=true    # the vehicle
+ros2 run duburi_manager bringup_check --srot                 # can it arm?
+ros2 run duburi_planner duburi arm                           # one verb
+ros2 run duburi_planner mission --list                       # missions
 ```
 
-> **`build_dubomini.sh` mirrors device-local models + missions into the tree
-> first, then builds.** The competition YOLO weights and the personal test
-> missions (`rakib_*`) are kept **out of git** (weights by extension; missions via
-> per-clone `.git/info/exclude`) and live in source-of-truth folders **outside**
-> the repo — `~/models` → `src/duburi_vision/models/` and `~/missions` →
-> `src/duburi_planner/duburi_planner/missions/`. So after a fresh `git clone`,
-> one `./build_dubomini.sh` restores them with nothing to copy by hand. The sync
-> is additive (never deletes) and soft-skips a missing source folder (dev box).
-> Override the sources with `DUBOMINI_MODELS_SRC` / `DUBOMINI_MISSIONS_SRC`.
-> (Formerly `build_duburi.sh` — renamed, same two-step interfaces-first build.)
+**Every capability is an opt-in switch with a defensible default** (ROADMAP §9): `vision`,
+`localization`, `flow`, `lock`, `retrodict`, `zupt`, `demand_aid`, `use_yaw`, `tile_m`,
+`lane_lines`, `caustics`, `mixer_aware`, `velocity_uplink`, `position_uplink`. Bring the
+vehicle up bare, then add one at a time and measure what it costs.
+[`launch-combinations.md`](.claude/context/launch-combinations.md)
 
-### Step 2: Verify connectivity
-
-```bash
-ros2 topic echo /duburi/state            # Should show armed=false, mode=MANUAL, yaw, depth, battery
-ros2 node info /duburi_manager           # ActionServer should be listed
-```
-
-### Step 3: Test control via CLI
-
-```bash
-ros2 run duburi_planner duburi arm
-ros2 run duburi_planner duburi set_depth --target -0.5
-ros2 run duburi_planner duburi yaw_right --target 90
-ros2 run duburi_planner duburi turn --target 90      # absolute heading, direction auto
-ros2 run duburi_planner duburi move_forward --duration 5 --gain 80
-ros2 run duburi_planner duburi arc --duration 4 --gain 50 --yaw_rate_pct 30
-ros2 run duburi_planner duburi lock_heading --target 0 --timeout 120
-ros2 run duburi_planner duburi unlock_heading
-ros2 run duburi_planner duburi disarm
-```
-
-### Step 3b: DVL + vision verbs (pool only)
-
-```bash
-# DVL auto-connects (dvl_auto_connect:=true). Manual: duburi dvl_connect
-ros2 run duburi_planner duburi move_forward_dist --distance_m 2.0 --gain 60
-# Centre the gate (yaw + lateral), then drive forward until it fills 80% of frame:
-ros2 run duburi_planner duburi vision_align --camera forward --target_class gate \
-    --axes yaw,lat --err_px 40 --gain 30 --duration 20
-ros2 run duburi_planner duburi vision_move --camera forward --target_class gate \
-    --fwd_fill 80 --mode area --gain 35 --duration 20
-```
-
-### Step 4: Run a mission
-
-```bash
-ros2 run duburi_planner mission --list
-# detected()-paradigm task chunks (standalone or chained):
-ros2 run duburi_planner mission task_gate          # gate chunk
-ros2 run duburi_planner mission task_full_2026     # full 5-task detected-paradigm run
-# YASMIN FSM (per-task or full sequence):
-ros2 run duburi_planner mission fsm_slalom         # standalone slalom FSM
-ros2 run duburi_planner mission fsm_bin            # standalone bin-drop FSM
-ros2 run duburi_planner mission fsm_torpedo        # standalone torpedo FSM
-ros2 run duburi_planner mission fsm_return         # standalone return-gate FSM
-ros2 run duburi_planner mission fsm_full_2026      # full 5-task YASMIN FSM (recommended)
-# Prior FSM missions (kept for backward compat):
-ros2 run duburi_planner mission gate_flare_fsm     # FSM gate + flare
-ros2 run duburi_planner mission prequal_fsm        # FSM gate-only prequal
-ros2 run duburi_planner mission gate_then_bin_fsm  # FSM gate → bin drop
-ros2 run duburi_planner mission gate_flare_autonomous  # detected()-paradigm fallback
-```
-
-### Step 5: Vision sanity
-
-```bash
-ros2 launch duburi_manager bringup.launch.py vision:=true
-ros2 run duburi_vision vision_check --camera forward --require-class gate
-ros2 run duburi_vision vision_thrust_check --camera forward --duration 4
-ros2 param set /duburi_detector_forward classes "gate,flare"   # live class switch
-```
+**Operator tooling** (off the mission path): `scripts/pool_session.sh` pins one folder per
+run; `scripts/pool_record.sh` records and replays a bag; scorecards land in `DUBURI_RUN_DIR`.
+[`foxglove-and-bags.md`](.claude/context/foxglove-and-bags.md) · [`pool-day.md`](.claude/context/pool-day.md)
 
 ---
 
-## 12. Environment & paths
+## 7. Simulator
 
-```bash
-# Docker env
-ROS_DOMAIN_ID=42
-GZ_SIM_SYSTEM_PLUGIN_PATH=~/stuff/ardupilot_gazebo/build
-GZ_IP=127.0.0.1
+[`sim/`](sim/) is a second colcon workspace in this repo: Gazebo, a pool with courses and
+props, both cameras, ground truth, and an operator lab. It runs **ArduSub SITL by design** —
+it is a physics environment, not the vehicle — so it uses `flight_controller:=pixhawk`.
 
-# Workspaces
-~/Ros_workspaces/duburi_ws        # OUR codebase (this workspace)
-~/Ros_workspaces/duburi_ws/sim    # the simulator — nested colcon workspace, same repo
-~/Ros_workspaces/colcon_ws        # legacy bluerov2_gz sim (superseded by sim/; DO NOT MODIFY)
+What transfers: control behaviour and every verb. What does **not**: detection thresholds and
+vision gains, because sim imagery is too clean.
 
-# Tools (out of workspace; override with ARDUPILOT_ROOT / ARDUPILOT_GAZEBO_ROOT)
-~/stuff/ardupilot/            # ArduSub SITL
-~/stuff/ardupilot_gazebo/     # Gazebo-ArduPilot bridge plugin
-```
+[`sim/README.md`](sim/README.md) · [`sim/.context/INDEX.md`](sim/.context/INDEX.md) ·
+[`legacy-pixhawk-and-sitl.md`](.claude/context/legacy-pixhawk-and-sitl.md)
 
 ---
 
-## 13. Safety rules (non-negotiable)
+## 8. Safety rules (non-negotiable)
 
-1. **Always have a disarm path** — Ctrl-C on the manager triggers `Duburi.stop()` + `disarm()`.
-2. **Cooperative abort** — `cancel_callback` sets `command_active=False` and calls `duburi.request_abort()` which signals `_abort_event`; every motion loop checks this flag once per tick and exits early. Safety verbs (`disarm`, `stop`, `surface`) bypass the `command_active` gate and signal abort simultaneously so they always execute.
-3. **Heartbeat must keep ticking** — owned by the manager's ROS2 timer; nothing in the action callback may block long enough to break it.
-4. **Neutral on startup** — RC defaults to 1500 (not 65535) until a movement is active.
-5. **Pool test checklist** — propellers clear, tether on, topside can ping the Jetson.
-6. **Autonomous mission** — timer-delayed start (run code, wait N seconds, remove tether).
-7. **DVL offset** — `dvl_depth_match = 0.78` (calibrated value from 2025 competition; will move into `duburi_sensors` when the DVL driver lands).
-
----
-
-## 14. Context files (in `.claude/context/`)
-
-**RoboSub 2026 (read first — competition status & TDR reconciliation):**
-
-| File                            | Contents                                                            |
-|---------------------------------|---------------------------------------------------------------------|
-| `development-board.md`          | **★ START HERE — central dashboard: phase status, open work, bug/fix log, phase-2 tickets, doc map.** |
-| `robosub-2026-audit.md`         | Full-stack audit + TDR⇄code gap matrix (G1–G12) + P0.1 Decision Record + P0/P1/P2 plan |
-| `robosub-2026-roadmap.md`       | Phase-1 schedule (Gate/Return/search ≈800 pt) + **Phase-2 committed build tickets** (FSM/Dubomini/IVC/tasks) |
-| `scouting/`                     | Competitor/reference-team scouting notes (e.g. `bumblebee-2025.md`) |
-
-**API & verbs (start here):**
-
-| File                            | Contents                                                            |
-|---------------------------------|---------------------------------------------------------------------|
-| `launch-combinations.md`        | **★ "so we never fail" master reference** — EVERY launch/run command with all args + combinations: control node (modes/yaw_source), `vision`/`vision_dual` (single/dual, single/multi-model, by-path device, dataset video), `mission_web` console, CLI verbs, mission runner, TensorRT engines. Scoped to the tested competition path |
-| `command-reference.md`          | **Every verb** on `/duburi/move`: CLI, Python facade, DSL, MAVLink, lock modes, distance metrics |
-| `client-and-dsl-api.md`         | `DuburiClient`, `DuburiMission` DSL, `vision.*` verbs, `duburi.detected()` |
-| `vision-results.md`             | **★ Read before a vision mission** — `VisionResult` finish-state (`x_px`/`y_px`/`saw_target`/`fill`/`elapsed`), hybrid vision+control recovery patterns, mid-hold fire (`fire`/`fire_t`), live `err_x_px` feedback, do's & don'ts |
-| `precision-alignment.md`        | **★ Close-in robustness** — kill last-moment misclassification (`lock_on` continuity lock + `ctrl_conf`) and hold a 20 kg hull steady (`range_gain_floor` + `ki_lat`); phased COARSE→APPROACH→TERMINAL pattern, yaw→`heading_lock` at the hole, pool runbook, what NOT to do |
-| `detected-paradigm.md`          | **`duburi.detected()` deep reference** — mechanics, rules, orbit trap, errors, testing, canonical templates |
-| `mission-cookbook.md`           | Mission DSL cookbook — working principles + 10 ready-to-steal samples |
-| `testing-guide.md`              | Every test: unit, bringup, mission smoke, in-water checklist        |
-| `ros2-conventions.md`           | ROS2 coding conventions + complete 28-verb command reference table   |
-
-**ArduSub & MAVLink:**
-
-| File                            | Contents                                                            |
-|---------------------------------|---------------------------------------------------------------------|
-| `ardusub-canon.md`              | **First-principles** ArduSub: modes, depth cascade, yaw rate loop, failsafes |
-| `ardusub-reference.md`          | ArduSub-specific parameters, modes, quirks (quick-list)             |
-| `mavlink-reference.md`          | MAVLink catalogue + per-call audit + `[MAV <fn> cmd=verb]` DEBUG trace |
-| `heading-lock.md`               | Heading-lock state diagram, motion interaction, failure modes       |
-| `axis-isolation.md`             | First-principles theory: sharp vs curved turns, settle/pause        |
-
-**Vehicle, hardware, sim:**
-
-| File                            | Contents                                                            |
-|---------------------------------|---------------------------------------------------------------------|
-| `../docs/JETSON_ONESHOT_15W.md` | **★ Backup-Jetson one-shot prep (15W Orin Nano 8GB, no WiFi)** — ordered, idempotent, two-agent runbook (network/remote/cameras/deps/build/**TensorRT engines**/power+clocks/verify). The engine is mandatory at 15W (`.pt`=3-4 Hz); `nvpmodel -m 0` is this board's max (NOT MAXN); measure sustained FPS on the desk to pick imgsz (640 default, 512 fallback) |
-| `vehicle-spec.md`               | **Canonical** Duburi 4.2 spec + TDR-vs-implementation delta         |
-| `hardware-setup.md`             | Pool setup, BlueOS, network topology                                |
-| `dual-camera-setup.md`          | **★ Jetson agent** — 2× identical Blue Robotics USB cams: by-path port-stable identity, USB-2 480 Mbps/MJPEG bandwidth, udev aliases, `vision_dual` `device_path` |
-| `downward-camera.md`            | **★ the axis flip** — why/how `vision.align` kwargs remap on `camera='downward'` (`lat`=Ch6, `fwd`=Ch5 surge, `depth`=fill→descent); canonical calls, surge-sign DISARMED check, depth bounds, migration note |
-| `sim-setup.md`                  | **Legacy** sibling-`colcon_ws` bring-up — superseded by `sim/`       |
-| [`../sim/README.md`](sim/README.md) | **★ Simulator** — operator cold start, terminal by terminal      |
-| [`../sim/.context/INDEX.md`](sim/.context/INDEX.md) | Simulator doc index (CONTRACT / OPERATOR / AUDIT / WORLD_EDITING / DATASETS) |
-| `sensors-pipeline.md`           | `duburi_sensors` design rules + BNO085 calibration model            |
-| `dvl-reference.md`              | Nortek Nucleus1000 protocol, packet catalog, POSHOLD ArduSub setup  |
-| `dvl-integration.md`            | DVL + BNO085 integration notes + composite source design            |
-| `pool-day.md`                   | Pool-day checklist and session workflow                             |
-| `foxglove-and-bags.md`          | **★ Operator tooling (off mission path)** — Foxglove telemetry (`foxglove:=true` + FPS/offline gates), `pool_record.sh` rosbag record/replay, mission scorecards → `~/duburi_runs`. Plus the "what we did NOT integrate" scouting decision |
-| `remote-access.md`              | **★ Ground-station remote access (off mission path)** — smooth, drop-proof workflow that replaces laggy xrdp: mosh+tmux (terminal, mission survives GUI death), Foxglove/`web_video_server` (vision, no desktop), NoMachine (full desktop), polkit `.pkla` (kills the password popups), emergency recovery without a reboot. Install: `tools/setup_remote_access.sh` |
-| `BUGS.md`                       | **★ THE bug register** — 2026-09-08 system-wide audit: B01–B23 by severity (CRITICAL→LOW) + D01–D03 JSF-AV design findings + coverage/verified-correct record. Start here for defects. |
-| `BUGS.md`               | Tracked code bugs from the 2026-04/05 audits (all FIXED). **Superseded for bug tracking by `BUGS.md`**; kept because 19 files (incl. source) link to it |
-
-**Method & design theory:**
-
-| File                            | Contents                                                            |
-|---------------------------------|---------------------------------------------------------------------|
-| `pid-theory.md`                 | PID tuning notes — **REFERENCE**, not the live path                 |
-| `proven-patterns.md`            | Patterns from 2023/2025 codebases — names are **historical**        |
-| `yaw-stability-and-fusion.md`   | Yaw drift research; cross-links to `sensors-pipeline.md`            |
-| `mission-design.md`             | YASMIN FSM design reference (now built — see fsm-guide.md)          |
-| `fsm-guide.md`                  | **★ FSM user guide** — YASMIN fundamentals, VehicleProfile, state library, pool-day workflow, adding new tasks |
-| `fsm-vision-missions.md`        | **★ Vision-guided mission design** — first-principles detection model, 6 search patterns, DVL/timed table, full pick+drop worked example, gain tuning, checklist |
-| `vision-architecture.md`        | `duburi_vision` file map, topic contract, GPU contract, viz layers  |
-| `vision-roadmap.md`             | v1–v4f done (detection, tracking, Kalman, vision verbs, depth pipeline); v5 real hw cams queued |
-| `depth-estimation.md`           | Depth Anything V2-Small ONNX node: params, topics, EMA smoothing, HUD integration, test |
-| `video-testing.md`              | **Full guide**: video_file source, sim+video workflow, playback controls, mission replay |
-
-**Archived / future work** (in `future/`):
-
-| File                            | Contents                                                            |
-|---------------------------------|---------------------------------------------------------------------|
-| `future/goals.md`               | Original TDR task checklist (archival)                              |
-| `future/future-registry-shrinkage.md` | Parked: COMMANDS registry refactor ideas                    |
-| `future/future-bno-into-ekf.md` | Parked: BNO085 velocity integration into ArduSub EKF3              |
+1. **Always have a disarm path.** Ctrl-C on the manager stops and disarms.
+2. **Cooperative abort.** Every motion loop checks the abort flag once per tick; `disarm`,
+   `stop` and `surface` bypass the busy gate so they always execute.
+3. **Heartbeat keeps ticking.** Nothing in an action callback may block long enough to break
+   it — the board surfaces after 5 s of silence.
+4. **Neutral on startup.** No axis is commanded until a verb asks for it.
+5. **Propellers clear, and a human on the kill switch**, before anything arms.
+6. **Never claim a verb worked without seeing the value it produced.** The recurring defect in
+   this codebase is a plausible number standing in for an absent measurement.
 
 ---
 
-## 15. Claude automations (`.claude/agents`, `.claude/skills`, `.claude/hooks`)
+## 9. How we work
 
-Project-local Claude Code automations, versioned with the repo and shared with the team.
+- **Measure, then ship.** Every shipped threshold is in
+  [`measured-bars.md`](.claude/context/measured-bars.md) with the method, the conditions and
+  the bar it must clear — including the numbers we later retracted. Tests read that file.
+- **Injection-verify a guard.** A test that has never failed against a real defect is not a
+  guard. Break it deliberately, watch it fail, restore it.
+- **Truth tests, not agreement tests.** Comparing a new estimator against the incumbent
+  measures agreement and cannot rank them; construct a case where truth is known.
+- **Refuse loudly.** A verb that reports success while the vehicle does nothing is the failure
+  mode that ends competition runs.
+- **One truth, two copies is the bug.** When two places state the same constant, make one read
+  the other, or have a test compare them.
 
-**Subagents** (`.claude/agents/*.md`) — dispatch via the Agent/Task tool:
+---
 
-| Agent | Use after / for |
-|-------|-----------------|
-| `mavlink-reviewer`       | editing `duburi_control/` — checks mode preconditions, RC directions, rate pins, heartbeat, disarm safety |
-| `mission-reviewer`       | editing `missions/` — `detected()` guard, two-verb vision (`align`/`move`) fallbacks, duration budgets, disarm-in-finally |
-| `doc-verifier`           | auditing external-API usage (pymavlink, ultralytics, supervision, cv2) vs current online docs |
-| `context-doc-sync`       | flagging stale claims in `.claude/context/*.md` + CLAUDE.md vs `src/` |
-| `robosub-task-architect` | designing a new RoboSub 2026 task (mission + detection + DSL verbs) |
-| `vision-model-reviewer`  | reviewing YOLO11 train/detect configs, dataset balance, thresholds |
+## 10. Context index
 
-**Skills** (`.claude/skills/<name>/SKILL.md`) — invoke as `/<name>`:
+**Status and orientation**
+[`ROADMAP.md`](.claude/context/ROADMAP.md) · [`docs/the-shift.md`](docs/the-shift.md) ·
+[`docs/capability-map.md`](docs/capability-map.md) ·
+[`packages/`](.claude/context/packages/README.md) · [`BUGS.md`](.claude/context/BUGS.md)
 
-| Skill | Invocation | Purpose |
-|-------|-----------|---------|
-| `pool-day`     | both      | Interactive in-water preflight (bringup_check, topic rates, armed=false gate) |
-| `add-command`  | user-only | Scaffold a new `/duburi/move` verb (commands.py + Duburi method + test) |
-| `new-mission`  | user-only | Scaffold a mission from the `detected()`-paradigm template |
-| `train-model`  | both      | YOLO11 fine-tune workflow for a new detection task |
-| `verify-docs`  | user-only | Run `doc-verifier` across a package, summarize API drift |
-| `geohot-guidelines` | **both (default)** | Radical-simplicity rules: complexity is the enemy, delete before you add, a wide interface is a design smell, never assert "it works" without looking at the value. See the standing rule below. |
+**Using the vehicle**
+[`command-reference.md`](.claude/context/command-reference.md) ·
+[`client-and-dsl-api.md`](.claude/context/client-and-dsl-api.md) ·
+[`mission-cookbook.md`](.claude/context/mission-cookbook.md) ·
+[`detected-paradigm.md`](.claude/context/detected-paradigm.md) ·
+[`vision-results.md`](.claude/context/vision-results.md) ·
+[`precision-alignment.md`](.claude/context/precision-alignment.md) ·
+[`downward-camera.md`](.claude/context/downward-camera.md) ·
+[`launch-combinations.md`](.claude/context/launch-combinations.md) ·
+[`ros2-conventions.md`](.claude/context/ros2-conventions.md) ·
+[`fsm-guide.md`](.claude/context/fsm-guide.md) ·
+[`fsm-vision-missions.md`](.claude/context/fsm-vision-missions.md)
 
-> **★ `geohot-guidelines` is ON BY DEFAULT for non-trivial work.** Invoke it as
-> `/geohot-guidelines`, but it also applies standing, without invocation, to any
-> refactor, review, or implementation that is more than a one-liner. The four
-> reflexes:
->
-> 1. **Complexity is the enemy** — more capability at equal or lower complexity is
->    the only real win. Adding a feature by adding a layer is a loss.
-> 2. **You have never refactored enough** — before touching a subsystem ask "can
->    this not exist?". A negative diff is a good diff; LOC is debt, not output.
->    *Fence:* prove it is dead by reading the callsites, and never delete a real
->    invariant (arming, depth, leak, lifecycle) to "simplify" — that is a bug.
-> 3. **Wide interfaces mean the abstraction is wrong** — past ~4 arguments, fix
->    the boundary; do not hide the width in a kwargs bag.
-> 4. **Understand the whole stack; nothing is magic** — print the real value and
->    check it before stacking more on top. Never claim code "works" without
->    having seen it work.
->
-> This suits this codebase specifically: its recurring defect is a *plausible
-> number standing in for an absent measurement*, and rule 4 is the direct
-> antidote. Rule 2's fence matters here more than usual — this is a vehicle, and
-> several "simplifications" in `BUGS.md` are guards someone removed.
-> Unofficial; not affiliated with George Hotz.
+**The board, the firmware, the other repos**
+[`srot-architecture.md`](.claude/context/srot-architecture.md) ·
+[`srot-integration.md`](.claude/context/srot-integration.md) ·
+[`srot-board-soul.md`](.claude/context/srot-board-soul.md) ·
+[`auv-architecture-2026.md`](.claude/context/auv-architecture-2026.md) ·
+[`cross-repo-contract.md`](.claude/context/cross-repo-contract.md) ·
+[`upstream/`](.claude/context/upstream/README.md) ·
+[`vision-control-split.md`](.claude/context/vision-control-split.md)
 
-**Hooks** (`.claude/hooks/`, wired in `.claude/settings.json` via `$CLAUDE_PROJECT_DIR` so they work on any checkout):
+**Perception and estimation**
+[`hailo-vision.md`](.claude/context/hailo-vision.md) ·
+[`vision-architecture.md`](.claude/context/vision-architecture.md) ·
+[`underwater-vision.md`](.claude/context/underwater-vision.md) ·
+[`camera-and-calibration.md`](.claude/context/camera-and-calibration.md) ·
+[`camera-latency.md`](.claude/context/camera-latency.md) ·
+[`detection-continuity.md`](.claude/context/detection-continuity.md) ·
+[`depth-estimation.md`](.claude/context/depth-estimation.md) ·
+[`sensors-pipeline.md`](.claude/context/sensors-pipeline.md) ·
+[`pipeline-hardening.md`](.claude/context/pipeline-hardening.md) ·
+[`system-harmony.md`](.claude/context/system-harmony.md)
 
-| Hook | Event | Behavior |
-|------|-------|----------|
-| `block_install.py` | PreToolUse  | Blocks edits to the colcon-generated `install/` tree (exit 2) |
-| `py_check.sh`      | PostToolUse | `py_compile` syntax check on edited `.py` (advisory) |
-| `pkg_test.sh`      | PostToolUse | Runs the matching `test_<name>.py` for an edited source file (targeted, fast, advisory) |
+**Method and hardware notes**
+[`measured-bars.md`](.claude/context/measured-bars.md) ·
+[`vehicle-spec.md`](.claude/context/vehicle-spec.md) ·
+[`pi-hailo-vision-box.md`](.claude/context/pi-hailo-vision-box.md) ·
+[`pi-and-env-traps.md`](.claude/context/pi-and-env-traps.md) ·
+[`foxglove-and-bags.md`](.claude/context/foxglove-and-bags.md) ·
+[`pool-day.md`](.claude/context/pool-day.md) ·
+[`video-testing.md`](.claude/context/video-testing.md) ·
+[`duburi-sim.md`](.claude/context/duburi-sim.md) ·
+[`legacy-pixhawk-and-sitl.md`](.claude/context/legacy-pixhawk-and-sitl.md) ·
+[`scouting/`](.claude/context/scouting/README.md)
+
+---
+
+## 11. Claude automations
+
+**Subagents** (`.claude/agents/`): `srot-reviewer` (control changes against the board's
+contract) · `mission-reviewer` · `doc-verifier` · `context-doc-sync` ·
+`robosub-task-architect` · `vision-model-reviewer`.
+
+**Skills** (`.claude/skills/`): `pool-day` · `add-command` · `new-mission` · `train-model` ·
+`verify-docs` · `geohot-guidelines` · `bumblebee-doctrine`.
+
+> **`geohot-guidelines` is standing, not optional**, for anything larger than a one-liner:
+> complexity is the enemy; ask whether a thing can *not* exist before adding a layer; a wide
+> interface means the abstraction is wrong; never claim code works without seeing the value.
+> Its fence matters here more than usual — this is a vehicle, and several "simplifications" in
+> `BUGS.md` were guards someone removed.
+
+**Hooks** (`.claude/hooks/`): block edits to the generated `install/` tree; `py_compile` after
+an edit; run the matching test file for an edited source file.
 
 ## graphify
 
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
-
-Rules:
-- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+Knowledge graph in `graphify-out/`. For a codebase question run `graphify query "<question>"`
+(a scoped subgraph, usually far smaller than raw grep). `graphify path "<A>" "<B>"` for
+relationships, `graphify explain "<concept>"` for one concept. After changing code, run
+`graphify update .` (AST-only, no API cost).

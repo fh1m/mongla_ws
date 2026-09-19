@@ -2,7 +2,7 @@
 
 > **This file is the SINGLE tracker for code defects in `duburi_ws`.**
 > It replaces the bug content previously spread across `known-issues.md`,
-> `development-board.md`, `robosub-2026-audit.md`, `water-owed.md` and
+> `ROADMAP.md`, `ROADMAP.md`, `water-owed.md` and
 > `srot-pre-dive-gates.md`. See §6 for exactly what was migrated, what was
 > deliberately left in place, and why.
 >
@@ -633,9 +633,9 @@ the tree and stop calling it built.
 
 | File | Disposition |
 |---|---|
-| `known-issues.md` (600 lines) | **DELETED.** Bug entries → §1–§4 here. FIXED entries whose IDs are cited from source (D7–D10, D14, D16, P1, P2) → §9 appendix. Environment traps E1–E5 + the fork evaluation → new [`jetson-and-env-traps.md`](jetson-and-env-traps.md). |
-| `development-board.md` | **KEPT**, bug section replaced by a pointer here. Its phase status, P0.1 commitment and doc map are project state, not a bug list. |
-| `robosub-2026-audit.md` | **KEPT**, bug entries pointed here. Carries the P0.1 Decision Record and the G1–G12 gap matrix, which CLAUDE.md treats as the authority for committed 2026 scope. |
+| `known-issues.md` (600 lines) | **DELETED.** Bug entries → §1–§4 here. FIXED entries whose IDs are cited from source (D7–D10, D14, D16, P1, P2) → §9 appendix. Environment traps E1–E5 + the fork evaluation → new [`pi-and-env-traps.md`](pi-and-env-traps.md). |
+| `ROADMAP.md` | **KEPT**, bug section replaced by a pointer here. Its phase status, P0.1 commitment and doc map are project state, not a bug list. |
+| `ROADMAP.md` | **KEPT**, bug entries pointed here. Carries the P0.1 Decision Record and the G1–G12 gap matrix, which CLAUDE.md treats as the authority for committed 2026 scope. |
 | `water-owed.md` | **DELETED.** Content → §11 appendix verbatim. It is a measurement backlog rather than a defect list, so it is kept whole and labelled as such. |
 | `srot-pre-dive-gates.md` | **DELETED.** Content → §10 appendix verbatim, flagged **live safety interlock, not history** — GATE 0/1/2 gate every AUTO move, `move_forward` included. |
 
@@ -811,7 +811,7 @@ true until `RC_OVERRIDE_TIME` elapses — default **3.0 s**
 (`RC_Channels_VarInfo.h:90`). Releasing is a different value: `0` clears the
 override; on Ch9+ `UINT16_MAX-1` means "return to RC".
 
-`mavlink-reference.md` and `ardusub-canon.md` both claimed 65535 released the
+`legacy-pixhawk-and-sitl.md` and `legacy-pixhawk-and-sitl.md` both claimed 65535 released the
 channel to RC input. Both corrected.
 
 **This makes B06 worse than recorded.** When the heading lock dies mid-command
@@ -2187,7 +2187,7 @@ Migrated verbatim from the retired `known-issues.md` on 2026-09-08. These are
 all **FIXED**. They are kept because source comments and tests cite them by ID
 (`detector_node.py` → D16, `vision_state.py` → D10, `test_detector_recovery.py`
 → D16, CLAUDE.md → P1/P2/D7–D10/D14) and the rationale is the part worth keeping.
-Environment traps E1–E5 moved to [`jetson-and-env-traps.md`](jetson-and-env-traps.md).
+Environment traps E1–E5 moved to [`pi-and-env-traps.md`](pi-and-env-traps.md).
 
 - **Fix:** `_orchestrate` catches `MoveFailed`/`MoveRejected`/`Exception` and returns a non-fatal `VisionResult(False, 'FAILED', …)`; the mission logs it and continues to the next step.
 

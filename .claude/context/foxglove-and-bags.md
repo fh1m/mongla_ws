@@ -49,7 +49,7 @@ ros2 run duburi_planner mission fsm_full_2026
 ```
 
 **Topside laptop — watch live:** Foxglove desktop → *Open connection → Foxglove WebSocket*
-→ `ws://192.168.2.69:8765`, load `src/duburi_vision/foxglove/duburi_layout.json`.
+→ `ws://<pi-ip>:8765`, load `src/duburi_vision/foxglove/duburi_layout.json`.
 
 **After the run — one folder has everything:**
 ```bash
@@ -78,7 +78,7 @@ WebSocket server that auto-exposes every topic. Our vision topics are standard
 (2D boxes over the image); `/duburi/state` (custom `DuburiState`) shows in the
 Raw-Messages panel; `/duburi/move` action feedback (`err_x_px`/`err_y_px`) plots live.
 
-**Install (once, on the Jetson):**
+**Install (once, on the Pi):**
 ```bash
 sudo apt install ros-humble-foxglove-bridge ros-humble-rosbag2-storage-mcap
 ```
@@ -93,7 +93,7 @@ ros2 launch duburi_manager bringup.launch.py vision:=true foxglove:=true
 # custom port: foxglove:=true foxglove_port:=8766
 ```
 Then in the **Foxglove desktop app**: *Open connection → Foxglove WebSocket →*
-`ws://192.168.2.69:8765` (the Jetson IP). Load the shared layout at
+`ws://<pi-ip>:8765` (the Pi's IP). Load the shared layout at
 `src/duburi_vision/foxglove/duburi_layout.json` so the whole team sees the same view.
 The bridge is launched with `include_hidden:=true` so the `/duburi/move/_action/feedback`
 plot (err_x_px/err_y_px) isn't silently empty. **The layout is a starting point** — its
@@ -198,11 +198,11 @@ gives you the exact colored terminal output too. (Manual equivalent, no helper:
 
 ## 4. Ground station (dev box) — the viewer + offline replay
 
-> **How you reach the Jetson at all** (mosh+tmux terminal, NoMachine desktop, killing the
+> **How you reach the Pi at all** (mosh+tmux terminal, NoMachine desktop, killing the
 > polkit password popups, drop-proof recovery) is its own guide:
 > [`remote-access.md`](remote-access.md). This section is just the **viewer**.
 
-The Jetson runs the **bridge** (server); the dev box / operator laptop runs the **viewer**
+The Pi runs the **bridge** (server); the dev box / operator laptop runs the **viewer**
 (client) and **replays bags**. The viewer we standardized on is **Lichtblick** — Bosch's
 MIT open-source fork of Foxglove Studio — chosen over the official Foxglove desktop app
 precisely because it has **no account / no login wall** and is guaranteed to work fully
@@ -217,12 +217,12 @@ sudo apt install -y /path/to/lichtblick-<ver>-linux-amd64.deb   # provides `lich
 sudo apt install -y ros-humble-foxglove-bridge
 # MCAP storage plugin -- REQUIRED for `pool_record.sh replay` / `ros2 bag play` here.
 # Stock Humble desktop only has sqlite3, so without this an MCAP bag errors
-# "invalid choice: 'mcap'". (The Jetson gets it via package.xml; the dev box needs it too.)
+# "invalid choice: 'mcap'". (The Pi gets it via package.xml; the dev box needs it too.)
 sudo apt install -y ros-humble-rosbag2-storage-mcap
 ```
 
 **Connect to the live AUV:** launch `lichtblick` → *Open connection → Foxglove WebSocket*
-→ `ws://192.168.2.69:8765` (the Jetson). Then *Layouts → Import* and pick
+→ `ws://<pi-ip>:8765` (the Pi). Then *Layouts → Import* and pick
 `src/duburi_vision/foxglove/duburi_layout.json`. This is pure WebSocket over the
 tether/switch — it needs **no** matching `ROS_DOMAIN_ID` and **no** DDS discovery on the
 dev box (that's why it's robust across the network).
@@ -245,8 +245,8 @@ ros2 launch duburi_manager bringup.launch.py mode:=sim yaw_source:=mavlink_ahrs 
 # then Lichtblick → ws://localhost:8765
 ```
 
-**Pull a run off the Jetson and replay it offline** (the highest-ROI loop — tune detection
-without the pool). Bags live in `~/duburi_runs` on the Jetson; copy the whole run folder
+**Pull a run off the Pi and replay it offline** (the highest-ROI loop — tune detection
+without the pool). Bags live in `~/duburi_runs` on the Pi; copy the whole run folder
 so the bag, scorecard, and logs come together:
 ```bash
 rsync -av jetson@192.168.2.69:~/duburi_runs/  ~/duburi_runs/     # or scp -r
@@ -265,7 +265,7 @@ scripts/pool_record.sh replay ~/duburi_runs/bag_gate_run_<ts>
 > **Note — the dev box is a distrobox** (`auv-ros2`, Ubuntu 22.04, ROS Humble). Lichtblick
 > is a GUI app; it launches fine with the container's `DISPLAY`/Wayland passthrough. If it
 > won't open a window on the host, run it from the host instead — the connection is just a
-> WebSocket, so where the viewer runs doesn't matter as long as it can reach the Jetson IP.
+> WebSocket, so where the viewer runs doesn't matter as long as it can reach the Pi's IP.
 
 ---
 

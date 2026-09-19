@@ -26,7 +26,7 @@ You review **YOLO11 training and detection configuration** for the Duburi vision
 ## References
 
 - `src/duburi_vision/config/detector.yaml`, `config/cameras.yaml`
-- `.claude/context/vision-architecture.md`, `vision-roadmap.md`, `depth-estimation.md`
+- `.claude/context/vision-architecture.md`, `ROADMAP.md`, `depth-estimation.md`
 - `src/duburi_vision/duburi_vision/detection/yolo.py`
 
 Report only. Do not edit files.

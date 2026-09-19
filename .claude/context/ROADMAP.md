@@ -5,8 +5,8 @@
 > `src/`; every "BUILT" row has a caller. Board and Pi were NOT connected for this pass, so
 > anything that needs them is stated as last-known with its date.
 >
-> **This file supersedes, for status:** `development-board.md` (last updated 2026-06-24,
-> Pixhawk era), `robosub-2026-roadmap.md`, `.claude/plans/eventual-bubbling-cocoa.md`,
+> **This file supersedes, for status:** `ROADMAP.md` (last updated 2026-06-24,
+> Pixhawk era), `ROADMAP.md`, `.claude/plans/eventual-bubbling-cocoa.md`,
 > `bumblebee-study/CAPABILITY-MAP.md` (body), `bumblebee-study/rounds/round19-gap-reaudit.md`,
 > the findings ledger `bumblebee-study/rounds/round12-findings-ledger.md` (statuses only — its
 > evidence stays there), and the memory `project_research_implement_queue.md`. Those files keep
@@ -230,7 +230,7 @@ Tests: `test_opt_in_consumers.py` (9, real rclpy publishers), each injection-ver
 | `CLAUDE.md` §2b | firmware "behaviour rev 7" | `config.h:805` is **rev 14** |
 | `CLAUDE.md` §2b | `vision_align` / `vision_move` refused on srot | un-refused 2026-09-03; `UNSUPPORTED_VERBS` is `lock_heading`, `move_*_dist`, `arc`, `style_yaw` |
 | `CLAUDE.md` §2b | `move_*_dist` "stay refused permanently" | planned un-refusal after PR #23 (C1) |
-| `development-board.md` | "single source of truth", updated 2026-06-24 | Pixhawk era; superseded by this file |
+| `ROADMAP.md` | "single source of truth", updated 2026-06-24 | Pixhawk era; superseded by this file |
 | `CAPABILITY-MAP.md` body | "Nothing is built yet" | Tiers 0–5 largely built; §4 lists what is not |
 
 ---

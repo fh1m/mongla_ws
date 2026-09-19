@@ -1,9 +1,9 @@
 # Ground-station remote access — the smooth, drop-proof workflow
 
-> **What this is:** how to drive the Jetson (`192.168.2.69`) from the ground-station
+> **What this is:** how to drive the Pi (`192.168.2.69`) from the ground-station
 > laptop over the Fathom-X tether **without** the old xrdp pain — laggy OpenCV, typing
 > delay, constant password popups, and the dropped-session black screen that used to need a
-> Jetson reboot mid-run. **Off the mission path** — none of this touches control/vision code.
+> Pi reboot mid-run. **Off the mission path** — none of this touches control/vision code.
 >
 > One-time install: **`tools/setup_remote_access.sh`** (idempotent; re-run after a reflash).
 > Config it installs lives in `tools/remote-access/`.
@@ -48,7 +48,7 @@ Drop the tether → `mosh` reconnects itself; if the whole link died, `mosh …`
 `tmux attach -t run` → the mission is exactly where you left it. Drop
 `tools/remote-access/tmux.conf.sample` into `~/.tmux.conf` for mouse + big scrollback.
 
-> mosh uses **UDP 60000–61000**. No firewall on the Jetson today, so nothing to open; the
+> mosh uses **UDP 60000–61000**. No firewall on the Pi today, so nothing to open; the
 > setup script opens them automatically **if** `ufw` is ever enabled.
 
 ---
@@ -59,12 +59,12 @@ Two ways to watch detections/`image_debug` natively on the laptop — **no remot
 pixels**, so no lag:
 
 - **Lichtblick / Foxglove** (recommended, already wired): launch with `foxglove:=true`, then
-  on the laptop *Open connection → Foxglove WebSocket →* `ws://192.168.2.69:8765`. Full setup,
+  on the laptop *Open connection → Foxglove WebSocket →* `ws://<pi-ip>:8765`. Full setup,
   the FPS "Gate A" check, and the offline-replay flow: [`foxglove-and-bags.md`](foxglove-and-bags.md).
 - **Browser MJPEG** (`web_video_server`, installed by the setup script): one command on the
-  Jetson, then open a URL — zero app needed:
+  Pi, then open a URL — zero app needed:
   ```bash
-  ros2 run web_video_server web_video_server        # on the Jetson (in tmux)
+  ros2 run web_video_server web_video_server        # on the Pi (in tmux)
   ```
   Laptop browser: `http://192.168.2.69:8080/stream_viewer?topic=/duburi/vision/forward/image_debug`
 
@@ -91,7 +91,7 @@ virtual-display Xorg snippet (`tools/remote-access/xorg-dummy.conf`) — but it 
 real GPU**, so remove it if you later attach a monitor/dummy plug.
 
 NoMachine needs **Xorg, not Wayland** — the script ensures `WaylandEnable=false` in
-`/etc/gdm3/custom.conf` (already set on this Jetson; this also removes the old xrdp black
+`/etc/gdm3/custom.conf` (already set on this Pi; this also removes the old xrdp black
 screen). Optional `--autologin` makes a desktop session exist at boot for NX to attach to.
 
 ---
@@ -122,11 +122,11 @@ sudo systemctl restart gdm3        # rebuild the desktop session
 sudo pkill -KILL -u dubomini       # then reconnect NoMachine
 ```
 Because the mission runs in **tmux over mosh**, neither touches a running mission. This is the
-replacement for "reboot the Jetson mid-run", which was the dangerous part of the old workflow.
+replacement for "reboot the Pi mid-run", which was the dangerous part of the old workflow.
 
 ---
 
-## Reproduce on a fresh Jetson (after a reflash)
+## Reproduce on a fresh Pi (after a reflash)
 
 ```bash
 cd ~/workspaces/duburi_ws
@@ -135,11 +135,11 @@ sudo systemctl restart gdm3        # applies Xorg/autologin; NOT needed for the 
 cp tools/remote-access/tmux.conf.sample ~/.tmux.conf     # optional QoL
 ```
 Then install the **NoMachine client** + **Lichtblick** on the laptop once. Everything else is
-the per-layer usage above. The Jetson's static IP (`192.168.2.69`) and the laptop side
-(`192.168.2.1`) are in [`hardware-setup.md`](hardware-setup.md) §2.
+the per-layer usage above. The Pi's static IP (`192.168.2.69`) and the laptop side
+(`192.168.2.1`) are in [`vehicle-spec.md`](vehicle-spec.md) §2.
 
 ## What did NOT change
 Sunshine/Moonlight (no NVENC on this board), RustDesk (fully-OSS alternative to NoMachine — a
 fallback if the free NoMachine licence ever bites, not installed), and `ssh -X` X11 forwarding
-(documented as laggy in `docs/JETSON_SETUP.md` §5b — superseded by layers 1–2). xrdp can stay
+(documented as laggy in `.claude/context/pi-hailo-vision-box.md` §5b — superseded by layers 1–2). xrdp can stay
 installed as a backstop but NoMachine is the day-to-day desktop.

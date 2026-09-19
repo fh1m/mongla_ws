@@ -10,7 +10,7 @@ The `srot` branch was written against a vehicle that no longer exists. It is an 
 **bypass** of the Pixhawk path, but it was built on the assumption that the rest of the stack
 stayed put. It did not.
 
-**Old (what `srot`, `sensors-pipeline.md`, `hardware-setup.md` and `dual-camera-setup.md`
+**Old (what `srot`, `sensors-pipeline.md`, `vehicle-spec.md` and `dual-camera-setup.md`
 still describe):**
 
 ```
