@@ -12,6 +12,24 @@ Every mission file in
 [`src/duburi_planner/duburi_planner/missions/`](../../src/duburi_planner/duburi_planner/missions/)
 is a plain Python module that exposes one `run(duburi, log)` function.
 
+
+> ## ⛔ Read this before copying a recipe
+>
+> This cookbook predates the move to the SROT board, and some recipes still show the older
+> backend's idioms. The **DSL verbs are unchanged** — what changed is where they run:
+>
+> - **`lock_heading` is refused on srot.** The board holds heading itself at 500 Hz. Guard it:
+>   `if duburi.backend != 'srot': duburi.lock_heading(0.0)`
+> - **`ALT_HOLD` is not a mode on this board.** `set_depth` works; the board owns depth. A
+>   recipe that engages ALT_HOLD explicitly is describing the legacy path.
+> - **`move_*_dist`, `arc` and `style_yaw` are refused on srot.** Use the timed moves, or the
+>   downward camera's own distance bracket (`calc_distance`).
+> - **On the downward camera, the depth-setpoint axes are refused**: sideways and fore/aft
+>   run normally.
+>
+> The current contract is [`command-reference.md`](command-reference.md); the legacy path is
+> [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md).
+
 ---
 
 ## 0. Designing a mission in 30 seconds
@@ -231,7 +249,7 @@ in `run(duburi, log)`. Defaults match the action server's
 ```python
 duburi.arm()                                # waits for ACK (timeout=15s)
 duburi.disarm()
-duburi.set_mode('ALT_HOLD')                 # 'STABILIZE', 'POSHOLD', 'GUIDED', ...
+duburi.set_mode('STABILIZE')                # srot: STABILIZE | DEPTH_HOLD | SURFACE | MANUAL | ACRO
 ```
 
 #### Translations (Ch5 forward, Ch6 lateral)
@@ -300,7 +318,8 @@ runs the arc in reverse.
 #### Heading lock (background)
 
 ```python
-duburi.lock_heading(degrees=0.0, timeout=300.0)   # returns immediately
+if duburi.backend != 'srot':                      # srot: the board holds heading
+    duburi.lock_heading(degrees=0.0, timeout=300.0)   # returns immediately
 ... mission body ...
 duburi.release_heading()                          # joins the daemon
 ```
@@ -868,7 +887,8 @@ def run(duburi, log):
 def run(duburi, log):
     duburi.arm()
     duburi.set_depth(-1.0)
-    duburi.lock_heading()                         # latch current heading
+    if duburi.backend != 'srot':                  # srot holds heading on the board
+        duburi.lock_heading()                     # latch current heading
     for _ in range(4):
         duburi.move_forward(3.0, gain=60)
         duburi.yaw_right(90.0)                    # lock auto-retargets

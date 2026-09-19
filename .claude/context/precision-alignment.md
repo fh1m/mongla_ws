@@ -1,5 +1,11 @@
 # Precision terminal alignment — hold steady & don't miss the hole
 
+> **Backend note.** The vehicle is the SROT board (firmware Hengla) + a Raspberry Pi 5 with a
+> Hailo-8. `lock_heading`, `move_*_dist`, `arc` and `style_yaw` are **refused** there, `ALT_HOLD`
+> is not one of its modes, and the depth-setpoint vision axes are refused. Where this page shows
+> an older idiom, the current contract is [`command-reference.md`](command-reference.md) and the
+> legacy path is [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md).
+
 > **Status:** BUILT on `main`. Every knob is **opt-in** — an un-tuned run behaves
 > exactly like before (`range_gain_floor=1.0`, `ki_lat=0`, `ctrl_conf=0`,
 > `lock_on=False`). Turn them on per the pool runbook in §6.

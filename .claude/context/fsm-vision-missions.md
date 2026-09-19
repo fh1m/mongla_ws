@@ -1,5 +1,11 @@
 # Vision-Guided FSM Mission Design — First Principles
 
+> **Backend note.** The vehicle is the SROT board (firmware Hengla) + a Raspberry Pi 5 with a
+> Hailo-8. `lock_heading`, `move_*_dist`, `arc` and `style_yaw` are **refused** there, `ALT_HOLD`
+> is not one of its modes, and the depth-setpoint vision axes are refused. Where this page shows
+> an older idiom, the current contract is [`command-reference.md`](command-reference.md) and the
+> legacy path is [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md).
+
 > **Companion to:** [`fsm-guide.md`](fsm-guide.md) (state library reference, pool-day workflow)
 > **Prerequisite:** [`fsm-guide.md`](fsm-guide.md) §1–4 (VehicleProfile, DuburiState, outcomes)
 > **Close-in shots:** for the terminal lock/hold/fire phase (don't miss the hole,
