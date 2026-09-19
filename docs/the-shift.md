@@ -208,7 +208,7 @@ Two things from that era are deliberately still here and are not leftovers:
 - The **simulator** runs ArduSub SITL by design — it is a physics environment, not the
   vehicle.
 
-Both are described in [Legacy: the Pixhawk backend and SITL](legacy-pixhawk-and-sitl.html).
+Both are described in [Legacy: the Pixhawk backend and SITL](https://github.com/fh1m/duburi_ws/blob/main/.claude/context/legacy-pixhawk-and-sitl.md).
 
 ---
 
