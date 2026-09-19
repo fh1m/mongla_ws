@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Capability Map
-description: What this vehicle can do, what it could do before, and the evidence behind every claim.
+description: "What this vehicle can do, what it could do before, and the evidence behind every claim."
 ---
 
 # Capability Map

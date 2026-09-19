@@ -1,7 +1,7 @@
 ---
 layout: default
 title: The Shift
-description: From Pixhawk + Jetson to the SROT board and a Hailo-8 AI HAT: what changed, and why it changed everything.
+description: "From Pixhawk + Jetson to the SROT board and a Hailo-8 AI HAT — what changed, and why it changed everything."
 ---
 
 # The Shift
