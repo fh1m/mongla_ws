@@ -139,9 +139,11 @@ footer{padding:clamp(60px,9vh,110px) 0 70px;border-top:1px solid var(--rule)}
     <li data-rail="lab">9 m &nbsp;the lab years</li>
     <li data-rail="stack">18 m &nbsp;the stack</li>
     <li data-rail="machine">27 m &nbsp;the machine</li>
-    <li data-rail="water">40 m &nbsp;what the water did</li>
-    <li data-rail="instruments">55 m &nbsp;instruments</li>
-    <li data-rail="move">70 m &nbsp;how it moves</li>
+    <li data-rail="seeing">34 m &nbsp;seeing</li>
+    <li data-rail="water">45 m &nbsp;what the water did</li>
+    <li data-rail="asking">58 m &nbsp;asking</li>
+    <li data-rail="instruments">70 m &nbsp;instruments</li>
+    <li data-rail="move">84 m &nbsp;how it moves</li>
     <li data-rail="open">∞ &nbsp;open</li>
   </ol>
 </nav>
@@ -308,6 +310,67 @@ footer{padding:clamp(60px,9vh,110px) 0 70px;border-top:1px solid var(--rule)}
         <p>A stale fallback constant made a 0.90 m phantom sensor error look like 0.20 m. The
           vehicle armed. The fix was to read the value from the board instead of assuming it.</p></div>
     </div>
+  </div>
+</section>
+
+
+<section id="seeing" data-zone="mid">
+  <div class="wrap">
+    <h2 class="col">The same gate, in two kinds of water</h2>
+    <p class="lede col quiet">Left, the pool you tune in. Right, the pool you compete in. The
+      detector does not get to choose, and nothing in the pipeline warns you which one you are
+      in.</p>
+    <figure class="duo">
+      <img src="imgs/water-clear.png" alt="A gate seen through clear water in the simulator" loading="lazy">
+      <img src="imgs/water-murky.png" alt="The same gate seen through turbid water" loading="lazy">
+    </figure>
+    <figcaption>Two frames from the same simulated course, one parameter apart. Recall on one
+      real prop across three venues fell from 97.5&nbsp;% to 93.3&nbsp;% — and across two
+      <em>models</em> of the same prop, from 73&nbsp;% to 29&nbsp;%. The model matters more than
+      the water.</figcaption>
+
+    <h3 style="margin-top:56px">Holding on when the detector blinks</h3>
+    <p class="col">Detections flicker. Measured over 71 real gaps at full frame rate, the median
+      is 0.155 s and the ninetieth percentile 0.651 s. So the grip on a target is a ladder, and
+      every rung is sized against that distribution rather than a guess:</p>
+    <ul class="plain">
+      <li>Freshness — the command decays toward neutral while blind<span>0.20 s · 56.3 %</span></li>
+      <li>Coast on the tracker's predicted box<span>0.80 s · 91.5 %</span></li>
+      <li>Grace before the target counts as lost<span>1.00 s</span></li>
+      <li>Kalman prediction<span>1.50 s · 94.4 %</span></li>
+      <li>Track buffer — nothing in the archive exceeds it<span>5.00 s · 100 %</span></li>
+    </ul>
+    <p class="col" style="margin-top:26px">Above all of it sits a feature anchor that once held
+      a target through <strong>175 consecutive frames</strong> in which the detector saw
+      nothing at all.</p>
+  </div>
+</section>
+
+<section id="asking" data-zone="deep">
+  <div class="wrap">
+    <h2 class="col">When the vehicle can't do something, that's a pull request</h2>
+    <p class="lede col quiet">The board's firmware, the ground station and the motor-controller
+      tooling are a second author's work, in his own repositories. Nothing is vendored. Every
+      change we need is asked for, with the evidence attached.</p>
+    <figure>
+      <img src="assets/diagrams/repo-map.svg" alt="The four repositories and the pull requests between them" loading="lazy">
+    </figure>
+    <div class="retract" style="margin-top:14px">
+      <div class="card"><h3>The motors couldn't say they were present</h3>
+        <p>The firmware computed it and dropped the value one line before the wire, so thruster
+          health could only ever answer "unknown". We read their source, found the line, and
+          sent it back as a one-line ask.</p></div>
+      <div class="card"><h3>The board had nowhere to put a velocity</h3>
+        <p>We had just turned the downward camera into a bottom-tracking velocity sensor, good
+          to a centimetre over 30 cm — and there was no message to send it in.</p></div>
+      <div class="card"><h3>The kill switch meant two things</h3>
+        <p>"Power is live" and "I cannot hear the power board" arrived identically, and nothing
+          on either side refused to arm a dead hull. One line, using their own rule.</p></div>
+    </div>
+    <p class="col" style="margin-top:30px">Nine such asks are written down, each reproducible
+      before it was sent. A handful of constants are shared between the repositories and frozen:
+      neither side may move one alone, and a test reads the firmware's own headers to prove
+      ours have not drifted.</p>
   </div>
 </section>
 
