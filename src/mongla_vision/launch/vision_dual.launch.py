@@ -49,7 +49,7 @@ NOTE: this bringup OPENS BOTH camera streams (paused only gates detector
 inference, not the MJPEG stream). Two 1080p USB-2 cameras on one 480 Mbps bus is
 bandwidth-heavy and can trip USB enumeration; for a single-task run prefer the
 one-camera vision.launch.py (camera:=forward|downward). See
-.claude/context/dual-camera-setup.md "two-cameras-at-once" for the guard rails.
+.claude/context/perception/dual-camera-setup.md "two-cameras-at-once" for the guard rails.
 """
 
 from launch                  import LaunchDescription
@@ -79,7 +79,7 @@ def generate_launch_description():
         # 0/4 above is NOT stable: /dev/videoN renumbers on the Orin and silently swaps the
         # two identical cameras (this is the exact "forward/downward reversed" bug). Set a
         # value here ONLY to force a specific device; a non-empty value overrides the symlink.
-        # See .claude/context/dual-camera-setup.md.
+        # See .claude/context/perception/dual-camera-setup.md.
         DeclareLaunchArgument('fwd_device_path', default_value='',
                               description='override device for forward (empty = auto /dev/mongla_cam_forward)'),
         DeclareLaunchArgument('dwn_device_path', default_value='',

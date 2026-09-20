@@ -1,12 +1,12 @@
 # Legacy: the Pixhawk backend and ArduSub SITL
 
 **This is not the vehicle.** The vehicle is the SROT board and a Raspberry Pi 5 —
-see [The Shift](../../docs/the-shift.md). This page exists because two things still depend on
+see [The Shift](../../../docs/the-shift.md). This page exists because two things still depend on
 the older path and would otherwise be undocumented:
 
 1. **The `pixhawk` backend** in `mongla_control/fc/pixhawk_fc.py`, behind the same interface
    as the board.
-2. **The simulator** in [`sim/`](../../sim), which runs **ArduSub SITL by design** — it is a
+2. **The simulator** in [`sim/`](../../../sim), which runs **ArduSub SITL by design** — it is a
    physics environment, not a vehicle.
 
 Everything else from that era lives on the **`pixhawk` branch** (commit `b483722`), including
@@ -66,13 +66,13 @@ autonomy link and looks like a sim fault.
 | Mission structure and the DSL | vision gains tuned against sim footage |
 | The action contract and outcome codes | anything depending on board telemetry (RPM, two packs, leak, kill) |
 
-Full simulator documentation: [`sim/README.md`](../../sim/README.md) ·
-[`sim/.context/INDEX.md`](../../sim/.context/INDEX.md)
+Full simulator documentation: [`sim/README.md`](../../../sim/README.md) ·
+[`sim/.context/INDEX.md`](../../../sim/.context/INDEX.md)
 
 ---
 
 *If you are here because a document referenced ArduSub, a Pixhawk parameter, the heading lock
 or a Jetson runbook: that content was removed from the default branch on 2026-09-19 and is
 preserved on the `pixhawk` branch. The current equivalents are
-[`command-reference.md`](command-reference.md), [`srot-integration.md`](srot-integration.md)
-and [`packages/`](packages/README.md).*
+[`command-reference.md`](../missions/command-reference.md), [`srot-integration.md`](srot-integration.md)
+and [`packages/`](../packages/README.md).*

@@ -2,7 +2,7 @@
 
 > **Status (corrected 2026-09-03): step 2 of the migration below IS live; the
 > board's half is not.** The firmware spec is
-> [`Mongla_others/srot-control-board/VISION_API.md`](../../../Mongla_others/srot-control-board/VISION_API.md).
+> [`Mongla_others/srot-control-board/VISION_API.md`](../../../../Mongla_others/srot-control-board/VISION_API.md).
 >
 > Two corrections to what this header used to say, both of which had been false
 > for a round:
@@ -146,7 +146,7 @@ The host loop is not deleted; it becomes the fallback and the reference implemen
 - **Downward camera.** Our downward path remaps axes (`lat`→strafe, `fwd`→surge,
   `depth`→descent) because the camera is rotated. Cleanest is to send bearings already in the
   **vehicle** frame and let the board stay camera-agnostic — decide before building the uplink.
-  See [`downward-camera.md`](downward-camera.md).
+  See [`downward-camera.md`](../perception/downward-camera.md).
 - **Range.** We can send a monocular `distance`, but `vis_range` has never been read by the
   control path. Send `0` (unknown) until there is a reason not to.
 

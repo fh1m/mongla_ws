@@ -141,5 +141,5 @@ the per-layer usage above. The Pi's static IP (`192.168.2.69`) and the laptop si
 ## What did NOT change
 Sunshine/Moonlight (no NVENC on this board), RustDesk (fully-OSS alternative to NoMachine — a
 fallback if the free NoMachine licence ever bites, not installed), and `ssh -X` X11 forwarding
-(documented as laggy in `.claude/context/pi-hailo-vision-box.md` §5b — superseded by layers 1–2). xrdp can stay
+(documented as laggy in `.claude/context/platform/pi-hailo-vision-box.md` §5b — superseded by layers 1–2). xrdp can stay
 installed as a backstop but NoMachine is the day-to-day desktop.

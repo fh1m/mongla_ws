@@ -106,14 +106,15 @@ def test_the_entry_points_do_not_present_the_retired_platform(name):
         f'{name} presents the retired platform ({hits}). The Pixhawk + Jetson '
         f'stack lives on the `pixhawk` branch; the live path is the SROT board '
         f'and the Pi. One page may describe the old path: '
-        f'.claude/context/legacy-pixhawk-and-sitl.md')
+        f'.claude/context/platform/legacy-pixhawk-and-sitl.md')
 
 
 def test_the_legacy_page_exists_so_the_simulator_is_not_undocumented():
     """The pixhawk backend and ArduSub SITL are still live code. Retiring the
     documentation without this page would leave `sim/` unexplained."""
-    page = CTX / 'legacy-pixhawk-and-sitl.md'
-    assert page.is_file(), 'the legacy page was deleted; sim/ has no documentation'
+    found = list(CTX.rglob('legacy-pixhawk-and-sitl.md'))
+    assert found, 'the legacy page was deleted; sim/ has no documentation'
+    page = found[0]
     text = page.read_text()
     assert 'SITL' in text and 'pixhawk' in text
 

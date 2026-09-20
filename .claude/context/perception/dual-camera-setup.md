@@ -65,4 +65,4 @@ single panel instead of crashing.
 Related: [`camera-and-calibration.md`](camera-and-calibration.md) ·
 [`camera-latency.md`](camera-latency.md) ·
 [`downward-camera.md`](downward-camera.md) (the axis remap) ·
-[`packages/mongla_vision`](packages/mongla_vision/README.md)
+[`packages/mongla_vision`](../packages/mongla_vision/README.md)

@@ -3,14 +3,14 @@
 > **Backend note.** The vehicle is the SROT board (firmware Hengla) + a Raspberry Pi 5 with a
 > Hailo-8. `lock_heading`, `move_*_dist`, `arc` and `style_yaw` are **refused** there, `ALT_HOLD`
 > is not one of its modes, and the depth-setpoint vision axes are refused. Where this page shows
-> an older idiom, the current contract is [`command-reference.md`](command-reference.md) and the
+> an older idiom, the current contract is [`command-reference.md`](../missions/command-reference.md) and the
 > legacy path is [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md).
 
 ROS2 surface and coding standards for `mongla_ws`. The surface is
 deliberately tiny: **one action, one telemetry topic, and a small set of
 manager ROS params** (the manager declares 14 + a `vision.*` tuning layer).
 If you're tempted to add a topic or service, reread this file and the
-[architecture section of CLAUDE.md](../../CLAUDE.md#4-software-architecture)
+[architecture section of CLAUDE.md](../../../CLAUDE.md#4-software-architecture)
 first.
 
 > Earlier revisions of this file documented `/mongla/attitude`,
@@ -42,7 +42,7 @@ goes through this single endpoint.
 > (style, DVL, the full `vision_align`/`vision_move` surface incl. the
 > precision + mid-hold-fire knobs, and on `lock` the anchor fields). The
 > authoritative per-verb field list lives in
-> [`mongla_control/commands.py`](../../src/mongla_control/mongla_control/commands.py);
+> [`mongla_control/commands.py`](../../../src/mongla_control/mongla_control/commands.py);
 > the action server, the `mongla` CLI, and the Python `MonglaClient` all read
 > from that registry — there is no second list to keep in sync.
 
@@ -119,8 +119,8 @@ Reliable, depth=1, KEEP_LAST. Late subscribers get the latest snapshot.
 
 Plus the `vision.*` tuning layer (10 params: `kp_lat/kp_yaw/kp_depth/kp_forward`,
 `lost_grace_s`, `frame_fill_default`, `align_stable_frames`, `range_gain_floor`,
-`ki_lat`, `ctrl_conf`) — see [`command-reference.md`](command-reference.md) §9 and
-[`vision_tunables.py`](../../src/mongla_manager/mongla_manager/vision_tunables.py).
+`ki_lat`, `ctrl_conf`) — see [`command-reference.md`](../missions/command-reference.md) §9 and
+[`vision_tunables.py`](../../../src/mongla_manager/mongla_manager/vision_tunables.py).
 
 `sensors_node` accepts a strict subset (`yaw_source`, `bno085_port`,
 `bno085_baud`, plus `calibrate` bool, `mavlink_url`, `print_period_s`) for

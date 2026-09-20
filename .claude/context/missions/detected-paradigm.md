@@ -4,15 +4,15 @@
 > Hailo-8. `lock_heading`, `move_*_dist`, `arc` and `style_yaw` are **refused** there, `ALT_HOLD`
 > is not one of its modes, and the depth-setpoint vision axes are refused. Where this page shows
 > an older idiom, the current contract is [`command-reference.md`](command-reference.md) and the
-> legacy path is [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md).
+> legacy path is [`legacy-pixhawk-and-sitl.md`](../platform/legacy-pixhawk-and-sitl.md).
 
 > **Purpose of this file:** Every fact, rule, gotcha, and test procedure
 > for the `mongla.detected()` conditional-loop paradigm. Read this before
 > writing any mission that uses `while not mongla.detected(...)` or branches
 > on detection state.
 >
-> Implementation: [`src/mongla_planner/mongla_planner/mongla_dsl.py`](../../src/mongla_planner/mongla_planner/mongla_dsl.py)  
-> Related: [`mission-cookbook.md §7.6`](./mission-cookbook.md) (samples), [`client-and-dsl-api.md`](./client-and-dsl-api.md) (API table)
+> Implementation: [`src/mongla_planner/mongla_planner/mongla_dsl.py`](../../../src/mongla_planner/mongla_planner/mongla_dsl.py)  
+> Related: [`mission-cookbook.md §7.6`](mission-cookbook.md) (samples), [`client-and-dsl-api.md`](client-and-dsl-api.md) (API table)
 
 ---
 
@@ -993,6 +993,6 @@ the YASMIN FSM is the right structure — and each `while detected()` loop maps
 - Detection topic source: `src/mongla_vision/mongla_vision/detector_node.py` (publishes `Detection2DArray`)
 - Vision state (manager side): `src/mongla_manager/mongla_manager/vision_state.py` (`bbox_error()`, used by vision verbs, NOT by `detected()`)
 - Mission samples: `src/mongla_planner/mongla_planner/missions/gate_flare_autonomous.py` (canonical use), `pool_day_practice.py` (full two-verb run + fallbacks)
-- Mission cookbook: `.claude/context/mission-cookbook.md` §7.6
-- Client/DSL API: `.claude/context/client-and-dsl-api.md` §2.5
+- Mission cookbook: `.claude/context/missions/mission-cookbook.md` §7.6
+- Client/DSL API: `.claude/context/missions/client-and-dsl-api.md` §2.5
 - YASMIN FSM states: `src/mongla_planner/mongla_planner/state_machines/states/vision.py` (`VisionSearchState` / `VisionAlignState` / `VisionMoveState`)

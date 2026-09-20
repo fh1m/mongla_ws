@@ -33,6 +33,14 @@ def _const(name):
     return int(m.group(1))
 
 
+def _harmony():
+    """`system-harmony.md` lives in a themed subdirectory now. Locate it: a test
+    that hard-codes a shelf breaks every time the library is tidied."""
+    found = sorted(CTX.rglob('system-harmony.md'))
+    assert found, 'system-harmony.md is missing from .claude/context'
+    return found[0]
+
+
 def _docs():
     # `**/*.md` already includes the top level, so globbing both double-counts
     # every finding -- which made this file's own first failure print each
@@ -124,7 +132,7 @@ def test_the_fov_blocker_is_not_still_asserted_as_open():
 
 
 # ---------------------------------------------------------------- harmony
-HARMONY = CTX / 'system-harmony.md'
+HARMONY = _harmony()
 
 
 def test_system_harmony_exists_and_states_the_four_rules():

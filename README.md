@@ -187,9 +187,9 @@ neither raises, both return where the target was, so a mission recovers instead 
 the attempt. **Give up cleanly** — a deadline cancels the goal in flight and hands the mission
 its fallback, rather than overrunning into the next task.
 
-Reference: [commands](.claude/context/command-reference.md) ·
-[the mission language](.claude/context/client-and-dsl-api.md) ·
-[cookbook](.claude/context/mission-cookbook.md)
+Reference: [commands](.claude/context/missions/command-reference.md) ·
+[the mission language](.claude/context/missions/client-and-dsl-api.md) ·
+[cookbook](.claude/context/missions/mission-cookbook.md)
 
 ## The packages
 

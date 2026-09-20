@@ -3,8 +3,8 @@
 > **Backend note.** The vehicle is the SROT board (firmware Hengla) + a Raspberry Pi 5 with a
 > Hailo-8. `lock_heading`, `move_*_dist`, `arc` and `style_yaw` are **refused** there, `ALT_HOLD`
 > is not one of its modes, and the depth-setpoint vision axes are refused. Where this page shows
-> an older idiom, the current contract is [`command-reference.md`](command-reference.md) and the
-> legacy path is [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md).
+> an older idiom, the current contract is [`command-reference.md`](../missions/command-reference.md) and the
+> legacy path is [`legacy-pixhawk-and-sitl.md`](../platform/legacy-pixhawk-and-sitl.md).
 
 Authoritative design notes for the perception package. Mirrors the
 `mongla_sensors` pattern: ABC + factory + per-source class + standalone
@@ -382,7 +382,7 @@ yaw/depth (ArduSub holds depth, the heading lock holds yaw).
 
 Search and recovery are **not** verbs: the mission DSL owns them via
 `mongla.detected()` poll loops and the `fallback=` search function passed
-to either verb (see [`client-and-dsl-api.md`](client-and-dsl-api.md)).
+to either verb (see [`client-and-dsl-api.md`](../missions/client-and-dsl-api.md)).
 Model + class switching lives in `mongla_planner/model_context.py`
 (`ClassRef` → `set_model` + `set_classes`) and runs before each goal.
 

@@ -1,7 +1,7 @@
 """Torpedo task — align on board, approach via blood, standoff-lock hole, fire.
 
 Two-verb vision, phased so the close-in shot is robust (see
-``.claude/context/precision-alignment.md``):
+``.claude/context/missions/precision-alignment.md``):
   1. COARSE align() on the 'torpedo' board (yaw+lat+depth) from distance
   2. lock_heading() on that nulled heading, then move() forward until 'blood'
      fills the frame (height metric) -- heading held by the lock, not vision.

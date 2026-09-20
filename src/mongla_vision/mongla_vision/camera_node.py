@@ -82,7 +82,7 @@ class CameraNode(Node):
         # PORT-STABLE identity for identical cameras (same VID/PID): a /dev/v4l/by-path/…
         # symlink pins the camera to a physical USB PORT, so 'forward'/'downward' never
         # swap on reboot/re-enumeration (unlike /dev/videoN indices). Non-empty wins over
-        # `device`. See .claude/context/dual-camera-setup.md.
+        # `device`. See .claude/context/perception/dual-camera-setup.md.
         self.declare_parameter('device_path',     '')        # e.g. /dev/v4l/by-path/...-video-index0
         self.declare_parameter('width',           640)
         self.declare_parameter('height',          480)

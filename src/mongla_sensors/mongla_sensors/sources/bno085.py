@@ -59,7 +59,7 @@ loop). Anything 20-100 Hz works; control loops poll at 10 Hz so we just
 need fresher-than-stale samples.
 Baud: 115200.
 
-Design rules (from user spec, see .claude/context/sensors-pipeline.md)
+Design rules (from user spec, see .claude/context/perception/sensors-pipeline.md)
 ---------------------------------------------------------------------
   * Single source per launch, no mid-run switching.
   * No fallback to MAVLink AHRS — if BNO085 goes silent, read_yaw()

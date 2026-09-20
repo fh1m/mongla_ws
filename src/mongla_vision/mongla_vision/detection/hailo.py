@@ -6,7 +6,7 @@ measured this pipeline at **98.0 Hz** on `gate_rescue_repair` against a
 code is at 100 % of the chip and there is no preprocessing overhead left to
 recover. The full campaign, including why the ceiling is the model's CONTEXT
 COUNT and why async inference buys exactly nothing here, is in
-`.claude/context/hailo-vision.md`.
+`.claude/context/perception/hailo-vision.md`.
 
 Four things differ from `.pt` / `.engine`, and each is silent if missed
 ---------------------------------------------------------------------

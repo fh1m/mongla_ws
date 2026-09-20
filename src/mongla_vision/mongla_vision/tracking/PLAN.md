@@ -38,5 +38,5 @@ ros2 launch mongla_vision cameras_.launch.py with_tracking:=true
 ros2 launch mongla_vision cameras_.launch.py depth:=true   # use_tracks=with_tracking
 ```
 
-See `.claude/context/vision-architecture.md` (topic contract) for the full
+See `.claude/context/perception/vision-architecture.md` (topic contract) for the full
 detector → tracker → HUD data flow.

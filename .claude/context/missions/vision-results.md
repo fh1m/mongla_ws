@@ -5,10 +5,10 @@
 > build robust hybrid vision+control missions), how to fire a payload **mid-hold**
 > while still correcting, and how to watch a verb converge live during practice.
 >
-> API source of truth: [`vision_dsl.py`](../../src/mongla_planner/mongla_planner/vision_dsl.py)
-> (`VisionResult`), [`vision_verbs.py`](../../src/mongla_control/mongla_control/vision_verbs.py),
-> [`motion_vision.py`](../../src/mongla_control/mongla_control/motion_vision.py)
-> (`align_loop` / `move_loop`), [`Move.action`](../../src/mongla_interfaces/action/Move.action).
+> API source of truth: [`vision_dsl.py`](../../../src/mongla_planner/mongla_planner/vision_dsl.py)
+> (`VisionResult`), [`vision_verbs.py`](../../../src/mongla_control/mongla_control/vision_verbs.py),
+> [`motion_vision.py`](../../../src/mongla_control/mongla_control/motion_vision.py)
+> (`align_loop` / `move_loop`), [`Move.action`](../../../src/mongla_interfaces/action/Move.action).
 > Companion: [`client-and-dsl-api.md`](client-and-dsl-api.md) · [`command-reference.md`](command-reference.md)
 > · [`mission-cookbook.md`](mission-cookbook.md) · [`detected-paradigm.md`](detected-paradigm.md).
 

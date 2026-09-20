@@ -40,9 +40,9 @@ hardware, water, or a firmware merge). Nothing on this platform has been in wate
 | Velocity / distance | **the downward camera** — no DVL is fitted, and none has ever been validated in water |
 | Payload | board channels over MAVLink (`fire(N)` = **board channel N**, 1–16) |
 
-Full hardware detail: [`vehicle-spec.md`](.claude/context/vehicle-spec.md) ·
-[`srot-architecture.md`](.claude/context/srot-architecture.md) ·
-[`srot-board-soul.md`](.claude/context/srot-board-soul.md)
+Full hardware detail: [`vehicle-spec.md`](.claude/context/platform/vehicle-spec.md) ·
+[`srot-architecture.md`](.claude/context/platform/srot-architecture.md) ·
+[`srot-board-soul.md`](.claude/context/platform/srot-board-soul.md)
 
 ### The other three repositories
 
@@ -54,7 +54,7 @@ Islam.**
 wire constants are frozen on both sides, `fc/srot_protocol.py` is our **single copy**, and
 `test_srot_protocol_drift.py` reads the firmware headers to prove it has not drifted.
 Asks we have sent: [`upstream/`](.claude/context/upstream/README.md). Rules:
-[`cross-repo-contract.md`](.claude/context/cross-repo-contract.md).
+[`cross-repo-contract.md`](.claude/context/platform/cross-repo-contract.md).
 
 **A missing low-level feature is a pull request, not a host workaround.** The hardware is not
 final either — a capability that needs a new sensor is a conversation with the hardware team.
@@ -66,7 +66,7 @@ final either — a capability that needs a new sensor is a conversation with the
 ⛔ **The depth loop has never run closed.** `SROT_MOVE` enters the board's automatic mode and
 **every** primitive there closes the depth loop — including a plain `move_forward`. Two armed
 bench checks gate all of them. An in-air move is *not* partial validation (at ~0 m, target and
-measurement agree). [`srot-integration.md`](.claude/context/srot-integration.md)
+measurement agree). [`srot-integration.md`](.claude/context/platform/srot-integration.md)
 
 ⛔ **Firmware version is a hull-safety interlock.** The board reports `SROT_FW_BEHAVIOUR_REV`;
 `SrotFC.check_behaviour_rev()` runs at connect **and inside `arm()`**. The floor is
@@ -157,12 +157,12 @@ same name on the facade. The CLI, the action server and the Python client pick i
 automatically.
 
 **Vision verbs**: two, pixel-native, never raise —
-[`command-reference.md`](.claude/context/command-reference.md) ·
-[`vision-results.md`](.claude/context/vision-results.md) ·
-[`precision-alignment.md`](.claude/context/precision-alignment.md).
-**Mission DSL**: [`client-and-dsl-api.md`](.claude/context/client-and-dsl-api.md) ·
-[`mission-cookbook.md`](.claude/context/mission-cookbook.md) ·
-[`detected-paradigm.md`](.claude/context/detected-paradigm.md).
+[`command-reference.md`](.claude/context/missions/command-reference.md) ·
+[`vision-results.md`](.claude/context/missions/vision-results.md) ·
+[`precision-alignment.md`](.claude/context/missions/precision-alignment.md).
+**Mission DSL**: [`client-and-dsl-api.md`](.claude/context/missions/client-and-dsl-api.md) ·
+[`mission-cookbook.md`](.claude/context/missions/mission-cookbook.md) ·
+[`detected-paradigm.md`](.claude/context/missions/detected-paradigm.md).
 
 ### ROS surface
 
@@ -191,12 +191,12 @@ venues: never positive; on the gate it destroyed 95 % of detections. A test keep
 ⛔ **A model's `<stem>.yaml` sidecar must ship beside the artifact.** Missing sidecar → empty
 allowlist → a silent `[]` every frame, with the pipeline looking healthy.
 
-Detail: [`hailo-vision.md`](.claude/context/hailo-vision.md) ·
-[`vision-architecture.md`](.claude/context/vision-architecture.md) ·
-[`underwater-vision.md`](.claude/context/underwater-vision.md) ·
-[`camera-and-calibration.md`](.claude/context/camera-and-calibration.md) ·
-[`downward-camera.md`](.claude/context/downward-camera.md) (the axis remap) ·
-environment pins: [`pi-and-env-traps.md`](.claude/context/pi-and-env-traps.md).
+Detail: [`hailo-vision.md`](.claude/context/perception/hailo-vision.md) ·
+[`vision-architecture.md`](.claude/context/perception/vision-architecture.md) ·
+[`underwater-vision.md`](.claude/context/perception/underwater-vision.md) ·
+[`camera-and-calibration.md`](.claude/context/perception/camera-and-calibration.md) ·
+[`downward-camera.md`](.claude/context/perception/downward-camera.md) (the axis remap) ·
+environment pins: [`pi-and-env-traps.md`](.claude/context/platform/pi-and-env-traps.md).
 
 ---
 
@@ -230,11 +230,11 @@ ros2 run mongla_planner mission --list                       # missions
 `localization`, `flow`, `lock`, `retrodict`, `zupt`, `demand_aid`, `use_yaw`, `tile_m`,
 `lane_lines`, `caustics`, `mixer_aware`, `velocity_uplink`, `position_uplink`. Bring the
 vehicle up bare, then add one at a time and measure what it costs.
-[`launch-combinations.md`](.claude/context/launch-combinations.md)
+[`launch-combinations.md`](.claude/context/platform/launch-combinations.md)
 
 **Operator tooling** (off the mission path): `scripts/pool_session.sh` pins one folder per
 run; `scripts/pool_record.sh` records and replays a bag; scorecards land in `MONGLA_RUN_DIR`.
-[`foxglove-and-bags.md`](.claude/context/foxglove-and-bags.md) · [`pool-day.md`](.claude/context/pool-day.md)
+[`foxglove-and-bags.md`](.claude/context/platform/foxglove-and-bags.md) · [`pool-day.md`](.claude/context/platform/pool-day.md)
 
 ---
 
@@ -248,7 +248,7 @@ What transfers: control behaviour and every verb. What does **not**: detection t
 vision gains, because sim imagery is too clean.
 
 [`sim/README.md`](sim/README.md) · [`sim/.context/INDEX.md`](sim/.context/INDEX.md) ·
-[`legacy-pixhawk-and-sitl.md`](.claude/context/legacy-pixhawk-and-sitl.md)
+[`legacy-pixhawk-and-sitl.md`](.claude/context/platform/legacy-pixhawk-and-sitl.md)
 
 ---
 
@@ -284,58 +284,37 @@ vision gains, because sim imagery is too clean.
 
 ## 10. Context index
 
-**Status and orientation**
-[`ROADMAP.md`](.claude/context/ROADMAP.md) · [`docs/the-shift.md`](docs/the-shift.md) ·
-[`docs/capability-map.md`](docs/capability-map.md) ·
-[`packages/`](.claude/context/packages/README.md) · [`BUGS.md`](.claude/context/BUGS.md)
+`.claude/context/` is shelved by subject. Five anchors stay at the top because they are the
+entry points and because tests read them:
 
-**Using the vehicle**
-[`command-reference.md`](.claude/context/command-reference.md) ·
-[`client-and-dsl-api.md`](.claude/context/client-and-dsl-api.md) ·
-[`mission-cookbook.md`](.claude/context/mission-cookbook.md) ·
-[`detected-paradigm.md`](.claude/context/detected-paradigm.md) ·
-[`vision-results.md`](.claude/context/vision-results.md) ·
-[`precision-alignment.md`](.claude/context/precision-alignment.md) ·
-[`downward-camera.md`](.claude/context/downward-camera.md) ·
-[`launch-combinations.md`](.claude/context/launch-combinations.md) ·
-[`ros2-conventions.md`](.claude/context/ros2-conventions.md) ·
-[`fsm-guide.md`](.claude/context/fsm-guide.md) ·
-[`fsm-vision-missions.md`](.claude/context/fsm-vision-missions.md)
+| Anchor | What it is |
+|---|---|
+| [`ROADMAP.md`](.claude/context/ROADMAP.md) | the one status file — where we are, what is blocked |
+| [`capability-map.md`](.claude/context/capability-map.md) · [`the-shift.md`](.claude/context/the-shift.md) | what the vehicle can do, and why it is built this way |
+| [`measured-bars.md`](.claude/context/measured-bars.md) | every shipped constant with the measurement behind it |
+| [`BUGS.md`](.claude/context/BUGS.md) | the defect register |
 
-**The board, the firmware, the other repos**
-[`srot-architecture.md`](.claude/context/srot-architecture.md) ·
-[`srot-integration.md`](.claude/context/srot-integration.md) ·
-[`srot-board-soul.md`](.claude/context/srot-board-soul.md) ·
-[`auv-architecture-2026.md`](.claude/context/auv-architecture-2026.md) ·
-[`cross-repo-contract.md`](.claude/context/cross-repo-contract.md) ·
-[`upstream/`](.claude/context/upstream/README.md) ·
-[`vision-control-split.md`](.claude/context/vision-control-split.md)
+**[`platform/`](.claude/context/platform/)** — the board, the firmware contract, the vehicle,
+bring-up and operations: `srot-architecture` · `srot-integration` · `srot-board-soul` ·
+`auv-architecture-2026` · `cross-repo-contract` · `vision-control-split` · `vehicle-spec` ·
+`pi-hailo-vision-box` · `pi-and-env-traps` · `launch-combinations` · `pool-day` ·
+`remote-access` · `foxglove-and-bags` · `ros2-conventions` · `system-harmony` · `mongla-sim` ·
+`legacy-pixhawk-and-sitl`
 
-**Perception and estimation**
-[`hailo-vision.md`](.claude/context/hailo-vision.md) ·
-[`vision-architecture.md`](.claude/context/vision-architecture.md) ·
-[`underwater-vision.md`](.claude/context/underwater-vision.md) ·
-[`camera-and-calibration.md`](.claude/context/camera-and-calibration.md) ·
-[`camera-latency.md`](.claude/context/camera-latency.md) ·
-[`detection-continuity.md`](.claude/context/detection-continuity.md) ·
-[`depth-estimation.md`](.claude/context/depth-estimation.md) ·
-[`sensors-pipeline.md`](.claude/context/sensors-pipeline.md) ·
-[`pipeline-hardening.md`](.claude/context/pipeline-hardening.md) ·
-[`system-harmony.md`](.claude/context/system-harmony.md)
+**[`perception/`](.claude/context/perception/)** — what the vehicle sees and how it is trusted:
+`hailo-vision` · `vision-architecture` · `underwater-vision` · `camera-and-calibration` ·
+`camera-calibration` · `camera-latency` · `detection-continuity` · `depth-estimation` ·
+`downward-camera` · `dual-camera-setup` · `pipeline-hardening` · `sensors-pipeline` ·
+`video-testing`
 
-**Method and hardware notes**
-[`measured-bars.md`](.claude/context/measured-bars.md) ·
-[`vehicle-spec.md`](.claude/context/vehicle-spec.md) ·
-[`pi-hailo-vision-box.md`](.claude/context/pi-hailo-vision-box.md) ·
-[`pi-and-env-traps.md`](.claude/context/pi-and-env-traps.md) ·
-[`foxglove-and-bags.md`](.claude/context/foxglove-and-bags.md) ·
-[`pool-day.md`](.claude/context/pool-day.md) ·
-[`video-testing.md`](.claude/context/video-testing.md) ·
-[`mongla-sim.md`](.claude/context/mongla-sim.md) ·
-[`legacy-pixhawk-and-sitl.md`](.claude/context/legacy-pixhawk-and-sitl.md) ·
-[`scouting/`](.claude/context/scouting/README.md)
+**[`missions/`](.claude/context/missions/)** — how it is asked to do things:
+`command-reference` · `client-and-dsl-api` · `mission-cookbook` · `detected-paradigm` ·
+`precision-alignment` · `vision-results` · `fsm-guide` · `fsm-vision-missions` ·
+`mission-design`
 
----
+**[`packages/`](.claude/context/packages/README.md)** — one page per ROS package.
+**[`upstream/`](.claude/context/upstream/README.md)** — the asks sent to the firmware team.
+**[`scouting/`](.claude/context/scouting/README.md)** · **`future/`** — competitor notes, parked ideas.
 
 ## 11. Claude automations
 

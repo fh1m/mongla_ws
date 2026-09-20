@@ -3,8 +3,8 @@
 > **Backend note.** The vehicle is the SROT board (firmware Hengla) + a Raspberry Pi 5 with a
 > Hailo-8. `lock_heading`, `move_*_dist`, `arc` and `style_yaw` are **refused** there, `ALT_HOLD`
 > is not one of its modes, and the depth-setpoint vision axes are refused. Where this page shows
-> an older idiom, the current contract is [`command-reference.md`](command-reference.md) and the
-> legacy path is [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md).
+> an older idiom, the current contract is [`command-reference.md`](../missions/command-reference.md) and the
+> legacy path is [`legacy-pixhawk-and-sitl.md`](../platform/legacy-pixhawk-and-sitl.md).
 
 This file is the design rationale + future-extension guide for the
 `mongla_sensors` package. Read this before adding sensors, swapping
@@ -296,10 +296,10 @@ manual override regardless of auto-connect state.
 
 ## Cross-references
 
-- `[../../src/mongla_sensors/](../../src/mongla_sensors/)` — package source
-- `[../../src/mongla_sensors/firmware/esp32c3_bno085.md](../../src/mongla_sensors/firmware/esp32c3_bno085.md)` — BNO085 wire contract
-- `[../../src/mongla_sensors/mongla_sensors/sources/nucleus_dvl.py](../../src/mongla_sensors/mongla_sensors/sources/nucleus_dvl.py)` — Nucleus 1000 DVL driver
-- `[../../src/mongla_sensors/mongla_sensors/sources/composite_bno_dvl.py](../../src/mongla_sensors/mongla_sensors/sources/composite_bno_dvl.py)` — BNO085+DVL composite
-- `[./legacy-pixhawk-and-sitl.md](./legacy-pixhawk-and-sitl.md)` — DVL hardware spec, packet format, smoke tests
-- `[./sensors-pipeline.md](./sensors-pipeline.md)` — research notes on yaw drift sources
-- `[./legacy-pixhawk-and-sitl.md](./legacy-pixhawk-and-sitl.md)` — 2023/2025 codebase patterns we draw from
+- `[../../src/mongla_sensors/](../../../src/mongla_sensors)` — package source
+- `[../../src/mongla_sensors/firmware/esp32c3_bno085.md](../../../src/mongla_sensors/firmware/esp32c3_bno085.md)` — BNO085 wire contract
+- `[../../src/mongla_sensors/mongla_sensors/sources/nucleus_dvl.py](../../../src/mongla_sensors/mongla_sensors/sources/nucleus_dvl.py)` — Nucleus 1000 DVL driver
+- `[../../src/mongla_sensors/mongla_sensors/sources/composite_bno_dvl.py](../../../src/mongla_sensors/mongla_sensors/sources/composite_bno_dvl.py)` — BNO085+DVL composite
+- `[./legacy-pixhawk-and-sitl.md](../platform/legacy-pixhawk-and-sitl.md)` — DVL hardware spec, packet format, smoke tests
+- `[./sensors-pipeline.md](sensors-pipeline.md)` — research notes on yaw drift sources
+- `[./legacy-pixhawk-and-sitl.md](../platform/legacy-pixhawk-and-sitl.md)` — 2023/2025 codebase patterns we draw from

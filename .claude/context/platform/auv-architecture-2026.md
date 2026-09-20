@@ -179,7 +179,7 @@ and it is not code:
 > Recalibrating is now an AUV command — `ros2 run mongla_vision calibrate` —
 > with a guided browser tool, a library of saved calibrations, one-click
 > re-apply to a swapped camera, and an in-water mode. See
-> [`camera-and-calibration.md`](camera-and-calibration.md).
+> [`camera-and-calibration.md`](../perception/camera-and-calibration.md).
 >
 > **The one thing that is still assumed:** the *water* figures are derived
 > from the air ones by Snell, not measured. See `BUGS.md` §1a.
@@ -253,6 +253,6 @@ nothing in this document changes that.
 - [`srot-integration.md`](srot-integration.md) — the verb table and the (now largely historical)
   workaround list
 - [`vision-control-split.md`](vision-control-split.md) — the split (its FOV blocker is cleared)
-- [`camera-and-calibration.md`](camera-and-calibration.md) — the calibration tool, the library, the in-water mode
+- [`camera-and-calibration.md`](../perception/camera-and-calibration.md) — the calibration tool, the library, the in-water mode
 - `srot-control-board/`: `AUDIT.md` (R35–R44), `FIRMWARE_CHANGELOG_FOR_DUBURI.md`,
   `VISION_API.md`, `JETSON_COMMS.md`, `PARAMETERS.md`
