@@ -21,7 +21,7 @@
 
   --ink:#e2e6ec;
   --ink-2:#9ba3b1;
-  --ink-3:#666f7e;
+  --ink-3:#788294;         /* 5.42:1 on black — these carry small mono labels */
 
   --red:#ff0000;           /* the hull, exactly */
   --red-lit:#ff5747;       /* red as text */
