@@ -7,10 +7,14 @@ SIMULATOR-rendered frames; it is a rehearsal. This one loads the weights that
 were trained during the 2025 season and runs them over the footage actually
 recorded at Mirpur and at RoboSub in Arizona.
 
-The archive lives outside the repository (~20 GB of video and 12,914 frames at
-$MONGLA_ARCHIVE, default /home/fh1m/Work/Projects/Duburi/2025). Only the chosen
-stills are committed, and manifest.json records which source frame each one came
-from so any figure on the site can be re-derived.
+The archive lives outside the repository -- roughly 20 GB of video and 12,914
+frames from the 2025 season. Point MONGLA_ARCHIVE at it; there is deliberately
+no default, because a tool that hardcodes one person's home directory only ever
+runs on one machine. Only the chosen stills are committed, and manifest.json
+records which source frame each came from, so any figure on the site can be
+re-derived.
+
+    export MONGLA_ARCHIVE=/path/to/the/2025/archive
 
 Frames are chosen by SCANNING each folder for its richest frame, never by hand.
 Folders where the real model finds nothing are reported and belong on the page
@@ -24,8 +28,8 @@ import cv2
 import numpy as np
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
-ARCHIVE = pathlib.Path(os.environ.get("MONGLA_ARCHIVE",
-                                      "/home/fh1m/Work/Projects/Duburi/2025"))
+_ARCHIVE_ENV = os.environ.get("MONGLA_ARCHIVE")
+ARCHIVE = pathlib.Path(_ARCHIVE_ENV) if _ARCHIVE_ENV else None
 OUT = REPO / "docs" / "imgs" / "real"
 W = 1920
 
@@ -119,8 +123,11 @@ def main(argv=None):
                     help="frames sampled per folder when scanning for the richest")
     args = ap.parse_args(argv)
 
+    if ARCHIVE is None:
+        raise SystemExit("set MONGLA_ARCHIVE to the 2025 season archive "
+                         "(the directory holding raw_images/ and Models/)")
     if not ARCHIVE.exists():
-        raise SystemExit(f"archive not found: {ARCHIVE}  (set MONGLA_ARCHIVE)")
+        raise SystemExit(f"MONGLA_ARCHIVE does not exist: {ARCHIVE}")
     OUT.mkdir(parents=True, exist_ok=True)
     manifest, empty = [], []
 

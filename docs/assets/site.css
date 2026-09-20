@@ -260,6 +260,9 @@ code,.n{font-family:var(--data);font-size:.87em;color:var(--medium-text)}
 .plate figure::after{content:"";position:absolute;inset:auto auto 0 0;height:1px;width:0;
   background:var(--signal);transition:width var(--t-mid) var(--ease)}
 .plate figure:hover::after{width:100%}
+/* the HUD composites are 1700x1518 — nearly square. A 16/10 cell letterboxes
+   them into black bars, so this variant matches the artefact instead. */
+.plate--hud figure{aspect-ratio:5/4;padding:clamp(10px,1.4vw,20px)}
 @media (max-width:620px){.plate{grid-template-columns:1fr}}
 
 figure{margin:var(--s6) 0 0}
