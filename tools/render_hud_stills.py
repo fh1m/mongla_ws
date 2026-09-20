@@ -28,7 +28,7 @@ model = YOLO(str(pathlib.Path.home()/'models'/'sauvc_sim.pt'))
 names = model.names
 print('classes:', len(names))
 
-class S:  # the DuburiState fields the strip reads
+class S:  # the MonglaState fields the strip reads
     armed = True; mode = 'AUTO'; yaw_deg = 41.7; depth_m = -1.24; battery_voltage = 14.7
 
 out = pathlib.Path('/tmp/claude-1000/hud'); out.mkdir(exist_ok=True)
