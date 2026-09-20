@@ -5,66 +5,77 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ page.title }} — Mongla</title>
 <meta name="description" content="{{ page.description }}">
+<meta name="theme-color" content="#000000">
 <link rel="icon" href="{{ '/imgs/mongla-logo-dark.png' | relative_url }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;1,8..60,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;1,6..72,300;1,6..72,400&display=swap" rel="stylesheet">
+<!-- one stylesheet for the whole site: the palette lives in exactly one file -->
+<link rel="stylesheet" href="{{ '/assets/site.css' | relative_url }}">
 <style>
-:root{
-  --paper:#0b1f27; --type:#dfeef1; --quiet:#8fb7bf; --rule:rgba(223,238,241,.16);
-  --accent:#ff7a55; --sand:#f2e4c9;
-  --display:"Bricolage Grotesque","Helvetica Neue",Arial,sans-serif;
-  --prose:"Source Serif 4",Georgia,serif;
-  --inst:"IBM Plex Mono",ui-monospace,Menlo,monospace;
-}
-*{box-sizing:border-box}
-body{margin:0;background:var(--paper);color:var(--type);
-  font-family:var(--prose);font-size:19px;line-height:1.64;-webkit-font-smoothing:antialiased}
-a{color:inherit;border-bottom:1px solid var(--accent);text-decoration:none;padding-bottom:1px}
-a:hover{background:var(--accent);color:var(--paper)}
-a:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
-header{border-bottom:1px solid var(--rule);position:sticky;top:0;z-index:5;
-  background:#0b1f27;backdrop-filter:blur(9px)}
-@supports (background:color-mix(in srgb,red 50%,transparent)){
-  header{background:color-mix(in srgb,var(--paper) 88%,transparent)}}
-header .bar{max-width:940px;margin:0 auto;padding:0 24px;height:58px;display:flex;align-items:center;gap:24px}
-header .home{font-family:var(--display);font-weight:800;letter-spacing:-.02em;font-size:18px;border:0}
-header .home:hover{background:none;color:var(--accent)}
-header nav{margin-left:auto;display:flex;gap:20px;font-family:var(--display);font-size:14.5px}
-header nav a{border:0;color:var(--quiet)}
-header nav a:hover{background:none;color:var(--type)}
-main{max-width:940px;margin:0 auto;padding:clamp(40px,7vh,84px) 24px 96px}
-h1,h2,h3{font-family:var(--display);letter-spacing:-.022em;line-height:1.06;margin:0}
-h1{font-size:clamp(36px,6vw,62px);font-weight:800}
-h1+h3{margin-top:14px;color:var(--quiet);font-weight:400;font-size:clamp(18px,2.2vw,23px);line-height:1.35}
-h2{font-size:clamp(25px,3.4vw,36px);font-weight:700;margin:64px 0 14px;padding-top:26px;border-top:1px solid var(--rule);scroll-margin-top:76px}
-h3{font-size:20px;font-weight:700;margin:34px 0 8px}
-p,li{max-width:74ch}
-hr{border:0;border-top:1px solid var(--rule);margin:52px 0}
-img{max-width:100%;height:auto;display:block;margin:30px 0;border:1px solid var(--rule)}
-table{width:100%;border-collapse:collapse;font-family:var(--display);font-size:15px;margin:22px 0;display:block;overflow-x:auto}
-th,td{text-align:left;padding:11px 13px;border-bottom:1px solid var(--rule);vertical-align:top}
-th{font-size:12.5px;color:var(--quiet);font-weight:700;letter-spacing:.02em}
-code{font-family:var(--inst);font-size:13.5px;color:var(--sand)}
-pre{font-family:var(--inst);font-size:13.5px;border:1px solid var(--rule);padding:18px;overflow-x:auto}
-pre code{color:var(--type)}
-blockquote{margin:26px 0;padding:14px 22px;border-left:2px solid var(--accent);color:var(--quiet)}
-blockquote p{margin:6px 0}
-em{color:var(--quiet)}
-footer{max-width:940px;margin:0 auto;padding:0 24px 80px;
-  font-family:var(--inst);font-size:12.5px;color:var(--quiet);display:flex;gap:22px;flex-wrap:wrap}
+/* the prose layer — everything else is inherited from site.css */
+body.doc main{margin-inline:auto;max-width:74ch;padding:clamp(40px,6vh,76px) var(--gutter) clamp(72px,10vh,120px)}
+.topbar{position:sticky;top:0;z-index:30;border-bottom:1px solid var(--rule);background:#000}
+@supports (backdrop-filter:blur(8px)){
+  .topbar{background:rgba(0,0,0,.82);backdrop-filter:blur(8px)}}
+.topbar .bar{max-width:74ch;margin:0 auto;padding:0 var(--gutter);height:56px;
+  display:flex;align-items:center;gap:22px}
+.topbar .home{font-family:var(--display);font-weight:700;letter-spacing:-.02em;
+  font-size:17px;border:0;color:var(--ink)}
+.topbar .home::before{content:"";display:inline-block;width:7px;height:7px;
+  background:var(--red);margin-right:9px;vertical-align:2px;box-shadow:0 0 8px var(--red)}
+.topbar .home:hover{color:#fff}
+.topbar nav{margin-left:auto;display:flex;gap:18px;font-family:var(--mono);
+  font-size:10.5px;letter-spacing:.14em;text-transform:uppercase}
+.topbar nav a{border:0;color:var(--ink-3)}
+.topbar nav a:hover{color:var(--red-lit)}
+
+body.doc h1{font-size:clamp(2.1rem,1rem + 3.6vw,3.6rem);margin-bottom:var(--s2)}
+body.doc h1 + p{font-size:clamp(1.05rem,1rem + .4vw,1.3rem);color:var(--ink-2);line-height:1.52}
+body.doc h2{font-size:clamp(1.4rem,1rem + 1.5vw,2.05rem);margin:var(--s6) 0 var(--s2);
+  padding-top:var(--s3);border-top:1px solid var(--rule);scroll-margin-top:74px}
+body.doc h3{font-size:1.06rem;margin:var(--s5) 0 var(--s1);color:#fff}
+body.doc p{margin:0 0 var(--s3)}
+body.doc ul,body.doc ol{margin:0 0 var(--s3);padding-left:1.15em}
+body.doc li{margin-bottom:7px}
+body.doc li::marker{color:var(--red)}
+body.doc blockquote{margin:var(--s4) 0;padding-left:20px;border-left:1px solid var(--red);
+  color:var(--ink-2);font-style:italic}
+body.doc hr{border:0;border-top:1px solid var(--rule);margin:var(--s6) 0}
+/* a rule immediately before a heading would draw the line twice */
+body.doc hr + h2{border-top:0;padding-top:0;margin-top:0}
+body.doc img{width:100%;height:auto;display:block;margin:var(--s4) 0;
+  border:1px solid var(--rule);background:var(--hull)}
+body.doc code{background:var(--hull);border:1px solid var(--rule);padding:1px 5px}
+body.doc pre{margin:var(--s4) 0}
+body.doc pre code{background:none;border:0;padding:0;color:inherit}
+/* a six-column table squeezed into 74ch is unreadable: scroll it instead */
+body.doc .tw{margin:var(--s4) 0;overflow-x:auto;-webkit-overflow-scrolling:touch}
+body.doc table{border-collapse:collapse;font-family:var(--mono);font-size:12.5px;
+  min-width:100%;width:max-content;max-width:none}
+body.doc th{text-align:left;font-weight:400;font-size:9.5px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-3);padding:0 14px 10px 0;
+  border-bottom:1px solid var(--rule-lit);white-space:nowrap}
+body.doc td{padding:11px 14px 11px 0;border-bottom:1px solid var(--rule);
+  color:var(--ink-2);vertical-align:top}
+body.doc td:first-child{color:#fff}
+body.doc strong{color:#fff}
+
+body.doc footer{margin-left:0;max-width:74ch;margin-inline:auto;display:flex;gap:20px;flex-wrap:wrap}
 </style>
 </head>
-<body>
-<header><div class="bar">
+<body class="doc">
+<header class="topbar"><div class="bar">
   <a class="home" href="{{ '/' | relative_url }}">Mongla</a>
   <nav>
-    <a href="{{ '/the-shift.html' | relative_url }}">The Shift</a>
+    <a href="{{ '/the-shift.html' | relative_url }}">The shift</a>
     <a href="{{ '/capability-map.html' | relative_url }}">Capabilities</a>
     <a href="https://github.com/fh1m/mongla_ws">Source</a>
   </nav>
 </div></header>
+
 <main>{{ content }}</main>
+
 <footer>
   <span>Muhammad Fahim Faisal · Dhaka</span>
   <span>Firmware &amp; hardware: Rakibul Islam</span>

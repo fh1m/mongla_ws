@@ -71,7 +71,7 @@ body{
   background:linear-gradient(90deg,#000 60%,transparent);
 }
 .rail b{display:block;font-weight:400;padding:5px 0 5px 14px;position:relative;
-  transition:color var(--t-fast) var(--ease)}
+  white-space:nowrap;transition:color var(--t-fast) var(--ease)}
 .rail b::before{content:"";position:absolute;left:0;top:50%;width:6px;height:1px;
   background:var(--rule-lit);transition:all var(--t-fast) var(--ease)}
 .rail b[data-on]{color:var(--red-lit)}
@@ -187,9 +187,12 @@ figcaption{font-family:var(--display);font-size:12.5px;color:var(--ink-3);
 .year p{margin:6px 0 0;color:var(--ink-2);font-size:.95rem;max-width:62ch}
 
 /* ── retractions ─────────────────────────────────────────────────── */
-.retract{border-left:1px solid var(--red);padding:2px 0 2px 20px;margin:26px 0}
+.retract{border-left:1px solid var(--red);padding:2px 0 2px 20px;margin:0 0 var(--s4);
+  max-width:calc(var(--measure) + 4ch)}
+.retract + .retract{margin-top:0}
 .retract b{display:block;font-family:var(--display);font-size:1.02rem;color:#fff;margin-bottom:5px}
-.retract p{margin:0;color:var(--ink-2);font-size:.95rem}
+.retract p{margin:0;color:var(--ink-2);font-size:.95rem;line-height:1.55}
+.retract p.was + p{margin-top:5px}
 .retract .was{font-family:var(--mono);font-size:11px;color:var(--red-lit);letter-spacing:.05em}
 
 /* ── code ────────────────────────────────────────────────────────── */
@@ -215,6 +218,7 @@ footer{padding:60px var(--gutter) 84px;border-top:1px solid var(--rule);
   margin-left:var(--rail);font-family:var(--mono);font-size:11px;
   color:var(--ink-3);letter-spacing:.04em}
 footer a{border:0;color:var(--ink-2)} footer a:hover{color:#fff}
+footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
 
 @media (max-width:900px){
   :root{--rail:0px}

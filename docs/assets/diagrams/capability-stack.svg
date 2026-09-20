@@ -1,70 +1,70 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 720" width="1160" height="720" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
   <defs>
     <linearGradient id="bg5" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#0c1322"/><stop offset="1" stop-color="#0a0f1c"/>
+      <stop offset="0" stop-color="#080a0e"/><stop offset="1" stop-color="#07090d"/>
     </linearGradient>
   </defs>
   <rect width="1160" height="720" fill="url(#bg5)"/>
 
-  <text x="40" y="50" fill="#e6edf7" font-size="25" font-weight="700">The capability stack — and how fast each layer thinks</text>
-  <text x="40" y="76" fill="#93a4bd" font-size="14">Each layer trusts the one below it to be faster than the problem it is solving. Colour marks how well each is verified today.</text>
+  <text x="40" y="50" fill="#a3c0f5" font-size="25" font-weight="700">The capability stack — and how fast each layer thinks</text>
+  <text x="40" y="76" fill="#6293ee" font-size="14">Each layer trusts the one below it to be faster than the problem it is solving. Colour marks how well each is verified today.</text>
 
   <g transform="translate(40,96)">
-    <rect x="0" y="0" width="1080" height="38" rx="9" fill="#101a2b" stroke="#2a3a55"/>
-    <circle cx="26" cy="19" r="6" fill="#37d6a8"/><text x="40" y="24" fill="#9ff0d3" font-size="12.5">verified in water</text>
-    <circle cx="214" cy="19" r="6" fill="#8b7cf6"/><text x="228" y="24" fill="#b6a9f0" font-size="12.5">verified on bench or real footage</text>
-    <circle cx="512" cy="19" r="6" fill="#f2b134"/><text x="526" y="24" fill="#e0c48a" font-size="12.5">built and tested in software, never flown</text>
-    <circle cx="828" cy="19" r="6" fill="#f2617a"/><text x="842" y="24" fill="#f0a2b2" font-size="12.5">blocked on hardware or a firmware merge</text>
+    <rect x="0" y="0" width="1080" height="38" rx="9" fill="#090c11" stroke="#11429c"/>
+    <circle cx="26" cy="19" r="6" fill="#30ddc9"/><text x="40" y="24" fill="#a0efe6" font-size="12.5">verified in water</text>
+    <circle cx="214" cy="19" r="6" fill="#81a8f1"/><text x="228" y="24" fill="#c4acec" font-size="12.5">verified on bench or real footage</text>
+    <circle cx="512" cy="19" r="6" fill="#fa9d2c"/><text x="526" y="24" fill="#fbbc6f" font-size="12.5">built and tested in software, never flown</text>
+    <circle cx="828" cy="19" r="6" fill="#ff5454"/><text x="842" y="24" fill="#ff9393" font-size="12.5">blocked on hardware or a firmware merge</text>
   </g>
 
-  <rect x="40" y="154" width="1080" height="112" rx="12" fill="#12291f" stroke="#2f6b52"/>
-  <text x="64" y="182" fill="#9ff0d3" font-size="16" font-weight="700">REFLEX — on the board, 500 Hz</text>
-  <text x="64" y="204" fill="#7fbfa2" font-size="12" font-family="ui-monospace, monospace">2 ms per pass · runs with the Pi unplugged</text>
+  <rect x="40" y="154" width="1080" height="112" rx="12" fill="#090c11" stroke="#189587"/>
+  <text x="64" y="182" fill="#a0efe6" font-size="16" font-weight="700">REFLEX — on the board, 500 Hz</text>
+  <text x="64" y="204" fill="#5ae4d4" font-size="12" font-family="ui-monospace, monospace">2 ms per pass · runs with the Pi unplugged</text>
   <g font-size="12.5">
-    <circle cx="430" cy="178" r="5" fill="#8b7cf6"/><text x="444" y="183" fill="#cfe9dd">attitude and heading hold</text>
-    <circle cx="430" cy="204" r="5" fill="#8b7cf6"/><text x="444" y="209" fill="#cfe9dd">eight-thruster mixing, saturation kept in shape</text>
-    <circle cx="430" cy="230" r="5" fill="#f2b134"/><text x="444" y="235" fill="#cfe9dd">failsafes: leak, battery, lost link, lost companion</text>
-    <circle cx="790" cy="178" r="5" fill="#f2617a"/><text x="804" y="183" fill="#cfe9dd">depth hold — loop never closed in water</text>
-    <circle cx="790" cy="204" r="5" fill="#f2b134"/><text x="804" y="209" fill="#cfe9dd">on-board move primitives, braked on board</text>
-    <circle cx="790" cy="230" r="5" fill="#f2b134"/><text x="804" y="235" fill="#cfe9dd">self-tuning of the control gains</text>
+    <circle cx="430" cy="178" r="5" fill="#81a8f1"/><text x="444" y="183" fill="#a7f1e8">attitude and heading hold</text>
+    <circle cx="430" cy="204" r="5" fill="#81a8f1"/><text x="444" y="209" fill="#a7f1e8">eight-thruster mixing, saturation kept in shape</text>
+    <circle cx="430" cy="230" r="5" fill="#fa9d2c"/><text x="444" y="235" fill="#a7f1e8">failsafes: leak, battery, lost link, lost companion</text>
+    <circle cx="790" cy="178" r="5" fill="#ff5454"/><text x="804" y="183" fill="#a7f1e8">depth hold — loop never closed in water</text>
+    <circle cx="790" cy="204" r="5" fill="#fa9d2c"/><text x="804" y="209" fill="#a7f1e8">on-board move primitives, braked on board</text>
+    <circle cx="790" cy="230" r="5" fill="#fa9d2c"/><text x="804" y="235" fill="#a7f1e8">self-tuning of the control gains</text>
   </g>
 
-  <rect x="40" y="280" width="1080" height="112" rx="12" fill="#1a1630" stroke="#5b4d9a"/>
-  <text x="64" y="308" fill="#c4b8ff" font-size="16" font-weight="700">PERCEPTION — Pi 5 + Hailo-8</text>
-  <text x="64" y="330" fill="#9b8fd0" font-size="12" font-family="ui-monospace, monospace">54 Hz through the ROS graph · 18 ms photon to detection</text>
+  <rect x="40" y="280" width="1080" height="112" rx="12" fill="#0a0d13" stroke="#602cbb"/>
+  <text x="64" y="308" fill="#c4acec" font-size="16" font-weight="700">PERCEPTION — Pi 5 + Hailo-8</text>
+  <text x="64" y="330" fill="#a27ee1" font-size="12" font-family="ui-monospace, monospace">54 Hz through the ROS graph · 18 ms photon to detection</text>
   <g font-size="12.5">
-    <circle cx="430" cy="304" r="5" fill="#8b7cf6"/><text x="444" y="309" fill="#ded7f5">detection on a dedicated inference chip</text>
-    <circle cx="430" cy="330" r="5" fill="#8b7cf6"/><text x="444" y="335" fill="#ded7f5">segmentation, decoded without leaving integers</text>
-    <circle cx="430" cy="356" r="5" fill="#8b7cf6"/><text x="444" y="361" fill="#ded7f5">a visual lock that survives a blinking detector</text>
-    <circle cx="790" cy="304" r="5" fill="#8b7cf6"/><text x="804" y="309" fill="#ded7f5">flat-port refraction corrected, per camera</text>
-    <circle cx="790" cy="330" r="5" fill="#8b7cf6"/><text x="804" y="335" fill="#ded7f5">measured calibration — 46.7° in water</text>
-    <circle cx="790" cy="356" r="5" fill="#8b7cf6"/><text x="804" y="361" fill="#ded7f5">newest-frame camera path, 16.9 ms stale</text>
+    <circle cx="430" cy="304" r="5" fill="#81a8f1"/><text x="444" y="309" fill="#c4acec">detection on a dedicated inference chip</text>
+    <circle cx="430" cy="330" r="5" fill="#81a8f1"/><text x="444" y="335" fill="#c4acec">segmentation, decoded without leaving integers</text>
+    <circle cx="430" cy="356" r="5" fill="#81a8f1"/><text x="444" y="361" fill="#c4acec">a visual lock that survives a blinking detector</text>
+    <circle cx="790" cy="304" r="5" fill="#81a8f1"/><text x="804" y="309" fill="#c4acec">flat-port refraction corrected, per camera</text>
+    <circle cx="790" cy="330" r="5" fill="#81a8f1"/><text x="804" y="335" fill="#c4acec">measured calibration — 46.7° in water</text>
+    <circle cx="790" cy="356" r="5" fill="#81a8f1"/><text x="804" y="361" fill="#c4acec">newest-frame camera path, 16.9 ms stale</text>
   </g>
 
-  <rect x="40" y="406" width="1080" height="112" rx="12" fill="#13263a" stroke="#3c5f7a"/>
-  <text x="64" y="434" fill="#9fc3dd" font-size="16" font-weight="700">ESTIMATION — where am I, and am I moving</text>
-  <text x="64" y="456" fill="#7d9db8" font-size="12" font-family="ui-monospace, monospace">none of this existed on the old stack</text>
+  <rect x="40" y="406" width="1080" height="112" rx="12" fill="#0b0e14" stroke="#1245a4"/>
+  <text x="64" y="434" fill="#8aaef2" font-size="16" font-weight="700">ESTIMATION — where am I, and am I moving</text>
+  <text x="64" y="456" fill="#4a82eb" font-size="12" font-family="ui-monospace, monospace">none of this existed on the old stack</text>
   <g font-size="12.5">
-    <circle cx="430" cy="430" r="5" fill="#8b7cf6"/><text x="444" y="435" fill="#d5e3ef">velocity from the downward camera</text>
-    <circle cx="430" cy="456" r="5" fill="#8b7cf6"/><text x="444" y="461" fill="#d5e3ef">height above the floor, from one pixel</text>
-    <circle cx="430" cy="482" r="5" fill="#f2b134"/><text x="444" y="487" fill="#d5e3ef">an invariant filter fusing IMU, depth and flow</text>
-    <circle cx="790" cy="430" r="5" fill="#f2b134"/><text x="804" y="435" fill="#d5e3ef">late measurements replayed at their true time</text>
-    <circle cx="790" cy="456" r="5" fill="#f2b134"/><text x="804" y="461" fill="#d5e3ef">position fixes from a prop of known place</text>
-    <circle cx="790" cy="482" r="5" fill="#f2b134"/><text x="804" y="487" fill="#d5e3ef">heading from lane lines and floor tiles</text>
+    <circle cx="430" cy="430" r="5" fill="#81a8f1"/><text x="444" y="435" fill="#a3c0f5">velocity from the downward camera</text>
+    <circle cx="430" cy="456" r="5" fill="#81a8f1"/><text x="444" y="461" fill="#a3c0f5">height above the floor, from one pixel</text>
+    <circle cx="430" cy="482" r="5" fill="#fa9d2c"/><text x="444" y="487" fill="#a3c0f5">an invariant filter fusing IMU, depth and flow</text>
+    <circle cx="790" cy="430" r="5" fill="#fa9d2c"/><text x="804" y="435" fill="#a3c0f5">late measurements replayed at their true time</text>
+    <circle cx="790" cy="456" r="5" fill="#fa9d2c"/><text x="804" y="461" fill="#a3c0f5">position fixes from a prop of known place</text>
+    <circle cx="790" cy="482" r="5" fill="#fa9d2c"/><text x="804" y="487" fill="#a3c0f5">heading from lane lines and floor tiles</text>
   </g>
 
-  <rect x="40" y="532" width="1080" height="112" rx="12" fill="#101a2b" stroke="#2a3a55"/>
-  <text x="64" y="560" fill="#cbd7e8" font-size="16" font-weight="700">MISSION — what to do, and when to give up</text>
-  <text x="64" y="582" fill="#7d8ea8" font-size="12" font-family="ui-monospace, monospace">seconds, not milliseconds</text>
+  <rect x="40" y="532" width="1080" height="112" rx="12" fill="#090c11" stroke="#11429c"/>
+  <text x="64" y="560" fill="#a3c0f5" font-size="16" font-weight="700">MISSION — what to do, and when to give up</text>
+  <text x="64" y="582" fill="#3c78e9" font-size="12" font-family="ui-monospace, monospace">seconds, not milliseconds</text>
   <g font-size="12.5">
-    <circle cx="430" cy="556" r="5" fill="#8b7cf6"/><text x="444" y="561" fill="#d5e3ef">two vision verbs: centre on it, or drive to it</text>
-    <circle cx="430" cy="582" r="5" fill="#f2b134"/><text x="444" y="587" fill="#d5e3ef">a run budget that skips what it cannot afford</text>
-    <circle cx="430" cy="608" r="5" fill="#f2b134"/><text x="444" y="613" fill="#d5e3ef">task deadlines that abandon cleanly</text>
-    <circle cx="790" cy="556" r="5" fill="#f2b134"/><text x="804" y="561" fill="#d5e3ef">payload fired mid-hold, on a fresh frame</text>
-    <circle cx="790" cy="582" r="5" fill="#f2b134"/><text x="804" y="587" fill="#d5e3ef">evidence written beside every run</text>
-    <circle cx="790" cy="608" r="5" fill="#f2617a"/><text x="804" y="613" fill="#d5e3ef">distance moves — waiting on a firmware merge</text>
+    <circle cx="430" cy="556" r="5" fill="#81a8f1"/><text x="444" y="561" fill="#a3c0f5">two vision verbs: centre on it, or drive to it</text>
+    <circle cx="430" cy="582" r="5" fill="#fa9d2c"/><text x="444" y="587" fill="#a3c0f5">a run budget that skips what it cannot afford</text>
+    <circle cx="430" cy="608" r="5" fill="#fa9d2c"/><text x="444" y="613" fill="#a3c0f5">task deadlines that abandon cleanly</text>
+    <circle cx="790" cy="556" r="5" fill="#fa9d2c"/><text x="804" y="561" fill="#a3c0f5">payload fired mid-hold, on a fresh frame</text>
+    <circle cx="790" cy="582" r="5" fill="#fa9d2c"/><text x="804" y="587" fill="#a3c0f5">evidence written beside every run</text>
+    <circle cx="790" cy="608" r="5" fill="#ff5454"/><text x="804" y="613" fill="#a3c0f5">distance moves — waiting on a firmware merge</text>
   </g>
 
-  <text x="40" y="676" fill="#93a4bd" font-size="12.5">Read it downward and it is a dependency chain: the mission can be slow because estimation is honest; estimation can be honest because</text>
-  <text x="40" y="696" fill="#93a4bd" font-size="12.5">perception is calibrated; perception can be calibrated because the reflex layer holds the hull still enough to measure anything at all.</text>
+  <text x="40" y="676" fill="#6293ee" font-size="12.5">Read it downward and it is a dependency chain: the mission can be slow because estimation is honest; estimation can be honest because</text>
+  <text x="40" y="696" fill="#6293ee" font-size="12.5">perception is calibrated; perception can be calibrated because the reflex layer holds the hull still enough to measure anything at all.</text>
 </svg>

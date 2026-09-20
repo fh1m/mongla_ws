@@ -86,3 +86,6 @@ trt_export.log
 # ─── Knowledge-graph / code-analysis tool artifacts (regenerable) ──────
 graphify-out/
 .understand-anything/
+
+# rendered doc previews (tools/preview_docs.py) - look at them, never publish them
+docs/_preview_*.html
