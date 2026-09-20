@@ -38,7 +38,7 @@ In PlotJuggler: start **ROS2 Topic Subscriber**, then drag:
 | Tool | Best for |
 |------|----------|
 | **PlotJuggler** | Fast multi-plot timeseries, transforms, CSV export |
-| **Foxglove / Lichtblick** (`mongla_ws`) | 3D, images, bags — see `mongla_ws/.claude/context/foxglove-and-bags.md` |
+| **Foxglove / Lichtblick** (`mongla_ws`) | 3D, images, bags — see `mongla_ws/.claude/context/platform/foxglove-and-bags.md` |
 | **Lab Operate** | Cams + teleop + record clips |
 
 ## Tips

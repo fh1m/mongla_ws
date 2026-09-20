@@ -20,7 +20,7 @@
 #        noisy desktop actions (Ubuntu 22.04 = polkit 0.105 = .pkla, not rules.d).
 #
 #   Full guide + laptop-side steps + emergency recovery:
-#     .claude/context/remote-access.md
+#     .claude/context/platform/remote-access.md
 #
 # IDEMPOTENT — safe to re-run. Re-run after an SSD reflash to restore all of it.
 #
@@ -184,5 +184,5 @@ cat <<EOF
 == Emergency (a wedged desktop) — over mosh/ssh, NO reboot, mission keeps running:
    sudo systemctl restart gdm3    # or: sudo pkill -KILL -u $TARGET_USER ; then reconnect
 
-Full guide: .claude/context/remote-access.md
+Full guide: .claude/context/platform/remote-access.md
 EOF

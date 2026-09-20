@@ -68,7 +68,7 @@ mission_scoreboard_*.json
 *.engine
 # Hailo-8 compiled graph -- the Pi + AI HAT+ equivalent of a .engine. Same
 # reasoning: a device-locked binary artifact, mirrored from ~/models by
-# build_dubomini.sh, never committed. The <stem>.yaml sidecar beside it IS
+# build_mongla.sh, never committed. The <stem>.yaml sidecar beside it IS
 # committed, and on this backend it is mandatory rather than advisory.
 *.hef
 trt_export.log
