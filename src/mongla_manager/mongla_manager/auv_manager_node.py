@@ -748,7 +748,7 @@ class AUVManagerNode(Node):
 
         self.get_logger().info(SEPARATOR)
         self.get_logger().info(
-            f' MONGLA · DUBURI AUV MANAGER  |  mode: {self._mode_name}')
+            f' MONGLA AUV MANAGER  |  mode: {self._mode_name}')
         if self._is_srot:
             self.get_logger().info(
                 ' Autopilot: SROT board  ·  firmware: Hengla  ·  link: USB serial')
