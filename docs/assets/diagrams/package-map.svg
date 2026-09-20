@@ -1,97 +1,97 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 700" width="1160" height="700" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
   <defs>
     <linearGradient id="bg6" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#0c1322"/><stop offset="1" stop-color="#0a0f1c"/>
+      <stop offset="0" stop-color="#080a0e"/><stop offset="1" stop-color="#07090d"/>
     </linearGradient>
     <marker id="m6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0 0 L10 5 L0 10 z" fill="#8fa2bd"/>
+      <path d="M0 0 L10 5 L0 10 z" fill="#5f91ed"/>
     </marker>
     <marker id="m6t" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0 0 L10 5 L0 10 z" fill="#37d6a8"/>
+      <path d="M0 0 L10 5 L0 10 z" fill="#30ddc9"/>
     </marker>
     <marker id="m6v" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0 0 L10 5 L0 10 z" fill="#8b7cf6"/>
+      <path d="M0 0 L10 5 L0 10 z" fill="#81a8f1"/>
     </marker>
   </defs>
   <rect width="1160" height="700" fill="url(#bg6)"/>
 
-  <text x="40" y="50" fill="#e6edf7" font-size="25" font-weight="700">Seven packages, and the one road between them</text>
-  <text x="40" y="76" fill="#93a4bd" font-size="14">Every command in the system — CLI, mission script or state machine — arrives as one goal on one action, and leaves through one node.</text>
+  <text x="40" y="50" fill="#a3c0f5" font-size="25" font-weight="700">Seven packages, and the one road between them</text>
+  <text x="40" y="76" fill="#6293ee" font-size="14">Every command in the system — CLI, mission script or state machine — arrives as one goal on one action, and leaves through one node.</text>
 
-  <rect x="40" y="108" width="300" height="196" rx="12" fill="#101a2b" stroke="#2a3a55"/>
-  <text x="62" y="136" fill="#cbd7e8" font-size="15" font-weight="700">mongla_planner</text>
-  <text x="62" y="156" fill="#7d8ea8" font-size="11.5" font-family="ui-monospace, monospace">11k lines · 405 tests</text>
-  <text x="62" y="184" fill="#8fa2bd" font-size="12.5">the mission language, the CLI, the</text>
-  <text x="62" y="202" fill="#8fa2bd" font-size="12.5">missions themselves and the state</text>
-  <text x="62" y="220" fill="#8fa2bd" font-size="12.5">machines</text>
-  <text x="62" y="248" fill="#6f8fae" font-size="11.5" font-family="ui-monospace, monospace">mongla arm</text>
-  <text x="62" y="266" fill="#6f8fae" font-size="11.5" font-family="ui-monospace, monospace">mission sauvc_full</text>
-  <text x="62" y="284" fill="#6f8fae" font-size="11.5" font-family="ui-monospace, monospace">mongla.vision.align('gate', …)</text>
+  <rect x="40" y="108" width="300" height="196" rx="12" fill="#090c11" stroke="#11429c"/>
+  <text x="62" y="136" fill="#a3c0f5" font-size="15" font-weight="700">mongla_planner</text>
+  <text x="62" y="156" fill="#3c78e9" font-size="11.5" font-family="ui-monospace, monospace">11k lines · 405 tests</text>
+  <text x="62" y="184" fill="#5f91ed" font-size="12.5">the mission language, the CLI, the</text>
+  <text x="62" y="202" fill="#5f91ed" font-size="12.5">missions themselves and the state</text>
+  <text x="62" y="220" fill="#5f91ed" font-size="12.5">machines</text>
+  <text x="62" y="248" fill="#3474e9" font-size="11.5" font-family="ui-monospace, monospace">mongla arm</text>
+  <text x="62" y="266" fill="#3474e9" font-size="11.5" font-family="ui-monospace, monospace">mission sauvc_full</text>
+  <text x="62" y="284" fill="#3474e9" font-size="11.5" font-family="ui-monospace, monospace">mongla.vision.align('gate', …)</text>
 
-  <rect x="380" y="140" width="220" height="132" rx="12" fill="#16223a" stroke="#4a6488"/>
-  <text x="402" y="168" fill="#cbd7e8" font-size="15" font-weight="700">mongla_interfaces</text>
-  <text x="402" y="188" fill="#7d8ea8" font-size="11.5" font-family="ui-monospace, monospace">messages only</text>
-  <text x="402" y="216" fill="#8fa2bd" font-size="12.5">one action: /mongla/move</text>
-  <text x="402" y="236" fill="#8fa2bd" font-size="12.5">one state topic</text>
-  <text x="402" y="260" fill="#6f8fae" font-size="11.5">the whole cross-package surface</text>
+  <rect x="380" y="140" width="220" height="132" rx="12" fill="#0b0e15" stroke="#1550bd"/>
+  <text x="402" y="168" fill="#a3c0f5" font-size="15" font-weight="700">mongla_interfaces</text>
+  <text x="402" y="188" fill="#3c78e9" font-size="11.5" font-family="ui-monospace, monospace">messages only</text>
+  <text x="402" y="216" fill="#5f91ed" font-size="12.5">one action: /mongla/move</text>
+  <text x="402" y="236" fill="#5f91ed" font-size="12.5">one state topic</text>
+  <text x="402" y="260" fill="#3474e9" font-size="11.5">the whole cross-package surface</text>
 
-  <rect x="640" y="108" width="300" height="196" rx="12" fill="#101a2b" stroke="#3c5f7a"/>
-  <text x="662" y="136" fill="#e6edf7" font-size="15" font-weight="700">mongla_manager</text>
-  <text x="662" y="156" fill="#7d9db8" font-size="11.5" font-family="ui-monospace, monospace">8.5k lines · 388 tests</text>
-  <text x="662" y="184" fill="#93b6cf" font-size="12.5">the only node that talks to the board:</text>
-  <text x="662" y="202" fill="#93b6cf" font-size="12.5">owns the link, serves the action,</text>
-  <text x="662" y="220" fill="#93b6cf" font-size="12.5">publishes state, and decides whether</text>
-  <text x="662" y="238" fill="#93b6cf" font-size="12.5">a verb runs on the board or here</text>
-  <text x="662" y="266" fill="#6f8fae" font-size="11.5" font-family="ui-monospace, monospace">start · connect · bringup_check</text>
-  <text x="662" y="284" fill="#6f8fae" font-size="11.5" font-family="ui-monospace, monospace">autotune · flare_order</text>
+  <rect x="640" y="108" width="300" height="196" rx="12" fill="#090c11" stroke="#1245a4"/>
+  <text x="662" y="136" fill="#a3c0f5" font-size="15" font-weight="700">mongla_manager</text>
+  <text x="662" y="156" fill="#4a82eb" font-size="11.5" font-family="ui-monospace, monospace">8.5k lines · 388 tests</text>
+  <text x="662" y="184" fill="#739eef" font-size="12.5">the only node that talks to the board:</text>
+  <text x="662" y="202" fill="#739eef" font-size="12.5">owns the link, serves the action,</text>
+  <text x="662" y="220" fill="#739eef" font-size="12.5">publishes state, and decides whether</text>
+  <text x="662" y="238" fill="#739eef" font-size="12.5">a verb runs on the board or here</text>
+  <text x="662" y="266" fill="#3474e9" font-size="11.5" font-family="ui-monospace, monospace">start · connect · bringup_check</text>
+  <text x="662" y="284" fill="#3474e9" font-size="11.5" font-family="ui-monospace, monospace">autotune · flare_order</text>
 
-  <rect x="640" y="336" width="300" height="152" rx="12" fill="#12291f" stroke="#2f6b52"/>
-  <text x="662" y="364" fill="#e6edf7" font-size="15" font-weight="700">mongla_control</text>
-  <text x="662" y="384" fill="#6fbfa5" font-size="11.5" font-family="ui-monospace, monospace">13.2k lines · 865 tests · no nodes</text>
-  <text x="662" y="412" fill="#a9e3c9" font-size="12.5">the verb implementations and the</text>
-  <text x="662" y="430" fill="#a9e3c9" font-size="12.5">flight-controller boundary: one class</text>
-  <text x="662" y="448" fill="#a9e3c9" font-size="12.5">per backend, behind one interface</text>
-  <text x="662" y="472" fill="#5fae8d" font-size="11.5" font-family="ui-monospace, monospace">srot · pixhawk (simulator)</text>
+  <rect x="640" y="336" width="300" height="152" rx="12" fill="#090c11" stroke="#189587"/>
+  <text x="662" y="364" fill="#a3c0f5" font-size="15" font-weight="700">mongla_control</text>
+  <text x="662" y="384" fill="#4ce2d0" font-size="11.5" font-family="ui-monospace, monospace">13.2k lines · 865 tests · no nodes</text>
+  <text x="662" y="412" fill="#9defe5" font-size="12.5">the verb implementations and the</text>
+  <text x="662" y="430" fill="#9defe5" font-size="12.5">flight-controller boundary: one class</text>
+  <text x="662" y="448" fill="#9defe5" font-size="12.5">per backend, behind one interface</text>
+  <text x="662" y="472" fill="#30ddc9" font-size="11.5" font-family="ui-monospace, monospace">srot · pixhawk (simulator)</text>
 
-  <rect x="40" y="336" width="286" height="152" rx="12" fill="#1a1630" stroke="#5b4d9a"/>
-  <text x="62" y="364" fill="#e6edf7" font-size="15" font-weight="700">mongla_vision</text>
-  <text x="62" y="384" fill="#9b8fd0" font-size="11.5" font-family="ui-monospace, monospace">24k lines · 824 tests</text>
-  <text x="62" y="412" fill="#ded7f5" font-size="12.5">cameras, the Hailo detector, tracking,</text>
-  <text x="62" y="430" fill="#ded7f5" font-size="12.5">the visual lock, optical flow, optics</text>
-  <text x="62" y="448" fill="#ded7f5" font-size="12.5">and calibration, the mission console</text>
-  <text x="62" y="472" fill="#9b8fd0" font-size="11.5" font-family="ui-monospace, monospace">detections · lock · velocity</text>
+  <rect x="40" y="336" width="286" height="152" rx="12" fill="#0a0d13" stroke="#602cbb"/>
+  <text x="62" y="364" fill="#a3c0f5" font-size="15" font-weight="700">mongla_vision</text>
+  <text x="62" y="384" fill="#a27ee1" font-size="11.5" font-family="ui-monospace, monospace">24k lines · 824 tests</text>
+  <text x="62" y="412" fill="#c4acec" font-size="12.5">cameras, the Hailo detector, tracking,</text>
+  <text x="62" y="430" fill="#c4acec" font-size="12.5">the visual lock, optical flow, optics</text>
+  <text x="62" y="448" fill="#c4acec" font-size="12.5">and calibration, the mission console</text>
+  <text x="62" y="472" fill="#a27ee1" font-size="11.5" font-family="ui-monospace, monospace">detections · lock · velocity</text>
 
-  <rect x="352" y="336" width="258" height="152" rx="12" fill="#13263a" stroke="#3c5f7a"/>
-  <text x="374" y="364" fill="#e6edf7" font-size="15" font-weight="700">mongla_localization</text>
-  <text x="374" y="384" fill="#7d9db8" font-size="11.5" font-family="ui-monospace, monospace">3.6k lines · 244 tests</text>
-  <text x="374" y="412" fill="#d5e3ef" font-size="12.5">the estimator: an invariant filter,</text>
-  <text x="374" y="430" fill="#d5e3ef" font-size="12.5">replay of late measurements, course</text>
-  <text x="374" y="448" fill="#d5e3ef" font-size="12.5">priors, pose fusion</text>
-  <text x="374" y="472" fill="#7d9db8" font-size="11.5" font-family="ui-monospace, monospace">odom · fixes · heading</text>
+  <rect x="352" y="336" width="258" height="152" rx="12" fill="#0b0e14" stroke="#1245a4"/>
+  <text x="374" y="364" fill="#a3c0f5" font-size="15" font-weight="700">mongla_localization</text>
+  <text x="374" y="384" fill="#4a82eb" font-size="11.5" font-family="ui-monospace, monospace">3.6k lines · 244 tests</text>
+  <text x="374" y="412" fill="#a3c0f5" font-size="12.5">the estimator: an invariant filter,</text>
+  <text x="374" y="430" fill="#a3c0f5" font-size="12.5">replay of late measurements, course</text>
+  <text x="374" y="448" fill="#a3c0f5" font-size="12.5">priors, pose fusion</text>
+  <text x="374" y="472" fill="#4a82eb" font-size="11.5" font-family="ui-monospace, monospace">odom · fixes · heading</text>
 
-  <rect x="972" y="336" width="148" height="152" rx="12" fill="#101a2b" stroke="#2a3a55"/>
-  <text x="994" y="364" fill="#e6edf7" font-size="14.5" font-weight="700">mongla_sensors</text>
-  <text x="994" y="384" fill="#7d8ea8" font-size="11" font-family="ui-monospace, monospace">1.9k · 31 tests</text>
-  <text x="994" y="412" fill="#8fa2bd" font-size="12">one interface for</text>
-  <text x="994" y="430" fill="#8fa2bd" font-size="12">"where is north",</text>
-  <text x="994" y="448" fill="#8fa2bd" font-size="12">whatever provides it</text>
+  <rect x="972" y="336" width="148" height="152" rx="12" fill="#090c11" stroke="#11429c"/>
+  <text x="994" y="364" fill="#a3c0f5" font-size="14.5" font-weight="700">mongla_sensors</text>
+  <text x="994" y="384" fill="#3c78e9" font-size="11" font-family="ui-monospace, monospace">1.9k · 31 tests</text>
+  <text x="994" y="412" fill="#5f91ed" font-size="12">one interface for</text>
+  <text x="994" y="430" fill="#5f91ed" font-size="12">"where is north",</text>
+  <text x="994" y="448" fill="#5f91ed" font-size="12">whatever provides it</text>
 
-  <line x1="340" y1="206" x2="376" y2="206" stroke="#8fa2bd" stroke-width="2" marker-end="url(#m6)"/>
-  <line x1="600" y1="206" x2="636" y2="206" stroke="#8fa2bd" stroke-width="2" marker-end="url(#m6)"/>
-  <line x1="790" y1="304" x2="790" y2="332" stroke="#37d6a8" stroke-width="2" marker-end="url(#m6t)"/>
-  <line x1="326" y1="412" x2="348" y2="412" stroke="#8b7cf6" stroke-width="2" marker-end="url(#m6v)"/>
-  <path d="M482 336 L482 316 L636 316" fill="none" stroke="#8fa2bd" stroke-width="1.8" marker-end="url(#m6)"/>
-  <line x1="968" y1="412" x2="944" y2="412" stroke="#8fa2bd" stroke-width="1.8" marker-end="url(#m6)"/>
+  <line x1="340" y1="206" x2="376" y2="206" stroke="#5f91ed" stroke-width="2" marker-end="url(#m6)"/>
+  <line x1="600" y1="206" x2="636" y2="206" stroke="#5f91ed" stroke-width="2" marker-end="url(#m6)"/>
+  <line x1="790" y1="304" x2="790" y2="332" stroke="#30ddc9" stroke-width="2" marker-end="url(#m6t)"/>
+  <line x1="326" y1="412" x2="348" y2="412" stroke="#81a8f1" stroke-width="2" marker-end="url(#m6v)"/>
+  <path d="M482 336 L482 316 L636 316" fill="none" stroke="#5f91ed" stroke-width="1.8" marker-end="url(#m6)"/>
+  <line x1="968" y1="412" x2="944" y2="412" stroke="#5f91ed" stroke-width="1.8" marker-end="url(#m6)"/>
 
-  <rect x="640" y="520" width="480" height="76" rx="12" fill="#12291f" stroke="#2f6b52"/>
-  <text x="662" y="548" fill="#9ff0d3" font-size="15" font-weight="700">SROT board — one USB-C cable, MAVLink</text>
-  <text x="662" y="574" fill="#8fd7b8" font-size="12.5">a streamed demand, or a primitive the board runs by itself</text>
-  <line x1="790" y1="488" x2="790" y2="516" stroke="#37d6a8" stroke-width="2.2" marker-end="url(#m6t)"/>
+  <rect x="640" y="520" width="480" height="76" rx="12" fill="#090c11" stroke="#189587"/>
+  <text x="662" y="548" fill="#a0efe6" font-size="15" font-weight="700">SROT board — one USB-C cable, MAVLink</text>
+  <text x="662" y="574" fill="#7ceadd" font-size="12.5">a streamed demand, or a primitive the board runs by itself</text>
+  <line x1="790" y1="488" x2="790" y2="516" stroke="#30ddc9" stroke-width="2.2" marker-end="url(#m6t)"/>
 
-  <rect x="40" y="520" width="566" height="76" rx="12" fill="#101a2b" stroke="#2a3a55"/>
-  <text x="62" y="548" fill="#cbd7e8" font-size="14" font-weight="700">Why one action instead of many topics</text>
-  <text x="62" y="574" fill="#8fa2bd" font-size="12.5">One goal at a time, cancellable, with a typed result — so a mission can be interrupted and still land safely.</text>
+  <rect x="40" y="520" width="566" height="76" rx="12" fill="#090c11" stroke="#11429c"/>
+  <text x="62" y="548" fill="#a3c0f5" font-size="14" font-weight="700">Why one action instead of many topics</text>
+  <text x="62" y="574" fill="#5f91ed" font-size="12.5">One goal at a time, cancellable, with a typed result — so a mission can be interrupted and still land safely.</text>
 
-  <text x="40" y="646" fill="#93a4bd" font-size="12.5">Adding a verb touches two files: a row in the command registry and a method of the same name. The CLI, the action server and the Python</text>
-  <text x="40" y="666" fill="#93a4bd" font-size="12.5">client all pick it up automatically — which is why the surface has stayed one action across thirty verbs.</text>
+  <text x="40" y="646" fill="#6293ee" font-size="12.5">Adding a verb touches two files: a row in the command registry and a method of the same name. The CLI, the action server and the Python</text>
+  <text x="40" y="666" fill="#6293ee" font-size="12.5">client all pick it up automatically — which is why the surface has stayed one action across thirty verbs.</text>
 </svg>
