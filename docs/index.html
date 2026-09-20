@@ -19,17 +19,21 @@
   <b data-rail="origin"><span class="m">02</span>origin</b>
   <b data-rail="shift"><span class="m">03</span>the shift</b>
   <b data-rail="body"><span class="m">04</span>the body</b>
-  <b data-rail="frame"><span class="m">05</span>one frame</b>
-  <b data-rail="blink"><span class="m">06</span>the blink</b>
-  <b data-rail="water"><span class="m">07</span>retractions</b>
-  <b data-rail="instruments"><span class="m">08</span>instruments</b>
-  <b data-rail="asked"><span class="m">09</span>language</b>
-  <b data-rail="open"><span class="m">10</span>open</b>
+  <b data-rail="repos"><span class="m">05</span>the suite</b>
+  <b data-rail="frame"><span class="m">06</span>one frame</b>
+  <b data-rail="thinking"><span class="m">07</span>one task</b>
+  <b data-rail="blink"><span class="m">08</span>the blink</b>
+  <b data-rail="archive"><span class="m">09</span>the archive</b>
+  <b data-rail="water"><span class="m">10</span>retractions</b>
+  <b data-rail="instruments"><span class="m">11</span>instruments</b>
+  <b data-rail="asked"><span class="m">12</span>language</b>
+  <b data-rail="shoulders"><span class="m">13</span>shoulders</b>
+  <b data-rail="open"><span class="m">14</span>open</b>
 </nav>
 
 <main>
 
-<!-- 00 ───────────────────────────────────────────────────────────── -->
+<!-- 00 ───────────────────────────────────────────────────────────────── -->
 <section id="surface">
  <div class="wrap">
   <p class="mark">Mongla <i>//</i> an autonomy stack for autonomous underwater vehicles</p>
@@ -50,7 +54,7 @@
  </div>
 </section>
 
-<!-- 01 ───────────────────────────────────────────────────────────── -->
+<!-- 01 ───────────────────────────────────────────────────────────────── -->
 <section id="medium">
  <div class="wrap">
   <h2 class="col">Everything down here fights you.</h2>
@@ -89,7 +93,7 @@
  </div>
 </section>
 
-<!-- 02 ───────────────────────────────────────────────────────────── -->
+<!-- 02 ───────────────────────────────────────────────────────────────── -->
 <section id="origin">
  <div class="wrap">
   <p class="mark">Act one <i>//</i> where it learned</p>
@@ -125,7 +129,7 @@
  </div>
 </section>
 
-<!-- 03 ───────────────────────────────────────────────────────────── -->
+<!-- 03 ───────────────────────────────────────────────────────────────── -->
 <section id="shift">
  <div class="wrap">
   <p class="mark">Act two <i>//</i> opening the box</p>
@@ -159,7 +163,7 @@
  </div>
 </section>
 
-<!-- 04 ───────────────────────────────────────────────────────────── -->
+<!-- 04 ───────────────────────────────────────────────────────────────── -->
 <section id="body">
  <div class="wrap">
   <p class="mark">The body <i>//</i> 702 mm, five thrusters, one uncontrolled axis</p>
@@ -307,7 +311,64 @@
  </div>
 </section>
 
-<!-- 05 ───────────────────────────────────────────────────────────── -->
+<!-- 05 ───────────────────────────────────────────────────────────────── -->
+<section id="repos">
+ <div class="wrap">
+  <p class="mark">The suite <i>//</i> three repositories, one wire</p>
+  <h2 class="col">Mongla is the soul. It does not own the body.</h2>
+  <p class="lede col quiet">Four repositories, two authors, and a rule that is easy to state and
+    hard to keep: <strong>we never commit to theirs, they never commit to ours.</strong> Anything
+    missing at the low level is a pull request, not a workaround on our side.</p>
+
+  <table class="ledger">
+   <thead><tr><th>repository</th><th>what it is</th><th>who owns it</th><th>how we reach it</th></tr></thead>
+   <tbody>
+    <tr><td><em>Mongla</em></td><td>Perception, estimation, mission language, simulator — this repository</td>
+        <td>Muhammad Fahim Faisal</td><td class="num">—</td></tr>
+    <tr><td><em>Hengla</em> — srot-control-board</td><td>The firmware. ESP32 dual-core plus an RP2350 thruster co-processor</td>
+        <td>Rakibul Islam</td><td class="num">MAVLink 2 over one USB-C cable</td></tr>
+    <tr><td><em>Bondor</em> — srot-ground-station</td><td>The operator's desktop GCS, plus a LoRa bridge</td>
+        <td>Rakibul Islam</td><td class="num">serial · UDP 14550 · LoRa 433&#8239;MHz</td></tr>
+    <tr><td>srot-esc-flasher</td><td>Bench tool — puts Bluejay on the ESCs</td>
+        <td>Rakibul Islam</td><td class="num">4-way interface</td></tr>
+   </tbody>
+  </table>
+
+  <h3 style="margin-top:56px">Hengla — what runs on the board</h3>
+  <p class="col quiet" style="margin-top:12px">Core 1 is the flight loop and nothing else is
+    permitted to run there: read the IMU, decide what each axis should do, split that across eight
+    thrusters, listen to what came back, repeat two milliseconds later. Core 0 carries everything
+    that can afford to wait — MAVLink at 100&#8239;Hz, LoRa and the SD card at 20, the display at
+    30. The RP2350 speaks bidirectional DShot, so an ESC reports the RPM it actually reached
+    rather than the one it was asked for.</p>
+  <p class="col quiet">That last detail is the one worth pausing on. On the old stack the motors
+    never answered: you asked for thrust and the honest answer to <em>"is thruster three actually
+    spinning?"</em> was <em>nobody knows</em>. Telemetry back from the ESC turns an open question
+    into a measurement — which is exactly how we learned that
+    <span class="nr">958 of 958</span> recorded ESC frames read zero with nothing plugged in, and
+    that counting messages is not a health check.</p>
+
+  <h3 style="margin-top:44px">Bondor — the operator's side</h3>
+  <p class="col quiet" style="margin-top:12px">An Electron and React desktop application built
+    specifically for this board: teleop, a <code>SROT_MOVE</code> console, parameters, calibration,
+    motor test, PID tuning and autotune, black-box analysis and a configurable joystick tab. It
+    connects over USB serial at 115200 — opened with DTR and RTS de-asserted, deliberately, so
+    that attaching a ground station does not reset the flight controller — or over UDP, or
+    receive-only over LoRa at 433&#8239;MHz, 250&#8239;kHz bandwidth, SF7, CR 4:5.</p>
+  <p class="col quiet">Three copies of the wire contract exist on purpose, because there are no
+    submodules across the suite: the LoRa struct, the vendored MAVLink dialect, and a hand-mirrored
+    TypeScript copy of the message ids. The firmware is the source of truth for all three, and a
+    mismatch does not raise an error — it fails CRC silently and looks exactly like being out of
+    radio range. On our side the same hazard is answered by a test that reads the firmware's own
+    headers and fails if our constants have drifted from them.</p>
+  <p class="quiet" style="font-size:.92rem;max-width:66ch;margin-top:20px">Bondor is not
+    screenshotted here. It is the firmware team's application, it needs the board attached to show
+    anything true, and a picture of it running against nothing would be a picture of nothing. The
+    operator surface further down this page is ours, and it is real.</p>
+ </div>
+</section>
+
+<!-- 06 ───────────────────────────────────────────────────────────────── -->
 <section id="frame">
  <div class="wrap">
   <p class="mark">Perception <i>//</i> one frame, end to end</p>
@@ -380,7 +441,43 @@
  </div>
 </section>
 
-<!-- 06 ───────────────────────────────────────────────────────────── -->
+<!-- 07 ───────────────────────────────────────────────────────────────── -->
+<section id="thinking">
+ <div class="wrap">
+  <p class="mark">One task <i>//</i> thought through, start to finish</p>
+  <h2 class="col">What actually happens when it is told to pass a gate.</h2>
+  <p class="lede col quiet">Not pseudocode and not a flowchart of boxes. This is the real sequence,
+    with the real rates, and with the places it is allowed to give up marked as clearly as the
+    places it succeeds.</p>
+
+  <table class="ledger">
+   <thead><tr><th>step</th><th>what the machine is doing</th><th>rate</th><th>how it can fail, honestly</th></tr></thead>
+   <tbody>
+    <tr><td>Arm</td><td>Check the firmware revision, refuse below the floor, verify the barometer is healthy, confirm the kill switch is live</td>
+        <td class="num">once</td><td>Refuses. An unhealthy barometer denies every automatic move — it arms and simply will not go</td></tr>
+    <tr><td>Look</td><td>Hailo-8 runs the detector on the forward camera; the newest frame wins and surplus frames are dropped</td>
+        <td class="num">53.9 Hz</td><td>Returns nothing. A missing class sidecar yields an empty allowlist and a silent <code>[]</code> forever</td></tr>
+    <tr><td>Decide it is there</td><td><code>detected('gate')</code> asks whether the class was seen inside a recency window, not whether it is in this exact frame</td>
+        <td class="num">1.0 s window</td><td>A flicker does not count as absence. An <code>if</code> here runs once — a moving search needs a loop</td></tr>
+    <tr><td>Centre it</td><td><code>vision.align</code> drives lateral and yaw on the signed pixel offset from frame centre</td>
+        <td class="num">20–50 Hz host</td><td>Never raises. Returns <span class="num">ALIGNED</span>, <span class="num">LOST</span>, <span class="num">TIMEOUT</span>, <span class="num">NO_CAMERA</span> or <span class="num">ABORTED</span> — and where it ended</td></tr>
+    <tr><td>Hold the lock</td><td>Live box, then tracker coast, then a geometric anchor matching image structure</td>
+        <td class="numr">175 frames</td><td>Refuses rather than inventing. The ladder ends in a stated loss</td></tr>
+    <tr><td>Drive through</td><td>One <code>SROT_MOVE</code>; the board runs and brakes the primitive itself</td>
+        <td class="numr">500 Hz board</td><td>The automatic mode closes the depth loop under <em>every</em> primitive, and that loop has never run closed</td></tr>
+    <tr><td>Know where it went</td><td>A right-invariant filter on board IMU, depth, and velocity from the downward camera; late measurements replayed at the instant they describe</td>
+        <td class="num">—</td><td>No GPS, no DVL. The downward camera is the only velocity there is</td></tr>
+   </tbody>
+  </table>
+
+  <p class="col quiet" style="margin-top:34px">Read that column on the right again. Every row has
+    one, and that is the design: a verb that reports success while the vehicle does nothing is the
+    failure mode that ends competition runs, so nothing in this stack is allowed to be quietly
+    optimistic. <em>The ladder ends in a refusal, not in a confident invention.</em></p>
+ </div>
+</section>
+
+<!-- 08 ───────────────────────────────────────────────────────────────── -->
 <section id="blink">
  <div class="wrap">
   <p class="mark">Continuity <i>//</i> when the detector blinks</p>
@@ -407,7 +504,56 @@
  </div>
 </section>
 
-<!-- 07 ───────────────────────────────────────────────────────────── -->
+<!-- 09 ───────────────────────────────────────────────────────────────── -->
+<section id="archive">
+ <div class="wrap">
+  <p class="mark">The archive <i>//</i> 4,925 labelled frames, and the stack run over them</p>
+  <h2 class="col">The same detector, twice, in two kinds of water.</h2>
+  <p class="lede col quiet">These are not mockups. The competition weights were loaded, run over
+    frames from the capture archive, and the true detections handed to the same function the
+    vehicle draws its operator display with. What is below is what an operator sees.</p>
+
+  <figure class="hero-render">
+   <img src="imgs/hud/hud_clear.webp" alt="The operator display on a clear-water frame: seven detections including the gate at 0.93 confidence, with the aim line from frame centre to the primary target" loading="lazy" width="1700" height="1518">
+   <figcaption><strong>Clear water.</strong> Seven detections — the gate at
+     <span class="num">0.93</span>, a flare at <span class="num">0.92</span>, three drums, the
+     pinger drum. The red box is the primary; the line runs from frame centre to it, and its
+     length <em>is</em> the error the controller is closing.</figcaption>
+  </figure>
+
+  <figure class="hero-render" style="margin-top:var(--s4)">
+   <img src="imgs/hud/hud_murky.webp" alt="The operator display on a murky-water frame: four detections, the gate still held at 0.98" loading="lazy" width="1700" height="1518">
+   <figcaption><strong>Murky water, same detector, same weights.</strong> Four detections instead
+     of seven — but the gate survives at <span class="num">0.98</span>. The flares are what the
+     water takes first, which is the whole argument for training on the water you will swim in
+     rather than on clean imagery.</figcaption>
+  </figure>
+
+  <p class="col quiet" style="margin-top:30px">And the honest half: across the thirteen sessions,
+    two returned <strong>no detections at all</strong> under these weights — they are a different
+    course with a different class set. That is a fact about the model, not about the water, and it
+    is here because a showcase that only shows the frames where the detector performed is a
+    showcase of nothing.</p>
+
+  <table class="ledger">
+   <thead><tr><th>session</th><th>frames</th><th>richest frame</th><th>best confidence</th></tr></thead>
+   <tbody>
+    <tr><td>sim_transit_clear</td><td class="num">1,120</td><td class="num">7 detections</td><td class="num">0.93</td></tr>
+    <tr><td>sim_transit_murky</td><td class="num">1,198</td><td class="num">—</td><td class="num">—</td></tr>
+    <tr><td>rs_bbox</td><td class="num">894</td><td class="num">—</td><td class="num">—</td></tr>
+    <tr><td>sim_clear</td><td class="num">309</td><td class="num">5 detections</td><td class="num">0.60</td></tr>
+    <tr><td>sim_murky</td><td class="num">312</td><td class="num">4 detections</td><td class="num">0.98</td></tr>
+    <tr><td>gate_approach ×3</td><td class="num">421</td><td class="num">0 detections</td><td class="num">wrong class set</td></tr>
+    <tr><td>drum_orbit</td><td class="num">127</td><td class="num">2 detections</td><td class="num">0.69</td></tr>
+   </tbody>
+  </table>
+  <p class="quiet" style="font-size:.9rem;max-width:66ch;margin-top:16px">Every session carries its
+    own <code>meta.json</code>, its class list, ground-truth labels from the simulator's
+    bounding-box sensor, and the video it came from — 27 classes across both competitions.</p>
+ </div>
+</section>
+
+<!-- 10 ───────────────────────────────────────────────────────────────── -->
 <section id="water">
  <div class="wrap">
   <p class="mark">Retractions <i>//</i> kept on purpose</p>
@@ -452,7 +598,7 @@
  </div>
 </section>
 
-<!-- 08 ───────────────────────────────────────────────────────────── -->
+<!-- 11 ───────────────────────────────────────────────────────────────── -->
 <section id="instruments">
  <div class="wrap">
   <p class="mark">Instruments <i>//</i> every number with where it was taken</p>
@@ -477,7 +623,7 @@
  </div>
 </section>
 
-<!-- 09 ───────────────────────────────────────────────────────────── -->
+<!-- 12 ───────────────────────────────────────────────────────────────── -->
 <section id="asked">
  <div class="wrap">
   <p class="mark">The language <i>//</i> how a machine is asked to do something</p>
@@ -506,7 +652,74 @@
  </div>
 </section>
 
-<!-- 10 ───────────────────────────────────────────────────────────── -->
+<!-- 13 ───────────────────────────────────────────────────────────────── -->
+<section id="shoulders">
+ <div class="wrap">
+  <p class="mark">Shoulders <i>//</i> where the ideas came from, and what they changed</p>
+  <h2 class="col">Borrowed convictions, and the line of code each one moved.</h2>
+  <p class="lede col quiet">Not a reading list. Each of these is a specific idea, from a named
+    source, that changed something concrete in this stack — and the change is named too.</p>
+
+  <div class="years" style="margin-top:44px">
+   <div class="year"><time>Hotz</time><div><h3>“Complex things eventually collapse under their own weight.”</h3>
+     <p>The magic, he says, is more capability at <em>no extra</em> complexity — tinygrad as “the
+       RISC of the machine learning stack.” <strong>What it changed:</strong> the hull viewer on
+       this page has no dependencies and no build step, because the alternative was 600&#8239;KB of
+       library to draw one mesh. The same reflex deleted a second stylesheet that had quietly
+       become a second design system.
+       <a href="https://www.latent.space/p/geohot">Latent Space interview</a></p></div></div>
+
+   <div class="year"><time>Carmack</time><div><h3>“The speed of light sucks.”</h3>
+     <p>His latency work treats every stage of a pipeline as somewhere to claw back milliseconds,
+       and he published his daily engineering notes for years on the conviction that work you
+       will publish is work you do more honestly. <strong>What it changed:</strong> photon to
+       detection is <span class="num">18.0 ms</span> and each stage of it is measured separately —
+       and the camera became a mailbox rather than a queue, which took frame staleness from
+       <span class="num">396 ms</span> to <span class="num">16.9 ms</span>.
+       <a href="https://danluu.com/latency-mitigation/">Latency Mitigation Strategies</a></p></div></div>
+
+   <div class="year"><time>Karpathy</time><div><h3>Software 2.0 — the program compiled from data.</h3>
+     <p>A neural network is a different kind of software: you do not write the program, you shape
+       the dataset and the objective. <strong>What it changed:</strong> the detector is treated as
+       a component with a measured operating envelope, not as an oracle — which is why the
+       archive above exists, why thresholds are measured on real footage rather than borrowed, and
+       why “image enhancement helps” was tested seventeen ways before being thrown out.
+       <a href="https://karpathy.medium.com/software-2-0-a64152b37c35">Software 2.0</a></p></div></div>
+
+   <div class="year"><time>Keller</time><div><h3>Every few years, design it again rather than patch it.</h3>
+     <p>His argument is that the rewrite comes out both faster and simpler than the accreted thing
+       it replaces, and that the reason teams do not do it is fear of a bad quarter.
+       <strong>What it changed:</strong> the whole of this page's Act Two. The old stack placed
+       2nd and 8th and still had a ceiling, and the answer was not to tune it harder — it was to
+       move the boundary and write the inner loop ourselves.
+       <a href="https://www.techpowerup.com/270197/jim-keller-on-moores-law-microprocessors-and-designing-chips-from-scratch">On designing from scratch</a></p></div></div>
+
+   <div class="year"><time>Lattner</time><div><h3>“Work backwards from the speed of light of hardware.”</h3>
+     <p>A compiler exists so you need to know less about the machine; the mistake is working
+       <em>forwards</em> from what you already have. <strong>What it changed:</strong> the
+       perception path is sized against what a Hailo-8 can actually do —
+       <span class="num">80.9 Hz</span> standalone — and the decode was kept in the quantised
+       domain rather than converted to floats, which took it from 31.5&#8239;ms to 0.93&#8239;ms,
+       bit-for-bit identical.
+       <a href="https://www.modular.com/blog/developer-voices-deep-dive-with-chris-lattner-on-mojo">Deep dive on Mojo</a></p></div></div>
+
+   <div class="year"><time>Rubin</time><div><h3>“Inspiration comes first. You come next. The audience comes last.”</h3>
+     <p>And: keep removing until it hurts, because that is usually where the soul of the thing is.
+       <strong>What it changed:</strong> this page. The palette was not chosen — it was sampled out
+       of the vehicle's own CAD materials, so the red here is the red the hull is painted. Every
+       section that only restated another section was cut.
+       <a href="https://www.goodreads.com/work/quotes/96114890-the-creative-act-a-way-of-being">The Creative Act</a></p></div></div>
+  </div>
+
+  <p class="col quiet" style="margin-top:38px">There is one more, and it is not a quote. Asked what
+    makes an engineering write-up worth reading, the most common answer engineers give is: a candid
+    view of the real trade-offs, the real implementation, and <em>the failures</em>. That is the
+    permission this page took to put its retractions in the middle instead of the appendix.
+    <a href="https://news.ycombinator.com/item?id=44382354">Ask HN: what makes an engineering blog great</a></p>
+ </div>
+</section>
+
+<!-- 14 ───────────────────────────────────────────────────────────────── -->
 <section id="open">
  <div class="wrap">
   <p class="mark">Act three <i>//</i> open</p>
