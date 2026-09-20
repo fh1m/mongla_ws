@@ -171,14 +171,23 @@
   <p class="lede col quiet">Drag it. Every number below was taken from the CAD geometry itself —
     84,248 triangles at 0.9 mm tessellation, measured rather than quoted.</p>
 
-  <div class="bay">
+  <div class="stage" id="explode-stage">
+   <div class="bay glass">
     <span class="tagtop">Mongla hull <i>//</i> drag to orbit <i>//</i> space to pause</span>
     <canvas id="hull" tabindex="0" role="img"
-      aria-label="Interactive three-dimensional model of the Mongla hull: 702 millimetres long, four tunnel thrusters and one axial nose thruster"></canvas>
+      aria-label="Interactive three-dimensional model of the Mongla hull: 702 millimetres long, four tunnel thrusters and one axial nose thruster. It comes apart as the page is scrolled."></canvas>
     <div class="hud">
       <span>L <i>702.0 mm</i></span><span>beam <i>176.1</i></span><span>height <i>172.1</i></span>
       <span>fineness <i>3.99</i></span><span id="hud-tri">tris <i>—</i></span>
     </div>
+   </div>
+   <ol class="beats" aria-hidden="true">
+    <li data-at="0.00"><b>Assembled</b><span>702.0 × 176.1 × 172.1 mm · 40 bodies · fineness 3.99</span></li>
+    <li data-at="0.22"><b>The fairings come off</b><span>Red shells, flooded. They shape the flow; they hold nothing dry.</span></li>
+    <li data-at="0.44"><b>The pressure can</b><span>3.310 L enclosed — the entire source of buoyancy. Everything that must stay dry is in here.</span></li>
+    <li data-at="0.66"><b>Four tunnels, one axial</b><span>⌀84 mm each. Laterals 350 mm apart, verticals 519 mm. Five of six degrees of freedom.</span></li>
+    <li data-at="0.88"><b>And a handle</b><span>Sized for one hand. A vehicle nobody can carry is a vehicle nobody tests.</span></li>
+   </ol>
   </div>
 
 
@@ -937,7 +946,41 @@
     started = true;
     MonglaHull(bay, 'assets/cad/hull.mgla').then(function(h){
       document.getElementById('hud-tri').innerHTML =
-        'tris <i>' + h.triangles.toLocaleString() + '</i>';
+        'tris <i>' + h.triangles.toLocaleString() + '</i> · parts <i>' + h.parts + '</i>';
+
+      /* Scroll through the section drives the hull apart and back together.
+         The reader is not clicking anything: descending IS the interaction.
+         Reduced motion keeps it assembled. */
+      var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (reduce) return;
+      var sect = document.getElementById('explode-stage');
+      var beats = [].slice.call(document.querySelectorAll('.beats li'));
+      var tick = false;
+      function onScroll(){
+        if (tick) return;
+        tick = true;
+        requestAnimationFrame(function(){
+          tick = false;
+          var r = sect.getBoundingClientRect();
+          var span = r.height - innerHeight;
+          if (span <= 0) return;
+          var t = Math.min(Math.max(-r.top / span, 0), 1);
+          h.explode(t);
+          /* light the beat whose threshold we have just passed */
+          var active = 0;
+          for (var i = 0; i < beats.length; i++) {
+            if (t >= parseFloat(beats[i].dataset.at)) active = i;
+          }
+          beats.forEach(function(b, i){ b.classList.toggle('on', i === active); });
+          var e = t;
+          hint.textContent = e > 0.06
+            ? 'Mongla hull // ' + Math.round(e * 100) + '% apart // keep scrolling'
+            : 'Mongla hull // drag to orbit // space to pause';
+        });
+      }
+      var hint = bay.parentElement.querySelector('.tagtop');
+      addEventListener('scroll', onScroll, {passive:true});
+      onScroll();
     }).catch(function(err){
       document.getElementById('hud-tri').innerHTML = 'tris <i>model unavailable</i>';
       bay.style.height = '0';

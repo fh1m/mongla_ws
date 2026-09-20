@@ -224,6 +224,31 @@ code,.n{font-family:var(--data);font-size:.87em;color:var(--medium-text)}
 .st.water{color:var(--state-water)} .st.bench{color:var(--state-bench)}
 .st.soft{color:var(--state-soft)}   .st.blocked{color:var(--state-blocked)}
 
+/* ── the explode stage: the canvas is PINNED and the scroll drives it ──
+   A viewer that scrolls out of frame halfway through its own animation is
+   the animation not happening. The stage is tall; the bay sticks inside it. */
+.stage{position:relative;margin-top:44px;height:300vh}
+.stage .bay{position:sticky;top:7vh;margin-top:0}
+.stage .bay canvas{height:min(78vh,720px)}
+.beats{position:absolute;inset:auto 0 0 0;list-style:none;margin:0;padding:0;
+  pointer-events:none;height:100%;display:block}
+.beats li{position:sticky;top:calc(7vh + min(78vh,720px) + 22px);
+  max-width:var(--measure);opacity:0;transform:translateY(8px);
+  transition:opacity 420ms var(--ease),transform 420ms var(--ease);
+  height:0;overflow:visible}
+.beats li.on{opacity:1;transform:none}
+.beats b{display:block;font-family:var(--display);font-weight:700;font-size:1.05rem;
+  color:#fff;letter-spacing:-.02em}
+.beats span{display:block;margin-top:5px;font-family:var(--data);font-size:11.5px;
+  line-height:1.6;color:var(--ink-3);letter-spacing:.02em}
+@media (max-width:900px){
+  .stage{height:auto}
+  .stage .bay{position:relative;top:0}
+  .beats{position:static;height:auto;margin-top:20px}
+  .beats li{position:static;opacity:1;transform:none;height:auto;
+    padding:12px 0;border-top:1px solid var(--rule)}
+}
+
 /* ── the hull bay ────────────────────────────────────────────────── */
 .bay{position:relative;margin-top:44px;border:1px solid var(--rule);overflow:hidden;
   background:radial-gradient(130% 100% at 50% 0%,#010613 0%,var(--d0) 72%)}

@@ -89,27 +89,31 @@ def load_mesh(path: Path):
         f = pbr.get("baseColorFactor", [0.8, 0.8, 0.8, 1.0])
         return tuple(int(round(max(0.0, min(1.0, c)) * 255)) for c in f[:3])
 
-    buckets = {}
+    groups = []           # (body_index, rgb, verts, faces)
 
-    def walk(idx, parent):
+    def walk(idx, parent, body):
         node = gltf["nodes"][idx]
         m = parent @ _node_matrix(node)
         if "mesh" in node:
+            body = len(groups) if body is None else body
+            per_colour = {}
             for prim in gltf["meshes"][node["mesh"]]["primitives"]:
                 pos = accessor(prim["attributes"]["POSITION"]).astype(np.float64)
                 pos = (m[:3, :3] @ pos.T).T + m[:3, 3]
                 tri = accessor(prim["indices"]).ravel().astype(np.int64).reshape(-1, 3)
                 key = base_colour(prim.get("material"))
-                v, f = buckets.setdefault(key, ([], []))
+                v, f = per_colour.setdefault(key, ([], []))
                 f.append(tri + sum(len(x) for x in v))
                 v.append(pos)
+            for rgb, (v, f) in per_colour.items():
+                groups.append((body, rgb, np.vstack(v), np.vstack(f)))
         for child in node.get("children", []):
-            walk(child, m)
+            walk(child, m, body)
 
     scene = gltf["scenes"][gltf.get("scene", 0)]
     for idx in scene["nodes"]:
-        walk(idx, np.eye(4))
-    return [(rgb, np.vstack(v), np.vstack(f)) for rgb, (v, f) in buckets.items()]
+        walk(idx, np.eye(4), None)
+    return groups
 
 
 def cluster(verts, faces, cell_m):
@@ -136,17 +140,24 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     groups = load_mesh(args.glb)
-    print(f"in   {sum(len(f) for _, _, f in groups):>8,} tris  "
-          f"{sum(len(v) for _, v, _ in groups):>8,} verts  across {len(groups)} materials")
+    bodies = sorted({b for b, _, _, _ in groups})
+    remap = {b: i for i, b in enumerate(bodies)}
+    if len(bodies) > 255:
+        raise SystemExit(f"{len(bodies)} bodies; the part id is one byte")
+    print(f"in   {sum(len(f) for _, _, _, f in groups):>8,} tris  "
+          f"{sum(len(v) for _, _, v, _ in groups):>8,} verts  "
+          f"across {len(bodies)} bodies")
 
-    V, F, C, base = [], [], [], 0
-    for rgb, gv, gf in groups:
+    V, F, C, P, base = [], [], [], [], 0
+    for body, rgb, gv, gf in groups:
         cv, cf = cluster(gv, gf, args.cell_mm / 1000.0)
         F.append(cf + base)
         V.append(cv)
         C.append(np.tile(np.array(rgb, dtype=np.uint8), (len(cv), 1)))
+        P.append(np.full(len(cv), remap[body], dtype=np.uint8))
         base += len(cv)
-    verts, faces, colours = np.vstack(V), np.vstack(F), np.vstack(C)
+    verts, faces = np.vstack(V), np.vstack(F)
+    colours, parts = np.vstack(C), np.concatenate(P)
     print(f"out  {len(faces):>8,} tris  {len(verts):>8,} verts   (cell {args.cell_mm} mm)")
 
     lo, hi = verts.min(0), verts.max(0)
@@ -155,13 +166,30 @@ def main(argv=None):
 
     centre = (lo + hi) / 2
     scale = float((hi - lo).max() / 2)
+
+    # one unit explode direction per body: radial from the hull centroid to the
+    # body's own centre. A body sitting ON the centreline has no radial
+    # direction at all, so it is pushed along the long axis instead -- otherwise
+    # the pressure can and the nose thruster would never leave the middle.
+    dirs = np.zeros((len(bodies), 3), dtype=np.float32)
+    for i in range(len(bodies)):
+        sel = parts == i
+        c = (verts[sel].min(0) + verts[sel].max(0)) / 2 - centre
+        radial = c.copy(); radial[2] = 0.0
+        n = np.linalg.norm(radial)
+        if n < 0.012:                      # within 12 mm of the axis
+            d = np.array([0.0, 0.0, 1.0 if c[2] >= 0 else -1.0])
+        else:
+            d = radial / n
+        dirs[i] = d
     quant = np.clip(np.round((verts - centre) / scale * 32767), -32767, 32767).astype("<i2")
     idx_dtype = "<u2" if len(verts) < 65536 else "<u4"
     idx = faces.astype(idx_dtype)
 
-    header = struct.pack("<4sHHII3ff", b"MGLA", 2, np.dtype(idx_dtype).itemsize,
-                         len(verts), len(faces), *centre, scale)
-    blob = header + quant.tobytes() + colours.tobytes() + idx.tobytes()
+    header = struct.pack("<4sHHII3ffH", b"MGLA", 3, np.dtype(idx_dtype).itemsize,
+                         len(verts), len(faces), *centre, scale, len(bodies))
+    blob = (header + dirs.astype("<f4").tobytes()
+            + quant.tobytes() + colours.tobytes() + parts.tobytes() + idx.tobytes())
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_bytes(blob)
     print(f"wrote {args.out.relative_to(REPO)}  {len(blob) / 1024:.0f} KB "
