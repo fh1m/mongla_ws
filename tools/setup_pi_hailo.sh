@@ -2,7 +2,7 @@
 # Reproducible setup for the Pi 5 + AI HAT+ (Hailo-8) vision box.
 # Ubuntu 24.04 (Noble) + ROS 2 Jazzy.  Idempotent -- safe to re-run.
 #
-# Full rationale and every measurement: .claude/context/pi-hailo-vision-box.md
+# Full rationale and every measurement: .claude/context/platform/pi-hailo-vision-box.md
 # NOT `set -u`: ROS's own setup.bash references unbound variables
 # (AMENT_TRACE_SETUP_FILES), so nounset kills the script at step 5.
 set -eo pipefail

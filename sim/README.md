@@ -204,7 +204,7 @@ ffprobe -v error -show_entries format=duration -of csv=p=0 front.mp4
 
 ```bash
 ros2 run mongla_sim_bringup mongla_sim plotjuggler   # state + GT
-# Foxglove: see mongla_ws/.claude/context/foxglove-and-bags.md
+# Foxglove: see mongla_ws/.claude/context/platform/foxglove-and-bags.md
 ```
 
 ### 8. Shutdown

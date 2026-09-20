@@ -1,4 +1,4 @@
-# Duburi-ws — JETSON-VALIDATED exact pins (Orin Nano, JetPack 6.2, py3.10)
+# Mongla-ws — JETSON-VALIDATED exact pins (Orin Nano, JetPack 6.2, py3.10)
 # =====================================================================
 # Companion to requirements.txt. requirements.txt is lower-bound only so
 # desktop/CI keep getting patches; THIS file is the exact, on-device-verified

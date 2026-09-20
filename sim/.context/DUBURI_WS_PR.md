@@ -18,7 +18,7 @@ Full narrative: [HANDOFF.md](HANDOFF.md).
 
 | Path | Change |
 |------|--------|
-| `.claude/context/mongla-sim.md` | Canonical pointer + packaging (no git on sim) + handoff link |
+| `.claude/context/platform/mongla-sim.md` | Canonical pointer + packaging (no git on sim) + handoff link |
 | `CLAUDE.md` | Prefer sibling sim `.context` over legacy `sim-setup.md` |
 | `README.md` | “Drive in Mongla Gazebo lab” section: `mongla_sim` + pixhawk |
 | `.claude/context/sim-setup.md` | Banner: legacy BlueROV path; redirect for Mongla SITL |

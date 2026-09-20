@@ -1,4 +1,4 @@
-# Duburi-ws Python dependencies (pip)
+# Mongla-ws Python dependencies (pip)
 # ----------------------------------------------------------------------
 # These are the THIRD-PARTY Python packages the workspace imports
 # directly. ROS2 dependencies (rclpy, sensor_msgs, vision_msgs,
@@ -18,12 +18,12 @@
 # ----------------------------------------------------------------------
 
 # ---- MAVLink (autopilot link) -----------------------------------------
-# Used by `duburi_control.pixhawk` (the only file that imports pymavlink).
+# Used by `mongla_control.pixhawk` (the only file that imports pymavlink).
 # >=2.4.41 ships MAVLink2 + ArduSub mode mapping the manager relies on.
 pymavlink>=2.4.41
 
 # ---- BNO085 IMU (yaw source) ------------------------------------------
-# Used by `duburi_sensors.sources.bno085`. Talks to the ESP32-C3 bridge
+# Used by `mongla_sensors.sources.bno085`. Talks to the ESP32-C3 bridge
 # over USB serial (see firmware/esp32c3_bno085.md).
 pyserial>=3.5
 
@@ -51,7 +51,7 @@ ultralytics>=8.1.0
 # Roboflow `trackers` is the primary engine behind the Tracker ABC
 # (tracker_node, OC-SORT default); supervision provides the legacy
 # ByteTrack fallback (+ `draw_video`); filterpy provides the Kalman filter
-# used by `duburi_vision.tracking.kalman` to smooth track bboxes.
+# used by `mongla_vision.tracking.kalman` to smooth track bboxes.
 # *** JETSON: pin trackers==2.4.0 and install --no-deps. *** The 2.5.0
 # PyPI wheel is a broken dud with no module, and the numpy>=2 dep-pin is a
 # red herring — see requirements-jetson.txt + jetson-and-env-traps.md §E3.
@@ -60,13 +60,13 @@ supervision>=0.18.0
 filterpy>=1.4.5
 
 # ---- Vision: monocular depth (OPTIONAL) -------------------------------
-# `duburi_vision.depth.depth_estimation_node` runs Depth Anything V2-Small
+# `mongla_vision.depth.depth_estimation_node` runs Depth Anything V2-Small
 # as an ONNX graph via onnxruntime. It is imported lazily: if absent, the
 # node logs a warning and falls back to bbox-area proximity, so this line
 # is optional. On Jetson prefer `onnxruntime-gpu` from NVIDIA's index.
 onnxruntime>=1.16; platform_machine == "x86_64"
 
 # ---- Test runner (CI + colcon test) ----------------------------------
-# Required for the duburi_control unit tests; colcon also calls into
+# Required for the mongla_control unit tests; colcon also calls into
 # pytest under the hood for `colcon test`.
 pytest>=7.0

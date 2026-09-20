@@ -1,7 +1,7 @@
 """The suite must be green ABOUT THE FILES IN THIS CHECKOUT.
 
 Sourcing a colcon workspace puts its `install/` tree on PYTHONPATH, so
-`import duburi_vision` resolves there rather than to the source beside the
+`import mongla_vision` resolves there rather than to the source beside the
 test. That has cost this project several rounds, always silently:
 
   * round 34 chased a "drift bug" that was a test reading 0.4 from an
@@ -41,7 +41,7 @@ def _resolved(name: str) -> pathlib.Path:
     """WHERE would `import <name>` land -- without running it.
 
     `__import__` would answer the same question, but by executing the package,
-    and these are ROS packages: `duburi_vision/__init__` reaches rclpy. On a
+    and these are ROS packages: `mongla_vision/__init__` reaches rclpy. On a
     box where ROS is not sourced that turns a PATH question into an unrelated
     ModuleNotFoundError, which is exactly what it did on the Pi -- reporting a
     shadowing failure that was really a missing environment. `find_spec` does
@@ -69,13 +69,13 @@ def test_the_package_is_not_served_from_an_install_tree(name):
     assert '/install/' not in where and '/build/' not in where, where
 
 
-def test_duburi_interfaces_is_still_reachable():
-    """The exemption that makes the rest safe. `duburi_interfaces` is
-    GENERATED -- there is no `src/duburi_interfaces/duburi_interfaces/` -- so
+def test_mongla_interfaces_is_still_reachable():
+    """The exemption that makes the rest safe. `mongla_interfaces` is
+    GENERATED -- there is no `src/mongla_interfaces/mongla_interfaces/` -- so
     it must keep coming from the install tree. A conftest that purged it
-    would break `from duburi_interfaces.msg import DuburiState` in every node
+    would break `from mongla_interfaces.msg import MonglaState` in every node
     test, which is why the rule is 'shadow only what we have source for'."""
-    spec = importlib.util.find_spec('duburi_interfaces')
+    spec = importlib.util.find_spec('mongla_interfaces')
     if spec is None:
         pytest.skip('workspace not built here; nothing to shadow either')
     # Resolved, and deliberately NOT from source -- there is none.

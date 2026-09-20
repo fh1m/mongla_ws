@@ -1,9 +1,9 @@
 {
-  // ── Mongla / duburi_ws — tuned for VSCode Remote-SSH onto the Jetson ──
+  // ── Mongla / mongla_ws — tuned for VSCode Remote-SSH onto the Jetson ──
   // The single biggest source of editor lag on a colcon workspace is the
   // file watcher + search indexing the generated build/ install/ log/ trees
   // (~1k+ churning files). Excluding them makes editing missions/code snappy
-  // over Remote-SSH. Edit src/ only; rebuild with ./build_dubomini.sh.
+  // over Remote-SSH. Edit src/ only; rebuild with ./build_mongla.sh.
 
   // Don't watch generated / heavy dirs (kills "files changed" CPU churn).
   "files.watcherExclude": {
