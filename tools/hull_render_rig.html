@@ -1,0 +1,46 @@
+<!doctype html><meta charset=utf-8><title>Mongla hull render rig</title>
+<!--
+  Offline render rig for the site's hull stills.
+
+  Copy into docs/ and serve it from there (it loads assets/ relatively):
+
+      cp tools/hull_render_rig.html docs/_preview_shot.html
+      python3 -m http.server 8777 --directory docs
+      python3 tools/upload_sink.py          # writes each POSTed frame to disk
+      # then open http://127.0.0.1:8777/_preview_shot.html
+
+  It NEVER awaits requestAnimationFrame. A browser tab driven by automation is a
+  background tab, and Chrome throttles rAF there to roughly nothing — a
+  frame-based wait hangs forever, with no error and no console line, while the
+  canvas still shows a correct picture. Draw synchronously, read back
+  synchronously.
+-->
+<style>html,body{margin:0;background:#000;color:#5a8dff;font:12px monospace}
+canvas{width:700px;height:438px;display:block}</style>
+<canvas id=c width=2800 height=1750></canvas><div id=log>booting…</div>
+<script src="assets/hull-viewer.js"></script>
+<script>
+const SHOTS = [                        // [name, yaw, pitch] in radians
+  ['iso',          -0.72,   0.30],
+  ['bow',          -1.5708, 0.00],
+  ['quarter-aft',   1.92,   0.34],
+  ['plan',         -1.5708, 1.2400],
+  ['low-three',    -0.42,  -0.30],
+  ['profile',       0.00,   0.02],
+];
+window.__done = []; window.__err = null;
+MonglaHull(document.getElementById('c'), 'assets/cad/hull.mgla', { fixed: true })
+  .then(async h => {
+    window.__h = h; h.spin(false); h.stop();     // own the draw loop ourselves
+    for (const [name, yaw, pitch] of SHOTS) {
+      h.pose(yaw, pitch);
+      h.frame(); h.frame();
+      const url = document.getElementById('c').toDataURL('image/png');
+      const r = await fetch('http://127.0.0.1:8778/', { method: 'POST', body: name + '|' + url });
+      window.__done.push(name + ':' + r.status);
+      log.textContent = 'sent ' + window.__done.join('  ');
+    }
+    window.__allDone = true; log.textContent += '  — ALL DONE';
+  })
+  .catch(e => { window.__err = e.message; log.textContent = 'FAIL ' + e.message; });
+</script>
