@@ -10,8 +10,14 @@ machined part and costs nothing.
     python3 tools/pack_hull.py <input.glb> [--cell-mm 0.9] [-o docs/assets/cad/hull.mgla]
 
 Container:
-    'MGLA' | u16 version | u16 indexBytes | u32 verts | u32 tris
-    f32 centre[3] | f32 scale | int16 pos[3]*verts | uint16|uint32 idx[3]*tris
+    'MGLA' | u16 version(2) | u16 indexBytes | u32 verts | u32 tris
+    f32 centre[3] | f32 scale
+    int16 pos[3]*verts | uint8 rgb[3]*verts | uint16|uint32 idx[3]*tris
+
+Version 2 adds per-vertex colour, taken from each primitive's own glTF material,
+so the hull renders in the livery it is actually built in rather than a single
+tint. Clustering runs INSIDE each material group — merging across a colour
+boundary would smear red fairing into grey frame along every seam.
 """
 import argparse, gzip, json, struct, sys
 from pathlib import Path
@@ -62,7 +68,7 @@ def _node_matrix(node):
 
 
 def load_mesh(path: Path):
-    """Return (vertices Nx3 float64 in metres, faces Mx3 int64), world-transformed."""
+    """Return [(rgb, verts Nx3 metres, faces Mx3)] — one entry per material."""
     gltf, blob = _read_glb(path)
 
     def accessor(i):
@@ -76,7 +82,14 @@ def load_mesh(path: Path):
                             count=count, offset=start)
         return arr.reshape(acc["count"], _NCOMP[acc["type"]])
 
-    verts, faces = [], []
+    def base_colour(mat_index):
+        if mat_index is None or mat_index < 0:
+            return (204, 204, 204)
+        pbr = gltf["materials"][mat_index].get("pbrMetallicRoughness", {})
+        f = pbr.get("baseColorFactor", [0.8, 0.8, 0.8, 1.0])
+        return tuple(int(round(max(0.0, min(1.0, c)) * 255)) for c in f[:3])
+
+    buckets = {}
 
     def walk(idx, parent):
         node = gltf["nodes"][idx]
@@ -86,15 +99,17 @@ def load_mesh(path: Path):
                 pos = accessor(prim["attributes"]["POSITION"]).astype(np.float64)
                 pos = (m[:3, :3] @ pos.T).T + m[:3, 3]
                 tri = accessor(prim["indices"]).ravel().astype(np.int64).reshape(-1, 3)
-                faces.append(tri + sum(len(v) for v in verts))
-                verts.append(pos)
+                key = base_colour(prim.get("material"))
+                v, f = buckets.setdefault(key, ([], []))
+                f.append(tri + sum(len(x) for x in v))
+                v.append(pos)
         for child in node.get("children", []):
             walk(child, m)
 
     scene = gltf["scenes"][gltf.get("scene", 0)]
     for idx in scene["nodes"]:
         walk(idx, np.eye(4))
-    return np.vstack(verts), np.vstack(faces)
+    return [(rgb, np.vstack(v), np.vstack(f)) for rgb, (v, f) in buckets.items()]
 
 
 def cluster(verts, faces, cell_m):
@@ -120,9 +135,18 @@ def main(argv=None):
     ap.add_argument("-o", "--out", type=Path, default=DEFAULT_OUT)
     args = ap.parse_args(argv)
 
-    verts, faces = load_mesh(args.glb)
-    print(f"in   {len(faces):>8,} tris  {len(verts):>8,} verts")
-    verts, faces = cluster(verts, faces, args.cell_mm / 1000.0)
+    groups = load_mesh(args.glb)
+    print(f"in   {sum(len(f) for _, _, f in groups):>8,} tris  "
+          f"{sum(len(v) for _, v, _ in groups):>8,} verts  across {len(groups)} materials")
+
+    V, F, C, base = [], [], [], 0
+    for rgb, gv, gf in groups:
+        cv, cf = cluster(gv, gf, args.cell_mm / 1000.0)
+        F.append(cf + base)
+        V.append(cv)
+        C.append(np.tile(np.array(rgb, dtype=np.uint8), (len(cv), 1)))
+        base += len(cv)
+    verts, faces, colours = np.vstack(V), np.vstack(F), np.vstack(C)
     print(f"out  {len(faces):>8,} tris  {len(verts):>8,} verts   (cell {args.cell_mm} mm)")
 
     lo, hi = verts.min(0), verts.max(0)
@@ -135,9 +159,9 @@ def main(argv=None):
     idx_dtype = "<u2" if len(verts) < 65536 else "<u4"
     idx = faces.astype(idx_dtype)
 
-    header = struct.pack("<4sHHII3ff", b"MGLA", 1, np.dtype(idx_dtype).itemsize,
+    header = struct.pack("<4sHHII3ff", b"MGLA", 2, np.dtype(idx_dtype).itemsize,
                          len(verts), len(faces), *centre, scale)
-    blob = header + quant.tobytes() + idx.tobytes()
+    blob = header + quant.tobytes() + colours.tobytes() + idx.tobytes()
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_bytes(blob)
     print(f"wrote {args.out.relative_to(REPO)}  {len(blob) / 1024:.0f} KB "
