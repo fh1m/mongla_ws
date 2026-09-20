@@ -9,12 +9,13 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/ROS_2-Humble%20%7C%20Jazzy-blue" alt="ROS 2"/>
-  <img src="https://img.shields.io/badge/control_loop-500_Hz-37d6a8" alt="500 Hz"/>
-  <img src="https://img.shields.io/badge/vision-Hailo--8-8b7cf6" alt="Hailo-8"/>
-  <img src="https://img.shields.io/badge/tests-2757-success" alt="tests"/>
-  <img src="https://img.shields.io/badge/licence-MIT-lightgrey" alt="MIT"/>
-  <a href="https://fh1m.github.io/mongla_ws/"><img src="https://img.shields.io/badge/field_notes-mongla-0a9396" alt="Docs"/></a>
+  <img src="https://img.shields.io/badge/control_loop-500_Hz-ff0000?style=flat-square&labelColor=0d1117" alt="500 Hz control loop"/>
+  <img src="https://img.shields.io/badge/photon_to_detection-18.0_ms-004eff?style=flat-square&labelColor=0d1117" alt="18.0 ms"/>
+  <img src="https://img.shields.io/badge/vision-Hailo--8-004eff?style=flat-square&labelColor=0d1117" alt="Hailo-8"/>
+  <img src="https://img.shields.io/badge/ROS_2-Humble_·_Jazzy-1c2029?style=flat-square&labelColor=0d1117" alt="ROS 2"/>
+  <img src="https://img.shields.io/badge/tests-3311_passing-1c2029?style=flat-square&labelColor=0d1117" alt="3311 tests passing"/>
+  <img src="https://img.shields.io/badge/in_water-never-ff0000?style=flat-square&labelColor=0d1117" alt="never been in water"/>
+  <img src="https://img.shields.io/badge/licence-MIT-1c2029?style=flat-square&labelColor=0d1117" alt="MIT"/>
 </p>
 
 <p align="center">
@@ -24,6 +25,10 @@
   <a href="#how-you-ask-it-to-move">Missions</a> ·
   <a href="#the-packages">Packages</a> ·
   <a href="#how-this-project-works">Doctrine</a>
+</p>
+
+<p align="center">
+  <a href="https://fh1m.github.io/mongla_ws/"><b>&#9654;&nbsp; Read the long version — the field notes</b></a>
 </p>
 
 ---
@@ -45,6 +50,33 @@ logs stay green, and the vehicle confidently goes somewhere else.
 So this repository is not really a pile of algorithms. It is an argument about **what a
 machine has to do to perceive, decide and move in a place that offers it no help** — and the
 receipts for every claim it makes.
+
+---
+
+## The machine
+
+<p align="center">
+  <img src="docs/imgs/cad/mongla-iso.webp" alt="The Mongla hull: red fairings over a grey pressure can, the axial thruster in the nose" width="100%"/>
+</p>
+
+Not a photograph and not an artist's impression — the CAD, rendered from the same mesh the
+[interactive model](https://fh1m.github.io/mongla_ws/#body) on the site uses, in the livery the
+vehicle is actually built in. Every number below was measured off that geometry, and validated
+against the CAD tool to **0.08 %**.
+
+| | | |
+|---|---|---|
+| **702.0 × 176.1 × 172.1 mm** | length × beam × height | fineness ratio **3.99** |
+| **4 × ⌀84 mm tunnels** | 350 mm apart across, 519 mm fore and aft | sway · yaw · heave · pitch |
+| **1 axial thruster** | in the nose | surge |
+| **5 of 6 degrees of freedom** | roll has no actuator at all | it has to be passively stable |
+| **3.310 L** | enclosed in the sealed pressure can | the entire source of buoyancy |
+| **1.767 L** | solid material, all 40 bodies | validated against the CAD tool |
+
+Four tunnels buy full authority *at zero forward speed* — which is the regime a task is
+actually won in, holding still in front of a hole. They cost **221.7 cm² of open aperture
+against a 160.9 cm² frontal area**, paid continuously while transiting. That trade is the
+design, stated in both directions.
 
 ---
 
@@ -223,6 +255,21 @@ boundaries.
 A full Gazebo pool lives in [`sim/`](sim/) — courses, props, both cameras, ground truth and an
 operator lab. It runs ArduSub SITL by design: it is a physics environment, not the vehicle.
 Control behaviour transfers; detection thresholds do not, because sim water is too clean.
+
+---
+
+## Shoulders
+
+Borrowed convictions, each with the thing it changed here.
+
+| | |
+|---|---|
+| [**Hotz**](https://www.latent.space/p/geohot) — *"complex things eventually collapse under their own weight"* | the 3D viewer on the site has no dependencies and no build step |
+| [**Carmack**](https://danluu.com/latency-mitigation/) — *"the speed of light sucks"* | the camera became a mailbox, not a queue: 396 ms of staleness → **16.9 ms** |
+| [**Karpathy**](https://karpathy.medium.com/software-2-0-a64152b37c35) — Software 2.0 | the detector is a component with a measured envelope, not an oracle |
+| [**Keller**](https://www.techpowerup.com/270197/jim-keller-on-moores-law-microprocessors-and-designing-chips-from-scratch) — design again rather than patch | Act II: move the boundary instead of tuning harder |
+| [**Lattner**](https://www.modular.com/blog/developer-voices-deep-dive-with-chris-lattner-on-mojo) — *"work backwards from the speed of light of hardware"* | the Hailo decode never leaves the quantised domain: 31.5 ms → **0.93 ms**, bit-identical |
+| [**Rubin**](https://www.goodreads.com/work/quotes/96114890-the-creative-act-a-way-of-being) — keep removing until it hurts | the palette was sampled from the vehicle's own CAD materials, not chosen |
 
 ---
 
