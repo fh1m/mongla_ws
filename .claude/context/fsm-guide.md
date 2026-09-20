@@ -8,9 +8,9 @@
 
 > **Status:** BUILT & TESTED (phase-2, commit 4a94231, 2026-06-02).
 > Runs alongside `detected()` scripted missions — both use the same
-> `run(duburi, log)` drop-in interface and auto-discovery.
+> `run(mongla, log)` drop-in interface and auto-discovery.
 >
-> **Home:** `src/duburi_planner/duburi_planner/state_machines/`
+> **Home:** `src/mongla_planner/mongla_planner/state_machines/`
 > **Entry missions:** `missions/gate_flare_fsm.py`, `missions/prequal_fsm.py`
 >
 > **See also:** [`fsm-vision-missions.md`](fsm-vision-missions.md) — vision as primary
@@ -64,7 +64,7 @@ Scripts (detected() paradigm) are kept and remain the **prototyping / unit-test 
 sudo apt install ros-humble-yasmin ros-humble-yasmin-ros
 ```
 
-`package.xml` in `duburi_planner` already declares `<depend>yasmin</depend>`.
+`package.xml` in `mongla_planner` already declares `<depend>yasmin</depend>`.
 
 ### Core concepts
 
@@ -139,7 +139,7 @@ state_machines/
 │   ├── outcomes.py              ← SUCCEED / FAILED / TIMEOUT / ABORT constants
 │   ├── blackboard.py            ← BK.* typed key registry (prevents typos)
 │   ├── vehicle_profile.py       ← VehicleProfile dataclass
-│   └── base_state.py            ← DuburiState: timeout + ABORT-on-exception
+│   └── base_state.py            ← MonglaState: timeout + ABORT-on-exception
 ├── states/
 │   ├── navigation.py            ← motion + safety states
 │   ├── vision.py                ← perception states
@@ -160,7 +160,7 @@ state_machines/
 ```
                 ┌─────────────────────────────────┐
                 │  VehicleProfile.auto(node)        │
-                │  probes /duburi_manager at runtime│
+                │  probes /mongla_manager at runtime│
                 └──────────────┬──────────────────┘
                                │
               ┌────────────────┴────────────────┐
@@ -168,7 +168,7 @@ state_machines/
               │                                  │
    ┌──────────▼──────────┐           ┌───────────▼──────────┐
    │  VehicleProfile      │           │  VehicleProfile       │
-   │  name='duburi45'     │           │  name='dubomini'      │
+   │  name='mongla_heavy'     │           │  name='mongla_agile'      │
    │  has_dvl=True        │           │  has_dvl=False        │
    │  has_manipulators=T  │           │  has_manipulators=F   │
    │  mission_depth=-0.8m │           │  mission_depth=-0.6m  │
@@ -179,17 +179,17 @@ States query `profile.has_dvl`, `profile.has_manipulators` to pick the right ver
 
 **Named constructors for pool-day without a running manager:**
 ```python
-profile = VehicleProfile.duburi45()   # force Duburi 4.5
-profile = VehicleProfile.dubomini()   # force Dubomini 2.0
+profile = VehicleProfile.mongla_heavy()   # force Mongla 4.5
+profile = VehicleProfile.mongla_agile()   # force Mongla_agile 2.0
 profile = VehicleProfile.auto(node)   # auto-detect (recommended in missions)
 ```
 
-### DuburiState base class
+### MonglaState base class
 
-Every state inherits from `DuburiState` which wraps YASMIN's `State`:
+Every state inherits from `MonglaState` which wraps YASMIN's `State`:
 
 ```python
-class DuburiState(State):
+class MonglaState(State):
     TIMEOUT_S = 60.0  # override per state
 
     def execute(self, blackboard):
@@ -197,7 +197,7 @@ class DuburiState(State):
         try:
             return self._run(blackboard)     # subclass logic
         except Exception as exc:
-            self.duburi.stop()               # always stop thrusters on crash
+            self.mongla.stop()               # always stop thrusters on crash
             blackboard[BK.LAST_ERROR] = str(exc)
             return ABORT
 
@@ -208,13 +208,13 @@ class DuburiState(State):
 Rules for subclasses:
 - Implement `_run(bb)` only
 - Check `self.timed_out()` in any polling loop
-- Never call Pixhawk/MAVLink directly — use `self.duburi.*` DSL verbs
+- Never call Pixhawk/MAVLink directly — use `self.mongla.*` DSL verbs
 - Return one of: `SUCCEED`, `FAILED`, `TIMEOUT`, `ABORT`
 
 ### BK — typed blackboard keys
 
 ```python
-from duburi_planner.state_machines.core.blackboard import BK
+from mongla_planner.state_machines.core.blackboard import BK
 
 bb[BK.START_HEADING]   # float deg — written by ArmState
 bb[BK.DVL_CONNECTED]   # bool — written by ArmState
@@ -233,35 +233,35 @@ Always use `BK.*` constants, never raw strings — grep-able and typo-safe.
 
 | State | Constructor | Outcomes | Notes |
 |---|---|---|---|
-| `ArmState` | `(duburi, profile)` | SUCCEED, ABORT | Arms + DVL connect if `has_dvl`; sets `BK.DVL_CONNECTED` |
-| `DisarmState` | `(duburi, profile)` | SUCCEED | Calls `release_heading()` before `disarm()` (mirrors `SurfaceState`) |
-| `SetDepthState` | `(duburi, profile, depth_m, timeout_s=45)` | SUCCEED, TIMEOUT, ABORT | Calls `duburi.set_depth()` |
-| `LockHeadingState` | `(duburi, profile, heading=0.0, lock_timeout=600.0)` | SUCCEED, TIMEOUT, ABORT | Calls `duburi.lock_heading(heading, timeout=lock_timeout)`; stores `BK.START_HEADING`. `lock_timeout` is how long the lock HOLDS heading across later states (mission/hold duration), **not** this state's `TIMEOUT_S` |
-| `MoveForwardState` | `(duburi, profile, distance_m=None, duration=None, gain=60)` | SUCCEED, ABORT | **DVL/timed auto-select** |
+| `ArmState` | `(mongla, profile)` | SUCCEED, ABORT | Arms + DVL connect if `has_dvl`; sets `BK.DVL_CONNECTED` |
+| `DisarmState` | `(mongla, profile)` | SUCCEED | Calls `release_heading()` before `disarm()` (mirrors `SurfaceState`) |
+| `SetDepthState` | `(mongla, profile, depth_m, timeout_s=45)` | SUCCEED, TIMEOUT, ABORT | Calls `mongla.set_depth()` |
+| `LockHeadingState` | `(mongla, profile, heading=0.0, lock_timeout=600.0)` | SUCCEED, TIMEOUT, ABORT | Calls `mongla.lock_heading(heading, timeout=lock_timeout)`; stores `BK.START_HEADING`. `lock_timeout` is how long the lock HOLDS heading across later states (mission/hold duration), **not** this state's `TIMEOUT_S` |
+| `MoveForwardState` | `(mongla, profile, distance_m=None, duration=None, gain=60)` | SUCCEED, ABORT | **DVL/timed auto-select** |
 | `MoveBackState` | same | SUCCEED, ABORT | **DVL/timed auto-select** |
 | `MoveLateralState` | same | SUCCEED, ABORT | **DVL/timed auto-select** |
-| `SurfaceState` | `(duburi, profile)` | SUCCEED, ABORT | release_heading + stop + set_depth(0) + disarm |
+| `SurfaceState` | `(mongla, profile)` | SUCCEED, ABORT | release_heading + stop + set_depth(0) + disarm |
 
 **DVL/timed auto-selection rule in MoveForwardState:**
 ```
 if distance_m is not None AND profile.has_dvl:
-    duburi.move_forward_dist(distance_m, gain)   ← DVL closed-loop
+    mongla.move_forward_dist(distance_m, gain)   ← DVL closed-loop
 else if duration is not None:
-    duburi.move_forward(duration, gain)           ← timed open-loop
+    mongla.move_forward(duration, gain)           ← timed open-loop
 ```
 Always pass **both** `distance_m` and `duration` in plan builders so each vehicle gets the right path.
 
 ### Vision states (`states/vision.py`)
 
 Three states map 1:1 onto the two-verb vision API plus an open-loop search.
-(Every state also inherits `TIMEOUT` + `ABORT` from `DuburiState`; ABORT fires
+(Every state also inherits `TIMEOUT` + `ABORT` from `MonglaState`; ABORT fires
 on an unexpected exception.)
 
 | State | Constructor | Outcomes | Wraps DSL |
 |---|---|---|---|
-| `VisionSearchState` | `(duburi, profile, target, camera=None, pattern='forward', gain=35, step_s=0.6, yaw_step=20.0, timeout=45.0)` | SUCCEED, TIMEOUT, ABORT | open-loop creep / yaw-sweep; polls `duburi.detected()` (replaces find/scan) |
-| `VisionAlignState` | `(duburi, profile, target, camera=None, yaw=None, lat=None, depth=None, err=40, gain=30, duration=20, fallback=None)` | SUCCEED, FAILED, ABORT | `duburi.vision.align()` |
-| `VisionMoveState` | `(duburi, profile, target, camera=None, fwd=95, mode='area', maintain=None, hold=None, gain=30, duration=20, fallback=None)` | SUCCEED, FAILED, ABORT | `duburi.vision.move()` |
+| `VisionSearchState` | `(mongla, profile, target, camera=None, pattern='forward', gain=35, step_s=0.6, yaw_step=20.0, timeout=45.0)` | SUCCEED, TIMEOUT, ABORT | open-loop creep / yaw-sweep; polls `mongla.detected()` (replaces find/scan) |
+| `VisionAlignState` | `(mongla, profile, target, camera=None, yaw=None, lat=None, depth=None, err=40, gain=30, duration=20, fallback=None)` | SUCCEED, FAILED, ABORT | `mongla.vision.align()` |
+| `VisionMoveState` | `(mongla, profile, target, camera=None, fwd=95, mode='area', maintain=None, hold=None, gain=30, duration=20, fallback=None)` | SUCCEED, FAILED, ABORT | `mongla.vision.move()` |
 
 **Axis flags on `VisionAlignState`** (`yaw` / `lat` / `depth`): `True` = centre
 (offset 0), a number = signed **pixel offset** from centre, `None`/`False` =
@@ -276,7 +276,7 @@ axis off. At least one axis must be on.
 - `SUCCEED` — every active axis held within `err` px for `align_stable_frames`
   ticks (`VisionResult.ok`)
 - `FAILED` — any miss (LOST / TIMEOUT / NO_CAMERA); the verb never raises
-- `fallback` — mission-authored `fn(duburi[, should_stop])` search run on
+- `fallback` — mission-authored `fn(mongla[, should_stop])` search run on
   target loss; the verb re-enters within the same `duration`
 
 Use `FAILED → FIND_*` in your plan to auto-retry after target loss.
@@ -291,24 +291,24 @@ Use `FAILED → FIND_*` in your plan to auto-retry after target loss.
 
 | State | Constructor | Outcomes | Notes |
 |---|---|---|---|
-| `TurnState` | `(duburi, profile, heading_deg: float)` | SUCCEED | Absolute compass heading snap via `duburi.turn()`. Use to orient toward a task zone. |
+| `TurnState` | `(mongla, profile, heading_deg: float)` | SUCCEED | Absolute compass heading snap via `mongla.turn()`. Use to orient toward a task zone. |
 
 ### Utility states (`states/utility.py`)
 
 | State | Constructor | Outcomes | Notes |
 |---|---|---|---|
-| `CountdownState` | `(duburi, profile, seconds=10)` | SUCCEED | Tether-removal window; sets `BK.MISSION_START_T` |
-| `PauseState` | `(duburi, profile, seconds=3.0)` | SUCCEED | `duburi.pause()` dwell |
-| `LogScoreState` | `(duburi, profile)` | SUCCEED | Exports mission scoreboard JSON |
-| `FireState` | `(duburi, profile, channel: int, confirm_pause_s=2.0)` | SUCCEED | `duburi.fire(channel)` + settle pause. Channels: 1/2=torpedo, 3/4=dropper. Always explicit. |
-| `StyleRollState` | `(duburi, profile, flips=1, headroom=0.4, gain=60)` | SUCCEED | ACRO roll manoeuvre; use as final style points after Return gate pass. |
+| `CountdownState` | `(mongla, profile, seconds=10)` | SUCCEED | Tether-removal window; sets `BK.MISSION_START_T` |
+| `PauseState` | `(mongla, profile, seconds=3.0)` | SUCCEED | `mongla.pause()` dwell |
+| `LogScoreState` | `(mongla, profile)` | SUCCEED | Exports mission scoreboard JSON |
+| `FireState` | `(mongla, profile, channel: int, confirm_pause_s=2.0)` | SUCCEED | `mongla.fire(channel)` + settle pause. Channels: 1/2=torpedo, 3/4=dropper. Always explicit. |
+| `StyleRollState` | `(mongla, profile, flips=1, headroom=0.4, gain=60)` | SUCCEED | ACRO roll manoeuvre; use as final style points after Return gate pass. |
 
 ---
 
 ## 5. Plan Builders
 
 Plan builders are functions that return a `StateMachine`. They take:
-- `duburi` — DuburiMission instance (from the mission runner)
+- `mongla` — MonglaMission instance (from the mission runner)
 - `profile` — VehicleProfile (usually from `VehicleProfile.auto(node)`)
 - `params` — optional dict to override defaults
 
@@ -354,14 +354,14 @@ COUNTDOWN → ARM → DIVE → LOCK_HEADING → FIND_GATE → HOME_GATE
 ### Default params
 
 ```python
-from duburi_planner.state_machines import GATE_FLARE_DEFAULTS, PREQUAL_DEFAULTS
+from mongla_planner.state_machines import GATE_FLARE_DEFAULTS, PREQUAL_DEFAULTS
 
 GATE_FLARE_DEFAULTS = {
     'countdown_s':    10,
     'depth_m':       -0.8,
     'gate_heading':   0.0,    # ← SET THIS at pool day
     'pass_dist_m':    3.5,    # DVL distance through gate
-    'pass_duration':  5.0,    # timed fallback for Dubomini
+    'pass_duration':  5.0,    # timed fallback for Mongla_agile
     'pass_gain':      80,
     'return_dist_m':  1.5,
     'return_duration': 3.0,
@@ -378,7 +378,7 @@ GATE_FLARE_DEFAULTS = {
 
 Override any key at runtime without code edits:
 ```python
-sm = build_gate_flare_fsm(duburi, profile, params={
+sm = build_gate_flare_fsm(mongla, profile, params={
     'gate_heading': 63.0,   # compass heading to gate at this pool
     'depth_m':     -1.0,    # deeper competition pool
     'pass_dist_m':  4.0,    # wider gate
@@ -402,11 +402,11 @@ Heading params default to `None` — when None, the turn state is omitted and th
 
 ```bash
 # Standalone task FSMs:
-ros2 run duburi_planner mission fsm_slalom
-ros2 run duburi_planner mission fsm_bin
-ros2 run duburi_planner mission fsm_torpedo    # requires TORPEDO_DEPTH_M != None
-ros2 run duburi_planner mission fsm_return
-ros2 run duburi_planner mission fsm_full_2026  # ★ recommended full competition run
+ros2 run mongla_planner mission fsm_slalom
+ros2 run mongla_planner mission fsm_bin
+ros2 run mongla_planner mission fsm_torpedo    # requires TORPEDO_DEPTH_M != None
+ros2 run mongla_planner mission fsm_return
+ros2 run mongla_planner mission fsm_full_2026  # ★ recommended full competition run
 ```
 
 `fsm_full_2026` is a flat 5-task state machine. Each task section's failure transitions to the
@@ -419,20 +419,20 @@ ros2 run duburi_planner mission fsm_full_2026  # ★ recommended full competitio
 ### Quickstart — same command, auto-detects vehicle
 
 ```bash
-# Gate + Flare FSM (Duburi 4.5 OR Dubomini 2.0 — auto-detected)
-ros2 run duburi_planner mission gate_flare_fsm
+# Gate + Flare FSM (Mongla 4.5 OR Mongla_agile 2.0 — auto-detected)
+ros2 run mongla_planner mission gate_flare_fsm
 
 # Gate-only prequal
-ros2 run duburi_planner mission prequal_fsm
+ros2 run mongla_planner mission prequal_fsm
 ```
 
 The mission prints at startup:
 ```
-[FSM] body=duburi45  dvl=True  manip=True  depth=-0.8m
+[FSM] body=mongla_heavy  dvl=True  manip=True  depth=-0.8m
 ```
 or:
 ```
-[FSM] body=dubomini  dvl=False  manip=False  depth=-0.6m
+[FSM] body=mongla_agile  dvl=False  manip=False  depth=-0.6m
 ```
 
 You see exactly what profile was detected before any movement.
@@ -443,16 +443,16 @@ Create a one-off wrapper mission (or pass params inline):
 
 ```python
 # missions/competition_day.py
-from duburi_planner.state_machines import build_gate_flare_fsm, VehicleProfile
+from mongla_planner.state_machines import build_gate_flare_fsm, VehicleProfile
 from yasmin import Blackboard
 from yasmin_ros import set_ros_loggers
 
-def run(duburi, log):
-    duburi.models(gate='gate_flare_medium_100ep')
-    duburi.camera = 'forward'
-    duburi.set_classes('gate,flare')
+def run(mongla, log):
+    mongla.models(gate='gate_flare_medium_100ep')
+    mongla.camera = 'forward'
+    mongla.set_classes('gate,flare')
 
-    profile = VehicleProfile.auto(duburi.client.node)
+    profile = VehicleProfile.auto(mongla.client.node)
 
     # Pool-day tunable block — edit here, not in the plan builder
     params = {
@@ -463,13 +463,13 @@ def run(duburi, log):
     }
 
     set_ros_loggers()
-    sm = build_gate_flare_fsm(duburi, profile, params=params)
+    sm = build_gate_flare_fsm(mongla, profile, params=params)
     outcome = sm(Blackboard())
     log(f'[FSM] result: {outcome}')
 ```
 
 ```bash
-ros2 run duburi_planner mission competition_day
+ros2 run mongla_planner mission competition_day
 ```
 
 ### Force a specific vehicle profile
@@ -477,19 +477,19 @@ ros2 run duburi_planner mission competition_day
 When manager is not running (bench test):
 
 ```python
-profile = VehicleProfile.duburi45()   # forces DVL path
-profile = VehicleProfile.dubomini()   # forces timed path
+profile = VehicleProfile.mongla_heavy()   # forces DVL path
+profile = VehicleProfile.mongla_agile()   # forces timed path
 ```
 
 ### Verify detector is loaded before running
 
 ```bash
 # Check detector sees gate and flare
-ros2 run duburi_vision vision_check --camera forward --require-class gate
-ros2 run duburi_vision vision_check --camera forward --require-class flare
+ros2 run mongla_vision vision_check --camera forward --require-class gate
+ros2 run mongla_vision vision_check --camera forward --require-class flare
 
 # See detection → RC echo (safe, sub disarmed)
-ros2 run duburi_vision vision_thrust_check --camera forward --duration 4
+ros2 run mongla_vision vision_thrust_check --camera forward --duration 4
 ```
 
 ---
@@ -504,8 +504,8 @@ FIND_GATE (VisionSearchState, pattern='forward')   → detects gate
 HOME_GATE (VisionAlignState, yaw=True, lat=True)    → centre yaw + lateral on the gate
 MOVE_GATE (VisionMoveState, fwd=42, mode='area')    → drive in until gate fills 42% of frame
 PASS_GATE (MoveForwardState, distance_m=3.5, duration=5.0)
-  → Duburi 4.5: DVL-measured 3.5m forward pass (precise, heading-locked)
-  → Dubomini: 5.0s timed thrust at gain=80
+  → Mongla 4.5: DVL-measured 3.5m forward pass (precise, heading-locked)
+  → Mongla_agile: 5.0s timed thrust at gain=80
 ```
 
 Key settings for smooth vision+DVL:
@@ -516,7 +516,7 @@ Key settings for smooth vision+DVL:
 | `gate_fwd_fill` | Gate bbox % of frame that commits the pass | 38-45 (higher = closer = more risk of clipping) |
 | `approach_gain` | Max-speed cap while `vision.move` drives in | 35-50 |
 | `align_gain` | Max-speed cap while `vision.align` centres | 25-35 |
-| `kp_yaw / kp_lat` | Vision loop P-gains | Tune via `ros2 param set /duburi_manager vision.kp_yaw 80` |
+| `kp_yaw / kp_lat` | Vision loop P-gains | Tune via `ros2 param set /mongla_manager vision.kp_yaw 80` |
 | `fallback=` | Mission search fn run on target loss; the verb re-enters within `duration` | Pass a creep/sweep fn; omit to coast through brief losses |
 
 A real miss (LOST / TIMEOUT) routes the align/move state to `FAILED`, so wire
@@ -537,15 +537,15 @@ plan owns recovery.
 If slalom needs a new behavior not covered by existing states, add to `states/navigation.py` or a new `states/slalom.py`:
 
 ```python
-class YawStepState(DuburiState):
+class YawStepState(MonglaState):
     """Yaw by a fixed increment. Returns SUCCEED always."""
-    def __init__(self, duburi, profile, degrees: float, timeout_s=15.0):
-        super().__init__(duburi, profile, [SUCCEED])
+    def __init__(self, mongla, profile, degrees: float, timeout_s=15.0):
+        super().__init__(mongla, profile, [SUCCEED])
         self._deg = degrees
         self.TIMEOUT_S = timeout_s
 
     def _run(self, bb):
-        self.duburi.yaw_right(self._deg) if self._deg > 0 else self.duburi.yaw_left(-self._deg)
+        self.mongla.yaw_right(self._deg) if self._deg > 0 else self.mongla.yaw_left(-self._deg)
         return SUCCEED
 ```
 
@@ -566,7 +566,7 @@ SLALOM_DEFAULTS = {
     'pass_duration': 3.5,
 }
 
-def build_slalom_fsm(duburi, profile, params=None):
+def build_slalom_fsm(mongla, profile, params=None):
     p = {**SLALOM_DEFAULTS, **(params or {})}
     sm = StateMachine(outcomes=[SUCCEED, ABORT])
     # ... add states ...
@@ -584,13 +584,13 @@ from yasmin_ros import set_ros_loggers
 from ..state_machines.plans.slalom import build_slalom_fsm
 from ..state_machines import VehicleProfile
 
-def run(duburi, log):
-    duburi.set_model('slalom_red_pipe')
-    duburi.camera = 'forward'
-    duburi.set_classes('red_pipe')
-    profile = VehicleProfile.auto(duburi.client.node)
+def run(mongla, log):
+    mongla.set_model('slalom_red_pipe')
+    mongla.camera = 'forward'
+    mongla.set_classes('red_pipe')
+    profile = VehicleProfile.auto(mongla.client.node)
     set_ros_loggers()
-    outcome = build_slalom_fsm(duburi, profile)(Blackboard())
+    outcome = build_slalom_fsm(mongla, profile)(Blackboard())
     log(f'[FSM] {outcome}')
 ```
 
@@ -615,12 +615,12 @@ All states are unit-testable without hardware:
 
 ```bash
 # Run FSM unit tests only
-PYTHONPATH=src/duburi_planner python3 -m pytest -q -p no:anyio \
-  src/duburi_planner/test/test_fsm_states.py
+PYTHONPATH=src/mongla_planner python3 -m pytest -q -p no:anyio \
+  src/mongla_planner/test/test_fsm_states.py
 
 # Full planner suite
-PYTHONPATH=src/duburi_planner python3 -m pytest -q -p no:anyio \
-  src/duburi_planner/test/
+PYTHONPATH=src/mongla_planner python3 -m pytest -q -p no:anyio \
+  src/mongla_planner/test/
 ```
 
 **Test pattern:**
@@ -628,12 +628,12 @@ PYTHONPATH=src/duburi_planner python3 -m pytest -q -p no:anyio \
 ```python
 from unittest.mock import MagicMock
 from yasmin import Blackboard
-from duburi_planner.state_machines.states.navigation import MoveForwardState
-from duburi_planner.state_machines import SUCCEED, VehicleProfile
+from mongla_planner.state_machines.states.navigation import MoveForwardState
+from mongla_planner.state_machines import SUCCEED, VehicleProfile
 
 def test_dvl_path():
     d = MagicMock()
-    state = MoveForwardState(d, VehicleProfile.duburi45(), distance_m=2.0, duration=4.0)
+    state = MoveForwardState(d, VehicleProfile.mongla_heavy(), distance_m=2.0, duration=4.0)
     assert state.execute(Blackboard()) == SUCCEED
     d.move_forward_dist.assert_called_once_with(2.0, gain=60)
 ```
@@ -643,7 +643,7 @@ def test_dvl_path():
 def test_abort_on_thruster_fault():
     d = MagicMock()
     d.move_forward.side_effect = RuntimeError('thruster fault')
-    state = MoveForwardState(d, VehicleProfile.dubomini(), duration=3.0)
+    state = MoveForwardState(d, VehicleProfile.mongla_agile(), duration=3.0)
     assert state.execute(Blackboard()) == 'aborted'
     d.stop.assert_called_once()
 ```
@@ -654,30 +654,30 @@ def test_abort_on_thruster_fault():
 
 ```bash
 # 1. Bringup check
-ros2 run duburi_manager bringup_check
+ros2 run mongla_manager bringup_check
 
 # 2. Start control stack + detector (gate+flare model)
-ros2 launch duburi_manager bringup.launch.py vision:=true
+ros2 launch mongla_manager bringup.launch.py vision:=true
 
 # 3. Verify detector
-ros2 run duburi_vision vision_check --camera forward --require-class gate
-ros2 run duburi_vision vision_check --camera forward --require-class flare
+ros2 run mongla_vision vision_check --camera forward --require-class gate
+ros2 run mongla_vision vision_check --camera forward --require-class flare
 
 # 4. Disarmed detection → RC echo test
-ros2 run duburi_vision vision_thrust_check --camera forward --duration 4
+ros2 run mongla_vision vision_thrust_check --camera forward --duration 4
 
 # 5. Run FSM prequal (will countdown 10s, then arm and execute)
-ros2 run duburi_planner mission prequal_fsm
+ros2 run mongla_planner mission prequal_fsm
 
 # 6. Run FSM full gate+flare
-ros2 run duburi_planner mission gate_flare_fsm
+ros2 run mongla_planner mission gate_flare_fsm
 
 # 7. Watch state transitions in ROS logs
 ros2 topic echo /rosout   # shows [INFO] state_machine.cpp: transitioning X→Y
 
 # 8. Tune gains live without restart
-ros2 param set /duburi_manager vision.kp_yaw 75.0
-ros2 param set /duburi_manager vision.kp_lat 65.0
+ros2 param set /mongla_manager vision.kp_yaw 75.0
+ros2 param set /mongla_manager vision.kp_lat 65.0
 
 # 9. Override pool-day params without code edit
 #    Create a thin mission wrapper (see §6) with a params dict
@@ -689,12 +689,12 @@ ros2 param set /duburi_manager vision.kp_lat 65.0
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│  mission runner (ros2 run duburi_planner mission X)         │
-│  ├── DuburiMission DSL (duburi.*)                          │
-│  └── VehicleProfile.auto() ─── /duburi_manager ROS params  │
+│  mission runner (ros2 run mongla_planner mission X)         │
+│  ├── MonglaMission DSL (mongla.*)                          │
+│  └── VehicleProfile.auto() ─── /mongla_manager ROS params  │
 └────────────────────────────────┬───────────────────────────┘
                                  │
-                    build_gate_flare_fsm(duburi, profile)
+                    build_gate_flare_fsm(mongla, profile)
                                  │
          ┌───────────────────────▼────────────────────────┐
          │  YASMIN StateMachine  sm(Blackboard())          │
@@ -715,15 +715,15 @@ ros2 param set /duburi_manager vision.kp_lat 65.0
          └─────────────────────────────────────────────────┘
                                  │
               ┌──────────────────▼──────────────────┐
-              │  DuburiState.execute()               │
-              │  calls: duburi.vision.align(...)     │
-              │         duburi.vision.move(...)       │
-              │         duburi.move_forward_dist(...) │
-              │         duburi.set_depth(...)         │
+              │  MonglaState.execute()               │
+              │  calls: mongla.vision.align(...)     │
+              │         mongla.vision.move(...)       │
+              │         mongla.move_forward_dist(...) │
+              │         mongla.set_depth(...)         │
               └──────────────────┬──────────────────┘
                                  │
               ┌──────────────────▼──────────────────┐
-              │  /duburi/move ActionServer            │
+              │  /mongla/move ActionServer            │
               │  (auv_manager_node)                  │
               │  MAVLink → Pixhawk → ArduSub          │
               └─────────────────────────────────────┘

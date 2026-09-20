@@ -1,6 +1,6 @@
-# Mongla / duburi_ws — Unified Bug Register
+# Mongla / mongla_ws — Unified Bug Register
 
-> **This file is the SINGLE tracker for code defects in `duburi_ws`.**
+> **This file is the SINGLE tracker for code defects in `mongla_ws`.**
 > It replaces the bug content previously spread across `known-issues.md`,
 > `ROADMAP.md`, `ROADMAP.md`, `water-owed.md` and
 > `srot-pre-dive-gates.md`. See §6 for exactly what was migrated, what was
@@ -63,7 +63,7 @@ logic right?" would have passed all three.
 ## 1. CRITICAL
 
 ### B01 — the LEAK health reporter is never registered  ✅ FIXED 2026-09-08 (`6fada73`)
-**`duburi_manager/health_reporters.py:72` · `auv_manager_node.py:1191`**
+**`mongla_manager/health_reporters.py:72` · `auv_manager_node.py:1191`**
 
 Nine reporters are defined; six are registered. `leak_sensor`, `target_lock`
 and `target_pose` are not.
@@ -82,7 +82,7 @@ six reads identically to `OK` from nine.
 whether `LEAK_EN=0` should block arming — that is a policy call, not a wiring one.
 
 ### B02 — 12 bytes of noise hang the DVL reader thread forever `REPRODUCED`  ✅ FIXED 2026-09-08 (`0c1099a`)
-**`duburi_sensors/sources/nucleus_parser.py` · `PacketAccumulator.feed`**
+**`mongla_sensors/sources/nucleus_parser.py` · `PacketAccumulator.feed`**
 
 `size_header` and `size_data` are taken off the wire with no lower bound. When
 both are zero, `total = 0`, so `len(buf) < total` is False (not treated as a
@@ -143,7 +143,7 @@ validation.
 > packets; trusting a zero-length version of it never terminates.
 
 ### B04 — an uncalibrated BNO reports healthy and steers as if Earth-referenced  ✅ FIXED 2026-09-08
-**`duburi_sensors/sources/bno085.py:181, 243, 284`**
+**`mongla_sensors/sources/bno085.py:181, 243, 284`**
 
 Calibration locks `offset = (pixhawk_yaw − bno_raw) % 360`. On failure the code
 deliberately continues and leaves `offset_deg = None`, with the comment *"so
@@ -176,7 +176,7 @@ exactly once at ingestion; the modular arithmetic across wrap in both
 directions; `_fresh_raw_yaw` returning `None` past `_STALE_S`.
 
 ### B05 — a caller coerces `None` to `0.0` and thereby defeats the guard written to catch it  ✅ FIXED 2026-09-08 (`d2df03d`)
-**`duburi_vision/distance/distance_estimation_node.py:208` · `flow_math.py:855`**
+**`mongla_vision/distance/distance_estimation_node.py:208` · `flow_math.py:855`**
 
 The accumulator refuses a degenerate frame on purpose:
 
@@ -208,7 +208,7 @@ no count of degenerate frames — while the sibling `HeightEstimator.add`
 immediately above takes the correct approach (`self._n_gated += 1; return None`).
 
 ### B06 — a mid-command heading-lock timeout leaves Ch4 with no author  ⏸ **DEFERRED — ArduSub path only; not worked by operator decision (2026-09-08)**
-**`duburi_control/duburi.py:1362 _writers()` · `heading_lock` timeout path**
+**`mongla_control/mongla.py:1362 _writers()` · `heading_lock` timeout path**
 
 `_writers()` samples `_lock_active()` **once**, at command dispatch, and the
 resulting `Writers` bundle is used for the whole command — a 20 Hz thrust loop
@@ -237,7 +237,7 @@ last command for up to three seconds. The fix must actively write `1500`;
 "releasing" it is exactly what does not work. Still deferred: ArduSub path.
 
 ### B07 — `arc()` steers on a fabricated heading reference  ⏸ **DEFERRED — ArduSub path only; not worked by operator decision (2026-09-08)**
-**`duburi_control/motion_forward.py:129`**
+**`mongla_control/motion_forward.py:129`**
 
 ```python
 start_heading = read_heading(pixhawk, yaw_source) or 0.0
@@ -251,7 +251,7 @@ with `STALE_HOLD_S`; `arc` has no stale guard. Same `or 0.0` idiom appears in
 `motion_writers.py` (B12), but there it only reaches a log line.
 
 ### B08 — `prime_alt_hold` seeds the ramp from ungated telemetry, inverting its own purpose  ⏸ **DEFERRED — ArduSub path only; not worked by operator decision (2026-09-08)**
-**`duburi_control/motion_depth.py`**
+**`mongla_control/motion_depth.py`**
 
 ```python
 starting = pixhawk.get_attitude()          # UNGATED
@@ -269,7 +269,7 @@ power."*
 ## 3. MEDIUM
 
 ### B09 — Kalman `Q` is not rescaled with `dt` while `F` is  ✅ FIXED 2026-09-08
-**`duburi_vision/tracking/kalman.py`**
+**`mongla_vision/tracking/kalman.py`**
 
 `_update_F(dt)` correctly rewrites `F[0,2] = F[1,3] = dt` for a variable frame
 interval, but `Q = np.eye(4) * process_noise` is built once and never touched.
@@ -299,7 +299,7 @@ height as `height=0.00m`, and the debug topic does the same. Three `or 0.0` in
 one file, each turning "unknown" into a number a human reads as measured.
 
 ### B11 — `CompositeBnoDvlSource.is_healthy` contradicts its own docstring  ✅ FIXED 2026-09-08
-**`duburi_sensors/sources/composite_bno_dvl.py:17 vs :59`**
+**`mongla_sensors/sources/composite_bno_dvl.py:17 vs :59`**
 
 Docstring: `is_healthy() -> BNO healthy AND DVL streaming`.
 Implementation: `return self._bno.is_healthy()`.
@@ -313,7 +313,7 @@ believes a green line covers the DVL. Separately, **nothing in the tree calls
 consulted.
 
 ### B12 — heading fabricated as due-north in the writers/log path  ⏸ **DEFERRED — ArduSub path only; not worked by operator decision (2026-09-08)**
-**`duburi_control/motion_writers.py`**
+**`mongla_control/motion_writers.py`**
 
 `locked_heading = read_heading(pixhawk, yaw_source) or 0.0` — same idiom as B07
 but reaching only a log line, so a stale source prints a confident `0.0°`.
@@ -322,7 +322,7 @@ not. The same file also polls `get_attitude()` every 20 Hz tick purely to feed a
 throttled log line.
 
 ### B13 — `motion_yaw` derivative term has no `dt`  ✅ FIXED 2026-09-08
-**`duburi_control/motion_yaw.py`**
+**`mongla_control/motion_yaw.py`**
 
 ```python
 d_term = YAW_KD * (error_deg - self._last_e)   # comment claims "Uses 1/YAW_RATE_HZ as dt"
@@ -337,7 +337,7 @@ not prevented); the timeout path reports the **entry** heading as current;
 `duration + timeout`, up to 6 s + timeout.
 
 ### B14 — the parser's tests cover the one garbage case that cannot fail  ✅ FIXED 2026-09-08
-**`duburi_sensors/test/test_nucleus_parser.py`**
+**`mongla_sensors/test/test_nucleus_parser.py`**
 
 `test_accumulator_skips_leading_garbage` feeds `b'\x00\x11\x22'` before a good
 packet. That garbage contains **no `0xa5`**, so it exercises only the
@@ -351,7 +351,7 @@ for B02/B03 is worthless without a test that feeds a false sync byte — the two
 exact inputs reproduced above.
 
 ### B15 — `LOCK_HOLD_DEADBAND_DEG < LOCK_APPROACH_BAND_DEG` is documented, unenforced  ✅ FIXED 2026-09-08
-**`duburi_control/heading_lock.py`**
+**`mongla_control/heading_lock.py`**
 
 The constant is annotated *"Must stay < `LOCK_APPROACH_BAND_DEG`"*. Nothing
 asserts it. Violated, the lock degrades silently into the relay it exists to
@@ -359,7 +359,7 @@ prevent — the exact limit-cycle that the tapering fix (`ab2014f`) was written 
 remove.
 
 ### B16 — `bearing.py` promises defensive scaling it does not implement  ✅ RESOLVED 2026-09-08 — **as a DOC defect; the finding as written is partly RETRACTED**
-**`duburi_vision/bearing.py`**
+**`mongla_vision/bearing.py`**
 
 The comment promises to *"scale defensively rather than silently producing
 bearings that are wrong by the resolution ratio"*. The code never scales and
@@ -384,7 +384,7 @@ halves plus the end-to-end invariant (a matched rescale must not change the
 bearing) in `test_bearing_resolution_invariant.py`.
 
 ### B21 — a preflight check that can silently vanish from the report  ✅ FIXED 2026-09-08
-**`duburi_manager/bringup_check.py:363`**
+**`mongla_manager/bringup_check.py:363`**
 
 ```python
 try:
@@ -431,7 +431,7 @@ This is more than a DRY complaint because the quantity is **physical** and the
 two uses are **inverses**: the failure mode is not "one is stale" but "the round
 trip no longer closes."
 
-**FIX.** `duburi_vision/optics.py` now holds `N_WATER` and both Snell transforms
+**FIX.** `mongla_vision/optics.py` now holds `N_WATER` and both Snell transforms
 as a pair; all six sites import them (`flow_math` could not import `solver` —
 that pulls `cv2` into a deliberately dependency-light module, which is part of
 how the literal got copied there). The transforms read `N_WATER` at **call** time,
@@ -457,7 +457,7 @@ started"`, raised on every srot shutdown). Same codebase, same hazard, one
 guarded and one not.
 
 ### B18 — `percent_to_pwm` truncates asymmetrically about neutral  ✅ FIXED 2026-09-08
-**`duburi_control/pixhawk.py`** — `int()` truncates toward zero, so `+0.1% →
+**`mongla_control/pixhawk.py`** — `int()` truncates toward zero, so `+0.1% →
 1500` and `−0.1% → 1499`. Endpoints and clamping are otherwise correct
 (verified). One LSB of dead-band bias on the negative side of every axis — below
 thruster resolution today, but a rounding rule that differs by sign.
@@ -542,12 +542,12 @@ lossy, an inner resume cancels an outer suspend.
 
 ~~Latent, not live~~ — **RETRACTED. It was live, and reachable in three
 operator steps.** The original reasoning (every scoped block sits in a verb body,
-`Duburi.lock` serialises verbs, so two scoped blocks cannot nest) is *correct* and
+`Mongla.lock` serialises verbs, so two scoped blocks cannot nest) is *correct* and
 the conclusion drawn from it is *wrong*, because **the collision is not
 scoped-vs-scoped**. It is a **latched** suspension against a **scoped** one:
 
 1. `lock_heading` while **DISARMED** latches a suspend that is *deliberately
-   unpaired* (`duburi.py:1044`), and sets `_lock_deferred`. Its own comment says
+   unpaired* (`mongla.py:1044`), and sets `_lock_deferred`. Its own comment says
    why: *"Suspend BEFORE start so the daemon never emits a single Ch4 write
    before the first armed command — no thruster kick while surface holders
    steady the hull."*
@@ -589,15 +589,15 @@ test that the two cannot diverge again, and an 8-thread × 200-cycle race check
 restoring the boolean semantics fails 3 of the 6, including the regression itself.
 
 ### J02 — `SurfaceState` swallows the failure of the one call it exists to make  ✅ FIXED 2026-09-08
-`duburi_planner/state_machines/states/navigation.py`
+`mongla_planner/state_machines/states/navigation.py`
 
 ```python
-self.duburi.stop()
+self.mongla.stop()
 try:
-    self.duburi.set_depth(0.0, timeout=60)
+    self.mongla.set_depth(0.0, timeout=60)
 except Exception:
     pass                       # ← the ascent failed, silently
-self.duburi.disarm()
+self.mongla.disarm()
 return SUCCEED                 # ← unconditional
 ```
 
@@ -605,7 +605,7 @@ return SUCCEED                 # ← unconditional
 emergency-surface path. A `MovementTimeout` means the hull did **not** reach the
 surface; the FSM records success and disarms, leaving a submerged vehicle
 without thrust. What makes it a defect rather than a style choice:
-`DuburiState.execute` already converts any exception into `stop()` + `ABORT`, so
+`MonglaState.execute` already converts any exception into `stop()` + `ABORT`, so
 this inner `except: pass` exists only to defeat that safety net, on the single
 call the state exists to perform. Violates *"fail-safe defaults"*.
 
@@ -660,17 +660,17 @@ the markers need removing. This was a find-only pass: the tests document the
 defects, they do not fix them.
 
 ### Read in depth
-`duburi_control` — all motion modules, the `duburi.py` facade, `heading_lock`,
+`mongla_control` — all motion modules, the `mongla.py` facade, `heading_lock`,
 `heartbeat`, `pixhawk`, `motion_vision` (92 KB), the `fc/` HAL and
-`port_guard`. `duburi_sensors` — every source plus the binary parser.
-`duburi_vision` — `flow_math`, `kalman`, `bearing`, `confidence`, the distance
+`port_guard`. `mongla_sensors` — every source plus the binary parser.
+`mongla_vision` — `flow_math`, `kalman`, `bearing`, `confidence`, the distance
 nodes, `calibration/solver`, `cameras/v4l2_mailbox`, `stamps`, `vision_state`.
-`duburi_manager` — health path and registration, banner, executor/callback-group
+`mongla_manager` — health path and registration, banner, executor/callback-group
 layout, `bringup_check`.
 
 ### Swept mechanically across the whole tree
 - **114 silent exception swallows** enumerated by AST; all 20 in
-  `duburi_control`/`duburi_manager` inspected individually. One defect (B21);
+  `mongla_control`/`mongla_manager` inspected individually. One defect (B21);
   the rest are `close()`/`flock`-unlock cleanup and are correct.
 - **MAVLink TX serialisation** — `srot_fc.py` 7 sends, `pixhawk.py` 13 sends,
   **0 unguarded**; every one inside `with self._tx_lock`.
@@ -692,7 +692,7 @@ inversion · `flow_math.axis_unit` / `height_above_floor` /
 reduces correctly to axial and lateral) · `pool_depth_m` defaulting to NaN with
 a refusal · `medium` validated `air|water` · `ConfidenceModel.bounds()` guarding
 `hi−lo < 1e-3` · `nsa_factor` direction (not inverted) ·
-`DuburiState.__init__` outcome merge · BNO085 negation, modular arithmetic and
+`MonglaState.__init__` outcome merge · BNO085 negation, modular arithmetic and
 staleness · `align_loop`/`move_loop` `half_w`/`half_h` cannot be zero
 (`_on_info` sets `_info_seen` only inside `if msg.width and msg.height:`, so a
 zero-dimension `CameraInfo` yields `NO_CAMERA` rather than a `ZeroDivisionError`
@@ -707,7 +707,7 @@ Recorded because a bug register that only lists faults misrepresents the
 codebase, and because these are the patterns the rest of the tree should be
 measured against.
 
-**`duburi_vision/stamps.py`** — the freshness-conversion module. It names the
+**`mongla_vision/stamps.py`** — the freshness-conversion module. It names the
 defect it exists to stop, lists the four times this codebase shipped it, and
 states the principle exactly: *"a clock read at the wrong place does not fail,
 it flatters."* It handles both clock domains explicitly, and even its residual
@@ -723,7 +723,7 @@ is a flaw in *when* that bundle is sampled, not in the design.
 ### Not covered — stated plainly
 `auv_manager_node` beyond the health/banner/executor/clock paths (91 KB),
 `srot_fc.py` (135 KB) and `srot_protocol.py` beyond the TX-lock and clock
-sweeps, `duburi_dsl.py` / `vision_dsl.py`, `detector_node`, `camera_node`,
+sweeps, `mongla_dsl.py` / `vision_dsl.py`, `detector_node`, `camera_node`,
 `tracker_node`, `lock_node`, `hailo`, `calibration/guide.py`, `display_node`,
 `mission_web_node`, `srot_connect`, `connection_config`, most of `tools/`, and
 the entire `sim/` workspace. The FSM tree was deliberately deprioritised per
@@ -832,7 +832,7 @@ exists to carry (an aborted detector keeps every topic; only the *rate* changes)
 never fired on a live vehicle.
 
 ### B27 — the ledger guard silently disables itself when a newer plan is written  ✅ FIXED 2026-09-08
-`src/duburi_manager/test/test_ledger_claims.py` pins the carried-work ledger
+`src/mongla_manager/test/test_ledger_claims.py` pins the carried-work ledger
 against the tree. `_ledger()` reads **"the most recently modified plan file"**,
 so the moment any new plan is written beside the workspace the guard switches to
 that file, finds no `### Open engineering` section, and `pytest.skip`s — five
@@ -959,11 +959,11 @@ which both overwrite them.
 
 ### B29 — a test replaces a class for the WHOLE session, because its `finally` is gated on `None`  ✅ FIXED 2026-09-08
 
-**`duburi_vision/test/test_camera_profiles.py:118`** (found while fixing B23).
+**`mongla_vision/test/test_camera_profiles.py:118`** (found while fixing B23).
 
 ```python
 orig = F._build_v4l2.__globals__.get('V4L2MailboxCamera')   # -> None, ALWAYS
-import duburi_vision.cameras.v4l2_mailbox as vm
+import mongla_vision.cameras.v4l2_mailbox as vm
 vm.V4L2MailboxCamera = _Spy
 try:
     ...
@@ -1015,7 +1015,7 @@ vehicle's primary vision verb.
    reaches the call and a fast snap-in does. It fails on the approach that has
    inertia — the hardest shape to catch on a bench, and the one that matters in
    water.
-3. **The facade drift tests could not see it.** They scan `duburi.py` /
+3. **The facade drift tests could not see it.** They scan `mongla.py` /
    `vision_verbs.py` for `self.pixhawk.<attr>`. These calls live in
    `motion_writers`, inside a lambda, reached through a `Writers` field.
 
@@ -1152,7 +1152,7 @@ rather than smoothed over.
 | Pilot authority is **not** unity | ⚠ see B31 | `computeDemands` `task_control_loop.cpp:158-165` + live board params measured 2026-09-08 |
 | `RC_CHANNELS_OVERRIDE` 65535 on Ch1–8 = "ignore this field", not "release" | ✅ (B24) | ArduPilot `GCS_Common.cpp:4213-4218`; `RC_OVERRIDE_TIME` default 3.0 s in `RC_Channels_VarInfo.h:90` |
 | White-noise-acceleration Kalman `Q` discretisation | ✅ (B09) | standard `[[dt⁴/4, dt³/2],[dt³/2, dt²]]·σ_a²` |
-| Flat-port refraction `n = 1.333`, `asin(sin θ/n)` | ✅ (B22) | Snell's law; single definition now in `duburi_vision/optics.py` |
+| Flat-port refraction `n = 1.333`, `asin(sin θ/n)` | ✅ (B22) | Snell's law; single definition now in `mongla_vision/optics.py` |
 
 ⛔ **The one thing to carry forward from this table:** four independent
 components agreeing with each other is *not* the same as agreeing with the
@@ -1162,13 +1162,13 @@ the fleet joins the link.
 
 ### B33 — the DSL's own worked example teaches the recovery BACKWARDS  ✅ FIXED 2026-09-08
 
-**`duburi_planner/vision_dsl.py`, `VisionResult`'s docstring.** Found in the
+**`mongla_planner/vision_dsl.py`, `VisionResult`'s docstring.** Found in the
 full-depth planner read.
 
 ```python
 elif res.saw_target:            # tried, didn't fully centre
-    if res.x_px < -30: duburi.move_right(1)     # target LEFT  -> goes RIGHT
-    elif res.x_px > 30: duburi.move_left(1)     # target RIGHT -> goes LEFT
+    if res.x_px < -30: mongla.move_right(1)     # target LEFT  -> goes RIGHT
+    elif res.x_px > 30: mongla.move_left(1)     # target RIGHT -> goes LEFT
 ```
 
 Both signs are inverted — against the docstring's **own** field list four lines
@@ -1203,7 +1203,7 @@ Added because the earlier pass gave these two a **targeted two-class grep**
 which is the same shape as the ESC flasher's earlier "no findings": a statement
 about code that had not been opened. 4,632 lines read.
 
-**`duburi_sensors` (1,802 lines) — one finding, already on the register.**
+**`mongla_sensors` (1,802 lines) — one finding, already on the register.**
 
 | File | Verdict |
 |---|---|
@@ -1219,13 +1219,13 @@ without rotating by heading, so the sum is only a valid displacement while headi
 is held — which is what `heading_lock` does during `*_dist` moves. Honest in the
 docstring, bounded in practice, and moot on srot where `*_dist` is refused.
 
-**`duburi_planner` core (2,830 lines) — B33 above, nothing else.**
+**`mongla_planner` core (2,830 lines) — B33 above, nothing else.**
 
 | File | Verdict |
 |---|---|
 | `client.py` | ✅ `_result_deadline` is the P1 fix and is correct: `max(timeout, duration)` + margin, with the quick-verb value a **floor, not a ceiling**. Its `or 0.0` chain is the documented rosidl "0 == unset" convention falling back to the same `COMMANDS` registry the server enforces — not B05's shape |
 | `mission.py` | ✅ `_safe_shutdown` runs on **both** the success and exception paths, each step isolated by `_try_step` so a failed `stop()` cannot prevent `disarm()`; Ctrl-C has its own ordered path (cancel → stop → disarm). **The opposite discipline to J02**, which swallows and still returns `SUCCEED` |
-| `duburi_dsl.py` | ✅ every `except Exception` is annotated with why it is best-effort (detector pause, HUD follow, graph read), and a missing detector **raises loudly** rather than degrading |
+| `mongla_dsl.py` | ✅ every `except Exception` is annotated with why it is best-effort (detector pause, HUD follow, graph read), and a missing detector **raises loudly** rather than degrading |
 | `vision_dsl.py` | ⛔ **B33**. `NaN` defaults and the `saw_target` guard are otherwise correct |
 | `cli.py`, `model_context.py` | ✅ |
 
@@ -1236,8 +1236,8 @@ docstring, bounded in practice, and moot on srot where `*_dist` is refused.
 `_speed_from_gain` clamps every host-issued move to `sp.MOVE_CRUISE_MAX = 0.80`,
 a **hard-coded copy of the firmware's DEFAULT**. The board's `MOVE_CRUISE_MAX` is
 a *runtime parameter* (`params.cpp:221`), and the host **never reads it** —
-verified: no `get_param('MOVE_CRUISE_MAX')` anywhere in `duburi_control` or
-`duburi_manager`.
+verified: no `get_param('MOVE_CRUISE_MAX')` anywhere in `mongla_control` or
+`mongla_manager`.
 
 All three agree today (host 0.80, firmware `DEF_MOVE_CRUISE_MAX` 0.80, and the
 live board measured 0.80 on 2026-09-08), so nothing is wrong right now.
@@ -1289,7 +1289,7 @@ and treat a comment as a claim to verify, never as evidence.
 - `tools/defect_class_sweep.py` — sweeps the classes actually found here:
   absence-coerced-to-zero (B05/B10/B25), blind silent `except`, unbounded `while`.
 
-**Read in full this round:** `duburi_sensors` (1,802), `duburi_planner` core
+**Read in full this round:** `mongla_sensors` (1,802), `mongla_planner` core
 (2,830), `srot-esc-flasher` (2,147). **Deep-read on the live srot path:**
 `vision_state.bbox_error` + `square_within`, `srot_connect`'s absence rendering,
 `motion_vision`'s freshness math, `motion_writers`, the Hengla handlers.
@@ -1301,9 +1301,9 @@ clamp — `full < zero` always, both caps respected, no ZeroDivision in
 `_freshness`, authority always in [0,1].
 
 ⚠ **What is NOT line-by-line read**, stated so the next round does not inherit a
-false clean bill: `srot_fc.py` (2,683), `duburi.py` (1,568), `auv_manager_node.py`
+false clean bill: `srot_fc.py` (2,683), `mongla.py` (1,568), `auv_manager_node.py`
 (1,854), `motion_vision.py` beyond the sections above, and most of
-`duburi_vision`'s large nodes (`detector_node`, `flow_node`, `guide`,
+`mongla_vision`'s large nodes (`detector_node`, `flow_node`, `guide`,
 `display_node`) — roughly 17k lines. Every one of them HAS been swept by both
 tools above and by `fc_surface_audit` / `srot_reachability`. That is coverage by
 mechanism, not by eye, and the difference is exactly what let B33 hide.
@@ -1416,15 +1416,15 @@ not bite.
 
 ### B36 — a failed `arm()` did not stop the mission; 16 of 16 missions discarded it  ✅ FIXED 2026-09-08
 
-**`duburi_planner/duburi_dsl.py`.** Found by applying **NASA JPL Power-of-10 rule
+**`mongla_planner/mongla_dsl.py`.** Found by applying **NASA JPL Power-of-10 rule
 7** to the tree — *"the return value of non-void functions must be checked by each
 calling function"* (Holzmann, *The Power of 10: Rules for Developing
 Safety-Critical Code*, IEEE Computer 39(6), 2006 —
 [spinroot.com/gerard/pdf/P10.pdf](https://spinroot.com/gerard/pdf/P10.pdf)).
 
-`DuburiMission._send()` does not raise. It logs the outcome, records
+`MonglaMission._send()` does not raise. It logs the outcome, records
 `success=False` on the scoreboard, and returns. **Every one of the 16 missions
-that arms does `duburi.arm()` as a bare statement** — including
+that arms does `mongla.arm()` as a bare statement** — including
 `task_full_2026`, the full competition run, which arms and then executes all five
 task chunks.
 
@@ -1495,7 +1495,7 @@ Asked for directly: *"give warning for — no terminal ACK within 8s (stall)"*.
 The stall — the commonest real failure on this link — was **never logged**. It
 braked the hull and returned `MoveResult(TIMEOUT, ...)`; whether anyone saw it
 depended entirely on the consumer. And the consumer was
-`DuburiMission._send()`, which logged **every** outcome through one formatter at
+`MonglaMission._send()`, which logged **every** outcome through one formatter at
 `info`. So the moment the vehicle stopped responding produced a line visually
 identical to the nineteen successful lines above it.
 
@@ -1668,7 +1668,7 @@ to a **ROS 2 autonomous vehicle** that has not been examined?* — executor topo
 QoS compatibility, and the shutdown path.
 
 CLAUDE.md safety rule 1 is non-negotiable: *"Ctrl-C on the manager triggers
-`Duburi.stop()` + `disarm()`."* The step that was supposed to stop the thrusters
+`Mongla.stop()` + `disarm()`."* The step that was supposed to stop the thrusters
 was `pixhawk.send_neutral()`. On srot that is a **zero `MANUAL_CONTROL` frame** —
 and a `SROT_MOVE` leaves the board in `AUTO`, where the firmware overwrites every
 pilot axis from the movement primitive and the frame is **discarded** (B28).
@@ -1770,7 +1770,7 @@ down, in `_safe_flush`.
 **Found by asking a different question:** not "is this value right?" but "does
 this file's own claim about itself hold?" `vision_tunables` says of itself:
 
-> *"Mirrors the spec defaults in `duburi_control/commands.py` exactly so nothing
+> *"Mirrors the spec defaults in `mongla_control/commands.py` exactly so nothing
 > changes if the operator never sets a param."*
 
 That claim is load-bearing, because `fields_for` substitutes in the order
@@ -1874,7 +1874,7 @@ never followed it.
 **Why this is not a typo.** The DVL is **not fitted and was never validated in
 water** (`vehicle-spec.md` "DVL status"). Two documents — CLAUDE.md's param
 table and `ros2-conventions.md`'s — told an operator that
-`ros2 launch duburi_manager bringup.launch.py` brings the vehicle up with its
+`ros2 launch mongla_manager bringup.launch.py` brings the vehicle up with its
 heading source set to a sensor that is not on the hull. Someone trusting that
 would not pass `yaw_source:=bno085`, and would spend pool time diagnosing a
 heading source they believed was selected and never was. Same shape as B45: the
@@ -1972,7 +1972,7 @@ it does this to the device the manager holds.
 split, and the srot branch skips it correctly. But the flag was
 `srot = '--srot' in argv` — **opt-IN**, defaulting to the pixhawk branch, and it
 stayed that way long after `flight_controller` defaulted to `srot`. So the bare
-`ros2 run duburi_manager bringup_check` — the exact command in the docs — took
+`ros2 run mongla_manager bringup_check` — the exact command in the docs — took
 the **pixhawk** path on an **srot** vehicle. The gate was correct; the thing
 selecting which side of the gate to stand on was a hand-typed literal.
 
@@ -2031,15 +2031,15 @@ This is the **class** behind it, found by finishing the sweep that produced it:
 enumerate every serial/MAVLink open in the tree and ask which are guarded.
 
 ```
-duburi_sensors/.../sensors_node.py     :55    guard=0
-duburi_sensors/.../sources/bno085.py   :142   guard=0   <- operator path
-duburi_sensors/.../sources/_discovery.py:67   guard=0   <- 303a:1001 only, cannot reach the board
-duburi_manager/.../srot_recorder.py    :26    guard=0   <- a DOCSTRING, not an open
-duburi_manager/.../bringup_check.py    :321   guard=0   <- udpin:, not a device
-duburi_manager/.../bringup_check.py    :982   guard=2
-duburi_manager/.../auv_manager_node.py :438   guard=1
-duburi_manager/.../srot_connect.py     :724   guard=1
-duburi_control/.../payload.py          :200   guard=0   <- operator path
+mongla_sensors/.../sensors_node.py     :55    guard=0
+mongla_sensors/.../sources/bno085.py   :142   guard=0   <- operator path
+mongla_sensors/.../sources/_discovery.py:67   guard=0   <- 303a:1001 only, cannot reach the board
+mongla_manager/.../srot_recorder.py    :26    guard=0   <- a DOCSTRING, not an open
+mongla_manager/.../bringup_check.py    :321   guard=0   <- udpin:, not a device
+mongla_manager/.../bringup_check.py    :982   guard=2
+mongla_manager/.../auv_manager_node.py :438   guard=1
+mongla_manager/.../srot_connect.py     :724   guard=1
+mongla_control/.../payload.py          :200   guard=0   <- operator path
 ```
 
 Every VID/PID safeguard the codebase has protects only the **auto-detect**
@@ -2108,7 +2108,7 @@ That lesson was learned for `cameras.yaml` **and nowhere else**.
 **`tracker.yaml` is the sharpest edge:** it is written in exact `--params-file`
 shape (`tracker_node: / ros__parameters:`) — the form an operator hands to
 `ros2 run --params-file` expecting it to work. **`sensors.yaml` is next:**
-`setup.py` *installs* it to `share/duburi_sensors/config/`, precisely where a
+`setup.py` *installs* it to `share/mongla_sensors/config/`, precisely where a
 live config would sit, and it still names the **unfitted DVL** as the yaw
 source — the likely origin of the same wrong claim corrected in two documents in
 B46.
@@ -2223,7 +2223,7 @@ Environment traps E1–E5 moved to [`pi-and-env-traps.md`](pi-and-env-traps.md).
 - **V-STABLE:** `stable` (and the settle gate's `prev_worst`) counted 20 Hz **loop ticks**, not detections — so at 3-4 Hz a single in-band frame re-read 3× in 0.15s declared ALIGNED / armed the fire on effectively one frame, and the settle gate was degenerate (`worst==prev_worst` on re-reads). **Fix:** a detection's arrival time is `now - sample.age_s` (constant across re-reads); `stable`/`prev_worst` only advance on a **new** frame (`> last_frame_at + _FRAME_EPS_S`, 5ms). `align_stable_frames` now means "N distinct in-band detections" — FPS-independent. Backward-compatible: at healthy FPS (age≈0 every tick) every tick is a new frame, so behaviour is unchanged (and the `age_s=0` test doubles stay valid). Duration budgets re-verified (smallest align 4s ≫ ~1s worst-case declare @3-4Hz). **Raising real FPS (TensorRT engine) is still the primary lever** — this is the per-frame guard.
 
 ### D12. Torpedo 10/10: fire-would-not-leave, depth z-wobble, terminal yaw jitter — **FIXED 2026-07-01 (pool feedback, 6/10→target 9-10/10)**
-- **Files:** `motion_vision.py` (`align_loop`, `_vision_yaw_floor`), `heading_lock.py` (`set_hold_mode`, deadband param), `vision_verbs.py`, `duburi.py` (`_set_lock_hold`), `commands.py`, `Move.action`, `vision_dsl.py`, `missions/{task_torpedo,pool_day_torpedo}.py`.
+- **Files:** `motion_vision.py` (`align_loop`, `_vision_yaw_floor`), `heading_lock.py` (`set_hold_mode`, deadband param), `vision_verbs.py`, `mongla.py` (`_set_lock_hold`), `commands.py`, `Move.action`, `vision_dsl.py`, `missions/{task_torpedo,pool_day_torpedo}.py`.
 - **Fire would not leave despite a perfect lock (the 4/10 miss):** D11's fire-freshness gate (`age_s <= VISION_FRESH_FULL_S`, 0.10s) is *narrower than one frame period* at 3-4 Hz, so a perfectly-aligned hull kept missing the fresh-tick coincidence with `stable≥N and (now-aligned_at)≥fire_t`. **Fix:** gate the fire on **`is_new_frame and not sample.coasted`** — fire on the tick a genuinely NEW live box lands. Fresh by construction at ANY FPS (fixes the miss) AND strictly safer than D11: a frozen detector produces no new frame, so it can never fire on a stale box even while `stable` stands held at threshold through a mid-hold freeze (the freeze-AFTER-alignment case a looser age gate would reopen). Discriminating test: `test_fire_withheld_when_detector_freezes_after_alignment`.
 - **`fire_pass` (opt-in, default off):** guaranteed partial-points shot — if no strict in-band fire landed, fire at a NATURAL exit (TIMEOUT / hold-complete) provided the target was seen LIVE within `lost_grace_s` (never on a never-seen or coasted-only target). DSL `align(fire_pass=True)`.
 - **Depth axis z-wobble:** the setpoint was recomputed EVERY 20 Hz tick (up to 0.4 m/s slew ArduSub chased) and nudged *even inside the deadband* (dithering on bbox-y jitter). **Fix:** setpoint now steps **only in the 5 Hz block**, **frozen inside the deadband**, capped per-update by the new **`depth_step`** resolution arg (m; 0.02 slow .. 0.10 coarse; the sole depth-rate knob — `gain_depth` no longer scales depth). Max slew = `depth_step × 5 Hz`, so ArduSub's ALT_HOLD PID settles between steps. `_MIN_DEPTH_M` surface floor preserved.
@@ -2231,21 +2231,21 @@ Environment traps E1–E5 moved to [`pi-and-env-traps.md`](pi-and-env-traps.md).
 - **Pitch/roll:** owned entirely by ArduSub's stabilizer — an `ATC_*` tune + physical trim/ballast matter, not our loop. (A calmer depth slew may quiet pitch as a side effect on a 6dof frame with unbalanced vertical thrusters.)
 
 ### D13. Vision verb dropped into an autonomous fallback SEARCH *during* a camera switch — **FIXED 2026-07-10 (pool feedback)**
-- **Files:** `duburi_dsl.py` (`_wait_detector_warm` + constants), `vision_dsl.py` (`_orchestrate` warm-gate; `align`/`move` reorder), `display_node.py` (switch indicator), `test_vision_dsl.py`.
+- **Files:** `mongla_dsl.py` (`_wait_detector_warm` + constants), `vision_dsl.py` (`_orchestrate` warm-gate; `align`/`move` reorder), `display_node.py` (switch indicator), `test_vision_dsl.py`.
 - **The bug (mission-critical, and SILENT):** right after a camera/model/class switch the target detector is briefly **cold** — it has not yet produced a `/detections` frame under the new config. A vision verb sent immediately has its acquire clock start on that cold detector; `align_loop`'s `lost_since`/`lost_grace_s` (1.0s) returns **LOST regardless of whether the target was ever seen** (`saw_target` only swaps the *reason string*, not the timing). When a `fallback` is provided, the DSL `_orchestrate` then runs the mission's **search** — so the AUV wanders off mid-mission looking for a target that was about to appear. Invisible in logs because `LOST → fallback` is a *normal* path (no error). Long-standing since the auto-switch landed (`13bb53d`), not a fresh regression. Observed symptom: HUD still on the previous camera while the AUV had already started a fallback search.
 - **Scope = DSL-only (this decides the fix layer):** `fallback` is a DSL construct, and `hold_through_loss=(fallback is None)` means a **no-fallback** verb holds through loss and never searches. So the danger is structurally *fallback-only* — the fix is in the DSL, **not** the high-criticality `align_loop` (touching it would be blast radius for a defect that can't fire without a DSL fallback).
-- **Fix — warm-gate:** `_orchestrate` now blocks on `DuburiMission._wait_detector_warm(camera)` **before the first goal, only when a `fallback` is set**. It gates on the detector **PRODUCING frames** (the detector publishes every inference tick, empty or not — so a fresh `_det_cache` entry = "alive"), **NOT** on the target being visible. Consequence: a genuine "target simply absent" search is **not** delayed (a warm detector returns on the first pump), only a cold/just-switched detector waits. Covers **both** switch paths (ClassRef set-inside-`align` *and* string `set_model`/`set_classes`-before-`align`) because it gates at the goal boundary, not on how the config was set. Bounded by `_DETECTOR_WARMUP_S` (2.5s); on timeout it **warns** (`detector … still not producing frames after warm-up`) and proceeds. **Tuning tripwire:** if that warn line appears in pool logs, the detector's post-switch first-inference is exceeding 2.5s → **raise `_DETECTOR_WARMUP_S`**, it is not a hardware fault.
+- **Fix — warm-gate:** `_orchestrate` now blocks on `MonglaMission._wait_detector_warm(camera)` **before the first goal, only when a `fallback` is set**. It gates on the detector **PRODUCING frames** (the detector publishes every inference tick, empty or not — so a fresh `_det_cache` entry = "alive"), **NOT** on the target being visible. Consequence: a genuine "target simply absent" search is **not** delayed (a warm detector returns on the first pump), only a cold/just-switched detector waits. Covers **both** switch paths (ClassRef set-inside-`align` *and* string `set_model`/`set_classes`-before-`align`) because it gates at the goal boundary, not on how the config was set. Bounded by `_DETECTOR_WARMUP_S` (2.5s); on timeout it **warns** (`detector … still not producing frames after warm-up`) and proceeds. **Tuning tripwire:** if that warn line appears in pool logs, the detector's post-switch first-inference is exceeding 2.5s → **raise `_DETECTOR_WARMUP_S`**, it is not a hardware fault.
 - **Fix — reorder (`align`/`move`):** was `_activate_camera` (resume + settle) → `_resolve_target` (program model/classes), so the settle warmed the **old** model and the detector briefly emitted wrong-class boxes. Now `_ensure_detector` → `_resolve_target` (program) → `_activate_camera` (resume + settle) so the settle warms the **new** config and the warm-gate returns instantly.
 - **Fix — HUD:** during the gap between a switch and the new camera's first frame the viewer showed the *frozen old frame* ("stuck on forward"). Now shows a `CAMERA → <name> waiting for stream` screen for up to `_SWITCH_WAIT_S` (3s). **Cosmetic only** — the control danger was the fallback (fixed above). If the HUD stays stuck *past* the switch, that is a separate "downward stream never starts" camera bug, not this.
 - **Verified:** live ROS-graph proof — cold detector → warm-gate **blocks 2.46s** (no immediate fallback); warm/producing → returns **0.01s** (zero search-case penalty). 5 DSL tests (gate wired when `fallback` / skipped without / program-before-activate order / warm+cold logic); planner 176, vision 53 green. The warm-gate sits *before* the `while` loop, so fallback re-entries don't re-gate — the ≤2.5s cost is paid at most once per verb, only when cold.
-- **Mitigation with no code change** (for any existing mission on an older build): `if duburi.wait_for('fire', timeout=3): duburi.vision.align(...)` before the align.
+- **Mitigation with no code change** (for any existing mission on an older build): `if mongla.wait_for('fire', timeout=3): mongla.vision.align(...)` before the align.
 
 ### D14. Single-camera vision missions broke on model identity: `set_model`/ClassRef rejected, and a missing registry model crashed the whole pipeline — **FIXED 2026-07-10 (pool feedback)**
 - **Files:** `detector_node.py` (`_model_stem`, `_resolve_model_key`, single-model `_single_model_name`, resilient registry load, `active_model` handler), `model_context.py` (ClassRef carries the STEM), `test_model_context.py`, `test_model_identity.py`.
 - **The bug (reproduced live, two failure modes on a single-camera launch):**
-  1. **`set_model`/ClassRef rejected in single-model mode.** `vision.launch.py model:=gate_rescue_repair` loads ONE model with no registry. Any mission that switched model — an explicit `set_model('gate_rescue_repair')`/`use(...)` **or** a `ClassRef` target (`duburi.models(...).x.cls`, which auto-`set_model`s) — hit `active_model: no registry loaded (use 'models' param at startup)` and **aborted**, *even though the requested model was the one already loaded*. (`set_classes`/`set_conf` worked — only model-switch was broken.)
+  1. **`set_model`/ClassRef rejected in single-model mode.** `vision.launch.py model:=gate_rescue_repair` loads ONE model with no registry. Any mission that switched model — an explicit `set_model('gate_rescue_repair')`/`use(...)` **or** a `ClassRef` target (`mongla.models(...).x.cls`, which auto-`set_model`s) — hit `active_model: no registry loaded (use 'models' param at startup)` and **aborted**, *even though the requested model was the one already loaded*. (`set_classes`/`set_conf` worked — only model-switch was broken.)
   2. **`models:=` registry was all-or-nothing → "no pipeline".** The eager registry load `raise`d `RuntimeError` if **any** model failed, taking the **whole detector node down** (no `/detections`, no OpenCV) — even if other models loaded fine. So a full-competition `models:=gate=…,slalom=…,torpedo=…` **crashed** whenever a task's `.pt` wasn't on the box yet (slalom/torpedo weights absent). Single-model mode loads async and survives; multi-model was eager + fatal — the asymmetry.
-- **Root cause (identity fracture):** `ClassRef` carried the **DSL alias** (`duburi.models(alias='stem')` key), not the stem — `ModelHandle` stored `_stem` but never used it. Missions register `duburi.models(gate='gate_flare_medium_100ep')` / `robosub=('gate_rescue_repair',…)` where **alias ≠ stem**, so `set_model('<alias>')` named something no detector knew. The stem is the one identity both sides share (it's what actually loads).
+- **Root cause (identity fracture):** `ClassRef` carried the **DSL alias** (`mongla.models(alias='stem')` key), not the stem — `ModelHandle` stored `_stem` but never used it. Missions register `mongla.models(gate='gate_flare_medium_100ep')` / `robosub=('gate_rescue_repair',…)` where **alias ≠ stem**, so `set_model('<alias>')` named something no detector knew. The stem is the one identity both sides share (it's what actually loads).
 - **Fix — stem is the universal model identity:**
   - `ClassRef` now carries the **stem** (`_stem`), so `_resolve_target` sends `set_model('<stem>')`. Only consumer was `vision_dsl.py:_resolve_target`.
   - **Single-model** detector records `_single_model_name` (basename-stem of `model_path`); `set_model(<that stem>)` is a **no-op SUCCESS**, any other name a **clear reject** (`single-model launch loaded 'X'; … relaunch with model:=Y`) — no `'registry'` word, so the DSL surfaces this message directly.
@@ -2260,7 +2260,7 @@ Environment traps E1–E5 moved to [`pi-and-env-traps.md`](pi-and-env-traps.md).
 Follow-up audit for the *same class* of hidden bug as D14 (config-dependent silent divergence, identity mismatch, all-or-nothing). `.engine` (TensorRT) was verified, three fixes landed, the rest documented.
 
 - **`.engine` (TensorRT) — VERIFIED, works with the D14 identity fix.** `yolo._resolve_model_path` prefers `<stem>.engine` over `.pt`; identity is the extension-less **stem**, so `model:=`/`models:=`/ClassRef/`set_model('<stem>')` all match a `.engine`. Live `conf`/`iou`/`max_det` tuning **DOES** take effect on an engine (passed to `predict()` each call + post-inference class filter — NOT baked). Class labels come from the sidecar `<stem>.yaml` (`_load_class_index`), preferred over embedded names, SAME path for `.pt`/`.engine`; the present sidecars (`gate_rescue_repair`, `bin_fire_blood`) match their models' class order (verified). **Only `imgsz`/`half` are export-baked** — `imgsz:=` silently only rescales the `.pt` fallback; re-export the engine to change it. **Silent risk:** a `.engine` with NO sidecar AND no embedded `names` → class indices → empty allowlist → detector returns `[]` every frame (warned once). Mitigation: **keep each `<stem>.yaml` sidecar beside the exported `<stem>.engine`.**
-- **FIXED — F1: mid-command FS_PILOT disarm on a long `set_depth`/`surface` (field-observed).** `_command_scope` pauses the 5 Hz heartbeat for the whole command; `wait_for_depth` streamed only `SET_POSITION_TARGET` (no `RC_CHANNELS_OVERRIDE`). With **no heading-lock** active (a lock's Ch4 stream would otherwise feed the failsafe), RC went silent for the hold → ArduSub `FS_PILOT_INPUT` (timeout 3 s) disarmed mid-command — worst on a 60 s emergency `surface()`. **Fix:** `wait_for_depth` now streams a lock-aware `depth_keepalive` each tick (`motion_writers.make_writers`): no-lock → `send_rc_override(throttle=NO_OVERRIDE)` (the heartbeat's all-neutral frame **minus Ch3**, 5 channels feed FS_PILOT); lock → `send_rc_translation(throttle=NO_OVERRIDE)` (Ch4 left to the lock). **Ch3 is RELEASED** so ALT_HOLD's position controller still drives to the setpoint — depth is REACHED *and* the failsafe stays fed. This mirrors the pool-proven vision pattern ("Release Ch3 to ALT_HOLD whenever depth is in play", motion_vision) — vision streams the same `SET_POSITION_TARGET` with Ch3 released for 20 s and reaches target, so depth-reaching is proven by parity. Files: `motion_writers.py` (`depth_keepalive`), `motion_depth.py` (`wait_for_depth`/`hold_depth` `keepalive=`), `duburi.py` (`set_depth` + style dives). **Bench gate (on-vehicle confirmation):** a 30 s `set_depth` and a 60 s `surface()` with NO lock active must **reach depth / ascend to ~0 AND not disarm**. Frame: closes the most likely disarm mechanism; if disarms persist, cause is elsewhere (battery sag / tether / EKF).
+- **FIXED — F1: mid-command FS_PILOT disarm on a long `set_depth`/`surface` (field-observed).** `_command_scope` pauses the 5 Hz heartbeat for the whole command; `wait_for_depth` streamed only `SET_POSITION_TARGET` (no `RC_CHANNELS_OVERRIDE`). With **no heading-lock** active (a lock's Ch4 stream would otherwise feed the failsafe), RC went silent for the hold → ArduSub `FS_PILOT_INPUT` (timeout 3 s) disarmed mid-command — worst on a 60 s emergency `surface()`. **Fix:** `wait_for_depth` now streams a lock-aware `depth_keepalive` each tick (`motion_writers.make_writers`): no-lock → `send_rc_override(throttle=NO_OVERRIDE)` (the heartbeat's all-neutral frame **minus Ch3**, 5 channels feed FS_PILOT); lock → `send_rc_translation(throttle=NO_OVERRIDE)` (Ch4 left to the lock). **Ch3 is RELEASED** so ALT_HOLD's position controller still drives to the setpoint — depth is REACHED *and* the failsafe stays fed. This mirrors the pool-proven vision pattern ("Release Ch3 to ALT_HOLD whenever depth is in play", motion_vision) — vision streams the same `SET_POSITION_TARGET` with Ch3 released for 20 s and reaches target, so depth-reaching is proven by parity. Files: `motion_writers.py` (`depth_keepalive`), `motion_depth.py` (`wait_for_depth`/`hold_depth` `keepalive=`), `mongla.py` (`set_depth` + style dives). **Bench gate (on-vehicle confirmation):** a 30 s `set_depth` and a 60 s `surface()` with NO lock active must **reach depth / ascend to ~0 AND not disarm**. Frame: closes the most likely disarm mechanism; if disarms persist, cause is elsewhere (battery sag / tether / EKF).
 - **FIXED — F2: `set_conf(model='<stem>')` silently no-op'd (the D14 identity-bug class, unfixed spot).** `_apply_model_conf` did an exact-key registry lookup; unlike the `active_model` handler it never used `_resolve_model_key`/`_single_model_name` (its docstring even claimed "or its stem"). So a per-model conf tighten dropped on a single-model launch (`_active_name` is None) and an aliased registry — e.g. `demo_dual_camera` running the torpedo model tight to stop a spurious box winning the terminal lock. **Fix:** resolve by KEY or STEM in registry mode, match `_single_model_name` in single mode. Live-verified: `set_conf(model='gate_rescue_repair')` now applies. **Safe on the competition bare-stem dual registry** (key==stem).
 - **FIXED — F3 (diagnostic only): silent low-FPS translation stall.** `_freshness` zeroes lat/fwd for a live bbox 0.4–1.0 s old while NOT declaring LOST (no fallback fires) → the hull barely translates yet never searches, a mystery TIMEOUT at low detector FPS. **Mitigated by `.engine`** (20-30 Hz → fresh≈1.0). Added a throttled `[VIS ] low detector FPS: lat/fwd authority N%` line (`_warn_low_fps`) at both align/move freshness sites — pure observability, no behaviour change.
 - **DOCUMENTED, not fixed (imperative path unaffected / phase-2):**
@@ -2276,7 +2276,7 @@ Follow-up audit for the *same class* of hidden bug as D14 (config-dependent sile
 ### Pool-day 1 audit (2026-07) — FIXED
 
 ### P1. Arm intermittently reports "doesn't arm, 12 s crossed" — **FIXED 2026-07**
-`DuburiClient._result_deadline` gave `arm`/`disarm`/`mission_reset` a **fixed 12 s** result
+`MonglaClient._result_deadline` gave `arm`/`disarm`/`mission_reset` a **fixed 12 s** result
 backstop (`_QUICK_CMDS`), but their real server budgets are larger — **arm ~18 s** (3 s ACK +
 15 s `is_armed()` poll), **disarm ~26 s**. `send()` never applies the `COMMANDS` defaults, so
 `goal.timeout` is `0.0` on the wire; the client raised `MoveTimeout` and cancelled the goal
@@ -2294,7 +2294,7 @@ STALE abort from a prior cancelled command can't insta-abort + disarm a fresh ar
 branch does a **verified** disarm (`_disarm_after_abort` re-sends DISARM across a window and requires
 the disarmed state to HOLD) — **fail-closed** with a distinct `ABORTED_DISARM_UNCONFIRMED` reason if
 it can't confirm, so no caller assumes "safe" on an unverified state. `NOT_ARMED_AFTER_ACK` also now
-appends ArduSub's STATUSTEXT pre-arm reason. `pixhawk.py`, `duburi.py`, `test_pixhawk_helpers.py`.
+appends ArduSub's STATUSTEXT pre-arm reason. `pixhawk.py`, `mongla.py`, `test_pixhawk_helpers.py`.
 
 ### P3. Distance estimator absent → `calc_distance('stop')` returned a phantom 0.0 m — **FIXED 2026-07**
 After the latched-topic refactor, `DistanceState.start()/stop()` always returned success even when
@@ -2324,8 +2324,8 @@ re-asserts the hold (`if stream_depth`). Forward paths byte-unchanged; mavlink-r
 `set_vision_param(...)`. They are also **NEGATIVE metres** — a POSITIVE value (e.g. `0.6`) is a sign
 error that silently reads as OFF (now warned loudly). They only bound the optional fill→depth **descent**;
 they are **not needed to hold depth** — plain `set_depth` holds after this fix. **Build note:**
-`build_dubomini.sh` is a plain `colcon build` (no `--symlink-install`), so editing
-`competition_config.py`/`vision_tunables.py`/missions requires **`./build_dubomini.sh` then restart** —
+`build_mongla.sh` is a plain `colcon build` (no `--symlink-install`), so editing
+`competition_config.py`/`vision_tunables.py`/missions requires **`./build_mongla.sh` then restart** —
 a node restart alone does nothing.
 
 ---
@@ -2641,7 +2641,7 @@ uninformative, and every one is verified-false today.
 |---|---|---|---|
 | **G1** | **`LEAK_EN = 0` on the board** | **verified 0** | Both the leak failsafe and the pre-arm refusal are gated on it. As configured a leak **neither blocks arming nor surfaces the hull**. The sensor reads DRY, so enabling it looks safe — that is exactly why it was never noticed. **Set `LEAK_EN = 1` and confirm the pre-arm refusal actually fires.** |
 | **G2** | **`FRAME_REVERSE = 1` + `MOT_n_DIRECTION = -1` on M1/M8** | set, **runtime-only, unsaved** | A double inversion nobody has resolved. `CAL_MDIRn` **multiplies** with `MOT_n_DIRECTION`, so a successful MOTOR_DETECT makes `FRAME_REVERSE` wrong. **Read all three back and write them down before arming.** |
-| **G3** | **GATE 0 — axis configuration** | **never verified** | Needs physical thrust, one motor at a time, hull restrained. `DO_MOTOR_TEST` (209) is fully implemented in firmware and runnable from `duburi_ws` today. **Until this is done every axis sign is an assumption**, including the ones the flow verification below depends on. |
+| **G3** | **GATE 0 — axis configuration** | **never verified** | Needs physical thrust, one motor at a time, hull restrained. `DO_MOTOR_TEST` (209) is fully implemented in firmware and runnable from `mongla_ws` today. **Until this is done every axis sign is an assumption**, including the ones the flow verification below depends on. |
 | **G4** | **GATE 2 — depth loop closed** | Bar30 healthy, loop *running*, never closed in water | It gates every `SROT_MOVE`. The host half is done. |
 | **G5** | **`MOT_BAT_V_MAX`** | unset | Without it a timed leg is **pack-state dependent** — the same command travels different distances at 16 V and 13 V (measured: 14.2 % less). |
 
@@ -2686,7 +2686,7 @@ held-out-validated FOV work (63.8° air / 46.7° water ±0.7°).
   than the bar, that is a finding to investigate, not a number to overwrite
   — one hand slide is far weaker evidence than 25 held-out views.
 - **⭐ An in-water CALIBRATION is the real answer, and it is now buildable
-  (2026-09-07).** `ros2 run duburi_vision calibrate --medium water`, or the
+  (2026-09-07).** `ros2 run mongla_vision calibrate --medium water`, or the
   WATER button on the page. It fits the intrinsics through the port with the
   board in the pool, so it measures the air-plus-port-plus-water system
   *directly* rather than assuming the model — the first genuinely
@@ -2855,7 +2855,7 @@ configuration that was correct in a tool and wrong in the launch.
 
 ```bash
 # The DVL. flow:=true is OFF by default and pool_depth_m has NO default.
-ros2 launch duburi_vision vision_pi.launch.py flow:=true pool_depth_m:=1.6
+ros2 launch mongla_vision vision_pi.launch.py flow:=true pool_depth_m:=1.6
 ```
 
 Expected banner, and check every field of it:
@@ -2893,7 +2893,7 @@ degraded. Telling them apart at 2 a.m. is the reason they are separate lines.
 - **`.tlog` recorder on for every run** (round 27). It captures both
   directions; a reader-only log has no *decisions* in it.
 - **`source scripts/pool_session.sh <name>`** in every terminal — pins
-  `DUBURI_RUN_DIR` and `ROS_LOG_DIR` to one folder per run.
+  `MONGLA_RUN_DIR` and `ROS_LOG_DIR` to one folder per run.
 - **Record `image_raw`** for at least one run per venue. `pool_record.sh`
   **excludes it by default**, and without frames no offline A/B is possible —
   bag playback is wall-clock paced and drops a different frame subset each
@@ -2949,13 +2949,13 @@ first two reasons it gives are misleading and the third is the real one:
 | symptom | actual cause |
 |---|---|
 | `no trackable texture (0/8 points survived)` | transient — the live scene measured **190 corners** on every frame seconds later. Do not chase texture on a single sample. |
-| `no depth yet, so no height above the floor` | no manager, and **no barometer is fitted on this bench anyway**. `flow_launch_check.py` publishes `/duburi/state` with depth 0 so height == the tape measure. The manager's own NaN depth is ignored by the node, so the two coexist. |
-| **`no gyro sample for this interval`** | **the real blocker.** The node will not measure without `/duburi/imu_rates`, which only `auv_manager_node` publishes (measured **exactly 50.0 Hz**, sd 1.9 ms). No manager, no DVL — on a dry bench and in a pool alike. |
+| `no depth yet, so no height above the floor` | no manager, and **no barometer is fitted on this bench anyway**. `flow_launch_check.py` publishes `/mongla/state` with depth 0 so height == the tape measure. The manager's own NaN depth is ignored by the node, so the two coexist. |
+| **`no gyro sample for this interval`** | **the real blocker.** The node will not measure without `/mongla/imu_rates`, which only `auv_manager_node` publishes (measured **exactly 50.0 Hz**, sd 1.9 ms). No manager, no DVL — on a dry bench and in a pool alike. |
 
 So the dry check is:
 
-    1  ros2 run duburi_manager start                    # gyro @ 50 Hz
-    2  ros2 launch duburi_vision vision_pi.launch.py \
+    1  ros2 run mongla_manager start                    # gyro @ 50 Hz
+    2  ros2 launch mongla_vision vision_pi.launch.py \
            flow:=true flow_medium:=air pool_depth_m:=<tape m>
     3  python3 tools/flow_launch_check.py --height <tape m> --truth-cm 30
 

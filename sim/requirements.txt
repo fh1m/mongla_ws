@@ -1,4 +1,4 @@
-# Python dependencies for the Duburi simulator asset generators.
+# Python dependencies for the Mongla simulator asset generators.
 #
 # These are only needed to *regenerate* models, worlds and textures. Running the
 # simulator from the committed assets needs none of them beyond what ROS 2 Humble

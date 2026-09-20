@@ -1,11 +1,11 @@
 # Audit — bugs, design debt, wrong decisions (v0.1)
 
 > ℹ **Absorbed 2026-08-27.** This workspace is no longer the sibling tree
-> `Ros_workspaces/duburi-sim_ws`; it lives inside the `duburi_ws` repo at
-> `duburi_ws/sim/` and is under version control. Paths below have been
+> `Ros_workspaces/mongla-sim_ws`; it lives inside the `mongla_ws` repo at
+> `mongla_ws/sim/` and is under version control. Paths below have been
 > updated; any remaining "sibling" phrasing is historical.
 
-Date: 2026-08-26. Scope: `duburi_ws/sim` bringup, bridge, scenarios, web lab,
+Date: 2026-08-26. Scope: `mongla_ws/sim` bringup, bridge, scenarios, web lab,
 docs vs code. Severity: **P0** blocker / lie, **P1** wrong behavior operators hit,
 **P2** design debt, **P3** polish.
 
@@ -18,7 +18,7 @@ Status **open** = still in code; fix later.
 
 | ID | Finding | Evidence | Impact | Fix | Status |
 |----|---------|----------|--------|-----|--------|
-| A1 | `duburi_sim` `_usage` says lab on **:8088** | `scripts/duburi_sim` L99 | Operators open wrong port | Change to 28765 / `DUBURI_LAB_PORT` | **doc-fixed** (this pass) |
+| A1 | `mongla_sim` `_usage` says lab on **:8088** | `scripts/mongla_sim` L99 | Operators open wrong port | Change to 28765 / `MONGLA_LAB_PORT` | **doc-fixed** (this pass) |
 | A2 | Historical Electron port collision on 8088/18088 | Session history | Lab bind failures | Prefer 28765 + auto-fallback | mitigated in code |
 
 ---
@@ -33,10 +33,10 @@ Status **open** = still in code; fix later.
 | B3 | Dataset zip is **synchronous** on request thread | `download_dataset` builds full zip in memory | Lab UI freezes on large runs | Zip to tempfile + `FileResponse` | **mitigated** (v0.2) |
 | B4 | `GET /api/props/list` returns **catalog**, not spawned instances | `props list` / `cli.py` `cmd_list` | Operators think spawn failed when list looks static | `/api/props/instances` + World UI | **mitigated** (instances API) |
 | B9 | Cursor/Electron port-forward races lab bind after probe-close | `_pick_lab_port` TOCTOU | Lab fails to listen | Hold listening socket + `uvicorn fd=` | **fixed** (v0.2) |
-| B5 | `duburi_sim stop` does **not** kill `lab_server` / all `record_cameras` | `_stop_all` patterns | Orphans after “stop” | Extend patterns | **fixed** (v0.2) |
-| B6 | `duburi_sim lab` starts `prop_manager` **without** `-p world:=` | `duburi_sim` lab branch | Defaults to qual; wrong after course change | Pin `world:=` + `/tmp/duburi_lab_active_course.txt` | **fixed** (v0.2) |
+| B5 | `mongla_sim stop` does **not** kill `lab_server` / all `record_cameras` | `_stop_all` patterns | Orphans after “stop” | Extend patterns | **fixed** (v0.2) |
+| B6 | `mongla_sim lab` starts `prop_manager` **without** `-p world:=` | `mongla_sim` lab branch | Defaults to qual; wrong after course change | Pin `world:=` + `/tmp/mongla_lab_active_course.txt` | **fixed** (v0.2) |
 | B7 | Turbidity UI default **0.6** then snaps to server **0.45** | `App.jsx` vs yaml | Confusing slider jump | Default UI to 0.45 | **fixed** (v0.2) |
-| B8 | Vite proxy hardcodes `28765` | `frontend/vite.config.js` | Dev UI misses lab if port bumped | `DUBURI_LAB_PORT` env | **fixed** (v0.2) |
+| B8 | Vite proxy hardcodes `28765` | `frontend/vite.config.js` | Dev UI misses lab if port bumped | `MONGLA_LAB_PORT` env | **fixed** (v0.2) |
 
 ---
 
@@ -46,12 +46,12 @@ Status **open** = still in code; fix later.
 |----|----------|--------------|---------------|
 | C1 | Course switch = full stop/start (~90s) | Operators expect hot-reload | **Keep** for v0.1; document clearly (done). Future: gz world reload R&D |
 | C2 | Lab teleop on TCP 5763 vs manager 14550 | Correct split, but easy to miswire | **Keep**; document hard |
-| C3 | Sibling workspace vs in-`duburi_ws` | Dual overlays confuse newcomers | **Keep** v0.1; see FUTURE_MERGE |
+| C3 | Sibling workspace vs in-`mongla_ws` | Dual overlays confuse newcomers | **Keep** v0.1; see FUTURE_MERGE |
 | C4 | Arm via subprocess planner, motion via pymavlink | Two control paths | Acceptable; unify later if needed |
 | C5 | FX on side topics (`image_fx`) | Extra node; easy to record wrong feed | **Keep** (protects contract) |
 | C6 | `props list` = library catalog | Name collision with “list spawned” | Change API naming (B4) |
 | C7 | Static React build committed/installed under `static/` | Easy to ship stale UI vs `frontend/src` | Dev checklist: rebuild static after UI edits |
-| C8 | `duburi_ws/.claude/context/sim-setup.md` legacy BlueROV path | Agents follow wrong guide | Prefer this `.context` (documented) |
+| C8 | `mongla_ws/.claude/context/sim-setup.md` legacy BlueROV path | Agents follow wrong guide | Prefer this `.context` (documented) |
 
 ---
 

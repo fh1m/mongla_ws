@@ -26,7 +26,7 @@ Customize the live Gazebo course from the lab **World** tab without leaving the 
 | POST | `/api/props/remove/{name}` |
 | POST | `/api/assets/upload` multipart zip |
 
-CLI equivalents: `ros2 run duburi_sim_scenarios props {list,add,move,remove}`.
+CLI equivalents: `ros2 run mongla_sim_scenarios props {list,add,move,remove}`.
 
 ## Custom assets
 
@@ -45,7 +45,7 @@ model.sdf
 meshes/...
 ```
 
-Files land in `src/duburi_sim_worlds/models/<id>/`. Refresh catalog after upload.
+Files land in `src/mongla_sim_worlds/models/<id>/`. Refresh catalog after upload.
 **First use** of a brand-new model may require a sim restart so Gazebo picks up
 `GZ_SIM_RESOURCE_PATH`.
 

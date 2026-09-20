@@ -200,7 +200,7 @@ we measure **HFOV 73.1°**.
 
 ## 8. THE LIBRARY: every calibration is kept, and re-appliable
 
-`src/duburi_vision/config/calibration/` is the vehicle's permanent store.
+`src/mongla_vision/config/calibration/` is the vehicle's permanent store.
 Every calibration this project has produced lives there, ships with the
 package, and is listed in the web tool under **Saved calibrations** with the
 fields an operator actually picks by — medium, resolution, fx, view count,

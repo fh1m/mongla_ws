@@ -1,0 +1,42 @@
+# ============================================================================
+#  ⚠  THIS FILE IS NOT LOADED AT RUNTIME.  (B49)
+#
+#  `setup.py` INSTALLS it to share/mongla_sensors/config/, so an operator finds
+#  it exactly where a live config would be -- and nothing reads it. Editing
+#  `yaw_source` here does not change the heading source; the launch arg does:
+#      ros2 launch mongla_manager bringup.launch.py yaw_source:=bno085
+#
+#  It also still says `yaw_source: 'dvl'`, and the DVL is NOT FITTED on this
+#  hull (vehicle-spec.md "DVL status"). That line is the likely origin of the
+#  same wrong claim found in CLAUDE.md and ros2-conventions.md (B46). The real
+#  default on both the launch and the node is `mavlink_ahrs`.
+# ============================================================================
+# mongla_sensors / mongla_manager — yaw source selection
+#
+# Pick ONE source per launch. No mid-run switching, no auto-fallback.
+#
+#   yaw_source: 'mavlink_ahrs'   ArduSub onboard AHRS (bench/sim, no extra hw)
+#   yaw_source: 'bno085'         BNO085 ESP32-C3 over USB CDC (heading only)
+#   yaw_source: 'dvl'            Nucleus 1000 AHRS over TCP (heading + position)
+#               'nucleus_dvl'    (alias)
+#   yaw_source: 'bno085_dvl'     BNO085 heading + DVL position (recommended pool)
+#               'dvl_bno'        (alias)
+#
+# DVL sources (dvl / nucleus_dvl / bno085_dvl):
+#   - Connect automatically at startup when dvl_auto_connect:=true (default).
+#   - Manual: ros2 run mongla_planner mongla dvl_connect
+#   - DVL provides get_position() used by move_forward_dist / move_lateral_dist.
+#
+# bno085_port / bno085_baud only matter when yaw_source has 'bno085'.
+# nucleus_dvl_* only matter when yaw_source has 'dvl'.
+
+mongla_manager:
+  ros__parameters:
+    yaw_source:           dvl
+    bno085_port:          /dev/ttyACM0
+    bno085_baud:          115200
+    nucleus_dvl_host:     '192.168.2.201'
+    nucleus_dvl_port:     9000
+    nucleus_dvl_password: 'nortek'
+    dvl_auto_connect:     true
+    dvl_retry_s:          5.0

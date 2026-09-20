@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Which duburi_control functions can actually RUN on the srot backend?
+"""Which mongla_control functions can actually RUN on the srot backend?
 
 ⛔ USE THIS INSTEAD OF GREP WHEN CLASSIFYING A BUG AS "not on the srot path".
 
@@ -24,7 +24,7 @@ Run from the workspace root:  python3 tools/srot_reachability.py
 """
 import ast, pathlib, sys, collections
 
-ROOT = pathlib.Path('src/duburi_control/duburi_control')
+ROOT = pathlib.Path('src/mongla_control/mongla_control')
 mods = {}                      # modname -> ast.Module
 for f in ROOT.rglob('*.py'):
     rel = f.relative_to(ROOT).with_suffix('')
@@ -52,8 +52,8 @@ for m, (tree, _) in mods.items():
                     funcs[f'{node.name}.{sub.name}'] = (sub, m)
                     methods_of[node.name].add(sub.name)
 
-# Duburi's facade surface includes its mixins (VisionVerbs).
-FACADE = {c for c in methods_of if c in ('Duburi', 'VisionVerbs')}
+# Mongla's facade surface includes its mixins (VisionVerbs).
+FACADE = {c for c in methods_of if c in ('Mongla', 'VisionVerbs')}
 
 def resolve(call, modname):
     """Best-effort: which qualnames could this Call reach?"""
@@ -85,7 +85,7 @@ def resolve(call, modname):
     return out
 
 # --- srot entry points ------------------------------------------------------
-ENTRIES = [f'Duburi.{v}' for v in (
+ENTRIES = [f'Mongla.{v}' for v in (
     'arm','calc_distance','calibrate_depth','disarm','dvl_connect','fire',
     'head','mission_reset','set_mode','unlock_heading')]
 ENTRIES += ['VisionVerbs.vision_align', 'VisionVerbs.vision_move']
@@ -115,7 +115,7 @@ for m in sorted(mods):
     if m not in mods_hit:
         print('  ', m)
 
-# --- the open duburi_control bugs, by defect SITE ---------------------------
+# --- the open mongla_control bugs, by defect SITE ---------------------------
 SITES = {
  'B06 heading-lock timeout leaves Ch4': ('heading_lock', None),
  'B07 arc() fabricated heading':        ('motion_forward', 'arc'),
@@ -127,7 +127,7 @@ SITES = {
  'B18 percent_to_pwm truncation':       ('pixhawk', 'percent_to_pwm'),
  'J01 HeadingLock.suspend nesting':     ('heading_lock', 'suspend'),
 }
-print('\n--- OPEN duburi_control bugs: is the defect site reachable on srot? ---')
+print('\n--- OPEN mongla_control bugs: is the defect site reachable on srot? ---')
 for name, (mod, fname) in SITES.items():
     if fname:
         hits = [q for q in seen if funcs[q][1] == mod and q.endswith('.' + fname)]

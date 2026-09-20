@@ -28,10 +28,10 @@ implausible mechanism:
 Usage:  python3 tools/gap_distribution.py
 """
 import sys, os, glob, contextlib, io, cv2
-sys.path.insert(0,'src/duburi_vision')
-from duburi_vision.continuity import Obs, analyse, LADDER, _pct
+sys.path.insert(0,'src/mongla_vision')
+from mongla_vision.continuity import Obs, analyse, LADDER, _pct
 from ultralytics import YOLO
-V='/home/fh1m/Work/Projects/Duburi/2025/raw_videos'; M='/home/fh1m/Music/detect'
+V='/home/fh1m/Work/Projects/Mongla/2025/raw_videos'; M='/home/fh1m/Music/detect'
 CONF=0.10; WIN=300           # consecutive frames per window
 CLIPS=[('final_run/gate_back.mkv','robosub_gate_200_final2'),
        ('final_run/bin.mkv','robosub_bin_200_v1'),

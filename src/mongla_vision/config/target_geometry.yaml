@@ -1,0 +1,310 @@
+# Committed prop geometry — the one piece of world knowledge that makes a
+# monocular answer METRIC.
+#
+# ⛔ WHAT THE NUMBER MEANS. `width_m` is the true width of WHAT THE DETECTOR
+# BOXES, not the prop's largest dimension. `lock_node` snaps its anchor
+# reference to the detection bbox (`self._anchor.snap(gray, roi=det_box)`) and
+# `anchor/pose.py::target_pose` scales that region by
+# `m_per_px = width_m / w_px`. So for a vertical pole spanning the pool the
+# right number is the POLE DIAMETER, not the span between two poles — using the
+# span would make every range wrong by a fixed factor, in the flattering
+# direction, with nothing logging a fault.
+#
+# This replaces `target_width_m`, an operator parameter defaulting to 0.0. That
+# default is why the 6-DoF path publishes `ok=false, reason='target_width_m
+# unset'` today: the metric branch has never run on the vehicle.
+#
+# ⛔ WHAT THIS FILE IS NOT. It is not a second copy of the simulator's arena
+# spec. `sim/src/mongla_sim_worlds/spec/{sauvc,robosub}.yaml` describe the
+# ARENA — pool size, prop placement, colours, band pitch, everything needed to
+# BUILD a world. This file holds only the per-DETECTION-CLASS widths the pose
+# solver consumes, keyed by the class names our models actually emit. The two
+# overlap in a handful of numbers and disagree in none; `test_target_geometry.py`
+# checks that where both state a dimension they agree, so a rulebook change
+# cannot land in one and not the other. The sim is a separate colcon workspace
+# (`sim/COLCON_IGNORE`), so importing it from the vehicle stack is not an
+# option — this is the reuse boundary, made explicit.
+#
+# Every entry carries its source. `measured: true` means we measured the actual
+# competition prop and that number wins over the rulebook's nominal, which is
+# what the SAUVC tolerance (+/- 5 %) exists to allow for.
+#
+# ★ OUR POOL IS NOT THE VENUE, SO THESE ARE DEFAULTS, NOT HARDCODINGS.
+# We practise against props we built, and ours are not the handbook's sizes. A
+# range is `m_per_px = width_m / w_px`, so a home-cut gate 40 % narrower than
+# the venue's makes every range 40 % wrong -- in whichever direction, silently.
+# Override per class, WITHOUT editing this file and WITHOUT a colcon build:
+#
+#     ~/.mongla/target_geometry.yaml          picked up with no env var
+#     MONGLA_TARGET_GEOMETRY=~/my_props.yaml  a file, or a directory holding
+#                                             target_geometry.yaml
+#
+# Same nesting, same keys; merged OVER this table PER CLASS, so overriding one
+# prop inherits the rest rather than zeroing them:
+#
+#     robosub:
+#       gate:
+#         width_m: 1.82
+#         boxes: whole-gate
+#         source: "our pool prop, tape-measured 2026-09-10"
+#
+# `lock_node` logs which width it used and where it came from, and an override
+# is stamped `overridden: true`, so a surprising range is one log line away.
+# A malformed override file is IGNORED rather than obeyed -- failing to the
+# handbook is recoverable, failing to 0.0 stops the mission with no reason.
+#
+# ⛔ AND THE DEFAULTS COME FROM THE ORGANISERS, NEVER FROM OUR SIMULATOR.
+# RoboSub: the team handbook (robonation.gitbook.io). SAUVC: sauvc.org/rulebook.
+# Two SAUVC entries are read off a rulebook FIGURE rather than quoted prose and
+# carry `unquoted: true` for exactly that reason -- pinned by
+# test_every_model_class_has_a_width.py. A simulator prop's size is our own
+# guess wearing a number's clothes; it never sources an entry here.
+#
+# ⛔ WHO LOADS THIS. No launch file does. `mongla_vision/target_geometry.py`
+# opens it directly out of the installed share directory at call time, and
+# `lock_node` calls `width_for()` when `target_width_m` is unset. So editing it
+# DOES take effect on the deck -- but only after a colcon build, because the
+# copy that is read is the installed one, not this source file.
+
+sauvc:
+  # Source: SAUVC 2026 rulebook, https://sauvc.org/rulebook/ (verified against
+  # the live page 2026-09-09; every quotation below is the rulebook's own text).
+
+  qual_gate:
+    # "150cm wide spanning from bottom of the pool to the top, hanging from the
+    #  water surface with orange markings on both port and starboard sides."
+    #
+    # ⛔ 1.50 is the SPAN BETWEEN THE POSTS, and it is the right number only if
+    # the detector boxes the whole gate. Our `qual_gate` class does exactly
+    # that -- the training labels enclose both posts -- so the bbox width is
+    # the span. If a future model is retrained to box a SINGLE POST, this must
+    # become the post diameter or every range triples.
+    width_m: 1.50
+    boxes: whole-gate
+    source: "SAUVC 2026 rulebook, qualifying task"
+
+  final_gate:
+    # "150cm wide and 100cm tall gate with striped red and green markings on
+    #  port and starboard sides respectively."
+    width_m: 1.50
+    boxes: whole-gate
+    source: "SAUVC 2026 rulebook, navigation task"
+
+  orange_flare:
+    # "~15cm diameter flare with height spanning from bottom to top of the
+    #  pool, and orange in color."
+    #
+    # A vertical cylinder taller than the frame at any useful range: the bbox
+    # is DIAMETER-wide and its height is clipped by the frame, so width is the
+    # only usable scale. The rulebook's own "~" is why `tolerance_note` exists.
+    width_m: 0.15
+    boxes: diameter
+    tolerance_note: "rulebook says ~15cm; treat as nominal"
+    source: "SAUVC 2026 rulebook, navigation task"
+
+  flare_red:    &bump_flare
+    # "80cm tall, ~1.6cm in diameter" -- the coloured bump flares.
+    #
+    # ⛔ 16 mm is SMALL. At 640 px wide and a 73.9 deg HFOV, a 1.6 cm pole is
+    # under 2 px beyond ~3 m, so a metric answer from this class is only
+    # defensible up close. The pose solver's own reprojection and ambiguity
+    # gates are what refuse it; this note is here so a wide range is not
+    # believed.
+    width_m: 0.016
+    boxes: diameter
+    source: "SAUVC 2026 rulebook, target acquisition task"
+  flare_yellow: *bump_flare
+  flare_blue:   *bump_flare
+
+  drum_red:        &drum
+    # "60cm in diameter and 30cm in depth."
+    #
+    # Seen from the DOWNWARD camera the bbox is the drum's circular mouth, so
+    # width = diameter. From the forward camera at an oblique angle it is an
+    # ellipse whose minor axis is shorter -- the width still bounds it, and the
+    # solver's ambiguity gate is what catches an over-oblique view.
+    width_m: 0.60
+    boxes: diameter
+    source: "SAUVC 2026 rulebook, target acquisition task"
+  drum_blue:       *drum
+  drum_red_pinger: *drum
+  # ⛔ `drum_red_pinger` IS NOT A VISUAL CLASS. Verified against the rulebook
+  # 2026-09-09: the pinger is identified ACOUSTICALLY -- "Drum Pinger: RJE
+  # International Pinger Model No. ULB-362B/45 kHz" -- and the rulebook
+  # describes NO visual marking separating it from the other red drums. Its
+  # geometry is identical to `drum_red`, which is why it aliases the same entry.
+  #
+  # The simulator DOES render it differently: `sauvc_drum_red_pinger/model.sdf`
+  # carries a `pinger_band` link, a bright yellow emissive ring (0.95 0.85 0.08,
+  # r=0.312) that no real drum has, and gives it its own semantic label 9 against
+  # plain red's 7. So a detector trained on sim imagery separates this class on a
+  # SIMULATOR ARTIFACT. On a real drum it will either miss the class or tag an
+  # arbitrary red drum as the 50-point one.
+  #
+  # No hydrophone is fitted to this vehicle. Until one is, every red drum is
+  # worth 10 points and no mission may steer on this class -- pinned by
+  # test_sauvc_target_acquisition.py.
+
+  target_mat:
+    # NOT in the rulebook's prose. 2.2 m is the simulator's arena spec
+    # (`sim/.../spec/sauvc.yaml`), taken from the rulebook figure rather than
+    # a quoted sentence. Kept because the mat is a downward-camera landmark,
+    # flagged because it is the one SAUVC entry with no quotable source.
+    width_m: 2.20
+    boxes: whole-mat
+    source: "sim arena spec, from the rulebook figure -- NOT quoted prose"
+    unquoted: true
+
+  starting_zone:
+    # "The starting zone is a 140x140cm area marked on the surface of water."
+    width_m: 1.40
+    boxes: whole-zone
+    source: "SAUVC 2026 rulebook"
+
+robosub:
+  # Source: RoboSub 2026 team handbook, via the simulator's arena spec, which
+  # cites page numbers and quotes the handbook directly. Two entries below are
+  # marked `unquoted` where that spec states a number the handbook does not.
+
+  gate:
+    # "120 in x 60 in (3 m x 1.5 m)" with black and red panels (p. 45).
+    width_m: 3.0
+    boxes: whole-gate
+    source: "RoboSub 2026 handbook p. 45"
+
+  slalom:
+    # "Three sets of vertical 1-inch PVC pipes moored at different heights",
+    # "3 ft (0.9 m)" tall. One inch nominal PVC is 33.4 mm OUTSIDE diameter --
+    # the nominal size is not the physical one, and the outside diameter is
+    # what a camera sees.
+    width_m: 0.0334
+    boxes: diameter
+    source: "RoboSub 2026 handbook (1 in nominal PVC = 33.4 mm OD)"
+
+  bin:
+    # The 2026 crate is 0.335 m square (the simulator derives its drop target
+    # and its scoring from this same figure).
+    width_m: 0.335
+    boxes: whole-crate
+    source: "RoboSub 2026 handbook, bins task"
+
+  # ------------------------------------------------------------------ #
+  #  THE SYMBOLS OUR REAL MODELS EMIT.                                    #
+  #                                                                       #
+  #  ⛔ The table was keyed by RULEBOOK PROP names while the detectors    #
+  #  emit MODEL CLASS names, and the two had never been compared. Of the  #
+  #  five classes the two competition models actually produce             #
+  #  (gate_rescue_repair -> gate/rescue/repair, bin_fire_blood ->         #
+  #  blood/fire), only `gate` resolved. The other four returned 0.0, so   #
+  #  `lock_node` published `ok=false, reason='target_width_m unset'` for  #
+  #  them -- no width, no pose, no RANGE, and therefore no tool-aim       #
+  #  correction and no standoff obliquity gate either. Ironically only    #
+  #  the SIM model's classes were covered, because that is what round 4   #
+  #  built the table from.                                                #
+  #                                                                       #
+  #  `test_every_shipped_model_class_has_a_width` now compares this file  #
+  #  against the model sidecars, so a new model cannot arrive uncovered.  #
+  # ------------------------------------------------------------------ #
+
+  rescue:
+    # The gate's "Search & Rescue" symbol. NOT the gate: a model that boxes
+    # the symbol must be scaled by the symbol, or every range is out by 10x.
+    width_m: 0.305
+    boxes: symbol-placard
+    source: "RoboSub 2025/26 handbook 3.2: 'Search & Rescue symbol, 12 in x 12 in (305 mm x 305 mm)'"
+
+  repair:
+    width_m: 0.305
+    boxes: symbol-placard
+    source: "RoboSub 2025/26 handbook 3.2: 'Survey & Repair symbol, 12 in x 12 in (305 mm x 305 mm)'"
+
+  fire:
+    # A BIN role symbol, not the crate. `bin` above is the 0.335 m crate; this
+    # is the 305 mm placard printed on it. Using the crate width for a symbol
+    # box would report the bin ~10 % further away than it is.
+    width_m: 0.305
+    boxes: symbol-placard
+    source: "RoboSub 2025/26 handbook 3.2: bin role symbols, 12 in x 12 in (305 mm x 305 mm)"
+
+  blood:
+    width_m: 0.305
+    boxes: symbol-placard
+    source: "RoboSub 2025/26 handbook 3.2: bin role symbols, 12 in x 12 in (305 mm x 305 mm)"
+
+  # The Octagon / "Return Home" role indicators, which `octagon.pt` emits as
+  # `sos` (Search & Rescue: pill + adhesive bandage) and `survey` (Survey &
+  # Repair: nut-and-bolt + electrical plug). Same 305 mm placard as every other
+  # role image on the course -- NOT the 2.7 m octagon and NOT the 0.6 m table,
+  # either of which would put the hull metres off.
+  sos:
+    width_m: 0.305
+    boxes: symbol-placard
+    source: "RoboSub 2025/26 handbook 3.2: hanging images and role indicators, 12 in x 12 in (305 mm x 305 mm)"
+
+  survey:
+    width_m: 0.305
+    boxes: symbol-placard
+    source: "RoboSub 2025/26 handbook 3.2: hanging images and role indicators, 12 in x 12 in (305 mm x 305 mm)"
+
+  octagon:
+    # The floating structure itself, if a model is ever trained to box it.
+    width_m: 2.7
+    boxes: whole-octagon
+    source: "RoboSub 2025/26 handbook 3.2: '9 ft (2.7 m) diameter octagon floats on the surface'"
+
+  resupply_table:
+    width_m: 0.6096
+    boxes: whole-table
+    source: "RoboSub 2025/26 handbook 3.2: resupply table, 2 ft x 2 ft (0.6 m x 0.6 m)"
+
+  red_pipe:
+    # What `slalom_red_pipe.pt` emits. Same object as `slalom` above, under the
+    # name the DETECTOR uses -- which is the entire defect this round fixed, so
+    # both names are spelled out rather than left to be inferred.
+    #
+    # ⛔ It is the PIPE DIAMETER, not the gap between pipes. The header's
+    # pole-diameter warning is about exactly this class: boxing one pipe and
+    # scaling by the span would make every slalom range wrong by ~10x, in the
+    # flattering direction, with nothing logging a fault.
+    width_m: 0.0334
+    boxes: single-pipe
+    source: "RoboSub 2026 handbook (1 in nominal PVC = 33.4 mm OD)"
+
+  hole:
+    # ⛔ NO WIDTH, DELIBERATELY. `torpedo_blood_hole.pt` emits `hole`, and the
+    # handbook dimensions the BOARD (2 ft x 2 ft) but NOT its two opening sizes.
+    # We have no organiser figure, and this file does not invent one: a guessed
+    # width here would silently rescale every range on the one shot where the
+    # hull must be still.
+    #
+    # What this costs, stated so nobody 'fixes' it: only the 6-DoF metric pose.
+    # The standoff shot rides `align(fwd=)`, which servos on ANGULAR SIZE -- a
+    # ratio of pixels to a commanded fill -- so it needs no absolute width and
+    # is unaffected. Measure our own opening with a tape and put it in
+    # ~/.mongla/target_geometry.yaml to turn the metric path on for our pool.
+    no_published_dimension: true
+    boxes: single-opening
+    source: "RoboSub 2025/26 handbook 3.2: the board is dimensioned, its openings are not"
+
+  torpedo_board: &torpedo_board
+    # ⛔ THIS WAS 0.52 AND `boxes: whole-board`, WHICH CONTRADICTED ITSELF.
+    # 0.52 is the printed board's USABLE FACE, taken from our own sim arena
+    # spec -- not from the handbook, and not what a whole-board box measures.
+    # The handbook is explicit: "2 ft x 2 ft (0.6m x 0.6m)". A detector boxing
+    # the board sees the board, so the whole-board figure is the right one;
+    # 0.52 made every range read ~13 % SHORT (m_per_px = width_m / w_px), i.e.
+    # the hull believed it was closer than it was.
+    #
+    # ⚠ IF a model is ever trained to box only the printed artwork rather than
+    # the board, this must go back to 0.52 AND `boxes` must say so. The two
+    # fields have to agree -- that disagreement is what hid this.
+    width_m: 0.6096
+    boxes: whole-board
+    source: "RoboSub 2025/26 handbook 3.2: 'Deploy' board, 2 ft x 2 ft (0.6 m x 0.6 m)"
+    # `unquoted: true` was here while the width was the sim's 0.52. The number
+    # is now a handbook quotation, so the flag goes with the number it described.
+
+  # The name `torpedo_blood_hole.pt` emits for the same board. Aliased, not
+  # retyped: two copies of one number is how `torpedo_board` came to hold the
+  # sim's 0.52 while claiming to box the whole board.
+  torpedo: *torpedo_board

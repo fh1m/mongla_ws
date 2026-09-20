@@ -60,7 +60,7 @@ It is also what `LANDING_TARGET` already means, so we are using a standard messa
 rather than as a container. And unlike `ESC_STATUS` (291), msgid 149 **is** in every pymavlink
 dialect — verified — so it decodes on both sides.
 
-**FOV is our responsibility.** It will live in `duburi_vision/config/cameras.yaml` per camera;
+**FOV is our responsibility.** It will live in `mongla_vision/config/cameras.yaml` per camera;
 the board never needs image dimensions.
 
 ### Why selection stays here

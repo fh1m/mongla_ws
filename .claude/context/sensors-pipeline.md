@@ -1,4 +1,4 @@
-# Sensors pipeline — `duburi_sensors`
+# Sensors pipeline — `mongla_sensors`
 
 > **Backend note.** The vehicle is the SROT board (firmware Hengla) + a Raspberry Pi 5 with a
 > Hailo-8. `lock_heading`, `move_*_dist`, `arc` and `style_yaw` are **refused** there, `ALT_HOLD`
@@ -7,7 +7,7 @@
 > legacy path is [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md).
 
 This file is the design rationale + future-extension guide for the
-`duburi_sensors` package. Read this before adding sensors, swapping
+`mongla_sensors` package. Read this before adding sensors, swapping
 fusion strategy, or "improving" the architecture — the constraints
 below were chosen deliberately.
 
@@ -42,7 +42,7 @@ below were chosen deliberately.
 
 ## Why a separate package
 
-Control code (`duburi_control`) should not know whether yaw came from
+Control code (`mongla_control`) should not know whether yaw came from
 ArduSub's AHRS, an external BNO085, a DVL, or a stub. It should ask a
 `YawSource` for `read_yaw()` and trust the answer (or hold last value
 if `None`).
@@ -51,9 +51,9 @@ Putting the source plumbing in its own package gives us:
 
 1. **Replaceable backend, fixed contract.** Swap chips by changing one
    ROS parameter; control code never recompiles.
-2. **Sensor-only depends on `duburi_control`** (for the `Pixhawk`
-   wrapper used by `MavlinkAhrsSource`), but `duburi_control` does NOT
-   depend on `duburi_sensors`. The dependency arrow points one way.
+2. **Sensor-only depends on `mongla_control`** (for the `Pixhawk`
+   wrapper used by `MavlinkAhrsSource`), but `mongla_control` does NOT
+   depend on `mongla_sensors`. The dependency arrow points one way.
 3. **Standalone diagnostic** (`sensors_node`) can talk to any source
    without booting the action server.
 
@@ -85,7 +85,7 @@ discussion. Don't relax them without a new conversation.
 |                                               | `_mocap_tick` *reads* the source and does the       |
 |                                               | `ATT_POS_MOCAP` yaw write — the source stays pure.) |
 | **No vision in this package**                 | Vision is large enough to deserve its own package  |
-|                                               | (`duburi_vision`). Don't pollute the sensor-only   |
+|                                               | (`mongla_vision`). Don't pollute the sensor-only   |
 |                                               | scope.                                             |
 
 ---
@@ -183,17 +183,17 @@ Consequences:
 
 The mechanical steps:
 
-1. `src/duburi_sensors/duburi_sensors/sources/<name>.py` — subclass
+1. `src/mongla_sensors/mongla_sensors/sources/<name>.py` — subclass
    `YawSource`. Mirror the BNO085 background-thread pattern.
-2. `src/duburi_sensors/duburi_sensors/factory.py` — add a `_build_<name>`
+2. `src/mongla_sensors/mongla_sensors/factory.py` — add a `_build_<name>`
    function and an entry in `_BUILDERS`.
-3. `src/duburi_sensors/firmware/<name>.md` — wire format spec + smoke
+3. `src/mongla_sensors/firmware/<name>.md` — wire format spec + smoke
    test instructions. (For pure-software sources like a network DVL,
    document the network protocol instead.)
 4. README §10A — add a paragraph and update the architecture diagram.
 
 The control side does not change. If you find yourself touching
-`duburi_control` to add a sensor, stop — you're probably adding fusion
+`mongla_control` to add a sensor, stop — you're probably adding fusion
 or fallback logic, both forbidden by the rules above.
 
 ---
@@ -273,7 +273,7 @@ while True:
 ```
 
 The thread is a `daemon=True` thread — it dies with the process even if still
-retrying. The `dvl_connect` verb (`duburi dvl_connect` CLI) always works as a
+retrying. The `dvl_connect` verb (`mongla dvl_connect` CLI) always works as a
 manual override regardless of auto-connect state.
 
 ---
@@ -281,7 +281,7 @@ manual override regardless of auto-connect state.
 ## When to break the rules
 
 - **Add fusion** → only after `robot_localization` lands as a separate
-  package (`duburi_estimation` / similar). The fused estimate becomes
+  package (`mongla_estimation` / similar). The fused estimate becomes
   a NEW `YawSource`; existing sources stay as they are.
 - **Add mid-run switching** → only with explicit operator-in-the-loop
   control (e.g. a service call from QGC that changes source). Even
@@ -296,10 +296,10 @@ manual override regardless of auto-connect state.
 
 ## Cross-references
 
-- `[../../src/duburi_sensors/](../../src/duburi_sensors/)` — package source
-- `[../../src/duburi_sensors/firmware/esp32c3_bno085.md](../../src/duburi_sensors/firmware/esp32c3_bno085.md)` — BNO085 wire contract
-- `[../../src/duburi_sensors/duburi_sensors/sources/nucleus_dvl.py](../../src/duburi_sensors/duburi_sensors/sources/nucleus_dvl.py)` — Nucleus 1000 DVL driver
-- `[../../src/duburi_sensors/duburi_sensors/sources/composite_bno_dvl.py](../../src/duburi_sensors/duburi_sensors/sources/composite_bno_dvl.py)` — BNO085+DVL composite
+- `[../../src/mongla_sensors/](../../src/mongla_sensors/)` — package source
+- `[../../src/mongla_sensors/firmware/esp32c3_bno085.md](../../src/mongla_sensors/firmware/esp32c3_bno085.md)` — BNO085 wire contract
+- `[../../src/mongla_sensors/mongla_sensors/sources/nucleus_dvl.py](../../src/mongla_sensors/mongla_sensors/sources/nucleus_dvl.py)` — Nucleus 1000 DVL driver
+- `[../../src/mongla_sensors/mongla_sensors/sources/composite_bno_dvl.py](../../src/mongla_sensors/mongla_sensors/sources/composite_bno_dvl.py)` — BNO085+DVL composite
 - `[./legacy-pixhawk-and-sitl.md](./legacy-pixhawk-and-sitl.md)` — DVL hardware spec, packet format, smoke tests
 - `[./sensors-pipeline.md](./sensors-pipeline.md)` — research notes on yaw drift sources
 - `[./legacy-pixhawk-and-sitl.md](./legacy-pixhawk-and-sitl.md)` — 2023/2025 codebase patterns we draw from

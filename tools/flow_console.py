@@ -49,10 +49,10 @@ def _load(name, rel):
 
 
 _fm = _load('_fc_flow_math',
-            'src/duburi_vision/duburi_vision/distance/flow_math.py')
+            'src/mongla_vision/mongla_vision/distance/flow_math.py')
 _fv = _load('_fc_flow_velocity',
-            'src/duburi_vision/duburi_vision/distance/flow_velocity.py')
-_ne = _load('_fc_nav', 'src/duburi_manager/duburi_manager/estimator/nav_estimator.py')
+            'src/mongla_vision/mongla_vision/distance/flow_velocity.py')
+_ne = _load('_fc_nav', 'src/mongla_manager/mongla_manager/estimator/nav_estimator.py')
 
 _FEATURE_PARAMS = dict(maxCorners=160, qualityLevel=0.01, minDistance=8,
                        blockSize=7)
@@ -747,7 +747,7 @@ class H(BaseHTTPRequestHandler):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--height', type=float, required=True)
-    p.add_argument('--device', default='/dev/duburi_cam_downward')
+    p.add_argument('--device', default='/dev/mongla_cam_downward')
     p.add_argument('--width', type=int, default=640)
     p.add_argument('--height-px', type=int, default=360)
     p.add_argument('--fps', type=int, default=210)
@@ -775,7 +775,7 @@ def main():
     p.add_argument('--sim-speed', type=float, default=0.15)
     p.add_argument('--want-points', type=int, default=80)
     p.add_argument('--calibration',
-                   default='src/duburi_vision/config/calibration/pi_downward_1280x720.json')
+                   default='src/mongla_vision/config/calibration/pi_downward_1280x720.json')
     p.add_argument('--no-undistort', action='store_true')
     a = p.parse_args()
     _load_runs()

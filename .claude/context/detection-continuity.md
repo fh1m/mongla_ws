@@ -15,7 +15,7 @@ because nothing had ever measured one.** `check_tracker.py` came closest and
 collapsed it to a scalar: a 5 % "predicted ratio" is one 400 ms blackout or a
 hundred single-frame flickers, reported identically.
 
-`duburi_vision/continuity.py` is the missing ruler. Pure functions over
+`mongla_vision/continuity.py` is the missing ruler. Pure functions over
 observations — no ROS, no camera, no model — so a live topic, a bag and an
 offline replay are all scored the same way.
 
@@ -189,7 +189,7 @@ now.
 
 - **Ego-motion compensation.** [EMAP](https://arxiv.org/abs/2404.03110) cuts ID
   switches **73 %** on OC-SORT — our tracker — by decoupling camera motion from
-  object trajectories. We publish body rates at 50 Hz (`/duburi/imu_rates`) and
+  object trajectories. We publish body rates at 50 Hz (`/mongla/imu_rates`) and
   `rotation_flow_px()` already computes the image shift. Not yet connected.
   **Recorded so it is not re-derived: an IMM filter bank is the wrong tool** —
   our targets are static props and all apparent motion is ours.
@@ -308,7 +308,7 @@ So it is a **per-water** decision, not a per-vehicle one. `water_check` prints
 the three statistics and says which side of the line the pool is on:
 
 ```
-ros2 run duburi_vision water_check              # live camera
+ros2 run mongla_vision water_check              # live camera
 python3 tools/water_check.py --video clip.mkv   # a recording
 ```
 

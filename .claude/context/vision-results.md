@@ -1,14 +1,14 @@
 # Vision verb results, mid-hold fire & live feedback
 
 > **Read this before writing a vision mission.** It documents what
-> `duburi.vision.align(...)` and `duburi.vision.move(...)` *give back* (so you can
+> `mongla.vision.align(...)` and `mongla.vision.move(...)` *give back* (so you can
 > build robust hybrid vision+control missions), how to fire a payload **mid-hold**
 > while still correcting, and how to watch a verb converge live during practice.
 >
-> API source of truth: [`vision_dsl.py`](../../src/duburi_planner/duburi_planner/vision_dsl.py)
-> (`VisionResult`), [`vision_verbs.py`](../../src/duburi_control/duburi_control/vision_verbs.py),
-> [`motion_vision.py`](../../src/duburi_control/duburi_control/motion_vision.py)
-> (`align_loop` / `move_loop`), [`Move.action`](../../src/duburi_interfaces/action/Move.action).
+> API source of truth: [`vision_dsl.py`](../../src/mongla_planner/mongla_planner/vision_dsl.py)
+> (`VisionResult`), [`vision_verbs.py`](../../src/mongla_control/mongla_control/vision_verbs.py),
+> [`motion_vision.py`](../../src/mongla_control/mongla_control/motion_vision.py)
+> (`align_loop` / `move_loop`), [`Move.action`](../../src/mongla_interfaces/action/Move.action).
 > Companion: [`client-and-dsl-api.md`](client-and-dsl-api.md) · [`command-reference.md`](command-reference.md)
 > · [`mission-cookbook.md`](mission-cookbook.md) · [`detected-paradigm.md`](detected-paradigm.md).
 
@@ -25,20 +25,20 @@ The fix is **vision + tested open-loop control**: read **where and how** the ver
 finished, then run a known-good `move_*` / `set_depth` to finish the job.
 
 ```python
-res = duburi.vision.align('gate', yaw=0, lat=0, duration=15)
+res = mongla.vision.align('gate', yaw=0, lat=0, duration=15)
 if res:                          # ALIGNED — the happy path
-    duburi.move_forward(3, gain=40)
+    mongla.move_forward(3, gain=40)
 elif res.saw_target:             # saw it, couldn't fully centre -> nudge + commit
-    if res.x_px > 30:   duburi.move_right(1, gain=30)   # target ended RIGHT  -> chase right
-    elif res.x_px < -30: duburi.move_left(1, gain=30)   # target ended LEFT   -> chase left
-    duburi.move_forward(3, gain=40)                     # drive through anyway
+    if res.x_px > 30:   mongla.move_right(1, gain=30)   # target ended RIGHT  -> chase right
+    elif res.x_px < -30: mongla.move_left(1, gain=30)   # target ended LEFT   -> chase left
+    mongla.move_forward(3, gain=40)                     # drive through anyway
 else:                            # NEVER saw the gate -> search, don't drive blind
-    while not duburi.detected('gate'):                  # the real search idiom
-        duburi.move_forward(0.6, gain=35)               #   (see detected-paradigm.md)
+    while not mongla.detected('gate'):                  # the real search idiom
+        mongla.move_forward(0.6, gain=35)               #   (see detected-paradigm.md)
 ```
 
-> **"Search" is mission-authored — there is no `duburi.search_pattern()` verb.** Use a
-> `while not duburi.detected(...)` loop or a `fallback=` search fn (see
+> **"Search" is mission-authored — there is no `mongla.search_pattern()` verb.** Use a
+> `while not mongla.detected(...)` loop or a `fallback=` search fn (see
 > [`detected-paradigm.md`](detected-paradigm.md) and §3 below). The examples here show the
 > real idiom.
 
@@ -57,7 +57,7 @@ answers, every time, on success **and** failure:
 ## 2. `VisionResult` — the finish-state
 
 ```python
-res = duburi.vision.align('hole', yaw=0, lat=0, depth=0)
+res = mongla.vision.align('hole', yaw=0, lat=0, depth=0)
 # res is a VisionResult:
 res.ok           # bool  — True only when ALIGNED (move: reached fill / passed through)
 res.status       # str   — 'ALIGNED'|'LOST'|'TIMEOUT'|'NO_CAMERA'|'ABORTED'|'FAILED'
@@ -69,7 +69,7 @@ res.saw_target   # bool  — was the target detected at least once during the ve
 res.last_err_px  # float — worst residual px from the GOAL (centre+offset) at exit
 res.fill         # float — bbox fill fraction at exit [0..1] (vision.move; 0 for align)
 res.elapsed_s    # float — how long the verb ran
-bool(res)        # == res.ok  ->  `if duburi.vision.align(...):` still works unchanged
+bool(res)        # == res.ok  ->  `if mongla.vision.align(...):` still works unchanged
 ```
 
 ### 2.1 `x_px` / `y_px` — WHERE the target finished (sign-critical)
@@ -80,8 +80,8 @@ verb saw it**, in pixels. They are the **raw observable** — independent of any
 
 | Value | Meaning | To centre it, the hull must… |
 |---|---|---|
-| `x_px > 0` | target ended **RIGHT** of centre | strafe **right** → `duburi.move_right(...)` |
-| `x_px < 0` | target ended **LEFT** of centre  | strafe **left**  → `duburi.move_left(...)` |
+| `x_px > 0` | target ended **RIGHT** of centre | strafe **right** → `mongla.move_right(...)` |
+| `x_px < 0` | target ended **LEFT** of centre  | strafe **left**  → `mongla.move_left(...)` |
 | `y_px > 0` | target ended **BELOW** centre    | go **deeper** → `set_depth(more negative)` |
 | `y_px < 0` | target ended **ABOVE** centre    | go **shallower** → `set_depth(less negative)` |
 | `NaN`      | target was **never seen**         | `saw_target` is `False` — search, don't move |
@@ -100,16 +100,16 @@ was never seen, and a `NaN` comparison is silently `False`:
 ```python
 # CORRECT — distinguish "ended off-centre" from "never saw it"
 if res:                                          # aligned
-    duburi.move_forward(3)
+    mongla.move_forward(3)
 elif res.saw_target:                             # saw it, off-centre -> chase the residual
-    duburi.move_right(1) if res.x_px > 0 else duburi.move_left(1)
+    mongla.move_right(1) if res.x_px > 0 else mongla.move_left(1)
 else:                                            # never saw it -> search (mission-authored)
-    while not duburi.detected('gate'):
-        duburi.move_forward(0.6, gain=35)
+    while not mongla.detected('gate'):
+        mongla.move_forward(0.6, gain=35)
 
 # WRONG — a never-seen target has x_px = NaN; `NaN < -30` is False, so this
 # silently falls through to "proceed" on a target the AUV never even detected.
-if res.x_px < -30: duburi.move_left(1)
+if res.x_px < -30: mongla.move_left(1)
 ```
 
 `saw_target == False` almost always means **wrong model/classes loaded** or the target
@@ -146,27 +146,27 @@ seed the **next** task ("gate was 40 px right, so the course bends right").
 
 ### 3.1 Gate — align, else nudge toward where it ended, then commit
 ```python
-def creep_forward(duburi):            # mission-authored search/fallback fn
-    duburi.move_forward(0.6, gain=35) #   one short creep, then return so align retries
+def creep_forward(mongla):            # mission-authored search/fallback fn
+    mongla.move_forward(0.6, gain=35) #   one short creep, then return so align retries
 
-def pass_gate(duburi):
-    res = duburi.vision.align('gate', yaw=0, lat=0, err=40, duration=15,
+def pass_gate(mongla):
+    res = mongla.vision.align('gate', yaw=0, lat=0, err=40, duration=15,
                               fallback=creep_forward)
     if not res and res.saw_target:
         # Off-centre at timeout: chase the residual the SAME direction align tried.
-        if res.x_px > 40:   duburi.move_right(1.0, gain=30)
-        elif res.x_px < -40: duburi.move_left(1.0, gain=30)
+        if res.x_px > 40:   mongla.move_right(1.0, gain=30)
+        elif res.x_px < -40: mongla.move_left(1.0, gain=30)
     if res or res.saw_target:         # aligned, or at least saw it -> commit through
-        duburi.set_depth(-1.4)         # drop below the gate bar first
-        duburi.move_forward(4, gain=45)
+        mongla.set_depth(-1.4)         # drop below the gate bar first
+        mongla.move_forward(4, gain=45)
     else:                             # never saw the gate -> keep searching forward
-        while not duburi.detected('gate'):
-            duburi.move_forward(0.6, gain=35)
+        while not mongla.detected('gate'):
+            mongla.move_forward(0.6, gain=35)
 ```
 
 ### 3.2 Torpedo — note the miss for the NEXT shot
 ```python
-res = duburi.vision.align('hole', yaw=0, lat=0, depth=0, err=12,
+res = mongla.vision.align('hole', yaw=0, lat=0, depth=0, err=12,
                           gain=25, yaw_gain=10, hold=4, fire=1, fire_t=1,
                           brake=False)            # fire mid-hold (see §4)
 if not res and res.saw_target:
@@ -176,14 +176,14 @@ if not res and res.saw_target:
 
 ### 3.3 Bin — drop only when actually centred, else reposition by sign
 ```python
-res = duburi.vision.align('bin', camera='downward', lat=0, depth=0,
+res = mongla.vision.align('bin', camera='downward', lat=0, depth=0,
                           err=25, duration=12)
 if res:
-    duburi.fire(3)                              # dropper
+    mongla.fire(3)                              # dropper
 elif res.saw_target and abs(res.x_px) < 60:
-    duburi.move_right(0.5) if res.x_px > 0 else duburi.move_left(0.5)
-    if duburi.vision.align('bin', camera='downward', lat=0, depth=0, err=25):
-        duburi.fire(3)
+    mongla.move_right(0.5) if res.x_px > 0 else mongla.move_left(0.5)
+    if mongla.vision.align('bin', camera='downward', lat=0, depth=0, err=25):
+        mongla.fire(3)
 # else: never saw the bin -> hold drop, continue search
 ```
 
@@ -202,7 +202,7 @@ and the torpedo leaving lets the hull drift off the hole. `fire`/`fire_t` fire t
 payload **while `align` is still actively correcting**, so the shot leaves *glued*.
 
 ```python
-duburi.vision.align('hole', yaw=0, lat=0, depth=0,
+mongla.vision.align('hole', yaw=0, lat=0, depth=0,
                     hold=4,            # active station-keep for 4 s after centring
                     fire=1,            # fire payload channel 1 (1/2=torpedo, 3/4=dropper)
                     fire_t=1,          # 1 s into the hold (0 = at the moment it locks)
@@ -262,7 +262,7 @@ gains during practice):
 
 ```bash
 # In another terminal during a mission / a standalone vision_align goal:
-ros2 topic echo /duburi/move/_action/feedback
+ros2 topic echo /mongla/move/_action/feedback
 # ...
 #   err_x_px: -120.0   err_y_px: 30.0    status_line: 'YAW:1.2  DEPTH:-1.40m  VIS:(-120,+30)px'
 #   err_x_px: -60.0    err_y_px: 12.0    status_line: '...  VIS:(-60,+12)px'

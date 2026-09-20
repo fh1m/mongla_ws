@@ -21,7 +21,7 @@ range — was then attached to the wrong physical lens for nine days.
 
 ```bash
 ls -l /dev/v4l/by-path/                       # which port is which
-ros2 run duburi_vision vision_check --camera forward
+ros2 run mongla_vision vision_check --camera forward
 ```
 
 Point something recognisable at one camera and confirm *that* camera's stream moves.
@@ -47,15 +47,15 @@ surplus frames are cost without value.
 ## Calibration belongs to the camera, not the role
 
 Each physical camera has its own measured calibration in
-`duburi_vision/config/calibration/`, including its field of view in water (**46.7°** for the
+`mongla_vision/config/calibration/`, including its field of view in water (**46.7°** for the
 forward camera, against 63.8° in air). A calibration file follows the **lens**, never the role
 it is playing — that is the mistake the role swap made expensive.
 
 ## Running both
 
 ```bash
-ros2 launch duburi_manager bringup.launch.py vision:=true      # the vehicle: both cameras
-ros2 launch duburi_vision mission_web.launch.py                # both streams in a browser
+ros2 launch mongla_manager bringup.launch.py vision:=true      # the vehicle: both cameras
+ros2 launch mongla_vision mission_web.launch.py                # both streams in a browser
 ```
 
 The mission console shows both `image_debug` streams side by side, with detections burned in
@@ -65,4 +65,4 @@ single panel instead of crashing.
 Related: [`camera-and-calibration.md`](camera-and-calibration.md) ·
 [`camera-latency.md`](camera-latency.md) ·
 [`downward-camera.md`](downward-camera.md) (the axis remap) ·
-[`packages/duburi_vision`](packages/duburi_vision/README.md)
+[`packages/mongla_vision`](packages/mongla_vision/README.md)

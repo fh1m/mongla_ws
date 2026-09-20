@@ -1,7 +1,7 @@
 # Lab HTTP API
 
-Server: `src/duburi_sim_web/duburi_sim_web/server.py` (`lab_server`).
-Default bind: `DUBURI_LAB_HOST`:`DUBURI_LAB_PORT` (28765, auto-bump if busy).
+Server: `src/mongla_sim_web/mongla_sim_web/server.py` (`lab_server`).
+Default bind: `MONGLA_LAB_HOST`:`MONGLA_LAB_PORT` (28765, auto-bump if busy).
 
 Static UI from package `static/` (built from `frontend/`).
 
@@ -51,13 +51,13 @@ Stop sim job (and related bringup).
 | Method | Path | Notes |
 |--------|------|-------|
 | GET | `/api/vehicle/state` | Snapshot |
-| POST | `/api/vehicle/arm` | `duburi_planner duburi arm` via `DUBURI_WS` |
+| POST | `/api/vehicle/arm` | `mongla_planner mongla arm` via `MONGLA_WS` |
 | POST | `/api/vehicle/disarm` | same |
 | POST | `/api/vehicle/cmd` | `{cmd, duration?, gain?, target?, timeout?}` |
 | POST | `/api/vehicle/teleop` | `{fwd,lat,up,yaw,gain?}` — axes −1…1 |
 | GET | `/api/vehicle/teleop` | TeleopStreamer status |
 
-Teleop endpoint: `DUBURI_TELEOP_ENDPOINT` default `tcp:127.0.0.1:5763`.
+Teleop endpoint: `MONGLA_TELEOP_ENDPOINT` default `tcp:127.0.0.1:5763`.
 
 ## FX / cameras
 
@@ -106,7 +106,7 @@ Returns `{ok, record_dir, stdout, code}`. UI derives zip id from `record_dir` ba
 | POST | `/api/scripts/run` `{script_id, label?, use_fx?, frames?, labels?}` |
 | GET | `/api/scripts/status` |
 
-YAMLs under `src/duburi_sim_web/scripts/` (or `DUBURI_SIM_SCRIPTS`).
+YAMLs under `src/mongla_sim_web/scripts/` (or `MONGLA_SIM_SCRIPTS`).
 
 ## Props / assets
 

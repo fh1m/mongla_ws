@@ -9,7 +9,7 @@ ritual: every step exists because skipping it cost a run.
 
 ```bash
 source scripts/pool_session.sh <label>     # SOURCE it in every terminal — one folder per run
-ros2 run duburi_manager bringup_check --srot
+ros2 run mongla_manager bringup_check --srot
 ```
 
 `bringup_check` grades each subsystem and exits non-zero on a real fault. Read the three
@@ -29,7 +29,7 @@ is the single most likely reason a session goes nowhere.
 ## Watch what the board is actually saying
 
 ```bash
-ros2 run duburi_manager connect --watch
+ros2 run mongla_manager connect --watch
 ```
 
 Both battery packs, per-ESC RPM and temperature, the depth controller's own command, error and
@@ -42,7 +42,7 @@ lands, "power is live" and "I cannot hear the power board" can look the same fro
 ## Bringing the stack up
 
 ```bash
-ros2 launch duburi_manager bringup.launch.py vision:=true
+ros2 launch mongla_manager bringup.launch.py vision:=true
 ```
 
 Bring it up **bare first** if anything is unfamiliar — control only, then vision, then
@@ -52,7 +52,7 @@ instead of argued about.
 Check before trusting vision:
 
 ```bash
-ros2 run duburi_vision vision_check --camera forward --require-class gate
+ros2 run mongla_vision vision_check --camera forward --require-class gate
 ```
 
 Require the model stem, a non-empty class allowlist, **and** a live alignment line. A missing
@@ -63,7 +63,7 @@ looking healthy.
 
 1. **Propellers clear.** Hands, tether, tools, cable ties.
 2. **A human on the kill switch**, watching the vehicle, not the laptop.
-3. `ros2 run duburi_planner duburi arm` — and expect the interlocks to refuse if something is
+3. `ros2 run mongla_planner mongla arm` — and expect the interlocks to refuse if something is
    wrong. A refusal here is the system working.
 4. First motion is a small one, on the surface, with someone able to reach it.
 
@@ -82,7 +82,7 @@ scripts/pool_record.sh record <label>
 
 ## After each run
 
-- A scorecard lands in `DUBURI_RUN_DIR`: every verb, its outcome, the goal id, what the camera
+- A scorecard lands in `MONGLA_RUN_DIR`: every verb, its outcome, the goal id, what the camera
   saw. Read it before deciding what the next run changes.
 - Replay the bag rather than re-flying the same experiment:
 

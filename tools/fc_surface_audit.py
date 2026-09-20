@@ -24,8 +24,8 @@ Run from the workspace root:  python3 tools/fc_surface_audit.py
 """
 import ast, pathlib, sys, collections
 
-sys.path.insert(0, 'src/duburi_control')
-sys.path.insert(0, 'src/duburi_manager')
+sys.path.insert(0, 'src/mongla_control')
+sys.path.insert(0, 'src/mongla_manager')
 
 FC_PARAM_NAMES = {'pixhawk', 'fc', 'flight_controller', 'master_fc'}
 FC_SELF_ATTRS  = {'pixhawk', 'fc', '_pixhawk', '_fc'}
@@ -76,10 +76,10 @@ def scan(root):
     return per_file
 
 # --- the real backend surfaces, from the classes themselves -----------------
-from duburi_control.fc.srot_fc import SrotFC
-from duburi_control.fc.base import FlightController
+from mongla_control.fc.srot_fc import SrotFC
+from mongla_control.fc.base import FlightController
 try:
-    from duburi_control.fc.pixhawk_fc import PixhawkFC
+    from mongla_control.fc.pixhawk_fc import PixhawkFC
     PIX = set(dir(PixhawkFC))
 except Exception as e:
     PIX = None
@@ -88,8 +88,8 @@ except Exception as e:
 SROT = set(dir(SrotFC))
 ABC  = set(dir(FlightController))
 
-roots = ['src/duburi_control/duburi_control', 'src/duburi_manager/duburi_manager',
-         'src/duburi_planner/duburi_planner']
+roots = ['src/mongla_control/mongla_control', 'src/mongla_manager/mongla_manager',
+         'src/mongla_planner/mongla_planner']
 missing = collections.defaultdict(list)
 allattrs = collections.Counter()
 for r in roots:

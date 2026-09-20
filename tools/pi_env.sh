@@ -5,18 +5,18 @@
 # because of failures that are silent, not loud.
 
 source /opt/ros/jazzy/setup.bash
-[ -f ~/duburi_ws/install/setup.bash ] && source ~/duburi_ws/install/setup.bash
+[ -f ~/mongla_ws/install/setup.bash ] && source ~/mongla_ws/install/setup.bash
 
 # Hailo models live outside the workspace so a rebuild cannot delete them.
 # A .hef carries NO class names -- without the .yaml sidecar beside it the
 # allowlist is empty and the detector returns [] on EVERY frame, with one
 # warning and no error.
-export DUBURI_HEF_DIR=~/hailo_models
+export MONGLA_HEF_DIR=~/hailo_models
 
 # The HEFs are baked at nms_scores_th=0.05 so runtime conf can be TIGHTENED
 # (it can never be loosened below the baked value). INT8 scores ~0.08 lower
 # than fp32, measured, so run 0.12-0.15 where the Jetson path uses 0.20.
-export DUBURI_HAILO_CONF=0.15
+export MONGLA_HAILO_CONF=0.15
 
 # Camera: 640x360 @ 210 fps MJPG.
 #   - the fps is a SETTING, not a bandwidth limit: 30->30 Hz, 210->125 Hz
@@ -26,4 +26,4 @@ export DUBURI_HAILO_CONF=0.15
 #     for nothing.
 #   - THESE NUMBERS CAME FROM THE BENCH MICRODIA. The vehicle's Blue Robotics
 #     cameras are unmeasured; re-measure before trusting 210 there.
-export DUBURI_CAM_W=640 DUBURI_CAM_H=360 DUBURI_CAM_FPS=210
+export MONGLA_CAM_W=640 MONGLA_CAM_H=360 MONGLA_CAM_FPS=210

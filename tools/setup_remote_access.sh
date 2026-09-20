@@ -16,7 +16,7 @@
 #        pixels; already built — this script just confirms web_video_server).
 #     3. Full desktop (BlueOS calib is web already; QGC; the odd GUI) -> NoMachine
 #        (NX) — the Jetson-recommended remote desktop, reconnects cleanly.
-#     4. Passwords -> a polkit .pkla granting `dubomini` ResultAny=yes for the
+#     4. Passwords -> a polkit .pkla granting `mongla_agile` ResultAny=yes for the
 #        noisy desktop actions (Ubuntu 22.04 = polkit 0.105 = .pkla, not rules.d).
 #
 #   Full guide + laptop-side steps + emergency recovery:
@@ -29,7 +29,7 @@
 #     --dummy-display : also install the software virtual-display Xorg snippet
 #                       (ONLY for a truly headless boot with no monitor AND no
 #                       HDMI dummy plug; overrides the real GPU otherwise).
-#     --autologin     : enable GNOME autologin for dubomini so a desktop session
+#     --autologin     : enable GNOME autologin for mongla_agile so a desktop session
 #                       exists at boot for NoMachine to attach to.
 #     <deb path>      : install NoMachine from this local .deb. If omitted, the
 #                       script looks in ~/Downloads and honours $NOMACHINE_URL.
@@ -42,7 +42,7 @@ set -uo pipefail   # NOT -e: each step reports and continues so one failure
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 RA_DIR="$REPO_DIR/tools/remote-access"
 TARGET_USER="${SUDO_USER:-$(id -un)}"   # the human user, even if run via sudo
-PKLA_DST="/etc/polkit-1/localauthority/50-local.d/50-duburi-nopasswd.pkla"
+PKLA_DST="/etc/polkit-1/localauthority/50-local.d/50-mongla-nopasswd.pkla"
 
 WANT_DUMMY=0 WANT_AUTOLOGIN=0 NOMACHINE_DEB=""
 for a in "$@"; do
@@ -87,13 +87,13 @@ fi
 
 # --- 4. kill the password popups: install the polkit .pkla -------------------
 step "Installing polkit no-password rule for desktop nuisances"
-if [ -f "$RA_DIR/50-duburi-nopasswd.pkla" ]; then
+if [ -f "$RA_DIR/50-mongla-nopasswd.pkla" ]; then
     sudo install -D -m 0644 -o root -g root \
-        "$RA_DIR/50-duburi-nopasswd.pkla" "$PKLA_DST" \
+        "$RA_DIR/50-mongla-nopasswd.pkla" "$PKLA_DST" \
         && ok "installed $PKLA_DST (takes effect for NEW sessions; no reboot)" \
         || warn "could not install pkla — check sudo"
 else
-    warn "missing $RA_DIR/50-duburi-nopasswd.pkla"
+    warn "missing $RA_DIR/50-mongla-nopasswd.pkla"
 fi
 
 # --- 3. NoMachine (NX) — the xrdp replacement --------------------------------
@@ -177,7 +177,7 @@ cat <<EOF
 == Use it from the LAPTOP (192.168.2.1) — one layer per job:
    Terminal  : mosh $TARGET_USER@192.168.2.69      # then: tmux new -s run   (mission survives drops)
    Vision    : Lichtblick -> ws://192.168.2.69:8765   (ros2 launch ... foxglove:=true)
-               or browser -> http://192.168.2.69:8080/stream_viewer?topic=/duburi/vision/forward/image_debug
+               or browser -> http://192.168.2.69:8080/stream_viewer?topic=/mongla/vision/forward/image_debug
                (run once:  ros2 run web_video_server web_video_server)
    Desktop   : NoMachine -> 192.168.2.69:4000  (login $TARGET_USER)
 

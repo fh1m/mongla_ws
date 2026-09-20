@@ -1,0 +1,503 @@
+#!/usr/bin/env bash
+# Helpers for the Mongla simulator.
+#
+#   ros2 run mongla_sim_bringup mongla_sim stop
+#   ros2 run mongla_sim_bringup mongla_sim sim          # Gazebo GUI + ArduSub + bridge
+#   ros2 run mongla_sim_bringup mongla_sim stack --no-vision
+#   ros2 run mongla_sim_bringup mongla_sim smoke
+
+set -eo pipefail
+
+_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$_HERE/../../../setup.bash" ]]; then
+  INSTALL="$(cd "$_HERE/../../.." && pwd)"
+  ROOT="$(cd "$INSTALL/.." && pwd)"
+elif [[ -f "$_HERE/../../../install/setup.bash" ]]; then
+  ROOT="$(cd "$_HERE/../../.." && pwd)"
+  INSTALL="$ROOT/install"
+else
+  echo "cannot find the sim workspace install/ next to this script" >&2
+  exit 1
+fi
+
+# Mongla is one repo, two workspaces: mongla_ws/ (autonomy) and mongla_ws/sim/
+# (this one). Resolve the autonomy root the same way mongla_sim_bridge/paths.py
+# does -- env, then walk up for src/mongla_manager -- because this script runs
+# BEFORE the overlay is sourced and so cannot import that module. Keep the two
+# in step: a change here needs the same change there.
+_find_mongla_ws() {
+  if [[ -n "${MONGLA_WS:-}" ]]; then
+    if [[ -d "$MONGLA_WS/src/mongla_manager" ]]; then printf '%s' "$MONGLA_WS"; return 0; fi
+    echo "[mongla-sim] WARNING: MONGLA_WS=$MONGLA_WS has no src/mongla_manager" >&2
+    return 1
+  fi
+  local d="$ROOT"
+  while [[ "$d" != "/" ]]; do
+    if [[ -d "$d/src/mongla_manager" ]]; then printf '%s' "$d"; return 0; fi
+    d="$(dirname "$d")"
+  done
+  return 1
+}
+MONGLA_WS="$(_find_mongla_ws || true)"
+
+_source_ros() {
+  set +u
+  # shellcheck disable=SC1091
+  source /opt/ros/humble/setup.bash
+  # shellcheck disable=SC1091
+  source "$INSTALL/setup.bash"
+  if [[ -n "${MONGLA_WS}" && -f "$MONGLA_WS/install/setup.bash" ]]; then
+    # shellcheck disable=SC1091
+    source "$MONGLA_WS/install/setup.bash"
+  fi
+  set -u
+  export GZ_IP="${GZ_IP:-127.0.0.1}"
+  # Gazebo GUI needs the host Xwayland cookie when running as root in the
+  # container. Prefer an explicit XAUTHORITY, else the mutter cookie.
+  if [[ -z "${XAUTHORITY:-}" ]]; then
+    auth=$(ls -1 /run/user/"${HOST_UID:-1000}"/.mutter-Xwaylandauth.* 2>/dev/null | head -1 || true)
+    if [[ -z "$auth" ]]; then
+      auth=$(ls -1 /run/user/1000/.mutter-Xwaylandauth.* 2>/dev/null | head -1 || true)
+    fi
+    if [[ -n "$auth" && -r "$auth" ]]; then
+      export XAUTHORITY="$auth"
+    fi
+  fi
+  export DISPLAY="${DISPLAY:-:0}"
+}
+
+# Kill every leftover sim / stack process. Matching is done via /proc so this
+# script's own argv cannot match and self-kill.
+_stop_all() {
+  python3 - <<'PY'
+import os, signal, time
+me, parent = os.getpid(), os.getppid()
+patterns = (
+    'ros2 launch mongla_sim_bringup',
+    'ros2 launch mongla_sim_web',
+    'ros2 launch mongla_manager',
+    'ros2 launch mongla_vision',
+    'lib/mongla_manager/start',
+    'lib/mongla_vision/',
+    'lib/mongla_sim_web/lab_server',
+    'mongla_sim_web/lab_server',
+    'lib/mongla_sim_bridge/record_cameras',
+    'lib/mongla_sim_bridge/underwater_fx',
+    # These two were MISSING and leaked. Measured 2026-08-28: eleven orphaned
+    # dvl_bridge processes, the oldest alive 20 h, 6-12 %% CPU each -- together
+    # a whole core stolen from Gazebo's render loop on every subsequent run.
+    # A leak here does not look like a leak; it looks like "the sim got slow".
+    'lib/mongla_sim_bridge/dvl_bridge',
+    'lib/mongla_sim_bridge/tf_broadcaster',
+    # Added 2026-08-29 after six orphans (4x t200_curve, 2x hydrophone) were
+    # found alive from earlier runs, one for 16 hours. Same leak as dvl_bridge:
+    # a node added to the launch and not to this list survives every `stop`,
+    # and the symptom is never "a process leaked" -- it is "the sim got slow".
+    # ANY new node in sim.launch.py belongs here.
+    'lib/mongla_sim_bridge/t200_curve',
+    'lib/mongla_sim_bridge/water_current',
+    'lib/mongla_sim_bridge/hydrophone',
+    'lib/mongla_sim_bridge/payload_sim',
+    'lib/mongla_sim_bridge/fault_injection',
+    'lib/mongla_sim_bridge/bno085_sim',
+    'lib/mongla_sim_bridge/scoring',
+    'lib/mongla_sim_bridge/depth_reference',
+    'lib/mongla_sim_bridge/thruster_wash',
+    'lib/mongla_sim_scenarios/prop_manager',
+    'mongla_sim_worlds/worlds',
+    'ros_gz_image/image_bridge',
+    'ros_gz_bridge/parameter_bridge',
+    'gz sim ',
+    # The scoring node's pose reader is a `gz topic -e` CHILD process, and the
+    # binary it execs is `gz-transport-topic`, which matches neither `gz sim `
+    # (trailing space) nor the parent's own pattern. SIGKILLing the parent
+    # cannot clean it up -- no handler runs -- so it outlived every `stop`
+    # until this line. Same family as the dvl_bridge and t200_curve leaks
+    # above: a subscriber nobody stops, and the symptom is never "a process
+    # leaked", it is "the sim got slow". `stop` already kills `gz sim`, so a
+    # lingering gz topic echo is in scope.
+    'gz-transport-topic',
+    'bin/ardusub',
+)
+killed = []
+for name in os.listdir('/proc'):
+    if not name.isdigit():
+        continue
+    pid = int(name)
+    if pid in (me, parent):
+        continue
+    try:
+        cmd = open(f'/proc/{pid}/cmdline', 'rb').read().replace(b'\0', b' ').decode()
+    except Exception:
+        continue
+    if 'mongla_sim stop' in cmd or 'cursor-sandbox' in cmd:
+        continue
+    if any(p in cmd for p in patterns):
+        try:
+            os.kill(pid, signal.SIGKILL)
+            killed.append(pid)
+        except ProcessLookupError:
+            pass
+time.sleep(2)
+print(f"[mongla-sim] stopped {len(killed)} leftover process(es)")
+PY
+}
+
+_usage() {
+  cat <<EOF
+Usage: $(basename "$0") <command> [args]
+
+Commands:
+  stop                         Kill every leftover sim / stack process
+  sim [--headless] [args...]   Gazebo + ArduSub + bridge (GUI on by default)
+  stack [--no-vision]          mongla_ws manager against a running simulator
+  smoke                        arm → set_depth -1 → move_forward 8s
+  joystick                     Live gamepad status in the terminal (needs `lab`)
+  view [far|high|chase|free|<model>]  Aimed 3rd-person at range, close chase, or let go
+  lab                          Operator web UI on :28765 (MONGLA_LAB_PORT; needs sim+stack)
+  plotjuggler                  Launch PlotJuggler with sim layout (needs ros-humble-plotjuggler-ros)
+
+Typical session:
+
+  # terminal 1 — pool + AUV visible in Gazebo
+  source /opt/ros/humble/setup.zsh
+  source $ROOT/install/setup.zsh
+  ros2 run mongla_sim_bringup mongla_sim stop
+  ros2 run mongla_sim_bringup mongla_sim sim
+
+  # terminal 2 — autonomy stack
+  source /opt/ros/humble/setup.zsh
+  source $MONGLA_WS/install/setup.zsh
+  source $ROOT/install/setup.zsh
+  ros2 run mongla_sim_bringup mongla_sim stack --no-vision
+
+  # terminal 3 — smoke test or web lab
+  ros2 run mongla_sim_bringup mongla_sim smoke
+  # or:  ros2 run mongla_sim_bringup mongla_sim lab
+EOF
+}
+
+cmd="${1:-}"
+shift || true
+
+# Mirrors mongla_sim_bridge.paths.runtime_dir(). This script runs before the
+# overlay is sourced so it cannot import that module -- change both together or
+# the CLI and the lab stop agreeing on the active course.
+_RT="${TMPDIR:-/tmp}/mongla-${USER:-$(id -u)}"
+mkdir -p -m 700 "$_RT"
+
+case "$cmd" in
+  stop)
+    _stop_all
+    ;;
+  sim)
+    _source_ros
+    _stop_all
+    gui=true
+    extra=()
+    for a in "$@"; do
+      case "$a" in
+        --headless) gui=false ;;
+        --gui) gui=true ;;
+        *) extra+=("$a") ;;
+      esac
+    done
+    echo "[mongla-sim] launching simulator (gui:=$gui) ..."
+    echo "[mongla-sim] AUV starts at the -x wall (x≈-11.8). Look there in the GUI."
+    exec ros2 launch mongla_sim_bringup sim.launch.py "gui:=$gui" "${extra[@]}"
+    ;;
+  stack)
+    _source_ros
+    if [[ -z "${MONGLA_WS}" || ! -d "$MONGLA_WS/install" ]]; then
+      echo "mongla_ws install not found. Set MONGLA_WS=/path/to/mongla_ws" >&2
+      exit 1
+    fi
+    # Only one manager may bind udpin:14550. Kill prior stacks, keep the sim.
+    python3 - <<'PY'
+import os, signal, time
+me, parent = os.getpid(), os.getppid()
+patterns = (
+    'ros2 launch mongla_sim_bringup stack',
+    'ros2 launch mongla_manager',
+    'ros2 launch mongla_vision',
+    'lib/mongla_manager/start',
+    'lib/mongla_vision/',
+)
+for name in os.listdir('/proc'):
+    if not name.isdigit():
+        continue
+    pid = int(name)
+    if pid in (me, parent):
+        continue
+    try:
+        cmd = open(f'/proc/{pid}/cmdline', 'rb').read().replace(b'\0', b' ').decode()
+    except Exception:
+        continue
+    if any(p in cmd for p in patterns):
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+time.sleep(1)
+print('[mongla-sim] cleared prior stack processes')
+PY
+    vision=true
+    passthrough=()
+    for a in "$@"; do
+      case "$a" in
+        --no-vision) vision=false ;;
+        # Pass any other key:=value straight through to the launch file --
+        # yaw_source:= in particular, now that the sim supports all four
+        # sources (bno085 and bno085_sim_dvl arrived with the virtual BNO
+        # board). Launching stack.launch.py by hand instead would skip the
+        # kill above, and two managers on udpin:14550 fight in ways that look
+        # like a broken sensor.
+        *:=*) passthrough+=("$a") ;;
+        *) echo "unknown arg: $a" >&2; exit 1 ;;
+      esac
+    done
+    if ! pgrep -x ardusub >/dev/null; then
+      echo "WARN: ardusub is not running. Start the simulator first:" >&2
+      echo "  ros2 run mongla_sim_bringup mongla_sim sim" >&2
+    fi
+    echo "[mongla-sim] launching mongla_ws stack (vision:=$vision${passthrough[*]:+ ${passthrough[*]}}) ..."
+    exec ros2 launch mongla_sim_bringup stack.launch.py "vision:=$vision" \
+        ${passthrough[@]+"${passthrough[@]}"}
+    ;;
+  smoke)
+    _source_ros
+    if [[ -z "${MONGLA_WS}" || ! -d "$MONGLA_WS/install" ]]; then
+      echo "mongla_ws install not found; set MONGLA_WS." >&2
+      exit 1
+    fi
+    n_mgr=$(ros2 node list 2>/dev/null | grep -c '/mongla_manager' || true)
+    if [[ "${n_mgr}" -gt 1 ]]; then
+      echo "FAIL: ${n_mgr} /mongla_manager nodes — kill extras and relaunch stack." >&2
+      echo "  ros2 run mongla_sim_bringup mongla_sim stop" >&2
+      echo "  ros2 run mongla_sim_bringup mongla_sim sim" >&2
+      echo "  ros2 run mongla_sim_bringup mongla_sim stack --no-vision" >&2
+      exit 1
+    fi
+    echo "[mongla-sim] waiting for /mongla/state ..."
+    for _ in $(seq 1 30); do
+      if ros2 topic list 2>/dev/null | grep -qx /mongla/state; then
+        break
+      fi
+      sleep 1
+    done
+    if ! ros2 topic list 2>/dev/null | grep -qx /mongla/state; then
+      echo "FAIL: /mongla/state not published. Is stack running?" >&2
+      exit 1
+    fi
+    echo "--- state ---"
+    timeout 5 ros2 topic echo /mongla/state --once
+    echo "--- arm ---"
+    ros2 run mongla_planner mongla arm
+    echo "--- set_depth -1.0 ---"
+    ros2 run mongla_planner mongla set_depth --target -1.0
+    echo "--- move_forward 8s ---"
+    ros2 run mongla_planner mongla move_forward --duration 8 --gain 60
+    echo "--- ground truth ---"
+    timeout 5 ros2 topic echo /mongla/sim/ground_truth --once | sed -n '/position:/,/orientation:/p' | head -8
+    echo "--- state ---"
+    timeout 5 ros2 topic echo /mongla/state --once
+    echo "[mongla-sim] smoke OK"
+    ;;
+  joystick)
+    # A CLI view of the gamepad, for flying from a terminal. The pad is READ
+    # BY THE LAB (one RC writer, never two), so this is a live status monitor
+    # against its API rather than a second reader competing for the device.
+    _source_ros
+    _lab_port="${MONGLA_LAB_PORT:-$(cat "$_RT/lab_port.txt" 2>/dev/null || echo 28765)}"
+    python3 - "$_lab_port" <<'JOYSTICK_PY'
+import json, sys, time, urllib.error, urllib.request
+
+url = f'http://127.0.0.1:{sys.argv[1]}/api/vehicle/joystick'
+
+
+def bar(v, width=17):
+    mid = width // 2
+    cells = ['-'] * width
+    cells[mid] = '|'
+    n = int(round(abs(v) * mid))
+    for i in range(1, n + 1):
+        cells[mid + i if v > 0 else mid - i] = '#'
+    return ''.join(cells)
+
+
+print(f'watching {url}   (ctrl-c to stop)')
+try:
+    while True:
+        try:
+            with urllib.request.urlopen(url, timeout=2) as r:
+                s = json.load(r)
+        except (urllib.error.URLError, OSError):
+            sys.stdout.write('\r  lab not reachable -- start it with `mongla_sim lab`   ')
+            sys.stdout.flush(); time.sleep(1.0); continue
+        if not s.get('connected'):
+            sys.stdout.write('\r  NO CONTROLLER  (plug a pad in, or set '
+                             'MONGLA_JOYSTICK=/dev/input/js0)         ')
+        else:
+            a = s['axes']
+            sys.stdout.write(
+                f"\r  ACTIVE {s['name'][:20]:20} fwd{bar(a['fwd'])} "
+                f"lat{bar(a['lat'])} up{bar(a['up'])} yaw{bar(a['yaw'])} "
+                f"gain {s['gain']:.2f}  ")
+        sys.stdout.flush()
+        time.sleep(0.1)
+except KeyboardInterrupt:
+    print()
+JOYSTICK_PY
+    ;;
+
+  lab)
+    _source_ros
+    _lab_port="${MONGLA_LAB_PORT:-28765}"
+    export MONGLA_LAB_PORT="$_lab_port"
+    export MONGLA_WS="${MONGLA_WS:-$(_find_mongla_ws || true)}"
+    _course="${MONGLA_SIM_COURSE:-sauvc26_qualification}"
+    # Prefer last lab course if present.
+    if [[ -f "$_RT/lab_active_course.txt" ]]; then
+      _course="$(tr -d '[:space:]' <"$_RT/lab_active_course.txt")"
+      [[ -n "$_course" ]] || _course="${MONGLA_SIM_COURSE:-sauvc26_qualification}"
+    fi
+    # Print what the server will ACTUALLY bind -- otherwise a remote operator
+    # tries the wrong URL and concludes the lab is broken rather than
+    # loopback-bound.
+    #
+    # EXPORT the normalised value rather than only echoing it. The message and
+    # the bind must not be two independent readings of the same variable: shell
+    # ${VAR:-d} substitutes on empty, Python os.environ.get(k, d) does not, so a
+    # set-but-empty MONGLA_LAB_HOST once printed "LOOPBACK ONLY" while the
+    # server bound 0.0.0.0. Exporting means the server is handed the exact
+    # string described below, so the two cannot disagree again.
+    _lab_host="${MONGLA_LAB_HOST:-127.0.0.1}"
+    _lab_host="${_lab_host//[[:space:]]/}"
+    [[ -n "$_lab_host" ]] || _lab_host="127.0.0.1"
+    export MONGLA_LAB_HOST="$_lab_host"
+    echo "[mongla-sim] starting operator lab on http://${_lab_host}:${_lab_port} ..."
+    # Loopback forms only. Anything else is announced as EXPOSED -- when in
+    # doubt this must over-warn, never under-warn.
+    if [[ "$_lab_host" == 127.* || "$_lab_host" == "localhost" || "$_lab_host" == "::1" ]]; then
+      echo "[mongla-sim] open http://localhost:${_lab_port} — LOOPBACK ONLY."
+      echo "[mongla-sim] remote? ssh -L ${_lab_port}:localhost:${_lab_port} <this-host>"
+      echo "[mongla-sim] (MONGLA_LAB_HOST=0.0.0.0 exposes it — unauthenticated, arms thrusters)"
+    else
+      echo "[mongla-sim] open http://<this-host>:${_lab_port} — EXPOSED on ${_lab_host}."
+    fi
+    # Prop manager for the World props page — pin world:= to active course.
+    if ! ros2 node list 2>/dev/null | grep -q prop_manager; then
+      ros2 run mongla_sim_scenarios prop_manager --ros-args -p "world:=${_course}" \
+        >"$_RT/prop_manager.log" 2>&1 &
+      echo "[mongla-sim] started prop_manager world:=${_course} (log $_RT/prop_manager.log)"
+    fi
+    exec ros2 launch mongla_sim_web lab.launch.py
+    ;;
+  rviz)
+    _source_ros
+    # RViz shows what the vehicle BELIEVES and can SEE; Gazebo shows what is
+    # true. Both poses are drawn at once, so the AHRS2 depth offset and DVL
+    # drift are visible rather than being numbers in a table.
+    echo "[mongla-sim] rviz + robot_state_publisher + odom->base_link TF"
+    echo "[mongla-sim] needs the sim running for ground truth and cameras."
+    exec ros2 launch mongla_sim_bringup rviz.launch.py "$@"
+    ;;
+  plotjuggler|pj)
+    _source_ros
+    layout="$INSTALL/mongla_sim_bringup/share/mongla_sim_bringup/config/plotjuggler_sim.xml"
+    if [[ ! -f "$layout" ]]; then
+      layout="$_HERE/../config/plotjuggler_sim.xml"
+    fi
+    if ! command -v plotjuggler >/dev/null 2>&1 && ! ros2 pkg prefix plotjuggler >/dev/null 2>&1; then
+      echo "PlotJuggler not found. Install:" >&2
+      echo "  sudo apt install ros-humble-plotjuggler-ros" >&2
+      exit 1
+    fi
+    echo "[mongla-sim] launching PlotJuggler (layout: $layout)"
+    if [[ -f "$layout" ]]; then
+      exec ros2 run plotjuggler plotjuggler --layout "$layout"
+    else
+      exec ros2 run plotjuggler plotjuggler
+    fi
+    ;;
+  view)
+    # The GUI camera follows the vehicle from startup (gui.config), so this is
+    # for BREAKING OUT of the follow and getting back into it without
+    # restarting -- to look at a prop, then return to the run.
+    #
+    # /gui/follow takes a model name; an EMPTY name releases the camera. The
+    # world instance is `mongla` on every course (the model is `mongla_heavy`);
+    # passing the model name silently follows nothing.
+    _target="${1:-chase}"
+    # `high` and `far` are a different MECHANISM, not a different offset.
+    #
+    # /gui/follow sets the camera's POSITION and leaves its orientation alone
+    # (gz-rendering's BaseCamera applies followOffset to position only, and
+    # Camera.hh says so). The aimed rig is track_mode FOLLOW_LOOK_AT, which
+    # needs BOTH follow_target and track_target.
+    #
+    # /gui/track IS A TOPIC, NOT A SERVICE. The plugin subscribes to it
+    # (OnTrackSub); Node::Advertise is instantiated only for StringMsg,
+    # GUICamera and Vector3d, never CameraTrack. The first version of this
+    # command called `gz service -s /gui/track` -- which cannot succeed -- and
+    # swallowed the failure into "no Gazebo GUI is running (or it is
+    # headless)". So `view high` never worked, and said something false about
+    # why. A publish returns no reply, so there is no success code to test
+    # either: check that the GUI is there FIRST, with a service that really is
+    # one, then publish.
+    if [[ "$_target" == "high" || "$_target" == "far" ]]; then
+      # THE POOL CAPS THE HEIGHT, and there is no way around it.
+      #
+      # The water surface is an OPAQUE model (Fuel openrobotics/waves) sitting
+      # at z=0, the RoboSub pool is 2.1 m deep and the hull runs about 0.8 m
+      # down -- so there is at most ~0.8 m of headroom, and a camera above the
+      # surface sees water and nothing else. Measured: at z offsets of 2.2 and
+      # 3.2 the camera really did move (the pose stream confirms it), and it
+      # really was looking at the underside of nothing useful.
+      #
+      # So elevation is bought by DISTANCE, not by altitude. `far` puts eleven
+      # metres of course in frame, which is the "see the vehicle and the world
+      # it is working" view; it is not a bird's eye, and cannot be.
+      if [[ "$_target" == "high" ]]; then
+        _off="x: -6.0, y: 0.8, z: 0.25"
+      else
+        _off="x: -12.0, y: 1.5, z: 0.25"
+      fi
+      if ! gz service -s /gui/follow --reqtype gz.msgs.StringMsg \
+           --reptype gz.msgs.Boolean --timeout 2000 \
+           --req 'data: "mongla"' >/dev/null 2>&1; then
+        echo "[mongla-sim] no Gazebo GUI is running (or it is headless)" >&2
+        exit 1
+      fi
+      gz topic -t /gui/track -m gz.msgs.CameraTrack \
+        -p "track_mode: 4, follow_target {name: \"mongla\"}, \
+            track_target {name: \"mongla\"}, follow_offset {$_off}, \
+            follow_pgain: 0.05, track_pgain: 0.08" >/dev/null 2>&1
+      echo "[mongla-sim] camera ${_target}, aimed at mongla -- 'view chase' or 'view free'"
+      exit 0
+    fi
+    case "$_target" in
+      chase) _target="mongla" ;;
+      free)  _target="" ;;
+    esac
+    if ! gz service -s /gui/follow --reqtype gz.msgs.StringMsg \
+         --reptype gz.msgs.Boolean --timeout 2000 \
+         --req "data: \"$_target\"" >/dev/null 2>&1; then
+      echo "[mongla-sim] no Gazebo GUI is running (or it is headless)" >&2
+      exit 1
+    fi
+    if [[ -n "$_target" ]]; then
+      echo "[mongla-sim] camera following $_target -- 'view free' to let go"
+    else
+      echo "[mongla-sim] camera released"
+    fi
+    ;;
+  -h|--help|help|"")
+    _usage
+    ;;
+  *)
+    echo "unknown command: $cmd" >&2
+    _usage >&2
+    exit 1
+    ;;
+esac

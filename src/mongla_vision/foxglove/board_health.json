@@ -1,0 +1,70 @@
+{
+  "configById": {
+    "Plot!depthyaw": {
+      "paths": [
+        {
+          "value": "/mongla/state.depth_m",
+          "enabled": true,
+          "label": "depth m"
+        },
+        {
+          "value": "/mongla/state.battery_voltage",
+          "enabled": true,
+          "label": "PM1 V"
+        }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!gyro": {
+      "paths": [
+        {
+          "value": "/mongla/imu.angular_velocity.x",
+          "enabled": true,
+          "label": "gx"
+        },
+        {
+          "value": "/mongla/imu.angular_velocity.y",
+          "enabled": true,
+          "label": "gy"
+        },
+        {
+          "value": "/mongla/imu.angular_velocity.z",
+          "enabled": true,
+          "label": "gz"
+        }
+      ],
+      "showLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "RawMessages!esc": {
+      "topicPath": "/mongla/esc_rpm"
+    },
+    "RawMessages!order": {
+      "topicPath": "/mongla/flare_order"
+    }
+  },
+  "layout": {
+    "direction": "column",
+    "first": {
+      "direction": "row",
+      "first": "Plot!depthyaw",
+      "second": "Plot!gyro",
+      "splitPercentage": 50
+    },
+    "second": {
+      "direction": "row",
+      "first": "RawMessages!esc",
+      "second": "RawMessages!order",
+      "splitPercentage": 50
+    },
+    "splitPercentage": 60
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  }
+}

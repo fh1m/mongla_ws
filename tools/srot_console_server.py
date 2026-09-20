@@ -35,16 +35,16 @@ import sys
 import threading
 import time
 
-WS = os.path.expanduser('~/duburi_ws/src')
-for _pkg in ('duburi_control', 'duburi_vision', 'duburi_manager'):
+WS = os.path.expanduser('~/mongla_ws/src')
+for _pkg in ('mongla_control', 'mongla_vision', 'mongla_manager'):
     _p = os.path.join(WS, _pkg)
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
 from pymavlink import mavutil                                   # noqa: E402
-from duburi_control.fc import srot_protocol as sp               # noqa: E402
-from duburi_control.fc.srot_fc import SrotFC                    # noqa: E402
-from duburi_control.nav_filter import DepthFilter, HeadingFilter  # noqa: E402
+from mongla_control.fc import srot_protocol as sp               # noqa: E402
+from mongla_control.fc.srot_fc import SrotFC                    # noqa: E402
+from mongla_control.nav_filter import DepthFilter, HeadingFilter  # noqa: E402
 
 SERIAL_CAPACITY_BPS = 115200 / 10.0     # 8N1 -> 10 bits per byte
 

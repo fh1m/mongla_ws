@@ -233,8 +233,8 @@ the moment the vehicle disturbs the water, and then the task is unrunnable.
 ## The courses
 
 ```bash
-ros2 run duburi_sim_bringup duburi_sim sim course:=robosub26_full
-ros2 run duburi_sim_bringup duburi_sim sim course:=rs_task_gate      # or
+ros2 run mongla_sim_bringup mongla_sim sim course:=robosub26_full
+ros2 run mongla_sim_bringup mongla_sim sim course:=rs_task_gate      # or
 #   rs_task_slalom · rs_task_bins · rs_task_torpedo · rs_task_octagon
 ```
 
@@ -252,12 +252,12 @@ detection range of the next, which is what makes a full run a search problem.
 ## Acoustics: `hydrophone`
 
 ```bash
-ros2 run duburi_sim_bridge hydrophone --ros-args \
+ros2 run mongla_sim_bridge hydrophone --ros-args \
     -p pinger_x:=4.0 -p pinger_y:=2.0 -p pinger_z:=-1.8 \
     -p freq_khz:=45.0 -p pulse_hz:=2.0
 ```
 
-Publishes `/duburi/sim/hydrophone/ping` (`Vector3Stamped`: x = bearing°,
+Publishes `/mongla/sim/hydrophone/ping` (`Vector3Stamped`: x = bearing°,
 y = elevation°, z = SNR dB) and `.../range`.
 
 **What it is, and is not.** Gazebo has no acoustic sensor and no propagation, and
@@ -292,7 +292,7 @@ offset stays large; a ghost near the truth would just be noise wearing a hat.
 ### Verified
 
 Flown around a pinger at a known position while yawing and translating, checked
-against `/duburi/sim/ground_truth`:
+against `/mongla/sim/ground_truth`:
 
 ```
 pings heard: 183   ghosts (>30 deg): 13 (7%)

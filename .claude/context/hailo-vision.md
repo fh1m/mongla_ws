@@ -357,7 +357,7 @@ raising, and with every surviving box in exactly the right place.
 `tools/hailo_api_equivalence.py` runs both APIs over the same frames and
 compares detections. It caught this; a smoke test would not have, nor would any
 check that only looked at class 0. Keep the blocking path
-(`DUBURI_HAILO_FORCE_BLOCKING=1`) alive for exactly this comparison.
+(`MONGLA_HAILO_FORCE_BLOCKING=1`) alive for exactly this comparison.
 
 Also from `parse-hef`, worth knowing without re-deriving: `Score threshold:
 0.050` (the baked floor — runtime `conf` can only tighten), `IoU threshold:
@@ -893,7 +893,7 @@ returns nothing posts a beautiful frame rate otherwise.
 
 ## Not addressed here
 
-**ROS.** The Pi runs **Jazzy**; duburi_ws is **Humble**; the two do not
+**ROS.** The Pi runs **Jazzy**; mongla_ws is **Humble**; the two do not
 interoperate — and worse than "unsupported", a Jazzy `ros2 topic list` can drive
 a Humble subscriber out of memory (`ros2/rmw_fastrtps#797`). Deliberately left
 open until the numbers justified going further. They now do.
@@ -902,7 +902,7 @@ open until the numbers justified going further. They now do.
 ## Segmentation: the decode never leaves the quantised domain
 
 *Measured on the vehicle 2026-09-11, HailoRT 4.24, HAILO8, `yolov8n_seg`
-640×640. Code: `duburi_vision/detection/seg_decode.py` and
+640×640. Code: `mongla_vision/detection/seg_decode.py` and
 `HailoSegDetector`.*
 
 A public Model Zoo `*_seg.hef` has **no on-chip NMS and no post-process at
@@ -1020,7 +1020,7 @@ Verified on the vehicle 2026-09-11 through the real launch, not through a
 harness:
 
 ```bash
-ros2 launch duburi_vision vision_pi.launch.py \
+ros2 launch mongla_vision vision_pi.launch.py \
   fwd_models:=gate_rescue_repair,yolov8n_seg \
   fwd_active:=gate_rescue_repair,yolov8n_seg \
   dwn_models:=bin_fire_blood
@@ -1037,12 +1037,12 @@ arguments. A single-model launch (`fwd_model:=`) has no registry and the node
 refuses any `active_model` that is not the loaded stem — which is the correct
 refusal and not a bug.
 
-From the DSL it is the same value widened: `duburi.use(['a', 'b'])`.
+From the DSL it is the same value widened: `mongla.use(['a', 'b'])`.
 
 **Verified LIVE on the topic**, not only in process:
 
-    /duburi/vision/forward/detections   14.99 Hz
-    /duburi/vision/forward/contours     15.09 Hz
+    /mongla/vision/forward/detections   14.99 Hz
+    /mongla/vision/forward/contours     15.09 Hz
 
 and a plain `rclpy` subscriber reads a real message — `camera='forward'`,
 `640x360`, one `repair` contour, 4 points, `angle_deg = -1` because a

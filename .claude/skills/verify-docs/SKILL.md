@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Verify docs
 
-**Usage:** `/verify-docs <package>`  (e.g. `duburi_control`, `duburi_vision`)
+**Usage:** `/verify-docs <package>`  (e.g. `mongla_control`, `mongla_vision`)
 
 Dispatch the `doc-verifier` agent over `src/<package>/` and summarize API-drift findings.
 

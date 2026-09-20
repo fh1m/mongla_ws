@@ -57,7 +57,7 @@ has **no intra-process comms** — that is rclcpp only — so
 
 ## 3. HEALTH IS AN OUTPUT, AND **UNKNOWN IS NOT OK**
 
-`duburi_manager/health.py`: every subsystem reports
+`mongla_manager/health.py`: every subsystem reports
 `(state, evidence, age)` — never a bare bool — in four states:
 
 ```

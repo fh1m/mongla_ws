@@ -5,21 +5,21 @@ choice holds over minutes rather than seconds. Jitter is reported as a
 DISTRIBUTION, because a control loop is hurt by its worst ticks, not its median.
 """
 import math, os, statistics as st, sys, time, json
-WS=os.path.expanduser('~/duburi_ws/src')
-for p in ('duburi_control','duburi_vision'):
+WS=os.path.expanduser('~/mongla_ws/src')
+for p in ('mongla_control','mongla_vision'):
     q=os.path.join(WS,p)
     if q not in sys.path: sys.path.insert(0,q)
 import cv2; cv2.setNumThreads(0)
 from pymavlink import mavutil
-from duburi_control.bearing import BearingFilter, bearing_from_pixels
-from duburi_control.fc import srot_protocol as sp
-from duburi_control.fc.port_guard import PortGuard
-from duburi_control.fc.srot_fc import SrotFC
-from duburi_control.motion_rates import VISION_LOOP_HZ_SROT
-from duburi_vision.detection.factory import make_detector
+from mongla_control.bearing import BearingFilter, bearing_from_pixels
+from mongla_control.fc import srot_protocol as sp
+from mongla_control.fc.port_guard import PortGuard
+from mongla_control.fc.srot_fc import SrotFC
+from mongla_control.motion_rates import VISION_LOOP_HZ_SROT
+from mongla_vision.detection.factory import make_detector
 
 W,H=640,360
-c=json.load(open(os.path.expanduser('~/duburi_ws/src/duburi_vision/config/calibration/pi_downward_1280x720.json')))
+c=json.load(open(os.path.expanduser('~/mongla_ws/src/mongla_vision/config/calibration/pi_downward_1280x720.json')))
 Kc,D=c['camera_matrix'],c['distortion_coefficients']
 sx,sy=W/c['image_width'],H/c['image_height']
 K=[Kc[0][0]*sx,0,Kc[0][2]*sx,0,Kc[1][1]*sy,Kc[1][2]*sy,0,0,1]
@@ -40,7 +40,7 @@ fc.set_message_rate(mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE,50)
 # a plausible measurement standing in for an absent one, which is this
 # project's signature defect. Reuse the verb path's own verified set-mode
 # rather than a second copy of it.
-from duburi_control.vision_verbs import _require_srot_vision_mode
+from mongla_control.vision_verbs import _require_srot_vision_mode
 _require_srot_vision_mode(fc, None, 'srot_loop_soak')
 det=make_detector(model_path='yolov11n',conf=0.35,class_allowlist=['person'],
                   device='cuda:0',iou=0.5,imgsz=640,half=True,max_det=20)

@@ -1,0 +1,296 @@
+"""Navigation states — arm, depth, heading, movement.
+
+MoveForwardState / MoveBackState / MoveLateralState are the plug-and-play
+core: pass both distance_m AND duration; each state picks the right verb
+based on profile.has_distance_moves.  Same plan builder → correct FSM for
+both vehicles AND both flight-controller backends.
+
+`has_distance_moves`, not `has_dvl`: a DVL alone is not enough, because it is
+host-side only and the srot backend refuses the streamed `move_*_dist` path.
+Authoring BOTH distance_m and duration is what makes a plan portable.
+"""
+from __future__ import annotations
+
+from yasmin import Blackboard
+
+from ..core.base_state import MonglaState
+from ..core.blackboard import BK
+from ..core.outcomes import ABORT, SUCCEED
+
+
+# ── ARM ──────────────────────────────────────────────────────────────────────
+
+class ArmState(MonglaState):
+    """Arm + optional DVL connect. Sets BK.START_HEADING + BK.DVL_CONNECTED."""
+    TIMEOUT_S = 30.0
+
+    def __init__(self, mongla, profile) -> None:
+        super().__init__(mongla, profile, [SUCCEED])
+
+    def _run(self, bb: Blackboard) -> str:
+        self.mongla.arm()
+
+        if self.profile.has_dvl:
+            try:
+                self.mongla.dvl_connect()
+                bb[BK.DVL_CONNECTED] = True
+            except Exception:
+                bb[BK.DVL_CONNECTED] = False
+
+        return SUCCEED
+
+
+# ── DISARM ────────────────────────────────────────────────────────────────────
+
+class DisarmState(MonglaState):
+    TIMEOUT_S = 15.0
+
+    def __init__(self, mongla, profile) -> None:
+        super().__init__(mongla, profile, [SUCCEED])
+
+    def _run(self, bb: Blackboard) -> str:
+        # Release the heading lock before disarming (mirrors SurfaceState).
+        # disarm() also stops the lock at the facade level; doing it here too
+        # keeps the FSM path explicit and self-documenting.
+        try:
+            self.mongla.release_heading()
+        except Exception:
+            pass
+        self.mongla.disarm()
+        return SUCCEED
+
+
+# ── SET DEPTH ─────────────────────────────────────────────────────────────────
+
+class SetDepthState(MonglaState):
+    """Drive to target depth. TIMEOUT → caller decides whether to retry or abort."""
+    TIMEOUT_S = 45.0
+
+    def __init__(self, mongla, profile, depth_m: float, timeout_s: float = 45.0) -> None:
+        super().__init__(mongla, profile, [SUCCEED])
+        self._depth_m  = depth_m
+        self.TIMEOUT_S = timeout_s
+
+    def _run(self, bb: Blackboard) -> str:
+        self.mongla.set_depth(self._depth_m, timeout=self.TIMEOUT_S - 2)
+        return SUCCEED
+
+
+# ── LOCK HEADING ─────────────────────────────────────────────────────────────
+
+class LockHeadingState(MonglaState):
+    """Engage heading lock. Stores initial heading in BK.START_HEADING.
+
+    ``lock_timeout`` is the lock's background auto-release timer (how long
+    it should HOLD heading across subsequent states), NOT this state's
+    execution timeout. ``lock_heading()`` returns immediately, so binding
+    the hold to ``TIMEOUT_S`` would kill the lock mid-task; use a duration
+    that comfortably covers the whole task instead.
+    """
+    TIMEOUT_S = 30.0
+
+    def __init__(self, mongla, profile, heading: float = 0.0,
+                 lock_timeout: float = 600.0) -> None:
+        super().__init__(mongla, profile, [SUCCEED])
+        self._heading = heading
+        self._lock_timeout = lock_timeout
+
+    def _run(self, bb: Blackboard) -> str:
+        self.mongla.lock_heading(self._heading, timeout=self._lock_timeout)
+        bb[BK.START_HEADING] = self._heading
+        return SUCCEED
+
+
+# ── MOVEMENT (plug-and-play DVL / timed) ─────────────────────────────────────
+
+def _warn_no_distance_move(state, verb: str) -> None:
+    """Say loudly that a distance step could not run and nothing moved.
+
+    Reached when a plan authored `distance_m` only, on a backend without distance
+    moves. Before this the state returned SUCCEED having commanded nothing -- a
+    mission step that silently does not happen, which is the worst way to fail.
+
+    Deliberately does NOT substitute a time estimate from the distance: guessing a
+    duration is the mission author's call, not this state's.
+    """
+    profile = state.profile
+    msg = (f'[FSM  ] {verb}: distance_m requested but this backend has no distance '
+           f'moves (flight_controller={profile.flight_controller}, '
+           f'has_dvl={profile.has_dvl}) and no duration= fallback was authored -- '
+           f'NOTHING MOVED.')
+    log = getattr(state.mongla, 'log', None)
+    if log is not None and hasattr(log, 'error'):
+        log.error(msg)
+    else:
+        print(msg)
+
+
+class MoveForwardState(MonglaState):
+    """Forward move: DVL distance if profile.has_dvl, else timed.
+
+    Always pass both distance_m and duration — state picks correct verb.
+    """
+    TIMEOUT_S = 30.0
+
+    def __init__(
+        self,
+        mongla,
+        profile,
+        distance_m: float | None = None,
+        duration: float | None = None,
+        gain: int = 60,
+    ) -> None:
+        super().__init__(mongla, profile, [SUCCEED])
+        self._distance_m = distance_m
+        self._duration   = duration
+        self._gain       = gain
+
+    def _run(self, bb: Blackboard) -> str:
+        # has_distance_moves, NOT has_dvl: the DVL is host-side only and the srot
+        # backend hard-refuses move_forward_dist. Gating on has_dvl dispatched a
+        # verb that cannot run -- and because this was an `elif`, the refusal did
+        # not fall through to the timed leg either, so the state just failed.
+        if self._distance_m is not None and self.profile.has_distance_moves:
+            self.mongla.move_forward_dist(self._distance_m, gain=self._gain)
+        elif self._duration is not None:
+            self.mongla.move_forward(self._duration, gain=self._gain)
+        elif self._distance_m is not None:
+            # Asked for a distance on a backend that cannot do one, with no timed
+            # fallback authored. Previously this returned SUCCEED having moved
+            # nothing -- a mission step that silently does not happen. Say so.
+            # (Deliberately NOT substituting a time estimate: guessing a duration
+            # from a distance is the mission author's call, not this state's.)
+            _warn_no_distance_move(self, 'move_forward_dist')
+        return SUCCEED
+
+
+class MoveBackState(MonglaState):
+    TIMEOUT_S = 30.0
+
+    def __init__(
+        self,
+        mongla,
+        profile,
+        distance_m: float | None = None,
+        duration: float | None = None,
+        gain: int = 60,
+    ) -> None:
+        super().__init__(mongla, profile, [SUCCEED])
+        self._distance_m = distance_m
+        self._duration   = duration
+        self._gain       = gain
+
+    def _run(self, bb: Blackboard) -> str:
+        # has_distance_moves, NOT has_dvl: the DVL is host-side only and the srot
+        # backend hard-refuses move_back_dist. Gating on has_dvl dispatched a
+        # verb that cannot run -- and because this was an `elif`, the refusal did
+        # not fall through to the timed leg either, so the state just failed.
+        if self._distance_m is not None and self.profile.has_distance_moves:
+            self.mongla.move_back_dist(self._distance_m, gain=self._gain)
+        elif self._duration is not None:
+            self.mongla.move_back(self._duration, gain=self._gain)
+        elif self._distance_m is not None:
+            # Asked for a distance on a backend that cannot do one, with no timed
+            # fallback authored. Previously this returned SUCCEED having moved
+            # nothing -- a mission step that silently does not happen. Say so.
+            # (Deliberately NOT substituting a time estimate: guessing a duration
+            # from a distance is the mission author's call, not this state's.)
+            _warn_no_distance_move(self, 'move_back_dist')
+        return SUCCEED
+
+
+class MoveLateralState(MonglaState):
+    TIMEOUT_S = 20.0
+
+    def __init__(
+        self,
+        mongla,
+        profile,
+        distance_m: float | None = None,
+        duration: float | None = None,
+        gain: int = 40,
+    ) -> None:
+        super().__init__(mongla, profile, [SUCCEED])
+        self._distance_m = distance_m
+        self._duration   = duration
+        self._gain       = gain
+
+    def _run(self, bb: Blackboard) -> str:
+        # has_distance_moves, NOT has_dvl: the DVL is host-side only and the srot
+        # backend hard-refuses move_lateral_dist. Gating on has_dvl dispatched a
+        # verb that cannot run -- and because this was an `elif`, the refusal did
+        # not fall through to the timed leg either, so the state just failed.
+        if self._distance_m is not None and self.profile.has_distance_moves:
+            self.mongla.move_lateral_dist(self._distance_m, gain=self._gain)
+        elif self._duration is not None:
+            # positive distance_m = right; mirror for raw timed move
+            self.mongla.move_right(self._duration, gain=self._gain)
+        elif self._distance_m is not None:
+            # Asked for a distance on a backend that cannot do one, with no timed
+            # fallback authored. Previously this returned SUCCEED having moved
+            # nothing -- a mission step that silently does not happen. Say so.
+            # (Deliberately NOT substituting a time estimate: guessing a duration
+            # from a distance is the mission author's call, not this state's.)
+            _warn_no_distance_move(self, 'move_lateral_dist')
+        return SUCCEED
+
+
+# ── TURN (absolute heading snap) ─────────────────────────────────────────────
+
+class TurnState(MonglaState):
+    """Snap to absolute compass heading via mongla.turn()."""
+    TIMEOUT_S = 30.0
+
+    def __init__(self, mongla, profile, heading_deg: float) -> None:
+        super().__init__(mongla, profile, [SUCCEED])
+        self._heading_deg = heading_deg
+
+    def _run(self, bb: Blackboard) -> str:
+        self.mongla.turn(self._heading_deg)
+        return SUCCEED
+
+
+# ── SURFACE (safe exit) ───────────────────────────────────────────────────────
+
+class SurfaceState(MonglaState):
+    """Emergency/planned surface: stop thrusters, ascend to 0m, disarm.
+
+    ⛔ THE ASCENT'S FAILURE IS REPORTED (J02). This used to wrap
+    `set_depth(0.0)` in a bare `except: pass` and then `return SUCCEED`
+    unconditionally -- a failed ascent reported as a successful surface, from the
+    one state whose entire purpose is to get the hull to the surface. On the
+    emergency path that is the worst possible lie: the FSM proceeds believing the
+    vehicle is up.
+
+    Everything still ATTEMPTED regardless, in order, each isolated -- a failed
+    release must not prevent the stop, and a failed ascent must not prevent the
+    disarm. Only the OUTCOME changes: ABORT when the ascent did not happen.
+    """
+    TIMEOUT_S = 90.0
+
+    def __init__(self, mongla, profile) -> None:
+        super().__init__(mongla, profile, [SUCCEED, ABORT])
+
+    def _run(self, bb: Blackboard) -> str:
+        ok, why = True, ''
+        try:
+            self.mongla.release_heading()
+        except Exception as exc:              # noqa: BLE001 -- best-effort
+            self.mongla.log.warning(f'[FSM  ] surface: release_heading failed: {exc}')
+        self.mongla.stop()
+
+        try:
+            res = self.mongla.set_depth(0.0, timeout=60)
+            if res is not None and not bool(getattr(res, 'success', True)):
+                ok, why = False, str(getattr(res, 'message', 'set_depth reported failure'))
+        except Exception as exc:              # noqa: BLE001 -- still disarm below
+            ok, why = False, f'{type(exc).__name__}: {exc}'
+
+        self.mongla.disarm()                  # ALWAYS, ascent or not
+
+        if not ok:
+            self.mongla.log.error(
+                f'[FSM  ] !! SURFACE DID NOT COMPLETE -- the hull may still be '
+                f'submerged. Disarmed anyway. Reason: {why}')
+            return ABORT
+        return SUCCEED

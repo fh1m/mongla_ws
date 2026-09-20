@@ -60,7 +60,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from sensor_msgs.msg import Image
 
-from duburi_vision.distance.flow_math import detect_corners
+from mongla_vision.distance.flow_math import detect_corners
 
 _MIN_SAMPLES = 60
 _MIN_ROT_SPREAD_PX = 3.0      # sd of the rotation regressor, in pixels
@@ -72,10 +72,10 @@ class Collector(Node):
         self.imgs = []
         self.rates = []
         self.create_subscription(
-            Image, f'/duburi/vision/{cam}/image_raw', self.imgs.append,
+            Image, f'/mongla/vision/{cam}/image_raw', self.imgs.append,
             QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT))
         self.create_subscription(
-            Vector3Stamped, '/duburi/imu_rates',
+            Vector3Stamped, '/mongla/imu_rates',
             lambda m: self.rates.append(
                 (m.header.stamp.sec + m.header.stamp.nanosec * 1e-9,
                  m.vector.x, m.vector.y)), 50)

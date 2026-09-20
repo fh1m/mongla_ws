@@ -1,0 +1,92 @@
+# ArduSub parameter overlay for the Mongla simulator.
+#
+# Applied on top of ArduPilot's Tools/autotest/default_params/sub-6dof.parm
+# (FRAME_CONFIG 2 = vectored_6dof). Loaded by sim.launch.py.
+
+# --- Thruster PWM range -----------------------------------------------------
+# Must match <servo_min>/<servo_max> on the vehicle ArduPilotPlugin.
+MOT_PWM_MIN      1100
+MOT_PWM_MAX      1900
+
+# --- Attitude / EKF ---------------------------------------------------------
+EK3_ENABLE       1
+AHRS_EKF_TYPE    3
+# Compass yaw. Use mongla_sub_extnav.parm instead when testing ATT_POS_MOCAP.
+EK3_SRC1_YAW     1
+VISO_TYPE        0
+
+# --- No GPS underwater ------------------------------------------------------
+# SITL still spins up a fake u-blox by default and spams "GPS 1: probing /
+# detected" forever. An AUV does not have GPS; disable every instance.
+GPS_TYPE         0
+GPS_TYPE2        0
+GPS_TYPE3        0
+SIM_GPS_TYPE     0
+# Don't make arming wait on a fix that will never come.
+ARMING_CHECK     0
+
+# --- Failsafes --------------------------------------------------------------
+# Autonomy heartbeats at a few Hz with neutral RC_CHANNELS_OVERRIDE. ArduSub's
+# default FS_PILOT_INPUT=DISARM still trips "Lost manual control" the moment
+# that stream hiccups (duplicate managers on 14550, brief pause during arm,
+# etc.) and immediately disarms. Disable it in sim; the real vehicle keeps the
+# stock setting.
+FS_PILOT_INPUT   0
+FS_GCS_ENABLE    0
+FS_LEAK_ENABLE   0
+FS_PRESS_ENABLE  0
+FS_BATT_ENABLE   0
+BRD_SAFETY_DEFLT 0
+
+# --- Simulated sensor noise -------------------------------------------------
+# BAR30, from the sensor's own datasheet rather than a guess. The Bar30 is a
+# TE MS5837-30BA: "resolution of 0.2 mbar", which the datasheet itself states
+# as a "water depth resolution of 2 mm". SIM_BARO_RND is in METRES of height
+# (SITL_Baro.cpp, @Units: m), so that is 0.002.
+#
+# The previous 0.02 was ten times too noisy -- a 20 mm noise floor on the one
+# sensor every single mission depends on, which is the difference between a
+# depth hold that looks twitchy in sim and one that does not. Nothing errored;
+# it simply made the sim harder than the vehicle in a way that would have been
+# tuned around.
+SIM_BARO_RND     0.002
+
+# ---------------------------------------------------------------------------
+# SENSOR NOISE. Until now only the barometer had any, so EKF3 in sim was fed
+# cleaner data than it will ever see on the vehicle -- and HEADING DRIFT, the
+# most persistent real-world problem this project has and the entire reason
+# `yaw_source` exists, simply did not happen in simulation.
+#
+# A heading loop tuned against a noiseless compass is tuned against a problem
+# the pool does not pose. These values are ArduPilot's own SITL defaults for a
+# consumer-grade IMU, which is what a Pixhawk 2.4.8 carries.
+# ---------------------------------------------------------------------------
+SIM_ACC_RND      0.5
+SIM_GYR_RND      0.5
+SIM_MAG_RND      2.0
+
+# Gyro bias drift, deg/s per run. This is what makes a heading estimate walk
+# away over a mission rather than staying put, and it is the specific failure
+# the BNO085/DVL yaw sources exist to work around.
+SIM_DRIFT_SPEED  0.05
+SIM_DRIFT_TIME   5
+
+# ---------------------------------------------------------------------------
+# BATTERY. The T200 curve is voltage-interpolated -- 36 N at 12 V against 66 N
+# at 20 V -- so a sagging pack makes late-mission manoeuvres measurably weaker
+# than the same manoeuvre at the start, exactly as in the pool.
+#
+# 16.0 V is 4S nominal. FS_BATT_ENABLE stays 0: a sim run must not be aborted
+# by a battery failsafe mid-experiment.
+# ---------------------------------------------------------------------------
+SIM_BATT_VOLTAGE 16.0
+BATT_MONITOR     4
+
+# --- Telemetry --------------------------------------------------------------
+SR1_EXTRA1       10
+SR1_EXTRA2       10
+SR1_EXTRA3       10
+SR1_POSITION     10
+SR1_EXT_STAT     5
+SR1_RAW_SENS     5
+SR1_RC_CHAN      5

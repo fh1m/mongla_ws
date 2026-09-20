@@ -23,7 +23,7 @@ mechanisms that are physically distinct, and treating them as one
 | **forward scatter** | blurs edges without dimming | sharpness (Laplacian var) | nothing cheap; shorten the range |
 | **motion blur** | blurs edges, ∝ angular rate × exposure | sharpness | **exposure**, not preprocessing |
 
-`duburi_vision/underwater.py` measures all five quantities. The key one is
+`mongla_vision/underwater.py` measures all five quantities. The key one is
 **saturation**, and it is the one most people leave out: it separated the two
 regimes where the same preprocessing helped by +42 points and hurt by −64,
 *more sharply than blur did*.

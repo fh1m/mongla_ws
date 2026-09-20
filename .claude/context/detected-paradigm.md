@@ -1,4 +1,4 @@
-# `duburi.detected()` paradigm — complete reference
+# `mongla.detected()` paradigm — complete reference
 
 > **Backend note.** The vehicle is the SROT board (firmware Hengla) + a Raspberry Pi 5 with a
 > Hailo-8. `lock_heading`, `move_*_dist`, `arc` and `style_yaw` are **refused** there, `ALT_HOLD`
@@ -7,22 +7,22 @@
 > legacy path is [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md).
 
 > **Purpose of this file:** Every fact, rule, gotcha, and test procedure
-> for the `duburi.detected()` conditional-loop paradigm. Read this before
-> writing any mission that uses `while not duburi.detected(...)` or branches
+> for the `mongla.detected()` conditional-loop paradigm. Read this before
+> writing any mission that uses `while not mongla.detected(...)` or branches
 > on detection state.
 >
-> Implementation: [`src/duburi_planner/duburi_planner/duburi_dsl.py`](../../src/duburi_planner/duburi_planner/duburi_dsl.py)  
+> Implementation: [`src/mongla_planner/mongla_planner/mongla_dsl.py`](../../src/mongla_planner/mongla_planner/mongla_dsl.py)  
 > Related: [`mission-cookbook.md §7.6`](./mission-cookbook.md) (samples), [`client-and-dsl-api.md`](./client-and-dsl-api.md) (API table)
 
 ---
 
 ## 1. What it is
 
-`duburi.detected(class, *, camera=None, stale_after=1.0) -> bool`
+`mongla.detected(class, *, camera=None, stale_after=1.0) -> bool`
 
 A **recency observation query**: "was `class` seen within the last
 `stale_after` s on `camera`?" It does not send a MAVLink command. It reads the
-same `/duburi/vision/<cam>/detections` stream the control loop acts on, and
+same `/mongla/vision/<cam>/detections` stream the control loop acts on, and
 **actively pumps the ROS node** before answering so the cache is current — not
 one left over from the last move.
 
@@ -44,10 +44,10 @@ inside the window.
 
 Two companions share the same machinery (added 2026-06):
 
-- `duburi.wait_for(class, *, timeout=10.0, camera=None, stale_after=1.0) -> bool`
+- `mongla.wait_for(class, *, timeout=10.0, camera=None, stale_after=1.0) -> bool`
   — block until the class appears or `timeout` elapses. The loop-free way to
   acquire a target while stationary.
-- `duburi.where(class, *, camera=None, stale_after=1.0, band=0.15) -> str`
+- `mongla.where(class, *, camera=None, stale_after=1.0, band=0.15) -> str`
   — bearing of the largest matching detection: `'left'` | `'center'` |
   `'right'` | `'unknown'`. `where_offset(...)` returns the raw signed
   normalized offset `[-1,+1]` for fine steering.
@@ -59,15 +59,15 @@ bug report) is treating an `if` as a loop:
 
 ```python
 # ✗ WRONG — an if executes once; this is NOT a circle search
-if duburi.detected('gate'):
-    duburi.move_forward(2)
+if mongla.detected('gate'):
+    mongla.move_forward(2)
 else:
-    duburi.yaw_left(90)        # runs at most once, then the script falls through
+    mongla.yaw_left(90)        # runs at most once, then the script falls through
 
 # ✓ CORRECT — a moving search loops until seen
-while not duburi.detected('gate'):
-    duburi.yaw_left(30)        # keep turning until the gate comes into frame
-duburi.move_forward(2)         # runs once the loop exits
+while not mongla.detected('gate'):
+    mongla.yaw_left(30)        # keep turning until the gate comes into frame
+mongla.move_forward(2)         # runs once the loop exits
 ```
 
 ### The mental model
@@ -75,10 +75,10 @@ duburi.move_forward(2)         # runs once the loop exits
 ```
 mission code                     |  what's happening
 ---------------------------------|-------------------------------------------
-while not duburi.detected('gate')|  pump node → read current frame → False
-    duburi.yaw_left(30)          |  blocking action round-trip (hull turns)
+while not mongla.detected('gate')|  pump node → read current frame → False
+    mongla.yaw_left(30)          |  blocking action round-trip (hull turns)
 # → loop exits when gate visible |  next detected() pumps → sees gate → True
-duburi.vision.align('gate',      |  vision P-loop centres on gate bbox
+mongla.vision.align('gate',      |  vision P-loop centres on gate bbox
                     yaw=0, lat=0) |  (signed pixel offsets; 0 = centre)
 ```
 
@@ -99,8 +99,8 @@ The **default camera is subscribed in `__init__`**, and `use_camera(name)`
 subscribes the new camera immediately. So DDS discovery completes long before
 the first `detected()`/`where()`, and the first poll cannot false-negate.
 `_subscribe_detections(cam)` is idempotent and creates two subs per camera:
-`/duburi/vision/<cam>/detections` (RELIABLE depth-10, matching `VisionState`)
-and `/duburi/vision/<cam>/camera_info` (for the image width `where()` needs).
+`/mongla/vision/<cam>/detections` (RELIABLE depth-10, matching `VisionState`)
+and `/mongla/vision/<cam>/camera_info` (for the image width `where()` needs).
 
 ### 2.2 Callback: eager record extraction
 
@@ -156,10 +156,10 @@ bounded window and returns.
 ## 3. API reference
 
 ```python
-duburi.detected(
+mongla.detected(
     target_class,           # str | ClassRef — class name to look for
     *,
-    camera: str | None = None,    # camera to query; defaults to duburi.camera
+    camera: str | None = None,    # camera to query; defaults to mongla.camera
     stale_after: float = 1.0,     # detections older than this → absent
 ) -> bool
 ```
@@ -168,8 +168,8 @@ duburi.detected(
 
 | Parameter | Type | Default | Meaning |
 |-----------|------|---------|---------|
-| `target_class` | `str` or `ClassRef` | required | Class name to search for: `'gate'`, `'flare'`, `duburi.models.gate.gate` |
-| `camera` | `str` or `None` | `duburi.camera` | Which camera's detection topic to subscribe |
+| `target_class` | `str` or `ClassRef` | required | Class name to search for: `'gate'`, `'flare'`, `mongla.models.gate.gate` |
+| `camera` | `str` or `None` | `mongla.camera` | Which camera's detection topic to subscribe |
 | `stale_after` | `float` | `1.0` | Detections older than this many seconds are treated as absent |
 
 ### Return value
@@ -186,15 +186,15 @@ use the right class *name*; only the case is forgiven.
 ### Using ClassRef
 
 ```python
-duburi.models(gate='gate_flare_medium_100ep')
+mongla.models(gate='gate_flare_medium_100ep')
 
 # ✓ ClassRef — passes through cleanly, reads .class_name
-while not duburi.detected(duburi.models.gate.gate):
-    duburi.move_forward(0.5, gain=30)
+while not mongla.detected(mongla.models.gate.gate):
+    mongla.move_forward(0.5, gain=30)
 
 # ✓ string form — identical result
-while not duburi.detected('gate'):
-    duburi.move_forward(0.5, gain=30)
+while not mongla.detected('gate'):
+    mongla.move_forward(0.5, gain=30)
 ```
 
 A `ClassRef` in `detected()` is **read-only** — it extracts `.class_name`
@@ -205,7 +205,7 @@ The same holds for `wait_for()` and `where()`.
 ### 3.1 `wait_for` — block until seen (loop-free acquire)
 
 ```python
-duburi.wait_for(target_class, *, timeout=10.0,
+mongla.wait_for(target_class, *, timeout=10.0,
                 camera=None, stale_after=1.0) -> bool
 ```
 
@@ -214,12 +214,12 @@ it does, or `False` if `timeout` elapses first. Use it to acquire/re-acquire
 a target while holding station — no busy-loop, no `move` between polls:
 
 ```python
-if duburi.wait_for('gate', timeout=8):
-    duburi.vision.align('gate', yaw=0, lat=0)
+if mongla.wait_for('gate', timeout=8):
+    mongla.vision.align('gate', yaw=0, lat=0)
 else:
-    # never appeared in 8 s -> mission-authored recovery (no `duburi.recover()` verb):
-    while not duburi.detected('gate'):     # e.g. search while moving
-        duburi.move_forward(0.6, gain=35)
+    # never appeared in 8 s -> mission-authored recovery (no `mongla.recover()` verb):
+    while not mongla.detected('gate'):     # e.g. search while moving
+        mongla.move_forward(0.6, gain=35)
 ```
 
 `wait_for` is for waiting **in place**; to search while *moving*, use a
@@ -228,9 +228,9 @@ else:
 ### 3.2 `where` — bearing of the target
 
 ```python
-duburi.where(target_class, *, camera=None,
+mongla.where(target_class, *, camera=None,
              stale_after=1.0, band=0.15) -> str       # 'left'|'center'|'right'|'unknown'
-duburi.where_offset(target_class, ...) -> float|None  # signed [-1,+1], None if unknown
+mongla.where_offset(target_class, ...) -> float|None  # signed [-1,+1], None if unknown
 ```
 
 Picks the **largest-area** matching detection and reports which side of frame
@@ -240,9 +240,9 @@ semantics: `'left'` = target on the left → yaw left to face it (same polarity
 as the vision-yaw axis). Coarse steering:
 
 ```python
-{'left':  lambda: duburi.yaw_left(20),
- 'right': lambda: duburi.yaw_right(20),
-}.get(duburi.where('gate'), lambda: duburi.move_forward(1))()
+{'left':  lambda: mongla.yaw_left(20),
+ 'right': lambda: mongla.yaw_right(20),
+}.get(mongla.where('gate'), lambda: mongla.move_forward(1))()
 ```
 
 `where_offset` gives the continuous offset for proportional steering.
@@ -254,12 +254,12 @@ These queries run between goals, which is exactly the context a vision
 re-enters the verb the moment `detected()`/`wait_for()` sees the target:
 
 ```python
-def sweep(duburi, should_stop):       # should_stop() is duburi.detected(target)
+def sweep(mongla, should_stop):       # should_stop() is mongla.detected(target)
     for ang in (20, -40, 40):
-        duburi.turn(duburi.head() + ang)
+        mongla.turn(mongla.head() + ang)
         if should_stop():
             return
-duburi.vision.align('gate', yaw=0, lat=0, fallback=sweep)
+mongla.vision.align('gate', yaw=0, lat=0, fallback=sweep)
 ```
 
 ---
@@ -270,12 +270,12 @@ duburi.vision.align('gate', yaw=0, lat=0, fallback=sweep)
 
 ```python
 # ✓ CORRECT — 0.5s steps, max overshoot ~0.15m at gain=30
-while not duburi.detected('gate'):
-    duburi.move_forward(0.5, gain=30)
+while not mongla.detected('gate'):
+    mongla.move_forward(0.5, gain=30)
 
 # ✗ WRONG — 2.0s steps, max overshoot ~0.6m at gain=30
-while not duburi.detected('gate'):
-    duburi.move_forward(2.0, gain=30)   # gate was seen 0.4s in, AUV drives 1.6s past it
+while not mongla.detected('gate'):
+    mongla.move_forward(2.0, gain=30)   # gate was seen 0.4s in, AUV drives 1.6s past it
 ```
 
 Why: detection is checked **after** the blocking verb returns. If the target
@@ -287,25 +287,25 @@ is 0.57 m of overshoot. Use 0.5 s or less to keep overshoot below 0.15 m.
 
 ```python
 # ✗ No safety net — runs forever if detector is offline or target never appears
-while not duburi.detected('gate'):
-    duburi.move_forward(0.5, gain=30)
+while not mongla.detected('gate'):
+    mongla.move_forward(0.5, gain=30)
 
 # ✓ Bounded — give up after N steps, handle failure explicitly
 MAX_STEPS = 60   # 60 × 0.5s = 30s total search budget
 for _ in range(MAX_STEPS):
-    if duburi.detected('gate'):
+    if mongla.detected('gate'):
         break
-    duburi.move_forward(0.5, gain=30)
+    mongla.move_forward(0.5, gain=30)
 else:
     log('gate not found in search budget — surfacing')
-    duburi.set_depth(0.0)
-    duburi.disarm()
+    mongla.set_depth(0.0)
+    mongla.disarm()
     return
 ```
 
 ### Rule 3 — Class filter coupling (the orbit trap)
 
-`vision.*` verbs that receive a `ClassRef` call `duburi.set_classes()` before
+`vision.*` verbs that receive a `ClassRef` call `mongla.set_classes()` before
 firing. This changes what the detector publishes. After that call, **only the
 specified class appears in the detection topic** — `detected()` for any other
 class will always return `False`.
@@ -313,26 +313,26 @@ class will always return `False`.
 ```python
 # ✗ BUG: vision.align with flare ClassRef sets classes='flare'
 #         Then detected('gate') can never be True — detector only publishes flare
-duburi.vision.align(duburi.models.gate.flare, yaw=0)  # ← sets classes='flare'
+mongla.vision.align(mongla.models.gate.flare, yaw=0)  # ← sets classes='flare'
 for _ in range(18):
-    if duburi.detected('gate'):   # ← ALWAYS FALSE — detector filtered to flare only
+    if mongla.detected('gate'):   # ← ALWAYS FALSE — detector filtered to flare only
         break
-    duburi.yaw_right(20)
+    mongla.yaw_right(20)
 ```
 
 ```python
 # ✓ CORRECT: restore both classes before the loop
-duburi.vision.align(duburi.models.gate.flare, yaw=0)  # sets classes='flare'
-duburi.set_classes('gate,flare')   # ← restore detection of both
+mongla.vision.align(mongla.models.gate.flare, yaw=0)  # sets classes='flare'
+mongla.set_classes('gate,flare')   # ← restore detection of both
 for _ in range(18):
-    if duburi.detected('gate', stale_after=0.3):   # ← NOW works
+    if mongla.detected('gate', stale_after=0.3):   # ← NOW works
         break
-    duburi.yaw_right(20)
-    duburi.pause(1.0)
+    mongla.yaw_right(20)
+    mongla.pause(1.0)
 ```
 
 **The general rule:** whenever you need `detected('X')` after a vision verb
-that used a `ClassRef` for a different class, call `duburi.set_classes(...)` 
+that used a `ClassRef` for a different class, call `mongla.set_classes(...)` 
 to restore the filter before the loop.
 
 ### Rule 4 — `stale_after` tuning by use case
@@ -354,38 +354,38 @@ place) or a small move (to search):
 
 ```python
 # ✓ BEST for waiting in place — one call, no busy-loop
-if duburi.wait_for('gate', timeout=10):
+if mongla.wait_for('gate', timeout=10):
     ...
 
 # ✓ search WHILE moving — the loop both polls and makes progress
-while not duburi.detected('gate'):
-    duburi.move_forward(0.5, gain=30)
+while not mongla.detected('gate'):
+    mongla.move_forward(0.5, gain=30)
 
 # ⚠ works but wasteful — busy-polls (~8 Hz) doing nothing; use wait_for instead
-while not duburi.detected('gate'):
+while not mongla.detected('gate'):
     pass
 ```
 
 ### Rule 6 — Camera defaults to `'forward'`; switch it for the downward cam
 
-`duburi.camera` now defaults to `'forward'` (the `DuburiMission` constructor
+`mongla.camera` now defaults to `'forward'` (the `MonglaMission` constructor
 default), which matches the forward detector topic. Forward-camera missions
 work without setting anything. For a downward-camera task you must switch
 first, or `detected()` subscribes the wrong topic.
 
 ```python
 # ✓ forward cam — default is already 'forward'
-while not duburi.detected('gate'):       # /duburi/vision/forward/detections
-    duburi.move_forward(0.5, gain=30)
+while not mongla.detected('gate'):       # /mongla/vision/forward/detections
+    mongla.move_forward(0.5, gain=30)
 
 # ✓ downward cam — switch before the loop (use_camera logs the change)
-duburi.use_camera('downward')
-while not duburi.detected('bin'):         # /duburi/vision/downward/detections
-    duburi.move_forward(0.5, gain=30)
+mongla.use_camera('downward')
+while not mongla.detected('bin'):         # /mongla/vision/downward/detections
+    mongla.move_forward(0.5, gain=30)
 
 # ✓ or override per call without changing the sticky context
-while not duburi.detected('bin', camera='downward'):
-    duburi.move_forward(0.5, gain=30)
+while not mongla.detected('bin', camera='downward'):
+    mongla.move_forward(0.5, gain=30)
 ```
 
 ---
@@ -401,40 +401,40 @@ These run the action round-trip (and incidentally service callbacks).
 are still where the *time* in a mission is spent:
 
 ```python
-duburi.move_forward(s)      # Ch5 RC override for s seconds
-duburi.move_back(s)
-duburi.move_left(s)
-duburi.move_right(s)
-duburi.yaw_left(deg)        # SET_ATTITUDE_TARGET, waits for settle
-duburi.yaw_right(deg)
-duburi.arc(s)
-duburi.set_depth(m)
-duburi.arm()
-duburi.disarm()
-duburi.pause(s)             # NO_OVERRIDE for s seconds
-duburi.stop()
-duburi.lock_heading(deg)
-duburi.dvl_connect()
-duburi.move_forward_dist(m)
-duburi.move_lateral_dist(m)
-duburi.vision.align(...)   # centre on lat/yaw/depth (signed px offsets)
-duburi.vision.move(...)    # drive forward to a bbox fill ratio
+mongla.move_forward(s)      # Ch5 RC override for s seconds
+mongla.move_back(s)
+mongla.move_left(s)
+mongla.move_right(s)
+mongla.yaw_left(deg)        # SET_ATTITUDE_TARGET, waits for settle
+mongla.yaw_right(deg)
+mongla.arc(s)
+mongla.set_depth(m)
+mongla.arm()
+mongla.disarm()
+mongla.pause(s)             # NO_OVERRIDE for s seconds
+mongla.stop()
+mongla.lock_heading(deg)
+mongla.dvl_connect()
+mongla.move_forward_dist(m)
+mongla.move_lateral_dist(m)
+mongla.vision.align(...)   # centre on lat/yaw/depth (signed px offsets)
+mongla.vision.move(...)    # drive forward to a bbox fill ratio
 ```
 
 ### Non-blocking (return almost immediately, do NOT update cache meaningfully)
 
 ```python
-duburi.camera = 'forward'           # attribute assignment
-duburi.target = 'gate'              # attribute assignment
-duburi.models(gate='model_name')    # model registration (Python object)
+mongla.camera = 'forward'           # attribute assignment
+mongla.target = 'gate'              # attribute assignment
+mongla.models(gate='model_name')    # model registration (Python object)
 ```
 
 ### Near-instant with subprocess overhead (~100ms for ros2 param set)
 
 ```python
-duburi.set_classes('gate,flare')    # ros2 param set subprocess
-duburi.set_model('gate_model')      # ros2 param set subprocess
-duburi.use('model', 'gate')         # two subprocess calls
+mongla.set_classes('gate,flare')    # ros2 param set subprocess
+mongla.set_model('gate_model')      # ros2 param set subprocess
+mongla.use('model', 'gate')         # two subprocess calls
 ```
 
 These are non-blocking in the mission sense but do a subprocess call. Call
@@ -448,57 +448,57 @@ them once before loops, not inside tight detection loops.
 
 **Forward search until gate:**
 ```python
-while not duburi.detected('gate'):
-    duburi.move_forward(0.5, gain=30)
+while not mongla.detected('gate'):
+    mongla.move_forward(0.5, gain=30)
 ```
 
 **Yaw sweep search:**
 ```python
 for _ in range(36):   # 36 × 10° = full 360°
-    if duburi.detected('gate'):
+    if mongla.detected('gate'):
         break
-    duburi.yaw_right(10)
-    duburi.pause(0.5)
+    mongla.yaw_right(10)
+    mongla.pause(0.5)
 ```
 
 **Conditional branch:**
 ```python
-if duburi.detected('flare', stale_after=0.5):
-    duburi.vision.align('flare', yaw=0, depth=0)
+if mongla.detected('flare', stale_after=0.5):
+    mongla.vision.align('flare', yaw=0, depth=0)
 else:
-    duburi.move_forward(2.0, gain=35)
+    mongla.move_forward(2.0, gain=35)
 ```
 
 **While gate visible — crude approach:**
 ```python
 # Move toward gate as long as it's in view (crude, use vision.move for precision)
-while duburi.detected('gate', stale_after=0.5):
-    duburi.move_forward(0.3, gain=25)
+while mongla.detected('gate', stale_after=0.5):
+    mongla.move_forward(0.3, gain=25)
 ```
 
 **Combined pause-and-check (wait for gate to drift into view):**
 ```python
-while not duburi.detected('gate'):
-    duburi.pause(0.5)   # wait in place; cache updated each pause
+while not mongla.detected('gate'):
+    mongla.pause(0.5)   # wait in place; cache updated each pause
 ```
 
 **Post-maneuver confirmation:**
 ```python
-duburi.yaw_right(45)
+mongla.yaw_right(45)
 # Confirm gate is now visible before committing to alignment
-if duburi.detected('gate', stale_after=0.5):
-    duburi.vision.align('gate', yaw=0, lat=0)
+if mongla.detected('gate', stale_after=0.5):
+    mongla.vision.align('gate', yaw=0, lat=0)
 ```
 
 **Orbit with gate-break (correct class filter):**
 ```python
 # After flare alignment, restore both classes then orbit
-duburi.set_classes('gate,flare')
+mongla.set_classes('gate,flare')
 for _ in range(18):
-    if duburi.detected('gate', stale_after=0.3):
+    if mongla.detected('gate', stale_after=0.3):
         break
-    duburi.yaw_right(20)
-    duburi.pause(1.0)
+    mongla.yaw_right(20)
+    mongla.pause(1.0)
 ```
 
 ### 6.2 Forbidden / will silently fail
@@ -507,40 +507,40 @@ for _ in range(18):
 ```python
 # ⚠ detected() pumps, so this DOES exit when the gate appears, but it
 #   busy-spins (~8 Hz) doing nothing. Prefer wait_for('gate', timeout=...).
-while not duburi.detected('gate'):
+while not mongla.detected('gate'):
     pass
 ```
 
 **Too-long steps:**
 ```python
 # ✗ 5.0s step → up to 1.5m overshoot at gain=30
-while not duburi.detected('gate'):
-    duburi.move_forward(5.0, gain=30)
+while not mongla.detected('gate'):
+    mongla.move_forward(5.0, gain=30)
 ```
 
 **Missing class filter restore:**
 ```python
 # ✗ vision.align(flare_ref) calls set_classes('flare')
 #    The loop below can never see gate
-duburi.vision.align(duburi.models.gate.flare, yaw=0)
+mongla.vision.align(mongla.models.gate.flare, yaw=0)
 for _ in range(18):
-    if duburi.detected('gate'):    # never True
+    if mongla.detected('gate'):    # never True
         break
-    duburi.yaw_right(20)
+    mongla.yaw_right(20)
 ```
 
 **Querying wrong camera:**
 ```python
 # ✗ camera left at 'forward' but the bin detector publishes on 'downward'
-while not duburi.detected('bin'):     # subscribes forward/detections (nothing there)
-    duburi.move_forward(0.5)          # runs until budget exhausted
+while not mongla.detected('bin'):     # subscribes forward/detections (nothing there)
+    mongla.move_forward(0.5)          # runs until budget exhausted
 ```
 
 **Unbounded loops:**
 ```python
 # ✗ If detector is offline, this runs forever
-while not duburi.detected('gate'):
-    duburi.move_forward(0.5, gain=30)
+while not mongla.detected('gate'):
+    mongla.move_forward(0.5, gain=30)
 ```
 
 **Checking stale cache after a long pause:**
@@ -551,7 +551,7 @@ while not duburi.detected('gate'):
 #    spins until_future_complete — but be aware if you ever use bare time.sleep)
 import time
 time.sleep(2.0)                    # NEVER use in mission code
-duburi.detected('gate')            # cache is 2.0s stale
+mongla.detected('gate')            # cache is 2.0s stale
 ```
 
 ---
@@ -561,15 +561,15 @@ duburi.detected('gate')            # cache is 2.0s stale
 The detected paradigm is **purely sequential** on the mission/planner side.
 There is no parallel thread contention because:
 
-1. `detected()` lives in `DuburiMission` (planner side, `duburi_planner`).
-2. All blocking verbs also live in `DuburiMission` (planner side).
+1. `detected()` lives in `MonglaMission` (planner side, `mongla_planner`).
+2. All blocking verbs also live in `MonglaMission` (planner side).
 3. The manager (controller side, `auv_manager_node`) is in a separate process.
 4. Communication is over ROS2 actions — one goal at a time, fully serialised.
 
 ```
 mission script (planner process)     manager process (control process)
 ─────────────────────────────────    ──────────────────────────────────
-detected('gate') → pump → False      /duburi/vision/.../detections ← (detections topic)
+detected('gate') → pump → False      /mongla/vision/.../detections ← (detections topic)
 move_forward(0.5) ──────────────────→  executes motion command (Ch5 RC)
 detected('gate') → pump → True       reads the current frame itself
 vision.align(...) ──────────────────→  executes vision P-loop
@@ -605,15 +605,15 @@ the default camera is subscribed eagerly at construction).
 
 ```bash
 # Check detection topic is alive and streaming
-ros2 topic hz /duburi/vision/forward/detections
+ros2 topic hz /mongla/vision/forward/detections
 # Expected: 15-25 Hz; anything below 5 Hz indicates detector issues
 
 # Inspect one message — confirms class names match what you'll use in code
-ros2 topic echo /duburi/vision/forward/detections --once
+ros2 topic echo /mongla/vision/forward/detections --once
 # Look for: detections[0].results[0].hypothesis.class_id = 'gate' (or 'flare')
 
 # Check the class filter is correct
-ros2 param get /duburi_detector classes
+ros2 param get /mongla_detector classes
 # Expected: 'gate' or 'gate,flare' for competition missions
 ```
 
@@ -625,43 +625,43 @@ Drop this in `missions/detected_test.py` for end-to-end verification:
 """detected_test.py — unit-tests the detected() cache live.
 
 Run with:
-    ros2 run duburi_planner mission detected_test
-Requires: detector_node publishing /duburi/vision/forward/detections.
+    ros2 run mongla_planner mission detected_test
+Requires: detector_node publishing /mongla/vision/forward/detections.
 Does NOT arm — safe on the bench.
 """
 import time
 
-def run(duburi, log):
-    duburi.camera = 'forward'
+def run(mongla, log):
+    mongla.camera = 'forward'
 
     # 1. First check — eager subscribe + pump means this is already reliable
     #    (True if the gate is in view right now, no warm-up move needed).
     log.info('=== Test 1: first detected() (pumps the current frame) ===')
-    result = duburi.detected('gate')
+    result = mongla.detected('gate')
     log.info(f'detected("gate") = {result}')   # True iff gate visible now
 
     # 2. wait_for — block (in place) until the gate appears or timeout
     log.info('=== Test 2: wait_for (loop-free acquire) ===')
-    seen = duburi.wait_for('gate', timeout=3.0)
+    seen = mongla.wait_for('gate', timeout=3.0)
     log.info(f'wait_for("gate", 3s) = {seen}')
 
     # 2b. where — bearing of the gate ('left'|'center'|'right'|'unknown')
-    log.info(f'where("gate") = {duburi.where("gate")}')
+    log.info(f'where("gate") = {mongla.where("gate")}')
 
     # 3. stale_after test
     log.info('=== Test 3: stale_after=0.01 (almost always False) ===')
-    result = duburi.detected('gate', stale_after=0.01)
+    result = mongla.detected('gate', stale_after=0.01)
     log.info(f'detected("gate", stale_after=0.01) = {result}')  # almost always False
 
     # 4. Camera fallback — should warn if wrong camera
     log.info('=== Test 4: explicit camera ===')
-    result = duburi.detected('gate', camera='forward')
+    result = mongla.detected('gate', camera='forward')
     log.info(f'detected("gate", camera="forward") = {result}')
 
     # 5. ClassRef form
-    duburi.models(gate='gate_flare_medium_100ep')
+    mongla.models(gate='gate_flare_medium_100ep')
     log.info('=== Test 5: ClassRef form ===')
-    result = duburi.detected(duburi.models.gate.gate)
+    result = mongla.detected(mongla.models.gate.gate)
     log.info(f'detected(models.gate.gate) = {result}')
 
     log.info('=== All tests complete — check logs above for expected values ===')
@@ -671,15 +671,15 @@ def run(duburi, log):
 
 **Test: step-and-detect loop**
 1. Point camera at gate prop.
-2. Run: `ros2 run duburi_planner mission detected_test` (or a loop mission).
-3. Observer: `ros2 topic echo /duburi/vision/forward/detections --once`.
+2. Run: `ros2 run mongla_planner mission detected_test` (or a loop mission).
+3. Observer: `ros2 topic echo /mongla/vision/forward/detections --once`.
 4. Expected: `detected()` returns `True` within one 0.5s step of gate entering frame.
 
 **Test: class filter coupling**
-1. Set `duburi.set_classes('flare')` manually via ros2 param.
+1. Set `mongla.set_classes('flare')` manually via ros2 param.
 2. Run `detected('gate')`.
 3. Expected: always `False` (detector only publishes flare detections).
-4. Set `duburi.set_classes('gate,flare')`.
+4. Set `mongla.set_classes('gate,flare')`.
 5. Run `detected('gate')`.
 6. Expected: `True` when gate in view.
 
@@ -703,16 +703,16 @@ def run(duburi, log):
 sim_vehicle.py -L RATBeach -v ArduSub -f vectored_6dof --model=JSON --out=udp:0.0.0.0:14550
 
 # Terminal 2: manager
-ros2 run duburi_manager start
+ros2 run mongla_manager start
 
 # Terminal 3a: vision — webcam / sim, detect person with yolov11n (ROBOSUB tested ★)
-ros2 launch duburi_vision cameras_.launch.py model:=yolov11n classes:=person
+ros2 launch mongla_vision cameras_.launch.py model:=yolov11n classes:=person
 
 # Terminal 3b: vision — pool/competition gate+flare model (swap in for pool day)
-ros2 launch duburi_vision cameras_.launch.py model:=gate_flare_medium_100ep classes:=gate,flare
+ros2 launch mongla_vision cameras_.launch.py model:=gate_flare_medium_100ep classes:=gate,flare
 
 # Terminal 4: run the autonomous mission (uses whatever classes the detector publishes)
-ros2 run duburi_planner mission gate_flare_autonomous
+ros2 run mongla_planner mission gate_flare_autonomous
 
 # What to watch for:
 # - AUV creeps forward in short steps until 'gate' appears in detections
@@ -727,11 +727,11 @@ ros2 run duburi_planner mission gate_flare_autonomous
 
 | What | How to check | Tuning lever |
 |------|-------------|--------------|
-| Detection topic flowing | `ros2 topic hz /duburi/vision/<cam>/detections` | Camera/detector pipeline must be up |
+| Detection topic flowing | `ros2 topic hz /mongla/vision/<cam>/detections` | Camera/detector pipeline must be up |
 | Class names match code | `ros2 topic echo ... --once` and grep for `class_id` | Name must match your `detected('string')`; matching is case-insensitive (`'Gate'` == `'gate'`) |
 | Cache freshness | `detected('gate', stale_after=0.1)` → should return True when gate visible | Tune `stale_after` for your use case |
-| Correct camera | `ros2 topic echo /duburi/vision/<cam>/detections` exists | Set `duburi.camera = 'forward'` before first loop |
-| Class filter not broken | `ros2 param get /duburi_detector classes` | Call `set_classes('gate,flare')` before orbit loop |
+| Correct camera | `ros2 topic echo /mongla/vision/<cam>/detections` exists | Set `mongla.camera = 'forward'` before first loop |
+| Class filter not broken | `ros2 param get /mongla_detector classes` | Call `set_classes('gate,flare')` before orbit loop |
 | Step size vs overshoot | Use `gain=30` + `step=0.5s` → max 0.15m overshoot | Reduce step size, reduce gain |
 | Budget covers search area | 30 steps × 0.5s × 0.3m/s = 4.5m of search | Increase MAX_STEPS if pool lane is longer |
 
@@ -743,20 +743,20 @@ ros2 run duburi_planner mission gate_flare_autonomous
 
 **Likely causes (check in order):**
 
-1. **Wrong camera** — `duburi.camera` defaults to `'forward'`. If your target
+1. **Wrong camera** — `mongla.camera` defaults to `'forward'`. If your target
    is on the downward detector (bin / path marker), the subscription is on the
    wrong topic.
    ```python
-   duburi.use_camera('downward')   # fix: switch before downward-cam loops
+   mongla.use_camera('downward')   # fix: switch before downward-cam loops
    ```
 
 2. **Class filter set to wrong class** — a previous `vision.align(flare_ref)`
    set `classes='flare'`. The detector no longer publishes gate detections.
    ```python
-   duburi.set_classes('gate,flare')   # fix: restore both classes
+   mongla.set_classes('gate,flare')   # fix: restore both classes
    ```
 
-3. **Detector not running** — no `/duburi/vision/<cam>/detections` topic.
+3. **Detector not running** — no `/mongla/vision/<cam>/detections` topic.
    ```bash
    ros2 topic list | grep detections   # should show your camera
    ```
@@ -766,7 +766,7 @@ ros2 run duburi_planner mission gate_flare_autonomous
    different name (e.g. `'gate_left'` vs `'gate'`) still misses. Confirm the
    published class_id:
    ```bash
-   ros2 topic echo /duburi/vision/forward/detections --once | grep class_id
+   ros2 topic echo /mongla/vision/forward/detections --once | grep class_id
    ```
 
 5. **Cache is stale** — detection happened but `stale_after` is too short.
@@ -787,8 +787,8 @@ current verb returns.
 
 **Fix:** reduce `move_forward` duration to 0.3–0.5 s:
 ```python
-while not duburi.detected('gate'):
-    duburi.move_forward(0.3, gain=30)   # 0.09m max overshoot at gain=30
+while not mongla.detected('gate'):
+    mongla.move_forward(0.3, gain=30)   # 0.09m max overshoot at gain=30
 ```
 
 ### Error: Loop runs for budget steps even when gate visible (stuck False)
@@ -796,11 +796,11 @@ while not duburi.detected('gate'):
 **Diagnosis:**
 ```bash
 # Watch detections in real time while loop is running
-ros2 topic echo /duburi/vision/forward/detections
+ros2 topic echo /mongla/vision/forward/detections
 ```
 
 If detections arrive but `detected()` returns False, class filter is the culprit.
-Check: `ros2 param get /duburi_detector classes`.
+Check: `ros2 param get /mongla_detector classes`.
 
 ### Error: `detected('gate')` in orbit loop never breaks, AUV spins forever
 
@@ -809,13 +809,13 @@ set `classes='flare'`.
 
 **Fix:** restore the filter before the orbit:
 ```python
-duburi.vision.align(duburi.models.gate.flare, yaw=0, depth=0)   # ← sets classes='flare'
-duburi.set_classes('gate,flare')   # ← REQUIRED before orbit
+mongla.vision.align(mongla.models.gate.flare, yaw=0, depth=0)   # ← sets classes='flare'
+mongla.set_classes('gate,flare')   # ← REQUIRED before orbit
 for _ in range(18):
-    if duburi.detected('gate', stale_after=0.3):
+    if mongla.detected('gate', stale_after=0.3):
         break
-    duburi.yaw_right(20)
-    duburi.pause(1.0)
+    mongla.yaw_right(20)
+    mongla.pause(1.0)
 ```
 
 ### Error: `detected()` returns True briefly then False (flickering)
@@ -828,7 +828,7 @@ at the edge of the frame or partially occluded.
    True through detection dropouts.
 2. Lower detector confidence: `ros2 launch ... conf:=0.35`.
 3. Hand off to a vision verb with a `fallback` search instead of relying on
-   raw `detected()`. `duburi.vision.align('gate', yaw=0, lat=0,
+   raw `detected()`. `mongla.vision.align('gate', yaw=0, lat=0,
    fallback=creep_forward)` rides brief dropouts (it coasts for
    `vision.lost_grace_s` before running the fallback) and re-acquires
    automatically.
@@ -840,39 +840,39 @@ at the edge of the frame or partially occluded.
 ### Pattern A: Search-then-align (the core paradigm)
 
 ```python
-def creep_forward(duburi):
+def creep_forward(mongla):
     """Fallback for vision.align/move: one short forward creep, then return."""
-    duburi.move_forward(0.5, gain=30)
+    mongla.move_forward(0.5, gain=30)
 
-def run(duburi, log):
-    duburi.camera = 'forward'
-    duburi.models(gate='gate_flare_medium_100ep')
-    duburi.arm()
-    duburi.set_depth(-0.8)
-    duburi.lock_heading(0.0, timeout=180)
+def run(mongla, log):
+    mongla.camera = 'forward'
+    mongla.models(gate='gate_flare_medium_100ep')
+    mongla.arm()
+    mongla.set_depth(-0.8)
+    mongla.lock_heading(0.0, timeout=180)
 
     # Search for gate — creep forward until visible
     MAX_SEARCH_STEPS = 60
     for _ in range(MAX_SEARCH_STEPS):
-        if duburi.detected(duburi.models.gate.gate, stale_after=0.5):
+        if mongla.detected(mongla.models.gate.gate, stale_after=0.5):
             break
-        duburi.move_forward(0.5, gain=30)
+        mongla.move_forward(0.5, gain=30)
     else:
         log.warn('gate not found — aborting')
-        duburi.set_depth(0.0)
-        duburi.disarm()
+        mongla.set_depth(0.0)
+        mongla.disarm()
         return
 
     # Gate visible — centre it (yaw + lat), then drive through to the fill ratio
-    duburi.vision.align(duburi.models.gate.gate, yaw=0, lat=0,
+    mongla.vision.align(mongla.models.gate.gate, yaw=0, lat=0,
                         err=40, gain=30, duration=20, fallback=creep_forward)
-    duburi.vision.move(duburi.models.gate.gate, fwd=80, mode='height',
+    mongla.vision.move(mongla.models.gate.gate, fwd=80, mode='height',
                        gain=45, duration=20, fallback=creep_forward)
-    duburi.move_forward_dist(3.0, gain=60)   # DVL commit through the gate
+    mongla.move_forward_dist(3.0, gain=60)   # DVL commit through the gate
 
-    duburi.release_heading()
-    duburi.set_depth(0.0)
-    duburi.disarm()
+    mongla.release_heading()
+    mongla.set_depth(0.0)
+    mongla.disarm()
 ```
 
 ### Pattern B: Reactive sweep (search with yaw)
@@ -880,10 +880,10 @@ def run(duburi, log):
 ```python
 # Yaw sweep: 10° increments, detect at each stop
 for _ in range(36):                        # full 360°
-    if duburi.detected('gate', stale_after=0.5):
+    if mongla.detected('gate', stale_after=0.5):
         break
-    duburi.yaw_right(10)
-    duburi.pause(0.8)                      # dwell at each position
+    mongla.yaw_right(10)
+    mongla.pause(0.8)                      # dwell at each position
 else:
     log.warn('gate not found in sweep')
     return
@@ -893,59 +893,59 @@ else:
 
 ```python
 # After aligning to flare (centre yaw + depth, then close in):
-duburi.vision.align(duburi.models.gate.flare, yaw=0, depth=0, fallback=creep_forward)
-duburi.vision.move(duburi.models.gate.flare, fwd=38, mode='height', fallback=creep_forward)
+mongla.vision.align(mongla.models.gate.flare, yaw=0, depth=0, fallback=creep_forward)
+mongla.vision.move(mongla.models.gate.flare, fwd=38, mode='height', fallback=creep_forward)
 
 # Restore both classes before orbit
-duburi.set_classes('gate,flare')
+mongla.set_classes('gate,flare')
 
 # Orbit in 20° steps, break when gate re-appears
 for _ in range(18):                        # 18 × 20° = 360°
-    if duburi.detected('gate', stale_after=0.3):
+    if mongla.detected('gate', stale_after=0.3):
         break
-    duburi.yaw_right(20)
-    duburi.pause(1.0)
+    mongla.yaw_right(20)
+    mongla.pause(1.0)
 
 # Re-align on gate if found
-if duburi.detected('gate', stale_after=0.5):
-    duburi.vision.align(duburi.models.gate.gate, yaw=0, lat=0, fallback=creep_forward)
-    duburi.move_forward_dist(1.5, gain=60)
+if mongla.detected('gate', stale_after=0.5):
+    mongla.vision.align(mongla.models.gate.gate, yaw=0, lat=0, fallback=creep_forward)
+    mongla.move_forward_dist(1.5, gain=60)
 ```
 
 ### Pattern D: Multi-target branch
 
 ```python
-duburi.set_classes('gate,flare')
-duburi.pause(1.0)   # warm the cache
+mongla.set_classes('gate,flare')
+mongla.pause(1.0)   # warm the cache
 
-if duburi.detected('gate', stale_after=0.5):
+if mongla.detected('gate', stale_after=0.5):
     log('gate visible — aligning')
-    duburi.vision.align('gate', yaw=0, lat=0)
-elif duburi.detected('flare', stale_after=0.5):
+    mongla.vision.align('gate', yaw=0, lat=0)
+elif mongla.detected('flare', stale_after=0.5):
     log('flare visible but no gate — centre then approach')
-    duburi.vision.align('flare', yaw=0, depth=0)
-    duburi.vision.move('flare', fwd=38, mode='height')
+    mongla.vision.align('flare', yaw=0, depth=0)
+    mongla.vision.move('flare', fwd=38, mode='height')
 else:
     log('nothing visible — advancing')
-    duburi.move_forward(2.0, gain=35)
+    mongla.move_forward(2.0, gain=35)
 ```
 
 ### Pattern E: Conditional DVL pass
 
 ```python
-result = duburi.vision.align(
-    duburi.models.gate.gate,
+result = mongla.vision.align(
+    mongla.models.gate.gate,
     yaw=0, lat=0,
     err=40, gain=30, duration=20,
 )
 
 if result.ok:
     # Vision aligned — use DVL for precise gate passage
-    duburi.move_forward_dist(3.0, gain=60)
+    mongla.move_forward_dist(3.0, gain=60)
 else:
     # Vision did not centre (gate moved or lost) — open-loop fallback
     log.warn('gate alignment failed — open-loop passage attempt')
-    duburi.move_forward(4.0, gain=40)   # conservative open-loop
+    mongla.move_forward(4.0, gain=40)   # conservative open-loop
 ```
 
 > `VisionResult` is truthy only on `ALIGNED`, so `if result.ok:` and
@@ -959,21 +959,21 @@ else:
 ```
 YASMIN FSM (built)             What the imperative paradigm does
 ─────────────────────          ─────────────────────────────────────────
-VisionSearchState          →   while not duburi.detected('gate'):
-  SEARCH_GATE → ALIGN_GATE          duburi.move_forward(0.5, gain=30)
+VisionSearchState          →   while not mongla.detected('gate'):
+  SEARCH_GATE → ALIGN_GATE          mongla.move_forward(0.5, gain=30)
 
-VisionAlignState           →   duburi.vision.align('gate', yaw=0, lat=0, ...)
+VisionAlignState           →   mongla.vision.align('gate', yaw=0, lat=0, ...)
   ALIGN_GATE → MOVE_GATE
 
-VisionMoveState            →   duburi.vision.move('gate', fwd=80, mode='height')
+VisionMoveState            →   mongla.vision.move('gate', fwd=80, mode='height')
   MOVE_GATE → PASS_GATE
 
-MoveForwardState           →   duburi.move_forward_dist(3.0, gain=60)
+MoveForwardState           →   mongla.move_forward_dist(3.0, gain=60)
   PASS_GATE → SEARCH_FLARE
 ```
 
 Each `detected()`-based loop IS a proto-state. The YASMIN FSM layer
-(`duburi_planner/state_machines/`) wraps the *same* DSL verbs as explicit
+(`mongla_planner/state_machines/`) wraps the *same* DSL verbs as explicit
 state nodes: `VisionSearchState` (search-until-detected), `VisionAlignState`
 (wraps `vision.align`), and `VisionMoveState` (wraps `vision.move`). The
 detected paradigm is the design that makes that mapping clean — every logical
@@ -988,11 +988,11 @@ the YASMIN FSM is the right structure — and each `while detected()` loop maps
 
 ## 12. Cross-references
 
-- Implementation: `src/duburi_planner/duburi_planner/duburi_dsl.py` (`detected()` method, `_on_detections()` callback)
-- Two-verb vision DSL: `src/duburi_planner/duburi_planner/vision_dsl.py` (`vision.align` / `vision.move`)
-- Detection topic source: `src/duburi_vision/duburi_vision/detector_node.py` (publishes `Detection2DArray`)
-- Vision state (manager side): `src/duburi_manager/duburi_manager/vision_state.py` (`bbox_error()`, used by vision verbs, NOT by `detected()`)
-- Mission samples: `src/duburi_planner/duburi_planner/missions/gate_flare_autonomous.py` (canonical use), `pool_day_practice.py` (full two-verb run + fallbacks)
+- Implementation: `src/mongla_planner/mongla_planner/mongla_dsl.py` (`detected()` method, `_on_detections()` callback)
+- Two-verb vision DSL: `src/mongla_planner/mongla_planner/vision_dsl.py` (`vision.align` / `vision.move`)
+- Detection topic source: `src/mongla_vision/mongla_vision/detector_node.py` (publishes `Detection2DArray`)
+- Vision state (manager side): `src/mongla_manager/mongla_manager/vision_state.py` (`bbox_error()`, used by vision verbs, NOT by `detected()`)
+- Mission samples: `src/mongla_planner/mongla_planner/missions/gate_flare_autonomous.py` (canonical use), `pool_day_practice.py` (full two-verb run + fallbacks)
 - Mission cookbook: `.claude/context/mission-cookbook.md` §7.6
 - Client/DSL API: `.claude/context/client-and-dsl-api.md` §2.5
-- YASMIN FSM states: `src/duburi_planner/duburi_planner/state_machines/states/vision.py` (`VisionSearchState` / `VisionAlignState` / `VisionMoveState`)
+- YASMIN FSM states: `src/mongla_planner/mongla_planner/state_machines/states/vision.py` (`VisionSearchState` / `VisionAlignState` / `VisionMoveState`)

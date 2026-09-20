@@ -36,7 +36,7 @@ away one line before they could be stored.
 
 Downstream, `mav_stream.cpp:188` packs those exact fields as literal zeros into
 `ESC_TELEMETRY_1_TO_4` / `_5_TO_8`. Those are **real MAVLink fields that
-`duburi_ws` already decodes today** — we read the message, we read the zeros,
+`mongla_ws` already decodes today** — we read the message, we read the zeros,
 and we cannot tell "this ESC reports 0 A" from "nobody filled this in".
 
 ## Why it matters more than a telemetry nicety

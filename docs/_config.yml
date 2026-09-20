@@ -1,10 +1,10 @@
 title: Mongla — an AUV that owns its whole stack
 description: >-
-  ROS 2 autonomy for BRAC University Duburi. SROT control board (firmware Hengla) +
+  An independent autonomy stack for autonomous underwater vehicles. SROT control board (firmware Hengla) +
   Raspberry Pi 5 with a Hailo-8 AI HAT — a 500 Hz loop we wrote, vision on dedicated
   silicon, and every capability claim carrying its evidence.
 url: "https://fh1m.github.io"
-baseurl: "/duburi_ws"
+baseurl: "/mongla_ws"
 # No theme: the two published pages use _layouts/default.html, and index.html is
 # standalone. A project site MUST set baseurl or `relative_url` links resolve to the
 # domain root and 404.

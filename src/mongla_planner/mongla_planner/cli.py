@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+"""mongla CLI -- argparse wrapper auto-built from `COMMANDS`.
+
+Every subcommand and its flags come straight from the COMMANDS
+registry: adding a row in `mongla_control/commands.py` makes a new
+CLI verb appear the next time `colcon build`s.
+
+Usage:
+    ros2 run mongla_planner mongla <cmd> [--field value ...]
+
+Examples:
+    ros2 run mongla_planner mongla arm
+    ros2 run mongla_planner mongla set_mode --target_name ALT_HOLD
+    ros2 run mongla_planner mongla set_depth --target -1.5
+    ros2 run mongla_planner mongla move_forward --duration 5 --gain 60
+    ros2 run mongla_planner mongla yaw_left --target 90
+    ros2 run mongla_planner mongla arc --duration 4 --gain 50 --target_yaw 90
+    ros2 run mongla_planner mongla lock_heading --target 0 --timeout 120
+    ros2 run mongla_planner mongla unlock_heading
+    ros2 run mongla_planner mongla pause --duration 3
+    ros2 run mongla_planner mongla stop
+    ros2 run mongla_planner mongla disarm
+"""
+
+import argparse
+import sys
+
+import rclpy
+from rclpy.node import Node
+
+from mongla_control import COMMANDS
+from mongla_control.commands import BOOL_FIELDS, STRING_FIELDS
+
+from .client import MonglaClient
+
+
+def _bool_arg(value):
+    """Loose bool parser so `--visual_pid true` / `1` / `yes` all work."""
+    if isinstance(value, bool):
+        return value
+    truthy = {'1', 'true',  't', 'yes', 'y', 'on'}
+    falsy  = {'0', 'false', 'f', 'no',  'n', 'off'}
+    lower  = str(value).strip().lower()
+    if lower in truthy:
+        return True
+    if lower in falsy:
+        return False
+    raise argparse.ArgumentTypeError(
+        f'expected bool-ish value, got {value!r}')
+
+
+_HEAD_SENTINEL = 'head'
+
+def _float_or_head(value):
+    """Accept a float OR the keyword 'head'.
+
+    'head' is resolved at send time to the live heading reading from
+    the active yaw source -- use it anywhere a float target is accepted:
+
+        mongla lock_heading --target head
+        mongla yaw_left --target head
+    """
+    if str(value).strip().lower() == _HEAD_SENTINEL:
+        return _HEAD_SENTINEL
+    return float(value)
+
+
+# Vision verbs let the manager fill defaults from `vision.*` ROS params
+# at dispatch time, so the CLI must NOT pre-fill spec defaults for these
+# commands; sending the rosidl zero is what triggers the live-param
+# substitution inside `commands.fields_for`.
+_LIVE_TUNED_COMMANDS = {
+    'vision_align', 'vision_move',
+}
+
+
+def _build_parser():
+    parser = argparse.ArgumentParser(prog='mongla')
+    sub    = parser.add_subparsers(dest='cmd', required=True)
+    for name, spec in COMMANDS.items():
+        cmd_parser = sub.add_parser(name, help=spec['help'])
+        live_tuned = name in _LIVE_TUNED_COMMANDS
+        for field in spec['fields']:
+            has_default = field in spec['defaults']
+            if field in BOOL_FIELDS:
+                arg_type = _bool_arg
+            elif field in STRING_FIELDS:
+                arg_type = str
+            else:
+                arg_type = _float_or_head
+            # For live-tuned commands, leave optional fields at None so
+            # the rosidl zero reaches the manager and `vision.*` ROS
+            # params apply. For everything else, prefill the spec default.
+            cli_default = None if live_tuned else spec['defaults'].get(field)
+            help_default = (
+                f'(default: vision.* ROS param, see vision_tunables.yaml)'
+                if live_tuned and has_default
+                else (f'(default: {spec["defaults"][field]})'
+                      if has_default else '(required)'))
+            cmd_parser.add_argument(
+                f'--{field}',
+                type=arg_type,
+                required=not has_default,
+                default=cli_default,
+                help=help_default,
+            )
+    return parser
+
+
+def _fields_from_args(cmd, args):
+    """Pick only the fields that belong to `cmd` out of the parsed args.
+
+    Drops kwargs the user didn't supply for live-tuned commands so the
+    rosidl zero reaches the manager (= live ROS-param defaults apply).
+    """
+    fields = {}
+    for field in COMMANDS[cmd]['fields']:
+        value = getattr(args, field)
+        if value is None:
+            continue
+        fields[field] = value
+    return fields
+
+
+def main():
+    args = _build_parser().parse_args()
+
+    rclpy.init()
+    node   = Node('mongla_cli')
+    mongla = MonglaClient(node)
+
+    exit_code = 0
+    try:
+        mongla.wait_for_connection()
+        fields = _fields_from_args(args.cmd, args)
+        if any(v == _HEAD_SENTINEL for v in fields.values()):
+            live = mongla.send('head').final_value
+            fields = {k: (live if v == _HEAD_SENTINEL else v)
+                      for k, v in fields.items()}
+        result = mongla.send(args.cmd, **fields)
+        node.get_logger().info(
+            f'{args.cmd} -> OK  '
+            f'final={result.final_value:.3f}  err={result.error_value:.3f}  '
+            f'msg="{result.message}"')
+    except Exception as exc:
+        node.get_logger().error(f'{args.cmd} -> FAIL: {exc}')
+        exit_code = 1
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+
+    sys.exit(exit_code)
+
+
+if __name__ == '__main__':
+    main()

@@ -33,13 +33,13 @@ import time
 # is already importable (a sourced install/) if the src layout is not where we expect.
 from pathlib import Path
 _SRC = Path(__file__).resolve().parent.parent / 'src'
-for _pkg in ('duburi_control', 'duburi_manager'):
+for _pkg in ('mongla_control', 'mongla_manager'):
     _p = _SRC / _pkg
     if _p.is_dir():
         sys.path.insert(0, str(_p))
 
 from pymavlink import mavutil
-import duburi_control.fc.srot_protocol as sp
+import mongla_control.fc.srot_protocol as sp
 
 WANT_SYSID = 255
 BENCH_COMPID = 0
@@ -129,7 +129,7 @@ if args.device:
     if conn_str.startswith('/dev/'):
         baud = sp.BAUD
 else:
-    from duburi_manager.connection_config import resolve_srot_profile
+    from mongla_manager.connection_config import resolve_srot_profile
     prof = resolve_srot_profile()          # -> {'conn': str, 'baud': int|None}
     conn_str, baud = prof['conn'], prof['baud']
 print(f'transport: {conn_str}' + (f' @ {baud}' if baud else ''))

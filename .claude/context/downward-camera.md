@@ -70,8 +70,8 @@ Downward — bin drop (pixel surge on `fwd`, fill descent on `depth`). `surge_si
 `vision.*` tunables (see "Bounds & signs" below), so the call is now just:
 ```python
 # once at the top of the mission (per-mission, not per-command):
-duburi.set_vision_param('max_depth_m', BIN_MAX_DEPTH_M)     # <0: floor + enables descent
-duburi.set_vision_param('depth_ceiling', BIN_DEPTH_CEILING_M)  # surface guard
+mongla.set_vision_param('max_depth_m', BIN_MAX_DEPTH_M)     # <0: floor + enables descent
+mongla.set_vision_param('depth_ceiling', BIN_DEPTH_CEILING_M)  # surface guard
 # ... then every downward align omits all three (surge_sign is the -1 deck default):
 align('fire', camera='downward', lat=0, fwd=0, depth=30, fwd_mode='height')
 ```
@@ -87,21 +87,21 @@ align('fire', camera='downward', lat=0, fwd=0, depth=30, fwd_mode='height')
 
 These three moved off per-`align` kwargs onto the manager's `vision.*` params
 (`vision_tunables.py`), so a downward run sets them **once per mission** (or the deck
-operator via `ros2 param set /duburi_manager vision.<name> <v>`) instead of on every call.
+operator via `ros2 param set /mongla_manager vision.<name> <v>`) instead of on every call.
 A per-call kwarg still overrides (layered default), but missions no longer need to pass them.
 
 - **`vision.surge_sign`** (**PERMANENT default −1**) flips the **Ch5 fore/aft polarity** for
   the physical bottom-cam mount. A wrong sign is **positive feedback** — the hull drives
   *away* from the bin. This hull needs −1 (the deck default), so missions **omit `surge_sign`
   entirely**. Downward-only (the forward path never reads it). **Run the DISARMED check
-  before an armed run** if the mount changes: `ros2 run duburi_vision vision_thrust_check
+  before an armed run** if the mount changes: `ros2 run mongla_vision vision_thrust_check
   --camera downward` — a bin AHEAD in the image must drive the hull FORWARD (Ch5>1500);
-  flip with `ros2 param set /duburi_manager vision.surge_sign +1` if reversed.
+  flip with `ros2 param set /mongla_manager vision.surge_sign +1` if reversed.
 - **`vision.max_depth_m`** (default **0.0 = off**; set `<0` per mission) — the deepest
   allowed setpoint (floor). The fill→depth descent **requires a value < 0** or the engine
   drops the descent and just holds ArduSub depth (fail-safe against an unreachable fill
   target driving the hull to the bottom). `0.0` default = the FORWARD torpedo align is
-  unchanged; a bin run sets it (`duburi.set_vision_param('max_depth_m', −1.6)`).
+  unchanged; a bin run sets it (`mongla.set_vision_param('max_depth_m', −1.6)`).
 - **`vision.depth_ceiling`** (default **0.0** → engine `_MIN_DEPTH_M` surface guard; set a
   tighter negative like **−0.4** per mission) — the shallowest allowed setpoint. Alignment
   can **never surface the hull**.

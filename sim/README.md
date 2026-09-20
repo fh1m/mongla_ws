@@ -1,14 +1,14 @@
-# Mongla — `duburi_ws/sim`
+# Mongla — `mongla_ws/sim`
 
 Gazebo Harmonic + ArduSub SITL + operator web lab for **Mongla / Duburi 4.5**.
 The MAVLink and camera surface the autonomy stack in [`../src`](../src) expects,
 without a pool.
 
-**One repo, two colcon workspaces.** `duburi_ws/` is the autonomy stack; `sim/`
+**One repo, two colcon workspaces.** `mongla_ws/` is the autonomy stack; `sim/`
 (here) is the simulator. They build and test independently — `sim/COLCON_IGNORE`
 keeps the root `colcon build` at exactly six autonomy packages — and they are
 refereed against each other by
-[`../src/duburi_manager/test/test_sim_contract_drift.py`](../src/duburi_manager/test/test_sim_contract_drift.py),
+[`../src/mongla_manager/test/test_sim_contract_drift.py`](../src/mongla_manager/test/test_sim_contract_drift.py),
 which reads the launch files, model SDF and ArduSub params below and fails if
 they stop agreeing with autonomy.
 
@@ -20,11 +20,11 @@ they stop agreeing with autonomy.
 | **Autonomy integrators** | [`.context/CONTRACT.md`](.context/CONTRACT.md) · [`.context/INTEGRATION_DUBURI_WS.md`](.context/INTEGRATION_DUBURI_WS.md) |
 
 > **Packaging (settled 2026-08-27).** This tree used to be an unversioned sibling
-> called `duburi-sim_ws` and every doc here told you not to `git init`. That is
-> over: the sim now lives **inside** the `duburi_ws` repo at `sim/`, with history.
+> called `mongla-sim_ws` and every doc here told you not to `git init`. That is
+> over: the sim now lives **inside** the `mongla_ws` repo at `sim/`, with history.
 > It is also published standalone as
-> [`fh1m/duburi-sim_ws`](https://github.com/fh1m/duburi-sim_ws) for sim-only work.
-> **`duburi_ws/sim/` is canonical**; the standalone repo is a mirror of it. Land
+> [`fh1m/mongla-sim_ws`](https://github.com/fh1m/mongla-sim_ws) for sim-only work.
+> **`mongla_ws/sim/` is canonical**; the standalone repo is a mirror of it. Land
 > changes here. See [`.context/FUTURE_MERGE.md`](.context/FUTURE_MERGE.md) for
 > what was decided and why.
 
@@ -36,10 +36,10 @@ they stop agreeing with autonomy.
 
 ```bash
 # ROS Humble + Gazebo Harmonic already installed in the auv-ros2 container
-cd ~/Ros_workspaces/duburi_ws
+cd ~/Ros_workspaces/mongla_ws
 pip install -r sim/requirements.txt      # PyYAML, numpy, Pillow for the world gens
 
-./build_dubomini.sh                      # autonomy FIRST -- sim includes its launch files
+./build_mongla.sh                      # autonomy FIRST -- sim includes its launch files
 cd sim && ./build_sim.sh                 # then the simulator
 
 # optional timeseries UI
@@ -56,16 +56,16 @@ Every terminal below starts from the same two sources, **autonomy first**:
 
 ```bash
 source /opt/ros/humble/setup.bash
-source ~/Ros_workspaces/duburi_ws/install/setup.bash
-source ~/Ros_workspaces/duburi_ws/sim/install/setup.bash
+source ~/Ros_workspaces/mongla_ws/install/setup.bash
+source ~/Ros_workspaces/mongla_ws/sim/install/setup.bash
 export GZ_IP=127.0.0.1
 ```
 
 ### 1. Simulator (Terminal 1)
 
 ```bash
-ros2 run duburi_sim_bringup duburi_sim stop    # always first
-ros2 run duburi_sim_bringup duburi_sim sim     # GUI; or: sim --headless
+ros2 run mongla_sim_bringup mongla_sim stop    # always first
+ros2 run mongla_sim_bringup mongla_sim sim     # GUI; or: sim --headless
 ```
 
 Wait for **`JSON received`**. AUV sits at **x ≈ −11.8** (start zone).
@@ -73,10 +73,10 @@ Wait for **`JSON received`**. AUV sits at **x ≈ −11.8** (start zone).
 ### 2. Autonomy stack (Terminal 2)
 
 ```bash
-export DUBURI_WS=~/Ros_workspaces/duburi_ws
-ros2 run duburi_sim_bringup duburi_sim stack --no-vision   # first bring-up
-#   heading-only, no DVL:  duburi_sim stack yaw_source:=mavlink_ahrs
-# later, with YOLO weights present:  duburi_sim stack
+export MONGLA_WS=~/Ros_workspaces/mongla_ws
+ros2 run mongla_sim_bringup mongla_sim stack --no-vision   # first bring-up
+#   heading-only, no DVL:  mongla_sim stack yaw_source:=mavlink_ahrs
+# later, with YOLO weights present:  mongla_sim stack
 ```
 
 > **`flight_controller:=pixhawk`** — `stack.launch.py` passes this through. It is
@@ -91,27 +91,27 @@ ros2 run duburi_sim_bringup duburi_sim stack --no-vision   # first bring-up
 ### 3. Prove the loop (Terminal 3)
 
 ```bash
-ros2 run duburi_sim_bridge contract_check   # 4 topics >=5 msgs, 640x480, + ground truth
-ros2 run duburi_sim_bringup duburi_sim smoke  # arm -> set_depth -1 -> move_forward 8s
+ros2 run mongla_sim_bridge contract_check   # 4 topics >=5 msgs, 640x480, + ground truth
+ros2 run mongla_sim_bringup mongla_sim smoke  # arm -> set_depth -1 -> move_forward 8s
 ```
 
 > **`mavlink_check` must run with the stack DOWN.** It binds UDP 14550 itself, so
 > against a live manager it either fails or silently steals the autonomy link.
 > ```bash
-> ros2 run duburi_sim_bringup duburi_sim stop   # or just Ctrl-C Terminal 2
-> ros2 run duburi_sim_bridge mavlink_check
+> ros2 run mongla_sim_bringup mongla_sim stop   # or just Ctrl-C Terminal 2
+> ros2 run mongla_sim_bridge mavlink_check
 > ```
 
 ### 4. Operator lab (optional)
 
 ```bash
-ros2 run duburi_sim_bringup duburi_sim lab
-# open http://localhost:28765   (port: cat /tmp/duburi-$USER/lab_port.txt)
+ros2 run mongla_sim_bringup mongla_sim lab
+# open http://localhost:28765   (port: cat /tmp/mongla-$USER/lab_port.txt)
 ```
 
 > The lab binds **`127.0.0.1`** by default — it is unauthenticated and its API can
 > arm thrusters. To reach it from a topside laptop, prefer an SSH port-forward;
-> `DUBURI_LAB_HOST=0.0.0.0` is the explicit opt-in if you really want it on the
+> `MONGLA_LAB_HOST=0.0.0.0` is the explicit opt-in if you really want it on the
 > network.
 
 | Tab | Use |
@@ -125,20 +125,20 @@ ros2 run duburi_sim_bringup duburi_sim lab
 With sim + stack up:
 
 ```bash
-ros2 run duburi_planner mission --list
-ros2 run duburi_planner mission sim_shakedown         # end-to-end loop check
-ros2 run duburi_planner mission gate_flare_prequal    # or your mission id
+ros2 run mongla_planner mission --list
+ros2 run mongla_planner mission sim_shakedown         # end-to-end loop check
+ros2 run mongla_planner mission gate_flare_prequal    # or your mission id
 
 # or drive manually
-ros2 run duburi_planner duburi arm
-ros2 run duburi_planner duburi set_depth --target -1.0
-ros2 run duburi_planner duburi move_forward --duration 5 --gain 60
-ros2 run duburi_planner duburi disarm
+ros2 run mongla_planner mongla arm
+ros2 run mongla_planner mongla set_depth --target -1.0
+ros2 run mongla_planner mongla move_forward --duration 5 --gain 60
+ros2 run mongla_planner mongla disarm
 ```
 
 > **Verifying the vision path needs an explicit pass criterion — both failure
-> modes are silent.** `duburi_sim stack` defaults to `model:=gate_rescue_repair`,
-> whose `.pt` weight is **not in git** (`*.pt` is gitignored; `build_dubomini.sh`
+> modes are silent.** `mongla_sim stack` defaults to `model:=gate_rescue_repair`,
+> whose `.pt` weight is **not in git** (`*.pt` is gitignored; `build_mongla.sh`
 > mirrors it from `~/models`) and whose `gate_rescue_repair.yaml` class sidecar
 > may also be absent. A missing weight is loud; a **missing sidecar is not** — the
 > class allowlist comes up empty and the detector publishes `[]` every frame
@@ -158,7 +158,7 @@ the return-to-origin mechanism (no position feedback — the same file runs on t
 real vehicle). Measure the residual against ground truth:
 
 ```bash
-ros2 topic echo /duburi/sim/ground_truth --once     # before, and again after
+ros2 topic echo /mongla/sim/ground_truth --once     # before, and again after
 ```
 
 Two measured runs, 5 s legs @ 55 % at −1.2 m: **0.266 m** and **0.200 m**
@@ -180,7 +180,7 @@ physics, cameras and the lab.
 
 ```bash
 # CLI
-ros2 run duburi_sim_bridge record_cameras --duration 20 --fx --frames --labels \
+ros2 run mongla_sim_bridge record_cameras --duration 20 --fx --frames --labels \
   --label gate_approach
 
 # or Operate → ● record → ■ stop (zip downloads)
@@ -203,15 +203,15 @@ ffprobe -v error -show_entries format=duration -of csv=p=0 front.mp4
 ### 7. Timeseries / 3D tools
 
 ```bash
-ros2 run duburi_sim_bringup duburi_sim plotjuggler   # state + GT
-# Foxglove: see duburi_ws/.claude/context/foxglove-and-bags.md
+ros2 run mongla_sim_bringup mongla_sim plotjuggler   # state + GT
+# Foxglove: see mongla_ws/.claude/context/foxglove-and-bags.md
 ```
 
 ### 8. Shutdown
 
 ```bash
 # Ctrl-C lab/stack terminals, then:
-ros2 run duburi_sim_bringup duburi_sim stop
+ros2 run mongla_sim_bringup mongla_sim stop
 # stop now also kills lab_server / record_cameras / bridges / prop_manager
 ```
 
@@ -221,15 +221,15 @@ ros2 run duburi_sim_bringup duburi_sim stop
 
 | Command | What |
 |---------|------|
-| `duburi_sim stop` | Kill sim + stack + lab + bridges |
-| `duburi_sim sim` | Gazebo + ArduSub + camera bridge |
-| `duburi_sim sim --headless` | No GUI |
-| `duburi_sim sim course:=sauvc26_final` | Other course |
-| `duburi_sim stack --no-vision` | Manager only |
-| `duburi_sim stack` | Manager + vision on sim front cam |
-| `duburi_sim smoke` | arm → depth −1 → surge 8 s |
-| `duburi_sim lab` | Operator UI |
-| `duburi_sim plotjuggler` | PlotJuggler + sim layout |
+| `mongla_sim stop` | Kill sim + stack + lab + bridges |
+| `mongla_sim sim` | Gazebo + ArduSub + camera bridge |
+| `mongla_sim sim --headless` | No GUI |
+| `mongla_sim sim course:=sauvc26_final` | Other course |
+| `mongla_sim stack --no-vision` | Manager only |
+| `mongla_sim stack` | Manager + vision on sim front cam |
+| `mongla_sim smoke` | arm → depth −1 → surge 8 s |
+| `mongla_sim lab` | Operator UI |
+| `mongla_sim plotjuggler` | PlotJuggler + sim layout |
 
 Full flags: [`.context/COMMAND_REFERENCE.md`](.context/COMMAND_REFERENCE.md).
 
@@ -238,22 +238,22 @@ Full flags: [`.context/COMMAND_REFERENCE.md`](.context/COMMAND_REFERENCE.md).
 | Surface | Value |
 |---------|-------|
 | Autonomy MAVLink | UDP **14550** |
-| DVL (native gz sensor) | `/duburi/sim/dvl/{velocity,altitude}`, `yaw_source=sim_dvl` |
+| DVL (native gz sensor) | `/mongla/sim/dvl/{velocity,altitude}`, `yaw_source=sim_dvl` |
 | Lab teleop RC | TCP **5763** |
-| Cams | `/duburi/sim/{front,bottom}_camera/image_raw` **640×480** |
-| GT | `/duburi/sim/ground_truth` |
-| Lab HTTP | `DUBURI_LAB_PORT` default **28765**, bound to **127.0.0.1** |
+| Cams | `/mongla/sim/{front,bottom}_camera/image_raw` **640×480** |
+| GT | `/mongla/sim/ground_truth` |
+| Lab HTTP | `MONGLA_LAB_PORT` default **28765**, bound to **127.0.0.1** |
 
 ## Packages
 
 | Package | Role |
 |---------|------|
-| `duburi_sim_description` | Vehicle SDF / hydro |
-| `duburi_sim_worlds` | Pool, props, courses |
-| `duburi_sim_bringup` | Launches + `duburi_sim` CLI |
-| `duburi_sim_bridge` | ros_gz, FX, recorder, checks |
-| `duburi_sim_scenarios` | Runtime props |
-| `duburi_sim_web` | FastAPI + React lab |
+| `mongla_sim_description` | Vehicle SDF / hydro |
+| `mongla_sim_worlds` | Pool, props, courses |
+| `mongla_sim_bringup` | Launches + `mongla_sim` CLI |
+| `mongla_sim_bridge` | ros_gz, FX, recorder, checks |
+| `mongla_sim_scenarios` | Runtime props |
+| `mongla_sim_web` | FastAPI + React lab |
 
 ## Doc map
 
@@ -280,12 +280,12 @@ Meshes: [Blue Robotics](https://bluerobotics.com/).
 
 The vehicle carries Gazebo's **native** DVL (`gz-sim 8` ships one), so
 `move_forward_dist` and friends close a real position loop in sim instead of
-dead reckoning. `yaw_source=sim_dvl` is the default for `duburi_sim stack`:
+dead reckoning. `yaw_source=sim_dvl` is the default for `mongla_sim stack`:
 heading still comes from MAVLink AHRS, position from the DVL.
 
 ```bash
-ros2 topic echo /duburi/sim/dvl/velocity --once     # body-frame m/s
-ros2 topic echo /duburi/sim/dvl/altitude --once     # bottom-track range
+ros2 topic echo /mongla/sim/dvl/velocity --once     # body-frame m/s
+ros2 topic echo /mongla/sim/dvl/altitude --once     # bottom-track range
 ```
 
 Four things about it are counter-intuitive enough that each one produced a
@@ -305,16 +305,16 @@ sim**:
 
 ```bash
 source /opt/ros/humble/setup.bash
-source ~/Ros_workspaces/duburi_ws/install/setup.bash
-source ~/Ros_workspaces/duburi_ws/sim/install/setup.bash
+source ~/Ros_workspaces/mongla_ws/install/setup.bash
+source ~/Ros_workspaces/mongla_ws/sim/install/setup.bash
 export GZ_IP=127.0.0.1
 ```
 
 ### T1 — Gazebo with the GUI
 
 ```bash
-ros2 run duburi_sim_bringup duburi_sim stop      # ALWAYS first: one sim only
-ros2 run duburi_sim_bringup duburi_sim sim       # GUI (drop --headless)
+ros2 run mongla_sim_bringup mongla_sim stop      # ALWAYS first: one sim only
+ros2 run mongla_sim_bringup mongla_sim sim       # GUI (drop --headless)
 ```
 
 Wait for **`JSON received`**. The GUI is where the **DVL beams** are drawn — four
@@ -324,8 +324,8 @@ beams are also published as RViz markers.
 ### T2 — the autonomy stack, with the DVL
 
 ```bash
-export DUBURI_WS=~/Ros_workspaces/duburi_ws
-ros2 run duburi_sim_bringup duburi_sim stack --no-vision
+export MONGLA_WS=~/Ros_workspaces/mongla_ws
+ros2 run mongla_sim_bringup mongla_sim stack --no-vision
 ```
 
 Defaults to `yaw_source=sim_dvl` — AHRS heading + DVL position. Look for
@@ -336,7 +336,7 @@ verbs **refuse** rather than dead-reckon.
 ### T3 — RViz
 
 ```bash
-ros2 run duburi_sim_bringup duburi_sim rviz
+ros2 run mongla_sim_bringup mongla_sim rviz
 ```
 
 Brings up `robot_state_publisher`, the `odom -> base_link` broadcaster and RViz
@@ -357,8 +357,8 @@ DVL altitude, both camera feeds, and a ground-truth track.
 ### T4 — the operator lab
 
 ```bash
-ros2 run duburi_sim_bringup duburi_sim lab
-# http://localhost:28765     port: cat /tmp/duburi-$USER/lab_port.txt
+ros2 run mongla_sim_bringup mongla_sim lab
+# http://localhost:28765     port: cat /tmp/mongla-$USER/lab_port.txt
 ```
 
 Mode selector, yaw teleop (q/e), ground-truth vs believed depth, connection
@@ -367,18 +367,18 @@ health, dataset integrity badges.
 ### T5 — drive it
 
 ```bash
-ros2 run duburi_sim_bridge contract_check        # prove the surface first
-ros2 run duburi_planner mission sim_shakedown    # arm -> depth -> out -> back
+ros2 run mongla_sim_bridge contract_check        # prove the surface first
+ros2 run mongla_planner mission sim_shakedown    # arm -> depth -> out -> back
 
 # individual verbs
-ros2 run duburi_planner duburi arm
-ros2 run duburi_planner duburi set_depth --target -0.8
-ros2 run duburi_planner duburi move_forward_dist --distance_m 2.0 --gain 55
-ros2 run duburi_planner duburi arc --duration 6 --gain 60 --target_yaw 90
-ros2 run duburi_planner duburi disarm
+ros2 run mongla_planner mongla arm
+ros2 run mongla_planner mongla set_depth --target -0.8
+ros2 run mongla_planner mongla move_forward_dist --distance_m 2.0 --gain 55
+ros2 run mongla_planner mongla arc --duration 6 --gain 60 --target_yaw 90
+ros2 run mongla_planner mongla disarm
 
 # measure any verb against ground truth
-ros2 run duburi_sim_bridge verb_audit --group heading
+ros2 run mongla_sim_bridge verb_audit --group heading
 ```
 
 ### Live tuning
@@ -386,14 +386,14 @@ ros2 run duburi_sim_bridge verb_audit --group heading
 RViz displays; it does not tune. Gains stay where they already are:
 
 ```bash
-ros2 param set /duburi_manager vision.kp_lat 80.0
-ros2 param list /duburi_manager
+ros2 param set /mongla_manager vision.kp_lat 80.0
+ros2 param list /mongla_manager
 ```
 
 ### Shutdown
 
 ```bash
-ros2 run duburi_sim_bringup duburi_sim stop
+ros2 run mongla_sim_bringup mongla_sim stop
 ```
 
 > **Reset between audit runs.** The pool spans x = ±12.5 and the hull drifts into
@@ -424,28 +424,28 @@ rather than a point — the orange flare, the bump flares, the drum order — on
 legal arrangement is baked in and you vary it at runtime rather than editing YAML:
 
 ```bash
-ros2 run duburi_sim_scenarios props list
-ros2 run duburi_sim_scenarios props add sauvc_drum_blue drum_x 8.0 1.0
-ros2 run duburi_sim_scenarios props move flare_red -2.0 4.0
-ros2 run duburi_sim_scenarios props remove drum_x
+ros2 run mongla_sim_scenarios props list
+ros2 run mongla_sim_scenarios props add sauvc_drum_blue drum_x 8.0 1.0
+ros2 run mongla_sim_scenarios props move flare_red -2.0 4.0
+ros2 run mongla_sim_scenarios props remove drum_x
 ```
 
 Any registered prop, any pose, live — the same catalogue the World tab in the lab
 drives. Adding a new prop is a builder plus one `PROPS` entry in
-`duburi_sim_worlds/scripts/prop_library.py`; that single registration lights it up
+`mongla_sim_worlds/scripts/prop_library.py`; that single registration lights it up
 in the model generator, the world generator, the ROS spawn service, the CLI and
 the web catalogue at once.
 
 ## Vision in sim
 
 ```bash
-ros2 run duburi_sim_bringup duburi_sim stack        # BOTH cameras + detectors
-ros2 run duburi_sim_bringup duburi_sim stack --no-vision
+ros2 run mongla_sim_bringup mongla_sim stack        # BOTH cameras + detectors
+ros2 run mongla_sim_bringup mongla_sim stack --no-vision
 ```
 
-Gives `/duburi_detector_forward` on the sim front camera and
-`/duburi_detector_downward` on the bottom camera, correctly labelled so missions
-and the vision verbs resolve `/duburi/vision/<name>/*` exactly as they do on the
+Gives `/mongla_detector_forward` on the sim front camera and
+`/mongla_detector_downward` on the bottom camera, correctly labelled so missions
+and the vision verbs resolve `/mongla/vision/<name>/*` exactly as they do on the
 vehicle.
 
 > `vision:=true` started **nothing at all** until 2026-08-28 — a launch-scope leak

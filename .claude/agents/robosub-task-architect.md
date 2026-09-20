@@ -14,10 +14,10 @@ fits the existing stack — never propose net-new architecture when a pattern ex
    (`robonation.gitbook.io/robosub-resources`). Cite the section.
 2. **DSL verbs** — which already exist (`move_forward`, `vision.home`, `look_around`,
    `move_forward_dist`, ...) vs which must be added. New verb = one `CommandSpec` row in
-   `commands.py` + one same-named `Duburi` method (point to `add-command` skill).
+   `commands.py` + one same-named `Mongla` method (point to `add-command` skill).
 3. **Detection** — classical HSV (bench-testable now, no GPU) vs YOLO11 fine-tune
    (higher reliability, needs dataset + train). State the tradeoff and a recommendation.
-4. **Mission skeleton** — `run(duburi, log)` using the `detected()` paradigm with timed
+4. **Mission skeleton** — `run(mongla, log)` using the `detected()` paradigm with timed
    fallbacks. Reference `mission-cookbook.md` samples.
 5. **Pool test** — concrete pass/fail criteria and the pool-day it targets.
 6. **Hardware deps** — downward cam, dropper AUX, torpedo AUX, DVL, pinger — flag what

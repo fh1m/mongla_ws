@@ -1,0 +1,14 @@
+names:
+  0: qual_gate
+  1: final_gate
+  2: orange_flare
+  3: flare_red
+  4: flare_yellow
+  5: flare_blue
+  6: drum_red
+  7: drum_blue
+  8: drum_red_pinger
+  9: starting_zone
+  10: target_mat
+path: .
+train: train.txt

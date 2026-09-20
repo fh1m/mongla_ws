@@ -289,7 +289,7 @@ operator passed the launch arg explicitly.
 
 **The udev rule earned itself on its first reboot.** `/dev/video0` was the
 Sonix before and the Fantech after, so the raw index had already swapped the
-two cameras. `/dev/duburi_cam_*` now comes from ID_PATH, and the Pi profiles
+two cameras. `/dev/mongla_cam_*` now comes from ID_PATH, and the Pi profiles
 name it instead of the `by-path` symlink Raspberry Pi OS never creates.
 
 ---
@@ -309,7 +309,7 @@ its full 10 s timeout** and reported *"did not pass within 10s"*, which reads
 as a slow pipeline rather than a QoS mismatch.
 
 The warning about this trap was already written down, verbatim, in **five
-files**. A comment repeated five times is not a mechanism. `duburi_vision/qos.py`
+files**. A comment repeated five times is not a mechanism. `mongla_vision/qos.py`
 is one table both ends import; ten call sites across four packages now take
 their profiles from it, and `test_qos_contract.py` computes the pairings and
 scans the tree for anything that bypasses it. The scan found two more

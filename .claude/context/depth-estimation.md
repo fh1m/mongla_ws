@@ -1,4 +1,4 @@
-# Depth Estimation (`duburi_vision/depth`)
+# Depth Estimation (`mongla_vision/depth`)
 
 ## Purpose
 
@@ -19,15 +19,15 @@ distinguish.
 
 ## Node: `depth_estimation_node`
 
-**Package**: `duburi_vision`  
+**Package**: `mongla_vision`  
 **Executable**: `depth_estimation_node`  
-**File**: `duburi_vision/depth/depth_estimation_node.py`
+**File**: `mongla_vision/depth/depth_estimation_node.py`
 
 ### Parameters
 
 | Param | Default | Notes |
 |-------|---------|-------|
-| `camera` | `'forward'` | Namespace: `/duburi/vision/<camera>/…` |
+| `camera` | `'forward'` | Namespace: `/mongla/vision/<camera>/…` |
 | `model_path` | `''` | Absolute path to `.onnx`. Empty = fallback |
 | `run_every_n_frames` | `3` | Run ONNX on every Nth frame (skip others) |
 | `publish_depth_map` | `False` | `True` → publish `vis_range_map` debug image |
@@ -38,10 +38,10 @@ distinguish.
 
 | Topic | Type | Direction |
 |-------|------|-----------|
-| `/duburi/vision/<cam>/image_raw` | `sensor_msgs/Image` | in |
-| `/duburi/vision/<cam>/detections` or `/tracks` | `vision_msgs/Detection2DArray` | in |
-| `/duburi/vision/<cam>/vis_range` | `std_msgs/Float32MultiArray` | out |
-| `/duburi/vision/<cam>/vis_range_map` | `sensor_msgs/Image` (float32) | out (optional) |
+| `/mongla/vision/<cam>/image_raw` | `sensor_msgs/Image` | in |
+| `/mongla/vision/<cam>/detections` or `/tracks` | `vision_msgs/Detection2DArray` | in |
+| `/mongla/vision/<cam>/vis_range` | `std_msgs/Float32MultiArray` | out |
+| `/mongla/vision/<cam>/vis_range_map` | `sensor_msgs/Image` (float32) | out (optional) |
 
 `vis_range.data` is a list of floats, one per detection in the input
 array, in the same order. If the detector sends 3 detections the array
@@ -66,7 +66,7 @@ staying responsive to real proximity changes (~0.4 s time constant).
 | Post-process | negate (`invert_depth=True`), min-max normalise to [0, 1] |
 | Mean | `[0.485, 0.456, 0.406]` |
 | Std | `[0.229, 0.224, 0.225]` |
-| File | `duburi_vision/depth/models/depth_anything_v2_small.onnx` |
+| File | `mongla_vision/depth/models/depth_anything_v2_small.onnx` |
 | Source | https://huggingface.co/depth-anything/Depth-Anything-V2-Small |
 
 **Re-export from HuggingFace** (if `.onnx` not present):
@@ -80,20 +80,20 @@ optimum-cli export onnx \
 ```
 
 The `.onnx` is gitignored (binary, ~50 MB). Copy into
-`duburi_vision/depth/models/` or set `model_path:=` to any other path.
+`mongla_vision/depth/models/` or set `model_path:=` to any other path.
 
 ## Launch
 
 ```bash
 # Bbox-area fallback (no model — always works):
-ros2 launch duburi_vision cameras_.launch.py depth:=true
+ros2 launch mongla_vision cameras_.launch.py depth:=true
 
 # With ONNX model:
-ros2 launch duburi_vision cameras_.launch.py depth:=true \
-    depth_model:=$(ros2 pkg prefix duburi_vision)/../../src/duburi_vision/duburi_vision/depth/models/depth_anything_v2_small.onnx
+ros2 launch mongla_vision cameras_.launch.py depth:=true \
+    depth_model:=$(ros2 pkg prefix mongla_vision)/../../src/mongla_vision/mongla_vision/depth/models/depth_anything_v2_small.onnx
 
 # Verify topic:
-ros2 topic echo /duburi/vision/logitech/vis_range
+ros2 topic echo /mongla/vision/logitech/vis_range
 ```
 
 ## HUD integration
@@ -110,9 +110,9 @@ ros2 topic echo /duburi/vision/logitech/vis_range
 ## Test
 
 ```bash
-cd ~/Ros_workspaces/duburi_ws
-python src/duburi_vision/test/test_depth_estimation.py \
-    src/duburi_vision/duburi_vision/depth/models/depth_anything_v2_small.onnx
+cd ~/Ros_workspaces/mongla_ws
+python src/mongla_vision/test/test_depth_estimation.py \
+    src/mongla_vision/mongla_vision/depth/models/depth_anything_v2_small.onnx
 # Expected: 9 passed, 0 failed
 ```
 

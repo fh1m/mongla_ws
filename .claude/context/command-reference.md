@@ -1,10 +1,10 @@
-# Command reference — every verb on `/duburi/move`
+# Command reference — every verb on `/mongla/move`
 
 One action, thirty verbs. This page says what each one does, what it takes, and — the part
 that matters on this vehicle — **where it actually runs**.
 
 The canonical list is the `COMMANDS` registry in
-[`duburi_control/commands.py`](../../src/duburi_control/duburi_control/commands.py). If a verb
+[`mongla_control/commands.py`](../../src/mongla_control/mongla_control/commands.py). If a verb
 is in this document and not in that registry, the document is wrong.
 
 ---
@@ -13,11 +13,11 @@ is in this document and not in that registry, the document is wrong.
 
 | Shape | How you call it |
 |---|---|
-| **CLI** | `ros2 run duburi_planner duburi <verb> --field value` |
-| **Mission DSL** | `duburi.<verb>(...)` inside `def run(duburi)` |
+| **CLI** | `ros2 run mongla_planner mongla <verb> --field value` |
+| **Mission DSL** | `mongla.<verb>(...)` inside `def run(mongla)` |
 | **Action** | a `Move` goal with `cmd='<verb>'`, from any ROS client |
 
-All three end up as the same goal on `/duburi/move`, served by `auv_manager_node`. The CLI is
+All three end up as the same goal on `/mongla/move`, served by `auv_manager_node`. The CLI is
 generated from the registry, so a new verb appears in it with no extra code.
 
 ## Where a verb runs (srot board)
@@ -90,10 +90,10 @@ the wire too: the board reports altitude, so a depth of 0.8 m arrives as −0.8.
 ## Power, mode and safety
 
 ```bash
-ros2 run duburi_planner duburi arm
-ros2 run duburi_planner duburi set_mode --target_name STABILIZE
-ros2 run duburi_planner duburi surface
-ros2 run duburi_planner duburi disarm
+ros2 run mongla_planner mongla arm
+ros2 run mongla_planner mongla set_mode --target_name STABILIZE
+ros2 run mongla_planner mongla surface
+ros2 run mongla_planner mongla disarm
 ```
 
 `arm` refuses on a board whose firmware is older than the host's floor — behaviour revision 10
@@ -108,14 +108,14 @@ control entirely for a few seconds.
 `mission_reset` belongs at the top of every mission: it clears state carried over from a
 previous run and re-zeroes the barometer while the vehicle is still on the surface. Which is
 also why a mission must never call another mission's `run()` mid-dive — see
-[`sauvc_full`](../../src/duburi_planner/duburi_planner/missions/sauvc_full.py).
+[`sauvc_full`](../../src/mongla_planner/mongla_planner/missions/sauvc_full.py).
 
 ## Moving
 
 ```bash
-ros2 run duburi_planner duburi move_forward --duration 5 --gain 40
-ros2 run duburi_planner duburi turn --target 90        # absolute heading
-ros2 run duburi_planner duburi set_depth --target -0.8
+ros2 run mongla_planner mongla move_forward --duration 5 --gain 40
+ros2 run mongla_planner mongla turn --target 90        # absolute heading
+ros2 run mongla_planner mongla set_depth --target -0.8
 ```
 
 On the srot board each of these becomes **one** command. The board runs the motion, brakes it
@@ -132,11 +132,11 @@ model of the world is required.
 
 ```bash
 # centre the gate on yaw and sideways
-ros2 run duburi_planner duburi vision_align --camera forward --target_class gate \
+ros2 run mongla_planner mongla vision_align --camera forward --target_class gate \
     --axes yaw,lat --err_px 40 --gain 30 --duration 20
 
 # drive until it fills 80 % of the frame
-ros2 run duburi_planner duburi vision_move --camera forward --target_class gate \
+ros2 run mongla_planner mongla vision_move --camera forward --target_class gate \
     --fwd_fill 80 --mode area --gain 35 --duration 20
 ```
 
@@ -159,9 +159,9 @@ verb ended — signed pixels from centre, `NaN` if it was never seen — so reco
 rather than a guess.
 
 ```python
-res = duburi.vision.align('gate', yaw=0, lat=0, gain=30, duration=20)
+res = mongla.vision.align('gate', yaw=0, lat=0, gain=30, duration=20)
 if not res and res.saw_target:
-    duburi.move_right(1.0) if res.x_px > 0 else duburi.move_left(1.0)
+    mongla.move_right(1.0) if res.x_px > 0 else mongla.move_left(1.0)
 ```
 
 Always check `saw_target` before reading a pixel position: `NaN < threshold` is quietly False.
@@ -188,10 +188,10 @@ When the target is lost, the DSL runs a mission-supplied search function and the
 loop — all inside the original budget.
 
 ```python
-def creep(duburi):
-    duburi.move_forward(1.0, gain=30)
+def creep(mongla):
+    mongla.move_forward(1.0, gain=30)
 
-duburi.vision.align('gate', yaw=0, lat=0, fallback=creep, duration=60)
+mongla.vision.align('gate', yaw=0, lat=0, fallback=creep, duration=60)
 ```
 
 With **no** fallback the verb rides out the blackout instead: it drives neutral and keeps
@@ -203,7 +203,7 @@ waiting, which is usually right in turbid water.
 loop is still correcting rather than after it has drifted:
 
 ```python
-duburi.vision.align('hole', camera='forward', lat=0, depth=0,
+mongla.vision.align('hole', camera='forward', lat=0, depth=0,
                     hold=6.0, fire=1, fire_t=3.0, brake=False)
 ```
 
@@ -218,16 +218,16 @@ it. There is no host-side map to get out of step. A channel configured as a swit
 channel configured as the on-board arming output is refused.
 
 ```bash
-ros2 run duburi_manager connect      # lists which channels are fireable
-ros2 run duburi_planner duburi fire --target 3
+ros2 run mongla_manager connect      # lists which channels are fireable
+ros2 run mongla_planner mongla fire --target 3
 ```
 
 ## Measuring a move without a DVL
 
 ```python
-duburi.calc_distance(phase='start')
-duburi.move_forward(3.0, gain=40)
-travelled = duburi.calc_distance(phase='stop').final_value
+mongla.calc_distance(phase='start')
+mongla.move_forward(3.0, gain=40)
+travelled = mongla.calc_distance(phase='stop').final_value
 ```
 
 The downward camera accumulates distance over the floor while the move runs. Bench-measured
@@ -250,5 +250,5 @@ floor's texture rather than any detection.
 - [`client-and-dsl-api.md`](client-and-dsl-api.md) — the mission language around these verbs
 - [`vision-results.md`](vision-results.md) — reading a vision result, and recovery patterns
 - [`precision-alignment.md`](precision-alignment.md) — holding a 20 kg hull still enough to fire
-- [`packages/duburi_control`](packages/duburi_control/README.md) — where each verb is implemented
+- [`packages/mongla_control`](packages/mongla_control/README.md) — where each verb is implemented
 - [Capability Map](capability-map.md) — what is verified, and what is not

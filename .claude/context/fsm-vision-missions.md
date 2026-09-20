@@ -7,7 +7,7 @@
 > legacy path is [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md).
 
 > **Companion to:** [`fsm-guide.md`](fsm-guide.md) (state library reference, pool-day workflow)
-> **Prerequisite:** [`fsm-guide.md`](fsm-guide.md) §1–4 (VehicleProfile, DuburiState, outcomes)
+> **Prerequisite:** [`fsm-guide.md`](fsm-guide.md) §1–4 (VehicleProfile, MonglaState, outcomes)
 > **Close-in shots:** for the terminal lock/hold/fire phase (don't miss the hole,
 > hold a heavy hull steady, ignore a 2nd hole) see
 > [`precision-alignment.md`](precision-alignment.md) — `lock_on`, the deck gain/conf/
@@ -25,8 +25,8 @@ Every vision interaction fits one of two modes. Confusing them is the #1 design 
 
 | Mode | What it does | Mongla primitive | Blocks? |
 |---|---|---|---|
-| **Vision-as-trigger** | Detects that an object IS present; changes state | `duburi.detected('gate')` | No — cache poll |
-| **Vision-as-control** | Continuously centres / approaches a target via closed-loop | `duburi.vision.align(...)` / `duburi.vision.move(...)` | Yes — runs until reached/timeout |
+| **Vision-as-trigger** | Detects that an object IS present; changes state | `mongla.detected('gate')` | No — cache poll |
+| **Vision-as-control** | Continuously centres / approaches a target via closed-loop | `mongla.vision.align(...)` / `mongla.vision.move(...)` | Yes — runs until reached/timeout |
 
 ```
 Vision-as-TRIGGER (inside a state's _run loop):
@@ -38,7 +38,7 @@ Vision-as-TRIGGER (inside a state's _run loop):
 
 Vision-as-CONTROL (hand off to DSL):
 
-  result = duburi.vision.align('gate', yaw=0, lat=0)
+  result = mongla.vision.align('gate', yaw=0, lat=0)
   return SUCCEED if result.ok else FAILED
   ← DSL runs a 20 Hz P-loop until every active axis is within
     err px for vision.align_stable_frames ticks
@@ -55,16 +55,16 @@ alignment work inside a dedicated state — `VisionAlignState` /
 
 ### 2.1 How `detected()` works inside a state
 
-`duburi.detected(class_name, camera=None, stale_after=1.0)` is a **non-blocking cache read**:
+`mongla.detected(class_name, camera=None, stale_after=1.0)` is a **non-blocking cache read**:
 
 ```
-Detector node → /duburi/vision/<cam>/detections (Detection2DArray, ~15-25 Hz)
+Detector node → /mongla/vision/<cam>/detections (Detection2DArray, ~15-25 Hz)
                          │
-                DuburiMission._on_detections()  ← lazy-subscribed on first call
+                MonglaMission._on_detections()  ← lazy-subscribed on first call
                          │
                 _det_cache[camera] = (monotonic_stamp, {class_names})
                          │
-duburi.detected('gate') ←── reads cache; returns True if:
+mongla.detected('gate') ←── reads cache; returns True if:
                               1. class_name in cached set
                               2. stamp is fresh (< stale_after seconds)
 ```
@@ -89,15 +89,15 @@ for _ in range(MAX_STEPS):
         return TIMEOUT
 
     # Priority 1: safety/avoid checks first
-    if self.duburi.detected('obstacle', stale_after=0.3):
+    if self.mongla.detected('obstacle', stale_after=0.3):
         return 'avoid'           # custom outcome → routes to AVOID state
 
     # Priority 2: mission target
-    if self.duburi.detected('gate', stale_after=0.5):
+    if self.mongla.detected('gate', stale_after=0.5):
         return SUCCEED
 
     # No detection: take one search step
-    self.duburi.move_forward(STEP_S, gain=SEARCH_GAIN)
+    self.mongla.move_forward(STEP_S, gain=SEARCH_GAIN)
 
 return TIMEOUT
 ```
@@ -105,10 +105,10 @@ return TIMEOUT
 Custom outcomes (not in `SUCCEED/FAILED/TIMEOUT/ABORT`) are fully supported — just list them in the state's `__init__`:
 
 ```python
-class SearchState(DuburiState):
-    def __init__(self, duburi, profile):
-        super().__init__(duburi, profile, [SUCCEED, 'avoid'])
-        # TIMEOUT and ABORT added automatically by DuburiState base
+class SearchState(MonglaState):
+    def __init__(self, mongla, profile):
+        super().__init__(mongla, profile, [SUCCEED, 'avoid'])
+        # TIMEOUT and ABORT added automatically by MonglaState base
 ```
 
 ---
@@ -153,17 +153,17 @@ Best for: gate (known direction), long straight searches.
 ```
 
 ```python
-class MarchSearchState(DuburiState):
+class MarchSearchState(MonglaState):
     TIMEOUT_S = 120.0
-    def __init__(self, duburi, profile, target: str, step_s=0.5, gain=30, max_steps=80):
-        super().__init__(duburi, profile, [SUCCEED])
+    def __init__(self, mongla, profile, target: str, step_s=0.5, gain=30, max_steps=80):
+        super().__init__(mongla, profile, [SUCCEED])
         self._target, self._step_s, self._gain, self._max = target, step_s, gain, max_steps
 
     def _run(self, bb):
         for _ in range(self._max):
             if self.timed_out(): return TIMEOUT
-            if self.duburi.detected(self._target, stale_after=0.5): return SUCCEED
-            self.duburi.move_forward(self._step_s, gain=self._gain)
+            if self.mongla.detected(self._target, stale_after=0.5): return SUCCEED
+            self.mongla.move_forward(self._step_s, gain=self._gain)
         return TIMEOUT
 ```
 
@@ -179,7 +179,7 @@ Exits on first detection.
 Best for: post-pass searching for next task object, orbit around marker.
 ```
 
-Use `VisionSearchState(duburi, profile, target='flare', pattern='yaw', yaw_step=20, timeout=90)`.
+Use `VisionSearchState(mongla, profile, target='flare', pattern='yaw', yaw_step=20, timeout=90)`.
 
 ### 4.3 Yaw sweep + forward march (helix)
 
@@ -192,19 +192,19 @@ Best for: large unknown area, no prior heading to target.
 ```
 
 ```python
-class HelixSearchState(DuburiState):
+class HelixSearchState(MonglaState):
     TIMEOUT_S = 180.0
-    def __init__(self, duburi, profile, target, yaw_step=30, fwd_step=1.0, gain=30):
-        super().__init__(duburi, profile, [SUCCEED])
+    def __init__(self, mongla, profile, target, yaw_step=30, fwd_step=1.0, gain=30):
+        super().__init__(mongla, profile, [SUCCEED])
         self._t, self._ys, self._fs, self._g = target, yaw_step, fwd_step, gain
 
     def _run(self, bb):
         for direction in ([1] * (360 // self._ys)):   # full circle
             if self.timed_out(): return TIMEOUT
-            if self.duburi.detected(self._t, stale_after=0.5): return SUCCEED
-            self.duburi.yaw_right(self._ys)
-            if self.duburi.detected(self._t, stale_after=0.5): return SUCCEED
-            self.duburi.move_forward(self._fs, gain=self._g)
+            if self.mongla.detected(self._t, stale_after=0.5): return SUCCEED
+            self.mongla.yaw_right(self._ys)
+            if self.mongla.detected(self._t, stale_after=0.5): return SUCCEED
+            self.mongla.move_forward(self._fs, gain=self._g)
         return TIMEOUT
 ```
 
@@ -338,7 +338,7 @@ CONFIRM_DROP (bbox reappears, or timeout)
 ```
 COUNTDOWN
     │
-ARM (+ DVL connect if Duburi 4.5)
+ARM (+ DVL connect if Mongla 4.5)
     │
 DIVE_SEARCH (-1.2m mission depth)
     │
@@ -402,20 +402,20 @@ LOG_SCORE → SURFACE → "succeeded"
 #### SearchAWhileAvoidingState
 
 ```python
-from duburi_planner.state_machines.core.base_state import DuburiState
-from duburi_planner.state_machines.core.outcomes import SUCCEED, TIMEOUT
+from mongla_planner.state_machines.core.base_state import MonglaState
+from mongla_planner.state_machines.core.outcomes import SUCCEED, TIMEOUT
 
 SEARCH_STEP_S   = 0.5    # forward step duration
 SEARCH_GAIN     = 30     # conservative gain while scanning
 MAX_SEARCH_STEPS = 120   # ~60s at 0.5s steps
 
-class SearchAWhileAvoidingState(DuburiState):
+class SearchAWhileAvoidingState(MonglaState):
     """March forward; yaw-sweep every 8 steps. Exits on object_a or object_b."""
     TIMEOUT_S = 70.0
 
-    def __init__(self, duburi, profile, target_a='object_a', avoid_trigger='object_b'):
+    def __init__(self, mongla, profile, target_a='object_a', avoid_trigger='object_b'):
         # 'avoid' is a custom outcome alongside the standard ones
-        super().__init__(duburi, profile, [SUCCEED, 'avoid'])
+        super().__init__(mongla, profile, [SUCCEED, 'avoid'])
         self._target_a = target_a
         self._avoid    = avoid_trigger
 
@@ -425,23 +425,23 @@ class SearchAWhileAvoidingState(DuburiState):
                 return TIMEOUT
 
             # Priority 1: avoid hazard (check first, every step)
-            if self.duburi.detected(self._avoid, stale_after=0.3):
+            if self.mongla.detected(self._avoid, stale_after=0.3):
                 bb['avoid_direction'] = 'right'   # hint for AvoidBState
                 return 'avoid'
 
             # Priority 2: mission target
-            if self.duburi.detected(self._target_a, stale_after=0.5):
+            if self.mongla.detected(self._target_a, stale_after=0.5):
                 return SUCCEED
 
             # Search step: small forward advance
-            self.duburi.move_forward(SEARCH_STEP_S, gain=SEARCH_GAIN)
+            self.mongla.move_forward(SEARCH_STEP_S, gain=SEARCH_GAIN)
 
             # Yaw sweep every 8 steps to widen search arc
             if step > 0 and step % 8 == 0:
-                self.duburi.yaw_right(15.0)
-                if self.duburi.detected(self._target_a, stale_after=0.5):
+                self.mongla.yaw_right(15.0)
+                if self.mongla.detected(self._target_a, stale_after=0.5):
                     return SUCCEED
-                self.duburi.yaw_left(15.0)   # return to heading
+                self.mongla.yaw_left(15.0)   # return to heading
 
         return TIMEOUT
 ```
@@ -449,16 +449,16 @@ class SearchAWhileAvoidingState(DuburiState):
 #### AvoidBState
 
 ```python
-AVOID_LATERAL_M  = 0.8    # Duburi 4.5 DVL distance
-AVOID_LATERAL_S  = 1.8    # Dubomini timed equivalent
+AVOID_LATERAL_M  = 0.8    # Mongla 4.5 DVL distance
+AVOID_LATERAL_S  = 1.8    # Mongla_agile timed equivalent
 AVOID_PAUSE_S    = 2.0
 
-class AvoidBState(DuburiState):
+class AvoidBState(MonglaState):
     """Lateral-clear object_b; pause; return SUCCEED to re-enter search."""
     TIMEOUT_S = 20.0
 
-    def __init__(self, duburi, profile, avoid_trigger='object_b'):
-        super().__init__(duburi, profile, [SUCCEED])
+    def __init__(self, mongla, profile, avoid_trigger='object_b'):
+        super().__init__(mongla, profile, [SUCCEED])
         self._trigger = avoid_trigger
 
     def _run(self, bb):
@@ -467,24 +467,24 @@ class AvoidBState(DuburiState):
 
         if self.profile.has_dvl:
             if direction == 'right':
-                self.duburi.move_lateral_dist(AVOID_LATERAL_M, gain=50)
+                self.mongla.move_lateral_dist(AVOID_LATERAL_M, gain=50)
             else:
-                self.duburi.move_lateral_dist(-AVOID_LATERAL_M, gain=50)
+                self.mongla.move_lateral_dist(-AVOID_LATERAL_M, gain=50)
         else:
             if direction == 'right':
-                self.duburi.move_right(AVOID_LATERAL_S, gain=50)
+                self.mongla.move_right(AVOID_LATERAL_S, gain=50)
             else:
-                self.duburi.move_left(AVOID_LATERAL_S, gain=50)
+                self.mongla.move_left(AVOID_LATERAL_S, gain=50)
 
         # Pause and let object_b pass / clear
-        self.duburi.pause(AVOID_PAUSE_S)
+        self.mongla.pause(AVOID_PAUSE_S)
 
         # Wait until object_b not visible before resuming
         deadline = self.elapsed() + 8.0
         while self.elapsed() < deadline:
-            if not self.duburi.detected(self._trigger, stale_after=0.3):
+            if not self.mongla.detected(self._trigger, stale_after=0.3):
                 break
-            self.duburi.pause(0.3)
+            self.mongla.pause(0.3)
 
         return SUCCEED
 ```
@@ -495,7 +495,7 @@ class AvoidBState(DuburiState):
 PICK_CONFIRM_POLL_S = 0.2
 PICK_CONFIRM_TIMEOUT = 5.0
 
-class ConfirmPickState(DuburiState):
+class ConfirmPickState(MonglaState):
     """Poll for grasp confirmation. Tries three signals in priority order:
     1. ESP32 actuator ACK (when payload serial is live)
     2. Target bbox disappears from camera (occluded by gripper)
@@ -503,8 +503,8 @@ class ConfirmPickState(DuburiState):
     """
     TIMEOUT_S = 8.0
 
-    def __init__(self, duburi, profile, target='object_c', camera='forward'):
-        super().__init__(duburi, profile, [SUCCEED])
+    def __init__(self, mongla, profile, target='object_c', camera='forward'):
+        super().__init__(mongla, profile, [SUCCEED])
         self._target = target
         self._camera = camera
 
@@ -514,16 +514,16 @@ class ConfirmPickState(DuburiState):
 
         while self.elapsed() < deadline:
             # Signal 2: bbox disappears (object now in gripper, occluded)
-            if bbox_was_visible and not self.duburi.detected(
+            if bbox_was_visible and not self.mongla.detected(
                     self._target, camera=self._camera, stale_after=0.3):
                 bb['pick_confirmed'] = 'bbox_occluded'
                 return SUCCEED
 
             # Track whether it was previously visible
-            if self.duburi.detected(self._target, stale_after=0.5):
+            if self.mongla.detected(self._target, stale_after=0.5):
                 bbox_was_visible = True
 
-            self.duburi.pause(PICK_CONFIRM_POLL_S)
+            self.mongla.pause(PICK_CONFIRM_POLL_S)
 
         # Timeout — assume picked (conservative: continue mission)
         bb['pick_confirmed'] = 'timeout_assumed'
@@ -533,15 +533,15 @@ class ConfirmPickState(DuburiState):
 #### LockBinState (downward camera alignment)
 
 ```python
-class LockBinState(DuburiState):
+class LockBinState(MonglaState):
     """Centre above bin using the downward camera.
     lat + depth centre the bin (down-cam: ex→lateral, ey→depth nudge).
     """
     TIMEOUT_S = 30.0
 
-    def __init__(self, duburi, profile, target='bin_a',
+    def __init__(self, mongla, profile, target='bin_a',
                  camera='downward', duration=20.0):
-        super().__init__(duburi, profile, [SUCCEED, FAILED])
+        super().__init__(mongla, profile, [SUCCEED, FAILED])
         self._target   = target
         self._camera   = camera
         self._duration = duration
@@ -549,7 +549,7 @@ class LockBinState(DuburiState):
     def _run(self, bb):
         # align: lat + depth to centre the bin in the down-cam (0 = centre).
         # A miss returns a non-ALIGNED VisionResult; never raises.
-        result = self.duburi.vision.align(
+        result = self.mongla.vision.align(
             self._target,
             camera=self._camera,
             lat=0,                 # centre laterally
@@ -566,15 +566,15 @@ class LockBinState(DuburiState):
 ```python
 CONFIRM_DROP_TIMEOUT = 4.0
 
-class ConfirmDropState(DuburiState):
+class ConfirmDropState(MonglaState):
     """Confirm object landed in bin.
     Looks for target bbox reappearing in downward camera (fell into bin, now visible from above).
     Falls back to timeout (assume dropped).
     """
     TIMEOUT_S = 6.0
 
-    def __init__(self, duburi, profile, target='object_c', camera='downward'):
-        super().__init__(duburi, profile, [SUCCEED])
+    def __init__(self, mongla, profile, target='object_c', camera='downward'):
+        super().__init__(mongla, profile, [SUCCEED])
         self._target = target
         self._camera = camera
 
@@ -582,10 +582,10 @@ class ConfirmDropState(DuburiState):
         deadline = self.elapsed() + CONFIRM_DROP_TIMEOUT
         while self.elapsed() < deadline:
             # Object visible in down-cam below AUV → dropped successfully
-            if self.duburi.detected(self._target, camera=self._camera, stale_after=0.5):
+            if self.mongla.detected(self._target, camera=self._camera, stale_after=0.5):
                 bb['drop_confirmed'] = 'bbox_visible'
                 return SUCCEED
-            self.duburi.pause(0.3)
+            self.mongla.pause(0.3)
         bb['drop_confirmed'] = 'timeout_assumed'
         return SUCCEED
 ```
@@ -618,42 +618,42 @@ PICK_DROP_DEFAULTS = {
     'gate_heading':    0.0,
 }
 
-def build_pick_drop_fsm(duburi, profile: VehicleProfile,
+def build_pick_drop_fsm(mongla, profile: VehicleProfile,
                          params: dict | None = None) -> StateMachine:
     p = {**PICK_DROP_DEFAULTS, **(params or {})}
     sm = StateMachine(outcomes=[SUCCEED, ABORT])
 
     sm.add_state('COUNTDOWN',
-                 CountdownState(duburi, profile, seconds=p['countdown_s']),
+                 CountdownState(mongla, profile, seconds=p['countdown_s']),
                  transitions={SUCCEED: 'ARM', ABORT: ABORT})
 
     sm.add_state('ARM',
-                 ArmState(duburi, profile),
+                 ArmState(mongla, profile),
                  transitions={SUCCEED: 'DIVE_SEARCH', ABORT: 'SURFACE'})
 
     sm.add_state('DIVE_SEARCH',
-                 SetDepthState(duburi, profile, depth_m=p['search_depth_m']),
+                 SetDepthState(mongla, profile, depth_m=p['search_depth_m']),
                  transitions={SUCCEED: 'LOCK_HEADING', TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     sm.add_state('LOCK_HEADING',
-                 LockHeadingState(duburi, profile, heading=p['gate_heading']),
+                 LockHeadingState(mongla, profile, heading=p['gate_heading']),
                  transitions={SUCCEED: 'SEARCH_A', TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     # ── search with avoid ─────────────────────────────────────────────
     sm.add_state('SEARCH_A',
-                 SearchAWhileAvoidingState(duburi, profile),
+                 SearchAWhileAvoidingState(mongla, profile),
                  transitions={SUCCEED: 'ALIGN_A',
                                'avoid': 'AVOID_B',
                                TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     sm.add_state('AVOID_B',
-                 AvoidBState(duburi, profile),
+                 AvoidBState(mongla, profile),
                  transitions={SUCCEED: 'SEARCH_A',   # ← loops back!
                                ABORT: 'SURFACE'})
 
     # ── approach object_a: centre (align) then drive in (move) ────────
     sm.add_state('ALIGN_A',
-                 VisionAlignState(duburi, profile, target='object_a',
+                 VisionAlignState(mongla, profile, target='object_a',
                                   yaw=True, lat=True,
                                   err=40, gain=30, duration=20.0),
                  transitions={SUCCEED: 'MOVE_A',
@@ -661,7 +661,7 @@ def build_pick_drop_fsm(duburi, profile: VehicleProfile,
                                TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     sm.add_state('MOVE_A',
-                 VisionMoveState(duburi, profile, target='object_a',
+                 VisionMoveState(mongla, profile, target='object_a',
                                  fwd=p['approach_fill'], mode='height',
                                  gain=35, duration=20.0),
                  transitions={SUCCEED: 'DEEP_DIVE',
@@ -670,17 +670,17 @@ def build_pick_drop_fsm(duburi, profile: VehicleProfile,
 
     # ── deep dive + scan for object_c ─────────────────────────────────
     sm.add_state('DEEP_DIVE',
-                 SetDepthState(duburi, profile, depth_m=p['deep_depth_m']),
+                 SetDepthState(mongla, profile, depth_m=p['deep_depth_m']),
                  transitions={SUCCEED: 'SCAN_C', TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     sm.add_state('SCAN_C',
-                 VisionSearchState(duburi, profile, target='object_c',
+                 VisionSearchState(mongla, profile, target='object_c',
                                    pattern='yaw', yaw_step=20.0, timeout=120.0),
                  transitions={SUCCEED: 'ALIGN_C', TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     # ── lock on object_c for pick: align (3-axis) then move in ────────
     sm.add_state('ALIGN_C',
-                 VisionAlignState(duburi, profile, target='object_c',
+                 VisionAlignState(mongla, profile, target='object_c',
                                   yaw=True, lat=True, depth=True,
                                   err=30, gain=30, duration=20.0),
                  transitions={SUCCEED: 'MOVE_C',
@@ -688,7 +688,7 @@ def build_pick_drop_fsm(duburi, profile: VehicleProfile,
                                TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     sm.add_state('MOVE_C',
-                 VisionMoveState(duburi, profile, target='object_c',
+                 VisionMoveState(mongla, profile, target='object_c',
                                  fwd=p['pick_fill'], mode='height',
                                  gain=25, duration=20.0),
                  transitions={SUCCEED: 'PICK',
@@ -696,20 +696,20 @@ def build_pick_drop_fsm(duburi, profile: VehicleProfile,
                                TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     sm.add_state('PICK',
-                 PickActuateState(duburi, profile),   # ESP32 serial grab cmd
+                 PickActuateState(mongla, profile),   # ESP32 serial grab cmd
                  transitions={SUCCEED: 'CONFIRM_PICK', ABORT: 'SURFACE'})
 
     sm.add_state('CONFIRM_PICK',
-                 ConfirmPickState(duburi, profile, target='object_c'),
+                 ConfirmPickState(mongla, profile, target='object_c'),
                  transitions={SUCCEED: 'ASCEND_DROP', ABORT: 'SURFACE'})
 
     # ── ascend + bin search ───────────────────────────────────────────
     sm.add_state('ASCEND_DROP',
-                 SetDepthState(duburi, profile, depth_m=p['drop_depth_m']),
+                 SetDepthState(mongla, profile, depth_m=p['drop_depth_m']),
                  transitions={SUCCEED: 'SEARCH_BIN', TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     sm.add_state('SEARCH_BIN',
-                 VisionSearchState(duburi, profile, target='bin_a',
+                 VisionSearchState(mongla, profile, target='bin_a',
                                    camera='downward', pattern='yaw',
                                    yaw_step=20.0, timeout=90.0),
                  transitions={SUCCEED: 'LOCK_BIN',
@@ -717,29 +717,29 @@ def build_pick_drop_fsm(duburi, profile: VehicleProfile,
                                ABORT: 'SURFACE'})
 
     sm.add_state('LOCK_BIN',
-                 LockBinState(duburi, profile, target='bin_a', camera='downward'),
+                 LockBinState(mongla, profile, target='bin_a', camera='downward'),
                  transitions={SUCCEED: 'DROP',
                                FAILED: 'SEARCH_BIN',
                                TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
 
     sm.add_state('DROP',
-                 DropActuateState(duburi, profile),   # ESP32 serial drop cmd
+                 DropActuateState(mongla, profile),   # ESP32 serial drop cmd
                  transitions={SUCCEED: 'CONFIRM_DROP', ABORT: 'SURFACE'})
 
     sm.add_state('CONFIRM_DROP',
-                 ConfirmDropState(duburi, profile, target='object_c', camera='downward'),
+                 ConfirmDropState(mongla, profile, target='object_c', camera='downward'),
                  transitions={SUCCEED: 'LOG_SCORE', ABORT: 'SURFACE'})
 
     sm.add_state('LOG_SCORE',
-                 LogScoreState(duburi, profile),
+                 LogScoreState(mongla, profile),
                  transitions={SUCCEED: 'SURFACE', ABORT: 'SURFACE'})
 
     sm.add_state('SURFACE_WITH_OBJ',
-                 SurfaceState(duburi, profile),
+                 SurfaceState(mongla, profile),
                  transitions={SUCCEED: SUCCEED, ABORT: ABORT})
 
     sm.add_state('SURFACE',
-                 SurfaceState(duburi, profile),
+                 SurfaceState(mongla, profile),
                  transitions={SUCCEED: SUCCEED, ABORT: ABORT})
 
     sm.set_start_state('COUNTDOWN')
@@ -755,16 +755,16 @@ from yasmin_ros import set_ros_loggers
 from ..state_machines.plans.pick_and_drop import build_pick_drop_fsm
 from ..state_machines import VehicleProfile
 
-def run(duburi, log):
+def run(mongla, log):
     # ── detector setup ──────────────────────────────────────────────
-    duburi.models(
+    mongla.models(
         objects='pick_drop_combined_100ep',   # model with object_a, object_b, object_c, bin_a
     )
-    duburi.camera  = 'forward'
-    duburi.set_classes('object_a,object_b,object_c,bin_a')
+    mongla.camera  = 'forward'
+    mongla.set_classes('object_a,object_b,object_c,bin_a')
 
     # ── vehicle detection ───────────────────────────────────────────
-    profile = VehicleProfile.auto(duburi.client.node)
+    profile = VehicleProfile.auto(mongla.client.node)
     log(f'[FSM] body={profile.name}  dvl={profile.has_dvl}')
 
     # ── pool-day params ─────────────────────────────────────────────
@@ -777,7 +777,7 @@ def run(duburi, log):
     }
 
     set_ros_loggers()
-    sm = build_pick_drop_fsm(duburi, profile, params=params)
+    sm = build_pick_drop_fsm(mongla, profile, params=params)
     outcome = sm(Blackboard())
     log(f'[FSM] result: {outcome}')
 ```
@@ -822,7 +822,7 @@ axis separately.
 There is no `on_lost` knob. By default a verb coasts for
 `vision.lost_grace_s` and then returns a non-`ALIGNED` `VisionResult` (the
 state maps it to `FAILED`, so the plan routes back to a search state). Pass a
-mission-authored `fallback=fn(duburi)` / `fn(duburi, should_stop)` to recover
+mission-authored `fallback=fn(mongla)` / `fn(mongla, should_stop)` to recover
 *inside* the same state — the verb runs the search once, then re-enters, all
 within `duration`:
 
@@ -837,13 +837,13 @@ verb is **cancelled** and every remaining verb in the search **short-circuits**,
 vision loop re-enters while the target is still in frame. Previously the search ran to
 completion every time, which could carry the just-reacquired target back **out of frame**
 (a torpedo/bin miss). You no longer need the 2-arg `should_stop` for this — a plain
-`def creep(duburi): duburi.move_forward(2)` is auto-interrupted. **Keep `fallback` bodies
+`def creep(mongla): mongla.move_forward(2)` is auto-interrupted. **Keep `fallback` bodies
 to motion verbs only** (no `fire`/`disarm` inside a fallback — a post-trip safety verb is
 short-circuited; the mission's own emergency disarm runs outside the fallback and is safe).
 
 ### 7.4 `kp_*` gain tuning guide
 
-Gains are live-tunable via `ros2 param set /duburi_manager vision.kp_yaw 80.0`
+Gains are live-tunable via `ros2 param set /mongla_manager vision.kp_yaw 80.0`
 (applied on the NEXT goal). Defaults live in `vision_tunables.py`.
 
 | Gain | Too low symptom | Too high symptom | Default |
@@ -871,8 +871,8 @@ for fine centring if needed:
 
 ```python
 # Coarse approach, then fine centre
-duburi.vision.move('gate', fwd=70, mode='height', gain=35, duration=30)
-duburi.vision.align('gate', yaw=0, lat=0, err=20, gain=20, duration=15)
+mongla.vision.move('gate', fwd=70, mode='height', gain=35, duration=30)
+mongla.vision.align('gate', yaw=0, lat=0, err=20, gain=20, duration=15)
 ```
 
 FSM state usage wraps the same DSL verb:
@@ -880,7 +880,7 @@ FSM state usage wraps the same DSL verb:
 ```python
 # In a plan:
 sm.add_state('APPROACH_GATE',
-             VisionMoveState(duburi, profile, target='gate',
+             VisionMoveState(mongla, profile, target='gate',
                              fwd=70, mode='height', duration=30),
              transitions={SUCCEED: 'CENTRE_GATE',
                            FAILED:  'SCAN_FOR_GATE',
@@ -948,16 +948,16 @@ Before writing a new plan:
 When a mission uses both forward and downward cameras:
 
 ```python
-class SetCameraState(DuburiState):
+class SetCameraState(MonglaState):
     """Switch sticky camera context + update detector classes."""
-    def __init__(self, duburi, profile, camera: str, classes: str):
-        super().__init__(duburi, profile, [SUCCEED])
+    def __init__(self, mongla, profile, camera: str, classes: str):
+        super().__init__(mongla, profile, [SUCCEED])
         self._camera  = camera
         self._classes = classes
 
     def _run(self, bb):
-        self.duburi.camera = self._camera
-        self.duburi.set_classes(self._classes)
+        self.mongla.camera = self._camera
+        self.mongla.set_classes(self._classes)
         return SUCCEED
 ```
 
@@ -975,20 +975,20 @@ Insert between phases:
 ### 11.1 Torpedo task — align then fire
 
 There is no lock-fire verb. Centre the target with `vision.align` (tight `err`,
-slow `gain`); when it returns `ALIGNED`, call `duburi.fire(channel)`
+slow `gain`); when it returns `ALIGNED`, call `mongla.fire(channel)`
 (1/2 = torpedo, 3/4 = dropper). `VisionResult` is truthy only on a real lock,
 so `if align(...).ok:` gates the shot.
 
 **As a standalone mission call** (inside `detected()`-paradigm or FSM state body):
 
 ```python
-duburi.models(torpedo='torpedo_blood_hole')   # classes: torpedo, blood, hole
+mongla.models(torpedo='torpedo_blood_hole')   # classes: torpedo, blood, hole
 
 # Coarse board align, then a precise hole lock before firing
-duburi.vision.align('torpedo', yaw=0, lat=0, depth=0,
+mongla.vision.align('torpedo', yaw=0, lat=0, depth=0,
                     err=40, gain=30, duration=20, fallback=creep_forward)
 
-duburi.set_classes('hole')
+mongla.set_classes('hole')
 # yaw_gain low: a 20 kg hull needs the yaw inertia fought gently to hold a tight
 # hole-lock steady enough to fire through (lat/depth stay at the global gain).
 # hold=2.0: ACTIVE station-keep -- once centred, keep correcting on the hole for
@@ -1000,10 +1000,10 @@ duburi.set_classes('hole')
 # right before align() returns -- which would nudge the hull off-aim between
 # lock-confirm and fire(). On a fire-from-lock the lateral brake buys nothing
 # (you are not moving away), so disable it to keep the shot dead still.
-if duburi.vision.align('hole', yaw=0, lat=0, depth=0,
+if mongla.vision.align('hole', yaw=0, lat=0, depth=0,
                        err=14, gain=12, yaw_gain=8, brake=False, hold=2.0,
                        duration=25, fallback=creep_forward).ok:
-    duburi.fire(1)           # torpedo_1 (ESP32 serial 1/2)
+    mongla.fire(1)           # torpedo_1 (ESP32 serial 1/2)
 ```
 
 > **Per-axis gain for stable holds.** `lat_gain`/`yaw_gain` cap the lat/yaw axis
@@ -1046,17 +1046,17 @@ if duburi.vision.align('hole', yaw=0, lat=0, depth=0,
 
 ```python
 sm.add_state('LOCK_HOLE',
-             VisionAlignState(duburi, profile, target='hole',
+             VisionAlignState(mongla, profile, target='hole',
                               yaw=True, lat=True, depth=True,
                               err=14, gain=12, duration=25),
              transitions={SUCCEED: 'FIRE_TORPEDO',
                            FAILED:  'SCAN_BOARD',
                            TIMEOUT: 'SURFACE', ABORT: 'SURFACE'})
-# FireState._run() calls duburi.fire(1) and returns SUCCEED.
+# FireState._run() calls mongla.fire(1) and returns SUCCEED.
 ```
 
-> `duburi.fire(ch)`: 1/2 = torpedo, 3/4 = dropper (ESP32 serial).
-> Call `duburi.payload_ready()` before the mission if you need a hard gate.
+> `mongla.fire(ch)`: 1/2 = torpedo, 3/4 = dropper (ESP32 serial).
+> Call `mongla.payload_ready()` before the mission if you need a hard gate.
 
 ---
 
@@ -1066,20 +1066,20 @@ Axis remap: with `camera='downward'`, `ex`→lateral and `ey`→the depth nudge.
 Centre with `lat` + `depth`, then drop.
 
 ```python
-duburi.set_depth(-1.5)
-duburi.use_camera('downward')
-duburi.models(bin='bin_fire_blood')          # classes: blood, fire
-duburi.set_classes('fire,blood')
+mongla.set_depth(-1.5)
+mongla.use_camera('downward')
+mongla.models(bin='bin_fire_blood')          # classes: blood, fire
+mongla.set_classes('fire,blood')
 
 # Search the down-cam for the bin marker, then centre and drop
 for _ in range(30):
-    if duburi.detected('fire', camera='downward', stale_after=0.5):
+    if mongla.detected('fire', camera='downward', stale_after=0.5):
         break
-    duburi.move_forward(0.5, gain=30)
+    mongla.move_forward(0.5, gain=30)
 
-if duburi.vision.align('fire', camera='downward', lat=0, depth=0,
+if mongla.vision.align('fire', camera='downward', lat=0, depth=0,
                        err=30, gain=30, duration=25, fallback=creep_forward).ok:
-    duburi.fire(3)           # dropper_1 (ESP32 serial 3/4)
+    mongla.fire(3)           # dropper_1 (ESP32 serial 3/4)
 ```
 
 ---
@@ -1092,14 +1092,14 @@ if duburi.vision.align('fire', camera='downward', lat=0, depth=0,
 
 ```python
 # Slalom — keep the red pipe 80 px to the right, then drive past it
-duburi.models(slalom='slalom_red_pipe')      # class: red_pipe
-duburi.vision.align('red_pipe', yaw=0, lat=80, err=40, gain=30, duration=20)
-duburi.vision.move('red_pipe', fwd=60, mode='height', maintain=80,
+mongla.models(slalom='slalom_red_pipe')      # class: red_pipe
+mongla.vision.align('red_pipe', yaw=0, lat=80, err=40, gain=30, duration=20)
+mongla.vision.move('red_pipe', fwd=60, mode='height', maintain=80,
                    gain=35, duration=15)
 
 # Torpedo board — aim right + above the bbox centre
 # (+lat/+yaw = right, -depth = above centre)
-duburi.vision.align('torpedo', yaw=60, lat=0, depth=-40,
+mongla.vision.align('torpedo', yaw=60, lat=0, depth=-40,
                     err=20, gain=20, duration=15)
 ```
 
@@ -1123,11 +1123,11 @@ def mock_detected(target, camera=None, stale_after=1.0):
     val = detection_seq.pop(0)
     return val == target
 
-duburi = MagicMock()
-duburi.detected.side_effect = mock_detected
+mongla = MagicMock()
+mongla.detected.side_effect = mock_detected
 # Vision verbs return a VisionResult; .ok is the truthy success flag.
-duburi.vision.align.return_value = MagicMock(ok=True)
-duburi.vision.move.return_value = MagicMock(ok=True)
+mongla.vision.align.return_value = MagicMock(ok=True)
+mongla.vision.move.return_value = MagicMock(ok=True)
 ```
 
 ### Test avoid branch fires
@@ -1135,10 +1135,10 @@ duburi.vision.move.return_value = MagicMock(ok=True)
 ```python
 def test_avoid_branch_taken_when_object_b_detected():
     # First call returns False (no avoid), second returns True (avoid fires)
-    duburi = MagicMock()
-    duburi.detected.side_effect = [False, False, True]  # 3rd poll: object_b seen
-    profile = VehicleProfile.dubomini()
-    state = SearchAWhileAvoidingState(duburi, profile)
+    mongla = MagicMock()
+    mongla.detected.side_effect = [False, False, True]  # 3rd poll: object_b seen
+    profile = VehicleProfile.mongla_agile()
+    state = SearchAWhileAvoidingState(mongla, profile)
     outcome = state.execute(Blackboard())
     assert outcome == 'avoid'
 ```
@@ -1147,21 +1147,21 @@ def test_avoid_branch_taken_when_object_b_detected():
 
 ```python
 def test_move_passes_fill_to_vision():
-    duburi = MagicMock()
-    duburi.vision.move.return_value = MagicMock(ok=True)
-    state = VisionMoveState(duburi, VehicleProfile.duburi45(), target='object_c',
+    mongla = MagicMock()
+    mongla.vision.move.return_value = MagicMock(ok=True)
+    state = VisionMoveState(mongla, VehicleProfile.mongla_heavy(), target='object_c',
                             fwd=70, mode='height')
     outcome = state.execute(Blackboard())
     # VisionMoveState delegates entirely to vision.move — fwd/mode passed through
-    _, kw = duburi.vision.move.call_args
+    _, kw = mongla.vision.move.call_args
     assert kw['fwd'] == 70
     assert kw['mode'] == 'height'
     assert outcome == SUCCEED
 
 def test_align_succeeds_on_ok_result():
-    duburi = MagicMock()
-    duburi.vision.align.return_value = MagicMock(ok=True)
-    state = VisionAlignState(duburi, VehicleProfile.duburi45(), target='object_c',
+    mongla = MagicMock()
+    mongla.vision.align.return_value = MagicMock(ok=True)
+    state = VisionAlignState(mongla, VehicleProfile.mongla_heavy(), target='object_c',
                              yaw=True, lat=True, depth=True)
     assert state.execute(Blackboard()) == SUCCEED
 ```

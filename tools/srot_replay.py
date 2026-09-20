@@ -39,13 +39,13 @@ import sys
 
 from pymavlink import mavutil
 
-for _p in ('duburi_control', 'duburi_manager'):
+for _p in ('mongla_control', 'mongla_manager'):
     _q = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                       'src', _p)
     if os.path.isdir(_q) and _q not in sys.path:
         sys.path.insert(0, _q)
 
-from duburi_control.nav_filter import DepthFilter, HeadingFilter   # noqa: E402
+from mongla_control.nav_filter import DepthFilter, HeadingFilter   # noqa: E402
 
 _ARMED = mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED
 

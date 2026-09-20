@@ -45,7 +45,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 from vision_msgs.msg import Detection2DArray
 
-from duburi_vision import qos
+from mongla_vision import qos
 
 
 def _pct(vals, p):
@@ -57,12 +57,12 @@ def _pct(vals, p):
 
 class _Bench(Node):
     def __init__(self, cameras, warmup_s):
-        super().__init__('duburi_vision_latency_bench')
+        super().__init__('mongla_vision_latency_bench')
         self._warmup_until = time.monotonic() + warmup_s
         # camera -> {'image': [ages], 'det': [ages], 'det_t': [arrival monotonic]}
         self.stats = {c: {'image': [], 'det': [], 'det_t': []} for c in cameras}
         for cam in cameras:
-            ns = f'/duburi/vision/{cam}'
+            ns = f'/mongla/vision/{cam}'
             self.create_subscription(
                 Image, f'{ns}/image_raw', self._mk(cam, 'image'), qos.IMAGE)
             self.create_subscription(

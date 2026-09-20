@@ -35,18 +35,18 @@ insufficient and the frame budget allows (ask `vision-model-reviewer`).
 
 ```bash
 cp runs/detect/train/weights/best.pt \
-   src/duburi_vision/models/<task>_nano_100ep.pt
+   src/mongla_vision/models/<task>_nano_100ep.pt
 ```
 
-Edit `src/duburi_vision/config/detector.yaml`: set `model` to the new weights and
+Edit `src/mongla_vision/config/detector.yaml`: set `model` to the new weights and
 `classes` to the trained class names.
 
 ## 4. Verify
 
 ```bash
-./build_dubomini.sh
-ros2 launch duburi_vision cameras_.launch.py
-ros2 run duburi_vision vision_check --camera forward --require-class <class>
+./build_mongla.sh
+ros2 launch mongla_vision cameras_.launch.py
+ros2 run mongla_vision vision_check --camera forward --require-class <class>
 ```
 
 Confirm detections appear with sane `conf` before any in-water mission run.

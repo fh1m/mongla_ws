@@ -23,12 +23,12 @@ import random
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..',
-                                'src', 'duburi_vision'))
+                                'src', 'mongla_vision'))
 
 import cv2                                                  # noqa: E402
 import yaml                                                 # noqa: E402
 
-from duburi_vision.underwater import (                      # noqa: E402
+from mongla_vision.underwater import (                      # noqa: E402
     analyse_frames, recommend, ON, OFF, UNKNOWN,
 )
 

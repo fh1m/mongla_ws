@@ -11,7 +11,7 @@ address it has ever had -- so it goes FIRST, with the live addresses listed
 after it as the fallback for a network where mDNS is filtered.
 
 Standalone and dependency-free on purpose: `tools/` is loaded without a ROS
-environment (importing `duburi_vision` drags in `rclpy`), so this cannot
+environment (importing `mongla_vision` drags in `rclpy`), so this cannot
 live in the package.
 """
 import socket

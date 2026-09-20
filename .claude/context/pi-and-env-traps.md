@@ -75,7 +75,7 @@
   empty), so the GUI has nowhere to draw. (Over the old full remote-desktop session
   it worked because that terminal inherited the desktop's `DISPLAY`.)
 - **Root cause:** the GNOME/Xorg session runs on display **`:1`** (owned by the same
-  `duburi-jetson` user; socket `/tmp/.X11-unix/X1`). A VSCode Remote-SSH integrated
+  `mongla-jetson` user; socket `/tmp/.X11-unix/X1`). A VSCode Remote-SSH integrated
   terminal starts with `$DISPLAY` unset and never inherits it.
 - **Fix (host-local, in `~/.zshrc`):** when `$DISPLAY` is empty, auto-point GUI apps
   at the live local X socket — guarded so it never clobbers a real desktop terminal:

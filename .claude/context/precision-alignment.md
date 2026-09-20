@@ -90,8 +90,8 @@ dial in water). Keep them separate: the mission says *what to do*, the params sa
 # standoff fill and HOLDS it while centering lat/depth -- no separate move()/align
 # seam where the hull drifts. lat+depth only (yaw -> heading_lock, see §4),
 # continuity lock so a 2nd hole can't steal the aim, fire MID-HOLD.
-duburi.set_classes('hole', node='/duburi_detector_forward')
-res = duburi.vision.align(
+mongla.set_classes('hole', node='/mongla_detector_forward')
+res = mongla.vision.align(
     'hole', camera='forward',
     lat=0, depth=0,                       # NO yaw -> heading_lock holds Ch4
     fwd=35, fwd_mode='height',            # drive to + HOLD the firing standoff
@@ -135,9 +135,9 @@ Tuning is live from the deck and applies on the **next** goal — no mission edi
 no restart:
 
 ```bash
-ros2 param set /duburi_manager vision.range_gain_floor 0.35   # soften close-in gain
-ros2 param set /duburi_manager vision.ctrl_conf        0.55   # reject low-score boxes
-ros2 param set /duburi_manager vision.ki_lat           0.4    # null steady current
+ros2 param set /mongla_manager vision.range_gain_floor 0.35   # soften close-in gain
+ros2 param set /mongla_manager vision.ctrl_conf        0.55   # reject low-score boxes
+ros2 param set /mongla_manager vision.ki_lat           0.4    # null steady current
 ```
 
 `settle` is the exception — it's a **per-call** `vision.align(settle=<px>)` kwarg, not
@@ -145,14 +145,14 @@ a deck param (it also gates the mid-hold fire, so a global value could silently
 suppress the torpedo shot). Put it on a coarse exit-and-move-on align in mission code:
 
 ```python
-duburi.vision.align('torpedo', yaw=0, lat=0, depth=0, settle=8, ...)  # exit settled
+mongla.vision.align('torpedo', yaw=0, lat=0, depth=0, settle=8, ...)  # exit settled
 ```
 
 You can also branch on the rich result (see [`vision-results.md`](vision-results.md)):
 
 ```python
 if not res and res.saw_target and res.x_px > 30:
-    duburi.move_right(1)        # ended off to the right -> nudge, then retry/fire
+    mongla.move_right(1)        # ended off to the right -> nudge, then retry/fire
 ```
 
 ---
@@ -202,7 +202,7 @@ while lat/depth correct.
 immediately only when the vehicle is **armed** (mid-mission, after
 `set_depth`/`align`/`move`, it is). If you script it from a disarmed state,
 activation is *deferred* to the first armed command. The reference mission is
-[`missions/task_torpedo.py`](../../src/duburi_planner/duburi_planner/missions/task_torpedo.py).
+[`missions/task_torpedo.py`](../../src/mongla_planner/mongla_planner/missions/task_torpedo.py).
 
 ---
 
@@ -234,23 +234,23 @@ activation is *deferred* to the first armed command. The reference mission is
 1. **Misclassification — try the free fix first.** Raise the **detector** global
    conf and see if the wrong box stops appearing:
    ```bash
-   ros2 param set /duburi_detector_forward conf 0.6     # or duburi.set_conf(0.6) in a mission
+   ros2 param set /mongla_detector_forward conf 0.6     # or mongla.set_conf(0.6) in a mission
    ```
    If that fixes it, you're done. If it *persists*, the bad box is
    high-confidence (a genuine second hole) → enable the **control-side** floor and
    the continuity lock:
    ```bash
-   ros2 param set /duburi_manager vision.ctrl_conf 0.55
+   ros2 param set /mongla_manager vision.ctrl_conf 0.55
    ```
    and run the terminal align with `lock_on=True` (mission already does).
 2. **Overshoot / can't hold still — damp first.** Lower the close-in gain until
    the hull stops oscillating on the hole:
    ```bash
-   ros2 param set /duburi_manager vision.range_gain_floor 0.35   # try 0.5 -> 0.3
+   ros2 param set /mongla_manager vision.range_gain_floor 0.35   # try 0.5 -> 0.3
    ```
 3. **Steady drift under current — integral last.** Only after step 2 is stable:
    ```bash
-   ros2 param set /duburi_manager vision.ki_lat 0.4             # raise slowly
+   ros2 param set /mongla_manager vision.ki_lat 0.4             # raise slowly
    ```
 4. **Terminal phase check.** With `lock_heading` engaged and a yaw-less terminal
    `align`, confirm Ch4 is steady (no vision-yaw wobble) and the hull holds within

@@ -1,0 +1,145 @@
+"""Static checks on the COMMANDS registry.
+
+If a row references a field that isn't on Move.Goal, the dispatcher
+will explode at runtime -- catch it at unit-test time.
+"""
+
+from mongla_interfaces.action import Move
+
+from mongla_control.commands import COMMANDS, STRING_FIELDS, fields_for
+
+
+# All Move.Goal field names the COMMANDS registry is allowed to use.
+# Built dynamically from the action definition so adding a new field to
+# Move.action automatically widens this set -- no test maintenance needed.
+GOAL_FIELDS = set(Move.Goal.get_fields_and_field_types().keys()) - {'cmd'}
+
+
+def test_every_field_is_on_move_goal():
+    for cmd, spec in COMMANDS.items():
+        for field in spec['fields']:
+            assert field in GOAL_FIELDS, (
+                f'{cmd!r} declares unknown Move.Goal field {field!r}')
+
+
+def test_defaults_are_subset_of_fields():
+    for cmd, spec in COMMANDS.items():
+        for field in spec['defaults']:
+            assert field in spec['fields'], (
+                f'{cmd!r} has default for non-listed field {field!r}')
+
+
+def test_fields_for_substitutes_default_when_unset():
+    goal = Move.Goal()
+    goal.cmd = 'move_forward'
+    goal.duration = 5.0
+    # gain + settle left as rosidl default 0.0 -> dispatcher should fill defaults
+    kwargs = fields_for('move_forward', goal)
+    assert kwargs == {'duration': 5.0, 'gain': 80.0, 'settle': 0.0}
+
+
+def test_arc_command_has_target_yaw_field():
+    """`arc` closes on an absolute heading via target_yaw (not a yaw-rate stick)."""
+    spec = COMMANDS['arc']
+    assert 'target_yaw' in spec['fields']
+    assert spec['defaults']['target_yaw'] == 0.0
+    assert 'yaw_rate_pct' not in spec['fields']   # removed from arc
+
+
+def test_lock_unlock_heading_registered():
+    """heading-lock pair must round-trip through the registry."""
+    assert 'lock_heading'   in COMMANDS
+    assert 'unlock_heading' in COMMANDS
+    assert COMMANDS['unlock_heading']['fields'] == []
+    assert COMMANDS['lock_heading']['defaults']['timeout'] == 300.0
+
+
+def test_fields_for_keeps_explicit_zero_when_no_default():
+    """`set_depth` has no default for `target`; an explicit 0.0 must
+    survive (hold at surface is a valid command)."""
+    goal = Move.Goal()
+    goal.cmd = 'set_depth'
+    goal.target = 0.0
+    goal.timeout = 0.0   # rosidl-zero -> default 30.0 substituted
+    kwargs = fields_for('set_depth', goal)
+    assert kwargs == {'target': 0.0, 'timeout': 30.0, 'settle': 0.0}
+
+
+def test_fields_for_string_field_uses_default_when_empty():
+    goal = Move.Goal()
+    goal.cmd = 'set_mode'
+    goal.target_name = 'ALT_HOLD'
+    # timeout 0.0 -> 8.0
+    kwargs = fields_for('set_mode', goal)
+    assert kwargs == {'target_name': 'ALT_HOLD', 'timeout': 8.0}
+
+
+# vision_align: surge_sign / max_depth_m / depth_ceiling_m are now deck tunables
+# (vision.*). The manager's runtime_defaults substitute them when the goal leaves
+# them at the rosidl zero -- exactly the layered-default path this asserts.
+def test_vision_align_downward_fields_in_spec():
+    fields = COMMANDS['vision_align']['fields']
+    for f in ('surge_sign', 'max_depth_m', 'depth_ceiling_m'):
+        assert f in fields
+
+
+def test_vision_align_surge_sign_substituted_when_omitted():
+    goal = Move.Goal()
+    goal.cmd = 'vision_align'
+    # surge_sign left at rosidl 0.0 -> manager's vision.surge_sign (-1) fills it.
+    rd = {'surge_sign': -1.0, 'max_depth_m': 0.0, 'depth_ceiling_m': 0.0}
+    kwargs = fields_for('vision_align', goal, runtime_defaults=rd)
+    assert kwargs['surge_sign'] == -1.0
+    # forward-safe: depth bounds stay 0.0 (OFF) unless a mission sets them
+    assert kwargs['max_depth_m'] == 0.0
+    assert kwargs['depth_ceiling_m'] == 0.0
+
+
+def test_vision_align_explicit_surge_sign_wins_over_tunable():
+    goal = Move.Goal()
+    goal.cmd = 'vision_align'
+    goal.surge_sign = 1.0                      # a mission that DID pass +1
+    rd = {'surge_sign': -1.0}
+    kwargs = fields_for('vision_align', goal, runtime_defaults=rd)
+    assert kwargs['surge_sign'] == 1.0         # non-zero request is not overridden
+
+
+def test_vision_align_depth_bounds_substituted_when_mission_sets_them():
+    goal = Move.Goal()
+    goal.cmd = 'vision_align'
+    rd = {'max_depth_m': -1.6, 'depth_ceiling_m': -0.4}   # bin run set them at start
+    kwargs = fields_for('vision_align', goal, runtime_defaults=rd)
+    assert kwargs['max_depth_m'] == -1.6
+    assert kwargs['depth_ceiling_m'] == -0.4
+
+
+def test_string_fields_constant_matches_actual_string_typed_fields():
+    """STRING_FIELDS controls how `fields_for` detects "unset". If a
+    new string field is added to Move.Goal, it must be added here too,
+    or numeric defaulting will misfire on it."""
+    assert 'target_name' in STRING_FIELDS
+
+
+def test_only_two_vision_verbs_registered():
+    """The vision subsystem is exactly vision_align + vision_move now;
+    every legacy verb must be gone (no aliases, no back-compat)."""
+    assert 'vision_align' in COMMANDS
+    assert 'vision_move' in COMMANDS
+    for legacy in ('vision_align_3d', 'vision_acquire', 'look_around',
+                   'vision_track_axes', 'vision_lock_fire', 'vision_align_yaw'):
+        assert legacy not in COMMANDS, f'legacy vision verb {legacy!r} still registered'
+
+
+def test_vision_align_fields():
+    spec = COMMANDS['vision_align']
+    for f in ('camera', 'target_class', 'axes',
+              'offset_lat', 'offset_yaw', 'offset_depth',
+              'err_px', 'duration', 'gain'):
+        assert f in spec['fields'], f'vision_align missing field {f!r}'
+
+
+def test_vision_move_fields():
+    spec = COMMANDS['vision_move']
+    for f in ('camera', 'target_class', 'fwd_fill', 'mode',
+              'maintain_px', 'hold_s', 'err_px', 'duration', 'gain'):
+        assert f in spec['fields'], f'vision_move missing field {f!r}'

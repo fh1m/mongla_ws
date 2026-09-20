@@ -110,7 +110,7 @@ def run_arm(label, gray, cal, medium, rectify, n_warp, steps, step_m, height):
     """One arm: warp with `n_warp`, measure with the node in `medium`."""
     import rclpy
     from rclpy.parameter import Parameter
-    from duburi_vision.distance.flow_node import FlowVelocityNode
+    from mongla_vision.distance.flow_node import FlowVelocityNode
 
     raw = json.load(open(cal))
     s = gray.shape[1] / raw['image_width']
@@ -173,9 +173,9 @@ def run_arm(label, gray, cal, medium, rectify, n_warp, steps, step_m, height):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--device', default='/dev/duburi_cam_downward')
+    ap.add_argument('--device', default='/dev/mongla_cam_downward')
     ap.add_argument('--calibration', default=os.path.expanduser(
-        '~/duburi_ws/src/duburi_vision/config/calibration/'
+        '~/mongla_ws/src/mongla_vision/config/calibration/'
         'pi_downward_1280x720.json'))
     ap.add_argument('--width', type=int, default=640)
     ap.add_argument('--height-px', type=int, default=360)

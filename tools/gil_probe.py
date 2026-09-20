@@ -40,7 +40,7 @@ import time
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..',
-                                'src', 'duburi_vision'))
+                                'src', 'mongla_vision'))
 
 
 _TICK_S = 0.001          # what the sampler ASKS for
@@ -109,7 +109,7 @@ def main():
     ap.add_argument('--seconds', type=float, default=4.0)
     a = ap.parse_args()
 
-    from duburi_vision.detection.factory import make_detector
+    from mongla_vision.detection.factory import make_detector
     det = make_detector(model_path=a.model, conf=0.15, max_det=100,
                         class_allowlist=None, device='cpu', half=False)
     frame = np.zeros((360, 640, 3), np.uint8)

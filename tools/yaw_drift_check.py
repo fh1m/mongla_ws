@@ -21,7 +21,7 @@ A run that was mostly not-quiet reports that fact instead of a number.
 import sys, time, math, json
 import rclpy
 from rclpy.node import Node
-from duburi_interfaces.msg import DuburiState
+from mongla_interfaces.msg import MonglaState
 from geometry_msgs.msg import Vector3Stamped
 
 DUR = float(sys.argv[1]) if len(sys.argv) > 1 else 480.0
@@ -37,8 +37,8 @@ class W(Node):
         self.y = []          # (t, yaw_deg)
         self.g = []          # (t, |omega|)
         self.t0 = time.monotonic()
-        self.create_subscription(DuburiState, '/duburi/state', self.cb_y, 10)
-        self.create_subscription(Vector3Stamped, '/duburi/imu_rates', self.cb_g, 20)
+        self.create_subscription(MonglaState, '/mongla/state', self.cb_y, 10)
+        self.create_subscription(Vector3Stamped, '/mongla/imu_rates', self.cb_g, 20)
 
     def cb_y(self, m):
         v = float(m.yaw_deg)
@@ -106,7 +106,7 @@ ty = [a for a, _ in n.y]; yy = unwrap([b for _, b in n.y])
 
 # --- stillness, MEASURED -------------------------------------------------- #
 if not n.g:
-    print("NO /duburi/imu_rates -- cannot verify stillness. REFUSING to report a drift.")
+    print("NO /mongla/imu_rates -- cannot verify stillness. REFUSING to report a drift.")
     print("Absence of a stillness check is not evidence of stillness.")
     sys.exit(3)
 gw = [w for _, w in n.g]

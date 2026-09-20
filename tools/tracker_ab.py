@@ -18,7 +18,7 @@ pipeline drops a different frame subset each run).
     # then compare, as many times as you like, on identical input
     python3 tools/tracker_ab.py --cache /tmp/bin.npz --compare
 
-What is reported is the CONTINUITY report from `duburi_vision.continuity` --
+What is reported is the CONTINUITY report from `mongla_vision.continuity` --
 the same ruler used for the raw detector -- so "how much did tracking buy" is
 answered in the units the lock ladder is written in.
 """
@@ -30,9 +30,9 @@ import time
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..',
-                                'src', 'duburi_vision'))
+                                'src', 'mongla_vision'))
 
-from duburi_vision.continuity import Obs, analyse    # noqa: E402
+from mongla_vision.continuity import Obs, analyse    # noqa: E402
 
 
 def cache_detections(a):
@@ -159,8 +159,8 @@ def compare(a):
     # returns -- which is the entire coast layer. Comparing the bare library
     # would measure something we do not ship, and would have reported that
     # tracking buys nothing when the wrapper is what does the work.
-    from duburi_vision.tracking.roboflow_tracker import RoboflowTracker
-    from duburi_vision.detection.detector import Detection
+    from mongla_vision.tracking.roboflow_tracker import RoboflowTracker
+    from mongla_vision.detection.detector import Detection
 
     def _wrapped(ttype, min_hits=3):
         def make():
@@ -207,7 +207,7 @@ def compare(a):
     print(f'    {"arm":<32} {"presence":>9} {"p50 gap":>9} {"p90 gap":>9}'
           f' {">coast":>7} {">lost":>6} {"switch":>7}')
     for r in reports:
-        from duburi_vision.continuity import _pct
+        from mongla_vision.continuity import _pct
         d = [g.duration for g in r.gaps]
         print(f'    {r.label:<32} {100 * r.presence:8.1f}% '
               f'{1000 * _pct(d, 50):8.0f}ms {1000 * _pct(d, 90):8.0f}ms '

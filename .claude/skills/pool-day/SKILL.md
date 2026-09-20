@@ -12,27 +12,27 @@ surface any failure with the specific fix. **Never arm thrusters from this skill
 
 1. **Network + serial + sensors**
    ```bash
-   ros2 run duburi_manager bringup_check
+   ros2 run mongla_manager bringup_check
    ```
    Pings Pi/Jetson IPs, sniffs UDP 14550 for an active MAVLink stream, lists Pixhawk USB
    devices, tests BNO085 auto-detection. Exit 0 = all clear. Report each sub-check.
 
 2. **Heartbeat / telemetry**
    ```bash
-   timeout 5 ros2 topic hz /duburi/state
+   timeout 5 ros2 topic hz /mongla/state
    ```
    Expect ~1 Hz (or faster on change). No messages → manager not up or MAVLink dead.
 
 3. **State sanity**
    ```bash
-   timeout 3 ros2 topic echo /duburi/state --once
+   timeout 3 ros2 topic echo /mongla/state --once
    ```
    Confirm `armed: false`, a plausible `mode`, finite `yaw_deg` / `depth_m`, battery > 0.
 
 4. **Vision topics** (if running vision)
    ```bash
-   ros2 topic list | grep duburi/vision
-   timeout 5 ros2 topic hz /duburi/vision/forward/image_raw
+   ros2 topic list | grep mongla/vision
+   timeout 5 ros2 topic hz /mongla/vision/forward/image_raw
    ```
    Expect `pub≈30Hz`. Detector + tracking topics present.
 

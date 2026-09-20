@@ -1,0 +1,74 @@
+# Port-stable camera identity: /dev/mongla_cam_forward and _downward.
+#
+# WHY THIS FILE EXISTS. `cameras.yaml` has always named the cameras by
+# `/dev/v4l/by-path/platform-xhci-hcd.N-usb-...`, and those ID_PATH values are
+# CORRECT -- udevadm reports exactly them. But Raspberry Pi OS's udev rules
+# create only `/dev/v4l/by-id/` for USB video, never `/dev/v4l/by-path/`. So on
+# this Pi both profiles named a symlink the distro does not make, both fell
+# through to the integer index, and BOTH CAMERAS RESOLVED TO /dev/video0 --
+# whichever node started first won and the other died with "failed to open".
+# That is worse than the swap the by-path convention exists to prevent.
+#
+# WHY NOT by-id. The vehicle carries TWO IDENTICAL Blue Robotics cameras and
+# the Sonix module already here reports `SN0001` -- a serial the vendor did not
+# bother to make unique. by-id cannot tell two of them apart; the USB PORT can,
+# which is the whole point of by-path.
+#
+# ID_PATH is the physical port, so re-plugging into the SAME socket keeps the
+# name and moving to another socket changes it. That is the intended behaviour:
+# a camera in the wrong port should be an error, not a silent swap.
+#
+# index0 only: a UVC camera exposes a second /dev/video* node for metadata that
+# cannot capture, and opening it looks exactly like a dead camera.
+#
+#   sudo cp tools/udev/99-mongla-cameras.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=video4linux
+#   ls -l /dev/mongla_cam_*
+#
+# Re-derive the ports for a new build with:
+#   udevadm info -n /dev/videoN | grep ID_PATH=
+
+SUBSYSTEM!="video4linux", GOTO="mongla_cam_end"
+ATTR{index}!="0", GOTO="mongla_cam_end"
+
+# ⛔ BOTH LINES WERE WRONG, and they failed in two different ways.
+#
+# MEASURED on the vehicle 2026-09-07 (`udevadm info -n /dev/videoN`):
+#
+#   Sonix "USB_2.0_Camera"    ID_PATH=platform-xhci-hcd.1-usb-0:1:1.0
+#   Fantech_Luminous_C30      ID_PATH=platform-xhci-hcd.0-usb-0:1:1.0
+#
+# 1. The old `forward` line named `hcd.1-usb-0:2:1.0`, which MATCHES NO
+#    DEVICE. So udev never created that symlink and the one on the box was
+#    hand-made and stale -- it survived only because nothing checked.
+# 2. The old `downward` line matched the Fantech, but the FANTECH IS THE
+#    FORWARD CAMERA. The global-shutter Sonix is the BOTTOM one.
+#
+# So the two cameras were SWAPPED IN SOFTWARE: `pi_forward` opened the bottom
+# camera and `pi_downward` opened the forward one, while every node, launch
+# file and mission looked entirely correct.
+#
+# That is not a cosmetic swap. The bottom camera is the optical-flow velocity
+# sensor (our DVL substitute). A GLOBAL shutter is what makes that work -- a
+# rolling shutter skews the frame while the hull moves and corrupts the very
+# displacement flow is measuring -- and the Sonix is also the only one of the
+# two that exceeds 30 Hz. Measured: Sonix MJPG 640x360 210.17 Hz, Fantech a
+# flat 15.00 Hz in EVERY format and resolution.
+#
+# MATCH ON THE MODEL, NOT THE PORT, WHILE THE TWO UNITS ARE DIFFERENT MODELS.
+# The by-port scheme below is the right answer only for two IDENTICAL cameras
+# (the vehicle's future pair of Blue Robotics units, whose serials are not
+# unique). Today the models differ, so the model is both more specific and
+# port-independent: moving a camera to another socket keeps it correct instead
+# of silently renaming it.
+ENV{ID_MODEL}=="Fantech_Luminous_C30", SYMLINK+="mongla_cam_forward"
+ENV{ID_MODEL}=="USB_2.0_Camera",       SYMLINK+="mongla_cam_downward"
+
+# When the two identical Blue Robotics cameras land, the model stops
+# discriminating and these take over. Re-derive each ID_PATH on the real build
+# (`udevadm info -n /dev/videoN | grep ID_PATH=`) -- do NOT copy these values,
+# one of them was wrong for exactly that reason.
+#ENV{ID_PATH}=="platform-xhci-hcd.0-usb-0:1:1.0", SYMLINK+="mongla_cam_forward"
+#ENV{ID_PATH}=="platform-xhci-hcd.1-usb-0:1:1.0", SYMLINK+="mongla_cam_downward"
+
+LABEL="mongla_cam_end"

@@ -1,0 +1,47 @@
+name: task_navigation
+description: >
+  Navigation task in isolation: the gate at ~16 m from the starting zone with the
+  orange flare as the obstacle, and nothing else in the water.
+
+  Drill the gate approach without the drums and bump flares in frame to confuse
+  the detector. Clear-ish water so a failure here is a control or alignment
+  failure, not a perception one -- move to sauvc26_final for the murky version.
+
+  SHORT RANGE ON PURPOSE. sauvc26_final holds the rulebook's ~16 m start-to-gate
+  distance; this course puts the gate at 7 m so a run is a gate approach and not
+  90 s of open-water transit first. The two are meant to be used together: drill
+  here, verify the real distance there.
+
+pool: sauvc
+
+scene:
+  lighting: competition
+  # fog_* is inert on gz-sim 8; `lighting:` above is the real lever
+  fog_start: 2.0
+  fog_end: 22.0
+  fog_density: 0.018
+
+vehicle:
+  model: mongla_heavy
+  name: mongla
+  pose: [-11.8, 0.0, -0.4]
+  yaw: 0.0
+
+props:
+  - model: sauvc_starting_zone
+    name: start
+    xy: [-11.8, 0.0]
+
+  # 7 m from the start, NOT the rulebook's ~16 m -- see the description. Long
+  # enough that the gate starts outside a murky-water detection range and has to
+  # be acquired, short enough that a failed approach costs seconds to retry.
+  - model: sauvc_final_gate
+    name: gate
+    xy: [-4.8, 0.0]
+
+  # Rulebook: "4m-8m from side of the arena, before the gate". y = 0 is 8 m from
+  # either wall -- the legal limit, and the only placement that actually sits on
+  # the approach line. 2 m short of the gate.
+  - model: sauvc_orange_flare
+    name: flare_obstacle
+    xy: [-6.8, 0.0]

@@ -33,8 +33,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-WS = os.path.expanduser('~/duburi_ws/src')
-for _p in ('duburi_control', 'duburi_vision', 'duburi_manager'):
+WS = os.path.expanduser('~/mongla_ws/src')
+for _p in ('mongla_control', 'mongla_vision', 'mongla_manager'):
     _q = os.path.join(WS, _p)
     if _q not in sys.path:
         sys.path.insert(0, _q)
@@ -43,12 +43,12 @@ import cv2                                                      # noqa: E402
 cv2.setNumThreads(0)
 from pymavlink import mavutil                                   # noqa: E402
 
-from duburi_control.bearing import (                            # noqa: E402
+from mongla_control.bearing import (                            # noqa: E402
     BearingFilter, bearing_from_pixels)
-from duburi_control.fc import srot_protocol as sp               # noqa: E402
-from duburi_control.fc.port_guard import PortGuard              # noqa: E402
-from duburi_control.fc.srot_fc import SrotFC                    # noqa: E402
-from duburi_vision.detection.factory import make_detector       # noqa: E402
+from mongla_control.fc import srot_protocol as sp               # noqa: E402
+from mongla_control.fc.port_guard import PortGuard              # noqa: E402
+from mongla_control.fc.srot_fc import SrotFC                    # noqa: E402
+from mongla_vision.detection.factory import make_detector       # noqa: E402
 from srot_console_server import (                               # noqa: E402
     SERIAL_CAPACITY_BPS, BoardTelemetry, HostStats)
 from _where import where                                        # noqa: E402
@@ -66,7 +66,7 @@ A = ap.parse_args()
 
 W, H = 640, 360
 DEADBAND_DEG = 2.5
-CAL = os.path.expanduser('~/duburi_ws/src/duburi_vision/config/'
+CAL = os.path.expanduser('~/mongla_ws/src/mongla_vision/config/'
                          'calibration/pi_downward_1280x720.json')
 
 K = D = None

@@ -10,8 +10,8 @@ __pycache__/
 .pytest_cache/
 
 # generated pool textures are large; regenerate with
-#   ros2 run duburi_sim_worlds gen_pool_texture.py
-src/duburi_sim_worlds/models/*/materials/textures/*_generated.png
+#   ros2 run mongla_sim_worlds gen_pool_texture.py
+src/mongla_sim_worlds/models/*/materials/textures/*_generated.png
 
 # camera dataset dumps from record_cameras
 datasets/
@@ -23,8 +23,8 @@ logs/
 *.mcap
 
 # web UI build artifacts / deps
-src/duburi_sim_web/frontend/node_modules/
-src/duburi_sim_web/frontend/dist/
+src/mongla_sim_web/frontend/node_modules/
+src/mongla_sim_web/frontend/dist/
 
 # editor / tooling
 .vscode/

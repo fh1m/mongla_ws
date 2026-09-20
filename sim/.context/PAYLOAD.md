@@ -2,32 +2,32 @@
 
 Until now the payload was the one part of the autonomy stack with **no
 simulated path at all**. `PayloadDriver` talks to an ESP32 over a CH340 serial
-port, so `duburi.fire()` — and with it `align(fire=…, fire_t=…)`, the mid-hold
+port, so `mongla.fire()` — and with it `align(fire=…, fire_t=…)`, the mid-hold
 shot with its `is_new_frame` gating and `fire_pass` fallback — had never once
 executed outside the pool.
 
-`duburi_sim_bridge/payload_sim.py` closes that. It starts with the rest of the
+`mongla_sim_bridge/payload_sim.py` closes that. It starts with the rest of the
 sim (`payload:=false` to disable it).
 
 ## Using it
 
-Nothing to configure. `duburi_sim stack` already defaults `payload_port` to the
+Nothing to configure. `mongla_sim stack` already defaults `payload_port` to the
 virtual board, so the manager finds it the way it finds the CH340 on the
 vehicle:
 
 ```bash
-ros2 run duburi_sim_bringup duburi_sim sim
-ros2 run duburi_sim_bringup duburi_sim stack --no-vision
-#   [PAYLOAD] verified + connected on /tmp/duburi-$USER/payload
+ros2 run mongla_sim_bringup mongla_sim sim
+ros2 run mongla_sim_bringup mongla_sim stack --no-vision
+#   [PAYLOAD] verified + connected on /tmp/mongla-$USER/payload
 ```
 
 Then everything works exactly as on the vehicle:
 
 ```bash
-ros2 run duburi_planner duburi arm
-ros2 run duburi_planner duburi fire --fire_channel 3
+ros2 run mongla_planner mongla arm
+ros2 run mongla_planner mongla fire --fire_channel 3
 #   fire -> OK  msg="fire: ch=3 (dropper_1) FIRED"
-ros2 topic echo /duburi/sim/payload/fired           # every shot, as an Int32
+ros2 topic echo /mongla/sim/payload/fired           # every shot, as an Int32
 ```
 
 The disarmed interlock still applies -- `fire` before `arm` fails with
@@ -35,7 +35,7 @@ The disarmed interlock still applies -- `fire` before `arm` fails with
 
 `payload_port:=auto` restores USB VID/PID scanning if you ever want it.
 
-`duburi.payload_ready()` returns True, and a mission's
+`mongla.payload_ready()` returns True, and a mission's
 `align(target, fwd=…, hold=…, fire=1, fire_t=…)` fires for real.
 
 ## Why a PTY, and not a sim-only fire path
@@ -46,7 +46,7 @@ existing `pyserial` code opens exactly as it opens the CH340: same `Serial()`
 setup, same DTR/RTS suppression, same `VERIFY_BYTE` probe, same single-digit
 write, same reconnect-and-retry path.
 
-Nothing in `duburi_control` changes, and that is the entire point — a sim-only
+Nothing in `mongla_control` changes, and that is the entire point — a sim-only
 fire path would test sim code rather than the code that flies.
 
 ## What a shot actually does
@@ -63,7 +63,7 @@ by a log line saying a byte was written.
 Verify against a running sim:
 
 ```bash
-python3 src/duburi_sim_worlds/scripts/payload_check.py
+python3 src/mongla_sim_worlds/scripts/payload_check.py
 # PASS: real driver -> PTY -> ROS topic -> a body that reaches the board at depth
 ```
 
@@ -167,7 +167,7 @@ The **serial and ROS path is exact** (it is the flight driver). The
 
 ## Scoring a shot
 
-`/duburi/sim/score` grades every fired round, to the handbook (p. 36):
+`/mongla/sim/score` grades every fired round, to the handbook (p. 36):
 
 > "Points are awarded for firing torpedoes through any opening. A torpedo must
 > pass through the opening for full points. Partial points are awarded if the

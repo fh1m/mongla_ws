@@ -6,19 +6,19 @@ Two things to establish, and only one of them is about code:
      where the pinhole answer is independently computable from fx and cx
 """
 import math, sys, threading, time
-sys.path.insert(0, '/home/fh1m/duburi_ws/src/duburi_control')
-sys.path.insert(0, '/home/fh1m/duburi_ws/src/duburi_vision')
+sys.path.insert(0, '/home/fh1m/mongla_ws/src/mongla_control')
+sys.path.insert(0, '/home/fh1m/mongla_ws/src/mongla_vision')
 import numpy as np, cv2
 cv2.setNumThreads(0)
 from pymavlink import mavutil
-from duburi_control.fc import srot_protocol as sp
-from duburi_control.fc.srot_fc import SrotFC
-from duburi_control.fc.port_guard import PortGuard
-from duburi_control.bearing import bearing_from_pixels
-from duburi_vision.detection.factory import make_detector
+from mongla_control.fc import srot_protocol as sp
+from mongla_control.fc.srot_fc import SrotFC
+from mongla_control.fc.port_guard import PortGuard
+from mongla_control.bearing import bearing_from_pixels
+from mongla_vision.detection.factory import make_detector
 import json
 
-cal = json.load(open('/home/fh1m/duburi_ws/src/duburi_vision/config/calibration/pi_downward_1280x720.json'))
+cal = json.load(open('/home/fh1m/mongla_ws/src/mongla_vision/config/calibration/pi_downward_1280x720.json'))
 Kc, D = cal['camera_matrix'], cal['distortion_coefficients']
 CW, CH = cal['image_width'], cal['image_height']
 

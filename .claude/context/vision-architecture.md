@@ -1,4 +1,4 @@
-# Vision Architecture (`duburi_vision`)
+# Vision Architecture (`mongla_vision`)
 
 > **Backend note.** The vehicle is the SROT board (firmware Hengla) + a Raspberry Pi 5 with a
 > Hailo-8. `lock_heading`, `move_*_dist`, `arc` and `style_yaw` are **refused** there, `ALT_HOLD`
@@ -7,18 +7,18 @@
 > legacy path is [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md).
 
 Authoritative design notes for the perception package. Mirrors the
-`duburi_sensors` pattern: ABC + factory + per-source class + standalone
+`mongla_sensors` pattern: ABC + factory + per-source class + standalone
 diagnostic node.
 
 ## File map
 
 ```
-src/duburi_vision/duburi_vision/
+src/mongla_vision/mongla_vision/
   factory.py             # make_camera(name, **kw) + BUILDERS dict
   config.py              # CAMERA_PROFILES dict (mirrors config/cameras.yaml)
   draw.py                # cv2/supervision overlays — rich annotator suite + AUV instruments
-                         #   draw_depth_gauge()   vertical depth slider (DuburiState.depth_m)
-                         #   draw_heading_tape()  horizontal compass tape (DuburiState.yaw_deg)
+                         #   draw_depth_gauge()   vertical depth slider (MonglaState.depth_m)
+                         #   draw_heading_tape()  horizontal compass tape (MonglaState.yaw_deg)
                          #   draw_classes_panel() configured-class list; detected classes light up
   camera_node.py         # publish image_raw + camera_info
   detector_node.py       # subscribe image_raw -> detections + image_debug
@@ -72,38 +72,38 @@ test/
 
 Naming rule: every file is named after the thing inside it. No `base.py`,
 no `to_ros.py`, no `nodes/` or `viz/` subfolders. Per-user request,
-`duburi_sensors` is NOT renamed to match.
+`mongla_sensors` is NOT renamed to match.
 
 ## Topic contract
 
 ```
-/duburi/vision/<cam>/image_raw        sensor_msgs/Image            (camera_node)
-/duburi/vision/<cam>/camera_info      sensor_msgs/CameraInfo       (camera_node)
-/duburi/vision/<cam>/detections       vision_msgs/Detection2DArray (detector_node)
-/duburi/vision/<cam>/classes_filter   std_msgs/String              (detector_node, CSV class list)
-/duburi/vision/<cam>/tracks           vision_msgs/Detection2DArray (tracker_node, optional)
-/duburi/vision/<cam>/vis_range        std_msgs/Float32MultiArray   (depth_estimation_node, one float per detection, 0=far 1=close)
-/duburi/vision/<cam>/vis_range_map    sensor_msgs/Image            (depth_estimation_node, float32 depth map, debug only)
-/duburi/vision/<cam>/image_debug      sensor_msgs/Image            (detector_node, rate-limited)
+/mongla/vision/<cam>/image_raw        sensor_msgs/Image            (camera_node)
+/mongla/vision/<cam>/camera_info      sensor_msgs/CameraInfo       (camera_node)
+/mongla/vision/<cam>/detections       vision_msgs/Detection2DArray (detector_node)
+/mongla/vision/<cam>/classes_filter   std_msgs/String              (detector_node, CSV class list)
+/mongla/vision/<cam>/tracks           vision_msgs/Detection2DArray (tracker_node, optional)
+/mongla/vision/<cam>/vis_range        std_msgs/Float32MultiArray   (depth_estimation_node, one float per detection, 0=far 1=close)
+/mongla/vision/<cam>/vis_range_map    sensor_msgs/Image            (depth_estimation_node, float32 depth map, debug only)
+/mongla/vision/<cam>/image_debug      sensor_msgs/Image            (detector_node, rate-limited)
 ```
 
 `/classes_filter` is published once at `detector_node` startup with the initial `classes` param,
-and re-published on every live `ros2 param set /duburi_detector_<camera> classes <...>` change. Any
+and re-published on every live `ros2 param set /mongla_detector_<camera> classes <...>` change. Any
 consumer — `vision_display`, logging nodes, future HUD overlays — can subscribe to get the
 current class filter without polling `ros2 param get`. This means class changes from CLI, DSL
-(`duburi.set_classes()`), or mission code (`duburi.models(...)`) all propagate automatically.
+(`mongla.set_classes()`), or mission code (`mongla.models(...)`) all propagate automatically.
 
 ### Mission console (`mission_web`) — HTTP surface, not a ROS topic
 
 `mission_web` (`web/mission_web_node.py`) is a monitoring+control node, not part of the
 mission path. It SUBSCRIBES `detections`, `vis_range`, `camera_info` per camera + latched
-`/duburi/vision/active_camera` + `/duburi/state`, and POLLS the detector params it reflects
+`/mongla/vision/active_camera` + `/mongla/state`, and POLLS the detector params it reflects
 (`active_model`/`conf`/`models`/`paused`/**`classes`**) at 1 Hz via `get_parameters`. NOTE:
 `classes` is polled, **not** read from `/classes_filter` — that topic is published VOLATILE
 (depth 10), so a TRANSIENT_LOCAL sub gets nothing (durability mismatch) and a VOLATILE sub
 misses the retained startup value on a late join → the console showed empty class chips.
 Polling the `classes` param is join-order-proof. It WRITES control through the **exact DSL
-surface** — `SetParameters` on `/duburi_detector_<cam>` and the latched `active_camera`
+surface** — `SetParameters` on `/mongla_detector_<cam>` and the latched `active_camera`
 publish + pause-others/resume-target — so UI and DSL converge. Video is served by a
 co-launched `web_video_server` (MJPEG of `image_debug`, `:8080`); the node never touches
 image bytes. Browser routes (`:8090`): `GET /` + `/static/*` (SPA), `GET /events` (SSE
@@ -125,8 +125,8 @@ console to watch/plan/tune.
 - Entries with `score=0.0` are Kalman-only predictions (detector missed that frame)
 
 **The vision control loop reads `/detections` first; `/tracks` only fills a gap
-when `vision.coast_s>0`.** `VisionState` (in `duburi_manager`) subscribes
-`/duburi/vision/<cam>/detections` (primary, authoritative) + `camera_info`, and
+when `vision.coast_s>0`.** `VisionState` (in `mongla_manager`) subscribes
+`/mongla/vision/<cam>/detections` (primary, authoritative) + `camera_info`, and
 computes `bbox_error()` in normalized pixels via `info_seen()`-gated scaling — so
 a box visible on the operator HUD is a box the controller acts on. It **also**
 subscribes `/tracks` as the **coast source**, but consults it ONLY when
@@ -197,7 +197,7 @@ sit in `models/`. On the Pi 5 raw PyTorch @640 is ~3-4 Hz
 ```
 
 Engines are **device + TRT/JetPack-version locked** — build them ON the Pi
-(`ros2 run duburi_vision export_engine --all`, FP16, imgsz must match the
+(`ros2 run mongla_vision export_engine --all`, FP16, imgsz must match the
 detector's `imgsz`), rebuild after a JetPack/TRT upgrade, and never commit them
 (`*.engine` gitignored). A dev box without an engine falls back to `.pt`
 transparently. Also set MAXN: `sudo nvpmodel -m 0 && sudo jetson_clocks`
@@ -240,7 +240,7 @@ the per-frame safety guard, complementary to the arrival brake (end-of-command).
    - Depth gauge (22×72 px, 0–5 m scale): fill + indicator line, always visible with `?` when no data; updates at 20 Hz
  - Footer: full-width heading tape (±60°, cardinal marks, 3-digit readout above center)
 
-**Real-time instruments**: `auv_manager_node` publishes `/duburi/state` at 20 Hz via
+**Real-time instruments**: `auv_manager_node` publishes `/mongla/state` at 20 Hz via
 `_fast_state_tick()` (fresh AHRS2 yaw + depth, reusing cached armed/mode/battery). The slower
 `telemetry_tick` at 2 Hz handles logging and armed/mode/battery cache updates. This keeps the
 compass needle and depth bar latency under 50 ms even though a full telemetry log line only
@@ -259,7 +259,7 @@ into a bug report.
 
 ### Model files
 
-Drop `<stem>.pt` + `<stem>.yaml` pairs into `src/duburi_vision/models/`.
+Drop `<stem>.pt` + `<stem>.yaml` pairs into `src/mongla_vision/models/`.
 The YAML maps integer class ids to human names:
 
 ```yaml
@@ -271,20 +271,20 @@ names:
 The detector logs the full class table at startup. Pass the **stem** (no `.pt`):
 
 ```bash
-ros2 launch duburi_vision vision.launch.py camera:=forward model:=gate_v1 classes:=gate
-ros2 launch duburi_vision vision.launch.py camera:=forward model:=flare_v1 classes:=flare
-ros2 launch duburi_vision vision.launch.py camera:=forward model:=gate_flare_v1 classes:=gate,flare
+ros2 launch mongla_vision vision.launch.py camera:=forward model:=gate_v1 classes:=gate
+ros2 launch mongla_vision vision.launch.py camera:=forward model:=flare_v1 classes:=flare
+ros2 launch mongla_vision vision.launch.py camera:=forward model:=gate_flare_v1 classes:=gate,flare
 ```
 
 ### Switching class filter live
 
 The `classes` param is a post-inference allowlist — the model runs its full
 forward pass; only matching boxes are published. Change it without restarting
-(node = `/duburi_detector_<camera>`):
+(node = `/mongla_detector_<camera>`):
 
 ```bash
-ros2 param set /duburi_detector_forward classes gate
-ros2 param set /duburi_detector_forward classes "gate,flare"
+ros2 param set /mongla_detector_forward classes gate
+ros2 param set /mongla_detector_forward classes "gate,flare"
 ```
 
 ### Offline testing with `video_file`
@@ -292,7 +292,7 @@ ros2 param set /duburi_detector_forward classes "gate,flare"
 Run the full pipeline on a pre-recorded `.mp4` / `.avi`:
 
 ```bash
-ros2 launch duburi_vision vision.launch.py camera:=forward \
+ros2 launch mongla_vision vision.launch.py camera:=forward \
     video_file:=/tmp/pool_run.mp4 model:=gate_v1 classes:=gate
 ```
 
@@ -336,26 +336,26 @@ box.
 The control loop owns thrust; the planner asks for an outcome. Vision
 verbs are the bridge. The 2026-06 rewrite replaced the old 9-verb axis API
 with **exactly two** pixel-native verbs, `vision_align` and `vision_move`,
-backed by two loops in `duburi_control/motion_vision.py`:
+backed by two loops in `mongla_control/motion_vision.py`:
 
 | Loop (`motion_vision.py`) | Action verb | Facade (`vision_verbs.py`) | DSL (`vision_dsl.py`) |
 |---------------------------|-------------|----------------------------|-----------------------|
-| `align_loop` | `vision_align` | `VisionVerbs.vision_align` | `duburi.vision.align` |
-| `move_loop`  | `vision_move`  | `VisionVerbs.vision_move`  | `duburi.vision.move`  |
+| `align_loop` | `vision_align` | `VisionVerbs.vision_align` | `mongla.vision.align` |
+| `move_loop`  | `vision_move`  | `VisionVerbs.vision_move`  | `mongla.vision.move`  |
 
 ```
 mission script
   v
-duburi.vision.align(target, yaw=0, lat=0)      # vision_dsl._VisionDSL
+mongla.vision.align(target, yaw=0, lat=0)      # vision_dsl._VisionDSL
   v
-/duburi/move action  (Move.Goal carries the vision_align / vision_move fields)
+/mongla/move action  (Move.Goal carries the vision_align / vision_move fields)
   v
 auv_manager_node
   +-- _vision_state_for(camera)        -- lazy VisionState per camera
   +-- wait_vision_state_ready(...)     -- one-time preflight, polling-only
-  +-- duburi.vision_align(...)         -- VisionVerbs mixin
+  +-- mongla.vision_align(...)         -- VisionVerbs mixin
         v
-duburi_control.motion_vision.align_loop   (move_loop for vision_move)
+mongla_control.motion_vision.align_loop   (move_loop for vision_move)
   +-- reads VisionState.bbox_error(target)            -- normalized pixel error
   +-- 20 Hz  send_rc_override / send_rc_translation (lateral / yaw / forward)
   +-- 5  Hz  set_target_depth(setpoint += clamp(ey * kp_depth))  -- align depth axis
@@ -381,9 +381,9 @@ optionally holding a lateral pixel offset (`maintain`); it never re-centres
 yaw/depth (ArduSub holds depth, the heading lock holds yaw).
 
 Search and recovery are **not** verbs: the mission DSL owns them via
-`duburi.detected()` poll loops and the `fallback=` search function passed
+`mongla.detected()` poll loops and the `fallback=` search function passed
 to either verb (see [`client-and-dsl-api.md`](client-and-dsl-api.md)).
-Model + class switching lives in `duburi_planner/model_context.py`
+Model + class switching lives in `mongla_planner/model_context.py`
 (`ClassRef` → `set_model` + `set_classes`) and runs before each goal.
 
 These two verbs plus the standalone `fire` verb (no vision — direct ESP32
@@ -415,25 +415,25 @@ down, so leave it off:
 
 ```python
 # Strafe-centre a bin under the AUV on the downward camera
-duburi.camera = 'downward'
-duburi.vision.align('bin', lat=0, err=30, duration=20)
+mongla.camera = 'downward'
+mongla.vision.align('bin', lat=0, err=30, duration=20)
 ```
 
 ### Camera switching in a mission
 
-`duburi.camera` is a sticky string attribute on `DuburiMission`. Assign it to switch which camera
-all subsequent `duburi.vision.*` calls use:
+`mongla.camera` is a sticky string attribute on `MonglaMission`. Assign it to switch which camera
+all subsequent `mongla.vision.*` calls use:
 
 ```python
 # Phase 1: gate with forward camera (default)
-duburi.camera = 'forward'
-duburi.vision.align('gate', yaw=0, lat=0, duration=15)
-duburi.vision.move('gate', fwd=80, mode='area', gain=35, duration=20)
+mongla.camera = 'forward'
+mongla.vision.align('gate', yaw=0, lat=0, duration=15)
+mongla.vision.move('gate', fwd=80, mode='area', gain=35, duration=20)
 
 # Switch to downward camera for bin task
-duburi.camera = 'downward'
-duburi.target  = 'bin'
-duburi.vision.align(lat=0, err=30, duration=20)   # target falls back to duburi.target='bin'
+mongla.camera = 'downward'
+mongla.target  = 'bin'
+mongla.vision.align(lat=0, err=30, duration=20)   # target falls back to mongla.target='bin'
 ```
 
 The camera name must match a running `camera_node` profile — verify with
@@ -442,22 +442,22 @@ The camera name must match a running `camera_node` profile — verify with
 Verifying the chain before pool day:
 
 ```
-ros2 run duburi_vision vision_check                 # detector publishing?
-ros2 run duburi_vision vision_thrust_check          # detection -> RC echo?
-ros2 run duburi_planner mission demo_find_person    # full mission rehearsal
+ros2 run mongla_vision vision_check                 # detector publishing?
+ros2 run mongla_vision vision_thrust_check          # detection -> RC echo?
+ros2 run mongla_planner mission demo_find_person    # full mission rehearsal
 ```
 
 ### Payload actuation (PayloadDriver)
 
-`duburi_control/payload.py` — write-only ESP32-C3 USB serial driver. Fires torpedoes (ch 1/2)
+`mongla_control/payload.py` — write-only ESP32-C3 USB serial driver. Fires torpedoes (ch 1/2)
 and droppers (ch 3/4) by sending ASCII digit bytes `b'1'`..`b'4'` over USB CDC.
 
 ```
-DuburiMission.fire(channel)
+MonglaMission.fire(channel)
   v
-Duburi.fire(fire_channel)            # 'fire' COMMANDS verb (command-scoped)
+Mongla.fire(fire_channel)            # 'fire' COMMANDS verb (command-scoped)
   v
-Duburi._fire_payload(channel)        # raw helper; also for mission "align then fire"
+Mongla._fire_payload(channel)        # raw helper; also for mission "align then fire"
   v
 PayloadDriver.fire(channel)          # serial.write(bytes([0x30 + channel]))
   v
@@ -471,11 +471,11 @@ excludes the BNO085 port, and connects the first match. Startup banner:
 [PAYLOAD] not found — fire() calls will log-stub only
 ```
 
-Check: `duburi.payload_ready` → `bool`.
+Check: `mongla.payload_ready` → `bool`.
 
 The `fire` verb (and the raw `_fire_payload` helper) decides:
 - `fire_channel > 0` → ESP32 serial (`PayloadDriver`)
 - `fire_channel == 0` → log-only stub
 
 There is **no** vision-fire verb. Missions compose vision with a fire call,
-e.g. `if duburi.vision.align('torpedo_hole', yaw=0, lat=0, depth=0).ok: duburi.fire(1)`.
+e.g. `if mongla.vision.align('torpedo_hole', yaw=0, lat=0, depth=0).ok: mongla.fire(1)`.

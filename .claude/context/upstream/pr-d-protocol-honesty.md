@@ -4,7 +4,7 @@
 two absences behind it that are architectural
 **Evidence:** live probe against `Hengla v0.2.0`, behaviour rev 14, on
 `/dev/ttyUSB0` at 115200, 2026-09-03. Tool: `tools/srot_mav_probe.py` in
-`duburi_ws` (`--messages`), which is in the PR branch and reproduces this in
+`mongla_ws` (`--messages`), which is in the PR branch and reproduces this in
 ~45 s.
 
 ---
@@ -102,7 +102,7 @@ Either half solves it, and we would rather have whichever is cheaper for you:
   protocol, no FTP stack, ~150 lines. Advertise nothing new.
 * **MAVFTP** — more code, but you also get param and config file transfer.
 
-We will write the host side either way; `duburi_ws` already has the .tlog
+We will write the host side either way; `mongla_ws` already has the .tlog
 recorder and replay tool that this would feed into (see PR B).
 
 ### 2. There is no common clock

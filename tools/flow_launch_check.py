@@ -12,7 +12,7 @@ So this drives ONLY the shipped surface: `distance_control` start/stop and
 the launch chose. It has no calibration argument on purpose -- if it had one,
 it would be the same mistake again.
 
-It also supplies `/duburi/state`, because on a dry bench no manager is
+It also supplies `/mongla/state`, because on a dry bench no manager is
 running and the node REFUSES without a depth (height multiplies every
 velocity it emits, so refusing is correct). `--height` is the tape measure
 from the lens to the floor.
@@ -24,7 +24,7 @@ worse -- every one of them from an automatic start/stop heuristic treating
 responsive can tell a slow hand from a still rig. Press, slide, press.
 
 Terminal A:
-    ros2 launch duburi_vision vision_pi.launch.py \
+    ros2 launch mongla_vision vision_pi.launch.py \
         flow:=true medium:=air pool_depth_m:=<height_m> forward:=false
 Terminal B:
     python3 tools/flow_launch_check.py --height <height_m> --truth-cm 30
@@ -44,13 +44,13 @@ from std_msgs.msg import Float32, String, UInt8
 from geometry_msgs.msg import TwistWithCovarianceStamped
 from rcl_interfaces.msg import Log
 
-from duburi_interfaces.msg import DuburiState
+from mongla_interfaces.msg import MonglaState
 
 
 class Check(Node):
     def __init__(self, cam, height, lateral):
         super().__init__('flow_launch_check')
-        ns = f'/duburi/vision/{cam}'
+        ns = f'/mongla/vision/{cam}'
         # ⛔ MUST MATCH THE NODE'S SUBSCRIPTION, which is RELIABLE +
         # TRANSIENT_LOCAL. A plain depth-10 publisher is VOLATILE, and rclpy
         # answers a durability mismatch with ONE warning and then silence --
@@ -65,7 +65,7 @@ class Check(Node):
             durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
         self._ctrl = self.create_publisher(String, f'{ns}/distance_control',
                                            ctrl_qos)
-        self._state = self.create_publisher(DuburiState, '/duburi/state', 10)
+        self._state = self.create_publisher(MonglaState, '/mongla/state', 10)
         self.create_subscription(Float32, f'{ns}/distance_traveled',
                                  self._on_dist, 10)
         self.create_subscription(UInt8, f'{ns}/flow_quality', self._on_q, 10)
@@ -102,11 +102,11 @@ class Check(Node):
         self.create_timer(0.1, self._tick)
 
     def _tick(self):
-        m = DuburiState()
+        m = MonglaState()
         m.header.stamp = self.get_clock().now().to_msg()
         m.depth_m = 0.0
         # ⛔ YAW MUST BE NaN, NOT ZERO. The manager also publishes
-        # /duburi/state, with the board's real heading (~180 deg here). The
+        # /mongla/state, with the board's real heading (~180 deg here). The
         # node keeps whichever arrived last, and `DistanceAccumulator`
         # projects with `e = yaw - axis_yaw`: with two publishers disagreeing
         # by 180 deg, `cos(e)` FLIPS SIGN between intervals and the

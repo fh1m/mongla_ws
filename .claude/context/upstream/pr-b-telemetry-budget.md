@@ -82,7 +82,7 @@ the ceiling on a 115200 line already carrying ~5.5 kB/s (measured).
 
 ## 4. What we do with it
 
-`duburi_ws` now records the **raw MAVLink stream both ways** to a `.tlog` and
+`mongla_ws` now records the **raw MAVLink stream both ways** to a `.tlog` and
 replays it (`tools/srot_replay.py`), reconstructing every console panel from the
 file alone. That log holds the host's decisions; yours holds the board's. With
 §1 and §2 the two together cover the whole loop.

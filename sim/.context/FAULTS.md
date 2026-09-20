@@ -16,7 +16,7 @@ ros2 param set /faults camera_loss_s 4.0        # both cameras stop
 ros2 param set /faults mavlink_loss_s 3.0       # the autopilot link drops
 ros2 param set /faults battery_sag_v 13.2       # pack sags; 0 restores nominal
 ros2 param set /t200_curve dead_thrusters "[3]" # thruster 3 fails; [0] = none
-ros2 topic echo /duburi/sim/faults              # what is currently armed
+ros2 topic echo /mongla/sim/faults              # what is currently armed
 ```
 
 A dead thruster lives on `/t200_curve` because that node is already the only
@@ -60,7 +60,7 @@ directions; with it off (the default) nothing in the fault path touches the
 link the whole session depends on.
 
 ```bash
-ros2 launch duburi_sim_bringup sim.launch.py mavlink_relay:=true
+ros2 launch mongla_sim_bringup sim.launch.py mavlink_relay:=true
 ```
 
 SIGSTOPping ArduSub would be simpler and is wrong: the FDM link is lock-stepped
@@ -69,7 +69,7 @@ just the telemetry.
 
 ## A probe that lied
 
-`/duburi/state` is **not** a MAVLink liveness probe. It kept updating at 22 Hz
+`/mongla/state` is **not** a MAVLink liveness probe. It kept updating at 22 Hz
 through a fully cut link, because with `yaw_source=sim_dvl` its yaw comes from
 Gazebo, not from the autopilot. Probe the link with something that must
 traverse it — `arm` returning `NO_ACK` is the honest test.

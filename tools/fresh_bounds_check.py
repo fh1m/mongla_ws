@@ -29,8 +29,8 @@ import rclpy
 from rclpy.node import Node
 from vision_msgs.msg import Detection2DArray
 
-from duburi_vision import qos
-from duburi_control.motion_vision import (
+from mongla_vision import qos
+from mongla_control.motion_vision import (
     _fresh_bounds, _freshness,
     VISION_FRESH_FULL_MAX_S, VISION_FRESH_ZERO_MAX_S,
 )
@@ -38,11 +38,11 @@ from duburi_control.motion_vision import (
 
 class _Watch(Node):
     def __init__(self, camera):
-        super().__init__('duburi_fresh_bounds_check')
+        super().__init__('mongla_fresh_bounds_check')
         self.ages, self.gaps = [], []
         self._last_cap = None
         self.create_subscription(
-            Detection2DArray, f'/duburi/vision/{camera}/detections',
+            Detection2DArray, f'/mongla/vision/{camera}/detections',
             self._cb, qos.DETECTIONS)
 
     def _cb(self, msg):

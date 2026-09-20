@@ -1197,9 +1197,9 @@ motion, never a distance. The +1.94 cm sits just outside a hand slide's own
 ±1 cm, and `h = 0.72` is a tape figure the optics dispute (§13 implied
 0.7025, which would scale this to 31.05).
 
-### ⛔ THE CAUSE: two `/duburi/state` publishers, disagreeing by 180°
+### ⛔ THE CAUSE: two `/mongla/state` publishers, disagreeing by 180°
 
-`flow_launch_check` publishes a synthetic `/duburi/state` so the node has a
+`flow_launch_check` publishes a synthetic `/mongla/state` so the node has a
 height on a bench with no barometer, and it filled in `yaw_deg = 0.0`. The
 MANAGER publishes the same topic with the board's real heading, ~180° here.
 The node keeps whichever arrived last.
@@ -1273,7 +1273,7 @@ to this camera.
 
 ### ⛔ RETRACTED WITHIN THE HOUR: "the gyro is noisy at rest"
 
-I measured `/duburi/imu_rates` for 30 s and reported pitch sd **0.083 rad/s**,
+I measured `/mongla/imu_rates` for 30 s and reported pitch sd **0.083 rad/s**,
 which at a 0.4 s baseline is **17 px** of phantom shift against an 8 px
 keyframe threshold -- a complete explanation, and wrong. **The operator was
 moving the rig during that capture.** Those were real rotations. The number
@@ -1741,7 +1741,7 @@ The question was "how good and how real is the thruster data". It is
 
 | quantity | measured | how |
 |---|---|---|
-| `ESC_STATUS` (291) frames recorded | **958** across two bench sessions | `~/duburi_runs/*.tlog` |
+| `ESC_STATUS` (291) frames recorded | **958** across two bench sessions | `~/mongla_runs/*.tlog` |
 | CRC-valid | **958 / 958** | the SHIPPED `_decode_esc_status`, `crc_extra = 10` |
 | index blocks present | `0` and `4` — all eight slots | both sessions |
 | distinct signed rpm values seen | **`{0}`** | every slot, every frame |
@@ -1799,7 +1799,7 @@ and it evidences decodability only. Now says so.
 
 ## §26. THE SECOND BOARD, AND `KILL = 0` MEANING TWO THINGS. 2026-09-07
 
-Read the firmware for what duburi_ws is not using. The answer was a whole board.
+Read the firmware for what mongla_ws is not using. The answer was a whole board.
 
 ### The second board exists and owns two things we care about
 
@@ -1970,7 +1970,7 @@ trusting an absolute heading late in a mission.
 ⛔ **THE RULE THIS COST US.** Three separate drift measurements in this project
 have been ruined by treating *"it is on a bench"* as evidence of stillness. The
 board publishes its own gyro at 50 Hz inside ATTITUDE and we already republish it
-as `/duburi/imu_rates` — **stillness was always measurable and was assumed
+as `/mongla/imu_rates` — **stillness was always measurable and was assumed
 instead.** `tools/yaw_drift_check.py` now gates on it and refuses to report a
 drift with no gyro available, because absence of a stillness check is not
 evidence of stillness.
@@ -2134,8 +2134,8 @@ the 1.264° off-axis principal point.
 * `n_medium = 1.0` is the **exact** identity (bench/air).
 * angular **size refracts per EDGE then differences** — refracting the
   difference reintroduces the eccentricity error the edge form avoids.
-* the index lives in `duburi_vision.optics` and is passed IN;
-  `duburi_control` must not depend on `duburi_vision`.
+* the index lives in `mongla_vision.optics` and is passed IN;
+  `mongla_control` must not depend on `mongla_vision`.
 
 ## The companion link and the board clock (2026-09-10)
 
@@ -2166,7 +2166,7 @@ All of that jitter is transport. `ClockMap` fit on the vehicle:
 `ready=True pairs=102 skew=-39ppm **resid=0.36 ms**`.
 
 **Bar: any stream carrying a BOARD measurement is stamped on the board clock.**
-`/duburi/imu_rates` already was; `/duburi/state` (yaw, depth) was not, and
+`/mongla/imu_rates` already was; `/mongla/state` (yaw, depth) was not, and
 `flow_node` differenced those arrival instants into a vertical speed. Both fixed.
 A board sample older than **0.2 s** (10 periods at 50 Hz) is refused rather than
 applied to a fresh message.
@@ -2497,7 +2497,7 @@ said `true` all along, and `test_camera_exclusivity.py` calls `paused:=false`
 keeping. Every query — `detected()`, `wait_for()`, `where()`,
 `where_offset()` — funnels through `_pump_detections`, and none of them reached
 `_activate_camera`; only `use_camera` and the vision verbs did. So against a
-launch that starts both paused, `while not duburi.detected('gate')` polls a
+launch that starts both paused, `while not mongla.detected('gate')` polls a
 detector that will never infer: an empty cache, forever, no error and no
 timeout. The mission searches and never finds. Flipping the default alone would
 have traded a 60 Hz loss for a mission that hangs.
@@ -2688,8 +2688,8 @@ Requested upstream as
 `SCALED_IMU2` arrives at 50 Hz and this stack read exactly one field off it —
 `temperature`, for the water-temp readout. Six axes of accel and gyro were
 decoded by pymavlink and thrown away every frame. Same shape as the ESC-RPM
-finding. Now published as `sensor_msgs/Imu` on `/duburi/imu`, stamped through
-the same `ClockMap` mapping as `/duburi/imu_rates` (the board's ATTITUDE
+finding. Now published as `sensor_msgs/Imu` on `/mongla/imu`, stamped through
+the same `ClockMap` mapping as `/mongla/imu_rates` (the board's ATTITUDE
 interval has sd 0.00 ms against 6.67 ms of host arrival jitter).
 
 ## The invariant filter on the vehicle, stationary rig (2026-09-11)
@@ -2704,7 +2704,7 @@ the table, ~95 s per run. No thrusters, no water.
 | board attitude consumed, first sample ADOPTED | **0.04 / 0.02 m** | 8 | 0 |
 
 Final run: `imu=2924 att=2924 zupt=58 depth=1540 gaps=0`, yaw held at
-**−168.3°** matching the board, `/duburi/imu` at **50.001 Hz** (sd 0.44 ms).
+**−168.3°** matching the board, `/mongla/imu` at **50.001 Hz** (sd 0.44 ms).
 
 **The bar: a stationary hull must stay under 5 cm.** Each row is one change.
 

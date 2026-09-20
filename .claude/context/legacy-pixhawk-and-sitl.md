@@ -4,7 +4,7 @@
 see [The Shift](../../docs/the-shift.md). This page exists because two things still depend on
 the older path and would otherwise be undocumented:
 
-1. **The `pixhawk` backend** in `duburi_control/fc/pixhawk_fc.py`, behind the same interface
+1. **The `pixhawk` backend** in `mongla_control/fc/pixhawk_fc.py`, behind the same interface
    as the board.
 2. **The simulator** in [`sim/`](../../sim), which runs **ArduSub SITL by design** — it is a
    physics environment, not a vehicle.
@@ -39,9 +39,9 @@ property — re-confirm per hull with a bare `Ch4=1600` check before trusting it
 
 ```bash
 cd sim && ./build_sim.sh
-ros2 run duburi_sim_bringup duburi_sim stop      # one sim at a time, always
-ros2 run duburi_sim_bringup duburi_sim sim
-ros2 run duburi_sim_bringup duburi_sim stack --no-vision
+ros2 run mongla_sim_bringup mongla_sim stop      # one sim at a time, always
+ros2 run mongla_sim_bringup mongla_sim sim
+ros2 run mongla_sim_bringup mongla_sim stack --no-vision
 ```
 
 `flight_controller:=pixhawk` is required there and **inert on the default branch** — extra
@@ -62,7 +62,7 @@ autonomy link and looks like a sim fault.
 
 | Transfers | Does not |
 |---|---|
-| Control behaviour and every `/duburi/move` verb | detection thresholds — sim imagery is too clean |
+| Control behaviour and every `/mongla/move` verb | detection thresholds — sim imagery is too clean |
 | Mission structure and the DSL | vision gains tuned against sim footage |
 | The action contract and outcome codes | anything depending on board telemetry (RPM, two packs, leak, kill) |
 

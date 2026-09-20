@@ -2,12 +2,12 @@
 
 Three layers, one action:
 
-1. **`DuburiMission`** — the mission language. What you call inside `def run(duburi)`.
-   [`duburi_dsl.py`](../../src/duburi_planner/duburi_planner/duburi_dsl.py)
-2. **`DuburiClient`** — the blocking action client underneath it: deadlines, cancellation,
-   typed failures. [`client.py`](../../src/duburi_planner/duburi_planner/client.py)
-3. **`Duburi`** — the manager-side facade that *implements* the verbs. Mission code never
-   instantiates it. [`duburi.py`](../../src/duburi_control/duburi_control/duburi.py)
+1. **`MonglaMission`** — the mission language. What you call inside `def run(mongla)`.
+   [`mongla_dsl.py`](../../src/mongla_planner/mongla_planner/mongla_dsl.py)
+2. **`MonglaClient`** — the blocking action client underneath it: deadlines, cancellation,
+   typed failures. [`client.py`](../../src/mongla_planner/mongla_planner/client.py)
+3. **`Mongla`** — the manager-side facade that *implements* the verbs. Mission code never
+   instantiates it. [`mongla.py`](../../src/mongla_control/mongla_control/mongla.py)
 
 Every verb in [`command-reference.md`](command-reference.md) is reachable from all three.
 
@@ -16,27 +16,27 @@ Every verb in [`command-reference.md`](command-reference.md) is reachable from a
 ## A mission
 
 ```python
-from duburi_planner.client import TaskAbandoned
+from mongla_planner.client import TaskAbandoned
 
-def run(duburi, log=None):
-    duburi.mission_reset()              # clear old state, re-zero depth at the surface
-    duburi.use_budget(900, reserve_s=45)
+def run(mongla, log=None):
+    mongla.mission_reset()              # clear old state, re-zero depth at the surface
+    mongla.use_budget(900, reserve_s=45)
 
     try:
-        duburi.arm()
-        duburi.set_depth(-0.8)
+        mongla.arm()
+        mongla.set_depth(-0.8)
 
-        with duburi.task('gate', deadline_s=120):
-            if duburi.vision.align('gate', yaw=0, lat=0, gain=30, duration=60):
-                duburi.vision.move('gate', fwd=None)     # drive through
+        with mongla.task('gate', deadline_s=120):
+            if mongla.vision.align('gate', yaw=0, lat=0, gain=30, duration=60):
+                mongla.vision.move('gate', fwd=None)     # drive through
     except TaskAbandoned:
-        duburi.note('gate', 'ran out of time', success=False)
+        mongla.note('gate', 'ran out of time', success=False)
     finally:
-        duburi.surface()
-        duburi.disarm()
+        mongla.surface()
+        mongla.disarm()
 ```
 
-Run it with `ros2 run duburi_planner mission <name>`. The `finally` block is not optional
+Run it with `ros2 run mongla_planner mission <name>`. The `finally` block is not optional
 style: a mission that raises must still surface and disarm.
 
 ---
@@ -44,20 +44,20 @@ style: a mission that raises must still surface and disarm.
 ## Moving
 
 ```python
-duburi.arm(timeout=15.0)
-duburi.disarm(timeout=20.0)
-duburi.set_mode('STABILIZE')
+mongla.arm(timeout=15.0)
+mongla.disarm(timeout=20.0)
+mongla.set_mode('STABILIZE')
 
-duburi.set_depth(-0.8, timeout=30)          # negative metres = below the surface
-duburi.move_forward(3.0, gain=40)           # seconds, and a thrust CAP
-duburi.move_left(2.0, gain=35)
-duburi.turn(90.0)                           # absolute heading; direction chosen for you
-duburi.yaw_right(45.0)                      # relative
+mongla.set_depth(-0.8, timeout=30)          # negative metres = below the surface
+mongla.move_forward(3.0, gain=40)           # seconds, and a thrust CAP
+mongla.move_left(2.0, gain=35)
+mongla.turn(90.0)                           # absolute heading; direction chosen for you
+mongla.yaw_right(45.0)                      # relative
 
-duburi.stop()                               # active neutral hold
-duburi.pause(2.0)                           # release control briefly
-duburi.surface()
-duburi.fire(3)                              # board channel 1..16
+mongla.stop()                               # active neutral hold
+mongla.pause(2.0)                           # release control briefly
+mongla.surface()
+mongla.fire(3)                              # board channel 1..16
 ```
 
 **`gain` is a ceiling, not a target.** **Depth is negative.** Both are worth saying twice.
@@ -65,15 +65,15 @@ duburi.fire(3)                              # board channel 1..16
 ## Seeing
 
 ```python
-duburi.vision.align('gate', yaw=0, lat=0, gain=30, duration=30, fallback=creep)
-duburi.vision.move('gate', fwd=80, mode='area', gain=35)
+mongla.vision.align('gate', yaw=0, lat=0, gain=30, duration=30, fallback=creep)
+mongla.vision.move('gate', fwd=80, mode='area', gain=35)
 
-duburi.detected('gate')                 # seen within the last second?
-duburi.wait_for('gate', timeout=8)      # block until seen
-duburi.where('gate')                    # 'left' | 'center' | 'right' | 'unknown'
-duburi.can_see('gate')                  # ...and if not, why not
-duburi.side_on('fire', 'bin')           # which side of the structure the symbol is on
-duburi.outline('gate')                  # the largest contour, when segmentation is on
+mongla.detected('gate')                 # seen within the last second?
+mongla.wait_for('gate', timeout=8)      # block until seen
+mongla.where('gate')                    # 'left' | 'center' | 'right' | 'unknown'
+mongla.can_see('gate')                  # ...and if not, why not
+mongla.side_on('fire', 'bin')           # which side of the structure the symbol is on
+mongla.outline('gate')                  # the largest contour, when segmentation is on
 ```
 
 `detected()` asks about a **window**, not a single frame — a class that flickers out of
@@ -86,7 +86,7 @@ Both verbs return a result that is truthy only when the target was actually reac
 carries what the camera last saw:
 
 ```python
-res = duburi.vision.align('hole', lat=0, depth=0, duration=25)
+res = mongla.vision.align('hole', lat=0, depth=0, duration=25)
 res.status        # 'ALIGNED' | 'LOST' | 'TIMEOUT' | 'NO_CAMERA' | 'ABORTED' | 'FAILED'
 res.saw_target    # was it ever seen?
 res.x_px, res.y_px  # signed pixels from centre at the last sighting; NaN if never seen
@@ -102,15 +102,15 @@ never-seen target slips straight through a naive guard.
 ## Measuring
 
 ```python
-duburi.range_to('gate')            # metres, with a sigma
-duburi.bearing_to('gate')          # degrees off the nose
-duburi.floor_range()               # to the point under the camera
-duburi.floor_height()              # height above the floor
-duburi.pose()                      # the filter's current estimate
-duburi.motion()                    # is the hull actually moving?
-duburi.fix_from_prop('gate')       # a position fix from something we recognise
-duburi.standoff_for_prop('board')  # how far back to sit for this prop
-duburi.hfov_water_deg()            # this camera's real field of view, in water
+mongla.range_to('gate')            # metres, with a sigma
+mongla.bearing_to('gate')          # degrees off the nose
+mongla.floor_range()               # to the point under the camera
+mongla.floor_height()              # height above the floor
+mongla.pose()                      # the filter's current estimate
+mongla.motion()                    # is the hull actually moving?
+mongla.fix_from_prop('gate')       # a position fix from something we recognise
+mongla.standoff_for_prop('board')  # how far back to sit for this prop
+mongla.hfov_water_deg()            # this camera's real field of view, in water
 ```
 
 Every one of these goes through the measured calibration and the flat-port refraction
@@ -119,33 +119,33 @@ correction. They return `None` rather than a guess when the inputs are not there
 ## Navigating to something known
 
 ```python
-duburi.use_course('sauvc26')       # load the venue's priors
-duburi.acquire('gate')             # search until it is in view
-duburi.goto_prop('drum')           # approach something at a known place
-duburi.anchor_on('gate')           # take an absolute heading from a known bearing
-duburi.absolute_heading()          # ...and read it back
+mongla.use_course('sauvc26')       # load the venue's priors
+mongla.acquire('gate')             # search until it is in view
+mongla.goto_prop('drum')           # approach something at a known place
+mongla.anchor_on('gate')           # take an absolute heading from a known bearing
+mongla.absolute_heading()          # ...and read it back
 ```
 
-Course files live in `duburi_localization/courses/`, and your own copy in `~/.duburi/courses`
+Course files live in `mongla_localization/courses/`, and your own copy in `~/.mongla/courses`
 wins over the packaged one — so a survey on competition day needs no rebuild.
 
 ## Managing the run
 
 ```python
-duburi.use_budget(900, reserve_s=45)         # the clock starts on a successful arm
+mongla.use_budget(900, reserve_s=45)         # the clock starts on a successful arm
 
-v = duburi.worth_attempting('torpedo', points=300, worst_case_s=120,
+v = mongla.worth_attempting('torpedo', points=300, worst_case_s=120,
                             fallback_s=25, fallback_points=100)
 if v.mode == 'full':      ...
 elif v.mode == 'fallback': ...                # e.g. fire blind, keep the points
                                               # v.mode == 'skip' → do not start
 
-with duburi.task('torpedo', deadline_s=90):   # cancels the goal in flight at the deadline
+with mongla.task('torpedo', deadline_s=90):   # cancels the goal in flight at the deadline
     ...
 
-duburi.note('navigation', 'unconfirmed: blind transit', success=False)
-duburi.countdown(10)                          # tether-removal banner
-duburi.log_scoreboard()                       # what happened, verb by verb
+mongla.note('navigation', 'unconfirmed: blind transit', success=False)
+mongla.countdown(10)                          # tether-removal banner
+mongla.log_scoreboard()                       # what happened, verb by verb
 ```
 
 Without `use_budget()` nothing is rationed — every verdict is "attempt, full". That is the
@@ -159,14 +159,14 @@ never blocked by one.
 ## Configuring vision live
 
 ```python
-duburi.use_camera('downward')       # switch the sticky camera and the live detector
-duburi.set_model('sauvc_sim')
-duburi.set_classes('final_gate')
-duburi.set_conf(0.15)
-duburi.set_vision_param('max_depth_m', -1.6)   # a manager tunable, for this mission
-duburi.pause_detector('forward')
-duburi.resume_detector('downward')
-duburi.save_evidence('forward', 'after_align')  # write the annotated frame beside the run
+mongla.use_camera('downward')       # switch the sticky camera and the live detector
+mongla.set_model('sauvc_sim')
+mongla.set_classes('final_gate')
+mongla.set_conf(0.15)
+mongla.set_vision_param('max_depth_m', -1.6)   # a manager tunable, for this mission
+mongla.pause_detector('forward')
+mongla.resume_detector('downward')
+mongla.save_evidence('forward', 'after_align')  # write the annotated frame beside the run
 ```
 
 Setting a model or class aborts loudly if the detector node is not on the graph. That is
@@ -176,15 +176,15 @@ looking for.
 ## Knowing the vehicle
 
 ```python
-duburi.backend        # 'srot' or 'pixhawk'
+mongla.backend        # 'srot' or 'pixhawk'
 ```
 
 Read once from the manager, and it **raises rather than guessing** if the manager cannot be
 reached. Missions use it to skip a verb one backend refuses:
 
 ```python
-if duburi.backend != 'srot':
-    duburi.lock_heading(0.0)       # on srot the board holds heading itself
+if mongla.backend != 'srot':
+    mongla.lock_heading(0.0)       # on srot the board holds heading itself
 ```
 
 ## The escape hatch
@@ -193,18 +193,18 @@ Any name the DSL does not define is forwarded to the raw client, so a new verb w
 mission before anyone writes a wrapper:
 
 ```python
-duburi.send('mission_reset')
-duburi.calibrate_depth()           # reaches the action server through the same path
+mongla.send('mission_reset')
+mongla.calibrate_depth()           # reaches the action server through the same path
 ```
 
 ---
 
-## Underneath: `DuburiClient`
+## Underneath: `MonglaClient`
 
 ```python
-from duburi_planner.client import DuburiClient, MoveRejected, MoveFailed, TaskAbandoned
+from mongla_planner.client import MonglaClient, MoveRejected, MoveFailed, TaskAbandoned
 
-client = DuburiClient(node)
+client = MonglaClient(node)
 client.wait_for_connection(timeout=15.0)
 result = client.send('move_forward', duration=5.0, gain=60.0)
 client.cancel_active()                 # from another thread, or a deadline
@@ -225,4 +225,4 @@ one a tired person can debug at the poolside at midnight.
 
 Related: [`command-reference.md`](command-reference.md) ·
 [`vision-results.md`](vision-results.md) · [`mission-cookbook.md`](mission-cookbook.md) ·
-[`packages/duburi_planner`](packages/duburi_planner/README.md)
+[`packages/mongla_planner`](packages/mongla_planner/README.md)

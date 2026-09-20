@@ -1,9 +1,9 @@
 # Mission Design & State Machine Architecture — Duburi AUV
 
 > **Status: BUILT & TESTED** (commit 4a94231, 2026-06-02).
-> The YASMIN FSM layer is live in `duburi_planner/state_machines/`.
+> The YASMIN FSM layer is live in `mongla_planner/state_machines/`.
 > Drop-in missions: `gate_flare_fsm`, `prequal_fsm` — auto-discover via
-> `ros2 run duburi_planner mission <name>`.
+> `ros2 run mongla_planner mission <name>`.
 >
 > **Comprehensive guide:** [`fsm-guide.md`](fsm-guide.md) — YASMIN fundamentals,
 > VehicleProfile design, state library reference, pool-day workflow, how to add
@@ -15,8 +15,8 @@
 > - `missions/gate_flare_fsm.py` etc — YASMIN FSM missions: robust competition
 >   layer with explicit timeouts, retry loops, dual-vehicle auto-detection.
 >
-> The FSM wraps the same DSL verbs (`duburi.vision.align()`,
-> `duburi.vision.move()`, `duburi.move_forward_dist()`, etc.) as states.
+> The FSM wraps the same DSL verbs (`mongla.vision.align()`,
+> `mongla.vision.move()`, `mongla.move_forward_dist()`, etc.) as states.
 > MAVLink/ArduSub control layer is completely unchanged.
 
 Based on the 2025 RoboSub competition codebase (YASMIN FSM) + 2023 patterns.
@@ -49,7 +49,7 @@ We use YASMIN (Yet Another State MachINe) — a ROS2-native state machine librar
 ```python
 from yasmin import State, Blackboard
 
-class DuburiState(State):
+class MonglaState(State):
     """Base class for all mission states."""
     
     TIMEOUT_S = 60.0   # Default state timeout — override per state
@@ -101,7 +101,7 @@ blackboard["mission_time"]  = time.time()        # Mission clock
 ### ARM State
 
 ```python
-class ArmState(DuburiState):
+class ArmState(MonglaState):
     TIMEOUT_S = 30.0
     
     def __init__(self, node):
@@ -123,7 +123,7 @@ class ArmState(DuburiState):
 ### SET DEPTH State
 
 ```python
-class SetDepthState(DuburiState):
+class SetDepthState(MonglaState):
     TIMEOUT_S = 30.0
     
     def __init__(self, node, depth_m: float, tolerance_m: float = 0.15):
@@ -147,7 +147,7 @@ class SetDepthState(DuburiState):
 ### SET HEADING State
 
 ```python
-class SetHeadingState(DuburiState):
+class SetHeadingState(MonglaState):
     TIMEOUT_S = 30.0
     
     def __init__(self, node, heading_deg: float, tolerance_deg: float = 5.0):
@@ -171,7 +171,7 @@ class SetHeadingState(DuburiState):
 ### TIMED MOVE State
 
 ```python
-class TimedMoveState(DuburiState):
+class TimedMoveState(MonglaState):
     def __init__(self, node, direction: str, duration: float,
                  speed_pct: float = 80, maintain_heading: bool = True):
         super().__init__(node, [SUCCEED])
@@ -206,7 +206,7 @@ class TimedMoveState(DuburiState):
 ### VISION ALIGN State (pattern from 2025 codebase)
 
 ```python
-class VisionAlignState(DuburiState):
+class VisionAlignState(MonglaState):
     TIMEOUT_S = 60.0
     THRESHOLD_LAT = 15    # px
     THRESHOLD_VERT = 40   # px
@@ -384,7 +384,7 @@ else:
 ## 8. Safety State (Always Available)
 
 ```python
-class EmergencySurfaceState(DuburiState):
+class EmergencySurfaceState(MonglaState):
     """Called on ABORT or SIGINT. Always surfaces vehicle."""
     
     def _run(self, bb: Blackboard) -> str:

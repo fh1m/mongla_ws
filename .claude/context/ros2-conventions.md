@@ -6,16 +6,16 @@
 > an older idiom, the current contract is [`command-reference.md`](command-reference.md) and the
 > legacy path is [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md).
 
-ROS2 surface and coding standards for `duburi_ws`. The surface is
+ROS2 surface and coding standards for `mongla_ws`. The surface is
 deliberately tiny: **one action, one telemetry topic, and a small set of
 manager ROS params** (the manager declares 14 + a `vision.*` tuning layer).
 If you're tempted to add a topic or service, reread this file and the
 [architecture section of CLAUDE.md](../../CLAUDE.md#4-software-architecture)
 first.
 
-> Earlier revisions of this file documented `/duburi/attitude`,
-> `/duburi/depth_cmd`, `Attitude.msg`, `RCOverride.msg`, services like
-> `/duburi/arm`, and packages like `duburi_driver` / `duburi_bringup`.
+> Earlier revisions of this file documented `/mongla/attitude`,
+> `/mongla/depth_cmd`, `Attitude.msg`, `RCOverride.msg`, services like
+> `/mongla/arm`, and packages like `mongla_driver` / `mongla_bringup`.
 > **None of those exist** in this workspace. They were either
 > aspirational or carried over from the 2023/2025 reference codebases.
 
@@ -23,15 +23,15 @@ first.
 
 ## 1. Live ROS2 surface
 
-### Action — `/duburi/move`
+### Action — `/mongla/move`
 
-`duburi_interfaces/action/Move`, served by `auv_manager_node` in
-`duburi_manager`. Every CLI verb, scripted mission, and external client
+`mongla_interfaces/action/Move`, served by `auv_manager_node` in
+`mongla_manager`. Every CLI verb, scripted mission, and external client
 goes through this single endpoint.
 
 | Goal field            | Meaning                                                          |
 |-----------------------|------------------------------------------------------------------|
-| `cmd` (str)           | Verb name — must match a key in `duburi_control.commands.COMMANDS` |
+| `cmd` (str)           | Verb name — must match a key in `mongla_control.commands.COMMANDS` |
 | `duration` (float)    | Seconds — used by `move_*`, `arc`, `pause`, `vision_*`           |
 | `gain` (float)        | Percent thrust 0..100 — `move_*`/`arc`; `vision_*`: max-speed cap |
 | `target` (float)      | Magnitude — degrees for `yaw_*`/`turn`, metres for `set_depth`   |
@@ -42,8 +42,8 @@ goes through this single endpoint.
 > (style, DVL, the full `vision_align`/`vision_move` surface incl. the
 > precision + mid-hold-fire knobs, and on `lock` the anchor fields). The
 > authoritative per-verb field list lives in
-> [`duburi_control/commands.py`](../../src/duburi_control/duburi_control/commands.py);
-> the action server, the `duburi` CLI, and the Python `DuburiClient` all read
+> [`mongla_control/commands.py`](../../src/mongla_control/mongla_control/commands.py);
+> the action server, the `mongla` CLI, and the Python `MonglaClient` all read
 > from that registry — there is no second list to keep in sync.
 
 | Result field          | Meaning                                                          |
@@ -67,14 +67,14 @@ goes through this single endpoint.
 | `status_line` (str)   | Human-readable one-liner                                         |
 
 **Rule:** add a new verb by adding **one row** to `COMMANDS` and **one
-method** to `Duburi` (in `duburi_control/duburi.py`). The action server,
+method** to `Mongla` (in `mongla_control/mongla.py`). The action server,
 CLI, and Python client pick it up automatically — no other file edits
 needed. Only widen `Move.action` if the existing field shape genuinely
 isn't enough.
 
-### Topic — `/duburi/state`
+### Topic — `/mongla/state`
 
-`duburi_interfaces/msg/DuburiState` (typed message, replaces the previous
+`mongla_interfaces/msg/MonglaState` (typed message, replaces the previous
 JSON-in-`std_msgs/String` carrier). Published by the manager's telemetry
 timer whenever the snapshot changes (or every ~1 s as a heartbeat).
 
@@ -94,7 +94,7 @@ Reliable, depth=1, KEEP_LAST. Late subscribers get the latest snapshot.
 
 > **Two default layers — don't confuse them.** The column below is the **node's
 > own `declare_parameter` default** (what you get from a bare
-> `ros2 run duburi_manager start`). The operator-facing **`bringup.launch.py`
+> `ros2 run mongla_manager start`). The operator-facing **`bringup.launch.py`
 > overrides some of these** for pool use (`mode:=pool` — and ONLY `mode`; verified
 > by extraction 2026-09-08, `yaw_source` is `mavlink_ahrs` in both) — so a
 > launched stack and a bare `ros2 run` can pick different profiles. `mode:=auto`
@@ -120,7 +120,7 @@ Reliable, depth=1, KEEP_LAST. Late subscribers get the latest snapshot.
 Plus the `vision.*` tuning layer (10 params: `kp_lat/kp_yaw/kp_depth/kp_forward`,
 `lost_grace_s`, `frame_fill_default`, `align_stable_frames`, `range_gain_floor`,
 `ki_lat`, `ctrl_conf`) — see [`command-reference.md`](command-reference.md) §9 and
-[`vision_tunables.py`](../../src/duburi_manager/duburi_manager/vision_tunables.py).
+[`vision_tunables.py`](../../src/mongla_manager/mongla_manager/vision_tunables.py).
 
 `sensors_node` accepts a strict subset (`yaw_source`, `bno085_port`,
 `bno085_baud`, plus `calibrate` bool, `mavlink_url`, `print_period_s`) for
@@ -130,7 +130,7 @@ diagnostic-only use.
 
 ## 2. Complete command reference
 
-All verbs listed here are entries in `duburi_control/commands.py` and are available on the `/duburi/move` action, `duburi` CLI, and `DuburiMission` DSL.
+All verbs listed here are entries in `mongla_control/commands.py` and are available on the `/mongla/move` action, `mongla` CLI, and `MonglaMission` DSL.
 
 ### Motion
 
@@ -191,7 +191,7 @@ knobs `lock_target`/`ctrl_conf`/`range_gain_floor`/`ki_lat`/`settle_px`, and the
 tuning fields `kp_lat`/`kp_yaw`/`kp_depth`/`lost_grace_s`/`align_stable_frames`/
 `hold_through_loss`; `vision_move` also takes `gain_lat`, `brake_off`/`brake_gain`,
 `range_gain_floor`, `kp_forward`/`kp_lat`/`lost_grace_s`/`hold_through_loss`. The control loop reads
-`/duburi/vision/<cam>/detections` directly; the tracker's `/tracks` feeds
+`/mongla/vision/<cam>/detections` directly; the tracker's `/tracks` feeds
 the HUD only (no `--tracking` flag). The standalone `fire` verb
 (`fire_channel`: 1/2=torpedo, 3/4=dropper) actuates payloads — there is no
 vision-fire verb.
@@ -201,16 +201,16 @@ vision-fire verb.
 ## 3. Real package layout
 
 ```
-duburi_ws/src/
-├── duburi_interfaces/    # ROS2 message + action defs (Move.action, DuburiState.msg)
-├── duburi_control/       # MAVLink layer + per-axis motion helpers + commands registry
-├── duburi_manager/       # ROS2 node: ActionServer, telemetry, VisionState pool
-├── duburi_sensors/       # YawSource abstraction (sensor-only, read-only)
-├── duburi_vision/        # Camera factory, YOLO detector, draw overlays, tracker
-└── duburi_planner/       # DuburiClient, DuburiMission DSL, mission scripts, CLI
+mongla_ws/src/
+├── mongla_interfaces/    # ROS2 message + action defs (Move.action, MonglaState.msg)
+├── mongla_control/       # MAVLink layer + per-axis motion helpers + commands registry
+├── mongla_manager/       # ROS2 node: ActionServer, telemetry, VisionState pool
+├── mongla_sensors/       # YawSource abstraction (sensor-only, read-only)
+├── mongla_vision/        # Camera factory, YOLO detector, draw overlays, tracker
+└── mongla_planner/       # MonglaClient, MonglaMission DSL, mission scripts, CLI
 ```
 
-There are **no** `duburi_driver`, `duburi_bringup`, `duburi_teleop`, or `duburi_mission`
+There are **no** `mongla_driver`, `mongla_bringup`, `mongla_teleop`, or `mongla_mission`
 packages. The 2023/2025 reference codebases had several of those names; that history is
 captured in `legacy-pixhawk-and-sitl.md` for pattern reference, not for layout.
 
@@ -283,15 +283,15 @@ if __name__ == '__main__':
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd"
             schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>duburi_package_name</name>
+  <name>mongla_package_name</name>
   <version>0.1.0</version>
   <description>Brief, accurate description.</description>
-  <maintainer email="duburi@example.com">BRACU Duburi</maintainer>
+  <maintainer email="fh1m.dev@gmail.com">Muhammad Fahim Faisal</maintainer>
   <license>MIT</license>
 
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
-  <depend>duburi_interfaces</depend>
+  <depend>mongla_interfaces</depend>
 
   <buildtool_depend>ament_python</buildtool_depend>
   <test_depend>ament_pep8</test_depend>
@@ -312,7 +312,7 @@ from glob import glob
 
 from setuptools import find_packages, setup
 
-package_name = 'duburi_package_name'
+package_name = 'mongla_package_name'
 
 setup(
     name=package_name,
@@ -327,7 +327,7 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='BRACU Duburi',
+    maintainer='Muhammad Fahim Faisal',
     description='...',
     license='MIT',
     entry_points={
@@ -340,19 +340,19 @@ setup(
 
 > Real-world tip: register console scripts under both the short
 > (`auv_manager`) and the explicit (`auv_manager_node`) names if both
-> get used in docs / muscle memory. We do this in `duburi_manager`.
+> get used in docs / muscle memory. We do this in `mongla_manager`.
 
 ---
 
 ## 7. Naming conventions
 
 ```
-Packages:      duburi_<name>              duburi_control, duburi_sensors
-Nodes:         duburi_<name>              auv_manager_node, sensors_node
-Topics:        /duburi/<name>             /duburi/state
-Actions:       /duburi/<verb>             /duburi/move
-Messages:      PascalCase (file == name)  Move (action), DuburiState (msg)
-Classes:       PascalCase                 Duburi, Pixhawk, BNO085Source, YawSource
+Packages:      mongla_<name>              mongla_control, mongla_sensors
+Nodes:         mongla_<name>              auv_manager_node, sensors_node
+Topics:        /mongla/<name>             /mongla/state
+Actions:       /mongla/<verb>             /mongla/move
+Messages:      PascalCase (file == name)  Move (action), MonglaState (msg)
+Classes:       PascalCase                 Mongla, Pixhawk, BNO085Source, YawSource
 Functions:     snake_case                 send_rc_override, set_target_depth
 Private:       _leading_underscore        _make_result, _ensure_yaw_capable_mode
 Constants:     UPPER_SNAKE                YAW_RATE_HZ, SETTLE_SEC, NETWORK
@@ -370,7 +370,7 @@ Constants:     UPPER_SNAKE                YAW_RATE_HZ, SETTLE_SEC, NETWORK
 
 We don't currently use custom QoS — defaults work for the action and
 the JSON state topic. If you add high-rate sensor topics later (e.g.
-when `duburi_vision` arrives), use these:
+when `mongla_vision` arrives), use these:
 
 ```python
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
@@ -400,22 +400,22 @@ STATE_QOS = QoSProfile(
 ## 9. Build commands
 
 ```bash
-cd ~/Ros_workspaces/duburi_ws
+cd ~/Ros_workspaces/mongla_ws
 
 # Full build (preferred — handles interface generation order)
-./build_dubomini.sh
+./build_mongla.sh
 
 # Faster: rebuild Python-only packages after editing source
-colcon build --symlink-install --packages-select duburi_control duburi_manager duburi_sensors
+colcon build --symlink-install --packages-select mongla_control mongla_manager mongla_sensors
 
 # Single package
-colcon build --symlink-install --packages-select duburi_manager
+colcon build --symlink-install --packages-select mongla_manager
 
 # Source after build
 source install/setup.bash
 
 # Lint a package
-colcon test --packages-select duburi_manager
+colcon test --packages-select mongla_manager
 ```
 
 ---
@@ -448,8 +448,8 @@ back the timestamp unless you're debugging a timing issue.
 - Don't open a second `pymavlink` connection from another node. The
   manager owns the MAVLink reader; everything else uses the `Move`
   action.
-- Don't add a "convenience" topic (`/duburi/depth_cmd`,
-  `/duburi/heading_cmd`, etc) — the action covers it.
+- Don't add a "convenience" topic (`/mongla/depth_cmd`,
+  `/mongla/heading_cmd`, etc) — the action covers it.
 - Don't add a launch file with one node in it. `ros2 run ... --ros-args
   -p mode:=...` is the documented entry point.
 - Don't introduce `std_srvs` services for arm/disarm — the action

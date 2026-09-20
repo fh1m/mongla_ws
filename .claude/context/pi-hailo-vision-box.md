@@ -5,7 +5,7 @@
 > camera → Hailo-8 → `vision_msgs/Detection2DArray` running at **72.4 Hz on the
 > live ROS graph**. Everything below was measured on the hardware, 2026-09-02.
 >
-> **Nothing in `duburi_ws`'s critical path was changed to achieve this.** The
+> **Nothing in `mongla_ws`'s critical path was changed to achieve this.** The
 > Jetson + BlueOS + Pixhawk stack that placed 8th at RoboSub 2025 is untouched.
 
 ## Why this box exists
@@ -86,7 +86,7 @@ perception was 3–4 Hz on a `.pt`.
 > is a *different lens*, not a disagreement.
 
 ~~**Blocked on one bench measurement that blocks both main and srot:** camera FOV
-does not exist anywhere in `duburi_ws` — no HFOV, no calibration, `K`/`D`
+does not exist anywhere in `mongla_ws` — no HFOV, no calibration, `K`/`D`
 published empty. Pixels cannot become radians without it. (`sim/.context/` has a
 derived in-water **57.7°**; *the simulator has a calibrated FOV the vehicle does
 not*, which is backwards.)~~
@@ -108,8 +108,8 @@ The fix, and why each part is needed:
 
 ```bash
 pip uninstall numpy opencv-python          # let the system packages win
-echo 'numpy<2' > ~/duburi_constraints.txt  # or pip silently drags numpy 2 back
-pip install -c ~/duburi_constraints.txt 'supervision>=0.18.0' scipy
+echo 'numpy<2' > ~/mongla_constraints.txt  # or pip silently drags numpy 2 back
+pip install -c ~/mongla_constraints.txt 'supervision>=0.18.0' scipy
 pip install --no-deps 'supervision==0.26.1' 'trackers==2.4.0'
 ```
 
@@ -134,7 +134,7 @@ pip install --no-deps 'supervision==0.26.1' 'trackers==2.4.0'
 ## Layout
 
 ```
-~/duburi_ws          the srot branch, built (plain colcon build -- NOT
+~/mongla_ws          the srot branch, built (plain colcon build -- NOT
                      --symlink-install; mixing the two makes CMake try to
                      replace a real directory with a symlink and the build dies)
 ~/hailo_models       *.hef + the *.yaml sidecars, OUTSIDE the workspace so a

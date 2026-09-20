@@ -1,7 +1,7 @@
 # Capability Map
 
 **The map lives at [`docs/capability-map.md`](../../docs/capability-map.md)**, published at
-<https://fh1m.github.io/duburi_ws/capability-map.html>.
+<https://fh1m.github.io/mongla_ws/capability-map.html>.
 
 Every capability of the srot + Pi/Hailo platform, beside what the Pixhawk + Jetson stack
 could do, with a file or a measurement as evidence for each row and one of four states:

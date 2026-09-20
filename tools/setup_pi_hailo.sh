@@ -14,18 +14,18 @@ say "1/6  Python: undo the two traps that break cv_bridge"
 # against numpy 1.x. A pip numpy>=2 or a pip opencv-python in ~/.local shadows
 # them and cv_bridge dies with "_ARRAY_API not found". pi-and-env-traps.md E1-E3.
 python3 -m pip uninstall -y -q --break-system-packages numpy opencv-python 2>/dev/null || true
-echo 'numpy<2' > ~/duburi_constraints.txt
+echo 'numpy<2' > ~/mongla_constraints.txt
 
 say "2/6  Python: vision deps, pinned so pip cannot drag numpy 2 back in"
 # --no-deps on BOTH: supervision and trackers each hard-require opencv-python,
 # which would re-shadow the system cv2. supervision 0.30.x uses np.long
 # (numpy-2 only), so 0.26.1 is the ceiling on numpy 1.26.4.
-python3 -m pip install -q --break-system-packages -c ~/duburi_constraints.txt \
+python3 -m pip install -q --break-system-packages -c ~/mongla_constraints.txt \
         scipy filterpy pymavlink pyserial
 python3 -m pip install -q --break-system-packages --no-deps \
         'supervision==0.26.1' 'trackers==2.4.0'
 
-say "3/6  ROS packages duburi_ws declares"
+say "3/6  ROS packages mongla_ws declares"
 ROS_PKGS="ros-jazzy-yasmin ros-jazzy-yasmin-ros ros-jazzy-vision-msgs
           ros-jazzy-cv-bridge ros-jazzy-image-transport ros-jazzy-foxglove-bridge
           ros-jazzy-rosbag2-storage-mcap ros-jazzy-web-video-server
@@ -77,12 +77,12 @@ if bad: sys.exit('  FAIL: ' + ', '.join(bad))
 print(f'  {len(mods)}/{len(mods)} imports OK')
 PY
 
-say "6/6  Build duburi_ws"
+say "6/6  Build mongla_ws"
 # Interfaces first, then the rest. PLAIN colcon build -- mixing a plain build
 # with --symlink-install makes CMake try to replace a real directory with a
 # symlink and the build fails.
-cd ~/duburi_ws
-colcon build --packages-select duburi_interfaces
+cd ~/mongla_ws
+colcon build --packages-select mongla_interfaces
 source install/setup.bash
 colcon build
 
