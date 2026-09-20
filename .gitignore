@@ -89,3 +89,7 @@ graphify-out/
 
 # rendered doc previews (tools/preview_docs.py) - look at them, never publish them
 docs/_preview_*.html
+
+# rendered README preview (tools/readme_preview.html)
+docs/_readme_preview.html
+docs/__repo__

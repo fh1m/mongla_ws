@@ -1,0 +1,754 @@
+<!-- Faithful README preview: renders README.md through GitHub's own
+     /markdown API (mode=gfm), then renders the mermaid blocks with the
+     same mermaid@11 GitHub uses. A diagram that fails to parse shows as a
+     grey error box on the repository front page, so it is checked here
+     BEFORE pushing.
+
+       cd <repo root>
+       gh api -X POST /markdown -f mode=gfm -f text="$(cat README.md)" \
+         > /tmp/body.html          # then paste into this file
+       ln -s "$(pwd)" docs/__repo__ # so repo-relative images resolve
+       python3 -m http.server --directory docs 8777
+-->
+<!doctype html><meta charset=utf-8><title>README preview</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-dark.css">
+<style>body{background:#0d1117;margin:0;padding:32px}
+.markdown-body{max-width:1012px;margin:0 auto;background:#0d1117}
+.markdown-body table{display:table;width:100%}
+.mermaid{margin:18px 0;text-align:center}</style>
+<article class="markdown-body"><p align="center">
+  <a target="_blank" rel="noopener noreferrer" href="docs/imgs/mongla-banner.png"><img src="/__repo__/docs/imgs/mongla-banner.png" alt="Mongla" width="100%" style="max-width: 100%;"></a>
+</p>
+<h1 align="center">Mongla</h1>
+<p align="center">
+  <em>Machines that have to work when nobody is watching.</em>
+</p>
+<p align="center">
+  <a target="_blank" rel="noopener noreferrer nofollow" href="https://camo.githubusercontent.com/cfea951c24d53908566526174f464af4973c80dc15798248b23503159bf68e47/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f636f6e74726f6c5f6c6f6f702d3530305f487a2d6666303030303f7374796c653d666c61742d737175617265266c6162656c436f6c6f723d306431313137"><img src="https://camo.githubusercontent.com/cfea951c24d53908566526174f464af4973c80dc15798248b23503159bf68e47/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f636f6e74726f6c5f6c6f6f702d3530305f487a2d6666303030303f7374796c653d666c61742d737175617265266c6162656c436f6c6f723d306431313137" alt="500 Hz control loop" data-canonical-src="https://img.shields.io/badge/control_loop-500_Hz-ff0000?style=flat-square&amp;labelColor=0d1117" style="max-width: 100%;"></a>
+  <a target="_blank" rel="noopener noreferrer nofollow" href="https://camo.githubusercontent.com/f22729e3bedb8997e055bd764487d66ec0667f4421c1922bc00557477dfe6f67/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f70686f746f6e5f746f5f646574656374696f6e2d31382e305f6d732d3030346566663f7374796c653d666c61742d737175617265266c6162656c436f6c6f723d306431313137"><img src="https://camo.githubusercontent.com/f22729e3bedb8997e055bd764487d66ec0667f4421c1922bc00557477dfe6f67/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f70686f746f6e5f746f5f646574656374696f6e2d31382e305f6d732d3030346566663f7374796c653d666c61742d737175617265266c6162656c436f6c6f723d306431313137" alt="18.0 ms" data-canonical-src="https://img.shields.io/badge/photon_to_detection-18.0_ms-004eff?style=flat-square&amp;labelColor=0d1117" style="max-width: 100%;"></a>
+  <a target="_blank" rel="noopener noreferrer nofollow" href="https://camo.githubusercontent.com/f5eae4c6f5f55a36041c67e5ea415761c4853ee71168307863b2ae500ca9b7b2/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f766973696f6e2d4861696c6f2d2d382d3030346566663f7374796c653d666c61742d737175617265266c6162656c436f6c6f723d306431313137"><img src="https://camo.githubusercontent.com/f5eae4c6f5f55a36041c67e5ea415761c4853ee71168307863b2ae500ca9b7b2/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f766973696f6e2d4861696c6f2d2d382d3030346566663f7374796c653d666c61742d737175617265266c6162656c436f6c6f723d306431313137" alt="Hailo-8" data-canonical-src="https://img.shields.io/badge/vision-Hailo--8-004eff?style=flat-square&amp;labelColor=0d1117" style="max-width: 100%;"></a>
+  <a target="_blank" rel="noopener noreferrer nofollow" href="https://camo.githubusercontent.com/c7b9faabe953e13f0aac824b50f0987f62067e8b75a0565eeaaf8cbc01b3d065/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f524f535f322d48756d626c655fc2b75f4a617a7a792d3163323032393f7374796c653d666c61742d737175617265266c6162656c436f6c6f723d306431313137"><img src="https://camo.githubusercontent.com/c7b9faabe953e13f0aac824b50f0987f62067e8b75a0565eeaaf8cbc01b3d065/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f524f535f322d48756d626c655fc2b75f4a617a7a792d3163323032393f7374796c653d666c61742d737175617265266c6162656c436f6c6f723d306431313137" alt="ROS 2" data-canonical-src="https://img.shields.io/badge/ROS_2-Humble_·_Jazzy-1c2029?style=flat-square&amp;labelColor=0d1117" style="max-width: 100%;"></a>
+  <a target="_blank" rel="noopener noreferrer nofollow" href="https://camo.githubusercontent.com/8c092462523640aa173aa3042a7097e1e28ace6fbaf135ff70f5741e96c01342/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f74657374732d333331315f70617373696e672d3163323032393f7374796c653d666c61742d737175617265266c6162656c436f6c6f723d306431313137"><img src="https://camo.githubusercontent.com/8c092462523640aa173aa3042a7097e1e28ace6fbaf135ff70f5741e96c01342/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f74657374732d333331315f70617373696e672d3163323032393f7374796c653d666c61742d737175617265266c6162656c436f6c6f723d306431313137" alt="3311 tests passing" data-canonical-src="https://img.shields.io/badge/tests-3311_passing-1c2029?style=flat-square&amp;labelColor=0d1117" style="max-width: 100%;"></a>
+  <a target="_blank" rel="noopener noreferrer nofollow" href="https://camo.githubusercontent.com/05808e6e159b0d0e2a68072afd1e2e8a4ef29c91ebd71057a8501f5506dfc2f1/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f696e5f77617465722d6e657665722d6666303030303f7374796c653d666c61742d737175617265266c6162656c436f6c6f723d306431313137"><img src="https://camo.githubusercontent.com/05808e6e159b0d0e2a68072afd1e2e8a4ef29c91ebd71057a8501f5506dfc2f1/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f696e5f77617465722d6e657665722d6666303030303f7374796c653d666c61742d737175617265266c6162656c436f6c6f723d306431313137" alt="never been in water" data-canonical-src="https://img.shields.io/badge/in_water-never-ff0000?style=flat-square&amp;labelColor=0d1117" style="max-width: 100%;"></a>
+  <a target="_blank" rel="noopener noreferrer nofollow" href="https://camo.githubusercontent.com/87e991f16b2c79b98d58a15857aa1f76ffd9141be5515be7f00bcb515cd20024/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f6c6963656e63652d4d49542d3163323032393f7374796c653d666c61742d737175617265266c6162656c436f6c6f723d306431313137"><img src="https://camo.githubusercontent.com/87e991f16b2c79b98d58a15857aa1f76ffd9141be5515be7f00bcb515cd20024/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f6c6963656e63652d4d49542d3163323032393f7374796c653d666c61742d737175617265266c6162656c436f6c6f723d306431313137" alt="MIT" data-canonical-src="https://img.shields.io/badge/licence-MIT-1c2029?style=flat-square&amp;labelColor=0d1117" style="max-width: 100%;"></a>
+</p>
+<p align="center">
+  <a href="https://fh1m.github.io/mongla_ws/the-shift.html" rel="nofollow"><b>The Shift</b></a> ·
+  <a href="https://fh1m.github.io/mongla_ws/capability-map.html" rel="nofollow"><b>Capability map</b></a> ·
+  <a href="#getting-it-running">Run it</a> ·
+  <a href="#how-you-ask-it-to-move">Missions</a> ·
+  <a href="#the-packages">Packages</a> ·
+  <a href="#how-this-project-works">Doctrine</a>
+</p>
+<p align="center">
+  <a href="https://fh1m.github.io/mongla_ws/" rel="nofollow"><b>▶  Read the long version — the field notes</b></a>
+</p>
+<hr>
+<h2>Contents</h2>
+<p><strong>Start here</strong> · <a href="#what-this-is">What this is</a> · <a href="#how-the-whole-thing-fits-together">How the whole thing fits together</a> · <a href="#the-machine">The machine</a></p>
+<p><strong>The fundamentals</strong> — written for someone who has never built a robot<br>
+<a href="#why-a-control-loop-and-why-500-hz">Why a control loop</a> · <a href="#what-a-pid-actually-does">What a PID actually does</a> · <a href="#how-a-camera-becomes-a-position">How a camera becomes a position</a> · <a href="#the-dvl-we-do-not-have">The DVL we do not have</a> · <a href="#running-a-neural-network-on-a-chip">Running a neural network on a chip</a></p>
+<p><strong>The system</strong> · <a href="#how-a-command-becomes-thrust">How a command becomes thrust</a> · <a href="#what-happens-when-the-detector-blinks">When the detector blinks</a> · <a href="#seven-packages-deconstructed">Seven packages</a> · <a href="#the-other-three-repositories">The other three repositories</a> · <a href="#the-simulator">The simulator</a></p>
+<p><strong>The people and the record</strong> · <a href="#three-acts">Three acts</a> · <a href="#why-keep-going">Why keep going</a> · <a href="#how-this-project-works">How this project works</a> · <a href="#where-it-stands-honestly">Where it stands</a> · <a href="#authors">Authors</a></p>
+<hr>
+<h2>What this is</h2>
+<p>Mongla is the autonomy stack for an autonomous underwater vehicle. It runs on a control board<br>
+we own down to the firmware, and a Raspberry Pi 5 with a Hailo-8 for vision. It decides what<br>
+the machine should do next, and it is built to keep being right about that when there is<br>
+nobody in the loop to catch it being wrong.</p>
+<p>Underwater, almost everything fights you. Radio does not travel, so there is no GPS and no<br>
+telemetry unless you carry it. Water bends light, so the camera you calibrated in air is a<br>
+different camera once it is wet. It eats red first, then contrast, then certainty. The floor<br>
+throws moving caustics that look exactly like motion. A magnetometer inside an aluminium hull<br>
+is a random number generator. And every one of these failures is quiet: nothing errors, the<br>
+logs stay green, and the vehicle confidently goes somewhere else.</p>
+<p>So this repository is not really a pile of algorithms. It is an argument about <strong>what a<br>
+machine has to do to perceive, decide and move in a place that offers it no help</strong> — and the<br>
+receipts for every claim it makes.</p>
+<hr>
+<h2>How the whole thing fits together</h2>
+<p>Two computers, one cable, and a hard rule about which one is allowed to be slow.</p>
+<div class="highlight highlight-source-mermaid"><pre class="notranslate"><span class="pl-k">flowchart</span> <span class="pl-c1">TB</span>
+    <span class="pl-k">subgraph</span> <span class="pl-en">PI</span><span class="pl-s"><span class="pl-pds"><span class="pl-sg">[</span></span>"Raspberry Pi 5 + Hailo-8 — ROS 2 — thinking"<span class="pl-pds"><span class="pl-sg">]</span></span></span>
+        <span class="pl-k">direction</span> <span class="pl-c1">LR</span>
+        <span class="pl-ent">CAM</span><span class="pl-s"><span class="pl-pds"><span class="pl-sg">[</span></span><span class="pl-s"><span class="pl-pds">"</span>cameras&lt;<span class="pl-ent">br</span>/&gt;forward + downward<span class="pl-pds">"</span></span><span class="pl-pds"><span class="pl-sg">]</span></span></span> <span class="pl-k">--&gt;</span> <span class="pl-ent">DET</span><span class="pl-s"><span class="pl-pds"><span class="pl-sg">[</span></span><span class="pl-s"><span class="pl-pds">"</span>detector&lt;<span class="pl-ent">br</span>/&gt;&lt;b&gt;53.9 Hz&lt;/b&gt;<span class="pl-pds">"</span></span><span class="pl-pds"><span class="pl-sg">]</span></span></span>
+        <span class="pl-ent">DET</span> <span class="pl-k">--&gt;</span> <span class="pl-ent">LOCK</span><span class="pl-s"><span class="pl-pds"><span class="pl-sg">[</span></span><span class="pl-s"><span class="pl-pds">"</span>lock ladder&lt;<span class="pl-ent">br</span>/&gt;live → coast → anchor<span class="pl-pds">"</span></span><span class="pl-pds"><span class="pl-sg">]</span></span></span>
+        <span class="pl-ent">LOCK</span> <span class="pl-k">--&gt;</span> <span class="pl-ent">MISS</span><span class="pl-s"><span class="pl-pds"><span class="pl-sg">[</span></span><span class="pl-s"><span class="pl-pds">"</span>mission + vision verbs&lt;<span class="pl-ent">br</span>/&gt;&lt;b&gt;20–50 Hz&lt;/b&gt;<span class="pl-pds">"</span></span><span class="pl-pds"><span class="pl-sg">]</span></span></span>
+        <span class="pl-ent">FLOW</span><span class="pl-s"><span class="pl-pds"><span class="pl-sg">[</span></span><span class="pl-s"><span class="pl-pds">"</span>optical flow&lt;<span class="pl-ent">br</span>/&gt;the DVL we do not have<span class="pl-pds">"</span></span><span class="pl-pds"><span class="pl-sg">]</span></span></span> <span class="pl-k">--&gt;</span> <span class="pl-ent">EKF</span><span class="pl-s"><span class="pl-pds"><span class="pl-sg">[</span></span><span class="pl-s"><span class="pl-pds">"</span>right-invariant EKF<span class="pl-pds">"</span></span><span class="pl-pds"><span class="pl-sg">]</span></span></span>
+        <span class="pl-ent">EKF</span> <span class="pl-k">--&gt;</span> <span class="pl-ent">MISS</span>
+    <span class="pl-k">end</span>
+
+    <span class="pl-ent">MISS</span> <span class="pl-k">--&gt;</span><span class="pl-k">|</span><span class="pl-s">"one USB-C cable — MAVLink 2 — 115200"</span><span class="pl-k">|</span> <span class="pl-ent">BOARD</span>
+
+    <span class="pl-k">subgraph</span> <span class="pl-en">BOARD</span><span class="pl-s"><span class="pl-pds"><span class="pl-sg">[</span></span>"SROT board — firmware Hengla — reflexes"<span class="pl-pds"><span class="pl-sg">]</span></span></span>
+        <span class="pl-k">direction</span> <span class="pl-c1">LR</span>
+        <span class="pl-ent">C1</span><span class="pl-s"><span class="pl-pds"><span class="pl-sg">[</span></span><span class="pl-s"><span class="pl-pds">"</span>core 1: the flight loop&lt;<span class="pl-ent">br</span>/&gt;&lt;b&gt;500 Hz, uninterruptible&lt;/b&gt;&lt;<span class="pl-ent">br</span>/&gt;IMU · depth · mix · DShot<span class="pl-pds">"</span></span><span class="pl-pds"><span class="pl-sg">]</span></span></span>
+        <span class="pl-ent">C0</span><span class="pl-s"><span class="pl-pds"><span class="pl-sg">[</span></span><span class="pl-s"><span class="pl-pds">"</span>core 0: everything that can wait&lt;<span class="pl-ent">br</span>/&gt;MAVLink 100 Hz · LoRa 20 Hz · display 30 Hz<span class="pl-pds">"</span></span><span class="pl-pds"><span class="pl-sg">]</span></span></span>
+    <span class="pl-k">end</span>
+
+    <span class="pl-ent">BOARD</span> <span class="pl-k">--&gt;</span><span class="pl-k">|</span><span class="pl-s">"bidirectional DShot"</span><span class="pl-k">|</span> <span class="pl-ent">ESC</span><span class="pl-s"><span class="pl-pds"><span class="pl-sg">[</span></span><span class="pl-s"><span class="pl-pds">"</span>8 × Bluejay ESC&lt;<span class="pl-ent">br</span>/&gt;they answer back<span class="pl-pds">"</span></span><span class="pl-pds"><span class="pl-sg">]</span></span></span>
+    <span class="pl-ent">ESC</span> <span class="pl-k">--&gt;</span><span class="pl-k">|</span><span class="pl-s">"measured RPM + current"</span><span class="pl-k">|</span> <span class="pl-ent">BOARD</span></pre></div>
+<p><strong>The rule:</strong> anything that keeps the vehicle upright runs on the board. Anything that decides<br>
+where it should go runs on the Pi. The cable carries <em>intent</em>, never reflexes — so a busy<br>
+detector, a garbage-collecting Python process or an unplugged cable cannot make the vehicle<br>
+tumble.</p>
+<p>That split is worth one number. Our host loop runs at 20–50 Hz; the board runs at 500 Hz.<br>
+<strong>About 25 corrections happen underneath every command we send.</strong> On the old stack the inner<br>
+loop belonged to someone else's firmware and we were the only thing correcting anything, at<br>
+20 Hz. At 20 Hz you are not steering — you are voting.</p>
+<h2>The machine</h2>
+<p align="center">
+  <a target="_blank" rel="noopener noreferrer" href="docs/imgs/cad/mongla-iso.webp"><img src="/__repo__/docs/imgs/cad/mongla-iso.webp" alt="The Mongla hull: red fairings over a grey pressure can, the axial thruster in the nose" width="100%" style="max-width: 100%;"></a>
+</p>
+<p>Not a photograph and not an artist's impression — the CAD, rendered from the same mesh the<br>
+<a href="https://fh1m.github.io/mongla_ws/#body" rel="nofollow">interactive model</a> on the site uses, in the livery the<br>
+vehicle is actually built in. Every number below was measured off that geometry, and validated<br>
+against the CAD tool to <strong>0.08 %</strong>.</p>
+<markdown-accessiblity-table><table role="table">
+<thead>
+<tr>
+<th></th>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>702.0 × 176.1 × 172.1 mm</strong></td>
+<td>length × beam × height</td>
+<td>fineness ratio <strong>3.99</strong></td>
+</tr>
+<tr>
+<td><strong>4 × ⌀84 mm tunnels</strong></td>
+<td>350 mm apart across, 519 mm fore and aft</td>
+<td>sway · yaw · heave · pitch</td>
+</tr>
+<tr>
+<td><strong>1 axial thruster</strong></td>
+<td>in the nose</td>
+<td>surge</td>
+</tr>
+<tr>
+<td><strong>5 of 6 degrees of freedom</strong></td>
+<td>roll has no actuator at all</td>
+<td>it has to be passively stable</td>
+</tr>
+<tr>
+<td><strong>3.310 L</strong></td>
+<td>enclosed in the sealed pressure can</td>
+<td>the entire source of buoyancy</td>
+</tr>
+<tr>
+<td><strong>1.767 L</strong></td>
+<td>solid material, all 40 bodies</td>
+<td>validated against the CAD tool</td>
+</tr>
+</tbody>
+</table></markdown-accessiblity-table>
+<p>Four tunnels buy full authority <em>at zero forward speed</em> — which is the regime a task is<br>
+actually won in, holding still in front of a hole. They cost <strong>221.7 cm² of open aperture<br>
+against a 160.9 cm² frontal area</strong>, paid continuously while transiting. That trade is the<br>
+design, stated in both directions.</p>
+<hr>
+<h2>Three acts</h2>
+<p><strong>Act I — the lab years.</strong> Mongla began as the autonomy software for a university AUV<br>
+programme, and flew on its vehicles at <strong>RoboSub 2023 (2nd place)</strong> and <strong>RoboSub 2025 (8th<br>
+place)</strong>. Four computers, a closed inner loop, and a 20 Hz host loop steering a black box we<br>
+could not open. It won trophies and it had a ceiling.</p>
+<p><strong>Act II — owning the stack.</strong> A custom control board (firmware <em>Hengla</em>, by Rakibul Islam),<br>
+a Pi 5 with dedicated inference silicon, and one USB-C cable between them. A 500 Hz loop we<br>
+wrote, on a core nothing else can interrupt. Sensors that had been computed and thrown away —<br>
+per-motor RPM, two battery packs, the depth controller's own error — came back, because we<br>
+could finally read the source and ask for what was missing. <em>Read the whole story:</em><br>
+<strong><a href="https://fh1m.github.io/mongla_ws/the-shift.html" rel="nofollow">The Shift</a></strong>.</p>
+<p><strong>Act III — open.</strong> In September 2026 I left the university, on principle, and Mongla<br>
+continues as an independent project. Nothing here is owed to anyone's roadmap now. What<br>
+remains is the part I actually care about: making a machine that perceives honestly and moves<br>
+deliberately, and being able to prove it.</p>
+<p><em>The next act is open — the machine is still being built.</em></p>
+<hr>
+<h2>Why keep going</h2>
+<p>I build on hope. Not optimism — hope is different: it is the decision to keep working on the<br>
+better version of a thing while the current version is still broken.</p>
+<p>Pushing a technical limit is the most concrete form of that I know. Every measurement in this<br>
+repository that came out worse than expected is a small argument that the world is knowable,<br>
+and that the next version can be better than this one. That is worth the hours it takes.</p>
+<p>The engineering follows from it. If the point is a better future and not a better demo, then<br>
+the work has to be honest in a specific way: <strong>you do not get to claim what you have not<br>
+measured.</strong></p>
+<hr>
+<h2>How this project works</h2>
+<p>Five habits, learned the expensive way. Each one exists because its absence cost a run.</p>
+<p><strong>Measure, then ship.</strong> Every shipped threshold lives in<br>
+<a href=".claude/context/measured-bars.md"><code class="notranslate">measured-bars.md</code></a> with the method, the conditions and the<br>
+bar it must clear. More than half of that file is <em>retractions</em> — numbers we believed, tested<br>
+properly, and withdrew. The image-enhancement step everybody adds to underwater vision took<br>
+the gate from 30.4 % to <strong>1.2 %</strong> when it was finally measured; it ships disabled, and a test<br>
+keeps it disabled.</p>
+<p><strong>A plausible number is not a measurement.</strong> The recurring defect in this codebase was never a<br>
+crash. It was a reading that looked reasonable: a phantom depth, a confident zero, 958 ESC<br>
+frames that were all exactly <code class="notranslate">0</code> with nothing plugged in. Absence is now <code class="notranslate">NaN</code>, never <code class="notranslate">0.0</code>,<br>
+on both sides of the wire.</p>
+<p><strong>Injection-verify every guard.</strong> A test that has never failed against a real defect is<br>
+decoration. Break it deliberately, watch it fail, restore it. Several tests here exist because<br>
+an earlier version of them passed while the vehicle was broken.</p>
+<p><strong>Refuse loudly.</strong> A verb that reports success while the vehicle does nothing is the failure<br>
+that ends a competition run with nobody knowing why. Unsupported verbs are refused before<br>
+dispatch, with the reason.</p>
+<p><strong>One truth, never two copies.</strong> Where a constant has to exist in two places, one reads the<br>
+other — or a test reads the firmware's own headers and fails when they drift.</p>
+<p><strong>A missing feature is a pull request, not a workaround.</strong> We own the firmware, the ground<br>
+station and the board. When the vehicle cannot do something, the honest move is to ask the<br>
+right layer to change, with the evidence attached. Nine such asks live in<br>
+<a href=".claude/context/upstream/README.md"><code class="notranslate">.claude/context/upstream/</code></a>.</p>
+<hr>
+<h2>Where it stands, honestly</h2>
+<p>Nothing on this platform has been in water. The board's depth loop has never run closed; no<br>
+mission has been flown; no non-zero thruster value has crossed the wire. The<br>
+<a href="https://fh1m.github.io/mongla_ws/capability-map.html" rel="nofollow">capability map</a> marks every row<br>
+<code class="notranslate">WATER</code>, <code class="notranslate">BENCH</code>, <code class="notranslate">BUILT</code> or <code class="notranslate">BLOCKED</code>, and today none of them is <code class="notranslate">WATER</code>.</p>
+<p>That is not modesty. A map that quietly promotes bench results to flight results is how a team<br>
+finds out at the venue.</p>
+<hr>
+<h2>Getting it running</h2>
+<div class="highlight highlight-source-shell"><pre class="notranslate">./build_mongla.sh
+<span class="pl-c1">source</span> install/setup.bash</pre></div>
+<div class="highlight highlight-source-shell"><pre class="notranslate"><span class="pl-c"><span class="pl-c">#</span> the vehicle: control, localization, vision on the Hailo</span>
+ros2 launch mongla_manager bringup.launch.py vision:=true
+
+<span class="pl-c"><span class="pl-c">#</span> is it healthy enough to arm?</span>
+ros2 run mongla_manager bringup_check --srot
+
+<span class="pl-c"><span class="pl-c">#</span> watch everything the board says, with no ROS graph at all</span>
+ros2 run mongla_manager connect --watch
+
+<span class="pl-c"><span class="pl-c">#</span> one verb at a time</span>
+ros2 run mongla_planner mongla arm
+ros2 run mongla_planner mongla set_depth --target -0.5
+ros2 run mongla_planner mongla disarm</pre></div>
+<h2>How you ask it to move</h2>
+<p>A mission is a Python file with a <code class="notranslate">run(mongla)</code> function. The object handed to it is the whole<br>
+vehicle.</p>
+<div class="highlight highlight-source-python"><pre class="notranslate"><span class="pl-k">from</span> <span class="pl-s1">mongla_planner</span>.<span class="pl-s1">client</span> <span class="pl-k">import</span> <span class="pl-v">TaskAbandoned</span>
+
+<span class="pl-k">def</span> <span class="pl-en">run</span>(<span class="pl-s1">mongla</span>, <span class="pl-s1">log</span><span class="pl-c1">=</span><span class="pl-c1">None</span>):
+    <span class="pl-s1">mongla</span>.<span class="pl-c1">mission_reset</span>()                     <span class="pl-c"># clear old state, re-zero depth at the surface</span>
+    <span class="pl-s1">mongla</span>.<span class="pl-c1">use_budget</span>(<span class="pl-c1">900</span>, <span class="pl-s1">reserve_s</span><span class="pl-c1">=</span><span class="pl-c1">45</span>)       <span class="pl-c"># ration the run; the clock starts on arm</span>
+
+    <span class="pl-k">try</span>:
+        <span class="pl-s1">mongla</span>.<span class="pl-c1">arm</span>()
+        <span class="pl-s1">mongla</span>.<span class="pl-c1">set_depth</span>(<span class="pl-c1">-</span><span class="pl-c1">0.8</span>)
+
+        <span class="pl-k">with</span> <span class="pl-s1">mongla</span>.<span class="pl-c1">task</span>(<span class="pl-s">'gate'</span>, <span class="pl-s1">deadline_s</span><span class="pl-c1">=</span><span class="pl-c1">120</span>):
+            <span class="pl-k">if</span> <span class="pl-s1">mongla</span>.<span class="pl-c1">vision</span>.<span class="pl-c1">align</span>(<span class="pl-s">'gate'</span>, <span class="pl-s1">yaw</span><span class="pl-c1">=</span><span class="pl-c1">0</span>, <span class="pl-s1">lat</span><span class="pl-c1">=</span><span class="pl-c1">0</span>, <span class="pl-s1">gain</span><span class="pl-c1">=</span><span class="pl-c1">30</span>, <span class="pl-s1">duration</span><span class="pl-c1">=</span><span class="pl-c1">60</span>):
+                <span class="pl-s1">mongla</span>.<span class="pl-c1">vision</span>.<span class="pl-c1">move</span>(<span class="pl-s">'gate'</span>, <span class="pl-s1">fwd</span><span class="pl-c1">=</span><span class="pl-c1">None</span>)      <span class="pl-c"># drive through it</span>
+    <span class="pl-k">except</span> <span class="pl-v">TaskAbandoned</span>:
+        <span class="pl-s1">mongla</span>.<span class="pl-c1">note</span>(<span class="pl-s">'gate'</span>, <span class="pl-s">'ran out of time'</span>, <span class="pl-s1">success</span><span class="pl-c1">=</span><span class="pl-c1">False</span>)
+    <span class="pl-k">finally</span>:
+        <span class="pl-s1">mongla</span>.<span class="pl-c1">surface</span>()
+        <span class="pl-s1">mongla</span>.<span class="pl-c1">disarm</span>()</pre></div>
+<p>Three ideas hold that up. <strong>Two vision verbs, not nine</strong> — centre on it, or drive to it;<br>
+neither raises, both return where the target was, so a mission recovers instead of crashing.<br>
+<strong>Effort is not points</strong> — a run is a budget, and each task is asked whether it is still worth<br>
+the attempt. <strong>Give up cleanly</strong> — a deadline cancels the goal in flight and hands the mission<br>
+its fallback, rather than overrunning into the next task.</p>
+<p>Reference: <a href=".claude/context/missions/command-reference.md">commands</a> ·<br>
+<a href=".claude/context/missions/client-and-dsl-api.md">the mission language</a> ·<br>
+<a href=".claude/context/missions/mission-cookbook.md">cookbook</a></p>
+<hr>
+<h1>The fundamentals</h1>
+<p>Everything below assumes you have never built a robot. If you have, skip to<br>
+<a href="#seven-packages-deconstructed">the packages</a> — but the numbers here are measured, not<br>
+textbook, and a few of them are surprising.</p>
+<h2>Why a control loop, and why 500 Hz</h2>
+<p>A submerged vehicle is never at rest. It is a buoyant body in a fluid that pushes back, and if<br>
+nothing corrects it, it drifts, rolls, and sinks or surfaces. A <strong>control loop</strong> is the thing<br>
+that stops that: read where you are, compare it to where you want to be, push in the direction<br>
+of the difference, repeat.</p>
+<p>The only interesting question is <em>how often</em>. Between one correction and the next, the<br>
+disturbance is unopposed — the vehicle is, briefly, an uncontrolled object.</p>
+<pre class="notranslate"><code class="notranslate">disturbance ─┬─────────────────────────────────────── 50 ms ──┐   old stack: 20 Hz
+             │        (nothing is answering)                  ▼   ← up to 50 ms adrift
+             │
+             ├─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┐   Mongla: 500 Hz
+             │ 2ms                                            ▼   ← up to 2 ms adrift
+</code></pre>
+<p>That is the entire argument for owning the firmware. Nothing about our code got faster — the<br>
+boundary moved. <strong>At 20 Hz you are not steering, you are voting.</strong></p>
+<p>Two more reasons the rate has to live on the board and not on the Pi:</p>
+<ul>
+<li><strong>Jitter is worse than latency.</strong> A loop that runs at 500 Hz <em>except</em> when Python's garbage<br>
+collector fires is not a 500 Hz loop; it is a 500 Hz loop with a hole in it, and the hole<br>
+lands at random. ESP32 core 1 runs the flight loop and nothing else is permitted there.</li>
+<li><strong>A failure has to be survivable.</strong> If the Pi dies mid-mission the board keeps its attitude<br>
+and surfaces on its own after 5 s of silence. If the loop lived on the Pi, a dead Pi would<br>
+mean a tumbling vehicle.</li>
+</ul>
+<h2>What a PID actually does</h2>
+<p>A PID controller is three guesses about the future, added together.</p>
+<markdown-accessiblity-table><table role="table">
+<thead>
+<tr>
+<th>Term</th>
+<th>What it answers</th>
+<th>Costs you</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>P</strong> — proportional</td>
+<td>"How wrong am I <em>right now</em>?"</td>
+<td>Alone, it never quite arrives — it stalls where the push balances the drag</td>
+</tr>
+<tr>
+<td><strong>I</strong> — integral</td>
+<td>"How long have I been wrong in the same direction?"</td>
+<td>Fixes a steady current, but <em>winds up</em>: it keeps accumulating while saturated and then overshoots</td>
+</tr>
+<tr>
+<td><strong>D</strong> — derivative</td>
+<td>"How fast is the error changing?"</td>
+<td>Damps the overshoot, and amplifies every bit of sensor noise</td>
+</tr>
+</tbody>
+</table></markdown-accessiblity-table>
+<p>Underwater, the D term is the one that bites. A 20 kg hull has enormous <strong>added mass</strong> — it<br>
+drags a volume of water along with it, roughly 1.0× its displacement broadside — so it<br>
+responds late and then keeps going. Tuned for air, D is far too eager; the vehicle oscillates<br>
+around its target instead of settling on it.</p>
+<p><strong>Where the PIDs live matters more than their gains.</strong> Depth and attitude are closed on the<br>
+board at 500 Hz. Heading, historically, was closed in Python against a BNO085 — because the<br>
+magnetometer inside an aluminium hull with eight thrusters drawing current is a random number<br>
+generator, so the compass could not be trusted even though it existed.</p>
+<p>And one measured thing about the actuator that no textbook mentions:</p>
+<blockquote>
+<p>at a demand of <strong>0.005</strong>, the thruster jumps from 0 to <strong>16.13 %</strong> of its band (DShot 1210).</p>
+</blockquote>
+<p>The actuator is not linear near zero — it is closer to a relay. A gain schedule that softens<br>
+the response as the target gets close cannot work if the smallest command the hardware can<br>
+express is already 16 % of full thrust. That is why <code class="notranslate">range_gain_floor</code> is off.</p>
+<h2>How a camera becomes a position</h2>
+<p>A detector returns a <strong>box in pixels</strong>. Control needs a <strong>direction in the world</strong>. Three<br>
+physical facts sit between them, and every one of them was measured rather than assumed.</p>
+<p><strong>1. The lens is not what the datasheet says it is.</strong> The camera is specified at 63.8° in air.<br>
+Underwater, light crosses from water into the flat port and refracts, and Snell's law narrows<br>
+the field of view to <strong>46.7°</strong> — measured, ±0.7°. Using the air figure means the vehicle<br>
+believes it can see 27 % more of the world than it can, so every search pattern is calibrated<br>
+against a view that does not exist.</p>
+<p><strong>2. A pixel offset is not an angle until you say which camera.</strong> The conversion needs that<br>
+camera's own focal length, so the measured constant belongs to the <em>physical device</em> — not to<br>
+the role. When the forward and downward cameras were swapped in udev, 46.7° stayed attached to<br>
+the wrong one for nine days and every range estimate was 17 % out.</p>
+<p><strong>3. The bearing has to be computed in water.</strong> We stream one <code class="notranslate">LANDING_TARGET</code> per frame as a<br>
+<strong>bearing in radians</strong>, not as pixels. Pixels are meaningless to firmware — change the lens and<br>
+every gain silently becomes wrong. A bearing has units and survives a hardware change.</p>
+<pre class="notranslate"><code class="notranslate">   photons ──► exposure ──► Hailo-8 ──► box in pixels
+                              18.0 ms total, photon to detection
+                                   │
+                                   ├─ undistort  (that camera's own intrinsics)
+                                   ├─ refract    (flat port, water — not air)
+                                   └─► bearing in radians ──► the controller
+</code></pre>
+<h2>The DVL we do not have</h2>
+<p>A <strong>Doppler Velocity Log</strong> is how serious AUVs know they are moving: it pings the seabed and<br>
+reads the Doppler shift of the return. We do not have one. What we have is a camera pointed at<br>
+the floor.</p>
+<p>If you know how far the floor is and how much the image shifted between two frames, you know<br>
+how far you travelled. <strong>Optical flow</strong> does exactly that, and it is the vehicle's only<br>
+velocity sensor.</p>
+<p><strong>Measured against a tape:</strong> three 30 cm slides on three axes, worst error <strong>1.09 cm</strong> (3.6 %).<br>
+Implied height 0.72 / 0.69 / 0.70 m against a 0.72 m tape.</p>
+<p>The interesting part is the failure and its inversion. Optical flow needs distinctive corners<br>
+to match between frames, and the pool floor is a repeating tile grid — the textbook worst case.<br>
+But:</p>
+<blockquote>
+<p>"That is true of MATCHING. It is exactly backwards for DEMODULATION. A periodic pattern is a<br>
+<strong>carrier</strong>, and displacement is a phase shift of that carrier."<br>
+— <a href="src/mongla_localization/mongla_localization/tile_grating.py"><code class="notranslate">tile_grating.py:3</code></a></p>
+</blockquote>
+<p>Read the floor as an optical encoder instead of a texture, and the thing that broke the method<br>
+becomes the thing that makes it precise.</p>
+<p>All of it feeds a <strong>right-invariant EKF</strong> on SE₂(3) — a filter that respects the fact that<br>
+rotations are not a vector space, so errors compose the way the geometry actually composes<br>
+rather than approximately. Late measurements are <strong>replayed at the instant they describe</strong><br>
+rather than applied on arrival, because a velocity fix that arrives 80 ms late and is applied<br>
+as though it were current is a measurement in the wrong place.</p>
+<h2>Running a neural network on a chip</h2>
+<p>The Hailo-8 is a 26 TOPS accelerator on the Pi's HAT. A compiled <code class="notranslate">.hef</code> runs on it instead of<br>
+on the CPU, which is the only reason two cameras and a filter fit on one small computer.</p>
+<p><strong>Measured: 98.0 Hz</strong> on <code class="notranslate">gate_rescue_repair</code>, against a <code class="notranslate">hailortcli --hw-only</code> benchmark of<br>
+<strong>97.9 FPS</strong> on the same file. The host code is at 100 % of the chip — there is nothing left to<br>
+optimise on our side of the boundary.</p>
+<p>Getting there took three findings that each looked like something else:</p>
+<p><strong>The decode never has to leave the quantised domain.</strong> The chip emits int8. Converting to<br>
+float before thresholding cost <strong>31.5 ms</strong>. But the class head is already a probability at<br>
+scale 1/255, so thresholding the raw bytes selects exactly the same cells — <strong>0.93 ms</strong>,<br>
+bit-for-bit identical output.</p>
+<p><strong>Publishing slower makes detections fresher.</strong> A full V4L2 queue keeps the <em>oldest</em> frames, so<br>
+the standard advice to drain it recovers almost nothing. Treat the topic as a <strong>mailbox</strong> —<br>
+newest frame wins, surplus dropped — and staleness falls from <strong>396 ms to 16.9 ms</strong>. The<br>
+pipeline that publishes <em>every</em> frame is the slow one.</p>
+<p><strong>Image enhancement does not help, and we tested it until it was embarrassing.</strong> CLAHE,<br>
+white balance, the lot: <strong>17 configurations across four props and three venues.</strong> Never once<br>
+positive. On the gate it destroyed <strong>95 %</strong> of detections. The implementation was correct; the<br>
+original +42 % that motivated it was a confounded A/B. A test now keeps preprocessing off.</p>
+<hr>
+<h2>How a command becomes thrust</h2>
+<p>Thirty verbs, one action, and a registry that means adding the thirty-first touches two files.</p>
+<div class="highlight highlight-source-mermaid"><pre class="notranslate"><span class="pl-k">sequenceDiagram</span>
+    <span class="pl-k">autonumber</span>
+    <span class="pl-k">participant</span> <span class="pl-ent">M</span> <span class="pl-k">as</span> <span class="pl-ent">mission script</span>
+    <span class="pl-k">participant</span> <span class="pl-ent">C</span> <span class="pl-k">as</span> <span class="pl-ent">MonglaClient</span>
+    <span class="pl-k">participant</span> <span class="pl-ent">N</span> <span class="pl-k">as</span> <span class="pl-ent">auv_manager_node</span>
+    <span class="pl-k">participant</span> <span class="pl-ent">F</span> <span class="pl-k">as</span> <span class="pl-ent">SrotFC</span>
+    <span class="pl-k">participant</span> <span class="pl-ent">B</span> <span class="pl-k">as</span> <span class="pl-ent">SROT board</span>
+
+    <span class="pl-ent">M</span><span class="pl-k">-&gt;&gt;</span><span class="pl-ent">C</span><span class="pl-k">:</span> <span class="pl-s">mongla.move_forward(duration=3, gain=40)</span>
+    <span class="pl-k">Note over </span><span class="pl-ent">C</span><span class="pl-k">:</span> <span class="pl-s">validated against COMMANDS —&lt;br/&gt;a typo is an AttributeError, not a bad goal</span>
+    <span class="pl-ent">C</span><span class="pl-k">-&gt;&gt;</span><span class="pl-ent">N</span><span class="pl-k">:</span> <span class="pl-s">/mongla/move action goal</span>
+    <span class="pl-k">Note over </span><span class="pl-ent">N</span><span class="pl-k">:</span> <span class="pl-s">registry-driven dispatch —&lt;br/&gt;this file never changes when a verb is added</span>
+    <span class="pl-ent">N</span><span class="pl-k">-&gt;&gt;</span><span class="pl-ent">F</span><span class="pl-k">:</span> <span class="pl-s">Mongla.move_forward(...)</span>
+    <span class="pl-ent">F</span><span class="pl-k">-&gt;&gt;</span><span class="pl-ent">F</span><span class="pl-k">:</span> <span class="pl-s">check firmware revision, refuse below the floor</span>
+    <span class="pl-ent">F</span><span class="pl-k">-&gt;&gt;</span><span class="pl-ent">B</span><span class="pl-k">:</span> <span class="pl-s">MAV_CMD_SROT_MOVE (31000)</span>
+    <span class="pl-k">Note over </span><span class="pl-ent">B</span><span class="pl-k">:</span> <span class="pl-s">the board runs AND BRAKES the primitive&lt;br/&gt;at 500 Hz — the host is not in this loop</span>
+    <span class="pl-ent">B</span><span class="pl-k">--&gt;&gt;</span><span class="pl-ent">F</span><span class="pl-k">:</span> <span class="pl-s">progress, then terminal ACK</span>
+    <span class="pl-ent">F</span><span class="pl-k">--&gt;&gt;</span><span class="pl-ent">N</span><span class="pl-k">:</span> <span class="pl-s">outcome</span>
+    <span class="pl-ent">N</span><span class="pl-k">--&gt;&gt;</span><span class="pl-ent">C</span><span class="pl-k">:</span> <span class="pl-s">result + final_value</span>
+    <span class="pl-ent">C</span><span class="pl-k">--&gt;&gt;</span><span class="pl-ent">M</span><span class="pl-k">:</span> <span class="pl-s">returns, or refuses loudly</span></pre></div>
+<p>Adding a verb is two edits, and <a href="src/mongla_control/mongla_control/commands.py"><code class="notranslate">commands.py</code></a><br>
+says so out loud:</p>
+<blockquote>
+<p>This is the ONE place that knows what commands exist, what fields each one reads from<br>
+<code class="notranslate">Move.Goal</code>, what the defaults are, and what to print in <code class="notranslate">--help</code>. The action server, the<br>
+Python client, and the <code class="notranslate">mongla</code> CLI all read from here.</p>
+</blockquote>
+<p>One row in the registry, one method on the facade. The CLI, the action server and the Python<br>
+client pick it up with no further edits — there is no dispatch table to forget.</p>
+<h2>Seven packages, deconstructed</h2>
+<p align="center">
+  <a target="_blank" rel="noopener noreferrer" href="docs/assets/diagrams/package-map.svg"><img src="/__repo__/docs/assets/diagrams/package-map.svg" alt="The seven packages and the action between them" width="100%" style="max-width: 100%;"></a>
+</p>
+<p><strong>60,026 lines of source across 221 files — and 45,355 lines of tests across 252.</strong> There are<br>
+more test files than source files in this repository. That ratio is the single most honest<br>
+thing about it.</p>
+<h3><code class="notranslate">mongla_vision</code> — 22,419 LOC · 85 test files · 21 entry points</h3>
+<p>The largest package, and the one that touches physics twice: once at the lens, once at the<br>
+water. Cameras, the Hailo-8 detector, the lock ladder, optical flow, refraction correction,<br>
+guided calibration.</p>
+<blockquote>
+<p>"Round 29 measured this pipeline at <strong>98.0 Hz</strong> on <code class="notranslate">gate_rescue_repair</code> against a<br>
+<code class="notranslate">hailortcli --hw-only</code> benchmark of <strong>97.9 FPS</strong> on the same HEF — so the host code is at<br>
+100 % of the chip."<br>
+— <a href="src/mongla_vision/mongla_vision/detection/hailo.py"><code class="notranslate">detection/hailo.py:3</code></a></p>
+</blockquote>
+<p>The calibration tool is a <em>scripted sequence of poses</em>, and the reason is a measurement about<br>
+people rather than optics: a freeform version reached 9/9 coverage with <strong>15 of 17 views<br>
+flat</strong>, because an operator naturally holds a board square-on and the one axis that decides<br>
+correctness is the one that goes unfilled. Bars report the problem; they do not prevent it.</p>
+<h3><code class="notranslate">mongla_control</code> — 13,213 LOC · 63 test files · <strong>zero</strong> entry points</h3>
+<p>Zero is deliberate. This package is a pure library: it owns every verb and the<br>
+flight-controller boundary, but it never gets its own process, because exactly one node in the<br>
+system is allowed to hold the MAVLink connection.</p>
+<blockquote>
+<p>"yaw : target-right → yaw RIGHT toward it → NO negate (same polarity as lateral;<br>
+pool-verified — the old <code class="notranslate">-ex</code> negation drove <em>away</em> from the target)"<br>
+— <a href="src/mongla_control/mongla_control/motion_vision.py"><code class="notranslate">motion_vision.py:28</code></a></p>
+</blockquote>
+<p>That comment is a sign error found in water, preserved so nobody helpfully "fixes" it back.</p>
+<h3><code class="notranslate">mongla_planner</code> — 10,971 LOC · 33 test files · the mission language</h3>
+<p><code class="notranslate">mongla.move_forward(...)</code> and <code class="notranslate">mongla.vision.align(...)</code> on one object. Missions are<br>
+discovered by filename — drop in <code class="notranslate">my_mission.py</code> with a <code class="notranslate">run(mongla, log)</code> and it appears in<br>
+<code class="notranslate">mission --list</code>, with no registry to update. A broken file is <strong>skipped, not fatal</strong>: on<br>
+competition day one half-edited scratch file must never brick the good mission.</p>
+<blockquote>
+<p>"⛔ A TIMED MOVE REPORTS SUCCESS WHETHER OR NOT THE HULL WENT ANYWHERE. … Treat unknown as<br>
+'no evidence', never as 'ok'."<br>
+— <a href="src/mongla_planner/mongla_planner/mongla_dsl.py"><code class="notranslate">mongla_dsl.py:1501</code></a></p>
+</blockquote>
+<h3><code class="notranslate">mongla_manager</code> — 7,983 LOC · 46 test files · 7 entry points</h3>
+<p>The one process that touches the board. Owns the MAVLink connection, the reader thread, the<br>
+<code class="notranslate">/mongla/move</code> action server and <code class="notranslate">/mongla/state</code>.</p>
+<blockquote>
+<p>"<strong>absence is data.</strong> … A consumer that renders a missing value as <code class="notranslate">0.0</code> re-creates exactly<br>
+the failure the firmware fixed — a Bar30 read during a PROM reset race once published<br>
+<code class="notranslate">-51 C</code> and <code class="notranslate">+2.87 m</code> in air with nothing marking them wrong."<br>
+— <a href="src/mongla_manager/mongla_manager/srot_connect.py"><code class="notranslate">srot_connect.py:15</code></a></p>
+</blockquote>
+<h3><code class="notranslate">mongla_localization</code> — 3,560 LOC · 20 test files · no GPS, no DVL</h3>
+<p>A right-invariant EKF on SE₂(3), corrected by depth, optical-flow velocity, headings and prop<br>
+fixes, with late measurements <strong>replayed at the instant they describe</strong> rather than applied on<br>
+arrival.</p>
+<p>The best idea in it inverts a known failure. Optical flow dies on a repeating tiled floor —<br>
+no distinctive corners to match. But:</p>
+<blockquote>
+<p>"That is true of MATCHING. It is exactly backwards for DEMODULATION. A periodic pattern is a<br>
+<strong>carrier</strong>, and displacement is a phase shift of that carrier."<br>
+— <a href="src/mongla_localization/mongla_localization/tile_grating.py"><code class="notranslate">tile_grating.py:3</code></a></p>
+</blockquote>
+<p>And one refusal, from arithmetic rather than opinion: reading a heading off a lane line by FFT<br>
+needs five cycles of a 2.5 m pitch in frame, which at our downward focal length requires an<br>
+altitude of <strong>26.8 m</strong>. A pool is 2 m deep. The method is not tuned — it is rejected.</p>
+<h3><code class="notranslate">mongla_sensors</code> — 1,880 LOC · one job</h3>
+<p>"Which way is north", behind one interface. The BNO085 runs with its <strong>magnetometer disabled</strong><br>
+— eight thrusters, an aluminium hull and battery currents make a magnetometer a random number<br>
+generator — so it gives a smooth heading with no absolute reference. The Earth reference is<br>
+borrowed from the Pixhawk's mag-fused yaw <strong>exactly once</strong>, at the surface, at boot, and the<br>
+offset is locked forever after.</p>
+<h3><code class="notranslate">mongla_interfaces</code> — 0 Python lines · 368 lines of interface</h3>
+<p>One action, four messages, zero services. <code class="notranslate">Move.action</code> is 212 lines of which only ~60 are<br>
+field declarations; the rest is argument.</p>
+<blockquote>
+<p>"⛔ 'fire' HERE MEANS ACTUATE A BOARD CHANNEL — it is NOT a torpedo verb. … Nothing in this<br>
+action, and nothing in any of the 30 verbs, is named for a competition task — the stack is a<br>
+set of AUV CAPABILITIES that missions compose, and <code class="notranslate">test_the_command_surface_is_task_free</code><br>
+keeps it that way."<br>
+— <a href="src/mongla_interfaces/action/Move.action"><code class="notranslate">Move.action:60</code></a></p>
+</blockquote>
+<p>Two more design arguments live in the <code class="notranslate">.msg</code> files. Why not <code class="notranslate">PoseWithCovarianceStamped</code>: a<br>
+covariance asserts a <em>unimodal</em> distribution, and planar pose carries a flip ambiguity, which<br>
+is bimodal — "one of two places, mirrored". Why publish correspondences and not just the pose:<br>
+publish only the answer and a shot that missed can never be explained; publish the evidence<br>
+and a recorded run is <strong>re-solvable off a bag, months later, with different thresholds</strong>.</p>
+<markdown-accessiblity-table><table role="table">
+<thead>
+<tr>
+<th>Package</th>
+<th align="right">Source</th>
+<th align="right">Tests</th>
+<th align="right">Entry points</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href=".claude/context/packages/mongla_vision/README.md"><code class="notranslate">mongla_vision</code></a></td>
+<td align="right">22,419</td>
+<td align="right">14,708</td>
+<td align="right">21</td>
+</tr>
+<tr>
+<td><a href=".claude/context/packages/mongla_control/README.md"><code class="notranslate">mongla_control</code></a></td>
+<td align="right">13,213</td>
+<td align="right">14,443</td>
+<td align="right">0</td>
+</tr>
+<tr>
+<td><a href=".claude/context/packages/mongla_planner/README.md"><code class="notranslate">mongla_planner</code></a></td>
+<td align="right">10,971</td>
+<td align="right">5,951</td>
+<td align="right">2</td>
+</tr>
+<tr>
+<td><a href=".claude/context/packages/mongla_manager/README.md"><code class="notranslate">mongla_manager</code></a></td>
+<td align="right">7,983</td>
+<td align="right">6,556</td>
+<td align="right">7</td>
+</tr>
+<tr>
+<td><a href=".claude/context/packages/mongla_localization/README.md"><code class="notranslate">mongla_localization</code></a></td>
+<td align="right">3,560</td>
+<td align="right">3,295</td>
+<td align="right">4</td>
+</tr>
+<tr>
+<td><a href=".claude/context/packages/mongla_sensors/README.md"><code class="notranslate">mongla_sensors</code></a></td>
+<td align="right">1,880</td>
+<td align="right">402</td>
+<td align="right">1</td>
+</tr>
+<tr>
+<td><a href=".claude/context/packages/mongla_interfaces/README.md"><code class="notranslate">mongla_interfaces</code></a></td>
+<td align="right">368 IDL</td>
+<td align="right">—</td>
+<td align="right">—</td>
+</tr>
+</tbody>
+</table></markdown-accessiblity-table>
+<div class="highlight highlight-source-shell"><pre class="notranslate">python3 -m pytest -q src/mongla_control/test      <span class="pl-c"><span class="pl-c">#</span> 1114 passed, 1 xfailed</span>
+python3 -m pytest -q src/mongla_vision/test       <span class="pl-c"><span class="pl-c">#</span> 1030 passed, 1 skipped</span>
+python3 -m pytest -q src/mongla_manager/test      <span class="pl-c"><span class="pl-c">#</span>  461 passed, 4 skipped</span>
+python3 -m pytest -q src/mongla_planner/test      <span class="pl-c"><span class="pl-c">#</span>  420 passed, 1 skipped</span>
+python3 -m pytest -q src/mongla_localization/test <span class="pl-c"><span class="pl-c">#</span>  286 passed</span></pre></div>
+<p>No hardware needed: the board, the cameras and the ROS graph are faked at their real<br>
+boundaries.</p>
+<hr>
+<h2>What happens when the detector blinks</h2>
+<p>A neural detector on real underwater footage drops the box constantly — a reflection, a bubble,<br>
+a bad angle. If control trusts only the detector, the vehicle loses a lock it never actually<br>
+lost. So there is a ladder, and every rung is allowed to be wrong for a <em>measured</em> length of<br>
+time.</p>
+<div class="highlight highlight-source-mermaid"><pre class="notranslate"><span class="pl-k">stateDiagram-v2</span>
+    <span class="pl-c1">[*]</span> <span class="pl-k">--&gt;</span> <span class="pl-v">LIVE</span>
+    <span class="pl-v">LIVE</span><span class="pl-k">:</span> <span class="pl-s">LIVE DETECTION</span>
+    <span class="pl-v">LIVE</span><span class="pl-k">:</span> <span class="pl-s">the box is there this frame — 53.9 Hz</span>
+    <span class="pl-v">COAST</span><span class="pl-k">:</span> <span class="pl-s">TRACKER COAST</span>
+    <span class="pl-v">COAST</span><span class="pl-k">:</span> <span class="pl-s">a frame or two missing — 0.8 s of authority, decayed by TRUE detection age</span>
+    <span class="pl-v">ANCHOR</span><span class="pl-k">:</span> <span class="pl-s">GEOMETRIC ANCHOR</span>
+    <span class="pl-v">ANCHOR</span><span class="pl-k">:</span> <span class="pl-s">the detector is gone — match image structure instead. Held 175 frames.</span>
+    <span class="pl-v">LOST</span><span class="pl-k">:</span> <span class="pl-s">REFUSE</span>
+    <span class="pl-v">LOST</span><span class="pl-k">:</span> <span class="pl-s">nothing above is honest any more — return LOST, never a guess</span>
+
+    <span class="pl-v">LIVE</span> <span class="pl-k">--&gt;</span> <span class="pl-v">COAST</span><span class="pl-k">:</span> <span class="pl-s">box missing</span>
+    <span class="pl-v">COAST</span> <span class="pl-k">--&gt;</span> <span class="pl-v">LIVE</span><span class="pl-k">:</span> <span class="pl-s">box returns</span>
+    <span class="pl-v">COAST</span> <span class="pl-k">--&gt;</span> <span class="pl-v">ANCHOR</span><span class="pl-k">:</span> <span class="pl-s">coast_s exceeded</span>
+    <span class="pl-v">ANCHOR</span> <span class="pl-k">--&gt;</span> <span class="pl-v">LIVE</span><span class="pl-k">:</span> <span class="pl-s">box returns</span>
+    <span class="pl-v">ANCHOR</span> <span class="pl-k">--&gt;</span> <span class="pl-v">LOST</span><span class="pl-k">:</span> <span class="pl-s">structure gone too</span>
+    <span class="pl-v">LOST</span> <span class="pl-k">--&gt;</span> <span class="pl-c1">[*]</span></pre></div>
+<p>The third rung is the one worth staring at. Through a gap of <strong>175 consecutive frames</strong> the<br>
+detector produced nothing at all, and the vehicle still knew where the target was — because<br>
+the anchor matches image structure rather than asking the network again.</p>
+<p>The fourth rung matters as much: the ladder ends in a <strong>refusal</strong>, not in a confident<br>
+invention. A verb that reports success while the vehicle does nothing is the failure mode that<br>
+ends competition runs.</p>
+<hr>
+<h2>The other three repositories</h2>
+<p>Mongla is the soul. It does not own the body.</p>
+<markdown-accessiblity-table><table role="table">
+<thead>
+<tr>
+<th>Repo</th>
+<th>What it is</th>
+<th>Owner</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Mongla</strong> <em>(this one)</em></td>
+<td>Perception, estimation, mission language, simulator</td>
+<td>Muhammad Fahim Faisal</td>
+</tr>
+<tr>
+<td><a href="https://github.com/RakibulIslam1/srot-control-board"><strong>Hengla</strong></a> — <code class="notranslate">srot-control-board</code></td>
+<td>The firmware. ESP32 dual-core + an RP2350 thruster co-processor</td>
+<td>Rakibul Islam</td>
+</tr>
+<tr>
+<td><a href="https://github.com/RakibulIslam1/srot-ground-station"><strong>Bondor</strong></a> — <code class="notranslate">srot-ground-station</code></td>
+<td>Desktop GCS + a LoRa bridge</td>
+<td>Rakibul Islam</td>
+</tr>
+<tr>
+<td><a href="https://github.com/RakibulIslam1/srot-esc-flasher"><strong>ESC flasher</strong></a></td>
+<td>Puts Bluejay on the ESCs</td>
+<td>Rakibul Islam</td>
+</tr>
+</tbody>
+</table></markdown-accessiblity-table>
+<p><strong>We never commit to theirs; they never commit to ours.</strong> Pull requests only. A missing<br>
+low-level feature is a request, not a host-side workaround.</p>
+<p>Three copies of the wire contract exist on purpose, because there are no submodules across the<br>
+suite: the LoRa struct, the vendored MAVLink dialect, and a hand-mirrored TypeScript copy of<br>
+the message ids. The firmware is the source of truth for all three. A mismatch does <strong>not</strong><br>
+raise an error — it fails CRC silently and looks exactly like being out of radio range. On our<br>
+side, <code class="notranslate">test_srot_protocol_drift.py</code> reads the firmware's own headers and fails if our<br>
+constants have drifted from them.</p>
+<p><strong>Bondor</strong> connects over USB serial at 115200 — opened with DTR and RTS de-asserted, so that<br>
+attaching a ground station does not reset the flight controller — or over UDP, or receive-only<br>
+over LoRa at 433 MHz, SF7, CR 4:5.</p>
+<h2>The simulator</h2>
+<p>A full Gazebo pool lives in <a href="sim/"><code class="notranslate">sim/</code></a> — courses, props, both cameras, ground truth and an<br>
+operator lab. It runs ArduSub SITL by design: it is a physics environment, not the vehicle.<br>
+Control behaviour transfers; detection thresholds do not, because sim water is too clean.</p>
+<hr>
+<h2>Shoulders</h2>
+<p>Borrowed convictions, each with the thing it changed here.</p>
+<markdown-accessiblity-table><table role="table">
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://www.latent.space/p/geohot" rel="nofollow"><strong>Hotz</strong></a> — <em>"complex things eventually collapse under their own weight"</em></td>
+<td>the 3D viewer on the site has no dependencies and no build step</td>
+</tr>
+<tr>
+<td><a href="https://danluu.com/latency-mitigation/" rel="nofollow"><strong>Carmack</strong></a> — <em>"the speed of light sucks"</em></td>
+<td>the camera became a mailbox, not a queue: 396 ms of staleness → <strong>16.9 ms</strong></td>
+</tr>
+<tr>
+<td><a href="https://karpathy.medium.com/software-2-0-a64152b37c35" rel="nofollow"><strong>Karpathy</strong></a> — Software 2.0</td>
+<td>the detector is a component with a measured envelope, not an oracle</td>
+</tr>
+<tr>
+<td><a href="https://www.techpowerup.com/270197/jim-keller-on-moores-law-microprocessors-and-designing-chips-from-scratch" rel="nofollow"><strong>Keller</strong></a> — design again rather than patch</td>
+<td>Act II: move the boundary instead of tuning harder</td>
+</tr>
+<tr>
+<td><a href="https://www.modular.com/blog/developer-voices-deep-dive-with-chris-lattner-on-mojo" rel="nofollow"><strong>Lattner</strong></a> — <em>"work backwards from the speed of light of hardware"</em></td>
+<td>the Hailo decode never leaves the quantised domain: 31.5 ms → <strong>0.93 ms</strong>, bit-identical</td>
+</tr>
+<tr>
+<td><a href="https://www.goodreads.com/work/quotes/96114890-the-creative-act-a-way-of-being" rel="nofollow"><strong>Rubin</strong></a> — keep removing until it hurts</td>
+<td>the palette was sampled from the vehicle's own CAD materials, not chosen</td>
+</tr>
+</tbody>
+</table></markdown-accessiblity-table>
+<hr>
+<h2>Authors</h2>
+<p>Two people. One writes the software; the other writes the firmware and builds the board. There<br>
+is no third category, and nothing here is owned by an institution.</p>
+<markdown-accessiblity-table><table role="table">
+<tbody><tr>
+<td width="160" align="center">
+  <a target="_blank" rel="noopener noreferrer nofollow" href="https://avatars.githubusercontent.com/u/132839265?v=4"><img src="https://avatars.githubusercontent.com/u/132839265?v=4" width="130" alt="Muhammad Fahim Faisal" style="max-width: 100%;"></a>
+</td>
+<td>
+<h3>Muhammad Fahim Faisal — author</h3>
+<p>Autonomy: perception, localization, control integration, the mission language, the simulator,<br>
+and this repository. Previously engineering team lead for the RoboSub 2026 campaign, AI &amp;<br>
+Machine Vision sub-team lead (2025), and a junior member of that team (2024) — the software<br>
+placed <strong>2nd at RoboSub 2023</strong> and <strong>8th in 2025</strong>.</p>
+<p><em>"Machines that have to work when nobody is watching."</em></p>
+<p><a href="https://fh1m.github.io/" rel="nofollow">fh1m.github.io</a> · <a href="https://github.com/fh1m">@fh1m</a> · <a href="mailto:fh1m.dev@gmail.com">fh1m.dev@gmail.com</a></p>
+</td>
+</tr>
+<tr>
+<td>
+<h3>Rakibul Islam — firmware and hardware lead</h3>
+<p>The <strong>SROT</strong> control board and its firmware <strong>Hengla</strong> — an ESP32 running a 500 Hz flight loop<br>
+beside an RP2350 that speaks bidirectional DShot. Also <strong>Bondor</strong>, the desktop ground station,<br>
+and the ESC flashing tool. Each lives in his own repository, under his own authorship.</p>
+<p>Mongla does not vendor any of it. It talks across a documented wire protocol, and every change<br>
+we need there is a pull request.</p>
+<p><a href="https://github.com/RakibulIslam1/srot-control-board">srot-control-board</a> ·<br>
+<a href="https://github.com/RakibulIslam1/srot-ground-station">srot-ground-station</a> ·<br>
+<a href="https://github.com/RakibulIslam1">@RakibulIslam1</a></p>
+</td>
+<td width="160" align="center">
+  <a target="_blank" rel="noopener noreferrer nofollow" href="https://avatars.githubusercontent.com/u/181973271?v=4"><img src="https://avatars.githubusercontent.com/u/181973271?v=4" width="130" alt="Rakibul Islam" style="max-width: 100%;"></a>
+</td>
+</tr>
+</tbody></table></markdown-accessiblity-table>
+<h3>History</h3>
+<p>Mongla began as the autonomy software for an autonomous underwater vehicle programme at BRAC<br>
+University, and flew on that programme's vehicles at <strong>RoboSub 2023 (2nd place)</strong> and<br>
+<strong>RoboSub 2025 (8th place)</strong>. In September 2026 the author left the university, on principle,<br>
+and Mongla continues independently. The vehicles, the team name and the university's materials<br>
+remain with the university and are referred to here only in the past tense, as history. What<br>
+lives in this repository is the software and its measurements.</p>
+<p>Full authorship: <a href="AUTHORS.md">AUTHORS.md</a>.</p>
+<h3>Standing on</h3>
+<p><a href="https://docs.ros.org/" rel="nofollow">ROS 2</a> · <a href="https://mavlink.io/" rel="nofollow">MAVLink</a> · <a href="https://hailo.ai/" rel="nofollow">Hailo</a> ·<br>
+<a href="https://github.com/ultralytics/ultralytics">Ultralytics YOLO</a> ·<br>
+<a href="https://github.com/roboflow/supervision">supervision</a> ·<br>
+<a href="https://github.com/uleroboticsgroup/yasmin">YASMIN</a> ·<br>
+<a href="https://gazebosim.org/" rel="nofollow">Gazebo</a></p>
+<p>MIT — see <a href="LICENSE">LICENSE</a>.</p>
+<p align="center"><sub>[ SYS: ONLINE ] · the machine is still being built</sub></p></article>
+<script id="mer" type="application/json">["flowchart TB\n    subgraph PI[\"Raspberry Pi 5 + Hailo-8 \u2014 ROS 2 \u2014 thinking\"]\n        direction LR\n        CAM[\"cameras<br/>forward + downward\"] --> DET[\"detector<br/><b>53.9 Hz</b>\"]\n        DET --> LOCK[\"lock ladder<br/>live \u2192 coast \u2192 anchor\"]\n        LOCK --> MISS[\"mission + vision verbs<br/><b>20\u201350 Hz</b>\"]\n        FLOW[\"optical flow<br/>the DVL we do not have\"] --> EKF[\"right-invariant EKF\"]\n        EKF --> MISS\n    end\n\n    MISS -->|\"one USB-C cable \u2014 MAVLink 2 \u2014 115200\"| BOARD\n\n    subgraph BOARD[\"SROT board \u2014 firmware Hengla \u2014 reflexes\"]\n        direction LR\n        C1[\"core 1: the flight loop<br/><b>500 Hz, uninterruptible</b><br/>IMU \u00b7 depth \u00b7 mix \u00b7 DShot\"]\n        C0[\"core 0: everything that can wait<br/>MAVLink 100 Hz \u00b7 LoRa 20 Hz \u00b7 display 30 Hz\"]\n    end\n\n    BOARD -->|\"bidirectional DShot\"| ESC[\"8 \u00d7 Bluejay ESC<br/>they answer back\"]\n    ESC -->|\"measured RPM + current\"| BOARD\n", "sequenceDiagram\n    autonumber\n    participant M as mission script\n    participant C as MonglaClient\n    participant N as auv_manager_node\n    participant F as SrotFC\n    participant B as SROT board\n\n    M->>C: mongla.move_forward(duration=3, gain=40)\n    Note over C: validated against COMMANDS \u2014<br/>a typo is an AttributeError, not a bad goal\n    C->>N: /mongla/move action goal\n    Note over N: registry-driven dispatch \u2014<br/>this file never changes when a verb is added\n    N->>F: Mongla.move_forward(...)\n    F->>F: check firmware revision, refuse below the floor\n    F->>B: MAV_CMD_SROT_MOVE (31000)\n    Note over B: the board runs AND BRAKES the primitive<br/>at 500 Hz \u2014 the host is not in this loop\n    B-->>F: progress, then terminal ACK\n    F-->>N: outcome\n    N-->>C: result + final_value\n    C-->>M: returns, or refuses loudly\n", "stateDiagram-v2\n    [*] --> LIVE\n    LIVE: LIVE DETECTION\n    LIVE: the box is there this frame \u2014 53.9 Hz\n    COAST: TRACKER COAST\n    COAST: a frame or two missing \u2014 0.8 s of authority, decayed by TRUE detection age\n    ANCHOR: GEOMETRIC ANCHOR\n    ANCHOR: the detector is gone \u2014 match image structure instead. Held 175 frames.\n    LOST: REFUSE\n    LOST: nothing above is honest any more \u2014 return LOST, never a guess\n\n    LIVE --> COAST: box missing\n    COAST --> LIVE: box returns\n    COAST --> ANCHOR: coast_s exceeded\n    ANCHOR --> LIVE: box returns\n    ANCHOR --> LOST: structure gone too\n    LOST --> [*]\n"]</script>
+<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+mermaid.initialize({startOnLoad:false, theme:'dark'});
+const defs = JSON.parse(document.getElementById('mer').textContent);
+const pres = [...document.querySelectorAll('div.highlight-source-mermaid')];
+let k=0, fail=0;
+for (const pre of pres){
+  try{ const {svg} = await mermaid.render('m'+k, defs[k] ?? pre.innerText);
+       const d=document.createElement('div'); d.className='mermaid'; d.innerHTML=svg; pre.replaceWith(d);}
+  catch(e){ fail++; pre.style.color='#f85149'; pre.textContent='MERMAID FAIL: '+e.message; }
+  k++;
+}
+window.__rendered=document.querySelectorAll('.mermaid').length; window.__failed=fail; window.__found=pres.length;
+</script>

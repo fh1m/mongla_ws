@@ -33,6 +33,19 @@
 
 ---
 
+## Contents
+
+**Start here** · [What this is](#what-this-is) · [How the whole thing fits together](#how-the-whole-thing-fits-together) · [The machine](#the-machine)
+
+**The fundamentals** — written for someone who has never built a robot
+[Why a control loop](#why-a-control-loop-and-why-500-hz) · [What a PID actually does](#what-a-pid-actually-does) · [How a camera becomes a position](#how-a-camera-becomes-a-position) · [The DVL we do not have](#the-dvl-we-do-not-have) · [Running a neural network on a chip](#running-a-neural-network-on-a-chip)
+
+**The system** · [How a command becomes thrust](#how-a-command-becomes-thrust) · [When the detector blinks](#what-happens-when-the-detector-blinks) · [Seven packages](#seven-packages-deconstructed) · [The other three repositories](#the-other-three-repositories) · [The simulator](#the-simulator)
+
+**The people and the record** · [Three acts](#three-acts) · [Why keep going](#why-keep-going) · [How this project works](#how-this-project-works) · [Where it stands](#where-it-stands-honestly) · [Authors](#authors)
+
+---
+
 ## What this is
 
 Mongla is the autonomy stack for an autonomous underwater vehicle. It runs on a control board
@@ -50,8 +63,6 @@ logs stay green, and the vehicle confidently goes somewhere else.
 So this repository is not really a pile of algorithms. It is an argument about **what a
 machine has to do to perceive, decide and move in a place that offers it no help** — and the
 receipts for every claim it makes.
-
----
 
 ---
 
@@ -262,6 +273,157 @@ its fallback, rather than overrunning into the next task.
 Reference: [commands](.claude/context/missions/command-reference.md) ·
 [the mission language](.claude/context/missions/client-and-dsl-api.md) ·
 [cookbook](.claude/context/missions/mission-cookbook.md)
+
+---
+
+# The fundamentals
+
+Everything below assumes you have never built a robot. If you have, skip to
+[the packages](#seven-packages-deconstructed) — but the numbers here are measured, not
+textbook, and a few of them are surprising.
+
+## Why a control loop, and why 500 Hz
+
+A submerged vehicle is never at rest. It is a buoyant body in a fluid that pushes back, and if
+nothing corrects it, it drifts, rolls, and sinks or surfaces. A **control loop** is the thing
+that stops that: read where you are, compare it to where you want to be, push in the direction
+of the difference, repeat.
+
+The only interesting question is *how often*. Between one correction and the next, the
+disturbance is unopposed — the vehicle is, briefly, an uncontrolled object.
+
+```
+disturbance ─┬─────────────────────────────────────── 50 ms ──┐   old stack: 20 Hz
+             │        (nothing is answering)                  ▼   ← up to 50 ms adrift
+             │
+             ├─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┐   Mongla: 500 Hz
+             │ 2ms                                            ▼   ← up to 2 ms adrift
+```
+
+That is the entire argument for owning the firmware. Nothing about our code got faster — the
+boundary moved. **At 20 Hz you are not steering, you are voting.**
+
+Two more reasons the rate has to live on the board and not on the Pi:
+
+- **Jitter is worse than latency.** A loop that runs at 500 Hz *except* when Python's garbage
+  collector fires is not a 500 Hz loop; it is a 500 Hz loop with a hole in it, and the hole
+  lands at random. ESP32 core 1 runs the flight loop and nothing else is permitted there.
+- **A failure has to be survivable.** If the Pi dies mid-mission the board keeps its attitude
+  and surfaces on its own after 5 s of silence. If the loop lived on the Pi, a dead Pi would
+  mean a tumbling vehicle.
+
+## What a PID actually does
+
+A PID controller is three guesses about the future, added together.
+
+| Term | What it answers | Costs you |
+|---|---|---|
+| **P** — proportional | "How wrong am I *right now*?" | Alone, it never quite arrives — it stalls where the push balances the drag |
+| **I** — integral | "How long have I been wrong in the same direction?" | Fixes a steady current, but *winds up*: it keeps accumulating while saturated and then overshoots |
+| **D** — derivative | "How fast is the error changing?" | Damps the overshoot, and amplifies every bit of sensor noise |
+
+Underwater, the D term is the one that bites. A 20 kg hull has enormous **added mass** — it
+drags a volume of water along with it, roughly 1.0× its displacement broadside — so it
+responds late and then keeps going. Tuned for air, D is far too eager; the vehicle oscillates
+around its target instead of settling on it.
+
+**Where the PIDs live matters more than their gains.** Depth and attitude are closed on the
+board at 500 Hz. Heading, historically, was closed in Python against a BNO085 — because the
+magnetometer inside an aluminium hull with eight thrusters drawing current is a random number
+generator, so the compass could not be trusted even though it existed.
+
+And one measured thing about the actuator that no textbook mentions:
+
+> at a demand of **0.005**, the thruster jumps from 0 to **16.13 %** of its band (DShot 1210).
+
+The actuator is not linear near zero — it is closer to a relay. A gain schedule that softens
+the response as the target gets close cannot work if the smallest command the hardware can
+express is already 16 % of full thrust. That is why `range_gain_floor` is off.
+
+## How a camera becomes a position
+
+A detector returns a **box in pixels**. Control needs a **direction in the world**. Three
+physical facts sit between them, and every one of them was measured rather than assumed.
+
+**1. The lens is not what the datasheet says it is.** The camera is specified at 63.8° in air.
+Underwater, light crosses from water into the flat port and refracts, and Snell's law narrows
+the field of view to **46.7°** — measured, ±0.7°. Using the air figure means the vehicle
+believes it can see 27 % more of the world than it can, so every search pattern is calibrated
+against a view that does not exist.
+
+**2. A pixel offset is not an angle until you say which camera.** The conversion needs that
+camera's own focal length, so the measured constant belongs to the *physical device* — not to
+the role. When the forward and downward cameras were swapped in udev, 46.7° stayed attached to
+the wrong one for nine days and every range estimate was 17 % out.
+
+**3. The bearing has to be computed in water.** We stream one `LANDING_TARGET` per frame as a
+**bearing in radians**, not as pixels. Pixels are meaningless to firmware — change the lens and
+every gain silently becomes wrong. A bearing has units and survives a hardware change.
+
+```
+   photons ──► exposure ──► Hailo-8 ──► box in pixels
+                              18.0 ms total, photon to detection
+                                   │
+                                   ├─ undistort  (that camera's own intrinsics)
+                                   ├─ refract    (flat port, water — not air)
+                                   └─► bearing in radians ──► the controller
+```
+
+## The DVL we do not have
+
+A **Doppler Velocity Log** is how serious AUVs know they are moving: it pings the seabed and
+reads the Doppler shift of the return. We do not have one. What we have is a camera pointed at
+the floor.
+
+If you know how far the floor is and how much the image shifted between two frames, you know
+how far you travelled. **Optical flow** does exactly that, and it is the vehicle's only
+velocity sensor.
+
+**Measured against a tape:** three 30 cm slides on three axes, worst error **1.09 cm** (3.6 %).
+Implied height 0.72 / 0.69 / 0.70 m against a 0.72 m tape.
+
+The interesting part is the failure and its inversion. Optical flow needs distinctive corners
+to match between frames, and the pool floor is a repeating tile grid — the textbook worst case.
+But:
+
+> "That is true of MATCHING. It is exactly backwards for DEMODULATION. A periodic pattern is a
+> **carrier**, and displacement is a phase shift of that carrier."
+> — [`tile_grating.py:3`](src/mongla_localization/mongla_localization/tile_grating.py)
+
+Read the floor as an optical encoder instead of a texture, and the thing that broke the method
+becomes the thing that makes it precise.
+
+All of it feeds a **right-invariant EKF** on SE₂(3) — a filter that respects the fact that
+rotations are not a vector space, so errors compose the way the geometry actually composes
+rather than approximately. Late measurements are **replayed at the instant they describe**
+rather than applied on arrival, because a velocity fix that arrives 80 ms late and is applied
+as though it were current is a measurement in the wrong place.
+
+## Running a neural network on a chip
+
+The Hailo-8 is a 26 TOPS accelerator on the Pi's HAT. A compiled `.hef` runs on it instead of
+on the CPU, which is the only reason two cameras and a filter fit on one small computer.
+
+**Measured: 98.0 Hz** on `gate_rescue_repair`, against a `hailortcli --hw-only` benchmark of
+**97.9 FPS** on the same file. The host code is at 100 % of the chip — there is nothing left to
+optimise on our side of the boundary.
+
+Getting there took three findings that each looked like something else:
+
+**The decode never has to leave the quantised domain.** The chip emits int8. Converting to
+float before thresholding cost **31.5 ms**. But the class head is already a probability at
+scale 1/255, so thresholding the raw bytes selects exactly the same cells — **0.93 ms**,
+bit-for-bit identical output.
+
+**Publishing slower makes detections fresher.** A full V4L2 queue keeps the *oldest* frames, so
+the standard advice to drain it recovers almost nothing. Treat the topic as a **mailbox** —
+newest frame wins, surplus dropped — and staleness falls from **396 ms to 16.9 ms**. The
+pipeline that publishes *every* frame is the slow one.
+
+**Image enhancement does not help, and we tested it until it was embarrassing.** CLAHE,
+white balance, the lot: **17 configurations across four props and three venues.** Never once
+positive. On the gate it destroyed **95 %** of detections. The implementation was correct; the
+original +42 % that motivated it was a confounded A/B. A test now keeps preprocessing off.
 
 ---
 
@@ -512,21 +674,72 @@ Borrowed convictions, each with the thing it changed here.
 
 ---
 
-## Credits
+## Authors
 
-Mongla is written by **Muhammad Fahim Faisal**.
+Two people. One writes the software; the other writes the firmware and builds the board. There
+is no third category, and nothing here is owned by an institution.
 
-**Rakibul Islam** — firmware and hardware lead, co-author of the system — wrote the SROT board
-firmware (*Hengla*), the Bondor ground station and the ESC tooling, each in
-[his own repositories](https://github.com/RakibulIslam1). Mongla does not vendor them; it
-talks to them across a documented protocol, and asks for changes by pull request.
+<table>
+<tr>
+<td width="160" align="center">
+  <img src="https://avatars.githubusercontent.com/u/132839265?v=4" width="130" alt="Muhammad Fahim Faisal"/>
+</td>
+<td>
 
-Full authorship and history: [AUTHORS.md](AUTHORS.md).
+### Muhammad Fahim Faisal — author
 
-Standing on [ROS 2](https://docs.ros.org/), [MAVLink](https://mavlink.io/),
-[Hailo](https://hailo.ai/), [Ultralytics YOLO](https://github.com/ultralytics/ultralytics),
-[supervision](https://github.com/roboflow/supervision) and
-[YASMIN](https://github.com/uleroboticsgroup/yasmin).
+Autonomy: perception, localization, control integration, the mission language, the simulator,
+and this repository. Previously engineering team lead for the RoboSub 2026 campaign, AI &
+Machine Vision sub-team lead (2025), and a junior member of that team (2024) — the software
+placed **2nd at RoboSub 2023** and **8th in 2025**.
+
+*"Machines that have to work when nobody is watching."*
+
+[fh1m.github.io](https://fh1m.github.io/) · [@fh1m](https://github.com/fh1m) · <fh1m.dev@gmail.com>
+
+</td>
+</tr>
+<tr>
+<td>
+
+### Rakibul Islam — firmware and hardware lead
+
+The **SROT** control board and its firmware **Hengla** — an ESP32 running a 500 Hz flight loop
+beside an RP2350 that speaks bidirectional DShot. Also **Bondor**, the desktop ground station,
+and the ESC flashing tool. Each lives in his own repository, under his own authorship.
+
+Mongla does not vendor any of it. It talks across a documented wire protocol, and every change
+we need there is a pull request.
+
+[srot-control-board](https://github.com/RakibulIslam1/srot-control-board) ·
+[srot-ground-station](https://github.com/RakibulIslam1/srot-ground-station) ·
+[@RakibulIslam1](https://github.com/RakibulIslam1)
+
+</td>
+<td width="160" align="center">
+  <img src="https://avatars.githubusercontent.com/u/181973271?v=4" width="130" alt="Rakibul Islam"/>
+</td>
+</tr>
+</table>
+
+### History
+
+Mongla began as the autonomy software for an autonomous underwater vehicle programme at BRAC
+University, and flew on that programme's vehicles at **RoboSub 2023 (2nd place)** and
+**RoboSub 2025 (8th place)**. In September 2026 the author left the university, on principle,
+and Mongla continues independently. The vehicles, the team name and the university's materials
+remain with the university and are referred to here only in the past tense, as history. What
+lives in this repository is the software and its measurements.
+
+Full authorship: [AUTHORS.md](AUTHORS.md).
+
+### Standing on
+
+[ROS 2](https://docs.ros.org/) · [MAVLink](https://mavlink.io/) · [Hailo](https://hailo.ai/) ·
+[Ultralytics YOLO](https://github.com/ultralytics/ultralytics) ·
+[supervision](https://github.com/roboflow/supervision) ·
+[YASMIN](https://github.com/uleroboticsgroup/yasmin) ·
+[Gazebo](https://gazebosim.org/)
 
 MIT — see [LICENSE](LICENSE).
 
