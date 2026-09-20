@@ -6,49 +6,69 @@
 <title>{{ page.title }} — Mongla</title>
 <meta name="description" content="{{ page.description }}">
 <link rel="icon" href="{{ '/imgs/mongla-logo-dark.png' | relative_url }}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;1,8..60,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  :root{--bg:#0a0f1c;--panel:#101a2b;--line:#22314d;--ink:#e6edf7;--ink-2:#9fb2cc;--ink-3:#7386a3;
-        --teal:#37d6a8;--violet:#8b7cf6;--amber:#f2b134;
-        --mono:ui-monospace,SFMono-Regular,"JetBrains Mono",Menlo,monospace;
-        --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.68}
-  a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
-  header.top{position:sticky;top:0;z-index:20;background:rgba(10,15,28,.88);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
-  header.top .bar{max-width:920px;margin:0 auto;padding:0 24px;height:58px;display:flex;align-items:center;gap:22px}
-  .brand{display:flex;align-items:center;gap:10px;font-weight:700}
-  .brand img{height:22px}
-  header.top nav{margin-left:auto;display:flex;gap:18px;font-size:14px}
-  header.top nav a{color:var(--ink-2)}header.top nav a:hover{color:var(--ink)}
-  main{max-width:920px;margin:0 auto;padding:52px 24px 90px}
-  h1{font-size:clamp(30px,4.4vw,44px);line-height:1.1;letter-spacing:-.02em;margin:0 0 10px}
-  h2{font-size:clamp(21px,2.8vw,28px);margin:56px 0 12px;letter-spacing:-.015em;padding-top:10px;border-top:1px solid var(--line)}
-  h3{font-size:18.5px;margin:34px 0 8px}
-  p,li{color:#cfdcec}
-  hr{border:0;border-top:1px solid var(--line);margin:44px 0}
-  img{max-width:100%;height:auto;border-radius:12px;border:1px solid var(--line);background:var(--panel);padding:10px;display:block;margin:26px 0}
-  table{width:100%;border-collapse:collapse;font-size:14.5px;margin:18px 0;display:block;overflow-x:auto}
-  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
-  th{color:var(--ink-3);font-size:12.5px;letter-spacing:.7px;text-transform:uppercase;font-weight:600}
-  code{font-family:var(--mono);font-size:13px;background:#0d1728;border:1px solid var(--line);border-radius:5px;padding:1.5px 6px;color:#bcd2ea}
-  pre{background:#0c1424;border:1px solid var(--line);border-radius:11px;padding:16px 18px;overflow:auto}
-  pre code{background:none;border:0;padding:0;color:#cfe0f2}
-  blockquote{margin:22px 0;padding:12px 20px;border-left:3px solid var(--amber);background:#1a1712;border-radius:0 10px 10px 0;color:#e0cfa8}
-  blockquote p{color:inherit;margin:6px 0}
-  em{color:var(--ink-2)}
-  footer{max-width:920px;margin:0 auto;padding:0 24px 70px;color:var(--ink-3);font-size:14px}
+:root{
+  --paper:#0b1f27; --type:#dfeef1; --quiet:#8fb7bf; --rule:rgba(223,238,241,.16);
+  --accent:#ff7a55; --sand:#f2e4c9;
+  --display:"Bricolage Grotesque","Helvetica Neue",Arial,sans-serif;
+  --prose:"Source Serif 4",Georgia,serif;
+  --inst:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--type);
+  font-family:var(--prose);font-size:19px;line-height:1.64;-webkit-font-smoothing:antialiased}
+a{color:inherit;border-bottom:1px solid var(--accent);text-decoration:none;padding-bottom:1px}
+a:hover{background:var(--accent);color:var(--paper)}
+a:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+header{border-bottom:1px solid var(--rule);position:sticky;top:0;z-index:5;
+  background:#0b1f27;backdrop-filter:blur(9px)}
+@supports (background:color-mix(in srgb,red 50%,transparent)){
+  header{background:color-mix(in srgb,var(--paper) 88%,transparent)}}
+header .bar{max-width:940px;margin:0 auto;padding:0 24px;height:58px;display:flex;align-items:center;gap:24px}
+header .home{font-family:var(--display);font-weight:800;letter-spacing:-.02em;font-size:18px;border:0}
+header .home:hover{background:none;color:var(--accent)}
+header nav{margin-left:auto;display:flex;gap:20px;font-family:var(--display);font-size:14.5px}
+header nav a{border:0;color:var(--quiet)}
+header nav a:hover{background:none;color:var(--type)}
+main{max-width:940px;margin:0 auto;padding:clamp(40px,7vh,84px) 24px 96px}
+h1,h2,h3{font-family:var(--display);letter-spacing:-.022em;line-height:1.06;margin:0}
+h1{font-size:clamp(36px,6vw,62px);font-weight:800}
+h1+h3{margin-top:14px;color:var(--quiet);font-weight:400;font-size:clamp(18px,2.2vw,23px);line-height:1.35}
+h2{font-size:clamp(25px,3.4vw,36px);font-weight:700;margin:64px 0 14px;padding-top:26px;border-top:1px solid var(--rule);scroll-margin-top:76px}
+h3{font-size:20px;font-weight:700;margin:34px 0 8px}
+p,li{max-width:74ch}
+hr{border:0;border-top:1px solid var(--rule);margin:52px 0}
+img{max-width:100%;height:auto;display:block;margin:30px 0;border:1px solid var(--rule)}
+table{width:100%;border-collapse:collapse;font-family:var(--display);font-size:15px;margin:22px 0;display:block;overflow-x:auto}
+th,td{text-align:left;padding:11px 13px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-size:12.5px;color:var(--quiet);font-weight:700;letter-spacing:.02em}
+code{font-family:var(--inst);font-size:13.5px;color:var(--sand)}
+pre{font-family:var(--inst);font-size:13.5px;border:1px solid var(--rule);padding:18px;overflow-x:auto}
+pre code{color:var(--type)}
+blockquote{margin:26px 0;padding:14px 22px;border-left:2px solid var(--accent);color:var(--quiet)}
+blockquote p{margin:6px 0}
+em{color:var(--quiet)}
+footer{max-width:940px;margin:0 auto;padding:0 24px 80px;
+  font-family:var(--inst);font-size:12.5px;color:var(--quiet);display:flex;gap:22px;flex-wrap:wrap}
 </style>
 </head>
 <body>
-<header class="top"><div class="bar">
-  <a class="brand" href="{{ '/' | relative_url }}"><img src="{{ '/imgs/mongla-logo-dark.png' | relative_url }}" alt="">Mongla</a>
+<header><div class="bar">
+  <a class="home" href="{{ '/' | relative_url }}">Mongla</a>
   <nav>
     <a href="{{ '/the-shift.html' | relative_url }}">The Shift</a>
     <a href="{{ '/capability-map.html' | relative_url }}">Capabilities</a>
-    <a href="https://github.com/fh1m/mongla_ws">GitHub</a>
+    <a href="https://github.com/fh1m/mongla_ws">Source</a>
   </nav>
 </div></header>
 <main>{{ content }}</main>
-<footer>Built by Muhammad Fahim Faisal · MIT licensed · <a href="https://github.com/fh1m/mongla_ws">source</a></footer>
+<footer>
+  <span>Muhammad Fahim Faisal · Dhaka</span>
+  <span>Firmware &amp; hardware: Rakibul Islam</span>
+  <span>MIT</span>
+</footer>
 </body>
 </html>
