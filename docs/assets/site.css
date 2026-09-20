@@ -41,9 +41,12 @@
   --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
   --voice:"Newsreader",Georgia,serif;
 
-  --gutter:clamp(18px,4vw,64px);
+  --gutter:clamp(20px,3.4vw,72px);
   --rail:136px;
   --measure:64ch;
+  --wrap:1320px;
+  /* one vertical rhythm, used everywhere — no ad-hoc margins */
+  --s1:8px; --s2:14px; --s3:22px; --s4:34px; --s5:52px; --s6:clamp(56px,7vw,96px);
   --t-fast:160ms; --t-mid:440ms;
   --ease:cubic-bezier(.16,1,.3,1);
 }
@@ -52,7 +55,7 @@
 html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
 body{
   margin:0; background:var(--void); color:var(--ink);
-  font-family:var(--voice); font-size:clamp(16px,.95rem + .25vw,18.5px);
+  font-family:var(--voice); font-size:clamp(16.5px,.95rem + .28vw,19px);
   line-height:1.62; -webkit-font-smoothing:antialiased; overflow-x:hidden;
 }
 ::selection{background:var(--red);color:#fff}
@@ -77,9 +80,15 @@ body{
 
 /* ── layout ──────────────────────────────────────────────────────── */
 main{margin-left:var(--rail)}
-section{padding:clamp(76px,11vh,150px) var(--gutter);position:relative;border-top:1px solid var(--rule)}
-section:first-of-type{border-top:0}
-.wrap{max-width:1180px;margin:0 auto}
+section{padding:clamp(72px,9.5vh,132px) var(--gutter);position:relative;border-top:1px solid var(--rule)}
+section:first-of-type{border-top:0;min-height:96svh;display:flex;align-items:center;
+  padding-top:clamp(86px,12vh,150px)}
+section:first-of-type .wrap{width:100%}
+.wrap{max-width:var(--wrap);margin:0 auto}
+/* the text column is narrow for reading; data and drawings take the full sheet */
+.wrap > h2, .wrap > .lede, .wrap > p, .wrap > h3{max-width:var(--measure)}
+.wrap > .ledger, .wrap > figure, .wrap > .readout, .wrap > .years,
+.wrap > ul.plain, .wrap > pre, .wrap > .bay{max-width:none}
 .col{max-width:var(--measure)}
 
 /* corner ticks — the page knows it is a drawing sheet */
@@ -90,14 +99,14 @@ section::after{right:var(--gutter);top:22px;border-left:0;border-bottom:0}
 
 /* ── type ────────────────────────────────────────────────────────── */
 h1,h2,h3{font-family:var(--display);font-weight:700;letter-spacing:-.026em;line-height:1.02;margin:0}
-h1{font-size:clamp(2.55rem,1rem + 6.2vw,6.6rem);text-wrap:balance}
+h1{font-size:clamp(2.35rem,.9rem + 5.9vw,6.4rem);text-wrap:balance;line-height:.99}
 h2{font-size:clamp(1.85rem,1rem + 2.6vw,3.3rem);margin-bottom:16px;text-wrap:balance}
 h3{font-size:1.02rem;letter-spacing:0;font-weight:600}
 
-.mark{font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
+.mark{font-family:var(--mono);font-size:clamp(10.5px,.62rem + .12vw,11.5px);letter-spacing:.2em;text-transform:uppercase;
   color:var(--ink-3);margin:0 0 26px}
 .mark i{font-style:normal;color:var(--red-lit)}
-.lede{font-size:clamp(1.06rem,1rem + .4vw,1.34rem);color:var(--ink-2);line-height:1.56}
+.lede{font-size:clamp(1.08rem,1rem + .45vw,1.38rem);color:var(--ink-2);line-height:1.54;margin-top:var(--s3)}
 .quiet{color:var(--ink-3)}
 em{font-style:italic;color:var(--ink)}
 strong{font-weight:600;color:#fff}
@@ -131,6 +140,7 @@ code,.n{font-family:var(--mono);font-size:.88em;color:var(--ocean-lit)}
   color:var(--ink-2);vertical-align:top}
 .ledger td:first-child{color:#fff}
 .ledger tr:hover td{background:var(--hull);color:var(--ink)}
+.ledger td:last-child,.ledger th:last-child{padding-right:0}
 .num{color:var(--ocean-lit)}
 .numr{color:var(--red-lit)}
 
@@ -154,8 +164,12 @@ code,.n{font-family:var(--mono);font-size:.88em;color:var(--ocean-lit)}
   letter-spacing:.2em;text-transform:uppercase;color:var(--ink-3)}
 
 /* ── figures ─────────────────────────────────────────────────────── */
-figure{margin:clamp(34px,5vw,60px) 0 0}
+figure{margin:var(--s6) 0 0}
 figure img,figure svg{width:100%;height:auto;display:block}
+figure.panel{background:linear-gradient(180deg,var(--hull),#000);
+  border:1px solid var(--rule);padding:clamp(18px,2.6vw,38px)}
+figure.panel figcaption{margin-top:clamp(16px,2vw,26px);
+  padding-top:14px;border-top:1px solid var(--rule)}
 figcaption{font-family:var(--display);font-size:12.5px;color:var(--ink-3);
   margin-top:12px;max-width:66ch;line-height:1.5}
 .strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(176px,1fr));gap:9px}
@@ -208,6 +222,37 @@ footer a{border:0;color:var(--ink-2)} footer a:hover{color:#fff}
   main,footer{margin-left:0}
   section::before,section::after{display:none}
   .year{grid-template-columns:1fr;gap:4px}
+  section:first-of-type{min-height:auto}
+}
+
+/* Below 720px a data table cannot stay a table and stay legible, so each row
+   becomes a small record with its column name carried in a ::before label. */
+@media (max-width:720px){
+  .ledger,.ledger tbody,.ledger tr,.ledger td{display:block;width:100%}
+  .ledger thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  .ledger tr{border-bottom:1px solid var(--rule-lit);padding:14px 0}
+  .ledger td{border:0;padding:3px 0}
+  .ledger td::before{content:attr(data-l);display:block;font-size:9px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+  .ledger td:first-child{font-size:14px}
+  ul.plain li{flex-direction:column;gap:4px}
+  .readout{grid-template-columns:repeat(auto-fit,minmax(138px,1fr))}
+  .strip{grid-template-columns:1fr 1fr;gap:7px}
+  pre{font-size:11.5px;padding:16px 14px}
+  figure.panel{padding:14px}
+}
+/* a drawing that is 820 units wide has to be readable on a 375px screen:
+   let the wide ones scroll horizontally rather than shrink to illegibility */
+@media (max-width:820px){
+  /* a drawing 820 units wide cannot shrink to a phone and stay a drawing.
+     It scrolls instead, and says so. */
+  figure.scrollable{overflow-x:auto;-webkit-overflow-scrolling:touch;
+    overscroll-behavior-x:contain;position:relative}
+  figure.scrollable svg,figure.scrollable img{min-width:680px}
+  figure.scrollable figcaption{min-width:0;position:sticky;left:0}
+  figure.scrollable::after{content:"drag the drawing sideways →";display:block;
+    position:sticky;left:0;margin-top:10px;font-family:var(--mono);font-size:9px;
+    letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
 }
 @media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}

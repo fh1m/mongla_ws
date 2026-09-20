@@ -60,18 +60,18 @@
   <table class="ledger">
    <thead><tr><th>the medium does this</th><th>so this breaks</th><th>what we measured</th></tr></thead>
    <tbody>
-    <tr><td>Absorbs red first, then everything</td><td>Colour thresholds, contrast tricks</td>
-        <td class="num">17 preprocessing configs, never once positive</td></tr>
-    <tr><td>Bends light at the port glass</td><td>Any angle taken from a datasheet</td>
-        <td class="num">63.8° in air → 46.7° in water</td></tr>
-    <tr><td>Blocks radio entirely</td><td>Telemetry, GPS, remote intervention</td>
-        <td class="num">no link below the surface</td></tr>
-    <tr><td>Carries 800× the mass of air</td><td>Any controller tuned for a drone</td>
-        <td class="num">added mass 1.0× displacement broadside</td></tr>
-    <tr><td>Moves while you are deciding</td><td>Position held by dead reckoning</td>
-        <td class="num">0.12 m/s current → 1.374 m of drift in 40 s</td></tr>
-    <tr><td>Hides the thing you were tracking</td><td>Detectors that assume continuity</td>
-        <td class="num">71 real detection gaps, catalogued</td></tr>
+    <tr><td data-l="the medium does this">Absorbs red first, then everything</td><td data-l="so this breaks">Colour thresholds, contrast tricks</td>
+        <td class="num" data-l="what we measured">17 preprocessing configs, never once positive</td></tr>
+    <tr><td data-l="the medium does this">Bends light at the port glass</td><td data-l="so this breaks">Any angle taken from a datasheet</td>
+        <td class="num" data-l="what we measured">63.8° in air → 46.7° in water</td></tr>
+    <tr><td data-l="the medium does this">Blocks radio entirely</td><td data-l="so this breaks">Telemetry, GPS, remote intervention</td>
+        <td class="num" data-l="what we measured">no link below the surface</td></tr>
+    <tr><td data-l="the medium does this">Carries 800× the mass of air</td><td data-l="so this breaks">Any controller tuned for a drone</td>
+        <td class="num" data-l="what we measured">added mass 1.0× displacement broadside</td></tr>
+    <tr><td data-l="the medium does this">Moves while you are deciding</td><td data-l="so this breaks">Position held by dead reckoning</td>
+        <td class="num" data-l="what we measured">0.12 m/s current → 1.374 m of drift in 40 s</td></tr>
+    <tr><td data-l="the medium does this">Hides the thing you were tracking</td><td data-l="so this breaks">Detectors that assume continuity</td>
+        <td class="num" data-l="what we measured">71 real detection gaps, catalogued</td></tr>
    </tbody>
   </table>
   <figure>
@@ -132,25 +132,26 @@
     rate our companion computer could manage. The ceiling was not our code — it was the boundary.
     So the boundary moved: reflexes went onto a board we write the firmware for, and the
     companion was left to do nothing but think.</p>
-  <figure>
+  <figure class="panel scrollable">
    <img src="assets/diagrams/the-shift.svg" alt="The old Pixhawk and Jetson architecture beside the SROT board and Raspberry Pi with Hailo" loading="lazy">
-   <figcaption>What actually changed is the rate at which a mistake gets corrected — from our
-     20 Hz outer loop to the board's 500 Hz inner one. Roughly 25 corrections now happen
-     underneath every command we send.</figcaption>
+   <figcaption>Neither architecture is cleverer than the other. The one on the bottom simply
+     gets to answer sooner, because the loop is no longer on the far side of a cable and a
+     vendor's firmware. This is also the honest reason the old stack placed well and still had
+     a ceiling: at 20 Hz you are not steering, you are voting.</figcaption>
   </figure>
   <table class="ledger">
    <thead><tr><th>layer</th><th>what it owns</th><th>rate</th><th>state</th></tr></thead>
    <tbody>
-    <tr><td>SROT board — firmware <em>Hengla</em></td><td>IMU, depth, leak, kill, thrust mixing</td>
-        <td class="numr">500 Hz</td><td><span class="st bench">bench</span></td></tr>
-    <tr><td>Raspberry Pi 5 + Hailo-8</td><td>Detection, tracking, optical-flow velocity</td>
-        <td class="num">53.9 Hz</td><td><span class="st bench">bench</span></td></tr>
-    <tr><td>Host control</td><td>Verbs, vision loops, mission logic</td>
-        <td class="num">20–50 Hz</td><td><span class="st bench">bench</span></td></tr>
-    <tr><td>Estimation</td><td>Right-invariant EKF, late measurements replayed in order</td>
-        <td class="num">—</td><td><span class="st soft">software</span></td></tr>
-    <tr><td>Anything at all, in water</td><td>—</td><td class="num">—</td>
-        <td><span class="st blocked">blocked</span></td></tr>
+    <tr><td data-l="layer">SROT board — firmware <em>Hengla</em></td><td data-l="what it owns">IMU, depth, leak, kill, thrust mixing</td>
+        <td class="numr" data-l="rate">500 Hz</td><td data-l="state"><span class="st bench">bench</span></td></tr>
+    <tr><td data-l="layer">Raspberry Pi 5 + Hailo-8</td><td data-l="what it owns">Detection, tracking, optical-flow velocity</td>
+        <td class="num" data-l="rate">53.9 Hz</td><td data-l="state"><span class="st bench">bench</span></td></tr>
+    <tr><td data-l="layer">Host control</td><td data-l="what it owns">Verbs, vision loops, mission logic</td>
+        <td class="num" data-l="rate">20–50 Hz</td><td data-l="state"><span class="st bench">bench</span></td></tr>
+    <tr><td data-l="layer">Estimation</td><td data-l="what it owns">Right-invariant EKF, late measurements replayed in order</td>
+        <td class="num" data-l="rate">—</td><td data-l="state"><span class="st soft">software</span></td></tr>
+    <tr><td data-l="layer">Anything at all, in water</td><td data-l="what it owns">—</td><td class="num" data-l="rate">—</td>
+        <td data-l="state"><span class="st blocked">blocked</span></td></tr>
    </tbody>
   </table>
  </div>
@@ -174,7 +175,7 @@
     </div>
   </div>
 
-  <figure>
+  <figure class="panel scrollable">
    <img src="assets/diagrams/hull-elevations.svg" alt="Orthographic starboard, plan and bow elevations of the hull, generated from the CAD" loading="lazy">
    <figcaption>Starboard, plan and bow — traced from the mesh itself, not drawn by hand. The four
      circles are the tunnel bores; the spoked disc in the bow view is the axial thruster's
@@ -185,19 +186,19 @@
   <table class="ledger">
    <thead><tr><th>measurement</th><th>value</th><th>why it matters</th></tr></thead>
    <tbody>
-    <tr><td>Length overall</td><td class="num">702.0 mm</td><td>One person can carry and launch it</td></tr>
-    <tr><td>Beam × height</td><td class="num">176.1 × 172.1 mm</td><td>Near-square section — form alone gives no preferred roll orientation</td></tr>
-    <tr><td>Fineness ratio</td><td class="num">3.99</td><td>Just under the 4.5–6 band of minimum-drag bodies of revolution: slightly stubby, deliberately compact</td></tr>
-    <tr><td>Frontal area</td><td class="num">160.9 cm²</td><td>The water that has to be pushed aside</td></tr>
-    <tr><td>Wetted area</td><td class="num">1.107 m²</td><td>Where skin friction is paid</td></tr>
-    <tr><td>Lateral tunnels</td><td class="num">2 × ⌀84 mm at ±175 mm</td><td>Sway, and yaw on a 175 mm arm</td></tr>
-    <tr><td>Vertical tunnels</td><td class="num">2 × ⌀84 mm at ±259.5 mm</td><td>Heave, and pitch on a 259.5 mm arm</td></tr>
-    <tr><td>Axial thruster</td><td class="num">1, in the nose</td><td>Surge</td></tr>
-    <tr><td>Bilateral symmetry</td><td class="num">±88.05 mm, exact</td><td>No built-in turn bias to trim out</td></tr>
+    <tr><td data-l="measurement">Length overall</td><td class="num" data-l="value">702.0 mm</td><td data-l="why it matters">One person can carry and launch it</td></tr>
+    <tr><td data-l="measurement">Beam × height</td><td class="num" data-l="value">176.1 × 172.1 mm</td><td data-l="why it matters">Near-square section — form alone gives no preferred roll orientation</td></tr>
+    <tr><td data-l="measurement">Fineness ratio</td><td class="num" data-l="value">3.99</td><td data-l="why it matters">Just under the 4.5–6 band of minimum-drag bodies of revolution: slightly stubby, deliberately compact</td></tr>
+    <tr><td data-l="measurement">Frontal area</td><td class="num" data-l="value">160.9 cm²</td><td data-l="why it matters">The water that has to be pushed aside</td></tr>
+    <tr><td data-l="measurement">Wetted area</td><td class="num" data-l="value">1.107 m²</td><td data-l="why it matters">Where skin friction is paid</td></tr>
+    <tr><td data-l="measurement">Lateral tunnels</td><td class="num" data-l="value">2 × ⌀84 mm at ±175 mm</td><td data-l="why it matters">Sway, and yaw on a 175 mm arm</td></tr>
+    <tr><td data-l="measurement">Vertical tunnels</td><td class="num" data-l="value">2 × ⌀84 mm at ±259.5 mm</td><td data-l="why it matters">Heave, and pitch on a 259.5 mm arm</td></tr>
+    <tr><td data-l="measurement">Axial thruster</td><td class="num" data-l="value">1, in the nose</td><td data-l="why it matters">Surge</td></tr>
+    <tr><td data-l="measurement">Bilateral symmetry</td><td class="num" data-l="value">±88.05 mm, exact</td><td data-l="why it matters">No built-in turn bias to trim out</td></tr>
    </tbody>
   </table>
 
-  <figure>
+  <figure class="panel scrollable">
    <svg viewBox="0 -14 820 310" role="img" aria-label="Plan diagram of thruster positions and the resulting control authority">
     <style>
       .hl{fill:none;stroke:#2e3542;stroke-width:1.2}
@@ -287,7 +288,7 @@
   <h2 class="col">Eighteen milliseconds from photon to decision.</h2>
   <p class="lede col quiet">Not a block diagram — a time axis, with the measured spans on it, and
     the board's 500 Hz heartbeat running underneath the whole thing.</p>
-  <figure>
+  <figure class="panel scrollable">
    <svg viewBox="0 0 820 300" role="img" aria-label="Timing diagram of one camera frame from exposure to thruster correction">
     <style>
       .ax{stroke:#2e3542;stroke-width:1}
@@ -365,10 +366,10 @@
   <table class="ledger">
    <thead><tr><th>rung</th><th>holds the lock when</th><th>measured</th></tr></thead>
    <tbody>
-    <tr><td>Live detection</td><td>The box is there this frame</td><td class="num">53.9 Hz</td></tr>
-    <tr><td>Tracker coast</td><td>A frame or two is missing</td><td class="num">0.8 s of authority, decayed by true age</td></tr>
-    <tr><td>Geometric anchor</td><td>The detector is gone entirely</td><td class="numr">held 175 consecutive frames</td></tr>
-    <tr><td>Refuse</td><td>Nothing above is honest any more</td><td class="num">returns LOST, never a guess</td></tr>
+    <tr><td data-l="rung">Live detection</td><td data-l="holds the lock when">The box is there this frame</td><td class="num" data-l="measured">53.9 Hz</td></tr>
+    <tr><td data-l="rung">Tracker coast</td><td data-l="holds the lock when">A frame or two is missing</td><td class="num" data-l="measured">0.8 s of authority, decayed by true age</td></tr>
+    <tr><td data-l="rung">Geometric anchor</td><td data-l="holds the lock when">The detector is gone entirely</td><td class="numr" data-l="measured">held 175 consecutive frames</td></tr>
+    <tr><td data-l="rung">Refuse</td><td data-l="holds the lock when">Nothing above is honest any more</td><td class="num" data-l="measured">returns LOST, never a guess</td></tr>
    </tbody>
   </table>
   <p class="col quiet" style="margin-top:30px">The third row is the one worth staring at. Through a
