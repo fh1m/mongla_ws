@@ -1,494 +1,565 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mongla — machines that have to work when nobody is watching</title>
-<meta name="description" content="Mongla is an independent ROS 2 autonomy stack for autonomous underwater vehicles: a 500 Hz control loop, vision on dedicated silicon, and every capability claim carrying its evidence.">
-<link rel="icon" href="imgs/mongla-logo-dark.png">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mongla — an autonomy stack for autonomous underwater vehicles</title>
+<meta name="description" content="Mongla is an independent ROS 2 autonomy stack for autonomous underwater vehicles: a 500 Hz control board, a Hailo-8 perception path, and a record of every measurement — including the ones that were wrong.">
+<meta name="theme-color" content="#000000">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,500;12..96,700;12..96,800&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;1,8..60,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-:root{
-  /* the water column: each zone is a real optical regime, not a mood */
-  --surface:#eaf4f4; --shallow:#a9d6d2; --mid:#2e6e77; --deep:#123a4a; --abyss:#050f18;
-  --stolen:#ff5e3a;        /* red: the first wavelength water takes */
-  --sand:#f2e4c9;
-  --ink:#08181d; --ink-soft:#3c5c61;
-  --paper:var(--surface); --type:var(--ink); --quiet:var(--ink-soft);
-  --rule:rgba(8,24,29,.14); --accent:var(--stolen);
-  --display:"Bricolage Grotesque","Helvetica Neue",Arial,sans-serif;
-  --prose:"Source Serif 4",Georgia,serif;
-  --inst:"IBM Plex Mono",ui-monospace,Menlo,monospace;
-  --col:min(68ch,100%);
-}
-*{box-sizing:border-box}
-html{scroll-behavior:smooth}
-@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
-body{
-  margin:0;background:var(--paper);color:var(--type);
-  font-family:var(--prose);font-size:19px;line-height:1.62;
-  transition:background-color 1.1s linear,color 1.1s linear;
-  -webkit-font-smoothing:antialiased;
-}
-/* zones: the page loses light, then colour, then red */
-body[data-zone="surface"]{--paper:#eaf4f4;--type:#08181d;--quiet:#3c5c61;--rule:rgba(8,24,29,.14);--accent:#ff5e3a}
-body[data-zone="shallow"]{--paper:#bfe0dc;--type:#07222a;--quiet:#2f5b60;--rule:rgba(7,34,42,.18);--accent:#f2603c}
-body[data-zone="mid"]    {--paper:#2e6e77;--type:#eaf6f4;--quiet:#bcdcd9;--rule:rgba(234,246,244,.22);--accent:#ffa07a}
-body[data-zone="deep"]   {--paper:#123a4a;--type:#dfeef1;--quiet:#8fb7bf;--rule:rgba(223,238,241,.18);--accent:#c4d9d6}
-body[data-zone="abyss"]  {--paper:#050f18;--type:#cfe0e4;--quiet:#6d8b93;--rule:rgba(207,224,228,.14);--accent:#9fc6c2}
-
-a{color:inherit;text-decoration:none;border-bottom:1px solid var(--accent);padding-bottom:1px}
-a:hover{background:var(--accent);color:var(--paper)}
-a:focus-visible,button:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
-
-.wrap{max-width:1180px;margin:0 auto;padding:0 clamp(18px,4vw,56px)}
-.col{max-width:var(--col)}
-h1,h2,h3{font-family:var(--display);font-weight:700;letter-spacing:-.02em;line-height:1.03;margin:0}
-h2{font-size:clamp(30px,4.6vw,56px);font-weight:800}
-h3{font-size:clamp(19px,2vw,24px);letter-spacing:-.01em}
-p{margin:0 0 1.1em}
-.lede{font-size:clamp(20px,2.1vw,25px);line-height:1.48}
-.quiet{color:var(--quiet)}
-
-/* the depth rail: where you are in the water */
-.rail{position:fixed;left:max(10px,1.6vw);top:0;height:100vh;width:74px;z-index:30;
-  display:flex;flex-direction:column;justify-content:center;gap:0;pointer-events:none;
-  font-family:var(--inst);font-size:10.5px;color:var(--quiet)}
-.rail ol{list-style:none;margin:0;padding:0;border-left:1px solid var(--rule)}
-.rail li{padding:0 0 0 10px;height:46px;display:flex;align-items:center;gap:7px;
-  opacity:.45;transition:opacity .45s ease}
-.rail li::before{content:"";width:9px;height:1px;background:currentColor;margin-left:-10px;flex:none}
-.rail li[data-on="1"]{opacity:1;color:var(--accent);font-weight:500}
-@media(max-width:980px){.rail{display:none}}
-
-section{padding:clamp(70px,11vh,150px) 0;position:relative;scroll-margin-top:24px}
-.stage{min-height:100svh;display:flex;flex-direction:column;justify-content:center}
-
-/* — surface — */
-.mark{font-family:var(--inst);font-size:12px;letter-spacing:.06em;color:var(--quiet)}
-.hero h1{font-size:clamp(44px,8.6vw,124px);font-weight:800;margin:.22em 0 .3em;max-width:16ch}
-.hero .sub{max-width:52ch}
-.readout{display:grid;grid-template-columns:repeat(auto-fit,minmax(122px,1fr));
-  gap:1px;background:var(--rule);border:1px solid var(--rule);margin-top:clamp(28px,5vh,56px)}
-.readout div{background:var(--paper);padding:13px 15px}
-.readout b{display:block;font-family:var(--inst);font-size:clamp(17px,2.2vw,23px);font-weight:500;letter-spacing:-.01em}
-.readout span{display:block;font-family:var(--display);font-size:11.5px;color:var(--quiet);margin-top:5px;line-height:1.3}
-
-/* — the medium — */
-.facts{display:grid;gap:clamp(22px,3vw,38px);grid-template-columns:repeat(auto-fit,minmax(240px,1fr));margin-top:46px}
-.fact{border-top:2px solid var(--accent);padding-top:14px}
-.fact b{font-family:var(--inst);font-size:26px;font-weight:500;display:block}
-.fact p{font-size:16.5px;margin:.5em 0 0;color:var(--quiet)}
-
-figure{margin:clamp(34px,5vw,64px) 0 0}
-figure img{width:100%;height:auto;display:block}
-figcaption{font-family:var(--display);font-size:13.5px;color:var(--quiet);margin-top:11px;max-width:62ch}
-.bleed{margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);width:100vw}
-.bleed img{width:100vw;max-height:78svh;object-fit:cover}
-.duo{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-@media(max-width:760px){.duo{grid-template-columns:1fr}}
-
-/* — timeline — */
-.years{margin-top:52px;border-top:1px solid var(--rule)}
-.year{display:grid;grid-template-columns:118px 1fr;gap:clamp(14px,3vw,40px);
-  padding:26px 0;border-bottom:1px solid var(--rule);align-items:baseline}
-.year time{font-family:var(--inst);font-size:15px;color:var(--accent)}
-.year h3{margin-bottom:6px}
-.year p{margin:0;color:var(--quiet);font-size:17px;max-width:62ch}
-@media(max-width:620px){.year{grid-template-columns:1fr;gap:4px}}
-
-/* — retractions — */
-.retract{display:grid;gap:clamp(18px,2.4vw,30px);grid-template-columns:repeat(auto-fit,minmax(275px,1fr));margin-top:46px}
-.card{border:1px solid var(--rule);padding:clamp(18px,2.3vw,26px)}
-.card .was{font-family:var(--inst);font-size:13px;color:var(--quiet);text-decoration:line-through}
-.card .now{font-family:var(--inst);font-size:clamp(20px,2.4vw,27px);font-weight:500;color:var(--accent);margin:6px 0 10px;display:block}
-.card p{font-size:16px;margin:0;color:var(--quiet)}
-.card h3{font-size:17px;margin-bottom:10px}
-
-/* — instruments — */
-.wall{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));
-  gap:1px;background:var(--rule);border:1px solid var(--rule);margin-top:44px}
-.cell{background:var(--paper);padding:18px 18px 16px}
-.cell b{font-family:var(--inst);font-size:clamp(21px,2.5vw,30px);font-weight:500;display:block;letter-spacing:-.02em}
-.cell span{display:block;font-family:var(--display);font-size:12.5px;color:var(--quiet);margin-top:7px;line-height:1.35}
-.cell em{font-family:var(--inst);font-style:normal;font-size:11px;color:var(--quiet);opacity:.8}
-
-pre{font-family:var(--inst);font-size:13.5px;line-height:1.66;overflow-x:auto;
-  border:1px solid var(--rule);padding:clamp(16px,2.2vw,26px);margin:38px 0 0;background:transparent}
-pre .c{color:var(--quiet)}
-pre .k{color:var(--accent)}
-
-ul.plain{list-style:none;padding:0;margin:30px 0 0}
-ul.plain li{border-bottom:1px solid var(--rule);padding:14px 0;display:grid;
-  grid-template-columns:1fr auto;gap:18px;align-items:baseline;font-size:17px}
-ul.plain li span{font-family:var(--inst);font-size:12.5px;color:var(--quiet);text-align:right}
-
-footer{padding:clamp(60px,9vh,110px) 0 70px;border-top:1px solid var(--rule)}
-.sig{font-family:var(--display);font-size:clamp(21px,2.4vw,28px);max-width:26ch;font-weight:500;line-height:1.24}
-.ends{display:flex;flex-wrap:wrap;gap:26px;margin-top:38px;font-family:var(--inst);font-size:13px;color:var(--quiet)}
-</style>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;1,6..72,300;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
 </head>
-<body data-zone="surface">
+<body>
 
-<nav class="rail" aria-label="Depth">
-  <ol>
-    <li data-rail="surface" data-on="1">0 m &nbsp;surface</li>
-    <li data-rail="medium">3 m &nbsp;the medium</li>
-    <li data-rail="lab">9 m &nbsp;the lab years</li>
-    <li data-rail="stack">18 m &nbsp;the stack</li>
-    <li data-rail="machine">27 m &nbsp;the machine</li>
-    <li data-rail="seeing">34 m &nbsp;seeing</li>
-    <li data-rail="water">45 m &nbsp;what the water did</li>
-    <li data-rail="asking">58 m &nbsp;asking</li>
-    <li data-rail="instruments">70 m &nbsp;instruments</li>
-    <li data-rail="move">84 m &nbsp;how it moves</li>
-    <li data-rail="open">∞ &nbsp;open</li>
-  </ol>
+<nav class="rail" aria-label="Sections">
+  <b data-rail="surface" data-on="1"><span class="m">00</span>surface</b>
+  <b data-rail="medium"><span class="m">01</span>the medium</b>
+  <b data-rail="origin"><span class="m">02</span>origin</b>
+  <b data-rail="shift"><span class="m">03</span>the shift</b>
+  <b data-rail="body"><span class="m">04</span>the body</b>
+  <b data-rail="frame"><span class="m">05</span>one frame</b>
+  <b data-rail="blink"><span class="m">06</span>the blink</b>
+  <b data-rail="water"><span class="m">07</span>what water did</b>
+  <b data-rail="instruments"><span class="m">08</span>instruments</b>
+  <b data-rail="asked"><span class="m">09</span>how it's asked</b>
+  <b data-rail="open"><span class="m">10</span>open</b>
 </nav>
 
 <main>
 
-<section class="stage hero" id="surface" data-zone="surface">
-  <div class="wrap">
-    <p class="mark">Mongla · an autonomy stack for autonomous underwater vehicles</p>
-    <h1>Machines that have to work when nobody is watching.</h1>
-    <p class="lede sub col">Underwater there is no radio, no GPS, and no second chance to explain
-      yourself. A vehicle either understood what it was looking at, or it did not — and it will
-      not tell you which. This is the software that has to be right anyway.</p>
-    <div class="readout" aria-label="Measured performance">
-      <div><b>500 Hz</b><span>control loop, on a core nothing can interrupt</span></div>
-      <div><b>18.0 ms</b><span>photon to detection, median</span></div>
-      <div><b>53.9 Hz</b><span>detection through the live ROS graph</span></div>
-      <div><b>46.7°</b><span>camera field of view, measured in water</span></div>
-      <div><b>1.09 cm</b><span>worst error over a 30 cm slide</span></div>
-      <div><b>2 757</b><span>tests, all of them green</span></div>
+<!-- 00 ───────────────────────────────────────────────────────────── -->
+<section id="surface">
+ <div class="wrap">
+  <p class="mark">Mongla <i>//</i> an autonomy stack for autonomous underwater vehicles</p>
+  <h1>Machines that have to work when nobody is watching.</h1>
+  <p class="lede col" style="margin-top:28px">Underwater there is no radio, no GPS, and no second
+    chance to explain yourself. A vehicle either understood what it was looking at, or it did
+    not — and it will not tell you which. This is the software that has to be right anyway.</p>
+  <div class="readout" aria-label="Measured performance">
+    <div><b>500 Hz</b><span>control loop, on a core nothing can interrupt</span></div>
+    <div><b>18.0 ms</b><span>photon to detection, median</span></div>
+    <div><b>53.9 Hz</b><span>detection through the live ROS graph</span></div>
+    <div><b>46.7°</b><span>camera field of view, measured in water</span></div>
+    <div><b>1.09 cm</b><span>worst error over a 30 cm slide</span></div>
+    <div><b>2 757</b><span>tests, all of them green</span></div>
+  </div>
+  <p class="mark" style="margin:22px 0 0">Nothing on this platform has been in water. Every number
+    above says where it was taken.</p>
+ </div>
+</section>
+
+<!-- 01 ───────────────────────────────────────────────────────────── -->
+<section id="medium">
+ <div class="wrap">
+  <h2 class="col">Everything down here fights you.</h2>
+  <p class="lede col quiet">Not as a metaphor. Each line is a force acting on a decision the
+    software has to make, and each one is why some ordinary technique does not survive contact
+    with the medium.</p>
+  <table class="ledger">
+   <thead><tr><th>the medium does this</th><th>so this breaks</th><th>what we measured</th></tr></thead>
+   <tbody>
+    <tr><td>Absorbs red first, then everything</td><td>Colour thresholds, contrast tricks</td>
+        <td class="num">17 preprocessing configs, never once positive</td></tr>
+    <tr><td>Bends light at the port glass</td><td>Any angle taken from a datasheet</td>
+        <td class="num">63.8° in air → 46.7° in water</td></tr>
+    <tr><td>Blocks radio entirely</td><td>Telemetry, GPS, remote intervention</td>
+        <td class="num">no link below the surface</td></tr>
+    <tr><td>Carries 800× the mass of air</td><td>Any controller tuned for a drone</td>
+        <td class="num">added mass 1.0× displacement broadside</td></tr>
+    <tr><td>Moves while you are deciding</td><td>Position held by dead reckoning</td>
+        <td class="num">0.12 m/s current → 1.374 m of drift in 40 s</td></tr>
+    <tr><td>Hides the thing you were tracking</td><td>Detectors that assume continuity</td>
+        <td class="num">71 real detection gaps, catalogued</td></tr>
+   </tbody>
+  </table>
+  <figure>
+   <div class="strip">
+     <img src="imgs/water-clear.png" alt="A target seen in clear water" loading="lazy">
+     <img src="imgs/water-murky.png" alt="The same target in murky water" loading="lazy">
+     <img src="imgs/pool-glide.jpg" alt="The vehicle gliding through the test pool" loading="lazy">
+     <img src="imgs/pool-top.jpg" alt="The test pool seen from above" loading="lazy">
+   </div>
+   <figcaption>The same target, the same detector, two water conditions. This is the single
+     variable that decides whether a run scores or ends.</figcaption>
+  </figure>
+ </div>
+</section>
+
+<!-- 02 ───────────────────────────────────────────────────────────── -->
+<section id="origin">
+ <div class="wrap">
+  <p class="mark">Act one <i>//</i> where it learned</p>
+  <h2 class="col">It learned most of what it knows from losing to water.</h2>
+  <p class="lede col quiet">Mongla began as the autonomy software for a university AUV programme.
+    It flew on that programme's vehicles. The vehicles, the team and the name stayed there; the
+    software, and everything it had been taught, came here.</p>
+
+  <div class="years">
+    <div class="year"><time>2023</time><div><h3>RoboSub — 2nd place</h3>
+      <p>A Pixhawk, ArduSub, a Jetson, and an inner control loop we could tune but never open.</p></div></div>
+    <div class="year"><time>2024–25</time><div><h3>The vision years</h3>
+      <p>Detection, tracking, and the slow discovery that most published underwater-vision advice
+         does not survive being measured on your own footage.</p></div></div>
+    <div class="year"><time>2025</time><div><h3>RoboSub — 8th place</h3>
+      <p>The last campaign on the old stack. It worked, and it had a ceiling: our control ran at
+         20 Hz, steering a box we were not allowed inside.</p></div></div>
+    <div class="year"><time>2026</time><div><h3>The stack leaves the lab</h3>
+      <p>In September the author left the university, on principle. Mongla continues
+         independently, with the firmware and hardware lead as its only co-author.</p></div></div>
+  </div>
+
+  <figure>
+   <div class="strip">
+    <img src="imgs/robosub-tent.jpg" alt="The team pit at RoboSub" loading="lazy">
+    <img src="imgs/robosub-deploy.jpg" alt="Deploying the vehicle at RoboSub" loading="lazy">
+    <img src="imgs/pool-dual-auvs.jpg" alt="Two vehicles in the test pool" loading="lazy">
+    <img src="imgs/team-bd-flag.jpg" alt="The team with the flag of Bangladesh" loading="lazy">
+   </div>
+   <figcaption>The pit, the deployment, the pool, the people. Both vehicles belonged to the
+     university programme. What continues here is the software that ran inside them.</figcaption>
+  </figure>
+ </div>
+</section>
+
+<!-- 03 ───────────────────────────────────────────────────────────── -->
+<section id="shift">
+ <div class="wrap">
+  <p class="mark">Act two <i>//</i> opening the box</p>
+  <h2 class="col">We stopped renting the inner loop.</h2>
+  <p class="lede col quiet">The old stack asked a closed autopilot to hold an attitude, at whatever
+    rate our companion computer could manage. The ceiling was not our code — it was the boundary.
+    So the boundary moved: reflexes went onto a board we write the firmware for, and the
+    companion was left to do nothing but think.</p>
+  <figure>
+   <img src="assets/diagrams/the-shift.svg" alt="The old Pixhawk and Jetson architecture beside the SROT board and Raspberry Pi with Hailo" loading="lazy">
+   <figcaption>What actually changed is the rate at which a mistake gets corrected — from our
+     20 Hz outer loop to the board's 500 Hz inner one. Roughly 25 corrections now happen
+     underneath every command we send.</figcaption>
+  </figure>
+  <table class="ledger">
+   <thead><tr><th>layer</th><th>what it owns</th><th>rate</th><th>state</th></tr></thead>
+   <tbody>
+    <tr><td>SROT board — firmware <em>Hengla</em></td><td>IMU, depth, leak, kill, thrust mixing</td>
+        <td class="numr">500 Hz</td><td><span class="st bench">bench</span></td></tr>
+    <tr><td>Raspberry Pi 5 + Hailo-8</td><td>Detection, tracking, optical-flow velocity</td>
+        <td class="num">53.9 Hz</td><td><span class="st bench">bench</span></td></tr>
+    <tr><td>Host control</td><td>Verbs, vision loops, mission logic</td>
+        <td class="num">20–50 Hz</td><td><span class="st bench">bench</span></td></tr>
+    <tr><td>Estimation</td><td>Right-invariant EKF, late measurements replayed in order</td>
+        <td class="num">—</td><td><span class="st soft">software</span></td></tr>
+    <tr><td>Anything at all, in water</td><td>—</td><td class="num">—</td>
+        <td><span class="st blocked">blocked</span></td></tr>
+   </tbody>
+  </table>
+ </div>
+</section>
+
+<!-- 04 ───────────────────────────────────────────────────────────── -->
+<section id="body">
+ <div class="wrap">
+  <p class="mark">The body <i>//</i> 702 mm, five thrusters, one uncontrolled axis</p>
+  <h2 class="col">A red machine, lit by the water it has to survive.</h2>
+  <p class="lede col quiet">Drag it. Every number below was taken from the CAD geometry itself —
+    84,248 triangles at 0.9 mm tessellation, measured rather than quoted.</p>
+
+  <div class="bay">
+    <span class="tagtop">Mongla hull <i>//</i> drag to orbit <i>//</i> space to pause</span>
+    <canvas id="hull" tabindex="0" role="img"
+      aria-label="Interactive three-dimensional model of the Mongla hull: 702 millimetres long, four tunnel thrusters and one axial nose thruster"></canvas>
+    <div class="hud">
+      <span>L <i>702.0 mm</i></span><span>beam <i>176.1</i></span><span>height <i>172.1</i></span>
+      <span>fineness <i>3.99</i></span><span id="hud-tri">tris <i>—</i></span>
     </div>
   </div>
+
+  <figure>
+   <img src="assets/diagrams/hull-elevations.svg" alt="Orthographic starboard, plan and bow elevations of the hull, generated from the CAD" loading="lazy">
+   <figcaption>Starboard, plan and bow — traced from the mesh itself, not drawn by hand. The four
+     circles are the tunnel bores; the spoked disc in the bow view is the axial thruster's
+     stator.</figcaption>
+  </figure>
+
+  <h3 style="margin-top:56px">What the geometry says</h3>
+  <table class="ledger">
+   <thead><tr><th>measurement</th><th>value</th><th>why it matters</th></tr></thead>
+   <tbody>
+    <tr><td>Length overall</td><td class="num">702.0 mm</td><td>One person can carry and launch it</td></tr>
+    <tr><td>Beam × height</td><td class="num">176.1 × 172.1 mm</td><td>Near-square section — form alone gives no preferred roll orientation</td></tr>
+    <tr><td>Fineness ratio</td><td class="num">3.99</td><td>Just under the 4.5–6 band of minimum-drag bodies of revolution: slightly stubby, deliberately compact</td></tr>
+    <tr><td>Frontal area</td><td class="num">160.9 cm²</td><td>The water that has to be pushed aside</td></tr>
+    <tr><td>Wetted area</td><td class="num">1.107 m²</td><td>Where skin friction is paid</td></tr>
+    <tr><td>Lateral tunnels</td><td class="num">2 × ⌀84 mm at ±175 mm</td><td>Sway, and yaw on a 175 mm arm</td></tr>
+    <tr><td>Vertical tunnels</td><td class="num">2 × ⌀84 mm at ±259.5 mm</td><td>Heave, and pitch on a 259.5 mm arm</td></tr>
+    <tr><td>Axial thruster</td><td class="num">1, in the nose</td><td>Surge</td></tr>
+    <tr><td>Bilateral symmetry</td><td class="num">±88.05 mm, exact</td><td>No built-in turn bias to trim out</td></tr>
+   </tbody>
+  </table>
+
+  <figure>
+   <svg viewBox="0 -14 820 310" role="img" aria-label="Plan diagram of thruster positions and the resulting control authority">
+    <style>
+      .hl{fill:none;stroke:#2e3542;stroke-width:1.2}
+      .tn{fill:none;stroke:#ff0000;stroke-width:1.6}
+      .vt{fill:none;stroke:#004eff;stroke-width:1.6}
+      .ar{stroke:#ff0000;stroke-width:1.4;fill:none}
+      .lb{font-family:"JetBrains Mono",monospace;font-size:9.5px;fill:#666f7e;letter-spacing:.1em}
+      .lbr{font-family:"JetBrains Mono",monospace;font-size:9.5px;fill:#ff5747;letter-spacing:.1em}
+      .lbb{font-family:"JetBrains Mono",monospace;font-size:9.5px;fill:#5a8dff;letter-spacing:.1em}
+      .cl{stroke:#2e3542;stroke-width:.7;stroke-dasharray:5 5}
+      .ld{stroke:#2e3542;stroke-width:.7}
+    </style>
+    <text class="lb" x="40" y="-2">PLAN · 702 mm · bow right · every thruster on the centreplane</text>
+    <!-- vertical tunnels act THROUGH this plane: labelled above -->
+    <line class="ld" x1="130.5" y1="70" x2="130.5" y2="26"/>
+    <line class="ld" x1="649.5" y1="70" x2="649.5" y2="26"/>
+    <text class="lbb" x="130.5" y="20" text-anchor="middle">VERT ⌀84 — heave + pitch</text>
+    <text class="lbb" x="649.5" y="20" text-anchor="middle">pitch arm 259.5 mm</text>
+    <path class="hl" d="M40,140 C40,85 96,53 168,47 L640,47 C700,51 742,87 742,140
+                        C742,193 700,229 640,233 L168,233 C96,227 40,195 40,140 Z"/>
+    <line class="cl" x1="26" y1="140" x2="800" y2="140"/>
+    <circle class="vt" cx="130.5" cy="140" r="42"/><circle class="vt" cx="130.5" cy="140" r="7"/>
+    <circle class="vt" cx="649.5" cy="140" r="42"/><circle class="vt" cx="649.5" cy="140" r="7"/>
+    <!-- lateral tunnels act IN this plane: arrows in-plane, labelled below -->
+    <circle class="tn" cx="215" cy="140" r="42"/>
+    <circle class="tn" cx="565" cy="140" r="42"/>
+    <path class="ar" d="M215,94 L215,66 M209,76 L215,64 L221,76"/>
+    <path class="ar" d="M215,186 L215,214 M209,202 L215,216 L221,202"/>
+    <path class="ar" d="M565,94 L565,66 M559,76 L565,64 L571,76"/>
+    <path class="ar" d="M565,186 L565,214 M559,202 L565,216 L571,202"/>
+    <line class="ld" x1="215" y1="240" x2="215" y2="264"/>
+    <line class="ld" x1="565" y1="240" x2="565" y2="264"/>
+    <text class="lbr" x="215" y="278" text-anchor="middle">LAT ⌀84 — sway + yaw</text>
+    <text class="lbr" x="565" y="278" text-anchor="middle">yaw arm 175 mm</text>
+    <!-- axial nose thruster -->
+    <circle class="tn" cx="720.6" cy="140" r="17"/>
+    <path class="ar" d="M752,140 L794,140 M784,134 L798,140 L784,146"/>
+    <text class="lbr" x="772" y="126" text-anchor="middle">SURGE</text>
+   </svg>
+   <figcaption>Five thrusters, every one of them on the centreplane. Red acts in the plane of this
+     drawing; blue acts through it. Nothing acts about the long axis — roll has no actuator.</figcaption>
+  </figure>
+
+  <h3 style="margin-top:52px">Where the design is strong</h3>
+  <p class="col quiet" style="margin-top:12px">Four tunnels and one axial unit buy <strong>five of
+    six degrees of freedom</strong> — surge, sway, heave, pitch, yaw — with no vectoring linkage,
+    no moving nozzles and nothing protruding into the flow. Tunnels also deliver full authority at
+    <em>zero forward speed</em>, which is precisely the regime a task is won in: holding still in
+    front of a hole. Bilateral symmetry is exact to ±88.05 mm, so there is no built-in turn to trim
+    away. And the pitch arm is 48 % longer than the yaw arm, which puts the strongest moment on the
+    axis that has to resist a nose-down trim.</p>
+
+  <h3 style="margin-top:36px">Where it costs</h3>
+  <p class="col quiet" style="margin-top:12px">The four bores total <span class="nr">221.7 cm²</span>
+    of open aperture on a hull whose frontal area is <span class="nr">160.9 cm²</span> — the holes
+    come to <strong>1.38× the frontal area</strong>. Open tunnels are cavities in cruise: they are
+    the price of station-keeping authority, and it is paid continuously while transiting. At a
+    fineness of 3.99 the body is already blunter than the drag optimum, so the two choices compound.
+    The arms are also arguably the wrong way round — <strong>yaw is the axis an AUV actually
+    uses</strong>, to hold heading against current and to line up on a target, and yaw got the
+    shorter 175 mm arm. Swapping the tunnel pairs would favour the axis doing the work. And with
+    every thruster on the centreplane, <strong>roll has no actuator at all</strong>: it has to be
+    passively stable, which promotes the vertical placement of ballast from a detail to a
+    load-bearing decision.</p>
+
+  <h3 style="margin-top:36px">What this drawing cannot tell you</h3>
+  <p class="col quiet" style="margin-top:12px">All of the above is geometry, and geometry is half a
+    hull. These are unmeasured, and will not be guessed at here:</p>
+  <ul class="plain">
+   <li>Net buoyancy — whether it floats at all<span>needs material densities</span></li>
+   <li>Centre of buoyancy above centre of mass — the whole roll argument<span>needs a mass model</span></li>
+   <li>Drag coefficient, and so the power to cruise<span>needs a tow test or CFD</span></li>
+   <li>Thrust per tunnel, and so whether five are enough<span>needs a bollard test</span></li>
+   <li>Whether the modelled motors are the ones fitted<span>3 of 5 populated in CAD</span></li>
+  </ul>
+  <p class="col quiet" style="margin-top:22px">A shell mesh cannot answer the buoyancy question, and
+    it would be easy to pretend otherwise: the enclosed volume of this model is 1.77 L, which is the
+    <em>surface</em> and not the displacement. Using it would repeat a mistake this project has
+    already made once, and written down.</p>
+ </div>
 </section>
 
-<section id="medium" data-zone="shallow">
-  <div class="wrap">
-    <h2 class="col">Everything down here is working against you.</h2>
-    <p class="lede col quiet">Not dramatically. Quietly, in ways that never raise an error and
-      always return a plausible number.</p>
-    <div class="facts">
-      <div class="fact"><b>red, first</b>
-        <p>Water eats wavelengths in order. Red goes within metres, then orange, then contrast.
-          A detector tuned in one pool can fail in the next one.</p></div>
-      <div class="fact"><b>−29.5 %</b>
-        <p>What a flat window does to range if you ignore refraction: a target at 0.5 m reads
-          29.5 % short. Corrected, the same measurement lands at +1.2 %.</p></div>
-      <div class="fact"><b>75 m in 30 s</b>
-        <p>How far a good inertial sensor drifts with nothing to correct it. Dead reckoning is
-          not navigation; it is a countdown.</p></div>
-      <div class="fact"><b>0.155 s</b>
-        <p>The median gap between detections, measured over 71 real ones. Half the time, the
-          machine is steering on something it can no longer see.</p></div>
-    </div>
-    <figure class="bleed">
-      <img src="imgs/pool-glide.jpg" alt="An autonomous underwater vehicle gliding in a test pool" loading="lazy">
-    </figure>
-  </div>
+<!-- 05 ───────────────────────────────────────────────────────────── -->
+<section id="frame">
+ <div class="wrap">
+  <p class="mark">Perception <i>//</i> one frame, end to end</p>
+  <h2 class="col">Eighteen milliseconds from photon to decision.</h2>
+  <p class="lede col quiet">Not a block diagram — a time axis, with the measured spans on it, and
+    the board's 500 Hz heartbeat running underneath the whole thing.</p>
+  <figure>
+   <svg viewBox="0 0 820 300" role="img" aria-label="Timing diagram of one camera frame from exposure to thruster correction">
+    <style>
+      .ax{stroke:#2e3542;stroke-width:1}
+      .bt{stroke:#004eff;stroke-width:1.1;opacity:.85}
+      .t{font-family:"JetBrains Mono",monospace;font-size:9.5px;fill:#666f7e;letter-spacing:.09em}
+      .tr{font-family:"JetBrains Mono",monospace;font-size:9.5px;fill:#ff5747;letter-spacing:.09em}
+      .tb{font-family:"JetBrains Mono",monospace;font-size:9.5px;fill:#5a8dff;letter-spacing:.09em}
+    </style>
+    <text class="t" x="62" y="22">CAMERA</text>
+    <rect x="62" y="30" width="53.7" height="18" fill="#5c0500" stroke="#ff0000"/>
+    <text class="tr" x="124" y="43">exposure + transfer</text>
+
+    <text class="t" x="62" y="72">HAILO-8</text>
+    <rect x="115.7" y="80" width="152.2" height="18" fill="#001a5c" stroke="#004eff"/>
+    <text class="tb" x="277" y="93">inference · 80.9 Hz standalone</text>
+
+    <text class="t" x="62" y="122">ROS GRAPH</text>
+    <rect x="267.9" y="130" width="54" height="18" fill="#11141c" stroke="#2e3542"/>
+    <text class="t" x="330" y="143">publish · mailbox keeps the newest frame · 16.9 ms stale</text>
+
+    <line x1="384.2" y1="26" x2="384.2" y2="214" stroke="#ff0000" stroke-width="1" stroke-dasharray="4 4"/>
+    <text class="tr" x="392" y="168">18.0 ms — the detection exists</text>
+
+    <line x1="62" y1="190" x2="384.2" y2="190" stroke="#ff5747" stroke-width="1"/>
+    <path d="M62,186 L62,194 M384.2,186 L384.2,194" stroke="#ff5747" stroke-width="1"/>
+    <text class="tr" x="392" y="194">one host command · 53.9 Hz</text>
+
+    <line class="ax" x1="62" y1="214" x2="778" y2="214"/>
+    <g class="t">
+      <text x="58" y="230">0</text><text x="233" y="230">10</text>
+      <text x="412" y="230">20</text><text x="591" y="230">30</text><text x="752" y="230">40 ms</text>
+    </g>
+    <g class="bt">
+      <line x1="62.0" y1="250" x2="62.0" y2="266"/>
+      <line x1="97.8" y1="250" x2="97.8" y2="266"/>
+      <line x1="133.6" y1="250" x2="133.6" y2="266"/>
+      <line x1="169.4" y1="250" x2="169.4" y2="266"/>
+      <line x1="205.2" y1="250" x2="205.2" y2="266"/>
+      <line x1="241.0" y1="250" x2="241.0" y2="266"/>
+      <line x1="276.8" y1="250" x2="276.8" y2="266"/>
+      <line x1="312.6" y1="250" x2="312.6" y2="266"/>
+      <line x1="348.4" y1="250" x2="348.4" y2="266"/>
+      <line x1="384.2" y1="250" x2="384.2" y2="266"/>
+      <line x1="420.0" y1="250" x2="420.0" y2="266"/>
+      <line x1="455.8" y1="250" x2="455.8" y2="266"/>
+      <line x1="491.6" y1="250" x2="491.6" y2="266"/>
+      <line x1="527.4" y1="250" x2="527.4" y2="266"/>
+      <line x1="563.2" y1="250" x2="563.2" y2="266"/>
+      <line x1="599.0" y1="250" x2="599.0" y2="266"/>
+      <line x1="634.8" y1="250" x2="634.8" y2="266"/>
+      <line x1="670.6" y1="250" x2="670.6" y2="266"/>
+      <line x1="706.4" y1="250" x2="706.4" y2="266"/>
+      <line x1="742.2" y1="250" x2="742.2" y2="266"/>
+      <line x1="778.0" y1="250" x2="778.0" y2="266"/>
+    </g>
+    <text class="tb" x="62" y="284">SROT board · 500 Hz · about 25 corrections inside one host command</text>
+   </svg>
+   <figcaption>The measurement that changed the design: a full V4L2 queue keeps the
+     <em>oldest</em> frames, so the standard advice to drain it recovers almost nothing. Treating
+     the topic as a mailbox instead — newest frame wins, surplus dropped — took staleness from
+     396 ms to 16.9 ms. Publishing <em>slower</em> made detections fresher.</figcaption>
+  </figure>
+ </div>
 </section>
 
-<section id="lab" data-zone="shallow">
-  <div class="wrap">
-    <h2 class="col">Act I — the lab years</h2>
-    <p class="lede col quiet">Mongla started as the autonomy software for a university AUV
-      programme. It flew on that programme's vehicles, and it learned most of what it knows
-      from losing to water.</p>
-
-    <div class="years">
-      <div class="year"><time>2023</time><div><h3>RoboSub — 2nd place</h3>
-        <p>Pixhawk, ArduSub, a Jetson, and a control loop we could tune but never change.</p></div></div>
-      <div class="year"><time>2024–25</time><div><h3>The vision years</h3>
-        <p>Detection, tracking, and the slow discovery that most underwater vision advice does
-          not survive being measured.</p></div></div>
-      <div class="year"><time>2025</time><div><h3>RoboSub — 8th place</h3>
-        <p>The last campaign on the old stack. It worked, and it had a ceiling: our own control
-          ran at 20 Hz, steering a box we could not open.</p></div></div>
-      <div class="year"><time>2026</time><div><h3>The stack leaves the lab</h3>
-        <p>In September the author left the university, on principle. Mongla continues
-          independently; the vehicles and the team name stayed behind.</p></div></div>
-    </div>
-
-    <figure class="duo">
-      <img src="imgs/robosub-deploy.jpg" alt="Deploying the vehicle at RoboSub" loading="lazy">
-      <img src="imgs/pool-dual-auvs.jpg" alt="Two vehicles in the test pool" loading="lazy">
-    </figure>
-    <figcaption>RoboSub, and the pool that taught us more. Both vehicles belonged to the
-      university programme; the software in them is what continues here.</figcaption>
-  </div>
+<!-- 06 ───────────────────────────────────────────────────────────── -->
+<section id="blink">
+ <div class="wrap">
+  <p class="mark">Continuity <i>//</i> when the detector blinks</p>
+  <h2 class="col">The target does not leave. The detector does.</h2>
+  <p class="lede col quiet">A neural detector on real underwater footage drops the box constantly —
+    a reflection, a bubble, a bad angle. If control trusts only the detector, the vehicle loses a
+    lock it never actually lost. So there is a ladder, and each rung is allowed to be wrong for a
+    measured length of time.</p>
+  <table class="ledger">
+   <thead><tr><th>rung</th><th>holds the lock when</th><th>measured</th></tr></thead>
+   <tbody>
+    <tr><td>Live detection</td><td>The box is there this frame</td><td class="num">53.9 Hz</td></tr>
+    <tr><td>Tracker coast</td><td>A frame or two is missing</td><td class="num">0.8 s of authority, decayed by true age</td></tr>
+    <tr><td>Geometric anchor</td><td>The detector is gone entirely</td><td class="numr">held 175 consecutive frames</td></tr>
+    <tr><td>Refuse</td><td>Nothing above is honest any more</td><td class="num">returns LOST, never a guess</td></tr>
+   </tbody>
+  </table>
+  <p class="col quiet" style="margin-top:30px">The third row is the one worth staring at. Through a
+    gap of 175 frames the detector produced nothing at all, and the vehicle still knew where the
+    target was — because the anchor matches image structure rather than asking the network again.
+    The fourth row matters as much: the ladder ends in a refusal, not in a confident invention.</p>
+ </div>
 </section>
 
-<section id="stack" data-zone="mid">
-  <div class="wrap">
-    <h2 class="col">Act II — owning the whole stack</h2>
-    <p class="lede col quiet">The ceiling was never the hardware. It was that the fastest,
-      most safety-critical loop belonged to somebody else.</p>
-    <p class="col">An autonomous vehicle has to answer two kinds of question. <em>Which way is
-      up, and how deep am I?</em> — hundreds of times a second, because water pushes back.
-      And <em>what is around me, and what should I do about it?</em> — which takes a camera,
-      a neural network, and time. Put both on one computer and the slow question delays the
-      fast one. So they were split: reflexes onto a board we wrote the firmware for, thinking
-      onto a Pi with dedicated inference silicon, one cable between them carrying intent
-      rather than reflexes.</p>
-    <figure>
-      <img src="assets/diagrams/the-shift.svg" alt="The old four-computer stack beside the current two-computer stack" loading="lazy">
-      <figcaption>Four computers became two — but the number is not the point. The point is that
-        every layer between the hull and the mission is now readable, measurable and ours to
-        change. <a href="the-shift.html">The full story</a>.</figcaption>
-    </figure>
-    <figure>
-      <img src="assets/diagrams/board-anatomy.svg" alt="Inside the control board: sense, decide, split, drive" loading="lazy">
-      <figcaption>One pass every 2 ms: read the hull's state, decide what each axis should do,
-        split that across eight thrusters, and listen to what came back.</figcaption>
-    </figure>
+<!-- 07 ───────────────────────────────────────────────────────────── -->
+<section id="water">
+ <div class="wrap">
+  <p class="mark">Retractions <i>//</i> kept on purpose</p>
+  <h2 class="col">The results we had to take back.</h2>
+  <p class="lede col quiet">More than half of the measurement ledger is retractions. They are kept
+    where anyone can read them, because a project that quietly deletes its wrong answers is a
+    project you cannot check.</p>
+
+  <div class="retract">
+    <b>Image enhancement made detection better</b>
+    <p class="was">claimed +42 % → measured −95 % on the gate</p>
+    <p>Seventeen configurations across four props and three venues. Never once positive. The
+      implementation was correct; the original A/B was confounded. Preprocessing is off, and a
+      test keeps it off.</p>
   </div>
+  <div class="retract">
+    <b>The confidence-adaptive filter tracked good boxes more tightly</b>
+    <p class="was">selectivity 0.78× — it was doing the exact opposite</p>
+    <p>The shipped filter followed doubtful detections <em>more</em> closely than confident ones.
+      It had been live, and every test passed, because no test compared the two directions.</p>
+  </div>
+  <div class="retract">
+    <b>Range-dependent gain cut jitter 16×</b>
+    <p class="was">a pooling artefact, not an effect</p>
+    <p>One clip contributed 1,299 far-field samples at the lowest jitter and zero near-field ones.
+      The trend was an artefact of how samples were pooled. The feature stays off.</p>
+  </div>
+  <div class="retract">
+    <b>Thruster health was verified</b>
+    <p class="was">958 of 958 ESC frames read exactly 0 — with nothing plugged in</p>
+    <p>The check counted messages arriving, and messages arrive whether or not a motor exists.
+      A gate that cannot fail is not a gate.</p>
+  </div>
+  <div class="retract">
+    <b>The depth loop works</b>
+    <p class="was">it has never once run closed</p>
+    <p>The sign was inverted until it was found, and the sensor was not fitted when it was written.
+      Two armed bench checks now gate every automatic move — including a plain forward command,
+      because on this board every automatic primitive closes the depth loop.</p>
+  </div>
+ </div>
 </section>
 
-<section id="machine" data-zone="deep">
-  <div class="wrap">
-    <h2 class="col">The machine, layer by layer</h2>
-    <p class="lede col quiet">Each layer trusts the one beneath it to be faster than the problem
-      it is solving. That is the whole architecture in one sentence.</p>
-    <figure>
-      <img src="assets/diagrams/capability-stack.svg" alt="Reflex, perception, estimation and mission layers, coloured by verification state" loading="lazy">
-      <figcaption>Colour is verification state, not ambition — what is proven in water, on a
-        bench, only in software, or still blocked.</figcaption>
-    </figure>
-    <figure>
-      <img src="assets/diagrams/system-dataflow.svg" alt="One frame's journey from camera to thruster" loading="lazy">
-      <figcaption>One frame's journey. The host decides tens of times a second; the board
-        corrects five hundred times a second underneath it — about 25 corrections for every
-        command we send.</figcaption>
-    </figure>
+<!-- 08 ───────────────────────────────────────────────────────────── -->
+<section id="instruments">
+ <div class="wrap">
+  <p class="mark">Instruments <i>//</i> every number with where it was taken</p>
+  <h2 class="col">If it is not measured, it does not ship.</h2>
+  <div class="readout">
+    <div><b>500 Hz</b><span>board control loop, dedicated core</span></div>
+    <div><b>80.9 Hz</b><span>Hailo-8 detection, standalone</span></div>
+    <div><b>53.9 Hz</b><span>the same detector through ROS</span></div>
+    <div><b>18.0 ms</b><span>photon to detection</span></div>
+    <div><b>16.9 ms</b><span>frame staleness — mailbox</span></div>
+    <div><b>396 ms</b><span>frame staleness — queue, before</span></div>
+    <div><b>46.7°</b><span>field of view in water</span></div>
+    <div><b>63.8°</b><span>the same lens in air</span></div>
+    <div><b>1.09 cm</b><span>worst error, 30 cm slide</span></div>
+    <div><b>175</b><span>frames held with no detector</span></div>
+    <div><b>0.9 mm</b><span>hull tessellation in the viewer</span></div>
+    <div><b>2 757</b><span>tests green across five suites</span></div>
   </div>
+  <p class="col quiet" style="margin-top:34px">Each of these lives in a ledger with its method, its
+    conditions and the bar it had to clear — and the tests read that file, so a number cannot drift
+    away from the measurement that produced it without something going red.</p>
+ </div>
 </section>
 
-<section id="water" data-zone="deep">
-  <div class="wrap">
-    <h2 class="col">What the water did to our conclusions</h2>
-    <p class="lede col quiet">More than half of this project's measurement log is retractions:
-      things we believed, tested properly, and withdrew. They are kept deliberately, because a
-      result you cannot reproduce is worth more as a warning than as a number.</p>
+<!-- 09 ───────────────────────────────────────────────────────────── -->
+<section id="asked">
+ <div class="wrap">
+  <p class="mark">The language <i>//</i> how a machine is asked to do something</p>
+  <h2 class="col">A mission should read like an instruction, not a state machine.</h2>
+  <p class="lede col quiet">One action, thirty verbs, two vision primitives. The vision verbs never
+    raise — they return where and how they finished, so a mission branches on reality instead of on
+    an exception.</p>
+  <pre><span class="c"># hold station on the target, then fire mid-hold — still correcting</span>
+<span class="k">res</span> = mongla.vision.align(
+    <span class="s">'hole'</span>, lat=<span class="s">0</span>, depth=<span class="s">0</span>,   <span class="c"># signed pixel offsets from frame centre</span>
+    fwd=<span class="s">62</span>, fwd_mode=<span class="s">'area'</span>,  <span class="c"># and hold this standoff</span>
+    hold=<span class="s">4.0</span>, fire=<span class="s">[1, 2]</span>,    <span class="c"># two shots, spaced, each gated on a NEW frame</span>
+    lock_on=<span class="k">True</span>, brake=<span class="k">False</span>,
+)
 
-    <div class="retract">
-      <div class="card"><h3>Brightening the image before the detector</h3>
-        <span class="was">+42 % recall</span><b class="now">30.4 % → 1.2 %</b>
-        <p>The most natural idea in underwater vision. Measured across 17 configurations, four
-          props and three venues: never once positive. On the gate it destroyed 95 % of
-          detections. It ships disabled, and a test keeps it disabled.</p></div>
-
-      <div class="card"><h3>Softening the gain as a target fills the frame</h3>
-        <span class="was">16× improvement</span><b class="now">1.56×</b>
-        <p>The 16× was an artefact of pooling clips: one clip contributed 1 299 samples and
-          manufactured the trend. Per-clip, the effect is between 0.6 and 3.0. The feature
-          stays off.</p></div>
-
-      <div class="card"><h3>Trusting confident detections more</h3>
-        <span class="was">shipping backwards</span><b class="now">0.78× → 5.37×</b>
-        <p>The filter had been weighting doubtful boxes <em>more</em> heavily than confident
-          ones for its entire life. Nothing failed. It simply followed the wrong boxes,
-          politely.</p></div>
-
-      <div class="card"><h3>Asking whether a thruster is spinning</h3>
-        <b class="now">958 / 958 = 0</b>
-        <p>Every ESC frame arrived valid, decodable, and exactly zero — with no thrusters
-          attached at all. A message count can never prove a motor is alive.</p></div>
-
-      <div class="card"><h3>The depth controller</h3>
-        <b class="now">never closed</b>
-        <p>The loop that holds depth has never run closed in water. It gates every automatic
-          move. We know because the board publishes its own error — something a sealed
-          autopilot would never have told us.</p></div>
-
-      <div class="card"><h3>The arming guard</h3>
-        <span class="was">safe by 0.20 m</span><b class="now">failed open by 6×</b>
-        <p>A stale fallback constant made a 0.90 m phantom sensor error look like 0.20 m. The
-          vehicle armed. The fix was to read the value from the board instead of assuming it.</p></div>
-    </div>
-  </div>
+<span class="k">if not</span> res.saw_target:        <span class="c"># never read x_px before this — NaN &lt; n is silently False</span>
+    <span class="k">return</span> search_pattern(mongla)
+<span class="k">if</span> res.x_px &gt; <span class="s">0</span>:              <span class="c"># it ended right of centre, so recover right</span>
+    mongla.move_right(duration=<span class="s">0.6</span>)</pre>
+  <p class="quiet" style="font-size:.92rem;margin-top:14px;max-width:66ch">The comment on the
+    eighth line is the whole philosophy compressed: a result that is <em>absent</em> must never be
+    mistaken for a result that is <em>zero</em>.</p>
+ </div>
 </section>
 
-
-<section id="seeing" data-zone="mid">
-  <div class="wrap">
-    <h2 class="col">The same gate, in two kinds of water</h2>
-    <p class="lede col quiet">Left, the pool you tune in. Right, the pool you compete in. The
-      detector does not get to choose, and nothing in the pipeline warns you which one you are
-      in.</p>
-    <figure class="duo">
-      <img src="imgs/water-clear.png" alt="A gate seen through clear water in the simulator" loading="lazy">
-      <img src="imgs/water-murky.png" alt="The same gate seen through turbid water" loading="lazy">
-    </figure>
-    <figcaption>Two frames from the same simulated course, one parameter apart. Recall on one
-      real prop across three venues fell from 97.5&nbsp;% to 93.3&nbsp;% — and across two
-      <em>models</em> of the same prop, from 73&nbsp;% to 29&nbsp;%. The model matters more than
-      the water.</figcaption>
-
-    <h3 style="margin-top:56px">Holding on when the detector blinks</h3>
-    <p class="col">Detections flicker. Measured over 71 real gaps at full frame rate, the median
-      is 0.155 s and the ninetieth percentile 0.651 s. So the grip on a target is a ladder, and
-      every rung is sized against that distribution rather than a guess:</p>
-    <ul class="plain">
-      <li>Freshness — the command decays toward neutral while blind<span>0.20 s · 56.3 %</span></li>
-      <li>Coast on the tracker's predicted box<span>0.80 s · 91.5 %</span></li>
-      <li>Grace before the target counts as lost<span>1.00 s</span></li>
-      <li>Kalman prediction<span>1.50 s · 94.4 %</span></li>
-      <li>Track buffer — nothing in the archive exceeds it<span>5.00 s · 100 %</span></li>
-    </ul>
-    <p class="col" style="margin-top:26px">Above all of it sits a feature anchor that once held
-      a target through <strong>175 consecutive frames</strong> in which the detector saw
-      nothing at all.</p>
-  </div>
-</section>
-
-<section id="asking" data-zone="deep">
-  <div class="wrap">
-    <h2 class="col">When the vehicle can't do something, that's a pull request</h2>
-    <p class="lede col quiet">The board's firmware, the ground station and the motor-controller
-      tooling are a second author's work, in his own repositories. Nothing is vendored. Every
-      change we need is asked for, with the evidence attached.</p>
-    <figure>
-      <img src="assets/diagrams/repo-map.svg" alt="The four repositories and the pull requests between them" loading="lazy">
-    </figure>
-    <div class="retract" style="margin-top:14px">
-      <div class="card"><h3>The motors couldn't say they were present</h3>
-        <p>The firmware computed it and dropped the value one line before the wire, so thruster
-          health could only ever answer "unknown". We read their source, found the line, and
-          sent it back as a one-line ask.</p></div>
-      <div class="card"><h3>The board had nowhere to put a velocity</h3>
-        <p>We had just turned the downward camera into a bottom-tracking velocity sensor, good
-          to a centimetre over 30 cm — and there was no message to send it in.</p></div>
-      <div class="card"><h3>The kill switch meant two things</h3>
-        <p>"Power is live" and "I cannot hear the power board" arrived identically, and nothing
-          on either side refused to arm a dead hull. One line, using their own rule.</p></div>
-    </div>
-    <p class="col" style="margin-top:30px">Nine such asks are written down, each reproducible
-      before it was sent. A handful of constants are shared between the repositories and frozen:
-      neither side may move one alone, and a test reads the firmware's own headers to prove
-      ours have not drifted.</p>
-  </div>
-</section>
-
-<section id="instruments" data-zone="abyss">
-  <div class="wrap">
-    <h2 class="col">Instruments</h2>
-    <p class="lede col quiet">Every number here has a method, a date and conditions recorded
-      beside it. Tests read that file, so a number cannot quietly drift away from the code.</p>
-    <div class="wall">
-      <div class="cell"><b>500 Hz</b><span>control loop, 2 ms per pass</span></div>
-      <div class="cell"><b>49.86 Hz</b><span>vision loop, soaked 90 s <em>0.00 % late</em></span></div>
-      <div class="cell"><b>80.9 Hz</b><span>detection, standalone</span></div>
-      <div class="cell"><b>18.0 ms</b><span>photon to detection</span></div>
-      <div class="cell"><b>16.9 ms</b><span>frame staleness <em>vs 396 ms on a queue</em></span></div>
-      <div class="cell"><b>0.93 ms</b><span>segmentation decode <em>from 31.5 ms, bit-exact</em></span></div>
-      <div class="cell"><b>46.7°</b><span>field of view in water <em>63.8° in air</em></span></div>
-      <div class="cell"><b>±0.7°</b><span>calibration spread, 25 views</span></div>
-      <div class="cell"><b>1.09 cm</b><span>worst error, three 30 cm slides</span></div>
-      <div class="cell"><b>0.57 mm/s</b><span>optical-flow noise floor</span></div>
-      <div class="cell"><b>0.07 m</b><span>drift with zero-velocity updates <em>from 635.77 m</em></span></div>
-      <div class="cell"><b>sd 0.000</b><span>board clock period, 200 samples <em>host arrival: sd 4.741 ms</em></span></div>
-      <div class="cell"><b>91.5 %</b><span>detection gaps the coast covers</span></div>
-      <div class="cell"><b>175</b><span>consecutive frames held without a detection</span></div>
-      <div class="cell"><b>18.8 %</b><span>of the serial link's budget</span></div>
-      <div class="cell"><b>10×</b><span>heartbeat margin over the failsafe</span></div>
-    </div>
-  </div>
-</section>
-
-<section id="move" data-zone="abyss">
-  <div class="wrap">
-    <h2 class="col">How you ask it to move</h2>
-    <p class="lede col quiet">A mission is a Python file. The object it is handed is the whole
-      vehicle — and it is written to be read at a poolside at midnight.</p>
-<pre><span class="c"># the gate task, as it actually ships</span>
-def run(mongla, log=None):
-    mongla.mission_reset()                     <span class="c"># clear old state, re-zero depth at the surface</span>
-    mongla.use_budget(900, reserve_s=45)       <span class="c"># ration the run; the clock starts on arm</span>
-
-    try:
-        mongla.arm()
-        mongla.set_depth(-0.8)
-
-        <span class="k">with</span> mongla.task('gate', deadline_s=120):
-            <span class="k">if</span> mongla.vision.align('gate', yaw=0, lat=0, gain=30, duration=60):
-                mongla.vision.move('gate', fwd=None)      <span class="c"># drive through it</span>
-    <span class="k">except</span> TaskAbandoned:
-        mongla.note('gate', 'ran out of time', success=False)
-    <span class="k">finally</span>:
-        mongla.surface()
-        mongla.disarm()</pre>
-    <p class="col" style="margin-top:30px">Three ideas hold that up. <strong>Two vision verbs,
-      not nine</strong> — centre on it, or drive to it; neither raises, and both report where
-      the target was, so a mission recovers instead of crashing. <strong>Effort is not
-      points</strong> — a run is a budget, and each task is asked whether it is still worth
-      attempting. <strong>Give up cleanly</strong> — a deadline cancels the goal in flight and
-      hands the mission its fallback, rather than overrunning into the next task.</p>
-  </div>
-</section>
-
-<section id="open" data-zone="abyss">
-  <div class="wrap">
-    <h2 class="col">Act III — open</h2>
-    <p class="lede col quiet">Nothing on this platform has been in water. The honest list of
-      what stands between here and there:</p>
-    <ul class="plain">
-      <li>The board's depth loop has never run closed<span>two bench checks, in water</span></li>
-      <li>Thruster health cannot tell eight healthy motors from none<span>one-line firmware merge</span></li>
-      <li>Moves by measured distance are refused<span>firmware pull request</span></li>
-      <li>The board cannot yet accept a velocity measurement<span>firmware pull request</span></li>
-      <li>The competition radio cannot reach through an aluminium hull<span>external antenna</span></li>
-      <li>No mission has been flown on this platform<span>water time</span></li>
-    </ul>
-    <p class="col" style="margin-top:44px">None of that is hidden, because a map that promotes
-      bench results to flight results is how a team finds out at the venue.</p>
-    <p class="col">I keep going on hope rather than optimism. Hope is the decision to keep
-      working on the better version of a thing while the current version is still broken.
-      Pushing a technical limit is the most concrete form of that I know: every measurement
-      that came out worse than expected is a small argument that the world is knowable, and
-      that the next version can be better than this one.</p>
-  </div>
+<!-- 10 ───────────────────────────────────────────────────────────── -->
+<section id="open">
+ <div class="wrap">
+  <p class="mark">Act three <i>//</i> open</p>
+  <h2 class="col">Nothing here has been in water yet.</h2>
+  <p class="lede col quiet">The honest list of what stands between this and a vehicle that swims:</p>
+  <ul class="plain">
+   <li>The board's depth loop has never run closed<span>two bench checks, then water</span></li>
+   <li>Thruster health cannot tell eight healthy motors from none<span>one-line firmware merge</span></li>
+   <li>Moves by measured distance are refused<span>firmware pull request</span></li>
+   <li>The board cannot yet accept a velocity measurement<span>firmware pull request</span></li>
+   <li>The competition radio cannot reach through an aluminium hull<span>external antenna</span></li>
+   <li>Three of five thrusters are populated in the CAD<span>hardware</span></li>
+   <li>No mission has been flown on this platform<span>water time</span></li>
+  </ul>
+  <p class="col" style="margin-top:44px">None of that is hidden, because a capability map that
+    promotes bench results to flight results is how a team finds out at the venue.</p>
+  <p class="col">I left on principle, and I am building this on hope rather than optimism. Hope is
+    the decision to keep working on the better version of a thing while the current version is
+    still broken. Pushing a technical limit is the most concrete form of that I know: every
+    measurement that came back worse than expected is a small argument that the world is knowable,
+    and that the next version can be better than this one.</p>
+  <p class="mark" style="margin-top:40px">The next act is open <i>//</i> the machine is still being built</p>
+ </div>
 </section>
 
 </main>
 
 <footer>
-  <div class="wrap">
-    <p class="sig">The next act is open — the machine is still being built.</p>
-    <div class="ends">
-      <span>Mongla — Muhammad Fahim Faisal, Dhaka</span>
-      <span>Firmware &amp; hardware: Rakibul Islam</span>
-      <a href="the-shift.html">The Shift</a>
-      <a href="capability-map.html">Capability map</a>
-      <a href="https://github.com/fh1m/mongla_ws">Source</a>
-      <a href="https://fh1m.github.io/">fh1m</a>
-      <span>MIT</span>
-    </div>
-  </div>
+  <p>Mongla — Muhammad Fahim Faisal · firmware and hardware, Rakibul Islam ·
+     <a href="https://github.com/fh1m/mongla_ws">source</a> ·
+     <a href="the-shift.html">the shift</a> ·
+     <a href="capability-map.html">capability map</a> · MIT</p>
+  <p style="margin-top:10px;opacity:.6">Hull geometry read from the project CAD. Photographs show
+     vehicles built by a university programme the author has since left, and appear here as
+     history.</p>
 </footer>
 
+<script src="assets/hull-viewer.js" defer></script>
 <script>
-// The descent: the page takes its colour from the zone you are reading. One idea,
-// one observer -- no scattered scroll effects.
-(function () {
-  var sections = document.querySelectorAll('section[data-zone]');
-  var rail = document.querySelectorAll('.rail li');
-  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (!('IntersectionObserver' in window)) return;
-  var io = new IntersectionObserver(function (entries) {
-    entries.forEach(function (e) {
-      if (!e.isIntersecting) return;
-      if (!reduce) document.body.dataset.zone = e.target.dataset.zone;
-      rail.forEach(function (li) {
-        li.dataset.on = (li.dataset.rail === e.target.id) ? '1' : '0';
+(function(){
+  var rail = [].slice.call(document.querySelectorAll('.rail b'));
+  var secs = rail.map(function(b){ return document.getElementById(b.dataset.rail); });
+
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        var i = secs.indexOf(e.target); if (i < 0 || !e.isIntersecting) return;
+        rail.forEach(function(b){ b.removeAttribute('data-on'); });
+        rail[i].setAttribute('data-on','1');
       });
+    }, { rootMargin: '-45% 0px -50% 0px' });
+    secs.forEach(function(s){ if (s) io.observe(s); });
+
+    var rise = new IntersectionObserver(function(es){
+      es.forEach(function(e){
+        if (e.isIntersecting) { e.target.classList.add('in'); rise.unobserve(e.target); }
+      });
+    }, { rootMargin: '0px 0px -12% 0px' });
+    [].forEach.call(document.querySelectorAll('section > .wrap > *'), function(el, i){
+      el.classList.add('rise');
+      el.style.transitionDelay = (Math.min(i, 6) * 45) + 'ms';
+      rise.observe(el);
     });
-  }, { rootMargin: '-45% 0px -45% 0px' });
-  sections.forEach(function (s) { io.observe(s); });
+  }
+
+  /* 717 KB of hull is not a landing-page cost: it loads when its section is near */
+  var bay = document.getElementById('hull'), started = false;
+  function boot(){
+    if (started || !window.MonglaHull) return;
+    started = true;
+    MonglaHull(bay, 'assets/cad/hull.mgla').then(function(h){
+      document.getElementById('hud-tri').innerHTML =
+        'tris <i>' + h.triangles.toLocaleString() + '</i>';
+    }).catch(function(err){
+      document.getElementById('hud-tri').innerHTML = 'tris <i>model unavailable</i>';
+      bay.style.height = '0';
+      console.error(err);
+    });
+  }
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function(es, o){
+      if (es[0].isIntersecting) { o.disconnect(); boot(); }
+    }, { rootMargin: '700px' }).observe(bay);
+  } else {
+    addEventListener('load', boot);
+  }
 })();
 </script>
 </body>

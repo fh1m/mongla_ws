@@ -1,0 +1,10 @@
+<!doctype html><meta charset=utf-8><title>viewer probe</title>
+<style>html,body{margin:0;background:#000;color:#8fa3bd;font:12px ui-monospace,monospace}
+canvas{width:96vw;height:74vh;display:block;margin:2vh auto;outline:1px solid #004eff}</style>
+<canvas id=c tabindex=0></canvas><div id=s style="padding:0 2vw">loading…</div>
+<script src="assets/hull-viewer.js"></script>
+<script>
+MonglaHull(document.getElementById('c'),'assets/cad/hull.mgla')
+ .then(h=>{s.textContent='OK tris='+h.triangles+' verts='+h.vertices;})
+ .catch(e=>{s.textContent='FAIL: '+e.message;console.error(e);});
+</script>
