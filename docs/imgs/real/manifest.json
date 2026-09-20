@@ -1,0 +1,133 @@
+{
+  "archive": "/home/fh1m/Work/Projects/Duburi/2025",
+  "conf": 0.3,
+  "scenes": [
+    {
+      "scene": "mirpur-gate",
+      "venue": "Mirpur",
+      "task": "gate",
+      "model": "robosub_gate_200_final2",
+      "source_frame": "raw_images/Mirpur/sun_june_29/gate/frame_177.png",
+      "frames_in_folder": 550,
+      "detections": [
+        {
+          "class": "shark_gate",
+          "conf": 0.395
+        },
+        {
+          "class": "shark_gate",
+          "conf": 0.85
+        }
+      ],
+      "top_conf": 0.85
+    },
+    {
+      "scene": "mirpur-torpedo",
+      "venue": "Mirpur",
+      "task": "torpedo",
+      "model": "robosub_torpedo_n_shark-up_200_final2",
+      "source_frame": "raw_images/Mirpur/sun_june_29/torpedo/frame_286.png",
+      "frames_in_folder": 378,
+      "detections": [
+        {
+          "class": "shaw_fish_torpedo",
+          "conf": 0.924
+        },
+        {
+          "class": "shark_torpedo",
+          "conf": 0.937
+        },
+        {
+          "class": "shaw_fish_hole_torpedo",
+          "conf": 0.937
+        },
+        {
+          "class": "shark_hole_torpedo",
+          "conf": 0.915
+        }
+      ],
+      "top_conf": 0.937
+    },
+    {
+      "scene": "robosub-bins",
+      "venue": "RoboSub",
+      "task": "bins",
+      "model": "robosub_bin_front_n_300_v1",
+      "source_frame": "raw_images/robosub/bin_front/2/frame_0231_#2.png",
+      "frames_in_folder": 639,
+      "detections": [
+        {
+          "class": "bin",
+          "conf": 0.939
+        }
+      ],
+      "top_conf": 0.939
+    },
+    {
+      "scene": "robosub-torpedo",
+      "venue": "RoboSub",
+      "task": "torpedo",
+      "model": "robosub_torpedo_n_shark-up_200_final2",
+      "source_frame": "raw_images/robosub/torpedo/shark_up/3/frame_262_#3.png",
+      "frames_in_folder": 775,
+      "detections": [
+        {
+          "class": "shark_torpedo",
+          "conf": 0.951
+        },
+        {
+          "class": "shaw_fish_torpedo",
+          "conf": 0.8
+        },
+        {
+          "class": "shaw_fish_hole_torpedo",
+          "conf": 0.949
+        },
+        {
+          "class": "shark_hole_torpedo",
+          "conf": 0.933
+        }
+      ],
+      "top_conf": 0.951
+    },
+    {
+      "scene": "robosub-octagon",
+      "venue": "RoboSub",
+      "task": "octagon",
+      "model": "robosub_octagon_front_n_300_v1",
+      "source_frame": "raw_images/robosub/octagon_front/2/frame_0092_#2.png",
+      "frames_in_folder": 410,
+      "detections": [
+        {
+          "class": "octagon",
+          "conf": 0.91
+        }
+      ],
+      "top_conf": 0.91
+    },
+    {
+      "scene": "final-run-bins",
+      "venue": "Final run",
+      "task": "bins",
+      "model": "robosub_bin_final_day_1",
+      "source_frame": "raw_images/final_fun/Bin/frame_049.png",
+      "frames_in_folder": 593,
+      "detections": [
+        {
+          "class": "bin",
+          "conf": 0.896
+        },
+        {
+          "class": "bin_shark",
+          "conf": 0.837
+        },
+        {
+          "class": "bin_shaw_fish",
+          "conf": 0.831
+        }
+      ],
+      "top_conf": 0.896
+    }
+  ],
+  "no_detections": []
+}
