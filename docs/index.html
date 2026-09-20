@@ -23,12 +23,14 @@
   <b data-rail="frame"><span class="m">06</span>one frame</b>
   <b data-rail="thinking"><span class="m">07</span>one task</b>
   <b data-rail="blink"><span class="m">08</span>the blink</b>
-  <b data-rail="archive"><span class="m">09</span>the archive</b>
-  <b data-rail="water"><span class="m">10</span>retractions</b>
-  <b data-rail="instruments"><span class="m">11</span>instruments</b>
-  <b data-rail="asked"><span class="m">12</span>language</b>
-  <b data-rail="shoulders"><span class="m">13</span>shoulders</b>
-  <b data-rail="open"><span class="m">14</span>open</b>
+  <b data-rail="sim"><span class="m">09</span>the simulator</b>
+  <b data-rail="archive"><span class="m">10</span>the archive</b>
+  <b data-rail="water"><span class="m">11</span>retractions</b>
+  <b data-rail="instruments"><span class="m">12</span>instruments</b>
+  <b data-rail="asked"><span class="m">13</span>language</b>
+  <b data-rail="shoulders"><span class="m">14</span>shoulders</b>
+  <b data-rail="deeper"><span class="m">15</span>further</b>
+  <b data-rail="open"><span class="m">16</span>open</b>
 </nav>
 
 <main>
@@ -504,6 +506,41 @@
  </div>
 </section>
 
+<!-- ## ───────────────────────────────────────────────────────────── -->
+<section id="sim">
+ <div class="wrap">
+  <p class="mark">The simulator <i>//</i> 20,649 lines, thirteen courses, one purpose</p>
+  <h2 class="col">A place to be wrong that costs nothing.</h2>
+  <p class="lede col quiet">A second colcon workspace inside this repository: Gazebo, both
+    competition pools, thirteen courses, both cameras, ground truth, and an operator lab. It is
+    not a demo. It is where every recovery path in the stack got run for the first time, because
+    a pool day is four hours long and a bug is cheaper here.</p>
+
+  <table class="ledger">
+   <thead><tr><th>what it models</th><th>why it had to be modelled</th><th>the number</th></tr></thead>
+   <tbody>
+    <tr><td>Real T200 thrust curve</td><td>A straight line was wrong by a quarter of full thrust, so fine alignment behaved nothing like the pool</td><td class="num">12.24 N error</td></tr>
+    <tr><td>Water current</td><td>The lateral integral term existed to fight a current the simulator did not have</td><td class="num">0.12 m/s → 1.374 m in 40 s</td></tr>
+    <tr><td>Camera field of view <em>in water</em></td><td>The in-air figure showed more of the course than the vehicle can ever see, so every search pattern was tuned against a view that does not exist</td><td class="num">80° → 57.7°</td></tr>
+    <tr><td>Bar30 noise</td><td>Ours was ten times too noisy on the one sensor every mission depends on</td><td class="num">0.02 m → 0.002 m</td></tr>
+    <tr><td>Fault injection</td><td>Five recovery paths existed in the code and had never once executed</td><td class="num">DVL · camera · link · battery · thruster</td></tr>
+    <tr><td>Ground-truth labels</td><td>Hand labelling does not scale; the bounding-box sensor is occlusion-correct and free</td><td class="num">12.83 Hz vs 12.75 baseline</td></tr>
+   </tbody>
+  </table>
+
+  <p class="col quiet" style="margin-top:34px">Each of those rows started as a thing that looked
+    fine. The pattern repeats so exactly that it became a rule: <em>the simulator's job is not to
+    look right, it is to be wrong in the same places the water is.</em> A static prop generates
+    contact and cannot be pushed. A cylinder and a box return no collision at all in one physics
+    engine, so the vehicle drove through every gate leg and slalom pipe for months. Fog does not
+    reach camera sensors, so thirteen courses shared one clarity while claiming six.</p>
+
+  <p class="col quiet">The archive higher up this page came out of here — 4,925 labelled frames,
+    27 classes, both competitions — and so did the honest finding that two of those sessions
+    detect nothing under the current weights.</p>
+ </div>
+</section>
+
 <!-- 09 ───────────────────────────────────────────────────────────────── -->
 <section id="archive">
  <div class="wrap">
@@ -716,6 +753,59 @@
     view of the real trade-offs, the real implementation, and <em>the failures</em>. That is the
     permission this page took to put its retractions in the middle instead of the appendix.
     <a href="https://news.ycombinator.com/item?id=44382354">Ask HN: what makes an engineering blog great</a></p>
+ </div>
+</section>
+
+<!-- ## ───────────────────────────────────────────────────────────── -->
+<section id="deeper">
+ <div class="wrap">
+  <p class="mark">Further <i>//</i> where to go if any of this caught you</p>
+  <h2 class="col">The reading behind it.</h2>
+  <p class="lede col quiet">This page is one project's answer. These are the places the questions
+    came from — and the places to go if you would rather build your own answer than read mine.</p>
+
+  <table class="ledger">
+   <thead><tr><th>if you want</th><th>go here</th><th>why this one</th></tr></thead>
+   <tbody>
+    <tr><td>The whole of this stack, in source</td>
+        <td><a href="https://github.com/fh1m/mongla_ws">github.com/fh1m/mongla_ws</a></td>
+        <td>Every number on this page traces to a file in it</td></tr>
+    <tr><td>The architecture from first principles</td>
+        <td><a href="the-shift.html">The Shift</a></td>
+        <td>Written for someone who has never seen a flight controller</td></tr>
+    <tr><td>What is proven, and how</td>
+        <td><a href="capability-map.html">Capability map</a></td>
+        <td>Every row carries its evidence and a state — in water, on a bench, in software, blocked</td></tr>
+    <tr><td>The firmware, the board, the ground station</td>
+        <td><a href="https://github.com/RakibulIslam1/srot-control-board">srot-control-board</a> · <a href="https://github.com/RakibulIslam1/srot-ground-station">srot-ground-station</a></td>
+        <td>Rakibul Islam's work — the other half of the machine</td></tr>
+    <tr><td>The competition this is aimed at</td>
+        <td><a href="https://robonation.org/programs/robosub/">RoboSub</a> · <a href="https://sauvc.org/">SAUVC</a></td>
+        <td>The rulebooks are the specification every prop in the simulator was built from</td></tr>
+    <tr><td>Why a neural detector is a component, not an oracle</td>
+        <td><a href="https://karpathy.medium.com/software-2-0-a64152b37c35">Software 2.0</a></td>
+        <td>The essay that reframes the model as something you shape rather than write</td></tr>
+    <tr><td>How to think about latency at all</td>
+        <td><a href="https://danluu.com/latency-mitigation/">Latency Mitigation Strategies</a></td>
+        <td>Carmack, on treating every stage as somewhere to claw milliseconds back</td></tr>
+    <tr><td>Estimation on a manifold, properly</td>
+        <td><a href="https://arxiv.org/abs/1410.1465">The invariant EKF as a stable observer</a></td>
+        <td>Barrau &amp; Bonnabel, 2014 — the filter this stack's localization is built on</td></tr>
+    <tr><td>The same idea, made to walk</td>
+        <td><a href="https://arxiv.org/abs/1904.09251">Contact-aided invariant EKF</a></td>
+        <td>Hartley, Ghaffari, Eustice &amp; Grizzle — the clearest worked application of it</td></tr>
+    <tr><td>Why the robot should not be clever</td>
+        <td><a href="https://www.latent.space/p/geohot">Hotz on complexity</a></td>
+        <td>The argument for deleting before adding, from someone who does it in public</td></tr>
+   </tbody>
+  </table>
+
+  <p class="col quiet" style="margin-top:34px">And if you are building one of these yourself: the
+    single most useful thing in this repository is not any algorithm. It is
+    <a href="https://github.com/fh1m/mongla_ws/blob/main/.claude/context/measured-bars.md">measured-bars.md</a>
+    — every shipped constant with the measurement that produced it, the conditions it was taken
+    under, and the bar it had to clear. More than half of it is retractions. That file is the
+    project.</p>
  </div>
 </section>
 
