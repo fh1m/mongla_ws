@@ -39,7 +39,7 @@ import time
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..',
-                                'src', 'duburi_vision'))
+                                'src', 'mongla_vision'))
 
 _TICK_S = 0.001
 
@@ -129,7 +129,7 @@ def main():
              a.seconds, rate_hz=77, note='camera, per consumed frame')
 
     # ---- detector: letterbox, once per inference -------------------------
-    from duburi_vision.detection.hailo import letterbox
+    from mongla_vision.detection.hailo import letterbox
     _measure('letterbox (resize+pad)', lambda: letterbox(img, 640),
              a.seconds, rate_hz=77, note='detector, per inference')
 

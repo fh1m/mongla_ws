@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Measure a camera's intrinsics and FIELD OF VIEW from checkerboard images.
 
-Why this exists: duburi_ws publishes CameraInfo with K and D EMPTY
+Why this exists: mongla_ws publishes CameraInfo with K and D EMPTY
 (`camera_node.py:9` -- "size only"), and there is no HFOV anywhere in the tree.
 `vision.align` steers on pixel offsets, which is fine on its own, but anything
 that turns a pixel into an ANGLE (a bearing, a LANDING_TARGET, a range estimate)
@@ -24,12 +24,12 @@ import numpy as np, cv2
 # to the literal ONLY if that import fails -- and say so, rather than letting a
 # second silent copy of a physical constant exist.
 try:
-    from duburi_vision.optics import N_WATER, fov_air_to_water
+    from mongla_vision.optics import N_WATER, fov_air_to_water
 except ImportError:                                    # pragma: no cover
     import sys as _sys, os as _os
     _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
-                                      '..', 'src', 'duburi_vision'))
-    from duburi_vision.optics import N_WATER, fov_air_to_water
+                                      '..', 'src', 'mongla_vision'))
+    from mongla_vision.optics import N_WATER, fov_air_to_water
 
 
 # INNER corners. ⛔ THIS MUST MATCH THE BOARD AND `fov_solve.py`, which

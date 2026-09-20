@@ -1,7 +1,7 @@
 # The Shift — Pixhawk + Jetson → SROT + AI HAT
 
 **The document lives at [`docs/the-shift.md`](../../docs/the-shift.md)**, published at
-<https://fh1m.github.io/duburi_ws/the-shift.html>.
+<https://fh1m.github.io/mongla_ws/the-shift.html>.
 
 It is written for a reader with no robotics background: what a flight controller is, why an
 AUV needs both a real-time controller and a companion computer, what the old four-computer

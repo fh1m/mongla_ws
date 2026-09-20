@@ -89,7 +89,7 @@ def sign_verdict(baseline, pressed):
                 f'baseline DEPTH_CMD is {baseline:+.3f}, within {SATURATION_HEADROOM:.2f} of '
                 'the +1.0 clamp -- a press has nowhere to go, so this test cannot pass '
                 'even on a correct board. Re-zero the barometer first '
-                '(`ros2 run duburi_planner duburi calibrate_depth`, disarmed) and re-run. '
+                '(`ros2 run mongla_planner mongla calibrate_depth`, disarmed) and re-run. '
                 'NOTE the zero offset is otherwise harmless here: this test measures a '
                 'DELTA, so a constant offset cancels.')
     delta = pressed - baseline

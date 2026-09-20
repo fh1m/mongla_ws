@@ -28,7 +28,7 @@ import random
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..',
-                                'src', 'duburi_vision'))
+                                'src', 'mongla_vision'))
 
 _IMG = ('.png', '.jpg', '.jpeg', '.bmp', '.webp')
 
@@ -218,7 +218,7 @@ def main():
     from ultralytics import YOLO
     pre = None
     if a.clahe:
-        from duburi_vision.detection.preprocess import make_clahe
+        from mongla_vision.detection.preprocess import make_clahe
         pre = make_clahe()
 
     if a.matrix:

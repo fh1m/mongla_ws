@@ -7,10 +7,10 @@
 > verbs second, full samples last.
 
 The mission DSL lives in
-[`src/duburi_planner/duburi_planner/duburi_dsl.py`](../../src/duburi_planner/duburi_planner/duburi_dsl.py).
+[`src/mongla_planner/mongla_planner/mongla_dsl.py`](../../src/mongla_planner/mongla_planner/mongla_dsl.py).
 Every mission file in
-[`src/duburi_planner/duburi_planner/missions/`](../../src/duburi_planner/duburi_planner/missions/)
-is a plain Python module that exposes one `run(duburi, log)` function.
+[`src/mongla_planner/mongla_planner/missions/`](../../src/mongla_planner/mongla_planner/missions/)
+is a plain Python module that exposes one `run(mongla, log)` function.
 
 
 > ## ⛔ Read this before copying a recipe
@@ -19,7 +19,7 @@ is a plain Python module that exposes one `run(duburi, log)` function.
 > backend's idioms. The **DSL verbs are unchanged** — what changed is where they run:
 >
 > - **`lock_heading` is refused on srot.** The board holds heading itself at 500 Hz. Guard it:
->   `if duburi.backend != 'srot': duburi.lock_heading(0.0)`
+>   `if mongla.backend != 'srot': mongla.lock_heading(0.0)`
 > - **`ALT_HOLD` is not a mode on this board.** `set_depth` works; the board owns depth. A
 >   recipe that engages ALT_HOLD explicitly is describing the legacy path.
 > - **`move_*_dist`, `arc` and `style_yaw` are refused on srot.** Use the timed moves, or the
@@ -35,46 +35,46 @@ is a plain Python module that exposes one `run(duburi, log)` function.
 ## 0. Designing a mission in 30 seconds
 
 1. **Drop a file** in
-   [`src/duburi_planner/duburi_planner/missions/`](../../src/duburi_planner/duburi_planner/missions/),
+   [`src/mongla_planner/mongla_planner/missions/`](../../src/mongla_planner/mongla_planner/missions/),
    for example `follow_gate.py`.
-2. **Expose `def run(duburi, log)`** — that is the entire contract. No
+2. **Expose `def run(mongla, log)`** — that is the entire contract. No
    registry table, no `__init__.py` edit. Files starting with `_` are
    skipped (use them for shared helpers).
-3. **Inside `run`, call `duburi.<verb>(...)` lines top to bottom.** The
+3. **Inside `run`, call `mongla.<verb>(...)` lines top to bottom.** The
    DSL prints one outcome line per call — no logging boilerplate.
 4. **Build + run:**
 
    ```bash
-   colcon build --packages-select duburi_planner && source install/setup.bash
-   ros2 run duburi_planner mission --list          # your file appears
-   ros2 run duburi_planner mission follow_gate
+   colcon build --packages-select mongla_planner && source install/setup.bash
+   ros2 run mongla_planner mission --list          # your file appears
+   ros2 run mongla_planner mission follow_gate
    ```
 
 A complete file is just this:
 
 ```python
-# src/duburi_planner/duburi_planner/missions/follow_gate.py
-def run(duburi, log):
-    duburi.camera = 'forward'
-    duburi.arm()
-    duburi.set_depth(-1.0)
+# src/mongla_planner/mongla_planner/missions/follow_gate.py
+def run(mongla, log):
+    mongla.camera = 'forward'
+    mongla.arm()
+    mongla.set_depth(-1.0)
     # align: centre the gate (yaw + lat); sweep to find it if it's not in frame.
-    duburi.vision.align('gate', yaw=0, lat=0, gain=30, duration=20,
+    mongla.vision.align('gate', yaw=0, lat=0, gain=30, duration=20,
                         fallback=sweep_for_gate)
     # move: drive forward until the gate fills 80% of the frame, then we're through.
-    duburi.vision.move('gate', fwd=80, mode='area', gain=35, duration=20)
-    duburi.set_depth(0.0)
-    duburi.disarm()
+    mongla.vision.move('gate', fwd=80, mode='area', gain=35, duration=20)
+    mongla.set_depth(0.0)
+    mongla.disarm()
 
 
 # Search pattern, defined at the BOTTOM of the file (pure open-loop control).
 # Runs automatically on target loss, then align() re-enters — all inside duration.
-def sweep_for_gate(duburi, should_stop):
+def sweep_for_gate(mongla, should_stop):
     for _ in range(6):
         if should_stop():       # True the moment the gate reappears
             return
-        duburi.yaw_right(15)
-        duburi.pause(0.4)
+        mongla.yaw_right(15)
+        mongla.pause(0.4)
 ```
 
 That's the whole pattern: **two vision verbs** (`align` then `move`) and a
@@ -89,33 +89,33 @@ No custom weights yet? Run this on a laptop with a webcam — no pool, no vehicl
 needed (use `mode:=sim` or just call the mission runner without arming).
 
 ```python
-def run(duburi, log):
-    duburi.mission_reset()
+def run(mongla, log):
+    mongla.mission_reset()
     # Auto-downloads yolov11n.pt (~5 MB, COCO 80-class) on first run.
-    duburi.models(person='yolov11n')
-    duburi.camera = 'laptop'
+    mongla.models(person='yolov11n')
+    mongla.camera = 'laptop'
 
-    duburi.arm()
-    duburi.set_depth(-0.5)
+    mongla.arm()
+    mongla.set_depth(-0.5)
 
-    target = duburi.models.person.person   # ClassRef — sets model + class automatically
+    target = mongla.models.person.person   # ClassRef — sets model + class automatically
 
     # align: yaw-centre the person; sweep to find them if they're not in frame.
-    duburi.vision.align(target, yaw=0, err=50, gain=30, duration=12,
+    mongla.vision.align(target, yaw=0, err=50, gain=30, duration=12,
                         fallback=sweep_yaw)
     # move: drive in until the person fills 55% of the frame height.
-    duburi.vision.move(target, fwd=55, mode='height', gain=35, duration=15,
+    mongla.vision.move(target, fwd=55, mode='height', gain=35, duration=15,
                        fallback=creep_forward)
-    duburi.disarm()
+    mongla.disarm()
 
 
 # Search patterns — pure open-loop control, defined at the bottom of the file.
-def creep_forward(duburi):
-    duburi.move_forward(0.6, gain=30)
+def creep_forward(mongla):
+    mongla.move_forward(0.6, gain=30)
 
-def sweep_yaw(duburi, should_stop):
+def sweep_yaw(mongla, should_stop):
     for _ in range(6):
-        duburi.yaw_right(30)
+        mongla.yaw_right(30)
         if should_stop():       # bail the moment the person reappears
             return
 ```
@@ -133,18 +133,18 @@ def sweep_yaw(duburi, should_stop):
 Custom model syntax is **identical** — only the name changes:
 
 ```python
-duburi.models(gate='gate_flare_medium_100ep')    # custom weights in models/
-duburi.models(person='yolov11n')                 # COCO pretrained, auto-download
+mongla.models(gate='gate_flare_medium_100ep')    # custom weights in models/
+mongla.models(person='yolov11n')                 # COCO pretrained, auto-download
 ```
 
 **Run the canonical demo mission:**
 
 ```bash
-ros2 launch duburi_vision cameras_.launch.py camera:=laptop
-ros2 run duburi_planner mission demo_find_person
+ros2 launch mongla_vision cameras_.launch.py camera:=laptop
+ros2 run mongla_planner mission demo_find_person
 ```
 
-> See `src/duburi_planner/duburi_planner/missions/demo_find_person.py` for the full
+> See `src/mongla_planner/mongla_planner/missions/demo_find_person.py` for the full
 > reference mission — it exercises both vision verbs (`align` + `move`) plus the
 > mission-authored fallback search.
 
@@ -160,24 +160,24 @@ Two namespaces, one DSL:
 
 | Namespace | What it does                       | Closed loop?          |
 | --------- | ---------------------------------- | --------------------- |
-| `duburi.*`        | Open-loop motion (RC overrides + ALT_HOLD setpoints) | No |
-| `duburi.vision.*` | Closed-loop, bbox-driven motion                       | Yes |
+| `mongla.*`        | Open-loop motion (RC overrides + ALT_HOLD setpoints) | No |
+| `mongla.vision.*` | Closed-loop, bbox-driven motion                       | Yes |
 
-**Both live on the same `duburi` object.** A mission usually pings
+**Both live on the same `mongla` object.** A mission usually pings
 between them: open-loop to *go somewhere*, vision to *land precisely*.
 
 ```python
-def run(duburi, log):
-    duburi.camera = 'forward'
-    duburi.arm()
-    duburi.set_depth(-0.5)
-    duburi.move_forward(3.0, gain=60)               # open-loop -- get to the area
-    duburi.vision.align('gate', yaw=0, lat=0,       # closed-loop -- centre on it
+def run(mongla, log):
+    mongla.camera = 'forward'
+    mongla.arm()
+    mongla.set_depth(-0.5)
+    mongla.move_forward(3.0, gain=60)               # open-loop -- get to the area
+    mongla.vision.align('gate', yaw=0, lat=0,       # closed-loop -- centre on it
                         gain=30, duration=20)
-    duburi.vision.move('gate', fwd=80, mode='area', # closed-loop -- drive in
+    mongla.vision.move('gate', fwd=80, mode='area', # closed-loop -- drive in
                        gain=35, duration=20)
-    duburi.move_back(2.0, gain=60)                  # open-loop -- withdraw
-    duburi.disarm()
+    mongla.move_back(2.0, gain=60)                  # open-loop -- withdraw
+    mongla.disarm()
 ```
 
 That's the entire pattern: open-loop to *go somewhere*, then the two vision
@@ -196,16 +196,16 @@ rest of this cookbook fills in the two verbs and their tuning.
 
 2. **Vision informs control, never fights it.** The two vision verbs
    talk *to* the same control stack the open-loop verbs use. They
-   don't open a parallel channel. So `duburi.vision.align(t, yaw=0)`
+   don't open a parallel channel. So `mongla.vision.align(t, yaw=0)`
    is exactly `yaw_right` driven by a bbox-error P loop instead of a
-   clock, and `duburi.vision.move(t)` is `move_forward` shaped by bbox
+   clock, and `mongla.vision.move(t)` is `move_forward` shaped by bbox
    fill instead of a stopwatch.
 
-3. **Sticky context.** `duburi.camera` and `duburi.target` default to
-   `'forward'` and `'person'`. Set `duburi.camera` once at the top of
+3. **Sticky context.** `mongla.camera` and `mongla.target` default to
+   `'forward'` and `'person'`. Set `mongla.camera` once at the top of
    the mission (or per call with `camera=`), and pass the target as
    the first positional arg to each verb. Switch cameras mid-mission
-   with `duburi.use_camera('downward')`.
+   with `mongla.use_camera('downward')`.
 
 4. **`gain` caps speed, `err` sets precision, `duration` bounds time.**
    `gain` is a **hard max-speed cap** (% thrust), not a target speed —
@@ -216,14 +216,14 @@ rest of this cookbook fills in the two verbs and their tuning.
    the deck:
 
    ```bash
-   ros2 param set /duburi_manager vision.kp_yaw       80.0
-   ros2 param set /duburi_manager vision.kp_lat       60.0
-   ros2 param set /duburi_manager vision.lost_grace_s  1.0
+   ros2 param set /mongla_manager vision.kp_yaw       80.0
+   ros2 param set /mongla_manager vision.kp_lat       60.0
+   ros2 param set /mongla_manager vision.lost_grace_s  1.0
    ```
 
 5. **Every verb blocks until the action server returns.** No
    threading. If you want a background hold (yaw lock during motion),
-   use `duburi.lock_heading(...)` — that's the one verb that returns
+   use `mongla.lock_heading(...)` — that's the one verb that returns
    immediately and runs a daemon thread.
 
 6. **Vision verbs never raise; open-loop verbs do.** `align` / `move`
@@ -232,33 +232,33 @@ rest of this cookbook fills in the two verbs and their tuning.
    continues to the next line. Open-loop verbs (`arm`, `move_forward`,
    `yaw_right`, ...) still raise `MoveRejected` / `MoveFailed` on
    rejection. Wrap the whole mission in a try/finally that calls
-   `duburi.disarm()` for a guaranteed safe exit.
+   `mongla.disarm()` for a guaranteed safe exit.
 
 ---
 
 ## 3. The verbs
 
-### 3.1  Open-loop motion (`duburi.*`)
+### 3.1  Open-loop motion (`mongla.*`)
 
-Every verb is a method on the `DuburiMission` instance you receive
-in `run(duburi, log)`. Defaults match the action server's
+Every verb is a method on the `MonglaMission` instance you receive
+in `run(mongla, log)`. Defaults match the action server's
 `COMMANDS` registry; pass kwargs to override.
 
 #### Power & mode
 
 ```python
-duburi.arm()                                # waits for ACK (timeout=15s)
-duburi.disarm()
-duburi.set_mode('STABILIZE')                # srot: STABILIZE | DEPTH_HOLD | SURFACE | MANUAL | ACRO
+mongla.arm()                                # waits for ACK (timeout=15s)
+mongla.disarm()
+mongla.set_mode('STABILIZE')                # srot: STABILIZE | DEPTH_HOLD | SURFACE | MANUAL | ACRO
 ```
 
 #### Translations (Ch5 forward, Ch6 lateral)
 
 ```python
-duburi.move_forward(seconds, gain=80, settle=0.0)
-duburi.move_back   (seconds, gain=80, settle=0.0)
-duburi.move_left   (seconds, gain=80, settle=0.0)
-duburi.move_right  (seconds, gain=80, settle=0.0)
+mongla.move_forward(seconds, gain=80, settle=0.0)
+mongla.move_back   (seconds, gain=80, settle=0.0)
+mongla.move_left   (seconds, gain=80, settle=0.0)
+mongla.move_right  (seconds, gain=80, settle=0.0)
 ```
 
 | Param   | Type  | Meaning                                                     |
@@ -274,7 +274,7 @@ duburi.move_right  (seconds, gain=80, settle=0.0)
 #### Depth
 
 ```python
-duburi.set_depth(metres, timeout=30.0, settle=0.0)   # drive-to-depth (blocks)
+mongla.set_depth(metres, timeout=30.0, settle=0.0)   # drive-to-depth (blocks)
 ```
 
 `set_depth` auto-engages ALT_HOLD if not already in it, then drives
@@ -288,7 +288,7 @@ onboard ALT_HOLD inherently latches whatever altitude is current the
 moment Ch3 (throttle) returns to neutral 1500. So once `set_depth`
 returns, the autopilot's 400 Hz internal depth PID continues to hold
 that depth for free, with zero further MAVLink traffic from us. The
-[`Heartbeat`](../../src/duburi_control/duburi_control/heartbeat.py)
+[`Heartbeat`](../../src/mongla_control/mongla_control/heartbeat.py)
 daemon keeps streaming neutral RC overrides at 5 Hz in the
 background so ArduSub never trips the `FS_PILOT_INPUT` failsafe and
 disarms — that is the *only* depth-related continuous traffic.
@@ -296,8 +296,8 @@ disarms — that is the *only* depth-related continuous traffic.
 #### Yaw (sharp pivots)
 
 ```python
-duburi.yaw_left (degrees, timeout=30.0, settle=0.0)
-duburi.yaw_right(degrees, timeout=30.0, settle=0.0)
+mongla.yaw_left (degrees, timeout=30.0, settle=0.0)
+mongla.yaw_right(degrees, timeout=30.0, settle=0.0)
 ```
 
 Engages ALT_HOLD if needed. Auto-suspends `lock_heading` for the
@@ -308,7 +308,7 @@ get flipped for you).
 #### Curved trajectory (`arc`)
 
 ```python
-duburi.arc(seconds, gain=50, yaw_rate_pct=30, settle=0.0)
+mongla.arc(seconds, gain=50, yaw_rate_pct=30, settle=0.0)
 ```
 
 Forward thrust *and* yaw rate in **one** RC packet. Suspends
@@ -318,14 +318,14 @@ runs the arc in reverse.
 #### Heading lock (background)
 
 ```python
-if duburi.backend != 'srot':                      # srot: the board holds heading
-    duburi.lock_heading(degrees=0.0, timeout=300.0)   # returns immediately
+if mongla.backend != 'srot':                      # srot: the board holds heading
+    mongla.lock_heading(degrees=0.0, timeout=300.0)   # returns immediately
 ... mission body ...
-duburi.release_heading()                          # joins the daemon
+mongla.release_heading()                          # joins the daemon
 ```
 
 Spawns a 20 Hz proportional Ch4 yaw-rate streamer
-([`heading_lock.py`](../../src/duburi_control/duburi_control/heading_lock.py))
+([`heading_lock.py`](../../src/mongla_control/mongla_control/heading_lock.py))
 in a background thread. The loop reads heading from the configured
 `yaw_source` (BNO085 / AHRS / SITL), computes a yaw error, and
 writes a clamped Ch4 RC override every 50 ms — this is what
@@ -338,8 +338,8 @@ re-targets on exit.
 #### Stop / pause
 
 ```python
-duburi.stop()                # 1500 PWM on every channel for 0.6s
-duburi.pause(2.0)            # NO_OVERRIDE for 2s -- autopilot takes over
+mongla.stop()                # 1500 PWM on every channel for 0.6s
+mongla.pause(2.0)            # NO_OVERRIDE for 2s -- autopilot takes over
 ```
 
 `stop` is **active hold**; `pause` is **release**. Use `stop`
@@ -347,7 +347,7 @@ between commands, `pause` for stabilisation between mode changes.
 
 ---
 
-### 3.2  Vision-driven motion (`duburi.vision.*`) — exactly two verbs
+### 3.2  Vision-driven motion (`mongla.vision.*`) — exactly two verbs
 
 The 2026-06 rewrite collapsed the old nine-verb vision API into **two
 pixel-native verbs**. Both run a closed P loop on the **largest detection**
@@ -356,19 +356,19 @@ of `target` in `camera`; both treat `gain` as a hard max-speed cap; and
 `VisionResult`, so the mission simply continues to the next line.
 
 ```python
-duburi.vision.align(target, *, lat=None, yaw=None, depth=None,
+mongla.vision.align(target, *, lat=None, yaw=None, depth=None,
                     err=40, duration=20, gain=30,
                     fallback=None, camera=None) -> VisionResult
 
-duburi.vision.move(target, *, fwd=95, mode='area', maintain=None,
+mongla.vision.move(target, *, fwd=95, mode='area', maintain=None,
                    hold=None, err=40, duration=20, gain=30,
                    fallback=None, camera=None) -> VisionResult
 ```
 
 `gain` = hard max-speed cap (% thrust, never exceeded). `err` = pixel
 tolerance for "centred". `duration` = total time budget (fallback cycles
-count against it). `camera` defaults to `duburi.camera` (`'forward'`).
-`target` is a class string (`'gate'`) or a `duburi.models.<alias>.<class>`
+count against it). `camera` defaults to `mongla.camera` (`'forward'`).
+`target` is a class string (`'gate'`) or a `mongla.models.<alias>.<class>`
 ClassRef (which auto-switches model + class filter first).
 
 > **Inertial brake (`brake=True`, on by default).** Like the control verbs,
@@ -391,10 +391,10 @@ axis is required.** `align` reports `ALIGNED` once *every* active axis sits
 within `err` px for `vision.align_stable_frames` ticks (3 @ 20 Hz ≈ 0.15 s).
 
 ```python
-duburi.vision.align('gate', yaw=0, lat=0)                      # centre horizontally
-duburi.vision.align('hole', yaw=0, lat=0, depth=0, err=12)     # tight 3-axis lock
-duburi.vision.align('red_pipe', yaw=0, lat=80)                 # hold pipe 80 px right
-duburi.vision.align('fire', lat=0, depth=0, camera='downward') # downward: lat + fore/aft
+mongla.vision.align('gate', yaw=0, lat=0)                      # centre horizontally
+mongla.vision.align('hole', yaw=0, lat=0, depth=0, err=12)     # tight 3-axis lock
+mongla.vision.align('red_pipe', yaw=0, lat=80)                 # hold pipe 80 px right
+mongla.vision.align('fire', lat=0, depth=0, camera='downward') # downward: lat + fore/aft
 ```
 
 #### `move` — drive forward to a bbox fill ratio
@@ -415,9 +415,9 @@ never re-centres yaw or depth** — ArduSub's ALT_HOLD owns depth, and the
 heading lock (or the autopilot) owns yaw.
 
 ```python
-duburi.vision.move('gate', fwd=80, mode='area')                    # drive through gate
-duburi.vision.move('red_pipe', fwd=60, mode='height', maintain=80) # pass beside the pipe
-duburi.vision.move('blood', fwd=30, mode='height', hold=2.0)       # close in, hold 2 s
+mongla.vision.move('gate', fwd=80, mode='area')                    # drive through gate
+mongla.vision.move('red_pipe', fwd=60, mode='height', maintain=80) # pass beside the pipe
+mongla.vision.move('blood', fwd=30, mode='height', hold=2.0)       # close in, hold 2 s
 ```
 
 #### The `VisionResult` it returns
@@ -434,9 +434,9 @@ You branch on it directly:
 # brake=False on the fire path: the arrival brake can emit a 0.2s kick on a fast
 # snap-in, nudging the hull off-aim between lock-confirm and fire(). No benefit
 # when firing from a lock (you are not moving away), so disable it.
-if duburi.vision.align('hole', yaw=0, lat=0, depth=0, err=12, gain=25, yaw_gain=10,
+if mongla.vision.align('hole', yaw=0, lat=0, depth=0, err=12, gain=25, yaw_gain=10,
                        brake=False):
-    duburi.fire(1)                       # fire only on a confirmed lock
+    mongla.fire(1)                       # fire only on a confirmed lock
 else:
     log.info('hole never locked — holding fire')
 ```
@@ -460,19 +460,19 @@ function at the bottom of the mission file. It runs **on real target loss**
 the original `duration` budget. Two shapes are accepted:
 
 ```python
-def creep_forward(duburi):                 # one short manoeuvre, then return
-    duburi.move_forward(0.6, gain=40)
+def creep_forward(mongla):                 # one short manoeuvre, then return
+    mongla.move_forward(0.6, gain=40)
 
-def sweep_for_gate(duburi, should_stop):   # longer self-polling sweep
+def sweep_for_gate(mongla, should_stop):   # longer self-polling sweep
     for _ in range(6):
         if should_stop():                  # True the moment the target reappears
             return
-        duburi.yaw_right(15)
-        duburi.pause(0.4)
+        mongla.yaw_right(15)
+        mongla.pause(0.4)
 ```
 
-- `fn(duburi)` — runs one manoeuvre, returns; the verb re-checks the frame.
-- `fn(duburi, should_stop)` — may sweep longer; `should_stop()` returns
+- `fn(mongla)` — runs one manoeuvre, returns; the verb re-checks the frame.
+- `fn(mongla, should_stop)` — may sweep longer; `should_stop()` returns
   `True` as soon as the target is detected again, so a good sweep bails early.
 
 A `fallback` is **pure open-loop control** (`move_forward` / `yaw_right` /
@@ -484,12 +484,12 @@ verb instead holds station through brief losses and rides out the `duration`.
 optionally `fire`, each with a mission-authored `fallback`:
 
 ```python
-# Register models once at the top of run(); access via duburi.models.alias.class
-duburi.models(gate='gate_rescue_repair')
+# Register models once at the top of run(); access via mongla.models.alias.class
+mongla.models(gate='gate_rescue_repair')
 
-duburi.vision.align(duburi.models.gate.gate, yaw=0, lat=0,
+mongla.vision.align(mongla.models.gate.gate, yaw=0, lat=0,
                     gain=30, duration=20, fallback=sweep_for_gate)
-duburi.vision.move(duburi.models.gate.gate, fwd=80, mode='area',
+mongla.vision.move(mongla.models.gate.gate, fwd=80, mode='area',
                    gain=35, duration=20, fallback=creep_forward)
 ```
 
@@ -502,7 +502,7 @@ duburi.vision.move(duburi.models.gate.gate, fwd=80, mode='area',
 There is **no per-goal tracking flag** and **no `vision.use_tracks` control
 param**. The two vision verbs **always read `/detections`** — the raw
 detector topic — so what the AUV acts on is exactly what
-`duburi.detected()` and the HUD report.
+`mongla.detected()` and the HUD report.
 
 `tracker_node` (ByteTrack + a Kalman smoother) still exists, but it is
 **display-only**: it republishes `/detections` as `/tracks` with stable IDs
@@ -510,7 +510,7 @@ and jitter-free boxes for the mission-control HUD (and feeds the depth
 node). It never sits in the control loop. Launch it for a nicer HUD:
 
 ```bash
-ros2 launch duburi_vision cameras_.launch.py with_tracking:=true
+ros2 launch mongla_vision cameras_.launch.py with_tracking:=true
 ```
 
 ### Holding on a target
@@ -519,7 +519,7 @@ ros2 launch duburi_vision cameras_.launch.py with_tracking:=true
 `vision.align_stable_frames` ticks). To **keep holding** instead of exiting,
 use one of:
 
-- `duburi.vision.move(target, fwd=<reached fill>, hold=S)` — drive to a fill
+- `mongla.vision.move(target, fwd=<reached fill>, hold=S)` — drive to a fill
   ratio, then station-keep for `S` seconds before exiting.
 - a re-centre loop: open-loop manoeuvre, then `align` again, repeated.
 
@@ -544,16 +544,16 @@ ORBIT_STEPS   = 12      # 12 × 30° = 360°
 ORBIT_STEP    = 30.0
 HOLD_PER_STEP = 3.0
 
-duburi.models(gate='gate_flare_medium_100ep')
+mongla.models(gate='gate_flare_medium_100ep')
 for _ in range(ORBIT_STEPS):
-    duburi.yaw_left(ORBIT_STEP, timeout=10.0, settle=0.3)   # pivot in place
-    duburi.vision.align(duburi.models.gate.flare,
+    mongla.yaw_left(ORBIT_STEP, timeout=10.0, settle=0.3)   # pivot in place
+    mongla.vision.align(mongla.models.gate.flare,
                         yaw=0, depth=0, gain=30,
                         duration=HOLD_PER_STEP)             # re-centre on the flare
 ```
 
 The 12-step polygon approximates a circle for pre-qual. For a smoother arc,
-replace the loop body with `duburi.arc(...)` calls.
+replace the loop body with `mongla.arc(...)` calls.
 
 ### Re-centring while driving forward
 
@@ -562,8 +562,8 @@ with a quick yaw re-centre:
 
 ```python
 for _ in range(5):
-    duburi.move_forward(2.0, gain=40)               # open-loop leg
-    duburi.vision.align('gate', yaw=0, duration=2)  # snap the heading back
+    mongla.move_forward(2.0, gain=40)               # open-loop leg
+    mongla.vision.align('gate', yaw=0, duration=2)  # snap the heading back
 ```
 
 Or, when you want the controller to own the whole approach, just use `move`
@@ -574,19 +574,19 @@ offset the entire way, no re-centre loop needed.
 
 ```bash
 # 1. Launch vision stack with the HUD tracker enabled
-ros2 launch duburi_vision cameras_.launch.py with_tracking:=true
+ros2 launch mongla_vision cameras_.launch.py with_tracking:=true
 
 # 2. Topic health check
-ros2 run duburi_vision vision_check --camera laptop
+ros2 run mongla_vision vision_check --camera laptop
 
 # 3. Confirm /tracks is publishing (HUD / depth feed only)
-ros2 topic hz /duburi/vision/laptop/tracks
+ros2 topic hz /mongla/vision/laptop/tracks
 
 # 4. Inspect a track (stable tracking_id; score > 0 for real detections)
-ros2 topic echo /duburi/vision/laptop/tracks --once
+ros2 topic echo /mongla/vision/laptop/tracks --once
 
 # 5. Full integration test via the tracker CLI
-ros2 run duburi_vision tracker_check --camera laptop --class person
+ros2 run mongla_vision tracker_check --camera laptop --class person
 ```
 
 ### Performance notes
@@ -605,7 +605,7 @@ ros2 run duburi_vision tracker_check --camera laptop --class person
 
 ### Drop-and-use — no YAML required
 
-Drop any `.pt` file into `src/duburi_vision/models/`. The detector reads
+Drop any `.pt` file into `src/mongla_vision/models/`. The detector reads
 class names from the model's embedded names table (`model.names`), which
 Ultralytics always populates at training time. **No sidecar YAML needed.**
 
@@ -631,25 +631,25 @@ names:
 ```bash
 # ── Sim / webcam / bench (ROBOSUB-tested pretrained ★) ──────────────────────
 # yolov11n detects COCO 80 classes — use 'person' to test demo_move_see
-ros2 launch duburi_vision cameras_.launch.py model:=yolov11n classes:=person
+ros2 launch mongla_vision cameras_.launch.py model:=yolov11n classes:=person
 
 # Or single-command launch+display:
-ros2 run duburi_vision vision_display --ros-args \
+ros2 run mongla_vision vision_display --ros-args \
     -p launch_pipeline:=true -p model:=yolov11n -p classes:=person
 
 # ── Pool / competition custom models ─────────────────────────────────────────
 # Gate-only model
-ros2 launch duburi_vision cameras_.launch.py model:=gate_medium_100ep classes:=gate
+ros2 launch mongla_vision cameras_.launch.py model:=gate_medium_100ep classes:=gate
 
 # Flare-only model
-ros2 launch duburi_vision cameras_.launch.py model:=flare_medium_100ep classes:=flare
+ros2 launch mongla_vision cameras_.launch.py model:=flare_medium_100ep classes:=flare
 
 # Combined model — gate approach phase
-ros2 launch duburi_vision cameras_.launch.py \
+ros2 launch mongla_vision cameras_.launch.py \
     model:=gate_flare_medium_100ep classes:=gate
 
 # Combined model — show both classes (debug)
-ros2 launch duburi_vision cameras_.launch.py \
+ros2 launch mongla_vision cameras_.launch.py \
     model:=gate_flare_medium_100ep classes:=gate,flare
 ```
 
@@ -660,77 +660,77 @@ same forward pass every frame, different box list published. Change it:
 
 ```bash
 # Shell
-ros2 param set /duburi_detector classes gate
-ros2 param set /duburi_detector classes flare
-ros2 param set /duburi_detector classes "gate,flare"
-ros2 param set /duburi_detector classes ""    # publish ALL model classes
+ros2 param set /mongla_detector classes gate
+ros2 param set /mongla_detector classes flare
+ros2 param set /mongla_detector classes "gate,flare"
+ros2 param set /mongla_detector classes ""    # publish ALL model classes
 ```
 
 ```python
-# Manual control (only needed when NOT using duburi.models ClassRef targets):
-duburi.set_classes('gate')
-duburi.set_classes('flare')
-duburi.set_classes('gate,flare')
-duburi.set_classes('')          # all classes
-duburi.set_classes(['gate', 'flare'])  # list form also accepted
-# When using duburi.models.gate.gate as target=, set_classes is called automatically.
+# Manual control (only needed when NOT using mongla.models ClassRef targets):
+mongla.set_classes('gate')
+mongla.set_classes('flare')
+mongla.set_classes('gate,flare')
+mongla.set_classes('')          # all classes
+mongla.set_classes(['gate', 'flare'])  # list form also accepted
+# When using mongla.models.gate.gate as target=, set_classes is called automatically.
 ```
 
 ### Full gate+flare prequal mission pattern
 
 ```python
-def run(duburi, log):
-    duburi.mission_reset()
-    duburi.camera = 'forward'
-    duburi.models(gate='gate_flare_medium_100ep')   # register once; use anywhere
+def run(mongla, log):
+    mongla.mission_reset()
+    mongla.camera = 'forward'
+    mongla.models(gate='gate_flare_medium_100ep')   # register once; use anywhere
 
     # Tether removal window -- operator disconnects tether during countdown
-    duburi.countdown(10)
+    mongla.countdown(10)
 
-    duburi.arm()
-    duburi.set_mode('ALT_HOLD')
-    duburi.set_depth(-1.0, settle=2.0)
-    duburi.dvl_connect()
+    mongla.arm()
+    mongla.set_mode('ALT_HOLD')
+    mongla.set_depth(-1.0, settle=2.0)
+    mongla.dvl_connect()
 
     # Gate phase — ClassRef auto-switches model+class in each verb call
-    duburi.vision.align(duburi.models.gate.gate, yaw=0, lat=0,
+    mongla.vision.align(mongla.models.gate.gate, yaw=0, lat=0,
                         gain=30, duration=20, fallback=creep_forward)
-    duburi.vision.move(duburi.models.gate.gate, fwd=80, mode='area',
+    mongla.vision.move(mongla.models.gate.gate, fwd=80, mode='area',
                        gain=35, duration=20, fallback=creep_forward)
-    duburi.move_forward_dist(3.5, gain=60.0)
+    mongla.move_forward_dist(3.5, gain=60.0)
 
     # Flare phase — yaw+depth centre, then close in on bbox height
-    duburi.vision.align(duburi.models.gate.flare, yaw=0, depth=0,
+    mongla.vision.align(mongla.models.gate.flare, yaw=0, depth=0,
                         gain=30, duration=20, fallback=sweep_yaw)
-    duburi.vision.move(duburi.models.gate.flare, fwd=45, mode='height',
+    mongla.vision.move(mongla.models.gate.flare, fwd=45, mode='height',
                        gain=35, duration=20, fallback=creep_forward)
 
     # Orbit flare 360° — yaw step, then re-centre at each stop
     for _ in range(12):
-        duburi.yaw_left(30.0, timeout=10.0, settle=0.3)
-        duburi.vision.align(duburi.models.gate.flare, yaw=0, depth=0,
+        mongla.yaw_left(30.0, timeout=10.0, settle=0.3)
+        mongla.vision.align(mongla.models.gate.flare, yaw=0, depth=0,
                             gain=30, duration=3.0)
 
     # Return through the gate
-    duburi.yaw_right(180.0, timeout=25.0, settle=0.5)
-    duburi.vision.align(duburi.models.gate.gate, yaw=0, lat=0,
+    mongla.yaw_right(180.0, timeout=25.0, settle=0.5)
+    mongla.vision.align(mongla.models.gate.gate, yaw=0, lat=0,
                         gain=30, duration=20, fallback=sweep_yaw)
-    duburi.vision.move(duburi.models.gate.gate, fwd=80, mode='area',
+    mongla.vision.move(mongla.models.gate.gate, fwd=80, mode='area',
                        gain=35, duration=20, fallback=creep_forward)
-    duburi.move_forward_dist(3.5, gain=60.0)
+    mongla.move_forward_dist(3.5, gain=60.0)
 
-    duburi.stop()
-    duburi.set_depth(0.0)
-    duburi.disarm()
+    mongla.stop()
+    mongla.set_depth(0.0)
+    mongla.disarm()
 
 
 # ── Mission-authored fallback search patterns (pure control) ────────────────────
-def creep_forward(duburi):
-    duburi.move_forward(0.6, gain=40)
+def creep_forward(mongla):
+    mongla.move_forward(0.6, gain=40)
 
-def sweep_yaw(duburi, should_stop):
+def sweep_yaw(mongla, should_stop):
     for _ in range(6):
-        duburi.yaw_right(20)
+        mongla.yaw_right(20)
         if should_stop():           # bail the moment the target reappears
             return
 ```
@@ -755,8 +755,8 @@ See `missions/gate_flare_prequal.py` for the production-tuned version of this.
 ### Tether removal countdown
 
 ```python
-duburi.countdown(10)          # 10-second window, default message
-duburi.countdown(15, message='Stand clear. Starting autonomous run.')
+mongla.countdown(10)          # 10-second window, default message
+mongla.countdown(15, message='Stand clear. Starting autonomous run.')
 ```
 
 Prints an ASCII box countdown to stdout. The mission continues immediately
@@ -767,11 +767,11 @@ removing the tether during this window leaves the AUV fully autonomous.
 
 ```bash
 # Run gate model on recorded pool footage
-ros2 launch duburi_vision cameras_.launch.py \
+ros2 launch mongla_vision cameras_.launch.py \
     video_file:=/tmp/pool_run.mp4 model:=gate_flare_medium_100ep classes:=gate
 
 # Loop OFF (stop at EOF), with ByteTrack
-ros2 launch duburi_vision cameras_.launch.py \
+ros2 launch mongla_vision cameras_.launch.py \
     video_file:=/tmp/gate_run.mp4 model:=gate_medium_100ep classes:=gate \
     loop:=false with_tracking:=true
 ```
@@ -824,7 +824,7 @@ if maintain_on:                     # optional lateral hold while driving
 - `gain` is a hard clamp on every output — the AUV never exceeds it.
 
 Reference implementation:
-[`src/duburi_control/duburi_control/motion_vision.py`](../../src/duburi_control/duburi_control/motion_vision.py).
+[`src/mongla_control/mongla_control/motion_vision.py`](../../src/mongla_control/mongla_control/motion_vision.py).
 
 ---
 
@@ -857,65 +857,65 @@ not ROS params. Set them in the verb call (or pull them from
 `competition_config.py`).
 
 Defaults live in
-[`src/duburi_manager/duburi_manager/vision_tunables.py`](../../src/duburi_manager/duburi_manager/vision_tunables.py).
+[`src/mongla_manager/mongla_manager/vision_tunables.py`](../../src/mongla_manager/mongla_manager/vision_tunables.py).
 
 ---
 
 ## 6. Ready-to-steal mission samples
 
-Every sample below is a complete `run(duburi, log)`. Drop it in
-`src/duburi_planner/duburi_planner/missions/<name>.py`, rebuild, and
-run with `ros2 run duburi_planner mission <name>`. The runner
+Every sample below is a complete `run(mongla, log)`. Drop it in
+`src/mongla_planner/mongla_planner/missions/<name>.py`, rebuild, and
+run with `ros2 run mongla_planner mission <name>`. The runner
 auto-discovers any `*.py` not starting with `_`; no registration
 required.
 
 ### 6.1  Hello world — arm, dive, surface, disarm
 
 ```python
-def run(duburi, log):
+def run(mongla, log):
     log.info('hello_world: starting')
-    duburi.arm()
-    duburi.set_depth(-0.5)
-    duburi.pause(2.0)
-    duburi.set_depth(0.0)
-    duburi.disarm()
+    mongla.arm()
+    mongla.set_depth(-0.5)
+    mongla.pause(2.0)
+    mongla.set_depth(0.0)
+    mongla.disarm()
 ```
 
 ### 6.2  Square pattern with heading lock
 
 ```python
-def run(duburi, log):
-    duburi.arm()
-    duburi.set_depth(-1.0)
-    if duburi.backend != 'srot':                  # srot holds heading on the board
-        duburi.lock_heading()                     # latch current heading
+def run(mongla, log):
+    mongla.arm()
+    mongla.set_depth(-1.0)
+    if mongla.backend != 'srot':                  # srot holds heading on the board
+        mongla.lock_heading()                     # latch current heading
     for _ in range(4):
-        duburi.move_forward(3.0, gain=60)
-        duburi.yaw_right(90.0)                    # lock auto-retargets
-    duburi.release_heading()
-    duburi.set_depth(0.0)
-    duburi.disarm()
+        mongla.move_forward(3.0, gain=60)
+        mongla.yaw_right(90.0)                    # lock auto-retargets
+    mongla.release_heading()
+    mongla.set_depth(0.0)
+    mongla.disarm()
 ```
 
 ### 6.3  Find person, centre, hold distance
 
 ```python
-def run(duburi, log):
-    duburi.camera = 'laptop'
-    duburi.arm()
-    duburi.set_depth(-0.5)
-    duburi.move_forward(3.0, gain=60)
+def run(mongla, log):
+    mongla.camera = 'laptop'
+    mongla.arm()
+    mongla.set_depth(-0.5)
+    mongla.move_forward(3.0, gain=60)
     # align: yaw-centre the person (sweep to find them); move: close to 55% fill.
-    duburi.vision.align('person', yaw=0, err=50, gain=30, duration=20,
+    mongla.vision.align('person', yaw=0, err=50, gain=30, duration=20,
                         fallback=sweep_yaw)
-    duburi.vision.move('person', fwd=55, mode='height', gain=35, duration=15)
-    duburi.move_back(2.0, gain=60)
-    duburi.disarm()
+    mongla.vision.move('person', fwd=55, mode='height', gain=35, duration=15)
+    mongla.move_back(2.0, gain=60)
+    mongla.disarm()
 
 
-def sweep_yaw(duburi, should_stop):
+def sweep_yaw(mongla, should_stop):
     for _ in range(6):
-        duburi.yaw_right(30)
+        mongla.yaw_right(30)
         if should_stop():
             return
 ```
@@ -923,30 +923,30 @@ def sweep_yaw(duburi, should_stop):
 ### 6.4  Reacquire after losing the target
 
 ```python
-def run(duburi, log):
-    duburi.camera = 'laptop'
-    duburi.arm()
-    duburi.set_depth(-0.5)
+def run(mongla, log):
+    mongla.camera = 'laptop'
+    mongla.arm()
+    mongla.set_depth(-0.5)
 
     # align() runs `reacquire` automatically on loss, then re-enters — all
     # inside duration. It never raises, so branch on the result, not try/except.
     for attempt in range(3):
         log.info(f'attempt {attempt+1}: searching')
-        if duburi.vision.align('person', yaw=0, gain=30, duration=20,
+        if mongla.vision.align('person', yaw=0, gain=30, duration=20,
                                fallback=reacquire):
             log.info('centred')
             break
         log.warning('still not centred -- backing off & retrying')
-        duburi.move_back(2.0, gain=50)
+        mongla.move_back(2.0, gain=50)
 
-    duburi.disarm()
+    mongla.disarm()
 
 
 # Search fallback: back off and fan yaw to bring the target back into frame.
-def reacquire(duburi, should_stop):
-    duburi.move_back(1.5, gain=50)
+def reacquire(mongla, should_stop):
+    mongla.move_back(1.5, gain=50)
     for _ in range(4):
-        duburi.yaw_right(45)
+        mongla.yaw_right(45)
         if should_stop():
             return
 ```
@@ -954,81 +954,81 @@ def reacquire(duburi, should_stop):
 ### 6.5  Full 3-axis align, then forward close-in
 
 ```python
-def run(duburi, log):
-    duburi.camera = 'forward'
-    duburi.arm()
-    duburi.set_depth(-1.5)
+def run(mongla, log):
+    mongla.camera = 'forward'
+    mongla.arm()
+    mongla.set_depth(-1.5)
     # align owns the three centring axes at once (yaw + lat + depth);
     # then move owns the forward close-in. Two verbs, full lock.
-    duburi.vision.align('gate', yaw=0, lat=0, depth=0,
+    mongla.vision.align('gate', yaw=0, lat=0, depth=0,
                         gain=30, duration=20, fallback=creep_forward)
-    duburi.vision.move('gate', fwd=80, mode='area', gain=35, duration=20)
-    duburi.disarm()
+    mongla.vision.move('gate', fwd=80, mode='area', gain=35, duration=20)
+    mongla.disarm()
 
 
-def creep_forward(duburi):
-    duburi.move_forward(0.6, gain=40)
+def creep_forward(mongla):
+    mongla.move_forward(0.6, gain=40)
 ```
 
 ### 6.6  Patrol pattern: drive, scan, drive, scan
 
 ```python
-def run(duburi, log):
-    duburi.camera = 'forward'
-    duburi.arm()
-    duburi.set_depth(-0.8)
+def run(mongla, log):
+    mongla.camera = 'forward'
+    mongla.arm()
+    mongla.set_depth(-0.8)
 
     for leg in range(3):
         log.info(f'leg {leg}: drive')
-        duburi.move_forward(5.0, gain=55)
+        mongla.move_forward(5.0, gain=55)
         log.info(f'leg {leg}: scan')
-        if duburi.detected('gate', stale_after=0.5):
+        if mongla.detected('gate', stale_after=0.5):
             log.info('found -- homing in')
-            duburi.vision.align('gate', yaw=0, lat=0, gain=30, duration=15)
-            duburi.vision.move('gate', fwd=80, mode='area', gain=35, duration=15)
+            mongla.vision.align('gate', yaw=0, lat=0, gain=30, duration=15)
+            mongla.vision.move('gate', fwd=80, mode='area', gain=35, duration=15)
             break
         log.info('no hit, continue patrol')
-        duburi.yaw_right(60.0)
+        mongla.yaw_right(60.0)
 
-    duburi.disarm()
+    mongla.disarm()
 ```
 
 ### 6.7  Per-call tuning (pin precision for one phase)
 
 ```python
-def run(duburi, log):
-    duburi.camera = 'forward'
-    duburi.arm()
-    duburi.set_depth(-0.5)
+def run(mongla, log):
+    mongla.camera = 'forward'
+    mongla.arm()
+    mongla.set_depth(-0.5)
     # Tight, slow yaw-only lock: small err (precise) + low gain (gentle).
     # The P-gains (vision.kp_yaw, …) are deck-side ROS params only — set them
-    # with `ros2 param set /duburi_manager vision.kp_yaw 85.0`.
-    duburi.vision.align('gate', yaw=0, err=12, gain=20, duration=10)
-    duburi.disarm()
+    # with `ros2 param set /mongla_manager vision.kp_yaw 85.0`.
+    mongla.vision.align('gate', yaw=0, err=12, gain=20, duration=10)
+    mongla.disarm()
 ```
 
 ### 6.8  Camera switching mid-mission (forward → downward)
 
-`duburi.camera` is a sticky string. Assign it once; all subsequent `duburi.vision.*` calls use that
+`mongla.camera` is a sticky string. Assign it once; all subsequent `mongla.vision.*` calls use that
 camera. The camera name must match a running `camera_node` profile — verify with
 `ros2 topic list | grep image_raw`.
 
 ```python
-def run(duburi, log):
-    duburi.arm()
-    duburi.set_depth(-0.8, settle=1.0)
+def run(mongla, log):
+    mongla.arm()
+    mongla.set_depth(-0.8, settle=1.0)
 
     # Phase 1: gate approach with the forward camera
-    duburi.use_camera('forward')
-    duburi.vision.align('gate', yaw=0, lat=0, gain=30, duration=15)
-    duburi.vision.move('gate', fwd=80, mode='area', gain=35, duration=15)
+    mongla.use_camera('forward')
+    mongla.vision.align('gate', yaw=0, lat=0, gain=30, duration=15)
+    mongla.vision.move('gate', fwd=80, mode='area', gain=35, duration=15)
 
     # Phase 2: descend and switch to the downward camera for the bin
-    duburi.set_depth(-1.5, settle=1.5)
-    duburi.use_camera('downward')
+    mongla.set_depth(-1.5, settle=1.5)
+    mongla.use_camera('downward')
     # downward cam: lat = left/right, depth axis = fore/aft (see §6.9)
-    duburi.vision.align('bin', lat=0, depth=0, err=30, gain=30, duration=20)
-    duburi.disarm()
+    mongla.vision.align('bin', lat=0, depth=0, err=30, gain=30, duration=20)
+    mongla.disarm()
 ```
 
 ### 6.9  Downward-camera alignment (bin centring)
@@ -1045,13 +1045,13 @@ physical work than on the forward camera. Centre over the target with
 - forward *fill* is a separate concern: it lives on `move`, never on `align`.
 
 ```python
-duburi.use_camera('downward')
+mongla.use_camera('downward')
 
 # CORRECT: lat + depth centre the AUV over the bin; yaw off.
-duburi.vision.align('fire', lat=0, depth=0, err=30, gain=30, duration=20)
+mongla.vision.align('fire', lat=0, depth=0, err=30, gain=30, duration=20)
 
 # WRONG: yaw-only does nothing useful from a top-down view.
-# duburi.vision.align('fire', yaw=0, duration=20)
+# mongla.vision.align('fire', yaw=0, duration=20)
 ```
 
 Mirrors `missions/task_bin.py`. If you use a custom camera id other than
@@ -1067,15 +1067,15 @@ holds a lateral offset while driving forward.
 **Slalom side-of-pipe pass** — sit 80 px right of the pipe, then drive in
 holding that offset:
 ```python
-duburi.vision.align('red_pipe', yaw=0, lat=80, gain=30, duration=20)
-duburi.vision.move('red_pipe', fwd=60, mode='height', maintain=80,
+mongla.vision.align('red_pipe', yaw=0, lat=80, gain=30, duration=20)
+mongla.vision.move('red_pipe', fwd=60, mode='height', maintain=80,
                    gain=35, duration=15)
 ```
 
 **Torpedo board bullseye** — aim 60 px right and 40 px above the board centre
 (one horizontal axis — `yaw` here — plus `depth` for the vertical):
 ```python
-duburi.vision.align('torpedo', yaw=60, depth=-40,
+mongla.vision.align('torpedo', yaw=60, depth=-40,
                     err=14, gain=20, duration=15)
 ```
 
@@ -1091,21 +1091,21 @@ Dubomini 2.0 has no DVL. Use `align` on lat+yaw+depth to hold station on a
 detected target. Launch with `yaw_source:=bno085` and `dvl_auto_connect:=false`.
 
 ```python
-# Dubomini bringup: ros2 run duburi_manager start
+# Mongla_agile bringup: ros2 run mongla_manager start
 #   --ros-args -p yaw_source:=bno085 -p dvl_auto_connect:=false
 
-def run(duburi, log):
-    duburi.camera = 'forward'
-    duburi.arm()
-    duburi.set_depth(-0.6, settle=1.0)
+def run(mongla, log):
+    mongla.camera = 'forward'
+    mongla.arm()
+    mongla.set_depth(-0.6, settle=1.0)
 
-    # Hold station on the gate using vision (replaces POSHOLD — Dubomini has no DVL).
+    # Hold station on the gate using vision (replaces POSHOLD — Mongla_agile has no DVL).
     # No fallback: align holds through brief losses and rides out the duration.
-    duburi.vision.align('gate', yaw=0, lat=0, depth=0, gain=30, duration=30)
+    mongla.vision.align('gate', yaw=0, lat=0, depth=0, gain=30, duration=30)
 
     # Approach: forward open-loop (no DVL distance available).
-    duburi.move_forward(5.0, gain=55)
-    duburi.disarm()
+    mongla.move_forward(5.0, gain=55)
+    mongla.disarm()
 ```
 
 VehicleProfile auto-selects Dubomini vs Duburi 4.5 at runtime via `VehicleProfile.auto()` —
@@ -1123,42 +1123,42 @@ own fire gate. Coarse-align the board, close in on `blood`, then take a tight
 the abort event from the previous run — critical for back-to-back pool runs.
 
 ```python
-def run(duburi, log):
-    duburi.mission_reset()   # ★ ALWAYS first — clears heading lock + abort from previous run
-    duburi.camera = 'forward'
-    duburi.models(torpedo='torpedo_blood_hole')   # classes: torpedo, blood, hole
-    duburi.arm()
-    duburi.set_depth(-1.2)
+def run(mongla, log):
+    mongla.mission_reset()   # ★ ALWAYS first — clears heading lock + abort from previous run
+    mongla.camera = 'forward'
+    mongla.models(torpedo='torpedo_blood_hole')   # classes: torpedo, blood, hole
+    mongla.arm()
+    mongla.set_depth(-1.2)
 
     # 1. Coarse board align (yaw + lat + depth); creep forward to find it.
-    duburi.vision.align(duburi.models.torpedo.torpedo, yaw=0, lat=0, depth=0,
+    mongla.vision.align(mongla.models.torpedo.torpedo, yaw=0, lat=0, depth=0,
                         err=40, gain=30, duration=15, fallback=creep_forward)
 
     # 2. Approach: drive forward until 'blood' fills 30% of frame height.
-    duburi.vision.move(duburi.models.torpedo.blood, fwd=30, mode='height',
+    mongla.vision.move(mongla.models.torpedo.blood, fwd=30, mode='height',
                        gain=35, duration=30, fallback=creep_forward)
 
     # 3. Fine hole lock (tight err, slow gain). Fire ONLY on a confirmed lock.
-    if duburi.vision.align(duburi.models.torpedo.hole, yaw=0, lat=0, depth=0,
+    if mongla.vision.align(mongla.models.torpedo.hole, yaw=0, lat=0, depth=0,
                            err=14, gain=12, duration=25, fallback=creep_forward):
-        duburi.fire(1)       # torpedo_1 — 1/2 = torpedo, 3/4 = dropper
+        mongla.fire(1)       # torpedo_1 — 1/2 = torpedo, 3/4 = dropper
         log.info('torpedo fired on stable lock')
     else:
         log.warning('hole never locked — holding fire')
 
-    duburi.move_forward(2.0, gain=40)   # clear the board
-    duburi.disarm()
+    mongla.move_forward(2.0, gain=40)   # clear the board
+    mongla.disarm()
 
 
-def creep_forward(duburi):
-    duburi.move_forward(0.6, gain=40)
+def creep_forward(mongla):
+    mongla.move_forward(0.6, gain=40)
 ```
 
 **Key fields:**
 
 | Field | Notes |
 |---|---|
-| `duburi.fire(channel)` | 1/2 = torpedo, 3/4 = dropper. **Always pass the channel explicitly.** |
+| `mongla.fire(channel)` | 1/2 = torpedo, 3/4 = dropper. **Always pass the channel explicitly.** |
 | `err` (fine lock) | small px tolerance (e.g. 14) so the fire only triggers dead-on. |
 | `gain` (fine lock) | low (e.g. 12) — gentle, precise corrections at close range. |
 | `fwd` / `mode` | approach stop: drive until `blood` fills `fwd`% by `mode='height'`. |
@@ -1166,7 +1166,7 @@ def creep_forward(duburi):
 
 > **Full two-verb torpedo missions:** `missions/task_torpedo.py` (chunk) and
 > `missions/pool_day_practice.py` (Phase 3) — run with
-> `ros2 run duburi_planner mission <name>`.
+> `ros2 run mongla_planner mission <name>`.
 
 ---
 
@@ -1176,27 +1176,27 @@ Centre over the bin on the downward camera with `align` (lat + depth), then
 drop. `align` is truthy only when centred within `err`, so it gates the drop.
 
 ```python
-def run(duburi, log):
-    duburi.mission_reset()
-    duburi.models(bin='bin_fire_blood')      # classes: blood, fire
-    duburi.arm()
-    duburi.set_depth(-1.5)
+def run(mongla, log):
+    mongla.mission_reset()
+    mongla.models(bin='bin_fire_blood')      # classes: blood, fire
+    mongla.arm()
+    mongla.set_depth(-1.5)
 
     # Fly over and centre on the bin with the downward camera.
-    duburi.use_camera('downward')
-    if duburi.vision.align(duburi.models.bin.fire, lat=0, depth=0,
+    mongla.use_camera('downward')
+    if mongla.vision.align(mongla.models.bin.fire, lat=0, depth=0,
                            err=30, gain=30, duration=45, fallback=creep_forward):
-        duburi.pause(3.0)        # stability confirmation before the drop
-        duburi.fire(3)           # dropper_1 — channel always explicit
+        mongla.pause(3.0)        # stability confirmation before the drop
+        mongla.fire(3)           # dropper_1 — channel always explicit
     else:
         log.warning('bin never centred — skipping drop')
 
-    duburi.use_camera('forward')
-    duburi.disarm()
+    mongla.use_camera('forward')
+    mongla.disarm()
 
 
-def creep_forward(duburi):
-    duburi.move_forward(0.6, gain=40)
+def creep_forward(mongla):
+    mongla.move_forward(0.6, gain=40)
 ```
 
 Mirrors `missions/task_bin.py`. The downward-cam `depth_sign` flip is automatic
@@ -1212,20 +1212,20 @@ followed by an explicit `pause`.
 
 ```python
 # Drive in until the gate fills 70% of area, then station-keep for 5 s.
-duburi.vision.move('gate', fwd=70, mode='area', hold=5.0, gain=35, duration=25)
-duburi.move_forward(2.0, gain=60)
+mongla.vision.move('gate', fwd=70, mode='area', hold=5.0, gain=35, duration=25)
+mongla.move_forward(2.0, gain=60)
 
 # Or: centre over a bin, hold briefly, then drop.
-duburi.use_camera('downward')
-duburi.vision.align('fire', lat=0, depth=0, err=30, gain=30, duration=20)
-duburi.pause(3.0)      # let it settle
-duburi.fire(3)         # dropper_1
+mongla.use_camera('downward')
+mongla.vision.align('fire', lat=0, depth=0, err=30, gain=30, duration=20)
+mongla.pause(3.0)      # let it settle
+mongla.fire(3)         # dropper_1
 ```
 
 **Arrive vs. stay:**
 - `vision.align(...)` / `vision.move(...)` — exit as soon as centred / fill reached.
 - `vision.move(..., hold=S)` — reach the fill, then station-keep for `S` seconds.
-- `if vision.align(...): duburi.fire(n)` — align, confirm the lock, fire.
+- `if vision.align(...): mongla.fire(n)` — align, confirm the lock, fire.
 
 ---
 
@@ -1239,14 +1239,14 @@ already connected before any mission code runs.
 ### 7.1  Basic DVL forward / back move
 
 ```python
-def run(duburi, log):
-    duburi.arm()
-    duburi.set_depth(-0.8, settle=1.0)
+def run(mongla, log):
+    mongla.arm()
+    mongla.set_depth(-0.8, settle=1.0)
     # DVL closed-loop: stops exactly 2.0 m from start position
-    duburi.move_forward_dist(2.0, gain=60)
+    mongla.move_forward_dist(2.0, gain=60)
     # Return to start (same tolerance applies — stops when back within 0.1 m)
-    duburi.move_back_dist(2.0, gain=60)
-    duburi.disarm()
+    mongla.move_back_dist(2.0, gain=60)
+    mongla.disarm()
 ```
 
 ### 7.2  Heading-stable DVL translation (recommended pattern)
@@ -1256,20 +1256,20 @@ holds the AUV pointed at the target while DVL drives Ch5 (forward) or Ch6
 (lateral). Do NOT call `unlock_heading` between them.
 
 ```python
-def run(duburi, log):
-    duburi.arm()
-    duburi.set_depth(-0.8, settle=1.0)
+def run(mongla, log):
+    mongla.arm()
+    mongla.set_depth(-0.8, settle=1.0)
 
     # Lock heading at 0° and keep it active throughout
-    duburi.lock_heading(0.0, timeout=120)   # ← positional arg, not target=
+    mongla.lock_heading(0.0, timeout=120)   # ← positional arg, not target=
 
     # DVL moves — heading lock stays alive, no yaw drift
-    duburi.move_forward_dist(3.0, gain=60)
-    duburi.move_lateral_dist(1.0, gain=36)      # strafe 1 m right
-    duburi.move_forward_dist(2.0, gain=60)
+    mongla.move_forward_dist(3.0, gain=60)
+    mongla.move_lateral_dist(1.0, gain=36)      # strafe 1 m right
+    mongla.move_forward_dist(2.0, gain=60)
 
-    duburi.release_heading()   # ← release_heading(), not unlock_heading()
-    duburi.disarm()
+    mongla.release_heading()   # ← release_heading(), not unlock_heading()
+    mongla.disarm()
 ```
 
 ### 7.3  Vision approach + DVL final run
@@ -1278,29 +1278,29 @@ Use vision to centre on the target, then DVL for a precise close-in. `align`
 owns yaw while it runs, so lock heading only AFTER the alignment phase:
 
 ```python
-def run(duburi, log):
-    duburi.camera = 'forward'
-    duburi.arm()
-    duburi.set_depth(-1.0)
+def run(mongla, log):
+    mongla.camera = 'forward'
+    mongla.arm()
+    mongla.set_depth(-1.0)
 
     # Phase 1: yaw-centre on the gate (sweep to find it if it's not in frame).
-    duburi.vision.align('gate', yaw=0, gain=30, duration=30, fallback=sweep_for_gate)
+    mongla.vision.align('gate', yaw=0, gain=30, duration=30, fallback=sweep_for_gate)
 
     # Phase 2: lock the (post-alignment) heading so DVL drives straight in.
-    duburi.lock_heading(0.0, timeout=120)   # 0 = lock current heading
+    mongla.lock_heading(0.0, timeout=120)   # 0 = lock current heading
 
     # Phase 3: drive through gate with DVL precision.
-    duburi.move_forward_dist(4.0, gain=60)
+    mongla.move_forward_dist(4.0, gain=60)
 
-    duburi.release_heading()
-    duburi.disarm()
+    mongla.release_heading()
+    mongla.disarm()
 
 
-def sweep_for_gate(duburi, should_stop):
+def sweep_for_gate(mongla, should_stop):
     for _ in range(6):
         if should_stop():
             return
-        duburi.yaw_right(15); duburi.pause(0.4)
+        mongla.yaw_right(15); mongla.pause(0.4)
 ```
 
 ### 7.4  Composite BNO+DVL (recommended pool config)
@@ -1309,7 +1309,7 @@ def sweep_for_gate(duburi, should_stop):
 Configure in `config/sensors.yaml`:
 
 ```yaml
-duburi_manager:
+mongla_manager:
   ros__parameters:
     yaw_source: bno085_dvl
 ```
@@ -1319,32 +1319,32 @@ Mission code is identical — the yaw source selection is transparent to the DSL
 ### 7.5  Orbit scan — `detected()` search loop
 
 There's no scan/orbit verb anymore. Searching is a mission-authored loop: yaw
-in steps, polling `duburi.detected()` (non-blocking, **case-insensitive**) at
+in steps, polling `mongla.detected()` (non-blocking, **case-insensitive**) at
 each stop, then hand off to `align`. The same pattern, written as a function,
 is exactly what you pass to a vision verb as a `fallback`.
 
 ```python
-def run(duburi, log):
-    duburi.models(gate='gate_flare_medium_100ep')
-    duburi.camera = 'forward'
-    duburi.arm()
-    duburi.set_depth(-1.0, settle=1.0)
+def run(mongla, log):
+    mongla.models(gate='gate_flare_medium_100ep')
+    mongla.camera = 'forward'
+    mongla.arm()
+    mongla.set_depth(-1.0, settle=1.0)
 
     # Orbit right in 20° steps until the gate is found (18 × 20° = 360°).
     found = False
     for _ in range(18):
-        if duburi.detected(duburi.models.gate.gate, stale_after=0.5):
+        if mongla.detected(mongla.models.gate.gate, stale_after=0.5):
             found = True
             break
-        duburi.yaw_right(20); duburi.pause(1.5)
+        mongla.yaw_right(20); mongla.pause(1.5)
 
     if found:
         log('gate found — aligning')
-        duburi.vision.align(duburi.models.gate.gate, yaw=0, lat=0,
+        mongla.vision.align(mongla.models.gate.gate, yaw=0, lat=0,
                             gain=30, duration=10)
     else:
         log('gate not found — advancing and retrying')
-        duburi.move_forward(3.0, gain=35)
+        mongla.move_forward(3.0, gain=35)
 ```
 
 > Prefer to fold the search into the verb itself: pass the loop as a `fallback`
@@ -1357,11 +1357,11 @@ to what the camera sees, then hand off to vision-closed control. Each **pumps
 the node** so the answer is the current frame (the default camera is subscribed
 eagerly, so the first call never false-negates):
 
-- `duburi.detected(class, *, camera=None, stale_after=1.0) -> bool` — visible
+- `mongla.detected(class, *, camera=None, stale_after=1.0) -> bool` — visible
   right now? (point-in-time, case-insensitive)
-- `duburi.wait_for(class, *, timeout=10.0, ...) -> bool` — block until seen or
+- `mongla.wait_for(class, *, timeout=10.0, ...) -> bool` — block until seen or
   timeout (loop-free acquire while stationary)
-- `duburi.where(class, *, band=0.15, ...) -> 'left'|'center'|'right'|'unknown'`
+- `mongla.where(class, *, band=0.15, ...) -> 'left'|'center'|'right'|'unknown'`
   — bearing of the largest match (`where_offset` → signed `[-1,+1]`)
 
 This is the architecture step toward YASMIN FSMs — each `while detected()` loop
@@ -1374,79 +1374,79 @@ IS a proto-state.
 ```python
 # 1. CIRCLE SEARCH — keep turning until seen (a moving search NEEDS a while;
 #    an `if` runs once and falls through, it is not a loop)
-while not duburi.detected('red_pipe'):
-    duburi.yaw_left(30)
-duburi.move_forward(3)            # runs once the pipe is in frame
+while not mongla.detected('red_pipe'):
+    mongla.yaw_left(30)
+mongla.move_forward(3)            # runs once the pipe is in frame
 
 # 2. ACQUIRE-THEN-ACT — wait in place, no busy-loop, with a give-up branch
-if duburi.wait_for('gate', timeout=8):
-    duburi.vision.align('gate', yaw=0, lat=0)
+if mongla.wait_for('gate', timeout=8):
+    mongla.vision.align('gate', yaw=0, lat=0)
 else:
-    duburi.move_forward(1)        # never showed — recover
+    mongla.move_forward(1)        # never showed — recover
 
 # 3. BEARING STEER — turn toward whichever side the target is on
-{'left':  lambda: duburi.yaw_left(20),
- 'right': lambda: duburi.yaw_right(20),
-}.get(duburi.where('gate'), lambda: duburi.move_forward(1))()
+{'left':  lambda: mongla.yaw_left(20),
+ 'right': lambda: mongla.yaw_right(20),
+}.get(mongla.where('gate'), lambda: mongla.move_forward(1))()
 ```
 
 #### Core paradigm
 
 ```python
-def run(duburi, log):
-    duburi.camera = 'forward'
-    duburi.models(gate='gate_flare_medium_100ep')
-    duburi.arm()
-    duburi.set_depth(-0.8)
-    duburi.lock_heading(0.0, timeout=180)
+def run(mongla, log):
+    mongla.camera = 'forward'
+    mongla.models(gate='gate_flare_medium_100ep')
+    mongla.arm()
+    mongla.set_depth(-0.8)
+    mongla.lock_heading(0.0, timeout=180)
 
     # ── Search: creep forward until gate visible ──────────────────────── #
     MAX_STEPS = 60   # safety budget: 60 × 0.5s = 30s of search
     for _ in range(MAX_STEPS):
-        if duburi.detected(duburi.models.gate.gate, stale_after=0.5):
+        if mongla.detected(mongla.models.gate.gate, stale_after=0.5):
             break
-        duburi.move_forward(0.5, gain=30)  # 0.5s steps → max 0.15m overshoot
+        mongla.move_forward(0.5, gain=30)  # 0.5s steps → max 0.15m overshoot
     else:
         log.warn('gate not found — aborting')
-        duburi.set_depth(0.0); duburi.disarm(); return
+        mongla.set_depth(0.0); mongla.disarm(); return
 
     # ── Align and pass ────────────────────────────────────────────────── #
-    duburi.vision.align(duburi.models.gate.gate, yaw=0, lat=0,
+    mongla.vision.align(mongla.models.gate.gate, yaw=0, lat=0,
                         gain=30, duration=20)
-    duburi.vision.move(duburi.models.gate.gate, fwd=80, mode='area',
+    mongla.vision.move(mongla.models.gate.gate, fwd=80, mode='area',
                        gain=55, duration=20)
-    duburi.move_forward_dist(3.0, gain=60)
+    mongla.move_forward_dist(3.0, gain=60)
 
     # ── Search: yaw-sweep for flare ────────────────────────────────────── #
-    duburi.set_classes('gate,flare')          # must set BEFORE detecting flare
+    mongla.set_classes('gate,flare')          # must set BEFORE detecting flare
     for _ in range(36):                       # 36 × 10° = full 360°
-        if duburi.detected('flare', stale_after=0.5):
+        if mongla.detected('flare', stale_after=0.5):
             break
-        duburi.yaw_right(10); duburi.pause(0.5)
+        mongla.yaw_right(10); mongla.pause(0.5)
 
-    if duburi.detected('flare', stale_after=0.5):
-        duburi.vision.align(duburi.models.gate.flare, yaw=0,
+    if mongla.detected('flare', stale_after=0.5):
+        mongla.vision.align(mongla.models.gate.flare, yaw=0,
                             gain=30, duration=20)
-        duburi.vision.move(duburi.models.gate.flare, fwd=60, mode='height',
+        mongla.vision.move(mongla.models.gate.flare, fwd=60, mode='height',
                            gain=35, duration=20)
 
         # ── Orbit flare: exit when gate re-appears ─────────────────────── #
         # IMPORTANT: passing the flare ClassRef above called set_classes('flare').
         # Restore both BEFORE the orbit loop.
-        duburi.set_classes('gate,flare')
+        mongla.set_classes('gate,flare')
         for _ in range(18):                   # 18 × 20° = 360°
-            if duburi.detected('gate', stale_after=0.3):
+            if mongla.detected('gate', stale_after=0.3):
                 break
-            duburi.yaw_right(20); duburi.pause(1.0)
+            mongla.yaw_right(20); mongla.pause(1.0)
 
-        if duburi.detected('gate', stale_after=0.5):
-            duburi.vision.align(duburi.models.gate.gate, yaw=0, lat=0,
+        if mongla.detected('gate', stale_after=0.5):
+            mongla.vision.align(mongla.models.gate.gate, yaw=0, lat=0,
                                 gain=30, duration=15)
-            duburi.move_forward_dist(1.5, gain=60)
+            mongla.move_forward_dist(1.5, gain=60)
 
-    duburi.release_heading()
-    duburi.set_depth(0.0)
-    duburi.disarm()
+    mongla.release_heading()
+    mongla.set_depth(0.0)
+    mongla.disarm()
 ```
 
 #### The four rules you must not break
@@ -1462,11 +1462,11 @@ loop with `MAX_STEPS`.
 **Rule 3 — Class filter coupling.** Any `vision.*` verb that takes a `ClassRef`
 calls `set_classes()` automatically. After `vision.align(flare_ref, ...)`, the
 detector publishes flare detections only. `detected('gate')` will always return
-`False` until you call `duburi.set_classes('gate,flare')`.
+`False` until you call `mongla.set_classes('gate,flare')`.
 
-**Rule 4 — Set the camera first.** `detected()` falls back to `duburi.camera`
+**Rule 4 — Set the camera first.** `detected()` falls back to `mongla.camera`
 (default `'forward'`). Set it explicitly to the camera you mean — e.g.
-`duburi.use_camera('downward')` before a bin search.
+`mongla.use_camera('downward')` before a bin search.
 
 #### What blocks vs what doesn't
 
@@ -1476,7 +1476,7 @@ detector publishes flare detections only. `detected('gate')` will always return
 `dvl_connect`, `move_forward_dist`, `move_lateral_dist`, ALL `vision.*` verbs.
 
 **Instant (no action goal):**
-`duburi.camera =`, `duburi.target =`, `duburi.models(...)`.
+`mongla.camera =`, `mongla.target =`, `mongla.models(...)`.
 
 `detected()`/`where()` **pump the node themselves** (bounded: ≤0.25 s warm,
 ≤0.60 s cold-on-first-frame), so they read the current frame regardless of
@@ -1487,22 +1487,22 @@ seen or its `timeout`.
 
 ```python
 # ✗ Step too long — 0.6m overshoot at gain=30
-while not duburi.detected('gate'):
-    duburi.move_forward(2.0, gain=30)
+while not mongla.detected('gate'):
+    mongla.move_forward(2.0, gain=30)
 
 # ✗ No safety budget — runs forever if detector offline
-while not duburi.detected('gate'):
-    duburi.move_forward(0.5)
+while not mongla.detected('gate'):
+    mongla.move_forward(0.5)
 
 # ✗ Class filter trap — align(flare_ref) set classes='flare', gate never detected
-duburi.vision.align(duburi.models.gate.flare, yaw=0)
+mongla.vision.align(mongla.models.gate.flare, yaw=0)
 for _ in range(18):
-    if duburi.detected('gate'):   # ALWAYS FALSE until set_classes('gate,flare')
+    if mongla.detected('gate'):   # ALWAYS FALSE until set_classes('gate,flare')
         break
 
 # ✗ Wrong camera — polling 'forward' while the bin is under the downward cam
-duburi.use_camera('forward')
-while not duburi.detected('bin'):   # never True — bin is on 'downward'
+mongla.use_camera('forward')
+while not mongla.detected('bin'):   # never True — bin is on 'downward'
     ...
 ```
 
@@ -1513,20 +1513,20 @@ success. Branch on it directly; pair it with `detected()` to pick the next targe
 
 ```python
 # Try to centre on the gate; branch on whether it actually aligned.
-if duburi.vision.align('gate', yaw=0, lat=0, gain=30, duration=20,
+if mongla.vision.align('gate', yaw=0, lat=0, gain=30, duration=20,
                        fallback=sweep_for_gate):
-    duburi.vision.move('gate', fwd=80, mode='area', gain=35, duration=20)
-    duburi.move_forward_dist(3.0, gain=60)
+    mongla.vision.move('gate', fwd=80, mode='area', gain=35, duration=20)
+    mongla.move_forward_dist(3.0, gain=60)
 else:
     log.warn('gate never centred — advancing blindly')
-    duburi.move_forward(4.0, gain=35)
+    mongla.move_forward(4.0, gain=35)
 
 # Confirm a target is still visible after a maneuver, then align on it.
-duburi.yaw_right(45)
-if duburi.detected('gate', stale_after=0.5):
-    duburi.vision.align('gate', yaw=0, lat=0, gain=30, duration=15)
-elif duburi.detected('flare', stale_after=0.5):
-    duburi.vision.align('flare', yaw=0, depth=0, gain=30, duration=15)
+mongla.yaw_right(45)
+if mongla.detected('gate', stale_after=0.5):
+    mongla.vision.align('gate', yaw=0, lat=0, gain=30, duration=15)
+elif mongla.detected('flare', stale_after=0.5):
+    mongla.vision.align('flare', yaw=0, depth=0, gain=30, duration=15)
 else:
     log.warn('no targets visible after yaw step')
 ```
@@ -1534,10 +1534,10 @@ else:
 #### API quick reference
 
 ```python
-duburi.detected(
-    target_class,             # str | ClassRef — e.g. 'gate', duburi.models.gate.gate
+mongla.detected(
+    target_class,             # str | ClassRef — e.g. 'gate', mongla.models.gate.gate
     *,
-    camera: str | None = None,      # defaults to duburi.camera
+    camera: str | None = None,      # defaults to mongla.camera
     stale_after: float = 1.0,       # seconds; detections older than this → False
 ) -> bool
 ```
@@ -1553,16 +1553,16 @@ duburi.detected(
 
 ```bash
 # 1. Confirm detection topic streaming
-ros2 topic hz /duburi/vision/forward/detections   # should be 15-25 Hz
+ros2 topic hz /mongla/vision/forward/detections   # should be 15-25 Hz
 
 # 2. Confirm class names match your code strings (case-sensitive)
-ros2 topic echo /duburi/vision/forward/detections --once   # look for class_id
+ros2 topic echo /mongla/vision/forward/detections --once   # look for class_id
 
 # 3. Confirm class filter correct
-ros2 param get /duburi_detector classes   # should be 'gate' or 'gate,flare'
+ros2 param get /mongla_detector classes   # should be 'gate' or 'gate,flare'
 
 # 4. Test one detected() call from CLI (Python one-liner approach):
-ros2 run duburi_planner mission detected_test   # see detected-paradigm.md §8.2
+ros2 run mongla_planner mission detected_test   # see detected-paradigm.md §8.2
 ```
 
 Full testing guide: [`.claude/context/detected-paradigm.md §8`](./detected-paradigm.md).
@@ -1587,7 +1587,7 @@ Full testing guide: [`.claude/context/detected-paradigm.md §8`](./detected-para
 
 The full 2026 competition run is built as five standalone chunk files directly
 in `missions/` plus a combinator in `missions/task_full_2026.py`.
-Each chunk can be run independently with `ros2 run duburi_planner mission <name>`.
+Each chunk can be run independently with `ros2 run mongla_planner mission <name>`.
 The flat layout is required: `discover()` only globs `missions/*.py` (non-recursive).
 
 **Mission naming convention (commit cec7f37):**
@@ -1608,27 +1608,27 @@ competition launch — inference only runs for the task that needs it.
 
 ```python
 # resume forward detector before gate search
-duburi.resume_detector('forward')   # → ros2 param set /duburi_detector_forward paused false
+mongla.resume_detector('forward')   # → ros2 param set /mongla_detector_forward paused false
 
 # ... gate task body ...
 
 # pause again when done (frees GPU for the next chunk's detector)
-duburi.pause_detector('forward')    # → ros2 param set /duburi_detector_forward paused true
+mongla.pause_detector('forward')    # → ros2 param set /mongla_detector_forward paused true
 ```
 
 #### Dual-camera node naming — pass `camera=`
 
 There is one naming rule for the whole stack: the detector node is
-`/duburi_detector_<camera>`, so `vision_dual.launch.py` creates
-`/duburi_detector_forward` and `/duburi_detector_downward`. Every DSL helper
+`/mongla_detector_<camera>`, so `vision_dual.launch.py` creates
+`/mongla_detector_forward` and `/mongla_detector_downward`. Every DSL helper
 derives the node from its `camera` argument (default = the mission's sticky
 camera), so just pass `camera=`:
 
 ```python
-duburi.set_model('gate_rescue_repair', camera='forward')   # → /duburi_detector_forward
-duburi.set_classes('gate,rescue,repair', camera='forward')
-duburi.resume_detector('forward')                          # camera arg drives the node name
-duburi.set_model('bin_fire_blood', camera='downward')      # → /duburi_detector_downward
+mongla.set_model('gate_rescue_repair', camera='forward')   # → /mongla_detector_forward
+mongla.set_classes('gate,rescue,repair', camera='forward')
+mongla.resume_detector('forward')                          # camera arg drives the node name
+mongla.set_model('bin_fire_blood', camera='downward')      # → /mongla_detector_downward
 ```
 
 #### Bounded search — never infinite forward
@@ -1638,14 +1638,14 @@ Every search loop has an explicit budget and a yaw-sweep fallback:
 ```python
 MAX_STEPS = 20
 for _ in range(MAX_STEPS):
-    if duburi.detected('gate', stale_after=1.0):
+    if mongla.detected('gate', stale_after=1.0):
         break
-    duburi.move_forward(1.5, gain=40)    # 1.5 s steps — short enough to re-check
+    mongla.move_forward(1.5, gain=40)    # 1.5 s steps — short enough to re-check
 else:
     for _ in range(18):                  # 18 × 20° = 360° orbit fallback
-        if duburi.detected('gate', stale_after=0.5):
+        if mongla.detected('gate', stale_after=0.5):
             break
-        duburi.yaw_right(20); duburi.pause(1.0)
+        mongla.yaw_right(20); mongla.pause(1.0)
 ```
 
 #### Gate pass with bbox-fill exit (`move`)
@@ -1654,7 +1654,7 @@ The gate chunk exits forward drive when the gate bbox fills 80% of the frame —
 that's exactly what `move` does:
 
 ```python
-duburi.vision.move('gate', fwd=80, mode='height', gain=35, duration=25)
+mongla.vision.move('gate', fwd=80, mode='height', gain=35, duration=25)
 # exits automatically when the gate fills 80% of frame height = "through"
 ```
 
@@ -1666,8 +1666,8 @@ offsets — never `yaw` — to centre over the bin:
 
 ```python
 # Centre over the bin: lat (left/right) + depth (fore/aft), no yaw.
-duburi.use_camera('downward')
-duburi.vision.align('fire', lat=0, depth=0, err=30, gain=30, duration=20)
+mongla.use_camera('downward')
+mongla.vision.align('fire', lat=0, depth=0, err=30, gain=30, duration=20)
 ```
 
 Tuning that used to be per-call kwargs (`kp_lat`, deadband) is now ROS params —
@@ -1679,9 +1679,9 @@ There's no lock-fire verb. Fire after a truthy fine `align` (its own gate), and
 always name the channel:
 
 ```python
-duburi.fire(3)                        # dropper_1 — always explicit
-if duburi.vision.align('hole', lat=0, depth=0, err=14, gain=12, duration=15):
-    duburi.fire(1)                    # torpedo_1 — only when locked dead-on
+mongla.fire(3)                        # dropper_1 — always explicit
+if mongla.vision.align('hole', lat=0, depth=0, err=14, gain=12, duration=15):
+    mongla.fire(1)                    # torpedo_1 — only when locked dead-on
 ```
 
 ### Pool-day constants (`competition_config.py`)
@@ -1689,7 +1689,7 @@ if duburi.vision.align('hole', lat=0, depth=0, err=14, gain=12, duration=15):
 All depths, headings, bbox fractions, and search budgets live in one file:
 
 ```python
-from duburi_planner.missions.competition_config import (
+from mongla_planner.missions.competition_config import (
     GATE_SEARCH_DEPTH_M,    # -0.4  — initial mission depth
     GATE_PASS_DEPTH_M,      # -0.6  — depth for gate opening
     GATE_PASS_BBOX_FRAC,    # 0.80  — gate height fill = "through"
@@ -1711,26 +1711,26 @@ readings after navigation.
 ```python
 # missions/task_full_2026.py  — detected()-paradigm sequential combinator
 # Fixed API usage (post cec7f37): positional move_forward, lock_heading, release_heading
-def run(duburi, log=None):
+def run(mongla, log=None):
     gate    = _chunk('task_gate')
     slalom  = _chunk('task_slalom')
     _bin    = _chunk('task_bin')
     torpedo = _chunk('task_torpedo')
     _return = _chunk('task_return')
     try:
-        duburi.pause(10.0)
-        duburi.arm()
-        duburi.set_depth(GATE_SEARCH_DEPTH_M, timeout=30)
-        duburi.lock_heading(0.0, timeout=600)   # ← positional, not target=
+        mongla.pause(10.0)
+        mongla.arm()
+        mongla.set_depth(GATE_SEARCH_DEPTH_M, timeout=30)
+        mongla.lock_heading(0.0, timeout=600)   # ← positional, not target=
         for name, chunk in [('gate',gate),('slalom',slalom),('bin',_bin),
                              ('torpedo',torpedo),('return',_return)]:
             try:
-                chunk.run(duburi)
+                chunk.run(mongla)
             except Exception as exc:
                 if log: log(f'[MISSION] {name} FAILED: {exc} — continuing')
     finally:
-        duburi.release_heading()   # ← release_heading, not unlock_heading
-        duburi.stop(); duburi.disarm()
+        mongla.release_heading()   # ← release_heading, not unlock_heading
+        mongla.stop(); mongla.disarm()
 ```
 
 ### FSM alternative (recommended for competition)
@@ -1739,7 +1739,7 @@ def run(duburi, log=None):
 outcome logging, per-task skip on failure:
 
 ```bash
-ros2 run duburi_planner mission fsm_full_2026
+ros2 run mongla_planner mission fsm_full_2026
 ```
 
 Fill `competition_config.py` headings before running. `torpedo_depth_m=None` → torpedo task skipped.
@@ -1748,17 +1748,17 @@ Fill `competition_config.py` headings before running. `torpedo_depth_m=None` →
 
 ```bash
 # ✅ runnable today (gate_rescue_repair.pt exists)
-ros2 run duburi_planner mission task_gate
-ros2 run duburi_planner mission task_return
+ros2 run mongla_planner mission task_gate
+ros2 run mongla_planner mission task_return
 
 # ⏳ logic test (model missing — verify search + timeout + abort flow)
-ros2 run duburi_planner mission task_slalom
-ros2 run duburi_planner mission task_bin
-ros2 run duburi_planner mission task_torpedo
+ros2 run mongla_planner mission task_slalom
+ros2 run mongla_planner mission task_bin
+ros2 run mongla_planner mission task_torpedo
 
 # full 5-task runs
-ros2 run duburi_planner mission task_full_2026   # detected-paradigm
-ros2 run duburi_planner mission fsm_full_2026    # YASMIN FSM (recommended)
+ros2 run mongla_planner mission task_full_2026   # detected-paradigm
+ros2 run mongla_planner mission fsm_full_2026    # YASMIN FSM (recommended)
 ```
 
 See `packages/README.md §3` for per-chunk expected outputs and `models/README.md §Competition models` for model status.
@@ -1796,8 +1796,8 @@ See `packages/README.md §3` for per-chunk expected outputs and `models/README.m
 
 - **`align` with no axis raises `ValueError`.** You must pass a number to
   at least one of `lat=`, `yaw=`, `depth=` (`0` = centre). Target itself
-  may be a class string, a `duburi.models.<alias>.<class>` ClassRef, or
-  sticky `duburi.target` — but the axis is never optional.
+  may be a class string, a `mongla.models.<alias>.<class>` ClassRef, or
+  sticky `mongla.target` — but the axis is never optional.
 - **No `fallback` means no search.** A vision verb that can't see the
   target just runs out its `duration` and returns a falsy `VisionResult`
   (`LOST`/`TIMEOUT`); it never spins in place looking. If the target may
@@ -1812,7 +1812,7 @@ See `packages/README.md §3` for per-chunk expected outputs and `models/README.m
 - **Open-loop seconds are NOT distances.** Currents and battery
   state change the metres-per-second mapping every run. Use vision
   verbs for precision; use open-loop for *getting close*.
-- **`duburi.stop()` between vision verbs is usually unnecessary** —
+- **`mongla.stop()` between vision verbs is usually unnecessary** —
   every vision verb exits with a neutral RC write. Add `stop` only
   if you need an *extra* settle pause.
 
@@ -1820,13 +1820,13 @@ See `packages/README.md §3` for per-chunk expected outputs and `models/README.m
 
 ## 10. Cross-references
 
-- Open-loop verb implementations: `src/duburi_control/duburi_control/{motion_forward,motion_lateral,motion_yaw,motion_depth,heading_lock}.py`
-- DVL distance verbs:             `src/duburi_control/duburi_control/{motion_forward,motion_lateral}.py` (`drive_*_dist`)
-- DVL sources:                    `src/duburi_sensors/duburi_sensors/sources/{nucleus_dvl,composite_bno_dvl}.py`
-- Vision loop body:               `src/duburi_control/duburi_control/motion_vision.py`
-- Vision state cache:             `src/duburi_manager/duburi_manager/vision_state.py`
-- DSL surface:                    `src/duburi_planner/duburi_planner/duburi_dsl.py`
-- ROS param defaults:             `src/duburi_manager/config/vision_tunables.yaml`
+- Open-loop verb implementations: `src/mongla_control/mongla_control/{motion_forward,motion_lateral,motion_yaw,motion_depth,heading_lock}.py`
+- DVL distance verbs:             `src/mongla_control/mongla_control/{motion_forward,motion_lateral}.py` (`drive_*_dist`)
+- DVL sources:                    `src/mongla_sensors/mongla_sensors/sources/{nucleus_dvl,composite_bno_dvl}.py`
+- Vision loop body:               `src/mongla_control/mongla_control/motion_vision.py`
+- Vision state cache:             `src/mongla_manager/mongla_manager/vision_state.py`
+- DSL surface:                    `src/mongla_planner/mongla_planner/mongla_dsl.py`
+- ROS param defaults:             `src/mongla_manager/config/vision_tunables.yaml`
 - DVL integration reference:      `.claude/context/legacy-pixhawk-and-sitl.md`
 - Sensors pipeline design:        `.claude/context/sensors-pipeline.md`
 - CLI cookbook (deck one-liners): `README.md` §9

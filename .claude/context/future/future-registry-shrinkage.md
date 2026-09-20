@@ -17,7 +17,7 @@
 
 ## Why we want to shrink it
 
-Look at `src/duburi_control/duburi_control/commands.py` today:
+Look at `src/mongla_control/mongla_control/commands.py` today:
 
 * 24 verbs, ~190 lines.
 * Every vision verb repeats `'camera': 'laptop', 'target_class':
@@ -151,18 +151,18 @@ Before opening the PR:
 * [ ] `rg "'move_forward'"` (and one verb from every family)
       still returns exactly one hit in `commands.py`.
 * [ ] `rg "def move_forward"` still returns exactly one hit per
-      family in `duburi.py` / `vision_verbs.py`.
+      family in `mongla.py` / `vision_verbs.py`.
 * [ ] `command-reference.md` is regenerated and the `impl path`
       column still resolves.
 * [ ] `colcon test` passes.
-* [ ] `duburi --help` for every verb still prints the right
+* [ ] `mongla --help` for every verb still prints the right
       defaults.
 
 ---
 
 ## Cross-references
 
-* Today's registry: `src/duburi_control/duburi_control/commands.py`
+* Today's registry: `src/mongla_control/mongla_control/commands.py`
 * Field-resolution algorithm: `commands.fields_for()` (top of same
   file)
 * Per-verb impl pointers: [`command-reference.md`](../command-reference.md)

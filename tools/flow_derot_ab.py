@@ -36,7 +36,7 @@ diagnostic instances and take the calibration explicitly -- read off the
 RUNNING node rather than hardcoded, so they cannot disagree with it.
 
 Prerequisites are the three processes `BUGS.md` §5c lists: the manager
-(for /duburi/imu_rates at 50 Hz -- without it every interval refuses), the
+(for /mongla/imu_rates at 50 Hz -- without it every interval refuses), the
 vision launch with flow:=true, and this.
 """
 import argparse
@@ -53,13 +53,13 @@ from rclpy.qos import (QoSDurabilityPolicy, QoSProfile,
                        QoSReliabilityPolicy)
 from std_msgs.msg import Float32, String, UInt8
 
-from duburi_interfaces.msg import DuburiState
+from mongla_interfaces.msg import MonglaState
 
 # Arms are (name, {param: value}). Everything not named here is left at the
 # node's own default, so an arm differs from the reference in exactly one way.
 #
 # ⛔ THE FIRST DE-ROTATION A/B IS WITHDRAWN. It ran on a tool whose fake
-# /duburi/state published yaw_deg = 0.0 against the manager's ~180, which
+# /mongla/state published yaw_deg = 0.0 against the manager's ~180, which
 # flipped the projection sign every interval and cancelled the travel in
 # EVERY arm equally -- so "all three alike" was the bug, not a result.
 # Re-measured here on the fixed tool.
@@ -83,13 +83,13 @@ def running_param(node_name, param):
 class AB(Node):
     def __init__(self, cam, height):
         super().__init__('flow_derot_ab')
-        ns = f'/duburi/vision/{cam}'
+        ns = f'/mongla/vision/{cam}'
         ctrl_qos = QoSProfile(
             depth=1, reliability=QoSReliabilityPolicy.RELIABLE,
             durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
         self._ctrl = self.create_publisher(String, f'{ns}/distance_control',
                                            ctrl_qos)
-        self._state = self.create_publisher(DuburiState, '/duburi/state', 10)
+        self._state = self.create_publisher(MonglaState, '/mongla/state', 10)
         self.dist = {}
         # ⛔ COUNT THE INTERVALS PER ARM. An arm reading 0.00 cm is either
         # "measured, and it did not move" or "measured nothing at all", and
@@ -128,11 +128,11 @@ class AB(Node):
             self.q_ok[k] = 0
 
     def _tick(self):
-        m = DuburiState()
+        m = MonglaState()
         m.header.stamp = self.get_clock().now().to_msg()
         m.depth_m = 0.0
         # ⛔ YAW MUST BE NaN, NOT ZERO. The manager also publishes
-        # /duburi/state, with the board's real heading (~180 deg here). The
+        # /mongla/state, with the board's real heading (~180 deg here). The
         # node keeps whichever arrived last, and `DistanceAccumulator`
         # projects with `e = yaw - axis_yaw`: with two publishers disagreeing
         # by 180 deg, `cos(e)` FLIPS SIGN between intervals and the
@@ -151,9 +151,9 @@ class AB(Node):
 
 
 def spawn(name, params, cam, cal, height, medium):
-    ns = f'/duburi/vision/{cam}'
-    cmd = ['ros2', 'run', 'duburi_vision', 'flow_node', '--ros-args',
-           '-r', f'__node:=duburi_flow_{name}',
+    ns = f'/mongla/vision/{cam}'
+    cmd = ['ros2', 'run', 'mongla_vision', 'flow_node', '--ros-args',
+           '-r', f'__node:=mongla_flow_{name}',
            '-p', f'camera:={cam}',
            '-p', f'medium:={medium}',
            '-p', f'pool_depth_m:={height}',
@@ -240,15 +240,15 @@ def _cleanup(procs):
     # child that gets reparented. Sweep by name and then CHECK -- a cleanup
     # that is merely attempted is how three duplicates of every arm
     # accumulated and silently contaminated a whole measurement.
-    subprocess.run(['pkill', '-f', 'duburi_flow_[BC]_'], capture_output=True)
+    subprocess.run(['pkill', '-f', 'mongla_flow_[BC]_'], capture_output=True)
     time.sleep(1.0)
-    left = subprocess.run(['pgrep', '-f', 'duburi_flow_[BC]_'],
+    left = subprocess.run(['pgrep', '-f', 'mongla_flow_[BC]_'],
                           capture_output=True, text=True)
     if (left.stdout or '').strip():
         print(f'\n  ARMS STILL RUNNING: '
               f'{len((left.stdout or "").split())} process(es). They publish '
               f'to the same\n  topics, so the NEXT run would read them. '
-              f'Clear: pkill -9 -f "duburi_flow_[BC]_"')
+              f'Clear: pkill -9 -f "mongla_flow_[BC]_"')
 
 
 def main():
@@ -257,7 +257,7 @@ def main():
     ap.add_argument('--height', type=float, required=True)
     ap.add_argument('--truth-cm', type=float, default=30.0)
     ap.add_argument('--medium', default='air')
-    ap.add_argument('--node', default='/duburi_flow_velocity')
+    ap.add_argument('--node', default='/mongla_flow_velocity')
     ap.add_argument('--repeat', type=int, default=1,
                     help='slides in one session. Arms are spawned ONCE and '
                          'reused, so a repeat costs only the slide -- and a '
@@ -295,7 +295,7 @@ def main():
             if subs > want:
                 print('  Orphaned flow_node processes are still publishing to '
                       'these topics.\n  Clear them: '
-                      'pkill -f "duburi_flow_[BC]_"')
+                      'pkill -f "mongla_flow_[BC]_"')
             else:
                 print('  Not every arm came up -- is the launch running?')
             return 1

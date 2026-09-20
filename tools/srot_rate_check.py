@@ -7,10 +7,10 @@ never been verified against hardware. Also probes the floor itself: asking for
 100 Hz must be CLAMPED (or denied), not silently accepted and ignored.
 """
 import sys, time, statistics as st
-sys.path.insert(0, '/home/fh1m/duburi_ws/src/duburi_control')
+sys.path.insert(0, '/home/fh1m/mongla_ws/src/mongla_control')
 from pymavlink import mavutil
-from duburi_control.fc import srot_protocol as sp
-from duburi_control.fc.port_guard import PortGuard
+from mongla_control.fc import srot_protocol as sp
+from mongla_control.fc.port_guard import PortGuard
 
 DEV='/dev/ttyUSB0'
 ATT = mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE

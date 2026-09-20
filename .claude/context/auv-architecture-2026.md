@@ -1,6 +1,6 @@
 # The AUV architecture changed — read this before anything else in `srot-*`
 
-> Written by the `srot-control-board` side, for the `duburi_ws` agent. Everything here is a
+> Written by the `srot-control-board` side, for the `mongla_ws` agent. Everything here is a
 > statement about hardware and firmware that already exists and has been bench-verified, not a
 > proposal. The proposals are in the last section and are labelled as such.
 
@@ -47,7 +47,7 @@ Pixhawk (ArduSub) ──MAVLink──> Raspberry Pi (BlueOS) ──UDP──> Je
 ### 1. The BNO085 is on the control board now
 
 This is the change with the largest footprint on your side, and it is the one nothing in
-`duburi_ws` knows about yet.
+`mongla_ws` knows about yet.
 
 **What we can state as fact, and what we cannot.** Fact: the SROT board carries a BNO085 and
 fuses it, and the vehicle is wired board→Jetson on one cable. What we *cannot* see from here is
@@ -58,16 +58,16 @@ vehicle; we cannot.
 
 The board carries the BNO085 on I2C0 and fuses it into the 500 Hz control loop. It already
 publishes fused attitude over MAVLink (`ATTITUDE`, now pinnable to ~55 Hz). It is the *same
-sensor part* your `duburi_sensors` package talks to over USB — one physical layer closer to the
+sensor part* your `mongla_sensors` package talks to over USB — one physical layer closer to the
 thrusters, sampled 10× faster, and on the loop that actually uses it.
 
 What that makes redundant on your side:
 
 | File | Lines | Why it is now duplication |
 |---|---|---|
-| `duburi_sensors/bno085.py` | ~333 | Reads the same part over a second USB link |
-| `duburi_sensors/_discovery.py` | ~155 | Discovers a board that is no longer fitted |
-| `duburi_sensors/composite_bno_dvl.py` | — | Fuses a duplicate against the DVL |
+| `mongla_sensors/bno085.py` | ~333 | Reads the same part over a second USB link |
+| `mongla_sensors/_discovery.py` | ~155 | Discovers a board that is no longer fitted |
+| `mongla_sensors/composite_bno_dvl.py` | — | Fuses a duplicate against the DVL |
 | `firmware/esp32c3_bno085.ino` | — | Firmware for a board that no longer exists |
 | the 5 s boot calibration + 50 Hz reader thread | — | Cost paid per boot, per tick, for a duplicate |
 
@@ -162,7 +162,7 @@ and it is not code:
 > a reader who trusts it defers work that is now unblocked.**
 >
 > Both cameras are calibrated, held-out validated, and the calibrations SHIP
-> in `src/duburi_vision/config/calibration/`:
+> in `src/mongla_vision/config/calibration/`:
 >
 > | | fx (at 1280×720) | HFOV air | HFOV water | views |
 > |---|---|---|---|---|
@@ -172,11 +172,11 @@ and it is not code:
 > `±0.7°`, `calibrateCameraRO`, chosen by k-fold held-out reprojection error,
 > AprilCal Max ERE reported. **`camera_info` publishes a real `K` and `D` on
 > every frame** — measured off the wire on the vehicle: fx 425.61 at 640×360,
-> which is 851.23 correctly rescaled. `duburi_control/bearing.py` does the
+> which is 851.23 correctly rescaled. `mongla_control/bearing.py` does the
 > pixel→radian conversion and agrees with an independent computation to
 > 0.003°.
 >
-> Recalibrating is now an AUV command — `ros2 run duburi_vision calibrate` —
+> Recalibrating is now an AUV command — `ros2 run mongla_vision calibrate` —
 > with a guided browser tool, a library of saved calibrations, one-click
 > re-apply to a swapped camera, and an in-water mode. See
 > [`camera-and-calibration.md`](camera-and-calibration.md).
@@ -187,7 +187,7 @@ and it is not code:
 > Kept below, struck through, because §11 and the migration order both point
 > at it.
 
-~~**The camera FOV numbers do not exist anywhere in `duburi_ws`.** No HFOV/VFOV parameter, no
+~~**The camera FOV numbers do not exist anywhere in `mongla_ws`.** No HFOV/VFOV parameter, no
 calibration file, no checkerboard script; `K` and `D` are published **empty** on every frame.
 The single focal number in the repo, `camera_focal_px: 500.0`, is explicitly commented as a
 guess, and it is a guess made for a different purpose.~~
@@ -245,7 +245,7 @@ nothing in this document changes that.
 2. ~~Measure both cameras' FOV at 640×480. Nothing vision-shaped moves until this exists.~~ **DONE** — 73.88°/63.82° air, held-out validated, shipping in `config/calibration/` and live on `camera_info`.
 3. Run the bench runbook, including the two depth checks. Then, and only then, dives.
 4. Stop defaulting `yaw_source` to a duplicate IMU; A/B the board's attitude against
-   `duburi_sensors` in the water before deleting anything.
+   `mongla_sensors` in the water before deleting anything.
 5. Decide the companion compid. Then we ship the source-specific failsafe.
 
 ## Related

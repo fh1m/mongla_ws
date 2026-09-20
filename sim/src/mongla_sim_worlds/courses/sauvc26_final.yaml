@@ -1,0 +1,116 @@
+name: sauvc26_final
+description: >
+  SAUVC 2026 final arena: navigation gate, orange flare to avoid, the four-drum
+  target zone, and the three coloured bump flares.
+
+  Prop placement follows the rulebook's stated distances. Where the rulebook
+  gives a zone rather than a point - the orange flare, the bump flares, the drum
+  ordering - one legal arrangement is chosen here. Vary them with the runtime
+  prop service or by copying this file.
+
+  Pool coordinates: origin at the pool centre, water surface at z = 0, so the
+  -x wall is at x = -12.5 and the floor at z = -1.6.
+
+pool: sauvc
+
+scene:
+  # Competition water is not clear. `lighting: murky` is what makes that true in
+  # the IMAGE -- it carries the underwater_fx block (turbidity 0.8) written out
+  # as sauvc26_final.fx.yaml. Turn it down to `competition` when debugging and
+  # back up before a pool test.
+  #
+  # The fog_* keys below are inert: gz-sim 8 ignores <scene><fog> on camera
+  # renders (measured -- 18 m -> 3 m changed nothing). Kept only so the world
+  # still carries the intent. Do not tune perception difficulty here.
+  lighting: murky
+  fog_start: 1.0
+  fog_end: 18.0
+  fog_density: 0.03
+
+vehicle:
+  model: mongla_heavy
+  name: mongla
+  pose: [-11.8, 0.0, -0.4]
+  yaw: 0.0
+
+props:
+  - model: sauvc_starting_zone
+    name: start_zone
+    xy: [-11.8, 0.0]
+
+  # "The gate may be located anywhere on a horizontal line, parallel to the side
+  #  of the swimming pool, approximately 16m away from the starting zone."
+  #
+  # 15.3 m from the start pose, and DELIBERATELY not shortened. It reads as an
+  # absurd distance in the viewport, but that was the inert-fog bug making 25 m
+  # of water look clear; with underwater_fx driven by the `lighting:` preset the
+  # gate is correctly invisible from the start and has to be searched for, which
+  # is the actual competition problem. task_navigation has the 7 m drill version.
+  - model: sauvc_final_gate
+    name: gate
+    xy: [3.5, 0.0]
+    yaw: 0.0
+
+  # "A orange flare may be located anywhere in a rectangular zone 4m-8m from
+  #  side of the arena, before the gate." Touching it aborts the attempt.
+  #
+  # THE ORANGE FLARE ZONE IS 4-8 m FROM THE START WALL -- nowhere near the
+  # gate. The course plan draws three bands across the pool: the starting zone
+  # in the first ~4 m, the orange-flare band from ~4 m to ~8 m, and the
+  # red/blue/yellow band from ~8 m to the ~16 m gate line. Placing it 1.5 m
+  # short of the gate (which is what was here) put it in the wrong band
+  # entirely and turned a mid-transit obstacle into a gate-approach hazard.
+  #
+  # Pool x runs -12.5 .. +12.5, so "4-8 m from the start wall" is x in
+  # [-8.5, -4.5]. One legal point inside it; move it anywhere in the band.
+  - model: sauvc_orange_flare
+    name: orange_flare
+    xy: [-6.5, 1.0]
+
+  # Target Acquisition: four drums in a LINE on the green mat, equally spaced at
+  # a 1.6 m PITCH (Figure 16). The pitch is cross-checked against
+  # BumblebeeAS/bb_worlds sauvc_target_acquisition_area (MIT), which places
+  # them at x = +/-0.8 and +/-2.4 -- an independent read by a team that has
+  # been to the venue. 4.8 m of drums centred on the 6.0 m mat. One blue and three red, one red carrying the
+  # 45 kHz pinger. Which drum is blue is randomised between attempts -- move them
+  # at runtime rather than editing this file.
+  - model: sauvc_target_mat
+    name: target_mat
+    xy: [10.5, 0.0]
+    yaw: 1.5708
+  - model: sauvc_drum_red
+    name: drum_red_a
+    xy: [10.5, 2.4]
+  - model: sauvc_drum_blue
+    name: drum_blue
+    xy: [10.5, 0.8]
+  - model: sauvc_drum_red_pinger
+    name: drum_pinger
+    xy: [10.5, -0.8]
+  - model: sauvc_drum_red
+    name: drum_red_b
+    xy: [10.5, -2.4]
+
+
+
+  # Communication & Localization: "these flares could be located ANYWHERE
+  # within" the 8-16 m band -- so they are scattered across it, as the course
+  # plan draws them, not lined up.
+  #
+  # A row of three evenly spaced flares is the one arrangement that makes the
+  # task easy: find one, and the other two are a fixed offset away. Scattering
+  # them is what forces a real search, and the bumping ORDER (given to the team
+  # after Navigation) is what makes it a sequence rather than a sweep.
+  #
+  # The band is x in [-4.5, 3.5]. These three points follow the plan's own
+  # figure: blue nearer the start and high, red further on and high, yellow
+  # mid-band and low. Move them anywhere inside the band between runs.
+  - model: sauvc_flare_blue
+    name: flare_blue
+    xy: [-2.0, 2.2]
+  - model: sauvc_flare_red
+    name: flare_red
+    xy: [0.8, 3.1]
+  - model: sauvc_flare_yellow
+    name: flare_yellow
+    xy: [-0.8, -3.4]

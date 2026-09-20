@@ -10,23 +10,23 @@ streamed to the vehicle.
 | Pad is on… | Read by | Use when |
 |---|---|---|
 | the machine running the **browser** | the lab UI, via the Gamepad API | the lab is on another machine (the QGC arrangement) |
-| the machine running the **lab** | `duburi_sim_web/joystick.py` | lowest latency, and no browser needed at all |
+| the machine running the **lab** | `mongla_sim_web/joystick.py` | lowest latency, and no browser needed at all |
 
 Both drive the **same `TeleopStreamer`**, so there is never a second RC writer.
 That streamer connects on **tcp:5763** — the port that exists precisely so
 teleop never fights the manager's `udpin:14550`.
 
 ```bash
-ros2 run duburi_sim_bringup duburi_sim sim
-ros2 run duburi_sim_bringup duburi_sim stack --no-vision
-ros2 run duburi_sim_bringup duburi_sim lab        # open the printed URL
+ros2 run mongla_sim_bringup mongla_sim sim
+ros2 run mongla_sim_bringup mongla_sim stack --no-vision
+ros2 run mongla_sim_bringup mongla_sim lab        # open the printed URL
 #   [JOY  ] Logitech Gamepad F310 on /dev/input/js0
 
 # pin a specific device instead of auto-detect:
-DUBURI_JOYSTICK=/dev/input/js1 ros2 run duburi_sim_bringup duburi_sim lab
+MONGLA_JOYSTICK=/dev/input/js1 ros2 run mongla_sim_bringup mongla_sim lab
 
 # terminal status, no browser:
-ros2 run duburi_sim_bringup duburi_sim joystick
+ros2 run mongla_sim_bringup mongla_sim joystick
 #   ACTIVE Logitech Gamepad F310  fwd----##|-------- lat--------|-------- … gain 0.55
 ```
 

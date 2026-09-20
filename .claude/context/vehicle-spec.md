@@ -19,7 +19,7 @@ the bug. Architecture and reasoning: [The Shift](../../docs/the-shift.md).
 | Depth | Bar30 / MS5837, **on the board** | reported as altitude: negative below the surface |
 | Leak · kill · water temp | on the board | kill state comes from the power board over ESP-NOW |
 | Batteries | **two packs**: electronics (PM1) and thrusters (PM2) | de-multiplex `BATTERY_STATUS` by `id` |
-| Cameras | 2 × USB — forward and downward | measured calibration in `duburi_vision/config/calibration/` |
+| Cameras | 2 × USB — forward and downward | measured calibration in `mongla_vision/config/calibration/` |
 | Radio | LoRa (SX127x) to the Bondor ground station | ⛔ needs an external antenna: an aluminium hull is a Faraday cage |
 | Payload | the board's own outputs; `fire(N)` = **board channel N** (1–16) | the board's channel role decides whether it fires |
 
@@ -46,7 +46,7 @@ the bug. Architecture and reasoning: [The Shift](../../docs/the-shift.md).
 
 **Duburi 4.5** (primary; grabber / dropper / torpedo) and **Dubomini 2.0** (agile,
 manipulator-free) run the same stack. Mongla is the soul; the hulls are bodies. The workspace
-name `duburi_ws` and the `/duburi/*` namespace are back-compat and are not renamed.
+name `mongla_ws` and the `/mongla/*` namespace are back-compat and are not renamed.
 
 ## Where a number belongs
 

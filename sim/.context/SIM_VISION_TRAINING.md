@@ -20,16 +20,16 @@ share directory, so the order matters.
 
 ```bash
 source /opt/ros/humble/setup.bash
-source ~/Ros_workspaces/duburi_ws/install/setup.bash
-source ~/Ros_workspaces/duburi_ws/sim/install/setup.bash
+source ~/Ros_workspaces/mongla_ws/install/setup.bash
+source ~/Ros_workspaces/mongla_ws/sim/install/setup.bash
 export GZ_IP=127.0.0.1
-export DUBURI_WS=~/Ros_workspaces/duburi_ws
+export MONGLA_WS=~/Ros_workspaces/mongla_ws
 ```
 
 Build order is the same, and only needed after a code change:
 
 ```bash
-cd ~/Ros_workspaces/duburi_ws && ./build_dubomini.sh
+cd ~/Ros_workspaces/mongla_ws && ./build_mongla.sh
 cd sim && ./build_sim.sh
 ```
 
@@ -41,8 +41,8 @@ cd sim && ./build_sim.sh
 gz-transport, and the failure looks like flaky physics rather than a duplicate.
 
 ```bash
-ros2 run duburi_sim_bringup duburi_sim stop
-ros2 run duburi_sim_bringup duburi_sim sim course:=sauvc26_final
+ros2 run mongla_sim_bringup mongla_sim stop
+ros2 run mongla_sim_bringup mongla_sim sim course:=sauvc26_final
 #   --headless                for dataset capture / CI (no GUI)
 #   course:=task_navigation   7 m gate drill
 #   course:=task_target_acquisition   drums + mat only
@@ -53,7 +53,7 @@ is not a good instrument here** — it deserialises every ~1 MB image in Python
 and its own cost shows up as the publisher being slow. Count arrivals instead:
 
 ```bash
-ros2 topic hz /duburi/sim/front_camera/image_raw   # expect ~12 Hz, jitter ~10 ms
+ros2 topic hz /mongla/sim/front_camera/image_raw   # expect ~12 Hz, jitter ~10 ms
 ```
 
 Healthy is **~12 Hz with single-digit-millisecond jitter**. If you see ~3 Hz with
@@ -65,7 +65,7 @@ several hundred ms of jitter, something re-enabled the DVL beam visuals — see
 ## 2. T2 — the control stack
 
 ```bash
-ros2 run duburi_sim_bringup duburi_sim stack --no-vision
+ros2 run mongla_sim_bringup mongla_sim stack --no-vision
 ```
 
 `--no-vision` because §3 launches vision separately, which is what you want
@@ -74,8 +74,8 @@ while iterating on models: restart the detector without restarting the vehicle.
 Prove the loop before trusting a mission:
 
 ```bash
-ros2 run duburi_sim_bridge contract_check
-ros2 run duburi_sim_bringup duburi_sim smoke
+ros2 run mongla_sim_bridge contract_check
+ros2 run mongla_sim_bringup mongla_sim smoke
 ```
 
 ---
@@ -85,9 +85,9 @@ ros2 run duburi_sim_bringup duburi_sim smoke
 Both sim cameras, both detectors, boxes on `image_debug`:
 
 ```bash
-ros2 launch duburi_vision vision_dual.launch.py \
-    fwd_topic:=/duburi/sim/front_camera/image_fx \
-    dwn_topic:=/duburi/sim/bottom_camera/image_fx \
+ros2 launch mongla_vision vision_dual.launch.py \
+    fwd_topic:=/mongla/sim/front_camera/image_fx \
+    dwn_topic:=/mongla/sim/bottom_camera/image_fx \
     fwd_model:=gate_rescue_repair fwd_classes:=gate,rescue,repair \
     dwn_model:=bin_fire_blood dwn_classes:=blood,fire \
     device_cls:=cpu paused:=false viewer:=true
@@ -98,20 +98,20 @@ Four things here are not optional and each one fails silently if you skip it:
 | Argument | Why |
 |---|---|
 | `fwd_topic:` / `dwn_topic:` | Without a topic source the camera node opens a **webcam**, not the sim. |
-| `paused:=false` | The launch defaults to **paused** — missions resume the detector they need. Without it the HUD reads `det=ERR dets=0` and looks broken. Resume live with `ros2 param set /duburi_detector_forward paused false`. |
+| `paused:=false` | The launch defaults to **paused** — missions resume the detector they need. Without it the HUD reads `det=ERR dets=0` and looks broken. Resume live with `ros2 param set /mongla_detector_forward paused false`. |
 | `device_cls:=cpu` | On a box with no CUDA the detector node **dies** at the `cuda:0` default. |
 | `image_fx` not `image_raw` | `image_fx` is the water. `image_raw` is a clean render no pool has. |
-| `fwd_model:` not `model:` | **`ros2 launch` silently ignores an unknown `key:=value`.** `model:=sauvc_sim` is accepted, does nothing, and the detector quietly runs the `fwd_model` default — you get plausible detections from the WRONG weights. Verify with `ros2 param get /duburi_detector_forward classes`. |
+| `fwd_model:` not `model:` | **`ros2 launch` silently ignores an unknown `key:=value`.** `model:=sauvc_sim` is accepted, does nothing, and the detector quietly runs the `fwd_model` default — you get plausible detections from the WRONG weights. Verify with `ros2 param get /mongla_detector_forward classes`. |
 | `fwd_classes:` alongside it | The class allowlist is a SEPARATE argument that does not follow the model. Point `fwd_model` at new weights without it and every detection is filtered out: a silent `[]` forever. |
 
-Healthy looks like this on the `duburi_display` line:
+Healthy looks like this on the `mongla_display` line:
 
 ```
 [VIS] fps=2.3 dets=1 | gate(50%) ex=-0.00 ey=+0.72 cam=OK det=OK trk=OK
 ```
 
 `cam=OK det=OK trk=OK` is the thing to read. Watch the boxes with
-`ros2 run rqt_image_view rqt_image_view /duburi/vision/forward/image_debug`.
+`ros2 run rqt_image_view rqt_image_view /mongla/vision/forward/image_debug`.
 
 ---
 
@@ -121,7 +121,7 @@ The recorder writes frames, an MP4, and **YOLO labels projected from Gazebo
 ground truth** — so there is no hand-labelling step at all.
 
 ```bash
-ros2 run duburi_sim_bridge record_cameras \
+ros2 run mongla_sim_bridge record_cameras \
     --duration 60 --frames --labels \
     --lighting murky --course sauvc26_final --label transit_murky
 ```
@@ -131,12 +131,12 @@ ros2 run duburi_sim_bridge record_cameras \
 fifth terminal, during the capture:
 
 ```bash
-ros2 run duburi_planner duburi arm
-ros2 run duburi_planner duburi set_depth --target -0.6
-ros2 run duburi_planner duburi move_forward --duration 14 --gain 45
-ros2 run duburi_planner duburi yaw_right   --target 25
-ros2 run duburi_planner duburi move_forward --duration 10 --gain 40
-ros2 run duburi_planner duburi disarm
+ros2 run mongla_planner mongla arm
+ros2 run mongla_planner mongla set_depth --target -0.6
+ros2 run mongla_planner mongla move_forward --duration 14 --gain 45
+ros2 run mongla_planner mongla yaw_right   --target 25
+ros2 run mongla_planner mongla move_forward --duration 10 --gain 40
+ros2 run mongla_planner mongla disarm
 ```
 
 `--lighting` overrides the course's water, so a **murky/clear pair of the same
@@ -144,7 +144,7 @@ scene** comes out of one sim launch — two courses would also differ in prop
 placement, which is not the variable you want to isolate:
 
 ```bash
-ros2 run duburi_sim_bridge record_cameras --duration 60 --frames --labels \
+ros2 run mongla_sim_bridge record_cameras --duration 60 --frames --labels \
     --lighting clear --course sauvc26_final --label transit_clear
 ```
 
@@ -166,7 +166,7 @@ python3 -c "import json;print(json.load(open('$D/meta.json'))['counts'])"
 ## 5. T5 — build the YOLO dataset
 
 ```bash
-ros2 run duburi_sim_bridge dataset_to_yolo \
+ros2 run mongla_sim_bridge dataset_to_yolo \
     --runs 'transit_*' --out ~/sim_yolo_gate --camera front --link
 ```
 
@@ -208,11 +208,11 @@ names = yaml.safe_load(names)['names']
 (pathlib.Path.home()/'models'/'sauvc_sim.yaml').write_text(
     yaml.safe_dump({'names': names}, sort_keys=False))
 PY
-cd ~/Ros_workspaces/duburi_ws && ./build_dubomini.sh   # mirrors ~/models into the tree
+cd ~/Ros_workspaces/mongla_ws && ./build_mongla.sh   # mirrors ~/models into the tree
 ```
 
 > Weights are gitignored by extension and live in `~/models`;
-> `build_dubomini.sh` mirrors them into `src/duburi_vision/models/`. Model
+> `build_mongla.sh` mirrors them into `src/mongla_vision/models/`. Model
 > identity is the **stem**, so `sauvc_sim.pt` + `sauvc_sim.yaml` is referred to
 > everywhere as `sauvc_sim`.
 
@@ -221,17 +221,17 @@ cd ~/Ros_workspaces/duburi_ws && ./build_dubomini.sh   # mirrors ~/models into t
 ## 7. T7 — run the model back in the sim
 
 ```bash
-ros2 launch duburi_vision vision_dual.launch.py \
-    fwd_topic:=/duburi/sim/front_camera/image_fx \
-    dwn_topic:=/duburi/sim/bottom_camera/image_fx \
+ros2 launch mongla_vision vision_dual.launch.py \
+    fwd_topic:=/mongla/sim/front_camera/image_fx \
+    dwn_topic:=/mongla/sim/bottom_camera/image_fx \
     fwd_model:=sauvc_sim \
     fwd_classes:=final_gate,orange_flare,starting_zone \
     dwn_model:=sauvc_sim dwn_classes:=drum_red,drum_blue \
     device_cls:=cpu paused:=false viewer:=true
 ```
 
-**Order matters: stack (T2) BEFORE vision (T3).** `duburi_sim stack` runs a
-cleanup pass that matches `ros2 launch duburi_vision` and `lib/duburi_vision/`,
+**Order matters: stack (T2) BEFORE vision (T3).** `mongla_sim stack` runs a
+cleanup pass that matches `ros2 launch mongla_vision` and `lib/mongla_vision/`,
 so starting the stack second kills a vision pipeline you already have running.
 Nothing is logged in the vision terminal -- the processes simply stop, and the
 verbs then fail with `NO_CAMERA / no camera_info`.
@@ -242,9 +242,9 @@ downward camera node tries to open webcam index 4, fails, and dies.
 Then drive it with the two vision verbs:
 
 ```bash
-ros2 run duburi_planner duburi vision_align --camera forward \
+ros2 run mongla_planner mongla vision_align --camera forward \
     --target_class final_gate --axes yaw,lat --err_px 40 --gain 30 --duration 25
-ros2 run duburi_planner duburi vision_move  --camera forward \
+ros2 run mongla_planner mongla vision_move  --camera forward \
     --target_class final_gate --fwd_fill 70 --mode area --gain 35 --duration 30
 ```
 
@@ -307,7 +307,7 @@ everywhere, which is what "hit and miss" looks like from the operator's seat.
    props at identical coordinates, so "where the gate is" is a constant the
    model can learn instead of what a gate looks like. The runtime spawn service
    exists for exactly this:
-   `ros2 run duburi_sim_scenarios props add sauvc_final_gate gate <x> <y>`.
+   `ros2 run mongla_sim_scenarios props add sauvc_final_gate gate <x> <y>`.
 3. **Record the courses that contain the missing classes** --
    `sauvc26_qualification` for `qual_gate`, `task_target_acquisition` for the
    drums and the mat.
@@ -332,4 +332,4 @@ one moved the number.
 
 **What does NOT transfer to the pool:** detection thresholds and vision gains.
 Sim imagery is cleaner than pool water even at `murky`. Control behaviour and
-every `/duburi/move` verb do transfer.
+every `/mongla/move` verb do transfer.

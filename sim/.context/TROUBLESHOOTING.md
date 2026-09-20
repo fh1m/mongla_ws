@@ -1,8 +1,8 @@
 # Troubleshooting
 
 > ℹ **Absorbed 2026-08-27.** This workspace is no longer the sibling tree
-> `Ros_workspaces/duburi-sim_ws`; it lives inside the `duburi_ws` repo at
-> `duburi_ws/sim/` and is under version control. Paths below have been
+> `Ros_workspaces/mongla-sim_ws`; it lives inside the `mongla_ws` repo at
+> `mongla_ws/sim/` and is under version control. Paths below have been
 > updated; any remaining "sibling" phrasing is historical.
 
 ## Lost manual control / arm NO_ACK
@@ -13,20 +13,20 @@ failsafe on pilot input.
 **Fix:**
 
 ```zsh
-ros2 run duburi_sim_bringup duburi_sim stop
-ros2 run duburi_sim_bringup duburi_sim sim
-ros2 run duburi_sim_bringup duburi_sim stack --no-vision
-# ensure only one /duburi_manager
-ros2 node list | grep duburi_manager
+ros2 run mongla_sim_bringup mongla_sim stop
+ros2 run mongla_sim_bringup mongla_sim sim
+ros2 run mongla_sim_bringup mongla_sim stack --no-vision
+# ensure only one /mongla_manager
+ros2 node list | grep mongla_manager
 ```
 
-Sim params set `FS_PILOT_INPUT` appropriately in `duburi_sub.parm`.
+Sim params set `FS_PILOT_INPUT` appropriately in `mongla_sub.parm`.
 
 ## No AUV in Gazebo / empty world
 
 **Cause:** Second headless sim already owns world / FDM port **9002**.
 
-**Fix:** `duburi_sim stop`, then one `sim` with GUI. Look at **x ≈ −11.8**.
+**Fix:** `mongla_sim stop`, then one `sim` with GUI. Look at **x ≈ −11.8**.
 
 ## Black / missing lab cameras
 
@@ -40,8 +40,8 @@ Sim params set `FS_PILOT_INPUT` appropriately in `duburi_sub.parm`.
 Lab auto-binds if 28765 busy (Electron often steals 8088 historically).
 
 ```zsh
-cat /tmp/duburi_lab_port.txt   # if your launcher wrote it
-echo $DUBURI_LAB_PORT
+cat /tmp/mongla_lab_port.txt   # if your launcher wrote it
+echo $MONGLA_LAB_PORT
 ss -tlnp | grep 2876
 ```
 
@@ -70,7 +70,7 @@ Open `http://localhost:<actual_port>/`.
 ## X11 / Gazebo GUI fails
 
 - Set `DISPLAY` and readable `XAUTHORITY` (helper tries mutter cookie).
-- Or use `duburi_sim sim --headless` (physics still runs).
+- Or use `mongla_sim sim --headless` (physics still runs).
 
 ## gz-transport flaky / commands dropped
 
@@ -82,11 +82,11 @@ Required on hosts with many NICs; launch also sets this.
 
 ## Verb audit — what each verb PHYSICALLY does
 
-Measured against `/duburi/sim/ground_truth`, 2026-08-28. Rerun with:
+Measured against `/mongla/sim/ground_truth`, 2026-08-28. Rerun with:
 
 ```bash
-ros2 run duburi_sim_bridge verb_audit            # all cases
-ros2 run duburi_sim_bridge verb_audit --only turn,arc
+ros2 run mongla_sim_bridge verb_audit            # all cases
+ros2 run mongla_sim_bridge verb_audit --only turn,arc
 ```
 
 The stack's telemetry cannot referee itself — that is how the AHRS2 depth offset
@@ -149,8 +149,8 @@ validated in the pool, not here.**
 
 ## Verb audit — what each verb PHYSICALLY does
 
-Measured against `/duburi/sim/ground_truth`, not against the verb's own result.
-Rerun with `ros2 run duburi_sim_bridge verb_audit`.
+Measured against `/mongla/sim/ground_truth`, not against the verb's own result.
+Rerun with `ros2 run mongla_sim_bridge verb_audit`.
 
 Two failure shapes are worth naming, because unit tests cannot see either:
 
@@ -167,7 +167,7 @@ Two failure shapes are worth naming, because unit tests cannot see either:
 | `head` | reports 46.5° vs truth 43.6° | OK |
 | `lock_heading` | **0.0° drift under lateral thrust** (the disturbance test) | OK |
 | `unlock_heading` | releases | OK |
-| `set_mode` | `/duburi/state` confirms ALT_HOLD and MANUAL | OK |
+| `set_mode` | `/mongla/state` confirms ALT_HOLD and MANUAL | OK |
 | `set_depth` | true depth within 2.5 cm of command | OK |
 | `style_yaw` | −58.6° rotation | moves; times out short (see below) |
 | `style_roll` | needs headroom; inconclusive near the surface | retest at depth |
@@ -183,11 +183,11 @@ Two failure shapes are worth naming, because unit tests cannot see either:
 Harmless. `<visualize>true</visualize>` on the DVL draws the four beams in the
 **Gazebo GUI**, and headless has no renderer for GUI markers, so gz warns once
 per attempt. The beams are still published as an RViz `MarkerArray` on
-`/duburi/sim/dvl/beams`, which is the path that works headless.
+`/mongla/sim/dvl/beams`, which is the path that works headless.
 
 ### Verifying RViz displays: count subscribers BY NAME
 
-`ros2 run duburi_sim_bridge rviz_check` asserts every topic the config
+`ros2 run mongla_sim_bridge rviz_check` asserts every topic the config
 references is subscribed **by RViz specifically**, not merely subscribed.
 
 The first version counted subscribers and gave a **false pass**: `underwater_fx`
@@ -228,7 +228,7 @@ front camera and assume it transfers to the drop.**
 Measure it yourself rather than eyeballing a fogged frame:
 
 ```bash
-ros2 topic echo /duburi/sim/bottom_camera/image_raw --once   # RAW render
+ros2 topic echo /mongla/sim/bottom_camera/image_raw --once   # RAW render
 ```
 
 `image_raw` is the clean Gazebo render; `underwater_fx` publishes its degraded
@@ -320,7 +320,7 @@ rather than an error.** The order matters: each was hidden by the one before it.
 
 | # | what looked true | what was true | what caught it |
 |---|---|---|---|
-| 1 | "the shader does not animate" | the water surface **was not in frame at all** — the pose was pinned on `duburi`, and a buoyant hull with CoB above CoM rights itself in milliseconds, so a pitched-up camera is level again before the next frame | painting the surface opaque magenta and counting magenta pixels: **0.00 %** |
+| 1 | "the shader does not animate" | the water surface **was not in frame at all** — the pose was pinned on `mongla`, and a buoyant hull with CoB above CoM rights itself in milliseconds, so a pitched-up camera is level again before the next frame | painting the surface opaque magenta and counting magenta pixels: **0.00 %** |
 | 2 | "the mesh fails to load" | the visual had **no `<geometry>` wrapper**. `_geometry_box()` wraps; the hand-written `<mesh>` string did not, SDF dropped it, and the visual rendered nothing — silently | box control also 0.00 % magenta, which ruled the mesh out |
 | 3 | "the shader is inert" | the sheet was **single-sided facing +z**, and every camera here is UNDER it, so Ogre2 culled it. Not an error, nothing logged | box (has a downward face) **100 %** magenta vs mesh **0.00 %**, same material, same pose |
 
@@ -431,7 +431,7 @@ will change and the numbers will read as authoritative to the next person.
 > keyed on a range image. It is **off by default**, and only because the two
 > extra render passes took the cameras from **12 Hz to 4 Hz**
 > (`PHYSICS.md:361`). Turn it on with `range_cameras: true` in
-> `duburi_heavy/configs.yaml` and accept that cost knowingly.
+> `mongla_heavy/configs.yaml` and accept that cost knowingly.
 >
 > And the `rgbd_camera` route it recommended was **consciously rejected**
 > (`model.sdf.in:229-232`): it moves the colour topic and breaks the `image_raw`
@@ -467,12 +467,12 @@ will reproduce the bug in your tool and blame the sim.
 
 ```bash
 # T1  sim (image_raw -> underwater_fx -> image_fx)
-ros2 run duburi_sim_bringup duburi_sim sim --headless course:=sauvc26_final
+ros2 run mongla_sim_bringup mongla_sim sim --headless course:=sauvc26_final
 
 # T2  both detectors on the sim's two cameras
-ros2 launch duburi_vision vision_dual.launch.py \
-    fwd_topic:=/duburi/sim/front_camera/image_fx \
-    dwn_topic:=/duburi/sim/bottom_camera/image_fx \
+ros2 launch mongla_vision vision_dual.launch.py \
+    fwd_topic:=/mongla/sim/front_camera/image_fx \
+    dwn_topic:=/mongla/sim/bottom_camera/image_fx \
     model:=gate_rescue_repair dwn_model:=bin_fire_blood \
     device_cls:=cpu paused:=false
 ```
@@ -481,7 +481,7 @@ ros2 launch duburi_vision vision_dual.launch.py \
 `paused:=true` on purpose — missions resume the one detector a task needs — so
 without it the HUD sits at `det=ERR trk=ERR` with `dets=0` and looks broken. It
 is not; nothing has resumed the detector. Resume live with
-`ros2 param set /duburi_detector_forward paused false`.
+`ros2 param set /mongla_detector_forward paused false`.
 
 `device_cls:=cpu` on a box with no CUDA: registry mode raises and the detector
 node **dies** if left at the `cuda:0` default.
@@ -502,8 +502,8 @@ outer scope and overwrote `stack.launch.py`'s own `vision` argument. The vision
 include then skipped itself via `IfCondition` — no error, no node, for any value
 of `vision:=`. That is why the older notes here tell you to run `--no-vision`.
 
-Both cameras now run: `duburi_sim stack` gives
-`/duburi_detector_forward` (sim front camera) and `/duburi_detector_downward`
+Both cameras now run: `mongla_sim stack` gives
+`/mongla_detector_forward` (sim front camera) and `/mongla_detector_downward`
 (sim bottom camera). If only one appears, check the `GroupAction(scoped=True)`
 around the manager include is still there — `test_sim_contract_drift.py` asserts
 it precisely because the failure is silent.
@@ -577,19 +577,19 @@ timeout as non-fatal in sim and real on hardware — see
 
 ## Depth bouncing / GPS spam
 
-Historical: duplicate sims; fake GPS. Current `duburi_sub.parm` disables GPS
+Historical: duplicate sims; fake GPS. Current `mongla_sub.parm` disables GPS
 noise paths — keep one sim only.
 
-## Stack cannot find duburi_ws
+## Stack cannot find mongla_ws
 
 ```zsh
-export DUBURI_WS=/path/to/duburi_ws
+export MONGLA_WS=/path/to/mongla_ws
 # must contain install/setup.bash
 ```
 
 ## srot branch hunts USB board
 
-Always use `duburi_sim stack` (forces `flight_controller:=pixhawk`) or pass that
+Always use `mongla_sim stack` (forces `flight_controller:=pixhawk`) or pass that
 arg yourself. See [INTEGRATION_DUBURI_WS.md](INTEGRATION_DUBURI_WS.md).
 
 
@@ -602,7 +602,7 @@ first.
 
 Measured: 0.4 m particles at 4000/s, the emitter confirmed alive (`gz topic -i
 -t /marine_snow` shows a subscriber, the rate command returns rc=0), and the
-frame off `/duburi/sim/front_camera/image_fx` came back as clean as with the
+frame off `/mongla/sim/front_camera/image_fx` came back as clean as with the
 emitter switched off. Per-pixel stddev over 14 frames was **1.4700 with snow
 and 1.4678 without** — indistinguishable, and the "without" arm was marginally
 higher.
@@ -649,7 +649,7 @@ working page either way, and prints a WARNING naming the stale directory.
 To clear the warning properly, rebuild the package after a frontend build:
 
 ```bash
-cd sim && ./build_sim.sh          # or: colcon build --base-paths src --packages-select duburi_sim_web
+cd sim && ./build_sim.sh          # or: colcon build --base-paths src --packages-select mongla_sim_web
 ```
 
 Note the installed `static/assets/` accumulates every past build's hashes plus
@@ -688,7 +688,7 @@ Measured on the worst course afterwards: offset +0.017 m, `surface()` confirms
 in 12.3 s with the hull genuinely at −0.074 m, and depth readback tracks truth
 to 7 mm at −0.95 m.
 
-`depth_reference` (in `duburi_sim_bridge`, on by default) re-measures this at
+`depth_reference` (in `mongla_sim_bridge`, on by default) re-measures this at
 every startup and fails loudly if a new course spawns too deep. It only
 reports — see below for why it must never correct.
 

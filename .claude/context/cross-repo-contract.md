@@ -1,13 +1,13 @@
-# Cross-repo contract — duburi_ws ↔ SROT ↔ Bondor
+# Cross-repo contract — mongla_ws ↔ SROT ↔ Bondor
 
-This is `duburi_ws`'s copy of the shared agent instructions. Each sibling repo carries the same
+This is `mongla_ws`'s copy of the shared agent instructions. Each sibling repo carries the same
 **Shared invariants** section verbatim in its `AGENTS.md`.
 
 ## The system
 
 ```
 Jetson Orin Nano  ──USB serial 115200──  SROT board  ──1 Mbaud UART──  RP2350 Pico ── 8× ESC
-  duburi_ws (this repo):                  "Hengla"                      thruster/RPM
+  mongla_ws (this repo):                  "Hengla"                      thruster/RPM
   ROS 2, YOLO11, missions,                (srot-control-board)
   payload, mission DSL                        │
                                               └── LoRa ── Bondor (srot-ground-station)
@@ -18,7 +18,7 @@ directly. Bondor is a parallel, independent link and is **not** in the control p
 
 | Repo | Owns |
 |---|---|
-| **duburi_ws** (here) | perception, mission logic, the action/DSL surface, payload decisions |
+| **mongla_ws** (here) | perception, mission logic, the action/DSL surface, payload decisions |
 | **srot-control-board** | every real-time control loop at 500 Hz, arming, all failsafes |
 | **srot-ground-station** | parameters, calibration, tuning, motor test, manual piloting |
 | **srot-esc-flasher** | one-time bench tool; Bluejay onto the ESCs (precondition for RPM) |
@@ -37,7 +37,7 @@ exception is raised, the vehicle just behaves wrong.
    `MAV_CMD_SROT_MOVE = 31000`; the `SROT_MOVE` p1 type codes and their ordering; the
    `FlightMode` integers; `PCA_RELAY_BASE_CH = 8`; `MAVLINK_BAUD = 115200`;
    `GCS_FAILSAFE_MS = 5000`.
-   We mirror them in `src/duburi_control/duburi_control/fc/srot_protocol.py` — **our one
+   We mirror them in `src/mongla_control/mongla_control/fc/srot_protocol.py` — **our one
    copy** — and `test_srot_protocol_drift.py` reads the firmware headers directly and fails on
    divergence.
 
@@ -96,14 +96,14 @@ enforces that nothing reaches an ArduSub-only mode gate.
 
 ## ⚖ Ownership, settled 2026-08-07 after the water test
 
-**We develop `duburi_ws` only.** No agent working in this repo writes code in
+**We develop `mongla_ws` only.** No agent working in this repo writes code in
 `srot-control-board`, `srot-ground-station` or `srot-esc-flasher` any more — the firmware and
 GCS teams own those, with their own agents. Our obligation to them is exactly one thing:
 **stay in harmony**, and prove it mechanically.
 
 | direction | mechanism |
 |---|---|
-| **them → us** | a **pull request on `duburi_ws`** ([#5](https://github.com/fh1m/duburi_ws/pull/5) is the template). They never commit here directly. |
+| **them → us** | a **pull request on `mongla_ws`** ([#5](https://github.com/fh1m/mongla_ws/pull/5) is the template). They never commit here directly. |
 | **us → them** | a **pull request on their repo**, appending a numbered Round to `TASKS_FROM_DUBURI_WS.md` ([srot-control-board#1](https://github.com/RakibulIslam1/srot-control-board/pull/1) is the template). Symmetric with the above: a PR is a *request*, and they merge it. |
 | **proof of harmony** | `Mongla_others/srot-control-board` is our **read-only mirror** of the firmware. Fast-forward it to the flashed baseline, then run `test_srot_protocol_drift.py` — it reads their headers directly and fails on any divergence. |
 
@@ -111,7 +111,7 @@ GCS teams own those, with their own agents. Our obligation to them is exactly on
 to their `main`, never edit their C/C++, and never "helpfully" fix a firmware defect in their
 tree — describe it, cite `file:line` against a named commit, and suggest a fix they can reject.
 The reason is not politeness: their agent reasons about code it wrote, and a silent edit from
-us breaks that. Work on a `duburi-ws/<topic>` branch, then **return the mirror to their `main`
+us breaks that. Work on a `mongla-ws/<topic>` branch, then **return the mirror to their `main`
 and re-run the drift suite** — a checked-out feature branch would make the mirror lie about
 what is flashed, which is the one thing it exists to tell the truth about.
 
@@ -123,7 +123,7 @@ So the routine when a firmware revision lands is fixed and short:
 
 ```bash
 git -C Mongla_others/srot-control-board fetch origin && git -C Mongla_others/srot-control-board merge --ff-only origin/main
-SROT_FW_DIR=$PWD/Mongla_others/srot-control-board python -m pytest src/duburi_control/test/test_srot_protocol_drift.py -q
+SROT_FW_DIR=$PWD/Mongla_others/srot-control-board python -m pytest src/mongla_control/test/test_srot_protocol_drift.py -q
 # then bump FW_BEHAVIOUR_REV in srot_protocol.py to the new rev and document what it means
 ```
 

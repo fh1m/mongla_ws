@@ -20,10 +20,10 @@ import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..',
-                                'src', 'duburi_vision'))
+                                'src', 'mongla_vision'))
 
-from duburi_vision import get_profile, make_camera_from_profile   # noqa: E402
-from duburi_vision.detection.factory import make_detector         # noqa: E402
+from mongla_vision import get_profile, make_camera_from_profile   # noqa: E402
+from mongla_vision.detection.factory import make_detector         # noqa: E402
 
 
 def _p(vals, q):

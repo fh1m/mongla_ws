@@ -125,7 +125,7 @@ That ratio is the point of the redesign. Our loop got *slower* and the vehicle g
 | [`srot-control-board`](https://github.com/RakibulIslam1/srot-control-board) | **Hengla** | The firmware: 500 Hz control loop, eleven flight modes, on-board move primitives, self-tuning, failsafes, and roughly 227 tunable parameters. C++ on ESP32 + RP2350. |
 | [`srot-ground-station`](https://github.com/RakibulIslam1/srot-ground-station) | **Bondor** | The operator's window: a desktop app (Electron + React) plus an ESP32-C3 radio bridge — live telemetry, every parameter, tuning, motor tests, black-box analysis, joystick, and a LoRa link to a vehicle already in the water. |
 | [`srot-esc-flasher`](https://github.com/RakibulIslam1/srot-esc-flasher) | — | A bench tool that turns a spare ESP32 into a programmer for the motor controllers, so they can run firmware that reports RPM at all. |
-| `duburi_ws` | **Mongla** | This repository. ROS 2 autonomy: perception, localization, the mission language, and the single node that talks to the board. |
+| `mongla_ws` | **Mongla** | This repository. ROS 2 autonomy: perception, localization, the mission language, and the single node that talks to the board. |
 
 **Firmware development team lead: Rakibul Islam** — author of the board firmware, the ground
 station and the ESC flasher (GitHub [`RakibulIslam1`](https://github.com/RakibulIslam1)).
@@ -156,7 +156,7 @@ Three real examples, none hypothetical:
   suppression rule, already applied twice in the same function.
 
 Nine such asks live in
-[`.claude/context/upstream/`](https://github.com/fh1m/duburi_ws/tree/main/.claude/context/upstream),
+[`.claude/context/upstream/`](https://github.com/fh1m/mongla_ws/tree/main/.claude/context/upstream),
 each carrying the evidence that produced it — a line of their source, or a number measured
 on the live board. That is the culture: **ask with evidence, in public, and let the right
 team own the fix.**
@@ -208,7 +208,7 @@ Two things from that era are deliberately still here and are not leftovers:
 - The **simulator** runs ArduSub SITL by design — it is a physics environment, not the
   vehicle.
 
-Both are described in [Legacy: the Pixhawk backend and SITL](https://github.com/fh1m/duburi_ws/blob/main/.claude/context/legacy-pixhawk-and-sitl.md).
+Both are described in [Legacy: the Pixhawk backend and SITL](https://github.com/fh1m/mongla_ws/blob/main/.claude/context/legacy-pixhawk-and-sitl.md).
 
 ---
 
@@ -217,4 +217,4 @@ Both are described in [Legacy: the Pixhawk backend and SITL](https://github.com/
 - **[Capability Map](capability-map.html)** — everything the vehicle can do, each row with its
   evidence and its honest verification state.
 - **Package documentation** — one page per package, under
-  [`.claude/context/packages/`](https://github.com/fh1m/duburi_ws/tree/main/.claude/context/packages).
+  [`.claude/context/packages/`](https://github.com/fh1m/mongla_ws/tree/main/.claude/context/packages).

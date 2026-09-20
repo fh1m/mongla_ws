@@ -1,11 +1,11 @@
 # Testing and verification
 
 > ℹ **Absorbed 2026-08-27.** This workspace is no longer the sibling tree
-> `Ros_workspaces/duburi-sim_ws`; it lives inside the `duburi_ws` repo at
-> `duburi_ws/sim/` and is under version control. Paths below have been
+> `Ros_workspaces/mongla-sim_ws`; it lives inside the `mongla_ws` repo at
+> `mongla_ws/sim/` and is under version control. Paths below have been
 > updated; any remaining "sibling" phrasing is historical.
 
-Assume workspaces sourced (humble + `duburi_ws` + `duburi_ws/sim`), `GZ_IP=127.0.0.1`,
+Assume workspaces sourced (humble + `mongla_ws` + `mongla_ws/sim`), `GZ_IP=127.0.0.1`,
 sim + stack already up unless noted.
 
 ## Automated / CLI checks
@@ -13,27 +13,27 @@ sim + stack already up unless noted.
 ### Contract (cameras + GT)
 
 ```zsh
-ros2 run duburi_sim_bridge contract_check
+ros2 run mongla_sim_bridge contract_check
 # expect: contract satisfied
 ```
 
 ### MAVLink rates
 
 ```zsh
-ros2 run duburi_sim_bridge mavlink_check
+ros2 run mongla_sim_bridge mavlink_check
 ```
 
 ### Smoke (arm / depth / surge)
 
 ```zsh
-ros2 run duburi_sim_bringup duburi_sim smoke
+ros2 run mongla_sim_bringup mongla_sim smoke
 # expect: smoke OK; vehicle moved in GT / state
 ```
 
 ### Teleop delta (lab API)
 
 ```zsh
-PORT=${DUBURI_LAB_PORT:-28765}
+PORT=${MONGLA_LAB_PORT:-28765}
 curl -sS -X POST http://127.0.0.1:$PORT/api/vehicle/arm
 X0=$(curl -sS http://127.0.0.1:$PORT/api/sim/status | python3 -c "import sys,json;print(json.load(sys.stdin)['ground_truth']['x'])")
 curl -sS -X POST http://127.0.0.1:$PORT/api/vehicle/teleop \
@@ -48,7 +48,7 @@ curl -sS http://127.0.0.1:$PORT/api/sim/status | python3 -c "import sys,json;d=j
 ### Record + zip (10 s gate)
 
 ```zsh
-PORT=$(cat /tmp/duburi_lab_port.txt 2>/dev/null || echo ${DUBURI_LAB_PORT:-28765})
+PORT=$(cat /tmp/mongla_lab_port.txt 2>/dev/null || echo ${MONGLA_LAB_PORT:-28765})
 curl -sS -X POST http://127.0.0.1:$PORT/api/record/start \
   -H 'content-type: application/json' \
   -d '{"name":"qa_clip","cameras":["front"],"fx":true,"frames":true,"labels":true}'
@@ -61,7 +61,7 @@ curl -sS -X POST http://127.0.0.1:$PORT/api/record/stop | python3 -m json.tool
 CLI equivalent:
 
 ```zsh
-ros2 run duburi_sim_bridge record_cameras --duration 10 --fx --frames --labels \
+ros2 run mongla_sim_bridge record_cameras --duration 10 --fx --frames --labels \
   --cameras front --label qa_clip
 ```
 

@@ -92,8 +92,8 @@ already computed.
 - The thruster health reporter starts returning **OK / FAILED** instead of a
   permanent UNKNOWN, and the pre-fire gate can actually refuse a shot the hull
   cannot hold. Our side is already written and tested against exactly this
-  contract (`health_reporters.thrusters`, `Duburi._thruster_fault`).
-- `/duburi/esc_rpm` starts publishing. It is currently gated on announced
+  contract (`health_reporters.thrusters`, `Mongla._thruster_fault`).
+- `/mongla/esc_rpm` starts publishing. It is currently gated on announced
   presence precisely so it does not emit eight fabricated zeros.
 - A **stall becomes actionable**: `esc_fault` plus our signed-RPM check
   distinguishes a fouled prop from an unwired one, which unsigned magnitude

@@ -8,10 +8,10 @@ these datasets and a class-strict matcher would score cross-venue pairs at 0
 for a naming reason, not a vision one.
 """
 import sys, contextlib, io
-sys.path.insert(0,'tools'); sys.path.insert(0,'src/duburi_vision')
+sys.path.insert(0,'tools'); sys.path.insert(0,'src/mongla_vision')
 from recall_matrix import conf_sweep
 from ultralytics import YOLO
-D='/home/fh1m/Work/Projects/Duburi/2025/datasets'; M='/home/fh1m/Music/detect'
+D='/home/fh1m/Work/Projects/Mongla/2025/datasets'; M='/home/fh1m/Music/detect'
 T=[0.05,0.08,0.10,0.12,0.15,0.20,0.25,0.30,0.40,0.50]
 PAIRS=[
  ('torpedo  held-out sess','robosub_torpedo_n_shark-down_200_v12','ROBOSUB/DAY-1/TORPEDO/Torpedo_Down'),

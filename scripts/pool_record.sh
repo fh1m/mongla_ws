@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# pool_record.sh -- record / replay / list Duburi pool-run rosbags.
+# pool_record.sh -- record / replay / list Mongla pool-run rosbags.
 #
-# Every run's artifacts live under one folder (default ~/duburi_runs, override
-# with DUBURI_RUN_DIR) -- the SAME tree the mission scorecard writes into, so
+# Every run's artifacts live under one folder (default ~/mongla_runs, override
+# with MONGLA_RUN_DIR) -- the SAME tree the mission scorecard writes into, so
 # after a pool session everything for a run is in one place.
 #
 #   scripts/pool_record.sh record [label]        # record the debug allowlist
@@ -17,7 +17,7 @@
 # (keeps bags small / off the raw-image tether firehose) + the shared run tree.
 set -euo pipefail
 
-RUN_DIR="${DUBURI_RUN_DIR:-$HOME/duburi_runs}"
+RUN_DIR="${MONGLA_RUN_DIR:-$HOME/mongla_runs}"
 
 # Debug allowlist -- what you actually need to review a run. Raw image_raw and
 # camera_info are EXCLUDED by default (bandwidth + disk); image_debug carries the
@@ -27,8 +27,8 @@ RUN_DIR="${DUBURI_RUN_DIR:-$HOME/duburi_runs}"
 # can never separate a bad solve from bad evidence. Replay into `pnp_node`
 # with a different `max_reproj_px` and the shot is re-solvable. ~8 kB per
 # message at the anchor's 3 Hz, which is nothing beside image_debug.
-ALLOW_DEBUG='^/duburi/(state|imu_rates|move/_action/(feedback|status)|vision/[^/]+/(detections|tracks|lock|correspondences|target_pose|image_debug|vis_range.*)|vision/[^/]+/distance.*)$'
-ALLOW_FULL='^/duburi/(state|imu_rates|move/_action/(feedback|status)|vision/[^/]+/(detections|tracks|lock|correspondences|target_pose|image_debug|image_raw|camera_info|vis_range.*)|vision/[^/]+/distance.*)$'
+ALLOW_DEBUG='^/mongla/(state|imu_rates|move/_action/(feedback|status)|vision/[^/]+/(detections|tracks|lock|correspondences|target_pose|image_debug|vis_range.*)|vision/[^/]+/distance.*)$'
+ALLOW_FULL='^/mongla/(state|imu_rates|move/_action/(feedback|status)|vision/[^/]+/(detections|tracks|lock|correspondences|target_pose|image_debug|image_raw|camera_info|vis_range.*)|vision/[^/]+/distance.*)$'
 
 usage() { sed -n '2,20p' "$0"; exit "${1:-0}"; }
 
@@ -53,11 +53,11 @@ cmd_record() {
   echo "  (Ctrl-C to stop cleanly; bag is finalized on stop)"
   # -s mcap: write MCAP (not the default sqlite3 .db3). MCAP is Foxglove's
   # native format — the bag opens as a local file directly in the Foxglove
-  # desktop app WITH embedded schemas (needed for our custom DuburiState msg),
+  # desktop app WITH embedded schemas (needed for our custom MonglaState msg),
   # so "record a run, drag it into Foxglove" just works. Needs the
-  # ros-humble-rosbag2-storage-mcap plugin (exec_depend in duburi_manager).
+  # ros-humble-rosbag2-storage-mcap plugin (exec_depend in mongla_manager).
   # --regex matches topic names; -o sets the output bag dir.
-  # --include-hidden-topics: /duburi/move/_action/{feedback,status} are HIDDEN
+  # --include-hidden-topics: /mongla/move/_action/{feedback,status} are HIDDEN
   # (the _action namespace); without this the regex matches them but bag record
   # still skips them. The regex keeps the set filtered, so we only get the
   # matching hidden topics, not the full _action firehose.

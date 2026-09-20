@@ -1,9 +1,9 @@
 # Mongla — the AUV autonomy stack
 
-> **Project**: Mongla — ROS 2 control / mission / vision for BRAC University Duburi's AUVs.
-> **This codebase**: `duburi_ws`. **Default platform**: the **SROT board** (firmware
+> **Project**: Mongla — an independent ROS 2 control / mission / vision stack for autonomous underwater vehicles.
+> **This codebase**: `mongla_ws`. **Default platform**: the **SROT board** (firmware
 > **Hengla**) + **Raspberry Pi 5 with a Hailo-8 AI HAT**.
-> The folder name `duburi_ws` and the `/duburi/*` namespace are kept for the test vehicle's
+> The folder name `mongla_ws` and the `/mongla/*` namespace are kept for the test vehicle's
 > tooling — **do not bulk-rename them.**
 
 **Read first, in this order:**
@@ -36,7 +36,7 @@ hardware, water, or a firmware merge). Nothing on this platform has been in wate
 | Link | **one USB-C cable**, MAVLink 2 at 115200, compid **191** (`MAV_COMP_ID_ONBOARD_COMPUTER`) |
 | IMU / depth / leak / kill / batteries / ESC RPM | all **on the board** |
 | Thrusters | 8 × T200, vectored (M1–M4 horizontal at 45°, M5–M8 vertical), Bluejay ESCs with bidirectional DShot |
-| Cameras | forward + downward USB; measured calibration in `duburi_vision/config/calibration/` |
+| Cameras | forward + downward USB; measured calibration in `mongla_vision/config/calibration/` |
 | Velocity / distance | **the downward camera** — no DVL is fitted, and none has ever been validated in water |
 | Payload | board channels over MAVLink (`fire(N)` = **board channel N**, 1–16) |
 
@@ -103,13 +103,13 @@ the mode changes. The vision verbs handle this by setting the mode and **verifyi
 
 **Absence renders `--`, never `0.0`.** From rev 3 the board suppresses values it cannot stand
 behind; rendering that as zero recreates the bug the suppression fixed. Same rule on our side:
-a missing number in `DuburiState` is `NaN`.
+a missing number in `MonglaState` is `NaN`.
 
 ### Reading and gating the board
 
 ```bash
-ros2 run duburi_manager connect --watch      # everything the board sends; no ROS graph needed
-ros2 run duburi_manager bringup_check --srot # grades each subsystem, exits non-zero on a fault
+ros2 run mongla_manager connect --watch      # everything the board sends; no ROS graph needed
+ros2 run mongla_manager bringup_check --srot # grades each subsystem, exits non-zero on a fault
 ```
 
 `connect` **reports** (always exits 0); `bringup_check` **grades and gates**. Use the first to
@@ -137,22 +137,22 @@ surface**.
 ## 3. Architecture
 
 ```
-[duburi CLI] ─┐
-[mission]    ─┼── /duburi/move (one action, 30 verbs) ──► auv_manager_node ──USB-C──► SROT board
+[mongla CLI] ─┐
+[mission]    ─┼── /mongla/move (one action, 30 verbs) ──► auv_manager_node ──USB-C──► SROT board
 [FSM state]  ─┘                                              │                         (500 Hz)
-                                                             └──► /duburi/state, /duburi/imu,
-                                                                  /duburi/esc_rpm, /duburi/demand
-[vision nodes] ──► detections · lock · velocity ──► [localization] ──► /duburi/odom
+                                                             └──► /mongla/state, /mongla/imu,
+                                                                  /mongla/esc_rpm, /mongla/demand
+[vision nodes] ──► detections · lock · velocity ──► [localization] ──► /mongla/odom
 ```
 
 **Exactly one node touches the board**: `auv_manager_node`. Everything else is a client.
 
 Seven packages, one page each in [`.claude/context/packages/`](.claude/context/packages/README.md):
-`duburi_control` (verbs + the flight-controller boundary) · `duburi_manager` (the node) ·
-`duburi_vision` · `duburi_localization` · `duburi_planner` (CLI, DSL, missions) ·
-`duburi_sensors` · `duburi_interfaces` (one action, one state topic).
+`mongla_control` (verbs + the flight-controller boundary) · `mongla_manager` (the node) ·
+`mongla_vision` · `mongla_localization` · `mongla_planner` (CLI, DSL, missions) ·
+`mongla_sensors` · `mongla_interfaces` (one action, one state topic).
 
-**Adding a verb** touches two files: a row in `duburi_control/commands.py` and a method of the
+**Adding a verb** touches two files: a row in `mongla_control/commands.py` and a method of the
 same name on the facade. The CLI, the action server and the Python client pick it up
 automatically.
 
@@ -166,13 +166,13 @@ automatically.
 
 ### ROS surface
 
-- **Action** `/duburi/move` (`duburi_interfaces/action/Move`) — one verb per goal.
-- **Topic** `/duburi/state` (`DuburiState`) — armed, mode, yaw, depth, battery; `NaN` when
+- **Action** `/mongla/move` (`mongla_interfaces/action/Move`) — one verb per goal.
+- **Topic** `/mongla/state` (`MonglaState`) — armed, mode, yaw, depth, battery; `NaN` when
   absent, published on change.
 - Params: `flight_controller` (`srot` default), `mode`, `yaw_source` (`mavlink_ahrs` — reads
   the board), plus the `vision.*` tunables in `vision_tunables.py`.
 
-Older context files mention `/duburi/arm`, `/duburi/depth_cmd`, `Attitude.msg`,
+Older context files mention `/mongla/arm`, `/mongla/depth_cmd`, `Attitude.msg`,
 `RCOverride.msg`. **None of these exist.**
 
 ---
@@ -205,25 +205,25 @@ environment pins: [`pi-and-env-traps.md`](.claude/context/pi-and-env-traps.md).
 No GPS, no DVL. A right-invariant EKF predicts on the board's IMU and corrects with depth,
 optical-flow velocity, headings and prop fixes; late measurements are **replayed at the
 instant they describe** rather than applied on arrival. Course priors are per venue and
-overridable on the deck (`~/.duburi/courses`) with a survey tool to measure the real thing.
+overridable on the deck (`~/.mongla/courses`) with a survey tool to measure the real thing.
 
 Verified: the downward camera as a velocity sensor — three 30 cm slides, worst error
 **1.09 cm**, implied height 0.72 / 0.69 / 0.70 m against a 0.72 m tape.
 
-[`packages/duburi_localization`](.claude/context/packages/duburi_localization/README.md)
+[`packages/mongla_localization`](.claude/context/packages/mongla_localization/README.md)
 
 ---
 
 ## 6. Running it
 
 ```bash
-./build_dubomini.sh                 # mirrors ~/models and ~/missions in, then builds
+./build_mongla.sh                 # mirrors ~/models and ~/missions in, then builds
 source install/setup.bash
 
-ros2 launch duburi_manager bringup.launch.py vision:=true    # the vehicle
-ros2 run duburi_manager bringup_check --srot                 # can it arm?
-ros2 run duburi_planner duburi arm                           # one verb
-ros2 run duburi_planner mission --list                       # missions
+ros2 launch mongla_manager bringup.launch.py vision:=true    # the vehicle
+ros2 run mongla_manager bringup_check --srot                 # can it arm?
+ros2 run mongla_planner mongla arm                           # one verb
+ros2 run mongla_planner mission --list                       # missions
 ```
 
 **Every capability is an opt-in switch with a defensible default** (ROADMAP §9): `vision`,
@@ -233,7 +233,7 @@ vehicle up bare, then add one at a time and measure what it costs.
 [`launch-combinations.md`](.claude/context/launch-combinations.md)
 
 **Operator tooling** (off the mission path): `scripts/pool_session.sh` pins one folder per
-run; `scripts/pool_record.sh` records and replays a bag; scorecards land in `DUBURI_RUN_DIR`.
+run; `scripts/pool_record.sh` records and replays a bag; scorecards land in `MONGLA_RUN_DIR`.
 [`foxglove-and-bags.md`](.claude/context/foxglove-and-bags.md) · [`pool-day.md`](.claude/context/pool-day.md)
 
 ---
@@ -331,7 +331,7 @@ vision gains, because sim imagery is too clean.
 [`foxglove-and-bags.md`](.claude/context/foxglove-and-bags.md) ·
 [`pool-day.md`](.claude/context/pool-day.md) ·
 [`video-testing.md`](.claude/context/video-testing.md) ·
-[`duburi-sim.md`](.claude/context/duburi-sim.md) ·
+[`mongla-sim.md`](.claude/context/mongla-sim.md) ·
 [`legacy-pixhawk-and-sitl.md`](.claude/context/legacy-pixhawk-and-sitl.md) ·
 [`scouting/`](.claude/context/scouting/README.md)
 

@@ -32,9 +32,9 @@ import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..',
-                                'src', 'duburi_vision'))
+                                'src', 'mongla_vision'))
 
-from duburi_vision.continuity import Obs, analyse   # noqa: E402
+from mongla_vision.continuity import Obs, analyse   # noqa: E402
 
 
 def main():

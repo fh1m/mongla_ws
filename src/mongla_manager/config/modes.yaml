@@ -1,0 +1,39 @@
+# ============================================================================
+#  ⚠  THIS FILE IS NOT LOADED AT RUNTIME.  (B49)
+#
+#  Nothing reads it. The values that run are `PROFILES` / `NETWORK` in
+#  `mongla_manager/connection_config.py` and the node's own
+#  `declare_parameter` defaults. Set one for real with a launch arg or
+#  `--ros-args -p <name>:=<value>`.
+#
+#  The `.1`/`.2` line below was CORRECTED here on 2026-09-08: it still carried
+#  the swap that was fixed in the code and in CLAUDE.md on 2026-08-03. Measured
+#  on the vehicle, the **Pi answers on 192.168.2.2** (Raspberry Pi MAC OUI, full
+#  BlueOS service set) and **192.168.2.1 is the topside box** -- Blue Robotics'
+#  own convention. A stale copy of a corrected fact is worse than no copy: it
+#  reads as confirmation.
+# ============================================================================
+# Default parameters for the mongla_manager node.
+#
+# Network topology (see connection_config.py for full diagram):
+#   Pixhawk → Raspberry Pi (BlueOS)  192.168.2.2  / GW 192.168.2.2
+#                    │  switch
+#                    ▼
+#              Jetson Orin Nano      192.168.2.69  (static)
+#              ros2 listens on udpin:0.0.0.0:14550
+#
+# BlueOS endpoint:  name=inspector  type=UDP Client  target=192.168.2.69:14550
+
+mongla_manager:
+  ros__parameters:
+    mode: auto             # auto (default; probes UDP+USB) | sim | pool | laptop | desk
+    smooth_yaw:       false   # true → yaw_glide (smootherstep setpoint sweep)
+    smooth_translate: false   # true → drive_*_eased (trapezoid thrust envelope, applies to forward + lateral)
+
+    # External yaw source. ArduSub onboard AHRS by default; BNO085 over
+    # ESP32-C3 USB CDC for magnetic-interference-free heading.
+    # Firmware contract: src/mongla_sensors/firmware/esp32c3_bno085.md
+    # Source code:       src/mongla_sensors/mongla_sensors/sources/bno085.py
+    yaw_source:  mavlink_ahrs   # mavlink_ahrs (default) | bno085 | dvl | witmotion
+    bno085_port: auto           # 'auto' = probe USB CDC for an ESP32-C3 streaming JSON yaw; or pin to /dev/ttyACM0
+    bno085_baud: 115200

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mongla — an AUV that owns its whole stack</title>
-<meta name="description" content="Mongla is the ROS 2 autonomy stack for BRAC University Duburi's autonomous underwater vehicles, running on the SROT control board (firmware Hengla) and a Raspberry Pi 5 with a Hailo-8 AI HAT.">
+<meta name="description" content="Mongla is an independent ROS 2 autonomy stack for autonomous underwater vehicles, running on the SROT control board (firmware Hengla) and a Raspberry Pi 5 with a Hailo-8 AI HAT.">
 <link rel="icon" href="imgs/mongla-logo-dark.png">
 <style>
   :root{
@@ -98,14 +98,14 @@
       <a href="#repos">Repos</a>
       <a href="the-shift.html">The Shift</a>
       <a href="capability-map.html">Capabilities</a>
-      <a href="https://github.com/fh1m/duburi_ws">GitHub</a>
+      <a href="https://github.com/fh1m/mongla_ws">GitHub</a>
     </nav>
   </div>
 </header>
 
 <div class="hero">
   <div class="wrap">
-    <div class="kicker">BRAC University Duburi · Bangladesh</div>
+    <div class="kicker">Dhaka, Bangladesh</div>
     <h1>An autonomous submarine<br><span class="dim">whose every layer we own.</span></h1>
     <p class="lede">
       Mongla is the autonomy stack for our underwater vehicles. It runs on hardware our own
@@ -124,7 +124,7 @@
     <div class="cta">
       <a class="btn primary" href="the-shift.html">Read: The Shift &rarr;</a>
       <a class="btn ghost" href="capability-map.html">What it can actually do</a>
-      <a class="btn ghost" href="https://github.com/fh1m/duburi_ws">Source</a>
+      <a class="btn ghost" href="https://github.com/fh1m/mongla_ws">Source</a>
     </div>
   </div>
 </div>
@@ -268,7 +268,7 @@
       <tr><td class="mono"><a href="https://github.com/RakibulIslam1/srot-control-board">srot-control-board</a></td><td class="mono">Hengla</td><td>The firmware: 500 Hz loop, eleven flight modes, on-board move primitives, self-tuning, failsafes.</td></tr>
       <tr><td class="mono"><a href="https://github.com/RakibulIslam1/srot-ground-station">srot-ground-station</a></td><td class="mono">Bondor</td><td>The operator's window: desktop app plus a LoRa radio bridge — telemetry, parameters, tuning, black-box analysis.</td></tr>
       <tr><td class="mono"><a href="https://github.com/RakibulIslam1/srot-esc-flasher">srot-esc-flasher</a></td><td class="mono">—</td><td>Bench tool that reflashes the motor controllers so they can report RPM.</td></tr>
-      <tr><td class="mono"><a href="https://github.com/fh1m/duburi_ws">duburi_ws</a></td><td class="mono">Mongla</td><td>This repository: ROS 2 autonomy, perception, localization, the mission language.</td></tr>
+      <tr><td class="mono"><a href="https://github.com/fh1m/mongla_ws">mongla_ws</a></td><td class="mono">Mongla</td><td>This repository: ROS 2 autonomy, perception, localization, the mission language.</td></tr>
     </table>
 
     <p class="sub" style="margin-top:22px">
@@ -287,33 +287,33 @@
       <div>
         <h3>From a terminal</h3>
 <pre><span class="c"># bring the vehicle up, with vision</span>
-ros2 launch duburi_manager bringup.launch.py vision:=true
+ros2 launch mongla_manager bringup.launch.py vision:=true
 
 <span class="c"># is it healthy enough to arm?</span>
-ros2 run duburi_manager bringup_check --srot
+ros2 run mongla_manager bringup_check --srot
 
 <span class="c"># watch everything the board sends</span>
-ros2 run duburi_manager connect --watch
+ros2 run mongla_manager connect --watch
 
 <span class="c"># one verb at a time</span>
-ros2 run duburi_planner duburi arm
-ros2 run duburi_planner duburi set_depth --target -0.5
-ros2 run duburi_planner duburi disarm</pre>
+ros2 run mongla_planner mongla arm
+ros2 run mongla_planner mongla set_depth --target -0.5
+ros2 run mongla_planner mongla disarm</pre>
       </div>
       <div>
         <h3>As a mission</h3>
-<pre>def run(duburi, log=None):
-    duburi.mission_reset()
-    duburi.use_budget(900, reserve_s=45)
-    duburi.arm()
-    duburi.set_depth(-0.8)
+<pre>def run(mongla, log=None):
+    mongla.mission_reset()
+    mongla.use_budget(900, reserve_s=45)
+    mongla.arm()
+    mongla.set_depth(-0.8)
 
-    with duburi.task('gate', deadline_s=120):
-        if duburi.vision.align('gate', yaw=0, lat=0, gain=30):
-            duburi.vision.move('gate', fwd=None)   <span class="c"># through it</span>
+    with mongla.task('gate', deadline_s=120):
+        if mongla.vision.align('gate', yaw=0, lat=0, gain=30):
+            mongla.vision.move('gate', fwd=None)   <span class="c"># through it</span>
 
-    duburi.surface()
-    duburi.disarm()</pre>
+    mongla.surface()
+    mongla.disarm()</pre>
       </div>
     </div>
 
@@ -331,10 +331,10 @@ ros2 run duburi_planner duburi disarm</pre>
     <div class="grid g3">
       <div class="card"><div class="tag">Start here</div><h3><a href="the-shift.html">The Shift</a></h3><p>Why the architecture looks like this, from first principles — no robotics background assumed.</p></div>
       <div class="card"><div class="tag">Evidence</div><h3><a href="capability-map.html">Capability map</a></h3><p>Every capability, what the old stack could do, and how each claim was verified.</p></div>
-      <div class="card"><div class="tag">Code</div><h3><a href="https://github.com/fh1m/duburi_ws/tree/main/.claude/context/packages">Package docs</a></h3><p>One page per package: what it is, how to run it, how to test it.</p></div>
-      <div class="card"><div class="tag">Reference</div><h3><a href="https://github.com/fh1m/duburi_ws/blob/main/.claude/context/command-reference.md">Commands</a></h3><p>All thirty verbs, and where each one actually runs.</p></div>
-      <div class="card"><div class="tag">Reference</div><h3><a href="https://github.com/fh1m/duburi_ws/blob/main/.claude/context/client-and-dsl-api.md">Mission language</a></h3><p>The DSL: move, see, measure, navigate, and manage the run.</p></div>
-      <div class="card"><div class="tag">Method</div><h3><a href="https://github.com/fh1m/duburi_ws/blob/main/.claude/context/measured-bars.md">Measured bars</a></h3><p>Every shipped threshold with the measurement that justifies it — including the ones we retracted.</p></div>
+      <div class="card"><div class="tag">Code</div><h3><a href="https://github.com/fh1m/mongla_ws/tree/main/.claude/context/packages">Package docs</a></h3><p>One page per package: what it is, how to run it, how to test it.</p></div>
+      <div class="card"><div class="tag">Reference</div><h3><a href="https://github.com/fh1m/mongla_ws/blob/main/.claude/context/command-reference.md">Commands</a></h3><p>All thirty verbs, and where each one actually runs.</p></div>
+      <div class="card"><div class="tag">Reference</div><h3><a href="https://github.com/fh1m/mongla_ws/blob/main/.claude/context/client-and-dsl-api.md">Mission language</a></h3><p>The DSL: move, see, measure, navigate, and manage the run.</p></div>
+      <div class="card"><div class="tag">Method</div><h3><a href="https://github.com/fh1m/mongla_ws/blob/main/.claude/context/measured-bars.md">Measured bars</a></h3><p>Every shipped threshold with the measurement that justifies it — including the ones we retracted.</p></div>
     </div>
   </div>
 </section>
@@ -342,11 +342,11 @@ ros2 run duburi_planner duburi disarm</pre>
 <footer>
   <div class="wrap">
     <p>
-      <b>Mongla</b> — the soul; <b>Duburi</b> and <b>Dubomini</b> — the bodies. Built by
-      BRAC University Duburi, Dhaka, Bangladesh.
+      <b>Mongla</b> — the soul; <b>Mongla</b> and <b>Mongla_agile</b> — the bodies. Built by
+      Muhammad Fahim Faisal · Dhaka, Bangladesh.
     </p>
     <p>
-      MIT licensed · <a href="https://github.com/fh1m/duburi_ws">github.com/fh1m/duburi_ws</a> ·
+      MIT licensed · <a href="https://github.com/fh1m/mongla_ws">github.com/fh1m/mongla_ws</a> ·
       Built on <a href="https://docs.ros.org/en/humble/">ROS 2</a>,
       <a href="https://mavlink.io/">MAVLink</a>,
       <a href="https://hailo.ai/">Hailo</a> and

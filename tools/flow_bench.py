@@ -53,7 +53,7 @@ _ROOT = os.path.dirname(_HERE)
 def _load(name, relpath):
     """Load ONE shipping module by path, without its package __init__.
 
-    `duburi_vision/__init__` reaches rclpy, so a plain import would make this
+    `mongla_vision/__init__` reaches rclpy, so a plain import would make this
     bench require a sourced ROS environment to measure optical flow -- which it
     does not need: flow_math, flow_velocity and nav_estimator import numpy and
     nothing else. Loading the files directly keeps the bench runnable on any
@@ -72,11 +72,11 @@ def _load(name, relpath):
 
 
 _fm = _load('_fb_flow_math',
-            'src/duburi_vision/duburi_vision/distance/flow_math.py')
+            'src/mongla_vision/mongla_vision/distance/flow_math.py')
 _fv = _load('_fb_flow_velocity',
-            'src/duburi_vision/duburi_vision/distance/flow_velocity.py')
+            'src/mongla_vision/mongla_vision/distance/flow_velocity.py')
 _ne = _load('_fb_nav_estimator',
-            'src/duburi_manager/duburi_manager/estimator/nav_estimator.py')
+            'src/mongla_manager/mongla_manager/estimator/nav_estimator.py')
 
 flow_dispersion = _fm.flow_dispersion
 solve_planar_motion = _fm.solve_planar_motion
@@ -807,7 +807,7 @@ def main():
     p.add_argument('--height', type=float, required=True,
                    help='LENS to floor, metres. No default: it is a clean '
                         'multiplier on every number.')
-    p.add_argument('--device', default='/dev/duburi_cam_downward')
+    p.add_argument('--device', default='/dev/mongla_cam_downward')
     p.add_argument('--width', type=int, default=640)
     p.add_argument('--height-px', type=int, default=360)
     p.add_argument('--fps', type=int, default=210)

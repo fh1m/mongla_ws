@@ -4,25 +4,25 @@ The sim could show you a run. It could not tell you what the run **scored**, so
 the parts of the rulebook that are pure judging — and that a mission has to be
 written around — were never exercised.
 
-`duburi_sim_bridge/scoring.py` watches ground truth and keeps the score against
+`mongla_sim_bridge/scoring.py` watches ground truth and keeps the score against
 the competition the running course belongs to. It is read-only, so it can never
 affect the run it is watching.
 
 ```bash
-ros2 topic echo /duburi/sim/score          # live JSON, 2 Hz
+ros2 topic echo /mongla/sim/score          # live JSON, 2 Hz
 ros2 param set /scoring run start          # also automatic on arm
 ros2 param set /scoring run stop           # scores the time bonus, writes the card
 ros2 param set /scoring coin flip          # take the coin flip
 ros2 param set /scoring flare_sequence "[yellow,red,blue]"   # SAUVC task 4
 ```
 
-The **`score` page in the lab UI** (`duburi_sim lab`) is the readable version:
+The **`score` page in the lab UI** (`mongla_sim lab`) is the readable version:
 every rulebook line item, what it is worth, whether it was earned, and the
 evidence for each.
 
 ## The tables are data — `rulebook.py`
 
-Both scoring tables live in `duburi_sim_bridge/rulebook.py`, one entry per
+Both scoring tables live in `mongla_sim_bridge/rulebook.py`, one entry per
 published line item with its citation. The scorer says HOW a thing is detected;
 that file says WHAT it is worth, so a rules update is a one-file edit.
 
@@ -106,7 +106,7 @@ quietly wrong.
 - SAUVC: `(900 − run) × 0.03`, needs two tasks.
 - RoboSub: whole minutes remaining plus fractional seconds, `× 100`.
 
-On stop the card is written to **`DUBURI_RUN_DIR`** (default `~/duburi_runs`),
+On stop the card is written to **`MONGLA_RUN_DIR`** (default `~/mongla_runs`),
 the same tree the autonomy mission scorecards use, so a practice run's two
 halves land under one timestamp. Everything used to be in memory, and a restart
 — which is also how you change course — erased the run you had just done.
@@ -274,8 +274,8 @@ silently mis-grading shots that physically went through.
 
 ### `score_check` — a rig that reports its OWN failures as its own
 
-`ros2 run duburi_sim_bridge score_check [--task torpedo|bins]`. It drives the
-`duburi` CLI by subprocess (never importing `duburi_ws` — `gate_transit_check`
+`ros2 run mongla_sim_bridge score_check [--task torpedo|bins]`. It drives the
+`mongla` CLI by subprocess (never importing `mongla_ws` — `gate_transit_check`
 sets that rule), **verifies its own preconditions from ground truth before
 firing**, and reports `RIG FAILED` distinctly from a scorer verdict. That
 distinction is the whole point: in round 13 a hull sitting at yaw 89.9 deg was
@@ -377,7 +377,7 @@ end-to-end on every run. `score_check` exits non-zero rather than hiding it.
 
 ### A crash nobody had hit
 
-`ros2 run duburi_planner duburi --help` died with `TypeError: %c requires int or
+`ros2 run mongla_planner mongla --help` died with `TypeError: %c requires int or
 char`. argparse interpolates help strings (`self._get_help_string(action) %
 params`), and one help string in `commands.py` had a bare `% cap` where the two
 others in the same file were correctly escaped `%%`. Nothing caught it because
@@ -425,7 +425,7 @@ open item rather than left as a plausible-sounding guess.
 
 ### And a crash nobody had hit
 
-`ros2 run duburi_planner duburi --help` died with `TypeError: %c requires int or
+`ros2 run mongla_planner mongla --help` died with `TypeError: %c requires int or
 char`. argparse interpolates help strings, and one in `commands.py` had a bare
 `% cap` where the two others in the same file were correctly `%%`. Nothing
 caught it because no test runs `--help`.

@@ -1,7 +1,7 @@
 # Camera calibration — measuring FOV, and why nothing worked without it
 
 > **The gap:** `camera_node.py:9` says CameraInfo is "size only; K/D" — and it
-> was. There is no HFOV anywhere in `duburi_ws`, no calibration file, no
+> was. There is no HFOV anywhere in `mongla_ws`, no calibration file, no
 > checkerboard script, and `K`/`D` published empty on every frame. **Pixels
 > cannot become radians without a measured focal length.**
 >
@@ -31,7 +31,7 @@ tools/fov_quick.py 0 0.210 1.00          # A4 sheet at 1 m -> saves a frame
 tools/fov_quick.py 0 0.210 1.00 --px 640 --res 1280x720
 ```
 
-**Print target:** `docs/assets/duburi_checkerboard_A4.png` — A4 landscape,
+**Print target:** `docs/assets/mongla_checkerboard_A4.png` — A4 landscape,
 300 dpi, 10×7 squares of 25 mm = **9×6 inner corners**. Print at **100 % /
 actual size** (never "fit to page") and check one square measures 25 mm.
 Verified detectable by `findChessboardCorners` before printing: 54/54 corners.
@@ -48,7 +48,7 @@ keeps the historical behaviour **byte-identical**: size-only CameraInfo, K and D
 zero. Nothing changes until a real calibration exists.
 
 ```bash
-ros2 run duburi_vision camera_node -p calibration:=~/cal_fwd/calibration.json
+ros2 run mongla_vision camera_node -p calibration:=~/cal_fwd/calibration.json
 ```
 
 **Intrinsics are rescaled to the streaming resolution**, and that is the part

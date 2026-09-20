@@ -46,7 +46,7 @@ from pymavlink import mavutil
 M = mavutil.mavlink
 
 _WS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                   'src', 'duburi_control')
+                   'src', 'mongla_control')
 if os.path.isdir(_WS) and _WS not in sys.path:
     sys.path.insert(0, _WS)
 

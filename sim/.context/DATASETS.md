@@ -1,13 +1,13 @@
 # Datasets and recording
 
 > ℹ **Absorbed 2026-08-27.** This workspace is no longer the sibling tree
-> `Ros_workspaces/duburi-sim_ws`; it lives inside the `duburi_ws` repo at
-> `duburi_ws/sim/` and is under version control. Paths below have been
+> `Ros_workspaces/mongla-sim_ws`; it lives inside the `mongla_ws` repo at
+> `mongla_ws/sim/` and is under version control. Paths below have been
 > updated; any remaining "sibling" phrasing is historical.
 
 ## Output layout
 
-Root: `<duburi_ws/sim>/datasets/` (override with `record_cameras --outdir`).
+Root: `<mongla_ws/sim>/datasets/` (override with `record_cameras --outdir`).
 
 Each run:
 
@@ -57,7 +57,7 @@ ffprobe -v error -show_entries format=duration -of default=nk=1:nw=1 datasets/<r
 ## CLI
 
 ```zsh
-ros2 run duburi_sim_bridge record_cameras \
+ros2 run mongla_sim_bridge record_cameras \
   --duration 20 \
   --cameras front,bottom \
   --fx --frames --labels \
@@ -84,7 +84,7 @@ Labels are **simulator GT**, not human annotations — good for bootstrap / doma
 
 ## Move scripts
 
-Under `src/duburi_sim_web/scripts/`:
+Under `src/mongla_sim_web/scripts/`:
 
 - `gate_approach.yaml`
 - `gate_pass_through.yaml`
@@ -103,4 +103,4 @@ walkthrough now lives in
 does the split and data.yaml. The line below is historical:
 
 for underwater domain gap. This repo does **not** include the YOLO train pipeline
-(see `duburi_ws` vision skills/docs).
+(see `mongla_ws` vision skills/docs).

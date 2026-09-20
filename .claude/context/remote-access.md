@@ -38,11 +38,11 @@ link never kills a running mission.
 
 **From the laptop:**
 ```bash
-mosh dubomini@192.168.2.69          # SSH keys / password both work; instant echo
+mosh mongla@mongla.local          # SSH keys / password both work; instant echo
 tmux new -s run                     # or: tmux attach -t run  (after a drop)
 # inside tmux — pin the run folder, then launch/mission as usual:
 source scripts/pool_session.sh gate_am
-ros2 launch duburi_manager bringup.launch.py mode:=pool vision:=true foxglove:=true
+ros2 launch mongla_manager bringup.launch.py mode:=pool vision:=true foxglove:=true
 ```
 Drop the tether → `mosh` reconnects itself; if the whole link died, `mosh …` again then
 `tmux attach -t run` → the mission is exactly where you left it. Drop
@@ -66,10 +66,10 @@ pixels**, so no lag:
   ```bash
   ros2 run web_video_server web_video_server        # on the Pi (in tmux)
   ```
-  Laptop browser: `http://192.168.2.69:8080/stream_viewer?topic=/duburi/vision/forward/image_debug`
+  Laptop browser: `http://192.168.2.69:8080/stream_viewer?topic=/mongla/vision/forward/image_debug`
 
 > **FPS Gate A still applies:** Mongla is FPS-coupled. Confirm
-> `ros2 topic hz /duburi/vision/forward/detections` is unchanged with a viewer attached, and
+> `ros2 topic hz /mongla/vision/forward/detections` is unchanged with a viewer attached, and
 > view **one** camera at a time over the tether. See `foxglove-and-bags.md` §1.
 
 ---
@@ -82,7 +82,7 @@ Install once (ARM 64-bit DEB for Linux) — the setup script does it if you drop
 tools/setup_remote_access.sh ~/Downloads/nomachine_*_arm64.deb
 ```
 The NX server autostarts. From the laptop's **NoMachine client** → `192.168.2.69` (port
-**4000**), log in as `dubomini`. It reconnects cleanly after a drop — no black-screen reboot.
+**4000**), log in as `mongla_agile`. It reconnects cleanly after a drop — no black-screen reboot.
 
 **Headless display (no monitor attached):** the GPU needs a display signal or the desktop is
 black. Primary fix = a **~$5 HDMI dummy plug** (a real signal, most robust). Software
@@ -100,9 +100,9 @@ screen). Optional `--autologin` makes a desktop session exist at boot for NX to 
 
 The "Authentication required…" dialogs appear **only over a remote desktop** because a remote
 session isn't a "local-active" seat, so polkit's default `ResultActive` doesn't apply and it
-prompts. The fix is a scoped `.pkla` granting `dubomini` `ResultAny=yes` for the nuisance
+prompts. The fix is a scoped `.pkla` granting `mongla_agile` `ResultAny=yes` for the nuisance
 actions (color-manager — the main offender — plus NetworkManager, PackageKit, udisks2, upower,
-suspend/hibernate). Installed to `/etc/polkit-1/localauthority/50-local.d/50-duburi-nopasswd.pkla`;
+suspend/hibernate). Installed to `/etc/polkit-1/localauthority/50-local.d/50-mongla-nopasswd.pkla`;
 takes effect for **new** sessions (no reboot).
 
 > Ubuntu 22.04 (JetPack 6.2) is **polkit 0.105** → `.pkla`, **not** the JS
@@ -119,7 +119,7 @@ Over the **mosh/ssh** link (never depends on the GUI):
 ```bash
 sudo systemctl restart gdm3        # rebuild the desktop session
 # if a zombie session blocks reconnect:
-sudo pkill -KILL -u dubomini       # then reconnect NoMachine
+sudo pkill -KILL -u mongla_agile       # then reconnect NoMachine
 ```
 Because the mission runs in **tmux over mosh**, neither touches a running mission. This is the
 replacement for "reboot the Pi mid-run", which was the dangerous part of the old workflow.
@@ -129,7 +129,7 @@ replacement for "reboot the Pi mid-run", which was the dangerous part of the old
 ## Reproduce on a fresh Pi (after a reflash)
 
 ```bash
-cd ~/workspaces/duburi_ws
+cd ~/workspaces/mongla_ws
 tools/setup_remote_access.sh [~/Downloads/nomachine_*_arm64.deb] [--autologin] [--dummy-display]
 sudo systemctl restart gdm3        # applies Xorg/autologin; NOT needed for the password fix
 cp tools/remote-access/tmux.conf.sample ~/.tmux.conf     # optional QoL

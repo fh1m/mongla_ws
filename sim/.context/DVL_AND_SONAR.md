@@ -7,7 +7,7 @@ without a custom plugin.**
 
 `move_forward_dist` and its siblings close a position loop on DVL bottom-track.
 The sim had no DVL, so they silently fell back to dead reckoning at a hardcoded
-0.3 m/s. Measured against `/duburi/sim/ground_truth`, a 1.0 m command drove
+0.3 m/s. Measured against `/mongla/sim/ground_truth`, a 1.0 m command drove
 **2.361 m** and reported `OK … completed`. Adding a DVL is what makes those
 verbs testable at all.
 
@@ -29,10 +29,10 @@ verbs testable at all.
 
 | # | Work | File |
 |---|---|---|
-| 1 | 4-beam janus array, 8 Hz, ±0.002 m/s noise | `duburi_sim_description/models/duburi_heavy/model.sdf.in` |
-| 2 | `DopplerVelocityLogSystem` in every world | `duburi_sim_worlds/templates/world.sdf.template` |
-| 3 | gz→ROS republisher | `duburi_sim_bridge/duburi_sim_bridge/dvl_bridge.py` |
-| 4 | `yaw_source=sim_dvl` | `duburi_sensors/sources/sim_dvl.py` + `factory.py` |
+| 1 | 4-beam janus array, 8 Hz, ±0.002 m/s noise | `mongla_sim_description/models/mongla_heavy/model.sdf.in` |
+| 2 | `DopplerVelocityLogSystem` in every world | `mongla_sim_worlds/templates/world.sdf.template` |
+| 3 | gz→ROS republisher | `mongla_sim_bridge/mongla_sim_bridge/dvl_bridge.py` |
+| 4 | `yaw_source=sim_dvl` | `mongla_sensors/sources/sim_dvl.py` + `factory.py` |
 
 `model.sdf` and the `.world` files are **generated** — edit the `.in` /
 `.template` and run `generate_model.py` / `gen_world.py --all`.
@@ -75,8 +75,8 @@ They are written down because none of them raises anything.
 ### Using it
 
 ```bash
-ros2 run duburi_sim_bringup duburi_sim stack            # yaw_source=sim_dvl by default
-ros2 run duburi_sim_bringup duburi_sim stack yaw_source:=mavlink_ahrs   # no DVL
+ros2 run mongla_sim_bringup mongla_sim stack            # yaw_source=sim_dvl by default
+ros2 run mongla_sim_bringup mongla_sim stack yaw_source:=mavlink_ahrs   # no DVL
 ```
 
 `sim_dvl` is a **composite**: heading still comes from MAVLink AHRS, only
@@ -84,8 +84,8 @@ position comes from the DVL. A DVL registered as a bare yaw source would
 displace the heading source and break every yaw verb —
 `sources/composite_bno_dvl.py` is the pattern.
 
-Topics: `/duburi/sim/dvl/velocity` (`TwistWithCovarianceStamped`, body frame)
-and `/duburi/sim/dvl/altitude` (`Range`, bottom-track).
+Topics: `/mongla/sim/dvl/velocity` (`TwistWithCovarianceStamped`, body frame)
+and `/mongla/sim/dvl/altitude` (`Range`, bottom-track).
 
 ### Accuracy today
 
@@ -113,7 +113,7 @@ Substitutes, in order of effort:
 
 | want | use | notes |
 |---|---|---|
-| bottom altitude | **already have it** — `/duburi/sim/dvl/altitude` | free, comes with the DVL |
+| bottom altitude | **already have it** — `/mongla/sim/dvl/altitude` | free, comes with the DVL |
 | forward obstacle range | `gpu_lidar` | native, well supported; a single-beam config is a plausible echosounder stand-in |
 | depth below surface | `altimeter` | native |
 | imaging / multibeam sonar | custom plugin, or port from Project DAVE | real work; DAVE's sonar is the usual reference |

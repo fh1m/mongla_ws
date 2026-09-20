@@ -20,12 +20,12 @@ already published one headline (82.3 Hz) that was a single run.
 import argparse, os, sys, time, statistics as st
 import numpy as np
 
-sys.path.insert(0, os.path.expanduser('~/duburi_ws/src/duburi_vision'))
+sys.path.insert(0, os.path.expanduser('~/mongla_ws/src/mongla_vision'))
 import cv2
 cv2.setNumThreads(1)          # the pipeline is serial; extra threads only add jitter
 
-from duburi_vision.detection.factory import make_detector
-from duburi_vision.detection import hailo as H
+from mongla_vision.detection.factory import make_detector
+from mongla_vision.detection import hailo as H
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--model', default='gate_rescue_repair')
@@ -40,7 +40,7 @@ ap.add_argument('--synthetic', action='store_true',
 A = ap.parse_args()
 
 path = A.model if A.model.endswith('.hef') else os.path.expanduser(
-    f'~/duburi_ws/src/duburi_vision/models/{A.model}.hef')
+    f'~/mongla_ws/src/mongla_vision/models/{A.model}.hef')
 det = make_detector(model_path=path, conf=A.conf, class_allowlist=None,
                     max_det=100, logger=None)
 size = det._size

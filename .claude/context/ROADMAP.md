@@ -52,7 +52,7 @@ not by competition, with a deck-side override for every venue constant.
 | G2 | **Thrusters fitted and ESC RPM non-zero.** 958/958 ESC frames read 0 with nothing attached; `THR_TRIM_EN=0` WARN | OPEN (hardware) | blocks `thrust_model`, the RPM velocity sensor, ESC current as a BLOCKED channel |
 | G3 | **Firmware PR merge.** 21 of our PRs open on `srot-control-board`, none merged since 2026-09-03 (re-checked 2026-09-17: #1-#24 all OPEN) | OPEN | `gh pr list -R RakibulIslam1/srot-control-board`; see §3 |
 | G4 | Board config applied 2026-09-15: Bar30 re-zeroed (+0.005 m), `LEAK_EN=1`, `MOT_BAT_V_MAX=16.8`, read back | DONE (re-verify after any reflash) | operator |
-| G5 | Tool offsets: torpedo and dropper are `unmeasured: true`, so every fire through them warns and aims the camera centre | OPEN (tape measure) | `src/duburi_vision/config/tool_geometry.yaml` |
+| G5 | Tool offsets: torpedo and dropper are `unmeasured: true`, so every fire through them warns and aims the camera centre | OPEN (tape measure) | `src/mongla_vision/config/tool_geometry.yaml` |
 
 ---
 
@@ -100,10 +100,10 @@ re-ask.
 |---|---|---|---|
 | C1 | `move_*_dist`, `arc`, `style_yaw`, `lock_heading` on srot | REFUSED (`srot_fc.UNSUPPORTED_VERBS`) | un-refuse `move_*_dist` ONLY after #23 merges, and in that same change flip `velocity_uplink` default to true (DIST refuses to start with no velocity) |
 | C2 | `velocity_uplink` / `position_uplink` on by default | OFF (both `False`) | gated on #23 and G1 |
-| C3 | Altitude HOLD verb (height above floor as a Z mode) | OPEN | height is published (`floor_height`, `duburi.floor_height()`); holding it needs G1 |
+| C3 | Altitude HOLD verb (height above floor as a Z mode) | OPEN | height is published (`floor_height`, `mongla.floor_height()`); holding it needs G1 |
 | C4 | Near-surface gain set | **DEFERRED (evidence) 2026-09-17** | board depth PID is one fixed gain set (`depth_control.cpp:40`); near-surface suction/wave coupling is a moving-body-in-waves effect and SAUVC 2026 is indoor. After G1, log `DEPTH_ERR` vs depth; add gains (firmware PR) only if the data show a near-surface error |
-| C5 | Autotune entry point | **DONE 2026-09-17 (operator, not mission)** | `ros2 run duburi_manager autotune` prints the live PID briefing; `--confirm "RUN AUTOTUNE IN WATER"` runs it; Ctrl-C aborts to STABILIZE + disarm; refuses a port the manager holds. Deliberately NOT a mission verb. Needs G1 before it is useful |
-| C6 | Goal id on goal/feedback/result; time-margin signal to missions | **DONE 2026-09-17** | scoreboard rows carry the first 8 hex of the action goal UUID, the manager logs the same on `[ACT]`; time margin = `duburi.task(deadline_s=)` / budget `remaining_s()` |
+| C5 | Autotune entry point | **DONE 2026-09-17 (operator, not mission)** | `ros2 run mongla_manager autotune` prints the live PID briefing; `--confirm "RUN AUTOTUNE IN WATER"` runs it; Ctrl-C aborts to STABILIZE + disarm; refuses a port the manager holds. Deliberately NOT a mission verb. Needs G1 before it is useful |
+| C6 | Goal id on goal/feedback/result; time-margin signal to missions | **DONE 2026-09-17** | scoreboard rows carry the first 8 hex of the action goal UUID, the manager logs the same on `[ACT]`; time margin = `mongla.task(deadline_s=)` / budget `remaining_s()` |
 
 ### Localization
 
@@ -113,7 +113,7 @@ re-ask.
 | L2 | Battery voltage as a demand-model input | **CLOSED 2026-09-17** | the board mixer already scales thrust by PM2 voltage (`mixer.cpp:77-125`, `MOT_BAT_V_MAX=16.8` set 2026-09-15); host compensation would double-count |
 | L3 | DeepVL evaluation | OPEN, wants G2 | only a docstring mention |
 | L4 | Magnetometer / MAG_CAL consumers | **CLOSED (by design) 2026-09-17** | board `yaw_ref` does the one-shot mag alignment (`MAG_YAW_REF=1`); host reads `YAW_REF` for health; drift bounded by landmark anchor + tile grid |
-| L5 | Course priors with measured positions | **TOOLING DONE 2026-09-17; DATA OPEN** | `courses/sauvc26.yaml` template (classes, rulebook dims, positions unset -- the rulebook gives zones, not points); `ros2 run duburi_localization course_survey --course sauvc26 --prop final_gate --x .. --y .. --bearing ..` writes the deck copy (`measured: true`) the loader reads first. Positions still need measuring at the venue |
+| L5 | Course priors with measured positions | **TOOLING DONE 2026-09-17; DATA OPEN** | `courses/sauvc26.yaml` template (classes, rulebook dims, positions unset -- the rulebook gives zones, not points); `ros2 run mongla_localization course_survey --course sauvc26 --prop final_gate --x .. --y .. --bearing ..` writes the deck copy (`measured: true`) the loader reads first. Positions still need measuring at the venue |
 | L6 | `floor_range` validated at taped range in water | OPEN (measurement) | `rounds/round17-range-without-size.md` |
 | L7 | Rewind-and-replay lag correction | **DONE 2026-09-17 (opt-in)** | merged into L1: every filter event buffered with its prior snapshot, late ones inserted and the tail replayed |
 
@@ -122,10 +122,10 @@ re-ask.
 | # | Item | State | Note |
 |---|---|---|---|
 | P1 | Hailo model release between tasks | **RE-SCOPED 2026-09-17** | not a binding limit today: configure-once, activate-per-turn, **≥3 groups measured resident together** (`hailo.py:611-626`; the "2-group ceiling" in `measured-bars.md` corrected). Opt-in `release_model(stem)` only if a 4th model is needed -- Pi measurement first (plan C1) |
-| P2 | Consumers for published-but-unread topics | **DONE 2026-09-16** | `duburi.outline(cls)` reads `*/contours` (polygon, area, OBB angle); `duburi.active_models(cam)` + `set_model(..., confirm_s=)` read `*/vision_info`. Both opt-in (subscribe on first call) |
-| P3 | OBB angle / class posterior on the wire | **CLOSED 2026-09-17** | OBB angle already on `contours` (`duburi.outline().angle_deg`). Posterior: detection HEFs run NMS on-chip per class, so no distribution survives to send. Masks now used in `identity` (symbol pixels vs structure BOX -- a gate's mask is its pipes); `side_on(..., use_outline=True)` opt-in |
+| P2 | Consumers for published-but-unread topics | **DONE 2026-09-16** | `mongla.outline(cls)` reads `*/contours` (polygon, area, OBB angle); `mongla.active_models(cam)` + `set_model(..., confirm_s=)` read `*/vision_info`. Both opt-in (subscribe on first call) |
+| P3 | OBB angle / class posterior on the wire | **CLOSED 2026-09-17** | OBB angle already on `contours` (`mongla.outline().angle_deg`). Posterior: detection HEFs run NMS on-chip per class, so no distribution survives to send. Masks now used in `identity` (symbol pixels vs structure BOX -- a gate's mask is its pipes); `side_on(..., use_outline=True)` opt-in |
 | P4 | Monocular depth on the vehicle launch | **MEASURE FIRST** | relative (per-frame min-max) depth, ONNX CPU, no control consumer, Pi cost never measured -- default stays off the vehicle launch unless a Pi measurement and a consumer justify it |
-| P5 | Verify the actuation by looking | **PARTIAL 2026-09-17** | `VisionResult.fired` = board outcome per channel (`ch1:FIRED`/`none`/`pending`); opt-in `align(evidence=True)` / `duburi.save_evidence()` writes the annotated frame to the run folder. An automatic hit/miss judgement still needs a model class for the shot itself |
+| P5 | Verify the actuation by looking | **PARTIAL 2026-09-17** | `VisionResult.fired` = board outcome per channel (`ch1:FIRED`/`none`/`pending`); opt-in `align(evidence=True)` / `mongla.save_evidence()` writes the annotated frame to the run folder. An automatic hit/miss judgement still needs a model class for the shot itself |
 | P6 | Detection range per prop | **TABLE CORRECTED 2026-09-17; DATA OPEN** | `measured-bars.md` range table used the downward AIR focal (≈514 px); recomputed per camera at the rectified centre focal. The 10 px floor is still a COCO `person` number -- re-run per competition model |
 | P7 | SAUVC bump flares are 16 mm wide | **RISK (quantified)** | pole detectable only inside **~0.91 m** on the forward camera (567 px centre focal, 10 px floor); golf ball ~2.4 m. Task 4 approach must come from course priors (`course_survey`), not detection at range |
 
@@ -133,10 +133,10 @@ re-ask.
 
 | # | Item | State | Note |
 |---|---|---|---|
-| M1 | Port missions + FSM off Pixhawk-era verbs | IN PROGRESS | **B1 DONE 2026-09-17:** srot now refuses only the axes that MOVE a depth setpoint (forward `depth`, downward fill->depth descent); downward lat + surge runs, and `align_loop` no longer streams `set_target_depth` on srot (`test_srot_vision_actuation.py`, 3 injections bite). **Open for water, not host:** in STABILIZE nothing holds depth during an align. Measure first (armed, STABILIZE, zero heave, log depth ~20 s); only a real sag justifies an opt-in DEPTH_HOLD vision mode, gated like AUTO (depth loop never run closed; a baro refusal silently forces STABILIZE). **B2 DONE 2026-09-17:** `sauvc_navigation` skips `lock_heading` on srot via new `duburi.backend` (reads the manager's `flight_controller` once, raises rather than guesses); `sauvc_target_acquisition` needed no change after B1. `test_sauvc_srot_port.py` executes both `run()`s and checks sent verbs against `UNSUPPORTED_VERBS`. **B3 DONE 2026-09-17:** `sauvc_full` (one dive: navigation, target acquisition, flares opt-in) -- see M3. Missions still NOT FLOWN. ⛔ On srot their `move_*`/`set_depth`/`pause`/`stop` (incl. the creep fallback and blind transit) enter AUTO and are denied until the depth-loop bench checks pass; frozen per mission in `test_sauvc_srot_port.py` |
-| M2 | SAUVC Task 4: listen station → `duburi.flare_order(timeout=)` → bump in order, else bump all | **HOST DONE 2026-09-17** | `sauvc_full._flares` (colour->class map, ordered or bump-all, off by default via `SAUVC_FLARES_ENABLED`). In water needs H1, #24 and the P6/P7 flare-range measurement |
-| M3 | Use `run_budget` in a real mission | **DONE (host) 2026-09-17** | `sauvc_full` is the first caller of `use_budget`, `worth_attempting` and `task()`: each chunk has a deadline and is abandoned cleanly, Task 3 is skipped by name (no gripper), a blind gate transit is recorded `unconfirmed` via new `duburi.note()`, chunks are called via `navigate()`/`acquire()` (their `run()` re-zeroes the baro). Task 4 (listen for the LoRa order, else bump all) is behind `SAUVC_FLARES_ENABLED=False` until P6 measures flare detection range. `test_sauvc_full.py` (3 injections bite); the pinger sweep now over-approximates variable class arguments |
-| M4 | Score-aware abandonment mid-task | **DONE 2026-09-17 (opt-in)** | `with duburi.task(name, deadline_s=)` cancels the goal in flight at the deadline and raises `TaskAbandoned` for the fallback; defaults to what the budget has left; safety verbs never blocked |
+| M1 | Port missions + FSM off Pixhawk-era verbs | IN PROGRESS | **B1 DONE 2026-09-17:** srot now refuses only the axes that MOVE a depth setpoint (forward `depth`, downward fill->depth descent); downward lat + surge runs, and `align_loop` no longer streams `set_target_depth` on srot (`test_srot_vision_actuation.py`, 3 injections bite). **Open for water, not host:** in STABILIZE nothing holds depth during an align. Measure first (armed, STABILIZE, zero heave, log depth ~20 s); only a real sag justifies an opt-in DEPTH_HOLD vision mode, gated like AUTO (depth loop never run closed; a baro refusal silently forces STABILIZE). **B2 DONE 2026-09-17:** `sauvc_navigation` skips `lock_heading` on srot via new `mongla.backend` (reads the manager's `flight_controller` once, raises rather than guesses); `sauvc_target_acquisition` needed no change after B1. `test_sauvc_srot_port.py` executes both `run()`s and checks sent verbs against `UNSUPPORTED_VERBS`. **B3 DONE 2026-09-17:** `sauvc_full` (one dive: navigation, target acquisition, flares opt-in) -- see M3. Missions still NOT FLOWN. ⛔ On srot their `move_*`/`set_depth`/`pause`/`stop` (incl. the creep fallback and blind transit) enter AUTO and are denied until the depth-loop bench checks pass; frozen per mission in `test_sauvc_srot_port.py` |
+| M2 | SAUVC Task 4: listen station → `mongla.flare_order(timeout=)` → bump in order, else bump all | **HOST DONE 2026-09-17** | `sauvc_full._flares` (colour->class map, ordered or bump-all, off by default via `SAUVC_FLARES_ENABLED`). In water needs H1, #24 and the P6/P7 flare-range measurement |
+| M3 | Use `run_budget` in a real mission | **DONE (host) 2026-09-17** | `sauvc_full` is the first caller of `use_budget`, `worth_attempting` and `task()`: each chunk has a deadline and is abandoned cleanly, Task 3 is skipped by name (no gripper), a blind gate transit is recorded `unconfirmed` via new `mongla.note()`, chunks are called via `navigate()`/`acquire()` (their `run()` re-zeroes the baro). Task 4 (listen for the LoRa order, else bump all) is behind `SAUVC_FLARES_ENABLED=False` until P6 measures flare detection range. `test_sauvc_full.py` (3 injections bite); the pinger sweep now over-approximates variable class arguments |
+| M4 | Score-aware abandonment mid-task | **DONE 2026-09-17 (opt-in)** | `with mongla.task(name, deadline_s=)` cancels the goal in flight at the deadline and raises `TaskAbandoned` for the fallback; defaults to what the budget has left; safety verbs never blocked |
 | M5 | Scorecard records the perception state behind each verb | **DONE 2026-09-17** | each vision row carries `vision: {target, camera, outcome, saw_target, x_px, y_px, fill, fired, model}` |
 | M6 | Real-pool auto-labelling | OPEN | new work; Bumblebee's is dead code |
 
@@ -191,12 +191,12 @@ own formula. Dev suite before any change: 3220 passed, 0 failed.
 
 | # | Defect | Consequence | Fix + guard |
 |---|---|---|---|
-| A1 | **The DSL's metric vision (`range_to`, `floor_range`, `bearing_to`, `fix_from_prop`, `standoff_for_prop`) used ONE in-water focal length for every camera**, from a 46.7° FOV measured on the global-shutter unit while it was "forward"; since the 2026-09-07 swap that unit is DOWNWARD. Worse, a flat port has no single focal: the in-water focal grows with field angle (forward camera at 640 px: ~567 px centre, ~634 edge) | 1.5 m gate at 4.0 m, forward camera: old constant read **5.15 m on axis (+29 %)**, 4.59 m at 1.2 m off-axis, 3.33 m at 2.2 m off-axis (−17 %). A per-camera FOV alone would still read 4.40 m on axis (+10 %) | pixels go through the SAME flat-port rectifier `lock_node`/`pnp_node` use (`optics.rectifier_for`, built from the live `CameraInfo` K), then a pinhole at `K_rect`. `medium` (`DUBURI_MEDIUM`, default water) matches those nodes. No calibration published → per-camera fallback table (53.6° forward / 46.7° downward), tested against the calibration JSONs. Ray-traced off-axis truth tests for `range_to` and `floor_range` (within 1 % / 0.5 %); both fail with the rectifier removed |
+| A1 | **The DSL's metric vision (`range_to`, `floor_range`, `bearing_to`, `fix_from_prop`, `standoff_for_prop`) used ONE in-water focal length for every camera**, from a 46.7° FOV measured on the global-shutter unit while it was "forward"; since the 2026-09-07 swap that unit is DOWNWARD. Worse, a flat port has no single focal: the in-water focal grows with field angle (forward camera at 640 px: ~567 px centre, ~634 edge) | 1.5 m gate at 4.0 m, forward camera: old constant read **5.15 m on axis (+29 %)**, 4.59 m at 1.2 m off-axis, 3.33 m at 2.2 m off-axis (−17 %). A per-camera FOV alone would still read 4.40 m on axis (+10 %) | pixels go through the SAME flat-port rectifier `lock_node`/`pnp_node` use (`optics.rectifier_for`, built from the live `CameraInfo` K), then a pinhole at `K_rect`. `medium` (`MONGLA_MEDIUM`, default water) matches those nodes. No calibration published → per-camera fallback table (53.6° forward / 46.7° downward), tested against the calibration JSONs. Ray-traced off-axis truth tests for `range_to` and `floor_range` (within 1 % / 0.5 %); both fail with the rectifier removed |
 | A2 | **`floor_range` used the frame centre as the principal point.** Forward cy is 290 px at 720 p, 70 px off centre | ~6° of pitch-equivalent: roughly a metre of range bias at 3 m | principal point now comes with `K_rect`; covered by the ray-traced truth test above |
 | A3 | **RIEKF update Jacobians disagreed with the filter's own error definition** (`_inject`): body velocity carried a spurious `Rᵀ[v]×` attitude block (the true block is exactly 0); depth and position fixes lacked the `-[p]×` coupling; yaw lacked tilt terms | simulated: **no accuracy change inside a pool** (radius ≤ 15 m, 1 rejection either way); 410 vs 20 gate rejections far from the origin (\|p\| ≈ 48 m) | H corrected; `test_inekf_jacobians.py` checks every H against a finite difference through `_inject`; injecting the old blocks fails |
 | A4 | **Bearing refraction was per-axis**; a flat port refracts the polar angle and keeps azimuth, which is the model `optics.RefractiveRectifier` already uses | +0.7° / +1.4° at the forward frame corner, ~0.2° mid-frame | radial `_refract_point`; ray-traced corner truth test fails on the old model. Two existing tests had put their "on-axis" point at `h/2` instead of `cy` and now sit on the true principal row |
 | A5 | `vision.launch.py` passed `max_predict_frames` to `tracker_node`, which had renamed it `max_predict_s` | the launch argument did nothing (rclpy ignores undeclared params silently) | launch passes `max_predict_s` (seconds) |
-| A6 | Three shims (`duburi_vision.{pose_cluster,heading_anchor,resection}`) left by the Tier 5.2 move, **zero importers** anywhere | a second copy waiting to drift | deleted |
+| A6 | Three shims (`mongla_vision.{pose_cluster,heading_anchor,resection}`) left by the Tier 5.2 move, **zero importers** anywhere | a second copy waiting to drift | deleted |
 
 ### Verified correct (by truth, not agreement)
 
@@ -215,10 +215,10 @@ own formula. Dev suite before any change: 3220 passed, 0 failed.
 | Item | Resolution |
 |---|---|
 | `run_budget.py` (Tier 5.1) | wired into the DSL, opt-in: `use_budget(total_s, reserve_s)` starts the clock on a successful `arm()`; `worth_attempting(name, points=, worst_case_s=, fallback_s=, fallback_points=)` returns full / fallback / skip and logs it on the scoreboard. No budget = always attempt |
-| `duburi_control/nav_filter.py` | **false positive** of the `src/`-only census: `tools/srot_console_server.py` and `tools/srot_replay.py` import it. Kept |
+| `mongla_control/nav_filter.py` | **false positive** of the `src/`-only census: `tools/srot_console_server.py` and `tools/srot_replay.py` import it. Kept |
 | `estimator/thrust_model.py` | stays uncalled on purpose until G2 (thrusters fitted) |
-| topic `*/vision_info` | `duburi.active_models(cam)`; `set_model(name, confirm_s=N)` waits for the detector to announce `name`, then drops detections cached from the old model. Matched by NAME, not epoch (a restarted detector resets the epoch). `confirm_s=0` (default) is the old behaviour |
-| topic `*/contours` | `duburi.outline(cls)` → largest `Outline(class_name, score, angle_deg, area_px, points)`; a box model gives 4 corners, a seg model the mask outline |
+| topic `*/vision_info` | `mongla.active_models(cam)`; `set_model(name, confirm_s=N)` waits for the detector to announce `name`, then drops detections cached from the old model. Matched by NAME, not epoch (a restarted detector resets the epoch). `confirm_s=0` (default) is the old behaviour |
+| topic `*/contours` | `mongla.outline(cls)` → largest `Outline(class_name, score, angle_deg, area_px, points)`; a box model gives 4 corners, a seg model the mask outline |
 
 Tests: `test_opt_in_consumers.py` (9, real rclpy publishers), each injection-verified.
 
@@ -242,13 +242,13 @@ Every switch defaults to what ships, so a plain launch is unchanged. Flip ONE at
 `test_feature_switches.py` fails if a bringup switch's default drifts from its node's, or if it is
 declared but not forwarded (a knob wired to nothing).
 
-### Launch (`ros2 launch duburi_manager bringup.launch.py <arg>:=<value>`)
+### Launch (`ros2 launch mongla_manager bringup.launch.py <arg>:=<value>`)
 
 | Switch | Default | Gates | Lands on |
 |---|---|---|---|
 | `vision` | `false` | the whole vision stack | include |
 | `vision_stack` | `pi` | `pi` (dual camera + Hailo) or `generic` | include |
-| `localization` | `true` | the RIEKF node | `duburi_localization` |
+| `localization` | `true` | the RIEKF node | `mongla_localization` |
 | `flow` | `false` | downward-camera velocity (needs `pool_depth_m`) | `flow_node` |
 | `lock` | `true` | XFeat anchor + LK follower ladder | `lock_node` |
 | `paused` | `true` | detectors idle until a mission resumes one | detectors |
@@ -268,7 +268,7 @@ declared but not forwarded (a knob wired to nothing).
 | `viewer` | `false` | on-vehicle HUD | vision |
 | `allow_fw_behaviour_mismatch` | `false` | arm below firmware rev 2 (safety override) | manager |
 
-### Live (`ros2 param set /duburi_manager vision.<name> <value>`, next goal)
+### Live (`ros2 param set /mongla_manager vision.<name> <value>`, next goal)
 
 `vision.coast_s` (0.8, 0 = off), `vision.lock_s` (1.0, 0 = ladder off), `vision.mixer_aware`
 (true), `vision.range_gain_floor` (1.0 = off), `vision.ki_lat` (0 = off), `vision.ctrl_conf`
@@ -288,5 +288,5 @@ declared but not forwarded (a knob wired to nothing).
 | `anchor_on(prop)` / `fix_position()` / `fix_from_prop(prop)` | absolute heading and pool fixes (need a course with positions, L5) |
 | `can_see()` / `motion()` | blind-camera and BLOCKED-hull checks |
 | `align(..., evidence=True)` / `save_evidence(cam, tag)` | annotated frame of how a task ended, saved beside the scorecard |
-| `DUBURI_MEDIUM=air` (env) | DSL metric vision as a plain pinhole for bench runs |
+| `MONGLA_MEDIUM=air` (env) | DSL metric vision as a plain pinhole for bench runs |
 | `align(..., lock_on=, settle=, hold_heading=, fire_pass=, tool=)` | per-call precision knobs |

@@ -19,7 +19,7 @@
 #        it through usbfs — blocking ch341 even once the module exists.
 #
 #   This script fixes both so "plug the payload into any USB port and run
-#   `ros2 run duburi_manager start ... -p payload_port:=auto`" just works.
+#   `ros2 run mongla_manager start ... -p payload_port:=auto`" just works.
 #
 # IDEMPOTENT — safe to re-run.  Re-run after any kernel update or SSD reflash.
 #

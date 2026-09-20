@@ -86,7 +86,7 @@ Final 6DOF pose estimate → motion planner
 
 **Why P0**: Gate-pass with style requires knowing approach angle precisely. Torpedo requires exact board face orientation. XFeat+PnP gives this with ZERO new training data needed (just a dock-side photo).
 
-**What to build**: `duburi_vision/pose/xfeat_pose.py`
+**What to build**: `mongla_vision/pose/xfeat_pose.py`
 
 ```python
 class XFeatPoseEstimator:
@@ -97,7 +97,7 @@ class XFeatPoseEstimator:
         # Returns None if < 8 inliers (fall back to bbox area proxy)
 ```
 
-**New ROS topic**: `/duburi/vision/<cam>/pose` (`geometry_msgs/PoseStamped`)
+**New ROS topic**: `/mongla/vision/<cam>/pose` (`geometry_msgs/PoseStamped`)
 
 **Gate physical geometry** (for solvePnP object_points_3d):
 ```python
@@ -110,18 +110,18 @@ GATE_POINTS_3D = np.array([
 ], dtype=np.float32)
 ```
 
-**Templates**: Store in `duburi_vision/templates/gate_front.jpg` etc.
+**Templates**: Store in `mongla_vision/templates/gate_front.jpg` etc.
 
 **Dock-side calibration checklist**:
 1. Place AUV 1m from gate, centered, camera level
-2. `ros2 run duburi_vision capture_template --camera forward --output templates/gate_front.jpg`
+2. `ros2 run mongla_vision capture_template --camera forward --output templates/gate_front.jpg`
 3. Confirm template captures both poles and crossbar clearly
 
 ### P1 — Competition day: XFeat Re-ID Gallery
 
 **Why P1**: After Part 4 tracking improvements (track_buffer=150), ID stability is much better. Re-ID is the remaining failure mode: turbid water hides gate for >5s → new ID on reappear. XFeat re-ID bridges that gap.
 
-**What to build**: `duburi_vision/filters/reid.py`
+**What to build**: `mongla_vision/filters/reid.py`
 
 ```python
 class XFeatReID:
@@ -143,7 +143,7 @@ class XFeatReID:
 **What to build**: `vision_depth_node.py`
 
 ```python
-# New ROS node: camera/image_raw → /duburi/vision/<cam>/depth_map (sensor_msgs/Image, 32FC1)
+# New ROS node: camera/image_raw → /mongla/vision/<cam>/depth_map (sensor_msgs/Image, 32FC1)
 # Model: DepthAnything V2 Small (ONNX, TensorRT fp16)
 # Calibrate: measure bbox median depth at known distance → scale factor
 ```

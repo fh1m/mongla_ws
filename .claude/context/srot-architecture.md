@@ -589,7 +589,7 @@ now been wrong three times:
 
 **The board has been publishing the answer at 50 Hz the whole time.** ATTITUDE
 carries the gyro (`mav_stream.cpp:226` packs `s.gx/gy/gz`) and we already
-republish it as `/duburi/imu_rates`. Stillness was always **measurable** and I
+republish it as `/mongla/imu_rates`. Stillness was always **measurable** and I
 assumed it instead.
 
 ### The measured difference, once stillness was verified
@@ -757,7 +757,7 @@ consequence unvalidated sign in the stack.** It belongs in `bringup_check`.
 
 ## 5b. Heading, MEASURED — and the drift is NOT the number that matters
 
-Five still-bench captures against `/duburi/state` at 22 Hz, board untouched. The
+Five still-bench captures against `/mongla/state` at 22 Hz, board untouched. The
 last three were run **back to back in one session** specifically to settle a
 claim an earlier version of this section made and got wrong.
 
@@ -911,7 +911,7 @@ consequence unvalidated sign in the stack.** It belongs in `bringup_check`.
 
 ## 5b. Heading drift, MEASURED on this board — and the sign is not stable
 
-Two still-bench runs against `/duburi/state` (no serial contention — the manager
+Two still-bench runs against `/mongla/state` (no serial contention — the manager
 owns the port and we read what it publishes), 22 Hz:
 
 | run | duration | within-window drift | residual | p2p |
@@ -992,12 +992,12 @@ until this round — the flasher was the one repo behind, exactly as suspected):
 > **We own, and commit directly to:** `srot-control-board`, `srot-ground-station`
 > (the LoRa bridge **and Bondor**), `srot-esc-flasher`.
 >
-> **We NEVER commit to `duburi_ws`.** Not to `main`, not to `srot`, not "just a
+> **We NEVER commit to `mongla_ws`.** Not to `main`, not to `srot`, not "just a
 > doc fix". … **That includes the mirrored constants in `fc/srot_protocol.py`
 > even though we are the source of truth for the values — being the authority on
 > a number is not the same as having write access to their tree.**
 >
-> **And the reverse.** If `duburi_ws` needs something changed in the firmware, in
+> **And the reverse.** If `mongla_ws` needs something changed in the firmware, in
 > Bondor or in the ESC flasher, they open a **pull request here**. They should not
 > push directly.
 

@@ -8,7 +8,7 @@ FOV."* (`JETSON_FEEDBACK.md`) — **cleared**, below.
 
 ## 1. The FOV, measured
 
-`duburi_ws` @ `8049de9`. Blue Robotics low-light USB camera, the mission optic.
+`mongla_ws` @ `8049de9`. Blue Robotics low-light USB camera, the mission optic.
 
 | | value |
 |---|---|

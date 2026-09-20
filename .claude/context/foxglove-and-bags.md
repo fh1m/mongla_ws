@@ -7,7 +7,7 @@
 > perturb a mission unless you explicitly turn it on.
 
 One idea unifies all three: **one folder per pool session holds everything for a run.**
-`DUBURI_RUN_DIR` (default `~/duburi_runs`) is where scorecards land and where
+`MONGLA_RUN_DIR` (default `~/mongla_runs`) is where scorecards land and where
 `pool_record.sh` writes bags — so after a session you grab one directory and have the
 telemetry, the bag, and the per-verb scorecard together.
 
@@ -21,19 +21,19 @@ from one folder afterwards (MCAP bag + scorecard + node logs). One helper —
 
 **Pin the run folder in EVERY terminal** (same label = same folder):
 ```bash
-cd ~/Ros_workspaces/duburi_ws && source install/setup.bash
-source scripts/pool_session.sh gate_am     # exports DUBURI_RUN_DIR + ROS_LOG_DIR
+cd ~/Ros_workspaces/mongla_ws && source install/setup.bash
+source scripts/pool_session.sh gate_am     # exports MONGLA_RUN_DIR + ROS_LOG_DIR
 ```
 
 **Terminal 1 — preflight + vehicle + telemetry + live viz** (the launch file is the
-`ros2 run duburi_manager start` equivalent that *also* wires vision + Foxglove; the same
+`ros2 run mongla_manager start` equivalent that *also* wires vision + Foxglove; the same
 `-p` params become `arg:=` — `bno085_port`/`payload_port` default to `auto` already):
 ```bash
-ros2 run duburi_manager bringup_check         # 12-section preflight; fix any FAIL first
-ros2 launch duburi_manager bringup.launch.py \
+ros2 run mongla_manager bringup_check         # 12-section preflight; fix any FAIL first
+ros2 launch mongla_manager bringup.launch.py \
      mode:=pool yaw_source:=bno085 vision:=true foxglove:=true
 ```
-> Prefer your existing `ros2 run duburi_manager start …`? It has no Foxglove arg — start
+> Prefer your existing `ros2 run mongla_manager start …`? It has no Foxglove arg — start
 > the bridge yourself in a spare terminal:
 > `ros2 run foxglove_bridge foxglove_bridge --ros-args -p port:=8765 -p use_compression:=true -p include_hidden:=true`
 
@@ -44,25 +44,25 @@ scripts/pool_record.sh record gate_am         # Ctrl-C to stop + finalize the ba
 
 **Terminal 3 — drive it** (mission OR CLI — scorecard auto-writes into the folder):
 ```bash
-ros2 run duburi_planner mission fsm_full_2026
-#   or hand-fly:  ros2 run duburi_planner duburi arm ; ... ; duburi disarm
+ros2 run mongla_planner mission fsm_full_2026
+#   or hand-fly:  ros2 run mongla_planner mongla arm ; ... ; mongla disarm
 ```
 
 **Topside laptop — watch live:** Foxglove desktop → *Open connection → Foxglove WebSocket*
-→ `ws://<pi-ip>:8765`, load `src/duburi_vision/foxglove/duburi_layout.json`.
+→ `ws://<pi-ip>:8765`, load `src/mongla_vision/foxglove/mongla_layout.json`.
 
 **After the run — one folder has everything:**
 ```bash
 scripts/pool_record.sh list                   # bags + recent scorecards
-ls ~/duburi_runs/gate_am/                      # bag_gate_am_<ts>/  <mission>_<ts>.json  logs/
+ls ~/mongla_runs/gate_am/                      # bag_gate_am_<ts>/  <mission>_<ts>.json  logs/
 ```
 
 **Offline replay-to-tune (bench, no pool time):**
 ```bash
 source scripts/pool_session.sh gate_am
-scripts/pool_record.sh replay ~/duburi_runs/gate_am/bag_gate_am_<ts>
-# other terminal: ros2 run duburi_vision vision_display   (or drag the .mcap into Foxglove)
-# then: ros2 param set /duburi_detector_forward conf 0.45  and watch the effect
+scripts/pool_record.sh replay ~/mongla_runs/gate_am/bag_gate_am_<ts>
+# other terminal: ros2 run mongla_vision vision_display   (or drag the .mcap into Foxglove)
+# then: ros2 param set /mongla_detector_forward conf 0.45  and watch the effect
 ```
 
 Sections 1–3 below detail each piece.
@@ -75,30 +75,30 @@ BumblebeeAS's `controlkitv3` is Foxglove-based; the borrowable idea is **Foxglov
 itself**, not their code. `foxglove_bridge` is a stock ROS 2 Humble package — a C++
 WebSocket server that auto-exposes every topic. Our vision topics are standard
 `vision_msgs/Detection2DArray` + `sensor_msgs/Image`, which Foxglove renders natively
-(2D boxes over the image); `/duburi/state` (custom `DuburiState`) shows in the
-Raw-Messages panel; `/duburi/move` action feedback (`err_x_px`/`err_y_px`) plots live.
+(2D boxes over the image); `/mongla/state` (custom `MonglaState`) shows in the
+Raw-Messages panel; `/mongla/move` action feedback (`err_x_px`/`err_y_px`) plots live.
 
 **Install (once, on the Pi):**
 ```bash
 sudo apt install ros-humble-foxglove-bridge ros-humble-rosbag2-storage-mcap
 ```
-Both are declared as `exec_depend` in `duburi_manager/package.xml`, so on a fresh
+Both are declared as `exec_depend` in `mongla_manager/package.xml`, so on a fresh
 image `rosdep install --from-paths src` restores them — you only run the apt line
 by hand if rosdep isn't set up. (`foxglove_bridge` = live telemetry;
 `rosbag2_storage_mcap` = the MCAP bag format `pool_record.sh` writes, §2.)
 
 **Run (opt-in launch arg, off by default):**
 ```bash
-ros2 launch duburi_manager bringup.launch.py vision:=true foxglove:=true
+ros2 launch mongla_manager bringup.launch.py vision:=true foxglove:=true
 # custom port: foxglove:=true foxglove_port:=8766
 ```
 Then in the **Foxglove desktop app**: *Open connection → Foxglove WebSocket →*
 `ws://<pi-ip>:8765` (the Pi's IP). Load the shared layout at
-`src/duburi_vision/foxglove/duburi_layout.json` so the whole team sees the same view.
-The bridge is launched with `include_hidden:=true` so the `/duburi/move/_action/feedback`
+`src/mongla_vision/foxglove/mongla_layout.json` so the whole team sees the same view.
+The bridge is launched with `include_hidden:=true` so the `/mongla/move/_action/feedback`
 plot (err_x_px/err_y_px) isn't silently empty. **The layout is a starting point** — its
 panel-config schema is Foxglove-version-sensitive; if a panel loads blank, add it manually
-(Image → `/duburi/vision/forward/image_debug`, Plot → the `_action/feedback` err fields)
+(Image → `/mongla/vision/forward/image_debug`, Plot → the `_action/feedback` err fields)
 and re-save the JSON.
 
 ### ⚠ Gate A — prove FPS is unperturbed (mandatory before trusting it in-water)
@@ -109,7 +109,7 @@ tether bandwidth + serialization on the Orin Nano — the classic "new bottlenec
 
 ```bash
 # baseline (bridge OFF):
-ros2 topic hz /duburi/vision/forward/detections
+ros2 topic hz /mongla/vision/forward/detections
 # repeat with foxglove:=true AND an operator viewing images in Foxglove.
 # Detection Hz must be essentially unchanged.
 ```
@@ -137,21 +137,21 @@ allowlist** (keeps bags small — off the raw-image firehose) and the shared run
 tune detection conf / gains / mission timings without being in the water. The helper
 records **MCAP** (`-s mcap`), Foxglove's native format — so you can either drag the
 `.mcap` straight into the Foxglove desktop app (schemas travel with the bag, so the
-custom `DuburiState` renders), or `replay` it into a live `foxglove_bridge`; a recorded
+custom `MonglaState` renders), or `replay` it into a live `foxglove_bridge`; a recorded
 run reviews exactly like a live one.
 
 ```bash
-scripts/pool_record.sh record gate_run        # debug allowlist → ~/duburi_runs/bag_gate_run_<ts>
+scripts/pool_record.sh record gate_run        # debug allowlist → ~/mongla_runs/bag_gate_run_<ts>
 scripts/pool_record.sh record --full gate_run  # + raw image_raw/camera_info (BIG; only if needed)
-scripts/pool_record.sh replay ~/duburi_runs/bag_gate_run_20260710_141530
+scripts/pool_record.sh replay ~/mongla_runs/bag_gate_run_20260710_141530
 scripts/pool_record.sh list                    # runs + sizes + recent scorecards
 ```
 Default allowlist: `state`, `imu_rates`, `move` action feedback/status, and per-camera
 `detections` / `tracks` / `image_debug` / `vis_range` / `distance`. Ctrl-C stops and
-finalizes the bag. Override the parent dir with `DUBURI_RUN_DIR`.
+finalizes the bag. Override the parent dir with `MONGLA_RUN_DIR`.
 
 **Replay-to-tune loop:** `replay` a bag → run `vision_display` or Foxglove against it →
-`ros2 param set /duburi_detector_forward conf 0.45` and watch the effect — all on the
+`ros2 param set /mongla_detector_forward conf 0.45` and watch the effect — all on the
 bench, no pool. (The control loop needs the manager+MAVLink; **detection/vision tuning**
 is what replays cleanly.)
 
@@ -160,16 +160,16 @@ is what replays cleanly.)
 ## 3. Mission scorecards — dedicated folder + traceability
 
 Already emitted by `mission.py` on every exit (success, exception, or Ctrl-C) via
-`DuburiMission.log_scoreboard`. What changed: it now writes into **`DUBURI_RUN_DIR`**
-(default `~/duburi_runs`) as `<mission>_<ts>.json` instead of littering the CWD, and the
+`MonglaMission.log_scoreboard`. What changed: it now writes into **`MONGLA_RUN_DIR`**
+(default `~/mongla_runs`) as `<mission>_<ts>.json` instead of littering the CWD, and the
 JSON carries `mission`, ISO `timestamp`, and best-effort `git_sha` (which code ran this
 run) alongside `total_s` / `success_count` / `fail_count` / per-verb `phases`. No mission
 code changes — the runner passes the mission name it already knows.
 
 ```bash
-ros2 run duburi_planner mission fsm_full_2026   # → ~/duburi_runs/fsm_full_2026_<ts>.json
+ros2 run mongla_planner mission fsm_full_2026   # → ~/mongla_runs/fsm_full_2026_<ts>.json
 # put a whole session in one place:
-DUBURI_RUN_DIR=~/duburi_runs/2026-champs ros2 run duburi_planner mission fsm_full_2026
+MONGLA_RUN_DIR=~/mongla_runs/2026-champs ros2 run mongla_planner mission fsm_full_2026
 ```
 `git_sha` is best-effort (2 s timeout, returns `''` if git/the repo is unavailable) — it
 never raises on pool day.
@@ -179,20 +179,20 @@ never raises on pool day.
 rclpy/rcl already writes a per-process log tree; point it at the run folder so the
 **manager** terminal (`[STATE]`/`[ARDUB]`/`[RC ]`/`[ACT]` telemetry) **and** the mission
 terminal both land in one place — more complete than an in-process tee (which would only
-see the mission terminal). `scripts/pool_session.sh` sets both `DUBURI_RUN_DIR` and
+see the mission terminal). `scripts/pool_session.sh` sets both `MONGLA_RUN_DIR` and
 `ROS_LOG_DIR` for you; **source it (same label) in every terminal**:
 
 ```bash
-source scripts/pool_session.sh 2026-champs     # → DUBURI_RUN_DIR=~/duburi_runs/2026-champs, ROS_LOG_DIR=.../logs
+source scripts/pool_session.sh 2026-champs     # → MONGLA_RUN_DIR=~/mongla_runs/2026-champs, ROS_LOG_DIR=.../logs
 # terminal 1:
-ros2 launch duburi_manager bringup.launch.py vision:=true foxglove:=true 2>&1 | tee $DUBURI_RUN_DIR/manager_console.log
+ros2 launch mongla_manager bringup.launch.py vision:=true foxglove:=true 2>&1 | tee $MONGLA_RUN_DIR/manager_console.log
 # terminal 2 (same `source pool_session.sh 2026-champs`):
-ros2 run duburi_planner mission fsm_full_2026  2>&1 | tee $DUBURI_RUN_DIR/mission_console.log
+ros2 run mongla_planner mission fsm_full_2026  2>&1 | tee $MONGLA_RUN_DIR/mission_console.log
 ```
-Now `~/duburi_runs/2026-champs/` holds the bag, the scorecard, the rcl logs, and both
+Now `~/mongla_runs/2026-champs/` holds the bag, the scorecard, the rcl logs, and both
 console tees for that session. The `tee` is optional (rcl logs already persist); it just
 gives you the exact colored terminal output too. (Manual equivalent, no helper:
-`export DUBURI_RUN_DIR=~/duburi_runs/2026-champs; export ROS_LOG_DIR=$DUBURI_RUN_DIR/logs`.)
+`export MONGLA_RUN_DIR=~/mongla_runs/2026-champs; export ROS_LOG_DIR=$MONGLA_RUN_DIR/logs`.)
 
 ---
 
@@ -223,7 +223,7 @@ sudo apt install -y ros-humble-rosbag2-storage-mcap
 
 **Connect to the live AUV:** launch `lichtblick` → *Open connection → Foxglove WebSocket*
 → `ws://<pi-ip>:8765` (the Pi). Then *Layouts → Import* and pick
-`src/duburi_vision/foxglove/duburi_layout.json`. This is pure WebSocket over the
+`src/mongla_vision/foxglove/mongla_layout.json`. This is pure WebSocket over the
 tether/switch — it needs **no** matching `ROS_DOMAIN_ID` and **no** DDS discovery on the
 dev box (that's why it's robust across the network).
 
@@ -240,26 +240,26 @@ dev box (that's why it's robust across the network).
 **Dry practice with NO AUV (local sim on the dev box):** the bridge runs here too, so you
 can rehearse the whole Foxglove workflow against Gazebo SITL before pool day:
 ```bash
-ros2 launch duburi_manager bringup.launch.py mode:=sim yaw_source:=mavlink_ahrs \
+ros2 launch mongla_manager bringup.launch.py mode:=sim yaw_source:=mavlink_ahrs \
     vision:=true foxglove:=true viewer:=false
 # then Lichtblick → ws://localhost:8765
 ```
 
 **Pull a run off the Pi and replay it offline** (the highest-ROI loop — tune detection
-without the pool). Bags live in `~/duburi_runs` on the Pi; copy the whole run folder
+without the pool). Bags live in `~/mongla_runs` on the Pi; copy the whole run folder
 so the bag, scorecard, and logs come together:
 ```bash
-rsync -av jetson@192.168.2.69:~/duburi_runs/  ~/duburi_runs/     # or scp -r
-# replay locally (needs the MCAP plugin above + duburi_interfaces built here):
-scripts/pool_record.sh replay ~/duburi_runs/bag_gate_run_<ts>
+rsync -av mongla@mongla.local:~/mongla_runs/  ~/mongla_runs/     # or scp -r
+# replay locally (needs the MCAP plugin above + mongla_interfaces built here):
+scripts/pool_record.sh replay ~/mongla_runs/bag_gate_run_<ts>
 # then Lichtblick → ws://localhost:8765 sees the replayed topics.
 ```
 **Two distinct replay paths — don't conflate them:**
 - **`pool_record.sh replay` / `ros2 bag play`** re-publishes the bag onto live ROS topics →
-  needs `ros-humble-rosbag2-storage-mcap` **and** `duburi_interfaces` built. Use it when you
+  needs `ros-humble-rosbag2-storage-mcap` **and** `mongla_interfaces` built. Use it when you
   also want `vision_display` or live `ros2 param set` against the replayed stream.
 - **Open the `.mcap` file directly in Lichtblick** (*Open local file*) → needs **no ROS, no
-  plugin, no `duburi_interfaces`** (MCAP carries the schemas, so `DuburiState` still renders).
+  plugin, no `mongla_interfaces`** (MCAP carries the schemas, so `MonglaState` still renders).
   Best on a bare laptop.
 
 > **Note — the dev box is a distrobox** (`auv-ros2`, Ubuntu 22.04, ROS Humble). Lichtblick

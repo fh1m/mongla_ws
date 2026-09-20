@@ -30,7 +30,7 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..',
-                                'src', 'duburi_vision'))
+                                'src', 'mongla_vision'))
 
 _SEED = 20260904
 _N = 24
@@ -55,8 +55,8 @@ def _frames():
 
 def _run(mode, path, model, conf):
     if mode == 'blocking':
-        os.environ['DUBURI_HAILO_FORCE_BLOCKING'] = '1'
-    from duburi_vision.detection.factory import make_detector
+        os.environ['MONGLA_HAILO_FORCE_BLOCKING'] = '1'
+    from mongla_vision.detection.factory import make_detector
     det = make_detector(model_path=model, conf=conf, max_det=100,
                         class_allowlist=None, device='cpu', half=False)
     rows = []

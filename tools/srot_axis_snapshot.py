@@ -3,7 +3,7 @@
 
 `MOT_n_DIRECTION` and `CAL_MDIR` MULTIPLY (fw `task_control_loop.cpp:140-145`), and
 neither alone tells you what the vehicle will do. Reading only the first is exactly
-how duburi_ws concluded "config is correct" on 2026-08-07 while `CAL_MDIR` had
+how mongla_ws concluded "config is correct" on 2026-08-07 while `CAL_MDIR` had
 already moved; the firmware team's CFG banner caught it because it prints the
 product. This prints the product too.
 
@@ -28,13 +28,13 @@ from datetime import datetime
 from pathlib import Path
 
 _SRC = Path(__file__).resolve().parent.parent / 'src'
-for _pkg in ('duburi_control', 'duburi_manager'):
+for _pkg in ('mongla_control', 'mongla_manager'):
     _p = _SRC / _pkg
     if _p.is_dir():
         sys.path.insert(0, str(_p))
 
 from pymavlink import mavutil
-import duburi_control.fc.srot_protocol as sp
+import mongla_control.fc.srot_protocol as sp
 
 # CAL_MDIR is 1-indexed on the wire (CAL_MDIR1..8) while motor_dir[] is 0-indexed
 # in firmware. Ask for what the param table actually publishes.
@@ -77,7 +77,7 @@ if args.device:
     if conn_str.startswith('/dev/'):
         baud = sp.BAUD
 else:
-    from duburi_manager.connection_config import resolve_srot_profile
+    from mongla_manager.connection_config import resolve_srot_profile
     prof = resolve_srot_profile()
     conn_str, baud = prof['conn'], prof['baud']
 print(f'transport: {conn_str}' + (f' @ {baud}' if baud else ''))

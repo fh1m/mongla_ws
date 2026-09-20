@@ -1,0 +1,32 @@
+name: rs_task_torpedo
+description: >
+  RoboSub Task 4 in isolation: the board, its FOUR openings, and its pinger.
+
+  All four are real gaps a torpedo passes through, not painted circles: two
+  large and two small, one of each per row. Maximum points need a LARGE opening
+  first then a small one, fired from the scored standoffs -- far 1.0 m, farther
+  1.5 m -- so this is the drill for the standoff hold, not just for alignment.
+
+  (This description said "two openings" and "0.3 / 0.46 m" until round 14: the
+  board gained its four-opening 2026 layout and the active standoff pair moved
+  to the TeamTime slide's 1.0 / 1.5 m, and the course text tracked neither.)
+
+competition: robosub
+
+scene:
+  lighting: competition
+
+vehicle:
+  model: mongla_heavy
+  name: mongla
+  pose: [-3.5, 0.0, -0.4]
+  yaw: 0.0
+
+props:
+  - model: robosub_torpedo_survey_repair
+    name: torpedo_board
+    xy: [0.0, 0.0]
+    yaw: 3.1416
+  - model: robosub_pinger
+    name: pinger_deploy
+    xy: [0.6, 0.0]

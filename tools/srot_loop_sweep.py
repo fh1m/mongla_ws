@@ -37,8 +37,8 @@ import statistics as st
 import sys
 import time
 
-WS = os.path.expanduser('~/duburi_ws/src')
-for _p in ('duburi_control', 'duburi_vision'):
+WS = os.path.expanduser('~/mongla_ws/src')
+for _p in ('mongla_control', 'mongla_vision'):
     _q = os.path.join(WS, _p)
     if _q not in sys.path:
         sys.path.insert(0, _q)
@@ -47,12 +47,12 @@ import cv2                                                      # noqa: E402
 cv2.setNumThreads(0)
 from pymavlink import mavutil                                   # noqa: E402
 
-from duburi_control.bearing import (                            # noqa: E402
+from mongla_control.bearing import (                            # noqa: E402
     BearingFilter, bearing_from_pixels)
-from duburi_control.fc import srot_protocol as sp               # noqa: E402
-from duburi_control.fc.port_guard import PortGuard              # noqa: E402
-from duburi_control.fc.srot_fc import SrotFC                    # noqa: E402
-from duburi_vision.detection.factory import make_detector       # noqa: E402
+from mongla_control.fc import srot_protocol as sp               # noqa: E402
+from mongla_control.fc.port_guard import PortGuard              # noqa: E402
+from mongla_control.fc.srot_fc import SrotFC                    # noqa: E402
+from mongla_vision.detection.factory import make_detector       # noqa: E402
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--rates', default='20,40,60,80,120,200')
@@ -63,7 +63,7 @@ ap.add_argument('--dev', default='/dev/ttyUSB0')
 A = ap.parse_args()
 
 W, H = 640, 360
-CAL = os.path.expanduser('~/duburi_ws/src/duburi_vision/config/'
+CAL = os.path.expanduser('~/mongla_ws/src/mongla_vision/config/'
                          'calibration/pi_downward_1280x720.json')
 K = D = None
 try:
@@ -107,7 +107,7 @@ def main() -> int:
     # a plausible measurement standing in for an absent one, which is this
     # project's signature defect. Reuse the verb path's own verified set-mode
     # rather than a second copy of it.
-    from duburi_control.vision_verbs import _require_srot_vision_mode
+    from mongla_control.vision_verbs import _require_srot_vision_mode
     _require_srot_vision_mode(fc, None, 'srot_loop_sweep')
 
     det = make_detector(model_path=A.model, conf=0.35,

@@ -107,7 +107,7 @@ static void onOpticalFlowRad(const mavlink_message_t& msg) {
     // quality == 0 is the sender saying "no valid flow" -- it is NOT "not moving".
     // A still hull and a covered lens produce the same numbers otherwise, and we
     // have already been bitten by that shape (BARO_HEALTH, and the all-zero ESC
-    // block that duburi_ws measured).
+    // block that mongla_ws measured).
     if (f.quality == 0)                       return;   // sender says invalid
     if (f.integration_time_us == 0)           return;   // no interval, no rate
     if (f.distance <= 0.0f)                   return;   // no height => no scale
@@ -116,7 +116,7 @@ static void onOpticalFlowRad(const mavlink_message_t& msg) {
 
     // De-rotation. The gyro fields MUST be the rotation accumulated over THIS
     // SAME interval -- do not resample your own gyro here, or the correction is
-    // wrong by f*omega*dt. duburi_ws measured that error dominating above about
+    // wrong by f*omega*dt. mongla_ws measured that error dominating above about
     // 1.1 rad/s, where de-rotating made the estimate WORSE than leaving it alone.
     const float fx = (f.integrated_x - f.integrated_xgyro) / dt;   // rad/s
     const float fy = (f.integrated_y - f.integrated_ygyro) / dt;

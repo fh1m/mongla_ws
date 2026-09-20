@@ -26,10 +26,10 @@ import sys
 import cv2
 
 # The vehicle's source tree, so this runs from anywhere on the Pi. Import
-# the BACKEND MODULE, never the package -- `duburi_vision/__init__` imports
+# the BACKEND MODULE, never the package -- `mongla_vision/__init__` imports
 # `preflight`, which imports `rclpy`, and this tool must run without ROS.
-sys.path.insert(0, os.path.expanduser("~/duburi_ws/src/duburi_vision"))
-from duburi_vision.detection.hailo import HailoDetector
+sys.path.insert(0, os.path.expanduser("~/mongla_ws/src/mongla_vision"))
+from mongla_vision.detection.hailo import HailoDetector
 
 
 def load(lp):

@@ -30,15 +30,15 @@ import os
 import sys
 
 WS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                  'src', 'duburi_control')
+                  'src', 'mongla_control')
 if WS not in sys.path:
     sys.path.insert(0, WS)
 
 from pymavlink import mavutil                                   # noqa: E402
 
-from duburi_control.fc import srot_protocol as sp               # noqa: E402
-from duburi_control.fc.port_guard import PortGuard              # noqa: E402
-from duburi_control.fc.srot_fc import SrotFC                    # noqa: E402
+from mongla_control.fc import srot_protocol as sp               # noqa: E402
+from mongla_control.fc.port_guard import PortGuard              # noqa: E402
+from mongla_control.fc.srot_fc import SrotFC                    # noqa: E402
 
 
 def _connect(dev):
@@ -82,7 +82,7 @@ def main() -> int:
 
         if not fc.is_armed():
             print('not armed. Both actions drive thrusters and the board '
-                  'refuses them disarmed -- arm from Bondor or `duburi arm`, '
+                  'refuses them disarmed -- arm from Bondor or `mongla arm`, '
                   'with the hull restrained or the props off.')
             return 2
 

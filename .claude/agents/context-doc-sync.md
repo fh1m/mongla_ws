@@ -11,13 +11,13 @@ rule is explicit: **package layout wins** when docs and code disagree.
 ## What to check
 
 - **Dead references** — files, modules, ROS nodes, or DSL verbs named in docs that no
-  longer exist in `src/`. (Known historical names: `duburi_bringup`, `duburi_driver`,
-  `duburi_teleop`, `duburi_mission`, `movement_pids.py` — flag if cited as current.)
+  longer exist in `src/`. (Known historical names: `mongla_bringup`, `mongla_driver`,
+  `mongla_teleop`, `mongla_mission`, `movement_pids.py` — flag if cited as current.)
 - **Command tables** — `command-reference.md` / `ros2-conventions.md` verb tables vs the
-  actual `COMMANDS` registry in `duburi_control/commands.py`. Flag missing/renamed verbs.
+  actual `COMMANDS` registry in `mongla_control/commands.py`. Flag missing/renamed verbs.
 - **ROS params** — param names + defaults in CLAUDE.md §8 vs `auv_manager_node` and
   `config/*.yaml`. Flag drifted defaults.
-- **Topic/action surface** — `/duburi/move`, `/duburi/state`, vision topics vs reality.
+- **Topic/action surface** — `/mongla/move`, `/mongla/state`, vision topics vs reality.
 - **Roadmap status** — `ROADMAP.md` task statuses vs what's actually shipped.
 
 ## Output

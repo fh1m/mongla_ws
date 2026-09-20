@@ -1,8 +1,8 @@
 # Operator guide
 
 > ℹ **Absorbed 2026-08-27.** This workspace is no longer the sibling tree
-> `Ros_workspaces/duburi-sim_ws`; it lives inside the `duburi_ws` repo at
-> `duburi_ws/sim/` and is under version control. Paths below have been
+> `Ros_workspaces/mongla-sim_ws`; it lives inside the `mongla_ws` repo at
+> `mongla_ws/sim/` and is under version control. Paths below have been
 > updated; any remaining "sibling" phrasing is historical.
 
 Full bring-up for Mongla sim lab. Companion: [QUICKSTART.md](QUICKSTART.md),
@@ -16,8 +16,8 @@ flowchart TB
   Gui[gz_sim_gui]
   AS[ardusub_SITL]
   Br[ros_gz_bridge_plus_FX]
-  Mgr[duburi_manager]
-  Vis[duburi_vision_optional]
+  Mgr[mongla_manager]
+  Vis[mongla_vision_optional]
   Lab[lab_server]
   Gz --> AS
   Gz --> Br
@@ -31,27 +31,27 @@ flowchart TB
 ## Prerequisites checklist
 
 - [ ] Humble + Gazebo Harmonic installed
-- [ ] `colcon build --symlink-install` succeeded in `duburi_ws/sim`
-- [ ] `duburi_ws` built; set `DUBURI_WS` if not sibling `../duburi_ws`
+- [ ] `colcon build --symlink-install` succeeded in `mongla_ws/sim`
+- [ ] `mongla_ws` built; set `MONGLA_WS` if not sibling `../mongla_ws`
 - [ ] ArduPilot SITL binary found (see launch errors for `ARDUPILOT_ROOT`)
 - [ ] For GUI: X11/`DISPLAY` works in this environment
 - [ ] Prefer `export GZ_IP=127.0.0.1` on multi-homed hosts
 
 ## Canonical session
 
-1. **Stop leftovers** — `duburi_sim stop`
-2. **Sim** — `duburi_sim sim` (GUI) or `--headless`
+1. **Stop leftovers** — `mongla_sim stop`
+2. **Sim** — `mongla_sim sim` (GUI) or `--headless`
 3. Wait for **`JSON received`** and visible AUV at start zone
-4. **Stack** — `duburi_sim stack --no-vision` first; add vision later with `stack` (no flag)
-5. **Smoke** — `duburi_sim smoke`
-6. **Lab** (optional) — `duburi_sim lab` → browser
+4. **Stack** — `mongla_sim stack --no-vision` first; add vision later with `stack` (no flag)
+5. **Smoke** — `mongla_sim smoke`
+6. **Lab** (optional) — `mongla_sim lab` → browser
 
 ### When to use vision
 
 | Goal | Stack |
 |------|-------|
 | Control / teleop / record only | `--no-vision` |
-| Mission + YOLO on forward cam | `duburi_sim stack` (needs weights in `duburi_ws`) |
+| Mission + YOLO on forward cam | `mongla_sim stack` (needs weights in `mongla_ws`) |
 
 ## Courses
 
@@ -62,7 +62,7 @@ flowchart TB
 | `pool_empty` | Bare pool / hydro tuning |
 
 ```zsh
-ros2 run duburi_sim_bringup duburi_sim sim course:=sauvc26_final
+ros2 run mongla_sim_bringup mongla_sim sim course:=sauvc26_final
 # Lab World tab: restart / switch (stop→start; polls gz+ardusub ~90s)
 ```
 
@@ -71,7 +71,7 @@ starts new world, waits ready, restacks `prop_manager` with `world:={course}`.
 
 ## Operator lab (mission control)
 
-URL: `http://localhost:${DUBURI_LAB_PORT:-28765}`
+URL: `http://localhost:${MONGLA_LAB_PORT:-28765}`
 
 Tabs:
 
@@ -82,7 +82,7 @@ Tabs:
 | **Datasets** | Newest-first; duration + `fps_actual`; zip download |
 
 Teleop: hold WASD / arrows / R·F depth / Space arm. RC goes to ArduSub TCP **5763**.
-Arm/disarm still via `duburi_planner` through `DUBURI_WS`.
+Arm/disarm still via `mongla_planner` through `MONGLA_WS`.
 
 Record: name + cam / fx / frames / labels; stop writes `datasets/` and triggers zip.
 MP4 wall duration matches take length (`fps_actual` encode). Course stamp = `active_course`.
@@ -94,16 +94,16 @@ underwater domain on the clip.
 
 ```zsh
 sudo apt install ros-humble-plotjuggler-ros
-ros2 run duburi_sim_bringup duburi_sim plotjuggler
+ros2 run mongla_sim_bringup mongla_sim plotjuggler
 ```
 
-Timeseries for `/duburi/state` + GT. Foxglove stays in `duburi_ws` for 3D/images.
+Timeseries for `/mongla/state` + GT. Foxglove stays in `mongla_ws` for 3D/images.
 Full guide: [PLOTJUGGLER.md](PLOTJUGGLER.md).
 
 ## Recording without the lab
 
 ```zsh
-ros2 run duburi_sim_bridge record_cameras --duration 30 --fx --frames --labels \
+ros2 run mongla_sim_bridge record_cameras --duration 30 --fx --frames --labels \
   --label gate_approach --course sauvc26_qualification
 ```
 
@@ -112,10 +112,10 @@ See [DATASETS.md](DATASETS.md). Verify with `ffprobe` that MP4 duration ≈ `met
 ## Props / world freedom
 
 ```zsh
-ros2 run duburi_sim_scenarios prop_manager --ros-args -p world:=sauvc26_qualification
-ros2 run duburi_sim_scenarios props add sauvc_qual_gate gate_a 1.0 0.0 --z -1.5
-ros2 run duburi_sim_scenarios props move gate_a 2.0 0.0 --z -1.5
-ros2 run duburi_sim_scenarios props remove gate_a
+ros2 run mongla_sim_scenarios prop_manager --ros-args -p world:=sauvc26_qualification
+ros2 run mongla_sim_scenarios props add sauvc_qual_gate gate_a 1.0 0.0 --z -1.5
+ros2 run mongla_sim_scenarios props move gate_a 2.0 0.0 --z -1.5
+ros2 run mongla_sim_scenarios props remove gate_a
 ```
 
 Or World tab: catalog, spawn with yaw, instances, move, custom model zip.
@@ -124,8 +124,8 @@ Course geometry still needs restart — [WORLD_EDITING.md](WORLD_EDITING.md).
 ## Healthy signs
 
 - Gazebo: AUV mid-water at start zone; front/bottom ImageDisplay panels live
-- `ros2 topic hz /duburi/sim/front_camera/image_raw` shows rate
-- `ros2 topic echo /duburi/state --once` after stack
+- `ros2 topic hz /mongla/sim/front_camera/image_raw` shows rate
+- `ros2 topic echo /mongla/state --once` after stack
 - Lab link dots: gz · sitl · mav · cams solid; teleop fills when holding D-pad
 - `contract_check` / `mavlink_check` print satisfied / rates OK
 
@@ -133,11 +133,11 @@ Course geometry still needs restart — [WORLD_EDITING.md](WORLD_EDITING.md).
 
 ```zsh
 # Ctrl-C lab and stack terminals, then:
-ros2 run duburi_sim_bringup duburi_sim stop
+ros2 run mongla_sim_bringup mongla_sim stop
 ```
 
 `stop` does not kill `lab_server` by default (pattern list is sim/stack focused).
-Stop the lab terminal separately, or `pkill -f duburi_sim_web/lab_server` if orphaned.
+Stop the lab terminal separately, or `pkill -f mongla_sim_web/lab_server` if orphaned.
 
 ---
 
@@ -148,9 +148,9 @@ air, looking down at the water surface. You could see the pool and not the run.
 
 The GUI camera now starts **underwater behind the hull** and **follows it**.
 `CameraTracking` was already loaded in `gui.config` with an empty body, so it
-never tracked anything; it now has a `follow_target` of `duburi` — the world
+never tracked anything; it now has a `follow_target` of `mongla` — the world
 *instance* name, which is the same on all 13 courses (the model name is
-`duburi_heavy`, and passing that silently follows nothing).
+`mongla_heavy`, and passing that silently follows nothing).
 
 The offset is behind, slightly left and slightly above: dead astern hides the
 hull behind its own wake, dead overhead loses the horizon, and both make it
@@ -159,9 +159,9 @@ a stiff follow transmits every yaw correction to the camera and the picture
 shakes.
 
 ```bash
-duburi_sim view          # chase the vehicle (the default)
-duburi_sim view free     # let go, fly the camera by hand
-duburi_sim view chase    # back to following
+mongla_sim view          # chase the vehicle (the default)
+mongla_sim view free     # let go, fly the camera by hand
+mongla_sim view chase    # back to following
 ```
 
 Useful for looking at a prop mid-run and then returning to the vehicle without
@@ -169,11 +169,11 @@ restarting.
 
 ## The score page
 
-`duburi_sim lab` now has a **score** tab: every rulebook line item for the
+`mongla_sim lab` now has a **score** tab: every rulebook line item for the
 running course's competition, what it is worth, whether it was earned, and the
 evidence. Full detail in [SCORING.md](SCORING.md).
 
-## `duburi_sim view high` — a third-person camera that actually aims
+## `mongla_sim view high` — a third-person camera that actually aims
 
 **Follow sets position only; it does not aim.** gz-rendering applies
 `follow_offset` to the camera's position and leaves its orientation alone
@@ -197,9 +197,9 @@ hull's own frame and the water visual sits at z = 0, so at a 0.8 m run depth
 much more elevation puts the camera through the surface looking down at it.
 
 ```bash
-ros2 run duburi_sim_bringup duburi_sim view high    # aimed 3rd-person, high
-ros2 run duburi_sim_bringup duburi_sim view chase   # the close chase
-ros2 run duburi_sim_bringup duburi_sim view free    # let go and fly by hand
+ros2 run mongla_sim_bringup mongla_sim view high    # aimed 3rd-person, high
+ros2 run mongla_sim_bringup mongla_sim view chase   # the close chase
+ros2 run mongla_sim_bringup mongla_sim view free    # let go and fly by hand
 ```
 
 `view high` is a **different mechanism**, not a different offset: it publishes
@@ -218,7 +218,7 @@ parses `follow_target`, `follow_offset` and `follow_pgain` and nothing else
 `/gui/track` is a **topic, not a service**. The plugin subscribes to it
 (`OnTrackSub`); `Node::Advertise` is instantiated only for `StringMsg`,
 `GUICamera` and `Vector3d`, never `CameraTrack`. The first version of
-`duburi_sim view high` called `gz service -s /gui/track`, which cannot succeed,
+`mongla_sim view high` called `gz service -s /gui/track`, which cannot succeed,
 and swallowed the failure into **"no Gazebo GUI is running (or it is
 headless)"** — so the command never worked *and* said something false about why.
 It publishes now, and checks the GUI first with a service that really is one.
@@ -233,10 +233,10 @@ underside of the surface.
 So elevation is bought by **distance**, not altitude:
 
 ```bash
-duburi_sim view far     # 12 m astern -- the vehicle and the task in one frame
-duburi_sim view high    # 6 m astern, over the shoulder
-duburi_sim view chase   # the close follow
-duburi_sim view free    # let go and fly by hand
+mongla_sim view far     # 12 m astern -- the vehicle and the task in one frame
+mongla_sim view high    # 6 m astern, over the shoulder
+mongla_sim view chase   # the close follow
+mongla_sim view free    # let go and fly by hand
 ```
 
 `far` is the "watch the run" view. It is **not** a bird's eye, and in a 2.1 m

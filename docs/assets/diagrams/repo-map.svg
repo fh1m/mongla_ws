@@ -16,7 +16,7 @@
   <text x="40" y="76" fill="#93a4bd" font-size="14">Nobody commits to anyone else's repo. Everything crosses as a pull request — which is exactly why a missing feature is something we can ask for.</text>
 
   <rect x="60" y="112" width="440" height="180" rx="14" fill="#101a2b" stroke="#3c5f7a"/>
-  <text x="84" y="144" fill="#e6edf7" font-size="17" font-weight="700">duburi_ws — "Mongla"</text>
+  <text x="84" y="144" fill="#e6edf7" font-size="17" font-weight="700">mongla_ws — "Mongla"</text>
   <text x="84" y="168" fill="#9fc3dd" font-size="12.5" font-family="ui-monospace, monospace">this repository · ROS 2 · Python</text>
   <text x="84" y="196" fill="#8fa2bd" font-size="12.5">The autonomy brain: perception on the Hailo, localization,</text>
   <text x="84" y="215" fill="#8fa2bd" font-size="12.5">the mission language, and the one node that talks to the board.</text>

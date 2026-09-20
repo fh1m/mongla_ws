@@ -1,6 +1,6 @@
 ---
 name: srot-reviewer
-description: Reviews duburi_control/ and duburi_manager/ changes against the SROT board's contract. Use after editing fc/srot_fc.py, fc/srot_protocol.py, motion_vision.py, vision_verbs.py, allocation.py, auv_manager_node.py, or anything that talks to the board.
+description: Reviews mongla_control/ and mongla_manager/ changes against the SROT board's contract. Use after editing fc/srot_fc.py, fc/srot_protocol.py, motion_vision.py, vision_verbs.py, allocation.py, auv_manager_node.py, or anything that talks to the board.
 tools: Read, Grep, Bash
 ---
 

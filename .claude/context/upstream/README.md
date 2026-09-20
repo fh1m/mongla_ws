@@ -1,8 +1,8 @@
-# Upstream asks — `duburi_ws` → `srot-control-board`
+# Upstream asks — `mongla_ws` → `srot-control-board`
 
 We do not develop the firmware. srot / Hengla / Bondor belong to the firmware
 and GCS teams, and their `AGENTS.md` states the rule from their side too: *"we
-never commit to duburi_ws, and they never commit here."* PRs and issues are the
+never commit to mongla_ws, and they never commit here."* PRs and issues are the
 channel, so these are written here, versioned with the evidence that produced
 them, and opened on their repo.
 

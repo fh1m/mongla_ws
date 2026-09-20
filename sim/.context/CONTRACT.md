@@ -1,11 +1,11 @@
-# Drop-in contract (sim ↔ `duburi_ws`)
+# Drop-in contract (sim ↔ `mongla_ws`)
 
 > ℹ **Absorbed 2026-08-27.** This workspace is no longer the sibling tree
-> `Ros_workspaces/duburi-sim_ws`; it lives inside the `duburi_ws` repo at
-> `duburi_ws/sim/` and is under version control. Paths below have been
+> `Ros_workspaces/mongla-sim_ws`; it lives inside the `mongla_ws` repo at
+> `mongla_ws/sim/` and is under version control. Paths below have been
 > updated; any remaining "sibling" phrasing is historical.
 
-This workspace must look like the real vehicle to `duburi_ws`. If you change
+This workspace must look like the real vehicle to `mongla_ws`. If you change
 any row below, update `contract_check` / `mavlink_check` and this file.
 
 ## MAVLink
@@ -25,16 +25,16 @@ managers. Lab teleop intentionally uses **TCP 5763**, not 14550.
 Verify:
 
 ```zsh
-ros2 run duburi_sim_bridge mavlink_check
+ros2 run mongla_sim_bridge mavlink_check
 ```
 
-## ROS control / state (from `duburi_ws`)
+## ROS control / state (from `mongla_ws`)
 
 | Surface | Name |
 |---------|------|
-| Action | `/duburi/move` (`duburi_interfaces/action/Move`) |
-| State | `/duburi/state` |
-| CLI | `ros2 run duburi_planner duburi …` |
+| Action | `/mongla/move` (`mongla_interfaces/action/Move`) |
+| State | `/mongla/state` |
+| CLI | `ros2 run mongla_planner mongla …` |
 
 These come from the stack, not the sim bridge. Sim only needs a healthy ArduSub
 link so manager can arm and command.
@@ -43,25 +43,25 @@ link so manager can arm and command.
 
 | Topic | Spec |
 |-------|------|
-| `/duburi/sim/front_camera/image_raw` | 640×480, rgb8/bgr8 |
-| `/duburi/sim/bottom_camera/image_raw` | same |
-| `/duburi/sim/front_camera/camera_info` | matching |
-| `/duburi/sim/bottom_camera/camera_info` | matching |
-| `/duburi/sim/{front,bottom}_camera/image_fx` | optional degraded feed (`underwater_fx`) |
-| `/duburi/sim/ground_truth` | Pose of vehicle in world (recorder / scoring) |
+| `/mongla/sim/front_camera/image_raw` | 640×480, rgb8/bgr8 |
+| `/mongla/sim/bottom_camera/image_raw` | same |
+| `/mongla/sim/front_camera/camera_info` | matching |
+| `/mongla/sim/bottom_camera/camera_info` | matching |
+| `/mongla/sim/{front,bottom}_camera/image_fx` | optional degraded feed (`underwater_fx`) |
+| `/mongla/sim/ground_truth` | Pose of vehicle in world (recorder / scoring) |
 
 Vision launch (via `stack.launch.py`) remaps:
 
 - `camera:=forward`
-- `topic:=/duburi/sim/front_camera/image_raw`
+- `topic:=/mongla/sim/front_camera/image_raw`
 
-so the detector node is `/duburi_detector_forward` (missions expect `forward`,
+so the detector node is `/mongla_detector_forward` (missions expect `forward`,
 not `sim_front`).
 
 Verify:
 
 ```zsh
-ros2 run duburi_sim_bridge contract_check
+ros2 run mongla_sim_bridge contract_check
 ```
 
 ## Lab-only surfaces (not required for autonomy)
@@ -69,8 +69,8 @@ ros2 run duburi_sim_bridge contract_check
 | Surface | Notes |
 |---------|-------|
 | HTTP lab | `:28765` FastAPI + static UI |
-| Teleop | `DUBURI_TELEOP_ENDPOINT` → TCP 5763 RC override |
-| Props services | `/duburi/sim/props/{spawn,move,delete}` via `prop_manager` |
+| Teleop | `MONGLA_TELEOP_ENDPOINT` → TCP 5763 RC override |
+| Props services | `/mongla/sim/props/{spawn,move,delete}` via `prop_manager` |
 | Datasets | `datasets/<label>_<stamp>/` on disk |
 
 Autonomy can ignore these; dataset collection uses them.
@@ -78,19 +78,19 @@ Autonomy can ignore these; dataset collection uses them.
 ## Source order for a full session
 
 ```text
-humble → duburi_ws/install → duburi_ws/sim/install
+humble → mongla_ws/install → mongla_ws/sim/install
 ```
 
-`stack.launch.py` includes `duburi_manager` / `duburi_vision` from `duburi_ws`.
+`stack.launch.py` includes `mongla_manager` / `mongla_vision` from `mongla_ws`.
 
 ## Compatibility matrix
 
-| `duburi_ws` branch | How to run against this sim |
+| `mongla_ws` branch | How to run against this sim |
 |--------------------|-----------------------------|
-| `main` | `duburi_sim stack` (pixhawk/SITL native) |
-| `srot` | Same — **must** pass `flight_controller:=pixhawk` (already in `stack.launch.py`). Bare `ros2 run duburi_manager start` defaults to USB SROT and will miss SITL. |
+| `main` | `mongla_sim stack` (pixhawk/SITL native) |
+| `srot` | Same — **must** pass `flight_controller:=pixhawk` (already in `stack.launch.py`). Bare `ros2 run mongla_manager start` defaults to USB SROT and will miss SITL. |
 
 ## Legacy doc warning
 
-`duburi_ws/.claude/context/sim-setup.md` describes an older BlueROV / `colcon_ws`
-path. Prefer **this** `.context/` (now `duburi_ws/sim/.context/`) for all new work.
+`mongla_ws/.claude/context/sim-setup.md` describes an older BlueROV / `colcon_ws`
+path. Prefer **this** `.context/` (now `mongla_ws/sim/.context/`) for all new work.

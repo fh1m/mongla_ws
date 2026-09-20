@@ -18,7 +18,7 @@ spin-up. Against Blue Robotics' own performance data at 16 V a straight line is
 wrong by **12.24 N — 24 % of full thrust** — and the error is largest at low
 command, exactly where alignment and station-keeping live.
 
-**The fix.** `duburi_sim_bridge/t200_curve.py` sits in the command chain:
+**The fix.** `mongla_sim_bridge/t200_curve.py` sits in the command chain:
 
 ```
 ArduSub --PWM--> ArduPilotPlugin --cmd_thrust_linear--> t200_curve
@@ -93,13 +93,13 @@ term — exists specifically to null that. **With zero current it had nothing to
 fight**, so every hold was being graded against an easier problem than the pool
 poses.
 
-`duburi_sim_bridge/water_current.py` publishes a steady set plus slow gusting.
+`mongla_sim_bridge/water_current.py` publishes a steady set plus slow gusting.
 Gazebo's Hydrodynamics plugin folds it into the relative-velocity term of the
 Fossen model, so the current is applied by the *same* hydrodynamics that produce
 drag rather than as a force bolted on beside them.
 
 ```bash
-ros2 launch duburi_sim_bringup sim.launch.py current_speed:=0.08 current_heading:=45
+ros2 launch mongla_sim_bringup sim.launch.py current_speed:=0.08 current_heading:=45
 ros2 param set /water_current speed 0.12      # live, no restart
 ```
 
@@ -211,7 +211,7 @@ exposed so the next person re-measures rather than re-guesses.
 ## Validation: all three translational axes, for the first time
 
 Full results in
-[`duburi_sim_description/models/duburi_heavy/RESULTS.md`](../src/duburi_sim_description/models/duburi_heavy/RESULTS.md).
+[`mongla_sim_description/models/mongla_heavy/RESULTS.md`](../src/mongla_sim_description/models/mongla_heavy/RESULTS.md).
 
 | Axis | Predicted | Measured | Error |
 |---|---|---|---|
@@ -370,7 +370,7 @@ range image arrives, so the sim is correct either way, just less faithful.
 
 Six orphans were found alive from earlier runs — four `t200_curve`, two
 `hydrophone`, one for over 16 hours — because the nodes were added to
-`sim.launch.py` and not to `duburi_sim stop`'s kill list. Exactly the
+`sim.launch.py` and not to `mongla_sim stop`'s kill list. Exactly the
 `dvl_bridge` leak from 2026-08-28, repeated with the new nodes. A single `stop`
 then reaped **62** leftover processes.
 

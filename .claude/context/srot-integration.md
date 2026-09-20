@@ -49,7 +49,7 @@
 > in air were both observed — and nothing marked them as wrong. A board whose PROM fails CRC now
 > also **refuses `DEPTH_HOLD` / `AUTO` / `PATTERN`** rather than flying on invented depth.
 
-> Migrating `duburi_ws` off Pixhawk/ArduSub onto the custom **SROT** board (firmware
+> Migrating `mongla_ws` off Pixhawk/ArduSub onto the custom **SROT** board (firmware
 > "Hengla": ESP32 flight core + RP2350 Pico RPM co-processor). A transport-and-verbs
 > swap, not a rewrite — the board owns the primitives, the Jetson sends intent.
 > Board-side source of truth: `Mongla_others/srot-control-board/{DUBURI_WS_INTEGRATION,
@@ -140,7 +140,7 @@ nothing about the uplink.
 > print(m.recv_match(type='PARAM_VALUE', blocking=True, timeout=5))   # None => uplink dead
 > ```
 
-> **⚖ RECONCILIATION (duburi_ws, on merge of PR #5).** Keep the probe — it is a good gate and
+> **⚖ RECONCILIATION (mongla_ws, on merge of PR #5).** Keep the probe — it is a good gate and
 > the finding is honest. But **do not read it as "the UDP uplink does not work"**: it worked
 > here, over this same Bridget configuration, the day before. On **2026-08-06** we ran, all
 > from `udpin:0.0.0.0:14550`:
@@ -205,9 +205,9 @@ nothing about the uplink.
 a baud when the target starts with `/dev/`, and `SrotFC` is transport-agnostic.
 
 ```bash
-ros2 run duburi_manager bringup_check --srot --srot-device=udpin:0.0.0.0:14550
-ros2 run duburi_manager connect --path udpin:0.0.0.0:14550 --watch
-ros2 run duburi_manager start --ros-args -p mav_device:=udpin:0.0.0.0:14550 \
+ros2 run mongla_manager bringup_check --srot --srot-device=udpin:0.0.0.0:14550
+ros2 run mongla_manager connect --path udpin:0.0.0.0:14550 --watch
+ros2 run mongla_manager start --ros-args -p mav_device:=udpin:0.0.0.0:14550 \
                                          -p yaw_source:=mavlink_ahrs
 ```
 
@@ -563,7 +563,7 @@ unreachable when this was written. The evidence points both ways and neither sid
 **One param read settles it. Do it before arming, not after:**
 
 ```bash
-ros2 run duburi_manager connect          # or Bondor -> Setup -> Motors
+ros2 run mongla_manager connect          # or Bondor -> Setup -> Motors
 # expect: FRAME_REVERSE = 1
 #         MOT_1_DIRECTION = -1, MOT_8_DIRECTION = -1, MOT_2..7_DIRECTION = +1
 # if all eight read -1, the axis fix is CANCELLED and M2-M7 are inverted -- fix before arming
@@ -592,11 +592,11 @@ Board on this dev box, `/dev/ttyUSB0`, by-id `usb-1a86_USB_Serial-if00-port0` (C
 | `FS_GCS_COMPID` | **191**, written and confirmed in flash (above) |
 | barometer spread | **2.94 mbar** on USB vs **5.87** over the bridge — visibly cleaner |
 | Bar30 health | healthy; `AUTO`/`DEPTH_HOLD` available |
-| manager startup | connects, banner correct, `/duburi/state` populating |
+| manager startup | connects, banner correct, `/mongla/state` populating |
 | payload roles | FIREABLE (switch) `[1,2,3,4, 9..16]` · arm/PWM `[5,6,7,8]` · **unreadable none** |
 | telemetry | BAT 13.3–13.6 V · WTEMP 27.9 °C · `MAGACC 2` · LEAK dry · KILL clear · RPM all 0 |
 
-**`duburi_ws` is compatible with the current firmware and needs no code change to fly it.**
+**`mongla_ws` is compatible with the current firmware and needs no code change to fly it.**
 
 ⚠ Two things this does **not** prove, both still open:
 - **The depth loop.** `DEPTH_OUT +0.00` disarmed is a *stale register*, not a settled loop
@@ -613,7 +613,7 @@ Board on this dev box, `/dev/ttyUSB0`, by-id `usb-1a86_USB_Serial-if00-port0` (C
 ### ⛔ AFTER EVERY FLASH: the bridge is dead but still looks alive
 
 **This is the single most likely reason "we cannot connect any more".** OBSERVED
-2026-08-06, after the rev-5 flash: neither duburi_ws nor Bondor could connect. The bridge
+2026-08-06, after the rev-5 flash: neither mongla_ws nor Bondor could connect. The bridge
 was listed, `/dev/ttyUSB0` was listed, the Pi pinged — and **zero datagrams arrived**.
 
 A Bridget bridge holds an **open file descriptor** on `/dev/ttyUSB0`. Flashing the board
@@ -629,7 +629,7 @@ curl -s -X DELETE http://192.168.2.2:27353/v1.0/bridges -H 'Content-Type: applic
 curl -s -X POST   http://192.168.2.2:27353/v1.0/bridges -H 'Content-Type: application/json' -d "$B"
 ```
 
-`connect`, `bringup_check --srot` and `duburi_manager start` now **print those two lines
+`connect`, `bringup_check --srot` and `mongla_manager start` now **print those two lines
 for you** when nothing arrives (`connection_config.diagnose_bridge`), and distinguish
 "BlueOS has no bridge" from "bridge configured and still silent" — the second being the
 reflash signature.
@@ -673,18 +673,18 @@ collision does not fail the way you would expect.
 
 ### Bondor (the GCS) over the same UDP link — take turns, and mind the port
 
-**⛔ DO NOT ARM FROM BONDOR WHILE duburi_ws IS DISCONNECTED.** This is the one sharp edge
+**⛔ DO NOT ARM FROM BONDOR WHILE mongla_ws IS DISCONNECTED.** This is the one sharp edge
 in the take-turns workflow and it bit us on 2026-08-06: arming produced
 `CRIT Failsafe: surfacing (companion lost)` followed by thrusters 5-8 spinning, which
 reads as "arming ran the motors on its own in MANUAL". It is neither a Bondor bug nor a
 firmware bug.
 
 `FS_GCS_SYSID`/`FS_GCS_COMPID` (255/191 on this board) scope the companion-lost failsafe
-to **one named source — duburi_ws**. Bondor is **255/190**, so its 1 Hz heartbeat never
+to **one named source — mongla_ws**. Bondor is **255/190**, so its 1 Hz heartbeat never
 feeds that timer no matter how healthy the link looks. The board only latches
 "companion seen" once the named source has appeared, so a Bondor-only session on a
 *freshly booted* board is fine — which is exactly why this never reproduces on a bench
-where duburi_ws is never run. But once duburi_ws has connected **in that power cycle**,
+where mongla_ws is never run. But once mongla_ws has connected **in that power cycle**,
 arming with only Bondor connected trips the failsafe ~5 s later, which switches out of
 MANUAL into **SURFACE** and drives the four vertical thrusters (5-8) up. `rpm=0` then
 raises `STALLED` on each of them.
@@ -734,7 +734,7 @@ replies to one Bridget may not send from.
 two processes both binding 14550 with `SO_REUSEADDR` — which Bondor does and pymavlink
 does — **both binds succeed, and the newcomer takes the stream** (544 datagrams vs a
 trickle over 6 s). So opening Bondor during a mission does *not* fail visibly: Bondor works
-fine and **silently starves duburi_ws** of telemetry and command ACKs. Bondor now probes the
+fine and **silently starves mongla_ws** of telemetry and command ACKs. Bondor now probes the
 port before binding and shows a red **PORT CONFLICT** chip that incoming data does not
 clear. Check `ss -ulnp | grep 14550` is empty before connecting either one.
 
@@ -742,13 +742,13 @@ clear. Check `ss -ulnp | grep 14550` is empty before connecting either one.
 
 "One process at a time" is a workaround for a socket collision, not a real constraint of
 the vehicle. **BlueOS will fan the same MAVLink stream out to as many UDP destinations as
-you ask it to**, so Bondor and duburi_ws never have to contend for one socket.
+you ask it to**, so Bondor and mongla_ws never have to contend for one socket.
 
 Observed live on this vehicle — `ardupilot-manager` was already doing exactly this:
 
 ```
 GCS Client Link   udpout  192.168.2.1:14550     enabled   <- topside / Bondor
-dubomini          udpout  192.168.2.69:14550    enabled   <- duburi_ws dev box
+mongla_agile          udpout  192.168.2.69:14550    enabled   <- mongla_ws dev box
 ```
 
 Two independent `udpout` endpoints, two different hosts, one board. Neither can starve the
@@ -760,7 +760,7 @@ Add one per consumer:
 ```bash
 curl -s -X POST http://192.168.2.2/ardupilot-manager/v1.0/endpoints/ \
   -H 'Content-Type: application/json' \
-  -d '[{"name":"duburi-jetson","owner":"User","connection_type":"udpout",
+  -d '[{"name":"mongla-jetson","owner":"User","connection_type":"udpout",
         "place":"192.168.2.69","argument":14550,"persistent":true,
         "protected":false,"enabled":true}]'
 
@@ -793,7 +793,7 @@ living in a launch file that goes stale on a re-wire — and the failure mode of
 payload map is firing the manipulator arm during a drop.
 
 Set it in **Bondor → Payload → Function**, then **Save** on the Parameters tab (it is
-NVS-backed and does not persist without the save). duburi_ws reads all 16 roles *and*
+NVS-backed and does not persist without the save). mongla_ws reads all 16 roles *and*
 functions in one traversal at bring-up (~4 s over the bridge) and prints them:
 
 ```
@@ -858,7 +858,7 @@ pre-arm checks, leak/low-batt/GCS-loss failsafes → SURFACE, ESC RPM telemetry.
 **The Jetson owns:** perception, mission logic, *which* verb next, DVL position loops,
 vision servoing, payload sequencing, logging.
 
-## Architecture — the FlightController HAL (built, `duburi_control/fc/`)
+## Architecture — the FlightController HAL (built, `mongla_control/fc/`)
 ```
 fc/base.py         FlightController ABC + Telemetry + MoveResult DTOs
 fc/srot_protocol.py THE wire constants (cmd 31000, type codes, modes, ACKs, MC scaling)
@@ -876,18 +876,18 @@ send_gcs_heartbeat`. `manual()` is the streamed servo primitive (vision + DVL lo
 
 ## The verb table (`fc/srot_fc.py:_build_params` + `MOVE_VERBS`)
 **Clean SROT_MOVE (31000) collapses** — `move()` sends one command, relays the ACK:
-| duburi verb | p1 type | params |
+| mongla verb | p1 type | params |
 |---|---|---|
 | `move_forward` | 0 forward | p2=duration, p3=speed(gain/100) |
 | `move_left`/`move_right` | 2/3 strafe | p2=duration, p3=speed |
 | `yaw_left`/`yaw_right` | 4 turn (**relative**) | p2=∓degrees, p4=0 |
 | `turn` | 4 turn (**absolute**) | p2=heading, p4=1 — **needs `MAG_YAW_REF=1`** |
-| `set_depth` | 5 dive | p2=**−target** (duburi neg → SROT pos depth); refuses target>0 |
+| `set_depth` | 5 dive | p2=**−target** (mongla neg → SROT pos depth); refuses target>0 |
 | `stop` | 6 brake | (also the ROS-cancel wire action) |
 | `pause` | 7 hold | station-keep (no channel-release exists on SROT) |
 | `style_roll` | 8 style | p2=count (roll only, 90°/s) |
 
-> **`arc` is NOT mapped** and is excluded from `MOVE_VERBS`. duburi's `arc` holds an
+> **`arc` is NOT mapped** and is excluded from `MOVE_VERBS`. mongla's `arc` holds an
 > ABSOLUTE target heading while curving; SROT's `MOVE_ARC` p4 is a signed yaw **rate** with
 > no heading lock. Passing the heading as a rate would spin the hull, so `arc` is refused
 > (see `UNSUPPORTED_VERBS`) until a host-side heading→rate arc lands.
@@ -951,13 +951,13 @@ is how the port lands. `unlock_heading` still works (it only stops a lock + send
   on this branch** (`:=pixhawk` for the ArduSub/BlueOS path).
 
 ## ⚠ Bench bring-up runbook (board benchable now; each step gates the next)
-Prereqs (operator, via **Bondor** — no duburi_ws code): ESCs on **Bluejay** (`DSHOT_BIDIR=1`,
+Prereqs (operator, via **Bondor** — no mongla_ws code): ESCs on **Bluejay** (`DSHOT_BIDIR=1`,
 `RPM_LOOP=1`) or ESC_STATUS RPM is absent; thruster **directions** verified (motor-detect);
 **Bar30 fitted**; a **`.params` export** taken and committed to `config/srot/` (a
 `PARAM_DEFAULTS_VER` bump wipes `CAL_*` — otherwise unrecoverable).
 
-1. **Telemetry (props off):** `flight_controller:=srot`; confirm `/duburi/state` populates
-   (yaw/depth/armed/mode) + `/duburi/esc_rpm`. Nothing actuates.
+1. **Telemetry (props off):** `flight_controller:=srot`; confirm `/mongla/state` populates
+   (yaw/depth/armed/mode) + `/mongla/esc_rpm`. Nothing actuates.
 2. **arm/disarm (props off):** from the CLI. Confirm pre-arm STATUSTEXT surfaces on reject.
 3. **`manual()` per axis:** teleop each of fwd/lat/up/yaw **individually**, verify direction
    vs `docs/THRUSTER_MAP.md`. A wrong sign is positive feedback — fix `MOT_n_DIRECTION` in
@@ -988,7 +988,7 @@ the collapse moves `move_forward` / `move_left` / `move_right` / `yaw_left` / `y
 `turn` / `set_depth`(dive) / `stop` / `pause`(hold) / `style_roll`; **`surface`** (SURFACE
 mode); `unlock_heading`; `head`, `mission_reset`, `calibrate_depth`, `calc_distance`,
 `dvl_connect` (host-side); `fire` **on any board channel the board calls a SWITCH**; telemetry →
-`/duburi/state` (yaw/**depth**/batt/mode/armed) + the GCS heartbeat.
+`/mongla/state` (yaw/**depth**/batt/mode/armed) + the GCS heartbeat.
 
 **REFUSED with a clear message (`UNSUPPORTED_VERBS`, see the verb table above):**
 `vision_align` / `vision_move`, `move_*_dist` (DVL), `lock_heading`, `arc`,
@@ -1122,7 +1122,7 @@ horizontals idle** — the reported symptom exactly, with no residual mystery.
 
 The board streams `BATTERY_STATUS` **twice** — id 0 (PM1 electronics) and id 1 (PM2 thruster
 pack) — at 2 Hz each, and pymavlink caches one message per **msgid**, not per instance. A live
-sample showed the slot alternating between **1.35 V and 14.74 V**. `/duburi/state`'s battery
+sample showed the slot alternating between **1.35 V and 14.74 V**. `/mongla/state`'s battery
 voltage was therefore whichever arrived last. Same failure as `NAMED_VALUE_FLOAT`, one layer
 down; fixed the same way (`SrotFC.note_battery`, fed from the manager's reader thread).
 `get_battery()` is now pinned to id 0 and `get_batteries()` returns both.
@@ -1133,14 +1133,14 @@ Each PCA9685 channel's role is a **firmware parameter** — `SERVO{n}_ROLE`, n =
 (`0` disabled, `1` PWM servo, `2` MOSFET/switch). **Measured on the vehicle 2026-08-02:
 1-8 = SERVO, 9-16 = SWITCH.**
 
-`duburi_ws` drives **switch channels only**. The PWM channels are the on-board manipulator
+`mongla_ws` drives **switch channels only**. The PWM channels are the on-board manipulator
 arm, and firing one from a mission would move the arm mid-drop. `SrotPayload.fire()` therefore
 reads the role from the board and refuses anything that is not `2`, **failing closed on an
 unreadable role**.
 
 **There is no host-side channel map at all any more (2026-08-03).** `fire(N)` addresses
 BOARD channel N — the same N as `DO_SET_SERVO param1` and as `SERVO{N}_ROLE`. The old
-`payload_fire_map` routed a "duburi channel" 1..4 onto a PCA channel; it bought nothing and
+`payload_fire_map` routed a "host channel" 1..4 onto a PCA channel; it bought nothing and
 cost a second numbering to keep in sync by hand, whose failure mode is driving the arm.
 `payload_fire_map` is now a **hard startup error** — silently ignoring it would be worse,
 because its old numbers (1..4) are now valid board channels that on the default role layout
@@ -1298,7 +1298,7 @@ plus detected motor directions, recoverable only from a Bondor parameter export.
 - **A FIFTH ACK result exists** — `TEMPORARILY_REJECTED` (3) on a state-mutex miss, not in
   `JETSON_COMMS.md`'s four-result table. Treated as terminal + reported as retryable.
 - **Depth sign** — `VFR_HUD.alt` already arrives NEGATIVE-below-surface (our convention, same
-  as Pixhawk AHRS2). We were negating it a second time, which made `/duburi/state.depth_m`
+  as Pixhawk AHRS2). We were negating it a second time, which made `/mongla/state.depth_m`
   positive when submerged and silently disabled every depth guard in the stack (they all
   compare against a negative constant, so none of them errored — they just stopped firing).
 - **⚠ pymavlink's DEFAULT dialect is MAVLink *1* (`dialects.v10.ardupilotmega`), where
@@ -1314,7 +1314,7 @@ plus detected motor directions, recoverable only from a Bondor parameter export.
 - **`ESC_STATUS` (291) is in NO pymavlink dialect** (upstream removed 290/291 from `common`),
   and pymavlink drops unknown msgids **silently**. This finding was correct and still stands —
   but the firmware now **also** emits `ESC_TELEMETRY_1_TO_4`/`5_TO_8` (11030/11031), which
-  decode fine, so the fallback you already wrote is live. **`/duburi/esc_rpm` is now
+  decode fine, so the fallback you already wrote is live. **`/mongla/esc_rpm` is now
   published** (`_publish_srot_telemetry`), and LEAK is surfaced on an edge latch rather than
   per-tick spam. Note `MAV_CMD_SET_MESSAGE_INTERVAL` needs msgid 291 as a *number*:
   `mavutil.mavlink.MAVLINK_MSG_ID_ESC_STATUS` **does not exist** and referencing it is an
@@ -1334,11 +1334,11 @@ plus detected motor directions, recoverable only from a Bondor parameter export.
   wiring** (`7f3d6e8` + review fixes): `flight_controller:=srot` was the **default on the srot branch**; the main merge briefly made it `pixhawk`, and on 2026-09-08 it went back to **`srot`** as main became the SROT vehicle (the RoboSub 2025 configuration is preserved on the `pixhawk` branch). It connects
   over **direct USB serial**, banner shows `SROT board · firmware Hengla · USB serial`, the
   collapse verbs route through `fc.move()` + the 4-terminal ACK relay, telemetry populates
-  `/duburi/state`. Build clean; ~670 tests green. mavlink-reviewer + advisor signed off (arc
+  `/mongla/state`. Build clean; ~670 tests green. mavlink-reviewer + advisor signed off (arc
   dropped, `manual()` NaN-safe, verified fail-closed arm-abort, HEARTBEAT source-filtered).
 - **READINESS FIXES (this pass):** real abort brake, leg-derived ACK deadline, the 5th ACK
   result, `surface` revived, `UNSUPPORTED_VERBS` guard, depth sign, collapse verbs now take
-  `duburi.lock` + the disarmed gate, fail-loud payload map, protocol drift test.
+  `mongla.lock` + the disarmed gate, fail-loud payload map, protocol drift test.
   **Verdict: ready for tethered bench work; the two depth checks below still gate any dive.**
 - **VISION IS NOW SPEC'D, NOT PORTED.** The `motion_vision` port is **superseded**: rather than
   re-expressing the 20 Hz host loop as `manual()` streaming, the loop **moves to the board**.
@@ -1354,7 +1354,7 @@ plus detected motor directions, recoverable only from a Bondor parameter export.
   > them. `lock_heading` is the one that genuinely stays refused, so no host
   > lock races the board's own hold.
 - **NEXT:** the DVL-distance streamed path + `lock_heading` semantics; commit the Bondor
-  `.params` export. `/duburi/esc_rpm` is **done** (was blocked on the firmware emitting
+  `.params` export. `/mongla/esc_rpm` is **done** (was blocked on the firmware emitting
   11030/11031 — it now does). Once the board serves vision: **measure the two cameras' FOV at
   640×480** ~~→ angle conversion → uplink → re-point the two verbs~~ — **DONE
   2026-09-07**: 73.88°/63.82° air, held-out validated, shipping in
@@ -1365,5 +1365,5 @@ plus detected motor directions, recoverable only from a Bondor parameter export.
 - **Cross-repo rules:** [`cross-repo-contract.md`](cross-repo-contract.md) (mirrored as
   `AGENTS.md` in each sibling repo).
 - **BENCH-GATED:** the runbook above (needs the board; first real validation — no SROT SITL).
-  Plug in USB, `ros2 run duburi_manager start`, watch the banner + `/duburi/state`. Depth stays
+  Plug in USB, `ros2 run mongla_manager start`, watch the banner + `/mongla/state`. Depth stays
   unproven until the hand-verification (step 4) passes.

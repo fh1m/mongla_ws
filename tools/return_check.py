@@ -20,12 +20,12 @@ The water statistics below are still useful and are kept. The model section
 now runs the honest scorer.
 """
 import sys, glob, random, contextlib, io, os, cv2
-sys.path.insert(0,'tools'); sys.path.insert(0,'src/duburi_vision')
-from duburi_vision.underwater import analyse_frames
+sys.path.insert(0,'tools'); sys.path.insert(0,'src/mongla_vision')
+from mongla_vision.underwater import analyse_frames
 from recall_matrix import conf_sweep
 from ultralytics import YOLO
-R='/home/fh1m/Work/Projects/Duburi/2025/raw_images'
-D='/home/fh1m/Work/Projects/Duburi/2025/datasets'; M='/home/fh1m/Music/detect'
+R='/home/fh1m/Work/Projects/Mongla/2025/raw_images'
+D='/home/fh1m/Work/Projects/Mongla/2025/datasets'; M='/home/fh1m/Music/detect'
 
 print('\n  === A2. RETURN -- water ===')
 for tag,d in (('final_fun/RETURN    ',f'{R}/final_fun/RETURN'),

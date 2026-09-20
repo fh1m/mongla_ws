@@ -1,4 +1,4 @@
-# The SROT board, read end to end — and what it means for `duburi_ws`
+# The SROT board, read end to end — and what it means for `mongla_ws`
 
 Written 2026-09-03 against `srot-control-board` @ `f1d3ba9`, **Hengla v0.2.0,
 behaviour rev 14**, with every claim below either read in their source or
@@ -166,7 +166,7 @@ Implemented in firmware, no driver method on our side:
 
 | command | id | why it matters |
 |---|---|---|
-| `DO_MOTOR_TEST` | 209 | **GATE 0's procedure.** Per-motor, ARMED, keep-alive at >=2 Hz, window `p4` clamped 600..3000 ms, auto-expires. Runnable from `duburi_ws` today |
+| `DO_MOTOR_TEST` | 209 | **GATE 0's procedure.** Per-motor, ARMED, keep-alive at >=2 Hz, window `p4` clamped 600..3000 ms, auto-expires. Runnable from `mongla_ws` today |
 | `DO_START_MAG_CAL` | 42424 | the mag calibration behind `YAW_REF` |
 | `ACCELCAL_VEHICLE_POS` | 42429 | 6-point accel cal |
 | `PREFLIGHT_STORAGE` | 245 | p1=1 save · **p1=2 factory reset, wipes params AND learned motor directions** |
@@ -206,7 +206,7 @@ every payload after it.
 # The full sweep — all three repos, 2026-09-03
 
 Read end to end: firmware 22.8 k lines, Bondor 6.9 k, ESC flasher 3.4 k. What
-follows is only what changes how `duburi_ws` behaves.
+follows is only what changes how `mongla_ws` behaves.
 
 ## 9. ⛔ A move can report COMPLETE while it is still running
 

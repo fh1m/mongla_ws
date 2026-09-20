@@ -19,24 +19,24 @@
   <text x="40" y="76" fill="#93a4bd" font-size="14">Every command in the system — CLI, mission script or state machine — arrives as one goal on one action, and leaves through one node.</text>
 
   <rect x="40" y="108" width="300" height="196" rx="12" fill="#101a2b" stroke="#2a3a55"/>
-  <text x="62" y="136" fill="#cbd7e8" font-size="15" font-weight="700">duburi_planner</text>
+  <text x="62" y="136" fill="#cbd7e8" font-size="15" font-weight="700">mongla_planner</text>
   <text x="62" y="156" fill="#7d8ea8" font-size="11.5" font-family="ui-monospace, monospace">11k lines · 405 tests</text>
   <text x="62" y="184" fill="#8fa2bd" font-size="12.5">the mission language, the CLI, the</text>
   <text x="62" y="202" fill="#8fa2bd" font-size="12.5">missions themselves and the state</text>
   <text x="62" y="220" fill="#8fa2bd" font-size="12.5">machines</text>
-  <text x="62" y="248" fill="#6f8fae" font-size="11.5" font-family="ui-monospace, monospace">duburi arm</text>
+  <text x="62" y="248" fill="#6f8fae" font-size="11.5" font-family="ui-monospace, monospace">mongla arm</text>
   <text x="62" y="266" fill="#6f8fae" font-size="11.5" font-family="ui-monospace, monospace">mission sauvc_full</text>
-  <text x="62" y="284" fill="#6f8fae" font-size="11.5" font-family="ui-monospace, monospace">duburi.vision.align('gate', …)</text>
+  <text x="62" y="284" fill="#6f8fae" font-size="11.5" font-family="ui-monospace, monospace">mongla.vision.align('gate', …)</text>
 
   <rect x="380" y="140" width="220" height="132" rx="12" fill="#16223a" stroke="#4a6488"/>
-  <text x="402" y="168" fill="#cbd7e8" font-size="15" font-weight="700">duburi_interfaces</text>
+  <text x="402" y="168" fill="#cbd7e8" font-size="15" font-weight="700">mongla_interfaces</text>
   <text x="402" y="188" fill="#7d8ea8" font-size="11.5" font-family="ui-monospace, monospace">messages only</text>
-  <text x="402" y="216" fill="#8fa2bd" font-size="12.5">one action: /duburi/move</text>
+  <text x="402" y="216" fill="#8fa2bd" font-size="12.5">one action: /mongla/move</text>
   <text x="402" y="236" fill="#8fa2bd" font-size="12.5">one state topic</text>
   <text x="402" y="260" fill="#6f8fae" font-size="11.5">the whole cross-package surface</text>
 
   <rect x="640" y="108" width="300" height="196" rx="12" fill="#101a2b" stroke="#3c5f7a"/>
-  <text x="662" y="136" fill="#e6edf7" font-size="15" font-weight="700">duburi_manager</text>
+  <text x="662" y="136" fill="#e6edf7" font-size="15" font-weight="700">mongla_manager</text>
   <text x="662" y="156" fill="#7d9db8" font-size="11.5" font-family="ui-monospace, monospace">8.5k lines · 388 tests</text>
   <text x="662" y="184" fill="#93b6cf" font-size="12.5">the only node that talks to the board:</text>
   <text x="662" y="202" fill="#93b6cf" font-size="12.5">owns the link, serves the action,</text>
@@ -46,7 +46,7 @@
   <text x="662" y="284" fill="#6f8fae" font-size="11.5" font-family="ui-monospace, monospace">autotune · flare_order</text>
 
   <rect x="640" y="336" width="300" height="152" rx="12" fill="#12291f" stroke="#2f6b52"/>
-  <text x="662" y="364" fill="#e6edf7" font-size="15" font-weight="700">duburi_control</text>
+  <text x="662" y="364" fill="#e6edf7" font-size="15" font-weight="700">mongla_control</text>
   <text x="662" y="384" fill="#6fbfa5" font-size="11.5" font-family="ui-monospace, monospace">13.2k lines · 865 tests · no nodes</text>
   <text x="662" y="412" fill="#a9e3c9" font-size="12.5">the verb implementations and the</text>
   <text x="662" y="430" fill="#a9e3c9" font-size="12.5">flight-controller boundary: one class</text>
@@ -54,7 +54,7 @@
   <text x="662" y="472" fill="#5fae8d" font-size="11.5" font-family="ui-monospace, monospace">srot · pixhawk (simulator)</text>
 
   <rect x="40" y="336" width="286" height="152" rx="12" fill="#1a1630" stroke="#5b4d9a"/>
-  <text x="62" y="364" fill="#e6edf7" font-size="15" font-weight="700">duburi_vision</text>
+  <text x="62" y="364" fill="#e6edf7" font-size="15" font-weight="700">mongla_vision</text>
   <text x="62" y="384" fill="#9b8fd0" font-size="11.5" font-family="ui-monospace, monospace">24k lines · 824 tests</text>
   <text x="62" y="412" fill="#ded7f5" font-size="12.5">cameras, the Hailo detector, tracking,</text>
   <text x="62" y="430" fill="#ded7f5" font-size="12.5">the visual lock, optical flow, optics</text>
@@ -62,7 +62,7 @@
   <text x="62" y="472" fill="#9b8fd0" font-size="11.5" font-family="ui-monospace, monospace">detections · lock · velocity</text>
 
   <rect x="352" y="336" width="258" height="152" rx="12" fill="#13263a" stroke="#3c5f7a"/>
-  <text x="374" y="364" fill="#e6edf7" font-size="15" font-weight="700">duburi_localization</text>
+  <text x="374" y="364" fill="#e6edf7" font-size="15" font-weight="700">mongla_localization</text>
   <text x="374" y="384" fill="#7d9db8" font-size="11.5" font-family="ui-monospace, monospace">3.6k lines · 244 tests</text>
   <text x="374" y="412" fill="#d5e3ef" font-size="12.5">the estimator: an invariant filter,</text>
   <text x="374" y="430" fill="#d5e3ef" font-size="12.5">replay of late measurements, course</text>
@@ -70,7 +70,7 @@
   <text x="374" y="472" fill="#7d9db8" font-size="11.5" font-family="ui-monospace, monospace">odom · fixes · heading</text>
 
   <rect x="972" y="336" width="148" height="152" rx="12" fill="#101a2b" stroke="#2a3a55"/>
-  <text x="994" y="364" fill="#e6edf7" font-size="14.5" font-weight="700">duburi_sensors</text>
+  <text x="994" y="364" fill="#e6edf7" font-size="14.5" font-weight="700">mongla_sensors</text>
   <text x="994" y="384" fill="#7d8ea8" font-size="11" font-family="ui-monospace, monospace">1.9k · 31 tests</text>
   <text x="994" y="412" fill="#8fa2bd" font-size="12">one interface for</text>
   <text x="994" y="430" fill="#8fa2bd" font-size="12">"where is north",</text>

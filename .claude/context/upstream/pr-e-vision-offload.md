@@ -20,7 +20,7 @@ separate bugs of one shape**, none of which raised anything:
 
 Every one is the same failure: **a constant expressed in TICKS or FRAMES stops
 being the physical quantity it was tuned as, the moment the rate underneath it
-moves.** All three are fixed on our side (`duburi_ws` @ `srot`), and all three
+moves.** All three are fixed on our side (`mongla_ws` @ `srot`), and all three
 were reachable only because the servo loop runs on a companion whose rate is
 whatever the perception stack happens to do that day — 3-4 Hz on a `.pt`,
 20-30 Hz on the Jetson's TensorRT, **55-98 Hz** on the Hailo path, and

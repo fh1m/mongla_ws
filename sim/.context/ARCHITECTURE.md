@@ -4,12 +4,12 @@
 
 | Package | Responsibility |
 |---------|----------------|
-| `duburi_sim_description` | `duburi_heavy` Gazebo model (BlueROV2 Heavy proxy) |
-| `duburi_sim_worlds` | Pool, SAUVC props, course YAML → `.world` |
-| `duburi_sim_bringup` | Orchestration: sim, stack, ArduSub params, `duburi_sim` CLI |
-| `duburi_sim_bridge` | ros_gz cameras/GT, underwater FX, recorder, contract tools |
-| `duburi_sim_scenarios` | Runtime prop services + CLI |
-| `duburi_sim_web` | FastAPI + React operator lab |
+| `mongla_sim_description` | `mongla_heavy` Gazebo model (BlueROV2 Heavy proxy) |
+| `mongla_sim_worlds` | Pool, SAUVC props, course YAML → `.world` |
+| `mongla_sim_bringup` | Orchestration: sim, stack, ArduSub params, `mongla_sim` CLI |
+| `mongla_sim_bridge` | ros_gz cameras/GT, underwater FX, recorder, contract tools |
+| `mongla_sim_scenarios` | Runtime prop services + CLI |
+| `mongla_sim_web` | FastAPI + React operator lab |
 
 ## Process graph
 
@@ -21,18 +21,18 @@ sequenceDiagram
   participant AS as ardusub
   participant Br as bridge_FX
   participant Stack as stack.launch
-  participant Mgr as duburi_manager
+  participant Mgr as mongla_manager
   participant Lab as lab_server
 
-  Op->>Sim: duburi_sim sim
+  Op->>Sim: mongla_sim sim
   Sim->>Gz: gz sim -s -r world
   Sim->>Gz: gz sim -g optional
   Sim->>AS: after IMU wait
   Sim->>Br: include bridge.launch
-  Op->>Stack: duburi_sim stack
+  Op->>Stack: mongla_sim stack
   Stack->>Mgr: mode sim pixhawk
   AS-->>Mgr: UDP 14550
-  Op->>Lab: duburi_sim lab
+  Op->>Lab: mongla_sim lab
   Lab-->>AS: TCP 5763 RC when teleop active
   Lab->>Mgr: arm via planner subprocess
 ```
@@ -45,18 +45,18 @@ sequenceDiagram
    fighting the manager’s MAVLink socket.
 4. **Course change = stop + start** — no true Gazebo world hot-swap in v0.1.
 5. **FX on separate topics** — raw contract topics stay clean; training uses `image_fx`.
-6. **Sibling workspace** — keep sim drop-in without merging into `duburi_ws` yet.
+6. **Sibling workspace** — keep sim drop-in without merging into `mongla_ws` yet.
 
 ## Data flow: cameras
 
 ```text
 Gazebo camera sensors
-  → ros_gz bridge → /duburi/sim/*/image_raw (+ camera_info)
-  → underwater_fx → /duburi/sim/*/image_fx
+  → ros_gz bridge → /mongla/sim/*/image_raw (+ camera_info)
+  → underwater_fx → /mongla/sim/*/image_fx
   → lab ROS node: JPEG q≈82; Operate preview defaults to **raw**
   → MJPEG (/api/cameras/*/mjpeg) ~30 Hz poll; skip duplicate JPEG seq
   → record_cameras: buffer frames; async PNG/labels; encode MP4 at fps_actual
-  → optional duburi_vision (forward) on image_raw
+  → optional mongla_vision (forward) on image_raw
 ```
 
 **MJPEG budget:** ~33 ms sleep when frames are fresh; idle backoff 50 ms.
@@ -69,9 +69,9 @@ finalize writes MP4 with `fps = count/duration_s` so playback length = wall time
 ## Data flow: control
 
 ```text
-Planner / mission  → /duburi/move → manager → MAVLink 14550 → ArduSub → thrusters
+Planner / mission  → /mongla/move → manager → MAVLink 14550 → ArduSub → thrusters
 Lab D-pad          → TeleopStreamer → RC_CHANNELS_OVERRIDE @5763 → ArduSub
-Lab arm button     → subprocess: ros2 run duburi_planner duburi arm|disarm
+Lab arm button     → subprocess: ros2 run mongla_planner mongla arm|disarm
 ```
 
 Idle teleop stops writing overrides so manager heartbeats can hold neutrals.

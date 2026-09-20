@@ -37,8 +37,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import numpy as np
 
-WS = os.path.expanduser('~/duburi_ws/src')
-for pkg in ('duburi_control', 'duburi_vision', 'duburi_manager'):
+WS = os.path.expanduser('~/mongla_ws/src')
+for pkg in ('mongla_control', 'mongla_vision', 'mongla_manager'):
     p = os.path.join(WS, pkg)
     if p not in sys.path:
         sys.path.insert(0, p)
@@ -47,12 +47,12 @@ import cv2                                                   # noqa: E402
 cv2.setNumThreads(0)
 from pymavlink import mavutil                                # noqa: E402
 
-from duburi_control.bearing import (                         # noqa: E402
+from mongla_control.bearing import (                         # noqa: E402
     BearingFilter, bearing_from_pixels)
-from duburi_control.fc import srot_protocol as sp            # noqa: E402
-from duburi_control.fc.port_guard import PortGuard           # noqa: E402
-from duburi_control.fc.srot_fc import SrotFC                 # noqa: E402
-from duburi_vision.detection.factory import make_detector    # noqa: E402
+from mongla_control.fc import srot_protocol as sp            # noqa: E402
+from mongla_control.fc.port_guard import PortGuard           # noqa: E402
+from mongla_control.fc.srot_fc import SrotFC                 # noqa: E402
+from mongla_vision.detection.factory import make_detector    # noqa: E402
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
 from _where import where   # never print a hardcoded IP
@@ -67,7 +67,7 @@ ap.add_argument('--dev', default='/dev/ttyUSB0')
 ap.add_argument('--conf', type=float, default=0.35)
 ap.add_argument('--hz', type=float, default=50.0)
 ap.add_argument('--cal', default=os.path.expanduser(
-    '~/duburi_ws/src/duburi_vision/config/calibration/pi_downward_1280x720.json'))
+    '~/mongla_ws/src/mongla_vision/config/calibration/pi_downward_1280x720.json'))
 A = ap.parse_args()
 
 W, H = 640, 360
