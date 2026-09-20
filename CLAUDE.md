@@ -35,10 +35,26 @@ hardware, water, or a firmware merge). Nothing on this platform has been in wate
 | Companion | **Raspberry Pi 5 + Hailo-8 AI HAT** (ROS 2 Jazzy on the vehicle; Humble on dev boxes) |
 | Link | **one USB-C cable**, MAVLink 2 at 115200, compid **191** (`MAV_COMP_ID_ONBOARD_COMPUTER`) |
 | IMU / depth / leak / kill / batteries / ESC RPM | all **on the board** |
-| Thrusters | 8 × T200, vectored (M1–M4 horizontal at 45°, M5–M8 vertical), Bluejay ESCs with bidirectional DShot |
+| Thrusters | **⚠ two answers — see below.** Firmware mixes for 8 × T200 vectored (M1–M4 horizontal at 45°, M5–M8 vertical); the **current CAD is a 5-thruster hull**. Bluejay ESCs, bidirectional DShot either way |
 | Cameras | forward + downward USB; measured calibration in `mongla_vision/config/calibration/` |
 | Velocity / distance | **the downward camera** — no DVL is fitted, and none has ever been validated in water |
 | Payload | board channels over MAVLink (`fire(N)` = **board channel N**, 1–16) |
+
+
+> **⚠ The hull in CAD is not the hull the mixer was written for.** Measured off the CAD
+> geometry on 2026-09-20 and validated against Onshape to 0.08 %: the vehicle is
+> **702.0 × 176.1 × 172.1 mm**, fineness **3.99**, with **four ⌀84 mm tunnel thrusters**
+> (lateral pair 350 mm apart, vertical pair 519 mm apart) plus **one axial unit in the nose** —
+> five thrusters, giving **5 of 6 DOF with roll unactuated**. The firmware's mixer is
+> `vectored_6dof` for **eight** T200s. Both statements are true of *something*; they are not
+> true of the same vehicle.
+>
+> Until that is settled, **say which hull a number belongs to.** The 8-thruster figures come
+> from the competition vehicles (RoboSub 2023/2025); the geometry above comes from the CAD that
+> is being built now. Full read, including what is deliberately *not* concluded (net buoyancy,
+> CoB above CoM, drag coefficient, thrust per tunnel — Onshape reports **no material assigned
+> to any part**, so mass genuinely cannot be computed): the *body* section of the site, and
+> `tools/pack_hull.py`, which reads the geometry rather than quoting it.
 
 Full hardware detail: [`vehicle-spec.md`](.claude/context/platform/vehicle-spec.md) ·
 [`srot-architecture.md`](.claude/context/platform/srot-architecture.md) ·
