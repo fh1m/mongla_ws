@@ -193,7 +193,9 @@
 
   <div class="stage" id="explode-stage">
    <div class="bay glass">
-    <span class="tagtop">Mongla hull <i>//</i> drag to orbit <i>//</i> space to pause</span>
+    <span class="tagtop">Mongla hull <i>//</i> drag to orbit <i>//</i> wheel to zoom</span>
+    <span class="keys"><b>drag</b> orbit · <b>wheel</b> zoom · <b>X</b> take the explode ·
+      <b>, .</b> open &amp; close · <b>0</b> reset</span>
     <canvas id="hull" tabindex="0" role="img"
       aria-label="Interactive three-dimensional model of the Mongla hull: 702 millimetres long, four tunnel thrusters and one axial nose thruster. It comes apart as the page is scrolled."></canvas>
     <div class="hud">
@@ -1038,7 +1040,7 @@
           var e = t;
           hint.textContent = e > 0.06
             ? 'Mongla hull // ' + Math.round(e * 100) + '% apart // keep scrolling'
-            : 'Mongla hull // drag to orbit // space to pause';
+            : 'Mongla hull // drag to orbit // wheel to zoom';
         });
       }
       var hint = bay.parentElement.querySelector('.tagtop');

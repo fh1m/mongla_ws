@@ -231,7 +231,10 @@ code,.n{font-family:var(--data);font-size:.87em;color:var(--medium-text)}
 /* ── the explode stage: the canvas is PINNED and the scroll drives it ──
    A viewer that scrolls out of frame halfway through its own animation is
    the animation not happening. The stage is tall; the bay sticks inside it. */
-.stage{position:relative;margin-top:44px;height:300vh}
+ /* 300vh made the section feel like a trap -- three screens of scrolling before
+   the page moved on. 190vh is enough travel to read the explode as a motion
+   and short enough that a reader who does not care is past it quickly. */
+.stage{position:relative;margin-top:44px;height:190vh}
 .stage .bay{position:sticky;top:7vh;margin-top:0}
 .stage .bay canvas{height:min(78vh,720px)}
 .beats{position:absolute;inset:auto 0 0 0;list-style:none;margin:0;padding:0;
@@ -268,6 +271,13 @@ code,.n{font-family:var(--data);font-size:.87em;color:var(--medium-text)}
   text-transform:uppercase;color:var(--ink-3);border-top:1px solid var(--rule);
   background:linear-gradient(180deg,transparent,rgba(0,0,0,.92) 70%)}
 .bay .hud i{font-style:normal;color:var(--signal-text)}
+.bay .keys{position:absolute;top:12px;right:16px;font-family:var(--data);
+  font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);
+  opacity:.55;transition:opacity var(--t-fast) var(--ease);text-align:right;
+  max-width:52%;line-height:1.9}
+.bay .keys b{color:var(--signal-text);font-weight:400}
+.bay:hover .keys{opacity:1}
+@media (max-width:760px){.bay .keys{display:none}}
 .bay .tagtop{position:absolute;top:12px;left:16px;font-family:var(--data);font-size:9.5px;
   letter-spacing:.2em;text-transform:uppercase;color:var(--ink-3)}
 
