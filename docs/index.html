@@ -43,7 +43,7 @@
     <div><b>53.9 Hz</b><span>detection through the live ROS graph</span></div>
     <div><b>46.7°</b><span>camera field of view, measured in water</span></div>
     <div><b>1.09 cm</b><span>worst error over a 30 cm slide</span></div>
-    <div><b>2 757</b><span>tests, all of them green</span></div>
+    <div><b>3 311</b><span>tests passing, none failing</span></div>
   </div>
   <p class="mark" style="margin:22px 0 0">Nothing on this platform has been in water. Every number
     above says where it was taken.</p>
@@ -82,7 +82,9 @@
      <img src="imgs/pool-top.jpg" alt="The test pool seen from above" loading="lazy">
    </div>
    <figcaption>The same target, the same detector, two water conditions. This is the single
-     variable that decides whether a run scores or ends.</figcaption>
+     variable that decides whether a run scores or ends. Every threshold behind these rows is in
+     <a href="https://github.com/fh1m/mongla_ws/blob/main/.claude/context/measured-bars.md">measured-bars.md</a>, with the method beside
+     it.</figcaption>
   </figure>
  </div>
 </section>
@@ -216,7 +218,7 @@
     <line class="ld" x1="130.5" y1="70" x2="130.5" y2="26"/>
     <line class="ld" x1="649.5" y1="70" x2="649.5" y2="26"/>
     <text class="lbb" x="130.5" y="20" text-anchor="middle">VERT ⌀84 — heave + pitch</text>
-    <text class="lbb" x="649.5" y="20" text-anchor="middle">pitch arm 259.5 mm</text>
+    <text class="lbb" x="649.5" y="20" text-anchor="middle">pitch couple 519 mm</text>
     <path class="hl" d="M40,140 C40,85 96,53 168,47 L640,47 C700,51 742,87 742,140
                         C742,193 700,229 640,233 L168,233 C96,227 40,195 40,140 Z"/>
     <line class="cl" x1="26" y1="140" x2="800" y2="140"/>
@@ -232,7 +234,7 @@
     <line class="ld" x1="215" y1="240" x2="215" y2="264"/>
     <line class="ld" x1="565" y1="240" x2="565" y2="264"/>
     <text class="lbr" x="215" y="278" text-anchor="middle">LAT ⌀84 — sway + yaw</text>
-    <text class="lbr" x="565" y="278" text-anchor="middle">yaw arm 175 mm</text>
+    <text class="lbr" x="565" y="278" text-anchor="middle">yaw couple 350 mm</text>
     <!-- axial nose thruster -->
     <circle class="tn" cx="720.6" cy="140" r="17"/>
     <path class="ar" d="M752,140 L794,140 M784,134 L798,140 L784,146"/>
@@ -248,8 +250,8 @@
     no moving nozzles and nothing protruding into the flow. Tunnels also deliver full authority at
     <em>zero forward speed</em>, which is precisely the regime a task is won in: holding still in
     front of a hole. Bilateral symmetry is exact to ±88.05 mm, so there is no built-in turn to trim
-    away. And the pitch arm is 48 % longer than the yaw arm, which puts the strongest moment on the
-    axis that has to resist a nose-down trim.</p>
+    away. And the pitch couple is 48 % wider than the yaw couple (519 mm against 350 mm), which puts
+    the stronger moment on the axis that has to resist a nose-down trim.</p>
 
   <h3 style="margin-top:36px">Where it costs</h3>
   <p class="col quiet" style="margin-top:12px">The four bores total <span class="nr">221.7 cm²</span>
@@ -257,9 +259,9 @@
     come to <strong>1.38× the frontal area</strong>. Open tunnels are cavities in cruise: they are
     the price of station-keeping authority, and it is paid continuously while transiting. At a
     fineness of 3.99 the body is already blunter than the drag optimum, so the two choices compound.
-    The arms are also arguably the wrong way round — <strong>yaw is the axis an AUV actually
+    The couples are also arguably the wrong way round — <strong>yaw is the axis an AUV actually
     uses</strong>, to hold heading against current and to line up on a target, and yaw got the
-    shorter 175 mm arm. Swapping the tunnel pairs would favour the axis doing the work. And with
+    narrower 350 mm couple. Swapping the tunnel pairs would favour the axis doing the work. And with
     every thruster on the centreplane, <strong>roll has no actuator at all</strong>: it has to be
     passively stable, which promotes the vertical placement of ballast from a detail to a
     load-bearing decision.</p>
@@ -277,7 +279,8 @@
   <p class="col quiet" style="margin-top:22px">A shell mesh cannot answer the buoyancy question, and
     it would be easy to pretend otherwise: the enclosed volume of this model is 1.77 L, which is the
     <em>surface</em> and not the displacement. Using it would repeat a mistake this project has
-    already made once, and written down.</p>
+    already made once, and written down. The geometry here is read straight out of the CAD by
+    <a href="https://github.com/fh1m/mongla_ws/blob/main/tools/pack_hull.py">pack_hull.py</a>, which is also what builds the model above.</p>
  </div>
 </section>
 
@@ -375,7 +378,9 @@
   <p class="col quiet" style="margin-top:30px">The third row is the one worth staring at. Through a
     gap of 175 frames the detector produced nothing at all, and the vehicle still knew where the
     target was — because the anchor matches image structure rather than asking the network again.
-    The fourth row matters as much: the ladder ends in a refusal, not in a confident invention.</p>
+    The fourth row matters as much: the ladder ends in a refusal, not in a confident invention.
+    The rungs and their timeouts are described in
+    <a href="https://github.com/fh1m/mongla_ws/blob/main/.claude/context/perception/detection-continuity.md">detection-continuity.md</a>.</p>
  </div>
 </section>
 
@@ -386,7 +391,8 @@
   <h2 class="col">The results we had to take back.</h2>
   <p class="lede col quiet">More than half of the measurement ledger is retractions. They are kept
     where anyone can read them, because a project that quietly deletes its wrong answers is a
-    project you cannot check.</p>
+    project you cannot check. The full ledger, retractions included, is
+    <a href="https://github.com/fh1m/mongla_ws/blob/main/.claude/context/measured-bars.md">here</a>.</p>
 
   <div class="retract">
     <b>Image enhancement made detection better</b>
@@ -440,7 +446,7 @@
     <div><b>1.09 cm</b><span>worst error, 30 cm slide</span></div>
     <div><b>175</b><span>frames held with no detector</span></div>
     <div><b>0.9 mm</b><span>hull tessellation in the viewer</span></div>
-    <div><b>2 757</b><span>tests green across five suites</span></div>
+    <div><b>3 311</b><span>passing across five suites; 0 failed</span></div>
   </div>
   <p class="col quiet" style="margin-top:34px">Each of these lives in a ledger with its method, its
     conditions and the bar it had to clear — and the tests read that file, so a number cannot drift
@@ -470,7 +476,10 @@
     mongla.move_right(duration=<span class="s">0.6</span>)</pre>
   <p class="quiet" style="font-size:.92rem;margin-top:14px;max-width:66ch">The comment on the
     eighth line is the whole philosophy compressed: a result that is <em>absent</em> must never be
-    mistaken for a result that is <em>zero</em>.</p>
+    mistaken for a result that is <em>zero</em>. The full verb table is in
+    <a href="https://github.com/fh1m/mongla_ws/blob/main/.claude/context/missions/command-reference.md">command-reference.md</a>; what a
+    vision verb hands back is in
+    <a href="https://github.com/fh1m/mongla_ws/blob/main/.claude/context/missions/vision-results.md">vision-results.md</a>.</p>
  </div>
 </section>
 
@@ -490,7 +499,9 @@
    <li>No mission has been flown on this platform<span>water time</span></li>
   </ul>
   <p class="col" style="margin-top:44px">None of that is hidden, because a capability map that
-    promotes bench results to flight results is how a team finds out at the venue.</p>
+    promotes bench results to flight results is how a team finds out at the venue. The live list
+    is <a href="https://github.com/fh1m/mongla_ws/blob/main/.claude/context/ROADMAP.md">ROADMAP.md</a> — one status file, so it cannot
+    disagree with itself.</p>
   <p class="col">I left on principle, and I am building this on hope rather than optimism. Hope is
     the decision to keep working on the better version of a thing while the current version is
     still broken. Pushing a technical limit is the most concrete form of that I know: every
