@@ -4,7 +4,7 @@ One action, thirty verbs. This page says what each one does, what it takes, and 
 that matters on this vehicle — **where it actually runs**.
 
 The canonical list is the `COMMANDS` registry in
-[`mongla_control/commands.py`](../../src/mongla_control/mongla_control/commands.py). If a verb
+[`mongla_control/commands.py`](../../../src/mongla_control/mongla_control/commands.py). If a verb
 is in this document and not in that registry, the document is wrong.
 
 ---
@@ -42,7 +42,7 @@ design exists to prevent.
 > automatic mode, which closes the depth loop — and that loop has never run closed in water.
 > Until the two bench checks pass, the board may refuse these moves outright. That includes
 > the search creep a vision verb falls back on. See
-> [`srot-integration.md`](srot-integration.md).
+> [`srot-integration.md`](../platform/srot-integration.md).
 
 ---
 
@@ -108,7 +108,7 @@ control entirely for a few seconds.
 `mission_reset` belongs at the top of every mission: it clears state carried over from a
 previous run and re-zeroes the barometer while the vehicle is still on the surface. Which is
 also why a mission must never call another mission's `run()` mid-dive — see
-[`sauvc_full`](../../src/mongla_planner/mongla_planner/missions/sauvc_full.py).
+[`sauvc_full`](../../../src/mongla_planner/mongla_planner/missions/sauvc_full.py).
 
 ## Moving
 
@@ -250,5 +250,5 @@ floor's texture rather than any detection.
 - [`client-and-dsl-api.md`](client-and-dsl-api.md) — the mission language around these verbs
 - [`vision-results.md`](vision-results.md) — reading a vision result, and recovery patterns
 - [`precision-alignment.md`](precision-alignment.md) — holding a 20 kg hull still enough to fire
-- [`packages/mongla_control`](packages/mongla_control/README.md) — where each verb is implemented
-- [Capability Map](capability-map.md) — what is verified, and what is not
+- [`packages/mongla_control`](../packages/mongla_control/README.md) — where each verb is implemented
+- [Capability Map](../capability-map.md) — what is verified, and what is not

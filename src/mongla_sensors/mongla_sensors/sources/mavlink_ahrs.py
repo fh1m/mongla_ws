@@ -7,7 +7,7 @@ in the last `STALE_SECONDS` seconds, the source is healthy.
 
 Staleness gate
 --------------
-The `.claude/context/sensors-pipeline.md` contract says any YawSource
+The `.claude/context/perception/sensors-pipeline.md` contract says any YawSource
 must withhold a sample older than 250 ms instead of returning a stale
 one -- otherwise yaw_snap / yaw_glide will lock onto a yaw value the
 sub already moved past. We implement that gate via

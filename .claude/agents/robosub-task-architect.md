@@ -26,7 +26,7 @@ fits the existing stack — never propose net-new architecture when a pattern ex
 ## References
 
 - `.claude/context/ROADMAP.md` — timeline, task table, skeletons (authoritative)
-- `.claude/context/mission-cookbook.md`, `detected-paradigm.md`, `command-reference.md`
-- `.claude/context/vision-architecture.md` — detector/topic contract
+- `.claude/context/missions/mission-cookbook.md`, `detected-paradigm.md`, `command-reference.md`
+- `.claude/context/perception/vision-architecture.md` — detector/topic contract
 
 Anchor every recommendation to the roadmap and existing code. Report only — do not edit.

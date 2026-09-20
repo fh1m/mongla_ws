@@ -10,7 +10,7 @@ format `path:line: <severity>: <problem>. <fix>.` No praise, no scope creep.
 
 Ground truth, in this order: the firmware source in
 `Mongla_others/srot-control-board/`, then `fc/srot_protocol.py`, then
-`.claude/context/srot-integration.md`. A document that disagrees with the firmware is the
+`.claude/context/platform/srot-integration.md`. A document that disagrees with the firmware is the
 finding.
 
 ## What to check
@@ -49,5 +49,5 @@ finding.
 ## Out of scope
 
 The `pixhawk` backend and the simulator's ArduSub path — see
-[`legacy-pixhawk-and-sitl.md`](../context/legacy-pixhawk-and-sitl.md). Do not port ArduSub
+[`legacy-pixhawk-and-sitl.md`](../context/platform/legacy-pixhawk-and-sitl.md). Do not port ArduSub
 assumptions (ALT_HOLD, RC channel overrides, a host heading lock) into srot code.

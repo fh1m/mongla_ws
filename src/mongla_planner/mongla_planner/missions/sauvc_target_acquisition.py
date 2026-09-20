@@ -18,7 +18,7 @@ test_sauvc_target_acquisition.py fails if any mission ever steers on the pinger.
 and must be completed before attempting any other task." This chunk assumes the
 gate is behind us -- run `sauvc_navigation` first, or a combinator that does.
 
-Downward-camera axis remap (full table: .claude/context/downward-camera.md):
+Downward-camera axis remap (full table: .claude/context/perception/downward-camera.md):
     image-X   -> Ch6 LATERAL strafe   -- align `lat`
     image-Y   -> Ch5 SURGE fore/aft   -- align `fwd`
     bbox fill -> DEPTH descent        -- align `depth` (OFF here, see config)

@@ -36,7 +36,7 @@ surface any failure with the specific fix. **Never arm thrusters from this skill
    ```
    Expect `pub≈30Hz`. Detector + tracking topics present.
 
-5. **Physical checklist** — walk `.claude/context/pool-day.md` items and ask the operator
+5. **Physical checklist** — walk `.claude/context/platform/pool-day.md` items and ask the operator
    to confirm each (props clear, tether on, topside can ping Jetson, kill-switch reachable).
 
 ## Rules

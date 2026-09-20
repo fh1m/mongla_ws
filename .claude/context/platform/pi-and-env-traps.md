@@ -1,7 +1,7 @@
 # Environment traps — dependency pitfalls that take down the vision launch
 
 > These are **environment** problems, not code bugs, but each one takes down the whole vision
-> launch with a confusing traceback. Code defects live in [`BUGS.md`](BUGS.md).
+> launch with a confusing traceback. Code defects live in [`BUGS.md`](../BUGS.md).
 >
 > E1–E3 were first hit on the old companion computer and are **still live on the Pi**: they
 > are Python packaging traps (NumPy ABI, a shadowed OpenCV, a broken wheel), not properties of
@@ -140,7 +140,7 @@
 * **Source:** https://github.com/BumblebeeAS/ardupilot_fix
 * **State vs upstream:** **1 commit ahead, 3911 commits behind** `ArduPilot/master`. 0 stars, 0 forks. No CI configured.
 * **The single commit** (`xelisce`, 2025-05-23, "hard code variables into file fix, passed all tests"): adds 9 unused declarations to `libraries/AP_DDS/AP_DDS_Client.cpp`. No semantic ArduSub change. No new mode, no new failsafe, no new MAVLink behaviour.
-* **Verdict:** nothing to learn or pull. The fork name suggests a fix for something interesting but the diff is non-semantic. Stay on the upstream Sub-stable-V4.5.x branch documented in [`legacy-pixhawk-and-sitl.md`](./legacy-pixhawk-and-sitl.md).
+* **Verdict:** nothing to learn or pull. The fork name suggests a fix for something interesting but the diff is non-semantic. Stay on the upstream Sub-stable-V4.5.x branch documented in [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md).
 * **Re-evaluate when:** the fork's `xelisce` author (or `BumblebeeAS` org) ships a second semantic commit. Until then, do not spend an evening "evaluating" this again.
 
 ---

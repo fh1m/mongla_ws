@@ -40,7 +40,7 @@ schedule, never truly converging unless the clip happens to show a centred
 target. For dynamics, use Gazebo/SITL; for detection + sequencing, use this.
 
 Pair with control in separate terminals (SITL for /mongla/state + the manager)
-exactly as documented in .claude/context/video-testing.md.
+exactly as documented in .claude/context/perception/video-testing.md.
 """
 
 import os

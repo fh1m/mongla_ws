@@ -1,7 +1,7 @@
 # Vehicle spec — what is actually fitted
 
 Canonical hardware reference. If this disagrees with the code, the code wins and this page is
-the bug. Architecture and reasoning: [The Shift](../../docs/the-shift.md).
+the bug. Architecture and reasoning: [The Shift](../../../docs/the-shift.md).
 
 ---
 
@@ -50,7 +50,7 @@ name `mongla_ws` and the `/mongla/*` namespace are back-compat and are not renam
 
 ## Where a number belongs
 
-A measured constant lives in [`measured-bars.md`](measured-bars.md) with its method and its
+A measured constant lives in [`measured-bars.md`](../measured-bars.md) with its method and its
 bar, and tests read that file. A per-camera optical number belongs to the **physical camera**,
 not to the role it is playing — the two were swapped once, and a 46.7° figure sat on the wrong
 camera for nine days (17 % range error).
@@ -58,4 +58,4 @@ camera for nine days (17 % range error).
 Related: [`srot-architecture.md`](srot-architecture.md) ·
 [`srot-integration.md`](srot-integration.md) ·
 [`pi-hailo-vision-box.md`](pi-hailo-vision-box.md) ·
-[`capability-map.md`](capability-map.md)
+[`capability-map.md`](../capability-map.md)

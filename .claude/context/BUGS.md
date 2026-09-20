@@ -633,7 +633,7 @@ the tree and stop calling it built.
 
 | File | Disposition |
 |---|---|
-| `known-issues.md` (600 lines) | **DELETED.** Bug entries → §1–§4 here. FIXED entries whose IDs are cited from source (D7–D10, D14, D16, P1, P2) → §9 appendix. Environment traps E1–E5 + the fork evaluation → new [`pi-and-env-traps.md`](pi-and-env-traps.md). |
+| `known-issues.md` (600 lines) | **DELETED.** Bug entries → §1–§4 here. FIXED entries whose IDs are cited from source (D7–D10, D14, D16, P1, P2) → §9 appendix. Environment traps E1–E5 + the fork evaluation → new [`pi-and-env-traps.md`](platform/pi-and-env-traps.md). |
 | `ROADMAP.md` | **KEPT**, bug section replaced by a pointer here. Its phase status, P0.1 commitment and doc map are project state, not a bug list. |
 | `ROADMAP.md` | **KEPT**, bug entries pointed here. Carries the P0.1 Decision Record and the G1–G12 gap matrix, which CLAUDE.md treats as the authority for committed 2026 scope. |
 | `water-owed.md` | **DELETED.** Content → §11 appendix verbatim. It is a measurement backlog rather than a defect list, so it is kept whole and labelled as such. |
@@ -2187,7 +2187,7 @@ Migrated verbatim from the retired `known-issues.md` on 2026-09-08. These are
 all **FIXED**. They are kept because source comments and tests cite them by ID
 (`detector_node.py` → D16, `vision_state.py` → D10, `test_detector_recovery.py`
 → D16, CLAUDE.md → P1/P2/D7–D10/D14) and the rationale is the part worth keeping.
-Environment traps E1–E5 moved to [`pi-and-env-traps.md`](pi-and-env-traps.md).
+Environment traps E1–E5 moved to [`pi-and-env-traps.md`](platform/pi-and-env-traps.md).
 
 - **Fix:** `_orchestrate` catches `MoveFailed`/`MoveRejected`/`Exception` and returns a non-fatal `VisionResult(False, 'FAILED', …)`; the mission logs it and continues to the next step.
 
@@ -2400,7 +2400,7 @@ process, one `VDevice` (`detection/hailo.py:158-176`) is still the rule.
 > flashed and confirmed over USB. 232 params re-read after the flash: **zero drift, zero
 > missing**. `CAL_MAG_*`, `CAL_LVL_*` and `FS_GCS_COMPID = 191` all intact.
 >
-> Read this with [`srot-integration.md`](srot-integration.md). This file is only the
+> Read this with [`srot-integration.md`](platform/srot-integration.md). This file is only the
 > go/no-go list for the next in-water session.
 
 ---

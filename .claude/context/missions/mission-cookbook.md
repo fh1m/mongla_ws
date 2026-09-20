@@ -7,9 +7,9 @@
 > verbs second, full samples last.
 
 The mission DSL lives in
-[`src/mongla_planner/mongla_planner/mongla_dsl.py`](../../src/mongla_planner/mongla_planner/mongla_dsl.py).
+[`src/mongla_planner/mongla_planner/mongla_dsl.py`](../../../src/mongla_planner/mongla_planner/mongla_dsl.py).
 Every mission file in
-[`src/mongla_planner/mongla_planner/missions/`](../../src/mongla_planner/mongla_planner/missions/)
+[`src/mongla_planner/mongla_planner/missions/`](../../../src/mongla_planner/mongla_planner/missions)
 is a plain Python module that exposes one `run(mongla, log)` function.
 
 
@@ -28,14 +28,14 @@ is a plain Python module that exposes one `run(mongla, log)` function.
 >   run normally.
 >
 > The current contract is [`command-reference.md`](command-reference.md); the legacy path is
-> [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md).
+> [`legacy-pixhawk-and-sitl.md`](../platform/legacy-pixhawk-and-sitl.md).
 
 ---
 
 ## 0. Designing a mission in 30 seconds
 
 1. **Drop a file** in
-   [`src/mongla_planner/mongla_planner/missions/`](../../src/mongla_planner/mongla_planner/missions/),
+   [`src/mongla_planner/mongla_planner/missions/`](../../../src/mongla_planner/mongla_planner/missions),
    for example `follow_gate.py`.
 2. **Expose `def run(mongla, log)`** — that is the entire contract. No
    registry table, no `__init__.py` edit. Files starting with `_` are
@@ -288,7 +288,7 @@ onboard ALT_HOLD inherently latches whatever altitude is current the
 moment Ch3 (throttle) returns to neutral 1500. So once `set_depth`
 returns, the autopilot's 400 Hz internal depth PID continues to hold
 that depth for free, with zero further MAVLink traffic from us. The
-[`Heartbeat`](../../src/mongla_control/mongla_control/heartbeat.py)
+[`Heartbeat`](../../../src/mongla_control/mongla_control/heartbeat.py)
 daemon keeps streaming neutral RC overrides at 5 Hz in the
 background so ArduSub never trips the `FS_PILOT_INPUT` failsafe and
 disarms — that is the *only* depth-related continuous traffic.
@@ -325,7 +325,7 @@ mongla.release_heading()                          # joins the daemon
 ```
 
 Spawns a 20 Hz proportional Ch4 yaw-rate streamer
-([`heading_lock.py`](../../src/mongla_control/mongla_control/heading_lock.py))
+([`heading_lock.py`](../../../src/mongla_control/mongla_control/heading_lock.py))
 in a background thread. The loop reads heading from the configured
 `yaw_source` (BNO085 / AHRS / SITL), computes a yaw error, and
 writes a clamped Ch4 RC override every 50 ms — this is what
@@ -824,7 +824,7 @@ if maintain_on:                     # optional lateral hold while driving
 - `gain` is a hard clamp on every output — the AUV never exceeds it.
 
 Reference implementation:
-[`src/mongla_control/mongla_control/motion_vision.py`](../../src/mongla_control/mongla_control/motion_vision.py).
+[`src/mongla_control/mongla_control/motion_vision.py`](../../../src/mongla_control/mongla_control/motion_vision.py).
 
 ---
 
@@ -857,7 +857,7 @@ not ROS params. Set them in the verb call (or pull them from
 `competition_config.py`).
 
 Defaults live in
-[`src/mongla_manager/mongla_manager/vision_tunables.py`](../../src/mongla_manager/mongla_manager/vision_tunables.py).
+[`src/mongla_manager/mongla_manager/vision_tunables.py`](../../../src/mongla_manager/mongla_manager/vision_tunables.py).
 
 ---
 
@@ -1367,7 +1367,7 @@ eagerly, so the first call never false-negates):
 This is the architecture step toward YASMIN FSMs — each `while detected()` loop
 IS a proto-state.
 
-**Full deep-dive reference:** [`.claude/context/detected-paradigm.md`](./detected-paradigm.md)
+**Full deep-dive reference:** [`.claude/context/missions/detected-paradigm.md`](detected-paradigm.md)
 
 #### The three canonical patterns
 
@@ -1565,7 +1565,7 @@ ros2 param get /mongla_detector classes   # should be 'gate' or 'gate,flare'
 ros2 run mongla_planner mission detected_test   # see detected-paradigm.md §8.2
 ```
 
-Full testing guide: [`.claude/context/detected-paradigm.md §8`](./detected-paradigm.md).
+Full testing guide: [`.claude/context/missions/detected-paradigm.md §8`](detected-paradigm.md).
 
 ### 7.7  DVL gotchas
 
@@ -1827,8 +1827,8 @@ See `packages/README.md §3` for per-chunk expected outputs and `models/README.m
 - Vision state cache:             `src/mongla_manager/mongla_manager/vision_state.py`
 - DSL surface:                    `src/mongla_planner/mongla_planner/mongla_dsl.py`
 - ROS param defaults:             `src/mongla_manager/config/vision_tunables.yaml`
-- DVL integration reference:      `.claude/context/legacy-pixhawk-and-sitl.md`
-- Sensors pipeline design:        `.claude/context/sensors-pipeline.md`
+- DVL integration reference:      `.claude/context/platform/legacy-pixhawk-and-sitl.md`
+- Sensors pipeline design:        `.claude/context/perception/sensors-pipeline.md`
 - CLI cookbook (deck one-liners): `README.md` §9
-- Architecture (visual flow):     `.claude/context/vision-architecture.md`
+- Architecture (visual flow):     `.claude/context/perception/vision-architecture.md`
 - Roadmap (what's next):          `.claude/context/ROADMAP.md`

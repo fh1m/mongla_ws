@@ -49,11 +49,11 @@ safety. Output one line per finding, severity-tagged, `path:line: <severity>: <p
   two-verb mission (`align`/`move`) + mission-authored fallbacks to copy
 - `src/mongla_planner/mongla_planner/vision_dsl.py` — `align`/`move` signatures +
   `VisionResult` + fallback orchestration (source of truth)
-- `.claude/context/fsm-vision-missions.md` — vision-guided mission design, search
+- `.claude/context/missions/fsm-vision-missions.md` — vision-guided mission design, search
   patterns, gain tuning
-- `.claude/context/detected-paradigm.md` — `detected()` mechanics, orbit trap, templates
-- `.claude/context/mission-cookbook.md` — working principles + ready-to-steal samples
-- `.claude/context/client-and-dsl-api.md` — DSL + vision verb semantics
+- `.claude/context/missions/detected-paradigm.md` — `detected()` mechanics, orbit trap, templates
+- `.claude/context/missions/mission-cookbook.md` — working principles + ready-to-steal samples
+- `.claude/context/missions/client-and-dsl-api.md` — DSL + vision verb semantics
 - `.claude/context/ROADMAP.md` — task-by-task mission targets
 
 Report only. Do not edit files.

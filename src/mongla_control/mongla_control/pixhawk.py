@@ -621,7 +621,7 @@ class Pixhawk:
         Pymavlink stamps every received message with `_timestamp` (wall
         time). Lets sensor sources gate on freshness (see
         `MavlinkAhrsSource` and the 250 ms staleness contract in
-        `.claude/context/sensors-pipeline.md`). When the attribute is
+        `.claude/context/perception/sensors-pipeline.md`). When the attribute is
         missing we return 0.0 so the sample is treated as fresh — the
         only known cause is an in-test mock without timestamps.
         """

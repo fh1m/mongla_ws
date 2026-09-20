@@ -2,7 +2,7 @@
 
 RoboSub Task 3 (Recon/Bins). The AUV flies ABOVE the bin looking straight down,
 so the downward-camera frame rotates the body axes and the align() KWARGS remap
-(gated on ``camera='downward'``; full table: .claude/context/downward-camera.md):
+(gated on ``camera='downward'``; full table: .claude/context/perception/downward-camera.md):
 
     image-X  -> Ch6 LATERAL strafe   (left/right over the bin)   -- align ``lat``
     image-Y  -> Ch5 SURGE fore/aft   (forward/back over the bin) -- align ``fwd``

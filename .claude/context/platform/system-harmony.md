@@ -171,7 +171,7 @@ Every one of these was paid for with a wrong answer that looked right.
 
 ## Related
 
-- [`measured-bars.md`](measured-bars.md) — every bar, its measurement, its guard
-- [`camera-and-calibration.md`](camera-and-calibration.md) — intrinsics, the library, in-water mode
-- [`BUGS.md`](BUGS.md) — what only a pool can close
+- [`measured-bars.md`](../measured-bars.md) — every bar, its measurement, its guard
+- [`camera-and-calibration.md`](../perception/camera-and-calibration.md) — intrinsics, the library, in-water mode
+- [`BUGS.md`](../BUGS.md) — what only a pool can close
 - [`srot-integration.md`](srot-integration.md) — the board contract

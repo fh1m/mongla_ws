@@ -40,7 +40,7 @@ and why the split exists.
 | Flight modes | the vendor's list | **eleven**, including two tuning modes and a pattern runner | fw `include/state_types.h` | 🟣 BENCH |
 | Movement primitives | none — every move was a host-side timed loop | **ten**, run and braked on the board: forward, back, strafe L/R, turn, dive, stop, hold, style, arc | `srot_protocol.py` (`CMD_SROT_MOVE = 31000`); fw `src/comms/mav_commands.cpp` | 🟡 BUILT |
 | Automatic gain tuning | ArduSub autotune, air-oriented | a relay self-tune on the board, driven from an operator command | fw `src/control/autotune.h`; host `mongla_manager/srot_autotune.py` | 🟡 BUILT |
-| Depth hold | ALT_HOLD, proven in water | implemented, **never closed in water** — two bench checks gate every automatic move until it is | fw `src/control/depth_control.cpp`; `.claude/context/srot-integration.md` | 🔴 BLOCKED |
+| Depth hold | ALT_HOLD, proven in water | implemented, **never closed in water** — two bench checks gate every automatic move until it is | fw `src/control/depth_control.cpp`; `.claude/context/platform/srot-integration.md` | 🔴 BLOCKED |
 | Link budget | UDP over a network switch | one USB-C cable at **18.8 %** of capacity; heartbeat margin **10×** the failsafe | `measured-bars.md` §4 | 🟣 BENCH |
 
 ### Failsafes — the vehicle protects itself without the Pi

@@ -13,5 +13,5 @@ firmware and this codebase.
 One copy on purpose: the public page *is* the document, so the community version and the
 agent-facing version cannot drift apart.
 
-Related: [`capability-map.md`](capability-map.md) · [`srot-architecture.md`](srot-architecture.md) ·
-[`srot-integration.md`](srot-integration.md) · [`upstream/`](upstream/README.md)
+Related: [`capability-map.md`](capability-map.md) · [`srot-architecture.md`](platform/srot-architecture.md) ·
+[`srot-integration.md`](platform/srot-integration.md) · [`upstream/`](upstream/README.md)

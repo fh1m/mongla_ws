@@ -3,11 +3,11 @@
 Three layers, one action:
 
 1. **`MonglaMission`** — the mission language. What you call inside `def run(mongla)`.
-   [`mongla_dsl.py`](../../src/mongla_planner/mongla_planner/mongla_dsl.py)
+   [`mongla_dsl.py`](../../../src/mongla_planner/mongla_planner/mongla_dsl.py)
 2. **`MonglaClient`** — the blocking action client underneath it: deadlines, cancellation,
-   typed failures. [`client.py`](../../src/mongla_planner/mongla_planner/client.py)
+   typed failures. [`client.py`](../../../src/mongla_planner/mongla_planner/client.py)
 3. **`Mongla`** — the manager-side facade that *implements* the verbs. Mission code never
-   instantiates it. [`mongla.py`](../../src/mongla_control/mongla_control/mongla.py)
+   instantiates it. [`mongla.py`](../../../src/mongla_control/mongla_control/mongla.py)
 
 Every verb in [`command-reference.md`](command-reference.md) is reachable from all three.
 
@@ -225,4 +225,4 @@ one a tired person can debug at the poolside at midnight.
 
 Related: [`command-reference.md`](command-reference.md) ·
 [`vision-results.md`](vision-results.md) · [`mission-cookbook.md`](mission-cookbook.md) ·
-[`packages/mongla_planner`](packages/mongla_planner/README.md)
+[`packages/mongla_planner`](../packages/mongla_planner/README.md)

@@ -165,7 +165,7 @@ Before opening the PR:
 * Today's registry: `src/mongla_control/mongla_control/commands.py`
 * Field-resolution algorithm: `commands.fields_for()` (top of same
   file)
-* Per-verb impl pointers: [`command-reference.md`](../command-reference.md)
+* Per-verb impl pointers: [`command-reference.md`](../missions/command-reference.md)
 * Why we keep verbs distinct in the first place:
-  [`mission-cookbook.md`](../mission-cookbook.md) "one verb, one
+  [`mission-cookbook.md`](../missions/mission-cookbook.md) "one verb, one
   closed loop" section.

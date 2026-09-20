@@ -22,7 +22,7 @@ LAUNCH (paused:=true is the norm -- detectors start idle, the mission resumes on
 
   NEVER launch paused:=false with two model-loaded detectors -- both infer from
   t=0 (before any use_camera) and that is the OOM. paused:=true + use_camera-first
-  is the contract. Full rationale: .claude/context/dual-camera-setup.md §4c.
+  is the contract. Full rationale: .claude/context/perception/dual-camera-setup.md §4c.
 
 Run:  ros2 run mongla_planner mission demo_dual_camera
 """

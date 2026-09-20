@@ -1922,7 +1922,7 @@ firmware's own `thstExpo()`/`oneToDshot()` into C, compiling, and comparing — 
 | smallest non-zero output | `MOT_SPIN_MIN = 0.15` (live) | **DShot 1210 = 16.13 % of band** | the actuator is a **relay**, not continuous | ditto |
 | host stick at the cliff | — | **0.714 % of full stick** | do not emit below this | live `PILOT_EXPO 0.30`, `GAIN 1.0` |
 | smallest yaw RATE | `PILOT_YAW_RATE = 160` (live, 3.6× default) | **3.20 °/s** | below 2.856 % stick STABILIZE **holds** instead of turning | `attitude_control.cpp` |
-| worst mixed-axis direction error | — | **25.6°**, with a **38° jump** for a 0.2 % command change | **never command lat+yaw together in the terminal phase** | `.claude/context/srot-architecture.md` §3b |
+| worst mixed-axis direction error | — | **25.6°**, with a **38° jump** for a 0.2 % command change | **never command lat+yaw together in the terminal phase** | `.claude/context/platform/srot-architecture.md` §3b |
 
 **What this bar invalidates:** `vision.range_gain_floor` was measured as
 ineffective in round 35 and shipped OFF. It could not have worked — the
@@ -2326,7 +2326,7 @@ quantised domain. The class head is already a probability (zp 0, scale 1/255)
 and both the class threshold and the mask threshold commute with the affine
 dequantisation, so the comparison is exact on raw bytes. Reasoning and
 injection-verified tests: `detection/seg_decode.py`,
-`test/test_seg_decode.py`, `.claude/context/hailo-vision.md`.
+`test/test_seg_decode.py`, `.claude/context/perception/hailo-vision.md`.
 
 **Retracted by this measurement:** "80 COCO classes cost 58× what 3 do, so the
 seg model must be ours for CPU reasons." Gating buys 0.3 ms. The accuracy

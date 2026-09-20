@@ -312,7 +312,7 @@ class _VisionDSL:
         softening (``vision.range_gain_floor``) and the hold integral
         (``vision.ki_lat``) are deck ROS params -- set them with
         ``ros2 param set /mongla_manager vision.<name> <value>`` (they apply on
-        the next goal); see ``.claude/context/precision-alignment.md``.
+        the next goal); see ``.claude/context/missions/precision-alignment.md``.
         """
         cam = self._resolve_camera(camera)
         # ── DOWNWARD-CAMERA ARG SWAP (operator-facing kwarg remap) ──────────────
@@ -326,7 +326,7 @@ class _VisionDSL:
         # the align engine's existing downward frame-rotation (Ch5 surge from the
         # image-Y pixel, fill->depth descent) -- align_loop, the wire fields, and
         # every thruster sign are UNCHANGED. Only which kwarg you type is swapped.
-        # Full axis table + why: .claude/context/downward-camera.md + CLAUDE.md.
+        # Full axis table + why: .claude/context/perception/downward-camera.md + CLAUDE.md.
         if cam in ('downward', 'sim_bottom'):
             depth, fwd = fwd, depth   # fwd->depth-axis (Ch5 surge); depth->fwd_fill (descent)
 

@@ -91,7 +91,7 @@ scripts/pool_record.sh replay <bag-dir>
 ```
 
 - **Write the number down.** A measurement that stays in a terminal scrollback becomes an
-  opinion by the next session. [`measured-bars.md`](measured-bars.md) is where it goes, with
+  opinion by the next session. [`measured-bars.md`](../measured-bars.md) is where it goes, with
   its conditions.
 
 ## Change one thing at a time
@@ -102,4 +102,4 @@ runs.
 
 Related: [`foxglove-and-bags.md`](foxglove-and-bags.md) ·
 [`srot-integration.md`](srot-integration.md) ·
-[`capability-map.md`](capability-map.md) · [`ROADMAP.md`](ROADMAP.md)
+[`capability-map.md`](../capability-map.md) · [`ROADMAP.md`](../ROADMAP.md)
