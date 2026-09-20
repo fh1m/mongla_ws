@@ -15,11 +15,13 @@
 
   const VERT = `#version 300 es
   in vec3 p;
+  in vec3 c;            /* the part's own material colour, straight from the CAD */
   uniform mat4 mvp, mv;
   out vec3 vE;          /* eye-space position */
-  out vec3 vO;          /* object-space position, for the waterline gradient */
+  out vec3 vO;          /* object-space position */
+  out vec3 vC;
   void main(){
-    vO = p;
+    vO = p; vC = c;
     vec4 e = mv * vec4(p, 1.0);
     vE = e.xyz;
     gl_Position = mvp * vec4(p, 1.0);
@@ -27,39 +29,39 @@
 
   /* A red machine lit by blue water. One key light, one ocean rim, one depth
      cue — and the depth cue is the whole argument: range is what water takes. */
+  /* The hull is drawn in the livery it is actually built in — red fairings over a
+     grey pressure can — and the water is what lights it. Key light warm, rim and
+     shadow-side bounce in ocean blue, and range taken away with depth, because
+     losing range to water is the whole problem this vehicle exists inside. */
   const FRAG = `#version 300 es
   precision highp float;
-  in vec3 vE; in vec3 vO; out vec4 o;
-  uniform vec3 uLit, uDeep, uRim;
-  uniform float uNear, uFar;
+  in vec3 vE; in vec3 vO; in vec3 vC; out vec4 o;
+  uniform vec3 uRim, uAmbient;
+  uniform float uNear, uFar, uLivery;
 
   void main(){
     vec3 n = normalize(cross(dFdx(vE), dFdy(vE)));   /* facet normal, free */
     vec3 v = normalize(-vE);
     if (dot(n, v) < 0.0) n = -n;
 
-    vec3  key   = normalize(vec3(0.42, 0.78, 0.46));
-    vec3  fill  = normalize(vec3(-0.52, -0.30, 0.34));
+    vec3  key   = normalize(vec3(0.40, 0.80, 0.45));
+    vec3  fill  = normalize(vec3(-0.55, -0.25, 0.32));
     float lam   = max(dot(n, key), 0.0);
-    float bounce= max(dot(n, fill), 0.0) * 0.26;
+    float bounce= max(dot(n, fill), 0.0);
 
     vec3  h    = normalize(key + v);
-    float spec = pow(max(dot(n, h), 0.0), 64.0) * 0.50;
+    float spec = pow(max(dot(n, h), 0.0), 68.0) * 0.42;
+    float fres = pow(1.0 - max(dot(n, v), 0.0), 2.7);
 
-    float fres = pow(1.0 - max(dot(n, v), 0.0), 2.6);   /* silhouette lights up */
-
-    /* depth cue: water takes the far side of the hull before the near side */
     float depth = clamp((-vE.z - uNear) / max(uFar - uNear, 1e-4), 0.0, 1.0);
 
-    vec3 c = uDeep;
-    c = mix(c, uLit, 0.09 + 0.88 * lam * lam);
-    c += uRim * bounce * 0.22;            /* water bouncing onto the shadow side */
-    c += uRim * fres * 0.72;
-    c += vec3(0.55, 0.72, 1.0) * spec;   /* highlights carry the water's colour */
-    c *= mix(1.10, 0.20, depth);
-
-    /* a faint horizontal banding along the hull axis: caustic light, not decoration */
-    c *= 1.0 + 0.045 * sin(vO.z * 46.0 + vO.y * 9.0);
+    vec3 albedo = mix(vec3(0.62, 0.10, 0.06), vC, uLivery);
+    vec3 c = albedo * (uAmbient + 0.90 * lam * lam);
+    c += uRim * bounce * 0.26 * albedo;              /* water on the shadow side */
+    c += uRim * fres * 0.62;                         /* the silhouette lights up  */
+    c += vec3(0.58, 0.74, 1.0) * spec;               /* highlights carry the water */
+    c *= mix(1.08, 0.22, depth);
+    c *= 1.0 + 0.035 * sin(vO.z * 46.0 + vO.y * 9.0);
 
     o = vec4(c, 1.0);
   }`;
@@ -96,11 +98,14 @@
     if (magic !== 'MGLA') throw new Error('not a hull container: ' + magic);
     const idxBytes = dv.getUint16(6, true);
     const nv = dv.getUint32(8, true), nt = dv.getUint32(12, true);
+    const version = dv.getUint16(4, true);
     let off = 16 + 12 + 4;
     const pos = new Int16Array(buf, off, nv * 3); off += nv * 6;
+    let col = null;
+    if (version >= 2) { col = new Uint8Array(buf, off, nv * 3); off += nv * 3; }
     const idx = idxBytes === 2 ? new Uint16Array(buf, off, nt * 3)
                                : new Uint32Array(buf, off, nt * 3);
-    return { pos, idx, nv, nt };
+    return { pos, col, idx, nv, nt, version };
   }
 
   window.MonglaHull = function (canvas, url, opts) {
@@ -117,9 +122,9 @@
 
     const U = n => gl.getUniformLocation(prog, n);
     const uMVP = U('mvp'), uMV = U('mv'), uNear = U('uNear'), uFar = U('uFar');
-    gl.uniform3fv(U('uLit'),  hex(opts.lit  || '#ff2a12'));
-    gl.uniform3fv(U('uDeep'), hex(opts.deep || '#01061c'));
-    gl.uniform3fv(U('uRim'),  hex(opts.rim  || '#004eff'));
+    gl.uniform3fv(U('uRim'), hex(opts.rim || '#004eff'));
+    gl.uniform3fv(U('uAmbient'), opts.ambient || [0.055, 0.075, 0.125]);
+    gl.uniform1f(U('uLivery'), opts.livery == null ? 1.0 : opts.livery);
 
     let yaw = opts.yaw != null ? opts.yaw : -0.7;
     let pitch = opts.pitch != null ? opts.pitch : 0.26;
@@ -140,6 +145,18 @@
         gl.enableVertexAttribArray(loc);
         gl.vertexAttribPointer(loc, 3, gl.SHORT, true, 0, 0);   /* normalised int16 */
 
+        if (m.col) {
+          const cb = gl.createBuffer();
+          gl.bindBuffer(gl.ARRAY_BUFFER, cb);
+          gl.bufferData(gl.ARRAY_BUFFER, m.col, gl.STATIC_DRAW);
+          const cloc = gl.getAttribLocation(prog, 'c');
+          gl.enableVertexAttribArray(cloc);
+          gl.vertexAttribPointer(cloc, 3, gl.UNSIGNED_BYTE, true, 0, 0);
+        } else {
+          gl.disableVertexAttribArray(gl.getAttribLocation(prog, 'c'));
+          gl.vertexAttrib3f(gl.getAttribLocation(prog, 'c'), 0.78, 0.12, 0.08);
+        }
+
         const ib = gl.createBuffer();
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, m.idx, gl.STATIC_DRAW);
@@ -150,6 +167,10 @@
         gl.clearColor(0, 0, 0, 1);
 
         function size() {
+          /* the offline render rig drives the canvas at a fixed resolution;
+             leave its backing store alone or it collapses to the CSS size */
+          if (opts.fixed) { gl.viewport(0, 0, canvas.width, canvas.height);
+                            return canvas.width / canvas.height; }
           const dpr = Math.min(devicePixelRatio || 1, 2);
           const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
           const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
@@ -160,11 +181,7 @@
 
         const DIST = 2.24;
         let last = performance.now();
-        function draw(t) {
-          raf = requestAnimationFrame(draw);
-          if (!visible) { last = t; return; }
-          const dt = Math.min((t - last) / 1000, 0.05); last = t;
-          if (spin) yaw += dt * 0.24;
+        function drawOnce() {
           const asp = size();
           const mv = mul(trans(0, 0, -DIST), mul(rotX(pitch), rotY(yaw)));
           gl.uniformMatrix4fv(uMV, false, mv);
@@ -173,6 +190,13 @@
           gl.uniform1f(uFar,  DIST + 1.20);
           gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
           gl.drawElements(gl.TRIANGLES, m.nt * 3, idxType, 0);
+        }
+        function draw(t) {
+          raf = requestAnimationFrame(draw);
+          if (!visible) { last = t; return; }
+          const dt = Math.min((t - last) / 1000, 0.05); last = t;
+          if (spin) yaw += dt * 0.24;
+          drawOnce();
         }
         raf = requestAnimationFrame(draw);
 
@@ -207,6 +231,9 @@
 
         return {
           triangles: m.nt, vertices: m.nv,
+          /* point the camera and draw exactly one frame, for the render rig */
+          pose(y, p_) { yaw = y; pitch = p_; },
+          frame() { drawOnce(); },
           spin(on) { spin = !!on; },
           stop() { cancelAnimationFrame(raf); }
         };
