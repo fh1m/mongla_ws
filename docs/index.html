@@ -21,18 +21,19 @@
   <b data-rail="thinking"><span class="m">07</span>one task</b>
   <b data-rail="blink"><span class="m">08</span>the blink</b>
   <b data-rail="sim"><span class="m">09</span>the simulator</b>
-  <b data-rail="archive"><span class="m">10</span>the archive</b>
-  <b data-rail="water"><span class="m">11</span>retractions</b>
-  <b data-rail="instruments"><span class="m">12</span>instruments</b>
-  <b data-rail="asked"><span class="m">13</span>language</b>
-  <b data-rail="shoulders"><span class="m">14</span>shoulders</b>
-  <b data-rail="deeper"><span class="m">15</span>further</b>
-  <b data-rail="open"><span class="m">16</span>open</b>
+  <b data-rail="archive"><span class="m">10</span>the rehearsal</b>
+  <b data-rail="water-real"><span class="m">11</span>the water</b>
+  <b data-rail="water"><span class="m">12</span>retractions</b>
+  <b data-rail="instruments"><span class="m">13</span>instruments</b>
+  <b data-rail="asked"><span class="m">14</span>language</b>
+  <b data-rail="shoulders"><span class="m">15</span>shoulders</b>
+  <b data-rail="deeper"><span class="m">16</span>further</b>
+  <b data-rail="open"><span class="m">17</span>open</b>
 </nav>
 
 <main>
 
-<!-- 00 ───────────────────────────────────────────────────────────────── -->
+<!-- 00 ──────────────────────────────────────────────────────────────── -->
 <section id="surface">
  <div class="wrap">
   <p class="mark">Mongla <i>//</i> an autonomy stack for autonomous underwater vehicles</p>
@@ -53,7 +54,7 @@
  </div>
 </section>
 
-<!-- 01 ───────────────────────────────────────────────────────────────── -->
+<!-- 01 ──────────────────────────────────────────────────────────────── -->
 <section id="medium">
  <div class="wrap">
   <h2 class="col">Everything down here fights you.</h2>
@@ -92,7 +93,7 @@
  </div>
 </section>
 
-<!-- 02 ───────────────────────────────────────────────────────────────── -->
+<!-- 02 ──────────────────────────────────────────────────────────────── -->
 <section id="origin">
  <div class="wrap">
   <p class="mark">Act one <i>//</i> where it learned</p>
@@ -128,7 +129,7 @@
  </div>
 </section>
 
-<!-- 03 ───────────────────────────────────────────────────────────────── -->
+<!-- 03 ──────────────────────────────────────────────────────────────── -->
 <section id="shift">
  <div class="wrap">
   <p class="mark">Act two <i>//</i> opening the box</p>
@@ -162,7 +163,7 @@
  </div>
 </section>
 
-<!-- 04 ───────────────────────────────────────────────────────────────── -->
+<!-- 04 ──────────────────────────────────────────────────────────────── -->
 <section id="body">
  <div class="wrap">
   <p class="mark">The body <i>//</i> 702 mm, five thrusters, one uncontrolled axis</p>
@@ -310,7 +311,7 @@
  </div>
 </section>
 
-<!-- 05 ───────────────────────────────────────────────────────────────── -->
+<!-- 05 ──────────────────────────────────────────────────────────────── -->
 <section id="repos">
  <div class="wrap">
   <p class="mark">The suite <i>//</i> three repositories, one wire</p>
@@ -367,7 +368,7 @@
  </div>
 </section>
 
-<!-- 06 ───────────────────────────────────────────────────────────────── -->
+<!-- 06 ──────────────────────────────────────────────────────────────── -->
 <section id="frame">
  <div class="wrap">
   <p class="mark">Perception <i>//</i> one frame, end to end</p>
@@ -440,7 +441,7 @@
  </div>
 </section>
 
-<!-- 07 ───────────────────────────────────────────────────────────────── -->
+<!-- 07 ──────────────────────────────────────────────────────────────── -->
 <section id="thinking">
  <div class="wrap">
   <p class="mark">One task <i>//</i> thought through, start to finish</p>
@@ -476,7 +477,7 @@
  </div>
 </section>
 
-<!-- 08 ───────────────────────────────────────────────────────────────── -->
+<!-- 08 ──────────────────────────────────────────────────────────────── -->
 <section id="blink">
  <div class="wrap">
   <p class="mark">Continuity <i>//</i> when the detector blinks</p>
@@ -503,7 +504,7 @@
  </div>
 </section>
 
-<!-- ## ───────────────────────────────────────────────────────────── -->
+<!-- 09 ──────────────────────────────────────────────────────────────── -->
 <section id="sim">
  <div class="wrap">
   <p class="mark">The simulator <i>//</i> 20,649 lines, thirteen courses, one purpose</p>
@@ -538,18 +539,21 @@
  </div>
 </section>
 
-<!-- 09 ───────────────────────────────────────────────────────────────── -->
+<!-- 10 ──────────────────────────────────────────────────────────────── -->
 <section id="archive">
  <div class="wrap">
-  <p class="mark">The archive <i>//</i> 4,925 labelled frames, and the stack run over them</p>
-  <h2 class="col">The same detector, twice, in two kinds of water.</h2>
-  <p class="lede col quiet">These are not mockups. The competition weights were loaded, run over
-    frames from the capture archive, and the true detections handed to the same function the
-    vehicle draws its operator display with. What is below is what an operator sees.</p>
+  <p class="mark">The rehearsal <i>//</i> 4,925 synthetic frames, and the stack run over them</p>
+  <h2 class="col">First, we rehearse in water we built.</h2>
+  <p class="lede col quiet"><strong>Everything in this section is synthetic</strong> — frames
+    rendered by our own simulator, scored by a detector trained on simulator imagery. It is a
+    rehearsal, and calling it anything else would be the exact mistake this project exists to
+    refuse. What it does prove is that the pipeline runs end to end: the true detections are
+    handed to the same <code>render_ui_strip()</code> the vehicle draws with, so the operator
+    display below is real even though the water is not.</p>
 
   <figure class="hero-render">
    <img src="imgs/hud/hud_clear.webp" alt="The operator display on a clear-water frame: seven detections including the gate at 0.93 confidence, with the aim line from frame centre to the primary target" loading="lazy" width="1700" height="1518">
-   <figcaption><strong>Clear water.</strong> Seven detections — the gate at
+   <figcaption><strong>Simulated clear water.</strong> Seven detections — the gate at
      <span class="num">0.93</span>, a flare at <span class="num">0.92</span>, three drums, the
      pinger drum. The red box is the primary; the line runs from frame centre to it, and its
      length <em>is</em> the error the controller is closing.</figcaption>
@@ -557,10 +561,10 @@
 
   <figure class="hero-render" style="margin-top:var(--s4)">
    <img src="imgs/hud/hud_murky.webp" alt="The operator display on a murky-water frame: four detections, the gate still held at 0.98" loading="lazy" width="1700" height="1518">
-   <figcaption><strong>Murky water, same detector, same weights.</strong> Four detections instead
+   <figcaption><strong>Simulated murky water, same detector, same weights.</strong> Four detections instead
      of seven — but the gate survives at <span class="num">0.98</span>. The flares are what the
-     water takes first, which is the whole argument for training on the water you will swim in
-     rather than on clean imagery.</figcaption>
+     water takes first — which is the argument for training on the water you will actually swim in,
+     and the reason the next section exists.</figcaption>
   </figure>
 
   <p class="col quiet" style="margin-top:30px">And the honest half: across the thirteen sessions,
@@ -587,7 +591,59 @@
  </div>
 </section>
 
-<!-- 10 ───────────────────────────────────────────────────────────────── -->
+<!-- 11 ──────────────────────────────────────────────────────────────── -->
+<section id="water-real">
+ <div class="wrap">
+  <p class="mark">The water <i>//</i> three venues, real weights, real footage</p>
+  <h2 class="col">Then we find out what the water was actually like.</h2>
+  <p class="lede col quiet">These are photographs. The weights are the ones trained during the
+    2025 season; the frames come from the 20&#8239;GB archive recorded at a pool in Mirpur and at
+    RoboSub in Arizona. Six scenes, <strong>3,345 real frames scanned</strong>, every frame
+    chosen by searching its folder for the richest one — never picked by hand.</p>
+
+  <div class="plate plate--hud">
+   <figure><figcaption>Mirpur · gate</figcaption>
+     <img src="imgs/real/mirpur-gate.webp" alt="A gate structure in a turquoise indoor pool at Mirpur, the real detector boxing shark_gate at 0.85" loading="lazy" width="1700" height="1518"></figure>
+   <figure><figcaption>RoboSub · bins</figcaption>
+     <img src="imgs/real/robosub-bins.webp" alt="The bins prop on an outdoor pool floor under hard sun caustics, detected at 0.94" loading="lazy" width="1700" height="1518"></figure>
+   <figure><figcaption>Final run · bins</figcaption>
+     <img src="imgs/real/final-run-bins.webp" alt="The competition bin tray with its sawfish and shark placards, both read by the real detector" loading="lazy" width="1700" height="1518"></figure>
+   <figure><figcaption>RoboSub · torpedo</figcaption>
+     <img src="imgs/real/robosub-torpedo.webp" alt="The torpedo board underwater, the real detector finding the board and its openings" loading="lazy" width="1700" height="1518"></figure>
+  </div>
+
+  <p class="col quiet" style="margin-top:26px">Look at the third one. The machine is not finding
+    "a bin" — it is reading the <strong>sawfish</strong> and the <strong>shark</strong> printed on
+    the two openings, <code>bin_shaw_fish</code> and <code>bin_shark</code>, both at
+    <span class="numr">0.84</span>. Which opening you drop into is the whole task, and that
+    distinction is what a season was spent teaching it.</p>
+
+  <table class="ledger">
+   <thead><tr><th>venue</th><th>what the water is like</th><th>task</th><th>frames</th><th>best</th></tr></thead>
+   <tbody>
+    <tr><td>Mirpur</td><td>Indoor, turquoise, hazy — contrast falls off within a few metres</td><td>gate</td><td class="num">550</td><td class="numr">shark_gate 0.85</td></tr>
+    <tr><td>Mirpur</td><td>Same pool, closer in</td><td>torpedo</td><td class="num">378</td><td class="numr">shaw_fish_hole 0.94</td></tr>
+    <tr><td>RoboSub, Arizona</td><td>Outdoor, bright, hard moving sun caustics across the floor</td><td>bins</td><td class="num">639</td><td class="numr">bin 0.94</td></tr>
+    <tr><td>RoboSub, Arizona</td><td>Same pool, mid-water</td><td>torpedo</td><td class="num">775</td><td class="numr">shark_torpedo 0.95</td></tr>
+    <tr><td>RoboSub, Arizona</td><td>Looking up toward the surface</td><td>octagon</td><td class="num">410</td><td class="numr">octagon 0.91</td></tr>
+    <tr><td>Final run</td><td>Close over the prop, the placards legible</td><td>bins</td><td class="num">593</td><td class="numr">bin_shark 0.90</td></tr>
+   </tbody>
+  </table>
+
+  <p class="col quiet" style="margin-top:30px">Mirpur and Arizona are not the same problem. One is
+    hazy and even; the other is bright, with caustics that sweep the floor and look exactly like
+    motion. A threshold tuned in one is wrong in the other — which is why every number in this
+    stack carries the conditions it was taken under, and why the simulator above bothers to model
+    caustics at all.</p>
+
+  <p class="col quiet">The archive is 20&#8239;GB and stays out of this repository. What ships is
+    six stills and a <code>manifest.json</code> naming the exact source frame behind each one, so
+    any figure here can be re-derived with
+    <a href="https://github.com/fh1m/mongla_ws/blob/main/tools/render_real_stills.py">one command</a>.</p>
+ </div>
+</section>
+
+<!-- 12 ──────────────────────────────────────────────────────────────── -->
 <section id="water">
  <div class="wrap">
   <p class="mark">Retractions <i>//</i> kept on purpose</p>
@@ -632,7 +688,7 @@
  </div>
 </section>
 
-<!-- 11 ───────────────────────────────────────────────────────────────── -->
+<!-- 13 ──────────────────────────────────────────────────────────────── -->
 <section id="instruments">
  <div class="wrap">
   <p class="mark">Instruments <i>//</i> every number with where it was taken</p>
@@ -657,7 +713,7 @@
  </div>
 </section>
 
-<!-- 12 ───────────────────────────────────────────────────────────────── -->
+<!-- 14 ──────────────────────────────────────────────────────────────── -->
 <section id="asked">
  <div class="wrap">
   <p class="mark">The language <i>//</i> how a machine is asked to do something</p>
@@ -686,7 +742,7 @@
  </div>
 </section>
 
-<!-- 13 ───────────────────────────────────────────────────────────────── -->
+<!-- 15 ──────────────────────────────────────────────────────────────── -->
 <section id="shoulders">
  <div class="wrap">
   <p class="mark">Shoulders <i>//</i> where the ideas came from, and what they changed</p>
@@ -753,7 +809,7 @@
  </div>
 </section>
 
-<!-- ## ───────────────────────────────────────────────────────────── -->
+<!-- 16 ──────────────────────────────────────────────────────────────── -->
 <section id="deeper">
  <div class="wrap">
   <p class="mark">Further <i>//</i> where to go if any of this caught you</p>
@@ -806,7 +862,7 @@
  </div>
 </section>
 
-<!-- 14 ───────────────────────────────────────────────────────────────── -->
+<!-- 17 ──────────────────────────────────────────────────────────────── -->
 <section id="open">
  <div class="wrap">
   <p class="mark">Act three <i>//</i> open</p>
