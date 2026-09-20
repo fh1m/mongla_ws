@@ -53,6 +53,46 @@ receipts for every claim it makes.
 
 ---
 
+---
+
+## How the whole thing fits together
+
+Two computers, one cable, and a hard rule about which one is allowed to be slow.
+
+```mermaid
+flowchart TB
+    subgraph PI["Raspberry Pi 5 + Hailo-8 — ROS 2 — thinking"]
+        direction LR
+        CAM["cameras<br/>forward + downward"] --> DET["detector<br/><b>53.9 Hz</b>"]
+        DET --> LOCK["lock ladder<br/>live → coast → anchor"]
+        LOCK --> MISS["mission + vision verbs<br/><b>20–50 Hz</b>"]
+        FLOW["optical flow<br/>the DVL we do not have"] --> EKF["right-invariant EKF"]
+        EKF --> MISS
+    end
+
+    MISS -->|"one USB-C cable — MAVLink 2 — 115200"| BOARD
+
+    subgraph BOARD["SROT board — firmware Hengla — reflexes"]
+        direction LR
+        C1["core 1: the flight loop<br/><b>500 Hz, uninterruptible</b><br/>IMU · depth · mix · DShot"]
+        C0["core 0: everything that can wait<br/>MAVLink 100 Hz · LoRa 20 Hz · display 30 Hz"]
+    end
+
+    BOARD -->|"bidirectional DShot"| ESC["8 × Bluejay ESC<br/>they answer back"]
+    ESC -->|"measured RPM + current"| BOARD
+```
+
+**The rule:** anything that keeps the vehicle upright runs on the board. Anything that decides
+where it should go runs on the Pi. The cable carries *intent*, never reflexes — so a busy
+detector, a garbage-collecting Python process or an unplugged cable cannot make the vehicle
+tumble.
+
+That split is worth one number. Our host loop runs at 20–50 Hz; the board runs at 500 Hz.
+**About 25 corrections happen underneath every command we send.** On the old stack the inner
+loop belonged to someone else's firmware and we were the only thing correcting anything, at
+20 Hz. At 20 Hz you are not steering — you are voting.
+
+
 ## The machine
 
 <p align="center">
@@ -223,32 +263,231 @@ Reference: [commands](.claude/context/missions/command-reference.md) ·
 [the mission language](.claude/context/missions/client-and-dsl-api.md) ·
 [cookbook](.claude/context/missions/mission-cookbook.md)
 
-## The packages
+---
+
+## How a command becomes thrust
+
+Thirty verbs, one action, and a registry that means adding the thirty-first touches two files.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant M as mission script
+    participant C as MonglaClient
+    participant N as auv_manager_node
+    participant F as SrotFC
+    participant B as SROT board
+
+    M->>C: mongla.move_forward(duration=3, gain=40)
+    Note over C: validated against COMMANDS —<br/>a typo is an AttributeError, not a bad goal
+    C->>N: /mongla/move action goal
+    Note over N: registry-driven dispatch —<br/>this file never changes when a verb is added
+    N->>F: Mongla.move_forward(...)
+    F->>F: check firmware revision, refuse below the floor
+    F->>B: MAV_CMD_SROT_MOVE (31000)
+    Note over B: the board runs AND BRAKES the primitive<br/>at 500 Hz — the host is not in this loop
+    B-->>F: progress, then terminal ACK
+    F-->>N: outcome
+    N-->>C: result + final_value
+    C-->>M: returns, or refuses loudly
+```
+
+Adding a verb is two edits, and [`commands.py`](src/mongla_control/mongla_control/commands.py)
+says so out loud:
+
+> This is the ONE place that knows what commands exist, what fields each one reads from
+> `Move.Goal`, what the defaults are, and what to print in `--help`. The action server, the
+> Python client, and the `mongla` CLI all read from here.
+
+One row in the registry, one method on the facade. The CLI, the action server and the Python
+client pick it up with no further edits — there is no dispatch table to forget.
+
+
+## Seven packages, deconstructed
 
 <p align="center">
   <img src="docs/assets/diagrams/package-map.svg" alt="The seven packages and the action between them" width="100%"/>
 </p>
 
-| Package | What it is |
-|---|---|
-| [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | the one node that talks to the board |
-| [`mongla_control`](.claude/context/packages/mongla_control/README.md) | every verb, and the flight-controller boundary |
-| [`mongla_vision`](.claude/context/packages/mongla_vision/README.md) | cameras, detection, the visual lock, optical flow, optics |
-| [`mongla_localization`](.claude/context/packages/mongla_localization/README.md) | where the vehicle is, without a DVL |
-| [`mongla_planner`](.claude/context/packages/mongla_planner/README.md) | the CLI, the mission language, the missions |
-| [`mongla_sensors`](.claude/context/packages/mongla_sensors/README.md) | one interface for "which way is north" |
-| [`mongla_interfaces`](.claude/context/packages/mongla_interfaces/README.md) | one action, one state topic — the whole surface |
+**60,026 lines of source across 221 files — and 45,355 lines of tests across 252.** There are
+more test files than source files in this repository. That ratio is the single most honest
+thing about it.
+
+### `mongla_vision` — 22,419 LOC · 85 test files · 21 entry points
+
+The largest package, and the one that touches physics twice: once at the lens, once at the
+water. Cameras, the Hailo-8 detector, the lock ladder, optical flow, refraction correction,
+guided calibration.
+
+> "Round 29 measured this pipeline at **98.0 Hz** on `gate_rescue_repair` against a
+> `hailortcli --hw-only` benchmark of **97.9 FPS** on the same HEF — so the host code is at
+> 100 % of the chip."
+> — [`detection/hailo.py:3`](src/mongla_vision/mongla_vision/detection/hailo.py)
+
+The calibration tool is a *scripted sequence of poses*, and the reason is a measurement about
+people rather than optics: a freeform version reached 9/9 coverage with **15 of 17 views
+flat**, because an operator naturally holds a board square-on and the one axis that decides
+correctness is the one that goes unfilled. Bars report the problem; they do not prevent it.
+
+### `mongla_control` — 13,213 LOC · 63 test files · **zero** entry points
+
+Zero is deliberate. This package is a pure library: it owns every verb and the
+flight-controller boundary, but it never gets its own process, because exactly one node in the
+system is allowed to hold the MAVLink connection.
+
+> "yaw : target-right → yaw RIGHT toward it → NO negate (same polarity as lateral;
+> pool-verified — the old `-ex` negation drove *away* from the target)"
+> — [`motion_vision.py:28`](src/mongla_control/mongla_control/motion_vision.py)
+
+That comment is a sign error found in water, preserved so nobody helpfully "fixes" it back.
+
+### `mongla_planner` — 10,971 LOC · 33 test files · the mission language
+
+`mongla.move_forward(...)` and `mongla.vision.align(...)` on one object. Missions are
+discovered by filename — drop in `my_mission.py` with a `run(mongla, log)` and it appears in
+`mission --list`, with no registry to update. A broken file is **skipped, not fatal**: on
+competition day one half-edited scratch file must never brick the good mission.
+
+> "⛔ A TIMED MOVE REPORTS SUCCESS WHETHER OR NOT THE HULL WENT ANYWHERE. … Treat unknown as
+> 'no evidence', never as 'ok'."
+> — [`mongla_dsl.py:1501`](src/mongla_planner/mongla_planner/mongla_dsl.py)
+
+### `mongla_manager` — 7,983 LOC · 46 test files · 7 entry points
+
+The one process that touches the board. Owns the MAVLink connection, the reader thread, the
+`/mongla/move` action server and `/mongla/state`.
+
+> "**absence is data.** … A consumer that renders a missing value as `0.0` re-creates exactly
+> the failure the firmware fixed — a Bar30 read during a PROM reset race once published
+> `-51 C` and `+2.87 m` in air with nothing marking them wrong."
+> — [`srot_connect.py:15`](src/mongla_manager/mongla_manager/srot_connect.py)
+
+### `mongla_localization` — 3,560 LOC · 20 test files · no GPS, no DVL
+
+A right-invariant EKF on SE₂(3), corrected by depth, optical-flow velocity, headings and prop
+fixes, with late measurements **replayed at the instant they describe** rather than applied on
+arrival.
+
+The best idea in it inverts a known failure. Optical flow dies on a repeating tiled floor —
+no distinctive corners to match. But:
+
+> "That is true of MATCHING. It is exactly backwards for DEMODULATION. A periodic pattern is a
+> **carrier**, and displacement is a phase shift of that carrier."
+> — [`tile_grating.py:3`](src/mongla_localization/mongla_localization/tile_grating.py)
+
+And one refusal, from arithmetic rather than opinion: reading a heading off a lane line by FFT
+needs five cycles of a 2.5 m pitch in frame, which at our downward focal length requires an
+altitude of **26.8 m**. A pool is 2 m deep. The method is not tuned — it is rejected.
+
+### `mongla_sensors` — 1,880 LOC · one job
+
+"Which way is north", behind one interface. The BNO085 runs with its **magnetometer disabled**
+— eight thrusters, an aluminium hull and battery currents make a magnetometer a random number
+generator — so it gives a smooth heading with no absolute reference. The Earth reference is
+borrowed from the Pixhawk's mag-fused yaw **exactly once**, at the surface, at boot, and the
+offset is locked forever after.
+
+### `mongla_interfaces` — 0 Python lines · 368 lines of interface
+
+One action, four messages, zero services. `Move.action` is 212 lines of which only ~60 are
+field declarations; the rest is argument.
+
+> "⛔ 'fire' HERE MEANS ACTUATE A BOARD CHANNEL — it is NOT a torpedo verb. … Nothing in this
+> action, and nothing in any of the 30 verbs, is named for a competition task — the stack is a
+> set of AUV CAPABILITIES that missions compose, and `test_the_command_surface_is_task_free`
+> keeps it that way."
+> — [`Move.action:60`](src/mongla_interfaces/action/Move.action)
+
+Two more design arguments live in the `.msg` files. Why not `PoseWithCovarianceStamped`: a
+covariance asserts a *unimodal* distribution, and planar pose carries a flip ambiguity, which
+is bimodal — "one of two places, mirrored". Why publish correspondences and not just the pose:
+publish only the answer and a shot that missed can never be explained; publish the evidence
+and a recorded run is **re-solvable off a bag, months later, with different thresholds**.
+
+| Package | Source | Tests | Entry points |
+|---|---:|---:|---:|
+| [`mongla_vision`](.claude/context/packages/mongla_vision/README.md) | 22,419 | 14,708 | 21 |
+| [`mongla_control`](.claude/context/packages/mongla_control/README.md) | 13,213 | 14,443 | 0 |
+| [`mongla_planner`](.claude/context/packages/mongla_planner/README.md) | 10,971 | 5,951 | 2 |
+| [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | 7,983 | 6,556 | 7 |
+| [`mongla_localization`](.claude/context/packages/mongla_localization/README.md) | 3,560 | 3,295 | 4 |
+| [`mongla_sensors`](.claude/context/packages/mongla_sensors/README.md) | 1,880 | 402 | 1 |
+| [`mongla_interfaces`](.claude/context/packages/mongla_interfaces/README.md) | 368 IDL | — | — |
 
 ```bash
-python3 -m pytest -q src/mongla_control/test      # 865
-python3 -m pytest -q src/mongla_vision/test       # 824
-python3 -m pytest -q src/mongla_planner/test      # 405
-python3 -m pytest -q src/mongla_manager/test      # 457
-python3 -m pytest -q src/mongla_localization/test # 286
+python3 -m pytest -q src/mongla_control/test      # 1114 passed, 1 xfailed
+python3 -m pytest -q src/mongla_vision/test       # 1030 passed, 1 skipped
+python3 -m pytest -q src/mongla_manager/test      #  461 passed, 4 skipped
+python3 -m pytest -q src/mongla_planner/test      #  420 passed, 1 skipped
+python3 -m pytest -q src/mongla_localization/test #  286 passed
 ```
 
 No hardware needed: the board, the cameras and the ROS graph are faked at their real
 boundaries.
+
+---
+
+## What happens when the detector blinks
+
+A neural detector on real underwater footage drops the box constantly — a reflection, a bubble,
+a bad angle. If control trusts only the detector, the vehicle loses a lock it never actually
+lost. So there is a ladder, and every rung is allowed to be wrong for a *measured* length of
+time.
+
+```mermaid
+stateDiagram-v2
+    [*] --> LIVE
+    LIVE: LIVE DETECTION
+    LIVE: the box is there this frame — 53.9 Hz
+    COAST: TRACKER COAST
+    COAST: a frame or two missing — 0.8 s of authority, decayed by TRUE detection age
+    ANCHOR: GEOMETRIC ANCHOR
+    ANCHOR: the detector is gone — match image structure instead. Held 175 frames.
+    LOST: REFUSE
+    LOST: nothing above is honest any more — return LOST, never a guess
+
+    LIVE --> COAST: box missing
+    COAST --> LIVE: box returns
+    COAST --> ANCHOR: coast_s exceeded
+    ANCHOR --> LIVE: box returns
+    ANCHOR --> LOST: structure gone too
+    LOST --> [*]
+```
+
+The third rung is the one worth staring at. Through a gap of **175 consecutive frames** the
+detector produced nothing at all, and the vehicle still knew where the target was — because
+the anchor matches image structure rather than asking the network again.
+
+The fourth rung matters as much: the ladder ends in a **refusal**, not in a confident
+invention. A verb that reports success while the vehicle does nothing is the failure mode that
+ends competition runs.
+
+---
+
+## The other three repositories
+
+Mongla is the soul. It does not own the body.
+
+| Repo | What it is | Owner |
+|---|---|---|
+| **Mongla** *(this one)* | Perception, estimation, mission language, simulator | Muhammad Fahim Faisal |
+| [**Hengla**](https://github.com/RakibulIslam1/srot-control-board) — `srot-control-board` | The firmware. ESP32 dual-core + an RP2350 thruster co-processor | Rakibul Islam |
+| [**Bondor**](https://github.com/RakibulIslam1/srot-ground-station) — `srot-ground-station` | Desktop GCS + a LoRa bridge | Rakibul Islam |
+| [**ESC flasher**](https://github.com/RakibulIslam1/srot-esc-flasher) | Puts Bluejay on the ESCs | Rakibul Islam |
+
+**We never commit to theirs; they never commit to ours.** Pull requests only. A missing
+low-level feature is a request, not a host-side workaround.
+
+Three copies of the wire contract exist on purpose, because there are no submodules across the
+suite: the LoRa struct, the vendored MAVLink dialect, and a hand-mirrored TypeScript copy of
+the message ids. The firmware is the source of truth for all three. A mismatch does **not**
+raise an error — it fails CRC silently and looks exactly like being out of radio range. On our
+side, `test_srot_protocol_drift.py` reads the firmware's own headers and fails if our
+constants have drifted from them.
+
+**Bondor** connects over USB serial at 115200 — opened with DTR and RTS de-asserted, so that
+attaching a ground station does not reset the flight controller — or over UDP, or receive-only
+over LoRa at 433 MHz, SF7, CR 4:5.
 
 ## The simulator
 
