@@ -10,32 +10,38 @@
 </head>
 <body>
 
-<nav class="rail" aria-label="Sections">
-  <b data-rail="surface" data-on="1"><span class="m">00</span>surface</b>
-  <b data-rail="medium"><span class="m">01</span>the medium</b>
-  <b data-rail="origin"><span class="m">02</span>origin</b>
-  <b data-rail="shift"><span class="m">03</span>the shift</b>
-  <b data-rail="body"><span class="m">04</span>the body</b>
-  <b data-rail="repos"><span class="m">05</span>the suite</b>
-  <b data-rail="frame"><span class="m">06</span>one frame</b>
-  <b data-rail="thinking"><span class="m">07</span>one task</b>
-  <b data-rail="blink"><span class="m">08</span>the blink</b>
-  <b data-rail="sim"><span class="m">09</span>the simulator</b>
-  <b data-rail="archive"><span class="m">10</span>the rehearsal</b>
-  <b data-rail="water-real"><span class="m">11</span>the water</b>
-  <b data-rail="water"><span class="m">12</span>retractions</b>
-  <b data-rail="instruments"><span class="m">13</span>instruments</b>
-  <b data-rail="asked"><span class="m">14</span>language</b>
-  <b data-rail="shoulders"><span class="m">15</span>shoulders</b>
-  <b data-rail="deeper"><span class="m">16</span>further</b>
-  <b data-rail="open"><span class="m">17</span>open</b>
+<nav class="sound" aria-label="Descent">
+  <div class="cable"></div>
+  <div class="paid" id="paid"></div>
+  <ol id="stops">
+    <li data-for="surface"><i></i><b>surface</b></li>
+    <li data-for="medium"><i></i><b>the medium</b></li>
+    <li data-for="origin"><i></i><b>origin</b></li>
+    <li data-for="shift"><i></i><b>the shift</b></li>
+    <li data-for="body"><i></i><b>the body</b></li>
+    <li data-for="repos"><i></i><b>the suite</b></li>
+    <li data-for="frame"><i></i><b>one frame</b></li>
+    <li data-for="thinking"><i></i><b>one task</b></li>
+    <li data-for="blink"><i></i><b>the blink</b></li>
+    <li data-for="sim"><i></i><b>the simulator</b></li>
+    <li data-for="archive"><i></i><b>the rehearsal</b></li>
+    <li data-for="water-real"><i></i><b>the water</b></li>
+    <li data-for="water"><i></i><b>retractions</b></li>
+    <li data-for="instruments"><i></i><b>instruments</b></li>
+    <li data-for="asked"><i></i><b>language</b></li>
+    <li data-for="shoulders"><i></i><b>shoulders</b></li>
+    <li data-for="deeper"><i></i><b>further</b></li>
+    <li data-for="open"><i></i><b>open</b></li>
+  </ol>
+  <div class="bell" id="bell"></div>
+  <div class="depth" id="depth">0 m<small>into the descent</small></div>
 </nav>
 
 <main>
 
 <!-- 00 ──────────────────────────────────────────────────────────────── -->
 <section id="surface">
- <div class="wrap">
+ <div class="wrap boot">
   <p class="mark">Mongla <i>//</i> an autonomy stack for autonomous underwater vehicles</p>
   <h1>Machines that have to work when nobody is watching.</h1>
   <p class="lede col" style="margin-top:28px">Underwater there is no radio, no GPS, and no second
@@ -52,6 +58,13 @@
   <p class="mark" style="margin:22px 0 0">Nothing on this platform has been in water. Every number
     above says where it was taken.</p>
  </div>
+</section>
+
+<section class="chapter">
+ <div class="wrap">
+  <div class="no">I</div>
+  <div><h2>The medium</h2><p class="sub">Everything down here is working against you</p></div>
+ </div><div class="hair"></div>
 </section>
 
 <!-- 01 ──────────────────────────────────────────────────────────────── -->
@@ -161,6 +174,13 @@
    </tbody>
   </table>
  </div>
+</section>
+
+<section class="chapter">
+ <div class="wrap">
+  <div class="no">II</div>
+  <div><h2>The machine</h2><p class="sub">Seven hundred and two millimetres of argument</p></div>
+ </div><div class="hair"></div>
 </section>
 
 <!-- 04 ──────────────────────────────────────────────────────────────── -->
@@ -548,6 +568,13 @@
  </div>
 </section>
 
+<section class="chapter">
+ <div class="wrap">
+  <div class="no">III</div>
+  <div><h2>The evidence</h2><p class="sub">What it sees — and how we know that it saw it</p></div>
+ </div><div class="hair"></div>
+</section>
+
 <!-- 10 ──────────────────────────────────────────────────────────────── -->
 <section id="archive">
  <div class="wrap">
@@ -650,6 +677,13 @@
     any figure here can be re-derived with
     <a href="https://github.com/fh1m/mongla_ws/blob/main/tools/render_real_stills.py">one command</a>.</p>
  </div>
+</section>
+
+<section class="chapter">
+ <div class="wrap">
+  <div class="no">IV</div>
+  <div><h2>The record</h2><p class="sub">Including every number we had to take back</p></div>
+ </div><div class="hair"></div>
 </section>
 
 <!-- 12 ──────────────────────────────────────────────────────────────── -->
@@ -914,18 +948,47 @@
 <script src="assets/hull-viewer.js" defer></script>
 <script>
 (function(){
-  var rail = [].slice.call(document.querySelectorAll('.rail b'));
-  var secs = rail.map(function(b){ return document.getElementById(b.dataset.rail); });
+  /* The sounding line. Each stop sits at the fraction of the document its
+     section actually begins at, so the line is a MAP of the page rather than an
+     evenly-spaced list of names -- a long section looks long. Depth is page
+     position wearing the right clothes, and the label says so. */
+  var stops = [].slice.call(document.querySelectorAll('.sound li'));
+  var secs  = stops.map(function(li){ return document.getElementById(li.dataset.for); });
+  var paid  = document.getElementById('paid');
+  var bell  = document.getElementById('bell');
+  var depth = document.getElementById('depth');
+
+  function layout(){
+    var docH = document.body.scrollHeight - innerHeight;
+    if (docH <= 0) return;
+    stops.forEach(function(li, i){
+      var el = secs[i]; if (!el) return;
+      var top = el.getBoundingClientRect().top + scrollY;
+      li.style.top = (Math.min(top / docH, 1) * 100) + '%';
+    });
+  }
+  function track(){
+    var docH = document.body.scrollHeight - innerHeight;
+    var f = docH > 0 ? Math.min(Math.max(scrollY / docH, 0), 1) : 0;
+    paid.style.height = (f * 100) + '%';
+    bell.style.top    = (f * 100) + '%';
+    depth.style.top   = (f * 100) + '%';
+    depth.firstChild.nodeValue = Math.round(f * 100) + ' m';
+    var cur = 0;
+    for (var i = 0; i < secs.length; i++) {
+      if (secs[i] && secs[i].getBoundingClientRect().top <= innerHeight * 0.42) cur = i;
+    }
+    stops.forEach(function(li, i){
+      li.classList.toggle('on', i === cur);
+      li.classList.toggle('past', i < cur);
+    });
+  }
+  addEventListener('scroll', track, {passive:true});
+  addEventListener('resize', function(){ layout(); track(); });
+  addEventListener('load',   function(){ layout(); track(); });
+  layout(); track();
 
   if ('IntersectionObserver' in window) {
-    var io = new IntersectionObserver(function(es){
-      es.forEach(function(e){
-        var i = secs.indexOf(e.target); if (i < 0 || !e.isIntersecting) return;
-        rail.forEach(function(b){ b.removeAttribute('data-on'); });
-        rail[i].setAttribute('data-on','1');
-      });
-    }, { rootMargin: '-45% 0px -50% 0px' });
-    secs.forEach(function(s){ if (s) io.observe(s); });
 
     var rise = new IntersectionObserver(function(es){
       es.forEach(function(e){

@@ -82,7 +82,11 @@ html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
 body{
   margin:0; color:var(--ink);
   font-family:var(--prose); font-size:clamp(16px,.92rem + .28vw,18.5px);
-  line-height:1.62; -webkit-font-smoothing:antialiased; overflow-x:hidden;
+  line-height:1.62; -webkit-font-smoothing:antialiased;
+  /* NOT overflow-x:hidden -- that computes overflow-y to auto, which makes
+     BODY the scroll container and silently breaks every position:sticky on the
+     page. clip constrains the axis without creating a scroll box. */
+  overflow-x:clip;
   /* atmosphere, not a flat fill: a shallow column of water over the void */
   /* atmosphere, barely: a hint of water at the surface that is gone by 30 %.
      Anything stronger reads as a gradient someone chose, not as depth. */
@@ -234,8 +238,12 @@ code,.n{font-family:var(--data);font-size:.87em;color:var(--medium-text)}
   pointer-events:none;height:100%;display:block}
 .beats li{position:sticky;top:calc(7vh + min(78vh,720px) + 22px);
   max-width:var(--measure);opacity:0;transform:translateY(8px);
-  transition:opacity 420ms var(--ease),transform 420ms var(--ease);
-  height:0;overflow:visible}
+  transition:opacity 300ms var(--ease),transform 300ms var(--ease);
+  height:0;overflow:visible;
+  /* every beat is sticky at the SAME offset, so they stack on top of one
+     another. Only the lit one may be in the flow of the eye. */
+  visibility:hidden;pointer-events:none}
+.beats li.on{visibility:visible}
 .beats li.on{opacity:1;transform:none}
 .beats b{display:block;font-family:var(--display);font-weight:700;font-size:1.05rem;
   color:#fff;letter-spacing:-.02em}
@@ -388,4 +396,118 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
   *{animation-duration:.01ms!important;transition-duration:.01ms!important}
   .rise{opacity:1;transform:none}
   body::before{display:none}
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   THE DESCENT — structural language
+   The page is a dive log, not a document. Three things carry that: a
+   sounding line that reads live depth, chapter breaks that log the act,
+   and a rhythm that alternates instrument / voice / evidence so no two
+   sections feel the same.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── the sounding line ───────────────────────────────────────────── */
+.sound{position:fixed;left:0;top:0;bottom:0;width:var(--rail);z-index:60;
+  pointer-events:none;font-family:var(--data)}
+.sound .cable{position:absolute;left:34px;top:0;bottom:0;width:1px;
+  background:linear-gradient(180deg,transparent,var(--rule-lit) 3%,var(--rule-lit) 92%,transparent)}
+.sound .paid{position:absolute;left:34px;top:0;width:1px;height:0;
+  background:linear-gradient(180deg,var(--signal),color-mix(in srgb,var(--signal) 20%,transparent));
+  box-shadow:0 0 12px color-mix(in srgb,var(--signal) 55%,transparent)}
+.sound .bell{position:absolute;left:29px;width:11px;height:11px;margin-top:-5px;
+  border:1px solid var(--signal);background:var(--d0);transform:rotate(45deg);
+  box-shadow:0 0 14px color-mix(in srgb,var(--signal) 70%,transparent)}
+.sound .bell::after{content:"";position:absolute;inset:3px;background:var(--signal)}
+.sound .depth{position:absolute;left:52px;margin-top:-16px;white-space:nowrap;
+  font-size:19px;font-weight:700;color:#fff;letter-spacing:-.04em;
+  text-shadow:0 0 18px var(--d0)}
+.sound .depth small{display:block;font-size:8.5px;font-weight:400;letter-spacing:.24em;
+  color:var(--ink-3);margin-top:3px;text-transform:uppercase}
+.sound ol{list-style:none;margin:0;padding:0;position:absolute;inset:0}
+.sound li{position:absolute;left:34px;width:calc(var(--rail) - 40px);transform:translateY(-50%)}
+.sound li i{position:absolute;left:0;top:50%;width:8px;height:1px;
+  background:var(--rule-lit);transition:all 260ms var(--ease)}
+.sound li b{display:block;padding-left:17px;font-size:8.5px;font-weight:400;
+  letter-spacing:.17em;text-transform:uppercase;color:var(--ink-3);opacity:.42;
+  transition:all 260ms var(--ease);white-space:nowrap}
+.sound li.on i{width:16px;background:var(--signal);box-shadow:0 0 9px var(--signal)}
+.sound li.on b{opacity:1;color:var(--signal-text);padding-left:25px}
+.sound li.past i{background:color-mix(in srgb,var(--signal) 45%,var(--rule-lit))}
+.sound li.past b{opacity:.62}
+
+/* ── chapter break: a log entry, full bleed ──────────────────────── */
+.chapter{min-height:62svh;display:flex;align-items:center;
+  padding:clamp(60px,10vh,120px) var(--gutter);
+  border-top:1px solid var(--rule);position:relative;overflow:hidden}
+.chapter::before,.chapter::after{display:none}
+.chapter .wrap{width:100%;display:grid;grid-template-columns:auto 1fr;
+  gap:clamp(24px,5vw,72px);align-items:center;max-width:var(--wrap)}
+.chapter .no{font-family:var(--display);font-weight:700;
+  font-size:clamp(4rem,2rem + 11vw,13rem);line-height:.8;letter-spacing:-.07em;
+  color:transparent;-webkit-text-stroke:1px var(--rule-lit)}
+.chapter h2{margin:0}
+.chapter .sub{margin-top:14px;color:var(--ink-3);font-family:var(--data);
+  font-size:11px;letter-spacing:.2em;text-transform:uppercase}
+.chapter .hair{position:absolute;left:0;right:0;bottom:0;height:1px;
+  background:linear-gradient(90deg,var(--signal),transparent 62%)}
+
+/* ── split: text one side, evidence the other ────────────────────── */
+.split{display:grid;grid-template-columns:minmax(0,var(--measure)) minmax(0,1fr);
+  gap:clamp(28px,4.5vw,76px);align-items:start;margin-top:var(--s5)}
+.split.flip{grid-template-columns:minmax(0,1fr) minmax(0,var(--measure))}
+.split.flip > :first-child{order:2}
+.split.flip > :last-child{order:1}
+.split > *{min-width:0}
+@media (max-width:1000px){
+  .split,.split.flip{grid-template-columns:1fr}
+  .split.flip > :first-child,.split.flip > :last-child{order:0}
+}
+
+/* ── glass, tinted by the hull ───────────────────────────────────── */
+.pane{position:relative;padding:clamp(18px,2.4vw,32px);
+  background:rgba(12,16,26,.55);border:1px solid var(--rule);
+  border-top-color:color-mix(in srgb,var(--signal) 16%,var(--rule-lit))}
+@supports (backdrop-filter:blur(8px)){
+  .pane{backdrop-filter:blur(18px) saturate(1.2);background:rgba(12,16,26,.38)}
+}
+.pane::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(90% 60% at 8% 0%,
+    color-mix(in srgb,var(--signal) 7%,transparent),transparent 70%)}
+.pane > *{position:relative}
+.pane h3{margin-bottom:10px}
+.pane .k{font-family:var(--data);font-size:9.5px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:12px}
+
+.panes{display:grid;grid-template-columns:repeat(auto-fit,minmax(248px,1fr));
+  gap:1px;background:var(--rule);border:1px solid var(--rule);margin-top:var(--s5)}
+.panes .pane{border:0}
+.panes .pane:first-child{grid-column:1 / -1}
+@media (max-width:760px){.panes .pane:first-child{grid-column:auto}}
+
+.fig{font-family:var(--data);font-size:9px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--signal-text);display:block;margin-bottom:8px}
+
+/* ── page-load orchestration: one moment, staggered ──────────────── */
+@keyframes surface{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.boot > *{opacity:0;animation:surface 900ms var(--ease) forwards}
+.boot > *:nth-child(1){animation-delay:60ms}
+.boot > *:nth-child(2){animation-delay:180ms}
+.boot > *:nth-child(3){animation-delay:300ms}
+.boot > *:nth-child(4){animation-delay:420ms}
+.boot > *:nth-child(5){animation-delay:540ms}
+.boot .readout div{opacity:0;animation:surface 700ms var(--ease) forwards}
+.boot .readout div:nth-child(1){animation-delay:620ms}
+.boot .readout div:nth-child(2){animation-delay:690ms}
+.boot .readout div:nth-child(3){animation-delay:760ms}
+.boot .readout div:nth-child(4){animation-delay:830ms}
+.boot .readout div:nth-child(5){animation-delay:900ms}
+.boot .readout div:nth-child(6){animation-delay:970ms}
+
+@media (max-width:900px){
+  .sound{display:none}
+  .chapter .wrap{grid-template-columns:1fr;gap:14px}
+  .chapter .no{font-size:3.4rem}
+}
+@media (prefers-reduced-motion:reduce){
+  .boot > *,.boot .readout div{opacity:1;animation:none}
 }
