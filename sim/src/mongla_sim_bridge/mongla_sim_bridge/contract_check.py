@@ -116,7 +116,7 @@ class ContractCheck(Node):
     def report(self) -> bool:
         """Print a summary. Returns True if the contract holds."""
         ok = True
-        print('\nDuburi simulator contract check')
+        print('\nMongla simulator contract check')
         print('-' * 62)
         for topic, count in self.counts.items():
             problem = self.problems.get(topic)

@@ -15,6 +15,7 @@ test could see:
 
 These are read as TEXT, never imported: the docs are the artefact under test.
 """
+import pathlib
 import re
 from pathlib import Path
 
@@ -142,3 +143,92 @@ def test_the_capability_map_states_a_verification_state_on_every_row():
     assert 'has not been in water' in text, (
         'the map no longer says this platform has never flown -- if that changed, '
         'the rows should say WATER and this test should be updated deliberately')
+
+
+# ── 5. the rename holds, and the record stays straight ──────────────────────
+
+# The project was renamed from the vehicle's name to its own in September 2026,
+# when the author left the university that owned those vehicles. The word may
+# appear in history -- a defect record, a competition result -- but never as a
+# live identifier, and never as a claim of current affiliation.
+RETIRED_NAME = 'duburi'
+
+# Filenames that live on the FIRMWARE team's repositories. We reference them; we
+# cannot rename them -- that would take a pull request on someone else's repo.
+FOREIGN = ('TASKS_FROM_DUBURI_WS', 'DUBURI_WS_INTEGRATION', 'INTEGRATION_DUBURI_WS',
+           'DUBURI_WS_PR', 'bracuduburi')
+
+CODE_ROOTS = ('src', 'sim/src', 'scripts', 'tools')
+
+
+# Only source-shaped files, and never the recorded datasets (gigabytes of frames).
+SOURCE_SUFFIXES = {'.py', '.sh', '.md', '.yaml', '.yml', '.xml', '.cfg', '.json',
+                   '.html', '.css', '.js', '.jsx', '.sdf', '.urdf', '.rviz',
+                   '.action', '.msg', '.in', '.dsv', '.rules', '.pkla', '.txt'}
+SKIP_DIRS = {'__pycache__', '.pytest_cache', 'node_modules', 'datasets',
+             'build', 'install', 'log', 'models', 'meshes'}
+
+
+def _source_files():
+    for root in CODE_ROOTS:
+        base = ROOT / root
+        if not base.is_dir():
+            continue
+        for f in base.rglob('*'):
+            if not f.is_file() or f.suffix.lower() not in SOURCE_SUFFIXES:
+                continue
+            if any(part in SKIP_DIRS for part in f.parts):
+                continue
+            yield f
+
+
+def test_no_live_code_carries_the_retired_project_name():
+    bad = []
+    for f in _source_files():
+            try:
+                text = f.read_text()
+            except (UnicodeDecodeError, OSError):
+                continue
+            if f.name == pathlib.Path(__file__).name:
+                continue                      # this file names the retired word to ban it
+            for i, line in enumerate(text.splitlines(), 1):
+                probe = line
+                for foreign in FOREIGN:
+                    probe = probe.replace(foreign, '')
+                if RETIRED_NAME in probe.lower():
+                    bad.append(f'{f.relative_to(ROOT)}:{i}: {line.strip()[:80]}')
+    assert not bad, (
+        'the retired project name is live in code again:\n  ' + '\n  '.join(bad[:20]))
+
+
+def test_no_path_carries_the_retired_project_name():
+    bad = [str(f.relative_to(ROOT)) for f in _source_files()
+           if RETIRED_NAME in f.name.lower()]
+    assert not bad, 'paths still named for the retired project:\n  ' + '\n  '.join(bad[:20])
+
+
+def test_authorship_is_stated_once_and_consistently():
+    authors = ROOT / 'AUTHORS.md'
+    assert authors.is_file(), 'AUTHORS.md is missing'
+    text = authors.read_text()
+    assert 'Muhammad Fahim Faisal' in text, 'the author is not named'
+    assert 'Rakibul Islam' in text, 'the firmware co-author is not credited'
+
+    import re
+    names = set()
+    for pkg in (ROOT / 'src').glob('*/package.xml'):
+        names |= set(re.findall(r'<maintainer[^>]*>([^<]+)</maintainer>', pkg.read_text()))
+    assert names == {'Muhammad Fahim Faisal'}, f'package maintainers disagree: {sorted(names)}'
+
+
+def test_nothing_claims_a_current_institutional_affiliation():
+    """Past tense is allowed and wanted -- the competition record is real. A
+    PRESENT-tense claim of belonging is what must not exist."""
+    claims = ('BRACU', 'BRAC University Mongla', "BRAC University's")
+    bad = []
+    for name in ENTRY_POINTS + ('AUTHORS.md',):
+        text = (ROOT / name).read_text()
+        for c in claims:
+            if c in text:
+                bad.append(f'{name}: {c}')
+    assert not bad, 'a current affiliation is claimed: ' + ', '.join(bad)
