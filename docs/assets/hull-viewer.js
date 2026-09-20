@@ -148,6 +148,8 @@
     let pitch = opts.pitch != null ? opts.pitch : 0.26;
     let spin = true, visible = true, raf = 0;
     let explodeT = 0, focusId = -1, explodeShown = 0;
+    let zoom = 1;                     /* 1 = framed; <1 closer, >1 further */
+    let manual = null;                /* non-null: the reader owns the explode */
     const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reduce) spin = false;
 
@@ -219,11 +221,12 @@
         const DIST = 2.24;
         /* dolly out as the hull opens, so the parts stay in frame and the whole
            thing reads as one move rather than as pieces escaping */
-        const distFor = t => DIST * (1 + 0.58 * t);
+        const distFor = t => DIST * (1 + 0.58 * t) * zoom;
         let last = performance.now();
         function drawOnce() {
           /* ease toward the target so a scroll jump does not snap the hull */
-          explodeShown += (explodeT - explodeShown) * 0.14;
+          const target = manual !== null ? manual : explodeT;
+          explodeShown += (target - explodeShown) * 0.14;
           gl.uniform1f(uExplode, explodeShown * 0.34);
           gl.uniform1f(uFocus, focusId);
           const asp = size();
@@ -251,6 +254,34 @@
             { threshold: 0.01 }).observe(canvas);
         }
 
+        /* Wheel ZOOMS the model. It deliberately does NOT drive the explode:
+           a canvas that eats the wheel traps the reader inside a section they
+           cannot scroll past, which is exactly the complaint this fixes.
+           Vertical page scroll always belongs to the page. */
+        canvas.addEventListener('wheel', e => {
+          e.preventDefault();
+          zoom = Math.max(0.42, Math.min(2.4, zoom * (1 + Math.sign(e.deltaY) * 0.09)));
+        }, { passive: false });
+
+        /* pinch, for the same job on a phone */
+        let pinch = null;
+        canvas.addEventListener('touchstart', e => {
+          if (e.touches.length === 2) {
+            pinch = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
+                               e.touches[0].clientY - e.touches[1].clientY);
+          }
+        }, { passive: true });
+        canvas.addEventListener('touchmove', e => {
+          if (pinch && e.touches.length === 2) {
+            const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
+                                 e.touches[0].clientY - e.touches[1].clientY);
+            zoom = Math.max(0.42, Math.min(2.4, zoom * (pinch / d)));
+            pinch = d;
+            e.preventDefault();
+          }
+        }, { passive: false });
+        canvas.addEventListener('touchend', () => { pinch = null; });
+
         let drag = null;
         canvas.addEventListener('pointerdown', e => {
           drag = { x: e.clientX, y: e.clientY }; spin = false;
@@ -272,6 +303,15 @@
           if (k === 'ArrowUp')    { spin = false; pitch = Math.max(-1.25, pitch - 0.09); e.preventDefault(); }
           if (k === 'ArrowDown')  { spin = false; pitch = Math.min( 1.25, pitch + 0.09); e.preventDefault(); }
           if (k === ' ')          { spin = !spin; e.preventDefault(); }
+          if (k === '+' || k === '=') { zoom = Math.max(0.42, zoom * 0.88); e.preventDefault(); }
+          if (k === '-' || k === '_') { zoom = Math.min(2.40, zoom * 1.14); e.preventDefault(); }
+          if (k === '0')          { zoom = 1; yaw = -0.7; pitch = 0.26; e.preventDefault(); }
+          if (k === 'x' || k === 'X') { manual = manual === null ? explodeShown : null;
+                                        e.preventDefault(); }
+          if (manual !== null) {
+            if (k === ',' || k === '<') { manual = Math.max(0, manual - 0.08); e.preventDefault(); }
+            if (k === '.' || k === '>') { manual = Math.min(1, manual + 0.08); e.preventDefault(); }
+          }
         });
 
         return {
@@ -279,8 +319,13 @@
           /* point the camera and draw exactly one frame, for the render rig */
           pose(y, p_) { yaw = y; pitch = p_; },
           frame() { drawOnce(); },
-          /* 0 assembled, 1 fully apart. Scroll drives this. */
-          explode(t) { explodeT = Math.max(0, Math.min(1, t)); },
+          /* 0 assembled, 1 fully apart. Scroll drives this, UNLESS the reader
+             has taken manual control with X -- then scroll is ignored and the
+             hull stays where they put it. Reversible either way. */
+          explode(t) { if (manual === null) explodeT = Math.max(0, Math.min(1, t)); },
+          manual()   { return manual !== null; },
+          zoom(z)    { if (z != null) zoom = Math.max(0.42, Math.min(2.4, z)); return zoom; },
+          reset()    { zoom = 1; yaw = -0.7; pitch = 0.26; manual = null; },
           /* keep one CAD body lit and dim the rest; -1 restores all */
           focus(id) { focusId = id == null ? -1 : id; },
           spin(on) { spin = !!on; },
