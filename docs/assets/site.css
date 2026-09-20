@@ -420,14 +420,19 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
 .sound .bell::after{content:"";position:absolute;inset:3px;background:var(--signal)}
 .sound .depth{position:absolute;left:52px;margin-top:-16px;white-space:nowrap;
   font-size:19px;font-weight:700;color:#fff;letter-spacing:-.04em;
-  text-shadow:0 0 18px var(--d0)}
+  /* the readout travels the whole line and WILL sit on top of a stop label.
+     Its own backing plate is what keeps both readable. */
+  padding:5px 9px 6px;background:var(--d0);
+  border-left:1px solid var(--signal);
+  box-shadow:0 0 22px 10px var(--d0)}
 .sound .depth small{display:block;font-size:8.5px;font-weight:400;letter-spacing:.24em;
   color:var(--ink-3);margin-top:3px;text-transform:uppercase}
 .sound ol{list-style:none;margin:0;padding:0;position:absolute;inset:0}
 .sound li{position:absolute;left:34px;width:calc(var(--rail) - 40px);transform:translateY(-50%)}
 .sound li i{position:absolute;left:0;top:50%;width:8px;height:1px;
   background:var(--rule-lit);transition:all 260ms var(--ease)}
-.sound li b{display:block;padding-left:17px;font-size:8.5px;font-weight:400;
+.sound li b{display:block;padding-left:17px;max-width:100%;overflow:hidden;
+  text-overflow:ellipsis;font-size:8.5px;font-weight:400;
   letter-spacing:.17em;text-transform:uppercase;color:var(--ink-3);opacity:.42;
   transition:all 260ms var(--ease);white-space:nowrap}
 .sound li.on i{width:16px;background:var(--signal);box-shadow:0 0 9px var(--signal)}
