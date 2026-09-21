@@ -394,3 +394,15 @@ def test_competition_placements_match_the_official_sheets():
                 f'{path.name}: RoboSub {year} {rank} of {teams} disagrees with the sheets'
             seen += 1
     assert seen, 'no placement found in the prose — did the pattern stop matching?'
+
+
+def test_front_page_long_read_cards_match_their_documents():
+    """The front page previews the-shift.md and capability-map.md with a figure
+    taken out of each: the board's timetable, and the tally of capabilities by
+    state. tools/site_pages.py generates both from the documents, so a card
+    cannot keep advertising a count or a rate the page itself no longer says."""
+    import subprocess
+    import sys
+    r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'site_pages.py'), '--check'],
+                       capture_output=True, text=True, cwd=ROOT)
+    assert r.returncode == 0, r.stdout + r.stderr
