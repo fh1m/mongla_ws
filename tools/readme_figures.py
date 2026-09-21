@@ -110,16 +110,38 @@ async def capture(ws_url: str, page_url: str) -> dict[str, bytes]:
         for stem, selector, prep in FIGURES:
             if prep:
                 await cmd('Runtime.evaluate', expression=prep)
-            rect = (await cmd('Runtime.evaluate', returnByValue=True, expression=(
+            # Chrome cannot rasterise a clip much past ~16 000 px down the page,
+            # and this page is far taller than that -- captures there came back
+            # shifted and CUT (the wire figure lost its key table). So each
+            # figure's own section is shown alone, near the top, and every other
+            # section is hidden for the length of the capture.
+            ok = (await cmd('Runtime.evaluate', returnByValue=True, expression=(
                 f"(() => {{ const e = document.querySelector({json.dumps(selector)});"
-                f"  if (!e) return null; e.scrollIntoView({{block: 'start'}});"
-                f"  const r = e.getBoundingClientRect();"
-                f"  return {{x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height}}; }})()"
+                f"  if (!e) return false;"
+                f"  const keep = e.closest('section') || e;"
+                f"  document.querySelectorAll('section,footer,header').forEach(n => {{"
+                f"    n.style.display = (n === keep || n.contains(keep)) ? '' : 'none'; }});"
+                # lazy images above the figure load DURING the wait and push it
+                # down; that is what cut the wire figure. Load them now.
+                f"  keep.querySelectorAll('img[loading=lazy]').forEach(i => i.loading = 'eager');"
+                f"  scrollTo(0, 0); return true; }})()"
             )))['result'].get('value')
-            if not rect:
+            if not ok:
                 print(f'missing: {selector}', file=sys.stderr)
                 continue
-            await asyncio.sleep(0.6)
+            await cmd('Runtime.evaluate', awaitPromise=True, expression=(
+                "Promise.all([...document.images].filter(i => !i.complete && i.offsetParent)"
+                ".map(i => new Promise(r => { i.onload = i.onerror = r; })))"))
+            await asyncio.sleep(0.8)
+            # measured LAST, after every image above it has taken its height;
+            # a journey stop is drawn at full strength only while it is the one
+            # in view, so that is set here too
+            rect = (await cmd('Runtime.evaluate', returnByValue=True, expression=(
+                f"(() => {{ document.querySelectorAll('.stop').forEach(s => s.classList.add('on'));"
+                f"  const r = document.querySelector({json.dumps(selector)}).getBoundingClientRect();"
+                f"  return {{x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height}}; }})()"
+            )))['result'].get('value')
+            await asyncio.sleep(0.3)
             pad = 12
             shot = await cmd('Page.captureScreenshot', format='png', captureBeyondViewport=True,
                              clip={'x': max(0, rect['x'] - pad), 'y': max(0, rect['y'] - pad),

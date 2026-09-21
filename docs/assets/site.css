@@ -1299,6 +1299,45 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
 .pull footer{margin-top:16px;font-family:var(--data);font-weight:400;font-size:var(--fs-caption);
   letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
 
+/* ── the gate run ─────────────────────────────────────────────────────
+   Seven steps and a hull that only advances when a step says yes. The path
+   lights behind it; the red ticks under each step are the designed stops. */
+.run{margin:var(--s4) 0 var(--s4);padding:clamp(14px,2vw,22px);border-radius:16px;
+  background:var(--s-raised);box-shadow:var(--e2)}
+.run svg{display:block;width:100%;height:auto;overflow:visible}
+.run__path{stroke:var(--rule-lit);stroke-width:2}
+.run__lit{stroke:var(--signal);stroke-width:2;stroke-dasharray:790;stroke-dashoffset:790;
+  animation:runlit 10s var(--ease) infinite}
+.run__n circle{fill:var(--s-sunk);stroke:var(--rule-lit);stroke-width:2;
+  animation:runnode 10s var(--ease) infinite;animation-delay:calc(var(--i) * 1.05s)}
+.run__n text{text-anchor:middle;font-family:var(--data)}
+.run__n .lab{font-family:var(--display);font-weight:800;font-size:13px;fill:#fff;letter-spacing:.02em}
+.run__n .rate{font-size:10px;fill:var(--ink-3)}
+.run__n .fail{stroke:var(--signal);stroke-width:1.5;stroke-dasharray:2 2;opacity:.7}
+.run__n .why{font-size:9.5px;fill:var(--signal-text);opacity:.85}
+.run__gate rect{fill:var(--ink-3)}
+.run__sub rect{fill:var(--ink)} .run__sub circle{fill:var(--signal)}
+.run__sub{animation:runsub 10s var(--ease) infinite}
+@keyframes runlit{0%{stroke-dashoffset:790}75%,100%{stroke-dashoffset:0}}
+@keyframes runnode{0%,4%{fill:var(--s-sunk);stroke:var(--rule-lit)}
+  8%,100%{fill:var(--signal);stroke:var(--signal)}}
+/* the hull hops step to step: it waits on each one, which is the point */
+@keyframes runsub{
+  0%{transform:translateX(70px)}   8%{transform:translateX(70px)}
+  14%{transform:translateX(202px)} 19%{transform:translateX(202px)}
+  25%{transform:translateX(333px)} 30%{transform:translateX(333px)}
+  36%{transform:translateX(465px)} 41%{transform:translateX(465px)}
+  47%{transform:translateX(597px)} 52%{transform:translateX(597px)}
+  58%{transform:translateX(728px)} 63%{transform:translateX(728px)}
+  69%{transform:translateX(860px)} 74%{transform:translateX(860px)}
+  86%,100%{transform:translateX(990px);opacity:0}
+}
+@media (prefers-reduced-motion:reduce){
+  .run__lit,.run__n circle,.run__sub{animation:none}
+  .run__lit{stroke-dashoffset:0} .run__n circle{fill:var(--signal);stroke:var(--signal)}
+  .run__sub{transform:translateX(860px)}
+}
+
 /* ── the width of now ─────────────────────────────────────────────────
    A live instrument, not a chart: the reader's own clock drives it, so the
    lanes drift apart in real time and the band between freshest and stalest is
