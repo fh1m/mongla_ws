@@ -27,6 +27,7 @@
     <li data-for="frame"><i></i><b>to thrust</b></li>
     <li data-for="thinking"><i></i><b>one task</b></li>
     <li data-for="blink"><i></i><b>the blink</b></li>
+    <li data-for="flow"><i></i><b>no DVL</b></li>
     <li data-for="sim"><i></i><b>the simulator</b></li>
     <li data-for="archive"><i></i><b>the rehearsal</b></li>
     <li data-for="water-real"><i></i><b>the water</b></li>
@@ -742,6 +743,82 @@
 </section>
 
 <!-- 09 ──────────────────────────────────────────────────────────────── -->
+<!-- 09b ─────────────────────────────────────────────────────────────── -->
+<section id="flow">
+ <div class="wrap">
+  <p class="mark">Play with it <i>//</i> the sensor we could not buy</p>
+  <h2 class="col">A camera pointed at the floor is a speedometer, if you know one number.</h2>
+  <p class="lede col quiet">A Doppler velocity log is the instrument that tells an underwater
+    vehicle how fast it is moving over the ground. We do not have one. What we have is a camera
+    pointed down, and the fact that the floor slides past it — but the same pixel motion means a
+    different speed depending on how far away the floor is.</p>
+
+  <div class="lab">
+   <div class="lab__stage">
+    <canvas id="flow-view" width="900" height="380" role="img"
+      aria-label="Simulated downward camera view with floor texture sliding past"></canvas>
+    <div class="lab__read">
+      <div><span class="silk silk--b">pixels move</span><b id="flow-px">—</b></div>
+      <div><span class="silk silk--b">floor in view</span><b id="flow-fov">—</b></div>
+      <div><span class="silk silk--b">speed we report</span><b id="flow-v">—</b></div>
+      <div><span class="silk silk--b">error we make</span><b id="flow-err">—</b></div>
+    </div>
+   </div>
+   <div class="lab__knobs">
+    <label class="knob"><span class="silk silk--b">true speed over ground</span>
+      <input type="range" id="flow-speed" min="0" max="1.2" step="0.01" value="0.3">
+      <output id="flow-speed-o">0.30 m/s</output>
+      <em>What the vehicle is actually doing. The camera cannot see this — it only sees pixels
+        move.</em></label>
+    <label class="knob"><span class="silk silk--b">height above the floor</span>
+      <input type="range" id="flow-h" min="0.25" max="2.5" step="0.01" value="0.72">
+      <output id="flow-h-o">0.72 m</output>
+      <em>Twice as high, half the pixel motion for the same speed. This is the one number that
+        turns a picture into a speedometer.</em></label>
+    <label class="knob"><span class="silk silk--b">how wrong our height is</span>
+      <input type="range" id="flow-herr" min="-40" max="40" step="1" value="0">
+      <output id="flow-herr-o">0 %</output>
+      <em>We do not measure height directly. Get it wrong by 20 % and every velocity — and every
+        metre of dead reckoning built on it — is wrong by 20 %, in the same direction, for ever.</em></label>
+    <div class="lab__presets">
+      <button class="key" type="button" data-flow="0.3,0.72,0">the bench slide</button>
+      <button class="key" type="button" data-flow="0.3,0.72,20">height off by 20 %</button>
+      <button class="key" type="button" data-flow="0.65,1.6,0">cruise, 1.6 m up</button>
+      <button class="key" type="button" data-flow="0.3,0.3,0">close to the floor</button>
+    </div>
+   </div>
+  </div>
+
+  <div class="split" style="margin-top:var(--s5)">
+   <div>
+    <h3>What it scored against a tape measure</h3>
+    <p class="col quiet">Three real slides of 30 cm on the bench rig, downward camera at 0.72 m
+      lens-to-floor, <code>f = 513.94 px</code>. The honest part is the third column: the
+      <em>height the measurement implies</em>, recovered from the slide it got wrong.</p>
+    <p class="col quiet">Worst error <span class="nr">1.09 cm on 30 cm</span> — 3.6 %. Nortek
+      quote 0.5–1 % for a real DVL's bottom track, so this is several times worse than the
+      instrument we cannot afford, and the same order as published monocular visual odometry in
+      turbid water. It was measured <em>in air, on a hand slide</em> whose own precision is about
+      ±1 cm: the operator's tape is inside our error bar, so it is an upper bound on the error,
+      not a measurement of it.</p>
+   </div>
+   <table class="ledger" style="margin-top:0">
+    <thead><tr><th>slide</th><th>measured</th><th>error</th><th>implied height</th></tr></thead>
+    <tbody>
+     <tr><td>lateral 30 cm</td><td class="num">30.13 cm</td><td class="num">+0.13</td><td class="num">0.72 m</td></tr>
+     <tr><td>forward 30 cm</td><td class="num">31.09 cm</td><td class="numr">+1.09</td><td class="num">0.69 m</td></tr>
+     <tr><td>back 30 cm</td><td class="num">31.04 cm</td><td class="num">+1.04</td><td class="num">0.70 m</td></tr>
+     <tr><td>tape says</td><td class="num">—</td><td class="num">—</td><td class="numr">0.72 m</td></tr>
+    </tbody>
+   </table>
+  </div>
+  <p class="col quiet" style="margin-top:26px">That last row is the result worth keeping. Height
+    is recovered independently, from <code>h · truth / measured</code>, and the three runs land on
+    0.72, 0.69 and 0.70 m against a tape that says 0.72. The scale chain closes on itself — which
+    is the only reason to believe the speed at all.</p>
+ </div>
+</section>
+
 <section id="sim">
  <div class="wrap">
   <p class="mark">The simulator <i>//</i> 20,649 lines, thirteen courses, one purpose</p>
@@ -1231,6 +1308,92 @@
     }, {threshold: 0.4});
     pairs.forEach(function(p){ io.observe(p); });
   } else { pairs.forEach(function(p){ p.classList.add('in'); }); }
+})();
+(function(){
+  /* ── the flow lab: a camera pointed at the floor ──────────────────
+     Ground-truth geometry, no fudge: pixels/second = v * f / h, with the
+     downward camera's MEASURED focal length (513.94 px at 640 wide, taken at
+     0.72 m on the bench rig). The floor is drawn as scattered features that
+     move at exactly that rate, so the animation IS the equation. */
+  var cv = document.getElementById('flow-view');
+  if (!cv) return;
+  var ctx = cv.getContext('2d'), F = 513.94, CAMW = 640;
+  var el = {v: document.getElementById('flow-speed'), h: document.getElementById('flow-h'),
+            herr: document.getElementById('flow-herr')};
+  var out = {v: document.getElementById('flow-speed-o'), h: document.getElementById('flow-h-o'),
+             herr: document.getElementById('flow-herr-o'), px: document.getElementById('flow-px'),
+             fov: document.getElementById('flow-fov'), speed: document.getElementById('flow-v'),
+             err: document.getElementById('flow-err')};
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var feats = [], N = 90, seed = 7;
+  function rnd(){ seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }
+  for (var i = 0; i < N; i++) feats.push({x: rnd(), y: rnd(), r: 1 + rnd() * 2.4});
+
+  var state = {pxs: 0, scale: 1}, off = 0, last = null;
+
+  function compute(){
+    var v = +el.v.value, h = +el.h.value, herr = +el.herr.value / 100;
+    var pxs = v * F / h;                       /* what the camera actually sees */
+    var hAssumed = h * (1 + herr);             /* what we think the height is  */
+    var vReported = pxs * hAssumed / F;        /* so this is what we report    */
+    var ground = CAMW * h / F;                 /* metres of floor across frame */
+    out.v.textContent = v.toFixed(2) + ' m/s';
+    out.h.textContent = h.toFixed(2) + ' m';
+    out.herr.textContent = (herr > 0 ? '+' : '') + (herr * 100).toFixed(0) + ' %';
+    out.px.textContent = pxs.toFixed(0) + ' px/s';
+    out.fov.textContent = (ground * 100).toFixed(0) + ' cm across';
+    out.speed.textContent = vReported.toFixed(2) + ' m/s';
+    var e = v > 0 ? (vReported - v) / v * 100 : 0;
+    out.err.textContent = Math.abs(e) < 0.5 ? 'none' :
+      (e > 0 ? '+' : '') + e.toFixed(0) + ' %  (' + (vReported - v).toFixed(2) + ' m/s)';
+    state.pxs = pxs;
+    state.scale = cv.width / CAMW;             /* canvas is a scaled camera frame */
+  }
+
+  function frame(ts){
+    if (last === null) last = ts;
+    var dt = Math.min((ts - last) / 1000, 0.05); last = ts;
+    if (!reduce) off += state.pxs * state.scale * dt;
+    var W = cv.width, H = cv.height;
+    var css = getComputedStyle(document.documentElement);
+    var sunk = css.getPropertyValue('--s-sunk').trim() || '#04060b';
+    var ink3 = css.getPropertyValue('--ink-3').trim() || '#7b8598';
+    var sea  = css.getPropertyValue('--sea-lit').trim() || '#5a8dff';
+    var sig  = css.getPropertyValue('--cad-red').trim() || '#ff0000';
+    ctx.fillStyle = sunk; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = sea; ctx.globalAlpha = .55;
+    for (var i = 0; i < feats.length; i++){                  /* the floor, sliding */
+      var f = feats[i];
+      var y = (f.y * H + off) % (H + 40) - 20;
+      ctx.beginPath(); ctx.arc(f.x * W, y, f.r * state.scale * 1.6, 0, 6.2832); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = ink3; ctx.globalAlpha = .5; ctx.lineWidth = 1;   /* frame centre */
+    ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H);
+    ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke(); ctx.globalAlpha = 1;
+    /* one tracked feature, with the vector the tracker would report */
+    var tx = W * 0.5, ty = H * 0.34;
+    var vecLen = Math.min(state.pxs * state.scale * 0.35, H * 0.5);
+    ctx.strokeStyle = sig; ctx.lineWidth = 2; ctx.beginPath();
+    ctx.moveTo(tx, ty); ctx.lineTo(tx, ty + vecLen); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(tx - 5, ty + vecLen - 8); ctx.lineTo(tx, ty + vecLen);
+    ctx.lineTo(tx + 5, ty + vecLen - 8); ctx.stroke();
+    ctx.fillStyle = sig; ctx.font = '12px ui-monospace, monospace';
+    ctx.fillText(state.pxs.toFixed(0) + ' px/s', tx + 10, ty + vecLen / 2);
+    ctx.strokeStyle = sig; ctx.lineWidth = 1.5;
+    ctx.strokeRect(tx - 16, ty - 14, 32, 28);
+    requestAnimationFrame(frame);
+  }
+  ['v','h','herr'].forEach(function(k){ el[k].addEventListener('input', compute); });
+  [].forEach.call(document.querySelectorAll('[data-flow]'), function(b){
+    b.addEventListener('click', function(){
+      var p = b.dataset.flow.split(',');
+      el.v.value = p[0]; el.h.value = p[1]; el.herr.value = p[2];
+      compute();
+    });
+  });
+  compute();
+  requestAnimationFrame(frame);
 })();
 (function(){
   /* ── the PID lab ──────────────────────────────────────────────────
