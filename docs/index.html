@@ -733,6 +733,26 @@
     <tr><td data-l="rung">Refuse</td><td data-l="holds the lock when">Nothing above is honest any more</td><td class="num" data-l="measured">returns LOST, never a guess</td></tr>
    </tbody>
   </table>
+  <figure class="rungs2" aria-label="Each rung's timeout against the measured distribution of real detection gaps">
+    <span class="silk silk--b">every rung, against 71 real gaps</span>
+    <ol>
+      <li style="--cov:56.3"><b>VISION_FRESH_ZERO_S</b><em>0.20 s</em><i></i><u>56.3 %</u></li>
+      <li style="--cov:91.5" class="key-rung"><b>vision.coast_s</b><em>0.80 s</em><i></i><u>91.5 %</u></li>
+      <li style="--cov:91.5"><b>vision.lost_grace_s</b><em>1.00 s</em><i></i><u>91.5 %</u></li>
+      <li style="--cov:94.4"><b>kalman max_predict_s</b><em>1.50 s</em><i></i><u>94.4 %</u></li>
+      <li style="--cov:100"><b>track_buffer</b><em>5.00 s</em><i></i><u>100 %</u></li>
+    </ol>
+    <div class="rungs2__marks">
+      <span>p50 · 0.155 s</span><span>p90 · 0.651 s</span><span>p99 · 2.418 s</span><span>max · 4.00 s</span>
+    </div>
+    <figcaption>Each bar is the fraction of <strong>71 real gaps</strong> — measured at native
+      frame rate over 300 consecutive frames × 3 windows × 5 clips, at conf 0.10 — that the rung's
+      timeout actually covers. <code>coast_s</code> sits just above the p90, which is exactly what
+      it is for: routine flicker. Nothing in the archive outlives <code>track_buffer</code>. This
+      was the first time the ladder was checked against footage rather than against the next rung
+      up, and it is the reason the numbers are these and not round ones.</figcaption>
+  </figure>
+
   <p class="col quiet" style="margin-top:30px">The third row is the one worth staring at. Through a
     gap of 175 frames the detector produced nothing at all, and the vehicle still knew where the
     target was — because the anchor matches image structure rather than asking the network again.
@@ -839,6 +859,20 @@
     <tr><td>Ground-truth labels</td><td>Hand labelling does not scale; the bounding-box sensor is occlusion-correct and free</td><td class="num">12.83 Hz vs 12.75 baseline</td></tr>
    </tbody>
   </table>
+
+  <figure class="faults" aria-label="The five fault paths the simulator can inject">
+    <span class="silk silk--b">fault injection · five recovery paths that had never once executed</span>
+    <ol>
+      <li><b>DVL dropout</b><span>the sensor we do not have, failing the way it would</span></li>
+      <li><b>camera loss</b><span>vision verbs must return NO_CAMERA, not hang</span></li>
+      <li><b>link silence</b><span>the board surfaces after 5 s — does the host agree?</span></li>
+      <li><b>battery sag</b><span>held 3 s while armed, and the board acts alone</span></li>
+      <li><b>thruster failure</b><span>the allocation has to fit the demand with what is left</span></li>
+    </ol>
+    <figcaption>Every one of these paths existed in the code and had never run. A pool day is four
+      hours long; a fault you can inject on a laptop costs nothing. This is the simulator's real
+      job — not looking like water, but being wrong in the same places water is.</figcaption>
+  </figure>
 
   <p class="col quiet" style="margin-top:34px">Each of those rows started as a thing that looked
     fine. The pattern repeats so exactly that it became a rule: <em>the simulator's job is not to

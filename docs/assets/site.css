@@ -1267,3 +1267,47 @@ pre::-webkit-scrollbar-track,.scrollable::-webkit-scrollbar-track{background:tra
   .lab{grid-template-columns:1fr}
   .lab__read{grid-template-columns:repeat(2,1fr)}
 }
+
+/* ── the lock ladder against the gap distribution ───────────────────
+   Bar length is the share of 71 real gaps the rung covers. The rung that
+   matters is marked: coast_s, sitting just above the p90. */
+.rungs2{margin:var(--s5) 0 0;padding:clamp(16px,2.2vw,26px);border-radius:14px;
+  background:var(--s-raised);box-shadow:var(--e2)}
+.rungs2 > .silk{display:block;font-family:var(--display);font-weight:800;font-size:var(--fs-micro);
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:14px}
+.rungs2 ol{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.rungs2 li{display:grid;grid-template-columns:minmax(120px,190px) 62px 1fr 56px;
+  align-items:center;gap:12px}
+.rungs2 b{font-family:var(--data);font-size:11.5px;color:var(--ink-2);font-weight:400;
+  overflow:hidden;text-overflow:ellipsis}
+.rungs2 em{font-style:normal;font-family:var(--data);font-size:12px;color:#fff;text-align:right}
+.rungs2 i{display:block;height:10px;border-radius:999px;background:var(--s-sunk);
+  box-shadow:var(--e-in);position:relative}
+.rungs2 i::after{content:"";position:absolute;inset:2px auto 2px 2px;border-radius:999px;
+  width:calc((100% - 4px) * var(--cov) / 100);background:var(--rule-lit)}
+.rungs2 .key-rung i::after{background:var(--signal)}
+.rungs2 .key-rung b,.rungs2 .key-rung u{color:var(--signal-text)}
+.rungs2 u{text-decoration:none;font-family:var(--data);font-size:11px;color:var(--ink-3);
+  text-align:right}
+.rungs2__marks{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:14px;padding-top:12px;
+  box-shadow:0 -1px 0 var(--rule);font-family:var(--data);font-size:10.5px;color:var(--ink-3)}
+@media (max-width:760px){
+  .rungs2 li{grid-template-columns:1fr 54px;grid-template-areas:"b e" "i u"}
+  .rungs2 b{grid-area:b} .rungs2 em{grid-area:e} .rungs2 i{grid-area:i} .rungs2 u{grid-area:u}
+}
+
+/* ── fault injection: five paths, each a row that can go red ─────── */
+.faults{margin:var(--s5) 0 0;padding:clamp(16px,2.2vw,26px);border-radius:14px;
+  background:var(--s-raised);box-shadow:var(--e2)}
+.faults > .silk{display:block;font-family:var(--display);font-weight:800;font-size:var(--fs-micro);
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:14px}
+.faults ol{list-style:none;margin:0;padding:0;display:grid;gap:8px;
+  grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.faults li{position:relative;padding:14px 16px 14px 34px;border-radius:10px;
+  background:var(--s-sunk);box-shadow:var(--e-in)}
+.faults li::before{content:"";position:absolute;left:14px;top:18px;width:8px;height:8px;
+  border-radius:50%;background:var(--caution)}
+.faults b{display:block;font-family:var(--data);font-size:12.5px;color:#fff}
+.faults span{display:block;margin-top:5px;font-size:var(--fs-caption);color:var(--ink-3);
+  line-height:1.45}
+.faults figcaption{margin-top:16px}
