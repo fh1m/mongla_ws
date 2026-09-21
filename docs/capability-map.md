@@ -21,7 +21,35 @@ date — and a **state**. The states are not blurred:
 A capability map that hides the last two is marketing. The blocked rows are listed in full at
 the bottom, and **no row in this document is 🟢 yet** — this platform has not been in water.
 
-![The capability stack](assets/diagrams/capability-stack.svg)
+<figure class="tally" id="tally" aria-live="polite">
+  <noscript>The tally below counts this page's rows by state; it needs JavaScript.</noscript>
+</figure>
+<script>
+(function(){
+  /* This page counts itself. Every table row below whose last cell carries a
+     state is tallied, so the bar can never disagree with the tables -- there is
+     no second copy of the numbers to drift. */
+  var states = [['🟢','WATER','water'],['🟣','BENCH','bench'],['🟡','BUILT','built'],['🔴','BLOCKED','blocked']];
+  function run(){
+    var n = {}, total = 0;
+    document.querySelectorAll('main table tbody tr').forEach(function(tr){
+      var c = tr.lastElementChild; if (!c) return;
+      states.forEach(function(s){ if (c.textContent.indexOf(s[0]) >= 0 && c.textContent.indexOf(s[1]) >= 0){ n[s[1]] = (n[s[1]]||0)+1; total++; } });
+    });
+    if (!total) return;
+    var f = document.getElementById('tally'), bar = '', key = '';
+    states.forEach(function(s){
+      var k = n[s[1]] || 0;
+      bar += '<i class="t--' + s[2] + '" style="flex-grow:' + k + '"></i>';
+      key += '<span class="t--' + s[2] + '"><b>' + k + '</b> ' + s[1].toLowerCase() + '</span>';
+    });
+    f.innerHTML = '<div class="tally__bar">' + bar + '</div><div class="tally__key">' + key +
+      '</div><figcaption>' + total + ' capabilities on this page, counted from its own tables ' +
+      'as it loads.</figcaption>';
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
+})();
+</script>
 
 New here? Read **[The Shift](the-shift.html)** first — it explains the two halves of the system
 and why the split exists.

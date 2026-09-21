@@ -21,9 +21,9 @@ body.doc main{margin-inline:auto;max-width:74ch;padding:clamp(40px,6vh,76px) var
 .topbar .home{font-family:var(--display);font-weight:700;letter-spacing:-.02em;
   font-size:17px;border:0;color:var(--ink)}
 .topbar .home::before{content:"";display:inline-block;width:7px;height:7px;
-  background:var(--red);margin-right:9px;vertical-align:2px;box-shadow:0 0 8px var(--red)}
+  background:var(--signal);margin-right:9px;vertical-align:2px}
 .topbar .home:hover{color:#fff}
-.topbar nav{margin-left:auto;display:flex;gap:18px;font-family:var(--mono);
+.topbar nav{margin-left:auto;display:flex;gap:18px;font-family:var(--data);
   font-size:10.5px;letter-spacing:.14em;text-transform:uppercase}
 .topbar nav a{border:0;color:var(--ink-3)}
 .topbar nav a:hover{color:var(--red-lit)}
@@ -36,20 +36,23 @@ body.doc h3{font-size:1.06rem;margin:var(--s5) 0 var(--s1);color:#fff}
 body.doc p{margin:0 0 var(--s3)}
 body.doc ul,body.doc ol{margin:0 0 var(--s3);padding-left:1.15em}
 body.doc li{margin-bottom:7px}
-body.doc li::marker{color:var(--red)}
-body.doc blockquote{margin:var(--s4) 0;padding-left:20px;border-left:1px solid var(--red);
+body.doc li::marker{color:var(--signal)}
+body.doc blockquote{margin:var(--s4) 0;padding-left:20px;border-left:1px solid var(--signal);
   color:var(--ink-2);font-style:italic}
 body.doc hr{border:0;border-top:1px solid var(--rule);margin:var(--s6) 0}
 /* a rule immediately before a heading would draw the line twice */
 body.doc hr + h2{border-top:0;padding-top:0;margin-top:0}
 body.doc img{width:100%;height:auto;display:block;margin:var(--s4) 0;
-  border:1px solid var(--rule);background:var(--hull)}
-body.doc code{background:var(--hull);border:1px solid var(--rule);padding:1px 5px}
+  border:1px solid var(--rule);background:var(--s-sunk)}
+body.doc code{background:var(--s-sunk);border:1px solid var(--rule);padding:1px 5px}
 body.doc pre{margin:var(--s4) 0}
 body.doc pre code{background:none;border:0;padding:0;color:inherit}
 /* a six-column table squeezed into 74ch is unreadable: scroll it instead */
-body.doc .tw{margin:var(--s4) 0;overflow-x:auto;-webkit-overflow-scrolling:touch}
-body.doc table{border-collapse:collapse;font-family:var(--mono);font-size:12.5px;
+body.doc .tw{margin:var(--s4) 0;overflow-x:auto;-webkit-overflow-scrolling:touch;
+  scrollbar-width:thin;scrollbar-color:var(--rule-lit) transparent}
+body.doc .tw::-webkit-scrollbar{height:6px}
+body.doc .tw::-webkit-scrollbar-thumb{background:var(--rule-lit);border-radius:3px}
+body.doc table{border-collapse:collapse;font-family:var(--data);font-size:12.5px;
   min-width:100%;width:max-content;max-width:none}
 body.doc th{text-align:left;font-weight:400;font-size:9.5px;letter-spacing:.16em;
   text-transform:uppercase;color:var(--ink-3);padding:0 14px 10px 0;
