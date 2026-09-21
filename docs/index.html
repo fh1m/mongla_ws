@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="assets/site.css">
 </head>
 <body>
+<div id="grain" aria-hidden="true"></div>
 
 <nav class="sound" aria-label="Descent">
   <div class="cable"></div>
@@ -49,16 +50,34 @@
   <p class="lede col" style="margin-top:28px">Underwater there is no radio, no GPS, and no second
     chance to explain yourself. A vehicle either understood what it was looking at, or it did
     not — and it will not tell you which. This is the software that has to be right anyway.</p>
-  <div class="readout" aria-label="Measured performance">
-    <div><b>500 Hz</b><span>control loop, on a core nothing can interrupt</span></div>
-    <div><b>18.0 ms</b><span>photon to detection, median</span></div>
-    <div><b>53.9 Hz</b><span>detection through the live ROS graph</span></div>
-    <div><b>46.7°</b><span>camera field of view, measured in water</span></div>
-    <div><b>1.09 cm</b><span>worst error over a 30 cm slide</span></div>
-    <div><b>3 311</b><span>tests passing, none failing</span></div>
+  <div class="bento" aria-label="Measured performance">
+    <div class="lead">
+      <span class="silk silk--lit">Control loop · on the board</span>
+      <div>
+        <b>500<u>Hz</u></b>
+        <div class="ticks" aria-hidden="true"></div>
+        <span>One tick every two milliseconds, on an ESP32 core nothing else is allowed to
+          interrupt. The Pi can crash; this does not stop.</span>
+      </div>
+    </div>
+    <div class="b"><span class="silk">Latency</span><b>18.0 ms</b><span>photon to detection, median</span></div>
+    <div class="c">
+      <span class="silk">Field of view</span>
+      <svg class="fov" viewBox="0 0 120 90" aria-hidden="true">
+        <polygon class="air" points="60,88 6.5,2 113.5,2"/>
+        <polygon class="water" points="60,88 22.9,2 97.1,2"/>
+      </svg>
+      <b>46.7°</b><span>measured in water. The datasheet's 63.8° (dashed) is the same lens in air.</span>
+    </div>
+    <div class="d"><span class="silk">Detection</span><b>53.9 Hz</b><span>through the live ROS graph, not a benchmark</span></div>
+    <div class="e">
+      <span class="silk">Velocity from the floor</span>
+      <div class="tape" aria-hidden="true"><i></i><em>0</em><em>30 cm</em></div>
+      <b>1.09 cm</b><span>worst error over a 30 cm slide, against a tape measure. The red sliver on the tape is that error, to scale.</span>
+    </div>
+    <div class="f"><span class="silk">Tests</span><b>3 311</b><span>passing, none failing</span></div>
+    <div class="g warn"><span class="silk">In water</span><b>0 dives</b><span>Nothing on this platform has been in water. Every number here says where it was taken.</span></div>
   </div>
-  <p class="mark" style="margin:22px 0 0">Nothing on this platform has been in water. Every number
-    above says where it was taken.</p>
  </div>
 </section>
 
@@ -167,6 +186,24 @@
      firmware. This is also the honest reason the old stack placed well and still had a
      ceiling: at 20 Hz you are not steering, you are voting.</figcaption>
   </figure>
+  <h3 class="col" style="margin-top:var(--s6)">What actually crosses the cable</h3>
+  <p class="col">If the reflexes live on the board, the Pi should have almost nothing to say — and it
+    doesn't. Here is the whole of <code>move_forward</code>, the most ordinary thing the vehicle is
+    ever asked to do, exactly as it leaves the Pi. Read it left to right, the way the board does.</p>
+  <p class="col">The first ten bytes are the envelope: where a frame starts, how long it is, who sent
+    it, what kind of message it is. The part that means anything is three numbers — a
+    <em>type</em>, a <em>duration</em>, a <em>speed</em> — and one tag that says “this is ours”. There
+    is no thrust in it. No motor, no angle, no depth. Which thrusters spin, how hard, and how the
+    hull holds its heading for those three seconds is the board's business; the Pi only said
+    what it wanted.</p>
+<!-- wire:begin -->
+  <figure class="wire" aria-label="The 44-byte MAVLink 2 frame for move_forward">
+   <div class="wire__cmd"><span class="silk">the operator types</span><code>mongla move_forward 3 --gain 40</code><span class="silk">the cable carries · 44 bytes</span></div>
+   <div class="wire__bytes"><div class="fld fld--hdr" style="--n:1"><span class="off">0</span><span class="hex"><i>FD</i></span><b>STX</b><em>0xFD</em></div><div class="fld fld--hdr" style="--n:1"><span class="off">1</span><span class="hex"><i>20</i></span><b>LEN</b><em>32</em></div><div class="fld fld--hdr" style="--n:1"><span class="off">2</span><span class="hex"><i>00</i></span><b>INCOMPAT</b><em>0</em></div><div class="fld fld--hdr" style="--n:1"><span class="off">3</span><span class="hex"><i>00</i></span><b>COMPAT</b><em>0</em></div><div class="fld fld--hdr" style="--n:1"><span class="off">4</span><span class="hex"><i>00</i></span><b>SEQ</b><em>0</em></div><div class="fld fld--who" style="--n:1"><span class="off">5</span><span class="hex"><i>FF</i></span><b>SYSID</b><em>255</em></div><div class="fld fld--who" style="--n:1"><span class="off">6</span><span class="hex"><i>BF</i></span><b>COMPID</b><em>191</em></div><div class="fld fld--hdr" style="--n:3"><span class="off">7</span><span class="hex"><i>4C</i><i>00</i><i>00</i></span><b>MSGID</b><em>76</em></div><div class="fld fld--verb" style="--n:4"><span class="off">10</span><span class="hex"><i>00</i><i>00</i><i>00</i><i>00</i></span><b>p1 · type</b><em>0</em></div><div class="fld fld--verb" style="--n:4"><span class="off">14</span><span class="hex"><i>00</i><i>00</i><i>40</i><i>40</i></span><b>p2 · seconds</b><em>3</em></div><div class="fld fld--verb" style="--n:4"><span class="off">18</span><span class="hex"><i>CD</i><i>CC</i><i>CC</i><i>3E</i></span><b>p3 · speed</b><em>0.4</em></div><div class="fld fld--idle" style="--n:4"><span class="off">22</span><span class="hex"><i>00</i><i>00</i><i>00</i><i>00</i></span><b>p4</b><em>0</em></div><div class="fld fld--idle" style="--n:4"><span class="off">26</span><span class="hex"><i>00</i><i>00</i><i>00</i><i>00</i></span><b>p5 · timeout</b><em>0</em></div><div class="fld fld--idle" style="--n:4"><span class="off">30</span><span class="hex"><i>00</i><i>00</i><i>00</i><i>00</i></span><b>p6</b><em>0</em></div><div class="fld fld--idle" style="--n:4"><span class="off">34</span><span class="hex"><i>00</i><i>00</i><i>00</i><i>00</i></span><b>p7</b><em>0</em></div><div class="fld fld--cmd" style="--n:2"><span class="off">38</span><span class="hex"><i>18</i><i>79</i></span><b>COMMAND</b><em>31000</em></div><div class="fld fld--who" style="--n:1"><span class="off">40</span><span class="hex"><i>01</i></span><b>TGT SYS</b><em>1</em></div><div class="fld fld--who" style="--n:1"><span class="off">41</span><span class="hex"><i>01</i></span><b>TGT COMP</b><em>1</em></div><div class="fld fld--hdr" style="--n:2"><span class="off">42</span><span class="hex"><i>FD</i><i>1E</i></span><b>CRC</b><em>0x1EFD</em></div></div>
+   <table class="wire__key"><tbody><tr class="fld--hdr"><td><b>STX</b></td><td class="v">0xFD</td><td>a MAVLink 2 frame starts here</td></tr><tr class="fld--hdr"><td><b>LEN</b></td><td class="v">32</td><td>payload length — MAVLink 2 cut 1 trailing zero byte</td></tr><tr class="fld--hdr"><td><b>INCOMPAT</b></td><td class="v">0</td><td>no flags set: the frame is unsigned</td></tr><tr class="fld--hdr"><td><b>SEQ</b></td><td class="v">0</td><td>counts frames, so the board can see a loss</td></tr><tr class="fld--who"><td><b>SYSID</b></td><td class="v">255</td><td>who is speaking: the Pi</td></tr><tr class="fld--who"><td><b>COMPID</b></td><td class="v">191</td><td>ONBOARD_COMPUTER — the id the board&#x27;s link failsafe listens for</td></tr><tr class="fld--hdr"><td><b>MSGID</b></td><td class="v">76</td><td>COMMAND_LONG, little-endian</td></tr><tr class="fld--verb"><td><b>p1 · type</b></td><td class="v">0</td><td>MOVE_FORWARD</td></tr><tr class="fld--cmd"><td><b>COMMAND</b></td><td class="v">31000</td><td>CMD_SROT_MOVE — the one custom command</td></tr><tr class="fld--who"><td><b>TGT SYS</b></td><td class="v">1</td><td>the board</td></tr><tr class="fld--who"><td><b>TGT COMP</b></td><td class="v">1</td><td>its autopilot</td></tr><tr class="fld--hdr"><td><b>CRC</b></td><td class="v">0x1EFD</td><td>checksum, seeded by the message definition itself</td></tr></tbody></table>
+   <figcaption>Every byte above is generated by <code>tools/wire_frame.py</code> from the project's own verb table, packed by pymavlink exactly as the manager sends it, then decoded back &mdash; the tool fails if the frame does not round-trip.</figcaption>
+  </figure>
+  <!-- wire:end -->
   <table class="ledger">
    <thead><tr><th>layer</th><th>what it owns</th><th>rate</th><th>state</th></tr></thead>
    <tbody>
@@ -205,6 +242,14 @@
     <span class="tagtop">Mongla hull <i>//</i> drag to orbit <i>//</i> wheel to zoom</span>
     <span class="keys"><b>drag</b> orbit · <b>wheel</b> zoom · <b>X</b> take the explode ·
       <b>, .</b> open &amp; close · <b>0</b> reset</span>
+    <div class="deck" role="group" aria-label="Hull controls">
+      <button class="key" type="button" data-k="x" aria-pressed="false">hold<small>X</small></button>
+      <button class="key" type="button" data-k="," data-hold>close<small>,</small></button>
+      <button class="key" type="button" data-k="." data-hold>open<small>.</small></button>
+      <button class="key" type="button" data-k="-" aria-label="zoom out">−<small>−</small></button>
+      <button class="key" type="button" data-k="+" aria-label="zoom in">+<small>+</small></button>
+      <button class="key" type="button" data-k="0">reset<small>0</small></button>
+    </div>
     <canvas id="hull" tabindex="0" role="img"
       aria-label="Interactive three-dimensional model of the Mongla hull: 702 millimetres long, four tunnel thrusters and one axial nose thruster. It comes apart as the page is scrolled."></canvas>
     <div class="hud">
@@ -651,14 +696,19 @@
  <div class="wrap">
   <p class="mark">Retractions <i>//</i> kept on purpose</p>
   <h2 class="col">The results we had to take back.</h2>
-  <p class="lede col quiet">More than half of the measurement ledger is retractions. They are kept
-    where anyone can read them, because a project that quietly deletes its wrong answers is a
-    project you cannot check. The full ledger, retractions included, is
-    <a href="https://github.com/fh1m/mongla_ws/blob/main/.claude/context/measured-bars.md">here</a>.</p>
+<!-- ledger:begin -->
+  <p class="lede col quiet">The measurement ledger holds 50 entries and 390 rows of numbers. 8 of those entries say, in their own title, that they took an earlier result back; 5 more measured an idea and the answer was to leave it off. They are kept where anyone can read them, because a project that quietly deletes its wrong answers is a project you cannot check. The full ledger is <a href="https://github.com/fh1m/mongla_ws/blob/main/.claude/context/measured-bars.md">here</a>.</p>
+  <figure class="core" aria-label="50 ledger entries in the order they were written; 8 taken back, 5 said no">
+   <ol class="core__cols"><li class="core--ok" style="--h:0.273" title="1. Vision — detection · 6 rows"></li><li class="core--ok" style="--h:0.273" title="2. Vision — continuity (the lock ladder) · 6 rows"></li><li class="core--ok" style="--h:0.273" title="3. Vision — pipeline · 6 rows"></li><li class="core--ok" style="--h:0.409" title="4. Control — srot link · 9 rows"></li><li class="core--ok" style="--h:0.227" title="5. Known gaps — measured, and open · 5 rows"></li><li class="core--ok" style="--h:0.040" title="Method rules these bars encode · 0 rows"></li><li class="core--no" style="--h:0.727" title="6. range_gain_floor — measured, and the answer is &quot;leave it off&quot; · 16 rows"></li><li class="core--ok" style="--h:0.591" title="7. Confidence-adaptive measurement noise — measured, live and on real data · 13 rows"></li><li class="core--no" style="--h:0.682" title="8. The feature backend for the anchor rung — benched, not chosen · 15 rows"></li><li class="core--ok" style="--h:0.773" title="9. Plane tilt from the anchor homography — correct, and only COARSE on real water · 17 rows"></li><li class="core--ok" style="--h:0.409" title="10. Optical-flow velocity — measured on the bench, global-shutter camera · 9 rows"></li><li class="core--ok" style="--h:1.000" title="11. The inertial data the board actually gives — measured, not assumed · 22 rows"></li><li class="core--ok" style="--h:0.591" title="12. De-rotation, calibrated on the rigid camera+IMU rig · 13 rows"></li><li class="core--ok" style="--h:0.182" title="13. The bottom camera AS A DVL — verified live against a tape, 2026-09-07 · 4 rows"></li><li class="core--ok" style="--h:0.136" title="14. Board-clock stamping — measured on the vehicle, 2026-09-07 · 3 rows"></li><li class="core--back" style="--h:0.273" title="15. The return leg — RETRACTING &quot;0.0 %&quot;, in both directions, 2026-09-07 · 6 rows"></li><li class="core--back" style="--h:0.773" title="16. Gyro-aided LK: MEASURED AND REJECTED. Rotation ripeness instead. 2026-09-07 · 17 rows"></li><li class="core--back" style="--h:0.136" title="17. The calibration was wired to the WRONG CAMERA, both ways. 2026-09-07 · 3 rows"></li><li class="core--ok" style="--h:0.227" title="18. The launch path reads 106.5 % of truth. Four wrong causes first. 2026-09-07 · 5 rows"></li><li class="core--ok" style="--h:0.136" title="18b. The original in-progress entry, kept · 3 rows"></li><li class="core--no" style="--h:0.182" title="19. De-rotation measured THREE WAYS on the vehicle: OFF wins. 2026-09-07 · 4 rows"></li><li class="core--back" style="--h:0.318" title="20. The de-rotation gains, re-derived on this mount. THE SIGN WAS WRONG. 2026-09-07 · 7 rows"></li><li class="core--back" style="--h:0.364" title="21. The fitted gains were REFUTED by the validation A/B. Default is 0. 2026-09-07 · 8 rows"></li><li class="core--back" style="--h:0.227" title="22. My own &quot;refused intervals lose travel&quot; fix — MEASURED AND WITHDRAWN. 2026-09-07 · 5 rows"></li><li class="core--ok" style="--h:0.591" title="23. Motion blur: the shutter, not the detector. Measured + SOTA. 2026-09-07 · 13 rows"></li><li class="core--no" style="--h:0.500" title="§24. THE RETURN LEG IS VISUALLY UNSUPPORTED — and three measurements said three different things · 11 rows"></li><li class="core--ok" style="--h:0.318" title="§25. THRUSTER TELEMETRY: 958 frames, every one exactly zero. 2026-09-07 · 7 rows"></li><li class="core--ok" style="--h:0.591" title="§26. THE SECOND BOARD, AND KILL = 0 MEANING TWO THINGS. 2026-09-07 · 13 rows"></li><li class="core--ok" style="--h:0.273" title="26. The actuator quantum — the bar every control gain is really tuned against · 6 rows"></li><li class="core--back" style="--h:0.455" title="27. Heading —  THE EARLIER ENTRY WAS CONTAMINATED · 10 rows"></li><li class="core--ok" style="--h:0.591" title="Forward camera rate — pi_forward.fps 15 → 60 (2026-09-09) · 13 rows"></li><li class="core--ok" style="--h:0.455" title="Tool aim, and the Ruckig feasibility numbers (2026-09-10) · 10 rows"></li><li class="core--ok" style="--h:0.040" title="The standoff feature and its validity bound (2026-09-10) · 0 rows"></li><li class="core--ok" style="--h:0.182" title="The UPLINK bearing is a WATER bearing (2026-09-10) · 4 rows"></li><li class="core--ok" style="--h:0.364" title="The companion link and the board clock (2026-09-10) · 8 rows"></li><li class="core--ok" style="--h:0.409" title="Flat-port refraction in the METRIC POSE path (2026-09-09) · 9 rows"></li><li class="core--ok" style="--h:0.227" title="SAUVC constants — DERIVED FROM THE RULEBOOK, and two that are NOT measured (2026-09-09) · 5 rows"></li><li class="core--back" style="--h:0.500" title="§28. Phase correlation DELETED — the low-texture regime does not exist on real water (2026-09-09) · 11 rows"></li><li class="core--ok" style="--h:0.409" title="Hailo segmentation decode (2026-09-11, vehicle, yolov8n_seg 640×640) · 9 rows"></li><li class="core--ok" style="--h:0.182" title="Dense-field motion estimation (2026-09-11, vehicle, 300 pairs) · 4 rows"></li><li class="core--ok" style="--h:0.182" title="Mask coefficients as an identity descriptor (2026-09-11, vehicle) · 4 rows"></li><li class="core--ok" style="--h:0.227" title="Flow front-end: three estimators against TRUTH (2026-09-11, vehicle) · 5 rows"></li><li class="core--ok" style="--h:0.409" title="Do contours cost the pipeline anything? (2026-09-11, vehicle) · 9 rows"></li><li class="core--ok" style="--h:0.136" title="The mission launch ran BOTH detectors (2026-09-11, vehicle) · 3 rows"></li><li class="core--ok" style="--h:0.227" title="The stack over the real frame archive (2026-09-11, vehicle, 200 frames) · 5 rows"></li><li class="core--no" style="--h:0.040" title="Scouting: nemo_auv (2026-09-11) -- ADOPT NOTHING, KEEP THE FAILURES · 0 rows"></li><li class="core--ok" style="--h:0.455" title="The detector&#x27;s floor, and where the standoff should be (2026-09-11, vehicle) · 10 rows"></li><li class="core--ok" style="--h:0.318" title="SROT sensor health: the zeros that are not a reading (2026-09-11) · 7 rows"></li><li class="core--ok" style="--h:0.318" title="The invariant filter on the vehicle, stationary rig (2026-09-11) · 7 rows"></li><li class="core--ok" style="--h:0.227" title="Sun caustics on the floor: flow tracks the waves (2026-09-15, real archive) · 5 rows"></li></ol>
+   <div class="core__axis"><span>first entry</span><span>newest</span></div>
+   <figcaption><span class="core__k core--back">taken back · 8</span><span class="core__k core--no">measured, answer was no · 5</span><span class="core__k core--ok">stands · 37</span><br>One column per entry, in the order the file was written; height is how many numbers it holds. The colour is what each entry says about <em>itself</em> in its title, counted by <code>tools/ledger_strip.py</code> &mdash; so it can miss a retraction that is not in a title, but it cannot invent one.</figcaption>
+  </figure>
+  <!-- ledger:end -->
 
+  <div class="retracts">
   <div class="retract">
     <b>Image enhancement made detection better</b>
-    <p class="was">claimed +42 % → measured −95 % on the gate</p>
+    <p class="was">gate detected in 30.4 % of frames → 1.2 % with it on</p>
     <p>Seventeen configurations across four props and three venues. Never once positive. The
       implementation was correct; the original A/B was confounded. Preprocessing is off, and a
       test keeps it off.</p>
@@ -688,6 +738,7 @@
       Two armed bench checks now gate every automatic move — including a plain forward command,
       because on this board every automatic primitive closes the depth loop.</p>
   </div>
+  </div>
  </div>
 </section>
 
@@ -696,19 +747,31 @@
  <div class="wrap">
   <p class="mark">Instruments <i>//</i> every number with where it was taken</p>
   <h2 class="col">If it is not measured, it does not ship.</h2>
-  <div class="readout">
-    <div><b>500 Hz</b><span>board control loop, dedicated core</span></div>
-    <div><b>80.9 Hz</b><span>Hailo-8 detection, standalone</span></div>
-    <div><b>53.9 Hz</b><span>the same detector through ROS</span></div>
-    <div><b>18.0 ms</b><span>photon to detection</span></div>
-    <div><b>16.9 ms</b><span>frame staleness — mailbox</span></div>
-    <div><b>396 ms</b><span>frame staleness — queue, before</span></div>
-    <div><b>46.7°</b><span>field of view in water</span></div>
-    <div><b>63.8°</b><span>the same lens in air</span></div>
-    <div><b>1.09 cm</b><span>worst error, 30 cm slide</span></div>
-    <div><b>175</b><span>frames held with no detector</span></div>
-    <div><b>0.9 mm</b><span>hull tessellation in the viewer</span></div>
-    <div><b>3 311</b><span>passing across five suites; 0 failed</span></div>
+  <div class="bento bento--ledger">
+    <div class="pair">
+      <span class="silk">Frame staleness · the camera mailbox</span>
+      <div class="bar was"><i style="--w:100%"></i><b>396 ms</b><em>a queue, before</em></div>
+      <div class="bar"><i style="--w:4.27%"></i><b>16.9 ms</b><em>a mailbox, shipped</em></div>
+      <span>23× fresher, by keeping only the newest frame instead of every frame in order.</span>
+    </div>
+    <div class="pair">
+      <span class="silk">Detection · what ROS costs</span>
+      <div class="bar was"><i style="--w:100%"></i><b>80.9 Hz</b><em>Hailo-8, standalone</em></div>
+      <div class="bar"><i style="--w:66.6%"></i><b>53.9 Hz</b><em>through the live graph</em></div>
+      <span>A third of the chip's rate is spent getting frames through the graph.</span>
+    </div>
+    <div class="pair">
+      <span class="silk">Field of view · what water does</span>
+      <div class="bar was"><i style="--w:100%"></i><b>63.8°</b><em>the datasheet, in air</em></div>
+      <div class="bar"><i style="--w:73.2%"></i><b>46.7°</b><em>measured, in water</em></div>
+      <span>A flat port bends light. Use the air number and every range estimate is wrong.</span>
+    </div>
+    <div><span class="silk">Loop</span><b>500 Hz</b><span>board, dedicated core</span></div>
+    <div><span class="silk">Latency</span><b>18.0 ms</b><span>photon to detection</span></div>
+    <div><span class="silk">Blind</span><b>175</b><span>frames held with no detector</span></div>
+    <div><span class="silk">Velocity</span><b>1.09 cm</b><span>worst error, 30 cm slide</span></div>
+    <div><span class="silk">Mesh</span><b>0.9 mm</b><span>hull tessellation in the viewer</span></div>
+    <div class="wide"><span class="silk silk--lit">Suites</span><b>3 311</b><span>passing across five suites; 0 failed</span></div>
   </div>
   <p class="col quiet" style="margin-top:34px">Each of these lives in a ledger with its method, its
     conditions and the bar it had to clear — and the tests read that file, so a number cannot drift
@@ -860,7 +923,7 @@
     single most useful thing in this repository is not any algorithm. It is
     <a href="https://github.com/fh1m/mongla_ws/blob/main/.claude/context/measured-bars.md">measured-bars.md</a>
     — every shipped constant with the measurement that produced it, the conditions it was taken
-    under, and the bar it had to clear. More than half of it is retractions. That file is the
+    under, and the bar it had to clear. The entries that take a number back sit in the same file as the ones that stand. That file is the
     project.</p>
  </div>
 </section>
@@ -907,6 +970,29 @@
 
 <script src="assets/hull-viewer.js" defer></script>
 <script>
+(function(){
+  /* Film grain, re-seeded per visit. The CSS carries a static tile so the
+     surface exists with JS off; this swaps in one with a random seed and a
+     slightly different frequency, so no two visits carry the same grain. */
+  var g = document.getElementById('grain');
+  if (g) {
+    var seed = Math.floor(Math.random() * 9973);
+    var freq = (0.74 + Math.random() * 0.16).toFixed(3);
+    g.style.backgroundImage = 'url("data:image/svg+xml,' + encodeURIComponent(
+      "<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'>" +
+      "<filter id='n'><feTurbulence type='fractalNoise' baseFrequency='" + freq +
+      "' numOctaves='3' stitchTiles='stitch' seed='" + seed + "'/></filter>" +
+      "<rect width='220' height='220' filter='url(#n)'/></svg>") + '")';
+  }
+  /* Ratio bars draw to their true length once they are on screen. */
+  var pairs = document.querySelectorAll('.pair');
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function(es){
+      es.forEach(function(e){ if (e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+    }, {threshold: 0.4});
+    pairs.forEach(function(p){ io.observe(p); });
+  } else { pairs.forEach(function(p){ p.classList.add('in'); }); }
+})();
 (function(){
   /* The sounding line. Each stop sits at the fraction of the document its
      section actually begins at, so the line is a MAP of the page rather than an
@@ -970,6 +1056,24 @@
     MonglaHull(bay, 'assets/cad/hull.mgla').then(function(h){
       document.getElementById('hud-tri').innerHTML =
         'tris <i>' + h.triangles.toLocaleString() + '</i> · parts <i>' + h.parts + '</i>';
+
+      /* The deck: physical keys for the same actions the keyboard has. They
+         send the viewer the very keydown it already handles, so there is one
+         implementation of each action, not two. Open/close take hold of the
+         explode first, because the viewer ignores them while scroll owns it. */
+      var canvas = bay;                              /* `bay` is the canvas itself */
+      var deck = canvas.parentElement.querySelector('.deck');
+      var holdKey = deck.querySelector('[data-k="x"]');
+      function press(k){
+        canvas.dispatchEvent(new KeyboardEvent('keydown', {key: k, bubbles: true}));
+      }
+      [].forEach.call(deck.querySelectorAll('.key'), function(b){
+        b.addEventListener('click', function(){
+          if (b.hasAttribute('data-hold') && !h.manual()) press('x');
+          press(b.dataset.k);
+          holdKey.setAttribute('aria-pressed', String(h.manual()));
+        });
+      });
 
       /* Scroll through the section drives the hull apart and back together.
          The reader is not clicking anything: descending IS the interaction.
