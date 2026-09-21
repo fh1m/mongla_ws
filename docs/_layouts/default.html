@@ -12,11 +12,11 @@
 <link rel="stylesheet" href="{{ '/assets/site.css' | relative_url }}">
 <style>
 /* the prose layer — everything else is inherited from site.css */
-body.doc main{margin-inline:auto;max-width:74ch;padding:clamp(40px,6vh,76px) var(--gutter) clamp(72px,10vh,120px)}
+body.doc main{margin-inline:auto;max-width:var(--wrap);padding:clamp(40px,6vh,76px) var(--gutter) clamp(72px,10vh,120px)}
 .topbar{position:sticky;top:0;z-index:30;border-bottom:1px solid var(--rule);background:#000}
 @supports (backdrop-filter:blur(8px)){
   .topbar{background:rgba(0,0,0,.82);backdrop-filter:blur(8px)}}
-.topbar .bar{max-width:74ch;margin:0 auto;padding:0 var(--gutter);height:56px;
+.topbar .bar{max-width:var(--wrap);margin:0 auto;padding:0 var(--gutter);height:56px;
   display:flex;align-items:center;gap:22px}
 .topbar .home{font-family:var(--display);font-weight:700;letter-spacing:-.02em;
   font-size:17px;border:0;color:var(--ink)}
@@ -47,7 +47,8 @@ body.doc img{width:100%;height:auto;display:block;margin:var(--s4) 0;
 body.doc code{background:var(--s-sunk);border:1px solid var(--rule);padding:1px 5px}
 body.doc pre{margin:var(--s4) 0}
 body.doc pre code{background:none;border:0;padding:0;color:inherit}
-/* a six-column table squeezed into 74ch is unreadable: scroll it instead */
+/* page-wide since 2026-09-21 (the 74ch column read as a narrow strip down the
+   middle of a wide screen). Tables still scroll rather than squeeze on a phone. */
 body.doc .tw{margin:var(--s4) 0;overflow-x:auto;-webkit-overflow-scrolling:touch;
   scrollbar-width:thin;scrollbar-color:var(--rule-lit) transparent}
 body.doc .tw::-webkit-scrollbar{height:6px}
@@ -62,7 +63,7 @@ body.doc td{padding:11px 14px 11px 0;border-bottom:1px solid var(--rule);
 body.doc td:first-child{color:#fff}
 body.doc strong{color:#fff}
 
-body.doc footer{margin-left:0;max-width:74ch;margin-inline:auto;display:flex;gap:20px;flex-wrap:wrap}
+body.doc footer{margin-left:0;max-width:var(--wrap);margin-inline:auto;display:flex;gap:20px;flex-wrap:wrap}
 </style>
 </head>
 <body class="doc">
