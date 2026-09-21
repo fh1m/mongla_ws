@@ -198,3 +198,88 @@ for name, fn in (('loop-rate', loop_rate), ('field-of-view', fov), ('frame-budge
     import xml.etree.ElementTree as ET
     ET.parse(p)                      # a diagram that will not parse renders as nothing
     print(f'{name:18} {p.stat().st_size // 1024:>3} KB  parses clean')
+
+
+# ── 4. the capability stack, drawn on a LOG RATE AXIS ───────────────────
+def capability_stack():
+    """Not four boxes in a column. The vertical axis is how fast a layer
+    thinks, logarithmically, so a layer's position IS its rate -- and the
+    500 Hz board sits visibly, unarguably below everything else."""
+    import math as _m
+    W, H = 1160, 620
+    x0, x1 = 268, W - 210
+    top, bot = 100, H - 158
+
+    def y_of(hz):                       # 1 Hz at the top, 1000 Hz at the floor
+        lo, hi = _m.log10(1), _m.log10(1000)
+        return top + (bot - top) * (_m.log10(hz) - lo) / (hi - lo)
+
+    o = [head(W, H, 'Four layers of the stack placed on a logarithmic rate axis')]
+    o.append(txt(0, 22, 'Each layer trusts the one below it to be faster than its problem', 'h'))
+    o.append(txt(0, 42, 'VERTICAL POSITION IS RATE · LOGARITHMIC · 1 Hz AT THE TOP, 1 kHz AT THE FLOOR'))
+
+    for hz in (1, 10, 100, 1000):
+        y = y_of(hz)
+        o.append(f'<line x1="{x0 - 8}" y1="{y:.1f}" x2="{x1 + 8}" y2="{y:.1f}" '
+                 f'stroke="{RULE}" stroke-width="1" stroke-dasharray="2 7"/>')
+        o.append(txt(x0 - 16, y + 4, f'{hz} Hz', 'l', 'end'))
+
+    layers = [
+        ('MISSION',    2.0,  'what to do, and when to give up',
+         'mission budgeting · the detected() window · scorecards', DIM,  'built'),
+        ('ESTIMATION', 20.0, 'where am I, and am I moving',
+         'invariant EKF · optical-flow velocity · replayed late fixes', SEA, 'software'),
+        ('PERCEPTION', 53.9, 'what is out there',
+         'Hailo-8 detection · the lock ladder · refraction, per camera', SEA, 'bench'),
+        ('REFLEX',     500.0,'stay upright, whatever else happens',
+         'attitude · depth · eight-thruster mixing · every failsafe', RED, 'bench'),
+    ]
+    ys = [y_of(hz) for _, hz, _, _, _, _ in layers]
+    for i, (name, hz, what, detail, col, state) in enumerate(layers):
+        y = ys[i]
+        h = 40
+        # 53.9 Hz and 20 Hz are only ~33 px apart on a log axis, so a detail
+        # line placed below one plate lands on top of the next. Put it above
+        # when the neighbour is close, below when there is room.
+        gap_below = (ys[i + 1] - y) if i + 1 < len(ys) else 999
+        detail_y = (y - h / 2 - 9) if gap_below < 72 else (y + h / 2 + 15)
+        o.append(f'<rect x="{x0}" y="{y - h / 2:.1f}" width="{x1 - x0}" height="{h}" '
+                 f'fill="{col}" fill-opacity=".10" stroke="{col}" stroke-width="1"/>')
+        o.append(f'<line x1="{x0}" y1="{y - h/2:.1f}" x2="{x0}" y2="{y + h/2:.1f}" '
+                 f'stroke="{col}" stroke-width="3"/>')
+        o.append(txt(x0 + 16, y - 2, name, 'v'))
+        o.append(txt(x0 + 16, y + 14, what))
+        o.append(txt(x1 - 16, y - 2, f'{hz:g} Hz',
+                     'r' if col == RED else 'b', 'end'))
+        # the detail sits BELOW its plate: inside the row it collides with the
+        # left-hand text on whichever layer has the longest description
+        o.append(txt(x0 + 16, detail_y, detail))
+        o.append(txt(x1 + 22, y + 4, state.upper(),
+                     'r' if state == 'blocked' else 'l'))
+
+    # the gap, which is the whole argument
+    ya, yb = y_of(53.9), y_of(500.0)
+    o.append(f'<line x1="{x0 - 112}" y1="{ya:.1f}" x2="{x0 - 112}" y2="{yb:.1f}" '
+             f'stroke="{RED_L}" stroke-width="1"/>')
+    o.append(f'<path d="M{x0-116},{ya+5:.1f} l4,-5 l4,5 M{x0-116},{yb-5:.1f} l4,5 l4,-5" '
+             f'fill="none" stroke="{RED_L}" stroke-width="1"/>')
+    o.append(f'<text x="{x0 - 122}" y="{(ya + yb) / 2:.1f}" class="r" text-anchor="middle" '
+             f'transform="rotate(-90 {x0 - 122} {(ya + yb) / 2:.1f})">'
+             f'~9× — the reflex gap</text>')
+
+    o.append(f'<line x1="0" y1="{H - 104}" x2="{W}" y2="{H - 104}" stroke="{RULE}"/>')
+    o.append(txt(0, H - 70, 'A layer may only be slower than the problem it is solving if the '
+                            'layer beneath it is faster.', 'v'))
+    o.append(txt(0, H - 50, 'That is the entire architecture. Mission can afford to stop and '
+                            'think because reflex never does.'))
+    o.append(txt(0, H - 22, 'NOTHING ON THIS PLATFORM HAS BEEN IN WATER · STATES READ: '
+                            'BENCH = ON HARDWARE, SOFTWARE = IN TESTS ONLY', 'r'))
+    o.append('</svg>')
+    return '\n'.join(o)
+
+
+p = OUT / 'capability-stack.svg'
+p.write_text(capability_stack())
+import xml.etree.ElementTree as _ET
+_ET.parse(p)
+print(f'{"capability-stack":18} {p.stat().st_size // 1024:>3} KB  parses clean')
