@@ -38,7 +38,8 @@ and be careful about the line between them.
 
 ## The old stack and its ceiling
 
-For RoboSub 2023 (2nd place) and 2025 (8th place), the vehicle carried **four computers**:
+For RoboSub 2025 (8th place) — as for the team's 2023 vehicle before it, which took 2nd a year
+before the author joined — the vehicle carried **four computers**:
 
 | Box | Job |
 |---|---|
@@ -47,7 +48,7 @@ For RoboSub 2023 (2nd place) and 2025 (8th place), the vehicle carried **four co
 | **Jetson Orin Nano** | vision and every ROS 2 node — the thinking |
 | the ESCs (motor controllers) | stock firmware, no telemetry |
 
-It worked. It won trophies. And it had a hard ceiling, which is the whole reason for this
+It worked. It placed. And it had a hard ceiling, which is the whole reason for this
 page:
 
 - **The inner loop was closed to us.** ArduSub is excellent, mature, open-source software —

@@ -23,7 +23,7 @@
     <li data-for="shift"><i></i><b>the shift</b></li>
     <li data-for="body"><i></i><b>the body</b></li>
     <li data-for="repos"><i></i><b>the suite</b></li>
-    <li data-for="frame"><i></i><b>one frame</b></li>
+    <li data-for="frame"><i></i><b>to thrust</b></li>
     <li data-for="thinking"><i></i><b>one task</b></li>
     <li data-for="blink"><i></i><b>the blink</b></li>
     <li data-for="sim"><i></i><b>the simulator</b></li>
@@ -144,9 +144,10 @@
     software, and everything it had been taught, came here.</p>
 
   <div class="years">
-    <div class="year"><time>2023</time><div><h3>RoboSub — 2nd place</h3>
-      <p>A Pixhawk, ArduSub, a Jetson, and an inner control loop we could tune but never open.</p></div></div>
-    <div class="year"><time>2024–25</time><div><h3>The vision years</h3>
+    <div class="year"><time>2023</time><div><h3>Before us — the team places 2nd</h3>
+      <p>The programme's vehicle takes 2nd at RoboSub on a Pixhawk, ArduSub and a Jetson. This is
+         the team's result, a year before the author joined; it is here as the ground he started on.</p></div></div>
+    <div class="year"><time>2024–25</time><div><h3>The author joins — the vision years</h3>
       <p>Detection, tracking, and the slow discovery that most published underwater-vision advice
          does not survive being measured on your own footage.</p></div></div>
     <div class="year"><time>2025</time><div><h3>RoboSub — 8th place</h3>
@@ -419,33 +420,74 @@
    </tbody>
   </table>
 
-  <h3 style="margin-top:56px">Hengla — what runs on the board</h3>
-  <p class="col quiet" style="margin-top:12px">Core 1 is the flight loop and nothing else is
+  <div class="split">
+   <div>
+    <h3>Hengla — what runs on the board</h3>
+  <p class="col quiet">Core 1 is the flight loop and nothing else is
     permitted to run there: read the IMU, decide what each axis should do, split that across eight
     thrusters, listen to what came back, repeat two milliseconds later. Core 0 carries everything
     that can afford to wait — MAVLink at 100&#8239;Hz, LoRa and the SD card at 20, the display at
     30. The RP2350 speaks bidirectional DShot, so an ESC reports the RPM it actually reached
     rather than the one it was asked for.</p>
-  <p class="col quiet">That last detail is the one worth pausing on. On the old stack the motors
+    <p class="col quiet">That last detail is the one worth pausing on. On the old stack the motors
     never answered: you asked for thrust and the honest answer to <em>"is thruster three actually
     spinning?"</em> was <em>nobody knows</em>. Telemetry back from the ESC turns an open question
     into a measurement — which is exactly how we learned that
     <span class="nr">958 of 958</span> recorded ESC frames read zero with nothing plugged in, and
     that counting messages is not a health check.</p>
 
-  <h3 style="margin-top:44px">Bondor — the operator's side</h3>
-  <p class="col quiet" style="margin-top:12px">An Electron and React desktop application built
+   </div>
+   <figure class="cores" aria-label="The ESP32's two cores drawn as orbits. Each task circles at a period proportional to its real rate, slowed a thousand times.">
+    <div class="orbits">
+     <div class="orbit orbit--1" style="--t:2s"><i>sensors</i><i>control</i><i>DShot</i></div>
+     <div class="orbit orbit--0a" style="--t:10s"><i>MAVLink</i></div>
+     <div class="orbit orbit--0b" style="--t:33.3s"><i>display</i></div>
+     <div class="orbit orbit--0c" style="--t:50s"><i>LoRa · SD</i></div>
+     <b class="hub">ESP32</b>
+    </div>
+    <table class="mini cores__k">
+     <tr><th>core 1</th><td class="hi">500 Hz</td><td>sensors · control · DShot</td></tr>
+     <tr><th>core 0</th><td>100 Hz</td><td>MAVLink to the Pi</td></tr>
+     <tr><th>core 0</th><td>30 Hz</td><td>display</td></tr>
+     <tr><th>core 0</th><td>20 Hz</td><td>LoRa and SD card</td></tr>
+    </table>
+    <figcaption>Every task laps the board once per period, slowed 1000× so the eye can follow it: the
+      inner ring's three jobs go round every 2&#8239;s because they run every 2&#8239;ms. Nothing on the
+      outer rings can reach the inner one.</figcaption>
+   </figure>
+  </div>
+
+  <div class="split flip">
+   <div>
+    <h3>Bondor — the operator's side</h3>
+  <p class="col quiet">An Electron and React desktop application built
     specifically for this board: teleop, a <code>SROT_MOVE</code> console, parameters, calibration,
     motor test, PID tuning and autotune, black-box analysis and a configurable joystick tab. It
     connects over USB serial at 115200 — opened with DTR and RTS de-asserted, deliberately, so
     that attaching a ground station does not reset the flight controller — or over UDP, or
     receive-only over LoRa at 433&#8239;MHz, 250&#8239;kHz bandwidth, SF7, CR 4:5.</p>
-  <p class="col quiet">Three copies of the wire contract exist on purpose, because there are no
+    <p class="col quiet">Three copies of the wire contract exist on purpose, because there are no
     submodules across the suite: the LoRa struct, the vendored MAVLink dialect, and a hand-mirrored
     TypeScript copy of the message ids. The firmware is the source of truth for all three, and a
     mismatch does not raise an error — it fails CRC silently and looks exactly like being out of
     radio range. On our side the same hazard is answered by a test that reads the firmware's own
     headers and fails if our constants have drifted from them.</p>
+   </div>
+   <figure class="spec" aria-label="Bondor's three links to the board">
+    <span class="silk">links · three ways in</span>
+    <dl>
+     <dt>USB serial</dt><dd>115200 baud · DTR and RTS held low, so attaching does not reset the board</dd>
+     <dt>UDP</dt><dd>port 14550</dd>
+     <dt>LoRa</dt><dd>433&#8239;MHz · 250&#8239;kHz · SF7 · CR 4:5 · receive-only</dd>
+    </dl>
+    <span class="silk">the wire contract · three copies, one truth</span>
+    <ol class="copies">
+     <li>LoRa struct</li><li>vendored MAVLink dialect</li><li>TypeScript message ids</li>
+    </ol>
+    <p>All three follow the firmware. A mismatch fails CRC silently — and looks exactly like being
+      out of radio range.</p>
+   </figure>
+  </div>
   <p class="quiet" style="font-size:.92rem;max-width:66ch;margin-top:20px">Bondor is not
     screenshotted here. It is the firmware team's application, it needs the board attached to show
     anything true, and a picture of it running against nothing would be a picture of nothing. The
@@ -456,17 +498,102 @@
 <!-- 06 ──────────────────────────────────────────────────────────────── -->
 <section id="frame">
  <div class="wrap">
-  <p class="mark">Perception <i>//</i> one frame, end to end</p>
-  <h2 class="col">Eighteen milliseconds from photon to decision.</h2>
-  <p class="lede col quiet">Not a block diagram — a time axis, with the measured spans on it, and
-    the board's 500 Hz heartbeat running underneath the whole thing.</p>
+  <p class="mark">Perception to propulsion <i>//</i> one frame, all the way down</p>
+  <h2 class="col">From a photon to a thrust, in ten stops.</h2>
+  <p class="lede col quiet">Follow one frame from the moment light reaches the lens to the moment
+    a propeller should turn. Every stop carries the number measured there and the file that does
+    the work — and the last two carry the honest word for what has not been measured yet.</p>
+
+  <div class="journey">
+   <div class="journey__rail" aria-hidden="true">
+    <svg class="spine" viewBox="0 0 24 1000" preserveAspectRatio="none">
+     <line class="spine__track" x1="12" y1="0" x2="12" y2="1000"/>
+     <line class="spine__lit" x1="12" y1="0" x2="12" y2="1000" pathLength="1"/>
+    </svg>
+    <div class="readout">
+     <span class="silk silk--b" id="j-n">01 · light</span>
+     <b><span id="j-num">30.18</span><u id="j-unit">Hz</u></b>
+     <span id="j-lab">true capture, asked for 60</span>
+    </div>
+   </div>
+   <ol class="journey__stages">
+    <li class="stop" data-num="30.18" data-unit="Hz" data-label="true capture, asked for 60" data-n="01">
+      <span class="silk silk--b">01 · light</span>
+      <div class="anim anim--light" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><b class="sensor"></b></div>
+      <p>A camera does not see a gate. It counts photons for a few milliseconds and hands over a grid of numbers. We asked the forward camera for 60 frames a second; counting distinct timestamps, it delivers 30.18 — the rest of the requests were the driver repeating itself. Through the flat port the lens sees 46.7°, not the 63.8° its datasheet promises, because water bends light at the glass.</p>
+      <table class="mini"><tr><th>asked</th><td>15</td><td>30</td><td>60</td><td>90</td></tr><tr><th>got</th><td>14.63</td><td>28.03</td><td class="hi">30.18</td><td>30.18</td></tr></table>
+      <p class="src"><code>mongla_vision/camera_node.py · CAMERA_PROFILES['pi_forward']</code><span class="st bench">bench</span></p>
+    </li>
+    <li class="stop" data-num="16.9" data-unit="ms" data-label="staleness, newest frame wins" data-n="02">
+      <span class="silk silk--b">02 · the mailbox</span>
+      <div class="anim anim--box" aria-hidden="true"><div class="q"><span>queue</span><u></u><u></u><u></u><u></u></div><div class="m"><span>mailbox</span><u></u></div></div>
+      <p>The obvious design is a queue: every frame waits its turn. It is also wrong. A full queue holds the oldest frames, so the detector was looking at the past — 396 ms of it. The fix keeps exactly one slot and overwrites it; a frame nobody had time for is simply dropped. Slower publishing, fresher detections.</p>
+      <div class="pair in"><div class="bar was"><i style="--w:100%"></i><b>396.1 ms</b><em>a queue</em></div><div class="bar"><i style="--w:4.27%"></i><b>16.9 ms</b><em>a mailbox</em></div></div>
+      <p class="src"><code>mongla_vision/cameras/v4l2_mailbox.py</code><span class="st bench">bench</span></p>
+    </li>
+    <li class="stop" data-num="98.0" data-unit="Hz" data-label="through our pipeline" data-n="03">
+      <span class="silk silk--b">03 · the chip</span>
+      <div class="anim anim--chip" aria-hidden="true"><b>letterbox</b><b>infer</b><b>decode</b><i></i></div>
+      <p>The Hailo-8 is a chip that does one thing: multiply the numbers a neural network is made of, very fast, at a few watts. Letterbox, inference and decode together cost 10.20 ms a frame (measured on synthetic frames, one model) — 98.0 frames a second, against 97.9 when the vendor's own tool benchmarks the bare chip. Non-maximum suppression runs on the chip, which is why decode costs 0.02 ms. There is no software left to optimise here. The chip is the ceiling.</p>
+      <div class="stack"><i style="--w:6.3%" title="letterbox 0.65 ms"></i><i class="hi" style="--w:93.5%" title="infer 9.54 ms"></i><i style="--w:.2%" title="decode 0.02 ms"></i></div><p class="stack__k"><span>letterbox 0.65 ms · 6.3 %</span><span class="hi">infer 9.54 ms · 93.5 %</span><span>decode 0.02 ms</span></p>
+      <p class="src"><code>mongla_vision/detector_node.py · perception/hailo-vision.md</code><span class="st bench">bench</span></p>
+    </li>
+    <li class="stop" data-num="53.9" data-unit="Hz" data-label="detections, through ROS" data-n="04">
+      <span class="silk silk--b">04 · the graph</span>
+      <div class="anim anim--hop" aria-hidden="true"><b></b><b></b><b></b><i></i></div>
+      <p>Standalone the detector runs at 80.9 Hz. Wired into the ROS graph — serialise, publish, deliver — it reaches the rest of the vehicle at 53.9. A third of the rate is spent moving results, not finding them. Photon to detection, end to end: 18.0 ms median.</p>
+      <div class="pair in"><div class="bar was"><i style="--w:100%"></i><b>80.9 Hz</b><em>standalone</em></div><div class="bar"><i style="--w:66.6%"></i><b>53.9 Hz</b><em>through ROS</em></div></div>
+      <p class="src"><code>mongla_vision/detector_node.py → /mongla/detections</code><span class="st bench">bench</span></p>
+    </li>
+    <li class="stop" data-num="175" data-unit="frames" data-label="held with the detector blind" data-n="05">
+      <span class="silk silk--b">05 · the lock</span>
+      <div class="anim anim--lock" aria-hidden="true"><u class="det"></u><u class="anch"></u><span>detector</span><span>anchor</span></div>
+      <p>Detectors flicker. Across 71 real gaps in real footage the median blink was 0.155 s. So the target is not the detection — it is a lock that climbs down a ladder when the detector goes quiet: the live box, then a tracker coasting on motion, then a feature anchor matching the image itself. On one clip the anchor held 175 consecutive frames the detector had lost. At the bottom of the ladder it says LOST, and means it.</p>
+      <ol class="rungs"><li class="on">live box</li><li class="on">tracker coast</li><li class="on">feature anchor</li><li class="x">LOST — said out loud</li></ol>
+      <p class="src"><code>mongla_vision/lock_node.py · test/test_anchor.py:13</code><span class="st bench">bench</span></p>
+    </li>
+    <li class="stop" data-num="49.86" data-unit="Hz" data-label="vision loop, 0.00 % late ticks" data-n="06">
+      <span class="silk silk--b">06 · the decision</span>
+      <div class="anim anim--demand" aria-hidden="true"><b class="ctr"></b><u class="tgt"></u><i class="arrow"></i></div>
+      <p>Now the Pi thinks. The vision verb reads the target's signed pixel offset from centre and turns it into a lateral and a yaw demand, fifty times a second — soaked for 90 s at 49.86 Hz with not one late tick. The demand shrinks with the age of the detection it came from, so a stale sighting pushes gently or not at all.</p>
+      
+      <p class="src"><code>mongla_control/vision_verbs.py · motion_rates.py:32</code><span class="st bench">bench</span></p>
+    </li>
+    <li class="stop" data-num="18.8" data-unit="%" data-label="of the link, used" data-n="07">
+      <span class="silk silk--b">07 · the cable</span>
+      <div class="anim anim--wire" aria-hidden="true"><b></b><i></i><i></i><i></i></div>
+      <p>The demand crosses one USB-C cable as a MAVLink MANUAL_CONTROL frame, in STABILIZE — the only mode in which a streamed demand reaches the thrusters. The link runs at 18.8 % of its 11,520 bytes a second. The board emits on an exact 100.000 ms clock; every millisecond of the 30.85 ms arrival spread we measured is ours — USB, the kernel, Python.</p>
+      <div class="meter"><i style="--v:.188"></i><span>18.8 % of 11,520 B/s</span></div>
+      <p class="src"><code>mongla_control/fc/srot_fc.py:711 · manual()</code><span class="st bench">bench</span></p>
+    </li>
+    <li class="stop" data-num="500" data-unit="Hz" data-label="one pass every 2 ms" data-n="08">
+      <span class="silk silk--b">08 · the board</span>
+      <div class="anim anim--tick" aria-hidden="true"><b></b><i></i></div>
+      <p>On the other end, core 1 of an ESP32 does three things and nothing else: read the sensors, run the control loop, drive the motors. It holds attitude and heading itself and adds our demand on top. If our frames stop, it does not freeze on the last one: authority ramps to zero between 1.0 and 1.5 s.</p>
+      
+      <p class="src"><code>Hengla (firmware) · src/control/attitude.* — their repository</code><span class="st bench">bench</span></p>
+    </li>
+    <li class="stop" data-num="8" data-unit="T200" data-label="in the firmware's matrix" data-n="09">
+      <span class="silk silk--b">09 · the mixer</span>
+      <div class="anim anim--mix" aria-hidden="true"><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u></div>
+      <p>Six numbers — surge, sway, heave, roll, pitch, yaw — become one command per thruster through a fixed matrix. Here the honest part: the firmware mixes for eight vectored T200s, and the hull now in CAD has five thrusters with roll unactuated. Both are true of something. They are not yet true of the same vehicle.</p>
+      
+      <p class="src"><code>Hengla · src/control/mixer.h · docs/THRUSTER_MAP.md</code><span class="st blocked">blocked</span></p>
+    </li>
+    <li class="stop" data-num="0" data-unit="N" data-label="measured, ever" data-n="10">
+      <span class="silk silk--b">10 · thrust</span>
+      <div class="anim anim--prop anim--dead" aria-hidden="true"><b></b><span>no thruster attached</span></div>
+      <p>Bidirectional DShot sends each ESC its command and brings back the RPM it actually reached — on the old stack the motors never answered at all. And here the journey stops being measured: no thrusters are attached. We know that because 958 of 958 ESC frames read exactly zero with nothing plugged in, and counting messages is not a health check.</p>
+      
+      <p class="src"><code>RP2350 · bidirectional DShot · measured-bars.md §25</code><span class="st blocked">blocked</span></p>
+    </li>
+   </ol>
+  </div>
+
   <figure class="panel scrollable">
    <img src="assets/diagrams/frame-budget.svg" alt="One camera frame from exposure to detection, drawn to scale across 40 milliseconds, with the board's 500 Hz tick comb underneath" loading="lazy">
-   <figcaption>The measurement that changed the design: a full V4L2 queue keeps the
-     <em>oldest</em> frames, so the standard advice to drain it recovers almost nothing.
-     Treating the topic as a mailbox instead — newest frame wins, surplus dropped — took
-     staleness from 396 ms to 16.9 ms. Publishing <em>slower</em> made detections
-     fresher.</figcaption>
+   <figcaption>The first four stops, drawn to scale in time, with the board's 500 Hz heartbeat
+     running underneath.</figcaption>
   </figure>
  </div>
 </section>
@@ -992,6 +1119,39 @@
     }, {threshold: 0.4});
     pairs.forEach(function(p){ io.observe(p); });
   } else { pairs.forEach(function(p){ p.classList.add('in'); }); }
+})();
+(function(){
+  /* Photon to thrust. The spine is lit to the fraction of the list the reader
+     has scrolled through; the rail's readout shows the stop nearest the middle
+     of the screen. One rAF-throttled scroll handler, nothing else. */
+  var j = document.querySelector('.journey'); if (!j) return;
+  var stops = [].slice.call(j.querySelectorAll('.stop'));
+  var lit = j.querySelector('.spine__lit');
+  var n = document.getElementById('j-n'), num = document.getElementById('j-num'),
+      unit = document.getElementById('j-unit'), lab = document.getElementById('j-lab');
+  var current = -1, queued = false;
+  function show(i){
+    if (i === current) return; current = i;
+    stops.forEach(function(s, k){ s.classList.toggle('on', k === i); });
+    var d = stops[i].dataset;
+    n.textContent = stops[i].querySelector('.silk').textContent;
+    num.textContent = d.num; unit.textContent = d.unit; lab.textContent = d.label;
+  }
+  function update(){
+    queued = false;
+    var r = j.getBoundingClientRect(), mid = innerHeight / 2;
+    var f = Math.min(Math.max((mid - r.top) / r.height, 0), 1);
+    lit.style.strokeDashoffset = String(1 - f);
+    var best = 0, bestD = Infinity;
+    stops.forEach(function(s, k){
+      var b = s.getBoundingClientRect(), d = Math.abs(b.top + b.height / 2 - mid);
+      if (d < bestD) { bestD = d; best = k; }
+    });
+    show(best);
+  }
+  addEventListener('scroll', function(){ if (!queued){ queued = true; requestAnimationFrame(update); } }, {passive:true});
+  addEventListener('resize', update);
+  update();
 })();
 (function(){
   /* The sounding line. Each stop sits at the fraction of the document its
