@@ -193,6 +193,9 @@ body::before{
    on a long patrol. Nothing here is decoration for its own sake -- the word
    behaves the way the subject behaves. All of it is transform/opacity, and all
    of it stops dead under prefers-reduced-motion. */
+/* the patrol and the swells run past the edges on purpose; `clip` (not
+   `hidden`) keeps them from widening the page without making a scroll box */
+#surface{overflow-x:clip}
 .title{position:relative;margin:0;line-height:.86;
   font-size:clamp(3.6rem,2rem + 12vw,11rem);letter-spacing:-.055em}
 .title__word{display:inline-flex}
@@ -209,7 +212,7 @@ body::before{
 /* the waterline: two swells at different rates, which is what stops a wave
    from reading as a loop */
 .title__sea{position:absolute;left:0;right:0;bottom:-.02em;width:100%;height:.30em;
-  overflow:visible;pointer-events:none;opacity:0;animation:tide 1.1s var(--ease) .5s forwards}
+  overflow:hidden;pointer-events:none;opacity:0;animation:tide 1.1s var(--ease) .5s forwards}
 .title__sea path{fill:none;stroke:var(--signal);stroke-width:2.5;vector-effect:non-scaling-stroke}
 .title__sea .s1{opacity:.85;animation:swell 9s linear infinite}
 .title__sea .s2{stroke:var(--medium-text);opacity:.5;animation:swell 13s linear infinite reverse}
@@ -708,7 +711,8 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
 .dock__depth small{font-size:9px;color:var(--ink-3);margin-left:2px}
 
 /* the ticks ARE the map: flex-grow carries each chapter's share of the page */
-.dock__ticks{position:relative;display:flex;gap:2px;height:14px;align-items:center;min-width:0}
+.dock__ticks{position:relative;display:flex;gap:2px;height:14px;align-items:center;min-width:0;
+  overflow:hidden;contain:paint}   /* the sweep travels past both ends; the page must not */
 .dock__ticks i{--mag:1;   /* the pointer's magnification, written by the dock script */
   display:block;height:3px;border-radius:2px;background:var(--rule-lit);
   transform:scaleY(var(--mag));transform-origin:center;
@@ -761,7 +765,7 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
 
 @media (max-width:640px){
   .dock{bottom:10px}
-  .dock__bar{gap:10px;padding:8px 13px}
+  .dock__bar{gap:10px;padding:8px 13px;grid-template-columns:auto 1fr auto}
   .dock__name{display:none}
 }
 @media (prefers-reduced-motion:reduce){
@@ -1047,7 +1051,7 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
    Period is the task's real period x 1000. Pure CSS: each ring rotates,
    each label counter-rotates to stay upright. */
 .cores{margin:0;padding:clamp(18px,2.4vw,28px);border-radius:14px;background:var(--s-raised);
-  box-shadow:var(--e2)}
+  box-shadow:var(--e2);overflow:hidden   /* the outer ring’s labels orbit past a phone’s edge */}
 .orbits{position:relative;aspect-ratio:1;max-width:340px;margin:0 auto 18px;border-radius:50%;
   background:var(--s-sunk);box-shadow:var(--e-well)}
 .orbit{position:absolute;border-radius:50%;box-shadow:inset 0 0 0 1px var(--rule-lit);
@@ -1303,7 +1307,7 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
    Seven steps and a hull that only advances when a step says yes. The path
    lights behind it; the red ticks under each step are the designed stops. */
 .run{margin:var(--s4) 0 var(--s4);padding:clamp(14px,2vw,22px);border-radius:16px;
-  background:var(--s-raised);box-shadow:var(--e2)}
+  background:var(--s-raised);box-shadow:var(--e2);overflow:hidden}
 .run svg{display:block;width:100%;height:auto;overflow:visible}
 .run__path{stroke:var(--rule-lit);stroke-width:2}
 .run__lit{stroke:var(--signal);stroke-width:2;stroke-dasharray:790;stroke-dashoffset:790;
@@ -1330,7 +1334,7 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
   47%{transform:translateX(597px)} 52%{transform:translateX(597px)}
   58%{transform:translateX(728px)} 63%{transform:translateX(728px)}
   69%{transform:translateX(860px)} 74%{transform:translateX(860px)}
-  86%,100%{transform:translateX(990px);opacity:0}
+  86%,100%{transform:translateX(950px);opacity:0}
 }
 @media (prefers-reduced-motion:reduce){
   .run__lit,.run__n circle,.run__sub{animation:none}
@@ -1470,6 +1474,10 @@ pre::-webkit-scrollbar-track,.scrollable::-webkit-scrollbar-track{background:tra
 .lab .silk{font-family:var(--display);font-weight:800;font-size:var(--fs-micro);
   letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
 .lab__knobs{display:flex;flex-direction:column;gap:14px;min-width:0}
+/* a <select> sizes itself to its LONGEST option and will not shrink below it,
+   which pushed the whole page sideways on a phone. Bound it to its column. */
+.lab__knobs select{width:100%;max-width:100%;min-width:0;text-overflow:ellipsis}
+.lab__knobs .knob{min-width:0}
 .knob{display:block}
 .knob output{float:right;font-family:var(--data);font-size:12px;color:var(--signal-text)}
 .knob em{display:block;margin-top:6px;font-style:normal;font-size:var(--fs-caption);
