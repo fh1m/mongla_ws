@@ -1,14 +1,21 @@
-# tracking/ — v2 SHIPPED
+# tracking/ — what is in this directory
 
-ByteTrack + per-track Kalman smoother are fully implemented and merged.
+> This file began as a v2 plan and then described only what v2 shipped. It is
+> now a map of the directory as it stands; the lock ladder that grew on top of
+> the tracker is documented in
+> [`detection-continuity.md`](../../../../.claude/context/perception/detection-continuity.md).
 
-## What shipped
+## What is here
 
 | Component | File |
 |---|---|
-| ByteTrack wrapper | `tracking/bytetrack.py` |
-| Tracker ABC | `tracking/tracker.py` |
+| Tracker ABC + `TrackedDetection` | `tracking/tracker.py` |
+| Roboflow OC-SORT / ByteTrack (default) | `tracking/roboflow_tracker.py` |
+| supervision ByteTrack wrapper (fallback) | `tracking/bytetrack.py` |
 | Kalman smoother (per track, 4-state CV) | `tracking/kalman.py` |
+| Lock state machine — live → coast → anchor → LOST | `tracking/lock_state.py` |
+| Confidence handling | `tracking/confidence.py` |
+| Optical-flow follower used while coasting | `tracking/follower.py` |
 | ROS node (detections → tracks) | `tracker_node.py` (package root) |
 | Track-ID overlay | `draw.py` → `draw_track_ids()` |
 | ROS integration test | `utils/tracker_check.py` → `tracker_check` CLI |

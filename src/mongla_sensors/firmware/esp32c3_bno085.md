@@ -1,5 +1,13 @@
 # ESP32-C3 + BNO085 — Firmware Contract
 
+> ⛔ **NOT FITTED ON THE CURRENT VEHICLE.** This describes an external ESP32-C3 + BNO085
+> IMU board from the Pixhawk era. On the SROT platform the IMU is **on the flight-control
+> board itself**, on the same clock as depth, leak, kill and ESC telemetry — see
+> [`vehicle-spec.md`](../../../.claude/context/platform/vehicle-spec.md). Keep this page as
+> the contract for that sensor board if it is ever used again; do not read it as current
+> vehicle wiring.
+
+
 This is the wire spec the Jetson-side `BNO085Source` expects. The
 reference sketch [esp32c3_bno085.ino](esp32c3_bno085.ino) is verbatim
 the firmware running on our test bench (verified streaming `{"yaw":...,
