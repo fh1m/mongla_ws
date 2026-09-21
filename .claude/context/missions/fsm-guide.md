@@ -233,13 +233,13 @@ Always use `BK.*` constants, never raw strings — grep-able and typo-safe.
 
 | State | Constructor | Outcomes | Notes |
 |---|---|---|---|
-| `ArmState` | `(mongla, profile)` | SUCCEED, ABORT | Arms + DVL connect if `has_dvl`; sets `BK.DVL_CONNECTED` |
-| `DisarmState` | `(mongla, profile)` | SUCCEED | Calls `release_heading()` before `disarm()` (mirrors `SurfaceState`) |
+| `ArmState` | `(mongla, profile)` | SUCCEED, ABORT | Arms + DVL connect if `has_dvl`; sets `BK.DVL_CONNECTED`. ⛔ `has_dvl` is never true on the fielded vehicle — no DVL is fitted — so on srot this branch never fires |
+| `DisarmState` | `(mongla, profile)` | SUCCEED | Calls `release_heading()` before `disarm()` (mirrors `SurfaceState`). ⛔ `release_heading()`'s underlying `lock_heading()` is refused on srot — pixhawk/sim only |
 | `SetDepthState` | `(mongla, profile, depth_m, timeout_s=45)` | SUCCEED, TIMEOUT, ABORT | Calls `mongla.set_depth()` |
-| `LockHeadingState` | `(mongla, profile, heading=0.0, lock_timeout=600.0)` | SUCCEED, TIMEOUT, ABORT | Calls `mongla.lock_heading(heading, timeout=lock_timeout)`; stores `BK.START_HEADING`. `lock_timeout` is how long the lock HOLDS heading across later states (mission/hold duration), **not** this state's `TIMEOUT_S` |
-| `MoveForwardState` | `(mongla, profile, distance_m=None, duration=None, gain=60)` | SUCCEED, ABORT | **DVL/timed auto-select** |
-| `MoveBackState` | same | SUCCEED, ABORT | **DVL/timed auto-select** |
-| `MoveLateralState` | same | SUCCEED, ABORT | **DVL/timed auto-select** |
+| `LockHeadingState` | `(mongla, profile, heading=0.0, lock_timeout=600.0)` | SUCCEED, TIMEOUT, ABORT | Calls `mongla.lock_heading(heading, timeout=lock_timeout)`; stores `BK.START_HEADING`. `lock_timeout` is how long the lock HOLDS heading across later states (mission/hold duration), **not** this state's `TIMEOUT_S`. ⛔ **refused on srot — pixhawk/sim only**; the board itself holds heading at 500 Hz, so a plan using `mongla_agile`-shaped profiles should skip this state on srot rather than call it |
+| `MoveForwardState` | `(mongla, profile, distance_m=None, duration=None, gain=60)` | SUCCEED, ABORT | **DVL/timed auto-select** — see caveat below |
+| `MoveBackState` | same | SUCCEED, ABORT | **DVL/timed auto-select** — see caveat below |
+| `MoveLateralState` | same | SUCCEED, ABORT | **DVL/timed auto-select** — see caveat below |
 | `SurfaceState` | `(mongla, profile)` | SUCCEED, ABORT | release_heading + stop + set_depth(0) + disarm |
 
 **DVL/timed auto-selection rule in MoveForwardState:**
@@ -250,6 +250,11 @@ else if duration is not None:
     mongla.move_forward(duration, gain)           ← timed open-loop
 ```
 Always pass **both** `distance_m` and `duration` in plan builders so each vehicle gets the right path.
+
+⛔ **On srot, `profile.has_dvl` is always false** (no DVL fitted) *and* `move_forward_dist`/
+`move_lateral_dist` are independently refused by `srot_fc.UNSUPPORTED_VERBS` regardless of
+`has_dvl` — the timed branch (`duration`) is the only live path on the fielded vehicle. Always
+pass `duration` for srot plans; `distance_m`-only calls will fail there.
 
 ### Vision states (`states/vision.py`)
 
@@ -406,11 +411,20 @@ ros2 run mongla_planner mission fsm_slalom
 ros2 run mongla_planner mission fsm_bin
 ros2 run mongla_planner mission fsm_torpedo    # requires TORPEDO_DEPTH_M != None
 ros2 run mongla_planner mission fsm_return
-ros2 run mongla_planner mission fsm_full_2026  # ★ recommended full competition run
+ros2 run mongla_planner mission fsm_full_2026  # ★ recommended full competition run, pixhawk/sim vehicles
 ```
 
 `fsm_full_2026` is a flat 5-task state machine. Each task section's failure transitions to the
 **next task's entry state** (skip pattern) rather than surfacing — the AUV completes as much as possible.
+
+⛔ **On srot, "recommended" above is not yet verified.** Every plan builder in
+`state_machines/plans/` constructs `LockHeadingState` unconditionally whenever a heading param
+is given (not just when `profile.has_dvl` is set) — `lock_heading` is refused on srot
+regardless of DVL presence, so a heading-carrying `fsm_*` run on the default (`srot`) backend
+will hit that refusal. Until the plans are audited/ported to branch on
+`profile.has_heading_lock`, treat `fsm_full_2026` and the other `fsm_*` missions as verified
+for pixhawk/sim vehicle profiles only, not as the standing recommendation for the fielded
+srot vehicle.
 
 ---
 
@@ -526,7 +540,12 @@ plan owns recovery.
 
 ### Heading lock + DVL forward = smooth straight pass
 
-`LockHeadingState` engages `lock_heading` — the heading_lock background thread continues running through `MoveForwardState`. So during DVL forward pass: DVL controls distance on Ch5, heading_lock controls Ch4 yaw simultaneously. The AUV stays dead straight through the gate.
+⛔ **pixhawk/sim only — refused on srot.** `LockHeadingState` engages `lock_heading` — the
+heading_lock background thread continues running through `MoveForwardState`. So during DVL
+forward pass: DVL controls distance on Ch5, heading_lock controls Ch4 yaw simultaneously. The
+AUV stays dead straight through the gate. On srot, both `lock_heading` and the DVL branch of
+`MoveForwardState` are unreachable (no DVL fitted, both verbs refused); the board's own 500 Hz
+control loop holds heading through a timed `move_forward` instead.
 
 ---
 
@@ -718,16 +737,20 @@ ros2 param set /mongla_manager vision.kp_lat 65.0
               │  MonglaState.execute()               │
               │  calls: mongla.vision.align(...)     │
               │         mongla.vision.move(...)       │
-              │         mongla.move_forward_dist(...) │
+              │         mongla.move_forward(...) or   │
+              │         mongla.move_forward_dist(...) │ ⛔ dist refused on srot
               │         mongla.set_depth(...)         │
               └──────────────────┬──────────────────┘
                                  │
               ┌──────────────────▼──────────────────┐
               │  /mongla/move ActionServer            │
               │  (auv_manager_node)                  │
-              │  MAVLink → Pixhawk → ArduSub          │
+              │  srot: MAVLink → SROT board (Hengla)  │
+              │  sim/legacy: MAVLink → Pixhawk →      │
+              │              ArduSub                  │
               └─────────────────────────────────────┘
 ```
 
-States never touch MAVLink. The FSM layer is entirely above the existing
-Pixhawk/Duburi facade. If you swap the control layer, the FSM is untouched.
+States never touch MAVLink directly. The FSM layer sits above the flight-controller facade in
+`mongla_control` — on the fielded vehicle that facade is `SrotFC`, not Pixhawk/ArduSub; the
+Pixhawk path still exists for `sim/`. If you swap the control layer, the FSM is untouched.

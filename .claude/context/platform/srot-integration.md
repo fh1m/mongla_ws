@@ -4,9 +4,13 @@
 > configuration is currently **UNKNOWN** — `CAL_MDIR` is not `[+1]×8` as §8.2 assumed, and it
 > multiplies with `MOT_n_DIRECTION`. §8.2's "config is correct" conclusion is superseded.
 >
-> **Firmware baseline for this branch: `srot-control-board` @ `3bd247b`, `SROT_FW_BEHAVIOUR_REV 9`.**
+> **Firmware baseline for this branch (at the time of the original integration — SUPERSEDED,
+> not current): `srot-control-board` @ `3bd247b`, `SROT_FW_BEHAVIOUR_REV 9`.**
 > **FLASHED to the vehicle 2026-08-07**, all 232 params re-read afterwards with **zero
-> drift** and `CAL_*` intact.
+> drift** and `CAL_*` intact. The board now reports **rev 14** (root `CLAUDE.md` §2); the
+> required floor is `FW_BEHAVIOUR_REV_REQUIRED` in
+> `src/mongla_control/mongla_control/fc/srot_protocol.py` — read it there, not the number
+> above, which is a historical baseline only.
 >
 > ⚠ **"Rev 7 is additive — nothing that worked on rev 6 changes" is true of the FIRMWARE
 > DEFAULTS and false of THIS HULL** (corrected on merge of PR #5, 2026-08-07). Five other
@@ -1024,10 +1028,12 @@ Rev 3 landed with the board **in the vehicle**, and its theme is that the firmwa
    health from `SYS_STATUS`, never infer it from the presence of a depth value.
 
 > ⛔ **CORRECTED 2026-09-07. `FW_BEHAVIOUR_REV_REQUIRED` IS 10, NOT 2**
-> (`srot_protocol.py:621`). The paragraph below was true when written and has
+> (`srot_protocol.py:733`). The paragraph below was true when written and has
 > been false since round 26, which is the dangerous kind of stale: it names a
 > **safety floor**, and a reader who trusts it believes the host will fly a
-> rev-2 board that it will in fact refuse.
+> rev-2 board that it will in fact refuse. (The board itself now reports rev 14 —
+> root `CLAUDE.md` §2 — but the *required floor* is still 10; read
+> `FW_BEHAVIOUR_REV_REQUIRED` in source, not either number quoted from memory.)
 >
 > The floor was raised because revs 3-10 are **not** all additive, which is
 > exactly what the original reasoning assumed: **rev 10 INVERTS YAW** and rev

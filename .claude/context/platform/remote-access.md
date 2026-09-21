@@ -23,10 +23,12 @@ xrdp was one laggy pipe for all jobs. Each job has a better tool:
 > Launch it inside **tmux over mosh**. If the desktop wedges, you `mosh` back, `tmux attach`,
 > and the run is still going — the GUI is only a convenience window.
 
-Why not Sunshine/Moonlight (the usual "lowest-latency" answer)? **The Orin Nano has no
-NVENC/NVDEC encoder silicon**, so it would software-encode (x264) and steal CPU from vision
-inference. On this board NoMachine's NX is the right desktop; the real latency win is moving
-terminal + vision off the desktop entirely (layers 1–2).
+Why not Sunshine/Moonlight (the usual "lowest-latency" answer)? This reasoning was written
+against the earlier **Jetson Orin Nano** companion, which had no NVENC/NVDEC encoder silicon
+and would have had to software-encode (x264) and steal CPU from vision inference. It has not
+been re-verified against the current **Raspberry Pi 5** box's encoder situation — re-check
+before relying on it. Either way, NoMachine's NX is the desktop in use today; the real latency
+win is moving terminal + vision off the desktop entirely (layers 1–2).
 
 ---
 
@@ -105,8 +107,12 @@ actions (color-manager — the main offender — plus NetworkManager, PackageKit
 suspend/hibernate). Installed to `/etc/polkit-1/localauthority/50-local.d/50-mongla-nopasswd.pkla`;
 takes effect for **new** sessions (no reboot).
 
-> Ubuntu 22.04 (JetPack 6.2) is **polkit 0.105** → `.pkla`, **not** the JS
-> `/etc/polkit-1/rules.d/*.rules` you'll see in 24.04 guides (that engine doesn't exist here).
+> ⚠ The `.pkla` engine noted here (`polkit 0.105`) was verified against the earlier **Jetson
+> Orin Nano** box's Ubuntu 22.04 (JetPack 6.2). The current Pi 5 box runs **Ubuntu 24.04**
+> (`pi-hailo-vision-box.md`), which typically ships the newer JS `rules.d` polkit engine
+> instead of `.pkla` — this has not been re-verified on the Pi. Check `polkitd --version` /
+> whether `/etc/polkit-1/rules.d/` exists on the actual box before installing a `.pkla` rule
+> there; it may need to be rewritten as a `.rules` file.
 > The rule is scoped to one user + these desktop actions; it deliberately does **not** grant
 > passwordless halt/reboot/power-off, and touches nothing on the vehicle (arming/thrusters/
 > serial go over MAVLink/pyserial, not polkit).
@@ -139,7 +145,8 @@ the per-layer usage above. The Pi's static IP (`192.168.2.69`) and the laptop si
 (`192.168.2.1`) are in [`vehicle-spec.md`](vehicle-spec.md) §2.
 
 ## What did NOT change
-Sunshine/Moonlight (no NVENC on this board), RustDesk (fully-OSS alternative to NoMachine — a
-fallback if the free NoMachine licence ever bites, not installed), and `ssh -X` X11 forwarding
-(documented as laggy in `.claude/context/platform/pi-hailo-vision-box.md` §5b — superseded by layers 1–2). xrdp can stay
-installed as a backstop but NoMachine is the day-to-day desktop.
+Sunshine/Moonlight (no verified hardware encoder path on the current box — see the Jetson-era
+caveat above), RustDesk (fully-OSS alternative to NoMachine — a fallback if the free NoMachine
+licence ever bites, not installed), and `ssh -X` X11 forwarding (laggy — superseded by layers
+1–2; the earlier citation to a `pi-hailo-vision-box.md` §5b was wrong, that section does not
+exist there). xrdp can stay installed as a backstop but NoMachine is the day-to-day desktop.

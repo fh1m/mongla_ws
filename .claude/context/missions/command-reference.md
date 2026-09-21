@@ -219,7 +219,7 @@ channel configured as the on-board arming output is refused.
 
 ```bash
 ros2 run mongla_manager connect      # lists which channels are fireable
-ros2 run mongla_planner mongla fire --target 3
+ros2 run mongla_planner mongla fire --fire_channel 3
 ```
 
 ## Measuring a move without a DVL

@@ -203,6 +203,10 @@ Full verb set: `arm disarm set_mode head stop mission_reset calibrate_depth surf
 move_forward move_back move_left move_right style_roll style_yaw arc yaw_left yaw_right turn
 set_depth lock_heading unlock_heading dvl_connect move_forward_dist move_back_dist
 move_lateral_dist vision_align vision_move fire` (+ `calc_distance`, experimental).
+Per this page's own top banner: `lock_heading`, `move_forward_dist`, `move_back_dist`,
+`move_lateral_dist`, `arc`, `style_yaw` are **refused before dispatch on `srot`** (the CLI
+examples above for `arc` and `lock_heading` are kept here for the `pixhawk` backend / reference,
+not as things to copy-paste on `srot`).
 Live gain tune (applies on the NEXT goal): `ros2 param set /mongla_manager vision.kp_yaw 80.0`.
 
 ---
@@ -226,16 +230,31 @@ Available: `task_{gate,slalom,bin,torpedo,return}`, `task_full_2026`,
 
 ---
 
-## 7. Detection FPS (Pi) — build TensorRT engines ON THE JETSON
+## 7. Detection FPS (Pi) — the Hailo `.hef` backend
+
+The default and only production path on the Pi 5 + Hailo-8 is a compiled `.hef` model
+(`src/mongla_vision/mongla_vision/detection/factory.py` picks `.hef` first, then `.engine`,
+then `.pt`, by file extension — see [`hailo-vision.md`](../perception/hailo-vision.md)).
+There is no runtime "build the engine on the box" step for Hailo the way TensorRT has one —
+compilation happens once, off-device, on the training/dev box:
 
 ```bash
-sudo nvpmodel -m 0 && sudo jetson_clocks          # MAXN (~2x); bringup_check warns if not set
-ros2 run mongla_vision export_engine --all        # <stem>.pt -> <stem>.engine (device+JetPack locked)
-ros2 run mongla_vision export_engine --all --imgsz 640
+# on the dev box, not the Pi — full sequence and traps: hailo-vision.md "Reproducing the compile"
+yolo export model=<stem>.pt format=onnx opset=11 nms=False
+hailo parser onnx <stem>.onnx --hw-arch hailo8 --start-node-names images --end-node-names ...
+hailo optimize <stem>.har --hw-arch hailo8 --calib-set-path calib_set.npy --model-script <stem>.alls
+hailo compiler <stem>_optimized.har --hw-arch hailo8   # -> <stem>.hef
 ```
-Detector auto-prefers `<stem>.engine` over `<stem>.pt`. Keep each `<stem>.yaml` sidecar beside the
-engine (class labels come from it). Live `conf`/`classes`/`max_det` still apply to an engine; only
-`imgsz`/`half` are export-baked.
+Copy the resulting `<stem>.hef` **and its mandatory `<stem>.yaml` sidecar** (class labels — a
+missing sidecar means an empty allowlist and a silent `[]` every frame) to `~/models` on the
+Pi. The detector auto-prefers `.hef` over `.engine`/`.pt`. Live `conf`/`classes`/`max_det` still
+apply; NMS/IoU thresholds are baked in at compile time (`detector.yaml`'s aren't re-applied).
+
+**The TensorRT `.engine` path (`nvpmodel -m 0 && jetson_clocks`, `export_engine --all`) is
+Jetson-only and legacy** — kept for anyone still building the retired Jetson variant, not for
+the Pi. See [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md) for that era's context;
+`nvpmodel`/`jetson_clocks` do not exist on a Pi 5 (`bringup_check --srot` already treats a
+missing `nvpmodel` as "not a Jetson — skipped", not a fault).
 
 ---
 

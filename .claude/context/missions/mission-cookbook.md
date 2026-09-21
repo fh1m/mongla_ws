@@ -1,4 +1,4 @@
-# Duburi Mission Cookbook
+# Mongla Mission Cookbook
 
 > Read this once, then design any mission you can imagine in 5 minutes.
 >
@@ -300,20 +300,26 @@ mongla.yaw_left (degrees, timeout=30.0, settle=0.0)
 mongla.yaw_right(degrees, timeout=30.0, settle=0.0)
 ```
 
-Engages ALT_HOLD if needed. Auto-suspends `lock_heading` for the
-duration and re-targets it on exit. The verb sign is implicit
+Engages ALT_HOLD if needed (pixhawk/sim). Auto-suspends `lock_heading` for the
+duration and re-targets it on exit — pixhawk/sim only; on srot there is no
+background lock to suspend, the board just turns. The verb sign is implicit
 (`yaw_left(90)` rotates +90° to port; the underlying signed degrees
 get flipped for you).
 
 #### Curved trajectory (`arc`)
 
+⛔ **refused on srot — pixhawk/sim only.** `arc` takes a yaw rate; the board's own `arc`
+primitive takes a heading, and that field-shape mismatch is exactly why it's in
+`srot_fc.UNSUPPORTED_VERBS`.
+
 ```python
-mongla.arc(seconds, gain=50, yaw_rate_pct=30, settle=0.0)
+mongla.arc(seconds, gain=50, target_yaw=0.0, settle=0.0)
 ```
 
-Forward thrust *and* yaw rate in **one** RC packet. Suspends
+Forward thrust *and* yaw in **one** RC packet. Suspends
 `lock_heading`, re-targets to the exit heading. Negative `gain`
-runs the arc in reverse.
+runs the arc in reverse. The DSL/CLI field is `target_yaw` (an absolute heading), not a rate
+— there is no `yaw_rate_pct` field.
 
 #### Heading lock (background)
 

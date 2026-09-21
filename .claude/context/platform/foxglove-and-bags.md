@@ -72,15 +72,15 @@ Sections 1–3 below detail each piece.
 ## 1. Foxglove — live telemetry (`foxglove:=true`)
 
 BumblebeeAS's `controlkitv3` is Foxglove-based; the borrowable idea is **Foxglove
-itself**, not their code. `foxglove_bridge` is a stock ROS 2 Humble package — a C++
+itself**, not their code. `foxglove_bridge` is a stock ROS 2 package — a C++
 WebSocket server that auto-exposes every topic. Our vision topics are standard
 `vision_msgs/Detection2DArray` + `sensor_msgs/Image`, which Foxglove renders natively
 (2D boxes over the image); `/mongla/state` (custom `MonglaState`) shows in the
 Raw-Messages panel; `/mongla/move` action feedback (`err_x_px`/`err_y_px`) plots live.
 
-**Install (once, on the Pi):**
+**Install (once, on the Pi — ROS 2 Jazzy):**
 ```bash
-sudo apt install ros-humble-foxglove-bridge ros-humble-rosbag2-storage-mcap
+sudo apt install ros-jazzy-foxglove-bridge ros-jazzy-rosbag2-storage-mcap
 ```
 Both are declared as `exec_depend` in `mongla_manager/package.xml`, so on a fresh
 image `rosdep install --from-paths src` restores them — you only run the apt line

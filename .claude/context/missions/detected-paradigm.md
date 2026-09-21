@@ -401,25 +401,30 @@ These run the action round-trip (and incidentally service callbacks).
 are still where the *time* in a mission is spent:
 
 ```python
-mongla.move_forward(s)      # Ch5 RC override for s seconds
+mongla.move_forward(s)      # on-board SROT_MOVE, s seconds (all backends)
 mongla.move_back(s)
 mongla.move_left(s)
 mongla.move_right(s)
-mongla.yaw_left(deg)        # SET_ATTITUDE_TARGET, waits for settle
+mongla.yaw_left(deg)
 mongla.yaw_right(deg)
-mongla.arc(s)
+mongla.arc(s)                        # ⛔ refused on srot — pixhawk/sim only
 mongla.set_depth(m)
 mongla.arm()
 mongla.disarm()
 mongla.pause(s)             # NO_OVERRIDE for s seconds
 mongla.stop()
-mongla.lock_heading(deg)
-mongla.dvl_connect()
-mongla.move_forward_dist(m)
-mongla.move_lateral_dist(m)
+mongla.lock_heading(deg)             # ⛔ refused on srot — pixhawk/sim only
+mongla.dvl_connect()                 # ⛔ no DVL is fitted on any vehicle — pixhawk/sim only
+mongla.move_forward_dist(m)          # ⛔ refused on srot — pixhawk/sim only
+mongla.move_lateral_dist(m)          # ⛔ refused on srot — pixhawk/sim only
 mongla.vision.align(...)   # centre on lat/yaw/depth (signed px offsets)
 mongla.vision.move(...)    # drive forward to a bbox fill ratio
 ```
+
+On srot, `lock_heading`, `dvl_connect`, `move_forward_dist`, `move_lateral_dist` and `arc`
+are refused before dispatch (`UNSUPPORTED_VERBS` in `srot_fc.py`) — a `detected()`-paradigm
+mission on the fielded vehicle should not call them; use timed `move_forward`/`move_left`/
+`move_right`/`yaw_left`/`yaw_right` instead.
 
 ### Non-blocking (return almost immediately, do NOT update cache meaningfully)
 
@@ -837,6 +842,13 @@ at the edge of the frame or partially occluded.
 
 ## 10. Design patterns — canonical mission templates
 
+⚠ Patterns A, C and E below are transcribed from `missions/gate_flare_autonomous.py`, a
+pixhawk/DVL-era mission. `lock_heading()`, `release_heading()` and `move_forward_dist()` are
+in `srot_fc.py`'s `UNSUPPORTED_VERBS` and are **⛔ refused on srot — pixhawk/sim only**; no
+DVL is fitted on the fielded vehicle. Each refused call below is tagged inline; the srot-safe
+substitute is a timed `move_forward(...)`, and the board itself holds heading at 500 Hz so an
+explicit heading lock is unnecessary on that backend.
+
 ### Pattern A: Search-then-align (the core paradigm)
 
 ```python
@@ -849,7 +861,8 @@ def run(mongla, log):
     mongla.models(gate='gate_flare_medium_100ep')
     mongla.arm()
     mongla.set_depth(-0.8)
-    mongla.lock_heading(0.0, timeout=180)
+    mongla.lock_heading(0.0, timeout=180)   # ⛔ refused on srot — pixhawk/sim only;
+                                             # the board holds heading on its own on srot
 
     # Search for gate — creep forward until visible
     MAX_SEARCH_STEPS = 60
@@ -868,9 +881,11 @@ def run(mongla, log):
                         err=40, gain=30, duration=20, fallback=creep_forward)
     mongla.vision.move(mongla.models.gate.gate, fwd=80, mode='height',
                        gain=45, duration=20, fallback=creep_forward)
-    mongla.move_forward_dist(3.0, gain=60)   # DVL commit through the gate
+    mongla.move_forward_dist(3.0, gain=60)   # ⛔ refused on srot — pixhawk/sim only.
+                                              # srot: mongla.move_forward(2.0, gain=60)
+                                              # (timed, no DVL commit available)
 
-    mongla.release_heading()
+    mongla.release_heading()   # ⛔ refused on srot — pixhawk/sim only; no-op needed there
     mongla.set_depth(0.0)
     mongla.disarm()
 ```
@@ -909,7 +924,8 @@ for _ in range(18):                        # 18 × 20° = 360°
 # Re-align on gate if found
 if mongla.detected('gate', stale_after=0.5):
     mongla.vision.align(mongla.models.gate.gate, yaw=0, lat=0, fallback=creep_forward)
-    mongla.move_forward_dist(1.5, gain=60)
+    mongla.move_forward_dist(1.5, gain=60)   # ⛔ refused on srot — pixhawk/sim only.
+                                              # srot: mongla.move_forward(1.0, gain=60)
 ```
 
 ### Pattern D: Multi-target branch
@@ -932,6 +948,10 @@ else:
 
 ### Pattern E: Conditional DVL pass
 
+⛔ **This pattern needs `move_forward_dist()`, refused on srot — pixhawk/sim only.** There is
+no DVL fitted, so on the fielded vehicle both branches collapse to a timed `move_forward`; the
+`if result.ok:` split (different open-loop distance/gain per branch) is still worth keeping.
+
 ```python
 result = mongla.vision.align(
     mongla.models.gate.gate,
@@ -941,7 +961,8 @@ result = mongla.vision.align(
 
 if result.ok:
     # Vision aligned — use DVL for precise gate passage
-    mongla.move_forward_dist(3.0, gain=60)
+    mongla.move_forward_dist(3.0, gain=60)   # ⛔ refused on srot — pixhawk/sim only.
+                                              # srot: mongla.move_forward(2.0, gain=60)
 else:
     # Vision did not centre (gate moved or lost) — open-loop fallback
     log.warn('gate alignment failed — open-loop passage attempt')

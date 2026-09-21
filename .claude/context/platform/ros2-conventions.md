@@ -8,8 +8,10 @@
 
 ROS2 surface and coding standards for `mongla_ws`. The surface is
 deliberately tiny: **one action, one telemetry topic, and a small set of
-manager ROS params** (the manager declares 14 + a `vision.*` tuning layer).
-If you're tempted to add a topic or service, reread this file and the
+manager ROS params** (the manager declares 29 base params + a 10-param
+`vision.*` tuning layer — see the table in §1, which used to list only 14 and
+was missing `flight_controller`, the single most load-bearing param in the
+codebase). If you're tempted to add a topic or service, reread this file and the
 [architecture section of CLAUDE.md](../../../CLAUDE.md#4-software-architecture)
 first.
 
@@ -116,6 +118,21 @@ Reliable, depth=1, KEEP_LAST. Late subscribers get the latest snapshot.
 | `dvl_auto_connect`      | bool   | `true`          | Auto-connect DVL at startup (background retry loop)                          |
 | `dvl_retry_s`           | float  | `5.0`           | Seconds between auto-connect retry attempts                                  |
 | `debug`                 | bool   | `false`         | `true` → per-command `[MAV …]` tracing + DEBUG logging                       |
+| `flight_controller`     | string | `srot`          | **The backend switch** — `srot` (default) or `pixhawk`. Gates `UNSUPPORTED_VERBS`, mode names, depth-axis refusal. |
+| `allow_fw_behaviour_mismatch` | bool | `false`    | Override: arm even if the board reports below `FW_BEHAVIOUR_REV_REQUIRED`    |
+| `srot_telemetry_period_s` | float | `2.0`         | srot telemetry poll period                                                   |
+| `allow_saturated_depth_arm` | bool | `false`      | Override: arm even with a saturated depth reading                            |
+| `position_source`       | string | `none`          | Localization input source                                                    |
+| `baro_calibration`      | bool   | `true`          | Re-zero the barometer at startup                                             |
+| `record`                | string | `''`            | Bag-record path/name, empty = off                                            |
+| `vision_uplink_camera`  | string | `''`            | Camera whose detections uplink to `mongla_localization`                      |
+| `vision_uplink_class`   | string | `''`            | Class filter for the vision uplink                                           |
+| `vision_uplink_hz`      | float  | `25.0`          | Vision uplink rate                                                           |
+| `vision_uplink_medium`  | string | `water`         | `water` \| `air` — selects the refraction/FOV correction applied to the uplink |
+| `velocity_uplink`       | bool   | `false`         | Publish downward-camera optical-flow velocity to localization                |
+| `position_uplink`       | bool   | `false`         | Publish estimated position to localization                                   |
+| `payload_channels`      | string | `''`            | Board relay channels available to `fire()`                                   |
+| `payload_fire_map`      | string | `''`            | Verb-name → channel mapping for `fire()`                                     |
 
 Plus the `vision.*` tuning layer (10 params: `kp_lat/kp_yaw/kp_depth/kp_forward`,
 `lost_grace_s`, `frame_fill_default`, `align_stable_frames`, `range_gain_floor`,
@@ -138,7 +155,7 @@ All verbs listed here are entries in `mongla_control/commands.py` and are availa
 |--------------------|-------------------------------------|-----------------------------------------------------|
 | `arm`              | `timeout`                           | Waits for ACK                                       |
 | `disarm`           | `timeout`                           | Clears RC overrides, then disarms                   |
-| `set_mode`         | `target_name` (str)                 | Mode name: `ALT_HOLD`, `POSHOLD`, `MANUAL`, …       |
+| `set_mode`         | `target_name` (str)                 | Mode name: **srot** `STABILIZE\|DEPTH_HOLD\|SURFACE\|MANUAL\|ACRO` (`ALT_HOLD` aliases to `DEPTH_HOLD`); **pixhawk** (legacy) `MANUAL\|ALT_HOLD\|STABILIZE\|...` |
 | `stop`             | —                                   | **Safety**: active neutral RC (1500) on all channels |
 | `surface`          | —                                   | **Safety**: ascend to 0 m; bypasses the command_active gate (runs mid-mission) |
 | `mission_reset`    | —                                   | Stop heading lock + clear abort + RC neutral; **call at start of every `run()`** |
@@ -148,26 +165,40 @@ All verbs listed here are entries in `mongla_control/commands.py` and are availa
 | `move_back`        | `duration`, `gain`, `settle`        | Ch5 reverse thrust, open-loop timed                 |
 | `move_left`        | `duration`, `gain`, `settle`        | Ch6 lateral left, open-loop timed                   |
 | `move_right`       | `duration`, `gain`, `settle`        | Ch6 lateral right, open-loop timed                  |
-| `arc`              | `duration`, `gain`, `yaw_rate_pct`, `settle` | Ch5 + Ch4 combined; curved trajectory        |
+| `arc`              | `duration`, `gain`, `yaw_rate_pct`, `settle` | **Refused on srot** (`UNSUPPORTED_VERBS`) — Ch5 + Ch4 combined; curved trajectory; pixhawk/legacy only |
 | `style_roll`       | `gain`, `timeout`, `flips`, `headroom` | N×360° roll in ACRO (surface-depth guarded)      |
-| `style_yaw`        | `flips`, `deg_per_step`, `settle`   | N×360° yaw spin in ALT_HOLD (no mode change)        |
+| `style_yaw`        | `flips`, `deg_per_step`, `settle`   | **Refused on srot** (`UNSUPPORTED_VERBS`) — N×360° yaw spin in `ALT_HOLD`/`DEPTH_HOLD` (no mode change); pixhawk/legacy only |
 | `yaw_left`         | `target` (deg), `timeout`, `settle` | Pivot left by N degrees                             |
 | `yaw_right`        | `target` (deg), `timeout`, `settle` | Pivot right by N degrees                            |
 | `turn`             | `target` (deg), `timeout`, `settle` | Rotate to **absolute** heading (0–360), direction auto |
-| `set_depth`        | `target` (m neg), `timeout`, `settle` | Engage ALT_HOLD + drive to depth                  |
-| `lock_heading`     | `target` (deg), `timeout`           | 50 Hz background yaw lock; `target=0` = current     |
+| `set_depth`        | `target` (m neg), `timeout`, `settle` | **srot**: refused — the depth-setpoint axis is refused on this backend (root `CLAUDE.md` §2). **pixhawk** (legacy): engage `ALT_HOLD` + drive to depth. |
+| `lock_heading`     | `target` (deg), `timeout`           | **Refused on srot** (`UNSUPPORTED_VERBS`) — 50 Hz background yaw lock; `target=0` = current; pixhawk/legacy only |
 | `unlock_heading`   | —                                   | Cancels the heading lock thread                     |
 
-### DVL (pool only — requires Nortek Nucleus 1000)
+### DVL (pool only — requires Nortek Nucleus 1000; **no DVL is fitted on the current vehicle,
+### and none has ever been validated in water** — root `CLAUDE.md`)
+
+> ⛔ The three `*_dist` verbs are in srot's `UNSUPPORTED_VERBS` and are **refused before
+> dispatch** on the default backend. `dvl_connect` exists in code but talks to hardware that
+> is not fitted. This whole section is pixhawk/legacy-backend and unvalidated-hardware
+> reference, not something to run on the vehicle as configured today.
 
 | Verb                 | Key params                             | Notes                                          |
 |----------------------|----------------------------------------|------------------------------------------------|
-| `dvl_connect`        | —                                      | Manual TCP connect (auto if `dvl_auto_connect:=true`) |
-| `move_forward_dist`  | `distance_m`, `gain`, `dvl_tolerance`, `settle` | DVL closed-loop forward                |
-| `move_back_dist`     | `distance_m`, `gain`, `dvl_tolerance`, `settle` | DVL closed-loop reverse                |
-| `move_lateral_dist`  | `distance_m`, `gain`, `dvl_tolerance`, `settle` | DVL closed-loop lateral (+ve = right)  |
+| `dvl_connect`        | —                                      | Manual TCP connect (auto if `dvl_auto_connect:=true`); no DVL fitted |
+| `move_forward_dist`  | `distance_m`, `gain`, `dvl_tolerance`, `settle` | **Refused on srot** — DVL closed-loop forward |
+| `move_back_dist`     | `distance_m`, `gain`, `dvl_tolerance`, `settle` | **Refused on srot** — DVL closed-loop reverse |
+| `move_lateral_dist`  | `distance_m`, `gain`, `dvl_tolerance`, `settle` | **Refused on srot** — DVL closed-loop lateral (+ve = right) |
 
 Heading lock stays active during all `*_dist` moves — Ch4 holds heading while DVL drives Ch5/Ch6.
+
+### Payload / depth / distance (host-side, srot-supported)
+
+| Verb              | Key params  | Notes                                                                 |
+|-------------------|-------------|------------------------------------------------------------------------|
+| `calibrate_depth` | —           | Re-zero the barometer at the surface (QGC "Calibrate Pressure" equivalent), disarmed |
+| `calc_distance`   | `phase`     | Downward optical-flow distance bracket: `phase='start'` latches, `phase='stop'` reports; experimental |
+| `fire`            | `fire_channel` | Actuate a board relay channel (torpedo/dropper); `fire_channel` = board channel N, 1–16 |
 
 ### Vision (closed-loop, requires camera + detector running)
 
