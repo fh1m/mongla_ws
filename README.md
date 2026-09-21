@@ -1,7 +1,7 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/imgs/mongla-banner.png">
   <source media="(prefers-color-scheme: light)" srcset="docs/imgs/mongla-banner-light.png">
-  <img alt="Mongla — an autonomy stack for autonomous underwater vehicles. The hull, 702 by 176 by 172 millimetres, beside five measured numbers: a 500 Hz control loop, 18.0 ms from photon to detection, 53.9 Hz detection through ROS, a 46.7 degree field of view in water, and 3315 tests passing." src="docs/imgs/mongla-banner-light.png">
+  <img alt="Mongla, মোংলা — an autonomy stack for autonomous underwater vehicles, set as the title of a nautical chart: depth contours and soundings off the Port of Mongla, a dive track through the course from the gate to the octagon, and the hull at the end of it with its sonar open. Three measured numbers: a 500 Hz control loop, 18.0 ms from photon to detection, a 46.7 degree field of view in water." src="docs/imgs/mongla-banner-light.png">
 </picture>
 
 # Mongla
@@ -13,6 +13,22 @@ in this repository without the measurement that produced it.**
 [![tests](https://img.shields.io/badge/tests-3%20316%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![in water](https://img.shields.io/badge/in%20water-never-critical)](#what-is-true-today) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
 
 **[The Shift](https://fh1m.github.io/mongla_ws/the-shift.html)** · **[Capability map](https://fh1m.github.io/mongla_ws/capability-map.html)** · **[The site](https://fh1m.github.io/mongla_ws/)** · [Run it](#run-it) · [Fundamentals](#the-fundamentals) · [Docs](#every-document-in-this-repository) · [Story](#three-acts)
+
+### The name
+
+**Mongla** (মোংলা) is named for the **Port of Mongla**, the second-largest and busiest seaport
+in Bangladesh after Chittagong. It opened in 1950 as Chalna Port, 48 km south of Khulna, where
+the Mongla River meets the Pasur, about 100 km up from the Bay of Bengal. It is the gateway ships
+use to reach the Sundarbans, the largest mangrove forest in the world. Before it had that name,
+this workspace was called **Duburi** (ডুবুরি), which means "diver".
+
+> **মোংলা** নামটি এসেছে **মোংলা বন্দর** থেকে। চট্টগ্রামের পরে এটি বাংলাদেশের দ্বিতীয় বৃহত্তম ও
+> ব্যস্ততম সমুদ্রবন্দর। ১৯৫০ সালে চালনা বন্দর নামে এর যাত্রা শুরু। খুলনা শহর থেকে ৪৮ কিলোমিটার
+> দক্ষিণে, পশুর নদী আর মোংলা নদীর সংগমে এর অবস্থান, বঙ্গোপসাগর থেকে প্রায় ১০০ কিলোমিটার উত্তরে।
+> বিশ্বের বৃহত্তম ম্যানগ্রোভ বন সুন্দরবনে যাওয়ার প্রবেশদ্বার এই বন্দর। এই নামের আগে প্রকল্পটির নাম ছিল
+> **ডুবুরি**।
+
+<sub>Facts about the port from [Port of Mongla](https://en.wikipedia.org/wiki/Port_of_Mongla).</sub>
 
 ---
 
@@ -600,13 +616,14 @@ stateDiagram-v2
     CHECKING --> ARMED: all gates pass
     ARMED --> MOVING: a verb is dispatched
     MOVING --> ARMED: terminal ACK
-    MOVING --> SURFACING: leak · battery sag · link silent 5 s · companion silent
+    MOVING --> SURFACING: battery sag · link silent 5 s · companion silent
     ARMED --> SURFACING: the same, at any time
     SURFACING --> DISARMED: surfaced and idle — auto-disarm
     ARMED --> DISARMED: Ctrl-C, stop, or disarm — these bypass the busy gate
     note left of SURFACING
         the board does this by itself,
-        with or without the Pi
+        with or without the Pi. NOT on a
+        leak, LEAK_EN is 0 on this board
     end note
 ```
 
@@ -624,6 +641,23 @@ stateDiagram-v2
    this codebase is a plausible number standing in for an absent measurement.
 
 </details>
+
+### The chain, as it is configured today
+
+<p align="center"><img src="docs/imgs/readme/safety-chain.webp" alt="The safety chain: eight links from the kill switch to 'absence is not zero'. The leak link is drawn broken and is highlighted: with LEAK_EN = 0 a leak neither blocks arming nor surfaces the vehicle." width="100%"></p>
+
+Eight links, each owned by a different part of the system. Two are not what they should be, and
+both are the firmware's to change, so both are open asks rather than host workarounds:
+
+- **The leak link is off.** The sensor is present and its bit is readable, but `LEAK_EN = 0` on
+  this board, and the firmware gates both the pre-arm refusal and the surface failsafe on it. Water
+  in the hull would neither stop an arm nor bring the vehicle up.
+  ([`srot-board-soul.md`](.claude/context/platform/srot-board-soul.md) §4)
+- **The kill link is ambiguous.** `KILL = 0` means "live" *or* "the power board is not talking to
+  us". The host shows `UNKNOWN` when the second board is silent, and `arm()` refuses only on a
+  *known* engaged switch. ([`measured-bars.md`](.claude/context/measured-bars.md) §26)
+
+The site lets you [pick a failure and watch which link takes it](https://fh1m.github.io/mongla_ws/#safety).
 
 ⛔ **Firmware revision is a hull-safety interlock**, checked at connect *and inside* `arm()`.
 Revision 10 inverted yaw; a board below the floor takes every turn backwards. The floor lives in
@@ -734,6 +768,20 @@ What transfers: control behaviour and every verb. What does **not**: detection t
 vision gains, because simulator imagery is too clean. That distinction is the whole reason the
 site labels simulator frames as [the rehearsal](https://fh1m.github.io/mongla_ws/#archive) and
 real footage as [the water](https://fh1m.github.io/mongla_ws/#water-real).
+
+<p align="center"><img src="docs/imgs/sim/sim-bluerov-gate.webp" alt="A BlueROV2 Heavy stand-in hull beside the gate in the simulated pool, the slalom poles and task boards behind it" width="100%"></p>
+
+<table><tr>
+<td width="50%"><img src="docs/imgs/sim/sim-gate-course.webp" alt="The gate and the slalom from the start of the simulated course"></td>
+<td width="50%"><img src="docs/imgs/sim/sim-bins-torpedo.webp" alt="The bins and the torpedo board in the simulated pool"></td>
+</tr><tr>
+<td><img src="docs/imgs/sim/sim-slalom.webp" alt="The slalom poles from low in the water"></td>
+<td><img src="docs/imgs/sim/sim-pool-overview.webp" alt="The whole simulated course, the task tables and the octagon"></td>
+</tr></table>
+
+<sub>Gazebo, 2026-09-12. The hull is a BlueROV2 Heavy flown by ArduSub SITL — deliberately not
+our vehicle: the simulator is a physics environment, and every verb goes through the same
+interface the board uses.</sub>
 
 The simulator earned its place by being wrong in the same places the pool is:
 

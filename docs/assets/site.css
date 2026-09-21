@@ -81,15 +81,15 @@
   --fs-micro:9px;                                     /* silk legends */
   --fs-caption:12px;
   --fs-box:13.5px;                                    /* prose inside a surface */
-  --fs-body:clamp(15px,.86rem + .16vw,16.5px);
-  --fs-lede:clamp(16px,.94rem + .3vw,18.5px);
+  --fs-body:clamp(14px,.82rem + .1vw,15px);          /* one rung down, 2026-09-22 */
+  --fs-lede:clamp(15px,.88rem + .18vw,16.5px);
   --fs-num:clamp(1rem,.92rem + .34vw,1.25rem);        /* a reading in a cell */
   --fs-num-hero:clamp(2.6rem,1.7rem + 2.8vw,4rem);
-  --fs-h2:clamp(1.55rem,1rem + 1.7vw,2.45rem);
+  --fs-h2:clamp(1.4rem,.95rem + 1.25vw,2.05rem);
   --fs-h1:clamp(2.1rem,.9rem + 4vw,4.4rem);
 
   --gutter:clamp(20px,3.4vw,72px);
-  --measure:76ch;
+  --measure:70ch;
   --wrap:min(1600px,100%);   /* was 1340 px: a 1920 screen left 290 px empty per side */
   --s1:8px; --s2:14px; --s3:22px; --s4:34px; --s5:52px; --s6:clamp(56px,7vw,96px);
   --t-fast:150ms; --t-mid:420ms; --t-slow:900ms;
@@ -283,6 +283,7 @@ section::after{right:var(--gutter);top:24px;border-left:0;border-bottom:0}
 
 /* ── type ────────────────────────────────────────────────────────── */
 h1,h2,h3{font-family:var(--display);font-weight:700;margin:0}
+h2{font-weight:600}   /* a size step down wants a weight step down too: less shout, same hierarchy */
 h1{font-size:var(--fs-h1);line-height:1.02;
   letter-spacing:-.035em;text-wrap:balance}
 h2{font-size:var(--fs-h2);line-height:1.08;
@@ -545,21 +546,22 @@ code,.n{font-family:var(--data);font-size:.87em;color:var(--medium-text)}
 
 .plate{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;margin-top:var(--s5);
   background:var(--rule);border:1px solid var(--rule)}
-.plate figure{margin:0;position:relative;padding:clamp(16px,2.4vw,34px);aspect-ratio:16/10;
+/* the caption is a line of its own ABOVE the picture: pinned over the corner,
+   it ran into the image and the two read as one muddle */
+.plate figure{margin:0;position:relative;padding:clamp(12px,1.6vw,20px);
   background:var(--s-sunk);box-shadow:var(--e-well);
-  display:flex;align-items:center;justify-content:center;overflow:hidden}
-.plate img{max-width:100%;max-height:100%;width:auto;height:auto;display:block;
+  display:flex;flex-direction:column;align-items:stretch;gap:10px;overflow:hidden}
+.plate img{width:100%;height:auto;display:block;aspect-ratio:16/10;
   object-fit:contain;transition:transform var(--t-mid) var(--ease)}
 .plate figure:hover img{transform:scale(1.035)}
-.plate figcaption{position:absolute;left:clamp(12px,1.6vw,20px);top:clamp(10px,1.4vw,16px);
-  margin:0;font-family:var(--data);font-size:9.5px;letter-spacing:.18em;
+.plate figcaption{order:-1;margin:0;font-family:var(--data);font-size:10px;letter-spacing:.18em;
   text-transform:uppercase;color:var(--ink-3)}
 .plate figure::after{content:"";position:absolute;inset:auto auto 0 0;height:1px;width:0;
   background:var(--signal);transition:width var(--t-mid) var(--ease)}
 .plate figure:hover::after{width:100%}
 /* the HUD composites are 1700x1518 — nearly square. A 16/10 cell letterboxes
    them into black bars, so this variant matches the artefact instead. */
-.plate--hud figure{aspect-ratio:5/4;padding:clamp(10px,1.4vw,20px)}
+.plate--hud img{aspect-ratio:1700/1518}
 @media (max-width:620px){.plate{grid-template-columns:1fr}}
 
 figure{margin:var(--s6) 0 0}
@@ -654,6 +656,19 @@ figure.panel figcaption{margin-top:clamp(16px,2vw,26px);padding-top:14px;
 @media (max-width:860px){
   .simgal{grid-template-columns:1fr 1fr;grid-template-areas:"h h" "a b" "c d"}
   .simgal__hero figcaption{position:static;background:var(--s-raised)}
+}
+
+/* ── the section head: heading and its intro side by side ──────────────
+   On a wide screen the intro used to sit under the heading at 70ch and leave
+   the right half of every section empty. From 1200 px the heading takes the
+   left column and the intro the right, the way an editorial page pairs a
+   headline with its standfirst; everything after them spans both again. */
+@media (min-width:1200px){
+  section:not(:first-of-type) > .wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+    column-gap:clamp(40px,5vw,96px);align-items:start}
+  section:not(:first-of-type) > .wrap > *{grid-column:1/-1}
+  section:not(:first-of-type) > .wrap > h2.col{grid-column:1;max-width:none}
+  section:not(:first-of-type) > .wrap > h2.col + .lede{grid-column:2;max-width:62ch;margin-top:0}
 }
 
 /* ── display sizes ────────────────────────────────────────────────────

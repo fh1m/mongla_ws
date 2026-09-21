@@ -54,6 +54,8 @@ FIGURES = [
      "document.querySelectorAll('[data-flow]').forEach(b => "
      "{ if (b.textContent.trim() === 'height off by 20 %') b.click(); });"),
     ('blockers',    '.board', ''),
+    ('safety-chain', '#safety .chain',
+     "document.querySelector('[data-fault=\"leak\"]').click();"),
 ]
 
 

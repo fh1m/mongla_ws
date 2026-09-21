@@ -334,7 +334,8 @@ def test_the_published_test_count_is_the_real_one():
             (ROOT / 'README.md', r'3[\s\u202f](\d{3}) passed, 0 failed'),
             (ROOT / 'README.md', r'5 suites · 3[\s\u202f](\d{3}) tests'),
             (DOCS / 'index.html', r'<b>3[\s\u202f&#8239;]*(\d{3})</b>'),
-            (ROOT / 'tools' / 'make_banner.py', r"'3\\u202f(\d{3})'"),
+            # the banner stopped quoting the count on 2026-09-22 (three chips,
+            # all measurements); nothing there to drift any more
     ):
         found = re.findall(pattern, path.read_text(encoding='utf-8'))
         assert found, f'no published test count matched {pattern!r} in {path.name}'
