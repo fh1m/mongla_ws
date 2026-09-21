@@ -273,180 +273,184 @@ sequenceDiagram
 > *"The first principle is that you must not fool yourself — and you are the easiest person to
 > fool."* — Richard Feynman, [Cargo Cult Science](https://calteches.library.caltech.edu/51/2/CargoCult.htm), 1974
 
-This section exists because an AUV reads as a black box from outside, and it is not one. Six
-ideas carry the whole vehicle. None of them is hard; all of them are easy to get subtly wrong,
-and each one below ends with the best places we know to go deeper.
-
-Several of these have an **interactive version on the site**, where you turn the knobs yourself
-and watch it break: [the control loop](https://fh1m.github.io/mongla_ws/#pid) and
-[the camera-as-speedometer](https://fh1m.github.io/mongla_ws/#flow).
+An AUV reads as a black box from outside. It is six ideas, and each one below follows the same
+shape: the belief it corrects, the idea in plain words, **a figure with our real numbers in
+it**, a worked example you can check, the maths folded away for whoever wants it, and a way to
+see it for yourself.
 
 ### 1. A control loop is a machine that asks one question
 
-*I am here, I want to be there — how hard do I push?* Five hundred times a second.
+**You would expect** a robot to be told where to go. It is told where to go *and* asked, five
+hundred times a second, how far it still is — and a controller is the thing that turns that
+distance into a push.
 
-A **P** term pushes in proportion to the error. Alone it overshoots, because at the instant it
-is finally pointing the right way it is still turning. A **D** term pushes back against how fast
-the error is closing — the brake that kills the overshoot, and the term that amplifies a noisy
-sensor. An **I** term accumulates what is still missing; it is the only one of the three that
-can beat a steady push like a current, and the one that quietly winds up and takes over if you
-let it.
+<p align="center"><img src="docs/imgs/readme/pid-lab.webp" alt="A simulated step response: the hull overshoots to 35 degrees, settles, then a current starts pushing at four seconds and the integral term pulls it back to 30." width="100%"></p>
+
+**P** pushes in proportion to the error, and alone it overshoots — at the instant it points the
+right way it is still turning. **D** pushes back against how fast the error is closing: the
+brake. **I** remembers what is still missing, and is the only one that beats a steady current.
+Above: a toy hull asked for 30°, with a current switched on at four seconds. PD alone would park
+7.1° short for ever; adding I closes the gap, and costs 18 % overshoot to do it.
+
+On the vehicle this loop runs **on the board at 500 Hz** — so the longest the hull is ever on
+its own is 2 ms. Our old host loop ran at 20 Hz: 50 ms, twenty-five times longer for the water.
+
+<details>
+<summary><b>The maths, if you want it</b></summary>
+
+```
+u(t) = Kp·e(t)  +  Ki·∫e(τ)dτ  +  Kd·de/dt          e(t) = setpoint − measured
+```
+
+Run discretely at rate f, the controller only sees the world every 1/f seconds and holds its
+output in between — which is why the rate changes behaviour even when the gains do not.
+</details>
+
+**See it yourself:** [turn the knobs in the browser](https://fh1m.github.io/mongla_ws/#pid) ·
+`ros2 run mongla_manager connect --watch` streams the board's own attitude at 50 Hz.
+
+### 2. Where am I, with no GPS?
+
+**You would expect** one good sensor to answer that. There is no such sensor underwater: the IMU
+is fast and drifts, depth is exact but in one axis, the camera sees the floor move, and the
+compass inside an aluminium hull is a random number generator.
 
 ```mermaid
 flowchart LR
-    SP["setpoint<br/>'hold 30°'"] --> E(("+/−"))
-    MEAS["measured heading<br/>from the IMU"] --> E
-    E -->|error| P["P · how hard"]
-    E --> I["I · how stubborn"]
-    E --> D["D · how cautious"]
-    P --> SUM(("Σ"))
-    I --> SUM
-    D --> SUM
-    SUM -->|"demand, clamped to ±1"| MIX["mixer"]
-    MIX --> T["8 × thruster"]
-    T --> PLANT["the hull, and the water"]
-    PLANT --> MEAS
+    IMU["IMU · board<br/>fast, drifts"] -->|predict| EKF
+    DEP["depth<br/>exact, 1 axis"] -->|correct| EKF
+    FLOW["floor camera<br/>velocity"] -->|correct| EKF
+    HDG["heading priors"] -->|correct| EKF
+    EKF["right-invariant EKF<br/>late data replayed<br/>at its own instant"] --> ODOM["/mongla/odom"]
 ```
 
-<p align="center"><img src="docs/imgs/readme/pid-lab.webp" alt="A simulated step response: the hull overshoots to 35 degrees, settles, then a current starts pushing at four seconds and the integral term pulls it back to 30." width="100%"></p>
-<sub>A toy hull, simulated — [turn the knobs yourself](https://fh1m.github.io/mongla_ws/#pid).
-P alone rings; D damps it; a current leaves PD parked short; only I closes the gap. On the
-vehicle this loop runs on the board at 500 Hz, so the window it is on its own is 2 ms, not the
-50 ms our old 20 Hz host loop left.</sub>
+So a filter blends them: predict forward on the IMU, then correct with whatever else arrived.
+Two details carry it. It is **right-invariant** — the maths lives on the rotation group, so
+there is no Euler-angle singularity near vertical. And a measurement that arrives late is
+**replayed at the instant it describes**: a detection that took 18 ms is evidence about where the
+vehicle *was*.
 
-**Go deeper:** Brian Douglas's control lectures and the MATLAB *Understanding PID Control*
-series · Steve Brunton's *Control Bootcamp* · Åström & Murray, *Feedback Systems* (free PDF) ·
-Tim Wescott, *PID Without a PhD*. Links in [Further reading](#further-reading).
+<details>
+<summary><b>The maths, if you want it</b></summary>
 
-### 2. Where am I? — the estimator
+Predict `x̂⁻ = f(x̂, u)`, `P⁻ = F P Fᵀ + Q`; correct with gain `K = P⁻Hᵀ(HP⁻Hᵀ + R)⁻¹`. The
+invariant form defines the error on the group itself (`η = X̂·X⁻¹`), which makes the error
+dynamics independent of the state for this class of system — the property Barrau & Bonnabel
+prove, and the reason it converges where a textbook EKF can diverge.
+</details>
 
-Underwater there is no GPS. The vehicle has to build its own answer out of pieces that each lie
-in a different way: an IMU that is fast and drifts, a depth sensor that is absolute but only in
-one axis, a camera that sees the floor move, and a compass that an aluminium hull turns into a
-random number generator.
-
-```mermaid
-flowchart TB
-    IMU["IMU · from the board<br/>fast, drifts"] -->|predict| EKF
-    DEP["depth · pressure<br/>absolute, one axis"] -->|correct| EKF
-    FLOW["downward camera<br/>velocity over ground"] -->|correct| EKF
-    HDG["heading priors<br/>course, props"] -->|correct| EKF
-    EKF["right-invariant EKF<br/>late measurements replayed<br/>at the instant they describe"] --> ODOM["/mongla/odom"]
-    ODOM --> MIS["mission logic"]
-```
-
-Two details are worth the words. It is a **right-invariant** filter, which means the maths is
-done on the rotation group rather than on three Euler angles that go singular and disagree about
-what "yaw" means near vertical. And measurements that arrive late are **replayed at the instant
-they describe**, not applied on arrival — a detection that took 18 ms to compute is evidence
-about where the vehicle *was*, and pretending otherwise smears the estimate.
-
-**Go deeper:** Joan Solà on error-state Kalman filters · Barrau & Bonnabel's invariant EKF ·
-Hartley et al.'s contact-aided InEKF · and, for intuition first, *How a Kalman Filter Works, in
-Pictures*. Links in [Further reading](#further-reading).
+**See it yourself:** `ros2 topic echo /mongla/odom` with `localization:=true` · the package page,
+[`mongla_localization`](.claude/context/packages/mongla_localization/README.md).
 
 ### 3. The DVL we do not have
 
-A Doppler velocity log is the instrument that tells an underwater vehicle how fast it is moving
-over the ground. They cost more than this entire vehicle. So the downward camera does it: watch
-the floor slide past, and
+**You would expect** a velocity sensor to measure velocity. A downward camera measures *pixels
+per second* — and the same pixel motion is a different speed at a different height.
 
-```
-speed over ground  =  pixels per second  ×  height above the floor  ÷  focal length
-```
+<p align="center"><img src="docs/imgs/readme/flow-lab.webp" alt="The flow explainer: floor features sliding past the downward camera, with a 20 percent height error producing exactly a 20 percent speed error." width="100%"></p>
 
-Everything turns on that height, which we do not measure directly — be 20 % wrong about it and
-every velocity, and every metre of dead reckoning built on it, is 20 % wrong in the same
-direction for ever.
+A Doppler velocity log costs more than this vehicle, so the floor camera stands in. Worked
+example, with the bench rig's measured focal length: at **0.72 m** up, a floor moving at
+**0.30 m/s** slides past at **214 px/s**. Be 20 % wrong about the height and every speed — and
+every metre of dead reckoning built on it — is 20 % wrong in the same direction, for ever.
 
-Measured against a tape, three real 30 cm slides on the bench rig (downward camera, 0.72 m
-lens-to-floor, `f = 513.94 px`):
+Against a tape, three real 30 cm slides:
 
-| slide | measured | error | implied height |
+| slide | measured | error | height it implies |
 |---|---|---|---|
-| lateral 30 cm | 30.13 cm | +0.13 | 0.72 m |
-| forward 30 cm | 31.09 cm | **+1.09** | 0.69 m |
-| back 30 cm | 31.04 cm | +1.04 | 0.70 m |
-| *the tape says* | — | — | **0.72 m** |
+| lateral | 30.13 cm | +0.13 | 0.72 m |
+| forward | 31.09 cm | **+1.09** | 0.69 m |
+| back | 31.04 cm | +1.04 | 0.70 m |
+| *the tape* | — | — | **0.72 m** |
 
-<p align="center"><img src="docs/imgs/readme/flow-lab.webp" alt="The flow explainer: floor features sliding past the downward camera, with a height error of 20 percent producing exactly a 20 percent speed error." width="100%"></p>
-<sub>Worst error **1.09 cm on 30 cm (3.6 %)** — several times a real DVL's 0.5–1 %, measured in
-air on a hand slide, so it is an upper bound. The implied heights land on 0.72 / 0.69 / 0.70 m
-against a 0.72 m tape: the scale chain closes. [Play with it](https://fh1m.github.io/mongla_ws/#flow).</sub>
+Worst **3.6 %** — several times a real DVL's 0.5–1 %, measured in air on a hand slide whose own
+precision is about ±1 cm, so it is an upper bound. The last column is the part to trust: the
+height recovered from each slide lands on the tape's.
 
-**Go deeper:** Lucas & Kanade 1981 · Bouguet's pyramidal LK (what OpenCV actually implements) ·
-Shi & Tomasi, *Good Features to Track* · Scaramuzza & Fraundorfer's visual-odometry tutorial.
-Links in [Further reading](#further-reading).
+<details>
+<summary><b>The maths, if you want it</b></summary>
+
+```
+v = (Δpixels / Δt) · h / f          214 px/s × 0.72 m ÷ 513.94 px = 0.2998 m/s
+```
+
+Features come from Shi–Tomasi corners and are tracked with pyramidal Lucas–Kanade. A turning
+hull also makes the floor appear to move, so the obvious next step is to subtract the gyro's
+rotation first — and it was measured three ways on the vehicle, and **left off**: the fitted
+gains were refuted by their own A/B (`measured-bars.md` §19–21). It is a measured choice, not a
+missing feature.
+</details>
+
+**See it yourself:** [the flow lab](https://fh1m.github.io/mongla_ws/#flow) ·
+`ros2 run mongla_planner mongla calc_distance --help` — the verb that brackets a flow distance.
 
 ### 4. A neural network, on a chip that only does that
 
-The Hailo-8 does one thing: multiply the numbers a neural network is made of, very fast, at a
-few watts. Detection runs there instead of on the Pi's CPU, which leaves the CPU free for
-holding a target between detections, measuring velocity from the floor, running the filter and
-deciding what the mission does next.
+**You would expect** a faster detector to need a faster computer. Here the computer barely
+takes part: the Hailo-8 does nothing but multiply the numbers a neural network is made of.
 
 <p align="center"><img src="docs/imgs/readme/stop-chip.webp" alt="Where a frame goes on the Hailo-8: letterbox 0.65 ms, inference 9.54 ms (93.5 percent), decode 0.02 ms — 98.0 Hz against a 97.9 FPS hardware-only benchmark." width="100%"></p>
 
-⛔ **A model's `<stem>.yaml` sidecar must ship beside the artifact.** Missing sidecar → empty
-allowlist → a silent `[]` every frame, with the pipeline looking perfectly healthy. That one has
-bitten us.
+Worked example: one frame costs **10.20 ms** — 0.65 letterbox, 9.54 inference, 0.02 decode —
+so **1000 ÷ 10.20 = 98.0 Hz**. The vendor's own benchmark of the bare chip says 97.9. There is
+no software left to optimise; the chip is the ceiling. Through the ROS graph the rest of the
+vehicle sees **53.9 Hz**, and photon to detection is **18.0 ms** median.
 
-**Go deeper:** Redmon et al., *You Only Look Once* · Ultralytics YOLO11 docs · Hailo's own
-example repos for the Pi 5. Links in [Further reading](#further-reading).
+⛔ A model's `<stem>.yaml` sidecar must ship beside it. Without it the class allowlist is empty
+and every frame returns a silent `[]` — with the pipeline looking perfectly healthy.
+
+**See it yourself:** `python3 tools/hailo_stages.py` on the Pi ·
+[`hailo-vision.md`](.claude/context/perception/hailo-vision.md).
 
 ### 5. The detector blinks. The target does not.
 
-A neural detector on real underwater footage drops the box constantly — a reflection, a bubble,
-a bad angle. If control trusts only the detector, the vehicle loses a lock it never actually
-lost. So the lock climbs down a ladder, and every rung is allowed to be wrong for a *measured*
-length of time.
-
-```mermaid
-stateDiagram-v2
-    [*] --> LIVE: detector produced a box
-    LIVE --> COAST: box missing for < 0.80 s
-    COAST --> LIVE: box returns
-    COAST --> ANCHOR: still gone — match image structure instead
-    ANCHOR --> LIVE: box returns
-    ANCHOR --> LOST: nothing above is honest any more
-    LOST --> [*]: say LOST, never invent
-    note right of COAST
-        measured over 71 real gaps in real footage:
-        median blink 0.155 s, p90 0.651 s, p99 2.418 s
-    end note
-    note right of ANCHOR
-        on one clip it held 175 consecutive
-        frames the detector had lost
-    end note
-```
+**You would expect** a lost detection to mean a lost target. On real footage it usually means a
+reflection, a bubble or a bad angle for a fraction of a second.
 
 <p align="center"><img src="docs/imgs/readme/lock-ladder.webp" alt="Each rung of the lock ladder against 71 real detection gaps: coast_s covers 91.5 percent, track_buffer covers 100 percent." width="100%"></p>
 
+So the lock climbs down a ladder — live box, then a tracker coasting on motion, then a feature
+anchor matching the image itself — and each rung may be wrong for a *measured* length of time.
+Over **71 real gaps** the median blink was 0.155 s and the p99 2.418 s; `coast_s = 0.80 s`
+covers 91.5 % of them, and on one clip the anchor held **175 consecutive frames** the detector
+had lost. At the bottom of the ladder it says `LOST`, and means it.
+
+**See it yourself:** `python3 tools/gap_distribution.py` ·
+[`detection-continuity.md`](.claude/context/perception/detection-continuity.md).
+
 ### 6. Water is not air, and the camera is the first casualty
 
-Water absorbs red first, bends light at the port glass, blocks radio entirely, and carries 800×
-the mass of air. Here is the first of those, measured on our own footage:
+**You would expect** water to tint the picture. It does that — and it also bends the rays, which
+quietly shrinks the camera's view.
 
 <p align="center"><img src="docs/imgs/readme/colour-loss.webp" alt="Mean red, green and blue per venue over 119 real frames: red falls to 36 percent of the strongest channel at RoboSub and 44 percent at Mirpur." width="100%"></p>
 
-And what each of them breaks:
+Colour first: over 119 real frames red falls to **36 %** of the strongest channel at RoboSub and
+**44 %** at Mirpur. Then geometry, which is the one worth checking by hand. The datasheet says
+63.8°. Through a flat port, Snell's law predicts
 
-| the water does this | so this breaks | what we measured |
+```
+2 · asin( sin(63.8° / 2) / 1.333 )  =  46.7°
+```
+
+and we **measured 46.7° ± 0.7°** in water. The theory and the bench agree to the tenth of a
+degree — and a search pattern using the datasheet figure believes it sweeps 27 % more course
+than it can see.
+
+| the water does this | so this breaks | measured |
 |---|---|---|
-| absorbs red first | colour thresholds, contrast tricks | red falls to **36 %** of the strongest channel at RoboSub, 44 % at Mirpur, over 119 real frames |
-| bends light at a flat port | any angle taken from a datasheet | **63.8° in air → 46.7° in water** |
-| blocks radio | telemetry, GPS, remote intervention | no link below the surface — the vehicle is alone |
-| carries 800× the mass | any controller tuned for a drone | added mass ≈ 1.0× displacement broadside |
-| moves while you decide | position held by dead reckoning | 0.12 m/s current → **1.374 m** of drift in 40 s |
-| hides what you were tracking | detectors that assume continuity | 71 real gaps, catalogued |
+| absorbs red first | colour thresholds, contrast tricks | red at 36–44 % of the strongest channel |
+| bends light at a flat port | any angle from a datasheet | 63.8° → **46.7°** |
+| blocks radio | telemetry, GPS, rescue | no link below the surface |
+| moves while you decide | dead reckoning | 0.12 m/s current → **1.374 m** of drift in 40 s |
 
-⛔ And the one everybody gets wrong: **image enhancement.** Putting the red back is the first
-thing every underwater-vision tutorial tells you to do. Measured across 17 configurations, four
-props and three venues, it was **never once positive** — on the gate it took detection from
-30.4 % of frames to **1.2 %**. It ships disabled, and a test keeps it that way.
+⛔ **Image enhancement** — the first fix every underwater tutorial suggests — was measured
+across 17 configurations, four props and three venues and was **never once positive**: on the
+gate it took detection from 30.4 % of frames to **1.2 %**. It ships disabled, and a test keeps
+it that way.
 
-**Go deeper:** Akkaynak & Treibitz, *Sea-thru* and the revised underwater image-formation model ·
-Treibitz, Schechner & Singh on flat-port refraction. Links in [Further reading](#further-reading).
+**See it yourself:** `MONGLA_ARCHIVE=… python3 tools/colour_loss.py` ·
+[`underwater-vision.md`](.claude/context/perception/underwater-vision.md).
 
 ---
 
