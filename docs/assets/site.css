@@ -94,6 +94,7 @@
   --s1:8px; --s2:14px; --s3:22px; --s4:34px; --s5:52px; --s6:clamp(56px,7vw,96px);
   --t-fast:150ms; --t-mid:420ms; --t-slow:900ms;
   --ease:cubic-bezier(.16,1,.3,1);
+  --ease-out-expo:cubic-bezier(.16,1,.3,1);   /* the surfacing letters */
 
   /* ── layer 2b: SURFACES, flat. Depth is shadow, never a gradient ──
      A gradient paints light without a source, so every panel invents its own
@@ -196,7 +197,7 @@ body::before{
   font-size:clamp(3.6rem,2rem + 12vw,11rem);letter-spacing:-.055em}
 .title__word{display:inline-flex}
 .title__word span{display:inline-block;transform:translateY(.42em);opacity:0;
-  animation:surface 900ms var(--ease-out-expo,cubic-bezier(.16,1,.3,1)) forwards}
+  animation:surface 900ms var(--ease-out-expo) forwards}
 .title__word span:nth-child(1){animation-delay:.05s}
 .title__word span:nth-child(2){animation-delay:.12s}
 .title__word span:nth-child(3){animation-delay:.19s}
@@ -708,8 +709,9 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
 
 /* the ticks ARE the map: flex-grow carries each chapter's share of the page */
 .dock__ticks{position:relative;display:flex;gap:2px;height:14px;align-items:center;min-width:0}
-.dock__ticks i{display:block;height:3px;border-radius:2px;background:var(--rule-lit);
-  transform:scaleY(var(--mag,1));transform-origin:center;
+.dock__ticks i{--mag:1;   /* the pointer's magnification, written by the dock script */
+  display:block;height:3px;border-radius:2px;background:var(--rule-lit);
+  transform:scaleY(var(--mag));transform-origin:center;
   transition:background 240ms var(--ease),height 240ms var(--ease)}
 .dock__ticks i.past{background:color-mix(in srgb,var(--signal) 50%,var(--rule-lit))}
 .dock__ticks i.on{background:var(--signal);height:9px}
@@ -1296,6 +1298,26 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
 .pull em{font-style:normal;color:var(--signal-text)}
 .pull footer{margin-top:16px;font-family:var(--data);font-weight:400;font-size:var(--fs-caption);
   letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+
+/* ── the width of now ─────────────────────────────────────────────────
+   A live instrument, not a chart: the reader's own clock drives it, so the
+   lanes drift apart in real time and the band between freshest and stalest is
+   something you watch happen rather than something you are told. */
+.nowfig{margin:var(--s5) 0 0;padding:clamp(14px,1.8vw,22px);border-radius:16px;
+  background:var(--s-raised);box-shadow:var(--e2)}
+.nowfig canvas{display:block;width:100%;height:auto;border-radius:11px;
+  background:var(--s-sunk);box-shadow:var(--e-in)}
+.nowfig__read{display:grid;gap:9px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  margin-top:14px}
+.nowfig__read > div{padding:11px 13px;border-radius:11px;background:var(--s-sunk);
+  box-shadow:var(--e-in)}
+.nowfig__read .silk{display:block;font-family:var(--display);font-weight:800;
+  font-size:var(--fs-micro);letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)}
+.nowfig__read b{display:block;margin-top:5px;font-family:var(--data);font-size:var(--fs-num);
+  color:#fff;font-variant-numeric:tabular-nums}
+.nowfig__ctl{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+.nowfig__ctl .key.on{border-color:var(--signal);color:var(--signal-text)}
+.nowfig figcaption{margin-top:14px}
 
 /* ── the two long reads ───────────────────────────────────────────────
    Not link cards: each one carries a real figure out of the document it points
