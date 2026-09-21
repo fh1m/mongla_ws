@@ -10,18 +10,9 @@
 for, a neural accelerator that does nothing but see, and a rule that no number appears anywhere
 in this repository without the measurement that produced it.**
 
-[![tests](https://img.shields.io/badge/tests-3%20315%20passing-brightgreen)](#the-tests-are-the-argument)
-[![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question)
-[![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that)
-[![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it)
-[![in water](https://img.shields.io/badge/in%20water-never-critical)](#what-is-true-today)
-[![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
+[![tests](https://img.shields.io/badge/tests-3%20315%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![in water](https://img.shields.io/badge/in%20water-never-critical)](#what-is-true-today) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
 
-**[The Shift](https://fh1m.github.io/mongla_ws/the-shift.html)** ·
-**[Capability map](https://fh1m.github.io/mongla_ws/capability-map.html)** ·
-**[The site](https://fh1m.github.io/mongla_ws/)** ·
-[Run it](#run-it) · [Fundamentals](#the-fundamentals) · [Docs](#every-document-in-this-repository) ·
-[Story](#three-acts)
+**[The Shift](https://fh1m.github.io/mongla_ws/the-shift.html)** · **[Capability map](https://fh1m.github.io/mongla_ws/capability-map.html)** · **[The site](https://fh1m.github.io/mongla_ws/)** · [Run it](#run-it) · [Fundamentals](#the-fundamentals) · [Docs](#every-document-in-this-repository) · [Story](#three-acts)
 
 ---
 
