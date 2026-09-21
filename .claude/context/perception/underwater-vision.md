@@ -237,7 +237,7 @@ oriented boxes — but it was re-run to confirm that rather than assumed.
 
 ---
 
-## 6. Validation cannot rank our models — measured, three ways
+## 8. Validation cannot rank our models — measured, three ways
 
 Round 34 addendum. Everything above concerned the data; this concerns how we
 **choose** what we train on it, and it is the finding with the most immediate
@@ -301,7 +301,7 @@ selection is a **48-point** swing on data we already own, and it is free.
 
 ---
 
-## 7. Mirpur: a third water type, and two retractions it forced
+## 9. Mirpur: a third water type, and two retractions it forced
 
 The 2025 archive holds a venue nothing in §1–§6 had opened:
 `raw_images/Mirpur/sun_june_29/` — **1,918 frames from a Bangladeshi pool in
@@ -377,7 +377,7 @@ learns — and not a filter placed between them.
 
 ---
 
-## 8. The confidence floor, measured against false positives at last
+## 10. The confidence floor, measured against false positives at last
 
 `conf 0.15 → 0.10` shipped on **+8.5 points of presence**, with jitter flat.
 Presence counts frames containing a box — **it cannot tell a right box from a
