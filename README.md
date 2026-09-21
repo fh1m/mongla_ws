@@ -175,8 +175,8 @@ Five habits, learned the expensive way. Each one exists because its absence cost
 
 **Measure, then ship.** Every shipped threshold lives in
 [`measured-bars.md`](.claude/context/measured-bars.md) with the method, the conditions and the
-bar it must clear. More than half of that file is *retractions* — numbers we believed, tested
-properly, and withdrew. The image-enhancement step everybody adds to underwater vision took
+bar it must clear. It keeps its *retractions* too — numbers we believed, tested properly,
+and withdrew — in the same file as the ones that stand. The image-enhancement step everybody adds to underwater vision took
 the gate from 30.4 % to **1.2 %** when it was finally measured; it ships disabled, and a test
 keeps it disabled.
 

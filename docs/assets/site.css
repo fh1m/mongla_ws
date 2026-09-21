@@ -27,6 +27,12 @@
 @font-face{font-family:"Zed Sans";src:url("fonts/zed-sans-extendeditalic.woff2") format("woff2");
   font-weight:400;font-style:italic;font-display:swap}
 
+/* Manrope, variable, wght 200-800, latin only — 24 KB for every weight the page
+   uses. It takes DISPLAY and headings. It does not take numbers: a measurement
+   stays in Zed Mono or the columns stop aligning. (SIL OFL, self-hosted.) */
+@font-face{font-family:"Manrope";src:url("fonts/manrope-latin.woff2") format("woff2");
+  font-weight:200 800;font-style:normal;font-display:swap}
+
 :root{
   /* ── layer 1: primitives, named for their source ─────────────── */
   --cad-red:#ff0000;        /* CAD material 4 — the fairings, exactly */
@@ -64,9 +70,23 @@
   --state-blocked:var(--cad-red);/* blocked           */
 
   /* ── layer 3: type ───────────────────────────────────────────── */
-  --display:"Zed Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --display:"Manrope",ui-sans-serif,system-ui,sans-serif;
+  --mono-display:"Zed Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
   --data:"Zed Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
   --prose:"Zed Sans",ui-sans-serif,system-ui,sans-serif;
+
+  /* ── type scale. Zed Sans is an EXTENDED face, so it reads roughly one
+     size larger than its px value; the body is set accordingly, in Linear's
+     15-17 px band, and everything inside a box steps down one rung. ─── */
+  --fs-micro:9px;                                     /* silk legends */
+  --fs-caption:12px;
+  --fs-box:13.5px;                                    /* prose inside a surface */
+  --fs-body:clamp(15px,.86rem + .16vw,16.5px);
+  --fs-lede:clamp(16px,.94rem + .3vw,18.5px);
+  --fs-num:clamp(1rem,.92rem + .34vw,1.25rem);        /* a reading in a cell */
+  --fs-num-hero:clamp(2.6rem,1.7rem + 2.8vw,4rem);
+  --fs-h2:clamp(1.55rem,1rem + 1.7vw,2.45rem);
+  --fs-h1:clamp(2.1rem,.9rem + 4vw,4.4rem);
 
   --gutter:clamp(20px,3.4vw,72px);
   --rail:150px;
@@ -75,32 +95,95 @@
   --s1:8px; --s2:14px; --s3:22px; --s4:34px; --s5:52px; --s6:clamp(56px,7vw,96px);
   --t-fast:150ms; --t-mid:420ms; --t-slow:900ms;
   --ease:cubic-bezier(.16,1,.3,1);
+
+  /* ── layer 2b: SURFACES, flat. Depth is shadow, never a gradient ──
+     A gradient paints light without a source, so every panel invents its own
+     sun and the page never agrees where the light is. A layered shadow is
+     DERIVED from a height under one light, and that agreement is the whole
+     effect. Fills below are flat; the ladder does the rest. */
+  --s-sunk:#04060b;     /* below the field — wells, insets, screens */
+  --s-flush:#080b12;    /* at the field                            */
+  --s-raised:#0c1119;   /* one step up — panels                    */
+  --s-key:#111725;      /* a pressable face                        */
+  --edge-lit:rgba(255,255,255,.055);   /* the light catching a top edge  */
+  --edge-dark:rgba(0,0,0,.55);         /* the shade under a bottom edge  */
+
+  /* ── the ladder: contact + ambient + rim, never one blur ──────────
+     The first three layers are Linear's surface recipe, read off linear.app
+     with getComputedStyle: a faint white inner ring, a lit top rim, and a
+     BLACK outer ring. The black ring is what separates a dark surface from a
+     dark field -- a grey border does it by being lighter, which looks cheap. */
+  --e0:none;
+  --e1:inset 0 0 0 1px rgba(255,255,255,.03),
+       inset 0 1px 0 var(--edge-lit),
+       0 0 0 1px rgba(0,0,0,.6),
+       0 1px 1px rgba(0,0,0,.55),
+       0 4px 12px -6px rgba(0,0,0,.75);
+  --e2:inset 0 0 0 1px rgba(255,255,255,.03),
+       inset 0 1px 0 var(--edge-lit),
+       0 0 0 1px rgba(0,0,0,.6),
+       0 1px 2px rgba(0,0,0,.6),
+       0 10px 28px -12px rgba(0,0,0,.82);
+  --e3:inset 0 0 0 1px rgba(255,255,255,.03),
+       inset 0 1px 0 var(--edge-lit),
+       0 0 0 1px rgba(0,0,0,.6),
+       0 2px 4px rgba(0,0,0,.6),
+       0 20px 48px -20px rgba(0,0,0,.88);
+  --e4:inset 0 0 0 1px rgba(255,255,255,.03),
+       inset 0 1px 0 var(--edge-lit),
+       0 0 0 1px rgba(0,0,0,.6),
+       0 3px 6px rgba(0,0,0,.62),
+       0 36px 80px -32px rgba(0,0,0,.92);
+  /* pressed: the face drops INTO the ladder instead of sitting on it */
+  --e-in:inset 0 2px 5px rgba(0,0,0,.8), inset 0 -1px 0 var(--edge-lit);
+  /* a well is a CUT: its far rim catches the light (outer lip, below) and its
+     near wall is in shade (inset, above). Without the lip it just vanishes
+     into the field, which is what the first render showed. */
+  --e-well:inset 0 2px 10px rgba(0,0,0,.9), inset 0 0 0 1px rgba(0,0,0,.7),
+           0 0 0 1px rgba(255,255,255,.045), 0 1px 0 1px rgba(255,255,255,.06);
 }
 
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
 body{
   margin:0; color:var(--ink);
-  font-family:var(--prose); font-size:clamp(16px,.92rem + .28vw,18.5px);
-  line-height:1.62; -webkit-font-smoothing:antialiased;
+  font-family:var(--prose); font-size:var(--fs-body);
+  line-height:1.65; -webkit-font-smoothing:antialiased;
   /* NOT overflow-x:hidden -- that computes overflow-y to auto, which makes
      BODY the scroll container and silently breaks every position:sticky on the
      page. clip constrains the axis without creating a scroll box. */
   overflow-x:clip;
-  /* atmosphere, not a flat fill: a shallow column of water over the void */
-  /* atmosphere, barely: a hint of water at the surface that is gone by 30 %.
-     Anything stronger reads as a gradient someone chose, not as depth. */
-  background:
-    radial-gradient(140% 52% at 50% -14%, rgba(0,34,96,.30) 0%, transparent 62%),
-    linear-gradient(180deg, var(--d1) 0%, var(--d0) 30%);
-  background-color:var(--d0);
+  /* FLAT. The void is one colour. Everything that used to be a gradient is
+     now either a shadow (which implies a light) or grain (which implies a
+     medium). Nothing here paints a highlight it cannot account for. */
+  background:var(--d0);
 }
+/* The surface of the water, cast rather than painted: a fixed pane whose
+   INSET shadow spills ocean over the top edge. It is the same mechanism as
+   every other panel on the page, which is why it sits with them. */
 body::before{
-  /* the grain the water has. one layer, cheap, never animated */
-  content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.5;
-  background-image:radial-gradient(circle at 1px 1px, rgba(255,255,255,.028) 1px, transparent 0);
-  background-size:3px 3px;
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:1;
+  box-shadow:inset 0 clamp(90px,16vh,190px) clamp(110px,20vh,240px)
+             calc(-1 * clamp(70px,12vh,150px)) rgba(0,44,122,.42);
 }
+/* ── film grain ──────────────────────────────────────────────────────
+   feTurbulence, rasterised by the browser into a tile. TWO layers at
+   different scales and blend modes, because ONE tile at one scale repeats
+   visibly at 1500 px and the eye finds the grid. The seed and baseFrequency
+   of the top layer are rewritten from Math.random() on load (see index.html,
+   ~6 lines) so no two visits carry the same grain -- that is the
+   "randomization" this replaces the gradients with. The value below is the
+   static fallback, so the page still has a surface with JS off. */
+#grain{position:fixed;inset:0;pointer-events:none;z-index:3;
+  opacity:.055;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch' seed='7'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size:220px 220px}
+#grain::after{content:"";position:absolute;inset:0;opacity:.5;
+  mix-blend-mode:soft-light;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='500' height='500'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.28' numOctaves='2' stitchTiles='stitch' seed='19'/%3E%3C/filter%3E%3Crect width='500' height='500' filter='url(%23m)'/%3E%3C/svg%3E");
+  background-size:500px 500px}
+@media (prefers-reduced-motion:reduce){#grain{opacity:.04}}
+
 ::selection{background:var(--signal);color:#fff}
 
 /* ── the dive profile: a depth gauge, not a nav bar ──────────────── */
@@ -110,11 +193,15 @@ body::before{
   display:flex; flex-direction:column; justify-content:center; gap:0;
   font-family:var(--data); font-size:9.5px; letter-spacing:.1em;
   text-transform:uppercase; color:var(--ink-3);
-  background:linear-gradient(90deg,var(--d0) 58%,transparent);
+  /* a flat plate with its own cast shadow -- not a fade-to-transparent scrim */
+  background:var(--d0);
+  box-shadow:14px 0 26px -18px #000;
 }
 .rail::before{                       /* the trace itself */
   content:"";position:absolute;left:20px;top:26px;bottom:26px;width:1px;
-  background:linear-gradient(180deg,var(--rule-lit),var(--rule) 70%,transparent);
+  background:var(--rule);
+  -webkit-mask-image:linear-gradient(180deg,#000 0 72%,transparent);
+          mask-image:linear-gradient(180deg,#000 0 72%,transparent);
 }
 .rail b{
   display:block;font-weight:400;padding:6px 0 6px 18px;position:relative;
@@ -125,9 +212,7 @@ body::before{
   background:var(--rule-lit);transition:all var(--t-fast) var(--ease);
 }
 .rail b[data-on]{color:var(--signal-text)}
-.rail b[data-on]::before{
-  width:13px;background:var(--signal);box-shadow:0 0 10px var(--signal);
-}
+.rail b[data-on]::before{width:13px;background:var(--signal)}
 .rail .m{font-size:8.5px;opacity:.42;letter-spacing:.16em;margin-right:6px}
 
 /* ── layout ──────────────────────────────────────────────────────── */
@@ -139,7 +224,7 @@ section:first-of-type{border-top:0;min-height:96svh;display:flex;align-items:cen
 section:first-of-type .wrap{width:100%}
 .wrap{max-width:var(--wrap);margin:0 auto}
 .wrap > h2, .wrap > .lede, .wrap > p, .wrap > h3{max-width:var(--measure)}
-.wrap > .ledger, .wrap > figure, .wrap > .readout, .wrap > .years,
+.wrap > .ledger, .wrap > figure, .wrap > .bento, .wrap > .years,
 .wrap > ul.plain, .wrap > pre, .wrap > .bay, .wrap > .plate{max-width:none}
 .col{max-width:var(--measure)}
 
@@ -166,17 +251,17 @@ section::after{right:var(--gutter);top:24px;border-left:0;border-bottom:0}
 
 /* ── type ────────────────────────────────────────────────────────── */
 h1,h2,h3{font-family:var(--display);font-weight:700;margin:0}
-h1{font-size:clamp(2.1rem,.8rem + 4.9vw,5.1rem);line-height:1.01;
+h1{font-size:var(--fs-h1);line-height:1.02;
   letter-spacing:-.035em;text-wrap:balance}
-h2{font-size:clamp(1.6rem,.9rem + 2.2vw,2.9rem);line-height:1.05;
+h2{font-size:var(--fs-h2);line-height:1.08;
   letter-spacing:-.03em;margin-bottom:16px;text-wrap:balance}
 h3{font-size:1.0rem;letter-spacing:.02em;font-weight:700;color:#fff}
 
 .mark{font-family:var(--data);font-size:clamp(10px,.6rem + .12vw,11px);
   letter-spacing:.22em;text-transform:uppercase;color:var(--ink-3);margin:0 0 26px}
 .mark i{font-style:normal;color:var(--signal-text)}
-.lede{font-size:clamp(1.05rem,1rem + .45vw,1.32rem);color:var(--ink-2);
-  line-height:1.56;margin-top:var(--s3)}
+.lede{font-size:var(--fs-lede);color:var(--ink-2);
+  line-height:1.6;margin-top:var(--s3)}
 .quiet{color:var(--ink-3)}
 em{font-style:italic;color:var(--ink)}
 strong{font-weight:700;color:#fff}
@@ -190,21 +275,157 @@ a:focus-visible,canvas:focus-visible{outline:2px solid var(--signal-text);outlin
 code,.n{font-family:var(--data);font-size:.87em;color:var(--medium-text)}
 .nr{font-family:var(--data);color:var(--signal-text)}
 
-/* ── readout: instrument segments, not cards ─────────────────────── */
-.readout{display:grid;grid-template-columns:repeat(auto-fit,minmax(152px,1fr));
-  margin-top:clamp(36px,6vh,66px);border-top:1px solid var(--rule)}
-.readout div{padding:18px 16px 20px;border-right:1px solid var(--rule);
-  border-bottom:1px solid var(--rule);position:relative}
-.readout div:first-child{border-left:1px solid var(--rule)}
-.readout div::before{                /* the segment's own tick */
-  content:"";position:absolute;left:16px;top:0;width:12px;height:1px;background:var(--signal)}
-.readout div::after{content:"";position:absolute;left:0;bottom:-1px;width:0;height:1px;
-  background:var(--signal);transition:width var(--t-mid) var(--ease)}
-.readout div:hover::after{width:100%}
-.readout b{display:block;font-family:var(--data);font-weight:700;
-  font-size:clamp(1.02rem,.88rem + .58vw,1.45rem);color:#fff;letter-spacing:-.03em}
-.readout span{display:block;margin-top:8px;font-family:var(--prose);font-size:11.5px;
-  line-height:1.42;color:var(--ink-3)}
+/* ══ SKEUOMORPHIC PRIMITIVES ═════════════════════════════════════════
+   Teenage Engineering's vocabulary, built entirely out of the shadow ladder:
+   a face at a height, a lit top edge, a contact shadow, and travel when you
+   press it. No gradient fills -- the only repeating-gradient here is KNURL,
+   which is texture on a surface, not atmosphere behind one.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* a machined panel: flat anodised face, lit rim, sitting one step up */
+.srf{background:var(--s-raised);border:1px solid var(--rule);
+  border-top-color:var(--rule-lit);box-shadow:var(--e2);position:relative}
+/* a recessed well: the same plate, pushed in */
+.srf--sunk{background:var(--s-sunk);box-shadow:var(--e-well)}
+/* silk-screened legend: printed ON the surface, so it is never full contrast */
+.silk{font-family:var(--display);font-weight:800;font-size:9px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--ink-3);display:block}
+.silk--lit{color:var(--signal-text)}
+
+/* a pressable face. it TRAVELS: on press it drops out of the ladder into it */
+.key{appearance:none;font:inherit;cursor:pointer;
+  font-family:var(--display);font-weight:800;font-size:10px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-2);
+  padding:10px 16px;border-radius:7px;
+  background:var(--s-key);border:1px solid var(--rule-lit);
+  box-shadow:var(--e2);
+  transition:transform var(--t-fast) var(--ease),box-shadow var(--t-fast) var(--ease),
+             color var(--t-fast) var(--ease)}
+.key:hover{color:#fff;box-shadow:var(--e3);transform:translateY(-1px)}
+.key:active{color:var(--signal-text);box-shadow:var(--e-in);transform:translateY(1px)}
+.key[aria-pressed="true"]{color:var(--signal-text);box-shadow:var(--e-in)}
+.key small{display:block;margin-top:5px;font-family:var(--data);font-weight:400;
+  font-size:8px;letter-spacing:.1em;color:var(--ink-3);opacity:.8}
+/* the hull's control deck: a row of keys sitting on the bay, TE-style.
+   Always shown -- on a phone these are the ONLY way to take the explode. */
+.deck{position:absolute;right:14px;top:clamp(46px,6vh,64px);z-index:2;display:flex;gap:6px;
+  padding:6px;border-radius:11px;background:var(--s-flush);box-shadow:var(--e-well)}
+.deck .key{min-width:44px;min-height:44px;padding:8px 10px 7px;font-size:9px}
+@media (max-width:760px){.deck{left:10px;right:10px;justify-content:space-between;top:auto;
+  bottom:46px}.deck .key{flex:1;min-width:0;padding:8px 4px 7px}}
+/* knurling -- the milled grip on a real knob. A gradient used AS TEXTURE. */
+.knurl{background-image:repeating-linear-gradient(90deg,
+  rgba(255,255,255,.055) 0 1px, transparent 1px 3px)}
+
+/* ══ THE BENTO ═══════════════════════════════════════════════════════
+   The six headline numbers were six equal boxes in one line, which reads as
+   a form, not as an instrument. Here the cells are DELIBERATELY UNEQUAL: the
+   lead measurement takes a 2x2, the rest are 1x1 and 2x1, and each cell is a
+   different KIND of object -- a rate, a latency, an angle, an error, a count,
+   a refusal. Equal cells would just reproduce the row with rounder corners.
+   ═══════════════════════════════════════════════════════════════════ */
+.bento{display:grid;gap:10px;margin-top:clamp(36px,6vh,66px);
+  grid-template-columns:repeat(4,1fr);
+  grid-template-areas:
+    "lead lead b    c"
+    "lead lead d    c"
+    "e    e    f    g";}
+.bento > *{grid-area:var(--a);position:relative;padding:18px 18px 20px;
+  border-radius:12px;background:var(--s-raised);border:0;
+  box-shadow:var(--e1);overflow:hidden;
+  transition:box-shadow var(--t-mid) var(--ease),transform var(--t-mid) var(--ease)}
+.bento > *:hover{box-shadow:var(--e3);transform:translateY(-2px)}
+.bento b{display:block;font-family:var(--data);font-weight:700;color:#fff;
+  font-size:var(--fs-num);letter-spacing:-.035em;
+  line-height:1}
+.bento span{display:block;margin-top:8px;font-family:var(--prose);font-size:var(--fs-caption);
+  line-height:1.45;color:var(--ink-3);max-width:34ch}
+
+/* the lead cell: a recessed instrument screen with a real readout on it */
+.bento .lead{--a:lead;background:var(--s-sunk);box-shadow:var(--e-well);
+  padding:clamp(20px,2.4vw,30px);display:flex;flex-direction:column;
+  justify-content:space-between;min-height:186px}
+.bento .lead:hover{transform:none;box-shadow:var(--e-well)}
+.bento .lead b{font-size:var(--fs-num-hero);letter-spacing:-.055em}
+.bento .lead b u{text-decoration:none;color:var(--signal-text);
+  font-size:.34em;letter-spacing:.02em;margin-left:.35em;vertical-align:.5em}
+.bento .lead span{font-size:var(--fs-box);color:var(--ink-2);max-width:40ch}
+/* the tick strip under the lead number: 500 marks, one per Hz, drawn as a
+   repeating rule. It is the rate, shown, rather than the word "500 Hz". */
+.bento .lead .ticks{height:26px;margin-top:14px;border-radius:4px;
+  box-shadow:var(--e-in);
+  background-image:repeating-linear-gradient(90deg,
+    var(--signal) 0 1px, transparent 1px 5px);
+  opacity:.52;
+  -webkit-mask-image:linear-gradient(90deg,#000 0 62%,transparent);
+          mask-image:linear-gradient(90deg,#000 0 62%,transparent)}
+/* silk legends inside cells: re-asserted, because ".bento span" (a class plus
+   an element) outranks ".silk" (one class) and silently turned them into prose */
+.bento span.silk{font-family:var(--display);font-weight:800;font-size:9px;letter-spacing:.14em;
+  color:var(--ink-3);margin:0 0 12px;max-width:none}
+.bento span.silk.silk--lit{color:var(--signal-text)}
+.bento .b{--a:b} .bento .c{--a:c} .bento .d{--a:d}
+.bento .e{--a:e} .bento .f{--a:f} .bento .g{--a:g}
+/* the error, shown: a 30 cm tape, one tick per cm, and the worst error as a
+   sliver at its true width -- 1.09 / 30 = 3.63 % of the tape */
+.bento .tape{position:relative;height:30px;margin:4px 0 16px;border-radius:4px;
+  background-color:var(--s-sunk);box-shadow:var(--e-in);
+  background-image:repeating-linear-gradient(90deg,var(--ink-3) 0 1px,transparent 1px calc(100% / 30));
+  background-size:100% 9px;background-repeat:no-repeat;background-position:0 0}
+.bento .tape i{position:absolute;top:0;bottom:0;right:0;width:3.63%;background:var(--signal)}
+.bento .tape em{position:absolute;bottom:3px;font-style:normal;font-family:var(--data);
+  font-size:9px;color:var(--ink-3);letter-spacing:.06em}
+.bento .tape em:first-of-type{left:6px}
+.bento .tape em:last-of-type{right:calc(3.63% + 6px)}
+/* the angle, shown: two wedges from one apex. Water is the filled one. */
+.bento .fov{width:100%;max-width:150px;height:auto;margin:6px 0 14px;display:block}
+.bento .fov .water{fill:color-mix(in srgb,var(--medium) 34%,transparent);
+  stroke:var(--medium-text);stroke-width:1}
+.bento .fov .air{fill:none;stroke:var(--ink-3);stroke-width:1;stroke-dasharray:3 3}
+/* the tall cell carries its number rotated down the side -- a grid break */
+.bento .c{display:flex;flex-direction:column;justify-content:flex-end}
+/* the refusal cell is the only one that is not a measurement, so it is the
+   only one keyed to the blocked state */
+.bento .warn{box-shadow:inset 0 1px 0 color-mix(in srgb,var(--caution) 55%,transparent),var(--e1)}
+.bento .warn b{color:var(--caution)}
+/* ── the instruments ledger: PAIRS carry a ratio, shown as length ─────
+   A before/after number is a ratio, and a ratio is best read as two lengths
+   on one scale. Each bar is the real proportion (--w), not a decoration. */
+.bento--ledger{grid-template-columns:repeat(6,1fr);grid-template-areas:none;
+  grid-auto-flow:row dense}
+.bento--ledger > *{grid-area:auto;grid-column:span 1}
+.bento--ledger > .pair{grid-column:span 3}
+.bento--ledger > .wide{grid-column:span 4}
+.pair .bar{position:relative;display:grid;grid-template-columns:auto 1fr;
+  align-items:baseline;gap:4px 12px;margin-top:12px}
+.pair .bar i{grid-column:1 / -1;display:block;height:8px;border-radius:999px;
+  background:var(--s-sunk);box-shadow:var(--e-in);position:relative;overflow:hidden}
+.pair .bar i::after{content:"";position:absolute;inset:0 auto 0 0;width:var(--w);
+  border-radius:inherit;background:var(--signal);
+  transform-origin:left;transform:scaleX(0);transition:transform var(--t-slow) var(--ease)}
+.pair .bar.was i::after{background:var(--ink-3)}
+.pair.in .bar i::after{transform:scaleX(1)}
+.pair .bar b{font-size:var(--fs-num)}
+.pair .bar.was b{color:var(--ink-2)}
+.pair .bar em{font-style:normal;font-family:var(--data);font-size:10px;
+  letter-spacing:.08em;color:var(--ink-3)}
+.pair > span:last-child{margin-top:14px;max-width:44ch}
+@media (prefers-reduced-motion:reduce){.pair .bar i::after{transform:none;transition:none}}
+@media (max-width:1000px){
+  .bento--ledger{grid-template-columns:repeat(2,1fr)}
+  .bento--ledger > *{grid-column:span 1}
+  .bento--ledger > .pair,.bento--ledger > .wide{grid-column:1 / -1}
+}
+@media (max-width:1000px){
+  .bento:not(.bento--ledger){grid-template-columns:repeat(2,1fr);
+    grid-template-areas:"lead lead" "b c" "d c" "e e" "f g"}
+}
+@media (max-width:560px){
+  .bento--ledger > *{grid-column:1 / -1}
+  .bento:not(.bento--ledger){grid-template-columns:1fr;
+    grid-template-areas:"lead" "b" "c" "d" "e" "f" "g"}
+  .bento .c{justify-content:flex-start}
+}
 
 /* ── ledger ──────────────────────────────────────────────────────── */
 .ledger{width:100%;border-collapse:collapse;margin-top:38px;
@@ -262,14 +483,15 @@ code,.n{font-family:var(--data);font-size:.87em;color:var(--medium-text)}
 
 /* ── the hull bay ────────────────────────────────────────────────── */
 .bay{position:relative;margin-top:44px;border:1px solid var(--rule);overflow:hidden;
-  background:radial-gradient(130% 100% at 50% 0%,#010613 0%,var(--d0) 72%)}
+  /* a WELL: flat floor, and the shadow of its own rim falling in */
+  background:var(--s-sunk);box-shadow:var(--e-well),var(--e2)}
 .bay canvas{display:block;width:100%;height:clamp(300px,54vh,640px);cursor:grab;
   touch-action:pan-y}
 .bay canvas:active{cursor:grabbing}
 .bay .hud{position:absolute;inset:auto 0 0 0;display:flex;gap:24px;flex-wrap:wrap;
   padding:12px 16px;font-family:var(--data);font-size:9.5px;letter-spacing:.14em;
   text-transform:uppercase;color:var(--ink-3);border-top:1px solid var(--rule);
-  background:linear-gradient(180deg,transparent,rgba(0,0,0,.92) 70%)}
+  background:var(--s-flush);box-shadow:0 -10px 26px -14px #000}
 .bay .hud i{font-style:normal;color:var(--signal-text)}
 .bay .keys{position:absolute;top:12px;right:16px;font-family:var(--data);
   font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);
@@ -284,7 +506,7 @@ code,.n{font-family:var(--data);font-size:.87em;color:var(--medium-text)}
 /* ── figures ─────────────────────────────────────────────────────── */
 .hero-render{margin-top:var(--s5);border:1px solid var(--rule);
   padding:clamp(14px,2vw,30px);
-  background:radial-gradient(120% 120% at 50% 10%,#070a12 0%,var(--d0) 72%)}
+  background:var(--s-flush);box-shadow:var(--e2)}
 .hero-render img{width:100%;height:auto;display:block}
 .hero-render figcaption{margin-top:clamp(14px,1.8vw,22px);padding-top:13px;
   border-top:1px solid var(--rule)}
@@ -292,7 +514,7 @@ code,.n{font-family:var(--data);font-size:.87em;color:var(--medium-text)}
 .plate{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;margin-top:var(--s5);
   background:var(--rule);border:1px solid var(--rule)}
 .plate figure{margin:0;position:relative;padding:clamp(16px,2.4vw,34px);aspect-ratio:16/10;
-  background:radial-gradient(120% 110% at 50% 15%,#080b14 0%,var(--d0) 70%);
+  background:var(--s-sunk);box-shadow:var(--e-well);
   display:flex;align-items:center;justify-content:center;overflow:hidden}
 .plate img{max-width:100%;max-height:100%;width:auto;height:auto;display:block;
   object-fit:contain;transition:transform var(--t-mid) var(--ease)}
@@ -312,8 +534,9 @@ figure{margin:var(--s6) 0 0}
 figure img,figure svg{width:100%;height:auto;display:block}
 figcaption{font-family:var(--prose);font-size:12.5px;color:var(--ink-3);
   margin-top:12px;max-width:66ch;line-height:1.5}
-figure.panel{background:linear-gradient(180deg,var(--d1),var(--d0));
-  border:1px solid var(--rule);padding:clamp(18px,2.6vw,38px)}
+figure.panel{background:var(--s-raised);
+  border:1px solid var(--rule);border-top-color:var(--rule-lit);
+  padding:clamp(18px,2.6vw,38px);box-shadow:var(--e2)}
 figure.panel figcaption{margin-top:clamp(16px,2vw,26px);padding-top:14px;
   border-top:1px solid var(--rule)}
 
@@ -329,17 +552,35 @@ figure.panel figcaption{margin-top:clamp(16px,2vw,26px);padding-top:14px;
 .year{display:grid;grid-template-columns:104px 1fr;gap:clamp(14px,3vw,40px);
   padding:22px 0;border-bottom:1px solid var(--rule);align-items:baseline}
 .year time{font-family:var(--data);font-size:11px;letter-spacing:.1em;color:var(--signal-text)}
-.year p{margin:6px 0 0;color:var(--ink-2);font-size:.95rem;max-width:62ch}
+.year p{margin:6px 0 0;color:var(--ink-2);font-size:var(--fs-box);max-width:62ch}
 
 /* ── retractions ─────────────────────────────────────────────────── */
-.retract{border-left:1px solid var(--signal);padding:2px 0 2px 20px;margin:0 0 var(--s4);
-  max-width:calc(var(--measure) + 4ch)}
-.retract b{display:block;font-family:var(--prose);font-weight:700;font-size:1.0rem;
-  color:#fff;margin-bottom:5px}
-.retract p{margin:0;color:var(--ink-2);font-size:.95rem;line-height:1.55}
-.retract .was{font-family:var(--data);font-size:11px;color:var(--signal-text);
-  letter-spacing:.04em}
-.retract p.was + p{margin-top:5px}
+/* ── retractions: the belief, struck; the measurement, printed under it ──
+   A bento, not a list. The two with the biggest swings take the wide cells.
+   The claim is set as a sentence someone once believed, with a red rule
+   through it; the measured value sits in a recessed readout underneath --
+   the same well every measurement on this page lives in. */
+.retracts{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:var(--s4)}
+.retract{grid-column:span 2;position:relative;padding:20px 20px 22px;border-radius:12px;
+  background:var(--s-raised);box-shadow:var(--e1);
+  transition:box-shadow var(--t-mid) var(--ease),transform var(--t-mid) var(--ease)}
+.retract:nth-child(-n+2){grid-column:span 3}
+.retract:hover{box-shadow:var(--e3);transform:translateY(-2px)}
+.retract b{display:block;font-family:var(--display);font-weight:700;font-size:.98rem;
+  line-height:1.3;letter-spacing:-.01em;color:var(--ink-2);margin-bottom:12px;
+  text-decoration:line-through;text-decoration-color:var(--signal);
+  text-decoration-thickness:2px}
+.retract p{margin:0;color:var(--ink-2);font-size:var(--fs-box);line-height:1.6}
+.retract .was{display:inline-block;font-family:var(--data);font-size:var(--fs-caption);color:#fff;
+  letter-spacing:.01em;padding:8px 12px;border-radius:8px;margin-bottom:12px;
+  background:var(--s-sunk);box-shadow:var(--e-well);
+  border-left:2px solid var(--signal)}
+@media (max-width:1000px){
+  .retracts{grid-template-columns:1fr 1fr}
+  .retract,.retract:nth-child(-n+2){grid-column:span 1}
+  .retract:first-child{grid-column:1 / -1}
+}
+@media (max-width:620px){.retracts{grid-template-columns:1fr}.retract{grid-column:1 / -1}}
 
 /* ── code ────────────────────────────────────────────────────────── */
 pre{font-family:var(--data);font-size:12.5px;line-height:1.72;background:var(--d1);
@@ -351,7 +592,7 @@ pre .s{color:var(--medium-text)}
 /* ── plain list ──────────────────────────────────────────────────── */
 ul.plain{list-style:none;padding:0;margin:30px 0 0;border-top:1px solid var(--rule)}
 ul.plain li{display:flex;justify-content:space-between;gap:22px;flex-wrap:wrap;
-  padding:14px 0;border-bottom:1px solid var(--rule);font-size:.97rem;color:var(--ink)}
+  padding:14px 0;border-bottom:1px solid var(--rule);font-size:var(--fs-box);color:var(--ink)}
 ul.plain li span{font-family:var(--data);font-size:10.5px;letter-spacing:.1em;
   text-transform:uppercase;color:var(--ink-3);white-space:nowrap}
 
@@ -386,7 +627,6 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
     text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
   .ledger td:first-child{font-size:14px}
   ul.plain li{flex-direction:column;gap:4px}
-  .readout{grid-template-columns:repeat(auto-fit,minmax(138px,1fr))}
   .strip{grid-template-columns:1fr 1fr;gap:7px}
   pre{font-size:11.5px;padding:16px 14px}
   figure.panel{padding:14px}
@@ -417,26 +657,33 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ── the sounding line ───────────────────────────────────────────── */
-.sound{position:fixed;left:0;top:0;bottom:0;width:var(--rail);z-index:60;
+.sound{position:fixed;left:0;top:34px;bottom:34px;width:var(--rail);z-index:60;
   pointer-events:none;font-family:var(--data)}
+/* NO GLOW anywhere on this line. A bloom is a light source the page cannot
+   account for, and at 22px it smeared the readout over the stop labels it was
+   meant to sit above. Real pixel colour; a cast shadow does the separating. */
 .sound .cable{position:absolute;left:34px;top:0;bottom:0;width:1px;
-  background:linear-gradient(180deg,transparent,var(--rule-lit) 3%,var(--rule-lit) 92%,transparent)}
+  background:var(--rule-lit);
+  -webkit-mask-image:linear-gradient(180deg,transparent,#000 3% 92%,transparent);
+          mask-image:linear-gradient(180deg,transparent,#000 3% 92%,transparent)}
 .sound .paid{position:absolute;left:34px;top:0;width:1px;height:0;
-  background:linear-gradient(180deg,var(--signal),color-mix(in srgb,var(--signal) 20%,transparent));
-  box-shadow:0 0 12px color-mix(in srgb,var(--signal) 55%,transparent)}
+  background:var(--signal)}
 .sound .bell{position:absolute;left:29px;width:11px;height:11px;margin-top:-5px;
-  border:1px solid var(--signal);background:var(--d0);transform:rotate(45deg);
-  box-shadow:0 0 14px color-mix(in srgb,var(--signal) 70%,transparent)}
+  border:1px solid var(--signal);background:var(--d0);transform:rotate(45deg)}
 .sound .bell::after{content:"";position:absolute;inset:3px;background:var(--signal)}
-.sound .depth{position:absolute;left:52px;margin-top:-16px;white-space:nowrap;
-  font-size:19px;font-weight:700;color:#fff;letter-spacing:-.04em;
-  /* the readout travels the whole line and WILL sit on top of a stop label.
-     Its own backing plate is what keeps both readable. */
-  padding:5px 9px 6px;background:var(--d0);
-  border-left:1px solid var(--signal);
-  box-shadow:0 0 22px 10px var(--d0)}
-.sound .depth small{display:block;font-size:8.5px;font-weight:400;letter-spacing:.24em;
-  color:var(--ink-3);margin-top:3px;text-transform:uppercase}
+/* the CAPSULE. It travels the whole line and will pass over a stop label, so
+   it carries its own machined pill: flat fill, a hairline ring, one contact
+   shadow -- the same ladder every other surface uses. */
+.sound .depth{position:absolute;left:50px;margin-top:-17px;white-space:nowrap;
+  display:flex;flex-direction:column;align-items:flex-start;
+  font-size:16px;font-weight:700;color:#fff;letter-spacing:-.035em;
+  padding:6px 15px 7px 22px;border-radius:999px;
+  background:var(--s-key);border:1px solid var(--rule-lit);
+  box-shadow:var(--e2)}
+.sound .depth::before{content:"";position:absolute;left:8px;top:50%;
+  width:4px;height:4px;margin-top:-2px;border-radius:50%;background:var(--signal)}
+.sound .depth small{display:block;font-size:8px;font-weight:400;letter-spacing:.22em;
+  color:var(--ink-3);margin-top:1px;text-transform:uppercase}
 .sound ol{list-style:none;margin:0;padding:0;position:absolute;inset:0}
 .sound li{position:absolute;left:34px;width:calc(var(--rail) - 40px);transform:translateY(-50%)}
 .sound li i{position:absolute;left:0;top:50%;width:8px;height:1px;
@@ -445,7 +692,7 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
   text-overflow:ellipsis;font-size:8.5px;font-weight:400;
   letter-spacing:.17em;text-transform:uppercase;color:var(--ink-3);opacity:.42;
   transition:all 260ms var(--ease);white-space:nowrap}
-.sound li.on i{width:16px;background:var(--signal);box-shadow:0 0 9px var(--signal)}
+.sound li.on i{width:16px;background:var(--signal)}
 .sound li.on b{opacity:1;color:var(--signal-text);padding-left:25px}
 .sound li.past i{background:color-mix(in srgb,var(--signal) 45%,var(--rule-lit))}
 .sound li.past b{opacity:.62}
@@ -464,7 +711,9 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
 .chapter .sub{margin-top:14px;color:var(--ink-3);font-family:var(--data);
   font-size:11px;letter-spacing:.2em;text-transform:uppercase}
 .chapter .hair{position:absolute;left:0;right:0;bottom:0;height:1px;
-  background:linear-gradient(90deg,var(--signal),transparent 62%)}
+  background:var(--signal);
+  -webkit-mask-image:linear-gradient(90deg,#000,transparent 62%);
+          mask-image:linear-gradient(90deg,#000,transparent 62%)}
 
 /* ── split: text one side, evidence the other ────────────────────── */
 .split{display:grid;grid-template-columns:minmax(0,var(--measure)) minmax(0,1fr);
@@ -485,11 +734,12 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
 @supports (backdrop-filter:blur(8px)){
   .pane{backdrop-filter:blur(18px) saturate(1.2);background:rgba(12,16,26,.38)}
 }
+.pane{box-shadow:var(--e2)}
 .pane::before{content:"";position:absolute;inset:0;pointer-events:none;
-  background:radial-gradient(90% 60% at 8% 0%,
-    color-mix(in srgb,var(--signal) 7%,transparent),transparent 70%)}
+  box-shadow:inset 0 1px 0 var(--edge-lit)}
 .pane > *{position:relative}
 .pane h3{margin-bottom:10px}
+.pane p,.pane li{font-size:var(--fs-box);line-height:1.62}
 .pane .k{font-family:var(--data);font-size:9.5px;letter-spacing:.2em;
   text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:12px}
 
@@ -510,13 +760,14 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
 .boot > *:nth-child(3){animation-delay:300ms}
 .boot > *:nth-child(4){animation-delay:420ms}
 .boot > *:nth-child(5){animation-delay:540ms}
-.boot .readout div{opacity:0;animation:surface 700ms var(--ease) forwards}
-.boot .readout div:nth-child(1){animation-delay:620ms}
-.boot .readout div:nth-child(2){animation-delay:690ms}
-.boot .readout div:nth-child(3){animation-delay:760ms}
-.boot .readout div:nth-child(4){animation-delay:830ms}
-.boot .readout div:nth-child(5){animation-delay:900ms}
-.boot .readout div:nth-child(6){animation-delay:970ms}
+.boot .bento > *{opacity:0;animation:surface 700ms var(--ease) forwards}
+.boot .bento > :nth-child(1){animation-delay:560ms}
+.boot .bento > :nth-child(2){animation-delay:640ms}
+.boot .bento > :nth-child(3){animation-delay:700ms}
+.boot .bento > :nth-child(4){animation-delay:760ms}
+.boot .bento > :nth-child(5){animation-delay:820ms}
+.boot .bento > :nth-child(6){animation-delay:880ms}
+.boot .bento > :nth-child(7){animation-delay:940ms}
 
 @media (max-width:900px){
   .sound{display:none}
@@ -524,5 +775,96 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
   .chapter .no{font-size:3.4rem}
 }
 @media (prefers-reduced-motion:reduce){
-  .boot > *,.boot .readout div{opacity:1;animation:none}
+  .boot > *,.boot .bento > *{opacity:1;animation:none}
 }
+
+/* ══ THE WIRE: a frame drawn as the bytes it is ══════════════════════
+   The azeria-labs register convention: the structure IS the figure. Each
+   byte is its own recessed cell holding its real hex; fields group bytes,
+   carry their offset above and their decoded value below. Colour is role,
+   and there are only three: RED is the part that means something (the verb
+   and its tag), OCEAN is identity (who speaks, who listens), and everything
+   else -- envelope and idle zeros -- stays in the dark it came from.
+   44 bytes happen to split into two rows of 22 exactly on field boundaries,
+   so the grid is 22 wide and no field is ever cut in half. */
+.wire{margin-top:var(--s4);padding:clamp(16px,2.2vw,28px);border-radius:14px;
+  background:var(--s-raised);box-shadow:var(--e2)}
+.wire__cmd{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 18px;
+  padding-bottom:18px;margin-bottom:18px;box-shadow:0 1px 0 var(--rule)}
+.wire__cmd code{font-size:14px;color:#fff;padding:6px 12px;border-radius:7px;
+  background:var(--s-sunk);box-shadow:var(--e-in)}
+.wire__cmd .silk:last-child{margin-left:auto}
+.wire .silk{font-family:var(--display);font-weight:800;font-size:9px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ink-3)}
+.wire__bytes{display:grid;grid-template-columns:repeat(22,minmax(0,1fr));gap:12px 4px}
+.fld{grid-column:span var(--n);display:flex;flex-direction:column;min-width:0;
+  font-family:var(--data)}
+.fld .off{font-size:9px;color:var(--ink-3);opacity:.7;padding:0 0 4px 2px}
+.fld .hex{display:grid;grid-template-columns:repeat(var(--n),1fr);gap:2px;
+  padding:3px;border-radius:6px;background:var(--s-sunk);box-shadow:var(--e-well)}
+.fld .hex i{font-style:normal;text-align:center;font-size:clamp(10px,.55rem + .3vw,13px);
+  line-height:1;padding:9px 0;border-radius:4px;color:var(--ink-3);
+  background:var(--s-flush);box-shadow:inset 0 1px 0 var(--edge-lit)}
+.fld b{margin-top:7px;padding-left:2px;font-family:var(--display);font-weight:800;
+  font-size:8.5px;letter-spacing:.08em;line-height:1.25;text-transform:uppercase;
+  color:var(--ink-3);overflow-wrap:anywhere}
+.fld em{font-style:normal;font-size:12px;color:var(--ink-2);padding-left:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* roles */
+.fld--verb .hex i,.fld--cmd .hex i{color:#fff;
+  background:color-mix(in srgb,var(--signal) 24%,var(--s-flush));
+  box-shadow:inset 0 1px 0 color-mix(in srgb,var(--signal) 45%,transparent)}
+.fld--verb b,.fld--cmd b,.fld--verb em,.fld--cmd em{color:var(--signal-text)}
+.fld--who .hex i{color:#fff;background:color-mix(in srgb,var(--medium) 26%,var(--s-flush));
+  box-shadow:inset 0 1px 0 color-mix(in srgb,var(--medium) 50%,transparent)}
+.fld--who b,.fld--who em{color:var(--medium-text)}
+.fld--idle .hex i{opacity:.45}
+.fld--idle em{color:var(--ink-3)}
+/* the lookup table, azeria-style: name, value, what it means */
+.wire__key{width:100%;margin-top:22px;border-collapse:separate;border-spacing:0 4px;
+  font-size:12.5px}
+.wire__key td{padding:9px 12px;background:var(--s-flush);vertical-align:baseline;
+  color:var(--ink-2);font-family:var(--prose)}
+.wire__key td:first-child{border-radius:7px 0 0 7px;width:1%;white-space:nowrap;
+  box-shadow:inset 2px 0 0 var(--rule-lit)}
+.wire__key td:last-child{border-radius:0 7px 7px 0}
+.wire__key td b{font-family:var(--display);font-weight:800;font-size:9px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink-3)}
+.wire__key .v{font-family:var(--data);color:#fff;width:1%;white-space:nowrap}
+.wire__key .fld--verb td:first-child,.wire__key .fld--cmd td:first-child{box-shadow:inset 2px 0 0 var(--signal)}
+.wire__key .fld--who td:first-child{box-shadow:inset 2px 0 0 var(--medium-text)}
+.wire figcaption{margin-top:16px}
+/* narrow: the 22-byte rows no longer fit, so fields wrap as whole units */
+@media (max-width:1000px){
+  .wire__bytes{display:flex;flex-wrap:wrap;gap:12px 6px}
+  .fld{flex:0 0 auto;width:calc(var(--n) * 32px + 8px)}
+  .wire__cmd .silk:last-child{margin-left:0}
+}
+
+/* ══ THE CORE SAMPLE: the ledger, one column per entry ═══════════════
+   Drawn like a drill core: a recessed tray, columns standing in the order
+   they were laid down. Height is how many numbers an entry holds; colour is
+   what the entry says about itself. Red is the only loud thing, and it is
+   reserved for the entries that took something back. */
+.core{margin-top:var(--s5);padding:clamp(16px,2.2vw,26px);border-radius:14px;
+  background:var(--s-raised);box-shadow:var(--e2)}
+.core__cols{list-style:none;margin:0;padding:10px 10px 0;display:flex;align-items:flex-end;
+  gap:3px;height:clamp(150px,22vh,220px);border-radius:8px;
+  background:var(--s-sunk);box-shadow:var(--e-well)}
+.core__cols li{flex:1 1 0;min-width:2px;height:calc(var(--h) * 100%);
+  border-radius:3px 3px 0 0;background:var(--rule-lit);
+  transition:transform var(--t-fast) var(--ease),filter var(--t-fast) var(--ease);
+  transform-origin:bottom}
+.core__cols li:hover{transform:scaleY(1.04);filter:brightness(1.45)}
+.core__cols li.core--back{background:var(--signal)}
+.core__cols li.core--no{background:color-mix(in srgb,var(--caution) 78%,var(--s-sunk))}
+.core__axis{display:flex;justify-content:space-between;margin-top:8px;
+  font-family:var(--data);font-size:9px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-3)}
+.core figcaption{margin-top:14px;line-height:1.7}
+.core__k{display:inline-flex;align-items:center;gap:7px;margin-right:18px;
+  font-family:var(--display);font-weight:800;font-size:9px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink-2)}
+.core__k::before{content:"";width:9px;height:9px;border-radius:2px;background:var(--rule-lit)}
+.core__k.core--back::before{background:var(--signal)}
+.core__k.core--no::before{background:var(--caution)}
