@@ -134,9 +134,9 @@ design, stated in both directions.
 ## Three acts
 
 **Act I — the lab years.** Mongla began as the autonomy software for a university AUV
-programme, and flew on its vehicles at **RoboSub 2023 (2nd place)** and **RoboSub 2025 (8th
-place)**. Four computers, a closed inner loop, and a 20 Hz host loop steering a black box we
-could not open. It won trophies and it had a ceiling.
+programme. The programme had placed **2nd at RoboSub 2023** the year before the author
+arrived; he joined in 2024, and the vision stack he led flew at **RoboSub 2025 (8th place)**. Four computers, a closed inner loop, and a 20 Hz host loop steering a black box we
+could not open. It placed, and it had a ceiling.
 
 **Act II — owning the stack.** A custom control board (firmware *Hengla*, by Rakibul Islam),
 a Pi 5 with dedicated inference silicon, and one USB-C cable between them. A 500 Hz loop we
@@ -685,8 +685,9 @@ is no third category, and nothing here is owned by an institution.
   Autonomy: perception, localization, control integration, the mission language, the simulator,
   and this repository.<br><br>
   Previously engineering team lead for the RoboSub 2026 campaign, AI &amp; Machine Vision sub-team
-  lead (2025), and a junior member of that team (2024) — the software placed
-  <strong>2nd at RoboSub 2023</strong> and <strong>8th in 2025</strong>.<br><br>
+  lead (2025), and a junior member of that team from 2024 — the year after the programme's
+  2nd place at RoboSub 2023, which predates him. His vision stack flew at
+  <strong>RoboSub 2025 (8th place)</strong>.<br><br>
   <em>"Machines that have to work when nobody is watching."</em><br><br>
   <a href="https://fh1m.github.io/">fh1m.github.io</a> ·
   <a href="https://github.com/fh1m">@fh1m</a> ·
@@ -716,7 +717,8 @@ is no third category, and nothing here is owned by an institution.
 ### History
 
 Mongla began as the autonomy software for an autonomous underwater vehicle programme at BRAC
-University, and flew on that programme's vehicles at **RoboSub 2023 (2nd place)** and
+University. The author joined that programme in 2024 — after its **2nd place at RoboSub 2023**,
+which is the team's result and not this software's — and the vision stack he led flew at
 **RoboSub 2025 (8th place)**. In September 2026 the author left the university, on principle,
 and Mongla continues independently. The vehicles, the team name and the university's materials
 remain with the university and are referred to here only in the past tense, as history. What

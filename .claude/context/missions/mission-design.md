@@ -33,7 +33,8 @@ Each task has:
 - A **completion signal** (passed through / torpedo hit / grabbed)
 
 ### Our Competition History
-- 2023: 2nd world — gate, buoy, bin tasks completed
+- 2023: 2nd world — gate, buoy, bin tasks completed (the programme's team result, the year
+  **before** the author joined; not this software)
 - 2025: 8th world — gate, slalom, bin, torpedo, octagon bottle tasks
 - Key insight: **robust control beats complex missions** — a vehicle that moves predictably
   can complete more tasks than one that moves unpredictably but has smart vision

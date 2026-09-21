@@ -24,8 +24,9 @@ documented wire protocol, and every change we need there is a pull request.
 Mongla began as the autonomy software for an autonomous underwater vehicle programme at BRAC
 University, where the author served as junior member of the AI & Machine Vision team (2024),
 AI & Machine Vision sub-team lead (2025), and engineering team lead for the RoboSub 2026
-campaign. The software flew on that programme's vehicles at **RoboSub 2023 (2nd place)** and
-**RoboSub 2025 (8th place)**.
+campaign. The programme had already placed **2nd at RoboSub 2023** — the year *before* the
+author joined, so that result belongs to the team of that year, not to this software. The
+vision stack he led flew at **RoboSub 2025 (8th place)**.
 
 In September 2026 the author left the university, on principle, and Mongla continues as an
 independent project. The vehicles, the team name and the university's materials remain with
