@@ -128,17 +128,28 @@
      search pattern believes it is sweeping.</figcaption>
   </figure>
 
+  <figure class="diff-fig">
+   <div class="diff" style="--pos:50%">
+     <img src="imgs/water-murky.png" alt="The same simulated gate in murky water" loading="lazy">
+     <img class="diff__top" src="imgs/water-clear.png" alt="The same simulated gate in clear water" loading="lazy">
+     <i class="diff__line" aria-hidden="true"></i>
+     <span class="diff__k diff__k--l">[ clear ]</span><span class="diff__k diff__k--r">[ murky ]</span>
+     <input class="diff__range" type="range" min="0" max="100" value="50"
+       aria-label="Drag to compare clear and murky water">
+   </div>
+   <figcaption><strong>Simulated</strong>: the same gate, one turbidity parameter apart — drag to
+     compare. This is the single variable that decides whether a run scores or ends, which is
+     why the simulator models it at all. The real water is further down the page, and every
+     threshold behind these rows is in
+     <a href="https://github.com/fh1m/mongla_ws/blob/main/.claude/context/measured-bars.md">measured-bars.md</a>
+     with its method beside it.</figcaption>
+  </figure>
+
   <figure>
    <div class="strip">
-     <img src="imgs/water-clear.png" alt="A target seen in clear water" loading="lazy">
-     <img src="imgs/water-murky.png" alt="The same target in murky water" loading="lazy">
      <img src="imgs/pool-glide.jpg" alt="The vehicle gliding through the test pool" loading="lazy">
      <img src="imgs/pool-top.jpg" alt="The test pool seen from above" loading="lazy">
    </div>
-   <figcaption>The same target, the same detector, two water conditions. This is the single
-     variable that decides whether a run scores or ends. Every threshold behind these rows is in
-     <a href="https://github.com/fh1m/mongla_ws/blob/main/.claude/context/measured-bars.md">measured-bars.md</a>, with the method beside
-     it.</figcaption>
   </figure>
  </div>
 </section>
@@ -1342,6 +1353,49 @@
     }, {threshold: 0.4});
     pairs.forEach(function(p){ io.observe(p); });
   } else { pairs.forEach(function(p){ p.classList.add('in'); }); }
+})();
+(function(){
+  /* Number ticker (magicui / transitions.dev), ported: each reading counts up
+     to its measured value once, when it first comes into view. Only the first
+     text node animates, so a unit in a child element is left alone, and the
+     final text is restored exactly, so the page never shows a rounded number
+     that is not the real one. Reduced motion: no animation at all. */
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (!('IntersectionObserver' in window)) return;
+  var cells = [].slice.call(document.querySelectorAll('.bento b'));
+  function run(b){
+    var node = b.firstChild; if (!node || node.nodeType !== 3) return;
+    var text = node.nodeValue, m = text.match(/^(\s*)([0-9][0-9\s\u202f]*[0-9]|[0-9])(\.[0-9]+)?(.*)$/);
+    if (!m) return;
+    var digits = (m[2] + (m[3] || '')).replace(/[\s\u202f]/g, '');
+    var target = parseFloat(digits), dec = m[3] ? m[3].length - 1 : 0;
+    var grouped = /[\s\u202f]/.test(m[2]), t0 = null, DUR = 900;
+    function fmt(v){
+      var str = v.toFixed(dec);
+      if (grouped){ var p = str.split('.'); p[0] = p[0].replace(/\B(?=(\d{3})+(?!\d))/g, '\u202f'); str = p.join('.'); }
+      return m[1] + str + m[4];
+    }
+    function step(ts){
+      if (t0 === null) t0 = ts;
+      var k = Math.min((ts - t0) / DUR, 1), e = 1 - Math.pow(2, -10 * k);
+      node.nodeValue = k < 1 ? fmt(target * e) : text;
+      if (k < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+  var io = new IntersectionObserver(function(es){
+    es.forEach(function(e){ if (e.isIntersecting){ run(e.target); io.unobserve(e.target); } });
+  }, {threshold: 0.6});
+  cells.forEach(function(b){ io.observe(b); });
+})();
+(function(){
+  /* daisyUI's Diff, ported: a range input drives one CSS variable that clips
+     the top image. A native input rather than the CSS resize handle, because a
+     resize grip is invisible on a phone and a range thumb is not. */
+  document.querySelectorAll('.diff').forEach(function(d){
+    var r = d.querySelector('.diff__range');
+    r.addEventListener('input', function(){ d.style.setProperty('--pos', r.value + '%'); });
+  });
 })();
 (function(){
   /* ── the flow lab: a camera pointed at the floor ──────────────────
