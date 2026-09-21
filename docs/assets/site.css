@@ -89,8 +89,8 @@
   --fs-h1:clamp(2.1rem,.9rem + 4vw,4.4rem);
 
   --gutter:clamp(20px,3.4vw,72px);
-  --measure:66ch;
-  --wrap:1340px;
+  --measure:76ch;
+  --wrap:min(1600px,100%);   /* was 1340 px: a 1920 screen left 290 px empty per side */
   --s1:8px; --s2:14px; --s3:22px; --s4:34px; --s5:52px; --s6:clamp(56px,7vw,96px);
   --t-fast:150ms; --t-mid:420ms; --t-slow:900ms;
   --ease:cubic-bezier(.16,1,.3,1);
@@ -572,7 +572,107 @@ figure.panel{background:var(--s-raised);
 figure.panel figcaption{margin-top:clamp(16px,2vw,26px);padding-top:14px;
   border-top:1px solid var(--rule)}
 
-.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(176px,1fr));gap:9px}
+/* ── the safety chain ─────────────────────────────────────────────────
+   Drawn as a chain because that is the argument: eight plain links, each held
+   by a different owner, and the strength is in the order. A link that is OFF
+   is drawn broken, and one that cannot tell two states apart is drawn thin --
+   the figure shows the chain as configured, not as intended. */
+.chain{margin:var(--s5) 0 0;padding:clamp(16px,2vw,26px);border-radius:16px;
+  background:var(--s-raised);box-shadow:var(--e2)}
+.chain__links{list-style:none;margin:0;padding:0;display:grid;gap:0;
+  grid-template-columns:repeat(8,minmax(0,1fr));counter-reset:link}
+.chain__links li{position:relative;padding:44px 10px 12px;text-align:center;counter-increment:link}
+/* the link itself: an oval ring, and the bar that joins it to the next one */
+.chain__links li::before{content:"";position:absolute;left:50%;top:6px;width:54px;height:26px;
+  margin-left:-27px;border-radius:999px;border:3px solid var(--rule-lit);background:var(--s-sunk);
+  transition:border-color 260ms var(--ease),background 260ms var(--ease),transform 260ms var(--ease)}
+.chain__links li::after{content:"";position:absolute;top:18px;left:calc(50% + 27px);
+  width:calc(100% - 54px);height:3px;background:var(--rule-lit);
+  transition:background 260ms var(--ease)}
+.chain__links li:last-child::after{display:none}
+.chain__links b{display:block;font-family:var(--display);font-weight:800;font-size:12px;
+  letter-spacing:.01em;color:#fff;line-height:1.25}
+.chain__links span{display:block;margin-top:5px;font-family:var(--data);font-size:10.5px;
+  line-height:1.4;color:var(--ink-3)}
+.chain__links > li > em{display:inline-block;margin-top:7px;padding:2px 7px;border-radius:999px;
+  font-style:normal;font-family:var(--data);font-size:9.5px;letter-spacing:.06em;
+  color:var(--ink-2);background:var(--s-sunk)}
+/* the states the figure can show */
+.chain__links li.path::before{border-color:var(--medium-text)}
+.chain__links li.path::after{background:var(--medium-text)}
+.chain__links li.catch::before{border-color:#3fd98a;background:rgba(63,217,138,.16);transform:scale(1.12)}
+.chain__links li.catch b{color:#3fd98a}
+.chain__links li.miss::before{border-color:var(--signal);background:rgba(255,42,20,.14);transform:scale(1.12)}
+.chain__links li.miss b{color:var(--signal-text)}
+.chain__links li.broken::before{border-style:dashed;border-color:var(--signal)}
+.chain__links li.broken::after{background:repeating-linear-gradient(90deg,var(--signal) 0 5px,transparent 5px 11px)}
+.chain__links li.broken > em{color:var(--signal-text)}
+.chain__links li.weak::before{border-width:1.5px;border-color:#e0b341}
+.chain__links li.weak > em{color:#e0b341}
+
+.chain__faults{display:flex;flex-wrap:wrap;gap:7px;margin-top:18px;padding-top:16px;
+  box-shadow:0 -1px 0 var(--rule)}
+.chain__faults .key.on{border-color:var(--signal);color:var(--signal-text)}
+.chain__verdict{display:grid;gap:9px;margin-top:14px;grid-template-columns:1fr 1fr 2.4fr}
+.chain__verdict > div{padding:12px 14px;border-radius:11px;background:var(--s-sunk);box-shadow:var(--e-in)}
+.chain__verdict .silk{display:block;font-family:var(--display);font-weight:800;
+  font-size:var(--fs-micro);letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)}
+.chain__verdict b{display:block;margin-top:6px;font-family:var(--data);font-size:12.5px;
+  font-weight:400;line-height:1.5;color:#fff}
+.chain__verdict b.bad{color:var(--signal-text)}
+.chain figcaption{margin-top:14px}
+@media (max-width:1100px){
+  .chain__links{grid-template-columns:repeat(4,minmax(0,1fr));row-gap:14px}
+  .chain__links li:nth-child(4)::after{display:none}
+  .chain__verdict{grid-template-columns:1fr 1fr}
+  .chain__verdict .wide{grid-column:1/-1}
+}
+@media (max-width:560px){
+  .chain__links{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .chain__links li:nth-child(2n)::after{display:none}
+  .chain__links li:nth-child(4)::after{display:none}
+}
+
+/* ── the simulator gallery: one hull shot, four course shots ─────────── */
+.simgal{display:grid;gap:10px;margin:var(--s5) 0;
+  grid-template-columns:repeat(4,1fr);grid-template-areas:"h h a b" "h h c d"}
+.simgal figure{margin:0;position:relative;border-radius:12px;overflow:hidden;background:#000;
+  box-shadow:var(--e2)}
+.simgal figure:nth-child(2){grid-area:a} .simgal figure:nth-child(3){grid-area:b}
+.simgal figure:nth-child(4){grid-area:c} .simgal figure:nth-child(5){grid-area:d}
+.simgal__hero{grid-area:h}
+.simgal img{display:block;width:100%;height:100%;object-fit:cover;aspect-ratio:1600/789;
+  transition:transform 600ms var(--ease)}
+.simgal figure:hover img{transform:scale(1.03)}
+.simgal figcaption{position:absolute;left:0;right:0;bottom:0;padding:22px 12px 10px;
+  background:linear-gradient(0deg,rgba(0,0,0,.78),transparent);   /* a scrim, for legibility */
+  font-family:var(--data);font-size:11px;color:var(--ink-2)}
+.simgal .silk{display:block;font-family:var(--display);font-weight:800;font-size:var(--fs-micro);
+  letter-spacing:.13em;text-transform:uppercase;color:#fff}
+.simgal .silk i{font-style:normal;color:var(--signal)}
+.simgal__hero figcaption{padding:48px 18px 16px;font-size:12px;max-width:none}
+@media (max-width:860px){
+  .simgal{grid-template-columns:1fr 1fr;grid-template-areas:"h h" "a b" "c d"}
+  .simgal__hero figcaption{position:static;background:var(--s-raised)}
+}
+
+/* ── display sizes ────────────────────────────────────────────────────
+   Measured in Chrome at 1920 / 1280 / 390 px (2026-09-22). Before this, a pool
+   photo rendered at 796 x 1061, each HUD still at 1538 x 1373, and the hull
+   elevations at 1522 x 1393 -- a picture you have to scroll past is not a
+   picture, it is a wall. Every photo now has a ceiling that is about the size
+   the eye takes in at once. */
+.strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,240px));gap:9px;
+  justify-content:start}
+.hud-pair{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+  margin-top:var(--s5)}
+.hud-pair .hero-render{margin-top:0}
+.hero-render img{max-height:min(72vh,720px);object-fit:contain;background:#000}
+.panel img{max-width:1180px;margin-inline:auto}
+.panel img[src$="hull-elevations.svg"]{max-width:920px}
+.plate{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+@media (min-width:1500px){ .plate{grid-template-columns:repeat(3,1fr)} }
+
 .strip img{aspect-ratio:3/4;object-fit:cover;filter:saturate(.55) contrast(1.1) brightness(.82);
   transition:filter var(--t-mid) var(--ease),transform var(--t-mid) var(--ease)}
 .strip img:hover{filter:none;transform:translateY(-3px)}
@@ -633,11 +733,13 @@ ul.plain li span{font-family:var(--data);font-size:10.5px;letter-spacing:.1em;
   transition:opacity 700ms var(--ease),transform 700ms var(--ease)}
 .rise.in{opacity:1;transform:none}
 
-footer{padding:60px var(--gutter) 128px;border-top:1px solid var(--rule);
+/* scoped to the page's own footer: bare `footer` also matched every quote's
+   attribution and gave each one 60 px of padding and a rule */
+body > footer{padding:60px var(--gutter) 128px;border-top:1px solid var(--rule);
   font-family:var(--data);font-size:11px;
   color:var(--ink-3);letter-spacing:.04em;position:relative;z-index:2}
-footer a{border:0;color:var(--ink-2)} footer a:hover{color:#fff;border:0}
-footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
+body > footer a{border:0;color:var(--ink-2)} body > footer a:hover{color:#fff;border:0}
+body > footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
 
 @media (max-width:900px){
   main,footer{margin-left:0}
@@ -695,11 +797,11 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
    cannot do -- draws each chapter as wide as its share of the page. */
 .dock{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:70;
   font-family:var(--data);display:flex;flex-direction:column;align-items:stretch;
-  gap:8px;width:min(680px,calc(100vw - 32px))}
+  gap:8px;width:min(860px,calc(100% - 32px))}
 .dock__bar{display:grid;grid-template-columns:auto auto 1fr auto;align-items:center;gap:14px;
-  width:100%;padding:9px 16px;border-radius:999px;border:1px solid var(--rule-lit);
-  background:color-mix(in srgb,var(--s-key) 88%,transparent);backdrop-filter:blur(14px);
-  box-shadow:var(--e3);color:var(--ink);cursor:pointer;text-align:left;
+  width:100%;padding:6px 16px;border-radius:999px;border:1px solid var(--rule-lit);
+  background:color-mix(in srgb,var(--s-key) 97%,transparent);
+  box-shadow:var(--e3);color:var(--ink);cursor:default;text-align:left;
   transition:border-color 200ms var(--ease),transform 200ms var(--ease)}
 .dock__bar:hover,.dock__bar:focus-visible{border-color:var(--signal);transform:translateY(-1px)}
 .dock__idx b{font-size:13px;font-weight:700;color:#fff;letter-spacing:-.02em}
@@ -710,20 +812,17 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
 .dock__depth b{font-size:13px;font-weight:700;color:#fff}
 .dock__depth small{font-size:9px;color:var(--ink-3);margin-left:2px}
 
-/* the ticks ARE the map: flex-grow carries each chapter's share of the page */
-.dock__ticks{position:relative;display:flex;gap:2px;height:14px;align-items:center;min-width:0;
-  overflow:hidden;contain:paint}   /* the sweep travels past both ends; the page must not */
-.dock__ticks i{--mag:1;   /* the pointer's magnification, written by the dock script */
-  display:block;height:3px;border-radius:2px;background:var(--rule-lit);
-  transform:scaleY(var(--mag));transform-origin:center;
-  transition:background 240ms var(--ease),height 240ms var(--ease)}
-.dock__ticks i.past{background:color-mix(in srgb,var(--signal) 50%,var(--rule-lit))}
-.dock__ticks i.on{background:var(--signal);height:9px}
-/* one slow sweep, the way a sonar display refreshes; motion only, no bloom */
-.dock__ticks u{position:absolute;top:0;bottom:0;width:60px;pointer-events:none;
-  background:linear-gradient(90deg,transparent,rgba(255,255,255,.14),transparent);
-  animation:sweep 7s var(--ease) infinite}
-@keyframes sweep{0%{transform:translateX(-70px)}55%,100%{transform:translateX(640px)}}
+/* the sonar floor: a canvas, drawn and flown by the dock script */
+.dock__sea{position:relative;display:block;height:34px;min-width:0;cursor:ew-resize;
+  touch-action:none}
+.dock__sea canvas{display:block;width:100%;height:100%}
+.dock--flying .dock__sea{cursor:grabbing}
+.dock__tip{position:absolute;bottom:calc(100% + 10px);transform:translateX(-50%);
+  white-space:nowrap;padding:4px 9px;border-radius:7px;background:#000;
+  border:1px solid var(--rule-lit);font-family:var(--data);font-size:10px;letter-spacing:.06em;
+  color:#fff;pointer-events:none}
+.dock__idx{cursor:pointer;border-radius:6px;padding:2px 4px;margin:-2px -4px}
+.dock__idx:hover{background:rgba(255,255,255,.07)}
 
 .dock__sheet{padding:16px 18px 14px;border-radius:16px;border:1px solid var(--rule-lit);
   background:color-mix(in srgb,var(--s-key) 94%,transparent);backdrop-filter:blur(18px);
@@ -740,15 +839,7 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
 .dock__rows .n{font-size:9px;color:var(--ink-3)}
 .dock__rows .t{font-family:var(--display);font-weight:700;font-size:11px;letter-spacing:.02em;
   color:var(--ink-2)}
-/* the share bar under each name: the same number the tick above encodes */
-/* a track, and a fill: the fill is this chapter's length against the longest
-   one, so the column reads as a bar chart of the page you are standing in */
-.dock__rows .pc{grid-column:2;display:block;height:3px;border-radius:2px;margin-top:6px;
-  background:rgba(255,255,255,.07);position:relative;overflow:hidden}
-.dock__rows .pc::after{content:"";position:absolute;inset:0 auto 0 0;border-radius:2px;
-  width:var(--w,6%);background:var(--rule-lit);transition:background 200ms var(--ease)}
-.dock__rows .on .t{color:#fff} .dock__rows .on .pc::after{background:var(--signal)}
-.dock__rows .past .pc::after{background:color-mix(in srgb,var(--signal) 45%,var(--rule-lit))}
+.dock__rows .on .t{color:#fff}
 .dock__snd{position:absolute;right:-2px;bottom:calc(100% + 10px);display:flex;align-items:center;
   gap:6px;padding:6px 11px;border-radius:999px;border:1px solid var(--rule);
   background:color-mix(in srgb,var(--s-key) 88%,transparent);backdrop-filter:blur(14px);
@@ -769,9 +860,7 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
   .dock__name{display:none}
 }
 @media (prefers-reduced-motion:reduce){
-  .dock__ticks u{animation:none;opacity:0}
   .dock__sheet{animation:none}
-  .dock__ticks i{transform:none}
   .dock__snd.on .w1,.dock__snd.on .w2{animation:none;opacity:1}
 }
 
@@ -1295,13 +1384,14 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
 }
 
 /* a pull quote: the one place on the page allowed to be personal */
-.pull{margin:var(--s5) 0 0;padding:clamp(22px,3vw,34px) clamp(20px,3vw,38px);border-radius:14px;
-  background:var(--s-raised);box-shadow:var(--e2);border-left:2px solid var(--signal);
-  font-family:var(--display);font-weight:700;font-size:clamp(1.05rem,.95rem + .7vw,1.5rem);
-  line-height:1.4;letter-spacing:-.015em;color:#fff;max-width:none}
+.pull{margin:var(--s5) 0 0;padding:14px 0 14px 20px;border-radius:0;
+  background:none;box-shadow:none;border-left:2px solid var(--signal);
+  font-family:var(--display);font-weight:700;font-size:clamp(.98rem,.92rem + .3vw,1.16rem);
+  line-height:1.45;letter-spacing:-.01em;color:#fff;max-width:62ch}
 .pull em{font-style:normal;color:var(--signal-text)}
-.pull footer{margin-top:16px;font-family:var(--data);font-weight:400;font-size:var(--fs-caption);
-  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+.pull footer{margin-top:8px;padding:0;border:0;font-family:var(--data);font-weight:400;
+  font-size:var(--fs-micro);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.pull footer::before{content:"\2014\00a0"}
 
 /* ── the gate run ─────────────────────────────────────────────────────
    Seven steps and a hull that only advances when a step says yes. The path
@@ -1548,7 +1638,7 @@ pre::-webkit-scrollbar-track,.scrollable::-webkit-scrollbar-track{background:tra
 .faults figcaption{margin-top:16px}
 
 /* ── Diff (daisyUI), ported: one image clipped over another ─────────── */
-.diff{position:relative;aspect-ratio:4/3;max-width:760px;border-radius:12px;overflow:hidden;
+.diff{position:relative;aspect-ratio:21/8;max-width:none;width:100%;border-radius:12px;overflow:hidden;
   box-shadow:var(--e2);background:var(--s-sunk)}
 .diff img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 .diff__top{clip-path:inset(0 calc(100% - var(--pos)) 0 0)}
@@ -1562,4 +1652,5 @@ pre::-webkit-scrollbar-track,.scrollable::-webkit-scrollbar-track{background:tra
 .diff__k--l{left:12px} .diff__k--r{right:12px}
 .diff__range{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:ew-resize}
 .diff__range:focus-visible + .diff__line,.diff:focus-within .diff__line{background:var(--signal-text)}
-.diff-fig figcaption{max-width:760px}
+.diff-fig figcaption{max-width:var(--measure)}
+@media (max-width:700px){ .diff{aspect-ratio:4/3} }

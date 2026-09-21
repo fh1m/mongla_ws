@@ -19,7 +19,8 @@
           title="Chapters — press C">
     <span class="dock__idx"><b id="dock-n">01</b><small id="dock-of">/ 25</small></span>
     <span class="dock__name" id="dock-name">surface</span>
-    <span class="dock__ticks" id="dock-ticks" aria-hidden="true"></span>
+    <span class="dock__sea"><canvas id="dock-sea" aria-hidden="true"></canvas>
+      <span class="dock__tip" id="dock-tip" hidden></span></span>
     <span class="dock__depth"><b id="dock-depth">0</b><small>m</small></span>
   </button>
   <button class="dock__snd" id="dock-snd" type="button" aria-pressed="false"
@@ -1014,6 +1015,83 @@
  </div>
 </section>
 
+<!-- 06c ─────────────────────────── -->
+<section id="safety" data-chapter="the safety chain">
+ <div class="wrap">
+  <p class="mark">The safety chain <i>//</i> what stops the vehicle, and what does not</p>
+  <h2 class="col">Eight links between a mistake and a hull on the bottom of the pool. One of them is missing.</h2>
+  <p class="lede col quiet">A vehicle is not made safe by one clever guard. It is made safe by a chain
+    of dull ones, each owned by a different part of the system, each catching a failure the others
+    cannot see. Pick a failure below and watch which link takes it. The chain is drawn as it is
+    configured <em>today</em> — including the link that is switched off and the one that cannot tell
+    two different states apart.</p>
+
+  <figure class="chain" id="chain">
+   <ol class="chain__links">
+    <li data-link="kill" class="weak"><b>kill switch</b><span>a human, by hand</span><em>always</em></li>
+    <li data-link="ctrlc"><b>Ctrl-C</b><span>the manager stops, then disarms</span><em>any time</em></li>
+    <li data-link="bypass"><b>safety verbs jump the queue</b><span>disarm · stop · surface pre-empt a running verb</span><em>next tick</em></li>
+    <li data-link="rev"><b>firmware interlock</b><span>below the floor: refused at connect <em>and</em> inside arm()</span><em>connect · arm</em></li>
+    <li data-link="baro"><b>barometer health</b><span>unhealthy: the board refuses every automatic mode</span><em>every move</em></li>
+    <li data-link="hb"><b>heartbeat failsafe</b><span>no word from the Pi: the board surfaces</span><em>after 5 s</em></li>
+    <li data-link="leak" class="broken"><b>leak failsafe</b><span><code>LEAK_EN = 0</code> — neither blocks arming nor surfaces</span><em>OFF</em></li>
+    <li data-link="nan"><b>absence is not zero</b><span>a missing reading renders <code>--</code> / <code>NaN</code></span><em>every value</em></li>
+   </ol>
+   <div class="chain__faults" role="group" aria-label="Choose a failure">
+    <button class="key" type="button" data-fault="pi">the Pi crashes mid-run</button>
+    <button class="key" type="button" data-fault="hang">a mission hangs inside a verb</button>
+    <button class="key" type="button" data-fault="panic">the operator needs it stopped now</button>
+    <button class="key" type="button" data-fault="oldfw">the board runs old firmware</button>
+    <button class="key" type="button" data-fault="baro">the barometer goes bad</button>
+    <button class="key" type="button" data-fault="dead">a sensor stops reporting</button>
+    <button class="key" type="button" data-fault="leak">water gets into the hull</button>
+    <button class="key" type="button" data-fault="kill">the power board goes quiet</button>
+   </div>
+   <div class="chain__verdict" aria-live="polite">
+    <div><span class="silk">caught by</span><b id="ch-by">—</b></div>
+    <div><span class="silk">when</span><b id="ch-when">—</b></div>
+    <div class="wide"><span class="silk">what the vehicle does</span><b id="ch-does">pick a failure</b></div>
+   </div>
+   <figcaption>Every link is a line in the code or a parameter read off the board, not an intention.
+     The heartbeat is measured at <span class="num">2 Hz</span> against a
+     <span class="num">5 s</span> failsafe — a <span class="num">10×</span> margin. <code>LEAK_EN</code>
+     and the kill-switch ambiguity are from reading the live board (<code>srot-board-soul.md</code> §4,
+     <code>measured-bars.md</code> §26); both are open asks to the firmware team, not things this
+     repository can switch on from the host.</figcaption>
+  </figure>
+
+  <div class="split" style="margin-top:var(--s5)">
+   <div>
+    <h3>Why a chain, and not a better guard</h3>
+    <p class="quiet">Each link is simple enough to be obviously right, and each one lives where its
+      failure can actually be seen. The board cannot know a mission is stuck; the host can. The
+      host cannot act if the Pi has frozen; the board can. A human cannot react in two
+      milliseconds; the loop can. No single layer could hold all eight, which is exactly why none
+      of them tries.</p>
+    <p class="quiet">It is also why the order of operations in <code>arm()</code> matters more than
+      any one check in it: the firmware revision is checked <em>again</em> at arm, not only at
+      connect, because a board can be re-flashed between the two and a revision below the floor
+      turns every command backwards.</p>
+   </div>
+   <div>
+    <h3>The two links we cannot close from here</h3>
+    <p class="quiet"><strong>The leak link is off.</strong> The sensor is present and its bit is
+      readable, but <code>LEAK_EN</code> is <span class="num">0</span> on this board, and the firmware
+      gates both the pre-arm refusal and the surface failsafe on it. Water in the hull would not stop
+      an arm and would not bring the vehicle up.</p>
+    <p class="quiet"><strong>The kill link is ambiguous.</strong> <code>KILL = 0</code> means "live"
+      <em>or</em> "the power board is not talking to us", and the host cannot tell which. So
+      <code>arm()</code> refuses only on a <em>known</em> engaged switch, and the display says
+      <code>UNKNOWN</code> rather than <code>clear</code> when the second board is silent. That is the
+      honest reading, not a fix — the fix is one line of firmware, and it has been asked for.</p>
+   </div>
+  </div>
+  <blockquote class="pull">Safety is not the guard that catches everything. It is <em>knowing
+    exactly which failure each guard will not see</em>.
+   <footer>the safety chain</footer></blockquote>
+ </div>
+</section>
+
 <!-- 07 ──────────────────────────────────────────────────────────────── -->
 <section id="thinking" data-chapter="one task">
  <div class="wrap">
@@ -1362,6 +1440,23 @@
     not a demo. It is where every recovery path in the stack got run for the first time, because
     a pool day is four hours long and a bug is cheaper here.</p>
 
+  <div class="simgal">
+   <figure class="simgal__hero">
+    <img src="imgs/sim/sim-bluerov-gate.webp" alt="A BlueROV2 Heavy hovering beside the gate in the simulated pool, the slalom poles and task boards behind it" loading="lazy" width="1600" height="789">
+    <figcaption><span class="silk">Gazebo <i>//</i> the stand-in hull</span> A BlueROV2 Heavy at the
+      gate, flown by ArduSub SITL. It is not our vehicle, on purpose: the simulator is a physics
+      environment, and every verb it runs goes through the same interface the board uses.</figcaption>
+   </figure>
+   <figure><img src="imgs/sim/sim-gate-course.webp" alt="The gate and the slalom poles from the start of the course" loading="lazy" width="1600" height="789">
+    <figcaption><span class="silk">the gate and the slalom</span></figcaption></figure>
+   <figure><img src="imgs/sim/sim-bins-torpedo.webp" alt="The bins and the torpedo board in the simulated pool" loading="lazy" width="1600" height="789">
+    <figcaption><span class="silk">bins and the torpedo board</span></figcaption></figure>
+   <figure><img src="imgs/sim/sim-slalom.webp" alt="The slalom poles, red and white, from low in the water" loading="lazy" width="1600" height="789">
+    <figcaption><span class="silk">slalom, from low</span></figcaption></figure>
+   <figure><img src="imgs/sim/sim-pool-overview.webp" alt="The whole simulated pool, the task tables and the octagon target" loading="lazy" width="1600" height="789">
+    <figcaption><span class="silk">the whole course</span></figcaption></figure>
+  </div>
+
   <table class="ledger">
    <thead><tr><th>what it models</th><th>why it had to be modelled</th><th>the number</th></tr></thead>
    <tbody>
@@ -1427,6 +1522,7 @@
     handed to the same <code>render_ui_strip()</code> the vehicle draws with, so the operator
     display below is real even though the water is not.</p>
 
+  <div class="hud-pair">
   <figure class="hero-render">
    <img src="imgs/hud/hud_clear.webp" alt="The operator display on a clear-water frame: seven detections including the gate at 0.93 confidence, with the aim line from frame centre to the primary target" loading="lazy" width="1700" height="1518">
    <figcaption><strong>Simulated clear water.</strong> Seven detections — the gate at
@@ -1435,13 +1531,14 @@
      length <em>is</em> the error the controller is closing.</figcaption>
   </figure>
 
-  <figure class="hero-render" style="margin-top:var(--s4)">
+  <figure class="hero-render">
    <img src="imgs/hud/hud_murky.webp" alt="The operator display on a murky-water frame: four detections, the gate still held at 0.98" loading="lazy" width="1700" height="1518">
    <figcaption><strong>Simulated murky water, same detector, same weights.</strong> Four detections instead
      of seven — but the gate survives at <span class="num">0.98</span>. The flares are what the
      water takes first — which is the argument for training on the water you will actually swim in,
      and the reason the next section exists.</figcaption>
   </figure>
+  </div>
 
   <p class="col quiet" style="margin-top:30px">And the honest half: across the thirteen sessions,
     two returned <strong>no detections at all</strong> under these weights — they are a different
@@ -2291,111 +2388,180 @@
   update();
 })();
 (function(){
-  /* The descent dock. The page used to carry a fixed rail down the left edge:
-     150 px of every screen, for ever, to say "you are here" -- and a vertical
-     progress rail is the single most over-used device on a long page. This is
-     a dock instead. It sits at the bottom, costs a 44 px strip only while the
-     pointer is near it, and opens into the whole map on hover, focus, tap or
-     the C key.
+  /* The descent dock, as a sonar you can fly.
 
-     The ticks are NOT evenly spaced. Each one is as wide as its section's share
-     of the document, so the strip is a map of the page: a long chapter is a
-     long tick. That is the part a scroll bar cannot say. */
+     The strip along the bottom is a seabed profile of THIS page: each chapter
+     is a stretch of floor as wide as its share of the document, and the floor
+     falls away chapter by chapter, because that is what reading this page is --
+     a descent. A small hull rides above it at your position.
+
+     It is a scrubber, not an index: press anywhere on the floor and drag, and
+     the page follows the hull. Hover shows which chapter lies under the pointer.
+     Arrow keys on the bar step a chapter at a time. The full list still opens
+     from the chapter number, for anyone who would rather read than fly. */
   var dock  = document.getElementById('dock');
   if (!dock) return;
   var bar   = document.getElementById('dock-bar');
   var sheet = document.getElementById('dock-sheet');
-  var ticks = document.getElementById('dock-ticks');
+  var cv    = document.getElementById('dock-sea');
+  var tip   = document.getElementById('dock-tip');
   var secs  = [].slice.call(document.querySelectorAll('section[data-chapter]'));
   var elN   = document.getElementById('dock-n');
   var elOf  = document.getElementById('dock-of');
   var elNm  = document.getElementById('dock-name');
   var elD   = document.getElementById('dock-depth');
-  var spans = [], cur = -1, open = false;
+  var ctx   = cv.getContext('2d');
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var spans = [], cur = -1, open = false, frac = 0, drag = false, hoverX = null, t0 = performance.now();
+
+  var css = getComputedStyle(document.documentElement);
+  var RED = css.getPropertyValue('--signal').trim() || '#ff2a14';
+  var SEA = css.getPropertyValue('--medium-text').trim() || '#5aa0ff';
 
   elOf.textContent = '/ ' + secs.length;
   sheet.innerHTML = '<p class="silk">The descent <i>//</i> ' + secs.length +
-    ' chapters \u00b7 each block is as wide as its share of the page</p>' +
+    ' chapters · drag the hull along the floor to fly the page</p>' +
     '<div class="dock__rows">' + secs.map(function(sec, i){
       return '<button type="button" data-go="' + i + '">' +
              '<span class="n">' + ('0' + (i + 1)).slice(-2) + '</span>' +
-             '<span class="t">' + sec.dataset.chapter + '</span>' +
-             '<span class="pc"></span></button>';
+             '<span class="t">' + sec.dataset.chapter + '</span></button>';
     }).join('') + '</div>';
   var rows = [].slice.call(sheet.querySelectorAll('[data-go]'));
-  ticks.innerHTML = secs.map(function(){ return '<i></i>'; }).join('') + '<u id="dock-ping"></u>';
-  var tickEls = [].slice.call(ticks.querySelectorAll('i'));
 
+  function docH(){ return Math.max(1, document.body.scrollHeight - innerHeight); }
   function layout(){
-    var docH = document.body.scrollHeight;
-    if (docH <= 0) return;
+    var H = document.body.scrollHeight;
     spans = secs.map(function(sec, i){
       var top = sec.getBoundingClientRect().top + scrollY;
       var next = secs[i + 1];
-      var bottom = next ? next.getBoundingClientRect().top + scrollY : docH;
-      return { top: top, share: Math.max(0.012, (bottom - top) / docH) };
+      var end = next ? next.getBoundingClientRect().top + scrollY : H;
+      return { a: top / H, b: end / H, top: top };
     });
-    var total = spans.reduce(function(a, s){ return a + s.share; }, 0);
-    var biggest = Math.max.apply(null, spans.map(function(sp){ return sp.share; }));
+    var r = cv.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
+    cv.width = Math.max(1, r.width * dpr); cv.height = Math.max(1, r.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  function chapterAt(f){
+    for (var i = spans.length - 1; i >= 0; i--) if (f >= spans[i].a) return i;
+    return 0;
+  }
+  function floorY(i, h){
+    /* the floor falls with the chapter index, with a little relief so it reads
+       as ground and not as a staircase */
+    var n = Math.max(1, secs.length - 1);
+    return h * (0.34 + 0.52 * (i / n)) + Math.sin(i * 2.1) * 2.2;
+  }
+  function draw(now){
+    var w = cv.clientWidth, h = cv.clientHeight;
+    ctx.clearRect(0, 0, w, h);
+    if (!spans.length) return;
+    // the floor, one stretch per chapter
     spans.forEach(function(sp, i){
-      tickEls[i].style.flexGrow = sp.share / total;
-      /* the row's bar is scaled to the LONGEST chapter, not to the page: at
-         page scale every bar is a few percent wide and they all look alike,
-         which tells the reader nothing */
-      rows[i].querySelector('.pc').style.setProperty('--w', (sp.share / biggest * 100).toFixed(1) + '%');
-      rows[i].title = sp.share > 0 ? (sp.share * 100).toFixed(1) + ' % of the page' : '';
+      var x0 = sp.a * w, x1 = sp.b * w, y = floorY(i, h);
+      var ny = i < spans.length - 1 ? floorY(i + 1, h) : y;
+      ctx.beginPath();
+      ctx.moveTo(x0, y); ctx.lineTo(x1 - 3, y); ctx.lineTo(x1, ny);
+      ctx.lineTo(x1, h); ctx.lineTo(x0, h); ctx.closePath();
+      ctx.fillStyle = i === cur ? 'rgba(255,42,20,.28)'
+                    : i < cur  ? 'rgba(90,160,255,.20)' : 'rgba(255,255,255,.07)';
+      ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1 - 3, y); ctx.lineTo(x1, ny);
+      ctx.strokeStyle = i === cur ? RED : i < cur ? SEA : 'rgba(255,255,255,.28)';
+      ctx.lineWidth = i === cur ? 2 : 1.2; ctx.stroke();
     });
+    // the hull, riding a fixed height above the floor it is over
+    var x = frac * w, ci = chapterAt(frac), hy = floorY(ci, h) - 9;
+    if (!reduce){
+      var p = ((now - t0) % 2600) / 2600;           // one ping every 2.6 s
+      ctx.beginPath(); ctx.arc(x, hy, 4 + p * 26, 0, 6.3);
+      ctx.strokeStyle = 'rgba(255,255,255,' + (0.35 * (1 - p)).toFixed(3) + ')';
+      ctx.lineWidth = 1; ctx.stroke();
+    }
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - 8, hy - 3, 16, 6, 3) : ctx.rect(x - 8, hy - 3, 16, 6);
+    ctx.fill();
+    ctx.fillStyle = RED; ctx.beginPath(); ctx.arc(x + 5, hy, 1.4, 0, 6.3); ctx.fill();
+    // where the pointer would take you
+    if (hoverX !== null){
+      ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.setLineDash([2, 3]);
+      ctx.beginPath(); ctx.moveTo(hoverX, 0); ctx.lineTo(hoverX, h); ctx.stroke(); ctx.setLineDash([]);
+    }
   }
   function track(){
-    var docH = document.body.scrollHeight - innerHeight;
-    var f = docH > 0 ? Math.min(Math.max(scrollY / docH, 0), 1) : 0;
-    elD.textContent = Math.round(f * 100);
-    dock.style.setProperty('--f', f);
-    var now = 0;
-    for (var i = 0; i < secs.length; i++) {
-      if (secs[i].getBoundingClientRect().top <= innerHeight * 0.42) now = i;
+    frac = Math.min(Math.max(scrollY / docH(), 0), 1);
+    elD.textContent = Math.round(frac * 100);
+    var now = chapterAt(scrollY / Math.max(1, document.body.scrollHeight) + innerHeight * 0.42 / Math.max(1, document.body.scrollHeight));
+    if (now !== cur){
+      cur = now;
+      elN.textContent = ('0' + (cur + 1)).slice(-2);
+      elNm.textContent = secs[cur].dataset.chapter;
+      rows.forEach(function(r, i){ r.classList.toggle('on', i === cur); r.classList.toggle('past', i < cur); });
     }
-    if (now === cur) return;
-    cur = now;
-    elN.textContent = ('0' + (cur + 1)).slice(-2);
-    elNm.textContent = secs[cur].dataset.chapter;
-    tickEls.forEach(function(t, i){
-      t.classList.toggle('on', i === cur);
-      t.classList.toggle('past', i < cur);
-    });
-    rows.forEach(function(r, i){
-      r.classList.toggle('on', i === cur);
-      r.classList.toggle('past', i < cur);
-    });
   }
+  var raf = 0;
+  function loop(now){ draw(now); raf = requestAnimationFrame(loop); }
+
+  // ---- flying it
+  function fracAt(e){
+    var r = cv.getBoundingClientRect();
+    return Math.min(Math.max((e.clientX - r.left) / r.width, 0), 1);
+  }
+  function showTip(e){
+    var r = cv.getBoundingClientRect(), f = fracAt(e);
+    hoverX = e.clientX - r.left;
+    tip.hidden = false;
+    tip.textContent = ('0' + (chapterAt(f) + 1)).slice(-2) + '  ' + secs[chapterAt(f)].dataset.chapter;
+    tip.style.left = hoverX + 'px';
+  }
+  cv.addEventListener('pointerdown', function(e){
+    drag = true; cv.setPointerCapture(e.pointerId); e.preventDefault();
+    dock.classList.add('dock--flying');
+    scrollTo({ top: fracAt(e) * docH(), behavior: 'instant' });
+  });
+  cv.addEventListener('pointermove', function(e){
+    showTip(e);
+    if (drag) scrollTo({ top: fracAt(e) * docH(), behavior: 'instant' });
+  });
+  function release(){ drag = false; dock.classList.remove('dock--flying'); }
+  cv.addEventListener('pointerup', release);
+  cv.addEventListener('pointercancel', release);
+  cv.addEventListener('pointerleave', function(){ if (!drag){ hoverX = null; tip.hidden = true; } });
+
   function setOpen(v){
-    open = v;
-    sheet.hidden = !v;
+    open = v; sheet.hidden = !v;
     dock.classList.toggle('dock--open', v);
     bar.setAttribute('aria-expanded', v ? 'true' : 'false');
   }
-  bar.addEventListener('click', function(){ setOpen(!open); });
-  dock.addEventListener('mouseenter', function(){ setOpen(true); });
-  dock.addEventListener('mouseleave', function(){ setOpen(false); });
-  dock.addEventListener('focusout', function(e){
-    if (!dock.contains(e.relatedTarget)) setOpen(false);
+  /* the list opens from the chapter number only -- the floor is for flying */
+  document.getElementById('dock-n').parentNode.addEventListener('click', function(e){
+    e.stopPropagation(); setOpen(!open);
   });
+  bar.addEventListener('keydown', function(e){
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft'){
+      e.preventDefault();
+      var to = Math.min(secs.length - 1, Math.max(0, cur + (e.key === 'ArrowRight' ? 1 : -1)));
+      secs[to].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); setOpen(!open); }
+  });
+  dock.addEventListener('focusout', function(e){ if (!dock.contains(e.relatedTarget)) setOpen(false); });
   sheet.addEventListener('click', function(e){
-    var b = e.target.closest('[data-go]');
-    if (!b) return;
+    var b = e.target.closest('[data-go]'); if (!b) return;
     secs[+b.dataset.go].scrollIntoView({ behavior: 'smooth', block: 'start' });
     setOpen(false);
   });
   addEventListener('keydown', function(e){
-    if (e.key === 'Escape' && open) { setOpen(false); bar.focus(); }
-    if ((e.key === 'c' || e.key === 'C') && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) {
-      setOpen(!open); if (!open) return; rows[Math.max(cur, 0)].focus();
+    if (e.key === 'Escape' && open){ setOpen(false); bar.focus(); }
+    if ((e.key === 'c' || e.key === 'C') && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)){
+      setOpen(!open); if (open) rows[Math.max(cur, 0)].focus();
     }
   });
   addEventListener('scroll', track, { passive: true });
   addEventListener('resize', function(){ layout(); track(); });
   addEventListener('load',   function(){ layout(); track(); });
   layout(); track();
+  if (reduce) { addEventListener('scroll', function(){ draw(0); }, { passive: true }); draw(0); }
+  else raf = requestAnimationFrame(loop);
 })();
 
 (function(){
@@ -3075,30 +3241,6 @@
   draw();
 })();
 
-(function(){
-  /* The dock's magnification, the way a dock is supposed to feel: each tick
-     swells with the pointer's distance to it. Borrowed in spirit from the
-     floating docks in the component libraries and rebuilt by hand in ~15 lines,
-     because importing a React island to scale four pixels would be absurd. */
-  var ticks = document.getElementById('dock-ticks');
-  if (!ticks) return;
-  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (reduce) return;
-  var raf = 0, px = null;
-  function paint(){
-    raf = 0;
-    var els = ticks.querySelectorAll('i');
-    for (var i = 0; i < els.length; i++){
-      var r = els[i].getBoundingClientRect(), c = r.left + r.width / 2;
-      var d = px === null ? 999 : Math.abs(px - c);
-      var k = Math.max(0, 1 - d / 96);                 // reach, in pixels
-      els[i].style.setProperty('--mag', (1 + k * k * 2.1).toFixed(3));
-    }
-  }
-  function queue(){ if (!raf) raf = requestAnimationFrame(paint); }
-  ticks.addEventListener('pointermove', function(e){ px = e.clientX; queue(); });
-  ticks.addEventListener('pointerleave', function(){ px = null; queue(); });
-})();
 
 (function(){
   /* Water, synthesised. No audio file ships: the sea here is filtered noise
@@ -3353,6 +3495,43 @@
   } else if (!raf) {
     raf = requestAnimationFrame(step);
   }
+})();
+
+(function(){
+  /* The safety chain. Each fault names the link that catches it; a fault the
+     chain does NOT catch says so, and names the link that should have. */
+  var root = document.getElementById('chain');
+  if (!root) return;
+  var links = {}; [].forEach.call(root.querySelectorAll('[data-link]'), function(li){ links[li.dataset.link] = li; });
+  var by = document.getElementById('ch-by'), when = document.getElementById('ch-when'),
+      does = document.getElementById('ch-does');
+  var F = {
+    pi:    ['hb',     'heartbeat failsafe', 'after 5 s of silence', 'The board hears nothing from the Pi and surfaces the vehicle by itself. Nothing on the Pi has to be working for this to happen.'],
+    hang:  ['bypass', 'safety verbs jump the queue', 'within one loop tick', 'A stop, surface or disarm is accepted even while a verb is running; it raises the abort flag, and the running loop exits at its next check.'],
+    panic: ['ctrlc',  'Ctrl-C on the manager', 'immediately', 'The manager stops every axis and then disarms. This is the path that must exist before anything spins.'],
+    oldfw: ['rev',    'firmware interlock', 'at connect, and again inside arm()', 'Refused. A board below the behaviour-revision floor would take every turn backwards, so it is never armed.'],
+    baro:  ['baro',   'barometer health', 'on every automatic move', 'It arms — and then simply will not move: every move verb enters AUTO, and the board refuses AUTO on bad depth.'],
+    dead:  ['nan',    'absence is not zero', 'on every reading', 'The value renders as -- on the board and NaN here, so nothing downstream mistakes silence for a measurement of zero.'],
+    leak:  ['leak',   'NOTHING — the leak link is off', 'never, as configured', 'LEAK_EN = 0: a leak would neither block arming nor surface the vehicle. Today this failure reaches the water. A human on deck is the only guard.'],
+    kill:  ['kill',   'only partly — the kill link is ambiguous', 'at arm, if the state is known', 'KILL reads 0 for "live" and for "not talking". The host shows UNKNOWN and refuses to arm only on a known-engaged switch.']
+  };
+  function pick(k){
+    var f = F[k];
+    Object.keys(links).forEach(function(n){ links[n].classList.remove('catch', 'miss', 'path'); });
+    var order = Object.keys(links), idx = order.indexOf(f[0]);
+    // the signal travels the chain up to the link that owns this failure
+    order.forEach(function(n, i){ if (i < idx) links[n].classList.add('path'); });
+    var bad = (k === 'leak' || k === 'kill');
+    links[f[0]].classList.add(bad ? 'miss' : 'catch');
+    root.style.setProperty('--at', idx);
+    by.textContent = f[1]; when.textContent = f[2]; does.textContent = f[3];
+    by.classList.toggle('bad', bad);
+    root.querySelectorAll('[data-fault]').forEach(function(b){ b.classList.toggle('on', b.dataset.fault === k); });
+  }
+  root.querySelectorAll('[data-fault]').forEach(function(b){
+    b.addEventListener('click', function(){ pick(b.dataset.fault); });
+  });
+  pick('pi');
 })();
 </script>
 </body>
