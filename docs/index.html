@@ -497,6 +497,92 @@
  </div>
 </section>
 
+<!-- 04b ─────────────────────────── -->
+<section id="mix">
+ <div class="wrap">
+  <p class="mark">Play with it <i>//</i> when the vehicle cannot do what it was asked</p>
+  <h2 class="col">Ask for more thrust than exists, and the vehicle does something you never asked for.</h2>
+  <p class="lede col quiet">"Forward, a little left, and turn" is three numbers. The vehicle has
+    four horizontal thrusters, each of which can only give so much. When the sum of those demands
+    exceeds what a motor can deliver, something has to give — and the choice of <em>what</em> gives
+    is a design decision most people never make on purpose. Make the wrong one and a vehicle asked
+    to go straight quietly turns instead.</p>
+
+  <div class="lab">
+   <div class="lab__stage">
+    <canvas id="mix-view" width="900" height="380" role="img"
+      aria-label="Four horizontal thrusters, their commanded outputs, and the motion that actually results"></canvas>
+    <div class="lab__read">
+      <div><span class="silk silk--b">asked for</span><b id="mix-ask">—</b></div>
+      <div><span class="silk silk--b">motors saturated</span><b id="mix-sat">—</b></div>
+      <div><span class="silk silk--b">you actually get</span><b id="mix-got">—</b></div>
+      <div><span class="silk silk--b">heading error</span><b id="mix-err">—</b></div>
+    </div>
+   </div>
+   <div class="lab__knobs">
+    <label class="knob"><span class="silk silk--b">surge — forward</span>
+      <input type="range" id="mix-s" min="-1" max="1" step="0.01" value="0.8">
+      <output id="mix-s-o">+0.80</output>
+      <em>One of the three things a pilot or a mission can ask for at once.</em></label>
+    <label class="knob"><span class="silk silk--b">sway — sideways</span>
+      <input type="range" id="mix-l" min="-1" max="1" step="0.01" value="0.35">
+      <output id="mix-l-o">+0.35</output>
+      <em>Free on this hull, because the thrusters sit at 45°. Free, but not free of
+        consequences.</em></label>
+    <label class="knob"><span class="silk silk--b">yaw — turn</span>
+      <input type="range" id="mix-y" min="-1" max="1" step="0.01" value="0.4">
+      <output id="mix-y-o">+0.40</output>
+      <em>The demand that usually loses the argument — and the one you least want quietly
+        added.</em></label>
+    <label class="knob"><span class="silk silk--b">what happens when a motor runs out</span>
+      <select id="mix-mode" class="key">
+        <option value="clip">clip each motor at its limit</option>
+        <option value="scale" selected>scale the whole demand together</option>
+      </select>
+      <em>Clipping keeps the magnitude and destroys the direction. Scaling keeps the direction and
+        gives up magnitude. The board scales.</em></label>
+    <div class="lab__presets">
+      <button class="key" type="button" data-mix="0.8,0.35,0.4">an ordinary approach</button>
+      <button class="key" type="button" data-mix="1,0,0">flat out, straight ahead</button>
+      <button class="key" type="button" data-mix="0.9,0.6,0.55">everything at once</button>
+      <button class="key" type="button" data-mix="0.35,0.15,0.18">gentle — nothing saturates</button>
+    </div>
+   </div>
+  </div>
+
+  <div class="split" style="margin-top:var(--s5)">
+   <div>
+    <h3>The arithmetic, in full</h3>
+    <p class="quiet">Four horizontal units at 45°, so each one contributes to all three axes at
+      once: <span class="num">m₁ = s + l + y</span>, <span class="num">m₂ = s − l − y</span>,
+      <span class="num">m₃ = s − l + y</span>, <span class="num">m₄ = s + l − y</span>. Ask for
+      <span class="num">0.8</span> forward and <span class="num">0.4</span> of turn and one motor
+      is already being asked for <span class="num">1.55</span> of a thing that stops at
+      <span class="num">1.0</span>.</p>
+    <p class="quiet">Clip it there and the four motors no longer stand in the ratio the demand
+      described. Run the arithmetic backwards — <span class="num">s′ = (m₁+m₂+m₃+m₄)/4</span> and
+      so on — and the motion that comes out has a yaw term nobody asked for. The vehicle is not
+      disobeying. It is doing exactly what four clipped numbers mean.</p>
+   </div>
+   <div>
+    <h3>Why the shape is the thing to protect</h3>
+    <p class="quiet">Scaling the whole demand by one factor costs speed and keeps direction: you
+      arrive later, along the line you meant. Clipping costs direction and keeps speed: you arrive
+      somewhere else, on time. For a vehicle following a visual target, the second failure is far
+      worse, because the controller sees the drift and asks for <em>more</em> correction — which
+      saturates harder.</p>
+    <p class="quiet">The board scales, and the host fits the demand yaw-first before sending it
+      (<a href="https://github.com/fh1m/mongla_ws/blob/main/src/mongla_control/mongla_control/allocation.py"><code>allocation.py</code></a>),
+      on the view that a heading you did not ask for is the most expensive thing to be given.</p>
+    <p class="quiet">⚠ One honest caveat: the mixer above is the firmware's eight-thruster
+      geometry, of which four are horizontal. The hull currently in CAD has five thrusters in a
+      different arrangement. Both are true of <em>something</em>; they are not true of the same
+      vehicle, and this figure says which one it is drawing.</p>
+   </div>
+  </div>
+ </div>
+</section>
+
 <!-- 05 ──────────────────────────────────────────────────────────────── -->
 <section id="repos">
  <div class="wrap">
@@ -592,6 +678,100 @@
     screenshotted here. It is the firmware team's application, it needs the board attached to show
     anything true, and a picture of it running against nothing would be a picture of nothing. The
     operator surface further down this page is ours, and it is real.</p>
+ </div>
+</section>
+
+<!-- 05b ─────────────────────────── -->
+<section id="signs">
+ <div class="wrap">
+  <p class="mark">Play with it <i>//</i> four switches, one observable</p>
+  <h2 class="col">Only the product is visible. Two wrongs look exactly like a right.</h2>
+  <p class="lede col quiet">Between "turn left" and the water there are four independent places a
+    sign can be flipped: the axis convention the host writes, a firmware parameter that negates
+    every axis before the mixer, a firmware revision that changed what positive yaw means, and the
+    direction each motor was told it spins. You can only ever observe their <em>product</em> —
+    which way the hull actually went. Every one of these has been wrong on this vehicle at least
+    once, and the register of that is in <a href="https://github.com/fh1m/mongla_ws/blob/main/.claude/context/BUGS.md">BUGS.md</a>.</p>
+
+  <div class="lab">
+   <div class="lab__stage">
+    <canvas id="sign-view" width="900" height="380" role="img"
+      aria-label="Four sign switches in series, their product, and the direction the hull turns"></canvas>
+    <div class="lab__read">
+      <div><span class="silk silk--b">the product</span><b id="sign-prod">—</b></div>
+      <div><span class="silk silk--b">the hull does</span><b id="sign-out">—</b></div>
+      <div><span class="silk silk--b">verdict</span><b id="sign-ok">—</b></div>
+      <div><span class="silk silk--b">wrong switches</span><b id="sign-bad">—</b></div>
+    </div>
+   </div>
+   <div class="lab__knobs">
+    <label class="knob"><span class="silk silk--b">FRAME_REVERSE</span>
+      <select id="sign-fr" class="key">
+        <option value="1">1 — set on our hull</option>
+        <option value="0">0 — firmware default</option>
+      </select>
+      <em>Shipped in rev 7. It negates all six axis demands before the mixer, so it fixes "every
+        axis is backwards" in one place instead of eight.</em></label>
+    <label class="knob"><span class="silk silk--b">MOT_n_DIRECTION</span>
+      <select id="sign-mot" class="key">
+        <option value="1">+1 — as MOTOR_DETECT left them</option>
+        <option value="-1">−1 × 8 — the hand-set values from 2026-08-06</option>
+      </select>
+      <em>The other place the same fix can be made. Make it in <em>both</em> places and they
+        cancel, which is the trap this figure exists for.</em></label>
+    <label class="knob"><span class="silk silk--b">firmware behaviour revision</span>
+      <select id="sign-fw" class="key">
+        <option value="1">14 — what the board reports today</option>
+        <option value="-1">below 10 — before yaw was inverted</option>
+      </select>
+      <em>Revision 10 changed what positive yaw means. A board under the floor takes every turn
+        backwards, which is why the version is checked inside <code>arm()</code> and not only at
+        connect.</em></label>
+    <label class="knob"><span class="silk silk--b">the host's own axis convention</span>
+      <select id="sign-host" class="key">
+        <option value="1">+1 — as written</option>
+        <option value="-1">−1 — someone "fixed" it here instead</option>
+      </select>
+      <em>The tempting place to fix it, because it is the file you have open. It is also the place
+        that makes the next person's correction cancel yours.</em></label>
+    <div class="lab__presets">
+      <button class="key" type="button" data-sign="1,1,1,1">the intended configuration</button>
+      <button class="key" type="button" data-sign="1,-1,1,1">the double inversion</button>
+      <button class="key" type="button" data-sign="0,1,-1,1">an old board, default param</button>
+      <button class="key" type="button" data-sign="1,-1,-1,1">two wrongs — and it looks right</button>
+    </div>
+   </div>
+  </div>
+
+  <div class="split" style="margin-top:var(--s5)">
+   <div>
+    <h3>Why a passing test is not a correct configuration</h3>
+    <p class="quiet">Pick "two wrongs" above. The hull turns the way it was asked, every bench
+      check passes, and the vehicle is <em>misconfigured in two places at once</em>. Nothing in
+      the observable disagrees, because the observable is a product and the product is right. The
+      configuration only reveals itself when someone corrects one of the two — at which point a
+      fix makes the vehicle worse, which is the single most confusing thing that can happen to a
+      team on a pool deck.</p>
+    <p class="quiet">This is why the rule here is to read the parameters before arming rather than
+      to test the turn. A turn tells you about the product. Only the parameters tell you about the
+      factors.</p>
+   </div>
+   <div>
+    <h3>What the vehicle actually does about it</h3>
+    <p class="quiet">The firmware revision is a hull-safety interlock: the board reports
+      <code>SROT_FW_BEHAVIOUR_REV</code>, and the host refuses at connect <em>and again inside</em>
+      <code>arm()</code> if it is below the floor in <code>srot_protocol.py</code>. The floor is
+      deliberately not a number written in prose anywhere — a test fails any document that quotes
+      a stale one, because a remembered constant is how a check gets silently disabled.</p>
+    <p class="quiet">The other three switches are configuration, and configuration is checked by
+      reading it. <code>FRAME_REVERSE = 1</code> with <code>MOT_1..8_DIRECTION</code> all
+      <span class="num">−1</span> is the documented double-inversion hazard: if all eight read
+      <span class="num">−1</span>, the axis fix is cancelled and six of the motors are individually
+      inverted — a hull that turns correctly and mixes incorrectly.</p>
+    <blockquote class="pull">A sign error is the only bug that can be fixed twice and thereby
+      <em>unfixed</em>.</blockquote>
+   </div>
+  </div>
  </div>
 </section>
 
@@ -698,6 +878,82 @@
  </div>
 </section>
 
+<!-- 06b ─────────────────────────── -->
+<section id="budget">
+ <div class="wrap">
+  <p class="mark">Play with it <i>//</i> one cable, and what fits down it</p>
+  <h2 class="col">Telemetry is free until it isn't, and then it takes the heartbeat with it.</h2>
+  <p class="lede col quiet">Everything the board says crosses one USB-C cable at
+    <span class="num">115 200</span> baud — about <span class="num">11 520</span> bytes a second
+    once the start and stop bits are paid for. Today the link runs at a measured
+    <span class="num">18.8&#8239;%</span> of that. The temptation, always, is to add "just one more"
+    stream; the cost is not that the new stream is slow, it is that everything already on the wire
+    starts queueing behind it — including the heartbeat the board uses to decide whether anyone is
+    still there.</p>
+
+  <div class="lab">
+   <div class="lab__stage">
+    <canvas id="bud-view" width="900" height="380" role="img"
+      aria-label="The serial link's capacity, what fills it now, and what an added stream costs"></canvas>
+    <div class="lab__read">
+      <div><span class="silk silk--b">on the wire</span><b id="bud-use">—</b></div>
+      <div><span class="silk silk--b">queueing delay</span><b id="bud-q">—</b></div>
+      <div><span class="silk silk--b">heartbeat margin</span><b id="bud-hb">—</b></div>
+      <div><span class="silk silk--b">verdict</span><b id="bud-v">—</b></div>
+    </div>
+   </div>
+   <div class="lab__knobs">
+    <label class="knob"><span class="silk silk--b">an added stream — message size</span>
+      <input type="range" id="bud-sz" min="0" max="120" step="1" value="36">
+      <output id="bud-sz-o">36 bytes</output>
+      <em>A debug struct, a second IMU topic, a per-motor detail you wanted "just while we
+        test".</em></label>
+    <label class="knob"><span class="silk silk--b">and its rate</span>
+      <input type="range" id="bud-hz" min="0" max="300" step="1" value="0">
+      <em>Nothing on this slider is unreasonable on its own. That is the trap: every individual
+        addition is defensible, and the wire only reports the sum.</em>
+      <output id="bud-hz-o">0 Hz</output></label>
+    <div class="lab__presets">
+      <button class="key" type="button" data-bud="36,0">the link as measured</button>
+      <button class="key" type="button" data-bud="36,50">a 50 Hz debug topic</button>
+      <button class="key" type="button" data-bud="64,200">"just while we test"</button>
+      <button class="key" type="button" data-bud="120,300">over the edge</button>
+    </div>
+   </div>
+  </div>
+
+  <div class="split" style="margin-top:var(--s5)">
+   <div>
+    <h3>What the model is, and what it is not</h3>
+    <p class="quiet"><strong>Measured:</strong> the link's capacity, the
+      <span class="num">18.8&#8239;%</span> the vehicle uses today, and the heartbeat margin of
+      <span class="num">10×</span> the board's <span class="num">5 s</span> silence failsafe. Those
+      are in the ledger with their method.</p>
+    <p class="quiet"><strong>Modelled:</strong> the queueing delay above. It is the standard
+      result for a link at utilisation <span class="num">ρ</span> — the wait grows like
+      <span class="num">ρ/(1−ρ)</span>, which is flat and boring until about
+      <span class="num">70&#8239;%</span> and then vertical. The curve is drawn to make that shape
+      felt, not to predict a millisecond. A figure that blurs which half is measured is worse than
+      no figure.</p>
+   </div>
+   <div>
+    <h3>Why the heartbeat is the thing that breaks</h3>
+    <p class="quiet">The board surfaces the vehicle after <span class="num">5 s</span> without
+      hearing from the Pi. That is a deliberate, good failsafe — and it means the heartbeat is the
+      one message whose <em>lateness</em> is a vehicle-level event rather than a logging nuisance.
+      A saturated wire does not announce itself as "telemetry is slow". It announces itself as a
+      vehicle that surfaced in the middle of a run for no reason anyone can see on deck.</p>
+    <p class="quiet">This is also why the interesting number is not bandwidth but headroom. At
+      <span class="num">18.8&#8239;%</span> the link is not "mostly empty" — it is a system with a
+      known distance to a cliff, and the only honest way to add a stream is to measure the distance
+      again afterwards.</p>
+    <blockquote class="pull">A link is not full or empty. It is <em>near</em> or <em>far</em> from
+      the point where waiting begins.</blockquote>
+   </div>
+  </div>
+ </div>
+</section>
+
 <!-- 07 ──────────────────────────────────────────────────────────────── -->
 <section id="thinking">
  <div class="wrap">
@@ -781,6 +1037,87 @@
  </div>
 </section>
 
+<!-- 08b ─────────────────────────── -->
+<section id="optics">
+ <div class="wrap">
+  <p class="mark">Play with it <i>//</i> the lens the water grinds for you</p>
+  <h2 class="col">Water takes a third of the picture, before the first pixel is read.</h2>
+  <p class="lede col quiet">A camera's field of view is a property of the lens, and every
+    datasheet states it for air. Put the same camera behind a flat window in water and the number
+    is simply no longer true: rays bend as they cross the glass, the cone narrows, and the edges
+    of the world quietly leave the frame. Nothing warns you. The image is still sharp, still
+    centred, still the same 640 pixels wide — it just contains less world.</p>
+
+  <div class="lab">
+   <div class="lab__stage">
+    <canvas id="snell-view" width="900" height="380" role="img"
+      aria-label="Plan view of the camera's cone in air and in water, with a prop at a set range"></canvas>
+    <div class="lab__read">
+      <div><span class="silk silk--b">cone in air</span><b id="snell-air">—</b></div>
+      <div><span class="silk silk--b">cone in water</span><b id="snell-wat">—</b></div>
+      <div><span class="silk silk--b">world in frame</span><b id="snell-w">—</b></div>
+      <div><span class="silk silk--b">the prop</span><b id="snell-fit">—</b></div>
+    </div>
+   </div>
+   <div class="lab__knobs">
+    <label class="knob"><span class="silk silk--b">range to the prop</span>
+      <input type="range" id="snell-d" min="0.4" max="6" step="0.05" value="2">
+      <output id="snell-d-o">2.00 m</output>
+      <em>How far ahead the thing you are trying to see is. The cone is an angle, so everything
+        below scales with this one number.</em></label>
+    <label class="knob"><span class="silk silk--b">how wide the prop is</span>
+      <input type="range" id="snell-w-in" min="0.3" max="3" step="0.05" value="1.2">
+      <output id="snell-w-o">1.20 m</output>
+      <em>A gate, a board, a bin. If it does not fit in the cone at the range you approach from,
+        no detector on earth will find all of it.</em></label>
+    <label class="knob"><span class="silk silk--b">refractive index of the medium</span>
+      <input type="range" id="snell-n" min="1" max="1.34" step="0.001" value="1.333">
+      <output id="snell-n-o">1.333 — sea water</output>
+      <em>Drag it to 1.000 and you are back in the lab, holding the datasheet. Every value in
+        between is the same camera, the same lens, a different world.</em></label>
+    <div class="lab__presets">
+      <button class="key" type="button" data-snell="2,1.2,1.333">in the water</button>
+      <button class="key" type="button" data-snell="2,1.2,1">on the bench</button>
+      <button class="key" type="button" data-snell="1.1,1.2,1.333">close enough to fit</button>
+      <button class="key" type="button" data-snell="4,2.4,1.333">a wide prop, far off</button>
+    </div>
+   </div>
+  </div>
+
+  <div class="split" style="margin-top:var(--s5)">
+   <div>
+    <h3>Why the cone narrows</h3>
+    <p class="quiet">A flat port is a pane of glass with water on one side and air on the other. A
+      ray arriving from the water at angle <em>θ<sub>w</sub></em> leaves into the air at
+      <em>θ<sub>a</sub></em>, and Snell's law fixes the relationship:
+      <span class="num">n<sub>w</sub> sin θ<sub>w</sub> = sin θ<sub>a</sub></span>. The sensor
+      still accepts rays out to its own half-angle, so the half-angle it accepts
+      <em>in the water</em> is <span class="num">asin(sin θ<sub>a</sub> / n<sub>w</sub>)</span> —
+      always smaller. The cone does not move or blur; it shrinks.</p>
+    <p class="quiet">This is also why the picture is not simply cropped. The bending is
+      angle-dependent, so a straight line near the edge comes back curved, and a pixel's bearing
+      is not the bearing the pinhole model would give it. That correction lives in
+      <a href="https://github.com/fh1m/mongla_ws/blob/main/src/mongla_vision/mongla_vision/geometry/optics.py"><code>optics.py</code></a>,
+      and it is applied before any pixel becomes a direction.</p>
+   </div>
+   <div>
+    <h3>What we measured, and what it cost</h3>
+    <p class="quiet">The datasheet says <span class="num">63.8°</span>. In water we measured
+      <span class="num">46.7°</span> — and Snell, from the index of water alone, predicts
+      <span class="num">46.71°</span>. Two independent routes to the same number is the strongest
+      form of "this is right" available on a bench.</p>
+    <p class="quiet">The cost of having believed the datasheet is not a blurry picture. It is
+      every bearing being wrong by a growing amount toward the edges, every range estimate built
+      on that bearing being wrong with it, and a standoff distance chosen so that a prop
+      <em>fits</em> — computed against a cone <span class="num">37&#8239;%</span> wider than the
+      one the vehicle actually has.</p>
+    <blockquote class="pull">A number measured in air is not a number about the vehicle. It is a
+      number about <em>the lab</em>.</blockquote>
+   </div>
+  </div>
+ </div>
+</section>
+
 <!-- 09 ──────────────────────────────────────────────────────────────── -->
 <!-- 09b ─────────────────────────────────────────────────────────────── -->
 <section id="flow">
@@ -855,6 +1192,84 @@
     is recovered independently, from <code>h · truth / measured</code>, and the three runs land on
     0.72, 0.69 and 0.70 m against a tape that says 0.72. The scale chain closes on itself — which
     is the only reason to believe the speed at all.</p>
+ </div>
+</section>
+
+<!-- 09c ─────────────────────────── -->
+<section id="late">
+ <div class="wrap">
+  <p class="mark">Play with it <i>//</i> the correction that arrives from the past</p>
+  <h2 class="col">Every measurement is a statement about a moment that has already gone.</h2>
+  <p class="lede col quiet">A camera exposes a frame, the Hailo-8 finds a prop in it, the result
+    crosses two processes and lands in the filter — and by then the vehicle has moved. The fix is
+    perfectly correct about where the vehicle <em>was</em>. Apply it to where the vehicle
+    <em>is</em> and you have just pulled the estimate backwards in time, on purpose, at speed.</p>
+
+  <div class="lab">
+   <div class="lab__stage">
+    <canvas id="late-view" width="900" height="380" role="img"
+      aria-label="A curved path with a late fix applied on arrival and replayed at the instant it describes"></canvas>
+    <div class="lab__read">
+      <div><span class="silk silk--b">fix age</span><b id="late-age">—</b></div>
+      <div><span class="silk silk--b">moved since</span><b id="late-moved">—</b></div>
+      <div><span class="silk silk--b">applied on arrival</span><b id="late-naive">—</b></div>
+      <div><span class="silk silk--b">replayed</span><b id="late-fixed">—</b></div>
+    </div>
+   </div>
+   <div class="lab__knobs">
+    <label class="knob"><span class="silk silk--b">how late the fix is</span>
+      <input type="range" id="late-lat" min="0" max="400" step="5" value="180">
+      <output id="late-lat-o">180 ms</output>
+      <em>Photon to detection is <span class="num">18.0 ms</span> measured. Add the ROS graph, the
+        filter's own queue and a frame you waited for, and a fix a fifth of a second old is
+        ordinary.</em></label>
+    <label class="knob"><span class="silk silk--b">speed</span>
+      <input type="range" id="late-v" min="0" max="1.4" step="0.02" value="0.6">
+      <output id="late-v-o">0.60 m/s</output>
+      <em>The error is latency × speed, so standing still hides the bug completely. This is why it
+        survives every bench test.</em></label>
+    <label class="knob"><span class="silk silk--b">yaw rate</span>
+      <input type="range" id="late-yaw" min="-40" max="40" step="1" value="18">
+      <output id="late-yaw-o">18 °/s</output>
+      <em>Turning is what makes it vicious: the stale fix is not merely behind, it is behind
+        and off to one side, so the correction pulls sideways.</em></label>
+    <div class="lab__presets">
+      <button class="key" type="button" data-late="180,0.6,18">a turning approach</button>
+      <button class="key" type="button" data-late="180,0,18">station keeping</button>
+      <button class="key" type="button" data-late="18,0.6,18">if the fix were instant</button>
+      <button class="key" type="button" data-late="320,1.2,30">fast, and very late</button>
+    </div>
+   </div>
+  </div>
+
+  <div class="split" style="margin-top:var(--s5)">
+   <div>
+    <h3>What the filter actually does</h3>
+    <p class="quiet">It keeps a short buffer of its own recent states. When a measurement arrives
+      carrying the instant it describes, the filter winds itself back to that instant, applies the
+      correction <em>there</em>, and replays every motion input since — so the correction lands on
+      the state it was actually about, and the vehicle's present position is a consequence rather
+      than an override.</p>
+    <p class="quiet">This is the only reason a timestamp is worth anything. A message that says
+      "the prop is here" is a rumour; a message that says "the prop was here, at this instant on
+      the board's clock" is a measurement. The board stamps its own messages, which is what makes
+      the rewind possible at all.</p>
+   </div>
+   <div>
+    <h3>Why it looks fine until it doesn't</h3>
+    <p class="quiet">Hold the vehicle still and both tracks agree exactly — latency multiplied by
+      zero speed is zero error. Every bench test, every dry run, every "we checked it in the lab"
+      is that case. The bug ships because the condition that reveals it is the condition you
+      cannot create indoors: moving, turning, and being corrected at the same time.</p>
+    <p class="quiet">Drag the yaw rate to zero and the two tracks separate along one line — bad,
+      but at least honest. Put the turn back and the naive track leans into the corner, because a
+      correction that is <span class="num">180 ms</span> stale during a
+      <span class="num">18 °/s</span> turn is a correction about a heading
+      <span class="num">3.2°</span> ago.</p>
+    <blockquote class="pull">A late measurement is not noise. It is a <em>true</em> statement,
+      applied to the wrong moment.</blockquote>
+   </div>
+  </div>
  </div>
 </section>
 
@@ -1833,6 +2248,579 @@
   } else {
     addEventListener('load', boot);
   }
+})();
+
+(function(){
+  /* Snell's window: the same camera, in two media, drawn to scale.
+     Nothing here is fitted -- the air half-angle is the datasheet's 63.8/2,
+     the water cone is Snell's law applied to it, and the caption's 46.7 deg is
+     the value measured in water (.claude/context/measured-bars.md). Drag n to
+     1.000 and the two cones must coincide; that is the built-in check. */
+  var cv = document.getElementById('snell-view');
+  if (!cv) return;
+  var ctx = cv.getContext('2d'), AIR_FULL = 63.8, DPR = 2;
+  cv.width = 900 * DPR; cv.height = 380 * DPR; ctx.scale(DPR, DPR);
+  var el = {d: document.getElementById('snell-d'), w: document.getElementById('snell-w-in'),
+            n: document.getElementById('snell-n')};
+  var out = {d: document.getElementById('snell-d-o'), w: document.getElementById('snell-w-o'),
+             n: document.getElementById('snell-n-o'), air: document.getElementById('snell-air'),
+             wat: document.getElementById('snell-wat'), ww: document.getElementById('snell-w'),
+             fit: document.getElementById('snell-fit')};
+  var css = getComputedStyle(document.documentElement);
+  function tok(name, fallback){ var v = css.getPropertyValue(name).trim(); return v || fallback; }
+  var INK = tok('--ink', '#e4e8ef'), INK3 = tok('--ink-3', '#7b8598'),
+      RED = tok('--signal', '#ff2a14'), SUNK = tok('--s-sunk', '#04060b');
+
+  function draw(){
+    var d = +el.d.value, pw = +el.w.value, n = +el.n.value;
+    var half = AIR_FULL / 2 * Math.PI / 180;
+    var halfW = Math.asin(Math.min(1, Math.sin(half) / n));
+    var W = 900, H = 380, ox = 74, oy = H / 2;
+    var scale = (W - ox - 150) / 6;                 // px per metre, fixed so range reads true
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = SUNK; ctx.fillRect(0, 0, W, H);
+
+    // range rings, one per metre
+    ctx.strokeStyle = 'rgba(255,255,255,.05)'; ctx.fillStyle = INK3;
+    ctx.font = '10px ui-monospace, monospace'; ctx.lineWidth = 1;
+    for (var m = 1; m <= 6; m++){
+      ctx.beginPath(); ctx.arc(ox, oy, m * scale, -1.2, 1.2); ctx.stroke();
+      ctx.fillText(m + ' m', ox + m * scale - 9, H - 12);
+    }
+    function cone(ang, fill, stroke, dash){
+      var far = 6.3 * scale;
+      ctx.beginPath(); ctx.moveTo(ox, oy);
+      ctx.lineTo(ox + far * Math.cos(-ang), oy + far * Math.sin(-ang));
+      ctx.lineTo(ox + far * Math.cos(ang), oy + far * Math.sin(ang));
+      ctx.closePath();
+      if (fill){ ctx.fillStyle = fill; ctx.fill(); }
+      ctx.setLineDash(dash || []); ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    cone(half, 'rgba(255,255,255,.045)', 'rgba(255,255,255,.28)', [5, 5]);   // the datasheet
+    cone(halfW, 'rgba(90,160,255,.13)', '#5aa0ff');                          // the real one
+
+    // the prop, drawn at its true width at this range
+    var px = ox + d * scale, ph = pw / 2 * scale;
+    var inW = pw / 2 <= d * Math.tan(halfW);
+    ctx.strokeStyle = inW ? INK : RED; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(px, oy - ph); ctx.lineTo(px, oy + ph); ctx.stroke();
+    ctx.lineCap = 'butt';
+    // the part of it that falls outside the water cone
+    if (!inW){
+      var edge = d * Math.tan(halfW) * scale;
+      ctx.strokeStyle = RED; ctx.lineWidth = 5; ctx.setLineDash([3, 4]);
+      ctx.beginPath(); ctx.moveTo(px, oy - ph); ctx.lineTo(px, oy - edge);
+      ctx.moveTo(px, oy + ph); ctx.lineTo(px, oy + edge); ctx.stroke(); ctx.setLineDash([]);
+    }
+    // the camera
+    ctx.fillStyle = INK; ctx.fillRect(ox - 13, oy - 9, 13, 18);
+    ctx.fillStyle = INK3; ctx.font = '10px ui-monospace, monospace';
+    ctx.fillText('camera', ox - 30, oy + 30);
+    ctx.fillStyle = 'rgba(255,255,255,.34)';
+    ctx.fillText('datasheet, in air', ox + 300, oy - 96);
+    ctx.fillStyle = '#5aa0ff';
+    ctx.fillText('what the water leaves', ox + 300, oy + 96);
+
+    var wAir = 2 * d * Math.tan(half), wWat = 2 * d * Math.tan(halfW);
+    out.d.textContent = d.toFixed(2) + ' m';
+    out.w.textContent = pw.toFixed(2) + ' m';
+    out.n.textContent = n.toFixed(3) + (n > 1.3 ? ' — sea water' : n === 1 ? ' — air' : ' — in between');
+    out.air.textContent = AIR_FULL.toFixed(1) + '\u00b0';
+    out.wat.textContent = (halfW * 360 / Math.PI).toFixed(1) + '\u00b0';
+    out.ww.textContent = wWat.toFixed(2) + ' m of ' + wAir.toFixed(2);
+    out.fit.textContent = inW ? 'fits, ' + (pw / wWat * 100).toFixed(0) + '% of frame'
+                              : (wWat / pw * 100).toFixed(0) + '% of it is in frame';
+    out.fit.style.color = inW ? '' : RED;
+  }
+  ['d', 'w', 'n'].forEach(function(k){ el[k].addEventListener('input', draw); });
+  document.querySelectorAll('[data-snell]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var v = b.dataset.snell.split(',');
+      el.d.value = v[0]; el.w.value = v[1]; el.n.value = v[2]; draw();
+    });
+  });
+  draw();
+})();
+
+(function(){
+  /* The late fix. Truth is a constant-speed, constant-yaw-rate arc; the
+     estimator dead-reckons with a small bias, so it drifts and needs help.
+     One fix is taken at t-latency and is EXACT about that instant. The naive
+     track snaps the present state to it; the replayed track rewinds to the
+     instant the fix describes, applies it there, and re-integrates. With speed
+     at zero the two must coincide -- drag it there and see. */
+  var cv = document.getElementById('late-view');
+  if (!cv) return;
+  var ctx = cv.getContext('2d'), DPR = 2, T = 6.0, DT = 0.02, BIAS = 0.035;
+  cv.width = 900 * DPR; cv.height = 380 * DPR; ctx.scale(DPR, DPR);
+  var el = {lat: document.getElementById('late-lat'), v: document.getElementById('late-v'),
+            yaw: document.getElementById('late-yaw')};
+  var out = {lat: document.getElementById('late-lat-o'), v: document.getElementById('late-v-o'),
+             yaw: document.getElementById('late-yaw-o'), age: document.getElementById('late-age'),
+             moved: document.getElementById('late-moved'), naive: document.getElementById('late-naive'),
+             fixed: document.getElementById('late-fixed')};
+  var css = getComputedStyle(document.documentElement);
+  var INK3 = (css.getPropertyValue('--ink-3').trim() || '#7b8598'),
+      RED = (css.getPropertyValue('--signal').trim() || '#ff2a14'),
+      SUNK = (css.getPropertyValue('--s-sunk').trim() || '#04060b');
+
+  function integrate(v, w, bias){
+    /* bias is a slow heading error, the ordinary failure of dead reckoning */
+    var x = 0, y = 0, th = 0, path = [];
+    for (var t = 0; t <= T + 1e-9; t += DT){
+      path.push([x, y, th, t]);
+      th += (w + bias) * DT; x += v * Math.cos(th) * DT; y += v * Math.sin(th) * DT;
+    }
+    return path;
+  }
+  function draw(){
+    var lat = +el.lat.value / 1000, v = +el.v.value, w = +el.yaw.value * Math.PI / 180;
+    var truth = integrate(v, w, 0), est = integrate(v, w, BIAS);
+    var iNow = truth.length - 1, iFix = Math.max(0, iNow - Math.round(lat / DT));
+    // the fix is exact about truth at iFix
+    var fx = truth[iFix][0], fy = truth[iFix][1];
+    // naive: the present estimate is snapped to it
+    var naive = [est[iNow][0] + (fx - est[iNow][0]), est[iNow][1] + (fy - est[iNow][1])];
+    // replayed: correct at iFix, then re-integrate the motion actually recorded since
+    var rx = fx, ry = fy;
+    for (var k = iFix; k < iNow; k++){
+      rx += (est[k + 1][0] - est[k][0]); ry += (est[k + 1][1] - est[k][1]);
+    }
+    var W = 900, H = 380;
+    /* The whole arc is metres long and the disagreement is centimetres, so the
+       main view zooms on the stale window -- the only place anything happens --
+       and the full path goes in a thumbnail, the way a map carries an inset. */
+    var focus = truth.slice(Math.max(0, iFix - 8)).concat([naive, [rx, ry]]);
+    var xs = focus.map(function(p){ return p[0]; }), ys = focus.map(function(p){ return p[1]; });
+    var pad = 0.06;
+    var x0 = Math.min.apply(null, xs) - pad, x1 = Math.max.apply(null, xs) + pad;
+    var y0 = Math.min.apply(null, ys) - pad, y1 = Math.max.apply(null, ys) + pad;
+    var span = Math.max(0.22, x1 - x0, (y1 - y0) * 1.9);
+    var cxm = (x0 + x1) / 2, cym = (y0 + y1) / 2;
+    var sc = (W - 260) / span;
+    var ox = W / 2 - cxm * sc, oy = H / 2 + 14 - cym * sc;
+    function X(p){ return ox + p[0] * sc; } function Y(p){ return oy + p[1] * sc; }
+
+    ctx.clearRect(0, 0, W, H); ctx.fillStyle = SUNK; ctx.fillRect(0, 0, W, H);
+    function line(pts, col, width, dash){
+      ctx.beginPath(); ctx.setLineDash(dash || []);
+      pts.forEach(function(p, i){ i ? ctx.lineTo(X(p), Y(p)) : ctx.moveTo(X(p), Y(p)); });
+      ctx.strokeStyle = col; ctx.lineWidth = width; ctx.stroke(); ctx.setLineDash([]);
+    }
+    line(truth, 'rgba(255,255,255,.75)', 2);
+    line(est, 'rgba(255,255,255,.14)', 1.5, [4, 4]);
+    // the interval the fix is stale by, drawn on the truth it belongs to
+    line(truth.slice(iFix), '#5aa0ff', 5);
+    function dot(p, col, r){
+      ctx.beginPath(); ctx.arc(X(p), Y(p), r, 0, 6.3); ctx.fillStyle = col; ctx.fill();
+      ctx.strokeStyle = SUNK; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+    dot(truth[iFix], '#5aa0ff', 5);
+    dot(truth[iNow], '#ffffff', 5);
+    dot(naive, RED, 6);
+    dot([rx, ry], '#3fd98a', 6);
+    // a legend, because four points a few centimetres apart cannot carry four labels
+    var key = [['rgba(255,255,255,.75)', 'where the vehicle really is'],
+               ['#5aa0ff', 'the instant the fix describes, ' + (lat * 1000).toFixed(0) + ' ms ago'],
+               [RED, 'the fix, applied on arrival'],
+               ['#3fd98a', 'the fix, replayed at its own instant'],
+               ['rgba(255,255,255,.2)', 'dead reckoning, never corrected']];
+    ctx.font = '11px ui-monospace, monospace';
+    key.forEach(function(k, i){
+      var ky = 26 + i * 18;
+      ctx.fillStyle = k[0]; ctx.beginPath(); ctx.arc(24, ky - 4, 4, 0, 6.3); ctx.fill();
+      ctx.fillStyle = i ? INK3 : 'rgba(255,255,255,.8)'; ctx.fillText(k[1], 36, ky);
+    });
+    // a hairline between each answer and the truth, so the gap is a thing you can see
+    [[naive, RED], [[rx, ry], '#3fd98a']].forEach(function(q){
+      ctx.strokeStyle = q[1]; ctx.setLineDash([2, 3]); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(X(q[0]), Y(q[0]));
+      ctx.lineTo(X(truth[iNow]), Y(truth[iNow])); ctx.stroke(); ctx.setLineDash([]);
+    });
+    // a scale bar, because this view is zoomed and the eye needs telling
+    var barM = span > 1.2 ? 0.5 : span > 0.5 ? 0.2 : 0.05;
+    ctx.strokeStyle = INK3; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(W - 40 - barM * sc, H - 26); ctx.lineTo(W - 40, H - 26);
+    ctx.moveTo(W - 40 - barM * sc, H - 31); ctx.lineTo(W - 40 - barM * sc, H - 21);
+    ctx.moveTo(W - 40, H - 31); ctx.lineTo(W - 40, H - 21); ctx.stroke();
+    ctx.fillStyle = INK3; ctx.font = '10px ui-monospace, monospace';
+    ctx.fillText((barM * 100).toFixed(0) + ' cm', W - 40 - barM * sc, H - 36);
+
+    // the inset: the whole run, with the zoomed window marked on it
+    var iw = 150, ih = 96, ix = W - iw - 22, iy = 22;
+    ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(ix, iy, iw, ih);
+    ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 1; ctx.strokeRect(ix, iy, iw, ih);
+    var txs = truth.map(function(p){ return p[0]; }), tys = truth.map(function(p){ return p[1]; });
+    var tx0 = Math.min.apply(null, txs), tx1 = Math.max.apply(null, txs);
+    var ty0 = Math.min.apply(null, tys), ty1 = Math.max.apply(null, tys);
+    var tsc = Math.min((iw - 26) / Math.max(0.3, tx1 - tx0), (ih - 26) / Math.max(0.3, ty1 - ty0));
+    var tox = ix + iw / 2 - (tx0 + tx1) / 2 * tsc, toy = iy + ih / 2 - (ty0 + ty1) / 2 * tsc;
+    ctx.beginPath();
+    truth.forEach(function(q, i){
+      var qx = tox + q[0] * tsc, qy = toy + q[1] * tsc;
+      i ? ctx.lineTo(qx, qy) : ctx.moveTo(qx, qy);
+    });
+    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(tox + truth[iNow][0] * tsc, toy + truth[iNow][1] * tsc, 7, 0, 6.3);
+    ctx.strokeStyle = '#5aa0ff'; ctx.stroke();
+    ctx.fillStyle = INK3; ctx.font = '10px ui-monospace, monospace';
+    ctx.fillText('the whole run', ix + 8, iy + ih - 8);
+
+    var eN = Math.hypot(naive[0] - truth[iNow][0], naive[1] - truth[iNow][1]);
+    var eR = Math.hypot(rx - truth[iNow][0], ry - truth[iNow][1]);
+    out.lat.textContent = (lat * 1000).toFixed(0) + ' ms';
+    out.v.textContent = v.toFixed(2) + ' m/s';
+    out.yaw.textContent = (+el.yaw.value) + ' \u00b0/s';
+    out.age.textContent = (lat * 1000).toFixed(0) + ' ms, ' + (Math.abs(+el.yaw.value) * lat).toFixed(1) + '\u00b0 of turn';
+    out.moved.textContent = (v * lat * 100).toFixed(1) + ' cm';
+    out.naive.textContent = (eN * 100).toFixed(1) + ' cm out';
+    out.fixed.textContent = (eR * 100).toFixed(1) + ' cm out';
+    out.naive.style.color = eN > eR + 1e-4 ? RED : '';
+  }
+  ['lat', 'v', 'yaw'].forEach(function(k){ el[k].addEventListener('input', draw); });
+  document.querySelectorAll('[data-late]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var p = b.dataset.late.split(',');
+      el.lat.value = p[0]; el.v.value = p[1]; el.yaw.value = p[2]; draw();
+    });
+  });
+  draw();
+})();
+
+(function(){
+  /* The mixer, run forwards and then backwards. m = M.d with the X-frame's own
+     signs; then the achieved demand is recovered from the (possibly clipped)
+     motor values. Nothing is fudged: with every motor inside its limit the two
+     vectors must coincide exactly, which is the figure's built-in check --
+     drag everything small and watch "asked for" and "you get" agree. */
+  var cv = document.getElementById('mix-view');
+  if (!cv) return;
+  var ctx = cv.getContext('2d'), DPR = 2;
+  cv.width = 900 * DPR; cv.height = 380 * DPR; ctx.scale(DPR, DPR);
+  var el = {s: document.getElementById('mix-s'), l: document.getElementById('mix-l'),
+            y: document.getElementById('mix-y'), mode: document.getElementById('mix-mode')};
+  var out = {s: document.getElementById('mix-s-o'), l: document.getElementById('mix-l-o'),
+             y: document.getElementById('mix-y-o'), ask: document.getElementById('mix-ask'),
+             sat: document.getElementById('mix-sat'), got: document.getElementById('mix-got'),
+             err: document.getElementById('mix-err')};
+  var css = getComputedStyle(document.documentElement);
+  var INK = (css.getPropertyValue('--ink').trim() || '#e4e8ef'),
+      INK3 = (css.getPropertyValue('--ink-3').trim() || '#7b8598'),
+      RED = (css.getPropertyValue('--signal').trim() || '#ff2a14'),
+      SUNK = (css.getPropertyValue('--s-sunk').trim() || '#04060b');
+  // front-left, front-right, rear-left, rear-right, drawn where they sit
+  var MOT = [{n: 'M1', x: -1, y: -1, s: 1, l: 1, w: 1},
+             {n: 'M2', x: 1, y: -1, s: 1, l: -1, w: -1},
+             {n: 'M3', x: -1, y: 1, s: 1, l: -1, w: 1},
+             {n: 'M4', x: 1, y: 1, s: 1, l: 1, w: -1}];
+
+  function draw(){
+    var s = +el.s.value, l = +el.l.value, y = +el.y.value, mode = el.mode.value;
+    var raw = MOT.map(function(m){ return m.s * s + m.l * l + m.w * y; });
+    var peak = Math.max.apply(null, raw.map(Math.abs));
+    var cmd = raw.map(function(v){
+      return mode === 'clip' ? Math.max(-1, Math.min(1, v))
+                             : (peak > 1 ? v / peak : v);
+    });
+    var sat = raw.filter(function(v){ return Math.abs(v) > 1.0001; }).length;
+    var gs = (cmd[0] + cmd[1] + cmd[2] + cmd[3]) / 4;
+    var gl = (cmd[0] - cmd[1] - cmd[2] + cmd[3]) / 4;
+    var gy = (cmd[0] - cmd[1] + cmd[2] - cmd[3]) / 4;
+
+    var W = 900, H = 380;
+    ctx.clearRect(0, 0, W, H); ctx.fillStyle = SUNK; ctx.fillRect(0, 0, W, H);
+
+    // left: the hull from above, with each thruster's command as a bar on its own strut
+    var hx = 230, hy = H / 2, hw = 96, hh = 128;
+    ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(hx - hw / 2, hy - hh / 2, hw, hh);
+    ctx.fillStyle = INK3; ctx.font = '10px ui-monospace, monospace';
+    ctx.fillText('bow', hx - 11, hy - hh / 2 + 16);
+    MOT.forEach(function(m, i){
+      var mx = hx + m.x * (hw / 2 + 34), my = hy + m.y * (hh / 2 + 24);
+      var v = cmd[i], over = Math.abs(raw[i]) > 1.0001;
+      ctx.strokeStyle = 'rgba(255,255,255,.1)';
+      ctx.beginPath(); ctx.moveTo(hx + m.x * hw / 2, hy + m.y * hh / 2); ctx.lineTo(mx, my); ctx.stroke();
+      // the motor, and a bar whose length is what it was told to do
+      ctx.fillStyle = 'rgba(255,255,255,.1)'; ctx.fillRect(mx - 30, my - 7, 60, 14);
+      ctx.fillStyle = over ? RED : '#5aa0ff';
+      ctx.fillRect(mx, my - 7, v * 30, 14);
+      ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(mx, my - 9); ctx.lineTo(mx, my + 9); ctx.stroke();
+      ctx.fillStyle = over ? RED : INK3; ctx.font = '10px ui-monospace, monospace';
+      ctx.fillText(m.n + '  ' + (raw[i] >= 0 ? '+' : '') + raw[i].toFixed(2) +
+                   (over ? ' \u2192 ' + v.toFixed(2) : ''), mx - 30, my + 25);
+    });
+
+    // right: asked-for against achieved, in the plane the pilot thinks in
+    var px = 640, py = H / 2, R = 120;
+    ctx.strokeStyle = 'rgba(255,255,255,.08)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(px, py, R, 0, 6.3); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px - R, py); ctx.lineTo(px + R, py);
+    ctx.moveTo(px, py - R); ctx.lineTo(px, py + R); ctx.stroke();
+    ctx.fillStyle = INK3; ctx.font = '10px ui-monospace, monospace';
+    ctx.fillText('forward', px - 20, py - R - 10); ctx.fillText('sway', px + R + 6, py + 4);
+    function vec(sv, lv, col, width, dash){
+      ctx.beginPath(); ctx.setLineDash(dash || []);
+      ctx.moveTo(px, py); ctx.lineTo(px + lv * R, py - sv * R);
+      ctx.strokeStyle = col; ctx.lineWidth = width; ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(px + lv * R, py - sv * R, width + 1.5, 0, 6.3);
+      ctx.fillStyle = col; ctx.fill();
+    }
+    vec(s, l, 'rgba(255,255,255,.5)', 2, [5, 4]);
+    vec(gs, gl, sat ? (mode === 'clip' ? RED : '#3fd98a') : '#5aa0ff', 3);
+    // the yaw nobody asked for, drawn as an arc around the achieved tip
+    function turnMark(val, col, r){
+      if (Math.abs(val) < 0.005) return;
+      ctx.beginPath(); ctx.arc(px, py, r, -Math.PI / 2, -Math.PI / 2 + val * 2.2, val < 0);
+      ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.stroke();
+    }
+    turnMark(y, 'rgba(255,255,255,.35)', R + 16);
+    turnMark(gy, gy * y < 0 || Math.abs(gy - y) > 0.02 ? RED : '#5aa0ff', R + 24);
+    ctx.fillStyle = INK3;
+    ctx.fillText('dashed: what was asked for', px - R, py + R + 26);
+    ctx.fillText('solid: what the four motors add up to', px - R, py + R + 42);
+    ctx.fillText('outer arcs: yaw, asked and achieved', px - R, py + R + 58);
+
+    out.s.textContent = (s >= 0 ? '+' : '') + s.toFixed(2);
+    out.l.textContent = (l >= 0 ? '+' : '') + l.toFixed(2);
+    out.y.textContent = (y >= 0 ? '+' : '') + y.toFixed(2);
+    out.ask.textContent = 's ' + s.toFixed(2) + ' · l ' + l.toFixed(2) + ' · y ' + y.toFixed(2);
+    out.sat.textContent = sat ? sat + ' of 4, peak ' + peak.toFixed(2) : 'none';
+    out.sat.style.color = sat ? RED : '';
+    out.got.textContent = 's ' + gs.toFixed(2) + ' · l ' + gl.toFixed(2) + ' · y ' + gy.toFixed(2);
+    var a0 = Math.atan2(l, s), a1 = Math.atan2(gl, gs);
+    var dir = (Math.abs(s) + Math.abs(l)) < 0.01 ? 0 : (a1 - a0) * 180 / Math.PI;
+    /* Two different failures, and calling them the same thing would be the
+       whole point missed: scaling DELIVERS LESS of what you asked for, clipping
+       ADDS a rotation you did not ask for. */
+    var dy = gy - y, less = Math.abs(gy) < Math.abs(y) - 0.005 && gy * y >= 0;
+    out.err.textContent = Math.abs(dir) > 0.05
+      ? dir.toFixed(1) + '\u00b0 off course, yaw ' + (dy >= 0 ? '+' : '') + dy.toFixed(2) + ' unasked'
+      : less ? 'on course — yaw delivered ' + (Math.abs(gy / (y || 1)) * 100).toFixed(0) + '% of asked'
+             : 'on course, all three delivered';
+    out.err.style.color = Math.abs(dir) > 0.05 ? RED : '';
+  }
+  ['s', 'l', 'y'].forEach(function(k){ el[k].addEventListener('input', draw); });
+  el.mode.addEventListener('change', draw);
+  document.querySelectorAll('[data-mix]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var v = b.dataset.mix.split(',');
+      el.s.value = v[0]; el.l.value = v[1]; el.y.value = v[2]; draw();
+    });
+  });
+  draw();
+})();
+
+(function(){
+  /* Four sign switches in series. The point of the figure is that the product
+     is the only thing the water shows you, so a configuration with an even
+     number of wrong switches is indistinguishable from a correct one -- the
+     figure therefore reports BOTH the product and the count of wrong switches,
+     which is exactly the distinction a bench test cannot make. */
+  var cv = document.getElementById('sign-view');
+  if (!cv) return;
+  var ctx = cv.getContext('2d'), DPR = 2;
+  cv.width = 900 * DPR; cv.height = 380 * DPR; ctx.scale(DPR, DPR);
+  var ids = ['host', 'fr', 'fw', 'mot'];
+  var el = {}; ids.forEach(function(k){ el[k] = document.getElementById('sign-' + k); });
+  var out = {prod: document.getElementById('sign-prod'), o: document.getElementById('sign-out'),
+             ok: document.getElementById('sign-ok'), bad: document.getElementById('sign-bad')};
+  var css = getComputedStyle(document.documentElement);
+  var INK = (css.getPropertyValue('--ink').trim() || '#e4e8ef'),
+      INK3 = (css.getPropertyValue('--ink-3').trim() || '#7b8598'),
+      RED = (css.getPropertyValue('--signal').trim() || '#ff2a14'),
+      SUNK = (css.getPropertyValue('--s-sunk').trim() || '#04060b');
+  // label, and the value this switch has when the vehicle is configured as intended
+  var STAGE = [{k: 'host', n: 'host axis', good: 1, sub: 'mongla_control'},
+               {k: 'fr', n: 'FRAME_REVERSE', good: 1, sub: 'board parameter'},
+               {k: 'fw', n: 'behaviour rev', good: 1, sub: 'firmware'},
+               {k: 'mot', n: 'MOT_DIRECTION', good: 1, sub: 'eight motors'}];
+  function val(st){
+    var v = +el[st.k].value;
+    return st.k === 'fr' ? (v === 1 ? 1 : -1) : v;   // the parameter reads 0/1, the effect is a sign
+  }
+  function draw(){
+    var W = 900, H = 380, prod = 1, wrong = 0;
+    ctx.clearRect(0, 0, W, H); ctx.fillStyle = SUNK; ctx.fillRect(0, 0, W, H);
+    var x0 = 44, gap = 176, y = 132;
+    ctx.fillStyle = INK3; ctx.font = '11px ui-monospace, monospace';
+    ctx.fillText('turn left', 8, y - 44);
+    STAGE.forEach(function(st, i){
+      var v = val(st), bad = v !== st.good;
+      if (bad) wrong++;
+      prod *= v;
+      var x = x0 + i * gap;
+      // the wire into this stage, carrying the running product's sign
+      ctx.strokeStyle = prod === 1 ? 'rgba(255,255,255,.35)' : RED; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x - 34, y); ctx.lineTo(x, y); ctx.stroke();
+      // the switch itself
+      ctx.fillStyle = bad ? 'rgba(255,42,20,.12)' : 'rgba(255,255,255,.05)';
+      ctx.strokeStyle = bad ? RED : 'rgba(255,255,255,.18)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(x, y - 34, 140, 68, 10); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = v === 1 ? INK : RED;
+      ctx.font = '700 22px ui-monospace, monospace';
+      ctx.fillText(v === 1 ? '+1' : '\u22121', x + 14, y + 8);
+      ctx.fillStyle = bad ? RED : INK3; ctx.font = '10px ui-monospace, monospace';
+      ctx.fillText(st.n, x + 52, y - 4);
+      ctx.fillStyle = INK3; ctx.fillText(st.sub, x + 52, y + 12);
+      if (bad){ ctx.fillStyle = RED; ctx.fillText('not as intended', x + 2, y + 50); }
+    });
+    // out of the last stage, into the water
+    var xe = x0 + 4 * gap - 40;
+    ctx.strokeStyle = prod === 1 ? 'rgba(255,255,255,.35)' : RED; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(xe - 4, y); ctx.lineTo(xe + 34, y); ctx.stroke();
+
+    // the hull, seen from above, turning whichever way the product says
+    var hx = 450, hy = 286, ang = prod === 1 ? -0.55 : 0.55;
+    ctx.save(); ctx.translate(hx, hy); ctx.rotate(ang);
+    ctx.fillStyle = 'rgba(255,255,255,.1)'; ctx.strokeStyle = prod === 1 ? INK : RED;
+    ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(-16, -30, 32, 60, 9); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, -46); ctx.lineTo(-7, -31); ctx.lineTo(7, -31); ctx.closePath();
+    ctx.fillStyle = prod === 1 ? INK : RED; ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = prod === 1 ? 'rgba(255,255,255,.4)' : RED; ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(hx, hy, 62, prod === 1 ? -2.5 : -0.65, prod === 1 ? -1.6 : 0.25, false);
+    ctx.stroke();
+    ctx.fillStyle = prod === 1 ? INK : RED; ctx.font = '11px ui-monospace, monospace';
+    ctx.fillText(prod === 1 ? 'the hull turns LEFT — as asked'
+                            : 'the hull turns RIGHT — the opposite of the command',
+                 hx + 84, hy + 4);
+    if (wrong && prod === 1){
+      ctx.fillStyle = RED; ctx.font = '11px ui-monospace, monospace';
+      ctx.fillText('…and ' + wrong + ' switches are wrong. The water cannot tell you that.',
+                   hx + 84, hy + 24);
+    }
+    out.prod.textContent = (prod === 1 ? '+1' : '\u22121') + ' — ' +
+      STAGE.map(function(st){ return val(st) === 1 ? '+' : '\u2212'; }).join(' ');
+    out.o.textContent = prod === 1 ? 'turns left, as asked' : 'turns right, backwards';
+    out.o.style.color = prod === 1 ? '' : RED;
+    out.ok.textContent = wrong === 0 ? 'correct, and correct for the right reason'
+      : prod === 1 ? 'looks right — and is not' : 'visibly wrong';
+    out.ok.style.color = wrong === 0 ? '' : RED;
+    out.bad.textContent = wrong ? wrong + ' of 4' : 'none';
+    out.bad.style.color = wrong ? RED : '';
+  }
+  ids.forEach(function(k){ el[k].addEventListener('change', draw); });
+  document.querySelectorAll('[data-sign]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var v = b.dataset.sign.split(',');
+      el.fr.value = v[0]; el.mot.value = v[1]; el.fw.value = v[2]; el.host.value = v[3]; draw();
+    });
+  });
+  draw();
+})();
+
+(function(){
+  /* The link budget. MEASURED: 115200 baud -> 11520 B/s with 8N1 framing, the
+     18.8 % the vehicle uses today, the 5 s board failsafe. MODELLED: the
+     queueing curve rho/(1-rho), drawn to show the shape of the cliff. The
+     figure labels which is which, because a chart that mixes them is a chart
+     that launders a guess into a measurement. */
+  var cv = document.getElementById('bud-view');
+  if (!cv) return;
+  var ctx = cv.getContext('2d'), DPR = 2;
+  cv.width = 900 * DPR; cv.height = 380 * DPR; ctx.scale(DPR, DPR);
+  var CAP = 11520, BASE = 0.188, FAILSAFE = 5.0;
+  /* The heartbeat's period is not guessed: the ledger's measured margin at the
+     present load is 10x the 5 s failsafe, so the gap it saw was 0.5 s. The
+     figure starts from that measurement and only adds the modelled wait. */
+  var HB_GAP0 = FAILSAFE / 10;
+  var el = {sz: document.getElementById('bud-sz'), hz: document.getElementById('bud-hz')};
+  var out = {sz: document.getElementById('bud-sz-o'), hz: document.getElementById('bud-hz-o'),
+             use: document.getElementById('bud-use'), q: document.getElementById('bud-q'),
+             hb: document.getElementById('bud-hb'), v: document.getElementById('bud-v')};
+  var css = getComputedStyle(document.documentElement);
+  var INK = (css.getPropertyValue('--ink').trim() || '#e4e8ef'),
+      INK3 = (css.getPropertyValue('--ink-3').trim() || '#7b8598'),
+      RED = (css.getPropertyValue('--signal').trim() || '#ff2a14'),
+      SUNK = (css.getPropertyValue('--s-sunk').trim() || '#04060b');
+
+  function draw(){
+    var sz = +el.sz.value, hz = +el.hz.value;
+    var added = sz * hz;                       // bytes per second, both directions the same wire
+    var used = BASE * CAP + added, rho = used / CAP;
+    // M/D/1-ish: the wait relative to one message time. Shape, not a prediction.
+    var msgT = 44 / CAP;                        // one SROT_MOVE frame, the unit of waiting
+    var q = rho < 0.999 ? msgT * rho / (1 - rho) : 9;
+    var hbGap = HB_GAP0 + q;
+
+    var W = 900, H = 380;
+    ctx.clearRect(0, 0, W, H); ctx.fillStyle = SUNK; ctx.fillRect(0, 0, W, H);
+
+    // the pipe: capacity as a well, what is in it as a fill
+    var px = 60, py = 62, pw = W - 160, ph = 58;
+    ctx.fillStyle = 'rgba(255,255,255,.05)'; ctx.fillRect(px, py, pw, ph);
+    var baseW = Math.min(1, BASE) * pw, addW = Math.min(pw - baseW, added / CAP * pw);
+    ctx.fillStyle = '#5aa0ff'; ctx.fillRect(px, py, baseW, ph);
+    ctx.fillStyle = rho > 1 ? RED : '#3fd98a'; ctx.fillRect(px + baseW, py, addW, ph);
+    ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1; ctx.strokeRect(px, py, pw, ph);
+    ctx.font = '10px ui-monospace, monospace';
+    ctx.fillStyle = INK3;
+    ctx.fillText('0', px, py + ph + 16);
+    ctx.fillText(CAP.toLocaleString() + ' B/s  —  one USB-C cable at 115 200 baud', px + pw - 260, py - 12);
+    ctx.fillStyle = '#04121f'; ctx.font = '700 10px ui-monospace, monospace';
+    ctx.fillText('the vehicle as measured, 18.8 %', px + 10, py + ph / 2 + 4);
+    ctx.font = '10px ui-monospace, monospace';
+    if (addW > 60){ ctx.fillStyle = '#04120a';
+      ctx.fillText('what you just added', px + baseW + 8, py + ph / 2 + 4); }
+    if (rho > 1){
+      ctx.fillStyle = RED;
+      ctx.fillText('over capacity by ' + ((rho - 1) * 100).toFixed(0) + ' % — this does not fit',
+                   px + pw - 300, py + ph + 16);
+    }
+
+    // the queueing curve, with the operating point on it
+    var gx = 60, gy = 320, gw = W - 160, gh = 150;
+    ctx.strokeStyle = 'rgba(255,255,255,.12)';
+    ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx + gw, gy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx, gy - gh); ctx.stroke();
+    ctx.beginPath();
+    for (var i = 0; i <= 240; i++){
+      var r = i / 250, w = msgT * r / (1 - r);
+      var yy = gy - Math.min(gh, w / (msgT * 12) * gh);
+      i ? ctx.lineTo(gx + r * gw, yy) : ctx.moveTo(gx + r * gw, yy);
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 2; ctx.stroke();
+    var opx = gx + Math.min(1, rho) * gw;
+    var opy = gy - Math.min(gh, q / (msgT * 12) * gh);
+    ctx.strokeStyle = rho > 0.7 ? RED : '#3fd98a'; ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(opx, gy); ctx.lineTo(opx, opy); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(opx, opy, 6, 0, 6.3);
+    ctx.fillStyle = rho > 0.7 ? RED : '#3fd98a'; ctx.fill();
+    ctx.fillStyle = INK3; ctx.font = '10px ui-monospace, monospace';
+    ctx.fillText('utilisation', gx + gw / 2 - 26, gy + 18);
+    ctx.fillText('0 %', gx - 4, gy + 18); ctx.fillText('100 %', gx + gw - 18, gy + 18);
+    ctx.save(); ctx.translate(gx - 16, gy - gh / 2 + 4); ctx.rotate(-Math.PI / 2);
+    ctx.fillText('waiting \u2014 modelled', -56, 0); ctx.restore();
+    ctx.fillStyle = 'rgba(255,255,255,.35)';
+    ctx.fillText('flat, and then vertical: the cliff is at about 70 %, not at 100 %',
+                 gx + 16, gy - gh + 14);
+
+    out.sz.textContent = sz + ' bytes';
+    out.hz.textContent = hz + ' Hz';
+    out.use.textContent = (rho * 100).toFixed(1) + ' % of ' + CAP.toLocaleString() + ' B/s';
+    out.use.style.color = rho > 0.7 ? RED : '';
+    out.q.textContent = rho >= 1 ? 'unbounded — it never drains' : (q * 1000).toFixed(1) + ' ms';
+    out.q.style.color = rho > 0.7 ? RED : '';
+    out.hb.textContent = rho >= 1 ? 'gone' : (FAILSAFE / hbGap).toFixed(1) + '\u00d7 the 5 s failsafe';
+    out.hb.style.color = rho >= 1 || FAILSAFE / hbGap < 3 ? RED : '';
+    out.v.textContent = rho >= 1 ? 'the vehicle surfaces, and nobody on deck knows why'
+      : rho > 0.7 ? 'still works — with no headroom left to be surprised by'
+      : 'headroom, and a measurable distance to the cliff';
+    out.v.style.color = rho > 0.7 ? RED : '';
+  }
+  ['sz', 'hz'].forEach(function(k){ el[k].addEventListener('input', draw); });
+  document.querySelectorAll('[data-bud]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var v = b.dataset.bud.split(',');
+      el.sz.value = v[0]; el.hz.value = v[1]; draw();
+    });
+  });
+  draw();
 })();
 </script>
 </body>
