@@ -132,6 +132,9 @@ healthy.
 
 ## How the whole thing fits together
 
+> *"A complex system that works is invariably found to have evolved from a simple system that
+> worked."* — John Gall, [*Systemantics*](https://en.wikiquote.org/wiki/John_Gall), 1975
+
 Two computers, one cable, and a split that decides everything else: **reflexes on the board,
 thinking on the Pi.**
 
@@ -527,6 +530,10 @@ moved. They are refused *before dispatch*, by name, in
 
 ## Asking it to do something
 
+> *"There are two ways of constructing a software design: One way is to make it so simple that
+> there are obviously no deficiencies, and the other way is to make it so complicated that there
+> are no obvious deficiencies."* — C.A.R. Hoare, [ACM Turing Award Lecture](https://amturing.acm.org/award_recipient/hoare_4622167), 1980
+
 A mission is a Python script, not a state machine you have to draw. The vision verbs are
 pixel-native and **never raise** — they return where and how they finished, so a mission
 branches on reality instead of on an exception.
@@ -577,6 +584,9 @@ stateDiagram-v2
 ---
 
 ## What keeps it from hurting someone
+
+> *"For a successful technology, reality must take precedence over public relations, for nature
+> cannot be fooled."* — Richard Feynman, Rogers Commission Report, [Appendix F](https://wist.info/feynman-richard/5360/), 1986
 
 Six rules, and they are not negotiable. They are also the reason several features are *slower*
 than they could be.
@@ -653,6 +663,9 @@ mongla_localization     286 passed       the filter, retrodiction, course priors
                      ─────────────
                      3 316 passed, 0 failed
 ```
+
+> *"Computing science has very convincingly shown that simplicity is a necessary precondition for
+> reliability."* — Edsger W. Dijkstra, [EWD1175](https://www.cs.utexas.edu/~EWD/transcriptions/EWD11xx/EWD1175.html)
 
 Some of those tests are unusual enough to be worth naming:
 
@@ -736,6 +749,9 @@ The simulator earned its place by being wrong in the same places the pool is:
 
 ## What stands in the way
 
+> *"A ship in port is safe, but that is not what ships are built for."* — John A. Shedd, 1928;
+> [a motto Grace Hopper lived by](https://quoteinvestigator.com/2013/12/09/safe-harbor/)
+
 Seven things, and **not one of them is ours to fix alone**:
 
 <p align="center"><img src="docs/imgs/readme/blockers.webp" alt="Seven blockers, each keyed by who can clear it: water, a firmware pull request, or hardware — none by us alone." width="100%"></p>
@@ -750,6 +766,9 @@ it, are in [`.claude/context/upstream/`](.claude/context/upstream/README.md).
 
 This README is a map, not the territory. The documents below are the territory, and they are
 kept beside the code they describe rather than pasted in here.
+
+Read them in order as **[the Mongla book](.claude/context/README.md)** — 47 chapters in seven parts,
+from why the vehicle exists to every number it has measured. Or dip in:
 
 **Start here**
 
@@ -889,6 +908,31 @@ is no third category, and nothing here is owned by an institution.
   </div>
 </div>
 <br clear="both">
+
+### The author, in his own log
+
+Muhammad Fahim Faisal is a systems engineer in Dhaka, Bangladesh, working across robotics,
+computer vision, embedded systems and control. The through-line of his
+[log](https://fh1m.github.io/log/) is one question, asked since the first machine: *what is
+actually happening underneath, and can I rebuild it from first principles?*
+
+| year | phase | what it taught, in his words |
+|---|---|---|
+| 2022 | the first machine | machine learning from tutorials — *"loss went down"* without understanding why; the practice that stuck was to *"take the opaque thing apart and rebuild it from first principles"* |
+| 2023 | experiments as apprenticeship | small vision projects, the comma.ai calibration challenge — calibration as *"the unglamorous core of any camera system"* |
+| 2024 | learning the machine from inside | joins the AUV programme's AI and machine-vision sub-team: *"perception is a pipeline with budgets, not a model with an accuracy number"* |
+| 2025 | from sub-team to engineering lead | *"engineering leadership is mostly making dependencies visible"* |
+| 2026 | the stack becomes the product | ROS 2 control, the simulator, the test tooling: *"a vehicle is only as good as the tooling around it"* — then leaves on principle, and keeps building |
+
+He thinks in five layers, from mission intent at the top, through control loops and
+estimation, drivers and real-time scheduling, the boards and sensors, down to the water itself —
+and works in one loop: **build, observe, fail, understand, rebuild.** Before this, rockets
+(a hybrid rocket engine test with AERD) and the Mongol Tori team; the influences he names are George
+Hotz, Andrej Karpathy and the comma.ai calibration mindset — and, above all of them, Claude
+Shannon.
+
+> *"The machine is still being built."* — the last line of his log, and the status of this
+> repository
 
 ### History
 

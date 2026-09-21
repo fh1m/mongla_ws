@@ -15,6 +15,7 @@
 | [`.claude/context/ROADMAP.md`](.claude/context/ROADMAP.md) | **the one status file** — where we are, what is left, what is blocked |
 | [`.claude/context/packages/`](.claude/context/packages/README.md) | one page per package |
 | [`.claude/context/BUGS.md`](.claude/context/BUGS.md) | **the single defect register** |
+| [`.claude/context/README.md`](.claude/context/README.md) | **the book** — every context doc, in reading order |
 
 **Precedence:** if anything here contradicts `src/`, the code wins. If a doc contradicts a
 measurement, the measurement wins — and both belong in
