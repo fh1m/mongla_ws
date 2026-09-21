@@ -94,7 +94,7 @@ already inside the board and had nowhere to go until we asked.
 |---|---|---|---|
 | Attitude and rotation rates | **on the flight board**, fused at up to 400 Hz, read at 500 Hz | fw `src/drivers/bno085.*` | 🟣 BENCH |
 | Depth and water temperature | direct — plus the controller's own error, output and command, published for inspection | fw `src/drivers/bar30.cpp` | 🟣 BENCH |
-| Leak and kill switch | both — and the kill switch's ambiguity is a known, written ask | `.claude/context/upstream/pr-h-kill-is-ambiguous.md` | 🟣 BENCH |
+| Leak and kill switch | both readable — but the leak **failsafe is OFF** on this board (`LEAK_EN = 0`: no pre-arm refusal, no surfacing), and the kill switch's ambiguity is a known, written ask | `.claude/context/upstream/pr-h-kill-is-ambiguous.md` | 🟣 BENCH |
 | Battery | **two packs**, electronics and thrusters, de-multiplexed by id | host `fc/srot_fc.py` (`note_battery`) | 🟣 BENCH |
 | Per-thruster RPM | measured by the ESCs, returned on the command wire | fw Pico + `thruster_link.cpp`; needs Bluejay from `srot-esc-flasher` | 🟣 BENCH |
 | Thruster presence | computed on the board and dropped before the wire — a one-line ask, open | `.claude/context/upstream/pr-f-esc-presence-on-the-wire.md`; 958/958 frames read zero with nothing attached | 🔴 BLOCKED |
