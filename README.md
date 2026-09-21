@@ -785,6 +785,7 @@ kept beside the code they describe rather than pasted in here.
 | [`ROADMAP.md`](.claude/context/ROADMAP.md) | **the one status file** — where we are, what is left, what is blocked |
 | [`measured-bars.md`](.claude/context/measured-bars.md) | every shipped constant with the measurement behind it, retractions included |
 | [`BUGS.md`](.claude/context/BUGS.md) | the single defect register |
+| [`reference/commands.md`](.claude/context/reference/commands.md) | **generated from the code**: all 30 verbs with their fields and defaults, which ones the board runs and which it refuses, every executable, launch argument, node parameter and wire constant |
 
 **The platform** — [`.claude/context/platform/`](.claude/context/platform/) · 17 documents
 
