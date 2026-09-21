@@ -13,42 +13,52 @@
 <body>
 <div id="grain" aria-hidden="true"></div>
 
-<nav class="sound" aria-label="Descent">
-  <div class="cable"></div>
-  <div class="paid" id="paid"></div>
-  <ol id="stops">
-    <li data-for="surface"><i></i><b>surface</b></li>
-    <li data-for="medium"><i></i><b>the medium</b></li>
-    <li data-for="origin"><i></i><b>origin</b></li>
-    <li data-for="shift"><i></i><b>the shift</b></li>
-    <li data-for="pid"><i></i><b>the loop</b></li>
-    <li data-for="body"><i></i><b>the body</b></li>
-    <li data-for="repos"><i></i><b>the suite</b></li>
-    <li data-for="frame"><i></i><b>to thrust</b></li>
-    <li data-for="thinking"><i></i><b>one task</b></li>
-    <li data-for="blink"><i></i><b>the blink</b></li>
-    <li data-for="flow"><i></i><b>no DVL</b></li>
-    <li data-for="sim"><i></i><b>the simulator</b></li>
-    <li data-for="archive"><i></i><b>the rehearsal</b></li>
-    <li data-for="water-real"><i></i><b>the water</b></li>
-    <li data-for="water"><i></i><b>retractions</b></li>
-    <li data-for="instruments"><i></i><b>instruments</b></li>
-    <li data-for="asked"><i></i><b>language</b></li>
-    <li data-for="shoulders"><i></i><b>shoulders</b></li>
-    <li data-for="deeper"><i></i><b>further</b></li>
-    <li data-for="open"><i></i><b>open</b></li>
-  </ol>
-  <div class="bell" id="bell"></div>
-  <div class="depth" id="depth">0 m<small>into the descent</small></div>
+<nav class="dock" id="dock" aria-label="Chapters">
+  <div class="dock__sheet" id="dock-sheet" hidden></div>
+  <button class="dock__bar" id="dock-bar" aria-expanded="false" aria-controls="dock-sheet"
+          title="Chapters — press C">
+    <span class="dock__idx"><b id="dock-n">01</b><small id="dock-of">/ 25</small></span>
+    <span class="dock__name" id="dock-name">surface</span>
+    <span class="dock__ticks" id="dock-ticks" aria-hidden="true"></span>
+    <span class="dock__depth"><b id="dock-depth">0</b><small>m</small></span>
+  </button>
+  <button class="dock__snd" id="dock-snd" type="button" aria-pressed="false"
+          title="Water, synthesised in the browser — off by default">
+    <svg viewBox="0 0 24 24" aria-hidden="true" width="13" height="13">
+      <path d="M4 9h3l4-4v14l-4-4H4z" fill="currentColor"/>
+      <path class="w1" d="M15.5 8.5a5 5 0 0 1 0 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      <path class="w2" d="M18.4 6a9 9 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+    </svg>
+    <span>water</span>
+  </button>
 </nav>
 
 <main>
 
 <!-- 00 ──────────────────────────────────────────────────────────────── -->
-<section id="surface">
+<section id="surface" data-chapter="surface">
  <div class="wrap boot">
-  <p class="mark">Mongla <i>//</i> an autonomy stack for autonomous underwater vehicles</p>
-  <h1>Machines that have to work when nobody is watching.</h1>
+  <p class="mark">An autonomy stack <i>//</i> for autonomous underwater vehicles</p>
+  <h1 class="title" aria-label="Mongla">
+    <span class="title__word" aria-hidden="true"><span>M</span><span>o</span><span>n</span><span>g</span><span>l</span><span>a</span></span>
+    <svg class="title__sea" viewBox="0 0 1200 120" preserveAspectRatio="none" aria-hidden="true">
+      <!-- each wave is drawn one wavelength LONGER than the box and travels
+           exactly one wavelength, so the loop has no seam and no bare end -->
+      <path class="s1" d="M-300 60 Q -150 34 0 60 T 300 60 T 600 60 T 900 60 T 1200 60 T 1500 60"/>
+      <path class="s2" d="M-300 66 Q -150 90 0 66 T 300 66 T 600 66 T 900 66 T 1200 66 T 1500 66"/>
+    </svg>
+    <svg class="title__sub" viewBox="0 0 120 44" aria-hidden="true">
+      <g class="hull">
+        <rect x="18" y="16" width="74" height="13" rx="6.5"/>
+        <path class="nose" d="M92 16h7a6.5 6.5 0 0 1 0 13h-7z"/>
+        <rect class="fin" x="26" y="29" width="9" height="6" rx="1.5"/>
+        <rect class="fin" x="70" y="29" width="9" height="6" rx="1.5"/>
+        <circle class="eye" cx="86" cy="22.5" r="2"/>
+      </g>
+      <g class="bubbles"><circle cx="14" cy="20" r="1.6"/><circle cx="8" cy="15" r="1.1"/><circle cx="4" cy="24" r="0.8"/></g>
+    </svg>
+  </h1>
+  <p class="title__quote">Machines that have to work when nobody is watching.</p>
   <p class="lede col" style="margin-top:28px">Underwater there is no radio, no GPS, and no second
     chance to explain yourself. A vehicle either understood what it was looking at, or it did
     not — and it will not tell you which. This is the software that has to be right anyway.</p>
@@ -91,7 +101,7 @@
 </section>
 
 <!-- 01 ──────────────────────────────────────────────────────────────── -->
-<section id="medium">
+<section id="medium" data-chapter="the medium">
  <div class="wrap">
   <h2 class="col">Everything down here fights you.</h2>
   <p class="lede col quiet">Not as a metaphor. Each line is a force acting on a decision the
@@ -130,8 +140,8 @@
 
   <figure class="diff-fig">
    <div class="diff" style="--pos:50%">
-     <img src="imgs/water-murky.png" alt="The same simulated gate in murky water" loading="lazy">
-     <img class="diff__top" src="imgs/water-clear.png" alt="The same simulated gate in clear water" loading="lazy">
+     <img src="imgs/water-murky.webp" alt="The same simulated gate in murky water" loading="lazy">
+     <img class="diff__top" src="imgs/water-clear.webp" alt="The same simulated gate in clear water" loading="lazy">
      <i class="diff__line" aria-hidden="true"></i>
      <span class="diff__k diff__k--l">[ clear ]</span><span class="diff__k diff__k--r">[ murky ]</span>
      <input class="diff__range" type="range" min="0" max="100" value="50"
@@ -147,15 +157,15 @@
 
   <figure>
    <div class="strip">
-     <img src="imgs/pool-glide.jpg" alt="The vehicle gliding through the test pool" loading="lazy">
-     <img src="imgs/pool-top.jpg" alt="The test pool seen from above" loading="lazy">
+     <img src="imgs/pool-glide.webp" alt="The vehicle gliding through the test pool" loading="lazy">
+     <img src="imgs/pool-top.webp" alt="The test pool seen from above" loading="lazy">
    </div>
   </figure>
  </div>
 </section>
 
 <!-- 02 ──────────────────────────────────────────────────────────────── -->
-<section id="origin">
+<section id="origin" data-chapter="origin">
  <div class="wrap">
   <p class="mark">Act one <i>//</i> where it learned</p>
   <h2 class="col">It learned most of what it knows from losing to water.</h2>
@@ -188,10 +198,10 @@
 
   <figure>
    <div class="strip">
-    <img src="imgs/robosub-tent.jpg" alt="The team pit at RoboSub" loading="lazy">
-    <img src="imgs/robosub-deploy.jpg" alt="Deploying the vehicle at RoboSub" loading="lazy">
-    <img src="imgs/pool-dual-auvs.jpg" alt="Two vehicles in the test pool" loading="lazy">
-    <img src="imgs/team-bd-flag.jpg" alt="The team with the flag of Bangladesh" loading="lazy">
+    <img src="imgs/robosub-tent.webp" alt="The team pit at RoboSub" loading="lazy">
+    <img src="imgs/robosub-deploy.webp" alt="Deploying the vehicle at RoboSub" loading="lazy">
+    <img src="imgs/pool-dual-auvs.webp" alt="Two vehicles in the test pool" loading="lazy">
+    <img src="imgs/team-bd-flag.webp" alt="The team with the flag of Bangladesh" loading="lazy">
    </div>
    <figcaption>The pit, the deployment, the pool, the people. Both vehicles belonged to the
      university programme. What continues here is the software that ran inside them.</figcaption>
@@ -200,7 +210,7 @@
 </section>
 
 <!-- 03 ──────────────────────────────────────────────────────────────── -->
-<section id="shift">
+<section id="shift" data-chapter="the shift">
  <div class="wrap">
   <p class="mark">Act two <i>//</i> opening the box</p>
   <h2 class="col">The fast loop lives where it belongs.</h2>
@@ -249,8 +259,40 @@
  </div>
 </section>
 
+<!-- 03a ─────────────────────────── -->
+<section id="pages" data-chapter="the long reads">
+ <div class="wrap">
+  <p class="mark">Two long reads <i>//</i> the same argument, at full length</p>
+  <h2 class="col">If this page is the tour, these two are the rooms.</h2>
+  <p class="lede col quiet">One explains why the vehicle is split the way it is, from first
+    principles and with no assumed background. The other lists every capability with the file or
+    the measurement behind it, and refuses to hide the rows that are blocked. Both previews below
+    are generated from those documents, so neither can quietly drift from what it is advertising.</p>
+  <!-- pages:begin -->
+  <div class="pages">
+   <a class="pages__card" href="the-shift.html">
+    <span class="silk">Long read <i>//</i> the architecture from first principles</span>
+    <h3>The Shift</h3>
+    <p>Why the reflexes live on a 500 Hz board and the thinking on a Pi, written for someone who has never seen a flight controller. The whole argument is one table — the board’s own timetable, two cores that never share a desk.</p>
+    <div class="pages__cores"><div><span class="silk">core 1 — nothing else may interrupt it</span><ul><li><span>read the sensors</span><b>500<u>Hz</u></b></li><li><span>run the control loop</span><b>500<u>Hz</u></b></li><li><span>drive the motors (DShot)</span><b>500<u>Hz</u></b></li></ul></div><div><span class="silk">core 0 — everything a human might wait on</span><ul><li><span>talk to the Pi (MAVLink)</span><b>100<u>Hz</u></b></li><li><span>display</span><b>30<u>Hz</u></b></li><li><span>radio and SD card</span><b>20<u>Hz</u></b></li></ul></div></div>
+    <span class="pages__go">Read it <i>→</i></span>
+   </a>
+   <a class="pages__card" href="capability-map.html">
+    <span class="silk">Long read <i>//</i> every claim with its evidence</span>
+    <h3>Capability map</h3>
+    <p>55 capabilities, each carrying the file or the measurement behind it and an honest state. The bar below is counted out of that page’s own table rows by <code>tools/site_pages.py</code> — including the state whose count is still zero.</p>
+    <ul class="pages__tally"><li class="t--water"><b>0</b><span class="silk">water</span><i style="--w:0.0%"></i><em>verified in water</em></li><li class="t--bench"><b>29</b><span class="silk">bench</span><i style="--w:52.7%"></i><em>verified on the bench or on real footage</em></li><li class="t--built"><b>23</b><span class="silk">built</span><i style="--w:41.8%"></i><em>built and tested, never flown</em></li><li class="t--blocked"><b>3</b><span class="silk">blocked</span><i style="--w:5.5%"></i><em>waiting on hardware or a firmware merge</em></li></ul>
+    <span class="pages__go">Read it <i>→</i></span>
+   </a>
+  </div>
+  <!-- pages:end -->
+  <blockquote class="pull">A capability map that hides the blocked rows is
+    <em>marketing</em>.</blockquote>
+ </div>
+</section>
+
 <!-- 03b ─────────────────────────────────────────────────────────────── -->
-<section id="pid">
+<section id="pid" data-chapter="the loop">
  <div class="wrap">
   <p class="mark">Play with it <i>//</i> the loop, in your hands</p>
   <h2 class="col">What a control loop is, if you have never written one.</h2>
@@ -331,7 +373,7 @@
 </section>
 
 <!-- 04 ──────────────────────────────────────────────────────────────── -->
-<section id="body">
+<section id="body" data-chapter="the body">
  <div class="wrap">
   <p class="mark">The body <i>//</i> 702 mm, five thrusters, one uncontrolled axis</p>
   <h2 class="col">A red machine, lit by the water it has to survive.</h2>
@@ -340,7 +382,7 @@
 
   <div class="stage" id="explode-stage">
    <div class="bay glass">
-    <span class="tagtop">Mongla hull <i>//</i> drag to orbit <i>//</i> wheel to zoom</span>
+    <span class="tagtop">Mongla hull <i>//</i> drag to orbit <i>//</i> + − to zoom</span>
     <span class="keys"><b>drag</b> orbit · <b>wheel</b> zoom · <b>X</b> take the explode ·
       <b>, .</b> open &amp; close · <b>0</b> reset</span>
     <div class="deck" role="group" aria-label="Hull controls">
@@ -498,7 +540,7 @@
 </section>
 
 <!-- 04b ─────────────────────────── -->
-<section id="mix">
+<section id="mix" data-chapter="saturation">
  <div class="wrap">
   <p class="mark">Play with it <i>//</i> when the vehicle cannot do what it was asked</p>
   <h2 class="col">Ask for more thrust than exists, and the vehicle does something you never asked for.</h2>
@@ -584,7 +626,7 @@
 </section>
 
 <!-- 05 ──────────────────────────────────────────────────────────────── -->
-<section id="repos">
+<section id="repos" data-chapter="the suite">
  <div class="wrap">
   <p class="mark">The suite <i>//</i> three repositories, one wire</p>
   <h2 class="col">Mongla is the soul. It does not own the body.</h2>
@@ -682,7 +724,7 @@
 </section>
 
 <!-- 05b ─────────────────────────── -->
-<section id="signs">
+<section id="signs" data-chapter="sign errors">
  <div class="wrap">
   <p class="mark">Play with it <i>//</i> four switches, one observable</p>
   <h2 class="col">Only the product is visible. Two wrongs look exactly like a right.</h2>
@@ -776,7 +818,7 @@
 </section>
 
 <!-- 06 ──────────────────────────────────────────────────────────────── -->
-<section id="frame">
+<section id="frame" data-chapter="to thrust">
  <div class="wrap">
   <p class="mark">Perception to propulsion <i>//</i> one frame, all the way down</p>
   <h2 class="col">From a photon to a thrust, in ten stops.</h2>
@@ -879,7 +921,7 @@
 </section>
 
 <!-- 06b ─────────────────────────── -->
-<section id="budget">
+<section id="budget" data-chapter="the link">
  <div class="wrap">
   <p class="mark">Play with it <i>//</i> one cable, and what fits down it</p>
   <h2 class="col">Telemetry is free until it isn't, and then it takes the heartbeat with it.</h2>
@@ -957,7 +999,7 @@
 </section>
 
 <!-- 07 ──────────────────────────────────────────────────────────────── -->
-<section id="thinking">
+<section id="thinking" data-chapter="one task">
  <div class="wrap">
   <p class="mark">One task <i>//</i> thought through, start to finish</p>
   <h2 class="col">What actually happens when it is told to pass a gate.</h2>
@@ -993,7 +1035,7 @@
 </section>
 
 <!-- 08 ──────────────────────────────────────────────────────────────── -->
-<section id="blink">
+<section id="blink" data-chapter="the blink">
  <div class="wrap">
   <p class="mark">Continuity <i>//</i> when the detector blinks</p>
   <h2 class="col">The target does not leave. The detector does.</h2>
@@ -1040,7 +1082,7 @@
 </section>
 
 <!-- 08b ─────────────────────────── -->
-<section id="optics">
+<section id="optics" data-chapter="the water lens">
  <div class="wrap">
   <p class="mark">Play with it <i>//</i> the lens the water grinds for you</p>
   <h2 class="col">Water takes a third of the picture, before the first pixel is read.</h2>
@@ -1122,7 +1164,7 @@
 
 <!-- 09 ──────────────────────────────────────────────────────────────── -->
 <!-- 09b ─────────────────────────────────────────────────────────────── -->
-<section id="flow">
+<section id="flow" data-chapter="no DVL">
  <div class="wrap">
   <p class="mark">Play with it <i>//</i> the sensor we could not buy</p>
   <h2 class="col">A camera pointed at the floor is a speedometer, if you know one number.</h2>
@@ -1198,7 +1240,7 @@
 </section>
 
 <!-- 09c ─────────────────────────── -->
-<section id="late">
+<section id="late" data-chapter="late fixes">
  <div class="wrap">
   <p class="mark">Play with it <i>//</i> the correction that arrives from the past</p>
   <h2 class="col">Every measurement is a statement about a moment that has already gone.</h2>
@@ -1275,7 +1317,7 @@
  </div>
 </section>
 
-<section id="sim">
+<section id="sim" data-chapter="the simulator">
  <div class="wrap">
   <p class="mark">The simulator <i>//</i> 20,649 lines, thirteen courses, one purpose</p>
   <h2 class="col">A place to be wrong that costs nothing.</h2>
@@ -1336,7 +1378,7 @@
 </section>
 
 <!-- 10 ──────────────────────────────────────────────────────────────── -->
-<section id="archive">
+<section id="archive" data-chapter="the rehearsal">
  <div class="wrap">
   <p class="mark">The rehearsal <i>//</i> 4,925 synthetic frames, and the stack run over them</p>
   <h2 class="col">First, we rehearse in water we built.</h2>
@@ -1388,7 +1430,7 @@
 </section>
 
 <!-- 11 ──────────────────────────────────────────────────────────────── -->
-<section id="water-real">
+<section id="water-real" data-chapter="the water">
  <div class="wrap">
   <p class="mark">The water <i>//</i> three venues, real weights, real footage</p>
   <h2 class="col">Then we find out what the water was actually like.</h2>
@@ -1451,7 +1493,7 @@
 </section>
 
 <!-- 12 ──────────────────────────────────────────────────────────────── -->
-<section id="water">
+<section id="water" data-chapter="retractions">
  <div class="wrap">
   <p class="mark">Retractions <i>//</i> kept on purpose</p>
   <h2 class="col">The results we had to take back.</h2>
@@ -1502,7 +1544,7 @@
 </section>
 
 <!-- 13 ──────────────────────────────────────────────────────────────── -->
-<section id="instruments">
+<section id="instruments" data-chapter="instruments">
  <div class="wrap">
   <p class="mark">Instruments <i>//</i> every number with where it was taken</p>
   <h2 class="col">If it is not measured, it does not ship.</h2>
@@ -1539,7 +1581,7 @@
 </section>
 
 <!-- 14 ──────────────────────────────────────────────────────────────── -->
-<section id="asked">
+<section id="asked" data-chapter="language">
  <div class="wrap">
   <p class="mark">The language <i>//</i> how a machine is asked to do something</p>
   <h2 class="col">A mission should read like an instruction, not a state machine.</h2>
@@ -1592,7 +1634,7 @@
 </section>
 
 <!-- 15 ──────────────────────────────────────────────────────────────── -->
-<section id="shoulders">
+<section id="shoulders" data-chapter="shoulders">
  <div class="wrap">
   <p class="mark">Shoulders <i>//</i> where the ideas came from, and what they changed</p>
   <h2 class="col">Borrowed convictions, and the line of code each one moved.</h2>
@@ -1714,7 +1756,7 @@
 </section>
 
 <!-- 16 ──────────────────────────────────────────────────────────────── -->
-<section id="deeper">
+<section id="deeper" data-chapter="further">
  <div class="wrap">
   <p class="mark">Further <i>//</i> where to go if any of this caught you</p>
   <h2 class="col">The reading behind it.</h2>
@@ -1767,7 +1809,7 @@
 </section>
 
 <!-- 17 ──────────────────────────────────────────────────────────────── -->
-<section id="open">
+<section id="open" data-chapter="open">
  <div class="wrap">
   <p class="mark">Act three <i>//</i> open</p>
   <h2 class="col">Nothing here has been in water yet.</h2>
@@ -2133,46 +2175,115 @@
   update();
 })();
 (function(){
-  /* The sounding line. Each stop sits at the fraction of the document its
-     section actually begins at, so the line is a MAP of the page rather than an
-     evenly-spaced list of names -- a long section looks long. Depth is page
-     position wearing the right clothes, and the label says so. */
-  var stops = [].slice.call(document.querySelectorAll('.sound li'));
-  var secs  = stops.map(function(li){ return document.getElementById(li.dataset.for); });
-  var paid  = document.getElementById('paid');
-  var bell  = document.getElementById('bell');
-  var depth = document.getElementById('depth');
+  /* The descent dock. The page used to carry a fixed rail down the left edge:
+     150 px of every screen, for ever, to say "you are here" -- and a vertical
+     progress rail is the single most over-used device on a long page. This is
+     a dock instead. It sits at the bottom, costs a 44 px strip only while the
+     pointer is near it, and opens into the whole map on hover, focus, tap or
+     the C key.
+
+     The ticks are NOT evenly spaced. Each one is as wide as its section's share
+     of the document, so the strip is a map of the page: a long chapter is a
+     long tick. That is the part a scroll bar cannot say. */
+  var dock  = document.getElementById('dock');
+  if (!dock) return;
+  var bar   = document.getElementById('dock-bar');
+  var sheet = document.getElementById('dock-sheet');
+  var ticks = document.getElementById('dock-ticks');
+  var secs  = [].slice.call(document.querySelectorAll('section[data-chapter]'));
+  var elN   = document.getElementById('dock-n');
+  var elOf  = document.getElementById('dock-of');
+  var elNm  = document.getElementById('dock-name');
+  var elD   = document.getElementById('dock-depth');
+  var spans = [], cur = -1, open = false;
+
+  elOf.textContent = '/ ' + secs.length;
+  sheet.innerHTML = '<p class="silk">The descent <i>//</i> ' + secs.length +
+    ' chapters \u00b7 each block is as wide as its share of the page</p>' +
+    '<div class="dock__rows">' + secs.map(function(sec, i){
+      return '<button type="button" data-go="' + i + '">' +
+             '<span class="n">' + ('0' + (i + 1)).slice(-2) + '</span>' +
+             '<span class="t">' + sec.dataset.chapter + '</span>' +
+             '<span class="pc"></span></button>';
+    }).join('') + '</div>';
+  var rows = [].slice.call(sheet.querySelectorAll('[data-go]'));
+  ticks.innerHTML = secs.map(function(){ return '<i></i>'; }).join('') + '<u id="dock-ping"></u>';
+  var tickEls = [].slice.call(ticks.querySelectorAll('i'));
 
   function layout(){
-    var docH = document.body.scrollHeight - innerHeight;
+    var docH = document.body.scrollHeight;
     if (docH <= 0) return;
-    stops.forEach(function(li, i){
-      var el = secs[i]; if (!el) return;
-      var top = el.getBoundingClientRect().top + scrollY;
-      li.style.top = (Math.min(top / docH, 1) * 100) + '%';
+    spans = secs.map(function(sec, i){
+      var top = sec.getBoundingClientRect().top + scrollY;
+      var next = secs[i + 1];
+      var bottom = next ? next.getBoundingClientRect().top + scrollY : docH;
+      return { top: top, share: Math.max(0.012, (bottom - top) / docH) };
+    });
+    var total = spans.reduce(function(a, s){ return a + s.share; }, 0);
+    var biggest = Math.max.apply(null, spans.map(function(sp){ return sp.share; }));
+    spans.forEach(function(sp, i){
+      tickEls[i].style.flexGrow = sp.share / total;
+      /* the row's bar is scaled to the LONGEST chapter, not to the page: at
+         page scale every bar is a few percent wide and they all look alike,
+         which tells the reader nothing */
+      rows[i].querySelector('.pc').style.setProperty('--w', (sp.share / biggest * 100).toFixed(1) + '%');
+      rows[i].title = sp.share > 0 ? (sp.share * 100).toFixed(1) + ' % of the page' : '';
     });
   }
   function track(){
     var docH = document.body.scrollHeight - innerHeight;
     var f = docH > 0 ? Math.min(Math.max(scrollY / docH, 0), 1) : 0;
-    paid.style.height = (f * 100) + '%';
-    bell.style.top    = (f * 100) + '%';
-    depth.style.top   = (f * 100) + '%';
-    depth.firstChild.nodeValue = Math.round(f * 100) + ' m';
-    var cur = 0;
+    elD.textContent = Math.round(f * 100);
+    dock.style.setProperty('--f', f);
+    var now = 0;
     for (var i = 0; i < secs.length; i++) {
-      if (secs[i] && secs[i].getBoundingClientRect().top <= innerHeight * 0.42) cur = i;
+      if (secs[i].getBoundingClientRect().top <= innerHeight * 0.42) now = i;
     }
-    stops.forEach(function(li, i){
-      li.classList.toggle('on', i === cur);
-      li.classList.toggle('past', i < cur);
+    if (now === cur) return;
+    cur = now;
+    elN.textContent = ('0' + (cur + 1)).slice(-2);
+    elNm.textContent = secs[cur].dataset.chapter;
+    tickEls.forEach(function(t, i){
+      t.classList.toggle('on', i === cur);
+      t.classList.toggle('past', i < cur);
+    });
+    rows.forEach(function(r, i){
+      r.classList.toggle('on', i === cur);
+      r.classList.toggle('past', i < cur);
     });
   }
-  addEventListener('scroll', track, {passive:true});
+  function setOpen(v){
+    open = v;
+    sheet.hidden = !v;
+    dock.classList.toggle('dock--open', v);
+    bar.setAttribute('aria-expanded', v ? 'true' : 'false');
+  }
+  bar.addEventListener('click', function(){ setOpen(!open); });
+  dock.addEventListener('mouseenter', function(){ setOpen(true); });
+  dock.addEventListener('mouseleave', function(){ setOpen(false); });
+  dock.addEventListener('focusout', function(e){
+    if (!dock.contains(e.relatedTarget)) setOpen(false);
+  });
+  sheet.addEventListener('click', function(e){
+    var b = e.target.closest('[data-go]');
+    if (!b) return;
+    secs[+b.dataset.go].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setOpen(false);
+  });
+  addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && open) { setOpen(false); bar.focus(); }
+    if ((e.key === 'c' || e.key === 'C') && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) {
+      setOpen(!open); if (!open) return; rows[Math.max(cur, 0)].focus();
+    }
+  });
+  addEventListener('scroll', track, { passive: true });
   addEventListener('resize', function(){ layout(); track(); });
   addEventListener('load',   function(){ layout(); track(); });
   layout(); track();
+})();
 
+(function(){
+  /* Reveal on scroll, and the lazy boot of the hull viewer. */
   if ('IntersectionObserver' in window) {
 
     var rise = new IntersectionObserver(function(es){
@@ -2241,7 +2352,7 @@
           var e = t;
           hint.textContent = e > 0.06
             ? 'Mongla hull // ' + Math.round(e * 100) + '% apart // keep scrolling'
-            : 'Mongla hull // drag to orbit // wheel to zoom';
+            : 'Mongla hull // drag to orbit // + − to zoom';
         });
       }
       var hint = bay.parentElement.querySelector('.tagtop');
@@ -2846,6 +2957,115 @@
     });
   });
   draw();
+})();
+
+(function(){
+  /* The dock's magnification, the way a dock is supposed to feel: each tick
+     swells with the pointer's distance to it. Borrowed in spirit from the
+     floating docks in the component libraries and rebuilt by hand in ~15 lines,
+     because importing a React island to scale four pixels would be absurd. */
+  var ticks = document.getElementById('dock-ticks');
+  if (!ticks) return;
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) return;
+  var raf = 0, px = null;
+  function paint(){
+    raf = 0;
+    var els = ticks.querySelectorAll('i');
+    for (var i = 0; i < els.length; i++){
+      var r = els[i].getBoundingClientRect(), c = r.left + r.width / 2;
+      var d = px === null ? 999 : Math.abs(px - c);
+      var k = Math.max(0, 1 - d / 96);                 // reach, in pixels
+      els[i].style.setProperty('--mag', (1 + k * k * 2.1).toFixed(3));
+    }
+  }
+  function queue(){ if (!raf) raf = requestAnimationFrame(paint); }
+  ticks.addEventListener('pointermove', function(e){ px = e.clientX; queue(); });
+  ticks.addEventListener('pointerleave', function(){ px = null; queue(); });
+})();
+
+(function(){
+  /* Water, synthesised. No audio file ships: the sea here is filtered noise
+     with a slow swell on the filter, plus the occasional distant ping -- about
+     40 lines of WebAudio against a 2 MB loop that would have to be downloaded
+     before it could be ignored.
+
+     It is OFF until asked. Audio that starts by itself is a thing done TO a
+     reader, browsers block it anyway, and the choice is remembered. */
+  var btn = document.getElementById('dock-snd');
+  if (!btn || !window.AudioContext && !window.webkitAudioContext) return;
+  var KEY = 'mongla.water', ctx = null, master = null, timer = 0, on = false;
+
+  function noiseBuffer(c){
+    var n = c.sampleRate * 3, buf = c.createBuffer(1, n, c.sampleRate), d = buf.getChannelData(0);
+    var last = 0;
+    for (var i = 0; i < n; i++){
+      var white = Math.random() * 2 - 1;
+      last = (last + 0.021 * white) / 1.021;          // brown-ish: the sea is low
+      d[i] = last * 3.2;
+    }
+    return buf;
+  }
+  function ping(){
+    if (!ctx || !on) return;
+    var t = ctx.currentTime, o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(900 + Math.random() * 320, t);
+    o.frequency.exponentialRampToValueAtTime(420, t + 0.5);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.055, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+    o.connect(g); g.connect(master); o.start(t); o.stop(t + 1.2);
+    timer = setTimeout(ping, 9000 + Math.random() * 11000);
+  }
+  function start(){
+    var C = window.AudioContext || window.webkitAudioContext;
+    ctx = ctx || new C();
+    if (ctx.state === 'suspended') ctx.resume();
+    master = ctx.createGain(); master.gain.value = 0;
+    master.connect(ctx.destination);
+    var src = ctx.createBufferSource();
+    src.buffer = noiseBuffer(ctx); src.loop = true;
+    var lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 340; lp.Q.value = 0.7;
+    // the swell: the filter breathes, which is what makes noise read as water
+    var lfo = ctx.createOscillator(), lfoGain = ctx.createGain();
+    lfo.frequency.value = 0.06; lfoGain.gain.value = 150;
+    lfo.connect(lfoGain); lfoGain.connect(lp.frequency);
+    src.connect(lp); lp.connect(master);
+    src.start(); lfo.start();
+    master.gain.linearRampToValueAtTime(0.16, ctx.currentTime + 2.5);   // fade in, never a jolt
+    timer = setTimeout(ping, 4000);
+    start.stop = function(){
+      try { src.stop(); lfo.stop(); } catch (e) {}
+      clearTimeout(timer);
+    };
+  }
+  function set(v){
+    on = v;
+    btn.setAttribute('aria-pressed', v ? 'true' : 'false');
+    btn.classList.toggle('on', v);
+    try { localStorage.setItem(KEY, v ? '1' : '0'); } catch (e) {}
+    if (v) start();
+    else if (start.stop){
+      if (master) master.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4);
+      setTimeout(start.stop, 500);
+    }
+  }
+  btn.addEventListener('click', function(){ set(!on); });
+  /* A remembered YES still needs a gesture on this page load -- that is the
+     browser's rule, and it is the right rule. So it arms, and the first click
+     or key anywhere starts it. */
+  var remembered = false;
+  try { remembered = localStorage.getItem(KEY) === '1'; } catch (e) {}
+  if (remembered){
+    btn.classList.add('armed');
+    var arm = function(){
+      removeEventListener('pointerdown', arm); removeEventListener('keydown', arm);
+      btn.classList.remove('armed'); set(true);
+    };
+    addEventListener('pointerdown', arm, { once: true });
+    addEventListener('keydown', arm, { once: true });
+  }
 })();
 </script>
 </body>

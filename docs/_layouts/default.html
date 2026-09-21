@@ -44,7 +44,13 @@ body.doc hr{border:0;border-top:1px solid var(--rule);margin:var(--s6) 0}
 body.doc hr + h2{border-top:0;padding-top:0;margin-top:0}
 body.doc img{width:100%;height:auto;display:block;margin:var(--s4) 0;
   border:1px solid var(--rule);background:var(--s-sunk)}
-body.doc code{background:var(--s-sunk);border:1px solid var(--rule);padding:1px 5px}
+body.doc code{background:var(--s-sunk);border:1px solid var(--rule);padding:1px 5px;
+  overflow-wrap:anywhere}
+/* Long unbroken tokens -- a 60-character path, a URL, a wire constant -- used to
+   push the whole page sideways on a phone. Nothing here may exceed its column. */
+body.doc main{overflow-wrap:break-word}
+body.doc pre{overflow-x:auto;max-width:100%}
+body.doc h1,body.doc h2,body.doc h3{overflow-wrap:anywhere}
 body.doc pre{margin:var(--s4) 0}
 body.doc pre code{background:none;border:0;padding:0;color:inherit}
 /* page-wide since 2026-09-21 (the 74ch column read as a narrow strip down the
@@ -83,5 +89,20 @@ body.doc footer{margin-left:0;max-width:var(--wrap);margin-inline:auto;display:f
   <span>Firmware &amp; hardware: Rakibul Islam</span>
   <span>MIT</span>
 </footer>
+<script>
+/* Markdown tables are emitted bare, and `width:max-content` on a bare table is
+   what pushed these pages off the side of a phone. Wrap each one in its own
+   scroller: the table keeps its readable width, the PAGE never scrolls. */
+(function(){
+  document.querySelectorAll('main table').forEach(function(t){
+    if (t.parentElement && t.parentElement.classList.contains('tw')) return;
+    var w = document.createElement('div');
+    w.className = 'tw'; w.tabIndex = 0;
+    w.setAttribute('role', 'region');
+    w.setAttribute('aria-label', 'table, scrolls sideways');
+    t.parentNode.insertBefore(w, t); w.appendChild(t);
+  });
+})();
+</script>
 </body>
 </html>

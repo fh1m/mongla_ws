@@ -105,7 +105,7 @@ async def capture(ws_url: str, page_url: str) -> dict[str, bytes]:
             # a stop is drawn at full brightness only while it is the one in view
             "document.querySelectorAll('.stop').forEach(e => e.classList.add('on'));"
             # page chrome that is fixed to the viewport would bleed into every clip
-            "document.querySelectorAll('.sound,#grain').forEach(e => e.style.display = 'none');"))
+            "document.querySelectorAll('.dock,#grain').forEach(e => e.style.display = 'none');"))
 
         for stem, selector, prep in FIGURES:
             if prep:

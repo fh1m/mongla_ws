@@ -254,11 +254,15 @@
             { threshold: 0.01 }).observe(canvas);
         }
 
-        /* Wheel ZOOMS the model. It deliberately does NOT drive the explode:
-           a canvas that eats the wheel traps the reader inside a section they
-           cannot scroll past, which is exactly the complaint this fixes.
-           Vertical page scroll always belongs to the page. */
+        /* The wheel belongs to the PAGE, always. An earlier version zoomed on a
+           bare wheel and called preventDefault, which meant a reader who put the
+           pointer over the hull could not scroll past it -- the canvas silently
+           took the gesture the whole document runs on. Zoom is now the browser's
+           own zoom gesture (ctrl / cmd + wheel, which is also a trackpad pinch),
+           plus the +/- keys and the buttons beside the model. Nothing this canvas
+           does can trap the reader. */
         canvas.addEventListener('wheel', e => {
+          if (!(e.ctrlKey || e.metaKey)) return;          // let the page have it
           e.preventDefault();
           zoom = Math.max(0.42, Math.min(2.4, zoom * (1 + Math.sign(e.deltaY) * 0.09)));
         }, { passive: false });
