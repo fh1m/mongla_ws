@@ -6,15 +6,19 @@ This is `mongla_ws`'s copy of the shared agent instructions. Each sibling repo c
 ## The system
 
 ```
-Jetson Orin Nano  ──USB serial 115200──  SROT board  ──1 Mbaud UART──  RP2350 Pico ── 8× ESC
-  mongla_ws (this repo):                  "Hengla"                      thruster/RPM
-  ROS 2, YOLO11, missions,                (srot-control-board)
-  payload, mission DSL                        │
-                                              └── LoRa ── Bondor (srot-ground-station)
+Raspberry Pi 5 + Hailo-8  ──USB serial 115200──  SROT board  ──1 Mbaud UART──  RP2350 Pico ── T200s
+  mongla_ws (this repo):                          "Hengla"                      thruster/RPM
+  ROS 2 Jazzy, Hailo detection,                (srot-control-board)
+  missions, payload, mission DSL                      │
+                                                       └── LoRa ── Bondor (srot-ground-station)
 ```
 
-**No Raspberry Pi, no BlueOS, no UDP router.** The Jetson connects to the board's USB-C port
-directly. Bondor is a parallel, independent link and is **not** in the control path.
+**No BlueOS, no UDP router.** The Pi 5 connects to the board's USB-C port directly. Bondor is a
+parallel, independent link and is **not** in the control path.
+
+> The companion computer was a Jetson Orin Nano during an earlier SROT integration; it is now
+> the Raspberry Pi 5 + Hailo-8 AI HAT (root `CLAUDE.md`; [`the-shift.md`](../../../docs/the-shift.md)).
+> `mongla_ws` and `/mongla/*` naming predates both and is kept for the test vehicle's tooling.
 
 | Repo | Owns |
 |---|---|
@@ -39,7 +43,8 @@ exception is raised, the vehicle just behaves wrong.
    `GCS_FAILSAFE_MS = 5000`.
    We mirror them in `src/mongla_control/mongla_control/fc/srot_protocol.py` — **our one
    copy** — and `test_srot_protocol_drift.py` reads the firmware headers directly and fails on
-   divergence.
+   divergence. (The code names it `CMD_SROT_MOVE`, not `MAV_CMD_SROT_MOVE` — same value, cosmetic
+   naming difference only, if you go grepping for the doc's exact identifier.)
 
 2. **`movement::Type` is append-only.** The wire mapping is `mv_type = wire + 1`, so inserting
    a value silently renumbers every verb after it — `move_forward` would become a strafe.

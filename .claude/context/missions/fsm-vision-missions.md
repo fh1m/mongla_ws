@@ -117,22 +117,28 @@ class SearchState(MonglaState):
 
 Every movement in a mission falls into one of these categories. Choose before coding.
 
-| Movement type | Duburi 4.5 (`has_dvl=True`) | Dubomini 2.0 (`has_dvl=False`) | Notes |
+⛔ **On srot, always read the right-hand ("timed") column.** No DVL is fitted on the fielded
+vehicle, and `move_forward_dist`/`move_lateral_dist` are independently refused by
+`srot_fc.UNSUPPORTED_VERBS` — the left-hand column below is reachable only on a pixhawk/sim
+`VehicleProfile` (`mongla_heavy`, `has_dvl=True`), never on srot.
+
+| Movement type | `mongla_heavy` (`has_dvl=True`, pixhawk/sim) | `mongla_agile` (`has_dvl=False`, timed — the srot path) | Notes |
 |---|---|---|---|
-| **Pass through gate** | `move_forward_dist(3.5m, gain=80)` | `move_forward(5.0s, gain=80)` | `MoveForwardState` handles automatically |
+| **Pass through gate** | `move_forward_dist(3.5m, gain=80)` ⛔ srot-refused | `move_forward(5.0s, gain=80)` | `MoveForwardState` handles automatically |
 | **Approach to standoff** | `vision.move(fwd=40, mode='area')` | same | Vision-measured (bbox fill) — DVL irrelevant |
-| **Lateral clear of obstacle** | `move_lateral_dist(0.8m, gain=50)` | `move_right(1.5s, gain=50)` | Lateral precision matters less |
-| **Return through gate** | `move_forward_dist(1.5m, gain=80)` | `move_forward(3.0s, gain=80)` | |
-| **Depth change** | `set_depth(-5.0m)` | same | ArduSub ALT_HOLD always; DVL irrelevant |
+| **Lateral clear of obstacle** | `move_lateral_dist(0.8m, gain=50)` ⛔ srot-refused | `move_right(1.5s, gain=50)` | Lateral precision matters less |
+| **Return through gate** | `move_forward_dist(1.5m, gain=80)` ⛔ srot-refused | `move_forward(3.0s, gain=80)` | |
+| **Depth change** | `set_depth(-5.0m)` | same | pixhawk: ArduSub ALT_HOLD; srot: the board's own depth loop — DVL irrelevant either way |
 | **Yaw search sweep** | `yaw_right(20°)` × N | same | Heading-based; DVL irrelevant |
-| **Hold position** | DVL auto-helps via EKF | POSHOLD not available | Duburi can hold; Dubomini drifts |
+| **Hold position** | DVL auto-helps via EKF | POSHOLD not available on srot | `mongla_heavy` can hold; `mongla_agile`/srot drifts |
 | **Forward search steps** | `move_forward(0.5s, gain=30)` | same | Short steps — precision irrelevant |
 | **Orbit around target** | `VisionSearchState(pattern='yaw')` / `yaw_right(20°)` + `detected()` | same | Vision-guided; DVL irrelevant |
 | **Pick approach** | `vision.move(fwd=X, mode='height')` | same | Vision-measured (bbox fill) |
-| **Drop manoeuvre** | `move_lateral_dist` or stay in place | timed lateral | DVL for precision |
+| **Drop manoeuvre** | `move_lateral_dist` ⛔ srot-refused, or stay in place | timed lateral | DVL for precision, unavailable on srot |
 
-**Core rule: any open-loop distance move should use DVL when available.
-Vision-closed-loop moves (`align`, `move`) are DVL-agnostic.**
+**Core rule: any open-loop distance move should use DVL when available** — which on the
+fielded vehicle is never; srot always takes the timed path.
+Vision-closed-loop moves (`align`, `move`) are DVL-agnostic and work on both backends.
 
 ---
 
@@ -1010,6 +1016,9 @@ if mongla.vision.align('hole', yaw=0, lat=0, depth=0,
 > independently of the global `gain` (unset = inherit it). **Depth has no `%` cap** —
 > its rate is `depth_step` (m/update, 0.02 slow .. 0.10 coarse); depth steps the
 > ArduSub setpoint at 5 Hz and freezes inside the deadband so there's no z-wobble.
+> ⛔ **pixhawk/sim only.** On srot the depth-setpoint vision axis is refused outright — the
+> board owns depth and the host has no way to stream it a setpoint — so `depth_step` has no
+> srot equivalent; omit the depth axis from `align()` calls on that backend.
 > Yaw is the axis to slow down for a torpedo hole-lock: far from the target a brisk
 > yaw overshoots and wobbles, so dial `yaw_gain` low (≈8–12) for a slow, settle-able
 > correction while `lat`/`depth` stay responsive. The yaw spin-up floor only engages

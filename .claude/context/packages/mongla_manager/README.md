@@ -1,6 +1,6 @@
 # mongla_manager — the node that owns the vehicle
 
-**8.5k lines · 388 tests · [`src/mongla_manager`](../../../../src/mongla_manager)**
+**8.5k lines · 469 tests · [`src/mongla_manager`](../../../../src/mongla_manager)**
 
 Exactly one process in the running system holds the link to the flight-control board. This is
 it. Everything else — the CLI, a mission, a state machine, the web console — asks *this* node
@@ -96,7 +96,7 @@ vehicle up bare, then add one at a time.
 python3 -m pytest -q src/mongla_manager/test
 ```
 
-388 tests, no hardware required: the board, the cameras and the ROS graph are all faked at
+469 tests (pytest-collected cases), no hardware required: the board, the cameras and the ROS graph are all faked at
 their real boundaries. Several tests read the documentation in `.claude/context/` and fail
 when a documented constant no longer matches the code.
 

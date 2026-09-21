@@ -66,6 +66,11 @@
 > across different models of devices", and the `target=None deprecated` FutureWarning.
 
 ### E4. cv2 windows die under VSCode Remote-SSH — `Can't initialize GTK backend` (no `$DISPLAY`)
+> **Jetson-only, not yet reconfirmed on Pi 5.** Written and verified entirely against the old
+> Jetson Orin Nano companion (display owner `mongla-jetson`, remote-desktop viewing on `:1`).
+> The underlying GTK/`$DISPLAY` mechanism is generic to any headless-SSH Linux box, so the fix
+> likely still applies on the Pi, but nobody has re-verified it there — treat the device-specific
+> details (display user, remote-desktop viewing path) as Jetson-era until someone confirms.
 - **Symptom (distinct from E2!):** launched from a **VSCode Remote-SSH / plain-ssh**
   terminal, `vision_display` crashes at `cv2.namedWindow` with
   `Can't initialize GTK backend in function 'cvInitSystem'` and exit code 1. The
@@ -98,6 +103,11 @@
   VSCode's auto port-forward) — not installed today; future task.
 
 ### E5. Payload CH340 has no `/dev/ttyUSB*` after carrier-board/SSD swap — **2026-07-10**
+> **Jetson-only, not yet reconfirmed on Pi 5.** Root cause and verification are both specific to
+> the Tegra kernel (`5.15.185-tegra`) and the Orin Nano carrier board. The `brltty`-steals-CH340
+> half is Ubuntu-generic and plausibly still bites on the Pi, but the missing-`ch341`-driver half
+> is Tegra-kernel-specific and `tools/install_ch341_driver.sh` builds against Tegra headers —
+> re-verify (or port the script) on the Pi before trusting this section there.
 - **Symptom:** `lsusb` shows `1a86:7523 QinHeng Electronics CH340` (payload ESP32
   board is on the bus), but `start … -p payload_port:=auto` logs
   `[PAYLOAD] no port found (auto-detect excluded: set())` and `fire()` becomes a

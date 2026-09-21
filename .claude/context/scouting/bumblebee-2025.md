@@ -41,7 +41,10 @@ Final 6DOF pose estimate → motion planner
 - **What it is**: Local keypoint descriptor (position + 64-D feature vector)
 - **What it is NOT**: A multi-object re-ID model, a bounding box tracker, a class classifier
 - **How Bumblebee uses it**: template image (dock-side) ↔ live bbox crop → 2D-2D correspondences → PnP
-- **Speed**: ~27 fps on CPU (x86), ~100 fps on Orin Nano GPU via TensorRT/ONNX
+- **Speed**: ~27 fps on CPU (x86), ~100 fps on Orin Nano GPU via TensorRT/ONNX. ⚠ Bumblebee's
+  own figure, for their Jetson Orin Nano — not our platform. Our companion is the Raspberry
+  Pi 5 + Hailo-8 AI HAT (Jetson/TensorRT retired here); Hailo-8 needs its own HEF compilation
+  via the Hailo Dataflow Compiler, a different deployment path with unmeasured feasibility.
 - **License**: Apache-2.0, pip installable
 - **Why not SuperPoint+SuperGlue**: XFeat is 10× faster, single ONNX, no GNN matcher required
 
@@ -49,7 +52,9 @@ Final 6DOF pose estimate → motion planner
 
 - **What it is**: ViT-based monocular depth estimation → relative depth map per pixel
 - **Calibration**: 1-point calibration (measure distance to object at known range → scale factor)
-- **Speed**: Small model (25M params), TensorRT fp16 → ~15 fps on Orin Nano GPU
+- **Speed**: Small model (25M params), TensorRT fp16 → ~15 fps on Orin Nano GPU. ⚠ Same
+  caveat as XFeat above — this is Bumblebee's Jetson figure, not measured for our Pi 5 +
+  Hailo-8 companion.
 - **Use case**: Distance estimate without known object geometry (bbox area proxy is fragile)
 
 ### HDBSCAN Clustering
@@ -148,7 +153,10 @@ class XFeatReID:
 # Calibrate: measure bbox median depth at known distance → scale factor
 ```
 
-**Jetson Orin Nano feasibility**: 25M params, TensorRT fp16 → ~15 fps concurrently with YOLO11n.
+**Jetson Orin Nano feasibility**: 25M params, TensorRT fp16 → ~15 fps concurrently with
+YOLO11n. This is a pre-pivot estimate for the retired Jetson platform — do not treat it as
+our budget. Our companion is Pi 5 + Hailo-8, which needs its own HEF compile and has not
+been re-estimated for this model.
 
 ### P2 — Post-competition: HDBSCAN Multi-Instance (Slalom)
 
@@ -185,7 +193,9 @@ from sklearn.cluster import HDBSCAN
 
 - Does RoboSub 2026 use the same gate geometry? Check official task manual each year.
 - Which YOLO model does Bumblebee use with XFeat? Paper says YOLO11 — same as us ✓
-- Their DVL model: unknown. Ours is Nortek Nucleus1000.
+- Their DVL model: unknown. We have never fitted a DVL —
+  `mongla_sensors/sources/nucleus_dvl.py`/`nucleus_parser.py` target a Nortek Nucleus1000
+  protocol, but no Nucleus1000 (or any DVL) has ever been mounted or validated in water.
 - Their UKF implementation: custom or ROS2 robot_localization package?
 
 ---

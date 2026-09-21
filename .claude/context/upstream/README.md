@@ -19,6 +19,8 @@ won and the document says so.
 | [`pr-h-kill-is-ambiguous.md`](pr-h-kill-is-ambiguous.md) | `KILL = 0` means "power live" OR "no 2nd-board link" and nothing tells them apart; **nothing refuses a cut kill switch on either side**, so a killed hull arms, runs every verb and fires the payload motionless | **one line, ESP32 only** — their own suppression rule, already applied twice in the same function |
 | [`pr-g-optical-flow-ingest.md`](pr-g-optical-flow-ingest.md) | accept `OPTICAL_FLOW_RAD` (106) — the bottom camera is a bottom-track velocity sensor now (30 cm ±1.09 cm) and the board has **no velocity ingest of any kind** | a handler + one state field |
 | [`pr-d-protocol-honesty.md`](pr-d-protocol-honesty.md) | `REQUEST_MESSAGE` ACCEPTs all 190 ids and emits 7 (including ids `-1`/`-2`); no `TIMESYNC`; the SD log cannot be pulled over the link | one switch; ten lines for TIMESYNC |
+| [`pr-e-vision-offload.md`](pr-e-vision-offload.md) | move the terminal visual-servo hold onto the board's fixed 500 Hz tick, replacing companion-side constants (continuity-lock gate, `align_stable_frames`, Kalman coast) that silently rescale with whatever the perception stack's rate happens to be that day | depends on PR A; a new board-side control mode |
+| [`pr-i-spin-min-relay.md`](pr-i-spin-min-relay.md) | `MOT_SPIN_MIN` turns every actuator below its floor into a relay — a 16-point DShot cliff at `t = 0.005` — and mixed-axis commands bend thrust direction as a consequence; filed as an issue, not a PR | ranked above #4, alongside #10 |
 
 **Ranked, if only one lands:** PR A §3, the `31001` collision. It is the only
 item that is cheap now and irreversible later, and both claimants are ours.

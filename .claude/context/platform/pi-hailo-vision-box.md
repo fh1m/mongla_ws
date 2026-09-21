@@ -63,11 +63,21 @@ stops being in any real-time loop: `heading_lock`, `motion_writers`,
 `motion_yaw`, `motion_depth` and the 5 Hz neutral-RC heartbeat are **deleted,
 not ported**, and 80 Hz of contended outbound writes becomes 2 Hz.
 
-**The catch, stated plainly:** `vision_align` / `vision_move` are in srot's
+~~**The catch, stated plainly:** `vision_align` / `vision_move` are in srot's
 `UNSUPPORTED_VERBS` today — the exact verbs this box exists to feed. And srot's
 GATE 0 (axis config unknown) and GATE 2 (depth loop never closed) are open. So
 build the Hailo backend against **main** first, where every verb works, and
-carry it to srot when its gates close.
+carry it to srot when its gates close.~~
+
+> ⛔ **CORRECTED 2026-09-03.** `vision_align` / `vision_move` came **out** of
+> `UNSUPPORTED_VERBS` on 2026-09-03 and now actuate through `SrotFC.manual()` ->
+> `MANUAL_CONTROL` in STABILIZE (see
+> [`vision-control-split.md`](vision-control-split.md)). They are **not** refused
+> on srot. This paragraph's premise — and the "build against main first" argument
+> it was the headline reason for — no longer holds; the numbers below (72.4 Hz /
+> 85.1 Hz) predate that un-refusal. GATE 2 (the depth loop never closed) is still
+> open and still gates `set_depth`/vision depth axes, but the vision-move verbs
+> themselves are live on srot today.
 
 ## The real unlock, and it is software
 

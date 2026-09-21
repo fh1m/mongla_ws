@@ -173,8 +173,6 @@ Not waiting on you:
 Happy to run any experiment on the hull that would help — we have the board on the
 bench and the parameter read is scripted.
 
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
 ---
 
 ## 7. A SKETCH, not a patch

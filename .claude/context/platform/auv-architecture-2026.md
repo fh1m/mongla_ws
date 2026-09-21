@@ -4,6 +4,15 @@
 > statement about hardware and firmware that already exists and has been bench-verified, not a
 > proposal. The proposals are in the last section and are labelled as such.
 
+> ⛔ **HISTORICAL, as of 2026-09-07.** This letter describes the SROT+Jetson intermediate
+> state — the "New (what is on the bench today)" diagram below shows a **Jetson Orin** as the
+> companion computer. That state has itself been superseded: the current companion is the
+> **Raspberry Pi 5 + Hailo-8 AI HAT** (see [`the-shift.md`](../../../docs/the-shift.md) and root
+> `CLAUDE.md`). Read the diagram and the "15 W Orin" GPU-budget reasoning in §1 as history, not
+> as the current box — the Hailo-8 is a dedicated inference chip and does not compete with the
+> CPU for detection the way the Jetson's GPU did. For current firmware-contract and verb state,
+> see [`srot-integration.md`](srot-integration.md) and root `CLAUDE.md` §2.
+
 ## What changed
 
 The `srot` branch was written against a vehicle that no longer exists. It is an excellent
@@ -122,14 +131,20 @@ latch. That bug predates your srot branch — your `_ack_budget_s` deadline was 
 
 ### 3. `SROT_FW_BEHAVIOUR_REV` is now the coordination signal
 
-`include/config.h` carries `SROT_FW_BEHAVIOUR_REV`, currently **2**. Mirrored on your side as
+`include/config.h` carries `SROT_FW_BEHAVIOUR_REV`. Mirrored on your side as
 `srot_protocol.FW_BEHAVIOUR_REV` / `FW_BEHAVIOUR_REV_REQUIRED`.
 
 **It is on the wire, and it is checked at runtime.** The board reports it in
 `AUTOPILOT_VERSION.middleware_sw_version` (we have no middleware, so the field was free);
 request it with `MAV_CMD_REQUEST_MESSAGE(148)`. `SrotFC.check_behaviour_rev()` reads it at
 connect and again inside `arm()`, and **refuses to arm** on a board that reports a revision
-below the requirement. Hardware-verified: the board answers **2**.
+below the requirement.
+
+~~Hardware-verified: the board answers **2**.~~ **STALE.** That was the reading at the time
+this letter was written. The floor is `FW_BEHAVIOUR_REV_REQUIRED` in
+`src/mongla_control/mongla_control/fc/srot_protocol.py` — read it there, not here; it is not a
+number to quote from memory. Root `CLAUDE.md` §2: the board currently reports **rev 14**, and
+revision 10 inverted yaw, so a board below the floor takes every turn backwards.
 
 This is deliberately not left to `test_firmware_behaviour_rev_is_new_enough`. That test reads
 this repo's headers off disk and **skips when the firmware repo is not checked out beside the

@@ -8,14 +8,16 @@ never seen this codebase can find where a thing lives and how to run it.
 | Package | Lines | Tests | What it is |
 |---|---|---|---|
 | [`mongla_control`](mongla_control/README.md) | 13.2k | 865 | Every verb's implementation, and the boundary between us and a flight controller. A library — it owns no ROS nodes. |
-| [`mongla_manager`](mongla_manager/README.md) | 8.5k | 388 | The one node that talks to the board: the link, the action server, the state topic, the operator tools. |
+| [`mongla_manager`](mongla_manager/README.md) | 8.5k | 469 | The one node that talks to the board: the link, the action server, the state topic, the operator tools. |
 | [`mongla_vision`](mongla_vision/README.md) | 24k | 824 | Cameras, the Hailo detector, tracking and the visual lock, optical flow, optics and calibration, the mission console. |
 | [`mongla_localization`](mongla_localization/README.md) | 3.6k | 244 | Where the vehicle is: the invariant filter, replay of late measurements, course priors, pose fusion. |
 | [`mongla_planner`](mongla_planner/README.md) | 11k | 405 | The mission language, the CLI, the missions and the state machines. |
 | [`mongla_sensors`](mongla_sensors/README.md) | 1.9k | 31 | One interface for "which way is north", whatever answers it. |
 | [`mongla_interfaces`](mongla_interfaces/README.md) | — | — | The messages. One action and one state topic are the entire cross-package surface. |
 
-Counts are non-test Python lines and `def test_` functions, measured 2026-09-17.
+Counts are non-test Python lines and `def test_` functions, measured 2026-09-17; the
+`mongla_manager` test count is `pytest --collect-only` cases (parametrized tests count once
+per case), re-measured 2026-09-21 after `test_docs_contract.py` landed.
 
 ## How to read these
 
