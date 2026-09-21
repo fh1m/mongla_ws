@@ -1226,3 +1226,44 @@ pre::-webkit-scrollbar,.scrollable::-webkit-scrollbar{height:6px}
 pre::-webkit-scrollbar-thumb,.scrollable::-webkit-scrollbar-thumb{background:var(--rule-lit);border-radius:3px}
 pre::-webkit-scrollbar-track,.scrollable::-webkit-scrollbar-track{background:transparent}
 .split pre{font-size:11.5px}
+
+/* ══ THE LAB: an explainer you can turn ══════════════════════════════
+   mlu-explain's move: let the reader break it themselves. The canvas is the
+   only thing on this page that shows a SIMULATION rather than a measurement,
+   so it is labelled as one in the prose above it. */
+.lab{display:grid;align-items:start;grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);
+  gap:clamp(16px,2.2vw,28px);margin-top:var(--s5);padding:clamp(16px,2.2vw,24px);
+  border-radius:16px;background:var(--s-raised);box-shadow:var(--e2)}
+.lab__stage{display:flex;flex-direction:column;gap:12px;min-width:0}
+.lab canvas{width:100%;height:auto;border-radius:10px;background:var(--s-sunk);
+  box-shadow:var(--e-well)}
+.lab__read{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.lab__read > div{padding:10px 12px;border-radius:9px;background:var(--s-sunk);box-shadow:var(--e-in)}
+.lab__read b{display:block;margin-top:5px;font-family:var(--data);font-size:15px;color:#fff}
+.lab .silk{font-family:var(--display);font-weight:800;font-size:var(--fs-micro);
+  letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.lab__knobs{display:flex;flex-direction:column;gap:14px;min-width:0}
+.knob{display:block}
+.knob output{float:right;font-family:var(--data);font-size:12px;color:var(--signal-text)}
+.knob em{display:block;margin-top:6px;font-style:normal;font-size:var(--fs-caption);
+  line-height:1.5;color:var(--ink-3)}
+.knob input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:26px;
+  margin:8px 0 0;background:transparent;cursor:ew-resize}
+.knob input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:999px;
+  background:var(--s-sunk);box-shadow:var(--e-in)}
+.knob input[type=range]::-moz-range-track{height:8px;border-radius:999px;
+  background:var(--s-sunk);box-shadow:var(--e-in)}
+/* a machined thumb: the same ladder as every other pressable thing here */
+.knob input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+  width:20px;height:20px;margin-top:-6px;border-radius:6px;background:var(--s-key);
+  border:1px solid var(--rule-lit);box-shadow:var(--e2)}
+.knob input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:6px;
+  background:var(--s-key);border:1px solid var(--rule-lit);box-shadow:var(--e2)}
+.knob input[type=range]:focus-visible::-webkit-slider-thumb{outline:2px solid var(--signal-text);
+  outline-offset:2px}
+.lab__presets{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+.lab__presets .key{padding:9px 12px;font-size:9px}
+@media (max-width:980px){
+  .lab{grid-template-columns:1fr}
+  .lab__read{grid-template-columns:repeat(2,1fr)}
+}

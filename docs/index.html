@@ -21,6 +21,7 @@
     <li data-for="medium"><i></i><b>the medium</b></li>
     <li data-for="origin"><i></i><b>origin</b></li>
     <li data-for="shift"><i></i><b>the shift</b></li>
+    <li data-for="pid"><i></i><b>the loop</b></li>
     <li data-for="body"><i></i><b>the body</b></li>
     <li data-for="repos"><i></i><b>the suite</b></li>
     <li data-for="frame"><i></i><b>to thrust</b></li>
@@ -227,6 +228,78 @@
         <td data-l="state"><span class="st blocked">blocked</span></td></tr>
    </tbody>
   </table>
+ </div>
+</section>
+
+<!-- 03b ─────────────────────────────────────────────────────────────── -->
+<section id="pid">
+ <div class="wrap">
+  <p class="mark">Play with it <i>//</i> the loop, in your hands</p>
+  <h2 class="col">What a control loop is, if you have never written one.</h2>
+  <p class="lede col quiet">A controller is a machine that answers one question, over and over:
+    <em>I am here, I want to be there — how hard do I push?</em> Below is a toy hull with one axis
+    of heading. Turn the three knobs and watch it fail in the three classic ways. Nothing here is
+    our vehicle: it is a simulation with made-up numbers, so that the shapes are honest even
+    though the values are not.</p>
+
+  <div class="lab">
+   <div class="lab__stage">
+    <canvas id="pid-plot" width="900" height="420" role="img"
+      aria-label="Step response of a simulated heading controller"></canvas>
+    <div class="lab__read">
+      <div><span class="silk silk--b">overshoot</span><b id="pid-os">—</b></div>
+      <div><span class="silk silk--b">settled</span><b id="pid-ts">—</b></div>
+      <div><span class="silk silk--b">left over</span><b id="pid-ss">—</b></div>
+      <div><span class="silk silk--b">unanswered for</span><b id="pid-sat">—</b></div>
+    </div>
+   </div>
+   <div class="lab__knobs">
+    <label class="knob"><span class="silk silk--b">P · how hard</span>
+      <input type="range" id="pid-kp" min="0" max="4" step="0.05" value="1.4">
+      <output id="pid-kp-o">1.40</output>
+      <em>Push in proportion to the error. Alone, it overshoots and rings: at the moment it is
+        finally pointing the right way, it is still turning.</em></label>
+    <label class="knob"><span class="silk silk--b">I · how stubborn</span>
+      <input type="range" id="pid-ki" min="0" max="2" step="0.02" value="1.1">
+      <output id="pid-ki-o">1.10</output>
+      <em>Accumulate what is still missing. It is the only term that beats a steady push like a
+        current — and the one that winds up and takes over if you let it.</em></label>
+    <label class="knob"><span class="silk silk--b">D · how cautious</span>
+      <input type="range" id="pid-kd" min="0" max="1.5" step="0.02" value="0.35">
+      <output id="pid-kd-o">0.35</output>
+      <em>Push back against how fast the error is closing. It is the brake that stops the
+        overshoot — and it amplifies noisy measurements.</em></label>
+    <label class="knob"><span class="silk silk--b">current pushing sideways</span>
+      <input type="range" id="pid-dist" min="0" max="40" step="1" value="25">
+      <output id="pid-dist-o">25</output>
+      <em>At four seconds a current starts pushing, and never stops — the thing water does
+        for free.</em></label>
+    <label class="knob"><span class="silk silk--b">loop rate</span>
+      <input type="range" id="pid-rate" min="0" max="4" step="1" value="4">
+      <output id="pid-rate-o">500 Hz</output>
+      <em>How often the controller is allowed to look and decide. This is the knob the whole
+        project turned: 20 Hz on the far side of a cable, or 500 Hz on the board.</em></label>
+    <div class="lab__presets">
+      <button class="key" type="button" data-pid="1.4,0,0,0,4">P only</button>
+      <button class="key" type="button" data-pid="1.4,0,0.35,0,4">add D</button>
+      <button class="key" type="button" data-pid="1.4,0,0.35,25,4">PD meets a current</button>
+      <button class="key" type="button" data-pid="1.4,1.1,0.35,25,4">add I</button>
+      <button class="key" type="button" data-pid="1.4,1.1,0.35,25,1">the same, at 20 Hz</button>
+    </div>
+   </div>
+  </div>
+  <p class="col quiet" style="margin-top:22px">Four things worth meeting by hand. <strong>P
+    alone</strong> overshoots and rings: nothing is braking it, so at the moment it is finally
+    pointing the right way it is still turning. <strong>Add D</strong> and the ringing dies,
+    because it now pushes back against its own approach speed. At three seconds a
+    <strong>current</strong> starts pushing, and the PD controller parks a degree or two short of
+    the target for ever — it is pushing exactly hard enough to hold station and not hard enough to
+    close the last degree. Only <strong>I</strong> fixes that, by remembering what is still
+    missing. Then move the <strong>loop rate</strong>: the gains do not change, but the window in
+    which the vehicle is on its own does. That is the number in the fourth readout.</p>
+  <p class="col quiet">On this vehicle that last knob is not ours to turn from the Pi. It is the
+    board's, and it is pinned at 500 Hz on a core nothing else is allowed on — which is the
+    whole argument of <a href="#shift">the section above</a>.</p>
  </div>
 </section>
 
@@ -1158,6 +1231,137 @@
     }, {threshold: 0.4});
     pairs.forEach(function(p){ io.observe(p); });
   } else { pairs.forEach(function(p){ p.classList.add('in'); }); }
+})();
+(function(){
+  /* ── the PID lab ──────────────────────────────────────────────────
+     A toy single-axis hull: J*theta'' = Ku*u - b*theta' + current. The
+     controller runs at the chosen rate on the PREVIOUS sample (one tick of
+     delay, which is what makes loop rate matter at all), holds its output
+     between ticks, and saturates at +-1 like a real thruster command. The
+     physics integrate at 1 kHz whatever the loop rate, so that knob changes
+     the CONTROLLER and not the world -- which is the point being made. */
+  var cv = document.getElementById('pid-plot');
+  if (cv) (function(){
+  var ctx = cv.getContext('2d');
+  var RATES = [10, 20, 50, 100, 500];
+  var el = {kp: document.getElementById('pid-kp'), ki: document.getElementById('pid-ki'),
+            kd: document.getElementById('pid-kd'), dist: document.getElementById('pid-dist'),
+            rate: document.getElementById('pid-rate')};
+  var out = {kp: document.getElementById('pid-kp-o'), ki: document.getElementById('pid-ki-o'),
+             kd: document.getElementById('pid-kd-o'), dist: document.getElementById('pid-dist-o'),
+             rate: document.getElementById('pid-rate-o'), os: document.getElementById('pid-os'),
+             ts: document.getElementById('pid-ts'), ss: document.getElementById('pid-ss'),
+             sat: document.getElementById('pid-sat')};
+  var SP = 30, T = 9, DT = 0.0005, J = 1, Ku = 900, B = 4, GUST_T = 4;
+
+  function simulate(kp, ki, kd, gust, rate){
+    var th = 0, w = 0, u = 0, integ = 0, prev = null, meas = 0, next = 0;
+    var per = 1 / rate, pts = [], peak = -1e9, satTicks = 0, ticks = 0;
+    var firstTickEnd = null, drift = 0;
+    for (var t = 0; t <= T; t += DT){
+      if (t >= next - 1e-9){
+        var e = (SP - meas) / SP;
+        integ = Math.max(-3, Math.min(3, integ + e * per));
+        var de = prev === null ? 0 : (e - prev) / per;
+        prev = e;
+        var raw = kp * e + ki * integ + kd * de;
+        u = Math.max(-1, Math.min(1, raw));
+        if (Math.abs(raw) > 1) satTicks++;
+        ticks++;
+        meas = th;                 /* it decides on the sample it already had */
+        next += per;
+        /* the first tick that begins after the gust is the first chance the
+           controller has to know about it at all */
+        if (firstTickEnd === null && t >= GUST_T) firstTickEnd = t + per;
+      }
+      var d = (t >= GUST_T ? gust : 0);
+      w += ((Ku * u - B * w - d) / J) * DT;
+      th += w * DT;
+      if (t > 0.02 && t < GUST_T) peak = Math.max(peak, th);
+      if (firstTickEnd !== null && t <= firstTickEnd) drift = Math.max(drift, Math.abs(th - SP));
+      pts.push(th);
+    }
+    /* settled: the last time it was still outside the 2 % band BEFORE the gust.
+       left over: where it actually sits at the end, i.e. AFTER the current has
+       been pushing for three seconds -- which is the whole point of the I term
+       and was measured in the wrong window on the first attempt. */
+    var settle = null, band = SP * 0.02, gustIdx = Math.floor(GUST_T / DT);
+    for (var i = gustIdx - 1; i >= 0; i--){
+      if (Math.abs(pts[i] - SP) > band){ settle = (i + 1) * DT; break; }
+    }
+    var tail = 0, n = 0;
+    for (var j = pts.length - 1; j >= pts.length - Math.floor(0.5 / DT); j--){ tail += pts[j]; n++; }
+    return {pts: pts, overshoot: Math.max(0, (peak - SP) / SP * 100), settle: settle,
+            left: SP - tail / n, drift: drift, per: per,
+            sat: ticks ? satTicks / ticks * 100 : 0};
+  }
+
+  function draw(r){
+    var W = cv.width, H = cv.height, x0 = 54, x1 = W - 16, y0 = 18, y1 = H - 30;
+    var maxY = Math.max(46, SP * 1.55);
+    var X = function(t){ return x0 + (t / T) * (x1 - x0); };
+    var Y = function(v){ return y1 - (v / maxY) * (y1 - y0); };
+    var css = getComputedStyle(document.documentElement);
+    var ink3 = css.getPropertyValue('--ink-3').trim() || '#7b8598';
+    var rule = css.getPropertyValue('--rule-lit').trim() || '#2b3448';
+    var sig = css.getPropertyValue('--cad-red').trim() || '#ff0000';
+    var sea = css.getPropertyValue('--sea-lit').trim() || '#5a8dff';
+    ctx.clearRect(0, 0, W, H);
+    ctx.font = '11px ui-monospace, monospace';
+    ctx.lineWidth = 1;
+    for (var v = 0; v <= maxY; v += 10){
+      ctx.strokeStyle = rule; ctx.globalAlpha = .45; ctx.beginPath();
+      ctx.moveTo(x0, Math.round(Y(v)) + .5); ctx.lineTo(x1, Math.round(Y(v)) + .5); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.fillStyle = ink3; ctx.fillText(v + '\u00b0', 8, Y(v) + 4);
+    }
+    for (var k = 0; k <= T; k++){
+      ctx.strokeStyle = rule; ctx.globalAlpha = .3; ctx.beginPath();
+      ctx.moveTo(Math.round(X(k)) + .5, y0); ctx.lineTo(Math.round(X(k)) + .5, y1); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.fillStyle = ink3; ctx.fillText(k + 's', X(k) - 6, H - 10);
+    }
+    ctx.setLineDash([5, 5]); ctx.strokeStyle = sea; ctx.beginPath();
+    ctx.moveTo(x0, Y(SP)); ctx.lineTo(x1, Y(SP)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = sea; ctx.fillText('asked for 30\u00b0', x1 - 100, Y(SP) - 8);
+    var gx = Math.round(X(GUST_T)) + .5;                       /* when the gust hits */
+    ctx.strokeStyle = ink3; ctx.globalAlpha = .8; ctx.setLineDash([2, 4]);
+    ctx.beginPath(); ctx.moveTo(gx, y0); ctx.lineTo(gx, y1); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+    ctx.fillStyle = ink3; ctx.fillText('a current starts pushing', gx + 6, y0 + 12);
+    ctx.strokeStyle = sig; ctx.lineWidth = 2; ctx.beginPath();
+    for (var i = 0; i < r.pts.length; i += 2){
+      var px = X(i * DT), py = Y(r.pts[i]);
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+
+  function run(){
+    var kp = +el.kp.value, ki = +el.ki.value, kd = +el.kd.value;
+    var gust = +el.dist.value * 12, rate = RATES[+el.rate.value];
+    out.kp.textContent = kp.toFixed(2); out.ki.textContent = ki.toFixed(2);
+    out.kd.textContent = kd.toFixed(2); out.dist.textContent = el.dist.value;
+    out.rate.textContent = rate + ' Hz';
+    var r = simulate(kp, ki, kd, gust, rate);
+    out.os.textContent = r.overshoot.toFixed(0) + ' %';
+    out.ts.textContent = r.settle === null ? 'at once'
+                       : (r.settle >= GUST_T - DT ? 'never' : r.settle.toFixed(2) + ' s');
+    out.ss.textContent = Math.abs(r.left) < 0.06 ? 'nothing' : r.left.toFixed(1) + '\u00b0';
+    out.sat.textContent = gust === 0 ? '\u2014'
+      : (r.per * 1000).toFixed(r.per < 0.01 ? 1 : 0) + ' ms \u00b7 ' + r.drift.toFixed(2) + '\u00b0';
+    draw(r);
+  }
+  ['kp','ki','kd','dist','rate'].forEach(function(k){ el[k].addEventListener('input', run); });
+  [].forEach.call(document.querySelectorAll('[data-pid]'), function(b){
+    b.addEventListener('click', function(){
+      var v = b.dataset.pid.split(',');
+      el.kp.value = v[0]; el.ki.value = v[1]; el.kd.value = v[2];
+      el.dist.value = v.length > 3 ? v[3] : 0;
+      el.rate.value = v.length > 4 ? v[4] : 4;
+      run();
+    });
+  });
+  run();
+  })();
 })();
 (function(){
   /* Photon to thrust. The spine is lit to the fraction of the list the reader
