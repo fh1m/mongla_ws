@@ -921,9 +921,11 @@
   <p class="lede col quiet">One action, thirty verbs, two vision primitives. The vision verbs never
     raise — they return where and how they finished, so a mission branches on reality instead of on
     an exception.</p>
+  <div class="split">
+  <div>
   <pre><span class="c"># hold station on the target, then fire mid-hold — still correcting</span>
 <span class="k">res</span> = mongla.vision.align(
-    <span class="s">'hole'</span>, lat=<span class="s">0</span>, depth=<span class="s">0</span>,   <span class="c"># signed pixel offsets from frame centre</span>
+    <span class="s">'hole'</span>, lat=<span class="s">0</span>, yaw=<span class="s">0</span>,     <span class="c"># centre it: signed px from frame centre</span>
     fwd=<span class="s">62</span>, fwd_mode=<span class="s">'area'</span>,  <span class="c"># and hold this standoff</span>
     hold=<span class="s">4.0</span>, fire=<span class="s">[1, 2]</span>,    <span class="c"># two shots, spaced, each gated on a NEW frame</span>
     lock_on=<span class="k">True</span>, brake=<span class="k">False</span>,
@@ -933,6 +935,28 @@
     <span class="k">return</span> search_pattern(mongla)
 <span class="k">if</span> res.x_px &gt; <span class="s">0</span>:              <span class="c"># it ended right of centre, so recover right</span>
     mongla.move_right(duration=<span class="s">0.6</span>)</pre>
+  <p class="quiet" style="font-size:var(--fs-caption);margin-top:10px">On the board this runs as streamed <code>MANUAL_CONTROL</code> in STABILIZE; an axis that would move the depth setpoint is refused, and comes back as <code>FAILED</code> rather than an exception.</p>
+  </div>
+  <figure class="result" aria-label="What a vision verb returns">
+    <span class="silk silk--b">what comes back · VisionResult</span>
+    <div class="frame">
+      <i class="cx"></i><i class="cy"></i>
+      <b class="box"></b>
+      <u class="dx"></u><em class="lab">x_px = +62</em>
+    </div>
+    <p class="result__k">Signed pixels from frame <strong>centre</strong> at the last frame the
+      target was seen: +x right, +y below. <code>NaN</code> if it was never seen — which is why
+      <code>saw_target</code> is read first.</p>
+    <ol class="codes">
+      <li class="ok"><b>ALIGNED</b>goal reached</li>
+      <li><b>LOST</b>seen, then gone</li>
+      <li><b>TIMEOUT</b>out of time</li>
+      <li><b>NO_CAMERA</b>nothing to look with</li>
+      <li><b>ABORTED</b>stopped on purpose</li>
+      <li class="bad"><b>FAILED</b>refused or errored — never raised</li>
+    </ol>
+  </figure>
+  </div>
   <p class="quiet" style="font-size:.92rem;margin-top:14px;max-width:66ch">The comment on the
     eighth line is the whole philosophy compressed: a result that is <em>absent</em> must never be
     mistaken for a result that is <em>zero</em>. The full verb table is in

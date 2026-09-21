@@ -1194,3 +1194,35 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
 .pull em{font-style:normal;color:var(--signal-text)}
 .pull footer{margin-top:16px;font-family:var(--data);font-weight:400;font-size:var(--fs-caption);
   letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+
+/* ── what a vision verb hands back ──────────────────────────────────── */
+.result{margin:0;padding:clamp(18px,2.4vw,26px);border-radius:14px;background:var(--s-raised);
+  box-shadow:var(--e2)}
+.result .silk{font-family:var(--display);font-weight:800;font-size:var(--fs-micro);letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:12px}
+.result .frame{position:relative;aspect-ratio:4/3;border-radius:8px;background:var(--s-sunk);
+  box-shadow:var(--e-well);overflow:hidden}
+.result .frame i,.result .frame b,.result .frame u,.result .frame em{position:absolute;display:block}
+.result .cx{left:50%;top:0;bottom:0;width:1px;background:var(--rule-lit)}
+.result .cy{top:50%;left:0;right:0;height:1px;background:var(--rule-lit)}
+.result .box{left:calc(50% + 62px - 34px);top:calc(50% - 30px);width:68px;height:52px;border-radius:4px;
+  box-shadow:inset 0 0 0 1.5px var(--medium-text)}
+.result .dx{left:50%;top:calc(50% + 34px);width:62px;height:2px;background:var(--signal)}
+.result .dx::after{content:"";position:absolute;right:-1px;top:-3px;border:4px solid transparent;
+  border-left:6px solid var(--signal);border-right:0}
+.result .lab{left:calc(50% + 4px);top:calc(50% + 42px);font-style:normal;font-family:var(--data);
+  font-size:11px;color:var(--signal-text)}
+.result__k{margin:12px 0 14px;font-size:var(--fs-caption);color:var(--ink-3);line-height:1.55}
+.codes{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.codes li{padding:8px 10px;border-radius:7px;background:var(--s-sunk);box-shadow:var(--e-in);
+  font-size:11px;color:var(--ink-3);line-height:1.35}
+.codes b{display:block;font-family:var(--data);font-size:11.5px;color:#fff;margin-bottom:2px}
+.codes .ok b{color:var(--state-water)} .codes .bad b{color:var(--signal-text)}
+
+/* every horizontal scroller on the page gets the page's own scrollbar, not
+   the browser's white default */
+pre,.scrollable,.tw{scrollbar-width:thin;scrollbar-color:var(--rule-lit) transparent}
+pre::-webkit-scrollbar,.scrollable::-webkit-scrollbar{height:6px}
+pre::-webkit-scrollbar-thumb,.scrollable::-webkit-scrollbar-thumb{background:var(--rule-lit);border-radius:3px}
+pre::-webkit-scrollbar-track,.scrollable::-webkit-scrollbar-track{background:transparent}
+.split pre{font-size:11.5px}
