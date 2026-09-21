@@ -926,13 +926,15 @@
    <div>
     <h3>What the model is, and what it is not</h3>
     <p class="quiet"><strong>Measured:</strong> the link's capacity, the
-      <span class="num">18.8&#8239;%</span> the vehicle uses today, and the heartbeat margin of
-      <span class="num">10×</span> the board's <span class="num">5 s</span> silence failsafe. Those
-      are in the ledger with their method.</p>
+      <span class="num">18.8&#8239;%</span> the vehicle uses today, and the heartbeat at
+      <span class="num">2 Hz</span> against the board's <span class="num">5 s</span> silence
+      failsafe — a <span class="num">10×</span> margin — and the bar this project ships against,
+      which is <span class="num">≤ 60 %</span> of the wire. Those are in the ledger with their
+      method.</p>
     <p class="quiet"><strong>Modelled:</strong> the queueing delay above. It is the standard
       result for a link at utilisation <span class="num">ρ</span> — the wait grows like
-      <span class="num">ρ/(1−ρ)</span>, which is flat and boring until about
-      <span class="num">70&#8239;%</span> and then vertical. The curve is drawn to make that shape
+      <span class="num">ρ/(1−ρ)</span>, which is flat and boring for most of its range
+      and then vertical. The curve is drawn to make that shape
       felt, not to predict a millisecond. A figure that blurs which half is measured is worse than
       no figure.</p>
    </div>
@@ -1613,6 +1615,16 @@
   </figure>
 
   <div class="years" style="margin-top:44px">
+   <div class="year"><time>Feynman</time><div><h3>“You must not fool yourself — and you are the easiest person to fool.”</h3>
+     <p>From the Caltech address on cargo-cult science, whose actual subject is not fraud but the
+       <em>missing</em> step: reporting the things that could make you wrong, as hard as you looked
+       for the things that made you right. <strong>What it changed:</strong> the ledger is public
+       and keeps its own retractions — <span class="num">8</span> entries whose titles say they
+       took an earlier result back, and <span class="num">5</span> more that measured an idea and
+       the answer was no. It would be a better-looking document with those removed, and a worthless
+       one.
+       <a href="https://calteches.library.caltech.edu/51/2/CargoCult.htm">Cargo Cult Science, 1974</a></p></div></div>
+
    <div class="year"><time>Hotz</time><div><h3>“Complex things eventually collapse under their own weight.”</h3>
      <p>The magic, he says, is more capability at <em>no extra</em> complexity — tinygrad as “the
        RISC of the machine learning stack.” <strong>What it changed:</strong> the hull viewer on
@@ -2551,7 +2563,7 @@
       ctx.beginPath(); ctx.moveTo(mx, my - 9); ctx.lineTo(mx, my + 9); ctx.stroke();
       ctx.fillStyle = over ? RED : INK3; ctx.font = '10px ui-monospace, monospace';
       ctx.fillText(m.n + '  ' + (raw[i] >= 0 ? '+' : '') + raw[i].toFixed(2) +
-                   (over ? ' \u2192 ' + v.toFixed(2) : ''), mx - 30, my + 25);
+                   (over ? ' \u2192 ' + v.toFixed(2) : ''), mx - 30, my + (m.y < 0 ? -18 : 27));
     });
 
     // right: asked-for against achieved, in the plane the pilot thinks in
@@ -2596,12 +2608,17 @@
     /* Two different failures, and calling them the same thing would be the
        whole point missed: scaling DELIVERS LESS of what you asked for, clipping
        ADDS a rotation you did not ask for. */
-    var dy = gy - y, less = Math.abs(gy) < Math.abs(y) - 0.005 && gy * y >= 0;
-    out.err.textContent = Math.abs(dir) > 0.05
-      ? dir.toFixed(1) + '\u00b0 off course, yaw ' + (dy >= 0 ? '+' : '') + dy.toFixed(2) + ' unasked'
-      : less ? 'on course — yaw delivered ' + (Math.abs(gy / (y || 1)) * 100).toFixed(0) + '% of asked'
-             : 'on course, all three delivered';
-    out.err.style.color = Math.abs(dir) > 0.05 ? RED : '';
+    /* Two different failures, and one word for both would be the whole point
+       missed: scaling DELIVERS LESS of what was asked for; clipping turns the
+       vehicle off the line it was given. Say which one happened. */
+    var extra = Math.abs(gy) > Math.abs(y) + 0.005 || gy * y < 0;
+    var short_ = Math.abs(gy) < Math.abs(y) - 0.005 && gy * y >= 0;
+    var yawWord = extra ? 'yaw ' + (gy - y >= 0 ? '+' : '') + (gy - y).toFixed(2) + ' nobody asked for'
+                : short_ ? 'yaw delivered ' + (Math.abs(gy / (y || 1)) * 100).toFixed(0) + '% of asked'
+                         : 'all three delivered';
+    out.err.textContent = (Math.abs(dir) > 0.05 ? dir.toFixed(1) + '\u00b0 off course, ' : 'on course, ')
+                          + yawWord;
+    out.err.style.color = (Math.abs(dir) > 0.05 || extra) ? RED : '';
   }
   ['s', 'l', 'y'].forEach(function(k){ el[k].addEventListener('input', draw); });
   el.mode.addEventListener('change', draw);
@@ -2725,10 +2742,10 @@
   var ctx = cv.getContext('2d'), DPR = 2;
   cv.width = 900 * DPR; cv.height = 380 * DPR; ctx.scale(DPR, DPR);
   var CAP = 11520, BASE = 0.188, FAILSAFE = 5.0;
-  /* The heartbeat's period is not guessed: the ledger's measured margin at the
-     present load is 10x the 5 s failsafe, so the gap it saw was 0.5 s. The
-     figure starts from that measurement and only adds the modelled wait. */
-  var HB_GAP0 = FAILSAFE / 10;
+  /* The heartbeat is not guessed: the ledger measures it at 2 Hz against the
+     board's 5 s GCS_FAILSAFE_MS, which is the 10x margin quoted below. The
+     figure starts from that 0.5 s gap and only adds the modelled wait. */
+  var HB_GAP0 = 0.5;
   var el = {sz: document.getElementById('bud-sz'), hz: document.getElementById('bud-hz')};
   var out = {sz: document.getElementById('bud-sz-o'), hz: document.getElementById('bud-hz-o'),
              use: document.getElementById('bud-use'), q: document.getElementById('bud-q'),
@@ -2761,10 +2778,15 @@
     ctx.font = '10px ui-monospace, monospace';
     ctx.fillStyle = INK3;
     ctx.fillText('0', px, py + ph + 16);
-    ctx.fillText(CAP.toLocaleString() + ' B/s  —  one USB-C cable at 115 200 baud', px + pw - 260, py - 12);
+    ctx.fillText(CAP.toLocaleString() + ' B/s \u2014 one USB-C cable at 115 200 baud', px + pw - 250, py - 14);
     ctx.fillStyle = '#04121f'; ctx.font = '700 10px ui-monospace, monospace';
-    ctx.fillText('the vehicle as measured, 18.8 %', px + 10, py + ph / 2 + 4);
+    ctx.fillText('measured: 18.8 %', px + 10, py + ph / 2 + 4);
     ctx.font = '10px ui-monospace, monospace';
+    // the bar this project actually ships against, on both figures
+    ctx.strokeStyle = RED; ctx.setLineDash([4, 3]); ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(px + 0.6 * pw, py - 6); ctx.lineTo(px + 0.6 * pw, py + ph + 6);
+    ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = RED; ctx.fillText('60 %', px + 0.6 * pw + 6, py + ph + 16);
     if (addW > 60){ ctx.fillStyle = '#04120a';
       ctx.fillText('what you just added', px + baseW + 8, py + ph / 2 + 4); }
     if (rho > 1){
@@ -2787,31 +2809,34 @@
     ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 2; ctx.stroke();
     var opx = gx + Math.min(1, rho) * gw;
     var opy = gy - Math.min(gh, q / (msgT * 12) * gh);
-    ctx.strokeStyle = rho > 0.7 ? RED : '#3fd98a'; ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
+    ctx.strokeStyle = rho > 0.6 ? RED : '#3fd98a'; ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(opx, gy); ctx.lineTo(opx, opy); ctx.stroke(); ctx.setLineDash([]);
     ctx.beginPath(); ctx.arc(opx, opy, 6, 0, 6.3);
-    ctx.fillStyle = rho > 0.7 ? RED : '#3fd98a'; ctx.fill();
+    ctx.fillStyle = rho > 0.6 ? RED : '#3fd98a'; ctx.fill();
     ctx.fillStyle = INK3; ctx.font = '10px ui-monospace, monospace';
     ctx.fillText('utilisation', gx + gw / 2 - 26, gy + 18);
     ctx.fillText('0 %', gx - 4, gy + 18); ctx.fillText('100 %', gx + gw - 18, gy + 18);
     ctx.save(); ctx.translate(gx - 16, gy - gh / 2 + 4); ctx.rotate(-Math.PI / 2);
     ctx.fillText('waiting \u2014 modelled', -56, 0); ctx.restore();
+    ctx.strokeStyle = 'rgba(255,42,20,.5)'; ctx.setLineDash([4, 3]); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(gx + 0.6 * gw, gy); ctx.lineTo(gx + 0.6 * gw, gy - gh);
+    ctx.stroke(); ctx.setLineDash([]);
     ctx.fillStyle = 'rgba(255,255,255,.35)';
-    ctx.fillText('flat, and then vertical: the cliff is at about 70 %, not at 100 %',
+    ctx.fillText('flat, then vertical \u2014 which is why the shipped bar is 60 %, not 100 %',
                  gx + 16, gy - gh + 14);
 
     out.sz.textContent = sz + ' bytes';
     out.hz.textContent = hz + ' Hz';
     out.use.textContent = (rho * 100).toFixed(1) + ' % of ' + CAP.toLocaleString() + ' B/s';
-    out.use.style.color = rho > 0.7 ? RED : '';
+    out.use.style.color = rho > 0.6 ? RED : '';
     out.q.textContent = rho >= 1 ? 'unbounded — it never drains' : (q * 1000).toFixed(1) + ' ms';
-    out.q.style.color = rho > 0.7 ? RED : '';
+    out.q.style.color = rho > 0.6 ? RED : '';
     out.hb.textContent = rho >= 1 ? 'gone' : (FAILSAFE / hbGap).toFixed(1) + '\u00d7 the 5 s failsafe';
     out.hb.style.color = rho >= 1 || FAILSAFE / hbGap < 3 ? RED : '';
     out.v.textContent = rho >= 1 ? 'the vehicle surfaces, and nobody on deck knows why'
-      : rho > 0.7 ? 'still works — with no headroom left to be surprised by'
-      : 'headroom, and a measurable distance to the cliff';
-    out.v.style.color = rho > 0.7 ? RED : '';
+      : rho > 0.6 ? 'past the ledger\'s 60 % bar — no headroom left to be surprised by'
+      : 'inside the bar, with a measurable distance to the cliff';
+    out.v.style.color = rho > 0.6 ? RED : '';
   }
   ['sz', 'hz'].forEach(function(k){ el[k].addEventListener('input', draw); });
   document.querySelectorAll('[data-bud]').forEach(function(b){
