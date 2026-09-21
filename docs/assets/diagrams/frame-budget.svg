@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 400" width="1160" height="400" role="img" aria-label="One frame from photons to a thruster correction, drawn to scale"><style>text{font-family:Zed Mono,ui-monospace,monospace}.l{font-size:9.5px;fill:#788294;letter-spacing:.14em}.v{font-size:11px;fill:#e4e8ef}.r{font-size:10px;fill:#ff5747;letter-spacing:.06em}.b{font-size:10px;fill:#5a8dff;letter-spacing:.06em}.h{font-size:17px;fill:#fff;font-weight:700;letter-spacing:-.02em}.big{font-size:30px;fill:#fff;font-weight:700;letter-spacing:-.04em}</style>
+<text x="0.0" y="22.0" class="h" text-anchor="start">One frame, photon to thrust</text>
+<text x="0.0" y="42.0" class="l" text-anchor="start">DRAWN TO SCALE · EVERY SPAN MEASURED · 40 ms OF WALL CLOCK</text>
+<text x="0.0" y="99.0" class="l" text-anchor="start">CAMERA</text>
+<rect x="120.0" y="86" width="73.5" height="20" fill="#5c0500" stroke="#ff0000" stroke-width="1"/>
+<text x="202.5" y="100.0" class="r" text-anchor="start">exposure + transfer</text>
+<text x="0.0" y="141.0" class="l" text-anchor="start">HAILO-8</text>
+<rect x="193.5" y="128" width="303.8" height="20" fill="#001a5c" stroke="#004eff" stroke-width="1"/>
+<text x="506.3" y="142.0" class="b" text-anchor="start">inference · 98.0 Hz on the chip</text>
+<text x="0.0" y="183.0" class="l" text-anchor="start">ROS GRAPH</text>
+<rect x="497.3" y="170" width="63.7" height="20" fill="#11141c" stroke="#1a2030" stroke-width="1"/>
+<text x="570.0" y="184.0" class="l" text-anchor="start">publish · mailbox keeps the newest frame</text>
+<line x1="561.0" y1="76" x2="561.0" y2="266" stroke="#ff0000" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="569.0" y="232.0" class="r" text-anchor="start">18.0 ms — the detection exists</text>
+<line x1="120.0" y1="248" x2="574.5" y2="248" stroke="#ff5747"/>
+<path d="M120.0,244 v8 M574.5,244 v8" stroke="#ff5747"/>
+<text x="582.5" y="252.0" class="r" text-anchor="start">one host command · 53.9 Hz</text>
+<line x1="120" y1="282" x2="1100" y2="282" stroke="#1a2030"/>
+<line x1="120.0" y1="282" x2="120.0" y2="287" stroke="#1a2030"/>
+<text x="120.0" y="301.0" class="l" text-anchor="middle">0</text>
+<line x1="242.5" y1="282" x2="242.5" y2="287" stroke="#1a2030"/>
+<text x="242.5" y="301.0" class="l" text-anchor="middle">5</text>
+<line x1="365.0" y1="282" x2="365.0" y2="287" stroke="#1a2030"/>
+<text x="365.0" y="301.0" class="l" text-anchor="middle">10</text>
+<line x1="487.5" y1="282" x2="487.5" y2="287" stroke="#1a2030"/>
+<text x="487.5" y="301.0" class="l" text-anchor="middle">15</text>
+<line x1="610.0" y1="282" x2="610.0" y2="287" stroke="#1a2030"/>
+<text x="610.0" y="301.0" class="l" text-anchor="middle">20</text>
+<line x1="732.5" y1="282" x2="732.5" y2="287" stroke="#1a2030"/>
+<text x="732.5" y="301.0" class="l" text-anchor="middle">25</text>
+<line x1="855.0" y1="282" x2="855.0" y2="287" stroke="#1a2030"/>
+<text x="855.0" y="301.0" class="l" text-anchor="middle">30</text>
+<line x1="977.5" y1="282" x2="977.5" y2="287" stroke="#1a2030"/>
+<text x="977.5" y="301.0" class="l" text-anchor="middle">35</text>
+<line x1="1100.0" y1="282" x2="1100.0" y2="287" stroke="#1a2030"/>
+<text x="1100.0" y="301.0" class="l" text-anchor="middle">40</text>
+<text x="1108.0" y="301.0" class="l" text-anchor="start">ms</text>
+<line x1="120.0" y1="328" x2="120.0" y2="341" stroke="#ff0000" stroke-width="1" opacity=".75"/>
+<line x1="169.0" y1="328" x2="169.0" y2="341" stroke="#ff0000" stroke-width="1" opacity=".75"/>
+<line x1="218.0" y1="328" x2="218.0" y2="341" stroke="#ff0000" stroke-width="1" opacity=".75"/>
+<line x1="267.0" y1="328" x2="267.0" y2="341" stroke="#ff0000" stroke-width="1" opacity=".75"/>
+<line x1="316.0" y1="328" x2="316.0" y2="341" stroke="#ff0000" stroke-width="1" opacity=".75"/>
+<line x1="365.0" y1="328" x2="365.0" y2="341" stroke="#ff0000" stroke-width="1" opacity=".75"/>
+<line x1="414.0" y1="328" x2="414.0" y2="341" stroke="#ff0000" stroke-width="1" opacity=".75"/>
+<line x1="463.0" y1="328" x2="463.0" y2="341" stroke="#ff0000" stroke-width="1" opacity=".75"/>
+<line x1="512.0" y1="328" x2="512.0" y2="341" stroke="#ff0000" stroke-width="1" opacity=".75"/>
+<line x1="561.0" y1="328" x2="561.0" y2="341" stroke="#ff0000" stroke-width="1" opacity=".75"/>
+<line x1="610.0" y1="328" x2="610.0" y2="341" stroke="#ff0000" stroke-width="1" opacity=".75"/>
+<line x1="659.0" y1="328" x2="659.0" y2="341" stroke="#ff0000" stroke-width="1" opacity=".75"/>
+<line x1="708.0" y1="328" x2="708.0" y2="341" stroke="#ff0000" stroke-width="1" opacity=".75"/>
+<line x1="757.0" y1="328" x2="757.0" y2="341" stroke="#ff0000" stroke-width="1" opacity=".75"/>
+<line x1="806.0" y1="328" x2="806.0" y2="341" stroke="#ff0000" stroke-width="1" opacity=".75"/>
+<line x1="855.0" y1="328" x2="855.0" y2="341" stroke="#ff0000" stroke-width="1" opacity=".75"/>
+<line x1="904.0" y1="328" x2="904.0" y2="341" stroke="#ff0000" stroke-width="1" opacity=".75"/>
+<line x1="953.0" y1="328" x2="953.0" y2="341" stroke="#ff0000" stroke-width="1" opacity=".75"/>
+<line x1="1002.0" y1="328" x2="1002.0" y2="341" stroke="#ff0000" stroke-width="1" opacity=".75"/>
+<line x1="1051.0" y1="328" x2="1051.0" y2="341" stroke="#ff0000" stroke-width="1" opacity=".75"/>
+<line x1="1100.0" y1="328" x2="1100.0" y2="341" stroke="#ff0000" stroke-width="1" opacity=".75"/>
+<text x="120.0" y="358.0" class="r" text-anchor="start">THE BOARD, UNDERNEATH ALL OF IT · 500 Hz · ONE TICK EVERY 2 ms</text>
+</svg>
