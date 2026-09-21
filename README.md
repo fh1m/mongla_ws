@@ -195,17 +195,7 @@ prove ours have not drifted. A missing low-level feature is a pull request, not 
 `mongla move_forward 3 --gain 40` leaves the Pi as **one MAVLink 2 frame, 44 bytes long**. Ten
 of them are the envelope. The part that means anything is three numbers and a tag:
 
-| bytes | field | value | what it is |
-|---|---|---|---|
-| 0 | `STX` | `0xFD` | a MAVLink 2 frame starts here |
-| 1 | `LEN` | `32` | payload length — v2 trimmed one trailing zero |
-| 5–6 | `SYSID` · `COMPID` | `255` · `191` | who is speaking: the Pi, as `ONBOARD_COMPUTER` |
-| 7–9 | `MSGID` | `76` | `COMMAND_LONG` |
-| 10–13 | `p1` | `0` | `MOVE_FORWARD` |
-| 14–17 | `p2` | `3` | seconds |
-| 18–21 | `p3` | `0.4` | speed, 0…1 |
-| 38–39 | `COMMAND` | `31000` | `CMD_SROT_MOVE` — the one custom command |
-| 42–43 | `CRC` | — | X.25, seeded by the message definition itself |
+<p align="center"><img src="docs/imgs/readme/wire-frame.webp" alt="The 44-byte MAVLink 2 frame for move_forward, one cell per real byte: red for the verb and its tag, blue for who is speaking and who is listening, and a lookup table of what each field means." width="100%"></p>
 
 No thrust. No motor, no angle, no depth. Which thrusters spin, how hard, and how the hull holds
 its heading for those three seconds is the board's business — the Pi only said what it wanted.
@@ -318,10 +308,11 @@ flowchart LR
     PLANT --> MEAS
 ```
 
-On this vehicle that loop runs **on the board, at 500 Hz, on a core nothing else is allowed to
-touch** — not on the Pi. The reason is the one number that matters: how long the vehicle is on
-its own between corrections. At 500 Hz that is 2 ms. At the 20 Hz our old host-side loop
-managed, it was 50 ms — twenty-five times longer for the water to do something about it.
+<p align="center"><img src="docs/imgs/readme/pid-lab.webp" alt="A simulated step response: the hull overshoots to 35 degrees, settles, then a current starts pushing at four seconds and the integral term pulls it back to 30." width="100%"></p>
+<sub>A toy hull, simulated — [turn the knobs yourself](https://fh1m.github.io/mongla_ws/#pid).
+P alone rings; D damps it; a current leaves PD parked short; only I closes the gap. On the
+vehicle this loop runs on the board at 500 Hz, so the window it is on its own is 2 ms, not the
+50 ms our old 20 Hz host loop left.</sub>
 
 **Go deeper:** Brian Douglas's control lectures and the MATLAB *Understanding PID Control*
 series · Steve Brunton's *Control Bootcamp* · Åström & Murray, *Feedback Systems* (free PDF) ·
@@ -378,15 +369,10 @@ lens-to-floor, `f = 513.94 px`):
 | back 30 cm | 31.04 cm | +1.04 | 0.70 m |
 | *the tape says* | — | — | **0.72 m** |
 
-Worst error **1.09 cm on 30 cm — 3.6 %**. Nortek quote 0.5–1 % for a real DVL's bottom track, so
-this is several times worse than the instrument we cannot afford, and about the same as
-published monocular visual odometry in turbid water. It was measured *in air, on a hand slide*
-whose own precision is about ±1 cm — the operator's tape is inside our error bar, so it is an
-upper bound on the error, not a measurement of it.
-
-The last column is the result worth keeping: height recovered independently from
-`h · truth / measured` lands on 0.72 / 0.69 / 0.70 m against a tape that says 0.72. The scale
-chain closes on itself.
+<p align="center"><img src="docs/imgs/readme/flow-lab.webp" alt="The flow explainer: floor features sliding past the downward camera, with a height error of 20 percent producing exactly a 20 percent speed error." width="100%"></p>
+<sub>Worst error **1.09 cm on 30 cm (3.6 %)** — several times a real DVL's 0.5–1 %, measured in
+air on a hand slide, so it is an upper bound. The implied heights land on 0.72 / 0.69 / 0.70 m
+against a 0.72 m tape: the scale chain closes. [Play with it](https://fh1m.github.io/mongla_ws/#flow).</sub>
 
 **Go deeper:** Lucas & Kanade 1981 · Bouguet's pyramidal LK (what OpenCV actually implements) ·
 Shi & Tomasi, *Good Features to Track* · Scaramuzza & Fraundorfer's visual-odometry tutorial.
@@ -399,18 +385,7 @@ few watts. Detection runs there instead of on the Pi's CPU, which leaves the CPU
 holding a target between detections, measuring velocity from the floor, running the filter and
 deciding what the mission does next.
 
-Where a frame's time actually goes, measured with `tools/hailo_stages.py`:
-
-| stage | median | share |
-|---|---|---|
-| letterbox | 0.65 ms | 6.3 % |
-| **inference** | **9.54 ms** | **93.5 %** |
-| decode | 0.02 ms | 0.2 % |
-| **total** | **10.20 ms** | → **98.0 Hz** |
-
-And `hailortcli benchmark --hw-only` on the same model reports **97.9 FPS**. Our Python pipeline
-runs at 100 % of the chip's own capability; there is no host overhead left to recover.
-Non-maximum suppression happens on-chip, which is why decode costs 0.02 ms.
+<p align="center"><img src="docs/imgs/readme/stop-chip.webp" alt="Where a frame goes on the Hailo-8: letterbox 0.65 ms, inference 9.54 ms (93.5 percent), decode 0.02 ms — 98.0 Hz against a 97.9 FPS hardware-only benchmark." width="100%"></p>
 
 ⛔ **A model's `<stem>.yaml` sidecar must ship beside the artifact.** Missing sidecar → empty
 allowlist → a silent `[]` every frame, with the pipeline looking perfectly healthy. That one has
@@ -445,13 +420,16 @@ stateDiagram-v2
     end note
 ```
 
-The rungs are sized against that distribution rather than against each other: `coast_s = 0.80 s`
-covers 91.5 % of real gaps, and the tracker's buffer covers 100 % of them.
+<p align="center"><img src="docs/imgs/readme/lock-ladder.webp" alt="Each rung of the lock ladder against 71 real detection gaps: coast_s covers 91.5 percent, track_buffer covers 100 percent." width="100%"></p>
 
 ### 6. Water is not air, and the camera is the first casualty
 
 Water absorbs red first, bends light at the port glass, blocks radio entirely, and carries 800×
-the mass of air. Each of those breaks something that works perfectly on land:
+the mass of air. Here is the first of those, measured on our own footage:
+
+<p align="center"><img src="docs/imgs/readme/colour-loss.webp" alt="Mean red, green and blue per venue over 119 real frames: red falls to 36 percent of the strongest channel at RoboSub and 44 percent at Mirpur." width="100%"></p>
+
+And what each of them breaks:
 
 | the water does this | so this breaks | what we measured |
 |---|---|---|
@@ -484,6 +462,8 @@ Treibitz, Schechner & Singh on flat-port refraction. Links in [Further reading](
 | thrusters | ⚠ **two answers — see below** |
 | cameras | forward + downward USB; per-camera calibration measured *in water* |
 | velocity | the **downward camera**. No DVL is fitted, and none has ever been validated in water |
+
+<p align="center"><img src="docs/imgs/readme/cores.webp" alt="The ESP32 two cores as orbits: core 1 runs sensors, control and DShot at 500 Hz; core 0 runs MAVLink, the display, LoRa and the SD card." width="46%"></p>
 
 The hull, measured off the CAD and validated against Onshape to **0.08 %**: **702.0 × 176.1 ×
 172.1 mm**, fineness **3.99**, four ⌀84 mm tunnel thrusters (lateral pair 350 mm apart, vertical
@@ -616,6 +596,9 @@ stateDiagram-v2
     end note
 ```
 
+<details>
+<summary><b>The six rules, in full</b></summary>
+
 1. **Always have a disarm path.** Ctrl-C on the manager stops and disarms.
 2. **Cooperative abort.** Every motion loop checks the abort flag once per tick; `disarm`,
    `stop` and `surface` bypass the busy gate so they always execute.
@@ -625,6 +608,8 @@ stateDiagram-v2
 5. **Propellers clear, and a human on the kill switch**, before anything arms.
 6. **Never claim a verb worked without seeing the value it produced.** The recurring defect in
    this codebase is a plausible number standing in for an absent measurement.
+
+</details>
 
 ⛔ **Firmware revision is a hull-safety interlock**, checked at connect *and inside* `arm()`.
 Revision 10 inverted yaw; a board below the floor takes every turn backwards. The floor lives in
@@ -646,15 +631,9 @@ to clear. Tests read it. A constant that drifts from it fails CI.
 more measured an idea and concluded it should stay switched off. The retractions live in the
 same file as the results that stand, in the middle rather than in an appendix:
 
-| what we believed | what the measurement said |
-|---|---|
-| Image enhancement makes detection better | gate detection **30.4 % → 1.2 %** with it on. Never once positive in 17 configurations |
-| The confidence-adaptive filter tracks good boxes more tightly | selectivity **0.78×** — it was doing the exact opposite, and every test passed because none compared the two directions |
-| Range-dependent gain cut jitter 16× | a pooling artefact. One clip contributed 1 299 far-field samples and zero near-field ones |
-| Thruster health is verified | **958 of 958** ESC frames read exactly 0 — with nothing plugged in. A gate that cannot fail is not a gate |
-| The depth loop works | it has never once run closed. The sign was inverted until it was found, and the sensor was not fitted when the code was written |
-| Gyro-aided optical flow will help | measured three ways on the vehicle: **OFF wins** |
-| The return leg is visually supported | three measurements gave three different answers. Retracted, and the feature is off |
+<p align="center"><img src="docs/imgs/readme/ledger.webp" alt="The measurement ledger as a core sample: one column per entry in the order written, red for the eight that took a result back." width="100%"></p>
+
+<p align="center"><img src="docs/imgs/readme/retractions.webp" alt="Five retractions, each with the belief struck through and the measurement beneath it." width="100%"></p>
 
 None of that is hidden, because a capability map that promotes bench results to flight results
 is how a team finds out at the venue.
@@ -755,15 +734,7 @@ The simulator earned its place by being wrong in the same places the pool is:
 
 Seven things, and **not one of them is ours to fix alone**:
 
-| blocker | whose move |
-|---|---|
-| the board's depth loop has never run closed | water, after two armed bench checks |
-| thruster health cannot tell eight healthy motors from none | a one-line firmware merge — the firmware already computes it and drops it one line early |
-| moves by measured distance are refused | a firmware pull request |
-| the board cannot yet accept a velocity measurement | a firmware pull request — we have the measurement, good to 1.09 cm over 30 cm, and nowhere to send it |
-| the competition radio cannot reach through an aluminium hull | hardware: an external antenna |
-| three of five thrusters are populated in the CAD | hardware |
-| no mission has been flown on this platform | water |
+<p align="center"><img src="docs/imgs/readme/blockers.webp" alt="Seven blockers, each keyed by who can clear it: water, a firmware pull request, or hardware — none by us alone." width="100%"></p>
 
 The live list is [`ROADMAP.md`](.claude/context/ROADMAP.md) — one status file, so it cannot
 disagree with itself. The asks already sent upstream, each carrying the evidence that produced
@@ -787,7 +758,8 @@ kept beside the code they describe rather than pasted in here.
 | [`BUGS.md`](.claude/context/BUGS.md) | the single defect register |
 | [`reference/commands.md`](.claude/context/reference/commands.md) | **generated from the code**: all 30 verbs with their fields and defaults, which ones the board runs and which it refuses, every executable, launch argument, node parameter and wire constant |
 
-**The platform** — [`.claude/context/platform/`](.claude/context/platform/) · 17 documents
+<details>
+<summary>**The platform** — [`.claude/context/platform/`](.claude/context/platform/) · 17 documents</summary>
 
 `srot-architecture` · `srot-integration` (the traps that cost us runs) · `srot-board-soul` ·
 `cross-repo-contract` · `vision-control-split` · `vehicle-spec` · `pi-hailo-vision-box` ·
@@ -795,17 +767,25 @@ kept beside the code they describe rather than pasted in here.
 `ros2-conventions` · `system-harmony` · `mongla-sim` · `legacy-pixhawk-and-sitl` (the old stack,
 where it belongs) · `auv-architecture-2026`
 
-**Perception** — [`.claude/context/perception/`](.claude/context/perception/) · 14 documents
+</details>
+
+<details>
+<summary>**Perception** — [`.claude/context/perception/`](.claude/context/perception/) · 14 documents</summary>
 
 `hailo-vision` · `vision-architecture` · `underwater-vision` · `camera-and-calibration` ·
 `camera-latency` · `detection-continuity` · `depth-estimation` · `downward-camera` ·
 `dual-camera-setup` · `pipeline-hardening` · `sensors-pipeline` · `video-testing`
 
-**Missions** — [`.claude/context/missions/`](.claude/context/missions/) · 9 documents
+</details>
+
+<details>
+<summary>**Missions** — [`.claude/context/missions/`](.claude/context/missions/) · 9 documents</summary>
 
 `command-reference` (all 30 verbs) · `client-and-dsl-api` · `mission-cookbook` ·
 `detected-paradigm` · `precision-alignment` · `vision-results` · `fsm-guide` ·
 `fsm-vision-missions`
+
+</details>
 
 **Per package** — [`.claude/context/packages/`](.claude/context/packages/README.md) · one page each ·
 **Upstream asks** — [`.claude/context/upstream/`](.claude/context/upstream/README.md) ·
@@ -926,7 +906,8 @@ The resources below are the ones we would hand someone who wanted to understand 
 from first principles. Every link was fetched and checked; where a host blocks automated
 fetching, that is noted rather than hidden.
 
-**Control loops, PID and why 500 Hz matters**
+<details>
+<summary><b>Control loops, PID and why 500 Hz matters</b></summary>
 
 | | |
 |---|---|
@@ -936,7 +917,10 @@ fetching, that is noted rather than hidden.
 | [*Feedback Systems*](https://www.cds.caltech.edu/~murray/books/AM08/pdf/am08-complete_22Feb09.pdf) — Åström & Murray (free PDF, 1st ed.) | the textbook, if you want the maths under all of the above |
 | [PID Without a PhD](http://www.wescottdesign.com/articles/Sampling/pidwophd.html) — Tim Wescott | the practical embedded version, written for people shipping firmware |
 
-**State estimation — where the vehicle thinks it is**
+</details>
+
+<details>
+<summary><b>State estimation — where the vehicle thinks it is</b></summary>
 
 | | |
 |---|---|
@@ -945,7 +929,10 @@ fetching, that is noted rather than hidden.
 | [The Invariant Extended Kalman Filter as a Stable Observer](https://arxiv.org/abs/1410.1465) — Barrau & Bonnabel | why our filter is *right-invariant* rather than a textbook EKF |
 | [Contact-Aided Invariant EKF](https://arxiv.org/abs/1904.09251) — Hartley, Ghaffari, Eustice & Grizzle | the InEKF applied to a real legged robot, with the derivations spelled out |
 
-**Optical flow — the DVL we could not buy**
+</details>
+
+<details>
+<summary><b>Optical flow — the DVL we could not buy</b></summary>
 
 | | |
 |---|---|
@@ -955,7 +942,10 @@ fetching, that is noted rather than hidden.
 | [OpenCV: Optical Flow](https://docs.opencv.org/4.x/d4/dee/tutorial_optical_flow.html) — OpenCV docs | the practical API entry point |
 | [Visual Odometry, Part I](https://rpg.ifi.uzh.ch/docs/VO_Part_I_Scaramuzza.pdf) — Scaramuzza & Fraundorfer, IEEE RAM 2011 | the tutorial that frames the whole problem, drift included |
 
-**Detection, and running a network on a chip that only does that**
+</details>
+
+<details>
+<summary><b>Detection, and running a network on a chip that only does that</b></summary>
 
 | | |
 |---|---|
@@ -965,7 +955,10 @@ fetching, that is noted rather than hidden.
 | [hailo-rpi5-examples](https://github.com/hailo-ai/hailo-rpi5-examples) — Hailo AI | older, but documents the Pi-specific pipeline pattern in more depth |
 | [AI HATs](https://www.raspberrypi.com/documentation/accessories/ai-hat-plus.html) — Raspberry Pi | the hardware this runs on, from the people who made it |
 
-**Underwater optics — why land vision does not survive the swim**
+</details>
+
+<details>
+<summary><b>Underwater optics — why land vision does not survive the swim</b></summary>
 
 | | |
 |---|---|
@@ -973,7 +966,10 @@ fetching, that is noted rather than hidden.
 | [Sea-thru](https://openaccess.thecvf.com/content_CVPR_2019/html/Akkaynak_Sea-Thru_A_Method_for_Removing_Water_From_Underwater_Images_CVPR_2019_paper.html) — Akkaynak & Treibitz, CVPR 2019 | the physically grounded way to take the water back out |
 | [Flat Refractive Geometry](https://csms.haifa.ac.il/profiles/tTreibitz/webfiles/flat_refractive_geometry.pdf) — Treibitz, Schechner & Singh | what a flat port does to your camera model — the 63.8° → 46.7° story |
 
-**The wire, the motors and the board**
+</details>
+
+<details>
+<summary><b>The wire, the motors and the board</b></summary>
 
 | | |
 |---|---|
@@ -983,7 +979,10 @@ fetching, that is noted rather than hidden.
 | [Bidirectional DShot and RPM filter](https://github.com/betaflight/betaflight/wiki/Bidirectional-DSHOT-and-RPM-Filter) — Betaflight wiki · [DShot RPM filtering](https://betaflight.com/docs/wiki/guides/current/DSHOT-RPM-Filtering) | the practical side, from the people who shipped it first |
 | [FreeRTOS on ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/freertos_idf.html) · [ESP32 Technical Reference Manual](https://www.espressif.com/sites/default/files/documentation/esp32_technical_reference_manual_en.pdf) — Espressif | how you pin a 500 Hz loop to one core and keep everything else off it |
 
-**The instrument we do not have, and the competition**
+</details>
+
+<details>
+<summary><b>The instrument we do not have, and the competition</b></summary>
 
 | | |
 |---|---|
@@ -991,16 +990,23 @@ fetching, that is noted rather than hidden.
 | [Teledyne Tasman DVL](https://www.teledynemarine.com/en-us/products/SiteAssets/RD%20Instruments/Tasman_DVL.pdf) · [PathFinder DVL Guide](https://www.teledynemarine.com/en-us/resources/Documents/Brand%20Support/RD%20INSTRUMENTS/Technical%20Resources/Manuals%20and%20Guides/Pathfinder/PathFinder%20DVL%20Guide_Apr22.pdf) | bottom tracking and the Janus beam geometry, explained by the manufacturer |
 | [RoboSub](https://robosub.org/) · [2026 programme](https://robosub.org/programs/2026/) · [Team Handbook](https://robonation.org/app/uploads/sites/4/2026/07/RoboSub-2026_Team-Handbook_20260711-compressed.pdf) | the competition these tasks come from |
 
-**ROS 2, if it is new to you**
+</details>
+
+<details>
+<summary><b>ROS 2, if it is new to you</b></summary>
 
 | | |
 |---|---|
 | [ROS 2 Jazzy documentation](https://docs.ros.org/en/jazzy/index.html) | the distribution the vehicle runs |
 | [Topics](https://docs.ros.org/en/jazzy/Concepts/Basic/About-Topics.html) · [Actions](https://docs.ros.org/en/jazzy/Concepts/Basic/About-Actions.html) · [Quality of Service](https://docs.ros.org/en/jazzy/Concepts/Intermediate/About-Quality-of-Service-Settings.html) | the three concepts this codebase actually uses |
 
+</details>
+
 <sub>Checked 2026-09-21. Two Teledyne/Nortek pages and the YouTube links are served behind bot
 protection that blocks automated fetching; those were confirmed by status code and independent
 search rather than by reading the page.</sub>
+
+---
 
 ---
 
