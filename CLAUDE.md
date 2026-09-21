@@ -168,6 +168,11 @@ Seven packages, one page each in [`.claude/context/packages/`](.claude/context/p
 `mongla_vision` · `mongla_localization` · `mongla_planner` (CLI, DSL, missions) ·
 `mongla_sensors` · `mongla_interfaces` (one action, one state topic).
 
+**Every command, generated from the code**:
+[`reference/commands.md`](.claude/context/reference/commands.md) — verbs, fields, defaults, what
+the board runs vs refuses, executables, launch arguments, node parameters and wire constants.
+Regenerate with `python3 tools/gen_reference.py`; a test fails if it drifts.
+
 **Adding a verb** touches two files: a row in `mongla_control/commands.py` and a method of the
 same name on the facade. The CLI, the action server and the Python client pick it up
 automatically.
