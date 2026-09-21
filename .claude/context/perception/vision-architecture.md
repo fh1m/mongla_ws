@@ -12,62 +12,90 @@ diagnostic node.
 
 ## File map
 
-```
+```text
 src/mongla_vision/mongla_vision/
-  factory.py             # make_camera(name, **kw) + BUILDERS dict
-  config.py              # CAMERA_PROFILES dict (mirrors config/cameras.yaml)
-  draw.py                # cv2/supervision overlays — rich annotator suite + AUV instruments
-                         #   draw_depth_gauge()   vertical depth slider (MonglaState.depth_m)
-                         #   draw_heading_tape()  horizontal compass tape (MonglaState.yaw_deg)
-                         #   draw_classes_panel() configured-class list; detected classes light up
-  camera_node.py         # publish image_raw + camera_info
-  detector_node.py       # subscribe image_raw -> detections + image_debug
-  tracker_node.py        # subscribe detections -> tracks (Roboflow OC-SORT/ByteTrack + Kalman)
-  vision_node.py         # in-process diag (cousin of sensors_node)
+  anchor/
+    anchor.py             # Hold a target with NO detection at all.
+    draw.py               # Draw what the matcher is actually doing.
+    geometry.py           # The half of the homography we were throwing away.
+    pose.py               # Metric 6-DoF pose of a known-size planar target. The firing solution.
+    xfeat_onnx.py         # XFeat on the vehicle: ONNX + numpy, no torch.
+  calibration/
+    binding.py            # Which calibration belongs to which camera -- resolved ONCE, from the data.
+    guide.py              # Step-by-step guided camera calibration in a browser.
+    solver.py             # Camera calibration that PROVES its own answer instead of asserting it.
   cameras/
-    camera.py            # Camera ABC (the only base in the tree)
-    webcam.py            # cv2.VideoCapture wrapper (live webcam / USB cam)
-    video_file.py        # cv2.VideoCapture(path) wrapper (pre-recorded video offline testing)
-    ros_topic.py         # subscribes sensor_msgs/Image (Gazebo / BlueOS)
-    {jetson,blueos,mavlink}_stub.py
-  detection/
-    detector.py          # Detector ABC + Detection dataclass
-    yolo.py              # YoloDetector (Ultralytics YOLO11, yolov11n default)
-    gpu.py               # select_device() -- fail-fast CUDA check
-    messages.py          # Detection -> vision_msgs converters (+ array_to_detections)
-  tracking/
-    __init__.py          # exports Tracker, TrackedDetection, RoboflowTracker, ByteTrackWrapper, TrackKalmanSmoother
-    tracker.py           # Tracker ABC + TrackedDetection dataclass (predicted=True/score=0.0 = coasted)
-    roboflow_tracker.py  # Roboflow `trackers` OC-SORT/ByteTrack (DEFAULT); coasted boxes from tracked_objects
-    bytetrack.py         # supervision.ByteTrack wrapper (legacy_bytetrack fallback)
-    kalman.py            # PerTrackKalman + TrackKalmanSmoother (filterpy 4-state CV)
-  preflight.py           # assert_vision_ready / wait_vision_state_ready
-  web/
-    mission_web_node.py  # `mission_web` -- browser mission console: SSE data + control
-    dashboard_state.py   # pure (rclpy-free) helpers: snapshot/param-type/exclusivity/offset math
-    static/{index.html,style.css,app.js}  # self-contained SPA (vanilla, no build/CDN)
-  utils/
-    check_pipeline.py    # `vision_check`        CLI -- topic-only smoke test
-    check_thrust.py      # `vision_thrust_check` CLI -- detection -> RC echo
-    check_tracker.py     # `tracker_check`       CLI -- tracking smoke test
-  filters/PLAN.md        # v3 -- folded into tracker_node (Kalman in kalman.py)
+    camera.py             # Abstract Camera — every image source implements this.
+    discover.py           # discover_cameras() -- probe connected USB cameras.
+    ros_topic.py          # RosTopicCamera — subscribes to a sensor_msgs/Image topic.
+    v4l2_mailbox.py       # A mailbox, not a queue: always the newest frame, with the kernel's timestamp.
+    video_file.py         # VideoFileCamera — run the vision pipeline on a pre-recorded video file.
+    webcam.py             # WebcamCamera — local USB / built-in webcam via cv2.VideoCapture.
   depth/
-    __init__.py
-    depth_estimation_node.py  # DepthEstimationNode: monocular vis_range (0=far, 1=close)
-                              #   fallback: bbox-area proxy (no model needed)
-                              #   model: Depth Anything V2-Small ONNX (364×364 NCHW)
-                              #   EMA temporal smoothing (alpha=0.40) for stable estimates
-                              #   subscribes /tracks when use_tracks=True (matches tracker ordering)
     models/
-      depth_anything_v2_small.onnx   # DA V2-Small (not tracked in git — see .gitignore)
-      README.md                      # placement, launch params, re-export instructions
-      .gitignore                     # ignores *.onnx *.pt *.bin *.pth
-config/
-  cameras.yaml           # camera profiles
-  detector.yaml          # model + class params
-  tracker.yaml           # tracker_type (ocsort default) + association + Kalman thresholds (ROS params)
-test/
-  test_depth_estimation.py  # standalone 9-check test: onnxruntime, bbox fallback, ONNX inference
+    depth_estimation_node.py # depth_estimation_node -- monocular depth estimation for detected objects.
+  detection/
+    contours.py           # Detections -> outlines. A box and a mask become the same thing here.
+    detector.py           # Abstract Detector — every detection backend implements this.
+    factory.py            # Pick a detector backend from the resolved model path. One seam, three callers.
+    gpu.py                # select_device — single decision point for laptop / docker / Jetson.
+    hailo.py              # Hailo-8 detector backend: a compiled ``.hef`` behind the same `Detector` API.
+    messages.py           # Convert internal Detection objects to vision_msgs.
+    preprocess.py         # Contrast preprocessing for underwater frames, measured on real footage.
+    profiles.py           # ONE WORD instead of five knobs, because competition day is not the time.
+    rangecrop.py          # Trade field of view for range, automatically, when the target is far.
+    seg_decode.py         # Host-side decode of a RAW YOLOv8/v11-seg head, in the QUANTISED domain.
+    yolo.py               # YoloDetector — Ultralytics YOLO11 (or any compatible model file).
+  flow/
+    distance_estimation_node.py # distance_estimation_node -- downward-camera optical-flow distance (DVL-free).
+    flow_math.py          # flow_math -- pure functions for downward-camera optical-flow distance.
+    flow_node.py          # flow_node -- the bottom camera AS A VELOCITY SENSOR. Our DVL substitute.
+    flow_timing.py        # Timing. The thing that decides whether de-rotation helps or hurts.
+    flow_velocity.py      # Optical flow -> BODY VELOCITY. The observation an estimator can actually use.
+  tracking/
+    bytetrack.py          # ByteTrack wrapper using supervision.ByteTrack.
+    confidence.py         # Detection confidence as the vehicle's measure of how much to trust a box.
+    follower.py           # The fast rung: carry a box across the frames the detector has nothing for.
+    kalman.py             # Per-track 4-state constant-velocity Kalman smoother.
+    lock_state.py         # One target position, from whichever rung can still supply it.
+    roboflow_tracker.py   # Roboflow `trackers` backend (OC-SORT / ByteTrack) behind the Tracker ABC.
+    tracker.py            # Tracker ABC and TrackedDetection dataclass.
+  utils/
+    check_pipeline.py     # vision_check -- standalone health probe for the perception pipeline.
+    check_thrust.py       # vision_thrust_check -- end-to-end smoke test: detection -> RC channel.
+    check_tracker.py      # tracker_check -- health probe for the tracking pipeline.
+    display_node.py       # vision_display -- smooth OpenCV viewer for the perception pipeline.
+    export_engine.py      # export_engine -- build TensorRT FP16 engines from the .pt models.
+    switch_camera.py      # switch_camera -- resume ONE detector, pause the others (CLI exclusivity).
+    water_check.py        # Should CLAHE be on in THIS water? Decide from the pool, not from memory.
+  web/
+    static/
+    dashboard_state.py    # Pure (rclpy-free) helpers for the mission-web console.
+    mission_web_node.py   # mission_web -- browser mission-control console for the Mongla vision stack.
+  _text_engine.py         # TrueType text rendering engine for HUD widgets.
+  acquire.py              # How close is close enough to SEE a prop, and what to do when you cannot.
+  camera_node.py          # camera_node -- read from a Camera and publish standard ROS image topics.
+  config.py               # Named camera profiles. THIS DICT IS THE ONE THE CODE READS.
+  continuity.py           # Detection continuity: the statistics the whole lock ladder is tuned on.
+  detector_dual_node.py   # The whole vision stack in ONE process: two cameras, two detectors, no hop.
+  detector_node.py        # detector_node -- subscribe to image_raw, run YOLO11 (yolov11n), publish detections.
+  draw.py                 # draw -- thin dispatcher for the mission-control HUD.
+  draw_strip.py           # draw_strip -- mission-control UI strip below the video frame.
+  draw_video.py           # draw_video -- video section overlays for the mission-control HUD.
+  draw_widgets.py         # draw_widgets -- reusable HUD micro-widgets for the mission-control strip.
+  factory.py              # Single dispatch point: source-name -> Camera instance.
+  identity.py             # Take GEOMETRY from the structure, IDENTITY from the symbol on it.
+  lock_node.py            # lock_node -- run the ladder, publish one target position.
+  optics.py               # Flat-port refraction -- the ONE place the water refractive index lives.
+  preflight.py            # Vision preflight -- block until the perception pipeline is alive.
+  qos.py                  # One QoS table for the vision topics, imported by every end of every link.
+  seeing.py               # Can this camera see at all? A blinded camera and an empty scene look alike.
+  stamps.py               # When was this actually SEEN? One implementation, every consumer.
+  target_geometry.py      # Committed prop widths, keyed by the class name the detector emits.
+  tool_geometry.py        # Where each tool is, relative to the camera that aims it.
+  tracker_node.py         # tracker_node -- subscribe to detections, publish stable tracks.
+  underwater.py           # Underwater image statistics, and what they predict about detection.
+  vision_node.py          # vision_node -- single-process diagnostic for camera + detector.
 ```
 
 Naming rule: every file is named after the thing inside it. No `base.py`,
@@ -184,25 +212,41 @@ Canary log line (grep for this on every machine):
 [VIS ] using cuda:0 (NVIDIA GeForce RTX 2060)  torch=2.11.0+cu128  cuda=12.8
 ```
 
-### TensorRT engine (Pi FPS)
+### Which artifact the detector loads, and which backend that picks
 
-`_resolve_model_path` **prefers `<stem>.engine` over `<stem>.pt`** when both
-sit in `models/`. On the Pi 5 raw PyTorch @640 is ~3-4 Hz
-(inference-bound); a TensorRT FP16 engine is ~20-30 Hz (nano/small) / ~10-15 Hz
-(medium). Confirm the fast path via the backend canary:
+The **extension decides the backend**, not a `backend=` argument — one fact, in
+one place. `detection/factory.py` keeps the preference order and
+`yolo._resolve_model_path` walks the same list when it turns a stem into a path:
+
+```python
+KNOWN_EXTENSIONS = ('.hef', '.engine', '.pt')   # most preferred first
+def backend_for(path):                          # '.hef' -> hailo, else yolo
+```
+
+So on the vehicle a compiled **`.hef` wins and runs on the Hailo-8**; a `.engine`
+(TensorRT) or a `.pt` (PyTorch) is what a dev box without the accelerator falls
+back to, transparently. Confirm which one you actually got from the backend
+canary line the detector logs at startup:
 
 ```
-[YOLO ] backend=TensorRT engine  (gate_flare_medium_100ep.engine)
-[YOLO ] backend=PyTorch .pt       (gate_flare_medium_100ep.pt)     ← fallback
+[YOLO ] backend=hailo     (gate_rescue_repair.hef)     ← the vehicle
+[YOLO ] backend=yolo      (gate_rescue_repair.pt)      ← a dev box fallback
 ```
 
-Engines are **device + TRT/JetPack-version locked** — build them ON the Pi
-(`ros2 run mongla_vision export_engine --all`, FP16, imgsz must match the
-detector's `imgsz`), rebuild after a JetPack/TRT upgrade, and never commit them
-(`*.engine` gitignored). A dev box without an engine falls back to `.pt`
-transparently. Also set MAXN: `sudo nvpmodel -m 0 && sudo jetson_clocks`
-(~2× alone; `bringup_check` warns if not set). The debug overlay is skipped
-when no one subscribes to `image_debug` (`viewer:=false`).
+⛔ **A model's `<stem>.yaml` sidecar must ship beside the artifact.** Without it
+the class allowlist is empty and every frame returns a silent `[]`, with the
+pipeline looking perfectly healthy.
+
+Measured on the vehicle (`tools/hailo_stages.py`, synthetic frames): letterbox
+0.65 ms, inference 9.54 ms, decode 0.02 ms → **10.20 ms, 98.0 Hz**, against
+`hailortcli benchmark --hw-only` reporting 97.9 FPS for the same model. The
+Python pipeline is at the chip's own ceiling; NMS runs on-chip, which is why
+decode costs 0.02 ms. See [`hailo-vision.md`](hailo-vision.md).
+
+> **History.** This section used to describe building TensorRT engines on a
+> Jetson (`nvpmodel -m 0 && jetson_clocks`, JetPack-locked engines). That was
+> the previous platform. The `.engine` path still exists in the loader for dev
+> boxes that have one; nothing on the current vehicle uses it.
 
 ### FPS ↔ control coupling
 

@@ -76,3 +76,14 @@ or a Jetson runbook: that content was removed from the default branch on 2026-09
 preserved on the `pixhawk` branch. The current equivalents are
 [`command-reference.md`](../missions/command-reference.md), [`srot-integration.md`](srot-integration.md)
 and [`packages/`](../packages/README.md).*
+
+## Documents retired into this history (2026-09-21)
+
+Two context documents described the old vehicle and were deleted rather than
+half-updated, because a doc that is 80 % true is worse than one that is absent.
+They are in git history at `ae61b3b^` if the numbers in them are ever needed:
+
+| file | why it went | what replaced it |
+|---|---|---|
+| `perception/camera-calibration.md` | superseded almost line for line | [`perception/camera-and-calibration.md`](../perception/camera-and-calibration.md), which carries the measured in-water figures |
+| `missions/mission-design.md` | the 2025 (Pixhawk + DVL) mission architecture, including calibrated values for a hull we no longer fly | [`missions/fsm-guide.md`](../missions/fsm-guide.md) for the current FSM layer |
