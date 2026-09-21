@@ -40,7 +40,7 @@ CHIPS = [('500', 'Hz', 'control loop, on the board'),
          ('18.0', 'ms', 'photon to detection'),
          ('53.9', 'Hz', 'detection through ROS'),
          ('46.7', '°', 'field of view, in water'),
-         ('3\u202f311', '', 'tests passing')]
+         ('3\u202f316', '', 'tests passing')]
 
 
 def page(dark: bool) -> str:
