@@ -38,7 +38,7 @@
 >
 > Rev 6 baseline was `ae1bc2f`, flashed 2026-08-06. MOTOR_DETECT still converges in one
 > pass — see the motor-direction section below; nobody should hand-set `MOT_n_DIRECTION` again.
-> Read [`auv-architecture-2026.md`](auv-architecture-2026.md) first if you have not.
+> Read [`srot-architecture.md`](srot-architecture.md) first if you have not.
 >
 > **⚠ YAW IS ABSOLUTE FROM REV 4.** `ATTITUDE.yaw` and `VFR_HUD.heading` are a magnetic compass
 > heading, not a value relative to wherever the board booted. A heading recorded against rev <= 3,
@@ -53,13 +53,17 @@
 > in air were both observed — and nothing marked them as wrong. A board whose PROM fails CRC now
 > also **refuses `DEPTH_HOLD` / `AUTO` / `PATTERN`** rather than flying on invented depth.
 
-> Migrating `mongla_ws` off Pixhawk/ArduSub onto the custom **SROT** board (firmware
-> "Hengla": ESP32 flight core + RP2350 Pico RPM co-processor). A transport-and-verbs
-> swap, not a rewrite — the board owns the primitives, the Jetson sends intent.
+> How `mongla_ws` drives the **SROT** board (firmware "Hengla": ESP32 flight core + RP2350
+> Pico RPM co-processor). The board owns the primitives; the Pi sends intent.
 > Board-side source of truth: `Mongla_others/srot-control-board/{DUBURI_WS_INTEGRATION,
 > JETSON_COMMS,ALGORITHMS,AUDIT,PARAMETERS}.md`.
 
-## Transitional rig — SROT through BlueOS over UDP (verified on hardware 2026-08-03)
+## Bench history, 2026-08 — SROT reached over a UDP bridge
+
+> The vehicle today is **one USB-C cable** from the Pi to the board. This section records the
+> August bench rig, where the board was reached through a bridge on a second computer. It stays
+> because the findings in it are about the **board**, not the bridge — `FRAME_REVERSE`, the
+> double-inversion hazard, the Bar30 fix and payload identity all still apply.
 
 The SROT board has no Ethernet, so while the hull is still wired Pi-first the board hangs
 off the **Raspberry Pi's USB** and reaches us as **UDP**, instead of the designed direct
@@ -1269,7 +1273,7 @@ plus detected motor directions, recoverable only from a Bondor parameter export.
 
 ### Host-side workarounds for firmware defects (see `srot-control-board/JETSON_FEEDBACK.md`)
 
-> **Read `auv-architecture-2026.md` first.** Most of this section is now history. The firmware
+> **Read `srot-architecture.md` first.** Most of this section is now history. The firmware
 > answered nine of the eleven `JETSON_FEEDBACK` items in its Round 6 (`AUDIT.md` R35–R44), and
 > the workarounds below have been **removed from the code**, not just annotated. The version
 > gate is `srot_protocol.FW_BEHAVIOUR_REV_REQUIRED`; the board reports its own via
@@ -1366,8 +1370,7 @@ plus detected motor directions, recoverable only from a Bondor parameter export.
   2026-09-07**: 73.88°/63.82° air, held-out validated, shipping in
   `config/calibration/`; `bearing.py` converts; `send_landing_target` ships
   default-off. That measurement was the
-  critical path and it is a bench task, not a code task — see `auv-architecture-2026.md` §"The
-  one thing blocking vision".
+  critical path and it is a bench task, not a code task.
 - **Cross-repo rules:** [`cross-repo-contract.md`](cross-repo-contract.md) (mirrored as
   `AGENTS.md` in each sibling repo).
 - **BENCH-GATED:** the runbook above (needs the board; first real validation — no SROT SITL).

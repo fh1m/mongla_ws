@@ -26,7 +26,9 @@ University, where the author served as junior member of the AI & Machine Vision 
 AI & Machine Vision sub-team lead (2025), and engineering team lead for the RoboSub 2026
 campaign. The programme had already placed **2nd at RoboSub 2023** — the year *before* the
 author joined, so that result belongs to the team of that year, not to this software. The
-vision stack he led flew at **RoboSub 2025 (8th place)**.
+vision stack he led flew at **RoboSub 2025 (8th of 58)**, and the campaign he led placed
+**RoboSub 2026 (8th of 58)** — both read from RoboNation's published score sheets into
+[`docs/data/robosub.json`](docs/data/robosub.json).
 
 In September 2026 the author left the university, on principle, and Mongla continues as an
 independent project. The vehicles, the team name and the university's materials remain with

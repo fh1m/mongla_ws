@@ -1,0 +1,336 @@
+{
+ "team": "BRAC U (Bangladesh)",
+ "source": "RoboNation, RoboSub \"Scores Master\" (published sheets)",
+ "years": {
+  "2025": {
+   "teams": 58,
+   "rounds": {
+    "Semi-Final 1": {
+     "score": 4083.0,
+     "tasks": [
+      {
+       "task": "Weight penalty/bonus",
+       "max": "-250 .. +126",
+       "points": 133.0
+      },
+      {
+       "task": "Gate: Pass through",
+       "max": "100",
+       "points": 100.0
+      },
+      {
+       "task": "Gate: Maintain control",
+       "max": "150",
+       "points": 150.0
+      },
+      {
+       "task": "Gate: Coin Flip",
+       "max": "300",
+       "points": 300.0
+      },
+      {
+       "task": "Gate: Style (Yaw / Roll,Pitch)",
+       "max": "100/200 (8x max)",
+       "points": 1600.0
+      },
+      {
+       "task": "Channel: Any, Correct",
+       "max": "200, 400 / slalom",
+       "points": 1200.0
+      },
+      {
+       "task": "Channel: Correct Depth",
+       "max": "200 / slalom",
+       "points": 600.0
+      }
+     ],
+     "rank": 3
+    },
+    "Semi-Final 2": {
+     "score": 132.0,
+     "tasks": [
+      {
+       "task": "Weight penalty/bonus",
+       "max": "-250 .. +126",
+       "points": 132.0
+      }
+     ],
+     "rank": 27
+    },
+    "Third Chance": {
+     "score": 4384.0,
+     "tasks": [
+      {
+       "task": "Weight penalty/bonus",
+       "max": "-250 .. +126",
+       "points": 134.0
+      },
+      {
+       "task": "Gate: Pass through",
+       "max": "100",
+       "points": 100.0
+      },
+      {
+       "task": "Gate: Maintain control",
+       "max": "150",
+       "points": 150.0
+      },
+      {
+       "task": "Gate: Coin Flip",
+       "max": "300",
+       "points": 300.0
+      },
+      {
+       "task": "Gate: Style (Yaw / Roll,Pitch)",
+       "max": "100/200 (8x max)",
+       "points": 1600.0
+      },
+      {
+       "task": "Channel: Any, Correct",
+       "max": "200, 400 / slalom",
+       "points": 1200.0
+      },
+      {
+       "task": "Channel: Correct Depth",
+       "max": "200 / slalom",
+       "points": 600.0
+      },
+      {
+       "task": "Return Home",
+       "max": "300",
+       "points": 300.0
+      }
+     ],
+     "rank": 4
+    },
+    "Final": {
+     "score": 0.0,
+     "tasks": [
+      {
+       "task": "Weight penalty/bonus",
+       "max": "-250 .. +126",
+       "points": 0.0
+      }
+     ],
+     "rank": null
+    }
+   },
+   "design": {
+    "score": 583.4,
+    "max": 860,
+    "rank": 26
+   },
+   "overall": {
+    "score": 4083.0,
+    "rank": 8
+   },
+   "wildcard": 4250,
+   "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTXxXI-kv_FB-9PbUNexgPf2k1Lm8jAugNN8Tb4Z0YoCMsdRyDcnY_SyaPkbVhoJCy2HjYw2ulb67dE/pubhtml"
+  },
+  "2026": {
+   "teams": 58,
+   "rounds": {
+    "Semi-Final 1": {
+     "score": 4779.0,
+     "tasks": [
+      {
+       "task": "Weight penalty/bonus",
+       "max": "-250 .. +126",
+       "points": 129.0
+      },
+      {
+       "task": "Gate: Pass through",
+       "max": "100",
+       "points": 100.0
+      },
+      {
+       "task": "Gate: Maintain control",
+       "max": "150",
+       "points": 150.0
+      },
+      {
+       "task": "Gate: Coin Flip",
+       "max": "300",
+       "points": 300.0
+      },
+      {
+       "task": "Gate: Style (Yaw / Roll,Pitch)",
+       "max": "100/200 [8]",
+       "points": 800.0
+      },
+      {
+       "task": "Avoid Debris: Any, Correct",
+       "max": "200, 400 / slalom",
+       "points": 1200.0
+      },
+      {
+       "task": "Avoid Debris: Correct Depth",
+       "max": "200 / slalom",
+       "points": 600.0
+      },
+      {
+       "task": "Restore: Surface in area",
+       "max": "800",
+       "points": 800.0
+      },
+      {
+       "task": "Restore: Surface facing image Any, Your Role, Correct",
+       "max": "200, 400, 700",
+       "points": 400.0
+      },
+      {
+       "task": "Return Home",
+       "max": "300",
+       "points": 300.0
+      }
+     ],
+     "rank": 9
+    },
+    "Semi-Final 2": {
+     "score": 6234.0,
+     "tasks": [
+      {
+       "task": "Weight penalty/bonus",
+       "max": "-250 .. +126",
+       "points": 134.0
+      },
+      {
+       "task": "Gate: Pass through",
+       "max": "100",
+       "points": 100.0
+      },
+      {
+       "task": "Gate: Maintain control",
+       "max": "150",
+       "points": 150.0
+      },
+      {
+       "task": "Gate: Coin Flip",
+       "max": "300",
+       "points": 300.0
+      },
+      {
+       "task": "Gate: Random Role",
+       "max": "150",
+       "points": 150.0
+      },
+      {
+       "task": "Gate: Style (Yaw / Roll,Pitch)",
+       "max": "100/200 [8]",
+       "points": 1600.0
+      },
+      {
+       "task": "Avoid Debris: Any, Correct",
+       "max": "200, 400 / slalom",
+       "points": 1200.0
+      },
+      {
+       "task": "Avoid Debris: Correct Depth",
+       "max": "200 / slalom",
+       "points": 600.0
+      },
+      {
+       "task": "Restore: Surface in area",
+       "max": "800",
+       "points": 800.0
+      },
+      {
+       "task": "Restore: Surface facing image Any, Your Role, Correct",
+       "max": "200, 400, 700",
+       "points": 400.0
+      },
+      {
+       "task": "Return Home",
+       "max": "300",
+       "points": 300.0
+      },
+      {
+       "task": "Random Pinger: First task",
+       "max": "500",
+       "points": 500.0
+      }
+     ],
+     "rank": 5
+    },
+    "Third Chance": {
+     "score": 5786.0,
+     "tasks": [
+      {
+       "task": "Weight penalty/bonus",
+       "max": "-250 .. +126",
+       "points": 136.0
+      },
+      {
+       "task": "Gate: Pass through",
+       "max": "100",
+       "points": 100.0
+      },
+      {
+       "task": "Gate: Maintain control",
+       "max": "150",
+       "points": 150.0
+      },
+      {
+       "task": "Gate: Coin Flip",
+       "max": "300",
+       "points": 300.0
+      },
+      {
+       "task": "Gate: Style (Yaw / Roll,Pitch)",
+       "max": "100/200 [8]",
+       "points": 1600.0
+      },
+      {
+       "task": "Avoid Debris: Any, Correct",
+       "max": "200, 400 / slalom",
+       "points": 1200.0
+      },
+      {
+       "task": "Avoid Debris: Correct Depth",
+       "max": "200 / slalom",
+       "points": 600.0
+      },
+      {
+       "task": "Restore: Surface in area",
+       "max": "800",
+       "points": 800.0
+      },
+      {
+       "task": "Restore: Surface facing image Any, Your Role, Correct",
+       "max": "200, 400, 700",
+       "points": 400.0
+      },
+      {
+       "task": "Random Pinger: First task",
+       "max": "500",
+       "points": 500.0
+      }
+     ],
+     "rank": 3
+    },
+    "Final": {
+     "score": 0.0,
+     "tasks": [
+      {
+       "task": "Weight penalty/bonus",
+       "max": "-250 .. +126",
+       "points": 0.0
+      }
+     ],
+     "rank": null
+    }
+   },
+   "design": {
+    "score": 628.0,
+    "max": 860,
+    "rank": 28
+   },
+   "overall": {
+    "score": 6234.0,
+    "rank": 8
+   },
+   "wildcard": 6500,
+   "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRFIz4fUxtK1p7pD0GRf8mYJGdG5wNQq_L8wrNF_xvTL37KEJT3oGB66BJb31gaiFGohmNzaSKBBYOA/pubhtml"
+  }
+ }
+}

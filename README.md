@@ -767,7 +767,7 @@ it, are in [`.claude/context/upstream/`](.claude/context/upstream/README.md).
 This README is a map, not the territory. The documents below are the territory, and they are
 kept beside the code they describe rather than pasted in here.
 
-Read them in order as **[the Mongla book](.claude/context/README.md)** — 47 chapters in seven parts,
+Read them in order as **[the Mongla book](.claude/context/README.md)** — 46 chapters in seven parts,
 from why the vehicle exists to every number it has measured. Or dip in:
 
 **Start here**
@@ -787,8 +787,8 @@ from why the vehicle exists to every number it has measured. Or dip in:
 `srot-architecture` · `srot-integration` (the traps that cost us runs) · `srot-board-soul` ·
 `cross-repo-contract` · `vision-control-split` · `vehicle-spec` · `pi-hailo-vision-box` ·
 `pi-and-env-traps` · `launch-combinations` · `pool-day` · `remote-access` · `foxglove-and-bags` ·
-`ros2-conventions` · `system-harmony` · `mongla-sim` · `legacy-pixhawk-and-sitl` (the old stack,
-where it belongs) · `auv-architecture-2026`
+`ros2-conventions` · `system-harmony` · `mongla-sim` · `legacy-pixhawk-and-sitl` (only for the simulator's
+ArduSub SITL harness)
 
 </details>
 
@@ -820,13 +820,14 @@ where it belongs) · `auv-architecture-2026`
 
 **Act I — the lab years.** Mongla began as the autonomy software for a university AUV programme.
 The programme had placed **2nd at RoboSub 2023** the year before the author arrived; he joined in
-2024 as a junior member of the AI and machine-vision team, led that sub-team in 2025, and was
-engineering lead for the 2026 campaign. Four computers, a closed inner loop, and a 20 Hz host
-loop steering a box we were not allowed inside. It placed, and it had a ceiling.
+2024 as a junior member of the AI and machine-vision team, led that sub-team in 2025 (RoboSub:
+8th of 58), and was engineering lead for the 2026 campaign (8th of 58 again, 4 083 → 6 234
+points). A closed inner loop and a 20 Hz host loop steering a box we were not allowed inside.
+It placed, and it had a ceiling.
 
 **Act II — opening the box.** The ceiling was never the code; it was the boundary. So the
-boundary moved. The firmware team built a board we could write the control loop for, the Jetson
-became a Pi with a chip that does nothing but see, and four computers became two. Our own loop
+boundary moved. The firmware team built a board we could write the control loop for, a Pi with a chip
+that does nothing but see took the thinking, and the vehicle became two computers. Our own loop
 got *slower* — and the vehicle got steadier, because the fast loop moved to where it belongs:
 about **25 control corrections for every command we send**.
 
@@ -882,7 +883,8 @@ is no third category, and nothing here is owned by an institution.
   Previously engineering team lead for the RoboSub 2026 campaign, AI &amp; Machine Vision sub-team
   lead (2025), and a junior member of that team from 2024 — the year after the programme's
   2nd place at RoboSub 2023, which predates him. His vision stack flew at
-  <strong>RoboSub 2025 (8th place)</strong>.<br><br>
+  <strong>RoboSub 2025 (8th of 58)</strong>, and the campaign he led placed
+  <strong>RoboSub 2026 (8th of 58)</strong> on 53&nbsp;% more points.<br><br>
   <em>"Machines that have to work when nobody is watching."</em><br><br>
   <a href="https://fh1m.github.io/">fh1m.github.io</a> ·
   <a href="https://github.com/fh1m">@fh1m</a> ·
@@ -939,7 +941,10 @@ Shannon.
 Mongla began as the autonomy software for an autonomous underwater vehicle programme at BRAC
 University. The author joined that programme in 2024 — after its **2nd place at RoboSub 2023**,
 which is the team's result and not this software's — and the vision stack he led flew at
-**RoboSub 2025 (8th place)**. In September 2026 the author left the university, on principle,
+**RoboSub 2025 (8th of 58, 4 083 points)**; the 2026 campaign he led as engineering lead
+placed **RoboSub 2026 (8th of 58, 6 234 points)** on the same programme's vehicle — both read
+from RoboNation's published score sheets into [`docs/data/robosub.json`](docs/data/robosub.json)
+by `tools/robosub_record.py`, never typed from memory. In September 2026 the author left the university, on principle,
 and Mongla continues independently. The vehicles, the team name and the university's materials
 remain with the university and are referred to here only in the past tense, as history. What
 lives in this repository is the software and its measurements.

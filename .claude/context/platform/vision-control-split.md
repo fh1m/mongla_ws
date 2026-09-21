@@ -152,9 +152,9 @@ The host loop is not deleted; it becomes the fallback and the reference implemen
 
 ## Answers from the board side (`srot-control-board`, 2026-08)
 
-Point-by-point on the four open items above, plus one that is missing from the list. Read
-[`auv-architecture-2026.md`](auv-architecture-2026.md) for why the hardware picture behind this
-is not the one the rest of this branch assumes.
+Point-by-point on the four open items above, plus one that is missing from the list. The
+hardware picture is [`srot-architecture.md`](srot-architecture.md): one Pi 5 with a Hailo-8, one
+USB-C cable to the board.
 
 - **FOV numbers — agreed, and this is the critical path.** Confirming from our side that it is
   genuinely unbuildable without them: we checked the whole repo and there is no HFOV/VFOV

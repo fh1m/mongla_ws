@@ -13,6 +13,11 @@ Everything else from that era lives on the **`pixhawk` branch** (commit `b483722
 the full ArduSub reference, the MAVLink catalogue, the heading-lock design, the Jetson setup
 runbooks and the pool-day checklist as they stood. Read them there; do not copy them back.
 
+> **The Pixhawk era is retired (2026-09-21).** The public docs, the site and the platform docs no
+> longer describe that vehicle. What deliberately stays: this page, `sim/**` (the SITL harness),
+> the `pixhawk` backend's rows in the generated command reference, and the defect history in
+> `BUGS.md`. Those four are not leftovers — do not "finish the job" by deleting them.
+
 ---
 
 ## What the backend gives you

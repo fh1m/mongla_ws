@@ -1,15 +1,15 @@
 ---
 layout: default
 title: The Shift
-description: "From Pixhawk + Jetson to the SROT board and a Hailo-8 AI HAT — what changed, and why it changed everything."
+description: "Reflexes on the SROT board, thinking on a Raspberry Pi 5 with a Hailo-8 — and why the line between them is the whole design."
 ---
 
 # The Shift
 
-### From Pixhawk + Jetson to SROT + AI HAT — what changed, and why it changed everything
+### Reflexes on the board, thinking on the Pi — and why the line between them is the whole design
 
 *This page assumes no background in robotics. If you already know what a flight controller
-is, skip to [The old stack and its ceiling](#the-old-stack-and-its-ceiling).*
+is, skip to [The two halves](#the-two-halves).*
 
 ---
 
@@ -36,38 +36,7 @@ and be careful about the line between them.
 
 ---
 
-## The old stack and its ceiling
-
-For RoboSub 2025 (8th place) — as for the team's 2023 vehicle before it, which took 2nd a year
-before the author joined — the vehicle carried **four computers**:
-
-| Box | Job |
-|---|---|
-| **Pixhawk 2.4.8** running **ArduSub** | the reflexes — attitude, depth, motor mixing |
-| **Raspberry Pi** running BlueOS | a MAVLink router; mostly a hop between the other two |
-| **Jetson Orin Nano** | vision and every ROS 2 node — the thinking |
-| the ESCs (motor controllers) | stock firmware, no telemetry |
-
-It worked. It placed. And it had a hard ceiling, which is the whole reason for this
-page:
-
-- **The inner loop was closed to us.** ArduSub is excellent, mature, open-source software —
-  but it is *someone else's* control system with *their* idea of what a flight mode is. We
-  could set parameters. We could not change how the loop behaved, add a mode, or watch
-  inside it while it ran. Every fix had to be shaped as "what can we do from outside?"
-- **Our own control ran at 20 Hz.** Anything the autopilot did not offer, we bolted on from
-  the host — the heading loop, the vision alignment loop. Fifty milliseconds between
-  corrections, plus link delay, on a 20 kg hull with momentum.
-- **The motors never answered.** Stock ESC firmware takes a command and reports nothing. Ask
-  "is thruster 3 actually spinning?" and the honest answer was: *nobody knows*.
-- **Sensors were scattered.** The IMU on one board, depth from the autopilot, each arriving
-  over a different link with a different delay, and no shared clock to relate them.
-
-The one-sentence version: **we could tune the vehicle, but we could not change it.**
-
----
-
-## What replaced it
+## The two halves
 
 Two computers, one cable.
 
@@ -121,8 +90,8 @@ sends *intent* — "strafe left a little", or a whole primitive such as "forward
 40 %" — and the board turns that into thrust 500 times a second underneath it: roughly
 **25 control corrections for every command we send**.
 
-That ratio is the point of the redesign. Our loop got *slower* and the vehicle got
-*steadier*, because the fast loop moved to where it belongs.
+That ratio is the point of the design. The loop we write on the Pi is *slow* on purpose, and
+the vehicle is steady anyway, because the fast loop lives where it belongs.
 
 You can see how little the Pi says. "Forward 3 seconds at 40 %" is **44 bytes** on that
 cable — the envelope, a type, a duration, a speed, and a tag — and not one of them is a
@@ -149,10 +118,10 @@ station and the ESC flasher (GitHub [`RakibulIslam1`](https://github.com/Rakibul
 
 ## Why owning the stack is the actual story
 
-The hardware is not the interesting part. Plenty of teams build a custom board. What changed
+The hardware is not the interesting part. Plenty of teams build a custom board. What matters
 is **what happens when the vehicle cannot do something.**
 
-Before, the answer was a workaround on the host. Now it is a pull request.
+The answer is never a workaround on the host. It is a pull request.
 
 Three real examples, none hypothetical:
 
@@ -191,37 +160,24 @@ measure and ask for.
 
 ---
 
-## What this bought, concretely
+## What this buys, concretely
 
-| Then | Now |
+| The design choice | What it gives |
 |---|---|
-| A 400 Hz inner loop we could not modify | a 500 Hz loop we wrote, on a core nothing else can interrupt |
-| Our own control loop at 20 Hz | the same loop, still around 20 Hz — but now it only steers, while the board stabilises 25× faster underneath it |
-| No motor feedback at all | per-motor RPM on every thruster, and current |
-| Sensors scattered across boards and links | every sensor on one board, on one clock |
-| The vendor's flight modes | eleven modes, and a twelfth is a pull request away |
-| Vision on a 15 W Jetson, competing for the GPU | a dedicated inference chip, leaving the CPU for tracking, flow and localization |
-| "Is the vehicle moving?" — inferred | measured, from the downward camera and from thruster RPM |
+| a 500 Hz loop we wrote, on a core nothing else can interrupt | the vehicle stabilises 25× faster than the host could ever ask it to |
+| a host loop at about 20 Hz | the Pi only *steers*; it is never on the hook for staying level |
+| per-motor RPM and current on the wire | "is thruster 3 spinning?" has an answer — once the presence bit ships |
+| every sensor on one board, one clock | a late reading still carries the instant it was true |
+| eleven flight modes, in source we can read | a twelfth is a pull request, not a vendor request |
+| a dedicated inference chip | the CPU is left for tracking, flow and localization |
+| velocity from the downward camera and from RPM | "is the vehicle moving?" is measured, not inferred |
 
-The full, evidence-backed list — including what is verified in water, what is verified only
-on a bench, and what is built but never flown — is the **[Capability Map](capability-map.html)**.
+The full, evidence-backed list — what is verified on a bench, what is built but never flown,
+and what is blocked — is the **[Capability Map](capability-map.html)**.
 
----
-
-## Where the old world went
-
-The Pixhawk + Jetson configuration is preserved on the **`pixhawk` branch** (commit
-`b483722`), exactly as it stood. Nothing on the default branch describes it as the live
-vehicle any more.
-
-Two things from that era are deliberately still here and are not leftovers:
-
-- The **`pixhawk` backend** still exists in the code, behind the same interface as the board.
-  It is how the simulator flies.
-- The **simulator** runs ArduSub SITL by design — it is a physics environment, not the
-  vehicle.
-
-Both are described in [Legacy: the Pixhawk backend and SITL](https://github.com/fh1m/mongla_ws/blob/main/.claude/context/platform/legacy-pixhawk-and-sitl.md).
+The simulator is the one place a third-party autopilot remains: it runs ArduSub SITL as a
+physics harness, by design, because it is an environment and not the vehicle. See
+[`sim/README.md`](https://github.com/fh1m/mongla_ws/blob/main/sim/README.md).
 
 ---
 

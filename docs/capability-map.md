@@ -1,12 +1,12 @@
 ---
 layout: default
 title: Capability Map
-description: "What this vehicle can do, what it could do before, and the evidence behind every claim."
+description: "What this vehicle can do, and the evidence behind every claim."
 ---
 
 # Capability Map
 
-### What this vehicle can do, what it could do before, and how we know
+### What this vehicle can do, and how we know
 
 Every row carries **evidence** — a file in one of our repositories, or a measurement with a
 date — and a **state**. The states are not blurred:
@@ -58,18 +58,18 @@ and why the split exists.
 
 ## 1. Control: keeping the vehicle where you put it
 
-| Capability | Pixhawk + Jetson | SROT + AI HAT | Evidence | State |
-|---|---|---|---|---|
-| Inner control loop | 400 Hz, closed to us | **500 Hz**, our source, on a core reserved for it | fw `include/config.h` (`CONTROL_LOOP_HZ 500`), core pinning in `src/main.cpp` | 🟣 BENCH |
-| Attitude and heading hold | ArduSub's, tuned by parameter | ours: angle → rate → torque, with gains we can change | fw `src/control/attitude.*`, `task_control_loop.cpp` | 🟣 BENCH |
-| Heading stability at rest | a compass inside an aluminium hull — untrusted | drift **< 0.01 °/min**, peak-to-peak **< 0.08° over 8 min** | `measured-bars.md` (srot heading, 2026-09-07, at rest) | 🟣 BENCH |
-| Thruster mixing | ArduSub's allocation | the same vectored-8 geometry — and we can read the matrix | fw `src/control/mixer.h`, `docs/THRUSTER_MAP.md` | 🟣 BENCH |
-| Saturation behaviour | per-motor clipping inside the autopilot | the whole demand scales together so the *shape* of the move survives; the host also fits the demand yaw-first before sending | fw `mixer.h`; host `mongla_control/allocation.py` | 🟡 BUILT |
-| Flight modes | the vendor's list | **eleven**, including two tuning modes and a pattern runner | fw `include/state_types.h` | 🟣 BENCH |
-| Movement primitives | none — every move was a host-side timed loop | **ten**, run and braked on the board: forward, back, strafe L/R, turn, dive, stop, hold, style, arc | `srot_protocol.py` (`CMD_SROT_MOVE = 31000`); fw `src/comms/mav_commands.cpp` | 🟡 BUILT |
-| Automatic gain tuning | ArduSub autotune, air-oriented | a relay self-tune on the board, driven from an operator command | fw `src/control/autotune.h`; host `mongla_manager/srot_autotune.py` | 🟡 BUILT |
-| Depth hold | ALT_HOLD, proven in water | implemented, **never closed in water** — two bench checks gate every automatic move until it is | fw `src/control/depth_control.cpp`; `.claude/context/platform/srot-integration.md` | 🔴 BLOCKED |
-| Link budget | UDP over a network switch | one USB-C cable at **18.8 %** of capacity; heartbeat margin **10×** the failsafe | `measured-bars.md` §4 | 🟣 BENCH |
+| Capability | How it works | Evidence | State |
+|---|---|---|---|
+| Inner control loop | **500 Hz**, our source, on a core reserved for it | fw `include/config.h` (`CONTROL_LOOP_HZ 500`), core pinning in `src/main.cpp` | 🟣 BENCH |
+| Attitude and heading hold | ours: angle → rate → torque, with gains we can change | fw `src/control/attitude.*`, `task_control_loop.cpp` | 🟣 BENCH |
+| Heading stability at rest | drift **< 0.01 °/min**, peak-to-peak **< 0.08° over 8 min** | `measured-bars.md` (srot heading, 2026-09-07, at rest) | 🟣 BENCH |
+| Thruster mixing | vectored-8 geometry, and we can read the matrix (⚠ the current CAD hull has five thrusters — see `vehicle-spec.md`) | fw `src/control/mixer.h`, `docs/THRUSTER_MAP.md` | 🟣 BENCH |
+| Saturation behaviour | the whole demand scales together so the *shape* of the move survives; the host also fits the demand yaw-first before sending | fw `mixer.h`; host `mongla_control/allocation.py` | 🟡 BUILT |
+| Flight modes | **eleven**, including two tuning modes and a pattern runner | fw `include/state_types.h` | 🟣 BENCH |
+| Movement primitives | **ten**, run and braked on the board: forward, back, strafe L/R, turn, dive, stop, hold, style, arc | `srot_protocol.py` (`CMD_SROT_MOVE = 31000`); fw `src/comms/mav_commands.cpp` | 🟡 BUILT |
+| Automatic gain tuning | a relay self-tune on the board, driven from an operator command | fw `src/control/autotune.h`; host `mongla_manager/srot_autotune.py` | 🟡 BUILT |
+| Depth hold | implemented, **never closed in water** — two bench checks gate every automatic move until it is | fw `src/control/depth_control.cpp`; `.claude/context/platform/srot-integration.md` | 🔴 BLOCKED |
+| Link budget | one USB-C cable at **18.8 %** of capacity; heartbeat margin **10×** the failsafe | `measured-bars.md` §4 | 🟣 BENCH |
 
 ### Failsafes — the vehicle protects itself without the Pi
 
@@ -87,80 +87,80 @@ and why the split exists.
 
 ## 2. Sensing: what the vehicle knows about itself
 
-The old stack had an IMU, a depth reading and a battery voltage. Most of this table is not
-*new hardware* — it was already inside the board and had nowhere to go until we asked.
+Every sensor is on the board, on one clock. Most of this table is not *new hardware* — it was
+already inside the board and had nowhere to go until we asked.
 
-| Capability | Pixhawk + Jetson | SROT + AI HAT | Evidence | State |
-|---|---|---|---|---|
-| Attitude and rotation rates | an external IMU on its own USB board | **on the flight board**, fused at up to 400 Hz, read at 500 Hz | fw `src/drivers/bno085.*` | 🟣 BENCH |
-| Depth and water temperature | depth through the autopilot | direct — plus the controller's own error, output and command, published for inspection | fw `src/drivers/bar30.cpp` | 🟣 BENCH |
-| Leak and kill switch | leak only, through the autopilot | both — and the kill switch's ambiguity is a known, written ask | `.claude/context/upstream/pr-h-kill-is-ambiguous.md` | 🟣 BENCH |
-| Battery | one pack, voltage only | **two packs**, electronics and thrusters, de-multiplexed by id | host `fc/srot_fc.py` (`note_battery`) | 🟣 BENCH |
-| Per-thruster RPM | did not exist | measured by the ESCs, returned on the command wire | fw Pico + `thruster_link.cpp`; needs Bluejay from `srot-esc-flasher` | 🟣 BENCH |
-| Thruster presence | did not exist | computed on the board and dropped before the wire — a one-line ask, open | `.claude/context/upstream/pr-f-esc-presence-on-the-wire.md`; 958/958 frames read zero with nothing attached | 🔴 BLOCKED |
-| Trustworthy timestamps | arrival time only | stamped on the board's own clock: period **100.000 ms, sd 0.000** at the source, against **sd 4.741 ms** by arrival | `measured-bars.md` §14 | 🟣 BENCH |
-| Reading the board live | QGroundControl | `ros2 run mongla_manager connect` prints everything the board sends — no ROS graph, no built workspace needed | `mongla_manager/srot_connect.py` | 🟣 BENCH |
-| A preflight that gates rather than guesses | a checklist | `bringup_check --srot` grades each subsystem and exits non-zero on a real fault | `mongla_manager/bringup_check.py` | 🟣 BENCH |
+| Capability | How it works | Evidence | State |
+|---|---|---|---|
+| Attitude and rotation rates | **on the flight board**, fused at up to 400 Hz, read at 500 Hz | fw `src/drivers/bno085.*` | 🟣 BENCH |
+| Depth and water temperature | direct — plus the controller's own error, output and command, published for inspection | fw `src/drivers/bar30.cpp` | 🟣 BENCH |
+| Leak and kill switch | both — and the kill switch's ambiguity is a known, written ask | `.claude/context/upstream/pr-h-kill-is-ambiguous.md` | 🟣 BENCH |
+| Battery | **two packs**, electronics and thrusters, de-multiplexed by id | host `fc/srot_fc.py` (`note_battery`) | 🟣 BENCH |
+| Per-thruster RPM | measured by the ESCs, returned on the command wire | fw Pico + `thruster_link.cpp`; needs Bluejay from `srot-esc-flasher` | 🟣 BENCH |
+| Thruster presence | computed on the board and dropped before the wire — a one-line ask, open | `.claude/context/upstream/pr-f-esc-presence-on-the-wire.md`; 958/958 frames read zero with nothing attached | 🔴 BLOCKED |
+| Trustworthy timestamps | stamped on the board's own clock: period **100.000 ms, sd 0.000** at the source, against **sd 4.741 ms** by arrival | `measured-bars.md` §14 | 🟣 BENCH |
+| Reading the board live | `ros2 run mongla_manager connect` prints everything the board sends — no ROS graph, no built workspace needed | `mongla_manager/srot_connect.py` | 🟣 BENCH |
+| A preflight that gates rather than guesses | `bringup_check --srot` grades each subsystem and exits non-zero on a real fault | `mongla_manager/bringup_check.py` | 🟣 BENCH |
 
 ---
 
 ## 3. Vision: what the vehicle sees
 
-| Capability | Pixhawk + Jetson | SROT + AI HAT | Evidence | State |
-|---|---|---|---|---|
-| Detection hardware | YOLO on the Jetson GPU, competing with everything else | a **Hailo-8** that does nothing else | `mongla_vision/detection/hailo.py` | 🟣 BENCH |
-| Detection rate | ~20–30 Hz with TensorRT, 3–4 Hz without | **80.9 Hz** standalone, **53.9 Hz** through the live ROS graph | `measured-bars.md` §3 | 🟣 BENCH |
-| Photon to detection | never measured | **18.0 ms** median | `measured-bars.md` §3 | 🟣 BENCH |
-| Frame freshness | a queue that hands you the *oldest* frame | a mailbox that keeps the newest: **16.9 ms** stale against 396 ms | `measured-bars.md` §3; `cameras/v4l2_mailbox.py` | 🟣 BENCH |
-| Segmentation | not run on the vehicle | decoded without leaving the quantised domain: 31.5 ms → **0.93 ms**, bit-exact | `measured-bars.md` (Hailo segmentation); `detection/seg_decode.py` | 🟣 BENCH |
-| Holding a target between detections | a tracker; a lost box meant a lost target | a **lock ladder** — tracker, optical-flow follower, then a feature anchor that held **175 consecutive frames** the detector had lost | `measured-bars.md` §2; `mongla_vision/lock_node.py` | 🟣 BENCH |
-| Continuity budget | guessed | measured from 71 real gaps: the coast covers **91.5 %**, the track buffer **100 %** | `measured-bars.md` §2 | 🟣 BENCH |
-| Lens geometry | the in-air number from the datasheet | measured per camera: **63.8° air, 46.7° water ±0.7°**, 25 views, held-out validated | `measured-bars.md` §3; `config/calibration/*.json` | 🟣 BENCH |
-| Refraction through a flat port | ignored | corrected radially, by the same rectifier every metric consumer uses | `mongla_vision/optics.py` | 🟣 BENCH |
-| Image preprocessing | assumed to help | measured in **17 configurations** and never positive; on the gate it destroyed 95 % of detections. Ships **off**, and a test keeps it off | `measured-bars.md` §1 | 🟣 BENCH |
+| Capability | How it works | Evidence | State |
+|---|---|---|---|
+| Detection hardware | a **Hailo-8** that does nothing else | `mongla_vision/detection/hailo.py` | 🟣 BENCH |
+| Detection rate | **80.9 Hz** standalone, **53.9 Hz** through the live ROS graph | `measured-bars.md` §3 | 🟣 BENCH |
+| Photon to detection | **18.0 ms** median | `measured-bars.md` §3 | 🟣 BENCH |
+| Frame freshness | a mailbox that keeps the newest: **16.9 ms** stale against 396 ms | `measured-bars.md` §3; `cameras/v4l2_mailbox.py` | 🟣 BENCH |
+| Segmentation | decoded without leaving the quantised domain: 31.5 ms → **0.93 ms**, bit-exact | `measured-bars.md` (Hailo segmentation); `detection/seg_decode.py` | 🟣 BENCH |
+| Holding a target between detections | a **lock ladder** — tracker, optical-flow follower, then a feature anchor that held **175 consecutive frames** the detector had lost | `measured-bars.md` §2; `mongla_vision/lock_node.py` | 🟣 BENCH |
+| Continuity budget | measured from 71 real gaps: the coast covers **91.5 %**, the track buffer **100 %** | `measured-bars.md` §2 | 🟣 BENCH |
+| Lens geometry | measured per camera: **63.8° air, 46.7° water ±0.7°**, 25 views, held-out validated | `measured-bars.md` §3; `config/calibration/*.json` | 🟣 BENCH |
+| Refraction through a flat port | corrected radially, by the same rectifier every metric consumer uses | `mongla_vision/optics.py` | 🟣 BENCH |
+| Image preprocessing | measured in **17 configurations** and never positive; on the gate it destroyed 95 % of detections. Ships **off**, and a test keeps it off | `measured-bars.md` §1 | 🟣 BENCH |
 
 ---
 
 ## 4. Estimation: where the vehicle is
 
-**None of this existed on the old stack.** With no DVL fitted, the previous vehicle had no
-velocity and no position at all — distance moves were timed guesses.
+No DVL is fitted and no GPS reaches underwater, so every number in this table is built from the
+IMU, the depth sensor and the downward camera. Without it, a distance move is a timed guess.
 
-| Capability | Pixhawk + Jetson | SROT + AI HAT | Evidence | State |
-|---|---|---|---|---|
-| Velocity over the floor | nothing | optical flow from the downward camera, with rotation removed before scaling | `mongla_vision/flow/flow_node.py`; `measured-bars.md` §10 | 🟣 BENCH |
-| Distance accuracy | — | three 30 cm slides: worst error **1.09 cm (3.6 %)**; recovered height 0.72 / 0.69 / 0.70 m against a 0.72 m tape | `measured-bars.md` §13 | 🟣 BENCH |
-| Refusing to guess | — | 727 static intervals produced **zero** velocity reports: an unmeasurable interval is never published as "0 m/s" | `measured-bars.md` §10 | 🟣 BENCH |
-| Height above the floor | — | from a single pixel on a known plane | `mongla_localization/floor_plane.py` | 🟡 BUILT |
-| Pose filter | ArduSub's EKF3 — readable, not shapeable | a right-invariant EKF over IMU, depth, flow, heading and fixes | `mongla_localization/inekf.py` | 🟡 BUILT |
-| Late measurements | applied on arrival, as if they had just happened | replayed at the instant they describe, with the tail re-run | `mongla_localization/retro.py`, `test_retro.py` | 🟡 BUILT |
-| Absolute position | — | a fix from a prop whose location is known, or resection from two bearings | `course_map.py`, `resection.py`, `pnp_node.py` | 🟡 BUILT |
-| Absolute heading | compass, untrusted in an aluminium hull | from a prop of known bearing, from pool lane lines, or from the floor tile grating | `heading_anchor.py`, `pool_lines.py`, `tile_grating.py` | 🟡 BUILT |
-| Venue priors | pool numbers hard-coded in missions | a course file per competition, overridable on the deck without a rebuild, plus a tool to survey the real venue | `mongla_localization/courses/*.yaml`, `course_survey.py` | 🟡 BUILT |
+| Capability | How it works | Evidence | State |
+|---|---|---|---|
+| Velocity over the floor | optical flow from the downward camera, with rotation removed before scaling | `mongla_vision/flow/flow_node.py`; `measured-bars.md` §10 | 🟣 BENCH |
+| Distance accuracy | three 30 cm slides: worst error **1.09 cm (3.6 %)**; recovered height 0.72 / 0.69 / 0.70 m against a 0.72 m tape | `measured-bars.md` §13 | 🟣 BENCH |
+| Refusing to guess | 727 static intervals produced **zero** velocity reports: an unmeasurable interval is never published as "0 m/s" | `measured-bars.md` §10 | 🟣 BENCH |
+| Height above the floor | from a single pixel on a known plane | `mongla_localization/floor_plane.py` | 🟡 BUILT |
+| Pose filter | a right-invariant EKF over IMU, depth, flow, heading and fixes | `mongla_localization/inekf.py` | 🟡 BUILT |
+| Late measurements | replayed at the instant they describe, with the tail re-run | `mongla_localization/retro.py`, `test_retro.py` | 🟡 BUILT |
+| Absolute position | a fix from a prop whose location is known, or resection from two bearings | `course_map.py`, `resection.py`, `pnp_node.py` | 🟡 BUILT |
+| Absolute heading | from a prop of known bearing, from pool lane lines, or from the floor tile grating | `heading_anchor.py`, `pool_lines.py`, `tile_grating.py` | 🟡 BUILT |
+| Venue priors | a course file per competition, overridable on the deck without a rebuild, plus a tool to survey the real venue | `mongla_localization/courses/*.yaml`, `course_survey.py` | 🟡 BUILT |
 
 ---
 
 ## 5. Acting: missions, alignment and payload
 
-| Capability | Pixhawk + Jetson | SROT + AI HAT | Evidence | State |
-|---|---|---|---|---|
-| Vision alignment | yes — the capability the old stack was built around | the same two verbs, now **50 Hz** on the srot path (soaked 90 s at 49.86 Hz, zero late ticks) over a hull the board stabilises at 500 Hz | `motion_vision.py`; `measured-bars.md` §3 | 🟣 BENCH |
-| Downward-camera work | yes — align and move over a bin | the same, and now without a streamed depth setpoint: the axes that need one are refused explicitly instead of silently doing nothing | `mongla_control/vision_verbs.py`, `test_srot_vision_actuation.py` | 🟡 BUILT |
-| Driving through a target | fill-ratio or pass-through | unchanged — the verb is backend-independent | `motion_vision.move_loop` | 🟡 BUILT |
-| Payload | a separate USB board with its own driver | MAVLink to the board's own outputs, with a typed outcome per shot: fired, refused, denied, no-ack, busy | `fc/base.py`, `fc/srot_fc.py` | 🟡 BUILT |
-| Firing on a *fresh* frame | timed, after alignment | gated on a new live detection, so a frozen or predicted box can never trigger a shot | `motion_vision.py` | 🟡 BUILT |
-| Knowing whether it fired | the log, and hope | the board's own answer is carried back into the mission result | `mongla_control/vision_verbs.py` | 🟡 BUILT |
-| Rationing a run | none — each task took as long as it took | an opt-in budget: every task is asked whether it is still worth attempting, and the verdict is recorded | `mongla_planner/run_budget.py`, `missions/sauvc_full.py` | 🟡 BUILT |
-| Giving up cleanly | a timeout per verb | a task deadline that cancels the goal in flight and hands the mission its fallback | `mongla_planner/client.py`, `mongla_dsl.task()` | 🟡 BUILT |
-| Evidence after a run | a log file | a scorecard per run: every verb, its outcome, the goal id, what the camera saw, and optionally the frame itself | `mongla_dsl.py`, `vision_dsl.py` | 🟡 BUILT |
-| Operator radio | tether or Wi-Fi | LoRa through Bondor, including the competition's flare order sent to a hull already in the water | `mongla_manager/flare_order_send.py`; fw `src/comms/flare_order.h` | 🔴 BLOCKED |
+| Capability | How it works | Evidence | State |
+|---|---|---|---|
+| Vision alignment | the same two verbs, now **50 Hz** on the srot path (soaked 90 s at 49.86 Hz, zero late ticks) over a hull the board stabilises at 500 Hz | `motion_vision.py`; `measured-bars.md` §3 | 🟣 BENCH |
+| Downward-camera work | the same, and now without a streamed depth setpoint: the axes that need one are refused explicitly instead of silently doing nothing | `mongla_control/vision_verbs.py`, `test_srot_vision_actuation.py` | 🟡 BUILT |
+| Driving through a target | unchanged — the verb is backend-independent | `motion_vision.move_loop` | 🟡 BUILT |
+| Payload | MAVLink to the board's own outputs, with a typed outcome per shot: fired, refused, denied, no-ack, busy | `fc/base.py`, `fc/srot_fc.py` | 🟡 BUILT |
+| Firing on a *fresh* frame | gated on a new live detection, so a frozen or predicted box can never trigger a shot | `motion_vision.py` | 🟡 BUILT |
+| Knowing whether it fired | the board's own answer is carried back into the mission result | `mongla_control/vision_verbs.py` | 🟡 BUILT |
+| Rationing a run | an opt-in budget: every task is asked whether it is still worth attempting, and the verdict is recorded | `mongla_planner/run_budget.py`, `missions/sauvc_full.py` | 🟡 BUILT |
+| Giving up cleanly | a task deadline that cancels the goal in flight and hands the mission its fallback | `mongla_planner/client.py`, `mongla_dsl.task()` | 🟡 BUILT |
+| Evidence after a run | a scorecard per run: every verb, its outcome, the goal id, what the camera saw, and optionally the frame itself | `mongla_dsl.py`, `vision_dsl.py` | 🟡 BUILT |
+| Operator radio | LoRa through Bondor, including the competition's flare order sent to a hull already in the water | `mongla_manager/flare_order_send.py`; fw `src/comms/flare_order.h` | 🔴 BLOCKED |
 
 ---
 
 ## 6. What owning the stack actually gave us
 
-Not the hardware — the *verbs*. Six things that were impossible before, each from being able
-to read, measure or change a layer that used to be opaque:
+Not the hardware — the *verbs*. Six things that follow from being able to read, measure or
+change every layer, including the one that keeps the vehicle level:
 
 1. **We can measure inside the loop.** The board publishes its own depth error, output and
    command. That is how we know the depth loop has never truly run — something a closed

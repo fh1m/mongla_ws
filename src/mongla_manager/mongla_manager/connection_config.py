@@ -302,7 +302,7 @@ def resolve_srot_profile(mav_device: str = '', *, logger=None,
 
     Auto order, and the order is the point:
 
-      1. **local USB serial** -- the designed transport (`auv-architecture-2026.md`):
+      1. **local USB serial** -- the designed transport (`srot-architecture.md`):
          one Type-C cable, no Pi, and MEASURED at zero BAD_DATA against ~8-9% over
          the bridge. If the cable is there, it always wins.
       2. **UDP 14550** -- the transitional rig, board on the Pi behind a BlueOS
