@@ -362,3 +362,35 @@ def test_the_published_test_count_is_the_real_one():
         f'{collected} collected vs {claimed} published passing: that gap is too big to be '
         f'skips — re-run the suites and update README.md, docs/index.html and '
         f'tools/make_banner.py (then re-run tools/make_banner.py)')
+
+
+def test_competition_placements_match_the_official_sheets():
+    """Placements were typed by hand in eight places, and the author's own log
+    disagreed with the repo about 2025 (it said 9th; RoboNation's published
+    sheet says 8th of 58 -- the "9th" was the 2026 Semi-Final 1 rank). The
+    record now lives once, in docs/data/robosub.json, read out of those sheets
+    by tools/robosub_record.py. This checks two things:
+      * the site figure is what the tool renders from that record;
+      * every "RoboSub <year> (<n>th ..." in the prose agrees with it, and no
+        copy drops back to the bare, un-sourced "(8th place)" form."""
+    import json
+    import subprocess
+    import sys
+    r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'robosub_record.py'), '--check'],
+                       capture_output=True, text=True, cwd=ROOT)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+    record = json.loads((DOCS / 'data' / 'robosub.json').read_text())['years']
+    prose = [ROOT / 'README.md', ROOT / 'AUTHORS.md', DOCS / 'index.html', *DOCS.glob('*.md')]
+    seen = 0
+    for path in prose:
+        text = path.read_text(encoding='utf-8')
+        assert not re.search(r'RoboSub 202[5-9] \(\d+(st|nd|rd|th) place\)', text), \
+            f'{path.name}: un-sourced placement — say "Nth of M", from the record'
+        for year, rank, teams in re.findall(r'RoboSub (\d{4}) \((\d+)(?:st|nd|rd|th) of (\d+)', text):
+            rec = record.get(year)
+            assert rec, f'{path.name}: RoboSub {year} is not in the record'
+            assert (int(rank), int(teams)) == (rec['overall']['rank'], rec['teams']), \
+                f'{path.name}: RoboSub {year} {rank} of {teams} disagrees with the sheets'
+            seen += 1
+    assert seen, 'no placement found in the prose — did the pattern stop matching?'

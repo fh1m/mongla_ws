@@ -72,6 +72,5 @@ something it is not. Code beats docs; a measurement beats both — see
 ## Appendix — History and elsewhere
 
 44. [Legacy: the Pixhawk backend and ArduSub SITL](platform/legacy-pixhawk-and-sitl.md)
-45. [The AUV architecture changed — read this before anything else in `srot-*](platform/auv-architecture-2026.md)
-46. [RoboSub Team Intelligence — Mongla Vision Roadmap](scouting/README.md)
-47. [Future TODO -- shrink `commands.py` registry](future/future-registry-shrinkage.md)
+45. [RoboSub Team Intelligence — Mongla Vision Roadmap](scouting/README.md)
+46. [Future TODO -- shrink `commands.py` registry](future/future-registry-shrinkage.md)

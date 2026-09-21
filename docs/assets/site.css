@@ -1163,6 +1163,36 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
 .chan--r .silk{color:var(--signal-text)}
 .colour figcaption{margin-top:18px}
 
+/* ── the record: two score cards, read from the official sheets ───────
+   Each round's bar is scaled to the best round either year, so the two
+   cards share one axis; the red tick is the finals wild card for THAT year,
+   which is why it moves — the bar got longer and so did the bar to clear. */
+.record{margin:var(--s5) 0 0}
+.record__cards{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.score{padding:clamp(16px,2vw,24px);border-radius:14px;background:var(--s-raised);box-shadow:var(--e2)}
+.score header{display:grid;grid-template-columns:auto 1fr;align-items:end;gap:0 14px;
+  padding-bottom:12px;margin-bottom:14px;box-shadow:0 1px 0 var(--rule)}
+.score time{grid-column:1/-1;font-family:var(--display);font-weight:800;font-size:var(--fs-micro);
+  letter-spacing:.16em;color:var(--ink-3)}
+.score .place{font-family:var(--display);font-weight:800;font-size:var(--fs-num-hero);
+  line-height:.9;letter-spacing:-.04em;color:#fff}
+.score .place sup{font-size:.34em;letter-spacing:0;color:var(--signal-text);margin-left:2px}
+.score .silk{font-family:var(--display);font-weight:800;font-size:var(--fs-micro);
+  letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.score__rounds{list-style:none;margin:0;padding:0;display:grid;gap:9px}
+.score__rounds li{display:grid;grid-template-columns:96px 1fr 5ch 3ch;align-items:center;gap:10px}
+.score__rounds i{display:block;height:10px;border-radius:999px;background:var(--s-sunk);
+  box-shadow:var(--e-in);position:relative}
+.score__rounds i::after{content:"";position:absolute;inset:1px auto 1px 1px;border-radius:999px;
+  width:calc((100% - 2px) * var(--w) / 100%);background:var(--ink-2)}
+.score__rounds i::before{content:"";position:absolute;top:-4px;bottom:-4px;left:var(--wc);
+  width:2px;background:var(--signal);z-index:1}
+.score__rounds b{font-family:var(--data);font-size:11px;color:var(--ink);text-align:right}
+.score__rounds em{font-family:var(--data);font-style:normal;font-size:11px;color:var(--ink-3)}
+.score__foot{margin:14px 0 0;font-family:var(--data);font-size:11px;color:var(--ink-3)}
+.score__foot b{color:var(--signal-text);font-weight:400}
+.record figcaption{margin-top:16px}
+
 /* ── the blocker board: what is in the way, and whose move it is ─────
    Each row is keyed by who can actually clear it. Three owners, three
    colours, and no row where the owner is "us" — which is the point. */
@@ -1194,6 +1224,22 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
 .pull em{font-style:normal;color:var(--signal-text)}
 .pull footer{margin-top:16px;font-family:var(--data);font-weight:400;font-size:var(--fs-caption);
   letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+
+/* ── the creed: one voice set above the rest of the shoulders list ───
+   A plaque, not a card: deeper well, wider type, and the attribution in the
+   data face so a date reads as a citation rather than a flourish. */
+.creed{margin:40px 0 0;padding:clamp(26px,3.4vw,44px) clamp(22px,3.4vw,46px);border-radius:16px;
+  background:var(--s-key);box-shadow:var(--e3),var(--e-in)}
+.creed blockquote{margin:0;font-family:var(--display);font-weight:800;
+  font-size:clamp(1.4rem,1rem + 2.1vw,2.6rem);line-height:1.15;letter-spacing:-.035em;color:#fff;
+  text-wrap:balance}
+.creed figcaption{margin-top:18px;padding-top:16px;box-shadow:0 -1px 0 var(--rule);
+  font-family:var(--data);font-size:var(--fs-caption);line-height:1.6;color:var(--ink-2)}
+.creed figcaption b{font-family:var(--display);font-weight:800;letter-spacing:.02em;color:#fff}
+.creed figcaption em{display:block;margin-top:6px;font-style:normal;font-size:var(--fs-micro);
+  letter-spacing:.06em;color:var(--ink-3)}
+.creed p{margin:20px 0 0;max-width:68ch;color:var(--ink-2)}
+.creed p strong{color:#fff}
 
 /* ── what a vision verb hands back ──────────────────────────────────── */
 .result{margin:0;padding:clamp(18px,2.4vw,26px);border-radius:14px;background:var(--s-raised);

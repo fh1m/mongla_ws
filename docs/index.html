@@ -165,18 +165,26 @@
 
   <div class="years">
     <div class="year"><time>2023</time><div><h3>Before us — the team places 2nd</h3>
-      <p>The programme's vehicle takes 2nd at RoboSub on a Pixhawk, ArduSub and a Jetson. This is
+      <p>The programme's vehicle takes 2nd at RoboSub. This is
          the team's result, a year before the author joined; it is here as the ground he started on.</p></div></div>
     <div class="year"><time>2024–25</time><div><h3>The author joins — the vision years</h3>
       <p>Detection, tracking, and the slow discovery that most published underwater-vision advice
          does not survive being measured on your own footage.</p></div></div>
-    <div class="year"><time>2025</time><div><h3>RoboSub — 8th place</h3>
-      <p>The last campaign on the old stack. It worked, and it had a ceiling: our control ran at
+    <div class="year"><time>2025</time><div><h3>RoboSub — 8th of 58</h3>
+      <p>The author leads the vision sub-team. It worked, and it had a ceiling: our control ran at
          20 Hz, steering a box we were not allowed inside.</p></div></div>
-    <div class="year"><time>2026</time><div><h3>The stack leaves the lab</h3>
-      <p>In September the author left the university, on principle. Mongla continues
-         independently, with the firmware and hardware lead as its only co-author.</p></div></div>
+    <div class="year"><time>2026</time><div><h3>RoboSub — 8th again, on more points</h3>
+      <p>The campaign he led as engineering lead, still on the programme's vehicle. In September
+         he left the university, on principle; Mongla continues independently, with the firmware
+         and hardware lead as its only co-author.</p></div></div>
   </div>
+
+  <!-- record:begin -->
+  <figure class="record" aria-label="RoboSub placements, read from the official score sheets">
+   <div class="record__cards"><article class="score"><header><time>2025</time><b class="place">8<sup>th</sup></b><span class="silk">of 58 teams · 4,083 points</span></header><ol class="score__rounds" style="--wc:65.4%"><li><span class="silk">Semi-Final 1</span><i style="--w:62.8%"></i><b>4,083</b><em>#3</em></li><li><span class="silk">Semi-Final 2</span><i style="--w:2.0%"></i><b>132</b><em>#27</em></li><li><span class="silk">Third Chance</span><i style="--w:67.4%"></i><b>4,384</b><em>#4</em></li></ol><p class="score__foot">finals wild card at <b>4,250</b> · design documentation 583/860, #26</p></article><article class="score"><header><time>2026</time><b class="place">8<sup>th</sup></b><span class="silk">of 58 teams · 6,234 points</span></header><ol class="score__rounds" style="--wc:100.0%"><li><span class="silk">Semi-Final 1</span><i style="--w:73.5%"></i><b>4,779</b><em>#9</em></li><li><span class="silk">Semi-Final 2</span><i style="--w:95.9%"></i><b>6,234</b><em>#5</em></li><li><span class="silk">Third Chance</span><i style="--w:89.0%"></i><b>5,786</b><em>#3</em></li></ol><p class="score__foot">finals wild card at <b>6,500</b> · design documentation 628/860, #28</p></article></div>
+   <figcaption>Read round by round out of RoboNation's published score sheets by <code>tools/robosub_record.py</code>, never typed in. Best round 4,083 → 6,234 points (+53%). The red tick is that year's published finals wild-card threshold; seven teams made the finals, and clearing the line on a third-chance run, as 2025 did, was not enough to be one of them. Both vehicles were the university programme's, on the old stack; nothing on the SROT board has been in water.</figcaption>
+  </figure>
+  <!-- record:end -->
 
   <figure>
    <div class="strip">
@@ -195,17 +203,15 @@
 <section id="shift">
  <div class="wrap">
   <p class="mark">Act two <i>//</i> opening the box</p>
-  <h2 class="col">We stopped renting the inner loop.</h2>
-  <p class="lede col quiet">The old stack asked a closed autopilot to hold an attitude, at whatever
-    rate our companion computer could manage. The ceiling was not our code — it was the boundary.
-    So the boundary moved: reflexes went onto a board we write the firmware for, and the
-    companion was left to do nothing but think.</p>
+  <h2 class="col">The fast loop lives where it belongs.</h2>
+  <p class="lede col quiet">A companion computer cannot hold an attitude: it sits on the far side of
+    a cable, answering at whatever rate it can manage. So the reflexes live on a board we write the
+    firmware for, and the Pi is left to do nothing but think.</p>
   <figure class="panel scrollable">
    <img src="assets/diagrams/loop-rate.svg" alt="The same disturbance drawn against a 20 Hz comb and a 500 Hz comb, with the unanswered interval shaded on each" loading="lazy">
    <figcaption>Neither architecture is cleverer than the other. The one underneath simply gets
-     to answer sooner, because the loop is no longer on the far side of a cable and a vendor's
-     firmware. This is also the honest reason the old stack placed well and still had a
-     ceiling: at 20 Hz you are not steering, you are voting.</figcaption>
+     to answer sooner, because it is not on the far side of a cable. At 20 Hz you are not steering, you are
+     voting.</figcaption>
   </figure>
   <h3 class="col" style="margin-top:var(--s6)">What actually crosses the cable</h3>
   <p class="col">If the reflexes live on the board, the Pi should have almost nothing to say — and it
@@ -523,8 +529,8 @@
     that can afford to wait — MAVLink at 100&#8239;Hz, LoRa and the SD card at 20, the display at
     30. The RP2350 speaks bidirectional DShot, so an ESC reports the RPM it actually reached
     rather than the one it was asked for.</p>
-    <p class="col quiet">That last detail is the one worth pausing on. On the old stack the motors
-    never answered: you asked for thrust and the honest answer to <em>"is thruster three actually
+    <p class="col quiet">That last detail is the one worth pausing on. Without it the motors never
+    answer: you ask for thrust and the honest answer to <em>"is thruster three actually
     spinning?"</em> was <em>nobody knows</em>. Telemetry back from the ESC turns an open question
     into a measurement — which is exactly how we learned that
     <span class="nr">958 of 958</span> recorded ESC frames read zero with nothing plugged in, and
@@ -677,7 +683,7 @@
     <li class="stop" data-num="0" data-unit="N" data-label="measured, ever" data-n="10">
       <span class="silk silk--b">10 · thrust</span>
       <div class="anim anim--prop anim--dead" aria-hidden="true"><b></b><span>no thruster attached</span></div>
-      <p>Bidirectional DShot sends each ESC its command and brings back the RPM it actually reached — on the old stack the motors never answered at all. And here the journey stops being measured: no thrusters are attached. We know that because 958 of 958 ESC frames read exactly zero with nothing plugged in, and counting messages is not a health check.</p>
+      <p>Bidirectional DShot sends each ESC its command and brings back the RPM it actually reached, so a motor can answer. And here the journey stops being measured: no thrusters are attached. We know that because 958 of 958 ESC frames read exactly zero with nothing plugged in, and counting messages is not a health check.</p>
       
       <p class="src"><code>RP2350 · bidirectional DShot · measured-bars.md §25</code><span class="st blocked">blocked</span></p>
     </li>
@@ -1176,6 +1182,21 @@
   <p class="lede col quiet">Not a reading list. Each of these is a specific idea, from a named
     source, that changed something concrete in this stack — and the change is named too.</p>
 
+  <figure class="creed">
+   <blockquote>“I just wondered how things were put together.”</blockquote>
+   <figcaption><b>Claude Shannon</b> — who wrote the theory of the channel, and also built a
+     juggling machine, a rocket-powered frisbee and a mouse that solved a maze.
+     <em>Interview, 2 November 1989; quoted in Soni &amp; Goodman, <cite>A Mind at Play</cite>.</em></figcaption>
+   <p><strong>Why he is at the top of this list:</strong> he is the reason a measurement is the unit
+     of work here. Information is what survives a noisy channel — so a value a sensor cannot stand
+     behind is not a small error, it is <em>not information</em>, and printing it as
+     <span class="num">0.0</span> manufactures certainty out of noise. That is why absence renders
+     <span class="num">--</span> on the board and <span class="num">NaN</span> here, why a
+     <span class="num">44</span>-byte frame is drawn bit by bit further up this page, and why
+     <span class="num">958 of 958</span> empty ESC frames is a finding rather than a footnote.
+     He is also the register: he did this for fun. <a href="https://www.itsoc.org/about/shannon">Claude E. Shannon</a></p>
+  </figure>
+
   <div class="years" style="margin-top:44px">
    <div class="year"><time>Hotz</time><div><h3>“Complex things eventually collapse under their own weight.”</h3>
      <p>The magic, he says, is more capability at <em>no extra</em> complexity — tinygrad as “the
@@ -1205,9 +1226,8 @@
    <div class="year"><time>Keller</time><div><h3>Every few years, design it again rather than patch it.</h3>
      <p>His argument is that the rewrite comes out both faster and simpler than the accreted thing
        it replaces, and that the reason teams do not do it is fear of a bad quarter.
-       <strong>What it changed:</strong> the whole of this page's Act Two. The old stack placed
-       2nd and 8th and still had a ceiling, and the answer was not to tune it harder — it was to
-       move the boundary and write the inner loop ourselves.
+       <strong>What it changed:</strong> the whole of this page's Act Two. The answer to a ceiling
+       was not to tune harder — it was to move the boundary and write the inner loop ourselves.
        <a href="https://www.techpowerup.com/270197/jim-keller-on-moores-law-microprocessors-and-designing-chips-from-scratch">On designing from scratch</a></p></div></div>
 
    <div class="year"><time>Lattner</time><div><h3>“Work backwards from the speed of light of hardware.”</h3>
@@ -1218,6 +1238,37 @@
        domain rather than converted to floats, which took it from 31.5&#8239;ms to 0.93&#8239;ms,
        bit-for-bit identical.
        <a href="https://www.modular.com/blog/developer-voices-deep-dive-with-chris-lattner-on-mojo">Deep dive on Mojo</a></p></div></div>
+
+   <div class="year"><time>Graham</time><div><h3>“Live in the future, then build what's missing.”</h3>
+     <p>And the verb, he insists, is not <em>think up</em> but <em>notice</em>: live at the front of
+       something changing and the gaps announce themselves. <strong>What it changed:</strong> the
+       upstream folder. Nine written asks to the firmware team, each one a gap somebody noticed
+       while measuring something else — per-ESC RPM computed on the board and dropped one line
+       before the wire; no message for the velocity our downward camera had just started
+       producing; a kill switch that reported the same value for <em>live</em> and <em>I cannot
+       hear the power board</em>. None of those were designed; all three were noticed.
+       <a href="https://paulgraham.com/startupideas.html">How to Get Startup Ideas</a></p></div></div>
+
+   <div class="year"><time>Urban</time><div><h3>The chef and the cook.</h3>
+     <p>“The chef reasons from first principles… the cook works off of some version of what's
+       already out there — a recipe of some kind.” Both can make a good dinner; only one can find
+       out the recipe is wrong. <strong>What it changed:</strong> every borrowed threshold on this
+       page was re-derived on our own footage. “Water eats red first” is a recipe — so it was
+       measured, per venue, and one venue came back level, which says the camera differed, not the
+       water. “Enhance the image underwater” is a recipe — tested seventeen ways across four props
+       and three venues, never once positive, and on the gate it destroyed
+       <span class="num">95&#8239;%</span> of detections. It ships off.
+       <a href="https://waitbutwhy.com/2015/11/the-cook-and-the-chef-musks-secret-sauce.html">The Cook and the Chef</a></p></div></div>
+
+   <div class="year"><time>West</time><div><h3>“The world can be saved through design, and everything needs to actually be architected.”</h3>
+     <p>Said to architecture students, and meant literally: the surface is not decoration laid over
+       the thing, it is part of the argument the thing makes. <strong>What it changed:</strong>
+       this page is built out of the vehicle's own vocabulary rather than a template's — silk-screen
+       labels, machined bezels, a depth readout shaped like an instrument capsule, and every
+       measurement set in one monospaced face so columns of numbers line up and a changed digit is
+       visible. Where a reading is missing, the capsule shows <span class="num">--</span>; the
+       design refuses to fill a gap it cannot measure, which is the same rule as the firmware's.
+       <a href="https://www.gsd.harvard.edu/2013/11/kanye-west-visits-gsd">At the Harvard GSD, 2013</a></p></div></div>
 
    <div class="year"><time>Rubin</time><div><h3>“Inspiration comes first. You come next. The audience comes last.”</h3>
      <p>And: keep removing until it hurts, because that is usually where the soul of the thing is.

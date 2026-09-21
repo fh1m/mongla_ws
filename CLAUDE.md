@@ -318,7 +318,7 @@ entry points and because tests read them:
 
 **[`platform/`](.claude/context/platform/)** — the board, the firmware contract, the vehicle,
 bring-up and operations: `srot-architecture` · `srot-integration` · `srot-board-soul` ·
-`auv-architecture-2026` · `cross-repo-contract` · `vision-control-split` · `vehicle-spec` ·
+`cross-repo-contract` · `vision-control-split` · `vehicle-spec` ·
 `pi-hailo-vision-box` · `pi-and-env-traps` · `launch-combinations` · `pool-day` ·
 `remote-access` · `foxglove-and-bags` · `ros2-conventions` · `system-harmony` · `mongla-sim` ·
 `legacy-pixhawk-and-sitl`
