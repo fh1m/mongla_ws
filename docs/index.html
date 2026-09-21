@@ -1633,6 +1633,72 @@
  </div>
 </section>
 
+<!-- 14b ────────────────────────── -->
+<section id="now" data-chapter="the width of now">
+ <div class="wrap">
+  <p class="mark">The last idea <i>//</i> and the one nobody writes down</p>
+  <h2 class="col">The vehicle has no present tense. It has a stack of pasts, and it steers on all of them.</h2>
+  <p class="lede col quiet">Every number the controller uses is a statement about a moment that has
+    already gone, and each one is a <em>different</em> moment. The attitude is two milliseconds old.
+    The depth is ten. The detection is eighteen at best, and during a gap it can be four seconds.
+    Nothing in the code declares this — there is no variable called <em>now</em> to be wrong. The
+    vehicle simply acts, at 500 Hz, on a picture assembled from clocks that never agreed.</p>
+
+  <figure class="nowfig">
+   <canvas id="now-view" width="960" height="300" role="img"
+     aria-label="Each signal's age, live: a lane per signal, the marker sliding right as the value ages and snapping back when it is refreshed"></canvas>
+   <div class="nowfig__read">
+     <div><span class="silk silk--b">freshest thing it knows</span><b id="now-min">—</b></div>
+     <div><span class="silk silk--b">stalest thing it is using</span><b id="now-max">—</b></div>
+     <div><span class="silk silk--b">the width of “now”</span><b id="now-w">—</b></div>
+     <div><span class="silk silk--b">control ticks inside it</span><b id="now-ticks">—</b></div>
+   </div>
+   <div class="nowfig__ctl">
+     <button class="key" type="button" data-now="calm">an ordinary second</button>
+     <button class="key" type="button" data-now="gap">a detection gap — p90</button>
+     <button class="key" type="button" data-now="worst">the worst gap we recorded</button>
+     <button class="key" type="button" id="now-pause" aria-pressed="false">pause</button>
+   </div>
+   <figcaption>Live, and to scale: each lane is one signal, the marker is how old that signal is
+     <em>at this instant</em>, and it snaps back to zero when a new one arrives. Every rate is
+     measured — 500 Hz control, 100 Hz telemetry, a 30.18 Hz camera, detection at 53.9 Hz through
+     the ROS graph with 18.0 ms of photon-to-detection ahead of it, and gaps drawn from the
+     <strong>71 real dropouts</strong> whose distribution is p50 0.155 s, p90 0.651 s, max 4.00 s.
+     The white band is the spread between the freshest and stalest number in use: that band
+     <em>is</em> the vehicle’s present, and it is never a point.</figcaption>
+  </figure>
+
+  <div class="split" style="margin-top:var(--s5)">
+   <div>
+    <h3>Why this is not a latency chart</h3>
+    <p class="quiet">Latency is a number you quote once. This is the thing latency does when you
+      leave it running: the ages never line up, so every control tick blends a two-millisecond
+      attitude with a detection from a fifth of a second ago and acts as though both describe the
+      same world. Most of the time that is fine, because the world did not change much in that
+      fifth of a second. The interesting question is the one the picture asks by itself —
+      <em>how wide is it allowed to get before "fine" stops being true?</em></p>
+    <p class="quiet">That question has a shipped answer, and it was measured rather than chosen:
+      <code>VISION_FRESH_ZERO_S</code> is <span class="num">0.20 s</span>, which covers
+      <span class="num">56.3 %</span> of the real gaps, and the lock ladder behind it was sized
+      against the same 71 dropouts. The rungs exist because the band in this figure gets wide.</p>
+   </div>
+   <div>
+    <h3>What surprised us about it</h3>
+    <p class="quiet">Drag the figure into a p90 gap and count the ticks: the board runs several
+      hundred control cycles on a detection that has not been refreshed once. The reflexes are
+      fine — they never needed the camera — but every <em>decision</em> layered on top is being
+      made about a world that has moved on, and the estimate of how far it moved is itself an
+      estimate.</p>
+    <p class="quiet">This is the honest reason a vehicle can be excellent at every individual
+      number on this site and still lose a run. Nothing failed. The parts simply did not agree
+      about when it was.</p>
+    <blockquote class="pull">There is no instant in this system where everything is true at once.
+      <em>Now</em> is a band, and the engineering is in how wide you let it get.</blockquote>
+   </div>
+  </div>
+ </div>
+</section>
+
 <!-- 15 ──────────────────────────────────────────────────────────────── -->
 <section id="shoulders" data-chapter="shoulders">
  <div class="wrap">
@@ -3065,6 +3131,177 @@
     };
     addEventListener('pointerdown', arm, { once: true });
     addEventListener('keydown', arm, { once: true });
+  }
+})();
+
+(function(){
+  /* THE WIDTH OF NOW. Every lane is a signal, and the marker is how old that
+     signal is at this instant; it snaps to zero when a fresh one lands. The
+     rates are the measured ones (measured-bars.md): 500 Hz control, 100 Hz
+     MAVLink, a 30.18 Hz camera, 53.9 Hz detection through the ROS graph with
+     18.0 ms of photon-to-detection ahead of it. Detection gaps are drawn from
+     the real dropout distribution -- p50 0.155 s, p90 0.651 s, p99 2.418 s,
+     max 4.00 s, over 71 gaps.
+
+     Nothing is sped up: the clock on this figure is the reader's own. A second
+     here is a second there, which is the only way the width means anything. */
+  var cv = document.getElementById('now-view');
+  if (!cv) return;
+  var ctx = cv.getContext('2d'), DPR = Math.min(2, devicePixelRatio || 1);
+  var W = 960, H = 300;
+  cv.width = W * DPR; cv.height = H * DPR; ctx.scale(DPR, DPR);
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var css = getComputedStyle(document.documentElement);
+  var INK  = (css.getPropertyValue('--ink').trim()   || '#e4e8ef'),
+      INK3 = (css.getPropertyValue('--ink-3').trim() || '#7b8598'),
+      RED  = (css.getPropertyValue('--signal').trim()|| '#ff2a14'),
+      SUNK = (css.getPropertyValue('--s-sunk').trim()|| '#04060b');
+
+  /* period: how often a fresh value lands. floor: the age it can never be
+     below, because the measurement was already that old when it arrived. */
+  var LANES = [
+    { n: 'attitude · IMU',      p: 2,     floor: 0,    c: '#3fd98a', note: '500 Hz, on the board' },
+    { n: 'depth · barometer',   p: 10,    floor: 0,    c: '#3fd98a', note: '100 Hz, over the cable' },
+    { n: 'thruster RPM',        p: 10,    floor: 0,    c: '#5aa0ff', note: 'bidirectional DShot' },
+    { n: 'camera frame',        p: 33.1,  floor: 16.9, c: '#5aa0ff', note: '30.18 Hz, mailbox 16.9 ms stale' },
+    { n: 'flow velocity',       p: 33.1,  floor: 20,   c: '#8b7cff', note: 'a frame pair, so one frame behind' },
+    { n: 'detection',           p: 18.6,  floor: 18.0, c: RED,       note: '53.9 Hz, 18.0 ms photon to detection', drops: true }
+  ];
+  var SPAN = 260;                       // ms across the lane at rest; grows for a gap
+  var mode = 'calm', paused = false;
+  var age = LANES.map(function(l){ return l.floor; });
+  var acc = LANES.map(function(){ return 0; });
+  var gapLeft = 0, last = 0, span = SPAN;
+
+  function nextGap(){
+    /* the real distribution, sampled by its own quantiles */
+    if (mode === 'calm')  return Math.random() < 0.55 ? 155 : 320;
+    if (mode === 'gap')   return 651;
+    return 4000;
+  }
+  var el = { min: document.getElementById('now-min'), max: document.getElementById('now-max'),
+             w: document.getElementById('now-w'), ticks: document.getElementById('now-ticks') };
+
+  function step(t){
+    if (!last) last = t;
+    var dt = Math.min(90, t - last);      // a tab that was away does not fabricate history
+    last = t;
+    if (!paused){
+      LANES.forEach(function(l, i){
+        age[i] += dt;
+        acc[i] += dt;
+        if (l.drops && gapLeft > 0){ gapLeft -= dt; return; }
+        if (acc[i] >= l.p){
+          acc[i] = 0;
+          age[i] = l.floor;
+          if (l.drops && Math.random() < 0.08) gapLeft = nextGap();
+        }
+      });
+    }
+    draw();
+    raf = requestAnimationFrame(step);
+  }
+
+  function draw(){
+    var oldest = Math.max.apply(null, age), newest = Math.min.apply(null, age);
+    /* the axis grows AT ONCE (a marker must never sit past the end of its own
+       scale) and relaxes slowly, so a gap's aftermath stays readable */
+    var target = Math.max(SPAN, oldest * 1.18);
+    span = target > span ? target : span + (target - span) * 0.03;
+    var x0 = 236, x1 = W - 70, lw = x1 - x0;
+    var top = 52, gap = 34;
+
+    ctx.clearRect(0, 0, W, H); ctx.fillStyle = SUNK; ctx.fillRect(0, 0, W, H);
+    ctx.font = '10px ui-monospace, monospace';
+
+    /* the band between freshest and stalest: this IS the vehicle's present */
+    var bx0 = x0 + newest / span * lw, bx1 = x0 + oldest / span * lw;
+    ctx.fillStyle = 'rgba(255,255,255,.05)';
+    ctx.fillRect(bx0, top - 16, Math.max(1, bx1 - bx0), LANES.length * gap + 6);
+    ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.setLineDash([2, 3]); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(bx1, top - 16); ctx.lineTo(bx1, top + LANES.length * gap - 10);
+    ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = INK3;
+    ctx.fillText('the width of "now"  ' + (oldest - newest).toFixed(0) + ' ms',
+                 Math.max(x0 + 60, bx1 - 150), top - 24);
+
+    /* the axis: 0 ms is the present, and nothing is ever on it */
+    ctx.strokeStyle = 'rgba(255,255,255,.16)';
+    ctx.beginPath(); ctx.moveTo(x0, top - 16); ctx.lineTo(x0, top + LANES.length * gap - 10); ctx.stroke();
+    ctx.fillStyle = INK; ctx.fillText('0 ms — the present', x0 - 4, top + LANES.length * gap + 6);
+    var stepMs = span > 2000 ? 1000 : span > 700 ? 250 : 50;
+    for (var m = stepMs; m < span; m += stepMs){
+      var gx = x0 + m / span * lw;
+      if (gx < x0 + 120) continue;           // leave room for the present's own label
+      ctx.strokeStyle = 'rgba(255,255,255,.05)';
+      ctx.beginPath(); ctx.moveTo(gx, top - 16); ctx.lineTo(gx, top + LANES.length * gap - 10); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,.22)';
+      ctx.fillText(m >= 1000 ? (m / 1000) + ' s' : m + '', gx - 8, top + LANES.length * gap + 6);
+    }
+
+    LANES.forEach(function(l, i){
+      var y = top + i * gap;
+      ctx.fillStyle = INK; ctx.font = '11px ui-monospace, monospace';
+      ctx.fillText(l.n, 14, y + 4);
+      ctx.fillStyle = 'rgba(255,255,255,.28)'; ctx.font = '9px ui-monospace, monospace';
+      ctx.fillText(l.note, 14, y + 16);
+      /* the track, and the trail from the present to where this value is */
+      ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke();
+      var ax = Math.min(x1, x0 + age[i] / span * lw);
+      var stale = l.drops && gapLeft > 0;
+      ctx.strokeStyle = stale ? RED : l.c; ctx.lineWidth = stale ? 3 : 2;
+      ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(ax, y); ctx.stroke();
+      ctx.beginPath(); ctx.arc(ax, y, stale ? 5 : 3.5, 0, 6.3);
+      ctx.fillStyle = stale ? RED : l.c; ctx.fill();
+      ctx.fillStyle = stale ? RED : 'rgba(255,255,255,.55)';
+      ctx.font = '10px ui-monospace, monospace';
+      ctx.fillText(age[i] >= 1000 ? (age[i] / 1000).toFixed(2) + ' s' : age[i].toFixed(0) + ' ms',
+                   Math.min(x1 + 6, ax + 9), y + 3.5);
+      if (stale){
+        ctx.fillStyle = RED; ctx.font = '9px ui-monospace, monospace';
+        ctx.fillText('in a gap — steering on this', Math.max(x0 + 8, ax - 170), y - 8);
+      }
+    });
+
+    el.min.textContent = newest.toFixed(1) + ' ms';
+    el.max.textContent = oldest >= 1000 ? (oldest / 1000).toFixed(2) + ' s' : oldest.toFixed(0) + ' ms';
+    el.w.textContent = (oldest - newest) >= 1000 ? ((oldest - newest) / 1000).toFixed(2) + ' s'
+                                                 : (oldest - newest).toFixed(0) + ' ms';
+    el.ticks.textContent = Math.round((oldest - newest) / 2).toLocaleString() + ' at 500 Hz';
+    el.max.style.color = oldest > 200 ? RED : '';
+    el.w.style.color = (oldest - newest) > 200 ? RED : '';
+  }
+
+  document.querySelectorAll('[data-now]').forEach(function(b){
+    b.addEventListener('click', function(){
+      mode = b.dataset.now;
+      if (mode !== 'calm') gapLeft = nextGap();
+      document.querySelectorAll('[data-now]').forEach(function(o){ o.classList.toggle('on', o === b); });
+    });
+  });
+  var pause = document.getElementById('now-pause');
+  pause.addEventListener('click', function(){
+    paused = !paused;
+    pause.setAttribute('aria-pressed', paused ? 'true' : 'false');
+    pause.textContent = paused ? 'run' : 'pause';
+  });
+
+  var raf = 0, live = true;
+  if ('IntersectionObserver' in window){
+    new IntersectionObserver(function(es){
+      live = es[0].isIntersecting;
+      if (live && !raf && !reduce) raf = requestAnimationFrame(step);
+      if (!live && raf){ cancelAnimationFrame(raf); raf = 0; last = 0; }
+    }, { threshold: 0.05 }).observe(cv);
+  }
+  if (reduce){
+    /* the still frame is an honest one: mid-gap, which is the case worth seeing */
+    age = LANES.map(function(l){ return l.drops ? 651 : l.floor + l.p * 0.5; });
+    gapLeft = 651; draw();
+  } else if (!raf) {
+    raf = requestAnimationFrame(step);
   }
 })();
 </script>
