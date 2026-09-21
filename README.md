@@ -679,48 +679,39 @@ Borrowed convictions, each with the thing it changed here.
 Two people. One writes the software; the other writes the firmware and builds the board. There
 is no third category, and nothing here is owned by an institution.
 
-<table>
-<tr>
-<td width="160" align="center">
-  <img src="https://avatars.githubusercontent.com/u/132839265?v=4" width="130" alt="Muhammad Fahim Faisal"/>
-</td>
-<td>
+<div>
+  <img src="https://avatars.githubusercontent.com/u/132839265?v=4" width="180" height="180" align="left" alt="Muhammad Fahim Faisal"/>
+  <strong>Muhammad Fahim Faisal</strong> — author<br>
+  Autonomy: perception, localization, control integration, the mission language, the simulator,
+  and this repository.<br><br>
+  Previously engineering team lead for the RoboSub 2026 campaign, AI &amp; Machine Vision sub-team
+  lead (2025), and a junior member of that team (2024) — the software placed
+  <strong>2nd at RoboSub 2023</strong> and <strong>8th in 2025</strong>.<br><br>
+  <em>"Machines that have to work when nobody is watching."</em><br><br>
+  <a href="https://fh1m.github.io/">fh1m.github.io</a> ·
+  <a href="https://github.com/fh1m">@fh1m</a> ·
+  <a href="mailto:fh1m.dev@gmail.com">fh1m.dev@gmail.com</a>
+</div>
+<br clear="both">
 
-### Muhammad Fahim Faisal — author
+---
 
-Autonomy: perception, localization, control integration, the mission language, the simulator,
-and this repository. Previously engineering team lead for the RoboSub 2026 campaign, AI &
-Machine Vision sub-team lead (2025), and a junior member of that team (2024) — the software
-placed **2nd at RoboSub 2023** and **8th in 2025**.
-
-*"Machines that have to work when nobody is watching."*
-
-[fh1m.github.io](https://fh1m.github.io/) · [@fh1m](https://github.com/fh1m) · <fh1m.dev@gmail.com>
-
-</td>
-</tr>
-<tr>
-<td>
-
-### Rakibul Islam — firmware and hardware lead
-
-The **SROT** control board and its firmware **Hengla** — an ESP32 running a 500 Hz flight loop
-beside an RP2350 that speaks bidirectional DShot. Also **Bondor**, the desktop ground station,
-and the ESC flashing tool. Each lives in his own repository, under his own authorship.
-
-Mongla does not vendor any of it. It talks across a documented wire protocol, and every change
-we need there is a pull request.
-
-[srot-control-board](https://github.com/RakibulIslam1/srot-control-board) ·
-[srot-ground-station](https://github.com/RakibulIslam1/srot-ground-station) ·
-[@RakibulIslam1](https://github.com/RakibulIslam1)
-
-</td>
-<td width="160" align="center">
-  <img src="https://avatars.githubusercontent.com/u/181973271?v=4" width="130" alt="Rakibul Islam"/>
-</td>
-</tr>
-</table>
+<div>
+  <img src="https://avatars.githubusercontent.com/u/181973271?v=4" width="180" height="180" align="right" alt="Rakibul Islam"/>
+  <div align="right">
+  <strong>Rakibul Islam</strong> — firmware and hardware lead<br>
+  The <strong>SROT</strong> control board and its firmware <strong>Hengla</strong> — an ESP32
+  running a 500 Hz flight loop beside an RP2350 that speaks bidirectional DShot. Also
+  <strong>Bondor</strong>, the desktop ground station, and the ESC flashing tool. Each lives in
+  his own repository, under his own authorship.<br><br>
+  Mongla does not vendor any of it. It talks across a documented wire protocol, and every change
+  we need there is a pull request.<br><br>
+  <a href="https://github.com/RakibulIslam1/srot-control-board">srot-control-board</a> ·
+  <a href="https://github.com/RakibulIslam1/srot-ground-station">srot-ground-station</a> ·
+  <a href="https://github.com/RakibulIslam1">@RakibulIslam1</a>
+  </div>
+</div>
+<br clear="both">
 
 ### History
 

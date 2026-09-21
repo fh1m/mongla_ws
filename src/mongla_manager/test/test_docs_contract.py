@@ -262,3 +262,23 @@ def test_site_ledger_strip_is_counted_from_the_ledger():
     r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'ledger_strip.py'), '--check'],
                        capture_output=True, text=True, cwd=ROOT)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_every_css_token_the_site_uses_is_defined():
+    """A `var(--x)` naming a token that does not exist is not an error in CSS:
+    the declaration is silently dropped. That is how the two Markdown pages lost
+    their monospace tables and their code background -- a palette rename left
+    `--red`, `--mono` and `--hull` behind in the layout, and nothing noticed.
+    Tokens set inline by a generated figure (`style="--w:.."`) count as defined."""
+    token = re.compile(r'(--[a-z0-9-]+)\s*:')
+    files = [DOCS / 'assets' / 'site.css', DOCS / 'index.html',
+             DOCS / '_layouts' / 'default.html']
+    defined = set()
+    for f in files:
+        defined |= set(token.findall(f.read_text(encoding='utf-8')))
+    missing = {}
+    for f in files:
+        used = set(re.findall(r'var\((--[a-z0-9-]+)', f.read_text(encoding='utf-8')))
+        if used - defined:
+            missing[f.name] = sorted(used - defined)
+    assert not missing, f'undefined CSS tokens: {missing}'

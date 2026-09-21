@@ -868,3 +868,27 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
 .core__k::before{content:"";width:9px;height:9px;border-radius:2px;background:var(--rule-lit)}
 .core__k.core--back::before{background:var(--signal)}
 .core__k.core--no::before{background:var(--caution)}
+
+/* ══ THE TALLY: a page that counts its own rows ══════════════════════
+   Used on the capability map in place of a diagram. One bar, four states,
+   each segment's width is its row count. Zero rows render as nothing, which
+   is the honest picture of "nothing has been in water". */
+.tally{margin:var(--s4) 0;padding:18px;border-radius:12px;background:var(--s-raised);
+  box-shadow:var(--e2)}
+.tally__bar{display:flex;gap:3px;height:14px;padding:3px;border-radius:999px;
+  background:var(--s-sunk);box-shadow:var(--e-well)}
+.tally__bar i{flex-basis:0;border-radius:999px}
+.tally__bar i[style*="flex-grow:0"]{display:none}
+.tally__key{display:flex;flex-wrap:wrap;gap:6px 20px;margin-top:14px;font-family:var(--display);
+  font-weight:800;font-size:var(--fs-micro);letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3)}
+.tally__key b{font-family:var(--data);font-size:14px;letter-spacing:0;color:#fff;margin-right:4px}
+.tally figcaption{margin-top:10px}
+/* colours follow the page's OWN emoji legend (🟣 bench, 🟡 built), not the
+   front page's state tokens -- a bar that disagrees with the key printed
+   three lines above it is worse than no bar */
+.t--water{--c:var(--state-water)} .t--bench{--c:var(--state-soft)}
+.t--built{--c:var(--cad-amber)} .t--blocked{--c:var(--state-blocked)}
+.tally__bar i{background:var(--c)}
+.tally__key span::before{content:"";display:inline-block;width:8px;height:8px;border-radius:2px;
+  margin-right:7px;background:var(--c)}

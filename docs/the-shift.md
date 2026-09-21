@@ -38,8 +38,6 @@ and be careful about the line between them.
 
 ## The old stack and its ceiling
 
-![Before and after](assets/diagrams/the-shift.svg)
-
 For RoboSub 2023 (2nd place) and 2025 (8th place), the vehicle carried **four computers**:
 
 | Box | Job |
@@ -72,7 +70,20 @@ The one-sentence version: **we could tune the vehicle, but we could not change i
 
 Two computers, one cable.
 
-![Inside the board](assets/diagrams/board-anatomy.svg)
+Here is the board's timetable. Read its two halves as two people
+who never share a desk:
+
+| Core | Task | Rate | One pass every |
+|---|---|---|---|
+| **1** | read the sensors | **500 Hz** | 2 ms |
+| **1** | run the control loop | **500 Hz** | 2 ms |
+| **1** | drive the motors (DShot) | **500 Hz** | 2 ms |
+| 0 | talk to the Pi (MAVLink) | 100 Hz | 10 ms |
+| 0 | display | 30 Hz | 33 ms |
+| 0 | radio and SD card | 20 Hz | 50 ms |
+
+Core 1 has three jobs, all on the same 500 Hz beat. Everything a human might ever wait on lives
+on core 0. That is the whole trick.
 
 ### The SROT board (firmware: *Hengla*)
 
@@ -104,8 +115,6 @@ running the position filter, and deciding what the mission does next.
 
 ### One cable
 
-![Camera to thruster](assets/diagrams/system-dataflow.svg)
-
 No network, no router, nothing in between. A single USB-C cable carrying MAVLink. The Pi
 sends *intent* — "strafe left a little", or a whole primitive such as "forward 3 seconds at
 40 %" — and the board turns that into thrust 500 times a second underneath it: roughly
@@ -114,11 +123,14 @@ sends *intent* — "strafe left a little", or a whole primitive such as "forward
 That ratio is the point of the redesign. Our loop got *slower* and the vehicle got
 *steadier*, because the fast loop moved to where it belongs.
 
+You can see how little the Pi says. "Forward 3 seconds at 40 %" is **44 bytes** on that
+cable — the envelope, a type, a duration, a speed, and a tag — and not one of them is a
+thrust. The frame is drawn byte by byte on the [front page](index.html#shift), generated from
+the same code that sends it.
+
 ---
 
 ## The four repositories
-
-![Repo map](assets/diagrams/repo-map.svg)
 
 | Repository | Codename | What it is |
 |---|---|---|
