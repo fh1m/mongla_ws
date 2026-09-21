@@ -1139,3 +1139,58 @@ footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
   .anim--chip i{transform:translateX(120px)} .anim--hop i{transform:translate(178px,0)}
   .anim--tick i{transform:translateX(200px)} .anim--light i{opacity:1;transform:translateY(24px)}
 }
+
+/* ── colour loss: three channels per venue, measured ─────────────────
+   The bar IS the measurement: width is the channel's mean level scaled to
+   that venue's brightest channel, so the red bar's shortness is the point. */
+.colour{margin:var(--s5) 0 0;padding:clamp(16px,2.2vw,26px);border-radius:14px;
+  background:var(--s-raised);box-shadow:var(--e2)}
+.colour__rows{list-style:none;margin:0;padding:0;display:grid;gap:18px;
+  grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.colour__head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+  margin-bottom:10px;padding-bottom:8px;box-shadow:0 1px 0 var(--rule)}
+.colour__head b{font-family:var(--display);font-weight:800;font-size:11px;letter-spacing:.12em;
+  text-transform:uppercase;color:#fff}
+.colour .silk{font-family:var(--display);font-weight:800;font-size:var(--fs-micro);
+  letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.chan{display:grid;grid-template-columns:14px 1fr auto;align-items:center;gap:10px;margin-top:7px}
+.chan i{display:block;height:9px;border-radius:999px;background:var(--s-sunk);
+  box-shadow:var(--e-in);position:relative}
+.chan i::after{content:"";position:absolute;inset:1px auto 1px 1px;border-radius:999px;
+  width:calc((100% - 2px) * var(--w) / 100%);background:var(--c)}
+.chan b{font-family:var(--data);font-size:11px;color:var(--ink-2);min-width:3ch;text-align:right}
+.chan--r{--c:var(--signal)} .chan--g{--c:#2fbf6a} .chan--b{--c:var(--medium-text)}
+.chan--r .silk{color:var(--signal-text)}
+.colour figcaption{margin-top:18px}
+
+/* ── the blocker board: what is in the way, and whose move it is ─────
+   Each row is keyed by who can actually clear it. Three owners, three
+   colours, and no row where the owner is "us" — which is the point. */
+.board{list-style:none;margin:var(--s4) 0 0;padding:0;display:grid;gap:8px}
+.board li{display:grid;grid-template-columns:1fr auto;gap:4px 18px;align-items:baseline;
+  padding:16px 18px;border-radius:11px;background:var(--s-raised);box-shadow:var(--e1);
+  border-left:2px solid var(--c);transition:box-shadow var(--t-mid) var(--ease),
+  transform var(--t-mid) var(--ease)}
+.board li:hover{box-shadow:var(--e3);transform:translateX(2px)}
+.board b{grid-column:1;justify-self:start;text-align:left;font-family:var(--display);
+  font-weight:700;font-size:.98rem;color:#fff;line-height:1.3}
+.board span{grid-column:1;justify-self:start;text-align:left;font-size:var(--fs-box);
+  color:var(--ink-3);line-height:1.5}
+.board em{grid-row:1 / span 2;font-style:normal;font-family:var(--display);font-weight:800;
+  font-size:var(--fs-micro);letter-spacing:.14em;text-transform:uppercase;color:var(--c);
+  align-self:center;white-space:nowrap}
+.board--water{--c:var(--state-water)} .board--fw{--c:var(--cad-amber)}
+.board--hw{--c:var(--state-blocked)}
+@media (max-width:620px){
+  .board li{grid-template-columns:1fr}
+  .board em{grid-row:auto;justify-self:start;margin-top:6px}
+}
+
+/* a pull quote: the one place on the page allowed to be personal */
+.pull{margin:var(--s5) 0 0;padding:clamp(22px,3vw,34px) clamp(20px,3vw,38px);border-radius:14px;
+  background:var(--s-raised);box-shadow:var(--e2);border-left:2px solid var(--signal);
+  font-family:var(--display);font-weight:700;font-size:clamp(1.05rem,.95rem + .7vw,1.5rem);
+  line-height:1.4;letter-spacing:-.015em;color:#fff;max-width:none}
+.pull em{font-style:normal;color:var(--signal-text)}
+.pull footer{margin-top:16px;font-family:var(--data);font-weight:400;font-size:var(--fs-caption);
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}

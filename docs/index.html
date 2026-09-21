@@ -112,6 +112,13 @@
         <td class="num" data-l="what we measured">71 real detection gaps, catalogued</td></tr>
    </tbody>
   </table>
+<!-- colour:begin -->
+  <figure class="colour" aria-label="Mean colour channel level per venue, measured over 119 real frames">
+   <ol class="colour__rows"><li><div class="colour__head"><b>Mirpur</b><span class="silk">47 frames</span></div><div class="chan chan--r"><span class="silk">r</span><i style="--w:43.7%"></i><b>82</b></div><div class="chan chan--g"><span class="silk">g</span><i style="--w:100.0%"></i><b>188</b></div><div class="chan chan--b"><span class="silk">b</span><i style="--w:93.6%"></i><b>176</b></div></li><li><div class="colour__head"><b>RoboSub</b><span class="silk">42 frames</span></div><div class="chan chan--r"><span class="silk">r</span><i style="--w:36.4%"></i><b>71</b></div><div class="chan chan--g"><span class="silk">g</span><i style="--w:100.0%"></i><b>195</b></div><div class="chan chan--b"><span class="silk">b</span><i style="--w:97.0%"></i><b>189</b></div></li><li><div class="colour__head"><b>Final run</b><span class="silk">30 frames</span></div><div class="chan chan--r"><span class="silk">r</span><i style="--w:100.0%"></i><b>174</b></div><div class="chan chan--g"><span class="silk">g</span><i style="--w:99.6%"></i><b>174</b></div><div class="chan chan--b"><span class="silk">b</span><i style="--w:99.6%"></i><b>174</b></div></li></ol>
+   <figcaption>Mean red, green and blue over <strong>119</strong> frames of our own 2025 footage — every 20th frame of each venue's folders, original captures with no HUD overlay — each venue scaled to its own brightest channel. At <strong>RoboSub</strong> red falls to <strong>36%</strong> of the strongest channel. Final run comes back level — that footage is near-neutral, which says the camera or its white balance differed, not that the water there was kinder. Two venues, two answers, from the same pipeline: that is why the number is measured per venue instead of quoted once. Measured by <code>tools/colour_loss.py</code>.</figcaption>
+  </figure>
+  <!-- colour:end -->
+
   <figure class="panel scrollable">
    <img src="assets/diagrams/field-of-view.svg" alt="Two cones from one lens: 63.8 degrees in air, 46.7 measured in water through a flat port" loading="lazy">
    <figcaption>One lens, two fields of view. The datasheet measures in air; the vehicle swims
@@ -1061,24 +1068,32 @@
   <p class="mark">Act three <i>//</i> open</p>
   <h2 class="col">Nothing here has been in water yet.</h2>
   <p class="lede col quiet">The honest list of what stands between this and a vehicle that swims:</p>
-  <ul class="plain">
-   <li>The board's depth loop has never run closed<span>two bench checks, then water</span></li>
-   <li>Thruster health cannot tell eight healthy motors from none<span>one-line firmware merge</span></li>
-   <li>Moves by measured distance are refused<span>firmware pull request</span></li>
-   <li>The board cannot yet accept a velocity measurement<span>firmware pull request</span></li>
-   <li>The competition radio cannot reach through an aluminium hull<span>external antenna</span></li>
-   <li>Three of five thrusters are populated in the CAD<span>hardware</span></li>
-   <li>No mission has been flown on this platform<span>water time</span></li>
-  </ul>
+  <ol class="board" aria-label="What stands between this and a vehicle that swims">
+   <li class="board--water"><b>The board's depth loop has never run closed</b>
+     <span>two armed bench checks, then water</span><em>water</em></li>
+   <li class="board--fw"><b>Thruster health cannot tell eight healthy motors from none</b>
+     <span>the firmware already computes it and drops it one line early</span><em>one-line merge</em></li>
+   <li class="board--fw"><b>Moves by measured distance are refused</b>
+     <span>no such primitive on the board; refused before dispatch, never faked</span><em>pull request</em></li>
+   <li class="board--fw"><b>The board cannot yet accept a velocity measurement</b>
+     <span>we have one, good to 1.09 cm over 30 cm, and nowhere to send it</span><em>pull request</em></li>
+   <li class="board--hw"><b>The competition radio cannot reach through an aluminium hull</b>
+     <span>an external antenna, not a software fix</span><em>hardware</em></li>
+   <li class="board--hw"><b>Three of five thrusters are populated in the CAD</b>
+     <span>and the firmware's mixer is written for eight</span><em>hardware</em></li>
+   <li class="board--water"><b>No mission has been flown on this platform</b>
+     <span>every number on this page says bench, footage, or board</span><em>water</em></li>
+  </ol>
   <p class="col" style="margin-top:44px">None of that is hidden, because a capability map that
     promotes bench results to flight results is how a team finds out at the venue. The live list
     is <a href="https://github.com/fh1m/mongla_ws/blob/main/.claude/context/ROADMAP.md">ROADMAP.md</a> — one status file, so it cannot
     disagree with itself.</p>
-  <p class="col">I left on principle, and I am building this on hope rather than optimism. Hope is
-    the decision to keep working on the better version of a thing while the current version is
-    still broken. Pushing a technical limit is the most concrete form of that I know: every
-    measurement that came back worse than expected is a small argument that the world is knowable,
-    and that the next version can be better than this one.</p>
+  <blockquote class="pull">I left on principle, and I am building this on <em>hope</em> rather
+    than optimism. Hope is the decision to keep working on the better version of a thing while the
+    current version is still broken. Pushing a technical limit is the most concrete form of that I
+    know: every measurement that came back worse than expected is a small argument that the world
+    is knowable, and that the next version can be better than this one.
+    <footer>Muhammad Fahim Faisal · Dhaka · 2026</footer></blockquote>
   <p class="mark" style="margin-top:40px">The next act is open <i>//</i> the machine is still being built</p>
  </div>
 </section>

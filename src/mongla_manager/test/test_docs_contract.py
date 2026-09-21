@@ -15,6 +15,7 @@ test could see:
 
 These are read as TEXT, never imported: the docs are the artefact under test.
 """
+import os
 import pathlib
 import re
 from pathlib import Path
@@ -282,3 +283,16 @@ def test_every_css_token_the_site_uses_is_defined():
         if used - defined:
             missing[f.name] = sorted(used - defined)
     assert not missing, f'undefined CSS tokens: {missing}'
+
+
+def test_site_colour_chart_matches_the_measurement():
+    """The colour-loss chart is measured off the real 2025 archive by
+    tools/colour_loss.py, which caches the result in docs/imgs/real/colour.json
+    so this check works on a machine without the 20 GB archive. If the cache and
+    the page disagree, the page is showing a number nobody measured."""
+    import subprocess
+    import sys
+    r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'colour_loss.py'), '--check'],
+                       capture_output=True, text=True, cwd=ROOT,
+                       env={k: v for k, v in os.environ.items() if k != 'MONGLA_ARCHIVE'})
+    assert r.returncode == 0, r.stdout + r.stderr

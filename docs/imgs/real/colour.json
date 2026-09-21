@@ -1,0 +1,47 @@
+{
+ "stride": 20,
+ "rows": [
+  {
+   "venue": "Mirpur",
+   "frames": 47,
+   "b": 175.9,
+   "g": 188.0,
+   "r": 82.2,
+   "bn": 0.936,
+   "gn": 1.0,
+   "rn": 0.437,
+   "folders": [
+    "raw_images/Mirpur/sun_june_29/gate",
+    "raw_images/Mirpur/sun_june_29/torpedo"
+   ]
+  },
+  {
+   "venue": "RoboSub",
+   "frames": 42,
+   "b": 188.7,
+   "g": 194.6,
+   "r": 70.8,
+   "bn": 0.97,
+   "gn": 1.0,
+   "rn": 0.364,
+   "folders": [
+    "raw_images/robosub/bin_front/2",
+    "raw_images/robosub/torpedo/shark_up/3",
+    "raw_images/robosub/octagon_front/2"
+   ]
+  },
+  {
+   "venue": "Final run",
+   "frames": 30,
+   "b": 173.8,
+   "g": 173.7,
+   "r": 174.4,
+   "bn": 0.996,
+   "gn": 0.996,
+   "rn": 1.0,
+   "folders": [
+    "raw_images/final_fun/Bin"
+   ]
+  }
+ ]
+}
