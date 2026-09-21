@@ -161,6 +161,16 @@ if not res and res.saw_target and res.x_px > 30:
 
 Compose the verbs into three phases — this is how the fixes work together:
 
+> ⛔ **On srot this exact pattern does not run.** `lock_heading()` /
+> `unlock_heading()` are refused before dispatch, and the `depth` axis of
+> `align` is refused too (it needs a streamed depth setpoint the board does not
+> take). The srot shape of the same idea: drop the lock calls entirely — the
+> board holds heading itself at 500 Hz in STABILIZE, which is what the lock was
+> emulating — and drive `lat` / `yaw` / `fwd` only, adding depth with a separate
+> `set_depth` once the depth loop is water-verified. The pattern below is
+> pixhawk/sim, and is kept because the reasoning about phases, standoff and the
+> settle gate carries over unchanged.
+
 ```
 COARSE   align('torpedo', yaw=0, lat=0, depth=0)        # all axes: square up + null heading
    |     lock_heading()                                 # hand heading to the background lock

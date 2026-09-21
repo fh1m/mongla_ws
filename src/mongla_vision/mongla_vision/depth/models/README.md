@@ -6,7 +6,7 @@ Files matching `*.onnx`, `*.pt`, `*.bin`, and `*.pth` are excluded from git
 
 ## Supported model: Depth Anything V2-Small
 
-The depth estimation node (`mongla_vision/depth_estimation_node.py`) expects a
+The depth estimation node (`mongla_vision/depth/depth_estimation_node.py`) expects a
 Depth Anything V2-Small ONNX export with:
 
 - Input:  `image`  — NCHW float32, shape `(1, 3, 364, 364)`, ImageNet-normalised

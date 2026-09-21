@@ -15,6 +15,15 @@ Full user guide (fundamentals, `VehicleProfile`, the state library, pool-day wor
 adding a task): [`.claude/context/missions/fsm-guide.md`](../../../../.claude/context/missions/fsm-guide.md).
 Vision-guided FSM design: [`.claude/context/missions/fsm-vision-missions.md`](../../../../.claude/context/missions/fsm-vision-missions.md).
 
+> ⛔ **Read this before running a plan on the vehicle.** These states were written for the
+> Pixhawk + DVL era. On the SROT board `lock_heading` (and therefore `release_heading`),
+> `move_forward_dist`, `move_back_dist`, `move_lateral_dist`, `arc` and `style_yaw` are
+> **refused before dispatch** (`srot_fc.UNSUPPORTED_VERBS`), and no DVL is fitted, so
+> `profile.has_dvl` is never true. A plan that leans on `LockHeadingState` or the distance
+> moves will not fail loudly — those verbs are refused and the plan continues — so build srot
+> plans from the timed and vision states instead. The board holds heading itself at 500 Hz.
+> Generated verb routing: [`reference/commands.md`](../../../../.claude/context/reference/commands.md).
+
 ## Layout (as built)
 
 ```
