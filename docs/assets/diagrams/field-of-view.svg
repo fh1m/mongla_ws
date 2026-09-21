@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 470" width="1160" height="470" role="img" aria-label="The camera sees 46.7 degrees in water, not the 63.8 the datasheet states"><style>text{font-family:Zed Mono,ui-monospace,monospace}.l{font-size:9.5px;fill:#788294;letter-spacing:.14em}.v{font-size:11px;fill:#e4e8ef}.r{font-size:10px;fill:#ff5747;letter-spacing:.06em}.b{font-size:10px;fill:#5a8dff;letter-spacing:.06em}.h{font-size:17px;fill:#fff;font-weight:700;letter-spacing:-.02em}.big{font-size:30px;fill:#fff;font-weight:700;letter-spacing:-.04em}</style>
+<text x="0.0" y="22.0" class="h" text-anchor="start">The lens the datasheet describes is not the lens you have</text>
+<text x="0.0" y="42.0" class="l" text-anchor="start">FLAT PORT · SNELL REFRACTION · MEASURED IN WATER, ±0.7°</text>
+<line x1="150" y1="235.0" x2="407.05074952980755" y2="75.0" stroke="#004eff" stroke-width="1.4" stroke-dasharray="4 5"/>
+<line x1="150" y1="235.0" x2="407.05074952980755" y2="395.0" stroke="#004eff" stroke-width="1.4" stroke-dasharray="4 5"/>
+<path d="M407.05074952980755,75.0 A257.05074952980755,257.05074952980755 0 0 1 407.05074952980755,395.0" fill="none" stroke="#004eff" stroke-width="1" opacity=".5" stroke-dasharray="4 5"/>
+<text x="309.4" y="126.8" class="b" transform="rotate(-31.9 309.4 126.8)">63.8°  in air — the datasheet</text>
+<line x1="150" y1="235.0" x2="520.6252173228867" y2="75.0" stroke="#ff0000" stroke-width="1.4"/>
+<line x1="150" y1="235.0" x2="520.6252173228867" y2="395.0" stroke="#ff0000" stroke-width="1.4"/>
+<path d="M520.6252173228867,75.0 A370.62521732288667,370.62521732288667 0 0 1 520.6252173228867,395.0" fill="none" stroke="#ff0000" stroke-width="1" opacity=".5"/>
+<text x="379.8" y="126.8" class="r" transform="rotate(-23.4 379.8 126.8)">46.7°  in water — measured</text>
+<circle cx="150" cy="235.0" r="9" fill="none" stroke="#e4e8ef" stroke-width="1.4"/>
+<line x1="124" y1="201.0" x2="124" y2="269.0" stroke="#e4e8ef" stroke-width="2"/>
+<text x="116.0" y="191.0" class="l" text-anchor="end">FLAT PORT</text>
+<text x="166.0" y="265.0" class="l" text-anchor="start">SENSOR</text>
+<line x1="150" y1="235.0" x2="1120" y2="235.0" stroke="#1a2030" stroke-width="1" stroke-dasharray="2 6"/>
+<line x1="0" y1="396" x2="1160" y2="396" stroke="#1a2030"/>
+<text x="0.0" y="430.0" class="big" text-anchor="start">27%</text>
+<text x="86.0" y="422.0" class="v" text-anchor="start">less world than the datasheet promises.</text>
+<text x="86.0" y="438.0" class="l" text-anchor="start">Every search pattern tuned against the air figure sweeps a view that does not exist.</text>
+</svg>

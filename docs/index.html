@@ -91,6 +91,13 @@
         <td class="num" data-l="what we measured">71 real detection gaps, catalogued</td></tr>
    </tbody>
   </table>
+  <figure class="panel scrollable">
+   <img src="assets/diagrams/field-of-view.svg" alt="Two cones from one lens: 63.8 degrees in air, 46.7 measured in water through a flat port" loading="lazy">
+   <figcaption>One lens, two fields of view. The datasheet measures in air; the vehicle swims
+     in water, and a flat port refracts. The 27 % the water takes is 27 % of the course a
+     search pattern believes it is sweeping.</figcaption>
+  </figure>
+
   <figure>
    <div class="strip">
      <img src="imgs/water-clear.png" alt="A target seen in clear water" loading="lazy">
@@ -152,11 +159,11 @@
     So the boundary moved: reflexes went onto a board we write the firmware for, and the
     companion was left to do nothing but think.</p>
   <figure class="panel scrollable">
-   <img src="assets/diagrams/the-shift.svg" alt="The old Pixhawk and Jetson architecture beside the SROT board and Raspberry Pi with Hailo" loading="lazy">
-   <figcaption>Neither architecture is cleverer than the other. The one on the bottom simply
-     gets to answer sooner, because the loop is no longer on the far side of a cable and a
-     vendor's firmware. This is also the honest reason the old stack placed well and still had
-     a ceiling: at 20 Hz you are not steering, you are voting.</figcaption>
+   <img src="assets/diagrams/loop-rate.svg" alt="The same disturbance drawn against a 20 Hz comb and a 500 Hz comb, with the unanswered interval shaded on each" loading="lazy">
+   <figcaption>Neither architecture is cleverer than the other. The one underneath simply gets
+     to answer sooner, because the loop is no longer on the far side of a cable and a vendor's
+     firmware. This is also the honest reason the old stack placed well and still had a
+     ceiling: at 20 Hz you are not steering, you are voting.</figcaption>
   </figure>
   <table class="ledger">
    <thead><tr><th>layer</th><th>what it owns</th><th>rate</th><th>state</th></tr></thead>
@@ -407,67 +414,12 @@
   <p class="lede col quiet">Not a block diagram — a time axis, with the measured spans on it, and
     the board's 500 Hz heartbeat running underneath the whole thing.</p>
   <figure class="panel scrollable">
-   <svg viewBox="0 0 820 300" role="img" aria-label="Timing diagram of one camera frame from exposure to thruster correction">
-    <style>
-      .ax{stroke:#2e3542;stroke-width:1}
-      .bt{stroke:#004eff;stroke-width:1.1;opacity:.85}
-      .t{font-family:"Zed Mono",ui-monospace,monospace;font-size:9.5px;fill:#788294;letter-spacing:.09em}
-      .tr{font-family:"Zed Mono",ui-monospace,monospace;font-size:9.5px;fill:#ff5747;letter-spacing:.09em}
-      .tb{font-family:"Zed Mono",ui-monospace,monospace;font-size:9.5px;fill:#5a8dff;letter-spacing:.09em}
-    </style>
-    <text class="t" x="62" y="22">CAMERA</text>
-    <rect x="62" y="30" width="53.7" height="18" fill="#5c0500" stroke="#ff0000"/>
-    <text class="tr" x="124" y="43">exposure + transfer</text>
-
-    <text class="t" x="62" y="72">HAILO-8</text>
-    <rect x="115.7" y="80" width="152.2" height="18" fill="#001a5c" stroke="#004eff"/>
-    <text class="tb" x="277" y="93">inference · 80.9 Hz standalone</text>
-
-    <text class="t" x="62" y="122">ROS GRAPH</text>
-    <rect x="267.9" y="130" width="54" height="18" fill="#11141c" stroke="#2e3542"/>
-    <text class="t" x="330" y="143">publish · mailbox keeps the newest frame · 16.9 ms stale</text>
-
-    <line x1="384.2" y1="26" x2="384.2" y2="214" stroke="#ff0000" stroke-width="1" stroke-dasharray="4 4"/>
-    <text class="tr" x="392" y="168">18.0 ms — the detection exists</text>
-
-    <line x1="62" y1="190" x2="384.2" y2="190" stroke="#ff5747" stroke-width="1"/>
-    <path d="M62,186 L62,194 M384.2,186 L384.2,194" stroke="#ff5747" stroke-width="1"/>
-    <text class="tr" x="392" y="194">one host command · 53.9 Hz</text>
-
-    <line class="ax" x1="62" y1="214" x2="778" y2="214"/>
-    <g class="t">
-      <text x="58" y="230">0</text><text x="233" y="230">10</text>
-      <text x="412" y="230">20</text><text x="591" y="230">30</text><text x="752" y="230">40 ms</text>
-    </g>
-    <g class="bt">
-      <line x1="62.0" y1="250" x2="62.0" y2="266"/>
-      <line x1="97.8" y1="250" x2="97.8" y2="266"/>
-      <line x1="133.6" y1="250" x2="133.6" y2="266"/>
-      <line x1="169.4" y1="250" x2="169.4" y2="266"/>
-      <line x1="205.2" y1="250" x2="205.2" y2="266"/>
-      <line x1="241.0" y1="250" x2="241.0" y2="266"/>
-      <line x1="276.8" y1="250" x2="276.8" y2="266"/>
-      <line x1="312.6" y1="250" x2="312.6" y2="266"/>
-      <line x1="348.4" y1="250" x2="348.4" y2="266"/>
-      <line x1="384.2" y1="250" x2="384.2" y2="266"/>
-      <line x1="420.0" y1="250" x2="420.0" y2="266"/>
-      <line x1="455.8" y1="250" x2="455.8" y2="266"/>
-      <line x1="491.6" y1="250" x2="491.6" y2="266"/>
-      <line x1="527.4" y1="250" x2="527.4" y2="266"/>
-      <line x1="563.2" y1="250" x2="563.2" y2="266"/>
-      <line x1="599.0" y1="250" x2="599.0" y2="266"/>
-      <line x1="634.8" y1="250" x2="634.8" y2="266"/>
-      <line x1="670.6" y1="250" x2="670.6" y2="266"/>
-      <line x1="706.4" y1="250" x2="706.4" y2="266"/>
-      <line x1="742.2" y1="250" x2="742.2" y2="266"/>
-      <line x1="778.0" y1="250" x2="778.0" y2="266"/>
-    </g>
-    <text class="tb" x="62" y="284">SROT board · 500 Hz · about 25 corrections inside one host command</text>
-   </svg>
+   <img src="assets/diagrams/frame-budget.svg" alt="One camera frame from exposure to detection, drawn to scale across 40 milliseconds, with the board's 500 Hz tick comb underneath" loading="lazy">
    <figcaption>The measurement that changed the design: a full V4L2 queue keeps the
-     <em>oldest</em> frames, so the standard advice to drain it recovers almost nothing. Treating
-     the topic as a mailbox instead — newest frame wins, surplus dropped — took staleness from
-     396 ms to 16.9 ms. Publishing <em>slower</em> made detections fresher.</figcaption>
+     <em>oldest</em> frames, so the standard advice to drain it recovers almost nothing.
+     Treating the topic as a mailbox instead — newest frame wins, surplus dropped — took
+     staleness from 396 ms to 16.9 ms. Publishing <em>slower</em> made detections
+     fresher.</figcaption>
   </figure>
  </div>
 </section>

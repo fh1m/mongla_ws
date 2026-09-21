@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 410" width="1160" height="410" role="img" aria-label="The same disturbance on a 20 Hz loop and a 500 Hz loop"><style>text{font-family:Zed Mono,ui-monospace,monospace}.l{font-size:9.5px;fill:#788294;letter-spacing:.14em}.v{font-size:11px;fill:#e4e8ef}.r{font-size:10px;fill:#ff5747;letter-spacing:.06em}.b{font-size:10px;fill:#5a8dff;letter-spacing:.06em}.h{font-size:17px;fill:#fff;font-weight:700;letter-spacing:-.02em}.big{font-size:30px;fill:#fff;font-weight:700;letter-spacing:-.04em}</style>
+<text x="0.0" y="22.0" class="h" text-anchor="start">How long a mistake is allowed to stand</text>
+<text x="0.0" y="42.0" class="l" text-anchor="start">ONE DISTURBANCE · TWO ARCHITECTURES · EACH TICK IS A CHANCE TO ANSWER</text>
+<text x="0.0" y="106.0" class="v" text-anchor="start">BEFORE</text>
+<text x="0.0" y="122.0" class="l" text-anchor="start">Pixhawk + ArduSub, corrected by our 20 Hz outer loop</text>
+<line x1="176" y1="132" x2="1104" y2="132" stroke="#1a2030" stroke-width="1"/>
+<line x1="176.0" y1="117" x2="176.0" y2="132" stroke="#004eff" stroke-width="1" opacity=".9"/>
+<line x1="640.0" y1="117" x2="640.0" y2="132" stroke="#004eff" stroke-width="1" opacity=".9"/>
+<line x1="1104.0" y1="117" x2="1104.0" y2="132" stroke="#004eff" stroke-width="1" opacity=".9"/>
+<rect x="287.4" y="110" width="352.6" height="22" fill="#004eff" opacity=".20"/>
+<line x1="287.4" y1="100" x2="640.0" y2="100" stroke="#5a8dff" stroke-width="1"/>
+<text x="463.7" y="92.0" class="b" text-anchor="middle">up to 50 ms with nobody answering</text>
+<text x="0.0" y="236.0" class="v" text-anchor="start">NOW</text>
+<text x="0.0" y="252.0" class="l" text-anchor="start">the loop is on the board, on a core nothing may interrupt</text>
+<line x1="176" y1="262" x2="1104" y2="262" stroke="#1a2030" stroke-width="1"/>
+<line x1="176.0" y1="247" x2="176.0" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="194.6" y1="253" x2="194.6" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="213.1" y1="253" x2="213.1" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="231.7" y1="253" x2="231.7" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="250.2" y1="253" x2="250.2" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="268.8" y1="247" x2="268.8" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="287.4" y1="253" x2="287.4" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="305.9" y1="253" x2="305.9" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="324.5" y1="253" x2="324.5" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="343.0" y1="253" x2="343.0" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="361.6" y1="247" x2="361.6" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="380.2" y1="253" x2="380.2" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="398.7" y1="253" x2="398.7" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="417.3" y1="253" x2="417.3" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="435.8" y1="253" x2="435.8" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="454.4" y1="247" x2="454.4" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="473.0" y1="253" x2="473.0" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="491.5" y1="253" x2="491.5" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="510.1" y1="253" x2="510.1" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="528.6" y1="253" x2="528.6" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="547.2" y1="247" x2="547.2" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="565.8" y1="253" x2="565.8" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="584.3" y1="253" x2="584.3" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="602.9" y1="253" x2="602.9" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="621.4" y1="253" x2="621.4" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="640.0" y1="247" x2="640.0" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="658.6" y1="253" x2="658.6" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="677.1" y1="253" x2="677.1" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="695.7" y1="253" x2="695.7" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="714.2" y1="253" x2="714.2" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="732.8" y1="247" x2="732.8" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="751.4" y1="253" x2="751.4" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="769.9" y1="253" x2="769.9" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="788.5" y1="253" x2="788.5" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="807.0" y1="253" x2="807.0" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="825.6" y1="247" x2="825.6" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="844.2" y1="253" x2="844.2" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="862.7" y1="253" x2="862.7" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="881.3" y1="253" x2="881.3" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="899.8" y1="253" x2="899.8" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="918.4" y1="247" x2="918.4" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="937.0" y1="253" x2="937.0" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="955.5" y1="253" x2="955.5" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="974.1" y1="253" x2="974.1" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="992.6" y1="253" x2="992.6" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="1011.2" y1="247" x2="1011.2" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="1029.8" y1="253" x2="1029.8" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="1048.3" y1="253" x2="1048.3" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="1066.9" y1="253" x2="1066.9" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="1085.4" y1="253" x2="1085.4" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<line x1="1104.0" y1="247" x2="1104.0" y2="262" stroke="#ff0000" stroke-width="1" opacity=".9"/>
+<rect x="287.4" y="240" width="18.6" height="22" fill="#ff0000" opacity=".20"/>
+<line x1="287.4" y1="230" x2="305.9" y2="230" stroke="#ff5747" stroke-width="1"/>
+<text x="314.9" y="222.0" class="r" text-anchor="start">up to 2 ms</text>
+<line x1="287.4" y1="60" x2="287.4" y2="278" stroke="#ff0000" stroke-width="1" stroke-dasharray="3 4"/>
+<text x="294.4" y="56.0" class="r" text-anchor="start">A DISTURBANCE ARRIVES</text>
+<line x1="176" y1="310" x2="1104" y2="310" stroke="#1a2030" stroke-width="1"/>
+<line x1="176.0" y1="310" x2="176.0" y2="315" stroke="#1a2030"/>
+<text x="176.0" y="329.0" class="l" text-anchor="middle">0</text>
+<line x1="361.6" y1="310" x2="361.6" y2="315" stroke="#1a2030"/>
+<text x="361.6" y="329.0" class="l" text-anchor="middle">20</text>
+<line x1="547.2" y1="310" x2="547.2" y2="315" stroke="#1a2030"/>
+<text x="547.2" y="329.0" class="l" text-anchor="middle">40</text>
+<line x1="732.8" y1="310" x2="732.8" y2="315" stroke="#1a2030"/>
+<text x="732.8" y="329.0" class="l" text-anchor="middle">60</text>
+<line x1="918.4" y1="310" x2="918.4" y2="315" stroke="#1a2030"/>
+<text x="918.4" y="329.0" class="l" text-anchor="middle">80</text>
+<line x1="1104.0" y1="310" x2="1104.0" y2="315" stroke="#1a2030"/>
+<text x="1104.0" y="329.0" class="l" text-anchor="end">100 ms</text>
+<text x="0.0" y="388.0" class="big" text-anchor="start">25×</text>
+<text x="62.0" y="380.0" class="v" text-anchor="start">corrections underneath every command the host sends.</text>
+<text x="62.0" y="396.0" class="l" text-anchor="start">Nothing about our code got faster. The boundary moved.</text>
+</svg>
