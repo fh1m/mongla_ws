@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Turn a bare Raspberry Pi 5 + Hailo-8 into a Mongla vehicle, repeatably.
 #
-# ⛔ WHY THIS EXISTS. On 2026-09-22 the vehicle was found running `duburi_ws` --
-# 122 commits behind and on the far side of the project rename, so the Pi had
-# `duburi_*` packages while the repo shipped `mongla_*`. The current stack had
-# NEVER been built on the vehicle. A deploy path that has never been exercised
-# is the thing that turns into "nothing works" on the day.
+# ⛔ WHY THIS EXISTS. On 2026-09-22 the vehicle was found running a workspace
+# 122 commits behind and on the far side of the project rename, so its package
+# names no longer matched the ones the repo ships. The current stack had NEVER
+# been built on the vehicle. A deploy path that has never been exercised is the
+# thing that turns into "nothing works" on the day.
 #
 # Every step below is one that was actually performed and observed, not a
 # plausible sequence. The measured result on that machine:
