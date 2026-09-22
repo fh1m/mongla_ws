@@ -14,8 +14,13 @@
 
 | # | move | kind | dive | value | risk | effort | score | testable before water? |
 |---|---|---|---|---|---|---|---|---|
+| G-10 | Close the depth-sign gate on the bench with `DEPTH_CMD` | OURS | control | 5 | 1 | 1 | **25.0** | **yes — today, a thumb and a disarmed board** |
 | G-01 | Make every FSM plan survive a refused verb (J04) | OURS | planning | 5 | 1 | 1 | **25.0** | yes — executes in the test suite |
 | G-03 | Measure `k_n_per_rpm2` on a fitted thruster | OURS | control | 4 | 1 | 1 | **20.0** | needs thrusters (G2), not water |
+| G-12 | Measure the ESC deadband; the yaw floor may sit inside it | SOTA | control | 4 | 1 | 1 | **20.0** | yes — one thruster on a bench |
+| G-11 | Geometric `B` + one offline pseudo-inverse + **report the scale factor** | SOTA | control | 5 | 2 | 2 | **12.5** | yes — the host half; the report is firmware PR #20 |
+| G-13 | Detect a dead thruster on **current**, not RPM | SOTA | control | 4 | 1 | 2 | **10.0** | needs firmware PR #4 + thrusters |
+| G-14 | Assign materials in CAD and get a real BG | SOTA | control | 4 | 1 | 2 | **10.0** | yes — a scale and a CAD session |
 | G-07 | Measure tool offsets and stop aiming the camera centre | OURS | vision | 4 | 1 | 1 | **20.0** | yes — a tape measure |
 | G-05 | Turn `retrodict` on by default after measuring its Pi cost | OURS | localization | 3 | 1 | 1 | **15.0** | yes — already proven correct |
 | G-02 | Publish a "do not trust me" signal from the estimator | OURS | localization | 5 | 1 | 2 | **12.5** | yes — replay a bag with flow removed |
@@ -29,6 +34,36 @@
 ---
 
 ## 2. The rows, with their evidence and their falsifier
+
+### G-10 — the highest-consequence unvalidated sign in the stack, closable today · `OURS` · control
+
+**The gap.** The board's depth loop **has never run closed** — the firmware says so in its own
+words, because the Bar30 was not fitted during development. Its sign **was inverted** and the fix
+is argued but unvalidated. **The SURFACE failsafe routes through the same loop**: a leak, a flat
+thruster pack or a lost GCS all call `depth::update()`, so if the sign is still wrong the
+emergency ascent drives the vehicle *down*
+([`srot-architecture.md` §6c](../platform/srot-architecture.md)).
+
+**The move.** The firmware already built the tool and we have never used it: `depth::preview()`
+runs the same error expression through a separate **proportional-only** instance and publishes
+`DEPTH_CMD`, readable **disarmed, with nothing spinning**. Pressurise the Bar30 port with a thumb
+and read the sign:
+
+| thumb says | `DEPTH_CMD` | verdict |
+|---|---|---|
+| deeper than target | **positive** → ascend | correct |
+| shallower than target | **negative** → descend | correct |
+| demand moves *away* from target | — | **still inverted — do not dive** |
+
+P-only is deliberate: a full PID fed a constant error winds to the rail and reports "inverted" for
+a correct loop.
+
+**The falsifier.** If `DEPTH_CMD` does not move at all under a thumb, the preview path is not
+wired the way the firmware document says, and everything above is unproven.
+
+**Why it ranks at the top.** It needs no water, no thrusters and no firmware merge — the three
+things currently blocking everything else — and it is the single sign whose error is a vehicle
+that dives when it is trying to save itself. It belongs in `bringup_check`.
 
 ### G-01 — every FSM plan aborts to SURFACE on srot · `OURS` · planning
 
@@ -155,6 +190,67 @@ the map-based half of the mission layer is unreachable at an unsurveyed venue.
 
 **The falsifier.** None needed — this is a measurement, not a hypothesis. The risk is that survey
 time at the venue is not available, which is a scheduling answer, not a technical one.
+
+### G-11 — allocate in force space, and put the scale factor on the wire · `SOTA` · control
+
+**The gap.** Durham's theorem says no choice of mixer weights makes clip-after-a-fixed-mix exact;
+our per-group scale-down is weaker still, and it runs in **demand space**, where the ±1 entries
+overstate surge and sway by **1/cos 45° = 41 %**. Separately, the board computes the applied
+scale every tick and **never transmits it**, so every published anti-windup design in this family
+is unimplementable here. Both in [`control.md` §2.1, §2.3](control.md).
+
+**The move.** A measured geometric `B`, one weighted pseudo-inverse `C = W⁻¹Bᵀ(BW⁻¹Bᵀ)⁻¹`
+computed **offline** (online cost: one 5×5 mat-vec, ~25 MACs), and the achieved wrench or the
+scale factor reported on telemetry — which is already asked for as firmware PR #20.
+
+**The falsifier.** Command a diagonal wrench that saturates one group and compare the achieved
+body acceleration against both allocators. If the pseudo-inverse does not reduce the wrench error,
+the geometry we measured is wrong and the row closes on that instead.
+
+**Risk 2** — it changes what every axis actually delivers, so gains move with it.
+
+### G-12 — the yaw floor may sit inside the ESC deadband · `SOTA` · control
+
+**The gap.** Blue Robotics publish a **±25 µs deadband** around 1500. On our ±400 µs scale that is
+**±6.25 %** producing exactly zero thrust — and `VISION_YAW_MIN_PCT = 5.0`, which the code itself
+labels *"a hardware spin-up assumption, NOT a measured value"*. If the published figure holds for
+our ESCs, **the stiction floor commands nothing at all**, and every terminal-alignment yaw
+correction below 6.25 % is silently discarded.
+
+**The move.** One thruster, one bench, a PWM ladder, and the RPM (or a current clamp) — find where
+motion actually starts.
+
+**The falsifier.** If motion starts below 5 %, the floor is fine and this row closes with a
+measured number replacing an assumption, which is still a win.
+
+### G-13 — a dead thruster is invisible on the channel we have · `SOTA` · control
+
+**The gap.** Published AUV thruster fault detection uses **voltage, current and speed**; an EKF
+bank identified a two-thruster failure in **0.1 s** on a BlueROV2. We have `ESC_STATUS(291)`
+undecodable and **958/958 frames reading exactly 0 RPM with nothing attached** — an RPM detector
+here reports a healthy zero for a missing thruster.
+
+**The move.** Firmware PR #4 already decodes per-ESC voltage/current/temperature and discards it;
+getting it on the wire makes the cheap detector possible. Cornell's version — comparing *attempted
+against actual* movement — needs nothing new at all.
+
+**The falsifier.** Unplug one thruster on the bench and watch the detector. If current does not
+separate a spinning thruster from a missing one, the channel is not discriminating and the row
+closes.
+
+### G-14 — "roll is passively stable" is an assumption, not a finding · `SOTA` · control
+
+**The gap.** Roll has no actuator, so the whole argument rests on hydrostatics — and
+**BG cannot be computed**, because Onshape reports no material assigned to any part. The
+literature's own caution is that *smaller AUVs have a relatively small stabilising moment*, and a
+published box-hull design quotes a 7.39 cm metacentric height as the thing that makes it work.
+
+**The move.** Assign materials (or weigh the parts) and compute CoG, CoB and BG. Then a bench
+incline test on the assembled hull to check the number.
+
+**The falsifier.** If the measured restoring moment is small enough that a thruster wash can roll
+the hull past the camera's usable tilt, "leave roll passive" stops being a design choice and
+becomes a ballast problem — which is a hardware answer, found by a software measurement.
 
 ---
 
