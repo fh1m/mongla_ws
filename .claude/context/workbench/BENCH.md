@@ -358,3 +358,60 @@ and the same 80-class NMS output as `yolov11s` at 42.65. That is not physically 
 artifact is suspect and the number is not used anywhere.
 
 **Lands in:** `measured-bars.md`, `hailo-vision.md` · raw: `data/hailo_bench_20260922.txt`
+
+---
+
+## B-16 · Mode interlocks and group saturation, at the actuator  `[x]` done 2026-09-22
+
+Two claims the host depends on, neither ever verified *at the motors*. Both need **both USB
+cables** — MAVLink to command, the Pico console to see what the mixer did — which is a rare state.
+
+### The barometer interlock HOLDS
+
+With the Bar30 **not connected**, requesting each mode and reading the mode back from `HEARTBEAT`
+(`set_mode` is best-effort on this wire — a silent refusal looks exactly like success):
+
+| requested | observed | verdict |
+|---|---|---|
+| STABILIZE (0) | 0 | accepted |
+| **DEPTH_HOLD (2)** | **0** | **refused** |
+| **AUTO (23)** | **0** | **refused** |
+
+This matters more than it reads. `SROT_MOVE` enters AUTO, so the refusal means **every move verb
+is denied** — the vehicle arms and will not move. And `depth::update()` is what the SURFACE
+failsafe routes through, so an AUTO accepted without a barometer would close an emergency loop on
+a measurement that does not exist. **The interlock is now verified rather than believed.**
+
+### The two thruster groups are independent — their fix works
+
+`mixer.cpp:44-66` scales down uniformly **within each group**, and the comment records why: it
+"used to compute ONE maxabs across all eight thrusters", so a saturating forward command scaled
+down roll and pitch as well — "a hard forward burst silently cost a third of the vehicle's
+roll/pitch authority, in the manoeuvre where you want it most."
+
+```
+                              M1    M2    M3    M4    M5    M6    M7    M8
+fwd 1.0 alone               1047  2046  1047  1046  1048  1238   237  1048
+fwd 1.0 + lat 0.5            705  2046  1047   705  1048  1238   237  1048
+up 0.5 alone                1048  1048  1048  1048  1750  1761  1735   746
+fwd 1.0 + lat 0.5 + up 0.5   705  2046  1047   705  1750  1761  1735   746
+```
+
+Adding heave to a **saturating** horizontal command left the horizontals **bit-identical**, and the
+verticals identical to heave alone. **Decoupled, measured.**
+
+### The saturation arithmetic, predicted before the run
+
+Written into the tool's docstring before it was executed: `fwd 1.0` and `lat 0.5` shape to 1.000
+and 0.3875, giving M2 = −1.3875 as the largest, so the group scales by 1/1.3875 = 0.7207 and the
+four normalised outputs are 0.4414, 1.0, 1.0, 0.4414 — about **657, 999, 999, 657** counts.
+
+Measured: **657, 998, 999, 657.**
+
+`up 0.5 alone` also re-confirms the heave path at a second level: ~700 counts measured against
+700.3 predicted **without** `PILOT_EXPO`.
+
+**Falsifier that passed:** had the groups been coupled, or had the scale-down been anything but
+uniform-within-group, these four numbers would have been structurally wrong, not slightly off.
+
+**Lands in:** `measured-bars.md`, `actuation_model.py` (axis paths) · raw: `data/verify.json`
