@@ -15,9 +15,12 @@ vehicle down**.
 
 **Needs:** the board, powered, **disarmed**. Nothing else. No thrusters, no water.
 
-**Procedure.** `depth::preview()` runs the same error expression through a separate
-**proportional-only** instance and publishes `DEPTH_CMD`, readable while disarmed. Pressurise the
-Bar30 port with a thumb and read the sign.
+**Procedure.** `python3 tools/depth_sign_check.py` — the tool already exists (170 lines) and
+prints a verdict. It reads `DEPTH_CMD`, which `depth::preview()` computes through a separate
+**proportional-only** instance, live while disarmed. Pressurise the Bar30 port with a thumb.
+
+⚠ You cannot do this by lifting the vehicle: a whole metre of air is ~0.12 mbar, about **1.2 mm**
+of equivalent depth.
 
 | thumb says | `DEPTH_CMD` | verdict |
 |---|---|---|
@@ -114,8 +117,18 @@ chi-squared distributed only for an already-tuned filter** — so our χ²-99 % 
 five-rejection lockout break and the ×4 inflation are all built on a statistic that is not valid
 until this run happens.
 
-**Procedure.** Board flat and undisturbed, 12 h, log raw gyro and accel. Compute Allan deviation;
-read bias instability and random walk off the curve.
+**Procedure.** `python3 tools/allan_variance.py --log --port /dev/ttyACM0 --hours 12`, board flat
+and undisturbed, then `--analyse` on the `.npz` it writes. The tool is built and its maths is
+**truth-tested** against signals with closed-form answers (`test_allan_variance.py`, 6 tests): the
+τ = 1 s intercept — the number that becomes `sigma_gyro` — recovers a known white-noise level to
+**0.11 %**.
+
+⚠ It **refuses** to report a bias instability when the curve has not turned (the minimum sitting at
+the longest τ means the log was too short, not that a floor was found) — which is the standard way
+this measurement is published wrongly. Verified: pure white noise comes back UNRESOLVED.
+
+⚠ The vehicle must be **still** for the whole run. A door slam is a rate-random-walk artefact no
+analysis can remove.
 
 **Expected:** numbers in the consumer-MEMS band. **Falsifier:** if measured noise is far from the
 nominal `Q`, every gate threshold in the estimator is re-derived from it.
