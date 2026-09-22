@@ -505,7 +505,8 @@ unactuated**.
 > quoted.
 
 You can take the hull apart yourself on the [front page](https://fh1m.github.io/mongla_ws/#body):
-a 0.9 mm-tessellated WebGL model, 40 bodies, that comes apart as you scroll.
+a 0.9 mm-tessellated WebGL model, 40 bodies, with a fader that takes it apart at your pace and
+five stops — fairings, pressure can, thrusters, handle — you can jump straight to.
 
 ---
 

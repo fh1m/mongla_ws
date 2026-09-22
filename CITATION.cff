@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+message: "If you use Mongla, or any measurement out of its ledger, please cite it."
+title: "Mongla: an autonomy stack for autonomous underwater vehicles"
+abstract: >-
+  An independent ROS 2 control, mission and perception stack for autonomous
+  underwater vehicles: reflexes on a 500 Hz flight board, thinking on a
+  Raspberry Pi 5 with a Hailo-8, and a public measurement ledger that keeps its
+  own retractions. Nothing in this stack has been in water.
+type: software
+license: MIT
+repository-code: "https://github.com/fh1m/mongla_ws"
+url: "https://fh1m.github.io/mongla_ws/"
+date-released: "2026-09-22"
+keywords:
+  - autonomous underwater vehicle
+  - ROS 2
+  - robotics
+  - computer vision
+  - state estimation
+  - RoboSub
+authors:
+  - family-names: Faisal
+    given-names: Muhammad Fahim
+    alias: fh1m
+    email: fh1m.dev@gmail.com
+    city: Dhaka
+    country: BD
+  - family-names: Islam
+    given-names: Rakibul
+    alias: RakibulIslam1
+    country: BD
