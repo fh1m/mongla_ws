@@ -12,6 +12,7 @@ Five documents. Four dossiers, one ledger. They answer one question, subsystem b
 | [`localization.md`](localization.md) | the estimator, its sources, and what happens when it is lost |
 | [`planning.md`](planning.md) | the DSL, the executive, and what "robust mission" means elsewhere |
 | [`SOTA-GAPS.md`](SOTA-GAPS.md) | **the ledger** — every gap and every candidate move, ranked |
+| [`sources/`](sources/) | the raw research dossiers the sweeps produced, kept verbatim — every link that was actually fetched, every table, and every "claim I could not verify" |
 
 ## The bar
 
