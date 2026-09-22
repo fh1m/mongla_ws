@@ -1934,3 +1934,10 @@ pre::-webkit-scrollbar-track,.scrollable::-webkit-scrollbar-track{background:tra
 .colophon__note{margin-top:22px;font-family:var(--data);font-size:10.5px;
   line-height:1.7;color:var(--ink-3);max-width:74ch}
 @media (max-width:900px){.colophon{grid-template-columns:1fr}}
+
+/* the depth readout is pressable: it dives to the hull and opens it */
+.dock__depth{border:0;font:inherit;color:inherit;cursor:pointer;
+  transition:color 160ms var(--ease),transform 160ms var(--ease)}
+.dock__depth:hover b{color:var(--signal-text)}
+.dock__depth:active{transform:translateY(1px)}
+.dock__depth:focus-visible{outline:2px solid var(--signal);outline-offset:3px}

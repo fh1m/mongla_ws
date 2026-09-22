@@ -38,7 +38,8 @@
     <span class="dock__name" id="dock-name">surface</span>
     <span class="dock__sea"><canvas id="dock-sea" aria-hidden="true"></canvas>
       <span class="dock__tip" id="dock-tip" hidden></span></span>
-    <span class="dock__depth"><b id="dock-depth">0</b><small>m</small></span>
+    <button class="dock__depth" id="dock-dive" type="button"
+            title="Dive to the hull, and take it apart"><b id="dock-depth">0</b><small>m</small></button>
     <button class="dock__snd" id="dock-snd" type="button" aria-pressed="false"
           title="Water, synthesised in the browser — off by default">
     <svg viewBox="0 0 24 24" aria-hidden="true" width="13" height="13">
@@ -2178,6 +2179,23 @@
 <script src="assets/hull-viewer.js" defer></script>
 <script>
 (function(){
+  /* The dock's depth readout is a dive: it takes the reader to the hull and
+     opens it, rather than making them find the fader. The viewer publishes
+     `apply` when it boots, so this moves the same control the buttons move --
+     no second implementation of the explode, and nothing scroll-driven. */
+  var dive = document.getElementById('dock-dive');
+  if (dive) dive.addEventListener('click', function(){
+    var stage = document.getElementById('explode-stage');
+    if (!stage) return;
+    stage.scrollIntoView({behavior: matchMedia('(prefers-reduced-motion: reduce)').matches
+                                    ? 'auto' : 'smooth', block: 'start'});
+    var tries = 0;
+    (function open(){                      /* the model loads lazily; wait for it */
+      if (window.__monglaHullOpen) return window.__monglaHullOpen(0.66);
+      if (tries++ < 40) setTimeout(open, 250);
+    })();
+  });
+
   /* Film grain, re-seeded per visit. The CSS carries a static tile so the
      surface exists with JS off; this swaps in one with a random seed and a
      slightly different frequency, so no two visits carry the same grain. */
@@ -2725,6 +2743,7 @@
         });
       });
       apply(0);
+      window.__monglaHullOpen = apply;      /* the dock dives to this */
 
       /* The deck: physical keys for the same actions the keyboard has. Zoom and
          reset send the viewer the very keydown it already handles, so there is
