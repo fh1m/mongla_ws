@@ -102,3 +102,70 @@ def test_a_real_minimum_is_found_when_one_exists():
 def test_a_short_record_raises_rather_than_returning_nonsense():
     with pytest.raises(ValueError):
         overlapping_allan(np.zeros(8), 100.0)
+
+
+# ── the on-disk record: a 12 h run must survive being read back ──────────────
+
+def _write_log(tmp_path, n=4000, period_ms=20, drop_at=None):
+    """A synthetic streamed log, written exactly as `log_imu` writes one."""
+    from allan_variance import RECORD
+
+    rng = np.random.default_rng(5)
+    r = np.zeros(n, dtype=RECORD)
+    bms = np.arange(n, dtype=np.int64) * period_ms
+    if drop_at is not None:
+        bms[drop_at:] += 40 * period_ms          # a hole: 40 samples lost
+    r['t'] = 1.7e9 + bms * 1e-3
+    r['bms'] = bms
+    r['gyro'] = rng.normal(0.0, 5.0, (n, 3))
+    r['accel'] = rng.normal(0.0, 9.0, (n, 3))
+    r['temp'] = 3150
+    p = tmp_path / 'imu.bin'
+    p.write_bytes(r.tobytes())
+    (tmp_path / 'imu.meta.json').write_text('{"msg_type": "SCALED_IMU2"}')
+    return p
+
+
+def test_a_streamed_log_reads_back_with_the_board_clock_and_rate(tmp_path):
+    from allan_variance import load_record
+
+    d = load_record(_write_log(tmp_path))
+
+    assert d['board_clock'] is True
+    assert abs(d['rate'] - 50.0) < 0.01          # 20 ms period
+    assert d['gyro'].shape[0] == 3               # axes first, as analyse wants
+    assert d['msg_type'] == 'SCALED_IMU2'
+
+
+def test_analysis_refuses_a_log_whose_message_type_is_unknown(tmp_path):
+    """Without the meta file the units are unknown. Guessing them would print a
+    plausible number for an unknown quantity -- the defect this tool exists to
+    stop."""
+    from allan_variance import load_record
+
+    p = _write_log(tmp_path)
+    (tmp_path / 'imu.meta.json').unlink()
+
+    with pytest.raises(SystemExit):
+        load_record(p)
+
+
+def test_a_dropped_frame_shows_as_a_gap_in_the_board_clock(tmp_path, capsys):
+    """Allan deviation assumes uniform sampling. A blocked reader loses frames,
+    and averaging across the hole reports a longer tau than was observed -- in
+    the direction that flatters the part. The board clock is what exposes it."""
+    from allan_variance import analyse
+
+    analyse(_write_log(tmp_path, drop_at=2000))
+
+    out = capsys.readouterr().out
+    assert 'gaps in the board clock' in out
+    assert '39 samples missing' in out or '40 samples missing' in out
+
+
+def test_a_clean_log_is_not_accused_of_gaps(tmp_path, capsys):
+    from allan_variance import analyse
+
+    analyse(_write_log(tmp_path))
+
+    assert 'no gaps' in capsys.readouterr().out
