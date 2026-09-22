@@ -630,6 +630,48 @@ figure.panel figcaption{margin-top:clamp(16px,2vw,26px);padding-top:14px;
 .shots__row .silk{display:block;margin-bottom:5px;font-family:var(--display);font-weight:800;
   font-size:var(--fs-micro);letter-spacing:.14em;text-transform:uppercase;color:var(--signal-text)}
 
+/* ── further reading, as cards ─────────────────────────────────────────
+   A three-column table of links reads as a spreadsheet and wastes the width on
+   a phone. Each row is a card: what you want, why this one, and where to go. */
+.reads{list-style:none;margin:var(--s5) 0 0;padding:0;display:grid;gap:10px;
+  grid-template-columns:repeat(auto-fit,minmax(290px,1fr))}
+.reads li{display:flex;flex-direction:column;gap:8px;padding:16px 18px;border-radius:13px;
+  background:var(--s-raised);box-shadow:var(--e1);
+  transition:transform 240ms var(--ease),box-shadow 240ms var(--ease)}
+.reads li:hover{transform:translateY(-2px);box-shadow:var(--e2)}
+.reads .silk{font-family:var(--display);font-weight:800;font-size:var(--fs-micro);
+  letter-spacing:.13em;text-transform:uppercase;color:var(--signal-text)}
+.reads .why{margin:0;font-family:var(--prose);font-size:var(--fs-box);line-height:1.55;
+  color:var(--ink-2)}
+.reads .go{margin:auto 0 0;padding-top:10px;box-shadow:0 -1px 0 var(--rule);
+  font-family:var(--data);font-size:11px;color:var(--ink-3);word-break:break-word}
+.reads .go a{color:var(--ink);border-bottom:1px solid var(--rule-lit)}
+.reads .go a:hover{color:#fff;border-bottom-color:var(--signal)}
+
+/* ── the chapter break carries the vehicle across it ───────────────────
+   The breaks were a numeral, two lines and a great deal of nothing. Now the
+   hull crosses each one under its own waterline: the same glyph as the title,
+   so the page has one animal in it rather than a new one per section. */
+.chapter{position:relative;overflow:hidden}
+.chapter__sea{position:absolute;left:0;right:0;bottom:0;height:120px;pointer-events:none}
+.chapter__wave{position:absolute;left:0;right:0;bottom:34px;width:100%;height:46px;overflow:visible}
+.chapter__wave path{fill:none;stroke:var(--rule-lit);stroke-width:1.5;vector-effect:non-scaling-stroke;
+  animation:swell 16s linear infinite}
+.chapter__hull{position:absolute;bottom:18px;width:104px;height:auto;opacity:.5;
+  animation:patrol 40s linear infinite}
+.chapter__hull rect,.chapter__hull path{fill:var(--ink-3)}
+.chapter__hull .fin{fill:var(--rule-lit)}
+.chapter__hull .eye{fill:var(--signal)}
+.chapter__hull .ping circle{fill:none;stroke:var(--signal);stroke-width:1.5;opacity:0;
+  animation:pingout 4s var(--ease) infinite}
+.chapter__hull .ping circle:nth-child(2){animation-delay:.45s}
+@keyframes pingout{0%{opacity:.6;transform:scale(.25);transform-origin:96px 22px}
+  70%,100%{opacity:0;transform:scale(1.6);transform-origin:96px 22px}}
+@media (prefers-reduced-motion:reduce){
+  .chapter__hull,.chapter__wave path,.chapter__hull .ping circle{animation:none}
+  .chapter__hull{left:12%}
+}
+
 /* ── shoulders, as a dive ──────────────────────────────────────────────
    A list of influences is a bookshelf. Here each voice sits at a depth and
    points at the instrument in this vehicle it actually moved; the panel shows
@@ -1164,15 +1206,23 @@ body > footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
 }
 
 /* ── chapter break: a log entry, full bleed ──────────────────────── */
-.chapter{min-height:62svh;display:flex;align-items:center;
-  padding:clamp(60px,10vh,120px) var(--gutter);
+/* 62svh of mostly nothing was a scroll tax between chapters; the break is a
+   band now, with the numeral as the field it sits on rather than a shape
+   floating beside the title */
+.chapter{min-height:38svh;display:flex;align-items:center;
+  padding:clamp(44px,7vh,86px) var(--gutter) clamp(64px,9vh,104px);
   border-top:1px solid var(--rule);position:relative;overflow:hidden}
 .chapter::before,.chapter::after{display:none}
-.chapter .wrap{width:100%;display:grid;grid-template-columns:auto 1fr;
-  gap:clamp(24px,5vw,72px);align-items:center;max-width:var(--wrap)}
+.chapter .wrap{width:100%;position:relative;display:grid;grid-template-columns:auto 1fr;
+  gap:clamp(20px,4vw,56px);align-items:center;max-width:var(--wrap)}
 .chapter .no{font-family:var(--display);font-weight:700;
-  font-size:clamp(4rem,2rem + 11vw,13rem);line-height:.8;letter-spacing:-.07em;
+  font-size:clamp(3.4rem,1.6rem + 8vw,9rem);line-height:.78;letter-spacing:-.07em;
   color:transparent;-webkit-text-stroke:1px var(--rule-lit)}
+/* and a second, huge copy behind everything: the chapter's own field mark */
+.chapter .wrap::after{content:attr(data-no);position:absolute;right:0;top:50%;
+  transform:translateY(-50%);font-family:var(--display);font-weight:800;
+  font-size:clamp(9rem,6rem + 18vw,22rem);line-height:.72;letter-spacing:-.08em;
+  color:rgba(255,255,255,.022);pointer-events:none;z-index:-1}
 .chapter h2{margin:0}
 .chapter .sub{margin-top:14px;color:var(--ink-3);font-family:var(--data);
   font-size:11px;letter-spacing:.2em;text-transform:uppercase}
