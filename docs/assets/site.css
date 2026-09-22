@@ -519,15 +519,17 @@ code,.n{font-family:var(--data);font-size:.87em;color:var(--medium-text)}
 /* ── the explode stage: the canvas is PINNED and the scroll drives it ──
    A viewer that scrolls out of frame halfway through its own animation is
    the animation not happening. The stage is tall; the bay sticks inside it. */
- /* 300vh made the section feel like a trap -- three screens of scrolling before
-   the page moved on. 190vh is enough travel to read the explode as a motion
-   and short enough that a reader who does not care is past it quickly. */
-.stage{position:relative;margin-top:44px;height:190vh}
+ /* 300vh -> 190 -> 115. Anything longer reads as the viewer holding the page
+   hostage: the reader did not ask to be pinned, and a pinned section they did
+   not ask for is the same complaint whether it is 3 screens or 2. 115vh is one
+   screen of travel -- enough to read the explode as a motion, short enough that
+   scrolling past it feels like scrolling. */
+.stage{position:relative;margin-top:44px;height:115vh}
 .stage .bay{position:sticky;top:7vh;margin-top:0}
-.stage .bay canvas{height:min(78vh,720px)}
+.stage .bay canvas{height:min(66vh,600px)}
 .beats{position:absolute;inset:auto 0 0 0;list-style:none;margin:0;padding:0;
   pointer-events:none;height:100%;display:block}
-.beats li{position:sticky;top:calc(7vh + min(78vh,720px) + 22px);
+.beats li{position:sticky;top:calc(7vh + min(66vh,600px) + 20px);
   max-width:var(--measure);opacity:0;transform:translateY(8px);
   transition:opacity 300ms var(--ease),transform 300ms var(--ease);
   height:0;overflow:visible;
@@ -653,11 +655,11 @@ figure.panel figcaption{margin-top:clamp(16px,2vw,26px);padding-top:14px;
    hull crosses each one under its own waterline: the same glyph as the title,
    so the page has one animal in it rather than a new one per section. */
 .chapter{position:relative;overflow:hidden}
-.chapter__sea{position:absolute;left:0;right:0;bottom:0;height:120px;pointer-events:none}
-.chapter__wave{position:absolute;left:0;right:0;bottom:34px;width:100%;height:46px;overflow:visible}
+.chapter__sea{position:absolute;left:0;right:0;bottom:0;height:78px;pointer-events:none}
+.chapter__wave{position:absolute;left:0;right:0;bottom:22px;width:100%;height:34px;overflow:visible}
 .chapter__wave path{fill:none;stroke:var(--rule-lit);stroke-width:1.5;vector-effect:non-scaling-stroke;
   animation:swell 16s linear infinite}
-.chapter__hull{position:absolute;bottom:18px;width:104px;height:auto;opacity:.5;
+.chapter__hull{position:absolute;bottom:10px;width:76px;height:auto;opacity:.45;
   animation:patrol 40s linear infinite}
 .chapter__hull rect,.chapter__hull path{fill:var(--ink-3)}
 .chapter__hull .fin{fill:var(--rule-lit)}
@@ -997,7 +999,12 @@ figure.panel figcaption{margin-top:clamp(16px,2vw,26px);padding-top:14px;
 /* fill the row, but never fewer than four across on a wide screen: capping the
    TILE width left a third of the section empty, capping the COUNT does not */
 .strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:9px}
-@media (min-width:1100px){ .strip{grid-template-columns:repeat(4,1fr)} }
+@media (min-width:1100px){
+  .strip{grid-template-columns:repeat(4,1fr)}
+  /* two photos in a four-column grid left half the section empty */
+  .strip:has(img:nth-child(2):last-child){grid-template-columns:repeat(2,1fr)}
+  .strip:has(img:nth-child(3):last-child){grid-template-columns:repeat(3,1fr)}
+}
 .hud-pair{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
   margin-top:var(--s5)}
 .hud-pair .hero-render{margin-top:0}
@@ -1011,7 +1018,7 @@ figure.panel figcaption{margin-top:clamp(16px,2vw,26px);padding-top:14px;
   .plate:not(:has(> figure:nth-child(4):last-child)){grid-template-columns:repeat(3,1fr)}
 }
 
-.strip img{aspect-ratio:1;object-fit:cover;max-height:340px;filter:saturate(.55) contrast(1.1) brightness(.82);
+.strip img{aspect-ratio:1;object-fit:cover;max-height:clamp(240px,26vw,380px);filter:saturate(.55) contrast(1.1) brightness(.82);
   transition:filter var(--t-mid) var(--ease),transform var(--t-mid) var(--ease)}
 .strip img:hover{filter:none;transform:translateY(-3px)}
 .bleed{margin-left:calc(-1 * var(--gutter));margin-right:calc(-1 * var(--gutter))}
@@ -1209,21 +1216,23 @@ body > footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
 /* 62svh of mostly nothing was a scroll tax between chapters; the break is a
    band now, with the numeral as the field it sits on rather than a shape
    floating beside the title */
-.chapter{min-height:38svh;display:flex;align-items:center;
-  padding:clamp(44px,7vh,86px) var(--gutter) clamp(64px,9vh,104px);
+/* a divider, not a chapter page: it marks a change of subject and gets out of
+   the way. 62svh -> 38 -> 20, with the type stepped down to match. */
+.chapter{min-height:0;display:flex;align-items:center;
+  padding:clamp(34px,5vh,58px) var(--gutter) clamp(46px,6.5vh,74px);
   border-top:1px solid var(--rule);position:relative;overflow:hidden}
 .chapter::before,.chapter::after{display:none}
 .chapter .wrap{width:100%;position:relative;display:grid;grid-template-columns:auto 1fr;
   gap:clamp(20px,4vw,56px);align-items:center;max-width:var(--wrap)}
 .chapter .no{font-family:var(--display);font-weight:700;
-  font-size:clamp(3.4rem,1.6rem + 8vw,9rem);line-height:.78;letter-spacing:-.07em;
+  font-size:clamp(2rem,1rem + 3.4vw,3.6rem);line-height:.78;letter-spacing:-.06em;
   color:transparent;-webkit-text-stroke:1px var(--rule-lit)}
 /* and a second, huge copy behind everything: the chapter's own field mark */
 .chapter .wrap::after{content:attr(data-no);position:absolute;right:0;top:50%;
   transform:translateY(-50%);font-family:var(--display);font-weight:800;
-  font-size:clamp(9rem,6rem + 18vw,22rem);line-height:.72;letter-spacing:-.08em;
-  color:rgba(255,255,255,.022);pointer-events:none;z-index:-1}
-.chapter h2{margin:0}
+  font-size:clamp(5rem,3rem + 9vw,11rem);line-height:.72;letter-spacing:-.08em;
+  color:rgba(255,255,255,.02);pointer-events:none;z-index:-1}
+.chapter h2{margin:0;font-size:clamp(1.15rem,.9rem + .8vw,1.6rem)}
 .chapter .sub{margin-top:14px;color:var(--ink-3);font-family:var(--data);
   font-size:11px;letter-spacing:.2em;text-transform:uppercase}
 .chapter .hair{position:absolute;left:0;right:0;bottom:0;height:1px;
@@ -1747,7 +1756,7 @@ body > footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
   box-shadow:var(--e2)}
 .result .silk{font-family:var(--display);font-weight:800;font-size:var(--fs-micro);letter-spacing:.14em;
   text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:12px}
-.result .frame{position:relative;aspect-ratio:4/3;border-radius:8px;background:var(--s-sunk);
+.result .frame{position:relative;aspect-ratio:21/9;border-radius:8px;background:var(--s-sunk);
   box-shadow:var(--e-well);overflow:hidden}
 .result .frame i,.result .frame b,.result .frame u,.result .frame em{position:absolute;display:block}
 .result .cx{left:50%;top:0;bottom:0;width:1px;background:var(--rule-lit)}
