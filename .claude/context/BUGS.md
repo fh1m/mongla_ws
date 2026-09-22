@@ -624,6 +624,49 @@ the highest-consequence kind of stale claim.
 **Decision needed, not a fix to guess at:** exercise it and keep it, or delete
 the tree and stop calling it built.
 
+### J04 — every FSM plan aborts to SURFACE on srot, one state after DIVE  🔴 OPEN (found 2026-09-22)
+
+Found while mapping the planner for the SOTA dive, and verified by grep before
+being written down.
+
+The chain, each link checked in the tree:
+
+| # | fact | evidence |
+|---|---|---|
+| 1 | `VehicleProfile.has_heading_lock` exists and is **False on srot** | `state_machines/core/vehicle_profile.py:52` |
+| 2 | it has **zero callers** anywhere in the workspace | `grep -rn has_heading_lock src/` returns only the definition |
+| 3 | `LockHeadingState` dispatches the verb **unconditionally** | `state_machines/states/navigation.py:99` |
+| 4 | srot **refuses** `lock_heading` before dispatch | `fc/srot_fc.py:2823-2827` `UNSUPPORTED_VERBS` |
+| 5 | the client turns a refusal into a raise | `mongla_planner/client.py:36` `MoveFailed` |
+| 6 | the state layer turns **any** exception into `stop()` + `ABORT` | `core/base_state.py:44-54` |
+| 7 | every plan wires `ABORT: 'SURFACE'` on `LOCK_HDG` | e.g. `plans/full_competition.py:124-126` |
+| 8 | **all eight** plans build a `LockHeadingState` | `full_competition`, `gate_then_bin`, `gate_flare`, `prequal`, `bin_drop`, `return_gate`, `slalom`, `torpedo_fire` |
+
+**Consequence:** on the srot backend every FSM plan arms, dives, and then
+surfaces — one state after `DIVE`, before a single task is attempted. Nothing
+warns; `LAST_ERROR` carries the refusal and the run ends looking orderly.
+
+⛔ **The document says the opposite.** `state_machines/README.md`: *"A plan that
+leans on `LockHeadingState` or the distance moves will not fail loudly — those
+verbs are refused and the plan continues."* The plan does not continue. By
+contrast `has_distance_moves` **is** consulted (`navigation.py:153, 188, 223`),
+which is what the heading-lock path was supposed to copy.
+
+**Why no test caught it:** `test_sauvc_srot_port.py:26-33` executes only the
+three SAUVC **script** missions against `UNSUPPORTED_VERBS`. No FSM plan is
+covered. `test_fire_state_and_plan_build.py` only asserts the plans *construct* —
+YASMIN validates transition maps at `add_state()` time, not the verbs a state
+will call.
+
+**Inert only while J03 is true** (the FSM has never run) — and J03's stated
+decision is "exercise it and keep it", which is exactly when this bites.
+
+**The fix is not a guess:** consult `profile.has_heading_lock` in
+`LockHeadingState._run` and skip with a loud log, the way
+`_warn_no_distance_move` (`navigation.py:106-125`) already does for the distance
+verbs. The guard that must bite: a test that **executes** each plan's states
+against `srot_fc.UNSUPPORTED_VERBS`, not one that only builds the graph.
+
 ---
 
 ## 6. Consolidation record — what was deleted, migrated, and rewritten
