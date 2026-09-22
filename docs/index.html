@@ -4316,6 +4316,14 @@
     if (st.seen){ st.drift *= 0.94; st.bx += (st.x - st.bx) * 0.08; st.by += (st.y - st.by) * 0.08; }
     else st.drift += (Math.random() - 0.5) * 0.02 * dt * 10;
 
+    chrome();
+  }
+
+  /* the HTML around the canvas -- which step is lit, and what it is saying.
+     Called from step() AND from draw(), because a jump with nothing animating
+     (reduced motion, or paused) must still leave the page describing the state
+     it jumped to rather than the one it left. */
+  function chrome(){
     stepBtns.forEach(function(b){
       var on = +b.dataset.s === st.task && st.phase !== 'arm';
       b.classList.toggle('on', on);
@@ -4341,6 +4349,7 @@
   }
 
   function draw(){
+    chrome();
     ctx.clearRect(0, 0, W, H); ctx.fillStyle = SUNK; ctx.fillRect(0, 0, W, H);
     var tk = TASKS[Math.max(0, st.task)];
 
