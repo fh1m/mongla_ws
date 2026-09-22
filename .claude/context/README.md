@@ -76,8 +76,15 @@ something it is not. Code beats docs; a measurement beats both — see
 46. [Planning, the DSL and the mission executive, against the world](sota/planning.md)
 47. [The gap ledger — every move, ranked](sota/SOTA-GAPS.md)
 
+## Part IX — The workbench
+
+48. [The workbench — what is being measured, and what it said](workbench/README.md)
+49. [Bench — everything provable without water](workbench/BENCH.md)
+50. [Pool — one section per session, agenda written before travel](workbench/POOL.md)
+51. [Research owed — the questions the sweeps could not answer](workbench/RESEARCH-OWED.md)
+
 ## Appendix — History and elsewhere
 
-48. [Legacy: the Pixhawk backend and ArduSub SITL](platform/legacy-pixhawk-and-sitl.md)
-49. [RoboSub Team Intelligence — Mongla Vision Roadmap](scouting/README.md)
-50. [Future TODO -- shrink `commands.py` registry](future/future-registry-shrinkage.md)
+52. [Legacy: the Pixhawk backend and ArduSub SITL](platform/legacy-pixhawk-and-sitl.md)
+53. [RoboSub Team Intelligence — Mongla Vision Roadmap](scouting/README.md)
+54. [Future TODO -- shrink `commands.py` registry](future/future-registry-shrinkage.md)
