@@ -54,6 +54,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # consumer MEMS part, whose 1/f corner typically sits in the 10-1000 s decade.
 MIN_USEFUL_HOURS = 2.0
 MAX_TAU_FRACTION = 0.4          # never average over more than 40 % of the record
+# A long unattended run that only writes at the end is one power blip away from
+# losing everything. Checkpoint, so the worst case costs five minutes, not a
+# night -- the same lesson that cost two research sweeps when agents held their
+# findings in memory and then hit a limit.
+CHECKPOINT_S = 300.0
 
 
 # ───────────────────────────────────────────────────────────── the maths ──
@@ -141,6 +146,26 @@ def characterise(tau: np.ndarray, sigma: np.ndarray, kind: str) -> dict:
 
 # ──────────────────────────────────────────────────────────── the logger ──
 
+def _save(out_path: Path, ts, bts, gx, gy, gz, ax, ay, az, mtype: str) -> None:
+    """Write the record so far. Atomic: write a temp file and rename, so a kill
+    mid-write cannot leave a truncated npz where a good one used to be."""
+    t = np.asarray(ts)
+    b = np.asarray(bts, dtype=float)
+    if t.size < 2:
+        return
+    board_clock = bool(np.any(b > 0)) and float(np.median(np.diff(b))) > 0
+    rate = (1000.0 / float(np.median(np.diff(b))) if board_clock
+            else 1.0 / float(np.median(np.diff(t))))
+    tmp = out_path.with_suffix('.npz.part')
+    np.savez_compressed(
+        tmp, t=t, t_board_ms=b, board_clock=board_clock, rate_hz=rate,
+        msg_type=mtype,
+        gyro=np.vstack([gx, gy, gz]).astype(float),
+        accel=np.vstack([ax, ay, az]).astype(float),
+        taken=datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))
+    tmp.replace(out_path)
+
+
 def log_imu(port: str, hours: float, out_path: Path) -> Path:
     """Passively record the board's IMU.
 
@@ -155,7 +180,7 @@ def log_imu(port: str, hours: float, out_path: Path) -> Path:
 
     t_start = time.time()
     t_end = t_start + seconds
-    ts, gx, gy, gz, ax, ay, az = [], [], [], [], [], [], []
+    ts, bts, gx, gy, gz, ax, ay, az = [], [], [], [], [], [], [], []
     last_report = t_start
     msg = None
     while time.time() < t_end:
@@ -165,19 +190,41 @@ def log_imu(port: str, hours: float, out_path: Path) -> Path:
             continue
         d = msg.to_dict()
         ts.append(time.time())
+        # ⚠ THE BOARD'S OWN CLOCK, NOT ARRIVAL TIME. Allan deviation assumes
+        # uniform sampling, and host arrival jitter on this link was measured at
+        # sd 4.741 ms -- which at a 20 ms period is a quarter of the interval and
+        # would land entirely in the short-tau region we are trying to read.
+        # `time_boot_ms` is stamped where the sample was taken.
+        bts.append(d.get('time_boot_ms', 0))
         gx.append(d['xgyro']); gy.append(d['ygyro']); gz.append(d['zgyro'])
         ax.append(d['xacc']);  ay.append(d['yacc']);  az.append(d['zacc'])
-        if time.time() - last_report > 300:
-            print(f'  {(time.time() - t_start) / 3600.0:.2f} h, {len(ts)} samples',
-                  flush=True)
+        if time.time() - last_report > CHECKPOINT_S:
+            _save(out_path, ts, bts, gx, gy, gz, ax, ay, az, msg.get_type())
+            print(f'  {(time.time() - t_start) / 3600.0:.2f} h, {len(ts)} samples, '
+                  f'checkpointed', flush=True)
             last_report = time.time()
 
     ts = np.asarray(ts)
+    bts = np.asarray(bts, dtype=float)
     if ts.size < 1000:
         raise SystemExit(f'only {ts.size} samples -- is the board streaming IMU?')
-    rate = 1.0 / float(np.median(np.diff(ts)))
+
+    # Prefer the board clock. Fall back to arrival time only if the board does
+    # not stamp, and SAY SO -- a silent fallback would quietly invalidate the
+    # short-tau end of every curve.
+    board_clock = bool(np.any(bts > 0)) and float(np.median(np.diff(bts))) > 0
+    if board_clock:
+        rate = 1000.0 / float(np.median(np.diff(bts)))
+        jitter = float(np.std(np.diff(ts))) * 1e3
+        print(f'using the board clock: {rate:.2f} Hz '
+              f'(host arrival jitter was sd {jitter:.2f} ms, excluded)')
+    else:
+        rate = 1.0 / float(np.median(np.diff(ts)))
+        print(f'⚠ board does not stamp time_boot_ms -- falling back to ARRIVAL '
+              f'time at {rate:.2f} Hz. Short-tau results carry link jitter.')
     np.savez_compressed(
-        out_path, t=ts, rate_hz=rate, msg_type=msg.get_type(),
+        out_path, t=ts, t_board_ms=bts, board_clock=board_clock,
+        rate_hz=rate, msg_type=msg.get_type(),
         gyro=np.vstack([gx, gy, gz]).astype(float),
         accel=np.vstack([ax, ay, az]).astype(float),
         taken=datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))
@@ -198,7 +245,8 @@ def analyse(path: Path) -> int:
     gyro = d['gyro'] * 1e-3
     accel = d['accel'] * 9.80665e-3
 
-    print(f'\n{path.name}: {t.size} samples, {rate:.1f} Hz, {hours:.2f} h, {mtype}')
+    clock = 'board clock' if bool(d['board_clock']) else 'HOST ARRIVAL TIME (jittered)'
+    print(f'\n{path.name}: {t.size} samples, {rate:.1f} Hz, {hours:.2f} h, {mtype}, {clock}')
     if hours < MIN_USEFUL_HOURS:
         print(f'⚠ {hours:.2f} h is under the {MIN_USEFUL_HOURS} h floor -- the '
               f'bias-instability minimum will very likely be unresolved.')
