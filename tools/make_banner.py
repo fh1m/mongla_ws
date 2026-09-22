@@ -245,16 +245,17 @@ def site_svg(full: bool) -> str:
             f'<rect x="49" y="49" width="{W - 98}" height="{H - 98}" fill="none" stroke="{rule}"/>{ticks}</svg>')
 
 
-def shoot(html: str, out: Path) -> None:
+def shoot(html: str, out: Path, size: tuple[int, int] | None = None) -> None:
     chrome = shutil.which('google-chrome-stable') or shutil.which('google-chrome')
     if not chrome:
         raise SystemExit('google-chrome not found; cannot render the banner')
+    w, h = size or (W, H)
     with tempfile.TemporaryDirectory() as td:
         src = Path(td) / 'banner.html'
         src.write_text(html, encoding='utf-8')
         subprocess.run([chrome, '--headless=new', '--disable-gpu', '--hide-scrollbars',
                         '--allow-file-access-from-files', '--force-device-scale-factor=1',
-                        f'--window-size={W},{H}', f'--screenshot={out}',
+                        f'--window-size={w},{h}', f'--screenshot={out}',
                         f'--user-data-dir={td}/profile', '--virtual-time-budget=6000',
                         src.as_uri()],
                        check=True, capture_output=True, timeout=180)

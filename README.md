@@ -289,6 +289,8 @@ sequenceDiagram
 
 ## The fundamentals
 
+<p align="center"><img src="docs/imgs/banners/fundamentals.png" alt="Act one, the fundamentals: a 500 Hz comb at 2 ms a tick, and the critically damped step response of the loop it drives." width="100%"></p>
+
 > *"The first principle is that you must not fool yourself — and you are the easiest person to
 > fool."* — Richard Feynman, [Cargo Cult Science](https://calteches.library.caltech.edu/51/2/CargoCult.htm), 1974
 
@@ -475,6 +477,8 @@ it that way.
 
 ## The machine
 
+<p align="center"><img src="docs/imgs/banners/machine.png" alt="Act two, the machine: the hull in profile, dimensioned 702.0 mm with its three tunnel thrusters and the axial unit in the nose, read off the CAD." width="100%"></p>
+
 | part | what |
 |---|---|
 | flight controller | **SROT board**, firmware **Hengla** — ESP32 (dual core) + RP2350 |
@@ -599,6 +603,32 @@ stateDiagram-v2
 
 ---
 
+## A run, from the inside
+
+The vehicle does not know where it is. It knows what it *believes*, and how sure it is — and
+those are different things the moment the detector blinks.
+
+A mission is not a list of waypoints executed. It is three things happening at once, on three
+different clocks, and the interesting part is what happens when they disagree.
+
+<p align="center"><img src="docs/imgs/readme/brain-run.webp" alt="Three panes on one clock: what Mongla sees (the forward camera at 30.18 Hz, with a detection on the bins and the lock rung named), what it believes (the course as priors, truth against belief, with the certainty drawn as a growing circle), and what it does (the verb in flight, the three axis demands, and the run budget — 26 seconds of 60 spent, two tasks done)." width="100%"></p>
+
+| the pane | the clock | what it is really showing |
+|---|---|---|
+| **what it sees** | 30.18 Hz — the camera's true capture rate, measured | the detector *blinks*. Across 71 recorded gaps the median blink is **0.155 s** and the worst is **4.00 s**, so the thing control follows is never the raw detection — it is a lock climbing a measured ladder: live box, tracker coast, geometric anchor, then a refusal said out loud |
+| **what it believes** | corrected when a measurement arrives, not when it is convenient | there is no GPS and no DVL, so between sightings the belief is dead reckoning and it **drifts**. The circle is how sure it is, and it grows while the vehicle is blind. A prior for where a task should be is not a sighting of it |
+| **what it does** | 50 Hz — the host's command rate into the board | one verb in flight at a time, with a budget. A verb that cannot finish **says so**: the run ends a task early on purpose, because that is what the budget did |
+
+The rule the three panes exist to make visible: **a task that cannot be done must not cost the
+run.** Refusing loudly and moving on scores more than a vehicle that spends sixty seconds
+proving it cannot see a gate.
+
+**See it yourself:** [ride along for a whole run](https://fh1m.github.io/mongla_ws/#brain) —
+scrub to any task, change the speed, and watch the belief circle grow every time the detector
+blinks.
+
+---
+
 ## What keeps it from hurting someone
 
 > *"For a successful technology, reality must take precedence over public relations, for nature
@@ -672,6 +702,8 @@ the kind of thing that goes stale — `test_doc_drift.py` fails any doc that sta
 ---
 
 ## The ledger
+
+<p align="center"><img src="docs/imgs/banners/ledger.png" alt="The ledger: fifty entries drawn as fifty marks — eight struck through because they take an earlier result back, five amber because the measurement said no." width="100%"></p>
 
 > *"It doesn't make any difference how beautiful your guess is… If it disagrees with experiment,
 > it's wrong."* — Richard Feynman
@@ -801,6 +833,8 @@ The simulator earned its place by being wrong in the same places the pool is:
 ---
 
 ## What stands in the way
+
+<p align="center"><img src="docs/imgs/banners/open.png" alt="Act three, open: the waterline with depth rungs at one, two and three metres, and the vehicle still on the surface. Zero metres reached, to date." width="100%"></p>
 
 > *"A ship in port is safe, but that is not what ships are built for."* — John A. Shedd, 1928;
 > [a motto Grace Hopper lived by](https://quoteinvestigator.com/2013/12/09/safe-harbor/)

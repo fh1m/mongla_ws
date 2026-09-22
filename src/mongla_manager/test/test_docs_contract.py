@@ -419,3 +419,21 @@ def test_live_board_panel_matches_the_snapshot():
     r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'board_panel.py'), '--check'],
                        capture_output=True, text=True, cwd=ROOT)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_readme_section_banners_exist_and_are_referenced():
+    """Four section banners open the README's movements, drawn by
+    tools/section_banners.py from the same chart the title banner uses. A
+    reference to an image that is not there renders as a broken box on the
+    front page of the project, and GitHub caches it."""
+    import subprocess
+    import sys
+    r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'section_banners.py'), '--check'],
+                       capture_output=True, text=True, cwd=ROOT)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+    readme = (ROOT / 'README.md').read_text(encoding='utf-8')
+    for src in re.findall(r'src="(docs/imgs/banners/[^"]+)"', readme):
+        assert (ROOT / src).exists(), f'README references {src}, which does not exist'
+    assert readme.count('docs/imgs/banners/') == 4, \
+        'expected the four section banners in the README'

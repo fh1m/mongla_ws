@@ -4450,7 +4450,11 @@
   document.getElementById('brain-again').addEventListener('click', function(){ reset(); playing = true; setPlay(); });
   speedEl.addEventListener('input', function(){ speedOut.textContent = (+speedEl.value) + '×'; });
   stepBtns.forEach(function(b){
-    b.addEventListener('click', function(){ reset(+b.dataset.s < 0 ? undefined : +b.dataset.s); playing = true; setPlay(); });
+    b.addEventListener('click', function(){
+      reset(+b.dataset.s < 0 ? undefined : +b.dataset.s);
+      playing = !reduce; setPlay();
+      draw();                      /* paint the jump even when nothing is animating */
+    });
   });
   setPlay(); draw();
   if ('IntersectionObserver' in window){
