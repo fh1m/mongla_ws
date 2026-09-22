@@ -62,6 +62,21 @@ DSHOT_SPAN = 999
 # outright (mixer.cpp:102), so the floor does not apply.
 CENTRE_EPS = 0.005
 
+# ⛔ THE FOUR AXES DO NOT SHARE A PATH, and assuming they do is wrong by 17 %.
+# `task_control_loop.cpp:158-165` applies PILOT_EXPO to forward and lateral
+# ONLY, before the mode switch. Then, in STABILIZE (:167+):
+#
+#   fwd, lat    the shaped pilot demand          -> PILOT_EXPO applies
+#   throttle    `thr = in.sp_throttle`, RAW      -> PILOT_EXPO does NOT apply
+#   yaw         `attitude::stabilize(...)` output -> not a demand at all
+#
+# Measured 2026-09-22 on M5 (the vertical with no roll trim at neutral): a 0.30
+# heave demand produced 544 counts. Without PILOT_EXPO the chain predicts 542;
+# with it, 463. The axes are not interchangeable.
+SHAPED_AXES = frozenset({'fwd', 'lat'})     # PILOT_EXPO applies
+RAW_AXES = frozenset({'up'})                # straight to the thrust curve
+CONTROLLED_AXES = frozenset({'yaw'})        # a controller output; not modellable
+
 
 def pilot_expo(d: float, expo: float = DEF_PILOT_EXPO) -> float:
     """Stick shaping. `task_control_loop.cpp:161`, `attitude_control.cpp:22`."""
@@ -112,24 +127,42 @@ def _solve_pilot_expo(t: float, expo: float = DEF_PILOT_EXPO) -> float:
     return 0.5 * (lo + hi)
 
 
-def demand_to_fraction(d: float, *, pilot: float = DEF_PILOT_EXPO,
+def demand_to_fraction(d: float, *, axis: str = 'fwd',
+                       pilot: float = DEF_PILOT_EXPO,
                        thst: float = DEF_MOT_THST_EXPO,
                        spin_min: float = DEF_MOT_SPIN_MIN) -> float:
     """A single-axis demand in -1..1 -> signed output fraction of full scale.
 
+    ⛔ `axis` is not decoration. `fwd`/`lat` are shaped by PILOT_EXPO and `up`
+    is not; passing the default for a heave command overstates it by about 17 %.
+    `yaw` RAISES, because in STABILIZE yaw is the attitude controller's output
+    and depends on heading error and body rate -- there is no static function
+    from a yaw demand to an output, and returning one would be a fabrication.
+
     Single axis only: with two axes active the mixer's per-group saturation
     scaling (mixer.cpp:56) couples them, and that is not modelled here.
     """
+    if axis in CONTROLLED_AXES:
+        raise ValueError(
+            f'{axis!r} is a controller output in STABILIZE '
+            f'(attitude::stabilize, task_control_loop.cpp), not a demand. It '
+            f'depends on heading error and body rate, so no static model of it '
+            f'exists. Measure it live on the Pico console instead.')
+    if axis not in SHAPED_AXES and axis not in RAW_AXES:
+        raise ValueError(f'unknown axis {axis!r}: expected one of '
+                         f'{sorted(SHAPED_AXES | RAW_AXES | CONTROLLED_AXES)}')
     if not math.isfinite(d):
         return 0.0
     mag = min(abs(d), 1.0)
     if mag < CENTRE_EPS:
         return 0.0                       # mixer.cpp:102 -- centred means stopped
-    shaped = spin_min + (1.0 - spin_min) * thrust_expo(pilot_expo(mag), thst)
+    t = pilot_expo(mag, pilot) if axis in SHAPED_AXES else mag
+    shaped = spin_min + (1.0 - spin_min) * thrust_expo(t, thst)
     return math.copysign(min(shaped, 1.0), d)
 
 
-def fraction_to_demand(f: float, *, pilot: float = DEF_PILOT_EXPO,
+def fraction_to_demand(f: float, *, axis: str = 'fwd',
+                       pilot: float = DEF_PILOT_EXPO,
                        thst: float = DEF_MOT_THST_EXPO,
                        spin_min: float = DEF_MOT_SPIN_MIN) -> float:
     """The demand that produces output fraction `f`. The inverse of
@@ -145,14 +178,15 @@ def fraction_to_demand(f: float, *, pilot: float = DEF_PILOT_EXPO,
     if not math.isfinite(f) or f == 0.0:
         return 0.0
     mag = min(abs(f), 1.0)
-    if mag < min_fraction(pilot=pilot, thst=thst, spin_min=spin_min):
+    if mag < min_fraction(axis=axis, pilot=pilot, thst=thst, spin_min=spin_min):
         return 0.0
     thr = (mag - spin_min) / (1.0 - spin_min)
     t = inverse_thrust_expo(thr, thst)
-    return math.copysign(_solve_pilot_expo(t, pilot), f)
+    d = _solve_pilot_expo(t, pilot) if axis in SHAPED_AXES else t
+    return math.copysign(d, f)
 
 
-def min_fraction(*, pilot: float = DEF_PILOT_EXPO,
+def min_fraction(*, axis: str = 'fwd', pilot: float = DEF_PILOT_EXPO,
                  thst: float = DEF_MOT_THST_EXPO,
                  spin_min: float = DEF_MOT_SPIN_MIN) -> float:
     """The smallest non-zero output this vehicle can ACHIEVE, as a fraction of
@@ -172,7 +206,7 @@ def min_fraction(*, pilot: float = DEF_PILOT_EXPO,
     Measured 2026-09-22: a demand of 0.02, the smallest tried, already produced
     18.1 % of full scale.
     """
-    return demand_to_fraction(CENTRE_EPS, pilot=pilot, thst=thst,
+    return demand_to_fraction(CENTRE_EPS, axis=axis, pilot=pilot, thst=thst,
                               spin_min=spin_min)
 
 
