@@ -69,6 +69,15 @@ something it is not. Code beats docs; a measurement beats both — see
 42. [Mongla / mongla_ws — Unified Bug Register](BUGS.md)
 43. [Upstream asks — `mongla_ws` → `srot-control-board](upstream/README.md)
 
+## Part VIII — Against the world
+
+47. [Against the world — how Mongla compares to the best work there is](sota/README.md)
+48. [Control, against the world](sota/control.md)
+49. [Vision, against the world](sota/vision.md)
+50. [Localization, against the world](sota/localization.md)
+51. [Planning, the DSL and the mission executive, against the world](sota/planning.md)
+52. [The gap ledger — every move, ranked](sota/SOTA-GAPS.md)
+
 ## Appendix — History and elsewhere
 
 44. [Legacy: the Pixhawk backend and ArduSub SITL](platform/legacy-pixhawk-and-sitl.md)
