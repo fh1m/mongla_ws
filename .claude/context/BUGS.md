@@ -119,6 +119,67 @@ already does.
 
 ## 2. HIGH
 
+### B50 — the pre-flight gate PASSES with no cameras attached `MEASURED ON THE VEHICLE`  ✅ FIXED 2026-09-22
+**`mongla_manager/bringup_check.py` · `_physical_cameras()`**
+
+Measured on the vehicle on 2026-09-22 with **both cameras physically removed**:
+
+```
+[PASS] USB cameras   2 USB camera(s): platform-1000800000.codec-video-index0,
+                                      platform-1000880000.pisp_be-video-index0
+```
+
+Those are the Raspberry Pi's hardware video **codec** and its **ISP backend**.
+They are `/dev/v4l/by-path/*-video-index0` nodes present on every Pi 5 whether
+or not a camera exists, and the filter took everything the glob returned.
+
+⛔ **A pre-flight gate that passes on a hull with no cameras is worse than no
+gate.** On the day, a dead camera cable reads as PASS.
+
+**Why it never showed before:** the Jetson has no codec/ISP video nodes, so the
+defect appeared the moment the default platform became a Pi — and section J has
+apparently not been run on this platform since.
+
+**Fix:** require `-usb-` in the by-path name, which is what the function's own
+docstring always claimed ("Distinct USB video capture devices"). With no
+cameras it now reports `WARN  NO USB cameras`. Guarded by
+`test_bringup_gate_does_not_pass_on_absent_hardware.py`; injection-verified by
+restoring the old filter, which fails three of its tests.
+
+### B51 — section K checks for TensorRT on a Hailo vehicle, so it can never pass `MEASURED` ✅ FIXED 2026-09-22
+**`mongla_manager/bringup_check.py` · `_check_models()`**
+
+The same run reported:
+
+```
+K. Vision models (TensorRT)
+[WARN] model engines   0/4 models have a .engine; ... will run slow .pt (~3-4 Hz)
+                       -- ros2 run mongla_vision export_engine --all (ON THE JETSON)
+```
+
+The default platform is a Pi 5 + Hailo-8. The flight artifact is a `.hef`;
+TensorRT does not exist there, and the remediation names a machine this vehicle
+is not. The check could not pass on a correctly-configured vehicle, so its
+warning carried no information.
+
+**Fix:** detect the accelerator (`/dev/hailo*` or `hailortcli`) and check the
+matching artifact. The Hailo branch also **FAILS on a `.hef` with no
+`<stem>.yaml` sidecar** — a missing sidecar empties the class allowlist, so the
+detector returns `[]` every frame while the pipeline looks healthy, which is
+silent and fatal to a run.
+
+**What it then found, which is the real finding:**
+
+```
+[FAIL] Hailo present but NO .hef in .../src/mongla_vision/models (4 .pt found).
+       The .pt path is not the flight path on this platform -- compile the models
+```
+
+**The tree ships zero compiled models.** A fresh Pi provisioned from this repo
+has nothing to fly. Same fact as `sota/SOTA-GAPS.md` G-15, now enforced by the
+gate rather than noted in a dossier.
+
+
 ### B03 — a false sync byte silently eats the next real packet `REPRODUCED`  ✅ FIXED 2026-09-08 (`0c1099a`)
 **`nucleus_parser.py` · same function as B02**
 
