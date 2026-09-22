@@ -407,3 +407,15 @@ def test_front_page_long_read_cards_match_their_documents():
     r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'site_pages.py'), '--check'],
                        capture_output=True, text=True, cwd=ROOT)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_live_board_panel_matches_the_snapshot():
+    """The board panel on the front page is rendered from docs/data/board.json
+    by tools/board_panel.py -- a reading taken over the cable, not prose. If the
+    page and the snapshot disagree, the page is claiming something the board did
+    not say."""
+    import subprocess
+    import sys
+    r = subprocess.run([sys.executable, str(ROOT / 'tools' / 'board_panel.py'), '--check'],
+                       capture_output=True, text=True, cwd=ROOT)
+    assert r.returncode == 0, r.stdout + r.stderr

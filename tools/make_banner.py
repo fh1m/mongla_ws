@@ -20,6 +20,7 @@ It is HTML in the site's own faces, screenshotted by headless Chrome:
     docs/imgs/mongla-banner-light.png  light  2560x1100  (a paper chart)
 
     python3 tools/make_banner.py              # write both
+    python3 tools/make_banner.py --site       # the same chart as the site's hero and page sea
     python3 tools/make_banner.py --keep-html  # also keep the HTML to open in a browser
 """
 from __future__ import annotations
@@ -75,7 +76,8 @@ def chart_svg(line: str, strong: str, label: str) -> str:
         for seg in segs:
             if len(seg) < 8:
                 continue
-            d = 'M' + ' L'.join(f'{x:.1f},{y:.1f}' for x, y in seg)
+            pts = seg[::2] if len(seg) > 40 else seg          # halve the points; invisible at this scale
+            d = 'M' + ' L'.join(f'{x:.0f},{y:.0f}' for x, y in pts)
             out.append(f'<path d="{d}" stroke="{strong if major else line}" '
                        f'stroke-width="{1.4 if major else 0.7}" fill="none"/>')
             if major and len(seg) > 60:
@@ -208,6 +210,41 @@ h1 em{{font-style:normal;color:{red}}}
 '''
 
 
+SITE_HERO = REPO / 'docs' / 'assets' / 'chart-hero.svg'
+SITE_PAGE = REPO / 'docs' / 'assets' / 'chart-page.svg'
+
+
+def site_svg(full: bool) -> str:
+    """The same chart, for the site. `full` is the hero: contours, soundings,
+    the dive track, the rose and the graduated neat line. The page version is
+    contours only, for the faint sea behind every section. Text in an SVG used
+    as an image cannot reach the page's webfonts, so the soundings name a
+    monospace fallback and stay small enough that the swap does not show."""
+    line, strong, label, rule = '#0e2033', '#1a3a59', '#28496b', '#162131'
+    ink, ink3, red = '#eef1f6', '#667085', '#ff2a14'
+    body = chart_svg(line, strong, label)
+    if not full:
+        body = ''.join(p + '/>' for p in body.split('/>') if p.startswith('<path'))
+        return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" '
+                f'preserveAspectRatio="xMidYMid slice">{body}</svg>')
+    ticks = ''.join(f'<line x1="{x}" y1="40" x2="{x}" y2="48" stroke="{ink3}" stroke-opacity=".6"/>'
+                    f'<line x1="{x}" y1="{H - 48}" x2="{x}" y2="{H - 40}" stroke="{ink3}" stroke-opacity=".6"/>'
+                    for x in range(80, W - 60, 80))
+    ticks += ''.join(f'<line x1="40" y1="{y}" x2="48" y2="{y}" stroke="{ink3}" stroke-opacity=".6"/>'
+                     f'<line x1="{W - 48}" y1="{y}" x2="{W - 40}" y2="{y}" stroke="{ink3}" stroke-opacity=".6"/>'
+                     for y in range(80, H - 60, 80))
+    rose = (f'<g transform="translate(1349,155)"><circle r="60" fill="none" stroke="{ink3}" stroke-width="1.2"/>'
+            f'<circle r="46" fill="none" stroke="{rule}"/>'
+            f'<path d="M0,-64 L7,0 L0,8 L-7,0 Z" fill="{red}"/><path d="M0,64 L7,0 L0,-8 L-7,0 Z" fill="{ink3}"/></g>')
+    style = ('<style>.clab{font:700 13px ui-monospace,monospace}.snd{font:400 15px ui-monospace,monospace}'
+             '.snd2{font-size:10.5px}.wp{font:700 17px ui-monospace,monospace;letter-spacing:.2em;'
+             'text-transform:uppercase}</style>')
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" '
+            f'preserveAspectRatio="xMidYMid slice">{style}{body}{track_svg(red, ink, ink3)}{rose}'
+            f'<rect x="40" y="40" width="{W - 80}" height="{H - 80}" fill="none" stroke="{rule}" stroke-width="1.5"/>'
+            f'<rect x="49" y="49" width="{W - 98}" height="{H - 98}" fill="none" stroke="{rule}"/>{ticks}</svg>')
+
+
 def shoot(html: str, out: Path) -> None:
     chrome = shutil.which('google-chrome-stable') or shutil.which('google-chrome')
     if not chrome:
@@ -225,6 +262,11 @@ def shoot(html: str, out: Path) -> None:
 
 
 def main() -> int:
+    if '--site' in sys.argv:
+        for full, out in ((True, SITE_HERO), (False, SITE_PAGE)):
+            out.write_text(site_svg(full), encoding='utf-8')
+            print(f'{out.relative_to(REPO)}  {out.stat().st_size // 1024} KB')
+        return 0
     keep = '--keep-html' in sys.argv
     for dark, out in ((True, OUT_DARK), (False, OUT_LIGHT)):
         html = page(dark)

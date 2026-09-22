@@ -1,0 +1,177 @@
+{
+ "taken": "2026-09-22T03:20:06Z",
+ "port": "/dev/ttyUSB0",
+ "baud": 115200,
+ "seconds": 40.0,
+ "passive": false,
+ "link": {
+  "bytes_per_s": 2417.2,
+  "wire_bytes_per_s": 11520.0,
+  "used_pct": 21.0,
+  "messages_per_s": 78.3,
+  "bad_frames": 160
+ },
+ "rates_hz": {
+  "NAMED_VALUE_FLOAT": 29.0,
+  "UNKNOWN_291": 9.8,
+  "ATTITUDE": 9.8,
+  "SCALED_IMU2": 9.8,
+  "VFR_HUD": 4.9,
+  "UNKNOWN_11030": 4.9,
+  "UNKNOWN_11031": 4.9,
+  "SYS_STATUS": 2.0,
+  "HEARTBEAT": 1.0,
+  "POWER_STATUS": 1.0,
+  "BATTERY_STATUS": 0.9,
+  "STATUSTEXT": 0.1,
+  "PARAM_VALUE": 0.1
+ },
+ "named_value_float": {
+  "LEAK": {
+   "hz": 2.0,
+   "last": 0.0
+  },
+  "STUNT_PRG": {
+   "hz": 2.0,
+   "last": 0.0
+  },
+  "ATUNE": {
+   "hz": 2.0,
+   "last": 0.0
+  },
+  "KILL": {
+   "hz": 2.0,
+   "last": 0.0
+  },
+  "CURR": {
+   "hz": 2.0,
+   "last": 0.0
+  },
+  "GAIN": {
+   "hz": 2.0,
+   "last": 1.0
+  },
+  "MAGACC": {
+   "hz": 2.0,
+   "last": 1.0
+  },
+  "YAW_REF": {
+   "hz": 2.0,
+   "last": 2.0
+  },
+  "BARO_P2P": {
+   "hz": 2.0,
+   "last": 0.0
+  },
+  "BARO_HEALT": {
+   "hz": 2.0,
+   "last": 3.0
+  },
+  "COMP_SEEN": {
+   "hz": 2.0,
+   "last": 0.0
+  },
+  "MIX_VERT": {
+   "hz": 2.0,
+   "last": -1.0
+  },
+  "MIX_VSGN": {
+   "hz": 2.0,
+   "last": 4.0
+  },
+  "STK_MAV": {
+   "hz": 0.5,
+   "last": 5176.0
+  },
+  "STK_SEN": {
+   "hz": 0.5,
+   "last": 6388.0
+  },
+  "STK_CTL": {
+   "hz": 0.5,
+   "last": 4980.0
+  },
+  "STK_UI": {
+   "hz": 0.5,
+   "last": 4100.0
+  },
+  "STK_LORA": {
+   "hz": 0.5,
+   "last": 4160.0
+  },
+  "STK_DSH": {
+   "hz": 0.5,
+   "last": 2868.0
+  },
+  "HEAP": {
+   "hz": 0.5,
+   "last": 156472.0
+  }
+ },
+ "params": {
+  "MOT_7_DIRECTION": -1.0,
+  "MOT_8_DIRECTION": 1.0
+ },
+ "batteries": {
+  "0": {
+   "voltage_mv": 19026,
+   "current_ca": -1
+  }
+ },
+ "statustext": [
+  "MAG cal PRESENT |off|=17.5uT sx=1.35",
+  "PM2_SRC=1 has no 2nd ADC - using ESP-NOW; set it t",
+  "CFG r14 FR=1 DIR=-1,1,1,1,1,1,1,-1",
+  "ESP-NOW started",
+  "Mag yaw ref: sampling",
+  "Mag yaw ref: LOCKED - heading is absolute"
+ ],
+ "heartbeat": {
+  "base_mode": 81,
+  "custom_mode": 19,
+  "system_status": 3,
+  "armed": false
+ },
+ "hud": {
+  "alt_m": -0.0,
+  "heading_deg": 0,
+  "groundspeed": 0.0,
+  "throttle": 0
+ },
+ "sensors": {
+  "present": [
+   "3D_ACCEL",
+   "ANGULAR_RATE_CONTROL",
+   "ATTITUDE_STABILIZATION"
+  ],
+  "enabled": [
+   "3D_ACCEL",
+   "ANGULAR_RATE_CONTROL",
+   "ATTITUDE_STABILIZATION"
+  ],
+  "health": [
+   "3D_ACCEL",
+   "ANGULAR_RATE_CONTROL"
+  ],
+  "present_extended": [
+   "LEAK"
+  ],
+  "enabled_extended": [
+   "LEAK"
+  ],
+  "health_extended": [
+   "LEAK"
+  ],
+  "extended_raw": {
+   "present_extended": 2,
+   "enabled_extended": 2,
+   "health_extended": 2
+  },
+  "voltage_battery_mv": 17615,
+  "raw": {
+   "onboard_control_sensors_present": 2149596171,
+   "onboard_control_sensors_enabled": 2112523,
+   "onboard_control_sensors_health": 2104323
+  }
+ }
+}
