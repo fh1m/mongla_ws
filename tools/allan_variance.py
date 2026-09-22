@@ -397,11 +397,13 @@ def main() -> int:
     ap.add_argument('--log', action='store_true', help='record from the board')
     # ⚠ THE BOARD PRESENTS TWO SERIAL DEVICES, and only one speaks MAVLink:
     #   /dev/ttyUSB0  CH340 (1a86:7523)  -- the ESP32. MAVLink. THIS one.
+    #                 Addressed BY-ID: it re-enumerates, and the number moves.
     #   /dev/ttyACM0  Pico 2 (2e8a:000f) -- the RP2350's ESC debug console, which
     #                 emits plain text ("M1[cmd=0 out=0 rpm=0 ...]"). pymavlink
     #                 decodes that as an endless run of BAD_DATA, so the port
     #                 looks busy and alive while yielding no IMU at all.
-    ap.add_argument('--port', default='/dev/ttyUSB0')
+    ap.add_argument('--port',
+                    default='/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0')
     ap.add_argument('--hours', type=float, default=12.0)
     ap.add_argument('--out', help='where to write (default: CWD)')
     ap.add_argument('--analyse', metavar='BIN')
