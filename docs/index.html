@@ -860,90 +860,46 @@
     a propeller should turn. Every stop carries the number measured there and the file that does
     the work — and the last two carry the honest word for what has not been measured yet.</p>
 
-  <div class="journey">
-   <div class="journey__rail" aria-hidden="true">
-    <svg class="spine" viewBox="0 0 24 1000" preserveAspectRatio="none">
-     <line class="spine__track" x1="12" y1="0" x2="12" y2="1000"/>
-     <line class="spine__lit" x1="12" y1="0" x2="12" y2="1000" pathLength="1"/>
-    </svg>
-    <div class="readout">
-     <span class="silk silk--b" id="j-n">01 · light</span>
-     <b><span id="j-num">30.18</span><u id="j-unit">Hz</u></b>
-     <span id="j-lab">true capture, asked for 60</span>
+  <div class="theatre" id="theatre">
+   <!-- the budget: the measured stages, to scale, and clickable -->
+   <div class="theatre__budget" role="tablist" aria-label="The ten stages, by measured cost">
+    <span class="silk">The 18.0 ms path, to scale <i>//</i> hatched stages come after it</span>
+    <div class="theatre__bar" id="tbar"></div>
+    <div class="theatre__axis"><span>exposure</span>
+     <span>18.0 ms · a detection exists · 10.20 of it measured on the chip</span>
+     <span>downstream</span></div>
+   </div>
+
+   <div class="theatre__stage">
+    <div class="theatre__screen">
+     <canvas id="tcanvas" width="960" height="420" role="img" aria-label="An animation of the selected stage"></canvas>
+     <div class="theatre__hud">
+      <span class="silk" id="t-name">01 · light</span>
+      <b><span id="t-num">30.18</span><u id="t-unit">Hz</u></b>
+      <span id="t-lab">true capture, asked for 60</span>
+     </div>
+     <div class="theatre__ctl">
+      <button class="key" type="button" id="t-prev" aria-label="Previous stage">&#8592;</button>
+      <button class="key" type="button" id="t-play" aria-pressed="true">pause</button>
+      <button class="key" type="button" id="t-next" aria-label="Next stage">&#8594;</button>
+     </div>
+    </div>
+
+    <div class="theatre__text">
+     <h3 id="t-title">Light arrives, and is counted</h3>
+     <p id="t-body" class="quiet"></p>
+     <div class="theatre__theory">
+      <span class="silk">The physics under it</span>
+      <p id="t-theory"></p>
+      <a id="t-cite" href="#" target="_blank" rel="noopener"></a>
+     </div>
+     <p class="theatre__src"><code id="t-src"></code><span class="st" id="t-state">bench</span></p>
     </div>
    </div>
-   <ol class="journey__stages">
-    <li class="stop" data-num="30.18" data-unit="Hz" data-label="true capture, asked for 60" data-n="01">
-      <span class="silk silk--b">01 · light</span>
-      <div class="anim anim--light" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><b class="sensor"></b></div>
-      <p>A camera does not see a gate. It counts photons for a few milliseconds and hands over a grid of numbers. We asked the forward camera for 60 frames a second; counting distinct timestamps, it delivers 30.18 — the rest of the requests were the driver repeating itself. Through the flat port the lens sees 46.7°, not the 63.8° its datasheet promises, because water bends light at the glass.</p>
-      <table class="mini"><tr><th>asked</th><td>15</td><td>30</td><td>60</td><td>90</td></tr><tr><th>got</th><td>14.63</td><td>28.03</td><td class="hi">30.18</td><td>30.18</td></tr></table>
-      <p class="src"><code>mongla_vision/camera_node.py · CAMERA_PROFILES['pi_forward']</code><span class="st bench">bench</span></p>
-    </li>
-    <li class="stop" data-num="16.9" data-unit="ms" data-label="staleness, newest frame wins" data-n="02">
-      <span class="silk silk--b">02 · the mailbox</span>
-      <div class="anim anim--box" aria-hidden="true"><div class="q"><span>queue</span><u></u><u></u><u></u><u></u></div><div class="m"><span>mailbox</span><u></u></div></div>
-      <p>The obvious design is a queue: every frame waits its turn. It is also wrong. A full queue holds the oldest frames, so the detector was looking at the past — 396 ms of it. The fix keeps exactly one slot and overwrites it; a frame nobody had time for is simply dropped. Slower publishing, fresher detections.</p>
-      <div class="pair in"><div class="bar was"><i style="--w:100%"></i><b>396.1 ms</b><em>a queue</em></div><div class="bar"><i style="--w:4.27%"></i><b>16.9 ms</b><em>a mailbox</em></div></div>
-      <p class="src"><code>mongla_vision/cameras/v4l2_mailbox.py</code><span class="st bench">bench</span></p>
-    </li>
-    <li class="stop" data-num="98.0" data-unit="Hz" data-label="through our pipeline" data-n="03">
-      <span class="silk silk--b">03 · the chip</span>
-      <div class="anim anim--chip" aria-hidden="true"><b>letterbox</b><b>infer</b><b>decode</b><i></i></div>
-      <p>The Hailo-8 is a chip that does one thing: multiply the numbers a neural network is made of, very fast, at a few watts. Letterbox, inference and decode together cost 10.20 ms a frame (measured on synthetic frames, one model) — 98.0 frames a second, against 97.9 when the vendor's own tool benchmarks the bare chip. Non-maximum suppression runs on the chip, which is why decode costs 0.02 ms. There is no software left to optimise here. The chip is the ceiling.</p>
-      <div class="stack"><i style="--w:6.3%" title="letterbox 0.65 ms"></i><i class="hi" style="--w:93.5%" title="infer 9.54 ms"></i><i style="--w:.2%" title="decode 0.02 ms"></i></div><p class="stack__k"><span>letterbox 0.65 ms · 6.3 %</span><span class="hi">infer 9.54 ms · 93.5 %</span><span>decode 0.02 ms</span></p>
-      <p class="src"><code>mongla_vision/detector_node.py · perception/hailo-vision.md</code><span class="st bench">bench</span></p>
-    </li>
-    <li class="stop" data-num="53.9" data-unit="Hz" data-label="detections, through ROS" data-n="04">
-      <span class="silk silk--b">04 · the graph</span>
-      <div class="anim anim--hop" aria-hidden="true"><b></b><b></b><b></b><i></i></div>
-      <p>Standalone the detector runs at 80.9 Hz. Wired into the ROS graph — serialise, publish, deliver — it reaches the rest of the vehicle at 53.9. A third of the rate is spent moving results, not finding them. Photon to detection, end to end: 18.0 ms median.</p>
-      <div class="pair in"><div class="bar was"><i style="--w:100%"></i><b>80.9 Hz</b><em>standalone</em></div><div class="bar"><i style="--w:66.6%"></i><b>53.9 Hz</b><em>through ROS</em></div></div>
-      <p class="src"><code>mongla_vision/detector_node.py → /mongla/detections</code><span class="st bench">bench</span></p>
-    </li>
-    <li class="stop" data-num="175" data-unit="frames" data-label="held with the detector blind" data-n="05">
-      <span class="silk silk--b">05 · the lock</span>
-      <div class="anim anim--lock" aria-hidden="true"><u class="det"></u><u class="anch"></u><span>detector</span><span>anchor</span></div>
-      <p>Detectors flicker. Across 71 real gaps in real footage the median blink was 0.155 s. So the target is not the detection — it is a lock that climbs down a ladder when the detector goes quiet: the live box, then a tracker coasting on motion, then a feature anchor matching the image itself. On one clip the anchor held 175 consecutive frames the detector had lost. At the bottom of the ladder it says LOST, and means it.</p>
-      <ol class="rungs"><li class="on">live box</li><li class="on">tracker coast</li><li class="on">feature anchor</li><li class="x">LOST — said out loud</li></ol>
-      <p class="src"><code>mongla_vision/lock_node.py · test/test_anchor.py:13</code><span class="st bench">bench</span></p>
-    </li>
-    <li class="stop" data-num="49.86" data-unit="Hz" data-label="vision loop, 0.00 % late ticks" data-n="06">
-      <span class="silk silk--b">06 · the decision</span>
-      <div class="anim anim--demand" aria-hidden="true"><b class="ctr"></b><u class="tgt"></u><i class="arrow"></i></div>
-      <p>Now the Pi thinks. The vision verb reads the target's signed pixel offset from centre and turns it into a lateral and a yaw demand, fifty times a second — soaked for 90 s at 49.86 Hz with not one late tick. The demand shrinks with the age of the detection it came from, so a stale sighting pushes gently or not at all.</p>
-      
-      <p class="src"><code>mongla_control/vision_verbs.py · motion_rates.py:32</code><span class="st bench">bench</span></p>
-    </li>
-    <li class="stop" data-num="18.8" data-unit="%" data-label="of the link, used" data-n="07">
-      <span class="silk silk--b">07 · the cable</span>
-      <div class="anim anim--wire" aria-hidden="true"><b></b><i></i><i></i><i></i></div>
-      <p>The demand crosses one USB-C cable as a MAVLink MANUAL_CONTROL frame, in STABILIZE — the only mode in which a streamed demand reaches the thrusters. The link runs at 18.8 % of its 11,520 bytes a second. The board emits on an exact 100.000 ms clock; every millisecond of the 30.85 ms arrival spread we measured is ours — USB, the kernel, Python.</p>
-      <div class="meter"><i style="--v:.188"></i><span>18.8 % of 11,520 B/s</span></div>
-      <p class="src"><code>mongla_control/fc/srot_fc.py:711 · manual()</code><span class="st bench">bench</span></p>
-    </li>
-    <li class="stop" data-num="500" data-unit="Hz" data-label="one pass every 2 ms" data-n="08">
-      <span class="silk silk--b">08 · the board</span>
-      <div class="anim anim--tick" aria-hidden="true"><b></b><i></i></div>
-      <p>On the other end, core 1 of an ESP32 does three things and nothing else: read the sensors, run the control loop, drive the motors. It holds attitude and heading itself and adds our demand on top. If our frames stop, it does not freeze on the last one: authority ramps to zero between 1.0 and 1.5 s.</p>
-      
-      <p class="src"><code>Hengla (firmware) · src/control/attitude.* — their repository</code><span class="st bench">bench</span></p>
-    </li>
-    <li class="stop" data-num="8" data-unit="T200" data-label="in the firmware's matrix" data-n="09">
-      <span class="silk silk--b">09 · the mixer</span>
-      <div class="anim anim--mix" aria-hidden="true"><u></u><u></u><u></u><u></u><u></u><u></u><u></u><u></u></div>
-      <p>Six numbers — surge, sway, heave, roll, pitch, yaw — become one command per thruster through a fixed matrix. Here the honest part: the firmware mixes for eight vectored T200s, and the hull now in CAD has five thrusters with roll unactuated. Both are true of something. They are not yet true of the same vehicle.</p>
-      
-      <p class="src"><code>Hengla · src/control/mixer.h · docs/THRUSTER_MAP.md</code><span class="st blocked">blocked</span></p>
-    </li>
-    <li class="stop" data-num="0" data-unit="N" data-label="measured, ever" data-n="10">
-      <span class="silk silk--b">10 · thrust</span>
-      <div class="anim anim--prop anim--dead" aria-hidden="true"><b></b><span>no thruster attached</span></div>
-      <p>Bidirectional DShot sends each ESC its command and brings back the RPM it actually reached, so a motor can answer. And here the journey stops being measured: no thrusters are attached. We know that because 958 of 958 ESC frames read exactly zero with nothing plugged in, and counting messages is not a health check.</p>
-      
-      <p class="src"><code>RP2350 · bidirectional DShot · measured-bars.md §25</code><span class="st blocked">blocked</span></p>
-    </li>
-   </ol>
+
+   <ol class="theatre__list" id="tlist" role="tablist" aria-label="Stages"></ol>
+  </div>
+
   </div>
 
   <figure class="panel scrollable">
@@ -3317,7 +3273,18 @@
   function start(){
     var C = window.AudioContext || window.webkitAudioContext;
     ctx = ctx || new C();
-    if (ctx.state === 'suspended') ctx.resume();
+    /* the context can come up suspended whatever the gesture; report the real
+       state on the control itself, so "it did not play" is diagnosable rather
+       than a guess -- and try again when it resolves */
+    var mark = function(){
+      btn.dataset.audio = ctx.state;
+      btn.title = ctx.state === 'running'
+        ? 'Water: playing — synthesised in the browser'
+        : 'Water: the browser has the audio suspended (' + ctx.state + ')';
+    };
+    ctx.onstatechange = mark;
+    if (ctx.state === 'suspended') ctx.resume().then(mark, mark);
+    mark();
     master = ctx.createGain(); master.gain.value = 0;
     master.connect(ctx.destination);
     var src = ctx.createBufferSource();
@@ -3343,6 +3310,7 @@
     try { localStorage.setItem(KEY, v ? '1' : '0'); } catch (e) {}
     if (v) start();
     else if (start.stop){
+      btn.dataset.audio = 'off';
       if (master) master.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4);
       setTimeout(start.stop, 500);
     }
@@ -3570,6 +3538,509 @@
     b.addEventListener('click', function(){ pick(b.dataset.fault); });
   });
   pick('pi');
+})();
+
+(function(){
+  /* PHOTON TO THRUST, as a theatre.
+
+     The old version was ten stacked cards: a lot of prose, one small CSS
+     animation each, and most of the page's width doing nothing. This is one
+     stage at a time, big, with the measured cost of each stage drawn to scale
+     above it and the physics under it cited rather than asserted.
+
+     Every number is measured and lives in .claude/context/measured-bars.md.
+     Every `theory` line is standard published work, linked -- the register the
+     reader is owed is "here is the law, here is our number, here is the gap".
+     Inspirations, recorded in memory: Kurzgesagt for how a hard idea is paced,
+     MLU-Explain for the interactive figure, Azeria Labs for showing the real
+     structure instead of a cartoon of it. */
+  var cv = document.getElementById('tcanvas');
+  if (!cv) return;
+  var ctx = cv.getContext('2d'), DPR = Math.min(2, devicePixelRatio || 1);
+  var W = 960, H = 420;
+  cv.width = W * DPR; cv.height = H * DPR; ctx.scale(DPR, DPR);
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var css = getComputedStyle(document.documentElement);
+  var RED  = css.getPropertyValue('--signal').trim() || '#ff2a14',
+      SEA  = css.getPropertyValue('--medium-text').trim() || '#5aa0ff',
+      INK  = css.getPropertyValue('--ink').trim() || '#e4e8ef',
+      INK3 = css.getPropertyValue('--ink-3').trim() || '#7b8598',
+      SUNK = css.getPropertyValue('--s-sunk').trim() || '#04060b';
+  var GREEN = '#3fd98a', VIOLET = '#8b7cff', AMBER = '#e0b341';
+
+  /* `ms` is a stage's share of the 18.0 ms photon-to-detection path, and only
+     the stages that ARE that path have one. 10.20 ms of it is measured on the
+     chip (0.65 + 9.54 + 0.02); the 7.8 ms before it is the remainder, by
+     subtraction, and the strip labels it that way. The mailbox's 16.9 ms is an
+     AGE, not a duration -- adding it to a duration would be arithmetic on two
+     different quantities, so it is marked downstream with the rest. */
+  var S = [
+    { n: 'light', num: '30.18', unit: 'Hz', lab: 'true capture, asked for 60', ms: 7.8,
+      msNote: 'exposure and transfer \u2014 by subtraction',
+      title: 'Light arrives, and is counted',
+      body: 'A camera does not see a gate. It counts photons for a few milliseconds and hands over a grid of numbers. We asked the forward camera for 60 frames a second; counting distinct timestamps it delivers <b>30.18</b>, and asking for 90 changes nothing — the sensor, not the request, sets the rate.',
+      theory: 'Water removes light before the lens gets any say: intensity falls off exponentially with distance, and it does so <em>per wavelength</em>, which is why red goes first. That is the Beer–Lambert law, and it is the reason every threshold on this page is measured in the water it will swim in rather than borrowed.',
+      cite: ['Beer–Lambert law', 'https://en.wikipedia.org/wiki/Beer%E2%80%93Lambert_law'],
+      src: "mongla_vision/camera_node.py · CAMERA_PROFILES['pi_forward']", state: 'bench' },
+    { n: 'the mailbox', num: '16.9', unit: 'ms', lab: 'staleness, newest frame wins', ms: 0,
+      title: 'A queue would hand over the past',
+      body: 'The obvious design is a queue: every frame waits its turn. It is also wrong — a full queue holds the <em>oldest</em> frames, so the detector was looking at <b>396 ms</b> ago. Keep exactly one slot and overwrite it, and staleness falls to <b>16.9 ms</b>: slower publishing, fresher detections.',
+      theory: 'Little’s law fixes this with no measurement at all: the average wait through a queue is its length divided by the rate, <span class="num">W = L / λ</span>. A four-deep queue at 30 frames a second <em>is</em> 133 ms of age, by arithmetic. The only way to make a queue fresh is to stop having one.',
+      cite: ['Little, 1961 — a proof for L = λW', 'https://doi.org/10.1287/opre.9.3.383'],
+      src: 'mongla_vision/cameras/v4l2_mailbox.py', state: 'bench' },
+    { n: 'the chip', num: '10.20', unit: 'ms', lab: 'letterbox + infer + decode', ms: 10.2,
+      msNote: 'measured on the chip',
+      title: 'A chip that only multiplies',
+      body: 'The Hailo-8 does one thing: multiply the numbers a neural network is made of, fast, at a few watts. Letterbox <b>0.65 ms</b>, inference <b>9.54 ms</b>, decode <b>0.02 ms</b> — <b>98.0</b> frames a second, against the vendor’s own 97.9 for the bare chip. The decode stayed in the quantised domain rather than converting to floats: 31.5 ms became 0.93 ms, bit for bit identical.',
+      theory: 'It is integer arithmetic all the way down. Weights and activations are affine-mapped to 8-bit integers, so a multiply-accumulate is an integer operation and the hardware can be a fixed array of them. The cost is precision you must train for; the gain is an order of magnitude in energy per multiply.',
+      cite: ['Jacob et al., 2017 — integer-arithmetic-only inference', 'https://arxiv.org/abs/1712.05877'],
+      src: 'mongla_vision/detector_node.py · perception/hailo-vision.md', state: 'bench' },
+    { n: 'the graph', num: '53.9', unit: 'Hz', lab: 'detections, through ROS', ms: 0,
+      title: 'A third of the rate goes on moving results',
+      body: 'Standalone the detector runs at <b>80.9 Hz</b>. Wired into the ROS graph — serialise, publish, deliver — it reaches the rest of the vehicle at <b>53.9</b>. Nothing is broken: that is what it costs to hand a result to another process.',
+      theory: 'ROS 2 publishes over DDS, and the measured cost of that hop is not noise — it is the dominant term for small, frequent messages, and it grows with the number of subscribers. Knowing the shape of that curve is why the vehicle publishes detections once and lets consumers filter, rather than publishing per-consumer.',
+      cite: ['Maruyama et al., 2016 — exploring the performance of ROS 2', 'https://doi.org/10.1145/2968478.2968502'],
+      src: 'mongla_vision/detector_node.py → /mongla/detections', state: 'bench' },
+    { n: 'the lock', num: '175', unit: 'frames', lab: 'held with the detector blind', ms: 0,
+      title: 'The target does not blink. The detector does.',
+      body: 'Across <b>71</b> real gaps in real footage the median blink was <b>0.155 s</b> and the worst was <b>4.00 s</b>. So the thing control follows is not the detection — it is a lock that climbs down a ladder: live box, then tracker coast, then a geometric anchor matched against image structure, and finally a refusal said out loud.',
+      theory: 'This is tracking-by-detection: predict where the target should be with a motion model, associate the new detections to the predictions, and coast on the prediction when nothing associates. SORT is the minimal published form of it — a Kalman filter and an assignment step — and the reason it is only a ladder rung here is that its prediction is trusted for a <em>measured</em> number of frames, not indefinitely.',
+      cite: ['Bewley et al., 2016 — Simple Online and Realtime Tracking', 'https://arxiv.org/abs/1602.00763'],
+      src: 'mongla_vision/lock_node.py · test/test_anchor.py:13', state: 'bench' },
+    { n: 'the decision', num: '49.86', unit: 'Hz', lab: 'vision loop, 0.00 % late ticks', ms: 0,
+      title: 'Pixels become a demand',
+      body: 'Now the Pi thinks. The vision verb reads the target’s signed pixel offset from frame centre and turns it into a lateral and a yaw demand, fifty times a second — soaked for 90 s at <b>49.86 Hz</b> with not one late tick.',
+      theory: 'The loop is proportional with a deadband: push in proportion to the error, do nothing inside the noise floor. The deadband is not laziness — a proportional term acting on noise is a vehicle that never settles. The classical treatment of why the gain, the delay and the deadband must be chosen together is Åström and Murray, which is free.',
+      cite: ['Åström & Murray — Feedback Systems (free)', 'https://www.cds.caltech.edu/~murray/amwiki/index.php/Main_Page'],
+      src: 'mongla_control/vision_verbs.py · motion_rates.py:32', state: 'bench' },
+    { n: 'the cable', num: '21.0', unit: '%', lab: 'of the link, measured today', ms: 0,
+      title: 'One cable, and how full it is',
+      body: 'The demand crosses a single USB-C cable as a MAVLink <code>MANUAL_CONTROL</code> frame, in STABILIZE — the only mode in which a streamed demand reaches the thrusters. Read off the board on 2026-09-22 the link runs at <b>21.0 %</b> of its 11,520 bytes a second. The bar this project ships against is 60 %.',
+      theory: 'A serial link is a queue with a service rate, so the same law as the mailbox applies — and the wait does not grow gently. Above about 70 % utilisation the expected delay climbs as <span class="num">ρ/(1−ρ)</span>, which is why headroom, not bandwidth, is the number worth quoting.',
+      cite: ['Kleinrock — queueing theory (M/M/1 delay)', 'https://en.wikipedia.org/wiki/M/M/1_queue'],
+      src: 'mongla_control/fc/srot_fc.py:711 · manual()', state: 'bench' },
+    { n: 'the board', num: '500', unit: 'Hz', lab: 'one pass every 2 ms', ms: 0,
+      title: 'Two milliseconds, for ever',
+      body: 'On the other end, core 1 of an ESP32 does three things and nothing else: read the sensors, run the control loop, drive the motors. It holds attitude and heading itself and adds our demand on top — about <b>25</b> corrections for every command we send.',
+      theory: 'Two separate results say this rate is the right shape. Sampling says a loop can only answer disturbances up to half its rate, so 500 Hz buys authority to 250; scheduling says a fixed set of periodic tasks on one core is schedulable under rate-monotonic priorities up to a utilisation bound. Together they are the argument for a core that runs three jobs and refuses everything else.',
+      cite: ['Liu & Layland, 1973 — hard-real-time scheduling', 'https://doi.org/10.1145/321738.321743'],
+      src: 'Hengla (firmware) · src/control/attitude.*', state: 'bench' },
+    { n: 'the mixer', num: '5', unit: 'axes', lab: 'of six, on this hull', ms: 0,
+      title: 'Six wishes, five thrusters',
+      body: 'Surge, sway, heave, roll, pitch, yaw become one command per thruster through a fixed matrix. The honest part: the firmware mixes for <b>eight</b> vectored T200s, and the hull in CAD has <b>five</b> tunnel units with roll unactuated. Both are true of something; they are not true of the same vehicle.',
+      theory: 'Allocation is the pseudo-inverse of the thruster configuration matrix — the least-norm set of thrusts that produces the demanded wrench. It is exact only while every thruster is inside its limit; past that the answer must be scaled, not clipped, or the direction of the result changes. That distinction has its own figure further up this page.',
+      cite: ['Fossen — Handbook of Marine Craft Hydrodynamics', 'https://doi.org/10.1002/9781119994138'],
+      src: 'Hengla · src/control/mixer.h · docs/THRUSTER_MAP.md', state: 'blocked' },
+    { n: 'thrust', num: '0', unit: 'N', lab: 'measured, ever', ms: 0,
+      title: 'And here the measuring stops',
+      body: 'Bidirectional DShot sends each ESC its command and brings back the RPM it actually reached, so a motor can answer. And here the journey stops being measured: no thrusters are attached. <b>958 of 958</b> recorded ESC frames read exactly zero with nothing plugged in — which is also the proof that counting messages is not a health check.',
+      theory: 'What a propeller does to water is momentum theory: thrust is the rate at which momentum is added to the flow, so it goes with the square of the rotational speed and the fourth power of the diameter. Every one of those terms is a measurement this vehicle has never taken, and the figure says <span class="num">0 N</span> rather than a number from a datasheet.',
+      cite: ['Momentum (actuator-disk) theory', 'https://en.wikipedia.org/wiki/Momentum_theory'],
+      src: 'RP2350 · bidirectional DShot · measured-bars.md §25', state: 'blocked' }
+  ];
+
+  var cur = 0, playing = !reduce, t0 = performance.now(), raf = 0;
+  var el = {
+    name: document.getElementById('t-name'), num: document.getElementById('t-num'),
+    unit: document.getElementById('t-unit'), lab: document.getElementById('t-lab'),
+    title: document.getElementById('t-title'), body: document.getElementById('t-body'),
+    theory: document.getElementById('t-theory'), cite: document.getElementById('t-cite'),
+    src: document.getElementById('t-src'), state: document.getElementById('t-state'),
+    list: document.getElementById('tlist'), bar: document.getElementById('tbar'),
+    play: document.getElementById('t-play')
+  };
+
+  /* the budget strip: only the stages with a measured millisecond cost can be
+     drawn to scale, and the rest are marked as what they are */
+  var msTotal = S.reduce(function(a, s){ return a + s.ms; }, 0);
+  el.bar.innerHTML = S.map(function(s, i){
+    var w = s.ms ? (s.ms / msTotal * 100) : null;
+    return '<button role="tab" data-i="' + i + '" style="' +
+      (w ? 'flex:' + w.toFixed(2) : 'flex:0 0 26px') + '" title="' +
+      s.n + (s.ms ? ' — ' + s.ms + ' ms, ' + s.msNote : ' — downstream of the 18.0 ms path') + '"' +
+      (s.ms ? '' : ' class="nom"') + '><span>' + ('0' + (i + 1)).slice(-2) + '</span></button>';
+  }).join('');
+  el.list.innerHTML = S.map(function(s, i){
+    return '<li><button role="tab" data-i="' + i + '"><span class="n">' +
+      ('0' + (i + 1)).slice(-2) + '</span><span class="t">' + s.n + '</span>' +
+      '<span class="v">' + s.num + '<u>' + s.unit + '</u></span></button></li>';
+  }).join('');
+  var tabs = [].slice.call(document.querySelectorAll('#tbar [data-i], #tlist [data-i]'));
+
+  function show(i){
+    cur = (i + S.length) % S.length;
+    var s = S[cur];
+    el.name.textContent = ('0' + (cur + 1)).slice(-2) + ' · ' + s.n;
+    el.num.textContent = s.num; el.unit.textContent = s.unit; el.lab.textContent = s.lab;
+    el.title.textContent = s.title;
+    el.body.innerHTML = s.body;
+    el.theory.innerHTML = s.theory;
+    el.cite.textContent = s.cite[0]; el.cite.href = s.cite[1];
+    el.src.textContent = s.src;
+    el.state.textContent = s.state; el.state.className = 'st ' + s.state;
+    tabs.forEach(function(b){
+      var on = +b.dataset.i === cur;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    t0 = performance.now();
+  }
+
+  // ── the ten animations. One switch, one clock, no libraries.
+  function bg(){ ctx.clearRect(0, 0, W, H); ctx.fillStyle = SUNK; ctx.fillRect(0, 0, W, H); }
+  function txt(s, x, y, col, size, weight){
+    ctx.fillStyle = col || INK3;
+    ctx.font = (weight || 400) + ' ' + (size || 11) + 'px ui-monospace, monospace';
+    ctx.fillText(s, x, y);
+  }
+  function rr(x, y, w, h, r){
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
+  }
+
+  function drawLight(t){
+    // photons fall through water into a sensor grid; red is eaten first
+    var cols = 26, rows = 12, cw = 15, ch = 15, ox = 300, oy = 120;
+    txt('WATER', 40, 40, INK3, 11, 700); txt('FLAT PORT', 220, 40, INK3, 11, 700);
+    txt('SENSOR — a grid of numbers', ox, 40, INK3, 11, 700);
+    for (var i = 0; i < 46; i++){
+      // a cheap hash, so the field looks scattered rather than swept
+      var seed = ((i * 2654435761) % 4294967296) / 4294967296;
+      var lane = ((i * 7919) % 97) / 97;
+      var p = ((t / 2600) + seed) % 1;
+      var y = 70 + lane * 300;
+      var x = 30 + p * 240;
+      var alive = Math.max(0, 1 - p * (0.45 + (seed % 7) / 12));   // absorption
+      ctx.strokeStyle = (seed % 3 === 0 ? 'rgba(255,60,40,' : (seed % 3 === 1 ? 'rgba(90,220,140,' : 'rgba(90,160,255,'))
+        + (alive * 0.9).toFixed(2) + ')';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 16, y); ctx.stroke();
+    }
+    // the port, and the bend
+    ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(276, 50); ctx.lineTo(276, 380); ctx.stroke();
+    // the grid, filling as the exposure integrates
+    var fill = ((t / 1400) % 1);
+    for (var r = 0; r < rows; r++) for (var c = 0; c < cols; c++){
+      var k = (r * cols + c) / (rows * cols);
+      var lit = k < fill;
+      var v = lit ? (0.10 + 0.5 * ((r * 7 + c * 13) % 10) / 10) : 0.04;
+      ctx.fillStyle = 'rgba(160,200,255,' + v.toFixed(2) + ')';
+      ctx.fillRect(ox + c * cw, oy + r * ch, cw - 2, ch - 2);
+    }
+    txt('exposure ' + (fill * 33).toFixed(0) + ' ms of 33', ox, oy + rows * ch + 24, INK3, 11);
+    txt('asked 60 Hz · got 30.18', ox + 300, oy + rows * ch + 24, RED, 11, 700);
+  }
+
+  function drawMailbox(t){
+    // a queue hands over the oldest frame; a mailbox keeps the newest
+    var p = (t / 2400) % 1;
+    txt('A QUEUE — four deep', 60, 60, INK3, 11, 700);
+    txt('A MAILBOX — one slot, overwritten', 60, 240, INK3, 11, 700);
+    for (var q = 0; q < 4; q++){
+      var age = ((p * 4 + q) % 4);
+      rr(70 + q * 92, 80, 80, 64, 8);
+      ctx.fillStyle = 'rgba(255,255,255,.05)'; ctx.fill();
+      ctx.strokeStyle = q === 3 ? RED : 'rgba(255,255,255,.18)'; ctx.lineWidth = 1.5; ctx.stroke();
+      txt((age * 33).toFixed(0) + ' ms old', 82 + q * 92, 116, q === 3 ? RED : INK3, 11);
+    }
+    ctx.strokeStyle = RED; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(430, 112); ctx.lineTo(470, 112); ctx.stroke();
+    txt('the detector reads THIS one — 396 ms of past', 480, 116, RED, 12, 700);
+    rr(70, 260, 80, 64, 8); ctx.fillStyle = 'rgba(63,217,138,.14)'; ctx.fill();
+    ctx.strokeStyle = GREEN; ctx.lineWidth = 1.5; ctx.stroke();
+    txt((16.9).toFixed(1) + ' ms', 86, 296, GREEN, 12, 700);
+    ctx.strokeStyle = GREEN; ctx.beginPath(); ctx.moveTo(160, 292); ctx.lineTo(200, 292); ctx.stroke();
+    txt('the detector reads the newest frame there is', 210, 296, GREEN, 12, 700);
+    // frames arriving and being dropped
+    for (var i = 0; i < 6; i++){
+      var fp = ((t / 1200) + i / 6) % 1;
+      var x = 70 + fp * 700, drop = fp > 0.45;
+      ctx.fillStyle = drop ? 'rgba(255,255,255,.10)' : 'rgba(63,217,138,.55)';
+      ctx.fillRect(x, 360, 12, 12);
+      if (drop && i % 2 === 0) txt('dropped', x - 6, 390, 'rgba(255,255,255,.25)', 9);
+    }
+    txt('frames nobody had time for are dropped, not queued', 70, 344, INK3, 11);
+  }
+
+  function drawChip(t){
+    // an int8 systolic array: rows of MACs lighting as the layer sweeps
+    var n = 16, cw = 18, ox = 70, oy = 90;
+    txt('8-BIT MULTIPLY-ACCUMULATE ARRAY', ox, 60, INK3, 11, 700);
+    var sweep = ((t / 1800) % 1) * n;
+    for (var r = 0; r < n; r++) for (var c = 0; c < n; c++){
+      var d = Math.abs(r - sweep);
+      var v = d < 1.4 ? 0.85 - d * 0.5 : 0.05;
+      ctx.fillStyle = 'rgba(139,124,255,' + v.toFixed(2) + ')';
+      ctx.fillRect(ox + c * cw, oy + r * cw, cw - 3, cw - 3);
+    }
+    txt('int8 in · int32 accumulate · requantise out', ox, oy + n * cw + 22, INK3, 11);
+    // the three costs, to scale
+    var bx = 460, bw = 430;
+    var parts = [['letterbox', 0.65, SEA], ['inference', 9.54, VIOLET], ['decode', 0.02, GREEN]];
+    txt('10.20 ms A FRAME', bx, 60, INK3, 11, 700);
+    var x = bx;
+    parts.forEach(function(pp){
+      var w = pp[1] / 10.21 * bw;
+      ctx.fillStyle = pp[2]; ctx.fillRect(x, 80, Math.max(2, w - 2), 26);
+      x += w;
+    });
+    parts.forEach(function(pp, i){
+      txt(pp[0] + '  ' + pp[1] + ' ms', bx, 132 + i * 20, pp[2], 11.5, 700);
+    });
+    txt('98.0 frames a second through our own pipeline;', bx, 206, INK, 12);
+    txt('the vendor measures 97.9 for the bare chip.', bx, 226, INK, 12);
+    txt('decode stayed in the quantised domain:', bx, 258, INK3, 11);
+    txt('31.5 ms → 0.93 ms, bit for bit identical', bx, 276, GREEN, 11.5, 700);
+  }
+
+  function drawGraph(t){
+    // one detection hopping three processes, and the rate it costs
+    var nodes = [['detector', 120], ['DDS', 420], ['the vehicle', 760]];
+    nodes.forEach(function(nd){
+      rr(nd[1] - 70, 150, 140, 70, 12);
+      ctx.fillStyle = 'rgba(255,255,255,.04)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.stroke();
+      txt(nd[0], nd[1] - 52, 190, INK, 12, 700);
+    });
+    var p = (t / 1600) % 1;
+    for (var k = 0; k < 3; k++){
+      var pp = (p + k / 3) % 1;
+      var x = 120 + pp * 640;
+      ctx.beginPath(); ctx.arc(x, 185, 6, 0, 6.3);
+      ctx.fillStyle = pp < 0.45 ? GREEN : SEA; ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(190, 185); ctx.lineTo(350, 185);
+    ctx.moveTo(490, 185); ctx.lineTo(690, 185); ctx.stroke();
+    txt('serialise', 230, 170, INK3, 10); txt('deliver', 560, 170, INK3, 10);
+    // the two rates
+    txt('80.9 Hz standalone', 120, 290, INK3, 12);
+    ctx.fillStyle = 'rgba(255,255,255,.10)'; ctx.fillRect(120, 300, 640, 12);
+    txt('53.9 Hz through the graph', 120, 342, RED, 12, 700);
+    ctx.fillStyle = RED; ctx.fillRect(120, 352, 640 * (53.9 / 80.9), 12);
+    txt('a third of the chip’s rate is spent handing the result to another process',
+        120, 392, INK3, 11);
+  }
+
+  function drawLock(t){
+    // the ladder: box → coast → anchor → refusal, against a real gap
+    var gap = ((t / 5200) % 1);
+    var rung = gap < 0.35 ? 0 : gap < 0.6 ? 1 : gap < 0.85 ? 2 : 3;
+    var names = ['live box', 'tracker coast', 'geometric anchor', 'LOST — said out loud'];
+    var cols = [GREEN, SEA, VIOLET, RED];
+    txt('THE DETECTOR’S VIEW', 70, 50, INK3, 11, 700);
+    // frame with a target that blinks
+    ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(70, 70, 380, 260);
+    var tx = 200 + Math.sin(t / 1400) * 90, ty = 170 + Math.cos(t / 1900) * 50;
+    if (rung === 0){
+      ctx.strokeStyle = GREEN; ctx.lineWidth = 2; ctx.strokeRect(tx, ty, 90, 70);
+      txt('gate 0.93', tx, ty - 8, GREEN, 11, 700);
+    } else {
+      ctx.setLineDash([4, 4]); ctx.strokeStyle = cols[rung]; ctx.lineWidth = 2;
+      ctx.strokeRect(tx, ty, 90, 70); ctx.setLineDash([]);
+      txt(rung === 3 ? 'nothing' : 'predicted', tx, ty - 8, cols[rung], 11, 700);
+    }
+    txt('no detection for ' + (gap * 4).toFixed(2) + ' s', 70, 352, rung ? RED : INK3, 11.5, 700);
+    // the ladder
+    txt('THE LADDER', 520, 50, INK3, 11, 700);
+    names.forEach(function(nm, i){
+      var y = 90 + i * 60, on = i === rung, past = i < rung;
+      rr(520, y, 360, 46, 10);
+      ctx.fillStyle = on ? 'rgba(255,255,255,.07)' : 'rgba(255,255,255,.02)'; ctx.fill();
+      ctx.strokeStyle = on ? cols[i] : past ? 'rgba(255,255,255,.16)' : 'rgba(255,255,255,.08)';
+      ctx.lineWidth = on ? 2 : 1; ctx.stroke();
+      txt(nm, 540, y + 28, on ? cols[i] : INK3, 12.5, on ? 700 : 400);
+      txt(['0.20 s', '0.65 s', '2.42 s', 'beyond'][i], 810, y + 28, INK3, 10.5);
+    });
+    txt('rungs sized against 71 real gaps: p50 0.155 s, p90 0.651, max 4.00',
+        520, 352, INK3, 10.5);
+  }
+
+  function drawDecision(t){
+    // pixel offset → lateral + yaw demand, with the deadband drawn
+    var cx = 300, cy = 200;
+    ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.strokeRect(80, 70, 440, 260);
+    ctx.setLineDash([3, 4]); ctx.strokeStyle = 'rgba(255,255,255,.2)';
+    ctx.beginPath(); ctx.moveTo(cx, 70); ctx.lineTo(cx, 330); ctx.stroke(); ctx.setLineDash([]);
+    var off = Math.sin(t / 1500) * 150;
+    var dead = Math.abs(off) < 26;
+    ctx.fillStyle = 'rgba(255,255,255,.04)'; ctx.fillRect(cx - 26, 70, 52, 260);
+    txt('deadband', cx - 24, 88, INK3, 9.5);
+    ctx.strokeStyle = dead ? INK3 : RED; ctx.lineWidth = 2;
+    ctx.strokeRect(cx + off - 45, cy - 35, 90, 70);
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + off, cy); ctx.stroke();
+    txt('x_px = ' + (off).toFixed(0), cx + off - 40, cy - 46, dead ? INK3 : RED, 11.5, 700);
+    // the demand
+    txt('THE DEMAND IT PRODUCES', 570, 50, INK3, 11, 700);
+    [['lateral', dead ? 0 : off / 150], ['yaw', dead ? 0 : off / 190]].forEach(function(d, i){
+      var y = 110 + i * 70;
+      txt(d[0], 570, y - 10, INK3, 11);
+      ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.fillRect(570, y, 300, 14);
+      ctx.fillStyle = d[1] === 0 ? INK3 : RED;
+      var w = d[1] * 150;
+      ctx.fillRect(720 + Math.min(0, w), y, Math.abs(w), 14);
+      ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(719, y - 4, 2, 22);
+      txt(d[1].toFixed(2), 880, y + 12, d[1] === 0 ? INK3 : RED, 11, 700);
+    });
+    txt(dead ? 'inside the deadband — it does nothing, on purpose'
+             : 'outside it — push, in proportion to the error', 570, 300, dead ? INK3 : INK, 12, 700);
+    txt('50 times a second, 0.00 % late ticks over 90 s', 570, 326, INK3, 10.5);
+  }
+
+  function drawCable(t){
+    // bytes down a pipe, the 60 % bar, the queueing cliff
+    txt('ONE USB-C CABLE · 11,520 BYTES A SECOND', 70, 50, INK3, 11, 700);
+    rr(70, 70, 820, 56, 12); ctx.fillStyle = 'rgba(255,255,255,.04)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.stroke();
+    ctx.fillStyle = SEA; ctx.fillRect(74, 74, 812 * 0.21, 48);
+    ctx.fillStyle = RED; ctx.fillRect(74 + 812 * 0.6, 68, 2, 60);
+    // the label goes beside the fill, not inside it: at 21 % it does not fit
+    txt('21.0 %', 86, 104, '#04121f', 13, 700);
+    txt('measured on the board, 2026-09-22', 74 + 812 * 0.21 + 14, 104, INK3, 11.5);
+    txt('60 %', 74 + 812 * 0.6 + 8, 62, RED, 10.5, 700);
+    for (var i = 0; i < 30; i++){
+      var p = ((t / 900) + i / 30) % 1;
+      ctx.fillStyle = 'rgba(255,255,255,' + (0.5 - Math.abs(p - 0.5)).toFixed(2) + ')';
+      ctx.fillRect(74 + p * 812 * 0.21, 84 + (i % 4) * 8, 5, 4);
+    }
+    // the cliff
+    var gx = 70, gy = 340, gw = 820, gh = 170;
+    ctx.strokeStyle = 'rgba(255,255,255,.12)';
+    ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx + gw, gy); ctx.stroke();
+    ctx.beginPath();
+    for (var k = 0; k <= 230; k++){
+      var r = k / 250, w = r / (1 - r);
+      var yy = gy - Math.min(gh, w * 26);
+      k ? ctx.lineTo(gx + r * gw, yy) : ctx.moveTo(gx + r * gw, yy);
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(gx + 0.21 * gw, gy - Math.min(gh, (0.21 / 0.79) * 26), 6, 0, 6.3);
+    ctx.fillStyle = GREEN; ctx.fill();
+    txt('waiting grows as ρ/(1−ρ) — flat, then vertical', gx + 16, gy - gh + 16, INK3, 11);
+    txt('utilisation', gx + gw / 2 - 26, gy + 20, INK3, 10.5);
+  }
+
+  function drawBoard(t){
+    // the 500 Hz comb, and what one tick contains
+    txt('CORE 1 · ONE PASS EVERY 2 MILLISECONDS', 70, 50, INK3, 11, 700);
+    var y = 150;
+    for (var i = 0; i < 40; i++){
+      var x = 70 + i * 20.5;
+      var on = ((t / 60) | 0) % 40 === i;
+      ctx.strokeStyle = on ? RED : 'rgba(255,255,255,.18)';
+      ctx.lineWidth = on ? 3 : 1.5;
+      ctx.beginPath(); ctx.moveTo(x, y - 26); ctx.lineTo(x, y + 26); ctx.stroke();
+    }
+    txt('sensors → control → DShot, every tick, nothing else on this core', 70, 210, INK, 12);
+    // our commands, 25x slower
+    var y2 = 300;
+    for (var j = 0; j < 40; j++){
+      if (j % 25 !== 0) continue;
+      var x2 = 70 + j * 20.5;
+      ctx.strokeStyle = SEA; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(x2, y2 - 20); ctx.lineTo(x2, y2 + 20); ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(90,160,255,.3)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(70, y2); ctx.lineTo(890, y2); ctx.stroke();
+    txt('our demand, about 20 Hz — 25 board corrections between any two of them',
+        70, 350, SEA, 12, 700);
+    txt('sampling: a loop answers disturbances to half its rate — 250 Hz of authority',
+        70, 388, INK3, 11);
+  }
+
+  function drawMixer(t){
+    // six axes into thrusters, and the two answers about how many
+    var axes = ['surge', 'sway', 'heave', 'roll', 'pitch', 'yaw'];
+    txt('SIX AXES', 70, 50, INK3, 11, 700);
+    axes.forEach(function(a, i){
+      var y = 80 + i * 48, v = Math.sin(t / 1100 + i) * (a === 'roll' ? 0 : 1);
+      txt(a, 70, y + 14, a === 'roll' ? RED : INK3, 11.5, 700);
+      ctx.fillStyle = 'rgba(255,255,255,.06)'; ctx.fillRect(140, y, 120, 12);
+      ctx.fillStyle = a === 'roll' ? 'rgba(255,42,20,.35)' : SEA;
+      ctx.fillRect(200 + Math.min(0, v * 58), y, Math.abs(v * 58), 12);
+      if (a === 'roll') txt('no actuator', 268, y + 11, RED, 10);
+    });
+    // five tunnels
+    txt('FIVE THRUSTERS · THE HULL IN CAD', 430, 50, INK3, 11, 700);
+    var pos = [[520, 150, 'VERT'], [520, 260, 'LAT'], [760, 150, 'VERT'], [760, 260, 'LAT'], [860, 205, 'AXIAL']];
+    ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 1.5;
+    rr(470, 120, 430, 170, 85); ctx.stroke();
+    pos.forEach(function(pp, i){
+      var v = Math.abs(Math.sin(t / 1100 + i * 0.7));
+      ctx.beginPath(); ctx.arc(pp[0], pp[1], i === 4 ? 16 : 26, 0, 6.3);
+      ctx.strokeStyle = i % 2 ? RED : SEA; ctx.lineWidth = 2; ctx.stroke();
+      ctx.beginPath(); ctx.arc(pp[0], pp[1], (i === 4 ? 14 : 24) * v, 0, 6.3);
+      ctx.fillStyle = (i % 2 ? 'rgba(255,42,20,' : 'rgba(90,160,255,') + (0.10 + v * 0.3).toFixed(2) + ')';
+      ctx.fill();
+      txt(pp[2], pp[0] - 16, pp[1] + (i === 4 ? 34 : 46), INK3, 9.5);
+    });
+    txt('the firmware mixes for EIGHT vectored T200s. Both are true of something;', 430, 340, AMBER, 11.5, 700);
+    txt('they are not true of the same vehicle.', 430, 360, AMBER, 11.5, 700);
+    txt('allocation is a pseudo-inverse — and past a limit it must be scaled, not clipped',
+        430, 392, INK3, 10.5);
+  }
+
+  function drawThrust(t){
+    // a propeller that does not turn, and the 958 zeros
+    var cx = 260, cy = 200;
+    ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cx, cy, 90, 0, 6.3); ctx.stroke();
+    ctx.save(); ctx.translate(cx, cy);
+    for (var b = 0; b < 4; b++){
+      ctx.rotate(Math.PI / 2);
+      ctx.fillStyle = 'rgba(255,255,255,.10)';
+      rr(-7, -78, 14, 62, 7); ctx.fill();
+    }
+    ctx.restore();
+    ctx.beginPath(); ctx.arc(cx, cy, 13, 0, 6.3); ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fill();
+    txt('0 RPM · NOTHING ATTACHED', cx - 92, cy + 130, RED, 12, 700);
+    // 958 zeros
+    txt('958 RECORDED ESC FRAMES', 470, 50, INK3, 11, 700);
+    for (var i = 0; i < 480; i++){
+      var x = 470 + (i % 40) * 10.6, y = 70 + ((i / 40) | 0) * 12;
+      ctx.fillStyle = 'rgba(255,255,255,.14)';
+      ctx.font = '9px ui-monospace, monospace';
+      ctx.fillText('0', x, y);
+    }
+    txt('every one of them exactly zero — which is why a message count', 470, 236, INK, 11.5);
+    txt('can never prove a thruster is alive', 470, 254, INK, 11.5);
+    txt('thrust goes as the square of rotational speed and the fourth power', 470, 300, INK3, 10.5);
+    txt('of diameter. Every term is a measurement this vehicle has not taken.', 470, 318, INK3, 10.5);
+    txt('so the figure says 0 N, not a datasheet number.', 470, 344, RED, 11.5, 700);
+  }
+
+  var DRAW = [drawLight, drawMailbox, drawChip, drawGraph, drawLock,
+              drawDecision, drawCable, drawBoard, drawMixer, drawThrust];
+
+  function frame(now){
+    bg();
+    DRAW[cur](reduce ? 1200 : now);
+    if (playing && !reduce && now - t0 > 9000) show(cur + 1);
+    raf = requestAnimationFrame(frame);
+  }
+
+  tabs.forEach(function(b){
+    b.addEventListener('click', function(){ show(+b.dataset.i); playing = false; setPlay(); });
+  });
+  function setPlay(){
+    el.play.textContent = playing ? 'pause' : 'play';
+    el.play.setAttribute('aria-pressed', playing ? 'true' : 'false');
+  }
+  el.play.addEventListener('click', function(){ playing = !playing; t0 = performance.now(); setPlay(); });
+  document.getElementById('t-prev').addEventListener('click', function(){ show(cur - 1); playing = false; setPlay(); });
+  document.getElementById('t-next').addEventListener('click', function(){ show(cur + 1); playing = false; setPlay(); });
+  cv.addEventListener('click', function(){ show(cur + 1); playing = false; setPlay(); });
+
+  show(0); setPlay();
+  if ('IntersectionObserver' in window){
+    new IntersectionObserver(function(es){
+      if (es[0].isIntersecting && !raf) raf = requestAnimationFrame(frame);
+      else if (!es[0].isIntersecting && raf){ cancelAnimationFrame(raf); raf = 0; }
+    }, { threshold: 0.04 }).observe(cv);
+  } else { raf = requestAnimationFrame(frame); }
 })();
 </script>
 </body>

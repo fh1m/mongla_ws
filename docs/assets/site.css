@@ -630,6 +630,76 @@ figure.panel figcaption{margin-top:clamp(16px,2vw,26px);padding-top:14px;
 .shots__row .silk{display:block;margin-bottom:5px;font-family:var(--display);font-weight:800;
   font-size:var(--fs-micro);letter-spacing:.14em;text-transform:uppercase;color:var(--signal-text)}
 
+/* ── the theatre: photon to thrust, one stage at a time ────────────────
+   Replaces ten stacked cards that used a third of the width and explained the
+   stages in prose. Here the measured cost is drawn to scale across the top, the
+   stage plays big in the middle, the physics under it is cited beside it, and
+   the ten stages are a rail you can scrub. Paced after Kurzgesagt, figured
+   after MLU-Explain, and kept honest after Azeria Labs: the real structure, not
+   a cartoon of it. */
+.theatre{margin:var(--s5) 0 0;display:grid;gap:14px}
+.theatre__budget{padding:14px 16px;border-radius:14px;background:var(--s-raised);box-shadow:var(--e2)}
+.theatre .silk{font-family:var(--display);font-weight:800;font-size:var(--fs-micro);
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+.theatre .silk i{font-style:normal;color:var(--signal)}
+.theatre__bar{display:flex;gap:2px;margin:10px 0 6px;height:34px}
+.theatre__bar button{flex:1;min-width:0;border:0;border-radius:6px;cursor:pointer;
+  background:rgba(255,255,255,.07);color:var(--ink-3);font-family:var(--data);font-size:10px;
+  display:flex;align-items:center;justify-content:center;
+  transition:background 200ms var(--ease),color 200ms var(--ease),transform 200ms var(--ease)}
+.theatre__bar button:hover{background:rgba(255,255,255,.14);color:#fff}
+.theatre__bar button.nom{background:repeating-linear-gradient(45deg,rgba(255,255,255,.05) 0 4px,transparent 4px 8px)}
+.theatre__bar button.on{background:var(--signal);color:#fff;transform:translateY(-2px)}
+.theatre__axis{display:flex;justify-content:space-between;font-family:var(--data);font-size:9.5px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+
+.theatre__stage{display:grid;gap:14px;grid-template-columns:minmax(0,1.45fr) minmax(280px,.55fr);
+  align-items:start}
+.theatre__screen{position:relative;border-radius:14px;overflow:hidden;background:var(--s-sunk);
+  box-shadow:var(--e2)}
+.theatre__screen canvas{display:block;width:100%;height:auto;cursor:pointer}
+/* a header strip, not an overlay: overlaid, it covered whatever each stage
+   drew in its own top-left corner */
+.theatre__hud{display:grid;grid-template-columns:auto auto 1fr;align-items:baseline;gap:6px 14px;
+  padding:12px 16px 10px;background:var(--s-key);box-shadow:0 1px 0 var(--rule)}
+.theatre__hud .silk{grid-row:1;grid-column:1}
+.theatre__hud b{grid-row:1;grid-column:2;font-family:var(--display);font-weight:800;
+  font-size:clamp(1.5rem,1rem + 1.4vw,2.1rem);line-height:1;letter-spacing:-.04em;color:#fff}
+.theatre__hud b u{text-decoration:none;font-size:.42em;color:var(--signal-text);margin-left:3px}
+.theatre__hud > span:last-child{grid-row:1;grid-column:3;font-family:var(--data);
+  font-size:10.5px;color:var(--ink-3)}
+.theatre__ctl{position:absolute;right:14px;bottom:14px;display:flex;gap:6px}
+.theatre__text h3{margin:0 0 10px}
+.theatre__text p{margin:0;color:var(--ink-2)}
+.theatre__text b{color:#fff;font-weight:400;font-family:var(--data);font-size:.95em}
+.theatre__theory{margin-top:16px;padding:14px;border-radius:12px;background:var(--s-sunk);
+  box-shadow:var(--e-in)}
+.theatre__theory p{margin:8px 0 10px;font-size:var(--fs-box);color:var(--ink-2)}
+.theatre__theory a{font-family:var(--data);font-size:10.5px;letter-spacing:.04em;
+  color:var(--signal-text);border-bottom:1px solid transparent}
+.theatre__theory a:hover{border-bottom-color:var(--signal)}
+.theatre__src{margin:14px 0 0;display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.theatre__src code{font-size:10.5px;color:var(--ink-3)}
+
+.theatre__list{list-style:none;margin:0;padding:0;display:grid;gap:4px;
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.theatre__list button{width:100%;display:grid;grid-template-columns:auto 1fr auto;gap:8px;
+  align-items:baseline;padding:9px 11px;border:1px solid var(--rule);border-radius:10px;
+  background:none;cursor:pointer;text-align:left;
+  transition:border-color 200ms var(--ease),background 200ms var(--ease)}
+.theatre__list button:hover{border-color:var(--rule-lit);background:rgba(255,255,255,.04)}
+.theatre__list button.on{border-color:var(--signal);background:rgba(255,42,20,.07)}
+.theatre__list .n{font-family:var(--data);font-size:9.5px;color:var(--ink-3)}
+.theatre__list .t{font-family:var(--display);font-weight:700;font-size:11px;color:var(--ink-2)}
+.theatre__list button.on .t{color:#fff}
+.theatre__list .v{font-family:var(--data);font-size:11px;color:var(--ink)}
+.theatre__list .v u{text-decoration:none;font-size:.72em;color:var(--ink-3);margin-left:2px}
+@media (max-width:1000px){
+  .theatre__stage{grid-template-columns:1fr}
+  .theatre__hud{grid-template-columns:auto 1fr}
+  .theatre__hud > span:last-child{grid-row:2;grid-column:1/-1}
+}
+
 /* ── the live board reading ────────────────────────────────────────────
    Generated by tools/board_panel.py from a snapshot taken over the cable. It
    is dated on its face because that is the only honest way to show a live
@@ -1253,13 +1323,6 @@ body > footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
 .stack__k{display:flex;flex-wrap:wrap;gap:4px 16px;margin:8px 0 4px !important;
   font-family:var(--data);font-size:11px;color:var(--ink-3)}
 .stack__k .hi{color:var(--signal-text)}
-/* horizontal meter */
-.meter{max-width:460px}
-.meter i{display:block;height:10px;border-radius:999px;background:var(--s-sunk);box-shadow:var(--e-well);
-  position:relative;overflow:hidden}
-.meter i::after{content:"";position:absolute;inset:2px auto 2px 2px;border-radius:999px;
-  width:calc((100% - 4px) * var(--v));background:var(--signal)}
-.meter span{display:block;margin-top:7px;font-family:var(--data);font-size:11px;color:var(--ink-3)}
 /* the lock ladder, as rungs */
 .rungs{list-style:none;margin:2px 0 6px;padding:0;display:flex;flex-wrap:wrap;gap:6px}
 .rungs li{font-family:var(--data);font-size:11px;padding:7px 11px;border-radius:7px;
@@ -1327,128 +1390,6 @@ body > footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
    They run only while their stop is the active one, so at most one
    animation is ever on screen; reduced motion freezes them at the pose
    that reads best as a still. */
-.anim{position:relative;height:74px;margin:2px 0 14px;max-width:460px;border-radius:10px;
-  background:var(--s-sunk);box-shadow:var(--e-well);overflow:hidden}
-.stop:not(.on) .anim *{animation-play-state:paused}
-.anim i,.anim u,.anim b{position:absolute;display:block}
-
-/* 01 photons falling onto the sensor */
-.anim--light i{width:3px;height:3px;border-radius:50%;background:var(--medium-text);top:-6px;
-  animation:fall 1.6s linear infinite}
-.anim--light i:nth-child(1){left:12%;animation-delay:0s}   .anim--light i:nth-child(2){left:24%;animation-delay:.6s}
-.anim--light i:nth-child(3){left:36%;animation-delay:.2s}  .anim--light i:nth-child(4){left:48%;animation-delay:.9s}
-.anim--light i:nth-child(5){left:60%;animation-delay:.35s} .anim--light i:nth-child(6){left:72%;animation-delay:1.1s}
-.anim--light i:nth-child(7){left:84%;animation-delay:.75s} .anim--light i:nth-child(8){left:92%;animation-delay:.45s}
-.anim--light .sensor{left:8%;right:8%;bottom:14px;height:10px;border-radius:3px;
-  background:var(--s-flush);box-shadow:inset 0 1px 0 var(--edge-lit),0 0 0 1px var(--rule-lit);
-  animation:expose 1.6s linear infinite}
-@keyframes fall{0%{transform:translateY(0);opacity:0}10%{opacity:1}
-  78%{transform:translateY(46px);opacity:1}100%{transform:translateY(50px);opacity:0}}
-@keyframes expose{0%,70%{box-shadow:inset 0 1px 0 var(--edge-lit),0 0 0 1px var(--rule-lit)}
-  80%{box-shadow:inset 0 1px 0 var(--edge-lit),0 0 0 1px var(--signal)}
-  100%{box-shadow:inset 0 1px 0 var(--edge-lit),0 0 0 1px var(--rule-lit)}}
-
-/* 02 a queue fills and serves the oldest; a mailbox keeps only the newest */
-.anim--box{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px 12px}
-.anim--box > div{position:relative;border-radius:7px;background:var(--s-flush);
-  box-shadow:inset 0 1px 0 var(--edge-lit);padding:18px 8px 8px}
-.anim--box span{position:absolute;top:5px;left:8px;font-family:var(--data);font-size:8.5px;
-  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
-.anim--box u{position:relative;display:inline-block;width:9px;height:18px;border-radius:2px;
-  margin-right:3px;background:var(--rule-lit)}
-.anim--box .q u{animation:stale 2.4s linear infinite}
-.anim--box .q u:nth-of-type(2){animation-delay:.2s} .anim--box .q u:nth-of-type(3){animation-delay:.4s}
-.anim--box .q u:nth-of-type(4){animation-delay:.6s}
-.anim--box .m u{width:22px;background:var(--signal);animation:swap 2.4s steps(1) infinite}
-@keyframes stale{0%{background:var(--signal)}35%{background:var(--rule-lit)}100%{background:var(--rule-lit)}}
-@keyframes swap{0%,100%{opacity:1}49%{opacity:1}50%{opacity:.25}}
-
-/* 03 one frame crossing three blocks, widths = their real share of 10.20 ms */
-.anim--chip{display:flex;align-items:center;gap:3px;padding:0 12px}
-.anim--chip b{position:relative;height:26px;border-radius:5px;background:var(--s-flush);
-  box-shadow:inset 0 1px 0 var(--edge-lit);font-family:var(--data);font-size:8px;
-  letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);display:grid;place-items:center}
-.anim--chip b:nth-child(1){flex:6.3} .anim--chip b:nth-child(2){flex:93.5} .anim--chip b:nth-child(3){flex:.2;font-size:0}
-.anim--chip i{top:50%;left:12px;width:10px;height:10px;margin-top:-5px;border-radius:2px;
-  background:var(--signal);animation:cross 2s linear infinite}
-@keyframes cross{0%{transform:translateX(0)}100%{transform:translateX(calc(460px - 46px))}}
-
-/* 04 the result hopping node to node through the graph */
-.anim--hop{display:flex;align-items:center;justify-content:space-between;padding:0 24px}
-.anim--hop b{position:relative;width:34px;height:34px;border-radius:9px;background:var(--s-flush);
-  box-shadow:inset 0 1px 0 var(--edge-lit)}
-.anim--hop i{top:50%;left:30px;width:8px;height:8px;margin-top:-4px;border-radius:50%;
-  background:var(--signal);animation:hop 1.8s cubic-bezier(.5,0,.5,1) infinite}
-@keyframes hop{0%{transform:translate(0,0)}45%{transform:translate(178px,0)}
-  50%{transform:translate(178px,0)}95%,100%{transform:translate(356px,0)}}
-
-/* 05 the detector blinks out; the anchor keeps holding */
-.anim--lock{padding:14px 14px 10px}
-.anim--lock u{left:14px;right:14px;height:16px;border-radius:4px}
-.anim--lock .det{top:14px;background:var(--medium);animation:blink 3s steps(1) infinite}
-.anim--lock .anch{top:40px;background:var(--signal)}
-.anim--lock span{position:absolute;right:16px;font-family:var(--data);font-size:8px;
-  letter-spacing:.1em;text-transform:uppercase;color:#fff;mix-blend-mode:difference}
-.anim--lock span:nth-of-type(1){top:17px} .anim--lock span:nth-of-type(2){top:43px}
-@keyframes blink{0%,30%{opacity:1}31%,85%{opacity:.12}86%,100%{opacity:1}}
-
-/* 06 an offset from centre becomes a demand */
-.anim--demand{padding:0}
-.anim--demand .ctr{left:50%;top:12px;bottom:12px;width:1px;background:var(--rule-lit)}
-.anim--demand .tgt{top:50%;left:22%;width:34px;height:22px;margin-top:-11px;border-radius:4px;
-  box-shadow:inset 0 0 0 1px var(--medium-text);animation:drift 3.4s ease-in-out infinite}
-.anim--demand .arrow{top:50%;left:calc(22% + 34px);height:2px;margin-top:-1px;background:var(--signal);
-  animation:pull 3.4s ease-in-out infinite}
-@keyframes drift{0%,100%{transform:translateX(0)}50%{transform:translateX(92px)}}
-@keyframes pull{0%,100%{width:112px;opacity:1}50%{width:20px;opacity:.35}}
-
-/* 07 bytes streaming down one wire */
-.anim--wire b{left:0;right:0;top:50%;height:1px;background:var(--rule-lit)}
-.anim--wire i{top:50%;width:16px;height:5px;margin-top:-2.5px;border-radius:2px;background:var(--signal);
-  animation:stream 1.5s linear infinite}
-.anim--wire i:nth-of-type(2){animation-delay:.5s} .anim--wire i:nth-of-type(3){animation-delay:1s}
-@keyframes stream{0%{transform:translateX(-20px);opacity:0}8%{opacity:1}
-  92%{opacity:1}100%{transform:translateX(460px);opacity:0}}
-
-/* 08 the 500 Hz comb, with the pulse landing on every tick */
-.anim--tick b{left:14px;right:14px;top:50%;height:22px;margin-top:-11px;border-radius:3px;
-  background-image:repeating-linear-gradient(90deg,var(--rule-lit) 0 1px,transparent 1px 9px)}
-.anim--tick i{top:50%;left:14px;width:7px;height:7px;margin-top:-3.5px;border-radius:50%;
-  background:var(--signal);animation:tickmove 2s steps(48) infinite}
-@keyframes tickmove{0%{transform:translateX(0)}100%{transform:translateX(432px)}}
-
-/* 09 six axes fanning out into eight thruster bars */
-.anim--mix{display:flex;align-items:flex-end;gap:7px;padding:12px 16px}
-.anim--mix u{position:relative;flex:1;border-radius:2px 2px 0 0;
-  background:color-mix(in srgb,var(--signal) 62%,transparent);
-  height:16%;animation:mix 2.6s ease-in-out infinite}
-.anim--mix u:nth-child(2){animation-delay:.15s} .anim--mix u:nth-child(3){animation-delay:.3s}
-.anim--mix u:nth-child(4){animation-delay:.45s} .anim--mix u:nth-child(5){animation-delay:.6s}
-.anim--mix u:nth-child(6){animation-delay:.75s} .anim--mix u:nth-child(7){animation-delay:.9s}
-.anim--mix u:nth-child(8){animation-delay:1.05s}
-@keyframes mix{0%,100%{height:14%}50%{height:64%}}
-
-/* 10 the propeller that does not turn, because nothing is attached */
-.anim--prop{display:grid;place-items:center}
-.anim--prop b{position:relative;width:38px;height:38px;border-radius:50%;
-  box-shadow:inset 0 0 0 1px var(--rule-lit)}
-.anim--prop b::before,.anim--prop b::after{content:"";position:absolute;inset:16px 2px;
-  border-radius:2px;background:var(--rule-lit)}
-.anim--prop b::after{rotate:90deg}
-.anim--prop span{position:absolute;bottom:8px;font-family:var(--data);font-size:8.5px;
-  letter-spacing:.12em;text-transform:uppercase;color:var(--signal-text)}
-.anim--dead b{opacity:.5}
-
-/* the author's own label vocabulary: bracketed, declared, never implied */
-.silk--b::before{content:"[";margin-right:2px;opacity:.55}
-.silk--b::after{content:"]";margin-left:2px;opacity:.55}
-
-@media (prefers-reduced-motion:reduce){
-  .anim *{animation:none !important}
-  .anim--chip i{transform:translateX(120px)} .anim--hop i{transform:translate(178px,0)}
-  .anim--tick i{transform:translateX(200px)} .anim--light i{opacity:1;transform:translateY(24px)}
-}
-
 /* ── colour loss: three channels per venue, measured ─────────────────
    The bar IS the measurement: width is the channel's mean level scaled to
    that venue's brightest channel, so the red bar's shortness is the point. */
