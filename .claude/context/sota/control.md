@@ -331,6 +331,40 @@ gap in the search. Both ran their control loops at **10 Hz**.
 identification on an actual BlueROV2 Heavy at a median **0.023 s per update (≥ 33 Hz)** — on an
 Intel Core Ultra 9 desktop, not embedded.
 
+#### What the 2026-09-22 bench measurement did to this row
+
+Two of INDI's three prerequisites moved, and the third moved **against** us.
+
+**Prerequisite 1 — knowing what a command does. CLOSED.** INDI is incremental: it computes a
+small Δu each tick and must convert it into an actuator command. On this board that conversion is
+**not linear** — `PILOT_EXPO`, then `thstExpo`, then a floor, then a split DShot band. That chain
+is now transcribed from the firmware and verified against the vehicle to **0.30 %** worst case
+([`measured-bars` §10](../measured-bars.md), [`BENCH` B-14](../workbench/BENCH.md)), and inverted
+in `actuation_model.py`. An INDI increment can now be turned into a command exactly, which
+previously could not have been done at all.
+
+**Prerequisite 2 — the control-effectiveness matrix. HALF CLOSED.** The *command-side* map is
+measured exactly (±1, all four horizontal axes). The map INDI actually needs is command → **angular
+acceleration**, and that still requires a vehicle free to rotate. The bench gives the first factor
+and nothing of the second.
+
+⛔ **Prerequisite 3 — and this is the one that moved against us. `MOT_SPIN_MIN` and INDI are in
+direct conflict.** The measured floor means the smallest output the vehicle can command is **15 %
+of full scale**; there is no such thing as a small actuator increment. An incremental controller
+whose increments are all quantised to 15 % is not an incremental controller. INDI would be
+computing Δu in a domain the actuator cannot express.
+
+So **[`upstream/pr-i`](../upstream/pr-i-spin-min-relay.md) is not an adjacent improvement — it is
+INDI's precondition.** That was not visible when this dossier was written, and it re-ranks PR I
+upward: it is the gate on the single most interesting control result in this dive.
+
+**And INDI belongs on the board, not on the Pi.** It wants angular acceleration at loop rate; we
+receive `SCALED_IMU2` at a measured **50.05 Hz**, clamped at the link's 20 ms floor, while the
+board runs its own IMU at 500 Hz. Running a sensor-based incremental law at 50 Hz over a
+115 200-baud link, around an actuator we cannot observe, is not a smaller version of INDI — it is a
+different and worse controller. If INDI happens here it is a **firmware collaboration** in which we
+supply the analysis and the identification data, not a host feature we can ship alone.
+
 #### ⚠ Is 500 Hz justified?
 
 **No AUV-specific study was found that ties loop rate to performance.** Every AUV control paper the
