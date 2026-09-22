@@ -345,8 +345,13 @@ classes is +5.8 %, via output bandwidth); **backbone size dominates** (n → s h
 models sitting within 0.5 % of each other is not a pipeline ceiling — `yolov11s` proves the
 silicon scales with model cost.
 
-**The ladder this gives:** **98 Hz silicon → 80.9 Hz standalone → 53.9 Hz through the ROS graph.**
-The graph costs 45 % of the chip, and that is now a measured target rather than an impression.
+⚠ **What this does NOT establish.** `hw_only` deliberately excludes host pre- and
+post-processing, and the 80.9 Hz standalone / 53.9 Hz through-the-graph figures in `CLAUDE.md`
+were measured separately, under conditions and on a model this run did not record. Lining the
+three up as "98 → 80.9 → 53.9, so the graph costs 45 %" would be comparing three measurements of
+different things — the same inconsistency that got the `yolov8s` number discarded two paragraphs
+up. **The 45 % is not claimed.** Attributing the gap needs one run that measures all three stages
+on one model in one session; until then, 98 Hz is the silicon figure and nothing more.
 
 ⛔ **Discarded, not explained away:** `yolov8s.hef` reported **466 FPS** at the same 640×640 input
 and the same 80-class NMS output as `yolov11s` at 42.65. That is not physically consistent; the

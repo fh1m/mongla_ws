@@ -2873,8 +2873,13 @@ that the arithmetic is self-consistent.
 | `yolov11n` stock | 80 | 92.53 | 7.794 ms |
 | `yolov11s` stock | 80 | 42.65 | 19.727 ms |
 
-**The ladder: 98 Hz silicon → 80.9 Hz standalone → 53.9 Hz through the ROS graph.**
-The graph costs **45 %** of the chip. That is now a measured target.
+⚠ **No end-to-end ladder is claimed from this.** `hw_only` excludes host pre- and
+post-processing; the 80.9 Hz standalone and 53.9 Hz through-the-graph numbers
+elsewhere in this tree were measured in another session on an unrecorded model
+and harness. Chaining them into "the graph costs 45 % of the chip" would compare
+three measurements of different quantities — the same fault that disqualified the
+`yolov8s` figure below. **That attribution is OWED**, and it needs one run
+measuring silicon, standalone and in-graph on a single model in a single session.
 
 Class count buys throughput (80 → 3 is +5.8 %, via NMS output bandwidth);
 backbone size dominates (n → s halves it). Our three models clustering within

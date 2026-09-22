@@ -52,3 +52,15 @@ def test_the_naive_midpoint_reading_is_what_this_rejects():
 ])
 def test_values_measured_on_the_board(value, expected):
     assert dshot_signed(value) == expected
+
+
+def test_the_tool_and_the_module_decode_identically():
+    """`tools/mixer_map.py` carries a standalone copy because it is scp'd to the
+    vehicle and run from /tmp, where the workspace is not importable. A second
+    copy nobody compares is how two truths appear -- so compare them, across the
+    whole of both bands and the boundary between them."""
+    from mongla_control.actuation_model import dshot_signed as module_impl
+
+    for v in list(range(48, 1048, 7)) + list(range(1048, 2048, 7)) + [
+            48, 1047, 1048, 2047]:
+        assert int(dshot_signed(v)) == module_impl(v), f'disagree at {v}'

@@ -92,6 +92,15 @@ _HEAD = re.compile(r'link=(\d+) armed=(\d+) bidir=(\d+) rpm_mode=(\d+) loop=(\d+
 # does not exist. Measured 2026-09-22.
 DSHOT_A_MIN, DSHOT_B_MIN, DSHOT_SPAN = 48, 1048, 999
 
+# ONE TRUTH. The real decoder lives in `mongla_control.actuation_model`; this
+# tool is copied to the vehicle and run from /tmp, where the workspace is not on
+# the path, so it carries a fallback. `test_dshot_decode.py` compares the two
+# across both bands, because a second copy that nobody checks is how they drift.
+try:
+    from mongla_control.actuation_model import dshot_signed as _dshot_one
+except ImportError:
+    _dshot_one = None
+
 
 def dshot_signed(v):
     """Console value -> signed magnitude in [-999, +999]. 48 and 1048 are both 0."""
