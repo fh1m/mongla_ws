@@ -285,6 +285,7 @@ def ladder(b: Board, pico: PicoConsole, axis: str = 'fwd') -> list[dict]:
     levels = (0.0, 0.02, 0.05, 0.08, 0.10, 0.15, 0.20, 0.30,
               0.45, 0.60, 0.80, 1.00)
     print(f'\nDEMAND LADDER on {axis}:')
+    print('        ' + ' '.join(f'M{i + 1}'.rjust(5) for i in range(8)))
     for lv in levels:
         b.stream(SETTLE_S, **{axis: 0.0})
         t0 = time.time()
@@ -298,10 +299,11 @@ def ladder(b: Board, pico: PicoConsole, axis: str = 'fwd') -> list[dict]:
                 if out else None)
         rows.append({'axis': axis, 'level': lv, 'cmd_median': med,
                      'out_median': medo, 'n_reports': len(reps)})
-        print(f'  {lv:4.2f}: cmd M1..M4 '
-              + (' '.join(f'{v:5d}' for v in med[:4]) if med else '(none)')
-              + '   out M1..M4 '
-              + (' '.join(f'{v:5d}' for v in medo[:4]) if medo else ''),
+        # ALL EIGHT. `up` drives M5..M8 and leaves M1..M4 at neutral, so a
+        # printout of the first four shows a column of 1048 and hides the
+        # entire result -- which is exactly what it did on the first run.
+        print(f'  {lv:4.2f}: cmd '
+              + (' '.join(f'{v:5d}' for v in med) if med else '(none)'),
               flush=True)
     b.stream(SETTLE_S)
     return rows

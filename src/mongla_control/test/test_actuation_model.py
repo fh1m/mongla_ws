@@ -141,3 +141,48 @@ def test_a_nonfinite_demand_is_neutral_rather_than_an_exception():
     assert demand_to_fraction(float('nan')) == 0.0
     assert demand_to_fraction(math.inf) == 0.0
     assert fraction_to_demand(float('nan')) == 0.0
+
+
+# ── the axes do not share a path, and that cost 17 % ────────────────────────
+
+# demand -> M5 DShot magnitude on a HEAVE ladder, measured 2026-09-22. M5 is the
+# vertical with no roll trim at neutral, so it is the clean channel.
+MEASURED_HEAVE = {0.02: 199, 0.05: 253, 0.08: 300, 0.10: 328, 0.15: 392,
+                  0.20: 447, 0.30: 544, 0.45: 665, 0.60: 770, 0.80: 892}
+
+
+@pytest.mark.parametrize('demand,counts', sorted(MEASURED_HEAVE.items()))
+def test_heave_bypasses_pilot_expo(demand, counts):
+    """`thr = in.sp_throttle` is RAW (task_control_loop.cpp, STABILIZE case) --
+    PILOT_EXPO is applied only to forward and lateral, before the mode switch.
+    Tolerance is wider than surge's because M5 carries a small residual trim
+    that a single-direction ladder cannot cancel."""
+    predicted = demand_to_fraction(demand, axis='up') * 999.0
+
+    assert abs(predicted - counts) <= 9, (
+        f'heave {demand}: model {predicted:.1f}, board {counts}')
+
+
+def test_using_the_surge_path_for_heave_is_wrong_by_a_lot():
+    """The bug this parametrisation exists to prevent: the default axis applied
+    to a heave command understates it by about 17 % at mid-range."""
+    right = demand_to_fraction(0.30, axis='up')
+    wrong = demand_to_fraction(0.30, axis='fwd')
+
+    assert abs(right - wrong) * 999 > 70, 'the two paths must differ materially'
+    assert right * 999 == pytest.approx(542, abs=3)
+    assert wrong * 999 == pytest.approx(464, abs=3)
+
+
+def test_yaw_refuses_rather_than_returning_a_number():
+    """In STABILIZE yaw is `attitude::stabilize(...)`'s output, driven by
+    heading error and body rate. There is no static demand->output function, and
+    inventing one is exactly the defect this module exists to stop. Measured:
+    yaw gave 344 counts where fwd gave 463 at the same 0.30 demand."""
+    with pytest.raises(ValueError, match='controller output'):
+        demand_to_fraction(0.30, axis='yaw')
+
+
+def test_an_unknown_axis_is_refused_not_silently_treated_as_surge():
+    with pytest.raises(ValueError, match='unknown axis'):
+        demand_to_fraction(0.30, axis='roll')
