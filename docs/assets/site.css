@@ -1941,3 +1941,16 @@ pre::-webkit-scrollbar-track,.scrollable::-webkit-scrollbar-track{background:tra
 .dock__depth:hover b{color:var(--signal-text)}
 .dock__depth:active{transform:translateY(1px)}
 .dock__depth:focus-visible{outline:2px solid var(--signal);outline-offset:3px}
+
+/* Three readings of one drawing -- what it buys, what it costs, and what it
+   cannot say. They were stacked in a single measure-width column under a
+   full-width figure, which left the right half of the section empty for three
+   screens. Side by side they are also easier to weigh against each other,
+   which is the point of having all three. */
+.verdict{display:grid;gap:clamp(24px,2.6vw,46px);grid-template-columns:repeat(3,1fr);
+  margin-top:52px;padding-top:30px;border-top:1px solid var(--rule)}
+.verdict__col h3{margin:0 0 10px}
+.verdict__col p{margin:0;max-width:52ch}
+.verdict__col .plain{margin-top:12px}
+@media (max-width:1100px){.verdict{grid-template-columns:1fr 1fr}}
+@media (max-width:760px){.verdict{grid-template-columns:1fr}}

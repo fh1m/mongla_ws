@@ -519,7 +519,7 @@
   </table>
 
   <figure class="panel scrollable">
-   <svg viewBox="0 -14 820 310" role="img" aria-label="Plan diagram of thruster positions and the resulting control authority">
+   <svg viewBox="0 -14 820 352" role="img" aria-label="Plan diagram of thruster positions and the resulting control authority">
     <style>
       .hl{fill:none;stroke:#2e3542;stroke-width:1.2}
       .tn{fill:none;stroke:#ff0000;stroke-width:1.6}
@@ -530,13 +530,19 @@
       .lbb{font-family:"Zed Mono",ui-monospace,monospace;font-size:9.5px;fill:#5a8dff;letter-spacing:.1em}
       .cl{stroke:#2e3542;stroke-width:.7;stroke-dasharray:5 5}
       .ld{stroke:#2e3542;stroke-width:.7}
+      .dim{fill:none;stroke:#5a8dff;stroke-width:.9;stroke-opacity:.75}
+      .dimr{fill:none;stroke:#ff5747;stroke-width:.9;stroke-opacity:.75}
+      .roll path{fill:none;stroke:#788294;stroke-width:1.1;stroke-dasharray:4 6}
+      .lbg{font-family:"Zed Mono",ui-monospace,monospace;font-size:9.5px;fill:#788294;letter-spacing:.1em}
     </style>
     <text class="lb" x="40" y="-2">PLAN · 702 mm · bow right · every thruster on the centreplane</text>
     <!-- vertical tunnels act THROUGH this plane: labelled above -->
-    <line class="ld" x1="130.5" y1="70" x2="130.5" y2="26"/>
-    <line class="ld" x1="649.5" y1="70" x2="649.5" y2="26"/>
-    <text class="lbb" x="130.5" y="20" text-anchor="middle">VERT ⌀84 — heave + pitch</text>
-    <text class="lbb" x="649.5" y="20" text-anchor="middle">pitch couple 519 mm</text>
+    <line class="ld" x1="130.5" y1="98" x2="130.5" y2="38"/>
+    <line class="ld" x1="649.5" y1="98" x2="649.5" y2="38"/>
+    <!-- the couple is a LENGTH, so it is dimensioned like one -->
+    <path class="dim" d="M130.5,38 L649.5,38 M140,33 L130.5,38 L140,43 M640,33 L649.5,38 L640,43"/>
+    <text class="lbb" x="130.5" y="20" text-anchor="start">VERT ⌀84 — heave + pitch</text>
+    <text class="lbb" x="649.5" y="20" text-anchor="end">pitch couple 519 mm</text>
     <path class="hl" d="M40,140 C40,85 96,53 168,47 L640,47 C700,51 742,87 742,140
                         C742,193 700,229 640,233 L168,233 C96,227 40,195 40,140 Z"/>
     <line class="cl" x1="26" y1="140" x2="800" y2="140"/>
@@ -549,30 +555,45 @@
     <path class="ar" d="M215,186 L215,214 M209,202 L215,216 L221,202"/>
     <path class="ar" d="M565,94 L565,66 M559,76 L565,64 L571,76"/>
     <path class="ar" d="M565,186 L565,214 M559,202 L565,216 L571,202"/>
-    <line class="ld" x1="215" y1="240" x2="215" y2="264"/>
-    <line class="ld" x1="565" y1="240" x2="565" y2="264"/>
-    <text class="lbr" x="215" y="278" text-anchor="middle">LAT ⌀84 — sway + yaw</text>
-    <text class="lbr" x="565" y="278" text-anchor="middle">yaw couple 350 mm</text>
+    <line class="ld" x1="215" y1="240" x2="215" y2="258"/>
+    <line class="ld" x1="565" y1="240" x2="565" y2="258"/>
+    <path class="dimr" d="M215,258 L565,258 M224,253 L215,258 L224,263 M556,253 L565,258 L556,263"/>
+    <text class="lbr" x="215" y="278" text-anchor="start">LAT ⌀84 — sway + yaw</text>
+    <text class="lbr" x="565" y="278" text-anchor="end">yaw couple 350 mm</text>
+    <text class="lbr" x="390" y="296" text-anchor="middle">33 % shorter than the pitch couple</text>
     <!-- axial nose thruster -->
     <circle class="tn" cx="720.6" cy="140" r="17"/>
     <path class="ar" d="M752,140 L794,140 M784,134 L798,140 L784,146"/>
     <text class="lbr" x="772" y="126" text-anchor="middle">SURGE</text>
+    <!-- roll: the one axis nothing acts about. An open arc that never closes,
+         drawn about the long axis, with the reason written where it happens. -->
+    <!-- the one axis nothing acts about, drawn outside the hull so it cannot be
+         mistaken for a fifth bore: an arc that never closes, because the loop
+         has no actuator to close it. -->
+    <g class="roll">
+     <path d="M58,326 a15,15 0 1 1 13,7"/>
+     <path d="M66,327 L71,333 L64,336"/>
+     <text class="lbg" x="106" y="330">ROLL — no actuator, in any of the five · passive stability only</text>
+    </g>
    </svg>
    <figcaption>Five thrusters, every one of them on the centreplane. Red acts in the plane of this
      drawing; blue acts through it. Nothing acts about the long axis — roll has no actuator.</figcaption>
   </figure>
 
-  <h3 style="margin-top:52px">Where the design is strong</h3>
-  <p class="col quiet" style="margin-top:12px">Four tunnels and one axial unit buy <strong>five of
+  <div class="verdict">
+   <div class="verdict__col">
+    <h3>Where the design is strong</h3>
+  <p class="quiet">Four tunnels and one axial unit buy <strong>five of
     six degrees of freedom</strong> — surge, sway, heave, pitch, yaw — with no vectoring linkage,
     no moving nozzles and nothing protruding into the flow. Tunnels also deliver full authority at
     <em>zero forward speed</em>, which is precisely the regime a task is won in: holding still in
     front of a hole. Bilateral symmetry is exact to ±88.05 mm, so there is no built-in turn to trim
     away. And the pitch couple is 48 % wider than the yaw couple (519 mm against 350 mm), which puts
     the stronger moment on the axis that has to resist a nose-down trim.</p>
-
-  <h3 style="margin-top:36px">Where it costs</h3>
-  <p class="col quiet" style="margin-top:12px">The four bores total <span class="nr">221.7 cm²</span>
+   </div>
+   <div class="verdict__col">
+    <h3>Where it costs</h3>
+  <p class="quiet">The four bores total <span class="nr">221.7 cm²</span>
     of open aperture on a hull whose frontal area is <span class="nr">160.9 cm²</span> — the holes
     come to <strong>1.38× the frontal area</strong>. Open tunnels are cavities in cruise: they are
     the price of station-keeping authority, and it is paid continuously while transiting. At a
@@ -583,17 +604,21 @@
     every thruster on the centreplane, <strong>roll has no actuator at all</strong>: it has to be
     passively stable, which promotes the vertical placement of ballast from a detail to a
     load-bearing decision.</p>
-
-  <h3 style="margin-top:36px">What this drawing cannot tell you</h3>
-  <p class="col quiet" style="margin-top:12px">All of the above is geometry, and geometry is half a
+   </div>
+   <div class="verdict__col">
+    <h3>What this drawing cannot tell you</h3>
+  <p class="quiet">All of the above is geometry, and geometry is half a
     hull. These are unmeasured, and will not be guessed at here:</p>
-  <ul class="plain">
+   <ul class="plain">
    <li>Net buoyancy — whether it floats at all<span>needs material densities</span></li>
    <li>Centre of buoyancy above centre of mass — the whole roll argument<span>needs a mass model</span></li>
    <li>Drag coefficient, and so the power to cruise<span>needs a tow test or CFD</span></li>
    <li>Thrust per tunnel, and so whether five are enough<span>needs a bollard test</span></li>
    <li>Whether the modelled motors are the ones fitted<span>3 of 5 populated in CAD</span></li>
   </ul>
+   </div>
+  </div>
+
   <p class="col quiet" style="margin-top:22px">A shell mesh cannot answer the buoyancy question, and
     it would be easy to pretend otherwise: the enclosed volume of this model is 1.77 L, which is the
     <em>surface</em> and not the displacement. Using it would repeat a mistake this project has
