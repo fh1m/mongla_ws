@@ -26,6 +26,11 @@
 | G-02 | Publish a "do not trust me" signal from the estimator | OURS | localization | 5 | 1 | 2 | **12.5** | yes — replay a bag with flow removed |
 | G-09 | Survey the course and fill the position files | OURS | planning | 5 | 1 | 2 | **12.5** | no — needs the venue |
 | G-04 | Model the board's `PILOT_EXPO` droop in the vision loop gain | OURS | control | 4 | 2 | 1 | **10.0** | yes — bench, demand vs commanded |
+| G-15 | One-call `format="hailo"` compile + **1 024 in-domain calibration images**, with a guard against the silent COCO128 fallback | SOTA | vision | 4 | 1 | 1 | **20.0** | yes — entirely off-vehicle |
+| G-16 | **Active selection** of which frames a human labels | SOTA | vision | 5 | 1 | 2 | **12.5** | yes — off-vehicle, on the existing archive |
+| G-17 | A **DeepVL-shaped second-opinion velocity model** | SOTA | vision + localization | 5 | 2 | 3 | **8.3** | partly — needs labelled velocity truth |
+| G-18 | XFeat → **XFeat\*** semi-dense in the anchor rung | SOTA | vision | 3 | 1 | 1 | **15.0** | yes — bench, on recorded footage |
+| G-19 | Gate flow health on the **KLT Hessian** we already compute | SOTA | vision | 4 | 1 | 1 | **20.0** | yes — replay recorded caustics footage |
 | G-08 | A model-production pipeline: label → train → compile → verify, timed | OURS | vision | 5 | 2 | 3 | **8.3** | yes — entirely off-vehicle |
 | G-06 | Close the loop from `/lock` to control (`vision.lock_s > 0`) | OURS | vision | 4 | 3 | 2 | **6.7** | partly — bench with a printed target |
 
@@ -251,6 +256,87 @@ incline test on the assembled hull to check the number.
 **The falsifier.** If the measured restoring moment is small enough that a thruster wash can roll
 the hull past the camera's usable tilt, "leave roll passive" stops being a design choice and
 becomes a ballast problem — which is a hardware answer, found by a software measurement.
+
+### G-15 — the compile is one call now, and it fails silently · `SOTA` · vision
+
+**The gap.** Our deployment path is six manual Dataflow Compiler steps with recorded traps.
+`model.export(format="hailo")` has existed since **ultralytics 8.4.97** and covers YOLOv8 / YOLO11
+/ YOLO26 including custom models. ⛔ It wants **≥1 024 in-domain calibration images**, and **with
+none supplied it silently falls back to COCO128** — the exact silent-failure shape this codebase
+keeps catching elsewhere. We currently calibrate on 320 real pool frames.
+
+**The move.** Adopt the one-call export, build a ≥1 024-frame in-domain calibration set, and write
+the guard **first**: a compile that did not see our frames must fail loudly, not quietly ship a
+COCO-calibrated `.hef`.
+
+**The falsifier.** Compile the same weights both ways and compare INT8 mAP on a held-out session.
+If the one-call path is not within the zoo's stated 0.6–2.4 mAP INT8 cost, it is not equivalent and
+the manual path stays.
+
+### G-16 — which frames we label matters more than how many · `SOTA` · vision
+
+**The gap.** We label whatever was collected. MaskAL, on a domain-shifted robot dataset with three
+held-out test sets, reaches **93.9 % of full-data performance from 17.9 % of the data**, against
+**81.9 % for random sampling** — a **12-point gap at equal effort**, and **900 actively-sampled
+images ≡ 2 300 random ones**. Our own three-octagon-models result (29.2 / 72.7 / 68.3 %
+cross-session recall at an *identical* mAP50 of 0.9950) is this same effect, unmanaged.
+
+**The move.** Score the existing archive by model uncertainty, label the top slice, retrain, repeat
+— the loop the literature measures, run on footage we already own.
+
+**The falsifier.** Hold out a session. If an actively-selected 20 % does not beat a random 20 % on
+that session's recall, the method does not transfer to our domain and the row closes with a real
+answer.
+
+**Note:** nothing in this literature measures **held-out-session** recall — every headline is an
+i.i.d. split. We already measure it. That is a lead, not a gap.
+
+### G-17 — a second opinion, not a fallback · `SOTA` · vision + localization
+
+**The gap.** Our flow refuses when it *knows* it cannot measure (no height, bare floor, rotation
+dominant). It cannot refuse when it is **confidently wrong** — the measured caustics failure, where
+tracking is healthy and tracking the wrong thing. Every published health mechanism except an
+independent second estimator detects the **absence** of signal, not a wrong one.
+
+DeepVL ([arXiv 2502.07726](https://arxiv.org/html/2502.07726), ICRA 2025) predicts body velocity
+from IMU + thruster commands + battery voltage: **28 k parameters, 3×GRU(40), <5 ms on an Orin
+AGX, 3.9 % relative position error through a full visual blackout**, 0.39 m RMSE per 10 m across
+88 trajectories, flown on a real BlueROV. Our own flow's drift floor is **3.4 %** — the same
+accuracy class, **with the camera off**.
+
+**The move.** Train the same shape on our data. We already have the input side (`/mongla/demand`,
+IMU, battery) and a partial version of the idea in `command_velocity.py`'s RLS fit.
+
+**The falsifier.** It needs ~4 h of labelled velocity truth, which we do not have. If flow-derived
+velocity is the only available label, the model can never disagree with flow usefully — and then
+this row collapses to "buy a DVL or a mocap hour", which is a hardware answer.
+
+**Risk 2** — it is additive until something consumes it.
+
+### G-18 — a measured free lunch inside a component we already run · `SOTA` · vision
+
+**The gap.** XFeat\* (semi-dense) against XFeat on the same CPU and protocol: **inliers
+892 → 1 885 (+111 %)**, **Acc@10° 74.9 → 85.1**, for **27.1 → 19.2 FPS (1.4× slower)**. Our anchor
+runs at 3 Hz by design, so the headroom exists.
+
+**The falsifier.** Replay recorded blackout footage through both. If anchor survival across our
+measured p90 gap (0.651 s) does not improve, the extra inliers are not buying what we need.
+
+### G-19 — the health metric is one eigenvalue away · `SOTA` · vision
+
+**The gap.** Our flow health is point-survival fraction. Super Odometry 2.0
+([arXiv 2608.25427](https://arxiv.org/abs/2608.25427), *Science Robotics*) gates visual health on
+the **Hessian of KLT tracking** — *the same matrix Shi-Tomasi already computes inside our flow
+node* — and disables a modality when its contribution stays below **10 % for 2–4 s**, with the
+hysteresis mattering as much as the threshold.
+
+**The move.** Publish the Hessian's smaller eigenvalue as a health channel and gate on it with
+hysteresis.
+
+**The falsifier.** Replay the recorded caustics clip. If the eigenvalue does not separate the
+caustic-tracking interval from good tracking, it is not the discriminator for *our* failure — which
+would itself be worth knowing, because it would confirm that only an independent estimator (G-17)
+catches a confident wrong reading.
 
 ---
 
