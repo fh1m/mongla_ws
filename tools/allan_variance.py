@@ -146,7 +146,7 @@ def characterise(tau: np.ndarray, sigma: np.ndarray, kind: str) -> dict:
 
 # ──────────────────────────────────────────────────────────── the logger ──
 
-def _save(out_path: Path, ts, bts, gx, gy, gz, ax, ay, az, mtype: str) -> None:
+def _save(out_path: Path, ts, bts, gx, gy, gz, ax, ay, az, temp, mtype: str) -> None:
     """Write the record so far. Atomic: write a temp file and rename, so a kill
     mid-write cannot leave a truncated npz where a good one used to be."""
     t = np.asarray(ts)
@@ -156,12 +156,15 @@ def _save(out_path: Path, ts, bts, gx, gy, gz, ax, ay, az, mtype: str) -> None:
     board_clock = bool(np.any(b > 0)) and float(np.median(np.diff(b))) > 0
     rate = (1000.0 / float(np.median(np.diff(b))) if board_clock
             else 1.0 / float(np.median(np.diff(t))))
-    tmp = out_path.with_suffix('.npz.part')
+    # numpy appends '.npz' to any name that lacks it, so the temp file must
+    # already end in .npz or savez writes somewhere we did not name.
+    tmp = out_path.with_name(out_path.stem + '.part.npz')
     np.savez_compressed(
         tmp, t=t, t_board_ms=b, board_clock=board_clock, rate_hz=rate,
         msg_type=mtype,
         gyro=np.vstack([gx, gy, gz]).astype(float),
         accel=np.vstack([ax, ay, az]).astype(float),
+        temp_cdegc=np.asarray(temp, dtype=float),
         taken=datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))
     tmp.replace(out_path)
 
@@ -180,7 +183,7 @@ def log_imu(port: str, hours: float, out_path: Path) -> Path:
 
     t_start = time.time()
     t_end = t_start + seconds
-    ts, bts, gx, gy, gz, ax, ay, az = [], [], [], [], [], [], [], []
+    ts, bts, gx, gy, gz, ax, ay, az, temp = [], [], [], [], [], [], [], [], []
     last_report = t_start
     msg = None
     while time.time() < t_end:
@@ -198,8 +201,9 @@ def log_imu(port: str, hours: float, out_path: Path) -> Path:
         bts.append(d.get('time_boot_ms', 0))
         gx.append(d['xgyro']); gy.append(d['ygyro']); gz.append(d['zgyro'])
         ax.append(d['xacc']);  ay.append(d['yacc']);  az.append(d['zacc'])
+        temp.append(d.get('temperature', 0))     # cdegC; 0 when unpopulated
         if time.time() - last_report > CHECKPOINT_S:
-            _save(out_path, ts, bts, gx, gy, gz, ax, ay, az, msg.get_type())
+            _save(out_path, ts, bts, gx, gy, gz, ax, ay, az, temp, msg.get_type())
             print(f'  {(time.time() - t_start) / 3600.0:.2f} h, {len(ts)} samples, '
                   f'checkpointed', flush=True)
             last_report = time.time()
@@ -222,12 +226,7 @@ def log_imu(port: str, hours: float, out_path: Path) -> Path:
         rate = 1.0 / float(np.median(np.diff(ts)))
         print(f'⚠ board does not stamp time_boot_ms -- falling back to ARRIVAL '
               f'time at {rate:.2f} Hz. Short-tau results carry link jitter.')
-    np.savez_compressed(
-        out_path, t=ts, t_board_ms=bts, board_clock=board_clock,
-        rate_hz=rate, msg_type=msg.get_type(),
-        gyro=np.vstack([gx, gy, gz]).astype(float),
-        accel=np.vstack([ax, ay, az]).astype(float),
-        taken=datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))
+    _save(out_path, ts, bts, gx, gy, gz, ax, ay, az, temp, msg.get_type())
     print(f'wrote {out_path}  {ts.size} samples at {rate:.1f} Hz')
     return out_path
 
@@ -247,6 +246,17 @@ def analyse(path: Path) -> int:
 
     clock = 'board clock' if bool(d['board_clock']) else 'HOST ARRIVAL TIME (jittered)'
     print(f'\n{path.name}: {t.size} samples, {rate:.1f} Hz, {hours:.2f} h, {mtype}, {clock}')
+    if 'temp_cdegc' in d.files:
+        tc = np.asarray(d['temp_cdegc'], dtype=float)
+        if np.any(tc != 0):
+            span = (tc.max() - tc.min()) / 100.0
+            print(f'IMU temperature {tc.min()/100:.1f} to {tc.max()/100:.1f} C '
+                  f'(span {span:.2f} C)')
+            if span > 2.0:
+                print('⚠ that span is large enough to move bias. Any rate-random-walk '
+                      'read off this curve may be thermal, not intrinsic.')
+        else:
+            print('IMU temperature field is not populated by this firmware')
     if hours < MIN_USEFUL_HOURS:
         print(f'⚠ {hours:.2f} h is under the {MIN_USEFUL_HOURS} h floor -- the '
               f'bias-instability minimum will very likely be unresolved.')
@@ -331,6 +341,7 @@ def main() -> int:
     ap.add_argument('--log', action='store_true', help='record from the board')
     ap.add_argument('--port', default='/dev/ttyACM0')
     ap.add_argument('--hours', type=float, default=12.0)
+    ap.add_argument('--out', help='where to write (default: CWD)')
     ap.add_argument('--analyse', metavar='NPZ')
     ap.add_argument('--selftest', action='store_true')
     a = ap.parse_args()
@@ -339,7 +350,9 @@ def main() -> int:
         return selftest()
     if a.log:
         stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-        out = ROOT / f'imu_allan_{stamp}.npz'
+        # CWD, not the source tree: this tool is copied to the vehicle and run
+        # from /tmp, where parents[1] is '/' and the write is refused.
+        out = Path(a.out) if a.out else Path.cwd() / f'imu_allan_{stamp}.npz'
         log_imu(a.port, a.hours, out)
         return analyse(out)
     if a.analyse:
