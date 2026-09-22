@@ -226,6 +226,17 @@ class Board:
         self.mav.mav.set_mode_send(
             1, self.enums.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED, mode_int)
 
+    def mode(self, timeout: float = 3.0):
+        """The board's live custom mode, from HEARTBEAT. `set_mode` is
+        best-effort on this wire -- a silent refusal looks exactly like
+        success -- so every mode change must be read back."""
+        t0 = time.time()
+        while time.time() - t0 < timeout:
+            m = self.mav.recv_match(type='HEARTBEAT', blocking=True, timeout=1.0)
+            if m and m.get_srcSystem() == 1:
+                return int(m.custom_mode)
+        return None
+
     def arm(self, on: bool) -> None:
         self.mav.mav.command_long_send(
             1, 1, self.enums.MAV_CMD_COMPONENT_ARM_DISARM, 0,
@@ -309,6 +320,91 @@ def ladder(b: Board, pico: PicoConsole, axis: str = 'fwd') -> list[dict]:
     return rows
 
 
+MODE_STABILIZE, MODE_DEPTH_HOLD, MODE_AUTO = 0, 2, 23
+
+
+def verify_mode_refusal(b: Board, pico: PicoConsole) -> dict:
+    """⛔ With no barometer, DEPTH_HOLD and AUTO must be REFUSED.
+
+    The contract: an unhealthy baro refuses DEPTH_HOLD/AUTO/PATTERN, and since
+    `SROT_MOVE` enters AUTO, that means every move verb is denied -- the vehicle
+    arms and simply will not move. The Bar30 is not connected on this bench, so
+    the refusal is testable directly.
+
+    ⚠ This is the interlock, not a nicety. If AUTO were accepted with no
+    barometer, `depth::update()` would close a loop on a measurement that does
+    not exist, and the SURFACE failsafe routes through the same loop.
+    """
+    out = {}
+    for name, want in (('STABILIZE', MODE_STABILIZE), ('DEPTH_HOLD', MODE_DEPTH_HOLD),
+                       ('AUTO', MODE_AUTO)):
+        b.set_mode(MODE_STABILIZE)
+        time.sleep(1.5)
+        b.mode()
+        b.set_mode(want)
+        time.sleep(1.5)
+        got = b.mode()
+        took = (got == want)
+        out[name] = {'requested': want, 'observed': got, 'took': took}
+        verdict = 'ACCEPTED' if took else 'refused'
+        flag = ''
+        if name in ('DEPTH_HOLD', 'AUTO') and took:
+            flag = '   ⛔ ACCEPTED WITH NO BAROMETER -- the interlock did not hold'
+        if name == 'STABILIZE' and not took:
+            flag = '   ⛔ the control mode itself was refused; nothing below is valid'
+        print(f'  {name:<11} requested {want:>2} -> observed {got}   {verdict}{flag}',
+              flush=True)
+    b.set_mode(MODE_STABILIZE)
+    time.sleep(1.0)
+    return out
+
+
+def verify_saturation(b: Board, pico: PicoConsole) -> dict:
+    """The mixer scales down UNIFORMLY WITHIN EACH GROUP when it saturates, and
+    the two groups are independent (`mixer.cpp:44-66`).
+
+    That independence is a deliberate fix with a worked example in their own
+    comment: it "used to compute ONE maxabs across all eight thrusters", so a
+    saturating forward command scaled down roll and pitch even though the
+    vertical motors were nowhere near their limits -- "a hard forward burst
+    silently cost a third of the vehicle's roll/pitch authority, in the
+    manoeuvre where you want it most."
+
+    THE PREDICTION, written before the run. fwd = 1.0 with lat = 0.5, both
+    shaped by PILOT_EXPO (1.000 and 0.3875), against the +-1 matrix:
+
+        M1 = -1.000 + 0.3875 = -0.6125      M3 = +1.000 + 0.3875 = +1.3875
+        M2 = -1.000 - 0.3875 = -1.3875      M4 = +1.000 - 0.3875 = +0.6125
+
+    maxabs = 1.3875, so the group scales by 1/1.3875 = 0.7207 and the four
+    normalised outputs are 0.4414, 1.0, 1.0, 0.4414 -- which through the thrust
+    curve and the floor are about 657, 999, 999, 657 counts.
+
+    FALSIFIER: if adding heave changes the HORIZONTAL numbers, or if adding a
+    saturating surge changes the VERTICAL ones, the groups are coupled and their
+    fix is not doing what the comment says.
+    """
+    cases = (('fwd 1.0 alone', {'fwd': 1.0}),
+             ('fwd 1.0 + lat 0.5', {'fwd': 1.0, 'lat': 0.5}),
+             ('up 0.5 alone', {'up': 0.5}),
+             ('fwd 1.0 + lat 0.5 + up 0.5', {'fwd': 1.0, 'lat': 0.5, 'up': 0.5}))
+    out = {}
+    print('        ' + ' '.join(f'M{i + 1}'.rjust(5) for i in range(8)))
+    for label, axes in cases:
+        b.stream(SETTLE_S)
+        t0 = time.time()
+        b.stream(HOLD_S, **axes)
+        reps = pico.since(t0 + 0.5)
+        if not reps:
+            print(f'  {label:<28} (no console reports)')
+            continue
+        med = [sorted(r['cmd'][i] for r in reps)[len(reps) // 2] for i in range(8)]
+        out[label] = med
+        print(f'  {label:<28} ' + ' '.join(f'{v:5d}' for v in med), flush=True)
+    b.stream(SETTLE_S)
+    return out
+
+
 def summarise(rows: list[dict]) -> None:
     print('\nmeasured mixer -- per-motor `cmd` at each axis demand')
     print(f'{"axis":>5} {"level":>6}  ' + ' '.join(f'M{i}'.rjust(6) for i in range(1, 9)))
@@ -336,9 +432,11 @@ def main() -> int:
                     help='disarmed only -- does the mixer preview at all?')
     ap.add_argument('--ladder', metavar='AXIS',
                     help='demand ladder on one axis (implies --arm)')
+    ap.add_argument('--verify', action='store_true',
+                    help='mode interlocks and group saturation (implies --arm)')
     ap.add_argument('--out', default='mixer_map.json')
     a = ap.parse_args()
-    if a.ladder:
+    if a.ladder or a.verify:
         a.arm = True
     if not (a.arm or a.dry):
         ap.error('pass --dry, --arm or --ladder AXIS')
@@ -360,7 +458,7 @@ def main() -> int:
 
             b.set_mode(0)                     # STABILIZE: the only mode that
             time.sleep(1.0)                   # honours MANUAL_CONTROL fully
-            if not a.ladder:
+            if not (a.ladder or a.verify):
                 print('\nDISARMED sweep:')
                 result['disarmed'] = sweep(b, pico, armed=False)
                 summarise(result['disarmed'])
@@ -378,6 +476,11 @@ def main() -> int:
                           'a mixer that does nothing.')
                 elif a.ladder:
                     result['ladder'] = ladder(b, pico, a.ladder)
+                elif a.verify:
+                    print('\nMODE INTERLOCKS (no barometer connected):')
+                    result['modes'] = verify_mode_refusal(b, pico)
+                    print('\nGROUP SATURATION:')
+                    result['saturation'] = verify_saturation(b, pico)
                 else:
                     print('\nARMED sweep:')
                     result['armed'] = sweep(b, pico, armed=True)
