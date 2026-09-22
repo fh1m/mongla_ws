@@ -40,8 +40,14 @@ WIDTH = 1500
 FIGURES = [
     ('numbers',     '#surface .bento', ''),
     ('wire-frame',  '.wire', ''),
-    ('stop-chip',   '#frame .stop[data-n="03"]', ''),
-    ('stop-lock',   '#frame .stop[data-n="05"]', ''),
+    # the theatre, parked on a named stage: the selector cannot go stale
+    # silently, because a missing figure is reported and the README guard fails
+    ('stop-chip',   '#theatre .theatre__stage',
+     "var t=document.querySelectorAll('#tbar [role=\"tab\"], #tbar button'); "
+     "if (t.length > 2) t[2].click();"),
+    ('stop-lock',   '#theatre .theatre__stage',
+     "var t=document.querySelectorAll('#tbar [role=\"tab\"], #tbar button'); "
+     "if (t.length > 4) t[4].click();"),
     ('colour-loss', '.colour', ''),
     ('lock-ladder', '.rungs2', ''),
     ('ledger',      '.core', ''),
@@ -54,6 +60,12 @@ FIGURES = [
      "document.querySelectorAll('[data-flow]').forEach(b => "
      "{ if (b.textContent.trim() === 'height off by 20 %') b.click(); });"),
     ('blockers',    '.board', ''),
+    # the mission run, stopped a third of the way in: a state the reader can read
+    ('brain-run',   '#brain-fig',
+     "var st=document.querySelectorAll('#brain-steps [data-s]'); "
+     "if (st.length > 3) st[3].click(); "
+     "var p=document.getElementById('brain-play'); "
+     "if (p && p.textContent.trim() === 'pause') p.click();"),
     ('safety-chain', '#safety .chain',
      "document.querySelector('[data-fault=\"leak\"]').click();"),
 ]
