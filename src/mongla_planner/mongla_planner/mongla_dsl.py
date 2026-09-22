@@ -152,7 +152,7 @@ from vision_msgs.msg import Detection2DArray
 from .model_context import ClassRef, ModelRegistry
 from .vision_dsl import _VisionDSL  # noqa: F401 -- re-exported; used by MonglaMission
 
-from .client import MoveFailed, TaskAbandoned   # arm() raises MoveFailed; task() raises TaskAbandoned
+from .client import MoveFailed, TaskAbandoned, MissionRefused  # arm() raises MoveFailed; task() raises TaskAbandoned; require() raises MissionRefused
 
 
 def _format_outcome(cmd: str, result) -> str:
@@ -1108,6 +1108,108 @@ class MonglaMission:
         self._scoreboard.append({'cmd': f'budget:{name}', 'success': bool(v.attempt),
                                  'elapsed': 0.0, 'msg': f'{v.mode}: {v.reason}'})
         return v
+
+    def step(self, name: str, *, points: int, worst_case_s: float,
+             run, fallback=None, fallback_s: float = 0.0,
+             fallback_points: int = 0, needs: str = ''):
+        """One declared piece of a run. Pairs with `run_plan()`.
+
+        `run` and `fallback` are CALLABLES taking `(mongla)` -- never verb
+        names, the same rule `resilience.py` holds: a mechanism that accepts a
+        verb name can be pointed at `disarm` by a config edit.
+
+        `needs` names a verb the step cannot work without; the plan skips the
+        step when the backend refuses it, instead of discovering that mid-dive.
+        """
+        return {'name': str(name), 'points': int(points),
+                'worst_case_s': float(worst_case_s), 'run': run,
+                'fallback': fallback, 'fallback_s': float(fallback_s),
+                'fallback_points': int(fallback_points), 'needs': str(needs)}
+
+    def run_plan(self, steps, *, order: str = 'as_written'):
+        """Execute a declared plan, re-deciding from the LIVE clock each time.
+
+        This is the whole point: a mission stops being a hand-ordered script
+        that hopes it fits, and becomes a declaration of what each task is worth
+        and what it costs. Between steps the clock has moved and the world has
+        changed, so the verdict is asked again -- never precomputed once.
+
+            mongla.use_budget(900, reserve_s=60)
+            mongla.run_plan([
+                mongla.step('gate',   points=100, worst_case_s=120,
+                            run=gate, fallback=blind_transit,
+                            fallback_s=25, fallback_points=40),
+                mongla.step('bins',   points=200, worst_case_s=180, run=bins),
+                mongla.step('flares', points=50,  worst_case_s=90,
+                            run=flares, needs='fire'),
+            ])
+
+        What it handles so the author does not:
+          * the budget verdict per step (full / fallback / skip),
+          * a deadline per step, so an overrun is abandoned rather than eating
+            the run -- `TaskAbandoned` is caught here and the plan continues,
+          * a verb the backend refuses (`needs=`), skipped with a reason,
+          * every outcome on the scorecard.
+
+        `order='by_value'` sorts by points per second first. ⚠ It ignores where
+        the props are -- `by_points_per_second` says so itself -- so it is for
+        deciding what to DROP, not the order to swim. Default is as written.
+
+        Returns the list of `(name, outcome)` actually executed.
+        """
+        from mongla_planner.run_budget import Task, by_points_per_second
+
+        steps = list(steps)
+        if order == 'by_value':
+            ranked = by_points_per_second([
+                Task(s['name'], s['points'], s['worst_case_s'],
+                     fallback_s=s['fallback_s'],
+                     fallback_points=s['fallback_points']) for s in steps])
+            by_name = {s['name']: s for s in steps}
+            steps = [by_name[t.name] for t in ranked]
+            self.log.info('[PLAN ] order by value: '
+                          + ' > '.join(s['name'] for s in steps))
+
+        results = []
+        for s in steps:
+            name = s['name']
+
+            if s['needs'] and not self.can(s['needs']):
+                self.note(name, f"skipped: backend refuses {s['needs']!r}",
+                          success=False)
+                results.append((name, 'unsupported'))
+                continue
+
+            verdict = self.worth_attempting(
+                name, points=s['points'], worst_case_s=s['worst_case_s'],
+                fallback_s=s['fallback_s'], fallback_points=s['fallback_points'])
+
+            if not verdict.attempt:
+                results.append((name, 'skipped'))
+                continue
+
+            use_fallback = verdict.mode == 'fallback'
+            body = s['fallback'] if use_fallback else s['run']
+            if body is None:
+                self.note(name, 'no fallback authored for this step',
+                          success=False)
+                results.append((name, 'skipped'))
+                continue
+
+            deadline = s['fallback_s'] if use_fallback else s['worst_case_s']
+            try:
+                with self.task(name, deadline_s=deadline):
+                    body(self)
+                results.append((name, verdict.mode))
+            except TaskAbandoned:
+                # A task that cannot be finished must not cost the run. The
+                # deadline already cancelled the goal in flight; keep swimming.
+                results.append((name, 'abandoned'))
+
+        done = [n for n, o in results if o in ('full', 'fallback')]
+        self.log.info(f'[PLAN ] {len(done)}/{len(steps)} steps carried out: '
+                      + ', '.join(f'{n}={o}' for n, o in results))
+        return results
 
     def disarm(self, *, timeout: float = 20.0):
         return self._send('disarm', timeout=timeout)
@@ -2946,6 +3048,46 @@ class MonglaMission:
                 ros_node.destroy_client(cli)
             self._backend_cache = kind
         return self._backend_cache
+
+    def can(self, verb: str) -> bool:
+        """Will this verb actually do something on the backend we are flying?
+
+        The capability oracle the retired FSM layer had and never consulted: it
+        carried a `VehicleProfile.has_heading_lock` that was False on srot and
+        had **zero callers**, so every plan dispatched `lock_heading` anyway, the
+        refusal raised, and the run ended one state after DIVE (J04). A mission
+        branches on this instead:
+
+            if mongla.can('lock_heading'):
+                mongla.lock_heading(90)
+
+        ONE TRUTH, not a second copy: the answer is read out of
+        `srot_fc.UNSUPPORTED_VERBS`, the same frozenset the manager checks before
+        dispatch. A hand-maintained list here would be the second place to
+        disagree -- which is exactly how J04 happened.
+        """
+        if self.backend != 'srot':
+            return True
+        try:
+            from mongla_control.fc.srot_fc import UNSUPPORTED_VERBS
+        except Exception:                       # control package not importable
+            self.log.warn(f"[DSL  ] can({verb!r}): srot_fc unreadable, assuming yes")
+            return True
+        return verb not in UNSUPPORTED_VERBS
+
+    def require(self, verb: str, *, why: str = '') -> None:
+        """Refuse the mission NOW if a verb it depends on cannot run.
+
+        For the case where there is no sensible branch: better to fail on the
+        deck, loudly, than to discover it underwater. The opposite of what the
+        FSM did, which was to convert the refusal into a silent surface.
+        """
+        if self.can(verb):
+            return
+        reason = f' ({why})' if why else ''
+        raise MissionRefused(
+            f"{verb!r} is refused on backend {self.backend!r}{reason} -- "
+            f"branch on mongla.can({verb!r}) or author a fallback")
 
     def pause_detector(self, camera: str | None = None, *,
                        node: str | None = None) -> None:

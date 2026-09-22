@@ -45,41 +45,39 @@ something it is not. Code beats docs; a measurement beats both — see
 27. [Precision terminal alignment — hold steady & don't miss the hole](missions/precision-alignment.md)
 28. [mongla.detected()` paradigm — complete reference](missions/detected-paradigm.md)
 29. [Mongla Mission Cookbook](missions/mission-cookbook.md)
-30. [Mongla FSM Guide — YASMIN State Machine Planning Layer](missions/fsm-guide.md)
-31. [Vision-Guided FSM Mission Design — First Principles](missions/fsm-vision-missions.md)
 
 ## Part V — Running it
 
-32. [Launch Combinations — the "so we never fail" master reference](platform/launch-combinations.md)
-33. [Pool day](platform/pool-day.md)
-34. [Environment traps — dependency pitfalls that take down the vision launch](platform/pi-and-env-traps.md)
-35. [Ground-station remote access — the smooth, drop-proof workflow](platform/remote-access.md)
-36. [Operator tooling — Foxglove, rosbag record/replay, scorecards](platform/foxglove-and-bags.md)
-37. [ROS2 Conventions — Duburi AUV Codebase](platform/ros2-conventions.md)
-38. [Simulator — pointer](platform/mongla-sim.md)
+30. [Launch Combinations — the "so we never fail" master reference](platform/launch-combinations.md)
+31. [Pool day](platform/pool-day.md)
+32. [Environment traps — dependency pitfalls that take down the vision launch](platform/pi-and-env-traps.md)
+33. [Ground-station remote access — the smooth, drop-proof workflow](platform/remote-access.md)
+34. [Operator tooling — Foxglove, rosbag record/replay, scorecards](platform/foxglove-and-bags.md)
+35. [ROS2 Conventions — Duburi AUV Codebase](platform/ros2-conventions.md)
+36. [Simulator — pointer](platform/mongla-sim.md)
 
 ## Part VI — Reference
 
-39. [Command reference — generated from the code](reference/commands.md)
-40. [The packages](packages/README.md)
+37. [Command reference — generated from the code](reference/commands.md)
+38. [The packages](packages/README.md)
 
 ## Part VII — The record
 
-41. [Measured bars — every number the stack ships, and what measured it](measured-bars.md)
-42. [Mongla / mongla_ws — Unified Bug Register](BUGS.md)
-43. [Upstream asks — `mongla_ws` → `srot-control-board](upstream/README.md)
+39. [Measured bars — every number the stack ships, and what measured it](measured-bars.md)
+40. [Mongla / mongla_ws — Unified Bug Register](BUGS.md)
+41. [Upstream asks — `mongla_ws` → `srot-control-board](upstream/README.md)
 
 ## Part VIII — Against the world
 
-47. [Against the world — how Mongla compares to the best work there is](sota/README.md)
-48. [Control, against the world](sota/control.md)
-49. [Vision, against the world](sota/vision.md)
-50. [Localization, against the world](sota/localization.md)
-51. [Planning, the DSL and the mission executive, against the world](sota/planning.md)
-52. [The gap ledger — every move, ranked](sota/SOTA-GAPS.md)
+42. [Against the world — how Mongla compares to the best work there is](sota/README.md)
+43. [Control, against the world](sota/control.md)
+44. [Vision, against the world](sota/vision.md)
+45. [Localization, against the world](sota/localization.md)
+46. [Planning, the DSL and the mission executive, against the world](sota/planning.md)
+47. [The gap ledger — every move, ranked](sota/SOTA-GAPS.md)
 
 ## Appendix — History and elsewhere
 
-44. [Legacy: the Pixhawk backend and ArduSub SITL](platform/legacy-pixhawk-and-sitl.md)
-45. [RoboSub Team Intelligence — Mongla Vision Roadmap](scouting/README.md)
-46. [Future TODO -- shrink `commands.py` registry](future/future-registry-shrinkage.md)
+48. [Legacy: the Pixhawk backend and ArduSub SITL](platform/legacy-pixhawk-and-sitl.md)
+49. [RoboSub Team Intelligence — Mongla Vision Roadmap](scouting/README.md)
+50. [Future TODO -- shrink `commands.py` registry](future/future-registry-shrinkage.md)

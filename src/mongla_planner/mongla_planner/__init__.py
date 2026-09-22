@@ -14,7 +14,6 @@ Submodules:
   cli             -- `mongla` argparse CLI (auto-built from COMMANDS)
   mission         -- `mission` runner that dispatches into missions/<name>.run
   missions/       -- one Python file per mission (run(mongla, log) entry)
-  state_machines/ -- reserved for future YASMIN-based plans
 
 Why this package exists
 -----------------------

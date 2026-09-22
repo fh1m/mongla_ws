@@ -1370,7 +1370,7 @@ eagerly, so the first call never false-negates):
 - `mongla.where(class, *, band=0.15, ...) -> 'left'|'center'|'right'|'unknown'`
   — bearing of the largest match (`where_offset` → signed `[-1,+1]`)
 
-This is the architecture step toward YASMIN FSMs — each `while detected()` loop
+This is the architecture step toward a declared plan — each `while detected()` loop
 IS a proto-state.
 
 **Full deep-dive reference:** [`.claude/context/missions/detected-paradigm.md`](detected-paradigm.md)
@@ -1601,9 +1601,7 @@ The flat layout is required: `discover()` only globs `missions/*.py` (non-recurs
 | Category | Prefix | Examples |
 |---|---|---|
 | Competition chunks (detected-paradigm) | `task_` | `task_gate`, `task_slalom`, `task_bin`, `task_torpedo`, `task_return`, `task_full_2026` |
-| Competition FSM launchers | `fsm_` | `fsm_slalom`, `fsm_bin`, `fsm_torpedo`, `fsm_return`, `fsm_full_2026` |
 | Demos / development | `demo_` | `demo_arc`, `demo_square`, `demo_heading_lock`, `demo_move_see`, `demo_pursue`, `demo_find_person` |
-| Prior FSM missions (kept) | varies | `gate_flare_fsm`, `prequal_fsm`, `gate_then_bin_fsm` |
 
 ### Key patterns introduced by the competition missions
 
@@ -1739,16 +1737,27 @@ def run(mongla, log=None):
         mongla.stop(); mongla.disarm()
 ```
 
-### FSM alternative (recommended for competition)
+### A declared plan (`run_plan`)
 
-`fsm_full_2026` wraps the same tasks as a YASMIN state machine — structured retry,
-outcome logging, per-task skip on failure:
+The YASMIN FSM layer was **retired on 2026-09-22** — 3,550 lines that had never
+executed, carrying a defect that ended every run one state after DIVE. What it was
+supposed to give (per-task skip, structured outcomes, a deadline per task) is now in
+the DSL itself, and a mission declares rather than sequences:
 
-```bash
-ros2 run mongla_planner mission fsm_full_2026
+```python
+mongla.use_budget(900, reserve_s=60)
+mongla.run_plan([
+    mongla.step('gate',   points=100, worst_case_s=120, run=gate,
+                fallback=blind_transit, fallback_s=25, fallback_points=40),
+    mongla.step('bins',   points=200, worst_case_s=180, run=bins),
+    mongla.step('flares', points=50,  worst_case_s=90,  run=flares, needs='fire'),
+])
 ```
 
-Fill `competition_config.py` headings before running. `torpedo_depth_m=None` → torpedo task skipped.
+`run_plan` asks the budget for a verdict **between** steps, from the live clock —
+never once, up front. It skips a step whose `needs=` verb the backend refuses, runs
+each body inside its own deadline, catches `TaskAbandoned` and keeps swimming, and
+puts every outcome on the scorecard.
 
 ### Individual chunk test commands
 
@@ -1764,7 +1773,7 @@ ros2 run mongla_planner mission task_torpedo
 
 # full 5-task runs
 ros2 run mongla_planner mission task_full_2026   # detected-paradigm
-ros2 run mongla_planner mission fsm_full_2026    # YASMIN FSM (recommended)
+ros2 run mongla_planner mission sauvc_full       # a declared plan (run_plan)
 ```
 
 See `packages/README.md §3` for per-chunk expected outputs and `models/README.md §Competition models` for model status.

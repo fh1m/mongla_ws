@@ -42,6 +42,15 @@ class TaskAbandoned(RuntimeError):
     """A `mongla.task(...)` deadline passed: the in-flight goal was cancelled."""
 
 
+class MissionRefused(RuntimeError):
+    """`mongla.require(verb)` found a verb this backend will not run.
+
+    Raised on the deck, before the vehicle is committed -- deliberately the
+    opposite of the retired FSM layer, which converted the same refusal into an
+    ABORT wired to SURFACE and ended the run looking orderly (J04).
+    """
+
+
 # Verbs a passed task deadline never blocks: stopping, surfacing and releasing
 # the vehicle must always be sendable, especially from the fallback that runs
 # BECAUSE a task was abandoned.

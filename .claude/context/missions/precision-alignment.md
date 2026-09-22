@@ -281,5 +281,5 @@ restarting anything.
   strafe, so the lateral offset hold is gentler as the target fills the frame.
 
 See also: [`vision-results.md`](vision-results.md) (branch on where/how a verb
-ended), [`fsm-vision-missions.md`](fsm-vision-missions.md) (search patterns +
+ended), [`mission-cookbook.md`](mission-cookbook.md) (search patterns +
 mission design), [`command-reference.md`](command-reference.md) (full verb table).

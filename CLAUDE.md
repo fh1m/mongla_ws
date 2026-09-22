@@ -156,7 +156,7 @@ surface**.
 ```
 [mongla CLI] ─┐
 [mission]    ─┼── /mongla/move (one action, 30 verbs) ──► auv_manager_node ──USB-C──► SROT board
-[FSM state]  ─┘                                              │                         (500 Hz)
+[run_plan]   ─┘                                              │                         (500 Hz)
                                                              └──► /mongla/state, /mongla/imu,
                                                                   /mongla/esc_rpm, /mongla/demand
 [vision nodes] ──► detections · lock · velocity ──► [localization] ──► /mongla/odom
@@ -331,7 +331,7 @@ bring-up and operations: `srot-architecture` · `srot-integration` · `srot-boar
 
 **[`missions/`](.claude/context/missions/)** — how it is asked to do things:
 `command-reference` · `client-and-dsl-api` · `mission-cookbook` · `detected-paradigm` ·
-`precision-alignment` · `vision-results` · `fsm-guide` · `fsm-vision-missions` ·
+`precision-alignment` · `vision-results` ·
 `mission-design`
 
 **[`packages/`](.claude/context/packages/README.md)** — one page per ROS package.

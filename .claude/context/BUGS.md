@@ -588,7 +588,7 @@ test that the two cannot diverge again, and an 8-thread × 200-cycle race check
 (`count += 1` is not atomic under either interpreter). Verified by injection:
 restoring the boolean semantics fails 3 of the 6, including the regression itself.
 
-### J02 — `SurfaceState` swallows the failure of the one call it exists to make  ✅ FIXED 2026-09-08
+### J02 — `SurfaceState` swallows the failure of the one call it exists to make  ✅ FIXED 2026-09-08 · **MOOT 2026-09-22 (the FSM tree was deleted)**
 `mongla_planner/state_machines/states/navigation.py`
 
 ```python
@@ -611,7 +611,7 @@ call the state exists to perform. Violates *"fail-safe defaults"*.
 
 **Deprioritised per operator** — this FSM tree has never executed (see J03).
 
-### J03 — 2,672 lines of FSM that has never run
+### J03 — 2,672 lines of FSM that has never run  ✅ RESOLVED 2026-09-22 — **deleted**
 `state_machines/` is 20 files / 2,501 lines plus 5 `missions/fsm_*.py` launchers
 / 171 lines. The operator confirms this code has **never executed**. CLAUDE.md
 presents the YASMIN FSM as BUILT and lists `fsm_full_2026` as *"(recommended)"*
@@ -624,7 +624,18 @@ the highest-consequence kind of stale claim.
 **Decision needed, not a fix to guess at:** exercise it and keep it, or delete
 the tree and stop calling it built.
 
-### J04 — every FSM plan aborts to SURFACE on srot, one state after DIVE  🔴 OPEN (found 2026-09-22)
+**The operator chose to delete it (2026-09-22).** 3,550 lines went: `state_machines/`
+(20 files), eight `missions/*fsm*.py` launchers, and two test files. Nothing outside
+`mongla_planner` imported any of it and no entry point named it. What the layer was
+supposed to provide now lives in the DSL, where missions already were:
+`mongla.can(verb)` (the capability oracle the FSM carried and never consulted),
+`mongla.require(verb)` (refuse on the deck, not underwater), and
+`mongla.run_plan(steps)` (a declared plan re-decided from the live clock, with a
+deadline per step and every outcome on the scorecard). `mission.py` already
+guaranteed disarm on both the success and the Ctrl-C paths, so `run_fsm` was
+redundant even for that.
+
+### J04 — every FSM plan aborts to SURFACE on srot, one state after DIVE  ✅ RESOLVED 2026-09-22 — **by deleting the layer (J03)**
 
 Found while mapping the planner for the SOTA dive, and verified by grep before
 being written down.
@@ -661,11 +672,18 @@ will call.
 **Inert only while J03 is true** (the FSM has never run) — and J03's stated
 decision is "exercise it and keep it", which is exactly when this bites.
 
-**The fix is not a guess:** consult `profile.has_heading_lock` in
-`LockHeadingState._run` and skip with a loud log, the way
-`_warn_no_distance_move` (`navigation.py:106-125`) already does for the distance
-verbs. The guard that must bite: a test that **executes** each plan's states
-against `srot_fc.UNSUPPORTED_VERBS`, not one that only builds the graph.
+**How it was resolved.** A guard on `LockHeadingState` was written first and it
+bit — the reproduction failed exactly as described. Then the operator retired the
+whole layer (J03), which makes the guard moot and the defect unreachable.
+
+**The lesson was kept, because it is the valuable part.** The capability oracle
+now exists where missions actually run: `mongla.can(verb)` reads
+`srot_fc.UNSUPPORTED_VERBS` **at call time** rather than copying it — one truth,
+not the second copy that caused this — and `mongla.run_plan()` skips any step
+whose `needs=` verb the backend refuses, with the skip on the scorecard.
+`test_run_plan.py` executes that path, and the J04 shape was injected back in to
+confirm the new guards fail against it (4 of 12 tests fail with the oracle
+stubbed to always say yes).
 
 ---
 
