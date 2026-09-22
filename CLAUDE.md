@@ -239,6 +239,13 @@ Verified: the downward camera as a velocity sensor — three 30 cm slides, worst
 ## 6. Running it
 
 ```bash
+# Provision a vehicle from scratch -- any Pi 5 + Hailo-8. Idempotent: run it
+# again after any change. It refuses a machine that is not one (wrong ROS
+# distro, no Hailo, no dialout, < 5 GB free) and exits NON-ZERO if the
+# vehicle's own bringup gate refuses.
+./scripts/provision_vehicle.sh fh1m@mongla.local            # sync + build + gate
+./scripts/provision_vehicle.sh fh1m@mongla.local --check-only
+
 ./build_mongla.sh                 # mirrors ~/models and ~/missions in, then builds
 source install/setup.bash
 
