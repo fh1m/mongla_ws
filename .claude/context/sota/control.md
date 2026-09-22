@@ -110,16 +110,258 @@ Shipped **off** by default: `ki_lat = 0.0` (lateral integral), `range_gain_floor
 
 ## 2. What the best work does
 
-*(Pending the research sweep for this dive.)*
+> **Coverage note, stated first because it matters.** This section is complete for **allocation,
+> thruster modelling and actuator fault tolerance**. The sweeps for *control laws* (INDI, MPC,
+> sliding mode, learning-based) and for *system identification without a basin* were killed by a
+> session limit before reporting, and nothing was written to disk. §6 lists exactly what is owed.
+> Nothing below is filled in from memory.
+
+### 2.1 The theorem that indicts our mixer
+
+[Johansen & Fossen, *Control allocation — A survey*, Automatica 49(5):1087–1103,
+2013](https://torarnj.folk.ntnu.no/ca_survey_final.pdf), citing Durham 1993:
+
+> *"no single generalized inverse (i.e. weight matrix W) can yield exact allocation whenever
+> possible using simple saturation."*
+
+That is a **proof** that clip-or-scale after a fixed mix cannot be made exact by any choice of
+mixer weights. Our uniform per-group scale-down is strictly **weaker** than the thing that theorem
+rules out: it is not a generalised inverse plus saturation, it is a generalised inverse plus a
+direction-preserving-per-group projection, applied in **demand space rather than force space**.
+
+The method family, with what each costs:
+
+| method | what it needs | cost per solve | what it buys |
+|---|---|---|---|
+| weighted pseudo-inverse, `C = W⁻¹Bᵀ(BW⁻¹Bᵀ)⁻¹` | geometric `B`, weights | **one p×m mat-vec — C is constant, computed offline** | least-squares optimal before limits |
+| damped / SVD-truncated inverse, `C_ε = W⁻¹Bᵀ(BW⁻¹Bᵀ + εI)⁻¹` | + ε or δ | same | survives rank loss — i.e. **a dead thruster** |
+| redistributed pseudo-inverse | B, u limits | 1–3 reduced solves; **≤2⁵ = 32 active-set patterns can be precomputed at p = 5** | exact in many saturating cases; no optimality guarantee |
+| daisy chaining | B, priority order | ≤ #groups solves | passes the **residual** down the chain |
+| direct allocation (Durham) | B, U, AMS facets | facet search / LP | **preserves the demand's direction** and provably reaches the attainable-moment-set boundary |
+| WLS active set (Härkegård) | B, U, weights, `u_p` | iterations ≈ linear in p; exact in finite steps | optimal, absorbs `u_min = u_max = 0` for a dead thruster |
+| explicit mp-QP | offline QP over fixed B, U | tree lookup | QP quality at lookup cost — **but B and U must be time-invariant, so it cannot host fault reconfiguration** |
+
+Two numbers that decide the embedded question:
+[Bodson & Frost](https://my.ece.utah.edu/~bodson/pdf/Constrained%20Quadratic%20Programming%20Techniques%20for%20Control%20Allocation.pdf)
+measured that active-set iteration count grows **linearly in the number of effectors** and that
+interior-point only wins **above ≈15 controls** — at our p = 5, active set is the right family and
+IP is not worth it. And
+[Bodson 2002](https://my.eng.utah.edu/~bodson/code/Evaluation%20of%20optimization%20methods.pdf):
+*"constrained optimization may be performed with computational requirements that fall within an
+order of magnitude of those of simpler methods. The performance gains … are found to be small on
+the average, but sometimes significant."*
+
+⚠ Two warnings that apply directly to this hull: iteration count **cannot be guaranteed**, so an
+embedded implementation must accept sub-optimality at a cap; and *"anti-cycling procedures are
+indeed needed since symmetric effectors may easily lead to degeneracies"* — a symmetric
+4-tunnel + 1-axial layout is exactly the degenerate case.
+
+### 2.2 Marine practice — and the one place we already agree with it
+
+From the same survey, §4.2:
+
+- **Yaw-first priority is published DP convention**, not an invention: *"Surge, sway and yaw
+  control, usually with a priority on the yaw axis since loss of heading will usually imply loss
+  of position under heavy wind conditions."* Our `HORIZONTAL_PRIORITY = (yaw, lateral, forward)`
+  matches the field. **But DP expresses it as a weight inside a QP; we express it as a sequential
+  greedy fit that never passes the residual on.**
+- A **fixed tunnel thruster is the easy case**: 1-DOF, a constant linear column of `B`. There is no
+  modelling excuse for not doing least squares on this geometry.
+- **Fault tolerance is an allocation design driver**: *"Thrusters may be disabled and enabled
+  dynamically in order to guarantee fault tolerance."* The worst-case single-point failure in the
+  industrial requirement is loss of **half** of thrust capacity.
+- For underwater vehicles specifically: *"Commonly used methods include pseudo-inverses,
+  redistributed pseudo-inverses or simple optimization formulations."*
+
+### 2.3 The anti-windup architecture we cannot implement yet
+
+[Johansen et al., *Anti-wind-up designs for dynamic positioning of marine vehicles with control
+allocation*](https://www.sciencedirect.com/science/article/pii/S1474667016319012) maps the
+actuator constraint set **up** to the motion-controller level so the allocator solves an
+unconstrained problem and the controller handles the constraint. The generic cascade rule is the
+same everywhere: feed back the **achieved** `τ = B·Proj_U(u)`, not the demanded `τ_c`.
+
+The survey states the quantity plainly: *"the allocated generalized force τ = BProj_U(u) may be
+different from the required/commanded force τ_c"* — and the allocator knows `Δτ` for free.
+
+⛔ **Our firmware computes that Δτ every tick and throws it away.** The per-group divide is never
+reported on any message (`allocation.py:3-15`, firmware PR #20). **No anti-windup design in this
+family is implementable on our vehicle today, whichever one we pick.**
+
+### 2.4 Thruster modelling — one of our assumptions survives, one does not
+
+[Blue Robotics T200 published performance](https://bluerobotics.com/store/thrusters/t100-t200-thrusters/t200-thruster-r2-rp/):
+
+| voltage | forward | reverse | rev/fwd | RPM at full throttle |
+|---|---|---|---|---|
+| 12 V | 3.71 kgf | 2.92 kgf | **0.787** | 3075 |
+| 16 V | 5.25 kgf | 4.10 kgf | **0.781** | 3600 |
+| 20 V | 6.70 kgf | 5.05 kgf | **0.754** | — |
+
+✅ Our `REVERSE_EFFICIENCY = 0.77` sits **within 1–3 % of the vendor's own ratio across 12–20 V**.
+It is one of the few constants in the stack that survives contact with a datasheet — though it is
+voltage-dependent and degrades as voltage rises.
+
+⛔ **The vendor data is bollard-only**, by the definition of bollard (*"zero advance speed… the
+only flow over the propeller is that induced by its own rotation"*). A `k` fitted to that
+spreadsheet is **a `k` at J = 0 by construction**, and over-predicts thrust at any transit speed —
+which is exactly the warning `thrust_model.py:16-32` already carries about itself.
+
+The right model for a purely thruster-propelled vehicle is four-quadrant
+([Häusler, Saccon, Hauser, Pascoal & Aguiar, IFAC/SMP 2015](https://pages.up.pt/~up519521/publications/SMP15.pdf)):
+`T = ½ρ c_T(β)(v_a² + v_p²)πR²` with `v_p = 0.7Rω` and `β = π − atan2(v_a, v_p)` — because for a
+thruster-propelled hull the sign changes in `n` make the advance ratio `J = v_a/(nd)` pass through
+infinity, and the first-quadrant model *"is adequate for … vehicles designed to keep a minimum
+speed and manoeuvre using control surfaces. This is in striking contrast to … vehicles that are
+purely thruster propelled."* Their worked case also shows the manufacturer's bollard spec can only
+serve as a **multiplicative correction** on `c_T` — it cannot supply the J-dependence.
+
+**The ESC deadband is bigger than our trim corrections.**
+[Blue Robotics](https://bluerobotics.com/learn/controlling-basic-esc-with-the-arduino-serial-monitor/):
+*"a deadband of +/- 25 microseconds centered around 1500"*. On our ±400 µs full scale that is
+**±6.25 % of range producing exactly zero thrust** — and our vision yaw floor is 5.0 %, i.e. inside
+the deadband. That 5.0 % is already labelled *"a hardware spin-up assumption, NOT a measured
+value"*; this is the first external number that says what it should be.
+
+### 2.5 Tunnel thrusters lose almost all authority in transit
+
+Two US patents, full text, quoting in-house AUV experiments:
+[US 6,286,447 B1](https://patents.google.com/patent/US6286447B1/en) — *"as the forward velocity of
+the vehicle was increased to a speed on the order of 3 knots, the effective side force… decreased
+to as low as 10 percent of the side force measured at zero forward vehicle velocity."*
+[US 6,164,230 A](https://patents.google.com/patent/US6164230A/en) gives the mechanism: the thruster
+jet obstructs the hull boundary layer, and the resulting suction **counteracts the force on the
+blades**.
+
+⚠ Provenance is weak — neither patent cites academic literature for the figure, and the primary
+academic sources (Palmer, Hearn & Stevenson, IEEE OCEANS; *Ocean Systems Engineering* on drift
+angle) were behind 403s. But the mechanism is the **same advance-ratio effect as §2.4, showing up
+on the lateral axis**.
+
+**Consequence for us, as a conditional:** if 3 kn / 10 % is even order-of-magnitude right for a
+⌀84 mm tunnel in a 702 mm hull, then a lateral tunnel's column in `B` **is not a constant — it
+collapses with surge speed.** A ±1 mixer encodes the bollard case and silently over-promises
+lateral authority during every transit. **That is a stronger argument against the fixed mixer than
+saturation is.**
+
+### 2.6 Fault tolerance — and why RPM is the wrong channel to detect it on
+
+- **Allocation side** (survey §2.2.6): a fault is *"changes in the B-matrix or the constraints…
+  an actuator that is locked in a faulty position could be systematically treated by setting the
+  lower and upper constraint limits to the locked value."* A dead thruster is `u_min = u_max = 0`,
+  which any constrained allocator absorbs with **no structural change**. A fixed ±1 mixer has no
+  way to express it at all.
+- **The closest published analogue to our hull**:
+  [Cristofaro & Johansen, *Fault tolerant control allocation using unknown input observers*,
+  Automatica 50:1891–1897, 2014](https://torarnj.folk.ntnu.no/cristofaro_automatica.pdf) — a
+  **5-thruster vessel, 3 azimuth + 2 transverse tunnels**. Their idea is the one worth stealing:
+  control allocation is used *actively*, constraining the redundant degrees of freedom **to make
+  the faults observable**. Redundancy is not only for recovery; it is the excitation that makes
+  detection possible.
+- **Measured detection speed**:
+  [arXiv:2504.16037](https://arxiv.org/html/2504.16037v1) on a BlueROV2 Heavy — an EKF bank with a
+  Bayesian posterior over failure models identifies a two-thruster failure **within 0.1 s**, and
+  soft switching reaches p = 0.9 within 5 s after a mid-run model change.
+- ⛔ **The channel matters.** Published AUV thruster FDI datasets are built from **voltage, current
+  and speed** per thruster. We have `ESC_STATUS(291)` undecodable here and **958/958 frames reading
+  exactly 0 RPM with nothing attached** — an RPM-based detector on this vehicle would report a
+  healthy zero for a missing thruster. **Current is the discriminating channel**, and it is exactly
+  what firmware PR #4 (Pico ESC voltage/current/temp decoded then discarded) would put on the wire.
+- **Cornell CUAUV** already ship the cheap end of this:
+  [2022 report](https://robonation.org/app/uploads/sites/4/2022/07/CUAUV-Technical-Report-2022.pdf)
+  — *"a new tool for automatically detecting and correcting the accidental reversal of our subs'
+  thrusters… By noticing and acting on discrepancies between attempted and actual movement."*
+
+### 2.7 Unactuated roll — what the field actually does
+
+- The formal consequence of under-actuation is Brockett: *"the system's equilibrium cannot be
+  stabilized using continuous pure state feedback."* **Scoping note that matters for us:** that
+  applies to setpoint stabilisation of the *full* configuration. If roll is left to hydrostatics
+  and never controlled, the 5-DOF subsystem does not hit Brockett — **the cost is paid in the
+  estimator, not the controller.**
+- The standard answer is **passive: centre of buoyancy above centre of gravity**.
+  [A box-shaped AUV design study](https://www.sciencedirect.com/science/article/pii/S1877050915038387)
+  reports a **7.39 cm metacentric height** with CoB directly above CoG, and the literature's
+  comparative point: **smaller AUVs have a relatively small stabilising moment because the vertical
+  CoG–CoB distance is small.**
+- When passive is not enough, the published fix is **an internal moving mass**
+  ([internal rolling mass](https://link.springer.com/chapter/10.1007/978-3-319-07488-7_16)), not a
+  roll thruster. Worth knowing, because "add a thruster" is not the field's default.
+- ⛔ **We cannot evaluate any of this on our hull**: Onshape reports **no material assigned to any
+  part**, so mass, CoG, CoB and therefore BG cannot be computed. Without BG there is no published
+  way to state our roll restoring moment — so "roll is passively stable" is currently an
+  assumption, not a finding.
+
+### 2.8 What the strongest competition teams run
+
+| team | what their TDR says |
+|---|---|
+| **NUS Bumblebee** (RoboSub champions) | [2023](https://robonation.org/app/uploads/sites/4/2023/06/TDR_NUS-Bumblebee_RS2023-compressed.pdf): *"Our thrust allocator uses **quadratic programming** … and **maintains control along each axis of motion even during thruster saturation**."* [2025](https://bumblebee.sg/pdf/Bumblebee_Robosub_Paper_2025.pdf): QP again, *"to prolong in-water testing time and mitigate wear"*. Their trajectory planner also imposes velocity/accel/jerk limits **to keep the allocator out of saturation upstream** — belt and braces. |
+| **Caltech** | [RS20](https://robonation.org/app/uploads/sites/4/2020/08/RS20_TDR_Caltech.pdf): 18-state LQR, then an explicit **4-tier priority saturation ladder** — *"(1) forces required to keep the sub static, (2) other vertical forces, (3) all other torques, (4) all other forces"*. Daisy chaining by another name — and note their **first** priority is hold-station/stay-level, not yaw. They also compensate thrust for battery voltage **on the host**. |
+| **Stanford** | [RS24](https://robonation.org/app/uploads/sites/4/2024/07/RS24_TDR_Stanford.pdf): 6 PID loops → a wrench → *"allocated as forces to the eight thrusters using an allocation matrix, **informed by the physical locations of the thrusters**"*, plus a stepwise inverse-quadratic PWM fit to the T200 curve. |
+
+**The field's verdict, in one line:** the two strongest teams in the archive both moved past fixed
+mixers — Bumblebee to QP in two consecutive reports, Caltech to a documented priority ladder.
+**Nobody in the sampled TDRs describes uniform per-group scale-down.**
 
 ---
 
 ## 3. The gap
 
+| # | what the best work does | what we do | the gap, in numbers |
+|---|---|---|---|
+| C-1 | allocate in **force space** through a geometric `B` | allocate in **demand space** through ±1 mix coefficients | using ±1 as a force sum overstates surge/sway by **1/cos 45° = 41 %**; the fix is ~25 multiply-accumulates |
+| C-2 | feed the **achieved** wrench back for anti-windup | the achieved wrench is computed on the board and **never transmitted** | every published anti-windup in this family is **unimplementable** for us today |
+| C-3 | treat a dead thruster as `u_min = u_max = 0` in a constrained allocator | a fixed ±1 mixer **cannot express a dead thruster at all** | published identification of a 2-thruster failure: **0.1 s**. Ours: none |
+| C-4 | detect thruster faults on **current** | we have RPM, undecodable, and **958/958 frames read 0 with nothing attached** | an RPM detector here reports a healthy zero for a missing thruster |
+| C-5 | model `k_T` falling with advance ratio (four-quadrant) | `T = k·n²` bollard-only, and `k` **unmeasured** | thrust over-predicted at cruise by an amount we cannot state — the J-slope for a T200 is behind a paywall (§6) |
+| C-6 | size the control floor above the **measured** ESC deadband | `VISION_YAW_MIN_PCT = 5.0`, self-labelled an assumption | the deadband is **±25 µs = ±6.25 %** of our range. **Our floor sits inside the dead zone** |
+| C-7 | know `B` changes with speed for tunnel thrusters | `B` is constant | lateral authority may fall to **~10 % at 3 kn** (weak provenance, §2.5) |
+| C-8 | state roll stability from a measured BG | roll assumed passively stable | **BG is not computable** — no materials in CAD |
+
 ---
 
 ## 4. Candidate moves
 
+Ranked in [`SOTA-GAPS.md`](SOTA-GAPS.md). The shape of dive 1's answer:
+
+- **C-1 + C-2 together are the cheapest real move in the stack**: a measured geometric `B`, one
+  offline weighted pseudo-inverse, and **the applied scale factor on the wire**. That removes the
+  41 % error, and it is the precondition for every anti-windup design published in this family. It
+  is ~25 MACs — it fits at 500 Hz with room to spare.
+- **A QP does not belong in the 500 Hz loop.** The measured solve times for a general solver are
+  **10–13.2 ms** (SeDuMi class, on a laptop), against a 2 ms budget. If we want QP-quality
+  allocation it runs **on the Pi at 10–50 Hz**, or as a precomputed active-set table — at p = 5
+  there are only **32 saturation patterns**, and they can all be inverted offline.
+- **Fault tolerance is an allocation property, not a feature.** The move is to make `B` a runtime
+  object with per-thruster limits, so a dead thruster is a limit change rather than a rewrite.
+- **The deadband finding (C-6) is testable this week on a bench with one thruster** and may
+  invalidate a shipped constant.
+
 ---
 
 ## 5. Rejected, with the reason
+
+| rejected | why |
+|---|---|
+| **Lipschitz-continuous analytic allocation** ([arXiv:2510.08119](https://arxiv.org/html/2510.08119)) | Its discontinuity is in **actuator orientation** (azimuth/tilt angle). Our geometry is fixed, so the result does not transfer. It becomes relevant only if a discrete mode switch — "thruster 3 declared dead" — makes the allocator's output jump, and then the same nullspace smoothing applies. Parked with that trigger written down. |
+| **Explicit / mp-QP allocation** | Fast (tree lookup) but the survey states it needs `B` and `U` **time-invariant**: *"the online computer memory requirements may limit the applicability … where the requirements for fault tolerance and reconfigurability are simple."* It trades away exactly the property C-3 wants. |
+| **Interior-point QP** | Bodson & Frost measured the crossover at **≈15 controls**; at p = 5 active set wins. |
+| **LP-based direct allocation as the online method** | Simplex iteration count is unbounded in the worst case and the survey warns that **symmetric effectors cause degeneracies needing anti-cycling** — our layout is symmetric. Viable only as an offline AMS enumeration plus a lookup. |
+
+---
+
+## 6. Research still owed on this dive
+
+Written down so the dossier cannot be mistaken for complete.
+
+| owed | why it is missing |
+|---|---|
+| **Control laws** — INDI / adaptive INDI, Lyapunov-constrained MPC, Koopman MPC, sliding mode / super-twisting, learning-based control that actually got wet, and *what loop rate an AUV demonstrably needs* | the sweep was killed by a session limit before it reported; nothing durable was written |
+| **System ID without a basin** — what is identifiable from free-running tests, added mass from geometry, coast-down drag, thruster ID without a load cell, physics-informed / GP / Koopman ID, excitation design, and what a model measurably buys | same |
+| **The T200's `k` and its J-dependence** | [Lam et al., OCEANS 2023](https://ieeexplore.ieee.org/document/10244513/) is the right paper and is paywalled. We have only the qualitative statement that `K_T` falls linearly with J and reaches zero at the geometric pitch. **The error from ignoring J at 0.5–1.5 m/s therefore cannot be stated** — and writing a number for it would be exactly the plausible-number-for-a-measurement failure this project names. |
+| **The tunnel-thruster speed penalty, from an academic source** | the 3 kn / 10 % figure is confirmed in two patents' full text but neither cites literature; the academic primaries were 403. |
+| **Fossen & Johansen's marine-only survey (MED 2006)** and **Sarkar/Podder/Antonelli 2002** | records verified, full texts not obtainable. |
+
+**And the honest bottom line for this dive:** none of the numbers above were measured on *this*
+vehicle. Every one is somebody else's hull.
