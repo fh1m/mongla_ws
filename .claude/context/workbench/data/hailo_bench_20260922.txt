@@ -1,0 +1,169 @@
+WINDOW_START 2026-09-22T20:12:35Z epoch=1790107955
+===== gate_rescue_repair 20:12:35Z temp=temp=49.4'C =====
+Starting Measurements...
+Measuring FPS in HW-only mode
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+Measuring FPS (and Power on supported platforms) in streaming mode
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+Measuring HW Latency
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+
+=======
+Summary
+=======
+FPS     (hw_only)                 = 97.9181
+        (streaming)               = 97.919
+Latency (hw)                      = 8.34039 ms
+===== sauvc_sim 20:13:20Z temp=temp=49.9'C =====
+Starting Measurements...
+Measuring FPS in HW-only mode
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+Measuring FPS (and Power on supported platforms) in streaming mode
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+Measuring HW Latency
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+
+=======
+Summary
+=======
+FPS     (hw_only)                 = 98.3589
+        (streaming)               = 98.1192
+Latency (hw)                      = 8.31512 ms
+===== bin_fire_blood 20:14:06Z temp=temp=49.4'C =====
+Starting Measurements...
+Measuring FPS in HW-only mode
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+Measuring FPS (and Power on supported platforms) in streaming mode
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+Measuring HW Latency
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+[F[2K
+
+=======
+Summary
+=======
+FPS     (hw_only)                 = 98.4494
+        (streaming)               = 98.4488
+Latency (hw)                      = 8.30804 ms
+WINDOW_END 2026-09-22T20:14:51Z epoch=1790108091 temp=temp=49.9'C
