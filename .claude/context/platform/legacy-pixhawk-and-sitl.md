@@ -91,4 +91,4 @@ They are in git history at `ae61b3b^` if the numbers in them are ever needed:
 | file | why it went | what replaced it |
 |---|---|---|
 | `perception/camera-calibration.md` | superseded almost line for line | [`perception/camera-and-calibration.md`](../perception/camera-and-calibration.md), which carries the measured in-water figures |
-| `missions/mission-design.md` | the 2025 (Pixhawk + DVL) mission architecture, including calibrated values for a hull we no longer fly | [`missions/fsm-guide.md`](../missions/fsm-guide.md) for the current FSM layer |
+| `missions/mission-design.md` | the 2025 (Pixhawk + DVL) mission architecture, including calibrated values for a hull we no longer fly | [`missions/mission-cookbook.md`](../missions/mission-cookbook.md) — the FSM layer was retired 2026-09-22 |

@@ -23,8 +23,11 @@
 
 **Platform (decided, built):** the SROT board runs every inner loop at 500 Hz with the BNO085 in
 hand; the Raspberry Pi + Hailo-8 does perception and estimation and feeds the board. Pixhawk /
-ArduSub is the preserved `pixhawk` branch, not the target. Missions and the YASMIN FSM are still
-Pixhawk-era and have never run on srot + Pi.
+ArduSub is the preserved `pixhawk` branch, not the target. Missions are still Pixhawk-era and
+have never run on srot + Pi. **The YASMIN FSM layer was retired on 2026-09-22** -- 3,550 lines
+that had never executed, carrying a defect (J04) that ended every run one state after DIVE.
+Missions are the DSL, and the DSL grew `can()`, `require()` and `run_plan()` to cover what the
+FSM was supposed to.
 
 **Competitions:** SAUVC 2026 (indoor 25 × 16 m pool, breach ends the attempt, flare order told to
 the team after Navigation) and RoboSub 2026 (outdoor TRANSDEC). Capabilities are keyed by LABEL,

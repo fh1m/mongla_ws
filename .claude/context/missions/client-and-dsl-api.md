@@ -151,6 +151,37 @@ mongla.log_scoreboard()                       # what happened, verb by verb
 Without `use_budget()` nothing is rationed — every verdict is "attempt, full". That is the
 opt-out: not calling it.
 
+### A declared plan
+
+For a run of several tasks, declare them and let the DSL fly the list:
+
+```python
+mongla.use_budget(900, reserve_s=60)
+mongla.run_plan([
+    mongla.step('gate',   points=100, worst_case_s=120, run=gate,
+                fallback=blind_transit, fallback_s=25, fallback_points=40),
+    mongla.step('bins',   points=200, worst_case_s=180, run=bins),
+    mongla.step('flares', points=50,  worst_case_s=90,  run=flares, needs='fire'),
+])
+```
+
+`run_plan` asks the budget for a verdict **between** steps, from the live clock — never once, up
+front, because by the second task the clock has moved and the world has changed. Per step it:
+
+| | |
+|---|---|
+| `needs='fire'` | skips the step if the backend refuses that verb, with the reason on the scorecard |
+| the verdict | runs the full body, the fallback, or nothing |
+| the deadline | each body runs inside its own `task(...)`, so an overrun is cancelled in flight |
+| `TaskAbandoned` | caught — **a task that cannot be finished must not cost the run** |
+
+`run` and `fallback` are **callables**, never verb names: a mechanism that accepts a verb name can
+be pointed at `disarm` by a config edit. `order='by_value'` sorts by points per second first — use
+it to decide what to *drop*, not the order to swim, because it does not know where the props are.
+
+It returns `[(name, outcome)]` with outcome one of `full`, `fallback`, `skipped`, `unsupported`,
+`abandoned`.
+
 `task()` is what turns a deadline into a *clean* abandonment: the in-flight goal is cancelled
 (the vehicle brakes and neutralises as with any cancel) and `TaskAbandoned` is raised so the
 mission takes its fallback. Nested tasks keep the earlier deadline, and the safety verbs are
@@ -183,9 +214,16 @@ Read once from the manager, and it **raises rather than guessing** if the manage
 reached. Missions use it to skip a verb one backend refuses:
 
 ```python
-if mongla.backend != 'srot':
+if mongla.can('lock_heading'):
     mongla.lock_heading(0.0)       # on srot the board holds heading itself
+
+mongla.require('fire', why='this task drops a marker')   # refuse on the deck, not underwater
 ```
+
+`can()` reads `srot_fc.UNSUPPORTED_VERBS` **at call time** — the same frozenset the manager checks
+before dispatch — so there is no second list to fall out of step. That mattered: the retired FSM
+layer carried its own capability flag, never consulted it, and every plan ended one state after
+DIVE (`BUGS.md` J04). `require()` raises `MissionRefused` when there is no sensible branch.
 
 ## The escape hatch
 

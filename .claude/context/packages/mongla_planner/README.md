@@ -84,7 +84,6 @@ of overrunning into the next task.
 | `resilience.py` | retries and fallbacks shared between missions |
 | `model_context.py` | naming a detection model and a class together |
 | `missions/` | the missions themselves, plus the pool-day constants |
-| `state_machines/` | the state-machine layer, wrapping the same verbs as states |
 
 ## Missions
 

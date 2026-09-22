@@ -978,32 +978,25 @@ else:
 ## 11. The paradigm in context of the mission architecture
 
 ```
-YASMIN FSM (built)             What the imperative paradigm does
-─────────────────────          ─────────────────────────────────────────
-VisionSearchState          →   while not mongla.detected('gate'):
-  SEARCH_GATE → ALIGN_GATE          mongla.move_forward(0.5, gain=30)
-
-VisionAlignState           →   mongla.vision.align('gate', yaw=0, lat=0, ...)
-  ALIGN_GATE → MOVE_GATE
-
-VisionMoveState            →   mongla.vision.move('gate', fwd=80, mode='height')
-  MOVE_GATE → PASS_GATE
-
-MoveForwardState           →   mongla.move_forward_dist(3.0, gain=60)
-  PASS_GATE → SEARCH_FLARE
+what a task looks like              the verb that does it
+──────────────────────────          ─────────────────────────────────────────
+search until it is there        →   while not mongla.detected('gate'):
+                                        mongla.move_forward(0.5, gain=30)
+line up on it                   →   mongla.vision.align('gate', yaw=0, lat=0, ...)
+close on it                     →   mongla.vision.move('gate', fwd=80, mode='height')
+go through it                   →   mongla.move_forward_dist(3.0, gain=60)
 ```
 
-Each `detected()`-based loop IS a proto-state. The YASMIN FSM layer
-(`mongla_planner/state_machines/`) wraps the *same* DSL verbs as explicit
-state nodes: `VisionSearchState` (search-until-detected), `VisionAlignState`
-(wraps `vision.align`), and `VisionMoveState` (wraps `vision.move`). The
-detected paradigm is the design that makes that mapping clean — every logical
-state is already isolated in the mission script.
+Each `detected()`-based loop is one self-contained step, which is what makes a
+mission readable as prose rather than as a graph.
 
-When missions outgrow linear scripts (more than ~3 tasks with retry logic),
-the YASMIN FSM is the right structure — and each `while detected()` loop maps
-1:1 to a `VisionSearchState`, each `vision.align`/`vision.move` to a
-`VisionAlignState`/`VisionMoveState`.
+⛔ **The YASMIN FSM layer was retired on 2026-09-22.** It wrapped these same DSL
+verbs in explicit state nodes — 3,550 lines that had never executed, carrying a
+defect (J04) that ended every run one state after DIVE. What it promised for
+missions bigger than a linear script now lives in the DSL: `mongla.run_plan()`
+takes the steps as a declaration, decides between them from the live clock,
+skips a step whose verb the backend refuses, gives each its own deadline, and
+records every outcome. See [`mission-cookbook.md`](mission-cookbook.md).
 
 ---
 
@@ -1016,4 +1009,4 @@ the YASMIN FSM is the right structure — and each `while detected()` loop maps
 - Mission samples: `src/mongla_planner/mongla_planner/missions/gate_flare_autonomous.py` (canonical use), `pool_day_practice.py` (full two-verb run + fallbacks)
 - Mission cookbook: `.claude/context/missions/mission-cookbook.md` §7.6
 - Client/DSL API: `.claude/context/missions/client-and-dsl-api.md` §2.5
-- YASMIN FSM states: `src/mongla_planner/mongla_planner/state_machines/states/vision.py` (`VisionSearchState` / `VisionAlignState` / `VisionMoveState`)
+- Declared plans: `mongla.run_plan()` / `mongla.step()` in `src/mongla_planner/mongla_planner/mongla_dsl.py`

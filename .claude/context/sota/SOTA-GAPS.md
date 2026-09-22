@@ -15,7 +15,8 @@
 | # | move | kind | dive | value | risk | effort | score | testable before water? |
 |---|---|---|---|---|---|---|---|---|
 | G-10 | Close the depth-sign gate on the bench with `DEPTH_CMD` | OURS | control | 5 | 1 | 1 | **25.0** | **yes — today, a thumb and a disarmed board** |
-| G-01 | Make every FSM plan survive a refused verb (J04) | OURS | planning | 5 | 1 | 1 | **25.0** | yes — executes in the test suite |
+| ~~G-01~~ | ~~Make every FSM plan survive a refused verb (J04)~~ | OURS | planning | — | — | — | **CLOSED 2026-09-22** | the layer was **retired**; the lesson moved into the DSL |
+| G-20 | A **pre-flight mission checker**: prove the properties before water | SOTA | planning | 5 | 1 | 2 | **12.5** | yes — entirely static, no vehicle |
 | G-03 | Measure `k_n_per_rpm2` on a fitted thruster | OURS | control | 4 | 1 | 1 | **20.0** | needs thrusters (G2), not water |
 | G-12 | Measure the ESC deadband; the yaw floor may sit inside it | SOTA | control | 4 | 1 | 1 | **20.0** | yes — one thruster on a bench |
 | G-11 | Geometric `B` + one offline pseudo-inverse + **report the scale factor** | SOTA | control | 5 | 2 | 2 | **12.5** | yes — the host half; the report is firmware PR #20 |
@@ -70,7 +71,36 @@ wired the way the firmware document says, and everything above is unproven.
 things currently blocking everything else — and it is the single sign whose error is a vehicle
 that dives when it is trying to save itself. It belongs in `bringup_check`.
 
-### G-01 — every FSM plan aborts to SURFACE on srot · `OURS` · planning
+### G-20 — prove the mission before the vehicle is wet · `SOTA` · planning
+
+**The gap.** COLA2 (Girona, Ictineu AUV) compiles its mission language to a **Petri net with
+reachability-based safety proofs**; BehaVerify model-checks behaviour trees **100× faster** than
+its predecessor. We prove nothing: a mission is arbitrary Python, and the only check is running
+it. That matters more for us than for them, because **we cannot test in water before we fly**.
+
+**The move.** A static checker over a mission's AST, answering before anything gets wet:
+does every path reach `disarm`? Does it call a verb this backend refuses (`can()` knows)? Does
+every task carry a deadline? Does the declared worst case fit the budget? `test/mission_ast.py`
+already has the AST helpers, written for exactly this kind of question — and `run_plan` makes each
+step's cost and value **declared data** rather than control flow, which is what makes them
+checkable at all.
+
+**The falsifier.** Point it at `sauvc_full` and at a deliberately broken mission. If it does not
+flag the broken one, or flags the working one, it is a linter with opinions rather than a proof of
+anything.
+
+**Risk 1** — it is a read-only tool; it cannot break a run.
+
+### ~~G-01~~ — every FSM plan aborts to SURFACE on srot · `OURS` · planning · **CLOSED**
+
+⛔ **Closed 2026-09-22 by deleting the layer**, not by fixing it. The guard was written first and
+*did* bite — the reproduction failed exactly as predicted — and then the operator retired the
+whole FSM tree (3,550 lines that had never executed). The lesson was kept where missions actually
+run: `mongla.can(verb)` reads `srot_fc.UNSUPPORTED_VERBS` **at call time** (one truth, not the
+second copy that caused J04), `mongla.require(verb)` refuses on the deck rather than underwater,
+and `run_plan` skips a step whose `needs=` verb the backend refuses — with the skip on the
+scorecard. `test_run_plan.py` executes that path, and the J04 shape was injected back in to
+confirm the new guards fail against it (4 of 12 fail with the oracle stubbed to always say yes).
 
 **The gap.** All eight FSM plans build a `LockHeadingState`; srot refuses `lock_heading`; the
 refusal raises; `base_state.py:44-54` converts any exception to `ABORT`; every plan wires
