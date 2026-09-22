@@ -524,30 +524,57 @@ code,.n{font-family:var(--data);font-size:.87em;color:var(--medium-text)}
    not ask for is the same complaint whether it is 3 screens or 2. 115vh is one
    screen of travel -- enough to read the explode as a motion, short enough that
    scrolling past it feels like scrolling. */
-.stage{position:relative;margin-top:44px;height:115vh}
-.stage .bay{position:sticky;top:7vh;margin-top:0}
-.stage .bay canvas{height:min(66vh,600px)}
-.beats{position:absolute;inset:auto 0 0 0;list-style:none;margin:0;padding:0;
-  pointer-events:none;height:100%;display:block}
-.beats li{position:sticky;top:calc(7vh + min(66vh,600px) + 20px);
-  max-width:var(--measure);opacity:0;transform:translateY(8px);
-  transition:opacity 300ms var(--ease),transform 300ms var(--ease);
-  height:0;overflow:visible;
-  /* every beat is sticky at the SAME offset, so they stack on top of one
-     another. Only the lit one may be in the flow of the eye. */
-  visibility:hidden;pointer-events:none}
-.beats li.on{visibility:visible}
-.beats li.on{opacity:1;transform:none}
-.beats b{display:block;font-family:var(--display);font-weight:700;font-size:1.05rem;
-  color:#fff;letter-spacing:-.02em}
-.beats span{display:block;margin-top:5px;font-family:var(--data);font-size:11.5px;
-  line-height:1.6;color:var(--ink-3);letter-spacing:.02em}
-@media (max-width:900px){
-  .stage{height:auto}
-  .stage .bay{position:relative;top:0}
-  .beats{position:static;height:auto;margin-top:20px}
-  .beats li{position:static;opacity:1;transform:none;height:auto;
-    padding:12px 0;border-top:1px solid var(--rule)}
+.stage{position:relative;margin-top:44px}
+.stage .bay{margin-top:0}
+.stage .bay canvas{height:min(62vh,560px)}
+
+/* The explode is a control, not a scroll toll. Five stops on a machined fader:
+   the reader takes it apart at their own pace, and the page never holds them.
+   `explode(t)` already lerps toward its target, so a click IS the animation. */
+.beats{list-style:none;margin:18px 0 0;padding:0;display:grid;gap:1px;
+  grid-template-columns:repeat(5,1fr);background:var(--rule);
+  border:1px solid var(--rule);border-radius:3px;overflow:hidden}
+.beats li{margin:0}
+.beats button{display:block;width:100%;height:100%;text-align:left;cursor:pointer;
+  padding:11px 13px 13px;border:0;background:var(--s-raised);color:inherit;
+  font:inherit;position:relative;
+  transition:background 160ms var(--ease),transform 160ms var(--ease)}
+.beats button::before{content:'';position:absolute;inset:0 0 auto 0;height:2px;
+  background:var(--signal);transform:scaleX(0);transform-origin:left;
+  transition:transform 260ms var(--ease)}
+.beats button:hover{background:var(--s-key)}
+.beats button:active{transform:translateY(1px)}
+.beats button:focus-visible{outline:2px solid var(--signal);outline-offset:-2px}
+.beats li.on button{background:var(--s-key)}
+.beats li.on button::before{transform:scaleX(1)}
+.beats em{display:block;font-family:var(--data);font-size:9.5px;font-style:normal;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px}
+.beats li.on em{color:var(--signal-text)}
+.beats b{display:block;font-family:var(--display);font-weight:700;font-size:.92rem;
+  color:#fff;letter-spacing:-.02em;line-height:1.25}
+.beats span{display:block;margin-top:6px;font-family:var(--data);font-size:10.5px;
+  line-height:1.62;color:var(--ink-3);letter-spacing:.02em}
+/* the fader itself: a travel slot with a machined thumb */
+.scrub{display:flex;align-items:center;gap:14px;margin-top:14px}
+.scrub .silk{flex:none}
+.scrub input{-webkit-appearance:none;appearance:none;flex:1;height:22px;
+  background:transparent;cursor:ew-resize}
+.scrub input:focus-visible{outline:2px solid var(--signal);outline-offset:4px}
+.scrub input::-webkit-slider-runnable-track{height:4px;border-radius:2px;
+  background:var(--s-key);box-shadow:inset 0 1px 2px rgba(0,0,0,.6)}
+.scrub input::-moz-range-track{height:4px;border-radius:2px;background:var(--s-key);
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.6)}
+.scrub input::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+  width:15px;height:22px;margin-top:-9px;border-radius:2px;background:#d8d5cf;
+  border:1px solid #2a2724;box-shadow:0 1px 0 #fff inset,0 2px 5px rgba(0,0,0,.55)}
+.scrub input::-moz-range-thumb{width:15px;height:22px;border-radius:2px;
+  background:#d8d5cf;border:1px solid #2a2724;box-shadow:0 2px 5px rgba(0,0,0,.55)}
+.scrub output{font-family:var(--data);font-size:11px;color:var(--signal-text);
+  min-width:4.2em;text-align:right;font-variant-numeric:tabular-nums}
+@media (max-width:760px){
+  .beats{grid-template-columns:1fr}
+  .beats span{font-size:11px}
+}
 }
 
 /* ── the hull bay ────────────────────────────────────────────────── */
@@ -1889,3 +1916,21 @@ pre::-webkit-scrollbar-track,.scrollable::-webkit-scrollbar-track{background:tra
 .diff__range:focus-visible + .diff__line,.diff:focus-within .diff__line{background:var(--signal-text)}
 .diff-fig figcaption{max-width:var(--measure)}
 @media (max-width:700px){ .diff{aspect-ratio:4/3} }
+
+/* ── the colophon: who wrote what, and how to reach them ────────────
+   Three columns that do not pretend to be equal -- the author's column
+   leads, the other two support it. On a phone they stack in that order. */
+.colophon{display:grid;gap:clamp(22px,3vw,44px);
+  grid-template-columns:1.15fr 1fr 1fr;align-items:start;
+  padding-bottom:26px;border-bottom:1px solid var(--rule)}
+.colophon__who p{margin:8px 0 0;font-size:var(--fs-caption);line-height:1.68;
+  color:var(--ink-2);max-width:42ch}
+.colophon__who strong{color:var(--ink);font-weight:600}
+.colophon__links{font-family:var(--data);font-size:11px;letter-spacing:.02em;
+  color:var(--ink-3)}
+.colophon__links a{color:var(--signal-text);text-decoration:none;
+  border-bottom:1px solid transparent;transition:border-color 160ms var(--ease)}
+.colophon__links a:hover{border-bottom-color:var(--signal-text)}
+.colophon__note{margin-top:22px;font-family:var(--data);font-size:10.5px;
+  line-height:1.7;color:var(--ink-3);max-width:74ch}
+@media (max-width:900px){.colophon{grid-template-columns:1fr}}
