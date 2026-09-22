@@ -2795,3 +2795,92 @@ once per anchor.
 **Rejected:** grey opening (5 or 9 px) is worse than erosion at full strength (6.93 / 3.62 px on
 tiles), because opening restores the dark gaps between filaments. Black-hat energy rose
 with caustics too, so it cannot flag a textureless floor.
+
+---
+
+## 10. The actuation chain — measured on the board, and `VISION_YAW_MIN_PCT` is the WRONG MODEL
+
+**Measured 2026-09-22.** Board armed, STABILIZE, **nothing attached to any ESC**,
+`MANUAL_CONTROL` held at 20 Hz on one axis at a time, per-motor result read off
+the RP2350's own USB console — the only place the board's `out` exists today.
+Raw: `workbench/data/mixer_ladder.json`, `workbench/data/mixer_armed.json`.
+
+### The bars
+
+| bar | value | where it is used |
+|---|---|---|
+| **smallest commandable output** | **15 % of full scale** (`MOT_SPIN_MIN`) | `actuation_model.min_fraction()` |
+| output at the smallest demand tried (0.02) | **18.1 %** of 999 | the floor is real, not extrapolated |
+| chain model error vs the board | **0.30 %** worst (3 counts of 999), at saturation; **< 1 count** elsewhere | `actuation_model.demand_to_fraction` |
+| mixer entries, all horizontal axes | **exactly ±1** | confirms the 41 % surge/sway overstatement |
+| `MOT_THST_EXPO` / `MOT_SPIN_MIN` / `PILOT_EXPO` | 0.65 / 0.15 / 0.30, read live | the model's defaults |
+
+### What it retracts
+
+⛔ **`VISION_YAW_MIN_PCT = 5.0` is not an under-measured constant. It is the wrong
+shape.** It exists to push a demand across an assumed ESC deadband. There is no
+deadband: `mixer.cpp:127` lifts every non-zero demand into `[spin_min, 1]` on
+purpose, so output cannot go *below* 15 % at all. A 5 % demand does not produce
+5 % of anything — it produces about 22 %.
+
+**No host-side gain fixes this**, which also explains a null result already in
+§6: `vision.range_gain_floor` was measured to do nothing and disabled. It could
+not have worked — the quantisation is downstream of every gain we own. §6's
+conclusion stands; this is the mechanism behind it.
+
+### What it does NOT give
+
+⚠ **No newtons.** Every number here is a DShot command fraction. `k_n_per_rpm2`
+still has no value, so nothing here converts to force, and no column of that
+matrix is a thrust. The *physical* stiction floor — where a real motor starts
+turning — is a different measurement and still needs a motor ([`BENCH` B-2](workbench/BENCH.md)).
+
+### The trap that produced a confident wrong answer first
+
+**Bidirectional DShot is two half-bands, not a signed range around 1048.** 48–1047
+and 1048–2047 each count upward from their own floor. Decoded as a deviation from
+1048, a 0.02 demand reads −819 on M1 when the truth is −181 — and the heave row
+grows a 3 % imbalance that does not exist. Guarded by `test_dshot_decode.py`,
+which includes a test that fails if the decoder ever regresses to the midpoint
+reading.
+
+### Method note — how the attitude loop was removed
+
+Driving a single axis is not enough: in STABILIZE the vertical group is always
+holding trim (M6 sat at +190 and M7 at −811 in *every* horizontal row).
+Differencing the **+demand and −demand** runs cancels any constant the controller
+was holding and leaves the demand response alone. Without that step the matrix
+looks asymmetric and unreadable.
+
+This is a **truth test, not an agreement test**: the model was transcribed from
+the firmware source (`srot-control-board`, `mixer.cpp` + `task_control_loop.cpp`)
+and then compared against the board. Agreement to under one count means the
+transcription is right; comparing the model against itself would have proved only
+that the arithmetic is self-consistent.
+
+---
+
+## 11. Hailo-8 throughput — the models we actually fly
+
+**Measured 2026-09-22**, `hailortcli benchmark`, Pi 5 + Hailo-8, all inputs
+640×640×3. Raw: `workbench/data/hailo_bench_20260922.txt`.
+
+| model | classes | FPS (hw_only) | latency (hw) |
+|---|---|---|---|
+| `bin_fire_blood` | 2 | **98.45** | 8.308 ms |
+| `sauvc_sim` | 11 | **98.36** | 8.315 ms |
+| `gate_rescue_repair` | 3 | **97.92** | 8.340 ms |
+| `yolov11n` stock | 80 | 92.53 | 7.794 ms |
+| `yolov11s` stock | 80 | 42.65 | 19.727 ms |
+
+**The ladder: 98 Hz silicon → 80.9 Hz standalone → 53.9 Hz through the ROS graph.**
+The graph costs **45 %** of the chip. That is now a measured target.
+
+Class count buys throughput (80 → 3 is +5.8 %, via NMS output bandwidth);
+backbone size dominates (n → s halves it). Our three models clustering within
+0.5 % is **not** a pipeline ceiling — `yolov11s` demonstrates the silicon scales
+with model cost.
+
+⛔ **Discarded:** `yolov8s.hef` reported 466 FPS at the same input and output
+shapes as `yolov11s` at 42.65. Not physically consistent; the artifact is suspect
+and the number is used nowhere.
