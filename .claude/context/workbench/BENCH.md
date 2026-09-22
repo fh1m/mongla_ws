@@ -36,7 +36,7 @@ unproven.
 
 ---
 
-## B-2 · ESC deadband ladder  `[~]` blocked: one thruster
+## B-2 · ESC deadband ladder  `[~]` command half DONE 2026-09-22, physical half blocked: one thruster
 
 **Why.** Blue Robotics publish a **±25 µs deadband** around 1500. On our ±400 µs full scale that
 is **±6.25 %** of range producing *exactly zero thrust* — and `VISION_YAW_MIN_PCT = 5.0`, which the
@@ -49,7 +49,22 @@ clamp) as the witness. Find where motion actually starts, both directions.
 **Expected:** motion starts somewhere near ±25 µs. **Falsifier:** if it starts below 5 % of range,
 the floor is fine — and we still replace an assumption with a measurement.
 
-**Result:** _(not yet run)_ · **Lands in:** `motion_vision.py` floor constants, `measured-bars.md`
+**Result, command domain, 2026-09-22.** ⛔ **The premise was wrong. There is no deadband — there is
+a FLOOR, and it is three times higher than our constant.** `MOT_SPIN_MIN = 0.15` lifts every
+non-zero demand into `[spin_min, 1]` deliberately (`mixer.cpp:127`), so the smallest output this
+vehicle can command is **15 % of full scale**. Measured on the board, nothing attached, armed, a
+0.02 demand — the smallest tried — already produced **18.1 %**. `VISION_YAW_MIN_PCT = 5.0` is not
+merely unmeasured; it is the wrong model, and no host-side gain crosses a floor.
+
+The whole chain is now modelled and verified to **0.30 %** worst case
+(`actuation_model.py`, `tools/mixer_map.py --ladder`), and it confirms the
+source-derived table in [`upstream/pr-i`](../upstream/pr-i-spin-min-relay.md) §1.
+
+**Still open:** the *physical* stiction floor — where a real motor starts turning — which needs a
+motor. The command-domain number above says nothing about force.
+
+**Lands in:** `actuation_model.py` (done), `motion_vision.py` floor constants (not yet wired —
+that is a flight-behaviour change), `measured-bars.md`
 
 ---
 
@@ -75,19 +90,31 @@ scale `c_T`, never supply its J-dependence.
 
 ---
 
-## B-4 · Dead-thruster signature on current  `[~]` blocked: current sense (our board, or firmware #4)
+## B-4 · Dead-thruster signature  `[~]` blocked on **one line of firmware**, not on hardware
 
 **Why.** Published AUV thruster fault detection uses **voltage, current and speed**. Our RPM
 channel read **0 in 958/958 frames with nothing attached** — an RPM-based detector reports a
 *healthy zero* for a missing thruster.
 
-**Procedure.** Spin one thruster, record current. Unplug it, record again. Stall it, record again.
-Three signatures, one plot.
+⚠ **2026-09-22: the premise moved.** Presence is already measured — it just never reaches us.
+The Pico decodes a `TL_ST_PRESENT` bit and four per-motor counters (`e` eRPM frames, `d` extended
+telemetry, `c` CRC failures, `n` nothing-came-back), prints them on its own USB console
+(`src/pico/main.cpp:405`), and publishes `status[]` to the ESP32 — where `sendEscStatus`
+(`mav_stream.cpp:190`) packs **literal zeros** into `cnt[4]` and drops the status entirely.
 
-**Expected:** current separates spinning / missing / stalled cleanly. **Falsifier:** if it does
-not, the channel is not discriminating and the detector needs another input.
+Read on the bench with nothing attached: `pres=0`, `n≈998` per 500 ms window. The firmware's own
+comment says the healthy-with-no-motor result is `pres=1 rpm=0`, so the two states are already
+distinguishable **at the source**.
 
-**Result:** _(not yet run)_ · **Lands in:** a thruster-health detector, `measured-bars.md`
+**This ranks H-4 (our own per-thruster current-sense board, weeks 3–6) below a one-line PR.**
+That ask already exists and is already ranked top-capability:
+[`upstream/pr-f-esc-presence-on-the-wire`](../upstream/pr-f-esc-presence-on-the-wire.md).
+
+**Still needs a motor:** separating *stalled* from *spinning*. Presence separates *missing* from
+*present*, which is the class that ends runs.
+
+**Result:** presence measured on the Pico console 2026-09-22; unreachable over MAVLink until PR F ·
+**Lands in:** a thruster-health detector, `measured-bars.md`
 
 ---
 
@@ -249,3 +276,80 @@ is bench work.
 
 **Result:** _(not yet run)_ · **Lands in:** `measured-bars.md`, and the honest version of our own
 headline
+
+---
+
+## B-14 · The mixer matrix, from the board  `[x]` done 2026-09-22
+
+**Why it was thought impossible.** `srot_fc.py:2114` states this backend has no output readback,
+and the ledger rates the allocation gap BLOCKED on exactly that: the achieved wrench is computed
+on the board every tick and, as far as MAVLink is concerned, goes nowhere.
+
+It goes to the **other USB device**. The board presents two and we had only ever connected one:
+`/dev/ttyUSB0` is the ESP32 (CH340, MAVLink); `/dev/ttyACM0` is the RP2350's ESC console, which
+prints every motor's commanded and output value at 2 Hz. That is enough to measure the mixer with
+**nothing attached to any wire**, because a mixer is a linear map from axis demands to motor
+commands and no part of it involves force.
+
+**Procedure.** `python3 tools/mixer_map.py --arm`. Drives one axis at a time, reads all eight
+motors, and differences the +demand and −demand runs — which cancels whatever the attitude loop
+was holding (M6 sat at +190 and M7 at −811 in every horizontal row).
+
+**Result.**
+
+```
+        M1     M2     M3     M4  |  M5   M6   M7   M8
+fwd  +1.00  +1.00  -1.00  -1.00  |   0    0    0    0
+lat  -1.00  +1.00  -1.00  +1.00  |   0    0    0    0
+ up      0      0      0      0  | +1   +1   +1   +1
+yaw  -1.00  +1.00  +1.00  -1.00  |   0    0    0    0
+```
+
+Exactly ±1, reproducing the firmware's `M[8][6]` (`mixer.cpp:26`) negated by `FRAME_REVERSE = 1`.
+**The ledger's 41 % surge/sway overstatement (1/cos 45° = 1.414) was read off the firmware; it is
+now measured on the board.**
+
+⚠ **Two traps, each of which returned a confident wrong answer first.**
+- **Bidirectional DShot is two half-bands, not a signed range.** 48–1047 and 1048–2047 each count
+  upward from their own floor, so there are two zeros and no midpoint. Decoded as a deviation from
+  1048, a 0.02 demand reads −819 on M1 when the truth is −181, and the heave row grows a 3 %
+  imbalance that does not exist. `test_dshot_decode.py` pins this, including a guard that fails if
+  the decoder regresses to the midpoint reading.
+- **The mixer does not run disarmed.** The disarmed sweep reads all zeros, and the tool **refuses**
+  rather than reporting a matrix of them — a mixer that does nothing and a board that is not
+  listening look identical on the wire.
+
+**Falsifier that passed:** predicting all eleven ladder points from the firmware source agreed with
+the board to **0.30 %** worst case. If the chain had been mis-transcribed, that error would be
+structural, not sub-count.
+
+**Lands in:** `actuation_model.py`, [`upstream/pr-i`](../upstream/pr-i-spin-min-relay.md) addendum,
+`measured-bars.md`
+
+---
+
+## B-15 · Hailo throughput, the three models we fly  `[x]` done 2026-09-22
+
+**Procedure.** `hailortcli benchmark` on each `.hef`, Pi 5 + Hailo-8, nothing else running.
+
+| model | classes | NMS output | FPS (hw_only) | latency (hw) |
+|---|---|---|---|---|
+| `gate_rescue_repair` | 3 | 6 012 | 97.92 | 8.340 ms |
+| `sauvc_sim` | 11 | 22 044 | 98.36 | 8.315 ms |
+| `bin_fire_blood` | 2 | 4 008 | 98.45 | 8.308 ms |
+| `yolov11n` (stock) | 80 | 160 320 | 92.53 | 7.794 ms |
+| `yolov11s` (stock) | 80 | 160 320 | 42.65 | 19.727 ms |
+
+All six inputs are 640×640×3, so these are comparable. **Class count buys throughput** (80 → 3
+classes is +5.8 %, via output bandwidth); **backbone size dominates** (n → s halves it). Our three
+models sitting within 0.5 % of each other is not a pipeline ceiling — `yolov11s` proves the
+silicon scales with model cost.
+
+**The ladder this gives:** **98 Hz silicon → 80.9 Hz standalone → 53.9 Hz through the ROS graph.**
+The graph costs 45 % of the chip, and that is now a measured target rather than an impression.
+
+⛔ **Discarded, not explained away:** `yolov8s.hef` reported **466 FPS** at the same 640×640 input
+and the same 80-class NMS output as `yolov11s` at 42.65. That is not physically consistent; the
+artifact is suspect and the number is not used anywhere.
+
+**Lands in:** `measured-bars.md`, `hailo-vision.md` · raw: `data/hailo_bench_20260922.txt`

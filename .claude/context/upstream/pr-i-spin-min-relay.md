@@ -227,3 +227,74 @@ eventually stop — at which point the floor returns and the next demand is a st
 again. So the hysteresis wants a small dwell (keep treating it as spinning for
 ~100-200 ms after rpm drops) or it will chatter at the boundary. That is the one
 part of this we would want to see measured in water rather than reasoned about.
+
+---
+
+## Addendum, 2026-09-22 — the table above is no longer derived. It is measured.
+
+Everything above §2 was computed from your source. On 2026-09-22 we measured it
+on the live board and it holds.
+
+**Method.** Nothing attached to any ESC, armed, STABILIZE, `MANUAL_CONTROL` held
+at twenty per second on one axis at a time, and the per-motor result read off the
+**RP2350's own USB console** (`src/pico/main.cpp:405`) rather than the MAVLink
+wire — which is the only place `out` exists today. Eleven demand levels, four
+horizontal motors averaged, `.claude/context/workbench/data/mixer_ladder.json`.
+
+**A decoding trap worth stating, because it cost us the first reading.** The two
+DShot 3D bands each count upward from their own floor, exactly as your comment at
+`mixer.cpp:131` warns. Read as a signed range around 1048, motor 1 at a 0.02
+demand looks like −819 when the truth is −181, the mixer comes out asymmetric,
+and the heave row grows a 3 % imbalance that does not exist. Your comment is
+correct and we needed it.
+
+**The result.** Transcribing your chain — `PILOT_EXPO` at
+`task_control_loop.cpp:161`, the ±1 matrix at `mixer.cpp:26`, `thstExpo` at
+`mixer.cpp:15`, the floor at `mixer.cpp:127`, the bands at `mixer.cpp:136` — and
+predicting each commanded level:
+
+| axis demand | measured, of 999 | your chain predicts | error |
+|---|---|---|---|
+| 0.02 | 181 | 181.6 | −0.4 |
+| 0.10 | 282 | 282.1 | −0.4 |
+| 0.30 | 463 | 463.6 | −0.4 |
+| 0.60 | 689 | 689.4 | −0.6 |
+| 1.00 | 996 | 999.0 | −3.0 |
+
+**Worst error 3 counts of 999 — 0.30 % — and that one is at saturation.**
+Everywhere else it is under one count. The firmware does exactly what its source
+says, and §1's table is confirmed: the smallest demand we could command already
+produced 18.1 % of the band.
+
+**Two things this changes on our side, so you know what we did with it.**
+
+1. We now carry a host-side model of your chain (`actuation_model.py`), so the
+   companion can finally ask for an output it will actually get. It **refuses**
+   any request below the floor rather than rounding it up, because silently
+   delivering three times what was asked is worse than saying no.
+2. It confirms the null result in §2. `vision.range_gain_floor` could not have
+   worked, and we have stopped looking for the explanation elsewhere.
+
+**The mixer matrix, also measured, since it bears on §3.** Driving one axis at a
+time and differencing the +demand and −demand runs (which cancels whatever the
+attitude loop was holding — M6 sat at +190 and M7 at −811 throughout) reproduces
+`M[8][6]` exactly, negated by `FRAME_REVERSE = 1`:
+
+```
+        M1     M2     M3     M4  |  M5   M6   M7   M8
+fwd  +1.00  +1.00  -1.00  -1.00  |   0    0    0    0
+lat  -1.00  +1.00  -1.00  +1.00  |   0    0    0    0
+ up      0      0      0      0  | +1   +1   +1   +1
+yaw  -1.00  +1.00  +1.00  -1.00  |   0    0    0    0
+```
+
+Entries are ±1 with no geometry in them, as you say. We are **not** asking you to
+change that here — it is our allocation problem, and it is on our side of the
+line. We mention it only so §3's "the mixer is a normalised demand mix, not
+geometry" is on the record as measured rather than read.
+
+**What would have made this unnecessary:** `out` on the MAVLink wire. We had to
+open a second USB cable to the Pico to see a number the board computes every
+tick. That is PR B §`ControlState.out_*`, and this session is the strongest
+argument for it we have — a companion cannot close any loop around an output it
+cannot observe.
