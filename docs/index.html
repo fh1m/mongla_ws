@@ -416,35 +416,41 @@
  <div class="wrap">
   <p class="mark">The body <i>//</i> 702 mm, five thrusters, one uncontrolled axis</p>
   <h2 class="col">A red machine, lit by the water it has to survive.</h2>
-  <p class="lede col quiet">Drag it. Every number below was taken from the CAD geometry itself —
-    84,248 triangles at 0.9 mm tessellation, measured rather than quoted.</p>
+  <p class="lede col quiet">Drag it to turn it; take it apart with the fader, or jump to a stop.
+    Every number below was read off the CAD geometry itself — 84,248 triangles at 0.9 mm
+    tessellation, measured rather than quoted.</p>
 
   <div class="stage" id="explode-stage">
    <div class="bay glass">
     <span class="tagtop">Mongla hull <i>//</i> drag to orbit <i>//</i> + − to zoom</span>
-    <span class="keys"><b>drag</b> orbit · <b>wheel</b> zoom · <b>X</b> take the explode ·
-      <b>, .</b> open &amp; close · <b>0</b> reset</span>
+    <span class="keys"><b>drag</b> orbit · <b>wheel</b> zoom ·
+      <b>, .</b> close &amp; open · <b>0</b> reset</span>
     <div class="deck" role="group" aria-label="Hull controls">
-      <button class="key" type="button" data-k="x" aria-pressed="false">hold<small>X</small></button>
-      <button class="key" type="button" data-k="," data-hold>close<small>,</small></button>
-      <button class="key" type="button" data-k="." data-hold>open<small>.</small></button>
+      <button class="key" type="button" data-k="," data-step="-8">close<small>,</small></button>
+      <button class="key" type="button" data-k="." data-step="8">open<small>.</small></button>
       <button class="key" type="button" data-k="-" aria-label="zoom out">−<small>−</small></button>
       <button class="key" type="button" data-k="+" aria-label="zoom in">+<small>+</small></button>
       <button class="key" type="button" data-k="0">reset<small>0</small></button>
     </div>
     <canvas id="hull" tabindex="0" role="img"
-      aria-label="Interactive three-dimensional model of the Mongla hull: 702 millimetres long, four tunnel thrusters and one axial nose thruster. It comes apart as the page is scrolled."></canvas>
+      aria-label="Interactive three-dimensional model of the Mongla hull: 702 millimetres long, four tunnel thrusters and one axial nose thruster. The fader below takes it apart."></canvas>
     <div class="hud">
       <span>L <i>702.0 mm</i></span><span>beam <i>176.1</i></span><span>height <i>172.1</i></span>
       <span>fineness <i>3.99</i></span><span id="hud-tri">tris <i>—</i></span>
     </div>
    </div>
-   <ol class="beats" aria-hidden="true">
-    <li data-at="0.00"><b>Assembled</b><span>702.0 × 176.1 × 172.1 mm · 40 bodies · fineness 3.99</span></li>
-    <li data-at="0.22"><b>The fairings come off</b><span>Red shells, flooded. They shape the flow; they hold nothing dry.</span></li>
-    <li data-at="0.44"><b>The pressure can</b><span>3.310 L enclosed — the entire source of buoyancy. Everything that must stay dry is in here.</span></li>
-    <li data-at="0.66"><b>Four tunnels, one axial</b><span>⌀84 mm each. Laterals 350 mm apart, verticals 519 mm. Five of six degrees of freedom.</span></li>
-    <li data-at="0.88"><b>And a handle</b><span>Sized for one hand. A vehicle nobody can carry is a vehicle nobody tests.</span></li>
+   <div class="scrub">
+    <span class="silk">take it apart</span>
+    <input id="explode-scrub" type="range" min="0" max="100" value="0" step="1"
+      aria-label="How far the hull is taken apart">
+    <output for="explode-scrub" id="explode-read">0&#8202;% apart</output>
+   </div>
+   <ol class="beats">
+    <li class="on"><button type="button" data-at="0.00"><em>0&#8202;% apart</em><b>Assembled</b><span>702.0 × 176.1 × 172.1 mm · 40 bodies · fineness 3.99</span></button></li>
+    <li><button type="button" data-at="0.22"><em>22&#8202;% apart</em><b>The fairings come off</b><span>Red shells, flooded. They shape the flow; they hold nothing dry.</span></button></li>
+    <li><button type="button" data-at="0.44"><em>44&#8202;% apart</em><b>The pressure can</b><span>3.310 L enclosed — the entire source of buoyancy. Everything that must stay dry is in here.</span></button></li>
+    <li><button type="button" data-at="0.66"><em>66&#8202;% apart</em><b>Four tunnels, one axial</b><span>⌀84 mm each. Laterals 350 mm apart, verticals 519 mm. Five of six degrees of freedom.</span></button></li>
+    <li><button type="button" data-at="0.88"><em>88&#8202;% apart</em><b>And a handle</b><span>Sized for one hand. A vehicle nobody can carry is a vehicle nobody tests.</span></button></li>
    </ol>
   </div>
 
@@ -681,13 +687,13 @@
    <thead><tr><th>repository</th><th>what it is</th><th>who owns it</th><th>how we reach it</th></tr></thead>
    <tbody>
     <tr><td><em>Mongla</em></td><td>Perception, estimation, mission language, simulator — this repository</td>
-        <td>Muhammad Fahim Faisal</td><td class="num">—</td></tr>
+        <td><a href="https://github.com/fh1m">Muhammad Fahim Faisal</a></td><td class="num">—</td></tr>
     <tr><td><em>Hengla</em> — srot-control-board</td><td>The firmware. ESP32 dual-core plus an RP2350 thruster co-processor</td>
-        <td>Rakibul Islam</td><td class="num">MAVLink 2 over one USB-C cable</td></tr>
+        <td><a href="https://github.com/RakibulIslam1">Rakibul Islam</a></td><td class="num">MAVLink 2 over one USB-C cable</td></tr>
     <tr><td><em>Bondor</em> — srot-ground-station</td><td>The operator's desktop GCS, plus a LoRa bridge</td>
-        <td>Rakibul Islam</td><td class="num">serial · UDP 14550 · LoRa 433&#8239;MHz</td></tr>
+        <td><a href="https://github.com/RakibulIslam1">Rakibul Islam</a></td><td class="num">serial · UDP 14550 · LoRa 433&#8239;MHz</td></tr>
     <tr><td>srot-esc-flasher</td><td>Bench tool — puts Bluejay on the ESCs</td>
-        <td>Rakibul Islam</td><td class="num">4-way interface</td></tr>
+        <td><a href="https://github.com/RakibulIslam1">Rakibul Islam</a></td><td class="num">4-way interface</td></tr>
    </tbody>
   </table>
 
@@ -2119,13 +2125,37 @@
 </main>
 
 <footer>
-  <p>Mongla — Muhammad Fahim Faisal · firmware and hardware, Rakibul Islam ·
-     <a href="https://github.com/fh1m/mongla_ws">source</a> ·
-     <a href="the-shift.html">the shift</a> ·
-     <a href="capability-map.html">capability map</a> · MIT</p>
-  <p style="margin-top:10px">Hull geometry read from the project CAD. Photographs show
-     vehicles built by a university programme the author has since left, and appear here as
-     history.</p>
+  <div class="colophon">
+   <div class="colophon__who">
+    <span class="silk">Written by</span>
+    <p><strong>Muhammad Fahim Faisal</strong> — autonomy: perception, localization, control
+       integration, the mission language, the simulator, and this page.</p>
+    <p class="colophon__links"><a href="https://github.com/fh1m">@fh1m</a> ·
+       <a href="https://fh1m.github.io/">fh1m.github.io</a> ·
+       <a href="https://fh1m.github.io/log/">the log</a> ·
+       <a href="mailto:fh1m.dev@gmail.com">fh1m.dev@gmail.com</a></p>
+   </div>
+   <div class="colophon__who">
+    <span class="silk">The board underneath it</span>
+    <p><strong>Rakibul Islam</strong> — the SROT board and its firmware Hengla, the Bondor ground
+       station, the ESC flasher. His repositories, his authorship; we reach them by pull request.</p>
+    <p class="colophon__links"><a href="https://github.com/RakibulIslam1">@RakibulIslam1</a> ·
+       <a href="https://github.com/RakibulIslam1/srot-control-board">srot-control-board</a> ·
+       <a href="https://github.com/RakibulIslam1/srot-ground-station">srot-ground-station</a></p>
+   </div>
+   <div class="colophon__who">
+    <span class="silk">This page</span>
+    <p>Hand-written HTML and CSS, no framework and no build step. The hull is the project CAD,
+       read by <a href="https://github.com/fh1m/mongla_ws/blob/main/tools/pack_hull.py">pack_hull.py</a>;
+       every figure marked generated is spliced in by a tool and guarded by a test.</p>
+    <p class="colophon__links"><a href="https://github.com/fh1m/mongla_ws">source</a> ·
+       <a href="the-shift.html">the shift</a> ·
+       <a href="capability-map.html">capability map</a> · MIT</p>
+   </div>
+  </div>
+  <p class="colophon__note">Hull geometry read from the project CAD. Photographs show vehicles
+     built by a university programme the author has since left, and appear here as history.
+     Nothing on this platform has been in water.</p>
 </footer>
 
 <script src="assets/hull-viewer.js" defer></script>
@@ -2647,57 +2677,53 @@
       document.getElementById('hud-tri').innerHTML =
         'tris <i>' + h.triangles.toLocaleString() + '</i> · parts <i>' + h.parts + '</i>';
 
-      /* The deck: physical keys for the same actions the keyboard has. They
-         send the viewer the very keydown it already handles, so there is one
-         implementation of each action, not two. Open/close take hold of the
-         explode first, because the viewer ignores them while scroll owns it. */
+
+      /* The explode is driven by a fader and five stops -- never by scroll.
+         A section that holds the page until an animation finishes is a toll,
+         and this one charged it twice: once going down, once coming back.
+         `explode(t)` already lerps toward its target, so setting a value IS
+         the animation, and the reader decides when it happens. */
+      var scrub = document.getElementById('explode-scrub');
+      var read  = document.getElementById('explode-read');
+      var beats = [].slice.call(document.querySelectorAll('.beats li'));
+      var hint  = bay.parentElement.querySelector('.tagtop');
+      function apply(t, fromScrub){
+        t = Math.min(Math.max(t, 0), 1);
+        h.explode(t);
+        if (!fromScrub) scrub.value = String(Math.round(t * 100));
+        read.textContent = Math.round(t * 100) + '\u200a% apart';
+        var active = 0;
+        for (var i = 0; i < beats.length; i++) {
+          if (t >= parseFloat(beats[i].firstElementChild.dataset.at) - 0.001) active = i;
+        }
+        beats.forEach(function(b, i){ b.classList.toggle('on', i === active); });
+        hint.textContent = t > 0.06
+          ? 'Mongla hull // ' + Math.round(t * 100) + '% apart // drag to orbit'
+          : 'Mongla hull // drag to orbit // + \u2212 to zoom';
+      }
+      scrub.addEventListener('input', function(){ apply(scrub.value / 100, true); });
+      beats.forEach(function(b){
+        b.firstElementChild.addEventListener('click', function(){
+          apply(parseFloat(b.firstElementChild.dataset.at));
+        });
+      });
+      apply(0);
+
+      /* The deck: physical keys for the same actions the keyboard has. Zoom and
+         reset send the viewer the very keydown it already handles, so there is
+         one implementation of each. Open and close move the fader instead --
+         one source of truth for how far apart the hull is. */
       var canvas = bay;                              /* `bay` is the canvas itself */
       var deck = canvas.parentElement.querySelector('.deck');
-      var holdKey = deck.querySelector('[data-k="x"]');
       function press(k){
         canvas.dispatchEvent(new KeyboardEvent('keydown', {key: k, bubbles: true}));
       }
       [].forEach.call(deck.querySelectorAll('.key'), function(b){
         b.addEventListener('click', function(){
-          if (b.hasAttribute('data-hold') && !h.manual()) press('x');
-          press(b.dataset.k);
-          holdKey.setAttribute('aria-pressed', String(h.manual()));
+          if (b.dataset.step) apply((+scrub.value + +b.dataset.step) / 100);
+          else press(b.dataset.k);
         });
       });
-
-      /* Scroll through the section drives the hull apart and back together.
-         The reader is not clicking anything: descending IS the interaction.
-         Reduced motion keeps it assembled. */
-      var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-      if (reduce) return;
-      var sect = document.getElementById('explode-stage');
-      var beats = [].slice.call(document.querySelectorAll('.beats li'));
-      var tick = false;
-      function onScroll(){
-        if (tick) return;
-        tick = true;
-        requestAnimationFrame(function(){
-          tick = false;
-          var r = sect.getBoundingClientRect();
-          var span = r.height - innerHeight;
-          if (span <= 0) return;
-          var t = Math.min(Math.max(-r.top / span, 0), 1);
-          h.explode(t);
-          /* light the beat whose threshold we have just passed */
-          var active = 0;
-          for (var i = 0; i < beats.length; i++) {
-            if (t >= parseFloat(beats[i].dataset.at)) active = i;
-          }
-          beats.forEach(function(b, i){ b.classList.toggle('on', i === active); });
-          var e = t;
-          hint.textContent = e > 0.06
-            ? 'Mongla hull // ' + Math.round(e * 100) + '% apart // keep scrolling'
-            : 'Mongla hull // drag to orbit // + − to zoom';
-        });
-      }
-      var hint = bay.parentElement.querySelector('.tagtop');
-      addEventListener('scroll', onScroll, {passive:true});
-      onScroll();
     }).catch(function(err){
       document.getElementById('hud-tri').innerHTML = 'tris <i>model unavailable</i>';
       bay.style.height = '0';
