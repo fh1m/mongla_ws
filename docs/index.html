@@ -1909,10 +1909,12 @@
 <!-- 15 ──────────────────────────────────────────────────────────────── -->
 <section id="shoulders" data-chapter="shoulders">
  <div class="wrap">
-  <p class="mark">Shoulders <i>//</i> where the ideas came from, and what they changed</p>
-  <h2 class="col">Borrowed convictions, and the line of code each one moved.</h2>
-  <p class="lede col quiet">Not a reading list. Each of these is a specific idea, from a named
-    source, that changed something concrete in this stack — and the change is named too.</p>
+  <p class="mark">Shoulders <i>//</i> ten voices, and the instrument each one moved</p>
+  <h2 class="col">Every idea borrowed here shows up as a reading on this vehicle.</h2>
+  <p class="lede col quiet">A list of influences is a bookshelf. This is a dive: each voice sits at
+    a depth, and choosing one lights the instrument in <em>this</em> vehicle that it changed — with
+    the number that instrument shows today. If an idea did not move a reading, it has no business
+    on the page.</p>
 
   <figure class="creed">
    <blockquote>“I just wondered how things were put together.”</blockquote>
@@ -1929,102 +1931,29 @@
      He is also the register: he did this for fun. <a href="https://www.itsoc.org/about/shannon">Claude E. Shannon</a></p>
   </figure>
 
-  <div class="years" style="margin-top:44px">
-   <div class="year"><time>Feynman</time><div><h3>“You must not fool yourself — and you are the easiest person to fool.”</h3>
-     <p>From the Caltech address on cargo-cult science, whose actual subject is not fraud but the
-       <em>missing</em> step: reporting the things that could make you wrong, as hard as you looked
-       for the things that made you right. <strong>What it changed:</strong> the ledger is public
-       and keeps its own retractions — <span class="num">8</span> entries whose titles say they
-       took an earlier result back, and <span class="num">5</span> more that measured an idea and
-       the answer was no. It would be a better-looking document with those removed, and a worthless
-       one.
-       <a href="https://calteches.library.caltech.edu/51/2/CargoCult.htm">Cargo Cult Science, 1974</a></p></div></div>
+  <figure class="dive">
+   <div class="dive__scale" role="tablist" aria-label="Ten voices, by depth"></div>
+   <div class="dive__panel">
+    <div class="dive__instr">
+     <span class="silk" id="dv-ins">the instrument</span>
+     <b id="dv-num">--</b>
+     <span id="dv-unit"></span>
+     <canvas id="dv-cv" width="420" height="150" aria-hidden="true"></canvas>
+    </div>
+    <div class="dive__say">
+     <span class="silk" id="dv-who">Shannon</span>
+     <h3 id="dv-head"></h3>
+     <p id="dv-idea" class="quiet"></p>
+     <p id="dv-changed"></p>
+     <a id="dv-link" href="#" target="_blank" rel="noopener"></a>
+    </div>
+   </div>
+   <figcaption>Depth here is only an ordering — the dive is the metaphor, not a measurement. The
+     numbers on the instruments are not: each one is the reading that idea is responsible for, and
+     each is in <a href="https://github.com/fh1m/mongla_ws/blob/main/.claude/context/measured-bars.md">measured-bars.md</a>
+     with its method.</figcaption>
+  </figure>
 
-   <div class="year"><time>Hotz</time><div><h3>“Complex things eventually collapse under their own weight.”</h3>
-     <p>The magic, he says, is more capability at <em>no extra</em> complexity — tinygrad as “the
-       RISC of the machine learning stack.” <strong>What it changed:</strong> the hull viewer on
-       this page has no dependencies and no build step, because the alternative was 600&#8239;KB of
-       library to draw one mesh. The same reflex deleted a second stylesheet that had quietly
-       become a second design system.
-       <a href="https://www.latent.space/p/geohot">Latent Space interview</a></p></div></div>
-
-   <div class="year"><time>Carmack</time><div><h3>“The speed of light sucks.”</h3>
-     <p>His latency work treats every stage of a pipeline as somewhere to claw back milliseconds,
-       and he published his daily engineering notes for years on the conviction that work you
-       will publish is work you do more honestly. <strong>What it changed:</strong> photon to
-       detection is <span class="num">18.0 ms</span> and each stage of it is measured separately —
-       and the camera became a mailbox rather than a queue, which took frame staleness from
-       <span class="num">396 ms</span> to <span class="num">16.9 ms</span>.
-       <a href="https://danluu.com/latency-mitigation/">Latency Mitigation Strategies</a></p></div></div>
-
-   <div class="year"><time>Karpathy</time><div><h3>Software 2.0 — the program compiled from data.</h3>
-     <p>A neural network is a different kind of software: you do not write the program, you shape
-       the dataset and the objective. <strong>What it changed:</strong> the detector is treated as
-       a component with a measured operating envelope, not as an oracle — which is why the
-       archive above exists, why thresholds are measured on real footage rather than borrowed, and
-       why “image enhancement helps” was tested seventeen ways before being thrown out.
-       <a href="https://karpathy.medium.com/software-2-0-a64152b37c35">Software 2.0</a></p></div></div>
-
-   <div class="year"><time>Keller</time><div><h3>Every few years, design it again rather than patch it.</h3>
-     <p>His argument is that the rewrite comes out both faster and simpler than the accreted thing
-       it replaces, and that the reason teams do not do it is fear of a bad quarter.
-       <strong>What it changed:</strong> the whole of this page's Act Two. The answer to a ceiling
-       was not to tune harder — it was to move the boundary and write the inner loop ourselves.
-       <a href="https://www.techpowerup.com/270197/jim-keller-on-moores-law-microprocessors-and-designing-chips-from-scratch">On designing from scratch</a></p></div></div>
-
-   <div class="year"><time>Lattner</time><div><h3>“Work backwards from the speed of light of hardware.”</h3>
-     <p>A compiler exists so you need to know less about the machine; the mistake is working
-       <em>forwards</em> from what you already have. <strong>What it changed:</strong> the
-       perception path is sized against what a Hailo-8 can actually do —
-       <span class="num">80.9 Hz</span> standalone — and the decode was kept in the quantised
-       domain rather than converted to floats, which took it from 31.5&#8239;ms to 0.93&#8239;ms,
-       bit-for-bit identical.
-       <a href="https://www.modular.com/blog/developer-voices-deep-dive-with-chris-lattner-on-mojo">Deep dive on Mojo</a></p></div></div>
-
-   <div class="year"><time>Graham</time><div><h3>“Live in the future, then build what's missing.”</h3>
-     <p>And the verb, he insists, is not <em>think up</em> but <em>notice</em>: live at the front of
-       something changing and the gaps announce themselves. <strong>What it changed:</strong> the
-       upstream folder. Nine written asks to the firmware team, each one a gap somebody noticed
-       while measuring something else — per-ESC RPM computed on the board and dropped one line
-       before the wire; no message for the velocity our downward camera had just started
-       producing; a kill switch that reported the same value for <em>live</em> and <em>I cannot
-       hear the power board</em>. None of those were designed; all three were noticed.
-       <a href="https://paulgraham.com/startupideas.html">How to Get Startup Ideas</a></p></div></div>
-
-   <div class="year"><time>Urban</time><div><h3>The chef and the cook.</h3>
-     <p>“The chef reasons from first principles… the cook works off of some version of what's
-       already out there — a recipe of some kind.” Both can make a good dinner; only one can find
-       out the recipe is wrong. <strong>What it changed:</strong> every borrowed threshold on this
-       page was re-derived on our own footage. “Water eats red first” is a recipe — so it was
-       measured, per venue, and one venue came back level, which says the camera differed, not the
-       water. “Enhance the image underwater” is a recipe — tested seventeen ways across four props
-       and three venues, never once positive, and on the gate it destroyed
-       <span class="num">95&#8239;%</span> of detections. It ships off.
-       <a href="https://waitbutwhy.com/2015/11/the-cook-and-the-chef-musks-secret-sauce.html">The Cook and the Chef</a></p></div></div>
-
-   <div class="year"><time>West</time><div><h3>“The world can be saved through design, and everything needs to actually be architected.”</h3>
-     <p>Said to architecture students, and meant literally: the surface is not decoration laid over
-       the thing, it is part of the argument the thing makes. <strong>What it changed:</strong>
-       this page is built out of the vehicle's own vocabulary rather than a template's — silk-screen
-       labels, machined bezels, a depth readout shaped like an instrument capsule, and every
-       measurement set in one monospaced face so columns of numbers line up and a changed digit is
-       visible. Where a reading is missing, the capsule shows <span class="num">--</span>; the
-       design refuses to fill a gap it cannot measure, which is the same rule as the firmware's.
-       <a href="https://www.gsd.harvard.edu/2013/11/kanye-west-visits-gsd">At the Harvard GSD, 2013</a></p></div></div>
-
-   <div class="year"><time>Rubin</time><div><h3>“Inspiration comes first. You come next. The audience comes last.”</h3>
-     <p>And: keep removing until it hurts, because that is usually where the soul of the thing is.
-       <strong>What it changed:</strong> this page. The palette was not chosen — it was sampled out
-       of the vehicle's own CAD materials, so the red here is the red the hull is painted. Every
-       section that only restated another section was cut.
-       <a href="https://www.goodreads.com/work/quotes/96114890-the-creative-act-a-way-of-being">The Creative Act</a></p></div></div>
-  </div>
-
-  <p class="col quiet" style="margin-top:38px">There is one more, and it is not a quote. Asked what
-    makes an engineering write-up worth reading, the most common answer engineers give is: a candid
-    view of the real trade-offs, the real implementation, and <em>the failures</em>. That is the
-    permission this page took to put its retractions in the middle instead of the appendix.
-    <a href="https://news.ycombinator.com/item?id=44382354">Ask HN: what makes an engineering blog great</a></p>
  </div>
 </section>
 
@@ -4175,6 +4104,9 @@
       st.x = tk.at[0] * 0.4; st.y = Math.max(0, tk.at[1] - 3.2);
       st.bx = st.x; st.by = st.y;
       st.done = TASKS.slice(0, from).map(function(t){ return t.key; });
+      st.spent = TASKS.slice(0, from).reduce(function(a, t){ return a + t.budget; }, 0);
+      // the narration must follow the jump, or it keeps saying "armed"
+      st.line = 'Looking for ' + tk.label + '. I have a prior for where it should be, and a prior is not a sighting.';
     }
   }
   reset();
@@ -4301,8 +4233,9 @@
     ctx.clearRect(0, 0, W, H); ctx.fillStyle = SUNK; ctx.fillRect(0, 0, W, H);
     var tk = TASKS[Math.max(0, st.task)];
 
-    // ───── pane 1: what it sees
-    var px = 16, py = 16, pw = 400, ph = H - 32;
+    // three EQUAL panes: 16 px margins, two 14 px gutters, the rest split three ways
+    var PAD = 16, GAP = 14, PW = (W - PAD * 2 - GAP * 2) / 3;
+    var px = PAD, py = PAD, pw = PW, ph = H - PAD * 2;
     panel(px, py, pw, ph, 'WHAT IT SEES · FORWARD CAMERA, 30.18 Hz');
     var fx = px + 18, fy = py + 42, fw = pw - 36, fh = 250;
     ctx.strokeStyle = 'rgba(255,255,255,.08)'; ctx.strokeRect(fx, fy, fw, fh);
@@ -4338,12 +4271,15 @@
     }
     t(st.seen ? 'detection: fresh' : 'no detection for ' + st.lostFor.toFixed(2) + ' s',
       fx, fy + fh + 26, st.seen ? GREEN : RED, 11.5, 700);
-    t('x_px ' + (st.xpx >= 0 ? '+' : '') + st.xpx.toFixed(0) + '   ladder rung ' +
-      ['live box', 'coast', 'anchor', 'anchor', 'LOST'][st.rung], fx, fy + fh + 48, INK3, 11);
-    t('a lock is a promise about the target, not about the detector', fx, fy + fh + 70, INK3, 10);
+    t('x_px ' + (st.xpx >= 0 ? '+' : '') + st.xpx.toFixed(0) +
+      (Math.abs(st.xpx) >= 300 ? ' (clamped)' : ''), fx, fy + fh + 48, INK3, 10.5);
+    t('rung: ' + ['live box', 'tracker coast', 'anchor', 'anchor', 'LOST'][st.rung],
+      fx + 150, fy + fh + 48, INK3, 10.5);
+    t('a lock is a promise about the target,', fx, fy + fh + 70, INK3, 9.5);
+    t('not about the detector', fx, fy + fh + 84, INK3, 9.5);
 
     // ───── pane 2: what it believes
-    var mx = 432, mw = 340;
+    var mx = PAD + PW + GAP, mw = PW;
     panel(mx, py, mw, ph, 'WHAT IT BELIEVES · NO GPS, NO DVL');
     var m0x = mx + mw / 2, m0y = py + ph - 60, sc = 11.5;
     function MX(wx){ return m0x + wx * sc; }
@@ -4375,7 +4311,7 @@
     t('the circle is how sure it is — it grows while blind', mx + 16, py + ph - 8, INK3, 9.5);
 
     // ───── pane 3: what it does
-    var dx2 = 788, dw = W - dx2 - 16;
+    var dx2 = PAD + (PW + GAP) * 2, dw = PW;
     panel(dx2, py, dw, ph, 'WHAT IT DOES · 50 Hz');
     t(st.phase === 'arm' ? 'arm' : st.phase === 'end' ? 'surface' : tk.verb,
       dx2 + 14, py + 50, INK, 12.5, 700);
@@ -4429,6 +4365,100 @@
       else if (!es[0].isIntersecting && raf){ cancelAnimationFrame(raf); raf = 0; }
     }, { threshold: 0.05 }).observe(cv);
   } else raf = requestAnimationFrame(loop);
+})();
+
+(function(){
+  /* SHOULDERS, as a dive. A list of influences is a bookshelf; this asks each
+     voice to point at the instrument it moved on this vehicle, and shows what
+     that instrument reads today. Depth is ordering, not measurement, and the
+     caption says so -- the numbers are the measured ones. */
+  var DATA = [{"who": "Feynman", "head": "“You must not fool yourself — and you are the easiest person to fool.”", "idea": "From the Caltech address on cargo-cult science, whose actual subject is not fraud but the <em>missing</em> step: reporting the things that could make you wrong, as hard as you looked for the things that made you right.", "changed": "the ledger is public and keeps its own retractions — <span class=\"num\">8</span> entries whose titles say they took an earlier result back, and <span class=\"num\">5</span> more that measured an idea and the answer was no. It would be a better-looking document with those removed, and a worthless one.", "link": ["Cargo Cult Science, 1974", "https://calteches.library.caltech.edu/51/2/CargoCult.htm"], "ins": "retractions", "num": "8", "unit": "entries that take an earlier result back", "kind": "ledger", "depth": 12}, {"who": "Hotz", "head": "“Complex things eventually collapse under their own weight.”", "idea": "The magic, he says, is more capability at <em>no extra</em> complexity — tinygrad as “the RISC of the machine learning stack.”", "changed": "the hull viewer on this page has no dependencies and no build step, because the alternative was 600&#8239;KB of library to draw one mesh. The same reflex deleted a second stylesheet that had quietly become a second design system.", "link": ["Latent Space interview", "https://www.latent.space/p/geohot"], "ins": "dependencies", "num": "0", "unit": "libraries in the hull viewer", "kind": "zero", "depth": 20}, {"who": "Carmack", "head": "“The speed of light sucks.”", "idea": "His latency work treats every stage of a pipeline as somewhere to claw back milliseconds, and he published his daily engineering notes for years on the conviction that work you will publish is work you do more honestly.", "changed": "photon to detection is <span class=\"num\">18.0 ms</span> and each stage of it is measured separately — and the camera became a mailbox rather than a queue, which took frame staleness from <span class=\"num\">396 ms</span> to <span class=\"num\">16.9 ms</span>.", "link": ["Latency Mitigation Strategies", "https://danluu.com/latency-mitigation/"], "ins": "staleness", "num": "16.9", "unit": "ms — from 396, by deleting a queue", "kind": "drop", "depth": 28}, {"who": "Karpathy", "head": "Software 2.0 — the program compiled from data.", "idea": "A neural network is a different kind of software: you do not write the program, you shape the dataset and the objective.", "changed": "the detector is treated as a component with a measured operating envelope, not as an oracle — which is why the archive above exists, why thresholds are measured on real footage rather than borrowed, and why “image enhancement helps” was tested seventeen ways before being thrown out.", "link": ["Software 2.0", "https://karpathy.medium.com/software-2-0-a64152b37c35"], "ins": "thresholds", "num": "17", "unit": "configurations tested before saying no", "kind": "tally", "depth": 36}, {"who": "Keller", "head": "Every few years, design it again rather than patch it.", "idea": "His argument is that the rewrite comes out both faster and simpler than the accreted thing it replaces, and that the reason teams do not do it is fear of a bad quarter.", "changed": "the whole of this page's Act Two. The answer to a ceiling was not to tune harder — it was to move the boundary and write the inner loop ourselves.", "link": ["On designing from scratch", "https://www.techpowerup.com/270197/jim-keller-on-moores-law-microprocessors-and-designing-chips-from-scratch"], "ins": "inner loop", "num": "500", "unit": "Hz, ours — the boundary moved", "kind": "tick", "depth": 44}, {"who": "Lattner", "head": "“Work backwards from the speed of light of hardware.”", "idea": "A compiler exists so you need to know less about the machine; the mistake is working <em>forwards</em> from what you already have.", "changed": "the perception path is sized against what a Hailo-8 can actually do — <span class=\"num\">80.9 Hz</span> standalone — and the decode was kept in the quantised domain rather than converted to floats, which took it from 31.5&#8239;ms to 0.93&#8239;ms, bit-for-bit identical.", "link": ["Deep dive on Mojo", "https://www.modular.com/blog/developer-voices-deep-dive-with-chris-lattner-on-mojo"], "ins": "decode", "num": "0.93", "unit": "ms — from 31.5, bit for bit identical", "kind": "drop", "depth": 52}, {"who": "Graham", "head": "“Live in the future, then build what's missing.”", "idea": "And the verb, he insists, is not <em>think up</em> but <em>notice</em>: live at the front of something changing and the gaps announce themselves.", "changed": "the upstream folder. Nine written asks to the firmware team, each one a gap somebody noticed while measuring something else — per-ESC RPM computed on the board and dropped one line before the wire; no message for the velocity our downward camera had just started producing; a kill switch that reported the same value for <em>live</em> and <em>I cannot hear the power board</em>. None of those were designed; all three were noticed.", "link": ["How to Get Startup Ideas", "https://paulgraham.com/startupideas.html"], "ins": "upstream asks", "num": "9", "unit": "gaps noticed while measuring something else", "kind": "tally", "depth": 60}, {"who": "Urban", "head": "The chef and the cook.", "idea": "“The chef reasons from first principles… the cook works off of some version of what's already out there — a recipe of some kind.” Both can make a good dinner; only one can find out the recipe is wrong.", "changed": "every borrowed threshold on this page was re-derived on our own footage. “Water eats red first” is a recipe — so it was measured, per venue, and one venue came back level, which says the camera differed, not the water. “Enhance the image underwater” is a recipe — tested seventeen ways across four props and three venues, never once positive, and on the gate it destroyed <span class=\"num\">95&#8239;%</span> of detections. It ships off.", "link": ["The Cook and the Chef", "https://waitbutwhy.com/2015/11/the-cook-and-the-chef-musks-secret-sauce.html"], "ins": "borrowed", "num": "0", "unit": "thresholds kept without re-measuring", "kind": "zero", "depth": 68}, {"who": "West", "head": "“The world can be saved through design, and everything needs to actually be architected.”", "idea": "Said to architecture students, and meant literally: the surface is not decoration laid over the thing, it is part of the argument the thing makes.", "changed": "this page is built out of the vehicle's own vocabulary rather than a template's — silk-screen labels, machined bezels, a depth readout shaped like an instrument capsule, and every measurement set in one monospaced face so columns of numbers line up and a changed digit is visible. Where a reading is missing, the capsule shows <span class=\"num\">--</span>; the design refuses to fill a gap it cannot measure, which is the same rule as the firmware's.", "link": ["At the Harvard GSD, 2013", "https://www.gsd.harvard.edu/2013/11/kanye-west-visits-gsd"], "ins": "surface", "num": "1", "unit": "design system, sampled from the CAD", "kind": "tally", "depth": 76}, {"who": "Rubin", "head": "“Inspiration comes first. You come next. The audience comes last.”", "idea": "And: keep removing until it hurts, because that is usually where the soul of the thing is.", "changed": "this page. The palette was not chosen — it was sampled out of the vehicle's own CAD materials, so the red here is the red the hull is painted. Every section that only restated another section was cut.", "link": ["The Creative Act", "https://www.goodreads.com/work/quotes/96114890-the-creative-act-a-way-of-being"], "ins": "palette", "num": "1", "unit": "red — the red the hull is painted", "kind": "tally", "depth": 84}];
+  var scale = document.querySelector('.dive__scale');
+  if (!scale) return;
+  var cv = document.getElementById('dv-cv'), ctx = cv.getContext('2d');
+  var DPR = Math.min(2, devicePixelRatio || 1);
+  cv.width = 420 * DPR; cv.height = 150 * DPR; ctx.scale(DPR, DPR);
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var css = getComputedStyle(document.documentElement);
+  var RED = css.getPropertyValue('--signal').trim() || '#ff2a14',
+      SEA = css.getPropertyValue('--medium-text').trim() || '#5aa0ff',
+      INK3 = css.getPropertyValue('--ink-3').trim() || '#7b8598';
+  var el = {}; ['ins','num','unit','who','head','idea','changed','link'].forEach(function(k){
+    el[k] = document.getElementById('dv-' + k);
+  });
+
+  scale.innerHTML = DATA.map(function(d, i){
+    return '<button role="tab" data-i="' + i + '" style="--d:' + d.depth + '">' +
+      '<span class="w">' + d.who + '</span>' +
+      '<span class="m">' + d.depth + ' m</span>' +
+      '<span class="i">' + d.ins + '</span></button>';
+  }).join('');
+  var btns = [].slice.call(scale.querySelectorAll('button'));
+  var cur = 0, t0 = performance.now(), raf = 0;
+
+  function show(i){
+    cur = i; var d = DATA[i];
+    el.ins.textContent = d.ins; el.num.textContent = d.num; el.unit.textContent = d.unit;
+    el.who.textContent = d.who; el.head.innerHTML = d.head;
+    el.idea.innerHTML = d.idea; el.changed.innerHTML = '<b>What it changed:</b> ' + d.changed;
+    if (d.link){ el.link.textContent = d.link[0]; el.link.href = d.link[1]; el.link.hidden = false; }
+    else el.link.hidden = true;
+    btns.forEach(function(b, k){
+      b.classList.toggle('on', k === i);
+      b.setAttribute('aria-selected', k === i ? 'true' : 'false');
+    });
+    t0 = performance.now();
+  }
+  function draw(now){
+    var d = DATA[cur], p = Math.min(1, (now - t0) / 900);
+    var e = 1 - Math.pow(1 - p, 3);
+    ctx.clearRect(0, 0, 420, 150);
+    if (d.kind === 'ledger'){
+      for (var i = 0; i < 50; i++){
+        var h = 12 + ((i * 37) % 60), back = [15,16,19,20,21,22,27,38].indexOf(i) >= 0;
+        ctx.fillStyle = back ? RED : 'rgba(255,255,255,.12)';
+        var hh = h * (back ? e : 1);
+        ctx.fillRect(10 + i * 8, 140 - hh, 5, hh);
+      }
+    } else if (d.kind === 'drop'){
+      ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(10, 40, 400, 20);
+      ctx.fillStyle = RED; ctx.fillRect(10, 90, 400 * (1 - 0.957 * e), 20);
+      ctx.fillStyle = INK3; ctx.font = '10px ui-monospace, monospace';
+      ctx.fillText('before', 10, 34); ctx.fillText('after', 10, 84);
+    } else if (d.kind === 'tick'){
+      for (var k = 0; k < 40; k++){
+        var on = (Math.floor(now / 40) % 40) === k;
+        ctx.strokeStyle = on ? RED : 'rgba(255,255,255,.14)';
+        ctx.lineWidth = on ? 3 : 1.5;
+        ctx.beginPath(); ctx.moveTo(14 + k * 10, 50); ctx.lineTo(14 + k * 10, 100); ctx.stroke();
+      }
+    } else if (d.kind === 'zero'){
+      ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(210, 75, 46 * e, 0, 6.3); ctx.stroke();
+      ctx.strokeStyle = RED; ctx.beginPath();
+      ctx.moveTo(178, 43); ctx.lineTo(242, 107); ctx.stroke();
+    } else if (d.kind === 'dash'){
+      ctx.fillStyle = RED; ctx.fillRect(170, 70, 34, 6); ctx.fillRect(216, 70, 34, 6);
+    } else {
+      var n = parseInt(d.num, 10) || 1;
+      for (var j = 0; j < n; j++){
+        var x = 24 + (j % 10) * 38, y = 46 + Math.floor(j / 10) * 40;
+        ctx.beginPath(); ctx.arc(x, y, 13 * Math.min(1, e * (j + 1) / n), 0, 6.3);
+        ctx.fillStyle = 'rgba(255,42,20,.22)'; ctx.fill();
+        ctx.strokeStyle = RED; ctx.lineWidth = 1.5; ctx.stroke();
+      }
+    }
+    raf = requestAnimationFrame(draw);
+  }
+  btns.forEach(function(b){ b.addEventListener('click', function(){ show(+b.dataset.i); }); });
+  show(0);
+  if (reduce) draw(performance.now());
+  else if ('IntersectionObserver' in window){
+    new IntersectionObserver(function(es){
+      if (es[0].isIntersecting && !raf) raf = requestAnimationFrame(draw);
+      else if (!es[0].isIntersecting && raf){ cancelAnimationFrame(raf); raf = 0; }
+    }, { threshold: 0.05 }).observe(cv);
+  } else raf = requestAnimationFrame(draw);
 })();
 </script>
 </body>
