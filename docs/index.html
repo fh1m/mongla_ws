@@ -38,10 +38,12 @@
 
 <!-- 00 ──────────────────────────────────────────────────────────────── -->
 <section id="surface" data-chapter="surface">
+ <img class="surface__chart" src="assets/chart-hero.svg" alt="" aria-hidden="true" width="2560" height="1100">
  <div class="wrap boot">
   <p class="mark">An autonomy stack <i>//</i> for autonomous underwater vehicles</p>
-  <h1 class="title" aria-label="Mongla">
-    <span class="title__word" aria-hidden="true"><span>M</span><span>o</span><span>n</span><span>g</span><span>l</span><span>a</span></span>
+  <h1 class="title" aria-label="Mongla — মোংলা">
+    <span class="title__word" aria-hidden="true"><span>M</span><span>o</span><span>n</span><span>g</span><span>l</span><span>a</span></span><span class="title__dot" aria-hidden="true">.</span>
+    <span class="title__bn" lang="bn" aria-hidden="true">মোংলা</span>
     <svg class="title__sea" viewBox="0 0 1200 120" preserveAspectRatio="none" aria-hidden="true">
       <!-- each wave is drawn one wavelength LONGER than the box and travels
            exactly one wavelength, so the loop has no seam and no bare end -->
@@ -59,6 +61,8 @@
       <g class="bubbles"><circle cx="14" cy="20" r="1.6"/><circle cx="8" cy="15" r="1.1"/><circle cx="4" cy="24" r="0.8"/></g>
     </svg>
   </h1>
+  <p class="title__origin">named for <b>the port of Mongla</b> · Pasur River, Bangladesh ·
+    the gateway to the Sundarbans</p>
   <p class="title__quote">Machines that have to work when nobody is watching.</p>
   <p class="lede col" style="margin-top:28px">Underwater there is no radio, no GPS, and no second
     chance to explain yourself. A vehicle either understood what it was looking at, or it did
@@ -1034,7 +1038,7 @@
     <li data-link="rev"><b>firmware interlock</b><span>below the floor: refused at connect <em>and</em> inside arm()</span><em>connect · arm</em></li>
     <li data-link="baro"><b>barometer health</b><span>unhealthy: the board refuses every automatic mode</span><em>every move</em></li>
     <li data-link="hb"><b>heartbeat failsafe</b><span>no word from the Pi: the board surfaces</span><em>after 5 s</em></li>
-    <li data-link="leak" class="broken"><b>leak failsafe</b><span><code>LEAK_EN = 0</code> — neither blocks arming nor surfaces</span><em>OFF</em></li>
+    <li data-link="leak"><b>leak failsafe</b><span>present, enabled and healthy — read off the board today</span><em>armed</em></li>
     <li data-link="nan"><b>absence is not zero</b><span>a missing reading renders <code>--</code> / <code>NaN</code></span><em>every value</em></li>
    </ol>
    <div class="chain__faults" role="group" aria-label="Choose a failure">
@@ -1055,10 +1059,28 @@
    <figcaption>Every link is a line in the code or a parameter read off the board, not an intention.
      The heartbeat is measured at <span class="num">2 Hz</span> against a
      <span class="num">5 s</span> failsafe — a <span class="num">10×</span> margin. <code>LEAK_EN</code>
-     and the kill-switch ambiguity are from reading the live board (<code>srot-board-soul.md</code> §4,
-     <code>measured-bars.md</code> §26); both are open asks to the firmware team, not things this
-     repository can switch on from the host.</figcaption>
+     is armed again — the reading below says so — and the kill-switch ambiguity
+     (<code>measured-bars.md</code> §26) is still an open ask to the firmware team, not something
+     this repository can close from the host.</figcaption>
   </figure>
+
+  <!-- board:begin -->
+  <figure class="board-live" aria-label="A live reading taken off the SROT board">
+   <header><span class="silk">Live off the board <i>//</i> 2026-09-22T03:20:06Z</span><span class="silk">/dev/ttyUSB0 · 115200 baud · 40 s window</span></header>
+   <div class="board-live__grid">
+    <div class="board-live__wire">
+     <span class="silk">the cable, right now</span>
+     <b>21<u>%</u></b>
+     <div class="board-live__bar"><i style="--w:21%"></i><u style="--x:60%"></u></div>
+     <p>2417 of 11520 bytes a second · 78 messages · 160 frames the parser rejected. The tick is the 60&#8239;% bar this project ships against.</p>
+    </div>
+    <ol class="board-live__streams"><li><b>NAMED_VALUE_FLOAT</b><i style="--w:100.0%"></i><em>29<u>Hz</u></em><span>the health names, multiplexed</span></li><li><b>ATTITUDE</b><i style="--w:33.8%"></i><em>9.8<u>Hz</u></em><span>roll, pitch, yaw</span></li><li><b>SCALED_IMU2</b><i style="--w:33.8%"></i><em>9.8<u>Hz</u></em><span>the raw inertial data</span></li><li><b>UNKNOWN_291</b><i style="--w:33.8%"></i><em>9.8<u>Hz</u></em><span>ESC_STATUS — undecodable here, by design</span></li><li><b>VFR_HUD</b><i style="--w:16.9%"></i><em>4.9<u>Hz</u></em><span>depth, reported as altitude</span></li><li><b>SYS_STATUS</b><i style="--w:6.9%"></i><em>2<u>Hz</u></em><span>the health words</span></li><li><b>BATTERY_STATUS</b><i style="--w:3.1%"></i><em>0.9<u>Hz</u></em><span>one pack per instance</span></li></ol>
+    <ol class="board-live__checks"><li class="ok"><b>leak</b><span>present · enabled · healthy</span><em>reads 0 — dry</em></li><li class="warn"><b>barometer</b><span>bit says unhealthy</span><em>BARO_HEALT reads 3 · p2p 0 — the two disagree</em></li><li class="warn"><b>kill switch</b><span>KILL = 0</span><em>still means live OR not talking</em></li><li class="ok"><b>armed</b><span>no</span><em>custom mode 19</em></li></ol>
+   </div>
+   <p class="board-live__cfg"><span class="silk">and the board states its own configuration</span><code>CFG r14 FR=1 DIR=-1,1,1,1,1,1,1,-1</code><span>revision <b>14</b> · <code>FRAME_REVERSE = 1</code> · eight motor directions, and <b>not</b> all &minus;1 — so the double inversion two sections above is not present on this hull, and the board is the one saying so.</span></p>
+   <figcaption>Read by <code>tools/board_snapshot.py</code> over the USB-C cable with DTR and RTS deasserted, so attaching did not reset the board; rendered by <code>tools/board_panel.py</code> from <code>docs/data/board.json</code>. Nothing was transmitted but the parameter reads. The electronics pack reads <strong>19.03 V</strong>, the vehicle is <strong>disarmed</strong>, and there are no thrusters attached to it.</figcaption>
+  </figure>
+  <!-- board:end -->
 
   <div class="split" style="margin-top:var(--s5)">
    <div>
@@ -1074,11 +1096,13 @@
       turns every command backwards.</p>
    </div>
    <div>
-    <h3>The two links we cannot close from here</h3>
-    <p class="quiet"><strong>The leak link is off.</strong> The sensor is present and its bit is
-      readable, but <code>LEAK_EN</code> is <span class="num">0</span> on this board, and the firmware
-      gates both the pre-arm refusal and the surface failsafe on it. Water in the hull would not stop
-      an arm and would not bring the vehicle up.</p>
+    <h3>The one link we cannot close from here</h3>
+    <p class="quiet"><strong>The leak link was off, and is on.</strong> On 2026-09-07 this board read
+      <code>LEAK_EN = 0</code> — the firmware gates both the pre-arm refusal and the surface failsafe
+      on that one parameter, so a leak would have done nothing. It was switched on before the bench
+      session on 2026-09-15, and the reading above says so: <code>LEAK</code> comes back present,
+      enabled and healthy. The link is only as good as its last reading, which is why this figure
+      carries the timestamp of one.</p>
     <p class="quiet"><strong>The kill link is ambiguous.</strong> <code>KILL = 0</code> means "live"
       <em>or</em> "the power board is not talking to us", and the host cannot tell which. So
       <code>arm()</code> refuses only on a <em>known</em> engaged switch, and the display says
@@ -3512,7 +3536,7 @@
     oldfw: ['rev',    'firmware interlock', 'at connect, and again inside arm()', 'Refused. A board below the behaviour-revision floor would take every turn backwards, so it is never armed.'],
     baro:  ['baro',   'barometer health', 'on every automatic move', 'It arms — and then simply will not move: every move verb enters AUTO, and the board refuses AUTO on bad depth.'],
     dead:  ['nan',    'absence is not zero', 'on every reading', 'The value renders as -- on the board and NaN here, so nothing downstream mistakes silence for a measurement of zero.'],
-    leak:  ['leak',   'NOTHING — the leak link is off', 'never, as configured', 'LEAK_EN = 0: a leak would neither block arming nor surface the vehicle. Today this failure reaches the water. A human on deck is the only guard.'],
+    leak:  ['leak',   'the leak failsafe', 'at the wet contact', 'The sensor reads present, enabled and healthy on the board right now, and reports dry. It was OFF on 2026-09-07 (LEAK_EN = 0) and was switched on before the 2026-09-15 bench session; this figure is the live reading, not the old one.'],
     kill:  ['kill',   'only partly — the kill link is ambiguous', 'at arm, if the state is known', 'KILL reads 0 for "live" and for "not talking". The host shows UNKNOWN and refuses to arm only on a known-engaged switch.']
   };
   function pick(k){
@@ -3521,7 +3545,7 @@
     var order = Object.keys(links), idx = order.indexOf(f[0]);
     // the signal travels the chain up to the link that owns this failure
     order.forEach(function(n, i){ if (i < idx) links[n].classList.add('path'); });
-    var bad = (k === 'leak' || k === 'kill');
+    var bad = (k === 'kill');
     links[f[0]].classList.add(bad ? 'miss' : 'catch');
     root.style.setProperty('--at', idx);
     by.textContent = f[1]; when.textContent = f[2]; does.textContent = f[3];

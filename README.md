@@ -616,14 +616,13 @@ stateDiagram-v2
     CHECKING --> ARMED: all gates pass
     ARMED --> MOVING: a verb is dispatched
     MOVING --> ARMED: terminal ACK
-    MOVING --> SURFACING: battery sag · link silent 5 s · companion silent
+    MOVING --> SURFACING: leak · battery sag · link silent 5 s · companion silent
     ARMED --> SURFACING: the same, at any time
     SURFACING --> DISARMED: surfaced and idle — auto-disarm
     ARMED --> DISARMED: Ctrl-C, stop, or disarm — these bypass the busy gate
     note left of SURFACING
         the board does this by itself,
-        with or without the Pi. NOT on a
-        leak, LEAK_EN is 0 on this board
+        with or without the Pi
     end note
 ```
 
@@ -644,18 +643,24 @@ stateDiagram-v2
 
 ### The chain, as it is configured today
 
-<p align="center"><img src="docs/imgs/readme/safety-chain.webp" alt="The safety chain: eight links from the kill switch to 'absence is not zero'. The leak link is drawn broken and is highlighted: with LEAK_EN = 0 a leak neither blocks arming nor surfaces the vehicle." width="100%"></p>
+<p align="center"><img src="docs/imgs/readme/safety-chain.webp" alt="The safety chain: eight links from the kill switch to 'absence is not zero', with the failure being traced to the link that catches it." width="100%"></p>
 
-Eight links, each owned by a different part of the system. Two are not what they should be, and
-both are the firmware's to change, so both are open asks rather than host workarounds:
+Eight links, each owned by a different part of the system. The figure is drawn from a **live
+reading taken off the board on 2026-09-22** ([`docs/data/board.json`](docs/data/board.json), by
+[`tools/board_snapshot.py`](tools/board_snapshot.py)), which settled two things prose had got wrong:
 
-- **The leak link is off.** The sensor is present and its bit is readable, but `LEAK_EN = 0` on
-  this board, and the firmware gates both the pre-arm refusal and the surface failsafe on it. Water
-  in the hull would neither stop an arm nor bring the vehicle up.
-  ([`srot-board-soul.md`](.claude/context/platform/srot-board-soul.md) §4)
-- **The kill link is ambiguous.** `KILL = 0` means "live" *or* "the power board is not talking to
-  us". The host shows `UNKNOWN` when the second board is silent, and `arm()` refuses only on a
+- **The leak link is armed again.** It was off on 2026-09-07 (`LEAK_EN = 0`, and the firmware gates
+  both the pre-arm refusal and the surface failsafe on that one parameter). The live extended health
+  word now reports `LEAK` present, enabled and healthy, reading dry.
+  ([`srot-board-soul.md`](.claude/context/platform/srot-board-soul.md) §4 records the old state.)
+- **The kill link is still ambiguous.** `KILL = 0` means "live" *or* "the power board is not talking
+  to us". The host shows `UNKNOWN` when the second board is silent, and `arm()` refuses only on a
   *known* engaged switch. ([`measured-bars.md`](.claude/context/measured-bars.md) §26)
+
+The same reading prints the board's own configuration line — `CFG r14 FR=1 DIR=-1,1,1,1,1,1,1,-1`
+— which is the sign chain above, stated by the board itself: firmware revision 14,
+`FRAME_REVERSE = 1`, and motor directions that are *not* all −1, so the double inversion is not
+present on this hull.
 
 The site lets you [pick a failure and watch which link takes it](https://fh1m.github.io/mongla_ws/#safety).
 
