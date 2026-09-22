@@ -15,7 +15,7 @@ instead of mid-mission.  Sections:
   H. DVL (Nortek Nucleus)    IP reachable + control port open
   I. Payload board (CH340)   port found + serial link verified (safe '0' byte)
   J. Cameras                 forward + downward USB cameras enumerated
-  K. Vision models           TensorRT .engine built (else slow .pt fallback)
+  K. Vision models           Hailo .hef + its .yaml sidecar (TensorRT off-platform)
   L. Jetson power mode       MAXN for full inference FPS
 
 Each check prints PASS / WARN / FAIL.  Exit code is 0 when no FAIL (WARNs
@@ -524,6 +524,16 @@ def _physical_cameras() -> list[str]:
     ports: dict[str, str] = {}
     for link in sorted(glob('/dev/v4l/by-path/*-video-index0')):
         base = os.path.basename(link)
+        # ⛔ ONLY USB. A Raspberry Pi exposes its hardware video codec and its
+        # ISP backend as by-path video nodes that exist whether or not a camera
+        # is plugged in -- `platform-1000800000.codec-video-index0` and
+        # `platform-1000880000.pisp_be-video-index0`. Measured on the vehicle
+        # 2026-09-22 with BOTH cameras physically removed: this check reported
+        # "[PASS] 2 USB camera(s)". A pre-flight gate that passes on a hull with
+        # no cameras is worse than no gate, and on the Jetson this never showed
+        # because that platform has no such nodes.
+        if '-usb-' not in base:
+            continue
         key = base.split('-video-index')[0]      # includes :1.x interface
         port = key.rsplit(':', 1)[0]              # drop interface -> USB port
         ports.setdefault(port, base)
@@ -534,6 +544,12 @@ def _check_cameras() -> tuple[str, str]:
     cams = _physical_cameras()
     n = len(cams)
     if n == 0:
+        plat = [os.path.basename(l) for l in
+                sorted(glob('/dev/v4l/by-path/*-video-index0'))]
+        if plat:
+            return WARN, (f'NO USB cameras. The {len(plat)} /dev/video* by-path '
+                          f'node(s) present are the platform codec/ISP, not '
+                          f'capture devices -- cameras unplugged?')
         raw = sorted(glob('/dev/video*'))
         if raw:
             return WARN, (f'{len(raw)} /dev/video* node(s) but no by-path link '
@@ -583,10 +599,25 @@ def _models_dirs() -> list[str]:
     return seen
 
 
+def _hailo_present() -> bool:
+    """Is a Hailo accelerator on this machine?
+
+    The default platform is a Pi 5 + Hailo-8, where the compiled artifact is a
+    `.hef` and TensorRT does not exist. Checking for a `.engine` there is a
+    check that can never pass, and it was shipping advice to run an exporter
+    "ON THE JETSON" -- a machine this vehicle is not.
+    """
+    if glob('/dev/hailo*'):
+        return True
+    return shutil.which('hailortcli') is not None
+
+
 def _check_models() -> tuple[str, str]:
     dirs = _models_dirs()
     if not dirs:
         return WARN, 'models dir not found -- vision detection disabled'
+    if _hailo_present():
+        return _check_models_hailo(dirs)
     # Merge by stem across dirs; a stem is engine-accelerated if a .engine
     # exists for it in ANY model dir.
     stems: dict[str, bool] = {}
@@ -606,6 +637,37 @@ def _check_models() -> tuple[str, str]:
     return WARN, (f'{len(with_engine)}/{len(stems)} models have a .engine; '
                   f'{", ".join(missing)} will run slow .pt (~3-4 Hz) -- '
                   'ros2 run mongla_vision export_engine --all (ON THE JETSON)')
+
+
+def _check_models_hailo(dirs: list[str]) -> tuple[str, str]:
+    """On Hailo the accelerated artifact is a `.hef`, compiled offline.
+
+    ⛔ A `.hef` WITHOUT ITS `<stem>.yaml` SIDECAR IS WORSE THAN NO MODEL. The
+    sidecar carries the class allowlist; missing, the allowlist is empty and the
+    detector returns `[]` every frame while the whole pipeline looks healthy.
+    That is a silent failure, so it is reported as a FAIL rather than a warning.
+    """
+    hefs: dict[str, bool] = {}
+    for d in dirs:
+        for p in glob(os.path.join(d, '*.hef')):
+            stem = os.path.splitext(os.path.basename(p))[0]
+            sidecar = os.path.exists(os.path.join(d, stem + '.yaml'))
+            hefs[stem] = hefs.get(stem, False) or sidecar
+    if not hefs:
+        pts = {os.path.splitext(os.path.basename(p))[0]
+               for d in dirs for p in glob(os.path.join(d, '*.pt'))}
+        if pts:
+            return FAIL, (f'Hailo present but NO .hef in {", ".join(dirs)} '
+                          f'({len(pts)} .pt found). The .pt path is not the '
+                          f'flight path on this platform -- compile the models')
+        return WARN, f'no .hef and no .pt in {", ".join(dirs)} -- vision disabled'
+    orphans = [s for s, ok in hefs.items() if not ok]
+    if orphans:
+        return FAIL, (f'{len(orphans)}/{len(hefs)} .hef have NO <stem>.yaml '
+                      f'sidecar ({", ".join(orphans)}) -- the class allowlist '
+                      f'is empty, so the detector returns [] every frame while '
+                      f'looking healthy')
+    return PASS, f'{len(hefs)} Hailo model(s), each with its .yaml sidecar'
 
 
 # --------------------------------------------------------------------------- #
@@ -1450,7 +1512,7 @@ def main(argv: list[str] | None = None) -> int:
     emit(st, 'USB cameras', det)
 
     # ---- K. vision models ------------------------------------------ #
-    section('K. Vision models (TensorRT)')
+    section('K. Vision models (Hailo .hef, or TensorRT off-platform)')
     st, det = _check_models()
     emit(st, 'model engines', det)
 
