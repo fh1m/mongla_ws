@@ -69,22 +69,23 @@ something it is not. Code beats docs; a measurement beats both — see
 
 ## Part VIII — Against the world
 
-42. [Against the world — how Mongla compares to the best work there is](sota/README.md)
-43. [Control, against the world](sota/control.md)
-44. [Vision, against the world](sota/vision.md)
-45. [Localization, against the world](sota/localization.md)
-46. [Planning, the DSL and the mission executive, against the world](sota/planning.md)
-47. [The gap ledger — every move, ranked](sota/SOTA-GAPS.md)
+42. [The verdict — Mongla against the world, in one document](sota/VERDICT.md)
+43. [Against the world — how Mongla compares to the best work there is](sota/README.md)
+44. [Control, against the world](sota/control.md)
+45. [Vision, against the world](sota/vision.md)
+46. [Localization, against the world](sota/localization.md)
+47. [Planning, the DSL and the mission executive, against the world](sota/planning.md)
+48. [The gap ledger — every move, ranked](sota/SOTA-GAPS.md)
 
 ## Part IX — The workbench
 
-48. [The workbench — what is being measured, and what it said](workbench/README.md)
-49. [Bench — everything provable without water](workbench/BENCH.md)
-50. [Pool — one section per session, agenda written before travel](workbench/POOL.md)
-51. [Research owed — the questions the sweeps could not answer](workbench/RESEARCH-OWED.md)
+49. [The workbench — what is being measured, and what it said](workbench/README.md)
+50. [Bench — everything provable without water](workbench/BENCH.md)
+51. [Pool — one section per session, agenda written before travel](workbench/POOL.md)
+52. [Research owed — the questions the sweeps could not answer](workbench/RESEARCH-OWED.md)
 
 ## Appendix — History and elsewhere
 
-52. [Legacy: the Pixhawk backend and ArduSub SITL](platform/legacy-pixhawk-and-sitl.md)
-53. [RoboSub Team Intelligence — Mongla Vision Roadmap](scouting/README.md)
-54. [Future TODO -- shrink `commands.py` registry](future/future-registry-shrinkage.md)
+53. [Legacy: the Pixhawk backend and ArduSub SITL](platform/legacy-pixhawk-and-sitl.md)
+54. [RoboSub Team Intelligence — Mongla Vision Roadmap](scouting/README.md)
+55. [Future TODO -- shrink `commands.py` registry](future/future-registry-shrinkage.md)

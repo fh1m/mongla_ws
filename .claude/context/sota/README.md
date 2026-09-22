@@ -1,12 +1,14 @@
 # Against the world — how Mongla compares to the best work there is
 
-Five documents. Four dossiers, one ledger. They answer one question, subsystem by subsystem:
+Six documents: a verdict, four dossiers and a ledger. They answer one question, subsystem by
+subsystem:
 
 > **What does the best work on earth do here, what do we do, what is the gap in numbers, and
 > what is the cheapest experiment that would close it?**
 
 | | |
 |---|---|
+| [`VERDICT.md`](VERDICT.md) | ⭐ **start here** — the whole-system answer: where we stand, subsystem by subsystem, and the five moves that matter |
 | [`control.md`](control.md) | the loops, the allocation, the vehicle model |
 | [`vision.md`](vision.md) | perception, and the model-production pipeline |
 | [`localization.md`](localization.md) | the estimator, its sources, and what happens when it is lost |
