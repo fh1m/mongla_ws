@@ -20,10 +20,19 @@ won and the document says so.
 | [`pr-g-optical-flow-ingest.md`](pr-g-optical-flow-ingest.md) | accept `OPTICAL_FLOW_RAD` (106) — the bottom camera is a bottom-track velocity sensor now (30 cm ±1.09 cm) and the board has **no velocity ingest of any kind** | a handler + one state field |
 | [`pr-d-protocol-honesty.md`](pr-d-protocol-honesty.md) | `REQUEST_MESSAGE` ACCEPTs all 190 ids and emits 7 (including ids `-1`/`-2`); no `TIMESYNC`; the SD log cannot be pulled over the link | one switch; ten lines for TIMESYNC |
 | [`pr-e-vision-offload.md`](pr-e-vision-offload.md) | move the terminal visual-servo hold onto the board's fixed 500 Hz tick, replacing companion-side constants (continuity-lock gate, `align_stable_frames`, Kalman coast) that silently rescale with whatever the perception stack's rate happens to be that day | depends on PR A; a new board-side control mode |
+| [`pr-j-simulated-esc-bench-mode.md`](pr-j-simulated-esc-bench-mode.md) | a simulated-ESC bench mode: the Pico already runs this model forward at `main.cpp:242`, so synthesising rpm for an ABSENT thruster is that line read backwards. Unblocks the display's thruster indicators, `motor_tune`'s plant fit, and every `ESC_TELEMETRY` consumer we have written but never executed. **We ask them to decline it rather than ship it unmarked** | small, Pico only |
 | [`pr-i-spin-min-relay.md`](pr-i-spin-min-relay.md) | `MOT_SPIN_MIN` turns every actuator below its floor into a relay — a 16-point DShot cliff at `t = 0.005` — and mixed-axis commands bend thrust direction as a consequence; filed as an issue, not a PR | ranked above #4, alongside #10 |
 
 **Ranked, if only one lands:** PR A §3, the `31001` collision. It is the only
 item that is cheap now and irreversible later, and both claimants are ours.
+
+**2026-09-22 — PR I's table is now MEASURED, and PR F outranks a board we were going to build.**
+Predicting all eleven points of a demand ladder from their own source agreed with the live board to
+**0.30 %** worst case (under one count of 999 everywhere but saturation), so PR I §1 is confirmed
+rather than derived — see its addendum. Separately, reading `main.cpp:393-405` and `mav_stream.cpp:190`
+settled that thruster **presence is already measured on the Pico and simply never reaches the wire**,
+which ranks PR F above **H-4, our own per-thruster current-sense board** — a multi-week build we had
+scheduled, against one line in a function that already holds the answer.
 
 **Ranked, if only one CAPABILITY lands: PR F, and it now outranks PR C.**
 Measured 2026-09-07: 958 CRC-valid `ESC_STATUS` frames with no ESCs attached,
