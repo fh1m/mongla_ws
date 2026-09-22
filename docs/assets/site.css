@@ -630,6 +630,41 @@ figure.panel figcaption{margin-top:clamp(16px,2vw,26px);padding-top:14px;
 .shots__row .silk{display:block;margin-bottom:5px;font-family:var(--display);font-weight:800;
   font-size:var(--fs-micro);letter-spacing:.14em;text-transform:uppercase;color:var(--signal-text)}
 
+/* ── inside its head: three panes, one clock ───────────────────────────
+   The run is a toy integrator, and the figure says so; the rates, the gap
+   distribution and the ladder are the measured ones. The narration strip is
+   the vehicle speaking in fields it actually has. */
+.brain{margin:var(--s5) 0 0}
+.brain__screen{position:relative;border-radius:16px;overflow:hidden;background:var(--s-sunk);
+  box-shadow:var(--e2)}
+.brain__screen canvas{display:block;width:100%;height:auto}
+.brain__say{padding:14px 18px;background:var(--s-key);box-shadow:0 -1px 0 var(--rule);
+  font-family:var(--prose);font-style:italic;font-size:var(--fs-lede);line-height:1.5;
+  color:var(--ink);min-height:3.4em}
+.brain__rail{display:grid;gap:10px;grid-template-columns:minmax(0,1fr) auto;align-items:center;
+  margin-top:12px}
+.brain__rail ol{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:4px}
+.brain__rail button{display:grid;grid-template-columns:auto auto;gap:7px;align-items:baseline;
+  padding:8px 12px;border:1px solid var(--rule);border-radius:9px;background:none;cursor:pointer;
+  transition:border-color 200ms var(--ease),background 200ms var(--ease)}
+.brain__rail button:hover{border-color:var(--rule-lit);background:rgba(255,255,255,.04)}
+.brain__rail .n{font-family:var(--data);font-size:9.5px;color:var(--ink-3)}
+.brain__rail .t{font-family:var(--display);font-weight:700;font-size:11px;color:var(--ink-2)}
+.brain__rail button.on{border-color:var(--signal);background:rgba(255,42,20,.08)}
+.brain__rail button.on .t{color:#fff}
+.brain__rail button.past .t{color:#3fd98a}
+.brain__ctl{display:flex;align-items:center;gap:8px}
+.brain__speed{display:flex;align-items:center;gap:7px}
+.brain__speed .silk{font-family:var(--display);font-weight:800;font-size:var(--fs-micro);
+  letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)}
+.brain__speed input{width:88px}
+.brain__speed output{font-family:var(--data);font-size:10.5px;color:var(--ink);min-width:2.6ch}
+.brain figcaption{margin-top:14px}
+@media (max-width:900px){
+  .brain__rail{grid-template-columns:1fr}
+  .brain__say{font-size:var(--fs-body)}
+}
+
 /* ── the theatre: photon to thrust, one stage at a time ────────────────
    Replaces ten stacked cards that used a third of the width and explained the
    stages in prose. Here the measured cost is drawn to scale across the top, the

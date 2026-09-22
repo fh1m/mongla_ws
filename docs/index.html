@@ -1139,6 +1139,73 @@
  </div>
 </section>
 
+<!-- 07b ─────────────────────────── -->
+<section id="brain" data-chapter="inside its head">
+ <div class="wrap">
+  <p class="mark">A run, from the inside <i>//</i> what it sees, believes and does</p>
+  <h2 class="col">Ride along inside Mongla's head for one run.</h2>
+  <p class="lede col quiet">Three panes, one clock. On the left is the forward camera as the
+    detector sees it. In the middle is what the vehicle <em>believes</em> — its own position, the
+    course it was told about, and how sure it is. On the right is what it decides to do about that.
+    Nothing here is a cartoon of the pipeline: the rates, the detection gaps, the lock ladder and
+    the refusals are the measured ones, and the narration is a sentence the code could actually
+    have produced.</p>
+
+  <figure class="brain" id="brain-fig">
+   <div class="brain__screen">
+    <canvas id="brain-cv" width="1140" height="470" role="img"
+      aria-label="Three panes: the camera view, the vehicle's believed position, and the demand it produces"></canvas>
+    <div class="brain__say" id="brain-say">…</div>
+   </div>
+   <div class="brain__rail">
+    <ol id="brain-steps" role="tablist" aria-label="The run, step by step"></ol>
+    <div class="brain__ctl">
+     <button class="key" type="button" id="brain-play" aria-pressed="true">pause</button>
+     <button class="key" type="button" id="brain-again">start again</button>
+     <label class="brain__speed"><span class="silk">speed</span>
+      <input type="range" id="brain-speed" min="0.25" max="3" step="0.25" value="1"
+        aria-label="Playback speed"><output id="brain-speed-o">1×</output></label>
+    </div>
+   </div>
+   <figcaption>The detector blinks on the real distribution — 71 recorded gaps, median
+     <span class="num">0.155 s</span>, worst <span class="num">4.00 s</span> — and when it blinks the
+     lock climbs the measured ladder rather than inventing a target. Dead reckoning drifts while the
+     vehicle is blind, which is why the belief pane draws how sure it is and not just where it
+     thinks it is. A verb that cannot finish says so: the run below ends one task early, on purpose,
+     because that is what the budget did.</figcaption>
+  </figure>
+
+  <div class="split" style="margin-top:var(--s5)">
+   <div>
+    <h3>Why three panes and not one</h3>
+    <p class="quiet">Every failure this stack has had lives in the gap between two of these panes.
+      A detector that sees nothing while the belief pane says the gate is dead ahead is a lock
+      problem. A belief that drifts while the camera holds a target steady is an estimator problem.
+      A demand that keeps pushing while both agree the target is centred is a control problem. One
+      pane cannot show you which of the three you are looking at, and a single "it works" video
+      hides all of them.</p>
+    <p class="quiet">This is also the argument for the scorecard: every vision verb records what it
+      saw, where it ended and why it stopped, so a run can be read back in these three columns
+      afterwards instead of being remembered.</p>
+   </div>
+   <div>
+    <h3>What it is allowed to say</h3>
+    <p class="quiet">The narration is deliberately restricted to things the code has a field for:
+      the class it is looking for, whether it saw it inside the recency window, the signed pixel
+      offset, which rung of the lock ladder it is on, the verb in flight, and the outcome —
+      <span class="num">ALIGNED</span>, <span class="num">LOST</span>,
+      <span class="num">TIMEOUT</span>, <span class="num">NO_CAMERA</span>,
+      <span class="num">ABORTED</span>. There is no line in here that the vehicle could not have
+      written itself, because a narration that knows more than the vehicle is a story, not a
+      readout.</p>
+   </div>
+  </div>
+  <blockquote class="pull">The vehicle is never confused. It is <em>specific</em> about what it does
+   not know — and that is the whole difference.
+   <footer>inside its head</footer></blockquote>
+ </div>
+</section>
+
 <!-- 08 ──────────────────────────────────────────────────────────────── -->
 <section id="blink" data-chapter="the blink">
  <div class="wrap">
@@ -4041,6 +4108,327 @@
       else if (!es[0].isIntersecting && raf){ cancelAnimationFrame(raf); raf = 0; }
     }, { threshold: 0.04 }).observe(cv);
   } else { raf = requestAnimationFrame(frame); }
+})();
+
+(function(){
+  /* INSIDE ITS HEAD -- one run, three panes, one clock.
+
+     Left: the forward camera as the detector sees it. Middle: what the vehicle
+     believes -- its own position, the course it was told about, and how sure it
+     is. Right: the demand that comes out, the verb in flight and the budget.
+
+     The simulation is honest about its own nature: the vehicle's motion is a toy
+     integrator, but every RATE, the detection-gap distribution (71 recorded
+     gaps: p50 0.155 s, p90 0.651, max 4.00), the lock ladder's rungs, the
+     50 Hz vision loop and the five outcome words are the measured, shipped
+     ones. The narration is restricted to fields the code actually has. */
+  var cv = document.getElementById('brain-cv');
+  if (!cv) return;
+  var ctx = cv.getContext('2d'), DPR = Math.min(2, devicePixelRatio || 1);
+  var W = 1140, H = 470;
+  cv.width = W * DPR; cv.height = H * DPR; ctx.scale(DPR, DPR);
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var css = getComputedStyle(document.documentElement);
+  var RED = css.getPropertyValue('--signal').trim() || '#ff2a14',
+      SEA = css.getPropertyValue('--medium-text').trim() || '#5aa0ff',
+      INK = css.getPropertyValue('--ink').trim() || '#e4e8ef',
+      INK3 = css.getPropertyValue('--ink-3').trim() || '#7b8598',
+      SUNK = css.getPropertyValue('--s-sunk').trim() || '#04060b';
+  var GREEN = '#3fd98a', VIOLET = '#8b7cff', AMBER = '#e0b341';
+
+  /* the course, in metres, as a mission would carry it: a prior, not a truth */
+  var TASKS = [
+    { key: 'gate',    label: 'the gate',     at: [0, 6],     verb: 'vision.align → move_forward', budget: 12 },
+    { key: 'slalom',  label: 'the slalom',   at: [3.2, 11],  verb: 'vision.align → move_left',    budget: 14 },
+    { key: 'bins',    label: 'the bins',     at: [-2.4, 16], verb: 'vision.align → fire(1)',      budget: 16 },
+    { key: 'torpedo', label: 'the torpedo board', at: [2.6, 21], verb: 'vision.align → fire(2)',  budget: 18 },
+    { key: 'octagon', label: 'the octagon',  at: [0, 26],    verb: 'surface',                     budget: 10 }
+  ];
+  var steps = document.getElementById('brain-steps');
+  steps.innerHTML = '<li><button role="tab" data-s="-1"><span class="n">00</span>' +
+    '<span class="t">arm</span></button></li>' + TASKS.map(function(t, i){
+      return '<li><button role="tab" data-s="' + i + '"><span class="n">' +
+        ('0' + (i + 1)).slice(-2) + '</span><span class="t">' + t.label + '</span></button></li>';
+    }).join('');
+  var stepBtns = [].slice.call(steps.querySelectorAll('[data-s]'));
+
+  var say = document.getElementById('brain-say');
+  var playBtn = document.getElementById('brain-play');
+  var speedEl = document.getElementById('brain-speed');
+  var speedOut = document.getElementById('brain-speed-o');
+
+  var st, playing = !reduce, last = 0, raf = 0;
+
+  function reset(from){
+    st = {
+      t: 0, task: from === undefined ? -1 : from, phase: 'arm', phaseT: 0,
+      x: 0, y: 0, hdg: 0,                  // truth
+      bx: 0, by: 0, drift: 0,              // belief
+      seen: false, gap: 0, nextGap: 1.2, rung: 0, xpx: 0, lostFor: 0,
+      lat: 0, yaw: 0, fwd: 0, spent: 0, fired: 0, done: [], outcome: '',
+      line: 'Armed. Firmware revision 14 accepted, barometer read, kill switch clear. Nothing is commanded until a verb asks for it.'
+    };
+    if (from !== undefined && from >= 0){
+      // jump: put the vehicle just short of that task
+      var tk = TASKS[from];
+      st.task = from; st.phase = 'search';
+      st.x = tk.at[0] * 0.4; st.y = Math.max(0, tk.at[1] - 3.2);
+      st.bx = st.x; st.by = st.y;
+      st.done = TASKS.slice(0, from).map(function(t){ return t.key; });
+    }
+  }
+  reset();
+
+  /* the gap distribution, sampled by its own quantiles rather than a guess */
+  function drawGap(){
+    var r = Math.random();
+    return r < 0.5 ? 0.06 + Math.random() * 0.12
+         : r < 0.9 ? 0.155 + Math.random() * 0.5
+         : r < 0.99 ? 0.65 + Math.random() * 1.7
+                    : 2.4 + Math.random() * 1.6;
+  }
+
+  function step(dt){
+    st.t += dt; st.phaseT += dt;
+    var tk = TASKS[Math.max(0, st.task)];
+
+    // ── the detector blinks on the real distribution
+    if (st.gap > 0){
+      st.gap -= dt; st.seen = false; st.lostFor += dt;
+      if (st.gap <= 0){ st.seen = true; st.lostFor = 0; st.rung = 0; }
+    } else {
+      st.seen = true;
+      st.nextGap -= dt;
+      if (st.nextGap <= 0){ st.gap = drawGap(); st.nextGap = 0.8 + Math.random() * 1.6; }
+    }
+    // the ladder: which rung the lock is on, by measured dwell
+    st.rung = st.lostFor === 0 ? 0 : st.lostFor < 0.20 ? 1 : st.lostFor < 0.65 ? 2
+            : st.lostFor < 2.42 ? 3 : 4;
+
+    if (st.phase === 'arm'){
+      if (st.phaseT > 2.2){ st.phase = 'search'; st.phaseT = 0; st.task = 0;
+        st.line = 'Looking for the gate. I have a prior for where it should be, and a prior is not a sighting.'; }
+      return;
+    }
+
+    // ── where the target is, relative to the hull
+    var dx = tk.at[0] - st.x, dy = tk.at[1] - st.y;
+    var range = Math.hypot(dx, dy);
+    var bearing = Math.atan2(dx, Math.max(0.2, dy));
+    st.xpx = Math.max(-300, Math.min(300, bearing * 640));
+
+    if (st.phase === 'search'){
+      st.yaw = Math.sin(st.t * 1.1) * 0.5; st.fwd = 0.18; st.lat = 0;
+      if (st.seen && Math.abs(bearing) < 0.5){
+        st.phase = 'align'; st.phaseT = 0;
+        st.line = 'I see ' + tk.label + '. It is ' + (st.xpx > 0 ? 'right' : 'left') +
+                  ' of centre by ' + Math.abs(st.xpx).toFixed(0) + ' px; closing that is the whole job.';
+      }
+    } else if (st.phase === 'align'){
+      var dead = Math.abs(st.xpx) < 24;
+      st.lat = dead ? 0 : Math.max(-1, Math.min(1, -st.xpx / 220));
+      st.yaw = dead ? 0 : Math.max(-1, Math.min(1, -st.xpx / 300));
+      st.fwd = dead ? 0.42 : 0.2;
+      if (st.rung >= 4){
+        st.phase = 'lost'; st.phaseT = 0; st.outcome = 'LOST';
+        st.line = 'The ladder ran out. ' + st.lostFor.toFixed(2) + ' s with no detection, no tracker and no anchor — I return LOST rather than invent a target.';
+      } else if (dead && range < 1.1){
+        st.phase = 'act'; st.phaseT = 0;
+        st.line = tk.verb.indexOf('fire') >= 0
+          ? 'Centred and holding. Firing channel ' + (tk.key === 'bins' ? '1' : '2') +
+            ' — and the shot is gated on a NEW frame, not on the one that got me here.'
+          : 'Centred and holding. Driving through on one SROT_MOVE; the board brakes it, not me.';
+      }
+    } else if (st.phase === 'lost'){
+      st.lat = 0; st.yaw = 0.35; st.fwd = 0.1;
+      if (st.phaseT > 2.0){ st.phase = 'search'; st.phaseT = 0; st.outcome = '';
+        st.line = 'Searching again from where I actually am, not from where I hoped to be.'; }
+    } else if (st.phase === 'act'){
+      st.lat = 0; st.yaw = 0; st.fwd = 0.5;
+      if (st.phaseT > 1.6){
+        st.done.push(tk.key);
+        if (tk.verb.indexOf('fire') >= 0) st.fired++;
+        st.spent += tk.budget;
+        st.outcome = 'ALIGNED';
+        if (st.task >= TASKS.length - 1 || st.spent > 46){
+          st.phase = 'end'; st.phaseT = 0;
+          st.line = st.spent > 46 && st.task < TASKS.length - 1
+            ? 'That is the budget. ' + (TASKS.length - 1 - st.task) + ' task(s) left unattempted on purpose — a run that tries everything scores less than a run that finishes something.'
+            : 'Surfacing. Four tasks attempted, ' + st.fired + ' payload shots, every verb’s outcome in the scorecard.';
+        } else {
+          st.task++; st.phase = 'search'; st.phaseT = 0;
+          st.line = 'Done with that one. Next: ' + TASKS[st.task].label + '.';
+        }
+      }
+    } else if (st.phase === 'end'){
+      st.lat = st.yaw = 0; st.fwd = 0;
+    }
+
+    // ── truth moves; belief integrates the same demand, but drifts while blind
+    st.hdg += st.yaw * 0.9 * dt;
+    st.x += Math.sin(st.hdg) * st.fwd * dt * 2.4;
+    st.y += Math.cos(st.hdg) * st.fwd * dt * 2.4;
+    st.bx += Math.sin(st.hdg + st.drift) * st.fwd * dt * 2.4;
+    st.by += Math.cos(st.hdg + st.drift) * st.fwd * dt * 2.4;
+    if (st.seen){ st.drift *= 0.94; st.bx += (st.x - st.bx) * 0.08; st.by += (st.y - st.by) * 0.08; }
+    else st.drift += (Math.random() - 0.5) * 0.02 * dt * 10;
+
+    stepBtns.forEach(function(b){
+      var on = +b.dataset.s === st.task && st.phase !== 'arm';
+      b.classList.toggle('on', on);
+      b.classList.toggle('past', st.done.indexOf((TASKS[+b.dataset.s] || {}).key) >= 0);
+    });
+    say.textContent = st.line;
+  }
+
+  // ── drawing
+  function panel(x, y, w, h, title){
+    ctx.fillStyle = 'rgba(255,255,255,.02)';
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(x, y, w, h, 12) : ctx.rect(x, y, w, h);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.10)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = INK3; ctx.font = '700 10px ui-monospace, monospace';
+    ctx.fillText(title, x + 14, y + 22);
+  }
+  function t(s, x, y, col, size, weight){
+    ctx.fillStyle = col || INK3;
+    ctx.font = (weight || 400) + ' ' + (size || 11) + 'px ui-monospace, monospace';
+    ctx.fillText(s, x, y);
+  }
+
+  function draw(){
+    ctx.clearRect(0, 0, W, H); ctx.fillStyle = SUNK; ctx.fillRect(0, 0, W, H);
+    var tk = TASKS[Math.max(0, st.task)];
+
+    // ───── pane 1: what it sees
+    var px = 16, py = 16, pw = 400, ph = H - 32;
+    panel(px, py, pw, ph, 'WHAT IT SEES · FORWARD CAMERA, 30.18 Hz');
+    var fx = px + 18, fy = py + 42, fw = pw - 36, fh = 250;
+    ctx.strokeStyle = 'rgba(255,255,255,.08)'; ctx.strokeRect(fx, fy, fw, fh);
+    // a horizon and some water texture, so the frame is not empty
+    for (var i = 0; i < 26; i++){
+      var wy = fy + ((i * 37 + (st.t * 22)) % fh);
+      ctx.fillStyle = 'rgba(90,160,255,.05)';
+      ctx.fillRect(fx, wy, fw, 1);
+    }
+    ctx.setLineDash([3, 4]); ctx.strokeStyle = 'rgba(255,255,255,.18)';
+    ctx.beginPath(); ctx.moveTo(fx + fw / 2, fy); ctx.lineTo(fx + fw / 2, fy + fh); ctx.stroke();
+    ctx.setLineDash([]);
+    if (st.phase !== 'arm' && st.phase !== 'end'){
+      var bw = Math.max(26, 120 - Math.hypot(tk.at[0] - st.x, tk.at[1] - st.y) * 6);
+      var bxp = fx + fw / 2 + st.xpx / 300 * (fw / 2 - 30) - bw / 2;
+      var byp = fy + fh / 2 - bw / 2.6;
+      if (st.rung === 0){
+        ctx.strokeStyle = GREEN; ctx.lineWidth = 2; ctx.strokeRect(bxp, byp, bw, bw * 0.78);
+        t(tk.key + '  0.9' + (3 + (((st.t * 3) | 0) % 5)), bxp, byp - 7, GREEN, 10.5, 700);
+      } else if (st.rung < 4){
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = st.rung === 1 ? SEA : st.rung === 2 ? VIOLET : AMBER;
+        ctx.lineWidth = 2; ctx.strokeRect(bxp, byp, bw, bw * 0.78); ctx.setLineDash([]);
+        t(['', 'tracker coast', 'geometric anchor', 'anchor, fading'][st.rung],
+          bxp, byp - 7, st.rung === 1 ? SEA : st.rung === 2 ? VIOLET : AMBER, 10.5, 700);
+      } else {
+        t('NOTHING — LOST', fx + fw / 2 - 48, fy + fh / 2, RED, 12, 700);
+      }
+      // the aim line: frame centre to the target, which IS the error
+      ctx.strokeStyle = st.rung === 0 ? RED : 'rgba(255,42,20,.35)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(fx + fw / 2, fy + fh / 2);
+      ctx.lineTo(bxp + bw / 2, fy + fh / 2); ctx.stroke();
+    }
+    t(st.seen ? 'detection: fresh' : 'no detection for ' + st.lostFor.toFixed(2) + ' s',
+      fx, fy + fh + 26, st.seen ? GREEN : RED, 11.5, 700);
+    t('x_px ' + (st.xpx >= 0 ? '+' : '') + st.xpx.toFixed(0) + '   ladder rung ' +
+      ['live box', 'coast', 'anchor', 'anchor', 'LOST'][st.rung], fx, fy + fh + 48, INK3, 11);
+    t('a lock is a promise about the target, not about the detector', fx, fy + fh + 70, INK3, 10);
+
+    // ───── pane 2: what it believes
+    var mx = 432, mw = 340;
+    panel(mx, py, mw, ph, 'WHAT IT BELIEVES · NO GPS, NO DVL');
+    var m0x = mx + mw / 2, m0y = py + ph - 60, sc = 11.5;
+    function MX(wx){ return m0x + wx * sc; }
+    function MY(wy){ return m0y - wy * sc; }
+    ctx.strokeStyle = 'rgba(255,255,255,.05)';
+    for (var g = 0; g <= 28; g += 4){
+      ctx.beginPath(); ctx.moveTo(mx + 10, MY(g)); ctx.lineTo(mx + mw - 10, MY(g)); ctx.stroke();
+    }
+    TASKS.forEach(function(tt){
+      var done = st.done.indexOf(tt.key) >= 0;
+      ctx.beginPath(); ctx.arc(MX(tt.at[0]), MY(tt.at[1]), 7, 0, 6.3);
+      ctx.strokeStyle = done ? GREEN : tt === tk ? RED : 'rgba(255,255,255,.22)';
+      ctx.lineWidth = 2; ctx.stroke();
+      t(tt.label, MX(tt.at[0]) + 12, MY(tt.at[1]) + 4, done ? GREEN : tt === tk ? RED : INK3, 9.5);
+    });
+    // the truth, and the belief, and how far apart they are
+    ctx.beginPath(); ctx.arc(MX(st.x), MY(st.y), 5, 0, 6.3);
+    ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fill();
+    var unc = 6 + Math.min(40, st.lostFor * 16 + Math.abs(st.drift) * 60);
+    ctx.beginPath(); ctx.arc(MX(st.bx), MY(st.by), unc, 0, 6.3);
+    ctx.fillStyle = 'rgba(90,160,255,.10)'; ctx.fill();
+    ctx.strokeStyle = SEA; ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(MX(st.bx), MY(st.by), 4, 0, 6.3); ctx.fillStyle = SEA; ctx.fill();
+    t('truth', MX(st.x) + 9, MY(st.y) - 9, 'rgba(255,255,255,.8)', 9.5);
+    t('belief', MX(st.bx) + unc + 6, MY(st.by) + 12, SEA, 9.5);
+    var err = Math.hypot(st.x - st.bx, st.y - st.by);
+    t('belief error ' + (err * 100).toFixed(0) + ' cm', mx + 16, py + ph - 26,
+      err > 0.35 ? RED : INK3, 11, 700);
+    t('the circle is how sure it is — it grows while blind', mx + 16, py + ph - 8, INK3, 9.5);
+
+    // ───── pane 3: what it does
+    var dx2 = 788, dw = W - dx2 - 16;
+    panel(dx2, py, dw, ph, 'WHAT IT DOES · 50 Hz');
+    t(st.phase === 'arm' ? 'arm' : st.phase === 'end' ? 'surface' : tk.verb,
+      dx2 + 14, py + 50, INK, 12.5, 700);
+    t('the verb in flight', dx2 + 14, py + 68, INK3, 9.5);
+    [['lateral', st.lat], ['yaw', st.yaw], ['forward', st.fwd]].forEach(function(d, i){
+      var y = py + 100 + i * 52;
+      t(d[0], dx2 + 14, y, INK3, 10.5);
+      ctx.fillStyle = 'rgba(255,255,255,.06)'; ctx.fillRect(dx2 + 14, y + 8, dw - 28, 14);
+      var mid = dx2 + 14 + (dw - 28) / 2, wv = d[1] * (dw - 28) / 2;
+      ctx.fillStyle = d[1] === 0 ? 'rgba(255,255,255,.18)' : RED;
+      ctx.fillRect(mid + Math.min(0, wv), y + 8, Math.abs(wv), 14);
+      ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(mid - 1, y + 4, 2, 22);
+      t(d[1].toFixed(2), dx2 + dw - 52, y + 20, d[1] === 0 ? INK3 : INK, 10.5, 700);
+    });
+    // outcome + budget
+    t('last outcome', dx2 + 14, py + 280, INK3, 9.5);
+    t(st.outcome || '—', dx2 + 14, py + 302,
+      st.outcome === 'LOST' ? RED : st.outcome ? GREEN : INK3, 13, 700);
+    t('budget spent', dx2 + 14, py + 336, INK3, 9.5);
+    ctx.fillStyle = 'rgba(255,255,255,.06)'; ctx.fillRect(dx2 + 14, py + 344, dw - 28, 10);
+    ctx.fillStyle = st.spent > 46 ? RED : SEA;
+    ctx.fillRect(dx2 + 14, py + 344, (dw - 28) * Math.min(1, st.spent / 60), 10);
+    t(st.spent + ' s of 60', dx2 + 14, py + 372, st.spent > 46 ? RED : INK3, 10.5, 700);
+    t('tasks done ' + st.done.length + ' \u00b7 shots ' + st.fired, dx2 + 14, py + 396, INK3, 10.5);
+    t('it abandons a task rather than spend', dx2 + 14, py + ph - 26, INK3, 9.5);
+    t('a whole run finding out', dx2 + 14, py + ph - 12, INK3, 9.5);
+  }
+
+  function loop(now){
+    var dt = Math.min(0.05, (now - (last || now)) / 1000) * (+speedEl.value);
+    last = now;
+    if (playing) step(dt);
+    draw();
+    raf = requestAnimationFrame(loop);
+  }
+
+  function setPlay(){
+    playBtn.textContent = playing ? 'pause' : 'play';
+    playBtn.setAttribute('aria-pressed', playing ? 'true' : 'false');
+  }
+  playBtn.addEventListener('click', function(){ playing = !playing; setPlay(); });
+  document.getElementById('brain-again').addEventListener('click', function(){ reset(); playing = true; setPlay(); });
+  speedEl.addEventListener('input', function(){ speedOut.textContent = (+speedEl.value) + '×'; });
+  stepBtns.forEach(function(b){
+    b.addEventListener('click', function(){ reset(+b.dataset.s < 0 ? undefined : +b.dataset.s); playing = true; setPlay(); });
+  });
+  setPlay(); draw();
+  if ('IntersectionObserver' in window){
+    new IntersectionObserver(function(es){
+      if (es[0].isIntersecting && !raf){ last = 0; raf = requestAnimationFrame(loop); }
+      else if (!es[0].isIntersecting && raf){ cancelAnimationFrame(raf); raf = 0; }
+    }, { threshold: 0.05 }).observe(cv);
+  } else raf = requestAnimationFrame(loop);
 })();
 </script>
 </body>
