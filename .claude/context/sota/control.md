@@ -304,6 +304,49 @@ saturation is.**
 mixers — Bumblebee to QP in two consecutive reports, Caltech to a documented priority ladder.
 **Nobody in the sampled TDRs describes uniform per-group scale-down.**
 
+### 2.9 Control laws — and an uncomfortable question about our own headline
+
+> Source dossier: [`sources/sota-control-laws.md`](sources/sota-control-laws.md). ⚠ Ran with
+> **zero web-search budget**; worked through the arXiv API and direct fetches. Most of the
+> classical marine system-ID literature (IEEE/Elsevier/MDPI) was unreachable — §6.
+
+**INDI is the strongest candidate the sweep found, and nobody has taken it underwater.**
+[Smeur, Chu & de Croon (arXiv 1701.07254)](https://arxiv.org/abs/1701.07254): **512 Hz** on a real
+quadrotor, **7× lower gust deviation than PID — 0.21 m vs 1.51 m**. It needs only a
+finite-difference angular-acceleration estimate and a control-effectiveness matrix,
+**identifiable from a single test flight** — not a hydrodynamic model. ⛔ **No underwater
+application was found anywhere**, actively searched, zero hits.
+
+That combination — sensor-based, model-light, high-rate, and unexplored in water — is the single
+most interesting control result in this dive **for a vehicle that already has a 500 Hz board.**
+
+**MPC on AUVs is not ready for us, and the literature will not admit it.** The two AUV MPC papers
+([arXiv 2509.17237](https://arxiv.org/html/2509.17237),
+[arXiv 2503.09628](https://arxiv.org/html/2503.09628)) are **sim-only** and report **zero
+solve-time or hardware numbers** despite explicit searching — a real gap in that literature, not a
+gap in the search. Both ran their control loops at **10 Hz**.
+
+**Real-vehicle evidence that adaptive identification is tractable**:
+[arXiv 2603.06548](https://arxiv.org/abs/2603.06548) runs online **27-parameter** dynamics
+identification on an actual BlueROV2 Heavy at a median **0.023 s per update (≥ 33 Hz)** — on an
+Intel Core Ultra 9 desktop, not embedded.
+
+#### ⚠ Is 500 Hz justified?
+
+**No AUV-specific study was found that ties loop rate to performance.** Every AUV control paper the
+sweep reached ran at **10–100 Hz**. ArduSub/Pixhawk's 400 Hz is an *in-air* inheritance. The
+assembled evidence is consistent with 500 Hz being a number carried over from multirotors rather
+than derived from underwater dynamics — **and that is inference from an absence, not a citable
+finding**, which is exactly how it is recorded here.
+
+What would settle it, and it is ours to run: log `DEPTH_ERR` and attitude error at the board's
+full rate, then decimate the *controller* to 250 / 100 / 50 Hz and compare. If nothing measurably
+degrades until 50 Hz, the 500 Hz board is buying headroom for something else — still worth having,
+but it should be said accurately.
+
+⚠ Also worth knowing before assuming a parameter set exists: **Fossen's own MSS toolbox ships
+REMUS100, NPS-AUV and DSRV — and no BlueROV2 or Girona500.**
+
 ---
 
 ## 3. The gap
