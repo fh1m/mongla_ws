@@ -28,8 +28,8 @@ WHAT IT PRODUCES, per axis:
     rate random walk             the tau^+1/2 slope -- the slow wander a bias
                                  state has to track.
 
-    python3 tools/allan_variance.py --log --port /dev/ttyACM0 --hours 12
-    python3 tools/allan_variance.py --analyse imu_allan_<stamp>.npz
+    python3 tools/allan_variance.py --log --port /dev/ttyUSB0 --hours 12
+    python3 tools/allan_variance.py --analyse imu_allan_<stamp>.bin
     python3 tools/allan_variance.py --selftest      # truth test, no hardware
 
 ⚠ THE OVERCLAIM THIS TOOL REFUSES TO MAKE. Bias instability is only readable if
@@ -41,6 +41,8 @@ UNRESOLVED rather than printing the last point.
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import sys
 import time
 from datetime import datetime, timezone
@@ -48,17 +50,35 @@ from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parents[1]
 
 # A log shorter than this cannot resolve a bias-instability minimum for a
 # consumer MEMS part, whose 1/f corner typically sits in the 10-1000 s decade.
 MIN_USEFUL_HOURS = 2.0
 MAX_TAU_FRACTION = 0.4          # never average over more than 40 % of the record
 # A long unattended run that only writes at the end is one power blip away from
-# losing everything. Checkpoint, so the worst case costs five minutes, not a
-# night -- the same lesson that cost two research sweeps when agents held their
-# findings in memory and then hit a limit.
+# losing everything. Flush, so the worst case costs five minutes, not a night.
 CHECKPOINT_S = 300.0
+# How long without an IMU frame before the logger says so. A stream that dies
+# at hour 1 must not be discovered at hour 12.
+STALE_S = 30.0
+
+# ─────────────────────────────────────────────────── the on-disk record ──
+
+# One sample, 38 bytes, written the moment it arrives. The logger holds NO
+# history, and that is the point: 12 h at 50 Hz is 2.16 M samples, which as
+# Python lists costs ~700 MB of boxed objects on a board that has 3 983 MB and
+# also has to run the detector. Streaming makes memory flat and the per-sample
+# cost constant.
+#
+# It also deletes a subtler defect. The previous design re-serialised the WHOLE
+# record every five minutes, inside the read loop -- so the checkpoint meant to
+# protect the run would, by hour 11, have blocked the reader long enough to
+# overflow the tty buffer and drop frames. Dropped frames are not a lost sample:
+# they are a GAP, and overlapping Allan deviation assumes uniform sampling.
+# The guard would have quietly corrupted the measurement it was guarding.
+RECORD = np.dtype([('t', '<f8'), ('bms', '<u4'),
+                   ('gyro', '<f4', (3,)), ('accel', '<f4', (3,)),
+                   ('temp', '<i2')])
 
 
 # ───────────────────────────────────────────────────────────── the maths ──
@@ -146,117 +166,153 @@ def characterise(tau: np.ndarray, sigma: np.ndarray, kind: str) -> dict:
 
 # ──────────────────────────────────────────────────────────── the logger ──
 
-def _save(out_path: Path, ts, bts, gx, gy, gz, ax, ay, az, temp, mtype: str) -> None:
-    """Write the record so far. Atomic: write a temp file and rename, so a kill
-    mid-write cannot leave a truncated npz where a good one used to be."""
-    t = np.asarray(ts)
-    b = np.asarray(bts, dtype=float)
-    if t.size < 2:
-        return
-    board_clock = bool(np.any(b > 0)) and float(np.median(np.diff(b))) > 0
-    rate = (1000.0 / float(np.median(np.diff(b))) if board_clock
-            else 1.0 / float(np.median(np.diff(t))))
-    # numpy appends '.npz' to any name that lacks it, so the temp file must
-    # already end in .npz or savez writes somewhere we did not name.
-    tmp = out_path.with_name(out_path.stem + '.part.npz')
-    np.savez_compressed(
-        tmp, t=t, t_board_ms=b, board_clock=board_clock, rate_hz=rate,
-        msg_type=mtype,
-        gyro=np.vstack([gx, gy, gz]).astype(float),
-        accel=np.vstack([ax, ay, az]).astype(float),
-        temp_cdegc=np.asarray(temp, dtype=float),
-        taken=datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))
-    tmp.replace(out_path)
-
 
 def log_imu(port: str, hours: float, out_path: Path) -> Path:
-    """Passively record the board's IMU.
+    """Passively record the board's IMU, one sample at a time, straight to disk.
 
     Reads only. The vehicle must be STILL and undisturbed for the whole run --
     a door slam is a rate-random-walk artefact that no analysis can remove.
     """
     from pymavlink import mavutil
 
+    out_path = out_path.with_suffix('.bin')
+    meta_path = out_path.with_suffix('.meta.json')
     seconds = hours * 3600.0
     print(f'logging {hours:.2f} h from {port} -> {out_path.name}', flush=True)
     m = mavutil.mavlink_connection(port, baud=115200)
 
+    rec = np.zeros(1, dtype=RECORD)
     t_start = time.time()
     t_end = t_start + seconds
-    ts, bts, gx, gy, gz, ax, ay, az, temp = [], [], [], [], [], [], [], [], []
-    last_report = t_start
-    msg = None
-    while time.time() < t_end:
-        msg = m.recv_match(type=['SCALED_IMU2', 'RAW_IMU', 'SCALED_IMU'],
-                           blocking=True, timeout=5.0)
-        if msg is None:
-            continue
-        d = msg.to_dict()
-        ts.append(time.time())
-        # ⚠ THE BOARD'S OWN CLOCK, NOT ARRIVAL TIME. Allan deviation assumes
-        # uniform sampling, and host arrival jitter on this link was measured at
-        # sd 4.741 ms -- which at a 20 ms period is a quarter of the interval and
-        # would land entirely in the short-tau region we are trying to read.
-        # `time_boot_ms` is stamped where the sample was taken.
-        bts.append(d.get('time_boot_ms', 0))
-        gx.append(d['xgyro']); gy.append(d['ygyro']); gz.append(d['zgyro'])
-        ax.append(d['xacc']);  ay.append(d['yacc']);  az.append(d['zacc'])
-        temp.append(d.get('temperature', 0))     # cdegC; 0 when unpopulated
-        if time.time() - last_report > CHECKPOINT_S:
-            _save(out_path, ts, bts, gx, gy, gz, ax, ay, az, temp, msg.get_type())
-            print(f'  {(time.time() - t_start) / 3600.0:.2f} h, {len(ts)} samples, '
-                  f'checkpointed', flush=True)
-            last_report = time.time()
+    last_flush = last_msg = t_start
+    n, mtype, complained = 0, None, False
 
-    ts = np.asarray(ts)
-    bts = np.asarray(bts, dtype=float)
-    if ts.size < 1000:
-        raise SystemExit(f'only {ts.size} samples -- is the board streaming IMU?')
+    with open(out_path, 'wb') as f:
+        while time.time() < t_end:
+            now = time.time()
+            # ⚠ BOTH CHECKS LIVE ABOVE THE RECEIVE, on purpose. Put them below
+            # the `msg is None: continue` and a stream that dies at hour 1 never
+            # flushes and never complains again -- you find out at hour 12.
+            if now - last_flush > CHECKPOINT_S:
+                f.flush()
+                os.fsync(f.fileno())
+                print(f'  {(now - t_start) / 3600.0:.2f} h, {n} samples, flushed',
+                      flush=True)
+                last_flush = now
+            if now - last_msg > STALE_S and not complained:
+                print(f'⚠ no IMU frame for {now - last_msg:.0f} s -- the board may '
+                      f'have reset or the port re-enumerated. Still listening.',
+                      flush=True)
+                complained = True
 
-    # Prefer the board clock. Fall back to arrival time only if the board does
-    # not stamp, and SAY SO -- a silent fallback would quietly invalidate the
-    # short-tau end of every curve.
-    board_clock = bool(np.any(bts > 0)) and float(np.median(np.diff(bts))) > 0
-    if board_clock:
-        rate = 1000.0 / float(np.median(np.diff(bts)))
-        jitter = float(np.std(np.diff(ts))) * 1e3
-        print(f'using the board clock: {rate:.2f} Hz '
-              f'(host arrival jitter was sd {jitter:.2f} ms, excluded)')
-    else:
-        rate = 1.0 / float(np.median(np.diff(ts)))
-        print(f'⚠ board does not stamp time_boot_ms -- falling back to ARRIVAL '
-              f'time at {rate:.2f} Hz. Short-tau results carry link jitter.')
-    _save(out_path, ts, bts, gx, gy, gz, ax, ay, az, temp, msg.get_type())
-    print(f'wrote {out_path}  {ts.size} samples at {rate:.1f} Hz')
+            msg = m.recv_match(type=['SCALED_IMU2', 'RAW_IMU', 'SCALED_IMU'],
+                               blocking=True, timeout=5.0)
+            if msg is None:
+                continue
+            d = msg.to_dict()
+            if mtype is None:
+                mtype = msg.get_type()
+                # Written on the FIRST sample, not at the end: a run killed at
+                # hour 11 must still be readable. The sample count is not stored
+                # here -- it is the file size divided by the record size, so
+                # there is only ever one truth about how long the run was.
+                meta_path.write_text(json.dumps({
+                    'msg_type': mtype, 'port': port,
+                    'record_dtype': [[k, str(RECORD[k].base), list(RECORD[k].shape)]
+                                     for k in RECORD.names],
+                    'started': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+                }, indent=2))
+            last_msg, complained = time.time(), False
+
+            rec['t'] = last_msg
+            rec['bms'] = d.get('time_boot_ms', 0)
+            rec['gyro'] = (d['xgyro'], d['ygyro'], d['zgyro'])
+            rec['accel'] = (d['xacc'], d['yacc'], d['zacc'])
+            rec['temp'] = d.get('temperature', 0)      # cdegC; 0 when unpopulated
+            f.write(rec.tobytes())
+            n += 1
+
+    if n < 1000:
+        raise SystemExit(f'only {n} samples -- is the board streaming IMU?')
+    print(f'wrote {out_path}  {n} samples')
     return out_path
+
+
+def load_record(path: Path) -> dict:
+    """Read a streamed log back. Refuses rather than guessing the scaling."""
+    r = np.fromfile(path, dtype=RECORD)
+    if r.size < 2:
+        raise SystemExit(f'{path} holds {r.size} samples')
+    meta_path = path.with_suffix('.meta.json')
+    if not meta_path.exists():
+        # The unit scaling depends on which message this was. Inventing one
+        # would produce a plausible number for an unknown quantity, which is
+        # exactly the defect this whole tool exists to stop.
+        raise SystemExit(f'{meta_path.name} is missing -- the message type, and '
+                         f'so the units, are unknown. Refusing to analyse.')
+    meta = json.loads(meta_path.read_text())
+
+    bms = r['bms'].astype(float)
+    # Prefer the board clock. Fall back to arrival time only if the board does
+    # not stamp, and SAY SO -- a silent fallback quietly invalidates the
+    # short-tau end of every curve.
+    board_clock = bool(np.any(bms > 0)) and float(np.median(np.diff(bms))) > 0
+    if board_clock:
+        rate = 1000.0 / float(np.median(np.diff(bms)))
+    else:
+        rate = 1.0 / float(np.median(np.diff(r['t'])))
+    return {'t': r['t'], 'bms': bms, 'rate': rate, 'board_clock': board_clock,
+            'gyro': r['gyro'].T.astype(float), 'accel': r['accel'].T.astype(float),
+            'temp': r['temp'].astype(float), 'msg_type': meta['msg_type']}
 
 
 # ────────────────────────────────────────────────────────── the analysis ──
 
 def analyse(path: Path) -> int:
-    d = np.load(path)   # no allow_pickle: numeric arrays + plain strings only
-    rate = float(d['rate_hz'])
-    t = d['t']
+    d = load_record(path)
+    rate, t = d['rate'], d['t']
     hours = (t[-1] - t[0]) / 3600.0
-    mtype = str(d['msg_type'])
 
     # SCALED_IMU*: gyro mrad/s -> rad/s, accel mG -> m/s^2
     gyro = d['gyro'] * 1e-3
     accel = d['accel'] * 9.80665e-3
 
-    clock = 'board clock' if bool(d['board_clock']) else 'HOST ARRIVAL TIME (jittered)'
-    print(f'\n{path.name}: {t.size} samples, {rate:.1f} Hz, {hours:.2f} h, {mtype}, {clock}')
-    if 'temp_cdegc' in d.files:
-        tc = np.asarray(d['temp_cdegc'], dtype=float)
-        if np.any(tc != 0):
-            span = (tc.max() - tc.min()) / 100.0
-            print(f'IMU temperature {tc.min()/100:.1f} to {tc.max()/100:.1f} C '
-                  f'(span {span:.2f} C)')
-            if span > 2.0:
-                print('⚠ that span is large enough to move bias. Any rate-random-walk '
-                      'read off this curve may be thermal, not intrinsic.')
-        else:
-            print('IMU temperature field is not populated by this firmware')
+    clock = 'board clock' if d['board_clock'] else 'HOST ARRIVAL TIME (jittered)'
+    print(f"\n{path.name}: {t.size} samples, {rate:.1f} Hz, {hours:.2f} h, "
+          f"{d['msg_type']}, {clock}")
+    if d['board_clock']:
+        jitter = float(np.std(np.diff(t))) * 1e3
+        print(f'host arrival jitter was sd {jitter:.2f} ms, excluded')
+
+    # ⚠ THE GAP CHECK. Allan deviation assumes UNIFORM sampling. A dropped frame
+    # is not a lost sample, it is a hole, and averaging across it reports a
+    # longer tau than was actually observed -- silently, and in the direction
+    # that flatters the part. The board's own clock is what makes this visible:
+    # a hole shows as a step in time_boot_ms that arrival time cannot reveal.
+    step = np.diff(d['bms'])
+    nominal = float(np.median(step))
+    holes = int(np.sum(step > 3 * nominal))
+    if holes:
+        lost = float(np.sum(step[step > 3 * nominal]) / nominal) - holes
+        print(f'⚠ {holes} gaps in the board clock ({lost:.0f} samples missing, '
+              f'{100.0 * lost / (t.size + lost):.3f} % of the record; '
+              f'worst {step.max() / nominal:.1f} x the {nominal:.1f} ms period)')
+        if lost / (t.size + lost) > 0.001:
+            print('  that is enough to bias the long-tau end. Find what blocked '
+                  'the reader before trusting the bias-instability number.')
+    else:
+        print(f'no gaps: every interval within 3x the {nominal:.1f} ms period')
+
+    tc = d['temp']
+    if np.any(tc != 0):
+        span = (tc.max() - tc.min()) / 100.0
+        print(f'IMU temperature {tc.min() / 100:.1f} to {tc.max() / 100:.1f} C '
+              f'(span {span:.2f} C)')
+        if span > 2.0:
+            print('⚠ that span is large enough to move bias. Any rate-random-walk '
+                  'read off this curve may be thermal, not intrinsic.')
+    else:
+        print('IMU temperature field is not populated by this firmware')
     if hours < MIN_USEFUL_HOURS:
         print(f'⚠ {hours:.2f} h is under the {MIN_USEFUL_HOURS} h floor -- the '
               f'bias-instability minimum will very likely be unresolved.')
@@ -339,10 +395,16 @@ def selftest() -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--log', action='store_true', help='record from the board')
-    ap.add_argument('--port', default='/dev/ttyACM0')
+    # ⚠ THE BOARD PRESENTS TWO SERIAL DEVICES, and only one speaks MAVLink:
+    #   /dev/ttyUSB0  CH340 (1a86:7523)  -- the ESP32. MAVLink. THIS one.
+    #   /dev/ttyACM0  Pico 2 (2e8a:000f) -- the RP2350's ESC debug console, which
+    #                 emits plain text ("M1[cmd=0 out=0 rpm=0 ...]"). pymavlink
+    #                 decodes that as an endless run of BAD_DATA, so the port
+    #                 looks busy and alive while yielding no IMU at all.
+    ap.add_argument('--port', default='/dev/ttyUSB0')
     ap.add_argument('--hours', type=float, default=12.0)
     ap.add_argument('--out', help='where to write (default: CWD)')
-    ap.add_argument('--analyse', metavar='NPZ')
+    ap.add_argument('--analyse', metavar='BIN')
     ap.add_argument('--selftest', action='store_true')
     a = ap.parse_args()
 
@@ -352,9 +414,11 @@ def main() -> int:
         stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
         # CWD, not the source tree: this tool is copied to the vehicle and run
         # from /tmp, where parents[1] is '/' and the write is refused.
-        out = Path(a.out) if a.out else Path.cwd() / f'imu_allan_{stamp}.npz'
-        log_imu(a.port, a.hours, out)
-        return analyse(out)
+        out = Path(a.out) if a.out else Path.cwd() / f'imu_allan_{stamp}.bin'
+        # analyse what log_imu ACTUALLY wrote -- it normalises the suffix, and
+        # analysing the name we asked for rather than the name it returned is
+        # how a tool ends up reading a file that is not the one it just made.
+        return analyse(log_imu(a.port, a.hours, out))
     if a.analyse:
         return analyse(Path(a.analyse))
     ap.print_help()
