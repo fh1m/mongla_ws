@@ -65,6 +65,32 @@ def test_a_truly_centred_demand_still_stops():
     assert demand_to_fraction(0.0) == 0.0
 
 
+def test_the_achievable_minimum_is_above_spin_min_not_equal_to_it():
+    """`spin_min` is the bottom of the lifted range, but the smallest demand that
+    survives the centre test still passes through both expo curves on the way, so
+    the achievable minimum is strictly higher. Returning `spin_min` here is a
+    lower bound, and `fraction_to_demand` gates on this value -- so the bound
+    would accept a request it then over-delivers."""
+    assert min_fraction() > DEF_MOT_SPIN_MIN
+    assert min_fraction() == pytest.approx(0.1583, abs=5e-4)
+
+
+def test_a_request_between_spin_min_and_the_achievable_minimum_is_refused():
+    """The exact gap the lower bound would have let through: 0.155 sits above
+    `spin_min` (0.150) and below what the vehicle can actually produce (0.158)."""
+    between = 0.5 * (DEF_MOT_SPIN_MIN + min_fraction())
+
+    assert DEF_MOT_SPIN_MIN < between < min_fraction()
+    assert fraction_to_demand(between) == 0.0
+
+
+def test_the_minimum_itself_round_trips_exactly():
+    """The boundary must be reachable, or the floor is reported one step above
+    where it is and the smallest usable correction is lost."""
+    assert demand_to_fraction(fraction_to_demand(min_fraction())) == pytest.approx(
+        min_fraction(), abs=1e-9)
+
+
 def test_asking_for_less_than_the_floor_is_refused_not_rounded():
     """Returning the smallest non-zero demand would silently deliver 3x what
     the caller asked for -- a plausible number for an impossible request."""

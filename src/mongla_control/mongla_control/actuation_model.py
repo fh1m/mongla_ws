@@ -145,21 +145,35 @@ def fraction_to_demand(f: float, *, pilot: float = DEF_PILOT_EXPO,
     if not math.isfinite(f) or f == 0.0:
         return 0.0
     mag = min(abs(f), 1.0)
-    if mag < spin_min:
+    if mag < min_fraction(pilot=pilot, thst=thst, spin_min=spin_min):
         return 0.0
     thr = (mag - spin_min) / (1.0 - spin_min)
     t = inverse_thrust_expo(thr, thst)
     return math.copysign(_solve_pilot_expo(t, pilot), f)
 
 
-def min_fraction(spin_min: float = DEF_MOT_SPIN_MIN) -> float:
-    """The smallest non-zero output this vehicle can command, as a fraction of
+def min_fraction(*, pilot: float = DEF_PILOT_EXPO,
+                 thst: float = DEF_MOT_THST_EXPO,
+                 spin_min: float = DEF_MOT_SPIN_MIN) -> float:
+    """The smallest non-zero output this vehicle can ACHIEVE, as a fraction of
     full scale. Not a deadband to push through -- a floor.
+
+    ⚠ This is NOT `spin_min`. The floor is the bottom of the lifted range, but
+    the smallest demand that survives the centre test still passes through
+    `pilot_expo` and `thrust_expo` on the way, so the achievable minimum is
+    strictly above `spin_min`: 0.1583 against 0.1500 at the shipped parameters.
+
+    Returning `spin_min` here looked right and was wrong in the one direction
+    that matters -- `fraction_to_demand` gates on this value, so a request for
+    0.155 would have been accepted and then delivered 0.164. Over-delivering by
+    the exact mechanism the refusal exists to prevent, in the function whose
+    whole purpose is not lying about the floor.
 
     Measured 2026-09-22: a demand of 0.02, the smallest tried, already produced
     18.1 % of full scale.
     """
-    return spin_min
+    return demand_to_fraction(CENTRE_EPS, pilot=pilot, thst=thst,
+                              spin_min=spin_min)
 
 
 def dshot_command(fraction: float) -> int:
