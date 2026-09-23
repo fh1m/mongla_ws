@@ -72,6 +72,17 @@ def _load() -> ctypes.CDLL:
     lib = ctypes.CDLL(str(LIB))
     f32, f32p = ctypes.c_float, ctypes.POINTER(ctypes.c_float)
     lib.bench_num_thrusters.restype = ctypes.c_int
+    # ⚠ WITHOUT THESE, ctypes ASSUMES int AND SILENTLY TRUNCATES. A char* came
+    # back as an int and the coverage test failed with 'int has no decode' --
+    # cheap here, but the same omission on a float-returning symbol returns a
+    # plausible number instead of an error.
+    lib.bench_param_count.restype = ctypes.c_int
+    lib.bench_param_name.argtypes = [ctypes.c_int]
+    lib.bench_param_name.restype = ctypes.c_char_p
+    lib.bench_set_param.argtypes = [ctypes.c_char_p, f32]
+    lib.bench_set_param.restype = ctypes.c_int
+    lib.bench_get_param.argtypes = [ctypes.c_char_p, f32p]
+    lib.bench_get_param.restype = ctypes.c_int
     lib.bench_params_defaults.restype = None
     lib.bench_mix.argtypes = [f32] * 6 + [f32p]
     lib.bench_mix.restype = None

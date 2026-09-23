@@ -155,7 +155,7 @@ surface**.
 
 ```
 [mongla CLI] ─┐
-[mission]    ─┼── /mongla/move (one action, 30 verbs) ──► auv_manager_node ──USB-C──► SROT board
+[mission]    ─┼── /mongla/move (one action, 31 verbs) ──► auv_manager_node ──USB-C──► SROT board
 [run_plan]   ─┘                                              │                         (500 Hz)
                                                              └──► /mongla/state, /mongla/imu,
                                                                   /mongla/esc_rpm, /mongla/demand

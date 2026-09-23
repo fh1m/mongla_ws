@@ -7,7 +7,7 @@ only ever be used once, and it quietly makes the next competition a rewrite
 instead of a config change -- which is the whole argument for SAUVC/RoboSub/TAC
 portability.
 
-Audited 2026-09-10: **zero** task words across all 30 verbs and every field.
+Audited 2026-09-10: **zero** task words across all 31 verbs and every field.
 This test is what keeps that true, because the pressure to add one arrives
 exactly when someone is busy shipping a task.
 

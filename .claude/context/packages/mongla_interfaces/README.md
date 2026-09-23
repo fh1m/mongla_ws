@@ -7,7 +7,7 @@ vehicle; everything else in this codebase is an implementation detail behind it.
 
 ---
 
-## `Move.action` — one action, thirty verbs
+## `Move.action` — one action, thirty-one verbs
 
 Every command is the same message with a different `cmd` string. Adding a verb does not add a
 topic, a service or a message type.

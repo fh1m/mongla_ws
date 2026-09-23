@@ -412,6 +412,20 @@ MOVE_YAW_RATE   = 45.0    # deg/s default turn rate when p3=0
 MOVE_DEPTH_RATE = 0.20    # m/s dive/ascend ramp
 GAIN_FOR_AUTONOMY = 1.0   # MANUAL_CONTROL is halved until GAIN=1.0 (boots at 0.5)
 
+# ⛔ TWO FIRMWARE LITERALS THAT ARE NOT PARAMETERS, so we carry copies and have
+# asked for them to become readable (upstream ask N section 3). Both stand
+# between a host yaw demand and a turning propeller:
+#
+#   attitude_control.cpp:87   fabsf(yaw_stick) > 0.02f   compared AFTER expo;
+#                             below it the board holds heading, not a rate.
+#   mixer.cpp:102             if (t < 0.005f) return neutral
+#
+# `SrotFC.check_yaw_authority` is what makes the pair actionable rather than
+# merely recorded. `actuation_model.STABILIZE_YAW_STICK_GATE` is the same first
+# number, and a test parses the firmware source so neither copy can drift.
+STABILIZE_YAW_STICK_GATE = 0.02
+MIXER_CENTRE_EPS = 0.005
+
 # --- the LIVE pilot gain, and why setting the parameter cannot reach it ------
 #
 # `JS_GAIN_DEFAULT` is only the POWER-ON value. The firmware keeps the live gain

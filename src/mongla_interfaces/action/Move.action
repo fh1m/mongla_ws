@@ -62,7 +62,7 @@ float32 fire_channel       # ESP32 payload channel: 1/2=torpedo, 3/4=dropper, 0=
 # The channel number IS the board's `SERVO{n}_ROLE` (1..16, no host-side map), so
 # the same field drives a dropper solenoid, a torpedo launcher, a grabber release
 # or anything else wired to the PCA9685. Nothing in this action, and nothing in
-# any of the 30 verbs, is named for a competition task -- the stack is a set of
+# any of the 31 verbs, is named for a competition task -- the stack is a set of
 # AUV CAPABILITIES that missions compose, and `test_the_command_surface_is_task_free`
 # keeps it that way.
 string  fire_channels      # vision_align: CSV channels fired once mid-hold, e.g. "1,2" ('' = none)

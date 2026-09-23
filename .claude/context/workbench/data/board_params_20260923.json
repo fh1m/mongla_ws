@@ -1,35 +1,59 @@
 {
  "_source": "read off the live SROT board over MAVLink, /dev/ttyUSB0 @115200 from mongla.local, 2026-09-23",
  "_firmware_rev": "bff7400",
- "_why": "config.h defaults are NOT what this vehicle runs. PILOT_YAW_RATE ships at 45.0 and reads back 160.0 -- a 3.556x error on every yaw torque computed from the defaults. Load this before any claim about the attitude cascade.",
+ "_coverage": "EVERY name in bench_api.cpp's s_bench_params -- 37 of 37, none missing. An earlier version of this file carried 20, which left roll/pitch I/D/FF/IMAX, both ANG_*_P, DEPTH_* and the TRIM/THR_TRIM group silently at config.h defaults. That is the same class of divergence as PILOT_YAW_RATE and it is now closed by test_the_capture_covers_every_bench_parameter.",
+ "_why": "config.h defaults are NOT what this vehicle runs. PILOT_YAW_RATE ships at 45.0 and reads back 160.0 -- a 3.556x error on every yaw torque computed from the defaults.",
  "_gain_live": 1.0,
- "_gain_note": "JS_GAIN_DEFAULT is the power-on value only; the LIVE gain is runtime and steppable 0.10..1.00 by joystick button. sp_yaw = (r/1000)*gain, mav_commands.cpp:736. At GAIN 1.0 a host yaw_pct of 5.0 is sp_yaw 0.05; at 0.5 it is 0.025 and every threshold below doubles.",
+ "_gain_note": "JS_GAIN_DEFAULT is the power-on value only; the LIVE gain is runtime and steppable 0.10..1.00 by joystick button. sp_yaw = (r/1000)*gain, mav_commands.cpp:736. At GAIN 1.0 a host yaw_pct of 5.0 is sp_yaw 0.05; at 0.5 it is 0.025 and every threshold doubles.",
+ "_battery_note": "MOT_BAT_V_MAX is 16.8 (non-zero), so thrust-vs-voltage compensation is CONFIGURED on this board -- mixer.cpp:118. Whether it is ACTIVE depends on batteryScale(), which returns 0 until the board has seen a pack voltage. The bench does not call set_battery, so bench results are UNCOMPENSATED unless a scenario sets it, and that matches the mixer_ladder capture, which was taken with no thruster pack. ANY number quoted for the vehicle in water must state the pack voltage it was computed at.",
+ "_battery_seen": {
+  "0": [
+   17816
+  ]
+ },
  "params": {
-  "PILOT_EXPO": 0.30000001192092896,
-  "PILOT_YAW_RATE": 160.0,
+  "ATC_ANG_RLL_P": 4.0,
+  "ATC_ANG_PIT_P": 4.0,
   "ATC_ANG_YAW_P": 6.0,
+  "ATC_RAT_RLL_P": 0.02500000037252903,
+  "ATC_RAT_RLL_I": 0.014999999664723873,
+  "ATC_RAT_RLL_D": 0.0007999999797903001,
+  "ATC_RAT_RLL_FF": 0.0,
+  "ATC_RAT_RLL_IMAX": 0.4440000057220459,
+  "ATC_RAT_PIT_P": 0.029999999329447746,
+  "ATC_RAT_PIT_I": 0.017999999225139618,
+  "ATC_RAT_PIT_D": 0.0010000000474974513,
+  "ATC_RAT_PIT_FF": 0.0,
+  "ATC_RAT_PIT_IMAX": 0.4440000057220459,
   "ATC_RAT_YAW_P": 0.18000000715255737,
   "ATC_RAT_YAW_I": 0.017999999225139618,
   "ATC_RAT_YAW_D": 0.0010000000474974513,
   "ATC_RAT_YAW_FF": 0.0,
   "ATC_RAT_YAW_IMAX": 0.22200000286102295,
-  "ATC_RAT_RLL_P": 0.02500000037252903,
-  "ATC_RAT_PIT_P": 0.029999999329447746,
-  "MOT_SPIN_MIN": 0.15000000596046448,
-  "MOT_SPIN_ARM": 0.0,
-  "MOT_THST_EXPO": 0.6499999761581421,
-  "MOT_BAT_V_MIN": 13.199999809265137,
-  "MOT_BAT_V_MAX": 16.799999237060547,
   "ATC_DRAG_RLL": 0.0,
   "ATC_DRAG_PIT": 0.0,
   "ATC_DRAG_YAW": 0.0,
   "XC_YAW2RLL": 0.0,
-  "TRIM_EN": 0.0
+  "TRIM_EN": 0.0,
+  "TRIM_LEAK": 0.0020000000949949026,
+  "TRIM_MAX": 0.30000001192092896,
+  "DEPTH_P": 0.5,
+  "DEPTH_I": 0.10000000149011612,
+  "DEPTH_D": 0.009999999776482582,
+  "PILOT_YAW_RATE": 160.0,
+  "PILOT_EXPO": 0.30000001192092896,
+  "MOT_THST_EXPO": 0.6499999761581421,
+  "MOT_SPIN_MIN": 0.15000000596046448,
+  "MOT_SPIN_ARM": 0.0,
+  "MOT_BAT_V_MIN": 13.199999809265137,
+  "MOT_BAT_V_MAX": 16.799999237060547,
+  "THR_TRIM_EN": 0.0,
+  "THR_TRIM_MAX": 0.25
  },
  "_not_a_param": {
   "FRAME_REVERSE": 1.0,
   "JS_GAIN_DEFAULT": 1.0,
   "MOVE_CRUISE_MAX": 0.800000011920929,
-  "_note": "these are real board params, but nothing the bench links reads them -- FRAME_REVERSE and the motor directions are applied by control_bench.drive(), and MOVE_CRUISE_MAX lives in movement.cpp which the bench does not link. Kept here as evidence, not as bench input."
+  "_note": "real board params, but nothing the bench links reads them -- FRAME_REVERSE and the motor directions are applied by control_bench.drive(), and MOVE_CRUISE_MAX lives in movement.cpp which the bench does not link."
  }
 }
