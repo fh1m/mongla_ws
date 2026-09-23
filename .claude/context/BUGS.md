@@ -62,6 +62,58 @@ logic right?" would have passed all three.
 
 ## 1. CRITICAL
 
+### B53 — every payload channel the missions use is REFUSED by this board `MEASURED 2026-09-22` ⚠ OPEN — needs an operator decision
+**`missions/competition_config.py` vs the board's `SERVOn_ROLE` params**
+
+Read live off the board, all 16 channels, twice each (retry on timeout):
+
+```
+FIREABLE (SWITCH):  9, 10, 12, 13, 14, 15, 16
+SERVO (must not drive): 1, 2, 3, 5, 6, 7, 8
+NONE (unroled): 4, 11
+```
+
+What the missions believe (`competition_config.py:60,189`, `pool_day_practice.py:63,65`):
+
+> `1=torpedo_1, 2=torpedo_2` · `3 = dropper_1, 4 = dropper_2`
+
+**Every one of those is SERVO or NONE on this board.** Resolved by AST — five real
+`fire()` call sites, not grep guesses:
+
+| call site | channel | role | result |
+|---|---|---|---|
+| `sauvc_target_acquisition.py:88` | 3 | SERVO | `FIRE_REJECTED_ARM` |
+| `task_bin.py:96` | 3 | SERVO | `FIRE_REJECTED_ARM` |
+| `pool_day_practice.py:178` | 1 | SERVO | `FIRE_REJECTED_ARM` |
+| `pool_day_practice.py:206` | 3 | SERVO | `FIRE_REJECTED_ARM` |
+| `demo_dual_camera.py:68` | 3 | SERVO | `FIRE_REJECTED_ARM` |
+
+⛔ **If this board's roles are representative, every drop and every torpedo scores
+zero** — the dropper and target-acquisition tasks in full.
+
+✅ **The guard works.** `fire()` fails closed: it refuses a SERVO channel rather
+than writing `DO_SET_SERVO` to the on-board arm, and refuses an unreadable role
+rather than guessing. Nothing here silently no-ops. That is the design working
+exactly as intended, and it is why this was findable on a bench.
+
+⚠ **TWO HYPOTHESES, AND THIS ONE IS NOT OURS TO CLOSE.**
+
+1. **The mission channel map is wrong** and should point at 9/10/12–16.
+2. **This bench board's `SERVOn_ROLE` params are simply unconfigured.** "1–8 servo,
+   9–16 switch" is exactly the folklore `preflight_roles`' own docstring says the
+   full read exists to retire — and this board almost matches it, with two
+   unexplained holes at 4 and 11. A default or partial config would look like this.
+
+The roles are **firmware state set in Bondor**, not ours, so the answer is an
+operator/GCS fact, not a code fact. Recorded rather than "fixed", because
+repointing five missions at channels nobody has confirmed would be swapping one
+unverified map for another.
+
+**To close it:** on the competition hull, run the channel read and compare. If the
+hull agrees with this board, the missions move; if it disagrees, this bench board
+gets configured and nothing in `src/` changes.
+
+
 ### B01 — the LEAK health reporter is never registered  ✅ FIXED 2026-09-08 (`6fada73`)
 **`mongla_manager/health_reporters.py:72` · `auv_manager_node.py:1191`**
 
