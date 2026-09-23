@@ -243,13 +243,34 @@ def test_an_over_large_demand_is_scaled_not_clipped(alloc):
     assert got.achieved[IDX['heave']] > 0
 
 
-def test_saturation_keeps_the_ratio_between_axes(alloc):
-    small = alloc.allocate(surge=0.2, heave=0.1)
-    huge = alloc.allocate(surge=4.0, heave=2.0)
+def test_uniform_scaling_keeps_the_ratio_between_axes(alloc):
+    """⚠ THIS IS A PROPERTY OF THE SCALING FALLBACK, NOT OF THE ALLOCATOR.
+
+    It held for every saturating demand until redistribution was added, and the
+    test was written as if it were universal. It is not: redistribution
+    deliberately gives up direction-preservation to recover magnitude, and this
+    test failed the moment the default changed -- correctly. The contract is
+    per-mode, so the test is now per-mode."""
+    small = alloc.allocate(surge=0.2, heave=0.1, redistribute=False)
+    huge = alloc.allocate(surge=4.0, heave=2.0, redistribute=False)
 
     r_small = small.achieved[IDX['surge']] / small.achieved[IDX['heave']]
     r_huge = huge.achieved[IDX['surge']] / huge.achieved[IDX['heave']]
     assert r_huge == pytest.approx(r_small, rel=1e-6)
+
+
+def test_redistribution_does_NOT_preserve_direction_and_that_is_the_point(alloc):
+    """The trade it makes, stated as a test so it cannot be mistaken for a bug.
+    Redistribution bends the wrench's direction in order to deliver more of its
+    magnitude; uniform scaling keeps the direction and delivers less."""
+    want = {'surge': 4.0, 'heave': 2.0}
+    scaled = alloc.allocate(**want, redistribute=False)
+    spread = alloc.allocate(**want, redistribute=True)
+
+    r_scaled = scaled.achieved[IDX['surge']] / scaled.achieved[IDX['heave']]
+    r_spread = spread.achieved[IDX['surge']] / spread.achieved[IDX['heave']]
+    assert r_spread != pytest.approx(r_scaled, rel=1e-3)
+    assert _err(spread, want) < _err(scaled, want)
 
 
 def test_a_feasible_demand_is_not_reported_saturated(alloc):
@@ -277,3 +298,106 @@ def test_build_b_is_a_pure_function_of_the_geometry():
 
     assert b[IDX['sway']][0] == pytest.approx(1.0)
     assert b[IDX['yaw']][0] == pytest.approx(-0.5)   # r x axis, arm 0.5 m
+
+
+# ── redistribution: use the authority that exists ───────────────────────────
+
+def _err(got, want: dict) -> float:
+    return math.sqrt(sum((v - got.achieved[IDX[k]]) ** 2 for k, v in want.items()))
+
+
+@pytest.mark.parametrize('want,floor', [
+    ({'heave': 1.2, 'pitch': 0.30}, 0.40),
+    ({'sway': 1.5, 'yaw': 0.15}, 0.50),
+    ({'heave': 1.9, 'pitch': 0.45}, 0.40),
+])
+def test_redistribution_delivers_more_wrench_than_uniform_scaling(alloc, want, floor):
+    """⭐ THE FALSIFIER FOR THIS FEATURE, and it is a measurement not a hope.
+
+    A uniform scale keeps the wrench pointing the right way but throws away
+    magnitude from EVERY thruster, including ones with room to spare.
+    Redistribution pins only the thrusters that actually hit a stop and asks the
+    rest for the difference. If that does not measurably reduce the error, the
+    extra code has no reason to exist and should be deleted."""
+    scaled = alloc.allocate(**want, redistribute=False)
+    spread = alloc.allocate(**want, redistribute=True)
+
+    assert _err(spread, want) < _err(scaled, want) * (1.0 - floor)
+
+
+def test_a_saturating_surge_no_longer_steals_heave_authority(alloc):
+    """⛔ THE FAILURE THE FIRMWARE'S OWN COMMENT DESCRIBES, one layer up. Its
+    mixer note records that a global scale meant "a hard forward burst silently
+    cost a third of the vehicle's roll/pitch authority, in the manoeuvre where
+    you want it most".
+
+    Here surge saturates the axial unit while the vertical pair is nowhere near
+    its limit. Scaling everything back loses 29 % of the heave for no reason;
+    redistribution keeps it whole."""
+    want = {'surge': 1.4, 'heave': 0.9}
+    scaled = alloc.allocate(**want, redistribute=False)
+    spread = alloc.allocate(**want, redistribute=True)
+
+    assert scaled.achieved[IDX['heave']] < 0.7        # authority thrown away
+    assert spread.achieved[IDX['heave']] == pytest.approx(0.9, abs=1e-6)
+    assert 'axial' in spread.clamped
+
+
+def test_redistribution_minimises_TOTAL_error_which_can_cost_one_axis(alloc):
+    """⚠ THE HONEST TRADEOFF, pinned so nobody is surprised by it later.
+
+    Least squares minimises the total, so an individual axis can end up FURTHER
+    from its request even as the overall error halves. Making one axis win is a
+    question of WEIGHTS -- the yaw-first priority that DP practice uses -- and
+    that is deliberately not built yet."""
+    want = {'heave': 1.2, 'pitch': 0.30}
+    scaled = alloc.allocate(**want, redistribute=False)
+    spread = alloc.allocate(**want, redistribute=True)
+
+    assert _err(spread, want) < _err(scaled, want)
+    # ...and yet pitch alone got worse:
+    assert (abs(0.30 - spread.achieved[IDX['pitch']])
+            > abs(0.30 - scaled.achieved[IDX['pitch']]))
+
+
+def test_a_clamped_thruster_sits_exactly_at_its_limit(alloc):
+    got = alloc.allocate(heave=1.9, pitch=0.45)
+
+    assert got.clamped
+    for name in got.clamped:
+        assert abs(got.thrusts[got.names.index(name)]) == pytest.approx(1.0, abs=1e-9)
+
+
+def test_nothing_is_clamped_when_the_demand_fits(alloc):
+    got = alloc.allocate(heave=0.3, pitch=0.05)
+
+    assert got.clamped == ()
+    assert not got.saturated
+
+
+def test_no_thruster_ever_exceeds_its_limit(alloc):
+    """The invariant the whole routine exists to keep. Redistribution must never
+    hand back a command the actuator cannot execute."""
+    for req in ({'heave': 5.0}, {'sway': 3.0, 'yaw': 0.4},
+                {'surge': 9.0, 'heave': 9.0, 'pitch': 1.0}):
+        got = alloc.allocate(**req)
+        assert max(abs(t) for t in got.thrusts) <= 1.0 + 1e-9, req
+
+
+def test_redistribution_still_refuses_an_unactuated_axis(alloc):
+    """Saturation handling must not quietly re-admit an impossible request."""
+    got = alloc.allocate(heave=1.9, roll=0.8)
+
+    assert 'roll' in got.refused
+    assert got.residual[IDX['roll']] == pytest.approx(0.8, abs=1e-9)
+
+
+def test_redistribution_falls_back_to_scaling_when_nothing_is_free(alloc):
+    """With a single thruster left there is nothing to redistribute INTO, so the
+    uniform scale must still bound the output."""
+    alloc.disable('lateral_a', 'lateral_b', 'vertical_a', 'vertical_b')
+
+    got = alloc.allocate(surge=5.0)
+
+    assert abs(got.thrusts[4]) == pytest.approx(1.0, abs=1e-9)
+    assert got.saturated
