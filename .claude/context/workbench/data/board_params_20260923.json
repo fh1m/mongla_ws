@@ -1,0 +1,35 @@
+{
+ "_source": "read off the live SROT board over MAVLink, /dev/ttyUSB0 @115200 from mongla.local, 2026-09-23",
+ "_firmware_rev": "bff7400",
+ "_why": "config.h defaults are NOT what this vehicle runs. PILOT_YAW_RATE ships at 45.0 and reads back 160.0 -- a 3.556x error on every yaw torque computed from the defaults. Load this before any claim about the attitude cascade.",
+ "_gain_live": 1.0,
+ "_gain_note": "JS_GAIN_DEFAULT is the power-on value only; the LIVE gain is runtime and steppable 0.10..1.00 by joystick button. sp_yaw = (r/1000)*gain, mav_commands.cpp:736. At GAIN 1.0 a host yaw_pct of 5.0 is sp_yaw 0.05; at 0.5 it is 0.025 and every threshold below doubles.",
+ "params": {
+  "PILOT_EXPO": 0.30000001192092896,
+  "PILOT_YAW_RATE": 160.0,
+  "ATC_ANG_YAW_P": 6.0,
+  "ATC_RAT_YAW_P": 0.18000000715255737,
+  "ATC_RAT_YAW_I": 0.017999999225139618,
+  "ATC_RAT_YAW_D": 0.0010000000474974513,
+  "ATC_RAT_YAW_FF": 0.0,
+  "ATC_RAT_YAW_IMAX": 0.22200000286102295,
+  "ATC_RAT_RLL_P": 0.02500000037252903,
+  "ATC_RAT_PIT_P": 0.029999999329447746,
+  "MOT_SPIN_MIN": 0.15000000596046448,
+  "MOT_SPIN_ARM": 0.0,
+  "MOT_THST_EXPO": 0.6499999761581421,
+  "MOT_BAT_V_MIN": 13.199999809265137,
+  "MOT_BAT_V_MAX": 16.799999237060547,
+  "ATC_DRAG_RLL": 0.0,
+  "ATC_DRAG_PIT": 0.0,
+  "ATC_DRAG_YAW": 0.0,
+  "XC_YAW2RLL": 0.0,
+  "TRIM_EN": 0.0
+ },
+ "_not_a_param": {
+  "FRAME_REVERSE": 1.0,
+  "JS_GAIN_DEFAULT": 1.0,
+  "MOVE_CRUISE_MAX": 0.800000011920929,
+  "_note": "these are real board params, but nothing the bench links reads them -- FRAME_REVERSE and the motor directions are applied by control_bench.drive(), and MOVE_CRUISE_MAX lives in movement.cpp which the bench does not link. Kept here as evidence, not as bench input."
+ }
+}
