@@ -3091,66 +3091,73 @@ so the rate and frame are the stack's own. That is a bring-up task, not a script
 
 ---
 
-## 14. ⭐ The Hailo is running our models at a fifth of its capability
+## 14. ⛔ "The Hailo is running our models at a fifth of its capability" — RETRACTED the same hour
 
-**Measured 2026-09-23** on the vehicle, `hailortcli benchmark`, batch 1, all models
-640×640×3 UINT8 — identical input, so nothing below is an input-size effect.
+**Claimed, then refuted, both on 2026-09-23.** Kept in full because the way it
+was wrong is more useful than the claim was.
 
-| model | classes | FPS (hw_only) | latency (hw) | contexts |
-|---|---|---|---|---|
-| `sauvc_sim` — **ours** | 11 | 97.79 | 8.31 ms | **3** |
-| `grr_lowth` — **ours** | 3 | 98.07 | 8.34 ms | **3** |
-| `yolov11s` — stock, ours to compile | 80 | 42.76 | 19.86 ms | **3** |
-| `yolov8n` — **stock** | 80 | 419.40 | — | **1** |
-| `yolov8s` — **stock** | 80 | **477.85** | **5.82 ms** | **1** |
+### 14.1 What was claimed
 
-⛔ **A stock 80-class yolov8s runs 4.9× faster than our 11-class model on the same
-chip.** That is backwards, and the cause is in the last column.
+`hailortcli benchmark`, batch 1 flag, all models 640×640×3:
 
-### 14.1 The cause: every model we compile is multi-context
-
-```
-bin_fire_blood      contexts: 3        yolov8n    Single Context
-gate_rescue_repair  contexts: 3        yolov8s    Single Context
-grr_lowth           contexts: 3
-sauvc_sim           contexts: 3
-yolov11n            contexts: 3
-yolov11s            contexts: 3
-```
-
-**Six of ours, all 3-context. Both stock models, single-context.** Multi-context
-means the network does not fit in the Hailo-8's on-chip memory in one pass, so
-weights are swapped **three times per inference**.
-
-⭐ **And it is not model size.** `sauvc_sim` is **7.1 MB** against `yolov8s`'s
-**11.3 MB** — ours is *smaller* and needs *more* contexts. A smaller network
-requiring more passes than a larger one points at the compiler's resource
-allocation, not at the architecture.
-
-### 14.2 What it is worth
-
-| | today | if single-context |
+| model | FPS (hw_only) | contexts |
 |---|---|---|
-| hardware throughput | 98 FPS | ~420–480 FPS by the stock comparison |
-| hardware latency | 8.31 ms | 5.82 ms |
+| `sauvc_sim` — ours | 97.79 | 3 |
+| `grr_lowth` — ours | 98.07 | 3 |
+| `yolov8s` — stock | **477.85** | 1 |
 
-For scale, [§ the vision numbers](perception/hailo-vision.md) record **80.9 Hz
-standalone** and **53.9 Hz through the ROS graph**. At 98 FPS of hardware the
-graph is already within a factor of two of the chip; at 420 FPS the Hailo stops
-being the constraint at all, and the 45 % the ROS graph currently costs becomes
-the only thing worth optimising.
+Six of our models compile to **3 contexts**; both stock models are **single
+context**. Multi-context means the network does not fit on-chip in one pass, so
+weights swap three times per inference. Ours is *smaller* (7.1 MB against
+11.3 MB) and needs *more* passes. The conclusion drawn was a **4.9× throughput
+opportunity** in the compilation step.
 
-⚠ **NOT YET ATTEMPTED, so this is an opportunity and not a result.** Whether our
-network *can* be made single-context depends on its architecture — but a stock
-yolov8s, larger and with 80 classes, is single-context on this same chip, which
-is strong evidence that a smaller 11-class model can be. The lever is the
-compilation step (`hailomz` resource allocation / performance mode), not the
-training.
+### 14.2 ⛔ Why it is wrong
 
-### 14.3 ⛔ And a model choice that is already refuted
+Run end to end — frame → letterbox → chip → NMS decode → boxes, batch 1:
 
-`yolov11s` measures **42.76 FPS and 19.86 ms**. That is **below the 53.9 Hz the
-ROS graph already achieves**, so adopting it would cap the pipeline *in hardware*
-beneath where it runs today, and more than double detection latency. Whatever it
-offers in accuracy, it cannot be reached at the rate the lock ladder was sized
-against.
+| model | contexts | infer | **loop** |
+|---|---|---|---|
+| `sauvc_sim` — ours | **3** | 9.48 ms | **97.47 Hz** |
+| `yolov8s` — stock | **1** | 9.22 ms | **99.73 Hz** |
+
+**Identical.** The 4.9× exists only in `hw_only` mode, which keeps many frames
+in flight. At batch 1 both are dominated by the **PCIe round trip, ~9.3 ms**, and
+the multi-context penalty is invisible because the host is waiting on the round
+trip anyway.
+
+⚠ **`hw_only` FPS is not a rate a vehicle can have**, and the bench script's own
+docstring says so: *"Batch 1 because a live AUV cannot batch; batching is exactly
+how the published figures flatter this chip."* It was read after the claim was
+written.
+
+### 14.3 ⭐ What actually survives, measured end to end at batch 1
+
+| model | loop | Hz | |
+|---|---|---|---|
+| `yolov8n` — stock | 7.99 ms | **125.14** | ⭐ 28 % faster than ours |
+| `yolov8s` — stock | 10.03 ms | 99.73 | |
+| `grr_lowth` — **ours** | 10.20 ms | 98.01 | |
+| `sauvc_sim` — **ours** | 10.26 ms | 97.47 | |
+| `yolov11n` — stock | 12.11 ms | 82.61 | |
+| `yolov11s` — stock | 23.49 ms | **42.57** | ⛔ below the graph's current rate |
+
+**1. The ROS graph is the lever, not the model.** Ours run at ~98 Hz standalone
+against **53.9 Hz through the ROS graph** — the graph costs **45 %**, and that
+dwarfs anything model choice offers.
+
+**2. ⭐ A yolov8n-class model would buy ~28 %** (125 vs 98 Hz), and that is a real
+accuracy trade rather than free throughput. It is the only model-side lever worth
+discussing.
+
+**3. ⛔ yolov11 is refuted, and this part was right for the right reason.**
+`yolov11s` measures **42.57 Hz end to end** — *below* the 53.9 Hz the graph
+already achieves — so it would cap the pipeline in hardware beneath where it runs
+today. `yolov11n` at 82.61 Hz is also slower than what we fly.
+
+### 14.4 The method lesson
+
+Two retractions in one session, both from trusting a benchmark's headline number
+over the vehicle's own path: §13's IMU catastrophe came from bypassing `SrotFC`,
+and this came from reading `hw_only` FPS as throughput. **A number measured in a
+mode the vehicle cannot operate in is not a measurement about the vehicle.**
