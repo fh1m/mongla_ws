@@ -3161,3 +3161,75 @@ Two retractions in one session, both from trusting a benchmark's headline number
 over the vehicle's own path: §13's IMU catastrophe came from bypassing `SrotFC`,
 and this came from reading `hw_only` FPS as throughput. **A number measured in a
 mode the vehicle cannot operate in is not a measurement about the vehicle.**
+
+---
+
+## 15. ⭐ The depth loop, closed for the first time
+
+**2026-09-23.** CLAUDE.md's largest standing unknown is *"the depth loop has
+never run closed"* — every `SROT_MOVE` primitive closes it, including a plain
+`move_forward`, and an in-air move proves nothing because at ~0 m the target and
+the measurement agree. The board's own `depth_control.cpp` now runs against the
+Fossen plant. **Not water, but the first time the code has run with feedback.**
+
+### 15.1 ⛔ The sign convention flips at the MAVLink boundary
+
+Three attempts flew the hull to **+20 m** before this was found:
+
+| where | convention |
+|---|---|
+| **inside the firmware** | depth is **POSITIVE metres DOWN** — `s_target` is clamped `>= 0`, and `SURFACE` sets it to `0` |
+| over `VFR_HUD` | **negative** below the surface |
+| Fossen / the plant | z positive **down**; `Plant.depth_m` flips it to the outward convention |
+
+So a caller of `depth::update` must pass **positive-down**, while everything it
+reads off the wire is negative-down. Passing the outward convention inward makes
+every sub-surface target unreachable and drives the hull straight up.
+
+⭐ The firmware's own comment corroborates the output sense three independent
+ways — `THRUSTER_MAP.md`'s axis table, `DEPTH_LOST_ASCENT` applied positive, and
+MANUAL passing the pilot's throttle through — and records that this exact sign
+was inverted once before.
+
+### 15.2 It closes, and the integrator earns its keep
+
+| target | final | steady error |
+|---|---|---|
+| 0.5 m | 0.517 m | 17 mm |
+| 1.5 m | 1.517 m | 17 mm |
+| 3.0 m | 3.016 m | 16 mm |
+
+⭐ **`DEPTH_I` rejects net buoyancy completely.** A real hull is never exactly
+neutral; at **±2 N** of standing force the loop still settles at **1.500 m, error
+0.000 m**.
+
+### 15.3 ⭐ THE MISSION NUMBER: overshoot is a fixed DISTANCE, not a percentage
+
+| target | overshoot | peak descent |
+|---|---|---|
+| 0.5 m | 0.202 m | 0.42 m/s |
+| 1.0 m | **0.307 m** | 0.53 m/s |
+| 2.0 m | **0.307 m** | 0.65 m/s |
+| 5.0 m | **0.307 m** | 0.68 m/s |
+
+The hull accelerates to a drag-limited descent and then needs a fixed distance to
+stop, so a 5 m step overshoots exactly as far as a 1 m one. The 0.5 m case
+undershoots that because it never reaches terminal descent.
+
+**Across the whole unmeasured band** — drag `Cd` 0.80–1.20, thrust 8–40 N, mass
+8–13.6 kg, 18 corners — the overshoot is **0.263 … 0.391 m**, a 1.5× spread.
+
+> ⛔ **Leave at least 0.4 m of clearance below any commanded depth**, and the
+> same above it when rising. A `set_depth` that lands 0.3 m from the floor will
+> touch it.
+
+⚠ Settling to ±0.05 m takes **7.5 s at 0.5 m and 11–16 s at 1.5–5 m.** A mission
+that commands a depth and immediately acts on it is acting during the overshoot.
+
+### 15.4 What this is not
+
+The plant's drag is a guess, buoyancy is modelled as a constant force, and there
+are no currents or thermoclines. **These are statements about the CONTROL CODE
+with feedback, not about the vehicle in water.** Round 4a replaces the drag; the
+overshoot number should be re-measured then, and confirmed on the first pool day
+with a depth well clear of the floor.
