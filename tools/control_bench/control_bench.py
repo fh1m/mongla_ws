@@ -108,6 +108,10 @@ def _load() -> ctypes.CDLL:
     lib.bench_acro.argtypes = [f32] * 7 + [f32p] * 3
     lib.bench_rate_integral.argtypes = [ctypes.c_int]
     lib.bench_rate_integral.restype = f32
+    lib.bench_depth_reset.argtypes = [f32]
+    lib.bench_depth_reset.restype = None
+    lib.bench_depth_update.argtypes = [f32, f32, f32, f32p]
+    lib.bench_depth_update.restype = f32
     lib.bench_feedforward.argtypes = [f32p] * 4 + [f32] * 3 + [ctypes.c_int] * 2
     lib.bench_set_drag.argtypes = [f32] * 3
     lib.bench_set_xc_yaw2rll.argtypes = [f32]
@@ -319,6 +323,32 @@ class Board:
         return float(self._lib.bench_rate_integral(axis))
 
     # ---- the hydrodynamic feedforward ----------------------------------- #
+
+    # ---- the depth controller ------------------------------------------- #
+
+    def depth_reset(self, current_depth: float) -> 'Board':
+        """`depth::reset` -- seed the hold target at the current depth."""
+        self._lib.bench_depth_reset(ctypes.c_float(current_depth))
+        return self
+
+    def depth_update(self, *, stick_throttle: float, depth_m: float,
+                     dt: float = 0.002) -> tuple:
+        """One tick of `depth::update`. Returns (throttle_demand, target_m).
+
+        ⛔ THE LOOP THAT HAS NEVER RUN CLOSED ON THE VEHICLE. `SROT_MOVE`
+        enters AUTO and every primitive there closes this, including a plain
+        `move_forward` -- and an in-air move proves nothing, because at ~0 m the
+        target and the measurement agree.
+
+        ⚠ DEPTH IS NEGATIVE BELOW THE SURFACE here, as everywhere in this
+        stack, because that is what the board reports over `VFR_HUD`. The
+        plant's Fossen z is positive DOWN, so `Plant.depth_m` already flips it.
+        """
+        tgt = ctypes.c_float()
+        out = self._lib.bench_depth_update(
+            ctypes.c_float(stick_throttle), ctypes.c_float(depth_m),
+            ctypes.c_float(dt), ctypes.byref(tgt))
+        return float(out), float(tgt.value)
 
     def set_feedforward(self, *, drag_rll=None, drag_pit=None, drag_yaw=None,
                         xc_yaw2rll=None, trim_en=None) -> 'Board':

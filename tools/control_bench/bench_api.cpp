@@ -97,6 +97,21 @@ void bench_params_defaults(void) {
 
 void bench_set_millis(unsigned long ms) { bench_millis_value = ms; }
 
+// ---- the depth controller, verbatim ------------------------------------- //
+//
+// ⛔ THE LOOP CLAUDE.md CALLS THE BIGGEST UNKNOWN ON THIS VEHICLE: "The depth
+// loop has never run closed." Every `SROT_MOVE` primitive closes it, and an
+// in-air move is not partial validation because at ~0 m target and measurement
+// agree. The bench can close it against a plant, which is not water but is the
+// first time the code has run with feedback at all.
+
+void bench_depth_reset(float current_depth) { depth::reset(current_depth); }
+
+float bench_depth_update(float stick_throttle, float meas_depth, float dt,
+                         float* target_out) {
+    return depth::update(stick_throttle, meas_depth, dt, *target_out);
+}
+
 // ---- parameters BY MAVLINK NAME ------------------------------------------ //
 //
 // ⛔ WHY THIS EXISTS, AND IT IS THE MOST EXPENSIVE LESSON THE BENCH HAS TAUGHT.
