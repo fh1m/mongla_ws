@@ -3197,17 +3197,21 @@ control for the whole chain. A moving measurement is the operator's slide.
 first test that has ever driven the filter along a trajectory against **truth**.
 Severity: **operating-envelope**, not a normal-operation defect.
 
-**The measurement.** 30 s trajectory, horizontal position error at the end:
+**The measurement.** 30 s trajectory, horizontal position error at the end.
+⚠ **Revised upward 2026-09-23** — the first numbers started the filter at the
+true origin, which is a free accuracy it cannot know it has. Re-measured with
+the error the filter's own `P0_position` claims:
 
-| aiding | final error |
-|---|---|
-| flow + depth + yaw | 0.009 m |
-| depth + yaw, **no flow** | **99.3 m** |
-| depth only, no flow | 302.6 m |
-| **IMU alone, no aiding at all** | **3.7 m** |
+| start error | full aiding | depth+yaw, **no flow** | **IMU alone** | ratio |
+|---|---|---|---|---|
+| 0.0 m (cheating) | 0.009 m | 99.3 m | 3.7 m | 26.7× |
+| **0.5 m** | 0.495 m | **382.1 m** | 1.9 m | **196.3×** |
+| 1.0 m | 0.993 m | 339.6 m | 2.3 m | 145.6× |
+| 2.0 m | 1.991 m | 350.0 m | 3.2 m | 109.4× |
 
-⛔ **Adding depth and yaw makes horizontal position 27× worse than adding
-nothing**, and depth-only makes it 81× worse. It corrupts **attitude** too —
+⛔ **Adding depth and yaw makes horizontal position up to 196× worse than
+adding nothing.** The defect is not an artefact of the cheating start — it is
+worse without it. It corrupts **attitude** too —
 yaw RMS 0.40° against 0.05° with no aiding — which is the tell that this is
 cross-coupling and not ordinary divergence.
 
@@ -3247,7 +3251,45 @@ are still net useful. "Always gate" and "never gate" are both wrong, so the
 decision needs the dropout *duration* and belongs with whatever already tracks
 flow health, not inside the filter.
 
-**Not fixed, deliberately.** With flow present the filter tracks to centimetres,
-and the plant's drag is a guess, so the exact thresholds will move once Round 4a
-measures it. What is recorded here is the *shape* — world-frame aiding without
-velocity aiding is actively harmful — which will not change.
+**⭐ THE CURE IS A LANDMARK POSITION FIX, and it is decisive.** `update_position`
+carries the *same* `-skew(p)` coupling, so the obvious fear was a second instance
+of this defect. It is the opposite: a fix pins `p`, which is exactly what the
+coupling needed. In the broken regime it recovers **99.3 m → 0.195 m, a 508×
+rescue**.
+
+**Not fixed in the filter, deliberately.** With flow present it tracks to
+centimetres, and the plant's drag is a guess, so exact thresholds move once
+Round 4a measures them. What will not change is the *shape*: world-frame aiding
+without velocity aiding is actively harmful, and a position fix is what makes it
+safe.
+
+---
+
+## B-57 — dead reckoning HOLDS the launch error; only a landmark fix removes it
+
+**Found 2026-09-23**, same harness. Not a defect — a structural property worth
+the same visibility, because missions are planned as though drift is the enemy.
+
+Nothing in the flow / depth / yaw set observes **absolute horizontal position**,
+so the filter carries whatever error it launched with, almost exactly, for the
+whole run:
+
+| launch error | after 30 s, no fix | after 30 s, **with fix** |
+|---|---|---|
+| 0.5 m | 0.495 m | **0.105 m** |
+| 1.0 m | 0.993 m | **0.103 m** |
+| 2.0 m | 1.991 m | **0.099 m** |
+
+**Flow-aided dead reckoning is excellent and still cannot tell you where you
+are.** It holds error constant rather than reducing it.
+
+⭐ **So a fix EARLY is worth far more than a fix often.** The landmark fix
+converges *any* launch error to ~0.10 m — the same place regardless of where it
+started — but until the first one arrives the entire run is offset by however
+wrong the launch position was. A mission that resects a prop in its first
+seconds is in a different accuracy regime from one that resects at the halfway
+mark.
+
+⚠ And in the B-56 regime the rescue is only 2× if the fix starts late against a
+1 m launch error (339.6 → 183.3 m), because the amplification outruns it. Fixes
+rescue B-56 **only when they arrive before the loop has run away.**
