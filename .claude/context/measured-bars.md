@@ -3049,7 +3049,7 @@ it is worth running anyway, because §12's failure mode is specifically an inert
 
 ---
 
-## 13. Live-board checks, 2026-09-23 — and two traps for anyone reading the IMU directly
+## 13. Live-board checks, 2026-09-23 — a reported catastrophe RETRACTED, and two IMU traps
 
 Run with the board on USB and the Pi + Hailo up, while the operator was away.
 
@@ -3088,3 +3088,69 @@ wire.
 The observability gate (B-56) remains validated **only against synthetic noise**.
 Validating it properly needs the manager and localization node running together
 so the rate and frame are the stack's own. That is a bring-up task, not a script.
+
+---
+
+## 14. ⭐ The Hailo is running our models at a fifth of its capability
+
+**Measured 2026-09-23** on the vehicle, `hailortcli benchmark`, batch 1, all models
+640×640×3 UINT8 — identical input, so nothing below is an input-size effect.
+
+| model | classes | FPS (hw_only) | latency (hw) | contexts |
+|---|---|---|---|---|
+| `sauvc_sim` — **ours** | 11 | 97.79 | 8.31 ms | **3** |
+| `grr_lowth` — **ours** | 3 | 98.07 | 8.34 ms | **3** |
+| `yolov11s` — stock, ours to compile | 80 | 42.76 | 19.86 ms | **3** |
+| `yolov8n` — **stock** | 80 | 419.40 | — | **1** |
+| `yolov8s` — **stock** | 80 | **477.85** | **5.82 ms** | **1** |
+
+⛔ **A stock 80-class yolov8s runs 4.9× faster than our 11-class model on the same
+chip.** That is backwards, and the cause is in the last column.
+
+### 14.1 The cause: every model we compile is multi-context
+
+```
+bin_fire_blood      contexts: 3        yolov8n    Single Context
+gate_rescue_repair  contexts: 3        yolov8s    Single Context
+grr_lowth           contexts: 3
+sauvc_sim           contexts: 3
+yolov11n            contexts: 3
+yolov11s            contexts: 3
+```
+
+**Six of ours, all 3-context. Both stock models, single-context.** Multi-context
+means the network does not fit in the Hailo-8's on-chip memory in one pass, so
+weights are swapped **three times per inference**.
+
+⭐ **And it is not model size.** `sauvc_sim` is **7.1 MB** against `yolov8s`'s
+**11.3 MB** — ours is *smaller* and needs *more* contexts. A smaller network
+requiring more passes than a larger one points at the compiler's resource
+allocation, not at the architecture.
+
+### 14.2 What it is worth
+
+| | today | if single-context |
+|---|---|---|
+| hardware throughput | 98 FPS | ~420–480 FPS by the stock comparison |
+| hardware latency | 8.31 ms | 5.82 ms |
+
+For scale, [§ the vision numbers](perception/hailo-vision.md) record **80.9 Hz
+standalone** and **53.9 Hz through the ROS graph**. At 98 FPS of hardware the
+graph is already within a factor of two of the chip; at 420 FPS the Hailo stops
+being the constraint at all, and the 45 % the ROS graph currently costs becomes
+the only thing worth optimising.
+
+⚠ **NOT YET ATTEMPTED, so this is an opportunity and not a result.** Whether our
+network *can* be made single-context depends on its architecture — but a stock
+yolov8s, larger and with 80 classes, is single-context on this same chip, which
+is strong evidence that a smaller 11-class model can be. The lever is the
+compilation step (`hailomz` resource allocation / performance mode), not the
+training.
+
+### 14.3 ⛔ And a model choice that is already refuted
+
+`yolov11s` measures **42.76 FPS and 19.86 ms**. That is **below the 53.9 Hz the
+ROS graph already achieves**, so adopting it would cap the pipeline *in hardware*
+beneath where it runs today, and more than double detection latency. Whatever it
+offers in accuracy, it cannot be reached at the rate the lock ladder was sized
+against.
