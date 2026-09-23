@@ -344,3 +344,23 @@ def test_the_coupling_is_kept_when_velocity_IS_observed():
     assert f.update_position([9.9, 10.0], sigma=0.5) is True
     assert not np.allclose(f.X.R, before, atol=1e-12), (
         'with velocity observed, a position fix SHOULD correct attitude')
+
+
+def test_the_gate_counter_is_published_not_silent():
+    """⛔ A FILTER THAT SILENTLY DROPS MEASUREMENTS LOOKS IDENTICAL TO ONE THAT
+    IS MERELY DRIFTING -- the reason `accepted`/`rejected` already exist. The
+    gate needs the same treatment, and `localization_node._diagnose` prints it.
+
+    A rising `gated` count while flow is healthy means the threshold is wrong
+    for the real vehicle, which is the one thing a pool day must be able to
+    see."""
+    f = RIEKF()
+    assert f.gated == 0
+    for _ in range(200):
+        f.predict([0, 0, 0], -GRAVITY, 0.02)
+    f.update_depth(-1.0)
+    f.update_yaw(10.0)
+    assert f.gated == 2
+    # and a position fix is NOT counted as gated -- it is applied, uncoupled
+    f.update_position([0.0, 0.0], sigma=0.5)
+    assert f.gated == 2
