@@ -144,10 +144,11 @@ class Allocation:
     scale: float                       # 1.0 = nothing was scaled back
     refused: Tuple[str, ...]           # axes asked for that cannot be produced
     disabled: Tuple[str, ...]
+    clamped: Tuple[str, ...] = ()      # thrusters pinned at a limit
 
     @property
     def saturated(self) -> bool:
-        return self.scale < 1.0
+        return self.scale < 1.0 or bool(self.clamped)
 
     @property
     def names(self) -> Tuple[str, ...]:
@@ -204,9 +205,18 @@ class GeometricAllocator:
 
     # ---- the allocation -------------------------------------------------- #
 
+    def _least_squares(self, want, cols):
+        """Minimum-error thruster outputs over the columns in `cols`."""
+        n = len(cols)
+        bt_b = [[sum(self._b[k][cols[i]] * self._b[k][cols[j]] for k in range(6))
+                 for j in range(n)] for i in range(n)]
+        bt_w = [sum(self._b[k][cols[i]] * want[k] for k in range(6))
+                for i in range(n)]
+        return _solve(bt_b, bt_w)
+
     def allocate(self, *, sway=0.0, surge=0.0, heave=0.0,
                  pitch=0.0, roll=0.0, yaw=0.0,
-                 limit: float = 1.0) -> Allocation:
+                 limit: float = 1.0, redistribute: bool = True) -> Allocation:
         """Solve for thruster outputs producing the requested wrench.
 
         ⛔ AN UNACTUATED AXIS IS REFUSED, NOT SILENTLY DROPPED. Asking for roll
@@ -235,20 +245,28 @@ class GeometricAllocator:
         # equations give the minimum-error solution directly. The unachievable
         # part of the request does not enter the solve -- it comes back as the
         # residual, which is exactly where a controller should see it.
-        bt_b = [[sum(self._b[k][i] * self._b[k][j] for k in range(6))
-                 for j in range(n)] for i in range(n)]
-        bt_w = [sum(self._b[k][i] * want[k] for k in range(6)) for i in range(n)]
         try:
-            u = _solve(bt_b, bt_w)
+            u = self._least_squares(want, list(range(n)))
         except ValueError:
             # A degenerate geometry is a refusal, not a guess.
             zeros = (0.0,) * 6
             return Allocation((0.0,) * len(self._thrusters), zeros, tuple(want),
                               1.0, refused + ('degenerate',), self._disabled)
 
-        peak = max((abs(v) for v in u), default=0.0)
-        scale = min(1.0, limit / peak) if peak > limit else 1.0
-        u = [v * scale for v in u]
+        clamped_slots: dict = {}
+        scale = 1.0
+
+        if max((abs(v) for v in u), default=0.0) > limit:
+            if redistribute:
+                u, clamped_slots = self._redistribute(want, u, limit)
+            if not redistribute or max(abs(v) for v in u) > limit + 1e-9:
+                # Nothing left to redistribute into: fall back to a uniform
+                # scale, which keeps the wrench's DIRECTION and loses only its
+                # magnitude. A clipped mix points somewhere nobody asked for.
+                peak = max(abs(v) for v in u)
+                scale = limit / peak
+                u = [v * scale for v in u]
+                clamped_slots = {}
 
         full = [0.0] * len(self._thrusters)
         for slot, idx in enumerate(self._live):
@@ -257,5 +275,62 @@ class GeometricAllocator:
         achieved = tuple(sum(self._b[i][j] * u[j] for j in range(n))
                          for i in range(6))
         residual = tuple(want[i] - achieved[i] for i in range(6))
+        clamped = tuple(self._thrusters[self._live[s]][0]
+                        for s in sorted(clamped_slots))
         return Allocation(tuple(full), achieved, residual, scale, refused,
-                          self._disabled)
+                          self._disabled, clamped)
+
+    # ---- redistribution -------------------------------------------------- #
+
+    def _redistribute(self, want, u, limit):
+        """Pin the thrusters that ran out, then re-solve for the rest.
+
+        ⛔ WHY THIS BEATS SCALING EVERYTHING DOWN. A uniform scale keeps the
+        wrench pointing the right way but throws away magnitude from EVERY
+        thruster, including the ones that had room to spare. Redistribution
+        clamps only the ones that actually hit their stop, subtracts what they
+        deliver from the request, and asks the remaining thrusters for the
+        difference -- so authority that exists is used instead of discarded.
+
+        This is the redistributed pseudo-inverse. The literature notes it is
+        exact in many saturating cases and carries no optimality guarantee,
+        which is why the fallback below still exists.
+
+        ⚠ WHY NOT THE 32 PRECOMPUTED ACTIVE-SET PATTERNS. With five thrusters
+        there are 2^5 saturation patterns and they COULD be inverted offline for
+        lookup-speed allocation. That is the right trade inside a 500 Hz
+        embedded loop. This allocator runs on the companion, where three reduced
+        solves cost microseconds, and a precomputed table would add a generator,
+        a staleness risk against a CAD that is still moving, and nothing
+        measurable. Build the table when a measurement says the iteration is too
+        slow, and not before.
+        """
+        clamped: dict = {}
+        n = len(u)
+        for _ in range(n):                    # at most one clamp per pass
+            worst, worst_mag = None, limit + 1e-12
+            for i, v in enumerate(u):
+                if i not in clamped and abs(v) > worst_mag:
+                    worst, worst_mag = i, abs(v)
+            if worst is None:
+                break
+            clamped[worst] = limit if u[worst] > 0 else -limit
+
+            free = [i for i in range(n) if i not in clamped]
+            if not free:
+                break
+            # What the request still needs after the pinned thrusters deliver.
+            rest = [want[k] - sum(self._b[k][i] * clamped[i] for i in clamped)
+                    for k in range(6)]
+            try:
+                solved = self._least_squares(rest, free)
+            except ValueError:
+                break                          # reduced set is degenerate
+            u = list(u)
+            for i, val in clamped.items():
+                u[i] = val
+            for slot, i in enumerate(free):
+                u[i] = solved[slot]
+            if max(abs(v) for v in u) <= limit + 1e-9:
+                break
+        return u, clamped
