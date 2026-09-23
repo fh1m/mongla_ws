@@ -7,99 +7,121 @@
 # is a geometric B, and until now the numbers for one existed NOWHERE in this
 # tree: only as prose in README.md and as pixel coordinates in a banner script.
 #
-# PROVENANCE, and its limits. Measured 2026-09-23 from
-# `docs/assets/cad/hull.mgla`, the packed mesh `tools/pack_hull.py` produced from
-# the Onshape GLB export. It IS the CAD -- but it is a RENDER asset: decimated by
-# vertex clustering and quantised to int16 against the model's bounding sphere.
+# PROVENANCE. Read 2026-09-23 straight off the Onshape model via its REST API
+# (`/api/parts/.../boundingboxes`), from an authenticated browser session on
+# document 7254e77c / workspace 1ac100c7 / Part Studio 290dbcab. These are CAD
+# part bounding boxes in millimetres, not an export and not an inference.
 #
-#   * Body CENTROIDS survive that. Each tunnel body carries 880-910 vertices,
-#     and vertex clustering does not bias a centroid.
-#   * The quantum is scale/32767 = 0.351/32767 = 1.1e-5 m, so quantisation is
-#     not the error term.
-#   * ⚠ What IS uncertain: whether an exported body is the thruster unit or its
-#     housing, and whether anything was left out of the export. One thing
-#     demonstrably was -- see `axial`.
+# ⚠ A FIRST PASS USED THE RENDER MESH AND WAS WRONG. `docs/assets/cad/hull.mgla`
+# is decimated and int16-quantised, and it gave 346.6 mm and 520.4 mm for the
+# two pair separations against a documented 350 and 519. Those 3.4 mm were
+# recorded as an unreconciled discrepancy. The CAD says 350.0 and 519.0
+# EXACTLY: the documentation was right and the mesh measurement was the error.
+# Kept here because the retraction is the useful part -- a decimated render
+# asset is not a metrology source.
 #
-# THE REASON TO TRUST THE REST: the hull bounding box measured from the same
-# mesh is 176.1 x 172.1 x 702.0 mm, reproducing CLAUDE.md's figure exactly.
+# ⚠ THE CAD FRAME IS NOT THE MESH FRAME. In the CAD the long axis is Y; the
+# glTF exporter rotated it to Z for the web viewer (glTF is Y-up). Everything
+# below is in the CAD's own frame.
 #
-# ⚠ NOT MEASURED THROUGH ONSHAPE. The Onshape MCP available in this session
-# exposes FeatureScript authoring only -- `test_featurescript` runs against a
-# scratch document and takes no document id, so it cannot query the AUV model.
-# The short list under `axial` and `unknown` is what someone with the document
-# open should read off directly.
+# ⚠ THE ONSHAPE MCP COULD NOT DO THIS. It exposes FeatureScript authoring:
+# `test_featurescript` runs in a scratch document and takes no document id, and
+# this document holds no Feature Studios. The browser session could, because the
+# page is authenticated and the REST API answers it.
 
 frame:
-  # Body axes as the CAD is built. Z is the long axis: the mesh's 702.0 mm
-  # extent lies along it.
-  x: sway        # +X to starboard.  Hull extent 176.1 mm
-  y: heave       # +Y up.            Hull extent 172.1 mm
-  z: surge       # +Z forward.       Hull extent 702.0 mm
-  hull_extent_m: [0.1761, 0.1721, 0.7020]
-  source: docs/assets/cad/hull.mgla
+  # THE CAD's OWN AXES. Y is the long axis; X and Z are the cross-section.
+  #   Y  the 702 mm axis. The axial thruster lies on it -> SURGE.
+  #   Z  the vertical tunnels' bore                     -> HEAVE.
+  #   X  the lateral tunnels' bore                      -> SWAY.
+  # ⚠ The +/- SENSE of each axis (which end is the bow, which way is up) is a
+  # separate decision and is NOT settled here. Magnitudes and moment arms below
+  # are measured; signs are a convention that must be fixed against the vehicle,
+  # not guessed from a part list.
+  long_axis: y
+  sway_axis: x
+  heave_axis: z
+  source: onshape REST /api/parts/.../boundingboxes
+  document: 7254e77ceff30ba82f72f408 / w 1ac100c7c4a0660307476d72 / e 290dbcab1f90336f7e9206f6
   measured: 2026-09-23
 
-# ── the four tunnel thrusters, measured ──────────────────────────────────────
+# ── the five thrusters, measured ─────────────────────────────────────────────
 #
-# Identified as the bodies carrying an 84 mm extent (the documented bore). Each
-# tunnel's AXIS is its longest extent: the lateral pair runs 148 mm along X, the
-# vertical pair 125 mm along Y.
+# ⚠ ALL FIVE SIT ON THE CENTRELINE -- every centre is at x = 0, and the only
+# off-axis figure anywhere is the axial motor's 8.1 mm in Z. They are
+# distributed along Y ONLY. That is what makes the vehicle's actuation legible:
+# a force along X at station y makes a moment about Z (YAW); a force along Z at
+# station y makes a moment about X (PITCH); and the axial force lies on Y, so
+# it makes no moment at all -- pure SURGE.
 #
-# ⚠ ALL FOUR SIT ON THE CENTRELINE -- every centroid is within 6 mm of x=0, y=0,
-# and they are distributed along Z ONLY. The consequence is worth stating
-# plainly, because it is what proves `axial` must exist: a force along X at
-# station z makes a YAW moment, and a force along Y at station z makes a PITCH
-# moment, so these four produce
-#       sway + yaw + heave + pitch
-# and NO SURGE, NO ROLL. Roll unactuated is documented and expected. No surge is
-# not -- the vehicle has to swim.
+#       lateral pair   -> sway  + yaw
+#       vertical pair  -> heave + pitch
+#       axial          -> surge
+#       nothing        -> ROLL, which is unactuated by design
 thrusters:
-  - name: lateral_aft
-    body: 1
-    position_m: [-0.0059, 0.0003, -0.1732]
+  # Tunnels identified by the documented 84 mm bore; each one's AXIS is its
+  # longest extent (the lateral pair runs 150 mm in X, the vertical pair
+  # 130.2 mm in Z). Positions are bounding-box centres, CAD frame, metres.
+  - name: lateral_a
+    part: Part 1
+    position_m: [0.0, -0.1750, 0.0]
     axis: [1, 0, 0]
     bore_mm: 84
-  - name: lateral_fwd
-    body: 26
-    position_m: [-0.0061, 0.0003, 0.1734]
+    extent_mm: [150, 84, 84]
+  - name: lateral_b
+    part: Part 11
+    position_m: [0.0, 0.1750, 0.0]
     axis: [1, 0, 0]
     bore_mm: 84
-  - name: vertical_aft
-    body: 6
-    position_m: [0.0005, -0.0046, -0.2603]
-    axis: [0, 1, 0]
+    extent_mm: [150, 84, 84]
+  - name: vertical_a
+    part: Part 2
+    position_m: [0.0, -0.2595, 0.0]
+    axis: [0, 0, 1]
     bore_mm: 84
-  - name: vertical_fwd
-    body: 18
-    position_m: [0.0002, -0.0046, 0.2601]
-    axis: [0, 1, 0]
+    extent_mm: [84, 84, 130.2]
+  - name: vertical_b
+    part: Part 12
+    position_m: [0.0, 0.2595, 0.0]
+    axis: [0, 0, 1]
     bore_mm: 84
+    extent_mm: [84, 84, 130.2]
+  # ⭐ THE AXIAL UNIT, FOUND. An A2212 brushless motor at the nose, on the long
+  # axis, with no tunnel near it -- and an 88 mm duct ring at y = -351 just
+  # beyond it. It is the vehicle's ONLY source of surge.
+  #
+  # ⚠ Identified by POSITION, not by bounding-box shape. Its box is
+  # [27.8, 40, 43.9] and the largest extent is Z, which would suggest a Z axis;
+  # but two identical A2212 motors sit at y = +-267.6 immediately beside the
+  # vertical tunnels at y = +-259.5, i.e. those are the tunnel DRIVES, and an
+  # A2212's box includes shaft and mount rather than aligning with its axis.
+  # Position is the reliable signal here and the shape is not.
+  - name: axial
+    part: A2212
+    position_m: [0.0, -0.3306, 0.0081]
+    axis: [0, 1, 0]
+    bore_mm: null          # a motor, not a tunnel; duct ring at y=-351 is 88 mm
+    extent_mm: [27.8, 40, 43.9]
+    identified_by: position
 
-# Measured pair separations, against what the documentation states:
-#   lateral   0.1734 - (-0.1732) = 0.3466 m   docs say 350 mm   (-1.0 %)
-#   vertical  0.2601 - (-0.2603) = 0.5204 m   docs say 519 mm   (+0.3 %)
-# The vertical figure agrees. The lateral one is 3.4 mm short of the documented
-# value. Not reconciled, and not averaged away.
+# Pair separations, from the CAD:
+#   lateral   0.1750 - (-0.1750) = 0.3500 m   docs say 350 mm   EXACT
+#   vertical  0.2595 - (-0.2595) = 0.5190 m   docs say 519 mm   EXACT
+# Both agree to the millimetre. Only three A2212 motors are modelled -- the two
+# vertical-tunnel drives and the axial -- so the lateral tunnels' motors are not
+# in the part list. That does not affect the geometry above.
 
-# ── the thruster that must exist and is not in the export ────────────────────
+# ── resolved 2026-09-23: the axial unit is in `thrusters` above ─────────────
 axial:
-  state: UNKNOWN
-  # ⛔ DO NOT FILL THIS IN BY INFERENCE. CLAUDE.md describes "one axial unit in
-  # the nose", giving five thrusters and 5 of 6 DOF. The export does not contain
-  # it: every body within 50 mm of either nose is a disc 2-5 mm thick and
-  # 65-88 mm across -- end caps, not a thruster.
+  state: FOUND
+  # Found at the nose on the long axis (see `axial` in `thrusters`). One unit,
+  # not a pair: the part list holds exactly three A2212 motors, and the other
+  # two are the vertical-tunnel drives.
   #
-  # We know it must exist, because the four tunnels above produce no surge at
-  # all. What we do NOT know is its position, its axis, or whether it is one
-  # unit or two. Guessing any of that puts a fabricated column into the
-  # allocation matrix, which is the exact failure this project keeps naming.
-  #
-  # TO CLOSE THIS, read off the Onshape document directly:
-  needed:
-    - position_m        # centroid in the frame above
-    - axis              # unit vector; presumably [0, 0, 1]
-    - bore_mm
-    - count             # one unit, or a pair?
+  # ⚠ STILL OPEN: the SIGN convention -- which end of Y is the bow, and whether
+  # the axial is a tractor or a pusher. An 88 mm duct ring sits at y = -351,
+  # just outboard of the motor, which is where a propeller would exhaust. That
+  # is suggestive, not decisive, and a sign error here reverses surge.
 
 # ── what is still missing before a FORCE-domain B is possible ────────────────
 #
