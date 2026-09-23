@@ -130,9 +130,13 @@ chosen.
 **Not more thrust.** Authority is not our limit; resolution is. A thruster with twice the peak
 and the same floor makes the problem worse, because the quantum scales with the peak.
 
-**Not a faster thruster.** A T100-class unit's thrust dead time is around 0.59 s, and the
-control loop runs at 2 ms. The actuator's lag already dominates the loop by two orders of
-magnitude, and shaving it is not where the next win is. Respond *smoothly*, not *fast*.
+⛔ ~~**Not a faster thruster.**~~ **RETRACTED 2026-09-23 — see §7.** We argued that
+because a T100-class unit's dead time (~0.59 s) already dwarfs the 2 ms control loop,
+response time was not where the win is. We then built a closed-loop bench and measured it,
+and the conclusion is the opposite: **thruster lag dominates everything else by one to two
+orders of magnitude, and it is the single most valuable property after §2.1.** §7 gives the
+design guidance, and the good news is that our tunnel geometry starts seven times ahead of a
+T100 already.
 
 **Not a redesign for fault tolerance.** The allocator handles a dead thruster as a limit
 change (`u_min = u_max = 0`) and degrades rather than tumbles. We need to *know* the thruster
@@ -307,3 +311,91 @@ then making full scale *smaller* — by sizing the propeller so cruise sits at
 50–70 % throttle rather than 20 % — shrinks the absolute size of every lurch, with
 no change to motor, ESC or firmware. That is the cheapest lever on this page and
 it is a propeller-sizing decision, not a control one.
+
+
+---
+
+## 7. ⭐ Designing the custom thruster for RESPONSE TIME — and it is mostly geometry
+
+Added 2026-09-23 from closed-loop measurement. This section **replaces** the "not a faster
+thruster" line in §4, which was wrong.
+
+### 7.1 The measurement that changed our minds
+
+Yaw hold against a 1.5 N·m torque burst, our control code on a Fossen plant, first-order
+thruster lag swept:
+
+| thruster lag τ | peak heading deviation | vs no lag |
+|---|---|---|
+| 0.00 s | 0.394° | — |
+| 0.05 s | 1.026° | 2.6× |
+| 0.10 s | 2.030° | 5.2× |
+| 0.30 s | 27.76° | 70× |
+| 0.59 s (T100-class) | 51.49° | **131×** |
+
+For comparison, dropping the **control loop from 500 Hz to 50 Hz** — a tenfold change — cost
+**21 %**. At τ = 0.10 s, *halving τ* buys about twice what a tenfold loop-rate increase buys.
+
+**Response time is the dominant actuator property. Not thrust, not loop rate.**
+
+### 7.2 What actually sets τ — two terms, and the big one is the duct
+
+**Rotor spin-up**, `τ = J·ω / Q`. For the DJI 2212 at 920 KV, `Kt = 9.55/KV = 0.0104 N·m/A`,
+so 0.104 N·m at 10 A. With a bell plus a light resin propeller, `J ≈ 5e-6 kg·m²`:
+
+| rotating inertia | τ to 3000 rpm |
+|---|---|
+| bell only, 1.5e-6 | 4.5 ms |
+| bell + resin prop, 5e-6 | **15 ms** |
+| bell + heavy prop, 1.2e-5 | 36 ms |
+
+**Water column**, and this is the one that dominates:
+
+```
+    τ = L · √(ρ·A / T)
+```
+
+A thruster does not make thrust by spinning — it makes thrust by throwing water backwards,
+and the water in the duct has to be accelerated first. Momentum theory gives a slipstream
+`v = √(T/ρA)`, and the entrained column `ρAL` has to reach it.
+
+| configuration | bore | duct L | τ at 20 N |
+|---|---|---|---|
+| **lateral tunnel, as drawn** | 84 mm | 150 mm | **79 ms** |
+| **vertical tunnel, as drawn** | 84 mm | 130 mm | **68 ms** |
+| half-length duct | 84 mm | 75 mm | 39 ms |
+| ring / nozzle only | 84 mm | 40 mm | 21 ms |
+| wider bore, same length | 100 mm | 150 mm | 94 ms |
+
+⭐ **We are already seven times faster than a T100 before anyone designs anything**, because
+short tunnel thrusters are inherently quick. The 0.59 s figure that scared us is a big open
+propeller, not a 130 mm tunnel.
+
+### 7.3 The design levers, ranked
+
+| lever | scaling | what it is worth |
+|---|---|---|
+| ⭐ **duct length** | `τ ∝ L` | **the biggest one, and it is a CAD change** — not a motor, ESC or firmware change. 150 → 75 mm halves the lag |
+| thrust at the operating point | `τ ∝ 1/√T` | 4× the thrust for half the lag — a poor trade on its own |
+| bore | `τ ∝ bore` | ⚠ easy to get backwards: a **wider** bore is **slower**, because there is more water to move |
+| propeller inertia | `τ ∝ J` (rotor term only) | ~15 ms of a ~80 ms total. Keep the resin prop light, but it is not where the win is |
+
+### 7.4 ⭐ And it does NOT conflict with §6.1
+
+§6.1 asks that the propeller be sized so cruise sits at 50–70 % throttle rather than 20 %,
+for command resolution. That is about **maximum** thrust; `τ` depends on the thrust being
+produced **at the operating point**. The two asks are independent and can both be satisfied.
+
+### 7.5 What we would ask the mechanical design to do
+
+1. ⭐ **Keep the ducts as short as hydrodynamically acceptable.** Every millimetre of duct is
+   directly proportional to lag, and lag is the dominant control term. If a 150 mm tunnel can
+   become 100 mm without losing efficiency, that is 26 ms off the vehicle's response.
+2. **Keep the propeller light.** Resin already helps; hollow or thin the hub if it is free.
+3. **Tell us the real number.** A step-response test — command a step, log rpm and thrust
+   against time, fit a first-order lag — is an afternoon with a load cell and it replaces
+   every estimate on this page. ⚠ Momentum theory ignores duct-wall friction, the inlet
+   contraction, and the break-away of a stopped propeller, so treat the table above as
+   RANKING design choices rather than as numbers to quote.
+4. **Do not widen the bore to buy thrust** without checking §7.3 — it costs response time
+   linearly.
