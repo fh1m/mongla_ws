@@ -127,6 +127,38 @@ def _solve_pilot_expo(t: float, expo: float = DEF_PILOT_EXPO) -> float:
     return 0.5 * (lo + hi)
 
 
+# ⛔ THE YAW STICK GATE -- a HARDCODED LITERAL in the firmware, not a parameter.
+#
+#   attitude_control.cpp:87   if (fabsf(yaw_stick) > 0.02f) { ...rate command... }
+#                             else  { ...HOLD the last heading... }
+#
+# Below it the board is not taking a yaw rate command at all: it is holding
+# heading. So a host yaw demand under this gate does not produce "a little yaw",
+# it produces NONE, and it is compared AFTER PILOT_EXPO has been applied.
+#
+# ⚠ It cannot be read off the vehicle, because it is not a parameter. That is
+# upstream ask N. Until it is one, this constant and the firmware are two copies
+# of one truth, and `test_yaw_gate_matches_the_firmware` is what keeps them equal.
+STABILIZE_YAW_STICK_GATE = 0.02
+
+
+def yaw_rate_command_floor(pilot: float = DEF_PILOT_EXPO) -> float:
+    """The smallest yaw stick fraction that is a RATE COMMAND at all.
+
+    Measured on the bench against the live board's own parameters
+    (`workbench/data/board_params_20260923.json`, PILOT_EXPO 0.30): **0.02856**,
+    i.e. 2.856 % of stick. At 2.80 % the output is exactly zero; at 2.86 % it is
+    17.42 % of full scale. There is nothing in between -- see `min_fraction`.
+
+    ⚠ THIS IS A FLOOR ON EXPRESSIBILITY, NOT A STICTION FIX. Below it the board
+    holds heading, which is usually the better behaviour; a host law that floors
+    its demand to just above the gate takes heading-hold away and replaces it
+    with a 17 % lurch. Use it to decide whether a yaw correction is expressible
+    AT ALL, and command exactly zero when it is not.
+    """
+    return _solve_pilot_expo(STABILIZE_YAW_STICK_GATE, pilot)
+
+
 def demand_to_fraction(d: float, *, axis: str = 'fwd',
                        pilot: float = DEF_PILOT_EXPO,
                        thst: float = DEF_MOT_THST_EXPO,
