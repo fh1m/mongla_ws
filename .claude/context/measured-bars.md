@@ -3226,7 +3226,41 @@ undershoots that because it never reaches terminal descent.
 ⚠ Settling to ±0.05 m takes **7.5 s at 0.5 m and 11–16 s at 1.5–5 m.** A mission
 that commands a depth and immediately acts on it is acting during the overshoot.
 
-### 15.4 What this is not
+### 15.4 ⭐ A forward move does NOT disturb the depth hold
+
+The scenario CLAUDE.md warns about directly: `SROT_MOVE` enters AUTO and **every**
+primitive there closes the depth loop, including a plain `move_forward`. Held at
+2.0 m, then surge applied at t = 20 s:
+
+| surge demand | depth error | peak pitch |
+|---|---|---|
+| 0.00 | 0.0250 m | 0.000° |
+| 0.10 | 0.0250 m | 0.845° |
+| 0.35 | 0.0250 m | 0.911° |
+| 0.50 | 0.0250 m | 0.970° |
+
+**Depth error is unchanged from the stationary case at every surge tried, and
+pitch stays under 1°.**
+
+⚠ **And the allocator's parasitic-pitch compensation is NOT why.** The axial unit
+sits 8.1 mm off the centreline, so pure surge also pitches; the geometric
+allocator answers by firing the vertical pair at ∓0.0078. Run with that
+compensation deliberately removed — the axial demand passed straight through —
+the result is **identical**: 0.0250 m and 0.906°. The attitude cascade and the
+depth PID absorb it either way.
+
+⭐ So the open-loop compensation is correct and worth almost nothing here. **The
+closed loops dominate**, which is the more useful thing to know: do not spend
+effort on feed-forward corrections the feedback already handles.
+
+⛔ **This says nothing about the shipped firmware.** The run uses our geometric
+allocator on the CAD hull. `mixer.cpp` allocates for eight T200s at 45° and would
+distribute a surge command completely differently — so *"a forward move holds
+depth"* is established for the hull in CAD and the allocator in
+[ask K](upstream/pr-k-the-mixer-is-for-a-different-hull.md), and is **untested for
+the frame the board actually mixes for.**
+
+### 15.5 What this is not
 
 The plant's drag is a guess, buoyancy is modelled as a constant force, and there
 are no currents or thermoclines. **These are statements about the CONTROL CODE
