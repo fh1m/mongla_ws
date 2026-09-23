@@ -201,3 +201,70 @@ def test_B56_survives_honest_initialisation_and_is_worse():
         bare = run(seconds=30.0, use_flow=False, use_depth=False,
                    use_yaw=False, initial_pos_error_m=err).pos_final_m
         assert aided > 50 * bare, f'{err} m: aided {aided:.1f} bare {bare:.1f}'
+
+
+# ═══════════════════════════════════════════════════════════════════════════ #
+#  ⭐ Fix timing and quantity -- the mission-design numbers
+# ═══════════════════════════════════════════════════════════════════════════ #
+
+def test_fix_TIMING_is_irrelevant_when_flow_is_healthy():
+    """⭐ AND AN EARLIER DRAFT OF B-57 CLAIMED THE OPPOSITE. It follows directly
+    from B-57's own content: if dead-reckoning error does not grow, a late fix
+    is worth exactly as much as an early one. Measured across a 60 s run, a 2 s
+    resection window anywhere lands in the same place."""
+    ends = [run(seconds=60.0, initial_pos_error_m=1.0, use_fix=True,
+                fix_windows=((float(t0), float(t0 + 2)),)).pos_final_m
+            for t0 in (0, 20, 55)]
+    assert max(ends) < 0.5
+    assert max(ends) / min(ends) < 2.0, 'timing should not matter'
+
+
+def test_fix_QUANTITY_is_what_matters():
+    """One resection anywhere captures most of the benefit (1.0 m -> 0.38 m);
+    after that it averages down roughly as sqrt(N)."""
+    one = run(seconds=60.0, initial_pos_error_m=1.0, use_fix=True,
+              fix_windows=((10.0, 10.5),)).pos_final_m
+    many = run(seconds=60.0, initial_pos_error_m=1.0, use_fix=True).pos_final_m
+    none = run(seconds=60.0, initial_pos_error_m=1.0).pos_final_m
+    assert one < none / 2.0, 'a single fix must remove most of the launch error'
+    assert many < one / 4.0, 'and more fixes must keep helping'
+
+
+def test_a_TIGHTER_fix_helps_with_flow_and_HURTS_without_it():
+    """⛔⛔ THE DEFINITIVE B-56 SIGNATURE, and the control that proves it is the
+    filter rather than this harness -- the two columns differ only in whether
+    the velocity update is applied.
+
+        sigma 0.50 -> 0.01     with flow:  0.1030 -> 0.0038   (27x BETTER)
+                               no flow:     183.3 -> 564.5    (3x WORSE)
+
+    A measurement you trust MORE producing an estimate that is WORSE is not a
+    modelling subtlety. `H[:,0:3] = -skew(X.p)` injects an attitude correction
+    scaled by the Kalman gain, so high gain is the accelerant."""
+    tight_ok = run(seconds=30.0, use_fix=True, initial_pos_error_m=1.0,
+                   sensors=Sensors(fix_noise_m=0.01)).pos_final_m
+    loose_ok = run(seconds=30.0, use_fix=True, initial_pos_error_m=1.0,
+                   sensors=Sensors(fix_noise_m=0.50)).pos_final_m
+    assert tight_ok < loose_ok / 10.0, 'with flow, tighter must be better'
+
+    tight_bad = run(seconds=30.0, use_flow=False, use_fix=True,
+                    initial_pos_error_m=1.0,
+                    sensors=Sensors(fix_noise_m=0.01)).pos_final_m
+    loose_bad = run(seconds=30.0, use_flow=False, use_fix=True,
+                    initial_pos_error_m=1.0,
+                    sensors=Sensors(fix_noise_m=0.50)).pos_final_m
+    assert tight_bad > 2.0 * loose_bad, 'without flow, tighter must be WORSE'
+
+
+def test_the_508x_rescue_was_an_artefact_of_a_perfect_start():
+    """⚠ RETRACTED CLAIM, kept as a test. B-56 was briefly recorded as cured by
+    landmark fixes (99.3 m -> 0.195 m). That held only at EXACTLY zero launch
+    error. Give the filter the error its own covariance claims and the rescue
+    collapses."""
+    perfect = (run(seconds=30.0, use_flow=False).pos_final_m
+               / run(seconds=30.0, use_flow=False, use_fix=True).pos_final_m)
+    realistic = (run(seconds=30.0, use_flow=False, initial_pos_error_m=0.25).pos_final_m
+                 / run(seconds=30.0, use_flow=False, use_fix=True,
+                       initial_pos_error_m=0.25).pos_final_m)
+    assert perfect > 100.0
+    assert realistic < 3.0, 'the rescue must not survive an honest start'
