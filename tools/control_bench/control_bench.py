@@ -286,6 +286,22 @@ class Board:
                                   ctypes.byref(y))
         return r.value, p.value, y.value
 
+    def acro(self, *, stick_roll=0.0, stick_pitch=0.0, stick_yaw=0.0,
+             gx=0.0, gy=0.0, gz=0.0, dt=0.002) -> tuple[float, float, float]:
+        """One tick of `attitude::acro` -- the inner rate PID alone, with the
+        sticks as body-rate commands scaled by `MAX_ACRO_RATE` (4.0 rad/s).
+
+        ⭐ NOTE WHAT IS MISSING. `stabilize()` gates the yaw stick at a
+        hardcoded 0.02 and hands anything smaller to heading hold. `acro()` has
+        NO such gate -- attitude_control.cpp:117-124 is expo, scale, rate PID,
+        and nothing else. Whether that actually buys expressible small yaw is a
+        question about the MIXER's 0.005 centre gap, not about this function,
+        so measure it rather than assuming."""
+        r, p, y = (ctypes.c_float() for _ in range(3))
+        self._lib.bench_acro(stick_roll, stick_pitch, stick_yaw, gx, gy, gz, dt,
+                             ctypes.byref(r), ctypes.byref(p), ctypes.byref(y))
+        return r.value, p.value, y.value
+
     def rate_integral(self, axis: int) -> float:
         """0=roll 1=pitch 2=yaw. Windup is visible here before it is visible
         anywhere else."""

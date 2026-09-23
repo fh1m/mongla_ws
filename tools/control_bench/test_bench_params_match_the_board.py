@@ -165,3 +165,50 @@ def test_a_board_is_a_handle_on_one_global_parameter_set():
     a = Board().from_board()
     b = Board().defaults()
     assert a.get_param('PILOT_YAW_RATE') == b.get_param('PILOT_YAW_RATE') == 45.0
+
+
+# --------------------------------------------------------------------------- #
+#  ACRO vs STABILIZE -- what the mode choice actually buys
+# --------------------------------------------------------------------------- #
+
+def _yaw_out(fn, pct, ticks=50):
+    b = Board().from_board()
+    b.reset()
+    for _ in range(ticks):
+        _, _, y = fn(b, pct / 100.0)
+    d = b.drive(yaw=y)
+    live = [v for v in d if v != 1048]
+    return y, (max((v - 1048 if v >= 1049 else v - 47) for v in live) if live else 0)
+
+
+_STAB = lambda b, s: b.stabilize(stick_yaw=s)      # noqa: E731
+_ACRO = lambda b, s: b.acro(stick_yaw=s)           # noqa: E731
+
+
+def test_acro_has_no_yaw_stick_gate():
+    """`stabilize()` gates the yaw stick at 0.02 and hands anything smaller to
+    heading hold; `acro()` does not gate at all. So ACRO commands yaw where
+    STABILIZE commands nothing -- 1.00 % of stick against 2.86 %."""
+    assert _yaw_out(_STAB, 1.00)[1] == 0
+    assert _yaw_out(_ACRO, 1.00)[1] > 0
+    assert _yaw_out(_ACRO, 0.50)[1] == 0     # the mixer's centre gap still binds
+
+
+def test_acro_does_not_shrink_the_output_quantum():
+    """⛔ THE THING ACRO DOES NOT FIX, and the reason it is not the answer to
+    precision alignment. `MOT_SPIN_MIN` is in the mixer, downstream of both
+    modes: the smallest non-zero output is ~16 % of full scale either way. ACRO
+    buys finer COMMAND resolution, not finer THRUST."""
+    smallest_acro = _yaw_out(_ACRO, 1.00)[1] / 999
+    smallest_stab = _yaw_out(_STAB, 2.86)[1] / 999
+    assert 0.15 < smallest_acro < 0.18
+    assert 0.15 < smallest_stab < 0.18
+
+
+def test_acro_has_more_yaw_authority_at_full_stick():
+    """Full stick: ACRO 84.8 % of full scale against STABILIZE's 70.7 %,
+    because MAX_ACRO_RATE (4.0 rad/s) exceeds PILOT_YAW_RATE (160 deg/s =
+    2.793 rad/s). Worth knowing before a hard turn is tuned in the wrong mode."""
+    assert _yaw_out(_ACRO, 100.0)[1] > _yaw_out(_STAB, 100.0)[1]
+    assert _yaw_out(_ACRO, 100.0)[1] / 999 == pytest.approx(0.848, abs=0.01)
+    assert _yaw_out(_STAB, 100.0)[1] / 999 == pytest.approx(0.707, abs=0.01)
