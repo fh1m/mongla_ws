@@ -85,6 +85,19 @@ def _load() -> ctypes.CDLL:
     for name in ('bench_get_thst_expo', 'bench_get_spin_min'):
         getattr(lib, name).restype = f32
     lib.bench_motor_angular.argtypes = [ctypes.c_int, f32p, f32p, f32p]
+    lib.bench_set_millis.argtypes = [ctypes.c_ulong]
+    lib.bench_hold_yaw.argtypes = [f32]
+    lib.bench_attitude_reset.argtypes = []
+    lib.bench_feedforward_reset.argtypes = []
+    lib.bench_stabilize.argtypes = [f32] * 10 + [f32p] * 3
+    lib.bench_acro.argtypes = [f32] * 7 + [f32p] * 3
+    lib.bench_rate_integral.argtypes = [ctypes.c_int]
+    lib.bench_rate_integral.restype = f32
+    lib.bench_feedforward.argtypes = [f32p] * 4 + [f32] * 3 + [ctypes.c_int] * 2
+    lib.bench_set_drag.argtypes = [f32] * 3
+    lib.bench_set_xc_yaw2rll.argtypes = [f32]
+    lib.bench_set_trim.argtypes = [f32] * 3
+    lib.bench_get_drag_yaw.restype = f32
     return lib
 
 
@@ -173,6 +186,75 @@ class Board:
                         throttle=s * throttle, forward=s * forward,
                         lateral=s * lateral)
         return self.to_dshot(norm, dirs=list(dirs or MOTOR_DIRS), armed=armed)
+
+    # ---- the attitude cascade ------------------------------------------- #
+
+    def reset(self) -> 'Board':
+        """Clear the attitude controller's integrators and the learned trim.
+
+        ⚠ Call this between scenarios. The rate PID carries an integrator and
+        `feedforward` carries a learned trim, so a run that does not reset
+        inherits the previous one -- which is a real effect on the vehicle and a
+        confounder on the bench."""
+        self._lib.bench_attitude_reset()
+        self._lib.bench_feedforward_reset()
+        return self
+
+    def hold_yaw(self, yaw_rad: float) -> None:
+        self._lib.bench_hold_yaw(yaw_rad)
+
+    def stabilize(self, *, stick_roll=0.0, stick_pitch=0.0, stick_yaw=0.0,
+                  roll=0.0, pitch=0.0, yaw=0.0, gx=0.0, gy=0.0, gz=0.0,
+                  dt=0.002) -> tuple[float, float, float]:
+        """One tick of `attitude::stabilize` -- the outer angle P into the inner
+        rate PID. Returns the (roll, pitch, yaw) TORQUE demands it hands the
+        mixer, each -1..1.
+
+        ⛔ This is why `actuation_model.demand_to_fraction` refuses `yaw`: on
+        this board a yaw stick is not a demand, it is an input to a controller
+        whose output depends on heading error and body rate. That output is what
+        this returns."""
+        r, p, y = (ctypes.c_float() for _ in range(3))
+        self._lib.bench_stabilize(stick_roll, stick_pitch, stick_yaw,
+                                  roll, pitch, yaw, gx, gy, gz, dt,
+                                  ctypes.byref(r), ctypes.byref(p),
+                                  ctypes.byref(y))
+        return r.value, p.value, y.value
+
+    def rate_integral(self, axis: int) -> float:
+        """0=roll 1=pitch 2=yaw. Windup is visible here before it is visible
+        anywhere else."""
+        return float(self._lib.bench_rate_integral(axis))
+
+    # ---- the hydrodynamic feedforward ----------------------------------- #
+
+    def set_feedforward(self, *, drag_rll=None, drag_pit=None, drag_yaw=None,
+                        xc_yaw2rll=None, trim_en=None) -> 'Board':
+        """⚠ EVERY ONE OF THESE SHIPS AT ZERO, on the live board as well as in
+        config.h -- read back over MAVLink on 2026-09-23. Setting one here
+        explores what it WOULD do; it does not describe the vehicle."""
+        if drag_rll is not None or drag_pit is not None or drag_yaw is not None:
+            cur = float(self._lib.bench_get_drag_yaw())
+            self._lib.bench_set_drag(drag_rll or 0.0, drag_pit or 0.0,
+                                     drag_yaw if drag_yaw is not None else cur)
+        if xc_yaw2rll is not None:
+            self._lib.bench_set_xc_yaw2rll(xc_yaw2rll)
+        if trim_en is not None:
+            self._lib.bench_set_trim(trim_en, 0.002, 0.30)
+        return self
+
+    def feedforward(self, *, roll=0.0, pitch=0.0, yaw=0.0, throttle=0.0,
+                    gx=0.0, gy=0.0, gz=0.0, mode=0, learn=False):
+        """`feedforward::apply` -- the drag / cross-coupling / CoB-trim layer
+        that sits between the mode and the mixer. Returns the modified demands."""
+        vals = [ctypes.c_float(v) for v in (roll, pitch, yaw, throttle)]
+        self._lib.bench_feedforward(*[ctypes.byref(v) for v in vals],
+                                    gx, gy, gz, int(mode), 1 if learn else 0)
+        return tuple(v.value for v in vals)
+
+    def set_millis(self, ms: int) -> None:
+        """Advance the bench's clock. Time is settable, not wall-clock."""
+        self._lib.bench_set_millis(int(ms))
 
     def set_battery(self, volts: float, dt_s: float = 0.1) -> None:
         """Feed the thruster-pack voltage. ⚠ `DEF_MOT_BAT_V_MAX` is 0.0, so

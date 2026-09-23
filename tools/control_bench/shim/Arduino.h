@@ -31,6 +31,20 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+// Arduino defines these; `attitude_control.cpp` wraps angles with PI.
+#ifndef PI
+#define PI 3.1415926535897932384626433832795f
+#endif
+#ifndef TWO_PI
+#define TWO_PI 6.283185307179586476925286766559f
+#endif
+#ifndef DEG_TO_RAD
+#define DEG_TO_RAD 0.017453292519943295769236907684886f
+#endif
+#ifndef RAD_TO_DEG
+#define RAD_TO_DEG 57.295779513082320876798154814105f
+#endif
+
 // Arduino's constrain is a MACRO, and that matters: the firmware relies on it
 // working for both float and int without overload resolution. A templated
 // function here would change which type the expression produces in mixed
@@ -46,6 +60,20 @@
 
 #ifndef max
 #define max(a, b) ((a) > (b) ? (a) : (b))
+#endif
+
+// ⚠ TIME IS SETTABLE, NOT WALL-CLOCK. `depth_control.cpp` calls millis() to
+// stamp its last run and to age its output. Wiring that to the host clock would
+// make every bench run depend on how fast the machine happens to be, and a
+// freshness check would pass or fail by luck. The bench ADVANCES time
+// deliberately instead, so a scenario is reproducible to the millisecond.
+#ifdef __cplusplus
+extern "C" {
+#endif
+extern unsigned long bench_millis_value;
+static inline unsigned long millis(void) { return bench_millis_value; }
+#ifdef __cplusplus
+}
 #endif
 
 // `isfinite` comes from <math.h> as a macro in C++; nothing to add.
