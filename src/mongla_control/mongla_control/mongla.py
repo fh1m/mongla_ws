@@ -364,6 +364,55 @@ class Mongla(VisionVerbs):
     #  Payload actuation                                                  #
     # ================================================================== #
 
+    def motor_test(self, target: float = 1.0, gain: float = 20.0,
+                   duration: float = 2.0):
+        """Spin ONE thruster, by index, at a chosen percentage. SROT only.
+
+        ⭐ WHY THIS VERB EXISTS. `MAV_CMD_DO_MOTOR_TEST` has been implemented on
+        the board the whole time and `SrotFC.motor_test` has driven it since
+        2026-09-07, but with no verb it was reachable from the ground station and
+        from nothing else -- not a mission, not a script, not the CLI. It is the
+        primitive underneath every per-thruster question we have open:
+
+          * the thrust curve. `k_n_per_rpm2` is still `null`, and
+            `MOT_THST_EXPO = 0.65` is fitted to a T200 we are not flying.
+          * which thruster is dead. 958 CRC-valid `ESC_STATUS` frames read rpm 0
+            with nothing attached, so a frame count proves nothing; making ONE
+            motor turn and watching does.
+          * whether a motor turns the way the mixer believes. `FRAME_REVERSE`
+            and the per-motor directions have been re-derived twice.
+
+        ⛔ THIS TURNS A THRUSTER. Props off, or the vehicle restrained, and a
+        human on the kill switch.
+
+        THE SAFETY MECHANISM IS THE BOARD'S, NOT OURS, AND THAT IS DELIBERATE.
+        The test expires when the keep-alives stop and expiry AUTO-DISARMS, so a
+        caller that spins a motor and then wedges cannot hold it spinning. There
+        is no stop command and none is wanted: silence IS the stop.
+        `SrotFC.motor_test` blocks for the duration and pumps from inside, so
+        every exit path -- a raise, an abort, the deadline -- stops resending.
+
+        `target` is the motor index 1..8 (the overloaded axis-quantity field;
+        see commands.py). `gain` is percent, signed: negative runs it in
+        reverse, which is how `REVERSE_EFFICIENCY` gets measured rather than
+        quoted.
+
+        impl: SrotFC.motor_test(motor, pct, seconds, abort_fn=).
+        """
+        motor = int(target)
+        with self._command_scope('motor_test'):
+            fc = self.pixhawk
+            if not hasattr(fc, 'motor_test'):
+                return self._make_result(
+                    False,
+                    'motor_test: this backend has no per-thruster test. It is '
+                    'MAV_CMD_DO_MOTOR_TEST on the SROT board; the ArduSub path '
+                    'has never had a driver for it here.')
+            ok, reason = fc.motor_test(motor, float(gain), float(duration),
+                                       abort_fn=self._abort_fn)
+            return self._make_result(ok, f'motor_test: {reason}',
+                                     final_value=float(motor))
+
     def fire(self, fire_channel: float):
         """Activate payload BOARD channel `fire_channel`.
 

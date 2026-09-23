@@ -348,6 +348,30 @@ COMMANDS = {
                      'range_gain_floor': 1.0, 'coast_s': 0.8,
                      'lock_s': 1.0},
     },
+    # ---- Per-thruster identification (SROT only) -------------------- #
+    #
+    # ⭐ The board has implemented MAV_CMD_DO_MOTOR_TEST the whole time and
+    # `SrotFC.motor_test` has driven it since 2026-09-07, but there was no verb,
+    # so the one procedure that can turn ONE thruster and watch what happens was
+    # reachable from the ground station and not from a mission, a script or the
+    # CLI. It is the primitive underneath thrust-curve identification
+    # (k_n_per_rpm2 is still null), dead-thruster detection, and checking that a
+    # motor turns the way the mixer believes it does.
+    #
+    # ⛔ THIS TURNS A THRUSTER. Props off, or the vehicle restrained.
+    'motor_test': {
+        'help':     'Spin ONE thruster (1-8) at `gain` percent for `duration` s. '
+                    'SROT only; requires ARMED. The board expires the test and '
+                    'DISARMS within 3 s of the last keep-alive, which is the '
+                    'safety mechanism -- there is no stop command. '
+                    'PROPS OFF OR VEHICLE RESTRAINED.',
+        # `target` carries the MOTOR INDEX (1..8). It is already the overloaded
+        # axis-quantity field -- metres for set_depth, degrees for yaw_* -- so
+        # reusing it costs no wire change and no mongla_interfaces rebuild. A
+        # dedicated field would be cleaner and is not worth a wire break for it.
+        'fields':   ['target', 'gain', 'duration'],
+        'defaults': {'target': 1.0, 'gain': 20.0, 'duration': 2.0},
+    },
     'fire': {
         'help':     'Activate payload BOARD channel N (1..16) -- the same n as '
                     'SERVO{n}_ROLE, no host-side map. The board decides: a SWITCH '

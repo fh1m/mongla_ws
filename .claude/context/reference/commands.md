@@ -4,7 +4,7 @@
 > `python3 tools/gen_reference.py`. A test fails if it has drifted from the source.
 > Every row below was read out of the file named beside it, never written from memory.
 
-**30 verbs.** On the SROT board **11** run as one `SROT_MOVE` primitive, which the board runs *and brakes* itself; **6** are refused before dispatch; the rest are host-side loops or single messages.
+**31 verbs.** On the SROT board **11** run as one `SROT_MOVE` primitive, which the board runs *and brakes* itself; **6** are refused before dispatch; the rest are host-side loops or single messages.
 
 ## 1. Verbs — `mongla_control/commands.py`
 
@@ -20,6 +20,7 @@
 | `head` | — | — | host | Read current heading (degrees) at execution time. Result is in final_value. Also works as a magic value in other CLI commands: --target head resolves to the live heading the moment the command runs. |
 | `lock_heading` | `target`, `timeout` | `target=0.0`, `timeout=300.0` | ⛔ **refused** | Stream Ch4 rate-overrides driven by yaw_source until unlock_heading. target=0 means lock current heading. |
 | `mission_reset` | — | — | host | Stop heading lock, clear abort event, send RC neutral. Call at start of every mission run() to clear state carried forward from any previous mission. |
+| `motor_test` | `target`, `gain`, `duration` | `target=1.0`, `gain=20.0`, `duration=2.0` | host | Spin ONE thruster (1-8) at `gain` percent for `duration` s. SROT only; requires ARMED. The board expires the test and DISARMS within 3 s of the last keep-alive, which is the safety mechanism -- there is no stop command. PROPS OFF OR VEHICLE RESTRAINED. |
 | `move_back` | `duration`, `gain`, `settle` | `gain=80.0`, `settle=0.0` | on the board | Drive backward for `duration` s at `gain` percent thrust. |
 | `move_back_dist` | `distance_m`, `gain`, `dvl_tolerance`, `settle` | `gain=60.0`, `dvl_tolerance=0.1`, `settle=0.0` | ⛔ **refused** | Drive backward `distance_m` metres using DVL position feedback. Falls back to open-loop timed drive if no DVL position available. |
 | `move_forward` | `duration`, `gain`, `settle` | `gain=80.0`, `settle=0.0` | on the board | Drive forward for `duration` s at `gain` percent thrust. |
