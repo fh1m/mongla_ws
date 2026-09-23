@@ -3191,7 +3191,7 @@ control for the whole chain. A moving measurement is the operator's slide.
 
 ---
 
-## B-56 — world-frame EKF updates are worse than nothing once flow is gone
+## B-56 — world-frame EKF updates are worse than nothing once flow is gone  ✅ **FIXED 2026-09-23**
 
 **Found 2026-09-23** by `tools/control_bench/test_localization_truth.py`, the
 first test that has ever driven the filter along a trajectory against **truth**.
@@ -3281,11 +3281,51 @@ at 0.25 m to 1.4×. **Position fixes do not reliably rescue this**, and a brief
 resection window does not rescue it at all (267–341 m for a 5 s window, whenever
 it arrives).
 
-**Not fixed in the filter, deliberately.** With flow present it tracks to
-centimetres, and the plant's drag is a guess, so exact thresholds move once
-Round 4a measures them. What will not change is the *shape*: world-frame aiding
-without velocity aiding is actively harmful, and a position fix is what makes it
-safe.
+---
+
+## ✅ The fix — an observability gate, `RIEKF._velocity_is_observed`
+
+Four candidates were built and **ranked on the bench** before anything shipped.
+Final horizontal error, 30 s, 1 m launch error:
+
+| variant | healthy | 5 s drop | no flow | no flow + fix |
+|---|---|---|---|---|
+| baseline (as shipped) | 0.1030 | 0.1205 | 339.61 | 183.316 |
+| A refuse all world updates | 0.1030 | 0.1360 | 4.96 | 2.460 |
+| B drop the attitude block | 0.1035 | 0.1193 | 936.51 | 0.193 |
+| C inflate R with \|p\| | 0.0983 | 0.1198 | 375.90 | 0.196 |
+| **D hybrid (shipped)** | **0.1030** | **0.1215** | **4.96** | **0.109** |
+
+A and B are each catastrophic in the other's regime — A because it also refuses
+the one fix that could help, B because it still lets **yaw** inject attitude. D
+takes A's trigger with B's action:
+
+> While velocity is unobserved, **depth and yaw are refused** — they inject
+> attitude and buy nothing horizontal. A **position fix is still applied**, with
+> its attitude block dropped. Once velocity is observed everything reverts to
+> the shipped behaviour exactly.
+
+⚠ **The threshold band is narrow and is enforced by a test, not a comment.** A
+cold filter's own `sigma_vel` is `√3 · P0_velocity = 0.866`, so the gate must
+exceed it or it fires on construction; and it must stay under ~1.2, because a
+gate at 1.5 already lets through enough to reach 377 m. 1.0 sits in that band,
+and `test_the_gate_clears_a_cold_filter` fails if `P0_velocity` is ever raised
+past it.
+
+⚠ **A staleness gate was tried and is worse.** Gating on time-since-last-velocity
+has no cold-start conflict, which is appealing — but even a 0.2 s timeout
+reaches 27 m against this gate's 4.9 m. **The damage is faster than any timeout
+can be.**
+
+⚠ **And one claim was withdrawn while writing it.** Zeroing `H[:, 0:3]` does
+*not* make the update attitude-free: the cross-covariance `P[0:3, 6:9]` still
+couples them, measured at 0.18 rad in an extreme case. What zeroing H removes is
+the part that scales with `|p|` — the part that runs away. The gate is justified
+by its measured outcome, never by a structural guarantee it does not have.
+
+**Result:** identical in normal operation, **68×** better with no flow, **1680×**
+better with no flow plus fixes, and the 20 s dropout that used to end at 6.37 m
+unrecovered is now sub-metre.
 
 ---
 
