@@ -50,6 +50,7 @@ from .motion_rates import VISION_LOOP_HZ_SROT
 from .motion_rates import DEPTH_SETPOINT_HZ as DEPTH_HZ
 from .motion_rates import LOG_THROTTLE_S
 from .motion_writers import REVERSE_KICK_SEC, _interruptible_sleep, is_srot
+from . import actuation_model
 
 
 # ---- Outcome codes (copied to Move.Result.final_value) --------------- #
@@ -107,6 +108,34 @@ FWD_BAND = 0.03   # |fwd_fill - fill| within this -> at standoff, forward neutra
 # hardware spin-up assumption, NOT a measured value -- confirm on pool day
 # with the bare Ch4 check (does the floor visibly spin the yaw thrusters?).
 VISION_YAW_MIN_PCT = 5.0
+
+# ⛔ ON SROT THAT CONSTANT IS A GUESS, AND THE MEASURED NUMBER IS DIFFERENT.
+# `attitude_control.cpp:87` gates the yaw stick at a hardcoded 0.02, AFTER
+# PILOT_EXPO. Below it the board is not taking a rate command at all -- it is
+# HOLDING HEADING. Above it the output jumps straight to 17.4 % of full scale,
+# because `MOT_SPIN_MIN` lifts every non-zero demand into [0.15, 1].
+#
+# Measured on `tools/control_bench` -- the board's own attitude_control.cpp and
+# mixer.cpp compiled natively -- under the LIVE board's parameters
+# (`workbench/data/board_params_20260923.json`, read off the vehicle 2026-09-23):
+#
+#     stick 2.80 %  ->  yaw torque 0.000000  ->   0.00 % output
+#     stick 2.86 %  ->  yaw torque 0.010369  ->  17.42 % output
+#     stick 5.00 %  ->  yaw torque 0.018140  ->  19.12 % output   (this constant)
+#     stick 100  %  ->  yaw torque 0.506651  ->  70.67 % output
+#
+# ⚠ Two consequences, and the second is the one that changes behaviour.
+#  1. 5.0 is 1.75x higher than the smallest command that moves the hull.
+#  2. THE TAPER BELOW CANNOT TAPER. `_vision_yaw_floor` ramps the floor from 0
+#     to 5 % across the approach band; on this backend every value in (0, 2.856)
+#     produces EXACTLY ZERO output while still holding yaw away from the board's
+#     heading hold, and every value in [2.856, 5] produces 17.4-19.1 %. It is a
+#     step function wearing a ramp's clothes.
+# So on srot we snap: either the correction is expressible, or we command a true
+# zero and let the board hold heading -- which is the better behaviour anyway,
+# and is what the vehicle was already doing below 2.856 % without anyone
+# intending it.
+SROT_YAW_MIN_PCT = 100.0 * actuation_model.yaw_rate_command_floor()   # 2.8561 %
 
 # The yaw floor above is a hard minimum command outside the deadband. On Ch4
 # (a yaw RATE) that is a relay feeding an integrator -- a limit-cycle oscillator
@@ -714,6 +743,25 @@ def _vision_yaw_floor(epx: float, eff_err: float, full_pct: float) -> float:
     return full_pct * max(0.0, frac)
 
 
+def _srot_yaw_expressible(mag_pct: float) -> float:
+    """A yaw magnitude (%) the SROT board can actually produce, or exactly 0.
+
+    ⛔ THIS IS NOT ROUNDING SMALL VALUES AWAY. Below `SROT_YAW_MIN_PCT` the
+    board's `attitude::stabilize` is not taking a rate command at all -- it is
+    holding heading -- so the thrust produced by a 1 % yaw demand and by a 0 %
+    yaw demand is identical, and it is zero. The difference is what the BOARD
+    does in the meantime: a true zero leaves heading hold engaged, while a
+    non-zero sub-gate demand is a request the board declines silently.
+
+    So passing the small value through is not "a little bit of yaw". It is the
+    same zero thrust, with the board's own heading hold taken away.
+
+    Pure; srot only. The ArduSub path has no such gate and keeps the taper --
+    see `_vision_yaw_floor`.
+    """
+    return mag_pct if mag_pct >= SROT_YAW_MIN_PCT else 0.0
+
+
 def _camera_ready(vision_state) -> bool:
     """True once the camera pipeline has published a CameraInfo.
 
@@ -1267,10 +1315,14 @@ def align_loop(*,
                     # edge instead of a hard min-PWM relay that limit-cycles the hull
                     # on Ch4 (the close-in yaw wobble). Mirrors the heading_lock /
                     # motion_yaw taper -- see _vision_yaw_floor.
+                    floor_pct = (SROT_YAW_MIN_PCT if _is_srot(pixhawk)
+                                 else VISION_YAW_MIN_PCT)
                     if _fill(sample, 'area') >= VISION_YAW_FLOOR_FILL:
                         mag = max(mag, _vision_yaw_floor(
-                            epx, eff_err, min(VISION_YAW_MIN_PCT, g_yaw)))
-                    yaw_pct = math.copysign(mag, ctrl)
+                            epx, eff_err, min(floor_pct, g_yaw)))
+                    if _is_srot(pixhawk):
+                        mag = _srot_yaw_expressible(mag)
+                    yaw_pct = math.copysign(mag, ctrl) if mag > 0.0 else 0.0
                 in_band.append(epx <= eff_err)
 
             if use_surge:
