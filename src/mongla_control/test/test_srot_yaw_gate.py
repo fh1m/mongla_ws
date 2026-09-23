@@ -82,26 +82,75 @@ def test_srot_floor_is_below_the_guessed_constant():
 
 
 @pytest.mark.parametrize('mag,want', [
-    (0.0, 0.0),
-    (0.5, 0.0),
-    (2.0, 0.0),
-    (2.8, 0.0),         # measured: exactly zero output on the board
-    (2.86, 2.86),       # measured: 17.42 % output
+    (0.0, 0.0),                 # inside the deadband -- stays an exact zero
+    (0.5, mv.SROT_YAW_MIN_PCT),
+    (2.0, mv.SROT_YAW_MIN_PCT),
+    (2.8, mv.SROT_YAW_MIN_PCT),
+    (2.86, 2.86),
     (5.0, 5.0),
     (30.0, 30.0),
 ])
-def test_sub_gate_yaw_collapses_to_a_true_zero(mag, want):
-    assert mv._srot_yaw_expressible(mag) == pytest.approx(want)
+def test_a_sub_gate_correction_is_lifted_to_something_that_actuates(mag, want):
+    assert mv._srot_yaw_expressible(mag, 100.0) == pytest.approx(want)
 
 
-def test_the_snap_never_invents_authority():
-    """It may only zero a value or pass it through -- never raise one. Flooring
-    a demand UP to the gate is the behaviour this replaces: it buys a 17 %
-    lurch and takes the board's heading hold away."""
-    for mag in (0.0, 1.0, 2.0, 2.8, 2.9, 5.0, 50.0):
-        out = mv._srot_yaw_expressible(mag)
-        assert out in (0.0, mag)
-        assert out <= mag
+def test_an_exact_zero_is_never_lifted():
+    """⛔ The deadband must stay a deadband. Lifting 0 would make the loop
+    command 17 % of full scale while it is already on target."""
+    assert mv._srot_yaw_expressible(0.0, 100.0) == 0.0
+
+
+def test_the_callers_speed_cap_is_respected():
+    """A mission that asked for a gentle yaw does not get a lurch because of
+    this. If the cap is below the floor the axis simply cannot actuate, and the
+    cap wins -- we do not silently exceed what was asked for."""
+    assert mv._srot_yaw_expressible(0.5, 2.0) == pytest.approx(2.0)
+    assert mv._srot_yaw_expressible(50.0, 10.0) == pytest.approx(10.0)
+
+
+def test_it_never_rounds_a_correction_DOWN():
+    """⛔ THE BUG THIS REPLACES, and it was shipped for one commit. Rounding a
+    sub-gate correction down to zero stalls the hole-lock just outside err_px --
+    the exact failure the yaw floor was written for. Worked example: with
+    kp_yaw scaled to 10 by range_gain_floor, the old taper actuated across the
+    upper 43 % of the approach band and the round-down law actuated nowhere
+    until the band edge."""
+    for mag in (0.1, 1.0, 2.0, 2.8):
+        assert mv._srot_yaw_expressible(mag, 100.0) >= mag
+        assert mv._srot_yaw_expressible(mag, 100.0) > 0.0
+
+
+def test_a_sub_gate_demand_does_not_disturb_the_boards_heading_hold():
+    """⚠ A RETRACTION, kept as a test so it is not re-argued. The first version
+    of this change claimed a true zero leaves heading hold engaged while a
+    sub-gate demand takes it away. That is false: both land in the same branch
+    of `attitude::stabilize`, and the bench measured identical hold torque
+    (-0.097075) for sticks of 0.0, 0.5, 1.0, 2.0 and 2.8 % against a 5 deg
+    heading error. The reason to act on a sub-gate demand is that it produces no
+    thrust -- nothing to do with the hold."""
+    import math
+    import sys
+    from pathlib import Path
+    bench = HERE.parents[2] / 'tools' / 'control_bench'
+    if not (bench / 'libcontrolbench.so').exists():
+        pytest.skip('control bench not built')
+    sys.path.insert(0, str(bench))
+    from control_bench import Board
+
+    b = Board().from_board()
+
+    def hold_torque(pct):
+        b.reset()
+        b.hold_yaw(0.0)
+        for _ in range(50):
+            _, _, y = b.stabilize(stick_yaw=pct / 100.0, yaw=math.radians(5.0))
+        return y
+
+    baseline = hold_torque(0.0)
+    for pct in (0.5, 1.0, 2.0, 2.8):
+        assert hold_torque(pct) == pytest.approx(baseline), (
+            f'{pct} % disturbed the hold -- the retracted claim would be true '
+            f'after all, and the docstrings need changing back')
 
 
 def test_the_taper_is_left_alone_for_the_ardusub_path():

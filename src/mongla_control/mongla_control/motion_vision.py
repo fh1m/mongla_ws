@@ -131,10 +131,18 @@ VISION_YAW_MIN_PCT = 5.0
 #     produces EXACTLY ZERO output while still holding yaw away from the board's
 #     heading hold, and every value in [2.856, 5] produces 17.4-19.1 %. It is a
 #     step function wearing a ramp's clothes.
-# So on srot we snap: either the correction is expressible, or we command a true
-# zero and let the board hold heading -- which is the better behaviour anyway,
-# and is what the vehicle was already doing below 2.856 % without anyone
-# intending it.
+# So on srot the close-in floor SNAPS UP to the smallest value that actuates:
+# inside the fill gate a non-zero correction becomes at least 2.8561 % (17.4 % of
+# full scale), capped by the caller's g_yaw. Rounding DOWN was tried and is
+# wrong -- it stalls the hole-lock just outside err_px, which is the exact
+# failure this floor was written for.
+#
+# ⚠ AND ONE CLAIM WE HAD TO RETRACT. It is NOT true that a sub-gate demand
+# disturbs the board's heading hold while a true zero does not. Measured
+# 2026-09-23 with a 5 deg heading error: sticks of 0.0, 0.5, 1.0, 2.0 and 2.8 %
+# all produce the same hold torque, -0.097075. They land in the same branch of
+# `attitude::stabilize`. The reason to act on a sub-gate demand is that it
+# produces no thrust, full stop.
 SROT_YAW_MIN_PCT = 100.0 * actuation_model.yaw_rate_command_floor()   # 2.8561 %
 
 # The yaw floor above is a hard minimum command outside the deadband. On Ch4
@@ -743,23 +751,42 @@ def _vision_yaw_floor(epx: float, eff_err: float, full_pct: float) -> float:
     return full_pct * max(0.0, frac)
 
 
-def _srot_yaw_expressible(mag_pct: float) -> float:
-    """A yaw magnitude (%) the SROT board can actually produce, or exactly 0.
+def _srot_yaw_expressible(mag_pct: float, cap_pct: float) -> float:
+    """Round a NON-ZERO yaw magnitude (%) UP to something the board can produce.
 
-    ⛔ THIS IS NOT ROUNDING SMALL VALUES AWAY. Below `SROT_YAW_MIN_PCT` the
-    board's `attitude::stabilize` is not taking a rate command at all -- it is
-    holding heading -- so the thrust produced by a 1 % yaw demand and by a 0 %
-    yaw demand is identical, and it is zero. The difference is what the BOARD
-    does in the meantime: a true zero leaves heading hold engaged, while a
-    non-zero sub-gate demand is a request the board declines silently.
+    ⛔ WHY UP AND NOT DOWN. Between 0 and `SROT_YAW_MIN_PCT` the board produces
+    no thrust at all, so a demand in that range is a correction that does not
+    happen. The old code reached it through the taper and stalled just outside
+    the deadband -- which is the exact failure the yaw floor was written for.
+    Rounding up costs a relay; rounding down costs convergence, and a verb that
+    times out having never moved is worse than one that wobbles in.
 
-    So passing the small value through is not "a little bit of yaw". It is the
-    same zero thrust, with the board's own heading hold taken away.
+    ⚠ THE RELAY IS UNAVOIDABLE HERE, not a choice we are making. `MOT_SPIN_MIN`
+    puts the smallest non-zero output at ~17.4 % of full scale, so there is no
+    gentler value to pick. The real fix is a heading-hold SETPOINT we can move,
+    which makes small yaw a continuous function of heading error instead of a
+    stick demand -- upstream ask N §2. Until that lands this is the best the
+    axis can do, and it is 17.4 % rather than the 19.1 % the guessed constant
+    was producing.
+
+    ⛔ AN EXACT ZERO STAYS ZERO. Only a correction the loop actually wants is
+    lifted; `mag_pct == 0` means the error is inside the deadband.
+
+    `cap_pct` is the caller's speed cap (`g_yaw`): we never exceed it, so a
+    mission that asked for a gentle yaw does not get a lurch because of this.
+
+    ⚠ NOT a claim about heading hold. Measured 2026-09-23: with a 5 deg heading
+    error, sticks of 0.0, 0.5, 1.0, 2.0 and 2.8 % ALL produce the same hold
+    torque (-0.097075). A sub-gate demand and a true zero land in the same
+    branch of `attitude::stabilize`, so neither disturbs the hold. The reason to
+    act here is the stall, not the hold.
 
     Pure; srot only. The ArduSub path has no such gate and keeps the taper --
     see `_vision_yaw_floor`.
     """
-    return mag_pct if mag_pct >= SROT_YAW_MIN_PCT else 0.0
+    if mag_pct <= 0.0:
+        return 0.0
+    return min(max(mag_pct, SROT_YAW_MIN_PCT), max(cap_pct, 0.0))
 
 
 def _camera_ready(vision_state) -> bool:
@@ -1320,8 +1347,16 @@ def align_loop(*,
                     if _fill(sample, 'area') >= VISION_YAW_FLOOR_FILL:
                         mag = max(mag, _vision_yaw_floor(
                             epx, eff_err, min(floor_pct, g_yaw)))
-                    if _is_srot(pixhawk):
-                        mag = _srot_yaw_expressible(mag)
+                        # ⛔ THE SNAP BELONGS INSIDE THE FILL GATE, NOT OUTSIDE.
+                        # This is the CLOSE regime, where the floor exists to
+                        # stop the hole-lock stalling just outside err_px. Far
+                        # away (small bbox) the rule is the opposite -- leave
+                        # yaw pure-proportional and let it decay, because a
+                        # minimum on a rate channel is a relay that limit-cycles
+                        # the hull. Lifting a far-field residual here would
+                        # re-create the far-field wobble the fill gate fixed.
+                        if _is_srot(pixhawk):
+                            mag = _srot_yaw_expressible(mag, g_yaw)
                     yaw_pct = math.copysign(mag, ctrl) if mag > 0.0 else 0.0
                 in_band.append(epx <= eff_err)
 

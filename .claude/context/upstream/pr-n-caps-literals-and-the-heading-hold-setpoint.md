@@ -71,11 +71,14 @@ the torque — which is a **continuous** function of heading error, so it is not
 subject to the stick gate at all. Precision alignment stops being a series of
 lurches and becomes a servo.
 
-⚠ **It also fixes something we are currently doing to you.** Our vision servo
-floors small yaw demands to 5 %, which takes your heading hold away and replaces
-it with a 19 % kick. We have just changed our side to command a true zero instead
-of a sub-cliff value, so the board keeps holding — but the *right* answer is for
-us to be able to move the target you are holding to.
+⚠ **A claim we made and then measured, so you do not have to.** We first thought
+our 5 % yaw floor was *taking your heading hold away* — that a sub-gate demand
+disturbs the hold while a true zero does not. **That is false, and we retract
+it.** Measured on the bench against a 5° heading error: sticks of 0.0, 0.5, 1.0,
+2.0 and 2.8 % all produce the same hold torque, `-0.097075`. They land in the
+same branch of `stabilize()`. Your hold is fine. The problem is only that a
+demand under the gate produces no thrust, so a correction the servo wants simply
+does not happen — and the axis has no smaller step to fall back on.
 
 ---
 
@@ -97,6 +100,24 @@ model the board without hardcoding a second copy of it.
 
 **We are happy to write any of these ourselves as a PR** if you would rather
 review than author. Say which and we will open it.
+
+### 3.1 ⚠ And one interaction between two of them that we will guard on our side
+
+The gate at 2.856 % sits *above* the mixer's 0.005 centre gap only while
+
+    0.02 × PILOT_YAW_RATE(rad/s) × ATC_RAT_YAW_P  >  0.005
+
+At the board's current `PILOT_YAW_RATE = 160 °/s` that product is 0.0101 and
+there is no dead band. At `config.h`'s **default of 45 °/s** it is 0.0028, and a
+band opens where the stick IS a rate command and the mixer still outputs nothing
+— commands that are accepted and produce no thrust. The break-even is around
+**80 °/s**.
+
+This is ours to guard, not yours: we will read `PILOT_YAW_RATE` and
+`ATC_RAT_YAW_P` at connect (we already read `DEPTH_P`) and refuse to fly the
+visual servo below the break-even. Recorded here because it is the kind of
+coupling that a retune could reintroduce silently, and because it is an argument
+for §3's first row: if the gate were a parameter, we could simply lower it.
 
 ---
 
@@ -144,9 +165,14 @@ them kept; naming which is which is the point of the list.
 
 ## 6. What we will do on our side regardless
 
-- ✅ **done today:** the visual servo no longer floors yaw to 5 %. Below the
-  2.856 % gate it now commands an exact zero, so your heading hold stays
-  engaged instead of being pushed aside by a demand the board declines.
+- ✅ **done today:** the visual servo's yaw floor is now the measured 2.856 %
+  rather than a guessed 5 %, so a close-in correction is the smallest one the
+  board can actually produce (17.4 % of full scale rather than 19.1 %).
+  ⚠ We tried rounding sub-gate corrections *down* to zero first and it was
+  wrong — it stalls the alignment just outside the pixel deadband. A correction
+  the loop wants is rounded **up** to something that actuates, and we accept the
+  relay, because on this axis there is no gentler value to pick. §2 is what
+  removes the relay rather than choosing its size.
 - ✅ **done today:** the bench carries the board's parameters by MAVLink name,
   and a test refuses to let an attitude-cascade result be quoted from
   `config.h` defaults again.
