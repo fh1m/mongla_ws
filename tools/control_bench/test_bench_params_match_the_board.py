@@ -1,0 +1,167 @@
+"""The bench must be able to BE the board, and must say when it is not.
+
+⛔ WHY THIS FILE EXISTS. On 2026-09-23 an entire session of yaw measurements was
+produced against `Board().defaults()`. The board does not run the defaults:
+`config.h` ships `DEF_PILOT_YAW_RATE = 45.0` and the vehicle reads back
+**160.0**, so every yaw torque was low by 160/45 = 3.556x. The mixer-ladder
+falsifier could not have caught it, because `mixer.cpp` reads no gain that has
+been retuned -- the divergence lived entirely in the attitude cascade.
+
+These tests are the guard that replaces the assumption.
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from control_bench import BOARD_PARAMS, Board, firmware_rev  # noqa: E402
+
+HERE = Path(__file__).resolve().parent
+FIRMWARE = Path(os.environ.get(
+    'SROT_FIRMWARE',
+    Path(__file__).resolve().parents[4] / 'Mongla_others' / 'srot-control-board'))
+
+
+def _capture() -> dict:
+    return json.loads(BOARD_PARAMS.read_text())
+
+
+# --------------------------------------------------------------------------- #
+#  The capture is real, and it is the vehicle's
+# --------------------------------------------------------------------------- #
+
+def test_the_capture_exists_and_names_its_firmware():
+    data = _capture()
+    assert data['params'], 'an empty capture is not evidence'
+    assert data['_firmware_rev'], 'a capture that cannot say which firmware it came from'
+    assert '2026' in data['_source']
+
+
+def test_from_board_applies_every_captured_value():
+    b = Board().from_board()
+    for name, want in _capture()['params'].items():
+        assert b.get_param(name) == pytest.approx(want, abs=1e-6), name
+
+
+def test_defaults_does_not_claim_to_be_the_board():
+    assert Board().defaults().is_board_parameterised is False
+    assert Board().from_board().is_board_parameterised is True
+
+
+# --------------------------------------------------------------------------- #
+#  ⭐ The divergence itself, pinned
+# --------------------------------------------------------------------------- #
+
+def test_the_defaults_and_the_board_disagree_on_pilot_yaw_rate():
+    """The specific lie that cost a session. If this ever stops failing to
+    match, the firmware default was changed or the board was retuned -- either
+    way somebody must look, because every yaw number in the repo was computed
+    under one of these two values."""
+    default = Board().defaults().get_param('PILOT_YAW_RATE')
+    board = Board().from_board().get_param('PILOT_YAW_RATE')
+    assert default == pytest.approx(45.0)
+    assert board == pytest.approx(160.0)
+    assert board / default == pytest.approx(3.5556, rel=1e-3)
+
+
+def test_the_divergence_is_invisible_to_the_mixer_and_large_in_the_cascade():
+    """Why the existing falsifier could not catch it: the mixer reads no
+    retuned parameter, so it agrees under either set. The cascade does not."""
+    dflt = Board().defaults()
+    mix_d, dsh_d = dflt.mix(yaw=0.30), dflt.to_dshot(dflt.mix(yaw=0.30))
+    board = Board().from_board()
+    assert board.mix(yaw=0.30) == mix_d
+    assert board.to_dshot(board.mix(yaw=0.30)) == dsh_d
+
+    # ⚠ `g_params` is ONE global inside the shared library, so every Board is a
+    # handle on the same parameter set -- `defaults()` and `from_board()` are
+    # switches, not independent instances. Re-select before each measurement.
+    def tau(select, pct):
+        b = select()
+        b.reset()
+        for _ in range(50):
+            _, _, y = b.stabilize(stick_yaw=pct / 100.0)
+        return y
+
+    hi = tau(lambda: Board().from_board(), 5.0)
+    lo = tau(lambda: Board().defaults(), 5.0)
+    assert hi / lo == pytest.approx(3.5556, rel=0.02)
+
+
+def test_the_integrator_limits_are_written(  ):
+    """`attitude::loadGains` falls back to 0.5 when `rat_*_imax` is 0, so a
+    memset left the bench integrating to 0.5 while the board integrates to
+    0.222 on yaw. A zeroed imax is not the firmware's behaviour."""
+    assert Board().defaults().get_param('ATC_RAT_YAW_IMAX') == pytest.approx(0.222)
+
+
+# --------------------------------------------------------------------------- #
+#  The table is a second copy of theirs -- this is what makes it honest
+# --------------------------------------------------------------------------- #
+
+ROW = re.compile(r'\{\s*"([A-Z0-9_]+)"\s*,\s*"[^"]*"\s*,\s*&g_params\.([a-z0-9_]+)')
+
+
+@pytest.mark.skipif(not FIRMWARE.exists(), reason='no firmware checkout')
+def test_every_bench_param_name_maps_to_the_same_member_as_the_firmware():
+    """`s_bench_params` in bench_api.cpp duplicates `comms/params.cpp`. The
+    duplication is unavoidable (their table drags in MAVLink and NVS); a test
+    that reads their file is what stops it drifting."""
+    theirs = dict(ROW.findall((FIRMWARE / 'src/comms/params.cpp').read_text()))
+    assert theirs, 'could not parse the firmware parameter table'
+
+    ours = dict(re.findall(r'\{\s*"([A-Z0-9_]+)"\s*,\s*&g_params\.([a-z0-9_]+)',
+                           (HERE / 'bench_api.cpp').read_text()))
+    assert ours, 'could not parse the bench parameter table'
+
+    for name, member in ours.items():
+        assert name in theirs, f'{name} is not a parameter the firmware has'
+        assert theirs[name] == member, (
+            f'{name}: firmware writes g_params.{theirs[name]}, '
+            f'the bench writes g_params.{member}')
+
+
+def test_an_unknown_parameter_is_refused_loudly():
+    with pytest.raises(KeyError):
+        Board().set_param('NOT_A_PARAM', 1.0)
+
+
+# --------------------------------------------------------------------------- #
+#  The yaw thresholds, under the BOARD's parameters
+# --------------------------------------------------------------------------- #
+
+def test_the_only_yaw_gate_is_the_stabilize_stick_literal():
+    """On the board's own gains there is no band between the `0.02f` stick gate
+    in `attitude_control.cpp` and the `0.005f` centre gap in `mixer.cpp`: the
+    first stick that is a rate command at all is already well past the mixer.
+    Under the config.h defaults that is NOT true, which is exactly how the
+    wrong-parameter run produced a dead band that does not exist."""
+    b = Board().from_board()
+
+    def out(pct):
+        b.reset()
+        for _ in range(50):
+            _, _, y = b.stabilize(stick_yaw=pct / 100.0)
+        d = b.drive(yaw=y)
+        return max((v - 1048 if v >= 1049 else v - 47) for v in d if v != 1048) if any(
+            v != 1048 for v in d) else 0
+
+    assert out(2.80) == 0
+    assert out(2.90) > 0
+    # and the step is a cliff, not a ramp: nothing small is expressible
+    assert out(2.90) / 999 > 0.15
+
+
+def test_a_board_is_a_handle_on_one_global_parameter_set():
+    """⚠ Stated as a test because it is a trap. `g_params` is a single global in
+    the shared library; constructing a second `Board` does not give a second
+    parameter set, it re-selects the same one. A test that holds two Boards and
+    compares them measures nothing."""
+    a = Board().from_board()
+    b = Board().defaults()
+    assert a.get_param('PILOT_YAW_RATE') == b.get_param('PILOT_YAW_RATE') == 45.0

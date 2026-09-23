@@ -64,6 +64,13 @@ void bench_params_defaults(void) {
     g_params.rat_pit_d = DEF_RAT_PIT_D; g_params.rat_pit_ff = DEF_RAT_PIT_FF;
     g_params.rat_yaw_p = DEF_RAT_YAW_P; g_params.rat_yaw_i = DEF_RAT_YAW_I;
     g_params.rat_yaw_d = DEF_RAT_YAW_D; g_params.rat_yaw_ff = DEF_RAT_YAW_FF;
+    // ⚠ THE IMAX MEMBERS ARE NOT OPTIONAL HERE. `attitude::loadGains` reads
+    // `rat_*_imax` and falls back to 0.5 when the value is 0 -- so a memset
+    // leaves the bench integrating to 0.5 while the live board integrates to
+    // its own stored value (0.222 on yaw, read 2026-09-23). Write them.
+    g_params.rat_rll_imax = 0.444f;
+    g_params.rat_pit_imax = 0.444f;
+    g_params.rat_yaw_imax = 0.222f;
     g_params.pilot_expo = DEF_PILOT_EXPO;
     g_params.pilot_yaw_rate = DEF_PILOT_YAW_RATE;
     // ⚠ The five feedforward gains stay at ZERO, because that is what the
@@ -79,6 +86,100 @@ void bench_params_defaults(void) {
 }
 
 void bench_set_millis(unsigned long ms) { bench_millis_value = ms; }
+
+// ---- parameters BY MAVLINK NAME ------------------------------------------ //
+//
+// ⛔ WHY THIS EXISTS, AND IT IS THE MOST EXPENSIVE LESSON THE BENCH HAS TAUGHT.
+// On 2026-09-23 a whole session of yaw numbers was produced against
+// `bench_params_defaults()`. The board does not run the defaults: `config.h`
+// ships `DEF_PILOT_YAW_RATE = 45.0` and the vehicle reads back **160.0**. Every
+// yaw torque measured under the defaults was low by 160/45 = 3.556x, and the
+// mixer-ladder falsifier could never have caught it, because the mixer does not
+// read PILOT_YAW_RATE.
+//
+// So the bench must be able to take the BOARD's parameters, by the same names
+// MAVLink uses, and a yaw claim made under the defaults is not a claim about
+// this vehicle.
+//
+// ⚠ THIS TABLE IS A SECOND COPY OF THEIRS (`comms/params.cpp`), which is the
+// bug this codebase names "one truth, two copies". It is here only because
+// linking their table would drag in MAVLink, NVS and the comms stack.
+// `test_bench_params_match_the_firmware.py` parses their file and fails if any
+// row here names a different member -- that test is what makes the copy honest.
+
+struct BenchParam { const char* name; float* slot; };
+
+static BenchParam s_bench_params[] = {
+    { "ATC_ANG_RLL_P",    &g_params.ang_rll_p },
+    { "ATC_ANG_PIT_P",    &g_params.ang_pit_p },
+    { "ATC_ANG_YAW_P",    &g_params.ang_yaw_p },
+    { "ATC_RAT_RLL_P",    &g_params.rat_rll_p },
+    { "ATC_RAT_RLL_I",    &g_params.rat_rll_i },
+    { "ATC_RAT_RLL_D",    &g_params.rat_rll_d },
+    { "ATC_RAT_RLL_FF",   &g_params.rat_rll_ff },
+    { "ATC_RAT_RLL_IMAX", &g_params.rat_rll_imax },
+    { "ATC_RAT_PIT_P",    &g_params.rat_pit_p },
+    { "ATC_RAT_PIT_I",    &g_params.rat_pit_i },
+    { "ATC_RAT_PIT_D",    &g_params.rat_pit_d },
+    { "ATC_RAT_PIT_FF",   &g_params.rat_pit_ff },
+    { "ATC_RAT_PIT_IMAX", &g_params.rat_pit_imax },
+    { "ATC_RAT_YAW_P",    &g_params.rat_yaw_p },
+    { "ATC_RAT_YAW_I",    &g_params.rat_yaw_i },
+    { "ATC_RAT_YAW_D",    &g_params.rat_yaw_d },
+    { "ATC_RAT_YAW_FF",   &g_params.rat_yaw_ff },
+    { "ATC_RAT_YAW_IMAX", &g_params.rat_yaw_imax },
+    { "ATC_DRAG_RLL",     &g_params.atc_drag_rll },
+    { "ATC_DRAG_PIT",     &g_params.atc_drag_pit },
+    { "ATC_DRAG_YAW",     &g_params.atc_drag_yaw },
+    { "XC_YAW2RLL",       &g_params.xc_yaw2rll },
+    { "TRIM_EN",          &g_params.trim_en },
+    { "TRIM_LEAK",        &g_params.trim_leak },
+    { "TRIM_MAX",         &g_params.trim_max },
+    { "DEPTH_P",          &g_params.depth_p },
+    { "DEPTH_I",          &g_params.depth_i },
+    { "DEPTH_D",          &g_params.depth_d },
+    { "PILOT_YAW_RATE",   &g_params.pilot_yaw_rate },
+    { "PILOT_EXPO",       &g_params.pilot_expo },
+    { "MOT_THST_EXPO",    &g_params.mot_thst_expo },
+    { "MOT_SPIN_MIN",     &g_params.mot_spin_min },
+    { "MOT_SPIN_ARM",     &g_params.mot_spin_arm },
+    { "MOT_BAT_V_MIN",    &g_params.mot_bat_v_min },
+    { "MOT_BAT_V_MAX",    &g_params.mot_bat_v_max },
+    { "THR_TRIM_EN",      &g_params.thr_trim_en },
+    { "THR_TRIM_MAX",     &g_params.thr_trim_max },
+};
+
+int bench_param_count(void) {
+    return (int)(sizeof(s_bench_params) / sizeof(s_bench_params[0]));
+}
+
+const char* bench_param_name(int i) {
+    if (i < 0 || i >= bench_param_count()) return "";
+    return s_bench_params[i].name;
+}
+
+// 1 = applied, 0 = this bench does not carry that parameter. Returning 0 rather
+// than silently ignoring the write is the point: a capture that names a
+// parameter the bench cannot honour must be a loud failure, not a quiet one.
+int bench_set_param(const char* name, float v) {
+    for (int i = 0; i < bench_param_count(); ++i) {
+        if (strcmp(name, s_bench_params[i].name) == 0) {
+            *s_bench_params[i].slot = v;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int bench_get_param(const char* name, float* out) {
+    for (int i = 0; i < bench_param_count(); ++i) {
+        if (strcmp(name, s_bench_params[i].name) == 0) {
+            *out = *s_bench_params[i].slot;
+            return 1;
+        }
+    }
+    return 0;
+}
 
 // ---- the attitude cascade, verbatim -------------------------------------- //
 

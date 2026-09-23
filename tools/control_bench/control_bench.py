@@ -27,11 +27,15 @@ whole point:
 from __future__ import annotations
 
 import ctypes
+import json
 import subprocess
 import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+# The live board's own parameters, captured off the vehicle. See `from_board`.
+BOARD_PARAMS = (HERE / '../../.claude/context/workbench/data'
+                     / 'board_params_20260923.json').resolve()
 LIB = HERE / 'libcontrolbench.so'
 NUM_THRUSTERS = 8
 
@@ -113,6 +117,7 @@ class Board:
     def __init__(self):
         self._lib = _load()
         self._lib.bench_params_defaults()
+        self._from_board = None
         assert self._lib.bench_num_thrusters() == NUM_THRUSTERS
 
     # ---- parameters ------------------------------------------------------ #
@@ -132,8 +137,68 @@ class Board:
         return self
 
     def defaults(self) -> 'Board':
+        """The `config.h` compile-time defaults.
+
+        ⛔ THESE ARE NOT THIS VEHICLE. `DEF_PILOT_YAW_RATE` is 45.0 and the live
+        board reads back 160.0, so every yaw torque computed here is low by
+        3.556x. Use `from_board()` for anything that touches the attitude
+        cascade, and reserve `defaults()` for the mixer and the output stage,
+        which read no parameter that has been retuned."""
         self._lib.bench_params_defaults()
+        self._from_board = None
         return self
+
+    def set_param(self, name: str, value: float) -> 'Board':
+        """Write one parameter BY ITS MAVLINK NAME.
+
+        Raises on a name the bench does not carry, rather than ignoring it: a
+        capture that names a parameter we cannot honour must fail loudly, or the
+        bench goes back to silently disagreeing with the board."""
+        ok = self._lib.bench_set_param(name.encode(), ctypes.c_float(value))
+        if not ok:
+            raise KeyError(
+                f'{name} is not a parameter the bench carries. Add it to '
+                f"`s_bench_params` in bench_api.cpp if the linked control code "
+                f'reads it; if nothing links it, the capture should not be '
+                f'feeding it to the bench.')
+        return self
+
+    def get_param(self, name: str) -> float:
+        out = ctypes.c_float()
+        if not self._lib.bench_get_param(name.encode(), ctypes.byref(out)):
+            raise KeyError(name)
+        return out.value
+
+    def load_params(self, params: dict) -> 'Board':
+        """Apply a whole `{MAVLINK_NAME: value}` mapping. Names starting with
+        `_` are treated as notes and skipped."""
+        for k, v in params.items():
+            if k.startswith('_'):
+                continue
+            self.set_param(k, float(v))
+        return self
+
+    def from_board(self, capture: str | Path = None) -> 'Board':
+        """Load a capture of the LIVE board's parameters.
+
+        This is what makes a yaw result a statement about the vehicle. The
+        capture is a file, not a live read, so it carries a date and a firmware
+        revision and can be checked into the repo next to the result it
+        produced."""
+        path = Path(capture) if capture else BOARD_PARAMS
+        data = json.loads(Path(path).read_text())
+        self.defaults()
+        self.load_params(data['params'])
+        self._from_board = str(path)
+        return self
+
+    @property
+    def is_board_parameterised(self) -> bool:
+        """True when `from_board()` supplied the parameters.
+
+        ⚠ Read this before quoting an attitude-cascade number. The mixer does
+        not care; the cascade does, by a factor of 3.556 on yaw."""
+        return self._from_board is not None
 
     @property
     def thst_expo(self) -> float:
