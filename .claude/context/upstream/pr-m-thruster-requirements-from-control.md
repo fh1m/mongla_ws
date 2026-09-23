@@ -160,3 +160,104 @@ died — which is §2.3 — not for it to never die.
 - [`pr-f-esc-presence-on-the-wire.md`](pr-f-esc-presence-on-the-wire.md),
   [`pr-c-pico-esc-health.md`](pr-c-pico-esc-health.md) — the wire side of §2.3.
 - `src/mongla_control/config/hull_geometry.yaml` — where `k_n_per_rpm2` waits.
+
+---
+
+## 6. Addendum, 2026-09-23 — the unit is chosen, and it changes the asks
+
+**Reported by the firmware team lead (Rakibul Islam):** the thruster will be a **DJI 2212
+920 KV outrunner**, potted into a **3D-printed enclosure** with a **custom resin propeller**,
+driven by an ESC running **Bluejay** firmware.
+
+Datasheet, as supplied: 28 × 24 mm, 3S/4S, 8 mm shaft, 56 g, 15–25 A standard / 30 A max,
+370 W max, "max thrust 1200 g". ⚠ That thrust figure is **in air, with an 8×4.5 aeroprop, at
+14.7 V**. It carries no information about this vehicle. Water loads a propeller by orders of
+magnitude more than air, and the number below is the one that matters instead.
+
+### 6.1 ⛔ This motor is torque-limited for this job, and that lands squarely on our floor
+
+Torque constant follows from KV: `Kt = 9.55 / KV = 0.0104 N·m/A`. At the 30 A absolute
+maximum that is **0.31 N·m**, and at a sane continuous 15 A it is **0.156 N·m**.
+
+A T200-class thruster absorbs roughly `Q = P / (2πn) ≈ 350 W / (2π × 3500/60) ≈ 0.95 N·m` at
+full output. So the 2212 has **on the order of a sixth of that torque continuously**, and the
+propeller has to be designed down to it rather than the motor up to the propeller.
+
+⚠ **The control consequence is the one that costs us the competition run, and it is not
+"less thrust".** If the propeller is sized so that ordinary cruise and station-keeping sit at
+**20 % throttle**, then our measured **16.22 % minimum non-zero output** is *the whole usable
+band*. Every correction the vehicle can express is a lurch, and there is no host-side gain that
+changes it — `MOT_SPIN_MIN` is a floor, not a slope.
+
+⭐ **So propeller sizing is a control-resolution decision, and it is the cheapest lever on this
+page.** Size the resin propeller — diameter and pitch — so that the hull's *cruise* thrust sits
+at **50–70 % of throttle**, not at 20 %. Same motor, same ESC, same firmware; the fixed
+16.22 % quantum goes from being the entire operating range to being a small part of it. The
+propeller is custom, so this costs a design iteration and nothing else.
+
+Concretely, what we need from the propeller design in order to check it:
+**the torque the propeller absorbs at the rpm that produces the thrust the hull needs to
+cruise.** If that torque exceeds ~0.15 N·m, the propeller is too big for this motor and the
+vehicle will live permanently in the bottom of the throttle range.
+
+### 6.2 ⭐ Run the motor **wet**, with no shaft seal — it answers §2.1 directly
+
+§2.1 asked for a thruster that turns smoothly from zero, and named shaft-seal and bearing
+static friction as one of the three reasons a floor is needed at all.
+
+A potted outrunner **flooded with water** — windings and stator conformal-coated or
+epoxy-potted, rotor and bearings running wet, no dynamic seal anywhere — removes that term
+entirely. There is no seal to break out of. It is also the better thermal answer for a motor
+that will be run at high current and low rpm, which is exactly the regime §6.1 puts it in.
+
+⚠ Costs, stated honestly: viscous drag from the rotor turning in water (a continuous loss,
+but a *smooth* one — it is damping, not stiction, and damping is a term the controller can
+model); and bearings must be water-rated (stainless or ceramic, not the stock shielded steel).
+
+**A dry enclosure with a rotating shaft seal is the option to avoid**, because it puts back the
+exact static-friction term that forces the floor we are trying to remove.
+
+### 6.3 What Bluejay does and does not give us
+
+**Gives us**, and this closes half of §2.3 for free:
+
+- **bidirectional DShot with rpm telemetry** — the reason `k_n_per_rpm2` can finally be
+  measured, and the reason thruster presence stops being unknowable;
+- **48 kHz (and higher) PWM**, which is the setting that matters most for smooth running at the
+  low duty cycles §6.1 says we will live at;
+- **`STARTUP_POWER` and `RAMPUP_POWER`** as explicit settings — the knobs that decide whether
+  the motor can be commanded off a standstill without a kick.
+
+**Does not give us**, and this needs a decision:
+
+- ⛔ **current.** Bluejay runs on BLHeli_S-class hardware, which typically has **no current
+  shunt at all**. §2.3 asked for current alongside rpm because rpm alone tops out around 78 %
+  fault-classification accuracy. If the chosen ESC has no shunt, that ask moves to the hardware
+  side: either pick an ESC variant that has one, or accept that per-thruster current comes from
+  our own sense board (H-4) after all.
+- ⛔ **sensored / FOC startup.** Bluejay is sensorless six-step. §2.1's third reason for the
+  floor — the ESC not knowing rotor position at rest — **stands**. Worse, sensorless
+  commutation relies on back-EMF, which is weakest at low rpm, so the §6.1 operating point is
+  also the point of greatest desync risk. §6.2 and §6.1 are the two mitigations available
+  without changing ESC family.
+
+⚠ **Verify before relying on it:** the exact Bluejay build, the ESC hardware it is flashed to,
+and whether that hardware has a current shunt. Three facts, one afternoon.
+
+### 6.4 The resin propeller
+
+A photopolymer propeller is brittle and creeps under sustained load; an aeroprop failure is an
+annoyance and an underwater one mid-run is the run. We are not asking for a material change —
+we are asking for **a strike test and a soak test** before it is trusted: run it against a
+deliberate obstruction, and leave a printed blade loaded in water for as long as a competition
+day, then re-measure. If it fails either, the finding is cheap now and expensive later.
+
+### 6.5 What this addendum changes in §2
+
+| §  | state after this news |
+|---|---|
+| 2.1 smooth from zero | **partly answered** — §6.2 (wet, no seal) removes the friction term. Cogging and sensorless startup remain. ⭐ §6.1 (propeller sizing) is now the larger lever |
+| 2.2 symmetric reverse | **still open, and now cheaper** — the propeller is custom, so a symmetric section is a design choice rather than a procurement one |
+| 2.3 rpm + current | **half answered** — Bluejay gives rpm. Current depends on whether the ESC has a shunt; see §6.3 |
+| 2.4 thrust curve | **unchanged and now urgent** — `MOT_THST_EXPO = 0.65` describes a T200. This motor and propeller will not share its shape, and §6.1 cannot be checked without the curve |
+| 2.5 CAD bodies + materials | **unchanged** |
