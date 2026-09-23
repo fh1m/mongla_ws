@@ -50,15 +50,22 @@ demand is worth 28 more.
 A break-away floor applied to a **continuous stabilisation demand** turns the
 actuator into a **relay**, and a relay inside a feedback loop limit-cycles.
 
-That is not a tuning complaint — it predicts, and explains, the close-in
-behaviour we have been chasing for three rounds: the hull oscillating when the
-target is near and corrections are small, and a torpedo shot that cannot be held
-steady. It also explains a null result we had already banked and could not
-account for: we shipped a host-side range-dependent gain softener
-(`vision.range_gain_floor`), measured it, found it did nothing, and left it
-disabled. It could not have worked — **the quantisation is downstream of every
-gain we own.** Reducing host gain does not reduce output; it only moves commands
-across the cliff less often, which is a lower-duty relay.
+⚠ **RETRACTED IN PART, 2026-09-23 — see the second addendum.** This section
+originally went on to claim the relay *explains* the close-in oscillation we had
+been chasing. We have since closed the loop on a plant and measured it: the
+magnitude quantisation on its own limit-cycles at about **a tenth of a degree
+peak-to-peak**, which is roughly 3.5 mm at 2 m range and far too small to be the
+behaviour we were describing. The magnitude argument is real but it is *minor*,
+and we would rather hand you the correction than have you find it.
+
+**§3 is the ask, and it survived the same scrutiny intact.** It is a direction
+error, not a magnitude error, and it is large.
+
+One null result the magnitude mechanism does still explain: we shipped a
+host-side range-dependent gain softener (`vision.range_gain_floor`), measured it,
+found it did nothing, and left it disabled. It could not have worked — **the
+quantisation is downstream of every gain we own.** Reducing host gain does not
+reduce output; it only moves commands across the cliff less often.
 
 ## 3. The part that is worse, and is the actual reason we are writing
 
@@ -298,3 +305,81 @@ open a second USB cable to the Pico to see a number the board computes every
 tick. That is PR B §`ControlState.out_*`, and this session is the strongest
 argument for it we have — a companion cannot close any loop around an output it
 cannot observe.
+
+
+---
+
+# Addendum, 2026-09-23 — we closed the loop, and it corrects our own §2
+
+We built a Fossen 6-DOF plant and flew your control code on it:
+`stabilize` → allocator → `oneToDshot` → plant → gyro → back in, with
+`MOT_SPIN_MIN` inside the loop on every tick. Validated against the exact
+analytic properties the equations of motion must have (`νᵀC(ν)ν == 0` to 1e-12,
+terminal speed `√(F/q)`, the small-angle roll period), not against another model.
+
+## 1. ⛔ The magnitude argument is smaller than we said
+
+Yaw hold, your gains read off the board, steady state over the last 2 s of a
+10 s hold:
+
+| commanded step | with `MOT_SPIN_MIN` | floor removed |
+|---|---|---|
+| 30° | 0.1055° pk-pk | 0.0043° |
+| 10° | 0.1051° | 0.0001° |
+| 3° | 0.1051° | 0.0001° |
+| 0.5° | 0.1050° | 0.0000° |
+
+The floor does cause a limit cycle, and its amplitude is constant regardless of
+step size — but **a tenth of a degree is 3.5 mm at 2 m**, well inside the pixel
+tolerances our vision servo works to.
+
+Swept across everything we have not measured: the result is **independent of drag
+to 1e-6** (the cycle lives near zero velocity, where quadratic damping vanishes),
+and moves **70×** across the plausible thrust and mass band. So it is an order of
+magnitude, not a number, and we are not quoting it to three figures.
+
+**Conclusion we are handing you against our own interest: the steady-state
+pointing cost of `MOT_SPIN_MIN` does not justify this issue on its own.**
+
+## 2. ⭐ But §3 does, and here it is again in demand space
+
+The original §3 table was in stick units, which made it depend on
+`PILOT_YAW_RATE`. Re-measured in **demand space**, where it depends on nothing
+but your mixer, at a fixed `lat = 0.02`:
+
+| yaw demand | commanded | achieved | error | m3,m4 |
+|---|---|---|---|---|
+| 0.006 | 16.70° | 3.61° | −13.09° | 2/2 live |
+| 0.014 | 34.99° | 8.48° | **−26.51°** | 2/2 live |
+| **0.020** | 45.00° | **45.00°** | 0.00° | **0/2 — both stopped** |
+| 0.030 | 56.31° | 79.68° | **+23.37°** | 2/2 live |
+
+**Worst direction error 26.5°. A 36.5° step between two adjacent rows**, from a
+0.006 change in demand. At `yaw = lat` exactly, `|lat − yaw| = 0`, the m3/m4 pair
+stops entirely, and the achieved direction snaps to exactly 45° — the attractor.
+
+A gain error still pushes the right way. **A direction error that jumps
+discontinuously as the controller sweeps its own axis ratio cannot be stabilised
+by any choice of gains**, and a vision align sweeps exactly that ratio as it
+converges.
+
+## 3. ⚠ And this is specific to `vectored_6dof` — which sharpens the ask
+
+Our closed-loop run used the **five-thruster CAD hull** through a geometric
+allocator: orthogonal thrusters, each axis on its own pair, so the ±45° pairing
+that produces the snapping **cannot occur there at all**. That is why the
+magnitude effect was all that was left to measure.
+
+So §3 is a property of the *eight-thruster vectored frame*, and it lands on the
+competition vehicles rather than on the hull now in CAD. It is still worth fixing:
+that frame is what the firmware ships, and it is what anyone else running Hengla
+on a vectored hull will hit.
+
+## 4. ⭐ Hysteresis still fixes it — and now for the better reason
+
+The proposal in §5 is unchanged and its justification is stronger. During a hold
+every thruster is already turning, so a hysteretic floor keeps all four alive;
+none drops out; the two pairs never cross the deadband at different commands; and
+the direction snapping **has no mechanism left**. Hysteresis was proposed to fix
+the magnitude relay. It fixes the direction attractor too, and that is the one
+that matters.

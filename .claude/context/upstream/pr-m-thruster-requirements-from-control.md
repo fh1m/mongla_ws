@@ -60,8 +60,10 @@ speed and can produce rated torque there.
 
 What it buys us, concretely:
 
-- the 16.8 % quantum disappears and precision alignment becomes expressible. Today the
-  smallest yaw correction the vehicle can make is a lurch;
+- the 16.2 % quantum disappears, so a small correction stops being a **lurch**. ⚠ Read
+  §6.6 before weighting this: we have since measured the floor's steady-state cost in
+  closed loop and it is about a tenth of a degree, which is *not* the problem. The
+  problem is the size of the smallest step, not the jitter it leaves behind;
 - **INDI becomes possible.** An incremental controller works by commanding small increments.
   An actuator whose smallest non-zero increment is 16.8 % of full scale is not an incremental
   actuator, and INDI on this hull is blocked on exactly this, nothing else;
@@ -142,7 +144,7 @@ died — which is §2.3 — not for it to never die.
 
 | ask | how it gets checked |
 |---|---|
-| §2.1 smooth from zero | a demand ladder on the bench with `MOT_SPIN_MIN = 0`: the output must be monotone and continuous through the first non-zero step, with no 16.8 % jump |
+| §2.1 smooth from zero (see §6.6) | a demand ladder on the bench with `MOT_SPIN_MIN = 0`: the output must be monotone and continuous through the first non-zero step, with no 16.8 % jump |
 | §2.2 symmetry | bollard thrust at ±command, matched pairs; `REVERSE_EFFICIENCY` retires when the ratio is within measurement error of 1.0 |
 | §2.3 telemetry | rpm and current must move with a *known* mechanical change (a fouled prop, a held shaft) — a non-zero reading is not evidence, per the 958-frame result |
 | §2.4 curve | the fitted curve predicts a held-out thrust point; the number lands in `measured-bars.md` with voltage and method |
@@ -261,3 +263,47 @@ day, then re-measure. If it fails either, the finding is cheap now and expensive
 | 2.3 rpm + current | **half answered** — Bluejay gives rpm. Current depends on whether the ESC has a shunt; see §6.3 |
 | 2.4 thrust curve | **unchanged and now urgent** — `MOT_THST_EXPO = 0.65` describes a T200. This motor and propeller will not share its shape, and §6.1 cannot be checked without the curve |
 | 2.5 CAD bodies + materials | **unchanged** |
+
+
+---
+
+## 6.6 ⚠ A correction to §2.1, measured — the floor's cost is the STEP, not the jitter
+
+Added 2026-09-23, after building a closed-loop bench: your firmware's control code
+compiled natively, flying a Fossen 6-DOF plant built from this hull's own geometry.
+
+§2.1 argues that a thruster which turns smoothly from zero is the single most
+valuable property, and it is still the ask. But one of the reasons we gave was
+wrong, and it is better that you hear it from us.
+
+**What we implied:** that `MOT_SPIN_MIN`'s floor ruins precision alignment by
+leaving the vehicle jittering on target.
+
+**What we measured.** Yaw hold with the floor in the loop limit-cycles at about
+**0.1° peak-to-peak**, constant regardless of the size of the step commanded,
+against ~0.000° with the floor removed. That is roughly **3.5 mm at 2 m range** —
+comfortably inside the pixel tolerances our vision servo already works to. The
+result is independent of drag (our largest unknown) to 1e-6, and varies 70× across
+the plausible thrust and mass band, so it is an order of magnitude rather than a
+number.
+
+**So the steady-state jitter is not the problem.** The problem is what happens
+*before* steady state:
+
+| the real cost | measured |
+|---|---|
+| the smallest non-zero output is a **lurch** | 16.2 % of full scale, from a standing start |
+| the usable yaw band is narrow | **4.06 : 1** — 17.4 % minimum to 70.7 % at full stick |
+| below the gate there is nothing at all | 0 % output under 2.856 % of stick |
+
+**What this changes for the thruster design: nothing about the direction of the
+ask, and something about why.** We are not asking for smooth-from-zero to reduce
+jitter. We are asking for it so the vehicle has **small steps available at all** —
+so a 2° correction can be a 2° correction instead of either nothing or a lurch,
+and so an incremental controller has increments to work with.
+
+⭐ **And it reprioritises §6.1.** If the smallest step is 16.2 % of full scale,
+then making full scale *smaller* — by sizing the propeller so cruise sits at
+50–70 % throttle rather than 20 % — shrinks the absolute size of every lurch, with
+no change to motor, ESC or firmware. That is the cheapest lever on this page and
+it is a propeller-sizing decision, not a control one.
