@@ -49,9 +49,19 @@ global-shutter unit — the *downward* camera — does **211 Hz** at 640×360 an
 the forward mount is the **single largest vision win available, and it is a
 purchase, not a sprint.**
 
-⚠ And the consumer ticks at **50 Hz** (`VISION_LOOP_HZ_SROT`, soaked 49.86 Hz).
-Above ~50 delivered, extra frames buy **latency and freshness, not rate** — so
-the target is 50–60 Hz on the forward camera, not 200.
+⭐⭐ **And here is the sharpest way to say why it matters.** The consumer ticks at
+**50 Hz** (`VISION_LOOP_HZ_SROT`, soaked 49.86 Hz) while detections arrive at
+**27.11 Hz** — so **the vision servo acts on a stale detection roughly half its
+ticks.** That is not a throughput complaint; it is the control loop steering on
+old information every other tick.
+
+⚠ The target is therefore **50–60 Hz on the forward camera, not 200.** Above the
+consumer's own rate, extra frames buy freshness, not rate.
+
+⛔ **And the "just crop 1280×720 natively" idea is dead**: that resolution is the
+`laptop` profile in `cameras.yaml`, a file whose own header says in capitals that
+it is **NOT LOADED AT RUNTIME (B49)**. The forward camera is 640×360. There is
+nothing to crop.
 
 ### 1.2 Multi-context compilation — 4.3× of chip, and it blocks pipelining
 
@@ -142,11 +152,16 @@ floor normal — real geometry for localization, at a rate we already have.
 |---|---|
 | **RAFT / NeuFlow / GMFlow** dense flow | ⛔ **Architectural.** All use `GridSample`, which the Hailo parser does not support. Not a porting gap |
 | **DPVO / DROID-SLAM / TartanVO** | ⛔ No ONNX path; DROID needs 8 GB frontend + 24 GB backend |
-| **SAM2 / EdgeTAM / XMem / Cutie** | ⛔ Below our LK follower's **125 Hz**. And SAM2 underwater is good *when you hand it the answer* — the prompt does the work |
+| **SAM2 / EdgeTAM / XMem / Cutie** | ⛔ Below our LK follower's **125 Hz**. The Hailo-8 zoo's instance-seg table is **17 models, all YOLO, zero SAM**; the one FastSAM-S attempt **failed at the allocator**. And the only underwater SAM2 evaluation found automatic/point-prompt mode — **the only mode we could use** — "significantly degraded" |
 | **LightGlue / SuperGlue** matchers | ⛔ Hailo's parser rejects `einsum` attention. Named error, not a guess |
 | **DINOv2 / DINOv3** | ⛔ Only ConvNeXt distillations are even candidates, and **INT8 on a self-supervised embedding has no label to defend it** |
 | **NetVLAD / CosPlace place recognition** | ⛔ Settled **geometrically**: a periodic tile floor aliases at the tile pitch for *every* appearance-based global descriptor |
-| **Test-time augmentation** | ⛔ Worse than "no" here — it is a wide interface for a measured non-gain |
+| **Test-time augmentation** | ⛔ Measured: **22.4 → 80.6 ms, 3.6×**, for **+1.2 mAP** |
+| **SAHI / tiling** | ⛔ Divides our rate by N; its own 2026 successor manages **1.02×** over full SAHI |
+| **Anchor tuning** | ⛔ **Does not exist** — YOLOv8/v11 are anchor-free |
+| **Higher input resolution** | ⛔ Upsamples data a 640×360 camera never produced |
+| **Streaming detectors** (StreamYOLO, DAMO-StreamNet) | ⛔ They predict one frame ahead at 30 FPS. Our frame is 18.6 ms ≈ **1.4 px** of target motion. Zero underwater papers |
+| **Track-before-detect** | ⛔ Radar/IR point-target work. Our gate is **233 px at 5 m** |
 | **Image preprocessing** | ⛔ Already measured in 17 configurations: never positive; on the gate it destroyed 95 % of detections |
 
 ---
@@ -187,7 +202,12 @@ corner detectors do not.
 | 5 | **Rate assertion at bring-up** | guard | catch a silent fallback to half rate before a run, not after |
 | — | ~~XFeat on the Hailo~~ | ⛔ **demoted** | possible, but trades scarce chip for idle CPU — §2.1 |
 
-### 5.1 ⭐ Two measurements that cost almost nothing and settle a lot
+⭐ **N-0, before any of the above: re-measure delivered rate with DISTINCT HEADER
+STAMPS, both cameras, one build.** A topic `hz` cannot tell a real frame from a
+republished one, and several numbers in this document were taken at different
+times on different builds. One day, and it can close lower rows outright.
+
+### 5.1 ⭐ Three measurements that cost almost nothing and settle a lot
 
 1. **Bench ROOT-SIFT on the five archive clips — as a CONTROL, not a candidate.**
    It has never been run here (`grep -i sift` finds nothing in `src/mongla_vision/`).
@@ -195,7 +215,9 @@ corner detectors do not.
    clips are easy**, not that XFeat is special. That is a truth test rather than
    an agreement test, and it is the cheapest way to find out whether our headline
    feature result means anything.
-2. ⭐ **Time `depth_anything_v2_small.onnx` on the Pi.** It is **already in our
+2. ⭐ **A held-out-VENUE reliability diagram** — see §6b. An afternoon, no
+   hardware, and no published underwater equivalent exists.
+3. ⭐ **Time `depth_anything_v2_small.onnx` on the Pi.** It is **already in our
    tree**, it *is* a DINOv2 ViT-S/14 encoder, and it has **never been timed**.
    One measurement replaces every estimate in the DINO section — including the
    verdict that DINO is out of reach.
@@ -221,6 +243,41 @@ try XFeat on the downward camera — not speed, and not caustics on tiles.
 
 ---
 
+## 6b. ⭐ The cheapest real move nobody has made: confidence calibration
+
+Our own recall spread across venues is **29.2 / 72.7 / 68.3 %**. The literature
+gives that a name: an **≈33 mAP50 swing on colour shift alone** underwater. A
+detector whose confidence means different things at different venues is one whose
+threshold cannot be set once.
+
+⚠ **And the obvious fix is the wrong one.** ECCV 2024
+([arXiv 2405.20459](https://arxiv.org/abs/2405.20459)) names **temperature
+scaling specifically** as producing wrong conclusions in detection. Use
+**isotonic or Platt** instead (+7 D-ECE over train-time SOTA).
+
+⭐ **No published underwater D-ECE exists.** A held-out-**venue** reliability
+diagram over our own archive is **an afternoon**, needs no hardware, and would be
+genuinely novel — as well as telling us whether our confidence thresholds mean
+anything across venues.
+
+---
+
+## 6c. ⭐ Masks for the floor plane — the one geometry item worth building
+
+`floor_plane.py` currently takes the contact point from a **box bottom edge**,
+which *assumes* where the object meets the floor. A segmentation mask **measures**
+it.
+
+That module's sensitivity is **17 cm per degree**, so the assumption is not free.
+And `yolov8n_seg` is already measured at **85.2 Hz end to end on this vehicle,
+with no regression** — the capability is on the chip already.
+
+⭐ Its falsifier is the **masks-vs-boxes study** that our own `vision.md` lists as
+owed by the whole field. Running it would close a local question and a published
+one at once.
+
+---
+
 ## 7. An outside confirmation of a rule we already had
 
 [arXiv 2507.21715](https://arxiv.org/html/2507.21715v1) measured underwater image
@@ -236,3 +293,31 @@ pipeline**, and the test in our repo that enforces the rule should cite it.
 looked hard for one and the honest answer is that our ladder, our flow estimator
 and our tracker are not what is costing us — **a 30 Hz camera and a compilation
 flag are.**
+
+---
+
+## 8. ⚠ Four beliefs that did not survive the sweep
+
+Recorded because each was load-bearing somewhere, and because the pattern is more
+useful than the items.
+
+| believed | actually |
+|---|---|
+| "the ROS graph costs 45 %" | **3.4 %.** A correct node measured 94.11 Hz against 97.47 standalone |
+| "we run ByteTrack" | ⭐ **We run OC-SORT.** `tracker_node.py:170` defaults to `'ocsort'`; ByteTrack is the `legacy_` path *and* the silent import fallback. OC-SORT is the better rung anyway — virtual trajectories re-derive the track *backwards* across an occlusion, 700+ FPS on one CPU |
+| "the detector is the bottleneck" | **The camera is.** 98 Hz of chip behind 30 Hz of Fantech |
+| "we have no CPU budget for XFeat" | **The Pi is 72.8 % idle** with both rungs running. The scarce resources are the **chip** and the **camera** |
+
+**The recurring shapes**, worth naming so they can be spotted next time:
+
+1. **Always-on multipliers bought for rare frames** — TTA, SAHI, tiling.
+2. **Benchmarks from hardware we do not have** — every laptop and Jetson figure;
+   our Pi is 2.4–4× slower than the i5 in the XFeat paper.
+3. **Gains measured against a baseline weaker than ours** — most flow accuracy
+   tables, against an estimator already at 0.07 %.
+4. ⭐ **A number measured in a mode the vehicle cannot operate in** — `hw_only`
+   FPS, which batches. This one cost two retractions in a single day.
+
+⚠ **Two silent-degradation paths remain open**, one assertion each:
+the OpenCV camera fallback (1.8–2.0× throughput) and the tracker import fallback
+(swaps the algorithm). Neither is checked at bring-up today.
