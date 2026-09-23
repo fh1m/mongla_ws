@@ -2889,3 +2889,95 @@ with model cost.
 ⛔ **Discarded:** `yolov8s.hef` reported 466 FPS at the same input and output
 shapes as `yolov11s` at 42.65. Not physically consistent; the artifact is suspect
 and the number is used nowhere.
+
+---
+
+## 11. The closed-loop bench — the plant, and what `MOT_SPIN_MIN` really costs
+
+**Built 2026-09-23.** `tools/control_bench/plant.py` + `flight.py`. Until now the
+bench was OPEN LOOP — stick in, DShot out, no feedback — so it could say what the
+board commands and nothing about what the vehicle then does.
+
+```
+stabilize / acro   FIRMWARE, compiled from the checkout   attitude -> torque
+  -> allocator     OURS (geometric_allocation)            torque  -> 5 demands
+  -> oneToDshot    FIRMWARE, per thruster                 demand  -> DShot
+  -> plant         Fossen 6-DOF                           force   -> motion
+  -> gyro + AHRS                                          motion  -> back in
+```
+
+⛔ **The firmware mixer is deliberately NOT in that chain.** `mixer.cpp` allocates
+for `vectored_6dof` — eight T200s at 45° — and the CAD hull has five orthogonal
+thrusters. Pushing one through the other simulates a vehicle that does not exist.
+`stabilize`/`acro` (attitude error → torque, no geometry) and `oneToDshot` (one
+demand → one DShot value) are hull-INDEPENDENT and stay real firmware; the mixer
+is the one hull-specific piece and the one we replace. That substitution is also
+the measurement that turns [ask K](upstream/pr-k-the-mixer-is-for-a-different-hull.md)
+from an argument into a number.
+
+### 11.1 What the plant is validated against
+
+⚠ **Nothing in the plant is validated against the vehicle, because the vehicle has
+never been wet.** It is validated against the exact analytic properties the
+equations of motion are *required* to have:
+
+| property | why it is exact |
+|---|---|
+| `νᵀ C(ν) ν == 0` | `C` is skew-symmetric: Coriolis moves energy between axes, never creates it |
+| terminal speed `= √(F/q)` | constant force against quadratic drag, closed form, mass-independent |
+| roll period `= 2π√(I/(BG·W))` | small-angle restoring pendulum |
+| undamped principal-axis spin is held | Euler's equations |
+
+⭐ **And one that rehearses a pool day.** `test_free_decay_recovers_the_drag_we_put
+_in` runs the planned Round 4a experiment against a plant whose drag we *chose*,
+and checks the fit returns it (to 1 %). If the procedure cannot recover a known
+answer on a noiseless plant it will not recover an unknown one in a pool — and it
+would return a plausible number while failing.
+
+### 11.2 ⛔ The frame seam, and the runaway it caused
+
+The allocator reads `hull_geometry.yaml` and therefore works in the **CAD frame**;
+the plant is **Fossen** (x fwd, y stbd, z DOWN). The map `body = (cad.y, cad.x,
+-cad.z)` is a proper rotation (det +1), so moments follow forces and **exactly two
+axes negate: heave and yaw.**
+
+The first wiring missed it. Yaw feedback became positive and the hull ran to
+**−1988° in six seconds.** ⚠ A runaway was the *lucky* outcome — at a lower gain
+the same sign error gives slow convergence that looks like a tuning problem, and
+costs a pool day. The conversion is now a named function with a test;
+injection-verified, its removal fails 7 tests.
+
+### 11.3 ⭐ What `MOT_SPIN_MIN` costs in closed loop — and a correction to our own ask
+
+Yaw hold, live board gains, CAD hull, `MOT_SPIN_MIN` inside the loop. Steady state,
+last 2 s of a 10 s hold, peak-to-peak:
+
+| commanded step | quantised (the vehicle) | ideal (no floor) |
+|---|---|---|
+| 30° | 0.1055° | 0.0043° |
+| 10° | 0.1051° | 0.0001° |
+| 3° | 0.1051° | 0.0001° |
+| 1° | 0.1052° | 0.0000° |
+| 0.5° | 0.1050° | 0.0000° |
+
+The floor cannot be held at zero, so the hold hunts. **The amplitude is constant —
+independent of step size.**
+
+**Robustness, swept across every unmeasured term:**
+
+| term | effect on the limit cycle |
+|---|---|
+| drag, `Cd` 0.15/0.80 → 0.30/1.20 | ⭐ **none, to 1e-6.** The cycle lives near zero velocity where quadratic damping vanishes. The plant's *largest* unknown does not touch this result |
+| thrust 8→40 N, mass 8→13.6 kg | ⚠ **0.0022° … 0.1520°, a 70× spread** |
+
+So the honest number is an **order of magnitude — a tenth of a degree — not a
+measurement.** Quoting three significant figures off this bench would be wrong.
+
+⛔ **AND IT PARTLY REFUTES OUR OWN UPSTREAM ARGUMENT.** [Ask I](upstream/pr-i-spin-min-relay.md)
+and [ask M](upstream/pr-m-thruster-requirements-from-control.md) both lean on
+`MOT_SPIN_MIN` hurting precision alignment. At ~0.1° peak-to-peak that is **3.5 mm
+at 2 m range**, far below the pixel tolerances the vision servo works to. The
+floor's real cost is **not** steady-state pointing jitter — it is the **16.22 %
+lurch** when a small correction finally crosses the gate, and the 4.06:1 usable
+yaw range. The asks should argue the lurch, and a test carries this correction so
+it is not quietly forgotten.
