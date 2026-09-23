@@ -3155,12 +3155,67 @@ discussing.
 already achieves — so it would cap the pipeline in hardware beneath where it runs
 today. `yolov11n` at 82.61 Hz is also slower than what we fly.
 
-### 14.4 The method lesson
+### 14.4 ⛔⛔ THE RETRACTION IS ITSELF RETRACTED — §14.1 was right
 
-Two retractions in one session, both from trusting a benchmark's headline number
-over the vehicle's own path: §13's IMU catastrophe came from bypassing `SrotFC`,
-and this came from reading `hw_only` FPS as throughput. **A number measured in a
-mode the vehicle cannot operate in is not a measurement about the vehicle.**
+**Measured again, 2026-09-23, through HailoRT's modern `create_infer_model` API
+instead of the older `InferVStreams` path `e2e.py` uses:**
+
+| model | contexts | sync (1 in flight) | **async (8 in flight)** | gain |
+|---|---|---|---|---|
+| `yolov8n` — stock | **1** | 153.31 Hz | **419.68 Hz** | **2.74×** |
+| `yolov8s` — stock | **1** | 112.72 Hz | **479.60 Hz** | **4.25×** |
+| `sauvc_sim` — ours | **3** | 98.44 Hz | 98.44 Hz | **1.00×** |
+| `grr_lowth` — ours | **3** | 98.21 Hz | 98.21 Hz | **1.00×** |
+| `yolov11n` | **3** | 91.16 Hz | 92.78 Hz | 1.02× |
+| `yolov11s` | **3** | 43.02 Hz | 43.02 Hz | 1.00× |
+
+⭐ **The correlation with context count is perfect.** Single-context models
+pipeline 2.7–4.3×; every multi-context model is flat at 1.00×. That is the
+mechanism: a multi-context network must swap weights between contexts, so it
+serialises and there is nothing to overlap. A single-context network keeps its
+weights resident, so the host round trip overlaps with compute.
+
+**Why §14.2 got it wrong.** `e2e.py` uses `InferVStreams`, which adds ~7 ms of
+host-side overhead — it reported `yolov8s` "infer 9.22 ms" for a model the chip
+runs in **2.09 ms**. That overhead is the same for every model, so it flattened
+them all to ~98 Hz and looked exactly like a shared PCIe bound. It was not.
+
+**So the standing conclusion is §14.1's: our models are multi-context and that is
+a real 4.3× penalty in chip time** — 10.16 ms against yolov8n's 2.38 ms.
+
+### 14.5 ⭐ And the value is LATENCY and HEADROOM, not frame rate
+
+We do not need 480 Hz detection — the camera tops out at 210 Hz and the control
+loop wants ~50. What single-context compilation actually buys:
+
+| | today | single-context + async |
+|---|---|---|
+| chip time per frame | 10.16 ms | ~2.4 ms |
+| **freed Hailo time** | — | **~7.8 ms per frame** |
+
+1. **Photon-to-decision drops by ~7.8 ms**, which is the number the control loop
+   feels.
+2. ⭐ **~7.8 ms of free chip time per frame is room for a SECOND network** — an
+   XFeat, a depth model, a flow network — on the same accelerator. That is the
+   difference between "we have one detector" and "we have a perception stack".
+
+⚠ **Still not attempted.** The lever is the compilation step, and whether our
+network *can* be made single-context depends on its architecture — but `yolov8s`
+is larger, has 80 classes, and is single-context on this same chip.
+
+### 14.6 The method lesson
+
+Three corrections in one session, and the third corrected the second.
+
+§13's IMU catastrophe came from bypassing `SrotFC` and its frame conventions.
+§14.2 then over-corrected: it read `hw_only` FPS as unreachable, when the real
+problem was that the *measuring tool* (`InferVStreams`) added 7 ms and hid the
+difference.
+
+⭐ **The lesson is not "distrust benchmarks" — it is that a measurement is only
+as good as the API path it went through.** `hw_only` was flattering because it
+batches; `e2e.py` was flattening because its API is slow. Neither described the
+chip. The one that did was the API the production code would actually use.
 
 ---
 
