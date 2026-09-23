@@ -1,0 +1,117 @@
+# Where the thrusters actually are.
+#
+# ⛔ WHY THIS FILE EXISTS. The allocator works in DEMAND space: `allocation.py`
+# holds an 8x6 matrix of exactly 0 and +-1 -- a sign pattern with no geometry in
+# it. Used as a force sum those +-1 entries overstate surge and sway by
+# 1/cos(45 deg) = 41 %, and they cannot express a dead thruster at all. The fix
+# is a geometric B, and until now the numbers for one existed NOWHERE in this
+# tree: only as prose in README.md and as pixel coordinates in a banner script.
+#
+# PROVENANCE, and its limits. Measured 2026-09-23 from
+# `docs/assets/cad/hull.mgla`, the packed mesh `tools/pack_hull.py` produced from
+# the Onshape GLB export. It IS the CAD -- but it is a RENDER asset: decimated by
+# vertex clustering and quantised to int16 against the model's bounding sphere.
+#
+#   * Body CENTROIDS survive that. Each tunnel body carries 880-910 vertices,
+#     and vertex clustering does not bias a centroid.
+#   * The quantum is scale/32767 = 0.351/32767 = 1.1e-5 m, so quantisation is
+#     not the error term.
+#   * ⚠ What IS uncertain: whether an exported body is the thruster unit or its
+#     housing, and whether anything was left out of the export. One thing
+#     demonstrably was -- see `axial`.
+#
+# THE REASON TO TRUST THE REST: the hull bounding box measured from the same
+# mesh is 176.1 x 172.1 x 702.0 mm, reproducing CLAUDE.md's figure exactly.
+#
+# ⚠ NOT MEASURED THROUGH ONSHAPE. The Onshape MCP available in this session
+# exposes FeatureScript authoring only -- `test_featurescript` runs against a
+# scratch document and takes no document id, so it cannot query the AUV model.
+# The short list under `axial` and `unknown` is what someone with the document
+# open should read off directly.
+
+frame:
+  # Body axes as the CAD is built. Z is the long axis: the mesh's 702.0 mm
+  # extent lies along it.
+  x: sway        # +X to starboard.  Hull extent 176.1 mm
+  y: heave       # +Y up.            Hull extent 172.1 mm
+  z: surge       # +Z forward.       Hull extent 702.0 mm
+  hull_extent_m: [0.1761, 0.1721, 0.7020]
+  source: docs/assets/cad/hull.mgla
+  measured: 2026-09-23
+
+# ── the four tunnel thrusters, measured ──────────────────────────────────────
+#
+# Identified as the bodies carrying an 84 mm extent (the documented bore). Each
+# tunnel's AXIS is its longest extent: the lateral pair runs 148 mm along X, the
+# vertical pair 125 mm along Y.
+#
+# ⚠ ALL FOUR SIT ON THE CENTRELINE -- every centroid is within 6 mm of x=0, y=0,
+# and they are distributed along Z ONLY. The consequence is worth stating
+# plainly, because it is what proves `axial` must exist: a force along X at
+# station z makes a YAW moment, and a force along Y at station z makes a PITCH
+# moment, so these four produce
+#       sway + yaw + heave + pitch
+# and NO SURGE, NO ROLL. Roll unactuated is documented and expected. No surge is
+# not -- the vehicle has to swim.
+thrusters:
+  - name: lateral_aft
+    body: 1
+    position_m: [-0.0059, 0.0003, -0.1732]
+    axis: [1, 0, 0]
+    bore_mm: 84
+  - name: lateral_fwd
+    body: 26
+    position_m: [-0.0061, 0.0003, 0.1734]
+    axis: [1, 0, 0]
+    bore_mm: 84
+  - name: vertical_aft
+    body: 6
+    position_m: [0.0005, -0.0046, -0.2603]
+    axis: [0, 1, 0]
+    bore_mm: 84
+  - name: vertical_fwd
+    body: 18
+    position_m: [0.0002, -0.0046, 0.2601]
+    axis: [0, 1, 0]
+    bore_mm: 84
+
+# Measured pair separations, against what the documentation states:
+#   lateral   0.1734 - (-0.1732) = 0.3466 m   docs say 350 mm   (-1.0 %)
+#   vertical  0.2601 - (-0.2603) = 0.5204 m   docs say 519 mm   (+0.3 %)
+# The vertical figure agrees. The lateral one is 3.4 mm short of the documented
+# value. Not reconciled, and not averaged away.
+
+# ── the thruster that must exist and is not in the export ────────────────────
+axial:
+  state: UNKNOWN
+  # ⛔ DO NOT FILL THIS IN BY INFERENCE. CLAUDE.md describes "one axial unit in
+  # the nose", giving five thrusters and 5 of 6 DOF. The export does not contain
+  # it: every body within 50 mm of either nose is a disc 2-5 mm thick and
+  # 65-88 mm across -- end caps, not a thruster.
+  #
+  # We know it must exist, because the four tunnels above produce no surge at
+  # all. What we do NOT know is its position, its axis, or whether it is one
+  # unit or two. Guessing any of that puts a fabricated column into the
+  # allocation matrix, which is the exact failure this project keeps naming.
+  #
+  # TO CLOSE THIS, read off the Onshape document directly:
+  needed:
+    - position_m        # centroid in the frame above
+    - axis              # unit vector; presumably [0, 0, 1]
+    - bore_mm
+    - count             # one unit, or a pair?
+
+# ── what is still missing before a FORCE-domain B is possible ────────────────
+#
+# This file gives GEOMETRY, not FORCE, and the two must not be confused. A
+# geometric B built from the columns above is exact in its directions and its
+# moment arms, and silent about newtons.
+unknown:
+  mass_kg: null                 # ⛔ Onshape reports NO MATERIAL on any part, so
+                                #    mass cannot be computed. A scale closes it
+                                #    (BENCH B-5). Every force claim waits here.
+  centre_of_mass_m: null
+  centre_of_buoyancy_m: null    # BG decides the passive roll stability the
+                                #    unactuated roll axis depends on
+  k_n_per_rpm2: null            # thrust per RPM^2. No default anywhere, on
+                                #    purpose (BENCH B-3: a thruster + load cell)
