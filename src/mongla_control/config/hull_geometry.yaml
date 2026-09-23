@@ -129,11 +129,71 @@ axial:
 # geometric B built from the columns above is exact in its directions and its
 # moment arms, and silent about newtons.
 unknown:
-  mass_kg: null                 # ⛔ Onshape reports NO MATERIAL on any part, so
-                                #    mass cannot be computed. A scale closes it
-                                #    (BENCH B-5). Every force claim waits here.
-  centre_of_mass_m: null
+  # ⚠ RETRACTED 2026-09-23: "mass cannot be computed" was WRONG, and it blocked
+  # the whole force domain for nothing. Two facts kill it. Volume is pure
+  # geometry -- a material assignment turns volume into mass, it is not needed
+  # to HAVE a volume. And a neutrally ballasted vehicle's mass EQUALS its
+  # displaced water mass, which is a design constraint rather than a
+  # measurement: this hull has two vertical thrusters and no ballast system, so
+  # it cannot afford to be far off neutral.
+  #
+  # `mongla_control/hydrodynamics.py` computes it. Band 8.0 .. 13.6 kg fresh,
+  # best estimate 10.2 kg for a faired hull with a parallel mid-body.
+  #
+  # ⛔ THE FOUR TUNNELS ARE FREE-FLOODING AND DO NOT DISPLACE -- 3.106 L, which
+  # is 23 % of the hull. A first pass omitted them and published a band whose
+  # LOWER bound (11.1 kg) was above the corrected best estimate (10.2 kg).
+  #
+  # ⭐ AND THE CAD IS THE WRONG INSTRUMENT FOR THIS ANYWAY. What control needs
+  # is NET BUOYANCY -- the few newtons the vertical pair must fight to hold
+  # depth -- and that is a difference between two large numbers, so a 2 % error
+  # in either swamps it. A float test measures it directly: put the sealed hull
+  # in water and find the ballast that makes it hover. Half an hour, no CAD, and
+  # it also gives the roll righting moment BG that the unactuated roll axis
+  # depends on. That is the experiment; a CAD volume only narrows the band.
+  mass_kg: null                 # 8.0 .. 13.6 kg computed -- see hydrodynamics.py
+  centre_of_mass_m: null        # ⛔ still genuinely unknown: a shell with placed
+                                #    parts is not a uniform body, and no envelope
+                                #    calculation can recover where the battery is
   centre_of_buoyancy_m: null    # BG decides the passive roll stability the
                                 #    unactuated roll axis depends on
   k_n_per_rpm2: null            # thrust per RPM^2. No default anywhere, on
                                 #    purpose (BENCH B-3: a thruster + load cell)
+
+# ── ⭐ what the SHAPE alone settles, with no mass and no material ─────────────
+#
+# Lamb's added-mass coefficients are functions of the fineness ratio ONLY --
+# dimensionless, mass-free, volume-free, and exact for a body of revolution,
+# which this hull is to within the 4 mm between its 176.1 and 172.1 mm
+# cross-section. Computed and truth-tested against both exact limits (a sphere
+# carries half its displaced mass; a slender body tends to one) in
+# `test_hydrodynamics.py`.
+added_mass:
+  fineness: 4.032
+  k1_axial: 0.0806            # surge  -> effective mass 1.081 m
+  k2_transverse: 0.8611       # sway, heave -> effective mass 1.861 m
+  kp_rotational: 0.6115       # pitch, yaw  -> +61 % moment of inertia
+  k_roll: null                # ⚠ NOT ZERO, and an earlier version said it was.
+                              # A SMOOTH body of revolution has exactly zero
+                              # roll added inertia; ours has four transverse
+                              # bores, which is something for the fluid to grip.
+                              # Small but unknown -- and it would be a false
+                              # claim about the one axis we cannot actuate.
+  # ⚠ ALL OF THE ABOVE DESCRIBE THE SEALED FAIRED ENVELOPE. The tunnels break
+  # the axisymmetry the formulas assume, so k2 and kp are over-estimates of the
+  # potential-flow part and the entrained tunnel water is a term they do not
+  # model at all. Good to maybe 10-20 % transversely; free-decay measures truth.
+  transverse_to_axial_ratio: 1.722
+  # 72 % more INERTIA laterally than axially, from geometry alone.
+  # ⛔ INERTIA ONLY. It does NOT follow that strafing beats pointing-and-driving
+  # (an earlier version claimed that). This hull has TWO lateral thrusters
+  # against ONE axial unit, so the heavier axis may also be the better actuated
+  # one, and drag has not entered yet. Settle it with the allocator and a
+  # measured drag coefficient, not with this ratio.
+  #
+  # ⛔ DO NOT SEED FROM sim/.../mongla_heavy/model.sdf. Those are BlueROV2
+  # Heavy's coefficients and the plan already called them "a seed for a bench,
+  # never a shipped value". It is worse: a boxy ROV is a different SHAPE CLASS,
+  # its axial ratio is 0.471 against our 0.081 -- out by 5.8x -- and its heave
+  # added mass EXCEEDS its rigid mass, which potential flow forbids for a body
+  # of revolution. Computing from our own geometry beats seeding from theirs.
