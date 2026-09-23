@@ -60,7 +60,7 @@ def _node():
     obj._imu_gap_warned = True          # suppress the logger call
     obj._n = {'imu': 0, 'att': 0, 'depth': 0, 'yaw': 0, 'flow': 0, 'fix': 0,
               'zupt': 0, 'grid': 0, 'grid_refused': 0,
-              'lane': 0, 'lane_refused': 0, 'model': 0, 'gap': 0}
+              'lane': 0, 'lane_refused': 0, 'model': 0, 'gap': 0, 'gated': 0}
     obj._attitude_sigma_deg = 0.5
     obj._zupt_sigma = 0.01
     obj._zupt_enabled = True
@@ -86,6 +86,7 @@ def _node():
     obj._last_demand_t = None
     obj._motion = ln.MotionCheck()
     obj._motion_state = None
+    obj._aiding_state = None
     return obj
 
 
@@ -760,3 +761,88 @@ def test_retrodict_off_is_exactly_the_old_on_arrival_path():
         if k == 53:
             b._on_flow(_flow_at(t))
     np.testing.assert_allclose(a._filter.X.v, b._filter.X.v, atol=1e-12)
+
+
+# ═══════════════════════════════════════════════════════════════════════════ #
+#  The aiding signal -- B-56's observability gate, made visible
+# ═══════════════════════════════════════════════════════════════════════════ #
+
+class _Recorder:
+    def __init__(self):
+        self.sent = []
+
+    def publish(self, msg):
+        self.sent.append(msg.data)
+
+
+def test_aiding_is_reported_as_aided_on_a_healthy_filter():
+    n = _node()
+    n._pub_aiding = _Recorder()
+    n._report_aiding()
+    assert n._pub_aiding.sent == ['aided']
+
+
+def test_aiding_flips_to_unaided_when_velocity_stops_being_observed():
+    """⛔ THE SIGNAL A MISSION NEEDS. The pose keeps publishing and keeps
+    looking healthy the whole time velocity is unobserved -- that is exactly
+    what made B-56 hard to see. This is the machine-readable version of the
+    warning the node already logs."""
+    n = _node()
+    n._pub_aiding = _Recorder()
+    n._report_aiding()
+    for _ in range(200):
+        n._filter.predict([0, 0, 0], -ln.np.array([0.0, 0.0, 9.80665]), 0.02)
+    n._report_aiding()
+    assert n._pub_aiding.sent == ['aided', 'unaided']
+
+
+def test_aiding_is_published_only_on_CHANGE():
+    """Latched and edge-triggered, like `/mongla/localization/motion`. A 10 Hz
+    restatement of an unchanged fact is noise an operator learns to ignore."""
+    n = _node()
+    n._pub_aiding = _Recorder()
+    for _ in range(5):
+        n._report_aiding()
+    assert n._pub_aiding.sent == ['aided']
+
+
+def test_aiding_recovers_when_velocity_is_measured_again():
+    n = _node()
+    n._pub_aiding = _Recorder()
+    n._report_aiding()
+    for _ in range(200):
+        n._filter.predict([0, 0, 0], -ln.np.array([0.0, 0.0, 9.80665]), 0.02)
+    n._report_aiding()
+    for _ in range(50):
+        n._filter.update_body_velocity([0.0, 0.0, 0.0], sigma=0.01)
+    n._report_aiding()
+    assert n._pub_aiding.sent == ['aided', 'unaided', 'aided']
+
+
+def test_a_filter_without_the_gate_reports_aided_rather_than_crashing():
+    """⚠ The node must survive a filter that predates the gate -- a replayed
+    bag, or a swapped estimator. An unreadable gate is reported as aided, which
+    is the pre-B-56 behaviour, rather than stopping the node."""
+    n = _node()
+    n._pub_aiding = _Recorder()
+
+    class _Old:
+        pass
+
+    n._filter = _Old()
+    n._report_aiding()
+    assert n._pub_aiding.sent == ['aided']
+
+
+def test_the_aiding_topic_is_not_the_motion_topic():
+    """⚠ TWO DIFFERENT QUESTIONS, and conflating them would be easy.
+    `motion` answers "is the hull moving as commanded" -- a prop, a snag, a
+    dead thruster. `aiding` answers "can the filter see where it is". A blocked
+    hull is perfectly well localised; an unaided one is not."""
+    n = _node()
+    n._pub_aiding, n._pub_motion = _Recorder(), _Recorder()
+    for _ in range(200):
+        n._filter.predict([0, 0, 0], -ln.np.array([0.0, 0.0, 9.80665]), 0.02)
+    n._report_aiding()
+    assert n._pub_aiding.sent == ['unaided']
+    assert n._pub_motion.sent == [], 'the motion topic must be untouched'

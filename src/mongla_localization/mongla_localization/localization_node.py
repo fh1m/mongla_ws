@@ -108,7 +108,15 @@ class LocalizationNode(Node):
         # of zero on one input is invisible in the pose itself.
         self._n = {'imu': 0, 'att': 0, 'depth': 0, 'yaw': 0, 'flow': 0,
                    'fix': 0, 'zupt': 0, 'grid': 0, 'grid_refused': 0,
-                   'lane': 0, 'lane_refused': 0, 'model': 0, 'gap': 0}
+                   'lane': 0, 'lane_refused': 0, 'model': 0, 'gap': 0,
+                   # World-frame updates the observability gate refused. A
+                   # non-zero count is not an error -- it is the gate doing its
+                   # job -- but a count that RISES while flow is healthy means
+                   # the threshold is wrong for this vehicle. See B-56.
+                   'gated': 0}
+        # ⭐ Whether the OBSERVABILITY GATE is open, latched so it is published
+        # only on change. See `_report_aiding`.
+        self._aiding_state = None
         self._still: deque = deque(maxlen=STILL_WINDOW)
         self._last_flow_t = 0.0
         self._attitude_seeded = False
@@ -199,6 +207,26 @@ class LocalizationNode(Node):
         # by `mongla.motion()`: a timed move into a prop reports success, and
         # this is the only thing that can tell the mission it went nowhere.
         self._pub_motion = self.create_publisher(String, '/mongla/localization/motion', latched)
+        # ⭐ 'aided' | 'unaided' -- is horizontal position OBSERVABLE right now?
+        #
+        # ⛔ WHY THIS IS A TOPIC AND NOT A FIELD ON `/mongla/state`. That message
+        # is `auv_manager_node`'s and describes the BOARD -- armed, mode, yaw,
+        # depth, battery. The filter lives in this process, so routing a
+        # localization fact through the manager would need a new `.msg` field
+        # AND a topic to carry it across the process boundary anyway. The fact
+        # belongs on the node that owns it.
+        #
+        # ⚠ AND IT IS NOT `/mongla/localization/motion`. That one answers "is
+        # the hull physically moving as commanded" -- a prop, a snag, a dead
+        # thruster. This answers "can the filter see where it is". A blocked
+        # hull is perfectly well localised; an unaided one is not.
+        #
+        # `unaided` means B-56's regime: `RIEKF._velocity_is_observed()` is
+        # False, so depth and yaw updates are being REFUSED and only a landmark
+        # fix can still pin position. The pose keeps publishing and keeps
+        # looking healthy, which is exactly why this has to be said out loud.
+        self._pub_aiding = self.create_publisher(
+            String, '/mongla/localization/aiding', latched)
         self.create_timer(0.1, self._publish)
         self.create_timer(5.0, self._diagnose)
         self.get_logger().info(
@@ -358,6 +386,36 @@ class LocalizationNode(Node):
         if not self._motion.suspect and state != BLOCKED:
             self._model.learn(v.x, v.y)      # the easy regime teaches the hard one
         self._report_motion(state)
+
+    def _report_aiding(self) -> None:
+        """Publish whether horizontal position is observable, on change.
+
+        Called from the publish timer rather than from an input handler,
+        because the thing being reported is the ABSENCE of an input -- there is
+        no callback for flow that did not arrive.
+        """
+        observed = True
+        probe = getattr(self._filter, '_velocity_is_observed', None)
+        if probe is not None:
+            try:
+                observed = bool(probe())
+            except Exception:                              # noqa: BLE001
+                observed = True      # an unreadable gate must not stop the node
+        state = 'aided' if observed else 'unaided'
+        if state == self._aiding_state:
+            return
+        self._aiding_state = state
+        if state == 'unaided':
+            self.get_logger().warning(
+                '[LOCAL] UNAIDED: velocity is unobserved, so depth and yaw '
+                'updates are being REFUSED (B-56) and horizontal position is '
+                'dead reckoning. The pose still publishes and still looks '
+                'healthy -- do not act on absolute position.')
+        else:
+            self.get_logger().info('[LOCAL] aiding restored: position observable')
+        pub = getattr(self, '_pub_aiding', None)
+        if pub is not None:
+            pub.publish(String(data=state))
 
     def _report_motion(self, state: str) -> None:
         if state == self._motion_state:
@@ -528,6 +586,9 @@ class LocalizationNode(Node):
 
     def _publish(self) -> None:
         self._maybe_model_aid()          # 10 Hz: one aid per output, not per IMU
+        # Report observability alongside the pose, so the two can never
+        # disagree about which tick they describe.
+        self._report_aiding()
         st = self._filter.X
         m = Odometry()
         # ⛔ THE STAMP IS THE LATEST INPUT'S, NOT `now()`. Every input to this
@@ -592,6 +653,7 @@ class LocalizationNode(Node):
             f"yaw={n['yaw']} grid={n['grid']}/{n['grid'] + n['grid_refused']} "
             f"lane={n['lane']}/{n['lane'] + n['lane_refused']} "
             f"model={n['model']} fix={n['fix']} gaps={n['gap']} "
+            f"gated={self._filter.gated} "
             f"rej={self._filter.rejected} brk={self._filter.lockout_breaks} "
             + (f"late={self._retro.late} replay={self._retro.replayed} "
                f"too_old={self._retro.refused} " if getattr(self, '_retro', None) else '')
