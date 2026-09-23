@@ -42,6 +42,16 @@ ga = _load_pure('geometric_allocation')
 
 DSHOT_SPAN = 999.0
 
+# ⛔ FlightMode, from `include/state_types.h`. NOT a magic number -- the first
+# version of this file passed `mode=3`, which is not a FlightMode at all, so
+# `feedforward::apply` took its `stabilized` branch as FALSE and returned the
+# demands untouched. Every feedforward gain then measured identically, which
+# reads as "the layer does nothing" rather than as "it was never called".
+MODE_STABILIZE = 0
+MODE_ACRO = 1
+MODE_DEPTH_HOLD = 2
+MODE_AUTO = 23
+
 
 # ═══════════════════════════════════════════════════════════════════════════ #
 #  ⛔ THE FRAME SEAM, and it produced a runaway the first time it was missed
@@ -134,7 +144,15 @@ class Vehicle:
     """The board, the allocator, the thrusters and the water, wired together."""
 
     def __init__(self, *, damping: Damping, max_thrust_n: float = 20.0,
-                 inertia: Inertia | None = None, from_board: bool = True):
+                 inertia: Inertia | None = None, from_board: bool = True,
+                 thruster_tau_s: float = 0.0):
+        """`thruster_tau_s` -- first-order lag from commanded to delivered
+        thrust. ⛔ IT IS NOT ZERO ON A REAL THRUSTER, and the default is zero
+        only because ours is unmeasured. A T100-class unit's thrust dead time is
+        reported around 0.59 s; a small custom unit will be faster, but it will
+        not be instant. It is the term most likely to dominate every argument
+        about loop rate, so it is modelled explicitly rather than assumed away.
+        """
         self.board = Board()
         # ⛔ The cascade must run on the VEHICLE's gains, not config.h's. The
         # defaults differ by 3.556x on PILOT_YAW_RATE alone.
@@ -143,16 +161,45 @@ class Vehicle:
         self.thrusters = cad_hull_thrusters(max_thrust_n)
         self.B = wrench_matrix(self.thrusters)
         self.max_thrust_n = max_thrust_n
+        self.thruster_tau_s = thruster_tau_s
         self.alloc = ga.GeometricAllocator()
 
     def _wrench(self, thrusts) -> list:
         return [sum(self.B[i][j] * thrusts[j] for j in range(len(thrusts)))
                 * self.max_thrust_n for i in range(6)]
 
+    def torque_per_unit_demand(self) -> float:
+        """N.m produced by one unit of NORMALISED axis demand.
+
+        The allocator works in units of (moment arm x thrust fraction), so a
+        demand the allocator can meet exactly becomes `demand * max_thrust_n`
+        newton-metres. This is the conversion the firmware's feedforward gains
+        are implicitly denominated in, and it is why a gain that is right on
+        one vehicle is meaningless on another.
+        """
+        return self.max_thrust_n
+
+    def ideal_drag_gain(self, axis: int = 5) -> float:
+        """⭐ The `ATC_DRAG_*` value that would cancel THIS PLANT's drag exactly.
+
+        The firmware adds `atc_drag_yaw * gz * |gz|` to the normalised demand;
+        the plant subtracts `q * r * |r|` newton-metres. They cancel when
+        `atc_drag * torque_per_unit = q`.
+
+        ⚠ CIRCULAR IF USED ALONE, and that is the point of `fly`'s
+        `drag_gain_scale`. We chose the plant's drag, so of course a gain
+        derived from it cancels. The question worth asking is not "does a
+        perfect gain help" but "how wrong may it be before it hurts", because
+        on the real vehicle it will never be perfect.
+        """
+        return self.plant.damping.quad[axis] / self.torque_per_unit_demand()
+
     def fly(self, *, seconds: float, dt: float = 0.002,
             stick=lambda t: (0.0, 0.0, 0.0),
             hold_yaw: float | None = 0.0,
             disturbance=lambda t: (0.0,) * 6,
+            drag_gain_scale: float | None = None,
+            control_hz: float | None = None,
             quantise: bool = True) -> Trace:
         """Run the closed loop. `stick` returns (roll, pitch, yaw) each tick.
 
@@ -160,23 +207,72 @@ class Vehicle:
         allocator demand -- which is not the vehicle, and exists only to MEASURE
         what MOT_SPIN_MIN costs by difference.
         """
+        # ⛔ RESET THE PLANT, NOT JUST THE BOARD. An earlier version reset only
+        # the controller, so a reused Vehicle started each run from the previous
+        # run's attitude and rates -- and the results looked like a feedforward
+        # effect rather than like leftover state. A bench that carries state
+        # between runs is worse than no bench, because its output is plausible.
+        self.plant.nu = [0.0] * 6
+        self.plant.eta = [0.0] * 6
+        delivered = [0.0] * 5
         self.board.reset()
+        # ⚠ The five feedforward gains ship at 0.0 on the live board. Anything
+        # non-zero here is an EXPLORATION of what they would do, never a
+        # description of the vehicle.
+        ff = (0.0 if drag_gain_scale is None
+              else drag_gain_scale * self.ideal_drag_gain())
+        self.board.set_feedforward(drag_yaw=ff, drag_rll=0.0, drag_pit=0.0)
         if hold_yaw is not None:
             self.board.hold_yaw(hold_yaw)
         tr = Trace()
         t = 0.0
-        for _ in range(int(seconds / dt)):
+        # ⛔ DECIMATION IS NOT THE SAME AS A BIGGER `dt`, and conflating them
+        # would answer a different question. The PLANT always integrates at
+        # `dt`; only the CONTROLLER is run less often, and its output is HELD
+        # between updates -- which is what a slower control task actually does.
+        # Passing a larger dt to the plant would instead measure the
+        # integrator, and would flatter the slow rates by removing the
+        # zero-order hold whose lag is the entire effect under test.
+        every = 1 if control_hz is None else max(1, round(1.0 / (control_hz * dt)))
+        held = None
+        for k in range(int(seconds / dt)):
             roll, pitch, yaw = self.plant.attitude
             gx, gy, gz = self.plant.body_rates
             sr, sp, sy = stick(t)
-            tq_r, tq_p, tq_y = self.board.stabilize(
-                stick_roll=sr, stick_pitch=sp, stick_yaw=sy,
-                roll=roll, pitch=pitch, yaw=yaw, gx=gx, gy=gy, gz=gz, dt=dt)
+            if held is None or k % every == 0:
+                # ⚠ The controller's own dt must be its ACTUAL period, or its
+                # integral and derivative terms are scaled for a rate it is not
+                # running at -- which would measure a detuned controller rather
+                # than a slower one.
+                tq_r, tq_p, tq_y = self.board.stabilize(
+                    stick_roll=sr, stick_pitch=sp, stick_yaw=sy,
+                    roll=roll, pitch=pitch, yaw=yaw,
+                    gx=gx, gy=gy, gz=gz, dt=dt * every)
+                held = (tq_r, tq_p, tq_y)
+            tq_r, tq_p, tq_y = held
 
+            if ff:
+                # `feedforward::apply` -- the firmware's own drag / cross-
+                # coupling layer, between the cascade and the mixer. Mode 3 is
+                # `learn=False` keeps the CoB auto-trim out of it,
+                # because a trim that learns during a scripted test is a
+                # confound, not a feature.
+                tq_r, tq_p, tq_y, _ = self.board.feedforward(
+                    roll=tq_r, pitch=tq_p, yaw=tq_y, throttle=0.0,
+                    gx=gx, gy=gy, gz=gz, mode=MODE_STABILIZE, learn=False)
             a = self.alloc.allocate(
                 **body_to_cad(roll=tq_r, pitch=tq_p, yaw=tq_y))
-            u = [dshot_to_fraction(self.board, d) if quantise else d
-                 for d in a.thrusts]
+            cmd = [dshot_to_fraction(self.board, d) if quantise else d
+                   for d in a.thrusts]
+            if self.thruster_tau_s > 0.0:
+                # First-order lag, per thruster. The ESC and the rotor cannot
+                # change the water's momentum instantly.
+                alpha = dt / (dt + self.thruster_tau_s)
+                delivered = [delivered[i] + alpha * (cmd[i] - delivered[i])
+                             for i in range(len(cmd))]
+                u = list(delivered)
+            else:
+                u = cmd
             tau = self._wrench(u)
             dist = disturbance(t)
             self.plant.step([tau[i] + dist[i] for i in range(6)], dt)

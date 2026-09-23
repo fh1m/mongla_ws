@@ -239,3 +239,55 @@ def test_uniform_inertia_is_flagged_as_the_weak_one():
     ixx, iyy = hy.uniform_inertia_per_kg()
     assert ixx < iyy, 'a slender body is far easier to roll than to pitch'
     assert iyy / ixx == pytest.approx(8.6, abs=0.3)
+
+
+# --------------------------------------------------------------------------- #
+#  ⭐ Thruster response -- the term the closed-loop bench found dominates
+# --------------------------------------------------------------------------- #
+
+def test_the_duct_term_beats_the_rotor_term():
+    """Which term to design against. A thruster makes thrust by throwing water,
+    and the water column takes longer to accelerate than the rotor does to spin
+    up -- so duct geometry matters more than propeller inertia."""
+    rotor = hy.rotor_spinup_s(inertia_kg_m2=5.0e-6, torque_nm=0.104, rpm=3000)
+    duct = hy.duct_response_s(bore_mm=84, duct_length_mm=150, thrust_n=20.0)
+    assert rotor < 0.030
+    assert duct > 3 * rotor
+
+
+def test_our_tunnels_are_already_far_quicker_than_a_T100():
+    """~68-79 ms against the ~0.59 s reported for a T100-class unit. Short
+    tunnel thrusters are inherently fast, and we start ahead."""
+    r = hy.hull_thruster_response_s(20.0)
+    assert 0.06 < r['vertical'] < r['lateral'] < 0.09
+    assert r['lateral'] < 0.59 / 5
+
+
+def test_duct_length_is_the_biggest_lever():
+    """tau ~ L exactly. Halving the duct halves the lag -- and it is a CAD
+    change, not a motor or ESC change."""
+    long_ = hy.duct_response_s(bore_mm=84, duct_length_mm=150, thrust_n=20.0)
+    half = hy.duct_response_s(bore_mm=84, duct_length_mm=75, thrust_n=20.0)
+    assert half == pytest.approx(long_ / 2.0, rel=1e-9)
+
+
+def test_thrust_helps_only_as_a_square_root():
+    """tau ~ 1/sqrt(T): four times the thrust buys half the lag. Worth knowing
+    before anyone proposes a bigger motor to fix response time."""
+    a = hy.duct_response_s(bore_mm=84, duct_length_mm=150, thrust_n=10.0)
+    b = hy.duct_response_s(bore_mm=84, duct_length_mm=150, thrust_n=40.0)
+    assert b == pytest.approx(a / 2.0, rel=1e-9)
+
+
+def test_a_wider_bore_is_slower():
+    """⚠ THE TRADE THAT IS EASY TO GET BACKWARDS. A bigger bore makes more
+    thrust for the same disc loading AND responds more slowly, because there is
+    more water to move. tau ~ bore."""
+    narrow = hy.duct_response_s(bore_mm=60, duct_length_mm=150, thrust_n=20.0)
+    wide = hy.duct_response_s(bore_mm=100, duct_length_mm=150, thrust_n=20.0)
+    assert wide / narrow == pytest.approx(100.0 / 60.0, rel=1e-9)
+
+
+def test_zero_thrust_has_no_response_time_and_is_refused():
+    with pytest.raises(ValueError):
+        hy.duct_response_s(bore_mm=84, duct_length_mm=150, thrust_n=0.0)

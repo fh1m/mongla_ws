@@ -220,3 +220,75 @@ def uniform_inertia_per_kg() -> tuple[float, float]:
     a = HULL_LENGTH_MM / 2000.0
     b = (HULL_BEAM_MM + HULL_HEIGHT_MM) / 4000.0
     return (0.4 * b * b, 0.2 * (a * a + b * b))
+
+
+# ═══════════════════════════════════════════════════════════════════════════ #
+#  ⭐ Thruster response time -- the term that dominates everything else
+# ═══════════════════════════════════════════════════════════════════════════ #
+#
+# Measured on the closed-loop bench 2026-09-23: against a yaw torque burst,
+# first-order thruster lag costs ONE TO TWO ORDERS OF MAGNITUDE more than
+# control loop rate. tau 0 -> 0.59 s made the peak deviation 131x worse, while
+# dropping the loop from 500 Hz to 50 Hz cost 21 %.
+#
+# So for a CUSTOM thruster, response time is the property to design for, and
+# these are the two terms that set it.
+
+
+def rotor_spinup_s(*, inertia_kg_m2: float, torque_nm: float,
+                   rpm: float) -> float:
+    """Time for the rotor and propeller to reach `rpm`. tau = J w / Q.
+
+    Small: of order 15 ms for a 2212-class bell with a light resin propeller.
+    It is NOT the dominant term -- see `duct_response_s` -- but it is the one a
+    heavy propeller makes worse, and it scales linearly with inertia.
+    """
+    if torque_nm <= 0.0:
+        raise ValueError('a rotor with no torque never spins up')
+    return inertia_kg_m2 * (rpm * 2.0 * math.pi / 60.0) / torque_nm
+
+
+def duct_response_s(*, bore_mm: float, duct_length_mm: float,
+                    thrust_n: float, rho: float = RHO_FRESH) -> float:
+    """⭐ THE DOMINANT TERM, and it is pure geometry.
+
+        tau = L * sqrt(rho * A / T)
+
+    A thruster does not make thrust by spinning -- it makes thrust by throwing
+    water backwards, and the water in the duct has to be accelerated first.
+    From momentum theory the slipstream reaches v = sqrt(T / (rho A)), and the
+    entrained column rho*A*L must be brought to it, which gives the expression
+    above.
+
+    ⭐ THE THREE DESIGN LEVERS FALL STRAIGHT OUT OF IT:
+
+        tau ~ L           halve the duct, halve the lag. THE BIGGEST ONE.
+        tau ~ 1/sqrt(T)   four times the thrust, half the lag
+        tau ~ bore        a narrower bore is faster, but makes less thrust
+
+    For this hull's CAD tunnels at 20 N: 79 ms on the 150 mm lateral bores and
+    68 ms on the 130 mm vertical ones. That is already SEVEN TIMES faster than
+    the ~0.59 s reported for a T100-class unit, before anybody designs
+    anything -- short tunnel thrusters are inherently quick.
+
+    ⚠ FIRST-ORDER AND IDEAL. Momentum theory ignores duct wall friction, the
+    inlet contraction, and the fact that a stopped propeller has to break away
+    before any of this starts. Treat it as the term that RANKS design choices,
+    not as a number to quote. A step-response test on the real unit settles it.
+    """
+    area = math.pi * (bore_mm / 2000.0) ** 2
+    if thrust_n <= 0.0:
+        raise ValueError('thrust must be positive to define a response time')
+    return (duct_length_mm / 1000.0) * math.sqrt(rho * area / thrust_n)
+
+
+def hull_thruster_response_s(thrust_n: float = 20.0) -> dict:
+    """This hull's four tunnels, from `hull_geometry.yaml`'s own bores."""
+    return {
+        'lateral': duct_response_s(bore_mm=TUNNEL_BORE_MM,
+                                   duct_length_mm=TUNNEL_LENGTHS_MM[0],
+                                   thrust_n=thrust_n),
+        'vertical': duct_response_s(bore_mm=TUNNEL_BORE_MM,
+                                    duct_length_mm=TUNNEL_LENGTHS_MM[2],
+                                    thrust_n=thrust_n),
+    }
