@@ -192,3 +192,55 @@ them kept; naming which is which is the point of the list.
   — the frame, and the request to keep the saturation scaling through it.
 - [`pr-b-telemetry-budget.md`](pr-b-telemetry-budget.md) — the achieved wrench,
   which is what would let us see a saturation instead of inferring one.
+
+
+---
+
+## 8. ⭐ `DEPTH_LOST_ASCENT = 0.35` — is the conservatism deliberate?
+
+Added 2026-09-23 after closing the depth loop on the bench for the first time.
+
+When the Bar30 goes unhealthy you abandon the depth PID and push an open-loop
+`DEPTH_LOST_ASCENT = 0.35` heave (`config.h:621` → `task_control_loop.cpp:219`).
+**The logic is right and we are not asking you to change it.** We measured what
+it buys, and have one question.
+
+From 3.0 m to your own `FS_SURFACE_DEPTH_M` of 0.25 m, our plant, 20 N thrusters:
+
+| net buoyancy | time to surface |
+|---|---|
+| neutral | 5.66 s |
+| 5 N heavy | 6.76 s |
+| 15 N heavy | 17.57 s |
+| **25 N heavy** | ⛔ **never surfaces** |
+
+Bisected, the escape overcomes **≈ 83 % of one thruster's maximum thrust** in
+negative buoyancy — with 20 N thrusters, about **1.7 kgf**.
+
+⚠ **And the two failures are correlated.** A flood that kills the Bar30 is also
+what makes the hull heavy, and 1.7 kgf is **1.7 litres** of water inside the
+pressure vessel. The margin is not against a random mis-ballast; it is against
+the specific failure that triggers the escape.
+
+**The question: is 0.35 deliberately conservative, and if so, against what?** We
+can think of two good reasons —
+
+- **not breaching hard.** A full-command ascent from 3 m arrives at the surface
+  with real momentum, and a hull that launches is a hull that can land badly.
+- **leaving authority for attitude.** At 0.35 the vertical pair still has headroom
+  for the roll and pitch the cascade is asking of it; at 1.0 it has none, and an
+  escape that tumbles is worse than a slow one.
+
+If either is the reason, **please say so in the comment** — the constant currently
+carries none, and the next person to find this measurement will be tempted to
+raise it.
+
+If neither is, a case can be made for scaling it: something like `0.35` while the
+attitude error is small and more when the vehicle is already level and simply
+needs to get up. We are not proposing a patch, because you own the failsafe path
+and the consequences of getting it wrong are yours to weigh.
+
+⭐ **Either way it is worth recording that this constant sets a ballast budget.**
+Nothing in the repo says that today, and "how heavy may the vehicle be and still
+survive a sensor failure" is a question the mechanical team should be able to
+look up.
