@@ -1044,5 +1044,13 @@ MOTOR_TUNE_PARAMS = ('RPM_KP', 'RPM_KI', 'FF_A', 'IDLE', 'MOT_SPIN_MIN')
 # The per-motor sign MOTOR_DETECT writes. It MULTIPLIES with MOT_n_DIRECTION;
 # neither display shows the product, which is exactly how the 2026-08-07
 # confusion happened (fw mav_stream.cpp:457).
+# A battery instance whose MEDIAN step between samples exceeds this is an
+# unwired sense pin, not a battery. Measured on the vehicle 2026-09-22: the
+# floating PM1 rail steps a median of 6.48 V per sample; a real pack sags about
+# 1 V under load. The bar sits between them by a factor of three either way.
+BATTERY_MAX_STEP_V = 2.0
+BATTERY_STEP_WINDOW = 16        # samples kept for the median
+BATTERY_STEP_MIN_SAMPLES = 8    # below this, do not accuse it
+
 CAL_MDIR_PARAMS = tuple(f'CAL_MDIR{i}' for i in range(1, 9))
 MOT_DIRECTION_PARAMS = tuple(f'MOT_{i}_DIRECTION' for i in range(1, 9))
