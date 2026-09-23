@@ -82,6 +82,26 @@ pixel counts shrink by ~20 %; every verdict in §4 survives that, because none o
 
 Hold these numbers. Q4 (small objects / tiling) is decided by them and by nothing else.
 
+### 0.1 ⭐ The question the brief did not ask, which this sweep thinks is the real one
+
+The goal says *"never losing detection **in ideal conditions**"*. ⚠ **Nothing in §1–§7 found a
+method that improves detection continuity in ideal conditions**, for a reason worth stating
+plainly: **in ideal conditions the detector already works.** The 71 real detection gaps the ladder
+was sized against, and the p99 **2.418 s** gap `../vision.md` §3 V-8 records, are not
+ideal-condition events — they are turbidity, occlusion, and the target leaving a **46.7°** frame.
+
+So the literature answer to the goal as worded is: **the continuity problem in ideal conditions is
+solved, and the remaining loss is not the detector's.** What this sweep found instead, reading the
+vehicle's own numbers, is that in ideal conditions the pipeline is **fed 27–30 Hz by a camera in
+front of a 98 Hz detector, into a 50 Hz consumer** (§8.1). That is the ideal-conditions defect.
+It is not a perception-method problem and no paper here fixes it.
+
+⛔ **The corollary is a scope warning.** If "never lose the target" is meant to include the hard
+frames, then §1–§7 say the ladder is already the right architecture and the gains are elsewhere:
+calibration (§5), a second opinion (`../vision.md` V-5), and — the one place the evidence says
+software cannot close the gap — **sonar** (`../vision.md` V-8: 2 of 5 top TDRs carry it, and "no
+software substitute exists in the literature").
+
 ---
 
 ## 1. Q1 — detection continuity: what beats detector + tracker + flow + anchor?
@@ -128,10 +148,19 @@ motion forward".
 is **9.3 mm ≈ 1.4 px**. Even at 2 m/s it is 5.7 px — inside the box-regression noise. The entire
 premise of streaming perception is a latency gap that our chip has already closed.
 
-⛔ **And we already do the one thing it does.** `tracking/kalman.py` propagates the track
-forward to the consumer's timestamp. StreamYOLO's contribution is folding that prediction *into
-the detector head* so it is learned rather than assumed — a retrain of the whole model, no Hailo
-zoo entry, for a 1.4 px correction we already apply linearly.
+⛔ **And we already do a version of the one thing it does.** `tracking/kalman.py` runs
+`predict()` on frames where the tracker held the track without a detection, and gives up after
+`max_predict_frames` (default **5**) consecutive predicted frames — so the track is propagated,
+not merely dropped.
+
+⚠ **Stated precisely, because the difference is real:** our filter is **constant-velocity in
+image space** and takes **no gyro input** — it has no model of the *vehicle's* motion, only of the
+box's recent pixel velocity. StreamYOLO's prediction is learned from the scene. So the honest
+claim is *not* "we already do it"; it is "we do the linear part, and the non-linear part is worth
+**≈1.4 px** at our frame interval." At 18.6 ms even a hard yaw contributes a displacement the
+constant-velocity term absorbs. ⭐ **If this is ever reopened, the cheap version is not a retrained
+detector head — it is feeding the board's 50 Hz gyro into `kalman.py`'s predict step**, which is
+the same information at effort 1 instead of effort 5.
 
 | | verdict |
 |---|---|
@@ -148,7 +177,7 @@ cannot buy anything. We predict it is 1–2 px.
 
 ### 1.4 What the evidence actually says about our ladder
 
-The honest reading: our four-rung ladder (detector → OC-SORT/ByteTrack → LK follower → XFeat anchor)
+The honest reading: our four-rung ladder (detector → OC-SORT → LK follower → XFeat anchor)
 **is** the edge instantiation of what the memory-tracker literature does with a learned memory,
 and [`../vision.md`](../vision.md) §2.4 already established that the blackout is a geometry
 problem and the anchor is the right shape of answer. The 2024–2026 work does not offer a fifth
@@ -211,9 +240,11 @@ encoder, is the latency bottleneck**.
   unquantised. J&F **87.7 DAVIS-2017 / 70.0 MOSE / 72.3 SA-V val / 71.7 SA-V test**. Its stated
   innovation is a 2D Spatial Perceiver precisely *because* "memory attention blocks are also the
   latency bottleneck".
-- **Cutie** (CVPR 2024 Highlight) — https://github.com/hkchengrex/Cutie **BENCH (GPU)**:
-  Cutie-small **45.5 FPS** vs XMem **22.6** vs DeAOT **11.7**; **+8.7 J&F over XMem on MOSE** at
-  similar runtime; 1.35 GB GPU memory with FIFO memory vs XMem's 3.03 GB.
+- **Cutie** (CVPR 2024 Highlight, arXiv:2310.12982, 19 Oct 2023 / rev. Apr 2024 —
+  https://arxiv.org/abs/2310.12982, **fetched**) **BENCH (GPU, device not stated)**: **+8.7 J&F
+  over XMem** on **MOSE** at comparable running time, and **+4.2 J&F over DeAOT while running 3×
+  faster**. The per-variant FPS figures (Cutie-small 45.5 vs XMem 22.6 vs DeAOT 11.7) and the
+  memory figures come from a search snippet, **not** from the fetched abstract — see §10.
 
 **Translate to our box.** 16 FPS is the number an A17 Pro with a 35 TOPS NPU achieves. The
 Hailo-8 is 26 TOPS but is a *dataflow* part with a **~9.3 ms PCIe round trip at batch 1**
@@ -282,10 +313,19 @@ So the two mechanisms in play are different, and both already do a form of tempo
 - **ByteTrack's** contribution is the **second association pass over low-confidence detections**
   (`bytetrack.py:32-33`, "IoU threshold for the second association pass (low-confidence…)") —
   weak detections are matched to tracks instead of discarded.
-- **OC-SORT's**, the one actually shipped, is observation-centric re-update and virtual
-  trajectories — it reconstructs the track *through* the gap. ⚠ **I did not verify OC-SORT's
-  mechanism against a fetched primary source in this sweep** (§10), only against
-  `tracker_node.py`'s own comment that it was chosen for "best dropout recovery".
+- **OC-SORT's**, the one actually shipped (CVPR 2023, arXiv:2203.14360, 27 Mar 2022 / final
+  16 Mar 2023 — https://arxiv.org/abs/2203.14360, **fetched**, **BENCH**): rather than trusting
+  the linear state estimate through an occlusion, it uses "object observations … to compute a
+  **virtual trajectory over the occlusion period** to fix the error accumulation of filter
+  parameters" — i.e. once the target reappears it **re-derives the track backwards across the
+  gap** instead of carrying the drift forward. SOTA on MOT17, MOT20, KITTI, head tracking and
+  "especially **DanceTrack**". **Runs at 700+ FPS on a single CPU**, so it costs us nothing.
+
+  ⭐ **That is the correct rung for our failure mode and it is already shipped.** `tracker_node.py`'s
+  comment "best dropout recovery" is right for a citable reason. ⚠ Note the benchmark it wins
+  hardest on is **DanceTrack** — which `../vision.md` §5 already flagged, rejecting Re-ID, as "a
+  benchmark of identical-looking targets". The caveat there applies here too: OC-SORT's headline
+  strength is measured on a target population unlike our props.
 
 Either way the point stands and hardens: **any proposal of the form "detect on N consecutive
 frames and fuse" must state its marginal delta over the shipped tracker, not over one-shot
@@ -685,17 +725,25 @@ and no new dependency.**
 | stage | rate | source |
 |---|---|---|
 | chip, batch 1, end to end | **98.01 Hz** (10.20 ms) | `measured-bars.md` §14.3 |
-| chip through a correctly-written ROS node + real camera, on a real topic | **94.11 Hz** (p95 10.75 ms) | §17.3 |
+| chip through a correctly-written ROS node + real camera, on a real topic | **94.11 Hz** (p95 10.75 ms) | §17.3 — ⚠ **that camera was the Sonix** (§17's header), i.e. the 210 Hz part, **not** the forward Fantech |
 | **forward camera (Fantech), distinct stamps, shipped `fps: 60`** | **30.18 Hz** | `config.py` `'pi_forward'` |
 | forward path end to end, image → detections | **30.03 → 27.11 Hz**, CPU **89.3 % idle** | `config.py` |
 | downward camera (Sonix) via `V4L2MailboxCamera` | **211.0 Hz** @640×360, **120.4 Hz** @1280×720 | §17.1 |
 | **the consumer**, `VISION_LOOP_HZ_SROT` | **50** (soaked 49.86 Hz, 0.00 % late) | `measured-bars.md` L60 |
 | the recorded 53.9 Hz | ⚠ **stale, "needs re-measuring"** | §17.3 |
 
-⭐ **Read down that column.** The detector is not the bottleneck on the forward path and neither
-is ROS: **the forward camera is**, at 30 Hz, with the chip idle roughly two thirds of the time and
-the CPU 89 % idle. The vehicle's own numbers say the frame budget was spent before any software in
-this dossier gets a turn.
+⚠ **That column is not apples to apples, and the difference is the whole point.** §17's header
+says the 94.11 Hz run was on the **Sonix**; `config.py`'s 30.18 Hz is the **Fantech**, measured
+2026-09-09 on a different day with a different node. **So 94.11 Hz is the rate the pipeline
+achieves when the camera can feed it, and 27–30 Hz is the rate it achieves on the forward mount.**
+Two cameras, two rates, one chip that is fast enough for both.
+
+⭐ **Read down that column anyway.** The detector is not the bottleneck on the forward path and
+neither is ROS: **the forward camera is**, at 30 Hz, with the chip idle roughly two thirds of the
+time and the CPU 89 % idle. The vehicle's own numbers say the forward frame budget was spent
+before any software in this dossier gets a turn. ⚠ Both camera figures predate the current code;
+**N-0 must re-measure them side by side, on one day, on one build**, or this table is two
+archaeological layers wearing one heading.
 
 ⛔ **And note where the consumer sits.** The control loop ticks at **50 Hz**. Detections arrive at
 **27**. So the vision loop is currently **acting on a stale detection about half its ticks** — not
@@ -788,9 +836,13 @@ in this dossier:
 
 - `cameras/webcam.py:87` sets `CAP_PROP_BUFFERSIZE = 1` "to avoid stale frames" — measured,
   that is a **1.8–2.0× throughput loss** (640×400: 117.2 vs **209.9 Hz**; 1280×720: 59.8 vs
-  **119.8 Hz**). And `_build_v4l2` **falls back to `webcam`** when the device is not a real V4L2
-  node, so a mis-bound camera runs at half rate with nothing downstream checking
-  (`measured-bars.md` §17.2).
+  **119.8 Hz**). And `factory.py:44-53` **falls back to the OpenCV `webcam` source whenever the
+  configured device is not a `/dev/...` path** — deliberately, so a dev box "gets OpenCV instead
+  of a stack trace". ⚠ It logs a warning, so it is not silent; but **the warning is the only
+  signal**, nothing downstream checks the achieved rate, and the vehicle profiles reach the
+  mailbox only because they carry `device_path: /dev/mongla_cam_*` symlinks — **the same udev
+  symlinks that were once bound to the wrong cameras** (`config.py`, the round-38 trap).
+  (`measured-bars.md` §17.2.)
 - `tracker_node.py:96-98` **falls back from OC-SORT to legacy ByteTrack** when the Roboflow
   library fails to import — a different tracking algorithm, chosen by an import error.
 
@@ -808,7 +860,7 @@ change the scores of everything below them.**
 
 | # | move | value | risk | effort | falsifier |
 |---|---|---|---|---|---|
-| **N-0** | ⭐ **Re-measure the delivered detection rate** on current code, **by distinct capture stamp** (§8.1) | 5 | 1 | **1** | it comes back ~94 Hz → the 53.9 figure was stale and `measured-bars.md` L59 is corrected. Either outcome is a win. |
+| **N-0** | ⭐ **Re-measure the delivered detection rate** on current code, **by distinct capture stamp, both cameras, one day, one build** (§8.1) | 5 | 1 | **1** | it comes back ~94 Hz on the forward path → the 53.9 figure *and* the 30.18 Fantech figure were stale, and `measured-bars.md` L59 is corrected. Either outcome is a win. |
 | **N-1** | ⭐ **Reliability diagram on a held-out venue**, raw detector confidence (§5.3) | 5 | 1 | **1** | the detector is already well-calibrated across venues → N-3 closed for an afternoon's work |
 | **N-2** | ⭐ **Price a 120 Hz global-shutter forward camera** against the Fantech's measured 30.18 Hz (§8.1). The Sonix on the downward mount already does 120.4 Hz at 720p. | **5** | 2 | 2 | N-0 shows the forward path is not camera-limited after all |
 | **N-3** | **Isotonic (not temperature) post-hoc calibration**, per camera per class (§5) | 4 | 2 | 2 | N-1's diagram shows no gain after fitting, or D-ECE improves while AP falls |
@@ -817,12 +869,20 @@ change the scores of everything below them.**
 | **N-6** | **Flatten the detector→tracker→lock hops** for freshness (§8.2) — the consumer ticks at 50 Hz and is fed at 27 | 3 | 2 | 3 | the hops measure sub-millisecond and the staleness is all upstream |
 | **N-7** | **Relabel / audit small-prop data** before any small-object architecture change (§4.6) | 3 | 1 | 3 | our small-prop labels audit clean → the 4×-correction-rate finding does not apply to us |
 | **N-8** | **Track-gated confidence threshold** in `confidence.py` (§3.3) | 3 | **4** | 2 | replay the **71 real gaps**: if *any* gap closes onto the **wrong object** at a setting that helps, refuted. ⚠ highest-risk item here — it is an agreement mechanism, which `../README.md` rule 3 exists to catch. |
+| **N-9** | **Feed the board's 50 Hz gyro into `kalman.py`'s predict step** — the filter is constant-velocity in image space with no vehicle-motion model (§1.2) | 3 | 2 | **1** | measure p95 box displacement between consecutive delivered frames during a hard yaw; if the constant-velocity term already absorbs it, closed |
 | ⛔ | ~~conditional native-resolution crop~~ | — | — | — | **dead as configured** (§4.4): the forward camera is 640×360, there is nothing to crop. Revives only with N-2. |
 
 ⚠ **Sequencing matters more than the scores.** N-0, N-1 and N-5 are each about a day, and **N-0
 and N-1 can each close a lower row outright**. N-2 is a hardware ask with a measured price and it
 gates the only "more pixels" idea that was ever real. N-7 answers the same question as any
 small-object architecture work and is far cheaper — do it first.
+
+**What would have changed this answer.** Stated so the sweep is falsifiable as a whole:
+a SAM2-family model in the Hailo-8 zoo with a published batch-1 figure; a published underwater
+D-ECE showing detectors are *already* calibrated across venues; a masks-vs-boxes study showing
+boxes suffice for plane contact; or an N-0 measurement showing the forward path already delivers
+~94 Hz. **The first three do not exist and the fourth is a day's work.** ⭐ Three of the four
+would *close* moves rather than open them — which is the point of running the measurement first.
 
 **The shape of this dive's answer, in one paragraph.** The 2024–2026 literature does **not** offer
 a better continuity ladder than detector → OC-SORT → LK → XFeat on this hardware; the
@@ -852,8 +912,8 @@ primary source. **None of them is used anywhere above.**
 | **Ultralytics TTA's 2–3× on what hardware** | vendor documentation, GPU-implied, no device stated. Used only for the *ratio*, which is architectural (N forward passes), not for an absolute rate. |
 | **A published underwater D-ECE, anywhere** | **does not exist as far as this sweep could find.** That is why §5.3's held-out-venue reliability diagram would be novel as well as useful. |
 | **Held-out-session or held-out-venue recall, anywhere in the detection literature** | still absent — `../vision.md` §6 recorded this and this sweep independently failed to find a counterexample. |
-| **OC-SORT's mechanism and its measured advantage over ByteTrack** | the **shipped default** (`tracker_node.py:170`) and I cite it only from that file's own comment, "best dropout recovery". **No OC-SORT paper was fetched in this sweep.** Given it is what actually runs, this is the most consequential gap in §10. |
-| **Cutie's 45.5 FPS device, and its MOSE J&F** | the GitHub page was fetched and carries **neither**; the numbers came from a search snippet of the paper (arXiv:2310.12982, not fetched). Used only to rank Cutie above XMem, never as a rate. |
+| **OC-SORT's measured advantage over ByteTrack, in HOTA/MOTA** | ⭐ the paper **was** fetched (§3.1) and its mechanism and 700+ FPS CPU figure are now sourced — but **its abstract gives no head-to-head numbers against ByteTrack**, only "state-of-the-art on multiple datasets". So *which* tracker is better **for us** remains unmeasured, and the fallback at `tracker_node.py:96-98` silently swaps between them. |
+| **Cutie's 45.5 FPS and the GPU it was measured on** | the abstract (arXiv:2310.12982) **was** fetched and gives the J&F deltas (+8.7 over XMem, +4.2 over DeAOT at 3× its speed) but **no FPS and no device**. The 45.5/22.6/11.7 figures remain snippet-only. Used to rank, never as a rate. |
 | **USIS-SAM's accuracy numbers** | arXiv:2406.06039 was fetched; the abstract claims "superior performance" with **no figures**. Only the dataset size (10 632 images, 7 categories) and the architectural fact that it needed an underwater-specific encoder + prompter are used. |
 | **Whether our forward camera's in-water FOV is 46.7°** | the 46.7° is measured, but `measured-bars.md` L2035 puts the forward lens at **73.9° in air** and L2235 records the **downward** in-water FOV as unknown, with L1108 documenting a live intrinsics mix-up. §0's pixel table is an order-of-magnitude instrument; **a per-camera in-water FOV is genuinely owed.** |
 
@@ -906,7 +966,8 @@ times in one afternoon. **Ask what a number is a number *of* before ranking anyt
 - SAM 2 — https://arxiv.org/html/2408.00714v1
 - SAM2 underwater evaluation — https://arxiv.org/abs/2408.02924 (6 Aug 2024)
 - EdgeTAM (CVPR 2025) — https://arxiv.org/abs/2501.07256 (13 Jan 2025) · https://github.com/facebookresearch/EdgeTAM
-- Cutie (CVPR 2024 Highlight) — https://github.com/hkchengrex/Cutie
+- Cutie (CVPR 2024 Highlight) — https://arxiv.org/abs/2310.12982 (19 Oct 2023, rev. Apr 2024) · https://github.com/hkchengrex/Cutie
+- OC-SORT (CVPR 2023) — https://arxiv.org/abs/2203.14360 (27 Mar 2022 / 16 Mar 2023) — **the shipped tracker**
 - Infrared dim small target review — https://pmc.ncbi.nlm.nih.gov/articles/PMC11207645/ (2024)
 - IR small object segmentation directions — https://arxiv.org/html/2502.14168v1 (Feb 2025)
 - Why Domain Matters (underwater domain + annotation quality) — https://arxiv.org/html/2607.10575 (12 Jul 2026)

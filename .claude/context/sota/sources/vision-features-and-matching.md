@@ -322,6 +322,34 @@ Three plausible uses. They are not equally plausible.
 > (label-free segmentation) is defeated by patch resolution. Revisit only if we ever need
 > *semantic* scene understanding — "is this a wall or open water" — which we currently do not.
 
+### 2.5 The one 2026 edge distillation I could find — and it argues for the NO
+
+[Lightweight Distillation of SAM 3 and DINOv3 for Edge-Deployable Individual-Level Livestock
+Monitoring (arXiv 2604.27128)](https://arxiv.org/abs/2604.27128), submitted 2026-04-29,
+v2 2026-06-15. This is precisely the class of work Q2 asked about — somebody distilling DINOv3
+specifically to get it onto an edge board — so it is the fairest available test of whether the
+§2 verdict is merely pessimism.
+
+| | |
+|---|---|
+| student | **40.66 M params**, TinyViT-21M-512 + FPN |
+| embedding model | **DINOv3 ViT-S/16, 21.6 M** (used as-is, not shrunk further) |
+| target hardware | **NVIDIA Jetson Orin NX 16 GB** |
+| peak VRAM | **6.49 GB** (vs 19.52 GB for the teacher) |
+| accuracy | 92.29 % MOTA / 96.15 % IDF1; −1.68 / −0.84 pp vs the SAM 3 teacher |
+| FPS / latency | **not stated in the abstract** |
+
+⛔ **Read the hardware line.** After distillation, and after cutting VRAM by two thirds, the
+result still targets a **Jetson Orin NX with 16 GB** and consumes **6.49 GB**. The Raspberry
+Pi 5 has **8 GB of LPDDR4X shared with the entire ROS 2 graph, both cameras and the detector**,
+and the Hailo-8 has no usable DRAM of its own for a model of this shape. Note also that the
+distillation **kept DINOv3 ViT-S/16 unchanged at 21.6 M** — the thing they compressed was SAM 3,
+not DINOv3. **ViT-S is already the floor.**
+
+**This is the strongest evidence in §2**: the state of the art in making DINOv3 edge-deployable,
+as of mid-2026, lands on a board an order of magnitude beyond ours. The §2 verdict is not
+pessimism; it is the published result.
+
 ---
 
 ## 3. The rest of the field: LightGlue, ALIKED, SuperPoint+SuperGlue, DeDoDe, RoMa, MASt3R/DUSt3R
@@ -470,7 +498,8 @@ exactly 2.5 m) rather than learned weights, so they need no venue training data.
 
 ## 6. Underwater-specific feature matching: what survives turbidity and caustics
 
-*(Taken before §5 because §5 depends on it.)*
+⚠ *Placed before §5 deliberately: §5's verdict on the downward camera depends on what §6.2
+measures about caustics. Read in file order, not in number order.*
 
 ### 6.1 Our own evidence is the strongest evidence we have
 
@@ -499,11 +528,20 @@ is real; *which* paper it belongs to is my inference. **The claim is therefore l
 unverified** — but it does not change action #1, because benching ROOT-SIFT on our own clips
 is cheap and settles the question with our own number regardless of who said what.
 
-⚠ Note what this implies for us: **SIFT was not in our own bench.** Our comparison was
-ORB-vs-XFeat-vs-EdgePoint2. The literature's strongest *classical* underwater performer is
-ROOT-SIFT, and OpenCV ships it. **That is a cheap, missing data point** — one afternoon,
-same clips, same protocol. It may well lose to XFeat on speed regardless (SIFT at VGA is
-tens of ms on a Pi), but the gap is ours and we should close it.
+⭐ **Note what this implies for us, and I checked rather than assumed: SIFT has never been
+benched on this vehicle.** `grep -i 'sift\|akaze\|brisk' measured-bars.md` returns **one**
+line, and it is about auto-exposure (DRL-AE, "+38 % SIFT..."), not about our footage;
+`grep -i sift src/mongla_vision/` returns **nothing**. Our comparison was
+ORB-vs-XFeat-vs-EdgePoint2 only. The literature's strongest *classical* underwater performer
+is ROOT-SIFT, and OpenCV ships it (patent expired 2020, `cv2.SIFT_create` is in the main
+build). **That is a cheap, genuinely missing data point** — one afternoon, same five clips,
+same 40 %-reference / +1/3/5/8 s / `USAC_MAGSAC` / ≥15-inlier protocol.
+
+⚠ It will very likely lose to XFeat on **speed** regardless (SIFT at VGA is tens of ms on a
+Pi), so this is not a candidate to adopt — **it is a control**. If ROOT-SIFT also reads 4/4 on
+the murky clips, then our 4/4 is telling us the clips are easier than we think, not that XFeat
+is special. That is worth knowing either way, and it is the kind of check this codebase's own
+rule asks for: *truth tests, not agreement tests.*
 
 **Enhancement makes matching worse — externally confirmed.**
 [Impact of Underwater Image Enhancement on Feature Matching (arXiv 2507.21715, Jul 2025)](https://arxiv.org/html/2507.21715v1)
@@ -685,7 +723,7 @@ refraction — and no matcher and no extra degree of freedom touches any of thos
 | DeDoDe-v2 | 42.76 ms **on an A100** | — | — | **NO** |
 | RoMa / DUSt3R / MASt3R | — | — | — | **NO — 198 ms/pair on an A40; >16 GB VRAM** |
 | DINOv2 / DINOv3 ViT-S | single-digit FPS | ViT-S ~13 ms est. @batch 1; **4.4× slower than ResNet-50 on the same chip** | semantics we do not need; patch-resolution too coarse | **NO** |
-| DINOv3 ConvNeXt-T (29 M) | no | the only architecturally sane variant | same as above | **NO, revisit if we need semantics** |
+| DINOv3 ConvNeXt-T (29 M) | no | the only architecturally sane variant | same as above | **NO** — and §2.5: the 2026 state of the art in edge-DINOv3 targets a **Jetson Orin NX 16 GB at 6.49 GB peak** |
 | NetVLAD / CosPlace / EigenPlaces | ~1 s (CNN) | ResNet-50 backbone ~11–14 ms est. | **nothing on a tiled floor — aliasing is total** | **NO** |
 | AnyLoc / SALAD / MegaLoc | worse | worse | most aliasing-robust, still defeated by a pure tile field | **NO** |
 | homography (8-DoF) on downward LK | free | n/a | roll/pitch the IMU already gives better; **still no metric scale** | **NO** |
@@ -770,9 +808,16 @@ inliers on a homography that is already trusted buys nothing we can point at.
 and HPatches measure wide-baseline pose between image pairs, not planar-anchor survival across
 a blackout. The ranking transfers; the absolutes do not."*
 
-**Resolution: XFeat\* is a cheap, reversible experiment** (it is a flag in XFeat's own API, not
-a new model or a new compile). If the Hailo path in §8.1 lands, 1.4× of ~11 ms is free and the
-answer flips. **Treat V-7 as live, ranked below the three actions in §7.**
+⛔ **Resolution — and I have to correct myself here too: XFeat\* is NOT "just a flag" for us.**
+In the upstream PyTorch API it nearly is. In *our* deployment it is not, because
+`tools/xfeat_export.py` exports **only `net`** — the three heads. XFeat\*'s gain comes from the
+**match-refinement MLP**, which is a *separate module* that is **not in our ONNX graph at all**.
+Adopting it means a second export plus a numpy port of the refinement, on top of the coarse
+1/8-resolution matching path. That is a day, not a flag.
+
+**Treat V-7 as live but correctly priced, ranked below the three actions in §7.** If the Hailo
+path in §8.1 ever lands, 1.4× of ~11 ms is cheap and the answer flips — but the porting work
+does not go away.
 
 ### 8.3 DINOv3 — "NO" (here) vs an underwater result cited in `vision.md`
 
@@ -828,11 +873,8 @@ different budgets. ⭐ The offline use is genuinely attractive and is an
   arXiv 2503.04096 on the strength of a search summary; the PDF fetch failed (>10 MB) and the
   abstract does not carry it. The paper's title, authors, date and subject matter are verified
   and consistent with the claim; the sentence itself is not.
-- **2026 edge distillations of DINOv3.** [arXiv 2604.27128](https://arxiv.org/pdf/2604.27128)
-  ("Lightweight Distillation of SAM 3 and DINOv3 for Edge-Deployable ... Livestock Monitoring")
-  is exactly the class of work Q2 asked about, and it is 2026 — past my cutoff. I did **not**
-  fetch it, so I have no student size, no hardware and no FPS from it. ⭐ **If §2 is ever
-  revisited, read this first**; it is the most likely source of a real edge number.
+- ~~2026 edge distillations of DINOv3 — not fetched.~~ **Fetched; see §2.5. It makes §2's NO
+  stronger, not weaker.**
 - ⛔ **That the FFT grating reads through caustics.** Argued from the spectra (broadband noise
   on a narrowband carrier), never measured. And the regime that needs it — a floor with no dark
   texture, where erosion leaves 12.47 px of error — is a floor with no grating to demodulate.

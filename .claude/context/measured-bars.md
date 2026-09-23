@@ -3463,3 +3463,71 @@ camera's limit. That is exactly the 2:1 pattern measured above.
 Sonix is connected. **But it should be re-checked with `v4l2-ctl --stream-mmap`
 before 30 Hz is accepted as that camera's ceiling**, because the same reading has
 now been wrong once.
+
+---
+
+## 18. ⭐ DINOv2 on the Pi, finally measured — 3 seconds per frame
+
+**2026-09-23.** Every DINO verdict in the SOTA sweep was an estimate, and one
+dossier flagged why that was avoidable: **`depth_anything_v2_small.onnx` has been
+sitting in our own tree** (`mongla_vision/depth/models/`), it **is** a DINOv2
+ViT-S/14 encoder, and **nobody had ever timed it.**
+
+`onnxruntime`, CPU provider, 518×518 input, median of 8 after 3 warm-ups:
+
+| threads | median | rate |
+|---|---|---|
+| 1 | **5263.6 ms** | 0.19 Hz |
+| 4 | **3064.4 ms** | **0.33 Hz** |
+
+⛔ **Three seconds per inference.** For scale, our detector does 640×640 on the
+Hailo in **10.16 ms** — DINOv2 ViT-S on this CPU is **~300× slower**, against a
+control loop that ticks at 50 Hz.
+
+⭐ **This is not "DINO is marginal on edge hardware". It is closed**, and it is
+now closed by a measurement on our own hardware with our own runtime rather than
+by reading Jetson figures. Any future proposal involving a ViT-S-class backbone
+on the Pi CPU starts from 3 s/frame.
+
+⚠ **What it does NOT close**: the Hailo route. The dossier's separate evidence
+there is the Hailo zoo's own table — `vit_small` 309 FPS against `resnet50`
+1372 at batch 8, a **4.4× attention penalty on the same silicon**, and those are
+PCIe ×4 batch-8 numbers we cannot have. Different argument, same verdict.
+
+---
+
+## 19. Feature front-ends priced on OUR hardware — the incumbent wins on speed
+
+**2026-09-23**, Pi 5, live camera frames at 640×360 grey, `cv2.setNumThreads(1)`,
+median of 20 after a warm-up.
+
+| front-end | median | rate | keypoints |
+|---|---|---|---|
+| ROOT-SIFT (`nfeatures=1000`) | 103.66 ms | **9.6 Hz** | 446 |
+| ORB (`nfeatures=1000`) | 10.08 ms | 99.2 Hz | 735 |
+| **Shi-Tomasi — what our LK uses** | **6.79 ms** | **147.4 Hz** | 483 |
+| *XFeat, for reference* | *33.1 ms @ 320×240* | *30.2 Hz* | — |
+
+⭐ **The incumbent is 15× faster than ROOT-SIFT and 1.5× faster than ORB**, while
+returning a comparable keypoint count — consistent with §28's 165–185 tracked
+points on real footage. **ROOT-SIFT at 9.6 Hz is below the 50 Hz consumer**, so
+it is not a candidate on this vehicle whatever its accuracy.
+
+⚠ **Every published feature timing needs repricing before it is quoted here.**
+The XFeat paper's CPU figure is an i5-1135G7 at VGA, and this Pi measures
+**2.4–4× slower than it** on the same graph.
+
+### 19.1 ⛔ What this does NOT answer, and why
+
+The reason to bench ROOT-SIFT was **not** speed — it was as a **control**: if
+ROOT-SIFT also scores 4/4 on our murky archive clips, then our 4/4 says *the
+clips are easy*, not that XFeat is special. That is a truth test rather than an
+agreement test, and it is the more valuable half.
+
+⛔ **It could not be run: the archive clips are on neither the dev box nor the
+vehicle.** Only simulator renders are present, and this project already holds
+that sim imagery is too clean for vision conclusions.
+
+**So the accuracy control remains owed**, and it needs the real footage restored
+to a machine first. Recorded rather than substituted, because running it on sim
+clips would have produced a number that looks like the answer and is not.
