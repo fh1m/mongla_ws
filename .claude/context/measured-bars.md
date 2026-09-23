@@ -3046,3 +3046,45 @@ exhaustively; the plant has no sensor noise, which would punish INDI's different
 acceleration estimate *harder* than the cascade; and the comparison is attitude-only.
 **Round 4a's free-decay inertia measurement is the thing that would change the answer** — and
 it is worth running anyway, because §12's failure mode is specifically an inertia error.
+
+---
+
+## 13. Live-board checks, 2026-09-23 — and two traps for anyone reading the IMU directly
+
+Run with the board on USB and the Pi + Hailo up, while the operator was away.
+
+### 13.1 ⭐ The parameter capture has not drifted
+
+All **37 of 37** parameters re-read off the board and compared against
+`workbench/data/board_params_20260923.json`: **every value identical**, live
+`GAIN` still 1.0. So §11 and §12's bench results keep their footing — the
+capture they were computed against is still what the vehicle runs.
+
+### 13.2 ⛔ Two traps that produced a false catastrophe
+
+A script was written to feed the board's own `SCALED_IMU2` straight into the
+filter. It reported a position of **2.8 × 10¹⁵ m** and the observability gate
+flipping **110 times in 30 s**. Both were the script's fault, and both are easy
+to repeat:
+
+| trap | what actually happens |
+|---|---|
+| **the accel is in SENSOR axes** | `SrotFC._accel_in_vehicle_frame` rotates it 180° about x=y before anyone should use it. At rest the raw message reads `zacc = +989.8 mG`, while the filter expects `-GRAVITY`. Fed raw, the filter **falls upward** — exactly what `RIEKF.predict`'s docstring warns about |
+| **`SCALED_IMU2` defaults to 10.1 Hz** | the documented 50.05 Hz is a rate the MANAGER requests (`auv_manager_node.py:127`, `SET_MESSAGE_INTERVAL`). Without the manager running, the board sends its own default |
+
+⭐ **Neither is a defect, and the chatter was a symptom of the first.** Reproduced
+on the bench: with the correct accel, ZUPT at 50/20/10/5 Hz gives **zero** gate
+flips; with the sign inverted it flips. The 110 flips were the inverted sign
+compounding on real noise.
+
+⚠ **The lesson is about method, not about the filter.** A bespoke MAVLink script
+that bypasses `SrotFC` bypasses every frame convention the stack has established,
+and it will produce numbers that look like findings. Read the IMU through
+`/mongla/imu` with the manager running, or through `SrotFC.imu()` — not off the
+wire.
+
+### 13.3 Still open
+
+The observability gate (B-56) remains validated **only against synthetic noise**.
+Validating it properly needs the manager and localization node running together
+so the rate and frame are the stack's own. That is a bring-up task, not a script.
