@@ -93,3 +93,7 @@ docs/_preview_*.html
 # rendered README preview (tools/readme_preview.html)
 docs/_readme_preview.html
 docs/__repo__
+
+# control_bench build artefacts (the .so is rebuilt from the firmware checkout)
+tools/control_bench/libcontrolbench.so
+tools/control_bench/.firmware_rev

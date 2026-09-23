@@ -1,0 +1,1806 @@
+--- PAGE 0 ---
+First International Symposium on Marine Propulsors
+smp’09, Trondheim, Norway, June 2009
+Propulsion Control Strategies for Fixed Pitch Propellers at Low
+Advance Speed
+Asgeir J. Sørensen1, Øyvind Smogeli2 and Eivind Ruth3
+1Department of Marine Technology, NTNU, Trondheim, Norway
+2Marine Cybernetics, Tiller, Norway
+3Det Norske Veritas, Høvik, Norway
+ABSTRACT
+Positioning control systems for marine vessels include dif-
+ferent control functions for station-keeping, maneuvering,
+and transit operations by means of proper action of the
+propulsion system. This paper presents an overview of the
+various propulsion control strategies for ﬁxed pitch pro-
+peller (FPP) at low advance number based on thruster shaft
+speed, torque, and power control. It can be shown that
+signiﬁcant reduction in power and torque ﬂuctuations can
+be achieved in waves. In high seas, however, when the
+propeller may be subject to large thrust losses due to ven-
+tilation and in-and-out-of-water effects, torque and power
+thruster control will lead to propeller racing. To facilitate
+use of torque and power control also in high seas, an anti-
+spin thruster controller is proposed.
+1
+INTRODUCTION
+Electrical propulsion has during the last decade become the
+preferred solution for offshore vessels, cruise and passen-
+ger ships. This opens up for new control solutions combin-
+ing the disciplines of hydrodynamics, electrical power, and
+control engineering. The real-time control hierarchy of a
+marine control system may be divided into three levels: the
+guidance system, the high-level plant control (e.g. dynamic
+positioning controller including thrust allocation), and the
+low-level thruster control (Sørensen, 2005). In this paper
+an overview of modelling and control of electrically driven
+FPP on vessels at low advance speed is given. The paper
+summarize some of the main results from Sørensen and
+Smogeli (2009), Smogeli and Sørensen (2009), Smogeli
+(2006) and Ruth (2008). Related research can be found in
+the following references: Blanke and Busk Nielsen (1987),
+Blanke and Busk Nielsen (1990), Blanke (1994), Sørensen
+et al. (1997), Smogeli et al. (2003, 2004b,a, 2005, 2008),
+Ruth et al. (2006), Pivano (2008), Bakkeheim et al. (2008),
+and Blanke et al. (2007). Various governor control schemes
+for diesel engines with direct mechanically driven pro-
+pellers are presented in Blanke and Busk Nielsen (1990),
+and are not further treated here. Unless otherwise stated, it
+will in this paper be referred to tunnel thrusters, azimuthing
+thrusters, pods, and main propellers as thrusters or pro-
+pellers.
+In the current work, two operational regimes are deﬁned:
+normal and extreme conditions. In normal operating con-
+ditions, i.e. calm to moderate seas, the dynamic loading
+of the propeller due to thrust and torque losses is con-
+sidered to be moderate. In extreme operating conditions,
+i.e. high to extreme seas, the thrusters may be subject to
+ventilation and in-and-out-of water effects. This leads to
+large transients in propeller loading, and hence in thrust
+and power, see e.g. Faltinsen et al. (1980), Minsaas et al.
+(1987), Koushan (2004), Smogeli et al. (2004a), Ruth and
+Smogeli (2006), and the references therein. For vessels
+with diesel-electric propulsion systems, the thrusters are
+normally the main power consumers. The thruster control
+system performance is therefore critical for avoiding black-
+outs and harmonic distortions in the power generation and
+distribution system. In extreme conditions, the control sys-
+tems designed for normal operating conditions may be in-
+adequate, and lead to increased mechanical wear and tear
+and unpredictable power consumption. Motivated by the
+similar problem of a car wheel losing friction on a slip-
+pery surface during braking or acceleration, the concept of
+anti-spin thruster control was introduced in Smogeli et al.
+(2003, 2004a), Smogeli (2006), and Smogeli et al. (2008).
+In Ruth (2008) anti-spin thruster allocation is treated. Ruth
+shows in his work how thrust may be re-allocated to non-
+ventilating propellers, increasing overall efﬁciency and im-
+proving thrust production. Thrust allocation will not be
+considered in this paper.
+2
+PROPELLER MODELLING
+This section treats modelling of propellers from a control
+point of view. This means that the models are required to be
+accurate enough to capture the main physical effects, and
+such facilitate control system design and testing. The actual
+propeller thrust Ta and torque Qa are inﬂuenced by many
+parameters, the most important being propeller geometry,
+submergence, and propeller loading – which depends on
+the propeller pitch ratio and shaft speed. Ta and Qa can in
+
+--- PAGE 1 ---
+general be formulated as functions of ﬁxed thruster param-
+eters θp (i.e. propeller diameter, geometry, position, etc.),
+the shaft speed n, and variables xp (i.e. pitch ratio, advance
+velocity, submergence, etc.):
+Ta = fT (n, xp, θp),
+(1a)
+Qa = fQ(n, xp, θp).
+(1b)
+In the following, only speed controlled FPP will be consid-
+ered. The pitch ratio will in this case be a ﬁxed parame-
+ter. Further, only thrusters and propellers with low advance
+number on dynamically positioned (DP) vessels are con-
+sidered. DP includes station-keeping and low-speed track-
+ing, and implies that the thrusters are subject to small water
+inﬂow velocities. The models are, however, easily extend-
+able to both controllable pitch propellers (CPP) and higher
+inﬂow velocities, as experienced on vessels in transit, see
+Smogeli (2006), Ruth et al. (2006) and Ruth (2008). The
+functions fQ(·) and fT (·) may include loss effects due to
+e.g. in-line and transverse velocity ﬂuctuations, ventila-
+tion, in-and-out-of water effects, and thruster-thruster in-
+teraction, as well as dynamic ﬂow effects.
+2.1
+Motor and Shaft Dynamics
+The electric motor torque Qm is controlled by a high band-
+width inner torque control loop. The resulting motor torque
+dynamics is in this work considered to be negligible when
+compared to the rotational dynamics of the propeller shaft.
+Hence, the motor torque Qm may be replaced by the com-
+manded torque Qc from the thruster controller. The rota-
+tional dynamics of the propeller and shaft is then deﬁned
+in terms of the moment of inertia for shafts, gears and pro-
+peller Is, the angular velocity ω = 2πn, the commanded
+torque Qc, the propeller load torque Qa, and the shaft fric-
+tion Qf(ω) according to:
+Is ˙ω = Qc −Qa −Qf(ω).
+(2)
+Qf(ω) may for most applications be viewed as a sum of a
+static friction (or starting torque) Qs ≥0 and a linear com-
+ponent Kωω, where Kω ≥0 is a linear friction coefﬁcient.
+Consequently:
+Qf(ω) = tanh(ω/ε)Qs + Kωω,
+(3)
+where ε > 0 is an appropriately chosen small constant.
+More sophisticated models of the shaft dynamics, where
+also ﬂow dynamics are included, have been developed and
+analyzed by Yoerger et al. (1991), Healey et al. (1995),
+Whitcomb and Yoerger (1999a), Bachmayer et al. (2000),
+and Fossen and Blanke (2000). Such models have not been
+considered for the current work, since they were developed
+for deeply submerged propellers, and cannot account for
+the large thrust losses that occur when the propeller is sub-
+ject to ventilation and in-and-out-of water effects.
+2.2
+Propeller Characteristics
+The relationships between the actual propeller thrust Ta,
+torque Qa, shaft speed n, diameter D, and density of water
+ρ are commonly given in the form of the thrust and torque
+coefﬁcients KT(n, xp, θp) ≥0 and KQ(n, xp, θp) ≥0
+according to:
+Ta = fT (·) = sign(n)KT (n, xp, θp)ρD4n2,
+(4)
+Qa = fQ(·) = sign(n)KQ(n, xp, θp)ρD5n2.
+(5)
+The strictly positive propeller power consumption Pa may
+be written as:
+Pa = 2πnQa = sign(n)2πKQ(n, xp, θp)ρD5n3.
+(6)
+For a given propeller geometry, KT and KQ will for nota-
+tional simplicity be written as functions of the angular ve-
+locity ω and time t, with time representing the exogenous
+thrust losses: KT (·) = KT (t, ω), and KQ(·) = KQ(t, ω).
+The nominal thrust Tn, torque Qn, and power Pn for a
+deeply submerged propeller with no thrust losses are given
+by the constant nominal thrust and torque coefﬁcients for
+zero advance number Va = 0, KT 0 > 0 and KQ0 > 0:
+Tn = sign(n)KT 0ρD4n2,
+(7a)
+Qn = sign(n)KQ0ρD5n2,
+(7b)
+Pn = 2πnQn = sign(n)2πKQ0ρD5n3.
+(7c)
+When a propeller is subject to waves, current, and ves-
+sel motion, it will experience a time-varying water inﬂow
+(advance velocity). This leads to oscillations in the shaft
+speed, thrust, torque, and power about their nominal val-
+ues given by (7a)-(7c), depending on the thruster control
+scheme.
+2.3
+Thrust Loss Effects
+Modelling of thrust losses is most commonly solved by em-
+pirical methods in conjunction with analytical models. The
+following loss effects may be considered:
+• Fluctuations in the in-line water inﬂow to the propeller
+will cause ﬂuctuations in thrust and torque.
+• Water inﬂow perpendicular to the propeller axis will
+introduce a force in the direction of the inﬂow due
+to deﬂection of the propeller race, termed transverse
+losses.
+This is often referred to as cross-coupling
+drag for open and ducted propellers (Lehn, 1992), and
+speed or suction loss for tunnel thrusters, see Chislett
+and Bj¨orheden (1966) or Brix (1978).
+• For heavily loaded propellers ventilation (air suction)
+caused by decreasing pressure on the propeller blades
+may occur, especially when the effective submergence
+of the propeller becomes small due to waves and
+wave-frequency motions of the ship, see e.g. Shiba
+
+--- PAGE 2 ---
+(1953). If the relative propeller motion results in wa-
+ter exits, additional losses due to in-and-out-of-water
+effects following a hysteresis pattern similar to the
+Wagner effect will occur, see e.g.
+Faltinsen et al.
+(1980) or Smogeli (2006) and the references therein.
+These losses mostly affect tunnel thrusters and main
+propellers.
+• For azimuthing thrusters, both thrust reduction and
+change of thrust direction may occur due to thruster-
+hull interaction caused by frictional losses and pres-
+sure effects when the thruster race sweeps along the
+hull (Lehn, 1992). The last is referred to as the Coanda
+effect.
+• Thruster-thruster interaction caused by inﬂuence from
+the propeller race from one thruster on neighboring
+thrusters may lead to signiﬁcant thrust reduction, if
+not appropriate precautions are taken in the thrust al-
+location algorithm, see e.g. Lehn (1992) or Koushan
+(2004).
+The sensitivity to the different types of losses depends on
+the type of propeller and thruster used, application of skegs
+and ﬁns, hull design and operational philosophy. The ef-
+fect of the above mentioned thrust losses may be expressed
+by the thrust and torque reduction coefﬁcients βT and βQ,
+which express the ratio of the actual to the nominal thrust
+and torque (Minsaas et al., 1987):
+βT (t, ω) = Ta/Tn = KT (t, ω)/KT 0,
+(8)
+βQ(t, ω) = Qa/Qn = KQ(t, ω)/KQ0.
+(9)
+In order to improve the understanding of thrust losses due
+to ventilation and in-and-out-of-water effects, systematic
+experiments in the cavitation tunnel at NTNU have recently
+been performed. As an example, Figure 1 shows the rela-
+tive thrust T/Tmax as a function of the relative submer-
+gence h/R and the shaft speed n for a ducted propeller.
+h is the propeller shaft submergence, R is the propeller
+radius, T is the measured thrust, and Tmax is the maxi-
+mum thrust observed in the experiments. For large h/R,
+the thruster performs as expected, with thrust proportional
+to n2. For low shaft speeds, and hence low propeller load-
+ing, the thrust is constant for h/R = 1.5 to h/R = 1, and
+then decays almost linearly from h/R = 1 to h/R = 0.
+This corresponds to lost thrust due to loss of effective disc
+area (Minsaas et al., 1987). If the propeller loading is sufﬁ-
+ciently high, the low pressure on the propeller blades may
+create a funnel through which air is drawn from the free
+surface, thus ventilating the propeller (Shiba, 1953). For a
+heavily loaded propeller, ventilation may lead to an abrupt
+loss of thrust and torque as high as 70-80%. Figure 1 indi-
+cates that a reduction of shaft speed in such a case may in-
+crease the thrust, and that an increase in shaft speed will not
+increase the thrust. In the following, “ventilation losses”
+and “ventilation incidents” will be used as common terms
+for the above mentioned loss effects. A simpliﬁed simula-
+tion model based on the experimental results is presented
+in Smogeli et al. (2008) and Smogeli (2006).
+5
+10
+15
+20
+0
+0.5
+1
+1.5
+2
+0
+0.2
+0.4
+0.6
+0.8
+1
+n
+h/R
+T/Tmax
+Figure 1: Relative thrust T/Tmax as a function of relative
+submergence h/R and propeller shaft speed n, from exper-
+iments.
+The mechanical effects of the dynamic loading of the pro-
+peller during ventilation, typically at shaft frequency, blade
+frequency, and above, is also an important topic. There are
+few available references considering such dynamic loads,
+but a summary of previous ﬁndings and a thorough inves-
+tigation of dynamic load effects can be found in Olofsson
+(1996). Although not well documented in literature, indus-
+trial experience shows that the high thrust losses combined
+with wave-frequency cyclic variations in propeller loading
+may lead to severe mechanical wear and tear of the propul-
+sion unit (Koushan, 2004). According to Olofsson (1996),
+the dynamic loads during ventilation increase with the pro-
+peller shaft speed. It is, therefore, considered beneﬁcial to
+avoid high shaft speeds during ventilation.
+3
+LOW-LEVEL THRUSTER CONTROLLERS
+The purpose of the low-level thruster controller is to relate
+the desired thrust Td, given by the thrust allocation rou-
+tine, to the commanded motor torque Qc. The thruster con-
+trollers may be divided in two control regimes, depending
+on the operational conditions:
+(a) Thruster control in normal conditions, when experienc-
+ing low to moderate thrust losses.
+(b) Thruster control in extreme conditions, when experi-
+encing large and abrupt thrust losses due to ventilation
+and in-and-out-of-water effects.
+For surface vessels with FPP, shaft speed control is the
+industry standard, whereas torque and power control was
+introduced by Sørensen et al. (1997), and a combined
+torque and power controller was presented in Smogeli et al.
+(2004b). For underwater vehicles, both torque and vari-
+ous shaft speed control schemes have been proposed, see
+
+--- PAGE 3 ---
+Yoerger et al. (1991), Whitcomb and Yoerger (1999b), Fos-
+sen and Blanke (2000), and the references therein. For
+control of diesel engines, shaft speed control is the most
+commonly used solution. However, both torque and power
+control have been proposed and implemented, see Blanke
+and Busk Nielsen (1987, 1990).
+3.1
+Control Objectives
+Shaft speed feedback control is the conventional way to
+control a FPP. However, as will be shown later, this may
+not be the best design choice. The ultimate goal of any
+thruster controller is to make the actual thrust track the de-
+sired thrust. Since no feedback from the actual thrust is
+available, different ways of trying to achieve this for a FPP
+are:
+• Shaft speed feedback control.
+• Torque feedforward control.
+• Power feedback control.
+• Combinations of the above.
+In dynamic operating conditions, other goals may be more
+important than tracking the desired thrust, e.g. reducing
+mechanical wear and tear, and limiting power oscillations
+and peak values. Predictable power consumption is of ma-
+jor concern to the power management system in order to
+avoid blackouts and improving the performance and the
+stability of the electrical power plant network. Other per-
+formance criteria than thrust production should therefore
+also be taken into account. In this work, the following per-
+formance criteria are considered:
+1. Thrust production in presence of disturbances, i.e.
+ability to locally counteract thrust losses.
+2. Mechanical wear and tear caused by transients and os-
+cillations in motor and propeller torque.
+3. Predictable power consumption.
+4
+THRUSTER CONTROL IN NORMAL CONDITIONS
+4.1
+Controller Structure
+The low-level thruster controller is proposed to be com-
+posed of ﬁve main building blocks: reference generator,
+core controller, inertia compensation, friction compensa-
+tion, and torque limiting. This is shown in Figure 2, where
+a block diagram of a thruster with low-level thruster con-
+troller is presented. The commanded torque from the core
+controller is termed Qci, where i = n for shaft speed con-
+trol, i = q for torque control, i = p for power control, and
+i = c for combined torque/power control. The commanded
+torque from the friction and inertia compensation schemes
+are termed Qff and Qif, respectively, and the total com-
+manded torque before torque and power limiting Qc0 is
+given by:
+Qc0 = Qci + Qff + Qif.
+(10)
+Qc0 is then limited by a torque and power limiting function
+to yield the commanded torque to the motor Qc.
+4.2
+Control Plant Model Parameters
+Since the propeller diameter D and density of water ρ are
+known and constant, the only remaining parameters are the
+thrust and torque coefﬁcients KT and KQ. The thrust and
+torque coefﬁcients used in the controllers are termed KT C
+and KQC, and denoted control coefﬁcients.
+4.2.1
+Choosing KT C and KQC
+In thruster control for station-keeping operations, estimates
+of the nominal thrust and torque coefﬁcients KT 0 and KQ0
+are usually chosen as control coefﬁcients, because the ac-
+tual advance velocity is unknown to the controller. Doppler
+logs, GPS, or similar may be used to give estimates of the
+advance velocity, but these measurements are usually not
+of sufﬁcient accuracy for inclusion in the low-level thruster
+controllers.
+For thruster control in transit, only the main propellers
+of the vessel are used. If the propeller characteristics are
+known, improved controller performance may be achieved
+by estimating the propeller advance velocity Va using the
+known vessel surge speed U and an estimated hull wake
+factor, or a low-pass ﬁltered measurement from a Doppler
+log or GPS. KT C and KQC could then be estimated from
+the propeller characteristics. Similar reasoning may be ap-
+plied to an underwater vehicle, where the propeller nor-
+mally is deeply submerged and not subject to wave ef-
+fects, ventilation and water exits. Such an output feedback
+shaft speed controller with advance speed compensation
+for AUVs can be found in Fossen and Blanke (2000). In
+the following, station-keeping and low-speed manoeuvring
+operations of surface vessels are of main concern, such that
+the control coefﬁcients are taken as KT 0 and KQ0.
+4.2.2
+Reverse Thrust
+With the exception of tunnel thrusters, most propellers are
+asymmetric. To achieve good performance for both posi-
+tive and negative thrust references, it may therefore be nec-
+essary to use two sets of control parameters. For low-speed
+operations, this means that KT 0 and KQ0 should be used
+for positive Tr, and the reverse thrust coefﬁcients KT 0r and
+KQ0r for negative Tr. The following control coefﬁcients
+are therefore proposed:
+KT C = KT 0λc + (1 −λc)KT 0r,
+(11a)
+KQC = KQ0λc + (1 −λc)KQ0r,
+(11b)
+where λc is a smooth switching function given by:
+λc = λc(nr) = 1
+2 + 1
+2 tanh(εc
+nr
+nc
+),
+(12)
+where εc > 0 is a constant. The shaft speed reference nr is
+given from Tr by:
+nr = gn(Tr) = sign(Tr)
+s
+|Tr|
+ρD4KT C
+,
+(13)
+
+--- PAGE 4 ---
+n
+Q
+Q
+Ta
+a
+m
+Motor
+dynamics
+Qc
+Torque
+limit
+Shaft
+dynamics
+Pmax
+Qmax
+Propulsion unit
+n
+Core
+controller
+Control scheme
+Qci
+Tr
+Friction
+comp.
+Qff
+Td
+Reference
+generator
+Inertia
+comp.
+Qif
+nr
+nr.
+Qm
+Propeller
+hydro-
+dynamics
+Qc0
+Figure 2: Block diagram of a thruster with reference generator, core controller, inertia and friction compensation, and
+torque limiting.
+which is the inverse function of the nominal shaft speed-
+to-force characteristics given in (7a) with KT 0 replaced by
+KT C. The switch between the coefﬁcients occurs smoothly
+in the interval nr ∈[−nc, nc], such that λc ≈0 for
+nr < −nc and λc ≈1 for nr > nc. The switch “width”
+nc may be chosen freely.
+(11) does not affect the sta-
+bility properties of the controllers when compared to us-
+ing constant control coefﬁcients, since KT 0, KQ0, KT 0r,
+and KQ0r are strictly positive, and the values of KT C and
+KQC only affect the mappings from thrust reference to
+shaft speed, torque, and power reference. Using nr as the
+switching variable instead of e.g. the measured shaft speed
+n means that no measurement noise is entered into the con-
+trol law through (11).
+4.3
+Reference Generator
+An appropriate reference generator for this system is a
+second-order ﬁlter with rate limiting. The reference gen-
+erator is imposed on the desired shaft speed nd, where nd
+is given from Td by gn in (13), and Td is given from nd by
+the inverse g−1
+n (nd), which is equal to (7a) with KT 0 re-
+placed by KT C. The second-order ﬁlter has damping ratio
+ζr and natural frequency ωr0, and the shaft speed rate limit
+is set to ˙nslew , such that the reference generator is given
+by:
+nd = gn(Td),
+˙nd2 = min(max( ˙nd, −˙nslew), ˙nslew),
+nr(s) = nd2(s)
+ω2
+r0
+s2 + 2ζrωr0s + ω2
+r0
+,
+Tr = g−1
+n (nr).
+(14)
+Notice that the reference generator gives a continuous ac-
+celeration reference ˙nr, which is available directly from the
+implementation of the second-order ﬁlter.
+4.4
+Inertia Compensation
+For a large thruster, the rotational inertia may be a dominat-
+ing dynamic term. In order to achieve the desired closed
+loop properties with respect to response and tracking, it
+may therefore be beneﬁcial to include an inertia compensa-
+tion term. The inertial term in the rotational dynamics (2)
+is Is ˙ω. Since differentiation of the measured shaft speed
+is undesirable, and the inertia compensation is wanted only
+when the thrust reference is changed, the following feed-
+forward compensation is proposed:
+Qif(nr) = Ic2π ˙nr,
+(15)
+where Ic is an estimate of the rotational inertia Is, and ˙nr
+is given by the reference generator in (14).
+4.5
+Friction Compensation
+In the torque and power controllers, the friction term
+Qf(ω) will be compensated by a feedforward controller. If
+this is not the case, and the friction is signiﬁcant, the con-
+trollers will be inaccurate, since at steady state Qm ≈Qa
+no longer holds, see (2). If the shaft friction becomes sig-
+niﬁcant, a feedforward friction term Qff should therefore
+be included in the control law. Note that the inclusion of
+Qff in the shaft speed controller is unnecessary, since this
+controller automatically compensates for the friction.
+Qff should be designed to compensate for the friction term
+Qf(ω), i.e. Qff ≈Qf(ω), without destabilizing the sys-
+tem. Therefore a feedforward compensation based on the
+reference shaft speed nr from (13) is chosen instead of a
+destabilizing feedback compensation based on n. Moti-
+vated by (3) the friction is assumed to consist of a static
+and a linear term, and the friction compensation scheme is
+proposed as:
+Qff(nr) = Qff0(nr) + Qff1(nr).
+(16)
+Qff0(nr) is proposed as:
+Qff0(nr) = Qf0 tanh(εf
+nr
+ns
+),
+(17)
+where Qf0, εs > 0, and ns are constants. The switch
+between −Qf0 and Qf0 occurs smoothly in the interval
+nr ∈[−ns, ns] such that |nr| > ns ⇒Qff0(nr) =
+sign(nr)Qf0, and nr = 0 ⇒Qff0(nr) = 0. Note that
+the switching function is of similar form as the one used in
+(12). Qff1 is proposed as:
+Qff1(nr) = 2πQf1nr,
+(18)
+
+--- PAGE 5 ---
+where the linear friction coefﬁcient Qf1 should be cho-
+sen such that Qf1 ≈Kω. In nominal conditions, n =
+nr ⇒Qff1(nr) ≈Kωω. For n ̸= nr, Qff1(nr) ̸= Kωω,
+but this only affects the performance about the equilibrium
+point.
+4.6
+Torque and Power Limiting
+The rated (nominal) torque and power for continuous oper-
+ation of the motor are denoted QN and PN. The maximum
+torque and power for the motor are usually set to
+Qmax = kQN,
+Pmax = kPN,
+(19)
+where k typically is in the range of 1.1 −1.2. The input to
+the motor should be limited by a torque limiting function
+given by:
+|Qc| = min{|Qc0|, Qmax, Pmax/|2πn|},
+where Qc0 is the commanded torque from the controller
+(10). The maximum power limit yields hyperbolic limit
+curves for the torque as a function of speed. Since the
+maximum power is not limited by the converter and motor
+ratings only, but also by the available power in the genera-
+tors, this limit should vary accordingly. By this method the
+power limitation will become fast and accurate, allowing
+to utilize the power system power capability with a built-in
+blackout prevention.
+4.7
+Shaft Speed Feedback Control
+For conventional FPP a speed controller is used to achieve
+the commanded propeller force. Given a speciﬁed force
+command Tr the corresponding reference (commanded)
+speed of the propeller nr is found by the shaft speed map-
+ping in (13). The shaft speed PI controller utilizes shaft
+speed feedback from the thruster, and sets the commanded
+motor torque Qcn according to
+Qcn = Kpe + Ki
+Z t
+0
+e(τ)dτ,
+(20)
+where the shaft speed error is e = nr −n, and Kp and
+Ki are the nonnegative PI gains. The motor torque is con-
+trolled by the inner torque control loop, see e.g. Leonhard
+(1996). Ki is often given as Ki = Kp/Ti, where Ti is
+the integral time constant. The integral term in the PI con-
+troller should be limited according to Qmax to avoid inte-
+gral windup.
+4.8
+Torque Feedforward Control
+In the torque control strategy the outer speed control loop is
+removed, and the thruster is controlled by its inner torque
+control loop with a commanded torque Qcq as set-point.
+A mapping from the reference thrust Tr to the reference
+torque Qr can be found from (7a) and (7b) with KT 0 and
+KQ0 replaced by KT C and KQC. The commanded motor
+torque Qcq is set equal to the reference torque:
+Qcq = Qr = KQC
+KT C
+DTr.
+(21)
+If the response of the thruster is slow, e.g. due to high rota-
+tional inertia, the inertia compensation scheme in (15) may
+be needed to speed up the response. This replaces the “in-
+ner torque algorithm” proposed in Sørensen et al. (1997).
+4.9
+Power Feedback Control
+Power control is based on controlling the power consump-
+tion of the thruster motor. The inner torque control loop is
+maintained, and the reference power Pr is found by insert-
+ing Qr from (21) and nr from (13) in (7c) such that
+Pr = Qr2πnr = |Tr|3/2 2πKQC
+√ρDK3/2
+T C
+.
+(22)
+To determine the torque direction, the signed reference
+power Prs is deﬁned as
+Prs = sign(Tr)Pr = sign(Tr)|Tr|3/2 2πKQC
+√ρDK3/2
+T C
+.
+(23)
+The commanded motor torque Qcp is calculated from Prs
+using feedback from the measured shaft speed n ̸= 0 ac-
+cording to
+Qcp = Prs
+2π|n| =
+KQC
+√ρDK3/2
+T C
+sign(Tr)|Tr|3/2
+|n|
+.
+(24)
+Note that the power controller is singular for zero shaft
+speed.
+As in torque control the inertia compensation
+scheme in (15) may be added if the response of the thruster
+is slow, replacing the “inner power algorithm” in Sørensen
+et al. (1997).
+4.10
+Combined Torque and Power Control
+A signiﬁcant shortcoming of the power control scheme in
+(24) is the fact that it is singular for zero shaft speed. This
+means that power control should not be used close to the
+singular point, for example when commanding low thrust
+or changing the thrust direction. For low thrust commands,
+torque control shows better performance in terms of con-
+stant thrust production, since the mapping from thrust to
+torque is more directly related to the propeller loading than
+the mapping from thrust to power. For high thrust com-
+mands, it is essential to avoid power transients, as these
+lead to higher fuel consumption and possible danger of
+power blackout and harmonic distortion of the power plant
+network. Power control is hence a natural choice for high
+thrust commands.
+This motivates the construction of a
+combined torque/power control scheme, utilizing the best
+properties of both controllers (Smogeli et al., 2004b).
+Combining the reference torque from the torque controller
+Qcq given by (21) and the reference torque from the power
+controller Qcp given by (24), the commanded motor torque
+Qcc from the combined torque/power controller is deﬁned
+as:
+Qcc = αc(n)Qcq + (1 −αc(n))Qcp.
+(25)
+αc(n) is a weighting function:
+αc(n) = e−k|pn|r, for n ∈Z,
+(26)
+
+--- PAGE 6 ---
+where k, p and r are positive constants. It satisﬁes:
+lim
+n→0 αc(n) = 1,
+lim
+n→∞αc(n) = 0,
+and shows smooth behavior for all n.
+Particularly,
+dαc/dn = 0 for n = 0 and n →±∞. The shape of αc(n)
+deﬁnes the dominant regimes of the two control schemes,
+and can be used to tune the controller according to user
+speciﬁcations. The parameter p will act as a scaling factor
+for n. A small p will widen the weighting function, giving
+a wider transition between 0 and 1. Increasing the param-
+eter k sharpens the peak about n = 0, whereas r widens it
+and makes the transition from 0 to 1 more steep. The shaft
+speed is physically limited to some max value nmax, such
+that αc(nmax) should be close to zero. It is easily shown
+that Qcc is non-singular if r > 1. Hence, the power control
+singularity for n = 0 is removed.
+The torque and power controllers aim at controlling the mo-
+tor torque or power, respectively. There is no need for in-
+tegral action in these controllers, since the motor torque is
+controlled by its inner torque control loop. Consequently,
+the torque and power controllers allow the shaft speed of
+the propeller to vary with the propeller loading, in order to
+keep the torque or power constant.
+5
+THRUSTER CONTROL IN EXTREME CONDITIONS
+5.1
+Loss Estimation and Ventilation Detection
+In the development of the anti-spin thruster controller, a
+scheme for thruster performance monitoring and ventila-
+tion detection will be essential.
+This section presents a
+load torque observer based on the thruster rotational dy-
+namics in (2), as ﬁrst presented in Smogeli et al. (2004a)
+and Smogeli (2006). The load torque estimate can be used
+to calculate the estimated torque loss factor ˆβQ. Finally,
+a ventilation detection scheme based on ˆβQ and the mea-
+sured motor torque Qm will be developed.
+5.1.1
+Load Torque Observer
+From (2), the following control plant model of the thruster
+dynamics is proposed:
+Is ˙ω = Qm −Qa −Qff0(nr) −Qf1ω + δf,
+˙Qa = wq,
+(27)
+where the measured Qm has been used instead of Qc. Since
+KQ(n, xp, θp) in (5) is unknown and may exhibit highly
+nonlinear behavior, Qa is here assumed to be a bias term
+driven by an exogenous bounded disturbance wq. This is
+necessary in order to capture the fast transients during ven-
+tilation. The static friction compensation term Qff0(nr)
+from (16) is used instead of a static friction model based on
+ω in order to avoid oscillations in this term about ω ≈0.
+Errors in the friction model are accounted for by δf. With
+the measurement y = ω + v contaminated with a bounded
+disturbance v, and ˆy = ˆω, a propeller load torque observer
+copying the control plant model (27) is:
+˙ˆω = 1/Is[Qm −ˆQa −Qff0(nr) −Qf1ˆω] + ka(y −ˆy),
+˙ˆQa = kb(y −ˆy),
+(28)
+where ka and kb are the observer gains. In Smogeli and
+Sørensen (2009) it is shown that with a constant load torque
+Qa implied by wq = 0, zero measurement disturbance
+v = 0, and perfect friction knowledge such that δf = 0,
+the equilibrium point of the observer estimation error is
+globally exponentially stable (GES) if the observer gains
+are chosen as ka > −Qf1/Is and kb < 0.
+5.1.2
+Torque Loss Estimation
+For DP operation the expected nominal propeller load
+torque ˆQn may be calculated from (7b) by feedback from
+the propeller shaft speed n. Based on (9), the estimated
+torque loss factor ˆβQ is calculated from ˆQa in (28) and ˆQn
+as:
+ˆβQ =
+ˆQa
+ˆQn
+=
+ˆQa
+KQCρD5n |n|, n ̸= 0,
+(29)
+where the control coefﬁcient KQC (usually equal to KQ0)
+is used to calculate ˆQn.
+Remark 1 There are no thrust losses for n = 0. Hence,
+the singularity for n = 0 is easily avoided by redeﬁning
+(29) as ˆβQ = αb(n) + (1 −αb(n)) ˆQa/ ˆQn, where αb(n) is
+a function of the type (26).
+5.1.3
+Ventilation Detection
+In this work, the ventilation detection algorithm is imple-
+mented by deﬁning limits for the onset and termination of
+ventilation, βv,on and βv,off, and generating a detection
+signal by monitoring the thrust loss factor ˆβQ. An addi-
+tional criterion for detection is that the magnitude of the
+motor torque Qm is non-increasing. A ventilation incident
+will then give the following evolution of the detection sig-
+nal ζ, with time instants t1 < t2 < t3:
+t1 :
+ˆβQ > βv,on
+⇒ζ = 0,
+t2 :
+ˆβQ ≤βv,on ∩sign(Qm) ˙Qm ≤0
+⇒ζ = 1,
+t3 :
+ˆβQ ≥βv,off
+⇒ζ = 0.
+(30)
+To avoid switching and chattering of the detection signal
+due to measurement noise and transients, an algorithm im-
+plementing a detection delay is added, such that once ven-
+tilation has been detected, it cannot be reset until after a
+given time interval Tvent. The detection delay can be seen
+as an implementation of the switching dwell-time proposed
+in Hespanha and Morse (2002). This ventilation detection
+scheme has shown good performance in both simulations
+and experiments. Note that βv,on should be chosen signiﬁ-
+cantly lower than 1 in order to allow for natural oscillations
+about the nominal propeller loading due to time-varying in-
+ﬂow to the propeller.
+
+--- PAGE 7 ---
+5.2
+Anti-spin Thruster Control
+The torque and power controllers, although advantageous
+for normal operating conditions, will show unacceptable
+behavior when subject to large thrust losses. The nature
+of this problem is in many ways similar to that of a car
+wheel losing traction on a slippery surface during accel-
+eration or braking (Smogeli et al., 2008). The work on
+anti-spin thruster control has therefore been motivated by
+similar control strategies in car anti-spin and ABS braking
+systems, see for example Haskara et al. (2000). With any
+of the core controllers from Section 4 in use for normal op-
+erating conditions, the proposed anti-spin control scheme
+is divided in two:
+1. Primary anti-spin action: override the core controller
+and take control of the shaft speed.
+2. Secondary anti-spin action: lower the setpoint of the
+controller to reduce the shaft speed.
+5.2.1
+Primary Anti-spin Action
+If a ventilation incident is detected by the detection algo-
+rithm in (30), the desired primary anti-spin control action
+is to take control of the shaft speed until the ventilation has
+terminated. This is done by modifying the core controller
+output Qci in (10) with a torque scaling factor γ:
+Qcas = γQci,
+(31)
+where Qcas is the anti-spin commanded torque, and γ is
+proposed as:
+γ =
+(
+1
+for
+ζ = 0
+(not ventilated),
+ˆβQ
+for
+ζ = 1
+(ventilated).
+(32)
+In Smogeli and Sørensen (2009) it is shown that the anti-
+spin control law will give a bounded shaft speed during
+ventilation.
+5.2.2
+Secondary Anti-spin Action: Setpoint Mapping
+For optimization of thrust production and reduction of wear
+and tear due to dynamic propeller loading during ventila-
+tion, it may desirable to reduce the propeller shaft speed.
+This can be done by modifying the thrust reference dur-
+ing ventilation, since the primary anti-spin control action
+assures that the shaft speed is kept close to its reference.
+The desired shaft speed during ventilation, nas, will be a
+thruster speciﬁc parameter, and must be chosen as a trade-
+off between thrust production, wear and tear, and response
+time.
+The nominal shaft speed reference nr from (13)
+should not be changed to nas instantaneously, as this will
+lead to undesired transients. It is therefore proposed to add
+a low-pass ﬁlter with time constant τn and a rate limiting
+algorithm to the change from nr to nas at ventilation detec-
+tion, and from nas to nr at ventilation termination. The ﬁl-
+tered and rate limited shaft speed reference is termed nras,
+i.e. ˙nfall < ˙nras < ˙nrise, where ˙nfall and ˙nrise are the
+rate limits. The thrust reference corresponding to nras is
+termed Tras, and is given by (7a) with KT 0 replaced by
+KT C:
+Tras = sign(nras)KT CρD4n2
+ras.
+(33)
+Since (33) is the inverse of (13), Tras ≡Tr when ventila-
+tion is not detected.
+5.2.3
+Implementation Aspects
+Perfect shaft speed control during ventilation would be
+possible if the ventilation incident could be foreseen, and
+βQ(t, ω) was known. However, since the propeller torque
+is not available as a measurement, and the ventilation inci-
+dents are random processes caused by wave elevation and
+vessel motion, this is not possible. An implementable so-
+lution is to use the torque loss estimation and ventilation
+detection schemes. The deviation of the shaft speed from
+the steady-state solution will then depend on the deviation
+of the torque modiﬁcation factor γ from the actual torque
+loss factor βQ(t, ω) during ventilation.
+To achieve the best possible control over the shaft speed
+during ventilation, γ should be switched from 1 to ˆβQ im-
+mediately when ventilation is detected. However, in or-
+der to avoid transients in the control input, the transition
+of γ from 1 to ˆβQ at ventilation detection, and from ˆβQ
+to 1 at ventilation termination, should be rate limited, i.e.
+˙γfall < ˙γ < ˙γrise. The rate limits ˙γrise and ˙γfall would
+typically be of magnitude 1. Furthermore, to avoid using
+the potentially noisy estimate ˆβQ directly in the control
+law, it may be beneﬁcial to ﬁlter γ by a properly chosen
+low-pass ﬁlter with time constant τγ.
+A block diagram of the resulting thruster controller with
+anti-spin is shown in Figure 3. Note that the proposed anti-
+spin controller may be used with all the core controllers
+from Section 4.
+Remark 2 A well-tuned shaft speed controller will pro-
+duce a controller output similar to the proposed anti-spin
+controller in (31) during ventilation, since the objective of
+the shaft speed controller is to keep the shaft speed con-
+stant, regardless of the load disturbance. However, since it
+is desired to use torque and power control in normal con-
+ditions, using a shaft speed controller during ventilation
+would require switching between the two controllers. This
+approach is further discussed in Smogeli (2006). If shaft
+speed control is chosen for normal conditions, anti-spin
+control may not be necessary.
+6
+SENSITIVITY TO THRUST LOSSES
+The steady-state performance of the controllers presented
+above can be theoretically analyzed by establishing the sen-
+sitivity to various thrust loss effects. Depending on the
+controller, a loss of propeller loading may, in addition to
+changes in propeller thrust and torque, lead to changes in
+shaft speed and power. As proposed by Sørensen et al.
+(1997) the relationship between the actual and reference
+
+--- PAGE 8 ---
+n
+f
+Q
+Q
+Ta
+a
+T
+m
+( )
+f Q ( ).
+.
+Motor
+dynamics
+Qc
+Friction
+compensation
+.
+Tr
+X
+Qci
+g
+Core
+thruster
+controller
+Shaft
+dynamics
+Loss
+calculation
+Torque
+observer
+Ventilation
+detection
+bQ
+Anti-spin
+control
+Qa
+Tras
+Qcas
+z
+T
+Propulsion
+unit
+as
+Tr
+n
+z
+LP filter +
+rate limit
+nrise nfall tn
+nras
+1
+bQ
+LP filter +
+rate limit
+g
+Tras
+rise
+fall t
+g
+g
+g
+nr
+1
+0
+1
+0
+{0,1}
++
++
+.
+.
+.
+.
+Qff
+n
+Torque
+limit
+P
+Qmax
+max
+gn( ).
+gn ( ).
+-1
+Qc0
+Qif
+Inertia
+compensation
++
++
+Anti-spin
+control
+scheme
+Reference
+generator
+Td
+Figure 3: The anti-spin control scheme, including core con-
+troller, torque observer, loss calculation, ventilation detec-
+tion, and anti-spin control actions.
+thrust, torque, shaft speed, and power are termed sensitivity
+functions.
+When developing the steady-state sensitivity functions
+(Smogeli, 2006) it is assumed that all controllers obtain
+their objectives perfectly, i.e. n = nr for shaft speed con-
+trol, Qa = Qr for torque control, and Pa = Pr for power
+control. It has hence been assumed that the friction is per-
+fectly compensated for in torque and power control, i.e.
+Qff = Qf.
+Assuming that all controllers perform ideally, the steady-
+state sensitivity functions for speed control, torque control
+and power control are shown in Table 1. For details in the
+derivation of the sensitivity functions, see Sørensen et al.
+(1997) and Smogeli (2006).
+Remark 3 It is interesting to note that if the controllers
+have knowledge of the instantaneous values of KT and
+KQ, such that KT C = KT and KQC = KQ at all times,
+all sensitivity functions reduce to unity, since nr from (13),
+Qr from (21), and Pr from (23) will be equal to the true
+values n, Qa, and Pa. This means that all controllers per-
+form identically. Also notice that sni(·)sqi(·) ≡spi(·) for
+all controllers, as should be expected.
+7
+EXPERIMENTS
+This section presents experimental results with the con-
+trollers designed above.
+The importance of the friction
+compensation scheme is investigated, and the dynamic per-
+formance of the controllers in various operating conditions
+tested.
+Motor
+Waves
+Strut
+Underwater
+housing
+Shaft
+Qa
+Ta
+Qm
+Control CPU
+Source CPU
+Simulink
+Matlab
+Opal RT-Lab
+QNX
+Executable
+Qc
+Qm,n
+h
+R
+Control
+code
+Log
+Measurements
+Vertical
+motion
+Figure 4: Sketch of the experimental setup.
+D [m]
+KT 0
+KQ0
+Is [kgm2]
+Qs[Nm]
+Kω[Nms]
+0.25
+0.513
+0.0444
+0.05
+1.0
+0.01
+Table 2: Main propeller data.
+The majority of the experiments were conducted for shaft
+speed control, torque control, and power control, since
+the main purpose of this work was to test the proper-
+ties of the basic thruster control methods. The combined
+torque/power controller was also tested, and behaved ex-
+actly as expected. Its performance can be inferred from the
+performance of the torque and power controllers.
+7.1
+Experimental Setup
+The experiments were conducted in the Marine Cybernet-
+ics Laboratory (MCLab) at NTNU. The MCLab basin is
+40m long, 6.45m wide, and 1.5m deep, and is equipped
+with a towing carriage and a wave-maker system. Two
+types of setups were used during the various tests. The
+tested propeller was of conventional design with 4 blades,
+pitch ratio at 70% of the propeller radius P/D = 1.0, and
+expanded blade area ratio EAR = 0.55. The propeller
+was tested both with and without duct. For the results pre-
+sented here a duct was used for the anti-spin tests only. The
+propeller was attached to a shaft equipped with thrust and
+torque sensors inside an underwater housing, and driven
+by an electric motor via shafts and gears with gear ratio
+1:1. The rig with motor, gears, underwater housing, shaft
+and propeller was ﬁxed to the towing carriage on a verti-
+cal slide, which was used to control the submergence of
+the propeller relative to the free surface. Ventilation inci-
+dents could hence be generated by moving the propeller
+vertically with a calm free surface. The motor torque was
+controlled from a PC onboard the carriage, using feed-
+back from the propeller shaft speed and the motor torque.
+The control code was generated by rapid prototyping us-
+ing Opal RT-Lab and source code in Matlab/Simulink. A
+sketch of the experimental setup is given in Fig. 4.
+The main characteristics of the ducted propeller and drive
+system are summarized in Table 2.
+The nominal thrust
+
+--- PAGE 9 ---
+Sensitivity
+Speed control
+Torque control
+Power control
+Thrust: sti(·) ≜Ta
+Tr
+stn(·) =
+KT
+KT C
+stq(·) =
+KT
+KT C
+KQC
+KQ
+stp(·) =
+KT
+KT C ( KQC
+KQ )2/3
+Speed: sni(·) ≜
+n
+nr
+snn(·) = 1
+snq(·) =
+q
+KQC
+KQ
+snp(·) =
+K1/3
+QC
+K1/3
+Q
+Torque: sqi(·) ≜Qa
+Qr
+sqn(·) =
+KQ
+KQC
+sqq(·) = 1
+sqp(·) =
+K1/3
+Q
+K1/3
+QC
+Power: spi(·) ≜Pa
+Pr
+spn(·) =
+KQ
+KQC
+spq(·) =
+K1/2
+QC
+K1/2
+Q
+spp(·) = 1
+Table 1: Sensitivity functions, where i=n for shaft speed control, i=q for torque control, i=p for power control, and i=c for
+combined torque/power control
+and torque coefﬁcients for the propeller without duct were
+found to be KT 0 = 0.570 and KQ0 = 0.0750. The nom-
+inal thrust and torque coefﬁcients for reversed thrust were
+found to be KT 0r = 0.393 and KQ0r = 0.0655.
+7.1.1
+Friction
+In the experiments presented here, the shaft friction turned
+out to affect the performance of the torque and power con-
+trollers. A feedforward friction compensation scheme as
+proposed in Section 4.5 was therefore implemented. Over
+the course of the experiments, the friction compensation
+coefﬁcients were found to be in the range Qf0 ∈[0.8, 1.0]
+and Qf1 ∈[0.009, 0.011].
+7.1.2
+Control Parameters
+The control coefﬁcients KT C and KQC used in the ex-
+periments were as given by (11), with the half “width” of
+the transition region nc = 3. The rotational inertia of the
+model-scale propeller was not found to be a dominating
+term. Hence, the inertia compensation scheme in (15) was
+not needed. Therefore, and since only feasible thrust ref-
+erence trajectories were used, no reference generator as in
+(14) was used. The constant plus linear friction compen-
+sation scheme (16) was used, with Qf0 and Qf1 appropri-
+ately chosen in the range speciﬁed above. The switching
+“width” of the smooth switching function in (17) was cho-
+sen as ns = 0.5. The shaft speed PI controller parameters
+(20) were chosen as Kp = 0.2 and Ti = 0.05 s, which gave
+adequate tracking properties. For the combined controller
+(25), the weighting function parameters (26) were chosen
+as [r, p, k] = [4, 0.5, 1]. This gave a pure torque controller
+for n < 0.5 and a pure power controller for n > 3.
+The friction compensation was chosen with Qf0s
+=
+1.0Nm and Qf1 = 0.01Nms. The inertia compensation
+was not needed for the small model-scale propeller. The
+control coefﬁcients were chosen as KT C = KT 0 = 0.513
+and KQC = KQ0 = 0.0444. For the combined controller
+(25), the weighting function parameters (26) were chosen
+as [r, p, k] = [4, 0.5, 1]. This gave a pure torque controller
+for n < 0.5rps and a pure power controller for n > 3rps.
+The shaft speed PI controller parameters (20) were chosen
+as Kp = 0.2 and Ti = 0.05s.
+In the load torque observer, the gains were chosen as ka =
+15 and kb = −25. In the ventilation detection scheme, the
+parameters were chosen as βv,on = 0.6 and βv,off = 0.9,
+and the detection delay was set to Tvent = 1s. For the
+proposed anti-spin controller, the settings for the primary
+anti-spin action were ˙γrise = 1s−1, ˙γfall = −1s−1, and
+unless otherwise stated τγ = 0.3s. For the secondary anti-
+spin action, the ﬁlter time constant was chosen as τn =
+0.05s, and the rate limits were chosen as ˙nrise = 3s−2 and
+˙nfall = −3s−2. The desired shaft speed during ventilation
+was set to nas = 9rps. The latter choice was motivated
+from observations during the tests, where it seemed that the
+most violent dynamic loading disappeared below 10rps. A
+maximum shaft speed of nmax = 25rps was enforced.
+The anti-spin control scheme appears to be robust to param-
+eter tuning. In order to avoid detection chattering, however,
+it is important not to choose βv,on too large. In addition, if
+the rate limits are chosen too low or the ﬁlter time con-
+stants too large, the anti-spin controller response will be-
+come slow, and the shaft speed will be allowed to increase
+more during ventilation. A further discussion and guide-
+lines on tuning are given in Smogeli (2006).
+7.2
+Quasi-static Tests
+In these tests the thrust reference was kept constant
+at Tr
+=
+100N, the advance velocities were Va
+=
+{−1, −0.5, 0, 0.5, 1, 1.5} m/s, and the speed, torque, and
+power controllers were used. Each combination was run 3
+times, giving a total of 54 runs. The tests showed excellent
+repeatability. The length of the test series were limited by
+the length of the basin, but gave adequate statistical values.
+The performance of the three controllers are summed up
+in Figure 5, where the propeller thrust Ta, propeller torque
+Qa, shaft speed n, motor torque Qm, and motor power Pm
+are shown for varying advance speeds. The friction com-
+pensation is not included in the plots of motor torque and
+power. It is clear that the three controllers obtain their ob-
+jectives: the shaft speed controller keeps the shaft speed
+most constant, the torque controller keeps the motor torque
+most constant, and the power controller keeps the motor
+power most constant.
+As the advance speed increases,
+the effective angle of attack of the propeller blades is de-
+creased, and the propeller loading decreases for a constant
+shaft speed. This can be seen in terms of reduced propeller
+thrust and torque at increasing advance velocities for the
+
+--- PAGE 10 ---
+0
+50
+100
+Ta [N]
+0
+2
+4
+Qa [Nm]
+7
+8
+9
+n [1/s]
+1
+2
+3
+4
+5
+Qm [Nm]
+−1
+−0.5
+0
+0.5
+1
+1.5
+50
+100
+150
+200
+250
+Pm [W]
+Va [m/s]
+Torque control
+Power control
+Shaft speed control
+Figure 5: Comparison of propeller thrust Ta, torque Qa,
+shaft speed n, motor torque Qm and power Pm for the shaft
+speed, torque and power controllers in varying advance ve-
+locities Va.
+shaft speed controller: at Va = 1.5 m/s, the propeller thrust
+is reduced from 100 N to 18 N. The torque and power con-
+trollers have much better performance, since the controllers
+increase the shaft speed as the propeller loading decreases:
+at Va = 1.5 m/s, the propeller thrust is reduced from 100 N
+to 65 N and 50 N respectively.
+7.3
+Dynamic Tests in Waves
+To validate the dynamic performance of the controllers
+when subject to rapidly changing inﬂow to the propeller
+a total of 34 tests in regular and irregular waves were per-
+formed. The thrust reference was Tr = 90 N and the car-
+riage was kept stationary. A comparison of the controller
+performance in regular waves with wave height 8 cm and
+period 1 s is shown in Figure 6. The results are summarized
+in the following:
+• The shaft speed controller keeps the shaft speed con-
+stant, and has to vary the motor torque and power in
+6.7
+6.8
+6.9
+7
+n [rps]
+85
+90
+95
+Ta [N]
+3.4
+3.6
+3.8
+Qa [Nm]
+4.6
+4.8
+5
+Qm [Nm]
+0
+1
+2
+3
+4
+5
+6
+7
+205
+210
+215
+Pm [W]
+Time [s]
+Torque control
+Power control
+Shaft speed control
+Figure 6: Comparison of shaft speed, torque, and power
+control in regular waves.
+order to achieve this. The resulting propeller thrust
+and torque have the largest variance.
+• The torque controller keeps the motor torque constant,
+and as a result the shaft speed varies with the load-
+ing. The resulting propeller thrust and torque have the
+smallest variance.
+• The power controller keeps the motor power constant,
+and as a result both the shaft speed and motor torque
+varies with the loading. The resulting propeller thrust
+and torque lie between the shaft speed and torque con-
+troller values.
+Tests with time-varying thrust reference trajectories are
+presented in Smogeli (2006) and Sørensen and Smogeli
+(2009).
+7.4
+Anti-spin Tests
+The anti-spin control scheme was tested in a variety of op-
+erating conditions: for constant and time-varying thrust ref-
+erences, in waves, with a calm free surface and forced ver-
+tical motion of varying amplitude Av, period Tv, and mean
+submergence h0, and in combinations of waves and verti-
+cal motion. In the results presented here, the thrust refer-
+ence was kept constant during forced vertical motion with
+
+--- PAGE 11 ---
+a calm free surface. This improved repeatability and en-
+abled comparison of the various controllers, since the time
+series could be synchronized by comparing the relative ver-
+tical motion of the propeller. Because of the chaotic nature
+of ventilation, the actual operational conditions for the pro-
+peller vary from one test run to another. However, the re-
+peatability is in general good. The results presented below
+are for h0 = 15cm, Av = 15cm, and Tv = 5s. Perfor-
+mance comparisons in other conditions, further validating
+the robust performance of the anti-spin controller, are pre-
+sented in Smogeli (2006).
+Figure 7 shows comparisons of the thrust Ta, propeller
+torque Qa, shaft speed n, motor torque Qm, and motor
+power Pm for four different thruster controllers during a
+ventilation incident with Tr = 200N. The ventilation in-
+cident starts at t ≈11.2s, and terminates at t ≈14.5s.
+The compared controllers are shaft speed PI control (20),
+torque control (21), power control (24), and the proposed
+anti-spin controller based on combined torque/power con-
+trol (25). With anti-spin activated, both the primary (31)
+and the secondary (33) anti-spin actions were used. The
+time series show that the torque controller and the power
+controller both lead to propeller racing. The shaft speed
+controller and the anti-spin controller limit the shaft speed
+as intended, with the secondary anti-spin action giving a
+slightly reduced shaft speed during ventilation. The result-
+ing thrust during ventilation is about the same for all con-
+trollers. That is, the anti-spin controller, which reduces the
+shaft speed to 9rps during ventilation, produces the same
+thrust as the torque controller, which races to the imposed
+limit of 25rps. This corresponds well to the experimental
+results shown in Fig. 1. The power consumption of the
+torque controller is unacceptably high, whereas the power
+controller keeps the power consumption limited. The shaft
+speed and anti-spin controllers give a lower power con-
+sumption during ventilation, but this is not considered to
+be a problem.
+Figure 8 shows comparisons of Ta, Qa, n, Qm, and Pm
+for four controllers during a ventilation incident with Tr =
+300N: power control, combined control with primary anti-
+spin action only (marked P), combined control with pri-
+mary and secondary anti-spin action (marked P+S), and
+shaft speed control. The torque controller could not be
+tested for this thrust reference, since the propeller racing
+was too severe to give sensible results. The ventilation in-
+cident starts at t ≈16.2s, and terminates at t ≈19.5s.
+Again, the thrust levels during ventilation are almost iden-
+tical for all the controllers. It can be noted that the primary
+anti-spin controller and the shaft speed controller behave
+almost identically, conﬁrming that the proposed anti-spin
+controller has a similar performance as a well-tuned shaft
+speed PI controller during ventilation. The secondary anti-
+spin action lowers the shaft speed as intended during venti-
+lation. Figure 9 shows details from the anti-spin controller
+10
+15
+20
+25
+n [1/s]
+ 
+50
+100
+150
+200
+Ta [N]
+1
+2
+3
+4
+5
+Qa [Nm]
+3
+4
+5
+6
+Qm [Nm]
+11
+12
+13
+14
+15
+200
+400
+600
+800
+Pm [W]
+Time [s]
+Torque control
+Power control
+Combined control with antispin P+S
+Shaft speed control
+Figure 7: Comparison of four controllers during a ventila-
+tion incident at Tr = 200N.
+during a ventilation incident: propeller torque Qa versus
+estimated propeller torque ˆQa, estimated torque loss factor
+ˆβQ and ventilation detection signal ζ, torque modiﬁcation
+factor γ, deviation of γ from the measured βQ, and the de-
+sired shaft speed nras. The time series show that the anti-
+spin controller, including torque observer and ventilation
+detection, performs as intended.
+8
+CONCLUSIONS
+Low-level controllers based on shaft speed, torque, and
+power control for electrically driven thrusters on vessels
+in normal operating conditions have been investigated, and
+evaluated according to three main performance criteria.
+The conventional shaft speed controller gave the thrust,
+torque, and power with the largest variance, and it was
+the least robust to disturbances in the in-line ﬂow veloc-
+ity. The torque controller produced the thrust and torque
+with the smallest variance, and was superior with respect
+to compensating for thrust losses due to disturbances in the
+inﬂow. The power controller gave the least oscillations in
+the power, with the resulting propeller thrust and torque
+in-between the shaft speed and torque controller values.
+The combined torque and power controller gave the over-
+all best improvement in the performance from low to high
+loadings. Steady-state sensitivity functions describing the
+
+--- PAGE 12 ---
+10
+15
+20
+25
+n [1/s]
+ 
+0
+100
+200
+300
+Ta [N]
+2
+4
+6
+Qa [Nm]
+2
+4
+6
+8
+Qm [Nm]
+15
+16
+17
+18
+19
+20
+200
+400
+600
+800
+Pm [W]
+Time [s]
+Power control
+Combined control with antispin P
+Combined control with antispin P+S
+Shaft speed control
+Figure 8: Comparison of four controllers during a ventila-
+tion incident at Tr = 300N.
+0
+2
+4
+6
+Q [Nm]
+Qa
+Qa
+0
+0.5
+1
+βQ, ζ [−]
+βQ
+ζ
+0.5
+1
+γ [−]
+−0.2
+0
+0.2
+0.4
+γ − βQ [−]
+0
+1
+2
+3
+4
+5
+10
+12
+nras [1/s]
+Time [s]
+Figure 9: Time series of the main parameters in the anti-
+spin control law with primary and secondary control action
+during a ventilation incident at Tr = 300N.
+performance of the various controllers in terms of result-
+ing thrust, shaft speed, torque, and power when subject to
+thrust losses were presented. Experiments illustrated the
+difference in performance and robustness of the different
+controllers.
+It has been shown that torque and power control is a fea-
+sible solution for high-performance thruster control only
+if special precautions are taken during extreme environ-
+mental conditions, when the propeller may be subject to
+ventilation and in-and-out-of water effects. To solve this
+problem, an anti-spin thruster controller has been designed.
+The thruster performance was monitored by a load torque
+observer, and the anti-spin controller was triggered by a
+ventilation detection scheme. The anti-spin controller took
+control of and lowered the shaft speed. Experiments with a
+model scale propeller were presented. The results showed
+that the torque and power controllers with anti-spin had
+comparable performance to that of a well-tuned shaft speed
+PI controller during ventilation, without compromising the
+superior performance of torque and power control in nor-
+mal conditions.
+9
+ACKNOWLEDGMENT
+This work has been carried out at the Centre for Ships
+and Ocean Structures (CeSOS) at NTNU in cooperation
+with the research project Energy-Efﬁcient All-Electric Ship
+(EEAES). The Research Council of Norway is acknowl-
+edged as the main sponsor of CeSOS and EEAES.
+REFERENCES
+Bachmayer, R., Whitcomb, L. L., and Grosenbaugh, M. A.
+(2000). An Accurate Four-Quadrant Nonlinear Dynami-
+cal Model for Marine Thrusters: Theory and Experimen-
+tal Validation. IEEE Journal of Oceanic Engineering,
+25(1):146–159.
+Bakkeheim, J., Johansen, T. A., Smogeli, O. N., and
+Sørensen, A. J. (2008). Lyapunov-based Integrator Re-
+setting with Application to Marine Thruster Control.
+IEEE Trans. Control Systems Technology. Accepted for
+publication.
+Blanke, M. (1994).
+Optimal Speed Control for Cruis-
+ing. In Proc. 3rd IFAC Conference on Manoeuvring and
+Control of Marine Craft (MCMC’94), pages 125–134,
+Southampton, UK.
+Blanke, M. and Busk Nielsen, P. (1987).
+Electronic
+Governor Control for two stroke Engines. In Nordisk
+Sj¨ofartsteknisk ˚Arsbok – Svensk Sj¨ofarts Tidning, vol-
+ume 40, pages 82–84.
+Blanke, M. and Busk Nielsen, P. (1990). The Marine En-
+gine Governor.
+In Proc. 2nd Int. Conf. on Maritime
+Communications and Control, pages 11–20, London,
+UK.
+
+--- PAGE 13 ---
+Blanke, M., Pivano, L., and Johansen, T. (2007). An Ef-
+ﬁciency Optimizing Propeller Speed Control for Ships
+in Moderate Seas - Model Experiments and Simulation.
+In Proc. IFAC Conference on Control Applications in
+Marine Systems (CAMS’07), Bol Croatia.
+Brix, J. (1978).
+Querstrahlsteuer.
+Forschungzentrum
+des Deutschen Schiffbaus, Bericht Nr. 80. In German.
+“Steering with Lateral Thrusters”.
+Chislett, M. S. and Bj¨orheden, O. (1966).
+Inﬂuence of
+Ship Speed on the Effectiveness of aLateral-Thrust Unit.
+Hydro- og Aerodynamisk Laboratorium Report No Hy-
+8, Lyngby, Denmark.
+Faltinsen, O. M., Minsaas, K. J., Liapis, N., and Skjørdal,
+S. O. (1980). Prediction of resistance and propulsion
+of a ship in a seaway. In Proceedings of the Thirteenth
+Symposium on Naval Hydrodynamics, Tokyo.
+Fossen, T. I. and Blanke, M. (2000).
+Nonlinear Out-
+put Feedback Control of Underwater Vehicle Propellers
+Using Feedback From Estimated Axial Flow Velocity.
+IEEE Journal of Oceanic Engineering, 25(2):241–255.
+Haskara, I., ¨Ozg¨uner, U., and Winkelman, J. (2000). Wheel
+Slip Control for Antispin Acceleration via Dynamic
+Spark Advance. Control Engineering Practice, 8:1135–
+1148.
+Healey, A. J., Rock, S. M., Cody., S., Miles, D., and
+Brown, J. P. (1995).
+Toward an improved under-
+standing of thruster dynamics for underwater vehicles.
+IEEE Journal of Oceanic Engineering, 29(4):354–361.
+Hespanha, J. P. and Morse, A. S. (2002). Switching be-
+tween stabilizing controllers. Automatica, 38(11):1905–
+1917.
+Koushan, K. (2004). Environmental and Interaction Effects
+on Propulsion Systems used in Dynamic Positioning, an
+Overview. In Proc. 9th Int. Symp. Practical Design of
+Ships and Other Floating Structures (PRADS’04), pages
+1013–1020, L¨ubeck-Travem¨unde, Germany.
+Lehn, E. (1992). FPS-2000 Mooring and Positioning, Part
+1.6 Dynamic Positioning - Thruster Efﬁciency: Practical
+Methods for Estimation of Thrust Losses. Technical Re-
+port 513003.00.06, Marintek, SINTEF, Trondheim, Nor-
+way.
+Leonhard,
+W.
+(1996).
+Control of Electrical Drives.
+Springer-Verlag, Berlin, 2nd edition.
+Minsaas, K. J., Thon, H. J., and Kauczynski, W. (1987).
+Estimation of Required Thruster Capacity for Operation
+of Offshore Vessels under Severe Weather Conditions.
+In Proc. 3rd Int. Symp. Practical Design of Ship and
+Mobile Units (PRADS’87), pages 411–427, Trondheim,
+Norway.
+Olofsson, N. (1996). Force and Flow Characteristics of
+a Partially Submerged Propeller. PhD thesis, Chalmers
+University of Technology, G¨oteborg, Sweden.
+Pivano, L. (2008).
+Thrust Estimation and Control of
+Marine Propellers in Four-Quadrant Operations. PhD
+thesis, Department of Engineering Cybernetics, Norwe-
+gian University of Science and Technology (NTNU),
+Thesis 2008:20, Trondheim, Norway.
+Ruth, E. (2008). Propulsion Control and Thrust Allocation
+on Marine Vessels. PhD thesis, Department of Marine
+Technology, Norwegian University of Science and Tech-
+nology (NTNU), Thesis 2008:203, Trondheim, Norway.
+Ruth, E. and Smogeli, Ø. N. (2006). Ventilation of Con-
+trollable Pitch Thrusters. SNAME Marine Technology,
+43(4):170–179.
+Ruth, E., Smogeli, Ø. N., and Sørensen, A. J. (2006).
+Overview of Propulsion Control for Surface Vessels. In
+Proc. 7th IFAC Conference on Manoeuvring and Control
+of Marine Craft (MCMC’06), Lisbon, Portugal.
+Shiba, H. (1953). Air-Drawing of Marine Propellers. In
+Report of Transportation Technical Research Institute,
+The Unyu-Gijutsu Kenkyujo, Japan.
+Smogeli, Ø. N. (2006). Control of Marine Propellers: from
+Normal to Extreme Conditions. PhD thesis, Department
+of Marine Technology, Norwegian University of Science
+and Technology (NTNU), Thesis 2006:187, Trondheim,
+Norway.
+Smogeli, Ø. N., Aarseth, L., Over˚a, E. S., Sørensen, A. J.,
+and Minsaas, K. J. (2003). Anti-spin Thruster Control
+in Extreme Seas.
+In Proc. 6th IFAC Conference on
+Manoeuvring and Control of Marine Craft (MCMC’03),
+pages 221–226, Girona, Spain.
+Smogeli, Ø. N., Hansen, J., Sørensen, A. J., and Johansen,
+T. A. (2004a). Anti-Spin Control for Marine Propulsion
+Systems. In Proc. 43rd IEEE Conference on Decision
+and Control (CDC’04), Paradise Island, Bahamas.
+Smogeli, Ø. N., Ruth, E., and Sørensen, A. J. (2005).
+Experimental Validation of Power and Torque Thruster
+Control. In Proc. Mediterranean Conference on Control
+and Automation (MED’05), Limassol, Cyprus.
+Smogeli, Ø. N. and Sørensen, A. J. (2009).
+Anti-Spin
+Thruster Control for Ships.
+IEEE Transactions on
+Control Systems Technology. Accepted for publication.
+
+--- PAGE 14 ---
+Smogeli, Ø. N., Sørensen, A. J., and Fossen, T. I. (2004b).
+Design of a Hybrid Power/Torque Thruster Controller
+with Thrust Loss Estimation. In Proc. IFAC Conference
+on Control Applications in Marine Systems (CAMS’04),
+Ancona, Italy.
+Smogeli, Ø. N., Sørensen, A. J., and Minsaas, K. J. (2008).
+The Concept of Anti-Spin Thruster Control.
+Control
+Engineering Practice, 16(4):465–481.
+Sørensen, A. J. (2005). Structural Issues in the Design and
+Operation of Marine Control Systems. IFAC Journal of
+Annual Reviews in Control, 29(1):125–149.
+Sørensen, A. J., ˚Adnanes, A. K., Fossen, T. I., and Strand,
+J. P. (1997). A New Method of Thruster Control in Po-
+sitioning of Ships based on Power Control.
+In Proc.
+4th IFAC Conference on Manoeuvring and Control of
+Marine Craft (MCMC’97), Brijuni, Croatia.
+Sørensen, A. J. and Smogeli, Ø. N. (2009). Torque and
+Power Control of Electrically Driven Marine Propellers
+with Experimental Validation.
+Control Engineering
+Practice. Accepted for publication.
+Whitcomb, L. L. and Yoerger, D. R. (1999a).
+De-
+velopment, Comparison, and Preliminary Experimen-
+tal Validation of Nonlinear Dynamic Thruster Models.
+IEEE Journal of Oceanic Engineering, 24(4):481–494.
+Whitcomb, L. L. and Yoerger, D. R. (1999b). Preliminary
+Experiments in Model-Based Thruster Control for Un-
+derwater Vehicle Positioning. IEEE Journal of Oceanic
+Engineering, 24(4):495–506.
+Yoerger, D. R., Cooke, J. G., and Slotine, J. J. E. (1991).
+The Inﬂuence of Thruster Dynamics on Underwater Ve-
+hicle Behavior and Their Incorporation Into Control Sys-
+tem Design.
+IEEE Journal of Oceanic Engineering,
+15(3):167–179.
+
