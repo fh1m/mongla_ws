@@ -3188,3 +3188,66 @@ reading **−0.68 cm over 10 s** — correctly near zero, which is the negative
 control for the whole chain. A moving measurement is the operator's slide.
 
 
+
+---
+
+## B-56 — world-frame EKF updates are worse than nothing once flow is gone
+
+**Found 2026-09-23** by `tools/control_bench/test_localization_truth.py`, the
+first test that has ever driven the filter along a trajectory against **truth**.
+Severity: **operating-envelope**, not a normal-operation defect.
+
+**The measurement.** 30 s trajectory, horizontal position error at the end:
+
+| aiding | final error |
+|---|---|
+| flow + depth + yaw | 0.009 m |
+| depth + yaw, **no flow** | **99.3 m** |
+| depth only, no flow | 302.6 m |
+| **IMU alone, no aiding at all** | **3.7 m** |
+
+⛔ **Adding depth and yaw makes horizontal position 27× worse than adding
+nothing**, and depth-only makes it 81× worse. It corrupts **attitude** too —
+yaw RMS 0.40° against 0.05° with no aiding — which is the tell that this is
+cross-coupling and not ordinary divergence.
+
+**The mechanism is in the filter's own source, and its docstring already warns
+of it.** `update_depth` carries
+
+```python
+H[0, 0:3] = -skew(self.X.p)[2]      # "a real coupling once the hull is
+                                     #  metres away from the origin"
+```
+
+and the method is documented as *"an IMPERFECT measurement for a right-invariant
+filter — world-frame, so the log-linear property is approximate here."* The
+coupling grows **linearly with |p|**. While flow pins velocity it is harmless.
+Once it does not: a depth innovation injects attitude error → in a
+right-invariant filter an attitude correction **rotates the whole believed
+trajectory** → position moves further from the origin → the coupling grows →
+repeat. The documented approximation becomes an amplifier.
+
+**⭐ The operating envelope, which is the actionable part.** Realistic dropouts —
+the bottom camera losing the floor in turbid or deep water — are survivable:
+
+| flow gone for | final error | recovers |
+|---|---|---|
+| 2 s | 0.03 m | yes |
+| 5 s | 0.05 m | yes |
+| 10 s | 0.47 m | yes, degraded |
+| **20 s** | **6.37 m** | **no** |
+
+**So: flow may be absent for about 5 s freely, 10 s with degradation, and 20 s
+loses the fix.** That is a number to design missions against, and nobody had it.
+
+**⚠ The obvious mitigation is a trade, not a fix.** Withholding depth and yaw
+while flow is missing breaks the loop — 1.3–1.6× better on gaps of 10 s and
+longer — but is about **2× worse on a 5 s gap**, where the world-frame updates
+are still net useful. "Always gate" and "never gate" are both wrong, so the
+decision needs the dropout *duration* and belongs with whatever already tracks
+flow health, not inside the filter.
+
+**Not fixed, deliberately.** With flow present the filter tracks to centimetres,
+and the plant's drag is a guess, so the exact thresholds will move once Round 4a
+measures it. What is recorded here is the *shape* — world-frame aiding without
+velocity aiding is actively harmful — which will not change.
