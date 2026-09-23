@@ -131,3 +131,73 @@ def test_a_gyro_bias_is_absorbed_rather_than_integrated():
     biased = run(seconds=60.0,
                  sensors=Sensors(gyro_bias=(0.0, 0.0, math.radians(1.0))))
     assert biased.yaw_rms_deg < clean.yaw_rms_deg + 2.0
+
+
+# ═══════════════════════════════════════════════════════════════════════════ #
+#  ⭐ The landmark position fix -- is it a cure, or a second B-56?
+# ═══════════════════════════════════════════════════════════════════════════ #
+
+def test_a_harness_that_starts_the_filter_at_truth_is_cheating():
+    """⛔ THE MISTAKE THIS FILE MADE FIRST, kept as a test so it is not made
+    again. The filter is built believing +-1 m of position uncertainty
+    (`P0_position`). Starting it at the true origin hands it an accuracy it has
+    no way to know it has -- and then ANY absolute-position measurement looks
+    harmful, because it is being scored against an error that was free.
+
+    The reading that produced was "a landmark fix makes things 12x worse",
+    which was an artefact. With the error the filter's own covariance claims,
+    the fix helps by 5-20x."""
+    cheat = run(seconds=30.0, initial_pos_error_m=0.0, use_fix=True).pos_final_m
+    honest = run(seconds=30.0, initial_pos_error_m=1.0, use_fix=True).pos_final_m
+    no_fix = run(seconds=30.0, initial_pos_error_m=1.0).pos_final_m
+    assert cheat > run(seconds=30.0, initial_pos_error_m=0.0).pos_final_m
+    assert honest < no_fix / 5.0, 'honestly initialised, the fix must help'
+
+
+@pytest.mark.parametrize('start_err', [0.5, 1.0, 2.0])
+def test_flow_aided_dead_reckoning_HOLDS_error_rather_than_reducing_it(start_err):
+    """⭐ THE STRUCTURAL FACT, and it is more useful than a defect would have
+    been. Nothing in the flow/depth/yaw set observes ABSOLUTE horizontal
+    position, so the filter carries whatever error it launched with, almost
+    exactly, for the whole run:
+
+        start 0.5 m -> end 0.4949 m
+        start 1.0 m -> end 0.9929 m
+        start 2.0 m -> end 1.9907 m
+
+    Dead reckoning that is excellent still cannot tell you where you are."""
+    end = run(seconds=30.0, initial_pos_error_m=start_err).pos_final_m
+    assert end == pytest.approx(start_err, rel=0.05)
+
+
+def test_the_landmark_fix_is_the_only_thing_that_removes_launch_error():
+    """⭐ AND IT CONVERGES ANY START TO THE SAME PLACE -- about 0.10 m with a
+    0.5 m fix at 2 Hz -- regardless of how wrong the launch position was. So a
+    fix EARLY is worth far more than a fix often: until the first one arrives,
+    the whole run is offset."""
+    ends = [run(seconds=30.0, initial_pos_error_m=e, use_fix=True).pos_final_m
+            for e in (0.5, 1.0, 2.0)]
+    assert all(e < 0.2 for e in ends)
+    assert max(ends) / min(ends) < 1.5, 'it should converge to the same place'
+
+
+def test_the_fix_rescues_the_B56_regime():
+    """The landmark fix is the CURE for B-56, not another instance of it. With
+    no flow, world-frame aiding runs away -- and a position fix pins `p`, which
+    is precisely what the `-skew(p)` coupling needed."""
+    broken = run(seconds=30.0, use_flow=False).pos_final_m
+    fixed = run(seconds=30.0, use_flow=False, use_fix=True).pos_final_m
+    assert fixed < broken / 100.0
+
+
+def test_B56_survives_honest_initialisation_and_is_worse():
+    """⛔ THE DEFECT IS NOT AN ARTEFACT OF THE CHEATING START. Re-measured with
+    the error the filter's own covariance claims, world-frame aiding without
+    velocity aiding is worse than NO aiding by up to 196x -- against the 27x
+    first recorded. B-56's severity is revised upward, not withdrawn."""
+    for err in (0.5, 1.0):
+        aided = run(seconds=30.0, use_flow=False,
+                    initial_pos_error_m=err).pos_final_m
+        bare = run(seconds=30.0, use_flow=False, use_depth=False,
+                   use_yaw=False, initial_pos_error_m=err).pos_final_m
+        assert aided > 50 * bare, f'{err} m: aided {aided:.1f} bare {bare:.1f}'

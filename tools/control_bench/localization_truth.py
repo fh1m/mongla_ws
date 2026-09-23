@@ -50,6 +50,9 @@ IMU_HZ = 50.0
 FLOW_HZ = 50.0
 DEPTH_HZ = 10.0
 YAW_HZ = 10.0
+# ⚠ A LANDMARK FIX IS INTERMITTENT BY NATURE -- it exists only while a prop is
+# in view and resects. 2 Hz while visible is generous.
+FIX_HZ = 2.0
 
 
 def rot_ned(phi: float, theta: float, psi: float) -> np.ndarray:
@@ -73,6 +76,7 @@ class Sensors:
     flow_noise: float = 0.01           # m/s
     depth_noise: float = 0.01          # m
     yaw_noise_deg: float = 1.0
+    fix_noise_m: float = 0.5      # prop resection, world x/y
     seed: int = 1
 
 
@@ -106,6 +110,8 @@ def run(*, seconds: float = 60.0, sensors: Sensors | None = None,
         use_flow: bool = True, use_depth: bool = True, use_yaw: bool = True,
         flow_dropout: tuple = (), manoeuvre=None,
         gate_world_updates: bool = False,
+        fix_windows: tuple = (), use_fix: bool = False,
+        initial_pos_error_m: float = 0.0,
         damping: Damping | None = None) -> Score:
     """Fly a trajectory, feed the filter, score it against the plant's truth.
 
@@ -133,7 +139,18 @@ def run(*, seconds: float = 60.0, sensors: Sensors | None = None,
     v.plant.eta = [0.0] * 6
     v.board.reset()
 
-    f = RIEKF(state=State())
+    # ⛔ A HARNESS THAT STARTS THE FILTER AT TRUTH IS CHEATING, and the first
+    # version of this file did. The filter is constructed believing +-1 m of
+    # position uncertainty (P0_position); handing it a perfect origin gives it
+    # an accuracy it has no way to know it has, and then any landmark fix looks
+    # harmful by comparison. `initial_pos_error_m` gives it the error its own
+    # covariance claims, which is the honest starting condition.
+    st = State()
+    if initial_pos_error_m:
+        ang = rnd.uniform(0, 2 * math.pi)
+        st.p = np.array([initial_pos_error_m * math.cos(ang),
+                         initial_pos_error_m * math.sin(ang), 0.0])
+    f = RIEKF(state=st)
     dt = 1.0 / IMU_HZ
     manoeuvre = manoeuvre or (lambda t: math.radians(30.0 * math.sin(t / 8.0)))
 
@@ -189,6 +206,16 @@ def run(*, seconds: float = 60.0, sensors: Sensors | None = None,
         if use_yaw and not gated and k % max(1, int(IMU_HZ / YAW_HZ)) == 0:
             f.update_yaw(math.degrees(eta[5]) + rnd.gauss(0, s.yaw_noise_deg),
                          sigma_deg=max(s.yaw_noise_deg, 0.1))
+        # ⭐ The landmark position fix. `update_position` carries the SAME
+        # `-skew(p)` attitude coupling as `update_depth` (B-56), so whether it
+        # bounds drift or feeds the same loop is a question, not an assumption.
+        if use_fix and (not fix_windows
+                        or any(lo <= t < hi for lo, hi in fix_windows)):
+            if k % max(1, int(IMU_HZ / FIX_HZ)) == 0:
+                f.update_position(
+                    [eta[0] + rnd.gauss(0, s.fix_noise_m),
+                     eta[1] + rnd.gauss(0, s.fix_noise_m)],
+                    sigma=max(s.fix_noise_m, 1e-3))
 
         # ── score ─────────────────────────────────────────────────────────
         pe = math.dist(f.X.p[:2], eta[0:2])
