@@ -212,3 +212,46 @@ def test_acro_has_more_yaw_authority_at_full_stick():
     assert _yaw_out(_ACRO, 100.0)[1] > _yaw_out(_STAB, 100.0)[1]
     assert _yaw_out(_ACRO, 100.0)[1] / 999 == pytest.approx(0.848, abs=0.01)
     assert _yaw_out(_STAB, 100.0)[1] / 999 == pytest.approx(0.707, abs=0.01)
+
+
+def test_the_capture_covers_every_bench_parameter():
+    """⛔ PARTIAL COVERAGE IS THE SAME BUG IN SMALLER LETTERS. The first version
+    of the capture carried 20 of these 37 names, so roll/pitch I, D, FF and
+    IMAX, both ANG_*_P, the DEPTH_* gains and the TRIM group all stayed at
+    config.h defaults while `is_board_parameterised` reported True. That is
+    exactly the PILOT_YAW_RATE failure, just quieter."""
+    b = Board()
+    names = {b._lib.bench_param_name(i).decode()
+             for i in range(b._lib.bench_param_count())}
+    captured = set(_capture()['params'])
+    assert names - captured == set(), (
+        f'not read off the board: {sorted(names - captured)}')
+    assert captured - names == set(), (
+        f'captured but not a bench parameter: {sorted(captured - names)}')
+
+
+def test_battery_compensation_does_not_move_a_threshold():
+    """⚠ The board has MOT_BAT_V_MAX = 16.8, so compensation is configured on
+    the vehicle, while `batteryScale()` returns 0 -- uncompensated -- until the
+    board has seen a pack voltage, which is the state the mixer_ladder capture
+    was taken in. Measured: across the whole 13.2-16.8 V range the output moves
+    by at most ONE percentage point, so every threshold quoted upstream stands.
+    This test is what lets those numbers be quoted without a pack voltage."""
+    def out(volts, pct):
+        b = Board().from_board()
+        b.reset()
+        if volts is not None:
+            for _ in range(40):
+                b.set_battery(volts, 0.1)
+        for _ in range(50):
+            _, _, y = b.stabilize(stick_yaw=pct / 100.0)
+        d = b.drive(yaw=y)
+        live = [v for v in d if v != 1048]
+        return (max((v - 1048 if v >= 1049 else v - 47) for v in live) if live else 0) / 999
+
+    for pct in (2.86, 5.0, 100.0):
+        base = out(None, pct)
+        for volts in (16.8, 14.7, 13.2):
+            assert abs(out(volts, pct) - base) <= 0.011, (
+                f'{pct} % at {volts} V moved more than one point from the '
+                f'uncompensated figure -- the upstream numbers need a pack voltage')

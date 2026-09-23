@@ -2665,6 +2665,57 @@ class SrotFC(FlightController):
         return True, (f'MOVE_CRUISE_MAX: board {board:.2f} < host clamp '
                       f'{sp.MOVE_CRUISE_MAX:.2f} -- the board is the binding one')
 
+    def check_yaw_authority(self, timeout: float = 3.0):
+        """Can a visual-servo yaw correction produce thrust at all? (ok, message)
+
+        ⛔ THE COUPLING THIS GUARDS, measured on `tools/control_bench` against
+        this board's own parameters. Two independent thresholds stand between a
+        host yaw demand and a turning propeller:
+
+          * `attitude_control.cpp:87` -- `fabsf(yaw_stick) > 0.02f`, compared
+            AFTER PILOT_EXPO. Below it the board holds heading instead of taking
+            a rate command.
+          * `mixer.cpp:102` -- `t < 0.005f` returns neutral outright.
+
+        The first is only USEFUL if crossing it also crosses the second, and
+        whether it does depends on two parameters an operator can change:
+
+            0.02 * PILOT_YAW_RATE(rad/s) * ATC_RAT_YAW_P  >  0.005
+
+        This board reads 160 deg/s and 0.18, giving 0.0101 -- comfortable. But
+        `config.h` DEFAULTS to 45 deg/s, where the product is 0.0028 and a band
+        opens in which the stick is accepted as a rate command and the mixer
+        still emits nothing. A demand that is accepted and produces no thrust is
+        the failure mode this codebase exists to refuse loudly. Break-even is
+        around **80 deg/s** at the shipped rate gain.
+
+        ⚠ A params reset restores the 45 deg/s default silently, which is
+        exactly how this would come back.
+
+        Best-effort, like `check_move_cruise_max`: a parameter that will not read
+        degrades the report rather than failing bring-up, because refusing to fly
+        on an unread parameter is its own failure mode.
+        """
+        rate = self.get_param('PILOT_YAW_RATE', timeout=timeout)
+        gain = self.get_param('ATC_RAT_YAW_P', timeout=timeout)
+        if rate is None or gain is None:
+            return True, ('yaw authority UNKNOWN -- PILOT_YAW_RATE / '
+                          'ATC_RAT_YAW_P did not read')
+        rate, gain = float(rate), float(gain)
+        torque = sp.STABILIZE_YAW_STICK_GATE * math.radians(rate) * gain
+        if torque > sp.MIXER_CENTRE_EPS:
+            return True, (f'yaw authority OK: the stick gate produces torque '
+                          f'{torque:.4f} > the mixer centre gap '
+                          f'{sp.MIXER_CENTRE_EPS} (PILOT_YAW_RATE {rate:.0f}, '
+                          f'ATC_RAT_YAW_P {gain:.3f})')
+        return False, (
+            f'yaw DEAD BAND: PILOT_YAW_RATE {rate:.0f} deg/s with '
+            f'ATC_RAT_YAW_P {gain:.3f} makes the stick gate produce torque '
+            f'{torque:.4f}, under the mixer centre gap {sp.MIXER_CENTRE_EPS}. '
+            f'Yaw demands above the gate will be ACCEPTED and produce NO '
+            f'thrust. Raise PILOT_YAW_RATE above ~80 deg/s (this board shipped '
+            f'at 160; a params reset restores the 45 deg/s default).')
+
     def read_depth_p(self, timeout: float = 3.0):
         """Cache the board's DEPTH_P for `check_depth_loop_settled`. None if unread.
 

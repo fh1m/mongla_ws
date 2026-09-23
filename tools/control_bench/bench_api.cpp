@@ -43,9 +43,19 @@ int bench_num_thrusters(void) { return NUM_THRUSTERS; }
 // thrust curve and the bench would disagree with the board for a reason nobody
 // could see.
 //
-// ⚠ DEF_MOT_BAT_V_MAX is 0.0, which means battery compensation is OFF by
-// default in the firmware. That is not an oversight to "fix" here -- it is the
-// shipped configuration, and it matches the board's measured behaviour.
+// ⚠ DEF_MOT_BAT_V_MAX is 0.0, which means battery compensation is OFF in the
+// COMPILED DEFAULTS. It is NOT off on the vehicle: the board reads back 16.8
+// (2026-09-23), so compensation is configured there. An earlier version of this
+// comment claimed the 0.0 default "matches the board's measured behaviour",
+// which the capture contradicts -- corrected.
+//
+// It stays 0.0 here because a default is what this function writes; use
+// `from_board()` for the vehicle's value. And note that even with v_max set,
+// `batteryScale()` returns 0 until the board has SEEN a pack voltage, so a
+// bench scenario is uncompensated unless it calls `set_battery`. Measured
+// effect of getting this wrong: at most 1.0 percentage point of output across
+// the whole 13.2-16.8 V range, so it does not move a threshold -- but it is
+// stated rather than assumed.
 void bench_params_defaults(void) {
     memset(&g_params, 0, sizeof(g_params));
     g_params.mot_thst_expo = DEF_MOT_THST_EXPO;

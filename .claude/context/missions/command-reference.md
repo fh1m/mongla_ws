@@ -1,6 +1,6 @@
 # Command reference — every verb on `/mongla/move`
 
-One action, thirty verbs. This page says what each one does, what it takes, and — the part
+One action, thirty-one verbs. This page says what each one does, what it takes, and — the part
 that matters on this vehicle — **where it actually runs**.
 
 The canonical list is the `COMMANDS` registry in

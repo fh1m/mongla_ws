@@ -139,3 +139,30 @@ def test_the_verb_is_gated_on_ARMED_by_the_command_scope():
     with pytest.raises(NotArmedError):
         _mongla(fc).motor_test(target=1.0)
     assert fc.calls == [], 'nothing may reach the board from a disarmed hull'
+
+
+def test_a_long_test_is_not_truncated_by_the_client_backstop():
+    """⛔ THE "DOESN'T ARM, 12 s CROSSED" CLASS OF BUG. The planner client bounds
+    how long it waits for a result at the goal's OWN limit plus a margin, read
+    from this same registry. `motor_test` registers `duration`, so a 30 s
+    thruster run gets a 45 s backstop rather than a fixed floor that would
+    report MoveTimeout while the motor was still legitimately turning.
+
+    Registering `duration` is therefore load-bearing, not decoration -- which is
+    why it is asserted here and not left to be noticed on a bench day."""
+    from mongla_planner.client import (_RESULT_TIMEOUT_FLOOR_S,
+                                       _RESULT_TIMEOUT_MARGIN_S)
+
+    spec = COMMANDS['motor_test']
+    assert 'duration' in spec['fields'], (
+        'without a registered duration the client falls back to the '
+        f'{_RESULT_TIMEOUT_FLOOR_S} s floor and truncates a longer run')
+
+    class _Goal:
+        cmd = 'motor_test'
+        timeout = 0.0
+        duration = 30.0
+
+    from mongla_planner.client import MonglaClient
+    assert MonglaClient._result_deadline(None, _Goal()) == pytest.approx(
+        30.0 + _RESULT_TIMEOUT_MARGIN_S)
