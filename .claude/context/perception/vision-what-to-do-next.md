@@ -15,11 +15,16 @@
 **The detector is not the problem and neither is ROS.** The forward camera
 delivers **30 Hz** into a chip that could do 98, and our models are compiled
 **multi-context**, which costs 4.3× of chip time *and* blocks the 2.7–4.3× that
-async pipelining would otherwise give. Fix those two and the forward path goes
-from 27 detections/s to something bounded by the camera, with ~8 ms of chip
-freed per frame — **which is exactly the room needed to put XFeat on the Hailo,
-which is proven possible.** Nothing on the "better velocity than optical flow"
-list survives contact with our own numbers.
+async pipelining would otherwise give. Fix those two and the forward path is
+bounded by the camera rather than by us, with **~7.8 ms less photon-to-decision**.
+
+⛔ **Nothing on the "better velocity than optical flow" list survives contact with
+our own numbers** — the incumbent's algorithmic error is ~0.07 % and the
+literature's headlines measure a thing it has already saturated (§4).
+
+⭐ **The one genuine perception gap is caustics on an UNTEXTURED floor** — 12.47 px
+of surviving error where a tiled floor is already down to 0.09 px (§6). That, not
+speed, is what a new front-end would be for.
 
 ---
 
@@ -63,8 +68,14 @@ the target is 50–60 Hz on the forward camera, not 200.
 on weight swaps, so there is nothing to overlap. Ours cost **10.16 ms** of chip
 against yolov8n's **2.38 ms**.
 
-⭐ **The prize is not 480 Hz.** It is **~7.8 ms of chip freed per frame**, and
-**~7.8 ms less photon-to-decision** — the number the control loop feels.
+⭐ **The prize is LATENCY, and only latency.** ~7.8 ms less photon-to-decision —
+the number the control loop actually feels.
+
+⚠ **Not "room for a second network", which is how I first framed it.** The Pi is
+**72.8 % idle** with both perception rungs running, so freed *chip* time is not a
+resource we are short of. Spending it would mean moving work off an idle CPU onto
+a busy accelerator. The latency case stands on its own; the headroom case does
+not.
 
 ### 1.3 ⚠ The OpenCV fallback halves the frame rate
 
@@ -78,7 +89,12 @@ at half rate silently.
 
 ## 2. ⭐⭐ What we can ADD — the short list that survived
 
-### 2.1 XFeat on the Hailo — proven, not speculative
+### 2.1 XFeat on the Hailo — ⚠ PROVEN POSSIBLE, AND DEMOTED ANYWAY
+
+⛔ **This section was written before the research agent's final position, which
+argues against it — and the argument is right.** Recorded in full because
+"possible" and "worth doing" are different questions and the gap between them is
+the useful part.
 
 **A working Hailo-8 HEF already exists** ([`guyp98/accelerated_features`](https://github.com/guyp98/accelerated_features),
 from the [Hailo community thread](https://community.hailo.ai/t/xfeat-compilation/14926)),
@@ -89,10 +105,29 @@ the CPU. The whole backbone and both heads compile.
 Today XFeat runs on the **CPU at 33 ms / 320×240**, forward camera only, as the
 anchor rung. On the chip it becomes cheap enough to run on **both** cameras.
 
-⛔ **The risk is INT8 on the 64-D descriptor**, and the dossier says it lands
-exactly on the thing we care about. **Falsifier before adoption:** match the
-INT8 HEF against the float ONNX on our own murky clips and compare inlier
-counts — not on clean natural imagery, where published rankings do not transfer.
+⛔ **But the trade is wrong, and the sibling dossier said so first.** The
+argument is not about milliseconds: **the Pi is 72.8 % idle with both rungs
+running.** Moving XFeat to the chip spends **scarce Hailo duty cycle** — which
+currently feeds our only working perception capability at 98 Hz — to buy back
+**abundant CPU**. A 6–8× speedup of something that is not the bottleneck is not
+a win.
+
+⛔ **And the specific HEF is worse than it looks.** That fork's graph takes
+**three inputs**, including the pixel-unshuffled tensor — roughly **double the
+bytes over the ×1 PCIe link that is already the constraint**. It also
+L2-normalises the 64-D descriptor and softmaxes the keypoint map **in INT8,
+on-chip**, which *sharpens* the quantisation risk. Our own export keeps both on
+the host in float and is the safer artifact.
+
+⚠ **XFeat★ is not a flag for us.** Its refinement MLP is a separate module
+absent from our ONNX export — a day of work, not a toggle.
+
+⚠ **And every laptop figure in the XFeat literature needs repricing**: the paper's
+CPU is an i5-1135G7 at VGA, and **our Pi is 2.4–4× slower than it** on the same
+graph.
+
+**So the falsifier, if this is ever reopened:** a HEF that compiles is not a
+result — one that still reads 4/4 on our own murky clips *through INT8* is.
 
 ### 2.2 Segmentation is already on the chip
 
@@ -148,8 +183,54 @@ corner detectors do not.
 | 1 | **A faster forward camera** | purchase | unlocks 2× on the forward path; everything else is downstream of a 30 Hz feed |
 | 2 | **Recompile our models single-context** | build step | 4.3× chip time, and it is the precondition for async AND for a second network |
 | 3 | **Async inference in the detector node** | code | 2.7–4.3×, but *only after* (2) — worth 1.00× before it |
-| 4 | **XFeat on the Hailo, downward first** | integration | answers the bare-floor failure regime; HEF already exists |
+| 4 | **XFeat on the DOWNWARD camera — on the CPU** | experiment | the only item offering a capability we lack. Bare-floor footage, Shi-Tomasi vs XFeat keypoint and inlier counts on the existing 30 cm-slide recordings. ⛔ **Not caustics** — see §6 |
 | 5 | **Rate assertion at bring-up** | guard | catch a silent fallback to half rate before a run, not after |
+| — | ~~XFeat on the Hailo~~ | ⛔ **demoted** | possible, but trades scarce chip for idle CPU — §2.1 |
+
+### 5.1 ⭐ Two measurements that cost almost nothing and settle a lot
+
+1. **Bench ROOT-SIFT on the five archive clips — as a CONTROL, not a candidate.**
+   It has never been run here (`grep -i sift` finds nothing in `src/mongla_vision/`).
+   It will lose on speed. But if it *also* reads 4/4, then our 4/4 says **the
+   clips are easy**, not that XFeat is special. That is a truth test rather than
+   an agreement test, and it is the cheapest way to find out whether our headline
+   feature result means anything.
+2. ⭐ **Time `depth_anything_v2_small.onnx` on the Pi.** It is **already in our
+   tree**, it *is* a DINOv2 ViT-S/14 encoder, and it has **never been timed**.
+   One measurement replaces every estimate in the DINO section — including the
+   verdict that DINO is out of reach.
+
+---
+
+## 6. ⛔ The real open gap: caustics on an UNTEXTURED floor
+
+Not what I would have guessed, and the dossier corrected itself mid-write.
+
+On a **tiled** floor the problem is already solved and shipped: a **7×7 grey
+erosion** takes **11.19 px → 0.09 px** against a known 13.4 px baseline, over
+three real floors of RoboSub caustics (detector: top-hat 9×9, threshold 0.07,
+**4.73 ms/frame** on the Pi).
+
+⛔ **But on a floor with no dark texture of its own — slalom, plain concrete —
+12.47 px of error survives.** And the FFT-demodulation idea does not rescue it:
+**a floor with no grating has nothing to demodulate.**
+
+⭐ **That is the one genuine perception gap this whole sweep found**, and it is
+also the one that maps onto a competition floor. It is the strongest reason to
+try XFeat on the downward camera — not speed, and not caustics on tiles.
+
+---
+
+## 7. An outside confirmation of a rule we already had
+
+[arXiv 2507.21715](https://arxiv.org/html/2507.21715v1) measured underwater image
+enhancement against ORB-SLAM3: inliers fell **442.21 → 328.03**, and it produced
+**zero loop closures across all five runs** where the *original* imagery achieved
+them.
+
+⭐ We banned preprocessing on our own evidence (17 configurations, 95 % of gate
+detections destroyed). **This is independent confirmation from a different
+pipeline**, and the test in our repo that enforces the rule should cite it.
 
 ⚠ **Nothing above is a new algorithm**, and that is deliberate. The dossiers
 looked hard for one and the honest answer is that our ladder, our flow estimator
