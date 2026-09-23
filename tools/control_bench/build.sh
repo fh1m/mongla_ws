@@ -30,6 +30,9 @@ SRC=(
   "$HERE/bench_api.cpp"
   "$FW/src/control/mixer.cpp"
   "$FW/src/control/thrust_trim.cpp"
+  "$FW/src/control/attitude_control.cpp"
+  "$FW/src/control/feedforward.cpp"
+  "$FW/src/control/depth_control.cpp"
 )
 
 # -ffp-contract=off matters: the board is a 32-bit ESP32 without FMA, so letting
