@@ -3335,3 +3335,76 @@ Plant drag is a guess, so the ascent *rate* carries that uncertainty. The
 weakly, which is why it is quoted and the rate is not. Neither is a substitute for
 the float test in [Round 4a §2.1](platform/pool-day-round-4a.md), which measures
 the vehicle's actual net buoyancy — the very number this margin is consumed by.
+
+---
+
+## 17. ⭐ The camera chain, measured end to end — and "the ROS graph costs 45 %" RETRACTED
+
+**2026-09-23**, Sonix global-shutter USB camera on the vehicle, Hailo-8 live.
+
+### 17.1 What the camera can actually do
+
+| mode | raw `v4l2-ctl` | **our `V4L2MailboxCamera`** | OpenCV `webcam` |
+|---|---|---|---|
+| 640×360 MJPG @210 | — | **211.0 Hz** ✅ | 118 Hz |
+| 640×400 MJPG @210 | 204.98 Hz | — | 118 Hz |
+| 1280×720 MJPG @120 | 118.99 Hz | **120.4 Hz** ✅ | 60.3 Hz |
+
+⭐ **Our own mailbox class gets the full rate.** That is the path both vehicle
+profiles use (`source: 'v4l2'`), so the flight path is not losing frames.
+
+⚠ **YUYV is not an option**: 10 fps at 720p against MJPG's 120. The
+`config.py` note that "MJPG is not a preference, it is 6×" is confirmed.
+
+### 17.2 ⛔ But the OpenCV fallback halves the rate, and the cause is one line
+
+`cameras/webcam.py:87` sets `CAP_PROP_BUFFERSIZE = 1` with the comment
+*"avoid stale frames"*. Measured, same camera, same mode:
+
+| | bufs = 1 | bufs = 4 |
+|---|---|---|
+| 640×400 @210 | 117.2 Hz | **209.9 Hz** |
+| 1280×720 @120 | 59.8 Hz | **119.8 Hz** |
+
+**A 1.8–2.0× loss.** And it is not MJPG decode — `read()` (which decodes)
+matches `grab()`-only (which does not) at 4 buffers, and CPU sits at 22 % of one
+core.
+
+⚠ `v4l2_mailbox.py` already says *"BUFFER COUNT IS NOT A LEVER"*, and that is
+**not a contradiction**: it measured **staleness** (flat across 2–8 buffers) at a
+62.5 Hz camera mode. This measures **throughput**, at 120–210 Hz. Both hold. The
+pump fixes staleness; the buffer count decides whether frames arrive at all.
+
+⛔ **The risk is the fallback path.** `_build_v4l2` falls back to `webcam` when
+the device is not a real V4L2 node — and a vehicle camera that fell back would
+run at **half rate, silently**, since nothing downstream checks the achieved
+frame rate against the profile's request.
+
+### 17.3 ⛔ RETRACTED: "the ROS graph costs 45 %"
+
+§14.3 concluded the ROS graph was the lever, from ~98 Hz standalone against a
+recorded 53.9 Hz through the graph. **Measured with a real ROS node, real camera,
+real Hailo, publishing a real `Detection2DArray` on the real topic:**
+
+| | rate |
+|---|---|
+| Hailo standalone, from files | 97.47 Hz |
+| **real ROS node + real camera** | **94.11 Hz** (p95 10.75 ms) |
+
+**The graph costs 3.4 %, not 45 %.** A correctly-written node keeps essentially
+all of the chip. So if our own detector delivers 53.9 Hz, the loss is **in our
+node**, not in ROS — which is a completely different and much more tractable
+problem. The 53.9 Hz figure needs re-measuring against the current code before
+anything is built on it.
+
+### 17.4 ⚠ And a number in `config.py` that deserves a second look
+
+`pi_forward` records *"fps 60 → image 30.03 Hz, detections 27.11 Hz"* and reads
+it as *"the request saturates at the ceiling"* — i.e. that 30 Hz **is** the
+camera's limit. That is exactly the 2:1 pattern measured above.
+
+⚠ **It may still be correct**: `pi_forward` is a different unit from the Sonix
+(the note says the forward camera "is indifferent to" format), and only the
+Sonix is connected. **But it should be re-checked with `v4l2-ctl --stream-mmap`
+before 30 Hz is accepted as that camera's ceiling**, because the same reading has
+now been wrong once.
