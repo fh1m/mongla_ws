@@ -1,4 +1,4 @@
-# Camera-derived velocity and odometry — the deep pass
+# Camera-derived velocity and odometry — the deep pass, and why nothing here ships
 
 Compiled **2026-09-23**. This is a **delta on**
 [`sota-vo-depth.md`](sota-vo-depth.md) (2026-09-22), which already covers NeuFlow v2, RAFT,
@@ -14,14 +14,38 @@ that first.** This document spends its budget on what that one does not have:
 
 ## The bar this is judged against
 
+> ⛔ **Verdict up front, after the research and after checking it against the tree: this
+> document's own proposal loses, and there is no move here.** Nothing in the 2024–2026
+> literature beats sparse LK as a velocity sensor on this vehicle. The one candidate that
+> survived contact with our hardware — XFeat frame-to-frame — is **withdrawn**, because
+> `measured-bars.md` §28 shows the failure regime it existed to serve **has never been
+> observed on real water**.
+>
+> ⭐ **What this sweep is actually worth: four closures, two corrections, and one recording to
+> take on a pool day.** The closures are durable (a vendor's "no plan to support", a CUDA
+> dependency, a 3.2 s/pair measurement, four papers that never compare events to frames).
+> The corrections: the incumbent's **algorithm** error is **0.02 cm on 30 cm** on a synthetic
+> in-air control — a different quantity from the 1.09 cm physical bound, and ⛔ **neither is
+> an in-water measurement**; and ⭐ **the Hailo gains ~7.8 ms/frame** once our detectors are
+> recompiled single-context — ⚠ **which is a reason to recompile the DETECTORS, not to host a
+> second network: the chip is the scarce resource, the CPU is 72.8 % idle** — which is the most consequential number touched by this sweep,
+> and it arrived from someone else's bench while this was being written (§0b).
+>
+> ⚠ **Written 2026-09-23 against a moving tree.** Two `measured-bars.md` retractions landed
+> mid-sweep and both hit load-bearing premises here (the PCIe bound, the ROS graph's 45 %).
+> Both are corrected inline. **Re-check §0b and §5c against `measured-bars.md` §14.4 before
+> relying on any Hailo number in this file.**
+>
+> **Jump to the recommendation; §1–§6 are the workings.**
+
 Our incumbent, from `sota-vo-depth.md` and `measured-bars.md`:
 
 | | |
 |---|---|
 | Method | sparse Shi-Tomasi + Lucas-Kanade + RANSAC similarity, downward camera, IMU de-rotated |
 | Cost | **12.34 ms/pair, Pi 5 CPU** |
-| Accuracy | worst **1.09 cm** over three 30 cm slides; noise floor **0.57 mm/s**; scale **103.4 %** |
-| Known failures | bare floor (no texture), sun caustics, yaw ≥ **1.128 rad/s** |
+| Accuracy | **algorithm**, synthetic in-air control: **0.02 cm / 30 cm**; 0.006–0.40 px against warped truth. **Physical in-air** hand slide: **1.09 cm** (±1 cm of operator precision inside it). ⛔ **In water: unmeasured.** Noise floor **0.57 mm/s** |
+| Known failures | sun caustics over a floor with no dark texture of its own (**now gated** by a patch-NCC refusal), yaw ≥ **1.128 rad/s**. ⛔ *"bare floor"* was the assumed failure and is **measured not to occur** on real downward water footage — `measured-bars.md` §28 |
 
 ⛔ **The decisive framing — and it is stronger than "our error is scale bias".** Read
 `measured-bars.md` §13 before believing the 1.09 cm is the *sensor's* error. The three slides
@@ -37,22 +61,80 @@ were **in air, at h = 0.72 m, by hand, against a tape**, and the file says so:
 max error 0.02 cm.** And against warped-truth frames the estimator returns **0.006–0.40 px**
 (`measured-bars.md`, 2026-09-11).
 
-⛔ **So the incumbent's algorithmic error is not 3.4 %, it is ~0.07 %, and nothing in this
-document can improve on it.** Every headline number below — RAFT's EPE, NeuFlow's 4.33,
-XFeat's inlier counts — measures something our incumbent has already saturated. A candidate
-must win on a *failure regime*, not on nominal accuracy:
+⛔ **Read the scope exactly.** 0.02 cm is the **algorithm's** error on a **synthetic, in-air**
+control; 1.09 cm is the **physical in-air** bound with the operator inside it. ⛔ **The
+deployed sensor's in-water error has never been measured** — height comes from pressure plus
+a flat-floor assumption, and refraction applies, and both belong to the sensor. **Nothing on
+this platform has been in water.**
+
+⭐ **What this does settle**: every headline number below — RAFT's EPE, NeuFlow's 4.33,
+XFeat's inlier counts — is an *algorithm* metric, and on algorithm metrics our incumbent is
+already at 0.02 cm. A candidate must win on a **failure regime**, not on nominal accuracy:
 
 1. does it produce usable motion on a **bare pool floor**, where LK gets no tracks?
 2. does it **reject caustic** motion (which is real image motion, not sensor noise)?
 3. does it survive **yaw ≥ 1.128 rad/s**?
 
-⛔ **The Hailo cost floor.** Measured here: at batch 1 the **PCIe round trip dominates**, and
-our fastest *complete* loop — frame → letterbox → chip → NMS decode → boxes — is **7.99 ms
-(125 Hz) for stock yolov8n at 640×640** (`measured-bars.md` §14.3). ⚠ So the floor is **under
-8 ms for a 640×640 input**, and it presumably scales with tensor size; it is not a fixed
-9.3 ms. LK already runs in 12.34 ms on a CPU core the Hailo does not free, and **the detector
-already owns the chip**. The economic case for moving *anything* else there is thin before we
-start.
+⛔ ⛔ **AND REGIME 1 LARGELY DOES NOT EXIST — MEASURED, AND THIS GUTS THE CASE THIS DOCUMENT
+WAS BUILT TO MAKE.** `measured-bars.md` §28 (2026-09-09) deleted a purpose-built low-texture
+fallback on exactly this evidence. Against `heading_down_test_vid.mp4` — **real** downward
+camera, 640×480, **898 frame pairs**, through the shipped
+`detect_corners` + `calcOpticalFlowPyrLK` + `solve_planar_motion`:
+
+| quantity | min | p05 | median | max |
+|---|---|---|---|---|
+| corners detected | **185** | 192 | 192 | 192 |
+| LK tracked | 184 | 190 | 192 | 192 |
+| RANSAC inliers | 37 | 71 | 100 | 145 |
+
+> **Frames below the 8-corner threshold: 0 of 898 (0.00 %). Solver refusals: 0 of 898.**
+> **"The worst frame in the clip carries 185 corners — 23× the threshold, not marginal."**
+
+Its own title is the finding: ***"the low-texture regime does not exist on real water."***
+And regime 2 is **already gated**: `flow_node.py` ships a refusal —
+*"sun caustics over a floor with no texture of its own (patch NCC … < CAUSTIC_NCC_MIN): the
+motion is the waves, not the hull"* — added the same day as the 12.47 px measurement.
+
+⭐ **What survives as a genuine unknown is narrower and different**: `measured-bars.md`
+states the scope honestly — *"one clip, one environment, real water but **not a competition
+pool floor**"*, and separately, *"the texture that defeats optical flow is **a repeating tile
+pattern under water**, and this archive does not contain one."* ⛔ **A repeating tile floor
+fails by aliasing, not by absence — and a learned descriptor aliases too** (§6a). **So the
+one remaining failure mode is the one XFeat does not fix.**
+
+⭐⭐ **THE HAILO HAS HEADROOM — and this reverses the premise this document was written on.**
+`measured-bars.md` §14.4 (2026-09-23, **committed while this sweep was in progress**)
+re-measured through HailoRT's modern `create_infer_model` API instead of the older
+`InferVStreams` path, and **un-retracted §14.1**:
+
+| model | contexts | sync | **async (8 in flight)** | gain |
+|---|---|---|---|---|
+| `yolov8n` — stock | **1** | 153.31 Hz | **419.68 Hz** | **2.74×** |
+| `yolov8s` — stock | **1** | 112.72 Hz | **479.60 Hz** | **4.25×** |
+| `sauvc_sim` — **ours** | **3** | 98.44 Hz | 98.44 Hz | **1.00×** |
+| `grr_lowth` — **ours** | **3** | 98.21 Hz | 98.21 Hz | **1.00×** |
+| `yolov11s` | 3 | 43.02 Hz | 43.02 Hz | 1.00× |
+
+⭐ **The correlation with context count is perfect**: single-context models pipeline 2.7–4.3×,
+every multi-context model is flat at 1.00×. `InferVStreams` was adding **~7 ms of host
+overhead**, reporting `yolov8s` at "9.22 ms" for a model **the chip runs in 2.09 ms** — an
+overhead identical for every model, which flattened them all to ~98 Hz and *looked exactly
+like a shared PCIe bound.* **It was not.**
+
+⛔ **So "the PCIe round trip is ~9.3 ms and dominates" is dead**, and with it the argument
+that nothing else can share the chip. The commit message states the consequence directly:
+single-context compilation takes chip time from 10.16 ms to ~2.4 ms, **freeing ~7.8 ms of
+chip per frame — "room for a SECOND network — XFeat, depth, flow — on the same
+accelerator."**
+
+⚠ **But read what that does and does not change.** ⛔ **It does not revive any dense-flow
+model** — §1a's blocker is `grid_sample`, a *compiler* refusal, not a throughput one, and no
+amount of headroom compiles an unsupported op. ⛔ **And it is not a licence to host a second
+network**: [`vision-what-to-do-next.md`](../../perception/vision-what-to-do-next.md) §2.1
+establishes that **the chip and the camera are the scarce resources while the Pi is 72.8 %
+idle**, so freed chip time is worth spending on **the detector's own latency**, not on moving
+CPU work onto the accelerator. ⭐ **The value here is latency and headroom for the detector,
+full stop.**
 
 ---
 
@@ -79,9 +161,11 @@ And on our own murky Mirpur clips, frame-to-reference with `USAC_MAGSAC`:
 | Mirpur gate | 111 | 3/4 | **4/4** (753→682) |
 | octagon (low texture) | 1205 | 1/4 | **3/4** |
 
-⭐ **This is the headline of the whole document.** The best *learned* feature front-end for
-this problem is **already exported, already timed on the vehicle, and already proven on our
-own turbid water** — at 30 Hz on one core while the LK rung runs at 125 Hz on another, with
+⚠ **An earlier draft called this "the headline of the whole document." It is not** — see
+"The bar", §3's preamble, and the recommendation: the regime it was going to serve was
+measured out of existence in `measured-bars.md` §28. What remains true is narrower and still
+worth knowing: the best *learned* feature front-end for this problem is **already exported,
+already timed on the vehicle, and already proven on our own turbid water** — at 30 Hz on one core while the LK rung runs at 125 Hz on another, with
 the Pi 72.8 % idle. Nothing in §1–§4 below is better positioned than that, and nothing below
 comes with a measurement on our footage.
 
@@ -118,16 +202,18 @@ candidate below.**
 | `yolov8s` — stock | 1 | 9.22 ms | 99.73 Hz |
 
 A 4.9× throughput gap in `hailortcli benchmark --hw-only` **vanished end to end**: at batch 1
-both are dominated by the **PCIe round trip, ~9.3 ms**. The consequence for this document:
+**§14.2 originally concluded** that both are dominated by a **PCIe round trip of ~9.3 ms**.
+⛔ **That conclusion has since been retracted** — see the blockquote below and "The bar".
 
-> **Any model moved to the Hailo-8 is round-trip-bound, not compute-bound, at batch 1.** The
-> best complete loop measured here is **7.99 ms** (yolov8n, 640×640, letterbox + NMS
-> included); ours run at 10.20–10.26 ms. ⭐ **The decisive point is not the millisecond count
-> — it is that the chip is a single shared resource the detector already occupies**, and the
-> Pi is **72.8 % idle**. ⛔ Spending detector rate to save CPU time we are not short of is not
-> a trade worth making, and it is settled before any paper is read. ⚠ It also means **every
-> vendor or forum FPS figure in this document must be read against ~8 ms of round trip** —
-> the same skepticism our own §14 retraction was about, applied uniformly.
+> ⛔ **This section is superseded — see "The bar" above.** §14.2's retraction was itself
+> retracted on 2026-09-23: the flat ~98 Hz was **`InferVStreams` host overhead**, not a PCIe
+> bound. The chip runs `yolov8s` in **2.09 ms**. Kept here because the shape of the error is
+> the lesson — *"a measurement is only as good as the API path it went through"* — and
+> because it is why an earlier draft of this document declared the chip full.
+
+⚠ **What survives, and it is a real caution**: vendor and forum FPS figures still deserve
+skepticism (SuperPoint's "~300 FPS", the Model Zoo's 2519), because they are chip-only
+numbers that omit the host path — **whose cost we now know depends on which API you call.**
 
 ---
 ## 1. Dense optical flow — and the Hailo question, answered
@@ -138,19 +224,21 @@ both are dominated by the **PCIe round trip, ~9.3 ms**. The consequence for this
 Hailo-8 that I could find"* and left it on the unverified list. **It can now be closed
 properly**, from Hailo's own mouth.
 
-⭐ **Verified in the source, not assumed.** `gh search code grid_sample` returns, as of
-2026-09-23:
+⭐ **Verified in each repository's own source, not assumed.** `gh search code grid_sample`,
+2026-09-23 — **all four architectures named in the brief, confirmed individually**:
 
-- `neufieldrobotics/NeuFlow_v2:NeuFlow/corr.py` — *"Wrapper for grid_sample, uses pixel
-  coordinates"*, `F.grid_sample(img, grid, align_corners=True)`; also `NeuFlow/utils.py`
-- `haofeixu/gmflow:gmflow/geometry.py` and `gmflow/matching.py` —
-  `F.grid_sample(feature1, sample_coords_norm, ...)`
+| repo | file | line |
+|---|---|---|
+| `princeton-vl/RAFT` | `core/utils/utils.py` | *"Wrapper for grid_sample, uses pixel coordinates"* · `F.grid_sample(img, grid, align_corners=True)` |
+| `neufieldrobotics/NeuFlow_v2` | `NeuFlow/corr.py`, `NeuFlow/utils.py` | same wrapper, same call |
+| `haofeixu/gmflow` | `gmflow/geometry.py`, `gmflow/matching.py` | `F.grid_sample(feature1, sample_coords_norm, ...)` |
+| `drinkingcoder/FlowFormer-Official` | `core/utils/utils.py` | same wrapper, inherited from RAFT |
 
-So **the edge-targeted model (NeuFlow v2) and the global-matching model (GMFlow) both depend
-on `grid_sample` directly**, not by family resemblance. ⚠ GMFlow does *global* matching rather
-than iterative correlation lookup, so the mechanism differs — but it uses the same primitive
-for feature warping and windowed sampling. RAFT's dependence is in its architecture
-description: the lookup operator *"extracts correlation
+⭐ **RAFT, NeuFlow v2, GMFlow and FlowFormer all call `grid_sample` directly** — this is a
+checked fact about four repositories, not an inference from family resemblance. ⚠ GMFlow does
+*global* matching rather than iterative correlation lookup, so its mechanism differs, but it
+uses the same primitive for feature warping and windowed sampling. What the operator does, in
+RAFT's own architecture description: the lookup operator *"extracts correlation
 features from the correlation volume by taking a fine feature pixel with its optical flow
 field, computing a 2D grid around it with a predefined radius, and performing subpixel
 bilinear resampling along the grid"*
@@ -170,8 +258,8 @@ PCIe round trip **per refinement iteration** — RAFT uses 12–32. At our measu
 round trip** that is **~96–256 ms per frame** before any arithmetic. Corroborating:
 [grid_sample problem](https://community.hailo.ai/t/grid-sample-problem/17078).
 
-⛔ **Verdict: as of Sep 2026, no RAFT- or GMFlow-family dense flow runs usefully on our
-Hailo-8.** Not "nobody has tried" — the vendor has declined to support the primitive these
+⛔ **Verdict: as of Sep 2026, none of the four dense-flow architectures in the brief runs
+usefully on our Hailo-8.** Not "nobody has tried" — the vendor has declined to support the primitive these
 architectures call directly. ⚠ **The vendor statement is dated 24 Apr 2025 and the
 supported-layer list moves.** Re-open only on a Hailo DFC release note that names GridSample;
 do not re-open on a new flow paper.
@@ -190,7 +278,7 @@ LoFTR). Stereo Depth Estimation exists, which matters for §5.
 | **NeuFlow v2** ([arXiv 2408.10161](https://arxiv.org/abs/2408.10161), Aug 2024, [code](https://github.com/neufieldrobotics/NeuFlow_v2)) | 2024 | KITTI-15 EPE **4.33**; claims **10×–70× speedup** over SOTA at comparable accuracy | **>20 FPS at 512×384 on a Jetson Orin Nano**, *half precision*, 1024 CUDA cores. Also benched on an RTX 2080. Trained FlyingThings, evaluated Sintel + KITTI-15 **training** sets | ⛔ GridSample |
 | **NeuFlow v1** ([arXiv 2403.10425](https://arxiv.org/abs/2403.10425), Mar 2024) | 2024 | KITTI-15 EPE **12.4** (v2 paper's figure for v1) | edge-targeted, same Jetson class | ⛔ |
 | **RAFT / RAFT-small** ([arXiv 2003.12039](https://arxiv.org/abs/2003.12039), Mar 2020) | 2020 | still the accuracy reference | ~**100 ms on a GTX 1080Ti**; RAFT-small is 1 M params. [DIFT (arXiv 2306.05691)](https://arxiv.org/abs/2306.05691) measures **<0.2 inferences/s for a single iteration** on a mobile platform — i.e. **seconds** per frame | ⛔ |
-| **GMFlow / FlowFormer** | 2022 | higher accuracy still | desktop-GPU numbers only; both are transformer/attention stacks. Note the SuperGlue precedent below: **Hailo's parser rejects `einsum` attention** | ⛔ |
+| **GMFlow / FlowFormer** | 2022 | higher accuracy still | desktop-GPU numbers only — ⚠ **no edge runtime found for either**; both are transformer/attention stacks, so the SuperGlue precedent also bites: **Hailo's parser rejects `einsum` attention** | ⛔ `grid_sample`, verified in both repos |
 
 ⚠ **Every rate in that table is a GPU rate.** None of these authors publish an ARM-CPU
 number, and we are on a CachyOS x86 dev box — **we cannot produce a Pi 5 timing here**, and
@@ -258,7 +346,13 @@ question does not arise; they are also up-to-scale, so they do not even remove o
 constraint. (c) cost? unbounded — it is a different computer.** Closed.
 
 ---
-## 3. Feature-based frame-to-frame VO — ⭐ the only live candidate in this document
+## 3. Feature-based frame-to-frame VO — the only live candidate, and it is weaker than it looks
+
+⛔ **Read "The bar" above first.** This section was written before `measured-bars.md` §28 was
+found, and §28 removes its main motivation: **on 898 real downward pairs the worst frame
+carried 185 corners against an 8-corner threshold, with zero refusals.** Everything below
+stands as research, but its *conclusion* is downgraded accordingly and the recommendation at
+the end of this file reflects the corrected view, not this section's original one.
 
 This is the one family that is (a) runnable, (b) arguably better than LK **in the regime
 where LK fails**, and (c) cheap to adopt — because **we already own the hard part**.
@@ -269,7 +363,7 @@ where LK fails**, and (c) cheap to adopt — because **we already own the hard p
 |---|---|---|---|
 | **XFeat** ([arXiv 2404.19174](https://arxiv.org/abs/2404.19174), 30 Apr 2024, CVPR 2024; [code](https://github.com/verlab/accelerated_features)) | 2024 | *"real-time on an inexpensive laptop CPU"*; **up to 5× faster** than deep local features; ~1400 FPS batched on an RTX 4090 at VGA sparse. ⭐ **The comparison table is already in [`sota/vision.md`](../vision.md)** — i5-1135G7 at VGA: XFeat **27.1 FPS / Acc@10° 74.9 / 892 inliers / HPatches MHA 81.1 (best in table)**, vs ORB 44.3/43.1, SuperPoint 3.0/67.4, ALIKE 5.3/77.7, DISK 1.2/81.3 | ⭐ **MEASURED HERE: 33.1 ms @ 320×240, 1 thread, Pi 5, stack running** (`measured-bars.md` §8) — which ⭐ **closes `RESEARCH-OWED.md` R-12** (*"XFeat on a Raspberry Pi 5 — the published figure is an i5-1135G7 at VGA"*). ONNX, 2.7 MB |
 | **XFeat\*** (semi-dense, same paper) | 2024 | **+111 % inliers (892 → 1 885)**, **+10.2 Acc@10° (74.9 → 85.1)** for **1.4× the time** (27.1 → 19.2 FPS) | ⭐ **already a ranked move: `SOTA-GAPS.md` G-18, value 15.0**, falsifier already written |
-| **SuperPoint** (Magicleap, 2018) | 2018 | the reference learned detector; XFeat's "5× faster" baseline | **~300 FPS on Hailo-8 / Pi 5, reported working** — [Hailo Community, 27–28 Jul 2026](https://community.hailo.ai/t/has-anyone-successfully-deployed-superglue-on-hailo-8/19604). ⚠ **Apply §0b's skepticism to that figure too**: an unqualified 300 FPS is 3.3 ms, below our own measured complete-loop floor of 7.99 ms, so it is almost certainly a chip-only number, not a loop rate. **Not in the Model Zoo** — a community port |
+| **SuperPoint** (Magicleap, 2018) | 2018 | the reference learned detector; XFeat's "5× faster" baseline | **~300 FPS on Hailo-8 / Pi 5, reported working** — [Hailo Community, 27–28 Jul 2026](https://community.hailo.ai/t/has-anyone-successfully-deployed-superglue-on-hailo-8/19604). ⚠ **Read it as chip-only, not a loop rate** — it carries no methodology. ⭐ But note §0b: our own chip runs `yolov8s` in **2.09 ms**, so **3.3 ms for SuperPoint is entirely plausible as a chip number**, and an earlier draft's dismissal of it rested on the since-retracted PCIe bound. **Not in the Model Zoo** — a community port |
 | **ALIKED** | 2023 | used as LightGlue's front-end in the ONNX ecosystem | no Pi/Hailo number found. ⚠ It uses **deformable convolution**, which is a GridSample consumer — see §1a |
 | **EdgePoint2** | 2025 | *2× faster than XFeat, competitive on IMC2022* | ⛔ **benched here and lost badly**: 1–4 inliers where XFeat got 86–155 on our Mirpur clips (`measured-bars.md` §8) |
 
@@ -304,11 +398,59 @@ chip; SuperGlue costs 30 % of its recall and three chained HEFs. Which is fine �
 is mutual-nearest-neighbour cosine on XFeat descriptors (`MIN_COSSIM = 0.82`, XFeat's own
 default) plus `USAC_MAGSAC`, and that is **CPU work of negligible cost**.
 
-⭐ **Keep XFeat on the CPU — and the reason is not the millisecond arithmetic, it is that we
-are not short of CPU.** The Pi is **72.8 % idle** with both rungs running (§0a). Moving the
-extractor to the Hailo would spend the detector's chip time to buy back a resource we have
-in surplus. ⚠ It has also never been attempted here, so whether XFeat even compiles under
-`hailomz` is unknown — see the unverified list.
+⚠⚠ **This was "keep XFeat on the CPU"; the 2026-09-23 re-measurement reopens it.** The old
+argument was that the chip is full and the Pi is 72.8 % idle, so hosting XFeat would spend
+detector rate to buy a surplus resource. ⛔ **The premise is gone**: recompiling our detectors
+**single-context** frees ~7.8 ms of chip per frame, and `measured-bars.md` names XFeat first
+among the networks that headroom is for.
+
+⭐ **So the honest position is now: XFeat-on-Hailo is an open question with a real payoff** —
+and it is a *different* move from anything this document recommends, because it would serve
+the **anchor rung** (where XFeat actually earns its place), not the velocity sensor.
+
+⛔⛔ **SUPERSEDED — and by evidence stronger than the reasoning below.**
+[`perception/vision-what-to-do-next.md`](../../perception/vision-what-to-do-next.md) §2.1
+settles this: **a working Hailo-8 XFeat HEF already exists**
+([`guyp98/accelerated_features`](https://github.com/guyp98/accelerated_features), from
+[Hailo community thread 14926](https://community.hailo.ai/t/xfeat-compilation/14926)), and it
+was verified **by downloading and loading the artifacts**, not by reading a claim. **Only the
+input normalisation — 2 nodes of 88 — stays on the CPU; the whole backbone and both heads
+compile.** ⭐ So my guess below was right in direction and irrelevant in effect: *possible*
+was never the question.
+
+⛔ **And it is demoted anyway, on a trade I had backwards.** The Pi is **72.8 % idle**;
+hosting XFeat spends **scarce Hailo duty cycle** — which feeds our only working perception
+capability at 98 Hz — **to buy back abundant CPU.** ⛔ **The scarce resources are the chip and
+the camera, not the CPU**, so my §0b enthusiasm for "room for a second network" is exactly
+the reasoning that section warns against. Worse: that fork's graph takes **three inputs**
+including a pixel-unshuffled tensor — **roughly double the bytes over the ×1 PCIe link that
+is already the constraint** — and it L2-normalises the descriptor and softmaxes the keypoint
+map **in INT8 on-chip**, sharpening quantisation risk. **Our own export keeps both on the
+host in float and is the safer artifact.**
+
+⭐ **Its falsifier, if ever reopened**: *a HEF that compiles is not a result — one that still
+reads 4/4 on our own murky clips through INT8 is.*
+
+*The original reasoning is kept below because the gap between "possible" and "worth doing" is
+the useful part.*
+
+⚠ **The obvious blocker — checked, and it looks avoidable.**
+`verlab/accelerated_features:modules/interpolator.py` calls
+`F.grid_sample(x, grid, mode=self.mode, align_corners=False)`, **the same op Hailo declined
+to support** (§1a). ⭐ **But our export almost certainly does not include it**:
+`tools/xfeat_export.py` exports `XFeat(weights=w, top_k=4096)**.net**` — the raw backbone —
+**not** the `XFeat` wrapper whose `detectAndCompute` / `match_xfeat_star` path uses the
+sparse interpolator. The interpolator is a *host-side sampling step*, which is exactly the
+arrangement Hailo's own advice recommends (*"handle the operation on the host side"*).
+
+⭐ **And the export is already Hailo-shaped in the other respect that matters**: its docstring
+says *"THE EXPORT IS FIXED-SHAPE. Feeding another size throws rather than resizing"* — **no
+dynamic shapes**, which the brief correctly flags as a Hailo requirement.
+
+⭐ **So the gating bench is one line — `grep`/inspect our existing 320×240 ONNX for a
+`GridSample` node — and the prior is that it is clean.** ⚠ **I could not run it: no
+`xfeat*.onnx` was located on this box within the search budget** (the artifact lives in
+`~/hailo_models` on the vehicle). **Run it there before opening the DFC.**
 
 ### 3c. ⭐ Would XFeat frame-to-frame beat LK **as a velocity sensor** for us?
 
@@ -320,10 +462,15 @@ nominal regime, and say so before running the experiment.**
 real downward frame warped by a known (dx, dy, θ, scale), 25 frames per case, worst of the
 swept range (30 px shift, 15° rotation, ×1.20 zoom) — LK + RANSAC similarity returns
 **0.006–0.40 px translation, 0.002–0.05° angle, ≤0.001 scale**; on the synthetic slide
-control, **0.02 cm on 30 cm**. ⛔ **There is no room above that in the nominal regime** — and
-XFeat's own matcher noise, as measured here, is **1.55 px** (`measured-bars.md` §9), i.e.
-**4–250× worse than what LK returns against truth.** A candidate that only matches the
-incumbent has cost us 21 ms for nothing.
+control, **0.02 cm on 30 cm**. ⛔ **There is no room above that in the nominal regime**. A candidate that only matches the incumbent has cost us 21 ms for nothing.
+
+⚠ **A comparison deliberately NOT made**: `measured-bars.md` §9 reports XFeat homography
+inlier reprojection RMS of **1.55 px**, and it is tempting to set that against LK's
+0.006–0.40 px. ⛔ **They are not commensurable** — different metric (reprojection RMS vs
+median error against known truth), different footage (forward props vs synthetic warps of a
+downward frame), different baseline (+1–8 s frame-to-reference vs a frame pair). Comparing
+them would measure nothing. **The withdrawal in §3 rests on §28 alone and needs no such
+ratio.**
 
 **Where it plausibly can — the two failure regimes, with our own evidence:**
 
@@ -331,10 +478,15 @@ incumbent has cost us 21 ms for nothing.
    *ours*: on the **octagon (low-texture)** clip ORB managed **1/4** and XFeat **3/4**; on
    Mirpur torpedo_1 ORB found **7 keypoints total** and failed 0/4 while XFeat found **4096
    keypoints, 130–301 inliers, 4/4**. Shi-Tomasi — what our LK rung uses — is a *corner*
-   detector of the same classical family as ORB's FAST front-end. ⛔ **Two gaps, both stated
-   rather than papered over**: (i) the clips are **forward-camera prop footage**, not the
-   downward floor (§0a); (ii) **Shi-Tomasi was never benched** — the inference that it fails
-   where ORB fails is **reasoned, not measured**. ⭐ Both close with one cheap run: keypoint
+   detector of the same classical family as ORB's FAST front-end. ⛔ **Three gaps, all stated rather
+   than papered over**: (i) the clips are **forward-camera prop footage**, not the downward
+   floor (§0a); (ii) **Shi-Tomasi was never benched** — the inference that it fails where ORB
+   fails is **reasoned, not measured**; (iii) ⭐ **the "low texture" row does not mean "no
+   corners."** The octagon clip gave ORB **1205 reference keypoints** and it still scored
+   1/4 — so ORB's failure there is in *matching and descriptor quality*, not in *detection*.
+   ⛔ **That is the opposite of the "LK gets no tracks" premise**, and it points the same way
+   as §28: the corner supply was never the thing that was short. Only Mirpur torpedo_1
+   (**7 keypoints**) is a genuine detection failure, and that is murk, not bare floor. ⭐ Both close with one cheap run: keypoint
    and inlier counts, **Shi-Tomasi vs XFeat, on the existing downward 30 cm-slide
    recordings**. **Do that before anything else in this document.**
 2. **Turbidity.** Settled in our favour and already recorded: the earlier conclusion *"the
@@ -342,8 +494,15 @@ incumbent has cost us 21 ms for nothing.
    limitation."*
 
 **Where it probably does not help:** caustics. XFeat will detect and match caustic structure
-as readily as it matches floor texture — caustics are high-contrast, repeatable-over-a-few-
-frames image structure. The defence there is **not** a better detector (§6).
+as readily as it matches floor texture — caustics are high-contrast,
+repeatable-over-a-few-frames image structure. The defence there is **not** a better detector
+(§6) — and one already ships (the patch-NCC refusal in `flow_node.py`).
+
+⛔ **And where the premise itself fails:** §28's 898-pair measurement says the corner supply
+on real downward footage is **23× the threshold at its worst**. ⚠ Both halves of point 1 are
+therefore now in doubt, not just the Shi-Tomasi inference: **the regime may not exist on the
+data we have**, and the one place it might — a repeating tile floor — is an *aliasing*
+failure a descriptor shares.
 
 **High yaw rate (≥1.128 rad/s):** unknown either way. Descriptor matching is more
 rotation-tolerant than LK's small-displacement linearisation, so there is a plausible win
@@ -376,7 +535,8 @@ The work is: point it at consecutive downward frames instead of a stored referen
 the **similarity** (not homography — the floor is a known plane and the full 8-DOF fit is
 over-parameterised and less stable), de-rotate with the IMU exactly as LK does, scale by
 height, and feed the EKF's existing body-velocity channel. Budget: **one CPU core at 30 Hz**,
-which §0a shows is available (Pi 72.8 % idle with both rungs running).
+which §0a shows is available (Pi 72.8 % idle with both rungs running) — ⚠ CPU idle measured
+before the 2026-09-23 camera-chain work; re-check if the pipeline rate has since changed.
 
 ⛔ **Three refusals that must be written into the experiment before it starts:**
 
@@ -395,7 +555,12 @@ which §0a shows is available (Pi 72.8 % idle with both rungs running).
 **Verdict — (a) runnable? ⭐ yes, measured, 30 Hz on one core. (b) better for us? only in the
 texture-poor regime, where our own data says it is dramatically better as a *matcher*;
 unproven as a *velocity sensor*. (c) cost? low — the export, the model and the bench protocol
-already exist.** ⭐ **This is the one thing in this document worth an experiment.**
+already exist.**
+
+⛔ **Superseded.** An earlier draft ended here with *"this is the one thing in this document
+worth an experiment."* It is not — see the recommendation. The falsifier above did its job:
+the bare-floor slide it demanded has effectively **already been run**, on 898 real pairs, and
+LK passed it 23× over.
 
 ---
 ## 4. Event cameras underwater — ⭐ the literature moved since 2026-09-22, and the verdict does not
@@ -519,9 +684,10 @@ not as verbatim citations of a named source.** Only the fourth bullet is from a 
 
 ⭐ **The convergence, stated plainly:** the published answer to *"optical flow fails
 underwater"* is **a DVL or a sonar**. Where the answer is allowed to be software-only, it is
-either **caustic-specific preprocessing — which we already ship, with measured bars and a
-stated failure mode** — or **a learned local feature replacing a classical corner detector**,
-which is exactly §3 and exactly the one experiment worth running.
+either **caustic-specific preprocessing — which we already ship, with measured bars, a
+stated failure mode and a refusal gate** — or **a learned local feature replacing a classical
+corner detector**, which is §3. ⛔ **And §3 loses here on our own data**, because the
+corner detector was never the thing that was short.
 
 ---
 ## 5. Scale recovery — a monocular downward camera is a *direction* sensor until something supplies height
@@ -593,7 +759,7 @@ it weakly or not at all. The observability gate in `measured-bars.md` §13.3 is 
 machinery and is itself *"validated only against synthetic noise"*. **Do not add a scale
 state without an observability gate that refuses it when unexcited.**
 
-### 5c. What the Hailo could actually contribute to scale — the one place the NPU has a role
+### 5c. What the Hailo could contribute to scale — nothing usable, but no longer for lack of room
 
 The Hailo-8 Model Zoo has **no optical flow and no keypoint-matching category** (§1a), but it
 *does* have depth. Published numbers, DFC v2.19.0, PCIe Gen3 ×4, batch 1:
@@ -604,12 +770,10 @@ The Hailo-8 Model Zoo has **no optical flow and no keypoint-matching category** 
 | `scdepthv3` | monocular depth | 256×320×3 | RMSE **0.48** (hardware) | **929** |
 | `stereonet` ⭐ | **stereo** depth | 368×1232×3 | Float EPE 8.22 / **HW EPE 10.3** (KITTI Stereo 2015) | **10.7** (11.6 at batch 8) |
 
-⚠ **Read those FPS against §0b.** 2519 FPS is 0.4 ms — **not a rate a vehicle can have**,
-when our fastest measured *complete* loop is 7.99 ms. These are the same `hw_only`-flavoured
-figures our own §14 retraction was about. ⚠ The two depth models use small inputs (224×224,
-256×320) against our detector's 640×640, so their round trip should be smaller than 7.99 ms
-and a real ceiling cannot be quoted without measuring it — **stating one would repeat the
-error §0b records.** The one number that is *not* flattered is StereoNet: **10.7 FPS =
+⚠ **Read those FPS against §0b.** They are chip-only numbers that omit the host path, and
+§0b shows that path's cost depends on which HailoRT API is used (`InferVStreams` added ~7 ms;
+`create_infer_model` did not). ⭐ **A real ceiling cannot be quoted without measuring it on
+our API path** — stating one would repeat the error §0b records, twice over. The one number that is *not* flattered is StereoNet: **10.7 FPS =
 93 ms/frame**, an order of magnitude above any plausible round trip, so it is genuinely
 compute-bound — and its **hardware EPE 10.3 px on
 KITTI** is poor. ⛔ **StereoNet is not a scale source for us.** It also needs a second
@@ -621,7 +785,7 @@ nothing found here contradicts it. The refraction trap (§4 of that document, an
 `optics.py`) applies to every one of them.
 
 ⭐ **Verdict on scale: we are already doing what the field does, and the binding constraint is
-an altimeter, not an algorithm.** The only software-only improvement with a citation is 5b
+an altimeter, not an algorithm — nor, any longer, chip time.** The only software-only improvement with a citation is 5b
 (scale as an estimated state), and it is observability-limited in exactly our flight regime.
 
 ---
@@ -629,22 +793,24 @@ an altimeter, not an algorithm.** The only software-only improvement with a cita
 
 | Candidate | (a) Runnable here? | (b) Better than sparse LK **for us**? | (c) Cost to adopt |
 |---|---|---|---|
-| **Sparse LK + RANSAC** (incumbent) | ⭐ yes — **12.34 ms** Pi 5 CPU | baseline: 1.09 cm / 30 cm, 0.57 mm/s floor, 3.4 % scale | — |
-| ⭐ **XFeat frame-to-frame** | ⭐ **yes, measured: 33.1 ms @ 320×240 on the Pi with the stack up** | **plausibly, in the texture-poor regime only** — 3/4 vs ORB's 1/4 on octagon; 4/4 vs 0/4 on murky Mirpur. ⛔ **but those clips are FORWARD-camera prop footage, and the comparison is against ORB, not Shi-Tomasi.** **Zero** expected gain nominally; XFeat's own matcher noise here is **1.55 px** vs LK's 0.006–0.40 px against truth | ⭐ **low** — export, ONNX, matcher and bench protocol all already exist |
+| **Sparse LK + RANSAC** (incumbent) | ⭐ yes — **12.34 ms** Pi 5 CPU | baseline. **Algorithm** error 0.02 cm / 30 cm on a synthetic in-air control; **physical** in-air bound 1.09 cm, which `measured-bars.md` attributes to *"the hand, the tape and the height — not the algorithm"*. ⛔ **In-water error unmeasured.** Noise floor 0.57 mm/s | — |
+| ⛔ **XFeat frame-to-frame** | yes, measured: 33.1 ms @ 320×240 on the Pi with the stack up | ⛔ **NO — withdrawn.** Its only case was the texture-poor regime, and §28 measured **185 corners in the worst of 898 real downward pairs, 0 refusals**. Zero expected gain nominally; the clips that motivated it are **forward-camera prop footage** compared against **ORB, not Shi-Tomasi** | low, but ⛔ **not recommended** |
+| ⭐ **Record a competition-pool tile floor in water** | ⭐ yes — a camera and a pool | ⭐ **the only untested regime left.** ⚠ The *composited* tiles row scored **0.09 px**, but a known-shift composite cannot exhibit period ambiguity, so it neither confirms nor refutes the real question | ⭐ a pool-day line item |
 | **XFeat\*** semi-dense (anchor rung) | yes — 1.4× XFeat's time | ⭐ **+111 % inliers, +10.2 Acc@10°** — but for the *anchor*, not velocity | ⭐ **already ranked: `SOTA-GAPS.md` G-18, value 15.0** |
 | **SuperPoint + LightGlue** | ⛔ **no — LightGlue is 0.31 pairs/s ≈ 3.2 s per pair on CPU**, measured here | ⛔ ~100× too slow | ⛔ rejected |
 | SuperPoint + **SuperGlue** | ⛔ **no on Hailo** — einsum + `ReduceLogSumExp` unsupported; 3 chained HEFs at **70.8 % recall**; one compile ran 7 h 34 m and failed | — | ⛔ prohibitive |
 | ALIKED | unknown; ⚠ deformable conv is a GridSample consumer | unknown | unknown |
 | EdgePoint2 | yes | ⛔ **no — measured, lost 1–4 inliers vs XFeat's 86–155 on our clips** | ⛔ rejected |
-| **NeuFlow v2** | ⛔ no — GridSample; >20 FPS figure is a **Jetson Orin Nano GPU** | ⛔ no — our error is scale bias, not flow error | ⛔ n/a |
-| **RAFT / RAFT-small** | ⛔ no — GridSample; <0.2 inf/s per iteration on mobile | ⛔ no | ⛔ n/a |
-| **GMFlow / FlowFormer** | ⛔ no — GridSample + einsum attention | ⛔ no | ⛔ n/a |
+| **NeuFlow v2** | ⛔ no — `grid_sample`, **verified in `NeuFlow/corr.py`**; >20 FPS figure is a **Jetson Orin Nano GPU** | ⛔ no — the incumbent already returns 0.006–0.40 px against truth | ⛔ n/a |
+| **RAFT / RAFT-small** | ⛔ no — `grid_sample`, **verified in `core/utils/utils.py`**; <0.2 inf/s per iteration on mobile | ⛔ no | ⛔ n/a |
+| **GMFlow / FlowFormer** | ⛔ no — `grid_sample` **verified in both repos**, + einsum attention | ⛔ no; ⚠ no edge runtime published for either | ⛔ n/a |
 | **DPVO / DPVO-QAT++** | ⛔ no — CUDA kernels, 4.9 GB GPU (RTX-3090) | ⛔ also up-to-scale, so it does not remove our constraint | ⛔ n/a |
 | **DROID-SLAM** | ⛔ no — 8 GB frontend / **24 GB** backend; OOMs on an 8 GB laptop GPU | ⛔ | ⛔ n/a |
 | **TartanVO** | ⛔ no — 40 ms on a GTX 1080 | ⭐ its **synthetic→real generalisation with no finetuning** is the property worth watching | ⛔ n/a this season |
 | **Event camera** | ⛔ new hardware | ⛔ **no published event-vs-frame underwater number exists** (4 papers, all event-vs-event), and a Jun 2026 SLAM paper calls Time-Surface methods *"highly unreliable when deployed underwater"* | ⛔ dead end |
 | `stereonet` on Hailo | technically yes — **10.7 FPS = 93 ms**, compute-bound | ⛔ HW EPE **10.3 px** on KITTI; needs a second synchronised camera | ⛔ hardware + poor accuracy |
-| Monocular metric depth on Hailo (`fast_depth`, `scdepthv3`) | yes in principle; ⚠ the quoted 2519/929 FPS are chip-only, real loop rate unmeasured | ⛔ see [`sota-vo-depth.md`](sota-vo-depth.md) §4 — measured, water breaks this class | ⛔ |
+| Monocular metric depth on Hailo (`fast_depth`, `scdepthv3`) | ⭐ yes — and **the chip now has room**, ~7.8 ms/frame freed by single-context compilation (§0b) | ⛔ still no — see [`sota-vo-depth.md`](sota-vo-depth.md) §4: measured, water breaks this class, and the refraction trap applies | ⛔ |
+| ⚠ **XFeat hosted on the Hailo** (anchor rung, not velocity) | ⚠ **reopened 2026-09-23** — `measured-bars.md` names XFeat first among the networks the freed chip time is for. ⛔ **But XFeat's own `modules/interpolator.py` calls `grid_sample`** — check our exported ONNX for a `GridSample` node first | n/a — it would serve the anchor, not the velocity sensor | ⚠ **three benches**, the first a one-liner: is `GridSample` in our ONNX (**probably not** — we export the backbone, fixed-shape); does it compile under `hailomz`; do our detectors recompile single-context without accuracy loss |
 | **Scale as an EKF state** (IMU + pressure) | ⭐ yes, software only | ⚠ unquantified; ⛔ unobservable at constant velocity — our nominal regime | medium — needs an observability gate first |
 
 ## The recommendation — and it is smaller than this document's length implies
@@ -656,45 +822,148 @@ board**, and a research pass that ends by proposing a *third* priority should sa
 |---|---|---|---|
 | 1 | **G-19** — gate flow health on the KLT Hessian we already compute | `SOTA-GAPS.md`, existing | **20.0** |
 | 2 | **G-18** — XFeat → XFeat\* in the anchor rung | `SOTA-GAPS.md`, existing | **15.0** |
-| 3 | ⭐ **step 0 below** — Shi-Tomasi vs XFeat on the downward slides | **new, from this sweep** | cheap, and it is a *measurement*, not a component |
-| 4 | XFeat frame-to-frame as a second velocity source | new | only if step 0 says yes |
+| 3 | ⭐ **Record a real competition-pool tile floor in water**, with real vehicle motion, and run the existing §28 harness on it | **new, from this sweep** | the only untested regime left, named twice in our own files. ⚠ **Modest and unproven** — period-ambiguity is *reasoned*, never measured, and a known-shift composite cannot produce it. A pool-day line item, not code |
+| — | ⛔ ~~**XFeat hosted on the Hailo**~~ | raised here, **then closed by better evidence** | ⛔ **demoted — do not pursue.** See below |
+| 5 | ⛔ **XFeat frame-to-frame as a velocity sensor** | this sweep's original idea | ⛔ **not recommended** — see below |
 
-⭐ **G-19 deserves the emphasis.** §6 establishes that the field's software-only answer to
-caustics and texture loss is either preprocessing (we ship it, with a measured failure mode)
-or better features (§3, marginal). ⛔ **The thing that actually protects a run is the sensor
-refusing when it should** — CLAUDE.md §8.6: *"the recurring defect in this codebase is a
-plausible number standing in for an absent measurement."* A flow-health gate is that, and it
-is already ranked first.
+⚠ **Ranks 1–2 are the project's own existing scores; ranks 3–4 are unscored and are this
+sweep's only additions.** Neither addition is a velocity-sensor improvement, which is the
+plainest way to say that **the question asked has a negative answer.**
 
-⭐ **Step 0, and it is nearly free: bench Shi-Tomasi against XFeat for keypoint and inlier
-count on the existing downward 30 cm-slide recordings.** Everything in §3 rests on a
-cross-domain inference (forward prop footage → downward floor) and on a detector that was
-never benched (**Shi-Tomasi, not ORB**). One run settles both, and it may well end §3.
+⭐ **G-19 deserves the emphasis, and this sweep strengthens its case rather than competing
+with it.** Its evidence is Super Odometry 2.0
+([arXiv 2608.25427](https://arxiv.org/abs/2608.25427), *Science Robotics*), which gates
+visual health on **the Hessian of KLT tracking — the same matrix Shi-Tomasi already computes
+inside our flow node** — disabling a modality when its contribution stays below **10 % for
+2–4 s**, hysteresis mattering as much as the threshold.
 
-**Then, only if step 0 favours XFeat:** bench XFeat frame-to-frame similarity as a second
-velocity source against known-truth slides — one textured floor, one bare floor, one under
-caustics.
+⭐ **Two things this sweep adds to G-19:**
+
+1. **It answers §3's question the cheap way.** "Does Shi-Tomasi have anything to work with?"
+   **is the smaller Hessian eigenvalue** — a number the code already computes. ⚠ §28 has
+   largely answered it already (185 corners in the worst of 898 pairs); G-19's value is not
+   discovery but **a continuous, gateable health channel** instead of a post-hoc count.
+2. **The harness is built, the footage is on this machine** (paths below), and the failure it
+   caught is on record: **12.47 px of error on the slalom floor against a 13.4 px truth**.
+   ⚠ That row is **pre-fix** — the patch-NCC refusal shipped the same day — so G-19's
+   falsifier would be testing whether the *eigenvalue* separates the same intervals the NCC
+   gate now catches, on data already on disk.
+
+⛔ **And §6's literature agrees with G-19 over §3**: the field's software-only answers to
+caustics are preprocessing (we ship it; measured; fails exactly here) or better features
+(§3; marginal, and — by reasoning, not measurement — liable to match the wrong tile over a
+tiled floor). **What protects a run is the
+sensor refusing when it should** — `CLAUDE.md` §8.6: *"the recurring defect in this codebase
+is a plausible number standing in for an absent measurement."*
+
+⛔ **The original recommendation of this document — XFeat frame-to-frame — is WITHDRAWN by
+its own research.** It rested on "LK gets no tracks on a bare floor." `measured-bars.md` §28
+measured that on 898 real downward pairs and found **185 corners in the worst frame, 23× the
+threshold, zero refusals**, and deleted a purpose-built low-texture fallback for the same
+reason. ⛔ **The regime the move existed to serve has not been observed on real water.** Kept
+in §3 with full workings, because the research is sound and the *reason it lost* is the
+useful part.
+
+⭐ **What replaces it: record the one floor nobody has recorded — with the caveat stated.**
+Our files name the gap twice: *"one clip, one environment, real water but **not a competition
+pool floor**"* (§28), and *"the texture that defeats optical flow is **a repeating tile
+pattern under water**, and this archive does not contain one"* (the bench/calibration
+archive).
+
+⚠ **Partial counter-evidence, stated precisely because it is easy to over-read**: the
+caustics harness **does** carry a **tiles** row, and LK scored **11.19 px raw → 0.09 px after
+the shipped 7×7 erosion** against a known 13.4 px baseline.
+
+⛔ **But that row does not answer the aliasing question, and must not be quoted as if it
+did.** The harness *synthesises* motion by shifting a real floor image by a known 13.4 px —
+so the same physical texture is present in both frames and LK is matching it to itself. **A
+repeating tile pattern fails when the matcher locks onto the *wrong* period**, which a
+known-shift composite of a single image cannot produce. ⭐ **What the tiles row proves is that
+caustics over tiles are survivable; it says nothing about period ambiguity.** That needs a
+continuous in-water recording over a real tiled floor, with real vehicle motion.
+
+⛔ **And if that regime does turn out to be real, a learned descriptor is probably the wrong
+answer**: a repeating tile floor fails by *aliasing*, which a descriptor shares. ⚠ **That is
+reasoning, not a measurement** — the supporting evidence is third-party and qualitative
+(nemo_auv's *"pool tiles are a repeating texture that obscures features"*, `measured-bars.md`
+scouting note). **No one has benched XFeat against a tiled floor for period ambiguity**, here
+or in the literature I found. The answers would be
+the tile-*period* instrument — `tile_grating.py`, §5a-bis, ⚠ whose `tile_m` **defaults to
+0.0 = OFF because a tile size is a venue constant** — and a refusal gate (G-19). ⭐ **This is
+a pool-day line item, not a software task.**
+
+⭐ **If an XFeat arm is ever wanted anyway, the harness AND its footage are both on this
+machine** — located 2026-09-23:
+
+```
+/home/fh1m/Work/Projects/Duburi/2025/raw_videos/robosub/clips/octagon/octagon_1.mp4
+/home/fh1m/Work/Projects/Duburi/2025/raw_videos/final_run/octagon_Bottom.mkv
+/home/fh1m/Work/Projects/Duburi/2025/raw_videos/final_run/Salom_red.mkv
+/home/fh1m/Work/Mine/r_&_d/heading_down_test_vid.mp4          (also under ~/Documents, ~/Work/Projects)
+```
+
+⚠ `final_run/bin.mkv` was not in the same search; the other three floors and §28's 898-pair
+clip are all present.
+`measured-bars.md` (2026-09-15) built exactly the bench §3d asks for: real RoboSub caustics
+(`octagon_1.mp4`, 58–62 s) composited over **three real floors** (`final_run/bin.mkv`,
+`octagon_Bottom.mkv`, `Salom_red.mkv`) **moved by a KNOWN 13.4 px baseline**, 27 pairs per
+row, through **the production `detect_corners` + LK + `robust_flow`**. ⭐ **Truth is known,
+the floors span textured → bare, and the caustics are real.** Adding an XFeat arm and a
+Shi-Tomasi-keypoint-count column is a script, not a project.
+
+And it already publishes the answer that matters most:
+
+| floor | raw | erode 7 (shipped) | no caustics |
+|---|---|---|---|
+| tiles | 11.19 px | **0.09** | 0.000 |
+| octagon mat | 1.01 | **0.11** | 0.000 |
+| **slalom floor** | 13.31 | ⛔ **12.47** | 0.000 |
+| **plain (synthetic)** | 13.13 | ⛔ **14.10** | refuses |
+
+⛔ **Zero refusals in every caustic row**, and on a floor with no dark texture of its own the
+shipped mitigation does **nothing** — 13.4 px of truth, ~13 px of error, reported
+confidently. **That is the failure this whole subsystem has, stated in our own numbers**, and
+it is a *refusal* problem before it is a *front-end* problem.
+
+⚠ **But note the caustics table is pre-fix**: the patch-NCC refusal (*"the motion is the
+waves, not the hull"*) shipped the same day, so the "zero refusals" row describes the defect,
+**not the current code**. Any new arm must be scored against the *gated* pipeline.
 
 Everything else in this document is either architecturally impossible on a Hailo-8
 (`grid_sample`, verified in NeuFlow v2's and GMFlow's own source), needs a CUDA GPU, needs
 hardware we do not have, or has already been measured and lost here. The XFeat move is the
-only one where the model is already exported and the rate is already measured on the vehicle.
+only one that runs here at all — and it still loses, on our own data rather than on a
+leaderboard.
 
 ⛔ **Its falsifier is stated in advance (§3d): if it does not beat LK on the bare-floor
 slide, it has no case at all** — because §3c shows the incumbent already returns 0.006–0.40 px
 against truth in the nominal regime, and §6a shows a learned descriptor is *worse* than a
 period estimator over identical tiles.
 
-⭐ **And the largest number anywhere near this subsystem is not in this document at all**: the
-ROS graph costs **45 %** of the vision rate (98 Hz standalone vs 53.9 Hz through the graph,
-`measured-bars.md` §14.3). ⛔ **That dwarfs every millisecond argued over above.**
+⛔ **RETRACTED WHILE THIS WAS BEING WRITTEN.** An earlier draft ended here by pointing at
+*"the ROS graph costs 45 %"*. `measured-bars.md`, commit `38f51ac` (2026-09-23), retracts it:
+measured with a real ROS node, real camera, real Hailo and a real `Detection2DArray` on the
+real topic, it is **94.11 Hz against 97.47 Hz standalone — the graph costs 3.4 %.**
+⭐ **So if our detector delivers the recorded 53.9 Hz, the loss is in OUR NODE, not in ROS** —
+a different and much more tractable problem, and the 53.9 Hz figure itself needs re-measuring
+against current code.
 
-⭐ **The most useful output of this sweep is arguably not a move at all — it is three
-closures**: dense flow on Hailo-8 is architecturally dead (`grid_sample`, verified in NeuFlow
-v2's and GMFlow's own source, plus a vendor "no plan to add support"); LightGlue is dead on
-our CPU (**3.2 s per pair**, our own measurement); and the event-camera case is still
-unsubstantiated after four papers (all event-vs-event). **Three directions that will not need
-researching again.**
+⭐ **The most useful output of this sweep is not a move — it is four closures**, each with a
+reason durable enough not to need re-researching:
+
+1. ⛔ **Dense flow on a Hailo-8 is architecturally dead.** `grid_sample`, verified in NeuFlow
+   v2's and GMFlow's own source, plus Hailo's *"no plan to add general support"* (Apr 2025).
+2. ⛔ **Learned VO (DPVO / DROID / TartanVO) needs a CUDA GPU**, and is up-to-scale anyway,
+   so it would not remove our binding constraint even if it ran.
+3. ⛔ **LightGlue is dead on our CPU** — **3.2 s per pair**, our own measurement.
+4. ⛔ **Event cameras remain unsubstantiated underwater** after four papers, all of which
+   compare events to events; one uses **RAFT-on-frames as its ground truth**.
+
+⭐ **And one distinction that outlives the sweep**: 1.09 cm and 0.02 cm measure different
+things. 0.02 cm is the **algorithm** on a synthetic in-air control; 1.09 cm is the
+**physical** in-air slide, with the operator's hand and tape inside the error bar. ⛔ **Neither
+is an in-water number, and there is no in-water number.** Quoting either as "the sensor's
+accuracy" is the failure mode `CLAUDE.md` §8.6 names.
 
 ---
 
@@ -726,12 +995,17 @@ researching again.**
    rests on the GridSample/einsum architecture argument, which is sound but is an inference
    about *those* models rather than a measured compile attempt.
 9. **Whether `hailomz` would actually compile XFeat.** Not attempted. §3b argues it is not
-   worth doing (the Pi is 72.8 % idle; it would spend detector chip time to buy a resource we
-   have in surplus) — but that is a *value* argument, not a compile result. Unverified, not
-   disproven.
-9b. **The Hailo round trip as a function of tensor size.** Our 7.99 ms is one input shape
-   (640×640). Every "is it fast enough on the chip" judgement here would be sharper with a
-   round-trip-vs-input-size sweep, which is a half-hour bench.
+   worth doing — ⛔ **but that argument rested on the retracted PCIe bound and no longer
+   holds** (§0b). Whether XFeat compiles under `hailomz` is now a question worth answering,
+   and it was not attempted here.
+9b. ⭐ **CHECKED, and the answer is good news.** `detection/hailo.py:351` uses
+   `create_infer_model` on the production path; `InferVStreams` appears only behind
+   `MONGLA_HAILO_FORCE_BLOCKING`, a diagnostics-only flag the file itself warns against
+   (*"HOLDS THE GIL for the whole ~10 ms inference and stalls the camera pump"*). ⭐ **So the
+   shipped node already uses the fast API**, and §14.4's freed headroom is a
+   **single-context-compilation** prize, not an API-migration one. ⚠ Our models are the
+   3-context ones, so **we do not have that headroom today** — recompiling for it is the
+   open bench.
 9c. **SuperPoint's "~300 FPS on Hailo-8"** — a forum figure with no methodology. Read as
    chip-only until someone reports a complete loop.
 9d. **The §5a and §6a and §6b quotations** — see the inline ⚠ caveats. Paraphrased from
@@ -739,21 +1013,49 @@ researching again.**
    arXiv 1806.05842's PDF did not decode. **Nothing in this document's verdicts rests on
    them.**
 9e. **`tile_grating.py`'s in-water accuracy** (§5a-bis). The code and the relation were read;
-   no measured error was looked up.
-10. **Which LK number is the baseline.** `measured-bars.md` carries two: **12.34 ms** for the
-    full *LK + RANSAC similarity* (4-DOF: dx dy yaw scale) in the truth-warp bench, and
-    **8.0 ms** for the lock ladder's *fast rung*. Read together they are different code paths,
-    not a contradiction — but ⚠ the XFeat experiment must name which one it is replacing
-    before it claims a win, because 33.1 ms is 2.7× the first and 4.1× the second.
+   no measured error was looked up. Note `tile_m` **defaults to 0.0 = OFF** — a venue
+   constant — so this instrument is not running unless a venue sets it.
+9f. **The harness numbers were not re-derived.** They are quoted from `measured-bars.md`.
+   ⭐ The footage **is** on this machine (paths in the recommendation), so re-deriving them is
+   possible; `final_run/bin.mkv` was the one clip not located. ⚠ An earlier draft of this
+   document asserted the footage was absent — that was a **`find` killed by a 120 s timeout
+   read as a negative result**, which is precisely the defect class this repo keeps
+   recording. Corrected.
+9g. **`sota/vision.md`'s LightGlue figure (0.31 pairs/s).** Trusted as a project measurement;
+   its hardware, resolution and keypoint count were **not** stated there and were not chased
+   here. ⚠ The rejection is strong enough to survive an order of magnitude, but the number
+   itself is second-hand within our own docs.
+10. ⭐ **RECONCILED, not open.** `measured-bars.md` carries **12.34 ms** for the full
+    *LK + RANSAC similarity* 4-DOF fit (dx dy yaw scale) in the truth-warp bench — and §28's
+    independent bench corroborates it at **11.1–12.1 ms** across six cases. The **8.0 ms** is
+    the *lock ladder's FOLLOW rung* on the **forward** camera, a different code path on
+    different imagery. ⛔ **They are not two copies of one truth.** The velocity sensor's
+    baseline is **~12 ms**, and 33.1 ms of XFeat is **2.7×** it.
 
-11. ⚠ **This document's own process defect, recorded.** Three claims were written from web
-    sources before the project's own files were checked, and all three were wrong or
-    redundant: LightGlue's CPU rate (`sota/vision.md` already had it, and it is fatal),
-    caustics preprocessing (`flow_node.py` already ships a measured one), and the XFeat
-    benchmark table (`sota/vision.md` already had it). ⛔ **The lesson is the one
-    `measured-bars.md` keeps re-teaching: check the tree before the literature.** A fourth
-    claim — `mixer_aware` as a tile-aliasing mitigation — was invented and is corrected
-    inline in §5a-bis.
+11. ⛔ **This document's own process defect, recorded in full because it is the lesson.**
+    **Six** claims were written from web sources or from reasoning *before* the project's own
+    files were checked, and every one was wrong, redundant or already closed:
+    (i) LightGlue's CPU rate — `sota/vision.md` already had it, **3.2 s/pair, fatal**;
+    (ii) caustics preprocessing — `flow_node.py` already ships a measured one;
+    (iii) the XFeat benchmark table — `sota/vision.md` already had it;
+    (iv) `mixer_aware` as a tile-aliasing mitigation — **invented**, corrected in §5a-bis;
+    (v) "zero refusals under caustics" — **the refusal shipped the same day** as the
+    measurement quoted;
+    (vi) ⛔ **the central recommendation itself** — "LK gets no tracks on a bare floor" — which
+    `measured-bars.md` §28 had already measured and refuted (**185 corners in the worst of
+    898 pairs**), in a section whose title is literally *"the low-texture regime does not
+    exist on real water."*
+    ⭐ **The lesson `measured-bars.md` keeps re-teaching, re-learned the expensive way: read
+    the tree before the literature.** A sweep that had grepped `measured-bars.md` for
+    "texture" in its first five minutes would have been half as long and would have reached
+    the same place.
+11b. ⛔ **Two premises were refuted by commits landing mid-sweep**, both in
+    `measured-bars.md` on 2026-09-23: the **~9.3 ms PCIe bound** (commit `13c31c7`, un-
+    retracting §14.1 — the chip runs `yolov8s` in **2.09 ms**; the flat ~98 Hz was
+    `InferVStreams` host overhead) and **"the ROS graph costs 45 %"** (commit `38f51ac` —
+    it costs **3.4 %**). ⚠ **Both were corrected inline, but neither correction has been
+    re-reasoned from scratch**, and the Hailo sections of this file should be read as
+    provisional until someone re-derives them against §14.4.
 12. ⭐ **What this sweep did NOT look at, and a reader should not assume it ruled out:**
     IMU-only dead reckoning between flow fixes, acoustic/sonar velocity, DeepVL-style learned
     velocity from thrust (that is `sota-vo-depth.md` §2 and `SOTA-GAPS.md` G-17), and
