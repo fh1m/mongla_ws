@@ -245,12 +245,13 @@ times on different builds. One day, and it can close lower rows outright.
 
 ### 5.1 ⭐ Three measurements that cost almost nothing and settle a lot
 
-1. **Bench ROOT-SIFT on the five archive clips — as a CONTROL, not a candidate.**
-   It has never been run here (`grep -i sift` finds nothing in `src/mongla_vision/`).
-   It will lose on speed. But if it *also* reads 4/4, then our 4/4 says **the
-   clips are easy**, not that XFeat is special. That is a truth test rather than
-   an agreement test, and it is the cheapest way to find out whether our headline
-   feature result means anything.
+1. ✅ **DONE 2026-09-23 — ROOT-SIFT benched as a CONTROL, and it LOST.**
+   `tools/feature_murky_control.py`, same §8 protocol, on the three murky Mirpur
+   clips whose frames were confirmed identical by reproducing ORB's recorded
+   reference keypoint counts exactly (71 / 7 / 111). ROOT-SIFT reads
+   **0/4, 0/4, 2/4** where XFeat reads 4/4, 4/4, 4/4 — and finds **three
+   keypoints in an entire frame** on the murkiest clip. So the 4/4 is not the
+   clips being easy. `measured-bars.md` §19.1.
 2. ⭐ **A held-out-VENUE reliability diagram** — see §6b. An afternoon, no
    hardware, and no published underwater equivalent exists.
 3. ⭐ **Time `depth_anything_v2_small.onnx` on the Pi.** It is **already in our

@@ -3517,17 +3517,64 @@ it is not a candidate on this vehicle whatever its accuracy.
 The XFeat paper's CPU figure is an i5-1135G7 at VGA, and this Pi measures
 **2.4–4× slower than it** on the same graph.
 
-### 19.1 ⛔ What this does NOT answer, and why
+### 19.1 ⭐ The accuracy control, finally run — the murky clips are NOT easy
 
-The reason to bench ROOT-SIFT was **not** speed — it was as a **control**: if
-ROOT-SIFT also scores 4/4 on our murky archive clips, then our 4/4 says *the
-clips are easy*, not that XFeat is special. That is a truth test rather than an
-agreement test, and it is the more valuable half.
+**2026-09-23.** The reason to bench ROOT-SIFT was never speed. It was a
+**control**: if the literature's best classical underwater front-end also scores
+4/4 on our murky archive clips, then XFeat's 4/4 says *the clips are easy*, not
+that XFeat is special. That is a truth test rather than an agreement test, and
+until today it was owed — the archive clips had been reported absent from both
+the dev box and the vehicle.
 
-⛔ **It could not be run: the archive clips are on neither the dev box nor the
-vehicle.** Only simulator renders are present, and this project already holds
-that sim imagery is too clean for vision conclusions.
+They are present. `tools/feature_murky_control.py`, same protocol as §8:
+reference at 40 % of the clip, frame-to-reference at +1/3/5/8 s, `USAC_MAGSAC`
+at `RANSAC_PX = 3.0`, a pass needing 15 inliers, mutual-nearest-neighbour
+matching to mirror the anchor's own matcher, RootSIFT normalisation
+(L1 then sqrt).
 
-**So the accuracy control remains owed**, and it needs the real footage restored
-to a machine first. Recorded rather than substituted, because running it on sim
-clips would have produced a number that looks like the answer and is not.
+#### The fingerprint, because the XFeat column cannot be regenerated here
+
+`xfeat.onnx` is not on this box, so ROOT-SIFT is being compared against a
+**recorded** column. That only counts if the frames match, so ORB was run first
+on the same extracted frames and had to reproduce its recorded reference
+keypoint counts. Those counts — **71** and **7** — sit far below any `nfeatures`
+cap, so they depend on the pixels and nothing else:
+
+| clip | ORB ref kp, recorded | ORB ref kp, today |
+|---|---|---|
+| Mirpur torpedo | 71 | **71** |
+| Mirpur torpedo_1 | 7 | **7** |
+| Mirpur gate | 111 | **111** |
+
+**Exact on all three murky clips.** Same frames, confirmed.
+
+#### The result
+
+| clip | XFeat (recorded) | **ROOT-SIFT** | ROOT-SIFT ref kp | inliers @ +1/3/5/8 s |
+|---|---|---|---|---|
+| Mirpur torpedo | 4/4 | **0/4** | 66 | 10, 0, 8, 0 |
+| Mirpur torpedo_1 | 4/4 | **0/4** | **3** | 0, 0, 0, 0 |
+| Mirpur gate | 4/4 | **2/4** | 51 | 21, 6, 25, 5 |
+
+⭐ **The control fails to reproduce XFeat's score, so XFeat's win is real.** On
+the murkiest clip ROOT-SIFT finds **three keypoints in an entire 640×480 frame**
+— fewer than ORB's seven. The 4/4 is not the clips being easy; it is a property
+of the descriptor, and the published *ROOT-SIFT > SIFT > ORB* underwater ranking
+does not carry to this water.
+
+⚠ **It also does not rescue ROOT-SIFT on speed**, which was already settled at
+9.6 Hz against a 50 Hz consumer. Nothing about the shipped anchor changes. What
+changes is what we are entitled to claim: previously "XFeat beats ORB", now
+"XFeat beats the best classical underwater front-end on our own turbid frames".
+
+#### ⛔ Two rows that did NOT fingerprint, and are therefore not comparable
+
+The `octagon` and clear-control `torpedo` rows read 4096 and 2152 ORB reference
+keypoints today against 1205 and 1260 recorded. Nine candidate octagon/torpedo
+clips and seventeen other archive clips were fingerprinted and **none** returns
+1205 or 1260, so the original run used a source or a setting that is not
+recoverable. Their ROOT-SIFT scores today are 2/4 and 4/4, **recorded but not
+compared** — a number that looks like an answer and is not.
+
+Both rows are outside the question anyway: §19.1 asks about the *murky* clips,
+and those three fingerprint exactly.
