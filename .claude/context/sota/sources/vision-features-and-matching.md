@@ -727,15 +727,19 @@ refraction — and no matcher and no extra degree of freedom touches any of thos
 | NetVLAD / CosPlace / EigenPlaces | ~1 s (CNN) | ResNet-50 backbone ~11–14 ms est. | **nothing on a tiled floor — aliasing is total** | **NO** |
 | AnyLoc / SALAD / MegaLoc | worse | worse | most aliasing-robust, still defeated by a pure tile field | **NO** |
 | homography (8-DoF) on downward LK | free | n/a | roll/pitch the IMU already gives better; **still no metric scale** | **NO** |
-| **ROOT-SIFT on our own murky clips** | tens of ms @VGA | n/a | **a missing data point** — the literature's best classical underwater performer, never benched here | **DO THIS — one afternoon** |
+| **ROOT-SIFT on our own murky clips** | **103.7 ms @640×360 = 9.6 Hz on the Pi** | n/a | **benched 2026-09-23 — it LOSES: 0/4, 0/4, 2/4 against XFeat's 4/4** | **CLOSED — control run, not a candidate** |
 | underwater image enhancement | — | — | **negative**: 442.21 → 328.03 inliers, and **zero** ORB-SLAM3 loop closures | **NO — now externally confirmed** |
 
 ### The three things actually worth doing, in order
 
-1. **Bench ROOT-SIFT on the five archive clips**, same 40 %-reference / +1/3/5/8 s /
-   `USAC_MAGSAC` / ≥15-inlier protocol. Cheapest item here, closes a real gap in our own
-   evidence, and the published underwater result says it might win on robustness.
-   *(BUILT? no — but it is a one-file script against footage we already own.)*
+1. ✅ **DONE 2026-09-23 — and the published underwater ranking did NOT transfer.**
+   `tools/feature_murky_control.py`, exactly that protocol. On the three murky Mirpur
+   clips — frames proven identical by reproducing ORB's recorded reference keypoint
+   counts to the unit (71 / 7 / 111) — ROOT-SIFT scores **0/4, 0/4, 2/4** against
+   XFeat's 4/4, 4/4, 4/4, with **3 keypoints in a whole 640×480 frame** on the worst
+   one. §6.2's *ROOT-SIFT > SIFT > ORB* holds in its own paper's water, not in ours.
+   The XFeat result is therefore a descriptor property, not easy footage.
+   `measured-bars.md` §19.1.
 2. ⚠ **DEMOTED — see §8.1.** *Compile XFeat to a HEF with a calibration set drawn from our
    turbid footage, then re-run the murky clip table through it.* The recipe is three lines and
    published, and the finding that **it compiles** (§1.2) closes a standing unknown. But the Pi
@@ -873,6 +877,10 @@ different budgets. ⭐ The offline use is genuinely attractive and is an
   arXiv 2503.04096 on the strength of a search summary; the PDF fetch failed (>10 MB) and the
   abstract does not carry it. The paper's title, authors, date and subject matter are verified
   and consistent with the claim; the sentence itself is not.
+  ⭐ **Superseded where it matters, 2026-09-23:** whatever that paper says, on OUR turbid
+  frames ROOT-SIFT finds 3–66 keypoints and scores 0/4, 0/4, 2/4. The citation no longer
+  needs verifying to act on — it has been out-measured on the only water we care about.
+  `measured-bars.md` §19.1.
 - ~~2026 edge distillations of DINOv3 — not fetched.~~ **Fetched; see §2.5. It makes §2's NO
   stronger, not weaker.**
 - ⛔ **That the FFT grating reads through caustics.** Argued from the spectra (broadband noise
