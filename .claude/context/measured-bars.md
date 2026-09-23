@@ -3267,3 +3267,71 @@ are no currents or thermoclines. **These are statements about the CONTROL CODE
 with feedback, not about the vehicle in water.** Round 4a replaces the drag; the
 overshoot number should be re-measured then, and confirmed on the first pool day
 with a depth well clear of the floor.
+
+---
+
+## 16. ⭐ `DEPTH_LOST_ASCENT` — the escape, and the ballast limit it implies
+
+**2026-09-23, on the closed-loop bench.** When the Bar30 goes unhealthy the board
+abandons the depth PID and pushes an open-loop `DEPTH_LOST_ASCENT = 0.35` heave
+(`config.h:621`, applied at `task_control_loop.cpp:219`). ⚠ **This failure is live
+on the bench right now** — `bringup_check` reports the Bar30 unhealthy.
+
+⭐ **And `config.h:647` independently confirms §15.1's sign finding**, in its own
+words: `#define FS_SURFACE_DEPTH_M 0.25f // m — "at the surface" (positive-down)`.
+
+### 16.1 It works, and the rate is reasonable
+
+From 3.0 m to the `FS_SURFACE_DEPTH_M` threshold of 0.25 m:
+
+| net buoyancy | time to surface | ascent rate |
+|---|---|---|
+| neutral | 5.66 s | 0.524 m/s |
+| 5 N buoyant | 4.97 s | 0.597 m/s |
+| 5 N heavy | 6.76 s | 0.439 m/s |
+| 15 N heavy | 17.57 s | 0.169 m/s |
+| **25 N heavy** | ⛔ **never** | — |
+
+### 16.2 ⭐ THE BALLAST LIMIT, and it is a simple law
+
+Bisected on the maximum negative buoyancy the escape can still overcome:
+
+| thruster max | escape limit | as mass | of a 10.2 kg hull |
+|---|---|---|---|
+| 8 N | 6.5 N | 0.67 kgf | 6.5 % |
+| 20 N | 16.6 N | 1.69 kgf | 16.5 % |
+| 40 N | 33.3 N | 3.40 kgf | 33.2 % |
+
+**The limit is ≈ 83 % of one thruster's maximum thrust**, across the whole range —
+so it is a property of the `0.35` command and the thrust curve, not of the hull.
+
+> ⛔ **With 20 N thrusters the vehicle can escape a depth-sensor failure while up
+> to ~1.7 kgf heavy. Beyond that it cannot surface and will sit on the bottom
+> with its thrusters running.**
+
+### 16.3 ⚠ The two failures are correlated, which is the part that matters
+
+A flood that kills the Bar30 is also what makes the hull heavy. **1.7 kgf is
+1.7 L of water inside the pressure vessel** — not an implausible ingress for a
+hull this size. So the margin is not against a random mis-ballast, it is against
+the *specific* failure that triggers the escape in the first place.
+
+Two consequences worth acting on:
+
+1. ⭐ **This is a third argument for thruster sizing**, alongside
+   [ask M §2.1](upstream/pr-m-thruster-requirements-from-control.md) (resolution)
+   and §6.1 (cruise throttle). Escape margin scales **linearly** with thruster
+   thrust: 8 N buys 0.67 kgf of margin, 40 N buys 3.40 kgf. It is not a
+   performance number, it is a **recovery** number.
+2. **`DEPTH_LOST_ASCENT = 0.35` is not the maximum.** At 1.0 the margin would be
+   far larger. Whether 0.35 is deliberately conservative — to avoid breaching
+   hard, or to leave authority for attitude — is a question for the firmware
+   team, and worth asking before a pool day rather than after an incident.
+
+### 16.4 What this is not
+
+Plant drag is a guess, so the ascent *rate* carries that uncertainty. The
+**limit** is a force balance — thrust against buoyancy — and depends on drag only
+weakly, which is why it is quoted and the rate is not. Neither is a substitute for
+the float test in [Round 4a §2.1](platform/pool-day-round-4a.md), which measures
+the vehicle's actual net buoyancy — the very number this margin is consumed by.
