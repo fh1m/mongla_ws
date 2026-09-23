@@ -248,6 +248,8 @@ class SrotFC(FlightController):
         # instances (0 = PM1 electronics, 1 = PM2 thruster pack over ESP-NOW) and
         # pymavlink caches one message per MSGID, not per instance.
         self._battery_cache = {}
+        self._battery_steps = {}       # id -> recent |dV| between samples
+        self._battery_last = {}        # id -> previous voltage
         self._last_batt = None
         # Separate from allow_fw_behaviour_mismatch ON PURPOSE. That flag means "I
         # accept an unknown firmware revision"; this one means "I accept that the
@@ -2021,7 +2023,51 @@ class SrotFC(FlightController):
         voltage = math.nan if raw_mv in (0, 0xFFFF) else raw_mv / 1000.0
         cur = getattr(msg, 'current_battery', -1)
         current = math.nan if cur == -1 else cur / 100.0
+        self._note_battery_step(bid, voltage)
         self._battery_cache[bid] = (voltage, current, time.time())
+
+    def _note_battery_step(self, bid: int, voltage: float) -> None:
+        """Track how far this instance moves between samples, so an UNWIRED
+        sense line can be told from a battery."""
+        prev = self._battery_last.get(bid)
+        self._battery_last[bid] = voltage
+        if prev is None or not (math.isfinite(prev) and math.isfinite(voltage)):
+            return
+        ring = self._battery_steps.setdefault(
+            bid, collections.deque(maxlen=sp.BATTERY_STEP_WINDOW))
+        ring.append(abs(voltage - prev))
+
+    def battery_trusted(self, bid: int) -> bool:
+        """Is this instance reporting a battery, or an unwired pin?
+
+        ⛔ MEASURED ON THE VEHICLE 2026-09-22, exclusive port, 41 frames of
+        instance 0, nothing else reading:
+
+            span 1.39 .. 25.05 V, sd 8.72 V
+            MEDIAN step between consecutive samples 6.48 V (max 20.42)
+            57.5 % of steps exceed 2 V
+
+        `get_batteries()` already documents why: "On this vehicle PM1 reads
+        ~1.3 V because nothing is wired to GPIO36." The ADC floats, and the
+        stack was promoting that float to `battery_voltage` -- the manager
+        printed `BAT main 1.39V` on a healthy bench.
+
+        The cost was not only cosmetic. `/mongla/state` publishes ON CHANGE with
+        a 0.20 V battery threshold, and 67.5 % of these steps cross it: in one
+        manager run, **2939 of 2939 state-change publications were this pin**.
+        Real state changes were buried under a floating input.
+
+        The MEDIAN is the statistic, not the max: one glitchy sample from a real
+        pack must not blank it, while a pin that is noise every sample cannot
+        hide behind a few quiet ones. A real pack sags ~1 V under load
+        (`srot_changes.py`), so the bar sits at 2 V -- between the two by a
+        factor of three either way.
+        """
+        ring = self._battery_steps.get(bid)
+        if not ring or len(ring) < sp.BATTERY_STEP_MIN_SAMPLES:
+            return True                 # not enough evidence to accuse it
+        mid = sorted(ring)[len(ring) // 2]
+        return mid <= sp.BATTERY_MAX_STEP_V
 
     def _baro_healthy(self):
         """True / False / None (never reported) from SYS_STATUS's health bitfield.
@@ -2092,9 +2138,17 @@ class SrotFC(FlightController):
         """
         self._drain_battery()
         now = time.time()
-        return {bid: {'voltage': v, 'current': c}
-                for bid, (v, c, stamp) in self._battery_cache.items()
-                if (now - stamp) <= max_age_s}
+        out = {}
+        for bid, (v, c, stamp) in self._battery_cache.items():
+            if (now - stamp) > max_age_s:
+                continue
+            # An instance that is measurably noise reports NaN, which renders
+            # `--`. Absence renders `--`, never a number -- and a pin that moves
+            # 6.48 V between samples is absence wearing a value.
+            if not self.battery_trusted(bid):
+                v = math.nan
+            out[bid] = {'voltage': v, 'current': c}
+        return out
 
     def get_battery(self):
         """{'voltage','current'} (V/A) for the MAIN battery (id 0), or None.

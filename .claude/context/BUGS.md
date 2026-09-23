@@ -119,6 +119,51 @@ already does.
 
 ## 2. HIGH
 
+### B52 — a floating sense pin is reported as the main battery, and it owns `/mongla/state` `MEASURED ON THE VEHICLE` ✅ FIXED 2026-09-22
+**`mongla_control/fc/srot_fc.py` · `note_battery()` / `get_batteries()`**
+
+`get_batteries()` has documented the cause all along:
+
+> "On this vehicle PM1 reads ~1.3 V because nothing is wired to GPIO36."
+
+and the stack promoted that floating ADC to `battery_voltage` anyway. Running
+the real manager against the real board printed, on a healthy bench:
+
+```
+~ battery_v: 14.62 -> 1.86  (Δ12.76)
+BAT main  1.86V | thruster -- | DEPTH -- err -- out -- | ... | KILL UNKNOWN
+```
+
+**Measured, exclusive port, 41 frames of instance 0** (a first attempt was taken
+while the manager still held the link — that reading was discarded):
+
+| | |
+|---|---|
+| span | 1.39 .. 25.05 V, sd **8.72 V** |
+| median step between samples | **6.48 V** (max 20.42) at 1 Hz |
+| steps over 2 V | **57.5 %** |
+| steps over the 0.20 V change threshold | **67.5 %** |
+
+⛔ **The cost is not cosmetic.** `/mongla/state` publishes ON CHANGE, and
+`srot_changes.py` sets the battery threshold at 0.20 V. In one manager run,
+**2 939 of 2 939 state-change publications were this pin** — every single one.
+Real state changes had nowhere to appear, and a failsafe or an operator reading
+`BAT main 1.39V` sees a vehicle about to die.
+
+Also confirmed: **only instance 0 is ever sent** (no id 1 in 41 frames), because
+PM2 arrives over ESP-NOW from the second board and `KILL UNKNOWN (no 2nd-board
+link)` says that board is absent. So the de-multiplex by `id` is correct and is
+*not* the defect — the defect is trusting what it selects.
+
+**Fix:** track the median step per instance; above `BATTERY_MAX_STEP_V = 2.0`
+the instance reports `NaN`, which renders `--`. Absence renders `--`, never a
+number, and a pin that moves 6.48 V between samples is absence wearing a value.
+The median is the statistic so one glitch cannot blank a real pack, and a real
+pack sags about 1 V under load — the bar sits between the two regimes by a
+factor of three either way. Guarded by `test_battery_plausibility.py` with the
+vehicle's own numbers; injection-verified.
+
+
 ### B50 — the pre-flight gate PASSES with no cameras attached `MEASURED ON THE VEHICLE`  ✅ FIXED 2026-09-22
 **`mongla_manager/bringup_check.py` · `_physical_cameras()`**
 
