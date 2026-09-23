@@ -185,9 +185,44 @@ XFeat's inlier counts — measures something our incumbent has already saturated
 2. does it **reject caustic** motion — which is real image motion, not noise?
 3. does it survive **yaw ≥ 1.128 rad/s**?
 
-**Those three questions are the entire brief for any velocity work.** XFeat is
-the only candidate that plausibly answers (1), because it finds features where
-corner detectors do not.
+**Those three questions are the entire brief for any velocity work.**
+
+---
+
+## 4b. ⛔ And question (1) is already answered — NO
+
+I proposed XFeat on the downward camera to cover the bare-floor case. **The
+premise is measured false**, and `measured-bars.md` §28 is titled after it:
+*"the low-texture regime does not exist on real water."*
+
+On **898 real downward pairs the worst frame carried 185 corners against an
+8-corner threshold, with zero refusals.** §28's own bench, across translation,
+rotation, and blur+noise, never drops below **165 points**:
+
+| case | LK err | LK pts |
+|---|---|---|
+| translation 0.5 px | 0.015 | 177 |
+| trans 8 px + rot 2° | 0.019 | 165 |
+| blur + noise, trans 8 px | 0.011 | 182 |
+
+⭐ **A purpose-built low-texture fallback (Fourier-Mellin phase correlation) was
+DELETED for exactly this reason** — zero callers, zero tests, 7× slower, and 2°
+of yaw injected 6 px of phantom translation.
+
+**So "LK gets no tracks on a bare floor" is not a thing that happens to us.** The
+research agent that raised XFeat-for-velocity withdrew it on this evidence, and
+so do I.
+
+⚠ **§6's caustics gap is a DIFFERENT claim and survives**: having enough corners
+to track is not the same as those corners being uncorrupted by caustic motion.
+But it is a *filtering* problem, not a *feature-detector* problem, and a new
+front-end is the wrong tool for it.
+
+### 4c. ⛔ And there is no in-water velocity number at all
+
+Both the 1.09 cm and the 0.02 cm are **in-air or synthetic**. Neither describes
+the sensor in water, and **no in-water measurement exists**. That is the gap —
+not an algorithm.
 
 ---
 
@@ -198,7 +233,8 @@ corner detectors do not.
 | 1 | **A faster forward camera** | purchase | unlocks 2× on the forward path; everything else is downstream of a 30 Hz feed |
 | 2 | **Recompile our models single-context** | build step | 4.3× chip time, and it is the precondition for async AND for a second network |
 | 3 | **Async inference in the detector node** | code | 2.7–4.3×, but *only after* (2) — worth 1.00× before it |
-| 4 | **XFeat on the DOWNWARD camera — on the CPU** | experiment | the only item offering a capability we lack. Bare-floor footage, Shi-Tomasi vs XFeat keypoint and inlier counts on the existing 30 cm-slide recordings. ⛔ **Not caustics** — see §6 |
+| 4 | ~~XFeat on the DOWNWARD camera~~ | ⛔ **withdrawn** | its premise is measured false — see §4b |
+| 4 | ⭐ **G-19: gate flow health on the KLT Hessian** | existing, ranked 20.0 | the sweep *strengthened* an item we already had, rather than finding a new one |
 | 5 | **Rate assertion at bring-up** | guard | catch a silent fallback to half rate before a run, not after |
 | — | ~~XFeat on the Hailo~~ | ⛔ **demoted** | possible, but trades scarce chip for idle CPU — §2.1 |
 
@@ -321,3 +357,27 @@ useful than the items.
 ⚠ **Two silent-degradation paths remain open**, one assertion each:
 the OpenCV camera fallback (1.8–2.0× throughput) and the tracker import fallback
 (swaps the algorithm). Neither is checked at bring-up today.
+
+---
+
+## 9. ⭐ The method lesson from the sweep itself
+
+The velocity research agent recorded its own process defect, and it is the most
+transferable thing in 2313 lines:
+
+> **Six claims were written from web sources before checking the tree, and all
+> six were wrong, redundant, or already closed — including the central
+> recommendation.**
+> *Lesson: read the tree before the literature.*
+
+That is the same shape as this document's own four retractions, and as the three
+`measured-bars.md` corrections of the same day. Every one of them was a case of a
+number being trusted before its provenance was checked — `hw_only` FPS, a
+benchmark's API path, an in-air hand slide quoted as sensor accuracy, a camera
+profile read as a ceiling.
+
+⭐ **The sweep's most valuable output is not a new technique. It is that four
+separate "obvious improvements" died on evidence already sitting in our own
+repository** — §28's 898 pairs, §17's rate table, §14's context counts, and the
+preprocessing ban. The literature was searched hard and honestly and returned
+almost nothing we could use; the tree returned four answers in an afternoon.
