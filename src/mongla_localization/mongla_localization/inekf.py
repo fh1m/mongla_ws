@@ -169,7 +169,8 @@ class RIEKF:
                  sigma_gyro: float = 0.01, sigma_accel: float = 0.1,
                  sigma_gyro_bias: float = 1e-4, sigma_accel_bias: float = 1e-3,
                  P0_attitude: float = 0.3, P0_velocity: float = 0.5,
-                 P0_position: float = 1.0, P0_bias: float = 0.01):
+                 P0_position: float = 1.0, P0_bias: float = 0.01,
+                 vel_sigma_gate: float = 1.0):
         self.X = state.copy() if state is not None else State()
         self.P = np.diag(np.concatenate([
             np.full(3, P0_attitude ** 2), np.full(3, P0_velocity ** 2),
@@ -185,6 +186,9 @@ class RIEKF:
         self.rejected = 0
         self.reject_streak = 0
         self.lockout_breaks = 0
+        # ⛔ THE OBSERVABILITY GATE -- see `_velocity_is_observed` (B-56).
+        self.vel_sigma_gate = float(vel_sigma_gate)
+        self.gated = 0
 
     # ── propagation ──────────────────────────────────────────────────────────
     def predict(self, gyro, accel, dt: float) -> None:
@@ -285,6 +289,47 @@ class RIEKF:
         """
         return self.update_body_velocity((0.0, 0.0, 0.0), sigma=sigma)
 
+    # ── the observability gate (B-56) ───────────────────────────────────────
+    def _velocity_is_observed(self) -> bool:
+        """Is velocity being measured, or is it free to wander?
+
+        ⛔ WHY EVERY WORLD-FRAME UPDATE ASKS THIS. `update_depth`,
+        `update_yaw` and `update_position` all carry an attitude block --
+        `-skew(p)` for the position-like ones -- because in a right-invariant
+        filter a correction acts on the whole state. While velocity is measured
+        that coupling is small and correct. While it is NOT, it becomes an
+        amplifier: the update injects attitude error, the attitude correction
+        rotates the velocity nothing is observing, position runs further from
+        the origin, and `-skew(p)` grows with it.
+
+        Measured on `tools/control_bench` against a Fossen plant with known
+        truth, 30 s, 1 m launch error, no velocity aiding:
+
+            fix sigma 0.50 m -> 183 m error
+            fix sigma 0.01 m -> 564 m error
+
+        **A measurement trusted MORE producing an estimate that is WORSE** is
+        the signature of an invalid observation model, and it is why this gate
+        exists rather than a tuning change. With the gate, the same case is
+        0.109 m.
+
+        ⚠ THE THRESHOLD SITS IN A NARROW BAND AND THAT IS DELIBERATE, not
+        sloppy. A cold filter's own sigma_vel is `sqrt(3) * P0_velocity` =
+        0.866, so the gate must exceed that or it fires on construction and
+        refuses everything. And it must be under about 1.2, because the damage
+        lands within a fraction of a second: a gate at 1.5 already lets through
+        enough to reach 377 m. The usable band is roughly 0.87 .. 1.2 and 1.0
+        sits in it. `test_the_gate_clears_a_cold_filter` fails if P0_velocity is
+        ever raised past it, rather than leaving that as a comment nobody reads.
+
+        ⚠ A TIME-SINCE-LAST-VELOCITY GATE WAS TRIED AND IS WORSE. It has no
+        cold-start conflict, which is appealing, but even a 0.2 s timeout lets
+        through enough to reach 27 m against this gate's 4.9 m -- the damage is
+        faster than any timeout can be.
+        """
+        return math.sqrt(self.P[3, 3] + self.P[4, 4]
+                         + self.P[5, 5]) < self.vel_sigma_gate
+
     def update_depth(self, depth_m: float, sigma: float = 0.02) -> bool:
         """Bar30 depth, NEGATIVE below the surface as everywhere in this stack.
 
@@ -294,6 +339,11 @@ class RIEKF:
         so the log-linear property is approximate here. Accepted, and named, as
         Potokar does for the same singleton.
         """
+        # ⛔ REFUSED while velocity is unobserved (B-56): a depth update then
+        # injects attitude error and buys nothing horizontal.
+        if not self._velocity_is_observed():
+            self.gated += 1
+            return False
         H = np.zeros((1, self.DIM))
         H[0, 8] = 1.0
         # p <- dR p + dp, so an attitude error moves predicted depth by
@@ -309,6 +359,12 @@ class RIEKF:
         ⚠ Also imperfect, and worth more than it looks: it is the only source
         here that can remove a heading error the vehicle cannot feel.
         """
+        # ⛔ Refused while velocity is unobserved, for the same reason as
+        # depth: it is an attitude correction, and an attitude correction
+        # rotates the velocity nothing is watching.
+        if not self._velocity_is_observed():
+            self.gated += 1
+            return False
         err = math.radians(_wrap180(float(yaw_deg) - self.X.yaw_deg()))
         H = np.zeros((1, self.DIM))
         # d(yaw)/d(dtheta) for R <- dR R. [0, 0, 1] only when the hull is
@@ -335,7 +391,21 @@ class RIEKF:
         H = np.zeros((2, self.DIM))
         H[0, 6] = 1.0
         H[1, 7] = 1.0
-        H[:, 0:3] = -skew(self.X.p)[:2]     # same coupling as update_depth
+        # ⭐ NOT refused when velocity is unobserved -- APPLIED WITHOUT THE
+        # COUPLING. A landmark fix is the one measurement that can still pin
+        # position out there, and dropping its attitude block lets it do most
+        # of that job. Measured on the bench: refusing it outright gives 2.46 m,
+        # applying it uncoupled gives 0.109 m.
+        #
+        # ⚠ IT DOES NOT MAKE THE UPDATE ATTITUDE-FREE, and an earlier comment
+        # here wrongly said it did. The cross-covariance P[0:3,6:9] still
+        # couples position to attitude, so the correction reaches attitude
+        # through P even with H's block zeroed -- measured at 0.18 rad in a
+        # deliberately extreme case. What zeroing H removes is the part that
+        # scales with |p|, which is the part that runs away. The justification
+        # is the measured outcome, not a structural guarantee.
+        if self._velocity_is_observed():
+            H[:, 0:3] = -skew(self.X.p)[:2]   # same coupling as update_depth
         return self._apply(H, z - self.X.p[:2], np.eye(2) * (sigma ** 2))
 
     def update_attitude(self, R_meas, sigma_deg: float = 1.0) -> bool:

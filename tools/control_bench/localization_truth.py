@@ -112,6 +112,7 @@ def run(*, seconds: float = 60.0, sensors: Sensors | None = None,
         gate_world_updates: bool = False,
         fix_windows: tuple = (), use_fix: bool = False,
         initial_pos_error_m: float = 0.0,
+        filter_cls=None,
         damping: Damping | None = None) -> Score:
     """Fly a trajectory, feed the filter, score it against the plant's truth.
 
@@ -150,7 +151,7 @@ def run(*, seconds: float = 60.0, sensors: Sensors | None = None,
         ang = rnd.uniform(0, 2 * math.pi)
         st.p = np.array([initial_pos_error_m * math.cos(ang),
                          initial_pos_error_m * math.sin(ang), 0.0])
-    f = RIEKF(state=st)
+    f = (filter_cls or RIEKF)(state=st)
     dt = 1.0 / IMU_HZ
     manoeuvre = manoeuvre or (lambda t: math.radians(30.0 * math.sin(t / 8.0)))
 

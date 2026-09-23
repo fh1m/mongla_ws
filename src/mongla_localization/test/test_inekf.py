@@ -226,3 +226,121 @@ def test_the_correction_carries_velocity_too():
     for _ in range(60):
         f.update_yaw(90.0, sigma_deg=0.5)
     assert f.X.v[1] == pytest.approx(1.0, abs=0.05)
+
+
+# ═══════════════════════════════════════════════════════════════════════════ #
+#  The observability gate (B-56)
+# ═══════════════════════════════════════════════════════════════════════════ #
+
+def test_the_gate_clears_a_cold_filter():
+    """⛔ THE FRAGILITY, AS A TEST RATHER THAN A COMMENT. A freshly built filter
+    has sigma_vel = sqrt(3) * P0_velocity = 0.866, and the gate must sit ABOVE
+    that or it fires on construction and refuses every world-frame update.
+
+    It must also stay BELOW about 1.2, because B-56's damage lands within a
+    fraction of a second -- a gate at 1.5 already lets through enough to reach
+    377 m on the bench. The usable band is narrow and this test is what stops
+    someone raising P0_velocity and silently closing it."""
+    f = RIEKF()
+    cold = math.sqrt(f.P[3, 3] + f.P[4, 4] + f.P[5, 5])
+    assert cold < f.vel_sigma_gate, (
+        f'a cold filter ({cold:.3f}) must pass its own gate '
+        f'({f.vel_sigma_gate}) or it refuses everything on construction')
+    assert f.vel_sigma_gate <= 1.2, 'above this the gate is too slow to help'
+    assert f._velocity_is_observed()
+
+
+def test_the_gate_closes_when_velocity_stops_being_measured():
+    """Propagating with no velocity aiding grows sigma_vel without bound; the
+    gate must notice. Measured on the bench: 0.012 m/s with flow against
+    22.8 without, a separation of 1880x, so this is not a marginal call."""
+    f = RIEKF()
+    for _ in range(200):
+        f.predict([0, 0, 0], -GRAVITY, 0.02)
+    assert not f._velocity_is_observed()
+
+
+def test_a_velocity_update_reopens_the_gate():
+    f = RIEKF()
+    for _ in range(200):
+        f.predict([0, 0, 0], -GRAVITY, 0.02)
+    assert not f._velocity_is_observed()
+    for _ in range(50):
+        f.update_body_velocity([0.0, 0.0, 0.0], sigma=0.01)
+    assert f._velocity_is_observed()
+
+
+def test_depth_and_yaw_are_REFUSED_while_velocity_is_unobserved():
+    """They inject attitude error and buy nothing horizontal. Refused, and
+    counted -- a filter that silently drops half its measurements looks
+    identical to one that is merely drifting."""
+    f = RIEKF()
+    for _ in range(200):
+        f.predict([0, 0, 0], -GRAVITY, 0.02)
+    before = f.gated
+    assert f.update_depth(-1.0) is False
+    assert f.update_yaw(10.0) is False
+    assert f.gated == before + 2
+
+
+def test_a_position_fix_is_STILL_APPLIED_when_velocity_is_unobserved():
+    """⭐ AND THIS IS THE ASYMMETRY THAT MAKES THE GATE WORK. A landmark fix is
+    the one measurement that can still pin position out there, so it is applied
+    rather than refused -- with its attitude block dropped, so it cannot rotate
+    the state. Measured: refusing it gives 2.46 m, applying it uncoupled gives
+    0.109 m."""
+    f = RIEKF()
+    for _ in range(200):
+        f.predict([0, 0, 0], -GRAVITY, 0.02)
+    assert not f._velocity_is_observed()
+    f.X.p = np.array([10.0, 10.0, 0.0])         # far out, where -skew(p) bites
+    gated_before = f.gated
+    assert f.update_position([9.0, 9.0], sigma=0.5) is True
+    assert f.gated == gated_before, 'a position fix must not be counted gated'
+    assert f.X.p[0] < 10.0, 'and it must actually move position'
+
+
+def test_dropping_the_attitude_block_does_NOT_make_the_update_attitude_free():
+    """⚠ A CLAIM THIS FILE BRIEFLY MADE AND HAD TO WITHDRAW, kept as a test.
+
+    Zeroing `H[:, 0:3]` does not stop a position fix moving attitude, because
+    the CROSS-COVARIANCE `P[0:3, 6:9]` still couples them -- the correction
+    reaches attitude through P, not only through H.
+
+    What zeroing H removes is the part that scales with `|p|`, and that is the
+    part that runs away. The gate is justified by its measured outcome
+    (0.109 m against 183 m), never by a structural guarantee it does not
+    have."""
+    f = RIEKF()
+    for _ in range(200):
+        f.predict([0, 0, 0], -GRAVITY, 0.02)
+    f.X.p = np.array([10.0, 10.0, 0.0])
+    before = f.X.R.copy()
+    f.update_position([9.0, 9.0], sigma=0.5)
+    assert not np.allclose(f.X.R, before, atol=1e-6), (
+        'attitude still moves through P -- if this ever passes, the coupling '
+        'analysis in update_position needs revisiting')
+
+
+def test_the_coupling_is_kept_when_velocity_IS_observed():
+    """The gate must not become a blanket simplification. With velocity aided
+    the `-skew(p)` block is real and correct, and it stays -- so a position fix
+    taken while the hull believes it is far from the origin DOES correct
+    attitude.
+
+    ⚠ TWO WAYS TO WRITE THIS TEST AND GET A FALSE PASS, both met while writing
+    it. The innovation must stay small or the filter's own OUTLIER gate rejects
+    the update -- a different mechanism entirely. And the innovation must be
+    ASYMMETRIC: at p = [d, d, 0] the yaw column of H is -d on one row and +d on
+    the other, so a symmetric innovation cancels the attitude correction to
+    machine precision (measured 5e-18) and the test passes for a reason that
+    has nothing to do with the gate."""
+    f = RIEKF()
+    for _ in range(50):
+        f.update_body_velocity([0.0, 0.0, 0.0], sigma=0.01)
+    assert f._velocity_is_observed()
+    f.X.p = np.array([10.0, 10.0, 0.0])
+    before = f.X.R.copy()
+    assert f.update_position([9.9, 10.0], sigma=0.5) is True
+    assert not np.allclose(f.X.R, before, atol=1e-12), (
+        'with velocity observed, a position fix SHOULD correct attitude')
