@@ -2984,7 +2984,7 @@ it is not quietly forgotten.
 
 ---
 
-## 12. Round 5 — INDI does not beat the cascade on our plant
+## 12. Round 5 — INDI measured against the tuned cascade, and NOT CHOSEN
 
 **Measured 2026-09-23** on the closed-loop bench. The plan's falsifier was explicit:
 *"INDI must win on the bench before it is ever proposed for the board. If it cannot beat a
