@@ -40,7 +40,7 @@ their stack has been in water and ours has not.
 | **Blocked** | the achieved wrench is computed on the board every tick and **transmitted nowhere**, so *no* published anti-windup design in this family is implementable here, whichever we pick |
 | **Unknown** | `k_n_per_rpm2` has no value at all. Every force-domain claim sits behind one load-cell afternoon |
 | ⚠ **Honest** | **no AUV study ties loop rate to performance.** Every AUV control paper reached ran at 10–100 Hz; ArduSub's 400 Hz is an in-air inheritance. 500 Hz may be buying headroom rather than stability — [`BENCH.md` B-13](../workbench/BENCH.md) settles it |
-| **The opening** | **INDI**: 512 Hz on a real quadrotor, **7× lower gust deviation than PID** (0.21 m vs 1.51 m), needing only an angular-acceleration estimate and a control-effectiveness matrix identifiable from one test flight. **Nobody has taken it underwater** |
+| **The opening** | **INDI**: 512 Hz on a real quadrotor, **7× lower gust deviation than PID** (0.21 m vs 1.51 m), needing only an angular-acceleration estimate and a control-effectiveness matrix identifiable from one test flight. ⛔ **"Nobody has taken it underwater" is RETRACTED (2026-09-23)** — [Cuttlefish/IROS 2024](https://ieeexplore.ieee.org/document/10802674/) and a [BSD-3 reference implementation](https://github.com/dfki-ric-underactuated-lab/auv_control_indi) on an 8-thruster 4v+4h vehicle exist. Better news: **INDI-QP** answers allocation, fault tolerance and the control law together, and needs **no RPM** — the channel we measured as useless |
 
 ### Vision — our retraction is the field's consensus
 

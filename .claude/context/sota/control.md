@@ -310,7 +310,36 @@ mixers — Bumblebee to QP in two consecutive reports, Caltech to a documented p
 > **zero web-search budget**; worked through the arXiv API and direct fetches. Most of the
 > classical marine system-ID literature (IEEE/Elsevier/MDPI) was unreachable — §6.
 
-**INDI is the strongest candidate the sweep found, and nobody has taken it underwater.**
+⛔ **RETRACTED 2026-09-23 — "nobody has taken it underwater" was WRONG.** The claim below was made
+by a sweep running on **zero search budget**, and the very first search after the quota was
+restored refuted it. INDI is not an unexplored idea underwater; it is a **published method with an
+open-source reference implementation on a vehicle whose thruster topology matches our firmware's**:
+
+| | |
+|---|---|
+| [Cuttlefish, IROS 2024 (DFKI)](https://ieeexplore.ieee.org/document/10802674/) | attitude control of a hydrobatic intervention AUV by INDI |
+| [`dfki-ric-underactuated-lab/auv_control_indi`](https://github.com/dfki-ric-underactuated-lab/auv_control_indi) | **BSD-3, Drake-based.** Vehicle: **8 thrusters, 4 vertical + 4 horizontal** — our mixer's topology |
+| [Aerial-underwater vehicle, IEEE 2020](https://ieeexplore.ieee.org/document/9164924/) | attitude *and altitude* control by INDI |
+
+That is **better** news than the original claim, and it changes the work: there is a reference
+implementation to build against rather than a method to invent. Three things from its README bear
+directly on us:
+
+- INDI needs *"only a 6×6 mass-inertia matrix and an actuation model"*. **We have the actuation
+  model, verified to 0.30 %.** The mass-inertia matrix is blocked on one scale.
+- **INDI-QP** performs prioritised allocation *and* fault tolerance in a single method — it
+  "safely executes the inspection even with fewer than six functional thrusters". That is the
+  allocation gap (C-1, C-3) and the control law answered together.
+- ⭐ *"**No RPM measurements needed** for fault tolerance in INDI-QP."* Decisive here: our per-ESC
+  RPM channel reads **0 in 958/958 frames with nothing attached**, so every RPM-based fault
+  detector we considered was built on a channel that cannot discriminate.
+
+**The lesson, recorded rather than buried:** a "nobody has done this" claim produced without a
+search budget is a statement about the search, not about the field. The paragraph below is kept
+verbatim so the retraction can be checked against what it corrects.
+
+**INDI is the strongest candidate the sweep found, and [RETRACTED: "nobody has taken it
+underwater"].**
 [Smeur, Chu & de Croon (arXiv 1701.07254)](https://arxiv.org/abs/1701.07254): **512 Hz** on a real
 quadrotor, **7× lower gust deviation than PID — 0.21 m vs 1.51 m**. It needs only a
 finite-difference angular-acceleration estimate and a control-effectiveness matrix,

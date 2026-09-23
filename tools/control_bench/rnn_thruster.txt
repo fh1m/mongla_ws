@@ -1,0 +1,608 @@
+--- PAGE 0 ---
+Modeling and Soft-fault Diagnosis of
+Underwater Thrusters with Recurrent
+Neural Networks
+Samy Nascimento ∗Matias Valdenegro-Toro ∗
+∗German Research Center for Artiﬁcial Intelligence, Bremen, 28359
+DE (e-mail: samy.marcelo nascimento@dfki.de,
+matias.valdenegro@dfki.de).
+Abstract: Noncritical soft-faults and model deviations are a challenge for Fault Detection and
+Diagnosis (FDD) of resident Autonomous Underwater Vehicles (AUVs). Such systems may have
+a faster performance degradation due to the permanent exposure to the marine environment, and
+constant monitoring of component conditions is required to ensure their reliability. This works
+presents an evaluation of Recurrent Neural Networks (RNNs) for a data-driven fault detection
+and diagnosis scheme for underwater thrusters with empirical data. The nominal behavior of the
+thruster was modeled using the measured control input, voltage, rotational speed and current
+signals. We evaluated the performance of fault classiﬁcation using all the measured signals
+compared to using the computed residuals from the nominal model as features.
+Keywords: Soft-fault detection, model-based fault diagnosis, underwater thrusters.
+1. INTRODUCTION
+There are increasing needs to monitor underwater facilities
+and structures, such as communication lines, wind farms
+and oil rigs. Autonomous Underwater Vehicles (AUVs) can
+perform this work with less risk to human lives, leading to
+an increased interest on sub-sea resident technology. These
+systems are meant to operate in a harsh environment with
+little to none access by operators, thus being required
+to perform several tasks of self-inspection autonomously.
+This work is part of the development and evaluation
+of methods to enable autonomous Fault Detection and
+Diagnosis (FDD) to enhance the self-awareness of sub-sea
+resident AUVs.
+Faults can be divided into two major categories: Hard-
+faults and Soft-faults. Hard-faults happen abruptly, such
+as a propeller blade breaking, or rotor blocking. In con-
+trast, Soft-faults are characterized by a continuous devi-
+ation of a property from normal conditions, and usually
+builds up over time, leading to a performance degradation
+of the aﬀected component. Such deviations are hard to
+detect at early stages, and may be not critical for the
+normal operation of the system, but preemptive moni-
+toring of its development is needed. Propeller biofouling
+and corrosion due to sea water are examples of Soft-faults
+inducing processes.
+Several methods have been proposed for the soft-fault
+detection and compensation, and most of the approaches
+depend on explicit physical models of the plant and the
+faults. Observers, Extended Kalman Filters (EKF) and
+parameter estimation are examples of such methods. One
+of the main advantages of data-driven approaches is the
+⋆This work was supported by FP7-PEOPLE-2013-ITN project
+(ROBOCADEMY), funded by the European Commission.
+ability of learning speciﬁc features of the signals generated
+by the plant, requiring less knowledge of the exact nature
+or extension of the fault. In the speciﬁc case of underwater
+thrusters, their non-linear dynamic nature might require
+complex models that are hard to identify with classical
+methods. Estimation of component condition to perform
+diagnosis of thruster soft-faults and noncritical failures is
+challenging, due to the amount and nature of external and
+internal factors that aﬀect its performance. However, an
+accurate diagnosis is required to enable better response to
+the occurrence of these faults on a real scenario.
+Neural Networks are a well-proven method for nonlinear
+dynamic system identiﬁcation, being a computationally
+eﬃcient method for nonlinear regression. Several con-
+ﬁgurations were evaluated for this task (Narendra and
+Parthasarathy, 1990; Chen et al., 1990) and have been used
+in many industrial applications, including control and fault
+diagnosis. Samy et al. (2011) presents a Neural Network
+based fault detection and isolation diagnosis system for an
+aerial vehicle. More recently, the works of Ogunmolu et al.
+(2016) and Wang (2017) present new contributions for
+dynamic system modeling using RNNs and Deep Learn-
+ing, with the use of Long Short-term Memory (LSTM)
+networks.
+In a previous work (Nascimento et al., 2017), we evaluated
+several regressors for online modeling of thrusters under
+changing conditions. This approach uses an initial model
+as reference to the nominal operation of the component
+and an adaptive model able to learn non-critical perfor-
+mance deviations. The rotational speed and current signals
+are used for fault detection, in a similar approach as
+presented on the work of Caccia et al. (2001). In this paper,
+we extend this evaluation to the diagnosis of non-critical
+soft-faults using a fault classiﬁer.
+arXiv:1807.04109v1  [cs.RO]  11 Jul 2018
+
+--- PAGE 1 ---
+2. RNN-BASED MODELING
+In this section, we shortly review some of Recurrent Neural
+Networks (RNNs) topologies that are used in this work.
+The Nonlinear Autoregressive Exogenous Model (NARX)
+networks are a classic scheme to identify dynamic systems.
+The Long Short-term Memory (LSTM) cell was introduced
+to solve the problem of gradient vanishing in normal RNNs
+and the Gated Recurrent Unit (GRU) was introduced
+recently as a smaller and simpler recurrent cell.
+2.1 Nonlinear Autoregressive Exogenous Model
+A Nonlinear Autoregressive Exogenous Model derives from
+the expansion of the past values of the inputs and outputs
+(targets) of an estimator to be used use as extra features.
+This expansion creates a time dependency and enables the
+learning of certain dynamic behavior.
+A nonlinear autoregressive exogenous model is derived
+from the use of past values of input and output. Given
+the input vector u(t) = {u1(t), u2(t), . . . , un(t)} and the
+output vector y(t) = {y1(t), y2(t), . . . , ym(t)}, a NARX
+model output is deﬁned by:
+y(t) = f(y(t −1), y(t −2), . . . , y(t −n), . . . ,
+u(t −1), u(t −2), . . . , u(t −q)) + εt
+(1)
+Applying such a scheme to NNs, it is possible to per-
+forming estimation of nonlinear relations based on current
+and previous values. NARX networks can learn dynamic
+behavior and preserve long-term dependencies longer than
+a standard RNN.
+u(t)
+(t)
+MLP
+TDL
+TDL
+y(t)
+(a)
+u(t)
+ŷ(t)
+MLP
+TDL
+TDL
+(b)
+Fig. 1. Nonlinear Auto Regressive Exogenous Model Net-
+works. Series-parallel (a) and parallel (b) conﬁgura-
+tions are shown. TDL denotes a tapped delay line
+applied to the input or the output vector.
+2.2 Deep Learning Recurrent Networks
+Long Short-term Memory networks is a type of recurrent
+neural networks proposed in Hochreiter and Schmidhuber
+(1997). With the introduction of a memory cell and the
+input, output and forget gates, such networks do not
+present the vanishing gradient problem and are able to
+preserve information for longer periods.
+ft = σg(Wfxt + Ufht−1 + bf)
+(2)
+it = σg(Wixt + Uiht−1 + bi)
+(3)
+ot = σg(Woxt + Uoht−1 + bo)
+(4)
+ct = ft ◦ct−1 + it ◦σc(Wcxt + Ucht−1 + bc)
+(5)
+ht = ot ◦σh(ct)
+(6)
+Fig. 2. Expanded LSTM network cell operation Graves
+(2012).
+In the above described cell, xt is the input vector, ft is the
+forget gate activation vector, it represents the input gate
+activation vector, ot is the output gate activation vector
+and ht is output vector. W, U and b represent respectively
+weight matrices and bias vector.
+Presented by Cho et al. (2014), Gated Recurrent Units
+are a special case of the LSTM cell, introduced to be
+computationally cheaper and easier to train. The reader
+is encouraged to refer to Goodfellow et al. (2017) to a
+complete description of Deep Learning techniques.
+3. DATA-DRIVEN THRUSTER MODELING
+3.1 Data collection
+Data was collected with several Bluerobotics T100 thrus-
+ters. This model is composed by an electric brushless
+motor, ranging from 300 to 4200 rpm, has up to 130 W of
+output power and has 2.36 kgf of nominal torque (Figure
+3a). The thrusters were driven by a Graupner T35 elec-
+tronic speed controller (ESC), which provides the signals
+of rotational speed, current, voltage and temperature and
+is rated to 35 A (Figure 3b). An ATMEGA328 micro-
+controller was used as interface between the supervisory
+software running on a computer and the ESC.
+(a)
+(b)
+Fig. 3. T100 thruster. T35 controller (Source: Graupner).
+A sequence of experiments were performed to model the
+thruster behavior in several conditions and evaluate a
+classiﬁcation-based diagnosis approach. The dataset was
+obtained with a testbed using Bluerobotics T100 thrusters
+and controllers capable of giving rotational speed, voltage
+and current consumption. Although the relation of thrust
+and rotational speed is given by the manufacturer, we did
+not consider this indirect thrust measurement as an output
+variable of the model.
+
+--- PAGE 2 ---
+Fig. 4. Step response of the thruster for multiple steps
+of 0.25 of the maximum input. The system presents
+a second-order-like response with average deadtime of
+0.59 seconds and average settling time of 2.95 seconds.
+The responses of the controller-thruster assembly to a step
+and sinusoidal signal in open loop were used to collect
+data for the model training. These signals represent a
+pulse width modulation signal with width varying from
+1.0 to 2.0 milliseconds, mapped to the -1.0 to 1.0 range to
+represent direction. For the step response characterization,
+every step of the applied input had 0.25 of the maximum
+possible amplitude, as shown in Figure 4. For the general
+model, data was obtained using sinusoidal input signals
+with of 0.01, 0.02, 0.03 and 0.04 Hz. In the Figures 5,
+6 and 7, the characteristic thruster open loop response is
+shown, with a saturated curve for the rotational speed and
+a quadratic curve for the current.
+Fig. 5. Thruster response over time to a sinusoidal signal
+of 0.01 Hz.
+The step response in open-loop for identiﬁcation, depicted
+in Fig. 4, showed a second-order overdamped system with
+some dead-time. The averaged measurements for settling
+time were 2.95 seconds and 0.59 seconds for dead-time.
+Also, according to the manufacturer, the thruster presents
+a dead band of ± 25 µs, which was considered for further
+modeling. Due to the eﬀect of the dead time and deadband,
+the system presents an observable hysteresis, that may
+impact on the selection of the frequency of signal to
+perform modeling of the thruster, as shown in Fig. 7.
+Fig. 6. Scatter plot of the thruster response to a sinusoidal
+signal of 0.01 Hz.
+Fig. 7. Response to input signals of diﬀerent frequencies.
+These curves show a hysteresis caused by the intrinsic
+delay of the controller-thruster system.
+3.2 Nominal Model Estimation
+Four NN-based methods were evaluated for the role of
+identifying the nominal model: Multilayer Perceptron
+(MLP) as a baseline regressor, a NARX Neural Networks,
+LSTM-based network and GRU-based network. The in-
+puts to each model are control signal and voltage, while
+the outputs are current and rotational speed.
+Since purely static regressors are not able to model the
+characteristic dead-time of the thruster, for the MLP, the
+known dead-time delay and the dead band non-linearities
+were added to the estimator in a Hammerstein-Wiener
+model fashion. For the NARX network, only the deadband
+was added and their performances evaluated.
+Scaling the data vectors was required for training the
+networks, since this strongly aﬀects the performance of
+
+--- PAGE 3 ---
+the regressors. Inputs and targets were scaled by the
+Interquartile Range (IQR), wich allows some outlier ro-
+bustness. Grid search was used to tune the parameters of
+each regressor, as shown on Table 1. Besides the number
+of neurons on every conﬁguration, the batch size and the
+numbers of past time steps to be taken into training (Look-
+back) were adjusted. For the NARX networks, every input
+and target feature was considered to have independent
+tapped delay line operators. The training set consisted
+of 2000 samples of the sinusoidal signal with 0.01 Hz.
+The regressors were trained with a 2-fold time series cross
+validation scheme, in which the validation set is always
+taken from a section posterior than the training set. The
+regressors were compared with a 1000 sample dataset in
+each frequency analyzed (0.01, 0.02, 0.03 and 0.04 Hz).
+Table 1. Conﬁgurations and scores for the
+best evaluated regressors after grid search.
+Training set: 2000 samples. Test set: 1000
+samples. Notation: L for LSTM cell, G for
+gated recurrent unit, P for perceptron, TDL for
+time delay, DB: deadband. Activation: tanh,
+optimizer: ADAM.
+Regressors - Conﬁgurations
+Method
+Hidden
+Layers
+Batch
+Size
+Lookback
+MLP
+8P,4P
+10
+-
+MLP + TDL + DB
+8P,4P
+10
+-
+NARX NN
+32P,4P
+5
+(20,0),(2,0)
+NARX NN + DB
+32P,4P
+5
+(20,0),(2,0)
+LSTM
+24L,16P,16P
+5
+1
+GRU
+24G,16P,16P
+5
+1
+The mean coeﬃcients of determination (r2 scores) between
+current and rotational speed outputs, for every frequency,
+are shown in Table 2. The scatter plot for a 1000 sample
+test set of a sinusoid of 0.01 Hz is shown in the Figure
+8. The results over time for 300 sample test set for the
+diﬀerent frequencies analysed are shown in the Figure 9.
+Table 2. Coeﬃcient of determination (r2-score)
+for the the evaluated regressor for test sets
+with several frequencies. The shown scores are
+the average of 30 runs. The results for the
+0.04 Hz signal are contaminated by outliers,
+thus presenting lower regression scores. D: time
+delay, DB: deadband.
+Regression Scores - Frequency
+Method
+r2 Scores
+0.01 Hz
+0.02 Hz
+0.03 Hz
+0.04 Hz
+MLP
+0.9650
+0.9580
+0.9139
+0.5340
+MLP+D+DB
+0.9794
+0.9867
+0.9694
+0.6260
+NARXNN
+0.9745
+0.9931
+0.9579
+0.6432
+NARXNN+DB
+0.9746
+0.9931
+0.9579
+0.6431
+LSTM
+0.9563
+0.9542
+0.9058
+0.5224
+GRU
+0.9590
+0.9585
+0.9112
+0.5258
+The results of Table 2 and Figures 8 and 9 show that the
+hysteresis caused by time delay were better captured by
+Fig. 8. Regression results for several regressors for a
+2000/1000 train/test dataset. The NARX networks
+present a r2-score of 0.9809, thus having the best
+performance in this case.
+the NARX network. This network sctructure is also able to
+rubustly predict the system response to other input signal
+frequencies. This regressor was then used as a reference
+nominal model for the fault classiﬁcation task (see Section
+4).
+4. SOFT-FAULT CLASSIFICATION
+For the task of fault diagnosis, data was collected and la-
+beled with a signal of 0.01 Hz for the following operational
+conditions: nominal operation with 15.0 V, 13.0 V, 11.8
+V, with one and two broken propeller blades and with a
+propeller impregnated with silicon to simulate biofouling
+(see Figure 10). A distinction between model changes due
+to healthy low-voltage states and faulty states may lead to
+a better fault handling decision making. These conditions
+are represented by six classes in our fault classiﬁer. The
+scatter plots for each condition are depicted in Figure 11.
+The residuals calculated from comparison to the nominal
+model obtained previously (NARX) were used for the fault
+classiﬁcation task as features and are shown in the Figure
+12.
+Several classiﬁers were trained with each condition as a
+class, in two conﬁgurations. The ﬁrst conﬁguration uses
+the thruster input, voltage, rotational speed and current
+signals as features, with 2000 samples for each class. The
+
+--- PAGE 4 ---
+Fig. 9. Regressor curves for estimation of thruster rota-
+tional speed and current for a input sinusoidal signals
+of several frequencies.
+(a)
+(b)
+Fig. 10. Thruster with (a) broken propellers and (b)
+impregnated with silicon.
+second conﬁguration uses the rotational speed and current
+residuals as features using 2000 residual samples each. Two
+methods were evaluated for diagnosis: multilayer percep-
+tron and LSTM-based classifers in the conﬁgurations listed
+on the Table 3. A 3-fold time series split cross-validation
+Fig. 11. Datasets for diﬀerent conditions, with 2000 sam-
+ples each. Data is shown for normal operation with
+supply voltages of 15.0, 13.0 and 11.8 V.
+scheme and cross entropy loss function were used for
+training of the classiﬁers. A test set of 11200 labeled
+samples was used to evaluate the overall performance of
+the classiﬁer.
+Table 3 shows that the use of computed residuals (ro-
+tational speed and current) as features for classiﬁcation
+lead to improved results compared to a full four-feature
+vector. This can be explained by additional information
+introduced by the nominal model, including a small mea-
+sure of diﬀerence between what is expected and what is
+actually being measured, leading to a better classiﬁcation
+performance.
+The confusion matrix for the best performing classiﬁer
+(MLP with residuals) is shown in Table 4. Our results
+show that identifying nominal operation is confused with
+a broken propeller, but identifying a broken propeller by
+itself works quite well. Biofouling is also hard to identify,
+with typical confusion with nominal operation. While we
+only achieve 78 % accuracy on our dataset, these results
+also show that the problem of classifying soft-faults is hard,
+and there is lots of room for improvement.
+5. CONCLUSIONS AND FUTURE WORK
+In this paper, we evaluate RNNs compared to the classic
+MLP for modeling and soft-fault classiﬁcation of underwa-
+ter thrusters using empirical data. As estimator, NARX
+
+--- PAGE 5 ---
+Fig. 12. Computed residuals for each thruster condition.
+Table 3. Conﬁgurations for the evaluated clas-
+siﬁers. Training set: 12000 samples, 4-fold time
+series split cross-validation scheme. Test set:
+11200 samples. Notation: L for LSTM cell,
+P for perceptron. Activation: tanh, recurrent
+activation: hard sigmoid, optimizer: ADAM,
+output layer activation: softmax.
+Classiﬁers Conﬁgurations - Diagnosis
+Method
+Batch Size
+Hidden Layers
+Avg. Accuracy
+MLPall
+5
+48P,48P
+73%
+MLPres
+5
+48P,48P
+75%
+MLPall
+1
+48P,48P
+74%
+MLPres
+1
+48P,48P
+78%
+LST Mall
+1
+8L,48P,48P
+69%
+LST Mres
+1
+16L,48P,48P
+72%
+Table 4. Normalized confusion matrix for the
+MLP classiﬁers using residuals.
+Confusion Matrix - MLP with Residuals
+Predicted labels
+Nominal
+23 %
+0 %
+0 %
+77 %
+0 %
+0 %
+13.0 V
+0 %
+100 %
+0 %
+0 %
+0 %
+0 %
+11.8 V
+0 %
+0 %
+100 %
+0 %
+0 %
+0 %
+Br. Prop.
+6 %
+0 %
+0 %
+94 %
+0 %
+0 %
+2 Br. Prop.
+4 %
+0 %
+0 %
+82 %
+14 %
+0 %
+Biofouling
+31 %
+0 %
+0 %
+5 %
+0 %
+64 %
+network demonstrated to be able to identify more accu-
+rately the time dependencies presented by the thrusters.
+For soft-fault classiﬁcation, we also evaluated LSTMs and
+MLPs. Noncritical thruster failure conditions produce sig-
+nal features capable of being diagnosed by a classiﬁer-
+based approach, if the faulty behavior is previously known.
+In our experiments, a maximum of 78% average accuracy
+score was obtained using the residuals computed from a
+nominal model. This result shows that modeling soft-faults
+is hard, as there are large confusions with other classes,
+indicating the need for further work.
+Future work will include evaluation of this approach with
+data from real missions, and we will consider unbalanced
+datasets that are closer to real operations. We also expect
+that time-series models based on other kinds of features
+can improve our classiﬁcation results.
+REFERENCES
+Caccia, M., Bono, R., Bruzzone, G., Bruzzone, G., Spi-
+randelli, E., and Veruggio, G. (2001). Experiences on
+Actuator Fault Detection, Diagnosis and Accommoda-
+tion for ROVs.
+In 12th International Symposium on
+Unmanned Untethered Submersible Technology.
+Chen, S., Billings, S.A., and Grant, P.M. (1990).
+Non-
+linear system identiﬁcation using neural networks. In-
+ternational Journal of Control, 51(6), 1191–1214. doi:
+10.1080/00207179008934126.
+Cho,
+K.,
+van
+Merrienboer,
+B.,
+Bahdanau,
+D.,
+and
+Bengio,
+Y.
+(2014).
+On
+the
+Properties
+of
+Neural
+Machine
+Translation:
+Encoder-Decoder
+Approaches.
+doi:10.3115/v1/W14-4012.
+URL
+http://arxiv.org/abs/1409.1259.
+Goodfellow, I.J., Bengio, Y., and Courville, A. (2017).
+Deep Learning. doi:10.1038/nmeth.3707.
+Graves, A. (2012).
+Supervised Sequence Labelling with
+Recurrent Neural Networks.
+385.
+doi:10.1007/978-3-
+642-24797-2.
+Hochreiter, S. and Schmidhuber, J. (1997). Long Short-
+Term Memory. Neural Computation, 9(8), 1735–1780.
+doi:10.1162/neco.1997.9.8.1735.
+Narendra, K. and Parthasarathy, K. (1990).
+Identiﬁ-
+cation and control of dynamical systems using neu-
+ral networks.
+IEEE Transactions on Neural Net-
+works,
+1(1),
+4–27.
+doi:10.1109/72.80202.
+URL
+http://ieeexplore.ieee.org/document/80202/.
+Nascimento, S., Kim, S.K., and Kirchner, F. (2017). Online
+Adaptive Modeling for Fault Detection of Underwater
+Thrusters.
+In 14th European Workshop on Advanced
+Control and Diagnosis.
+Ogunmolu,
+O.,
+Gu,
+X.,
+Jiang,
+S.,
+and
+Gans,
+N.
+(2016).
+Nonlinear
+Systems
+Identiﬁcation
+Using
+Deep
+Dynamic
+Neural
+Networks.
+URL
+http://arxiv.org/abs/1610.01439.
+Samy, I., Postlethwaite, I., and Gu, D.W. (2011). Survey
+and Application of Sensor Fault Detection and Isolation
+Schemes. Control Engineering Practice, 19(7), 658–674.
+doi:10.1016/j.conengprac.2011.03.002.
+Wang, Y. (2017).
+A New Concept using LSTM Neural
+Networks for Dynamic System Identiﬁcation.
+2017
+American Control Conference (ACC), 5324–5329. doi:
+10.23919/ACC.2017.7963782.
+
