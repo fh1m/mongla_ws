@@ -2981,3 +2981,68 @@ floor's real cost is **not** steady-state pointing jitter — it is the **16.22 
 lurch** when a small correction finally crosses the gate, and the 4.06:1 usable
 yaw range. The asks should argue the lurch, and a test carries this correction so
 it is not quietly forgotten.
+
+---
+
+## 12. Round 5 — INDI does not beat the cascade on our plant
+
+**Measured 2026-09-23** on the closed-loop bench. The plan's falsifier was explicit:
+*"INDI must win on the bench before it is ever proposed for the board. If it cannot beat a
+well-tuned PID on our own plant, it does not fly — and that is a publishable result either
+way."* **It does not fly.**
+
+Both controllers tuned on the nominal plant, then the plant changed and **nothing retuned**:
+
+| plant change | cascade settle / burst dev | INDI settle / burst dev |
+|---|---|---|
+| nominal | 0.480 s / 0.394° | 0.364 s / 1.423° |
+| drag ×3 | 0.498 / 0.393 | 0.372 / 1.423 |
+| drag ×0.3 | 0.466 / 0.394 | 0.364 / 1.423 |
+| mass ×1.6 | 0.432 / 0.390 | 0.392 / 0.680 |
+| drag ×3 + mass ×1.6 | 0.492 / 0.389 | 0.400 / 0.680 |
+| **drag ×0.3 + mass ×0.6** | 0.470 / 0.394 | ⛔ **NEVER** / 2.506 |
+
+**Where INDI wins:** the clean step. ~24 % faster settling (0.364 vs 0.480) and a 2.4×
+smaller limit cycle. It is also barely affected by the `MOT_SPIN_MIN` quantiser (0.366
+quantised vs 0.364 ideal) where the cascade degrades 0.370 → 0.480.
+
+**Where it loses, and why that decides it:**
+
+1. ⛔ **Disturbance rejection is 3.6× worse** (1.423° vs 0.394°) — the *opposite* of the
+   quadrotor result that motivated trying it (7× lower gust deviation).
+2. ⛔ **It destabilises when the inertia estimate is wrong.** At mass ×0.6 — controller `I`
+   1.7× too large — it never settles. The cascade is fine at every corner, moving 21 %
+   end to end across a 10× drag and 2.7× mass swing.
+3. **Its headline advantage does not pay here.** INDI needs no drag model; neither does the
+   cascade on this vehicle, because §11's Round 3a result showed the yaw axis is
+   **rate-limited**, not drag-limited. Swing drag 10× and the cascade moves < 7 %. An
+   advantage over a problem we do not have is not an advantage.
+
+### 12.1 ⭐ The blocker was misidentified, and that is the durable finding
+
+The plan listed INDI's third prerequisite as *"increments the actuator can express — blocked
+on PR I; the 15.8 % floor means there is no such thing as a small increment."* **Measured,
+that is not the binding constraint** — INDI is *more* tolerant of the quantiser than the
+cascade is.
+
+The real prerequisite is the `I` in `τ = τ_applied + I(ω̇_des − ω̇_meas)`. Ours is a
+**uniform-body guess**, and a real hull is a shell with its battery placed deliberately.
+**INDI is blocked on inertia identification (Round 4a free-decay), not on actuator
+resolution.**
+
+### 12.2 Two INDI design rules this bench discovered by breaking them
+
+- ⛔ **Never point an incremental law at an unactuated axis.** Run INDI on roll — which this
+  hull cannot actuate, B being rank 5 of 6 — and the increment winds to its clamp because no
+  acceleration is ever coming, then Euler coupling drags yaw off target. A cascade survives
+  the same mistake because its output is a bounded PID the allocator simply refuses.
+- ⛔ **Limit the increment to ACHIEVABLE torque, not ±1.** The allocator delivers 0.35 in yaw;
+  clamping at 1.0 lets the increment run 3× past anything the hull can do.
+
+### 12.3 What would reopen this
+
+Honest limits: this is a from-scratch INDI, swept over `k_rate` and filter cutoff but not
+exhaustively; the plant has no sensor noise, which would punish INDI's differentiated-gyro
+acceleration estimate *harder* than the cascade; and the comparison is attitude-only.
+**Round 4a's free-decay inertia measurement is the thing that would change the answer** — and
+it is worth running anyway, because §12's failure mode is specifically an inertia error.

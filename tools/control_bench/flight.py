@@ -200,6 +200,7 @@ class Vehicle:
             disturbance=lambda t: (0.0,) * 6,
             drag_gain_scale: float | None = None,
             control_hz: float | None = None,
+            controller=None,
             quantise: bool = True) -> Trace:
         """Run the closed loop. `stick` returns (roll, pitch, yaw) each tick.
 
@@ -215,6 +216,9 @@ class Vehicle:
         self.plant.nu = [0.0] * 6
         self.plant.eta = [0.0] * 6
         delivered = [0.0] * 5
+        self._applied_norm = (0.0, 0.0, 0.0)
+        if controller is not None:
+            controller.reset()
         self.board.reset()
         # ⚠ The five feedforward gains ship at 0.0 on the live board. Anything
         # non-zero here is an EXPLORATION of what they would do, never a
@@ -239,7 +243,19 @@ class Vehicle:
             roll, pitch, yaw = self.plant.attitude
             gx, gy, gz = self.plant.body_rates
             sr, sp, sy = stick(t)
-            if held is None or k % every == 0:
+            if controller is not None:
+                if held is None or k % every == 0:
+                    # ⭐ INDI needs the torque ACTUALLY delivered, which after
+                    # the allocator, the DShot quantiser and the thruster lag is
+                    # not the torque that was asked for. Feeding back the demand
+                    # instead is the `use_achieved=False` case, and it is what
+                    # upstream ask B exists to make possible on the real wire.
+                    held = controller.update(
+                        attitude=(roll, pitch, yaw), rates=(gx, gy, gz),
+                        target=(0.0, 0.0, hold_yaw or 0.0),
+                        tau_applied=self._applied_norm, dt=dt * every)
+                tq_r, tq_p, tq_y = held
+            elif held is None or k % every == 0:
                 # ⚠ The controller's own dt must be its ACTUAL period, or its
                 # integral and derivative terms are scaled for a rate it is not
                 # running at -- which would measure a detuned controller rather
@@ -249,7 +265,9 @@ class Vehicle:
                     roll=roll, pitch=pitch, yaw=yaw,
                     gx=gx, gy=gy, gz=gz, dt=dt * every)
                 held = (tq_r, tq_p, tq_y)
-            tq_r, tq_p, tq_y = held
+                tq_r, tq_p, tq_y = held
+            else:
+                tq_r, tq_p, tq_y = held
 
             if ff:
                 # `feedforward::apply` -- the firmware's own drag / cross-
@@ -274,6 +292,10 @@ class Vehicle:
             else:
                 u = cmd
             tau = self._wrench(u)
+            # What the actuators REALLY produced, back in the board's
+            # normalised torque units -- the signal ask B would put on the wire.
+            self._applied_norm = tuple(
+                tau[i] / self.max_thrust_n for i in (3, 4, 5))
             dist = disturbance(t)
             self.plant.step([tau[i] + dist[i] for i in range(6)], dt)
 
