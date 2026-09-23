@@ -415,3 +415,33 @@ Measured: **657, 998, 999, 657.**
 uniform-within-group, these four numbers would have been structurally wrong, not slightly off.
 
 **Lands in:** `measured-bars.md`, `actuation_model.py` (axis paths) · raw: `data/verify.json`
+
+---
+
+## B-17 · Payload channel roles, read off the board  `[x]` done 2026-09-22 · **opened B53**
+
+**Why.** `fire(N)` addresses a BOARD channel directly, with no host-side map. Which channels are
+fireable is firmware state set in Bondor, and nothing in this tree had ever read it.
+
+**Procedure.** All 16 `SERVOn_ROLE` params, two attempts each (one dropped `PARAM_VALUE` reads
+exactly like a mis-roled board). Needs **both cables** only in the sense that it needs the board
+live; it is a pure MAVLink read.
+
+**Result.**
+
+| role | channels |
+|---|---|
+| SWITCH — `fire(N)` drives these | **9, 10, 12, 13, 14, 15, 16** |
+| SERVO — the on-board arm, must not be driven | 1, 2, 3, 5, 6, 7, 8 |
+| NONE — unroled | **4, 11** |
+
+⛔ **Every channel the missions use (1 and 3) is SERVO here**, so all five real `fire()` call sites
+would be refused. Full analysis and the two competing explanations: [`BUGS.md` B53](../BUGS.md).
+
+**What this row does NOT settle:** whether this bench board's roles match the competition hull's.
+The pattern is suspiciously close to the "1–8 servo / 9–16 switch" folklore that
+`preflight_roles`' own docstring says the full read exists to retire, with two unexplained holes.
+Until the hull is read the same way, the map is unconfirmed on both sides.
+
+**Lands in:** `BUGS.md` B53 (open), and — after the hull is read — either
+`competition_config.py` or the board's Bondor config, but not both.
