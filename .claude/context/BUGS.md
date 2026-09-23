@@ -3251,11 +3251,35 @@ are still net useful. "Always gate" and "never gate" are both wrong, so the
 decision needs the dropout *duration* and belongs with whatever already tracks
 flow health, not inside the filter.
 
-**⭐ THE CURE IS A LANDMARK POSITION FIX, and it is decisive.** `update_position`
-carries the *same* `-skew(p)` coupling, so the obvious fear was a second instance
-of this defect. It is the opposite: a fix pins `p`, which is exactly what the
-coupling needed. In the broken regime it recovers **99.3 m → 0.195 m, a 508×
-rescue**.
+**⛔ AND THE DEFINITIVE SIGNATURE: A MORE ACCURATE MEASUREMENT MAKES IT WORSE.**
+
+Continuous landmark position fixes, no flow, 1.0 m launch error, 30 s — with the
+identical harness run both with and without velocity aiding as a control:
+
+| fix σ | **with** flow | **without** flow |
+|---|---|---|
+| 0.50 m | 0.1030 m | 183.3 m |
+| 0.20 m | 0.0431 m | 418.0 m |
+| 0.05 m | 0.0110 m | 534.2 m |
+| 0.01 m | **0.0038 m** | **564.5 m** |
+
+With velocity aiding, tightening σ by 50× improves the estimate 27× — correct
+Kalman behaviour. Without it, the same tightening makes the estimate **3× worse,
+monotonically.** A measurement you trust *more* producing an estimate that is
+*worse* is not a modelling subtlety; it is an invalid observation model.
+
+**Why.** `H[:, 0:3] = -skew(X.p)` means every world-frame update injects an
+attitude correction scaled by the Kalman gain. Tighter σ → higher gain → larger
+attitude kick → in a right-invariant filter that rotates the whole state,
+including the velocity that nothing is observing → position runs further out →
+`-skew(p)` grows. High gain is the accelerant.
+
+⚠ **RETRACTED: the "508× rescue".** An earlier revision of this entry claimed
+landmark fixes cure B-56, from 99.3 m → 0.195 m. That was measured at **exactly
+zero launch error**. At 0.10 m of launch error the rescue collapses to 1.9×, and
+at 0.25 m to 1.4×. **Position fixes do not reliably rescue this**, and a brief
+resection window does not rescue it at all (267–341 m for a 5 s window, whenever
+it arrives).
 
 **Not fixed in the filter, deliberately.** With flow present it tracks to
 centimetres, and the plant's drag is a guess, so exact thresholds move once
@@ -3283,13 +3307,30 @@ whole run:
 **Flow-aided dead reckoning is excellent and still cannot tell you where you
 are.** It holds error constant rather than reducing it.
 
-⭐ **So a fix EARLY is worth far more than a fix often.** The landmark fix
-converges *any* launch error to ~0.10 m — the same place regardless of where it
-started — but until the first one arrives the entire run is offset by however
-wrong the launch position was. A mission that resects a prop in its first
-seconds is in a different accuracy regime from one that resects at the halfway
-mark.
+⭐ **A fix OFTEN beats a fix EARLY — and an earlier draft of this entry said the
+opposite.** Measured, 60 s run, 1.0 m launch error, flow healthy:
 
-⚠ And in the B-56 regime the rescue is only 2× if the fix starts late against a
-1 m launch error (339.6 → 183.3 m), because the amplification outruns it. Fixes
-rescue B-56 **only when they arrive before the loop has run away.**
+| when the fix window is | final error |
+|---|---|
+| t = 0 s | 0.202 m |
+| t = 20 s | 0.270 m |
+| t = 55 s | 0.276 m |
+
+**Timing is irrelevant**, and that follows from this entry's own claim: if error
+does not grow, a late fix is worth exactly as much as an early one. What does
+matter is how many:
+
+| fix seconds (at 2 Hz) | final error | vs no fix |
+|---|---|---|
+| 0.5 s — one fix | 0.383 m | 2.6× |
+| 5 s — 10 fixes | 0.293 m | 3.4× |
+| 20 s — 40 fixes | 0.139 m | 7.1× |
+| continuous — 120 fixes | **0.055 m** | 17.9× |
+
+⭐ **One resection anywhere in the run captures most of the benefit** (1.0 m →
+0.38 m); after that it averages down roughly as √N. So mission design is
+unconstrained on *where* a prop is sighted, and rewarded for sighting one for
+*longer*.
+
+⛔ **None of this holds without flow** — see B-56. There, fixes do not rescue and
+a tighter fix actively hurts.
