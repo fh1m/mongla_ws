@@ -56,11 +56,48 @@ import numpy as np
 
 from .anchor import Anchor, AnchorPose, MIN_COSSIM, MIN_INLIERS
 
-# How many references to hold. 5 is the prototype gallery's cap and a starting
-# point, not a measured constant: the falsifier is the +8 s column above, which
-# a bank must beat clip-for-clip. Raising it costs one match per reference per
-# evaluation, which is why `locate()` stays linear and small.
-CAPACITY = 5
+# ⭐ HOW MANY REFERENCES, AND WHY IT IS NO LONGER A CONSTANT.
+#
+# This shipped at 5, copied from the prototype gallery. Measured 2026-09-24
+# (`measured-bars.md` §20), matching is LINEAR in bank size -- one
+# 1024x1024x64 similarity matrix plus a mutual-NN pass per reference:
+#
+#                 dev box        Pi 5
+#     1 ref        14.4 ms      31.4 ms
+#     5 refs       56.8 ms     156.7 ms
+#    10 refs      122.9 ms     314.0 ms   <- at the 3 Hz budget already
+#   100 refs      853.2 ms    3146.5 ms
+#
+# ⛔ Batching the bank into one GEMM does NOT fix it: 1.5-1.7x on the dev box
+# and NOTHING on the Pi (3146 -> 3136 ms), because at this shape the matmul is
+# already bound by something a bigger call does not change. That optimisation
+# was measured and dropped.
+#
+# What does fix it is not matching everything. Each reference carries a 64-D
+# signature -- the L2-normalised mean of its own descriptors, already computed,
+# no second network -- and only the top-k by signature are matched. That is
+# FLAT: 100 references cost what 5 do, plus a 100x64 dot product.
+#
+# Memory never was the constraint: a reference is 1024x64 float32 = 256 kB, so
+# 64 of them is 16 MB.
+CAPACITY = 64
+
+# How wide the shortlist may get. The accuracy cost of a narrow one, measured
+# on the archive clips over 120 queries (`measured-bars.md` §20.2) as the
+# inlier yield lost against always matching every reference:
+#
+#     k=1  17.6 %     k=2  9.3 %     k=3  6.3 %     k=5  1.9 %     k=8  0.7 %
+#
+# ⚠ Recall@1 is only 50.8 %, and that is not the number to steer by: several
+# references are nearly as good, so a "wrong" shortlist costs yield rather than
+# the lock. k=5 is the knee. 8 is the ceiling this constant sets, not the
+# default -- the default is whatever the time budget affords, below.
+MAX_SHORTLIST = 8
+
+# The fraction of one evaluation period the bank may spend matching. The rest
+# belongs to the detector, the follower and the camera pumps; the anchor is the
+# rung that can afford to be late, which is exactly why it must not be greedy.
+BUDGET_FRACTION = 0.45
 
 # A detection must be at least this confident before its view is worth storing.
 # Deliberately a FLOOR and not a threshold to act on -- the detector's own
@@ -102,6 +139,11 @@ class BankPose:
     inliers: int = 0
     index: Optional[int] = None
     pose: Optional[AnchorPose] = None
+    # WHAT was recognised, not merely where. One bank can hold a prop, a
+    # checkpoint and a place; without this the caller gets a position and no
+    # idea what it belongs to.
+    label: str = ''
+    searched: int = 0          # how many references were actually matched
 
     @property
     def confidence(self) -> float:
@@ -116,6 +158,9 @@ class CheckpointBank:
                  min_cossim: float = MIN_COSSIM,
                  conf_floor: float = CONF_FLOOR,
                  refresh_inliers: int = REFRESH_INLIERS,
+                 period_s: float = 0.0,
+                 max_shortlist: int = MAX_SHORTLIST,
+                 budget_fraction: float = BUDGET_FRACTION,
                  k=None):
         self._be = backend
         self._cap = int(max(1, capacity))
@@ -124,7 +169,19 @@ class CheckpointBank:
         self._conf_floor = float(conf_floor)
         self._refresh = int(refresh_inliers)
         self._k = k
+        self._period = float(max(0.0, period_s))
+        self._max_k = int(max(1, max_shortlist))
+        self._budget = float(budget_fraction)
         self._refs: list[Anchor] = []
+        # One 64-D signature per reference, and what each reference IS.
+        self._sigs: list[np.ndarray] = []
+        self._labels: list[str] = []
+        # Measured cost of ONE match, in seconds, as a decaying average. This
+        # is what makes the shortlist width adapt instead of being guessed:
+        # the same code picks 5 on a dev box and 3 on a Pi because it has
+        # measured both. 0.0 means "not yet timed" -- the first evaluation runs
+        # the full width and learns the number.
+        self._match_s = 0.0
         # Best inlier count each reference has produced. This is the eviction
         # key, and it starts at the snap's keypoint count so a brand-new
         # reference is not evicted before it has ever been asked a question.
@@ -149,6 +206,17 @@ class CheckpointBank:
     def clear(self) -> None:
         self._refs.clear()
         self._yields.clear()
+        self._sigs.clear()
+        self._labels.clear()
+
+    @property
+    def labels(self) -> list[str]:
+        return list(self._labels)
+
+    @property
+    def match_ms(self) -> float:
+        """Measured cost of one match on THIS machine, or 0.0 if never timed."""
+        return self._match_s * 1e3
 
     def reference_image(self, i: int):
         """The frame reference `i` was snapped from, for display. A number of
@@ -167,8 +235,44 @@ class CheckpointBank:
         return self._refs[-1].reference_roi if self._refs else None
 
     # -- enrolment (the meta-updater) --------------------------------------- #
+    @staticmethod
+    def _signature(desc: np.ndarray) -> np.ndarray:
+        """One 64-D vector per reference: the L2-normalised mean descriptor.
+
+        Not a learned global descriptor -- it is what the backend already
+        produced, so retrieval costs a dot product and no second network. The
+        claim it encodes is weak but real and measured: two views of one scene
+        share keypoints, so their mean descriptors sit closer together than two
+        views of different scenes. Recall@1 is only 50.8 % on the archive, and
+        that is acceptable because being wrong costs 1.9 % of inlier yield at
+        k=5, not the lock.
+        """
+        if desc is None or len(desc) == 0:
+            return np.zeros(64, np.float32)
+        v = np.asarray(desc, np.float32).mean(axis=0)
+        n = float(np.linalg.norm(v))
+        return (v / n) if n > 0.0 else v
+
+    def shortlist_k(self) -> int:
+        """How many references this box can afford to match, right now.
+
+        ⭐ Derived, not configured. The same code picks a wider shortlist on a
+        dev box than on a Pi because it has MEASURED one match on the machine
+        it is running on -- 14.4 ms against 31.4 ms for the identical work.
+        A constant here would be wrong on one of the two by a factor of two.
+
+        Before any match has been timed, and when no period was given, it
+        returns the ceiling: the first evaluation is what supplies the number,
+        and refusing to search until then would be a worse failure than being
+        briefly slow.
+        """
+        if self._period <= 0.0 or self._match_s <= 0.0:
+            return self._max_k
+        affordable = int((self._period * self._budget) / self._match_s)
+        return int(min(self._max_k, max(1, affordable)))
+
     def enrol(self, gray: np.ndarray, roi=None, det_conf: float = 0.0,
-              *, force: bool = False) -> EnrolResult:
+              *, label: str = '', force: bool = False) -> EnrolResult:
         """Consider storing this view as a reference.
 
         `force` skips the POLICY and is for a caller that already knows it wants
@@ -205,6 +309,8 @@ class CheckpointBank:
             self._evict()
         self._refs.append(a)
         self._yields.append(int(n))
+        self._sigs.append(self._signature(a._ref_desc))
+        self._labels.append(str(label))
         return EnrolResult(True, 'ok', index=len(self._refs) - 1, keypoints=n)
 
     def _evict(self) -> None:
@@ -212,6 +318,8 @@ class CheckpointBank:
         i = int(np.argmin(self._yields))
         self._refs.pop(i)
         self._yields.pop(i)
+        self._sigs.pop(i)
+        self._labels.pop(i)
 
     def wants_refresh(self, gray: np.ndarray) -> bool:
         """Is the best reference decaying toward uselessness?
@@ -225,26 +333,62 @@ class CheckpointBank:
         return self.locate(gray).inliers < self._refresh
 
     # -- use ---------------------------------------------------------------- #
-    def locate(self, gray: np.ndarray) -> BankPose:
-        """Best-of-bank, and say which one.
+    def locate(self, gray: np.ndarray, *, label: Optional[str] = None,
+               shortlist: Optional[int] = None) -> BankPose:
+        """Best-of-shortlist, and say which reference and what it is.
 
         Best-of rather than a vote or a mean: the references are views of one
-        target from different instants, so the one with the most inliers is the
+        thing from different instants, so the one with the most inliers is the
         one whose viewpoint this frame actually resembles. Averaging their poses
         would produce a position none of them claims -- the same argument
         `lock_state.arbitrate` makes for refusing to blend rungs.
+
+        `label` restricts the search to references of one kind, which is what
+        makes a single bank able to hold a prop, a checkpoint and a place at
+        once. `None` searches everything, which is the re-identification
+        question: not "is this the gate" but "what is this".
+
+        ⭐ ONLY THE TOP-k BY SIGNATURE ARE MATCHED, and k is measured rather
+        than configured -- see `shortlist_k()`. This is what makes the bank's
+        cost independent of its size: 100 references cost what 5 do.
         """
-        best = BankPose(ok=False)
-        for i, a in enumerate(self._refs):
-            p = a.locate(gray)
+        import time
+
+        pool = [i for i in range(len(self._refs))
+                if label is None or self._labels[i] == label]
+        if not pool:
+            return BankPose(ok=False)
+
+        k = int(shortlist) if shortlist else self.shortlist_k()
+        if len(pool) > k:
+            q = self._signature(self._be.detect(gray)[1])
+            # One (N,64) @ (64,) dot product. At 100 references this is
+            # microseconds against tens of milliseconds per match, which is the
+            # whole reason the shortlist is worth having.
+            score = np.stack([self._sigs[i] for i in pool]) @ q
+            pool = [pool[j] for j in np.argsort(-score)[:k]]
+
+        best = BankPose(ok=False, searched=len(pool))
+        t0 = time.perf_counter()
+        for i in pool:
+            p = self._refs[i].locate(gray)
             n = int(getattr(p, 'inliers', 0) or 0)
             if n > best.inliers:
-                best = BankPose(ok=bool(p.ok), inliers=n, index=i, pose=p)
+                best = BankPose(ok=bool(p.ok), inliers=n, index=i, pose=p,
+                                label=self._labels[i], searched=len(pool))
             if n > self._yields[i]:
                 self._yields[i] = n
+        # Decaying average of the per-match cost, which is what `shortlist_k`
+        # spends. Measured here rather than configured because the same code
+        # runs on a dev box and on the Pi and the two differ by 2.2x.
+        if pool:
+            per = (time.perf_counter() - t0) / len(pool)
+            self._match_s = per if self._match_s <= 0.0 else (
+                0.8 * self._match_s + 0.2 * per)
         return best
 
-    def verify(self, gray: np.ndarray) -> int:
+    def verify(self, gray: np.ndarray, *,
+               label: Optional[str] = None) -> int:
         """The LTMU verifier: how much evidence says this is still the target.
 
         Returns an inlier count, and **0 when the bank cannot stand behind an
@@ -252,5 +396,5 @@ class CheckpointBank:
         nothing. A caller comparing against `min_inliers` then gets the same
         semantics everywhere, and no path here invents support.
         """
-        p = self.locate(gray)
+        p = self.locate(gray, label=label)
         return int(p.inliers) if p.ok else 0

@@ -227,6 +227,7 @@ class LockNode(Node):
                                  self._on_info, 10)
         self._det_box = None
         self._det_conf = 0.0
+        self._det_cls = ''
         self._det_t = 0.0
         self._fresh = threading.Event()
 
@@ -240,6 +241,11 @@ class LockNode(Node):
         self._anchor_inliers = 0
         self._anchor_best = None
         self._anchor_enrolled = 0
+        # What the bank is holding. One bank can carry several kinds of thing,
+        # so a checkpoint is tagged with the class it was enrolled from and the
+        # search is restricted to it -- otherwise "where is the gate" could be
+        # answered by a torpedo board that happened to match better.
+        self._anchor_label = ''
         self._anchor_pose = None
         self._anchor_next = 0.0
         self._anchor_period = 1.0 / max(
@@ -338,10 +344,17 @@ class LockNode(Node):
                 p = c[0] if c else ''
             if not p:
                 raise FileNotFoundError('no xfeat_*.onnx found')
-            self._anchor = CheckpointBank(XFeatONNX(p, top_k=1024))
+            # `period_s` is what lets the bank size its own shortlist: it
+            # measures one match on THIS machine and spends a fixed fraction of
+            # the evaluation period. The dev box and the Pi differ by 2.2x on
+            # the identical work (14.4 vs 31.4 ms), so a constant width would
+            # be wrong on one of them.
+            self._anchor = CheckpointBank(XFeatONNX(p, top_k=1024),
+                                          period_s=self._anchor_period)
             self.get_logger().info(
                 f'[LOCK ] anchor backend {os.path.basename(p)}, '
-                f'bank capacity {self._anchor._cap}')
+                f'bank capacity {self._anchor._cap}, '
+                f'shortlist <= {self._anchor.shortlist_k()}')
         except Exception as exc:
             self.get_logger().warning(
                 f'[LOCK ] anchor DISABLED: {type(exc).__name__}: {exc} '
@@ -560,6 +573,7 @@ class LockNode(Node):
 
     def _on_det(self, msg):
         best = None
+        best_name = ''
         for d in msg.detections:
             if not d.results:
                 continue
@@ -573,6 +587,7 @@ class LockNode(Node):
             if score <= 0.0:          # a COASTED track, not an observation
                 continue
             if best is None or score > best[0]:
+                best_name = name
                 b = d.bbox
                 hw, hh = b.size_x * 0.5, b.size_y * 0.5
                 best = (score, (b.center.position.x - hw,
@@ -596,6 +611,7 @@ class LockNode(Node):
                 self._det_box, self._det_conf = None, 0.0
             else:
                 self._det_conf, self._det_box = best
+                self._det_cls = best_name
                 self._det_t = t
                 self._det_header = msg.header
 
@@ -621,6 +637,7 @@ class LockNode(Node):
                   det_header = self._det_header
                   det_box, det_conf, det_t = (self._det_box, self._det_conf,
                                               self._det_t)
+                  det_cls = self._det_cls
               if gray is None:
                   continue
               now = time.monotonic()
@@ -682,13 +699,15 @@ class LockNode(Node):
                                   'frame it does not belong to.')
                       else:
                           r = self._anchor.enrol(snap_gray, roi=det_box,
-                                                 det_conf=det_conf)
+                                                 det_conf=det_conf,
+                                                 label=det_cls)
                           if r.accepted:
                               # A fresh checkpoint resets the staleness measure:
                               # the number that triggered this refresh described
                               # the reference we have just replaced.
                               self._anchor_inliers = self._anchor._refresh
                               self._anchor_enrolled += 1
+                              self._anchor_label = det_cls
                               # Logged because a bank that silently stops
                               # enrolling looks exactly like one that never
                               # needed to, and those are opposite faults.
@@ -702,7 +721,8 @@ class LockNode(Node):
                   elif (self._anchor.has_reference
                         and now >= self._anchor_next):
                       self._anchor_next = now + self._anchor_period
-                      bp = self._anchor.locate(gray)
+                      bp = self._anchor.locate(
+                          gray, label=self._anchor_label or None)
                       # The bank answers best-of-bank; `pose` is the ordinary
                       # AnchorPose the rest of this node already consumes, so
                       # nothing downstream learns that there is now more than
