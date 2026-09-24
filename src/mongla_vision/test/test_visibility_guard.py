@@ -142,3 +142,53 @@ def test_the_memory_carries_no_confidence_that_looks_like_a_sighting():
     t.observe((0.0, 0.0), 0.0, 0.0, 5.0, 0.0)
     assert not hasattr(t, 'score') and not hasattr(t, 'confidence')
     assert not hasattr(t, 'detected')
+
+
+# --------------------------------------------------------------------------- #
+#  ⭐ PRIOR-GUIDED DETECTION -- measured on the recorded session, section 56
+# --------------------------------------------------------------------------- #
+from mongla_vision.tracking.visibility import (project_world_target,
+                                               region_conf_bar)
+
+
+def test_a_target_dead_ahead_projects_to_the_frame_centre():
+    px = project_world_target((5.0, 0.0), (0.0, 0.0), 0.0, W, H, FX)
+    assert px is not None and px[0] == pytest.approx(W / 2, abs=1e-6)
+
+
+def test_a_target_to_the_left_projects_left():
+    px = project_world_target((5.0, 5.0), (0.0, 0.0), 0.0, W, H, FX)
+    assert px is not None and px[0] > W / 2
+
+
+def test_range_does_not_change_the_projected_pixel():
+    """⭐ Bearing only. A target's horizontal pixel depends on its BEARING,
+    not on how far away it is -- and range is what we are least sure of."""
+    near = project_world_target((2.0, 1.0), (0.0, 0.0), 0.0, W, H, FX)
+    far = project_world_target((20.0, 10.0), (0.0, 0.0), 0.0, W, H, FX)
+    assert near[0] == pytest.approx(far[0], abs=1e-6)
+
+
+def test_a_target_behind_the_vehicle_has_NO_pixel():
+    """⛔ Projecting it anyway would silently fold it back into the frame."""
+    assert project_world_target((-5.0, 0.0), (0.0, 0.0), 0.0, W, H, FX) is None
+
+
+def test_inside_the_predicted_region_the_floor_is_enough():
+    """Section 56: 84 % of weak boxes fall within the prior radius against
+    28 % by chance -- 3.00x, measured on the recorded session."""
+    px = (W / 2, H / 2)
+    assert region_conf_bar(px, W / 2 + 10, H / 2, W,
+                           inside_bar=0.20, outside_bar=0.50) == 0.20
+
+
+def test_outside_the_predicted_region_the_strict_bar_applies():
+    px = (W / 2, H / 2)
+    assert region_conf_bar(px, W - 5, H / 2, W,
+                           inside_bar=0.20, outside_bar=0.50) == 0.50
+
+
+def test_NO_prior_means_the_strict_bar_everywhere():
+    """⛔ An absent prediction must never be read as a permissive one."""
+    assert region_conf_bar(None, W / 2, H / 2, W,
+                           inside_bar=0.20, outside_bar=0.50) == 0.50
