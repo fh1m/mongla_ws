@@ -422,6 +422,26 @@ class HailoDetector(Detector):
             self._log.warn(
                 f'[HAILO] class(es) {sorted(unknown)} are not in this model. '
                 f'Available: {sorted(self._names.values())[:10]}')
+        # ⛔ NOT NONE OF THEM. If every requested name is unknown, `ids` is
+        # EMPTY -- and an empty allowlist filters every detection away, so the
+        # detector returns [] on every frame while the graph looks healthy.
+        # That is the silent-[] failure this codebase already has a rule
+        # against (`CLAUDE.md` §4, the missing-sidecar case), reached from a
+        # different direction: one typo'd class name and the whole pipeline
+        # goes quiet with a single WARN.
+        #
+        # Refusing to narrow is the safe direction: the caller gets everything
+        # the model found and can filter downstream, instead of getting
+        # nothing and believing the water is empty.
+        if wanted and not ids:
+            if self._log:
+                self._log.error(
+                    f'[HAILO] NONE of {sorted(wanted)} exist in this model -- '
+                    f'ignoring the allowlist rather than filtering every '
+                    f'detection away. Fix the class name, or the pipeline is '
+                    f'blind while looking healthy.')
+            self._allow_ids = None
+            return
         self._allow_ids = ids
 
     def update_conf(self, conf: float) -> None:
