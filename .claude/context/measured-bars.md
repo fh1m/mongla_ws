@@ -4740,14 +4740,39 @@ detection 46.7%   follow 14.2%   anchor 8.2%   lost 30.9%
 anchor fires in 27% of windows, carrying 30% on average (max 58%)
 ```
 
-⛔ **`lost` is 30.9 %, against 0 % on the easy live run of the same day (§35).**
-The easy run had the target present almost throughout; this one has it leave
-and return 108 times. §35 is not wrong, it is *unrepresentative* — and the
-difference between the two is the entire value of recording a hard session.
-**The ladder's real bar is this number, not §35's.**
+⛔ **CORRECTION, same day: those are REPLAY numbers, and the replay is
+pessimistic about the ladder.** The live run's own log, on the same footage:
 
-The anchor is genuinely load-bearing: it fires in **27 %** of windows and
-carries up to **58 %** of one.
+| | live | replay @1.0 | replay @0.5 |
+|---|---|---|---|
+| detection | **48.1 %** | 46.7 % | 47.8 % |
+| follow | **15.5 %** | 14.2 % | 8.0 % |
+| anchor | **11.2 %** | 8.2 % | 4.4 % |
+| **lost** | **25.2 %** | 30.9 % | 39.8 % |
+| anchor fired in | **42 %** of windows | 27 % | 21 % |
+
+⭐ **The ladder's real bar is `lost` = 25.2 %**, against 0 % on the easy live
+run (§35). §35 is not wrong, it is *unrepresentative* — the target was present
+almost throughout — and the gap between 0 % and 25.2 % is the entire value of
+recording a hard session.
+
+⛔ **And slowing the playback makes it WORSE, not better.** The obvious theory
+was that the Pi cannot both play a 4.7 GB bag and infer at full rate (20.5 Hz
+of detections replayed against 41.2 Hz live), so halving the rate should let it
+keep up. It does not: `lost` goes 30.9 % → **39.8 %**. The ladder decays
+authority on **wall-clock time** while the bag's content is frame-indexed, so
+slowing playback *widens* the real interval between detections. The two cannot
+be traded off, and there is no rate at which the fixture reproduces live ladder
+occupancy.
+
+⭐ **So the fixture's scope is bounded, and that is a result rather than a
+disappointment:** it is faithful for **detector-level** quantities (51 % vs
+52 % of messages carrying a box) and systematically **pessimistic for ladder
+occupancy** at any rate. Use it to compare detectors, thresholds and models;
+use the **live log** for a ladder number. A fixture whose limits are measured
+is usable; one assumed faithful everywhere is a trap.
+
+The anchor is genuinely load-bearing: live, it fires in **42 %** of windows.
 
 ### Two alarms raised and withdrawn — both mine, both caught by checking
 
@@ -4946,3 +4971,94 @@ four, since every one of them printed "stopped". Injection-verified by stubbing
 is the defect reproduced on demand. `STOP_TREE_GRACE_S` shortens only the wait
 before escalating (never what is signalled), taking the guard from 68 s to
 14 s, because a guard too slow to run habitually is not a guard.
+
+---
+
+## 39. ⭐ THE LOOP-CLOSURE DECISION LAYER — BUILT, GUARDED, NEVER FLOWN
+
+**2026-09-24.** `mongla_vision/anchor/loop_closure.py` decides when a bank
+match may become a position fix, and `inekf.update_position` takes exactly what
+it emits. ⚠ **It is not wired into `lock_node` yet** — see "what is still
+owed". What exists is the decision and its guards, pure and tested.
+
+### ⛔ The blocker found first: the machinery was unreachable
+
+`lock_node` calls `bank.enrol(...)` with **no `position=`**, and subscribes to
+no odometry at all. So every reference carries `ref_position=None`, and
+`locate(near=…)` and the loop-closure path could **never** have fired — while
+looking entirely healthy. The shipped bank has had this capability and no way
+to reach it.
+
+### What is claimed, and what deliberately is not
+
+⭐ **Proximity, not displacement.** Resolving the homography's offset into
+world x and y needs **yaw** as well as altitude, and a yaw error rotates the
+fix into a confidently wrong place. So the fix is the *stored* position, and
+the apparent offset is folded into **sigma** instead.
+
+The bar is **100 inliers** (§24: far p50 9–16, near p50 76–192). `MIN_INLIERS`
+is 15 — inside the far distribution, ample to follow a target, useless to
+assert a position.
+
+Every gate refuses **by name**: not a place · no stored position · below the
+bar · reference too young · too little travel · among the newest 2 · **no
+altitude** · no homography · offset too large. A closure that silently never
+fires is indistinguishable from one that was never wired up, which is exactly
+the state above.
+
+⛔ **No altitude, no closure.** Pixels become metres only with a height above
+the floor, and the barometer reports "not initialised" (§37). A constant there
+would put a plausible number where a measurement is missing.
+
+### ⭐ A defect the test caught in my own module
+
+The first `offset_metres` warped the **origin** — and `H @ [0,0,1]` *is* H's
+third column, so it was precisely the `H[0,2]/H[1,2]` read the file forbids,
+wearing a hat. The offset is now the displacement of the frame **centre**, and
+a test proves a 30° rotation about the centre reads **0.00 m** where the naive
+read would call it a large translation.
+
+### ⭐⭐ What a closure does to the real filter — and the regime that matters
+
+| | fix at the truth |
+|---|---|
+| position error | **4.547 m → 0.000 m** |
+| yaw after a POSITION fix | **0.000°** |
+| 200 repeats of one fix | variance unchanged to 4 figures |
+| a fix 40 m away | **believed**, and covariance shrinks |
+
+⛔ **But only when velocity is aided.** With depth and yaw alone, velocity
+sigma reaches **21 m/s**, and there a position fix spends its innovation
+**rotating attitude**: `_inject` corrects on the left, so `p ← dR·p + dp`, and
+a 1.50 m error became **2.91 m on the far side**. `update_position` documents
+this coupling at 0.18 rad; unaided it is far past that. Not a defect — the
+vehicle's downward camera feeds `update_body_velocity_xy` — but it means **a
+loop closure into an unaided filter can make things worse**, and the fixture
+had to be the vehicle's regime before any of these numbers meant anything.
+
+⚠ Depth and yaw aiding do **not** bound horizontal drift (sigma_x 2576 m
+unaided, 2572 m aided): x and y are unobservable without a position or
+velocity measurement. That is the case for loop closure, stated as a test.
+
+### ⛔ The trap that cost an hour: `install/` is not `src/`
+
+A script that sources `install/setup.bash` imports
+`install/…/mongla_localization/inekf.py`; pytest imports `src/…/inekf.py`.
+**They are different code** — the built copy does not cancel gravity the same
+way, so the same fixture drifted 7.49 m under one and 1.50 m under the other,
+and I chased a phantom numerical instability between them. **`src` is
+authoritative; any bench script sourcing `install/` may be measuring stale
+code.** Worth auditing every tool that does.
+
+### What is still owed
+
+⛔ `lock_node` wiring: subscribe to `/mongla/odom`, pass `position=` and the
+filter's own sigma at enrol, add a **whole-frame** `place:*` enrolment path for
+the downward camera (the ~100 bar was derived on whole-frame references, so
+ROI-cropping would repeat §25), and publish the fix on
+`/mongla/localization/fix` stamped with the **matched frame's** header.
+Default **off**.
+⛔ Truth tests on downward archive footage: a same-clip revisit must fire at
+the revisit and nowhere else; a bank from clip A against clip B must give zero.
+⛔ Neither of today's bags can test any of this: the vehicle has one camera, the
+downward lock published zeros, and there is no altitude.
