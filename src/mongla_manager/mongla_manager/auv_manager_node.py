@@ -113,6 +113,12 @@ MESSAGE_RATES = {
 # floor so a companion cannot starve the PARAM_VALUE / COMMAND_ACK traffic missions
 # depend on, and it refuses a request to disable HEARTBEAT.
 SROT_MESSAGE_RATES = {
+    # The board's MODE and ARMED state reach us only on HEARTBEAT, 1 Hz by
+    # default. At 1 Hz a failsafe SURFACE is invisible for up to a second --
+    # long enough for the next mission leg's SROT_MOVE to put the board back in
+    # AUTO. 10 Hz costs ~170 B/s (~1.5 % of the 115200 link) and lets
+    # `SrotFC.move` refuse that leg and see a cut-short move for what it is.
+    mavutil.mavlink.MAVLINK_MSG_ID_HEARTBEAT:      10,   # Hz -- mode/armed freshness
     mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE:       50,   # Hz -- the host-loop ceiling
     # RAW GYRO for flow de-rotation, and it was ABSENT from this table, so it
     # ran at the board's 10 Hz default while the camera ran at 30+. Measured on
