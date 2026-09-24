@@ -28,7 +28,10 @@ import numpy as np
 import onnxruntime as ort
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-A = '/home/fh1m/Work/Projects/Duburi/2025/raw_videos'
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from archive_root import archive_root
+A = archive_root()
 M = f'{A}/Mirpur/Sun_June_21'
 
 

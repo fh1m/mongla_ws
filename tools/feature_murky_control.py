@@ -37,7 +37,10 @@ MIN_INLIERS = 15         # "a homography needs ~15 to be trusted"
 OFFSETS_S = (1, 3, 5, 8)
 REF_FRACTION = 0.40
 
-ARCHIVE = "/home/fh1m/Work/Projects/Duburi/2025/raw_videos"
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from archive_root import archive_root
+ARCHIVE = archive_root()
 
 # name -> (path, recorded ORB reference keypoint count, recorded ORB passes)
 CLIPS = {

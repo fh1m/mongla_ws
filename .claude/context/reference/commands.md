@@ -279,6 +279,7 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `dwn_fps` | `0` |  |
 | `fwd_publish_hz` | `40` |  |
 | `dwn_publish_hz` | `0` |  |
+| `replay` | `false` | Consume image_raw from a RECORDED BAG instead of a camera. Build no camera, keep every detector, and let `ros2 bag play` drive the graph. This is how a recorded session becomes a regression fixture: the detector, tracker, lock ladder and checkpoint bank all run for real, on input that never changes. |
 | `fwd_device_path` | `` |  |
 | `dwn_device_path` | `` |  |
 
@@ -396,11 +397,12 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `loop` | `True` |
 | `discover_on_start` | `False` |
 
-**`mongla_vision/detector_dual_node.py`** — 1 parameters
+**`mongla_vision/detector_dual_node.py`** — 2 parameters
 
 | parameter | default |
 |---|---|
 | `device` | `-1` |
+| `replay` | `False` |
 
 **`mongla_vision/detector_node.py`** — 25 parameters
 
