@@ -5609,3 +5609,68 @@ water footage exists, and the method is now a one-line rerun against any bag.
 3. `jitter` max is **0.9686** — a box that moved nearly a full frame width in
    one frame, which with no track ids cannot be separated from a second person
    entering.
+
+---
+
+## 51. ⭐⭐ THE SAME MEASUREMENT ON REAL WATER — AND §50'S CANDIDATE IS WITHDRAWN
+
+**2026-09-24.** §50 measured the gap distribution on a person walking in and
+out of a room and shipped a five-constant candidate from it. Real underwater
+footage, scored with the model that actually flies
+(`gate_rescue_repair.onnx`, `tools/continuity_from_video.py`), refutes four
+fifths of it.
+
+```
+REAL WATER, real props, 45 gaps over 180 s
+    p50 0.13   p75 0.20   p90 0.47   p95 0.53   p99 3.53   max 3.53 s
+
+    octagon  (robosub)   96.6 % presence   12 gaps   max 0.53 s
+    torpedo  (robosub)   88.9 %            26 gaps   max 3.53 s
+    bin      (final_run) 98.9 %             7 gaps   max 0.20 s
+```
+
+### ⭐ Two datasets, opposite biases, one agreement
+
+| rung | person in a room | props in water |
+|---|---|---|
+| **freshness zero 0.20 s** | **65.4 %** | **66.7 %** |
+| coast_s 0.80 s | 87.6 % | 97.8 % |
+| lost_grace_s 1.00 s | 89.1 % | 97.8 % |
+| kalman 1.50 s | 93.2 % | 97.8 % |
+| track_buffer 5.00 s | 99.7 % | 100.0 % |
+
+The person recording **over-states** long gaps — a person leaves entirely, for
+seconds. The archive clips **under-state** them — the camera stays pointed at
+the prop, which a mission does not. They fail in opposite directions and
+**agree to within 1.3 points on the lowest rung**: a third of real gaps outrun
+the reflex meant to absorb ordinary ones.
+
+⭐ **That agreement is the finding.** The candidate shrinks from five changes to
+**one**: `freshness_zero 0.20 → 0.47 s` (p90 in water). The other four are
+right and stay.
+
+⛔ **§50's candidate is WITHDRAWN.** It read 0.33 / 1.12 / 1.84 / 3.04 / 7.64 s,
+sized on the person alone. In water p99 is **0.47 s**, so coasting 1.12 s would
+hold a dead target more than twice as long as any real gap — and a coast that
+outlives the target is how a vehicle steers confidently at nothing. Shipped
+two commits before real footage refuted it.
+
+### ⛔ And a contaminated number caught before it was published
+
+The first pooled run read `507 gaps, p50 0.01 s` and would have been written up
+as *"real water says the ladder is generous"*. It was wrong: the Mirpur MKVs
+report **fps = 250 and fps = 1000** — variable-frame-rate containers OpenCV
+cannot time honestly — and they were **469 of those 507 gaps**. Every quantity
+here is a *duration*, so a fictional clock does not produce small gaps, it
+produces no measurement at all.
+
+`continuity_from_video.py` now **refuses** any clip outside 5–120 fps and says
+so. ⚠ The Mirpur clips remain valid for everything **frame-based** (the murky
+table, inlier counts); only their *time* axis is unusable.
+
+### What water still has to settle
+
+Both datasets are stationary-camera or walk-past. Neither has a **vehicle
+turning away from a prop under its own control**, which is the gap process a
+mission actually generates — and the one that decides whether 0.47 s is enough
+or whether the upper rungs matter after all.

@@ -1,51 +1,66 @@
-# Candidate lock-ladder constants, derived from a MEASURED gap distribution.
+# ⭐ ONE lock-ladder constant is measurably wrong. The other four are right.
 #
-# ⛔ NOT THE DEFAULTS, AND MUST NOT BECOME THEM UNTIL WATER SAYS SO.
-# The shipped values are unchanged. This file is the A/B arm for a pool day.
+# ⛔ NOT THE DEFAULTS. The shipped values are unchanged; this is the A/B arm
+# for a pool day, and it exists to be refuted.
 #
-# WHERE THESE COME FROM (section 50). `continuity.py` states that six constants
-# protect a target lock and that every one is sized from the detection RATE and
-# from the others' ordering -- not one from how long a real gap lasts. That
-# quantity was finally measured on a 253 s vehicle recording:
+# TWO INDEPENDENT DATASETS, OPPOSITE BIASES, ONE AGREEMENT
+# -------------------------------------------------------
+# `continuity.py` states that six constants protect a target lock and that
+# every one is sized from the detection RATE and from the others' ordering --
+# not one from how long a real gap lasts. That quantity has now been measured
+# twice, on data that fails in opposite directions:
 #
-#     338 gaps    p50 116 ms    p90 1.12 s    p99 3.04 s    max 7.64 s
+#   A. a 253 s VEHICLE RECORDING of a person walking in and out of a room.
+#      338 gaps. Over-states long gaps: a person leaves entirely, for seconds.
+#   B. REAL UNDERWATER FOOTAGE of competition props, scored with the model
+#      that flies (gate_rescue_repair). 45 gaps. Under-states long gaps: the
+#      camera stays pointed at the prop, which a mission does not.
 #
-# Read as coverage, the SHIPPED rungs land at 65 / 87.6 / 89.1 / 93.2 / 99.7 %
-# of real gaps -- a sensible escalation, reached without ever seeing this
-# distribution. The one outlier is the 0.20 s freshness zero, outrun by 117 of
-# 338 gaps.
+#       rung                    covers (A)   covers (B)
+#       freshness zero  0.20 s     65.4 %       66.7 %     <-- AGREE: too tight
+#       coast_s         0.80 s     87.6 %       97.8 %
+#       lost_grace_s    1.00 s     89.1 %       97.8 %
+#       kalman predict  1.50 s     93.2 %       97.8 %
+#       track_buffer    5.00 s     99.7 %      100.0 %
 #
-# ⚠ AND THE LIMIT THAT KEEPS THIS A CANDIDATE. The recording is a PERSON
-# walking in and out of a room. Gap DURATIONS there belong to the subject and
-# its occlusions, not to underwater detection. These numbers are sized against
-# a real distribution, which beats sizing against each other, and they are not
-# a competition-water number.
+# ⭐ The two disagree about the UPPER rungs and agree about the LOWEST one.
+# That agreement is the finding: a third of real gaps outrun the rung meant to
+# absorb ordinary ones, on a person in air AND on props in water.
+#
+# ⛔ AN EARLIER VERSION OF THIS FILE CHANGED ALL FIVE, sized from (A) alone:
+# 0.33 / 1.12 / 1.84 / 3.04 / 7.64 s. Real footage refutes it. In water,
+# p99 is 0.47 s, so coasting 1.12 s would hold a dead target more than twice
+# as long as any real gap -- and a coast that outlives the target is how a
+# vehicle steers confidently at nothing. Withdrawn.
 
-shipped:            # what runs today; the control arm
-  freshness_zero_s:  0.20     # covers 65.4 % of measured gaps
-  coast_s:           0.80     # 87.6 %
-  lost_grace_s:      1.00     # 89.1 %
-  kalman_predict_s:  1.50     # 93.2 %
-  track_buffer_s:    5.00     # 99.7 %
+shipped:
+  freshness_zero_s:  0.20
+  coast_s:           0.80     # 97.8 % in water -- keep
+  lost_grace_s:      1.00     # 97.8 % -- keep
+  kalman_predict_s:  1.50     # 97.8 % -- keep
+  track_buffer_s:    5.00     # 100 %  -- keep
 
-candidate:          # each rung at a percentile of the MEASURED distribution
-  freshness_zero_s:  0.33     # p75 -- the rung 35 % of gaps currently outrun
-  coast_s:           1.12     # p90
-  lost_grace_s:      1.84     # p95
-  kalman_predict_s:  3.04     # p99
-  track_buffer_s:    7.64     # worst observed
+candidate:
+  # p90 of the real-water distribution. p95 is 0.53 s and p99 is 3.53 s, but
+  # p99 is ONE gap out of 45 -- sizing a reflex on a single sample is how the
+  # withdrawn version happened.
+  freshness_zero_s:  0.47
+  coast_s:           0.80     # unchanged
+  lost_grace_s:      1.00     # unchanged
+  kalman_predict_s:  1.50     # unchanged
+  track_buffer_s:    5.00     # unchanged
 
-# ⛔ THE ORDERING IS A HARD CONSTRAINT, NOT A STYLE.
-# freshness < coast_s < lost_grace_s < kalman < track_buffer, and the tracker
-# buffer must EXCEED coast_s in wall time or a coasted target vanishes off
-# /tracks before the coast ends and the coast truncates early
-# (tracker.yaml:95). Any hand-edit must preserve it.
+# ⛔ THE ORDERING IS A HARD CONSTRAINT: freshness < coast_s < lost_grace_s <
+# kalman < track_buffer, and the tracker buffer must EXCEED coast_s in wall
+# time, or a coasted target vanishes off /tracks before the coast ends and the
+# coast truncates early (tracker.yaml:95). 0.47 < 0.80 holds.
 
-# Applied live, no rebuild, no relaunch:
-#   ros2 param set /mongla_manager vision.coast_s       1.12
-#   ros2 param set /mongla_manager vision.lost_grace_s  1.84
-#   ros2 param set /mongla_lock_forward zero_authority_s 3.04
-#   # track_buffer is in frames: tracker.yaml `track_buffer: 150` at 30 Hz
-#   # is 5.0 s; 7.64 s is 229.
+# Applied live -- no rebuild, no relaunch:
+#   ros2 param set /mongla_lock_forward  full_authority_s 0.47
+#   ros2 param set /mongla_lock_downward full_authority_s 0.47
+# Revert with 0.20.
 #
-# Reverting is the same four commands with the `shipped` values.
+# ⚠ WHAT WOULD REFUTE IT: a pool run where 0.47 s holds a stale box long
+# enough to steer the hull at a target that has genuinely gone. Score `lost`
+# AND false holds, not `lost` alone -- a ladder that never reports a loss has
+# not solved the problem, it has stopped asking the question.
