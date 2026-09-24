@@ -45,6 +45,40 @@ on the present wire separates eight healthy thrusters from none. PR F is one
 line in a function that already holds the answer; PR C is a dual reflash for
 the richer half. Presence first, then instrumentation.
 
+## Where each ask actually is
+
+⚠ **Written here is not filed.** K, M, N and O sat written and unopened for a week;
+this table exists so that cannot happen silently again. Every row is a live URL on
+`RakibulIslam1/srot-control-board`.
+
+| ask | filed as | opened |
+|---|---|---|
+| A | PR [#2](https://github.com/RakibulIslam1/srot-control-board/pull/2) | earlier |
+| B | PR [#3](https://github.com/RakibulIslam1/srot-control-board/pull/3), and the allocator half as [#20](https://github.com/RakibulIslam1/srot-control-board/pull/20) | earlier |
+| C | PR [#4](https://github.com/RakibulIslam1/srot-control-board/pull/4) | earlier |
+| D | PR [#5](https://github.com/RakibulIslam1/srot-control-board/pull/5) | earlier |
+| E | issue [#9](https://github.com/RakibulIslam1/srot-control-board/issues/9) | earlier |
+| F | PR [#10](https://github.com/RakibulIslam1/srot-control-board/pull/10) | earlier |
+| G | PR [#11](https://github.com/RakibulIslam1/srot-control-board/pull/11) | earlier |
+| H | PR [#12](https://github.com/RakibulIslam1/srot-control-board/pull/12) | earlier |
+| I | issue [#13](https://github.com/RakibulIslam1/srot-control-board/issues/13) | earlier |
+| **K** | PR [**#25**](https://github.com/RakibulIslam1/srot-control-board/pull/25) | **2026-09-24** |
+| **M** | PR [**#26**](https://github.com/RakibulIslam1/srot-control-board/pull/26) | **2026-09-24** |
+| **N** | PR [**#27**](https://github.com/RakibulIslam1/srot-control-board/pull/27) | **2026-09-24** |
+| **O** | PR [**#28**](https://github.com/RakibulIslam1/srot-control-board/pull/28) | **2026-09-24** |
+
+Each of the four adds exactly one document at their repo root and changes no code,
+so none of them needs a `SROT_FW_BEHAVIOUR_REV` bump to merge — the bump each *ask*
+would require is named inside the document, per the reciprocal rule below.
+
+⚠ **J is written and NOT filed**, deliberately: it asks for a simulated-ESC bench
+mode and asks them to decline it rather than ship it unmarked. File it only when
+somebody is ready to own that conversation.
+
+Their repos are also checked out locally at
+`/home/fh1m/Envs/dockers/auv-ros2/Mongla_others/{srot-control-board,srot-ground-station,srot-esc-flasher}`.
+Read the firmware there; ⛔ still never commit to it.
+
 **Filed as issues rather than PRs**, so severity stays legible — both are in
 [`pr-b-telemetry-budget.md`](pr-b-telemetry-budget.md) §5:
 the `JS_ARM` / `JS_ARM_TOGGLE` pre-arm bypass (safety), and four points of doc
