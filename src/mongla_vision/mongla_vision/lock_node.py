@@ -692,6 +692,33 @@ class LockNode(Node):
                   # per frame to learn what we just measured.
                   stale = (self._anchor.has_reference
                            and self._anchor_inliers < self._anchor._refresh)
+                  # ⭐ AND the criterion that matters more, per §21.2: the bank
+                  # buys VIEWPOINT DIVERSITY, not freshness. A target whose
+                  # apparent size is outside the band the bank covers earns a
+                  # slot even while the existing references are matching fine
+                  # -- because they will stop matching when the vehicle closes
+                  # in, and that is the frame a torpedo actually fires from.
+                  # Seen on footage: a bank enrolled at mid-range refused every
+                  # close-range frame at 7 inliers against a board filling the
+                  # screen.
+                  uncovered = (det_box is not None
+                               and not self._anchor.covers_scale(gray, det_box))
+                  # ⛔ AND THE REASON THE BANK WAS STAYING EMPTY.
+                  # `stale` only fires when the match is BAD -- but when it is
+                  # bad the target may already be lost, and when it is good
+                  # nothing is ever added, so the bank never grows. Measured on
+                  # Mirpur torpedo footage: the stale-only policy enrolled ONE
+                  # reference and asserted identity on 0 % of later frames,
+                  # while a bank of 14 asserted on 3 of 8.
+                  #
+                  # Hoarding is free here and we built the machinery that makes
+                  # it so: §20 measured search cost FLAT in bank size (100
+                  # references cost what 10 do, via the signature shortlist) and
+                  # 64 references is 16 MB. Eviction by inlier yield keeps the
+                  # quality bar. So while there is room, every confident
+                  # detection earns a slot -- diversity then emerges from the
+                  # run instead of being predicted by a heuristic.
+                  room = self._anchor.size < self._anchor._cap
                   # ⛔ THROTTLED, AND NOT FOR TIDINESS. `enrol()` runs a full
                   # `locate()` to decide whether a candidate agrees with the
                   # bank, and a candidate that keeps being REFUSED leaves
@@ -707,7 +734,8 @@ class LockNode(Node):
                   # its mind in between.
                   may_try = now >= self._anchor_enrol_next
                   if det_box is not None and may_try and (
-                          not self._anchor.has_reference or stale):
+                          not self._anchor.has_reference or stale or uncovered
+                          or room):
                       self._anchor_enrol_next = now + self._anchor_period
                       # THE FRAME THE BOX BELONGS TO, not merely the newest.
                       # This patch becomes the object model, so pairing it with
@@ -744,7 +772,8 @@ class LockNode(Node):
                               self.get_logger().info(
                                   f'[LOCK ] checkpoint {self._anchor_enrolled}: '
                                   f'{r.keypoints} kp, bank {self._anchor.size}/'
-                                  f'{self._anchor._cap}')
+                                  f'{self._anchor._cap}, '
+                                  f'{"scale" if uncovered else ("room" if room else "quality")}')
                           elif r.reason != 'confidence':
                               self.get_logger().debug(
                                   f'[LOCK ] checkpoint refused: {r.reason}')
