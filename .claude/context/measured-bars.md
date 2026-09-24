@@ -4453,3 +4453,62 @@ open question is **what to enrol from**, not whether to mask: a box sized to the
 conclusion and a proposed segmentation workstream all rested on a detector that
 was never trained for the clip it was scored on. The model collection was
 available the whole time.
+
+---
+
+## 32. ⭐ XFeat and the detector CAN share the chip — and the anchor's 3 Hz is obsolete
+
+**2026-09-24.** §28.4 listed chip contention as unmeasured. Measured now, on the
+vehicle.
+
+### 32.1 Two processes cannot share it
+
+A second client against the same Hailo-8 fails outright with
+**`HAILO_OUT_OF_PHYSICAL_DEVICES(74)`** while the first keeps its full rate. And
+two network groups cannot both be `activate()`d — that raises
+`HailoRTInvalidOperationException`. ⭐ **Sharing must happen inside one process,
+with the HailoRT scheduler**, which owns activation itself.
+
+### 32.2 Naive round-robin halves the detector
+
+| | alone | shared, round-robin | keeps |
+|---|---|---|---|
+| detector (`sauvc_sim`, 3 contexts) | 95.1 Hz | **48.7 Hz** | 51 % |
+| XFeat (single context) | 245.7 Hz | 48.4 Hz | 20 % |
+
+⛔ **Fails the ≥ 90 Hz bar.** Round-robin gives each model an equal share, and
+XFeat takes 48 Hz it has no use for.
+
+### 32.3 ⭐ Throttled to what the anchor wants, it is nearly free
+
+| XFeat target | detector Hz | XFeat Hz | detector keeps |
+|---|---|---|---|
+| none | 95.1 | — | 100 % |
+| **3 Hz** | 92.0 | 3.0 | **97 %** |
+| **5 Hz** | 89.7 | 5.0 | **94 %** |
+| **10 Hz** | 85.3 | 9.5 | **90 %** |
+| 30 Hz | 71.7 | 24.0 | 75 % |
+
+### 32.4 ⛔ And the anchor's 3 Hz was a CPU constraint that no longer exists
+
+`lock_node` evaluates the anchor at **3 Hz** because §14 measured 8 Hz costing
+**+42 % of frame age for no extra coverage** — with XFeat costing **33.1 ms on
+the CPU and blocking the loop**. On the chip the call is **4.1 ms**
+(245.7 Hz alone, activation hoisted out of the loop). **The constraint that
+produced 3 Hz is gone**, and the table above prices its replacement directly:
+10 Hz of anchor for 10 % of detector rate.
+
+⚠ **The new ceiling is the MATCHER, not the backbone.** The similarity matmul
+is still CPU-side at **31.4 ms per reference** (§20), so a 4-wide shortlist
+costs ~126 ms and the anchor tops out near **8 Hz** however fast the backbone
+runs. Raising `anchor_hz` past that buys nothing.
+
+### The bar
+
+**XFeat may share the chip at up to ~10 Hz**, costing the detector ≤ 10 % — but
+only inside the vision process, only with the scheduler enabled, and only
+throttled. ⛔ Unthrottled sharing costs half the detector and must not ship.
+
+⚠ **Owed:** this is synthetic load on both sides. The real `lock_node` does
+host work between inferences, which may change the sharing profile in either
+direction.
