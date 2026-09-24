@@ -52,7 +52,7 @@ from mongla_interfaces.msg import MonglaState
 
 from mongla_localization.command_velocity import (BLOCKED, CommandVelocityModel,
                                                   MotionCheck)
-from mongla_localization.inekf import RIEKF
+from mongla_localization.inekf import RIEKF, _wrap180
 from mongla_localization.retro import Retrodictor
 from mongla_localization.tile_grating import snap_to_grid
 
@@ -121,6 +121,13 @@ class LocalizationNode(Node):
         self._last_flow_t = 0.0
         self._attitude_seeded = False
         self._anchored = False
+        # ⛔ BOARD YAW + THIS = POOL YAW. Zero until an anchor arrives. Every
+        # board attitude (and board yaw, under `use_yaw`) is rotated by it
+        # before it reaches the filter -- see `_on_heading` for why the anchor
+        # has to live HERE and not as a one-off filter update.
+        self._yaw_offset_deg = 0.0
+        # The latest RAW board attitude, the partner the anchor is paired with.
+        self._board_R = None
         self._last_input_t = 0.0
         self._aided_at_last_diag = -1
 
@@ -294,8 +301,14 @@ class LocalizationNode(Node):
         # one -- it would be better to diverge visibly than to converge to a
         # number nobody measured.
         if msg.orientation_covariance[0] >= 0.0:
-            R_meas = _R_from_quat(msg.orientation.w, msg.orientation.x,
-                                  msg.orientation.y, msg.orientation.z)
+            self._board_R = _R_from_quat(msg.orientation.w, msg.orientation.x,
+                                         msg.orientation.y, msg.orientation.z)
+            # ⛔ INTO THE POOL FRAME BEFORE THE FILTER SEES IT. The board's yaw
+            # is boot-relative; once anchored, handing it over raw pins the
+            # filter back to boot axes at 50 Hz while `frame_id` says `pool`.
+            # Rz on the LEFT changes yaw only: R = Rz(yaw) Ry(pitch) Rx(roll)
+            # in the board's Z-Y-X convention, so Rz(off) R keeps roll/pitch.
+            R_meas = _Rz(self._yaw_offset_deg) @ self._board_R
             if not self._attitude_seeded:
                 # ⛔ THE FIRST ATTITUDE IS AN INITIALISATION, NOT A CORRECTION.
                 # The filter starts at identity; the board starts wherever the
@@ -341,6 +354,9 @@ class LocalizationNode(Node):
         # board with an unhealthy BNO actually publishes. Feeding NaN into the
         # update would poison every state through the gain, silently.
         if self._use_yaw and not math.isnan(yaw):
+            # The same board yaw as the attitude stream, so the same offset --
+            # raw, it would drag an anchored filter back to boot axes.
+            yaw = _wrap180(yaw + self._yaw_offset_deg)
             self._apply(t, lambda f, y=yaw, s=self._yaw_sigma_deg:
                         f.update_yaw(y, sigma_deg=s))
             self._n['yaw'] += 1
@@ -511,15 +527,55 @@ class LocalizationNode(Node):
         Publishing `pool` before that point would not be a labelling nicety:
         flow integrates into position through the SAME rotation, so every
         dead-reckoned metre would walk off along an offset nobody measured.
+
+        ⛔ AN OFFSET, NOT AN UPDATE -- the defect this replaced. This used to be
+        one `update_yaw` against a filter the board pins at 0.5 deg, 50 times a
+        second. Any anchor more than ~5 deg from boot yaw was chi-square
+        REJECTED; one that got in was pulled back to boot axes by the next
+        attitude samples. And `_anchored` flipped either way, so `/mongla/odom`
+        said `pool` while every number in it was still boot-relative.
+
+        So the anchor is turned into what it actually is -- the angle between
+        the board's axes and the pool's -- and kept: offset = anchor - the
+        board's CURRENT raw yaw, every later board attitude is rotated by it
+        (`_on_imu`), and the filter's state is rotated by the CHANGE in offset
+        as an EVENT, so a retrodicted replay re-applies it at the same place in
+        the sequence, exactly as the seed is. A later anchor replaces the
+        offset and rotates by the difference.
+
+        ⚠ THE PAIRING IS BY ARRIVAL. The message carries the hull's absolute
+        heading at the moment the mission computed it, and it is paired here
+        with the newest board sample. Mid-turn, the latency between the two is
+        heading error. Carrying the mission's own `offset_deg` would remove
+        that; this keeps the wire as it is.
         """
-        self._apply(None, lambda f, y=float(msg.data), s=self._yaw_sigma_deg:
-                    f.update_yaw(y, sigma_deg=s))
+        heading = float(msg.data)
+        if not math.isfinite(heading):
+            return
+        if self._board_R is None:
+            # ⛔ REFUSED, NOT HELD. An absolute heading means nothing without
+            # the board yaw it was paired with, and a latched anchor delivered
+            # to a node that has not yet heard the board may be minutes old --
+            # the hull has turned since. A wrong heading zero is worse than
+            # none, because nothing downstream can tell it is lost.
+            self.get_logger().warning(
+                f'[LOCAL] heading anchor {heading:+.1f} deg REFUSED: no board '
+                f'attitude yet to pair it with. The output stays in `odom`.')
+            return
+        board_yaw = math.degrees(math.atan2(self._board_R[1, 0],
+                                            self._board_R[0, 0]))
+        offset = _wrap180(heading - board_yaw)
+        delta = _wrap180(offset - self._yaw_offset_deg)
+        if not self._apply(None, lambda f, d=delta: f.rotate_world_yaw(d)):
+            return
+        self._yaw_offset_deg = offset
         self._n['yaw'] += 1
         if not self._anchored:
             self._anchored = True
             self.get_logger().info(
-                f'[LOCAL] heading anchored at {float(msg.data):+.1f} deg: the '
-                f'output frame is the POOL from here on.')
+                f'[LOCAL] heading anchored at {heading:+.1f} deg (board '
+                f'{board_yaw:+.1f}, offset {offset:+.1f}): the output frame is '
+                f'the POOL from here on.')
 
     def _on_floor_grid(self, msg: Float32) -> None:
         """The floor's tile grid: a DRIFT BOUND on yaw, not a heading source.
@@ -560,8 +616,19 @@ class LocalizationNode(Node):
         if snapped is None:
             self._n[f'{key}_refused'] += 1
             return
+        before = self._filter.X.yaw_deg()
         self._apply(None, lambda f, y=snapped, s=self._grid_sigma_deg:
                     f.update_yaw(y, sigma_deg=s))
+        # ⛔ WHAT THE FLOOR MOVED GOES INTO THE OFFSET, or it is undone. The
+        # next board attitude, 20 ms later, would pull yaw straight back to
+        # board + offset: a drift bound that bounds nothing. Folding the
+        # accepted correction (the filter's own gain, so a 1 deg floor against
+        # a 0.2 deg board moves a few percent a sample) into the offset makes
+        # the board agree with it from then on. A refused update moves 0.
+        # ⚠ Taken once, at arrival: a retrodicted replay re-runs the update
+        # and may move yaw by a slightly different amount than was folded in.
+        moved = _wrap180(self._filter.X.yaw_deg() - before)
+        self._yaw_offset_deg = _wrap180(self._yaw_offset_deg + moved)
         self._n[key] += 1
 
     def _on_fix(self, msg: PointStamped) -> None:
@@ -661,6 +728,13 @@ class LocalizationNode(Node):
             f"yaw={self._filter.X.yaw_deg():+.1f} deg "
             f"p=({self._filter.X.p[0]:+.2f},{self._filter.X.p[1]:+.2f},"
             f"{self._filter.X.p[2]:+.2f}) m")
+
+
+def _Rz(deg: float) -> np.ndarray:
+    """Yaw about world z (NED down): positive turns north toward east."""
+    a = math.radians(float(deg))
+    c, s = math.cos(a), math.sin(a)
+    return np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
 
 
 def _R_from_quat(w, x, y, z):

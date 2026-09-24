@@ -68,6 +68,8 @@ def _node():
     obj._last_flow_t = 0.0
     obj._attitude_seeded = False
     obj._anchored = False
+    obj._yaw_offset_deg = 0.0
+    obj._board_R = None
     obj._grid_sigma_deg = 1.0
     obj._grid_max_corr_deg = 20.0
     obj._last_input_t = 0.0
@@ -453,9 +455,23 @@ def test_the_frame_is_odom_until_the_heading_is_anchored():
 
 def test_an_anchor_reaches_the_filter_and_flips_the_frame():
     n = _node()
+    n._on_imu(_Imu(100.0))                     # clock only
+    n._on_imu(_Imu(100.02))                    # the board attitude to pair with
     n._on_heading(type('F', (), {'data': 137.0})())
     assert n._anchored is True
     assert n._n['yaw'] == 1
+    assert n._filter.X.yaw_deg() == pytest.approx(137.0, abs=0.5)
+
+
+def test_an_anchor_with_no_board_attitude_is_REFUSED_not_claimed():
+    """An absolute heading is only an offset once it is paired with the board
+    yaw it was taken against. A latched anchor reaching a node that has not
+    heard the board may be minutes old; claiming `pool` on it is a wrong
+    heading zero that nothing downstream can detect."""
+    n = _node()
+    n._on_heading(type('F', (), {'data': 137.0})())
+    assert n._anchored is False
+    assert n._yaw_offset_deg == 0.0
 
 
 def test_the_odom_stamp_is_the_inputs_not_the_wall_clock():
@@ -505,6 +521,147 @@ def test_aiding_present_is_not_announced():
     n._n['zupt'] += 1
     n._diagnose()
     assert not any('NO VELOCITY AIDING' in m for m in warned)
+
+
+# --------------------------------------------------------------------------- #
+#  the anchor must HOLD against the board, not just arrive (truth tests)
+# --------------------------------------------------------------------------- #
+G = 9.80665
+
+
+def _board_at(t, yaw_deg, accel_x=0.0):
+    """The board's IMU sample for a level hull at BOARD yaw `yaw_deg`."""
+    m = _Imu(t, accel=(accel_x, 0.0, -G))
+    a = math.radians(yaw_deg)
+    Rz = np.array([[math.cos(a), -math.sin(a), 0.0],
+                   [math.sin(a), math.cos(a), 0.0], [0.0, 0.0, 1.0]])
+    qw, qx, qy, qz = ln._quat_from_R(Rz)
+    m.orientation.w, m.orientation.x = qw, qx
+    m.orientation.y, m.orientation.z = qy, qz
+    return m
+
+
+def _fly_board(n, t, seconds, yaw_deg, speed=None, accel_x=0.0):
+    """`seconds` of 50 Hz board samples at BOARD yaw `yaw_deg`.
+
+    `speed(t)`, when given, is the TRUE forward speed and is reported as
+    body-frame flow; `accel_x` is the matching forward specific force, so the
+    accelerometer and the camera tell the same story."""
+    for _ in range(int(round(seconds * 50))):
+        t += 0.02
+        n._on_imu(_board_at(t, yaw_deg, accel_x))
+        if speed is not None:
+            f = type('T', (), {})()
+            f.header = _Header(t)
+            f.twist = type('T2', (), {})()
+            f.twist.twist = type('T3', (), {})()
+            f.twist.twist.linear = type('L', (), {'x': speed(t), 'y': 0.0,
+                                                  'z': 0.0})()
+            f.twist.covariance = [0.0] * 36
+            f.twist.covariance[0] = f.twist.covariance[7] = 1e-4
+            n._on_flow(f)
+    return t
+
+
+def _published_frame(n):
+    out = []
+    n._pub = type('P', (), {'publish': lambda _s, m: out.append(m)})()
+    n._publish()
+    return out[-1].header.frame_id
+
+
+def test_the_anchor_HOLDS_against_50hz_board_attitude():
+    """⛔ TRUTH: the board boots with the hull at +30 deg (its own frame); the
+    hull's true pool heading is -60. After the anchor and 5 s of the board
+    pinning attitude at 50 Hz, the published yaw must be the POOL's.
+
+    The defect this guards: the anchor went in as one `update_yaw` against a
+    filter the board pins at 0.5 deg. A 90 deg offset is chi-square rejected
+    outright (and an accepted one is dragged back within a second) -- yet
+    `_anchored` flipped anyway, so the output said `pool` at +30."""
+    n = _node()
+    t = _fly_board(n, 100.0, 1.0, 30.0)
+    assert n._filter.X.yaw_deg() == pytest.approx(30.0, abs=0.5)
+    assert _published_frame(n) == 'odom'
+    n._on_heading(type('F', (), {'data': -60.0})())
+    t = _fly_board(n, t, 5.0, 30.0)
+    assert n._filter.X.yaw_deg() == pytest.approx(-60.0, abs=1.0)
+    assert _published_frame(n) == 'pool'
+    # And it is an OFFSET, not a sticky number: the hull turns 45 deg right
+    # (board +30 -> +75), so its true pool heading is -15.
+    _fly_board(n, t, 2.0, 75.0)
+    assert n._filter.X.yaw_deg() == pytest.approx(-15.0, abs=1.0)
+
+
+def test_a_later_anchor_replaces_the_offset_rather_than_stacking():
+    n = _node()
+    t = _fly_board(n, 100.0, 1.0, 30.0)
+    n._on_heading(type('F', (), {'data': -60.0})())
+    t = _fly_board(n, t, 1.0, 30.0)
+    n._on_heading(type('F', (), {'data': -55.0})())     # a better look
+    _fly_board(n, t, 2.0, 30.0)
+    assert n._filter.X.yaw_deg() == pytest.approx(-55.0, abs=1.0)
+
+
+def test_flow_dead_reckons_along_the_POOL_heading_after_the_anchor():
+    """⛔ TRUTH: hull faces pool -60 (board +30), accelerates straight ahead at
+    0.5 m/s^2 for 1 s and cruises at 0.5 m/s for 3 s: 1.75 m along its nose.
+    Flow and the accelerometer both report it in the BODY frame, and the
+    filter turns them into the world through its R -- so the track must run
+    along -60 in the pool frame, toward (+0.50, -0.87) NED. On the boot-frame
+    R it runs along +30, labelled `pool`."""
+    n = _node()
+    t = _fly_board(n, 100.0, 1.0, 30.0)
+    n._on_heading(type('F', (), {'data': -60.0})())
+    t0 = _fly_board(n, t, 1.0, 30.0)
+    p0 = n._filter.X.p[:2].copy()
+    t = _fly_board(n, t0, 1.0, 30.0, speed=lambda tt: 0.5 * (tt - t0),
+                   accel_x=0.5)
+    _fly_board(n, t, 3.0, 30.0, speed=lambda tt: 0.5)
+    d = n._filter.X.p[:2] - p0
+    bearing = math.degrees(math.atan2(d[1], d[0]))
+    assert bearing == pytest.approx(-60.0, abs=2.0)
+    assert np.linalg.norm(d) == pytest.approx(1.75, rel=0.10)
+
+
+def test_the_anchor_survives_a_retrodicted_replay_across_it():
+    """The rotation is an EVENT, like the seed: a late measurement stamped
+    before the anchor replays the tail through it, and the board samples
+    after it were already rotated. Were the rotation applied outside the
+    event log, the replay would restore a pre-anchor snapshot and lose it."""
+    n = _node()
+    n._retro = ln.Retrodictor(n._filter, horizon_s=2.0)
+    t = _fly_board(n, 100.0, 1.0, 30.0)
+    n._on_heading(type('F', (), {'data': -60.0})())
+    t = _fly_board(n, t, 0.5, 30.0)
+    late = type('T', (), {})()
+    late.header = _Header(t - 0.8)                  # before the anchor
+    late.twist = type('T2', (), {})()
+    late.twist.twist = type('T3', (), {})()
+    late.twist.twist.linear = type('L', (), {'x': 0.0, 'y': 0.0, 'z': 0.0})()
+    late.twist.covariance = [0.0] * 36
+    n._on_flow(late)
+    assert n._retro.late == 1
+    _fly_board(n, t, 0.5, 30.0)
+    assert n._filter.X.yaw_deg() == pytest.approx(-60.0, abs=1.0)
+
+
+def test_a_floor_correction_is_KEPT_not_undone_by_the_board():
+    """⛔ TRUTH: anchored at pool -60 (board +30). The board then drifts +2 deg
+    (reads +32 while the hull has not turned), and the grid keeps reporting
+    the true -60. Without folding the correction into the offset, the next
+    board sample pulls yaw straight back and the drift bound bounds nothing."""
+    n = _node()
+    t = _fly_board(n, 100.0, 1.0, 30.0)
+    n._on_heading(type('F', (), {'data': -60.0})())
+    t = _fly_board(n, t, 1.0, 32.0)                     # drifted board
+    assert n._filter.X.yaw_deg() == pytest.approx(-58.0, abs=0.5)
+    for _ in range(100):                                # 10 s of 10 Hz grid
+        t = _fly_board(n, t, 0.1, 32.0)
+        n._on_floor_grid(type('F', (), {'data': -60.0})())
+    t = _fly_board(n, t, 1.0, 32.0)                     # board has the last word
+    assert n._n['grid'] > 0
+    assert n._filter.X.yaw_deg() == pytest.approx(-60.0, abs=0.5)
 
 
 # --------------------------------------------------------------------------- #
