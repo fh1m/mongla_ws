@@ -44,7 +44,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "▸ graph up in REPLAY mode (no camera)"
-ros2 launch mongla_vision vision_pi.launch.py \
+run_resettable ros2 launch mongla_vision vision_pi.launch.py \
     replay:=true paused:=false lock:=true lock_class:=person \
     fwd_model:=yolov11n >"$LOG" 2>&1 &
 SYS_PID=$!
