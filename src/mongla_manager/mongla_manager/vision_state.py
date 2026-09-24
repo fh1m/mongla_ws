@@ -546,6 +546,16 @@ class VisionState:
             # anchor). Opt-in, and it CANNOT fabricate -- `lock_node` publishes
             # nothing once its own authority reaches zero, so an absent message
             # is the loss being declared on schedule rather than hidden.
+            # ⚠ `lock_s` IS A SWITCH, NOT A DURATION, and its name says
+            # otherwise. Any positive value enables the ladder; the magnitude
+            # is never compared to anything, so `lock_s:=2.5` and `lock_s:=0.1`
+            # behave identically.
+            #
+            # That is deliberate and correct: the ladder OWNS the horizon. It
+            # decays its own authority from the last real detection and stops
+            # publishing at zero, so a second numeric horizon here would be the
+            # same quantity in two places -- and the shorter of the two would
+            # silently win. The name is the defect, not the behaviour.
             if lock_s > 0.0:
                 return self._lock_sample(image_width, image_height)
             return None
