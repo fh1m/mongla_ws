@@ -4789,3 +4789,64 @@ later.
 ⚠ **`baro health: not initialised`** during this record, so it carries **no
 depth noise**. Per the board contract that also means every move verb would be
 refused — the vehicle would arm and not move.
+
+---
+
+## 37. ⭐⭐ WHAT THE BOARD'S IMU SAYS WHEN NOTHING IS MOVING
+
+**2026-09-24.** SROT board on the bench, disarmed, untouched for 30 minutes.
+A vehicle at rest is the only condition outside water where truth is known
+exactly — every rate is zero, the only acceleration is gravity — so everything
+reported beyond that is bias and noise. `tools/imu_rest_stats.py` on
+`/mongla/imu`, **89 813 samples over 1797.0 s at 49.98 Hz**.
+
+Rest was verified rather than assumed: **|accel| = 9.7271 ± 0.0053 m/s²**. A
+standard deviation of 5 mm/s² over half an hour means nothing knocked the
+bench, so these are sensor statistics and not desk statistics.
+
+### Gyro [deg/s]
+
+| axis | bias | noise 1σ | ARW @1 s | stability | @ tau |
+|---|---|---|---|---|---|
+| x | −0.000131 | 0.0888 | 0.0140 | 0.000293 | 660 s |
+| y | +0.000321 | 0.0994 | 0.0136 | 0.000328 | 660 s |
+| z | −0.000018 | 0.0987 | 0.0152 | 0.000907 | 858 s |
+
+⭐ **Every gyro bias is under 0.0004 deg/s** — three orders of magnitude below
+the per-sample noise. The board is already estimating and removing gyro bias,
+so what `/mongla/imu` carries is a bias-corrected rate, not a raw sensor. Our
+filter must not estimate that bias a second time.
+
+⭐ **Residual yaw drift: 0.1 deg/hour.** That is the drift left *after* the
+board's own correction, and it is small enough that heading error on any
+realistic run is dominated by something other than gyro bias.
+
+Allan deviation, not just standard deviation, because the two answer different
+questions: σ says how much one sample scatters, Allan says how long the sensor
+can be averaged before bias drift takes over. These gyros keep improving out to
+**~660–860 s**, which is longer than any mission.
+
+### Accel [m/s²]
+
+| axis | mean | noise 1σ | VRW @1 s | stability |
+|---|---|---|---|---|
+| x | −0.8718 | 0.00465 | 0.00223 | 0.000208 |
+| y | +0.0022 | 0.00426 | 0.00185 | 0.000165 |
+| z | −9.6880 | 0.00533 | 0.00254 | 0.000852 |
+
+⚠ **The x mean is NOT a bias.** `asin(0.8718 / 9.727) = 5.1°`, and `connect`
+read the board at **pitch −4.15°** in the same session: this is gravity
+projected onto a tilted board. Reading it as an accelerometer offset and
+removing it would inject a real 5° error the moment the vehicle is level.
+
+⚠ **|accel| is 0.81 % low** (0.9919 g). Over half an hour with 5 mm/s² of
+scatter that is a scale-factor observation, not noise — worth carrying to the
+firmware team rather than compensating for on our side.
+
+### What this does NOT contain
+
+⛔ **No depth noise.** `baro health: not initialised` throughout. Per the board
+contract an unhealthy barometer also refuses `DEPTH_HOLD`/`AUTO`/`PATTERN`, and
+since `SROT_MOVE` enters `AUTO` that means every move verb would have been
+denied — the vehicle would arm and not move. The depth half of this
+characterisation is **blocked on a working barometer**, not on time.
