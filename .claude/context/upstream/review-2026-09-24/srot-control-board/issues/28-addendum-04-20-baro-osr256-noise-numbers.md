@@ -1,0 +1,63 @@
+# Addendum to "Depth D-term differentiates a 20 Hz sample-and-hold baro" and "Proposal: on-board vertical state estimator": at OSR 256 the Bar30 noise is about 1.6 cm RMS, not 2 mm
+
+Part of the 2026-09-24 ecosystem review, round 2 (see ../README.md).
+
+**This is an addendum, not a new defect.** It adds numbers to round-1 drafts `04-depth-dterm-sample-and-hold.md` and `20-proposal-vertical-state-estimator.md`, and corrects one figure used in 04 and in `15-bar30-driver-blocks-sensor-task.md`. If those have been filed, post this as a comment on 04 and link it from 20.
+
+## Summary
+Round-1 drafts 04 and 15 put Bar30 noise at "about 2 mm at the default OSR". The firmware reads at **OSR 256**. The MS5837-30BA datasheet gives **1.57 mbar RMS at OSR 256** (≈1.6 cm of water). The 0.2 mbar (≈2 mm) figure is the OSR 8192 value. So the depth D-term problem in 04 is roughly **8× worse** than 04 estimated, and the case for the estimator in 20 is correspondingly stronger. *The datasheet values come from a search snippet (the direct PDF fetch was blocked in the review container). The arithmetic is the review's own. Nothing here was measured.*
+
+`LINEAR_ACCELERATION` is still disabled (already noted in 04 and 20). This addendum does not repeat that.
+
+## Evidence
+At commit `f1d3ba9`.
+
+The driver calls the library's default `read()` (`src/drivers/bar30.cpp:139-144`):
+```cpp
+    // Library default OSR (bits=8). A higher OSR was tried on the bench and made the read
+    // FAIL outright -- no SCALED_PRESSURE2 at all -- so it is not the knob it looked like.
+    // The 608 -> 744 mbar excursion that prompted it was the mag-report disable colliding
+    // with a Bar30 conversion on the shared I2C0 bus, not conversion-time margin; ...
+    if (s_ms.read() != 0) {
+```
+`lib/MS5837/MS5837.h:57` has `int read(uint8_t bits = 8);`, and `lib/MS5837/MS5837.cpp:113-114` maps bits 8 to OSR index 0, which is **OSR 256**:
+```cpp
+  int OSR = constrain(bits, 8, 13);
+  OSR -= 8;
+```
+The baro is read at about 20 Hz (`src/tasks/task_sensor_read.cpp:41`, `BARO_DIV = TASK_SENSOR_HZ / 20`).
+
+**Numbers** (MS5837-30BA datasheet via snippet; arithmetic from the round-2 control review):
+
+| quantity | value |
+|---|---|
+| RMS resolution, OSR 256 / 4096 / 8192 | **1.57** / 0.28 / 0.20 mbar (≈1.6 cm / 2.9 mm / 2 mm of water) |
+| max conversion time, OSR 4096 | 8.2 ms (draft 15 uses 9.04 ms; take the larger when scheduling) |
+| vertical-velocity noise from differencing 20 Hz depth, OSR 256 | σ_w = √2·0.016/0.05 ≈ **0.45 m/s RMS** |
+| depth D input on a new-sample tick (draft 04's mechanism) | noise step √2·0.0157 m / 0.002 s ≈ 11 m/s raw, ≈ 2.2 m/s after the 20 Hz D filter (α≈0.2) |
+| resulting throttle spike with `DEPTH_D = 0.2` | ≈ **±0.44**, every 50 ms, from noise alone (draft 04 estimated this from 2 mm) |
+| steady-state Kalman σ_w, baro + vertical accel (300 µg/√Hz assumed, 4× pessimistic) | OSR 256: **≈3.7 mm/s**. OSR 4096: ≈2.4 mm/s. About 100× better than differencing, crossover ≈0.15 Hz |
+| dynamic pressure at 0.5 m/s surge, ½ρv² | 1.25 mbar ≈ **1.3 cm** of apparent depth that depends on speed |
+
+The last row matters for draft 20's filter: at pool speeds, a surge-dependent 1 cm bias is the same size as the OSR 256 noise. The filter's innovation gate and its bias state have to tolerate it, or it has to be compensated from the commanded or measured surge.
+
+## Failure scenario (additional to 04)
+The noise-only D spike at `DEPTH_D = 0.2` is about ±0.44 throttle at 20 Hz, which is nearly half the heave authority. That fully explains why D had to be cut 20× in the water. It also means that raising the baro *rate* without raising the OSR (for example 50 Hz at OSR 256) would make the D-term **worse**, not better, because the per-sample noise stays the same while the Δt shrinks.
+
+## Suggested fix (additions)
+- Once the Bar30 read is non-blocking (draft 15), run it at **OSR 2048–4096**, under an I2C0 mutex shared with the BNO085. The comment at `bar30.cpp:139-143` itself attributes the earlier higher-OSR failure to the bus collision, not to the OSR.
+- In draft 20's filter, set the baro measurement noise R from the OSR actually in use (1.57 mbar at 256, 0.28 at 4096). Do not use a single constant.
+- Add a dynamic-pressure term, or at least widen the innovation gate by ½ρu² at the current surge.
+
+## How to verify (bench)
+- On the bench, still, in air: log 60 s of depth at OSR 256 and at OSR 4096 (after draft 15), and compute the standard deviation. **Expect** about 1.6 cm and about 3 mm. If OSR 256 measures near 2 mm, this addendum's datasheet value is wrong and should be withdrawn.
+- With the vertical filter from 20, still in air: σ_w below 2 cm/s. If it is higher, the accel path or its rotation is wrong.
+
+## Severity: Addendum (parent draft 04: High; draft 20: Proposal)
+
+## Related
+- Round-1 drafts 04, 15 and 20 (the parents).
+- Round-1 draft 19 and addendum draft 38 in this batch (the shared I2C0 bus, which is why OSR could not be raised).
+
+---
+_Generated by [Claude Code](https://claude.ai/code)_
