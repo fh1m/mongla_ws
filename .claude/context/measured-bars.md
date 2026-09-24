@@ -4215,3 +4215,41 @@ optimisation entirely.
   competing load. **Sharing the chip with the detector is unmeasured** — the
   detector must stay above 90 Hz.
 - ⚠ 701 FPS is throughput, not latency under our own pipeline.
+
+### 28.5 ⭐ INT8 SURVIVES — the gate, passed
+
+**2026-09-24.** "A HEF that compiles is not a result; a HEF that still reads
+4/4 on the murky clips is." `tools/hef_vs_cpu.py`, run **on the vehicle**, both
+arms sharing the shipped numpy post-processing, MAGSAC and 15-inlier bar so the
+only difference is float32-on-CPU against INT8-on-Hailo:
+
+| clip | CPU +1/3/5/8 s | HEF +1/3/5/8 s | |
+|---|---|---|---|
+| mirpur_torpedo | 187, 64, 136, 26 | 180, 60, 115, 21 | 4/4 → **4/4** |
+| mirpur_torpedo_1 | 74, 49, 55, **13** | 80, 51, 43, **12** | 3/4 → **3/4** |
+| mirpur_gate | 202, 36, 236, 30 | 186, 37, 211, 26 | 4/4 → **4/4** |
+| octagon | 184, 113, 74, 25 | 139, 99, 80, **35** | 4/4 → **4/4** |
+| torpedo (clear) | 362, 199, 123, 98 | 344, 197, 108, 89 | 4/4 → **4/4** |
+
+⭐ **Every pass count is identical**, reference keypoints are 1024 on both, and
+inliers sit within ~10 % — sometimes above (octagon +8 s: 35 vs 25). The canary
+held: `torpedo_1` at +8 s reads 12 against 13 on CPU, i.e. it was already under
+the bar in float32 and INT8 did not cause it.
+
+### 28.6 ⚠ And the rate claim needs narrowing
+
+| measurement | number |
+|---|---|
+| `hailortcli run`, batch throughput | 701.22 FPS |
+| **single-shot `detect()` through `InferVStreams`** | **13.4 ms** |
+| same on the Pi CPU, same script | 20.0 ms |
+
+⛔ **701 FPS is throughput, not what our pipeline gets.** Single-shot is
+**1.5× the CPU**, not 23×. The gap is the host API: `hailo-vision.md` measured
+`InferVStreams` at ~7 ms of per-call overhead against `create_infer_model` /
+`AsyncInferJob`, and this harness uses the old one — plus it re-activates the
+network group per call.
+
+So the honest figure today is **13.4 ms with headroom**, and the next move is
+the modern API rather than anything about the model. ⚠ Quote 701 FPS only as
+"the chip can sustain this"; quote 13.4 ms as "what a call costs us".
