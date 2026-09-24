@@ -59,6 +59,9 @@ class FollowResult:
     points: int = 0
     survival: float = 0.0
     fb_median: float = float('nan')
+    # Uniform scale from the similarity fit; 1.0 when the fit
+    # was refused and the box was carried by translation alone.
+    scale: float = 1.0
 
     @property
     def confidence(self) -> float:
@@ -71,10 +74,19 @@ class Follower:
     """Carry one box forward on optical flow. No ROS, so the bench and the node
     exercise the same object."""
 
+    # Minimum inliers before a similarity fit is trusted. Below this a fit is
+    # free to be wildly wrong and the median translation is the safer answer.
+    _MIN_FIT_PTS = 12
+    # Per-frame scale bounds. A target does not double in one frame; a fit
+    # that says so has latched onto something else.
+    _SCALE_LO, _SCALE_HI = 0.90, 1.11
+
     def __init__(self, *, fb_max_px: float = FB_MAX_PX,
                  min_points: int = MIN_POINTS,
                  min_survival: float = MIN_SURVIVAL):
         self._fb = float(fb_max_px)
+        self._min_fit_pts = self._MIN_FIT_PTS
+        self._scale_lo, self._scale_hi = self._SCALE_LO, self._SCALE_HI
         self._min_pts = int(min_points)
         self._min_surv = float(min_survival)
         self._prev: Optional[np.ndarray] = None
@@ -142,14 +154,57 @@ class Follower:
 
         a = self._pts[good]
         b = p1.reshape(-1, 2)[good]
-        # Median translation, not mean: a handful of points latching onto a
-        # passing feature would drag a mean and leave a median alone.
-        d = np.median(b - a, axis=0)
         x1, y1, x2, y2 = self._box
-        box = (x1 + d[0], y1 + d[1], x2 + d[0], y2 + d[1])
+
+        # ⭐ SIMILARITY FIT, NOT TRANSLATION ALONE. Median translation carries
+        # the box but cannot express SCALE or ROTATION, so an approaching
+        # target kept a fixed-size box while it grew on screen -- and section
+        # 23 measured that apparent SIZE is exactly what the approach
+        # controller reads. A partial-affine (similarity) fit recovers
+        # translation + rotation + uniform scale from the correspondences we
+        # already have, for microseconds on ~100 points.
+        #
+        # This is the third leg of the classic recipe -- pyramidal LK, a
+        # forward-backward check, and a RANSAC similarity fit -- which a 2026
+        # comparison found beats CSRT on mobile robots by a wide margin
+        # (optical flow RMSE 10.79 px at 30 fps against CSRT's 252.35 px at
+        # 4 fps). We had the first two.
+        #
+        # ⛔ RANSAC, and it must be able to FAIL. A similarity fit on points
+        # that have partly latched onto the background silently reports a
+        # scale change that is really parallax, so a failed or degenerate fit
+        # falls back to the median translation rather than being trusted.
+        scale = 1.0
+        box = None
+        if n >= self._min_fit_pts:
+            M, inl = cv2.estimateAffinePartial2D(
+                a.reshape(-1, 1, 2), b.reshape(-1, 1, 2),
+                method=cv2.RANSAC, ransacReprojThreshold=3.0,
+                maxIters=200, confidence=0.99)
+            if M is not None and inl is not None \
+                    and int(inl.sum()) >= self._min_fit_pts:
+                # A similarity matrix is [[s*cos, -s*sin, tx], [s*sin, s*cos, ty]]
+                s_fit = float(np.hypot(M[0, 0], M[1, 0]))
+                # ⛔ A scale jump per frame is a fit failure, not a target that
+                # doubled in one frame. Clamp rather than trust.
+                if self._scale_lo <= s_fit <= self._scale_hi:
+                    cx, cy = 0.5 * (x1 + x2), 0.5 * (y1 + y2)
+                    nc = M @ np.array([cx, cy, 1.0])
+                    hw = 0.5 * (x2 - x1) * s_fit
+                    hh = 0.5 * (y2 - y1) * s_fit
+                    box = (float(nc[0] - hw), float(nc[1] - hh),
+                           float(nc[0] + hw), float(nc[1] + hh))
+                    scale = s_fit
+
+        if box is None:
+            # Median translation, not mean: a handful of points latching onto a
+            # passing feature would drag a mean and leave a median alone.
+            d = np.median(b - a, axis=0)
+            box = (x1 + d[0], y1 + d[1], x2 + d[0], y2 + d[1])
 
         self._pts = b.astype(np.float32)
         self._prev = gray.copy()
         self._box = box
         return FollowResult(ok=True, xyxy=box, points=n, survival=surv,
-                            fb_median=float(np.median(fb[good])))
+                            fb_median=float(np.median(fb[good])),
+                            scale=scale)
