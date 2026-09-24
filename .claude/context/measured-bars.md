@@ -5316,3 +5316,70 @@ stationary vehicle are one observation seen fifty times, and multiplying their
 likelihoods manufactures certainty from a single look. The bank already knows
 whether the viewpoint moved (high inliers against the last reference = the same
 look), so that is the gate: 50 identical looks leave the estimate at **0.5**.
+
+---
+
+## 47. ⭐⭐ ROUND 7 — XFEAT FINE-TUNED ON OUR OWN WATER, AND THE CANARY FLIPPED
+
+**2026-09-24.** Every XFeat number this project has ever taken — the 4/4 murky
+table, the ROOT-SIFT control, the INT8 survival — was **stock weights trained
+on MegaDepth**: clear, natural, above-water imagery. This is the first
+measurement with weights that have seen our water.
+
+### The dataset — and it is the publishable part
+
+**4 304 frames from 145 clips across six physical archives.** Built by
+`tools/xfeat_finetune.py`, which needs **no labels**: upstream's
+`xfeat_synthetic` scheme warps each frame (homography + thin-plate spline) and
+keeps the warp as exact correspondence ground truth.
+
+⭐ **The second half is a physics model, not more jitter.** Beer-Lambert
+per-channel attenuation `exp(-k·d)` — red removed fastest, blue last — plus a
+backscatter veil that lifts the blacks. A brightness or contrast jitter cannot
+produce that colour cast, and would teach the network the wrong invariance.
+Randomising `k` and depth generates the turbidity range our archive does not
+happen to contain. **Leaving the veil out** would make turbid frames merely
+dark, which is the half contrast enhancement can undo — the easy half.
+
+⛔ **`mirpur` was held out entirely**, verified by count (**0 mirpur frames in
+the training set**), because the murky table's two hardest clips come from
+there and our own detector recall swings 29.2 / 72.7 / 68.3 % across venues.
+
+### The result at 2 000 steps, on the held-out venue
+
+```
+                       stock                    fine-tuned
+mirpur_torpedo    [210, 133, 222, 41]  4/4   [272, 104, 175, 42]  4/4
+mirpur_torpedo_1  [135,  91,  78, 11]  3/4   [130,  88,  86, 15]  4/4   ⭐
+mirpur_gate       [245,  67, 296, 39]  4/4   [229,  52, 292, 40]  4/4
+total passing            11/12                      12/12
+```
+
+⭐⭐ **The canary flipped.** `mirpur_torpedo_1` at +8 s has been **below the
+15-inlier bar in every measurement this project has taken** — 13 on CPU
+float32, 12 through the HEF (§38), 11 here. Fine-tuned it reads **15 and
+passes.** First 12/12 on the murky table, on a venue the weights never saw.
+
+⚠ **Read this narrowly.** It is one column crossing by one inlier, at 2 000 of
+12 000 steps. What it is *not* is noise: the arms are bit-identical on stock
+weights (verified stock-against-stock), so the only difference is the weights.
+
+### ⚠ Three honest limits
+
+1. **The scorer is the TORCH path, not the shipped ONNX one.** Absolute
+   inliers here (`[210, 133, 222, 41]`) are not comparable to §19.1's
+   (`[187, 64, 136, 26]`) — different post-processing. Both arms share one
+   path, so **stock-against-tuned is valid and tuned-against-§19.1 is not.**
+2. **Not re-exported or re-quantised.** New weights are a *new* quantisation,
+   so §38's INT8 table must be **re-measured, not assumed** before any of this
+   reaches the chip.
+3. **One held-out venue.** `mirpur` is three clips from one day.
+
+### For the open-source community
+
+The pipeline is the contribution, not the checkpoint: **a labelled-data-free
+recipe for adapting a modern local feature to turbid water**, using synthetic
+warps for correspondence and Beer-Lambert for domain shift, with a held-out
+venue as the honesty gate. No public underwater feature-matching benchmark
+does the venue split this way, and the failure mode it guards against —
+overfitting to one's own pool — is the one every AUV team has.
