@@ -3605,3 +3605,76 @@ compared** — a number that looks like an answer and is not.
 
 Both rows are outside the question anyway: §19.1 asks about the *murky* clips,
 and those three fingerprint exactly.
+
+---
+
+## 20. ⭐ How big can the checkpoint bank get? Measured, not assumed
+
+**2026-09-24.** `CheckpointBank` shipped a capacity of **5**, ported from a
+prototype gallery (`dino_idea_v12.py:463`) rather than measured. The operator
+asked the right question — why five? — and the honest answer needed two numbers:
+what a larger bank costs, and whether a larger bank can be *searched*.
+
+### 20.1 Cost: the limit is the match, and it is linear
+
+`tools/bank_scaling_bench.py`, dev box, top_k 1024, 64-D, 2 threads, median of 7.
+Each reference is one 1024×1024×64 similarity matrix plus a mutual-NN pass.
+
+| bank | looped | batched | **shortlist(5)** | descriptors |
+|---|---|---|---|---|
+| 1 | 14.4 ms | 10.1 ms | 10.8 ms | 0.3 MB |
+| 5 | 56.8 ms | 27.6 ms | 55.8 ms | 1.3 MB |
+| 10 | 122.9 ms | 82.7 ms | **43.0 ms** | 2.6 MB |
+| 20 | 231.9 ms | 164.6 ms | **44.1 ms** | 5.2 MB |
+| 50 | 509.8 ms | 345.1 ms | **49.1 ms** | 13.1 MB |
+| 100 | 853.2 ms | 582.4 ms | **57.0 ms** | 26.2 MB |
+
+⛔ **Memory was never the constraint** — 100 references is 26 MB. **Looped
+matching blows the anchor's 333 ms budget at ~30 references**, and batching the
+bank into one GEMM buys only 1.5–1.7× and still blows it at ~55. Both are
+linear; batching changes the constant, not the shape.
+
+⭐ **A shortlist is flat.** Rank references by a cheap signature, match only the
+top 5, and 100 references cost what 10 do.
+
+### 20.2 ⭐ But does the shortlist retrieve the RIGHT reference?
+
+The above is a speed result on random descriptors and proves nothing about
+correctness. `tools/bank_shortlist_accuracy.py` answers the other half on the
+**real archive clips**, with ground truth obtained the expensive way: match the
+query against *every* reference, see which truly yields the most inliers, then
+ask whether a signature ranking puts it in the top-k.
+
+The signature is the one we can afford: **the L2-normalised mean of a
+reference's XFeat descriptors — 64 numbers, already computed.** No second
+network. (DINOv2 is closed here at 3064 ms/frame, §18.)
+
+24 references per clip at a 4 s stride, every frame queried against the others:
+
+| clip | r@1 | r@3 | r@5 | inlier loss @5 |
+|---|---|---|---|---|
+| mirpur_torpedo | 37.5 % | 75.0 % | 87.5 % | 1.3 % |
+| mirpur_torpedo_1 | 62.5 % | 87.5 % | 91.7 % | 2.2 % |
+| mirpur_gate | 79.2 % | 83.3 % | 91.7 % | 3.0 % |
+| octagon | 41.7 % | 75.0 % | 95.8 % | 0.1 % |
+| torpedo (clear) | 33.3 % | 70.8 % | 91.7 % | 2.9 % |
+| **all, 120 queries** | **50.8 %** | **78.3 %** | **91.7 %** | **1.9 %** |
+
+⚠ **Recall@1 is 50.8 %, and that is fine** — because ranking the single best
+reference is not the job. ⭐ **The load-bearing number is the last column: when
+the shortlist does not contain the true best, the best of its top-5 still
+returns 98.1 % of the true best's inliers.** Several references are nearly as
+good, so being "wrong" costs ~2 % of yield rather than the lock.
+
+### The bar
+
+**A bank may hold as many references as memory allows, searched by a 5-wide
+signature shortlist**, at a measured cost of **~57 ms at 100 references** and
+**1.9 % of inlier yield**. The capacity of 5 is withdrawn as a *limit*; it
+survives only as a default.
+
+⚠ **Not yet measured:** these are dev-box timings. The Pi is 2.4–4× slower on
+this class of work (§19), so the Pi's own curve is owed before a large bank
+ships. And the signature was tested on FORWARD-camera clips; on a tiled floor
+the sweep expects place recognition to alias badly, so the downward camera
+needs its own number rather than this one.
