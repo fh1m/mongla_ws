@@ -59,6 +59,14 @@ WIRED = {
 # ⚠ NOT wired, ON PURPOSE, each with the consumer it needs. A row here is a
 # debt with a name, not a silent gap.
 DEFERRED = {
+    'mongla_vision/mongla_vision/tracking/reid.py': (
+        'the 179-switch fix, and the one piece of the BoT-SORT / McByte++ '
+        'recipe an embedded budget can normally not afford -- a dedicated '
+        'Re-ID network costs 15-25 ms/frame, while XFeat is ALREADY loaded '
+        'for the anchor rung at 701 FPS on the Hailo. Waits on tracker_node '
+        'supplying crop descriptors at track birth and death, which is a '
+        'change to the tracker hot path and needs its rate measured on the '
+        'vehicle first.'),
     'mongla_vision/mongla_vision/continuity.py': (
         'NOW EXERCISED by tools/continuity_from_bag.py, which produced the '
         'measurement it was written for (section 50): 338 real gaps, p50 '
