@@ -1,0 +1,51 @@
+# Candidate lock-ladder constants, derived from a MEASURED gap distribution.
+#
+# ⛔ NOT THE DEFAULTS, AND MUST NOT BECOME THEM UNTIL WATER SAYS SO.
+# The shipped values are unchanged. This file is the A/B arm for a pool day.
+#
+# WHERE THESE COME FROM (section 50). `continuity.py` states that six constants
+# protect a target lock and that every one is sized from the detection RATE and
+# from the others' ordering -- not one from how long a real gap lasts. That
+# quantity was finally measured on a 253 s vehicle recording:
+#
+#     338 gaps    p50 116 ms    p90 1.12 s    p99 3.04 s    max 7.64 s
+#
+# Read as coverage, the SHIPPED rungs land at 65 / 87.6 / 89.1 / 93.2 / 99.7 %
+# of real gaps -- a sensible escalation, reached without ever seeing this
+# distribution. The one outlier is the 0.20 s freshness zero, outrun by 117 of
+# 338 gaps.
+#
+# ⚠ AND THE LIMIT THAT KEEPS THIS A CANDIDATE. The recording is a PERSON
+# walking in and out of a room. Gap DURATIONS there belong to the subject and
+# its occlusions, not to underwater detection. These numbers are sized against
+# a real distribution, which beats sizing against each other, and they are not
+# a competition-water number.
+
+shipped:            # what runs today; the control arm
+  freshness_zero_s:  0.20     # covers 65.4 % of measured gaps
+  coast_s:           0.80     # 87.6 %
+  lost_grace_s:      1.00     # 89.1 %
+  kalman_predict_s:  1.50     # 93.2 %
+  track_buffer_s:    5.00     # 99.7 %
+
+candidate:          # each rung at a percentile of the MEASURED distribution
+  freshness_zero_s:  0.33     # p75 -- the rung 35 % of gaps currently outrun
+  coast_s:           1.12     # p90
+  lost_grace_s:      1.84     # p95
+  kalman_predict_s:  3.04     # p99
+  track_buffer_s:    7.64     # worst observed
+
+# ⛔ THE ORDERING IS A HARD CONSTRAINT, NOT A STYLE.
+# freshness < coast_s < lost_grace_s < kalman < track_buffer, and the tracker
+# buffer must EXCEED coast_s in wall time or a coasted target vanishes off
+# /tracks before the coast ends and the coast truncates early
+# (tracker.yaml:95). Any hand-edit must preserve it.
+
+# Applied live, no rebuild, no relaunch:
+#   ros2 param set /mongla_manager vision.coast_s       1.12
+#   ros2 param set /mongla_manager vision.lost_grace_s  1.84
+#   ros2 param set /mongla_lock_forward zero_authority_s 3.04
+#   # track_buffer is in frames: tracker.yaml `track_buffer: 150` at 30 Hz
+#   # is 5.0 s; 7.64 s is 229.
+#
+# Reverting is the same four commands with the `shipped` values.

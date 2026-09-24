@@ -337,6 +337,7 @@ bring-up and operations: `srot-architecture` · `srot-integration` · `srot-boar
 `cross-repo-contract` · `vision-control-split` · `vehicle-spec` ·
 `pi-hailo-vision-box` · `pi-and-env-traps` · `launch-combinations` · `pool-day` ·
 `remote-access` · `foxglove-and-bags` · `ros2-conventions` · `system-harmony` · `mongla-sim` ·
+**`first-pool-verification`** (⭐ what water has to decide, in order) ·
 `legacy-pixhawk-and-sitl`
 
 **[`perception/`](.claude/context/perception/)** — what the vehicle sees and how it is trusted:
