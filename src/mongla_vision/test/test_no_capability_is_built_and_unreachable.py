@@ -85,15 +85,21 @@ DEFERRED = {
         'vehicle first.'),
     'mongla_vision/mongla_vision/tracking/presence.py': (
         'the rung BELOW detection -- track-before-detect, which postpones the '
-        'threshold and accumulates sub-threshold evidence across frames. The '
-        'effect is REAL and measured on our own bag: in-view dropouts link at '
-        '0.938 against a 0.090 time-free control (10.42x), while the departed '
-        'regime -- where a chain means nothing -- scores 2.27x. ⛔ It is NOT '
-        'wired because on THIS hardware it has no input: the HEF compiles '
-        '`Score threshold: 0.200` into its on-chip NMS while the acting bar '
-        'is 0.15, so nothing sub-threshold ever reaches the host. Measured at '
-        'the live bar: pairs = 0. Waits on B-58, a HEF recompile at threshold '
-        '0.05. Wiring it before that would ship a rung that can never fire.'),
+        'threshold and accumulates sub-threshold evidence across frames. ⛔ IT '
+        'MAY NEVER BE WIRED, and the reason is B-59: on real water the band '
+        'below the bar is not faint signal, it is confident open-water FALSE '
+        'POSITIVES. The gate model fires on 90.8 % of gate-free frames at the '
+        'shipped 0.15, with half-frame boxes over empty turquoise at '
+        '0.44-0.56, and separation between gate-present and gate-absent '
+        'footage is +0.0 points at 0.15 and 0.30. Accumulating that would '
+        'manufacture a confident track out of hallucination. Its constants '
+        '(GATE_PX 40, MIN_RUN 3) come from a PERSON IN AIR, where the control '
+        'is 0.090; the one water control measured 0.360, which would need '
+        'MIN_RUN 6 to stay under 1 % false chains -- longer than the median '
+        'gap. Precedent: continuity.py, whose person-in-air constants were '
+        'also not shipped. Revisit only after B-59 is fixed, the bar is '
+        're-derived WITH negative clips, and the constants are re-swept on '
+        'water.'),
     'mongla_vision/mongla_vision/continuity.py': (
         'NOW EXERCISED by tools/continuity_from_bag.py, which produced the '
         'measurement it was written for (section 50): 338 real gaps, p50 '

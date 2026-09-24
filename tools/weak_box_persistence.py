@@ -94,7 +94,58 @@ def read_bag(path, topic, bar, floor):
     return strong, weak, seen
 
 
-def gap_stretches(strong, min_len):
+def read_video(clip, model_path, bar, floor, imgsz, limit):
+    """Same split, but from real underwater footage through the .pt.
+
+    ⭐ WHY THIS MODE EXISTS. The bag was recorded through stock `yolov11n`,
+    whose HEF bakes a 0.200 NMS floor -- ABOVE the 0.15 acting bar -- so it
+    holds no sub-threshold population at all and the measurement read
+    `pairs = 0`. The ultralytics path has no such floor, so running the same
+    checkpoint over archive clips at a 0.05 floor measures what a recompiled
+    HEF will deliver, on real water rather than on a person in a room.
+    """
+    import cv2
+    from ultralytics import YOLO
+
+    model = YOLO(str(model_path), task='detect')
+    cap = cv2.VideoCapture(str(clip))
+    size = (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 640),
+            int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 480))
+    strong, weak, n = [], [], 0
+    while n < limit:
+        ok, frame = cap.read()
+        if not ok:
+            break
+        n += 1
+        r = model.predict(frame, conf=floor, imgsz=imgsz, verbose=False)[0]
+        s, w = [], []
+        for b in r.boxes:
+            score = float(b.conf[0])
+            cls = str(int(b.cls[0]))
+            x, y = (float(v) for v in b.xywh[0][:2])
+            (s if score >= bar else w).append((score, x, y, cls))
+        strong.append(s)
+        weak.append(w)
+    cap.release()
+    return strong, weak, size
+
+
+def gap_stretches(strong, min_len, cls=None):
+    """Frames with no strong detection OF THE TRACKED CLASS.
+
+    ⛔ `cls=None` counts any class as filling the gap, which is wrong for the
+    ladder and produced a nonsense result before it was fixed: on gate.mkv a
+    `repair` detection masked every `gate` dropout, so the tool reported ZERO
+    gaps in 1 200 frames of footage the continuity study found gaps in. The
+    ladder tracks ONE target; a different prop being visible is not the target
+    being visible.
+    """
+    if cls is not None:
+        strong = [[b for b in f if b[3] == cls] for f in strong]
+    return _stretches(strong, min_len)
+
+
+def _stretches(strong, min_len):
     idx = [i for i, s in enumerate(strong) if not s]
     if not idx:
         return []
@@ -115,13 +166,17 @@ def margin(x, y, w, h):
     return min(1.0 - abs(x - hw) / hw, 1.0 - abs(y - hh) / hh)
 
 
-def classify(stretch, strong, w, h):
+def classify(stretch, strong, w, h, cls=None):
     """IN-VIEW or EXIT/ENTRY, decided by the detections bracketing the gap."""
     i, j = stretch[0] - 1, stretch[-1] + 1
-    if i < 0 or j >= len(strong) or not strong[i] or not strong[j]:
+    if i < 0 or j >= len(strong):
         return None, None
-    a = max(strong[i], key=lambda b: b[0])
-    b = max(strong[j], key=lambda b: b[0])
+    pre = [b for b in strong[i] if cls is None or b[3] == cls]
+    post = [b for b in strong[j] if cls is None or b[3] == cls]
+    if not pre or not post:
+        return None, None
+    a = max(pre, key=lambda b: b[0])
+    b = max(post, key=lambda b: b[0])
     if a[3] != b[3]:
         return None, None
     interior = (margin(a[1], a[2], w, h) >= MARGIN_ENTER
@@ -147,7 +202,15 @@ def link_rate(pairs, gate):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument('bag')
+    ap.add_argument('bag', nargs='?', default='',
+                    help='rosbag2 MCAP directory; omit when using --video')
+    ap.add_argument('--video', default='',
+                    help='archive clip to run the checkpoint over instead')
+    ap.add_argument('--model', default='',
+                    help='.pt checkpoint for --video mode')
+    ap.add_argument('--imgsz', type=int, default=640)
+    ap.add_argument('--limit', type=int, default=3000,
+                    help='max frames to read from a clip')
     ap.add_argument('--topic', default='/mongla/vision/forward/detections')
     ap.add_argument('--bar', type=float, default=0.45,
                     help='shipped acting bar (detector.yaml conf)')
@@ -157,12 +220,24 @@ def main() -> int:
     ap.add_argument('--size', default='640x480')
     ap.add_argument('--min-len', type=int, default=3)
     ap.add_argument('--trials', type=int, default=200)
+    ap.add_argument('--target', default='',
+                    help='class id to treat as the tracked target; '
+                         'default is the most-detected class')
     args = ap.parse_args()
 
-    W, H = (int(v) for v in args.size.lower().split('x'))
-    strong, weak, seen = read_bag(args.bag, args.topic, args.bar, args.floor)
-    if not weak:
-        print('no detections on that topic')
+    if args.video:
+        if not args.model:
+            raise SystemExit('--video needs --model <checkpoint.pt>')
+        strong, weak, (W, H) = read_video(
+            args.video, args.model, args.bar, args.floor or 0.05,
+            args.imgsz, args.limit)
+        seen = [b[0] for f in (strong + weak) for b in f]
+    else:
+        W, H = (int(v) for v in args.size.lower().split('x'))
+        strong, weak, seen = read_bag(args.bag, args.topic, args.bar,
+                                      args.floor)
+    if not weak or not seen:
+        print('no detections')
         return 1
 
     print(f'frames {len(weak)}   detections {len(seen)}   '
@@ -170,14 +245,20 @@ def main() -> int:
     print(f'acting bar {args.bar:.2f}   gate {args.gate:.0f} px   '
           f'frame {W}x{H}   interior margin >= {MARGIN_ENTER}\n')
 
-    stretches = gap_stretches(strong, args.min_len)
+    # The tracked class is the one the footage is actually about: the most
+    # frequently detected. Naming it explicitly beats letting any prop in
+    # frame stand in for the target.
+    tally = Counter(b[3] for f in strong for b in f)
+    target = args.target or (tally.most_common(1)[0][0] if tally else None)
+    print(f'strong detections by class: {dict(tally)}   tracking {target!r}\n')
+    stretches = gap_stretches(strong, args.min_len, target)
     lens = Counter(min(len(s), 10) for s in stretches)
     print('gap length (frames, 10 = 10+): '
           + '  '.join(f'{k}:{lens[k]}' for k in sorted(lens)))
 
     groups = {'in_view': [], 'exit_entry': []}
     for s in stretches:
-        kind, cls = classify(s, strong, W, H)
+        kind, cls = classify(s, strong, W, H, target)
         if kind:
             groups[kind].append((s, cls))
     print(f'classified: in-view {len(groups["in_view"])}   '
