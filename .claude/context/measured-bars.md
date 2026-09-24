@@ -4850,3 +4850,59 @@ contract an unhealthy barometer also refuses `DEPTH_HOLD`/`AUTO`/`PATTERN`, and
 since `SROT_MOVE` enters `AUTO` that means every move verb would have been
 denied — the vehicle would arm and not move. The depth half of this
 characterisation is **blocked on a working barometer**, not on time.
+
+---
+
+## 38. ⭐⭐ XFEAT SURVIVES INT8 ON THE HAILO-8 — THE ARM CLOSES YES
+
+**2026-09-24, on the vehicle.** A HEF that compiles is not a result. The bar
+was §19.1's murky table re-run with the chip as the backbone and **everything
+else identical**: the shipped numpy post-processing in `xfeat_onnx.py`, the
+same `USAC_MAGSAC`, the same 15-inlier trust bar, the same reference-at-40 % /
+query-at-+1/3/5/8 s protocol. Both arms ran on the Pi, so the only difference
+is float32-on-CPU against INT8-on-Hailo.
+
+```
+CPU: median detect 21.8 ms      HEF: median detect 14.0 ms      1.56x
+clip                ref kp        CPU +1/3/5/8            HEF +1/3/5/8    ok
+mirpur_torpedo    1024/1024   [187,  64, 136, 26]   [180,  60, 115, 21]  4/4 -> 4/4
+mirpur_torpedo_1  1024/1024   [ 74,  49,  55, 13]   [ 80,  51,  43, 12]  3/4 -> 3/4
+mirpur_gate       1024/1024   [202,  36, 236, 30]   [186,  37, 211, 26]  4/4 -> 4/4
+octagon           1024/1024   [184, 113,  74, 25]   [139,  99,  80, 35]  4/4 -> 4/4
+torpedo_clear     1024/1024   [362, 199, 123, 98]   [344, 197, 108, 89]  4/4 -> 4/4
+```
+
+⭐ **Every clip scores exactly what it scored on CPU.** Quantisation costs a
+**median −7.7 %** of inliers (mean −5.4 %, worst −24.5 %), and in 5 of 20
+columns INT8 read *higher* — best +40 %, which is MAGSAC's own scatter, not the
+chip being better.
+
+⭐ **The number that decides the arm: zero columns crossed the bar.** 19 of 20
+columns clear 15 inliers on CPU and **19 of 20 on the chip** — and it is the
+same column that fails, `mirpur_torpedo_1` at +8 s, which read **13 on CPU**
+before INT8 ever touched it.
+
+⚠ **The canary was mis-stated in the plan.** It said "`torpedo_1` at 12 is the
+canary — INT8 must not drop a murky clip below 15". That column was **already
+below 15 on float32**. The real test was whether quantisation pushed any
+*passing* column under, and none did. A canary that was already dead cannot
+report anything, and reading the HEF's 12 as an INT8 failure would have killed
+a working arm.
+
+### What this closes and what it does not
+
+✅ **Round 1d: YES.** INT8 XFeat matches as well as float32 on our own turbid
+water, at **1.56×** the speed on the detect path.
+⛔ It does **not** free the chip: `HAILO_OUT_OF_PHYSICAL_DEVICES` if anything
+else holds the device (see below). Sharing was measured separately in §32.
+⛔ It does **not** transfer to fine-tuned weights. New weights are a new
+quantisation and this table must be **re-measured, not assumed** (Round 7e).
+
+### The trap that blocked this run for an hour
+
+`ros2 launch` started from a non-interactive shell inherits `SIGINT` as IGNORE
+(§36), so killing the launcher **orphans its nodes**. Five of them —
+`detector_dual_node`, two trackers, two lock nodes — outlived the replay and
+kept the Hailo claimed, and the only symptom was `HAILO_OUT_OF_PHYSICAL_DEVICES`
+from a tool that has nothing to do with the vision graph. ⛔ **Before blaming
+the chip, check who already owns it.**

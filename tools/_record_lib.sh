@@ -7,8 +7,16 @@
 # ignores every `kill -INT`, `wait` never returns, and the bag is never
 # finalized. The recorder looks like it is working the entire time.
 #
-# Measured twice on 2026-09-24: a bench record still open 30 minutes after its
-# countdown ended, and a replay that had finished playing but would not exit.
+# Measured three times on 2026-09-24: a bench record still open 30 minutes after
+# its countdown ended, a replay that had finished playing but would not exit,
+# and -- the expensive one -- a `ros2 launch` that ignored SIGINT and therefore
+# ORPHANED its five nodes when it was killed. Those nodes kept the Hailo
+# claimed, and the only symptom was HAILO_OUT_OF_PHYSICAL_DEVICES raised an
+# hour later by a tool with nothing to do with the vision graph.
+#
+# So EVERY long-lived child goes through run_resettable, not just the bag
+# recorder: `ros2 launch` forwards SIGINT to its nodes, and a launcher that
+# cannot receive one cannot forward it.
 
 # Run a command with the default signal dispositions restored.
 run_resettable() {

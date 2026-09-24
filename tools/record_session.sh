@@ -63,7 +63,7 @@ vision)
   # today's decisions into the fixture and make it useless for that.
   TOPICS='^/mongla/(state|imu_rates|vision/[^/]+/(detections|tracks|lock|correspondences|target_pose|image_debug|image_raw|camera_info))$'
   echo "▸ starting the vision graph (this takes ~15 s to settle)"
-  ros2 launch mongla_vision vision_pi.launch.py \
+  run_resettable ros2 launch mongla_vision vision_pi.launch.py \
       paused:=false lock:=true lock_class:=person \
       fwd_model:=yolov11n fwd_device_path:=/dev/video1 \
       >"$LOG" 2>&1 &
@@ -76,7 +76,7 @@ bench)
   # differently later. Record what the board actually said.
   TOPICS='^/mongla/(state|imu|imu_rates|esc_rpm|demand|localization/(aiding|fix|heading|motion)|odom)$'
   echo "▸ starting the manager against the board"
-  ros2 launch mongla_manager bringup.launch.py vision:=false \
+  run_resettable ros2 launch mongla_manager bringup.launch.py vision:=false \
       >"$LOG" 2>&1 &
   SYS_PID=$!
   ;;
