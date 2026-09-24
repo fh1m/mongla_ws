@@ -233,6 +233,13 @@ class LockNode(Node):
         self._follower = Follower() if bool(
             self.get_parameter('follow').value) else None
         self._anchor = None
+        # Inliers the last bank evaluation produced, and the reference that
+        # produced them. Starts at 0, which cannot read as stale because
+        # staleness is gated on `has_reference` -- an empty bank is not a
+        # decayed one, and the two need different answers.
+        self._anchor_inliers = 0
+        self._anchor_best = None
+        self._anchor_enrolled = 0
         self._anchor_pose = None
         self._anchor_next = 0.0
         self._anchor_period = 1.0 / max(
@@ -308,7 +315,7 @@ class LockNode(Node):
         """Optional by design: a missing ONNX must cost the anchor rung, not
         the node -- the follower is still worth running without it."""
         try:
-            from mongla_vision.anchor.anchor import Anchor
+            from mongla_vision.anchor.bank import CheckpointBank
             from mongla_vision.anchor.xfeat_onnx import XFeatONNX
             import glob
             p = str(self.get_parameter('anchor_model').value).strip()
@@ -331,8 +338,10 @@ class LockNode(Node):
                 p = c[0] if c else ''
             if not p:
                 raise FileNotFoundError('no xfeat_*.onnx found')
-            self._anchor = Anchor(XFeatONNX(p, top_k=1024))
-            self.get_logger().info(f'[LOCK ] anchor backend {os.path.basename(p)}')
+            self._anchor = CheckpointBank(XFeatONNX(p, top_k=1024))
+            self.get_logger().info(
+                f'[LOCK ] anchor backend {os.path.basename(p)}, '
+                f'bank capacity {self._anchor._cap}')
         except Exception as exc:
             self.get_logger().warning(
                 f'[LOCK ] anchor DISABLED: {type(exc).__name__}: {exc} '
@@ -630,7 +639,29 @@ class LockNode(Node):
 
               ab = ac = None
               if self._anchor is not None:
-                  if det_box is not None and not self._anchor.has_reference:
+                  # ⛔ THE DEFECT THIS REPLACED. The guard here used to be
+                  # `not self._anchor.has_reference`, so the reference was
+                  # snapped ONCE and never refreshed. Measured 2026-09-24 on
+                  # the archive clips, inliers against that frozen reference:
+                  #
+                  #   clip              +1 s  +3 s  +5 s  +8 s
+                  #   mirpur_torpedo     189    65   134    24
+                  #   mirpur_torpedo_1    69    43    51    12  <- under the bar
+                  #   mirpur_gate        195    36   237    31
+                  #
+                  # Every clip's minimum is its +8 s column. A reference decays,
+                  # and the same frames against a FRESH reference are the +1 s
+                  # column -- so this was never a limit of the descriptor.
+                  #
+                  # The bank takes a new checkpoint when the best stored one has
+                  # decayed toward the trust bar, judged on the inlier count the
+                  # 3 Hz `locate()` below already produced. Asking
+                  # `wants_refresh()` here instead would run a SECOND full match
+                  # per frame to learn what we just measured.
+                  stale = (self._anchor.has_reference
+                           and self._anchor_inliers < self._anchor._refresh)
+                  if det_box is not None and (not self._anchor.has_reference
+                                              or stale):
                       # THE FRAME THE BOX BELONGS TO, not merely the newest.
                       # This patch becomes the object model, so pairing it with
                       # the wrong frame scales every range that follows.
@@ -650,11 +681,35 @@ class LockNode(Node):
                                   'model, so it is not snapped against a '
                                   'frame it does not belong to.')
                       else:
-                          self._anchor.snap(snap_gray, roi=det_box)
+                          r = self._anchor.enrol(snap_gray, roi=det_box,
+                                                 det_conf=det_conf)
+                          if r.accepted:
+                              # A fresh checkpoint resets the staleness measure:
+                              # the number that triggered this refresh described
+                              # the reference we have just replaced.
+                              self._anchor_inliers = self._anchor._refresh
+                              self._anchor_enrolled += 1
+                              # Logged because a bank that silently stops
+                              # enrolling looks exactly like one that never
+                              # needed to, and those are opposite faults.
+                              self.get_logger().info(
+                                  f'[LOCK ] checkpoint {self._anchor_enrolled}: '
+                                  f'{r.keypoints} kp, bank {self._anchor.size}/'
+                                  f'{self._anchor._cap}')
+                          elif r.reason != 'confidence':
+                              self.get_logger().debug(
+                                  f'[LOCK ] checkpoint refused: {r.reason}')
                   elif (self._anchor.has_reference
                         and now >= self._anchor_next):
                       self._anchor_next = now + self._anchor_period
-                      self._anchor_pose = self._anchor.locate(gray)
+                      bp = self._anchor.locate(gray)
+                      # The bank answers best-of-bank; `pose` is the ordinary
+                      # AnchorPose the rest of this node already consumes, so
+                      # nothing downstream learns that there is now more than
+                      # one reference.
+                      self._anchor_pose = bp.pose
+                      self._anchor_inliers = int(bp.inliers)
+                      self._anchor_best = bp.index
                       anchor_ran = True
                       # The frame this pose was fitted to. The anchor runs at
                       # 3 Hz while this loop runs at frame rate, so between

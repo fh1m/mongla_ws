@@ -108,7 +108,14 @@ def test_the_snap_site_uses_the_paired_frame():
            / 'lock_node.py').read_text()
     i = src.index('def _loop')
     body = src[i:]
-    assert 'self._anchor.snap(snap_gray' in body, (
-        'snap no longer uses the stamp-paired frame')
-    assert 'self._anchor.snap(gray' not in body, (
-        'snap fell back to the newest frame')
+    # The call is `enrol` since the checkpoint bank replaced the single
+    # reference (2026-09-24); the property it guards is unchanged and is the
+    # whole point -- a reference built from the newest frame rather than the
+    # one the BOX came from bakes in the detector's latency as a scale error,
+    # silently.
+    assert 'self._anchor.enrol(snap_gray' in body, (
+        'the checkpoint no longer uses the stamp-paired frame')
+    assert 'self._anchor.enrol(gray' not in body, (
+        'the checkpoint fell back to the newest frame')
+    assert 'self._anchor.snap(' not in body, (
+        'a raw snap() reappeared: it bypasses the bank enrolment policy')
