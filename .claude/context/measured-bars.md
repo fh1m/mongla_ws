@@ -5453,3 +5453,84 @@ warps for correspondence and Beer-Lambert for domain shift, with a held-out
 venue as the honesty gate. No public underwater feature-matching benchmark
 does the venue split this way, and the failure mode it guards against —
 overfitting to one's own pool — is the one every AUV team has.
+
+---
+
+## 48. ⛔ THE STANDING RULE: NO CAPABILITY SHIPS UNREACHABLE
+
+**2026-09-24.** A repo-wide scan for modules that **nothing imports**, excluding
+nodes (launched, not imported), `console_scripts` entry points, and the
+`missions/` tree (loaded dynamically by `missions/__init__.py`):
+
+**Ten orphans. Five written today.**
+
+| module | lines | state |
+|---|---|---|
+| `draw_strip.py` | 471 | pre-existing |
+| `geometric_allocation.py` | 336 | pre-existing — **the hull mixer** |
+| `hydrodynamics.py` | 294 | pre-existing |
+| `continuity.py` | 280 | pre-existing |
+| `nav_filter.py` | 138 | pre-existing |
+| `estimator/thrust_model.py` | 107 | pre-existing (blocked on G2) |
+| `time_to_contact.py` | 119 | **today** |
+| `flow/scale_check.py` | 108 | **today** |
+| `detection/confidence_calibration.py` | 85 | **today** |
+| `approach.py` | 83 | **today** |
+
+⭐ **This is the project's oldest and most expensive defect**, and the register
+of prior instances was already long: the lock ladder built and in no launch
+file · `lock_s` held at 0 so nothing read the ladder · the bank storing a
+position nothing passed · `device_path` read and ignored · loop closure wired
+into `vision_pi.launch.py` while `bringup` includes `vision.launch.py`.
+
+⛔ **Every one looked finished.** Correct code, passing tests, and the
+capability did not exist on the vehicle. It is invisible to every check except
+one that asks "does anything import this".
+
+### The rule
+
+> **A capability module is either imported by something that runs, or it
+> carries a written reason naming the consumer it waits for. There is no third
+> state.**
+
+Enforced by `test_no_capability_is_built_and_unreachable.py`: a module in
+neither register fails the suite, and a DEFERRED module that later gets
+imported must be promoted, so the register cannot decay into fiction.
+
+⚠ Deciding at write time is the point — that is the only moment anyone knows
+whether a consumer exists.
+
+### Wired this session
+
+`anchor/health.py` → `lock_node`, reporting **which** failure a lost match is:
+a fouled port collapses the yield against *every* reference at once, a target
+that left collapses only the one that used to win. Reported, not acted on —
+its thresholds are declared, not measured.
+
+---
+
+## 49. ⭐ TWO TRAINING RUNS KILLED SILENTLY — `/tmp` IS A RAM DISK
+
+Two fine-tune runs died mid-epoch with **no traceback, no CUDA error and no
+exit message**: the process simply vanished at step 1998 and step 326.
+
+**Cause:** `/tmp` is a **tmpfs**, so the 2.7 GB dataset was living *in RAM* on
+a 15 GB machine, while upstream's `AugmentationPipe` cached 3 000 images at
+800×608×3 — about **4.4 GB more**. The OOM killer took the trainer.
+
+⛔ **Batch size was never the problem.** VRAM peaked at **2.6 of 6.1 GB** while
+the job was being killed for system memory. Raising the batch to use "the full
+GPU" made it die *sooner*, because it is the wrong resource.
+
+**The fixes, in the order they mattered:**
+
+| change | effect |
+|---|---|
+| dataset to real disk (`~/mongla_data`) | frees 2.7 GB of RAM; also **2.05 → 3.2 it/s**, since tmpfs pressure was throttling it |
+| loader cache 3 000 → 1 200 images, reload 4 000 → 1 200 steps | ~2.7 GB less RAM, same variety per unit memory |
+| batch 4 → 6 | **GPU 61 % → 78 %, VRAM 2.6 → 5.0 GB** |
+
+⚠ **For every future training run on this box: never put a dataset under
+`/tmp`.** It is 7.8 GB of RAM wearing a directory's clothes, and it fails by
+killing the thing you are trying to measure rather than by refusing to store
+the file.
