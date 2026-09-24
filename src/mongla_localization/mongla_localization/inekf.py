@@ -146,7 +146,8 @@ CHI2_99 = {1: 6.635, 2: 9.210, 3: 11.345}
 # position, for ever, with no error anywhere.
 #
 # So persistent disagreement is evidence about the FILTER, not the sensor. On
-# a run of consecutive rejections the estimate stops being trusted: the gate
+# a run of consecutive rejections FROM ONE KIND OF MEASUREMENT (see
+# `reject_streak`) the estimate stops being trusted: the gate
 # is bypassed once and the covariance inflated, which lets the measurement
 # back in and widens the gate for what follows. Five is roughly a second of
 # our slowest channel -- long enough that noise does not trip it, short enough
@@ -184,7 +185,15 @@ class RIEKF:
         # measurements looks identical to one that is merely drifting.
         self.accepted = 0
         self.rejected = 0
-        self.reject_streak = 0
+        # ⛔ ONE STREAK PER MEASUREMENT KIND, keyed by `_apply(kind=)`. This
+        # was a single counter that ANY accepted update reset -- and the
+        # board's attitude is accepted 50 times a second, so a filter
+        # confidently wrong in POSITION rejected every fix for ever: the
+        # streak never got past 1 before an attitude update zeroed it. The
+        # lockout break below is evidence about the filter FROM ONE CHANNEL
+        # persistently disagreeing; another channel agreeing about a
+        # different part of the state says nothing about it.
+        self.reject_streak: dict = {}
         self.lockout_breaks = 0
         # ⛔ THE OBSERVABILITY GATE -- see `_velocity_is_observed` (B-56).
         self.vel_sigma_gate = float(vel_sigma_gate)
@@ -235,7 +244,8 @@ class RIEKF:
         return Q
 
     # ── updates ──────────────────────────────────────────────────────────────
-    def update_body_velocity(self, v_body, sigma: float = 0.05) -> bool:
+    def update_body_velocity(self, v_body, sigma: float = 0.05, *,
+                             kind: str = 'velocity') -> bool:
         """The flow DVL: velocity measured in the BODY frame.
 
         ⛔ NO ATTITUDE TERM. Under this filter's error (`_inject`: R <- dR R,
@@ -249,7 +259,7 @@ class RIEKF:
         H = np.zeros((3, self.DIM))
         H[:, 3:6] = self.X.R.T
         y = z - self.X.R.T @ self.X.v
-        return self._apply(H, y, np.eye(3) * (sigma ** 2))
+        return self._apply(H, y, np.eye(3) * (sigma ** 2), kind=kind)
 
     def update_body_velocity_xy(self, vx: float, vy: float,
                                 var_x: float, var_y: float) -> bool:
@@ -271,7 +281,7 @@ class RIEKF:
         R_T = self.X.R.T
         H[:, 3:6] = R_T[:2, :]              # no attitude term, see update_body_velocity
         y = np.array([vx, vy]) - (R_T @ self.X.v)[:2]
-        return self._apply(H, y, np.diag([var_x, var_y]))
+        return self._apply(H, y, np.diag([var_x, var_y]), kind='velocity_xy')
 
     def update_zero_velocity(self, sigma: float = 0.02) -> bool:
         """ZUPT: the vehicle is stationary, so body velocity is exactly zero.
@@ -287,7 +297,8 @@ class RIEKF:
         filter: declaring "still" during a slow constant-velocity transit
         removes real motion.
         """
-        return self.update_body_velocity((0.0, 0.0, 0.0), sigma=sigma)
+        return self.update_body_velocity((0.0, 0.0, 0.0), sigma=sigma,
+                                         kind='zupt')
 
     # ── the observability gate (B-56) ───────────────────────────────────────
     def _velocity_is_observed(self) -> bool:
@@ -351,7 +362,7 @@ class RIEKF:
         # once the hull is metres away from it.
         H[0, 0:3] = -skew(self.X.p)[2]
         y = np.array([-float(depth_m) - self.X.p[2]])
-        return self._apply(H, y, np.array([[sigma ** 2]]))
+        return self._apply(H, y, np.array([[sigma ** 2]]), kind='depth')
 
     def update_yaw(self, yaw_deg: float, sigma_deg: float = 2.0) -> bool:
         """The landmark heading anchor: an absolute world yaw.
@@ -378,7 +389,8 @@ class RIEKF:
         else:
             H[0, 2] = 1.0
         return self._apply(H, np.array([err]),
-                           np.array([[math.radians(sigma_deg) ** 2]]))
+                           np.array([[math.radians(sigma_deg) ** 2]]),
+                           kind='yaw')
 
     def update_position(self, xy, sigma: float = 0.5) -> bool:
         """A pool fix from prop resection: world x and y.
@@ -406,7 +418,8 @@ class RIEKF:
         # is the measured outcome, not a structural guarantee.
         if self._velocity_is_observed():
             H[:, 0:3] = -skew(self.X.p)[:2]   # same coupling as update_depth
-        return self._apply(H, z - self.X.p[:2], np.eye(2) * (sigma ** 2))
+        return self._apply(H, z - self.X.p[:2], np.eye(2) * (sigma ** 2),
+                           kind='position')
 
     def update_attitude(self, R_meas, sigma_deg: float = 1.0) -> bool:
         """Consume the BNO's own fused attitude instead of propagating to it.
@@ -419,7 +432,8 @@ class RIEKF:
         err = so3_log(R_meas @ self.X.R.T)
         H = np.zeros((3, self.DIM))
         H[:, 0:3] = np.eye(3)
-        return self._apply(H, err, np.eye(3) * (math.radians(sigma_deg) ** 2))
+        return self._apply(H, err, np.eye(3) * (math.radians(sigma_deg) ** 2),
+                           kind='attitude')
 
     # ── re-expressing the world frame ────────────────────────────────────────
     def rotate_world_yaw(self, delta_deg: float) -> None:
@@ -458,7 +472,7 @@ class RIEKF:
         self.P = 0.5 * (self.P + self.P.T)
 
     # ── the correction itself ────────────────────────────────────────────────
-    def _apply(self, H, y, R_noise) -> bool:
+    def _apply(self, H, y, R_noise, *, kind: str) -> bool:
         """One correction. Returns False if the measurement was REJECTED.
 
         ⛔ THE GATE IS NOT OPTIONAL FOR A VISION-FED FILTER. Every measurement
@@ -492,8 +506,9 @@ class RIEKF:
             self.rejected += 1
             return False
         if nis > CHI2_99[len(y)]:
-            self.reject_streak += 1
-            if self.reject_streak < REJECT_STREAK_LIMIT:
+            streak = self.reject_streak.get(kind, 0) + 1
+            self.reject_streak[kind] = streak
+            if streak < REJECT_STREAK_LIMIT:
                 self.rejected += 1
                 return False
             # Believe the world instead of the estimate. Inflate FIRST, then
@@ -501,14 +516,14 @@ class RIEKF:
             # the old tight P would apply a small correction to a large error
             # and leave the filter just as stuck next time.
             self.lockout_breaks += 1
-            self.reject_streak = 0
+            self.reject_streak[kind] = 0
             self.P = self.P * REJECT_INFLATION
             S = H @ self.P @ H.T + R_noise
             try:
                 S_inv = np.linalg.inv(S)
             except np.linalg.LinAlgError:
                 return False
-        self.reject_streak = 0
+        self.reject_streak[kind] = 0
         K = self.P @ H.T @ S_inv
         dx = K @ y
         self._inject(dx)

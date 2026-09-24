@@ -107,3 +107,21 @@ def test_replay_cost_is_printed(late_ms, capsys):
     ms = (time.perf_counter() - t0) * 1000.0
     with capsys.disabled():
         print(f'\n[retro] {late_ms} ms late: replayed {rd.replayed} events in {ms:.2f} ms')
+
+
+def test_a_replay_does_not_count_a_rejection_streak_twice():
+    """The per-kind streak is a dict, and a snapshot that held the LIVE dict
+    would be written through by every rejection after it -- so a replay would
+    restore a streak that already counts the events it is about to re-run,
+    and break the lockout on half the evidence."""
+    f = I.RIEKF(P0_position=0.05)
+    f.X.p = np.array([5.0, 5.0, 0.0])
+    r = Retrodictor(f, horizon_s=2.0)
+    r.run(0.0, lambda g: g.update_attitude(np.eye(3)))
+    for k in range(1, 4):                       # three rejected fixes
+        r.run(k * 0.1, lambda g: g.update_position([1.0, 2.0], sigma=0.3))
+    assert f.reject_streak['position'] == 3
+    r.run(0.05, lambda g: g.update_attitude(np.eye(3)))  # late: replays all 3
+    assert r.late == 1 and r.replayed == 3
+    assert f.reject_streak['position'] == 3
+    assert f.lockout_breaks == 0
