@@ -64,13 +64,13 @@ def test_the_failsafe_window_is_what_we_think_it_is():
 
 
 def test_the_managers_cadence_has_real_margin_on_the_failsafe():
-    """`auv_manager_node` ticks `heartbeat_tick` at 0.5 s (2 Hz) against a 5 s
+    """`auv_manager_node._HeartbeatThread` beats at 0.5 s (2 Hz) against a 5 s
     failsafe. That is 10x, and the margin is the point: the board SURFACES the
     vehicle mid-mission on 5 s of silence, so the cadence must survive a
     scheduler hiccup, a param-download blackout, and a slow ACK -- not merely
     beat the deadline on a good day.
     """
-    tick_s = 0.5                      # auv_manager_node.py create_timer(0.5, ...)
+    tick_s = 0.5                      # auv_manager_node.HEARTBEAT_PERIOD_S
     window_s = sp.GCS_FAILSAFE_MS / 1000.0
     missed = window_s / tick_s
     assert missed >= 5, (

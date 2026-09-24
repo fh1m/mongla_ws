@@ -237,6 +237,66 @@ class FeedbackPump:
           self._stop.wait(timeout=0.4)
 
 
+# 2 Hz against the board's 5 s GCS failsafe (sp.GCS_FAILSAFE_MS): ten beats per
+# window, so a scheduler hiccup or a slow write still leaves real margin.
+HEARTBEAT_PERIOD_S = 0.5
+
+
+class _HeartbeatThread:
+    """The companion HEARTBEAT on its own daemon thread -- nothing may starve it.
+
+    ⛔ WHY NOT A ROS TIMER. It used to be `create_timer(0.5, heartbeat_tick)` in
+    the MutuallyExclusive `timer_group`, sharing one slot with callbacks that
+    BLOCK: `_vision_uplink_tick` -> `_vision_state_for` waits up to 10 s for a
+    first CameraInfo, and `_reapply_srot_config` -> `set_default_gain` busy-waits
+    up to 3 s. While either ran, no heartbeat left -- and the board SURFACES the
+    vehicle after 5 s of silence (CLAUDE.md safety rule 3). Worse, the timer
+    only existed once `executor.spin()` started, so every second of bring-up
+    after the port opened (preflight reads, BNO probe, vision pool, payload
+    join -- many seconds) was already silent.
+
+    So it is started the moment the MAVLink backend exists and runs on
+    `time.monotonic` (a wall-clock step cannot stall or burst it). Thread-safe
+    on the wire: both backends' `send_heartbeat` take the FC's `_tx_lock`, the
+    same lock every other writer (reader-thread replies, action threads) holds,
+    because pymavlink shares one sequence counter and one port.
+    """
+
+    def __init__(self, send, period_s=HEARTBEAT_PERIOD_S, log=None):
+        self._send = send
+        self._period = float(period_s)
+        self._log = log
+        self._stop = threading.Event()
+        self._thread = threading.Thread(
+            target=self._run, name='mongla-heartbeat', daemon=True)
+
+    def start(self):
+        self._thread.start()
+        return self
+
+    def stop(self, timeout=1.0):
+        self._stop.set()
+        if self._thread.is_alive():
+            self._thread.join(timeout=timeout)
+
+    def _run(self):
+        fails = 0
+        next_t = time.monotonic()
+        while not self._stop.is_set():
+            try:
+                self._send()
+                fails = 0
+            except Exception as exc:          # noqa: BLE001 -- must never die
+                fails += 1
+                if self._log is not None and fails in (1, 10):
+                    self._log.error(f'[NET  ] heartbeat send failed #{fails}: {exc!r}')
+            next_t += self._period
+            now = time.monotonic()
+            if next_t < now:                  # overran: re-anchor, never burst
+                next_t = now + self._period
+            self._stop.wait(next_t - now)
+
+
 def _kill_text(kill) -> str:
     """Three states, because the wire has three.
 
@@ -489,6 +549,10 @@ class AUVManagerNode(Node):
         self.fc = make_flight_controller(
             self._fc_kind, master=self.master, log=self.get_logger())
         self.pixhawk = self.fc
+        # HEARTBEAT FROM HERE ON, before a single slow bring-up step -- see
+        # _HeartbeatThread for why it is not a timer.
+        self._hb_thread = _HeartbeatThread(
+            self.fc.send_heartbeat, log=self.get_logger()).start()
         self.get_logger().info(f'[NET  ] flight_controller = {self.fc.name}')
         if self._is_srot:
             self.fc.allow_saturated_depth_arm = bool(
@@ -853,7 +917,7 @@ class AUVManagerNode(Node):
         self.heartbeat = Heartbeat(self.pixhawk, log=self.get_logger())
         # The Heartbeat streams NEUTRAL RC at 5 Hz (ArduSub FS_PILOT_INPUT guard).
         # On SROT that fights an on-board AUTO move, and the mandatory >=1 Hz MAVLink
-        # HEARTBEAT is already sent by heartbeat_tick (2 Hz) -> do NOT stream it.
+        # HEARTBEAT is already sent by _hb_thread (2 Hz) -> do NOT stream it.
         if not self._is_srot:
             self.heartbeat.start()
 
@@ -1001,7 +1065,8 @@ class AUVManagerNode(Node):
         self._register_health()
         self._health_last = None
         self.create_timer(1.0, self._health_tick, callback_group=self.timer_group)
-        self.create_timer(0.5,  self.heartbeat_tick,   callback_group=self.timer_group)
+        # (No heartbeat timer: it runs on `_hb_thread`, started in _setup_mavlink,
+        #  because this group also holds callbacks that block for seconds.)
         self.create_timer(0.5,  self.telemetry_tick,   callback_group=self.timer_group)
         # Fast tick: 20 Hz HUD compass + depth (AHRS2 pinned to 50 Hz).
         # Separate callback group so it can fire between telemetry ticks.
@@ -1556,9 +1621,6 @@ class AUVManagerNode(Node):
         log = (self.get_logger().warn
                if worst is _health.State.DEGRADED else self.get_logger().error)
         log(f'[HLTH ] {worst.name}: {bad}')
-
-    def heartbeat_tick(self):
-        self.pixhawk.send_heartbeat()
 
     def _publish_flare_order(self) -> None:
         """Republish the board's latched flare order, if it has one.
@@ -2507,11 +2569,13 @@ def main(args=None):
     finally:
         _emergency_stop(node)
         # Drain executor threads before destroying the node.  Without this,
-        # a timer callback (telemetry_tick / heartbeat_tick) can fire on a
+        # a timer callback (telemetry_tick / _health_tick) can fire on a
         # background thread concurrently with node.destroy_node(), causing
         # "publisher's context is invalid" when the logger tries to publish
         # to /rosout after the context is torn down.
         executor.shutdown(timeout_sec=1)
+        # Last, after the disarm above: the link must stay fed while it runs.
+        node._hb_thread.stop()
         node.destroy_node()
         if rclpy.ok():          # Ctrl-C unwinds spin() which may already have shut down
             rclpy.shutdown()
