@@ -3509,3 +3509,58 @@ built and tested but **not yet wired**: the persistence measurement behind it
 was taken on stock `yolov11n`, whose 0.200 floor leaves no sub-threshold
 population at a 0.15 acting bar (measured, `pairs = 0`). Re-measure on a 0.050
 model, then wire. See CLAUDE.md §9.
+
+---
+
+## B-59 — the gate model claims a gate on 90.8 % of gate-free frames, at the shipped confidence bar  ⛔ CRITICAL, OPEN
+
+**Found 2026-09-24**, while checking whether sub-threshold detections could be
+accumulated into a rung below DETECTION. They could not, and the reason turned
+out to matter far more than the rung.
+
+`gate_rescue_repair.pt`, three Mirpur clips, 1 200 frames each, fraction of
+frames carrying a class-`gate` detection at or above each bar:
+
+| `conf` | `gate.mkv` — gate present | `torpedo.mkv` — no gate | `torpedo_1.mkv` — no gate |
+|---|---|---|---|
+| **0.15** ← shipped launch default | 100.0 % | **90.8 %** | 33.3 % |
+| 0.30 | 100.0 % | 77.2 % | 11.8 % |
+| 0.45 | 98.9 % | 46.8 % | 6.8 % |
+| **0.60** | **83.2 %** | **8.6 %** | **1.7 %** |
+| 0.75 | 47.0 % | 0.0 % | 0.0 % |
+
+**Confirmed by eye, which is the only thing that catches this class of error.**
+On `gate.mkv` the boxes enclose the real gate tightly at 0.52–0.81 — the model
+works. On `torpedo.mkv` it draws a half-frame box over **empty turquoise water**
+and calls it a gate at **0.44–0.56**, well above the acting bar.
+
+⛔ **Why this is a run-ending defect and not a tuning nit.** `lock_node._on_det`
+has no acting bar at all: it takes the highest-scoring box with `score > 0` as
+THE detection, at full authority. So on open water the ladder locks onto
+nothing, the follower seeds on it, the anchor enrols against it, and the vision
+verbs drive the hull at a hallucination. Section 8.6 names exactly this: a verb
+that reports success while the vehicle does nothing useful.
+
+⚠ **It also inverts the direction we were heading.** The whole track-before-detect
+idea assumes what sits below the bar is faint signal worth accumulating. On this
+model the band below 0.60 is dominated by confident open-water false positives,
+so lowering the floor floods every consumer with them. The bar needs RAISING.
+
+**This contradicts `measured-bars.md` §1**, which says "above 0.15 loses the
+cross-venue gate" and ships `conf` 0.10. Here 0.60 holds 83.2 % of frames on the
+real gate while cutting false positives by an order of magnitude. Both cannot be
+right. The old sweep measured recall and precision on **labelled held-out
+pairs** — frames that contain the prop — and a set built that way cannot see a
+false positive on open water, because it contains no open water.
+
+**What to do, in order.**
+1. Do **not** lower `conf` anywhere, and do not wire `tracking/presence.py`.
+2. Give `lock_node` an explicit acting bar instead of `score > 0`.
+3. Re-run the conf sweep with **negative clips included** — footage where the
+   prop is absent — and re-derive the band. A precision number taken only on
+   positive frames is not a precision number.
+4. Then re-check on the recompiled HEF, since INT8 moves scores most at the
+   low end.
+
+**Scope not yet established:** measured on one model and three clips from one
+venue. `bin_fire_blood` and `sauvc_sim` have not been checked and must be.

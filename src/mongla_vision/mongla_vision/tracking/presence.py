@@ -47,6 +47,27 @@ is bracketed by one in the margin band. That is `visibility.assess`, already
 measured and already shipped. So this rung REFUSES to accumulate when the last
 detection was leaving, and the refusal is the feature rather than a gap in it.
 
+⛔⛔ READ THIS BEFORE WIRING ANY OF IT. The numbers above are a PERSON IN AIR.
+On real underwater footage the premise does not hold: the band below the bar is
+not faint signal but confident open-water false positives. `gate_rescue_repair`
+claims a gate on **90.8 % of gate-free frames** at the shipped 0.15, drawing
+half-frame boxes over empty turquoise at 0.44-0.56, and the separation between
+gate-present and gate-absent footage is **+0.0 points at both 0.15 and 0.30**
+(B-59). Accumulating that band would manufacture a confident track out of
+hallucination -- the exact failure this module was written to prevent, arriving
+through the front door.
+
+The constants here inherit the same problem. `MIN_RUN = 3` is justified by the
+person bag's 0.090 control giving 0.8 % false chains; the one water control
+measured **0.360**, which needs MIN_RUN 6 to stay under 1 % -- longer than the
+median gap, so the rung would rarely fire even if it were safe. Precedent for
+holding: `continuity.py`, whose person-in-air constants were also not shipped.
+
+So this module is DEFERRED and stays there until B-59 is fixed, the bar is
+re-derived WITH negative clips (`tools/negative_clip_check.py`), and these
+constants are re-swept on water. It may turn out never to be wired, and that is
+an acceptable outcome for it.
+
 WHAT IT NEVER CLAIMS. Not a detection, not an identity, not a box to act on.
 It answers one question -- "is there still something of that class where the
 target was?" -- with a bearing and a capped confidence the control path weighs
