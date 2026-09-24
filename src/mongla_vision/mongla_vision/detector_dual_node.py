@@ -141,6 +141,14 @@ class _Launcher(Node):
 
     def __init__(self):
         super().__init__('mongla_detector_dual')
+        # `replay`: consume frames from a RECORDED bag instead of a camera.
+        # Without this there is no way to run the real graph on recorded
+        # input -- CameraNode raises when the device is absent and this
+        # launcher then drops that camera's detector, so a bag full of
+        # image_raw has nothing left subscribed to play into. That made every
+        # pipeline check require a live camera and a person standing in front
+        # of it, which is not a thing a regression test can do.
+        self.declare_parameter('replay', False)
         for cam in ('fwd', 'dwn'):
             for key in _PER_CAMERA:
                 self.declare_parameter(f'{cam}_{key}', _DEFAULTS[key])
@@ -163,8 +171,13 @@ class _Launcher(Node):
         # process, so the detector must NOT also subscribe -- it would decode
         # and infer the same picture twice, and the topic copy is the SLOWER
         # of the two, so it would be the one acted on half the time.
+        # Under replay there IS no in-process camera, so the detector has to
+        # take the topic path it normally refuses -- `direct_feed` is exactly
+        # the switch between the two, and it must be False or the node will
+        # sit waiting for a frame_sink that nothing will ever call.
+        direct = not bool(self.get_parameter('replay').value)
         out = [Parameter('camera', value=camera),
-               Parameter('direct_feed', value=True)]
+               Parameter('direct_feed', value=direct)]
         for key in _PER_CAMERA:
             out.append(Parameter(
                 key, value=self.get_parameter(f'{cam}_{key}').value))
@@ -179,6 +192,7 @@ def main():
     nodes = [launcher]
     live: list[str] = []
     try:
+        replay = bool(launcher.get_parameter('replay').value)
         for cam, camera in (('fwd', 'forward'), ('dwn', 'downward')):
             # Built SEQUENTIALLY on purpose. The second one configures a second
             # network group on the device the first created; doing that from a
@@ -201,6 +215,17 @@ def main():
             # A missing camera is a DEGRADED vehicle, not a broken one. Keep
             # the eye that works; the detector for the dead one is dropped too,
             # so nothing subscribes to a topic that will never carry frames.
+            if replay:
+                # Keep the detector, build no camera. The frames come from
+                # `ros2 bag play`, so this is a LIVE graph on RECORDED input:
+                # the detector, tracker, lock ladder and checkpoint bank all
+                # run exactly as they do on the vehicle.
+                nodes.append(det)
+                live.append(camera)
+                launcher.get_logger().info(
+                    f'[COMP ] {camera}: REPLAY -- no camera; consuming '
+                    f'/mongla/vision/{camera}/image_raw from a bag.')
+                continue
             try:
                 cam_node = CameraNode(
                     f'mongla_camera_{camera}',

@@ -240,7 +240,9 @@ def test_the_composed_launcher_turns_direct_feed_ON():
     the detector would subscribe AND be fed, silently doubling the work."""
     src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
            / 'detector_dual_node.py').read_text()
-    assert "Parameter('direct_feed', value=True)" in src
+    assert "direct = not bool(self.get_parameter('replay').value)" in src, (
+        'direct_feed is no longer derived from replay')
+    assert "Parameter('direct_feed', value=direct)" in src
     assert 'frame_sink=det' in src
 
 

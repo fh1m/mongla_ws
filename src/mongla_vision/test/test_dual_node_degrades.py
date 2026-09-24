@@ -16,8 +16,15 @@ import pytest
 from mongla_vision import detector_dual_node as dn
 
 
-def _run(camera_factory):
-    """Drive main() with fake nodes; return (launcher, built camera names)."""
+def _run(camera_factory, replay=False):
+    """Drive main() with fake nodes; return (launcher, built camera names).
+
+    ⛔ `replay` must be set explicitly. A bare MagicMock returns a truthy
+    object for EVERY parameter, so `get_parameter('replay').value` reads as
+    True and the loop builds no cameras at all -- the fake silently answers a
+    question it was never told about, and every assertion here then measures
+    replay mode instead of camera degradation.
+    """
     built: list[str] = []
 
     def _camera(name, **kw):
@@ -28,6 +35,8 @@ def _run(camera_factory):
 
     launcher = MagicMock()
     launcher.get_logger.return_value = MagicMock()
+    launcher.get_parameter.side_effect = lambda name: MagicMock(
+        value=replay if name == 'replay' else MagicMock())
     with patch.object(dn, 'rclpy'), \
          patch.object(dn, '_Launcher', return_value=launcher), \
          patch.object(dn, 'DetectorNode', MagicMock()), \
@@ -78,3 +87,15 @@ def test_both_cameras_present_builds_both():
     launcher, built, code = _run(lambda role: MagicMock())
     assert built == ['forward', 'downward']
     assert code is None
+
+
+def test_replay_builds_no_cameras_and_keeps_every_detector():
+    """Replay drives the graph from a recorded bag, so there is no camera to
+    build -- but the detectors must survive, or the played frames arrive at a
+    process with nothing subscribed and the bag looks empty."""
+    def factory(role):
+        raise AssertionError('replay must not construct a camera')
+
+    launcher, built, code = _run(factory, replay=True)
+    assert built == [], 'replay built a camera it has no use for'
+    assert code is None, 'replay exited as though no camera came up'
