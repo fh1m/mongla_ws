@@ -5674,3 +5674,67 @@ Both datasets are stationary-camera or walk-past. Neither has a **vehicle
 turning away from a prop under its own control**, which is the gap process a
 mission actually generates — and the one that decides whether 0.47 s is enough
 or whether the upper rungs matter after all.
+
+---
+
+## 52. ⭐⭐⭐ WHY THE FINE-TUNE FAILED: WE TRAINED AT A RESOLUTION WE NEVER RUN
+
+**2026-09-25.** Round 7's second run, on the verified 4 834-frame set, was
+scored across all eight checkpoints and read as another failure: the median
+inlier count fell on **both** the held-out venue and the trained-on ones. Two
+runs, two sets of weights, the same shape of result.
+
+Then the same weights were scored at a **different input size**, and the sign
+of the result flipped.
+
+```
+                              held-out            trained-on
+  320x240  (we INFER here)   median  -4.5        median  -9.0    ⛔ loses
+  800x608  (we TRAINED here) median  +4.0        median  +8.5    ⭐ wins
+```
+
+n = 144 held-out, 192 trained-on, one checkpoint (6 000), identical code path
+for both arms.
+
+⭐ **The fine-tune worked. It improved the descriptor at the resolution it was
+trained at, and that gain does not survive the trip down to 320×240.**
+
+### Why this was invisible for two runs
+
+Upstream's `train.py` defaults to `--training_res 800,608` because upstream
+infers near that size. We took the default and never questioned it, while our
+shipped backend is **320×240** — chosen because §19 measured it as the better
+operating point (stock itself scores median 99.0 at 320 against 68.5 at 800 on
+the held-out venue). A convolutional descriptor's keypoint density and
+effective receptive field both scale with input size, so weights tuned at
+800×608 are tuned for a different feature geometry than the one that flies.
+
+⛔ **And the first attempt to see this MISSED it.** A coarse "passing columns"
+score (12 columns, stock already at 10–11) has a ceiling and read as scatter:
+750 won at 320, 6 000 won at 800, everything else tied. The claim was made on
+that metric and immediately withdrawn. The effect is only visible with the
+wide metric — n=144 and a median — because that is the metric with the power
+to resolve it. **A measurement that cannot detect the effect is not evidence
+of absence.**
+
+### What follows
+
+Training now runs at `--training_res 320,240`, the resolution that actually
+flies. Early signal is consistent with the diagnosis: the coarse-match head
+reaches `acc_c0` **0.77** at 320×240 against 0.3–0.4 at 800×608 — it is
+learning a geometry it will be asked about.
+
+⚠ **Round 7 is NOT closed by this.** What is established is the *cause* of two
+failures, not a win. The retrained weights must still beat stock **at 320×240
+on the held-out venue**, and if they do not, Round 7 closes NO with the cause
+understood — which is a better outcome than two unexplained failures.
+
+### Settings that survived the search
+
+| | |
+|---|---|
+| training resolution | **320×240** (was 800×608) |
+| batch | **16** — 32 OOM'd at 8 %, 10 left the GPU at 43 % |
+| loader cache | **1 200** images (3 000 is ~4.4 GB of system RAM) |
+| lr | 2e-4 from stock weights, never from scratch |
+| dataset | on **nvme**, never `/tmp` — see §49 |
