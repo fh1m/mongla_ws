@@ -265,8 +265,22 @@ class CameraNode(Node):
                     f'or the reverse, gives exactly this. Pass the profile for '
                     f'the host you are on: bringup.launch.py camera_profile:=...')
             # device_path (by-path symlink) > int device override > profile default.
+            #
+            # ⛔ BOTH KEYS, and the bug this fixes was exactly one of them. A
+            # profile carries its own `device_path` (`config.py`: pi_forward is
+            # `/dev/mongla_cam_forward`). Overriding only `device` left that
+            # entry untouched, so the v4l2 mailbox -- which reads `device_path`
+            # -- kept opening the profile's udev symlink while this very line
+            # logged the override as applied. Measured on the vehicle:
+            #
+            #   [CAM ] device_path (port-stable) -> /dev/video0
+            #   [CAM ] v4l2 mailbox failed on '/dev/mongla_cam_forward'
+            #
+            # A parameter that is read, logged and then ignored is worse than
+            # one that is unsupported: the log says it worked.
             if device_path:
                 profile['device'] = device_path
+                profile['device_path'] = device_path
                 self.get_logger().info(f'[CAM  ] device_path (port-stable) → {device_path}')
             else:
                 dev_param = self.get_parameter('device').value

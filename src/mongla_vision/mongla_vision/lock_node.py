@@ -393,6 +393,32 @@ class LockNode(Node):
             self._recent.append((_stamp_key(msg.header), g))
         self._fresh.set()
 
+    def _load_bank(self):
+        """Preload a practice bank, if one was named.
+
+        A missing or unreadable bank costs the PRELOAD, never the rung: the
+        anchor still learns live checkpoints from detections. But it WARNs
+        rather than logging quietly, because an operator who passed
+        `anchor_bank:=` and silently got nothing would believe the vehicle had
+        a memory it does not have, and would find out during the run.
+        """
+        path = str(self.get_parameter('anchor_bank').value or '').strip()
+        if not path:
+            return
+        path = os.path.expanduser(path)
+        try:
+            n = self._anchor.load(path)
+            self.get_logger().info(
+                f'[LOCK ] preloaded {n} checkpoints from '
+                f'{os.path.basename(path)}: {sorted(set(self._anchor.labels))}')
+            if self._anchor.labels:
+                self._anchor_label = self._anchor.labels[-1]
+        except Exception as exc:
+            self.get_logger().warn(
+                f'[LOCK ] anchor_bank {path} NOT loaded: '
+                f'{type(exc).__name__}: {exc} -- the rung still runs and will '
+                f'learn checkpoints from live detections')
+
     def _frame_for(self, det_header):
         """The frame a detection was computed on, not merely the newest one.
 

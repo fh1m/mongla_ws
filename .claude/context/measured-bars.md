@@ -4577,3 +4577,74 @@ chip saves a further ~16 ms.
 something else.** The flat per-match time was the signal; the optimisation
 being attempted (PCA to 32-D, spatial gating) would have bought 1.1× while an
 8× redundancy sat underneath.
+
+---
+
+## 34. ⭐ The bank runs on the VEHICLE — and two defects only hardware could find
+
+**2026-09-24.** Everything in §20–§33 was bench and archive. The bank had never
+run on the Pi. It has now, and the first two attempts failed for reasons **1 031
+passing tests could not see**, because nothing in the suite constructs a ROS
+node.
+
+### 34.1 ⛔ `_load_bank` was called and never defined
+
+    [WARN] [LOCK ] anchor DISABLED: AttributeError: 'LockNode' object has no
+           attribute '_load_bank' -- the follower rung still runs
+
+A patch matched on `def _frame_for(self, header)` when the real signature is
+`det_header`, so the insertion **silently did nothing** while the call site
+landed. ⚠ And the node **degraded exactly as designed** — a WARN, not a crash —
+so it would have run a whole pool day with the anchor rung off.
+
+Guarded by `test_lock_node_methods_exist.py`, which parses the source with
+`ast` (no rclpy needed) and asserts every `self.<method>()` call resolves.
+Injection-verified: deleting the definition fails it, restoring passes.
+
+### 34.2 ⛔ `device_path:=` was read, logged, and ignored
+
+    [CAM  ] device_path (port-stable) → /dev/video0
+    [CAM  ] v4l2 mailbox failed on '/dev/mongla_cam_forward'
+
+Both lines, one after the other. A profile carries its **own `device_path`**
+key (`config.py`: `pi_forward` → `/dev/mongla_cam_forward`), and `camera_node`
+overrode `profile['device']` only — a different key. The v4l2 mailbox reads
+`device_path`, so it kept opening a udev symlink that does not exist on this
+host, while the log line directly above said the override had applied.
+
+⭐ **A parameter that is read, logged and then ignored is worse than an
+unsupported one: every log says it worked.** The whole graph produced no images,
+no detections and no lock, and every rung reported 0 %.
+
+Fixed by writing both keys; guarded by
+`test_device_path_override_reaches_the_camera.py`.
+
+### 34.3 ⭐ And then it worked — with no detector at all
+
+With the camera fixed: **`pub=37.0 Hz, sent=74, dropped=0`**, detections at
+**33.4 Hz**.
+
+⚠ The detector found no `person`: the live frame is an extreme face close-up,
+monochrome, **mean 204/255 — blown out**. That is a legitimate miss, not a bug,
+and it is exactly the condition the anchor exists for.
+
+`tools/live_anchor_check.py`, bank enrolled from 4 live frames, then locating
+for 12 s on the vehicle camera:
+
+| | |
+|---|---|
+| scene held | ⭐ **100 % of 32 frames** |
+| inliers | **467–595** |
+| offsets | sub-pixel, scale 1.00 |
+| match cost | **29.8 ms** (§20 predicted 31.4) |
+| full `locate()` at 4-wide | **134 ms ≈ 7.5 Hz** (§32.4 predicted ~8 Hz) |
+
+⚠ **The scene was static**, so this demonstrates station-keeping rather than
+tracking through motion. The dx/dy of ~0 is the operator standing still, not a
+tracking result.
+
+### The bar
+
+**A rung is not verified until it has run on the vehicle.** Two defects, one of
+which silently disabled the rung and one of which silently ignored an operator
+parameter, survived the entire suite and died in the first two launches.
