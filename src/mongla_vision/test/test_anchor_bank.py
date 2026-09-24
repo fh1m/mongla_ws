@@ -50,17 +50,27 @@ class FakeBackend:
     """detect() reads a scene out of the image; descriptors follow identity.
 
     The image is a carrier, not a picture: row 0 holds the point count across
-    two cells (it exceeds 255), and each subsequent row holds one point as
+    two cells (it exceeds 255), and each point occupies a 4-cell block as
     (ident_hi, ident_lo, x, y). Real pixels would make this a test of OpenCV's
     corner detector instead of a test of the bank.
+
+    ⚠ IT IS SHAPED LIKE THE BACKEND (240x320) ON PURPOSE. `enrol` scales
+    annotations from full-frame pixels into backend pixels using
+    `gray.shape`, exactly as `Anchor.snap` scales the ROI. A carrier of some
+    other shape would silently exercise a scale factor of 80 and the test would
+    be measuring the harness.
     """
     w, h = 320, 240
+    PER_ROW = 80
 
     def detect(self, gray):
         n = int(gray[0, 0]) * 256 + int(gray[0, 1])
         if n == 0:
             return np.zeros((0, 2), np.float32), np.zeros((0, 64), np.float32)
-        rows = gray[1:1 + n].astype(np.int32)
+        g = gray.astype(np.int32)
+        rows = np.array([g[1 + i // self.PER_ROW,
+                           4 * (i % self.PER_ROW):4 * (i % self.PER_ROW) + 4]
+                         for i in range(n)])
         ident = rows[:, 0] * 256 + rows[:, 1]
         kp = rows[:, 2:4].astype(np.float32)
         return kp, _PROJ[ident % len(_PROJ)]
@@ -94,15 +104,17 @@ def view(scene_id, n_points, *, drop=0):
     measured the harness rather than the bank. Two coprime multipliers keep the
     points spread without correlating x with y.
     """
-    img = np.zeros((512, 4), np.uint8)
+    img = np.zeros((FakeBackend.h, FakeBackend.w), np.uint8)
     idents = np.arange(drop, n_points) + scene_id * 1000
     img[0, 0] = len(idents) // 256
     img[0, 1] = len(idents) % 256
-    for row, ident in enumerate(idents, start=1):
-        img[row, 0] = (ident // 256) % 256
-        img[row, 1] = ident % 256
-        img[row, 2] = 5 + (int(ident) * 37) % 245
-        img[row, 3] = 5 + (int(ident) * 101) % 245
+    per = FakeBackend.PER_ROW
+    for i, ident in enumerate(idents):
+        r, c = 1 + i // per, 4 * (i % per)
+        img[r, c + 0] = (ident // 256) % 256
+        img[r, c + 1] = ident % 256
+        img[r, c + 2] = 5 + (int(ident) * 37) % 245
+        img[r, c + 3] = 5 + (int(ident) * 101) % 245
     return img
 
 
@@ -527,3 +539,56 @@ def test_a_bank_saved_without_attitude_loads_as_unknown_not_as_zero():
         fresh = bank()
         fresh.load(p)
         assert fresh.locate(rich(1)).ref_attitude is None
+
+
+# --------------------------------------------------------------------------- #
+# 11. Annotations: finding a thing no model was trained to find
+# --------------------------------------------------------------------------- #
+def test_an_annotated_point_is_carried_into_the_live_frame():
+    """⭐ The trainingless-detector property. A point marked once on a
+    reference -- a hole centre, an aim point -- lands in the live frame through
+    the same homography the pose came from. Published competition practice:
+    feature correspondences locate the holes, and no detector is trained on
+    them."""
+    b = bank()
+    b.enrol(rich(1), roi=None, det_conf=0.9, label='torpedo',
+            annotations={'hole_shark': (100.0, 60.0)})
+    p = b.locate(rich(1))
+    assert p.ok
+    assert p.points is not None and 'hole_shark' in p.points
+    x, y = p.points['hole_shark']
+    # Identical view, so the annotation must land back where it was marked.
+    assert abs(x - 100.0) < 2.0 and abs(y - 60.0) < 2.0
+
+
+def test_no_annotation_reports_None_not_an_empty_dict():
+    """Absent and 'found none' are different answers; a caller must be able to
+    tell them apart before acting on a hole position."""
+    b = bank()
+    b.enrol(rich(1), roi=None, det_conf=0.9)
+    assert b.locate(rich(1)).points is None
+
+
+def test_annotations_are_not_reported_when_the_match_is_refused():
+    """A warped point from a refused homography is a confident wrong aim."""
+    b = bank()
+    b.enrol(rich(1), roi=None, det_conf=0.9, annotations={'hole': (10.0, 10.0)})
+    p = b.locate(rich(2))
+    assert not p.ok
+    assert p.points is None
+
+
+def test_annotations_survive_save_and_load(tmp_path):
+    """A practice-day reference is annotated once, on the bench, with time to
+    get it right -- then loaded on the run."""
+    b = bank()
+    b.enrol(rich(1), roi=None, det_conf=0.9, label='torpedo',
+            annotations={'hole_shark': (80.0, 50.0), 'hole_fish': (150.0, 90.0)})
+    p = tmp_path / 'annotated.npz'
+    b.save(str(p))
+    fresh = bank()
+    fresh.load(str(p))
+    got = fresh.locate(rich(1))
+    assert got.points is not None
+    assert set(got.points) == {'hole_shark', 'hole_fish'}
+    assert abs(got.points['hole_fish'][0] - 150.0) < 2.0
