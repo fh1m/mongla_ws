@@ -1969,9 +1969,20 @@ class SrotFC(FlightController):
         ALREADY in our convention. Pass it straight through: negating here too
         made /mongla/state.depth_m positive when submerged, which silently
         inverted every one of those guards (they all compare against a negative
-        constant, so each just stopped firing)."""
+        constant, so each just stopped firing).
+
+        ⛔ STALE IS ABSENT. pymavlink keeps the last ATTITUDE forever, so after a
+        USB drop this kept returning the final yaw/depth the board ever sent, and
+        /mongla/state published a frozen, confident vehicle at 2 Hz -- exactly the
+        "plausible number standing in for an absent measurement" of safety rule 6.
+        ATTITUDE is pinned at 50 Hz, so an ATTITUDE older than `_LINK_STALE_S`
+        (the same window `link_alive` uses) means the link, not the vehicle, went
+        quiet: None, which every caller already handles as "not yet received"."""
         att = self._cache('ATTITUDE')
         if att is None:
+            return None
+        age = self.get_attitude_age()
+        if age is None or age > _LINK_STALE_S:
             return None
         # Same baro-health gate as telemetry() -- see the long note there. VFR_HUD is
         # NOT suppressed when the barometer is unhealthy, so an ungated read publishes a

@@ -1996,24 +1996,29 @@ class AUVManagerNode(Node):
 
     def _effective_yaw_deg(self, attitude):
         """Return ``(yaw_deg, label)`` -- the SAME yaw the control loops
-        close on. Prefers ``yaw_source.read_yaw()`` when fresh, falls
-        back to Pixhawk AHRS, degrades gracefully to ``(None, 'N/A')``.
+        close on: ``yaw_source.read_yaw()`` when a source is configured,
+        the (age-gated) board attitude only when none is, and
+        ``(None, 'N/A')`` when neither has a fresh value.
 
-        ``BNO085Source.read_yaw()`` already returns ``None`` when its
-        stream goes stale (see ``_STALE_S`` in ``bno085.py``), so a
-        yanked USB cable silently falls through to AHRS here rather
-        than holding the last stale BNO value forever.
+        ⛔ NO FALLBACK FROM A CONFIGURED SOURCE. This used to fall through to
+        ``attitude['yaw']`` whenever the source returned None -- and None is
+        how a source says STALE (``MavlinkAhrsSource._is_fresh``: 250 ms;
+        ``BNO085Source``: ``_STALE_S``). So the freshness gate was undone one
+        line later: after a USB drop /mongla/state kept publishing the last yaw
+        pymavlink ever cached, and it was not even the yaw the loops were
+        using (they got None and held). Absent is absent -- NaN downstream.
         """
         source = getattr(self, 'yaw_source', None)
         if source is not None:
             yaw = source.read_yaw()
-            if yaw is not None:
-                # Short-label for the [STATE] line. 'MAVLINK_AHRS' ->
-                # 'AHRS' keeps the line tidy; custom sources (BNO085,
-                # DVL, WITMOTION) render as-is.
-                raw_name = getattr(source, 'name', 'SRC')
-                label = 'AHRS' if raw_name == 'MAVLINK_AHRS' else raw_name
-                return float(yaw), label
+            if yaw is None:
+                return None, 'N/A'
+            # Short-label for the [STATE] line. 'MAVLINK_AHRS' ->
+            # 'AHRS' keeps the line tidy; custom sources (BNO085,
+            # DVL, WITMOTION) render as-is.
+            raw_name = getattr(source, 'name', 'SRC')
+            label = 'AHRS' if raw_name == 'MAVLINK_AHRS' else raw_name
+            return float(yaw), label
         if attitude is not None:
             # NaN IS ABSENCE HERE, and this branch used to pass it straight out.
             # `SrotFC.get_attitude` returns NaN yaw when the board reports the
