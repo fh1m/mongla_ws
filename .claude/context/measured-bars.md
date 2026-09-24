@@ -4512,3 +4512,68 @@ throttled. ⛔ Unthrottled sharing costs half the detector and must not ship.
 ⚠ **Owed:** this is synthetic load on both sides. The real `lock_node` does
 host work between inferences, which may change the sharing profile in either
 direction.
+
+---
+
+## 33. ⭐ The bank ran the backbone FIVE TIMES per lookup
+
+**2026-09-24.** Chasing the matcher bottleneck (§32.4) turned up a defect worth
+more than the optimisation being chased.
+
+### How it showed itself
+
+Trading keypoints for bank breadth at a fixed budget gave a per-match cost that
+**barely moved with `top_k`**:
+
+| top_k | per-match ms |
+|---|---|
+| 1024 | 42.3 |
+| 512 | 36.3 |
+| 256 | 13.3 |
+
+A quarter of the multiply-accumulates should have been far cheaper than 86 % of
+the time. **That flatness was a fixed overhead, not the matmul.**
+
+### ⛔ The defect
+
+`Anchor.locate()` detects internally — `k1, d1 = self._be.detect(gray)`. But
+`CheckpointBank.locate()` asks *several* references about **one frame**, so a
+4-wide shortlist ran the backbone **four times on identical pixels**, and the
+signature path detected once more. **Five backbone passes per lookup, four of
+them redundant.**
+
+### The fix and what it bought
+
+`Anchor.locate_features(k1, d1)` takes features already extracted; the bank
+detects once and hands them to every reference.
+
+| shortlist k | p50 inliers | floor | locate ms, before | after |
+|---|---|---|---|---|
+| 1 | 42 | 6 | — | 31.6 |
+| **4** | **51** | 6 | **169.1** | **94.4** |
+| 8 | 51 | 6 | — | 140.7 |
+
+⭐ **1.8× at the shipping width, with no accuracy cost** — the numbers are
+identical arithmetic, just not repeated.
+
+### ⭐ And it changes what the chip is worth
+
+§28.3 concluded the chip saves "a fixed ~31.7 ms regardless of bank size,"
+because detection was assumed to happen once. It was happening **k+1 times**, so
+the chip's saving scales with the shortlist instead:
+
+| | CPU detect (20 ms) | chip detect (4.1 ms) |
+|---|---|---|
+| before this fix, k=4 | 5 × 20 = 100 ms of detection | 5 × 4.1 = 20.5 ms |
+| after, k=4 | 1 × 20 = 20 ms | **1 × 4.1 = 4.1 ms** |
+
+The honest reading: **the redundancy was worth more than the accelerator.**
+Removing it saved 75 ms on CPU; moving the remaining single detection to the
+chip saves a further ~16 ms.
+
+### The method note
+
+**A cost that does not respond to the knob you are turning is measuring
+something else.** The flat per-match time was the signal; the optimisation
+being attempted (PCA to 32-D, spatial gating) would have bought 1.1× while an
+8× redundancy sat underneath.
