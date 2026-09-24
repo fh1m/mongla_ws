@@ -18,6 +18,67 @@
 # recorder: `ros2 launch` forwards SIGINT to its nodes, and a launcher that
 # cannot receive one cannot forward it.
 
+# ⛔ AND RESETTING THE DISPOSITION IS NOT ENOUGH ON ITS OWN. Measured: with the
+# shim in place, `ros2 launch` still did not exit on SIGINT within 20 s, so the
+# escalation sent SIGTERM -- which the launcher does NOT forward, orphaning
+# every node it started. Signalling the launcher relies on the launcher
+# choosing to pass the signal on.
+#
+# So a long-lived graph is started in its OWN PROCESS GROUP and the GROUP is
+# signalled. Then every node receives the signal directly and none of it
+# depends on the launcher's cooperation.
+
+# Start a command in its own process group, with default signal dispositions.
+# Echoes the pid, which is also the process-GROUP id.
+# ⛔ TWO APPROACHES TRIED AND REJECTED, because signalling the LAUNCHER only
+# works if the launcher cooperates:
+#   1. `run_resettable ros2 launch` -- measured: still did not exit within 20 s
+#      of SIGINT, so the escalation sent SIGTERM, which ros2 launch does NOT
+#      forward, and its nodes were orphaned anyway.
+#   2. `setsid cmd &` to signal the process GROUP -- os.setsid() failed in this
+#      context and the shim died at once, so $! named a pid that never existed
+#      and stop() silently signalled nothing. Five nodes survived every time.
+#
+# What works is not asking anyone to forward anything: walk the process tree
+# and signal every descendant directly. `ros2 launch` starts each node as its
+# own child, so the tree IS the node list.
+kill_tree() {
+  local pid="$1" sig="$2" kid
+  for kid in $(pgrep -P "$pid" 2>/dev/null); do
+    kill_tree "$kid" "$sig"
+  done
+  kill "-$sig" "$pid" 2>/dev/null || true
+}
+
+# stop_tree <pid> <name> -- INT the whole tree, then TERM, then KILL, and say
+# what actually happened at each step. Never blocks forever.
+stop_tree() {
+  local pid="$1" name="$2" i
+  [ -n "$pid" ] || { echo "  $name: no pid recorded"; return 0; }
+  if ! kill -0 "$pid" 2>/dev/null; then
+    echo "  $name: already gone"
+    return 0
+  fi
+  kill_tree "$pid" INT
+  for i in $(seq 20); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 1
+  done
+  kill_tree "$pid" TERM
+  sleep 2
+  kill_tree "$pid" KILL
+  # The launcher dying is not the question -- surviving NODES are. Report the
+  # thing that actually matters, because "launcher stopped" was true during
+  # every single run that left five nodes holding the Hailo.
+  local left
+  left="$(pgrep -f '[d]etector_dual_node|[t]racker_node|[l]ock_node' 2>/dev/null | wc -l)"
+  if [ "$left" -gt 0 ]; then
+    echo "  ⛔ $name stopped but $left vision node(s) SURVIVE -- they hold the Hailo" >&2
+  else
+    echo "  $name stopped; no surviving vision nodes"
+  fi
+}
+
 # Run a command with the default signal dispositions restored.
 run_resettable() {
   python3 -c 'import os, signal, sys
@@ -28,20 +89,32 @@ os.execvp(sys.argv[1], sys.argv[1:])' "$@"
 
 # stop <pid> <name> -- INT, then TERM, then KILL. Never blocks forever.
 # rosbag2 finalizes (writes metadata.yaml) on INT or TERM; only KILL loses it.
+# stop <pid> <name> [group] -- pass 'group' when the pid leads its own process
+# group (i.e. it came from start_group); the whole group is then signalled.
 stop() {
-  local pid="$1" name="$2" i
+  local pid="$1" name="$2" mode="${3:-}" target i
   [ -n "$pid" ] || return 0
-  kill -INT "$pid" 2>/dev/null || return 0
+  if [ "$mode" = group ] && kill -0 "-$pid" 2>/dev/null; then
+    target="-$pid"          # negative pid = the process GROUP
+  else
+    target="$pid"
+  fi
+  if ! kill -INT "$target" 2>/dev/null; then
+    # Say so. A silent return here reads exactly like a clean stop, which is
+    # how a bad pid hid five surviving nodes.
+    echo "  $name: nothing to signal at $target (already gone, or wrong pid)"
+    return 0
+  fi
   for i in $(seq 20); do
     kill -0 "$pid" 2>/dev/null || { echo "  $name stopped cleanly"; return 0; }
     sleep 1
   done
   echo "  $name ignored SIGINT -- sending SIGTERM"
-  kill -TERM "$pid" 2>/dev/null
+  kill -TERM "$target" 2>/dev/null
   for i in $(seq 15); do
     kill -0 "$pid" 2>/dev/null || { echo "  $name stopped on SIGTERM"; return 0; }
     sleep 1
   done
   echo "  $name ignored SIGTERM -- SIGKILL (the bag may be unfinalized)" >&2
-  kill -KILL "$pid" 2>/dev/null
+  kill -KILL "$target" 2>/dev/null
 }
