@@ -142,10 +142,26 @@ def _require_srot_vision_mode(fc, log, verb: str) -> None:
     this wire (the firmware's `onSetMode` discards its own return value and
     sends no ACK), so a request that is silently refused looks identical to one
     that worked.
+
+    ⛔ SURFACE IS NEVER SWITCHED OUT OF -- ONLY REFUSED. It used to be treated
+    like any other wrong mode and "corrected" to STABILIZE, which let a vision
+    verb pull the hull out of a leak / low-battery / GCS-loss failsafe, or out
+    of the operator's own `surface`, and drive it back down. The board reached
+    SURFACE for a reason this verb cannot see; leaving it is the operator's
+    call (an explicit `set_mode`), never a side-effect of an align. Refused
+    with the same MovementError as a refused STABILIZE, so the manager turns
+    it into a failed Result exactly as before.
     """
     mode = (fc.get_mode() or '').upper()
     if mode in _SROT_VISION_MODES:
         return
+    if mode == 'SURFACE':
+        raise MovementError(
+            f'{verb}: the board is in SURFACE and a vision verb will not take it '
+            f'out. SURFACE is a failsafe destination (leak, thruster battery, GCS '
+            f'loss) or an operator surface; the firmware zeroes translation and '
+            f'yaw there, so this verb would move nothing. Refusing. Check the '
+            f'failsafe, then set_mode STABILIZE explicitly if it is safe to dive.')
     if log is not None:
         log.info(f'[CMD  ] {verb}: board is in {mode or "?"} -- '
                  f'switching to STABILIZE so MANUAL_CONTROL reaches the thrusters')
