@@ -372,6 +372,14 @@ def generate_launch_description():
         # consumer; lower would starve it.
         DeclareLaunchArgument('fwd_publish_hz', default_value='40'),
         DeclareLaunchArgument('dwn_publish_hz', default_value='0'),
+        DeclareLaunchArgument(
+            'replay', default_value='false',
+            description='Consume image_raw from a RECORDED BAG instead of a '
+                        'camera. Build no camera, keep every detector, and let '
+                        '`ros2 bag play` drive the graph. This is how a '
+                        'recorded session becomes a regression fixture: the '
+                        'detector, tracker, lock ladder and checkpoint bank '
+                        'all run for real, on input that never changes.'),
         DeclareLaunchArgument('fwd_device_path', default_value=''),
         DeclareLaunchArgument('dwn_device_path', default_value=''),
     ]
@@ -409,6 +417,7 @@ def generate_launch_description():
             'range_crop':      LaunchConfiguration('range_crop'),
             'preprocess_clip': LaunchConfiguration('preprocess_clip'),
             'paused':         LaunchConfiguration('paused'),
+            'replay':         LaunchConfiguration('replay'),
             # The Hailo backend ignores it (`**_ignored`), but the value has to
             # be SOMETHING that is not 'cuda:0': `gpu.select_device` raises on a
             # Pi, and the factory builds the backend from the model extension,
