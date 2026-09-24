@@ -83,10 +83,20 @@ def main():
     ap.add_argument('--stock', default='/tmp/xfeat_src/weights/xfeat.pt')
     ap.add_argument('--tuned', required=True)
     ap.add_argument('--bar', type=int, default=15)
+    # ⭐ Training happens at 800x608, inference at 320x240. A
+    # convolutional descriptor's keypoint density and receptive
+    # field both scale with input size, so 'the fine-tune is bad'
+    # and 'the fine-tune is for the wrong size' are different
+    # claims and only a resolution sweep separates them.
+    ap.add_argument('--width', type=int, default=320)
+    ap.add_argument('--height', type=int, default=240)
     args = ap.parse_args()
     dev = 'cuda' if torch.cuda.is_available() else 'cpu'
-    arms = {'stock': Torch320(load_net(args.stock, dev), dev),
-            'tuned': Torch320(load_net(args.tuned, dev), dev)}
+    arms = {'stock': Torch320(load_net(args.stock, dev), dev,
+                              args.width, args.height),
+            'tuned': Torch320(load_net(args.tuned, dev), dev,
+                              args.width, args.height)}
+    print(f'resolution {args.width}x{args.height}   bar {args.bar}')
 
     for label, clips in (('HELD-OUT (never trained on)', HELD_OUT),
                          ('TRAINED-ON venues', TRAINED_ON)):

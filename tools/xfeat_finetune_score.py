@@ -53,12 +53,23 @@ def load_net(weights, dev):
 
 
 class Torch320:
-    """The SHIPPED geometry -- 320x240, top_k 1024 -- driven by torch weights,
-    so stock and fine-tuned go through one identical code path."""
-    w, h, top_k = 320, 240, 1024
+    """The SHIPPED geometry by default -- 320x240, top_k 1024 -- driven by
+    torch weights, so stock and fine-tuned go through one identical path.
 
-    def __init__(self, net, dev):
+    ⭐ `w`/`h` are settable because TRAINING RESOLUTION AND INFERENCE
+    RESOLUTION ARE NOT THE SAME HERE. Upstream trains at 800x608 and infers
+    near it; we infer at 320x240. A convolutional descriptor's keypoint
+    density and effective receptive field both scale with input size, so a
+    fine-tune could genuinely improve the weights at 800x608 and still lose at
+    320x240 -- and every Round 7 number so far was taken at 320x240 only.
+    Scoring both resolutions is what separates "the fine-tune is bad" from
+    "the fine-tune is for the wrong size".
+    """
+    top_k = 1024
+
+    def __init__(self, net, dev, w=320, h=240):
         self.net, self.dev = net, dev
+        self.w, self.h = int(w), int(h)
 
     def detect(self, gray):
         g = cv2.resize(gray, (self.w, self.h), interpolation=cv2.INTER_AREA)
@@ -131,6 +142,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--stock', default='/tmp/xfeat_src/weights/xfeat.pt')
     ap.add_argument('--tuned', required=True)
+    ap.add_argument('--width', type=int, default=320)
+    ap.add_argument('--height', type=int, default=240)
     args = ap.parse_args()
     dev = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -139,7 +152,8 @@ def main():
         if not os.path.exists(w):
             print(f'{tag}: missing {w}')
             return 1
-        arms[tag] = Torch320(load_net(w, dev), dev)
+        arms[tag] = Torch320(load_net(w, dev), dev, args.width, args.height)
+    print(f'resolution: {args.width}x{args.height}')
 
     print('HELD-OUT venue: mirpur (never trained on)\n')
     print(f'{"clip":<20}{"stock +1/3/5/8":>26}{"ok":>5}'
