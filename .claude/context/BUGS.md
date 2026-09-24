@@ -3377,7 +3377,7 @@ a tighter fix actively hurts.
 
 ---
 
-## B-XF1 ⛔ `detector_dual_node` publishes EMPTY detections for frames its own detector class detects
+## B-XF1 ✅ FIXED — `detector_dual_node` published EMPTY detections: it was PAUSED
 
 **Found 2026-09-24, on the vehicle.** Severity: **HIGH** — this is the "silent
 `[]` every frame while the pipeline looks healthy" failure `CLAUDE.md` §4 warns
@@ -3410,12 +3410,46 @@ nothing.** So the defect is in `detector_dual_node`'s path between decoding the
 image and publishing `Detection2DArray` — not in the model, the threshold, the
 image, or `HailoDetector`.
 
-### Next step
+### ⭐ ROOT CAUSE — `vision_pi.launch.py:154` declares `paused` default **true**
 
-Instrument `detector_dual_node` between `infer()` and the publish: log
-`len(detections)` at the source. If `infer()` returns non-empty there, the loss
-is in the message-building or filtering step; if it returns empty, the frame the
-node hands it differs from the frame it publishes.
+```python
+if self.get_parameter('paused').value:
+    continue  # frame consumed from queue; skip decode + infer
+```
+
+**A paused detector consumes every frame and publishes nothing**, and said
+nothing about it. So the shipped default is a pipeline that looks completely
+healthy — camera at 35 Hz with zero drops, `image_raw` flowing at 24.7 Hz with
+two subscribers, the `/detections` publisher registered and live — and does no
+work.
+
+⚠ **It was mistaken, in order, for**: a broken model, a wrong confidence
+threshold, blown-out exposure, an empty class allowlist, a wrong input dtype, a
+QoS mismatch, a stale build, and a dead worker thread. Each was ruled out by a
+measurement. **The one thing the node never mentioned was that it had been told
+not to work.**
+
+With `paused:=false`:
+
+```
+[DET  ] infer() returned 1 raw detection(s) on 640x360, best 0.856
+[LOCK ] detection=100%  follow=0%  anchor=0%  lost=0%
+```
+
+### The fix
+
+The paused branch now **warns** — once, then every 300 frames:
+
+    [DET  ] PAUSED -- consuming frames and publishing NOTHING (1 so far).
+            `paused:=false` to infer.
+
+Verified on the vehicle. Guarded by `test_a_paused_detector_says_so.py`, which
+also pins the launch default so that if it ever flips, the warning's reasoning
+is re-read rather than silently kept.
+
+⚠ **The default itself is left alone.** `paused:=true` is deliberate — the
+unused camera is paused for most of a mission so it does not decode frames
+nobody reads. Silence was the defect, not the default.
 
 ⚠ **Blocks the live ladder end-to-end.** The anchor rung was verified
 independently (§34.3: 100 % hold over 32 frames, 467–595 inliers) precisely

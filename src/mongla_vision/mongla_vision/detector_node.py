@@ -626,7 +626,7 @@ class DetectorNode(Node):
         self._stale_sum = 0.0
         self._stale_max = 0.0
         self._infer_fails = 0
-        threading.Thread(target=self._infer_loop, daemon=True).start()
+        threading.Thread(target=self._infer_loop_guarded, daemon=True).start()
 
         registry_info = (
             f"  registry={list(self._registry)}  active={self._active_name!r}"
@@ -924,6 +924,39 @@ class DetectorNode(Node):
         except Exception as exc:                # noqa: BLE001
             self.get_logger().error(f'[DET  ] rebuild failed: {exc!r}')
 
+    def _infer_loop_guarded(self):
+        """`_infer_loop`, but a raise is LOGGED and the loop restarts.
+
+        ⛔ A PYTHON THREAD THAT RAISES SIMPLY ENDS. No traceback in the node's
+        log, no exit code, no fault anywhere -- the node stays up, the
+        subscriptions stay up, the publisher stays registered, and
+        `/detections` goes quiet for ever. Only `det.infer()` was guarded;
+        every other statement in the loop body ran bare.
+
+        Measured on the vehicle (B-XF1): `image_raw` flowing at 24.7 Hz with
+        the detector subscribed, `/detections` carrying a live publisher and
+        ZERO messages, and not one error line to say why. That is the same
+        invisibility D16 removed from the infer-exception path, reached
+        through every OTHER statement in the loop.
+
+        Restarting rather than exiting: a detector that loses one frame is
+        recoverable, one that silently stops is not. The fault is counted so a
+        loop failing every frame is loud rather than a log flood.
+        """
+        faults = 0
+        while rclpy.ok():
+            try:
+                self._infer_loop()
+                return                      # clean exit: rclpy shutting down
+            except Exception as exc:        # noqa: BLE001
+                faults += 1
+                if faults <= 3 or faults % 100 == 0:
+                    import traceback
+                    self.get_logger().error(
+                        f'[DET  ] inference loop DIED ({faults}x) and was '
+                        f'restarted: {exc!r}\n{traceback.format_exc()}')
+                time.sleep(0.05)
+
     def _infer_loop(self):
         """Worker thread: decode + infer + publish (never touches the ROS executor)."""
         while rclpy.ok():
@@ -936,6 +969,23 @@ class DetectorNode(Node):
                 self._want.clear()
 
             if self.get_parameter('paused').value:
+                # ⛔ SAY SO. A paused detector consumes frames and publishes
+                # NOTHING: the camera runs, `image_raw` flows, the
+                # `/detections` publisher is registered and live, and zero
+                # messages ever appear. Every liveness check passes.
+                #
+                # `vision_pi.launch.py` declares `paused` default TRUE, so this
+                # is the SHIPPED state until an operator says otherwise -- and
+                # it cost hours on the vehicle (B-XF1) being mistaken for a
+                # broken model, a wrong threshold, a bad allowlist and a dead
+                # worker thread, because the one thing the node never mentioned
+                # was that it had been told not to work.
+                self._paused_logged = getattr(self, '_paused_logged', 0) + 1
+                if self._paused_logged == 1 or self._paused_logged % 300 == 0:
+                    self.get_logger().warn(
+                        f'[DET  ] PAUSED -- consuming frames and publishing '
+                        f'NOTHING ({self._paused_logged} so far). '
+                        f'`paused:=false` to infer.')
                 continue  # frame consumed from queue; skip decode + infer
 
             if isinstance(item, _DirectFrame):
@@ -992,6 +1042,17 @@ class DetectorNode(Node):
                 infer_frame, crop_state = self._crop.apply(frame)
             try:
                 detections = det.infer(infer_frame)
+                # B-XF1 diagnostic: what the model returned AT THE SOURCE,
+                # before any merge, crop remap or filtering. Throttled -- hot
+                # path.
+                self._infer_dbg = getattr(self, '_infer_dbg', 0) + 1
+                if self._infer_dbg % 150 == 1:
+                    self.get_logger().info(
+                        f'[DET  ] infer() returned {len(detections)} raw '
+                        f'detection(s) on {infer_frame.shape[1]}x'
+                        f'{infer_frame.shape[0]}'
+                        + (f', best {max(d.score for d in detections):.3f}'
+                           if detections else ''))
                 self._infer_fails = 0
             except Exception as exc:
                 self._on_infer_failure(exc)

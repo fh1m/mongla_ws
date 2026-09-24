@@ -4648,3 +4648,47 @@ tracking result.
 **A rung is not verified until it has run on the vehicle.** Two defects, one of
 which silently disabled the rung and one of which silently ignored an operator
 parameter, survived the entire suite and died in the first two launches.
+
+---
+
+## 35. ⭐⭐ THE WHOLE LADDER, ON THE VEHICLE, LOSING NOTHING
+
+**2026-09-24.** `vision_pi.launch.py` with the forward camera, `yolov11n` on the
+Hailo, `lock_class:=person`, a person moving in frame. Every rung fired:
+
+```
+[DET  ] infer() returned 1 raw detection(s) on 640x360, best 0.901
+[LOCK ] detection=100%  follow=0%   anchor=0%   lost=0%
+[LOCK ] detection=97%   follow=3%   anchor=0%   lost=0%
+[LOCK ] detection=77%   follow=10%  anchor=14%  lost=0%
+```
+
+⭐ **`lost=0 %` for the whole run.** When the detector dropped to 77 %, the
+follower took 10 % and **the anchor took 14 %** — the ladder covering a real gap
+on real hardware, which is the entire point of the rung.
+
+And the bank built itself from live detections, with the enrolment reason
+visible per checkpoint:
+
+```
+checkpoint 1: 228 kp, bank 1/64, scale     <- scale coverage
+checkpoint 2: 545 kp, bank 2/64, scale
+checkpoint 3: 637 kp, bank 3/64, room      <- then "while there is room"
+checkpoint 6: 222 kp, bank 6/64, room
+```
+
+**Both enrolment triggers added today fire in the live loop**, in the order the
+bench predicted: scale coverage first while the bank is empty and the apparent
+size is changing, then room-filling.
+
+### What this closes
+
+| owed | state |
+|---|---|
+| §34: "a rung is not verified until it has run on the vehicle" | ✅ all four rungs exercised |
+| §29: enrolment policy fixes (1 ref → 11) | ✅ 6 checkpoints from a 70 s run |
+| §32: anchor sharing the chip with the detector | ✅ both ran together, detector kept inferring |
+
+⚠ **Still bench-only:** the loop-closure path (§24), the preloaded bank
+(`bank_forward`), `corroborate()` (§30/§31), and anything underwater. This was
+a person in air, in a room.

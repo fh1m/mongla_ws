@@ -271,6 +271,8 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `pool_depth_m` | `nan` | Water depth in metres. REQUIRED with flow:=true -- the node refuses to publish velocity without it. |
 | `tile_m` | `0.0` | Floor tile pitch in metres, measured on deck. 0 = OFF. Sets height from the floor and publishes the grid angle that bounds yaw drift. A wrong value rescales every height silently -- measure it. |
 | `caustics` | `true` | flow: erode sun caustics and refuse a bare floor under them (false = always track the raw floor; A/B switch) |
+| `bank_forward` | `` | checkpoint bank (.npz) preloaded into the FORWARD lock node, from tools/build_practice_bank.py. Empty learns live. A preloaded reference is trusted exactly like a live one -- it clears MIN_INLIERS or it does not answer. |
+| `bank_downward` | `` | checkpoint bank (.npz) preloaded into the DOWNWARD lock node -- places rather than props. |
 | `lane_lines` | `false` | Read the lane line (heading mod 180) for the yaw drift bound. OFF: a path marker is also a dark band. Enable on a floor with lanes and no markers. |
 | `medium` | `water` | The medium the VEHICLE is in. 'water' engages the flat-port rectification in flow_node, lock_node AND pnp_node; 'air' for a dry bench run. Was 'flow_medium' when only the flow node read it -- one value, so one argument, or the three drift apart and each reports a plausible number. |
 | `fwd_fps` | `0` |  |
@@ -430,7 +432,7 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `range_crop` | `-1` |
 | `vision_profile` | `''` |
 
-**`mongla_vision/lock_node.py`** — 11 parameters
+**`mongla_vision/lock_node.py`** — 12 parameters
 
 | parameter | default |
 |---|---|
@@ -439,6 +441,7 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `follow` | `True` |
 | `anchor` | `False` |
 | `anchor_model` | `''` |
+| `anchor_bank` | `''` |
 | `publish_hz` | `0.0` |
 | `anchor_hz` | `3.0` |
 | `full_authority_s` | `FULL_AUTHORITY_S` |
