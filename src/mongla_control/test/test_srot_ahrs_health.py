@@ -28,6 +28,7 @@ the fixture.
 """
 import math
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -66,7 +67,7 @@ class _FC(SrotFC):
         if key == 'ATTITUDE' and self._attitude:
             return _Msg(roll=0.0, pitch=0.0, yaw=0.0, rollspeed=0.0,
                         pitchspeed=0.0, yawspeed=0.0, time_boot_ms=1000,
-                        _timestamp=1.0)
+                        _timestamp=time.time())   # fresh: get_attitude gates on age
         if key == 'SCALED_IMU2' and self._imu:
             return _Msg(xacc=0, yacc=0, zacc=0, xgyro=0, ygyro=0, zgyro=0,
                         time_boot_ms=1000, _timestamp=1.0)
