@@ -3678,3 +3678,81 @@ this class of work (§19), so the Pi's own curve is owed before a large bank
 ships. And the signature was tested on FORWARD-camera clips; on a tiled floor
 the sweep expects place recognition to alias badly, so the downward camera
 needs its own number rather than this one.
+
+---
+
+## 21. ⚠ A reference does NOT decay to death — and a correction
+
+**2026-09-24.** §20 and the bank's own docstring were written around a claim
+that needs withdrawing.
+
+### 21.1 ⛔ The withdrawal
+
+§19.1 sampled four offsets (+1/3/5/8 s), found every clip's minimum at +8 s, and
+I read that as *"a reference decays with elapsed time; by 8 s it is close to
+worthless."* `tools/anchor_lifetime.py` sweeps the offset every second to 30 s,
+median over four start times per clip:
+
+| clip | half-life | T(<40 inliers) | T(<15 inliers) | inliers @ 1/5/10/20/30 s |
+|---|---|---|---|---|
+| mirpur_torpedo | 29.0 s | 30.0 s | **never** | 114, 26, 98, 35, 38 |
+| mirpur_torpedo_1 | 12.0 s | 26.0 s | **never** | 94, 30, 88, 36, 22 |
+| mirpur_gate | 6.0 s | 20.0 s | **never** | 210, 136, 58, 34, 24 |
+| octagon | 6.0 s | 6.0 s | **never** | 56, 56, 16, 20, 16 |
+| torpedo (clear) | 7.0 s | never | **never** | 318, 243, 102, 120, 68 |
+
+⛔ **No clip's reference ever falls below the 15-inlier bar and stays there,
+out to 30 seconds.** The curves oscillate — `mirpur_torpedo` reads 114 → 26 →
+98 → 35 → 38 — because the target leaves and re-enters view as the vehicle
+moves. **The +8 s column was a trough, not a trend**, and the decay claim is
+withdrawn.
+
+### 21.2 ⭐ What is true instead, and it is a better reason for the bank
+
+At any *instant* a single reference can sit deep in a trough (24 inliers), and a
+different viewpoint would not be. So the bank's value is **viewpoint diversity,
+not reference freshness** — which is also the only explanation that fits §20.2's
+result that the best of a 5-wide shortlist loses just **1.9 %** of inlier yield.
+If references decayed, the newest would dominate and a shortlist would be
+lossy; it is not.
+
+⚠ **Consequence for the meta-updater:** refreshing on a decay *trend* would fire
+on troughs and churn the bank. `T(<40)` is 6–30 s, so the cadence is slow, and
+what a new checkpoint should buy is a viewpoint the bank does not already hold.
+The shipped `REFRESH_INLIERS = 40` trigger is therefore **over-eager on this
+evidence** and is flagged for re-derivation against a diversity criterion.
+
+### 21.3 ⭐ Can the bank be PRELOADED from practice? Yes — for props
+
+The operator's question: references taken before the run, reused on it. The
+archive holds pairs of separate runs over one venue and prop, which is the
+closest available analogue. `tools/anchor_cross_run.py`, 8 references from clip
+A matched against 12 frames of clip B:
+
+| bank from | queried on | median | p10 | over the bar |
+|---|---|---|---|---|
+| mirpur_torpedo | mirpur_torpedo | 112 | 81 | 100 % *(control)* |
+| mirpur_torpedo | **mirpur_torpedo_1** | 57 | 20 | **92 %** |
+| torpedo_up_1 | torpedo_up_1 | 280 | 123 | 100 % *(control)* |
+| torpedo_up_1 | **torpedo_up_2** | 155 | 27 | **100 %** |
+| octagon_1 | octagon_1 | 53 | 25 | 100 % *(control)* |
+| octagon_1 | **octagon_2** | 11 | 10 | ⛔ **8 %** |
+
+⭐ **A reference from one run locks a different run of the same prop**, at 92 %
+and 100 % of frames over the trust bar. That is the evidence preloading needed.
+
+⛔ **And it fails on `octagon`, at 8 %** — a generic structural view rather than
+a distinctive rigid prop, which is the self-similarity case the feature sweep
+predicted would alias. **So preloading is a per-target capability, not a
+per-vehicle one**, and a preloaded bank must prove itself through the same
+inlier bar as a live one rather than being trusted because it was prepared.
+
+### The bar
+
+**A preloaded reference is trusted only through `MIN_INLIERS`, exactly like a
+live one.** Preloading changes where a checkpoint comes from, never what it has
+to prove.
+
+⚠ **What this does NOT establish:** both runs in each pair share a day, water
+and lighting. A practice session on another day, or another pool, is a larger
+domain shift than this measures. Necessary evidence, not sufficient.
