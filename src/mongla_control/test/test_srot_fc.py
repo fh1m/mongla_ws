@@ -261,7 +261,7 @@ def test_telemetry_decodes_attitude_depth_and_mode():
     now = time.time()
     fc.master.messages['HEARTBEAT'] = SimpleNamespace(
         base_mode=_ARMED, custom_mode=sp.MODE_AUTO, _timestamp=now)
-    fc.master.messages['ATTITUDE'] = SimpleNamespace(
+    fc.master.messages['ATTITUDE'] = SimpleNamespace(_timestamp=time.time(), 
         yaw=math.radians(90.0), roll=0.0, pitch=0.0)
     fc.master.messages['VFR_HUD'] = SimpleNamespace(alt=-2.5)   # alt = -depth
     fc.master.messages['BATTERY_STATUS'] = SimpleNamespace(voltages=[16000])
@@ -347,7 +347,7 @@ def test_manual_coerces_nonfinite_axis_to_neutral():
 # --------------------------------------------------------------------------- #
 def test_get_attitude_returns_degrees_dict():
     fc = _fc()
-    fc.master.messages['ATTITUDE'] = SimpleNamespace(
+    fc.master.messages['ATTITUDE'] = SimpleNamespace(_timestamp=time.time(), 
         yaw=math.radians(45.0), roll=0.0, pitch=0.0)
     fc.master.messages['VFR_HUD'] = SimpleNamespace(alt=-1.2)
     att = fc.get_attitude()
@@ -363,7 +363,7 @@ def test_depth_sign_matches_pixhawk_convention():
     compares against a NEGATIVE constant, so a positive-down reading did not
     error -- it silently stopped every one of them from ever firing."""
     fc = _fc()
-    fc.master.messages['ATTITUDE'] = SimpleNamespace(yaw=0.0, roll=0.0, pitch=0.0)
+    fc.master.messages['ATTITUDE'] = SimpleNamespace(_timestamp=time.time(), yaw=0.0, roll=0.0, pitch=0.0)
     for board_depth_m in (0.5, 2.0, 8.0):
         # The board sends alt = -depth (fw mav_stream.cpp:210-218).
         fc.master.messages['VFR_HUD'] = SimpleNamespace(alt=-board_depth_m)
@@ -421,7 +421,7 @@ def test_get_angular_rates_uses_rate_suffixed_keys():
     # The manager's _imu_rates_tick reads rates['pitch_rate'] etc. -- a key mismatch
     # crashes the 50 Hz timer (it did, on the first live connect).
     fc = _fc()
-    fc.master.messages['ATTITUDE'] = SimpleNamespace(
+    fc.master.messages['ATTITUDE'] = SimpleNamespace(_timestamp=time.time(), 
         yaw=0.0, roll=0.0, pitch=0.0, rollspeed=0.1, pitchspeed=0.2, yawspeed=0.3)
     r = fc.get_angular_rates()
     assert r['pitch_rate'] == pytest.approx(0.2)
@@ -1309,7 +1309,7 @@ def test_depth_is_suppressed_when_the_board_calls_the_barometer_unhealthy():
     through published a confident 0.00 m depth on /mongla/state and into every depth
     guard, all of which compare against negative constants and would just stop firing."""
     fc = _fc()
-    fc.master.messages['ATTITUDE'] = SimpleNamespace(roll=0.0, pitch=0.0, yaw=0.0)
+    fc.master.messages['ATTITUDE'] = SimpleNamespace(_timestamp=time.time(), roll=0.0, pitch=0.0, yaw=0.0)
     fc.master.messages['VFR_HUD'] = SimpleNamespace(alt=-0.0, heading=160)
     fc.master.messages['SYS_STATUS'] = _sys_status(False)
     assert math.isnan(fc.get_attitude()['depth'])
@@ -1318,7 +1318,7 @@ def test_depth_is_suppressed_when_the_board_calls_the_barometer_unhealthy():
 
 def test_depth_passes_through_when_the_barometer_is_healthy():
     fc = _fc()
-    fc.master.messages['ATTITUDE'] = SimpleNamespace(roll=0.0, pitch=0.0, yaw=0.0)
+    fc.master.messages['ATTITUDE'] = SimpleNamespace(_timestamp=time.time(), roll=0.0, pitch=0.0, yaw=0.0)
     fc.master.messages['VFR_HUD'] = SimpleNamespace(alt=-1.5, heading=160)
     fc.master.messages['SYS_STATUS'] = _sys_status(True)
     assert fc.get_attitude()['depth'] == pytest.approx(-1.5)
@@ -1329,7 +1329,7 @@ def test_depth_is_not_blanked_before_the_first_sys_status_arrives():
     SYS_STATUS yet" are different. Treating the second as unhealthy would blank depth
     for the first half-second of every connection."""
     fc = _fc()
-    fc.master.messages['ATTITUDE'] = SimpleNamespace(roll=0.0, pitch=0.0, yaw=0.0)
+    fc.master.messages['ATTITUDE'] = SimpleNamespace(_timestamp=time.time(), roll=0.0, pitch=0.0, yaw=0.0)
     fc.master.messages['VFR_HUD'] = SimpleNamespace(alt=-2.0, heading=160)
     assert fc.get_attitude()['depth'] == pytest.approx(-2.0)
 
@@ -1338,7 +1338,7 @@ def test_the_heading_matches_the_boards_own_0_360_convention():
     """The board's OLED and VFR_HUD.heading both wrap to 0..360, and so must we --
     a signed -162 beside the board's 197 is the same angle read two ways."""
     fc = _fc()
-    fc.master.messages['ATTITUDE'] = SimpleNamespace(
+    fc.master.messages['ATTITUDE'] = SimpleNamespace(_timestamp=time.time(), 
         roll=0.0, pitch=0.0, yaw=math.radians(-162.23))
     assert fc.get_attitude()['yaw'] == pytest.approx(197.77, abs=0.01)
 
