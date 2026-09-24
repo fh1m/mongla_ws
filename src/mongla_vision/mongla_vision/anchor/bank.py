@@ -108,11 +108,26 @@ BUDGET_FRACTION = 0.45
 # doubtful frame out of long-term memory.
 CONF_FLOOR = 0.60
 
-# Ask for a refresh while the match is still comfortably above the trust bar.
-# 40 against MIN_INLIERS=15: the point is to take the new photograph BEFORE the
-# old one stops working, and the measured decay is steep enough (189 -> 24 over
-# 8 s) that waiting for 15 means waiting until the rung has already failed.
-REFRESH_INLIERS = 40
+# Ask for a new checkpoint while the best one is still working.
+#
+# ⚠ RE-DERIVED TWICE, AND BOTH EARLIER VALUES WERE WRONG FOR PRODUCTION.
+# The first (40) was reasoned from a decay that §21.1 then withdrew -- the
+# curves oscillate rather than decay, so a threshold near the typical match
+# fires on troughs and churns the bank. The second problem is the one §22.2
+# found: every bar here was swept on WHOLE-FRAME references (1024 keypoints),
+# while `lock_node` enrols with `roi=det_box` and those carry a median of 376.
+#
+# Measured on production-shaped references -- cropped to a real detector box,
+# queried against whole live frames:
+#
+#     same run                p50  52
+#     same prop, other run    p50  40
+#     other prop              p50  25
+#
+# 25 sits below what a working match returns and at what a wrong one does, so
+# it fires when the bank is genuinely running out of usable viewpoints rather
+# than on every trough.
+REFRESH_INLIERS = 25
 
 # ⛔ THE BAR FOR ASSERTING AN IDENTITY, which is NOT the bar for tracking.
 #
@@ -129,13 +144,30 @@ REFRESH_INLIERS = 40
 #
 # Swept on same-prop-other-run vs other-prop-same-venue:
 #
-#     bar 15: keeps 100 % of true, admits 100 % of false   <- shipped
+#     bar 15: keeps 100 % of true, admits 100 % of false
 #     bar 40: keeps  64 %,          admits  14 %
-#     bar 60: keeps  57 %,          admits   0 %           <- this
+#     bar 60: keeps  57 %,          admits   0 %
 #
-# Rejecting 43 % of true frames is the right trade: a missed re-acquisition
-# costs a second, a false one costs the run.
-IDENTITY_INLIERS = 60
+# ⛔ THAT SWEEP USED WHOLE-FRAME REFERENCES AND PRODUCTION DOES NOT.
+# `lock_node` enrols with `roi=det_box`, so a shipped reference holds only the
+# keypoints inside the box -- measured median 376 against 1024. Re-swept on
+# production-shaped references (`tools/anchor_roi_bars.py`):
+#
+#     bar 15: keeps  86 % of true, admits  93 % of false
+#     bar 30: keeps  64 %,          admits  21 %
+#     bar 40: keeps  64 %,          admits   7 %          <- this
+#     bar 60: keeps  14 %,          admits   0 %          <- was shipped
+#
+# ⛔ At 60 a true re-acquisition fires on 14 % of frames, i.e. essentially
+# never, and nothing would log a fault. That is the failure direction that
+# hides: a capability that silently does not work.
+#
+# ⚠ 40 admits 7 % of other-prop frames rather than 0 %, and that is deliberate:
+# `recognise()` does not decide on geometry alone. The detector must also agree
+# on the class, and its failure mode is missing things rather than confusing
+# them -- so a 7 % geometric false rate meets a semantic check that does not
+# correlate with it.
+IDENTITY_INLIERS = 40
 
 # How stale a detector hypothesis may be and still corroborate an identity.
 # ⭐ THE DETECTOR IS THE IDENTITY AUTHORITY, not the bank. Its failure mode is

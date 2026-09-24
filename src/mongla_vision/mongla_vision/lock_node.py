@@ -246,6 +246,9 @@ class LockNode(Node):
         # search is restricted to it -- otherwise "where is the gate" could be
         # answered by a torpedo board that happened to match better.
         self._anchor_label = ''
+        # Earliest monotonic time another enrolment may be ATTEMPTED. See the
+        # throttle note at the enrol site.
+        self._anchor_enrol_next = 0.0
         self._anchor_pose = None
         self._anchor_next = 0.0
         self._anchor_period = 1.0 / max(
@@ -677,8 +680,23 @@ class LockNode(Node):
                   # per frame to learn what we just measured.
                   stale = (self._anchor.has_reference
                            and self._anchor_inliers < self._anchor._refresh)
-                  if det_box is not None and (not self._anchor.has_reference
-                                              or stale):
+                  # ⛔ THROTTLED, AND NOT FOR TIDINESS. `enrol()` runs a full
+                  # `locate()` to decide whether a candidate agrees with the
+                  # bank, and a candidate that keeps being REFUSED leaves
+                  # `stale` true -- so an unthrottled path retries that match on
+                  # every detection frame. Measured cost of one match on the Pi
+                  # is 31.4 ms and the shortlist is several, which lands
+                  # ~124 ms of matching inside the loop that publishes /lock,
+                  # against a measured 53.6 Hz floor. The refusal case is
+                  # exactly when the vehicle can least afford it.
+                  #
+                  # One attempt per anchor period: enrolling faster than the
+                  # bank is evaluated cannot help, because nothing has changed
+                  # its mind in between.
+                  may_try = now >= self._anchor_enrol_next
+                  if det_box is not None and may_try and (
+                          not self._anchor.has_reference or stale):
+                      self._anchor_enrol_next = now + self._anchor_period
                       # THE FRAME THE BOX BELONGS TO, not merely the newest.
                       # This patch becomes the object model, so pairing it with
                       # the wrong frame scales every range that follows.
