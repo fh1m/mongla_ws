@@ -4144,3 +4144,74 @@ can license an identity on a preloaded checkpoint.
 run 57 (§21.3), other session 23–25, other year 11–12. Each step of domain
 shift costs roughly half. Useful for deciding how fresh a practice bank has to
 be: **same day is worth a great deal; last year is worth nothing.**
+
+---
+
+## 28. ⭐⭐ XFeat runs on the Hailo-8 — 701 FPS, and the bottleneck moves
+
+**2026-09-24.** The chip arm, measured. No FPS figure for XFeat on Hailo-8 is
+published anywhere we could find, so this is a new number.
+
+### 28.1 Getting it to compile
+
+⛔ **Stock XFeat does not parse**: `UnsupportedShuffleLayerError` on 71
+Transposes. The graph carries 71 Transposes, 72 Slices and 70 Unsqueezes, all
+5-D — and they are **one operation**, `XFeatModel._unfold2d(x, ws=8)`, written
+with `Tensor.unfold`, which torch traces as a pile of 5-D slicing.
+
+⭐ **That operation is space-to-depth**, which torch has as `pixel_unshuffle`
+and Hailo supports natively. The substitution is **not an approximation**:
+
+| check | result |
+|---|---|
+| `unfold` vs `pixel_unshuffle`, random input | `torch.equal` **True** |
+| whole network, all three heads, 320×240 | max abs diff **0.000e+00** |
+| whole network, all three heads, 640×480 | max abs diff **0.000e+00** |
+
+`tools/xfeat_export_hailo.py` re-runs that check and **refuses to write** if it
+fails. A graph that compiles but computes something slightly different would
+surface later as a worse match rate and be blamed on quantisation.
+
+Quantised INT8 on the **320 real pool calibration frames** (never sim imagery).
+
+### 28.2 The number
+
+`hailortcli run`, Hailo-8, firmware 4.24.0, batch 1, 8419 frames:
+
+| | rate | per frame |
+|---|---|---|
+| XFeat 320×240 **on the Hailo-8** | **701.22 FPS** | **1.43 ms** |
+| XFeat 320×240 on the Pi CPU (§19) | 30.2 Hz | 33.1 ms |
+
+⭐ **23× the Pi's CPU.** And ⭐ **it compiled SINGLE-CONTEXT** — which is the
+condition §14 said the chip arm needed: single-context pipelines measured
+2.74–4.25× while multi-context was flat at 1.00×.
+
+### 28.3 ⛔ What it does NOT buy, which is most of it
+
+**Only the backbone is on the chip.** Keypoint decoding, NMS, top-k sampling,
+descriptor interpolation and **the matcher** all run in numpy on the CPU. The
+match is the expensive half — 31.4 ms per reference on the Pi (§20) — and it is
+untouched.
+
+| path | CPU only | with the HEF |
+|---|---|---|
+| one `locate()`, 1 reference | 33.1 + 31.4 = **64.5 ms** | 1.4 + 31.4 = **32.8 ms** |
+| bank, shortlist k=4 | 33.1 + 125.6 = **158.7 ms** | 1.4 + 125.6 = **127.0 ms** |
+
+⭐ **The saving is a fixed ~31.7 ms regardless of bank size**, so the larger the
+shortlist, the smaller the relative win: 2.0× at one reference, 1.25× at four.
+
+⚠ **The bottleneck has moved from the detector to the MATCHER.** Any further
+speed comes from the similarity matmul, not the network. That reframes the next
+optimisation entirely.
+
+### 28.4 Owed before this is usable
+
+- ⛔ **Accuracy through INT8 is UNMEASURED.** A HEF that compiles is not a
+  result; a HEF that still reads 4/4 on the murky clips is. `torpedo_1` at 12
+  inliers against a bar of 15 (§19.1) is the canary.
+- ⚠ `hailortcli run` is a synthetic throughput test with no host work and no
+  competing load. **Sharing the chip with the detector is unmeasured** — the
+  detector must stay above 90 Hz.
+- ⚠ 701 FPS is throughput, not latency under our own pipeline.
