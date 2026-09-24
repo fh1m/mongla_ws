@@ -364,3 +364,19 @@ def test_the_gate_counter_is_published_not_silent():
     # and a position fix is NOT counted as gated -- it is applied, uncoupled
     f.update_position([0.0, 0.0], sigma=0.5)
     assert f.gated == 2
+
+
+def test_rotate_world_yaw_turns_the_state_AND_its_covariance():
+    """A frame change, not a measurement: R, v, p turn by Rz, biases (body
+    frame) do not, and the covariance turns with them -- a position
+    uncertainty long along world x must be long along world y after +90."""
+    f = RIEKF(state=State(v=np.array([1.0, 0.0, 0.0]),
+                          p=np.array([2.0, 0.0, 0.5]),
+                          bg=np.array([0.01, 0.0, 0.0])))
+    f.P[6, 6], f.P[7, 7] = 4.0, 0.01
+    f.rotate_world_yaw(90.0)
+    assert f.X.yaw_deg() == pytest.approx(90.0, abs=1e-9)
+    assert np.allclose(f.X.v, [0.0, 1.0, 0.0], atol=1e-12)
+    assert np.allclose(f.X.p, [0.0, 2.0, 0.5], atol=1e-12)
+    assert np.allclose(f.X.bg, [0.01, 0.0, 0.0])
+    assert f.P[7, 7] == pytest.approx(4.0) and f.P[6, 6] == pytest.approx(0.01)
