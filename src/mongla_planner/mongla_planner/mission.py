@@ -27,6 +27,7 @@ import time
 
 import rclpy
 from rclpy.node import Node
+from rclpy.signals import SignalHandlerOptions
 
 from .client      import MonglaClient
 from .mongla_dsl  import MonglaMission
@@ -131,7 +132,11 @@ def main(args=None):
               file=sys.stderr)
         sys.exit(2)
 
-    rclpy.init()
+    # ⛔ NO rclpy SIGINT handler. rclpy's default one SHUTS THE CONTEXT DOWN on
+    # Ctrl-C, so the abort path below cannot publish a cancel, stop or
+    # disarm -- measured: `publisher's context is invalid`. Python's own
+    # handler still raises KeyboardInterrupt; the context stays usable.
+    rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     node   = Node('mongla_mission_runner')
     log    = node.get_logger()
     client = MonglaClient(node)

@@ -27,6 +27,7 @@ import sys
 
 import rclpy
 from rclpy.node import Node
+from rclpy.signals import SignalHandlerOptions
 
 from mongla_control import COMMANDS
 from mongla_control.commands import BOOL_FIELDS, STRING_FIELDS
@@ -125,7 +126,11 @@ def _fields_from_args(cmd, args):
 def main():
     args = _build_parser().parse_args()
 
-    rclpy.init()
+    # ⛔ NO rclpy SIGINT handler. rclpy's default one SHUTS THE CONTEXT DOWN on
+    # Ctrl-C, so the abort path below cannot publish a cancel, stop or
+    # disarm -- measured: `publisher's context is invalid`. Python's own
+    # handler still raises KeyboardInterrupt; the context stays usable.
+    rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     node   = Node('mongla_cli')
     mongla = MonglaClient(node)
 
