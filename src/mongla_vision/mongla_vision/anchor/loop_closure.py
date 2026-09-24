@@ -56,7 +56,77 @@ OFFSET_ERR_PX = 3.0
 # A place must be labelled as one. A bank can hold props, checkpoints and
 # places; a prop is not a position, and today's forward bank is full of crops
 # of a PERSON who walks about.
-PLACE_PREFIX = 'place:'
+#
+# ⚠ ONE shared label, not one per place. `CheckpointBank.locate(label=...)`
+# filters by EQUALITY, so 'place:0', 'place:1' ... would each be searched
+# alone and a revisit would never find its neighbours. Which place it was is
+# already answered by the winning reference's index and its stored position.
+PLACE_LABEL = 'place'
+PLACE_PREFIX = PLACE_LABEL + ':'
+
+
+def is_place(label) -> bool:
+    """Exactly the shared label, or a namespaced variant of it."""
+    t = str(label or '')
+    return t == PLACE_LABEL or t.startswith(PLACE_PREFIX)
+
+
+# --------------------------------------------------------------------------- #
+#  When to REMEMBER a place. Separate from when to trust one.
+# --------------------------------------------------------------------------- #
+
+# Enrol on a cadence OR on displacement, whichever comes first -- the pair from
+# `tracker_v9/place_memory.py`, which used displacement alone and therefore
+# never recorded a new place while holding station over changing ground.
+PLACE_PERIOD_S = 5.0
+PLACE_TRAVEL_M = 1.0
+
+
+class PlaceLog:
+    """Decides when the downward camera should remember where it is.
+
+    Pure, so the policy can be tested without a camera, a pool or a filter.
+    Holds only what the decision needs: when and where the last place was
+    taken, and how far the vehicle has gone since.
+    """
+
+    def __init__(self, period_s: float = PLACE_PERIOD_S,
+                 travel_m: float = PLACE_TRAVEL_M):
+        self.period_s = float(period_s)
+        self.travel_m = float(travel_m)
+        self._last_t = None
+        self._last_xy = None
+
+    def should_enrol(self, now: float, xy) -> bool:
+        """⛔ A place with no position is worthless: it can never be a fix.
+
+        So unlike a prop checkpoint, an unlocalised frame is NOT enrolled. The
+        bank would accept it happily and it would occupy a slot that can never
+        answer the only question places are for.
+        """
+        if xy is None:
+            return False
+        if self._last_t is None:
+            return True                     # the first one, unconditionally
+        if (now - self._last_t) >= self.period_s:
+            return True
+        if self._last_xy is not None:
+            dx = float(xy[0]) - self._last_xy[0]
+            dy = float(xy[1]) - self._last_xy[1]
+            if (dx * dx + dy * dy) >= self.travel_m ** 2:
+                return True
+        return False
+
+    def note(self, now: float, xy) -> None:
+        self._last_t = float(now)
+        self._last_xy = None if xy is None else (float(xy[0]), float(xy[1]))
+
+    def travel_since(self, xy) -> float:
+        """Distance from the last enrolment, for the closure's travel gate."""
+        if xy is None or self._last_xy is None:
+            return 0.0
+        return float(((float(xy[0]) - self._last_xy[0]) ** 2
+                      + (float(xy[1]) - self._last_xy[1]) ** 2) ** 0.5)
 
 
 @dataclass(frozen=True)
@@ -126,7 +196,7 @@ def consider(pose, *, ref_age_s: float, travel_m: float, ref_sigma_m: float,
     """
     if pose is None or not getattr(pose, 'ok', False):
         return Closure(False, 'no match')
-    if not str(pose.label or '').startswith(PLACE_PREFIX):
+    if not is_place(pose.label):
         return Closure(False, f'not a place ({pose.label!r})')
     if pose.ref_position is None:
         return Closure(False, 'reference has no position -- nothing passed '

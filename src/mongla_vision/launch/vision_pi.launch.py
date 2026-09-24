@@ -373,6 +373,19 @@ def generate_launch_description():
         DeclareLaunchArgument('fwd_publish_hz', default_value='40'),
         DeclareLaunchArgument('dwn_publish_hz', default_value='0'),
         DeclareLaunchArgument(
+            'loop_closure', default_value='false',
+            description='DOWNWARD camera: remember places and offer a '
+                        'recognised one to the localisation filter as a '
+                        'position fix on /mongla/localization/fix. OFF by '
+                        'default -- it is the only vision path that reaches '
+                        'the filter, and a wrong fix is not merely wrong, the '
+                        'filter shrinks its covariance around it. Needs '
+                        'pool_depth_m, or every closure is refused for want '
+                        'of an altitude.'),
+        DeclareLaunchArgument('place_period_s', default_value='5.0'),
+        DeclareLaunchArgument('place_travel_m', default_value='1.0'),
+        DeclareLaunchArgument('pool_depth_m', default_value='0.0'),
+        DeclareLaunchArgument(
             'replay', default_value='false',
             description='Consume image_raw from a RECORDED BAG instead of a '
                         'camera. Build no camera, keep every detector, and let '
@@ -483,6 +496,15 @@ def generate_launch_description():
                 # pixels scaled to metres); pnp_node rectifies the image side.
                 # Two nodes, one value, one launch argument.
                 'medium':       LaunchConfiguration('medium'),
+                # ⛔ Passed to BOTH ladders, and refused inside lock_node on
+                # anything but the downward camera. A forward bank holds
+                # TARGETS, and a target that moves is not a place -- the
+                # refusal is logged rather than silent, because a loop-closure
+                # path that never fires looks exactly like one that is off.
+                'loop_closure':   LaunchConfiguration('loop_closure'),
+                'place_period_s': LaunchConfiguration('place_period_s'),
+                'place_travel_m': LaunchConfiguration('place_travel_m'),
+                'pool_depth_m':   LaunchConfiguration('pool_depth_m'),
             }],
             condition=IfCondition(LaunchConfiguration('lock')),
         )
