@@ -5996,3 +5996,63 @@ never be read as a permissive one.
 dominant gap cause. A prop that dims into turbidity may produce a different
 weak-box distribution, and the 3.00× wants re-measuring in water. The tools
 (`gap_recovery_potential.py`, `weak_box_locality.py`) run against any bag.
+
+---
+
+## 57. ⭐⭐ BEFORE THE MODEL RUNS: THE CAMERA IS ARGUING WITH ITSELF
+
+**2026-09-25, live on the vehicle.** Every measurement in this repo — detector
+confidence, XFeat inliers, the turbidity proxy, bank references — is computed
+on pixels **the camera decided the values of**. Nobody had asked what the
+camera's own automatic loops were doing to them.
+
+Read from the real device:
+
+```
+white_balance_automatic      value=1     AWB running
+auto_exposure                value=3     Aperture Priority, NOT manual
+exposure_dynamic_framerate   value=1     the camera may change FRAME RATE
+```
+
+⛔ **Nothing in `mongla_vision` touches white balance at all**, and
+`exposure_dynamic_framerate=1` lets the camera silently drop frame rate in dim
+water — while every rung of the lock ladder is sized in **seconds**, so a
+halved rate halves how many detections fit inside `coast_s`.
+
+### Measured, static scene, camera still
+
+| | luma peak-to-peak | R/B peak-to-peak | fps |
+|---|---|---|---|
+| **auto** | **2.42** | 0.0000 | 35.4 (min 30.5) |
+| **fixed** | **0.16** | 0.0000 | 35.3 (min 30.2) |
+
+⭐ **Auto-exposure injects 15.5× more luma drift into a scene that is not
+moving.** XFeat descriptors are intensity-derived, so a bank reference that
+never moved still changes appearance frame to frame. That is noise entering
+every intensity-derived number we take, from a source none of them account for.
+
+### ⛔ And the run answered a different question than it asked
+
+**R/B is exactly 1.0000 with zero variance in both arms — the forward camera is
+delivering MONO.** AWB is therefore moot on this camera: there is no colour to
+balance. That is consistent with the standing finding that the forward camera
+needs a colour variant, and it means the AWB half of this concern is
+**unfalsifiable on the current hardware**, not disproven.
+
+⚠ **The luma number is from a static indoor scene, which is the easy case.**
+Under a moving vehicle in changing water, an auto-exposure loop has far more to
+chase. The claim that it matters *underwater* is unmeasured, and
+`tools/camera_auto_loops.py` re-runs against any camera to settle it.
+
+⚠ Also note `FIXED` read luma 59.55 against `AUTO`'s 119.27 — manual mode
+inherited `exposure_time_absolute=157` and simply underexposed. A shipped fix
+must set the exposure, not merely disable the loop;
+`webcam.blur_capped_exposure()` already computes the right value and is the
+place to do it.
+
+### What this earns
+
+⭐ **The class of question is the finding.** Every measurement so far has been
+taken *downstream* of acquisition, and acquisition has its own control loops
+with their own objectives — objectives that are not ours. Before trusting any
+pixel-derived number, ask what the camera decided before handing it over.
