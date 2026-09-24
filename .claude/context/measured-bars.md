@@ -4096,3 +4096,51 @@ were right by luck, but because the alternatives were measured and lose.
 measurement of the rung, because the rung spends its budget on a *bank*. Price a
 setting in the currency the system actually spends — here, milliseconds against
 a 333 ms period — before adopting it.
+
+---
+
+## 27. ⭐ Preloading across SESSIONS: works for position, not for identity
+
+**2026-09-24.** §21.3 measured preloading across two runs *on one day* (92 %,
+100 % over the trust bar). Two harder cases now, both on the 2026 archive.
+
+### 27.1 ⛔ Across YEARS it fails completely — and that is the props changing
+
+Bank from 2025 footage, queried on 2026 footage of the "same" prop:
+
+| prop | 2025 p50 (control) | 2026 p50 | ≥15 | ≥40 |
+|---|---|---|---|---|
+| torpedo | 194 | **12** | 29 % | 0 % |
+| gate | 327 | **11** | 0 % | 0 % |
+| octagon | 54 | **10** | 0 % | 0 % |
+
+⚠ **This is not a preloading result.** The props are rebuilt between years, so
+this measures how different they are, and the answer is *completely* — the
+cross-year score is indistinguishable from the wrong-prop score. **Operational
+rule: a preloaded bank is year- and venue-specific and must be rebuilt.**
+
+### 27.2 ⭐ Same prop, same year, different session — the real practice case
+
+Bank from one 2026 session, queried on a *different* 2026 session:
+
+| prop | same session | other session p50 | p90 | ≥15 | ≥40 | other prop p50 / ≥40 |
+|---|---|---|---|---|---|---|
+| torpedo | 150 | **23** | 31 | **100 %** | ⛔ 12 % | 12 / 0 % |
+| gate | 167 | **25** | 26 | **100 %** | ⛔ 0 % | 9 / 0 % |
+
+⭐ **Every frame clears the TRACKING bar (15). Almost none clears the IDENTITY
+bar (40).** And the wrong prop is rejected outright — p50 9–12, 0 % over 40.
+
+### The bar, and it confirms the architecture rather than changing it
+
+**A preloaded bank supplies POSITION across sessions and must not assert
+IDENTITY.** That is exactly the division `recognise()` already enforces:
+geometry ≥ 40 *and* a detector hypothesis of the same class *and* plausible
+attitude. A preloaded reference will normally fail the geometry half across
+sessions, so the detector's opinion is not a nicety — it is the only thing that
+can license an identity on a preloaded checkpoint.
+
+⚠ **Degradation is graded, not binary**: same run p50 150–167, same day other
+run 57 (§21.3), other session 23–25, other year 11–12. Each step of domain
+shift costs roughly half. Useful for deciding how fresh a practice bank has to
+be: **same day is worth a great deal; last year is worth nothing.**
