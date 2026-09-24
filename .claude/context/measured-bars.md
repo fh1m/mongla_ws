@@ -5145,3 +5145,56 @@ they would watch for a change that never loaded.
 `ladder('forward')` and `ladder('downward')` both run with `anchor: True`, and
 today's replay exercised both (`lock_node-4` and `-5`). What is new is that the
 **downward** bank now feeds localisation rather than only the lock ladder.
+
+---
+
+## 41. ⭐⭐ THE LOOP-CLOSURE TRUTH TEST — THE BAR HOLDS ON REAL WATER
+
+**2026-09-24.** `tools/loop_closure_truth.py`, three real downward clips
+(`octagon_1`, `octagon_Bottom`, `bin`), the shipped bank and the shipped
+`consider()`. Two arms, because a closure has two opposite ways to be wrong.
+
+### ⛔ The arm that sets the bar: cross-clip
+
+A bank built from clip A, replayed against clip B. **Every closure here is
+false by construction** — the vehicle has never been in venue B's pool holding
+venue A's map — so this needs no ground truth, which is exactly why the bar is
+set from it.
+
+```
+worst FALSE closures, per bar, over all six ordered pairs
+   15: 24     40: 2     60: 0     80: 0     100: 0     120: 0     150: 0
+```
+
+⭐ **Zero false closures at 60 and above. The shipped bar is 100**, clean with
+**1.67× margin.**
+⛔ **The 15-inlier TRACKING bar would have produced 24 false position fixes.**
+That is the whole argument for a separate bar, measured rather than asserted:
+§24 predicted it from the far-tail distribution, and this is it happening.
+
+### The other arm: same clip, second half against a bank from the first
+
+| clip | best inliers | closures at the shipped bar (of 40 probes) |
+|---|---|---|
+| `bin` | 686 | **11** |
+| `octagon_Bottom` | 643 | **4** |
+| `octagon_1` | 511 | **1** |
+
+⚠ **A same-clip closure cannot be proven to be a real revisit** — there is no
+ground-truth trajectory for this footage, and a revisit and an alias produce
+the same evidence. So this arm reports a rate, not a verdict. What it does show
+is that the bar is not so high that nothing ever fires.
+
+### ⛔ A defect in the test itself, caught by an impossible number
+
+The first run reported `octagon_1: best=511` and **zero** closures at bar 40 —
+impossible, since 511 clears 40. The cause was `EXCLUDE_NEWEST = 2` against a
+**12-reference** bank: it removed indices 10–11, which for a clip probed just
+after its bank was built are precisely the references the frames resemble. The
+self-closure guard is right in production (a 64-slot bank grown over a run) and
+wrong as a harness default, so the evidence arm now stands it down and says so.
+
+⚠ **Worth carrying forward:** `exclude_newest` is a fraction of a small bank.
+At 64 references it removes 3 %; at 12 it removes 17 % and the most relevant
+ones. If a pool day starts with a nearly-empty bank, this is the gate that will
+make it look like loop closure does not work.
