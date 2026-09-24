@@ -421,6 +421,42 @@ class RIEKF:
         H[:, 0:3] = np.eye(3)
         return self._apply(H, err, np.eye(3) * (math.radians(sigma_deg) ** 2))
 
+    # ── re-expressing the world frame ────────────────────────────────────────
+    def rotate_world_yaw(self, delta_deg: float) -> None:
+        """Re-express the whole estimate in a world frame yawed by `delta_deg`.
+
+        ⛔ NOT A MEASUREMENT, AND IT MUST NOT BE ONE. The heading anchor does
+        not tell the filter something uncertain about the hull -- it tells it
+        that the AXES everything has been written in were boot-relative, and by
+        exactly how much. Feeding that through `update_yaw` puts a frame change
+        through the chi-square gate, where any offset over a few degrees is
+        rejected against the board's 0.5 deg attitude, and even an accepted
+        one is dragged back by the next 50 Hz attitude update.
+
+        So the state is rotated, deterministically: X <- G X with
+        G = (Rz(delta), 0, 0). R, v and p are world-frame and all turn; the
+        biases are BODY-frame and do not. The right-invariant error
+        eta = X_hat X^-1 becomes G eta G^-1, i.e. Ad_G, which for a pure
+        rotation is Rz on each of the theta, v and p blocks -- the covariance
+        turns with the state rather than keeping the old frame's axes.
+
+        Position turns about the WORLD ORIGIN, which is wherever the filter
+        started: the path flown so far is re-expressed in the new axes, not
+        moved. The origin is still not the pool's until a fix arrives.
+        """
+        a = math.radians(float(delta_deg))
+        c, s = math.cos(a), math.sin(a)
+        G = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
+        self.X.R = G @ self.X.R
+        self.X.v = G @ self.X.v
+        self.X.p = G @ self.X.p
+        T = np.eye(self.DIM)
+        T[0:3, 0:3] = G
+        T[3:6, 3:6] = G
+        T[6:9, 6:9] = G
+        self.P = T @ self.P @ T.T
+        self.P = 0.5 * (self.P + self.P.T)
+
     # ── the correction itself ────────────────────────────────────────────────
     def _apply(self, H, y, R_noise) -> bool:
         """One correction. Returns False if the measurement was REJECTED.
