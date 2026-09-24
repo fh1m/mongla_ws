@@ -89,3 +89,5 @@ something it is not. Code beats docs; a measurement beats both — see
 53. [Legacy: the Pixhawk backend and ArduSub SITL](platform/legacy-pixhawk-and-sitl.md)
 54. [RoboSub Team Intelligence — Mongla Vision Roadmap](scouting/README.md)
 55. [Future TODO -- shrink `commands.py` registry](future/future-registry-shrinkage.md)
+
+- [`platform/first-pool-verification.md`](platform/first-pool-verification.md) — what to verify in water, in order, first pool day.
