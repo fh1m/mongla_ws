@@ -1,5 +1,7 @@
 # Ecosystem review 2026-09-24: the handoff to the SROT repos
 
+**Tracking issue:** fh1m/mongla_ws#53, which links every PR, issue and draft from this review. **Host fixes:** fh1m/mongla_ws#43.
+
 **Who this is for:** the Claude Code session, or the person, that has write access to `RakibulIslam1/srot-control-board`, `srot-ground-station` and `srot-esc-flasher`.
 
 **Why it is a folder here and not PRs and issues there:** the review ran in a session whose GitHub App has no access to the RakibulIslam1 repos. Both `git push` and "create issue" returned **403**. Everything is written out here instead, ready to file, following the same convention as the `pr-*.md` asks one level up.
