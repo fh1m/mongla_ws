@@ -310,7 +310,7 @@ COMMANDS = {
                      'kp_lat': 60.0, 'kp_yaw': 60.0, 'kp_depth': 0.05,
                      'lost_grace_s': 1.0, 'align_stable_frames': 3.0,
                      'lock_target': False, 'ctrl_conf': 0.0,
-                     'range_gain_floor': 1.0, 'ki_lat': 0.0, 'coast_s': 0.8, 'lock_s': 1.0,
+                     'range_gain_floor': 1.0, 'ki_lat': 0.0, 'coast_s': 0.8, 'lock_s': 1.0,   # a SWITCH: >0 enables the ladder
                      'fwd_fill': 0.0, 'mode': 'area', 'kp_forward': 200.0,
                      'settle_px': 0.0, 'depth_step': 0.0,
                      'fire_pass_enabled': False, 'hold_heading': False,
@@ -346,6 +346,9 @@ COMMANDS = {
                      'hold_through_loss': False,
                      'kp_forward': 200.0, 'kp_lat': 60.0, 'lost_grace_s': 1.0,
                      'range_gain_floor': 1.0, 'coast_s': 0.8,
+                     # A SWITCH, not a duration: the ladder owns its own
+                     # horizon (`lock_state.ZERO_AUTHORITY_S`) and stops
+                     # publishing at zero. Any value > 0 enables it.
                      'lock_s': 1.0},
     },
     # ---- Per-thruster identification (SROT only) -------------------- #
