@@ -45,12 +45,13 @@ LABEL="$(printf '%s' "$LABEL" | tr -c 'A-Za-z0-9._-' '_')"
 LOG="$RUN_DIR/${LABEL}_${TS}.log"
 BAG="$RUN_DIR/bag_${LABEL}_${TS}"
 
+# shellcheck source=tools/_record_lib.sh
+source "$(dirname "$0")/_record_lib.sh"
+
 cleanup() {
   set +e
-  [ -n "${BAG_PID:-}" ] && kill -INT  "$BAG_PID" 2>/dev/null && wait "$BAG_PID" 2>/dev/null
-  [ -n "${SYS_PID:-}" ] && kill -INT  "$SYS_PID" 2>/dev/null
-  sleep 3
-  [ -n "${SYS_PID:-}" ] && kill -KILL "$SYS_PID" 2>/dev/null
+  stop "${BAG_PID:-}" 'bag record'
+  stop "${SYS_PID:-}" 'graph'
   wait 2>/dev/null
 }
 trap cleanup EXIT INT TERM
@@ -91,8 +92,8 @@ for _ in $(seq 40); do
 done
 
 echo "▸ recording $SECS s → $BAG"
-ros2 bag record -s mcap --regex "$TOPICS" --include-hidden-topics -o "$BAG" \
-    >>"$LOG" 2>&1 &
+run_resettable ros2 bag record -s mcap --regex "$TOPICS" \
+    --include-hidden-topics -o "$BAG" >>"$LOG" 2>&1 &
 BAG_PID=$!
 
 if [ "$MODE" = vision ]; then

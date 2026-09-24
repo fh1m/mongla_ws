@@ -4692,3 +4692,100 @@ size is changing, then room-filling.
 ⚠ **Still bench-only:** the loop-closure path (§24), the preloaded bank
 (`bank_forward`), `corroborate()` (§30/§31), and anything underwater. This was
 a person in air, in a room.
+
+---
+
+## 36. ⭐⭐ THE LADDER ON HARD INPUT — AND A FIXTURE THAT REPLACES A PERSON
+
+**2026-09-24.** Until today every vision measurement needed a human standing in
+front of the camera while the measurement ran, so no two numbers were ever
+taken on the same input. A recorded session plus `replay:=true` removes that.
+
+### The fixture
+
+`tools/record_session.sh vision` on the vehicle, forward camera, `yolov11n`,
+`lock_class:=person`, a person walking in and out repeatedly:
+
+| | |
+|---|---|
+| duration | **253.2 s** |
+| detection messages | 10 425, of which **52 %** carried a box |
+| gaps ≥ 0.2 s | **108** — median 0.62 s, longest **7.62 s** |
+| total dark | **106.1 s of 253.2 s (42 %)** |
+| lock held a target | 72 % of messages |
+| **held with NO detection** | **1 156 messages** — the ladder covering real gaps |
+
+The recording is **data and is never committed**; it lives off-repo.
+
+### Replay reproduces it
+
+The same bag played back through the real graph with no camera attached:
+
+| | live | replay |
+|---|---|---|
+| duration | 253.2 s | 253.1 s |
+| carried a box | 52 % | 51 % |
+| dark | 42 % | 44 % |
+| lock held | 72 % | 68 % |
+
+⭐ That agreement is what makes the fixture worth having: a number taken today
+and a number taken after a change now mean the same thing.
+
+### ⭐ The ladder, measured on input that is actually hard
+
+Forward node, windows where the ladder was doing anything:
+
+```
+detection 46.7%   follow 14.2%   anchor 8.2%   lost 30.9%
+anchor fires in 27% of windows, carrying 30% on average (max 58%)
+```
+
+⛔ **`lost` is 30.9 %, against 0 % on the easy live run of the same day (§35).**
+The easy run had the target present almost throughout; this one has it leave
+and return 108 times. §35 is not wrong, it is *unrepresentative* — and the
+difference between the two is the entire value of recording a hard session.
+**The ladder's real bar is this number, not §35's.**
+
+The anchor is genuinely load-bearing: it fires in **27 %** of windows and
+carries up to **58 %** of one.
+
+### Two alarms raised and withdrawn — both mine, both caught by checking
+
+1. **"XFeat scores 0/4 on every clip"** — the arm is opt-in via `--xfeat`, and
+   I ran without it. With it, the table reproduces bit-for-bit:
+   `[189, 65, 134, 24]`, `[69, 43, 51, 12]`, against ROOT-SIFT's 0/4, 0/4, 2/4.
+2. **"anchor = 0 % everywhere"** — true of the windows I happened to read, false
+   of the run: 14 of 51 windows have anchor > 0.
+
+### ⛔ A defect in the recorder itself, fixed
+
+A backgrounded child of a **non-interactive** shell inherits `SIGINT` set to
+IGNORE, and an ignored disposition survives `exec` — no later `trap` undoes it.
+So `ros2 bag record` ignored every `kill -INT`, `wait` never returned, and the
+bag was never finalized. Observed twice: a bench record still open **30 minutes**
+after its countdown ended, and a replay that had finished playing but would not
+exit. A recorder that cannot stop produces no fixture, and it fails while
+looking like it is working. `tools/_record_lib.sh` restores the default
+disposition before exec and escalates INT → TERM → KILL. It is **one** file
+because the first fix went into one recorder and the identical bug then hung
+the other.
+
+### Correction to the standing blocker list
+
+**`mongla_interfaces` does build on this box.** `install/mongla_interfaces`
+exists; the suite simply was not sourced. The dev-box baseline is **1105
+passed, 1 pre-existing failure**
+(`test_config_files_say_whether_they_are_loaded`), not the collection error
+previously recorded.
+
+### The board at rest — a 30-minute reference
+
+`tools/record_session.sh bench`, SROT board on the bench, disarmed:
+**1798.1 s, 89 813 raw `/mongla/imu` samples, 39 534 `MonglaState`.**
+Raw `/mongla/imu` is recorded alongside the derived `imu_rates` on purpose: a
+noise fixture holding only the derived signal cannot be re-derived differently
+later.
+
+⚠ **`baro health: not initialised`** during this record, so it carries **no
+depth noise**. Per the board contract that also means every move verb would be
+refused — the vehicle would arm and not move.
