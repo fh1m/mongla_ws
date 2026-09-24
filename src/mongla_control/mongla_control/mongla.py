@@ -343,7 +343,18 @@ class Mongla(VisionVerbs):
         overrides, which must not keep firing after the vehicle drops to
         MANUAL (and leaving the lock handle set would keep the heartbeat
         paused). Mirrors the cleanup in unlock_heading / mission_reset.
+
+        ⛔ SIGNALS ABORT FIRST. Disarm used to signal nothing, so the host loops
+        outlived it: a `vision_align` kept streaming MANUAL_CONTROL at 20-50 Hz
+        into a board that would re-arm under it, and a queued `_fire_async` shot
+        (which re-checks only `_abort_event` before each channel) still left the
+        tube -- the one thing a disarm must prevent. The node's `goal_callback`
+        signals abort only when disarm arrives while `command_active` is True;
+        a direct facade call, a cancelled-then-disarmed goal, or a shot that
+        outlived its align scope all got nothing. Not a poisoned next verb:
+        `arm`, `_command_scope` and `_run_srot_move` each clear the flag at entry.
         """
+        self.request_abort()
         with command_scope('disarm'):
             if self._heading_lock is not None:
                 self._heading_lock.stop()

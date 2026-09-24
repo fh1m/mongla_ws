@@ -521,3 +521,67 @@ def test_calc_distance_no_provider_is_graceful():
     d = Mongla(pixhawk, ThrottleLogger(logging.getLogger('test.dist')))  # no provider
     r = d.calc_distance('start')
     assert r.success is False                  # never raises; reports absence
+
+
+# --------------------------------------------------------------------------- #
+#  disarm signals abort -- the host loops and a queued shot must not outlive it
+# --------------------------------------------------------------------------- #
+class _AbortWatchingPixhawk(FakePixhawk):
+    """Records whether the abort was already signalled when disarm reached the
+    wire, and -- like the real `SrotFC.arm` poll -- refuses an arm whose abort
+    reads True, so a stale abort left by disarm would show up as a failed arm."""
+
+    def __init__(self, abort_event_getter, **kw):
+        super().__init__(**kw)
+        self._get_ev = abort_event_getter
+        self.abort_set_at_disarm = None
+
+    def disarm(self, timeout=20.0):
+        self.abort_set_at_disarm = self._get_ev().is_set()
+        return super().disarm(timeout)
+
+    def arm(self, timeout=15.0, abort=None):
+        if abort is not None and abort():
+            return False, 'aborted'
+        return super().arm(timeout, abort)
+
+
+def _abort_watching_mongla():
+    box = {}
+    pix = _AbortWatchingPixhawk(lambda: box['m']._abort_event)
+    box['m'] = Mongla(pix, ThrottleLogger(logging.getLogger('test.mongla')))
+    return box['m'], pix
+
+
+def test_disarm_stops_a_running_host_loop():
+    """A vision loop (or the `_fire_async` shot thread) exits only on the abort
+    flag. Disarm used to signal nothing, so it kept streaming -- and a delayed
+    torpedo still left -- after the operator disarmed."""
+    m, pix = _abort_watching_mongla()
+    exited = threading.Event()
+
+    def _host_loop():
+        t_end = time.monotonic() + 2.0
+        while time.monotonic() < t_end:
+            if m._abort_fn():
+                exited.set()
+                return
+            time.sleep(0.02)
+
+    th = threading.Thread(target=_host_loop, daemon=True)
+    th.start()
+    time.sleep(0.05)
+    m.disarm()
+    assert exited.wait(1.0), 'the host loop outlived disarm'
+    assert pix.abort_set_at_disarm is True, 'abort must be signalled BEFORE the disarm'
+
+
+def test_disarm_does_not_poison_the_next_arm():
+    """The abort disarm leaves set is cleared by arm at its own entry -- the
+    same clean-slate rule every other verb follows."""
+    m, _ = _abort_watching_mongla()
+    m.disarm()
+    assert m._abort_event.is_set()
+    res = m.arm()
+    assert res.success is True
+    assert not m._abort_event.is_set()
