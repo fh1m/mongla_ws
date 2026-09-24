@@ -4323,3 +4323,67 @@ production — where nothing force-enrols — is **unmeasured**.
 **Look at the frames.** Three shipped defects, one of them a repeat of a bug I
 had already diagnosed in someone else's code, survived every inlier table in
 this file and died within minutes of drawing the quad on the image.
+
+---
+
+## 30. ⛔ XFeat cannot arbitrate weak detections yet — and the reason names the fix
+
+**2026-09-24.** The operator's proposal, and it is a good one: a detector
+confidence is a semantic opinion with no geometry behind it, and the bank's
+inliers are geometry with no semantics. Ask the bank about a *specific box* and
+you get both, answering two opposite failures with one mechanism —
+
+- a **weak** detection the bank corroborates is worth acting on (our detector's
+  median confidence on murky water is **0.49**, so real props are routinely
+  reported at a confidence nobody would act on);
+- a **confident** detection the bank contradicts is a distractor, which a
+  confidence threshold cannot catch at any setting.
+
+`CheckpointBank.corroborate()` implements it. **Measured, it does not work.**
+
+16 references enrolled from the first half of `torpedo.mkv`, then every
+detection in the second half of that clip (TRUE) and of `gate.mkv`
+(DISTRACTOR) scored against the bank:
+
+| | n | inliers p50 | inliers p90 | quad inside the box, p50 |
+|---|---|---|---|---|
+| TRUE | 23 | **20** | 55 | ⛔ **0 %** |
+| DISTRACTOR | 25 | ⛔ **26** | 43 | ⛔ **0 %** |
+
+⛔ **The distractor scores HIGHER than the true clip**, and the warped quad
+almost never lands inside the detector's box. Swept across bars:
+
+| inlier bar | overlap | TRUE | DISTRACTOR |
+|---|---|---|---|
+| 15 | 0 % | 57 % | ⛔ 96 % |
+| 25 | 0 % | 35 % | ⛔ 64 % |
+| 40 | 0 % | 22 % | 16 % |
+| any | 30 % | 4 % | 4 % |
+
+**No threshold separates them.** This is not a tuning problem.
+
+### Why, and it is §22 for the third time
+
+Even ROI-cropped, a reference is a **box**, and a box around a prop in Mirpur
+water still contains Mirpur water — pool edge, backscatter, caustics. Those
+features are in every Mirpur frame, so the bank matches the *venue* and scores
+the gate clip as well as the torpedo clip. The 0 % quad overlap says the same
+thing from the other side: the homography is not fitting the prop.
+
+### ⭐ The fix is masks, not thresholds — and it is already priced
+
+§6c records `floor_plane.py` taking its contact point from a **box bottom
+edge**, where a segmentation mask would *measure* it, and notes **`yolov8n_seg`
+measured at 85.2 Hz end-to-end on this vehicle with no regression**. The same
+capability solves this: **enrol from a MASK, so the reference contains the prop
+and nothing else.**
+
+Until then `corroborate()` ships **refusing** rather than guessing, and is
+documented as not yet discriminating. ⚠ It must not be wired into any control
+path: at the tracking bar it corroborates 96 % of distractor frames.
+
+### The bar
+
+**A reference built from a bounding box encodes its venue.** Any capability that
+needs prop-specific identity — corroboration, cross-venue preload, re-acquisition
+by appearance — is gated on mask-based enrolment, not on a threshold sweep.
