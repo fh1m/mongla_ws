@@ -1,0 +1,130 @@
+From 12b45ebaac007f883060fae2bd76e8f4eebba0f4 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 24 Sep 2026 06:23:28 +0000
+Subject: [PATCH 4/5] mav: refuse reboot, param reset and calibration while
+ armed
+
+Three commands did something dangerous to an armed vehicle and were
+accepted without looking at the arm state:
+  * PREFLIGHT_REBOOT_SHUTDOWN (p1 1/3): ESP.restart() mid-water drops every
+    thruster and comes back disarmed in MANUAL at an unknown depth.
+  * PREFLIGHT_STORAGE p1=2: the reset is live - every gain, FRAME_REVERSE
+    (=1 on this hull, so every axis inverts in one step) and each MOT_n_DIR
+    plus the learned motor directions change under a running controller.
+  * PREFLIGHT_CALIBRATION (all sub-types): BARO_ZERO at depth makes that
+    depth "0 m", so the failsafe's surface-then-disarm disarms AT DEPTH;
+    gyro/level cal averages the vehicle's own motion into the offsets.
+
+Each now goes through disarmedGate(): proceed only when positively known
+disarmed; otherwise MAV_RESULT_TEMPORARILY_REJECTED (terminal ACK) plus a
+STATUSTEXT "<what> refused: disarm first" ("state busy" on a lock miss,
+which refuses rather than guessing). PREFLIGHT_STORAGE p1=1 (save) stays
+allowed - it changes nothing live.
+
+Crosses the companion contract (behaviour, not wire constants):
+JETSON_COMMS.md updated. mongla_ws's calibrate_depth already gates on
+disarmed, so its normal path is unaffected.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KchLnXUAMJ6S4pj3BZLobN
+---
+ JETSON_COMMS.md            |  6 +++---
+ src/comms/mav_commands.cpp | 35 +++++++++++++++++++++++++++++++++++
+ 2 files changed, 38 insertions(+), 3 deletions(-)
+
+diff --git a/JETSON_COMMS.md b/JETSON_COMMS.md
+index f6161f2..ac2b851 100644
+--- a/JETSON_COMMS.md
++++ b/JETSON_COMMS.md
+@@ -384,10 +384,10 @@ Everything the firmware dispatches. **Anything not listed returns `MAV_RESULT_UN
+ | `DO_SET_MODE` | 176 | **p2** = custom_mode (table §3) |
+ | **`SROT_MOVE`** | **31000** | the movement verb — §5 |
+ | `DO_MOTOR_TEST` | 209 | p1 motor (1-based), p2 throttle type (0 = percent), p3 throttle, p4 timeout s. **Requires ARMED.** Re-send ≥2 Hz as a keep-alive; window 600–3000 ms |
+-| `PREFLIGHT_CALIBRATION` | 241 | p1 gyro · p2 mag · p3 baro · p5 1 = accel 6-point, 2/4 = level |
++| `PREFLIGHT_CALIBRATION` | 241 | p1 gyro · p2 mag · p3 baro · p5 1 = accel 6-point, 2/4 = level. **Requires DISARMED** — armed → `TEMPORARILY_REJECTED` + `STATUSTEXT "Calibration refused: disarm first"` |
+ | `ACCELCAL_VEHICLE_POS` | 42429 | p1 = 1..6 face, during the 6-point accel cal |
+ | `DO_START_MAG_CAL` | 42424 | compass cal |
+-| `PREFLIGHT_STORAGE` | 245 | **p1 = 1** save params · **p1 = 2** factory reset (params **and** learned motor directions) |
++| `PREFLIGHT_STORAGE` | 245 | **p1 = 1** save params · **p1 = 2** factory reset (params **and** learned motor directions) — p1 = 2 **requires DISARMED** (armed → `TEMPORARILY_REJECTED` + `STATUSTEXT`) |
+ | `DO_SET_SERVO` | 183 | p1 channel (1-based), p2 µs — PCA9685 |
+ | `DO_SET_RELAY` | 181 | p1 relay instance (0-based), p2 1/0. **Reaches PCA channels 9–16 only** (instance → `PCA_RELAY_BASE_CH + n`). To drive a switch channel in the 1–8 range use `DO_SET_SERVO` — on a `SERVOn_ROLE = 2` channel its pulse width is a level, **≥ 1500 µs = ON**. |
+ | `USER_1/2/3` | 31010-31012 | yaw / pitch / roll spin (stunt) |
+@@ -395,7 +395,7 @@ Everything the firmware dispatches. **Anything not listed returns `MAV_RESULT_UN
+ | `USER_5` | 31014 | autotune start |
+ | `REQUEST_MESSAGE` | 512 | |
+ | `REQUEST_AUTOPILOT_CAPABILITIES` | 520 | → `AUTOPILOT_VERSION` |
+-| `PREFLIGHT_REBOOT_SHUTDOWN` | 246 | |
++| `PREFLIGHT_REBOOT_SHUTDOWN` | 246 | p1 1 = reboot, 3 = bootloader. **Requires DISARMED** — armed → `TEMPORARILY_REJECTED` + `STATUSTEXT "Reboot refused: disarm first"` |
+ 
+ **Messages handled:** `HEARTBEAT`, `PARAM_REQUEST_LIST`, `PARAM_REQUEST_READ`, `PARAM_SET`,
+ `COMMAND_LONG`, `COMMAND_INT`, `SET_MODE`, `MANUAL_CONTROL`, and the mission set (`MISSION_COUNT`,
+diff --git a/src/comms/mav_commands.cpp b/src/comms/mav_commands.cpp
+index d456c7d..053480d 100644
+--- a/src/comms/mav_commands.cpp
++++ b/src/comms/mav_commands.cpp
+@@ -184,6 +184,23 @@ static void ackCommand(uint16_t command, uint8_t result) {
+ 
+ static void setArmed(bool armed);   // forward decl (defined below)
+ 
++// Gate for commands that are only safe on a DISARMED vehicle. Returns MAV_RESULT_ACCEPTED
++// ("go ahead") only when the vehicle is positively known to be disarmed; otherwise says why
++// and returns TEMPORARILY_REJECTED — a terminal ACK, and the honest one: disarm and retry.
++// A lock miss is "don't know", and "don't know" refuses. Core 0 only (sendStatusText).
++static uint8_t disarmedGate(const char* what) {
++    bool known = false, armed = false;
++    {
++        StateLock lk(g_state.mtx_control, pdMS_TO_TICKS(5));
++        if (lk.ok()) { known = true; armed = g_state.control.armed; }
++    }
++    if (known && !armed) return MAV_RESULT_ACCEPTED;
++    char b[50];   // STATUSTEXT.text is char[50]
++    snprintf(b, sizeof(b), known ? "%s refused: disarm first" : "%s refused: state busy", what);
++    mav_stream::sendStatusText(MAV_SEVERITY_WARNING, b);
++    return MAV_RESULT_TEMPORARILY_REJECTED;
++}
++
+ // Modes the GCS dropdown may select. STUNT/PATTERN are command-only.
+ static bool isSupportedMode(uint8_t m) {
+     switch (m) {
+@@ -431,6 +448,13 @@ static uint8_t dispatchCommand(uint16_t command, const float p[7]) {
+             // ArduPilot param semantics:
+             //   p1=1 gyro, p2=1 mag, p3=1 baro, p4=1 radio(ignored),
+             //   p5=1 full accel (6-point), p5=2/4 quick LEVEL (AHRS trim).
++            //
++            // DISARMED ONLY. Every one of these assumes a vehicle at rest, and on an armed
++            // one they write a wrong reference into live control: BARO_ZERO at depth makes
++            // that depth "0 m", so the failsafe's surface-then-disarm logic disarms AT DEPTH;
++            // a gyro or level cal averages the vehicle's own motion into the offsets.
++            { const uint8_t g = disarmedGate("Calibration");
++              if (g != MAV_RESULT_ACCEPTED) return g; }
+             CalRoutine r = CalRoutine::NONE;
+             if (p[0] == 1)      { r = CalRoutine::GYRO;      mav_stream::sendStatusText(MAV_SEVERITY_INFO, "Calibrating gyros"); }
+             else if (p[1] == 1) { r = CalRoutine::MAG; }
+@@ -476,6 +500,13 @@ static uint8_t dispatchCommand(uint16_t command, const float p[7]) {
+             if (p[0] == 2) {
+                 // Recovery path when a stored value is wrong and you don't want to
+                 // reflash (e.g. a stale RPM_LOOP=0 frozen in by a MOTOR_TUNE saveAll).
++                //
++                // DISARMED ONLY. The reset is LIVE: every gain, FRAME_REVERSE and each
++                // MOT_n_DIR (plus the learned motor directions below) change under a running
++                // controller — on this hull FRAME_REVERSE=1, so a reset mid-dive inverts every
++                // axis in one step. A save (p1=1) stays allowed: it changes nothing live.
++                { const uint8_t g = disarmedGate("Param reset");
++                  if (g != MAV_RESULT_ACCEPTED) return g; }
+                 params::resetAllToDefaults();
+                 // Also clear the SEPARATE per-motor direction learned by MOTOR_DETECT.
+                 // It multiplies with MOT_n_DIRECTION, so a bad bench detect (gyro reads
+@@ -601,6 +632,10 @@ static uint8_t dispatchCommand(uint16_t command, const float p[7]) {
+         case MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN:
+             // param1: 1 = reboot autopilot, 3 = reboot to bootloader.
+             if ((int)p[0] == 1 || (int)p[0] == 3) {
++                // DISARMED ONLY. A restart drops every thruster mid-water and comes back
++                // disarmed in MANUAL at an unknown depth; the operator disarms first.
++                { const uint8_t g = disarmedGate("Reboot");
++                  if (g != MAV_RESULT_ACCEPTED) return g; }
+                 ackCommand(command, MAV_RESULT_ACCEPTED);      // ack now — restart never returns
+                 mav_stream::sendStatusText(MAV_SEVERITY_INFO, "SROT: rebooting");
+                 MAVLINK_SERIAL.flush();
+-- 
+2.43.0
+

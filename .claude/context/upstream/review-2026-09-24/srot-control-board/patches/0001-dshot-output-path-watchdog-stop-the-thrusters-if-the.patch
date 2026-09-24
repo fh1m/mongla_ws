@@ -1,0 +1,211 @@
+From 596dc76f9c691a1a1755a2fc377f3d6df2586eec Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 24 Sep 2026 06:21:05 +0000
+Subject: [PATCH 1/5] dshot: output-path watchdog - stop the thrusters if the
+ control loop stalls
+
+Task_DShot_RMT re-sends its cached out[]/nrm[]/armed every cycle, so a
+stalled or livelocked Task_ControlLoop kept the Pico fed with fresh,
+CRC-valid ARMED frames: its 150 ms link failsafe never tripped and the last
+demand was held indefinitely. ControlState::loop_stamp_ms was written every
+cycle and read nowhere.
+
+The control loop now bumps ThrusterState::out_seq inside the same lock as
+throttle[]/norm[]/armed. The DShot task counts consecutive cycles in which
+it has not moved; at CTRL_OUT_STALE_CYCLES (10 = 20 ms) it sends the
+disarmed stop (DSHOT_DISARMED / zero norm / armed=false - what the disarmed
+path already sends) and queues one edge-triggered STATUSTEXT, plus one on
+recovery. Not latched: the control loop's own armed/mode stay authoritative.
+
+Counted in DShot cycles rather than wall time on purpose: a flash write on
+Core 0 (every live param save) suspends both Core-1 tasks together, and a
+millisecond age would read that shared pause as a control stall and cut the
+thrusters mid-dive. The unused loop_stamp_ms (and its per-cycle mtx_control
+take) is removed.
+
+The ESP-IDF task watchdog is deliberately not subscribed: its default 5 s
+timeout is irrelevant next to 20 ms and its action is a reboot at depth.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KchLnXUAMJ6S4pj3BZLobN
+---
+ ARCHITECTURE.md                 | 10 ++++++++
+ include/config.h                | 15 +++++++++++
+ include/state_types.h           |  5 +++-
+ src/tasks/task_control_loop.cpp | 11 +++++---
+ src/tasks/task_dshot_rmt.cpp    | 45 +++++++++++++++++++++++++++++++--
+ 5 files changed, 79 insertions(+), 7 deletions(-)
+
+diff --git a/ARCHITECTURE.md b/ARCHITECTURE.md
+index 3833b67..18c83e5 100644
+--- a/ARCHITECTURE.md
++++ b/ARCHITECTURE.md
+@@ -130,6 +130,16 @@ Failsafes (leak / low-batt / GCS-loss → SURFACE); arming enforcement (the 2nd-
+ thruster-kill is display-only, never gates arming); motor-test 2 Hz keep-alive with
+ auto-disarm; deferred NVS writes on Core 0; stack high-water for all six tasks as `STK_*`.
+ 
++**Output-path watchdog** (`Task_DShot_RMT`). The DShot task re-sends its cached command every
++cycle, so a stalled control loop would otherwise keep the Pico fed with fresh ARMED frames and
++its link failsafe would never trip. The control loop bumps `ThrusterState::out_seq` on each
++publish; if the DShot task runs `CTRL_OUT_STALE_CYCLES` (10 = 20 ms) cycles without seeing it
++move, it sends the disarmed stop and reports `Control loop stalled - thrusters stopped`
++(`Control loop resumed` when it comes back — not latched). Counted in cycles, not ms, so a
++flash write that pauses both Core-1 tasks together is not mistaken for a stall. The ESP-IDF
++task watchdog is **not** subscribed for the flight tasks: its 5 s timeout is far too slow to
++matter next to this, and its action is a reboot.
++
+ ---
+ 
+ ## 3. MAVLink / QGC / BlueOS / companion
+diff --git a/include/config.h b/include/config.h
+index 5826023..d9cabd3 100644
+--- a/include/config.h
++++ b/include/config.h
+@@ -386,6 +386,21 @@
+ #define TASK_DSHOT_STACK        4096
+ #define TASK_DSHOT_HZ           500         // match the 500 Hz control loop
+ 
++// Output-path watchdog (Task_DShot_RMT). The DShot task re-sends its CACHED command every
++// cycle, so if Task_ControlLoop stalls or livelocks the Pico keeps receiving fresh, CRC-valid,
++// ARMED frames and its own link failsafe never trips: the last demand is held for ever. The
++// control loop therefore bumps ThrusterState::out_seq on every publish, and the DShot task
++// sends DISARMED frames once it has run this many consecutive cycles without seeing it move.
++//
++// Counted in DShot CYCLES, not milliseconds, on purpose. A flash write on Core 0 (every
++// param save — they are edited live from Bondor) disables the cache and suspends BOTH
++// Core-1 tasks together for tens of ms; a wall-clock age would read that shared pause as a
++// control stall and cut the thrusters mid-dive. A cycle count only advances while this task
++// itself is running, so it measures exactly "the output path is alive and the control loop
++// is not". 10 cycles = 20 ms at 500 Hz: well clear of a lock miss or two, far inside the
++// Pico's own 150 ms link failsafe.
++#define CTRL_OUT_STALE_CYCLES   10
++
+ // -----------------------------------------------------------------------------
+ // SECTION 7 — DEFAULT TUNING CONSTANTS (NVS fallbacks; live-editable via QGC)
+ // The authoritative runtime values come from NVS (Preferences); these are the
+diff --git a/include/state_types.h b/include/state_types.h
+index 875ae81..ff45aa1 100644
+--- a/include/state_types.h
++++ b/include/state_types.h
+@@ -169,7 +169,6 @@ struct ControlState {
+     float       pattern_return_yaw = 0;
+ 
+     bool        autotune_active = false;
+-    uint32_t    loop_stamp_ms = 0;
+ 
+     // AUTO-mode movement (MAV_CMD_SROT_MOVE). Command: set by Task_MAVLink (Core 0) on a new
+     // SROT_MOVE; the control loop starts it when `mv_seq` changes. State: set by the control
+@@ -204,6 +203,10 @@ struct ThrusterState {
+     // Normalized mixer demand (−1..1) per thruster — used to derive the signed target
+     // RPM in closed-loop RPM mode (throttle[] is the open-loop DShot value).
+     float    norm[NUM_THRUSTERS] = {0};
++    // Incremented by Task_ControlLoop on every publish of throttle[]/norm[]/armed, under the
++    // same lock, so the DShot task can tell a fresh command from its own re-sent cache.
++    // 0 = the control loop has never published. See CTRL_OUT_STALE_CYCLES.
++    uint32_t out_seq = 0;
+     // Motor-test / detect override: when active, the named motor is driven at
+     // test_throttle (−1..1) until test_expire_ms, bypassing the mixer. Set by
+     // MAV_CMD_DO_MOTOR_TEST / the calibration routines; consumed by the control
+diff --git a/src/tasks/task_control_loop.cpp b/src/tasks/task_control_loop.cpp
+index 8e4fcc5..34ef800 100644
+--- a/src/tasks/task_control_loop.cpp
++++ b/src/tasks/task_control_loop.cpp
+@@ -920,12 +920,15 @@ void Task_ControlLoop(void* pv) {
+                                                         : (norm[i] * (float)in.dir[i]);
+                 }
+                 g_state.thrusters.armed = armed;
++                // Liveness for the DShot task's output-path watchdog. Bumped only when the
++                // publish lands, so a run of lock misses reads as stale too — which it is.
++                // (Replaces ControlState::loop_stamp_ms, which was written here every cycle
++                // and read nowhere.)
++                static uint32_t s_out_seq = 0;
++                if (++s_out_seq == 0) s_out_seq = 1;   // 0 is reserved for "never published"
++                g_state.thrusters.out_seq = s_out_seq;
+             }
+         }
+-        {
+-            StateLock lk(g_state.mtx_control, pdMS_TO_TICKS(1));
+-            if (lk.ok()) g_state.control.loop_stamp_ms = millis();
+-        }
+ 
+         // Publish movement state for Task_MAVLink (ACK progress/complete + telemetry).
+         //
+diff --git a/src/tasks/task_dshot_rmt.cpp b/src/tasks/task_dshot_rmt.cpp
+index 6218021..b521294 100644
+--- a/src/tasks/task_dshot_rmt.cpp
++++ b/src/tasks/task_dshot_rmt.cpp
+@@ -15,11 +15,11 @@
+   #include "comms/ui_log.h"
+   #include "comms/params.h"          // g_params.rpm_* for the config push
+   #include "control/thrust_trim.h"   // slow RPM-based thrust normalisation
+-  #include "comms/mav_stream.h"      // queueStatusText — stall reports
+-  #include "comms/mavlink_bridge.h"  // MAV_SEVERITY_*
+ #else
+   #include "drivers/dshot_out.h"
+ #endif
++#include "comms/mav_stream.h"        // queueStatusText — stall reports (Core-1 safe)
++#include "comms/mavlink_bridge.h"    // MAV_SEVERITY_*
+ 
+ extern volatile uint32_t g_stack_hw[6];   // [5] = this task
+ extern volatile bool g_thr_beep_req;      // set by Task_Buzzer; one-shot ESC beacon chirp
+@@ -41,6 +41,10 @@ void Task_DShot_RMT(void* pv) {
+     int16_t out[NUM_THRUSTERS] = {0};
+     float   nrm[NUM_THRUSTERS] = {0};
+     bool    armed = false, testing = false;
++    uint32_t out_seq = 0;         // control loop's publish counter, as last read
++    uint32_t seen_seq = 0;        // ...and the value it had on the previous cycle
++    uint32_t same_cycles = 0;     // consecutive cycles it has not moved
++    bool     ctl_stale = false;   // output-path watchdog latched (edge-reported)
+     uint32_t stk_cnt = 0;
+     int beep_frames = 0;      // when >0, tag outgoing frames with the beep flag
+     bool prev_link = false;   // Pico link edge, for the gap-reason diagnostic
+@@ -68,9 +72,46 @@ void Task_DShot_RMT(void* pv) {
+                 for (int i = 0; i < NUM_THRUSTERS; ++i) { out[i] = g_state.thrusters.throttle[i]; nrm[i] = g_state.thrusters.norm[i]; }
+                 armed = g_state.thrusters.armed;
+                 testing = g_state.thrusters.test_override;
++                out_seq = g_state.thrusters.out_seq;
+             }
+         }
+ 
++        // --- Output-path watchdog. ---
++        // The cache above is re-sent every cycle, so a stalled or livelocked control loop
++        // used to look perfectly healthy downstream: fresh CRC-valid ARMED frames kept the
++        // Pico's link failsafe satisfied and the last demand was held indefinitely. Nothing
++        // read the loop's old liveness stamp. If the control loop has not published for
++        // CTRL_OUT_STALE_CYCLES of OUR cycles, send the disarmed stop — the same frame the
++        // disarmed path sends (DSHOT_DISARMED / zero norm / armed=false), which the Pico
++        // turns into a stop exactly as it does for a real disarm.
++        //
++        // Counted in cycles of this task, not wall time: see config.h for why (a flash write
++        // pauses both Core-1 tasks together and must not read as a control stall). A lock
++        // miss above keeps the cached out_seq, so a long run of misses trips it too — the
++        // cache it would re-send is exactly as stale.
++        //
++        // Not latched: control-loop state (armed, mode) stays authoritative, so if the loop
++        // comes back its next publish drives again. Sits ABOVE everything downstream in the
++        // precedence — this is the last point before the wire.
++        if (out_seq == seen_seq) { if (same_cycles < UINT32_MAX) ++same_cycles; }
++        else                     { seen_seq = out_seq; same_cycles = 0; }
++        const bool stale_now = same_cycles >= CTRL_OUT_STALE_CYCLES;
++        if (stale_now) {
++            for (int i = 0; i < NUM_THRUSTERS; ++i) { out[i] = DSHOT_DISARMED; nrm[i] = 0.0f; }
++            armed = false;
++            testing = false;
++        }
++        // Report edges only, and only once the loop has published at all: out_seq 0 means
++        // the control task has not run yet at boot, which is not a stall (the cache is
++        // already the disarmed stop), and must not produce a "resumed" on its first publish.
++        const bool report = stale_now && out_seq != 0;
++        if (report != ctl_stale) {
++            mav_stream::queueStatusText(report ? MAV_SEVERITY_CRITICAL : MAV_SEVERITY_INFO,
++                                        report ? "Control loop stalled - thrusters stopped"
++                                               : "Control loop resumed");
++        }
++        ctl_stale = report;
++
+ #if THRUSTER_BACKEND == THRUSTER_PICO
+         // One-shot ESC beacon chirp: latch the request and tag ~6 consecutive frames so
+         // the Pico can't miss it. Only sent once the link is up, and only while disarmed.
+-- 
+2.43.0
+
