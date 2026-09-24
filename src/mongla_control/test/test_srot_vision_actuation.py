@@ -195,11 +195,25 @@ def test_surface_is_refused_rather_than_run():
 
 def test_a_bad_mode_is_SET_before_it_is_refused():
     """Refusing without trying would strand an operator whose board simply
-    booted into the wrong mode -- which is the common case, not the failsafe."""
-    fc = _ModeFC(mode='SURFACE', accepts=True)
+    booted into the wrong mode -- which is the common case, not the failsafe.
+    AUTO is that common case: every SROT_MOVE leaves the board there."""
+    fc = _ModeFC(mode='AUTO', accepts=True)
     _require_srot_vision_mode(fc, None, 'vision_align')
     assert fc.set_calls == ['STABILIZE']
     assert fc.get_mode() == 'STABILIZE'
+
+
+def test_SURFACE_is_never_switched_out_of_even_when_the_board_would_take_it():
+    """A vision verb must not pull the hull out of a failsafe (leak, thruster
+    battery, GCS loss) or an operator `surface` and drive it back down. The
+    gate used to "correct" SURFACE to STABILIZE like any wrong mode -- this
+    board WOULD accept that, which is exactly the danger."""
+    fc = _ModeFC(mode='SURFACE', accepts=True)
+    with pytest.raises(MovementError) as exc:
+        _require_srot_vision_mode(fc, None, 'vision_align')
+    assert fc.set_calls == [], 'a vision verb tried to leave SURFACE'
+    assert fc.get_mode() == 'SURFACE'
+    assert 'SURFACE' in str(exc.value)
 
 
 def test_an_acceptable_mode_is_left_alone():
@@ -232,7 +246,7 @@ def test_the_check_re_reads_rather_than_trusting_set_mode():
     """`set_mode` is best-effort on this wire: the firmware's `onSetMode`
     discards its return and sends no ACK, so a silent refusal looks exactly
     like success. Trusting it is how this class of bug survives."""
-    fc = _ModeFC(mode='SURFACE', accepts=False)
+    fc = _ModeFC(mode='AUTO', accepts=False)
     with pytest.raises(MovementError):
         _require_srot_vision_mode(fc, None, 'vision_move')
     assert fc.set_calls == ['STABILIZE'], 'it must at least try'
@@ -300,10 +314,20 @@ def test_vision_move_ITSELF_refuses_on_a_surface_board():
     assert 'SURFACE' in str(exc.value)
 
 
+def test_vision_move_ITSELF_leaves_a_willing_board_in_SURFACE():
+    """Through the real verb: the board would accept STABILIZE, and the verb
+    must still refuse without asking."""
+    fc = _ModeFC(mode='SURFACE', accepts=True)
+    h = _VerbHarness(fc)
+    with pytest.raises(MovementError):
+        h.vision_move(camera='forward', target_class='gate', fwd_fill=80.0)
+    assert fc.set_calls == []
+
+
 def test_vision_align_SETS_the_mode_when_the_board_will_take_it():
     """The other half: a board that merely booted into the wrong mode must be
     corrected and allowed to proceed, not stranded."""
-    fc = _ModeFC(mode='SURFACE', accepts=True)
+    fc = _ModeFC(mode='AUTO', accepts=True)
     h = _VerbHarness(fc)
     with pytest.raises(AssertionError, match='mode gate did NOT fire'):
         h.vision_align(camera='forward', target_class='gate', axes='lat,yaw')

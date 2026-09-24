@@ -1370,9 +1370,20 @@ class AUVManagerNode(Node):
 
         Braked first: the board keeps running the active movement primitive until
         something displaces it, and SURFACE alone does not abort a move.
+
+        ⛔ THE ABORT IS LEFT SET -- SURFACE *IS* THE ABORT. `goal_callback` calls
+        `request_abort()` when surface arrives while another verb runs, and this
+        used to `_abort_event.clear()` on its very next line. The flag is the only
+        thing that stops the host loops -- `vision_align`/`vision_move` stream
+        MANUAL_CONTROL at 20-50 Hz and a queued `_fire_async` shot waits on it --
+        and clearing it within microseconds of setting it meant they usually never
+        saw it: the align kept driving and the shot still fired after the
+        operator said "surface". Nothing here waits on the flag (brake + one mode
+        change, no loop), so the clear protected nothing. The next verb clears it
+        at its own entry (`_command_scope`, `_run_srot_move`, `arm`), which is
+        where a stale abort is dealt with everywhere else.
         """
         timeout = float(kwargs.get('timeout', 60.0) or 60.0)
-        self.mongla._abort_event.clear()
         self.fc.stop_motion()                     # brake + cancel any running leg
         ok, reason = self.fc.set_mode('SURFACE')
 
