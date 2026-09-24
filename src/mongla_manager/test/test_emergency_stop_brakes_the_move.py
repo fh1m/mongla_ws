@@ -100,3 +100,77 @@ def test_every_step_stays_isolated():
                 and n.name == '_step')
     assert any(isinstance(h, ast.ExceptHandler) for h in ast.walk(step)), \
         '_step must swallow per-step failures so later steps still run'
+
+
+# --------------------------------------------------------------------------- #
+#  Step 0: the emergency stop signals abort (behavioural, not a source grep)
+# --------------------------------------------------------------------------- #
+import threading   # noqa: E402
+import time        # noqa: E402
+
+
+class _Facade:
+    """Just the abort surface of `Mongla` -- a real Event, a real request_abort."""
+
+    def __init__(self):
+        self._abort_event = threading.Event()
+        self._heading_lock = None
+
+    def request_abort(self):
+        self._abort_event.set()
+
+
+class _RecFC:
+    def __init__(self, ev):
+        self._ev = ev
+        self.abort_seen = {}
+
+    def _note(self, name):
+        self.abort_seen[name] = self._ev.is_set()
+
+    def stop_motion(self):
+        self._note('stop_motion')
+
+    def send_neutral(self):
+        self._note('send_neutral')
+
+    def disarm(self):
+        self._note('disarm')
+        return True, 'ok'
+
+
+class _StubNode:
+    def __init__(self):
+        self.mongla = _Facade()
+        self.fc = self.pixhawk = _RecFC(self.mongla._abort_event)
+        self.heartbeat = type('H', (), {'stop': lambda self: None})()
+        self.yaw_source = type('Y', (), {'close': lambda self: None})()
+        self._vision_states = {}
+        self._recorder = None
+
+
+def test_the_emergency_stop_signals_abort_before_any_hardware_step():
+    """Ctrl-C with a vision loop running: the thrusters were braked and disarmed
+    while the action thread kept streaming MANUAL_CONTROL, and a queued
+    `_fire_async` shot (which checks only the abort flag) could still leave."""
+    import mongla_manager.auv_manager_node as amn
+    node = _StubNode()
+    ev = node.mongla._abort_event
+    exited = threading.Event()
+
+    def _host_loop():
+        t_end = time.monotonic() + 2.0
+        while time.monotonic() < t_end:
+            if ev.is_set():
+                exited.set()
+                return
+            time.sleep(0.02)
+
+    th = threading.Thread(target=_host_loop, daemon=True)
+    th.start()
+    time.sleep(0.05)
+    amn._emergency_stop(node)
+    assert exited.wait(1.0), 'a host loop outlived the emergency stop'
+    assert node.fc.abort_seen == {'stop_motion': True, 'send_neutral': True,
+                                  'disarm': True}, (
+        'abort must be signalled before the brake / neutral / disarm steps')

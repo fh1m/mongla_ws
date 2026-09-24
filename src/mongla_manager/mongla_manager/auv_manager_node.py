@@ -2436,6 +2436,13 @@ def _emergency_stop(node) -> None:
             print(f'  {label:<22s} {fail_sym}  ({exc!r})', file=sys.stderr)
             return None
 
+    # ⛔ STEP 0: SIGNAL ABORT, BEFORE ANY HARDWARE STEP. Every host loop
+    # (`vision_align`/`vision_move` at 20-50 Hz, `style_roll`, a queued
+    # `_fire_async` shot) exits only on `_abort_event`, and this path never set
+    # it: the thrusters were braked and disarmed while an action thread kept
+    # streaming MANUAL_CONTROL and a delayed torpedo could still leave. It goes
+    # first because it cannot fail on the wire and every later step can.
+    _step('signal abort',       lambda: node.mongla.request_abort())
     _step('stop heading lock',  lambda: node.mongla._heading_lock.stop()
                                         if node.mongla._heading_lock else None)
     _step('stop heartbeat',     lambda: node.heartbeat.stop())
