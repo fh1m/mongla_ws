@@ -3975,3 +3975,58 @@ REVISIT rather than an alias, and without trajectory ground truth these are
 indistinguishable — so the far tail is a reason to set the bar high, not a
 proof of aliasing. And these are three clips from one archive: the bar of 100 is
 a starting point that a pool day with known positions should replace.
+
+---
+
+## 25. ⛔ The identity bar was derived on a configuration production does not use
+
+**2026-09-24.** §22 swept the identity bar to **60** inliers. That sweep used
+**whole-frame** references — 1024 keypoints spread over water, pool edge and
+prop. But `lock_node` enrols with `roi=det_box`, so a shipped reference holds
+only the keypoints *inside the detection box*.
+
+`tools/anchor_roi_bars.py` rebuilds the experiment in production shape:
+references cropped to a **real detector box** (our own YOLO graph through
+onnxruntime, not hand-drawn rectangles), queried against **whole live frames**,
+because that is what `locate()` sees.
+
+**References carry a median of 376 keypoints, min 26, max 698** — against 1024
+whole-frame.
+
+| population | p50 | p90 | max |
+|---|---|---|---|
+| same run | 52 | 189 | 322 |
+| same prop, other run | 40 | 61 | 106 |
+| other prop, same venue | 25 | 31 | 51 |
+
+Swept, true = same prop other run, false = other prop:
+
+| bar | keeps of true | admits of false |
+|---|---|---|
+| 15 | 86 % | 93 % |
+| 25 | 79 % | 50 % |
+| 30 | 64 % | 21 % |
+| **40** | **64 %** | **7 %** |
+| 60 *(was shipped)* | ⛔ **14 %** | 0 % |
+
+⛔ **At 60, a true re-acquisition fires on 14 % of frames — effectively never,
+and nothing would log a fault.** That is the failure direction that hides: a
+capability that silently does not work. The bar is now **40**.
+
+⚠ **40 admits 7 % of other-prop frames rather than 0 %, deliberately.**
+`recognise()` does not decide on geometry alone: the detector must also agree on
+the class, and its failure mode is *missing* things rather than confusing them,
+so a 7 % geometric false rate meets a semantic check uncorrelated with it. The
+whole point of three checks is that none has to be perfect alone.
+
+**`REFRESH_INLIERS` moves 40 → 25** for the same reason, compounded with
+§21.1's withdrawal: 40 sits at the median of a *working* match on ROI
+references (same run p50 52, same-prop-other-run p50 40), so it would fire on
+ordinary troughs and churn the bank.
+
+### The method note, because this is the third time
+
+A constant swept in one configuration and applied in another is the recurring
+defect in this codebase. **Sweep the bar on the shape production actually
+builds**, or state the configuration in the constant's own comment so the
+mismatch is visible at the point of use.
