@@ -5804,3 +5804,70 @@ retrain.
 was wrong rather than the data or the interpretation. It is also the most
 expensive: two training runs, ~3 GPU-hours, and a published §52 that read as a
 breakthrough.
+
+---
+
+## 54. ⭐⭐⭐ 179 IDENTITY SWITCHES — AND WHY XFEAT IS THE FIX, NOT THE FAILURE
+
+**2026-09-25.** Round 7 closed NO, so the question became: *if fine-tuning is
+not where XFeat pays, where is?* The answer came from fixing a different
+defect.
+
+### The number that was hiding behind a wrong field name
+
+`continuity.py` reported **`id switches: 0`** — read as a clean result. It was
+scoring `/detections`, which carries no id at all, so zero was **the absence of
+a measurement**. And `check_tracker.py:70` read `d.tracking_id`, a field
+`vision_msgs/Detection2D` **does not have** (its fields are `header, results,
+bbox, id`), so that shipped diagnostic raised `AttributeError` on the first
+track of every run — a tool that only executes when tracks exist, and broke
+exactly there. Both the node docstring and `tracking/PLAN.md` asserted
+`tracking_id` was set; `_build_array` actually writes `d2.id = str(track_id)`.
+
+Scored on `/tracks` with the real field:
+
+```
+    id switches: 179     over 253 s, one person, one room
+```
+
+### Why a motion tracker cannot fix this
+
+ByteTrack and OC-SORT associate on **motion** — IoU plus a Kalman prediction.
+Across a real gap the prediction decays and the overlap is gone, so a returning
+target cannot be matched to the track it came from and a new id is minted.
+That is not a bug in ByteTrack; it is the boundary of what motion can say.
+
+### ⭐ The SOTA names the fix and names the price
+
+**BoT-SORT** unifies motion prediction with **appearance modelling** and
+explicit camera-motion compensation "to maintain stable object identities".
+**McByte++ (2026)** reports up to **+6.1 IDF1** from adding online
+re-identification to a tracking-by-detection pipeline, training-free.
+
+The standard objection is cost: *"a dedicated Re-ID embedding network... an
+extra **15–25 ms per frame**"* — which is why embedded trackers skip it.
+
+### ⭐⭐ We do not pay that price, because we already built the network
+
+XFeat is **already loaded and already running** for the anchor rung —
+**701 FPS** on the Hailo-8 (§38), sharing the chip with the detector for ~10 %
+of its throughput (§32). The descriptor that re-identifies a *place* can
+re-identify a *target*. **This is the one piece of the SOTA recipe we can
+afford precisely because we built it for something else** — and it is the
+answer to where XFeat pays, after fine-tuning said it was not the weights.
+
+`tracking/reid.py`: a short-term appearance memory of identities that just
+left, using **§25's measured 40-inlier identity bar** — not a new constant.
+
+⛔ **The failure modes are asymmetric, so the gates are.** A missed
+re-identification costs one extra id. A **wrong** one welds two objects into
+one identity and every consumer downstream believes the target teleported. So
+it refuses on: a weak match, a **1.5× margin** against the runner-up (two
+identities matching moderately is exactly where a wrong merge happens, and an
+absolute bar cannot see it), a different class label, a stale identity, or an
+empty descriptor set. Every refusal is counted and named.
+
+⚠ **Not yet wired.** It waits on `tracker_node` supplying crop descriptors at
+track birth and death — a change to the tracker's hot path, whose rate must be
+measured on the vehicle before it ships. Registered in the capability register
+with that consumer named.

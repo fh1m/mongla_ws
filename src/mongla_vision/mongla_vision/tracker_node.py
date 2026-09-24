@@ -3,7 +3,10 @@
 
 Sits between detector_node and everything downstream. Takes raw per-frame
 Detection2DArray, runs ByteTrack + optional Kalman smoothing, and publishes
-a Detection2DArray with stable `tracking_id` fields.
+a Detection2DArray with a stable id per track in `Detection2D.id`.
+⚠ The field is `id`. vision_msgs/Detection2D has no `tracking_id`;
+this docstring said otherwise and `check_tracker.py` believed it,
+raising AttributeError on the first track of every run.
 
 Topics:
   in    /mongla/vision/<cam>/detections    vision_msgs/Detection2DArray  (raw)

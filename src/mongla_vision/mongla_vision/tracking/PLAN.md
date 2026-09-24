@@ -24,7 +24,7 @@
 
 ```
 in   /mongla/vision/<cam>/detections    vision_msgs/Detection2DArray
-out  /mongla/vision/<cam>/tracks        vision_msgs/Detection2DArray  (tracking_id set)
+out  /mongla/vision/<cam>/tracks        vision_msgs/Detection2DArray  (Detection2D.id set; there is NO tracking_id field)
 ```
 
 Predicted frames (occlusion-bridged) carry `score=0.0`.

@@ -34,7 +34,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), 'src', 'mongla_vision'))
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument('bag')
-    ap.add_argument('--topic', default='/mongla/vision/forward/detections')
+    # ⭐ `/tracks` by default, not `/detections`. Identity switches are a
+    # TRACKER property and /detections carries no id at all, so scoring the
+    # detector topic reported `switches = 0` -- which is the absence of a
+    # measurement, not a clean result. Pass --topic to score the raw detector.
+    ap.add_argument('--topic', default='/mongla/vision/forward/tracks')
     ap.add_argument('--label', default='')
     args = ap.parse_args()
 
@@ -75,10 +79,17 @@ def main() -> int:
         # 640x360; read it from the box rather than assuming.
         w = float(os.environ.get('MONGLA_FRAME_W', 640))
         hgt = float(os.environ.get('MONGLA_FRAME_H', 360))
+        # The id is a STRING on the wire (`Detection2D.id`); continuity wants
+        # an int and treats -1 as unknown, so a non-numeric id stays unknown
+        # rather than being hashed into a fake identity.
+        try:
+            tid = int(best.id) if best.id else -1
+        except (TypeError, ValueError):
+            tid = -1
         obs.append(Obs(t=t, seen=True, score=score,
                        cx=float(bb.center.position.x) / w,
                        cy=float(bb.center.position.y) / hgt,
-                       track_id=-1))
+                       track_id=tid))
 
     if not obs:
         print(f'no messages on {args.topic}')

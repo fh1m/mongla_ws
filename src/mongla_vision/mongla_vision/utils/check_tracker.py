@@ -67,7 +67,13 @@ def main(argv=None):
         ids_this_frame = set()
         has_track = False
         for d in msg.detections:
-            tid = d.tracking_id
+            # ⛔ `d.id`, NOT `d.tracking_id`. vision_msgs/Detection2D has
+            # fields (header, results, bbox, id) -- there is no tracking_id,
+            # so this line raised AttributeError on the FIRST track of every
+            # run. A shipped diagnostic that cannot ever have worked: it only
+            # runs when tracks exist, which is exactly when it broke.
+            # `tracker_node._build_array` writes the id with `d2.id = str(...)`.
+            tid = d.id
             if not tid:
                 continue
             has_track = True
