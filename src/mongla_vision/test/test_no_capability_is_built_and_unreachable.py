@@ -59,6 +59,14 @@ WIRED = {
 # ⚠ NOT wired, ON PURPOSE, each with the consumer it needs. A row here is a
 # debt with a name, not a silent gap.
 DEFERRED = {
+    'mongla_vision/mongla_vision/tracking/cascade.py': (
+        'the association cascade that makes appearance affordable -- it runs '
+        'the expensive stage only on detections motion could not explain, and '
+        'carries the ego-motion stage no published tracker has, because ours '
+        'is MEASURED rather than fitted from image content. Waits on '
+        'tracker_node, which currently calls its tracker library directly; '
+        'inserting a cascade is a change to the association hot path and its '
+        'rate must be measured on the vehicle first.'),
     'mongla_vision/mongla_vision/tracking/reid.py': (
         'the 179-switch fix, and the one piece of the BoT-SORT / McByte++ '
         'recipe an embedded budget can normally not afford -- a dedicated '
