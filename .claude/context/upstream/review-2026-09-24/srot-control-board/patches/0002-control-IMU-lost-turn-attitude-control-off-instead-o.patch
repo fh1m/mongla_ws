@@ -1,0 +1,136 @@
+From f6ce513821d3f327c14bdae014683f26793fad5c Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 24 Sep 2026 06:22:00 +0000
+Subject: [PATCH 2/5] control: IMU lost - turn attitude control off instead of
+ "holding"
+
+With the IMU debounced-lost, gx/gy/gz were zeroed but roll/pitch/yaw stayed
+frozen at their last values. attitude::stabilize turned the frozen angle
+error into a constant desired rate, and the rate PID against a measured 0
+answered with constant P plus an integrator ramping to IMAX: a steady
+torque for as long as the IMU stayed down, while the GCS was told
+"holding last attitude".
+
+While the IMU is lost (and not in MANUAL, whose roll/pitch/yaw are pilot
+passthrough rather than a controller) the three attitude demands are now
+zeroed after every controller and the feedforward, and attitude::reset()
+keeps the rate integrators empty so recovery does not release a wound-up
+I-term (and re-arms heading capture at the recovered heading). The CoB
+trim does not learn during the loss. Depth and translation are untouched,
+so a SURFACE failsafe still surfaces. STATUSTEXT now says what the vehicle
+does: "IMU lost - attitude control off, STILL ARMED" / "(disarmed)".
+
+docs/VS_ARDUSUB.md updated to match.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KchLnXUAMJ6S4pj3BZLobN
+---
+ docs/VS_ARDUSUB.md              | 11 +++++----
+ src/tasks/task_control_loop.cpp | 42 +++++++++++++++++++++++++++++----
+ 2 files changed, 44 insertions(+), 9 deletions(-)
+
+diff --git a/docs/VS_ARDUSUB.md b/docs/VS_ARDUSUB.md
+index fc2f2cf..388037e 100644
+--- a/docs/VS_ARDUSUB.md
++++ b/docs/VS_ARDUSUB.md
+@@ -59,10 +59,13 @@ outputs from the same MCU that runs everything else.
+ 
+ ### 5. IMU loss degrades instead of disarming
+ 
+-Lose attitude mid-dive and Hengla warns, zeroes the stale rates, holds the last-good attitude
+-and **stays armed** — for a submarine, cutting the thrusters mid-water is usually worse than
+-flying on slightly stale data. It also self-heals the BNO085 (re-issues reports, then re-opens
+-the SH-2 session).
++Lose attitude mid-dive (>300 ms) and Hengla warns, turns **attitude control off** — roll,
++pitch and yaw demands zeroed and the rate integrators held empty, except in MANUAL where they
++are the pilot's own sticks — keeps depth and translation, and **stays armed**: for a submarine,
++cutting the thrusters mid-water is usually worse than losing attitude hold. (It used to claim
++to "hold the last attitude"; a frozen angle against a zeroed gyro actually produced a constant,
++ramping torque.) It also self-heals the BNO085 (re-issues reports, then re-opens the SH-2
++session).
+ 
+ ArduSub's EKF failsafe is more conservative, which is the right call for a vehicle that can fall
+ out of the sky and the wrong one for a neutrally-buoyant vehicle.
+diff --git a/src/tasks/task_control_loop.cpp b/src/tasks/task_control_loop.cpp
+index 34ef800..183de33 100644
+--- a/src/tasks/task_control_loop.cpp
++++ b/src/tasks/task_control_loop.cpp
+@@ -753,9 +753,16 @@ void Task_ControlLoop(void* pv) {
+         // transient sensor-mutex miss ("state busy"), on a 150 ms BNO085 reset-recovery
+         // window, and even on "calibrating" — which made MOTOR_DETECT impossible, since it
+         // sets cal.routine itself. For a submarine, cutting the thrusters mid-water is
+-        // worse than flying on the last known attitude: roll/pitch/yaw already hold their
+-        // last-good values, so we keep control and just say so.
++        // worse than losing attitude control, so we keep depth and translation and turn
++        // the attitude axes OFF (see `imu_bad` below the mixer inputs).
++        //
++        // "Holding the last attitude" is what this used to claim, and it was false: a frozen
++        // angle against a fixed target is a CONSTANT angle error, the outer loop turned it
++        // into a constant desired rate, and the rate PID against the zeroed gyro answered
++        // with constant P plus an integrator ramping to IMAX — a steady torque for as long
++        // as the IMU stayed down, while the GCS was told the vehicle was holding.
+         bool armed = in.armed;
++        bool imu_bad = false;   // debounced IMU loss, for the demand gate further down
+         {
+             static bool     s_imu_bad = false;      // debounced state
+             static uint32_t s_bad_since = 0;
+@@ -773,9 +780,10 @@ void Task_ControlLoop(void* pv) {
+                     // unconditionally, so a disarmed bench board announced itself as armed --
+                     // exactly the claim an operator acts on, and the one it must never get
+                     // wrong. `armed` is right here and was already being read.
++                    // <= 50 chars (STATUSTEXT.text); says what the vehicle now DOES.
+                     mav_stream::queueStatusText(MAV_SEVERITY_ERROR,
+-                        armed ? "IMU lost - holding last attitude, STILL ARMED"
+-                              : "IMU lost - holding last attitude (disarmed)");
++                        armed ? "IMU lost - attitude control off, STILL ARMED"
++                              : "IMU lost - attitude control off (disarmed)");
+                 }
+             } else {
+                 s_bad_since = 0;
+@@ -788,6 +796,7 @@ void Task_ControlLoop(void* pv) {
+             // rate to the rate PIDs winds their integrators up against an error that can
+             // never be corrected, so zero the rates instead of holding them.
+             if (s_imu_bad) { in.gx = 0; in.gy = 0; in.gz = 0; }
++            imu_bad = s_imu_bad;
+         }
+ 
+         // --- Motor test override takes precedence over the mixer. ---
+@@ -877,11 +886,34 @@ void Task_ControlLoop(void* pv) {
+                 computeDemands(in, dt, roll, pitch, yaw, thr, fwd, lat);
+                 // Model-based feedforward (drag + cross-coupling + CoB auto-trim). Learn
+                 // the trim only when the pilot sticks are near centre.
++                // Never learn while the IMU is lost: the trim is learned from the rate
++                // integrators, which are being held at zero below.
+                 bool learn = fabsf(in.sp_roll) < 0.1f && fabsf(in.sp_pitch) < 0.1f &&
+-                             fabsf(in.sp_yaw) < 0.1f && fabsf(in.sp_throttle) < 0.1f;
++                             fabsf(in.sp_yaw) < 0.1f && fabsf(in.sp_throttle) < 0.1f &&
++                             !imu_bad;
+                 feedforward::apply(roll, pitch, yaw, thr, in.gx, in.gy, in.gz, in.mode, learn);
+             }
+ 
++            // IMU lost: attitude control OFF. Every closed-loop attitude path (STABILIZE,
++            // DEPTH_HOLD, SURFACE, AUTO, ACRO, STUNT, PATTERN, AUTOTUNE, and the feedforward
++            // trim added just above) is acting on a frozen angle and a zeroed gyro, which
++            // yields a constant torque, not a hold. Zero the three attitude demands and keep
++            // the rate integrators empty, so recovery starts clean instead of releasing a
++            // wound-up I-term. reset() also re-arms heading capture, so a recovered IMU
++            // (whose yaw may have re-zeroed after a BNO reset) holds where it IS rather than
++            // swinging back to a heading from before the loss.
++            //
++            // Depth and translation are untouched: they do not depend on the IMU, and
++            // keeping them is what lets a SURFACE failsafe still surface.
++            //
++            // MANUAL is exempt — its roll/pitch/yaw are the pilot's sticks passed straight
++            // through, not a controller, and a pilot flying by hand is the best attitude
++            // control left once the IMU is gone.
++            if (imu_bad && in.mode != FlightMode::MANUAL) {
++                roll = 0; pitch = 0; yaw = 0;
++                attitude::reset();
++            }
++
+             // FRAME_REVERSE: negate every axis demand, right before mixing.
+             //
+             // Applied HERE, after the controllers and before the mixer, deliberately. The
+-- 
+2.43.0
+

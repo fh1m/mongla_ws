@@ -1,0 +1,181 @@
+From 22f0ccb7052fa4b05299807cfa4d3d64d4511f87 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 24 Sep 2026 06:24:49 +0000
+Subject: [PATCH 5/5] arming: refuse to arm into a mode that would itself start
+ a manoeuvre
+
+canArm() had no mode check. USER_1..4 select STUNT/PATTERN while
+disarmed, and stunt::start/pattern::start run at mode entry regardless of
+the arm state, so a yaw spin queued on the bench fired at full rate the
+instant the vehicle armed. USER_5 / ATUNE=1 latch autotune_active while
+disarmed with the same effect, and AUTOTUNE / MOTOR_TUNE / MOTOR_DETECT
+were "select, then arm to start".
+
+canArm() now refuses, before and independent of ARMING_CHECK (which skips
+sensor checks on a bench, not this), while the mode is STUNT, PATTERN,
+AUTOTUNE, MOTOR_TUNE or MOTOR_DETECT, or an autotune is pending, with a
+reason that says what to do ("PreArm: STUNT queued - select a flight
+mode", "... - arm first, then select", "autotune pending - set ATUNE=0";
+all fit STATUSTEXT). The workflow is now uniformly: arm in a flight mode,
+then select the manoeuvre.
+
+So a pending trigger is not a dead end, ATUNE=0 now withdraws it while
+disarmed (previously only arming - which starts the tune - cleared it).
+The MOTOR_TUNE OLED hint changes to "MTune: arm, then select".
+
+The joystick-button arm path does not go through canArm and is untouched
+(tracked upstream as issue #6).
+
+Companion: mongla_ws's autotune/motor_tune already arm first and then set
+the mode, so they are unaffected. ARCHITECTURE.md and PARAMETERS.md
+updated.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01KchLnXUAMJ6S4pj3BZLobN
+---
+ ARCHITECTURE.md                 |  5 +++++
+ PARAMETERS.md                   |  4 ++--
+ src/comms/mav_commands.cpp      | 10 ++++++++--
+ src/control/arming.cpp          | 32 +++++++++++++++++++++++++++++++-
+ src/control/arming.h            |  7 ++++++-
+ src/tasks/task_control_loop.cpp |  2 +-
+ 6 files changed, 53 insertions(+), 7 deletions(-)
+
+diff --git a/ARCHITECTURE.md b/ARCHITECTURE.md
+index 18c83e5..f548f93 100644
+--- a/ARCHITECTURE.md
++++ b/ARCHITECTURE.md
+@@ -102,6 +102,11 @@ creep. What it actively does depends on the mode:
+ | MOTOR_DETECT (20) | — | — | Pulses each thruster to detect direction |
+ | STUNT/PATTERN (100/101) | scripted | scripted | Cmd-triggered rotations/sequences |
+ 
++**Arming is refused** in STUNT, PATTERN, AUTOTUNE, MOTOR_TUNE and MOTOR_DETECT, and while an
++`ATUNE`/`USER_5` autotune is pending (`arming::canArm`, not bypassed by `ARMING_CHECK=0`):
++each would start a scripted, full-authority manoeuvre the instant the vehicle armed. Arm in a
++flight mode, then select them.
++
+ Entering **Depth Hold** captures the *current* depth as target (it doesn't dive to a
+ preset); the throttle stick slews the target and re-locks on release. **No mode holds
+ horizontal position** (no GPS/DVL/flow fusion yet) — current can drift the sub sideways.
+diff --git a/PARAMETERS.md b/PARAMETERS.md
+index 4104605..0e9ba63 100644
+--- a/PARAMETERS.md
++++ b/PARAMETERS.md
+@@ -131,7 +131,7 @@ Outer angle loop: `error × ATC_ANG_*_P → desired rate`. Inner rate loop:
+ ### Autotune & motor tuning (modes AUTOTUNE=21, MOTOR_TUNE=22)
+ | Param | Default | What it does |
+ |---|---|---|
+-| `ATUNE` | 0 | Set 1 to start the flight-loop relay autotune (auto-resets). Or select AUTOTUNE mode. |
++| `ATUNE` | 0 | Set 1 to start the flight-loop relay autotune (auto-resets). Or select AUTOTUNE mode. **Arm first:** set while disarmed it is only *pending*, and arming is refused until it runs or `ATUNE=0` withdraws it. |
+ | `ST_ANGLE_MAX` | 70 | Safety: tumbling angle (deg) that auto-disarms during a tune. |
+ | `ST_RATE_MAX` | 360 | Safety: spin-out body rate (deg/s) that auto-disarms. |
+ | `ST_DEPTH_DELTA` | 2.0 | Safety: depth runaway (m from tune start) that auto-disarms. |
+@@ -233,7 +233,7 @@ success *and* refusal — is announced over `STATUSTEXT`.
+ | `FS_GCS_ENABLE` **[R]** | 1 | GCS-loss failsafe → controlled SURFACE ascent. |
+ | `FS_BAT_ENABLE` **[R]** | 1 | Low-battery failsafe enable (PM1). |
+ | `FS_BAT_VOLTAGE` **[R]** | 13.2 | **THRUSTER**-pack low-battery threshold (V) — see the note below. For a 4S LiPo use **13.6** (3.4 V/cell). |
+-| `ARMING_CHECK` **[R]** | 1 | 0 = skip pre-arm checks, 1 = enforce. |
++| `ARMING_CHECK` **[R]** | 1 | 0 = skip the sensor pre-arm checks, 1 = enforce. The mode check is **not** skipped: arming is always refused in STUNT / PATTERN / AUTOTUNE / MOTOR_TUNE / MOTOR_DETECT or with an autotune pending — arm, then select those. |
+ | `ATUNE` **[R]** | 0 | Momentary trigger: set 1 → relay auto-tune of all PID loops (auto-resets to 0; NVS save deferred to the comms core). |
+ | `ESPNOW_EN` **[R]** | 0 | Start the WiFi/ESP-NOW 2nd-board link (thruster-kill + thruster-pack voltage). Live within ~50 ms; **setting it back to 0 does not stop the radio** — that needs a reboot. |
+ 
+diff --git a/src/comms/mav_commands.cpp b/src/comms/mav_commands.cpp
+index 053480d..02b8493 100644
+--- a/src/comms/mav_commands.cpp
++++ b/src/comms/mav_commands.cpp
+@@ -703,9 +703,15 @@ static void onParamSet(const mavlink_message_t& msg) {
+             mav_stream::sendStatusText(MAV_SEVERITY_ERROR, wb);
+         }
+         // ATUNE is a momentary trigger: setting it ≥1 starts the relay auto-tune.
+-        if (strncmp(name, "ATUNE", 16) == 0 && ps.param_value >= 1.0f) {
++        // ATUNE=0 withdraws a trigger that has not started yet. Without this, a trigger set
++        // while disarmed could only be cleared by arming — which starts the tune — and
++        // canArm() now refuses to arm with one pending, so it would be a dead end.
++        if (strncmp(name, "ATUNE", 16) == 0) {
+             StateLock lk(g_state.mtx_control);
+-            if (lk.ok()) g_state.control.autotune_active = true;
++            if (lk.ok()) {
++                if (ps.param_value >= 1.0f)        g_state.control.autotune_active = true;
++                else if (!g_state.control.armed)   g_state.control.autotune_active = false;
++            }
+         }
+         // Pin assignments only take effect after a reboot (ArduPilot-style).
+         if (strncmp(name, "PIN_", 4) == 0) {
+diff --git a/src/control/arming.cpp b/src/control/arming.cpp
+index 1e73ebc..0e13f0a 100644
+--- a/src/control/arming.cpp
++++ b/src/control/arming.cpp
+@@ -9,8 +9,38 @@
+ 
+ namespace arming {
+ 
++// Modes (and the ATUNE latch) in which ARMING ITSELF would start a scripted, full-authority
++// manoeuvre. USER_1..5 and the ATUNE param select these while disarmed, and their state
++// machines are primed at mode entry — so a yaw spin queued on the bench fired at full rate
++// the instant the vehicle armed, with no further command. Arm in a flight mode; select
++// these once armed, where selecting them IS the deliberate act.
++//
++// MOTOR_TUNE and MOTOR_DETECT used to be "select, then arm to start". They now follow the
++// same rule: arm (STABILIZE/MANUAL), then select the mode.
++static const char* modeRefusal(FlightMode m, bool autotune_pending) {
++    switch (m) {
++        case FlightMode::STUNT:        return "STUNT queued - select a flight mode";
++        case FlightMode::PATTERN:      return "PATTERN queued - select a flight mode";
++        case FlightMode::AUTOTUNE:     return "AUTOTUNE mode - arm first, then select";
++        case FlightMode::MOTOR_TUNE:   return "MOTOR_TUNE mode - arm first, then select";
++        case FlightMode::MOTOR_DETECT: return "MOTOR_DETECT - arm first, then select";
++        default: break;
++    }
++    if (autotune_pending) return "autotune pending - set ATUNE=0";
++    return nullptr;
++}
++
+ bool canArm(const char** reason) {
+-    // ARMING_CHECK == 0 → skip pre-arm checks (arm always allowed).
++    // Mode check FIRST, and NOT bypassed by ARMING_CHECK=0: that switch exists to skip
++    // sensor pre-arm checks on a bench, not to let arming launch a queued manoeuvre.
++    {
++        StateLock lk(g_state.mtx_control, pdMS_TO_TICKS(5));
++        if (!lk.ok()) { if (reason) *reason = "state busy"; return false; }
++        const char* why = modeRefusal(g_state.control.mode, g_state.control.autotune_active);
++        if (why) { if (reason) *reason = why; return false; }
++    }
++
++    // ARMING_CHECK == 0 → skip the remaining (sensor) pre-arm checks.
+     if (g_params.arming_check < 0.5f) return true;
+ 
+     bool imu_ok = false, leak = false, aux_fresh = false;
+diff --git a/src/control/arming.h b/src/control/arming.h
+index 5fe6884..c9404c2 100644
+--- a/src/control/arming.h
++++ b/src/control/arming.h
+@@ -12,7 +12,12 @@
+ namespace arming {
+ 
+ // True if arming is permitted. When `reason` is non-null and arming is refused,
+-// it is filled with a short human-readable pre-arm failure message.
++// it is filled with a short human-readable pre-arm failure message (<= 41 chars, so
++// "PreArm: " + reason fits STATUSTEXT's 50).
++//
++// Refuses (regardless of ARMING_CHECK) while the mode is STUNT, PATTERN, AUTOTUNE,
++// MOTOR_TUNE or MOTOR_DETECT, or an ATUNE/USER_5 autotune is pending: arming there would
++// itself start a scripted manoeuvre. Takes mtx_control and mtx_sensors (not nested).
+ bool canArm(const char** reason = nullptr);
+ 
+ }  // namespace arming
+diff --git a/src/tasks/task_control_loop.cpp b/src/tasks/task_control_loop.cpp
+index 183de33..b71d156 100644
+--- a/src/tasks/task_control_loop.cpp
++++ b/src/tasks/task_control_loop.cpp
+@@ -544,7 +544,7 @@ void Task_ControlLoop(void* pv) {
+         }
+         // Explain the two ways these silently do nothing, instead of leaving the pilot guessing.
+         if (in.mode == FlightMode::MOTOR_TUNE && !in.armed && !prev_mtune)
+-            ui_log::set("MTune: arm to start");
++            ui_log::set("MTune: arm, then select");   // canArm refuses arming IN this mode
+         if (in.mode == FlightMode::MOTOR_TUNE && g_params.mtune_en <= 0.5f && !prev_mtune)
+             ui_log::set("MTune off: set MTUNE_EN=1");
+         prev_autotune = at_active;
+-- 
+2.43.0
+
