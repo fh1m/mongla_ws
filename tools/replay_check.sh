@@ -15,8 +15,17 @@
 # number from today and a number from next month mean the same thing.
 set -euo pipefail
 
-BAG="${1:?usage: replay_check.sh <bag-dir> [label]}"
+BAG="${1:?usage: replay_check.sh <bag-dir> [label] [rate]}"
 LABEL="${2:-replay}"
+# ⛔ RATE IS A FIDELITY CONTROL, NOT A CONVENIENCE. Measured 2026-09-24: played
+# at 1.0, the Pi managed 20.5 Hz of detections against 41.2 Hz live on the same
+# footage -- it cannot both play a 4.7 GB bag and infer at full rate. The lock
+# ladder decays authority with TIME, so half the detections per second reads as
+# a worse ladder: lost 30.9 % replayed against 25.2 % live. Detector-level
+# numbers survive that (51 % vs 52 % of messages carrying a box); ladder
+# occupancy does not. Slow the playback until the detector keeps up, or the
+# fixture measures the Pi's spare capacity instead of the code.
+RATE="${3:-1.0}"
 RUN_DIR="${MONGLA_RUN_DIR:-$HOME/mongla_runs}"
 WS="${MONGLA_WS:-$HOME/mongla_ws}"
 [ -d "$BAG" ] || { echo "no such bag: $BAG" >&2; exit 1; }
@@ -62,11 +71,12 @@ run_resettable ros2 bag record -s mcap --regex \
 REC_PID=$!
 sleep 3
 
-echo "▸ playing $BAG"
+echo "▸ playing $BAG at rate $RATE"
 # Only image_raw: everything else in the recorded bag is OUTPUT, and replaying
 # a detection alongside the detector that is meant to produce it would score
 # the recording instead of the code.
-ros2 bag play "$BAG" --topics /mongla/vision/forward/image_raw >>"$LOG" 2>&1
+ros2 bag play "$BAG" --rate "$RATE" \
+    --topics /mongla/vision/forward/image_raw >>"$LOG" 2>&1
 echo "▸ play finished"
 sleep 3
 
