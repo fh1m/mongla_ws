@@ -3915,3 +3915,63 @@ scale alone. That is the right quantity for "does driving closer help?" and the
 wrong one for a claim about scale sensitivity in isolation.
 ⚠ Class ids are this graph's, and the per-class numbers do not transfer to a
 different model without re-measuring.
+
+---
+
+## 24. ⭐ The downward camera CAN recognise a place — three bars, not one
+
+**2026-09-24.** The operator asked whether the downward camera plus XFeat could
+remember places, giving the localiser waypoints and loop closures — the one
+correction a dead-reckoning filter with no GPS and no DVL cannot generate for
+itself.
+
+⚠ **The standing prediction was that this fails.** `vision-features-and-matching.md`
+holds that place recognition over a tiled floor is defeated by aliasing
+("nothing on a tiled floor — aliasing is total"), and §22 measured a generic
+structural view matching a different run of itself on only 8 % of frames.
+
+`tools/floor_place_recognition.py` samples frames in PAIRS along a downward clip
+— two frames a short hop apart at each site — and matches every pair, splitting
+by time separation. Near pairs are the same ground; far pairs should not match
+unless the floor aliases:
+
+| downward clip | pairs | near p50 | far p50 | far p90 | near ≥15 | far ≥15 | |
+|---|---|---|---|---|---|---|---|
+| octagon_1 (caustics) | 276 | **76** | 12 | 27 | 100 % | 35 % | SEPARATES |
+| octagon_Bottom | 276 | **168** | 9 | 20 | 92 % | 17 % | SEPARATES |
+| bin | 276 | **192** | 16 | 81 | 100 % | 55 % | SEPARATES |
+
+⭐ **Same place separates from different place on all three floors, including
+the caustic-lit one.** The near median is 6–19× the far median.
+
+### The prediction was about a different thing, and that is the lesson
+
+The aliasing claim came from **NetVLAD/CosPlace-class GLOBAL descriptors**,
+which pool a whole image into one vector and therefore cannot tell one tile from
+an identical tile. XFeat matches **local** features with a geometric
+verification on top, so a repeating pattern produces many candidate
+correspondences that MAGSAC then fails to fit to a single homography. ⭐ The
+aliasing prediction stands for the method it was made about and **does not
+transfer** to this one. Recorded because inheriting it would have closed a
+capability we turn out to have.
+
+### ⛔ But the bar cannot be 15
+
+The far tail clears `MIN_INLIERS` on **17–55 %** of pairs. A loop closure is a
+hard constraint injected into an EKF; accepting a wrong one is far worse than
+missing a right one, because the filter will then confidently converge on a
+false position. Far p90 is 20–81 against a near p50 of 76–192.
+
+⭐ **Three bars, three questions** — and they are not the same number:
+
+| question | bar | source |
+|---|---|---|
+| is this the same scene? (tracking) | **15** | `MIN_INLIERS`, §8 |
+| is this that prop? (identity, reacquire) | **60** | §22, swept |
+| am I where I was before? (loop closure) | **~100** | this table, far p90 |
+
+⚠ **What this does NOT establish.** A far pair that matches may be a genuine
+REVISIT rather than an alias, and without trajectory ground truth these are
+indistinguishable — so the far tail is a reason to set the bar high, not a
+proof of aliasing. And these are three clips from one archive: the bar of 100 is
+a starting point that a pool day with known positions should replace.
