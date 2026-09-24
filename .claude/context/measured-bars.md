@@ -5738,3 +5738,69 @@ understood — which is a better outcome than two unexplained failures.
 | loader cache | **1 200** images (3 000 is ~4.4 GB of system RAM) |
 | lr | 2e-4 from stock weights, never from scratch |
 | dataset | on **nvme**, never `/tmp` — see §49 |
+
+---
+
+## 53. ⛔⛔ ROUND 7 CLOSES **NO** — AND THE SCORER WAS THE DEFECT
+
+**2026-09-25.** The 320×240 retrain looked like the win: all eight checkpoints
+scored at or above stock, and the wide metric read held-out median **+17.0,
++9.5, +11.0**. Then the same weights were run through the **shipped** ONNX path
+— `xfeat_onnx.py`, the code the vehicle actually executes.
+
+```
+                  stock                     fine-tuned
+mirpur_torpedo    [189,  65, 134, 24] 4/4   [174,  54, 134, 36] 4/4
+mirpur_torpedo_1  [ 69,  43,  51, 12] 3/4   [ 78,  43,  41,  9] 3/4
+mirpur_gate       [195,  36, 237, 31] 4/4   [147,  53, 167, 32] 4/4
+octagon           [182, 115,  73, 18] 4/4   [156, 102,  55, 25] 4/4
+torpedo_clear     [355, 199, 121, 88] 4/4   [328, 206, 121, 91] 4/4
+
+total inliers     2237                      2052        -8.3 %
+passing columns   19/20                     19/20       identical
+```
+
+⛔ **No improvement. A small loss. Round 7 closes NO and stock weights stay.**
+
+### The defect was my measuring instrument
+
+`tools/xfeat_finetune_score.py` drives the network with **its own** keypoint
+extraction — top-k on the heatmap, nearest-neighbour descriptor sampling — not
+`xfeat_onnx.py`'s NMS, bilinear sampling and reliability weighting. It was a
+different algorithm wearing the same name.
+
+⭐ **The tell was visible from the first run and I read past it.** The scorer's
+stock arm reported `[210, 133, 222, 41]`; §19.1's recorded table, produced by
+the shipped path, reads `[189, 65, 134, 24]`. Two stock numbers for one stock
+model. I noted the discrepancy, attributed it to "different post-processing",
+and kept using the scorer anyway — for two training runs and four checkpoint
+sweeps.
+
+**A control arm that cannot reproduce the recorded number is not a control
+arm.** That check costs one command and would have caught this before either
+retrain.
+
+### What survives, and it is not nothing
+
+- **§52's resolution finding still stands, and is now the explanation rather
+  than a lead.** Training at 800×608 while inferring at 320×240 is a real
+  mismatch; fixing it moved the scorer's numbers a long way. It did not move
+  the shipped pipeline, which is what matters.
+- **The dataset and its discipline stand.** 4 834 verified frames, balanced by
+  venue-and-date, Mirpur held out by count, Beer-Lambert calibrated against the
+  archive's own measured R/B. The contamination story (§47) is the durable
+  part.
+- **The ONNX export path now takes `--weights`**, so a fine-tuned checkpoint can
+  be exported at all — previously it silently exported stock under any name.
+
+### The rule this earns
+
+> **Score through the shipped code path, or do not score.** A harness that
+> re-implements the pipeline measures the harness. Before trusting any new
+> scorer, make its control arm reproduce a recorded number — and if it cannot,
+> that is the finding.
+
+⚠ Four retractions in two days, and this is the only one where the *instrument*
+was wrong rather than the data or the interpretation. It is also the most
+expensive: two training runs, ~3 GPU-hours, and a published §52 that read as a
+breakthrough.

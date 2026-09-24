@@ -42,6 +42,8 @@ def main() -> int:
     ap.add_argument('--out', default='/home/fh1m/hailo/work')
     ap.add_argument('--sizes', default='320x240')
     ap.add_argument('--tol', type=float, default=1e-5)
+    ap.add_argument('--weights', default='')
+    ap.add_argument('--tag', default='hailo')
     a = ap.parse_args()
 
     sys.path.insert(0, a.src)
@@ -54,7 +56,10 @@ def main() -> int:
         # Identical to the stock implementation, as one supported op.
         return F.pixel_unshuffle(x, ws)
 
-    w = os.path.join(a.src, 'weights', 'xfeat.pt')
+    # THE WEIGHTS ARE A PARAMETER. Without --weights this tool exports
+    # stock under whatever name it is given, which would be invisible
+    # until someone measured the HEF and got the stock numbers back.
+    w = a.weights or os.path.join(a.src, 'weights', 'xfeat.pt')
     os.makedirs(a.out, exist_ok=True)
 
     for spec in a.sizes.split(','):
@@ -80,7 +85,7 @@ def main() -> int:
                 f'{worst:.3e} > {a.tol:.0e}. A graph that compiles but computes '
                 f'something else is worse than one that does not compile.')
 
-        dst = os.path.join(a.out, f'xfeat_hailo_{W}x{H}.onnx')
+        dst = os.path.join(a.out, f'xfeat_{a.tag}_{W}x{H}.onnx')
         torch.onnx.export(
             patched, x, dst, opset_version=16, input_names=['image'],
             output_names=['feats', 'keypoints', 'heatmap'], dynamo=False)
