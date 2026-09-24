@@ -3374,3 +3374,50 @@ unconstrained on *where* a prop is sighted, and rewarded for sighting one for
 
 ⛔ **None of this holds without flow** — see B-56. There, fixes do not rescue and
 a tighter fix actively hurts.
+
+---
+
+## B-XF1 ⛔ `detector_dual_node` publishes EMPTY detections for frames its own detector class detects
+
+**Found 2026-09-24, on the vehicle.** Severity: **HIGH** — this is the "silent
+`[]` every frame while the pipeline looks healthy" failure `CLAUDE.md` §4 warns
+about, and nothing in the graph reports a fault.
+
+### Symptom
+
+Full `vision_pi.launch.py` on the Pi, forward camera live:
+
+| | |
+|---|---|
+| camera | `pub=37.0 Hz, sent=74, dropped=0` |
+| `/mongla/vision/forward/detections` | publishing at **33.4 Hz** |
+| detections in each message | ⛔ **zero** |
+| ladder | `detection=0% follow=0% anchor=0% lost=100%` |
+
+### What has been RULED OUT, each by measurement
+
+| candidate | evidence it is not the cause |
+|---|---|
+| the model | `yolov11n.hef` direct through HailoRT on the live frame: **3 boxes, best 0.808, class 0** |
+| the confidence | identical empty result at `conf:=0.25` and `conf:=0.13` (the documented INT8 operating point) |
+| exposure | detected at 0.808 blown-out, 0.834 darkened, 0.509 CLAHE |
+| the class allowlist | `update_allowlist` maps empty → `None` → allow-all; correct |
+| input dtype | the detector binds `FormatType.UINT8`, which is right |
+| **the detector class itself** | `make_detector(...).infer()` on the NODE's own 640×360 published frame returns **`person` 0.542**; on a 1280×720 grab, **`person` 0.827** |
+
+⭐ **The same class, on the same pixels, returns a detection. The node emits
+nothing.** So the defect is in `detector_dual_node`'s path between decoding the
+image and publishing `Detection2DArray` — not in the model, the threshold, the
+image, or `HailoDetector`.
+
+### Next step
+
+Instrument `detector_dual_node` between `infer()` and the publish: log
+`len(detections)` at the source. If `infer()` returns non-empty there, the loss
+is in the message-building or filtering step; if it returns empty, the frame the
+node hands it differs from the frame it publishes.
+
+⚠ **Blocks the live ladder end-to-end.** The anchor rung was verified
+independently (§34.3: 100 % hold over 32 frames, 467–595 inliers) precisely
+because it does not need the detector — but DETECTION and FOLLOW cannot be
+exercised on the vehicle until this is fixed.
