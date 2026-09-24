@@ -57,6 +57,7 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PointStamped
 from sensor_msgs.msg import Range
 from mongla_vision.anchor import loop_closure as _lc
+from mongla_vision.anchor import health as _health
 
 from mongla_vision import qos as _qos
 from mongla_vision.stamps import capture_monotonic
@@ -332,6 +333,7 @@ class LockNode(Node):
         self._floor_h = float('nan')
         self._floor_h_t = 0.0
         self._pool_depth_warned = False
+        self._last_health = _health.UNKNOWN
         self._fix_pub = None
         self._closures = 0
         self._closure_refusals = collections.Counter()
@@ -551,6 +553,30 @@ class LockNode(Node):
         self._odom_sigma = (math.sqrt(vx + vy)
                             if (vx > 0.0 and vy > 0.0) else float('nan'))
         self._odom_t = time.monotonic()
+
+    def _note_anchor_health(self) -> None:
+        """Say WHICH failure this is, when the bank stops matching.
+
+        ⚠ Reported, not acted on. The thresholds in `anchor/health.py` are
+        DECLARED -- no port has been fouled on purpose -- so this logs a
+        verdict for an operator and changes no control path. Wiring it to
+        behaviour needs a measured bar first.
+        """
+        try:
+            cur, best = self._anchor.last_lookup_scores()
+        except Exception:                      # noqa: BLE001 -- never fatal
+            return
+        v = _health.assess(cur, best)
+        if v.state == self._last_health:
+            return
+        self._last_health = v.state
+        if v.state == _health.CAMERA:
+            self.get_logger().warning(
+                f'[LOCK ] the CAMERA looks degraded, not the scene: '
+                f'{v.reason}. Searching for a better view cannot help.')
+        elif v.state == _health.WORLD:
+            self.get_logger().info(
+                f'[LOCK ] the VIEW changed, the camera is fine: {v.reason}')
 
     def _on_floor_height(self, msg) -> None:
         """Measured height above the floor, from the tile grating."""
@@ -1064,6 +1090,15 @@ class LockNode(Node):
                       # AnchorPose the rest of this node already consumes, so
                       # nothing downstream learns that there is now more than
                       # one reference.
+                      # ⭐ THE PER-REFERENCE YIELDS, WHICH USED TO BE THROWN
+                      # AWAY. A fouled port collapses the match against EVERY
+                      # reference at once; a target that left collapses only
+                      # the one that used to win. Both arrive at the ladder as
+                      # "the anchor is not matching" and need OPPOSITE
+                      # responses -- stop trusting vision, or go and search.
+                      # `bp` alone cannot carry that: it is a statement about
+                      # the whole shortlist.
+                      self._note_anchor_health()
                       self._anchor_pose = bp.pose
                       self._anchor_inliers = int(bp.inliers)
                       self._anchor_best = bp.index

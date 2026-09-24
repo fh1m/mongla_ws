@@ -302,6 +302,15 @@ vision gains, because sim imagery is too clean.
   the bar it must clear — including the numbers we later retracted. Tests read that file.
 - **Injection-verify a guard.** A test that has never failed against a real defect is not a
   guard. Break it deliberately, watch it fail, restore it.
+- ⛔ **No capability ships unreachable.** A module is either **imported by something that
+  runs**, or it carries a written reason naming the consumer it waits for. There is no third
+  state. This is the repo's oldest and most expensive defect — the lock ladder in no launch
+  file, `lock_s` held at 0, the bank storing a position nothing passed, `device_path` read and
+  ignored, loop closure wired into the launch `bringup` does not include, and **ten orphaned
+  modules found on 2026-09-24, five of them written that day**. Every one looked finished:
+  correct code, passing tests, and nothing on the vehicle. Decide at write time — that is the
+  only moment anyone knows whether a consumer exists.
+  `test_no_capability_is_built_and_unreachable.py` enforces it.
 - **Truth tests, not agreement tests.** Comparing a new estimator against the incumbent
   measures agreement and cannot rank them; construct a case where truth is known.
 - **Refuse loudly.** A verb that reports success while the vehicle does nothing is the failure
