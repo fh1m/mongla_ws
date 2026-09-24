@@ -334,6 +334,10 @@ class LockNode(Node):
         self._floor_h_t = 0.0
         self._pool_depth_warned = False
         self._last_health = _health.UNKNOWN
+        # Recent bank yields, oldest first. Short on purpose: this answers
+        # "is it getting worse NOW", not "what has the run been like".
+        self._anchor_trend = collections.deque(maxlen=8)
+        self._prepared = 0
         self._fix_pub = None
         self._closures = 0
         self._closure_refusals = collections.Counter()
@@ -1037,7 +1041,22 @@ class LockNode(Node):
                   # bank is evaluated cannot help, because nothing has changed
                   # its mind in between.
                   may_try = now >= self._anchor_enrol_next
+                  # ⭐ A FALLING TREND IS A REASON TO ENROL, alongside stale /
+                  # uncovered / room. It is the only one of the four that is
+                  # PREDICTIVE: the others describe the bank, this describes
+                  # where the view is heading. It licenses nothing else --
+                  # it never claims the target is gone.
+                  falling = False
+                  if len(self._anchor_trend) >= _health.TREND_MIN_SAMPLES:
+                      tr = _health.trend(self._anchor_trend)
+                      if tr.prepare:
+                          falling = True
+                          self._prepared += 1
+                          if self._prepared == 1 or self._prepared % 20 == 0:
+                              self.get_logger().info(
+                                  f'[LOCK ] anticipating a loss: {tr.reason}')
                   if det_box is not None and may_try and (
+                          falling or
                           not self._anchor.has_reference or stale or uncovered
                           or room):
                       self._anchor_enrol_next = now + self._anchor_period
@@ -1099,6 +1118,13 @@ class LockNode(Node):
                       # `bp` alone cannot carry that: it is a statement about
                       # the whole shortlist.
                       self._note_anchor_health()
+                      # ⭐ ANTICIPATE, do not merely react. A falling match
+                      # quality predicts the next seconds will be worse, and
+                      # the reference worth having is the one from BEFORE the
+                      # detection is lost. Snapping then is cheap and
+                      # reversible; snapping after costs the very view it
+                      # needed.
+                      self._anchor_trend.append(int(bp.inliers))
                       self._anchor_pose = bp.pose
                       self._anchor_inliers = int(bp.inliers)
                       self._anchor_best = bp.index
