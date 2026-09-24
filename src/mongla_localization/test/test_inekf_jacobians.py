@@ -26,7 +26,7 @@ def _state():
 def _captured_H(f, call):
     seen = {}
 
-    def spy(H, y, R):
+    def spy(H, y, R, *, kind):
         seen['H'] = np.array(H)
         return True
     f._apply = spy

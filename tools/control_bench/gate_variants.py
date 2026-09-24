@@ -71,14 +71,15 @@ class DropAttitudeBlock(RIEKF):
         H = np.zeros((1, self.DIM))
         H[0, 8] = 1.0                      # NO -skew(p) term
         y = np.array([-float(depth_m) - self.X.p[2]])
-        return self._apply(H, y, np.array([[sigma ** 2]]))
+        return self._apply(H, y, np.array([[sigma ** 2]]), kind='depth')
 
     def update_position(self, xy, sigma=0.5):
         z = np.asarray(xy, dtype=float).reshape(2)
         H = np.zeros((2, self.DIM))
         H[0, 6] = 1.0
         H[1, 7] = 1.0                      # NO -skew(p) term
-        return self._apply(H, z - self.X.p[:2], np.eye(2) * (sigma ** 2))
+        return self._apply(H, z - self.X.p[:2], np.eye(2) * (sigma ** 2),
+                           kind='position')
 
 
 class InflateWithDistance(RIEKF):
@@ -147,7 +148,8 @@ class Hybrid(RIEKF):
         H = np.zeros((2, self.DIM))
         H[0, 6] = 1.0
         H[1, 7] = 1.0
-        return self._apply(H, z - self.X.p[:2], np.eye(2) * (sigma ** 2))
+        return self._apply(H, z - self.X.p[:2], np.eye(2) * (sigma ** 2),
+                           kind='position')
 
 
 VARIANTS['D  hybrid'] = Hybrid
@@ -226,7 +228,8 @@ class StalenessGate(RIEKF):
         H = np.zeros((2, self.DIM))
         H[0, 6] = 1.0
         H[1, 7] = 1.0
-        return self._apply(H, z - self.X.p[:2], np.eye(2) * (sigma ** 2))
+        return self._apply(H, z - self.X.p[:2], np.eye(2) * (sigma ** 2),
+                           kind='position')
 
 
 VARIANTS['E  staleness gate'] = StalenessGate

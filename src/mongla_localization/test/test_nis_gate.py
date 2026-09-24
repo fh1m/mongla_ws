@@ -58,6 +58,32 @@ def test_a_persistently_disagreeing_world_breaks_the_lockout():
     assert f.X.p[1] == pytest.approx(2.0, abs=0.2)
 
 
+def test_the_lockout_breaks_while_ANOTHER_channel_is_being_accepted():
+    """⛔ TRUTH: the hull is at (1, 2), level. The filter is confidently wrong
+    at (5, 5) with a 5 cm sigma. The board's attitude -- correct, accepted --
+    arrives at 50 Hz, and a correct fix at 5 Hz.
+
+    The streak used to be ONE counter that any accepted update zeroed. With
+    attitude accepted ten times between fixes, the position streak never got
+    past 1: the lockout break never fired and the filter sat at (5, 5)
+    rejecting the truth for ever, publishing a 5 cm sigma. One channel
+    agreeing about attitude says nothing about another disagreeing about
+    position."""
+    f = RIEKF(P0_position=0.05)
+    f.X.p = np.array([5.0, 5.0, 0.0])
+    truth = np.array([1.0, 2.0])
+    breaks_at = None
+    for i in range(1, 60 * 50 + 1):                     # 60 s at 50 Hz
+        assert f.update_attitude(np.eye(3), sigma_deg=0.5) is True
+        if i % 10 == 0:                                 # 5 Hz fix
+            f.update_position(truth, sigma=0.3)
+            if f.lockout_breaks and breaks_at is None:
+                breaks_at = i // 10
+    assert breaks_at == REJECT_STREAK_LIMIT, (
+        f'lockout broke at fix {breaks_at}, not the {REJECT_STREAK_LIMIT}th')
+    assert np.linalg.norm(f.X.p[:2] - truth) < 0.1
+
+
 def test_one_outlier_does_not_break_the_lockout():
     """The recovery must need a RUN of disagreement. Tripping on a single
     outlier would make the gate pointless."""
