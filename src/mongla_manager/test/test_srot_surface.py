@@ -10,6 +10,9 @@ So the one verb whose whole purpose is to always run was the one that could
 not. Reaching the handler is not the same as the handler working, which is the
 gap these tests close.
 """
+import threading
+import time
+
 import pytest
 
 from mongla_manager import auv_manager_node as amn
@@ -27,16 +30,6 @@ class _Log:
 
     def warning(self, m):
         pass
-
-
-class _Abort:
-    def __init__(self):
-        self.cleared = 0
-        self._set = True
-
-    def clear(self):
-        self.cleared += 1
-        self._set = False
 
 
 class _FC:
@@ -64,7 +57,11 @@ class _Node:
 
     def __init__(self, fc):
         self.fc = fc
-        self.mongla = type('D', (), {'_abort_event': _Abort()})()
+        # A REAL Event, set -- exactly what `goal_callback` leaves behind when
+        # surface arrives while another verb is running.
+        ev = threading.Event()
+        ev.set()
+        self.mongla = type('D', (), {'_abort_event': ev})()
         self._log = _Log()
 
     def get_logger(self):
@@ -90,11 +87,49 @@ def test_it_brakes_before_it_changes_mode():
     assert fc.calls == ['stop_motion', 'set_mode:SURFACE']
 
 
-def test_a_prior_abort_does_not_block_it():
-    """Every motion loop exits on `_abort_event`. If a previous cancel left it
-    set, the surface would be aborted by the thing that prompted it."""
+def test_the_abort_that_brought_surface_here_stays_set():
+    """SURFACE IS THE ABORT. `goal_callback` sets the flag when surface arrives
+    mid-verb; the handler used to clear it on its next line, so a vision loop
+    streaming MANUAL_CONTROL at 20-50 Hz (and a queued fire) never saw it and
+    kept going after the operator said surface. The flag must survive the
+    handler -- the next verb clears it at its own entry."""
     node, _ = _run(_FC())
-    assert node.mongla._abort_event.cleared == 1
+    assert node.mongla._abort_event.is_set(), (
+        'surface erased the abort it was sent with -- host loops keep running')
+
+
+def test_a_running_host_loop_actually_stops():
+    """The behaviour the flag exists for, end to end: a host loop polling the
+    abort once per tick (as align_loop/move_loop do) must exit after surface."""
+    ev = threading.Event()
+
+    def _host_loop():                          # a vision loop at 50 Hz
+        t_end = time.monotonic() + 2.0
+        while time.monotonic() < t_end:
+            if ev.is_set():
+                return
+            time.sleep(0.02)
+
+    th = threading.Thread(target=_host_loop, daemon=True)
+    th.start()
+    time.sleep(0.05)
+    node = _Node(_FC())
+    node.mongla._abort_event = ev
+    ev.set()                                   # goal_callback's request_abort()
+    amn.AUVManagerNode._run_srot_surface(node, {})
+    th.join(timeout=1.0)
+    assert not th.is_alive(), 'the host loop never saw the abort surface carried'
+
+
+def test_a_prior_abort_does_not_stop_the_surface_itself():
+    """The other half of the old test's intent: with the flag left set, the
+    surface must still brake, engage SURFACE and report success. Nothing in
+    it may exit on the abort -- it is the thing the abort asked for."""
+    fc = _FC()
+    node, out = _run(fc)
+    assert node.mongla._abort_event.is_set()
+    assert fc.calls == ['stop_motion', 'set_mode:SURFACE']
+    assert out.success is True
 
 
 def test_it_reports_the_depth_it_is_ascending_from():
