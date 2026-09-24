@@ -4387,3 +4387,69 @@ path: at the tracking bar it corroborates 96 % of distractor frames.
 **A reference built from a bounding box encodes its venue.** Any capability that
 needs prop-specific identity — corroboration, cross-venue preload, re-acquisition
 by appearance — is gated on mask-based enrolment, not on a threshold sweep.
+
+---
+
+## 31. ⛔ §30 WITHDRAWN — the failure was the wrong detector, not the bounding box
+
+**2026-09-24.** §30 concluded that `corroborate()` could not discriminate
+because a *box* reference encodes its venue, and named mask-based enrolment as
+the fix. **That conclusion is withdrawn.** It was an artifact of the model I ran.
+
+### The confound
+
+§30 scored torpedo footage using **`gate_rescue_repair`** — a 3-class
+gate/rescue/repair graph — because it was the ONNX nearest to hand. On torpedo
+footage it produces weak, badly-placed boxes: confidence **p50 0.49**, and it
+fires on the gate clip as readily as the torpedo clip. The crops fed to the bank
+were therefore not of the prop, and the bank learned what was in them: water.
+
+⚠ **`/home/fh1m/Music/detect` holds 118 trained model directories**, including
+per-prop torpedo, gate, octagon and bin models. Measured over four torpedo
+models on the same frames:
+
+| model | hits on torpedo | conf p50 | hits on gate |
+|---|---|---|---|
+| `gate_rescue_repair` *(what §30 used)* | — | **0.49** | fires on both |
+| `robosub_torpedo_mini_final_day_1` | 56 % | 0.92 | 0 % |
+| `robosub_torpedo_n_200_shark-up_v1` | 81 % | 0.89 | 6 % |
+| **`robosub_torpedo_n_shark-up_200_final2`** | **81 %** | **0.88** | **0 %** |
+
+### With the right model, box crops discriminate
+
+Same protocol, 20 enrolment frames from the first half, queried against the rest
+of the torpedo clip (TRUE) and the gate clip (DISTRACTOR):
+
+| reference built from | refs | TRUE p50 | DISTRACTOR p50 | separation |
+|---|---|---|---|---|
+| **box crop, correct model** | 10 | 10 | **0** | **9.5×** |
+| GrabCut mask, correct model | 4 | 0 | 0 | 0.0× |
+| box crop, §30's wrong model | 16 | 20 | ⛔ 26 | ⛔ 0.8× |
+
+⭐ **The distractor drops to p50 0.** The venue-contamination story was real in
+§22 (whole-frame references) and **false here** — a box from a model that
+actually localises the prop contains the prop.
+
+### ⛔ And masks-from-detections made it WORSE
+
+The operator's idea — derive masks from detections so mask-based enrolment can
+be tested before any segmentation model is trained — is a good one and was
+implemented with GrabCut seeded from the detection rectangle. Measured: **4
+references and TRUE p50 0**. A tight prop box leaves little to segment, and
+GrabCut strips enough that too few keypoints survive. **Masking is not the
+lever.**
+
+### ⚠ What is still wrong
+
+TRUE p50 is **10**, below `MIN_INLIERS = 15`. Separation is excellent and
+absolute strength is poor, because this model's boxes are tight on the
+shark/hole rather than the board — a small crop carries few keypoints. So the
+open question is **what to enrol from**, not whether to mask: a box sized to the
+*structure* (the board) may beat one sized to the *label* (the shark).
+
+### The method note, and it is the expensive one
+
+**Use the right model for the footage.** Two measurements, one published
+conclusion and a proposed segmentation workstream all rested on a detector that
+was never trained for the clip it was scored on. The model collection was
+available the whole time.
