@@ -230,3 +230,81 @@ class WorldTarget:
     @property
     def xy(self) -> Optional[Tuple[float, float]]:
         return self._xy
+
+
+# --------------------------------------------------------------------------- #
+#  ⭐ PRIOR-GUIDED DETECTION -- vision stops fighting alone
+# --------------------------------------------------------------------------- #
+# ⛔ THE DETECTOR CURRENTLY SEARCHES THE WHOLE FRAME AT ONE THRESHOLD, and so
+# treats a weak blob in the corner exactly like a weak blob where the target
+# was a moment ago. It has no idea where the vehicle is, where the target was,
+# or which way either of them has moved -- although the stack knows all three.
+#
+# ⭐ THE STATE OF THE ART DOES TWO THINGS WITH THAT KNOWLEDGE.
+# Pose priors from inertial prediction "initialize feature search by projecting
+# 3D landmarks to the current image, shrinking the search region around the
+# expected pixel location", improving robustness under fast motion and blur.
+# And detection-tracking feedback lowers the bar inside that region: "when
+# search regions fall within predicted regions, the detector reduces the
+# threshold to a lower value to enhance the detection rate in that region".
+# ByteTrack makes the same argument from the other end -- similarity with
+# existing tracklets is what lets a LOW-SCORE box be recovered rather than
+# discarded.
+#
+# ⭐⭐ WE ALREADY HOLD EVERY INPUT. `WorldTarget` has the target in pool
+# coordinates, the localiser has the vehicle pose, and `optics` has the
+# intrinsics. Projecting one through the others gives the predicted pixel --
+# which is the sonar-substitute of section 4, built from geometry instead of a
+# second sensor.
+#
+# ⛔ AND THE BAR IS NEVER LOWERED BELOW WHAT THE DETECTOR CAN PRODUCE. Our HEF
+# bakes an NMS floor of 0.200; nothing at runtime brings back what the chip
+# already discarded. So this RAISES the bar outside the predicted region rather
+# than lowering it inside -- identical in effect, and honest about the floor.
+
+# How far the predicted pixel may be wrong before the prior is worthless, as a
+# fraction of frame width. Generous: the point is to exclude the far corners,
+# not to demand precision from a memory.
+PRIOR_RADIUS_FRAC = 0.25
+
+
+def project_world_target(target_xy, vehicle_xy, yaw_deg: float,
+                         w: float, h: float, fx: float,
+                         ) -> Optional[Tuple[float, float]]:
+    """Where a remembered world position should appear in the image, in px.
+
+    Bearing only -- no range is used, because the horizontal pixel of a target
+    depends on its BEARING and not on how far away it is. Returns None when the
+    target is behind the vehicle, where no pixel exists and a projection would
+    silently fold it back into the frame.
+    """
+    if target_xy is None or vehicle_xy is None or not (fx > 0 and w > 0):
+        return None
+    dx = float(target_xy[0]) - float(vehicle_xy[0])
+    dy = float(target_xy[1]) - float(vehicle_xy[1])
+    if abs(dx) < 1e-9 and abs(dy) < 1e-9:
+        return None
+    rel = math.radians(
+        (math.degrees(math.atan2(dy, dx)) - float(yaw_deg) + 180.0) % 360.0
+        - 180.0)
+    if abs(rel) >= math.radians(89.0):
+        return None                      # abeam or behind: no pixel
+    return (w * 0.5 + fx * math.tan(rel), h * 0.5)
+
+
+def region_conf_bar(px: Optional[Tuple[float, float]],
+                    cx: float, cy: float, w: float,
+                    *, inside_bar: float, outside_bar: float,
+                    radius_frac: float = PRIOR_RADIUS_FRAC) -> float:
+    """The confidence a detection at (cx, cy) must clear.
+
+    Inside the predicted region the detector's own floor is enough; outside it
+    the usual bar applies. ⛔ With no prediction, EVERYTHING gets the strict
+    bar -- an absent prior must never be read as a permissive one.
+    """
+    if px is None:
+        return outside_bar
+    r = radius_frac * float(w)
+    if math.hypot(float(cx) - px[0], float(cy) - px[1]) <= r:
+        return inside_bar
+    return outside_bar

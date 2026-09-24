@@ -5927,3 +5927,72 @@ that decided it.
 ⚠ **Not wired.** `tracker_node` calls its tracker library directly; inserting a
 cascade changes the association hot path, and its rate must be measured on the
 vehicle before it ships. Registered with that consumer named.
+
+---
+
+## 56. ⭐⭐⭐ THE DETECTOR SEES THE TARGET DURING 100 % OF ITS OWN GAPS
+
+**2026-09-25.** Measured on the recorded vehicle session (§36) — not on a
+benchmark, not on synthetic data.
+
+The literature says: project the target's expected position and **lower the
+detection bar there**. Pose priors "shrink the search region around the
+expected pixel location"; detection–tracking feedback means "when search
+regions fall within predicted regions, the detector reduces the threshold";
+ByteTrack recovers **low-score** boxes by matching them to tracklets.
+
+⛔ **None of that was evidence for our pipeline.** The mechanism only pays if
+weak detections actually exist inside OUR gaps, and only if they sit where the
+target is. Both were measured.
+
+### There is something to recover
+
+```
+10 425 frames over 253.3 s, acting threshold 0.50
+gaps >= 0.2 s                          23     (5 523 frames inside them)
+gaps containing ANY weak detection     23/23        100 %
+gap frames with a weak detection      521/5 523       9 %
+their scores            p50 0.247   p90 0.389   max 0.488
+```
+
+⭐ **The detector saw something in every single gap.** A "lost" target was not
+invisible — it was **below the bar**.
+
+### And it is where the target is, not scattered
+
+⛔ *"Near the last sighting"* means nothing without knowing how near a **random**
+box would be, so the same distance was computed against uniformly-drawn points:
+
+| | weak boxes | random control |
+|---|---|---|
+| p25 | **11 px** | 145 px |
+| p50 | **66 px** | 229 px |
+| p90 | **198 px** | 393 px |
+| within a 160 px prior radius | **84 %** | 28 % |
+
+⭐⭐ **3.00× more of the discarded boxes fall near the last sighting than
+chance.** A region-aware bar admits targets three times faster than it admits
+noise. Had the two distributions agreed, the mechanism would have been worse
+than useless — feeding the tracker exactly the false positives the bar exists
+to reject — and it would have been dropped.
+
+### What is built
+
+`tracking/visibility.py`: `project_world_target()` turns a remembered pool
+position into an expected pixel using **bearing only** (a target's horizontal
+pixel depends on its bearing, not its range — and range is what we are least
+sure of). `region_conf_bar()` then applies the detector's own floor inside that
+region and the strict bar outside.
+
+⛔ **The bar is RAISED outside, never lowered inside.** Our HEF bakes an NMS
+floor of 0.200 and nothing at runtime brings back what the chip already
+discarded — so the honest implementation keeps the detector at its floor and is
+stricter everywhere the target is not expected.
+
+⛔ **With no prior, everything gets the strict bar.** An absent prediction must
+never be read as a permissive one.
+
+⚠ **Measured on a person in a room**, where "the target left the frame" is the
+dominant gap cause. A prop that dims into turbidity may produce a different
+weak-box distribution, and the 3.00× wants re-measuring in water. The tools
+(`gap_recovery_potential.py`, `weak_box_locality.py`) run against any bag.
