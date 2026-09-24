@@ -49,6 +49,7 @@ the one to keep however old it is, and the newest is not automatically better.
 """
 from __future__ import annotations
 
+import json
 import os
 
 from dataclasses import dataclass
@@ -183,6 +184,9 @@ class BankPose:
     # idea what it belongs to.
     label: str = ''
     searched: int = 0          # how many references were actually matched
+    # Points annotated ON THE REFERENCE, carried into THIS frame through the
+    # homography. See `enrol(annotations=...)`.
+    points: Optional[dict] = None
     # Set only by `recognise()`. `locate()` leaves it False, because geometry
     # alone was measured unable to tell a torpedo from a gate in one venue.
     identity_ok: bool = False
@@ -232,6 +236,7 @@ class CheckpointBank:
         # rather than required, because a bank built from stills has neither.
         self._att: list[Optional[tuple]] = []
         self._depth: list[float] = []
+        self._ann: list[Optional[dict]] = []
         # Measured cost of ONE match, in seconds, as a decaying average. This
         # is what makes the shortlist width adapt instead of being guessed:
         # the same code picks 5 on a dev box and 3 on a Pi because it has
@@ -266,6 +271,7 @@ class CheckpointBank:
         self._labels.clear()
         self._att.clear()
         self._depth.clear()
+        self._ann.clear()
 
     @property
     def labels(self) -> list[str]:
@@ -331,6 +337,7 @@ class CheckpointBank:
 
     def enrol(self, gray: np.ndarray, roi=None, det_conf: float = 0.0,
               *, label: str = '', attitude=None, depth_m: float = float('nan'),
+              annotations: Optional[dict] = None,
               force: bool = False) -> EnrolResult:
         """Consider storing this view as a reference.
 
@@ -373,6 +380,28 @@ class CheckpointBank:
         self._att.append(None if attitude is None
                          else tuple(float(v) for v in attitude))
         self._depth.append(float(depth_m))
+        # ⭐ ANNOTATIONS: named points marked once on the reference -- a hole
+        # centre, an aim point, the spot a marker must be dropped on. `locate()`
+        # warps them into the live frame through the SAME homography the pose
+        # comes from, so they are found without a detector that was ever
+        # trained to find them, and they survive occlusion of the point itself
+        # because the transform is fitted to the whole reference.
+        #
+        # This is the half of the published feature-matching approach we did
+        # not have: correspondences -> PnP was already here (`anchor/pose.py`),
+        # but nothing carried MEANING attached to the reference.
+        #
+        # ⚠ In FULL-FRAME pixels of the enrolled image, like `roi`, and scaled
+        # to backend pixels here for the same reason `snap` scales the ROI: the
+        # homography is fitted in backend pixels and mixing the two silently
+        # moves every annotation.
+        ann = None
+        if annotations:
+            fh, fw = gray.shape[:2]
+            sx, sy = self._be.w / float(fw), self._be.h / float(fh)
+            ann = {str(k): (float(v[0]) * sx, float(v[1]) * sy)
+                   for k, v in annotations.items()}
+        self._ann.append(ann)
         return EnrolResult(True, 'ok', index=len(self._refs) - 1, keypoints=n)
 
     def _evict(self) -> None:
@@ -384,6 +413,7 @@ class CheckpointBank:
         self._labels.pop(i)
         self._att.pop(i)
         self._depth.pop(i)
+        self._ann.pop(i)
 
     def wants_refresh(self, gray: np.ndarray) -> bool:
         """Is the best reference decaying toward uselessness?
@@ -426,7 +456,12 @@ class CheckpointBank:
                'yields': np.array(self._yields, np.int32),
                'att': np.array([(np.nan, np.nan, np.nan) if a is None else a
                                 for a in self._att], np.float32),
-               'depth': np.array(self._depth, np.float32)}
+               'depth': np.array(self._depth, np.float32),
+               # JSON per reference: a dict of named points is not an array,
+               # and a ragged object array would not survive allow_pickle=False
+               # for anyone who loads this more carefully than we do.
+               'ann': np.array([json.dumps(a or {}) for a in self._ann],
+                               dtype=object)}
         for i, a in enumerate(self._refs):
             out[f'k{i}'] = np.asarray(a._ref_kpts, np.float32)
             out[f'd{i}'] = np.asarray(a._ref_desc, np.float32)
@@ -489,6 +524,13 @@ class CheckpointBank:
             self._depth.append(float(z['depth'][i])
                                if 'depth' in z.files and i < len(z['depth'])
                                else float('nan'))
+            raw = (json.loads(str(z['ann'][i]))
+                   if 'ann' in z.files and i < len(z['ann']) else {})
+            # Already in BACKEND pixels when saved, so no rescale here -- and
+            # `load` refuses a foreign resolution outright, which is what makes
+            # that safe.
+            self._ann.append({k: (float(v[0]), float(v[1]))
+                              for k, v in raw.items()} or None)
             added += 1
         return added
 
@@ -537,7 +579,8 @@ class CheckpointBank:
                 best = BankPose(ok=bool(p.ok), inliers=n, index=i, pose=p,
                                 label=self._labels[i], searched=len(pool),
                                 ref_attitude=self._att[i],
-                                ref_depth_m=self._depth[i])
+                                ref_depth_m=self._depth[i],
+                                points=self._warp(self._ann[i], p))
             if n > self._yields[i]:
                 self._yields[i] = n
         # Decaying average of the per-match cost, which is what `shortlist_k`
@@ -633,6 +676,33 @@ class CheckpointBank:
         p.identity_ok = bool(ok and p.ok)
         p.identity_why = '; '.join(why)
         return p
+
+    @staticmethod
+    def _warp(ann: Optional[dict], pose) -> Optional[dict]:
+        """Carry the reference's annotated points into the live frame.
+
+        ⭐ THIS IS WHAT MAKES THE BANK A TRAININGLESS DETECTOR. A point marked
+        once on a reference photograph -- a hole centre, an aim point -- lands
+        in the live frame through the SAME homography the pose came from. No
+        model was ever trained to find that point, and it is located even when
+        it is itself occluded, because the transform is fitted to the whole
+        reference rather than to the point.
+
+        Returns None rather than an empty dict when there is nothing to warp or
+        no homography to warp it through: absent and "found none" are different
+        answers and a caller must be able to tell them apart.
+        """
+        if not ann or pose is None or not getattr(pose, 'ok', False):
+            return None
+        H = getattr(pose, 'H', None)
+        if H is None:
+            return None
+        import cv2
+        names = list(ann)
+        src = np.array([[ann[n]] for n in names], np.float32)
+        dst = cv2.perspectiveTransform(src, np.asarray(H, np.float64))
+        return {n: (float(dst[i, 0, 0]), float(dst[i, 0, 1]))
+                for i, n in enumerate(names)}
 
     def verify(self, gray: np.ndarray, *,
                label: Optional[str] = None) -> int:

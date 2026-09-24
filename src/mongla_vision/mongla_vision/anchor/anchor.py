@@ -83,6 +83,13 @@ class AnchorPose:
     # image-matching paper ships for exactly that reason.
     ref_pts: object = None
     live_pts: object = None
+    # The fitted homography itself, reference -> live, in BACKEND pixels.
+    # Carried so a caller can map ITS OWN points through the same transform the
+    # pose came from -- a hole centre marked on the reference, an aim point, a
+    # spot to drop a marker on. Recomputing it from tx/ty/theta/scale would be
+    # a similarity, not a homography, and would drop exactly the perspective
+    # that matters when the board is oblique.
+    H: object = None
     # Plane orientation, when the camera is calibrated -- see `anchor/geometry`.
     # None when no K was supplied; `ok=False` when the decomposition refused.
     # A bbox centre says the board is IN FRONT; only this says we are SQUARE to
@@ -286,4 +293,4 @@ class Anchor:
         return AnchorPose(ok=True, tx=tx, ty=ty, theta=theta, scale=scale,
                           inliers=inl, matches=int(len(i0)),
                           corners=reference_corners(H, w, h, roi),
-                          ref_pts=rp, live_pts=lp, plane=plane)
+                          H=H, ref_pts=rp, live_pts=lp, plane=plane)
