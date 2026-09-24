@@ -4350,3 +4350,36 @@ the unused `actions/checkout` step deleted, since no step read the repository.
 **Verified by injection, both directions:** restoring the `${{ }}` form fails
 tests 1 and 3 (`attacker-controlled text is interpolated into a shell script`;
 `the PR body is no longer passed through env:`); restoring the fix passes 3/3.
+
+---
+
+## B-69 … B-76 — the 2026-09-24 ecosystem review
+
+> ⚠ **RENUMBERED ON LANDING (2026-09-30).** This review ran on a branch cut
+> before 2026-09-26, and numbered its findings **B-58 … B-64**. `main` spent
+> those same seven ids on the vision/model defects above and on the
+> "what calls this?" sweep, so the review's findings are **B-69 … B-76** here.
+> PR #43, its commit messages and the handoff in
+> `upstream/review-2026-09-24/` all still say B-58 … B-64 — that text is in
+> history permanently and is not rewritten. Read it with this table.
+> The commit hashes below are the ones on `main`; the branch's own hashes did
+> not survive the replay that stripped the agent session trailers.
+
+A whole-stack review: firmware, host, ground station and flasher, benchmarked against BumblebeeAS. It produced seven host fixes on branch `claude/zealous-pascal-sdgidr`. Each landed with a test **verified to fail without the fix**. The defects it did not fix are filed as fh1m/mongla_ws issues **#9–#42**, and the SROT-repo half is written up for filing in `upstream/review-2026-09-24/`.
+
+| id | grade | defect | status |
+|---|---|---|---|
+| **B-69** | CRITICAL | Ctrl-C on a mission became `MoveFailed`, an ordinary Exception, which `retry`/`selector`/`never_fails` and the vision verbs contain, so **Ctrl-C skipped one step and the mission drove on**. And rclpy's default SIGINT handler shuts the context down, so `_abort_sequence` could not publish its cancel/stop/disarm (measured: `publisher's context is invalid`). | ✅ FIXED `7103a16f`: re-raise after the cancel; `SignalHandlerOptions.NO` in `mission.py` and `cli.py` |
+| **B-70** | CRITICAL | `surface` cleared the abort that `goal_callback` had just set, so host loops and queued `fire_async` shots continued. A vision verb could also `set_mode('STABILIZE')` out of SURFACE, including a firmware failsafe SURFACE. `test_srot_surface.py` asserted the clear, i.e. it encoded the bug. | ✅ FIXED `69215db1` |
+| **B-71** | HIGH | `_emergency_stop` and `disarm` never called `request_abort()`, so a running align or a delayed shot outlived an operator disarm. | ✅ FIXED `e3ef8fc7`. The CTRL-14 `_fire_async` 0.1 s window is still open |
+| **B-72** | CRITICAL | The heartbeat ran in a MutuallyExclusive `timer_group` beside callbacks that block for 3–10 s, and none was sent between port open and `executor.spin()` while preflight reads ran. The board surfaces after 5 s of silence. | ✅ FIXED `c032221c`: a dedicated monotonic thread. ⚠ Trade-off: a hung executor no longer trips the board failsafe, see #13 (mission keep-alive) |
+| **B-73** | HIGH | `get_attitude` had no age check, and `_effective_yaw_deg` back-filled a withheld yaw from the cached attitude, so after a USB drop `/mongla/state` kept publishing frozen yaw/depth. | ✅ FIXED `41611b0e`. `is_armed`/`get_mode` are still ungated (disarm confirmation depends on them) |
+| **B-74** | CRITICAL | **The pool heading anchor was rejected or undone** by 50 Hz board attitude in boot-relative yaw, while `_anchored` flipped anyway, so `/mongla/odom` said `pool` while every metre was in boot axes. | ✅ FIXED `bde36b3d`: the anchor is a yaw offset applied to the board plus a `rotate_world_yaw` event |
+| **B-75** | HIGH | `inekf.reject_streak` was one counter for every measurement kind; 50 Hz accepted attitude reset it, so the lockout break **never fired** for flow/depth/position. | ✅ FIXED `56be6a2a`: a streak per kind; snapshot/restore copies it |
+| **B-76** | CRITICAL | **Every motion verb undid a SURFACE.** The firmware's `SROT_MOVE` handler sets `mode = AUTO` unconditionally for every type, `STOP` included, so the next mission leg — or a plain `stop` — pulled the hull straight back out of a leak/battery/GCS failsafe SURFACE and re-dived to hold depth. And a move a failsafe cut short is latched as finished, so its terminal ACK is `ACCEPTED` at 100 %: taken at face value the mission advanced. | ✅ FIXED `TBD_SURFACE_HASH`: `move` and `stop_motion` refuse in SURFACE; a SUCCEEDED ACK is re-judged against a HEARTBEAT newer than the ACK (`_cut_short_by_mode_change`) and becomes FAILED if the board left AUTO or disarmed. HEARTBEAT is requested at 10 Hz so mode is fresh enough to see it |
+
+**Open, filed as issues:**
+- **Host control and manager:** #10–#22. The top ones are the move ACK not bound to its command (#10), the unsynchronised busy gate (#11), no serial recovery (#12) and no mission keep-alive (#13).
+- **Estimator and vision:** #23–#37. Distortion ignored on metric paths (#24), flow covariance overconfidence (#23), ZUPT during cruise (#25), missing adjoint Q terms (#26), no lever arm (#27).
+- **Proposals:** #38–#42.
+- **CAD/allocator:** #9. `VERTICAL_PRIORITY` ranks unactuated roll above depth, and the axial unit sits at a phantom 8.1 mm offset.
