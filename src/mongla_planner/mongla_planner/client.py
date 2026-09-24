@@ -260,14 +260,18 @@ class MonglaClient:
                 rclpy.spin_until_future_complete(
                     self.node, result_future, timeout_sec=deadline)
             except KeyboardInterrupt:
+                # ⛔ Ctrl-C is an OPERATOR ABORT, not a failed verb. It used to
+                # become `MoveFailed` -- an ordinary Exception -- which
+                # `retry`/`selector`/`never_fails` and the vision verbs all
+                # contain by design, so Ctrl-C during an align skipped ONE step
+                # and the mission drove on. Cancel (bounded), then re-raise so
+                # the runner's `except KeyboardInterrupt` abort path runs.
                 self.node.get_logger().warn(
                     f'Ctrl-C — cancelling goal "{cmd}"...')
                 self._cancel(goal_handle)
                 rclpy.spin_until_future_complete(
                     self.node, result_future, timeout_sec=15.0)
-                if not result_future.done():
-                    raise MoveFailed(
-                        f'Goal "{cmd}" did not finish cancelling in time')
+                raise
             if not result_future.done():
                 # Client deadline elapsed with no result -> server stalled/dead
                 # or the goal overran. Cancel + fail BOUNDED so the mission (and
