@@ -246,3 +246,93 @@ def test_verify_on_a_thin_or_empty_bank_returns_zero_not_a_guess(n):
     for i in range(n):
         b.enrol(view(1, 400, drop=i * 5), roi=None, det_conf=0.9, force=True)
     assert b.verify(view(9, 400)) == 0
+
+
+# --------------------------------------------------------------------------- #
+# 7. Scale: the shortlist, and a width that is measured rather than configured
+# --------------------------------------------------------------------------- #
+def test_a_large_bank_only_matches_the_shortlist():
+    """The reason a bank may hold a hundred references. Matching is linear --
+    measured 31.4 ms per reference on the Pi, so 100 would be 3.1 s against a
+    333 ms budget -- and the shortlist is what breaks that linearity."""
+    b = bank(capacity=40)
+    for i in range(30):
+        b.enrol(view(1, 400, drop=i * 5), roi=None, det_conf=0.9, force=True)
+    assert b.size == 30
+    p = b.locate(view(1, 400), shortlist=4)
+    assert p.searched == 4, 'the whole bank was matched, not the shortlist'
+    assert p.ok
+
+
+def test_the_shortlist_never_searches_more_than_the_bank_holds():
+    b = bank()
+    b.enrol(view(1, 400), roi=None, det_conf=0.9)
+    assert b.locate(view(1, 400), shortlist=9).searched == 1
+
+
+def test_shortlist_width_falls_when_a_match_is_measured_to_be_slow():
+    """⭐ The width is DERIVED from the cost measured on the machine it runs
+    on. A constant would be wrong on one of dev box and Pi by 2.2x."""
+    b = bank(period_s=0.333, max_shortlist=8, budget_fraction=0.45)
+    assert b.shortlist_k() == 8, 'untimed, it must start at the ceiling'
+    b._match_s = 0.0314                       # the Pi's measured 31.4 ms
+    assert b.shortlist_k() == 4               # 0.333*0.45/0.0314
+    b._match_s = 0.0144                       # the dev box's 14.4 ms
+    assert b.shortlist_k() == 8               # affords the ceiling
+    b._match_s = 0.5                          # absurdly slow
+    assert b.shortlist_k() == 1, 'it must still search ONE, never zero'
+
+
+def test_without_a_period_the_width_is_the_ceiling():
+    """No budget declared means the caller has not asked for rationing, and
+    silently rationing anyway would be a performance cliff nobody configured."""
+    b = bank(max_shortlist=6)
+    b._match_s = 1.0
+    assert b.shortlist_k() == 6
+
+
+def test_the_measured_match_cost_is_recorded():
+    b = bank()
+    assert b.match_ms == 0.0
+    b.enrol(view(1, 400), roi=None, det_conf=0.9)
+    b.locate(view(1, 400))
+    assert b.match_ms > 0.0
+
+
+# --------------------------------------------------------------------------- #
+# 8. One bank, many things: props, checkpoints, places
+# --------------------------------------------------------------------------- #
+def test_a_label_restricts_the_search_to_one_kind_of_thing():
+    b = bank()
+    b.enrol(view(1, 400), roi=None, det_conf=0.9, label='gate')
+    b.enrol(view(2, 400), roi=None, det_conf=0.9, label='torpedo', force=True)
+    assert b.locate(view(2, 400), label='torpedo').ok
+    assert not b.locate(view(2, 400), label='gate').ok
+
+
+def test_locate_reports_WHAT_it_recognised_not_only_where():
+    """Re-identification with the same machinery as tracking: searching every
+    label answers "what is this", not merely "is this the gate"."""
+    b = bank()
+    b.enrol(view(1, 400), roi=None, det_conf=0.9, label='gate')
+    b.enrol(view(2, 400), roi=None, det_conf=0.9, label='torpedo', force=True)
+    b.enrol(view(3, 400), roi=None, det_conf=0.9, label='place:octagon',
+            force=True)
+    assert b.locate(view(3, 400)).label == 'place:octagon'
+    assert b.locate(view(1, 400)).label == 'gate'
+
+
+def test_an_unknown_label_refuses_rather_than_falling_back_to_everything():
+    """Falling back to the whole bank would answer a question nobody asked,
+    with a different target, at full confidence."""
+    b = bank()
+    b.enrol(view(1, 400), roi=None, det_conf=0.9, label='gate')
+    p = b.locate(view(1, 400), label='bin')
+    assert not p.ok and p.index is None
+
+
+def test_verify_can_be_asked_about_one_label():
+    b = bank()
+    b.enrol(view(1, 400), roi=None, det_conf=0.9, label='gate')
+    assert b.verify(view(1, 400), label='gate') >= MIN_INLIERS
+    assert b.verify(view(1, 400), label='torpedo') == 0
