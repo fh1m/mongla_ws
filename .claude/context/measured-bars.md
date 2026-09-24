@@ -4928,3 +4928,21 @@ previous attempts left **5**.
 ⚠ And `stop_tree` now reports **surviving nodes**, not launcher exit. "Launcher
 stopped" was true during every single run that left five nodes holding the
 chip, so it was the wrong thing to report.
+
+⛔ **A fourth defect, found by the test rather than by the vehicle.** Writing
+the guard exposed one the hardware had hidden: `kill_tree` re-walked
+`pgrep -P` at each escalation, and **once the parent exits its children are
+reparented to init**, so the walk can never find them again. Children that
+ignore SIGINT therefore outlive the parent and are never signalled a second
+time — **3 of 3 survived**. The vehicle passed anyway because ROS nodes die on
+the first INT, so the bug was real, shipped, and invisible to the only test
+that had been run. The tree is now **snapshot before anything dies**.
+
+`test_stop_tree_leaves_nothing_running.py` asserts on **processes**, never on
+the script's output or its source: a source-reading test would have passed for
+all three broken versions, and an output-reading one would have passed for all
+four, since every one of them printed "stopped". Injection-verified by stubbing
+`descendants()` so the snapshot finds nobody — the children then survive, which
+is the defect reproduced on demand. `STOP_TREE_GRACE_S` shortens only the wait
+before escalating (never what is signalled), taking the guard from 68 s to
+14 s, because a guard too slow to run habitually is not a guard.

@@ -42,40 +42,67 @@
 # What works is not asking anyone to forward anything: walk the process tree
 # and signal every descendant directly. `ros2 launch` starts each node as its
 # own child, so the tree IS the node list.
-kill_tree() {
-  local pid="$1" sig="$2" kid
+# ⛔ AND THE TREE MUST BE SNAPSHOT BEFORE ANYTHING DIES. Re-walking `pgrep -P`
+# at each escalation looks equivalent and is not: the moment the parent exits,
+# its children are REPARENTED to init and the walk can never find them again.
+# Children that ignore SIGINT therefore outlive the parent and are never
+# signalled a second time. Caught by
+# test_stop_tree_leaves_nothing_running.py, which spawns children that ignore
+# SIGINT exactly as a non-interactive shell's background jobs do: 3 of 3
+# survived. The vehicle had hidden it, because ROS nodes die on the first INT.
+descendants() {          # every descendant pid, deepest first
+  local pid="$1" kid
   for kid in $(pgrep -P "$pid" 2>/dev/null); do
-    kill_tree "$kid" "$sig"
+    descendants "$kid"
+    echo "$kid"
   done
-  kill "-$sig" "$pid" 2>/dev/null || true
 }
 
-# stop_tree <pid> <name> -- INT the whole tree, then TERM, then KILL, and say
-# what actually happened at each step. Never blocks forever.
+kill_tree() {            # kill_tree <sig> <pid>...
+  local sig="$1" pid
+  shift
+  for pid in "$@"; do
+    kill "-$sig" "$pid" 2>/dev/null || true
+  done
+}
+
+# stop_tree <pid> <name> -- INT the whole tree, then TERM, then KILL, and
+# report SURVIVORS. Never blocks forever.
 stop_tree() {
-  local pid="$1" name="$2" i
+  local pid="$1" name="$2" i tree alive left
   [ -n "$pid" ] || { echo "  $name: no pid recorded"; return 0; }
   if ! kill -0 "$pid" 2>/dev/null; then
     echo "  $name: already gone"
     return 0
   fi
-  kill_tree "$pid" INT
-  for i in $(seq 20); do
-    kill -0 "$pid" 2>/dev/null || break
+  # Snapshot first. This is the whole fix.
+  tree="$(descendants "$pid") $pid"
+
+  kill_tree INT $tree
+  # Seconds to wait for a graceful INT before escalating. A real graph needs
+  # this long; the test spawns children that ignore SIGINT on purpose, and
+  # would otherwise spend the full grace period three times over -- a guard
+  # too slow to run habitually is not a guard.
+  for i in $(seq "${STOP_TREE_GRACE_S:-20}"); do
+    alive=0
+    for p in $tree; do kill -0 "$p" 2>/dev/null && alive=1 && break; done
+    [ "$alive" = 0 ] && break
     sleep 1
   done
-  kill_tree "$pid" TERM
+  kill_tree TERM $tree
   sleep 2
-  kill_tree "$pid" KILL
-  # The launcher dying is not the question -- surviving NODES are. Report the
-  # thing that actually matters, because "launcher stopped" was true during
-  # every single run that left five nodes holding the Hailo.
-  local left
-  left="$(pgrep -f '[d]etector_dual_node|[t]racker_node|[l]ock_node' 2>/dev/null | wc -l)"
-  if [ "$left" -gt 0 ]; then
-    echo "  ⛔ $name stopped but $left vision node(s) SURVIVE -- they hold the Hailo" >&2
+  kill_tree KILL $tree
+
+  # Report what SURVIVES, not that the launcher exited -- "launcher stopped"
+  # was true during every run that left five nodes holding the Hailo.
+  left=0
+  for p in $tree; do kill -0 "$p" 2>/dev/null && left=$((left + 1)); done
+  local nodes
+  nodes="$(pgrep -f '[d]etector_dual_node|[t]racker_node|[l]ock_node' 2>/dev/null | wc -l)"
+  if [ "$left" -gt 0 ] || [ "$nodes" -gt 0 ]; then
+    echo "  ⛔ $name: $left tree process(es) and $nodes vision node(s) SURVIVE" >&2
   else
-    echo "  $name stopped; no surviving vision nodes"
+    echo "  $name stopped; no surviving processes"
   fi
 }
 
