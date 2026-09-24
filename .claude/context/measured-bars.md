@@ -5198,3 +5198,121 @@ wrong as a harness default, so the evidence arm now stands it down and says so.
 At 64 references it removes 3 %; at 12 it removes 17 % and the most relevant
 ones. If a pool day starts with a nearly-empty bank, this is the gate that will
 make it look like loop closure does not work.
+
+---
+
+## 42. ⭐⭐ POSE PRECISION: 640 IS 2.74× MORE PRECISE THAN 320 — AND §19 STILL STANDS
+
+**2026-09-24.** `tools/pose_precision.py`. A **known** homography is applied to
+a real frame and the estimate compared against it, so truth is constructed
+rather than borrowed — comparing 320 against 640 directly would measure
+agreement and cannot rank them.
+
+```
+                n     mean      median     p90     (source-frame px)
+320x240        64     3.21       2.43      4.70
+640x480        64     1.17       0.98      2.04     ⭐ 2.74x more precise
+```
+
+Zero failures at either resolution, across three warp types (drift, rotate,
+close) on `octagon` and `bin`.
+
+⭐ **This does not contradict §19, and the pair together is the finding.**
+§19 measured 640 **worse on RECALL** (33 inliers against 69 on murky water).
+This measures 640 **better on PRECISION by 2.74×**. Both are true because they
+are different questions — *how often does it match* versus *how exactly does it
+match when it does* — and the plan flagged precision as unmeasured for exactly
+this reason.
+
+**What it implies:** the shipped 320 backend is right for the **lock ladder**,
+where recall is everything and a coarse box still holds a target. It is the
+wrong choice for anything **metric** — a 3.21 px corner error at 320 is a real
+error in any range or position derived from it. A future metric path (PnP,
+loop-closure offset) has a measured reason to run at 640, and now a number to
+justify the cost with.
+
+⚠ Measured on a **synthetic** warp of real frames. It isolates the estimator
+from detection failure, which is the point, but it is not a water measurement
+of end-to-end pose.
+
+---
+
+## 43. ⭐ TIME TO CONTACT, FOR A VEHICLE THAT IS ITSELF MOVING
+
+`mongla_vision/time_to_contact.py`. The prototype solved
+`|rel_pos + t·rel_vel|² = r²` exactly — a real quadratic, not `range/speed` —
+and then assumed a **stationary observer**, which its own comment admits.
+
+⭐ **One subtraction away**, because we have an ego-velocity it did not: the
+downward camera, verified to **1.09 cm over 30 cm**. Subtract the vehicle's own
+velocity and the answer is correct for the only case that ever occurs.
+
+Measured consequence, pinned as a test: a vehicle closing at 1 m/s on a fixed
+prop 10 m away has **TTC 9.5 s**; the stationary-observer form returns
+**never**, because the prop is not moving.
+
+⛔ **It refuses rather than extrapolating.** Below a closing-rate noise floor
+the answer is "never", not a large finite number — a TTC of 900 s and "not
+approaching" are different decisions, and a controller cannot tell them apart
+if both arrive as floats. It also reports **closest approach** even when
+contact never happens, because "will pass 3 m to the side" is what a standoff
+decision needs, and a bare "never" throws it away. That case — a fast pass
+alongside — is exactly what `range/speed` calls an imminent collision.
+
+---
+
+## 44. ⭐ THE FLOW SCALE HAS TWO INDEPENDENT WITNESSES — AND THEY HAD NEVER BEEN COMPARED
+
+`mongla_vision/flow/scale_check.py`. Height above the floor multiplies **every**
+flow velocity, so a 20 % height error is a 20 % velocity error integrated into
+position with no symptom anywhere. We have two estimates that **share no
+sensor**: the tile grating (`floor_height`) and `pool_depth_m − |depth|` from
+the barometer.
+
+⛔ **It reports; it does not pick.** A divergence says the two disagree, never
+which is wrong — and `pool_depth_m` is the one nobody measures. The prototype
+this came from flagged **its own** frame confusion here (bottom-referenced
+altitude fused as surface-referenced depth); this module compares two estimates
+of the *same* quantity and never fuses one as the other.
+
+Discipline ported intact: weighted **median** (one grating misread must not
+recalibrate every velocity), confidence from the **coefficient of variation**
+(right shape for a ratio), a minimum sample count, and ageing so a calibration
+cannot outlive its conditions. A pair with either side absent is **not stored**,
+so the sample count cannot be met by data that cannot answer.
+
+---
+
+## 45. ⚠ TURBIDITY AS CONFIDENCE CALIBRATION — BUILT, OFF, AND HONEST ABOUT ITS CONSTANT
+
+`mongla_vision/detection/confidence_calibration.py`. Detector recall swings
+**29.2 / 72.7 / 68.3 %** across venues, so one shipped threshold cannot be right
+in all three — and nothing in the stack knows which water it is in. XFeat's
+match quality is a turbidity proxy computed on every anchor evaluation and
+currently discarded.
+
+⛔ **The risk is that a calibration invents confidence in exactly the conditions
+where the stack can least check it.** So the gain is **capped at 0.15**, it can
+never promote a detection the detector did not make (conf 0 stays 0), and with
+no turbidity estimate it returns the input **unchanged** rather than treating
+"unknown" as "clear".
+
+⚠ **The gain is DECLARED, not measured.** Relating match quality to the recall
+curve needs a labelled per-venue set we do not have. What *is* measured is the
+recall spread that motivates it. **It ships OFF.**
+
+---
+
+## 46. ⭐ THE APPROACH SETPOINT IS A BAND, NOT A MINIMUM RANGE
+
+`mongla_vision/approach.py`. §23 measured confidence against apparent size and
+found it rises **0.260 → 0.521 and then falls** — very close, the prop overflows
+the frame and context is lost. So a controller told to *minimise range* drives
+through the best band and out the far side. The advisor can therefore say
+**BACK OFF**, which is the half a "get closer" loop cannot express.
+
+⭐ **Evidence accumulates across VIEWPOINTS, not frames.** Fifty frames from a
+stationary vehicle are one observation seen fifty times, and multiplying their
+likelihoods manufactures certainty from a single look. The bank already knows
+whether the viewpoint moved (high inliers against the last reference = the same
+look), so that is the gate: 50 identical looks leave the estimate at **0.5**.
