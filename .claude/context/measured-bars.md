@@ -3756,3 +3756,101 @@ to prove.
 ⚠ **What this does NOT establish:** both runs in each pair share a day, water
 and lighting. A practice session on another day, or another pool, is a larger
 domain shift than this measures. Necessary evidence, not sufficient.
+
+---
+
+## 22. ⛔ A preloaded bank said "torpedo" while looking at the gate
+
+**2026-09-24.** §21.3 measured that a bank built on one run locks a different
+run of the same prop (92 %, 100 %). That test only ever asked *same prop vs
+same prop*. Running the negative it never ran:
+
+8 whole-frame references from `torpedo.mkv`, matched through the shipped
+`CheckpointBank.locate()` at 320×240:
+
+| queried on | p50 | p90 | ≥15 | ≥40 | ≥80 |
+|---|---|---|---|---|---|
+| torpedo.mkv — same run | 76 | 266 | 93 % | 71 % | 43 % |
+| torpedo_1 — **same prop, other run** | 63 | 77 | 100 % | 64 % | 7 % |
+| gate.mkv — ⛔ **OTHER PROP, same venue** | 23 | 36 | **100 %** | 14 % | 0 % |
+| octagon — other venue | 8 | 10 | **0 %** | 0 % | 0 % |
+
+⛔ **The torpedo bank cleared the trust bar on 100 % of GATE frames and
+reported `label='torpedo'`.** A rung that names the wrong prop with confidence
+is worse than one that reports LOST, because LOST is honest.
+
+### Why, and it is not the descriptor's fault
+
+The references were built with `roi=None`, so each one is the **whole frame** —
+Mirpur water, pool edge, lighting, backscatter. Those features are present in
+every Mirpur clip, so the bank learned *the venue* and was then asked about *the
+prop*. The octagon row is the same fact seen from the other side: a genuinely
+different venue scores 0 % and is rejected correctly.
+
+### The separation, swept
+
+Same-prop-other-run (true) against other-prop-same-venue (false):
+
+| bar | keeps of true | admits of false |
+|---|---|---|
+| 15 *(shipped `MIN_INLIERS`)* | 100 % | ⛔ **100 %** |
+| 25 | 86 % | 36 % |
+| 40 | 64 % | 14 % |
+| **60** | **57 %** | ✅ **0 %** |
+| 80 | 7 % | 0 % |
+
+### Two bars, because they answer two different questions
+
+⭐ **`MIN_INLIERS = 15` is correct for what it does** — "is this the same scene
+as the reference", which is the tracking question, asked of a reference that a
+live detection just supplied. It is **not** an identity test and must stop being
+used as one.
+
+⛔ **A bar of 60 is required wherever the bank ASSERTS AN IDENTITY** — a
+preloaded reference, or a reacquisition from LOST. That is 4× `MIN_INLIERS`,
+where the plan had guessed 3×.
+
+⚠ **57 % of true frames rejected is the price**, and it is the right trade: a
+missed re-acquisition costs a second, a false one costs the run.
+
+### What must change in the tooling
+
+⛔ **A practice bank built with `roi=None` encodes the venue.** References for a
+prop must be cropped to the prop. `tools/build_practice_bank.py` warns and
+records the ROI state so a whole-frame bank cannot be mistaken for a prop bank.
+
+⚠ **Still owed:** the same sweep with ROI-cropped references, which should move
+both columns and may lower the 60. The number above is for whole-frame
+references and is the conservative case.
+
+### 22.1 ⭐ The fix: identity is the DETECTOR's job, position is the bank's
+
+`CheckpointBank.recognise()` asserts an identity only when three checks that
+fail for **unrelated reasons** agree — turbidity blinds the detector and the
+matcher together and moves the IMU not at all:
+
+| check | source | bar |
+|---|---|---|
+| geometry | MAGSAC inliers | ≥ **60** (§22, measured) |
+| semantics | a detector hypothesis of the same class | within **3.0 s** |
+| kinematics | vehicle attitude vs the checkpoint's | within **45°** |
+
+⭐ **The detector is the identity authority even when it is useless as a
+position.** Its failure mode is semantic — it *misses* — not confusing a gate
+for a torpedo, so a hypothesis far below the control-confidence gate is strong
+evidence of WHAT is in frame. That division is the whole design: identity from
+the detector, position from the bank.
+
+⛔ **Unknown is not agreement.** A check whose input is absent is skipped and
+says so in `identity_why`; it is never counted as a pass.
+
+**Verified against the footage that produced the defect**, same 8 whole-frame
+torpedo references:
+
+| clip | `locate().ok` | `identity_ok` | wanted |
+|---|---|---|---|
+| torpedo_1 — same prop, other run | 100 % | **57 %** | ACCEPT ✅ |
+| gate.mkv — other prop | 100 % | ⛔ **0 %** | REJECT ✅ |
+
+Geometry alone accepted the gate on **every** frame; the gate rejects it on
+every frame, and keeps exactly the 57 % of true frames the sweep predicted.

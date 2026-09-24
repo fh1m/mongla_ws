@@ -49,6 +49,8 @@ the one to keep however old it is, and the newest is not automatically better.
 """
 from __future__ import annotations
 
+import os
+
 from dataclasses import dataclass
 from typing import Optional
 
@@ -111,6 +113,43 @@ CONF_FLOOR = 0.60
 # 8 s) that waiting for 15 means waiting until the rung has already failed.
 REFRESH_INLIERS = 40
 
+# ⛔ THE BAR FOR ASSERTING AN IDENTITY, which is NOT the bar for tracking.
+#
+# `MIN_INLIERS = 15` answers "is this the same scene as the reference" -- asked
+# of a reference a live detection just supplied, so identity is already known.
+# It is not an identity test, and it was measured failing as one
+# (`measured-bars.md` §22): 8 whole-frame references from a torpedo run cleared
+# 15 inliers on 100 % of GATE frames from the same venue, and said 'torpedo'.
+#
+# The references had `roi=None`, so they encoded Mirpur's water and pool edge
+# rather than the prop -- features every Mirpur clip contains. A genuinely
+# different venue (octagon) scored 0 %, which is the same fact from the other
+# side: the bank discriminates VENUE well and PROP-within-venue not at all.
+#
+# Swept on same-prop-other-run vs other-prop-same-venue:
+#
+#     bar 15: keeps 100 % of true, admits 100 % of false   <- shipped
+#     bar 40: keeps  64 %,          admits  14 %
+#     bar 60: keeps  57 %,          admits   0 %           <- this
+#
+# Rejecting 43 % of true frames is the right trade: a missed re-acquisition
+# costs a second, a false one costs the run.
+IDENTITY_INLIERS = 60
+
+# How stale a detector hypothesis may be and still corroborate an identity.
+# ⭐ THE DETECTOR IS THE IDENTITY AUTHORITY, not the bank. Its failure mode is
+# semantic -- it MISSES things -- rather than confusing one prop for another, so
+# even a hypothesis far below the control-confidence gate is strong evidence of
+# WHAT is in frame while being useless as a position. That is exactly the
+# division this uses: identity from the detector, position from the bank.
+IDENTITY_DET_AGE_S = 3.0
+
+# How far the vehicle's attitude may differ from the attitude a checkpoint was
+# enrolled at before the match is implausible. A third opinion that fails for
+# reasons decorrelated from both vision rungs: turbidity blinds the detector and
+# the matcher together, and moves the IMU not at all.
+IDENTITY_ATT_DEG = 45.0
+
 
 @dataclass
 class EnrolResult:
@@ -144,6 +183,12 @@ class BankPose:
     # idea what it belongs to.
     label: str = ''
     searched: int = 0          # how many references were actually matched
+    # Set only by `recognise()`. `locate()` leaves it False, because geometry
+    # alone was measured unable to tell a torpedo from a gate in one venue.
+    identity_ok: bool = False
+    identity_why: str = ''
+    ref_attitude: Optional[tuple] = None
+    ref_depth_m: float = float('nan')
 
     @property
     def confidence(self) -> float:
@@ -158,6 +203,9 @@ class CheckpointBank:
                  min_cossim: float = MIN_COSSIM,
                  conf_floor: float = CONF_FLOOR,
                  refresh_inliers: int = REFRESH_INLIERS,
+                 identity_inliers: int = IDENTITY_INLIERS,
+                 identity_det_age_s: float = IDENTITY_DET_AGE_S,
+                 identity_att_deg: float = IDENTITY_ATT_DEG,
                  period_s: float = 0.0,
                  max_shortlist: int = MAX_SHORTLIST,
                  budget_fraction: float = BUDGET_FRACTION,
@@ -168,6 +216,9 @@ class CheckpointBank:
         self._min_cossim = float(min_cossim)
         self._conf_floor = float(conf_floor)
         self._refresh = int(refresh_inliers)
+        self._id_inliers = int(identity_inliers)
+        self._id_det_age = float(identity_det_age_s)
+        self._id_att_deg = float(identity_att_deg)
         self._k = k
         self._period = float(max(0.0, period_s))
         self._max_k = int(max(1, max_shortlist))
@@ -176,6 +227,11 @@ class CheckpointBank:
         # One 64-D signature per reference, and what each reference IS.
         self._sigs: list[np.ndarray] = []
         self._labels: list[str] = []
+        # Where the vehicle WAS when each checkpoint was taken: (roll, pitch,
+        # yaw) in degrees and depth in metres, or None/NaN when unknown. Stored
+        # rather than required, because a bank built from stills has neither.
+        self._att: list[Optional[tuple]] = []
+        self._depth: list[float] = []
         # Measured cost of ONE match, in seconds, as a decaying average. This
         # is what makes the shortlist width adapt instead of being guessed:
         # the same code picks 5 on a dev box and 3 on a Pi because it has
@@ -208,6 +264,8 @@ class CheckpointBank:
         self._yields.clear()
         self._sigs.clear()
         self._labels.clear()
+        self._att.clear()
+        self._depth.clear()
 
     @property
     def labels(self) -> list[str]:
@@ -272,7 +330,8 @@ class CheckpointBank:
         return int(min(self._max_k, max(1, affordable)))
 
     def enrol(self, gray: np.ndarray, roi=None, det_conf: float = 0.0,
-              *, label: str = '', force: bool = False) -> EnrolResult:
+              *, label: str = '', attitude=None, depth_m: float = float('nan'),
+              force: bool = False) -> EnrolResult:
         """Consider storing this view as a reference.
 
         `force` skips the POLICY and is for a caller that already knows it wants
@@ -311,6 +370,9 @@ class CheckpointBank:
         self._yields.append(int(n))
         self._sigs.append(self._signature(a._ref_desc))
         self._labels.append(str(label))
+        self._att.append(None if attitude is None
+                         else tuple(float(v) for v in attitude))
+        self._depth.append(float(depth_m))
         return EnrolResult(True, 'ok', index=len(self._refs) - 1, keypoints=n)
 
     def _evict(self) -> None:
@@ -320,6 +382,8 @@ class CheckpointBank:
         self._yields.pop(i)
         self._sigs.pop(i)
         self._labels.pop(i)
+        self._att.pop(i)
+        self._depth.pop(i)
 
     def wants_refresh(self, gray: np.ndarray) -> bool:
         """Is the best reference decaying toward uselessness?
@@ -331,6 +395,102 @@ class CheckpointBank:
         if not self._refs:
             return True
         return self.locate(gray).inliers < self._refresh
+
+    # -- persistence: the bank can be built before the run ------------------ #
+    #
+    # ⭐ WHY THIS EXISTS. On the run there may be no confident detection to
+    # enrol from at the moment the anchor is needed -- which is precisely when
+    # the detector is failing, i.e. the case the rung exists for. A bank
+    # prepared on practice footage does not have that dependency.
+    #
+    # Measured 2026-09-24 (`measured-bars.md` §21.3): references snapped on one
+    # run clear the trust bar on 92 % and 100 % of frames of a DIFFERENT run of
+    # the same prop. ⛔ And on a generic structural view they clear it on 8 %.
+    # So preloading is a per-target capability, not a per-vehicle one.
+    #
+    # ⛔ A PRELOADED REFERENCE IS TRUSTED EXACTLY LIKE A LIVE ONE: it answers
+    # through `MIN_INLIERS` or it does not answer. Preloading changes where a
+    # checkpoint comes from, never what it has to prove -- which is what keeps
+    # the octagon result a visible refusal instead of a confident wrong lock.
+
+    SAVE_VERSION = 1
+
+    def save(self, path: str) -> int:
+        """Write the bank to a .npz. Returns the number of references saved."""
+        if not self._refs:
+            raise ValueError('refusing to save an empty bank')
+        out = {'version': np.array([self.SAVE_VERSION]),
+               'count': np.array([len(self._refs)]),
+               'backend_wh': np.array([self._be.w, self._be.h]),
+               'labels': np.array(self._labels, dtype=object),
+               'yields': np.array(self._yields, np.int32),
+               'att': np.array([(np.nan, np.nan, np.nan) if a is None else a
+                                for a in self._att], np.float32),
+               'depth': np.array(self._depth, np.float32)}
+        for i, a in enumerate(self._refs):
+            out[f'k{i}'] = np.asarray(a._ref_kpts, np.float32)
+            out[f'd{i}'] = np.asarray(a._ref_desc, np.float32)
+            out[f's{i}'] = np.asarray(self._sigs[i], np.float32)
+            roi = a.reference_roi
+            out[f'r{i}'] = (np.array([np.nan] * 4, np.float32) if roi is None
+                            else np.asarray(roi, np.float32))
+        os.makedirs(os.path.dirname(os.path.abspath(path)) or '.', exist_ok=True)
+        np.savez_compressed(path, **out)
+        return len(self._refs)
+
+    def load(self, path: str, *, append: bool = False) -> int:
+        """Read a bank back. Returns how many references were added.
+
+        ⛔ REFUSES A BANK BUILT AT ANOTHER RESOLUTION. Keypoints are stored in
+        BACKEND pixels, so loading 640x480 references into a 320x240 backend
+        would silently halve every coordinate -- no error, a plausible
+        homography, and every pose wrong by a factor of two. That is the exact
+        class of failure this codebase keeps finding, so it is a hard refusal
+        rather than a rescale.
+        """
+        z = np.load(path, allow_pickle=True)
+        ver = int(z['version'][0])
+        if ver != self.SAVE_VERSION:
+            raise ValueError(f'bank version {ver} != {self.SAVE_VERSION}')
+        w, h = (int(v) for v in z['backend_wh'])
+        if (w, h) != (self._be.w, self._be.h):
+            raise ValueError(
+                f'bank was built at {w}x{h}, backend is '
+                f'{self._be.w}x{self._be.h} -- keypoints are in backend pixels, '
+                f'so loading it would scale every pose silently')
+        if not append:
+            self.clear()
+        labels = [str(v) for v in z['labels']]
+        yields = [int(v) for v in z['yields']]
+        n = int(z['count'][0])
+        added = 0
+        for i in range(n):
+            if len(self._refs) >= self._cap:
+                self._evict()
+            a = Anchor(self._be, min_inliers=self._min_inliers,
+                       min_cossim=self._min_cossim, k=self._k)
+            a._ref_kpts = z[f'k{i}']
+            a._ref_desc = z[f'd{i}']
+            a._ref_shape = (self._be.h, self._be.w)
+            roi = z[f'r{i}']
+            a._ref_roi = None if not np.isfinite(roi).all() else tuple(
+                float(v) for v in roi)
+            # No stored image: a preloaded reference can still MATCH, it simply
+            # cannot be displayed. Better than refusing to load, and better
+            # than inventing a picture.
+            a._ref_gray = None
+            self._refs.append(a)
+            self._yields.append(yields[i] if i < len(yields) else len(a._ref_kpts))
+            self._sigs.append(z[f's{i}'])
+            self._labels.append(labels[i] if i < len(labels) else '')
+            att = z['att'][i] if 'att' in z.files and i < len(z['att']) else None
+            self._att.append(None if att is None or not np.isfinite(att).all()
+                             else tuple(float(v) for v in att))
+            self._depth.append(float(z['depth'][i])
+                               if 'depth' in z.files and i < len(z['depth'])
+                               else float('nan'))
+            added += 1
+        return added
 
     # -- use ---------------------------------------------------------------- #
     def locate(self, gray: np.ndarray, *, label: Optional[str] = None,
@@ -375,7 +535,9 @@ class CheckpointBank:
             n = int(getattr(p, 'inliers', 0) or 0)
             if n > best.inliers:
                 best = BankPose(ok=bool(p.ok), inliers=n, index=i, pose=p,
-                                label=self._labels[i], searched=len(pool))
+                                label=self._labels[i], searched=len(pool),
+                                ref_attitude=self._att[i],
+                                ref_depth_m=self._depth[i])
             if n > self._yields[i]:
                 self._yields[i] = n
         # Decaying average of the per-match cost, which is what `shortlist_k`
@@ -386,6 +548,91 @@ class CheckpointBank:
             self._match_s = per if self._match_s <= 0.0 else (
                 0.8 * self._match_s + 0.2 * per)
         return best
+
+    @staticmethod
+    def _att_gap_deg(a, b) -> float:
+        """Largest per-axis attitude difference, wrapped. NaN if either is unknown.
+
+        Per-axis rather than a single rotation angle: the axes fail for
+        different reasons -- roll is unactuated on this hull, yaw is where the
+        board's rev-10 inversion lived -- and a combined magnitude would hide
+        which one disagrees.
+        """
+        if a is None or b is None:
+            return float('nan')
+        worst = 0.0
+        for x, y in zip(a, b):
+            if not (np.isfinite(x) and np.isfinite(y)):
+                return float('nan')
+            d = abs((float(x) - float(y) + 180.0) % 360.0 - 180.0)
+            worst = max(worst, d)
+        return worst
+
+    def recognise(self, gray: np.ndarray, *, label: Optional[str] = None,
+                  det_class: Optional[str] = None,
+                  det_age_s: float = float('inf'),
+                  attitude=None) -> BankPose:
+        """Locate, then ask whether the bank may ASSERT this is that thing.
+
+        ⛔ WHY THIS IS SEPARATE FROM `locate()`. Geometry alone was measured
+        unable to tell one prop from another inside one venue: whole-frame
+        references from a torpedo run cleared `MIN_INLIERS` on 100 % of GATE
+        frames and said 'torpedo' (`measured-bars.md` §22). `locate()` answers
+        "where", which is all a rung with a detector-supplied reference needs.
+        Asserting "what" needs more, and this is the more.
+
+        THREE CHECKS THAT FAIL FOR UNRELATED REASONS, which is the whole point
+        -- turbidity blinds the detector and the matcher together and moves the
+        IMU not at all:
+
+          geometry    inliers >= `identity_inliers` (60, measured to admit 0 %
+                      of the other-prop frames while keeping 57 % of true ones)
+          semantics   a detector hypothesis of the SAME class, recently. ⭐ The
+                      detector is the identity authority: it misses things, it
+                      does not confuse a gate for a torpedo, so a hypothesis far
+                      below the control-confidence gate is still strong evidence
+                      of WHAT is in frame while being useless as a position
+          kinematics  the vehicle's attitude is within `identity_att_deg` of
+                      where the checkpoint was taken
+
+        UNKNOWN IS NOT AGREEMENT. A check whose input is absent -- no detector
+        hypothesis passed, no attitude stored -- is skipped and SAID SO in
+        `identity_why`, never counted as a pass. A caller that wants a hard
+        corroboration requirement can read `identity_why` and refuse; one that
+        cannot supply a detector at all still gets the geometry bar.
+        """
+        p = self.locate(gray, label=label)
+        why = []
+        ok = True
+
+        if p.inliers < self._id_inliers:
+            ok = False
+            why.append(f'inliers {p.inliers}<{self._id_inliers}')
+        else:
+            why.append(f'inliers {p.inliers}')
+
+        if det_class is None:
+            why.append('no detector opinion')
+        elif det_age_s > self._id_det_age:
+            why.append(f'detector {det_age_s:.1f}s stale')
+        elif p.label and det_class != p.label:
+            ok = False
+            why.append(f'detector says {det_class!r}, bank says {p.label!r}')
+        else:
+            why.append(f'detector agrees ({det_class})')
+
+        gap = self._att_gap_deg(attitude, p.ref_attitude)
+        if gap != gap:                                   # NaN -- unknown
+            why.append('no attitude')
+        elif gap > self._id_att_deg:
+            ok = False
+            why.append(f'attitude off {gap:.0f}deg')
+        else:
+            why.append(f'attitude within {gap:.0f}deg')
+
+        p.identity_ok = bool(ok and p.ok)
+        p.identity_why = '; '.join(why)
+        return p
 
     def verify(self, gray: np.ndarray, *,
                label: Optional[str] = None) -> int:
