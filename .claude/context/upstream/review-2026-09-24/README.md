@@ -39,6 +39,37 @@ File one issue per file in [`srot-control-board/issues/`](srot-control-board/iss
 | 18 Low-severity control-loop hygiene (checklist) | Low |
 | 19–20 Proposals: IMU off the shared I2C bus, and an on-board vertical state estimator | Proposal |
 
+### Round 2 (deeper firmware pass + control SOTA), same filing rule
+
+| file | severity |
+|---|---|
+| 22 A running autotune overrides every SURFACE failsafe; no mode change stops it; at the end it disarms at depth | High |
+| 23 MOTOR_DETECT ignores FRAME_REVERSE: a "successful" detect on this hull (FRAME_REVERSE=1) reverses every axis | High |
+| 24 Pico or ESC loss is invisible to arming, failsafes and MAVLink, and a reset Bluejay ESC never re-arms under a depth-holding demand | High |
+| 25 MOTOR_TUNE writes an inflated MOT_SPIN_MIN (used on every flight) and an RPM Ki 2000× too strong | High |
+| 26 The BNO085 mount remap is done on Euler angles, not the quaternion: roll capped at ±90°, style_roll commands a huge pitch | High |
+| 27 / 28 Addenda to 03 (the ArduPilot AC_PID reference) and 04/20 (baro OSR-256 noise numbers; LINEAR_ACCELERATION not enabled) | — |
+| 29 An aborted autotune keeps partial gains live; the relay has no hysteresis | Medium |
+| 30 The Pico's USB printf can block for up to 1 s and trip its 250 ms watchdog | Medium |
+| 31 The RPM target is linear in a thrust-linear demand (it should be √); the same mistake is in thrust trim | Medium |
+| 32 The angular "drag feedforward" is positive feedback on measured rate | Medium (latent, defaults 0) |
+| 35 ESC_FLASHING.md puts Bluejay PWM (48/24 kHz) inside or next to the pinger bands; move to 96 kHz before any hydrophone work (host: fh1m/mongla_ws#45) | Medium |
+
+⚠ **Not yet drafted.** The round-2 drafting was stopped part-way. What remains lives in the research reports below. Draft them from the reports, verifying each claim at `f1d3ba9` first:
+- **[`research/firmware_deep.md`](research/firmware_deep.md):** M2 move brake is open-loop; M3 no max-depth limit; M4 reversals near zero; M7 SD log format and ~5 Hz actual rate; M8 unpinned libraries; the 10 Lows; the failsafe matrix; and the proposals (a single failsafe evaluator, Pico/ESC health as an input, a self-describing log).
+- **[`research/cross_stack.md`](research/cross_stack.md):**
+  - A: a move cut short by a failsafe is ACKed 100 %;
+  - B: SROT_MOVE forces AUTO out of SURFACE;
+  - C: a Pico reset is invisible to the Pi;
+  - D: the LEAK/ESPNOW failsafes are off by default, and SAFETY_GATES is never enforced;
+  - E: reconnecting reboots the board via DTR;
+  - F: IMU stamps are the send time;
+  - also TIMESYNC, the latency and link budgets (1 KB TX buffer bursts), and contract-drift gaps (the drift test skips in this layout; FLARE_ORDER is host-only).
+
+  The **host half of A and B is fixed** in fh1m/mongla_ws#43 (`5cebe0d`); the firmware half still needs its draft.
+- **[`research/control_sota.md`](research/control_sota.md)** and **[`research/perception_sota.md`](research/perception_sota.md):** the SOTA comparisons with citations. Their host items are filed as fh1m/mongla_ws#44–#52.
+- **[`research/cad_review.md`](research/cad_review.md):** the full B-matrix derivation behind issue 00 and fh1m/mongla_ws#9.
+
 ## 3. `srot-ground-station`: issues
 
 File each file in [`srot-ground-station/issues/`](srot-ground-station/issues/) the same way; evidence is at `1adc14c`. The top three are **High**:
@@ -46,9 +77,12 @@ File each file in [`srot-ground-station/issues/`](srot-ground-station/issues/) t
 - Bondor accepts any sender's HEARTBEAT, so the Arm/Disarm toggle can send ARM;
 - after a window reload, Disarm is disabled while "Link OK" is shown.
 
-## 4. `srot-esc-flasher`: issue
+## 4. `srot-esc-flasher`: issues
 
-[`srot-esc-flasher/issues/01-flasher-testalive-always-ok.md`](srot-esc-flasher/issues/). Evidence is at `c30b843`.
+[`srot-esc-flasher/issues/`](srot-esc-flasher/issues/), with evidence at `c30b843`:
+- 01: InterfaceTestAlive always ACKs OK.
+- 02: Bluejay PWM 24/48 kHz sits in the pinger band.
+- 03: `ESC_FLASHING.md` claims a false "open-loop" safety property.
 
 ---
 
@@ -62,6 +96,6 @@ File each file in [`srot-ground-station/issues/`](srot-ground-station/issues/) t
 | item | repo | URL |
 |---|---|---|
 | safety PR (5 commits) | srot-control-board | — |
-| issues 00–20 | srot-control-board | — |
+| issues 00–35 | srot-control-board | — |
 | issues 01–09 | srot-ground-station | — |
-| issue 01 | srot-esc-flasher | — |
+| issues 01–03 | srot-esc-flasher | — |
