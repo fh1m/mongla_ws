@@ -1,5 +1,17 @@
 # Where the thrusters actually are.
 #
+# ⛔ NOT LOADED AT RUNTIME. Nothing on the vehicle opens this file. The numbers
+# below are transcribed into `geometric_allocation.py` and `hydrodynamics.py`
+# as module constants, and those constants are what fly. Only two tests read
+# this file, and they read it to prove the constants still match it.
+#
+# So EDITING THIS FILE ALONE CHANGES NOTHING. There is no `ros2 param set` for
+# hull geometry and no `--params-file` that loads it: it is not a ROS parameter
+# at any point. To change the geometry, re-run `tools/pull_hull_geometry.js`
+# against the CAD and update the constants in those two modules; the tests
+# above will fail until both agree, which is the whole point of keeping the
+# file.
+#
 # ⛔ WHY THIS FILE EXISTS. The allocator works in DEMAND space: `allocation.py`
 # holds an 8x6 matrix of exactly 0 and +-1 -- a sign pattern with no geometry in
 # it. Used as a force sum those +-1 entries overstate surge and sway by
