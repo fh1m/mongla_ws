@@ -2359,8 +2359,8 @@ class SrotFC(FlightController):
         return None if hb is None else (time.time() - getattr(hb, '_timestamp', 0.0))
 
     def send_heartbeat(self):
-        """Alias: the manager's heartbeat_tick calls this -- on SROT it IS the
-        mandatory >=1 Hz GCS HEARTBEAT (2 Hz tick > the 1 Hz failsafe floor)."""
+        """Alias: the manager's `_HeartbeatThread` calls this -- on SROT it IS the
+        mandatory >=1 Hz GCS HEARTBEAT (2 Hz thread > the 1 Hz failsafe floor)."""
         self.send_gcs_heartbeat()
 
     def send_neutral(self):

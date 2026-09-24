@@ -101,7 +101,7 @@ class Pixhawk:
         # MAVLink WRITE serialization. pymavlink's MAVLink object shares a single
         # sequence counter + encode buffer across threads; five writers hit it
         # concurrently -- HeadingLock (50 Hz), Heartbeat (5 Hz), the action
-        # thread, and the manager's _mocap_tick (20 Hz) + heartbeat_tick. Over
+        # thread, and the manager's _mocap_tick (20 Hz) + _hb_thread. Over
         # serial (desk mode) unserialized writes tear frames / duplicate seq
         # numbers. Every outbound send goes through _tx() under this lock (the
         # symmetric write rule to the existing "only the reader thread calls
