@@ -4030,3 +4030,69 @@ A constant swept in one configuration and applied in another is the recurring
 defect in this codebase. **Sweep the bar on the shape production actually
 builds**, or state the configuration in the constant's own comment so the
 mismatch is visible at the point of use.
+
+---
+
+## 26. ⭐ XFeat's settings, chosen on our own water — and the benchmark that lied
+
+**2026-09-24.** The shipped settings were inherited rather than chosen:
+`top_k=1024` because the anchor could afford it, `det_thresh=0.05` because it is
+upstream's default and nobody in the prototype lineage ever varied it, 320×240
+because it fit the rate budget.
+
+### 26.1 The isolated sweep
+
+`tools/xfeat_settings_sweep.py`, murky archive pairs at +1/3/5 s:
+
+| model | top_k | thr | murky p50 | murky floor | detect | match |
+|---|---|---|---|---|---|---|
+| 320×240 | 1024 | 0.05 *(shipped)* | 69 | 10 | 22.3 ms | 19.8 ms |
+| 320×240 | 1024 | 0.10 | 78 | 11 | 19.0 ms | 18.2 ms |
+| **320×240** | **2048** | **0.02** | **152** | **14** | 23.6 ms | 40.0 ms |
+| 640×480 | 1024 | 0.05 | 33 | 8 | 47.8 ms | 21.2 ms |
+| 640×480 | 2048 | 0.02 | 55 | 12 | 44.4 ms | 38.7 ms |
+
+Two facts worth keeping:
+
+⭐ **`top_k` and `det_thresh` are coupled.** The threshold *gates*, `top_k`
+*caps*, so 2048 only pays with a low threshold — at 2048/0.10 it collapses to
+78, indistinguishable from 1024.
+
+⛔ **640×480 is WORSE than 320×240 on murky water, everywhere** — 33 vs 69
+murky p50 at top_k 1024, for 2× the detect cost. More pixels spread the same
+keypoint budget over four times the area, and downscaling appears to act as a
+denoiser in turbid water. ⚠ This is an INLIER result; pose *precision* is a
+different metric and 640 may still help there. But 640 is not free and is not
+an automatic upgrade.
+
+### 26.2 ⛔ And the sweep's headline does not survive the system
+
+`top_k=2048` costs **125.0 ms per match on the Pi** against 31.4 ms at 1024 —
+4×, because the similarity matrix is O(N²) in keypoints. At a fixed ~125 ms
+budget the choice is therefore **one reference at 2048 or four at 1024**, and
+that is the comparison that matters:
+
+| clip | 1024 × 4 refs | 2048 × 1 ref |
+|---|---|---|
+| mirpur_torpedo | 22 | 24 |
+| mirpur_torpedo_1 | **38** | 28 |
+| mirpur_gate | 50 | 56 |
+| **all, median** | **40** | 32 |
+| floor | **6** | 5 |
+
+⭐ **Bank breadth beats keypoint density at equal cost.** The setting that
+doubled inliers in isolation loses by 25 % once its time is spent on the system
+it lives in.
+
+### The bar
+
+**`top_k = 1024`, `det_thresh = 0.05`, 320×240 all stand.** Not because they
+were right by luck, but because the alternatives were measured and lose.
+
+### The method note
+
+⚠ **An isolated benchmark can favour a setting that loses in the system.** The
++1/3/5 s pair sweep is a fair measurement of one match and a misleading
+measurement of the rung, because the rung spends its budget on a *bank*. Price a
+setting in the currency the system actually spends — here, milliseconds against
+a 333 ms period — before adopting it.

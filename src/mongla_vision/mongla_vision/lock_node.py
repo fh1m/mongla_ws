@@ -93,6 +93,17 @@ class LockNode(Node):
         self.declare_parameter('follow', True)
         self.declare_parameter('anchor', False)
         self.declare_parameter('anchor_model', '')
+        # A bank built BEFORE the run, from practice footage or stills:
+        # `tools/build_practice_bank.py`. Measured 2026-09-24 -- references
+        # from one run clear the trust bar on 92-100 % of frames of a DIFFERENT
+        # run of the same prop, so the anchor need not wait for a confident
+        # live detection to have something to match against. Which matters
+        # because the moment it is needed is the moment the detector is failing.
+        #
+        # ⛔ A preloaded reference is trusted exactly like a live one: it clears
+        # MIN_INLIERS or it does not answer, and `recognise()` still wants the
+        # detector to agree before any identity is asserted.
+        self.declare_parameter('anchor_bank', '')
         # 3 Hz, not 8. Measured on the Pi with the full stack live, and the
         # cost is LATENCY rather than throughput -- detection rate is unchanged
         # at every setting, but the anchor's 33 ms bursts delay the image
@@ -358,6 +369,7 @@ class LockNode(Node):
                 f'[LOCK ] anchor backend {os.path.basename(p)}, '
                 f'bank capacity {self._anchor._cap}, '
                 f'shortlist <= {self._anchor.shortlist_k()}')
+            self._load_bank()
         except Exception as exc:
             self.get_logger().warning(
                 f'[LOCK ] anchor DISABLED: {type(exc).__name__}: {exc} '
