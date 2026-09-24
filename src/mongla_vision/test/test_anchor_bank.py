@@ -336,3 +336,194 @@ def test_verify_can_be_asked_about_one_label():
     b.enrol(view(1, 400), roi=None, det_conf=0.9, label='gate')
     assert b.verify(view(1, 400), label='gate') >= MIN_INLIERS
     assert b.verify(view(1, 400), label='torpedo') == 0
+
+
+# --------------------------------------------------------------------------- #
+# 9. Preloading: a bank built before the run
+# --------------------------------------------------------------------------- #
+def test_a_saved_bank_reloads_and_still_matches(tmp_path):
+    """Measured 2026-09-24: references from one run clear the trust bar on
+    92-100 % of frames of a DIFFERENT run of the same prop. This asserts the
+    mechanism that makes that usable -- descriptors survive the round trip."""
+    b = bank()
+    for i in range(3):
+        b.enrol(view(1, 400, drop=i * 20), roi=None, det_conf=0.9,
+                label='gate', force=True)
+    p = tmp_path / 'practice.npz'
+    assert b.save(str(p)) == 3
+
+    fresh = bank()
+    assert fresh.size == 0
+    assert fresh.load(str(p)) == 3
+    assert fresh.size == 3
+    assert fresh.labels == ['gate'] * 3
+    got = fresh.locate(view(1, 400))
+    assert got.ok and got.inliers >= MIN_INLIERS
+    assert got.label == 'gate'
+
+
+def test_a_preloaded_reference_still_has_to_clear_the_bar(tmp_path):
+    """⛔ The octagon result: a preloaded bank scored 8 % on a different run of
+    a generic structural view. Preloading changes where a checkpoint comes
+    from, never what it has to prove -- so the wrong scene must still refuse."""
+    b = bank()
+    b.enrol(view(1, 400), roi=None, det_conf=0.9)
+    p = tmp_path / 'practice.npz'
+    b.save(str(p))
+    fresh = bank()
+    fresh.load(str(p))
+    assert not fresh.locate(view(2, 400)).ok
+    assert fresh.verify(view(2, 400)) == 0
+
+
+def test_loading_a_bank_built_at_another_resolution_is_REFUSED(tmp_path):
+    """Keypoints are stored in BACKEND pixels. Loading 640x480 references into
+    a 320x240 backend would halve every coordinate with no error and a
+    plausible homography -- every pose wrong by two, silently."""
+    b = bank()
+    b.enrol(view(1, 400), roi=None, det_conf=0.9)
+    p = tmp_path / 'practice.npz'
+    b.save(str(p))
+
+    class Wide(FakeBackend):
+        w, h = 640, 480
+
+    other = CheckpointBank(Wide())
+    with pytest.raises(ValueError, match='backend is'):
+        other.load(str(p))
+    assert other.size == 0
+
+
+def test_saving_an_empty_bank_is_refused(tmp_path):
+    """An empty .npz would load as a bank that silently never answers."""
+    with pytest.raises(ValueError, match='empty'):
+        bank().save(str(tmp_path / 'nothing.npz'))
+
+
+def test_load_can_append_to_a_live_bank(tmp_path):
+    """Practice references and live ones coexist: the run does not have to
+    choose between what it prepared and what it has learned since."""
+    b = bank()
+    b.enrol(view(1, 400), roi=None, det_conf=0.9, label='gate')
+    p = tmp_path / 'practice.npz'
+    b.save(str(p))
+
+    live = bank()
+    live.enrol(view(2, 400), roi=None, det_conf=0.9, label='torpedo')
+    assert live.load(str(p), append=True) == 1
+    assert live.size == 2
+    assert sorted(live.labels) == ['gate', 'torpedo']
+    assert live.locate(view(1, 400), label='gate').ok
+    assert live.locate(view(2, 400), label='torpedo').ok
+
+
+# --------------------------------------------------------------------------- #
+# 10. Asserting an identity needs more than geometry
+# --------------------------------------------------------------------------- #
+def rich(scene, n=400, drop=0):
+    """A view that yields well over the identity bar of 60 inliers."""
+    return view(scene, n, drop=drop)
+
+
+def test_locate_does_not_assert_identity():
+    """Measured: whole-frame references from a torpedo run cleared MIN_INLIERS
+    on 100 % of GATE frames. locate() answers "where", never "what"."""
+    b = bank()
+    b.enrol(rich(1), roi=None, det_conf=0.9, label='torpedo')
+    p = b.locate(rich(1))
+    assert p.ok
+    assert p.identity_ok is False, 'locate() must not assert an identity'
+
+
+def test_recognise_passes_on_geometry_when_nothing_else_is_offered():
+    b = bank()
+    b.enrol(rich(1), roi=None, det_conf=0.9, label='torpedo')
+    p = b.recognise(rich(1))
+    assert p.identity_ok
+    assert 'no detector opinion' in p.identity_why
+    assert 'no attitude' in p.identity_why
+
+
+def test_a_weak_match_is_refused_even_with_the_detector_agreeing():
+    """The geometry bar is 60, not MIN_INLIERS. A detector that agrees cannot
+    rescue a match that is not there."""
+    b = bank(identity_inliers=60)
+    b.enrol(rich(1), roi=None, det_conf=0.9, label='torpedo')
+    p = b.recognise(view(1, 400, drop=370), det_class='torpedo', det_age_s=0.1)
+    assert not p.identity_ok
+    assert 'inliers' in p.identity_why and '<60' in p.identity_why
+
+
+def test_the_detector_overrules_a_strong_geometric_match():
+    """⭐ The whole point. The bank's geometry said 'torpedo' on gate frames;
+    the detector's failure mode is missing things, not confusing them."""
+    b = bank()
+    b.enrol(rich(1), roi=None, det_conf=0.9, label='torpedo')
+    p = b.recognise(rich(1), det_class='gate', det_age_s=0.1)
+    assert p.inliers >= 60, 'the geometry should be strong here'
+    assert not p.identity_ok
+    assert "bank says 'torpedo'" in p.identity_why
+
+
+def test_a_stale_detector_opinion_is_skipped_not_counted_as_disagreement():
+    b = bank(identity_det_age_s=3.0)
+    b.enrol(rich(1), roi=None, det_conf=0.9, label='torpedo')
+    p = b.recognise(rich(1), det_class='gate', det_age_s=99.0)
+    assert p.identity_ok, 'a stale opinion must not veto'
+    assert 'stale' in p.identity_why
+
+
+def test_attitude_disagreement_refuses():
+    """The third opinion, and it fails for reasons unrelated to both vision
+    rungs: turbidity blinds detector and matcher together, the IMU not at all."""
+    b = bank(identity_att_deg=45.0)
+    b.enrol(rich(1), roi=None, det_conf=0.9, label='torpedo',
+            attitude=(0.0, 0.0, 10.0))
+    assert b.recognise(rich(1), attitude=(0.0, 0.0, 20.0)).identity_ok
+    p = b.recognise(rich(1), attitude=(0.0, 0.0, 190.0))
+    assert not p.identity_ok
+    assert 'attitude off' in p.identity_why
+
+
+def test_attitude_wraps_at_180_rather_than_reporting_a_huge_gap():
+    b = bank(identity_att_deg=45.0)
+    b.enrol(rich(1), roi=None, det_conf=0.9, attitude=(0.0, 0.0, 179.0))
+    assert b.recognise(rich(1), attitude=(0.0, 0.0, -179.0)).identity_ok
+
+
+def test_an_unknown_check_is_reported_never_silently_passed():
+    """UNKNOWN IS NOT AGREEMENT. A caller that needs hard corroboration must be
+    able to see that a check did not run."""
+    b = bank()
+    b.enrol(rich(1), roi=None, det_conf=0.9, label='torpedo')
+    why = b.recognise(rich(1)).identity_why
+    assert 'no detector opinion' in why and 'no attitude' in why
+
+
+def test_attitude_and_depth_survive_the_save_load_round_trip(tmp_path):
+    b = bank()
+    b.enrol(rich(1), roi=None, det_conf=0.9, label='torpedo',
+            attitude=(1.0, -2.0, 33.0), depth_m=1.25)
+    p = tmp_path / 'b.npz'
+    b.save(str(p))
+    fresh = bank()
+    fresh.load(str(p))
+    got = fresh.locate(rich(1))
+    assert got.ref_attitude is not None
+    assert abs(got.ref_attitude[2] - 33.0) < 1e-3
+    assert abs(got.ref_depth_m - 1.25) < 1e-3
+
+
+def test_a_bank_saved_without_attitude_loads_as_unknown_not_as_zero():
+    """Zero is a real attitude. Rendering absence as 0.0 would make every
+    checkpoint claim the vehicle was level, which is the bug the board's own
+    value-suppression rule exists to prevent."""
+    import tempfile, os as _os
+    b = bank()
+    b.enrol(rich(1), roi=None, det_conf=0.9)
+    with tempfile.TemporaryDirectory() as d:
+        p = _os.path.join(d, 'b.npz')
+        b.save(p)
+        fresh = bank()
+        fresh.load(p)
+        assert fresh.locate(rich(1)).ref_attitude is None

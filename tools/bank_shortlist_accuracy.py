@@ -107,12 +107,14 @@ def main() -> int:
 
     print(f'model={os.path.basename(a.model)} stride={a.stride}s '
           f'refs<={a.refs}  signature=mean XFeat descriptor (64-D)')
-    print(f'{"clip":<18} {"refs":>5} {"queries":>8} {"r@1":>7} {"r@3":>7} '
-          f'{"r@5":>7} {"inlier loss @5":>15}')
+    KS = (1, 2, 3, 5, 8)
+    hdr = ' '.join(f'{"r@"+str(k):>6}' for k in KS)
+    hdr2 = ' '.join(f'{"loss@"+str(k):>8}' for k in KS)
+    print(f'{"clip":<18} {"refs":>5} {"q":>4} {hdr}  {hdr2}')
 
-    tot = {1: 0, 3: 0, 5: 0}
+    tot = {k: 0 for k in KS}
     tot_q = 0
-    losses = []
+    losses = {k: [] for k in KS}
     for name in want:
         fs = frames(CLIPS[name], a.stride, a.refs)
         if len(fs) < 4:
@@ -121,7 +123,7 @@ def main() -> int:
         feats = [net.detect(f) for f in fs]
         sigs = np.stack([signature(d) for _, d in feats])
 
-        hit = {1: 0, 3: 0, 5: 0}
+        hit = {k: 0 for k in KS}
         q = 0
         # Every frame is a query against all the OTHERS as a bank, which is the
         # honest version: a reference never retrieves itself.
@@ -137,28 +139,26 @@ def main() -> int:
                 continue                      # nothing to retrieve; not a miss
             order = np.argsort(-(sigs[idx] @ sigs[qi]))
             q += 1
-            for k in (1, 3, 5):
+            for k in KS:
                 topk = order[:k]
                 if best in topk:
                     hit[k] += 1
-                if k == 5:
-                    got = max(truth[t] for t in topk)
-                    losses.append(1.0 - got / max(1, truth[best]))
+                got = max(truth[t] for t in topk)
+                losses[k].append(1.0 - got / max(1, truth[best]))
         if q == 0:
             print(f'{name:<18} no usable queries')
             continue
         tot_q += q
-        for k in (1, 3, 5):
+        for k in KS:
             tot[k] += hit[k]
-        ml = float(np.mean(losses[-q:])) if q else 0.0
-        print(f'{name:<18} {len(fs):>5} {q:>8} '
-              f'{hit[1]/q:>6.1%} {hit[3]/q:>6.1%} {hit[5]/q:>6.1%} '
-              f'{ml:>14.1%}')
+        r = ' '.join(f'{hit[k]/q:>6.1%}' for k in KS)
+        l = ' '.join(f'{float(np.mean(losses[k][-q:])):>8.1%}' for k in KS)
+        print(f'{name:<18} {len(fs):>5} {q:>4} {r}  {l}')
 
     if tot_q:
-        print(f'{"ALL":<18} {"":>5} {tot_q:>8} '
-              f'{tot[1]/tot_q:>6.1%} {tot[3]/tot_q:>6.1%} {tot[5]/tot_q:>6.1%} '
-              f'{float(np.mean(losses)):>14.1%}')
+        r = ' '.join(f'{tot[k]/tot_q:>6.1%}' for k in KS)
+        l = ' '.join(f'{float(np.mean(losses[k])):>8.1%}' for k in KS)
+        print(f'{"ALL":<18} {"":>5} {tot_q:>4} {r}  {l}')
     return 0
 
 
