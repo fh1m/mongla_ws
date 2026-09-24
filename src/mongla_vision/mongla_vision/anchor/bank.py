@@ -725,9 +725,16 @@ class CheckpointBank:
         if not pool:
             return BankPose(ok=False)
 
+        # ⭐ DETECT ONCE. Every reference is asked about the SAME frame, so the
+        # backbone runs here and the features are handed to each one --
+        # `Anchor.locate_features`. Previously each reference detected for
+        # itself and the signature detected again, so a 4-wide shortlist ran
+        # the backbone five times on one image.
+        kq, dq = self._be.detect(gray)
+
         k = int(shortlist) if shortlist else self.shortlist_k()
         if len(pool) > k:
-            q = self._signature(self._be.detect(gray)[1])
+            q = self._signature(dq)
             # One (N,64) @ (64,) dot product. At 100 references this is
             # microseconds against tens of milliseconds per match, which is the
             # whole reason the shortlist is worth having.
@@ -737,7 +744,7 @@ class CheckpointBank:
         best = BankPose(ok=False, searched=len(pool))
         t0 = time.perf_counter()
         for i in pool:
-            p = self._refs[i].locate(gray)
+            p = self._refs[i].locate_features(kq, dq)
             n = int(getattr(p, 'inliers', 0) or 0)
             if n > best.inliers:
                 best = BankPose(ok=bool(p.ok), inliers=n, index=i, pose=p,

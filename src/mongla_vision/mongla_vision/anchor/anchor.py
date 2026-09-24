@@ -256,11 +256,30 @@ class Anchor:
     # -- relocate ----------------------------------------------------------- #
     def locate(self, gray: np.ndarray) -> AnchorPose:
         """Where is the reference in this frame?"""
-        import cv2
         if not self.has_reference:
             return AnchorPose(ok=False)
         k1, d1 = self._be.detect(gray)
-        if len(k1) < 8:
+        return self.locate_features(k1, d1)
+
+    def locate_features(self, k1, d1) -> AnchorPose:
+        """`locate()` against features ALREADY extracted from the frame.
+
+        ⛔ WHY THIS EXISTS. `CheckpointBank` asks several references about one
+        frame, and `locate()` detects internally -- so a 4-wide shortlist ran
+        the backbone FOUR times on the same pixels, plus once more for the
+        signature. Measured on the dev box that is ~20 ms of detection repeated
+        per reference: a bank `locate()` at k=4 spent ~80 ms re-extracting
+        features it already had.
+
+        It showed up as a per-match cost that barely moved with `top_k` --
+        42.3 ms at 1024 against 36.3 at 512, when a quarter of the multiply-
+        accumulates should have been far cheaper. That flatness was the
+        detection, not the matching.
+        """
+        import cv2
+        if not self.has_reference:
+            return AnchorPose(ok=False)
+        if k1 is None or len(k1) < 8:
             return AnchorPose(ok=False)
         i0, i1 = self._be.match(self._ref_desc, d1, self._min_cossim)
         if len(i0) < 8:
