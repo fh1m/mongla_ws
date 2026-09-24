@@ -103,10 +103,39 @@ MAX_SHORTLIST = 8
 BUDGET_FRACTION = 0.45
 
 # A detection must be at least this confident before its view is worth storing.
-# Deliberately a FLOOR and not a threshold to act on -- the detector's own
-# control-confidence gate lives elsewhere, and this one exists only to keep a
-# doubtful frame out of long-term memory.
-CONF_FLOOR = 0.60
+#
+# ⛔ WAS 0.60, AND IT STARVED THE BANK. Measured on Mirpur torpedo footage
+# through our own YOLO graph: the detector's confidences are p50 **0.49**
+# (min 0.22, max 0.85), so a 0.60 floor refused **10 of 13** candidate views
+# and the bank ended a whole clip holding ONE reference -- which then asserted
+# identity on 0 % of later frames, where a 14-reference bank asserted on 3 of 8.
+#
+# ⚠ And a fixed absolute floor is the wrong SHAPE here, not just the wrong
+# number: §6b records our own detector's recall swinging 29.2 / 72.7 / 68.3 %
+# across venues, so a confidence that means different things in different water
+# cannot have a threshold set once.
+#
+# 0.25 because the checks that actually discriminate are elsewhere and are
+# measured: `enrol` already requires the candidate to AGREE geometrically with
+# the bank (≥ MIN_INLIERS), eviction is by inlier yield so a reference that
+# never wins is discarded, and `recognise()` needs 40 inliers plus the
+# detector's class before any identity is asserted. This floor's only job is to
+# keep obvious noise out of long-term memory.
+CONF_FLOOR = 0.25
+
+# ⛔ HOW MANY REFERENCES BEFORE THE BANK MAY JUDGE A CANDIDATE.
+#
+# `enrol` requires a candidate to AGREE with the bank, which stops it learning
+# a distractor. But a bank of one reference from one viewpoint cannot judge:
+# measured on Mirpur torpedo footage, 10 of 13 candidates were refused as
+# 'disagrees' and the bank ended the clip holding ONE reference. A second
+# bootstrap deadlock, in the same family as the first.
+#
+# The prototype gallery this policy came from had it right and the port missed
+# it: `dino_idea_v12.py:458` rejects only `if template_score < THRESH and
+# len(self.pipe_templates) > 2` -- the gate switches on once there are three
+# templates. Below that the bank is accumulating evidence, not adjudicating it.
+AGREEMENT_MIN = 3
 
 # Ask for a new checkpoint while the best one is still working.
 #
@@ -128,6 +157,24 @@ CONF_FLOOR = 0.60
 # it fires when the bank is genuinely running out of usable viewpoints rather
 # than on every trough.
 REFRESH_INLIERS = 25
+
+# ⭐ THE SCALE-COVERAGE TRIGGER, and it is the meta-updater's PRIMARY criterion.
+#
+# §21.1 withdrew the decay story: references oscillate rather than decay, so a
+# threshold on inlier count fires on troughs. §21.2 replaced it -- what the bank
+# buys is VIEWPOINT DIVERSITY. This is that, made operational.
+#
+# Seen on real footage (`tools/pipeline_visual_check.py`, Mirpur torpedo): the
+# bank enrolled where the detector was confident, which is mid-range, and then
+# refused every close-range frame -- 7 inliers against a board filling the
+# screen. The number said "no match"; the picture said "the prop is
+# unmistakable and we had nothing at that scale to compare it to". That is the
+# partial-view case a torpedo run actually fires from.
+#
+# A view earns a slot when its apparent SIZE is outside the band the bank
+# already covers by this factor. 1.6 is roughly half an octave: close enough
+# that references overlap, far enough that five of them span a useful range.
+SCALE_COVERAGE = 1.6
 
 # ⛔ THE BAR FOR ASSERTING AN IDENTITY, which is NOT the bar for tracking.
 #
@@ -242,7 +289,9 @@ class CheckpointBank:
                  min_inliers: int = MIN_INLIERS,
                  min_cossim: float = MIN_COSSIM,
                  conf_floor: float = CONF_FLOOR,
+                 agreement_min: int = AGREEMENT_MIN,
                  refresh_inliers: int = REFRESH_INLIERS,
+                 scale_coverage: float = SCALE_COVERAGE,
                  identity_inliers: int = IDENTITY_INLIERS,
                  identity_det_age_s: float = IDENTITY_DET_AGE_S,
                  identity_att_deg: float = IDENTITY_ATT_DEG,
@@ -255,7 +304,9 @@ class CheckpointBank:
         self._min_inliers = int(min_inliers)
         self._min_cossim = float(min_cossim)
         self._conf_floor = float(conf_floor)
+        self._agree_min = int(agreement_min)
         self._refresh = int(refresh_inliers)
+        self._cover = float(scale_coverage)
         self._id_inliers = int(identity_inliers)
         self._id_det_age = float(identity_det_age_s)
         self._id_att_deg = float(identity_att_deg)
@@ -277,6 +328,10 @@ class CheckpointBank:
         # (x, y) metres, or None. Supplied by the localiser at enrol time. See
         # `locate(near=...)` for what it buys.
         self._pos: list[Optional[tuple]] = []
+        # Apparent size of each reference's target, as sqrt(ROI area) in
+        # backend pixels, or NaN when the reference is whole-frame. This is the
+        # axis `SCALE_COVERAGE` spreads the bank along.
+        self._scale: list[float] = []
         # Measured cost of ONE match, in seconds, as a decaying average. This
         # is what makes the shortlist width adapt instead of being guessed:
         # the same code picks 5 on a dev box and 3 on a Pi because it has
@@ -313,6 +368,7 @@ class CheckpointBank:
         self._depth.clear()
         self._ann.clear()
         self._pos.clear()
+        self._scale.clear()
 
     @property
     def labels(self) -> list[str]:
@@ -393,10 +449,12 @@ class CheckpointBank:
         if not (force or bootstrap):
             if float(det_conf) < self._conf_floor:
                 return EnrolResult(False, 'confidence')
-            # The view must already agree with something we hold. This is what
-            # stops the bank quietly learning a distractor the detector
-            # happened to be confident about.
-            if self.locate(gray).inliers < self._min_inliers:
+            # The view must already agree with something we hold -- ONCE there
+            # is enough held to judge with. This is what stops the bank quietly
+            # learning a distractor the detector happened to be confident
+            # about, without it also stopping the bank from ever reaching two.
+            if (len(self._refs) >= self._agree_min
+                    and self.locate(gray).inliers < self._min_inliers):
                 return EnrolResult(False, 'disagrees')
 
         if self._require_agreement_always and not self._refs:
@@ -446,6 +504,7 @@ class CheckpointBank:
         self._ann.append(ann)
         self._pos.append(None if position is None
                          else (float(position[0]), float(position[1])))
+        self._scale.append(self._roi_scale(gray, roi))
         return EnrolResult(True, 'ok', index=len(self._refs) - 1, keypoints=n)
 
     def _evict(self) -> None:
@@ -459,6 +518,40 @@ class CheckpointBank:
         self._depth.pop(i)
         self._ann.pop(i)
         self._pos.pop(i)
+        self._scale.pop(i)
+
+    def _roi_scale(self, gray, roi) -> float:
+        """sqrt(ROI area) in BACKEND pixels. NaN for a whole-frame reference.
+
+        NaN rather than the frame diagonal, because a whole-frame reference
+        covers no particular scale and pretending it covers the largest one
+        would suppress every close-range enrolment.
+        """
+        if roi is None:
+            return float('nan')
+        fh, fw = gray.shape[:2]
+        sx, sy = self._be.w / float(fw), self._be.h / float(fh)
+        x1, y1, x2, y2 = (float(v) for v in roi)
+        return float(np.sqrt(max(1.0, abs(x2 - x1) * sx * abs(y2 - y1) * sy)))
+
+    def covers_scale(self, gray, roi) -> bool:
+        """Is a target this size already represented in the bank?
+
+        False means this view would ADD coverage -- the caller should enrol it
+        even though the existing references are matching fine, because they
+        will stop matching when the vehicle closes in.
+        """
+        if roi is None:
+            return True                       # no scale to reason about
+        s = self._roi_scale(gray, roi)
+        known = [v for v in self._scale if v == v and v > 0]
+        if not known or s <= 0:
+            return False
+        return any(max(s, k) / min(s, k) < self._cover for k in known)
+
+    @property
+    def scales(self) -> list[float]:
+        return list(self._scale)
 
     def wants_refresh(self, gray: np.ndarray) -> bool:
         """Is the best reference decaying toward uselessness?

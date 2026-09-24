@@ -162,12 +162,50 @@ def test_a_low_confidence_detection_is_refused():
 
 def test_a_view_that_does_not_agree_with_the_bank_is_refused():
     """Scene 2 shares no identities with scene 1, so it matches nothing. This
-    is the gate that stops the bank learning a distractor."""
-    b = bank()
-    b.enrol(view(1, 60), roi=None, det_conf=0.9)
-    r = b.enrol(view(2, 60), roi=None, det_conf=0.9)
+    is the gate that stops the bank learning a distractor.
+
+    ⚠ It only applies ONCE THE BANK CAN JUDGE -- `AGREEMENT_MIN` references.
+    See the test below for why."""
+    b = bank(agreement_min=2)
+    b.enrol(view(1, 400), roi=None, det_conf=0.9)
+    b.enrol(view(1, 400, drop=20), roi=None, det_conf=0.9, force=True)
+    r = b.enrol(view(2, 400), roi=None, det_conf=0.9)
     assert not r.accepted and r.reason == 'disagrees'
-    assert b.size == 1
+    assert b.size == 2
+
+
+def test_a_THIN_bank_does_not_adjudicate_the_second_deadlock():
+    """⛔ THE SECOND BOOTSTRAP DEADLOCK, and it shipped.
+
+    `enrol` requires a candidate to agree with the bank. A bank of ONE
+    reference from ONE viewpoint cannot judge: measured on Mirpur torpedo
+    footage, 10 of 13 candidates were refused as 'disagrees' and the bank ended
+    the clip holding one reference, asserting identity on 0 % of later frames.
+    Lifting the gate below `AGREEMENT_MIN` took it to 11 references and 33 %.
+
+    The prototype this policy came from had it right and the port missed it:
+    `dino_idea_v12.py:458` rejects only `if score < THRESH and
+    len(templates) > 2`."""
+    b = bank(agreement_min=3)
+    b.enrol(view(1, 400), roi=None, det_conf=0.9)
+    # A completely different scene is ACCEPTED while the bank is too thin to
+    # have an opinion -- deliberately, because the alternative is a bank of one.
+    assert b.enrol(view(2, 400), roi=None, det_conf=0.9).accepted
+    assert b.enrol(view(3, 400), roi=None, det_conf=0.9).accepted
+    assert b.size == 3
+    # At AGREEMENT_MIN it can judge, and does.
+    r = b.enrol(view(4, 400), roi=None, det_conf=0.9)
+    assert not r.accepted and r.reason == 'disagrees'
+
+
+def test_the_thin_bank_deadlock_is_injection_verified():
+    """Restore the shipped behaviour -- adjudicate from one reference -- and
+    watch the bank refuse to grow, which is what was measured on footage."""
+    b = bank(agreement_min=1)
+    b.enrol(view(1, 400), roi=None, det_conf=0.9)
+    for i in range(10):
+        b.enrol(view(2 + i, 400), roi=None, det_conf=0.9)
+    assert b.size == 1, 'the deadlock did not reproduce; the test is wrong'
 
 
 def test_capacity_is_capped():
@@ -641,3 +679,54 @@ def test_position_survives_save_and_load(tmp_path):
     assert got.ref_position is not None
     assert abs(got.ref_position[0] - 4.5) < 1e-3
     assert abs(got.ref_position[1] + 2.5) < 1e-3
+
+
+# --------------------------------------------------------------------------- #
+# 13. Scale coverage: the meta-updater's primary criterion
+# --------------------------------------------------------------------------- #
+def _roi(w, h):
+    """A box of the given size at the origin, in the carrier's own pixels."""
+    return (0.0, 0.0, float(w), float(h))
+
+
+def test_a_target_at_a_new_SIZE_is_not_covered():
+    """Seen on real footage: a bank enrolled at mid-range refused every
+    close-range frame -- 7 inliers against a board filling the screen. The
+    references were fine; none of them was at that scale."""
+    b = bank()
+    b.enrol(rich(1), roi=_roi(60, 60), det_conf=0.9, label='prop')
+    assert b.covers_scale(rich(1), _roi(64, 64)), 'nearly the same size'
+    assert not b.covers_scale(rich(1), _roi(240, 200)), 'much closer, uncovered'
+
+
+def test_coverage_widens_as_references_are_added():
+    b = bank()
+    b.enrol(rich(1), roi=_roi(60, 60), det_conf=0.9, force=True)
+    assert not b.covers_scale(rich(1), _roi(200, 200))
+    b.enrol(rich(1), roi=_roi(200, 200), det_conf=0.9, force=True)
+    assert b.covers_scale(rich(1), _roi(200, 200)), 'now represented'
+    assert b.covers_scale(rich(1), _roi(60, 60)), 'and still is'
+
+
+def test_a_whole_frame_reference_claims_no_scale():
+    """⛔ NaN rather than the frame diagonal. Treating a whole-frame reference
+    as covering the largest scale would suppress every close-range enrolment,
+    which is the exact failure this criterion exists to fix."""
+    b = bank()
+    b.enrol(rich(1), roi=None, det_conf=0.9)
+    assert b.scales and b.scales[0] != b.scales[0]      # NaN
+    assert not b.covers_scale(rich(1), _roi(100, 100))
+
+
+def test_no_roi_means_no_scale_question_to_answer():
+    b = bank()
+    b.enrol(rich(1), roi=_roi(60, 60), det_conf=0.9)
+    assert b.covers_scale(rich(1), None)
+
+
+def test_scale_is_recorded_in_backend_pixels():
+    """The carrier is backend-shaped, so a 60x60 box is 60x60 there too --
+    and the recorded scale is its sqrt(area)."""
+    b = bank()
+    b.enrol(rich(1), roi=_roi(60, 60), det_conf=0.9)
+    assert abs(b.scales[0] - 60.0) < 1.0

@@ -4253,3 +4253,73 @@ network group per call.
 So the honest figure today is **13.4 ms with headroom**, and the next move is
 the modern API rather than anything about the model. ⚠ Quote 701 FPS only as
 "the chip can sustain this"; quote 13.4 ms as "what a call costs us".
+
+---
+
+## 29. ⛔ The bank was building ONE reference — three defects, found by looking
+
+**2026-09-24.** Every number in §20–§28 is an inlier count, and an inlier count
+says a match is good without saying good **at what**.
+`tools/pipeline_visual_check.py` draws what the ladder believes — the matched
+quad, the surviving correspondences, the warped annotations, the identity
+verdict and its reason — on real footage. Three defects fell out immediately,
+none of which a table would have shown.
+
+### 29.1 The visual finding
+
+On Mirpur torpedo footage the bank asserted identity on mid-range frames and
+refused every **close-range** one at 7–8 inliers, with the board filling the
+screen. The number said "no match"; the picture said *"the prop is unmistakable
+and we had nothing at that scale to compare it to"* — and close-range partial
+views are what a torpedo run actually fires from.
+
+### 29.2 ⛔ Three defects behind it
+
+| # | defect | evidence |
+|---|---|---|
+| 1 | `CONF_FLOOR = 0.60` refused **10 of 13** candidate views | detector p50 on this footage is **0.49** (min 0.22, max 0.85) |
+| 2 | `enrol` demanded agreement from a bank too thin to judge — **a second bootstrap deadlock** | 10 of 13 refused `'disagrees'`; bank ended the clip at **1 reference** |
+| 3 | `stale` only fires when the match is **bad**, so a healthy bank never grows | 1 reference, identity asserted on **0 %** of later frames |
+
+⭐ **Defect 2 is the same failure I ported a fix for and then half-applied.**
+`dino_idea_v12.py:458` rejects only `if score < THRESH **and
+len(templates) > 2**` — the gate switches on once three templates exist. I
+ported the first-reference bootstrap and missed the thin-bank one.
+
+### 29.3 The fixes, and what they bought
+
+- `CONF_FLOOR` **0.60 → 0.25**. ⚠ A fixed absolute floor is the wrong *shape*
+  as well as the wrong number: §6b records our recall swinging
+  **29.2 / 72.7 / 68.3 %** across venues. The checks that discriminate are
+  elsewhere and measured — geometric agreement at enrol, eviction by yield, and
+  `recognise()` needing 40 inliers plus the detector's class.
+- `AGREEMENT_MIN = 3`: below it the bank accumulates evidence rather than
+  adjudicating it.
+- **Enrol while there is room.** §20 measured search cost **flat** in bank size
+  and 64 references is 16 MB — we built the machinery that makes hoarding free
+  and then kept a policy written for a 5-slot bank.
+
+Measured, same clip, same protocol, enrol on the first third and evaluate on
+the rest:
+
+| policy | references | identity asserted | median inliers |
+|---|---|---|---|
+| as shipped this morning | **1** | ⛔ **0 %** | 0 |
+| stale only, after the fixes | 5 | 26 % | 23 |
+| stale + scale coverage | 5 | 26 % | 23 |
+| **while there is room** | **11** | **33 %** | **27** |
+
+### 29.4 ⚠ And a scale-coverage result that was mine to get wrong
+
+A first A/B showed scale coverage *halving* performance — 14 references and
+3/8 down to 3 references and 0/8. That measured an **inverted policy**: the
+harness skipped views whose scale was covered, while `lock_node` treats an
+uncovered scale as one *more* reason to enrol. Corrected, it is neutral on this
+clip (it fires on 3 of 14 views, spanning 38–208 px) and its value in
+production — where nothing force-enrols — is **unmeasured**.
+
+### The method note
+
+**Look at the frames.** Three shipped defects, one of them a repeat of a bug I
+had already diagnosed in someone else's code, survived every inlier table in
+this file and died within minutes of drawing the quad on the image.
