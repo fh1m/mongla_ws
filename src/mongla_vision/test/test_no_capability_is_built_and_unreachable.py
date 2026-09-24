@@ -60,14 +60,15 @@ WIRED = {
 # debt with a name, not a silent gap.
 DEFERRED = {
     'mongla_vision/mongla_vision/continuity.py': (
-        '⭐ THE MOST VALUABLE ORPHAN HERE. Its own docstring says the lock '
-        'ladder has six constants sized from the detection RATE and from each '
-        'other, none sized from HOW LONG A REAL GAP LASTS, and that nothing '
-        'in this repo has ever recorded that. As of 2026-09-24 something has: '
-        'a 253 s vehicle recording with 108 real gaps, median 0.62 s, longest '
-        '7.62 s. Run this against that bag and re-derive coast_s, '
-        'lost_grace_s and max_predict_s from it -- that is the measurement '
-        'the whole ladder is waiting on.'),
+        'NOW EXERCISED by tools/continuity_from_bag.py, which produced the '
+        'measurement it was written for (section 50): 338 real gaps, p50 '
+        '116 ms, p90 1.12 s, max 7.64 s, and one rung -- the 0.20 s freshness '
+        'zero -- outrun by 35 % of them. It stays DEFERRED because no NODE '
+        'imports it: it is an offline analyser, and the ladder constants it '
+        'implies are NOT shipped, since the recording is a person in air and '
+        'gap durations there belong to the subject, not to underwater '
+        'detection. Promote it when a water bag exists and the constants are '
+        're-derived from that.'),
     'mongla_vision/mongla_vision/draw_strip.py': (
         'superseded UI. The mission-control strip it renders is not called by '
         'any node; draw.py and draw_video.py carry the overlays that ship. '

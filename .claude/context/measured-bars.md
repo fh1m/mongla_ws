@@ -5534,3 +5534,78 @@ GPU" made it die *sooner*, because it is the wrong resource.
 `/tmp`.** It is 7.8 GB of RAM wearing a directory's clothes, and it fails by
 killing the thing you are trying to measure rather than by refusing to store
 the file.
+
+---
+
+## 50. ⭐⭐ HOW LONG A REAL GAP LASTS — THE NUMBER THE LADDER WAS NEVER SIZED ON
+
+**2026-09-24.** `mongla_vision/continuity.py` opens by stating that six
+constants protect a target lock — the freshness ramp, `coast_s` (0.8),
+`lost_grace_s` (1.0), `_STALE_LIMIT_S` (1.0), the Kalman `max_predict_s` (1.5)
+and the tracker's `track_buffer` (5.0) — and that **every one is sized from the
+detection RATE and from the others' ordering, not one from the quantity they
+actually defend against.** It then says nothing in this repo has ever recorded
+that quantity.
+
+It has now. `tools/continuity_from_bag.py` runs the module against the recorded
+vehicle session (§36):
+
+```
+338 gaps over 253.3 s, 10 425 frames, 51.7 % presence, 21.3 Hz
+    p50   116 ms      p90  1 124 ms      p99  3 044 ms      max  7 645 ms
+
+gaps NOT covered by each rung
+    freshness zero (0.20 s)   117     ⛔ 35 % of gaps outrun it
+    coast_s        (0.80 s)    42        12.4 %
+    lost_grace_s   (1.00 s)    37        10.9 %
+    kalman predict (1.50 s)    23         6.8 %
+    track_buffer   (5.00 s)     1         0.3 %
+```
+
+### ⭐ The ladder's sizing is broadly VINDICATED — one rung is measurably tight
+
+Read as coverage, the rungs land at 65 % / 87.6 % / 89.1 % / 93.2 % / **99.7 %**
+of real gaps. That is a sensible escalation, and it was arrived at without ever
+seeing this distribution — worth saying, because the honest outcome of a
+measurement is often that the guess was good.
+
+⛔ **The exception is the 0.20 s freshness zero: 117 of 338 gaps exceed it.**
+A third of real losses outrun the rung meant to absorb the ordinary ones.
+
+### What the measured distribution implies, per rung
+
+| coverage | duration |
+|---|---|
+| 50 % | 0.12 s |
+| 75 % | 0.33 s |
+| 90 % | **1.12 s** |
+| 95 % | **1.84 s** |
+| 99 % | **3.04 s** |
+| every gap | 7.64 s |
+
+A ladder derived from the data rather than from itself would read roughly
+0.33 / 1.12 / 1.84 / 3.04 / 7.64 s.
+
+### ⛔ NOT SHIPPED, AND THE REASON MATTERS
+
+**These constants are unchanged.** The recording is a **person walking in and
+out of a room**, not a prop in water. Gap *durations* are a property of the
+subject and its occlusions, not of the detector's underwater performance —
+so this sizes the constants against a real gap distribution, which is strictly
+better than sizing them against each other, and it is **not a competition-water
+number.** Retuning the ladder on it would be precisely the overreach three
+other retractions today were about.
+
+**What it does license:** the 0.20 s rung is worth re-examining the moment
+water footage exists, and the method is now a one-line rerun against any bag.
+
+### ⚠ Three limits in this run
+
+1. `track_id` is not published on `/detections`, so `switches = 0` is **the
+   absence of a measurement, not a clean result**.
+2. `reacquire` p50 is 148 ms but **max is 16 381 ms** — after one gap the
+   detector did not produce three stable frames for 16 s. Worth a look;
+   it is a single outlier and not yet a finding.
+3. `jitter` max is **0.9686** — a box that moved nearly a full frame width in
+   one frame, which with no track ids cannot be separated from a second person
+   entering.
