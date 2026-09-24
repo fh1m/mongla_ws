@@ -886,17 +886,18 @@ class CheckpointBank:
             failure that steals the vehicle, and the one a confidence
             threshold alone cannot catch at any setting
 
-        ⛔ MEASURED, THIS DOES NOT DISCRIMINATE YET -- see `measured-bars.md`
-        §30. On Mirpur footage the DISTRACTOR clip scored a higher median
-        inlier count than the true clip (26 vs 20), and the warped quad landed
-        inside the detector's box on 0 % of frames. No threshold separates
-        them, because a reference built from a BOX contains the venue's water
-        and pool edge, which every clip from that venue shares. The fix is
-        mask-based enrolment (§6c: `yolov8n_seg` is measured at 85.2 Hz on this
-        vehicle), not a threshold sweep.
+        ⚠ ITS DISCRIMINATION DEPENDS ENTIRELY ON THE DETECTOR -- §30, §31.
+        Scored with a model never trained for the footage, the distractor clip
+        beat the true clip (26 vs 20 median inliers) and no threshold
+        separated them. With the per-prop model for that footage, the
+        distractor drops to a median of **0** against 10 -- a 9.5x separation
+        from the same code.
 
-        ⛔ DO NOT WIRE THIS INTO A CONTROL PATH until that lands: at the
-        tracking bar it corroborates 96 % of distractor frames.
+        ⛔ So this is only as good as the box it is handed, and it must not be
+        wired into a control path until it has been scored with the model that
+        will actually run beside it. Mask-based enrolment was proposed as the
+        fix in §30 and MEASURED WORSE (§31): a tight prop box leaves too little
+        to segment.
 
         ⛔ IT DOES NOT INVENT A FUSED SCORE. There is no principled way to
         combine "0.31 confident" with "62 inliers" into one number, and a
