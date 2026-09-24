@@ -5062,3 +5062,86 @@ Default **off**.
 the revisit and nowhere else; a bank from clip A against clip B must give zero.
 ⛔ Neither of today's bags can test any of this: the vehicle has one camera, the
 downward lock published zeros, and there is no altitude.
+
+---
+
+## 40. ⭐ EVERY SENSOR'S ROLE, WRITTEN DOWN WHERE IT CAN FAIL
+
+**2026-09-24.** "All the sensors are helping" is a claim, so it is now a test:
+`test_every_sensor_is_accounted_for.py` requires each subscribed signal to be
+either **used** (with the role named) or **excluded** (with the reason named).
+Adding a signal without deciding its role fails the suite — the decision is
+forced when the signal appears rather than remembered later.
+
+### What reaches the filter
+
+| signal | role |
+|---|---|
+| `/mongla/imu` | prediction, 50 Hz |
+| `/mongla/state` | depth, yaw, attitude from the board |
+| `vision/<cam>/velocity` | **the downward camera as a DVL** |
+| `/mongla/localization/fix` | position — prop resection **and now loop closure** |
+| `/mongla/localization/heading` | the latched earth-referenced heading |
+| `/mongla/demand` | the motion-model aid |
+| `floor_grid_deg`, `lane_heading_deg` | **yaw drift bound from the floor** |
+
+### ⭐ Heading needs no magnetometer, and the design says so
+
+Heading is taken as an **earth reference once at the start** and held by the
+gyro. The magnetometer is not trusted — a hull full of thrusters is a poor
+place to measure a magnetic field. What bounds the gyro is **the floor**: the
+grid and the lane line, already subscribed. §37 measured the residual gyro
+drift at **0.1 °/hour** with the board's own bias estimate removed, which is
+what makes that affordable. A test pins it so the design cannot be quietly
+changed.
+
+⚠ Note the tension to keep in view: `connect` reports the board's heading as
+**"ABSOLUTE magnetic from rev 4"**. Our *filter* does not depend on it, because
+the latched heading and the floor geometry define the pool frame — but the
+number on the board's own display is magnetic, and the two should not be
+confused when reading telemetry.
+
+### Excluded, each with a reason
+
+`esc_rpm` (958/958 frames read exactly zero with nothing attached — a stopped
+thruster is indistinguishable from a silent one) · `imu_rates` (a derived copy
+of an input already used; feeding it back double-counts) · `distance_traveled`
+(an integral of a rate already consumed) · `vis_range` and `target_pose` (about
+a TARGET, not the vehicle) · `low_quality` (a flag, which belongs in a
+measurement's sigma, not as a measurement).
+
+### ⭐ `floor_height` was the altitude we were missing
+
+`flow_node` publishes it from the **tile grating** and deliberately refuses to
+publish `pool_depth_m − |depth|` under that name, because a typed constant
+minus a depth is not a measurement of the floor. The loop closure now prefers
+the grating and requires it to be **fresh** (≤ 2 s); `pool_depth_m` remains as
+an operator fallback that **says what it is**, once. With neither, every
+closure is refused.
+
+⚠ And the two are **different frames** — bottom-referenced altitude versus
+surface-referenced depth. Fusing one as the other is the exact frame confusion
+flagged in the prototype this idea was ported from, so `floor_height` scales
+the closure and is **not** fed to the filter as depth.
+
+### ⛔ Configured WITHOUT launch plumbing — and why
+
+Loop closure was first wired into `vision_pi.launch.py`. **`bringup` includes
+`vision.launch.py`**, so it was unreachable from the documented mission
+command — the fifth instance of this package's oldest defect (the lock ladder
+in no launch file; `lock_s` held at 0; `position=` never passed; `device_path`
+read and ignored).
+
+The node configures **itself** instead: `~/.mongla/loop_closure.yaml`, the same
+deck-editable pattern the course priors already use, with the constants as
+defaults and an explicitly-set ROS parameter still winning. A test now fails if
+`loop_closure` reappears in **either** launch file, because two sources of
+truth for one switch is how they disagree. A malformed file degrades to
+defaults **and says so** — silently ignoring an operator's edit is worse, since
+they would watch for a change that never loaded.
+
+### XFeat is already on both cameras
+
+`ladder('forward')` and `ladder('downward')` both run with `anchor: True`, and
+today's replay exercised both (`lock_node-4` and `-5`). What is new is that the
+**downward** bank now feeds localisation rather than only the lock ladder.

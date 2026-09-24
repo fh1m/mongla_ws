@@ -55,6 +55,7 @@ except ImportError:                    # message not built in this workspace
 from std_msgs.msg import String
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PointStamped
+from sensor_msgs.msg import Range
 from mongla_vision.anchor import loop_closure as _lc
 
 from mongla_vision import qos as _qos
@@ -113,12 +114,16 @@ class LockNode(Node):
         # FILTER, and a wrong position fix is not merely wrong -- the filter
         # shrinks its covariance around it and becomes confident. Off until a
         # pool day says otherwise.
-        self.declare_parameter('loop_closure', False)
-        self.declare_parameter('place_period_s', _lc.PLACE_PERIOD_S)
-        self.declare_parameter('place_travel_m', _lc.PLACE_TRAVEL_M)
+        self.declare_parameter('loop_closure',
+                               _lc.defaults()['enabled'])
+        self.declare_parameter('place_period_s',
+                               _lc.defaults()['place_period_s'])
+        self.declare_parameter('place_travel_m',
+                               _lc.defaults()['place_travel_m'])
         # Height above the floor = pool_depth_m - |depth|. Without it pixels
         # cannot become metres and every closure is refused, by design.
-        self.declare_parameter('pool_depth_m', 0.0)
+        self.declare_parameter('pool_depth_m',
+                               _lc.defaults()['pool_depth_m'])
         # 3 Hz, not 8. Measured on the Pi with the full stack live, and the
         # cost is LATENCY rather than throughput -- detection rate is unchanged
         # at every setting, but the anchor's 33 ms bursts delay the image
@@ -289,15 +294,44 @@ class LockNode(Node):
             self._build_anchor()
 
         # ---- loop closure ------------------------------------------------
-        self._closer_on = bool(self.get_parameter('loop_closure').value)
+        # ⛔ CONFIGURED BY THE NODE, NOT BY LAUNCH. A switch threaded through
+        # launch has to be declared in every launch file that starts this
+        # node, and this package has already shipped capabilities reachable
+        # from one launch path and not the one `bringup` includes. Loop
+        # closure nearly became the next: it went into vision_pi.launch.py
+        # while bringup includes vision.launch.py.
+        #
+        # Precedence: an explicitly-set ROS parameter wins (so `ros2 param
+        # set` and any launch that does pass one still work), otherwise
+        # ~/.mongla/loop_closure.yaml, otherwise the defaults. The deck file
+        # is the same pattern the course priors already use.
+        cfg = _lc.load_config(log=self.get_logger())
+
+        def _cfg(name, key):
+            p = self.get_parameter(name)
+            if p.type_ != rclpy.parameter.Parameter.Type.NOT_SET:
+                v = p.value
+                # A parameter left at its declared default is not a decision;
+                # the file is. Only a value that DIFFERS from the default
+                # overrides the file, so an operator's edit is not silently
+                # outvoted by a default nobody set.
+                if v != _lc.defaults()[key]:
+                    return v
+            return cfg[key]
+
+        self._closer_on = bool(_cfg('loop_closure', 'enabled'))
         self._places = _lc.PlaceLog(
-            float(self.get_parameter('place_period_s').value),
-            float(self.get_parameter('place_travel_m').value))
-        self._pool_depth = float(self.get_parameter('pool_depth_m').value)
+            float(_cfg('place_period_s', 'place_period_s')),
+            float(_cfg('place_travel_m', 'place_travel_m')))
+        self._pool_depth = float(_cfg('pool_depth_m', 'pool_depth_m'))
+        self._closure_cfg = cfg
         self._odom_xy = None          # (x, y) m, pool frame
         self._odom_sigma = float('nan')
         self._odom_z = float('nan')   # filter depth, negative below surface
         self._odom_t = 0.0
+        self._floor_h = float('nan')
+        self._floor_h_t = 0.0
+        self._pool_depth_warned = False
         self._fix_pub = None
         self._closures = 0
         self._closure_refusals = collections.Counter()
@@ -315,6 +349,12 @@ class LockNode(Node):
             else:
                 self.create_subscription(Odometry, '/mongla/odom',
                                          self._on_odom, _qos.sensor())
+                # ⭐ THE FLOOR'S OWN HEIGHT, from the tile grating in
+                # `flow_node`. That is a MEASUREMENT of the floor; flow_node
+                # declines to publish the pool_depth arithmetic under this
+                # name precisely because it is not one.
+                self.create_subscription(Range, f'{ns}/floor_height',
+                                         self._on_floor_height, 10)
                 self._fix_pub = self.create_publisher(
                     PointStamped, '/mongla/localization/fix', 10)
                 self.get_logger().info(
@@ -512,21 +552,54 @@ class LockNode(Node):
                             if (vx > 0.0 and vy > 0.0) else float('nan'))
         self._odom_t = time.monotonic()
 
+    def _on_floor_height(self, msg) -> None:
+        """Measured height above the floor, from the tile grating."""
+        r = float(msg.range)
+        if r > 0.05 and math.isfinite(r):
+            self._floor_h = r
+            self._floor_h_t = time.monotonic()
+
+    # A floor height older than this is not this vehicle's altitude any more.
+    _FLOOR_H_MAX_AGE_S = 2.0
+
     def _altitude_m(self) -> float:
         """Height above the floor. NaN when it cannot be known.
 
-        ⛔ NO CONSTANT FALLBACK. Pixels become metres only with this number,
-        and substituting one would put a plausible value where a measurement
-        is missing -- the recurring defect in this codebase. The barometer
-        reported "not initialised" on the bench (section 37), so today this
-        returns NaN and every closure is refused, loudly, which is correct.
+        ⭐ THE MEASURED FLOOR FIRST. `flow_node` publishes `floor_height` from
+        the tile grating, and refuses to publish the pool_depth arithmetic
+        under that name because `pool_depth_m - |depth|` is a typed constant
+        minus a depth, not a measurement of the floor. This agrees: the
+        grating wins, and it must be FRESH -- a stale height is a different
+        altitude wearing the right units.
+
+        ⚠ The pool_depth fallback stays, because an operator who has measured
+        their pool may legitimately supply it. It says what it is, once.
+
+        ⛔ AND THERE IS NO THIRD OPTION. Pixels become metres only with this
+        number; a default would put a plausible value where a measurement is
+        missing, the recurring defect in this codebase. The bench barometer
+        read "not initialised" (section 37), so with neither source this
+        returns NaN and every closure is refused.
         """
+        if (self._floor_h == self._floor_h
+                and (time.monotonic() - self._floor_h_t)
+                <= self._FLOOR_H_MAX_AGE_S):
+            return self._floor_h
         if not (self._pool_depth > 0.0):
             return float('nan')
         if self._odom_z != self._odom_z:
             return float('nan')
         alt = self._pool_depth - abs(self._odom_z)
-        return alt if alt > 0.05 else float('nan')
+        if alt <= 0.05:
+            return float('nan')
+        if not self._pool_depth_warned:
+            self._pool_depth_warned = True
+            self.get_logger().warn(
+                f'[LOCK ] no floor_height; using pool_depth_m '
+                f'({self._pool_depth:.2f} m) minus depth. That is a TYPED '
+                f'CONSTANT minus a measurement, not a measured altitude, and '
+                f'every closure offset is scaled by it.')
+        return alt
 
     def _place_tick(self, gray, header, now: float) -> None:
         """Remember where we are, and recognise where we have been.
@@ -557,7 +630,11 @@ class LockNode(Node):
                 ref_sigma_m=(self._odom_sigma
                              if self._odom_sigma == self._odom_sigma else 1.0),
                 m_per_px=self._m_per_px(),
-                bank_size=self._anchor.size)
+                bank_size=self._anchor.size,
+                min_inliers=int(self._closure_cfg['min_inliers']),
+                min_age_s=float(self._closure_cfg['min_age_s']),
+                min_travel_m=float(self._closure_cfg['min_travel_m']),
+                max_offset_m=float(self._closure_cfg['max_offset_m']))
             if c.ok:
                 self._closures += 1
                 m = PointStamped()
