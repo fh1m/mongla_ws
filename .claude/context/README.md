@@ -91,3 +91,5 @@ something it is not. Code beats docs; a measurement beats both — see
 55. [Future TODO -- shrink `commands.py` registry](future/future-registry-shrinkage.md)
 
 - [`platform/first-pool-verification.md`](platform/first-pool-verification.md) — what to verify in water, in order, first pool day.
+
+- [`perception/never-lose-the-target.md`](perception/never-lose-the-target.md) — the research arsenal: what the SOTA does, what we have that they do not, and what Bumblebee has that we do not.

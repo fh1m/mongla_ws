@@ -121,3 +121,79 @@ def test_the_bank_keeps_the_per_reference_yields():
     assert hasattr(CheckpointBank, 'last_lookup_scores'), (
         'the bank no longer exposes per-reference yields, so the separator '
         'has nothing to read and silently degrades to "unknown" forever')
+
+
+# --------------------------------------------------------------------------- #
+#  Memory contamination: the bank must not remember a view of the FAULT
+# --------------------------------------------------------------------------- #
+def test_a_fouled_camera_refuses_enrolment():
+    """⛔ A reference snapped while the port is silted is a view of the fault,
+    not of the target, and once stored every later lookup matches against it.
+
+    DAM4SAM measures robustness 0.887 -> 0.944 for keeping degraded frames out
+    of the reliable memory; we get the same protection without a second bank,
+    because health.py already separates a fouled camera from a changed world.
+    """
+    import numpy as np
+    from mongla_vision.anchor.bank import CheckpointBank
+
+    class _Be:
+        w, h = 320, 240
+
+        def detect(self, gray):
+            n = 64
+            d = np.random.default_rng(0).normal(size=(n, 64)).astype(np.float32)
+            return np.zeros((n, 2), np.float32), d
+
+    b = CheckpointBank(_Be())
+    # Pretend a lookup just happened in which EVERY reference collapsed --
+    # the camera verdict.
+    b._refs = [object(), object(), object(), object()]
+    b._yields = [100, 100, 100, 100]
+    b._last_scores = {0: 1, 1: 2, 2: 0, 3: 3}
+    r = b.enrol(np.zeros((240, 320), np.uint8), det_conf=1.0)
+    assert not r.accepted and r.reason == 'camera degraded'
+    assert b._contaminated_refusals == 1
+
+
+def test_a_changed_world_does_NOT_block_enrolment():
+    """The camera is fine and the view moved -- that is exactly when a new
+    reference is worth having."""
+    import numpy as np
+    from mongla_vision.anchor.bank import CheckpointBank
+
+    class _Be:
+        w, h = 320, 240
+
+        def detect(self, gray):
+            n = 64
+            d = np.random.default_rng(1).normal(size=(n, 64)).astype(np.float32)
+            return np.zeros((n, 2), np.float32), d
+
+    b = CheckpointBank(_Be())
+    b._refs = [object(), object(), object(), object()]
+    b._yields = [100, 100, 100, 100]
+    b._last_scores = {0: 1, 1: 90, 2: 80, 3: 70}   # one collapsed, rest fine
+    r = b.enrol(np.zeros((240, 320), np.uint8), det_conf=1.0, force=True)
+    assert r.reason != 'camera degraded'
+
+
+def test_force_overrides_the_contamination_guard():
+    """A deliberate operator snap is a decision, not an accident."""
+    import numpy as np
+    from mongla_vision.anchor.bank import CheckpointBank
+
+    class _Be:
+        w, h = 320, 240
+
+        def detect(self, gray):
+            n = 64
+            d = np.random.default_rng(2).normal(size=(n, 64)).astype(np.float32)
+            return np.zeros((n, 2), np.float32), d
+
+    b = CheckpointBank(_Be())
+    b._refs = [object(), object(), object(), object()]
+    b._yields = [100, 100, 100, 100]
+    b._last_scores = {0: 1, 1: 2, 2: 0, 3: 3}
+    r = b.enrol(np.zeros((240, 320), np.uint8), det_conf=1.0, force=True)
+    assert r.reason != 'camera degraded'

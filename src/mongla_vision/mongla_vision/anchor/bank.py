@@ -344,6 +344,10 @@ class CheckpointBank:
         self._yields: list[int] = []
         # index -> inliers, from the MOST RECENT locate(). See `health.py`.
         self._last_scores: dict = {}
+        # Enrolments refused because the camera, not the scene, was the
+        # problem. Counted so a bank that stops growing can be told apart
+        # from one that is being protected.
+        self._contaminated_refusals = 0
         # Injection hook for the ported deadlock. Production never sets it;
         # the test does, to watch the bank stay empty forever.
         self._require_agreement_always = False
@@ -447,6 +451,33 @@ class CheckpointBank:
         bank's invariants rather than its policy.
         """
         bootstrap = not self._refs and not self._require_agreement_always
+
+        # ⛔ MEMORY CONTAMINATION. A reference snapped while the CAMERA is
+        # degraded -- silt on the port, a bubble, the lights gone -- is not a
+        # view of the target. It is a view of the fault, and once it is in the
+        # bank every later lookup is asked to match against it.
+        #
+        # ⭐ Three independent 2026 results converge on this. DAM4SAM splits
+        # memory into recent-appearance and distractor-resolving banks
+        # "to prevent memory contamination and improve re-detection after
+        # occlusion", and measures robustness 0.887 -> 0.944 for it;
+        # occlusion-aware SAM2 tracking splits non-occlusion and occlusion
+        # memory for the same reason; McByte++ keeps re-identification cues
+        # separate from propagation cues.
+        #
+        # We do not need a second bank to get the benefit, because we already
+        # compute the signal those papers had to infer: `anchor/health.py`
+        # separates a fouled camera from a changed world using the
+        # per-reference yields of the lookup that just ran. A camera verdict
+        # is a refusal to remember. `force` still overrides -- a deliberate
+        # operator snap is a decision, not an accident.
+        if not force and self._refs:
+            from mongla_vision.anchor import health as _health
+            cur, best = self.last_lookup_scores()
+            v = _health.assess(cur, best)
+            if v.state == _health.CAMERA:
+                self._contaminated_refusals += 1
+                return EnrolResult(False, 'camera degraded')
 
         if not (force or bootstrap):
             if float(det_conf) < self._conf_floor:
