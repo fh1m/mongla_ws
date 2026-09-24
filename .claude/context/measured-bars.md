@@ -22,6 +22,17 @@ is how `recommend()` happened.
 
 ## 1. Vision — detection
 
+> ⛔ **Every `conf` figure below 0.20 is a no-op on `gate_rescue_repair`.**
+> Each HEF bakes its NMS score threshold at compile time, and parsing all four
+> found one custom model compiled at the stock bar: `sauvc_sim` 0.050,
+> `bin_fire_blood` 0.050, **`gate_rescue_repair` 0.200**, stock `yolov11n`
+> 0.200. On the gate model the chip emits nothing below 0.200, so `conf` 0.08,
+> 0.10 and 0.15 are one configuration and the "real underwater p10 0.167" row
+> describes detections it never delivers. The bars below hold on the 0.050
+> models and on the GPU/ONNX path. See **B-58**; the fix is recompiling
+> `gate_rescue_repair` at 0.05, after which this sweep must be re-run on the
+> HEF before these bars are quoted as live for that model.
+
 | quantity | shipped (file) | measured | bar |
 |---|---|---|---|
 | detector `conf` floor | `0.10` — `profiles.py` murky/clear | 0.15→0.10 buys **+0.0..+3.0** pts recall, costs **0.0..−8.3** pts precision on 7 labelled held-out pairs; F1 knee 0.25–0.50 in 5 of 7 | **0.08 ≤ conf ≤ 0.15.** Below 0.08 is unmeasured; above 0.15 loses the cross-venue gate. Do NOT move on presence evidence — presence counts a false box as a detection |
