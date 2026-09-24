@@ -216,6 +216,10 @@ class BankPose:
     # idea what it belongs to.
     label: str = ''
     searched: int = 0          # how many references were actually matched
+    # Where the vehicle was when the winning checkpoint was taken, (x, y) m, or
+    # None. This is what a loop closure is FOR: `inekf.update_position` takes
+    # exactly this, once the match is trusted enough to hand it over.
+    ref_position: Optional[tuple] = None
     # Points annotated ON THE REFERENCE, carried into THIS frame through the
     # homography. See `enrol(annotations=...)`.
     points: Optional[dict] = None
@@ -269,6 +273,10 @@ class CheckpointBank:
         self._att: list[Optional[tuple]] = []
         self._depth: list[float] = []
         self._ann: list[Optional[dict]] = []
+        # Where the vehicle was in the WORLD when each checkpoint was taken,
+        # (x, y) metres, or None. Supplied by the localiser at enrol time. See
+        # `locate(near=...)` for what it buys.
+        self._pos: list[Optional[tuple]] = []
         # Measured cost of ONE match, in seconds, as a decaying average. This
         # is what makes the shortlist width adapt instead of being guessed:
         # the same code picks 5 on a dev box and 3 on a Pi because it has
@@ -304,6 +312,7 @@ class CheckpointBank:
         self._att.clear()
         self._depth.clear()
         self._ann.clear()
+        self._pos.clear()
 
     @property
     def labels(self) -> list[str]:
@@ -370,6 +379,7 @@ class CheckpointBank:
     def enrol(self, gray: np.ndarray, roi=None, det_conf: float = 0.0,
               *, label: str = '', attitude=None, depth_m: float = float('nan'),
               annotations: Optional[dict] = None,
+              position=None,
               force: bool = False) -> EnrolResult:
         """Consider storing this view as a reference.
 
@@ -434,6 +444,8 @@ class CheckpointBank:
             ann = {str(k): (float(v[0]) * sx, float(v[1]) * sy)
                    for k, v in annotations.items()}
         self._ann.append(ann)
+        self._pos.append(None if position is None
+                         else (float(position[0]), float(position[1])))
         return EnrolResult(True, 'ok', index=len(self._refs) - 1, keypoints=n)
 
     def _evict(self) -> None:
@@ -446,6 +458,7 @@ class CheckpointBank:
         self._att.pop(i)
         self._depth.pop(i)
         self._ann.pop(i)
+        self._pos.pop(i)
 
     def wants_refresh(self, gray: np.ndarray) -> bool:
         """Is the best reference decaying toward uselessness?
@@ -489,6 +502,8 @@ class CheckpointBank:
                'att': np.array([(np.nan, np.nan, np.nan) if a is None else a
                                 for a in self._att], np.float32),
                'depth': np.array(self._depth, np.float32),
+               'pos': np.array([(np.nan, np.nan) if q is None else q
+                                for q in self._pos], np.float32),
                # JSON per reference: a dict of named points is not an array,
                # and a ragged object array would not survive allow_pickle=False
                # for anyone who loads this more carefully than we do.
@@ -556,6 +571,9 @@ class CheckpointBank:
             self._depth.append(float(z['depth'][i])
                                if 'depth' in z.files and i < len(z['depth'])
                                else float('nan'))
+            q = z['pos'][i] if 'pos' in z.files and i < len(z['pos']) else None
+            self._pos.append(None if q is None or not np.isfinite(q).all()
+                             else (float(q[0]), float(q[1])))
             raw = (json.loads(str(z['ann'][i]))
                    if 'ann' in z.files and i < len(z['ann']) else {})
             # Already in BACKEND pixels when saved, so no rescale here -- and
@@ -568,6 +586,7 @@ class CheckpointBank:
 
     # -- use ---------------------------------------------------------------- #
     def locate(self, gray: np.ndarray, *, label: Optional[str] = None,
+               near=None, radius_m: float = 0.0,
                shortlist: Optional[int] = None) -> BankPose:
         """Best-of-shortlist, and say which reference and what it is.
 
@@ -590,6 +609,26 @@ class CheckpointBank:
 
         pool = [i for i in range(len(self._refs))
                 if label is None or self._labels[i] == label]
+
+        # ⭐ THE LOCALISER AS A PRIOR, and it is the cheapest false-positive
+        # filter available. §24 measured the downward camera separating same
+        # place from different place -- but its far tail still clears the
+        # tracking bar on 17-55 % of pairs, which is why loop closure needs a
+        # bar near 100. A vehicle that knows where it is to within a few metres
+        # does not have to ask whether this is a place 20 m away: it can refuse
+        # to consider it at all.
+        #
+        # `radius_m` should come from the FILTER'S OWN UNCERTAINTY, not from a
+        # constant -- a confident filter gates hard, a drifting one gates
+        # loosely and eventually not at all. ⛔ Checkpoints with no stored
+        # position are KEPT, never silently dropped: absent is not far away.
+        if near is not None and radius_m > 0.0:
+            x, y = float(near[0]), float(near[1])
+            pool = [i for i in pool
+                    if self._pos[i] is None
+                    or ((self._pos[i][0] - x) ** 2
+                        + (self._pos[i][1] - y) ** 2) <= radius_m ** 2]
+
         if not pool:
             return BankPose(ok=False)
 
@@ -612,6 +651,7 @@ class CheckpointBank:
                                 label=self._labels[i], searched=len(pool),
                                 ref_attitude=self._att[i],
                                 ref_depth_m=self._depth[i],
+                                ref_position=self._pos[i],
                                 points=self._warp(self._ann[i], p))
             if n > self._yields[i]:
                 self._yields[i] = n

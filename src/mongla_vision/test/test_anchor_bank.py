@@ -592,3 +592,52 @@ def test_annotations_survive_save_and_load(tmp_path):
     assert got.points is not None
     assert set(got.points) == {'hole_shark', 'hole_fish'}
     assert abs(got.points['hole_fish'][0] - 150.0) < 2.0
+
+
+# --------------------------------------------------------------------------- #
+# 12. The localiser as a prior: a place 20 m away is not a candidate
+# --------------------------------------------------------------------------- #
+def test_a_spatial_gate_excludes_places_the_vehicle_cannot_be_at():
+    """§24 measured the downward camera separating same place from different
+    place -- but its far tail still clears the tracking bar on 17-55 % of
+    pairs. A vehicle that knows where it is does not have to ask about a place
+    20 m away."""
+    b = bank()
+    b.enrol(rich(1), roi=None, det_conf=0.9, label='place', position=(0.0, 0.0))
+    b.enrol(rich(2), roi=None, det_conf=0.9, label='place', position=(30.0, 0.0),
+            force=True)
+    near = b.locate(rich(2), near=(0.0, 0.0), radius_m=5.0)
+    assert not near.ok, 'a place 30 m away must not be a candidate'
+    far = b.locate(rich(2), near=(30.0, 0.0), radius_m=5.0)
+    assert far.ok and far.ref_position == (30.0, 0.0)
+
+
+def test_no_gate_is_applied_without_a_radius():
+    """radius_m=0 means the caller did not offer a prior. Gating anyway would
+    be a silent behaviour change driven by a default."""
+    b = bank()
+    b.enrol(rich(2), roi=None, det_conf=0.9, position=(30.0, 0.0))
+    assert b.locate(rich(2), near=(0.0, 0.0), radius_m=0.0).ok
+
+
+def test_a_checkpoint_with_no_position_is_kept_not_dropped():
+    """⛔ Absent is not far away. Dropping unpositioned checkpoints under a
+    spatial gate would silently discard every reference enrolled before the
+    localiser had a fix."""
+    b = bank()
+    b.enrol(rich(1), roi=None, det_conf=0.9)          # no position
+    p = b.locate(rich(1), near=(99.0, 99.0), radius_m=1.0)
+    assert p.ok and p.ref_position is None
+
+
+def test_position_survives_save_and_load(tmp_path):
+    b = bank()
+    b.enrol(rich(1), roi=None, det_conf=0.9, label='place', position=(4.5, -2.5))
+    f = tmp_path / 'places.npz'
+    b.save(str(f))
+    fresh = bank()
+    fresh.load(str(f))
+    got = fresh.locate(rich(1))
+    assert got.ref_position is not None
+    assert abs(got.ref_position[0] - 4.5) < 1e-3
+    assert abs(got.ref_position[1] + 2.5) < 1e-3
