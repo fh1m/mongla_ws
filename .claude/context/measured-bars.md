@@ -3854,3 +3854,64 @@ torpedo references:
 
 Geometry alone accepted the gate on **every** frame; the gate rejects it on
 every frame, and keeps exactly the 57 % of true frames the sweep predicted.
+
+---
+
+## 23. ⭐ Approach-driven acquisition: the premise holds, but not monotonically
+
+**2026-09-24.** The operator's proposal: take a *faint* detection, let the
+anchor hold it, drive closer, and the detection strengthens until it can be
+trusted — "not detecting every time, but close". That is a good loop if and only
+if confidence rises with apparent size. Nobody had measured it.
+
+`tools/conf_vs_range.py`, our own `gate_rescue_repair` graph through
+`onnxruntime` on the dev box (so the numbers describe the MODEL, not the Hailo),
+archive clips, `conf >= 0.05` deliberately low so faint detections are visible.
+Size is √area, which is linear in 1/range for a fixed object:
+
+| clip · class | n | Spearman | mean conf, smallest → largest quartile |
+|---|---|---|---|
+| torpedo · 2 | 1099 | **0.43** | 0.260 → 0.311 → 0.469 → **0.521** |
+| gate · 2 | 547 | 0.27 | 0.335 → 0.370 → 0.431 → **0.510** |
+| octagon · 2 | 1834 | 0.32 | 0.337 → 0.519 → 0.490 → **0.610** |
+| octagon · 1 | 50 | 0.46 | 0.215 → 0.543 → 0.715 → 0.550 |
+| gate · 0 | 963 | 0.24 | 0.193 → **0.525** → 0.493 → ⚠ 0.413 |
+| gate · 1 | 583 | 0.11 | 0.252 → 0.280 → 0.285 → 0.293 |
+| torpedo · 0 | 756 | ⛔ **0.05** | 0.094 → 0.096 → 0.127 → 0.099 |
+
+### What this licenses
+
+⭐ **Closing distance roughly doubles confidence on the classes where it works**
+— torpedo class 2 goes 0.260 → 0.521 across the size range. An anchor that holds
+a 0.26 detection while the vehicle closes is buying a 0.52 one, and 0.52 clears
+thresholds that 0.26 does not. **The loop is real.**
+
+### Two qualifications, and the second changes the control law
+
+⛔ **It is flat on some classes** — torpedo class 0 at Spearman 0.05 and 0.094 →
+0.099 across the whole range. For those, closing buys nothing and the approach
+must be justified by something else or abandoned.
+
+⭐⭐ **Confidence is NOT monotonic in size.** `gate` class 0 peaks in the
+*second* quartile (0.525) and falls to 0.413 in the largest — and octagon
+class 1 peaks in the third (0.715 → 0.550). Too close is worse than
+well-placed, which is consistent with partial views and lost context at short
+range.
+
+**So the approach loop's setpoint is a STANDOFF, not a minimum.** "Drive closer
+until confident" would drive past the peak and lose the very confidence it went
+looking for. The target is the size band where the class peaks, which this table
+gives per class.
+
+### The bar
+
+**An approach-for-acquisition may only be commanded for a class whose
+confidence-vs-size correlation is measured positive**, and it must target the
+measured peak band rather than minimum range.
+
+⚠ **Confound, stated:** a closer target is also better lit, less
+backscattered and more centred, so this measures the whole approach rather than
+scale alone. That is the right quantity for "does driving closer help?" and the
+wrong one for a claim about scale sensitivity in isolation.
+⚠ Class ids are this graph's, and the per-class numbers do not transfer to a
+different model without re-measuring.
