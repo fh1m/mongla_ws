@@ -342,6 +342,8 @@ class CheckpointBank:
         # key, and it starts at the snap's keypoint count so a brand-new
         # reference is not evicted before it has ever been asked a question.
         self._yields: list[int] = []
+        # index -> inliers, from the MOST RECENT locate(). See `health.py`.
+        self._last_scores: dict = {}
         # Injection hook for the ported deadlock. Production never sets it;
         # the test does, to watch the bank stay empty forever.
         self._require_agreement_always = False
@@ -743,9 +745,17 @@ class CheckpointBank:
 
         best = BankPose(ok=False, searched=len(pool))
         t0 = time.perf_counter()
+        # ⭐ KEPT, NOT MAXED AWAY. The per-reference yields of ONE lookup are
+        # what separates a fouled lens from a changed world: a dirty port
+        # collapses every reference at once, a moved target collapses only the
+        # one that used to win. `best` cannot carry that -- it is a statement
+        # about the whole shortlist -- and the numbers were being computed and
+        # discarded on every lookup. See `anchor/health.py`.
+        self._last_scores = {}
         for i in pool:
             p = self._refs[i].locate_features(kq, dq)
             n = int(getattr(p, 'inliers', 0) or 0)
+            self._last_scores[i] = n
             if n > best.inliers:
                 best = BankPose(ok=bool(p.ok), inliers=n, index=i, pose=p,
                                 label=self._labels[i], searched=len(pool),
@@ -763,6 +773,18 @@ class CheckpointBank:
             self._match_s = per if self._match_s <= 0.0 else (
                 0.8 * self._match_s + 0.2 * per)
         return best
+
+    def last_lookup_scores(self):
+        """(current, best) per reference from the last `locate()`.
+
+        Returned as two aligned lists over the references that were ACTUALLY
+        searched, because the shortlist means most lookups touch a handful.
+        Judging a reference that was never asked would count a silence as a
+        collapse, which is how a healthy camera gets reported as fouled.
+        """
+        idx = sorted(self._last_scores)
+        return ([self._last_scores[i] for i in idx],
+                [self._yields[i] for i in idx if i < len(self._yields)])
 
     @staticmethod
     def _att_gap_deg(a, b) -> float:

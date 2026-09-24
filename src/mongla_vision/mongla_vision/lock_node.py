@@ -25,6 +25,7 @@ anchor is 33 ms at 320x240 and blocking a callback with it would back the
 executor up behind the very frames it is meant to bridge.
 """
 import collections
+import math
 import os
 
 os.environ.setdefault('RCUTILS_CONSOLE_OUTPUT_FORMAT', '[{severity}] {message}')
@@ -52,6 +53,9 @@ except ImportError:                    # message not built in this workspace
     TargetCorrespondences = None
 
 from std_msgs.msg import String
+from nav_msgs.msg import Odometry
+from geometry_msgs.msg import PointStamped
+from mongla_vision.anchor import loop_closure as _lc
 
 from mongla_vision import qos as _qos
 from mongla_vision.stamps import capture_monotonic
@@ -104,6 +108,17 @@ class LockNode(Node):
         # MIN_INLIERS or it does not answer, and `recognise()` still wants the
         # detector to agree before any identity is asserted.
         self.declare_parameter('anchor_bank', '')
+        # ⛔ LOOP CLOSURE IS OFF BY DEFAULT, like every other capability here.
+        # It is the only path in this node that can reach the LOCALISATION
+        # FILTER, and a wrong position fix is not merely wrong -- the filter
+        # shrinks its covariance around it and becomes confident. Off until a
+        # pool day says otherwise.
+        self.declare_parameter('loop_closure', False)
+        self.declare_parameter('place_period_s', _lc.PLACE_PERIOD_S)
+        self.declare_parameter('place_travel_m', _lc.PLACE_TRAVEL_M)
+        # Height above the floor = pool_depth_m - |depth|. Without it pixels
+        # cannot become metres and every closure is refused, by design.
+        self.declare_parameter('pool_depth_m', 0.0)
         # 3 Hz, not 8. Measured on the Pi with the full stack live, and the
         # cost is LATENCY rather than throughput -- detection rate is unchanged
         # at every setting, but the anchor's 33 ms bursts delay the image
@@ -272,6 +287,41 @@ class LockNode(Node):
         self._pub_min_dt = (1.0 / _phz) if _phz > 0.0 else 0.0
         if bool(self.get_parameter('anchor').value):
             self._build_anchor()
+
+        # ---- loop closure ------------------------------------------------
+        self._closer_on = bool(self.get_parameter('loop_closure').value)
+        self._places = _lc.PlaceLog(
+            float(self.get_parameter('place_period_s').value),
+            float(self.get_parameter('place_travel_m').value))
+        self._pool_depth = float(self.get_parameter('pool_depth_m').value)
+        self._odom_xy = None          # (x, y) m, pool frame
+        self._odom_sigma = float('nan')
+        self._odom_z = float('nan')   # filter depth, negative below surface
+        self._odom_t = 0.0
+        self._fix_pub = None
+        self._closures = 0
+        self._closure_refusals = collections.Counter()
+        if self._closer_on:
+            # ⛔ DOWNWARD ONLY. A forward bank holds crops of TARGETS -- today's
+            # fixture is literally a person walking about -- and matching a
+            # moving object is not a vehicle position. The floor does not move.
+            if self._camera != 'downward':
+                self.get_logger().warn(
+                    '[LOCK ] loop_closure requested on the '
+                    f'{self._camera} camera and REFUSED. A forward bank holds '
+                    'targets, and a target that moves is not a place. Run it '
+                    'on the downward camera.')
+                self._closer_on = False
+            else:
+                self.create_subscription(Odometry, '/mongla/odom',
+                                         self._on_odom, _qos.sensor())
+                self._fix_pub = self.create_publisher(
+                    PointStamped, '/mongla/localization/fix', 10)
+                self.get_logger().info(
+                    '[LOCK ] loop closure ON: places remembered every '
+                    f'{self._places.period_s:.0f} s or '
+                    f'{self._places.travel_m:.1f} m, offered as a fix at '
+                    f'>= {_lc.CLOSURE_INLIERS} inliers.')
 
         self._pub = self.create_publisher(Detection2DArray, f'{ns}/lock',
                                           _qos.DETECTIONS)
@@ -444,6 +494,131 @@ class LockNode(Node):
             if k == key:
                 return g
         return None
+
+    def _on_odom(self, msg) -> None:
+        """The filter's own estimate: where it thinks it is, and how sure.
+
+        ⛔ SIGMA IS READ, NOT ASSUMED. It gates the bank search radius and it
+        is half of every closure's own sigma, so a zero covariance here (the
+        ROS default for "not filled in") would claim perfect knowledge. Absent
+        is NaN, which every gate downstream refuses.
+        """
+        pp = msg.pose.pose.position
+        self._odom_xy = (float(pp.x), float(pp.y))
+        self._odom_z = float(pp.z)
+        cov = msg.pose.covariance
+        vx, vy = float(cov[0]), float(cov[7])
+        self._odom_sigma = (math.sqrt(vx + vy)
+                            if (vx > 0.0 and vy > 0.0) else float('nan'))
+        self._odom_t = time.monotonic()
+
+    def _altitude_m(self) -> float:
+        """Height above the floor. NaN when it cannot be known.
+
+        ⛔ NO CONSTANT FALLBACK. Pixels become metres only with this number,
+        and substituting one would put a plausible value where a measurement
+        is missing -- the recurring defect in this codebase. The barometer
+        reported "not initialised" on the bench (section 37), so today this
+        returns NaN and every closure is refused, loudly, which is correct.
+        """
+        if not (self._pool_depth > 0.0):
+            return float('nan')
+        if self._odom_z != self._odom_z:
+            return float('nan')
+        alt = self._pool_depth - abs(self._odom_z)
+        return alt if alt > 0.05 else float('nan')
+
+    def _place_tick(self, gray, header, now: float) -> None:
+        """Remember where we are, and recognise where we have been.
+
+        Recognition FIRST: enrolling before asking would add the current frame
+        to the bank and then find it, which is the self-closure this whole
+        path is built to avoid.
+        """
+        if not self._closer_on or gray is None or self._anchor is None:
+            return
+        xy = self._odom_xy
+
+        # ---- recognise ---------------------------------------------------
+        if self._anchor.size:
+            # ⭐ THE FILTER'S OWN UNCERTAINTY IS THE SEARCH RADIUS. A confident
+            # filter refuses to consider a place 20 m away; a drifting one
+            # widens until it gates on nothing, which is exactly right -- the
+            # prior should stop helping precisely when it stops being one.
+            radius = (3.0 * self._odom_sigma
+                      if self._odom_sigma == self._odom_sigma else 0.0)
+            bp = self._anchor.locate(gray, label=_lc.PLACE_LABEL,
+                                     near=xy if radius > 0.0 else None,
+                                     radius_m=radius)
+            c = _lc.consider(
+                bp,
+                ref_age_s=(now - (self._places._last_t or now)),
+                travel_m=self._places.travel_since(xy),
+                ref_sigma_m=(self._odom_sigma
+                             if self._odom_sigma == self._odom_sigma else 1.0),
+                m_per_px=self._m_per_px(),
+                bank_size=self._anchor.size)
+            if c.ok:
+                self._closures += 1
+                m = PointStamped()
+                # THE MATCHED FRAME'S header, on the board clock -- not now().
+                # A fix stamped on arrival is replayed at the wrong instant by
+                # the filter's retrodiction, which is the one thing that makes
+                # a late measurement safe.
+                m.header = header
+                m.point.x, m.point.y = float(c.xy[0]), float(c.xy[1])
+                m.point.z = float(c.sigma)      # the producer's own sigma
+                self._fix_pub.publish(m)
+                self.get_logger().info(
+                    f'[LOCK ] loop closure {self._closures}: ref {c.index}, '
+                    f'{c.reason}, sigma {c.sigma:.2f} m')
+            else:
+                # Counted, not dropped. A closure path that silently never
+                # fires is indistinguishable from one that was never wired up.
+                key = c.reason.split(' -- ')[0].split('(')[0].strip()
+                self._closure_refusals[key] += 1
+                n = sum(self._closure_refusals.values())
+                if n % 300 == 0:
+                    top = ', '.join(f'{k} x{v}' for k, v in
+                                    self._closure_refusals.most_common(3))
+                    self.get_logger().info(
+                        f'[LOCK ] no closure in {n} looks: {top}')
+
+        # ---- remember ----------------------------------------------------
+        if self._places.should_enrol(now, xy):
+            # ⛔ WHOLE FRAME, no ROI. The ~100-inlier bar was derived on
+            # whole-frame downward references (section 24); cropping would
+            # repeat section 25, where a bar measured on one configuration was
+            # shipped against another and silently never fired.
+            r = self._anchor.enrol(gray, roi=None, det_conf=1.0,
+                                   label=_lc.PLACE_LABEL, position=xy)
+            if r.accepted:
+                self._places.note(now, xy)
+                self.get_logger().info(
+                    f'[LOCK ] place {self._anchor.size}: {r.keypoints} kp '
+                    f'at ({xy[0]:.2f}, {xy[1]:.2f})')
+
+    def _m_per_px(self) -> float:
+        """Metres per BACKEND pixel on the floor. NaN without an altitude.
+
+        ⭐ THE RECTIFIED K, NOT THE AIR ONE. `_on_info` already scales the
+        intrinsics to the backend's own grid -- which is the grid the
+        homography is defined on -- and `rectifier_for` returns the K that
+        matches the flat-port correction. Using the air focal length underwater
+        leaves a clean 1/n scale error: every offset 33 % short, with a
+        plausible number and no warning. That is the exact defect
+        `optics.py` exists to prevent, and a loop closure is precisely where a
+        silent 33 % would be believed.
+        """
+        alt = self._altitude_m()
+        if alt != alt:
+            return float('nan')
+        K = self._K_rect if getattr(self, '_K_rect', None) is not None \
+            else self._K
+        if K is None:
+            return float('nan')
+        f = float(K[0, 0])
+        return alt / f if f > 0.0 else float('nan')
 
     def _on_info(self, msg):
         """K, scaled to the anchor backend's resolution.
@@ -831,6 +1006,13 @@ class LockNode(Node):
                       ab = (float(q[:, 0].min()), float(q[:, 1].min()),
                             float(q[:, 0].max()), float(q[:, 1].max()))
                       ac = p.confidence
+
+              # Places ride the same frame the ladder just used. Kept out
+              # of the ladder itself on purpose: a place is evidence about the
+              # VEHICLE, and the ladder is evidence about a TARGET. Blending
+              # the two is how a lock starts following the floor.
+              if self._closer_on:
+                  self._place_tick(gray, header, now)
 
               st = arbitrate(now=now, last_detection_t=det_t,
                              detection=det_box, detection_conf=det_conf,

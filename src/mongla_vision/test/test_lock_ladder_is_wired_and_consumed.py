@@ -62,8 +62,17 @@ def test_the_ladder_can_be_turned_off_without_editing_the_launch():
     assert re.search(r"DeclareLaunchArgument\(\s*\n?\s*'lock'", src), (
         'the ladder has no `lock` launch argument, so disabling it on the '
         'deck means editing a launch file.')
+    # ⚠ The window is STRUCTURAL, not a character count. It used to be
+    # `src[i:i + 1200]`, and adding four loop-closure parameters to the node
+    # pushed `condition=` past 1200 characters -- so a test guarding against
+    # an inert launch argument failed because the block it reads grew. Read to
+    # the end of this Node(...) call instead, which is what it always meant.
     i = src.index("executable='lock_node'")
-    window = src[i:i + 1200]
+    end = src.index('condition=', i)
+    # To the end of the condition LINE. Stopping at the first ')' after
+    # `condition=` closes LaunchConfiguration, not IfCondition, so the window
+    # ended one character before the text being searched for.
+    window = src[i:src.index('\n', end)]
     assert "IfCondition(LaunchConfiguration('lock'))" in window, (
         'lock_node is not gated on the `lock` argument, so the argument is '
         'inert -- declared and unread, the defect class this package has '

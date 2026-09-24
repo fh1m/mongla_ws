@@ -279,6 +279,10 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `dwn_fps` | `0` |  |
 | `fwd_publish_hz` | `40` |  |
 | `dwn_publish_hz` | `0` |  |
+| `loop_closure` | `false` | DOWNWARD camera: remember places and offer a recognised one to the localisation filter as a position fix on /mongla/localization/fix. OFF by default -- it is the only vision path that reaches the filter, and a wrong fix is not merely wrong, the filter shrinks its covariance around it. Needs pool_depth_m, or every closure is refused for want of an altitude. |
+| `place_period_s` | `5.0` |  |
+| `place_travel_m` | `1.0` |  |
+| `pool_depth_m` | `0.0` |  |
 | `replay` | `false` | Consume image_raw from a RECORDED BAG instead of a camera. Build no camera, keep every detector, and let `ros2 bag play` drive the graph. This is how a recorded session becomes a regression fixture: the detector, tracker, lock ladder and checkpoint bank all run for real, on input that never changes. |
 | `fwd_device_path` | `` |  |
 | `dwn_device_path` | `` |  |
@@ -434,7 +438,7 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `range_crop` | `-1` |
 | `vision_profile` | `''` |
 
-**`mongla_vision/lock_node.py`** — 12 parameters
+**`mongla_vision/lock_node.py`** — 16 parameters
 
 | parameter | default |
 |---|---|
@@ -444,6 +448,10 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `anchor` | `False` |
 | `anchor_model` | `''` |
 | `anchor_bank` | `''` |
+| `loop_closure` | `False` |
+| `place_period_s` | `_lc.PLACE_PERIOD_S` |
+| `place_travel_m` | `_lc.PLACE_TRAVEL_M` |
+| `pool_depth_m` | `0.0` |
 | `publish_hz` | `0.0` |
 | `anchor_hz` | `3.0` |
 | `full_authority_s` | `FULL_AUTHORITY_S` |
