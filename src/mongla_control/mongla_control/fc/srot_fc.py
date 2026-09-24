@@ -89,6 +89,11 @@ _SYS_STATUS_BASE_LEN = 31
 _SYS_STATUS_EXT_END  = 43
 _LINK_STALE_S = 3.0
 
+# How long a SUCCEEDED move waits for a HEARTBEAT newer than its ACK before
+# judging the board's mode. The manager requests HEARTBEAT at 10 Hz
+# (SROT_MESSAGE_RATES), so one normally lands inside 0.1 s.
+_POST_ACK_HB_WAIT_S = 0.3
+
 _ACK_MARGIN_S     = 5.0    # slack over the expected leg time before calling it a stall
 _ACK_MIN_BUDGET_S = 8.0    # floor, so a 0.5 s leg still tolerates a slow first ACK
 _STYLE_ROLL_S     = 360.0 / 90.0   # MOVE_STYLE is always a roll at 90 deg/s
@@ -769,6 +774,37 @@ class SrotFC(FlightController):
             return None
         return d[0], d[1]
 
+    def _cut_short_by_mode_change(self, t_ack: float):
+        """Why a move ACKed ACCEPTED,100 did not really complete -- or None.
+
+        ⛔ THE BOARD REPORTS A CANCELLED MOVE AS DONE. When a failsafe (leak,
+        battery, companion loss), a baro loss or a disarm displaces AUTO, the
+        running move is cancelled and then latched as finished, so the terminal
+        ACK is ACCEPTED at 100 %. Taken at its word, the mission advances to its
+        next leg -- which (without the SURFACE refusal in `move`) would pull the
+        board straight back out of the failsafe. A move only completed if the
+        board is still ARMED and in AUTO afterwards: a completed move never
+        leaves AUTO (it never exits by itself).
+
+        Judged on a HEARTBEAT newer than the ACK, waited for briefly; with no
+        vehicle heartbeat at all there is nothing to judge and the ACK stands.
+        """
+        hb = self._vehicle_hb()
+        if hb is None:
+            return None
+        deadline = time.monotonic() + _POST_ACK_HB_WAIT_S
+        while getattr(hb, '_timestamp', 0.0) < t_ack and time.monotonic() < deadline:
+            time.sleep(_POLL_S)
+            hb = self._vehicle_hb() or hb
+        mode = sp.mode_name(getattr(hb, 'custom_mode', None))
+        base = getattr(hb, 'base_mode', None)
+        if base is not None and not (base & _ARMED_FLAG):
+            return 'cut short -- the board DISARMED during the move (ACK said 100 %)'
+        if mode not in ('AUTO', 'UNKNOWN'):
+            return (f'cut short -- the board left AUTO for {mode} during the move '
+                    f'(ACK said 100 %); a failsafe or mode change cancelled it')
+        return None
+
     def stop_motion(self) -> None:
         """Bring the vehicle to an actual halt.
 
@@ -789,6 +825,11 @@ class SrotFC(FlightController):
         at zero, which is what makes this usable as the ROS-cancel action.
         """
         self._last_leg = None
+        # A STOP is a SROT_MOVE, and every SROT_MOVE puts the board in AUTO. In
+        # SURFACE there is nothing to brake (leaving AUTO cancelled the move), so
+        # sending it would only undo the surface. See `move`.
+        if self.get_mode() == 'SURFACE':
+            return
         self._command_long(sp.CMD_SROT_MOVE, p1=float(sp.MOVE_STOP))
 
     # -- payload (PCA9685 on the board -- integrated, no separate USB ESP32) --- #
@@ -878,6 +919,22 @@ class SrotFC(FlightController):
         if not _finite(p1, p2, p3, p4, p5):
             return MoveResult(DENIED, f'{verb}: non-finite parameter -- refused host-side')
 
+        # ⛔ NEVER SEND A SROT_MOVE INTO SURFACE. The firmware's SROT_MOVE handler
+        # sets `mode = AUTO` unconditionally (mav_commands.cpp), so the next leg of
+        # a mission -- or a plain `stop` -- quietly undoes a leak/battery/GCS
+        # failsafe SURFACE, or the operator's own `surface`, and the hull re-dives
+        # to hold depth. Leaving SURFACE is a deliberate `set_mode`, never a side
+        # effect of a motion verb.
+        if self.get_mode() == 'SURFACE':
+            if verb == 'stop':
+                # Leaving AUTO already cancelled any move; there is nothing to
+                # brake, and a STOP would re-enter AUTO.
+                return MoveResult(SUCCEEDED, 'stop: board is in SURFACE -- no move '
+                                  'can be running; STOP not sent (it would re-enter AUTO)')
+            return MoveResult(DENIED, f'{verb}: refused -- the board is in SURFACE '
+                              f'(failsafe or operator). A SROT_MOVE would switch it '
+                              f'back to AUTO and re-dive. Leave SURFACE deliberately first.')
+
         # No host-side brake before a 'stop' any more: fw rev 2 brakes on-board.
         self._clear_ack()
         self._command_long(sp.CMD_SROT_MOVE, p1=p1, p2=p2, p3=p3, p4=p4, p5=p5)
@@ -919,6 +976,11 @@ class SrotFC(FlightController):
             if ack is not None and ack.command == sp.CMD_SROT_MOVE:
                 if ack.result in sp.TERMINAL_ACKS:
                     code = _ACK_TO_CODE[ack.result]
+                    if code == SUCCEEDED:
+                        cut = self._cut_short_by_mode_change(
+                            getattr(ack, '_timestamp', 0.0))
+                        if cut is not None:
+                            return MoveResult(FAILED, f'{verb}: {cut}')
                     if on_progress is not None and code == SUCCEEDED:
                         on_progress(1.0)
                     return MoveResult(
