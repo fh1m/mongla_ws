@@ -4906,3 +4906,25 @@ quantisation and this table must be **re-measured, not assumed** (Round 7e).
 kept the Hailo claimed, and the only symptom was `HAILO_OUT_OF_PHYSICAL_DEVICES`
 from a tool that has nothing to do with the vision graph. ⛔ **Before blaming
 the chip, check who already owns it.**
+
+Two fixes for this were measured and **both failed**, which is worth recording
+because each looked correct:
+
+1. **Reset the signal disposition and SIGINT the launcher.** `ros2 launch`
+   still did not exit within 20 s, so the escalation sent SIGTERM — which it
+   does **not** forward. Nodes orphaned anyway.
+2. **`setsid cmd &`, then signal the process group.** `os.setsid()` failed in
+   this context and the shim died immediately, so `$!` named a pid that had
+   never existed and `stop()` silently signalled nothing. ⛔ The failure was
+   invisible: `stop()` returned success having done nothing at all.
+
+⭐ What works asks nobody to forward anything: **walk the process tree and
+signal every descendant directly** (`kill_tree`/`stop_tree` in
+`tools/_record_lib.sh`). `ros2 launch` starts each node as its own child, so
+the tree *is* the node list. Verified on the vehicle:
+`graph stopped; no surviving vision nodes`, count **0**, where all three
+previous attempts left **5**.
+
+⚠ And `stop_tree` now reports **surviving nodes**, not launcher exit. "Launcher
+stopped" was true during every single run that left five nodes holding the
+chip, so it was the wrong thing to report.

@@ -38,7 +38,7 @@ source "$(dirname "$0")/_record_lib.sh"
 cleanup() {
   set +e
   stop "${REC_PID:-}" 'bag record'
-  stop "${SYS_PID:-}" 'graph'
+  stop_tree "${SYS_PID:-}" 'graph'
   wait 2>/dev/null
 }
 trap cleanup EXIT INT TERM
@@ -46,7 +46,7 @@ trap cleanup EXIT INT TERM
 echo "▸ graph up in REPLAY mode (no camera)"
 run_resettable ros2 launch mongla_vision vision_pi.launch.py \
     replay:=true paused:=false lock:=true lock_class:=person \
-    fwd_model:=yolov11n >"$LOG" 2>&1 &
+    fwd_model:=yolov11n >>"$LOG" 2>&1 &
 SYS_PID=$!
 
 for _ in $(seq 40); do

@@ -51,7 +51,7 @@ source "$(dirname "$0")/_record_lib.sh"
 cleanup() {
   set +e
   stop "${BAG_PID:-}" 'bag record'
-  stop "${SYS_PID:-}" 'graph'
+  stop_tree "${SYS_PID:-}" 'graph'
   wait 2>/dev/null
 }
 trap cleanup EXIT INT TERM
@@ -66,7 +66,7 @@ vision)
   run_resettable ros2 launch mongla_vision vision_pi.launch.py \
       paused:=false lock:=true lock_class:=person \
       fwd_model:=yolov11n fwd_device_path:=/dev/video1 \
-      >"$LOG" 2>&1 &
+      >>"$LOG" 2>&1 &
   SYS_PID=$!
   ;;
 bench)
@@ -77,7 +77,7 @@ bench)
   TOPICS='^/mongla/(state|imu|imu_rates|esc_rpm|demand|localization/(aiding|fix|heading|motion)|odom)$'
   echo "▸ starting the manager against the board"
   run_resettable ros2 launch mongla_manager bringup.launch.py vision:=false \
-      >"$LOG" 2>&1 &
+      >>"$LOG" 2>&1 &
   SYS_PID=$!
   ;;
 *) echo "usage: $0 {vision|bench} [seconds] [label]" >&2; exit 2 ;;
