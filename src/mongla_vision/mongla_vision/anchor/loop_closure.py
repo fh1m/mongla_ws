@@ -251,3 +251,87 @@ def consider(pose, *, ref_age_s: float, travel_m: float, ref_sigma_m: float,
                          f'ref {ref_age_s:.0f}s / {travel_m:.1f} m ago',
                    xy=tuple(pose.ref_position), sigma=sigma,
                    index=pose.index, inliers=pose.inliers, offset_m=off)
+
+
+# --------------------------------------------------------------------------- #
+#  Configuration, WITHOUT launch plumbing
+# --------------------------------------------------------------------------- #
+# ⛔ NOT A LAUNCH ARGUMENT. Threading a switch through launch means declaring
+# it in every launch file that starts the node, and this package has already
+# shipped four capabilities that were reachable from one launch path and not
+# the one `bringup` actually includes. Loop closure nearly became the fifth:
+# it was wired into `vision_pi.launch.py` while `bringup` includes
+# `vision.launch.py`.
+#
+# So the node configures ITSELF. Settings come from a deck-editable file --
+# the same pattern the course priors already use (`~/.mongla/courses`) -- and
+# fall back to the constants above. An operator changes a pool day's behaviour
+# by editing one file, with no launch argument, no rebuild and no edit to a
+# launch file that some other path does not read.
+CONFIG_PATH = '~/.mongla/loop_closure.yaml'
+
+_KEYS = {
+    'enabled': bool,
+    'min_inliers': int,
+    'min_age_s': float,
+    'min_travel_m': float,
+    'max_offset_m': float,
+    'place_period_s': float,
+    'place_travel_m': float,
+    'pool_depth_m': float,
+}
+
+
+def defaults() -> dict:
+    return {
+        'enabled': False,          # ⛔ the only vision path into the filter
+        'min_inliers': CLOSURE_INLIERS,
+        'min_age_s': MIN_REF_AGE_S,
+        'min_travel_m': MIN_TRAVEL_M,
+        'max_offset_m': MAX_OFFSET_M,
+        'place_period_s': PLACE_PERIOD_S,
+        'place_travel_m': PLACE_TRAVEL_M,
+        'pool_depth_m': 0.0,
+    }
+
+
+def load_config(path: str = CONFIG_PATH, log=None) -> dict:
+    """Deck settings, merged over the defaults. Never raises.
+
+    ⚠ A malformed file must not take the vision stack down on a pool deck, so
+    every failure degrades to the defaults AND SAYS SO. Silently ignoring a
+    file the operator just edited is the worse failure: they would watch for a
+    behaviour change that was never loaded.
+    """
+    import os
+
+    out = defaults()
+    full = os.path.expanduser(path)
+    if not os.path.isfile(full):
+        return out
+    try:
+        import yaml
+        with open(full) as fh:
+            raw = yaml.safe_load(fh) or {}
+        if not isinstance(raw, dict):
+            raise ValueError(f'expected a mapping, got {type(raw).__name__}')
+        unknown = [k for k in raw if k not in _KEYS]
+        for k, v in raw.items():
+            if k in _KEYS:
+                out[k] = _KEYS[k](v)
+        if log is not None:
+            log.info(f'[LOCK ] loop closure config from {full}: '
+                     + ', '.join(f'{k}={out[k]}' for k in sorted(raw)
+                                 if k in _KEYS))
+            if unknown:
+                # Named, because a typo'd key is indistinguishable from a
+                # setting that did not take effect.
+                log.warn(f'[LOCK ] ignored unknown key(s) in {full}: '
+                         + ', '.join(sorted(unknown)))
+    except Exception as exc:                       # noqa: BLE001
+        if log is not None:
+            log.error(f'[LOCK ] {full} could not be read ({exc}); using '
+                      f'defaults. Loop closure is '
+                      f'{"ON" if out["enabled"] else "OFF"}.')
+        return defaults()
+    return out
