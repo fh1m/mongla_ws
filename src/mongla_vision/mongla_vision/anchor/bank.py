@@ -869,6 +869,71 @@ class CheckpointBank:
         return {n: (float(dst[i, 0, 0]), float(dst[i, 0, 1]))
                 for i, n in enumerate(names)}
 
+    def corroborate(self, gray: np.ndarray, xyxy, *,
+                    label: Optional[str] = None,
+                    overlap: float = 0.3) -> BankPose:
+        """Does the bank agree that THIS BOX is the thing it remembers?
+
+        ⭐ THE TWO-WAY USE, and it is one mechanism. A detector confidence is a
+        semantic opinion with no geometry behind it; the bank's inliers are
+        geometry with no semantics. Asking the bank about a specific box gets
+        both, and answers two opposite questions at once:
+
+          a WEAK detection the bank corroborates is worth acting on -- the
+            prop is really there and the detector was merely unsure, which on
+            our own footage is the common case (p50 confidence 0.49)
+          a CONFIDENT detection the bank contradicts is a distractor -- the
+            failure that steals the vehicle, and the one a confidence
+            threshold alone cannot catch at any setting
+
+        ⛔ MEASURED, THIS DOES NOT DISCRIMINATE YET -- see `measured-bars.md`
+        §30. On Mirpur footage the DISTRACTOR clip scored a higher median
+        inlier count than the true clip (26 vs 20), and the warped quad landed
+        inside the detector's box on 0 % of frames. No threshold separates
+        them, because a reference built from a BOX contains the venue's water
+        and pool edge, which every clip from that venue shares. The fix is
+        mask-based enrolment (§6c: `yolov8n_seg` is measured at 85.2 Hz on this
+        vehicle), not a threshold sweep.
+
+        ⛔ DO NOT WIRE THIS INTO A CONTROL PATH until that lands: at the
+        tracking bar it corroborates 96 % of distractor frames.
+
+        ⛔ IT DOES NOT INVENT A FUSED SCORE. There is no principled way to
+        combine "0.31 confident" with "62 inliers" into one number, and a
+        fabricated one would be acted on as though it meant something. The
+        caller gets the inlier count, the overlap, and a verdict, and decides.
+
+        `overlap` is the fraction of the bank's matched quad that must fall
+        inside the box for them to be talking about the same object. Without
+        it, a match anywhere in frame would corroborate a box anywhere else.
+        """
+        import cv2
+        p = self.locate(gray, label=label)
+        p.identity_why = ''
+        if not p.ok or p.pose is None or p.pose.corners is None:
+            p.identity_ok = False
+            p.identity_why = f'bank has no match (inliers {p.inliers})'
+            return p
+
+        # The box arrives in FULL-FRAME pixels; the quad is in backend pixels.
+        fh, fw = gray.shape[:2]
+        sx, sy = self._be.w / float(fw), self._be.h / float(fh)
+        x1, y1, x2, y2 = (float(v) for v in xyxy)
+        bx = (min(x1, x2) * sx, min(y1, y2) * sy,
+              max(x1, x2) * sx, max(y1, y2) * sy)
+        quad = np.asarray(p.pose.corners, np.float32).reshape(-1, 2)
+        inside = ((quad[:, 0] >= bx[0]) & (quad[:, 0] <= bx[2])
+                  & (quad[:, 1] >= bx[1]) & (quad[:, 1] <= bx[3]))
+        frac = float(inside.mean()) if len(quad) else 0.0
+
+        ok = p.inliers >= self._id_inliers and frac >= overlap
+        p.identity_ok = bool(ok)
+        p.identity_why = (f'inliers {p.inliers}'
+                          f'{"" if p.inliers >= self._id_inliers else f"<{self._id_inliers}"}; '
+                          f'quad {frac:.0%} inside the box'
+                          f'{"" if frac >= overlap else f" <{overlap:.0%}"}')
+        return p
+
     def verify(self, gray: np.ndarray, *,
                label: Optional[str] = None) -> int:
         """The LTMU verifier: how much evidence says this is still the target.

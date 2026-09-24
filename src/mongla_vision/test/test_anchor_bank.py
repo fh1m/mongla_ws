@@ -730,3 +730,58 @@ def test_scale_is_recorded_in_backend_pixels():
     b = bank()
     b.enrol(rich(1), roi=_roi(60, 60), det_conf=0.9)
     assert abs(b.scales[0] - 60.0) < 1.0
+
+
+# --------------------------------------------------------------------------- #
+# 14. corroborate(): one mechanism, two opposite failures
+# --------------------------------------------------------------------------- #
+def test_a_weak_detection_the_bank_corroborates_is_usable():
+    """⭐ The common case on our own footage: the detector's median confidence
+    on murky water is 0.49, so a prop that is really there is routinely
+    reported at a confidence nobody would act on. Geometry can say it is
+    there."""
+    b = bank()
+    for i in range(3):
+        b.enrol(rich(1), roi=None, det_conf=0.9, label='gate', force=True)
+    # The whole carrier is the "object", so a box over it should corroborate.
+    p = b.corroborate(rich(1), (0, 0, FakeBackend.w, FakeBackend.h),
+                      label='gate')
+    assert p.inliers >= 40
+    assert p.identity_ok, p.identity_why
+
+
+def test_a_confident_detection_the_bank_contradicts_is_refused():
+    """The distractor that steals the vehicle. A confidence threshold cannot
+    catch this at ANY setting, because the detector is confident and wrong."""
+    b = bank()
+    for i in range(3):
+        b.enrol(rich(1), roi=None, det_conf=0.9, label='gate', force=True)
+    p = b.corroborate(rich(2), (0, 0, FakeBackend.w, FakeBackend.h),
+                      label='gate')
+    assert not p.identity_ok
+    assert 'no match' in p.identity_why
+
+
+def test_a_match_somewhere_else_does_not_corroborate_this_box():
+    """⛔ Without the overlap test, a real match anywhere in frame would
+    corroborate a box anywhere else -- the bank would be agreeing that the
+    prop is where the detector says purely because the prop is visible."""
+    b = bank()
+    for i in range(3):
+        b.enrol(rich(1), roi=None, det_conf=0.9, label='gate', force=True)
+    p = b.corroborate(rich(1), (0, 0, 8, 8), label='gate')   # a tiny far box
+    assert p.inliers >= 40, 'the bank should still MATCH'
+    assert not p.identity_ok, 'but not about THIS box'
+    assert 'inside the box' in p.identity_why
+
+
+def test_corroborate_never_invents_a_fused_score():
+    """There is no principled way to combine '0.31 confident' with '62
+    inliers', and a fabricated number would be acted on as if it meant
+    something. The caller gets the evidence and decides."""
+    b = bank()
+    b.enrol(rich(1), roi=None, det_conf=0.9, label='gate')
+    p = b.corroborate(rich(1), (0, 0, FakeBackend.w, FakeBackend.h),
+                      label='gate')
+    assert not hasattr(p, 'fused_confidence')
+    assert isinstance(p.inliers, int) and p.identity_why
