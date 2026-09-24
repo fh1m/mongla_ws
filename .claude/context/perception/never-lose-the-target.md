@@ -174,3 +174,72 @@ for throughput will re-measure 1.00x.
 ⚠ The real remaining gap is the graph, not the accelerator: **80.9 Hz
 standalone against 53.9 Hz through the ROS graph**. That is where the
 throughput went, and it has not been attacked.
+
+
+---
+
+## 9. ⭐⭐⭐ THE GOLDEN GOAL NEEDS ANTICIPATION, NOT BETTER RECOVERY
+
+Everything in sections 1-8 makes the ladder **recover** better. None of it
+changes the fact that **every rung fires after the detection is already gone**:
+the follower takes over once there is nothing left to follow from, and the
+anchor is asked once the box has vanished. By then the reference worth having —
+the one from while the view was still good — is a second in the past and
+unrecoverable.
+
+### The SOTA name for the missing capability is INTROSPECTION
+
+*Online Monitoring of Object Detection Performance During Deployment* and
+*Per-frame mAP Prediction* both predict performance drops **from the detector's
+own internal features, with no ground truth**, and frame the decision as
+trading a false alarm against absenting from detection. Robotic introspection
+is described as "the introspection capability of a mobile robot while operating
+in an unknown environment".
+
+What it requires is a **per-frame quality signal that needs no label**.
+
+### ⭐⭐ We already compute one and were throwing it away
+
+XFeat's inlier count against the bank falls as the water thickens, as the
+target turns away, as range opens — **all the things that precede a lost
+detection**. It is measured on every bank lookup and was used only to pick a
+winner.
+
+A **falling trend** is a prediction that the next seconds will be worse than
+the last. `health.trend()` compares the recent half of the series against the
+earlier half — not a slope, because a slope is dominated by its endpoints and
+one catastrophic frame would swing it; halves are what a gap actually looks
+like.
+
+⭐ **Wired**: a falling trend is now a fourth reason to enrol, beside stale /
+uncovered / room. It is the only one of the four that is **predictive** — the
+others describe the bank, this describes where the view is heading.
+
+⛔ **And it licenses exactly one action.** It says *prepare*, never *the target
+is gone*. Snapping a reference early is cheap and reversible; snapping late
+costs the very view it needed. A test asserts the trend object carries no
+`lost` or `target_gone` field, because the moment this becomes a control input
+the ladder's rule — no rung fabricates a position — is gone.
+
+⚠ `TREND_FALL = 0.70` is **declared, not measured**. What is measured is that
+the signal exists and moves the right way. The bar wants a pool day with real
+gaps either side of it.
+
+---
+
+## 10. The shape of the whole thing
+
+```
+            ANTICIPATE      falling XFeat trend  ->  enrol NOW      (section 9)
+                 |
+    DETECT  ->  FOLLOW  ->  ANCHOR  ->  LOST
+       |          |            |
+       |          |            +-- bank, contamination-guarded   (section 5)
+       |          +-- LK + forward-backward + RANSAC similarity  (scale!)
+       +-- cascade: motion -> MEASURED ego-motion -> XFeat re-ID  (sections 2,4)
+```
+
+Each addition attacks a different half of the same failure:
+**holding identity across a gap**, and **not making the gap worse by
+remembering the wrong thing** — with one new stage that tries to see the gap
+coming.

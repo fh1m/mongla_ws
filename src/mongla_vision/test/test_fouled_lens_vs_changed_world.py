@@ -197,3 +197,52 @@ def test_force_overrides_the_contamination_guard():
     b._last_scores = {0: 1, 1: 2, 2: 0, 3: 3}
     r = b.enrol(np.zeros((240, 320), np.uint8), det_conf=1.0, force=True)
     assert r.reason != 'camera degraded'
+
+
+# --------------------------------------------------------------------------- #
+#  ⭐ ANTICIPATION -- predicting a loss instead of reacting to one
+# --------------------------------------------------------------------------- #
+def test_a_falling_trend_says_prepare():
+    """The reference worth having is the one from BEFORE the detection is
+    lost. A falling match quality is the only warning available in time."""
+    t = health.trend([200, 190, 80, 60])
+    assert t.state == health.FALLING and t.prepare
+
+
+def test_a_steady_trend_does_not_fire():
+    assert not health.trend([100, 110, 95, 105]).prepare
+
+
+def test_an_improving_trend_does_not_fire():
+    assert not health.trend([60, 80, 190, 200]).prepare
+
+
+def test_too_few_samples_is_not_a_trend():
+    """Noise with an opinion. Three points can look like anything."""
+    t = health.trend([200, 50])
+    assert t.state == health.STEADY and 'needed for a trend' in t.reason
+
+
+def test_an_already_dead_signal_does_not_report_a_fall():
+    """There is no fall left to detect, and the health verdict is the right
+    instrument for that state."""
+    assert not health.trend([0, 0, 0, 0]).prepare
+
+
+def test_the_trend_never_claims_the_target_is_gone():
+    """⛔ It licenses ONE action -- enrol now -- and no other. The ladder's
+    rule stands: no rung fabricates a position."""
+    t = health.trend([300, 280, 40, 30])
+    assert t.prepare
+    assert not hasattr(t, 'lost') and not hasattr(t, 'target_gone')
+
+
+def test_lock_node_uses_the_trend_as_an_enrolment_REASON():
+    """Wired, not merely available -- the defect this repo produces most."""
+    import pathlib
+    src = (pathlib.Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'lock_node.py').read_text()
+    assert '_anchor_trend' in src and '_health.trend(' in src
+    assert 'falling or' in src, (
+        'the trend is computed but not used as a reason to enrol, so the '
+        'anticipation never reaches the bank')

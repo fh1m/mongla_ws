@@ -104,3 +104,85 @@ def assess(current: Sequence[int], best: Sequence[int],
                    f'{collapsed}/{len(usable)} references collapsed, the rest '
                    f'still score -- the camera is fine and the view changed',
                    collapsed=collapsed, considered=len(usable))
+
+
+# --------------------------------------------------------------------------- #
+#  ⭐ ANTICIPATION -- the piece the ladder was missing
+# --------------------------------------------------------------------------- #
+# ⛔ THE LADDER ONLY EVER REACTED. Every rung below DETECTION fires AFTER the
+# detection is already gone: the follower takes over once there is nothing to
+# follow from, and the anchor is asked once the box has vanished. By then the
+# best reference that could have been snapped -- the one from while the view
+# was still good -- is a second in the past and unrecoverable.
+#
+# ⭐ THE STATE OF THE ART CALLS THIS INTROSPECTION. Online detection monitoring
+# predicts performance drops "using the detector's internal features", without
+# ground truth, and frames the decision as trading a false alarm against
+# absenting from detection. What it needs is a per-frame quality signal that
+# does not require a label.
+#
+# ⭐⭐ WE ALREADY COMPUTE ONE. XFeat's inlier count against the bank falls as
+# the water thickens, as the target turns away, as range opens -- all the
+# things that precede a lost detection. It is measured on every bank lookup
+# and was being used only to pick a winner. A FALLING TREND is a prediction
+# that the next seconds will be worse than the last.
+#
+# ⛔ AND IT MUST NOT BECOME A CONTROL INPUT ON ITS OWN. This says "prepare",
+# never "the target is gone". The ladder's rule stands: no rung fabricates.
+# The only action it licenses is cheap and reversible -- snap a reference now,
+# while there is still something worth remembering.
+
+# Fewer samples than this is not a trend, it is noise with an opinion.
+TREND_MIN_SAMPLES = 4
+
+# Ratio of the recent half to the earlier half, below which the signal is
+# falling rather than merely varying. Declared, not measured -- see the note.
+TREND_FALL = 0.70
+
+STEADY = 'steady'
+FALLING = 'falling'
+
+
+@dataclass(frozen=True)
+class Trend:
+    """Where the match quality is going, not where it is."""
+    state: str
+    reason: str
+    ratio: float = float('nan')
+    samples: int = 0
+
+    @property
+    def prepare(self) -> bool:
+        """⭐ The ONLY thing a falling trend licenses: remember something now,
+        while the view is still good enough to be worth remembering."""
+        return self.state == FALLING
+
+
+def trend(series, *, min_samples: int = TREND_MIN_SAMPLES,
+          fall: float = TREND_FALL) -> Trend:
+    """Is match quality falling? `series` is recent inlier counts, oldest first.
+
+    Compares the recent half against the earlier half rather than fitting a
+    slope: a slope is dominated by its endpoints, and one catastrophic frame
+    at either end would swing it. Halves are what a gap actually looks like.
+    """
+    vals = [float(v) for v in series if v is not None and v == v]
+    n = len(vals)
+    if n < min_samples:
+        return Trend(STEADY, f'{n} samples; {min_samples} needed for a trend',
+                     samples=n)
+    half = n // 2
+    older, newer = vals[:half], vals[half:]
+    a = sum(older) / len(older)
+    b = sum(newer) / len(newer)
+    if a <= 0.0:
+        # It was already at zero; there is no fall left to detect, and the
+        # health verdict above is the right instrument for that state.
+        return Trend(STEADY, 'earlier window was already zero', samples=n)
+    r = b / a
+    if r <= fall:
+        return Trend(FALLING,
+                     f'match quality {a:.0f} -> {b:.0f} ({r:.2f}x): the view '
+                     f'is getting worse, snap a reference while it is still '
+                     f'worth having', ratio=r, samples=n)
+    return Trend(STEADY, f'{a:.0f} -> {b:.0f} ({r:.2f}x)', ratio=r, samples=n)
