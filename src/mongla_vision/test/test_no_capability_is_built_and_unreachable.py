@@ -83,6 +83,17 @@ DEFERRED = {
         'supplying crop descriptors at track birth and death, which is a '
         'change to the tracker hot path and needs its rate measured on the '
         'vehicle first.'),
+    'mongla_vision/mongla_vision/tracking/presence.py': (
+        'the rung BELOW detection -- track-before-detect, which postpones the '
+        'threshold and accumulates sub-threshold evidence across frames. The '
+        'effect is REAL and measured on our own bag: in-view dropouts link at '
+        '0.938 against a 0.090 time-free control (10.42x), while the departed '
+        'regime -- where a chain means nothing -- scores 2.27x. ⛔ It is NOT '
+        'wired because on THIS hardware it has no input: the HEF compiles '
+        '`Score threshold: 0.200` into its on-chip NMS while the acting bar '
+        'is 0.15, so nothing sub-threshold ever reaches the host. Measured at '
+        'the live bar: pairs = 0. Waits on B-58, a HEF recompile at threshold '
+        '0.05. Wiring it before that would ship a rung that can never fire.'),
     'mongla_vision/mongla_vision/continuity.py': (
         'NOW EXERCISED by tools/continuity_from_bag.py, which produced the '
         'measurement it was written for (section 50): 338 real gaps, p50 '
@@ -183,9 +194,18 @@ def test_a_deferred_capability_has_a_named_consumer(rel, reason):
 
 def test_a_deferred_capability_that_got_wired_is_promoted():
     """Housekeeping with teeth: once something IS imported, it must move to
-    WIRED, or the register slowly becomes fiction."""
+    WIRED, or the register slowly becomes fiction.
+
+    ⛔ AN IMPORT FROM ANOTHER DEFERRED MODULE IS NOT REACHABILITY, and reading
+    it as one would invert this test's purpose. `presence.py` imports
+    `visibility.py` for its arming interlock; both are deferred, so nothing on
+    the vehicle reaches either, and promoting visibility on that evidence
+    would put a module in WIRED that no running code can touch -- the exact
+    fiction this file exists to prevent. Only an importer that is itself
+    reachable counts.
+    """
     for rel in DEFERRED:
-        hits = _imported_by(rel)
+        hits = [h for h in _imported_by(rel) if h not in DEFERRED]
         assert not hits, (
             f'{rel} is now imported by {hits} -- move it from DEFERRED to '
             f'WIRED so the register keeps meaning something')

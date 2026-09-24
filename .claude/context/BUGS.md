@@ -3455,3 +3455,57 @@ nobody reads. Silence was the defect, not the default.
 independently (§34.3: 100 % hold over 32 frames, 467–595 inliers) precisely
 because it does not need the detector — but DETECTION and FOLLOW cannot be
 exercised on the vehicle until this is fixed.
+
+
+---
+
+## B-58 — one custom HEF was compiled at the stock NMS threshold, and it is the competition model  ⛔ OPEN (needs a recompile)
+
+**Found 2026-09-24**, while measuring whether sub-threshold evidence could
+extend the lock ladder below its first rung.
+
+`hailortcli parse-hef` across all four deployed HEFs:
+
+| HEF | classes | baked score th | verdict |
+|---|---|---|---|
+| `sauvc_sim` | 11 | **0.050** | correct |
+| `bin_fire_blood` | 2 | **0.050** | correct |
+| **`gate_rescue_repair`** | 3 | **0.200** | ⛔ **wrong** |
+| `yolov11n` (stock) | 80 | 0.200 | correct — Hailo's own build |
+
+`hailo-vision.md` states our custom models are compiled at 0.050 and that only
+the *stock* models are baked at 0.200. Three of the four match that. The fourth
+is `gate_rescue_repair`, which carries **gate, rescue and repair** — the props
+the competition run is built around.
+
+⛔ **The NMS threshold is compiled into the HEF.** No ROS parameter can lower
+it, because the chip has already discarded the boxes. So on this model every
+host-side bar below 0.20 is decoration:
+
+| constant | shipped | on `gate_rescue_repair` |
+|---|---|---|
+| detector `conf` (murky/clear) | `0.10` `profiles.py` | **no-op** — 0.08, 0.10, 0.15 are one configuration |
+| launch `conf` default | `0.15` `bringup.launch.py` | **no-op**, same reason |
+| tracker `high_conf_det_threshold` | clamped to live `conf` | measured underwater **p10 0.167** cannot occur |
+
+**The p10 row is the damaging one.** The measured bottom decile of real
+underwater detection scores is 0.167 — below this model's floor. Those are the
+faint detections murky water produces, the ones the low `conf` exists to keep,
+and on the gate model they are discarded in silicon before any host code runs.
+
+**How it hid.** A too-low bar never errors; it simply stops changing anything,
+which is indistinguishable from a bar that was already permissive. The doc
+recorded the correct *intent* (0.050) and a spot check of the other models
+confirmed it, so the odd one out was never parsed. `detector.yaml` carries no
+record of the compiled threshold, so nothing could compare them.
+
+**The fix.** Recompile `gate_rescue_repair` with `nms_scores_th=0.05` to match
+its siblings, then re-run the conf sweep on the HEF rather than on the ONNX
+path. Add a startup check that parses each HEF's baked threshold and refuses a
+`conf` written below it — one truth, two copies is the bug.
+
+**What it blocks.** `tracking/presence.py` (the track-before-detect rung) is
+built and tested but **not yet wired**: the persistence measurement behind it
+was taken on stock `yolov11n`, whose 0.200 floor leaves no sub-threshold
+population at a 0.15 acting bar (measured, `pairs = 0`). Re-measure on a 0.050
+model, then wire. See CLAUDE.md §9.
