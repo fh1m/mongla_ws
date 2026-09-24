@@ -32,12 +32,13 @@ LABEL="$(printf '%s' "$LABEL" | tr -c 'A-Za-z0-9._-' '_')"
 LOG="$RUN_DIR/${LABEL}_${TS}.log"
 OUT="$RUN_DIR/bag_${LABEL}_${TS}"
 
+# shellcheck source=tools/_record_lib.sh
+source "$(dirname "$0")/_record_lib.sh"
+
 cleanup() {
   set +e
-  [ -n "${REC_PID:-}" ] && kill -INT "$REC_PID" 2>/dev/null && wait "$REC_PID" 2>/dev/null
-  [ -n "${SYS_PID:-}" ] && kill -INT "$SYS_PID" 2>/dev/null
-  sleep 3
-  [ -n "${SYS_PID:-}" ] && kill -KILL "$SYS_PID" 2>/dev/null
+  stop "${REC_PID:-}" 'bag record'
+  stop "${SYS_PID:-}" 'graph'
   wait 2>/dev/null
 }
 trap cleanup EXIT INT TERM
@@ -55,7 +56,7 @@ done
 
 # Record the graph's OWN output to a second bag, so the replay's result is
 # itself a durable artifact rather than a number scrolling past in a terminal.
-ros2 bag record -s mcap --regex \
+run_resettable ros2 bag record -s mcap --regex \
   '^/mongla/vision/forward/(detections|tracks|lock)$' -o "$OUT" \
   >>"$LOG" 2>&1 &
 REC_PID=$!
