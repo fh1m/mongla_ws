@@ -59,6 +59,14 @@ WIRED = {
 # ⚠ NOT wired, ON PURPOSE, each with the consumer it needs. A row here is a
 # debt with a name, not a silent gap.
 DEFERRED = {
+    'mongla_vision/mongla_vision/tracking/visibility.py': (
+        'the LARGEST remaining gap: there is no field-of-view guard anywhere '
+        'in mongla_control, so the perception stack can be perfect and still '
+        'lose the lock because the vehicle turned away. Waits on a consumer '
+        'in the vision verbs -- the yaw/lateral demand must be scaled by '
+        'Visibility.scale, and only the component that makes the bearing '
+        'WORSE. That is a control-path change and needs a pool day, since '
+        'visibility is SOFT and must always yield to collision avoidance.'),
     'mongla_vision/mongla_vision/tracking/cascade.py': (
         'the association cascade that makes appearance affordable -- it runs '
         'the expensive stage only on detections motion could not explain, and '

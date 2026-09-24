@@ -243,3 +243,84 @@ Each addition attacks a different half of the same failure:
 **holding identity across a gap**, and **not making the gap worse by
 remembering the wrong thing** — with one new stage that tries to see the gap
 coming.
+
+
+---
+
+## 11. ⭐⭐⭐ THE LAST PIECE: THE VEHICLE IS THE LARGEST CAUSE OF LOSING THE TARGET
+
+Sections 1–10 are all **perception**. Every one of them — the cascade, the
+re-identification, the contamination guard, the anticipation — operates in the
+**image plane**, downstream of a decision the vehicle has already made about
+where to point.
+
+⛔ **Grepped `mongla_control`: there is no field-of-view guard anywhere.**
+Nothing stops the controller yawing the target out of frame, and **no tracker
+survives that**. The perception stack can be perfect and still lose the lock.
+
+### The SOTA says it twice
+
+A 2026 safety-critical visual-servoing result observes that blocking the
+camera–target line causes failure **"even when the robot remains physically
+safe"**, and that holding visual contact **"can conflict with navigation
+progress and collision avoidance"** — so it keeps collision constraints **hard**
+and gives field of view **slack**. Perception-aware planning encodes the same
+thing as a cost: keep the feature in the cone, keep its image-plane velocity
+small.
+
+The barrier is `h = β·(R e_c) − cos(ψ_F)`, and the property that matters here
+is that a published splitting strategy makes it **robust to bounded distance
+error** — it needs **bearing, not range**, which is exactly our situation.
+
+### ⛔ And a real departure from the paper, forced by measurement
+
+The published barrier is **conical**. A camera's image is a **rectangle**, and
+they disagree precisely where it matters. Measured on our own geometry
+(640×480, fx 500): a box sitting on the **right-hand edge** scores
+**h = +0.061 against the conical barrier** — comfortably "safe" — while being
+one pixel from gone. The cone closes only at the diagonal **corner**, so a
+target can walk out of the left edge with margin reported the whole way.
+
+⭐ So the shipped barrier is the fraction of half-width/half-height remaining,
+whichever is smaller: **1.0 dead centre, 0.0 on any edge**. Bearing is still
+reported because it is what a controller acts on; it is not what the barrier is
+made of.
+
+```
+dx=  0  ok         h=1.000  scale=1.00
+dx=260  ok         h=0.188  scale=1.00
+dx=290  near_edge  h=0.094  scale=0.28
+dx=310  critical   h=0.031  scale=0.00
+dx=320  lost       h=0.000  scale=0.00
+```
+
+### ⭐⭐ The second half: leaving the frame must not mean forgetting
+
+Image-plane tracking forgets the instant the box leaves. The fix is old and a
+robot-behaviour patent states it plainly: store target position **"not on a
+sensor coordinate system but on a world coordinate system"**, so it "remains
+identical from the behaviour control perspective" however the vehicle moves.
+
+`WorldTarget` projects a sighting into the pool frame using the localiser's
+pose. Losing sight then stops being a perception failure and becomes a
+**navigation** one — the vehicle still knows the bearing to turn back to.
+
+⛔ It stores a **memory, never a sighting**: it refuses a non-finite or absurd
+range rather than storing a guess, it answers `None` once the estimate is
+staler than its horizon (a position from a minute ago is a rumour, not
+knowledge), and a test asserts it carries **no `score`, `confidence` or
+`detected` field** that anything downstream could mistake for a detection.
+
+### Where the golden goal now stands
+
+| failure | answer | state |
+|---|---|---|
+| target flickers | ladder + coast | shipped |
+| target changes appearance | bank, contamination-guarded | shipped |
+| identity fragments after a gap | XFeat re-ID + cascade | built |
+| vehicle's own motion moves the box | measured ego-motion stage | built |
+| the view is about to degrade | falling-trend anticipation | **wired** |
+| target approaches or recedes | similarity fit tracks scale | **wired** |
+| **the controller steers it out of frame** | **visibility guard** | built |
+| **it leaves anyway** | **world-frame memory** | built |
+| no detection at all, long range, bad water | ⛔ **sonar's job — still open** | §3 |
