@@ -294,6 +294,17 @@ def generate_launch_description():
             description='flow: erode sun caustics and refuse a bare floor under them '
                         '(false = always track the raw floor; A/B switch)'),
         DeclareLaunchArgument(
+            'bank_forward', default_value='',
+            description='checkpoint bank (.npz) preloaded into the FORWARD '
+                        'lock node, from tools/build_practice_bank.py. Empty '
+                        'learns live. A preloaded reference is trusted exactly '
+                        'like a live one -- it clears MIN_INLIERS or it does '
+                        'not answer.'),
+        DeclareLaunchArgument(
+            'bank_downward', default_value='',
+            description='checkpoint bank (.npz) preloaded into the DOWNWARD '
+                        'lock node -- places rather than props.'),
+        DeclareLaunchArgument(
             'lane_lines', default_value='false',
             description='Read the lane line (heading mod 180) for the yaw '
                         'drift bound. OFF: a path marker is also a dark band. '
@@ -458,6 +469,7 @@ def generate_launch_description():
                 # launch flag for it would only be a way to disable a rung
                 # that already disables itself.
                 'anchor':       True,
+                'anchor_bank':  LaunchConfiguration(f'bank_{camera_name}'),
                 # lock_node still rectifies its OBJECT points (reference
                 # pixels scaled to metres); pnp_node rectifies the image side.
                 # Two nodes, one value, one launch argument.
