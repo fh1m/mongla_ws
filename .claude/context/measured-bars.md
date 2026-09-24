@@ -5355,10 +5355,10 @@ mirpur_gate       [245,  67, 296, 39]  4/4   [229,  52, 292, 40]  4/4
 total passing            11/12                      12/12
 ```
 
-⭐⭐ **The canary flipped.** `mirpur_torpedo_1` at +8 s has been **below the
-15-inlier bar in every measurement this project has taken** — 13 on CPU
-float32, 12 through the HEF (§38), 11 here. Fine-tuned it reads **15 and
-passes.** First 12/12 on the murky table, on a venue the weights never saw.
+⚠ **At 2 000 steps the canary appeared to flip** — `mirpur_torpedo_1` at +8 s
+reading 15 where it has always been below the bar. **This was retracted the
+same night; see below.** It did not survive a sweep of the other checkpoints,
+and the training set turned out to be contaminated.
 
 ⚠ **Read this narrowly.** It is one column crossing by one inlier, at 2 000 of
 12 000 steps. What it is *not* is noise: the arms are bit-identical on stock
@@ -5374,6 +5374,76 @@ weights (verified stock-against-stock), so the only difference is the weights.
    so §38's INT8 table must be **re-measured, not assumed** before any of this
    reaches the chip.
 3. **One held-out venue.** `mirpur` is three clips from one day.
+
+### ⛔⛔ RETRACTED THE SAME NIGHT — THE TRAINING SET WAS CONTAMINATED
+
+Sweeping **every** checkpoint instead of reporting the best one killed the
+result:
+
+```
+step:     2000   4000   6000   8000   10000   12000     (stock = 11)
+canary:     15     10     11     10      10       8
+passing:    12     11     11     11      11      11
+```
+
+⭐ **The canary DEGRADES monotonically with training.** The 2 000-step "flip"
+was a lucky checkpoint, not a finding. Reporting it alone would have been the
+most flattering number in the project — which is exactly the trap the sweep
+exists to catch.
+
+Widening the evidence (8 offsets × 6 references × 7 clips, n=336) shows the
+shape:
+
+| | median inliers | pass rate |
+|---|---|---|
+| held-out | 99.0 → 80.0 (**−19.0**) | 95.1 → 97.2 % |
+| trained-on | 113.5 → 95.0 (**−18.5**) | 95.3 → 93.8 % |
+
+⛔ **The median falls by ~19 on BOTH sets, near-identically.** That is not
+overfitting — overfitting is better-on-trained, worse-on-held-out. Uniform
+degradation points at the **data**, and it was there:
+
+**1. 60 % of the training set was YOLO PREDICTION OUTPUT.** `Music/detect` is
+92 `predict*` directories — footage with bounding boxes, class names and
+confidences **burned into the pixels** (`octagon 0.86`, `shark_gate 0.92`).
+Hard edges, pure hues and crisp glyphs are the easiest features in any frame
+and **do not exist at inference**, so the descriptor spent capacity on
+furniture. 2 440 of 4 036 frames.
+
+**2. The Beer-Lambert range was physically absurd.** Sampling `k` and depth
+independently gives `R/B = exp(-1.15 × 6) ≈ 0.001`. Measured over 20 real
+clips, the archive's own range is **R/B 0.305 … 0.977**. The augmentation was
+generating water **300× more red-starved than anything ever recorded**, on top
+of footage already blue. It now samples the *target ratio* from the measured
+distribution and derives the attenuation.
+
+### ⛔ AND BOTH AUTOMATIC CONTAMINATION DETECTORS WERE WRONG
+
+Worth recording because the second failure repeated the first:
+
+* **"saturated AND bright"** flagged **32 of 33** clips — including
+  `torpedo_shark_up_3.mkv` and `bin_front_#2.mp4`, raw clips from the murky
+  table. Bright turquoise pool water *is* saturated and bright: it was
+  detecting water.
+* **"long axis-aligned lines"** (YOLO boxes are rectangles) flagged 6 more.
+  All six were **confirmed clean by eye**: pool tile borders, lane markers and
+  wall edges are axis-aligned when the camera is level.
+
+⭐ **The only verification that has ever worked here is looking at the
+frames.** `tools/footage_inventory.py` renders every clip; all 40 in
+`raw_videos` + `2026` were verified visually. The defence is now structural —
+the contaminated archive is **not read at all** — rather than a detector.
+
+### The rebuilt dataset
+
+Two sources only (`raw_videos`, `2026`), **balanced by (venue, date)** so 25
+robosub clips cannot make the descriptor an August-2025 specialist, dry deck
+shots excluded, and **Mirpur held out as a venue-and-date**, not a random
+split — a random split would leak the same pool, day and water into both sides.
+
+Verified groups: Mirpur 2025-06-29 · final_run 2025-07-31/08-02/08-03/08-06 ·
+robosub 2025-08-12/13/14/16 · season 2026-07-09/07-12/07-13/09-22.
+**R/B spans 0.382 … 0.977** across them.
 
 ### For the open-source community
 
