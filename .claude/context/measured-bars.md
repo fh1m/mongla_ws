@@ -3567,6 +3567,33 @@ does not carry to this water.
 changes is what we are entitled to claim: previously "XFeat beats ORB", now
 "XFeat beats the best classical underwater front-end on our own turbid frames".
 
+#### ⭐ And the XFeat column, regenerated rather than quoted
+
+The comparison above rests on a **recorded** XFeat column. On 2026-09-24 that column was
+re-measured on the same frames, through the shipped `anchor/xfeat_onnx.py` at the shipping
+320×240, `top_k` 1024, so what is scored is what the vehicle runs:
+
+| clip | +1 s | +3 s | +5 s | **+8 s** | today | recorded |
+|---|---|---|---|---|---|---|
+| Mirpur torpedo | 189 | 65 | 134 | **24** | 4/4 | 4/4 |
+| Mirpur torpedo_1 | 69 | 43 | 51 | **12** | **3/4** | ⚠ 4/4 |
+| Mirpur gate | 195 | 36 | 237 | **31** | 4/4 | 4/4 |
+| octagon | 182 | 115 | 73 | **18** | 4/4 | ⚠ 3/4 |
+| torpedo (clear) | 355 | 199 | 121 | **88** | 4/4 | 4/4 |
+
+⚠ **`torpedo_1` is 3/4, not the recorded 4/4** — its +8 s frame carries **12 inliers against the
+15-inlier bar**. The margin on the murkiest clip is thinner than the stored table implies, and
+that is now the number of record. `octagon` moves the other way, 3/4 → 4/4.
+
+⭐ **The stronger finding is the shape of the rows, not the pass counts.** Every clip's minimum
+is its **+8 s** column, and the worst case falls **189 → 24** on `torpedo`. A reference does not
+fail suddenly; it decays with elapsed time, and at 8 s it is close to worthless.
+
+⛔ **That is a defect in `lock_node.py:633`, and this is its measurement.** The anchor reference
+is snapped once — the guard is literally `not self._anchor.has_reference` — and is never
+refreshed while a reference exists. The decay above is what that costs. It is not an XFeat
+limitation: the same frames, matched against a *fresh* reference, are the +1 s column.
+
 #### ⛔ Two rows that did NOT fingerprint, and are therefore not comparable
 
 The `octagon` and clear-control `torpedo` rows read 4096 and 2152 ORB reference
