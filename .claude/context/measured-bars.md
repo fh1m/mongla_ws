@@ -5871,3 +5871,59 @@ empty descriptor set. Every refusal is counted and named.
 track birth and death — a change to the tracker's hot path, whose rate must be
 measured on the vehicle before it ships. Registered in the capability register
 with that consumer named.
+
+---
+
+## 55. ⭐⭐ NEVER LOSING THE TARGET: THE CASCADE, AND THE ONE STAGE NOBODY ELSE HAS
+
+**2026-09-25.** Three SOTA sources, read rather than cited, converge on one
+architecture — and one of its stages is something this vehicle can do and a
+surveillance tracker cannot.
+
+| source | claim |
+|---|---|
+| Enhanced CenterTrack, 2026 | a **three-stage cascade** (Mahalanobis → IoU → centroid), each stage seeing only what the last could not match: **IDF1 75.5 → 82.5** |
+| BoT-SORT | motion **+ appearance + explicit camera-motion compensation** "to maintain stable object identities" |
+| McByte++, 2026 | **+6.1 IDF1** from training-free online re-identification |
+| the standard objection | a dedicated Re-ID network costs **15–25 ms/frame** |
+
+### ⭐ The cascade is what makes appearance affordable
+
+Re-ID on every track is unaffordable on an embedded budget. Re-ID on the
+**handful that motion could not explain** is nearly free — and the cascade is
+what produces that handful. `MAX_APPEARANCE_CALLS = 4` caps it even when the
+detector fires on a cloud of silt.
+
+Combined with §54: XFeat is **already loaded** at 701 FPS on the Hailo, so the
+stage everyone else pays 15–25 ms for costs us almost nothing.
+
+### ⭐⭐ Stage 2 is not in any of those papers
+
+BoT-SORT estimates camera motion by **fitting an affine transform between
+images** — a surveillance camera has no other way to know it moved. This
+vehicle does:
+
+- the downward camera is a **verified velocity sensor** — 1.09 cm over 30 cm
+- the board reports attitude at 50 Hz with **gyro bias already removed**
+  (residual 0.1 °/hour, §37)
+
+So ego-motion is **measured, not inferred from the very pixels whose motion is
+in question** — two cues that do not share a failure mode. A target that
+"moved" because the *vehicle* moved is explained before appearance is ever
+consulted.
+
+⛔ **And it is skipped, never assumed.** With no altitude there is no
+metres-per-pixel, so `ego_pixel_shift` returns **NaN** and the stage does not
+run. A vehicle that cannot measure its own motion must not claim it did not
+move — the same rule as every other absent measurement here.
+
+### ⛔ Nothing is fabricated
+
+A detection no stage explains becomes a **new track**, honestly. The ladder
+already refuses to invent a position; the cascade does not change that, it
+reduces how often the question has to be asked. Every outcome names the cue
+that decided it.
+
+⚠ **Not wired.** `tracker_node` calls its tracker library directly; inserting a
+cascade changes the association hot path, and its rate must be measured on the
+vehicle before it ships. Registered with that consumer named.
