@@ -3564,3 +3564,23 @@ false positive on open water, because it contains no open water.
 
 **Scope not yet established:** measured on one model and three clips from one
 venue. `bin_fire_blood` and `sauvc_sim` have not been checked and must be.
+
+**⚠ Addendum, same day — a label error of mine, recorded because it is the
+failure mode this defect is about.** Checking the other two classes of the same
+model, I marked `torpedo_1.mkv` a negative for `rescue` and the tool reported
+`rescue` on 12.0 % of frames at conf 0.45, which reads as a second
+hallucinating class. Rendering the boxes showed them tight around a REAL prop:
+a panel with two circular cut-outs, plainly in the clip. The detections were
+correct and the label was wrong.
+
+This does not weaken the `gate` result — those boxes were rendered and are
+empty water — but it is the same mistake in the other direction, and it is
+exactly what `negative_clip_check.py` warns it cannot catch: *"it cannot check
+your labels."* **A negative clip is one somebody LOOKED at.** Before the bar is
+re-derived, every clip used as a negative must be eyeballed per class, not
+assumed from its filename.
+
+**Still open, and now narrower:** the `gate` class fires confidently on open
+water (90.8 % at 0.15, half-frame boxes at 0.44-0.56). `rescue` and `repair`
+are UNMEASURED, because no clip has yet been visually confirmed as a true
+negative for them.
