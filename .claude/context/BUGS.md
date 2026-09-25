@@ -4103,3 +4103,20 @@ path's `/255.0` must NOT be repeated, or the image is quantised twice.
 and the remaining cost is host-side: `_post` runs NMS and bilinear descriptor
 sampling in numpy on the Pi. That is the next thing to measure, and it is a
 different problem from the transport.
+
+**✅ B-62 CLOSED (2026-09-25).** Cross-backend equivalence checked before
+enabling: **875 / 888 / 878 of 1024 keypoints match** between the ONNX and HEF
+descriptors on three frames of `gate.mkv` (~86 %). A checkpoint enrolled
+through one backend is matchable through the other, so the bank does not
+partition by transport — and against the 40-inlier identity bar, 875 is
+enormous headroom.
+
+`anchor_xfeat_hef` now defaults **true**. The ONNX path remains the automatic
+fallback for a machine with no accelerator.
+
+⚠ **What this unblocks:** `tracking/reid.py` was deferred on the premise that
+"XFeat is ALREADY loaded at 701 FPS, so identity is nearly free". The premise
+was false (32.9 ms on the CPU) and is now *closer* to true — 10.89 ms alone,
+19.85 ms contended. That is cheap enough to ask for a descriptor at track
+birth and death, which is what the re-ID rung needs. It is NOT free, so the
+rate must still be measured on the vehicle before that rung ships.
