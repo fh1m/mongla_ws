@@ -120,6 +120,12 @@ class LockNode(Node):
         # Set false to force the CPU path -- on a dev box with no chip the
         # resolver falls back on its own, so this is for A/B measurement.
         self.declare_parameter('anchor_xfeat_hef', True)
+        # ⭐ Semi-dense matching: 2.1-2.6x the inliers for +37 % match cost
+        # (measured, four frame pairs). DEFAULT OFF until frame-to-reference
+        # behaviour and inlier CORRECTNESS are measured -- see
+        # never-lose-the-target.md. Hailo backend only; the ONNX path keeps
+        # its sparse maths.
+        self.declare_parameter('anchor_semi_dense', False)
         # A bank built BEFORE the run, from practice footage or stills:
         # `tools/build_practice_bank.py`. Measured 2026-09-24 -- references
         # from one run clear the trust bar on 92-100 % of frames of a DIFFERENT
@@ -572,7 +578,10 @@ class LockNode(Node):
             if p.endswith('.hef'):
                 try:
                     from mongla_vision.anchor.xfeat_hailo import XFeatHailo
-                    backend = XFeatHailo(p, top_k=1024)
+                    backend = XFeatHailo(
+                        p, top_k=1024,
+                        semi_dense=bool(self.get_parameter(
+                            'anchor_semi_dense').value))
                     self.get_logger().info(
                         f'[LOCK ] anchor on the Hailo-8: {os.path.basename(p)}')
                 except Exception as exc:                         # noqa: BLE001
