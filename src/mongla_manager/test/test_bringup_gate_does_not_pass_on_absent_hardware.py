@@ -251,6 +251,35 @@ def test_the_floor_guard_bites_only_because_of_the_floor(
     assert bc._check_models_hailo(dirs)[0] == bc.PASS
 
 
+def test_a_stock_model_above_the_bar_warns_rather_than_fails(
+        tmp_path, monkeypatch):
+    """⚠ `yolov11n` is Hailo's own Model Zoo build -- "ROBOSUB-tested
+    pretrained, sim/bench" per bringup.launch.py. Its 0.200 floor is correct
+    for what it is and it is not flown, so failing a dive over it would train
+    the operator to ignore this gate, which is worse than not having it."""
+    floors = {'yolov11n': 0.20}
+    monkeypatch.setattr(bc, '_baked_floor', lambda p: floors[Path(p).stem])
+    monkeypatch.setattr(bc, '_CONF_DEFAULT', 0.15)
+    status, detail = bc._check_models_hailo(_hefs(tmp_path, floors))
+    assert status == bc.WARN, 'a stock model must not block a dive'
+    assert 'yolov11n' in detail
+
+
+def test_one_of_ours_above_the_bar_still_fails_beside_a_stock_one(
+        tmp_path, monkeypatch):
+    """Injection-verify the exemption: it must exempt ONLY the stock name. A
+    model of ours at 0.200 is still a FAIL even when a stock model is present
+    and equally high -- otherwise the exemption would swallow the real case."""
+    floors = {'yolov11n': 0.20, 'gate_rescue_repair': 0.20}
+    monkeypatch.setattr(bc, '_baked_floor', lambda p: floors[Path(p).stem])
+    monkeypatch.setattr(bc, '_CONF_DEFAULT', 0.15)
+    status, detail = bc._check_models_hailo(_hefs(tmp_path, floors))
+    assert status == bc.FAIL
+    assert 'gate_rescue_repair' in detail
+    assert 'yolov11n' not in detail, \
+        'the stock model must not be named as a fault'
+
+
 def test_an_unreadable_floor_does_not_fail_the_dive(tmp_path, monkeypatch):
     """`hailortcli` may be absent. A pre-dive check that refused to pass over
     a missing diagnostic binary would get switched off, which is the real
