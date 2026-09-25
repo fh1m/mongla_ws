@@ -67,7 +67,7 @@ class XFeatHailo:
     w, h = 320, 240
 
     def __init__(self, hef_path: str, *, top_k: int = 1024,
-                 det_thresh: float = 0.05):
+                 det_thresh: float = 0.05, semi_dense: bool = False):
         # ⛔ THE PROCESS'S ONE VDevice, AND THE SAME ARBITRATION THE DETECTORS
         # USE (B-62, measured twice on the vehicle).
         #
@@ -92,6 +92,20 @@ class XFeatHailo:
         self._hd = _hd
         self._lock = _hd._DEVICE_LOCK
         self.top_k, self.det_thresh = int(top_k), float(det_thresh)
+        # ⭐ SEMI-DENSE: every grid cell as a keypoint instead of NMS-selecting
+        # 1024 from the same map. Measured on the vehicle, four frame pairs:
+        # 589/210/218/202 inliers against sparse 229/80/105/92 -- 2.1-2.6x,
+        # for +37 % match cost (45.85 ms vs 33.50). The number that matters:
+        # the anchor's trust bar is 100 inliers, and on the weakest pair
+        # sparse scores 80 and FAILS it while dense scores 210.
+        #
+        # ⚠ DEFAULT OFF until two things are measured: frame-to-REFERENCE
+        # behaviour (this tested consecutive frames; the anchor matches a
+        # checkpoint stored seconds ago from another viewpoint) and whether
+        # the extra inliers are CORRECT rather than merely numerous. MAGSAC
+        # agreeing on a homography is good evidence, not proof, and a wrong
+        # loop closure moves the vehicle.
+        self.semi_dense = bool(semi_dense)
         self.path = hef_path
         self._target = _hd._shared_device()
         self._model = self._target.create_infer_model(hef_path)
@@ -138,6 +152,8 @@ class XFeatHailo:
                 f'channels, got {[v[0].shape for v in out.values()]}. This HEF '
                 f'is not an XFeat build.')
         self.last_reliability = rel
+        if self.semi_dense:
+            return self._post_dense(feats)
         return self._post(feats, kpts)
 
     def _acquire_locked(self):
@@ -198,6 +214,24 @@ class XFeatHailo:
                 pass
         if self._hd._ACTIVE is self:
             self._hd._ACTIVE = None
+
+    def _post_dense(self, feats):
+        """Every descriptor-grid cell as a keypoint -- no NMS, no top_k.
+
+        The map is already computed; sparse throws most of it away. Cell
+        centres map back to full resolution at stride 8, matching the sampling
+        `_post` does for NMS keypoints, so the two produce coordinates in the
+        same frame.
+        """
+        f = feats[0]
+        c, fh, fw = f.shape
+        d = f.reshape(c, -1).T.astype(np.float32)
+        n = np.linalg.norm(d, axis=1, keepdims=True)
+        n[n == 0] = 1.0
+        ys, xs = np.mgrid[0:fh, 0:fw]
+        k = np.stack([(xs.ravel() + 0.5) * 8.0, (ys.ravel() + 0.5) * 8.0],
+                     axis=1).astype(np.float32)
+        return k, (d / n).astype(np.float32)
 
     def _post(self, feats, kpt_logits):
         """Identical arithmetic to the ONNX path, reusing its helpers."""
