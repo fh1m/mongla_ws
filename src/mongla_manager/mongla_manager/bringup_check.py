@@ -38,6 +38,8 @@ Usage:
 from __future__ import annotations
 
 import os
+import pathlib
+import re
 import shutil
 import socket
 import subprocess
@@ -639,6 +641,50 @@ def _check_models() -> tuple[str, str]:
                   'ros2 run mongla_vision export_engine --all (ON THE JETSON)')
 
 
+def _baked_floor(hef_path: str) -> 'float | None':
+    """The NMS score threshold compiled into a HEF, or None if unreadable.
+
+    Shells out to `hailortcli parse-hef` because there is no Python API for
+    it: `HEF` exposes stream infos and nothing about the post-process. Best
+    effort -- a pre-dive check that crashed because a diagnostic binary was
+    missing would be worse than one that reports what it could read.
+    """
+    try:
+        out = subprocess.run(['hailortcli', 'parse-hef', hef_path],
+                             capture_output=True, text=True, timeout=10).stdout
+    except Exception:                                            # noqa: BLE001
+        return None
+    m = re.search(r'Score threshold:\s*([0-9.]+)', out)
+    return float(m.group(1)) if m else None
+
+
+def _launch_conf_default() -> float:
+    """Read the shipped `conf` default out of the launch file.
+
+    ⛔ NOT a literal here. One truth, two copies is the bug: a hardcoded 0.15
+    would keep passing after someone changed the launch default, which is
+    exactly the drift this check exists to catch.
+    """
+    try:
+        import mongla_manager
+        p = (pathlib.Path(mongla_manager.__file__).resolve().parents[1]
+             / 'launch' / 'bringup.launch.py')
+        if not p.exists():                       # installed share/ layout
+            from ament_index_python.packages import get_package_share_directory
+            p = (pathlib.Path(get_package_share_directory('mongla_manager'))
+                 / 'launch' / 'bringup.launch.py')
+        m = re.search(r"DeclareLaunchArgument\(\s*'conf'\s*,\s*"
+                      r"default_value='([0-9.]+)'", p.read_text())
+        if m:
+            return float(m.group(1))
+    except Exception:                                            # noqa: BLE001
+        pass
+    return 0.15
+
+
+_CONF_DEFAULT = _launch_conf_default()
+
+
 def _check_models_hailo(dirs: list[str]) -> tuple[str, str]:
     """On Hailo the accelerated artifact is a `.hef`, compiled offline.
 
@@ -667,7 +713,31 @@ def _check_models_hailo(dirs: list[str]) -> tuple[str, str]:
                       f'sidecar ({", ".join(orphans)}) -- the class allowlist '
                       f'is empty, so the detector returns [] every frame while '
                       f'looking healthy')
-    return PASS, f'{len(hefs)} Hailo model(s), each with its .yaml sidecar'
+    # ⛔ THE BAKED NMS FLOOR vs THE CONFIGURED conf. A HEF compiles its NMS
+    # score threshold on-chip; nothing at runtime can go below it. The Hailo
+    # backend already WARNS about this at construction -- and that warning
+    # fired on every boot for `gate_rescue_repair`, baked at 0.200 against a
+    # launch default of 0.15, and nobody read it (B-58). A warning that only a
+    # human scrolling a log can catch is not a gate, so it is GRADED here.
+    floors = {}
+    for d in dirs:
+        for p in glob(os.path.join(d, '*.hef')):
+            th = _baked_floor(p)
+            if th is not None:
+                floors[os.path.splitext(os.path.basename(p))[0]] = th
+    high = {s: t for s, t in floors.items() if t > _CONF_DEFAULT + 1e-6}
+    if high:
+        worst = ', '.join(f'{s} {t:.3f}' for s, t in sorted(high.items()))
+        return FAIL, (
+            f'{len(high)}/{len(floors)} .hef bake an NMS floor ABOVE the '
+            f'configured conf {_CONF_DEFAULT:.2f} ({worst}) -- everything '
+            f'below the bake was discarded on-chip and no runtime value '
+            f'brings it back, so conf is a no-op on those models. Recompile: '
+            f'tools/hailo_compile.sh <model> --nms-score-th 0.05')
+    seen = (f', floors {min(floors.values()):.3f}-{max(floors.values()):.3f}'
+            if floors else '')
+    return PASS, (f'{len(hefs)} Hailo model(s), each with its .yaml '
+                  f'sidecar{seen}')
 
 
 # --------------------------------------------------------------------------- #

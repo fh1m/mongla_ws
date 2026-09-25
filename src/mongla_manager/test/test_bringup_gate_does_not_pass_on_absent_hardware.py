@@ -24,6 +24,7 @@ pass, on any correctly-configured vehicle.
 """
 import sys
 from pathlib import Path
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -104,6 +105,84 @@ def test_hef_with_sidecars_passes(tmp_path):
         (tmp_path / f'{stem}.yaml').write_text('names: []')
 
     assert bc._check_models_hailo([str(tmp_path)])[0] == bc.PASS
+
+
+def _hefs(tmp_path, floors):
+    """A model dir where every .hef has its sidecar, so the only thing under
+    test is the baked floor."""
+    for stem in floors:
+        (tmp_path / f'{stem}.hef').write_bytes(b'x')
+        (tmp_path / f'{stem}.yaml').write_text('names: [gate]')
+    return [str(tmp_path)]
+
+
+def test_a_baked_floor_above_the_configured_conf_fails_the_gate(
+        tmp_path, monkeypatch):
+    """⛔ B-58. A HEF compiles its NMS score threshold on-chip and nothing at
+    runtime can go below it. `gate_rescue_repair` shipped baked at 0.200
+    against a launch default of conf=0.15, so the configured threshold was a
+    no-op and the faintest detections -- measured underwater p10 0.167 -- were
+    discarded in silicon.
+
+    ⚠ The backend ALREADY warned: `HailoDetector._warn_conf` fires at
+    construction with a logger correctly wired from `detector_node`. It
+    printed on every boot for weeks and nobody read it. A warning only a human
+    scrolling a log can catch is not a gate, which is why the same fact now
+    decides a pre-dive verdict.
+    """
+    floors = {'gate_rescue_repair': 0.20}
+    monkeypatch.setattr(bc, '_baked_floor',
+                        lambda p: floors[Path(p).stem])
+    monkeypatch.setattr(bc, '_CONF_DEFAULT', 0.15)
+    status, detail = bc._check_models_hailo(_hefs(tmp_path, floors))
+    assert status == bc.FAIL
+    assert '0.200' in detail and 'no-op' in detail
+    assert 'hailo_compile.sh' in detail, 'a verdict must say how to fix it'
+
+
+def test_one_bad_model_among_good_ones_still_fails(tmp_path, monkeypatch):
+    """⭐ THE ACTUAL SHAPE OF B-58: two models were correct at 0.050 and one
+    was not, which is exactly why a spot check of the others confirmed the
+    intent and missed the outlier."""
+    floors = {'sauvc_sim': 0.05, 'bin_fire_blood': 0.05,
+              'gate_rescue_repair': 0.20}
+    monkeypatch.setattr(bc, '_baked_floor',
+                        lambda p: floors[Path(p).stem])
+    monkeypatch.setattr(bc, '_CONF_DEFAULT', 0.15)
+    status, detail = bc._check_models_hailo(_hefs(tmp_path, floors))
+    assert status == bc.FAIL
+    assert 'gate_rescue_repair' in detail
+    assert 'sauvc_sim' not in detail, 'name the offender, not the innocent'
+
+
+def test_the_floor_guard_bites_only_because_of_the_floor(
+        tmp_path, monkeypatch):
+    """Injection-verify. Same models, same sidecars: dropping the floor to a
+    compliant value must flip the verdict, or the FAIL came from something
+    else and these tests prove nothing."""
+    monkeypatch.setattr(bc, '_CONF_DEFAULT', 0.15)
+    dirs = _hefs(tmp_path, {'gate_rescue_repair': 0.0})
+    monkeypatch.setattr(bc, '_baked_floor', lambda p: 0.20)
+    assert bc._check_models_hailo(dirs)[0] == bc.FAIL
+    monkeypatch.setattr(bc, '_baked_floor', lambda p: 0.05)
+    assert bc._check_models_hailo(dirs)[0] == bc.PASS
+
+
+def test_an_unreadable_floor_does_not_fail_the_dive(tmp_path, monkeypatch):
+    """`hailortcli` may be absent. A pre-dive check that refused to pass over
+    a missing diagnostic binary would get switched off, which is the real
+    cost."""
+    monkeypatch.setattr(bc, '_baked_floor', lambda p: None)
+    monkeypatch.setattr(bc, '_CONF_DEFAULT', 0.15)
+    assert bc._check_models_hailo(
+        _hefs(tmp_path, {'sauvc_sim': 0}))[0] == bc.PASS
+
+
+def test_the_conf_default_is_read_from_the_launch_file():
+    """⛔ One truth, two copies is the bug. A literal here would keep passing
+    after someone changed the launch default -- the exact drift this check
+    exists to catch."""
+    assert bc._launch_conf_default() == pytest.approx(0.15)
 
 
 def test_pt_weights_alone_are_a_failure_on_a_hailo_vehicle(tmp_path):
