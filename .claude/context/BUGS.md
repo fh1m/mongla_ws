@@ -4070,3 +4070,36 @@ the detector runs.** `lock_node` degrades to ONNX on any load error, so a
 vehicle that starts the detector first still works; the hazard is only when
 the anchor wins the race. The `.hef` preference in the resolver should be
 reverted or gated until the port lands.
+
+**⭐ B-62 THIRD ATTEMPT — the InferModel port works, and the two coexist.**
+
+| path | per call | rate |
+|---|---|---|
+| ONNX on the Pi CPU — what ships today | 32.9 ms (p95 33.4) | 30.4 FPS |
+| legacy `activate()` + `InferVStreams` | 14.50 ms (p95 16.91) | 68.9 FPS |
+| **`InferModel`, alone** | **10.89 ms** (p95 12.95) | **91.8 FPS** |
+| **`InferModel`, detector running** | **19.85 ms** (p95 29.12) | **50.4 FPS** |
+
+⭐ **The contention benchmark RAN** — it had failed twice before, first with
+`HAILO_OUT_OF_PHYSICAL_DEVICES(74)` and then with "Cant activate network
+because a network is already activated". Joining `detection/hailo.py`'s
+`_ACTIVE` registry (whoever wants the chip releases the incumbent first) is
+what fixed it; a second lock never could, because the problem was two
+incompatible HailoRT APIs rather than a scheduling race.
+
+Even **fully contended it is 1.7x the CPU path**, and those milliseconds move
+off the cores the camera pump and the rclpy executor need.
+
+⚠ **One concrete trap found on the way, worth keeping:** binding a float32
+input failed with
+
+    Input buffer size 307200 is different than expected 76800
+
+exactly 4x, which is the whole diagnosis — the HEF's input is quantised
+**uint8** (320x240x1 = 76 800) and HailoRT scales on the way in. The ONNX
+path's `/255.0` must NOT be repeated, or the image is quantised twice.
+
+**Still short of 1.43 ms.** 10.89 ms standalone against §28's figure is ~7.6x,
+and the remaining cost is host-side: `_post` runs NMS and bilinear descriptor
+sampling in numpy on the Pi. That is the next thing to measure, and it is a
+different problem from the transport.
