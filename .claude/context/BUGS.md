@@ -171,6 +171,79 @@ already does.
 
 ## 2. HIGH
 
+### B54 — the `/mongla/move` busy gate is a test THEN a set, so two motion loops can both run `REPRODUCED 2026-09-25` ✅ FIXED 2026-09-25
+**`auv_manager_node.py:1273` (was 1241) · `dispatch_policy.py`**
+
+`command_active` was a plain bool, READ in `goal_callback` (the accept/reject
+decision) and WRITTEN in `execute_callback` (the start of the motion loop). Those
+are two callbacks on a `ReentrantCallbackGroup` (line 905) under a
+`MultiThreadedExecutor` (line 2476) and nothing held a lock across the gap — so a
+second goal arriving inside that window saw `command_active` still False and was
+**ACCEPTED**. Two motion loops then commanded the board at once, sharing one abort
+flag, and whichever finished first cleared the gate while the other was still
+driving thrust.
+
+```
+dispatch gap  20.0 ms -> BOTH verbs ran concurrently in 40/40 trials
+dispatch gap   5.0 ms -> BOTH verbs ran concurrently in 40/40 trials
+dispatch gap   1.0 ms -> BOTH verbs ran concurrently in 40/40 trials
+```
+
+REPRODUCED against the real `goal_acceptance`, driven through the same two-callback
+split. ⚠ Not through a live `ActionServer` — rclpy is not a test dependency of the
+package — but rclpy only sets the WIDTH of the window, not whether it exists. The
+mission DSL sequences legs back-to-back deliberately, which is the arrival pattern
+that hits it.
+
+✅ `_CommandGate` applies `goal_acceptance` — unchanged, still the pure rule — under
+its own lock, so test-and-set is one operation. `command_active` is now a read-only
+property; **there is no setter left to race.**
+
+⭐ **Found with it, same fix:** `cancel_callback` set `command_active = False`
+outright, freeing the gate for EVERY verb rather than only the safety verb its
+comment was written for, so an ordinary `move_*` could start while the cancelled leg
+was still commanding thrust. A cancel now marks the gate DRAINING — busy for
+everything except a safety verb.
+
+⚠ **The cost of claiming at the accept decision**, stated because it is a real new
+failure mode: an accepted goal that never reaches `execute_callback` would leak the
+gate and then reject every later verb in silence. The claim carries a monotonic
+stamp and `reap_stale()` clears an **unconfirmed** claim from the telemetry tick,
+loudly. A confirmed long-running leg is never reaped — `move_forward 120` is not a
+leak.
+
+`test_command_gate.py`, 8 tests, injection-verified three ways (restore the
+two-step claim; free the gate on cancel; reap a confirmed command).
+
+
+### B55 — `pose_fuse.yaw_at` raises when the hull's yaw is absent `REPRODUCED 2026-09-25` ✅ FIXED 2026-09-25
+**`pose_fuse_node.py:71`**
+
+`sorted(self._yaw_hist)` sorted whole `(stamp, yaw_or_None)` tuples, so on a stamp
+TIE it fell through to comparing the second element — and that element is `None`
+whenever `/mongla/state` carries `yaw_deg = NaN`, this stack's own documented absent
+value (`_on_state` maps NaN → None). `None < float` raises **inside a subscription
+callback**: the detection is dropped and the executor thread takes a `TypeError`.
+
+```
+hist = [(100.0, 12.5), (100.5, None), (100.5, 30.0)]
+yaw_at(101.0) -> TypeError: '<' not supported between 'float' and 'NoneType'
+```
+
+Neither precondition is exotic. `/mongla/state` is published by **TWO** timers —
+`telemetry_tick` at 2 Hz and `_fast_state_tick` at 20 Hz — in two different callback
+groups, so equal capture stamps are ordinary. And an absent yaw is the documented
+value before the board's AHRS goes healthy, i.e. exactly while a mission is
+starting.
+
+✅ `key=lambda h: h[0]`. The sort has to stay — two publishers give no ordering
+guarantee, and `yaw_at`'s "last stamp at or before" lookup depends on order — so the
+fix is to make the comparison total rather than to remove it.
+
+`test_yaw_at_survives_absent_yaw.py`, 5 tests, injection-verified (drop the `key=`
+and two of them fail with the TypeError).
+
+
 ### B52 — a floating sense pin is reported as the main battery, and it owns `/mongla/state` `MEASURED ON THE VEHICLE` ✅ FIXED 2026-09-22
 **`mongla_control/fc/srot_fc.py` · `note_battery()` / `get_batteries()`**
 
@@ -425,6 +498,32 @@ power."*
 ---
 
 ## 3. MEDIUM
+
+### B56 — "`/mongla/state` publishes ON CHANGE" is not true, in seven places `2026-09-25` ✅ PARTLY FIXED 2026-09-25
+**`auv_manager_node.py:6` · `srot_fc.py:2055` · `CLAUDE.md:193` · `commands.md:571` · two test docstrings · `pose_fuse_node.py:49`**
+
+The on-change logic is `_maybe_print_state` (with `YAW_/DEPTH_/BAT_CHANGE_THRESH`),
+and it gates the **CONSOLE PRINT**. `_publish_state` is called unconditionally, from
+`telemetry_tick` AND `_fast_state_tick`, on a depth-10 VOLATILE publisher — so the
+topic is periodic at ~22 Hz, not on change.
+
+It is a consumer contract, not only prose: told "on change", a subscriber may
+reasonably treat each message as a transition, and every message is periodic. The
+measured *"2939 of 2939 state-change publications were this pin"* in
+`srot_fc.plausible_battery` counted **log lines** — that guard is still right, its
+evidence was misattributed.
+
+✅ Corrected where the claim is load-bearing (the node docstring and
+`plausible_battery`). ⚠ **OPEN:** the four remaining prose copies above, and a
+`test_doc_drift` case so it cannot come back — that test exists for exactly this
+class of defect.
+
+⚠ **Also noted, not a defect today:** two timers in two different
+`MutuallyExclusiveCallbackGroup`s publish the same topic, so there is no ordering
+guarantee between them and they build the message from different sources
+(`_fast_state_tick` reuses cached armed/mode/battery). `pose_fuse` survives it
+because it sorts; nothing else was checked for an ordering assumption.
+
 
 ### B09 — Kalman `Q` is not rescaled with `dt` while `F` is  ✅ FIXED 2026-09-08
 **`mongla_vision/tracking/kalman.py`**
