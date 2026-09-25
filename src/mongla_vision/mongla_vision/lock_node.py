@@ -300,6 +300,13 @@ class LockNode(Node):
         self._depth_m = float('nan')
         self._armed = False
         self._state_t = 0.0
+        # ⭐ OBJECT PERMANENCE, downward camera only -- see `_remember_world`
+        # for why the forward camera cannot have it without a measured range.
+        try:
+            from .tracking.visibility import WorldTarget
+            self._world = WorldTarget()
+        except Exception:                                        # noqa: BLE001
+            self._world = None
         self._vis_state = None
         self._vis_last = None
         self._det_box = None
@@ -1392,8 +1399,65 @@ class LockNode(Node):
                                   score=float(st.confidence),
                                   xyxy=(x1, y1, x2, y2)))
             self._note_visibility(x1, y1, x2, y2)
+            self._remember_world(x1, y1, x2, y2)
         if header is not None:
             self._pub.publish(detections_to_array(dets, header))
+
+    def _remember_world(self, x1, y1, x2, y2) -> None:
+        """Hold the target in WORLD coordinates, so leaving frame is not
+        forgetting (`visibility.WorldTarget`).
+
+        ⛔ DOWNWARD CAMERA ONLY, AND THAT IS THE WHOLE POINT. `WorldTarget`
+        needs an absolute RANGE, and it refuses a guessed one by design: "a
+        remembered position built from a guessed range would send the vehicle
+        confidently to the wrong place." For a FORWARD target we genuinely do
+        not have one -- the anchor gives a relative patch scale, metric only
+        if the prop's true width is known -- so this stays disabled there
+        rather than inventing a number.
+
+        ⭐ For the DOWNWARD camera the range is measured: `_altitude_m()` is
+        the height above the floor from `flow_node`'s tile grating, and a
+        target on the floor is exactly that far away, corrected for the
+        off-axis angle. That is why this rung can be switched on for one
+        camera and not the other -- not a limitation of the memory, a fact
+        about which sensor measures what.
+
+        ⚠ Every input is gated on being FRESH and FINITE. Yaw, odometry and
+        altitude each go NaN when their source cannot stand behind them, and
+        the memory refuses rather than storing a confident wrong place.
+        """
+        if self._cam != 'downward' or self._world is None:
+            return
+        K = self._K_rect if getattr(self, '_K_rect', None) is not None \
+            else getattr(self, '_K', None)
+        gray = self._gray
+        if K is None or gray is None or self._odom_xy is None:
+            return
+        yaw = self._yaw_fresh()
+        alt = self._altitude_m()
+        if not (math.isfinite(yaw) and math.isfinite(alt) and alt > 0.0):
+            return
+        try:
+            from .tracking.visibility import bearing_from_pixel
+            h, w = gray.shape[:2]
+            cx, cy = 0.5 * (x1 + x2), 0.5 * (y1 + y2)
+            bx, by, bz = bearing_from_pixel(cx, cy, float(w), float(h),
+                                            float(K[0][0]), float(K[1][1]))
+            if not math.isfinite(bz) or bz <= 1e-6:
+                return
+            # Looking DOWN: the optical axis is the vertical, so the slant
+            # range to a floor target is the altitude divided by the cosine
+            # of the off-axis angle -- which `bearing_from_pixel` already
+            # returns as the z component of a unit vector.
+            rng = alt / bz
+            # The downward camera's x/y map to the hull's lateral/forward
+            # axes, so the in-plane bearing is measured from the SAME axes
+            # yaw is measured from. `downward-camera.md` records the remap.
+            brg = math.degrees(math.atan2(bx, by))
+            self._world.observe(self._odom_xy, yaw, brg, rng,
+                                time.monotonic())
+        except Exception:                                        # noqa: BLE001
+            return
 
     # -- the field-of-view guard, ADVISORY ---------------------------------- #
     def _note_visibility(self, x1, y1, x2, y2) -> None:
