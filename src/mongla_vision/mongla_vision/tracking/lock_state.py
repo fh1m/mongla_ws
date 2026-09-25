@@ -34,6 +34,7 @@ implementation.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Tuple
@@ -63,6 +64,19 @@ ZERO_AUTHORITY_S = 2.50
 MIN_RUNG_CONF = 0.10
 
 
+# ⛔ HOW FAR TWO INDEPENDENT ESTIMATES MAY SEPARATE BEFORE THE LADDER STOPS
+# TRUSTING EITHER. 64 px on a 640-wide frame is a tenth of the image: wide
+# enough that ordinary parallax between a frame-to-frame and a
+# frame-to-reference fit does not trip it, tight enough that a follower which
+# has slid onto the background beside a prop does.
+#
+# ⚠ NOT MEASURED ON WATER YET. It is a geometric argument, not a number off a
+# clip, and it is deliberately generous -- the cost of tripping late is a
+# slower demotion, while the cost of tripping early is a hull that hesitates
+# whenever a fish crosses the frame.
+DISAGREE_PX = 64.0
+
+
 @dataclass
 class LockState:
     rung: Rung = Rung.LOST
@@ -70,6 +84,9 @@ class LockState:
     rung_conf: float = 0.0        # how much THIS rung trusts itself
     authority: float = 0.0        # how much the loop should act, 0..1
     age_s: float = float('inf')   # since the last real DETECTION
+    # ⭐ HOW FAR APART THE TWO INDEPENDENT ESTIMATES ARE, in px of centre
+    # separation, or NaN when only one rung answered. See `arbitrate`.
+    disagreement_px: float = float('nan')
 
     @property
     def have_target(self) -> bool:
@@ -111,6 +128,7 @@ def arbitrate(*, now: float, last_detection_t: float,
               detection: Optional[Tuple] = None, detection_conf: float = 0.0,
               follow: Optional[Tuple] = None, follow_conf: float = 0.0,
               anchor: Optional[Tuple] = None, anchor_conf: float = 0.0,
+              disagree_px: float = DISAGREE_PX,
               full_s: float = FULL_AUTHORITY_S,
               zero_s: float = ZERO_AUTHORITY_S,
               min_rung_conf: float = MIN_RUNG_CONF) -> LockState:
@@ -160,10 +178,51 @@ def arbitrate(*, now: float, last_detection_t: float,
         # point: recovery races the decay, it never delays it.
         return LockState(rung=Rung.LOST, age_s=age)
 
+    # ⭐⭐⭐ THE CROSS-CHECK. Until this, `follow` won outright whenever its
+    # own confidence cleared the bar and the anchor box was never looked at --
+    # two independent estimates of one target, in one function, never
+    # compared.
+    #
+    # ⛔ WHY THAT MATTERS, AND WHY THE FOLLOWER CANNOT CATCH IT ALONE. Its two
+    # quality signals -- forward-backward error and point survival -- are both
+    # SELF-REFERENTIAL: they measure whether LK tracked ITS OWN POINTS
+    # consistently, not whether those points are on the target. A follower
+    # that has smoothly latched onto a passing fish, or slid onto the textured
+    # background beside the prop, has PERFECT fb error and PERFECT survival.
+    # The tracking literature names exactly this: similarity-based checks
+    # "struggle to detect slow, cumulative drift, or cases where the tracker
+    # settles on a visually similar but incorrect background patch".
+    #
+    # The anchor is the independent witness. It is fitted frame-to-REFERENCE
+    # against a stored patch, so its errors are uncorrelated with LK's -- it
+    # cannot drift with the follower, because it never integrates.
+    #
+    # ⚠ DISAGREEMENT DEMOTES, IT DOES NOT SWAP. When the two centres separate
+    # by more than `disagree_px`, we know one of them is wrong and NOT which:
+    # the follower may have drifted, or the anchor may have matched a repeated
+    # texture. Preferring the anchor would be a guess. So the ladder keeps the
+    # follower's box -- it is the fresher of the two -- and cuts AUTHORITY,
+    # which is the one response that is correct under either explanation.
+    disagree = float('nan')
+    if follow is not None and anchor is not None:
+        fcx = 0.5 * (float(follow[0]) + float(follow[2]))
+        fcy = 0.5 * (float(follow[1]) + float(follow[3]))
+        acx = 0.5 * (float(anchor[0]) + float(anchor[2]))
+        acy = 0.5 * (float(anchor[1]) + float(anchor[3]))
+        disagree = math.hypot(fcx - acx, fcy - acy)
+
     if follow is not None and follow_conf >= min_rung_conf:
+        a = auth
+        if disagree == disagree and disagree > disagree_px:
+            # Scale down smoothly rather than dropping to zero: a target
+            # crossing in front of clutter produces a brief spike, and a cliff
+            # would make the hull stutter on something that resolves itself.
+            a = auth * max(0.0, min(1.0, disagree_px / max(disagree, 1e-6)))
         return LockState(rung=Rung.FOLLOW, xyxy=tuple(follow),
-                         rung_conf=float(follow_conf), authority=auth, age_s=age)
+                         rung_conf=float(follow_conf), authority=a, age_s=age,
+                         disagreement_px=disagree)
     if anchor is not None and anchor_conf >= min_rung_conf:
         return LockState(rung=Rung.ANCHOR, xyxy=tuple(anchor),
-                         rung_conf=float(anchor_conf), authority=auth, age_s=age)
+                         rung_conf=float(anchor_conf), authority=auth,
+                         age_s=age, disagreement_px=disagree)
     return LockState(rung=Rung.LOST, age_s=age)
