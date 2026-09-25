@@ -434,7 +434,7 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `range_crop` | `-1` |
 | `vision_profile` | `''` |
 
-**`mongla_vision/lock_node.py`** — 17 parameters
+**`mongla_vision/lock_node.py`** — 19 parameters
 
 | parameter | default |
 |---|---|
@@ -443,6 +443,8 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `follow` | `True` |
 | `anchor` | `False` |
 | `anchor_model` | `''` |
+| `anchor_xfeat_hef` | `True` |
+| `anchor_semi_dense` | `False` |
 | `anchor_bank` | `''` |
 | `loop_closure` | `_lc.defaults(` |
 | `place_period_s` | `_lc.defaults(` |
@@ -544,6 +546,12 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | parameter | default |
 |---|---|
 | `medium` | `'water'` |
+
+**`mongla_vision/test_semi_dense.py`** — 1 parameters
+
+| parameter | default |
+|---|---|
+| `anchor_semi_dense` | `False` |
 
 ## 5. The wire — `fc/srot_protocol.py`
 
