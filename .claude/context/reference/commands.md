@@ -266,6 +266,11 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `fwd_calibration` | `` |  |
 | `flow` | `false` |  |
 | `lock` | `false` | Run the lock ladder (follower + XFeat anchor) on the forward camera, publishing <ns>/lock. Control ignores it until vision.lock_s > 0. |
+| `act_conf` | `0.45` | ladder ACTING bar: below this a detection may be associated by the tracker but is not acted on (B-59; measured knee 0.60, shipped 0.45) |
+| `anchor_xfeat_hef` | `true` | run XFeat on the Hailo-8 rather than the Pi CPU (B-62: 10.89 ms vs 32.9 ms) |
+| `anchor_semi_dense` | `false` | semi-dense matching: 2.1-2.6x inliers for +37 % match cost. OFF until frame-to-reference is measured |
+| `target_width_m_forward` | `0.0` | measured TRUE width of the forward target in metres; 0 = use the rulebook nominal. A measured prop beats a nominal, which is what SAUVC +/-5 % allows for |
+| `target_width_m_downward` | `0.0` | measured true width of the downward target, metres |
 | `lock_class` | `` | Class the ladder locks onto. Empty = whatever the detector is publishing. |
 | `dwn_lock_class` | `` | Class the DOWNWARD ladder follows. Empty = any class, and no 6-DoF pose (the geometry table is keyed by class). |
 | `pool_depth_m` | `nan` | Water depth in metres. REQUIRED with flow:=true -- the node refuses to publish velocity without it. |

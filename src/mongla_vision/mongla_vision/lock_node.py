@@ -301,7 +301,30 @@ class LockNode(Node):
         # raised AttributeError inside the callback -- caught by
         # test_stamps.py, but it is a real startup race and not a test
         # artifact.
-        self._act_conf = float(self.get_parameter('act_conf').value)
+        # ⭐ THE DECK FILE WINS OVER THE DEFAULT, AND A LAUNCH ARGUMENT WINS
+        # OVER BOTH. One file (`~/.mongla/ladder.yaml`) changes the ladder
+        # whichever launch started the node -- the pattern `loop_closure`
+        # already proved and has a guard test for. An explicitly-passed launch
+        # parameter still overrides it, so a mission can pin a value without
+        # editing the deck.
+        from .ladder_config import defaults as _ld_defaults, load_config as _ld_load
+        self._ladder_cfg = _ld_load(log=self.get_logger())
+        _ld_def = _ld_defaults()
+
+        # ⚠ NOT named `_cfg`: a DIFFERENT local `_cfg` exists further down
+        # for the loop-closure block, and two closures with one name in one
+        # __init__ is a shadowing bug waiting to be written.
+        def _ladder(name):
+            """An explicitly-set launch/param value wins; otherwise the deck
+            file's. Equality with the shipped default is how "not explicitly
+            set" is detected -- ROS does not distinguish a default from a
+            value that happens to equal it, so a mission wanting the default
+            AND a deck override of it must edit the deck."""
+            v = self.get_parameter(name).value
+            return v if v != _ld_def[name] else self._ladder_cfg[name]
+
+        self._ladder = _ladder
+        self._act_conf = float(_ladder('act_conf'))
         self._yaw_deg = float('nan')
         self._depth_m = float('nan')
         self._armed = False
@@ -544,7 +567,7 @@ class LockNode(Node):
                 # detector coexist. The ONNX remains the fallback for a box
                 # with no chip.
                 exts = (('*.hef', '*.onnx')
-                        if bool(self.get_parameter('anchor_xfeat_hef').value)
+                        if bool(self._ladder('anchor_xfeat_hef'))
                         else ('*.onnx', '*.hef'))
                 c = []
                 for r in roots:
@@ -580,8 +603,7 @@ class LockNode(Node):
                     from mongla_vision.anchor.xfeat_hailo import XFeatHailo
                     backend = XFeatHailo(
                         p, top_k=1024,
-                        semi_dense=bool(self.get_parameter(
-                            'anchor_semi_dense').value))
+                        semi_dense=bool(self._ladder('anchor_semi_dense')))
                     self.get_logger().info(
                         f'[LOCK ] anchor on the Hailo-8: {os.path.basename(p)}')
                 except Exception as exc:                         # noqa: BLE001
