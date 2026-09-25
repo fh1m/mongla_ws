@@ -88,3 +88,47 @@ ends**:
 
 ⭐ **(2) is the largest remaining gap in the whole pipeline** and the only one
 whose module is already written and measured.
+
+---
+
+## Work left — the running list
+
+> Kept HERE because it has been lost twice in conversation. Anything picked up
+> gets struck from this list in the same commit that lands it.
+
+### Blocking, in order
+
+1. **B-60 — the `gate` class is not a gate detector.** Worst mistake **0.92 on
+   `bin_front_#1.mp4`**, higher than the 0.89 it gives the real gate. No bar
+   separates them. Fix is retraining with hard negatives
+   (`tools/mine_hard_negatives.py`, 160 frames mined so far).
+2. **Evaluate the OTHER models.** 66 `.pt` on this box, **32 with a gate
+   class**, including single-class `duburi_nano_250` / `duburi_medium_100`
+   never tested. A better model may already exist — cheaper than retraining.
+3. **`rescue` / `repair` / `sauvc_sim` / `bin_fire_blood` unmeasured** for the
+   same defect.
+4. **HEF vs `.pt` class disagreement** — on `gate.mkv` the `.pt` says
+   `gate(0)` at 0.78–0.89 while both HEFs say `repair` 150–262×. Either INT8
+   damage or a class-order mismatch. **Unresolved.**
+
+### Wired half-way
+
+5. **`visibility.py`** — `assess()` is wired advisory; **`WorldTarget`,
+   `project_world_target`, `region_conf_bar` are reached by TESTS ONLY.** That
+   is the object-permanence half: what lets a target leaving frame become a
+   navigation problem rather than a forgotten one. ⚠ The reachability register
+   cannot see this — it checks modules, not capabilities.
+6. **FOV demand-scaling** — measured and advisory only; scaling waits on water.
+
+### Deferred, unchanged
+
+7. `cascade.py` · `reid.py` · `presence.py` (B-59/60 may retire it) ·
+   `continuity.py` · `time_to_contact.py` · `approach.py` ·
+   `flow/scale_check.py` · `confidence_calibration.py` · `draw_strip.py`
+   (delete or revive)
+8. **Never started:** Round 11 (homography → yaw/altitude/obliquity) ·
+   Round 14 / POS_HOLD without DVL · downward place-bank preloading ·
+   Hailo async API (13.4 → ~7 ms) · `track_id` on `/detections` (its absence
+   makes every id-switch number meaningless) · `geometric_allocation.py` triage
+9. **`measured-bars.md` §1 must be re-derived** once a model passes
+   `negative_clip_check.py` — every bar there came from positive frames alone.
