@@ -4120,3 +4120,46 @@ was false (32.9 ms on the CPU) and is now *closer* to true — 10.89 ms alone,
 19.85 ms contended. That is cheap enough to ask for a descriptor at track
 birth and death, which is what the re-ID rung needs. It is NOT free, so the
 rate must still be measured on the vehicle before that rung ships.
+
+---
+
+## ROADMAP P4 — monocular depth on the vehicle: CLOSED BY MEASUREMENT, do not wire (2026-09-25)
+
+P4 has stood as *"relative depth, ONNX CPU, no control consumer, **Pi cost
+never measured** — default stays off unless a Pi measurement and a consumer
+justify it."* The measurement now exists.
+
+**`depth_anything_v2_small.onnx`, 99.1 MB, 364x364 (`_DA2_SIZE`), on the
+vehicle's CPU, 10 runs after warm-up:**
+
+| | |
+|---|---|
+| median | **1 211.3 ms** |
+| p95 | 1 229.4 ms |
+| rate | **0.8 FPS** |
+
+⛔ **1.2 seconds per frame.** The ladder acts on a box whose age is measured in
+tens of milliseconds (10.05 ms median at queue depth 1), and the follower runs
+at ~50 Hz. A depth map that arrives 1.2 s late describes a scene the vehicle
+has already left. This is not a tuning question.
+
+⭐ **Three findings, not one:**
+
+1. **The model was never loaded anyway.** `depth_model` defaults to `''`, so
+   `depth_estimation_node` runs its **bbox-area fallback** — "estimate
+   proximity from normalised bbox area; no model needed". Every `vis_range`
+   number this system has ever produced came from box geometry, not from a
+   depth network.
+2. **The node is not in the vehicle launch at all.** It appears in
+   `vision.launch.py` (the dev/CUDA path) and **not** in
+   `vision_pi.launch.py`. So `/vis_range_map` — which `topic_wiring_sweep.py`
+   flagged as published-and-unread — is not even published on the vehicle.
+3. **The artifact is on the Pi**, at
+   `src/mongla_vision/mongla_vision/depth/models/depth_anything_v2_small.onnx`,
+   99 MB of it, doing nothing.
+
+**Verdict: keep it off, and say why in one line rather than leaving it as an
+open question.** Reopen only with a Hailo compile — the same 23x-class move
+that fixed B-62 — AND a named consumer. At 1.2 s on the CPU neither the
+"measure first" nor the "no consumer" half of P4 is the binding constraint;
+the arithmetic is.
