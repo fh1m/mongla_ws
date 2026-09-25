@@ -42,6 +42,12 @@ from . import xfeat_onnx as _x
 # network, so they are what this keys on.
 _FEAT_CH, _KPT_CH = 64, 65
 
+# Deadlock guards, not latency knobs -- same rationale as detection/hailo.py:
+# an inference that takes a second has already broken the mission, and a tight
+# bound would turn a slow frame into an exception.
+_ASYNC_READY_MS = 1000
+_ASYNC_WAIT_MS = 1000
+
 
 class XFeatHailo:
     """Same interface as `XFeatONNX`: `detect(gray) -> (keypoints, descriptors)`."""
@@ -50,35 +56,37 @@ class XFeatHailo:
 
     def __init__(self, hef_path: str, *, top_k: int = 1024,
                  det_thresh: float = 0.05):
-        import hailo_platform as hp
+        # ⛔ THE PROCESS'S ONE VDevice, AND THE SAME ARBITRATION THE DETECTORS
+        # USE (B-62, measured twice on the vehicle).
+        #
+        #   attempt 1, own VDevice:  HAILO_OUT_OF_PHYSICAL_DEVICES(74)
+        #   attempt 2, shared VDevice + lock:
+        #       "Cant activate network because a network is already activated"
+        #       HAILO_INVALID_OPERATION(6)
+        #
+        # The second failure is not a scheduling problem and no lock fixes it:
+        # HailoRT permits ONE activated network group at a time, the detector
+        # holds its activation for the process's life, and the old
+        # `activate()` + `InferVStreams` idiom asks for a second one per call.
+        #
+        # ⭐ `detection/hailo.py` had already solved this for two detectors on
+        # one chip: a module-level `_ACTIVE` registry where the next claimant
+        # RELEASES the incumbent before activating. Joining that registry --
+        # rather than inventing a parallel one -- is what lets the anchor and
+        # the detector coexist, and it is why this class now speaks
+        # `InferModel` like they do instead of the legacy API.
+        from ..detection import hailo as _hd
 
-        # ⛔ THE PROCESS'S ONE VDevice, NEVER A SECOND (measured, B-62).
-        # Opening our own device while the detector holds one fails with
-        #     HAILO_OUT_OF_PHYSICAL_DEVICES(74)
-        # and the loser is whichever component asks second -- on the vehicle
-        # that was the DETECTOR, so a faster anchor bought no detections at
-        # all. `detection/hailo.py` already documents this race, including its
-        # other face (a silent hang during concurrent construction), and
-        # `_shared_device()` is the answer it arrived at: two models CAN be
-        # resident on one VDevice and take turns, measured at 98.2 Hz.
-        from ..detection.hailo import _DEVICE_LOCK, _shared_device
-
-        self._lock = _DEVICE_LOCK
-        self._InferVStreams = hp.InferVStreams
+        self._hd = _hd
+        self._lock = _hd._DEVICE_LOCK
         self.top_k, self.det_thresh = int(top_k), float(det_thresh)
-        self._hef = hp.HEF(hef_path)
-        self._dev = _shared_device()
-        cfg = hp.ConfigureParams.create_from_hef(
-            self._hef, interface=hp.HailoStreamInterface.PCIe)
-        with self._lock:
-            self._ng = self._dev.configure(self._hef, cfg)[0]
-        self._ng_params = self._ng.create_params()
-        self._in = self._hef.get_input_vstream_infos()[0]
-        self._in_params = hp.InputVStreamParams.make(
-            self._ng, format_type=hp.FormatType.FLOAT32)
-        self._out_params = hp.OutputVStreamParams.make(
-            self._ng, format_type=hp.FormatType.FLOAT32)
         self.path = hef_path
+        self._target = _hd._shared_device()
+        self._model = self._target.create_infer_model(hef_path)
+        self._cim = None
+        self._bindings = None
+        self._in_buf = None
+        self._out_bufs = {}
 
     def detect(self, gray: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         import cv2
@@ -87,8 +95,7 @@ class XFeatHailo:
         # ⚠ GREY, normalised to [0, 1] exactly as the ONNX path does. XFeat
         # takes one channel, which is why B-61's BGR/RGB defect in the
         # DETECTOR path does not touch this one.
-        x = (gray.astype(np.float32) / 255.0)[None, :, :, None]   # NHWC
-        # ⛔ THE SAME LOCK THE DETECTOR USES, spanning activate AND infer.
+        # ⛔ THE SAME LOCK THE DETECTOR USES, spanning acquire AND infer.
         # The chip runs one network group at a time whatever we do; releasing
         # across the wait would let the detector evict this activation
         # mid-flight, which `detection/hailo.py` recorded as a measured
@@ -96,13 +103,17 @@ class XFeatHailo:
         # than the other way round -- the correct priority, since a late
         # detection costs a lock and a late anchor costs a slower re-anchor.
         with self._lock:
-            with self._ng.activate(self._ng_params):
-                with self._InferVStreams(self._ng, self._in_params,
-                                         self._out_params) as pipe:
-                    out = pipe.infer({self._in.name: x})
+            cim = self._acquire_locked()
+            # Into the bound buffer: no per-call allocation, and no per-call
+            # activation either, which was most of the 14.5 ms the legacy
+            # idiom cost.
+            self._in_buf[...] = gray[:, :, None]
+            cim.wait_for_async_ready(timeout_ms=_ASYNC_READY_MS)
+            job = cim.run_async([self._bindings])
+            job.wait(_ASYNC_WAIT_MS)
+            raw = {k: v.copy() for k, v in self._out_bufs.items()}
         feats = kpts = None
-        for _name, v in out.items():
-            a = v[0]
+        for _name, a in raw.items():
             if a.shape[-1] == _FEAT_CH:
                 feats = a.transpose(2, 0, 1)[None]
             elif a.shape[-1] == _KPT_CH:
@@ -113,6 +124,65 @@ class XFeatHailo:
                 f'channels, got {[v[0].shape for v in out.values()]}. This HEF '
                 f'is not an XFeat build.')
         return self._post(feats, kpts)
+
+    def _acquire_locked(self):
+        """Take the chip's single activation, evicting whoever holds it.
+
+        ⛔ THE CALLER MUST HOLD `_DEVICE_LOCK`. This is the detector's own
+        protocol, reused rather than reimplemented: `_ACTIVE` names whoever
+        currently owns the activation, and the next claimant releases it
+        first. Two registries would race each other and reintroduce exactly
+        the `HAILO_INVALID_OPERATION(6)` this class was rewritten to fix.
+        """
+        from hailo_platform import FormatType
+
+        hd = self._hd
+        if hd._ACTIVE is self and self._cim is not None:
+            return self._cim
+        if hd._ACTIVE is not None and hd._ACTIVE is not self:
+            hd._ACTIVE._release_locked()
+        if self._cim is None:
+            # ⛔ UINT8 IN, NOT FLOAT32. Measured: binding a float32 input gave
+            #     Input buffer size 307200 is different than expected 76800
+            # -- exactly 4x, which is the whole diagnosis. The HEF's input is
+            # quantised uint8 (320*240*1 = 76 800 bytes) and HailoRT scales on
+            # the way in, so the /255.0 the ONNX path does must NOT be
+            # repeated here; doing it in float and then casting would quantise
+            # the image twice.
+            self._model.input().set_format_type(FormatType.UINT8)
+            for name in self._out_names():
+                self._model.output(name).set_format_type(FormatType.FLOAT32)
+            self._cim = self._model.configure()
+            self._cim.__enter__()
+            self._in_buf = np.zeros((self.h, self.w, 1), np.uint8)
+            self._bindings = self._cim.create_bindings()
+            self._bindings.input().set_buffer(self._in_buf)
+            # ⚠ ONE BUFFER PER OUTPUT, keyed by name. XFeat emits three heads
+            # where the detector emits one, so the single-output binding the
+            # detector uses does not transfer.
+            for name in self._out_names():
+                buf = np.zeros(tuple(self._model.output(name).shape),
+                               np.float32)
+                self._out_bufs[name] = buf
+                self._bindings.output(name).set_buffer(buf)
+        self._cim.activate()
+        hd._ACTIVE = self
+        return self._cim
+
+    def _out_names(self):
+        return [o.name for o in self._model.outputs]
+
+    def _release_locked(self) -> None:
+        """Give up the activation so a detector can take it. Caller holds the
+        lock. Mirrors `HailoDetector._release_locked` -- the registry calls
+        this on whichever object it finds, so the two must agree."""
+        if self._cim is not None:
+            try:
+                self._cim.deactivate()
+            except Exception:                                    # noqa: BLE001
+                pass
+        if self._hd._ACTIVE is self:
+            self._hd._ACTIVE = None
 
     def _post(self, feats, kpt_logits):
         """Identical arithmetic to the ONNX path, reusing its helpers."""
