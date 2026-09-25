@@ -17,6 +17,11 @@ something real rather than on whichever folder happened to be convenient.
 """
 from __future__ import annotations
 
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from data_root import data_root  # noqa: E402
+
 import argparse
 import datetime as dt
 import json
@@ -112,7 +117,9 @@ def venue_of(path: str, roots: dict) -> str:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--out', default='/tmp/footage_inventory.json')
+    ap.add_argument('--out',
+                    default=os.path.join(data_root('xfeat'),
+                                         'footage_inventory.json'))
     args = ap.parse_args()
 
     here = os.path.dirname(os.path.abspath(__file__))

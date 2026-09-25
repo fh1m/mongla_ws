@@ -18,6 +18,11 @@ the shape.
 """
 from __future__ import annotations
 
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from data_root import data_root  # noqa: E402
+
 import argparse
 import os
 import sys
@@ -80,7 +85,9 @@ def pairs(be, path, n_ref=6, offs=(1, 2, 3, 4, 5, 6, 8, 10)):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--stock', default='/tmp/xfeat_src/weights/xfeat.pt')
+    ap.add_argument('--stock',
+                    default=os.path.join(data_root('xfeat', 'src'),
+                                         'weights', 'xfeat.pt'))
     ap.add_argument('--tuned', required=True)
     ap.add_argument('--bar', type=int, default=15)
     # ⭐ Training happens at 800x608, inference at 320x240. A
