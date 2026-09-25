@@ -324,3 +324,72 @@ knowledge), and a test asserts it carries **no `score`, `confidence` or
 | **the controller steers it out of frame** | **visibility guard** | built |
 | **it leaves anyway** | **world-frame memory** | built |
 | no detection at all, long range, bad water | ⛔ **sonar's job — still open** | §3 |
+
+---
+
+## §57 — The research that mattered turned out to be about EVALUATION, not tracking
+
+Rounds of searching for a better tracker found the real gap somewhere else:
+the way we chose and measured models. Four independent literatures say the
+same thing, and all four match a defect we measured on our own footage the
+same week.
+
+**COCO-FP** (*A Deep Dive into Background False Positives for COCO
+Detectors*) — background errors are false positives on **non-target visual
+clutter**, and standard benchmarks do not contain enough of it to measure
+them. Ours: `gate_rescue_repair` fires on pool structure — lane lines, floor
+seams, the wall/floor horizon — at up to **0.92**, higher than the 0.89 it
+gives the real gate (B-60).
+
+**Egocentric visual query localisation** — *"models never see such negative
+samples in both training and evaluation."* Ours, exactly: every bar in
+`measured-bars.md` §1 came from labelled held-out **pairs**, frames that
+contain the prop. A set built that way cannot measure a false positive on
+open water, because it holds no open water.
+
+**Deployment-aware model selection (2026)** — *"when deployment-aware methods
+were applied, model choice changed from benchmark-based selection **in all
+tested splits**."* Ours: recall-based ranking chose a model with **+0.0 points**
+of separation between gate-present and gate-free footage. Negative-separation
+ranking chose a different model already in the archive with **+100.0**.
+
+**Saturated benchmarks** — *"benchmarks that expand rather than saturate,
+metrics that diagnose rather than simply score."* Ours twice over: `mAP50`
+saturated at 0.995 across all 25 archived runs (this is why
+`model_select.py` exists), and then **recall itself saturated at 1.0**, which
+is why `model_select.py` in turn ranked the wrong model.
+
+⛔ **The pattern, and it is the durable lesson.** Each time we replaced a
+saturated metric we replaced it with another metric measured **only where the
+answer is yes**. mAP → recall → nothing, until a negative set was introduced.
+The ladder was never the weak link; the instrument that told us the detector
+was good was.
+
+### What was tried against the false positives and FAILED
+
+Three runtime rejectors, all dead, all measured (table in `BUGS.md`):
+**temporal persistence** (the hard-negative-mining literature's "false
+positives are isolated in time" does not transfer — ours persist 400 frames of
+400, because the camera stares at the same empty water), **box geometry**
+(area straddles both sides), **edge energy inside the box** (*backwards*:
+6.69 real vs 6.82 and 9.40 hallucinated — turbid water is not smooth, and what
+a human reads as "nothing there" is semantic, not photometric).
+
+⭐ **The fix was not an algorithm.** It was looking at 34 clips' worth of
+rendered boxes, and then searching the archive: **208 `.pt` on this box, 96
+unique, 29 with a gate class**, against the 4 that ship. The better model had
+been sitting there the whole time.
+
+### FOV and object permanence — confirmed by others, still half-wired
+
+**VISTA-CBF+ELR (2026)** keeps collision constraints hard while relaxing
+field-of-view ones — independently confirming the `SLACK = True` decision
+already written into `visibility.py`, and adding one idea we do not have:
+**occlusion-evasive replanning**, acting before the target is lost rather than
+after.
+
+**Object permanence** (*Out of Sight, Still in Mind*; RoboStream 2026's causal
+memory) — a target leaving frame should become a navigation problem, not a
+forgotten one. `WorldTarget` implements this and is reached by **tests only**;
+its blocker is two missing signals (yaw, absolute range), named precisely in
+`ladder-register.md`. Do not wire it by inventing a range.
