@@ -3614,3 +3614,44 @@ human sees as "nothing there" is semantic, not photometric.
 where the evidence points -- raise the bar (knee at 0.60, +74.0 points
 separation) and give `lock_node` an explicit acting bar. Anything cleverer
 needs to be measured before it is believed.
+
+---
+
+## Round 7 — XFeat fine-tuned on our own water: CLOSED, **NO** (2026-09-25)
+
+Scored through the **shipped ONNX path** (`feature_murky_control.py` driving
+`xfeat_onnx.py`, the code the vehicle runs), stock as the control:
+
+| checkpoint | total inliers | passing |
+|---|---|---|
+| **STOCK** | **2237** | 19/20 |
+| ft750 | 2052 | 19/20 |
+| ft1500 | 2021 | 19/20 |
+| ft2250 | 1992 | 19/20 |
+| ft3000 | 2007 | 19/20 |
+| ft3750 | 1992 | 19/20 |
+| ft4500 | 1986 | 19/20 |
+| ft5250 | 2056 | 19/20 |
+| ft6000 | 2054 | 19/20 |
+
+**Every checkpoint is below stock.** Best fine-tune 2056 vs 2237 = **−8.1 %**,
+and the pass count never moves off 19/20. Monotone across 8 checkpoints and
+6 000 steps, so this is not noise and not an unlucky stopping point.
+
+**Why the verdict is trustworthy this time.** The first scoring pass was
+retracted because it used its own top-k rather than the shipped path, and the
+tell (`[210,133,222,41]` stock vs `[189,65,134,24]` recorded) was visible and
+read past for two runs. `sweep.sh` now drives the shipped path and carries
+STOCK as a control whose numbers must reproduce section 19.1 first.
+
+⭐ **What this buys even though it is a NO.** The honest reading is not "our
+water is unlearnable" -- it is that **XFeat's pretrained descriptor is already
+better on our water than 6 000 steps of our own data made it**, on a dataset
+of 34 visually-verified clean clips across 3 venues. That is a real result
+about the descriptor, and it closes a line of work that had been open for
+weeks. The anchor rung keeps stock weights.
+
+**What was salvaged.** The training artifacts were on nvme
+(`mongla_data/xfeat_{v2,320,lr5}_run`, 24 checkpoints) and survived; only the
+`/tmp` dataset and inventory were lost, and `tools/data_root.py` now makes the
+persistent path the default so the next run cannot repeat it.
