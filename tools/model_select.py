@@ -33,6 +33,23 @@ So: train several, and rank them HERE. The cost is one evaluation pass per
 model per session, which is minutes.
 
     python3 tools/model_select.py --models m1.pt m2.pt --sessions dirA dirB
+
+⛔ RECALL ALONE RANKED THE WRONG MODEL FOR WEEKS, AND THIS TOOL IS WHY. Every
+session above CONTAINS the prop, so a model that fires constantly scores
+perfect recall and ranks first. Measured 2026-09-25 on the shipped gate model
+(B-60): 100 % of frames on a real gate, and **100 % of frames on a gate-FREE
+clip at conf 0.15 and 0.30** -- a separation of +0.0 points. It was the
+best-ranked model here and it cannot tell a gate from an empty pool.
+
+⭐ A model already in the archive scored 100 % positive and **0.0 % across
+1 200 negative frames from 3 venues**. Ranking on recall could never have
+found it, because both models have recall 1.0.
+
+So: measure the negative side too, with clips a human has CONFIRMED do not
+contain the prop (`tools/label_contact_sheet.py` renders the evidence), and
+rank on the SEPARATION -- `tools/negative_clip_check.py` does exactly that.
+A model with no negative column has not been evaluated, it has been
+auditioned.
 """
 import argparse
 import os
