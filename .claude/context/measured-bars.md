@@ -94,6 +94,19 @@ footage rather than against the next rung up.
 > confirms the colour bug cost no cycles, and that the properly-calibrated
 > HEF is if anything faster. The through-the-graph number (was 53.9 Hz) has
 > NOT been re-taken and still carries the B-61 caveat.
+>
+> ⛔ **Attempted 2026-09-25 and BLOCKED ON HARDWARE, not on effort.**
+> `vision_pi.launch.py` starts `detector_dual_node`, which opens BOTH cameras;
+> only one is currently plugged into the vehicle (a single Sonix USB camera,
+> `/dev/v4l/by-id/usb-Sonix_Technology_Co.__Ltd._USB_2.0_Camera_SN0001-*`).
+> The forward camera opened; the downward retried five times on a
+> `/dev/mongla_cam_downward` symlink that does not exist, and no detections
+> were ever published. ⚠ Note the udev rules are also absent — the launch's
+> documented `device_path:=/dev/mongla_cam_<forward|downward>` names symlinks
+> this Pi does not have, which is a second thing to fix before a pool day.
+>
+> **The figure therefore stays unmeasured.** It needs both cameras attached;
+> substituting a one-camera number would not be the same quantity.
 | `VISION_LOOP_HZ_SROT` | 50 — `motion_vision.py` | soaked 90 s: **49.86 Hz**, 0.00 % late ticks | ≥ 25 Hz sustained |
 | camera FOV | 63.8° air / **46.7° water** ±0.7 | 25 views, `calibrateCameraRO`, held-out validated | ±1.5° |
 | frame staleness | — | mailbox **16.9 ms** vs 396 ms on a plain queue | ≤ 50 ms |
