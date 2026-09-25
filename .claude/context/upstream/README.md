@@ -31,13 +31,14 @@ won and the document says so.
 | [`pr-r-thrust-trim-predicts-the-wrong-duty.md`](pr-r-thrust-trim-predicts-the-wrong-duty.md) | `thrust_trim` forms `meas/pred` with `pred = rpm_max · demand` -- the **pre-shaping** demand -- while `meas` is the RPM from the **post-shaping** duty, after `thstExpo`, `MOT_SPIN_MIN` and the voltage feedforward. The error is one-sided (`shaped(d) ≥ d`), so with the shipped 0.65 / 0.15 defaults `THR_TRIM_EN = 1` drives **every gain to its −25 % clamp on every dive**. Latent only because it defaults to 0 | publish the shaped duty; one line of plumbing |
 | [`pr-s-a-timed-out-move-reports-accepted.md`](pr-s-a-timed-out-move-reports-accepted.md) | `MOVE_DIVE` and `MOVE_TURN` that never reach their target brake out on the global timeout, hit the SAME `PH_DONE` a success does, and are ACKed `MAV_RESULT_ACCEPTED` progress 100. Nothing carries why the move ended. ⚠ **Distinct from #8** (which is a timing problem); this fires after the move correctly finished, having failed. `s_remain` is already in scope at the site | one enum, one field |
 | [`pr-t-the-brake-ignores-how-far-you-travelled.md`](pr-t-the-brake-ignores-how-far-you-travelled.md) | `PH_BRAKE`'s impulse is `g·k·v²` -- **no dependence on leg duration at all**. Below ≈0.21 s the brake impulse exceeds the forward impulse and the vehicle ends up **behind** where it started; at 3 s it removes 4.6 %. `abort()` already brakes on the ACHIEVED speed and normal completion on the COMMANDED one, in the same file. Short legs are precision alignment | accumulate `s_cur_speed·dt`, brake against that |
+| [`pr-u-two-mission-stores-nothing-reads.md`](pr-u-two-mission-stores-nothing-reads.md) | ⛔ **TWO complete mission stores, neither read by anything** -- `mission::count/getItem` and `lora_mission::missionReady/waypointCount/getWaypoint` all have ZERO callers. The MAVLink handshake round-trips (upload, read back, draw on the QGC map), and the LoRa path **ACKs every chunk**, so Bondor is positively told yes. Neither can simply be wired: the hull has no position estimate. ⭐ The general ask is bigger than the bug -- **the firmware has no unreachable-capability guard at all**, and the same sweep found `thrust_trim::learned()` orphaned, which is the *observability* for PR R's live defect | refuse on the wire, delete, or name the consumer |
 
 **Ranked, if only one lands:** ⛔ **PR Q.** It is safety-critical, it is one
 multiply, and it describes the configuration our hull is in *right now* — a
 MOTOR_DETECT run on this vehicle today leaves every axis inverted. PR A §3 (the
 `31001` collision) remains the ranking cheap-now-irreversible-later item.
 
-## 2026-09-25 — a batch of five, and ⚠ a correction to one we already sent
+## 2026-09-25 — a batch of six, and ⚠ a correction to one we already sent
 
 PR P **implements** what PR K asked for, and in the course of measuring the hull
 properly it found that **PR K's own geometry is wrong** — 346.6 / 520.4 mm read off
@@ -49,7 +50,7 @@ with nothing saying so. **Post the correction on their #25 before anyone builds
 from it.** This is the `one truth, two copies is the bug` failure arriving across a
 repo boundary, where no test of ours can reach it.
 
-⏳ **ALL FIVE ARE UNSENT.** The session that wrote them had read-only GitHub access
+⏳ **ALL SIX ARE UNSENT.** The session that wrote them had read-only GitHub access
 to `srot-control-board` (`403 Resource not accessible by integration` on branch,
 issue and PR creation). Everything needed to send them is here: the four issue
 bodies above, and PR P's firmware patch in
