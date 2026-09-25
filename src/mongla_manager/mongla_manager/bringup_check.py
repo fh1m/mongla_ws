@@ -641,6 +641,54 @@ def _check_models() -> tuple[str, str]:
                   'ros2 run mongla_vision export_engine --all (ON THE JETSON)')
 
 
+def _check_build_freshness() -> tuple[str, str]:
+    """Is the vehicle running the code that is in `src/`?
+
+    ⛔ IT USUALLY IS NOT, AND NOTHING SAID SO. `mongla_vision` resolves to
+    `build/mongla_vision/mongla_vision/...`, not `src/`. On 2026-09-25 the
+    B-61 fix was rsynced into `src/`, verified by a probe that inserts `src/`
+    on `sys.path`, and reported as "verified on the vehicle" -- while the
+    flight path was still importing the broken copy out of `build/`. The
+    rsync proved nothing.
+
+    That is the same shape as every §9 defect: the code was correct, the test
+    passed, and the vehicle was running something else.
+
+    ⚠ A source file NEWER than its build copy is the signal, not file
+    contents: `--symlink-install` makes many packages share an inode, in
+    which case the mtimes match and this passes trivially, which is correct --
+    a symlinked package cannot go stale.
+    """
+    ws = pathlib.Path(__file__).resolve().parents[3]
+    src, build = ws / 'src', ws / 'build'
+    if not build.is_dir():
+        return PASS, 'no build/ tree -- running from source'
+    stale = []
+    for s in src.rglob('*.py'):
+        if '/test/' in str(s) or '/launch/' in str(s):
+            continue
+        rel = s.relative_to(src)
+        pkg = rel.parts[0]
+        b = build / pkg / pathlib.Path(*rel.parts[1:])
+        if not b.exists():
+            continue
+        try:
+            if s.stat().st_mtime > b.stat().st_mtime + 1.0:
+                stale.append(str(rel))
+        except OSError:
+            continue
+    if stale:
+        shown = ', '.join(sorted(stale)[:4])
+        more = f' (+{len(stale) - 4} more)' if len(stale) > 4 else ''
+        pkgs = sorted({p.split('/')[0] for p in stale})
+        return FAIL, (
+            f'{len(stale)} source file(s) NEWER than the build copy the '
+            f'vehicle imports: {shown}{more}. The running code is not your '
+            f'code. Rebuild: colcon build --packages-select '
+            f'{" ".join(pkgs)} --symlink-install')
+    return PASS, 'build tree matches src'
+
+
 def _baked_floor(hef_path: str) -> 'float | None':
     """The NMS score threshold compiled into a HEF, or None if unreadable.
 
@@ -1585,6 +1633,11 @@ def main(argv: list[str] | None = None) -> int:
     section('K. Vision models (Hailo .hef, or TensorRT off-platform)')
     st, det = _check_models()
     emit(st, 'model engines', det)
+
+    # ---- K2. Stale build tree --------------------------------------- #
+    section('K2. Build tree freshness (is the vehicle running your code?)')
+    st, det = _check_build_freshness()
+    emit(st, 'build vs src', det)
 
     # ---- L. Jetson power ------------------------------------------- #
     section('L. Jetson power mode (vision FPS)')
