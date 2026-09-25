@@ -159,8 +159,17 @@ whose module is already written and measured.
    (delete or revive)
 8. **Never started:** Round 11 (homography → yaw/altitude/obliquity) ·
    Round 14 / POS_HOLD without DVL · downward place-bank preloading ·
-   Hailo async API (13.4 → ~7 ms) · `track_id` on `/detections` (its absence
-   makes every id-switch number meaningless) · `geometric_allocation.py` triage
+   Hailo async API (13.4 → ~7 ms) · `geometric_allocation.py` triage
+
+   ✅ **`track_id` is NOT missing** — checked 2026-09-25.
+   `tracker_node.py:432` sets `d2.id = str(td.track_id)` on `/tracks`, and
+   `check_tracker.py` reads `d.id` (the field `vision_msgs/Detection2D`
+   actually has; there is no `tracking_id`). The backlog entry claiming "its
+   absence makes every id-switch number meaningless" was stale. ⚠ What is
+   genuinely absent is an id on **`/detections`** — the DETECTOR's output has
+   no track identity, because association happens downstream in
+   `tracker_node`. That is by design, and it is why re-ID cannot be fed from
+   the detections topic as it stands.
 9. **`measured-bars.md` §1 must be re-derived** once a model passes
    `negative_clip_check.py` — every bar there came from positive frames alone.
 
