@@ -40,7 +40,7 @@ from mongla_vision.optics import RefractiveRectifier
 import rclpy
 from cv_bridge import CvBridge
 from rclpy.node import Node
-from sensor_msgs.msg import CameraInfo, Image
+from sensor_msgs.msg import CameraInfo, Image, Imu
 from vision_msgs.msg import Detection2DArray
 
 try:                                   # noqa: SIM105
@@ -358,6 +358,8 @@ class LockNode(Node):
 
         self._ladder = _ladder
         self._act_conf = float(_ladder('act_conf'))
+        self._roll_rad = float('nan')
+        self._imu_t = 0.0
         self._yaw_deg = float('nan')
         self._depth_m = float('nan')
         self._armed = False
@@ -748,6 +750,40 @@ class LockNode(Node):
             if k == key:
                 return g
         return None
+
+    def _on_imu(self, msg) -> None:
+        """Hull roll from the board's fused BNO085.
+
+        ⛔ THE -1.0 CONVENTION IS LOAD-BEARING. `auv_manager_node` sets
+        `orientation_covariance[0] = -1.0` when the board cannot supply
+        attitude -- the ROS "no data" marker -- and publishes a
+        structurally-valid message anyway. Reading the quaternion without
+        checking it would take (0,0,0,1) as level, which is a confident wrong
+        answer on a rolled hull and exactly the failure that convention
+        exists to prevent.
+        """
+        try:
+            if float(msg.orientation_covariance[0]) < 0.0:
+                self._roll_rad = float('nan')
+                return
+            q = msg.orientation
+            x, y, z, w = (float(q.x), float(q.y), float(q.z), float(q.w))
+            self._roll_rad = math.atan2(2.0 * (w * x + y * z),
+                                        1.0 - 2.0 * (x * x + y * y))
+            self._imu_t = time.monotonic()
+        except Exception:                                        # noqa: BLE001
+            self._roll_rad = float('nan')
+
+    def _roll_fresh(self, max_age_s: float = 1.0) -> float:
+        """Roll, or NaN when stale or never received -- same discipline as
+        `_yaw_fresh`. A second-old roll on a rolling hull is a different
+        attitude."""
+        r = getattr(self, '_roll_rad', float('nan'))
+        if not math.isfinite(r):
+            return float('nan')
+        if (time.monotonic() - getattr(self, '_imu_t', 0.0)) > max_age_s:
+            return float('nan')
+        return r
 
     def _on_state(self, msg) -> None:
         """The hull's heading, depth and armed state.
@@ -1618,6 +1654,27 @@ class LockNode(Node):
                                             float(K[0][0]), float(K[1][1]))
             if not math.isfinite(bz) or bz <= 1e-6:
                 return
+            # ⭐ DE-ROTATE BY HULL ROLL, from the operator's R&D fusion:
+            #     dx' = dx*cos(roll) - dy*sin(roll)
+            #     dy' = dx*sin(roll) + dy*cos(roll)
+            # The downward camera is bolted to the hull, so a rolled hull
+            # rotates the IMAGE about the optical axis. Without this, a target
+            # dead ahead on a hull rolled 20 deg is remembered 20 deg off, and
+            # the error is INVISIBLE -- the bearing is perfectly
+            # self-consistent, just in the wrong frame.
+            #
+            # ⛔ ROLL IS UNACTUATED on this five-thruster hull (5 of 6 DOF),
+            # so it cannot be nulled by the controller and must be
+            # compensated here.
+            #
+            # ⚠ NaN roll leaves the bearing ALONE rather than assuming level.
+            # Assuming zero is a confident claim that the hull is flat, which
+            # is the plausible-number defect; leaving it uncorrected is an
+            # honest smaller claim.
+            roll = self._roll_fresh()
+            if math.isfinite(roll):
+                cr, sr = math.cos(roll), math.sin(roll)
+                bx, by = (bx * cr - by * sr), (bx * sr + by * cr)
             # Looking DOWN: the optical axis is the vertical, so the slant
             # range to a floor target is the altitude divided by the cosine
             # of the off-axis angle -- which `bearing_from_pixel` already
