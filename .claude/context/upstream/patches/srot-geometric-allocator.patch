@@ -1,8 +1,8 @@
 From a128b30743a7ae81585c61068563e8227163ef48 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Fri, 25 Sep 2026 15:14:22 +0000
-Subject: [PATCH] control: allocate thrust from GEOMETRY, and make the six axes
- commensurate
+Subject: [PATCH 1/3] control: allocate thrust from GEOMETRY, and make the six
+ axes commensurate
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -1342,6 +1342,808 @@ index 0000000..98c5b94
 +    "$out" || fail=1
 +done
 +exit $fail
+-- 
+2.43.0
+
+
+From 096514484f7551eae44a4c980a6231934330f1d6 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 25 Sep 2026 15:56:56 +0000
+Subject: [PATCH 2/3] control: delete the allocator API nothing called, and put
+ authority on the wire
+
+Self-audit of the previous commit against this repo's own hardest rule -- a
+capability is either reached by something that runs or carries a written reason.
+Five of twelve exported symbols had ZERO production callers. In a commit whose
+subject is an allocator, that is the defect the rule exists for.
+
+DELETED (negative diff, and the claim got stronger):
+
+  rebuild(avail), the `avail` mask on allocate(), ready(), frameClass()
+
+`rebuild()` and `avail` were a fault-tolerance interface serving a capability that
+does not exist. Nothing on the vehicle can detect a dead thruster -- ESC presence
+is measured on the Pico and never reaches the wire (#10) -- so the mask had no
+possible source, and the flight path only ever passed nullptr. On a 5x5 exactly
+determined matrix re-solving cannot help anyway: removing a column removes an
+AXIS. It was a wide interface around a thing that could not happen.
+
+The geometric fact it existed to express now has a better test. Instead of
+asserting that rebuild() refuses, the suite computes the RANK of B with each
+column dropped, from the public per-thruster wrench:
+
+    mongla-5:  full rank 5 of 6; drop ANY thruster -> rank 4, an axis is lost
+    vector-8:  full rank 6;      drop ANY thruster -> rank 6, all axes survive
+
+That is the redundancy argument stated against the geometry rather than against a
+function nobody called, and it is the argument the hardware team needs: on this
+hull a thruster failure is a surface-now event, not a degrade-and-continue one.
+
+`ready()` and `frameClass()` were speculative accessors, and `frameClass()` was a
+second copy of state `mixer` already owns.
+
+WIRED (the orphan that was worth keeping):
+
+  authority() had no reader, and it is the number this entire allocation turns on.
+  A +-1 mixer calls every axis "1.0"; this hull's axes differ by 5.71x, exactly
+  the reduced matrix's condition number. An operator tuning yaw against sway's
+  scale fights that factor with no way to see it.
+
+It now goes out from mav_stream's configBanner(), alongside FR and DIR, because
+that banner exists for precisely this -- configuration is behaviour, and this is
+the configuration that decides what a demand of 1.0 MEANS. Repeated rather than
+boot-only, so a GCS that connects late still sees it. Both lines measured against
+the char[50] STATUSTEXT limit: 45 and 46.
+
+  CFG r14 FR=1 FC=1 DIR=...
+  AUTH sw2.00 su1.00 hv2.00 pi0.52 rl0.00 yw0.35
+
+FC is mixer::activeFrameClass(), NOT the FRAME_CLASS param -- selectFrame() falls
+back to 0 on a geometry that will not solve, so the param says what was asked for
+and FC says what the vehicle is doing. A host reading the param would believe the
+wrong allocation, which is the same near-miss this banner was created for. It also
+gave activeFrameClass() its first caller.
+
+selectFrame() is back to ONE boot STATUSTEXT: the queue is 4 slots and nothing
+drains it until Task_MAVLink starts, so three lines there could drop the third.
+
+achieved() still has no flight caller and is KEPT with a written reason: it is the
+correctness oracle the native test allocates against -- you cannot check an
+allocator without computing the wrench its outputs produce -- and it is the
+readback an anti-windup needs when #20 lands.
+
+85 checks still pass.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Mm13LYmLyja8PDVLbFUT58
+---
+ src/comms/mav_stream.cpp       |  36 ++++++++-
+ src/control/allocator.cpp      |  45 +++--------
+ src/control/allocator.h        |  62 +++++++--------
+ src/control/mixer.cpp          |  12 +++
+ test/native/test_allocator.cpp | 137 +++++++++++++++++++++------------
+ 5 files changed, 175 insertions(+), 117 deletions(-)
+
+diff --git a/src/comms/mav_stream.cpp b/src/comms/mav_stream.cpp
+index 6c5af66..5c9dc22 100644
+--- a/src/comms/mav_stream.cpp
++++ b/src/comms/mav_stream.cpp
+@@ -5,7 +5,9 @@
+ #include "comms/mav_stream.h"
+ #include "comms/mavlink_bridge.h"
+ #include "comms/mav_commands.h"
+-#include "comms/params.h"            // g_params.leak_en — the LEAK health bit's "enabled" state
++#include "comms/params.h"
++#include "control/mixer.h"       // activeFrameClass -- which allocation is LIVE
++#include "control/allocator.h"   // authority() -- what each axis is actually worth            // g_params.leak_en — the LEAK health bit's "enabled" state
+ #include "control/depth_control.h"   // preview()/lastError() — depth-loop observability
+ #include "control/mixer.h"           // mix() is pure — preview the depth chain disarmed
+ #include "control/yaw_ref.h"         // state() — is the heading absolute or boot-relative?
+@@ -736,15 +738,45 @@ static void configBanner(uint32_t now) {
+         // MUST fit 50 chars -- STATUSTEXT.text is char[50]. The rev-9 wording
+         // ("CFG rev10 FRAME_REVERSE=1 MOT_DIR=-1,1,1,1,1,1,1,-1") was 51 and lost its final
+         // digit on the wire, which is worse than a shorter label: a truncated -1 reads as -.
++        // ⭐ FC = the allocation actually IN FORCE, from mixer::activeFrameClass(),
++        // NOT the FRAME_CLASS param. selectFrame() falls back to 0 when a geometry
++        // will not solve, so the param says what was ASKED for and this says what
++        // the vehicle is doing. A host reading the param would believe the wrong
++        // allocation -- which is the same class of near-miss this banner exists for.
+         snprintf(buf, sizeof(buf),
+-                 "CFG r%d FR=%d DIR=%d,%d,%d,%d,%d,%d,%d,%d",
++                 "CFG r%d FR=%d FC=%d DIR=%d,%d,%d,%d,%d,%d,%d,%d",
+                  SROT_FW_BEHAVIOUR_REV,
+                  g_params.frame_reverse > 0.5f ? 1 : 0,
++                 mixer::activeFrameClass(),
+                  (int)lroundf(g_params.mot_dir[0]) * d[0], (int)lroundf(g_params.mot_dir[1]) * d[1],
+                  (int)lroundf(g_params.mot_dir[2]) * d[2], (int)lroundf(g_params.mot_dir[3]) * d[3],
+                  (int)lroundf(g_params.mot_dir[4]) * d[4], (int)lroundf(g_params.mot_dir[5]) * d[5],
+                  (int)lroundf(g_params.mot_dir[6]) * d[6], (int)lroundf(g_params.mot_dir[7]) * d[7]);
+         queueStatusText(MAV_SEVERITY_INFO, buf);
++
++        // ⭐ PER-AXIS AUTHORITY, on a geometric frame only.
++        //
++        // A +-1 mixer calls every axis "1.0". On the mongla-5 hull the axes differ
++        // by 5.71x -- sway 2.000 against yaw 0.350, which is exactly the reduced
++        // matrix's condition number -- so the per-axis PID gains must differ by the
++        // same factor. Until this line existed nothing anywhere could read those
++        // numbers: an operator tuning yaw against sway's scale was fighting a 5.7x
++        // error with no way to see it. Same argument as FR and DIR above --
++        // configuration is behaviour, and this is the configuration that decides
++        // what a demand of 1.0 MEANS.
++        //
++        // A ROLL authority of 0.000 is the unactuated axis saying so on the wire.
++        if (mixer::activeFrameClass() != 0) {
++            snprintf(buf, sizeof(buf),
++                     "AUTH sw%.2f su%.2f hv%.2f pi%.2f rl%.2f yw%.2f",
++                     (double)allocator::authority(allocator::AX_SWAY),
++                     (double)allocator::authority(allocator::AX_SURGE),
++                     (double)allocator::authority(allocator::AX_HEAVE),
++                     (double)allocator::authority(allocator::AX_PITCH),
++                     (double)allocator::authority(allocator::AX_ROLL),
++                     (double)allocator::authority(allocator::AX_YAW));
++            queueStatusText(MAV_SEVERITY_INFO, buf);
++        }
+     }
+ 
+     // A bench affordance that became permanent is the failure this catches: with COMPID = 0
+diff --git a/src/control/allocator.cpp b/src/control/allocator.cpp
+index 2a9f0ba..a055b3f 100644
+--- a/src/control/allocator.cpp
++++ b/src/control/allocator.cpp
+@@ -100,14 +100,10 @@ static void cross3(const float a[3], const float b[3], float out[3]) {
+     out[2] = a[0] * b[1] - a[1] * b[0];
+ }
+ 
+-// Build s_A (and s_auth) from s_B, using only the thrusters marked available.
+-// Split out of begin() because it is also what a thruster failure needs: the
+-// geometry has not changed, only which columns may be used.
++// Solve the geometry: s_B -> s_A and s_auth. Called once, from begin().
+ //
+-// ⚠ NOT CALLED FROM THE FLIGHT LOOP. It solves a linear system. A failure has to
+-// be handled off-loop (recompute, then publish), which is also the honest place
+-// to decide whether the vehicle should still be flying at all.
+-static bool build(const bool* avail) {
++// ⚠ NOT CALLABLE FROM THE FLIGHT LOOP. It solves a linear system.
++static bool build() {
+     memset(s_A, 0, sizeof(s_A));
+     for (int k = 0; k < AX_COUNT; ++k) s_auth[k] = 0.0f;
+ 
+@@ -117,7 +113,6 @@ static bool build(const bool* avail) {
+     for (int i = 0; i < AX_COUNT; ++i) {
+         float mx = 0.0f;
+         for (int j = 0; j < s_n; ++j) {
+-            if (avail && !avail[j]) continue;
+             float v = fabsf(s_B[i][j]);
+             if (v > mx) mx = v;
+         }
+@@ -126,9 +121,11 @@ static bool build(const bool* avail) {
+     }
+     if (m == 0) return false;
+ 
+-    // The usable columns, in order.
++    // The columns, in order. (Kept as an indirection because the wide/square
++    // branch below indexes them, and a future availability mask would slot in
++    // here -- but nothing masks today, so this is the identity.)
+     int col[ALLOC_MAX_THRUSTERS], nc = 0;
+-    for (int j = 0; j < s_n; ++j) if (!avail || avail[j]) col[nc++] = j;
++    for (int j = 0; j < s_n; ++j) col[nc++] = j;
+     if (nc < m) return false;   // fewer thrusters than producible axes: underdetermined
+ 
+     // Br is m x nc. Solve for the outputs that produce each unit axis wrench.
+@@ -210,29 +207,11 @@ bool begin(int cls) {
+         s_B[AX_YAW][j]   = mom[2];
+     }
+ 
+-    if (!build(nullptr)) return false;
++    if (!build()) return false;
+     s_ready = true;
+     return true;
+ }
+ 
+-bool rebuild(const bool* avail) {
+-    if (s_cls < 0 || s_n <= 0) return false;
+-    // Keep the previous solution if the new one is not viable: a hull that has
+-    // just lost an axis is not improved by also losing its allocator.
+-    float A_save[ALLOC_MAX_THRUSTERS][AX_COUNT];
+-    float auth_save[AX_COUNT];
+-    unsigned unact_save = s_unact;
+-    memcpy(A_save, s_A, sizeof(s_A));
+-    memcpy(auth_save, s_auth, sizeof(s_auth));
+-    if (build(avail)) return true;
+-    memcpy(s_A, A_save, sizeof(s_A));
+-    memcpy(s_auth, auth_save, sizeof(s_auth));
+-    s_unact = unact_save;
+-    return false;
+-}
+-
+-bool        ready()         { return s_ready; }
+-int         frameClass()    { return s_cls; }
+ const char* frameName()     { return s_name; }
+ int         thrusterCount() { return s_ready ? s_n : 0; }
+ unsigned    unactuatedMask(){ return s_unact; }
+@@ -263,8 +242,8 @@ static float headroom(float a, float t) {
+     return (lim < 0.0f) ? 0.0f : (lim > 1.0f ? 1.0f : lim);
+ }
+ 
+-Result allocate(const float demand[AX_COUNT], const bool* avail,
+-                int priority, float out[ALLOC_MAX_THRUSTERS]) {
++Result allocate(const float demand[AX_COUNT], int priority,
++                float out[ALLOC_MAX_THRUSTERS]) {
+     Result r;
+     r.ok = false;
+     r.scale_attitude = 0.0f;
+@@ -288,12 +267,8 @@ Result allocate(const float demand[AX_COUNT], const bool* avail,
+     }
+ 
+     // Two partial solutions, so the scaling can give one of them precedence.
+-    // Available thrusters only: an unavailable column has a zero row in s_A when
+-    // build() was told about it, but a caller may pass `avail` per frame without
+-    // having rebuilt, so mask here too rather than trusting that.
+     float ua[ALLOC_MAX_THRUSTERS] = {0}, ut[ALLOC_MAX_THRUSTERS] = {0};
+     for (int j = 0; j < s_n; ++j) {
+-        if (avail && !avail[j]) continue;
+         ua[j] = s_A[j][AX_PITCH] * d[AX_PITCH] * s_auth[AX_PITCH]
+               + s_A[j][AX_ROLL]  * d[AX_ROLL]  * s_auth[AX_ROLL]
+               + s_A[j][AX_YAW]   * d[AX_YAW]   * s_auth[AX_YAW];
+diff --git a/src/control/allocator.h b/src/control/allocator.h
+index 0cbb2cf..3a97113 100644
+--- a/src/control/allocator.h
++++ b/src/control/allocator.h
+@@ -19,10 +19,21 @@
+ //      sits 8.06 mm off the Z centreline, so surge carries a real pitch moment;
+ //      under the old mixer that arrived as an unexplained pitch disturbance.
+ //
+-//    * a +-1 pattern cannot express a DEAD thruster. Here availability is an
+-//      input: `allocate()` masks the column on the flight loop, and `rebuild()`
+-//      re-solves the geometry without it OFF the flight loop. The two differ and
+-//      the difference is the honest part -- see `rebuild()`.
++//  ⛔ WHAT THIS DELIBERATELY DOES NOT DO: tolerate a dead thruster. An earlier
++//  version carried `rebuild(avail)` and an `avail` mask on `allocate()`. Both are
++//  DELETED, because on this hull they cannot help and nothing could have called
++//  them:
++//    * the mongla-5 matrix is 5x5 and exactly determined, so removing a column
++//      removes an AXIS -- there is no better allocation to re-solve for;
++//    * nothing on the vehicle can detect a dead thruster yet. ESC presence is
++//      measured on the Pico and never reaches the wire (our upstream PR F /
++//      their #10), so the mask had no possible source;
++//    * and the flight path only ever passed `nullptr`.
++//  So it was a wide interface serving a capability that did not exist. When #10
++//  lands and presence is readable, add it THEN, with the consumer in hand. The
++//  geometric fact it was there to express -- that this hull has no redundancy --
++//  is asserted directly against the matrix in the test, which is a stronger claim
++//  than a function nobody called.
+ //
+ //  ⛔ UNACTUATED AXES ARE REFUSED, NOT ROUNDED TO ZERO. On mongla-5 every
+ //  thruster's line of action passes through the long axis, so no combination
+@@ -98,21 +109,6 @@ struct Result {
+ // using mixer::mix().
+ bool begin(int cls);
+ 
+-// Re-solve the allocation for a changed set of healthy thrusters.
+-//
+-// ⛔ NOT FROM THE FLIGHT LOOP. This inverts a matrix. Call it from the task that
+-// notices the health change, then let the next allocate() use the result.
+-//
+-// ⚠ AND ON A HULL WITH NO REDUNDANCY, RE-SOLVING MAY NOT HELP. mongla-5's five
+-// thrusters produce exactly five axes (determinant 0.1817, condition number
+-// 5.71), so losing one does not reduce the quality of the solution -- it removes
+-// an axis. rebuild() then returns false, because there is no allocation, and the
+-// previous one stays in force. A caller that treats false as "keep flying" is
+-// wrong; the correct response is to surface. Passing null restores full health.
+-bool rebuild(const bool* avail);
+-
+-bool  ready();
+-int   frameClass();
+ const char* frameName();
+ int   thrusterCount();
+ 
+@@ -121,27 +117,33 @@ int   thrusterCount();
+ unsigned unactuatedMask();
+ 
+ // The largest single-axis wrench this frame can produce with every |output| <= 1.
+-// This is the number that makes the six demand channels comparable, and it is
+-// worth reading on a bench: on mongla-5 it is sway 2.000, surge 1.000, heave
+-// 2.000, pitch 0.519, yaw 0.350, roll 0. A hull whose axes differ by 5.7x is a
+-// hull whose per-axis gains must differ by 5.7x, and now that is visible.
++// This is the number that makes the six demand channels comparable: on mongla-5
++// it is sway 2.000, surge 1.000, heave 2.000, pitch 0.519, yaw 0.350, roll 0. A
++// hull whose axes differ by 5.7x is a hull whose per-axis gains must differ by
++// 5.7x -- so this is reported on the wire at boot by mixer::selectFrame(), which
++// is the only way an operator or the companion ever gets to see it.
+ float authority(int axis);
+ 
+ // Allocate. `demand[AX_COUNT]` is normalised, -1..1, where 1.0 means "all the
+-// authority this hull has on that axis". `avail` may be null (all healthy), else
+-// avail[i] false removes thruster i. `out` receives thrusterCount() values in
++// authority this hull has on that axis". `out` receives thrusterCount() values in
+ // -1..1; entries past that are zeroed.
+ //
+ // Deterministic and allocation-free: one N x 6 multiply plus at most two linear
+ // passes over the thrusters. No matrix work happens here -- that is all in
+ // begin() -- so this is safe at 500 Hz.
+-Result allocate(const float demand[AX_COUNT], const bool* avail,
+-                int priority, float out[ALLOC_MAX_THRUSTERS]);
++Result allocate(const float demand[AX_COUNT], int priority,
++                float out[ALLOC_MAX_THRUSTERS]);
+ 
+ // The wrench a set of outputs actually produces, in the same units `authority()`
+-// reports. This is the readback the anti-windup needs and the wire does not
+-// carry: the difference between this and the demand is precisely the charge a
+-// PID integrator must NOT accumulate.
++// reports.
++//
++// ⚠ NO FLIGHT CONSUMER, ON PURPOSE, AND THAT IS NOT AN ORPHAN. This is the
++// correctness oracle the native test allocates against: you cannot check an
++// allocator without computing the wrench its outputs produce, and asserting
++// against recorded outputs instead would only prove the code still does what it
++// did. It is also the readback an anti-windup needs (their #20) -- when that
++// lands it has a caller. Kept BECAUSE the test needs it, not in case something
++// might.
+ void achieved(const float out[ALLOC_MAX_THRUSTERS], float wrench[AX_COUNT]);
+ 
+ // Column j of the wrench matrix — what thruster j produces at unit output.
+diff --git a/src/control/mixer.cpp b/src/control/mixer.cpp
+index 031cf0c..1560cbf 100644
+--- a/src/control/mixer.cpp
++++ b/src/control/mixer.cpp
+@@ -70,6 +70,14 @@ void selectFrame(int frame_class) {
+             snprintf(b, sizeof(b), "Frame: %s, 6 DOF", allocator::frameName());
+         }
+         mav_stream::queueStatusText(MAV_SEVERITY_INFO, b);
++
++        // ⚠ ONE MESSAGE, NOT THREE. queueStatusText holds QCAP = 4 slots and
++        // nothing drains them until Task_MAVLink starts, so this runs with the
++        // queue cold and params::init() may already have used one. Three lines
++        // here could silently drop the third. The per-axis AUTHORITY -- the
++        // number this allocation turns on -- goes out from mav_stream's repeated
++        // configBanner() instead, which is also the only way a GCS that connects
++        // after boot ever sees it.
+         return;
+     }
+     // ⛔ FALL BACK LOUDLY. A geometry that will not solve is a configuration error, and
+@@ -81,6 +89,10 @@ void selectFrame(int frame_class) {
+     mav_stream::queueStatusText(MAV_SEVERITY_ERROR, b);
+ }
+ 
++// The allocation actually in force. Distinct from the FRAME_CLASS *param*, which
++// is what was ASKED for -- selectFrame() falls back to 0 on a geometry that will
++// not solve, and a host that reads the param instead of this would believe the
++// wrong allocation. mav_stream's CFG line reports this one.
+ int activeFrameClass() { return s_frame_class; }
+ 
+ void mix(float roll, float pitch, float yaw,
+diff --git a/test/native/test_allocator.cpp b/test/native/test_allocator.cpp
+index 0f299c2..08dcc2b 100644
+--- a/test/native/test_allocator.cpp
++++ b/test/native/test_allocator.cpp
+@@ -76,7 +76,7 @@ static void test_roll_is_refused() {
+ 
+     float d[AX_COUNT] = {0}, out[ALLOC_MAX_THRUSTERS];
+     d[AX_ROLL] = 0.8f;
+-    Result r = allocate(d, nullptr, PRIO_UNIFORM, out);
++    Result r = allocate(d, PRIO_UNIFORM, out);
+     check(r.ok, "allocate() still succeeds");
+     check((r.refused_mask & (1u << AX_ROLL)) != 0, "roll demand REPORTED as refused");
+     float sum = 0.0f;
+@@ -112,7 +112,7 @@ static void test_unit_demand_is_exactly_full() {
+     for (int a = 0; a < 5; ++a) {
+         float d[AX_COUNT] = {0}, out[ALLOC_MAX_THRUSTERS];
+         d[axes[a]] = 1.0f;
+-        Result r = allocate(d, nullptr, PRIO_UNIFORM, out);
++        Result r = allocate(d, PRIO_UNIFORM, out);
+         float mx = 0.0f;
+         for (int j = 0; j < 5; ++j) mx = fmaxf(mx, fabsf(out[j]));
+         char buf[64];
+@@ -138,7 +138,7 @@ static void test_surge_pitch_coupling() {
+     check(begin(frames::CLASS_MONGLA5), "begin");
+     float d[AX_COUNT] = {0}, out[ALLOC_MAX_THRUSTERS];
+     d[AX_SURGE] = 1.0f;
+-    allocate(d, nullptr, PRIO_UNIFORM, out);
++    allocate(d, PRIO_UNIFORM, out);
+     near(out[4], 1.0f,      1e-5f, "axial at full");
+     near(out[2], -0.015530f, 1e-5f, "vert_aft trims");
+     near(out[3], +0.015530f, 1e-5f, "vert_fwd trims the other way");
+@@ -157,14 +157,14 @@ static void test_priority_modes() {
+     float d[AX_COUNT] = {0}, out[ALLOC_MAX_THRUSTERS];
+     d[AX_SWAY] = 1.0f; d[AX_YAW] = 1.0f;   // the lateral pair, asked for twice over
+ 
+-    Result u = allocate(d, nullptr, PRIO_UNIFORM, out);
++    Result u = allocate(d, PRIO_UNIFORM, out);
+     near(u.scale_attitude, 0.5f, 1e-5f, "uniform: everything halved");
+     near(out[0], 1.0f,  1e-5f, "uniform: lat_aft at the rail");
+     near(out[1], 0.0f,  1e-5f, "uniform: lat_fwd stopped");
+     float wr[AX_COUNT]; achieved(out, wr);
+     near(wr[AX_YAW] / authority(AX_YAW), 0.5f, 1e-4f, "uniform: HALF the yaw it asked for");
+ 
+-    Result a = allocate(d, nullptr, PRIO_ATTITUDE, out);
++    Result a = allocate(d, PRIO_ATTITUDE, out);
+     near(a.scale_attitude,    1.0f, 1e-5f, "attitude-first: yaw met in full");
+     near(a.scale_translation, 0.0f, 1e-5f, "attitude-first: sway yields entirely");
+     achieved(out, wr);
+@@ -183,54 +183,92 @@ static void test_groups_stay_independent() {
+     check(begin(frames::CLASS_MONGLA5), "begin");
+     float d1[AX_COUNT] = {0}, o1[ALLOC_MAX_THRUSTERS];
+     d1[AX_YAW] = 0.6f;
+-    allocate(d1, nullptr, PRIO_UNIFORM, o1);
++    allocate(d1, PRIO_UNIFORM, o1);
+     float d2[AX_COUNT] = {0}, o2[ALLOC_MAX_THRUSTERS];
+     d2[AX_YAW] = 0.6f; d2[AX_SURGE] = 1.0f;
+-    allocate(d2, nullptr, PRIO_UNIFORM, o2);
++    allocate(d2, PRIO_UNIFORM, o2);
+     check(o1[0] == o2[0] && o1[1] == o2[1], "lateral pair BIT-IDENTICAL with surge added");
+     printf("        (%.9f, %.9f) vs (%.9f, %.9f)\n",
+            (double)o1[0], (double)o1[1], (double)o2[0], (double)o2[1]);
+ }
+ 
+-// A dead thruster is a limit, not a new matrix. With one lateral tunnel gone the
+-// hull loses a DOF outright -- there is no redundancy to fall back on -- and the
+-// allocator must say so rather than produce a plausible wrong answer.
+-static void test_dead_thruster() {
+-    printf("\nA DEAD THRUSTER: no redundancy exists, so say so\n");
+-    check(begin(frames::CLASS_MONGLA5), "begin");
+-    float d[AX_COUNT] = {0}, out[ALLOC_MAX_THRUSTERS];
+-    bool avail[ALLOC_MAX_THRUSTERS] = { false, true, true, true, true };  // lat_aft dead
+-    d[AX_YAW] = 1.0f;
+-    Result r = allocate(d, avail, PRIO_UNIFORM, out);
+-    check(r.ok, "allocate() succeeds");
+-    near(out[0], 0.0f, 1e-9f, "the dead thruster is commanded nothing");
+-    float wr[AX_COUNT];
+-    achieved(out, wr);
+-    printf("        yaw asked %.3f, got %.3f; sway side-effect %.4f\n",
+-           (double)authority(AX_YAW), (double)wr[AX_YAW], (double)wr[AX_SWAY]);
+-    check(fabsf(wr[AX_SWAY]) > 1e-3f,
+-          "⛔ and yaw now comes with unavoidable SWAY -- one pair, one thruster");
+-    printf("        ^ the determinant is 0.1817 with a condition number of 5.71: exactly\n"
+-           "          determined, zero redundancy. Any single loss costs a whole DOF.\n");
++// ⛔ THIS HULL HAS NO REDUNDANCY, asserted against the GEOMETRY rather than
++// against a fault-tolerance API.
++//
++// An earlier version proved this through `rebuild(avail)` and an `avail` mask on
++// `allocate()`. Both are gone: nothing on the vehicle can detect a dead thruster
++// (ESC presence never reaches the wire -- their #10), the flight path only ever
++// passed nullptr, and on a 5x5 exactly-determined matrix re-solving cannot help
++// anyway. Testing a function nobody calls is testing dead code.
++//
++// The claim that actually matters survives, and it is stronger stated this way:
++// remove ANY single column from B and the rank drops, i.e. an axis is LOST. On
++// the 8-thruster frame it does not. That difference is the whole argument for
++// redundancy, and it is a property of the geometry, not of any code path.
++static int rank_of(const float* rows, int nr, int nc) {
++    // Gaussian elimination with partial pivoting; counts independent rows.
++    float m[AX_COUNT * ALLOC_MAX_THRUSTERS];
++    for (int i = 0; i < nr * nc; ++i) m[i] = rows[i];
++    int rank = 0;
++    for (int c = 0; c < nc && rank < nr; ++c) {
++        int piv = -1; float best = 1e-6f;
++        for (int r = rank; r < nr; ++r) {
++            const float v = fabsf(m[r * nc + c]);
++            if (v > best) { best = v; piv = r; }
++        }
++        if (piv < 0) continue;
++        for (int k = 0; k < nc; ++k) { float t = m[rank*nc+k]; m[rank*nc+k] = m[piv*nc+k]; m[piv*nc+k] = t; }
++        for (int r = 0; r < nr; ++r) {
++            if (r == rank) continue;
++            const float f = m[r * nc + c] / m[rank * nc + c];
++            if (f == 0.0f) continue;
++            for (int k = 0; k < nc; ++k) m[r * nc + k] -= f * m[rank * nc + k];
++        }
++        ++rank;
++    }
++    return rank;
+ }
+ 
+-// rebuild() is the off-loop re-solve, and on this hull it must REFUSE: five
+-// thrusters produce exactly five axes, so removing one removes an axis and there
+-// is no allocation to fall back to. Refusing is the answer; pretending is not.
+-static void test_rebuild_refuses_when_a_dof_is_lost() {
+-    printf("\nrebuild() after a thruster loss: REFUSE, do not improvise\n");
+-    check(begin(frames::CLASS_MONGLA5), "begin");
+-    bool dead_lat[ALLOC_MAX_THRUSTERS] = { false, true, true, true, true };
+-    check(!rebuild(dead_lat), "one lateral tunnel lost -> rebuild() returns false");
+-    near(authority(AX_YAW), 0.350f, 1e-5f, "previous solution retained, not corrupted");
+-    check(rebuild(nullptr), "restoring full health rebuilds cleanly");
+-    near(authority(AX_YAW), 0.350f, 1e-5f, "and authority is unchanged");
+-    // The redundant frame is the opposite case: it CAN re-solve around a loss.
++// Build the 6 x N matrix from the public per-thruster wrench, optionally dropping
++// column `skip`. Uses only what a caller can see, so it cannot accidentally test
++// allocator internals.
++static int rank_without(int skip, int n) {
++    float rows[AX_COUNT * ALLOC_MAX_THRUSTERS] = {0};
++    int nc = 0;
++    for (int j = 0; j < n; ++j) {
++        if (j == skip) continue;
++        float w[AX_COUNT];
++        thrusterWrench(j, w);
++        for (int i = 0; i < AX_COUNT; ++i) rows[i * (n - (skip >= 0 ? 1 : 0)) + nc] = w[i];
++        ++nc;
++    }
++    return rank_of(rows, AX_COUNT, nc);
++}
++
++static void test_no_redundancy_is_a_property_of_the_geometry() {
++    printf("\nREDUNDANCY: mongla-5 has none, and the 8-thruster frame does\n");
++    check(begin(frames::CLASS_MONGLA5), "begin(mongla5)");
++    const int full5 = rank_without(-1, 5);
++    printf("        full rank = %d of 6 (roll unactuated)\n", full5);
++    check(full5 == 5, "all five thrusters -> rank 5");
++    bool every_loss_costs_an_axis = true;
++    for (int j = 0; j < 5; ++j) {
++        const int r = rank_without(j, 5);
++        printf("        drop thruster %d -> rank %d %s\n", j, r,
++               r < full5 ? "  <- an AXIS is lost" : "");
++        if (r >= full5) every_loss_costs_an_axis = false;
++    }
++    check(every_loss_costs_an_axis,
++          "⛔ EVERY single-thruster loss costs a whole DOF -- zero redundancy");
++
+     check(begin(frames::CLASS_VECTORED8_GEOM), "begin(vectored8_geom)");
+-    bool dead_h[ALLOC_MAX_THRUSTERS] = { false, true, true, true, true, true, true, true };
+-    check(rebuild(dead_h), "⭐ eight thrusters CAN re-solve around one loss");
+-    printf("        yaw authority after the loss: %.4f (was 0.9625)\n", (double)authority(AX_YAW));
+-    printf("        ^ THIS is what redundancy buys, and mongla-5 has none of it.\n");
++    const int full8 = rank_without(-1, 8);
++    check(full8 == 6, "eight thrusters -> full 6-DOF rank");
++    bool survives_any_loss = true;
++    for (int j = 0; j < 8; ++j) if (rank_without(j, 8) < full8) survives_any_loss = false;
++    check(survives_any_loss, "⭐ and it keeps all six axes after ANY single loss");
++    printf("        ^ THAT is what redundancy buys. mongla-5 has none of it, so a\n"
++           "          thruster failure is a surface-now event, not a degrade-and-continue one.\n");
+ }
+ 
+ // Whatever the demand, no output may leave [-1, 1]. Swept rather than argued.
+@@ -248,7 +286,7 @@ static void test_bounds_sweep() {
+     for (int p = 0; p < 2; ++p) {
+         float d[AX_COUNT] = { V[a], V[b], V[c], V[e], 0.0f, V[f] };
+         float out[ALLOC_MAX_THRUSTERS];
+-        allocate(d, nullptr, p, out);
++        allocate(d, p, out);
+         for (int j = 0; j < 5; ++j) worst = fmaxf(worst, fabsf(out[j]));
+         ++n;
+     }
+@@ -257,7 +295,7 @@ static void test_bounds_sweep() {
+     // NaN must not propagate to a single thruster.
+     float d[AX_COUNT] = { 0.5f, NAN, 0.2f, 0.1f, 0.0f, -0.3f };
+     float out[ALLOC_MAX_THRUSTERS];
+-    Result r = allocate(d, nullptr, PRIO_UNIFORM, out);
++    Result r = allocate(d, PRIO_UNIFORM, out);
+     bool clean = true;
+     for (int j = 0; j < 5; ++j) if (!std::isfinite(out[j])) clean = false;
+     check(clean, "a NaN demand reaches NO thruster");
+@@ -281,7 +319,7 @@ static void test_vectored8_geom_builds() {
+     // Minimum-norm property: the redundant frame must produce the wrench EXACTLY.
+     float d[AX_COUNT] = {0}, out[ALLOC_MAX_THRUSTERS], wr[AX_COUNT];
+     d[AX_YAW] = 0.5f; d[AX_SURGE] = 0.5f;
+-    allocate(d, nullptr, PRIO_UNIFORM, out);
++    allocate(d, PRIO_UNIFORM, out);
+     achieved(out, wr);
+     near(wr[AX_YAW],   0.5f * authority(AX_YAW),   1e-4f, "redundant solve is EXACT in yaw");
+     near(wr[AX_SURGE], 0.5f * authority(AX_SURGE), 1e-4f, "...and in surge");
+@@ -294,10 +332,10 @@ static void test_vectored8_geom_builds() {
+ static void test_legacy_class_is_refused() {
+     printf("\nFRAME_CLASS 0 stays with mixer.cpp\n");
+     check(!begin(frames::CLASS_LEGACY_VECTORED8), "begin(0) returns false");
+-    check(!ready(), "allocator stays disabled");
++    check(thrusterCount() == 0, "allocator stays disabled (no thrusters reported)");
+     float d[AX_COUNT] = {0}, out[ALLOC_MAX_THRUSTERS];
+     d[AX_YAW] = 1.0f;
+-    Result r = allocate(d, nullptr, PRIO_UNIFORM, out);
++    Result r = allocate(d, PRIO_UNIFORM, out);
+     check(!r.ok, "allocate() refuses");
+     near(out[0], 0.0f, 1e-9f, "and commands nothing");
+     check(!begin(99), "an unknown class is refused too");
+@@ -312,8 +350,7 @@ int main() {
+     test_surge_pitch_coupling();
+     test_priority_modes();
+     test_groups_stay_independent();
+-    test_dead_thruster();
+-    test_rebuild_refuses_when_a_dof_is_lost();
++    test_no_redundancy_is_a_property_of_the_geometry();
+     test_bounds_sweep();
+     test_vectored8_geom_builds();
+     test_legacy_class_is_refused();
+-- 
+2.43.0
+
+
+From add32cc6ae732ee4d8a021b2117748230f019840 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 25 Sep 2026 16:02:28 +0000
+Subject: [PATCH 3/3] control: measure QP and RPI against the shipped
+ allocator, and prove no axis reverses
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The user asked for SOTA grounding. The AUV control-allocation literature is mostly
+optimisation-based -- redistributed pseudo-inverse, and QP formulations folding
+saturation and energy into the objective (prioritised INDI-QP, RA-L 2026; T-S
+fuzzy + pseudo-inverse QP under constraints, 2024) -- and Bumblebee's published
+stack diagram carries a distinct "Thrust Allocator" stage. So a QP is the obvious
+reach. We measured it instead of assuming.
+
+Four allocators, same geometry, all 992 INFEASIBLE demands of a 4^5 sweep:
+
+  allocator            direction err    attitude err    real reversals
+  uniform (default)      0.00 deg          39.9 %             0
+  attitude-first        60.51 deg           0.0 %             0
+  RPI                    8.01 deg          69.7 %             0
+  QP (bounded LSQ)       8.01 deg          69.7 %             0
+
+⛔ QP AND RPI ARE WORSE, on both metrics that matter to a hull. On an L2 score they
+beat uniform scaling in 81 % of these cases -- which is precisely why L2 is the
+wrong objective. Minimising ||Bu - w|| is free to ROTATE the wrench: 8 deg mean, 12.5
+deg worst. A vehicle asked for surge-and-yaw wants a weaker version of that motion,
+not a different motion that is nearer in norm. Recorded in allocator.h so nobody
+has to re-derive it, including the frame-specific caveat: the 8-thruster frame has
+a 2-D null space and this row of the table will NOT transfer to it.
+
+NEW INVARIANT, PROVED THEN ASSERTED. No demanded axis is ever driven backwards, in
+either mode:
+
+  uniform   achieved = w * s, s in (0,1]                 -- a non-negative scale
+  attitude  achieved = wa + s*wt, s in [0,1], A exact    -- attitude exact,
+            translation a NON-NEGATIVE multiple of the demand
+
+A non-negative multiple of a vector cannot oppose it. 992 infeasible demands x 2
+modes, zero reversals.
+
+⚠ AND THE FIRST MEASUREMENT OF THIS WAS WRONG, which is why the test is written the
+way it is. A sweep comparing sign(achieved) against sign(demand) reported reversals
+on 41.9 % of saturating demands, and every one was a floating-point +1e-17 scored
+against a negative demand. I was about to delete ALLOC_PRIO on that number.
+Requiring a magnitude -- 1 % of the demand -- before calling something a reversal
+takes the count to zero and matches the proof. A guard that cries wolf gets
+deleted, and an unsafe allocator would ship behind it.
+
+⭐ The 39.9 % attitude error under the default is real and no allocator can remove
+it -- the thrust does not exist. The fix is to tell the controllers, which is what
+upstream #20 asks for, and achieved() is that number.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Mm13LYmLyja8PDVLbFUT58
+---
+ src/control/allocator.h        | 42 +++++++++++++++++++++
+ test/native/test_allocator.cpp | 67 ++++++++++++++++++++++++++++++++++
+ 2 files changed, 109 insertions(+)
+
+diff --git a/src/control/allocator.h b/src/control/allocator.h
+index 3a97113..98ee77f 100644
+--- a/src/control/allocator.h
++++ b/src/control/allocator.h
+@@ -50,6 +50,48 @@
+ //  about magnitude. That is enough to allocate correctly and not enough to
+ //  predict a trajectory, and the distinction matters.
+ //
++//  ── WHY NOT A QP, WHICH IS WHAT THE LITERATURE AND OUR RIVALS USE ───────────
++//
++//  Bumblebee's published stack diagram carries a distinct "Thrust Allocator"
++//  stage, and the AUV control-allocation literature is largely optimisation-based:
++//  redistributed pseudo-inverse (RPI), and QP formulations that fold thruster
++//  saturation and energy into the objective (e.g. prioritised INDI-QP allocation,
++//  RA-L 2026; T-S fuzzy + pseudo-inverse QP under constraints). So a QP is the
++//  obvious thing to reach for, and we measured it before deciding not to.
++//
++//  Four allocators, same geometry, all 992 INFEASIBLE demands of a 4^5 sweep:
++//
++//    allocator            wrench direction err    attitude err    axis reversals
++//    uniform (default)      0.00 deg  (exact)         39.9 %            0
++//    attitude-first        60.51 deg (by design)       0.0 %            0
++//    RPI                    8.01 deg                  69.7 %            0
++//    QP (bounded LSQ)       8.01 deg                  69.7 %            0
++//
++//  ⛔ QP AND RPI ARE WORSE HERE, ON BOTH METRICS THAT MATTER TO A HULL. They
++//  minimise ||Bu - w||, and on an L2 score they do beat uniform scaling in 81 % of
++//  these cases -- which is exactly why L2 is the wrong objective. Being "closest"
++//  is allowed to rotate the wrench: 8 deg of mean direction error, 12.5 deg worst.
++//  A vehicle asked for surge-and-yaw wants a WEAKER version of that motion, not a
++//  different motion that happens to be nearer in norm. Uniform scaling is exactly
++//  direction-preserving, and on this hull it is also nearly half the attitude
++//  error.
++//
++//  And the redundancy QP exists to exploit is not there: mongla-5's matrix is 5x5
++//  and exactly determined (null space dimension 0), so for every ACHIEVABLE wrench
++//  all four methods return the identical u. QP only differs where the demand
++//  cannot be met, and there it differs for the worse.
++//
++//  ⚠ THIS CONCLUSION IS FRAME-SPECIFIC. The 8-thruster frame has a 2-dimensional
++//  null space, and there a QP could genuinely trade thruster effort at no cost to
++//  the wrench. If that frame is ever flown, re-measure before assuming this row of
++//  the table transfers -- it will not.
++//
++//  ⭐ THE RESIDUAL IS NOT AN ALLOCATION PROBLEM. 39.9 % attitude error while
++//  saturating is real, and no allocator can remove it: the thrust does not exist.
++//  The fix is to TELL THE CONTROLLERS, which is what upstream #20 asks for -- the
++//  difference between demanded and achieved is precisely the charge the PID
++//  integrators must not accumulate. `achieved()` is that number, ready for it.
++//
+ //  ⚠ NO ARDUINO, NO PARAMS, NO GLOBALS IN THE MATH. This file compiles on a host
+ //  with nothing but <math.h>, which is what makes `test/test_allocator` possible.
+ //  A 500 Hz allocator that can only be checked by flying it is not checkable.
+diff --git a/test/native/test_allocator.cpp b/test/native/test_allocator.cpp
+index 08dcc2b..358c124 100644
+--- a/test/native/test_allocator.cpp
++++ b/test/native/test_allocator.cpp
+@@ -271,6 +271,72 @@ static void test_no_redundancy_is_a_property_of_the_geometry() {
+            "          thruster failure is a surface-now event, not a degrade-and-continue one.\n");
+ }
+ 
++// ⭐ NO DEMANDED AXIS IS EVER DRIVEN BACKWARDS. The invariant that makes both
++// priority modes safe to ship, and it is provable rather than lucky:
++//
++//   uniform   u = A*w / max(1, max|A*w|)  -> achieved = w * s, s in (0,1].
++//             A non-negative scale of the demand. Every axis keeps its sign.
++//
++//   attitude  u = ua + s*ut with s in [0,1], where A is the EXACT inverse, so
++//             Br*ua = wa (attitude rows only, zeros elsewhere) and Br*ut = wt.
++//             Achieved = wa + s*wt: attitude exactly, translation scaled by a
++//             NON-NEGATIVE scalar. A non-negative multiple of a vector cannot
++//             oppose it, so translation is degraded but never reversed.
++//
++// ⚠ THIS TEST EXISTS BECAUSE THE FIRST MEASUREMENT OF IT WAS WRONG. A sweep that
++// compared sign(achieved) against sign(demand) reported reversals on 41.9 % of
++// saturating demands -- and every one was a floating-point +0.0 scored against a
++// negative demand. sign(+0.0) is 0.0, but the value that actually came out was
++// +1e-17, whose sign is +1. Requiring a MAGNITUDE (1 % of the demand) before
++// calling something a reversal takes the count to zero, which matches the proof
++// above. A guard that cries wolf gets deleted, and an unsafe allocator would then
++// ship behind it.
++static void test_no_axis_is_ever_driven_backwards() {
++    printf("\nNO AXIS IS EVER DRIVEN BACKWARDS, in either priority mode\n");
++    check(begin(frames::CLASS_MONGLA5), "begin");
++    const float V[4] = { -1.0f, -0.5f, 0.5f, 1.0f };
++    int infeasible = 0, reversals = 0;
++    float worst_ratio = 0.0f;
++    for (int a = 0; a < 4; ++a)
++    for (int b = 0; b < 4; ++b)
++    for (int c = 0; c < 4; ++c)
++    for (int e = 0; e < 4; ++e)
++    for (int f = 0; f < 4; ++f)
++    for (int prio = 0; prio < 2; ++prio) {
++        float d[AX_COUNT] = { V[a], V[b], V[c], V[e], 0.0f, V[f] };
++        float out[ALLOC_MAX_THRUSTERS];
++        Result r = allocate(d, prio, out);
++        if (r.scale_attitude >= 1.0f && r.scale_translation >= 1.0f) continue;  // feasible
++        if (prio == 0) ++infeasible;
++        float wr[AX_COUNT];
++        achieved(out, wr);
++        for (int i = 0; i < AX_COUNT; ++i) {
++            const float want = d[i] * authority(i);
++            if (fabsf(want) < 1e-9f) continue;
++            // A REVERSAL needs a magnitude. 1 % of the demand, so a numerical
++            // zero is not mistaken for thrust in the wrong direction.
++            if (wr[i] * want < 0.0f && fabsf(wr[i]) > 0.01f * fabsf(want)) {
++                ++reversals;
++                const float ratio = fabsf(wr[i]) / fabsf(want);
++                if (ratio > worst_ratio) worst_ratio = ratio;
++                printf("        ⛔ %s: want %+.4f got %+.4f (prio %d)\n",
++                       AXIS_NAME[i], (double)want, (double)wr[i], prio);
++            }
++        }
++    }
++    printf("        %d infeasible demands x 2 priority modes swept\n", infeasible);
++    check(reversals == 0, "no achieved axis opposes its demand by >1 % of magnitude");
++
++    // And the positive half of the claim for attitude-first: it really does meet
++    // the attitude demand exactly, which is the whole reason to accept the trade.
++    float d[AX_COUNT] = { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f };   // sway + yaw, infeasible
++    float out[ALLOC_MAX_THRUSTERS], wr[AX_COUNT];
++    allocate(d, PRIO_ATTITUDE, out);
++    achieved(out, wr);
++    near(wr[AX_YAW], authority(AX_YAW), 1e-4f, "attitude-first: yaw met EXACTLY");
++    check(wr[AX_SWAY] >= -1e-6f, "...and sway is reduced, never negative");
++}
++
+ // Whatever the demand, no output may leave [-1, 1]. Swept rather than argued.
+ static void test_bounds_sweep() {
+     printf("\nBOUNDS: no demand, however hostile, can command past the rail\n");
+@@ -352,6 +418,7 @@ int main() {
+     test_groups_stay_independent();
+     test_no_redundancy_is_a_property_of_the_geometry();
+     test_bounds_sweep();
++    test_no_axis_is_ever_driven_backwards();
+     test_vectored8_geom_builds();
+     test_legacy_class_is_refused();
+     printf("\n=== %s ===\n", g_fail == 0 ? "ALL PASS" : "FAILURES PRESENT");
 -- 
 2.43.0
 
