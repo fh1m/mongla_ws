@@ -204,3 +204,69 @@ def test_the_class_filter_still_applies():
     s._cls = 'gate'
     _on_det(s, _msg(_det(0.99, name='repair')))
     assert s._det_box is None
+
+
+# ── hull roll, and the -1.0 "no data" convention ───────────────────────────
+
+
+def _imu(roll_rad=0.0, has_orientation=True):
+    """A sensor_msgs/Imu-shaped object. `orientation_covariance[0] = -1.0` is
+    the ROS marker for "this backend cannot supply attitude", which
+    auv_manager_node sets while still publishing a structurally valid
+    message."""
+    import math as _m
+    cov = [0.0] * 9
+    if not has_orientation:
+        cov[0] = -1.0
+    q = types.SimpleNamespace(x=_m.sin(roll_rad / 2), y=0.0, z=0.0,
+                              w=_m.cos(roll_rad / 2))
+    return types.SimpleNamespace(orientation=q, orientation_covariance=cov)
+
+
+def _imunode(**kw):
+    from mongla_vision.lock_node import LockNode
+    s = _Stub(act_conf=0.45)
+    LockNode._on_imu(s, _imu(**kw))
+    return LockNode, s
+
+
+def test_roll_is_read_from_the_imu_quaternion():
+    """⭐ The de-rotation the operator's R&D fusion does and the ladder did
+    not. On a five-thruster hull roll is UNACTUATED, so it is the one attitude
+    the controller cannot null and a visual estimate must compensate for."""
+    LockNode, s = _imunode(roll_rad=0.35)
+    assert LockNode._roll_fresh(s) == pytest.approx(0.35, abs=1e-6)
+
+
+def test_the_minus_one_covariance_convention_is_obeyed():
+    """⛔ THE LOAD-BEARING CHECK. auv_manager_node publishes a valid Imu with
+    orientation_covariance[0] = -1.0 when the board cannot supply attitude.
+    Reading the quaternion anyway would take (0,0,0,1) as LEVEL -- a confident
+    wrong answer on a rolled hull, and exactly what that convention exists to
+    prevent."""
+    LockNode, s = _imunode(roll_rad=0.0, has_orientation=False)
+    assert math.isnan(LockNode._roll_fresh(s))
+
+
+def test_a_stale_roll_is_refused():
+    """A second-old roll on a rolling hull is a different attitude."""
+    LockNode, s = _imunode(roll_rad=0.2)
+    s._imu_t -= 5.0
+    assert math.isnan(LockNode._roll_fresh(s))
+
+
+def test_roll_is_NaN_before_any_imu_arrives():
+    from mongla_vision.lock_node import LockNode
+    s = _Stub(act_conf=0.45)
+    s._roll_rad, s._imu_t = float('nan'), 0.0
+    assert math.isnan(LockNode._roll_fresh(s))
+
+
+def test_the_derotation_is_actually_applied_to_the_bearing():
+    """⛔ §9 INLINE: reading roll and never using it would be the defect this
+    repo keeps finding. The world-frame bearing must be rotated by it."""
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'lock_node.py').read_text()
+    assert 'roll = self._roll_fresh()' in src
+    assert 'bx * cr - by * sr' in src, 'roll is read but never applied'
