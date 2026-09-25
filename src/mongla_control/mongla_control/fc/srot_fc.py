@@ -2052,10 +2052,16 @@ class SrotFC(FlightController):
         stack was promoting that float to `battery_voltage` -- the manager
         printed `BAT main 1.39V` on a healthy bench.
 
-        The cost was not only cosmetic. `/mongla/state` publishes ON CHANGE with
-        a 0.20 V battery threshold, and 67.5 % of these steps cross it: in one
-        manager run, **2939 of 2939 state-change publications were this pin**.
+        The cost was not only cosmetic. The manager's state LOG is gated on change
+        with a 0.20 V battery threshold, and 67.5 % of these steps cross it: in
+        one manager run, **2939 of 2939 state-change log lines were this pin**.
         Real state changes were buried under a floating input.
+
+        ⚠ CORRECTED: this said "`/mongla/state` publishes ON CHANGE". It does not
+        -- `_publish_state` is called unconditionally from `telemetry_tick`, and
+        the change threshold belongs to `_maybe_print_state`, a console printer.
+        The guard below is unaffected (a floating pin must not reach
+        `battery_voltage` either way); only the attribution was wrong.
 
         The MEDIAN is the statistic, not the max: one glitchy sample from a real
         pack must not blank it, while a pin that is noise every sample cannot

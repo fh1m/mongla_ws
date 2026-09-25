@@ -3,7 +3,16 @@
 
 * Owns MAVLink connection + reader thread (only thread calling recv_match).
 * Exposes /mongla/move as a ROS2 ActionServer.
-* Publishes /mongla/state (typed MonglaState message) on change.
+* Publishes /mongla/state (typed MonglaState message) EVERY telemetry tick.
+  ⚠ NOT "on change", which this line said and four other places repeated. The
+  on-change logic (`_maybe_print_state`, with YAW/DEPTH/BAT_CHANGE_THRESH) gates
+  the CONSOLE PRINT; `_publish_state` is called unconditionally from
+  `telemetry_tick` and publishes at the timer rate on a depth-10 VOLATILE
+  publisher. The distinction is a consumer contract: told "on change", a
+  subscriber may reasonably treat each message as a transition, and every
+  message here is periodic. (The measured "2939 of 2939 state-change
+  publications were this pin" in `srot_fc.plausible_battery` counted LOG LINES,
+  not publications -- the guard is still right, its evidence was misattributed.)
 * MultiThreadedExecutor: action callbacks + timers run in parallel threads.
 
 Dispatch is registry-driven: every entry in `mongla_control.COMMANDS`
@@ -72,7 +81,8 @@ from .connection_config import (                                             # n
     DEFAULT_FLIGHT_CONTROLLER, DEFAULT_MODE, NETWORK, PROFILES, resolve_mode,
     resolve_profile, resolve_srot_profile,
 )
-from .dispatch_policy   import goal_acceptance                           # noqa: E402
+from .dispatch_policy   import (goal_acceptance, _CommandGate,             # noqa: E402
+                                COMMAND_GATE_STALE_S)
 from .vision_state     import VisionState                                # noqa: E402
 from .vision_tunables  import (                                          # noqa: E402
     declare_vision_params,
@@ -905,7 +915,27 @@ class AUVManagerNode(Node):
         self.action_group = ReentrantCallbackGroup()
         self.timer_group  = MutuallyExclusiveCallbackGroup()
 
-        self.command_active = False
+        # ⛔ THE GATE IS CLAIMED IN goal_callback, NOT IN execute_callback.
+        #
+        # It used to be a plain bool READ in `goal_callback` (the accept/reject
+        # decision) and WRITTEN in `execute_callback` (the start of the motion
+        # loop). Those are two different callbacks on a ReentrantCallbackGroup
+        # under a MultiThreadedExecutor, and nothing held a lock across the gap --
+        # so a second goal arriving in that window saw `command_active` still
+        # False and was ACCEPTED. Two motion loops then drove the board at once,
+        # sharing one abort flag, and whichever finished first cleared the gate
+        # while the other was still commanding thrust.
+        #
+        # REPRODUCED: 40/40 trials at every hand-off delay from 20 ms down to
+        # 1 ms (`test_command_gate.py::test_two_goals_cannot_both_claim`).
+        # rclpy only sets the WIDTH of the window, not whether it exists.
+        #
+        # Claiming at the accept decision makes test-and-set one operation. The
+        # cost is that an accepted goal which never reaches execute_callback would
+        # leak the claim, so the claim carries a monotonic stamp and
+        # `_reap_stale_claim()` clears it from the telemetry timer -- loudly,
+        # because a leak means an assumption above is wrong.
+        self._gate = _CommandGate()
         self.action_server  = ActionServer(
             self, Move, '/mongla/move',
             execute_callback=self.execute_callback,
@@ -1236,9 +1266,21 @@ class AUVManagerNode(Node):
     #  Action Server callbacks                                            #
     # ================================================================== #
 
+    @property
+    def command_active(self) -> bool:
+        """Whether a command currently holds the gate.
+
+        Read-only on purpose. Every write used to be a bare assignment from one of
+        four places, which is what made the race invisible; the gate object now
+        owns the transitions and the only way in is `claim()` / `release()`.
+        """
+        return self._gate.active
+
     def goal_callback(self, goal_request):
-        accept, signal_abort = goal_acceptance(
-            goal_request.cmd, self.command_active)
+        # ONE atomic operation: decide and claim together. `goal_acceptance` stays
+        # the pure policy (and stays unit-testable); the gate applies it under its
+        # own lock so no second caller can observe the pre-claim state.
+        accept, signal_abort = self._gate.claim(goal_request.cmd, goal_acceptance)
         if not accept:
             self.get_logger().warn(
                 f'[ACT  ] Rejected {goal_request.cmd} -- command already active')
@@ -1258,7 +1300,13 @@ class AUVManagerNode(Node):
         # queued safety verb (disarm) gets through. Then stop the heading lock
         # (it must not outlive a cancelled goal) and send a backstop neutral.
         self.mongla.request_abort()
-        self.command_active = False
+        # ⚠ Releasing here is deliberate (a queued `disarm` must get through) and
+        # it is ALSO how a cancel let an ordinary `move_*` in while the cancelled
+        # loop was still winding down: the gate is freed for every verb, not just
+        # the safety ones. Keep the release -- a stuck gate is worse -- but mark it
+        # DRAINING, which `claim()` treats as busy for everything except a safety
+        # verb. The cancelled loop clears it from its own `finally`.
+        self._gate.begin_drain()
         self.mongla.unlock_heading()
         self.pixhawk.send_neutral()
         return CancelResponse.ACCEPT
@@ -1274,7 +1322,9 @@ class AUVManagerNode(Node):
             goal_handle.abort()
             return result
 
-        self.command_active = True
+        # Already claimed in goal_callback. Confirm the hand-off arrived so a leak
+        # shows up here rather than as a mystery rejection three verbs later.
+        self._gate.confirm(cmd)
         try:
             gid = bytes(bytearray(goal_handle.goal_id.uuid)).hex()[:8]
         except Exception:                   # noqa: BLE001 -- a log field only
@@ -1352,7 +1402,7 @@ class AUVManagerNode(Node):
             return result
 
         finally:
-            self.command_active = False
+            self._gate.release()
 
     def _run_srot_surface(self, kwargs):
         """Emergency surface on the SROT backend: engage the board's SURFACE mode.
@@ -1966,6 +2016,16 @@ class AUVManagerNode(Node):
         self._fast_armed  = bool(armed)
         self._fast_mode   = mode or ''
         self._fast_batt_v = float(battery['voltage']) if battery else math.nan
+
+        # A claim that was never confirmed by execute_callback is a leak, and a
+        # leaked gate rejects every later verb in silence. Clear it and say so.
+        leaked = self._gate.reap_stale()
+        if leaked is not None:
+            self.get_logger().error(
+                f'[ACT  ] gate claim for {leaked!r} was never confirmed by '
+                f'execute_callback and has been released after '
+                f'{COMMAND_GATE_STALE_S:.0f} s. Goals were being rejected for a '
+                f'command that never ran -- this should not happen; capture the log.')
 
         self._maybe_print_state(attitude, battery, mode, armed, yaw_deg, yaw_label)
         self._maybe_print_rc(rc)
