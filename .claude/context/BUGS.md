@@ -3857,3 +3857,52 @@ archive found a better model in one afternoon.
    mission surface changes — those two props need their own model;
 3. it must be compiled to HEF at >= 1024 calibration frames (B-61) and
    re-measured on the vehicle before it flies.
+
+---
+
+## ⭐ B-61 ROOT CAUSE — BGR/RGB. Not the decode, not the calibration cliff. ✅ FIXED 2026-09-25
+
+`letterbox()` and `_letterbox_into_bound()` wrote the frame into the Hailo
+input buffer **without converting BGR to RGB**. `cv2` yields BGR, the model was
+trained on RGB, so the accelerator has been running on colour-swapped
+pixels — red and blue exchanged in every frame — for as long as this backend
+has existed.
+
+**Reproduced with no Hailo involved**, which is what settles it. Feeding the
+`.pt` the same swap on the same frame:
+
+| input | result |
+|---|---|
+| normal | `gate = 0.78 @ 56,246` |
+| **channels swapped** | **`repair = 0.92 @ 0,0`** |
+
+That is the HEF's exact signature: wrong class, ~0.9 score, box at the origin.
+
+⚠ **TWO WRONG DIAGNOSES CAME FIRST AND BOTH FIT THE EVIDENCE.**
+1. *A decode stride bug* in the `HAILO NMS BY CLASS` buffer — disproved by
+   dumping the raw buffer; the packed-layout walk matched `_decode_nms`
+   exactly.
+2. *The DFC calibration cliff* — 258 frames against the 1024 threshold, which
+   genuinely does drop AdaRound and QAT and genuinely was wrong. Disproved by
+   a **1 038-frame rebuild that reproduced the corruption unchanged**.
+
+Both were consistent with the symptom, and one of them (the cliff) was a real
+defect worth fixing on its own. What named the actual cause was reproducing
+the failure **somewhere the suspected component does not exist** — the `.pt`
+path, on the dev box, with no chip.
+
+⭐ **Why nothing caught it.** It never raised, never dropped a frame, never
+cost a millisecond. `test_letterbox_into_bound.py` checked geometry and the
+zero-copy write; nothing asserted channel order. ultralytics converts
+internally, so the `.pt` path always looked healthy — **which is why every
+measurement taken through the `.pt`, including B-59 and B-60, remains valid.**
+
+**Fixed** in both paths, with the async one converting in place (`dst=roi`) so
+the 1.265 ms zero-copy write is preserved.
+`test_hailo_channel_order.py` guards it, injection-verified: reverting the fix
+fails 2 tests, restoring passes.
+
+**What it invalidates:** every number taken through the HEF path — the
+80.9 Hz / 53.9 Hz rates, the murky-clip INT8 table, the "INT8 costs 0.08
+confidence" finding. All were measured on a detector reading swapped colour.
+They must be re-taken.
