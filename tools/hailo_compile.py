@@ -187,6 +187,26 @@ def main() -> int:
     ap.add_argument('--allow-reduced-optimization', action='store_true',
                     help='proceed below 1024 frames; the HEF will have '
                          'corrupted scores and must not be deployed')
+    # ⛔ THE ESCAPE HATCH FOR A LAYER THAT WILL NOT QUANTISE. Some models fail
+    # with, for example:
+    #
+    #   NegativeSlopeExponentNonFixable: Quantization failed in layer
+    #   <model>/conv54 due to unsupported required slope. Desired shift is
+    #   8.0, but op has only 8 data bits.
+    #
+    # That means the layer's weight/activation range is too wide for INT8 --
+    # a property of how the model was TRAINED (unfolded batch-norm, or an
+    # unusually wide activation), not of the calibration set. It is NOT fixed
+    # by more frames: `gate_candidate` failed on the SAME 1024-frame set that
+    # compiled `gate_rescue_repair` cleanly, which is what rules the
+    # calibration set out as the cause.
+    #
+    # Raising just that layer to 16-bit costs a little throughput on one layer
+    # and leaves the rest INT8. ⚠ Name the layer the error names; blanket
+    # 16-bit would quietly discard the accelerator's main advantage.
+    ap.add_argument('--a16-layers', default='',
+                    help='comma-separated layers to keep at 16-bit, for ones '
+                         'that fail INT8 quantisation (see the error text)')
     a = ap.parse_args()
 
     pt = pathlib.Path(a.models) / f'{a.model}.pt'
@@ -222,6 +242,15 @@ def main() -> int:
         f'nms_postprocess(meta_arch=yolov8, engine=cpu, '
         f'classes={len(names)}, '
         f'nms_scores_th={a.nms_score_th}, nms_iou_th={a.nms_iou_th})\n')
+    for layer in [s.strip() for s in a.a16_layers.split(',') if s.strip()]:
+        # The layer name the DFC reports is `<model>/<layer>`; the script
+        # wants it bare, so accept either spelling rather than making the
+        # caller reformat an error message.
+        bare = layer.split('/')[-1]
+        script += (f'quantization_param([{bare}], '
+                   f'precision_mode=a16_w16)\n')
+        print(f'[hailo] ⚠ {bare} kept at 16-bit: it would not quantise to '
+              f'INT8. The rest of the network is unaffected.')
     runner.load_model_script(script)
     print(f'[hailo] model script:\n{script}')
 

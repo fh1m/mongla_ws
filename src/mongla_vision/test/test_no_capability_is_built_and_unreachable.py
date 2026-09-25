@@ -107,10 +107,16 @@ DEFERRED = {
         'detection. Promote it when a water bag exists and the constants are '
         're-derived from that.'),
     'mongla_vision/mongla_vision/draw_strip.py': (
-        'superseded UI. The mission-control strip it renders is not called by '
-        'any node; draw.py and draw_video.py carry the overlays that ship. '
-        'Delete it or revive it deliberately -- 471 lines of dead UI is the '
-        'kind of thing that gets read as current and copied.'),
+        'NOT DEAD after all -- corrected 2026-09-25. Its old note said '
+        '"superseded UI ... delete it or revive it deliberately", and the '
+        'orphan sweep agreed because it scanned only src/. '
+        '`tools/render_hud_stills.py` and `tools/render_real_stills.py` both '
+        'import `render_ui_strip` to generate the site HUD imagery, so this '
+        'is live code with an out-of-tree consumer. It stays DEFERRED rather '
+        'than WIRED because no NODE imports it -- the register tracks the '
+        'vehicle, and a tools-only consumer is a real but different kind of '
+        'reachability. ⚠ Nearly deleted on the strength of a sweep that could '
+        'not see tools/; the sweep now scans it.'),
     'mongla_vision/mongla_vision/time_to_contact.py': (
         'needs a consumer in the approach/standoff control path, which does '
         'not exist yet -- adding one now would be a control change justified '

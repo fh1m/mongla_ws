@@ -80,18 +80,26 @@ def importers(stem: str, exclude: pathlib.Path) -> list:
 
     ⚠ A substring grep is useless: "approach" and "health" appear in prose all
     over this codebase and both read as wired when they were not.
+
+    ⛔ `tools/` IS SCANNED TOO, and that is not optional. Scanning only `src/`
+    reported `draw_strip.py` as 471 unreachable lines whose own note said
+    "delete it or revive it deliberately" -- and it is imported by
+    `tools/render_hud_stills.py` and `tools/render_real_stills.py`, which
+    generate the site's HUD imagery. A sweep that recommends deleting live
+    code is worse than no sweep.
     """
     pat = re.compile(
         rf'^\s*(from\s+\S*\b{stem}\b\s+import|'
         rf'from\s+\S+\s+import\s+[^\n]*\b{stem}\b|'
         rf'import\s+\S*\b{stem}\b)', re.M)
     hits = []
-    for q in SRC.rglob('*.py'):
+    searched = list(SRC.rglob('*.py')) + list((ROOT / 'tools').rglob('*.py'))
+    for q in searched:
         if q == exclude or '/test' in str(q):
             continue
         try:
             if pat.search(q.read_text()):
-                hits.append(str(q.relative_to(SRC)))
+                hits.append(str(q.relative_to(ROOT)))
         except (OSError, UnicodeDecodeError):
             continue
     return hits
