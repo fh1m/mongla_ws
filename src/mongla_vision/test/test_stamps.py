@@ -149,6 +149,11 @@ def _bare_node():
     n._cls = ''
     n._det_box = n._det_header = None
     n._det_conf = n._det_t = 0.0
+    # The acting bar (B-59). Kept LOW here on purpose: these tests are about
+    # WHICH CLOCK the decay measures against, not about the confidence gate,
+    # and a shipping-strength bar would silently change what they exercise.
+    # The bar itself is covered by test_lock_acting_bar.py.
+    n._act_conf = 0.01
     n._stamp_warned = False
     n.get_logger = lambda: types.SimpleNamespace(
         warn=lambda *_a, **_k: None, info=lambda *_a, **_k: None)
