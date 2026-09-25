@@ -3706,3 +3706,51 @@ track whatever the detector hands them.
 **Scope.** Measured on `gate`. `rescue` and `repair` are unmeasured. The other
 models (`sauvc_sim`, `bin_fire_blood`) are unmeasured and must be checked the
 same way before they are trusted.
+
+---
+
+## B-61 — the HEF path returns the wrong class, a frozen score, and a box at the origin  ⛔ CRITICAL, OPEN
+
+**Found 2026-09-25** by running the SAME three frames of `gate.mkv` through the
+`.pt` on the dev box and through the HEF on the vehicle.
+
+| frame | `.pt` (ultralytics) | HEF (`HailoDetector.infer`, on the Pi) |
+|---|---|---|
+| 120 | `gate(0)` = 0.78 @ 56,246 | `repair(2)` = **0.86** @ **0,0** |
+| 240 | `gate(0)` = 0.53 @ 101,235 | `repair(2)` = **0.86** @ **1,0** |
+| 360 | `gate(0)` = 0.89 @ 159,240 | `repair(2)` = **0.86** @ **0,0** |
+
+Three independent symptoms, all pointing the same way:
+
+1. **wrong class** — `gate(0)` read as `repair(2)`;
+2. **frozen score** — 0.86 on every frame, while the `.pt` varies 0.53–0.89.
+   A real detector's confidence moves with the image;
+3. **box at the origin** — (0,0) on all three frames.
+
+⛔ **This is a DECODE defect, not quantisation.** INT8 shifts scores by a few
+points and moves boxes by pixels; it does not pin a box to the origin and hold
+a score constant to two decimals across unrelated frames. The signature is
+reading HailoRT's `HAILO NMS BY CLASS` output with the wrong stride or class
+indexing -- the buffer is grouped by class id, each group a variable-length
+list, and misreading that yields exactly this: a plausible number from the
+wrong offset.
+
+⚠ **Both HEFs show it** -- the deployed 0.200 build and the 0.050 build I
+compiled today -- so it is not introduced by the recompile. It is in the host
+decode, and it has been there the whole time.
+
+**What this invalidates.** Every number ever taken through the HEF path on
+this vehicle: the 80.9 Hz / 53.9 Hz detection rates describe a decoder
+returning constants; the murky-clip INT8 table compared the wrong classes; and
+`bringup_check`'s vision section passes a model that cannot detect.
+
+⚠ It does NOT invalidate B-59 or B-60 -- those were measured on the `.pt`
+through ultralytics, which this comparison shows is behaving sanely.
+
+**Where to look first:** `detection/hailo.py`, the `HAILO NMS BY CLASS` decode.
+The class docstring already documents the grouped-by-class layout, which makes
+this a strong candidate for an off-by-one over class groups rather than a
+misunderstanding of the format.
+
+**Do not fly anything on the HEF path until this is fixed.** The `.pt`/ONNX
+path is currently the only trustworthy one.
