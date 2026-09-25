@@ -3993,3 +3993,43 @@ priority.
 **Also to check:** whether §28's 701 FPS was itself measured on the
 swapped-colour path (B-61). XFeat takes a GREY image, so it is probably
 unaffected — but "probably" is not a measurement.
+
+**B-62 measured, and the first fix is NOT yet safe to enable (2026-09-25).**
+
+| path | per call | rate |
+|---|---|---|
+| ONNX on the Pi CPU — what ships today | 32.9 ms (p95 33.4) | 30.4 FPS |
+| **HEF via `XFeatHailo`** | **14.73 ms** (p95 18.04) | **67.9 FPS** |
+| §28's standalone claim | 1.43 ms | 701 FPS |
+
+⚠ **2.2×, not 23×.** The 701 FPS figure is raw accelerator throughput;
+`XFeatHailo.detect()` pays `ng.activate()` + `InferVStreams` construction on
+**every call**, which is most of the 14.73 ms. `detection/hailo.py` solved the
+same problem with a persistent `ConfiguredInferModel` and bound buffers, and
+that is the shape this needs. Even unoptimised it is worth having — it halves
+the latency and takes the work off the cores the camera pump needs.
+
+⛔ **IT CANNOT BE SWITCHED ON YET.** Constructing a second `VDevice` while the
+detector holds one fails:
+
+```
+[HailoRT] [error] CHECK_SUCCESS failed with status=HAILO_OUT_OF_PHYSICAL_DEVICES(74)
+```
+
+The contention benchmark never ran — the DETECTOR could not open the chip,
+because `XFeatHailo` had already taken it. On the vehicle that is not a slow
+anchor, it is **no detector at all**, which is strictly worse than the 32.9 ms
+CPU path it replaces.
+
+⭐ **The fix already exists in this repo.** `detection/hailo.py` has
+`_shared_device()` and `_DEVICE_LOCK` precisely because two detectors had to
+share one chip; `XFeatHailo` must use the same shared `VDevice` and the same
+lock rather than opening its own. Until it does, the resolver's `.hef`
+preference is a hazard: it is committed because the measurement and the
+failure are both worth recording, and `lock_node` degrades to ONNX on any
+load error — but a vehicle whose XFeat HEF loads FIRST would starve the
+detector.
+
+**Next, in order:** share the device and the lock; re-measure with the
+detector running; then persist the activation to chase the remaining gap to
+1.43 ms.
