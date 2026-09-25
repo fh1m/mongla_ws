@@ -158,6 +158,16 @@ class LockNode(Node):
         # idle: 53.4 % -> 37.4 %), but 0 = publish every frame is the default
         # and the design intent. A RUNG CHANGE is never delayed even when a
         # limit is set -- that transition is the information.
+        # ⛔ THE ACTING BAR (B-59). Below this a detection may be ASSOCIATED by
+        # the tracker but must not be ACTED ON by the ladder. Default 0.45,
+        # deliberately NOT the 0.60 knee that measurement favours: 0.60 is
+        # derived from ONE model, ONE class and ONE venue, and shipping a
+        # control bar that tight on that evidence would trade a measured false
+        # positive for an unmeasured missed detection. 0.45 already removes
+        # the 90.8 %-on-empty-water regime (it falls to 46.8 %) while holding
+        # 98.9 % on the real gate. Raise it to 0.60 per mission once the sweep
+        # has been repeated with visually-confirmed negatives on more venues.
+        self.declare_parameter('act_conf', 0.45)
         self.declare_parameter('publish_hz', 0.0)
         self.declare_parameter('anchor_hz', 3.0)
         self.declare_parameter('full_authority_s', FULL_AUTHORITY_S)
@@ -257,6 +267,14 @@ class LockNode(Node):
                 'Rebuild mongla_interfaces to enable it.')
         self.create_subscription(CameraInfo, f'{ns}/camera_info',
                                  self._on_info, 10)
+        # ⚠ SET BESIDE THE STATE IT GUARDS, NOT WHERE THE OTHER PARAMETERS ARE
+        # READ. `_on_det` runs as soon as the subscription exists, which is
+        # earlier in __init__ than the parameter block below, so reading it
+        # there left a window where a detection arriving mid-construction
+        # raised AttributeError inside the callback -- caught by
+        # test_stamps.py, but it is a real startup race and not a test
+        # artifact.
+        self._act_conf = float(self.get_parameter('act_conf').value)
         self._det_box = None
         self._det_conf = 0.0
         self._det_cls = ''
@@ -907,7 +925,25 @@ class LockNode(Node):
                        else h.id)
             if self._cls and name != self._cls:
                 continue
-            if score <= 0.0:          # a COASTED track, not an observation
+            # ⛔ AN ACTING BAR, NOT MERELY "NOT ZERO" (B-59). This accepted the
+            # highest-scoring box with score > 0 as THE target, at full
+            # authority. Measured on real Mirpur footage, `gate_rescue_repair`
+            # claims a gate on 90.8 % of GATE-FREE frames at conf 0.15 --
+            # half-frame boxes over empty turquoise at 0.44-0.56, confirmed by
+            # rendering them. Separation between gate-present and gate-absent
+            # footage is +0.0 points at 0.15 and at 0.30, and +74.0 at 0.60.
+            #
+            # With no bar here the ladder locked onto open water: the follower
+            # seeded on it, the anchor enrolled against it, and the vision
+            # verbs drove the hull at it -- section 8.6's failure exactly.
+            #
+            # ⚠ The bar lives HERE and not only in the detector because the
+            # detector's `conf` is deliberately permissive: the tracker needs
+            # low-scoring boxes to maintain association across a gap. What may
+            # be ASSOCIATED and what may be ACTED ON are different questions,
+            # and conflating them turned a 0.15 detector bar into a 0.15
+            # control bar.
+            if score < self._act_conf:
                 continue
             if best is None or score > best[0]:
                 best_name = name

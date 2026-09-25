@@ -3584,3 +3584,33 @@ assumed from its filename.
 water (90.8 % at 0.15, half-frame boxes at 0.44-0.56). `rescue` and `repair`
 are UNMEASURED, because no clip has yet been visually confirmed as a true
 negative for them.
+
+**Three runtime rejectors tried against B-59, all three DEAD.** Recorded so
+nobody spends the afternoon re-deriving them. `gate_rescue_repair`, class
+`gate`, 400 frames per clip, `gate.mkv` (real gate, confirmed by eye) against
+`torpedo.mkv` and `torpedo_1.mkv` (hallucinated, confirmed by eye):
+
+| cue | real | halluc. A | halluc. B | verdict |
+|---|---|---|---|---|
+| frames carrying a box | 400/400 | 400/400 | 326/400 | ⛔ no separation |
+| box area / frame | 0.285 | 0.601 | 0.131 | ⛔ straddles both sides |
+| centre jitter %/frame | 0.68 | 1.04 | 4.03 | ⚠ suggestive, not clean |
+| score sd | 0.091 | 0.077 | 0.158 | ⛔ no separation |
+| edge energy inside box | 6.69 | 6.82 | 9.40 | ⛔ **backwards** |
+
+⛔ **"Isolated in time" does not transfer.** The hard-negative-mining
+literature reports that false positives are temporally isolated, so a
+persistence test should reject them. Ours persist perfectly -- 400 frames of
+400 -- because the camera stares at the same empty water. A cue measured on
+internet video does not survive a fixed camera on a slow vehicle.
+
+⛔ **"The box encloses featureless water" is not measurable as texture.** It is
+what the rendered frames plainly show, and the Sobel energy inside the box is
+*higher* for the hallucination than for the real gate. Turbid water is not
+smooth: caustics, lane lines and the surface all carry gradient. The thing a
+human sees as "nothing there" is semantic, not photometric.
+
+**What this leaves.** No cheap runtime rejector was found, so the fix stays
+where the evidence points -- raise the bar (knee at 0.60, +74.0 points
+separation) and give `lock_node` an explicit acting bar. Anything cleverer
+needs to be measured before it is believed.
