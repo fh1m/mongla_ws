@@ -98,18 +98,25 @@ whose module is already written and measured.
 
 ### Blocking, in order
 
-1. **B-60 — the `gate` class is not a gate detector.** Worst mistake **0.92 on
-   `bin_front_#1.mp4`**, higher than the 0.89 it gives the real gate. No bar
-   separates them. Fix is retraining with hard negatives
-   (`tools/mine_hard_negatives.py`, 160 frames mined so far).
-2. **Evaluate the OTHER models.** 66 `.pt` on this box, **32 with a gate
-   class**, including single-class `duburi_nano_250` / `duburi_medium_100`
-   never tested. A better model may already exist — cheaper than retraining.
-3. **`rescue` / `repair` / `sauvc_sim` / `bin_fire_blood` unmeasured** for the
-   same defect.
-4. **HEF vs `.pt` class disagreement** — on `gate.mkv` the `.pt` says
-   `gate(0)` at 0.78–0.89 while both HEFs say `repair` 150–262×. Either INT8
-   damage or a class-order mismatch. **Unresolved.**
+1. ✅ **B-60 RESOLVED by model selection.**
+   `pendrive_2/final/models/gate/weights/best.pt` scores **100 % positive and
+   0.0 % across 1 200 negative frames from 3 venues**, at every threshold.
+   The shipped model fires on 100 % of a gate-free clip at 0.15. Remaining:
+   its top box on `gate.mkv` is still slightly off structure; it carries
+   `gate, shark, shaw_fish` and NOT `rescue`/`repair`, so promoting it changes
+   the mission surface; and it must be compiled at >= 1024 calibration frames
+   before it flies.
+2. ✅ **The archive was searched.** `tools/model_inventory.py`: **208 `.pt`,
+   96 unique after content dedup, 29 with a gate class.** 96/96 have never
+   been measured against absent-prop footage — that column is now tracked.
+3. **`rescue` / `repair` / `sauvc_sim` / `bin_fire_blood` still unmeasured**
+   for the same defect.
+4. **B-61 — cause found, fix in flight.** The HEF returned `repair` 0.86 with
+   an impossible box (`y2 < y1`, `x1 > 1.0`) because the calibration set was
+   258 frames against the DFC's 1024 cliff, which silently drops AdaRound and
+   QAT. The decode is EXONERATED by a raw-buffer dump. `hailo_compile.py` now
+   refuses below 1024 and stages frames as uint8. **The 1024-frame rebuild
+   must reproduce the `.pt`'s classes before the HEF path is trusted again.**
 
 ### Wired half-way
 
