@@ -54,6 +54,7 @@ except ImportError:                    # message not built in this workspace
 
 from std_msgs.msg import String
 from nav_msgs.msg import Odometry
+from geometry_msgs.msg import Vector3Stamped
 # ⚠ OPTIONAL, like TargetCorrespondences above. A workspace that has not
 # rebuilt mongla_interfaces must still get a working ladder: losing vehicle
 # state costs the object-permanence rung, not the lock.
@@ -196,7 +197,30 @@ class LockNode(Node):
         # has been repeated with visually-confirmed negatives on more venues.
         self.declare_parameter('act_conf', 0.45)
         self.declare_parameter('publish_hz', 0.0)
-        self.declare_parameter('anchor_hz', 3.0)
+        # ⭐ 4.5 Hz, RAISED FROM 3.0 ON A RE-MEASUREMENT (B-62).
+        #
+        # The 3 Hz below was set when one anchor evaluation was a "33 ms
+        # burst" on the CPU. Re-measured on the vehicle after XFeat moved to
+        # the accelerator, one full evaluation (detect + match against one
+        # stored checkpoint):
+        #
+        #     CPU   67.0 ms  p95 70.4   -> 3.0 Hz at 20 % duty
+        #     HAILO 44.2 ms  p95 46.3   -> 4.5 Hz at 20 % duty
+        #
+        # ⭐ The CPU number reproduces the shipped 3.0 Hz exactly from first
+        # principles, which is what makes the new one trustworthy: the same
+        # arithmetic on the same duty budget, with only the burst changed.
+        #
+        # What it buys: the anchor pose is REUSED between evaluations, so the
+        # box the ladder steers on can be a full period old. 333 ms -> 222 ms
+        # of worst-case staleness on the rung that exists to cover the p99
+        # 2.418 s gap.
+        #
+        # ⚠ The 8 Hz row in the old table (+42 % frame age for no extra
+        # coverage) was measured at the OLD burst; 4.5 Hz at 44.2 ms is a
+        # LOWER duty than 3 Hz at 67.0 ms, so this costs less latency than
+        # what ships today, not more.
+        self.declare_parameter('anchor_hz', 4.5)
         self.declare_parameter('full_authority_s', FULL_AUTHORITY_S)
         self.declare_parameter('zero_authority_s', ZERO_AUTHORITY_S)
 
@@ -471,6 +495,20 @@ class LockNode(Node):
                     f'{self._places.travel_m:.1f} m, offered as a fix at '
                     f'>= {_lc.CLOSURE_INLIERS} inliers.')
 
+        # ⭐ THE DECOMPOSITION, PUBLISHED (Round 11, half-built until now).
+        # Every anchor fit produces tx, ty, theta and scale, and until this
+        # the ladder read `corners` alone -- the only consumer of theta/scale
+        # in the whole tree was a debug text label. Two real signals were
+        # computed and discarded on every evaluation.
+        #
+        # ⚠ PUBLISHED, NOT ACTED ON. Bumblebee reflex 1 is "redundancy beats
+        # optimisation" -- their gate runs five pose sources. This is a SECOND
+        # range estimate beside the follower's, fitted frame-to-REFERENCE
+        # rather than frame-to-frame, and a second is worth more than a
+        # replacement. A consumer that wants to fuse them can; nothing is
+        # forced to.
+        self._decomp_pub = self.create_publisher(
+            Vector3Stamped, f'{ns}/anchor_decomposition', 10)
         self._pub = self.create_publisher(Detection2DArray, f'{ns}/lock',
                                           _qos.DETECTIONS)
         # Shared profiles, never a hand-rolled QoS: a RELIABLE/BEST_EFFORT
@@ -1346,6 +1384,13 @@ class LockNode(Node):
                       # looks correct whenever a detection is present.
                       self._anchor_header = header
                   p = self._anchor_pose
+                  # ⭐ EVERY fit publishes its decomposition, including the
+                  # ones with no usable corner quad -- theta and scale are
+                  # fitted from the same inliers and are valid whether or not
+                  # the warped quad is. Gating them on `corners` would discard
+                  # the signal exactly when the box is least trustworthy.
+                  if anchor_ran:
+                      self._publish_decomposition(p, self._anchor_header)
                   if p is not None and p.ok and p.corners is not None:
                       q = np.asarray(p.corners, np.float32)
                       ab = (float(q[:, 0].min()), float(q[:, 1].min()),
@@ -1433,6 +1478,55 @@ class LockNode(Node):
             self._remember_world(x1, y1, x2, y2)
         if header is not None:
             self._pub.publish(detections_to_array(dets, header))
+
+    def _publish_decomposition(self, pose, header) -> None:
+        """theta, scale and the range they imply -- the anchor's other outputs.
+
+        ⭐ WHAT EACH ONE IS.
+
+        `scale` > 1 means the reference patch appears LARGER than when it was
+        stored, i.e. we are CLOSER. It is a range RATIO against the moment of
+        enrolment, so it becomes metres only if the reference's true width is
+        known -- which is what `target_width_m` is for, and why that parameter
+        now reaches this node.
+
+        `theta` is in-plane rotation against a FIXED reference, not an
+        integrated rate. ⚠ It is hull ROLL only on the DOWNWARD camera; on the
+        forward camera the same number is a mixture of roll and the target
+        being tilted, and publishing it as roll would be the plausible-number
+        defect this repo keeps finding. The frame_id says which camera it came
+        from so a consumer can decide.
+
+        ⛔ NaN WHEN UNKNOWN, never 0.0. A scale of 1.0 means "the same
+        distance"; absent must not read as that.
+        """
+        if self._decomp_pub is None or pose is None or not getattr(pose, 'ok', False):
+            return
+        th = float(getattr(pose, 'theta', float('nan')))
+        sc = float(getattr(pose, 'scale', float('nan')))
+        if not (math.isfinite(th) or math.isfinite(sc)):
+            return
+        m = Vector3Stamped()
+        if header is not None:
+            m.header = header
+        m.header.frame_id = self._cam
+        m.vector.x = th
+        m.vector.y = sc
+        # ⭐ THE PER-CLASS TABLE, not the operator parameter.
+        # `target_geometry.yaml` replaced `target_width_m` precisely because
+        # one width for every prop is wrong, and `width_for()` is what the
+        # 6-DoF path already uses. An explicit `target_width_m` still wins --
+        # a measured prop beats a table entry -- but the table is the default.
+        w = float(self._ladder('target_width_m') or 0.0)
+        if w <= 0.0:
+            try:
+                from mongla_vision.target_geometry import width_for
+                w = float(width_for(self._cls) or 0.0)
+            except Exception:                                    # noqa: BLE001
+                w = 0.0
+        m.vector.z = (w / sc) if (w > 0.0 and math.isfinite(sc) and sc > 1e-6) \
+            else float('nan')
+        self._decomp_pub.publish(m)
 
     def _remember_world(self, x1, y1, x2, y2) -> None:
         """Hold the target in WORLD coordinates, so leaving frame is not

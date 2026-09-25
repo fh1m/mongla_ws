@@ -308,3 +308,29 @@ robosub:
   # retyped: two copies of one number is how `torpedo_board` came to hold the
   # sim's 0.52 while claiming to box the whole board.
   torpedo: *torpedo_board
+
+  # ── gate_sharks (the model that can tell a gate from an empty pool) ──────
+  #
+  # ⛔ THESE TWO ARE ROBOSUB TORPEDO-BOARD ARTWORK, not SAUVC props, and the
+  # width is the SAME BOARD both classes sit on. `gate_sharks` was promoted
+  # for its `gate` class (0 % false positives across 150 frames of gate-free
+  # footage against the shipped model's 100 %); it happens to carry these two
+  # as well, and a class the detector can emit must have a width or its range,
+  # tool-aim and obliquity gate cannot compute.
+  shark:
+    # The 2 ft x 2 ft board, exactly as `torpedo_board` above -- these classes
+    # label the ARTWORK, and the artwork's own size is not in the handbook.
+    # ⚠ So this is the board's width, and it is right ONLY IF the detector
+    # boxes the board rather than the printed shark. If a future model is
+    # retrained to box the artwork alone, this becomes wrong in the flattering
+    # direction: a smaller true width reads as a nearer target.
+    width_m: 0.6096
+    boxes: whole-board
+    unquoted: true
+    source: "RoboSub 2025/26 handbook 3.2 board size; the ARTWORK size is not
+      published, and no one has measured ours"
+  shaw_fish:
+    width_m: 0.6096
+    boxes: whole-board
+    unquoted: true
+    source: "as `shark` -- same board, same caveat"
