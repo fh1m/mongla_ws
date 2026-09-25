@@ -434,7 +434,7 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `range_crop` | `-1` |
 | `vision_profile` | `''` |
 
-**`mongla_vision/lock_node.py`** — 16 parameters
+**`mongla_vision/lock_node.py`** — 17 parameters
 
 | parameter | default |
 |---|---|
@@ -448,6 +448,7 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `place_period_s` | `_lc.defaults(` |
 | `place_travel_m` | `_lc.defaults(` |
 | `pool_depth_m` | `_lc.defaults(` |
+| `act_conf` | `0.45` |
 | `publish_hz` | `0.0` |
 | `anchor_hz` | `3.0` |
 | `full_authority_s` | `FULL_AUTHORITY_S` |

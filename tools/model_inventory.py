@@ -3,8 +3,8 @@
 
 ⛔ WHY THIS EXISTS. Four models ship in `src/mongla_vision/models/`. There are
 **66 `.pt` files on this machine, 32 of them carrying a gate class**, spread
-across `Music/detect/`, `Downloads/DUBURI_Models/`, three pendrive backups and
-a 2026 season folder. Work proceeded for weeks on the four, while dedicated
+across the model directories, three pendrive backups and a 2026 season
+folder. Work proceeded for weeks on the four, while dedicated
 single-class gate models sat unevaluated a directory away.
 
 That is the same shape as the footage problem: a `find` from the repo root
@@ -41,17 +41,51 @@ import warnings
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-# Every place models have actually been found. Adding a root here is cheaper
-# than rediscovering the same gap a fourth time.
-ROOTS = (
-    '/home/fh1m/Envs/dockers/auv-ros2/Ros_workspaces/mongla_ws/'
-    'src/mongla_vision/models',
-    '/home/fh1m/Music/detect',
-    '/home/fh1m/Downloads/DUBURI_Models',
-    '/home/fh1m/Downloads',
-    '/home/fh1m/tmp/smol backups',
-    '/home/fh1m/Work/Projects/Duburi',
-)
+def _roots() -> tuple:
+    """Every place models have actually been found.
+
+    ⛔ The archive paths are RESOLVED, never written here:
+    `test_no_live_code_carries_the_retired_project_name` bans the old project
+    name from live code, and `archive_root.py` exists so tools read it from
+    `$MONGLA_ARCHIVE` or `~/.mongla/archive_root` instead. Hardcoding it is
+    also how a tool silently stops finding anything when the archive moves.
+    """
+    here = pathlib.Path(__file__).resolve().parents[1]
+    # ⛔ NOT Path.home(). Inside the dev container $HOME is the workspace
+    # root, so `~/Downloads` resolves to a directory that does not exist while
+    # looking perfectly reasonable -- the same trap `hailo_compile.sh`
+    # documents. Resolve against the real login directory.
+    # Both $HOME and pwd.pw_dir are remapped to the workspace inside the
+    # container, so /home/$USER is the only candidate that actually holds the
+    # model directories. Try it first and fall back rather than the reverse.
+    import pwd
+    home = None
+    for cand in (pathlib.Path('/home') / os.environ.get('USER', ''),
+                 pathlib.Path(pwd.getpwuid(os.getuid()).pw_dir),
+                 pathlib.Path.home()):
+        if (cand / 'Downloads').is_dir() or (cand / 'Music').is_dir():
+            home = cand
+            break
+    home = home or pathlib.Path.home()
+    out = [str(here / 'src/mongla_vision/models'),
+           str(home / 'Music/detect'),
+           str(home / 'Downloads'),
+           str(home / 'tmp/smol backups')]
+    try:
+        from archive_root import archive_root
+        # The archive root points at footage; models sit beside it, so walk up
+        # to the project directory that contains both.
+        r = pathlib.Path(archive_root(required=False) or '')
+        for cand in (r, *r.parents):
+            if cand.name and cand.parent.name == 'Projects':
+                out.append(str(cand))
+                break
+    except Exception:                                            # noqa: BLE001
+        pass
+    return tuple(out)
+
+
+ROOTS = _roots()
 
 # Stock checkpoints that are not ours and detect nothing we care about.
 _SKIP = ('yolo11n', 'yolov8n', 'yolov8s', 'yolov8m', 'yolo26n', 'last.pt')

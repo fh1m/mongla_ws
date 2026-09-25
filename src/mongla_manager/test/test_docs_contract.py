@@ -330,9 +330,9 @@ def test_the_published_test_count_is_the_real_one():
     published = {}
     for path, pattern in (
             (ROOT / 'README.md', r'tests-3%20(\d{3})%20passing'),
-            (ROOT / 'README.md', r'5 suites, 3[\s\u202f](\d{3}) of them'),
+            (ROOT / 'README.md', r'6 suites, 3[\s\u202f](\d{3}) of them'),
             (ROOT / 'README.md', r'3[\s\u202f](\d{3}) passed, 0 failed'),
-            (ROOT / 'README.md', r'5 suites · 3[\s\u202f](\d{3}) tests'),
+            (ROOT / 'README.md', r'6 suites · 3[\s\u202f](\d{3}) tests'),
             (DOCS / 'index.html', r'<b>3[\s\u202f&#8239;]*(\d{3})</b>'),
             # the banner stopped quoting the count on 2026-09-22 (three chips,
             # all measurements); nothing there to drift any more
@@ -346,8 +346,12 @@ def test_the_published_test_count_is_the_real_one():
     claimed = values.pop()
 
     collected = 0
+    # ⛔ `mongla_sensors` was MISSING from this list, so the collector saw
+    # 3 795 where six suites actually collect 3 829 -- and the published
+    # "5 suites" matched the omission rather than the repo. A count guard that
+    # skips a package cannot catch a count drift in that package.
     for pkg in ('mongla_control', 'mongla_vision', 'mongla_manager',
-                'mongla_planner', 'mongla_localization'):
+                'mongla_planner', 'mongla_localization', 'mongla_sensors'):
         r = subprocess.run([sys.executable, '-m', 'pytest', f'src/{pkg}/test',
                             '--collect-only', '-q', '-p', 'no:cacheprovider'],
                            capture_output=True, text=True, cwd=ROOT)
