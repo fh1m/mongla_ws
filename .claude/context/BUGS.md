@@ -3754,3 +3754,41 @@ misunderstanding of the format.
 
 **Do not fly anything on the HEF path until this is fixed.** The `.pt`/ONNX
 path is currently the only trustworthy one.
+
+**⭐ B-61 CAUSE FOUND, same day — the calibration set crossed the DFC's cliff.**
+From my own compile log:
+
+```
+[warning] Reducing optimization level to 1 (the accuracy won't be optimized
+and compression won't be used) because there's less data than the
+recommended amount (1024)
+[info] Adaround skipped
+[info] Quantization-Aware Fine-Tuning skipped
+```
+
+**258 calibration frames, against a threshold of 1024.** Below it the DFC
+drops AdaRound and QAT, and the resulting HEF compiles, loads and runs at full
+speed while returning corrupted scores. That is the whole defect.
+
+⚠ **It is not a decode bug after all.** My first reading blamed the
+`HAILO NMS BY CLASS` stride, on the strength of a box at (0,0). Re-reading the
+`.pt` output at the same frame shows `repair(2)=0.06@0,0` — the degenerate
+origin box is **real and present in fp32 too**, at 0.06. Quantisation at
+reduced optimisation inflated it to 0.86 and buried the true `gate` boxes.
+`detection/hailo.py`'s decode is exonerated; the packed-layout handling there
+is correct.
+
+⛔ **I crossed the cliff myself.** I cut `--calib-frames` from 1024 to 256 to
+avoid a 5.0 GB float32 allocation. The right fix was staging frames as uint8
+(1.26 GB); shrinking the set was the wrong lever and there was no guard to say
+so — although **issue #47 had predicted exactly this cause** and asked for the
+guard.
+
+**Fixed:** `tools/hailo_compile.py` now refuses below 1024 before the
+40-minute optimise, stages calibration as uint8, and labels a deliberate
+low-frame build undeployable.
+
+**Still to verify:** the 1024-frame rebuild must reproduce the `.pt`'s classes
+and scores on the same three frames. Until it does, B-61 stays OPEN and the
+HEF path stays untrusted. Note the OLD deployed HEF shows the same corruption,
+so whatever produced it also used too few frames.
