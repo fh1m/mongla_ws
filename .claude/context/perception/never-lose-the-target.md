@@ -497,3 +497,46 @@ stays, because it costs nothing and a future consumer may want it; the
 frame-to-REFERENCE across seconds and viewpoint change, where the two
 populations may separate differently. That is a different experiment and it
 has not been run — but on the evidence here, nothing should act on this head.
+
+### ⭐⭐⭐ Semi-dense matching: 2.1–2.6x more inliers, and it needs no new model
+
+§58 listed semi-dense as the third remaining XFeat idea. It is the first one to
+survive measurement, and it is the largest single improvement to the anchor
+found in this campaign.
+
+**Measured on the vehicle** (`XFeatHailo`, `USAC_MAGSAC`, reproj 3.0):
+
+| clip / pair | sparse matches | sparse inliers | dense matches | **dense inliers** | gain |
+|---|---|---|---|---|---|
+| `torpedo` 0 | 551 | 229 | 949 | **589** | **2.57x** |
+| `torpedo` 1 | 339 | 80 | 621 | **210** | **2.63x** |
+| `gate` 0 | 382 | 105 | 686 | **218** | **2.08x** |
+| `gate` 1 | 359 | 92 | 624 | **202** | **2.20x** |
+
+⭐ **It costs nothing extra to compute.** The network already emits the full
+`30x40x64` descriptor map — 1 200 cells — and the sparse path NMS-selects
+1 024 keypoints *from that same map*. So this is a matching-strategy change,
+not a model change: no retraining, no re-export, no new HEF. Sparse throws
+away a map it already paid for.
+
+⛔ **WHY IT MATTERS FOR THE LADDER, IN ONE NUMBER.** The anchor's trust bar is
+**100 inliers**. On `torpedo` pair 1 — the weakest pair measured — sparse
+scores **80 and FAILS the bar**; dense scores **210 and clears it comfortably**.
+That is the difference between the anchor rung holding a lock and dropping it,
+on real footage, with no new model.
+
+⚠ **What is NOT yet measured, and must be before this ships:**
+- **cost.** 1 200 descriptors vs 1 024 is a bigger match matrix; the pairwise
+  cosine is O(N*M). The 17 % more descriptors is not the issue — the match
+  itself is, and it runs on the CPU in `XFeatONNX.match`.
+- **frame-to-REFERENCE, not frame-to-frame.** This tested consecutive frames.
+  The anchor's real job is matching against a checkpoint stored seconds ago
+  from a different viewpoint, where a uniform grid may behave differently from
+  corner-selected keypoints.
+- **false positives.** More inliers is only better if they are right. MAGSAC
+  rejecting to a consistent homography is good evidence, not proof; the
+  loop-closure bar of 100 exists because a wrong closure moves the vehicle.
+
+**Ranking now:** this is item 1 on the XFeat list, ahead of everything except
+the Hailo port that is already done. Next step is the cost measurement, then a
+frame-to-reference test on the archive, then wire it behind a switch.
