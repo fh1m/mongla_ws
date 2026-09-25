@@ -107,6 +107,89 @@ def test_hef_with_sidecars_passes(tmp_path):
     assert bc._check_models_hailo([str(tmp_path)])[0] == bc.PASS
 
 
+def _workspace(tmp_path, *, symlinked: bool, stale: bool):
+    """A miniature workspace with a src/ and a build/ tree.
+
+    `symlinked` reproduces `colcon build --symlink-install`, where build/ is a
+    link into src/ and staleness is impossible; `stale` writes a build copy
+    older than its source, which is the real hazard.
+    """
+    import os
+    import time
+    ws = tmp_path / 'ws'
+    pkg_src = ws / 'src' / 'mongla_vision' / 'mongla_vision' / 'detection'
+    pkg_bld = ws / 'build' / 'mongla_vision' / 'mongla_vision' / 'detection'
+    pkg_src.mkdir(parents=True)
+    s = pkg_src / 'hailo.py'
+    s.write_text('# current\n')
+    if symlinked:
+        pkg_bld.parent.mkdir(parents=True)
+        os.symlink(pkg_src, pkg_bld)
+    else:
+        pkg_bld.mkdir(parents=True)
+        b = pkg_bld / 'hailo.py'
+        b.write_text('# OLD\n')
+        old = time.time() - (600 if stale else -600)
+        os.utime(b, (old, old))
+    return ws
+
+
+def _freshness(monkeypatch, ws):
+    """Point the check at the miniature workspace.
+
+    `_check_build_freshness` derives the workspace from its own __file__, so
+    the test swaps that rather than reimplementing the walk -- the SHIPPING
+    function has to be the one under test.
+    """
+    fake = ws / 'src' / 'mongla_manager' / 'mongla_manager' / 'bringup_check.py'
+    fake.parent.mkdir(parents=True, exist_ok=True)
+    fake.touch()
+    monkeypatch.setattr(bc, '__file__', str(fake))
+    return bc._check_build_freshness()
+
+
+def test_a_build_copy_older_than_its_source_fails_the_gate(
+        tmp_path, monkeypatch):
+    """⛔ THE NEAR-MISS THIS GUARDS (B-61). The fix was rsynced into src/ and
+    reported "verified on the vehicle" while the flight path still imported
+    the broken copy out of build/. `mongla_vision` resolves to
+    build/mongla_vision/..., so an rsync into src/ proves nothing."""
+    ws = _workspace(tmp_path, symlinked=False, stale=True)
+    status, detail = _freshness(monkeypatch, ws)
+    assert status == bc.FAIL
+    assert 'hailo.py' in detail
+    assert 'colcon build' in detail, 'a verdict must say how to fix it'
+
+
+def test_a_fresh_build_copy_passes(tmp_path, monkeypatch):
+    ws = _workspace(tmp_path, symlinked=False, stale=False)
+    assert _freshness(monkeypatch, ws)[0] == bc.PASS
+
+
+def test_a_symlinked_build_tree_passes_because_it_cannot_go_stale(
+        tmp_path, monkeypatch):
+    """`--symlink-install` shares the inode, so src and build ARE one file.
+    Reporting that as stale would make the check cry wolf on the correct
+    configuration, and a check that cries wolf gets deleted."""
+    ws = _workspace(tmp_path, symlinked=True, stale=False)
+    assert _freshness(monkeypatch, ws)[0] == bc.PASS
+
+
+def test_the_freshness_guard_bites_only_because_of_the_mtime(
+        tmp_path, monkeypatch):
+    """Injection-verify: identical trees, only the build copy's mtime moves,
+    and the verdict must flip."""
+    import os
+    import time
+    ws = _workspace(tmp_path, symlinked=False, stale=True)
+    assert _freshness(monkeypatch, ws)[0] == bc.FAIL
+    b = (ws / 'build' / 'mongla_vision' / 'mongla_vision' / 'detection'
+         / 'hailo.py')
+    now = time.time() + 600
+    os.utime(b, (now, now))
+    assert _freshness(monkeypatch, ws)[0] == bc.PASS
+
+
 def _hefs(tmp_path, floors):
     """A model dir where every .hef has its sidecar, so the only thing under
     test is the baked floor."""
