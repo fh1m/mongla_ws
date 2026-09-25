@@ -455,3 +455,36 @@ inliers, and we have never tried it.
 ⚠ Items 2 and 3 are RESEARCH NOTES, not findings. Neither has been measured on
 our footage, and §57's lesson is that an idea consistent with the symptom is
 not evidence.
+
+### ⛔ The reliability head does NOT predict which keypoints survive a match
+
+§58 listed "use the reliability head" as the second-best remaining XFeat idea:
+the paper emits one, we compute it on-chip, and `min_cossim = 0.82` was doing
+that job as a single global constant. It is now decoded (`conv23`, 30x40x1,
+exposed as `XFeatHailo.last_reliability`) and **measured on the vehicle**,
+three consecutive frame pairs of `gate.mkv`:
+
+| pair | matched kp | mean rel | unmatched kp | mean rel | ratio |
+|---|---|---|---|---|---|
+| 0 | 382 | 0.14 | 642 | 0.11 | **1.289** |
+| 1 | 359 | 0.17 | 665 | 0.15 | **1.137** |
+| 2 | 493 | 0.17 | 531 | 0.17 | **1.050** |
+
+⛔ **A 5–29 % separation, decaying toward 1.0.** Keypoints that survive a match
+score barely above those that do not, and by the third pair the two
+populations are indistinguishable. That cannot replace a cosine bar which
+currently rejects on a real similarity.
+
+⚠ **Why the idea was still worth testing, and what the failure teaches.** The
+reasoning was sound — a per-keypoint confidence should beat a global constant
+— and it is the same shape as §57's lesson: *an idea consistent with the
+symptom is not evidence*. Three ideas have now died this way (temporal
+persistence, box geometry, edge energy) and this is the fourth. The decode
+stays, because it costs nothing and a future consumer may want it; the
+`min_cossim` bar stays as the thing that actually decides a match.
+
+⚠ One caveat stated honestly: this measured reliability against
+**frame-to-frame** matching on clear-ish pool footage. The anchor's real job is
+frame-to-REFERENCE across seconds and viewpoint change, where the two
+populations may separate differently. That is a different experiment and it
+has not been run — but on the evidence here, nothing should act on this head.
