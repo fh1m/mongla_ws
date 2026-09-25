@@ -27,7 +27,8 @@ import math
 
 import pytest
 
-from mongla_vision.tracking.lock_state import DISAGREE_PX, Rung, arbitrate
+from mongla_vision.tracking.lock_state import (DISAGREE_PX, Rung,
+                                              _AGREE_BOOST, arbitrate)
 
 
 def _box(cx, cy, w=60.0, h=60.0):
@@ -115,3 +116,57 @@ def test_a_detection_outranks_the_cross_check():
               now=10.0, last_detection_t=10.0)
     assert s.rung is Rung.DETECTION
     assert s.authority == pytest.approx(1.0)
+
+
+# ── agreement is evidence too (from the operator's own R&D fusion code) ─────
+
+
+def _decayed(**kw):
+    """A detection old enough that authority has decayed below 1.0, so a
+    boost has room to show. Full authority for 1 s, zero at 3 s; at 2 s the
+    ladder is mid-decay."""
+    args = dict(now=10.0, last_detection_t=8.0, full_s=1.0, zero_s=3.0,
+                follow_conf=0.9, anchor_conf=0.8)
+    args.update(kw)
+    return arbitrate(**args)
+
+
+def test_two_agreeing_rungs_earn_MORE_authority_than_one():
+    """⭐ THE IDEA FROM `r_&_d/features_v9.py`. Its fusion boosted confidence
+    when the EKF and the visual estimate agreed on direction; the first
+    version of this cross-check only punished disagreement and threw that
+    half away.
+
+    Two INDEPENDENT estimates -- LK integrating frame to frame, XFeat fitting
+    frame to a stored reference -- landing on the same centre is a stronger
+    statement than either alone."""
+    alone = _decayed(follow=_box(320, 240), anchor=None).authority
+    agreed = _decayed(follow=_box(320, 240),
+                      anchor=_box(322, 241)).authority
+    assert agreed > alone, 'corroboration must be worth something'
+    assert agreed == pytest.approx(min(1.0, alone * _AGREE_BOOST))
+
+
+def test_the_boost_needs_the_witness_to_be_confident_itself():
+    """⚠ A low-confidence anchor agreeing is not corroboration -- it is two
+    guesses. `anchor_conf` must clear the same bar the anchor rung would."""
+    weak = _decayed(follow=_box(320, 240), anchor=_box(322, 241),
+                    anchor_conf=0.0).authority
+    strong = _decayed(follow=_box(320, 240), anchor=_box(322, 241)).authority
+    assert strong > weak
+
+
+def test_the_boost_never_exceeds_full_authority():
+    """⛔ Authority is a fraction of what the control loop may do. Boosting
+    past 1.0 would let a CARRIED rung outrank a fresh detection."""
+    s = _call(follow=_box(320, 240), anchor=_box(321, 240))
+    assert s.authority <= 1.0
+
+
+def test_merely_not_conflicting_is_not_agreement():
+    """The boost needs the two to be CLOSE, not just inside the disagreement
+    bar. A pair 60 px apart on a 640-wide frame is not corroboration."""
+    close = _decayed(follow=_box(320, 240), anchor=_box(325, 240)).authority
+    apart = _decayed(follow=_box(320, 240),
+                     anchor=_box(320 + DISAGREE_PX - 4, 240)).authority
+    assert close > apart, 'the bonus must fall off well inside the bar'
