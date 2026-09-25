@@ -540,3 +540,27 @@ on real footage, with no new model.
 **Ranking now:** this is item 1 on the XFeat list, ahead of everything except
 the Hailo port that is already done. Next step is the cost measurement, then a
 frame-to-reference test on the archive, then wire it behind a switch.
+
+**⭐ The cost, measured — and it moves the bottleneck.** `XFeatONNX.match` on
+the vehicle's CPU:
+
+| | per match | |
+|---|---|---|
+| sparse 1024x1024 | **33.50 ms** | |
+| dense 1200x1200 | **45.85 ms** | **+37 %** |
+
+**+37 % for 2.1-2.6x the inliers is a good trade**, and it is affordable at the
+anchor's 3 Hz cadence (45.85 ms of a 333 ms budget).
+
+⛔ **But look at the sparse number.** The MATCH costs **33.50 ms** while the
+inference now costs **10.89 ms** on the chip (B-62). **The anchor's bottleneck
+was never the network — it is the pairwise cosine on the CPU**, and it always
+was: even before the Hailo port, 32.9 ms of inference sat beside 33.5 ms of
+matching and only the inference was ever profiled or optimised.
+
+⭐ That reframes the remaining work. The next 2-3x in the anchor is not a
+better descriptor or a faster backend; it is the matcher — a mutual-nearest
+check on a 1200x1200 float32 matrix, in numpy, single-threaded. Options worth
+measuring, in order of expected return: a coarse-to-fine grid (match at 15x20
+first, refine locally), `float16` accumulation, or handing the matrix to the
+chip. None of these needs a new model either.
