@@ -270,6 +270,30 @@ def generate_launch_description():
             description='Run the lock ladder (follower + XFeat anchor) on the '
                         'forward camera, publishing <ns>/lock. Control ignores '
                         'it until vision.lock_s > 0.'),
+        # The ladder's own bars, reachable from the command line. Defaults
+        # mirror `lock_node`'s declarations exactly -- two copies of a default
+        # is how they drift, so if one moves the other must.
+        DeclareLaunchArgument(
+            'act_conf', default_value='0.45',
+            description='ladder ACTING bar: below this a detection may be '
+                        'associated by the tracker but is not acted on '
+                        '(B-59; measured knee 0.60, shipped 0.45)'),
+        DeclareLaunchArgument(
+            'anchor_xfeat_hef', default_value='true',
+            description='run XFeat on the Hailo-8 rather than the Pi CPU '
+                        '(B-62: 10.89 ms vs 32.9 ms)'),
+        DeclareLaunchArgument(
+            'anchor_semi_dense', default_value='false',
+            description='semi-dense matching: 2.1-2.6x inliers for +37 % '
+                        'match cost. OFF until frame-to-reference is measured'),
+        DeclareLaunchArgument(
+            'target_width_m_forward', default_value='0.0',
+            description='measured TRUE width of the forward target in metres; '
+                        '0 = use the rulebook nominal. A measured prop beats '
+                        'a nominal, which is what SAUVC +/-5 % allows for'),
+        DeclareLaunchArgument(
+            'target_width_m_downward', default_value='0.0',
+            description='measured true width of the downward target, metres'),
         DeclareLaunchArgument(
             'lock_class', default_value='',
             description='Class the ladder locks onto. Empty = whatever the '
@@ -479,6 +503,32 @@ def generate_launch_description():
                 # that already disables itself.
                 'anchor':       True,
                 'anchor_bank':  LaunchConfiguration(f'bank_{camera_name}'),
+                # ⛔ THESE WERE DECLARED IN THE NODE AND NEVER PASSED HERE,
+                # which is the same shape of gap as the yaw one: the parameter
+                # exists, its default is sensible, and NO LAUNCH ARGUMENT
+                # REACHES IT -- so an operator can only change it with
+                # `ros2 param set` after the node is already running.
+                # `act_conf` is the B-59 safety bar, so that is the one that
+                # matters: the bar a pool day would want to raise is the bar a
+                # pool day could not reach.
+                'act_conf':          LaunchConfiguration('act_conf'),
+                'anchor_xfeat_hef':  LaunchConfiguration('anchor_xfeat_hef'),
+                'anchor_semi_dense': LaunchConfiguration('anchor_semi_dense'),
+                # ⭐ `target_width_m` is the metric scale the anchor's range
+                # depends on, and its own comment says "an explicit parameter
+                # WINS: a measured prop beats a rulebook nominal" -- which was
+                # not actionable, because no launch argument reached it.
+                #
+                # ⛔ The place-recognition rung is deliberately NOT plumbed
+                # here. It configures itself from `~/.mongla/*.yaml` so it
+                # behaves the same whichever launch starts the node; a launch
+                # argument would recreate the defect where a capability is
+                # reachable from one launch path and not the one `bringup`
+                # includes. A guard test fails if the plumbing comes back --
+                # and it caught this attempt, which is why the comment is here
+                # rather than the parameter.
+                'target_width_m': LaunchConfiguration(
+                    f'target_width_m_{camera_name}'),
                 # lock_node still rectifies its OBJECT points (reference
                 # pixels scaled to metres); pnp_node rectifies the image side.
                 # Two nodes, one value, one launch argument.
