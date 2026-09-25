@@ -52,6 +52,7 @@ not by competition, with a deck-side override for every venue constant.
 | # | Item | State | Owner / evidence |
 |---|---|---|---|
 | G1 | **Board depth loop has never run closed.** Every srot move enters AUTO, which closes depth, so this gates `move_forward` too | OPEN (last read 2026-09-15: `DEPTH_OUT` absent while disarmed) | bench: the two armed checks in `srot-integration.md` |
+| G1b | ⛔ **`FRAME_REVERSE` vs MOTOR_DETECT.** On this hull `FRAME_REVERSE = 1`, and MOTOR_DETECT converges to the configuration that cancels it — so a detect run leaves every axis inverted in every closed-loop mode, and Motor Test confirms the wrong answer. **Do not run MOTOR_DETECT on this hull until upstream `pr-q` lands** | OPEN (upstream, unsent) | `upstream/pr-q-motor-detect-and-frame-reverse.md`; source-read, not bench-verified |
 | G2 | **Thrusters fitted and ESC RPM non-zero.** 958/958 ESC frames read 0 with nothing attached; `THR_TRIM_EN=0` WARN | OPEN (hardware) | blocks `thrust_model`, the RPM velocity sensor, ESC current as a BLOCKED channel |
 | G3 | **Firmware PR merge.** 21 of our PRs open on `srot-control-board`, none merged since 2026-09-03 (re-checked 2026-09-17: #1-#24 all OPEN) | OPEN | `gh pr list -R RakibulIslam1/srot-control-board`; see §3 |
 | G4 | Board config applied 2026-09-15: Bar30 re-zeroed (+0.005 m), `LEAK_EN=1`, `MOT_BAT_V_MAX=16.8`, read back | DONE (re-verify after any reflash) | operator |
@@ -87,6 +88,27 @@ first**; twice already the thing to ask for was already open.
 | Docs | **#16** MANUAL_CONTROL.z deviates from spec | — |
 | SAUVC | **#24** flare order over LoRa (`MAV_CMD_SROT_FLARE_ORDER` 31020) | Task 4; also needs H1 |
 | GS | ground station **#4** absent telemetry renders 0.00 m; joystick disable sends no neutral | operator display honesty |
+
+### ⏳ 2026-09-25 — FIVE MORE, WRITTEN AND UNSENT (no write access)
+
+Bodies in [`upstream/`](upstream/README.md); PR P's firmware code is a patch in
+[`upstream/patches/`](upstream/patches/) that applies to their `main` at `f1d3ba9`
+and whose 85 host-side tests pass. The session that wrote them had **read-only**
+GitHub access to `srot-control-board` — `403 Resource not accessible by integration`
+on branch, issue and PR creation — so **none of these are on their repo yet.**
+
+| Tier | doc | What it unlocks |
+|---|---|---|
+| ⛔ Safety | **`pr-q`** MOTOR_DETECT converges to the configuration that cancels `FRAME_REVERSE` | **outranks everything in §3.** On this hull (`FRAME_REVERSE = 1`) a *successful* detect leaves every axis inverted in every closed-loop mode, and Motor Test shows the opposite of what the vehicle will do. One multiply |
+| Control | **`pr-p`** the geometric allocator, implemented | the mongla-5 hull becomes flyable at all; the six axes become commensurate (sway:yaw is **5.714×**, = the condition number); the axial unit's 8.06 mm pitch moment gets cancelled instead of absorbed. ⚠ Also **corrects PR K / their #25**, whose 346.6 / 520.4 mm came from the decimated render asset |
+| Control | **`pr-t`** the brake's impulse ignores leg duration | short legs stop reversing — below ≈0.21 s the brake impulse exceeds the forward impulse. Precision alignment |
+| Safety | **`pr-s`** a timed-out `DIVE`/`TURN` reports `ACCEPTED` at 100 % | a mission can tell a reached target from a given-up one. Distinct from #8 |
+| Control | **`pr-r`** `thrust_trim` predicts the pre-shaping demand | `THR_TRIM_EN=1` stops driving every gain to its −25 % clamp; needed before G2 makes the feature usable |
+
+**To send them:** reconnect GitHub / install the Claude GitHub App on that repo
+(<https://claude.ai/connect-github>), or send from a session with write access
+there. ⚠ **Post the PR K correction on their #25 first** — it is the document the
+firmware team would implement a mixer from, and it is wrong.
 
 **Drafted, NOT sent (need operator OK):**
 `srot-control-board/PR_DEMAND_ECHO_AND_HEAP_MIN_2026-09-14.md` (DEM_FWD/DEM_LAT echo, HEAP_MIN)
