@@ -95,6 +95,25 @@ footage rather than against the next rung up.
 > HEF is if anything faster. The through-the-graph number (was 53.9 Hz) has
 > NOT been re-taken and still carries the B-61 caveat.
 >
+> ⭐ **HEF vs `.pt` AGREEMENT, re-measured 2026-09-25** on whole clips rather
+> than the three frames B-61 was confirmed with — 200 frames each, conf 0.05,
+> best detection per frame:
+>
+> | clip | `.pt` | HEF |
+> |---|---|---|
+> | `gate.mkv` | 100 % det, `gate` x200, p50 **0.79**, p10 0.70 | 100 % det, `gate` x198 + `rescue` x2, p50 **0.73**, p10 0.63 |
+> | `torpedo.mkv` | 100 % det, `gate` x200, p50 **0.59** | 100 % det, `gate` x200, p50 **0.55** |
+>
+> Same class, same detection rate, and **INT8 costs 0.04–0.06 of confidence**.
+> ⭐ That replaces the retracted "INT8 costs ~0.08" figure, which was measured
+> on the swapped-colour path and meant nothing. The two `rescue` frames out of
+> 200 are the only class disagreement.
+>
+> ⛔ It also confirms **B-60 on the accelerator**, not just on the `.pt`:
+> `torpedo.mkv` contains no gate and the HEF reports one on **200/200 frames**
+> at p50 0.55. The detector's learned concept is wrong on both paths, which is
+> what makes it a model problem rather than a quantisation one.
+>
 > ⛔ **Attempted 2026-09-25 and BLOCKED ON HARDWARE, not on effort.**
 > `vision_pi.launch.py` starts `detector_dual_node`, which opens BOTH cameras;
 > only one is currently plugged into the vehicle (a single Sonix USB camera,
