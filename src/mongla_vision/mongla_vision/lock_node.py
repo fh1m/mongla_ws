@@ -106,9 +106,20 @@ class LockNode(Node):
         self.declare_parameter('follow', True)
         self.declare_parameter('anchor', False)
         self.declare_parameter('anchor_model', '')
-        # Opt-in until XFeatHailo moves to the InferModel API (B-62):
-        # preferring the .hef today can starve the detector of the chip.
-        self.declare_parameter('anchor_xfeat_hef', False)
+        # ⭐ DEFAULT ON since the InferModel port (B-62). Measured on the
+        # vehicle: 10.89 ms alone and 19.85 ms with the detector inferring,
+        # against 32.9 ms for the ONNX path it replaces -- 1.7x even fully
+        # contended, and off the cores the camera pump needs. The two now
+        # share the chip through `detection/hailo.py`'s `_ACTIVE` registry.
+        #
+        # Cross-backend equivalence checked before flipping this: 875/888/878
+        # of 1024 keypoints match between the ONNX and HEF descriptors, so a
+        # checkpoint enrolled on one path is matchable on the other and the
+        # bank does not partition by transport. The identity bar is 40.
+        #
+        # Set false to force the CPU path -- on a dev box with no chip the
+        # resolver falls back on its own, so this is for A/B measurement.
+        self.declare_parameter('anchor_xfeat_hef', True)
         # A bank built BEFORE the run, from practice footage or stills:
         # `tools/build_practice_bank.py`. Measured 2026-09-24 -- references
         # from one run clear the trust bar on 92-100 % of frames of a DIFFERENT
@@ -511,19 +522,14 @@ class LockNode(Node):
                 # dev box has no chip, and a vehicle whose HEF is missing must
                 # still get an anchor rung rather than lose it to a
                 # FileNotFoundError.
-                # ⛔ ONNX FIRST, STILL — the `.hef` is OPT-IN until the port
-                # lands. Measured 2026-09-25: sharing the VDevice removed
-                # HAILO_OUT_OF_PHYSICAL_DEVICES, and the failure moved to
-                #     Cant activate network because a network is already activated
-                # because `detection/hailo.py` holds a persistent InferModel
-                # activation while `XFeatHailo` asks for one per call. HailoRT
-                # allows one activated group at a time, so the anchor winning
-                # that race means NO DETECTOR — strictly worse than the 32.9 ms
-                # CPU path it replaces. Locking cannot fix it; the backend has
-                # to move to the same InferModel API (B-62).
-                #
-                # `anchor_xfeat_hef:=true` is for benchmarking the transport on
-                # a bench with no detector running.
+                # ⭐ `.hef` FIRST (B-62). It took three attempts to earn this
+                # default: an own VDevice gave HAILO_OUT_OF_PHYSICAL_DEVICES,
+                # a shared VDevice with a lock gave "Cant activate network
+                # because a network is already activated", and only joining
+                # `detection/hailo.py`'s `_ACTIVE` registry -- where the next
+                # claimant releases the incumbent -- let the anchor and the
+                # detector coexist. The ONNX remains the fallback for a box
+                # with no chip.
                 exts = (('*.hef', '*.onnx')
                         if bool(self.get_parameter('anchor_xfeat_hef').value)
                         else ('*.onnx', '*.hef'))
