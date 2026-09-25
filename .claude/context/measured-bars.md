@@ -77,6 +77,23 @@ footage rather than against the next rung up.
 > the detector was answering a different question. Re-take them before
 > quoting. Every figure measured through the `.pt`/ONNX path is
 > unaffected, because ultralytics converts internally.
+>
+> ⭐ **RE-TAKEN 2026-09-25 on the fixed path**, `hailo_latency.py`, the
+> 1 038-frame HEF, on the vehicle:
+>
+> | queue depth | throughput | box age median | p95 | max |
+> |---|---|---|---|---|
+> | **1** | **99.0 Hz** | **10.05 ms** | 10.43 ms | 13.25 ms |
+> | 2 | 98.9 Hz | 15.87 ms | 20.11 ms | 23.28 ms |
+> | 4 | 99.0 Hz | 25.53 ms | 40.07 ms | 42.91 ms |
+> | 8 | 99.1 Hz | 45.63 ms | 80.02 ms | 83.03 ms |
+>
+> Throughput is flat across depth — the chip is the bottleneck, not the
+> queue — so **depth 1 is free**: the same 99 Hz at a quarter of the box age
+> that depth 4 gives. 99.0 Hz against the old 80.9 Hz standalone figure
+> confirms the colour bug cost no cycles, and that the properly-calibrated
+> HEF is if anything faster. The through-the-graph number (was 53.9 Hz) has
+> NOT been re-taken and still carries the B-61 caveat.
 | `VISION_LOOP_HZ_SROT` | 50 — `motion_vision.py` | soaked 90 s: **49.86 Hz**, 0.00 % late ticks | ≥ 25 Hz sustained |
 | camera FOV | 63.8° air / **46.7° water** ±0.7 | 25 views, `calibrateCameraRO`, held-out validated | ±1.5° |
 | frame staleness | — | mailbox **16.9 ms** vs 396 ms on a plain queue | ≤ 50 ms |
