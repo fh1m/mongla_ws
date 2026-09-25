@@ -3792,3 +3792,29 @@ low-frame build undeployable.
 and scores on the same three frames. Until it does, B-61 stays OPEN and the
 HEF path stays untrusted. Note the OLD deployed HEF shows the same corruption,
 so whatever produced it also used too few frames.
+
+**B-61 decode EXONERATED by the raw buffer (2026-09-25).** Dumped
+`HailoDetector._out_buf` on the vehicle for the same frame:
+
+```
+raw size 1503   nms_classes 3   names {0: gate, 1: rescue, 2: repair}
+class 0: count=0      class 1: count=0      class 2: count=2
+box 1:  y1=0.1223  x1=0.0014  y2=0.7770  x2=1.0008  score=0.8618
+box 2:  y1=0.8751  x1=1.0027  y2=0.1183  ...
+```
+
+The packed-layout walk agrees exactly with `_decode_nms`, and the buffer
+itself says class 2, count 2, score 0.86. **The chip really is emitting
+`repair` and zero `gate` boxes** — the host decode reports faithfully what it
+is given.
+
+⭐ **Box 2 is geometrically impossible**: `y2 (0.118) < y1 (0.875)` and
+`x1 = 1.0027 > 1.0`. A correctly quantised NMS cannot emit an inverted box
+outside the normalised range. That is quantisation wreckage, and it is the
+signature that confirms the reduced-optimisation diagnosis rather than merely
+being consistent with it.
+
+⚠ One robustness gap noted in passing, NOT the bug: `_boxes_to_detections`
+does not reject a box with `y2 < y1` or coordinates outside [0, 1]. It turned
+the inverted box into a plausible-looking `[0, 202, 640, 480]`. Worth a guard
+so corrupt output is refused rather than rendered.
