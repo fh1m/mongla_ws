@@ -111,7 +111,17 @@ whose module is already written and measured.
    been measured against absent-prop footage — that column is now tracked.
 3. **`rescue` / `repair` / `sauvc_sim` / `bin_fire_blood` still unmeasured**
    for the same defect.
-4. **B-61 — cause found, fix in flight.** The HEF returned `repair` 0.86 with
+4. ✅ **B-61 — ROOT CAUSE FOUND AND FIXED: BGR/RGB.** The Hailo input path
+   never converted `cv2`'s BGR to the RGB the model was trained on, so the
+   chip ran on colour-swapped pixels since the backend was written. Proved by
+   reproducing it on the `.pt` with no chip involved: the same swap turns
+   `gate=0.78` into `repair=0.92 @0,0`. ⚠ **Two wrong diagnoses came first**
+   (decode stride; the DFC calibration cliff — a real defect, fixed
+   separately, but not this one). **Every HEF-path measurement must be
+   re-taken**: 80.9/53.9 Hz, the murky INT8 table, "INT8 costs 0.08". The
+   `.pt` numbers (B-59, B-60) are unaffected.
+
+   ~~B-61 — cause found, fix in flight.~~ The HEF returned `repair` 0.86 with
    an impossible box (`y2 < y1`, `x1 > 1.0`) because the calibration set was
    258 frames against the DFC's 1024 cliff, which silently drops AdaRound and
    QAT. The decode is EXONERATED by a raw-buffer dump. `hailo_compile.py` now
