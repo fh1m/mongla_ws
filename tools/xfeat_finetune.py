@@ -30,6 +30,11 @@ venues would be the most flattering and least true number in the project.
 """
 from __future__ import annotations
 
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from data_root import data_root  # noqa: E402
+
 import argparse
 import os
 import random
@@ -195,8 +200,10 @@ def extract(paths, n_per_clip, size, out_dir, turbid, seed=0, tag=''):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--out', default='/tmp/xfeat_ourwater')
-    ap.add_argument('--inventory', default='/tmp/footage_inventory.json')
+    ap.add_argument('--out', default=data_root('xfeat', 'ourwater'))
+    ap.add_argument('--inventory',
+                    default=os.path.join(data_root('xfeat'),
+                                         'footage_inventory.json'))
     ap.add_argument('--per-group', type=int, default=FRAMES_PER_GROUP)
     ap.add_argument('--width', type=int, default=800)
     ap.add_argument('--height', type=int, default=608)
