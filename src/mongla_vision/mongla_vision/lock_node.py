@@ -106,6 +106,9 @@ class LockNode(Node):
         self.declare_parameter('follow', True)
         self.declare_parameter('anchor', False)
         self.declare_parameter('anchor_model', '')
+        # Opt-in until XFeatHailo moves to the InferModel API (B-62):
+        # preferring the .hef today can starve the detector of the chip.
+        self.declare_parameter('anchor_xfeat_hef', False)
         # A bank built BEFORE the run, from practice footage or stills:
         # `tools/build_practice_bank.py`. Measured 2026-09-24 -- references
         # from one run clear the trust bar on 92-100 % of frames of a DIFFERENT
@@ -497,21 +500,82 @@ class LockNode(Node):
                 # and no error.
                 roots = [d for d in (os.environ.get('MONGLA_HEF_DIR', '').strip(),
                                      '~/hailo_models') if d]
+                # ⛔ `.hef` FIRST (B-62). This globbed `xfeat_*.onnx` only, so
+                # the compiled HEF sitting in the SAME directory was never a
+                # candidate and the anchor ran on the Pi's CPU: measured
+                # 32.9 ms per call (30.4 FPS) against 1.43 ms (701 FPS) on the
+                # accelerator. A 23x gap, spent on the cores the camera pump
+                # and the rclpy executor need.
+                #
+                # ⚠ The ONNX stays as the fallback, and it is a real one: the
+                # dev box has no chip, and a vehicle whose HEF is missing must
+                # still get an anchor rung rather than lose it to a
+                # FileNotFoundError.
+                # ⛔ ONNX FIRST, STILL — the `.hef` is OPT-IN until the port
+                # lands. Measured 2026-09-25: sharing the VDevice removed
+                # HAILO_OUT_OF_PHYSICAL_DEVICES, and the failure moved to
+                #     Cant activate network because a network is already activated
+                # because `detection/hailo.py` holds a persistent InferModel
+                # activation while `XFeatHailo` asks for one per call. HailoRT
+                # allows one activated group at a time, so the anchor winning
+                # that race means NO DETECTOR — strictly worse than the 32.9 ms
+                # CPU path it replaces. Locking cannot fix it; the backend has
+                # to move to the same InferModel API (B-62).
+                #
+                # `anchor_xfeat_hef:=true` is for benchmarking the transport on
+                # a bench with no detector running.
+                exts = (('*.hef', '*.onnx')
+                        if bool(self.get_parameter('anchor_xfeat_hef').value)
+                        else ('*.onnx', '*.hef'))
                 c = []
                 for r in roots:
-                    c = sorted(glob.glob(os.path.join(
-                        os.path.expanduser(r), 'xfeat_*.onnx')))
+                    for ext in exts:
+                        c = sorted(glob.glob(os.path.join(
+                            os.path.expanduser(r), 'xfeat_' + ext)))
+                        if c:
+                            break
                     if c:
                         break
                 p = c[0] if c else ''
             if not p:
-                raise FileNotFoundError('no xfeat_*.onnx found')
+                raise FileNotFoundError('no xfeat_*.hef or xfeat_*.onnx found')
             # `period_s` is what lets the bank size its own shortlist: it
             # measures one match on THIS machine and spends a fixed fraction of
             # the evaluation period. The dev box and the Pi differ by 2.2x on
             # the identical work (14.4 vs 31.4 ms), so a constant width would
             # be wrong on one of them.
-            self._anchor = CheckpointBank(XFeatONNX(p, top_k=1024),
+            # ⭐ THE ACCELERATOR WHEN THE ARTIFACT IS ONE (B-62), the CPU
+            # otherwise. Both backends share `xfeat_onnx`'s post-processing and
+            # matcher, so a checkpoint enrolled through either is matchable by
+            # the other -- the bank must not partition by transport.
+            #
+            # ⚠ DEGRADES RATHER THAN DIES. A HEF that will not configure --
+            # the detector already holding the device, a driver mismatch, a
+            # dev box with no chip at all -- falls back to ONNX with a loud
+            # warning. Losing 31 ms per call is bad; losing the anchor rung
+            # entirely is worse, and this is the rung that survives a
+            # detection gap.
+            backend = None
+            if p.endswith('.hef'):
+                try:
+                    from mongla_vision.anchor.xfeat_hailo import XFeatHailo
+                    backend = XFeatHailo(p, top_k=1024)
+                    self.get_logger().info(
+                        f'[LOCK ] anchor on the Hailo-8: {os.path.basename(p)}')
+                except Exception as exc:                         # noqa: BLE001
+                    self.get_logger().warn(
+                        f'[LOCK ] {os.path.basename(p)} would not load on the '
+                        f'accelerator ({type(exc).__name__}: {exc}) -- falling '
+                        f'back to ONNX on the CPU, which measured 32.9 ms per '
+                        f'call against 1.43 ms on the chip (B-62).')
+                    alt = sorted(glob.glob(os.path.join(
+                        os.path.dirname(p), 'xfeat_*.onnx')))
+                    p = alt[0] if alt else ''
+                    if not p:
+                        raise
+            if backend is None:
+                backend = XFeatONNX(p, top_k=1024)
+            self._anchor = CheckpointBank(backend,
                                           period_s=self._anchor_period)
             self.get_logger().info(
                 f'[LOCK ] anchor backend {os.path.basename(p)}, '
