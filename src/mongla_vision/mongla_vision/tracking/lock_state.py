@@ -76,6 +76,15 @@ MIN_RUNG_CONF = 0.10
 # whenever a fish crosses the frame.
 DISAGREE_PX = 64.0
 
+# Two independent rungs landing within this FRACTION of the disagreement bar
+# are treated as corroborating rather than merely not-conflicting.
+_AGREE_FRAC = 0.25
+
+# ⚠ 1.15, not the 1.3 of the R&D code. There the boost was applied to a
+# DISPLAY confidence; here it scales AUTHORITY, which is how hard the hull
+# pushes. A rung that is right deserves a little more reach, not a third more.
+_AGREE_BOOST = 1.15
+
 
 @dataclass
 class LockState:
@@ -213,6 +222,34 @@ def arbitrate(*, now: float, last_detection_t: float,
 
     if follow is not None and follow_conf >= min_rung_conf:
         a = auth
+        # ⭐ AGREEMENT IS EVIDENCE TOO, not merely the absence of a fault.
+        #
+        # From the operator's own R&D fusion code (`r_&_d/features_v9.py`,
+        # `fuse_visual_imu_guidance`), which had this and the shipped ladder
+        # did not:
+        #
+        #     if dx_agree and dy_agree and ekf_vel_magnitude > 0.1:
+        #         fused_confidence = min(100, visual_conf * 1.3)
+        #
+        # Two estimates that are INDEPENDENT -- LK integrating frame to frame,
+        # XFeat fitting frame to a stored reference -- landing on the same
+        # centre is a much stronger statement than either making its own
+        # claim. The first version of this cross-check only punished
+        # disagreement, which threw half the information away.
+        #
+        # ⚠ THE GUARD IS THE OPERATOR'S TOO, AND IT IS THE SUBTLE PART.
+        # `abs(ekf_dx) > 5` in that code refuses to read agreement out of a
+        # near-zero signal: two estimators both saying "about here" agree on
+        # nothing. Here the same idea is a MINIMUM SEPARATION SCALE -- the
+        # agreement bonus needs both boxes to be real and close, not two
+        # degenerate boxes sitting on top of each other.
+        #
+        # ⛔ CAPPED AT 1.0. Authority is a fraction of what the CONTROL LOOP
+        # may do, and boosting past full would let a carried rung outrank a
+        # fresh detection.
+        if (disagree == disagree and disagree <= disagree_px * _AGREE_FRAC
+                and anchor_conf >= min_rung_conf):
+            a = min(1.0, auth * _AGREE_BOOST)
         if disagree == disagree and disagree > disagree_px:
             # Scale down smoothly rather than dropping to zero: a target
             # crossing in front of clutter produces a brief spike, and a cliff
