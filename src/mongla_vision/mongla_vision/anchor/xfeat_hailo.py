@@ -40,7 +40,19 @@ from . import xfeat_onnx as _x
 # Channel counts identify the heads. The HEF's output NAMES are compiler
 # artifacts and have changed between builds; the shapes are a property of the
 # network, so they are what this keys on.
-_FEAT_CH, _KPT_CH = 64, 65
+_FEAT_CH, _KPT_CH, _REL_CH = 64, 65, 1
+
+# ⭐ THE THIRD HEAD. The XFeat paper emits a keypoint heatmap, a 64-D
+# descriptor map AND a reliability heatmap; `hailortcli parse-hef` confirms
+# our own HEF carries all three (conv20 30x40x64, conv27 30x40x65,
+# conv23 30x40x1). We computed the reliability on-chip and dropped it on the
+# floor, while `min_cossim = 0.82` did the same job as ONE GLOBAL CONSTANT for
+# every keypoint in every frame.
+#
+# ⚠ It is exposed as `last_reliability` rather than being applied here: the
+# matcher is shared with the ONNX path, and changing what a match means on one
+# backend only is how the two would come to disagree. Measure what it buys
+# before any rung acts on it.
 
 # Deadlock guards, not latency knobs -- same rationale as detection/hailo.py:
 # an inference that takes a second has already broken the mission, and a tight
@@ -112,17 +124,20 @@ class XFeatHailo:
             job = cim.run_async([self._bindings])
             job.wait(_ASYNC_WAIT_MS)
             raw = {k: v.copy() for k, v in self._out_bufs.items()}
-        feats = kpts = None
+        feats = kpts = rel = None
         for _name, a in raw.items():
             if a.shape[-1] == _FEAT_CH:
                 feats = a.transpose(2, 0, 1)[None]
             elif a.shape[-1] == _KPT_CH:
                 kpts = a.transpose(2, 0, 1)[None]
+            elif a.shape[-1] == _REL_CH:
+                rel = a[..., 0]
         if feats is None or kpts is None:
             raise RuntimeError(
                 f'{self.path}: expected heads with {_FEAT_CH} and {_KPT_CH} '
                 f'channels, got {[v[0].shape for v in out.values()]}. This HEF '
                 f'is not an XFeat build.')
+        self.last_reliability = rel
         return self._post(feats, kpts)
 
     def _acquire_locked(self):
