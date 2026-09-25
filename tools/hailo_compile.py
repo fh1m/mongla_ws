@@ -135,7 +135,12 @@ def calib_frames(n: int, imgsz: int):
                          f'of {n} requested across {len(clips)} clips.')
     print(f'[hailo] calibration: {len(out)} frames from {len(clips)} clips '
           f'under {root}')
-    return np.stack(out[:n]).astype('float32')
+    # ⛔ uint8, NOT float32. 1024 x 640 x 640 x 3 is 1.26 GB as uint8 and
+    # 5.0 GB as float32 -- and it was that 5 GB which pushed me to cut the set
+    # to 256 frames, crossing the DFC's 1024 optimisation cliff and producing
+    # the corrupted HEF in B-61. The DFC casts internally, so staging narrow
+    # costs nothing and removes the reason to shrink the set.
+    return np.stack(out[:n]).astype('uint8')
 
 
 def class_names(pt: pathlib.Path) -> list:
@@ -162,11 +167,26 @@ def main() -> int:
     ap.add_argument('--imgsz', type=int, default=640)
     ap.add_argument('--nms-score-th', type=float, default=0.05)
     ap.add_argument('--nms-iou-th', type=float, default=0.70)
-    # ⚠ 256, not the 1024 the guides suggest: the set is held as float32, so
-    # 1024 x 640 x 640 x 3 is 5.0 GB resident and the box swaps or the run is
-    # OOM-killed mid-optimise -- the same failure that silently killed two
-    # training runs off the tmpfs. 256 is 1.26 GB and still spans every clip.
-    ap.add_argument('--calib-frames', type=int, default=256)
+    # ⛔ 1024 IS A CLIFF, NOT A GUIDELINE. Below it the DFC prints
+    #
+    #   [warning] Reducing optimization level to 1 (the accuracy won't be
+    #   optimized and compression won't be used) because there's less data
+    #   than the recommended amount (1024)
+    #
+    # and silently drops AdaRound and Quantization-Aware Fine-Tuning. The HEF
+    # still compiles, still loads, still runs at full speed -- and returns
+    # corrupted scores. Measured: a 258-frame build scored `repair` 0.86 on
+    # every frame of gate.mkv where the .pt scored `gate` 0.53-0.89 (B-61).
+    #
+    # ⚠ I set this to 256 myself to avoid an OOM, which is how the cliff got
+    # crossed. The memory problem is real -- 1024 x 640 x 640 x 3 float32 is
+    # 5.0 GB resident -- and the fix is uint8 staging in `calib_frames`, not a
+    # smaller set. `--allow-reduced-optimization` exists for a deliberate
+    # throwaway build and says so in the log.
+    ap.add_argument('--calib-frames', type=int, default=1024)
+    ap.add_argument('--allow-reduced-optimization', action='store_true',
+                    help='proceed below 1024 frames; the HEF will have '
+                         'corrupted scores and must not be deployed')
     a = ap.parse_args()
 
     pt = pathlib.Path(a.models) / f'{a.model}.pt'
@@ -204,6 +224,24 @@ def main() -> int:
         f'nms_scores_th={a.nms_score_th}, nms_iou_th={a.nms_iou_th})\n')
     runner.load_model_script(script)
     print(f'[hailo] model script:\n{script}')
+
+    # ⛔ THE CLIFF, REFUSED BEFORE THE HOUR IS SPENT. Issue #47 asked for a
+    # build guard on the DFC's "Reducing optimization level" warning; this is
+    # it, checked on the input rather than scraped from the log, so it fires
+    # before the 40-minute optimise rather than after.
+    if a.calib_frames < 1024 and not a.allow_reduced_optimization:
+        raise SystemExit(
+            f'[hailo] REFUSING: {a.calib_frames} calibration frames is below '
+            f'the DFC\'s 1024 threshold. Below it the compiler drops AdaRound '
+            f'and Quantization-Aware Fine-Tuning, and the HEF compiles, loads '
+            f'and runs at full speed while returning CORRUPTED SCORES -- a '
+            f'258-frame build read `repair` 0.86 on every frame where the .pt '
+            f'read `gate` 0.53-0.89 (B-61). Raise --calib-frames, or pass '
+            f'--allow-reduced-optimization for a throwaway build that must '
+            f'not be deployed.')
+    if a.calib_frames < 1024:
+        print('[hailo] ⚠ REDUCED OPTIMIZATION requested. This HEF will have '
+              'corrupted scores. Do not deploy it.')
 
     runner.optimize(calib_frames(a.calib_frames, a.imgsz))
     opt = out / f'{a.model}_optimized.har'
