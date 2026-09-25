@@ -73,6 +73,33 @@ def load_mesh(path: Path):
 
     def accessor(i):
         acc = gltf["accessors"][i]
+        # ⛔ A DEFAULT ONSHAPE EXPORT LANDS HERE, and it used to do so as a bare
+        # `KeyError: 'bufferView'` twelve frames deep. Onshape emits
+        # KHR_draco_mesh_compression unless you turn it off, and a Draco primitive
+        # keeps its bufferView inside the extension rather than on the accessor --
+        # so every accessor in the file looks malformed.
+        #
+        # ⭐ AND FOR GEOMETRY YOU DO NOT NEED THIS FILE DECODED AT ALL. glTF
+        # requires exact min/max on every POSITION accessor, written by the
+        # exporter from the CAD, and Draco does not touch them: they live in the
+        # JSON chunk. `hull_stations.py` reads the thruster stations straight out
+        # of those bounds -- offline, no decompressor, no Onshape session -- and it
+        # agrees with the REST API exactly. THIS tool only exists to make a small
+        # mesh for the web viewer, and a mesh it decimates must never be used as a
+        # metrology source: that is where the retracted 346.6 / 520.4 mm pair
+        # separations came from, against a true 350.0 / 519.0.
+        if "bufferView" not in acc:
+            draco = "KHR_draco_mesh_compression" in gltf.get("extensionsRequired", [])
+            raise SystemExit(
+                "this GLB's vertex data is compressed"
+                + (" (KHR_draco_mesh_compression)" if draco else "")
+                + " and this packer does not decode it.\n"
+                "  * for the WEB VIEWER asset: re-export from Onshape with\n"
+                "    compression turned off, then re-run this.\n"
+                "  * for THRUSTER GEOMETRY: you do not need this tool. Run\n"
+                "        python3 tools/hull_stations.py <this file>\n"
+                "    which reads the exact per-part bounding boxes out of the\n"
+                "    accessor bounds and prints the pair separations.")
         view = gltf["bufferViews"][acc["bufferView"]]
         start = view.get("byteOffset", 0) + acc.get("byteOffset", 0)
         count = acc["count"] * _NCOMP[acc["type"]]
