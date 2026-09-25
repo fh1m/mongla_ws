@@ -3925,3 +3925,21 @@ checkpoint agree for the first time.
 variation and is now the only difference left. It should be re-measured
 honestly, because the old "INT8 costs 0.08 confidence" figure was taken on the
 swapped-colour path and means nothing.
+
+**⚠ THE FLIGHT PATH IMPORTS FROM `build/`, NOT `src/` — a near-miss worth
+recording.** The first on-vehicle verification of the B-61 fix passed only
+because `cls_cmp.py` inserts `src/` on `sys.path`. The vehicle itself resolves
+`mongla_vision.detection.hailo` to
+`~/mongla_ws/build/mongla_vision/mongla_vision/detection/hailo.py`, so an
+`rsync` into `src/` proves nothing about what flies. A `colcon build
+--packages-select mongla_vision --symlink-install` is required, and the fix
+must then be re-confirmed by importing through the sourced overlay
+(`inspect.getsource(...)` for `COLOR_BGR2RGB` in **both** `letterbox` and
+`_letterbox_into_bound`).
+
+This is the same shape as every §9 defect: the code was correct, the test
+passed, and the vehicle was running something else.
+
+**Deployed 2026-09-25:** the 1 038-frame HEF (`Score threshold: 0.050`, 3
+classes) is now `src/mongla_vision/models/gate_rescue_repair.hef`; the old
+0.200 build is kept at `~/gate_rescue_repair_OLD_0.200.hef.bak`.
