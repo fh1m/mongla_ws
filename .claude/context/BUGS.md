@@ -3655,3 +3655,54 @@ weeks. The anchor rung keeps stock weights.
 (`mongla_data/xfeat_{v2,320,lr5}_run`, 24 checkpoints) and survived; only the
 `/tmp` dataset and inventory were lost, and `tools/data_root.py` now makes the
 persistent path the default so the next run cannot repeat it.
+
+---
+
+## B-60 — the `gate` class is not a gate detector; raising the bar cannot fix it  ⛔ CRITICAL, OPEN
+
+**Found 2026-09-25** by `tools/label_contact_sheet.py`, which renders each
+clip's HIGHEST-scoring `gate` box across all **34 visually-clean clips, 4
+venues, 2025 + 2026 seasons** — then looking at them.
+
+**28 of 34 clips produce a `gate` detection.** Every bin clip, every torpedo
+clip, every octagon clip. Looking at the boxes:
+
+| clip | score | what the box actually encloses |
+|---|---|---|
+| `gate.mkv` | **0.89** | empty water, offset right of the real gate |
+| `Cockpit_3.mkv` | 0.82 | lane lines and floor seam |
+| `bin_front_#1.mp4` | **0.81** | bare pool floor |
+| `octagon_front_1.mp4` | 0.70 | empty mid-water |
+| `bin.mkv` | 0.60 | **pool tiles** |
+| `torpedo_shark_up_2.mkv` | 0.15 | inside of the red octagon ring |
+
+⛔ **THIS INVALIDATES THE B-59 FIX AS A SUFFICIENT ANSWER.** The Mirpur sweep
+put the knee at 0.60 and the shipped acting bar at 0.45. Here the model scores
+**0.81 on bare pool floor and 0.89 on empty water** — comfortably above both.
+No confidence threshold separates these, because the score is not wrong, the
+LEARNED CONCEPT is: the class fires on pool structure (lane lines, floor
+seams, the wall/floor horizon) which is present in every frame of every clip.
+
+⚠ **And my earlier reading was wrong.** B-59 recorded "on gate.mkv the boxes
+enclose the real gate at 0.52-0.81, so the model works." That was true of the
+frames I sampled and false of the clip's best frame. Sampling a few frames of
+a positive clip is how this hid twice.
+
+**What this means for the ladder.** The acting bar (`act_conf` 0.45) and the
+pre-dive floor gate stay — they are correct and they reduce exposure. But they
+do NOT make this model safe to fly a gate mission on, and nothing downstream
+can compensate: the follower, the anchor and the place bank all faithfully
+track whatever the detector hands them.
+
+**The fix is retraining, not tuning.** Specifically:
+1. the training set needs **hard negatives** — pool frames with no prop, which
+   `label_contact_sheet.py` can now mine in bulk from the 34 clean clips;
+2. every candidate model must pass `negative_clip_check.py` on
+   visually-confirmed negatives BEFORE any bar is quoted;
+3. `measured-bars.md` section 1 must be re-derived afterwards. Its
+   cross-venue recall numbers were computed on positive frames only and say
+   nothing about this failure.
+
+**Scope.** Measured on `gate`. `rescue` and `repair` are unmeasured. The other
+models (`sauvc_sim`, `bin_fire_blood`) are unmeasured and must be checked the
+same way before they are trusted.
