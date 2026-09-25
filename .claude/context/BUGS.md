@@ -3906,3 +3906,22 @@ fails 2 tests, restoring passes.
 80.9 Hz / 53.9 Hz rates, the murky-clip INT8 table, the "INT8 costs 0.08
 confidence" finding. All were measured on a detector reading swapped colour.
 They must be re-taken.
+
+**✅ B-61 VERIFIED ON THE VEHICLE (2026-09-25).** Same three frames of
+`gate.mkv`, HEF on the Pi with the BGR→RGB fix, against the `.pt` on the dev
+box:
+
+| frame | `.pt` | **HEF, fixed** | HEF, before |
+|---|---|---|---|
+| 120 | `gate` 0.78 @ 56,246 | **`gate` 0.79 @ 58,248** | `repair` 0.86 @ 0,0 |
+| 240 | `gate` 0.53 @ 105,239 | **`gate` 0.72 @ 105,239** | `repair` 0.86 @ 1,0 |
+| 360 | `gate` 0.89 @ 159,240 | **`gate` 0.86 @ 160,241** | `repair` 0.86 @ 0,0 |
+
+Correct class on every frame, boxes within **2–4 px** of the `.pt`, and the
+secondary `rescue` detections at ~0.06 reproduce too. The accelerator and the
+checkpoint agree for the first time.
+
+⚠ The residual score spread (0.53 → 0.72 at frame 240) is ordinary INT8
+variation and is now the only difference left. It should be re-measured
+honestly, because the old "INT8 costs 0.08 confidence" figure was taken on the
+swapped-colour path and means nothing.
