@@ -689,6 +689,13 @@ def _check_build_freshness() -> tuple[str, str]:
     return PASS, 'build tree matches src'
 
 
+# ⚠ Stock Model Zoo builds. Not ours to recompile, not flown: `yolov11n` is
+# documented in bringup.launch.py as "ROBOSUB-tested pretrained, sim/bench".
+# Its 0.200 floor is correct for what it is, and failing a dive over it is how
+# a gate gets ignored.
+_STOCK_MODELS = ('yolov11n', 'yolov8n', 'yolo26_nano_pretrained')
+
+
 def _baked_floor(hef_path: str) -> 'float | None':
     """The NMS score threshold compiled into a HEF, or None if unreadable.
 
@@ -773,7 +780,15 @@ def _check_models_hailo(dirs: list[str]) -> tuple[str, str]:
             th = _baked_floor(p)
             if th is not None:
                 floors[os.path.splitext(os.path.basename(p))[0]] = th
-    high = {s: t for s, t in floors.items() if t > _CONF_DEFAULT + 1e-6}
+    # ⚠ STOCK MODELS ARE NOT OURS TO RECOMPILE, and failing a dive over one is
+    # how a gate gets ignored. `yolov11n` is Hailo's own Model Zoo build,
+    # documented in bringup.launch.py as "ROBOSUB-tested pretrained,
+    # sim/bench" -- it is not a flight model, and its 0.200 floor is correct
+    # for what it is. Ours are the ones that must be compiled at 0.05.
+    high = {s: t for s, t in floors.items()
+            if t > _CONF_DEFAULT + 1e-6 and s not in _STOCK_MODELS}
+    stock_high = {s: t for s, t in floors.items()
+                  if t > _CONF_DEFAULT + 1e-6 and s in _STOCK_MODELS}
     if high:
         worst = ', '.join(f'{s} {t:.3f}' for s, t in sorted(high.items()))
         return FAIL, (
@@ -784,6 +799,14 @@ def _check_models_hailo(dirs: list[str]) -> tuple[str, str]:
             f'tools/hailo_compile.sh <model> --nms-score-th 0.05')
     seen = (f', floors {min(floors.values()):.3f}-{max(floors.values()):.3f}'
             if floors else '')
+    if stock_high:
+        names = ', '.join(f'{s} {v:.3f}' for s, v in sorted(stock_high.items()))
+        return WARN, (
+            f'{len(hefs)} Hailo model(s), each with its .yaml sidecar{seen}. '
+            f'stock build(s) bake a floor above conf {_CONF_DEFAULT:.2f} '
+            f'({names}) -- correct for a Model Zoo model and not flown, so a '
+            f'note rather than a gate. Every model of OURS is at or below the '
+            f'configured conf.')
     return PASS, (f'{len(hefs)} Hailo model(s), each with its .yaml '
                   f'sidecar{seen}')
 
