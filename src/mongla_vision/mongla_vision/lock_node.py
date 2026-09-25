@@ -75,6 +75,15 @@ from mongla_vision.tracking.follower import Follower
 from mongla_vision.tracking.lock_state import (
     FULL_AUTHORITY_S, ZERO_AUTHORITY_S, Rung, arbitrate)
 
+# ⛔ THE BAR FOR HEALING THE FOLLOWER FROM THE ANCHOR. Deliberately ABOVE the
+# anchor's own trust bar (100): a box good enough to report is not
+# automatically good enough to restart the fast rung on, because a reseeded
+# follower then carries FULL authority for the rest of the gap. Set at the
+# identity bar the re-ID work uses for "this is the same object", which is the
+# strictest claim any rung in this package makes.
+_ANCHOR_RESEED_INLIERS = 120
+
+
 
 def header_for(rung, *, detection, frame, anchor):
     """The stamp of the frame the WINNING RUNG actually observed.
@@ -360,6 +369,7 @@ class LockNode(Node):
             self._world = WorldTarget()
         except Exception:                                        # noqa: BLE001
             self._world = None
+        self._reseeds = 0
         self._vis_state = None
         self._vis_last = None
         self._det_box = None
@@ -1396,6 +1406,44 @@ class LockNode(Node):
                       ab = (float(q[:, 0].min()), float(q[:, 1].min()),
                             float(q[:, 0].max()), float(q[:, 1].max()))
                       ac = p.confidence
+                      # ⭐⭐ THE LADDER HEALS UPWARD, NOT ONLY DOWNWARD.
+                      #
+                      # Until this, `_follower.reset()` was called on an
+                      # accepted DETECTION and nowhere else. So when LK's
+                      # points died mid-gap -- which is exactly what the
+                      # survival and forward-backward gates exist to detect --
+                      # the fast ~50 Hz rung stayed dead until a detection
+                      # came back, even though the anchor was still finding
+                      # the target every 222 ms. The ladder had a one-way
+                      # ratchet: every rung could fall, none could climb.
+                      #
+                      # The anchor's box is a legitimate seed. It is fitted
+                      # frame-to-REFERENCE, so unlike a follower box it has
+                      # not drifted, and `goodFeaturesToTrack` inside it finds
+                      # the same corners LK wanted. Reseeding costs one GFTT
+                      # call (measured 8.0 ms for the whole LK step) and buys
+                      # back the 50 Hz rung for the rest of the gap.
+                      #
+                      # ⛔ ONLY WHEN THE FOLLOWER IS DEAD AND THE ANCHOR IS
+                      # CONFIDENT. Reseeding a LIVE follower would replace a
+                      # frame-fresh box with one up to 222 ms old, and
+                      # reseeding from a weak fit would restart the fast rung
+                      # on a bad box and give it full authority -- exactly the
+                      # failure the acting bar exists to prevent, arriving by
+                      # another door.
+                      if (self._follower is not None
+                              and not self._follower.active
+                              and anchor_ran
+                              and int(self._anchor_inliers)
+                              >= _ANCHOR_RESEED_INLIERS):
+                          n = self._follower.reset(gray, ab)
+                          if n:
+                              self._reseeds += 1
+                              if self._reseeds in (1, 10, 100):
+                                  self.get_logger().info(
+                                      f'[LOCK ] follower reseeded from the '
+                                      f'anchor ({n} pts, {self._anchor_inliers} '
+                                      f'inliers) -- reseed #{self._reseeds}')
 
               # Places ride the same frame the ladder just used. Kept out
               # of the ladder itself on purpose: a place is evidence about the

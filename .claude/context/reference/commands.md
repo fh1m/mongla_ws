@@ -457,7 +457,7 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `pool_depth_m` | `_lc.defaults(` |
 | `act_conf` | `0.45` |
 | `publish_hz` | `0.0` |
-| `anchor_hz` | `3.0` |
+| `anchor_hz` | `4.5` |
 | `full_authority_s` | `FULL_AUTHORITY_S` |
 | `zero_authority_s` | `ZERO_AUTHORITY_S` |
 | `target_width_m` | `0.0` |
