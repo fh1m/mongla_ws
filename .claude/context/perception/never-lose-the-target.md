@@ -393,3 +393,65 @@ memory) — a target leaving frame should become a navigation problem, not a
 forgotten one. `WorldTarget` implements this and is reached by **tests only**;
 its blocker is two missing signals (yaw, absolute range), named precisely in
 `ladder-register.md`. Do not wire it by inventing a range.
+
+---
+
+## §58 — Getting more out of XFeat, after the fine-tune said no
+
+Round 7 closed NO: stock XFeat beat every checkpoint trained on our own water
+(2237 inliers against 1986–2056). That is a real result about the descriptor,
+and it removes *training* from the list of ways to improve the anchor. It does
+not remove the others, and this session found that the largest one had nothing
+to do with the network at all.
+
+### ⭐ 1. It was running on the wrong processor (B-62, the big one)
+
+Measured on the vehicle, 320×240, 30 runs:
+
+| | per call | rate |
+|---|---|---|
+| ONNX on the Pi CPU — **what ran** | **32.9 ms** (p95 33.4) | 30.4 FPS |
+| HEF on the Hailo-8 — what §28 measured | 1.43 ms | 701 FPS |
+
+The resolver globbed `xfeat_*.onnx` only, so the compiled HEF **in the same
+directory** was never a candidate. No amount of retraining would have closed a
+23× gap that was a missing file extension.
+
+### 2. What the literature actually offers
+
+**xfeatSLAM** (`udaysankar01/xfeatSLAM`) — XFeat as the front end of ORB-SLAM3,
+real-time. ⚠ Not something to adopt: a full SLAM system is a much larger claim
+than our anchor rung makes, and we have no loop-closure budget on a 15-minute
+run. What IS worth taking is the demonstration that **XFeat descriptors are
+good enough to carry a map**, which is a stronger statement than "good enough
+to re-find one patch" — our checkpoint bank is a deliberately small slice of
+that, and the paper's result says the slice is safe.
+
+**XfeatVINS** (2026) — monocular **thermal**-inertial SLAM on XFeat, for
+all-time operation. The transferable part is not the thermal: it is that XFeat
+holds up as the front end of a **tightly-coupled inertial** system. We already
+have the IMU and the RIEKF; the anchor currently feeds neither.
+
+**The XFeat paper itself** — it emits three heads: a keypoint heatmap, a 64-D
+dense descriptor map, **and a reliability heatmap**. ⚠ We use two. The
+reliability head is exactly a per-keypoint confidence, and our `min_cossim`
+0.82 is a global constant doing that job badly. Worth measuring.
+
+**Semi-dense matching** — XFeat's second mode, for when sparse matching finds
+too few correspondences. Our failure mode in murky water is precisely too few
+inliers, and we have never tried it.
+
+### 3. The honest ranking of what is left
+
+1. **run it on the chip** (B-62) — 23×, measured, no new maths;
+2. **use the reliability head** — replaces a global cosine bar with a
+   per-keypoint one, using an output we already compute and discard;
+3. **semi-dense mode** when sparse falls below the inlier bar — turbidity is
+   exactly the case it was built for;
+4. feed the anchor into the RIEKF (XfeatVINS' actual lesson) — blocked on the
+   same absolute range that blocks `WorldTarget`;
+5. ⛔ **more training** — measured, closed, do not reopen without a new idea.
+
+⚠ Items 2 and 3 are RESEARCH NOTES, not findings. Neither has been measured on
+our footage, and §57's lesson is that an idea consistent with the symptom is
+not evidence.
