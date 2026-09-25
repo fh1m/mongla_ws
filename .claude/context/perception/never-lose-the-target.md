@@ -448,8 +448,17 @@ inliers, and we have never tried it.
    per-keypoint one, using an output we already compute and discard;
 3. **semi-dense mode** when sparse falls below the inlier bar — turbidity is
    exactly the case it was built for;
-4. feed the anchor into the RIEKF (XfeatVINS' actual lesson) — blocked on the
-   same absolute range that blocks `WorldTarget`;
+4. ✅ **ALREADY DONE — this item was wrong.** Checked 2026-09-25: the anchor
+   DOES feed the filter. `lock_node` publishes `/mongla/localization/fix`
+   (a `PointStamped` carrying the closure position with the producer's own
+   sigma in `z`), `localization_node.py:182` subscribes it, and
+   `test_every_sensor_is_accounted_for.py` records it as "position: prop
+   resection AND loop closure". The route is **loop closure**, not per-frame
+   descriptor aiding, which is the right granularity: a bounded absolute fix
+   rather than a stream the filter would have to de-weight.
+   ⚠ What XfeatVINS does beyond this is tightly-coupled PER-FRAME feature
+   aiding, which would need the forward metric range we do not have. That
+   distinction is real; the claim "the anchor feeds neither" was not;
 5. ⛔ **more training** — measured, closed, do not reopen without a new idea.
 
 ⚠ Items 2 and 3 are RESEARCH NOTES, not findings. Neither has been measured on
