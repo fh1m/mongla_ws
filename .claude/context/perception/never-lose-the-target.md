@@ -564,3 +564,41 @@ check on a 1200x1200 float32 matrix, in numpy, single-threaded. Options worth
 measuring, in order of expected return: a coarse-to-fine grid (match at 15x20
 first, refine locally), `float16` accumulation, or handing the matrix to the
 chip. None of these needs a new model either.
+
+### ⛔ The anchor computes ROTATION and RANGE-CHANGE, and only the overlay reads them
+
+`AnchorPose` (anchor/anchor.py:63-75) carries five numbers out of every
+homography fit:
+
+    tx, ty      px from frame centre
+    theta       rad, in-plane rotation
+    scale       >1 = the reference appears LARGER, i.e. we are CLOSER
+    corners     the warped quad
+
+⭐ The ladder uses **`corners` only** — to build the anchor rung's bounding
+box. Grepping the whole tree for consumers of `.theta` and `.scale` finds
+exactly one: `anchor/draw.py:135`, a debug text label reading `scale x1.03`.
+
+**Two capabilities are being computed and discarded on every anchor
+evaluation:**
+
+1. **`scale` is a RANGE RATE.** The follower's RANSAC similarity fit was added
+   (section 23) precisely because apparent SIZE is what the approach
+   controller reads — and the anchor has been producing a *better* scale all
+   along, fitted frame-to-REFERENCE against a stored patch rather than
+   frame-to-frame with LK's drift. `time_to_contact.py` and `approach.py` are
+   both DEFERRED for want of exactly this signal.
+2. **`theta` is an in-plane rotation** measured against a fixed reference. On a
+   hull whose roll is unactuated (five thrusters, 5 of 6 DOF) that is a direct
+   observation of the one attitude the controller cannot command, and the
+   RIEKF has no visual roll aiding at all.
+
+⚠ **Neither is wired here, and neither should be on this evidence.** `scale` is
+metric only if the reference patch's true width is known (`target_width_m`,
+which is why that parameter now reaches the node), and `theta` is in-plane
+camera rotation which is only hull roll for the DOWNWARD camera. Both are
+real signals with a named consumer and a named precondition -- which is the
+standard §9 asks for, and is more than they had.
+
+**This is Round 11 ("homography → yaw/altitude/obliquity") half-built:** the
+decomposition exists and is correct, and nothing downstream reads it.
