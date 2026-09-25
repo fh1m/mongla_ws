@@ -3943,3 +3943,53 @@ passed, and the vehicle was running something else.
 **Deployed 2026-09-25:** the 1 038-frame HEF (`Score threshold: 0.050`, 3
 classes) is now `src/mongla_vision/models/gate_rescue_repair.hef`; the old
 0.200 build is kept at `~/gate_rescue_repair_OLD_0.200.hef.bak`.
+
+---
+
+## B-62 — the anchor rung runs XFeat on the CPU; the 701 FPS HEF is never loaded  ⛔ OPEN
+
+**Found 2026-09-25** while asking whether the 701 FPS claim survives running
+alongside detections. It does not apply at all: **the vehicle never loads the
+HEF.**
+
+`lock_node` resolves `anchor_model` when the launch leaves it empty — which
+`vision_pi.launch.py` always does, passing only `anchor: True`:
+
+```python
+c = sorted(glob.glob(os.path.join(os.path.expanduser(r), 'xfeat_*.onnx')))
+```
+
+⛔ **The glob matches `xfeat_*.onnx` only.** `~/hailo_models/` holds BOTH
+`xfeat_320x240.onnx` and `xfeat_320x240.hef`; the `.hef` is never a candidate.
+And `anchor/xfeat_onnx.py` hardcodes `providers=['CPUExecutionProvider']`, so
+even the ONNX cannot reach the accelerator.
+
+**Measured on the vehicle** (`XFeatONNX.detect`, 320×240, 30 runs):
+
+| path | per call | rate |
+|---|---|---|
+| **what actually runs** — ONNX on the Pi CPU | **32.9 ms** (p95 33.4) | **30.4 FPS** |
+| what §28 measured — the HEF on the Hailo-8 | 1.43 ms | 701 FPS |
+
+**A 23× gap**, and the anchor is on the wrong side of it.
+
+⚠ **The cost is worse than the ratio suggests**, because those 32.9 ms are on
+the Pi's CPU, competing with the camera pump and the rclpy executor — the very
+contention the async Hailo API was introduced to avoid. The accelerator sits
+idle between detections while the CPU does work it could do in 1.43 ms.
+
+⭐ **What this unblocks.** `tracking/reid.py` is DEFERRED with the rationale
+"XFeat is ALREADY loaded at 701 FPS, so identity is nearly free" — that
+premise is false today. At 32.9 ms per call it is not free, which is the real
+reason the re-ID rung cannot be switched on. Fixing this is a prerequisite for
+that capability, not merely an optimisation.
+
+**The fix** is to let the resolver prefer a `.hef` and give `xfeat_onnx.py` a
+Hailo backend, reusing the arbitration in `detection/hailo.py` since both
+would then share one device. ⚠ Measure the shared-device contention before
+believing it: two graphs on one chip serialise, and the detector must keep
+priority.
+
+**Also to check:** whether §28's 701 FPS was itself measured on the
+swapped-colour path (B-61). XFeat takes a GREY image, so it is probably
+unaffected — but "probably" is not a measurement.
