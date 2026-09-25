@@ -67,8 +67,27 @@ class PoseFuseNode(Node):
         self._yaw_hist.append((t, self._yaw_deg))
 
     def yaw_at(self, t: float):
-        """Heading in effect at `t`: the last state stamped at or before it."""
-        hist = sorted(self._yaw_hist)
+        """Heading in effect at `t`: the last state stamped at or before it.
+
+        ⛔ SORT BY THE STAMP ONLY. `sorted(self._yaw_hist)` sorted whole tuples, so
+        on a stamp TIE it fell through to comparing the second element -- and that
+        element is `None` whenever the board's yaw is absent, because `_on_state`
+        maps this stack's NaN convention onto None. `None < float` raises, inside a
+        subscription callback, so a detection was lost and the executor thread took
+        a TypeError. REPRODUCED with three entries: (100.0, 12.5), (100.5, None),
+        (100.5, 30.0).
+
+        Ties are not exotic here: `/mongla/state` is published by TWO timers --
+        `telemetry_tick` at 2 Hz and `_fast_state_tick` at 20 Hz -- in two
+        different callback groups, so two messages can carry the same capture
+        stamp. A missing yaw is not exotic either; it is the documented value
+        before the board's AHRS is healthy, which is exactly when a mission is
+        starting up.
+
+        The sort stays (the two publishers give no ordering guarantee), and
+        `key=` makes it total regardless of what the second element is.
+        """
+        hist = sorted(self._yaw_hist, key=lambda h: h[0])
         i = bisect.bisect_right([h[0] for h in hist], t)
         return hist[i - 1][1] if i else None
 
