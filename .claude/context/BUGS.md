@@ -4033,3 +4033,40 @@ detector.
 **Next, in order:** share the device and the lock; re-measure with the
 detector running; then persist the activation to chase the remaining gap to
 1.43 ms.
+
+**B-62, second attempt: sharing the VDevice was necessary and not sufficient.**
+
+Using `_shared_device()` + `_DEVICE_LOCK` removed
+`HAILO_OUT_OF_PHYSICAL_DEVICES(74)`. The failure then moved one layer in:
+
+```
+[HailoRT] [error] CHECK failed - Cant activate network because a network is already activated
+[HailoRT] [error] Failed activate HAILO_INVALID_OPERATION(6)
+```
+
+⛔ **The two components use INCOMPATIBLE HailoRT APIs.** `detection/hailo.py`
+runs the modern `InferModel` path: it builds a `ConfiguredInferModel` once and
+holds the activation for the process's life, which is exactly what makes its
+async `run_async` cheap. `XFeatHailo` uses the older
+`activate()` + `InferVStreams` idiom and asks for an activation **per call**.
+HailoRT permits one activated network group at a time, so the second asker
+fails whatever lock is held — the lock serialises calls, it cannot make the
+detector let go.
+
+⚠ **So the mutual exclusion is not a scheduling problem, it is an API-mixing
+problem**, and no amount of locking around the current code fixes it. Timing
+alone (14.50 ms, p95 16.91, 68.9 FPS standalone — reproducing the earlier
+14.73 ms) says the transport is worth having.
+
+**The fix is to port `XFeatHailo` to `InferModel`**, the same way
+`detection/hailo.py` did: `create_infer_model()`, bind input/output buffers
+once, then `run_async` + `wait` per call under the shared lock. That also
+removes the per-call `activate()` which is most of the 14.5 ms, so it should
+close much of the remaining gap to the 1.43 ms standalone figure — one change
+addressing both the correctness blocker and the speed.
+
+**Status: `XFeatHailo` is committed, reachable, and NOT safe to prefer while
+the detector runs.** `lock_node` degrades to ONNX on any load error, so a
+vehicle that starts the detector first still works; the hazard is only when
+the anchor wins the race. The `.hef` preference in the resolver should be
+reverted or gated until the port lands.
