@@ -163,3 +163,42 @@ whose module is already written and measured.
    makes every id-switch number meaningless) · `geometric_allocation.py` triage
 9. **`measured-bars.md` §1 must be re-derived** once a model passes
    `negative_clip_check.py` — every bar there came from positive frames alone.
+
+---
+
+## Re-ID: the blocker was misdiagnosed, and the real one is architectural
+
+`tracking/reid.py` has been deferred on the note *"XFeat is ALREADY loaded at
+701 FPS … waits on tracker_node supplying crop descriptors at track birth and
+death"*. Fixing B-62 was supposed to unblock it. It does not.
+
+⛔ **`tracker_node` has no images.** It subscribes to exactly two topics —
+`detections` and `camera_info` — and nothing else. It owns track identity and
+has never seen a pixel. Re-ID needs a *crop descriptor*, so the missing
+ingredient was never XFeat's cost; it is that the node holding the identity
+cannot compute an appearance at all.
+
+**Three ways out, and none is free:**
+
+1. **Subscribe images in `tracker_node`.** Puts a second full-resolution
+   subscriber on the hot path and duplicates the camera mailbox the detector
+   already owns. ⚠ Measured elsewhere in this repo: a queue-bound consumer sees
+   396 ms of staleness against 16.9 ms on the mailbox, so this is the option
+   most likely to be quietly wrong.
+2. **Compute descriptors in the DETECTOR**, which already holds the frame and
+   the boxes, and publish them alongside the detections. Costs a wire format
+   and bandwidth, but the frame is already in hand and correctly stamped.
+3. **Move identity into `lock_node`**, which has frames and XFeat today. ⛔ But
+   `lock_node` tracks ONE target by design, and re-ID exists for the
+   multi-object case — this would be re-architecting around the tool we happen
+   to have.
+
+⭐ **(2) is the honest one**, and it is the same shape as a decision this repo
+already made: the detector owns the frame, so anything needing pixels and
+boxes together belongs where both already are. It is a wire-format change and
+needs its rate measured before it ships.
+
+**Status: still DEFERRED, with a corrected and more specific blocker.** The
+old note was wrong about what was missing, which is worth more than the fix
+would have been — `track_id` on `/detections` (also outstanding) is a
+prerequisite for any of the three.
