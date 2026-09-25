@@ -54,6 +54,13 @@ except ImportError:                    # message not built in this workspace
 
 from std_msgs.msg import String
 from nav_msgs.msg import Odometry
+# ⚠ OPTIONAL, like TargetCorrespondences above. A workspace that has not
+# rebuilt mongla_interfaces must still get a working ladder: losing vehicle
+# state costs the object-permanence rung, not the lock.
+try:
+    from mongla_interfaces.msg import MonglaState
+except ImportError:                                              # noqa: BLE001
+    MonglaState = None
 from geometry_msgs.msg import PointStamped
 from sensor_msgs.msg import Range
 from mongla_vision.anchor import loop_closure as _lc
@@ -275,6 +282,10 @@ class LockNode(Node):
         # test_stamps.py, but it is a real startup race and not a test
         # artifact.
         self._act_conf = float(self.get_parameter('act_conf').value)
+        self._yaw_deg = float('nan')
+        self._depth_m = float('nan')
+        self._armed = False
+        self._state_t = 0.0
         self._vis_state = None
         self._vis_last = None
         self._det_box = None
@@ -381,6 +392,27 @@ class LockNode(Node):
                 # name precisely because it is not one.
                 self.create_subscription(Range, f'{ns}/floor_height',
                                          self._on_floor_height, 10)
+                # ⭐ THE VEHICLE'S OWN STATE. The ladder ran without ever
+                # knowing which way the hull was pointing: it had odometry
+                # (where) and floor height (how high) but no yaw, so a target
+                # leaving the frame could not be turned into a world bearing
+                # and `visibility.WorldTarget` -- the object-permanence rung --
+                # was unreachable for want of one number the board already
+                # publishes.
+                #
+                # ⚠ `yaw_deg` is NaN when the board has no AHRS sample, and
+                # every consumer must gate on that rather than treat NaN as
+                # zero. A heading of "0 because we do not know" points the
+                # memory due north, which is worse than having no memory.
+                if MonglaState is not None:
+                    self._state_sub = self.create_subscription(
+                        MonglaState, '/mongla/state', self._on_state, 10)
+                else:
+                    self.get_logger().warn(
+                        '[LOCK ] mongla_interfaces/MonglaState not built -- '
+                        'the ladder runs without vehicle yaw, so any '
+                        'world-frame target memory stays disabled. Rebuild '
+                        'mongla_interfaces to enable it.')
                 self._fix_pub = self.create_publisher(
                     PointStamped, '/mongla/localization/fix', 10)
                 self.get_logger().info(
@@ -560,6 +592,35 @@ class LockNode(Node):
             if k == key:
                 return g
         return None
+
+    def _on_state(self, msg) -> None:
+        """The hull's heading, depth and armed state.
+
+        ⛔ NaN IS THE ABSENT VALUE AND IS KEPT AS ONE. The board suppresses a
+        yaw it cannot stand behind, and `MonglaState` carries that through as
+        NaN. Coercing it to 0.0 here would hand every downstream rung a
+        confident heading of due north -- the repo's recurring defect, a
+        plausible number standing in for an absent measurement.
+        """
+        y = float(msg.yaw_deg)
+        self._yaw_deg = y if math.isfinite(y) else float('nan')
+        d = float(msg.depth_m)
+        self._depth_m = d if math.isfinite(d) else float('nan')
+        self._armed = bool(msg.armed)
+        self._state_t = time.monotonic()
+
+    def _yaw_fresh(self, max_age_s: float = 1.0) -> float:
+        """Yaw, or NaN when it is stale or was never received.
+
+        Freshness matters more here than for most signals: a remembered world
+        position is built from yaw AT THE MOMENT OF THE SIGHTING, and a yaw
+        one second old on a turning hull is a different direction entirely.
+        """
+        if not math.isfinite(getattr(self, '_yaw_deg', float('nan'))):
+            return float('nan')
+        if (time.monotonic() - getattr(self, '_state_t', 0.0)) > max_age_s:
+            return float('nan')
+        return self._yaw_deg
 
     def _on_odom(self, msg) -> None:
         """The filter's own estimate: where it thinks it is, and how sure.

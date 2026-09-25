@@ -19,6 +19,7 @@ exercise the shipped acceptance logic without a ROS graph.
 """
 from __future__ import annotations
 
+import math
 import types
 
 import pytest
@@ -143,6 +144,59 @@ def test_a_frame_with_only_sub_bar_boxes_also_clears_the_target():
     _on_det(s, _msg(_det(0.90)))
     _on_det(s, _msg(_det(0.50)))
     assert s._det_box is None
+
+
+def _state(yaw=12.5, depth=-1.2, armed=True):
+    """A MonglaState-shaped object. Built by hand so the test does not need
+    mongla_interfaces built -- the same reason lock_node imports it
+    optionally."""
+    return types.SimpleNamespace(yaw_deg=yaw, depth_m=depth, armed=armed)
+
+
+def _yawnode(**kw):
+    from mongla_vision.lock_node import LockNode
+    s = _Stub(act_conf=0.45)
+    LockNode._on_state(s, _state(**kw))
+    return LockNode, s
+
+
+def test_vision_now_knows_the_hull_heading():
+    """⭐ THE HARMONY GAP. The ladder had odometry (where) and floor height
+    (how high) but never yaw, so a target leaving frame could not be turned
+    into a world bearing -- WorldTarget was unreachable for want of one number
+    the board already publishes."""
+    LockNode, s = _yawnode(yaw=12.5)
+    assert s._yaw_deg == pytest.approx(12.5)
+    assert s._depth_m == pytest.approx(-1.2)
+    assert s._armed is True
+    assert LockNode._yaw_fresh(s) == pytest.approx(12.5)
+
+
+def test_an_absent_yaw_stays_NaN_and_is_never_coerced_to_zero():
+    """⛔ THE RECURRING DEFECT. The board suppresses a yaw it cannot stand
+    behind. Coercing NaN to 0.0 would hand every rung a confident heading of
+    due north -- a plausible number standing in for an absent measurement."""
+    LockNode, s = _yawnode(yaw=float('nan'))
+    assert math.isnan(s._yaw_deg)
+    assert math.isnan(LockNode._yaw_fresh(s))
+
+
+def test_a_stale_yaw_is_refused():
+    """A remembered world position is built from yaw AT THE MOMENT OF THE
+    SIGHTING. One second old on a turning hull is a different direction."""
+    LockNode, s = _yawnode(yaw=90.0)
+    s._state_t -= 5.0
+    assert math.isnan(LockNode._yaw_fresh(s))
+    assert s._yaw_deg == pytest.approx(90.0), 'the value is stale, not gone'
+
+
+def test_yaw_is_NaN_before_any_state_arrives():
+    """The window between construction and the first message must not read as
+    'pointing at 0 degrees'."""
+    from mongla_vision.lock_node import LockNode
+    s = _Stub(act_conf=0.45)
+    s._yaw_deg, s._state_t = float('nan'), 0.0
+    assert math.isnan(LockNode._yaw_fresh(s))
 
 
 def test_the_class_filter_still_applies():
