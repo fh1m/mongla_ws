@@ -3818,3 +3818,42 @@ being consistent with it.
 does not reject a box with `y2 < y1` or coordinates outside [0, 1]. It turned
 the inverted box into a plausible-looking `[0, 202, 640, 480]`. Worth a guard
 so corrupt output is refused rather than rendered.
+
+---
+
+## B-60 — RESOLVED BY MODEL SELECTION, not retraining (2026-09-25)
+
+A model already on this box beats the shipped one outright.
+`tmp/smol backups/pendrive_2/final/models/gate/weights/best.pt`
+(classes `gate, shark, shaw_fish`), 300 frames per clip, `gate` class:
+
+| bar | shipped pos/neg | **candidate** pos/neg |
+|---|---|---|
+| 0.15 | 100.0 % / **100.0 %** = **+0.0** | 100.0 % / **0.0 %** = **+100.0** |
+| 0.30 | 100.0 % / **100.0 %** = **+0.0** | 100.0 % / 0.0 % = +100.0 |
+| 0.45 | 99.7 % / 97.7 % = +2.0 | 100.0 % / 0.0 % = +100.0 |
+| 0.60 | 93.7 % / 80.7 % = +13.0 | 100.0 % / 0.0 % = +100.0 |
+| 0.75 | 59.7 % / 33.0 % = +26.7 | 100.0 % / 0.0 % = +100.0 |
+
+Negatives: `bin_front_#1`, `bin.mkv`, `Cockpit_3`, `octagon_1` — **1 200
+frames, 3 venues, zero false positives at any threshold**, while holding
+100 % on the real gate.
+
+⛔ **The shipped acting bar buys 2 points.** `act_conf` 0.45 was the right
+move against the wrong problem: at 0.45 the shipped model still fires on
+97.7 % of the frames of a gate-free clip. It stays (it is free and it helps)
+but it must not be described as containment.
+
+⭐ **Why this was missed for weeks.** There are **208 `.pt` on this box, 96
+unique after content dedup, 29 with a gate class** — against the 4 that ship.
+Nobody had ranked them, because `model_select.py` ranks on POSITIVE sessions
+only, which is the same blind spot that hid B-60 itself. Cross-checking the
+archive found a better model in one afternoon.
+
+**Remaining before promotion:**
+1. the candidate's top box on `gate.mkv` (0.93) is still slightly off the
+   structure — better by a wide margin, not perfect;
+2. it carries `gate, shark, shaw_fish` and **not** `rescue`/`repair`, so the
+   mission surface changes — those two props need their own model;
+3. it must be compiled to HEF at >= 1024 calibration frames (B-61) and
+   re-measured on the vehicle before it flies.
