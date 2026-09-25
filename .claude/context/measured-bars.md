@@ -66,8 +66,17 @@ footage rather than against the next rung up.
 
 | quantity | shipped | measured | bar |
 |---|---|---|---|
-| photon → detections | — | **18.0 ms** median (round 32) | ≤ 25 ms |
-| detection rate, Hailo-8 | — | **80.9 Hz** standalone, **53.9 Hz** through the ROS graph | ≥ 30 Hz |
+| photon → detections | — | **18.0 ms** median (round 32) ⚠ B-61 | ≤ 25 ms |
+| detection rate, Hailo-8 | — | **80.9 Hz** standalone, **53.9 Hz** through the ROS graph ⚠ B-61 | ≥ 30 Hz |
+
+> ⚠ **The two rows above, and the INT8 confidence figure below, were all
+> taken through the HEF path while it fed the chip BGR where the model
+> expects RGB (B-61, fixed 2026-09-25).** Timing is probably unaffected —
+> a colour swap costs no cycles — but nothing was measured to confirm
+> that, and the *accuracy* figures taken on that path are meaningless:
+> the detector was answering a different question. Re-take them before
+> quoting. Every figure measured through the `.pt`/ONNX path is
+> unaffected, because ultralytics converts internally.
 | `VISION_LOOP_HZ_SROT` | 50 — `motion_vision.py` | soaked 90 s: **49.86 Hz**, 0.00 % late ticks | ≥ 25 Hz sustained |
 | camera FOV | 63.8° air / **46.7° water** ±0.7 | 25 views, `calibrateCameraRO`, held-out validated | ±1.5° |
 | frame staleness | — | mailbox **16.9 ms** vs 396 ms on a plain queue | ≤ 50 ms |
@@ -916,7 +925,8 @@ firing its ordinary `gate` class on a gate seen from behind. That is genuine
 generalisation and the ledger's 0.0 % erased it.
 
 **But at the SHIPPED operating point it is ~26 %.** The Hailo path runs
-`conf 0.15` and INT8 scores ~0.08 lower than fp32 (round 24), so the
+`conf 0.15` and INT8 scores ~0.08 lower than fp32 (round 24 — ⚠ RETRACTED,
+measured on the swapped-colour HEF path, see B-61), so the
 fp32-equivalent bar is ≈0.23 — the 0.25 row. **A scoring task that works one
 run in four is not a working scoring task.**
 
