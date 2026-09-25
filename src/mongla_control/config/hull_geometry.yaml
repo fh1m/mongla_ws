@@ -36,6 +36,35 @@
 # glTF exporter rotated it to Z for the web viewer (glTF is Y-up). Everything
 # below is in the CAD's own frame.
 #
+# ⭐ 2026-09-25 — RE-MEASURED OFFLINE, AND THE NUMBERS HOLD EXACTLY.
+# `tools/hull_stations.py` reads each body's bounding box out of the GLB's own
+# POSITION accessor `min`/`max`, which glTF requires the exporter to write from
+# the CAD. Those bounds are in the JSON chunk, so Draco compression does not
+# touch them -- which means geometry needs NO mesh decode, NO numpy and NO
+# authenticated Onshape session. It reproduces this file to the micrometre:
+#
+#     hull bbox  176.10 x 172.09 x 702.00 mm   fineness 3.986
+#     bore along mesh X: -175.00, +175.00      separation 350.00 mm
+#     bore along mesh Y: -259.50, +259.50      separation 519.00 mm
+#     A2212 axial at mesh +330.60, y +8.06     (CAD -0.3306, z +0.00806)
+#     Part 3, a 87.99 mm ring 2 mm thick, at mesh +351.00  <- the axial duct
+#
+# So the REST API is no longer the only exact path, and `hull.mgla` is no longer
+# a path at all: `pack_hull.py` now refuses a compressed export with a message
+# naming both alternatives instead of dying on `KeyError: 'bufferView'`.
+#
+# ⚠ THE MESH->CAD TRANSFORM, WRITTEN DOWN. Measured against this hull:
+#     cad = (mesh_x, -mesh_z, mesh_y)
+# i.e. CAD +Y (forward) is the export's -Z. Verified three ways: the axial motor
+# at mesh +330.60 -> CAD y -0.3306 as recorded below; its 8.06 mm lands on CAD z
+# as recorded below; and both pair separations are sign-independent. Getting this
+# backwards flips SURGE, which is why it is here and not remembered.
+#
+# ⚠ AND UPSTREAM PR srot-control-board#25 STILL CARRIES THE RETRACTED FIGURES --
+# 346.6 / 520.4 mm, in the MESH frame, with the axial unit marked UNKNOWN. It is
+# the document the firmware team would implement a mixer from. See
+# `.claude/context/upstream/pr-p-the-allocator-they-asked-for.md` §1.
+
 # ⚠ THE ONSHAPE MCP COULD NOT DO THIS. It exposes FeatureScript authoring:
 # `test_featurescript` runs in a scratch document and takes no document id, and
 # this document holds no Feature Studios. The browser session could, because the

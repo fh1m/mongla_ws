@@ -26,9 +26,35 @@ won and the document says so.
 | [`pr-m-thruster-requirements-from-control.md`](pr-m-thruster-requirements-from-control.md) | **to the hardware team, not firmware.** What the control layer needs from the custom thruster: ⭐ turn smoothly from zero so `MOT_SPIN_MIN` can go to 0 (measured: a 5 % yaw stick produces **0.0 %** output; the first demand that moves the hull produces **16.8 %**), symmetric reverse, rpm **and current** telemetry, a measured thrust curve at our voltage, and named thruster bodies with materials in CAD | a design constraint, taken before the thruster is cut |
 | [`pr-n-caps-literals-and-the-heading-hold-setpoint.md`](pr-n-caps-literals-and-the-heading-hold-setpoint.md) | ⭐ **`attitude::holdYaw()` already exists and is already in the flight path** (`attitude_control.h:30`, called from `task_control_loop.cpp:238`) — but only from AUTO, so STABILIZE, the one mode that honours `MANUAL_CONTROL`, cannot reach it. Measured: yaw is **17.42 % → 70.67 % of full scale and zero below**, a 4.06:1 range, because the `0.02f` stick gate meets `MOT_SPIN_MIN`. A heading-hold setpoint makes small yaw a continuous function of heading error instead of a lurch. Plus: six control literals that should be parameters, and ⚠ `JS_GAIN` silently halving every axis with no way to set the live value | a handler and one call, then an audit |
 | [`pr-o-thruster-step-response.md`](pr-o-thruster-step-response.md) | ⭐ **to the hardware team: one afternoon on a load cell closes FOUR open asks.** Measured on the closed-loop bench, thruster lag beats control-loop rate by 1-2 orders of magnitude -- tau 0.59 s costs **131x** the heading deviation of tau 0, while 500 Hz -> 50 Hz costs 21 % -- and we do not know ours. The break-away pair (step from stopped vs from running) decides whether `MOT_SPIN_MIN` can go to 0; the plateaus give the thrust curve, `REVERSE_EFFICIENCY` and `k_n_per_rpm2`; the transients give tau. Analysis ships with the ask and is validated against traces whose answer we chose | one rig, one afternoon |
+| [`pr-p-the-allocator-they-asked-for.md`](pr-p-the-allocator-they-asked-for.md) | ⭐ **PR K's §4.2, implemented.** A geometry-driven allocator behind `FRAME_CLASS` (0 = today's ±1 matrix, bit for bit, and the default). Makes the six axes commensurate for the first time -- sway and yaw differ by **5.714×**, exactly the reduced matrix's condition number, and a ±1 mixer called both "1.0". Cancels the axial unit's 8.06 mm pitch moment. ⚠ **Also corrects PR K's own geometry**: its 346.6 / 520.4 mm came from the decimated render asset and the CAD says **350.00 / 519.00**, and the axial unit it marked UNKNOWN is at +330.60 with its duct ring at +351.00 | a patch, applied; 85 host-side checks |
+| [`pr-q-motor-detect-and-frame-reverse.md`](pr-q-motor-detect-and-frame-reverse.md) | ⛔ **CRITICAL, and it outranks the rest of this batch.** `FRAME_REVERSE` appears at exactly ONE site in the control path, inside the mixer branch -- the motor-test and MOTOR_TUNE paths bypass it and `motorAngular()` knows nothing about it. So MOTOR_DETECT converges to a configuration correct only when `FRAME_REVERSE = 0`, and **on our hull it is 1**: a successful detect leaves every axis inverted in every closed-loop mode. The same gap makes Motor Test show the opposite of what the vehicle will do. Matches the 2026-08-07 water incident and the `[-1] × 8` state our CLAUDE.md already warns about | one multiply, or negate `M` once at boot |
+| [`pr-r-thrust-trim-predicts-the-wrong-duty.md`](pr-r-thrust-trim-predicts-the-wrong-duty.md) | `thrust_trim` forms `meas/pred` with `pred = rpm_max · demand` -- the **pre-shaping** demand -- while `meas` is the RPM from the **post-shaping** duty, after `thstExpo`, `MOT_SPIN_MIN` and the voltage feedforward. The error is one-sided (`shaped(d) ≥ d`), so with the shipped 0.65 / 0.15 defaults `THR_TRIM_EN = 1` drives **every gain to its −25 % clamp on every dive**. Latent only because it defaults to 0 | publish the shaped duty; one line of plumbing |
+| [`pr-s-a-timed-out-move-reports-accepted.md`](pr-s-a-timed-out-move-reports-accepted.md) | `MOVE_DIVE` and `MOVE_TURN` that never reach their target brake out on the global timeout, hit the SAME `PH_DONE` a success does, and are ACKed `MAV_RESULT_ACCEPTED` progress 100. Nothing carries why the move ended. ⚠ **Distinct from #8** (which is a timing problem); this fires after the move correctly finished, having failed. `s_remain` is already in scope at the site | one enum, one field |
+| [`pr-t-the-brake-ignores-how-far-you-travelled.md`](pr-t-the-brake-ignores-how-far-you-travelled.md) | `PH_BRAKE`'s impulse is `g·k·v²` -- **no dependence on leg duration at all**. Below ≈0.21 s the brake impulse exceeds the forward impulse and the vehicle ends up **behind** where it started; at 3 s it removes 4.6 %. `abort()` already brakes on the ACHIEVED speed and normal completion on the COMMANDED one, in the same file. Short legs are precision alignment | accumulate `s_cur_speed·dt`, brake against that |
 
-**Ranked, if only one lands:** PR A §3, the `31001` collision. It is the only
-item that is cheap now and irreversible later, and both claimants are ours.
+**Ranked, if only one lands:** ⛔ **PR Q.** It is safety-critical, it is one
+multiply, and it describes the configuration our hull is in *right now* — a
+MOTOR_DETECT run on this vehicle today leaves every axis inverted. PR A §3 (the
+`31001` collision) remains the ranking cheap-now-irreversible-later item.
+
+## 2026-09-25 — a batch of five, and ⚠ a correction to one we already sent
+
+PR P **implements** what PR K asked for, and in the course of measuring the hull
+properly it found that **PR K's own geometry is wrong** — 346.6 / 520.4 mm read off
+the decimated web-viewer asset, against a true 350.00 / 519.00 from the CAD. Our
+own `hull_geometry.yaml` retracted those figures the day after PR K was sent and
+nobody went back to the PR. It is still the document the firmware team would
+implement from, and it is in a different axis frame from our shipped constants
+with nothing saying so. **Post the correction on their #25 before anyone builds
+from it.** This is the `one truth, two copies is the bug` failure arriving across a
+repo boundary, where no test of ours can reach it.
+
+⏳ **ALL FIVE ARE UNSENT.** The session that wrote them had read-only GitHub access
+to `srot-control-board` (`403 Resource not accessible by integration` on branch,
+issue and PR creation). Everything needed to send them is here: the four issue
+bodies above, and PR P's firmware patch in
+[`patches/srot-geometric-allocator.patch`](patches/srot-geometric-allocator.patch),
+which applies to their `main` at `f1d3ba9`.
 
 **2026-09-22 — PR I's table is now MEASURED, and PR F outranks a board we were going to build.**
 Predicting all eleven points of a demand ladder from their own source agreed with the live board to
