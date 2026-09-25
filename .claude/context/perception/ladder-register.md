@@ -211,3 +211,42 @@ needs its rate measured before it ships.
 old note was wrong about what was missing, which is worth more than the fix
 would have been — `track_id` on `/detections` (also outstanding) is a
 prerequisite for any of the three.
+
+---
+
+## The ROS-graph sweep — `/target_pose_fused` is produced and nobody reads it
+
+`tools/topic_wiring_sweep.py` (new, 2026-09-25) looks for the half of the §9
+defect that `orphan_sweep.py` cannot see: a topic published with no in-graph
+reader, or subscribed with no in-graph producer. That is the shape of the yaw
+gap — no import was missing, no test failed, and the capability did not exist.
+
+Five rows; four resolve cleanly and **one is real**:
+
+| topic | verdict |
+|---|---|
+| `/mongla/esc_rpm` | ✅ diagnostic, CLI and Foxglove read it |
+| `/mongla/localization/aiding` | ✅ diagnostic |
+| `/vis_range_map` | ✅ "debug only" by its own docstring; `display_node` reads it |
+| `/target_pose` | ✅ false alarm — `pnp_node` builds the name in a VARIABLE, invisible to a source scan |
+| **`/target_pose_fused`** | ⛔ **published by `pose_fuse_node`, read by nothing** |
+
+⭐ **What is being wasted.** `pose_fuse_node` subscribes every estimator's
+single-frame answer and publishes the one the support agrees on — a fused,
+outlier-rejected pose, with `pose_cluster`'s decision rule behind it. Every
+consumer today reads the RAW `/target_pose` instead: one frame's answer from
+whichever estimator happened to produce it.
+
+⚠ **This was a deliberate split**, and the node's docstring defends it: a
+consumer wanting the latest reading and one wanting the settled reading are
+different consumers, and collapsing them would remove the ability to compare
+an estimator against its own fused output. So the topic existing unread is
+NOT automatically wrong.
+
+**What is wrong is that no consumer chose.** The fused topic was built for the
+control path — the settled answer is what you steer on — and the control path
+never switched. ⛔ Do not flip it blind: the fusion adds latency by
+construction (it waits for support), and `vision_verbs` acts on a freshness
+decay. The measurement to make first is **fused-vs-raw latency against
+accuracy on a recorded bag**, which is exactly what publishing both was meant
+to enable.
