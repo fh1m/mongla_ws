@@ -275,6 +275,8 @@ class LockNode(Node):
         # test_stamps.py, but it is a real startup race and not a test
         # artifact.
         self._act_conf = float(self.get_parameter('act_conf').value)
+        self._vis_state = None
+        self._vis_last = None
         self._det_box = None
         self._det_conf = 0.0
         self._det_cls = ''
@@ -1258,8 +1260,57 @@ class LockNode(Node):
             dets.append(Detection(class_id=0, class_name=st.rung.value,
                                   score=float(st.confidence),
                                   xyxy=(x1, y1, x2, y2)))
+            self._note_visibility(x1, y1, x2, y2)
         if header is not None:
             self._pub.publish(detections_to_array(dets, header))
+
+    # -- the field-of-view guard, ADVISORY ---------------------------------- #
+    def _note_visibility(self, x1, y1, x2, y2) -> None:
+        """How much field of view is left before the target leaves the frame.
+
+        ⭐ THE LARGEST REMAINING GAP IN THE PIPELINE. There is no field-of-view
+        constraint anywhere in `mongla_control`, so perception can be perfect
+        and the lock still dies because the vehicle turned away from a target
+        it was tracking successfully. `tracking/visibility.py` has existed,
+        measured and tested, importable by nothing.
+
+        ⚠ ADVISORY ONLY, AND DELIBERATELY SO. The real fix is to scale the
+        yaw/lateral demand by `Visibility.scale` -- and ONLY the component that
+        makes the bearing worse, or the vehicle stops approaching a target that
+        is dead centre. That is a control-path change, and B-59 is a fresh
+        reminder of what shipping an unmeasured one costs. So this rung
+        MEASURES and REPORTS; it does not steer. The pool day then has the
+        margin trace it needs to justify switching the scaling on, instead of
+        the scaling arriving untested on the same day as the water.
+
+        The barrier is RECTANGULAR, not the conical one the CBF papers use:
+        a camera image is a rectangle, and on our own geometry a target one
+        pixel from the right edge scores h = +0.061 against a cone -- "safe"
+        while being gone.
+        """
+        K = self._K_rect if getattr(self, '_K_rect', None) is not None \
+            else getattr(self, '_K', None)
+        gray = self._gray
+        if K is None or gray is None:
+            return
+        try:
+            from .tracking.visibility import assess
+            h, w = gray.shape[:2]
+            v = assess(0.5 * (x1 + x2), 0.5 * (y1 + y2), float(w), float(h),
+                       float(K[0][0]), float(K[1][1]))
+        except Exception:                                        # noqa: BLE001
+            return
+        self._vis_state = v
+        # Log only on a TRANSITION. A per-frame line at 50 Hz is noise and
+        # would be filtered out by whoever reads the log, which is how the
+        # baked-floor warning in B-58 went unread for weeks.
+        if v.state != getattr(self, '_vis_last', None):
+            self._vis_last = v.state
+            if not v.safe:
+                self.get_logger().warn(
+                    f'[LOCK ] target near frame edge: {v.state} '
+                    f'margin={v.h:.3f} (advisory -- no demand is scaled yet; '
+                    f'see ladder-register.md)')
 
     def _log_health(self):
         n = self._n_by_rung
