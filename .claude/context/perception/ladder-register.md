@@ -118,6 +118,20 @@ whose module is already written and measured.
    is the object-permanence half: what lets a target leaving frame become a
    navigation problem rather than a forgotten one. ⚠ The reachability register
    cannot see this — it checks modules, not capabilities.
+
+   ⛔ **The blocker, measured 2026-09-25, is two missing signals — not a
+   missing consumer.** `WorldTarget.observe()` needs `vehicle_xy`, `yaw_deg`,
+   `bearing_deg` and `range_m`. `lock_node` has the first (`_odom_xy`) and can
+   compute the third (`bearing_from_pixel`). It has **neither yaw** (never
+   subscribed; yaw lives on `/mongla/state`) **nor an absolute range** — only
+   a RELATIVE scale from the anchor's reference-patch width, which is metric
+   only if the patch's true width is known.
+   The module refuses a guessed range by design, and it is right to: *"a
+   remembered position built from a guessed range would send the vehicle
+   confidently to the wrong place."* So wiring it means either subscribing
+   `/mongla/state` for yaw plus establishing one metric width per prop, or
+   deriving range from `_altitude_m()` for downward-camera targets only.
+   **Do not wire it by inventing a range.**
 6. **FOV demand-scaling** — measured and advisory only; scaling waits on water.
 
 ### Deferred, unchanged
