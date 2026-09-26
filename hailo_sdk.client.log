@@ -1,0 +1,217 @@
+2026-09-25 05:26:34,922 - WARNING - __init__.py:56 - Cannot use graphviz, so no visualizations will be created
+2026-09-25 05:29:18,499 - WARNING - __init__.py:56 - Cannot use graphviz, so no visualizations will be created
+2026-09-25 05:32:36,809 - WARNING - __init__.py:56 - Cannot use graphviz, so no visualizations will be created
+2026-09-25 05:32:44,758 - WARNING - __init__.py:56 - Cannot use graphviz, so no visualizations will be created
+2026-09-25 05:33:44,832 - WARNING - __init__.py:56 - Cannot use graphviz, so no visualizations will be created
+2026-09-25 05:33:53,251 - WARNING - __init__.py:56 - Cannot use graphviz, so no visualizations will be created
+2026-09-25 05:34:01,824 - WARNING - __init__.py:56 - Cannot use graphviz, so no visualizations will be created
+2026-09-25 05:34:01,845 - INFO - parser.py:158 - Translation started on ONNX model gate_rescue_repair
+2026-09-25 05:34:02,158 - INFO - parser.py:193 - Restored ONNX model gate_rescue_repair (completion time: 00:00:00.31)
+2026-09-25 05:34:03,065 - INFO - parser.py:216 - Extracted ONNXRuntime meta-data for Hailo model (completion time: 00:00:01.22)
+2026-09-25 05:34:05,434 - INFO - parser.py:367 - Start nodes mapped from original model: 'images': 'gate_rescue_repair/input_layer1'.
+2026-09-25 05:34:05,434 - INFO - parser.py:368 - End nodes mapped from original model: '/model.23/cv2.0/cv2.0.2/Conv', '/model.23/cv3.0/cv3.0.2/Conv', '/model.23/cv2.1/cv2.1.2/Conv', '/model.23/cv3.1/cv3.1.2/Conv', '/model.23/cv2.2/cv2.2.2/Conv', '/model.23/cv3.2/cv3.2.2/Conv'.
+2026-09-25 05:34:05,595 - INFO - parser.py:289 - Translation completed on ONNX model gate_rescue_repair (completion time: 00:00:03.75)
+2026-09-25 05:34:07,061 - INFO - client_runner.py:1881 - Saved HAR to: /home/fh1m/Envs/dockers/auv-ros2/hailo_work/gate_rescue_repair_parsed.har
+2026-09-25 05:34:07,073 - INFO - client_runner.py:504 - Loading model script commands to gate_rescue_repair from string
+2026-09-25 05:35:26,626 - WARNING - __init__.py:56 - Cannot use graphviz, so no visualizations will be created
+2026-09-25 05:35:35,450 - WARNING - __init__.py:56 - Cannot use graphviz, so no visualizations will be created
+2026-09-25 05:35:43,913 - WARNING - __init__.py:56 - Cannot use graphviz, so no visualizations will be created
+2026-09-25 05:35:43,939 - INFO - parser.py:158 - Translation started on ONNX model gate_rescue_repair
+2026-09-25 05:35:44,229 - INFO - parser.py:193 - Restored ONNX model gate_rescue_repair (completion time: 00:00:00.29)
+2026-09-25 05:35:45,049 - INFO - parser.py:216 - Extracted ONNXRuntime meta-data for Hailo model (completion time: 00:00:01.11)
+2026-09-25 05:35:47,197 - INFO - parser.py:367 - Start nodes mapped from original model: 'images': 'gate_rescue_repair/input_layer1'.
+2026-09-25 05:35:47,197 - INFO - parser.py:368 - End nodes mapped from original model: '/model.23/cv2.0/cv2.0.2/Conv', '/model.23/cv3.0/cv3.0.2/Conv', '/model.23/cv2.1/cv2.1.2/Conv', '/model.23/cv3.1/cv3.1.2/Conv', '/model.23/cv2.2/cv2.2.2/Conv', '/model.23/cv3.2/cv3.2.2/Conv'.
+2026-09-25 05:35:47,354 - INFO - parser.py:289 - Translation completed on ONNX model gate_rescue_repair (completion time: 00:00:03.42)
+2026-09-25 05:35:48,822 - INFO - client_runner.py:1881 - Saved HAR to: /home/fh1m/hailo_work/gate_rescue_repair_parsed.har
+2026-09-25 05:35:48,832 - INFO - client_runner.py:504 - Loading model script commands to gate_rescue_repair from string
+2026-09-25 05:36:55,609 - INFO - nms_postprocess_command.py:720 - The layer gate_rescue_repair/conv51 was detected as reg_layer.
+2026-09-25 05:36:55,609 - INFO - nms_postprocess_command.py:720 - The layer gate_rescue_repair/conv54 was detected as cls_layer.
+2026-09-25 05:36:55,609 - INFO - nms_postprocess_command.py:720 - The layer gate_rescue_repair/conv62 was detected as reg_layer.
+2026-09-25 05:36:55,609 - INFO - nms_postprocess_command.py:720 - The layer gate_rescue_repair/conv65 was detected as cls_layer.
+2026-09-25 05:36:55,609 - INFO - nms_postprocess_command.py:720 - The layer gate_rescue_repair/conv77 was detected as reg_layer.
+2026-09-25 05:36:55,610 - INFO - nms_postprocess_command.py:720 - The layer gate_rescue_repair/conv80 was detected as cls_layer.
+2026-09-25 05:36:55,610 - INFO - nms_postprocess_command.py:514 - Using the default score threshold of 0.05 (range is [0-1], where 1 performs maximum suppression) and IoU threshold of 0.7 (range is [0-1], where 0 performs maximum suppression).
+Changing the values is possible using the nms_postprocess model script command.
+2026-09-25 05:36:55,614 - INFO - nms_postprocess.py:1108 - The activation function of layer gate_rescue_repair/conv54 was replaced by a Sigmoid
+2026-09-25 05:36:55,614 - INFO - nms_postprocess.py:1108 - The activation function of layer gate_rescue_repair/conv65 was replaced by a Sigmoid
+2026-09-25 05:36:55,614 - INFO - nms_postprocess.py:1108 - The activation function of layer gate_rescue_repair/conv80 was replaced by a Sigmoid
+2026-09-25 05:36:55,970 - INFO - calib_set_generator.py:130 - Found model with 3 input channels, using real RGB images for calibration instead of sampling random data.
+2026-09-25 05:36:56,380 - IMPORTANT - sdk_backend.py:1133 - Starting Model Optimization
+2026-09-25 05:36:56,582 - WARNING - mo_config.py:168 - Reducing optimization level to 1 (the accuracy won't be optimized and compression won't be used) because there's less data than the recommended amount (1024)
+2026-09-25 05:36:56,583 - INFO - mo_script_parser.py:91 - Model received quantization params from the hn
+2026-09-25 05:37:05,784 - INFO - algorithm_base.py:149 - MatmulDecompose skipped
+2026-09-25 05:37:06,152 - INFO - algorithm_base.py:152 - Starting Mixed Precision
+2026-09-25 05:37:07,156 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Mixed Precision is done (completion time is 00:00:01.00)
+2026-09-25 05:37:08,011 - INFO - algorithm_base.py:149 - LayerNorm Decomposition skipped
+2026-09-25 05:37:10,609 - INFO - algorithm_base.py:152 - Starting Statistics Collector
+2026-09-25 05:37:10,615 - INFO - stats_collection.py:89 - Using dataset with 64 entries for calibration
+2026-09-25 05:38:12,177 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Statistics Collector is done (completion time is 00:01:01.56)
+2026-09-25 05:38:14,718 - INFO - algorithm_base.py:152 - Starting Fix zp_comp Encoding
+2026-09-25 05:38:14,719 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Fix zp_comp Encoding is done (completion time is 00:00:00.00)
+2026-09-25 05:38:14,720 - INFO - algorithm_base.py:152 - Starting Matmul Equalization
+2026-09-25 05:38:14,747 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Matmul Equalization is done (completion time is 00:00:00.03)
+2026-09-25 05:38:14,747 - INFO - algorithm_base.py:152 - Starting MatmulDecomposeFix
+2026-09-25 05:38:14,747 - INFO - algorithm_base.py:168 - Model Optimization Algorithm MatmulDecomposeFix is done (completion time is 00:00:00.00)
+2026-09-25 05:39:05,529 - INFO - algorithm_base.py:149 - Finetune encoding skipped
+2026-09-25 05:39:05,547 - INFO - algorithm_base.py:152 - Starting Bias Correction
+2026-09-25 05:39:07,074 - INFO - block_by_block.py:325 - The algorithm Bias Correction will use up to 1.15 GB of storage space
+2026-09-25 05:39:07,074 - INFO - bias_correction_v2.py:66 - Using dataset with 64 entries for Bias Correction
+2026-09-25 05:45:20,087 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Bias Correction is done (completion time is 00:06:13.01)
+2026-09-25 05:45:20,116 - INFO - algorithm_base.py:149 - Adaround skipped
+2026-09-25 05:45:20,130 - INFO - algorithm_base.py:149 - Quantization-Aware Fine-Tuning skipped
+2026-09-25 05:45:44,058 - INFO - algorithm_base.py:152 - Starting Layer Noise Analysis
+2026-09-25 05:49:20,374 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Layer Noise Analysis is done (completion time is 00:03:36.31)
+2026-09-25 05:50:04,754 - IMPORTANT - sdk_backend.py:1145 - Model Optimization is done
+2026-09-25 05:50:06,698 - INFO - client_runner.py:1881 - Saved HAR to: /home/fh1m/hailo_work/gate_rescue_repair_optimized.har
+2026-09-25 05:50:06,807 - INFO - hailo_tools_runner.py:510 - To achieve optimal performance, set the compiler_optimization_level to "max" by adding performance_param(compiler_optimization_level=max) to the model script. Note that this may increase compilation time.
+2026-09-25 10:13:47,157 - WARNING - __init__.py:56 - Cannot use graphviz, so no visualizations will be created
+2026-09-25 10:13:54,932 - WARNING - __init__.py:56 - Cannot use graphviz, so no visualizations will be created
+2026-09-25 10:14:02,570 - WARNING - __init__.py:56 - Cannot use graphviz, so no visualizations will be created
+2026-09-25 10:14:02,588 - INFO - parser.py:158 - Translation started on ONNX model gate_rescue_repair
+2026-09-25 10:14:02,872 - INFO - parser.py:193 - Restored ONNX model gate_rescue_repair (completion time: 00:00:00.28)
+2026-09-25 10:14:03,641 - INFO - parser.py:216 - Extracted ONNXRuntime meta-data for Hailo model (completion time: 00:00:01.05)
+2026-09-25 10:14:05,579 - INFO - parser.py:367 - Start nodes mapped from original model: 'images': 'gate_rescue_repair/input_layer1'.
+2026-09-25 10:14:05,579 - INFO - parser.py:368 - End nodes mapped from original model: '/model.23/cv2.0/cv2.0.2/Conv', '/model.23/cv3.0/cv3.0.2/Conv', '/model.23/cv2.1/cv2.1.2/Conv', '/model.23/cv3.1/cv3.1.2/Conv', '/model.23/cv2.2/cv2.2.2/Conv', '/model.23/cv3.2/cv3.2.2/Conv'.
+2026-09-25 10:14:05,723 - INFO - parser.py:289 - Translation completed on ONNX model gate_rescue_repair (completion time: 00:00:03.14)
+2026-09-25 10:14:07,106 - INFO - client_runner.py:1881 - Saved HAR to: /home/fh1m/Envs/dockers/auv-ros2/hailo_work/gate_rescue_repair_parsed.har
+2026-09-25 10:14:07,116 - INFO - client_runner.py:504 - Loading model script commands to gate_rescue_repair from string
+2026-09-25 10:14:21,795 - WARNING - __init__.py:56 - Cannot use graphviz, so no visualizations will be created
+2026-09-25 10:14:29,789 - WARNING - __init__.py:56 - Cannot use graphviz, so no visualizations will be created
+2026-09-25 10:14:37,553 - WARNING - __init__.py:56 - Cannot use graphviz, so no visualizations will be created
+2026-09-25 10:14:37,571 - INFO - parser.py:158 - Translation started on ONNX model gate_rescue_repair
+2026-09-25 10:14:37,871 - INFO - parser.py:193 - Restored ONNX model gate_rescue_repair (completion time: 00:00:00.30)
+2026-09-25 10:14:38,620 - INFO - parser.py:216 - Extracted ONNXRuntime meta-data for Hailo model (completion time: 00:00:01.05)
+2026-09-25 10:14:40,536 - INFO - parser.py:367 - Start nodes mapped from original model: 'images': 'gate_rescue_repair/input_layer1'.
+2026-09-25 10:14:40,536 - INFO - parser.py:368 - End nodes mapped from original model: '/model.23/cv2.0/cv2.0.2/Conv', '/model.23/cv3.0/cv3.0.2/Conv', '/model.23/cv2.1/cv2.1.2/Conv', '/model.23/cv3.1/cv3.1.2/Conv', '/model.23/cv2.2/cv2.2.2/Conv', '/model.23/cv3.2/cv3.2.2/Conv'.
+2026-09-25 10:14:40,687 - INFO - parser.py:289 - Translation completed on ONNX model gate_rescue_repair (completion time: 00:00:03.12)
+2026-09-25 10:14:42,019 - INFO - client_runner.py:1881 - Saved HAR to: /home/fh1m/hailo_work_1024/gate_rescue_repair_parsed.har
+2026-09-25 10:14:42,029 - INFO - client_runner.py:504 - Loading model script commands to gate_rescue_repair from string
+2026-09-25 10:18:42,052 - INFO - nms_postprocess_command.py:720 - The layer gate_rescue_repair/conv51 was detected as reg_layer.
+2026-09-25 10:18:42,052 - INFO - nms_postprocess_command.py:720 - The layer gate_rescue_repair/conv54 was detected as cls_layer.
+2026-09-25 10:18:42,052 - INFO - nms_postprocess_command.py:720 - The layer gate_rescue_repair/conv62 was detected as reg_layer.
+2026-09-25 10:18:42,052 - INFO - nms_postprocess_command.py:720 - The layer gate_rescue_repair/conv65 was detected as cls_layer.
+2026-09-25 10:18:42,053 - INFO - nms_postprocess_command.py:720 - The layer gate_rescue_repair/conv77 was detected as reg_layer.
+2026-09-25 10:18:42,053 - INFO - nms_postprocess_command.py:720 - The layer gate_rescue_repair/conv80 was detected as cls_layer.
+2026-09-25 10:18:42,053 - INFO - nms_postprocess_command.py:514 - Using the default score threshold of 0.05 (range is [0-1], where 1 performs maximum suppression) and IoU threshold of 0.7 (range is [0-1], where 0 performs maximum suppression).
+Changing the values is possible using the nms_postprocess model script command.
+2026-09-25 10:18:42,057 - INFO - nms_postprocess.py:1108 - The activation function of layer gate_rescue_repair/conv54 was replaced by a Sigmoid
+2026-09-25 10:18:42,057 - INFO - nms_postprocess.py:1108 - The activation function of layer gate_rescue_repair/conv65 was replaced by a Sigmoid
+2026-09-25 10:18:42,057 - INFO - nms_postprocess.py:1108 - The activation function of layer gate_rescue_repair/conv80 was replaced by a Sigmoid
+2026-09-25 10:18:42,420 - INFO - calib_set_generator.py:130 - Found model with 3 input channels, using real RGB images for calibration instead of sampling random data.
+2026-09-25 10:18:42,906 - IMPORTANT - sdk_backend.py:1133 - Starting Model Optimization
+2026-09-25 10:18:43,134 - INFO - mo_config.py:160 - Using default optimization level of 2
+2026-09-25 10:18:43,136 - INFO - mo_script_parser.py:91 - Model received quantization params from the hn
+2026-09-25 10:18:51,123 - INFO - algorithm_base.py:149 - MatmulDecompose skipped
+2026-09-25 10:18:51,492 - INFO - algorithm_base.py:152 - Starting Mixed Precision
+2026-09-25 10:18:52,425 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Mixed Precision is done (completion time is 00:00:00.93)
+2026-09-25 10:18:53,143 - INFO - algorithm_base.py:149 - LayerNorm Decomposition skipped
+2026-09-25 10:18:55,129 - INFO - algorithm_base.py:152 - Starting Statistics Collector
+2026-09-25 10:18:55,132 - INFO - stats_collection.py:89 - Using dataset with 64 entries for calibration
+2026-09-25 10:19:46,508 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Statistics Collector is done (completion time is 00:00:51.38)
+2026-09-25 10:19:48,523 - INFO - algorithm_base.py:152 - Starting Fix zp_comp Encoding
+2026-09-25 10:19:48,524 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Fix zp_comp Encoding is done (completion time is 00:00:00.00)
+2026-09-25 10:19:48,524 - INFO - algorithm_base.py:152 - Starting Matmul Equalization
+2026-09-25 10:19:48,557 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Matmul Equalization is done (completion time is 00:00:00.03)
+2026-09-25 10:19:48,558 - INFO - algorithm_base.py:152 - Starting MatmulDecomposeFix
+2026-09-25 10:19:48,558 - INFO - algorithm_base.py:168 - Model Optimization Algorithm MatmulDecomposeFix is done (completion time is 00:00:00.00)
+2026-09-25 10:20:57,627 - INFO - algorithm_base.py:149 - Finetune encoding skipped
+2026-09-25 10:20:57,629 - INFO - algorithm_base.py:149 - Bias Correction skipped
+2026-09-25 10:20:57,643 - INFO - algorithm_base.py:149 - Adaround skipped
+2026-09-25 10:20:57,658 - INFO - algorithm_base.py:152 - Starting Quantization-Aware Fine-Tuning
+2026-09-25 10:20:57,701 - INFO - qft.py:332 - Using dataset with 1024 entries for finetune
+2026-09-25 10:31:14,535 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Quantization-Aware Fine-Tuning is done (completion time is 00:10:14.96)
+2026-09-25 10:31:31,746 - INFO - algorithm_base.py:152 - Starting Layer Noise Analysis
+2026-09-25 10:34:19,414 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Layer Noise Analysis is done (completion time is 00:02:47.67)
+2026-09-25 10:34:34,461 - IMPORTANT - sdk_backend.py:1145 - Model Optimization is done
+2026-09-25 10:34:35,528 - INFO - client_runner.py:1881 - Saved HAR to: /home/fh1m/hailo_work_1024/gate_rescue_repair_optimized.har
+2026-09-25 10:34:35,587 - INFO - hailo_tools_runner.py:510 - To achieve optimal performance, set the compiler_optimization_level to "max" by adding performance_param(compiler_optimization_level=max) to the model script. Note that this may increase compilation time.
+2026-09-25 16:36:08,021 - WARNING - __init__.py:56 - Cannot use graphviz, so no visualizations will be created
+2026-09-25 16:36:15,667 - WARNING - __init__.py:56 - Cannot use graphviz, so no visualizations will be created
+2026-09-25 16:36:27,530 - WARNING - __init__.py:56 - Cannot use graphviz, so no visualizations will be created
+2026-09-25 16:36:27,548 - INFO - parser.py:158 - Translation started on ONNX model gate_candidate
+2026-09-25 16:36:27,829 - INFO - parser.py:193 - Restored ONNX model gate_candidate (completion time: 00:00:00.28)
+2026-09-25 16:36:28,611 - INFO - parser.py:216 - Extracted ONNXRuntime meta-data for Hailo model (completion time: 00:00:01.06)
+2026-09-25 16:36:30,513 - INFO - parser.py:367 - Start nodes mapped from original model: 'images': 'gate_candidate/input_layer1'.
+2026-09-25 16:36:30,513 - INFO - parser.py:368 - End nodes mapped from original model: '/model.23/cv2.0/cv2.0.2/Conv', '/model.23/cv3.0/cv3.0.2/Conv', '/model.23/cv2.1/cv2.1.2/Conv', '/model.23/cv3.1/cv3.1.2/Conv', '/model.23/cv2.2/cv2.2.2/Conv', '/model.23/cv3.2/cv3.2.2/Conv'.
+2026-09-25 16:36:30,657 - INFO - parser.py:289 - Translation completed on ONNX model gate_candidate (completion time: 00:00:03.11)
+2026-09-25 16:36:31,973 - INFO - client_runner.py:1881 - Saved HAR to: /home/fh1m/hailo_work_gate/gate_candidate_parsed.har
+2026-09-25 16:36:31,983 - INFO - client_runner.py:504 - Loading model script commands to gate_candidate from string
+2026-09-25 16:40:25,114 - INFO - nms_postprocess_command.py:720 - The layer gate_candidate/conv51 was detected as reg_layer.
+2026-09-25 16:40:25,114 - INFO - nms_postprocess_command.py:720 - The layer gate_candidate/conv54 was detected as cls_layer.
+2026-09-25 16:40:25,114 - INFO - nms_postprocess_command.py:720 - The layer gate_candidate/conv62 was detected as reg_layer.
+2026-09-25 16:40:25,114 - INFO - nms_postprocess_command.py:720 - The layer gate_candidate/conv65 was detected as cls_layer.
+2026-09-25 16:40:25,114 - INFO - nms_postprocess_command.py:720 - The layer gate_candidate/conv77 was detected as reg_layer.
+2026-09-25 16:40:25,114 - INFO - nms_postprocess_command.py:720 - The layer gate_candidate/conv80 was detected as cls_layer.
+2026-09-25 16:40:25,115 - INFO - nms_postprocess_command.py:514 - Using the default score threshold of 0.05 (range is [0-1], where 1 performs maximum suppression) and IoU threshold of 0.7 (range is [0-1], where 0 performs maximum suppression).
+Changing the values is possible using the nms_postprocess model script command.
+2026-09-25 16:40:25,119 - INFO - nms_postprocess.py:1108 - The activation function of layer gate_candidate/conv54 was replaced by a Sigmoid
+2026-09-25 16:40:25,119 - INFO - nms_postprocess.py:1108 - The activation function of layer gate_candidate/conv65 was replaced by a Sigmoid
+2026-09-25 16:40:25,119 - INFO - nms_postprocess.py:1108 - The activation function of layer gate_candidate/conv80 was replaced by a Sigmoid
+2026-09-25 16:40:25,483 - INFO - calib_set_generator.py:130 - Found model with 3 input channels, using real RGB images for calibration instead of sampling random data.
+2026-09-25 16:40:25,914 - IMPORTANT - sdk_backend.py:1133 - Starting Model Optimization
+2026-09-25 16:40:26,134 - INFO - mo_config.py:160 - Using default optimization level of 2
+2026-09-25 16:40:26,135 - INFO - mo_script_parser.py:91 - Model received quantization params from the hn
+2026-09-25 16:40:34,280 - INFO - algorithm_base.py:149 - MatmulDecompose skipped
+2026-09-25 16:40:34,701 - INFO - algorithm_base.py:152 - Starting Mixed Precision
+2026-09-25 16:40:35,684 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Mixed Precision is done (completion time is 00:00:00.98)
+2026-09-25 16:40:36,865 - INFO - algorithm_base.py:149 - LayerNorm Decomposition skipped
+2026-09-25 16:40:39,067 - INFO - algorithm_base.py:152 - Starting Statistics Collector
+2026-09-25 16:40:39,074 - INFO - stats_collection.py:89 - Using dataset with 64 entries for calibration
+2026-09-25 16:41:33,829 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Statistics Collector is done (completion time is 00:00:54.75)
+2026-09-25 16:41:35,724 - INFO - algorithm_base.py:152 - Starting Fix zp_comp Encoding
+2026-09-25 16:41:35,724 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Fix zp_comp Encoding is done (completion time is 00:00:00.00)
+2026-09-25 16:41:35,725 - INFO - algorithm_base.py:152 - Starting Matmul Equalization
+2026-09-25 16:41:35,750 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Matmul Equalization is done (completion time is 00:00:00.02)
+2026-09-25 16:41:35,750 - INFO - algorithm_base.py:152 - Starting MatmulDecomposeFix
+2026-09-25 16:41:35,750 - INFO - algorithm_base.py:168 - Model Optimization Algorithm MatmulDecomposeFix is done (completion time is 00:00:00.00)
+2026-09-25 16:49:31,946 - WARNING - __init__.py:56 - Cannot use graphviz, so no visualizations will be created
+2026-09-25 16:49:39,742 - WARNING - __init__.py:56 - Cannot use graphviz, so no visualizations will be created
+2026-09-25 16:49:47,351 - WARNING - __init__.py:56 - Cannot use graphviz, so no visualizations will be created
+2026-09-25 16:49:47,372 - INFO - parser.py:158 - Translation started on ONNX model gate_candidate
+2026-09-25 16:49:47,639 - INFO - parser.py:193 - Restored ONNX model gate_candidate (completion time: 00:00:00.27)
+2026-09-25 16:49:48,441 - INFO - parser.py:216 - Extracted ONNXRuntime meta-data for Hailo model (completion time: 00:00:01.07)
+2026-09-25 16:49:50,413 - INFO - parser.py:367 - Start nodes mapped from original model: 'images': 'gate_candidate/input_layer1'.
+2026-09-25 16:49:50,413 - INFO - parser.py:368 - End nodes mapped from original model: '/model.23/cv2.0/cv2.0.2/Conv', '/model.23/cv3.0/cv3.0.2/Conv', '/model.23/cv2.1/cv2.1.2/Conv', '/model.23/cv3.1/cv3.1.2/Conv', '/model.23/cv2.2/cv2.2.2/Conv', '/model.23/cv3.2/cv3.2.2/Conv'.
+2026-09-25 16:49:50,560 - INFO - parser.py:289 - Translation completed on ONNX model gate_candidate (completion time: 00:00:03.19)
+2026-09-25 16:49:51,943 - INFO - client_runner.py:1881 - Saved HAR to: /home/fh1m/hailo_work_gate/gate_candidate_parsed.har
+2026-09-25 16:49:51,956 - INFO - client_runner.py:504 - Loading model script commands to gate_candidate from string
+2026-09-25 16:53:51,322 - INFO - nms_postprocess_command.py:720 - The layer gate_candidate/conv51 was detected as reg_layer.
+2026-09-25 16:53:51,322 - INFO - nms_postprocess_command.py:720 - The layer gate_candidate/conv54 was detected as cls_layer.
+2026-09-25 16:53:51,322 - INFO - nms_postprocess_command.py:720 - The layer gate_candidate/conv62 was detected as reg_layer.
+2026-09-25 16:53:51,322 - INFO - nms_postprocess_command.py:720 - The layer gate_candidate/conv65 was detected as cls_layer.
+2026-09-25 16:53:51,323 - INFO - nms_postprocess_command.py:720 - The layer gate_candidate/conv77 was detected as reg_layer.
+2026-09-25 16:53:51,323 - INFO - nms_postprocess_command.py:720 - The layer gate_candidate/conv80 was detected as cls_layer.
+2026-09-25 16:53:51,323 - INFO - nms_postprocess_command.py:514 - Using the default score threshold of 0.05 (range is [0-1], where 1 performs maximum suppression) and IoU threshold of 0.7 (range is [0-1], where 0 performs maximum suppression).
+Changing the values is possible using the nms_postprocess model script command.
+2026-09-25 16:53:51,328 - INFO - nms_postprocess.py:1108 - The activation function of layer gate_candidate/conv54 was replaced by a Sigmoid
+2026-09-25 16:53:51,329 - INFO - nms_postprocess.py:1108 - The activation function of layer gate_candidate/conv65 was replaced by a Sigmoid
+2026-09-25 16:53:51,329 - INFO - nms_postprocess.py:1108 - The activation function of layer gate_candidate/conv80 was replaced by a Sigmoid
+2026-09-25 16:53:51,645 - INFO - calib_set_generator.py:130 - Found model with 3 input channels, using real RGB images for calibration instead of sampling random data.
+2026-09-25 16:53:52,009 - IMPORTANT - sdk_backend.py:1133 - Starting Model Optimization
+2026-09-25 16:53:52,196 - INFO - mo_config.py:160 - Using default optimization level of 2
+2026-09-25 16:53:52,197 - INFO - mo_script_parser.py:91 - Model received quantization params from the hn
+2026-09-25 16:53:59,431 - INFO - algorithm_base.py:149 - MatmulDecompose skipped
+2026-09-25 16:53:59,762 - INFO - algorithm_base.py:152 - Starting Mixed Precision
+2026-09-25 16:54:00,654 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Mixed Precision is done (completion time is 00:00:00.89)
+2026-09-25 16:54:01,358 - INFO - algorithm_base.py:149 - LayerNorm Decomposition skipped
+2026-09-25 16:54:03,132 - INFO - algorithm_base.py:152 - Starting Statistics Collector
+2026-09-25 16:54:03,135 - INFO - stats_collection.py:89 - Using dataset with 64 entries for calibration
+2026-09-25 16:54:53,304 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Statistics Collector is done (completion time is 00:00:50.17)
+2026-09-25 16:54:55,234 - INFO - algorithm_base.py:152 - Starting Fix zp_comp Encoding
+2026-09-25 16:54:55,235 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Fix zp_comp Encoding is done (completion time is 00:00:00.00)
+2026-09-25 16:54:55,235 - INFO - algorithm_base.py:152 - Starting Matmul Equalization
+2026-09-25 16:54:55,268 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Matmul Equalization is done (completion time is 00:00:00.03)
+2026-09-25 16:54:55,269 - INFO - algorithm_base.py:152 - Starting MatmulDecomposeFix
+2026-09-25 16:54:55,269 - INFO - algorithm_base.py:168 - Model Optimization Algorithm MatmulDecomposeFix is done (completion time is 00:00:00.00)
+2026-09-25 16:55:23,050 - WARNING - neg_exp_fixer.py:224 - Reducing output bits of gate_candidate/conv54 by 9.0 bits (More than half)
+2026-09-25 16:55:44,659 - INFO - algorithm_base.py:149 - Finetune encoding skipped
+2026-09-25 16:55:44,661 - INFO - algorithm_base.py:149 - Bias Correction skipped
+2026-09-25 16:55:44,677 - INFO - algorithm_base.py:149 - Adaround skipped
+2026-09-25 16:55:44,688 - INFO - algorithm_base.py:152 - Starting Quantization-Aware Fine-Tuning
+2026-09-25 16:55:44,751 - INFO - qft.py:332 - Using dataset with 1024 entries for finetune
+2026-09-25 17:06:05,709 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Quantization-Aware Fine-Tuning is done (completion time is 00:10:19.21)
+2026-09-25 17:06:23,149 - INFO - algorithm_base.py:152 - Starting Layer Noise Analysis
+2026-09-25 17:09:14,217 - INFO - algorithm_base.py:168 - Model Optimization Algorithm Layer Noise Analysis is done (completion time is 00:02:51.07)
+2026-09-25 17:09:30,007 - IMPORTANT - sdk_backend.py:1145 - Model Optimization is done
+2026-09-25 17:09:31,069 - INFO - client_runner.py:1881 - Saved HAR to: /home/fh1m/hailo_work_gate/gate_candidate_optimized.har
+2026-09-25 17:09:31,131 - INFO - hailo_tools_runner.py:510 - To achieve optimal performance, set the compiler_optimization_level to "max" by adding performance_param(compiler_optimization_level=max) to the model script. Note that this may increase compilation time.

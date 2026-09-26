@@ -1265,10 +1265,13 @@ def _solver():
 
     ⛔ NOT `from mongla_vision.calibration.solver import ...`. `tools/` loads
     this file by path precisely so the calibration tool does not need a ROS
-    environment; a package import re-enters `mongla_vision/__init__.py`,
-    which imports `preflight`, which imports `rclpy` -- and the tool dies on
-    a dev box with `ModuleNotFoundError: rclpy`. This is the same trap the
-    shims were written to avoid, walked into from the other side.
+    environment, and does not need this package installed either.
+
+    It also used to be that a package import re-entered
+    `mongla_vision/__init__.py` -> `preflight` -> `rclpy` and the tool died
+    with `ModuleNotFoundError: rclpy`. That chain ended on 2026-09-26 with the
+    dead `assert_vision_ready`, and `test_the_package_imports_without_ros.py`
+    fails if any import puts rclpy back -- so this is now one reason, not two.
     """
     import importlib.util
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)),

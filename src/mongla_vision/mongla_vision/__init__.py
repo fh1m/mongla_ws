@@ -19,11 +19,8 @@ from .cameras.camera   import Camera, FrameMeta
 from .factory          import make_camera, make_camera_from_profile, BUILDERS
 from .config           import CAMERA_PROFILES, get_profile
 from .detection.detector import Detector, Detection
-from .preflight        import (
-    assert_vision_ready, wait_vision_state_ready,
-    clear_cache as clear_preflight_cache,
-    VisionNotReadyError, VisionStatus,
-)
+from .preflight        import (wait_vision_state_ready,
+                               VisionNotReadyError, VisionStatus)
 
 __all__ = [
     'Camera',
@@ -35,9 +32,7 @@ __all__ = [
     'BUILDERS',
     'CAMERA_PROFILES',
     'get_profile',
-    'assert_vision_ready',
     'wait_vision_state_ready',
-    'clear_preflight_cache',
     'VisionNotReadyError',
     'VisionStatus',
 ]
