@@ -186,8 +186,12 @@ class ClockMap:
         return self._resid_ms
 
     def __repr__(self):
+        # Through the property, not the field behind it: the manager logs this
+        # repr when the clock converges, and that was the ONLY path the
+        # residual reached a human by -- so the accessor and the log must not
+        # be able to disagree about which number the residual is.
         return (f'ClockMap(ready={self.ready} pairs={self.n_pairs} '
-                f'skew={self.skew_ppm:+.0f}ppm resid={self._resid_ms:.2f}ms)')
+                f'skew={self.skew_ppm:+.0f}ppm resid={self.residual_ms:.2f}ms)')
 
 
 def exposure_offset_s(exposure_time_absolute: Optional[float]) -> float:

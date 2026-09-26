@@ -4163,3 +4163,143 @@ open question.** Reopen only with a Hailo compile — the same 23x-class move
 that fixed B-62 — AND a named consumer. At 1.2 s on the CPU neither the
 "measure first" nor the "no consumer" half of P4 is the binding constraint;
 the arithmetic is.
+
+---
+
+## B-63 … B-67 — five defects found by asking "what calls this?" (2026-09-26)
+
+Not one of these came from reading code for correctness. Every one came from a
+single mechanical question — **is this function called by anything?** —
+asked by `tools/dead_function_sweep.py`, the fourth sweep in the family after
+`orphan_sweep` (modules), `topic_wiring_sweep` (topics) and `launch_param_sweep`
+(parameters). All three of those work at the file or graph level, so a dead
+function inside a module that is imported, tested and running was invisible to
+every one of them.
+
+The sweep found 26 candidates. Sixteen were wiring opportunities or residue.
+**Five were live defects**, and the most expensive of them had been shipping for
+as long as the feature existed.
+
+⚠ The lesson is not "delete dead code". In two of the five the dead function was
+the CORRECT implementation and the live path was the buggy duplicate. Deleting
+reflexively would have destroyed the fix and kept the bug.
+
+---
+
+### B-63 — `Hengla v0.0.0`: an absent firmware version rendered as a real one ✅ **FIXED 2026-09-26**
+
+**Severity: HIGH.** `srot_connect.render` unpacked `AUTOPILOT_VERSION.
+flight_sw_version` with inline bit-shifts. That message is **one-shot** — it is
+not streamed, it must be asked for — so an unanswered request left the packed
+word at 0, and `(0 >> 24) & 0xff` … printed:
+
+```
+  firmware        Hengla v0.0.0   behaviour rev --
+```
+
+A version number that reads as a real board running very old firmware. The
+behaviour rev beside it is a **hull-safety interlock** (rev 10 inverted yaw), so
+this is the worst field in the report to fabricate, and it contradicts the
+board's own rule that absence renders `--`.
+
+`srot_format.fw_version` returns `ABSENT` for 0 and was written for this exact
+line. It was never called from it. **Fixed** by calling it; `test_srot_format`
+now fails if the bit-shifts return.
+
+---
+
+### B-64 — `water_check` was dead on import ✅ **FIXED 2026-09-26**
+
+**Severity: MEDIUM** (a tool, not the vehicle). `underwater.recommend()` was
+deleted on purpose after re-measuring CLAHE across 17 configurations. The
+deletion was right. `utils/water_check.py` kept importing it, so the
+`water_check` console entry point died before parsing an argument:
+
+```
+ImportError: cannot import name 'recommend' from 'mongla_vision.underwater'
+```
+
+For as long as nobody ran it. **No test imported an entry point**, so the whole
+class was invisible: `test_no_capability_is_built_and_unreachable` checks that
+modules are *reachable*, not that reachable ones *load*.
+`test_every_entry_point_imports.py` now imports all 35.
+
+Two context docs still stated the deleted CLAHE rule as live; corrected.
+
+---
+
+### B-65 — the DShot reverse band decoded from 47, in four places ✅ **FIXED 2026-09-26**
+
+**Severity: MEDIUM.** Bidirectional DShot is two bands counting upward from
+their own floor: 48 and 1048 are each a zero. Four copies of that arithmetic
+existed outside the module that owns the constants, and `tools/control_bench/`
+used **47**:
+
+| | stopped thruster | full reverse |
+|---|---|---|
+| correct | 0.000 | −1.000 |
+| as decoded | −0.001 | **−1.001** |
+
+A magnitude outside the range every caller assumes, and a stopped thruster
+reading as a small reverse command. `test_dshot_decode` already compared
+`mixer_map.py`'s copy against the module; the bench copies were the ones nothing
+compared. All four now load `actuation_model.dshot_signed`, and a new test fails
+on any hand-rolled band decode anywhere in `src/` or `tools/` — **it found two
+further copies on its first run**, in a file the first fix had not touched.
+
+---
+
+### B-66 — `debug:=true` never tagged a single MAVLink frame ⛔ **the expensive one** ✅ **FIXED 2026-09-26**
+
+**Severity: MEDIUM on the vehicle, HIGH on every debugging session since the
+feature was written.**
+
+`tracing.set_enabled()` wrote a **ContextVar**. A new thread in CPython starts
+with an *empty* context — it does not inherit its parent's — and the manager
+runs a `MultiThreadedExecutor`. Every action callback, which is where every
+`command_scope()` in the facade and in `_run_srot_move` is entered, therefore
+read the default `False`, took the no-op branch, and emitted no tag.
+
+Measured, in three lines:
+
+```
+main:   True
+worker: False
+```
+
+⛔ **It looked like it worked.** The parameter was read, `set_enabled(True)`
+ran, the logger went to DEBUG and `[MAV ...]` lines appeared — without the one
+thing the module exists for. The module's docstring anticipated *half* of it
+("background daemons … will simply lack the `cmd=` tag") and called that an
+accepted trade. The executor's workers are not daemons it spawned; they are
+where the entire command path runs.
+
+**The fix is the distinction the types should have made.** Two different things
+were both ContextVars: `_cmd_id` (*which* verb is in flight — per scope, per
+thread, nested-safe) stays one; `_enabled` (whether tracing runs at all — one
+process-wide switch) is now a module global.
+`test_tracing_crosses_thread_boundaries.py` fails against the old code on four
+of its five tests, including one that checks two workers keep their own verbs.
+
+---
+
+### B-67 — the pilot gain was unmonitored, and the board boots at half ✅ **REPORTER ADDED 2026-09-26**
+
+**Severity: MEDIUM.** `GAIN` scales every `MANUAL_CONTROL` demand on the board —
+which is how **both vision verbs actuate**. The board boots at 0.5, and
+`JS_GAIN_DEFAULT` cannot reach the live value: the firmware latches
+`s_gain_live` on first use and the telemetry loop reads `pilotGain()` from boot,
+so the latch always happens before a companion finishes connecting. Measured:
+after our startup write of 1.0, every GAIN sample across a 44 s capture read
+**0.500**. The firmware's own source records the cost — *"They lost a whole pool
+session to exactly this … leaving MANUAL_CONTROL at half authority with nothing
+to indicate it."*
+
+`SrotFC.read_gain()` existed and was called by nothing; the health register had
+no gain line. Added `health_reporters.pilot_gain`, which reports **DEGRADED**
+below 1.0 and names the consequence. Health is a report, not a veto, so nothing
+new refuses to arm.
+
+⚠ **Expect DEGRADED on every session** until the gain is raised on the joystick
+button edge (verified live: 0.5 → 1.0 in five presses). That is the true state
+of the vehicle, not a false alarm.
