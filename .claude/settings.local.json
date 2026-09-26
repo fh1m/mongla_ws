@@ -121,7 +121,8 @@
       "Bash(lsusb)",
       "Bash(sudo chmod a+rw /dev/ttyUSB0)",
       "Bash(lsusb -t)",
-      "Bash(PI_TIMEOUT=200 $SCR/pirun *)"
+      "Bash(PI_TIMEOUT=200 $SCR/pirun *)",
+      "mcp__plugin_ecc_chrome-devtools__evaluate_script"
     ]
   },
   "skillOverrides": {

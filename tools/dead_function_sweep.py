@@ -48,7 +48,24 @@ SEARCH = ('src', 'tools', 'sim', 'missions', 'scripts')
 
 # Called by the language, a framework, or the ROS graph -- never by name here.
 _EXEMPT_EXACT = {'main', 'setup', 'teardown', 'generate_launch_description'}
-_EXEMPT_PREFIX = ('test_', '__', 'on_', '_on_', 'do_', 'visit_')
+_EXEMPT_PREFIX = ('test_', '__')
+# ⛔ `on_` AND `_on_` WERE EXEMPT HERE AND MUST NOT BE. A ROS callback is PASSED
+# as a reference to `create_subscription`, `create_timer` or `add_on_set_
+# parameters_callback`, and the AST scan below sees that reference -- so a
+# subscribed callback is found by the ordinary path. Exempting the prefix hid
+# the most common shape of this defect instead: a handler that was written and
+# never subscribed, or whose subscription was later removed. Framework
+# lifecycle hooks that really are called by name from outside go in
+# `_EXEMPT_EXACT`, one name at a time.
+# ⛔ CLASSES WHOSE PUBLIC METHODS ARE AN API FOR CODE OUTSIDE THIS REPO.
+# `MonglaMission` is the mission DSL: operators write mission scripts under
+# `~/missions`, which `build_mongla.sh` mirrors in and which are deliberately
+# NOT in git (a course re-measured at a venue beats one committed months ago).
+# So a DSL verb with no in-repo caller is the NORMAL state, not a defect, and
+# `tools/gen_reference.py` already fails if one is undocumented. Private
+# methods of the same class are still checked -- nothing outside can reach
+# those.
+_EXEMPT_PUBLIC_METHODS_OF = {'MonglaMission'}
 # A ROS node's own plumbing: a timer or subscription callback is passed as a
 # reference, which the AST scan DOES see -- so these are not exempted. Only
 # names invoked purely by a framework's own convention are.
@@ -79,11 +96,19 @@ def _defs_and_refs():
         # launch file. Those are consumers, not capabilities.
         shipped = (rel.parts[0] == 'src' and '/test' not in str(rel)
                    and 'launch' not in rel.parts and rel.name != 'setup.py')
+        api, methods = set(), set()
+        for cls in (n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)):
+            methods |= {f for f in cls.body
+                        if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))}
+            if cls.name in _EXEMPT_PUBLIC_METHODS_OF:
+                api |= {f.name for f in cls.body
+                        if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))
+                        and not f.name.startswith('_')}
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                if shipped:
+                if shipped and node.name not in api:
                     defs.setdefault(node.name, []).append(
-                        (str(rel), node.lineno))
+                        (str(rel), node.lineno, node in methods))
                 # ⛔ A DECORATED FUNCTION IS REFERENCED BY ITS DECORATOR, and a
                 # `@property` or `@x.setter` is called through attribute access
                 # that never spells the name as a call.
@@ -97,9 +122,47 @@ def _defs_and_refs():
                 refs.add(node.id)
             elif isinstance(node, ast.Attribute):
                 refs.add(node.attr)
-            elif isinstance(node, ast.Str):                     # noqa: ANN401
-                pass
+            elif isinstance(node, ast.Call):
+                # ⛔ A NAME REACHED BY STRING IS STILL A CALLER, and the first
+                # version of this sweep called `srot_fc.leak_state` dead when
+                # `auv_manager_node` reaches it as
+                # `getattr(fc, 'leak_state', lambda: (None, None))()` -- the
+                # late-bound form the cross-repo boundary uses on purpose, so a
+                # board build without the method degrades instead of crashing.
+                # Missing this would have deleted a wired health reporter.
+                fn = node.func
+                name = (fn.id if isinstance(fn, ast.Name)
+                        else fn.attr if isinstance(fn, ast.Attribute) else '')
+                if name in ('getattr', 'hasattr', 'setattr', 'delattr'):
+                    for arg in node.args[1:2]:
+                        if isinstance(arg, ast.Constant) and isinstance(
+                                arg.value, str):
+                            refs.add(arg.value)
     return defs, refs
+
+
+def _verb_refs():
+    """Every verb in the command registry, which is dispatched BY NAME.
+
+    ⛔ `commands.py` is the repo's one dynamic-dispatch table:
+    `getattr(mongla, cmd)(**kwargs)`, where `cmd` is a key of `COMMANDS`. So a
+    facade method's caller is a dict key, and nothing in the source ever spells
+    it as a call. Adding a verb is documented as "a row in `commands.py` and a
+    method of the same name on the facade" -- the row IS the reference.
+    """
+    p = (ROOT / 'src' / 'mongla_control' / 'mongla_control' / 'commands.py')
+    try:
+        tree = ast.parse(p.read_text())
+    except (OSError, SyntaxError):
+        return set()
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Assign)
+                and any(getattr(t_, 'id', '') == 'COMMANDS'
+                        for t_ in node.targets)
+                and isinstance(node.value, ast.Dict)):
+            return {k.value for k in node.value.keys
+                    if isinstance(k, ast.Constant) and isinstance(k.value, str)}
+    return set()
 
 
 def _text_refs():
@@ -135,7 +198,7 @@ def main() -> int:
     a = ap.parse_args()
 
     defs, refs = _defs_and_refs()
-    refs |= _text_refs()
+    refs |= _text_refs() | _verb_refs()
 
     rows = []
     for name, sites in sorted(defs.items()):
@@ -143,13 +206,15 @@ def main() -> int:
             continue
         if a.private and not name.startswith('_'):
             continue
-        # Defined more than once means an override or a duck-typed interface:
-        # the call site names one of them and cannot say which.
-        if len(sites) > 1:
+        # A METHOD defined more than once is an override or a duck-typed
+        # interface: the call site names one of them and cannot say which, so
+        # neither can be judged. A module-level FUNCTION defined twice is just
+        # two functions -- if one is dead the tool must still say so.
+        if len(sites) > 1 and all(m for _f, _l, m in sites):
             continue
         if name in refs:
             continue
-        f, ln = sites[0]
+        f, ln, _m = sites[0]
         if a.package and a.package not in f:
             continue
         rows.append((f, ln, name))

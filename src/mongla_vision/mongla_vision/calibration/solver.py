@@ -82,12 +82,17 @@ SUBPIX_WIN = (11, 11)
 try:
     from ..optics import N_WATER, fov_air_to_water, fov_water_to_air  # noqa: E402
 except ImportError:                                                    # pragma: no cover
-    # ⛔ THIS FILE IS DELIBERATELY LOADABLE BY PATH (see guide._solver): a package
-    # import re-enters `mongla_vision/__init__.py` -> `preflight` -> `rclpy`, and
-    # the calibration tool dies on a dev box with no ROS. A relative import here
-    # is that same trap from the other side -- it broke three tests when this
-    # module first collapsed the refraction constant. `optics.py` has no
-    # dependencies at all (math only), so load it the same way the tool loads us.
+    # ⛔ THIS FILE IS DELIBERATELY LOADABLE BY PATH (see guide._solver), so the
+    # calibration tool runs on a dev box with no ROS. A relative import here is
+    # the trap from the other side -- it broke three tests when this module
+    # first collapsed the refraction constant. `optics.py` has no dependencies
+    # at all (math only), so load it the same way the tool loads us.
+    #
+    # The chain that made this urgent is GONE: `mongla_vision/__init__.py` ->
+    # `preflight` -> `rclpy` ended on 2026-09-26 with the dead
+    # `assert_vision_ready`, and `test_the_package_imports_without_ros.py`
+    # fails if any import puts rclpy back. The by-path load stays anyway,
+    # because `tools/` runs with this package not installed at all.
     import importlib.util as _ilu
     _spec = _ilu.spec_from_file_location('_mongla_optics', os.path.join(
         os.path.dirname(os.path.abspath(__file__)), os.pardir, 'optics.py'))
