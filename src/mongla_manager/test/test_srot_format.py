@@ -152,3 +152,56 @@ def test_heading_wrap_uses_the_shortest_arc():
     out = srot_changes.diff({'heading_deg': 359.0}, {'heading_deg': 20.0})
     assert len(out) == 1
     assert '21.00' in out[0][2] and 'shortest arc' in out[0][2]
+
+
+# ── the version line, rendered through the formatter ─────────────────────────
+
+
+def _render_board_line(av):
+    """The first two lines of `connect`'s report, with one AUTOPILOT_VERSION."""
+    from mongla_manager import srot_connect
+
+    snap = srot_connect.Snapshot()
+    if av is not None:
+        snap.msgs['AUTOPILOT_VERSION'] = av
+    return '\n'.join(srot_connect.render(snap, conn=None))
+
+
+class _AV:
+    def __init__(self, flight_sw_version, middleware_sw_version=14):
+        self.flight_sw_version = flight_sw_version
+        self.middleware_sw_version = middleware_sw_version
+
+
+def test_an_unanswered_version_request_renders_dashes_not_v0_0_0():
+    """⛔ THE DEFECT THIS CLOSES. AUTOPILOT_VERSION is one-shot and must be
+    ASKED for, so an unanswered request is the ordinary case for the first
+    second of every session. `render` unpacked the bit-fields inline, so a
+    missing message left the packed word at 0 and the shifts turned it into
+    `Hengla v0.0.0` -- a version number that reads as a real board running
+    very old firmware, which is exactly the reading that matters most here
+    because the behaviour rev is a hull-safety interlock.
+
+    `srot_format.fw_version` was written for this line and returns `--` for 0.
+    It was never called from it."""
+    out = _render_board_line(None)
+    assert 'v0.0.0' not in out
+    assert 'Hengla --' in out
+
+
+def test_a_real_version_still_renders(capsys):
+    packed = (0 << 24) | (2 << 16) | (11 << 8)          # v0.2.11
+    out = _render_board_line(_AV(packed))
+    assert 'Hengla v0.2.11' in out
+    assert 'behaviour rev 14' in out
+
+
+def test_the_formatter_is_the_one_copy():
+    """⛔ ONE TRUTH, TWO COPIES IS THE BUG. If the bit-shifts come back into
+    the renderer the two will drift, and the suppression above is lost again."""
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[1] / 'mongla_manager'
+           / 'srot_connect.py').read_text()
+    assert 'sfmt.fw_version(' in src
+    assert '>> 24' not in src, 'the renderer unpacks the version itself again'
