@@ -64,3 +64,42 @@ def test_the_tool_and_the_module_decode_identically():
     for v in list(range(48, 1048, 7)) + list(range(1048, 2048, 7)) + [
             48, 1047, 1048, 2047]:
         assert int(dshot_signed(v)) == module_impl(v), f'disagree at {v}'
+
+
+def test_no_other_copy_of_the_band_arithmetic_exists():
+    """⛔ THE COPY THAT WENT WRONG WAS THE ONE NOTHING COMPARED. `mixer_map.py`
+    has a standalone copy for a stated reason and the test above compares it.
+    `tools/control_bench/` had TWO more, uncompared, and they disagreed:
+    `flight.py` decoded the reverse band as `-(v - 47)` where every other copy
+    uses 48. One count -- but it put a STOPPED thruster at -1/999 of full
+    reverse and full reverse at a magnitude of 1.001, outside the range its
+    caller is entitled to assume.
+
+    Both now load `actuation_model` through the bench's own `_load_pure`. This
+    test fails if a third copy appears: any file that spells a DShot band floor
+    as a literal, other than the module that owns the constants and the tool
+    that is scp'd to the vehicle without the workspace.
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    owner = {'actuation_model.py',        # owns the constants
+             'mixer_map.py',              # runs from /tmp on the vehicle
+             'test_dshot_decode.py'}      # this file, which quotes them
+    # 1047/1048/1049 and the 48 floor, written as a bare number next to a
+    # subtraction -- the shape of a hand-rolled decode.
+    pat = re.compile(r'-\s*\(\s*\w+\s*-\s*(4[5-9])\s*\)|'
+                     r'\w+\s*-\s*10(4[789])\b')
+    offenders = []
+    for p in list(root.glob('src/*/*/**/*.py')) + list(root.glob('tools/**/*.py')):
+        if p.name in owner or '/install/' in str(p) or '/build/' in str(p):
+            continue
+        for i, line in enumerate(p.read_text().splitlines(), 1):
+            if line.lstrip().startswith('#'):
+                continue
+            if pat.search(line):
+                offenders.append(f'{p.relative_to(root)}:{i}: {line.strip()}')
+    assert not offenders, (
+        'a hand-rolled DShot band decode -- import `actuation_model.'
+        'dshot_signed` instead:\n  ' + '\n  '.join(offenders))

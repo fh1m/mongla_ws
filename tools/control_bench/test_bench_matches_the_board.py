@@ -38,14 +38,15 @@ DATA = Path(__file__).resolve().parents[2] / '.claude/context/workbench/data'
 LADDER = DATA / 'mixer_ladder.json'
 SWEEP = DATA / 'mixer_armed.json'
 
-DSHOT_B_MIN, DSHOT_A_MIN = 1048, 48
+# ⛔ THE DECODE, FROM THE ONE COPY. Both DShot bands count upward from their own
+# floor; 48 and 1048 are each a zero, and decoding this as a deviation from 1048
+# is what made the mixer look asymmetric on the first reading. This file used to
+# carry its own copy of that arithmetic, which is how `flight.py` came to use 47
+# where this one used 48 -- one count, but it put a stopped thruster at -1/999
+# and full reverse at a magnitude of 1.001.
+from plant import _load_pure                                      # noqa: E402
 
-
-def dshot_signed(v: int) -> int:
-    """Both DShot bands count upward from their own floor; 48 and 1048 are each
-    a zero. Decoding this as a deviation from 1048 is what made the mixer look
-    asymmetric on the first reading."""
-    return v - DSHOT_B_MIN if v >= DSHOT_B_MIN else -(v - DSHOT_A_MIN)
+dshot_signed = _load_pure('actuation_model').dshot_signed
 
 
 @pytest.fixture(scope='module')

@@ -242,22 +242,6 @@ def min_fraction(*, axis: str = 'fwd', pilot: float = DEF_PILOT_EXPO,
                               spin_min=spin_min)
 
 
-def dshot_command(fraction: float) -> int:
-    """Signed output fraction -> the DShot value the console reports.
-
-    Both bands run low->high within themselves; the reverse band is NOT
-    mirrored around the neutral gap (mixer.cpp:131). Mapping it backwards makes
-    the smallest reverse demand nearly full reverse -- a judder that never
-    spins up.
-    """
-    if not math.isfinite(fraction) or fraction == 0.0:
-        return DSHOT_NEUTRAL
-    mag = min(abs(fraction), 1.0)
-    if fraction > 0:
-        return int(DSHOT_FWD_MIN + mag * (DSHOT_FWD_MAX - DSHOT_FWD_MIN))
-    return int(DSHOT_REV_MIN + mag * (DSHOT_REV_MAX - DSHOT_REV_MIN))
-
-
 def dshot_signed(value: int) -> int:
     """A console value -> signed magnitude in [-999, 999]. 48 and 1048 are 0."""
     if value >= DSHOT_NEUTRAL:
