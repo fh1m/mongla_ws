@@ -20,6 +20,20 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from control_bench import BOARD_PARAMS, Board, firmware_rev  # noqa: E402
+from plant import _load_pure                                 # noqa: E402
+
+# ⛔ ONE COPY OF THE BAND ARITHMETIC. Both lines below used to read
+# `v - 1048 if v >= 1049 else v - 47`, and 47 is wrong: 48 is the reverse band's
+# zero, so full reverse came out as 1000 counts where the span is 999.
+# `test_dshot_decode.test_no_other_copy_of_the_band_arithmetic_exists` fails if
+# a hand-rolled copy comes back.
+_dshot_signed = _load_pure('actuation_model').dshot_signed
+
+
+def _magnitude(values):
+    """Largest output magnitude in counts, 0 when every motor is at neutral."""
+    live = [v for v in values if v != 1048]
+    return max((abs(_dshot_signed(v)) for v in live), default=0)
 
 HERE = Path(__file__).resolve().parent
 FIRMWARE = Path(os.environ.get(
@@ -148,8 +162,7 @@ def test_the_only_yaw_gate_is_the_stabilize_stick_literal():
         for _ in range(50):
             _, _, y = b.stabilize(stick_yaw=pct / 100.0)
         d = b.drive(yaw=y)
-        return max((v - 1048 if v >= 1049 else v - 47) for v in d if v != 1048) if any(
-            v != 1048 for v in d) else 0
+        return _magnitude(d)
 
     assert out(2.80) == 0
     assert out(2.90) > 0
@@ -177,8 +190,7 @@ def _yaw_out(fn, pct, ticks=50):
     for _ in range(ticks):
         _, _, y = fn(b, pct / 100.0)
     d = b.drive(yaw=y)
-    live = [v for v in d if v != 1048]
-    return y, (max((v - 1048 if v >= 1049 else v - 47) for v in live) if live else 0)
+    return y, _magnitude(d)
 
 
 _STAB = lambda b, s: b.stabilize(stick_yaw=s)      # noqa: E731
@@ -246,8 +258,7 @@ def test_battery_compensation_does_not_move_a_threshold():
         for _ in range(50):
             _, _, y = b.stabilize(stick_yaw=pct / 100.0)
         d = b.drive(yaw=y)
-        live = [v for v in d if v != 1048]
-        return (max((v - 1048 if v >= 1049 else v - 47) for v in live) if live else 0) / 999
+        return _magnitude(d) / 999
 
     for pct in (2.86, 5.0, 100.0):
         base = out(None, pct)

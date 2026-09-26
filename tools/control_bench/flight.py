@@ -39,8 +39,15 @@ from plant import (Damping, Inertia, Plant, _load_pure,           # noqa: E402
                    cad_hull_thrusters, wrench_matrix)
 
 ga = _load_pure('geometric_allocation')
+# ⛔ THE DSHOT BANDS, FROM THE ONE COPY. This file used to decode the reverse
+# band as `-(v - 47)`, where every other copy in the repo uses 48 -- and
+# `test_bench_matches_the_board` states the reason: "48 and 1048 are each a
+# zero". The off-by-one made a stopped thruster read as -1/999 of full reverse
+# and, at the far end, produced a magnitude of 1.001 -- a fraction outside the
+# range the caller is entitled to assume.
+_am = _load_pure('actuation_model')
 
-DSHOT_SPAN = 999.0
+DSHOT_SPAN = float(_am.DSHOT_SPAN)
 
 # ⛔ FlightMode, from `include/state_types.h`. NOT a magic number -- the first
 # version of this file passed `mode=3`, which is not a FlightMode at all, so
@@ -133,11 +140,7 @@ def dshot_to_fraction(board: Board, demand: float) -> float:
     implementations rather than re-described here.
     """
     v = board.one_to_dshot(demand, 1)
-    if v >= 1049:
-        return (v - 1048) / DSHOT_SPAN
-    if v <= 1047:
-        return -(v - 47) / DSHOT_SPAN
-    return 0.0
+    return _am.dshot_signed(int(v)) / DSHOT_SPAN
 
 
 class Vehicle:
