@@ -344,3 +344,34 @@ def test_leak_sensor_separates_NOT_WATCHING_from_DRY():
     assert R.leak_sensor(None, None).state is State.UNKNOWN    # no reading
     # and the not-watching case must SAY so, not just fail
     assert 'NOTHING IS WATCHING' in R.leak_sensor(False, None).evidence
+
+
+def test_pilot_gain_reports_HALF_AUTHORITY_rather_than_healthy():
+    """⛔ THE STATE THIS BOARD WAS MEASURED IN. GAIN boots at 0.5 and the
+    `JS_GAIN_DEFAULT` parameter cannot reach the live value -- the firmware
+    latches it before a companion finishes connecting. At 0.5 the vehicle arms,
+    moves and reports healthy while every MANUAL_CONTROL demand, which is how
+    both vision verbs actuate, is halved. The firmware's own source records a
+    lost pool session for exactly that."""
+    assert R.pilot_gain(1.0).state is State.OK
+    assert R.pilot_gain(0.5).state is State.DEGRADED
+    assert R.pilot_gain(None).state is State.UNKNOWN, \
+        'absent GAIN must not read as full authority'
+    ev = R.pilot_gain(0.5).evidence
+    assert '50%' in ev and 'MANUAL_CONTROL' in ev, \
+        'the evidence must name the consequence, not just the number'
+
+
+def test_the_gain_bar_is_read_from_the_wire_constants():
+    """One truth: the autonomy bar lives beside the firmware's own literals in
+    `srot_protocol`, and is imported rather than retyped here."""
+    from mongla_control.fc.srot_protocol import GAIN_FOR_AUTONOMY
+
+    assert R.GAIN_FULL_AUTHORITY == GAIN_FOR_AUTONOMY
+
+
+def test_a_gain_just_under_the_bar_is_not_called_full():
+    """0.99 is a rounding artefact of a 0.5..1.0 ladder, 0.9 is a real
+    reduction. The bar must not be so generous it stops reporting."""
+    assert R.pilot_gain(0.90).state is State.DEGRADED
+    assert R.pilot_gain(0.995).state is State.OK

@@ -1230,7 +1230,16 @@ class FlowVelocityNode(Node):
                             f'[FLOW ] camera<->gyro time offset '
                             f'{self._td * 1000:+.2f} ms (this window '
                             f'{got * 1000:+.2f}, quality '
-                            f'{self._td_est.quality:.2f})')
+                            f'{self._td_est.quality:.2f}, peak '
+                            f'{self._td_est.peak_correlation:.2f})')
+                        # ⭐ THE PEAK, NOT ONLY THE QUALITY. Quality is height x
+                        # prominence, so a low value means EITHER the two yaw
+                        # series barely correlate OR they correlate broadly and
+                        # the lag is poorly determined. Those want opposite
+                        # responses -- distrust the sensor, or lengthen the
+                        # window -- and the log could not tell them apart. The
+                        # peak height was already computed and exposed by a
+                        # property nothing read.
 
         if abs(gyro_yaw) < 0.05 and abs(img_yaw) < 0.05:
             return

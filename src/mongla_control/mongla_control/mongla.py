@@ -480,7 +480,10 @@ class Mongla(VisionVerbs):
         if fault is not None:
             self.log.error(f'[FIRE ] REFUSED ch={channel} -- {fault}')
             return FireResult(FIRE_THRUSTER_FAULT, int(channel), fault)
-        if self._payload is None or not self._payload.is_ready:
+        # Through the property, not a second copy of the same test: `fire` and
+        # `payload_ready` must never be able to disagree about whether the
+        # payload board is there.
+        if not self.payload_ready:
             self.log.warning(f'[FIRE ] payload not ready ch={channel} -- stub only')
             return FireResult(FIRE_NOT_READY, int(channel),
                               'payload driver absent or link down')

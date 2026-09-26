@@ -16,6 +16,15 @@ from typing import Optional
 
 from .health import Health, degraded, failed, ok, unknown
 
+# ⛔ ONE COPY. The autonomy bar for the pilot gain lives in the wire-constant
+# module beside the firmware's own literals, and is imported rather than
+# retyped -- `srot_protocol.GAIN_FOR_AUTONOMY`.
+try:
+    from mongla_control.fc.srot_protocol import GAIN_FOR_AUTONOMY as _GFA
+except Exception:                                                # noqa: BLE001
+    _GFA = 1.0
+GAIN_FULL_AUTHORITY = float(_GFA)
+
 # BARO_HEALTH is a FAULT CODE, not a score (bar30.h:33). 0 is the good one, and
 # 3 -- the largest -- means the barometer never initialised. Read as a score it
 # looks like "mostly healthy", which is how it was read once.
@@ -116,6 +125,38 @@ def leak_sensor(leak_enabled: Optional[bool], leaking: Optional[bool]) -> Health
         return unknown('leak', 'enabled but no reading')
     return failed('leak', 'LEAK DETECTED') if leaking else \
         ok('leak', 'enabled and dry')
+
+
+def pilot_gain(gain: Optional[float]) -> Health:
+    """The live pilot gain, which scales EVERY MANUAL_CONTROL demand.
+
+    ⛔ THE BOARD BOOTS AT 0.5 AND THE PARAMETER CANNOT CHANGE IT. The firmware
+    keeps the live gain in `s_gain_live`, which adopts `JS_GAIN_DEFAULT` "on
+    first use" -- and the telemetry loop reads `pilotGain()` from boot, so the
+    latch has always happened before a companion finishes connecting. Measured
+    on this board: after our startup writes JS_GAIN_DEFAULT = 1.0, every GAIN
+    sample across a 44 s capture read 0.500. The firmware's own source records
+    what that cost: "They lost a whole pool session to exactly this ... leaving
+    MANUAL_CONTROL at half authority with nothing to indicate it."
+
+    That is the shape this file exists for. At 0.5 the vehicle arms, moves,
+    reports healthy and obeys -- at half the authority the host computed. Every
+    vision correction is halved, and sluggish water looks identical.
+
+    ⚠ DEGRADED, NOT FAILED, and deliberately. `vision_align` still converges at
+    half gain, just slower, and health is a REPORT rather than a veto (see
+    `health.py`). The in-session fix is the joystick button edge, not a
+    parameter write: verified live, 0.5 -> 1.0 in five presses.
+    """
+    if gain is None:
+        return unknown('pilot_gain', 'GAIN absent')
+    if gain >= GAIN_FULL_AUTHORITY - 0.01:
+        return ok('pilot_gain', f'{gain:.2f} -- full authority')
+    return degraded(
+        'pilot_gain',
+        f'{gain:.2f} -- every MANUAL_CONTROL demand is scaled to {gain:.0%}. '
+        f'The board boots at 0.5 and JS_GAIN_DEFAULT cannot reach the live '
+        f'value; raise it on the joystick button edge.')
 
 
 def allocator(sat) -> Health:
