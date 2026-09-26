@@ -37,6 +37,12 @@ import numpy as np
 
 from .camera import Camera, FrameMeta
 
+# The playback-speed ladder. It lives here, with the camera that owns the speed
+# and clamps it, and `utils/display_node.py` imports it for its `[` and `]`
+# keys -- the stepping happens there because that is where the keypress lands,
+# but there is ONE copy of the values.
+SPEED_STEPS: tuple = (0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 4.0)
+
 
 class VideoFileCamera(Camera):
     source_kind = 'video_file'
@@ -102,11 +108,6 @@ class VideoFileCamera(Camera):
         with self._lock:
             self._paused = False
 
-    def toggle_pause(self) -> bool:
-        with self._lock:
-            self._paused = not self._paused
-            return self._paused
-
     def seek_rel(self, seconds: float) -> None:
         """Seek by ±seconds from the current position. Thread-safe."""
         with self._lock:
@@ -136,8 +137,6 @@ class VideoFileCamera(Camera):
             if self._paused:
                 self._step_pending = True
 
-    # Speed step ladder — same values understood by display_node keybinds.
-    _SPEED_STEPS: tuple = (0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 4.0)
 
     def set_speed(self, speed: float) -> float:
         """Set playback speed multiplier (0.1–4.0). Returns clamped value."""
@@ -145,24 +144,6 @@ class VideoFileCamera(Camera):
         with self._lock:
             self._speed = speed
         return speed
-
-    def speed_step_up(self) -> float:
-        with self._lock:
-            cur = self._speed
-            for s in self._SPEED_STEPS:
-                if s > cur + 0.01:
-                    self._speed = s
-                    return s
-            return self._speed
-
-    def speed_step_down(self) -> float:
-        with self._lock:
-            cur = self._speed
-            for s in reversed(self._SPEED_STEPS):
-                if s < cur - 0.01:
-                    self._speed = s
-                    return s
-            return self._speed
 
     @property
     def speed(self) -> float:

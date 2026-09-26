@@ -66,16 +66,6 @@ class TrackedDetection:
     def cy(self) -> float:
         return float(self.xyxy[1] + self.xyxy[3]) * 0.5
 
-    @classmethod
-    def from_detection(cls, d: Detection, track_id: int,
-                       predicted: bool = False) -> 'TrackedDetection':
-        return cls(
-            class_id=d.class_id, class_name=d.class_name,
-            score=d.score, xyxy=d.xyxy,
-            track_id=track_id, predicted=predicted,
-        )
-
-
 class Tracker:
     """Abstract tracker.  update() is called once per frame."""
 
