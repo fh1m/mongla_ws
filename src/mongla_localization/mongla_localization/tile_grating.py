@@ -375,17 +375,6 @@ def _fundamental(mag, iy: int, ix: int, cy: int, cx: int) -> Tuple[int, int]:
             return iy, ix
 
 
-def _annulus_values(mag, cy, cx, radius: float):
-    h, w = mag.shape
-    r = max(3.0, float(radius))
-    out = []
-    for k in range(180):
-        t = math.pi * k / 180.0
-        y = int(round(cy + r * math.sin(t)))
-        x = int(round(cx + r * math.cos(t)))
-        if 0 <= y < h and 0 <= x < w:
-            out.append(float(mag[y, x]))
-    return out
 
 
 def _parabolic(line: np.ndarray, i: int) -> float:

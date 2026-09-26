@@ -46,7 +46,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Optional
 
 import numpy as np
 
@@ -59,11 +59,6 @@ CROSS_LINE_FROM_WALL_M = 2.0
 # A line must span enough of the frame to be a lane marking rather than a
 # shadow edge or a tile joint. Fraction of the image diagonal.
 MIN_LINE_SPAN = 0.45
-
-# Agreement required among the detected segments before the answer is a
-# heading rather than a coincidence: the spread of the inlier angles.
-MAX_ANGLE_SPREAD_DEG = 8.0
-MIN_SEGMENTS = 3
 
 # Length over width of the dark region. A lane line at 0.25 m wide spanning a
 # 3 m view is ~12:1; a round blob is 1:1 and has no direction at all.
@@ -271,34 +266,3 @@ def _moment_orientation(xs: np.ndarray, ys: np.ndarray):
         return None, 0.0
     elong = (l1 / l2) ** 0.5 if l2 > 1e-9 else float('inf')
     return math.degrees(ang) % 180.0, elong
-
-
-def _dominant_angle(angles: List[float]):
-    """Modal direction of a set of angles that live on a 180-degree circle.
-
-    ⛔ A PLAIN MEAN IS WRONG HERE AND THE ERROR IS SILENT. Angles wrap: 179 and
-    1 degree are two degrees apart, and their arithmetic mean is 90 -- exactly
-    perpendicular to both. Doubling the angle maps the 180-degree circle onto a
-    full circle where a vector mean is well defined, then halving returns it.
-    This is the standard axial-statistics trick and it is the difference
-    between a heading and a right angle.
-    """
-    if not angles:
-        return None, 0.0, []
-    a = np.asarray(angles, dtype=float)
-    two = np.radians(a * 2.0)
-    mx, my = float(np.cos(two).mean()), float(np.sin(two).mean())
-    if abs(mx) < 1e-12 and abs(my) < 1e-12:
-        return None, 0.0, []
-    mean = (math.degrees(math.atan2(my, mx)) / 2.0) % 180.0
-    # Residuals on the same doubled circle, back in single-angle degrees.
-    resid = np.degrees(np.abs(np.angle(np.exp(1j * (two - math.radians(mean * 2.0)))))) / 2.0
-    keep = [i for i, r in enumerate(resid) if r <= MAX_ANGLE_SPREAD_DEG]
-    if not keep:
-        return None, float(resid.max()), []
-    spread = float(resid[keep].max())
-    # Re-mean on the inliers only, so one wild segment cannot drag the answer.
-    two_k = np.radians(a[keep] * 2.0)
-    mean = (math.degrees(math.atan2(float(np.sin(two_k).mean()),
-                                    float(np.cos(two_k).mean()))) / 2.0) % 180.0
-    return mean, spread, keep

@@ -418,11 +418,18 @@ def render(snap: Snapshot, conn) -> list[str]:
     else:
         mode = sp.mode_name(getattr(hb, 'custom_mode', -1))
     rev = int(getattr(av, 'middleware_sw_version', 0)) if av else None
+    # ⛔ THIS LINE USED TO RENDER `Hengla v0.0.0` WHEN THE BOARD HAD NOT
+    # ANSWERED. AUTOPILOT_VERSION is one-shot and must be asked for, so an
+    # unanswered request left `fsw = 0`, and the bit-shifts turned that into a
+    # version number that looks like a real reading of a very old board. That
+    # is the exact defect the board's own value suppression exists to prevent,
+    # recreated on our side. `sfmt.fw_version` returns `--` for 0; it was
+    # written for this line and never called from it.
     fsw = getattr(av, 'flight_sw_version', 0) if av else 0
 
     L.append(f'{BOLD}== SROT board =={RESET}')
-    L.append(f'  firmware        Hengla v{(fsw >> 24) & 0xff}.{(fsw >> 16) & 0xff}.'
-             f'{(fsw >> 8) & 0xff}   behaviour rev {_f(rev, "{:.0f}")}')
+    L.append(f'  firmware        Hengla {sfmt.fw_version(fsw)}   '
+             f'behaviour rev {_f(rev, "{:.0f}")}')
     L.append(f'  state           {RED + "ARMED" + RESET if armed else "disarmed"}   '
              f'mode {mode}')
     if rev is not None and sp is not None and rev < sp.FW_BEHAVIOUR_REV_REQUIRED:
