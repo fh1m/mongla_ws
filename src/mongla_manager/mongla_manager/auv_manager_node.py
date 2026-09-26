@@ -430,8 +430,15 @@ class AUVManagerNode(Node):
         self._fc_kind       = str(self.get_parameter('flight_controller').value).strip().lower()
         self._is_srot       = (self._fc_kind == 'srot')
 
-        # Wire MAVLink tracing on as early as possible — mutates contextvar in
-        # main thread; daemons spawned later still see the default (False).
+        # ⛔ THE COMMENT HERE USED TO SAY "mutates contextvar in main thread;
+        # daemons spawned later still see the default (False)", which was true
+        # and far too kind. `_enabled` WAS a contextvar, a new thread starts
+        # with an empty context, and this node runs a MultiThreadedExecutor --
+        # so every action callback, which is where every `command_scope()` is
+        # entered, read False. `debug:=true` produced no `cmd=` tag on any
+        # frame, ever, while looking like it worked. The switch is now a plain
+        # module global; see `tracing.py` and
+        # `test_tracing_crosses_thread_boundaries.py`.
         if self._debug:
             tracing.set_enabled(True)
             try:
@@ -1470,6 +1477,13 @@ class AUVManagerNode(Node):
             getattr(fc, 'thruster_health', lambda: None)()))
         self._health.register('thruster_power', lambda: _hr.thruster_power(
             getattr(fc.telemetry(), 'kill_switch', None)))
+        # ⛔ PILOT GAIN. The board boots at 0.5, the parameter write cannot reach
+        # the live value, and at 0.5 every MANUAL_CONTROL demand -- which is how
+        # both vision verbs actuate -- is halved with nothing to indicate it.
+        # The firmware's own source says a pool session was lost to exactly
+        # that. `fc.read_gain()` existed for this and was called by nothing.
+        self._health.register('pilot_gain', lambda: _hr.pilot_gain(
+            getattr(fc, 'read_gain', lambda: None)()))
         self._health.register('detector', lambda: _hr.detector(
             self._detection_rate_hz()))
         # ⛔ LEAK. Nine reporters were defined here and six were registered; this
