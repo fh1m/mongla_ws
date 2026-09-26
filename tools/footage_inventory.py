@@ -14,6 +14,28 @@ guess and this already cost a run.
 
 It also reports DATE and VENUE, so the training/held-out split can be made on
 something real rather than on whichever folder happened to be convenient.
+
+AND IT REPORTS THE WATER, from `mongla_vision.underwater` -- the same statistics
+`water_check` reads off a live camera, not a second implementation of "how
+blurry is this frame". That matters for a split: `sharp 315 / sat 160` (the gate
+approach) and `sharp 1241 / sat 28` (bin and torpedo) are two different optical
+regimes, and a model trained on one is being asked about the other.
+
+Measured across the whole archive on 2026-09-26, which is wider than either:
+median sharpness runs **8.5 to 3088**, a 363x range, with saturation 20 to 176
+and cast -13 to +124.
+
+⚠ AND SHARPNESS IS NOT ONLY THE WATER. The lowest clip, a 2026 testing day at
+8.5, is four times below Mirpur -- but its five probe frames were looked at, and
+they are a blank pool wall and a bare floor with one lane rope. That is real
+underwater footage, not a lens cap, and the number is honest; it is just scene
+content as much as clarity, because a Laplacian variance has nothing to measure
+on a plain wall. Two clips with the same sharpness are not necessarily in the
+same water.
+
+⚠ NO PREPROCESSING VERDICT, and that is not an omission. The CLAHE rule fitted
+to two clips was deleted from `underwater.py` after re-measuring on raw
+detection rate across 17 configurations, where it was never positive.
 """
 from __future__ import annotations
 
@@ -21,6 +43,15 @@ import os
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from data_root import data_root  # noqa: E402
+
+# The water statistics and the CLAHE rule, from the package rather than
+# re-implemented here. `mongla_vision` imports without ROS on purpose -- see
+# `test_the_package_imports_without_ros.py` -- so a dev box with no rclpy runs
+# this tool.
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    'src', 'mongla_vision'))
+from mongla_vision.underwater import analyse_frames  # noqa: E402
 
 import argparse
 import datetime as dt
@@ -60,19 +91,28 @@ PROBE_FRAMES = 5
 
 
 def annotated_score(path: str, n: int = PROBE_FRAMES):
-    """Median count of long AXIS-ALIGNED lines. High = drawn rectangles."""
+    """Median axis-aligned line count, plus the frames it decoded to get it.
+
+    ⭐ THE FRAMES COME BACK because the water statistics need frames and this
+    function has already paid for them. The previous version opened every clip
+    a SECOND time to read one mid-clip frame for the colour ratio; now one pass
+    feeds the overlay gate, the ratios and the water character, and the ratios
+    are medians over five frames spread across the clip rather than whatever
+    the middle frame happened to show.
+    """
     cap = cv2.VideoCapture(path)
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     if total <= 2:
         cap.release()
-        return None, 0, (0, 0)
-    vals, shape = [], (0, 0)
+        return None, 0, (0, 0), []
+    vals, shape, frames = [], (0, 0), []
     for i in np.linspace(total * 0.15, total * 0.85, n).astype(int):
         cap.set(cv2.CAP_PROP_POS_FRAMES, int(i))
         ok, im = cap.read()
         if not ok or im is None:
             continue
         shape = im.shape[:2]
+        frames.append(im)
         g = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
         ls = cv2.HoughLinesP(cv2.Canny(g, 80, 200), 1, np.pi / 180, 60,
                              minLineLength=AXIS_MIN_LEN, maxLineGap=3)
@@ -85,25 +125,27 @@ def annotated_score(path: str, n: int = PROBE_FRAMES):
         vals.append(c)
     cap.release()
     if not vals:
-        return None, total, shape
-    return float(np.median(vals)), total, shape
+        return None, total, shape, frames
+    return float(np.median(vals)), total, shape, frames
 
 
-def colour(path: str):
-    """R/B and G/B at mid-clip -- the water's own signature."""
-    cap = cv2.VideoCapture(path)
-    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-    if total <= 2:
-        cap.release()
+def colour(frames):
+    """R/B and G/B, medians over the probe frames -- the water's signature.
+
+    Kept alongside `WaterStats.cast` (which is mean(B) - mean(R)) because the
+    venue table reports the RATIO and downstream tools read `rb`/`gb` out of
+    the JSON. A ratio and a difference answer slightly different questions and
+    neither is derivable from the other without the absolute levels.
+    """
+    if not frames:
         return None, None
-    cap.set(cv2.CAP_PROP_POS_FRAMES, total // 2)
-    ok, im = cap.read()
-    cap.release()
-    if not ok:
-        return None, None
-    b, g, r = (float(im[:, :, i].mean()) for i in range(3))
-    b = max(b, 1e-6)
-    return r / b, g / b
+    rb, gb = [], []
+    for im in frames:
+        b, g, r = (float(im[:, :, i].mean()) for i in range(3))
+        b = max(b, 1e-6)
+        rb.append(r / b)
+        gb.append(g / b)
+    return float(np.median(rb)), float(np.median(gb))
 
 
 def venue_of(path: str, roots: dict) -> str:
@@ -145,10 +187,11 @@ def main():
                 if not f.endswith(VIDEO_EXT):
                     continue
                 p = os.path.join(dirpath, f)
-                score, frames, shape = annotated_score(p)
+                score, frames, shape, probe = annotated_score(p)
                 if score is None:
                     continue
-                rb, gb = colour(p)
+                rb, gb = colour(probe)
+                st = analyse_frames(probe)
                 rows.append(dict(
                     path=p, venue=venue_of(p, roots),
                     date=dt.datetime.fromtimestamp(
@@ -157,7 +200,14 @@ def main():
                     annotated_score=score,
                     clean=bool(score < AXIS_LINES_MAX),
                     rb=None if rb is None else round(rb, 3),
-                    gb=None if gb is None else round(gb, 3)))
+                    gb=None if gb is None else round(gb, 3),
+                    water=dict(sharpness=round(st.sharpness, 1),
+                               contrast=round(st.contrast, 1),
+                               saturation=round(st.saturation, 1),
+                               cast=round(st.cast, 1),
+                               brightness=round(st.brightness, 1),
+                               probe_frames=st.frames),
+                    water_row=st.as_row()))
 
     clean = [r for r in rows if r['clean']]
     dirty = [r for r in rows if not r['clean']]
@@ -167,11 +217,18 @@ def main():
     for r in clean:
         key = (r['venue'], r['date'])
         by.setdefault(key, []).append(r)
-    print(f'{"venue":<46}{"date":<12}{"clips":>6}{"frames":>9}{"R/B":>7}')
+    print(f'{"venue":<40}{"date":<12}{"clips":>6}{"frames":>9}{"R/B":>7}'
+          f'{"sharp":>8}{"sat":>6}{"cast":>7}')
     for (v, d), rs in sorted(by.items()):
         rb = [x['rb'] for x in rs if x['rb']]
-        print(f'{v[:45]:<46}{d:<12}{len(rs):>6}{sum(x["frames"] for x in rs):>9}'
-              f'{(np.median(rb) if rb else float("nan")):>7.3f}')
+        sh = [x['water']['sharpness'] for x in rs]
+        sa = [x['water']['saturation'] for x in rs]
+        ca = [x['water']['cast'] for x in rs]
+
+        print(f'{v[:39]:<40}{d:<12}{len(rs):>6}{sum(x["frames"] for x in rs):>9}'
+              f'{(np.median(rb) if rb else float("nan")):>7.3f}'
+              f'{np.median(sh):>8.0f}{np.median(sa):>6.0f}'
+              f'{np.median(ca):>+7.0f}')
 
     if dirty:
         print(f'\n⛔ REJECTED as annotated ({len(dirty)}):')

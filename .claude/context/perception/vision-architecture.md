@@ -67,7 +67,7 @@ src/mongla_vision/mongla_vision/
     display_node.py       # vision_display -- smooth OpenCV viewer for the perception pipeline.
     export_engine.py      # export_engine -- build TensorRT FP16 engines from the .pt models.
     switch_camera.py      # switch_camera -- resume ONE detector, pause the others (CLI exclusivity).
-    water_check.py        # Should CLAHE be on in THIS water? Decide from the pool, not from memory.
+    water_check.py        # Which water is this? Characterise the pool before trusting a model in it.
   web/
     static/
     dashboard_state.py    # Pure (rclpy-free) helpers for the mission-web console.
