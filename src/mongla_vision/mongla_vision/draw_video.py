@@ -265,33 +265,6 @@ def render_video_section(frame_bgr: np.ndarray,
     return out
 
 
-# ── Standalone helpers (for external callers) ─────────────────────────────── #
-
-def draw_track_ids(frame_bgr: np.ndarray, tracks) -> np.ndarray:
-    if frame_bgr is None or not tracks:
-        return frame_bgr
-    _PALETTE = [
-        (255, 100,  50), ( 50, 220, 100), ( 50, 100, 255),
-        (255, 200,  50), (180,  50, 255), ( 50, 255, 220),
-    ]
-    out = frame_bgr.copy()
-    w = out.shape[1]
-    sf = max(1.0, w / 640.0)
-    for td in tracks:
-        color = _PALETTE[abs(int(td.track_id)) % len(_PALETTE)]
-        x1, y1, x2, y2 = (int(v) for v in td.xyxy)
-        thick = max(1, int(sf)) if td.predicted else max(1, int(2 * sf))
-        if td.predicted:
-            overlay = out.copy()
-            cv2.rectangle(overlay, (x1, y1), (x2, y2), color, thick, cv2.LINE_AA)
-            cv2.addWeighted(overlay, 0.45, out, 0.55, 0, out)
-        else:
-            cv2.rectangle(out, (x1, y1), (x2, y2), color, thick, cv2.LINE_AA)
-        lbl = f"#{td.track_id} {td.class_name}" + (' (pred)' if td.predicted else '')
-        pil_text(out, lbl, (x1, max(y1 - 5, int(12 * sf))), 0.36 * sf, color)
-    return out
-
-
 # ── Internal helpers ──────────────────────────────────────────────────────── #
 
 def _dashed_line(img, p1, p2, color, dash=10, gap=6, thickness=1):

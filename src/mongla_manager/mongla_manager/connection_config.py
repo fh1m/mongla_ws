@@ -499,15 +499,3 @@ def resolve_profile(mode: str, *, mav_device: str = '', logger=None) -> dict:
             profile['conn'] = path
 
     return profile
-
-
-def describe_endpoint(mode: str, mav_device: str = '') -> str:
-    """Human-readable connection string for the manager startup banner."""
-    if mav_device:
-        return mav_device
-    profile = PROFILES.get(mode, PROFILES['sim'])
-    conn = profile['conn']
-    if conn == _SERIAL_AUTO:
-        path = _find_pixhawk_serial()
-        return path if path else '(no Pixhawk serial found)'
-    return conn

@@ -37,13 +37,20 @@ from __future__ import annotations
 
 import argparse
 import ast
+import os
 import pathlib
 import re
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+# The tree to judge. `MONGLA_SWEEP_ROOT` points it at a COPY, which is how the
+# injection test plants a dead function without touching the real `src/`: the
+# suite runs under `timeout`, and a killed run would leave the plant behind and
+# fail `--private` on every run afterwards.
+ROOT = pathlib.Path(os.environ.get('MONGLA_SWEEP_ROOT')
+                    or pathlib.Path(__file__).resolve().parents[1])
 # Every tree that could hold a caller: the packages, the tools, the simulator's
 # own workspace, and the mission scripts.
+SRC = ROOT / 'src'
 SEARCH = ('src', 'tools', 'sim', 'missions', 'scripts')
 
 # Called by the language, a framework, or the ROS graph -- never by name here.
@@ -83,9 +90,17 @@ def _py_files():
 
 
 def _defs_and_refs():
-    """Definitions in shipped package code; references from EVERYWHERE."""
+    """Definitions in shipped package code; references from EVERYWHERE.
+
+    Also returns, per name, the files that merely IMPORT it. An import is not a
+    call: `mongla_vision/__init__.py` exported `assert_vision_ready` in
+    `__all__` for its whole life and nothing ever ran it. So an import alias is
+    recorded separately and reported as a re-export, which is the shape that
+    hides a dead capability behind a public-looking surface.
+    """
     defs: dict[str, list] = {}
     refs: set[str] = set()
+    imported: dict[str, set] = {}
     for p in _py_files():
         try:
             tree = ast.parse(p.read_text())
@@ -122,6 +137,10 @@ def _defs_and_refs():
                 refs.add(node.id)
             elif isinstance(node, ast.Attribute):
                 refs.add(node.attr)
+            elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                for al in node.names:
+                    leaf = (al.asname or al.name).split('.')[-1]
+                    imported.setdefault(leaf, set()).add(str(rel))
             elif isinstance(node, ast.Call):
                 # ⛔ A NAME REACHED BY STRING IS STILL A CALLER, and the first
                 # version of this sweep called `srot_fc.leak_state` dead when
@@ -138,7 +157,7 @@ def _defs_and_refs():
                         if isinstance(arg, ast.Constant) and isinstance(
                                 arg.value, str):
                             refs.add(arg.value)
-    return defs, refs
+    return defs, refs, imported
 
 
 def _verb_refs():
@@ -189,18 +208,59 @@ def _text_refs():
     return out
 
 
+def _unreachable_modules() -> set:
+    """Module stems that nothing imports, from `orphan_sweep`'s own logic.
+
+    Loaded rather than re-implemented: two answers to "is this module
+    reachable?" is the duplication this whole family of tools exists to find.
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        '_orphan_sweep', ROOT / 'tools' / 'orphan_sweep.py')
+    try:
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        entries = mod.entry_points()
+        out = set()
+        for p in SRC.rglob('*.py'):
+            rel = str(p.relative_to(SRC))
+            if not mod.is_capability(p, rel, entries):
+                continue
+            if not mod.importers(p.stem, p):
+                out.add(p.stem)
+        return out
+    except Exception as exc:                                     # noqa: BLE001
+        print(f'(could not read orphan_sweep: {type(exc).__name__}: {exc})',
+              file=sys.stderr)
+        return set()
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument('--package', default='')
+    # ⚠ `--root` exists for the INJECTION TEST, which must plant a dead
+    # function in a COPY of the tree. Planting in the real `src/` and undoing
+    # it in a `finally` is not safe: the suite runs under `timeout`, and a
+    # killed run would leave the plant in the source, failing `--private` on
+    # every run afterwards. Set MONGLA_SWEEP_ROOT or pass --root.
+    ap.add_argument('--all', action='store_true',
+                    help='also judge functions inside modules that are '
+                         'themselves unreachable')
     ap.add_argument('--private', action='store_true',
                     help='only _underscore names -- these can have no caller '
                          'outside their own package, so a dead one is certain')
     a = ap.parse_args()
 
-    defs, refs = _defs_and_refs()
+    defs, refs, imported = _defs_and_refs()
     refs |= _text_refs() | _verb_refs()
 
-    rows = []
+    # ⚠ A FUNCTION INSIDE AN UNREACHABLE MODULE IS ALREADY ACCOUNTED FOR.
+    # `orphan_sweep.py` lists those modules, each with the consumer it waits
+    # for, so reporting their contents here would say the same thing twice and
+    # bury the hits that are NOT explained.
+    deferred = _unreachable_modules()
+
+    rows, in_deferred = [], []
     for name, sites in sorted(defs.items()):
         if name in _EXEMPT_EXACT or name.startswith(_EXEMPT_PREFIX):
             continue
@@ -217,12 +277,24 @@ def main() -> int:
         f, ln, _m = sites[0]
         if a.package and a.package not in f:
             continue
+        if pathlib.Path(f).stem in deferred and not a.all:
+            in_deferred.append((f, ln, name))
+            continue
         rows.append((f, ln, name))
 
     for f, ln, name in sorted(rows):
-        print(f'{f}:{ln}: {name}()')
+        by = sorted(imported.get(name, set()) - {f})
+        note = (f'   <- re-exported by {", ".join(by)}, never called'
+                if by else '')
+        print(f'{f}:{ln}: {name}(){note}')
+    if in_deferred:
+        print(f'\n{len(in_deferred)} more inside modules that are themselves '
+              f'unreachable -- run `python3 tools/orphan_sweep.py`, which lists '
+              f'each with the consumer it waits for (--all to show them):')
+        for f, ln, name in sorted(in_deferred):
+            print(f'   {f}:{ln}: {name}()')
     if not rows:
-        print('every shipped function is referenced somewhere')
+        print('every shipped function in a REACHABLE module is referenced')
         return 0
     print(f'\n{len(rows)} function(s) with no reference anywhere in '
           f'{", ".join(SEARCH)}.\n'
