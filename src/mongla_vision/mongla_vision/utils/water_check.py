@@ -1,22 +1,33 @@
 #!/usr/bin/env python3
-"""Should CLAHE be on in THIS water? Decide from the pool, not from memory.
+"""Which water is this? Characterise the pool before trusting a model in it.
 
-CLAHE is not universally good. Measured on real competition footage:
+⛔ THIS TOOL USED TO ANSWER "SHOULD CLAHE BE ON?" AND IT WAS BROKEN FOR BOTH
+REASONS AT ONCE. The answer itself was wrong: the CLAHE rule was fitted to two
+clips, and re-measured on raw detection rate across 17 configurations -- 4
+props, 3 venues, a 39x sharpness range -- preprocessing was NEVER positive, and
+on the gate it took detection from 30.4 % to 1.2 %. So `underwater.recommend()`
+was deleted, deliberately and with the reasoning written where it used to live.
 
-                        gate approach      torpedo on bin
-    tracker + conf .10      53.6 %             79.5 %
-    ...+ CLAHE              95.4 %  (+42)      15.3 %  (-64)
+This file kept importing it. `ros2 run mongla_vision water_check` therefore died
+with `ImportError: cannot import name 'recommend'` before parsing an argument --
+a console entry point in `setup.py`, dead on arrival, and nothing noticed
+because no test imports an entry point. `test_every_entry_point_imports.py` now
+does.
 
-The clips separate on frame statistics, and saturation splits them harder
-than blur:
+WHAT IT REPORTS, WHICH IS A FACT ABOUT THE POOL AND REPRODUCED ACROSS ALL THREE
+VENUES:
 
-                  blur (lapvar)   contrast   saturation
+                  blur (lapvar)   contrast   saturation   cast (B-R)
     gate                  315        27.7        159.9
-    bin/torpedo          1241        36.1         27.9
+    bin / torpedo        1241        36.1         27.9
+    Mirpur                 33         ----       148        +92
 
-CLAHE helps blurry, low-contrast, SATURATED (green/murky) water and hurts
-sharp, desaturated water. Point the camera at the pool, run this, and it says
-which side of the line you are on -- rather than discovering it mid-mission.
+That is which optical regime you are in -- which decides whether a model
+trained on one of them is being asked about the other, and which venue a
+held-out split is actually holding out. What to DO about the water is not
+something this tool claims to know: the models were trained on UNPROCESSED
+underwater frames, so any preprocessing that makes an image look better to a
+person moves it away from the distribution the detector learned.
 
     ros2 run mongla_vision water_check                 # live camera topic
     python3 tools/water_check.py --video clip.mkv      # a recording
@@ -34,10 +45,10 @@ import numpy as np
 # exists to warn about.
 
 
-# The statistics and the rule live in `mongla_vision.underwater`, imported by
-# the dataset survey and the preprocessing decision as well. Three copies of
-# "how blurry is this frame" is how two of them come to disagree.
-from mongla_vision.underwater import analyse_frames, recommend   # noqa: E402
+# The statistics live in `mongla_vision.underwater`, imported by the footage
+# inventory as well. Three copies of "how blurry is this frame" is how two of
+# them come to disagree. There is no `recommend` to import -- see the header.
+from mongla_vision.underwater import analyse_frames               # noqa: E402
 
 
 def main():
@@ -85,17 +96,23 @@ def main():
     st = analyse_frames(frames)
     blur, bright, contrast, sat = (st.sharpness, st.brightness,
                                    st.contrast, st.saturation)
-    call, why = recommend(st)
     print(f'\n  {src}  ({len(frames)} frames)\n')
     print(f'    blur (Laplacian var) {blur:8.1f}   '
-          f'(gate 315 -> CLAHE helped | bin 1241 -> CLAHE hurt)')
+          f'(gate 315 | bin 1241 | Mirpur 33)')
     print(f'    saturation           {sat:8.1f}   '
-          f'(gate 160 -> CLAHE helped | bin  28 -> CLAHE hurt)')
+          f'(gate 160 | bin   28 | Mirpur 148)')
     print(f'    contrast             {contrast:8.1f}')
     print(f'    colour cast (B-R)    {st.cast:+8.1f}   '
           f'(green/murky water is strongly positive)')
     print(f'    brightness           {bright:8.1f}')
-    print(f'\n    -> {call}: {why}\n')
+    # ⚠ NO VERDICT LINE, AND NO "NEAREST REGIME" EITHER. The first rewrite of
+    # this function scored the frame against the three reference rows with a
+    # log-ratio distance -- which is a new metric fitted to three points, the
+    # exact move that produced `recommend()`. Each line above already prints
+    # the references beside the measurement; the reader can see where they sit
+    # without this file inventing a number to say it.
+    print('\n    preprocessing is OFF on this vehicle and measured never to '
+          'help -- see mongla_vision/underwater.py\n')
     return 0
 
 

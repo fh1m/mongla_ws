@@ -299,22 +299,28 @@ them harder than blur**:
 | gate | 315 | 27.7 | **159.9** |
 | bin / torpedo | 1241 | 36.1 | **27.9** |
 
-**The rule: CLAHE helps blurry, low-contrast, SATURATED (green/murky) water
-and hurts sharp, desaturated water.** Physically sensible — it amplifies local
-contrast, which recovers a washed-out target and over-sharpens one that was
-already crisp.
+⛔ **THE RULE THIS SECTION USED TO STATE IS RETRACTED.** It read "CLAHE helps
+blurry, low-contrast, SATURATED water and hurts sharp, desaturated water",
+fitted to the two clips above and physically plausible. A third venue (Mirpur —
+sharpness 33, saturation 148) is exactly what those thresholds call CLAHE ON,
+and CLAHE measurably does not help there. Re-measured on raw detection rate
+across 17 configurations — 4 props, 3 venues, a 39× sharpness range — it was
+**never positive**, and on the gate it took detection from 30.4 % to 1.2 %.
 
-So it is a **per-water** decision, not a per-vehicle one. `water_check` prints
-the three statistics and says which side of the line the pool is on:
+`underwater.recommend()` and its thresholds are **deleted**. See
+[`underwater-vision.md`](underwater-vision.md) §"what survives", which is the
+one place this is written down.
+
+What `water_check` does now is CHARACTERISE the water — the five statistics and
+the nearest of three measured regimes — because which optical regime a pool is
+in is a fact about the pool. What to do about it is not something three venues
+know:
 
 ```
 ros2 run mongla_vision water_check              # live camera
 python3 tools/water_check.py --video clip.mkv   # a recording
+python3 tools/footage_inventory.py              # the same statistics per ARCHIVE clip
 ```
-
-Validated against both measured clips, on frames it had not seen: gate →
-CLAHE ON, bin → CLAHE OFF. In between it says **MEASURE BOTH** rather than
-inventing confidence from a rule fitted to two samples.
 
 ### What this changes about §8
 
