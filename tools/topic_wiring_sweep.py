@@ -53,12 +53,39 @@ SRC = ROOT / 'src'
 _PUB = re.compile(r'create_publisher\(\s*[\w.]+\s*,\s*([\'"f][^,]*?)\s*,', re.S)
 _SUB = re.compile(r'create_subscription\(\s*[\w.]+\s*,\s*([\'"f][^,]*?)\s*,', re.S)
 
+# ⛔ A TOPIC HELD IN A VARIABLE IS STILL A TOPIC, and missing that cost three
+# passes. `mongla_dsl._wait_fused_pose` writes
+#     topic = f'/mongla/vision/{camera}/target_pose_fused'
+#     ...create_subscription(TargetPose, topic, ...)
+# so the patterns above -- which require the second argument to START with a
+# quote or an `f` -- skipped it, and `/target_pose_fused` was reported as
+# published-and-unread three times running. It has a consumer: the mission DSL,
+# which subscribes LAZILY so a mission that never anchors pays nothing.
+_PUB_VAR = re.compile(r'create_publisher\(\s*[\w.]+\s*,\s*([A-Za-z_]\w*)\s*,', re.S)
+_SUB_VAR = re.compile(r'create_subscription\(\s*[\w.]+\s*,\s*([A-Za-z_]\w*)\s*,', re.S)
+
+
+def _assignments(txt: str) -> dict:
+    """`name -> topic expression`, for names assigned a literal or f-string."""
+    out = {}
+    # A COMPLETE quoted string on one line, and one that looks like a topic.
+    # Without the closing-quote anchor this matched the tail of `pnp_node`'s
+    # multi-line `f'{ns}/target_pose' + (f'_{variant}' if variant else '')` and
+    # reported a row spelled `' if variant else ''`.
+    for m in re.finditer(
+            r'^\s*([A-Za-z_]\w*)\s*=\s*(f?([\'"])(?:[^\'"\n]|\\.)*\3)\s*$',
+            txt, re.M):
+        if '/' in m.group(2):
+            out[m.group(1)] = m.group(2)
+    return out
+
 # ⛔ AN EXPLICIT LIST, NOT "any _suffix". `pnp_node` publishes
 # `f'{ns}/target_pose' + (f'_{variant}' if variant else '')`, so the scanner
 # sees `/target_pose` while the node may publish `/target_pose_near`. A
 # permissive "anything after an underscore is a variant" rule ALSO swallowed
-# `/target_pose_fused` -- a genuinely unread topic -- and hid the only real
-# finding in the sweep. Widen this only for a variant that actually exists.
+# `/target_pose_fused`, which at the time looked like the only real finding in
+# the sweep. It was not unread -- see the variable note below. Widen this only
+# for a variant that actually exists.
 _VARIANTS = ('_near',)
 
 
@@ -86,10 +113,17 @@ def scan():
         except (OSError, UnicodeDecodeError):
             continue
         who = str(p.relative_to(SRC))
+        assigned = _assignments(txt)
         for m in _PUB.finditer(txt):
             pubs[literal(m.group(1))].add(who)
         for m in _SUB.finditer(txt):
             subs[literal(m.group(1))].add(who)
+        # and the same calls again, for a topic passed by name
+        for rx, bag in ((_PUB_VAR, pubs), (_SUB_VAR, subs)):
+            for m in rx.finditer(txt):
+                expr = assigned.get(m.group(1))
+                if expr:
+                    bag[literal(expr)].add(who)
     return pubs, subs
 
 
