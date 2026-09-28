@@ -641,6 +641,76 @@ def _check_models() -> tuple[str, str]:
                   'ros2 run mongla_vision export_engine --all (ON THE JETSON)')
 
 
+def _check_model_separation() -> tuple[str, str]:
+    """Can the model you are about to fly TELL THE PROP FROM THE WATER?
+
+    ⛔ THE DEFECT THIS EXISTS FOR. Every other check in this file asks whether
+    a model LOADS. None asked whether it WORKS, and for eight months the
+    vehicle's default forward graph was one that claims a gate on 90.8 % of
+    gate-free frames -- +0.0 points of separation between gate-present and
+    gate-absent footage at every bar measured (B-59). It loaded perfectly. It
+    ran at full rate. Every check passed.
+
+    A graph that hallucinates is worse than no graph: the mission acts on it.
+
+    ⭐ THE MEASUREMENT LIVES IN THE SIDECAR, beside the weights it describes,
+    so it cannot be separated from them by a copy or a rename. Written by
+    `tools/negative_clip_check.py`; `recommended_conf: null` means MEASURED AND
+    FOUND UNUSABLE for that class, which is different from absent.
+
+    ⚠ A MODEL WITH NO `separation:` BLOCK IS UNKNOWN, NOT BAD. Most graphs have
+    not been through the tool yet, and reporting them as failures would train
+    the operator to ignore this line. Unknown is a WARN naming the tool.
+    """
+    dirs = _models_dirs()
+    if not dirs:
+        return WARN, 'models dir not found -- cannot check separation'
+    try:
+        import yaml
+    except Exception:                                            # noqa: BLE001
+        return WARN, 'pyyaml missing -- cannot read model sidecars'
+
+    refused, unmeasured, good = [], [], []
+    seen = set()
+    for d in dirs:
+        for p_ in sorted(glob(os.path.join(d, '*.yaml'))):
+            stem = os.path.splitext(os.path.basename(p_))[0]
+            if stem in seen:
+                continue
+            seen.add(stem)
+            try:
+                doc = yaml.safe_load(open(p_)) or {}
+            except Exception:                                    # noqa: BLE001
+                continue
+            sep = doc.get('separation')
+            if not isinstance(sep, dict):
+                unmeasured.append(stem)
+                continue
+            for cls, row in sep.items():
+                if not isinstance(row, dict) or row.get('measured') is None:
+                    continue
+                if row.get('recommended_conf') is None:
+                    refused.append(f'{stem}:{cls}')
+                else:
+                    good.append(f'{stem}:{cls}@{row["recommended_conf"]}')
+    if refused:
+        return FAIL, (
+            f'MEASURED AND UNUSABLE for {", ".join(refused)} -- the sidecar '
+            f'records separation and says do not fly this class on this '
+            f'graph. Usable: {", ".join(good) if good else "NONE"}. Run both '
+            f'with fwd_models:=<good>,<other> and take the class from the '
+            f'good one.')
+    if good:
+        return PASS, (f'{len(good)} class(es) with a measured bar: '
+                      f'{", ".join(good)}'
+                      + (f'; {len(unmeasured)} graph(s) unmeasured'
+                         if unmeasured else ''))
+    return WARN, (f'no model carries a measured separation -- a graph that '
+                  f'loads is not a graph that works. '
+                  f'python3 tools/negative_clip_check.py --model <m> '
+                  f'--class <c> --positive <clip> --negative <clip>')
+
+
 def _check_build_freshness() -> tuple[str, str]:
     """Is the vehicle running the code that is in `src/`?
 
@@ -1656,6 +1726,11 @@ def main(argv: list[str] | None = None) -> int:
     section('K. Vision models (Hailo .hef, or TensorRT off-platform)')
     st, det = _check_models()
     emit(st, 'model engines', det)
+
+    # ---- K1b. Can the model tell the prop from the water? ----------- #
+    section('K1b. Model separation (does it WORK, not just load?)')
+    st, det = _check_model_separation()
+    emit(st, 'measured separation', det)
 
     # ---- K2. Stale build tree --------------------------------------- #
     section('K2. Build tree freshness (is the vehicle running your code?)')
