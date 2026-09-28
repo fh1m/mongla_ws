@@ -29,6 +29,28 @@ argument; if no, say so where the parameter is declared.
 
     python3 tools/launch_param_sweep.py
     python3 tools/launch_param_sweep.py --node lock_node
+
+⛔ TRIAGED 2026-09-28, AND DELIBERATELY NOT MADE A TEST. The other three
+reachability sweeps now fail the build -- modules, functions and topics each
+have a guard with a named-exemption list. This one does not, and that is a
+decision rather than an omission.
+
+102 of the declared parameters have no launch argument, and the great majority
+are legitimately runtime-only: `gyro_gain_x`, `ransac_px`, `fb_reject_px`,
+`max_dispersion_ratio` and their kind are tuned live with `ros2 param set`
+against a running graph, which is the whole point of them. Turning that into a
+test means writing a 102-row exemption registry that nobody will read and that
+will rot -- the failure mode this repo keeps naming. A question list that a
+human runs occasionally is the right instrument here.
+
+⚠ ONE ASYMMETRY FOUND AND LEFT ALONE, so it is not re-discovered as a defect:
+`allow_saturated_depth_arm` has no launch argument while its sibling
+`allow_fw_behaviour_mismatch` does. Both are arming overrides. It is NOT
+broken -- the value is read once at construction and
+`--ros-args -p allow_saturated_depth_arm:=true` reaches it fine -- and for an
+override that accepts "full uncommanded heave", friction is arguably the
+correct default. Recorded because the asymmetry looks like an oversight and is
+not.
 """
 from __future__ import annotations
 
