@@ -6376,3 +6376,63 @@ committing, which is what this tool is for.
 
 ⚠ This does not weaken reflex 1 — Bumblebee's five gate estimators are five
 *good* estimators. It bounds it.
+
+---
+
+## 62. ⚠ TIME-TO-CONTACT FROM SCALE — the metres cancel, and the noise does not
+
+**2026-09-28.** `time_to_contact.py` has sat orphaned since it was written, and
+its stated blocker is that its inputs are METRES — a relative position and two
+velocities — which a monocular vehicle with no DVL does not have.
+
+⭐ The literature's form does not need them. TTC is *"the ratio of an object's
+visual scale to its rate of expansion over time"*, `tau = s / (ds/dt)`, and the
+metres cancel by construction. **We already compute that scale in three
+independent places and discard all three**: the follower's similarity fit
+(`FollowResult.scale`), the anchor's homography (`AnchorPose.scale`), and the
+flow's `PlanarMotion.scale_rate`.
+
+### Measured on a real approach, and it is not ready
+
+`gate.mkv`, 600 frames, `gate_rescue_repair` at 0.35, tau from the detector's
+own box height (the honest reference, since the follower's scale is pinned at
+1.0000 whenever detections are continuous — it never runs):
+
+| | |
+|---|---|
+| tau, p50 | **2.5 s** |
+| tau, p10 | 0.8 s |
+| positive tau | **299 of 600 frames** |
+| frame-to-frame \|Δtau\|, p50 | **2.4 s** |
+| frame-to-frame \|Δtau\|, p90 | **27.2 s** |
+
+⛔ **The frame-to-frame swing is as large as the value.** A tau of 2.5 s that
+moves 2.4 s between frames is not a time, it is noise with a unit. And half the
+frames give a negative tau because the box is shrinking — which is correct
+(the target is receding) and means any consumer must handle "not approaching"
+as a state rather than as a large number.
+
+This is the same shape as the per-frame plane tilt in `anchor/geometry.py`
+(p90 swing 39°), and that module already records what smoothing buys there:
+**smoothness, not accuracy** — two independent snaps still disagreed by 17.5°
+at p90 after a 31-frame median. A filtered tau would look excellent and be
+reference-dependent in exactly the same way.
+
+### The bar
+
+⚠ **The scale-based form is the right one and it is NOT wired**, because a
+filter that makes tau usable has to be validated against something, and nothing
+here measures true time-to-contact. `time_to_contact.py` stays deferred, with
+its blocker CORRECTED: not "we have no metres" (we do not need them) but "the
+per-frame scale rate is too noisy and no ground truth exists to tune a filter
+against".
+
+⭐ **What would close it:** one pool run approaching a fixed prop at a known
+constant speed from a known start range. That makes true tau a straight line
+and the filter a fit rather than a guess. It belongs on the first-pool list.
+
+⚠ **And a side finding worth its own line:** `Follower.scale` reads exactly
+1.0000 at p10, p50 and p90 across 600 frames, because a continuous detector
+re-seeds every frame and `step()` never runs. Every measurement of the
+follower's scale must therefore be taken across a real DETECTION GAP, not a
+clip where the detector is healthy.
