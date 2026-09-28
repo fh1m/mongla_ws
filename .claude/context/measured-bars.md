@@ -6211,3 +6211,67 @@ this section measured and could not close.
 
 Harness: `tools/rung_independence.py` — asks whether two rungs fail together,
 printing the joint failure rate beside what independence would predict.
+
+---
+
+## 59. ⛔⛔⛔ THE VEHICLE SHIPS THE HALLUCINATING GATE MODEL, AND THE GOOD ONE IS ON DISK
+
+**2026-09-28.** B-59 recorded that `gate_rescue_repair` claims a gate on
+**90.8 %** of gate-free frames at the shipped bar, drawing half-frame boxes
+over empty turquoise at 0.44–0.56, with **+0.0 points** of separation between
+gate-present and gate-absent footage at both 0.15 and 0.30. That defect has
+been open since 2026-09-25 and is the blocker on `tracking/presence.py`.
+
+⭐ **B-59 IS MODEL-SPECIFIC, AND NOBODY RE-CHECKED IT AFTER B-60 WAS RESOLVED
+BY SWITCHING MODELS.** Re-run today with `tools/negative_clip_check.py`, same
+clips, same tool, `gate_sharks.pt` instead:
+
+| bar | worst positive | worst negative | separation |
+|---|---|---|---|
+| 0.15 | 100.0 % | 40.8 % | **+59.2 pts** |
+| 0.30 | 100.0 % | 15.8 % | **+84.2 pts** |
+| 0.45 | 100.0 % | 3.2 % | **+96.8 pts** |
+| 0.60 | 100.0 % | 0.2 % | **+99.8 pts** |
+| 0.75 | 100.0 % | 0.0 % | **+100.0 pts** |
+
+Against `gate_rescue_repair`'s **+0.0 at every bar measured**. Same venue, same
+negatives, same instrument.
+
+⛔ **AND THE VEHICLE LAUNCHES THE BAD ONE.** `vision_pi.launch.py:86` and
+`bringup.launch.py:160` both declare `fwd_model` default
+**`gate_rescue_repair`**. `gate_sharks.pt` and `gate_sharks.hef` are both in
+`src/mongla_vision/models/`, compiled and ready, and nothing points at them.
+
+⚠ **IT IS NOT A ONE-LINE SWAP, and that is why it has not happened.** The two
+graphs carry different class sets:
+
+    gate_rescue_repair   gate · rescue · repair
+    gate_sharks          gate · shark · shaw_fish
+
+Switching the default silently drops `rescue` and `repair`, which missions name
+(`mission-cookbook.md:1633`). So the choice is between a gate detector that
+works and two other classes, and it must be made deliberately rather than by a
+default nobody revisited.
+
+⭐ **THE THIRD OPTION IS ALREADY BUILT AND EMPTY.** `detector_dual_node` takes
+`models` (plural) and runs several graphs off ONE decode — Bumblebee reflex 5,
+"single multi-model YOLO node: one subscription and one decode feeding both
+models". `vision_pi.launch.py:88` declares `fwd_models` with
+`default_value=''`, wires it through at line 428, and documents the syntax in
+its own header at line 100. **The capability ships, the plumbing is complete,
+and the argument is blank.**
+
+### The bar
+
+⛔ **No gate mission may run on `gate_rescue_repair` alone.** The model that
+detects gates on this footage is `gate_sharks` at a bar of **0.30 or above**;
+0.45 buys +96.8 points for no measured loss on the positive clip.
+
+⚠ **`rescue` and `repair` still need a model**, so the resolution is
+`fwd_models:=gate_sharks,gate_rescue_repair` with the gate class taken from the
+first — not a swap, and not the status quo.
+
+⚠ **Per-frame rate on named clips, not recall.** A frame where the prop is out
+of view counts against the positive column, so 100 % positive means the clip is
+gate-dominated rather than that recall is perfect. Confirm by rendering boxes
+before believing either column.
