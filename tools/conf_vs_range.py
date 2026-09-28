@@ -41,6 +41,28 @@ def letterbox(img, size=640):
     return out, r
 
 
+class Det(tuple):
+    """(cls, conf, w, h, cx, cy) -- a tuple so every existing 4-way unpack
+    keeps working, with the centre available by name for anything that needs
+    to look inside the box."""
+    __slots__ = ()
+
+    def __new__(cls_, c, conf, w, h, cx=float('nan'), cy=float('nan')):
+        return super().__new__(cls_, (c, conf, w, h, cx, cy))
+
+    cls = property(lambda s: s[0])
+    conf = property(lambda s: s[1])
+    w = property(lambda s: s[2])
+    h = property(lambda s: s[3])
+    cx = property(lambda s: s[4])
+    cy = property(lambda s: s[5])
+
+    def xyxy(self, W, H):
+        x1 = max(0, int(self.cx - self.w / 2)); x2 = min(W, int(self.cx + self.w / 2))
+        y1 = max(0, int(self.cy - self.h / 2)); y2 = min(H, int(self.cy + self.h / 2))
+        return x1, y1, x2, y2
+
+
 def detect(sess, name, img, conf_th):
     lb, r = letterbox(img)
     x = lb[:, :, ::-1].transpose(2, 0, 1)[None].astype(np.float32) / 255.0
@@ -52,7 +74,16 @@ def detect(sess, name, img, conf_th):
     out = []
     for i in np.nonzero(keep)[0]:
         cx, cy, bw, bh = boxes[:, i] / r
-        out.append((int(cls[i]), float(conf[i]), float(bw), float(bh)))
+        # ⚠ cx, cy ARE RETURNED TOO, and they were not for a long time. Any
+        # measurement that needs to sample the IMAGE inside the box -- the
+        # attenuation prior, a colour check, a texture gate -- cannot do it
+        # from a size alone, and the first version of `attenuation_range.py`
+        # silently fell back to a whole-frame median because of it. A
+        # frame-average is a different quantity and it flipped sign between
+        # clips, which reads as a falsified hypothesis rather than a broken
+        # instrument.
+        out.append(Det(int(cls[i]), float(conf[i]), float(bw), float(bh),
+                       float(cx), float(cy)))
     return out
 
 
