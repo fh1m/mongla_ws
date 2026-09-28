@@ -48,6 +48,52 @@ MIN_POINTS = 8
 # most likely background that happened to be inside the box.
 MIN_SURVIVAL = 0.30
 
+# ⛔ A CORNER COUNT IS NOT EVIDENCE THE PATCH IS TRACKABLE, and this is the
+# measurement that says so. Over 155 boxes on four archive clips, binned by the
+# grey-level standard deviation of the patch:
+#
+#     patch std     boxes   corners found (p50)   LK survival (p50)
+#       0 - 2          30            98                 0.12
+#       2 - 5          65            23                 0.36
+#       5 - 10         21            22                 0.91
+#      10 - 20         20            23                 0.83
+#      20+             19            21                 0.95
+#
+# `goodFeaturesToTrack` returns NINETY-EIGHT corners from a patch with two grey
+# levels of variation -- more than from a richly textured one, because sensor
+# noise in a flat region produces plenty of local maxima -- and 88 % of them die
+# within 30 frames. So `reset()` returning a healthy `n0` said nothing at all
+# about whether the box could be carried, and the ladder learned the truth
+# thirty frames later, holding a box it believed in, built on noise.
+#
+# The bar below is chosen from the same data, by the cost of each mistake.
+# Refusing a trackable box costs one gap the detector must cover; accepting an
+# untrackable one costs a CONFIDENTLY WRONG carried box, which is the failure
+# mode that ends runs. At std < 2.0 the refusal is right 86.7 % of the time,
+# for a 19.4 % refusal rate -- the highest-precision operating point measured:
+#
+#     bar   refused   of refused, really dead   of kept, really dead
+#     2.0    19.4 %          86.7 %                   25.6 %
+#     4.0    49.7 %          64.9 %                   10.3 %
+#
+# ⚠ THE POPULATION IS NOT REAL DETECTION BOXES. Those 155 boxes are a GRID
+# across the frame, so most are water and wall. A real detection sits on a prop
+# and is textured, so the 19.4 % refusal rate does NOT transfer -- it is an
+# upper bound on the cost, measured on the worst possible sample. What does
+# transfer is the cliff: below ~2 grey levels there is no information to track,
+# and no appearance-based rung can change that.
+#
+# ⛔ MEASURED AND REJECTED, so nobody re-derives them: a colour back-projection
+# rung (HSV hue+saturation) and NCC template matching were both tried as a
+# third, model-free rung for exactly these frames. The histogram LOSES to a
+# decoy box on 69 % of gate.mkv frames (margin -0.049), and NCC scores a
+# confident-looking 0.891 peak with a margin over its own second-best of
+# +0.005 -- no uniqueness at all. Neither can work, because the failure is not
+# in the algorithm: the patch carries 0.92 bits of entropy where a trackable
+# one carries 1.58. Redundancy here has to come from a different KIND of
+# information, not another appearance tracker.
+MIN_PATCH_STD = 2.0
+
 _GFTT = dict(maxCorners=120, qualityLevel=0.01, minDistance=7, blockSize=7)
 _LK = dict(winSize=(15, 15), maxLevel=2)
 
@@ -92,6 +138,9 @@ class Follower:
         self._prev: Optional[np.ndarray] = None
         self._pts: Optional[np.ndarray] = None
         self._box: Optional[Tuple[float, float, float, float]] = None
+        # Grey-level spread of the last patch offered to `reset`. Kept so a
+        # refusal can say WHY, rather than looking like "no corners found".
+        self.last_patch_std = float('nan')
         self._n0 = 0
 
     @property
@@ -110,6 +159,13 @@ class Follower:
         x1 = max(0, min(x1, w - 2)); x2 = max(x1 + 2, min(x2, w))
         y1 = max(0, min(y1, h - 2)); y2 = max(y1 + 2, min(y2, h))
         roi = gray[y1:y2, x1:x2]
+        # Refuse a patch with no information BEFORE asking for corners -- see
+        # MIN_PATCH_STD. Cheap, and it is the only check that distinguishes
+        # "98 corners of noise" from "22 corners of target".
+        self.last_patch_std = float(roi.std()) if roi.size else 0.0
+        if self.last_patch_std < MIN_PATCH_STD:
+            self._pts = None
+            return 0
         p = cv2.goodFeaturesToTrack(roi, **_GFTT)
         if p is None or len(p) < self._min_pts:
             self._pts = None
