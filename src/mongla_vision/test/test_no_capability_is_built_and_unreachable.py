@@ -58,6 +58,15 @@ WIRED = {
     # the field-of-view margin but scales no demand. The demand-scaling half
     # is a control change and waits on a pool day; see ladder-register.md.
     'mongla_vision/mongla_vision/tracking/visibility.py': 'lock_node.py',
+    # Promoted 2026-09-28. Its deferral said "the barometer reports 'not
+    # initialised' on this hull, so the comparison has one side" -- but the
+    # side it needs is not the barometer directly: `flow_node._read_the_floor`
+    # already had BOTH heights in hand (the tile grating and the pool_depth
+    # path) and was comparing them with a one-sample `d > 0.20` and a latch.
+    # One bad grating read therefore fired the warning once, forever, and a
+    # slow real drift was never reported. The orphan was the BETTER
+    # implementation of a comparison already happening.
+    'mongla_vision/mongla_vision/flow/scale_check.py': 'flow/flow_node.py',
 }
 
 # ⚠ NOT wired, ON PURPOSE, each with the consumer it needs. A row here is a
@@ -125,10 +134,6 @@ DEFERRED = {
         'the BAND is measured (section 23) but the controller that would act '
         'on back-off does not exist; vision_verbs closes range only. Wiring '
         'it means a new verb, which is a mission-surface change.'),
-    'mongla_vision/mongla_vision/flow/scale_check.py': (
-        'both heights exist but the barometer reports "not initialised" on '
-        'this hull, so the comparison has one side. Wire it the first time a '
-        'working baro and the tile grating run together.'),
     'mongla_vision/mongla_vision/detection/confidence_calibration.py': (
         'ships OFF by design: its gain is DECLARED, not measured, and it '
         'needs a labelled per-venue set to calibrate. Wiring it before that '

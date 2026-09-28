@@ -431,6 +431,10 @@ class FlowVelocityNode(Node):
         self._tile_height = None          # last height read off the floor
         self._tile_angle = None           # grid orientation, absolute mod 90
         self._tile_warned = False
+        # The grating height against the barometric one, over a window rather
+        # than per frame. See `_read_the_floor`.
+        from .scale_check import ScaleCrossCheck
+        self._scale_x = ScaleCrossCheck()
         self._lane_lines = bool(self.get_parameter('lane_lines').value)
         self._lane_angle = None           # lane heading, pool frame mod 180
 
@@ -1108,15 +1112,28 @@ class FlowVelocityNode(Node):
         # Report the disagreement, never silently pick. Same rule the existing
         # optical cross-check follows: a divergence does not say WHICH input is
         # wrong, and `pool_depth_m` is the one nobody measures.
+        #
+        # ⛔ THIS USED TO BE ONE SAMPLE AND A BARE `d > 0.20`, so a single bad
+        # grating read -- a caustic, a drain cover, one frame of a passing
+        # shadow -- latched a warning that never cleared, and a slow genuine
+        # drift that never spiked was never reported at all.
+        # `flow/scale_check.py` was written for exactly this comparison, with
+        # the same 0.20 bar plus a MEDIAN over at least 5 pairs, a 60 s age
+        # limit so a calibration cannot outlive its conditions, and confidence
+        # from the coefficient of variation. It sat orphaned beside this worse
+        # inline copy.
         if self._last_height and self._tile_height:
-            d = abs(self._tile_height - self._last_height) / self._last_height
-            if d > 0.20 and not self._tile_warned:
+            self._scale_x.add(self._tile_height, self._last_height)
+            chk = self._scale_x.check()
+            if chk.ok and chk.disagree and not self._tile_warned:
                 self._tile_warned = True
                 self.get_logger().warning(
                     f'[FLOW ] the FLOOR says {self._tile_height:.2f} m, the '
-                    f'pool_depth path says {self._last_height:.2f} m '
-                    f'({d:.0%} apart). The floor needs no pool_depth_m and is '
-                    f'preferred -- check pool_depth_m and the tile_m you set.')
+                    f'pool_depth path says {self._last_height:.2f} m -- '
+                    f'{chk.reason} (median of {chk.samples} pairs, confidence '
+                    f'{chk.confidence:.2f}). The floor needs no pool_depth_m '
+                    f'and is preferred -- check pool_depth_m and the tile_m '
+                    f'you set.')
 
     def _read_the_lane(self, gray) -> None:
         """Publish the lane line's heading, modulo 180, or nothing.

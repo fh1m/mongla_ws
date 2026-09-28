@@ -142,3 +142,72 @@ def test_both_OFF_by_default_publish_nothing():
         assert n.published == {'grid': [], 'lane': []}
     finally:
         n.destroy_node()
+
+
+# ── the two heights, compared over a window rather than per frame ───────────
+
+
+def test_one_bad_grating_read_no_longer_latches_a_warning():
+    """⛔ THE DEFECT THIS CLOSES. The height comparison in `_read_the_floor`
+    was one sample and a bare `d > 0.20`, with a `_tile_warned` latch. So a
+    SINGLE bad grating read -- a caustic, a drain cover, one frame of a passing
+    shadow -- printed "the FLOOR says ..." once and then never spoke again,
+    including if the two later diverged for real.
+
+    `flow/scale_check.py` was written for this exact comparison and sat
+    orphaned beside the worse inline copy: same 0.20 bar, plus a MEDIAN over at
+    least 5 pairs and a 60 s age limit.
+    """
+    from mongla_vision.flow.scale_check import ScaleCrossCheck
+
+    x = ScaleCrossCheck()
+    for _ in range(6):
+        x.add(1.00, 1.00)
+    x.add(1.60, 1.00)                       # the spike
+    c = x.check()
+    assert c.ok and not c.disagree, \
+        'one bad pair moved the median -- that is what the median is for'
+
+
+def test_a_sustained_disagreement_is_still_reported():
+    """⚠ AND THE OTHER HALF. A filter that never warns is not an improvement
+    on a filter that warns once; height multiplies EVERY velocity."""
+    from mongla_vision.flow.scale_check import ScaleCrossCheck
+
+    y = ScaleCrossCheck()
+    for _ in range(7):
+        y.add(1.30, 1.00)
+    d = y.check()
+    assert d.ok and d.disagree
+    assert 'DISAGREE' in d.reason and 'nobody measures' in d.reason
+
+
+def test_too_few_pairs_says_so_rather_than_answering():
+    from mongla_vision.flow.scale_check import ScaleCrossCheck
+
+    z = ScaleCrossCheck()
+    z.add(1.0, 1.0)
+    c = z.check()
+    assert not c.ok and 'need' in c.reason
+
+
+def test_the_cross_check_is_wired_into_the_floor_read():
+    """⛔ THE §9 CHECK, INLINE. `scale_check` was correct, tested and imported
+    by nothing for its whole life. Assert the CALL exists in `_read_the_floor`
+    and that the old one-sample test is gone."""
+    import ast
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[1] / 'mongla_vision' / 'flow'
+           / 'flow_node.py')
+    tree = ast.parse(src.read_text())
+    fn = next((n for n in ast.walk(tree)
+               if isinstance(n, ast.FunctionDef) and n.name == '_read_the_floor'),
+              None)
+    assert fn is not None, '_read_the_floor is gone -- rename or deletion?'
+    body = ast.dump(fn)
+    assert "attr='add'" in body and '_scale_x' in body, \
+        'the floor read does not feed the cross-check'
+    assert "attr='check'" in body, 'the cross-check is fed but never read'
+    assert 'IfExp' not in body.split('_scale_x', 1)[1][:400], \
+        'the cross-check call sits behind a conditional expression -- neutered?'
