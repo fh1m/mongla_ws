@@ -297,6 +297,24 @@ vision gains, because sim imagery is too clean.
 
 ## 9. How we work
 
+- **Write the scorer BEFORE the run, and say what would falsify it.** Measured
+  the hard way this session: six model-free candidates were built, and the four
+  whose pass/fail criterion was written down first were each settled in one
+  run. The two scored afterwards both produced a confident number that was
+  wrong — a vanishing point jittering 20 227 px while its own quality metric
+  read 0.958, and a "top 10 offenders" list that turned out to be measuring
+  base64 on disk rather than context. `tools/tau_from_scale.py --self-test`
+  is the shape to copy: it runs the ranking against synthetic sources whose
+  bias was chosen, so a bug in the scorer cannot be mistaken for a defect in a
+  sensor on the day — and it corrected its own author before any water.
+  ⛔ **A quality number a method computes from the data it just fit is not
+  evidence.** The only trustworthy check is a second, independent observation.
+- **A citation is not a measurement.** `approach.py` shipped a band citing
+  §23, correctly, around numbers §23 never states — §23 measured pixels of
+  sqrt-area and the code compared fraction of frame height. It survived weeks.
+  `test_shipped_constants_match_the_ledger.py` now compares shipped constants
+  against the digits in `measured-bars.md`, in **both** directions, and caught
+  a missing entry on its first run.
 - **Measure, then ship.** Every shipped threshold is in
   [`measured-bars.md`](.claude/context/measured-bars.md) with the method, the conditions and
   the bar it must clear — including the numbers we later retracted. Tests read that file.

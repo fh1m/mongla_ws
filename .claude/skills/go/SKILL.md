@@ -14,6 +14,16 @@ yourself.
 
 1. **Name the success criterion first**, in one sentence, before writing code. If you
    cannot name it, you do not understand the task yet — ask, or go read.
+1b. **If the task is a MEASUREMENT, write the scorer before collecting the data,
+   and write down what result would falsify the idea.** Measured the hard way:
+   of six model-free vision candidates built in one session, the four with a
+   pass/fail criterion written down first were each settled in one run; the two
+   scored afterwards both produced a confident number that was wrong.
+   ⛔ A quality number a method computes from the data it just fit is **not**
+   evidence — a vanishing point scored 0.958 on its own metric while jittering
+   20 227 px. Cross-check against a second, independent observation or against
+   synthetic input whose answer you chose. `tools/tau_from_scale.py --self-test`
+   is the pattern, and it corrected its own author before any water.
 2. Implement.
 3. **Pick the strongest oracle available** from the ladder below. Strongest, not
    cheapest.
