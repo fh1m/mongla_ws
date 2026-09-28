@@ -256,7 +256,7 @@ Two things make this easy to trip:
   back to the weights' embedded `names`. The failure is when the allowlist a
   mission asks for does not intersect whatever names are in play.
 
-`gate_rescue_repair.pt` is `{0: gate, 1: rescue, 2: repair}`.
+`gate_sharks.pt` is `{0: gate, 1: rescue, 2: repair}`.
 
 ### A live sim/vision stack fails the autonomy tests
 
@@ -473,7 +473,7 @@ ros2 run mongla_sim_bringup mongla_sim sim --headless course:=sauvc26_final
 ros2 launch mongla_vision vision_dual.launch.py \
     fwd_topic:=/mongla/sim/front_camera/image_fx \
     dwn_topic:=/mongla/sim/bottom_camera/image_fx \
-    model:=gate_rescue_repair dwn_model:=bin_fire_blood \
+    model:=gate_sharks dwn_model:=bin_fire_blood \
     device_cls:=cpu paused:=false
 ```
 

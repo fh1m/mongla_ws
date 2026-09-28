@@ -16,7 +16,7 @@ Usage:
     # crashes at startup without it):
     ros2 launch mongla_vision vision.launch.py camera:=forward \\
         device_path:=/dev/mongla_cam_forward \\
-        model:=gate_rescue_repair classes:=gate,rescue,repair conf:=0.4
+        model:=gate_sharks classes:=gate,shark,shaw_fish conf:=0.4
 
     # Headless (mission mode, no OpenCV window):
     ros2 launch mongla_vision vision.launch.py camera:=forward viewer:=false
@@ -139,7 +139,7 @@ def generate_launch_description():
                               description='Loop the video file at EOF (video_file only)'),
         DeclareLaunchArgument('model',         default_value='yolov11n',
                               description='Model stem (models/) or .pt path (single-model mode). '
-                                          'Pool: gate_rescue_repair / gate_flare_medium_100ep.'),
+                                          'Pool: gate_sharks / gate_flare_medium_100ep.'),
         DeclareLaunchArgument('models',        default_value='',
                               description='CSV name=stem registry for hot model switching: '
                                           '"gate=gate_nano_100ep,combined=gate_flare_medium_100ep"'),

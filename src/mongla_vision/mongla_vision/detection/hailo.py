@@ -1,7 +1,7 @@
 """Hailo-8 detector backend: a compiled ``.hef`` behind the same `Detector` API.
 
 Replaces the Jetson's TensorRT path on the Raspberry Pi 5 + AI HAT+. Round 29
-measured this pipeline at **98.0 Hz** on `gate_rescue_repair` against a
+measured this pipeline at **98.0 Hz** on `gate_sharks` against a
 `hailortcli --hw-only` benchmark of **97.9 FPS** on the same HEF -- so the host
 code is at 100 % of the chip and there is no preprocessing overhead left to
 recover. The full campaign, including why the ceiling is the model's CONTEXT
@@ -240,7 +240,7 @@ def _shared_device():
     GENUINELY CONCURRENTLY. Unlocked, both threads saw `_DEVICE is None` and
     both called `VDevice()` -- and the note above this function already records
     what a second VDevice does. Measured on the vehicle: sequential
-    construction of `gate_rescue_repair` and `bin_fire_blood` gives OK/OK,
+    construction of `gate_sharks` and `bin_fire_blood` gives OK/OK,
     while the same two in parallel HANG -- no exception, no core dump, the
     process simply never finishes loading. An earlier run of the same launch
     instead reported `HAILO_OUT_OF_PHYSICAL_DEVICES` and dropped one model, so
@@ -670,7 +670,7 @@ class HailoDetector(Detector):
         # 2026-09-11, correcting what this comment used to assert. It said
         # "two configured groups are resident at once here ... and is known to
         # fit", which was true of what we ran and was never the limit. On this
-        # Hailo-8, `yolov8n_seg` + `gate_rescue_repair` + `bin_fire_blood` all
+        # Hailo-8, `yolov8n_seg` + `gate_sharks` + `bin_fire_blood` all
         # configure together: three groups, no SRAM error. So a segmentation
         # model can live BESIDE both detectors rather than evicting one, and
         # any plan that assumed a two-group budget was solving a constraint

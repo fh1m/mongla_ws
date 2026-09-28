@@ -13,7 +13,7 @@ chunk calls ``mongla.resume_detector(<cam>)`` then ``pause_detector``.
 Start it AFTER the control stack (``mongla start`` / bringup).
 
 Usage:
-    # Competition defaults (gate_rescue_repair fwd, bin_fire_blood dwn, paused):
+    # Competition defaults (gate_sharks fwd, bin_fire_blood dwn, paused):
     ros2 launch mongla_vision vision_dual.launch.py
 
     # Headless pool day:
@@ -29,8 +29,8 @@ Usage:
     # runtime; a mission's ClassRef / set_model() needs the model pre-loaded
     # here or it errors "not in registry". Pass the class UNION; per-camera conf:
     ros2 launch mongla_vision vision_dual.launch.py \\
-        fwd_models:=gate_rescue_repair,slalom_red_pipe,torpedo_blood_hole \\
-        fwd_classes:=gate,rescue,repair,red_pipe,torpedo,blood,hole fwd_conf:=0.60 \\
+        fwd_models:=gate_sharks,slalom_red_pipe,torpedo_blood_hole \\
+        fwd_classes:=gate,shark,shaw_fish,red_pipe,torpedo,blood,hole fwd_conf:=0.60 \\
         dwn_models:=bin_fire_blood dwn_classes:=fire,blood dwn_conf:=0.70
 
     # Detectors live from the start (no per-task resume):
@@ -85,7 +85,7 @@ def generate_launch_description():
         DeclareLaunchArgument('dwn_device_path', default_value='',
                               description='override device for downward (empty = auto /dev/mongla_cam_downward)'),
         # Forward camera -- gate / slalom / torpedo tasks
-        DeclareLaunchArgument('fwd_model',    default_value='gate_rescue_repair',
+        DeclareLaunchArgument('fwd_model',    default_value='gate_sharks',
                               description='Single YOLO model stem (used only when '
                                           'fwd_models is empty)'),
         # REGISTRY mode: CSV of model stems the forward detector loads AND can
@@ -95,9 +95,9 @@ def generate_launch_description():
         # The FIRST stem is the startup/active model.
         DeclareLaunchArgument('fwd_models',   default_value='',
                               description='CSV of model stems for runtime switching '
-                                          '(e.g. gate_rescue_repair,slalom_red_pipe,'
+                                          '(e.g. gate_sharks,slalom_red_pipe,'
                                           'torpedo_blood_hole). Empty = single fwd_model.'),
-        DeclareLaunchArgument('fwd_classes',  default_value='gate,rescue,repair',
+        DeclareLaunchArgument('fwd_classes',  default_value='gate,shark,shaw_fish',
                               description='Class filter for the forward detector'),
         # Downward camera -- bin / drop tasks
         DeclareLaunchArgument('dwn_model',    default_value='bin_fire_blood',

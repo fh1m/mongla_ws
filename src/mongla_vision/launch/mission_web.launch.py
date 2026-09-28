@@ -26,8 +26,8 @@ panel; both uses vision_dual.
 
     # Registry (runtime model switching from the UI dropdown / DSL):
     ros2 launch mongla_vision mission_web.launch.py \\
-        fwd_models:=gate_rescue_repair,slalom_red_pipe,torpedo_blood_hole \\
-        fwd_classes:=gate,rescue,repair,red_pipe,torpedo,blood,hole
+        fwd_models:=gate_sharks,slalom_red_pipe,torpedo_blood_hole \\
+        fwd_classes:=gate,shark,shaw_fish,red_pipe,torpedo,blood,hole
 
 Port-forward :web_port (console) and :video_port (streams) to a dev-box browser,
 or just open http://localhost:<web_port> on the Jetson NoMachine desktop.
@@ -82,9 +82,9 @@ def generate_launch_description():
         DeclareLaunchArgument('dwn_device', default_value='4'),
         DeclareLaunchArgument('fwd_device_path', default_value=''),
         DeclareLaunchArgument('dwn_device_path', default_value=''),
-        DeclareLaunchArgument('fwd_model',   default_value='gate_rescue_repair'),
+        DeclareLaunchArgument('fwd_model',   default_value='gate_sharks'),
         DeclareLaunchArgument('fwd_models',  default_value=''),
-        DeclareLaunchArgument('fwd_classes', default_value='gate,rescue,repair'),
+        DeclareLaunchArgument('fwd_classes', default_value='gate,shark,shaw_fish'),
         DeclareLaunchArgument('fwd_conf',    default_value='0.35'),
         DeclareLaunchArgument('fwd_model_conf', default_value=''),
         DeclareLaunchArgument('dwn_model',   default_value='bin_fire_blood'),

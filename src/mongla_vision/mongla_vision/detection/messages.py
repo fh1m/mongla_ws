@@ -142,7 +142,7 @@ def class_index(class_name: str) -> int:
 
     ⛔ AND WHY THIS IS NOT "PUT THE ORIGINAL INTEGER ON THE WIRE". A detector's
     integer index is a property of WHICHEVER MODEL produced it -- `gate` is 0
-    in `gate_rescue_repair` and something else in the next model -- so the
+    in `gate_sharks` and something else in the next model -- so the
     integer is only meaningful alongside the model that minted it, which the
     message does not carry. `srot_protocol.py` records the same conclusion for
     the same reason. The LABEL is the identity that survives a model switch, so

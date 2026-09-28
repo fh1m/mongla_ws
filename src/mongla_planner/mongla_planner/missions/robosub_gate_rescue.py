@@ -3,8 +3,8 @@
 
 Platform : Mongla_agile 2.0  — no DVL, BNO085 heading, forward camera only.
 Paradigm : detected()    — open-loop search + vision closed-loop alignment.
-Model    : gate_rescue_repair  (classes: 0=gate  1=rescue  2=repair)
-           → src/mongla_vision/models/gate_rescue_repair.pt
+Model    : gate_sharks  (classes: 0=gate  1=rescue  2=repair)
+           → src/mongla_vision/models/gate_sharks.pt
 
 ──────────────────────────────────────────────────────────────────────────────
 Mission phases:
@@ -24,14 +24,45 @@ Mission phases:
 Launch (BNO085, no DVL):
   ros2 launch mongla_manager bringup.launch.py \\
       vision:=true yaw_source:=bno085 \\
-      model:=gate_rescue_repair classes:=gate,rescue,repair conf:=0.45
+      model:=gate_sharks classes:=gate,shark,shaw_fish conf:=0.45
 
 Launch (sim/bench):
   ros2 launch mongla_manager bringup.launch.py \\
       vision:=true yaw_source:=mavlink_ahrs \\
-      model:=gate_rescue_repair classes:=gate,rescue,repair
+      model:=gate_sharks classes:=gate,shark,shaw_fish
 ──────────────────────────────────────────────────────────────────────────────
+
+⛔ THIS MISSION DOES NOT RUN. It steers on the `rescue` / `repair` classes, and
+no shipped model emits them any more: `gate_rescue_repair` was RETIRED on
+2026-09-28 because it measured **+0.0 points** of separation between
+gate-present and gate-absent footage -- it claimed a gate on 90.8 % of
+gate-free frames -- while `gate_sharks` measures +84.2 points at 0.30 and
++96.8 at 0.45 on the same clips with the same tool (measured-bars section 59).
+The weights are at ~/models/retired/ so the measurement stays reproducible.
+
+To bring this mission back, one of:
+  * train a gate+rescue+repair model that CLEARS the separation bar, and prove
+    it with `tools/negative_clip_check.py` before it ships;
+  * rewrite the rescue phases against `gate_sharks`'s classes
+    (gate / shark / shaw_fish), which is a different task, not a rename.
+
+It refuses at import rather than at thrust time, because a mission that runs
+and steers on a class nothing emits is the failure mode CLAUDE.md section 8.6
+names as the one that ends runs.
+
 """
+
+# ⛔ REFUSE AT IMPORT. See the docstring: the classes this mission
+# steers on are not emitted by any shipped model. Raising here means
+# the operator finds out when they LIST missions, not when the vehicle
+# is in the water.
+raise ImportError(
+    'robosub_gate_rescue steers on `rescue`/`repair`, which no shipped model '
+    'emits since gate_rescue_repair was retired 2026-09-28 (+0.0 '
+    'points of separation; see measured-bars section 59). Retrain and '
+    'clear the bar with tools/negative_clip_check.py, or rewrite '
+    'against gate_sharks.')
+
 
 # ── Tunable constants (edit per pool session) ─────────────────────────────────
 
@@ -88,7 +119,7 @@ YAW_STYLE_SETTLE   =  1.0     # settle between yaw steps (seconds)
 def run(mongla, log):
     mongla.mission_reset()
     # Register model — strict: wrong class name raises AttributeError
-    mongla.models(robosub=('gate_rescue_repair', ['gate', 'rescue', 'repair']))
+    mongla.models(robosub=('gate_sharks', ['gate', 'shark', 'shaw_fish']))
     mongla.camera = 'forward'
 
     gate   = mongla.models.robosub.gate
@@ -113,7 +144,7 @@ def run(mongla, log):
 
     # ── 2. FindGate ───────────────────────────────────────────────────── #
     log('=== FindGate ===')
-    mongla.set_classes('gate,rescue,repair')
+    mongla.set_classes('gate,shark,shaw_fish')
 
     found = (
         creep_forward(mongla, gate, MAX_GATE_STEPS)
@@ -166,7 +197,7 @@ def run(mongla, log):
 
     # ── 7. FindRescue ─────────────────────────────────────────────────── #
     log('=== FindRescue ===')
-    mongla.set_classes('gate,rescue,repair')
+    mongla.set_classes('gate,shark,shaw_fish')
 
     found = (
         creep_forward(mongla, rescue, MAX_RESCUE_STEPS)

@@ -162,7 +162,7 @@ Compiled and verified on-device — note class count is nearly free
 
 | model | classes | baked threshold | hw FPS |
 |---|---|---|---|
-| gate_rescue_repair | 3 | 0.05 | 97.6 |
+| gate_sharks | 3 | 0.05 | 97.6 |
 | bin_fire_blood | 2 | 0.05 | 98.2 |
 | sauvc_sim | 11 | 0.05 | 97.8 |
 

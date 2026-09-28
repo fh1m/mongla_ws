@@ -99,7 +99,7 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `vision` | `false` | Start camera + detector alongside manager |
 | `vision_stack` | `pi` | pi = both cameras + calibration (vision_pi.launch.py, the vehicle); generic = single camera, no calibration (vision.launch.py, dev/CUDA). |
 | `vision_profile` | `fast` | vision_stack:=pi -- vision_pi's own profile argument (its `vision:=`). Renamed here because `vision` is this file's boolean on/off switch. |
-| `fwd_model` | `gate_rescue_repair` | vision_stack:=pi -- forward-camera model stem. |
+| `fwd_model` | `gate_sharks` | vision_stack:=pi -- forward-camera model stem. |
 | `dwn_model` | `bin_fire_blood` | vision_stack:=pi -- downward-camera model stem. |
 | `fwd_classes` | `` | vision_stack:=pi -- forward class allowlist (empty = the model sidecar's full set). |
 | `dwn_classes` | `` | vision_stack:=pi -- downward class allowlist. |
@@ -143,9 +143,9 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `dwn_device` | `4` |  |
 | `fwd_device_path` | `` |  |
 | `dwn_device_path` | `` |  |
-| `fwd_model` | `gate_rescue_repair` |  |
+| `fwd_model` | `gate_sharks` |  |
 | `fwd_models` | `` |  |
-| `fwd_classes` | `gate,rescue,repair` |  |
+| `fwd_classes` | `gate,shark,shaw_fish` |  |
 | `fwd_conf` | `0.35` |  |
 | `fwd_model_conf` | `` |  |
 | `dwn_model` | `bin_fire_blood` |  |
@@ -160,8 +160,8 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `tracking` | `true` |  |
 | `fwd_video` | `` | Forward-camera video (e.g. a gate dataset clip). At least one of fwd_video / dwn_video is required. |
 | `dwn_video` | `` | Downward-camera video (e.g. a bin dataset clip). |
-| `fwd_model` | `gate_rescue_repair` | YOLO model stem for the forward detector. |
-| `fwd_classes` | `gate,rescue,repair` | Class filter for the forward detector. |
+| `fwd_model` | `gate_sharks` | YOLO model stem for the forward detector. |
+| `fwd_classes` | `gate,shark,shaw_fish` | Class filter for the forward detector. |
 | `dwn_model` | `bin_fire_blood` | YOLO model stem for the downward detector. |
 | `dwn_classes` | `fire,blood` | Class filter for the downward detector. |
 | `conf` | `0.35` | Detection confidence threshold (both detectors). |
@@ -182,7 +182,7 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `video_file` | `` | Path to a video file; when set, replaces the live webcam |
 | `topic` | `` | ROS image topic to consume (Gazebo / re-published stream). Ignored when video_file is set. |
 | `loop` | `true` | Loop the video file at EOF (video_file only) |
-| `model` | `yolov11n` | Model stem (models/) or .pt path (single-model mode). Pool: gate_rescue_repair / gate_flare_medium_100ep. |
+| `model` | `yolov11n` | Model stem (models/) or .pt path (single-model mode). Pool: gate_sharks / gate_flare_medium_100ep. |
 | `models` | `` | CSV name=stem registry for hot model switching: "gate=gate_nano_100ep,combined=gate_flare_medium_100ep" |
 | `active_model` | `` | Registry key to start with (requires models:="...") |
 | `classes` | `` | CSV class filter; empty = all model classes |
@@ -209,9 +209,9 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `dwn_device` | `4` | /dev/videoN index for the downward camera (dev-box fallback; the Jetson symlink wins automatically) |
 | `fwd_device_path` | `` | override device for forward (empty = auto /dev/mongla_cam_forward) |
 | `dwn_device_path` | `` | override device for downward (empty = auto /dev/mongla_cam_downward) |
-| `fwd_model` | `gate_rescue_repair` | Single YOLO model stem (used only when fwd_models is empty) |
-| `fwd_models` | `` | CSV of model stems for runtime switching (e.g. gate_rescue_repair,slalom_red_pipe,torpedo_blood_hole). Empty = single fwd_model. |
-| `fwd_classes` | `gate,rescue,repair` | Class filter for the forward detector |
+| `fwd_model` | `gate_sharks` | Single YOLO model stem (used only when fwd_models is empty) |
+| `fwd_models` | `` | CSV of model stems for runtime switching (e.g. gate_sharks,slalom_red_pipe,torpedo_blood_hole). Empty = single fwd_model. |
+| `fwd_classes` | `gate,shark,shaw_fish` | Class filter for the forward detector |
 | `dwn_model` | `bin_fire_blood` | Single YOLO model stem (used only when dwn_models is empty) |
 | `dwn_models` | `` | CSV of model stems for runtime switching on the downward detector. Empty = single dwn_model. |
 | `dwn_classes` | `fire,blood` | Class filter for the downward detector |
@@ -239,7 +239,7 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `hud_distance` | `true` | HUD pre-arms the distance panel (shows on calc_distance). |
 | `fwd_profile` | `pi_forward` |  |
 | `dwn_profile` | `pi_downward` |  |
-| `fwd_model` | `gate_rescue_repair` |  |
+| `fwd_model` | `gate_sharks` |  |
 | `dwn_model` | `bin_fire_blood` |  |
 | `fwd_models` | `` |  |
 | `dwn_models` | `` |  |

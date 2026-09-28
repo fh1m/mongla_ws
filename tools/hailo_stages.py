@@ -28,7 +28,7 @@ from mongla_vision.detection.factory import make_detector
 from mongla_vision.detection import hailo as H
 
 ap = argparse.ArgumentParser()
-ap.add_argument('--model', default='gate_rescue_repair')
+ap.add_argument('--model', default='gate_sharks')
 ap.add_argument('--conf', type=float, default=0.15)
 ap.add_argument('--seconds', type=float, default=12.0)
 ap.add_argument('--width', type=int, default=640)

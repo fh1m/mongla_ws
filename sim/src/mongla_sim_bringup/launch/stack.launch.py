@@ -63,10 +63,10 @@ def generate_launch_description():
             description='Start the vision pipeline on BOTH sim cameras.',
         ),
         DeclareLaunchArgument(
-            'model', default_value='gate_rescue_repair',
+            'model', default_value='gate_sharks',
             description='Detector weights stem under mongla_vision/models.',
         ),
-        DeclareLaunchArgument('models', default_value='gate=gate_rescue_repair'),
+        DeclareLaunchArgument('models', default_value='gate=gate_sharks'),
         DeclareLaunchArgument('active_model', default_value='gate'),
         DeclareLaunchArgument('classes', default_value='gate'),
         DeclareLaunchArgument('viewer', default_value='false'),

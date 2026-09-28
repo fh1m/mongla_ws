@@ -1,7 +1,7 @@
 """Which artifact a bare model STEM resolves to, per machine.
 
 Stem identity is what keeps missions, `ClassRef` and `mongla.use('<stem>')`
-backend-agnostic: the same `gate_rescue_repair` is a `.pt` on a dev box, an
+backend-agnostic: the same `gate_sharks` is a `.pt` on a dev box, an
 `.engine` on the Jetson and a `.hef` on the Pi. The resolution order is the
 only thing that makes that true, and getting it wrong is silent -- a stale
 `.pt` of the same stem runs at 3 Hz and looks like a slow chip.

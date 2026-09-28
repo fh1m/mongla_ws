@@ -16,8 +16,8 @@ built-in settle so the resumed detector's first frames land before we steer.
 LAUNCH (paused:=true is the norm -- detectors start idle, the mission resumes one):
   ros2 launch mongla_vision vision_dual.launch.py viewer:=true paused:=true \\
       fwd_device_path:=/dev/mongla_cam_forward dwn_device_path:=/dev/mongla_cam_downward \\
-      fwd_models:=gate_rescue_repair,torpedo_blood_hole \\
-      fwd_classes:=gate,rescue,repair,torpedo,blood,hole \\
+      fwd_models:=gate_sharks,torpedo_blood_hole \\
+      fwd_classes:=gate,shark,shaw_fish,torpedo,blood,hole \\
       dwn_models:=bin_fire_blood dwn_classes:=fire,blood
 
   NEVER launch paused:=false with two model-loaded detectors -- both infer from
@@ -40,13 +40,13 @@ def run(mongla, log=None):
     # model tight (fewer false holes on the shot) and the gate model loose. Set
     # once up front -- each override lives on its model and survives the set_model
     # switch below. (set_conf(x) with no model= would set ALL models uniformly.)
-    mongla.set_conf(0.35, model='gate_rescue_repair', node=_FWD)
+    mongla.set_conf(0.35, model='gate_sharks', node=_FWD)
     mongla.set_conf(0.55, model='torpedo_blood_hole', node=_FWD)
 
     # ── 1. GATE (forward) ───────────────────────────────────────────────────────
     # use_camera('forward') resumes the forward detector (pausing downward) + HUD.
     mongla.use_camera('forward')
-    mongla.set_model('gate_rescue_repair', node=_FWD)
+    mongla.set_model('gate_sharks', node=_FWD)
     mongla.set_classes('gate', node=_FWD)
     if mongla.wait_for('gate', timeout=10):
         mongla.vision.align('gate', yaw=0, lat=0, err=40, gain=30, duration=20)

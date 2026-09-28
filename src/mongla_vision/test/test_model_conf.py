@@ -64,15 +64,15 @@ def _bare_node():
 def test_single_model_conf_by_stem_applies():
     n = _bare_node()
     n._det = _FakeDet()
-    n._single_model_name = 'gate_rescue_repair'   # single-model launch: _active_name is None
-    n._apply_model_conf('gate_rescue_repair=0.55')
+    n._single_model_name = 'gate_sharks'   # single-model launch: _active_name is None
+    n._apply_model_conf('gate_sharks=0.55')
     assert n._det.conf == 0.55                     # was silently dropped before the fix
 
 
 def test_single_model_conf_wrong_stem_is_noop_not_crash():
     n = _bare_node()
     n._det = _FakeDet()
-    n._single_model_name = 'gate_rescue_repair'
+    n._single_model_name = 'gate_sharks'
     n._apply_model_conf('some_other_model=0.55')   # names a model not loaded
     assert n._det.conf is None                      # warned, not applied, no crash
 

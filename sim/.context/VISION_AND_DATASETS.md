@@ -129,7 +129,7 @@ drives both. The dual file prefixes every per-camera argument `fwd_`/`dwn_`.
 ```bash
 # live USB webcam
 ros2 launch mongla_vision vision.launch.py \
-    camera:=forward device:=4 model:=gate_rescue_repair classes:=gate,rescue \
+    camera:=forward device:=4 model:=gate_sharks classes:=gate,rescue \
     paused:=false viewer:=true
 
 # the sim's front camera
@@ -140,7 +140,7 @@ ros2 launch mongla_vision vision.launch.py \
 # a recorded video file
 ros2 launch mongla_vision vision.launch.py \
     camera:=forward video_file:=~/clips/gate.mp4 loop:=true \
-    model:=gate_rescue_repair paused:=false
+    model:=gate_sharks paused:=false
 ```
 
 ### Single camera, multi-model (switch mid-mission)
@@ -148,7 +148,7 @@ ros2 launch mongla_vision vision.launch.py \
 ```bash
 ros2 launch mongla_vision vision.launch.py \
     camera:=forward topic:=/mongla/sim/front_camera/image_fx \
-    models:=gate_rescue_repair,bin_fire_blood active_model:=gate_rescue_repair \
+    models:=gate_sharks,bin_fire_blood active_model:=gate_sharks \
     paused:=false
 ```
 
@@ -172,7 +172,7 @@ ros2 launch mongla_vision vision_dual.launch.py \
 ros2 launch mongla_vision vision_dual.launch.py \
     fwd_topic:=/mongla/sim/front_camera/image_fx \
     dwn_topic:=/mongla/sim/bottom_camera/image_fx \
-    fwd_models:=gate_rescue_repair,torpedo_blood_hole \
+    fwd_models:=gate_sharks,torpedo_blood_hole \
     dwn_models:=bin_fire_blood \
     device_cls:=cpu paused:=false
 ```
@@ -421,7 +421,7 @@ The cells live in `spec/robosub.yaml`, so a rules update is one edit.
 
 ## Per-visual labels do NOT give per-visual boxes — measured, negative
 
-The pool detectors are trained on **sub-features**: `gate_rescue_repair.pt`
+The pool detectors are trained on **sub-features**: `gate_sharks.pt`
 classifies `gate`/`rescue`/`repair`, `bin_fire_blood.pt` classifies
 `blood`/`fire`. The sim labels **whole models** (`robosub_gate`, `robosub_bins`),
 so **a dataset captured in simulation cannot train any model a mission actually
@@ -513,7 +513,7 @@ so. Now `visible_2d`.
 
 ## One box per TOP-LEVEL MODEL — nested models do not help either
 
-The pool detectors are trained on **sub-features**: `gate_rescue_repair.pt`
+The pool detectors are trained on **sub-features**: `gate_sharks.pt`
 classifies `gate`/`rescue`/`repair`, `bin_fire_blood.pt` classifies
 `blood`/`fire`. The sim can only annotate **whole props**, so a dataset captured
 here still cannot train a model any mission runs. That is the largest remaining

@@ -229,8 +229,8 @@ back to, transparently. Confirm which one you actually got from the backend
 canary line the detector logs at startup:
 
 ```
-[YOLO ] backend=hailo     (gate_rescue_repair.hef)     ← the vehicle
-[YOLO ] backend=yolo      (gate_rescue_repair.pt)      ← a dev box fallback
+[YOLO ] backend=hailo     (gate_sharks.hef)     ← the vehicle
+[YOLO ] backend=yolo      (gate_sharks.pt)      ← a dev box fallback
 ```
 
 ⛔ **A model's `<stem>.yaml` sidecar must ship beside the artifact.** Without it

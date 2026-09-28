@@ -42,7 +42,7 @@ CLIPS = {
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument('--model', default='/home/fh1m/hailo/work/gate_rescue_repair.onnx')
+    ap.add_argument('--model', default='/home/fh1m/hailo/work/gate_sharks.onnx')
     ap.add_argument('--conf', type=float, default=0.25)
     ap.add_argument('--seconds', type=float, default=60.0)
     ap.add_argument('--stride', type=int, default=2)

@@ -18,7 +18,7 @@ from mongla_vision.detector_node import _split_active
 
 class TestSplitActive:
     def test_a_bare_name_is_unchanged(self):
-        assert _split_active('gate_rescue_repair') == ('gate_rescue_repair', [])
+        assert _split_active('gate_sharks') == ('gate_sharks', [])
 
     def test_a_csv_gives_a_primary_and_the_rest(self):
         assert _split_active('a, b ,c') == ('a', ['b', 'c'])

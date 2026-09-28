@@ -58,7 +58,7 @@ classes conf imgsz max_det viewer foxglove foxglove_port`
 ros2 launch mongla_manager bringup.launch.py mode:=pool yaw_source:=bno085
 # control + a single-model forward detector, no HUD window (headless)
 ros2 launch mongla_manager bringup.launch.py mode:=pool yaw_source:=bno085 \
-    vision:=true camera:=forward model:=gate_rescue_repair classes:=gate,rescue,repair viewer:=false
+    vision:=true camera:=forward model:=gate_sharks classes:=gate,shark,shaw_fish viewer:=false
 # control + vision + Foxglove bridge (ws://<ip>:8765)
 ros2 launch mongla_manager bringup.launch.py mode:=pool yaw_source:=bno085 vision:=true foxglove:=true
 ```
@@ -77,29 +77,29 @@ track_buffer min_hits max_predict depth depth_model distance pool_depth_m camera
 ```bash
 # SINGLE camera, SINGLE model
 ros2 launch mongla_vision vision.launch.py camera:=forward \
-    model:=gate_rescue_repair classes:=gate,rescue,repair conf:=0.55
+    model:=gate_sharks classes:=gate,shark,shaw_fish conf:=0.55
 
 # SINGLE camera, port-stable by-path device (2 identical USB cams -> pin the port)
 ros2 launch mongla_vision vision.launch.py camera:=forward \
     device_path:=/dev/v4l/by-path/platform-xhci-hcd.1-usb-0:1:1.0-video-index0 \
-    model:=gate_rescue_repair classes:=gate,rescue,repair
+    model:=gate_sharks classes:=gate,shark,shaw_fish
 
 # SINGLE camera, MULTI-model registry (switch active_model live from DSL/UI)
 ros2 launch mongla_vision vision.launch.py camera:=forward \
-    models:=gate_rescue_repair,slalom_red_pipe,torpedo_blood_hole \
-    classes:=gate,rescue,repair,red_pipe,torpedo,blood,hole conf:=0.55
+    models:=gate_sharks,slalom_red_pipe,torpedo_blood_hole \
+    classes:=gate,shark,shaw_fish,red_pipe,torpedo,blood,hole conf:=0.55
 
 # headless (no cv2 HUD window) — pair with web_video_server / mission_web
-ros2 launch mongla_vision vision.launch.py camera:=forward model:=gate_rescue_repair viewer:=false
+ros2 launch mongla_vision vision.launch.py camera:=forward model:=gate_sharks viewer:=false
 
 # per-model conf override in a registry (name=conf, live-tunable too)
 ros2 launch mongla_vision vision.launch.py camera:=forward \
-    models:=gate_rescue_repair,torpedo_blood_hole \
+    models:=gate_sharks,torpedo_blood_hole \
     model_conf:=torpedo_blood_hole=0.65 conf:=0.50
 
 # DATASET VIDEO (no hardware — drives the full camera->detector->image_debug chain)
 ros2 launch mongla_vision vision.launch.py camera:=forward video_file:=/path/clip.mp4 loop:=true \
-    model:=gate_rescue_repair classes:=gate,rescue,repair
+    model:=gate_sharks classes:=gate,shark,shaw_fish
 ```
 Knobs: `imgsz:=640` (export-baked for `.engine`; re-scales `.pt` only) · `max_det:=100` ·
 `conf:=` (whole-registry) · `paused:=true` (start not inferring) · `debug_image_hz:=12` (MJPEG
@@ -116,25 +116,25 @@ max_det paused debug_image_hz viewer tracking tracker_type fwd_video dwn_video f
 ```bash
 # DOUBLE camera, one model each
 ros2 launch mongla_vision vision_dual.launch.py \
-    fwd_model:=gate_rescue_repair fwd_classes:=gate,rescue,repair \
+    fwd_model:=gate_sharks fwd_classes:=gate,shark,shaw_fish \
     dwn_model:=bin_fire_blood   dwn_classes:=fire,blood
 
 # DOUBLE camera, MULTI-model forward registry + single downward
 ros2 launch mongla_vision vision_dual.launch.py \
-    fwd_models:=gate_rescue_repair,slalom_red_pipe,torpedo_blood_hole \
-    fwd_classes:=gate,rescue,repair,red_pipe,torpedo,blood,hole \
+    fwd_models:=gate_sharks,slalom_red_pipe,torpedo_blood_hole \
+    fwd_classes:=gate,shark,shaw_fish,red_pipe,torpedo,blood,hole \
     dwn_model:=bin_fire_blood dwn_classes:=fire,blood
 
 # DOUBLE camera, port-stable by-path (the 2-identical-cam case)
 ros2 launch mongla_vision vision_dual.launch.py \
     fwd_device_path:=/dev/v4l/by-path/...-video-index0 \
     dwn_device_path:=/dev/v4l/by-path/...-video-index0 \
-    fwd_model:=gate_rescue_repair dwn_model:=bin_fire_blood
+    fwd_model:=gate_sharks dwn_model:=bin_fire_blood
 
 # DOUBLE dataset video (no hardware)
 ros2 launch mongla_vision vision_dual.launch.py \
     fwd_video:=/path/fwd.mp4 dwn_video:=/path/dwn.mp4 fwd_loop:=true dwn_loop:=true \
-    fwd_model:=gate_rescue_repair dwn_model:=bin_fire_blood
+    fwd_model:=gate_sharks dwn_model:=bin_fire_blood
 ```
 
 ---
@@ -148,17 +148,17 @@ paused debug_image_hz viewer fwd_* dwn_* imgsz max_det tracking`.
 ```bash
 # DOUBLE camera (default cameras:=both -> vision_dual), one model each
 ros2 launch mongla_vision mission_web.launch.py \
-    fwd_model:=gate_rescue_repair fwd_classes:=gate,rescue,repair \
+    fwd_model:=gate_sharks fwd_classes:=gate,shark,shaw_fish \
     dwn_model:=bin_fire_blood dwn_classes:=fire,blood
 
 # DOUBLE camera, MULTI-model forward registry
 ros2 launch mongla_vision mission_web.launch.py \
-    fwd_models:=gate_rescue_repair,slalom_red_pipe,torpedo_blood_hole \
-    fwd_classes:=gate,rescue,repair,red_pipe,torpedo,blood,hole dwn_model:=bin_fire_blood
+    fwd_models:=gate_sharks,slalom_red_pipe,torpedo_blood_hole \
+    fwd_classes:=gate,shark,shaw_fish,red_pipe,torpedo,blood,hole dwn_model:=bin_fire_blood
 
 # SINGLE forward (cameras:=forward -> vision.launch.py; console shows ONE panel, no phantom 2nd)
 ros2 launch mongla_vision mission_web.launch.py cameras:=forward \
-    fwd_model:=gate_rescue_repair fwd_classes:=gate,rescue,repair
+    fwd_model:=gate_sharks fwd_classes:=gate,shark,shaw_fish
 
 # SINGLE downward, device override + own model
 ros2 launch mongla_vision mission_web.launch.py cameras:=downward \
@@ -262,7 +262,7 @@ missing `nvpmodel` as "not a Jetson — skipped", not a fault).
 
 ```bash
 # monocular depth proximity (vis_range) — depth:=true
-ros2 launch mongla_vision vision.launch.py camera:=forward model:=gate_rescue_repair depth:=true
+ros2 launch mongla_vision vision.launch.py camera:=forward model:=gate_sharks depth:=true
 # DVL-free downward optical-flow distance (calc_distance) — distance:=true + hud_distance:=true
 ros2 launch mongla_vision vision.launch.py camera:=downward distance:=true hud_distance:=true \
     pool_depth_m:=4.0

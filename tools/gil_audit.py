@@ -103,7 +103,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--seconds', type=float, default=3.0)
     ap.add_argument('--hef', default=os.path.expanduser(
-        '~/hailo_models/gate_rescue_repair.hef'))
+        '~/hailo_models/gate_sharks.hef'))
     ap.add_argument('--serial', default='/dev/ttyUSB0')
     a = ap.parse_args()
 

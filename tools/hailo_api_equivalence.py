@@ -97,7 +97,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--mode', choices=('blocking', 'async'))
     ap.add_argument('--out')
-    ap.add_argument('--model', default='gate_rescue_repair')
+    ap.add_argument('--model', default='gate_sharks')
     ap.add_argument('--conf', type=float, default=0.05)
     ap.add_argument('--compare', nargs=2)
     a = ap.parse_args()

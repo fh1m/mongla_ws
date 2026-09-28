@@ -96,8 +96,8 @@ def test_bbox_metrics_unknown_frame_is_none():
 
 # ---- build_camera_view / build_snapshot ------------------------------------
 def _cam(**over):
-    base = {'present': True, 'paused': False, 'active_model': 'gate_rescue_repair',
-            'models': ['gate_rescue_repair', 'slalom_red_pipe'], 'conf': 0.35,
+    base = {'present': True, 'paused': False, 'active_model': 'gate_sharks',
+            'models': ['gate_sharks', 'slalom_red_pipe'], 'conf': 0.35,
             'classes': ['gate', 'rescue'], 'fps': 12.3, 'frame': (640, 480),
             'dets': [{'cls': 'gate', 'conf': 0.9, 'cx': 400, 'cy': 300, 'w': 64, 'h': 48,
                       'vis': 0.5, 'id': '7'},

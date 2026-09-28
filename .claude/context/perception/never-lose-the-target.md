@@ -337,7 +337,7 @@ same week.
 **COCO-FP** (*A Deep Dive into Background False Positives for COCO
 Detectors*) — background errors are false positives on **non-target visual
 clutter**, and standard benchmarks do not contain enough of it to measure
-them. Ours: `gate_rescue_repair` fires on pool structure — lane lines, floor
+them. Ours: `gate_sharks` fires on pool structure — lane lines, floor
 seams, the wall/floor horizon — at up to **0.92**, higher than the 0.89 it
 gives the real gate (B-60).
 

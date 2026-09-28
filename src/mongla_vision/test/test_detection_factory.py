@@ -21,9 +21,9 @@ from mongla_vision.detection.factory import (      # noqa: E402
 #  Backend selection
 # --------------------------------------------------------------------------- #
 def test_extension_picks_the_backend():
-    assert backend_for('/models/gate_rescue_repair.hef') == 'hailo'
-    assert backend_for('/models/gate_rescue_repair.engine') == 'yolo'
-    assert backend_for('/models/gate_rescue_repair.pt') == 'yolo'
+    assert backend_for('/models/gate_sharks.hef') == 'hailo'
+    assert backend_for('/models/gate_sharks.engine') == 'yolo'
+    assert backend_for('/models/gate_sharks.pt') == 'yolo'
 
 
 def test_hef_is_preferred_over_engine_and_pt():
