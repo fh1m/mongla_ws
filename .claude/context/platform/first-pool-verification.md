@@ -171,6 +171,10 @@ deliberate-damage test in this document, and the cheapest.
 | **Downward camera as a DVL** | verified to 1.09 cm over 30 cm **in air**. No in-water velocity number exists at all |
 | **Approach band** (§46) | confidence peaks mid-range on archive. Does the peak sit at the same apparent size in this water? |
 | **Fine-tuned XFeat** | only if the checkpoint sweep says it wins on the held-out venue |
+| **Time-to-contact from scale** (§62) | tau swings as much as its own value (p50 2.5 s, frame-to-frame p90 27.2 s). ⭐ Needs ONE run approaching a fixed prop at a **known constant speed from a known start range** — that makes true tau a straight line, so the filter becomes a fit instead of a guess. Cheapest item on this list and it unblocks `time_to_contact.py` |
+| **`gate_sharks` vs the shipped graph** (§59) | +84.2 points of separation at 0.30 on archive against **+0.0** for `gate_rescue_repair`. Confirm on this pool's water before trusting either, and decide whether both run (`fwd_models:=`) or one does |
+| **Orange flare chroma** (§60) | direction (+a*, +b*) held in every run; magnitude collapsed 20.2 → 0.8 between two SIM lighting setups. Only worth re-measuring with a real flare in frame, and only as a diagnostic |
+| **The trackability floor** (§58) | `Follower.reset` now refuses below 2.0 grey levels. Measured on a GRID of boxes, mostly water and wall — so the 19.4 % refusal rate is an upper bound. What water decides is the rate on REAL detection boxes |
 
 ---
 

@@ -127,9 +127,16 @@ DEFERRED = {
         'reachability. ⚠ Nearly deleted on the strength of a sweep that could '
         'not see tools/; the sweep now scans it.'),
     'mongla_vision/mongla_vision/time_to_contact.py': (
-        'needs a consumer in the approach/standoff control path, which does '
-        'not exist yet -- adding one now would be a control change justified '
-        'by no measurement. Blocked behind an in-water standoff run.'),
+        'BLOCKER CORRECTED 2026-09-28 (section 62). It was "needs metres we do '
+        'not have"; the literature form `tau = scale / (d scale/dt)` needs '
+        'none -- the metres cancel, and we already compute that scale in THREE '
+        'places and discard all three. The real blocker is noise: measured on '
+        'a 600-frame approach, tau p50 2.5 s with a frame-to-frame swing of '
+        'p50 2.4 s and p90 27.2 s, so it is noise with a unit. Same shape as '
+        'the per-frame plane tilt, where smoothing bought smoothness and NOT '
+        'accuracy. Closes with one pool run at a known constant speed from a '
+        'known start range, which makes true tau a straight line and the '
+        'filter a fit rather than a guess.'),
     'mongla_vision/mongla_vision/approach.py': (
         'the BAND is measured (section 23) but the controller that would act '
         'on back-off does not exist; vision_verbs closes range only. Wiring '
