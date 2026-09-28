@@ -126,24 +126,29 @@ def test_murkier_water_raises_more_than_clear_water():
 # --------------------------------------------------------------------------- #
 #  The approach band
 # --------------------------------------------------------------------------- #
+# ⛔ THESE THREE USED TO PASS NO CLASS, and that was the defect rather than a
+# convenience: one global band (0.25-0.45) served three classes whose measured
+# peaks are 0.15, 0.52 and 0.80+. `advise` now requires the class, and the full
+# per-class behaviour is covered in `test_approach_band_is_measured.py`.
 def test_far_away_it_closes():
-    assert advise(40, 640).action == CLOSE
+    assert advise(40, 640, 'gate').action == CLOSE
 
 
 def test_inside_the_band_it_holds():
-    assert advise(0.35 * 640, 640).action == HOLD
+    assert advise(0.50 * 640, 640, 'gate').action == HOLD
 
 
 def test_too_close_it_BACKS_OFF():
-    """⭐ The half §23 measured and a 'minimise range' controller cannot
-    express: confidence rises 0.260 -> 0.521 and then FALLS."""
-    a = advise(0.80 * 640, 640)
+    """⭐ The half section 23 measured and a 'minimise range' controller cannot
+    express: confidence rises and then FALLS. Measured for `gate` at
+    0.45-0.60 of frame height, so 0.80 is past it."""
+    a = advise(0.80 * 640, 640, 'gate')
     assert a.action == BACK_OFF and 'FALLS' in a.reason
 
 
 def test_no_size_holds_rather_than_guessing():
-    assert advise(0, 640).action == HOLD
-    assert advise(100, 0).action == HOLD
+    assert advise(0, 640, 'gate').action == HOLD
+    assert advise(100, 0, 'gate').action == HOLD
 
 
 def test_evidence_ignores_a_repeated_view():
