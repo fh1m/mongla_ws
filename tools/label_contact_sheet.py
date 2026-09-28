@@ -4,7 +4,7 @@
 ⛔ WHY THIS EXISTS. Every detection bar in `measured-bars.md` section 1 was
 derived from labelled held-out PAIRS -- frames that contain the prop. A set
 built that way cannot measure a false positive on open water, because it holds
-no open water. That is how B-59 hid: `gate_rescue_repair` claims a `gate` on
+no open water. That is how B-59 hid: `gate_sharks` claims a `gate` on
 90.8 % of gate-free frames at the shipped conf 0.15.
 
 `negative_clip_check.py` fixes the measurement but needs NEGATIVE clips, and a

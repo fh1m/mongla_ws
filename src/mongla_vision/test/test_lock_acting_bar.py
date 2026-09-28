@@ -2,7 +2,7 @@
 
 ⛔ B-59. `lock_node._on_det` accepted the highest-scoring box with `score > 0`
 as THE target, at full authority. Measured on real Mirpur footage,
-`gate_rescue_repair` claims a `gate` on **90.8 % of gate-free frames** at conf
+`gate_sharks` claims a `gate` on **90.8 % of gate-free frames** at conf
 0.15 -- half-frame boxes over empty turquoise at 0.44-0.56, confirmed by
 rendering them. So on open water the ladder locked onto nothing: the follower
 seeded on it, the anchor enrolled against it, and the vision verbs drove the

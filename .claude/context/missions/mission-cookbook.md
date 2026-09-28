@@ -491,7 +491,7 @@ optionally `fire`, each with a mission-authored `fallback`:
 
 ```python
 # Register models once at the top of run(); access via mongla.models.alias.class
-mongla.models(gate='gate_rescue_repair')
+mongla.models(gate='gate_sharks')
 
 mongla.vision.align(mongla.models.gate.gate, yaw=0, lat=0,
                     gain=30, duration=20, fallback=sweep_for_gate)
@@ -1629,8 +1629,8 @@ derives the node from its `camera` argument (default = the mission's sticky
 camera), so just pass `camera=`:
 
 ```python
-mongla.set_model('gate_rescue_repair', camera='forward')   # → /mongla_detector_forward
-mongla.set_classes('gate,rescue,repair', camera='forward')
+mongla.set_model('gate_sharks', camera='forward')   # → /mongla_detector_forward
+mongla.set_classes('gate,shark,shaw_fish', camera='forward')
 mongla.resume_detector('forward')                          # camera arg drives the node name
 mongla.set_model('bin_fire_blood', camera='downward')      # → /mongla_detector_downward
 ```
@@ -1762,7 +1762,7 @@ puts every outcome on the scorecard.
 ### Individual chunk test commands
 
 ```bash
-# ✅ runnable today (gate_rescue_repair.pt exists)
+# ✅ runnable today (gate_sharks.pt exists)
 ros2 run mongla_planner mission task_gate
 ros2 run mongla_planner mission task_return
 

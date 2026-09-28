@@ -37,7 +37,7 @@ def _vision(message, x=12.0):
     dsl = MagicMock()
     dsl.__dict__['_scoreboard'] = [{'cmd': 'vision_align', 'success': True,
                                     'elapsed': 3.0, 'msg': message}]
-    dsl.__dict__['_vinfo'] = {'forward': (('gate_rescue_repair',), 2)}
+    dsl.__dict__['_vinfo'] = {'forward': (('gate_sharks',), 2)}
     dsl._record_vision = lambda *a: MonglaMission._record_vision(dsl, *a)
     v = _VisionDSL.__new__(_VisionDSL)
     v._dsl = dsl
@@ -54,7 +54,7 @@ def test_the_result_and_the_scoreboard_row_carry_the_evidence():
     row = dsl.__dict__['_scoreboard'][0]['vision']
     assert row == {'target': 'gate', 'camera': 'forward', 'outcome': 'ALIGNED',
                    'saw_target': True, 'x_px': 12.0, 'y_px': -3.0, 'fill': 0.0,
-                   'fired': 'ch1:FIRED', 'model': ['gate_rescue_repair']}
+                   'fired': 'ch1:FIRED', 'model': ['gate_sharks']}
 
 
 def test_no_fire_requested_reads_none_and_never_seen_reads_null():

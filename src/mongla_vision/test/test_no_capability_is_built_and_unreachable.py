@@ -102,9 +102,20 @@ DEFERRED = {
         'is 0.090; the one water control measured 0.360, which would need '
         'MIN_RUN 6 to stay under 1 % false chains -- longer than the median '
         'gap. Precedent: continuity.py, whose person-in-air constants were '
-        'also not shipped. Revisit only after B-59 is fixed, the bar is '
-        're-derived WITH negative clips, and the constants are re-swept on '
-        'water.'),
+        'also not shipped. '
+        '⭐ HALF THE BLOCKER LIFTED 2026-09-28, and it was lifted by a MODEL '
+        'CHANGE nobody re-checked. B-59 is model-SPECIFIC: re-run with the '
+        'same tool on the same clips, `gate_sharks` separates +84.2 points at '
+        '0.30 and +96.8 at 0.45, where `gate_rescue_repair` gives +0.0 at '
+        'every bar. The band below the bar on THAT graph is signal, not '
+        'hallucination -- see section 59. '
+        '⛔ THE OTHER HALF STANDS, and a second measurement replaced it: on '
+        'gate.mkv `gate_sharks` detects the gate in 900 of 900 frames at '
+        '0.892-0.932, so there are NO GAPS to accumulate across and the rung '
+        'has nothing to do. Its value shrinks exactly as the detector '
+        'improves. Promote it only when a clip with REAL dropouts on a graph '
+        'with measured separation shows the in-view and departed regimes '
+        'separating -- neither of which the archive currently contains.'),
     'mongla_vision/mongla_vision/continuity.py': (
         'NOW EXERCISED by tools/continuity_from_bag.py, which produced the '
         'measurement it was written for (section 50): 338 real gaps, p50 '
@@ -144,7 +155,18 @@ DEFERRED = {
     'mongla_vision/mongla_vision/detection/confidence_calibration.py': (
         'ships OFF by design: its gain is DECLARED, not measured, and it '
         'needs a labelled per-venue set to calibrate. Wiring it before that '
-        'would put an unmeasured constant in the detection path.'),
+        'would put an unmeasured constant in the detection path. '
+        '⛔ STRENGTHENED 2026-09-28 -- the blocker is now EVIDENCE, not just '
+        'absence. This module maps a TURBIDITY statistic onto a confidence '
+        'adjustment, and that family has now failed twice on real data: '
+        '`underwater.recommend()` was deleted for fitting exactly such a rule '
+        'to two clips that a third venue contradicted, and section 60 measured '
+        'a chromatic bar collapsing from a margin of 20.2 to 0.8 between two '
+        'SIM lighting setups -- before sunlight, depth or time of day enter. A '
+        'turbidity-to-confidence gain is not merely unmeasured here, it is the '
+        'shape of thing this stack has twice measured to be unstable. Promote '
+        'it only with a labelled set spanning MULTIPLE venues, and only if the '
+        'gain survives a held-out one.'),
 }
 
 

@@ -157,7 +157,7 @@ def generate_launch_description():
                                           "profile argument (its `vision:=`). "
                                           "Renamed here because `vision` is this "
                                           "file's boolean on/off switch."),
-        DeclareLaunchArgument('fwd_model',   default_value='gate_rescue_repair',
+        DeclareLaunchArgument('fwd_model',   default_value='gate_sharks',
                               description='vision_stack:=pi -- forward-camera model stem.'),
         DeclareLaunchArgument('dwn_model',   default_value='bin_fire_blood',
                               description='vision_stack:=pi -- downward-camera model stem.'),

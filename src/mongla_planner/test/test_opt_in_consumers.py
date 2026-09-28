@@ -146,10 +146,10 @@ def _info(stems, epoch):
 
 def test_active_models_reads_the_latched_announcement(node):
     pub = _latched(node)
-    pub.publish(_info('gate_rescue_repair,gate_seg', 3))
+    pub.publish(_info('gate_sharks,gate_seg', 3))
     m = _dsl(node)
     assert MonglaMission.active_models(m, 'forward', timeout=2.0) == \
-        (('gate_rescue_repair', 'gate_seg'), 3)
+        (('gate_sharks', 'gate_seg'), 3)
 
 
 def test_confirm_waits_for_the_new_model_then_drops_pre_switch_detections(node):
@@ -167,11 +167,11 @@ def test_confirm_waits_for_the_new_model_then_drops_pre_switch_detections(node):
 
 def test_confirming_the_model_already_live_returns_at_once_and_keeps_detections(node):
     pub = _latched(node)
-    pub.publish(_info('gate_rescue_repair', 9))
+    pub.publish(_info('gate_sharks', 9))
     m = _dsl(node)
     before = MonglaMission.active_models(m, 'forward', timeout=2.0)
     t0 = time.monotonic()
-    MonglaMission._confirm_model(m, 'forward', 'gate_rescue_repair', before, 5.0)
+    MonglaMission._confirm_model(m, 'forward', 'gate_sharks', before, 5.0)
     assert time.monotonic() - t0 < 1.0
     assert 'forward' in m._det_cache
 

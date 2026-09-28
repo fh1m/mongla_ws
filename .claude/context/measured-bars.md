@@ -6129,7 +6129,7 @@ pixel-derived number, ask what the camera decided before handing it over.
 
 ---
 
-## 58. ⭐⭐⭐ THE MODEL-FREE RUNG THAT CANNOT EXIST — four families, one reason
+## 58. ⭐⭐⭐ THE MODEL-FREE RUNG THAT CANNOT EXIST — four families REJECTED, one reason
 
 **2026-09-28.** The standing ask was a **third ladder rung that needs no model
 and no training data**, on the Bumblebee reflex that redundancy beats
@@ -6278,7 +6278,7 @@ before believing either column.
 
 ---
 
-## 60. ⛔ COLOUR IS NOT A RUNG, EVEN WHEN THE RULEBOOK FIXES IT
+## 60. ⛔ COLOUR IS NOT A RUNG, EVEN WHEN THE RULEBOOK FIXES IT — built, measured, DELETED
 
 **2026-09-28.** The SAUVC rulebook names the colour of eight of the eleven
 props — "orange in color", "red in color", "striped red and green markings on
@@ -6348,7 +6348,7 @@ chromatic_prior_check.py` is the harness that re-derives it against labels.
 
 ---
 
-## 61. ⚠ REDUNDANCY IS NOT UNCONDITIONAL — the ensemble lost to its better half
+## 61. ⚠ REDUNDANCY IS NOT UNCONDITIONAL — the ensemble was measured and not chosen
 
 **2026-09-28.** Bumblebee reflex 1 says "when you cannot pick a threshold, RUN
 BOTH". We ship two graphs that detect `gate`, so the intersection was measured

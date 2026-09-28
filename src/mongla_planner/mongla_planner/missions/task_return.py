@@ -3,7 +3,7 @@
 Two-verb vision: align() re-centres on the gate (creeping to find it),
 move() drives back through on bbox-height fill, then a style roll.
 
-Standalone test (gate_rescue_repair.pt present):
+Standalone test (gate_sharks.pt present):
     ros2 run mongla_planner mission task_return
 
 Called by full_mission_2026 combinator after torpedo_task.
@@ -32,7 +32,7 @@ def run(mongla, log=None):
         mongla.turn(RETURN_HEADING_DEG)
 
     mongla.resume_detector('forward')
-    mongla.set_model('gate_rescue_repair', node=_FWD)
+    mongla.set_model('gate_sharks', node=_FWD)
     mongla.set_classes('gate', node=_FWD)
 
     # ── Centre on the return gate, descend, drive through ─────────────────────

@@ -28,7 +28,7 @@ than a lever.
 ## 1. Every HEF we ship, parsed
 
 ```
-gate_rescue_repair  3 classes   Multi Context x3   score th 0.050   IoU 0.70
+gate_sharks  3 classes   Multi Context x3   score th 0.050   IoU 0.70
 bin_fire_blood      2 classes   Multi Context x3   score th 0.050   IoU 0.70
 sauvc_sim          11 classes   Multi Context x3   score th 0.050   IoU 0.70
 yolov11n (stock)   80 classes   Multi Context x3   score th 0.200   IoU 0.70
@@ -45,7 +45,7 @@ is why host decode measures 0.02 ms.
 
 ## 2. Where a frame's time actually goes
 
-`tools/hailo_stages.py`, synthetic frames, `gate_rescue_repair`:
+`tools/hailo_stages.py`, synthetic frames, `gate_sharks`:
 
 ```
   stage         median      p95     share
@@ -69,7 +69,7 @@ model                    contexts        HW-only FPS
 yolov8s  (11.3 MB)       Single             462.4
 yolov8n  ( 5.1 MB)       Single             414.6
 bin_fire_blood (2 cls)   Multi x3            98.6
-gate_rescue_repair       Multi x3            98.1
+gate_sharks       Multi x3            98.1
 sauvc_sim (11 cls)       Multi x3            98.3
 yolov11n (80 cls)        Multi x3            92.7
 yolov11s                 Multi x3            42.9
@@ -129,7 +129,7 @@ and would have to be justified against accuracy, not FPS.
 
 ```
 model                     chip/frame   our infer   overhead
-gate_rescue_repair (x3)     10.19 ms     9.54 ms    ~0 ms
+gate_sharks (x3)     10.19 ms     9.54 ms    ~0 ms
 yolov8n (single ctx)         2.41 ms     7.12 ms    4.71 ms
 ```
 `InferVStreams.infer()` costs a fixed ~4.7 ms per call. Behind a 10 ms graph
@@ -141,7 +141,7 @@ that is invisible; in front of a 2.4 ms graph it is **66 % of the frame**.
 delta anywhere**. Ours:
 
 ```
-                          yolov8n (single ctx)   gate_rescue_repair (x3)
+                          yolov8n (single ctx)   gate_sharks (x3)
 blocking InferVStreams          141 Hz                   98.2 Hz
 async depth 2                   225 Hz  (1.60x)          98.2 Hz  (1.00x)
 async depth 4                   292 Hz  (2.07x)          98.2 Hz  (1.00x)
@@ -214,7 +214,7 @@ right; they were answering different questions.**
 Every launch path shipped conf **0.35-0.45**, the CUDA number, against HEFs
 baked at 0.05 and a documented INT8 penalty of ~0.08. The Pi paths now default
 to **0.15**. That was an inference until this run; 605 frames through
-`gate_rescue_repair` on the forward camera, one pass, thresholds applied to the
+`gate_sharks` on the forward camera, one pass, thresholds applied to the
 same boxes:
 
 ```
@@ -647,8 +647,8 @@ loop measured here is strictly serial), not from a smaller model.
   carries no `names` table, so the documented fallback to the model's embedded
   names does not exist. With no sidecar the allowlist is empty and the detector
   returns `[]` **every frame** with a single warning. `yolo.py:52-63` already
-  derives the sidecar by suffix-swap, so `gate_rescue_repair.hef` ->
-  `gate_rescue_repair.yaml` resolves with no code change.
+  derives the sidecar by suffix-swap, so `gate_sharks.hef` ->
+  `gate_sharks.yaml` resolves with no code change.
 
 ## Building the Python bindings (the wheel is NOT public)
 
@@ -675,7 +675,7 @@ bindings are built by their own `setup.py`, which invokes cmake itself. And
 
 ## M2 / M5 — our own model, compiled and measured (2026-09-02)
 
-`gate_rescue_repair` (YOLO11n, 3 classes) is compiled and running on the chip.
+`gate_sharks` (YOLO11n, 3 classes) is compiled and running on the chip.
 
 **M2 — our model is FASTER than the stock proxy**, which retires the caveat this
 document previously carried:
@@ -683,7 +683,7 @@ document previously carried:
 | | hw_only FPS | latency |
 |---|---|---|
 | stock COCO yolov11n (80 classes) | 92.4 | 7.81 ms |
-| **ours, `gate_rescue_repair` (3 classes)** | **97.8** | 8.34 ms |
+| **ours, `gate_sharks` (3 classes)** | **97.8** | 8.34 ms |
 
 5.8 % faster, exactly as predicted from the smaller NMS workload. **The stock-HEF
 proxy was fair and slightly conservative.**
@@ -744,16 +744,16 @@ which the low baked threshold is what *permits*:
 
 ```bash
 # ONNX: no NMS in the graph, opset 11, Hailo adds its own
-yolo export model=gate_rescue_repair.pt format=onnx opset=11 nms=False
+yolo export model=gate_sharks.pt format=onnx opset=11 nms=False
 
-hailo parser onnx gate_rescue_repair.onnx --hw-arch hailo8 \
+hailo parser onnx gate_sharks.onnx --hw-arch hailo8 \
   --start-node-names images \
   --end-node-names /model.23/cv2.0/cv2.0.2/Conv /model.23/cv3.0/cv3.0.2/Conv \
                    /model.23/cv2.1/cv2.1.2/Conv /model.23/cv3.1/cv3.1.2/Conv \
                    /model.23/cv2.2/cv2.2.2/Conv /model.23/cv3.2/cv3.2.2/Conv
-hailo optimize gate_rescue_repair.har --hw-arch hailo8 \
-  --calib-set-path calib_set.npy --model-script gate_rescue_repair.alls
-hailo compiler gate_rescue_repair_optimized.har --hw-arch hailo8
+hailo optimize gate_sharks.har --hw-arch hailo8 \
+  --calib-set-path calib_set.npy --model-script gate_sharks.alls
+hailo compiler gate_sharks_optimized.har --hw-arch hailo8
 ```
 
 **Traps, each of which cost real time:**
@@ -830,7 +830,7 @@ do and every model reports ~98 FPS. On real frames:
 | model | classes | infer ms | Hz | dets/frame |
 |---|---|---|---|---|
 | stock COCO yolov11n | 80 | 12.24 | 81.7 | 0.3 |
-| gate_rescue_repair | 3 | 10.49 | 95.4 | 3.3 |
+| gate_sharks | 3 | 10.49 | 95.4 | 3.3 |
 | bin_fire_blood | 2 | 10.16 | 98.4 | 1.4 |
 | sauvc_sim | 11 | 10.34 | 96.7 | 0.0 |
 
@@ -875,10 +875,10 @@ conf   : 0.12-0.15  (fp32 would use 0.20)
 table (57 Hz e2e, the 13-minute soak) were taken on **stock COCO** HEFs; M2 then
 measured our own model at **97.8 vs 92.4 FPS**, so those figures are
 conservative by ~6 % and the proxy is retired. The *accuracy* result (M5) was
-measured on our own `gate_rescue_repair` weights against real pool frames — no
+measured on our own `gate_sharks` weights against real pool frames — no
 proxy involved.
 
-**The remaining gap is scope, not doubt:** only `gate_rescue_repair` has been
+**The remaining gap is scope, not doubt:** only `gate_sharks` has been
 compiled. `bin_fire_blood`, `sauvc_sim` and the rest follow the same recipe, and
 `sauvc_sim` has 11 classes, so its NMS cost (host-side, see above) is worth
 re-measuring rather than assuming.
@@ -941,9 +941,9 @@ End to end through `make_detector`, bus.jpg, on the vehicle:
 |---|---|---|
 | seg alone, with masks | 77.1 Hz | **85.2 Hz** |
 | seg alone, boxes only | 103.5 Hz | **113.3 Hz** |
-| `gate_rescue_repair` alone | 85.4 Hz | **95.3 Hz** |
+| `gate_sharks` alone | 85.4 Hz | **95.3 Hz** |
 | both alternating every frame | 32.6 Hz | **37.5 Hz** per pair |
-| `gate_rescue_repair` **after** the swaps | 85.4 Hz | **95.1 Hz** |
+| `gate_sharks` **after** the swaps | 85.4 Hz | **95.1 Hz** |
 
 The last row is the one that answers "does segmentation slow the pipeline
 down": **no.** A resident, swapping seg model leaves the detection path at the
@@ -1021,15 +1021,15 @@ harness:
 
 ```bash
 ros2 launch mongla_vision vision_pi.launch.py \
-  fwd_models:=gate_rescue_repair,yolov8n_seg \
-  fwd_active:=gate_rescue_repair,yolov8n_seg \
+  fwd_models:=gate_sharks,yolov8n_seg \
+  fwd_active:=gate_sharks,yolov8n_seg \
   dwn_models:=bin_fire_blood
 ```
 
 brings up both models on the forward camera beside the downward detector —
 three network groups resident — and logs
 
-    [DET  ] running 2 models on every frame: 'gate_rescue_repair' +
+    [DET  ] running 2 models on every frame: 'gate_sharks' +
     ['yolov8n_seg']. ... the frame rate is the SUM plus the swaps
 
 ⛔ **`*_active` selects FROM `*_models`**, so a multi-model launch needs both

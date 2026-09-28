@@ -2731,7 +2731,7 @@ class MonglaMission:
                   confirm_s: float = 0.0) -> None:
         """Switch the active detector model, or run SEVERAL at once.
 
-        ``name`` is the model **stem** (e.g. ``'gate_rescue_repair'``) or a
+        ``name`` is the model **stem** (e.g. ``'gate_sharks'``) or a
         registry key. Works on BOTH launch styles: a single-model launch
         (``model:=<stem>``) accepts ``set_model('<that stem>')`` as a no-op and
         rejects any *other* name; a registry launch (``models:=``) accepts the
@@ -2741,9 +2741,9 @@ class MonglaMission:
         **Pass a list or a comma-separated string to run more than one model on
         every frame** -- a detector and a segmentation model together, say::
 
-            mongla.use('gate_rescue_repair')                  # detection only
+            mongla.use('gate_sharks')                  # detection only
             mongla.use('gate_seg')                            # segmentation only
-            mongla.use(['gate_rescue_repair', 'gate_seg'])    # both, merged
+            mongla.use(['gate_sharks', 'gate_seg'])    # both, merged
 
         The FIRST name stays "the" model: it owns the class filter, the
         published `vision_info`, and the alignment line. The rest only

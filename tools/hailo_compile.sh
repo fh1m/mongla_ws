@@ -4,7 +4,7 @@
 # This exists because the toolchain kept being stood up by hand and thrown
 # away, and each rebuild rediscovered the same two traps at the same cost.
 #
-#   ./tools/hailo_compile.sh gate_rescue_repair --nms-score-th 0.05
+#   ./tools/hailo_compile.sh gate_sharks --nms-score-th 0.05
 #   ./tools/hailo_compile.sh --check            # verify the toolchain only
 #
 # ⛔ TRAP 1 -- PYTHONPATH. A sourced ROS overlay puts its own site-packages

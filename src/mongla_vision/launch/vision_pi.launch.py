@@ -25,7 +25,7 @@ of which is a thing that was silently wrong before:
    nothing.
 
     ros2 launch mongla_vision vision_pi.launch.py \\
-        fwd_model:=gate_rescue_repair fwd_classes:=gate,rescue,repair \\
+        fwd_model:=gate_sharks fwd_classes:=gate,shark,shaw_fish \\
         dwn_model:=bin_fire_blood     dwn_classes:=fire,blood
 """
 import os
@@ -83,12 +83,12 @@ def generate_launch_description():
     args = [
         DeclareLaunchArgument('fwd_profile', default_value='pi_forward'),
         DeclareLaunchArgument('dwn_profile', default_value='pi_downward'),
-        DeclareLaunchArgument('fwd_model',   default_value='gate_rescue_repair'),
+        DeclareLaunchArgument('fwd_model',   default_value='gate_sharks'),
         DeclareLaunchArgument('dwn_model',   default_value='bin_fire_blood'),
         DeclareLaunchArgument('fwd_models',  default_value=''),
         DeclareLaunchArgument('dwn_models',  default_value=''),
         # Which of `*_models` is live. A COMMA-SEPARATED value runs several on
-        # every frame -- `fwd_active:=gate_rescue_repair,gate_seg` gives
+        # every frame -- `fwd_active:=gate_sharks,gate_seg` gives
         # detection and segmentation merged into one detection array and one
         # contour message. The first name stays "the" model: it owns the class
         # filter and the published vision_info. Empty means the registry's
@@ -97,8 +97,8 @@ def generate_launch_description():
         # ⛔ REQUIRES A REGISTRY. `*_active` selects FROM `*_models`, so both
         # must be given and every name must appear in the registry:
         #
-        #     fwd_models:=gate_rescue_repair,yolov8n_seg \
-        #     fwd_active:=gate_rescue_repair,yolov8n_seg
+        #     fwd_models:=gate_sharks,yolov8n_seg \
+        #     fwd_active:=gate_sharks,yolov8n_seg
         #
         # A single-model launch (`fwd_model:=`) has no registry to select from
         # and the node REFUSES any `active_model` that is not the loaded stem.

@@ -194,7 +194,7 @@ robosub:
   #  ⛔ The table was keyed by RULEBOOK PROP names while the detectors    #
   #  emit MODEL CLASS names, and the two had never been compared. Of the  #
   #  five classes the two competition models actually produce             #
-  #  (gate_rescue_repair -> gate/rescue/repair, bin_fire_blood ->         #
+  #  (gate_rescue_repair -> gate/rescue/repair, bin_fire_blood ->   #
   #  blood/fire), only `gate` resolved. The other four returned 0.0, so   #
   #  `lock_node` published `ok=false, reason='target_width_m unset'` for  #
   #  them -- no width, no pose, no RANGE, and therefore no tool-aim       #
@@ -206,6 +206,13 @@ robosub:
   #  against the model sidecars, so a new model cannot arrive uncovered.  #
   # ------------------------------------------------------------------ #
 
+  # ⚠ `rescue` and `repair` ARE NO LONGER EMITTED BY ANY SHIPPED MODEL.
+  # `gate_rescue_repair` was retired on 2026-09-28 -- it measured +0.0 points
+  # of separation between gate-present and gate-absent footage while
+  # `gate_sharks` measured +84.2 at 0.30 (section 59), and the weights moved to
+  # ~/models/retired/. The widths STAY because they are rulebook facts, not
+  # model facts: they are correct the moment a model emits these classes again,
+  # and deleting them would mean re-deriving them from the handbook.
   rescue:
     # The gate's "Search & Rescue" symbol. NOT the gate: a model that boxes
     # the symbol must be scaled by the symbol, or every range is out by 10x.

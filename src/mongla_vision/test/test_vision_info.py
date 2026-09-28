@@ -19,7 +19,7 @@ _SRC = (Path(__file__).resolve().parents[1] / 'mongla_vision'
         / 'detector_node.py')
 
 
-def _stub(active='gate_rescue_repair'):
+def _stub(active='gate_sharks'):
     """The pieces `_publish_vision_info` actually touches, and nothing else.
 
     Constructing a real DetectorNode needs a model on disk; the weights are
@@ -43,7 +43,7 @@ def test_the_model_name_is_published_and_is_the_STEM():
     obj, sent = _stub()
     obj.publish()
     assert len(sent) == 1
-    assert sent[0].database_location == 'gate_rescue_repair', (
+    assert sent[0].database_location == 'gate_sharks', (
         'the model identity here must be the stem this stack uses everywhere '
         'else -- set_model, ClassRef and the .engine sidecar all key on it')
 

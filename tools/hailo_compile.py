@@ -5,13 +5,13 @@
 the venv and clears `PYTHONPATH`, and without it the DFC silently imports the
 ROS overlay's onnx and dies claiming `onnx.mapping` is missing.
 
-    ./tools/hailo_compile.sh gate_rescue_repair --nms-score-th 0.05
+    ./tools/hailo_compile.sh gate_sharks --nms-score-th 0.05
 
 ⭐ WHY THIS TOOL EXISTS. A HEF bakes its NMS score threshold into the on-chip
 post-process; no ROS parameter can lower it, because the chip has already
 thrown those boxes away. Parsing all four deployed HEFs on 2026-09-24 found
 `sauvc_sim` and `bin_fire_blood` at 0.050, stock `yolov11n` at 0.200 -- and
-`gate_rescue_repair`, the COMPETITION model, at 0.200. Every host-side bar
+`gate_sharks`, the COMPETITION model, at 0.200. Every host-side bar
 below 0.20 was decoration on that model, including the murky profile's 0.10
 and a measured underwater score p10 of 0.167 the chip could not emit (B-58).
 
@@ -160,7 +160,7 @@ def class_names(pt: pathlib.Path) -> list:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument('model', help='name under --models, e.g. gate_rescue_repair')
+    ap.add_argument('model', help='name under --models, e.g. gate_sharks')
     ap.add_argument('--models', default=str(
         _HERE.parent / 'src/mongla_vision/models'))
     ap.add_argument('--out', default=str(pathlib.Path.home() / 'hailo_work'))
@@ -198,7 +198,7 @@ def main() -> int:
     # a property of how the model was TRAINED (unfolded batch-norm, or an
     # unusually wide activation), not of the calibration set. It is NOT fixed
     # by more frames: `gate_candidate` failed on the SAME 1024-frame set that
-    # compiled `gate_rescue_repair` cleanly, which is what rules the
+    # compiled `gate_sharks` cleanly, which is what rules the
     # calibration set out as the cause.
     #
     # Raising just that layer to 16-bit costs a little throughput on one layer

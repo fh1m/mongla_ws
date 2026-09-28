@@ -4,7 +4,7 @@ Two-verb vision: align() centres (creeping forward via its fallback until
 the gate appears), then move() drives through on bbox-height fill. No
 command aborts the mission — a miss just logs and the run continues.
 
-Standalone test (gate_rescue_repair.pt present):
+Standalone test (gate_sharks.pt present):
     ros2 run mongla_planner mission task_gate
 
 Called by full_mission_2026 combinator after arm + depth set.
@@ -26,8 +26,8 @@ _FWD = '/mongla_detector_forward'
 def run(mongla, log=None):
     mongla.mission_reset()   # clear heading lock + abort from any previous run
     mongla.resume_detector('forward')
-    mongla.set_model('gate_rescue_repair', node=_FWD)
-    mongla.set_classes('gate,rescue,repair', node=_FWD)
+    mongla.set_model('gate_sharks', node=_FWD)
+    mongla.set_classes('gate,shark,shaw_fish', node=_FWD)
 
     # ── Centre on gate (yaw+lat); creep forward to find it if not yet seen ────
     mongla.vision.align(

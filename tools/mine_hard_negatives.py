@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Mine the frames the detector is most confidently WRONG about.
 
-⛔ WHAT THIS IS FOR (B-60). `gate_rescue_repair` fires a `gate` on 28 of 34
+⛔ WHAT THIS IS FOR (B-60). `gate_sharks` fires a `gate` on 28 of 34
 visually-clean clips -- 0.81 on bare pool floor, 0.89 on empty water, 0.60 on
 pool tiles. No confidence bar separates those, because the score is not wrong:
 the learned concept is. The class has latched onto pool structure -- lane

@@ -152,8 +152,8 @@ def _parse_models_param(s: str) -> Dict[str, str]:
 def _model_stem(path: str) -> str:
     """Canonical model identity: basename without extension.
 
-    ``'gate_rescue_repair'`` -> ``'gate_rescue_repair'``;
-    ``'/models/gate_rescue_repair.pt'`` -> ``'gate_rescue_repair'``.
+    ``'gate_sharks'`` -> ``'gate_sharks'``;
+    ``'/models/gate_sharks.pt'`` -> ``'gate_sharks'``.
     Missions name models by this stem (``mongla.models('stem')`` / ClassRef /
     ``set_model('stem')``), so the node matches ``active_model`` against it
     regardless of whether the model was launched single (``model:=stem``) or in a
@@ -233,7 +233,7 @@ class DetectorNode(Node):
         # against a shipped 0.25 floor, so we were discarding the median.
         self.declare_parameter('assoc_conf',          0.0)
         # Per-model confidence overrides: CSV 'name=conf' (e.g.
-        # 'torpedo_blood_hole=0.55,gate_rescue_repair=0.35'). Applies on top of
+        # 'torpedo_blood_hole=0.55,gate_sharks=0.35'). Applies on top of
         # the uniform `conf` above, targeting individual registry entries, and
         # PERSISTS across active_model switches (each detector holds its own
         # threshold). Empty = every model uses `conf`. Live-tunable.
@@ -1196,7 +1196,7 @@ class DetectorNode(Node):
         """Map a set_model()/active_model argument to a registry key.
 
         Accepts EITHER the launch registry key (``mongla.use('gate')`` with
-        ``models:=gate=...``) OR the model stem (``set_model('gate_rescue_repair')``
+        ``models:=gate=...``) OR the model stem (``set_model('gate_sharks')``
         / a ClassRef). Returns the key, or ``None`` if neither matches. Registry
         mode only (single-model handled separately).
         """

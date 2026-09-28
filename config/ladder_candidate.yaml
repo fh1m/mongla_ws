@@ -13,7 +13,7 @@
 #   A. a 253 s VEHICLE RECORDING of a person walking in and out of a room.
 #      338 gaps. Over-states long gaps: a person leaves entirely, for seconds.
 #   B. REAL UNDERWATER FOOTAGE of competition props, scored with the model
-#      that flies (gate_rescue_repair). 45 gaps. Under-states long gaps: the
+#      that flies (gate_sharks). 45 gaps. Under-states long gaps: the
 #      camera stays pointed at the prop, which a mission does not.
 #
 #       rung                    covers (A)   covers (B)

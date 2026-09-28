@@ -349,7 +349,7 @@ def visual(name, geometry, mat, pose="0 0 0 0 0 0", cast_shadows=True,
         what the sensor emits; a visual label merely competes to name it.
 
     So sub-feature classes -- the `rescue`/`repair`, `fire`/`blood`, `hole` that
-    `gate_rescue_repair.pt`, `bin_fire_blood.pt` and the torpedo mission are
+    `gate_sharks.pt`, `bin_fire_blood.pt` and the torpedo mission are
     actually trained on -- CANNOT be produced this way, and a dataset captured
     in simulation still cannot train the models the missions run. Getting there
     needs each sub-feature to be its OWN MODEL, which costs the joints that make

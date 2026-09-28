@@ -11,11 +11,11 @@ from mongla_planner.model_context import ClassRef, ModelRegistry
 
 def test_classref_carries_stem_not_alias():
     m = ModelRegistry()
-    # alias 'robosub' != stem 'gate_rescue_repair' -- the real mission pattern.
-    m(robosub=('gate_rescue_repair', ['gate', 'rescue', 'repair']))
+    # alias 'robosub' != stem 'gate_sharks' -- the real mission pattern.
+    m(robosub=('gate_sharks', ['gate', 'shark', 'shaw_fish']))
     ref = m.robosub.gate
     assert isinstance(ref, ClassRef)
-    assert ref.model_name == 'gate_rescue_repair'   # STEM, the detector identity
+    assert ref.model_name == 'gate_sharks'   # STEM, the detector identity
     assert ref.class_name == 'gate'
 
 
@@ -37,7 +37,7 @@ def test_classref_index_access_also_uses_stem():
 
 def test_unknown_class_still_raises_with_alias_in_message():
     m = ModelRegistry()
-    m(gate=('gate_rescue_repair', ['gate', 'rescue']))
+    m(gate=('gate_sharks', ['gate', 'rescue']))
     try:
         _ = m.gate.typo
         assert False, "expected AttributeError"

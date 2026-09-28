@@ -77,7 +77,7 @@ def _measure(label, work, seconds):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--hef', default=os.path.expanduser(
-        '~/hailo_models/gate_rescue_repair.hef'))
+        '~/hailo_models/gate_sharks.hef'))
     ap.add_argument('--seconds', type=float, default=5.0)
     # ONE MODE PER PROCESS. Configuring a network group the blocking way and
     # then asking the same VDevice for an InferModel raises

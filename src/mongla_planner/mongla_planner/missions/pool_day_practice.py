@@ -98,8 +98,8 @@ def run(mongla, log=None):
         # ══════════════════════════════════════════════════════════════════════
         info('[gate] aligning...')
         mongla.resume_detector('forward')
-        mongla.set_model('gate_rescue_repair', node=_FWD)
-        mongla.set_classes('gate,rescue,repair', node=_FWD)
+        mongla.set_model('gate_sharks', node=_FWD)
+        mongla.set_classes('gate,shark,shaw_fish', node=_FWD)
 
         mongla.vision.align(
             'gate', camera='forward', yaw=0, lat=0,

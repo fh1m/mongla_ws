@@ -11,7 +11,7 @@ every stage is timed against the SAME monotonic clock and the stages are made
 to sum to the measured total. A stage that does not appear in the sum is a
 stage nobody is measuring.
 
-    python3 tools/vision_stage_profile.py --model gate_rescue_repair --seconds 20
+    python3 tools/vision_stage_profile.py --model gate_sharks --seconds 20
 """
 import argparse
 import os
@@ -44,7 +44,7 @@ def _row(name, vals, total_med):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--profile', default='pi_forward')
-    ap.add_argument('--model', default='gate_rescue_repair')
+    ap.add_argument('--model', default='gate_sharks')
     ap.add_argument('--conf', type=float, default=0.15)
     ap.add_argument('--seconds', type=float, default=20.0)
     ap.add_argument('--warmup', type=float, default=4.0)

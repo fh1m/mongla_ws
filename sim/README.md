@@ -137,15 +137,15 @@ ros2 run mongla_planner mongla disarm
 ```
 
 > **Verifying the vision path needs an explicit pass criterion — both failure
-> modes are silent.** `mongla_sim stack` defaults to `model:=gate_rescue_repair`,
+> modes are silent.** `mongla_sim stack` defaults to `model:=gate_sharks`,
 > whose `.pt` weight is **not in git** (`*.pt` is gitignored; `build_mongla.sh`
-> mirrors it from `~/models`) and whose `gate_rescue_repair.yaml` class sidecar
+> mirrors it from `~/models`) and whose `gate_sharks.yaml` class sidecar
 > may also be absent. A missing weight is loud; a **missing sidecar is not** — the
 > class allowlist comes up empty and the detector publishes `[]` every frame
 > forever. So do not conclude "vision works" from a clean launch. Require all
 > three in the detector log:
 >
-> 1. the expected model stem (`[YOLO ] ... gate_rescue_repair`),
+> 1. the expected model stem (`[YOLO ] ... gate_sharks`),
 > 2. a **non-empty** class allowlist,
 > 3. the always-on `[ align lat=… depth=… ]` line appearing with a gate in frame.
 >

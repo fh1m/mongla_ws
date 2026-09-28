@@ -202,7 +202,7 @@ def _hefs(tmp_path, floors):
 def test_a_baked_floor_above_the_configured_conf_fails_the_gate(
         tmp_path, monkeypatch):
     """⛔ B-58. A HEF compiles its NMS score threshold on-chip and nothing at
-    runtime can go below it. `gate_rescue_repair` shipped baked at 0.200
+    runtime can go below it. `gate_sharks` shipped baked at 0.200
     against a launch default of conf=0.15, so the configured threshold was a
     no-op and the faintest detections -- measured underwater p10 0.167 -- were
     discarded in silicon.
@@ -213,7 +213,7 @@ def test_a_baked_floor_above_the_configured_conf_fails_the_gate(
     scrolling a log can catch is not a gate, which is why the same fact now
     decides a pre-dive verdict.
     """
-    floors = {'gate_rescue_repair': 0.20}
+    floors = {'gate_sharks': 0.20}
     monkeypatch.setattr(bc, '_baked_floor',
                         lambda p: floors[Path(p).stem])
     monkeypatch.setattr(bc, '_CONF_DEFAULT', 0.15)
@@ -228,13 +228,13 @@ def test_one_bad_model_among_good_ones_still_fails(tmp_path, monkeypatch):
     was not, which is exactly why a spot check of the others confirmed the
     intent and missed the outlier."""
     floors = {'sauvc_sim': 0.05, 'bin_fire_blood': 0.05,
-              'gate_rescue_repair': 0.20}
+              'gate_sharks': 0.20}
     monkeypatch.setattr(bc, '_baked_floor',
                         lambda p: floors[Path(p).stem])
     monkeypatch.setattr(bc, '_CONF_DEFAULT', 0.15)
     status, detail = bc._check_models_hailo(_hefs(tmp_path, floors))
     assert status == bc.FAIL
-    assert 'gate_rescue_repair' in detail
+    assert 'gate_sharks' in detail
     assert 'sauvc_sim' not in detail, 'name the offender, not the innocent'
 
 
@@ -244,7 +244,7 @@ def test_the_floor_guard_bites_only_because_of_the_floor(
     compliant value must flip the verdict, or the FAIL came from something
     else and these tests prove nothing."""
     monkeypatch.setattr(bc, '_CONF_DEFAULT', 0.15)
-    dirs = _hefs(tmp_path, {'gate_rescue_repair': 0.0})
+    dirs = _hefs(tmp_path, {'gate_sharks': 0.0})
     monkeypatch.setattr(bc, '_baked_floor', lambda p: 0.20)
     assert bc._check_models_hailo(dirs)[0] == bc.FAIL
     monkeypatch.setattr(bc, '_baked_floor', lambda p: 0.05)
@@ -270,12 +270,12 @@ def test_one_of_ours_above_the_bar_still_fails_beside_a_stock_one(
     """Injection-verify the exemption: it must exempt ONLY the stock name. A
     model of ours at 0.200 is still a FAIL even when a stock model is present
     and equally high -- otherwise the exemption would swallow the real case."""
-    floors = {'yolov11n': 0.20, 'gate_rescue_repair': 0.20}
+    floors = {'yolov11n': 0.20, 'gate_sharks': 0.20}
     monkeypatch.setattr(bc, '_baked_floor', lambda p: floors[Path(p).stem])
     monkeypatch.setattr(bc, '_CONF_DEFAULT', 0.15)
     status, detail = bc._check_models_hailo(_hefs(tmp_path, floors))
     assert status == bc.FAIL
-    assert 'gate_rescue_repair' in detail
+    assert 'gate_sharks' in detail
     assert 'yolov11n' not in detail, \
         'the stock model must not be named as a fault'
 

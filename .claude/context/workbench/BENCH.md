@@ -334,7 +334,7 @@ structural, not sub-count.
 
 | model | classes | NMS output | FPS (hw_only) | latency (hw) |
 |---|---|---|---|---|
-| `gate_rescue_repair` | 3 | 6 012 | 97.92 | 8.340 ms |
+| `gate_sharks` | 3 | 6 012 | 97.92 | 8.340 ms |
 | `sauvc_sim` | 11 | 22 044 | 98.36 | 8.315 ms |
 | `bin_fire_blood` | 2 | 4 008 | 98.45 | 8.308 ms |
 | `yolov11n` (stock) | 80 | 160 320 | 92.53 | 7.794 ms |

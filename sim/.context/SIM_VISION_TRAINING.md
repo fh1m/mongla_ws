@@ -5,7 +5,7 @@ estimated. It takes you from a cold shell to a **sim-native YOLO model** driving
 `vision_align` / `vision_move` inside Gazebo.
 
 > **Why a sim-native model at all.** The competition weights
-> (`gate_rescue_repair`, `bin_fire_blood`) are trained on *real* RoboSub props.
+> (`gate_sharks`, `bin_fire_blood`) are trained on *real* RoboSub props.
 > Pointed at the SAUVC sim they mis-fire — a pool floor edge scored `gate 46 %`
 > in testing. That is not a pipeline fault, it is a domain gap, and the fix is a
 > model trained on sim imagery. Before this document there was no such model and
@@ -88,7 +88,7 @@ Both sim cameras, both detectors, boxes on `image_debug`:
 ros2 launch mongla_vision vision_dual.launch.py \
     fwd_topic:=/mongla/sim/front_camera/image_fx \
     dwn_topic:=/mongla/sim/bottom_camera/image_fx \
-    fwd_model:=gate_rescue_repair fwd_classes:=gate,rescue,repair \
+    fwd_model:=gate_sharks fwd_classes:=gate,shark,shaw_fish \
     dwn_model:=bin_fire_blood dwn_classes:=blood,fire \
     device_cls:=cpu paused:=false viewer:=true
 ```

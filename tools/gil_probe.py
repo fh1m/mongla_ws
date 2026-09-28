@@ -105,7 +105,7 @@ def _measure(label, work, seconds):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--model', default='gate_rescue_repair')
+    ap.add_argument('--model', default='gate_sharks')
     ap.add_argument('--seconds', type=float, default=4.0)
     a = ap.parse_args()
 

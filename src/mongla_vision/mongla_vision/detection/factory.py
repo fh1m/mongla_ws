@@ -5,8 +5,8 @@ camera sources.
 
 WHY THE EXTENSION DECIDES, NOT A `backend=` PARAMETER
 -----------------------------------------------------
-Model identity in this stack is the **stem** -- `gate_rescue_repair`, not
-`gate_rescue_repair.pt`. That is load-bearing: `mongla.use('gate_rescue_repair')`,
+Model identity in this stack is the **stem** -- `gate_sharks`, not
+`gate_sharks.pt`. That is load-bearing: `mongla.use('gate_sharks')`,
 a `ClassRef`, `model:=` and `models:=` all pass stems, and the `<stem>.yaml`
 sidecar is found by suffix-swap. So the same mission runs on the Jetson (`.pt`
 or `.engine`) and on the Pi (`.hef`) with no mission change, because the only

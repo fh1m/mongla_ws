@@ -376,7 +376,7 @@ as though it were current is a measurement in the wrong place.</p>
 <h2>Running a neural network on a chip</h2>
 <p>The Hailo-8 is a 26 TOPS accelerator on the Pi's HAT. A compiled <code class="notranslate">.hef</code> runs on it instead of<br>
 on the CPU, which is the only reason two cameras and a filter fit on one small computer.</p>
-<p><strong>Measured: 98.0 Hz</strong> on <code class="notranslate">gate_rescue_repair</code>, against a <code class="notranslate">hailortcli --hw-only</code> benchmark of<br>
+<p><strong>Measured: 98.0 Hz</strong> on <code class="notranslate">gate_sharks</code>, against a <code class="notranslate">hailortcli --hw-only</code> benchmark of<br>
 <strong>97.9 FPS</strong> on the same file. The host code is at 100 % of the chip — there is nothing left to<br>
 optimise on our side of the boundary.</p>
 <p>Getting there took three findings that each looked like something else:</p>
@@ -436,7 +436,7 @@ thing about it.</p>
 water. Cameras, the Hailo-8 detector, the lock ladder, optical flow, refraction correction,<br>
 guided calibration.</p>
 <blockquote>
-<p>"Round 29 measured this pipeline at <strong>98.0 Hz</strong> on <code class="notranslate">gate_rescue_repair</code> against a<br>
+<p>"Round 29 measured this pipeline at <strong>98.0 Hz</strong> on <code class="notranslate">gate_sharks</code> against a<br>
 <code class="notranslate">hailortcli --hw-only</code> benchmark of <strong>97.9 FPS</strong> on the same HEF — so the host code is at<br>
 100 % of the chip."<br>
 — <a href="src/mongla_vision/mongla_vision/detection/hailo.py"><code class="notranslate">detection/hailo.py:3</code></a></p>

@@ -68,7 +68,7 @@ Do **not** use `camera:=sim_front` unless you also rename mission detector expec
 ```zsh
 ros2 launch mongla_vision vision.launch.py camera:=forward \
   topic:=/mongla/sim/front_camera/image_raw \
-  model:=gate_rescue_repair classes:=gate
+  model:=gate_sharks classes:=gate
 ```
 
 ## Lab needs `MONGLA_WS`
