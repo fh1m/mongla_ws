@@ -170,3 +170,51 @@ def test_every_class_is_emitted_by_the_model_loaded_for_it(path):
         'duration, and the mission reports success.\n'
         '  Fix by editing the `set_model` line, removing the phase, or '
         'shipping a sidecar whose `names:` include the class.')
+
+
+# ── models a mission names that do not ship yet ─────────────────────────────
+
+# ⚠ THIS IS NOT A DEFECT LIST. The weights in `models/` are development
+# harnesses; the models that matter are trained and swapped ON THE DAY during
+# water testing. A mission naming a model that has not been trained yet is
+# normal planning, not a bug.
+#
+# ⛔ BUT A TYPO IN A MODEL NAME LOOKS EXACTLY THE SAME -- both give "no
+# sidecar, cannot check", and the class check above then SILENTLY SKIPS the
+# whole mission. So the future models are declared here by name: a stem that
+# is neither shipped nor declared is a typo, and it fails.
+AWAITING_TRAINING = {
+    'torpedo_blood_hole': 'torpedo board -- blood/fire symbols and the holes',
+    'slalom_red_pipe': 'slalom -- the red pipe gates',
+}
+
+
+def test_no_mission_names_a_model_that_is_neither_shipped_nor_declared():
+    """A stem that ships nowhere and is not declared above is a typo, and a
+    typo here disables the class check for that whole mission without a word."""
+    bad = []
+    for path in _missions():
+        for model, _cls, line in _steered_classes_by_model(path):
+            if classes_of(model) is None and model not in AWAITING_TRAINING:
+                bad.append(f'{path.name}:{line} loads {model!r}')
+    assert not bad, (
+        '\n  '.join([''] + bad) +
+        '\n  No sidecar ships for it and it is not in AWAITING_TRAINING, so '
+        'the class check above skipped this mission entirely. Either fix the '
+        'stem, or declare the model with what it is for.')
+
+
+def test_the_awaiting_training_list_does_not_rot():
+    """⚠ Once a model ships, its entry must go -- otherwise the class check
+    stays skipped for every mission that loads it, which is the silent state
+    this pair exists to prevent."""
+    shipped = {m: classes_of(m) for m in AWAITING_TRAINING}
+    arrived = {m for m, c in shipped.items() if c is not None}
+    assert not arrived, (
+        f'{sorted(arrived)} now ship a sidecar -- remove them from '
+        f'AWAITING_TRAINING so their missions start being checked.')
+
+
+def test_every_awaiting_entry_says_what_the_model_is_for():
+    for stem, why in AWAITING_TRAINING.items():
+        assert '--' in why and len(why) > 15, f'{stem} has no stated purpose'
