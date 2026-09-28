@@ -65,6 +65,38 @@ paid that bill: a 31-frame rolling median took the plane tilt's p90 swing from
 17.5° at p90. **Smoothing bought smoothness, not accuracy.** A filtered tau
 would look excellent on a plot and be wrong in the same reference-dependent way.
 
+## ⭐⭐ The scorer is already written, and it changed the problem statement
+
+`tools/tau_from_scale.py --self-test` runs the ranking against synthetic
+sources whose bias we chose, so a bug in the scorer cannot be mistaken for a
+bias in a sensor on the day — when re-running costs a pool session. It found
+two things before any water:
+
+| synthetic source | bias | slope | tau jitter p90 |
+|---|---|---|---|
+| perfect | −0.00 | −1.00 | 0.04 s |
+| **scale biased +20 %** | **−0.00** | **−1.00** | **0.04 s** |
+| scale noise 2 % | −2.23 | −0.66 | **23.28 s** |
+| wrong exponent (r^−1.15) | −0.96 | −0.87 | 0.03 s |
+
+⭐ **A constant scale bias scores IDENTICAL to perfect.** tau is
+scale-invariant, so a source that is 20 % off everywhere cancels exactly. **No
+calibration is needed and none can help** — which is precisely why this is the
+right quantity for a vehicle with no DVL, and why it does not inherit the
+flow path's dependence on a height nobody measures.
+
+⭐⭐ **So only two things can go wrong, and the run distinguishes them:**
+
+* **NOISE.** 2 % scale noise produces **23.3 s** of tau jitter here, against
+  the **27.2 s** p90 measured on real footage. **Our problem is therefore
+  roughly 2 % scale noise** — which makes the open question quantitative and
+  small: *how many frames of averaging bring 2 % down far enough*, and does the
+  vehicle have that many before contact.
+* **SLOPE.** A wrong exponent — apparent size not going as 1/range, which is
+  what a tilted or partly-occluded prop gives — reads −0.87 instead of −1.00,
+  and **no amount of filtering fixes it** because the scale itself is wrong.
+  This is the failure mode that must not be smoothed over.
+
 ## The run that closes it
 
 **One approach at a known constant speed from a known start range.** That makes
