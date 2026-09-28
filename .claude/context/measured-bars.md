@@ -6126,3 +6126,88 @@ place to do it.
 taken *downstream* of acquisition, and acquisition has its own control loops
 with their own objectives — objectives that are not ours. Before trusting any
 pixel-derived number, ask what the camera decided before handing it over.
+
+---
+
+## 58. ⭐⭐⭐ THE MODEL-FREE RUNG THAT CANNOT EXIST — four families, one reason
+
+**2026-09-28.** The standing ask was a **third ladder rung that needs no model
+and no training data**, on the Bumblebee reflex that redundancy beats
+optimisation: their gate runs five pose sources, ours carries two, and both of
+ours want the same physical thing — local image structure. If LK and XFeat die
+on the same frames, the ladder has redundancy of **one** wearing the costume of
+two.
+
+The premise checked out. The conclusion did not survive contact.
+
+### The premise: LK failure is an information failure, not an algorithm failure
+
+155 boxes on a grid across four archive clips, binned by the grey-level
+standard deviation of the patch, LK seeded then run 30 frames:
+
+| patch std | boxes | corners found (p50) | LK survival (p50) |
+|---|---|---|---|
+| 0 – 2 | 30 | **98** | **0.12** |
+| 2 – 5 | 65 | 23 | 0.36 |
+| 5 – 10 | 21 | 22 | 0.91 |
+| 10 – 20 | 20 | 23 | 0.83 |
+| 20 + | 19 | 21 | 0.95 |
+
+⛔ **`goodFeaturesToTrack` returns ninety-eight corners from a patch with two
+grey levels of variation** — more than from a richly textured one, because
+sensor noise in a flat region makes plenty of local maxima — and 88 % of them
+are gone in 30 frames. Dead boxes carry **0.92 bits** of entropy; live ones
+**1.58**. There is nothing in those pixels.
+
+### Four families tried. All four failed, and all four said they had not.
+
+| method | kind | result in the LK-dead regime |
+|---|---|---|
+| colour back-projection (HSV h+s) | generative appearance | **loses to a decoy box on 69 %** of gate.mkv frames; median margin **−0.049** |
+| NCC template matching | discriminative appearance | peak **0.891**, margin over its own second-best **+0.005** — no uniqueness |
+| ECC direct photometric alignment | dense, gradient, corner-free | converges on **17.6 %** of LK-dead boxes (40.4 % overall); correlation 0.324 there vs 0.804 where it works; 6.1 ms/patch |
+| vanishing point (least-squares null vector) | geometry | gate.mkv: **no VP in 200 frames**. octagon_Bottom: VP at **(−19532, −25301)**, frame-to-frame jitter **20 227 px** p50 |
+
+### ⛔⭐ The finding that is worth more than the rung would have been
+
+**Every one of the four reported high confidence while being wrong.** NCC
+returned 0.891. The vanishing point's singular-value quality read **0.958**
+while the point itself moved twenty thousand pixels between frames. The colour
+rung's back-projection peak saturated at 1.00 on the very clip where a decoy
+beat it. A quality number computed *by* a method, *from* the same data it just
+fit, is not independent evidence — and in our water all four are uninformative.
+
+That is the general lesson, and it is the reason the two-snap control in
+`anchor/geometry.py` exists: **the only trustworthy check is a second
+observation, not a self-reported score.**
+
+### The bar
+
+⛔ **No appearance-based rung may be proposed for the LK-dead regime again
+without first showing it beats a decoy box on real footage.** The failure is
+information-theoretic, not algorithmic; three independent method families
+(generative, discriminative, direct) confirm it, and the fourth shows geometry
+from a single forward camera does not substitute.
+
+⭐ **What shipped instead is a refusal.** `Follower.reset()` now rejects a patch
+below **2.0** grey levels before running the corner detector — the
+highest-precision operating point measured (19.4 % refused, **86.7 %** of those
+genuinely untrackable, against 49.7 % / 64.9 % at a bar of 4.0). The ladder now
+learns at seed time what it used to discover thirty frames later while holding
+a box it believed in.
+
+⚠ **Population caveat, stated:** those 155 boxes are a grid, mostly water and
+wall. A real detection box sits on a prop and is textured, so 19.4 % is an
+upper bound on the cost measured on the worst possible sample. The cliff is
+what transfers, not the rate.
+
+⭐ **Where the real redundancy already is.** The model-free navigation layer
+exists and is wired — it is just not a *tracking* rung: the tile grating (floor
+height and heading), `pool_lines` (lane heading, 0.17°), optical flow velocity
+(verified 1.09 cm over 30 cm), and the barometer. All four need no model and no
+training data. The honest gap is that they are **downward-camera instruments**,
+and the forward camera has no model-free equivalent — which is exactly what
+this section measured and could not close.
+
+Harness: `tools/rung_independence.py` — asks whether two rungs fail together,
+printing the joint failure rate beside what independence would predict.
