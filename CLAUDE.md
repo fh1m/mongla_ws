@@ -315,6 +315,17 @@ vision gains, because sim imagery is too clean.
   `test_shipped_constants_match_the_ledger.py` now compares shipped constants
   against the digits in `measured-bars.md`, in **both** directions, and caught
   a missing entry on its first run.
+- ⛔ **THE MODELS IN `models/` ARE DEVELOPMENT HARNESSES.** They exercise
+  logic and pipelines; the models that matter are chosen and swapped **on the
+  day** during water testing, and verified against archive footage. So **never
+  hard-code a class list in more than one place.** Retiring one model on
+  2026-09-28 touched 85 files by textual substitution and left `task_gate` and
+  `pool_day_practice` steering on `rescue`, which the new graph does not emit —
+  both ran, reported success and thrust open loop, because
+  `detection/hailo.py` logs an error and **ignores** an all-unknown allowlist.
+  Checks key on the one line that already names the model (`set_model`), so a
+  swap is a one-line edit:
+  `test_missions_only_name_classes_a_model_emits.py`.
 - **Measure, then ship.** Every shipped threshold is in
   [`measured-bars.md`](.claude/context/measured-bars.md) with the method, the conditions and
   the bar it must clear — including the numbers we later retracted. Tests read that file.

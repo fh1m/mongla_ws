@@ -202,7 +202,7 @@ def _hefs(tmp_path, floors):
 def test_a_baked_floor_above_the_configured_conf_fails_the_gate(
         tmp_path, monkeypatch):
     """⛔ B-58. A HEF compiles its NMS score threshold on-chip and nothing at
-    runtime can go below it. `gate_sharks` shipped baked at 0.200
+    runtime can go below it. `gate_rescue_repair` shipped baked at 0.200
     against a launch default of conf=0.15, so the configured threshold was a
     no-op and the faintest detections -- measured underwater p10 0.167 -- were
     discarded in silicon.
@@ -291,10 +291,28 @@ def test_an_unreadable_floor_does_not_fail_the_dive(tmp_path, monkeypatch):
 
 
 def test_the_conf_default_is_read_from_the_launch_file():
-    """⛔ One truth, two copies is the bug. A literal here would keep passing
-    after someone changed the launch default -- the exact drift this check
-    exists to catch."""
-    assert bc._launch_conf_default() == pytest.approx(0.15)
+    """⛔ One truth, two copies is the bug -- AND THIS TEST WAS THE SECOND COPY.
+
+    Its docstring already said "a literal here would keep passing after
+    someone changed the launch default", and then asserted against the literal
+    `0.15`. When the default moved to 0.45 on 2026-09-28 -- because
+    `gate_sharks` measures a 40.8 % worst negative at 0.15 against 3.2 % at
+    0.45 -- this failed for exactly the reason it warned about, one line below
+    the warning.
+
+    Now it parses the launch file itself, so the two cannot disagree: the only
+    way to break it is for `_launch_conf_default` to stop reading the file it
+    claims to read.
+    """
+    import re
+    from pathlib import Path
+
+    launch = (Path(__file__).resolve().parents[1] / 'launch'
+              / 'bringup.launch.py').read_text()
+    m = re.search(r"DeclareLaunchArgument\(\s*'conf',\s*default_value='([\d.]+)'",
+                  launch)
+    assert m, 'no `conf` launch argument found -- was it renamed?'
+    assert bc._launch_conf_default() == pytest.approx(float(m.group(1)))
 
 
 def test_pt_weights_alone_are_a_failure_on_a_hailo_vehicle(tmp_path):

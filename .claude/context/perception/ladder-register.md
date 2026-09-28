@@ -54,7 +54,7 @@ approach controller reads), replay mode, and — new — the **acting bar** belo
 | change | measured on | result |
 |---|---|---|
 | **acting bar** `act_conf` 0.45 in `lock_node` | 3 Mirpur clips × 1 200 frames | gate-on-empty-water 90.8 % → 46.8 %, real gate held at 98.9 % |
-| **pre-dive floor gate** in `bringup_check` | the 4 deployed HEFs | FAIL naming `gate_sharks` 0.200 and `yolov11n` 0.200 |
+| **pre-dive floor gate** in `bringup_check` | the 4 deployed HEFs | FAIL naming `gate_rescue_repair` 0.200 and `yolov11n` 0.200 |
 | **HEF recompiled** at `nms_scores_th 0.05` | `hailortcli parse-hef` | `Score threshold: 0.050`, 3 classes — verified on the artifact |
 | **`tools/hailo_compile.sh`** | — | the compile is now a standing capability, not a thing rebuilt and thrown away |
 | **`tools/negative_clip_check.py`** | — | closes the hole that hid B-59: no bar may be set from positive frames alone |

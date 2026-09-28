@@ -126,7 +126,7 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `models` | `` | Multi-model registry (CSV name=stem): "gate=gate_nano_100ep,combined=gate_flare_medium_100ep" |
 | `active_model` | `` | Registry key to start with (requires models:="..." to be set) |
 | `classes` | `gate` | CSV class names for detector |
-| `conf` | `0.15` | Detector confidence floor. 0.15 = Hailo INT8 operating point; pass 0.35 for the generic CUDA stack. |
+| `conf` | `0.45` | Detector confidence floor. 0.15 = Hailo INT8 operating point; pass 0.35 for the generic CUDA stack. |
 | `imgsz` | `640` | Inference square size. NOTE: a TensorRT .engine bakes imgsz at export -- this only re-scales the .pt fallback. For TRT, re-export to match (export_engine --all --imgsz <N>), then imgsz:=<N>. |
 | `max_det` | `100` | Post-NMS detection cap (runtime; lower toward ~10 if NMS is the FPS bottleneck on busy frames). |
 | `viewer` | `false` | Open vision_display (OpenCV viewer) alongside vision pipeline |
@@ -248,7 +248,7 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `contours` | `true` |  |
 | `fwd_classes` | `` |  |
 | `dwn_classes` | `` |  |
-| `conf` | `0.15` | INT8 operating point. NOT the CUDA path's 0.35-0.45 -- see the module docstring. |
+| `conf` | `0.45` | INT8 operating point. NOT the CUDA path's 0.35-0.45 -- see the module docstring. |
 | `max_det` | `100` |  |
 | `vision` | `fast` |  |
 | `preprocess` | `auto` |  |

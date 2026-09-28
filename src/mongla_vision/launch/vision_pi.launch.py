@@ -119,7 +119,7 @@ def generate_launch_description():
         DeclareLaunchArgument('fwd_classes', default_value=''),
         DeclareLaunchArgument('dwn_classes', default_value=''),
         DeclareLaunchArgument(
-            'conf', default_value='0.15',
+            'conf', default_value='0.45',
             description='INT8 operating point. NOT the CUDA path\'s 0.35-0.45 '
                         '-- see the module docstring.'),
         DeclareLaunchArgument('max_det',   default_value='100'),
