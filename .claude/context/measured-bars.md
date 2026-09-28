@@ -6436,3 +6436,46 @@ and the filter a fit rather than a guess. It belongs on the first-pool list.
 re-seeds every frame and `step()` never runs. Every measurement of the
 follower's scale must therefore be taken across a real DETECTION GAP, not a
 clip where the detector is healthy.
+
+---
+
+## 63. ⛔ THE APPROACH BAND MATCHED NO CLASS — RETRACTED, a citation around an invented number
+
+**2026-09-28.** `approach.py` shipped `BAND_LO = 0.25, BAND_HI = 0.45` and
+cited section 23 for it. Section 23 is real and its measurement is sound — but
+it measured confidence against **sqrt of box area in PIXELS**, reported by
+quartile, and this module compares **`box_height / frame_height`**. Different
+quantities, no recorded conversion between them. The citation pointed at a real
+section wrapped around a number that section never states.
+
+Re-measured in the controller's own unit (`tools/approach_band.py`: four
+archive clips, 13 668 detections, `gate_rescue_repair` ONNX at conf ≥ 0.05,
+binned by box_h / frame_h):
+
+| class | n | peak bin | mean conf at peak |
+|---|---|---|---|
+| gate | 7 588 | **0.45 - 0.60** | 0.263 |
+| rescue | 1 729 | **0.10 - 0.20** | 0.278 |
+| repair | 4 351 | **0.80 - 1.20** | 0.526 |
+
+⛔ **The shipped band matched none of them, and the three disagree by a factor
+of five on where to stop.** For `repair` it was wrong in the exact way the
+module exists to prevent: confidence rises all the way to the frame edge, so
+0.25-0.45 would have commanded **BACK OFF from the best view the detector ever
+gets**.
+
+⚠ `repair`'s upper bound is "we never saw it get worse", not a measured fall.
+⚠ Class bands belong to ONE graph; re-run the tool when the model changes.
+
+### The bar
+
+⭐ **The band is per class, and a class with no measurement gets no advice.**
+`advise()` takes the class name and returns HOLD with a reason naming the tool
+for anything not in the table — never a default, because a default is what was
+wrong.
+
+⛔ **And the general rule, which is why this entry exists at all:** a citation
+is not a measurement. Section 23 was cited correctly and the number was still
+invented. `test_shipped_constants_match_the_ledger.py` now compares shipped
+constants against the digits recorded here, in both directions — it was written
+after this and **caught this entry missing on its first run**.
