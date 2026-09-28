@@ -6275,3 +6275,104 @@ first — not a swap, and not the status quo.
 of view counts against the positive column, so 100 % positive means the clip is
 gate-dominated rather than that recall is perfect. Confirm by rendering boxes
 before believing either column.
+
+---
+
+## 60. ⛔ COLOUR IS NOT A RUNG, EVEN WHEN THE RULEBOOK FIXES IT
+
+**2026-09-28.** The SAUVC rulebook names the colour of eight of the eleven
+props — "orange in color", "red in color", "striped red and green markings on
+port and starboard sides respectively". Those are published worldwide
+constants, like the World Aquatics lane geometry `pool_lines.py` already
+exploits, so a chromatic detector would need **no model, no training set and no
+venue calibration** — and the main gate's red/green would resolve port from
+starboard, a geometric ambiguity a class-only detector structurally cannot
+answer.
+
+It looked like the model-free rung the ladder wants. It is not.
+
+### What the ground truth says
+
+Labelled SAUVC sim frames, prop chromaticity minus the SAME FRAME's water, in
+CIE Lab a*/b* (not HSV — hue is undefined at low saturation and wraps, which is
+how the section 58 histogram rung fooled itself):
+
+| class | n | Δa* | Δb* | distance | worst decile |
+|---|---|---|---|---|---|
+| **orange_flare** | 47 | **+12.0** | **+18.0** | **22.2** | **10.3** |
+| target_mat | 56 | +0.0 | +5.8 | 5.8 | 1.4 |
+| flare_blue | 56 | −1.0 | −4.0 | 5.0 | 3.0 |
+| flare_yellow | 20 | −4.0 | −2.0 | 4.5 | 2.2 |
+| flare_red | 8 | −0.5 | −2.0 | 2.1 | 2.0 |
+| final_gate | 61 | −1.0 | +0.0 | 1.0 | 0.0 |
+
+Only the orange flare separates, and the physics says why: pool water sits
+blue-green, orange is the chromatic opposite, and it is the one prop that is
+both saturated and opposed. **Red dies to absorption within ~2 m. Blue matches
+the water it floats in. The gates are thin structures whose box is mostly
+water.** So seven of the eight rulebook colours are not usable at all.
+
+### ⛔ And the eighth does not survive a second venue
+
+A blob-labelling implementation found the flare on **0/60** frames: on a
+surface view the sky is warmer than the water, so a whole-frame reference sat
+between them, the mask lit every cloud, and the true flare merged into a region
+spanning the frame. Fixing the reference to the lower half and rejecting
+frame-wide regions got **10/60**. A column-profile form — the physically right
+instrument for a floor-to-surface column, taking the median down each column so
+a partial-height cloud cannot score — finally worked:
+
+| sim run | peak | margin over the 95th column | column jitter p90 |
+|---|---|---|---|
+| gate_approach | 26.1 | **20.2** | 6 px |
+| sim_murky | 6.6 | **0.8** | 13 px |
+
+**Two runs of the same simulator, and the margin collapses from 20.2 to 0.8.**
+If it cannot survive a change of sim lighting it cannot survive sunlight, depth,
+time of day or turbidity — the four things that move underwater colour most, and
+none of which the rulebook fixes. The rulebook fixes the paint, not the photons
+that reach the sensor.
+
+### The bar
+
+⛔ **Colour may not gate, filter or steer anything on this vehicle.** It may be
+reported as a diagnostic beside a measurement that does not depend on it.
+`mongla_vision/chromatic.py` was written, measured and **deleted** rather than
+shipped behind a default-off switch, because a switch invites someone to turn
+it on at a venue where nobody re-measured.
+
+⚠ **The direction survives even though the magnitude does not.** Orange is
++a*, +b* against pool water in every run measured. If a future pool session with
+an orange flare in frame establishes a stable margin, `tools/
+chromatic_prior_check.py` is the harness that re-derives it against labels.
+
+---
+
+## 61. ⚠ REDUNDANCY IS NOT UNCONDITIONAL — the ensemble lost to its better half
+
+**2026-09-28.** Bumblebee reflex 1 says "when you cannot pick a threshold, RUN
+BOTH". We ship two graphs that detect `gate`, so the intersection was measured
+rather than assumed (`tools/cross_model_gate.py`, conf 0.30, IoU 0.30, 250
+frames per clip, one positive and two negative clips):
+
+| | worst positive | worst negative | separation |
+|---|---|---|---|
+| `gate_sharks` alone | 60.4 % | 6.4 % | **+54.0 pts** |
+| `gate_rescue_repair` alone | 54.8 % | 41.2 % | +13.6 pts |
+| both, boxes agreeing | 45.6 % | 2.4 % | +43.2 pts |
+
+⛔ **The ensemble is worse than the good model alone.** The AND removes 4.0
+points of false positive and costs **14.8 points of true detection**, because
+an intersection inherits the misses of its weakest member — and
+`gate_rescue_repair` is not a peer, it is a model with +13.6 points of
+separation against +54.0.
+
+### The bar
+
+⭐ **Run both when the sources are COMPARABLE. Run the better one when they are
+not.** Redundancy pays for uncorrelated errors of similar size; against a much
+weaker source the intersection is a recall tax. Measure the pair before
+committing, which is what this tool is for.
+
+⚠ This does not weaken reflex 1 — Bumblebee's five gate estimators are five
+*good* estimators. It bounds it.
