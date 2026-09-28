@@ -97,3 +97,9 @@ docs/__repo__
 # control_bench build artefacts (the .so is rebuilt from the firmware checkout)
 tools/control_bench/libcontrolbench.so
 tools/control_bench/.firmware_rev
+
+# ─── Session transcripts ───────────────────────────────────────────────
+# reasoning: a 965 KB Claude Code transcript was committed to this public
+# repo once. Transcripts carry working context that was never meant to ship.
+*_chats.txt
+*-transcript.txt
