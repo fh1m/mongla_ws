@@ -1182,7 +1182,10 @@ class LockNode(Node):
                 continue
             # ⛔ AN ACTING BAR, NOT MERELY "NOT ZERO" (B-59). This accepted the
             # highest-scoring box with score > 0 as THE target, at full
-            # authority. Measured on real Mirpur footage, `gate_sharks`
+            # authority. Measured on real Mirpur footage, the now-RETIRED
+            # `gate_rescue_repair` graph (⚠ not `gate_sharks`, which replaced
+            # it on 2026-09-28 and against which this bar has NOT been
+            # re-derived -- see measured-bars section 59)
             # claims a gate on 90.8 % of GATE-FREE frames at conf 0.15 --
             # half-frame boxes over empty turquoise at 0.44-0.56, confirmed by
             # rendering them. Separation between gate-present and gate-absent

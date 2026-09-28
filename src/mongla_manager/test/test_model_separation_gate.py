@@ -72,8 +72,15 @@ def test_the_retired_graph_is_really_gone():
     """⛔ It measured +0.0 points and it does not fly. Its WEIGHTS are kept at
     ~/models/retired/ so the measurement stays reproducible, but nothing in the
     shipped model set may resolve to it."""
-    assert not (_MODELS / 'gate_rescue_repair.yaml').exists()
-    assert not (_MODELS / 'gate_rescue_repair.pt').exists()
+    # ⛔ ANY EXTENSION, not just .yaml and .pt. The first version checked
+    # those two and would have stayed green on a stale `.hef`: `build_mongla.
+    # sh`'s sync is ADDITIVE, so weights left in the Pi's ~/models copy back
+    # into the tree on the next vehicle-side build. Caught by a fresh-context
+    # review, not by this test.
+    stragglers = sorted(p.name for p in _MODELS.glob('gate_rescue_repair.*'))
+    assert not stragglers, (
+        f'the retired graph is back in the shipped model set: {stragglers}. '
+        f'build_mongla.sh syncs additively -- check the vehicle\'s ~/models.')
 
 
 def test_the_real_model_set_passes_the_check():

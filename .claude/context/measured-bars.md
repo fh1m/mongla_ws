@@ -6276,6 +6276,27 @@ of view counts against the positive column, so 100 % positive means the clip is
 gate-dominated rather than that recall is perfect. Confirm by rendering boxes
 before believing either column.
 
+### ✅ RESOLVED the same day, and not the way this section proposed
+
+The operator's call was to **retire `gate_rescue_repair` outright** rather than
+run both. `gate_sharks` is now the default on both launch paths and the weights
+are at `~/models/retired/`, so the `fwd_models:=gate_sharks,gate_rescue_repair`
+form prescribed above is no longer available — read it as history.
+
+⛔ **AND THE SWAP WAS INITIALLY WRONG IN A WAY THE SEPARATION TABLE HIDES.**
+The model changed and `conf` did not: both launch files still defaulted to
+**0.15**, where `gate_sharks` measures a worst negative of **40.8 %** — not the
+3.2 % at 0.45 that justified the whole change. The sidecar said
+`recommended_conf: 0.45` and **nothing read it**; `bringup_check` only prints
+it, so the preflight went green quoting a bar no launch applied. Found by a
+fresh-context review, not by the tests. Both defaults are now 0.45, and
+`at_0_15: [100.0, 40.8, 59.2]` is recorded in the sidecar — **omitting the
+flown bar while keeping the flattering ones is the absent-number pattern.**
+
+⚠ Two live missions (`task_gate`, `pool_day_practice`) were also left steering
+on `rescue` by the same substitution; see the note in `CLAUDE.md` §9 and
+`test_missions_only_name_classes_a_model_emits.py`.
+
 ---
 
 ## 60. ⛔ COLOUR IS NOT A RUNG, EVEN WHEN THE RULEBOOK FIXES IT — built, measured, DELETED

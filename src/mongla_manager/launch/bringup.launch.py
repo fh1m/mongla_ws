@@ -283,7 +283,7 @@ def generate_launch_description():
         # cross-venue gate). It was 0.30 here -- a CUDA-path number, shipped on
         # the path that never ran. On `vision_stack:=generic` (a .pt on CUDA)
         # pass conf:=0.35 explicitly.
-        DeclareLaunchArgument('conf',       default_value='0.15',
+        DeclareLaunchArgument('conf',       default_value='0.45',
                               description='Detector confidence floor. 0.15 = Hailo '
                                           'INT8 operating point; pass 0.35 for the '
                                           'generic CUDA stack.'),

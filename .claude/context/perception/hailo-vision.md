@@ -1,3 +1,21 @@
+<!-- ⛔ PROVENANCE WARNING, ADDED 2026-09-28. Retiring `gate_rescue_repair`
+     renamed the model across 85 files by TEXTUAL SUBSTITUTION, and this file
+     took ~20 of those hits. Every benchmark below -- the 10.19/9.54 ms decode
+     pair, 97.8 FPS vs 92.4, 8.34 ms, 10.49 ms / 95.4 Hz, 85.4 -> 95.3 Hz, the
+     parse-hef dump and "measured on our own weights against real pool frames"
+     -- was measured on `gate_rescue_repair`, NOT on `gate_sharks`, whatever
+     the surrounding text now says.
+
+     `gate_sharks` has NOT been re-benchmarked. The throughput figures should
+     transfer (same architecture, same input size) and the NMS floor should
+     NOT be assumed -- `hailortcli parse-hef` has not been run on
+     gate_sharks.hef, and a baked floor is per-file.
+
+     Individual lines are deliberately NOT edited: 20 substitutions verified
+     one at a time is how a second error gets introduced, and this banner
+     states the truth once where it cannot be missed. Fix a line when you
+     re-measure it, not before. -->
+
 <!-- MERGED 2026-09-07 (srot -> main). These were TWO DIFFERENT DOCUMENTS
      that happened to share a filename: they share ZERO of 18 headings. Neither
      is a newer version of the other, so neither was discarded.

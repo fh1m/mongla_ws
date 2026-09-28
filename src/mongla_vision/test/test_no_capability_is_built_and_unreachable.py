@@ -149,6 +149,12 @@ DEFERRED = {
         'known start range, which makes true tau a straight line and the '
         'filter a fit rather than a guess.'),
     'mongla_vision/mongla_vision/approach.py': (
+        '⚠ AND ITS BANDS CAME FROM THE RETIRED GRAPH. `tools/approach_band.py` '
+        'was run against `gate_rescue_repair`, whose documented failure mode '
+        'is half-frame boxes over empty water -- so the peaks may be peaks of '
+        'hallucination, and the module\'s own docstring says class bands '
+        'belong to ONE graph and do not transfer. Re-run the tool on '
+        '`gate_sharks` before wiring anything to this. '
         'the BAND is measured (section 23) but the controller that would act '
         'on back-off does not exist; vision_verbs closes range only. Wiring '
         'it means a new verb, which is a mission-surface change.'),

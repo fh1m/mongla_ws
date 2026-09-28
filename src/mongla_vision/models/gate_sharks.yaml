@@ -13,6 +13,10 @@ separation:
     tool: tools/negative_clip_check.py
     venue: Mirpur/Sun_June_21
     # bar: [worst positive %, worst negative %, separation points]
+    # ⚠ 0.15 was the LAUNCH DEFAULT until 2026-09-28 and is the worst
+    # bar measured. Recorded because omitting the flown bar while
+    # keeping the flattering ones is the absent-number pattern.
+    at_0_15: [100.0, 40.8, 59.2]
     at_0_30: [100.0, 15.8, 84.2]
     at_0_45: [100.0, 3.2, 96.8]
     at_0_75: [100.0, 0.0, 100.0]
