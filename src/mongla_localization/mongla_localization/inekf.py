@@ -196,6 +196,11 @@ class RIEKF:
         # different part of the state says nothing about it.
         self.reject_streak: dict = {}
         self.lockout_breaks = 0
+        # The raw gyro of the latest `predict`, kept so a measurement taken by
+        # a sensor AWAY from the IMU can remove `omega x r` (see
+        # `update_body_velocity_xy`). Raw, not bias-corrected: the bias is
+        # subtracted at use, with the estimate current at that moment.
+        self._gyro = np.zeros(3)
         # ⛔ THE OBSERVABILITY GATE -- see `_velocity_is_observed` (B-56).
         self.vel_sigma_gate = float(vel_sigma_gate)
         self.gated = 0
@@ -212,7 +217,8 @@ class RIEKF:
         dt = float(dt)
         if dt <= 0.0:
             return
-        w = np.asarray(gyro, dtype=float).reshape(3) - self.X.bg
+        self._gyro = np.asarray(gyro, dtype=float).reshape(3).copy()
+        w = self._gyro - self.X.bg
         a = np.asarray(accel, dtype=float).reshape(3) - self.X.ba
 
         R = self.X.R
@@ -262,8 +268,17 @@ class RIEKF:
         y = z - self.X.R.T @ self.X.v
         return self._apply(H, y, np.eye(3) * (sigma ** 2), kind=kind)
 
+    def last_rate(self) -> np.ndarray:
+        """Body rate at the latest `predict`, bias-corrected, rad/s FRD.
+
+        The same omega `predict` integrated, so a lever-arm correction and the
+        attitude propagation can never disagree about how fast the hull turns.
+        """
+        return self._gyro - self.X.bg
+
     def update_body_velocity_xy(self, vx: float, vy: float,
-                                var_x: float, var_y: float) -> bool:
+                                var_x: float, var_y: float, *,
+                                lever_arm=None) -> bool:
         """Downward optical flow: body x and y ONLY.
 
         ⛔ A BOTTOM-LOOKING CAMERA CANNOT MEASURE VERTICAL VELOCITY, and the
@@ -277,11 +292,34 @@ class RIEKF:
         standard error of the mean over its RANSAC inliers -- a textured floor
         and a bare one do not deserve the same weight, and a constant sigma
         here would throw that away.
+
+        ⛔ THE CAMERA IS NOT AT THE IMU (issue #27). The state is the IMU's
+        velocity; the flow node measures the CAMERA's, and rigid-body
+        kinematics says exactly
+
+            v_cam = R^T v + omega x r        r = IMU -> camera, body FRD
+
+        Without the second term a turn in place is fused as translation: at
+        0.5 rad/s of yaw with the lens 0.25 m forward, 0.1256 m/s sideways was
+        measured on this filter (`test_camera_lever_arm.py`), at the flow
+        node's millimetre-per-second sigma. `lever_arm=None` means NOT
+        MEASURED and reproduces the old behaviour exactly -- it is not a zero
+        standing in for a number, it is the absence of one, and the caller
+        reports it as DEGRADED. An explicit `(0, 0, 0)` means measured as zero.
+
+        The term enters the PREDICTION only; H is unchanged. It also depends on
+        the gyro bias (omega = gyro - bg), and that column is omitted: it is
+        second order at the bias magnitudes this board shows, and getting its
+        sign right needs `_inject`'s bias-error convention settled first.
         """
         H = np.zeros((2, self.DIM))
         R_T = self.X.R.T
         H[:, 3:6] = R_T[:2, :]              # no attitude term, see update_body_velocity
-        y = np.array([vx, vy]) - (R_T @ self.X.v)[:2]
+        expected = R_T @ self.X.v
+        if lever_arm is not None:
+            expected = expected + np.cross(self.last_rate(),
+                                           np.asarray(lever_arm, dtype=float))
+        y = np.array([vx, vy]) - expected[:2]
         return self._apply(H, y, np.diag([var_x, var_y]), kind='velocity_xy')
 
     def update_zero_velocity(self, sigma: float = 0.02) -> bool:

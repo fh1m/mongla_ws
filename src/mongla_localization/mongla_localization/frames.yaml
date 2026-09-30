@@ -1,0 +1,34 @@
+# Where the sensors are, relative to the board's IMU. ONE copy, read by
+# `frames.py`; nothing else states these numbers.
+#
+# Body FRD, metres, origin = the IMU chip on the SROT board:
+#   x forward (toward the nose), y right (starboard), z DOWN.
+#
+# ⛔ `null` MEANS NOT MEASURED, AND IS NOT ZERO. Every consumer treats null as
+# "uncorrected, and say so": flow is fused without its lever arm and its height
+# without the baro offset -- exactly the behaviour before these corrections
+# existed -- and the manager's `frames` health line reads DEGRADED, naming what
+# the missing number costs. A measured zero is written `[0.0, 0.0, 0.0]`.
+#
+# ⛔ DO NOT FILL THESE FROM CAD. The CAD models the thrusters and not the
+# electronics tray, and the board's position in the hull is not final. Tape
+# them on the built vehicle -- IMU chip to the centre of each lens's front
+# element, and to the Bar30's port -- and record the date and the method in
+# `measured-bars.md` in the same commit.
+#
+# What each one buys, at the magnitudes issue #27 sized:
+#   downward_cam  omega x r: a 0.25 m lever arm turns a 0.5 rad/s yaw-in-place
+#                 into 0.125 m/s of sideways velocity in the filter (measured
+#                 0.1256 m/s, `test_camera_lever_arm.py`)
+#   baro          with downward_cam, the lens height the flow scale uses: a
+#                 10 cm baro-above-lens offset at 0.7 m is a 14 % scale error
+#                 on every velocity and every distance
+#   forward_cam   the TF edge for forward-camera geometry (PnP, approach)
+imu_to:
+  downward_cam: null
+  forward_cam: null
+  baro: null
+
+measured:
+  date: null
+  method: null

@@ -66,6 +66,7 @@ def _node():
     obj._zupt_enabled = True
     obj._still = deque(maxlen=ln.STILL_WINDOW)
     obj._last_flow_t = 0.0
+    obj._flow_lever_arm = None          # not measured: the uncorrected path
     obj._attitude_seeded = False
     obj._anchored = False
     obj._yaw_offset_deg = 0.0

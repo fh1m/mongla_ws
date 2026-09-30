@@ -159,6 +159,37 @@ def pilot_gain(gain: Optional[float]) -> Health:
         f'value; raise it on the joystick button edge.')
 
 
+def sensor_offsets(offsets) -> Health:
+    """Are the sensors' positions relative to the IMU known? (issues #19, #27)
+
+    ⚠ DEGRADED, NOT FAILED. An unmeasured offset leaves its correction OFF,
+    which is exactly the behaviour before the correction existed -- the vehicle
+    flies as it always has, and this line says what that costs. Refusing flow
+    until a tape is run would disable the only velocity sensor before first
+    water and put the filter in B-56's unobserved regime.
+
+    `offsets` is `mongla_localization.frames.Offsets`, or None if the frames
+    file could not be read -- which is UNKNOWN, not OK.
+    """
+    if offsets is None:
+        return unknown('sensor_offsets', 'frames.yaml unreadable')
+    missing = offsets.unmeasured()
+    if not missing:
+        return ok('sensor_offsets', 'downward, forward and baro offsets measured')
+    cost = []
+    if 'downward_cam' in missing:
+        cost.append('flow fused without omega x r (a turn in place reads as '
+                    'sideways motion)')
+    if 'downward_cam' in missing or 'baro' in missing:
+        cost.append('flow height taken at the baro, not the lens (scale error '
+                    '= offset / height)')
+    if 'forward_cam' in missing:
+        cost.append('no TF edge for forward-camera geometry')
+    return degraded('sensor_offsets',
+                    f'NOT MEASURED: {", ".join(missing)} -- ' + '; '.join(cost)
+                    + '. Tape them into mongla_localization/frames.yaml')
+
+
 def allocator(sat) -> Health:
     """Grade the thrust allocator's per-group scale-down (srot-control-board#20).
 

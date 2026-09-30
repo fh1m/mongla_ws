@@ -67,6 +67,10 @@ class DistanceEstimationNode(Node):
 
         cam = str(self.get_parameter('camera').value or 'downward').strip()
         self._pool_depth = float(self.get_parameter('pool_depth_m').value)
+        # Lens below the baro port, body FRD metres, or None = not measured
+        # (issue #27; see `flow_math.height_above_floor`).
+        from mongla_localization import frames as _frames
+        self._lens_below_baro = _frames.load().baro_to_downward_cam_z()
         self._f_px       = float(self.get_parameter('camera_focal_px').value)
         self._rsx        = float(self.get_parameter('rot_sign_x').value)
         self._rsy        = float(self.get_parameter('rot_sign_y').value)
@@ -214,7 +218,8 @@ class DistanceEstimationNode(Node):
 
         height = None
         if self._depth_m is not None:
-            height = height_above_floor(self._pool_depth, self._depth_m)
+            height = height_above_floor(self._pool_depth, self._depth_m,
+                                        self._lens_below_baro)
         if height is not None:
             self._last_height = height
             self._last_height_t = t

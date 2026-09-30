@@ -52,6 +52,7 @@ from mongla_interfaces.msg import MonglaState
 
 from mongla_localization.command_velocity import (BLOCKED, CommandVelocityModel,
                                                   MotionCheck)
+from mongla_localization import frames
 from mongla_localization.inekf import RIEKF, _wrap180
 from mongla_localization.retro import Retrodictor
 from mongla_localization.tile_grating import snap_to_grid
@@ -133,6 +134,17 @@ class LocalizationNode(Node):
 
         cam = str(self.declare_parameter('flow_camera', 'downward').value)
         self._flow_sigma = float(self.declare_parameter('flow_sigma', 0.05).value)
+        # ⛔ THE DOWNWARD CAMERA IS NOT AT THE IMU (issue #27). `None` until it
+        # is taped on the built hull -- and None means UNCORRECTED, exactly the
+        # behaviour before this existed, reported rather than hidden. It is not
+        # a zero standing in for a measurement.
+        self._flow_lever_arm = frames.load().downward_cam
+        if self._flow_lever_arm is None:
+            self.get_logger().warning(
+                '[LOCAL] downward camera lever arm NOT MEASURED (frames.yaml '
+                'imu_to.downward_cam is null): flow is fused WITHOUT omega x r, '
+                'so every turn in place is read as sideways motion -- 0.125 m/s '
+                'at 0.5 rad/s for a lens 0.25 m from the IMU. Tape it.')
         self._depth_sigma = float(self.declare_parameter('depth_sigma', 0.02).value)
         self._yaw_sigma_deg = float(self.declare_parameter('yaw_sigma_deg', 2.0).value)
         self._fix_sigma = float(self.declare_parameter('fix_sigma', 0.5).value)
@@ -390,8 +402,9 @@ class LocalizationNode(Node):
         if not (var_y > 0.0) or not math.isfinite(var_y):
             var_y = floor
         self._apply(_opt_stamp(msg),
-                    lambda f, vx=v.x, vy=v.y, a=max(var_x, 1e-6), b=max(var_y, 1e-6):
-                    f.update_body_velocity_xy(vx, vy, a, b))
+                    lambda f, vx=v.x, vy=v.y, a=max(var_x, 1e-6), b=max(var_y, 1e-6),
+                    r=self._flow_lever_arm:
+                    f.update_body_velocity_xy(vx, vy, a, b, lever_arm=r))
         self._n['flow'] += 1
         now = time.monotonic()
         dt = min(now - self._last_flow_t, 0.25) if self._last_flow_t > 0.0 else 0.0

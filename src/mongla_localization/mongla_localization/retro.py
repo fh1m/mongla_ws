@@ -42,17 +42,21 @@ def snapshot(filt) -> tuple:
     """Everything an update can change, including the gate's own counters --
     a replay must not count one measurement's rejection twice."""
     return (filt.X.copy(), filt.P.copy(), filt.accepted, filt.rejected,
-            dict(filt.reject_streak), filt.lockout_breaks)
+            dict(filt.reject_streak), filt.lockout_breaks,
+            filt._gyro.copy())
 
 
 def restore(filt, snap: tuple) -> None:
-    X, P, acc, rej, streak, breaks = snap
+    X, P, acc, rej, streak, breaks, gyro = snap
     filt.X = X.copy()
     filt.P = P.copy()
     filt.accepted, filt.rejected = acc, rej
     # A COPY: the snapshot is restored on every replay across it, and handing
     # the live dict back would let the replay's rejections write into it.
     filt.reject_streak, filt.lockout_breaks = dict(streak), breaks
+    # The rate a late lever-armed flow sample is corrected with must be the
+    # rate at ITS instant, so it is state for replay like everything else.
+    filt._gyro = gyro.copy()
 
 
 class Retrodictor:
