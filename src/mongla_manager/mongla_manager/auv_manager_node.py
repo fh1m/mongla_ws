@@ -2660,7 +2660,12 @@ def main(args=None):
         # to /rosout after the context is torn down.
         executor.shutdown(timeout_sec=1)
         # Last, after the disarm above: the link must stay fed while it runs.
-        node._hb_thread.stop()
+        # `getattr` because `_setup_mavlink` can raise before the thread exists,
+        # and an AttributeError here would replace the real error with a
+        # teardown one -- the same class of mistake as safety rule 6.
+        hb = getattr(node, '_hb_thread', None)
+        if hb is not None:
+            hb.stop()
         node.destroy_node()
         if rclpy.ok():          # Ctrl-C unwinds spin() which may already have shut down
             rclpy.shutdown()

@@ -171,7 +171,15 @@ already does.
 
 ## 2. HIGH
 
-### B54 — the `/mongla/move` busy gate is a test THEN a set, so two motion loops can both run `REPRODUCED 2026-09-25` ✅ FIXED 2026-09-25
+> ⚠ **RENUMBERED ON LANDING (2026-09-30).** This audit numbered its three findings
+> **B54, B55, B56** — without the hyphen every other entry uses, and `B56`
+> collided outright with `B-56` (*world-frame EKF updates are worse than nothing
+> once flow is gone*), a different defect that **ten places in
+> `mongla_localization/` cite by name.** Two defects separated only by a hyphen is
+> the register's own version of "one truth, two copies". They are **B-78 … B-80**
+> here. PR #61 and its commit messages still say B54 … B56.
+
+### B-78 — the `/mongla/move` busy gate is a test THEN a set, so two motion loops can both run `REPRODUCED 2026-09-25` ✅ FIXED 2026-09-25
 **`auv_manager_node.py:1273` (was 1241) · `dispatch_policy.py`**
 
 `command_active` was a plain bool, READ in `goal_callback` (the accept/reject
@@ -216,7 +224,7 @@ leak.
 two-step claim; free the gate on cancel; reap a confirmed command).
 
 
-### B55 — `pose_fuse.yaw_at` raises when the hull's yaw is absent `REPRODUCED 2026-09-25` ✅ FIXED 2026-09-25
+### B-79 — `pose_fuse.yaw_at` raises when the hull's yaw is absent `REPRODUCED 2026-09-25` ✅ FIXED 2026-09-25
 **`pose_fuse_node.py:71`**
 
 `sorted(self._yaw_hist)` sorted whole `(stamp, yaw_or_None)` tuples, so on a stamp
@@ -499,7 +507,7 @@ power."*
 
 ## 3. MEDIUM
 
-### B56 — "`/mongla/state` publishes ON CHANGE" is not true, in seven places `2026-09-25` ✅ PARTLY FIXED 2026-09-25
+### B-80 — "`/mongla/state` publishes ON CHANGE" is not true, in seven places `2026-09-25` ✅ PARTLY FIXED 2026-09-25
 **`auv_manager_node.py:6` · `srot_fc.py:2055` · `CLAUDE.md:193` · `commands.md:571` · two test docstrings · `pose_fuse_node.py:49`**
 
 The on-change logic is `_maybe_print_state` (with `YAW_/DEPTH_/BAT_CHANGE_THRESH`),
