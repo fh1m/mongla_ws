@@ -16,7 +16,7 @@ setup(
     maintainer='Muhammad Fahim Faisal',
     description='Estimation: invariant filter, heading anchor, resection, pose fusion.',
     license='MIT',
-    package_data={package_name: ['courses/*.yaml']},
+    package_data={package_name: ['courses/*.yaml', 'frames.yaml']},
     include_package_data=True,
     entry_points={
         'console_scripts': [

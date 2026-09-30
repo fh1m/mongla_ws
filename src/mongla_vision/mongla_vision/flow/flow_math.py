@@ -31,16 +31,33 @@ import numpy as np
 from ..optics import N_WATER, RefractiveRectifier  # noqa: F401
 
 
-def height_above_floor(pool_depth_m: float, depth_m: float) -> Optional[float]:
-    """Metric camera height above the pool floor, or None if non-physical.
+def height_above_floor(pool_depth_m: float, depth_m: float,
+                       lens_below_baro_m: Optional[float] = None
+                       ) -> Optional[float]:
+    """Metric LENS height above the pool floor, or None if non-physical.
 
     `depth_m` is NEGATIVE below the surface (this stack's AHRS2 convention), so
     height = pool_depth + depth_m (= pool_depth - |depth|). At 0.5 m deep in a
     4 m pool: 4 + (-0.5) = 3.5 m. Returns None when the result is <= 0 (bad
     depth / bad pool_depth) so the caller holds the last good height instead of
     scaling by a garbage number.
+
+    ⛔ THAT IS THE BAROMETER'S HEIGHT, NOT THE LENS'S (issue #27). The docstring
+    said "camera height" for years while the arithmetic had no camera in it.
+    Flow scale is `h / (f * dt)`, so any vertical gap between the Bar30 port and
+    the lens is a fixed SCALE error on every velocity and every distance: a lens
+    10 cm below the port at 0.7 m reads 14 % long. `lens_below_baro_m` is that
+    gap, body FRD (positive = lens LOWER, i.e. nearer the floor), from
+    `frames.Offsets.baro_to_downward_cam_z()`. None = NOT MEASURED, and the
+    baro height is returned unchanged -- the old behaviour, which the manager's
+    `sensor_offsets` health line reports as DEGRADED. It is not a zero.
+
+    Level-hull approximation: the gap is taken along world vertical. At the
+    few degrees of pitch this hull holds, cos(tilt) is within 0.5 % of 1.
     """
     h = float(pool_depth_m) + float(depth_m)
+    if lens_below_baro_m is not None:
+        h -= float(lens_below_baro_m)
     return h if h > 1e-3 else None
 
 

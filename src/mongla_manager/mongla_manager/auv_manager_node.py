@@ -313,6 +313,15 @@ class _HeartbeatThread:
             self._stop.wait(next_t - now)
 
 
+def _load_sensor_offsets():
+    """The frames file, or None if it cannot be read (reported as UNKNOWN)."""
+    try:
+        from mongla_localization import frames
+        return frames.load()
+    except Exception:                 # noqa: BLE001 -- health must not raise
+        return None
+
+
 def _kill_text(kill) -> str:
     """Three states, because the wire has three.
 
@@ -1616,6 +1625,8 @@ class AUVManagerNode(Node):
         # that. `fc.read_gain()` existed for this and was called by nothing.
         self._health.register('pilot_gain', lambda: _hr.pilot_gain(
             getattr(fc, 'read_gain', lambda: None)()))
+        self._health.register('sensor_offsets', lambda: _hr.sensor_offsets(
+            _load_sensor_offsets()))
         self._health.register('detector', lambda: _hr.detector(
             self._detection_rate_hz()))
         # ⛔ LEAK. Nine reporters were defined here and six were registered; this
