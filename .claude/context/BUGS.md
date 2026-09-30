@@ -4383,3 +4383,66 @@ A whole-stack review: firmware, host, ground station and flasher, benchmarked ag
 - **Estimator and vision:** #23–#37. Distortion ignored on metric paths (#24), flow covariance overconfidence (#23), ZUPT during cruise (#25), missing adjoint Q terms (#26), no lever arm (#27).
 - **Proposals:** #38–#42.
 - **CAD/allocator:** #9. `VERTICAL_PRIORITY` ranks unactuated roll above depth, and the axial unit sits at a phantom 8.1 mm offset.
+
+---
+
+### B-77 — the NIS lockout break was never safe; it was only unreachable ✅ **FIXED 2026-09-30**
+
+**Severity: CRITICAL (estimator).** B-75 made `inekf.reject_streak` one counter
+per measurement kind, which is correct — a single shared counter was zeroed by
+the board's 50 Hz attitude, so a filter confidently wrong in position rejected
+the truth for ever and the lockout break never fired.
+
+⛔ **It fires now, and the first thing it did was destroy the filter.**
+`test_loop_closure_bounds_drift.py` — written after the branch that carried B-75,
+and green on `main` — failed four ways. Measured on its flow-aided fixture, 20 s,
+with every kind eligible:
+
+```
+DEPTH at 10 Hz broke the lockout       14 times
+each break multiplies the WHOLE P by   4.0  (REJECT_INFLATION)
+velocity measured at 10 Hz to 5 cm/s   ended at sigma 4.7 m/s
+_velocity_is_observed()                went false
+position                               reached 1 957 m
+```
+
+**One channel's disagreement destroyed every other channel's estimate.**
+
+⭐ **Why depth is the wrong channel for it.** The break reads five consecutive
+rejections as evidence about the *filter* rather than the sensor. For a low-rate
+detector fix that is about a second of evidence. For a continuous channel at
+10–50 Hz it is half a second — and because a break is *followed* by an accepted
+update, which resets the streak, a small steady bias against a tight `P` breaks
+the lockout again at the channel's own rate, for ever. `depth` is the worst of
+them: its `H` carries `-skew(p)`, so the row **grows with the position error it
+is helping to cause**.
+
+**Fixed** by `LOCKOUT_BREAKABLE_KINDS = {position, yaw, attitude}` — the three
+the tests show it is genuinely needed for: a wrong prop resection, and a heading
+anchor that re-expresses the world frame, after which the board's raw
+boot-relative attitude disagrees by the whole offset until it is let back in.
+
+⚠ **This is a NARROWING, not a fix.** A continuous channel that rejects
+persistently is a real fault; it is now merely rejected and counted, which is the
+safe reading. The answer is issues **#23** (flow covariance overconfidence) and
+**#26** (the missing adjoint Q terms), not a covariance multiply.
+
+**Two attempts that did not work, kept because the reason is the finding:**
+
+1. projecting the inflation onto the measurement's own subspace —
+   `P' = P + (k-1) P Hᵀ (H P Hᵀ)⁻¹ H P`, so `H P' Hᵀ == k · H P Hᵀ` exactly and
+   unobserved directions are untouched — **still diverged**, because depth's own
+   subspace is what grows;
+2. a per-kind cooldown (one break per 5 s of filter time) fixed the fixture and
+   **broke the two tests the break exists for**.
+
+⭐ The rate was not the problem. The channel was.
+
+**Verified by injection:** re-admitting `depth` fails 5 loop-closure tests;
+removing `attitude` fails the anchor test; the shipped set passes 343/343 in the
+localization suite and 4 053 across six.
+
+⚠ **The lesson for the next landing.** This defect was invisible on the branch
+and invisible on `main`. It existed only in the *combination*, and the test that
+caught it was newer than the branch. **A branch is re-run against current `main`
+before it lands, not against the `main` it was cut from.**
