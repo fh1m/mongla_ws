@@ -25,3 +25,14 @@ def test_the_shipped_file_is_what_the_vehicle_reports():
     o = _load_sensor_offsets()
     assert o is not None, 'the manager cannot read frames.yaml'
     assert hr.sensor_offsets(o).state in (State.OK, State.DEGRADED)
+
+
+def test_the_pre_dive_gate_warns_but_never_fails_on_unmeasured_offsets():
+    """`bringup_check` is what operators decide with; the verdict must reach it,
+    and must not block a dive -- the correction is simply off."""
+    from mongla_manager import bringup_check as bc
+    st, det = bc._check_sensor_offsets()
+    assert st in (bc.PASS, bc.WARN)
+    assert st != bc.FAIL
+    if st == bc.WARN:
+        assert 'NOT MEASURED' in det

@@ -641,6 +641,25 @@ def _check_models() -> tuple[str, str]:
                   'ros2 run mongla_vision export_engine --all (ON THE JETSON)')
 
 
+def _check_sensor_offsets() -> tuple[str, str]:
+    """Are the sensors' positions relative to the IMU measured? (#19, #27)
+
+    ⚠ WARN, NEVER FAIL. An unmeasured offset leaves its correction OFF -- the
+    behaviour before the correction existed -- and the vehicle flies as it
+    always has. This line exists so the cost is SEEN at the pool, where the
+    only fix (a tape measure) is available, rather than inferred later from a
+    sideways drift on every turn. The same verdict the manager's
+    `sensor_offsets` health line gives, from the same file and the same words.
+    """
+    try:
+        from mongla_localization import frames
+        from mongla_manager import health_reporters as hr
+        h = hr.sensor_offsets(frames.load())
+    except Exception as exc:                        # noqa: BLE001
+        return WARN, f'frames.yaml unreadable: {exc!r}'
+    return (PASS if h.ok else WARN), h.evidence
+
+
 def _check_model_separation() -> tuple[str, str]:
     """Can the model you are about to fly TELL THE PROP FROM THE WATER?
 
@@ -1731,6 +1750,11 @@ def main(argv: list[str] | None = None) -> int:
     section('K1b. Model separation (does it WORK, not just load?)')
     st, det = _check_model_separation()
     emit(st, 'measured separation', det)
+
+    # ---- K1c. Where the sensors are ---------------------------------- #
+    section('K1c. Sensor offsets (is flow corrected for where the lens is?)')
+    st, det = _check_sensor_offsets()
+    emit(st, 'IMU -> camera / baro', det)
 
     # ---- K2. Stale build tree --------------------------------------- #
     section('K2. Build tree freshness (is the vehicle running your code?)')

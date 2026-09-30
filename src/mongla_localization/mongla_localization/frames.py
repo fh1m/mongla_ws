@@ -126,6 +126,17 @@ def altitude_from_ned_z(z_ned: float) -> float:
 # filter in pool axes, so odom_ned coordinates ARE pool coordinates and
 # `map -> odom` is the identity.
 #
+# ⚠ `odom_ned` IS NOT CONTINUOUS ACROSS THE ANCHOR, and REP-105 says odom
+# should be. The heading anchor ROTATES the filter state (`rotate_world_yaw`),
+# so `odom_ned -> mongla` jumps in yaw -- and in x/y by the same rotation about
+# the origin -- exactly once, at the anchor. Anyone adding `robot_localization`
+# or another consumer that integrates odom must treat that instant as a reset
+# (the uplink already counts it: `_send_position_uplink` bumps its reset counter
+# on the frame change). The REP-shaped alternative, an unrotated odom plus a
+# `map -> odom` correction, would mean carrying the anchor as a transform
+# instead of in the state; not done, because every consumer today wants the
+# pool-axis estimate itself.
+#
 # ⚠ `{cam}_cam` HAS BODY AXES, NOT OPTICAL ONES. It is the frame flow publishes
 # in, and flow's velocity is already remapped to body x/y by `flow_node`. An
 # optical frame (z out of the lens) belongs to the IMAGE and needs the measured

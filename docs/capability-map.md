@@ -137,6 +137,8 @@ IMU, the depth sensor and the downward camera. Without it, a distance move is a 
 | Absolute position | a fix from a prop whose location is known, or resection from two bearings | `course_map.py`, `resection.py`, `pnp_node.py` | 🟡 BUILT |
 | Absolute heading | from a prop of known bearing, from pool lane lines, or from the floor tile grating | `heading_anchor.py`, `pool_lines.py`, `tile_grating.py` | 🟡 BUILT |
 | Venue priors | a course file per competition, overridable on the deck without a rebuild, plus a tool to survey the real venue | `mongla_localization/courses/*.yaml`, `course_survey.py` | 🟡 BUILT |
+| Frame tree | FRD/NED inside, REP-103 FLU/ENU at the boundary through a published TF tree; the pool frame is unreachable until anchored | `mongla_localization/frames.py`, `test_frame_tree.py`; live on the board: `odom → base_link` yaw −58.95° ENU against a 148.6° NED heading (90 − 148.6 = −58.6) | 🟣 BENCH |
+| Camera lever arm and lens height | a turn in place is not read as sideways motion (ω × r), and flow scales by the lens height, not the barometer's | `inekf.update_body_velocity_xy`, `test_camera_lever_arm.py` (0.1256 m/s → under 1 cm/s); **the three offsets are not yet taped**, so the corrections are off and `sensor_offsets` reads DEGRADED | 🟡 BUILT |
 
 ---
 

@@ -486,3 +486,34 @@ back the timestamp unless you're debugging a timing issue.
 - Don't introduce `std_srvs` services for arm/disarm — the action
   handles them via the `cmd` field.
 - Don't add new QoS profiles unless you benchmarked them. Defaults work.
+
+---
+
+## Frames (2026-09-30)
+
+**One owner: `mongla_localization/frames.py`.** Names, sensor offsets
+(`frames.yaml`), rotations, and every TF edge live there; nothing else states
+them.
+
+```
+map (ENU) -- pool (NED)                        static
+ `- odom (ENU)                                 identity, ONLY once anchored
+     `- odom_ned (NED)                         static
+         `- mongla (FRD, at the IMU)           dynamic, localization
+             |- base_link (FLU)                static, manager
+             `- {downward,forward}_cam (FRD)   static, ONLY when measured
+```
+
+- **FRD/NED inside, REP-103 at the boundary.** Do not convert internally.
+- **Depth:** `MonglaState.depth_m` is altitude (negative below the surface);
+  `/mongla/odom` z and VISION_POSITION_ESTIMATE are NED (positive down). The one
+  flip is `frames.ned_z_from_altitude`; `test_depth_sign.py` walks one depth
+  through all three.
+- **`odom_ned` jumps once, at the heading anchor** (the state is rotated). A
+  consumer that integrates odom must treat that as a reset.
+- **Not in the tree yet:** image frames (`forward` / `downward` from
+  `camera_node`, and `lock_node`'s pixel-space outputs), because optical frames
+  need the measured image→body signs; and `{cam}_cam` until the offsets are
+  taped. An unmeasured edge is absent, never zero.
+- **Sim:** Gazebo truth is `odom -> base_link_truth`, beside the estimate.
+
