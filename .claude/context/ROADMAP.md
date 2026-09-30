@@ -141,6 +141,8 @@ re-ask.
 | L5 | Course priors with measured positions | **TOOLING DONE 2026-09-17; DATA OPEN** | `courses/sauvc26.yaml` template (classes, rulebook dims, positions unset -- the rulebook gives zones, not points); `ros2 run mongla_localization course_survey --course sauvc26 --prop final_gate --x .. --y .. --bearing ..` writes the deck copy (`measured: true`) the loader reads first. Positions still need measuring at the venue |
 | L6 | `floor_range` validated at taped range in water | OPEN (measurement) | `rounds/round17-range-without-size.md` |
 | L7 | Rewind-and-replay lag correction | **DONE 2026-09-17 (opt-in)** | merged into L1: every filter event buffered with its prior snapshot, late ones inserted and the tail replayed |
+| L8 | Frame tree (#19) | **DONE 2026-09-30, BENCH** | `frames.py` is the one owner; FRD/NED inside, REP-103 at the boundary; `pool` unreachable until anchored; seen live on the board (`odom → base_link` yaw within 0.4° of the heading). ⚠ `odom_ned` jumps once, at the anchor -- REP-105 wants odom continuous; treat it as a reset. Optical camera frames OWED: need the measured image→body signs |
+| L9 | Camera lever arm + lens height (#27) | **BUILT 2026-09-30; DATA OPEN** | ω×r in the flow update and the baro→lens gap in flow scale, both off until `frames.yaml` is taped (IMU chip → downward lens, → forward lens, → Bar30 port). Null = uncorrected, `sensor_offsets` DEGRADED, bringup K1c WARN |
 
 ### Perception
 
