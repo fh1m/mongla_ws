@@ -83,6 +83,33 @@ def load(path: Optional[pathlib.Path] = None) -> Offsets:
                       for k in ('downward_cam', 'forward_cam', 'baro')})
 
 
+# ── the depth sign: the one place it flips ────────────────────────────────
+#
+# Two conventions, each correct where it lives, and ONE conversion between them:
+#
+#   ALTITUDE  negative below the surface.  `MonglaState.depth_m`, the facade,
+#             every mission constant (-0.6 = 0.6 m down), the board's VFR_HUD.
+#   NED z     positive DOWN.               the filter state, `/mongla/odom`
+#             position.z, and VISION_POSITION_ESTIMATE, which MAVLink defines
+#             in NED.
+#
+# ⛔ NO INTERFACE CHANGES SIGN HERE. Changing either would silently invert
+# every depth guard on the other side (it has happened: `SrotFC.get_attitude`
+# once negated an already-negative depth and every guard stopped firing).
+# What changes is that the flip has a NAME, and `test_depth_sign.py` walks one
+# depth through all three interfaces.
+
+
+def ned_z_from_altitude(altitude_m: float) -> float:
+    """-0.6 m (0.6 m below the surface) -> +0.6 NED z."""
+    return -float(altitude_m)
+
+
+def altitude_from_ned_z(z_ned: float) -> float:
+    """+0.6 NED z -> -0.6 m, the MonglaState convention."""
+    return -float(z_ned)
+
+
 # ── the tree ─────────────────────────────────────────────────────────────────
 #
 #   map (ENU) ── pool (NED)                          static

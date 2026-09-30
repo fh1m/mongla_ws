@@ -73,6 +73,8 @@ import numpy as np
 # starboard. This was z-up until 2026-09-15 while the rotation fed in was NED:
 # replayed through 50 s of real board data at rest, that ran to 583 m; NED,
 # 0.036 m. At rest the accelerometer reads (0, 0, -g) level.
+from mongla_localization.frames import ned_z_from_altitude  # noqa: E402
+
 GRAVITY = np.array([0.0, 0.0, 9.80665])
 
 # Below this rotation angle the closed-form exponential divides by ~0, so the
@@ -400,7 +402,7 @@ class RIEKF:
         # (dtheta x p)_z: rows of -[p]x. Zero at the origin, a real coupling
         # once the hull is metres away from it.
         H[0, 0:3] = -skew(self.X.p)[2]
-        y = np.array([-float(depth_m) - self.X.p[2]])
+        y = np.array([ned_z_from_altitude(depth_m) - self.X.p[2]])
         return self._apply(H, y, np.array([[sigma ** 2]]), kind='depth')
 
     def update_yaw(self, yaw_deg: float, sigma_deg: float = 2.0) -> bool:
