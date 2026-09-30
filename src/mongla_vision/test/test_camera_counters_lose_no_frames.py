@@ -52,25 +52,51 @@ def _run(reporter, iterations=1500):
     try:
         counted = 0
         for _ in range(iterations):
-            counted += reporter(state)
+            counted += reporter(state, lambda: time.sleep(0))
         stop.set()
         t.join(timeout=1.0)
-        counted += reporter(state)
+        counted += reporter(state, lambda: time.sleep(0))
     finally:
         sys.setswitchinterval(old_interval)
     return published['n'], counted
 
 
-def _read_then_zero(state):
+def _run_with_the_window_forced(reporter, iterations=50, per_window=3):
+    """Same two schemes, but a publish PROVABLY lands inside the window.
+
+    Whether a real thread switch lands between the read and the reset is up to
+    the scheduler, so a threaded test of that is a coin toss -- it passed alone
+    and failed inside the full suite on 2026-09-30. The window's existence is
+    the premise here, not the thing under test: `_log_health` probes the camera,
+    formats a string and logs, and logging releases the GIL. So inject the
+    publish instead of hoping for it. Single-threaded, so the result is exact.
+    """
+    state = {'sent': 0, 'last': 0}
+    published = {'n': 0}
+
+    def window():
+        for _ in range(per_window):
+            state['sent'] += 1
+            published['n'] += 1
+
+    counted = 0
+    for _ in range(iterations):
+        window()                      # frames arrive between reports too
+        counted += reporter(state, window)
+    counted += reporter(state, lambda: None)   # the drain: no frames in flight
+    return published['n'], counted
+
+
+def _read_then_zero(state, window):
     v = state['sent']
-    time.sleep(0)                 # stands in for is_healthy() + format + log I/O
+    window()                      # stands in for is_healthy() + format + log I/O
     state['sent'] = 0
     return v
 
 
-def _delta(state):
+def _delta(state, window):
     tot = state['sent']
-    time.sleep(0)                 # same window, same work
+    window()                      # same window, same work
     v = tot - state['last']
     state['last'] = tot
     return v
@@ -78,11 +104,18 @@ def _delta(state):
 
 def test_the_old_read_then_zero_really_does_lose_counts():
     """If this ever stops losing, the test below proves nothing -- so assert it."""
-    published, counted = _run(_read_then_zero)
-    assert published > 0
-    assert counted < published, (
+    published, counted = _run_with_the_window_forced(_read_then_zero)
+    # Every frame published inside the window is zeroed before it is ever read.
+    assert published == 50 * 6, published
+    assert counted == 50 * 3, counted
+    assert published - counted == 150, (
         'read-then-zero did not lose a single count -- the window has closed and '
         'this test no longer demonstrates the defect it exists for')
+
+
+def test_the_delta_scheme_loses_nothing_with_the_window_forced():
+    published, counted = _run_with_the_window_forced(_delta)
+    assert counted == published, f'delta lost {published - counted} of {published}'
 
 
 def test_the_delta_scheme_loses_nothing():

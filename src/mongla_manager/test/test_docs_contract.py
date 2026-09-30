@@ -328,18 +328,25 @@ def test_the_published_test_count_is_the_real_one():
     import subprocess
     import sys
     published = {}
+    # ⛔ These patterns used to hard-code the thousands digit as `3` and add
+    # 3 000 to the match. The count passed 4 000 on 2026-09-30, at which point
+    # every pattern would have matched NOTHING -- and a pattern that matches
+    # nothing raises the `no published test count matched` assert below, so the
+    # guard fails loudly rather than passing on a stale number. It is still the
+    # wrong failure, so the thousands digit is captured now.
     for path, pattern in (
-            (ROOT / 'README.md', r'tests-3%20(\d{3})%20passing'),
-            (ROOT / 'README.md', r'6 suites, 3[\s\u202f](\d{3}) of them'),
-            (ROOT / 'README.md', r'3[\s\u202f](\d{3}) passed, 0 failed'),
-            (ROOT / 'README.md', r'6 suites · 3[\s\u202f](\d{3}) tests'),
-            (DOCS / 'index.html', r'<b>3[\s\u202f&#8239;]*(\d{3})</b>'),
+            (ROOT / 'README.md', r'tests-(\d)%20(\d{3})%20passing'),
+            (ROOT / 'README.md', r'6 suites, (\d)[\s\u202f](\d{3}) of them'),
+            (ROOT / 'README.md', r'(\d)[\s\u202f](\d{3}) passed, 0 failed'),
+            (ROOT / 'README.md', r'6 suites · (\d)[\s\u202f](\d{3}) tests'),
+            (DOCS / 'index.html', r'<b>(\d)[\s\u202f]*(?:&#8239;)?(\d{3})</b>'),
             # the banner stopped quoting the count on 2026-09-22 (three chips,
             # all measurements); nothing there to drift any more
     ):
         found = re.findall(pattern, path.read_text(encoding='utf-8'))
         assert found, f'no published test count matched {pattern!r} in {path.name}'
-        published[f'{path.name}:{pattern[:22]}'] = {3000 + int(n) for n in found}
+        published[f'{path.name}:{pattern[:22]}'] = {
+            1000 * int(k) + int(n) for k, n in found}
 
     values = set().union(*published.values())
     assert len(values) == 1, f'published counts disagree: {published}'
