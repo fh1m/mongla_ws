@@ -40,7 +40,13 @@ class SimTf(Node):
         super().__init__('mongla_sim_tf')
         self.declare_parameter('odom_topic', '/mongla/sim/ground_truth')
         self.declare_parameter('odom_frame', 'odom')
-        self.declare_parameter('base_frame', 'base_link')
+        # ⛔ `base_link_truth`, NOT `base_link`. The stack now publishes its own
+        # tree (`mongla_localization/frames.py`), where `base_link` is the
+        # ESTIMATE's body frame, child of `mongla`. Publishing Gazebo truth to
+        # the same name gave `base_link` two parents -- `odom` from here and
+        # `mongla` from the stack -- which tf2 does not allow. Truth and belief
+        # under different names is also the point of this node.
+        self.declare_parameter('base_frame', 'base_link_truth')
         self.odom_frame = self.get_parameter('odom_frame').value
         self.base_frame = self.get_parameter('base_frame').value
 

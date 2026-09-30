@@ -35,11 +35,15 @@ TEMPLATE = """<?xml version="1.0"?>
      Do not hand-edit: run the generator. -->
 <robot name="{name}">
 
-  <!-- base_link is the ROOT. `odom` is deliberately NOT a link here: it is
-       supplied at runtime as a dynamic odom to base_link transform by
-       mongla_sim_bridge's ground-truth broadcaster. Declaring it in the URDF
-       would need a floating joint, which robot_state_publisher ignores, so the
-       link would exist in the model and never in TF. -->
+  <!-- base_link is the ROOT of this model. Its PARENT is supplied at runtime
+       by the stack's own tree (mongla_localization/frames.py):
+       odom -> odom_ned -> mongla -> base_link, so these sensor links ride the
+       ESTIMATE. Gazebo ground truth is published separately as
+       odom -> base_link_truth by mongla_sim_bridge's broadcaster; a second
+       parent for base_link is not allowed in tf2, and truth and belief under
+       one name is exactly what that node exists to separate. With the
+       localization node down, base_link has no parent and RViz shows nothing
+       under `odom`: there is no estimate, and that is the honest picture. -->
   <link name="base_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>

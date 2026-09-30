@@ -11,6 +11,7 @@ from collections import deque
 import numpy as np
 import pytest
 
+from mongla_localization import frames
 from mongla_localization import localization_node as ln
 from mongla_localization.inekf import RIEKF, State
 
@@ -583,11 +584,11 @@ def test_the_anchor_HOLDS_against_50hz_board_attitude():
     n = _node()
     t = _fly_board(n, 100.0, 1.0, 30.0)
     assert n._filter.X.yaw_deg() == pytest.approx(30.0, abs=0.5)
-    assert _published_frame(n) == 'odom'
+    assert _published_frame(n) == frames.ODOM
     n._on_heading(type('F', (), {'data': -60.0})())
     t = _fly_board(n, t, 5.0, 30.0)
     assert n._filter.X.yaw_deg() == pytest.approx(-60.0, abs=1.0)
-    assert _published_frame(n) == 'pool'
+    assert _published_frame(n) == frames.POOL
     # And it is an OFFSET, not a sticky number: the hull turns 45 deg right
     # (board +30 -> +75), so its true pool heading is -15.
     _fly_board(n, t, 2.0, 75.0)
