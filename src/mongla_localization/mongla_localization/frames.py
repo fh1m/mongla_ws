@@ -15,6 +15,7 @@ never zero (see that file).
 """
 from __future__ import annotations
 
+import math
 import pathlib
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -80,3 +81,82 @@ def load(path: Optional[pathlib.Path] = None) -> Offsets:
     imu_to = data.get('imu_to') or {}
     return Offsets(**{k: _vec(imu_to.get(k), k)
                       for k in ('downward_cam', 'forward_cam', 'baro')})
+
+
+# ── the tree ─────────────────────────────────────────────────────────────────
+#
+#   map (ENU) ── pool (NED)                          static
+#    └─ odom (ENU)                                   identity, ONLY once anchored
+#        └─ odom_ned (NED)                           static
+#            └─ mongla (FRD, at the IMU)             dynamic, the filter
+#                ├─ base_link (FLU)                  static
+#                ├─ downward_cam  (FRD axes)         static, ONLY when measured
+#                └─ forward_cam   (FRD axes)         static, ONLY when measured
+#
+# One parent per frame. Before a pool fix `map` and `pool` are not connected to
+# the hull, so a lookup into them FAILS -- which is the truth: there is no pool
+# position yet. After the anchor, `rotate_world_yaw` has re-expressed the
+# filter in pool axes, so odom_ned coordinates ARE pool coordinates and
+# `map -> odom` is the identity.
+#
+# ⚠ `{cam}_cam` HAS BODY AXES, NOT OPTICAL ONES. It is the frame flow publishes
+# in, and flow's velocity is already remapped to body x/y by `flow_node`. An
+# optical frame (z out of the lens) belongs to the IMAGE and needs the measured
+# image->body signs -- `flow_node.py` records four wrong answers reached
+# deriving them -- so it is owed, not guessed.
+#
+# Quaternions are (x, y, z, w), ROS order.
+
+# FLU axes written in FRD: x = x, y = -y, z = -z. 180 deg about x.
+Q_FRD_TO_FLU = (1.0, 0.0, 0.0, 0.0)
+# NED axes written in ENU: north = y, east = x, down = -z. 180 deg about the
+# (1, 1, 0) diagonal.
+Q_ENU_TO_NED = (math.sqrt(0.5), math.sqrt(0.5), 0.0, 0.0)
+Q_IDENTITY = (0.0, 0.0, 0.0, 1.0)
+
+
+@dataclass(frozen=True)
+class Edge:
+    parent: str
+    child: str
+    xyz: Vec3
+    q: Tuple[float, float, float, float]
+
+
+def cam_frame(cam: str) -> str:
+    """The body-aligned frame at camera `cam`'s lens -- what flow publishes in."""
+    return f'{cam}_cam'
+
+
+def static_edges(offsets: Offsets) -> list:
+    """Every edge that does not move. A camera edge exists only if measured."""
+    edges = [
+        Edge(ODOM_ENU, ODOM, (0.0, 0.0, 0.0), Q_ENU_TO_NED),
+        Edge(MAP_ENU, POOL, (0.0, 0.0, 0.0), Q_ENU_TO_NED),
+        Edge(BODY, BODY_FLU, (0.0, 0.0, 0.0), Q_FRD_TO_FLU),
+    ]
+    for cam in ('downward', 'forward'):
+        r = getattr(offsets, f'{cam}_cam')
+        if r is not None:
+            edges.append(Edge(BODY, cam_frame(cam), r, Q_IDENTITY))
+    return edges
+
+
+def anchored_edge() -> Edge:
+    """`map -> odom`, published only once the pool anchor has been applied."""
+    return Edge(MAP_ENU, ODOM_ENU, (0.0, 0.0, 0.0), Q_IDENTITY)
+
+
+def to_msg(edge: Edge, stamp):
+    """A `geometry_msgs/TransformStamped` for `edge`, imported lazily so this
+    module stays importable without a ROS environment."""
+    from geometry_msgs.msg import TransformStamped
+    t = TransformStamped()
+    t.header.stamp = stamp
+    t.header.frame_id = edge.parent
+    t.child_frame_id = edge.child
+    t.transform.translation.x, t.transform.translation.y, \
+        t.transform.translation.z = (float(c) for c in edge.xyz)
+    (t.transform.rotation.x, t.transform.rotation.y,
+     t.transform.rotation.z, t.transform.rotation.w) = edge.q
+    return t

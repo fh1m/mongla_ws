@@ -222,6 +222,13 @@ class LocalizationNode(Node):
             self._on_lane_line, 10)
 
         self._pub = self.create_publisher(Odometry, '/mongla/odom', 10)
+        # The tree (issue #19). The static edges -- FRD<->FLU, NED<->ENU, the
+        # measured camera mounts -- are the manager's, because it always runs;
+        # this node owns only what the filter knows: `odom_ned -> mongla`, and
+        # `map -> odom` once the pool anchor has been applied.
+        from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
+        self._tf = TransformBroadcaster(self)
+        self._tf_static = StaticTransformBroadcaster(self)
         # 'ok' | 'blocked' | 'unknown', latched and published on change. Read
         # by `mongla.motion()`: a timed move into a prop reports success, and
         # this is the only thing that can tell the mission it went nowhere.
@@ -573,7 +580,7 @@ class LocalizationNode(Node):
             # none, because nothing downstream can tell it is lost.
             self.get_logger().warning(
                 f'[LOCAL] heading anchor {heading:+.1f} deg REFUSED: no board '
-                f'attitude yet to pair it with. The output stays in `odom`.')
+                f'attitude yet to pair it with. The output stays in `odom_ned`.')
             return
         board_yaw = math.degrees(math.atan2(self._board_R[1, 0],
                                             self._board_R[0, 0]))
@@ -585,6 +592,14 @@ class LocalizationNode(Node):
         self._n['yaw'] += 1
         if not self._anchored:
             self._anchored = True
+            # Connect `pool` to the hull, once. ⚠ The same claim the odometry
+            # header has always made at this moment: pool AXES. The origin is
+            # still where the filter started until a position fix moves it
+            # (see `RIEKF.rotate_world_yaw`), so this is not a pool position.
+            st = getattr(self, '_tf_static', None)
+            if st is not None:
+                st.sendTransform(frames.to_msg(frames.anchored_edge(),
+                                               self.get_clock().now().to_msg()))
             self.get_logger().info(
                 f'[LOCAL] heading anchored at {heading:+.1f} deg (board '
                 f'{board_yaw:+.1f}, offset {offset:+.1f}): the output frame is '
@@ -685,9 +700,11 @@ class LocalizationNode(Node):
         else:
             m.header.stamp = self.get_clock().now().to_msg()
         # `pool` is a CLAIM, and it is only true once the heading is anchored.
-        m.header.frame_id = 'pool' if self._anchored else 'odom'
+        m.header.frame_id = frames.POOL if self._anchored else frames.ODOM
         # Both frames are NED (z down: position.z is +depth) with an FRD child.
-        m.child_frame_id = 'mongla'
+        # ⚠ `odom_ned`, not `odom`: REP-103 reserves `odom` for ENU, and a tool
+        # reading this under `odom` drew the hull CLIMBING as it dived (#19).
+        m.child_frame_id = frames.BODY
         m.pose.pose.position.x = float(st.p[0])
         m.pose.pose.position.y = float(st.p[1])
         m.pose.pose.position.z = float(st.p[2])
@@ -706,6 +723,16 @@ class LocalizationNode(Node):
         m.twist.twist.linear.z = float(v_body[2])
         _fill_covariance(m, self._filter)
         self._pub.publish(m)
+        # The same pose as the tree's one moving edge. ALWAYS from odom_ned:
+        # after the anchor the filter is in pool axes, and `map -> odom` (sent
+        # once, at the anchor) is what makes `pool` reachable -- see frames.py.
+        tf = getattr(self, '_tf', None)
+        if tf is not None:
+            t = frames.to_msg(frames.Edge(
+                frames.ODOM, frames.BODY,
+                (float(st.p[0]), float(st.p[1]), float(st.p[2])),
+                (qx, qy, qz, qw)), m.header.stamp)
+            tf.sendTransform(t)
 
     def _diagnose(self) -> None:
         n = self._n

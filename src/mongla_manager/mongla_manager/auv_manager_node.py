@@ -76,6 +76,7 @@ from mongla_vision  import wait_vision_state_ready                       # noqa:
 from . import srot_format as _sfmt                                          # noqa: E402
 from . import srot_changes as _schg                                        # noqa: E402
 from . import health as _health
+from mongla_localization.frames import BODY as _BODY_FRAME       # noqa: E402
 from . import health_reporters as _hr
 from .connection_config import (                                             # noqa: E402
     DEFAULT_FLIGHT_CONTROLLER, DEFAULT_MODE, NETWORK, PROFILES, resolve_mode,
@@ -1115,6 +1116,7 @@ class AUVManagerNode(Node):
         # and the transition is the event worth seeing.
         self._health = _health.HealthBoard()
         self._register_health()
+        self._publish_static_frames()
         self._health_last = None
         self.create_timer(1.0, self._health_tick, callback_group=self.timer_group)
         # (No heartbeat timer: it runs on `_hb_thread`, started in _setup_mavlink,
@@ -1582,6 +1584,27 @@ class AUVManagerNode(Node):
     #  Timers                                                             #
     # ================================================================== #
 
+    def _publish_static_frames(self) -> None:
+        """The tree's fixed edges (issue #19): FRD<->FLU, NED<->ENU, and each
+        camera mount that has been MEASURED. Here because this node always
+        runs; the moving edge is the localization node's.
+
+        An unmeasured camera gets NO edge, not a zero one, so a lookup into it
+        fails loudly -- the `sensor_offsets` health line says why.
+        """
+        try:
+            from tf2_ros import StaticTransformBroadcaster
+            from mongla_localization import frames
+            self._tf_static = StaticTransformBroadcaster(self)
+            stamp = self.get_clock().now().to_msg()
+            edges = frames.static_edges(frames.load())
+            self._tf_static.sendTransform([frames.to_msg(e, stamp) for e in edges])
+            self.get_logger().info(
+                f'[FRAME] static tree: '
+                + ', '.join(f'{e.parent}->{e.child}' for e in edges))
+        except Exception as exc:          # noqa: BLE001 -- never fatal
+            self.get_logger().error(f'[FRAME] static tree NOT published: {exc!r}')
+
     def _register_health(self) -> None:
         """Translate what each subsystem already knows into one vocabulary.
 
@@ -1855,7 +1878,7 @@ class AUVManagerNode(Node):
         yaw_deg, _ = self._effective_yaw_deg(attitude)
         msg = MonglaState()
         msg.header.stamp    = self._state_stamp()
-        msg.header.frame_id = 'mongla'
+        msg.header.frame_id = _BODY_FRAME
         msg.armed           = self._fast_armed
         msg.mode            = self._fast_mode
         msg.yaw_deg         = float(yaw_deg) if yaw_deg is not None else math.nan
@@ -1874,7 +1897,7 @@ class AUVManagerNode(Node):
         # sync on the Pi did, mid-run). The consumer times the lag on its own
         # arrival monotonic() and must never subtract these stamps.
         m.header.stamp = self.get_clock().now().to_msg()
-        m.header.frame_id = 'mongla'
+        m.header.frame_id = _BODY_FRAME
         m.vector.x, m.vector.y =(math.nan, math.nan) if d is None else d
         self.demand_publisher.publish(m)
 
@@ -1959,7 +1982,7 @@ class AUVManagerNode(Node):
         m = self._Vector3Stamped()
         m.header.stamp.sec = int(stamp_s)
         m.header.stamp.nanosec = int((stamp_s - int(stamp_s)) * 1e9)
-        m.header.frame_id = 'mongla'
+        m.header.frame_id = _BODY_FRAME
         m.vector.x = rates['pitch_rate']
         m.vector.y = rates['roll_rate']
         m.vector.z = rates['yaw_rate']
@@ -2033,7 +2056,7 @@ class AUVManagerNode(Node):
         msg = self._Imu()
         msg.header.stamp.sec = int(stamp_s)
         msg.header.stamp.nanosec = int((stamp_s - int(stamp_s)) * 1e9)
-        msg.header.frame_id = 'mongla'
+        msg.header.frame_id = _BODY_FRAME
         msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z = imu['gyro']
         (msg.linear_acceleration.x, msg.linear_acceleration.y,
          msg.linear_acceleration.z) = imu['accel']
@@ -2559,7 +2582,7 @@ class AUVManagerNode(Node):
             return
         msg = MonglaState()
         msg.header.stamp    = self._state_stamp()
-        msg.header.frame_id = 'mongla'
+        msg.header.frame_id = _BODY_FRAME
         msg.armed           = bool(armed)
         msg.mode            = mode if mode else ''
         # Publish the yaw the control loops actually use (BNO when it's
