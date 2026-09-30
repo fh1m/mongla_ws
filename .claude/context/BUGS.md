@@ -4303,3 +4303,50 @@ new refuses to arm.
 ⚠ **Expect DEGRADED on every session** until the gain is raised on the joystick
 button edge (verified live: 0.5 → 1.0 in five presses). That is the true state
 of the vehicle, not a false alarm.
+
+---
+
+### B-68 — the CI that gates every pull request ran the pull request's own text ✅ **FIXED 2026-09-30**
+
+**Severity: HIGH (repository, not vehicle).** `.github/workflows/poc-check.yml`
+opened its only script with
+
+```yaml
+run: |
+  PR_BODY="${{ github.event.pull_request.body }}"
+```
+
+`${{ }}` is substituted by the Actions runner **before bash parses the script**,
+so the pull request description was not data passed to a program — it was the
+program. A description containing a quote and a semicolon executed commands on
+the runner, with the job's `GITHUB_TOKEN` in the environment, and the workflow
+triggers on `opened` from any fork. This is GitHub's own documented script
+injection; it was filed as issue #54.
+
+⚠ **The workflow's job is to gate every pull request**, which is why it was fixed
+before it was trusted rather than after. Merging the two open pull requests
+depended on it.
+
+**Fixed** by passing the body through `env:` — the runner sets a variable, bash
+never parses its contents, and `"$PR_BODY"` expands to exactly the bytes the
+author typed. Also: an explicit least-privilege `permissions:` block (`contents:
+read`, `pull-requests: write`), because an undeclared token scope is whatever the
+repository setting happens to be and that setting is not visible in the file; and
+the unused `actions/checkout` step deleted, since no step read the repository.
+
+**Guarded by `test_ci_workflows_are_not_injectable.py`, three ways:**
+
+1. a static scan of every workflow for `github.event.*`, `inputs.*` or
+   `github.head_ref` interpolated inside any `run:` block — this catches the next
+   workflow, or the next step, written the old way;
+2. `permissions:` declared in every workflow;
+3. ⭐ a **behavioural** test that extracts the shipped `run:` script out of the
+   real YAML and executes it with a body that tries to escape four ways (`";`,
+   `';`, `$( )` and backticks), asserting that none of the four marker files
+   appears **and** that the step still classifies a populated table as a pass. A
+   static rule can be satisfied by moving text around; this one fails if the
+   bytes ever reach a shell parser again.
+
+**Verified by injection, both directions:** restoring the `${{ }}` form fails
+tests 1 and 3 (`attacker-controlled text is interpolated into a shell script`;
+`the PR body is no longer passed through env:`); restoring the fix passes 3/3.
