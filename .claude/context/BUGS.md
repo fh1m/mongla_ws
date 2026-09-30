@@ -4493,63 +4493,70 @@ A whole-stack review: firmware, host, ground station and flasher, benchmarked ag
 
 ---
 
-### B-77 — the NIS lockout break was never safe; it was only unreachable ✅ **FIXED 2026-09-30**
+### B-77 — ⛔ RETRACTED THE SAME DAY: the test fixture was in free fall, and the "fix" treated its symptom ✅ **FIXED 2026-09-30, differently**
 
-**Severity: CRITICAL (estimator).** B-75 made `inekf.reject_streak` one counter
-per measurement kind, which is correct — a single shared counter was zeroed by
-the board's 50 Hz attitude, so a filter confidently wrong in position rejected
-the truth for ever and the lockout break never fired.
+⚠ **Read this as a method failure, not an estimator defect.** It is the clearest
+example this repository has of a rule it already states: *a quality number a
+method computes from the data it just fit is not evidence.*
 
-⛔ **It fires now, and the first thing it did was destroy the filter.**
-`test_loop_closure_bounds_drift.py` — written after the branch that carried B-75,
-and green on `main` — failed four ways. Measured on its flow-aided fixture, 20 s,
-with every kind eligible:
+**What was claimed.** B-75 made `inekf.reject_streak` one counter per measurement
+kind — correct, and it is what finally lets the NIS lockout break fire. On
+landing, `test_loop_closure_bounds_drift.py` failed four ways and the measurement
+looked decisive: DEPTH at 10 Hz broke the lockout **14 times in 20 s**, each break
+multiplying the whole covariance by 4, velocity ending at sigma 4.7 m/s and
+position at 1 957 m. A narrowing shipped —
+`LOCKOUT_BREAKABLE_KINDS = {position, yaw, attitude}` — with an injection check, a
+rewritten comment, and two rejected alternatives recorded.
+
+⛔ **All of it was a symptom.** The fixture's `ACCEL` read `+9.80665`.
+`RIEKF.predict` computes `a_world = R @ a + GRAVITY` with `GRAVITY = +z`, because
+world z is **down** — so a level stationary hull reports **`-9.80665`**, exactly
+what `_board_at` in `test_localization_node.py` has always used. `+9.80665` is
+**2 g downward.** Measured on the fixture as it stood:
 
 ```
-DEPTH at 10 Hz broke the lockout       14 times
-each break multiplies the WHOLE P by   4.0  (REJECT_INFLATION)
-velocity measured at 10 Hz to 5 cm/s   ended at sigma 4.7 m/s
-_velocity_is_observed()                went false
-position                               reached 1 957 m
+z reached        3 914 m at 391 m/s in 20 s   (analytically 0.5 x 19.6 x 400 = 3 921)
+depth rejected   198 of 200
+p =              [10.547, 0.000, 3913.982]
 ```
 
-**One channel's disagreement destroyed every other channel's estimate.**
+**Depth was not disagreeing because the streak became per-kind. Depth was
+disagreeing because the vehicle was 3.9 km under the pool at terminal velocity** —
+and had been for as long as the file existed.
+`test_the_setup_actually_drifts` passed throughout, because it asserted
+`_err > 1.0` and only ever looked at x.
 
-⭐ **Why depth is the wrong channel for it.** The break reads five consecutive
-rejections as evidence about the *filter* rather than the sensor. For a low-rate
-detector fix that is about a second of evidence. For a continuous channel at
-10–50 Hz it is half a second — and because a break is *followed* by an accepted
-update, which resets the streak, a small steady bias against a tight `P` breaks
-the lockout again at the channel's own rate, for ever. `depth` is the worst of
-them: its `H` carries `-skew(p)`, so the row **grows with the position error it
-is helping to cause**.
+**What was actually done.** `ACCEL` corrected; the narrowing **reverted in full**.
+`reject_streak` stays per-kind, which is B-75 and is right. On a level hull the
+lockout break **never fires, in any channel**, so there was nothing to narrow.
 
-**Fixed** by `LOCKOUT_BREAKABLE_KINDS = {position, yaw, attitude}` — the three
-the tests show it is genuinely needed for: a wrong prop resection, and a heading
-anchor that re-expresses the world frame, after which the board's raw
-boot-relative attitude disagrees by the whole offset until it is let back in.
+⭐ **And correcting the sign overturned two things this repository believed**, both
+measured on the falling filter:
 
-⚠ **This is a NARROWING, not a fix.** A continuous channel that rejects
-persistently is a real fault; it is now merely rejected and counted, which is the
-safe reading. The answer is issues **#23** (flow covariance overconfidence) and
-**#26** (the missing adjoint Q terms), not a covariance multiply.
+| the file claimed | measured on a level hull |
+|---|---|
+| a repeated identical fix leaves position variance *"unchanged to four figures"*, so the closure age/travel gates are belt-and-braces | **pos_var 0.1708 → 0.0052 over 200 repeats — a 33× collapse.** A Kalman update is unconditionally information and the filter cannot know it is the same place twice. **The gates are the only defence.** |
+| a closure 50 m wrong is *believed*, which is why the gates exist | at 50 m the chi-square gate **rejects** it. It accepts **0.5–4.0 m and rejects from 5.0 m**, and an accepted 4 m fix takes pos_var **2.0365 → 0.0256, 80×**. ⛔ The gate catches the absurd closure and waves through the **plausible** one — the only kind a real false positive produces. The justification is *stronger* than the retracted version, for a better reason. |
 
-**Two attempts that did not work, kept because the reason is the finding:**
+`_err` also compared every run against the 20 s truth, so a 10 s run scored 2.5 m
+of "drift" that was 3 m of unflown distance. It takes the duration now.
 
-1. projecting the inflation onto the measurement's own subspace —
-   `P' = P + (k-1) P Hᵀ (H P Hᵀ)⁻¹ H P`, so `H P' Hᵀ == k · H P Hᵀ` exactly and
-   unobserved directions are untouched — **still diverged**, because depth's own
-   subspace is what grows;
-2. a per-kind cooldown (one break per 5 s of filter time) fixed the fixture and
-   **broke the two tests the break exists for**.
+**Verified by injection:** restoring `+9.80665` fails three tests —
+`57.4224 m of along-track drift, expected 1.0000 m`, `velocity is unobserved`,
+`yaw moved to -10.662 deg`. The level fixture passes 13/13 and the localization
+suite 349/349.
 
-⭐ The rate was not the problem. The channel was.
+⛔ **Two lessons, both already house rules:**
 
-**Verified by injection:** re-admitting `depth` fails 5 loop-closure tests;
-removing `attitude` fails the anchor test; the shipped set passes 343/343 in the
-localization suite and 4 053 across six.
+1. **The scorer was written after the run.** Four failing tests were read as a
+   verdict on the change under review, and the change under review was the only
+   thing examined. Nobody asked whether the *fixture* was physical — one
+   `print(f.X.p)` showed 3 914 m.
+2. **A test that has passed since it was written is not therefore a guard.**
+   `test_the_setup_actually_drifts` existed to prove the fixture was a real drift,
+   asserted `> 1.0`, and certified a 2 g free fall for weeks. It now pins the
+   analytic value and asserts `|z| < 0.01` with the reason named.
 
-⚠ **The lesson for the next landing.** This defect was invisible on the branch
-and invisible on `main`. It existed only in the *combination*, and the test that
-caught it was newer than the branch. **A branch is re-run against current `main`
-before it lands, not against the `main` it was cut from.**
+⚠ **The landing rule still stands, and is what surfaced this at all:** a branch is
+re-run against current `main` before it lands, not against the `main` it was cut
+from. The four failures were real; only the diagnosis was wrong.

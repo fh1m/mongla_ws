@@ -6501,3 +6501,50 @@ is not a measurement. Section 23 was cited correctly and the number was still
 invented. `test_shipped_constants_match_the_ledger.py` now compares shipped
 constants against the digits recorded here, in both directions — it was written
 after this and **caught this entry missing on its first run**.
+
+---
+
+## 64. ⛔ THE LOOP-CLOSURE EVIDENCE WAS MEASURED ON A FILTER IN FREE FALL — RETRACTED AND RE-MEASURED
+
+**2026-09-30.** `test_loop_closure_bounds_drift.py` set `ACCEL = [0, 0, +9.80665]`.
+`RIEKF.predict` computes `a_world = R @ a + GRAVITY` with `GRAVITY = +z` because
+world z is **down**, so a level stationary hull reports **`-9.80665`**, which is
+what `_board_at` in `test_localization_node.py` has always used. `+9.80665` is
+**2 g downward.**
+
+| | the fixture as it stood | a level hull |
+|---|---|---|
+| depth `z` after 20 s | **3 913.98 m** (analytic 0.5·19.6·400 = 3 921) at **391 m/s** | **−0.0000008 m** |
+| depth updates rejected | **198 of 200** | **0 of 200** |
+| along-track error | 4.547 m | **0.99999 m** = `FLOW_BIAS × SECONDS` exactly |
+| NIS lockout breaks | **14** (depth) | **0**, in every channel |
+
+⚠ **`test_the_setup_actually_drifts` passed throughout.** It asserted
+`_err > 1.0` and only ever looked at x, so it certified a 2 g free fall as "a real
+drift" for as long as the file existed. It now pins the analytic value and asserts
+`|z| < 0.01` with the reason named.
+
+### The two bars this overturns
+
+| retracted claim | re-measured, level hull |
+|---|---|
+| a repeated identical fix leaves position variance *"unchanged to four figures"* | **pos_var 0.170803 → 0.005235 over 200 repeats — 33×.** Measured at 1/2/5/10/50/200 repeats: 0.170803 · 0.091136 · 0.039978 · 0.022317 · 0.007954 · 0.005235 |
+| a closure **50 m** wrong is believed | at 50 m the chi-square gate **rejects** it. Accepts **0.5–4.0 m**, rejects from **5.0 m**; an accepted 4 m fix takes pos_var **2.0365 → 0.0256, 80×** |
+
+⭐ **The conclusion is unchanged and the reason is better.** The gate catches the
+absurd closure and waves through the **plausible** one — the only kind a real
+place-recognition false positive produces. So the age and travel gates in
+`loop_closure.py` are **load-bearing**, not defensive decoration: they are the
+only thing between one recognised place and a filter 33× more certain than its
+evidence.
+
+**Closure residual, for the record:** sigma 0.30 against pos_var 2.04 gives the
+measurement ~87 % of the weight, so 1.000 m of drift becomes **0.082 m** of
+residual — not zero, and it should not be. The old bar of `< 0.01` was met only
+because the falling filter's P was enormous.
+
+**Bar:** `|z| < 0.01 m` and along-track error within 0.01 m of
+`FLOW_BIAS × SECONDS` before any other number in that file is quoted.
+**Injection-verified:** restoring `+9.80665` fails three tests
+(`57.4224 m of along-track drift, expected 1.0000 m`, `velocity is unobserved`,
+`yaw moved to -10.662 deg`). Full read: **B-77**.
