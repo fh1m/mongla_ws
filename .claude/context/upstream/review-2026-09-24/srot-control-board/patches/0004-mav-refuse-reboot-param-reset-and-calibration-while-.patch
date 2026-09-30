@@ -1,5 +1,5 @@
 From 12b45ebaac007f883060fae2bd76e8f4eebba0f4 Mon Sep 17 00:00:00 2001
-From: Claude <noreply@anthropic.com>
+From: Fahim Faisal <fahim.2002.faisal@gmail.com>
 Date: Thu, 24 Sep 2026 06:23:28 +0000
 Subject: [PATCH 4/5] mav: refuse reboot, param reset and calibration while
  armed
@@ -25,8 +25,6 @@ Crosses the companion contract (behaviour, not wire constants):
 JETSON_COMMS.md updated. mongla_ws's calibrate_depth already gates on
 disarmed, so its normal path is unaffected.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01KchLnXUAMJ6S4pj3BZLobN
 ---
  JETSON_COMMS.md            |  6 +++---
  src/comms/mav_commands.cpp | 35 +++++++++++++++++++++++++++++++++++

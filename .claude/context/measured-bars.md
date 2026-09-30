@@ -136,7 +136,8 @@ footage rather than against the next rung up.
 |---|---|---|---|
 | GCS heartbeat | 2 Hz | vs `GCS_FAILSAFE_MS` 5000 → **10× margin** | ≥ 3× margin |
 | `ATTITUDE` rate | 50 Hz | firmware floor `RATE_MIN_MS` 20 ms | ≥ 20 Hz |
-| serial load | — | **18.8 %** of 11520 B/s | ≤ 60 % |
+| `HEARTBEAT` in rate | 10 Hz (was the board's 1 Hz default) | ⚠ **computed, not measured**: MODE and ARMED reach the host only on HEARTBEAT, so at 1 Hz a failsafe SURFACE is invisible for up to a second — long enough for the next leg's `SROT_MOVE` to force AUTO and re-dive | fresh enough for `SrotFC.move` to refuse a leg in SURFACE |
+| serial load | — | **18.8 %** of 11520 B/s measured; ⚠ **+1.6 % computed** for HEARTBEAT 1 → 10 Hz (9 extra frames/s × 21 B = 189 B/s), so ≈ **20.4 %** until it is re-measured on the board | ≤ 60 % |
 | `MANUAL_CONTROL` resend | ≥ 10 Hz | authority ramps to zero between `MANUAL_FRESH_MS` 1000 and `MANUAL_DECAY_MS` 1500 | ≥ 10 Hz |
 | `DEPTH_P` | 0.5 (read from board) | board answers 0.5; a stale 3.0 fallback **failed open by 6×** on the arming guard | must be READ, never assumed |
 | `FW_BEHAVIOUR_REV` | ≥ 10 required | board reports **14** | ≥ 10 |

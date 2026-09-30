@@ -153,6 +153,42 @@ CHI2_99 = {1: 6.635, 2: 9.210, 3: 11.345}
 # our slowest channel -- long enough that noise does not trip it, short enough
 # that a lockout does not survive a manoeuvre.
 REJECT_STREAK_LIMIT = 5
+
+# ⛔ AND ONLY THESE KINDS MAY BREAK IT -- MEASURED, NOT ARGUED.
+#
+# The break exists for a filter that is confidently wrong and therefore rejects
+# the one measurement that would fix it. Making the streak per-kind is what
+# finally lets it fire (a single shared counter was zeroed by 50 Hz attitude, so
+# it essentially never did) -- and the first thing it did when it fired was
+# destroy the filter.
+#
+# On the flow-aided fixture in `test_loop_closure_bounds_drift.py`, 20 s, with
+# every kind eligible: DEPTH at 10 Hz broke the lockout **14 times**, each break
+# multiplying the covariance by REJECT_INFLATION. A velocity measured at 10 Hz
+# to 5 cm/s ended at sigma 4.7 m/s, `_velocity_is_observed` went false, and
+# position reached **1 957 m**. One channel's disagreement destroyed every other
+# channel's estimate.
+#
+# ⚠ WHY DEPTH AND THE VELOCITY FAMILY ARE OUT, AND THE OTHER THREE ARE IN.
+# `depth`, `velocity`, `velocity_xy` and `zupt` are CONTINUOUS: they arrive at
+# 10-50 Hz, so five consecutive rejections is half a second, not a second of
+# evidence -- and a break is followed by an ACCEPTED update, which resets the
+# streak, so a small steady bias against a tight P breaks the lockout for ever
+# at the channel's own rate. `depth` is the worst of them because its H carries
+# `-skew(p)` and therefore GROWS with the position error it is helping to cause.
+# `position`, `yaw` and `attitude` are the ones two tests show the break is
+# genuinely needed for: a wrong prop resection
+# (`test_a_persistently_disagreeing_world_breaks_the_lockout`) and a heading
+# anchor that re-expresses the world frame, after which the board's raw
+# boot-relative attitude disagrees by the whole offset until it is let back in
+# (`test_the_anchor_HOLDS_against_50hz_board_attitude`).
+#
+# ⚠ THIS IS A NARROWING, NOT A FIX. A continuous channel that rejects
+# persistently is a real fault, and it is now merely rejected -- countable in
+# `rejected`, and the safe reading. What should happen instead is issues #23 and
+# #26 (flow covariance overconfidence, the missing adjoint Q terms), not a
+# covariance multiply.
+LOCKOUT_BREAKABLE_KINDS = frozenset({'position', 'yaw', 'attitude'})
 REJECT_INFLATION = 4.0
 
 
@@ -508,7 +544,8 @@ class RIEKF:
         if nis > CHI2_99[len(y)]:
             streak = self.reject_streak.get(kind, 0) + 1
             self.reject_streak[kind] = streak
-            if streak < REJECT_STREAK_LIMIT:
+            if (streak < REJECT_STREAK_LIMIT
+                    or kind not in LOCKOUT_BREAKABLE_KINDS):
                 self.rejected += 1
                 return False
             # Believe the world instead of the estimate. Inflate FIRST, then

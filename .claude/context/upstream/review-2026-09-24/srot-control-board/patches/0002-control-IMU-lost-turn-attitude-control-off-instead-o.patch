@@ -1,5 +1,5 @@
 From f6ce513821d3f327c14bdae014683f26793fad5c Mon Sep 17 00:00:00 2001
-From: Claude <noreply@anthropic.com>
+From: Fahim Faisal <fahim.2002.faisal@gmail.com>
 Date: Thu, 24 Sep 2026 06:22:00 +0000
 Subject: [PATCH 2/5] control: IMU lost - turn attitude control off instead of
  "holding"
@@ -22,8 +22,6 @@ does: "IMU lost - attitude control off, STILL ARMED" / "(disarmed)".
 
 docs/VS_ARDUSUB.md updated to match.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01KchLnXUAMJ6S4pj3BZLobN
 ---
  docs/VS_ARDUSUB.md              | 11 +++++----
  src/tasks/task_control_loop.cpp | 42 +++++++++++++++++++++++++++++----

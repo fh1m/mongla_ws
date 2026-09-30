@@ -1,5 +1,5 @@
 From 596dc76f9c691a1a1755a2fc377f3d6df2586eec Mon Sep 17 00:00:00 2001
-From: Claude <noreply@anthropic.com>
+From: Fahim Faisal <fahim.2002.faisal@gmail.com>
 Date: Thu, 24 Sep 2026 06:21:05 +0000
 Subject: [PATCH 1/5] dshot: output-path watchdog - stop the thrusters if the
  control loop stalls
@@ -26,8 +26,6 @@ take) is removed.
 The ESP-IDF task watchdog is deliberately not subscribed: its default 5 s
 timeout is irrelevant next to 20 ms and its action is a reboot at depth.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01KchLnXUAMJ6S4pj3BZLobN
 ---
  ARCHITECTURE.md                 | 10 ++++++++
  include/config.h                | 15 +++++++++++

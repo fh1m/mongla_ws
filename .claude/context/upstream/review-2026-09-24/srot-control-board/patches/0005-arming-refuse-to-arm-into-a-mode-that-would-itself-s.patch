@@ -1,5 +1,5 @@
 From 22f0ccb7052fa4b05299807cfa4d3d64d4511f87 Mon Sep 17 00:00:00 2001
-From: Claude <noreply@anthropic.com>
+From: Fahim Faisal <fahim.2002.faisal@gmail.com>
 Date: Thu, 24 Sep 2026 06:24:49 +0000
 Subject: [PATCH 5/5] arming: refuse to arm into a mode that would itself start
  a manoeuvre
@@ -30,8 +30,6 @@ Companion: mongla_ws's autotune/motor_tune already arm first and then set
 the mode, so they are unaffected. ARCHITECTURE.md and PARAMETERS.md
 updated.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01KchLnXUAMJ6S4pj3BZLobN
 ---
  ARCHITECTURE.md                 |  5 +++++
  PARAMETERS.md                   |  4 ++--

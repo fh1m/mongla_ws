@@ -1,5 +1,5 @@
 From 8980bb6edcd1bb3b727a02ebd67d6327146681d3 Mon Sep 17 00:00:00 2001
-From: Claude <noreply@anthropic.com>
+From: Fahim Faisal <fahim.2002.faisal@gmail.com>
 Date: Thu, 24 Sep 2026 06:22:33 +0000
 Subject: [PATCH 3/5] mav: link-age race could latch a false "companion lost"
  SURFACE
@@ -19,8 +19,6 @@ a local, then read millis(), and compute a SIGNED age where a negative age
 (stamp newer than the clock read) counts as fresh. No wire or behaviour
 change on a healthy link.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01KchLnXUAMJ6S4pj3BZLobN
 ---
  src/comms/mav_commands.cpp | 53 ++++++++++++++++++++++++++------------
  1 file changed, 37 insertions(+), 16 deletions(-)

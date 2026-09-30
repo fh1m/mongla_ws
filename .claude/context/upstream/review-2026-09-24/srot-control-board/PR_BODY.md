@@ -27,4 +27,3 @@ Related: #6 (the joystick arm path, deliberately untouched), #15, #25.
 
 ---
 
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
