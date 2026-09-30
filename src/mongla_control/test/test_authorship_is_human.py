@@ -91,6 +91,59 @@ def test_no_agent_is_credited_as_co_author():
     )
 
 
+# Trailers this repo has actually written, beyond Co-Authored-By.
+FILE_TRAILERS = (
+    'Co-Authored-By: Claude',
+    'Co-Authored-By: Cursor',
+    'Claude-Session:',
+    'noreply@anthropic.com',
+    'cursoragent@cursor.com',
+    'Generated with [Claude',
+)
+
+# This file states the rule, so it must be allowed to name what it forbids.
+SELF = pathlib.Path(__file__).name
+
+
+def test_no_checked_in_file_carries_an_agent_attribution():
+    """⛔ THE GAP THE OTHER TWO TESTS LEFT, found on 2026-09-30.
+
+    They read `git log`, so they see trailers in COMMITS. They cannot see a
+    trailer sitting inside a checked-in FILE -- and PR #43 carried five
+    `git format-patch` files for the firmware repo, each headed
+
+        From: Claude <noreply@anthropic.com>
+        ...
+        Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+    plus a ready-to-paste pull request body ending in the `🤖 Generated with`
+    line. ⛔ Those are OUTGOING: `git am` would have authored them as an agent
+    in a sibling team's repository, where this repo's settings do not reach and
+    nobody here would see the result. A `.patch` is a commit message that a test
+    reading `git log` cannot reach.
+    """
+    root = pathlib.Path(_git('rev-parse', '--show-toplevel').strip())
+    tracked = _git('ls-files', '-z').split('\0')
+    offenders = []
+    for rel in tracked:
+        if not rel or rel.endswith(SELF):
+            continue
+        f = root / rel
+        try:
+            text = f.read_text(encoding='utf-8', errors='ignore')
+        except (OSError, IsADirectoryError):
+            continue
+        for marker in FILE_TRAILERS:
+            if marker in text:
+                offenders.append(f'{rel}: {marker}')
+    assert not offenders, (
+        f'{len(offenders)} checked-in file(s) attribute work to an agent: '
+        f'{offenders[:10]}. A `.patch` or a pasted PR body is a commit message '
+        'the git-log tests cannot see, and an outgoing one credits an agent in '
+        "someone else's repository."
+    )
+
+
 def test_attribution_stays_disabled_in_checked_in_settings():
     """The setting that prevents new trailers is checked in, not merely local."""
     root = pathlib.Path(_git("rev-parse", "--show-toplevel").strip())
