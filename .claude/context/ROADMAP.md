@@ -129,6 +129,7 @@ re-ask.
 | C4 | Near-surface gain set | **DEFERRED (evidence) 2026-09-17** | board depth PID is one fixed gain set (`depth_control.cpp:40`); near-surface suction/wave coupling is a moving-body-in-waves effect and SAUVC 2026 is indoor. After G1, log `DEPTH_ERR` vs depth; add gains (firmware PR) only if the data show a near-surface error |
 | C5 | Autotune entry point | **DONE 2026-09-17 (operator, not mission)** | `ros2 run mongla_manager autotune` prints the live PID briefing; `--confirm "RUN AUTOTUNE IN WATER"` runs it; Ctrl-C aborts to STABILIZE + disarm; refuses a port the manager holds. Deliberately NOT a mission verb. Needs G1 before it is useful |
 | C6 | Goal id on goal/feedback/result; time-margin signal to missions | **DONE 2026-09-17** | scoreboard rows carry the first 8 hex of the action goal UUID, the manager logs the same on `[ACT]`; time margin = `mongla.task(deadline_s=)` / budget `remaining_s()` |
+| C7 | Mission keep-alive (#13) | ⛔ **OPEN, SAFETY** | since B-72 (2026-09-30) the companion HEARTBEAT runs on its own thread, so it can no longer be starved by a blocking callback -- but a HUNG manager executor now keeps the board fed and **no longer trips the 5 s surface failsafe**. A deliberate weakening of CLAUDE.md §8 rule 3, taken because starvation was the likelier failure. #13 is the fix: a keep-alive the board sees only while the mission layer is live |
 
 ### Localization
 
@@ -143,6 +144,8 @@ re-ask.
 | L7 | Rewind-and-replay lag correction | **DONE 2026-09-17 (opt-in)** | merged into L1: every filter event buffered with its prior snapshot, late ones inserted and the tail replayed |
 | L8 | Frame tree (#19) | **DONE 2026-09-30, BENCH** | `frames.py` is the one owner; FRD/NED inside, REP-103 at the boundary; `pool` unreachable until anchored; seen live on the board (`odom → base_link` yaw within 0.4° of the heading). ⚠ `odom_ned` jumps once, at the anchor -- REP-105 wants odom continuous; treat it as a reset. Optical camera frames OWED: need the measured image→body signs |
 | L9 | Camera lever arm + lens height (#27) | **BUILT 2026-09-30; DATA OPEN** | ω×r in the flow update and the baro→lens gap in flow scale, both off until `frames.yaml` is taped (IMU chip → downward lens, → forward lens, → Bar30 port). Null = uncorrected, `sensor_offsets` DEGRADED, bringup K1c WARN |
+| L10 | Anchor test flies with zero gyro (#62) | OPEN | `_fly_board` reports no rate, so the 45 deg turn is carried by the NIS lockout break, not `predict` -- same class as B-77's falling fixture. Fix the fixture, re-read `lockout_breaks` |
+| L11 | Optical camera frames | OPEN (needs measurement) | image frames (`forward` / `downward`) are not in the tree; the image->body signs must be MEASURED on the bench (flow_node records four wrong derivations) before an optical edge is published |
 
 ### Perception
 
