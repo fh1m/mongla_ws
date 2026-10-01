@@ -100,6 +100,20 @@ _POST_ACK_HB_WAIT_S = 0.3
 # that the board never answers, which is then logged, not hung on.
 MOVE_ACK_DRAIN_S = 1.0
 
+# ── the host-side motion envelope (issue #15) ────────────────────────────────
+# Each bound catches a UNITS BUG or a TYPO, never a real request -- the reason is
+# written beside it, and none is a tuning value.
+#
+# Deepest venue in the campaign is TRANSDEC at ~5 m; SAUVC is 1.2-1.6 m. 10 m
+# restricts no real pool and refuses -50 (cm typed as m). The hull's own
+# pressure rating is NOT measured, so this is not a crush-depth claim.
+MAX_DEPTH_M = 10.0
+# A turn of more than a full revolution is a units bug (3600 = deg x 10).
+MAX_TURN_DEG = 360.0
+# A single leg longer than ten minutes is a typo in a run that lasts ~15; a
+# negative one (-30 for -3.0) has no meaning on the board, which is unverified.
+MAX_DURATION_S = 600.0
+
 
 def _rx_age(msg) -> float:
     """Seconds since `msg` ARRIVED, on the monotonic clock (issue #18).
@@ -979,6 +993,21 @@ class SrotFC(FlightController):
             return MoveResult(DENIED, f'{verb}: {exc}')
         if not _finite(p1, p2, p3, p4, p5):
             return MoveResult(DENIED, f'{verb}: non-finite parameter -- refused host-side')
+        # ⚠ AN ABSOLUTE TURN IS ONLY A COMPASS HEADING WITH A LOCKED YAW
+        # REFERENCE (#15). Checked HERE, not once at startup: YAW_REF is a live
+        # state machine that restarts at SAMPLING after every board reboot.
+        # WARNED, NOT REFUSED, deliberately: the search sweeps call
+        # `turn(head() + step)`, a target in the board's OWN frame, which is
+        # correct whether or not that frame is magnetic. Only a heading taken
+        # from the course (GATE_HEADING_DEG ...) is wrong unlocked -- and the verb
+        # cannot tell which it was given. The `heading_ref` health line reports
+        # the state continuously; this puts it beside the command that needs it.
+        if verb == 'turn':
+            yr_ok, yr_why = self.check_yaw_reference()
+            if not yr_ok:
+                self._log_warn(f'[SROT ] turn {p1:+.1f} deg sent with {yr_why} -- '
+                               f'correct for a head()-relative target, WRONG for a '
+                               f'compass heading from the course')
 
         # ⛔ NEVER SEND A SROT_MOVE INTO SURFACE. The firmware's SROT_MOVE handler
         # sets `mode = AUTO` unconditionally (mav_commands.cpp), so the next leg of
@@ -2980,6 +3009,10 @@ def _depth_to_dive(kw) -> float:
         raise ValueError(f'non-finite set_depth target: {target}')
     if target > 0.0:
         raise ValueError(f'set_depth target must be <=0 (below surface), got {target}')
+    if target < -MAX_DEPTH_M:
+        raise ValueError(f'set_depth target {target} m is deeper than the '
+                         f'{MAX_DEPTH_M:.0f} m envelope -- a units bug (cm as m?), '
+                         f'not a pool (#15)')
     return -target
 
 
@@ -3005,6 +3038,27 @@ def _finite_param(name: str, value: float) -> float:
     return v
 
 
+def _bounded_time(name: str, value) -> float:
+    """Finite, not negative, not past MAX_DURATION_S (issue #15)."""
+    v = _finite_param(name, value)
+    if v < 0.0:
+        raise ValueError(f'negative {name} {v} s -- a typo (-30 for -3.0?); the '
+                         f'board was never verified on a negative {name} (#15)')
+    if v > MAX_DURATION_S:
+        raise ValueError(f'{name} {v:.0f} s is past the {MAX_DURATION_S:.0f} s '
+                         f'envelope for one leg -- a typo, not a manoeuvre (#15)')
+    return v
+
+
+def _bounded_turn(kw) -> float:
+    """A turn target within one revolution (issue #15)."""
+    v = _finite_param('target', kw.get('target', 0.0) or 0.0)
+    if abs(v) > MAX_TURN_DEG:
+        raise ValueError(f'turn target {v} deg is more than one revolution -- '
+                         f'a units bug (deg x 10?), not a heading (#15)')
+    return v
+
+
 def _build_params(verb: str, kw: dict):
     """mongla verb + Move.Goal-ish kwargs -> (p1, p2, p3, p4, p5). Raises KeyError
     for an unmapped verb, ValueError for a bad parameter. This is THE verb table.
@@ -3014,8 +3068,8 @@ def _build_params(verb: str, kw: dict):
     `VisionResult.x_px` is NaN when the target was never seen."""
     # Validated at the boundary, so no per-verb branch below can forget it.
     # `speed` needs no check: sanitize_speed maps NaN to 0.0 and clamps inf.
-    dur   = _finite_param('duration', kw.get('duration', 0.0) or 0.0)
-    tmo   = _finite_param('timeout',  kw.get('timeout', 0.0) or 0.0)
+    dur   = _bounded_time('duration', kw.get('duration', 0.0) or 0.0)
+    tmo   = _bounded_time('timeout',  kw.get('timeout', 0.0) or 0.0)
     speed = _speed_from_gain(kw)
     if verb == 'move_forward':
         return (sp.MOVE_FORWARD, dur, speed, 0.0, tmo)
@@ -3035,14 +3089,14 @@ def _build_params(verb: str, kw: dict):
     # heading as a rate would spin the hull. Deferred until a host-side heading->rate
     # arc lands; arc is excluded from MOVE_VERBS so it never routes here on SROT.
     if verb == 'yaw_left':
-        return (sp.MOVE_TURN, -abs(_finite_param('target', kw.get('target', 0.0) or 0.0)), 0.0,
+        return (sp.MOVE_TURN, -abs(_bounded_turn(kw)), 0.0,
                 float(sp.TURN_RELATIVE), tmo)
     if verb == 'yaw_right':
-        return (sp.MOVE_TURN, abs(_finite_param('target', kw.get('target', 0.0) or 0.0)), 0.0,
+        return (sp.MOVE_TURN, abs(_bounded_turn(kw)), 0.0,
                 float(sp.TURN_RELATIVE), tmo)
     if verb == 'turn':
         # mongla 'turn' is an ABSOLUTE heading -> needs MAG_YAW_REF=1 on the board.
-        return (sp.MOVE_TURN, _finite_param('target', kw.get('target', 0.0) or 0.0), 0.0,
+        return (sp.MOVE_TURN, _bounded_turn(kw), 0.0,
                 float(sp.TURN_ABSOLUTE), tmo)
     if verb == 'set_depth':
         return (sp.MOVE_DIVE, _depth_to_dive(kw), 0.0, 0.0, tmo)
