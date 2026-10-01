@@ -203,3 +203,58 @@ def test_a_step_takes_a_callable_never_a_verb_name():
     step = m.step('x', points=1, worst_case_s=1, run=lambda _: None)
 
     assert callable(step['run'])
+
+
+# ── #16: one failed verb costs its step, not the run ─────────────────────────
+from mongla_planner.client import MoveFailed, MoveRejected, MoveTimeout  # noqa: E402
+
+
+@pytest.mark.parametrize('exc', [MoveFailed('move_forward stalled'),
+                                 MoveRejected('busy'),
+                                 MoveTimeout('no ACK')],
+                         ids=['failed', 'rejected', 'timeout'])
+def test_a_failed_verb_costs_its_step_and_the_plan_continues(exc):
+    """Falsified if B never runs -- the run used to disarm right here."""
+    m = _no_deadlines(_mission('srot'))
+    m.stop = MagicMock()
+    ran = []
+
+    def _fails(_):
+        raise exc
+
+    out = m.run_plan([
+        m.step('slalom', points=100, worst_case_s=10, run=_fails),
+        m.step('bins', points=200, worst_case_s=10, run=lambda _: ran.append('bins')),
+    ])
+    assert ran == ['bins']
+    assert out[0][0] == 'slalom' and out[0][1].startswith('failed:')
+    m.stop.assert_called_once()           # braked before moving on
+
+
+def test_a_vehicle_that_cannot_take_a_stop_ENDS_the_run():
+    """The measured fatal case: the brake itself is refused, so the link or the
+    vehicle is gone. Falsified if the plan carries on 'aligning' regardless."""
+    m = _no_deadlines(_mission('srot'))
+    m.stop = MagicMock(side_effect=MoveFailed('stop: not armed / link down'))
+    ran = []
+
+    def _fails(_):
+        raise MoveFailed('move_forward DENIED')
+
+    with pytest.raises(MoveFailed, match='DENIED'):
+        m.run_plan([
+            m.step('slalom', points=100, worst_case_s=10, run=_fails),
+            m.step('bins', points=200, worst_case_s=10, run=lambda _: ran.append('bins')),
+        ])
+    assert ran == []
+
+
+def test_ctrl_c_and_a_refused_mission_still_end_the_run():
+    for exc in (KeyboardInterrupt(), MissionRefused('refused')):
+        m = _no_deadlines(_mission('srot'))
+        m.stop = MagicMock()
+
+        def _raise(_, e=exc):
+            raise e
+        with pytest.raises(type(exc)):
+            m.run_plan([m.step('a', points=1, worst_case_s=10, run=_raise)])
