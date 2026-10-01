@@ -1,6 +1,6 @@
 ---
 name: bumblebee-doctrine
-description: How the back-to-back RoboSub champions (BumblebeeAS, 2025 AND 2026) actually think, distilled from a full code-grounded read of their 2026 stack. Load before designing or reviewing ANY perception, estimation, control-integration, or mission-composition change in this repo — and before deciding what NOT to build. Reflexes, not recipes: redundancy over tuning, geometry apart from identity, effort is not points, and configure the fallback.
+description: "How the back-to-back RoboSub champions (BumblebeeAS, 2025 AND 2026) actually think, distilled from a full code-grounded read of their 2026 stack. Load before designing or reviewing ANY perception, estimation, control-integration, or mission-composition change in this repo — and before deciding what NOT to build. Reflexes, not recipes: redundancy over tuning, geometry apart from identity, effort is not points, and configure the fallback."
 ---
 
 # Bumblebee doctrine — how the champions think

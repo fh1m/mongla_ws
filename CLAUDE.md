@@ -361,37 +361,15 @@ entry points and because tests read them:
 | [`measured-bars.md`](.claude/context/measured-bars.md) | every shipped constant with the measurement behind it |
 | [`BUGS.md`](.claude/context/BUGS.md) | the defect register |
 
-**[`platform/`](.claude/context/platform/)** — the board, the firmware contract, the vehicle,
-bring-up and operations: `srot-architecture` · `srot-integration` · `srot-board-soul` ·
-`cross-repo-contract` · `vision-control-split` · `vehicle-spec` ·
-`pi-hailo-vision-box` · `pi-and-env-traps` · `launch-combinations` · `pool-day` ·
-`remote-access` · `foxglove-and-bags` · `ros2-conventions` · `system-harmony` · `mongla-sim` ·
-**`first-pool-verification`** (⭐ what water has to decide, in order) ·
-`legacy-pixhawk-and-sitl`
-
-**[`perception/`](.claude/context/perception/)** — what the vehicle sees and how it is trusted:
-`hailo-vision` · `vision-architecture` · `underwater-vision` · `camera-and-calibration` ·
-`camera-calibration` · `camera-latency` · `detection-continuity` · `depth-estimation` ·
-`downward-camera` · `dual-camera-setup` · `pipeline-hardening` · `sensors-pipeline` ·
-`video-testing`
-
-**[`missions/`](.claude/context/missions/)** — how it is asked to do things:
-`command-reference` · `client-and-dsl-api` · `mission-cookbook` · `detected-paradigm` ·
-`precision-alignment` · `vision-results` ·
-`mission-design`
-
-**[`packages/`](.claude/context/packages/README.md)** — one page per ROS package.
-**[`upstream/`](.claude/context/upstream/README.md)** — the asks sent to the firmware team.
-**[`scouting/`](.claude/context/scouting/README.md)** · **`future/`** — competitor notes, parked ideas.
+Everything else is shelved by subject under `platform/`, `perception/`, `missions/`,
+`packages/` (one page per package), `upstream/` (asks sent to the firmware team), `scouting/`
+and `future/` — `ls` them. Start with ⭐ **`platform/first-pool-verification.md`**: what water
+has to decide, in order.
 
 ## 11. Claude automations
 
-**Subagents** (`.claude/agents/`): `srot-reviewer` (control changes against the board's
-contract) · `mission-reviewer` · `doc-verifier` · `context-doc-sync` ·
-`robosub-task-architect` · `vision-model-reviewer`.
-
-**Skills** (`.claude/skills/`): `pool-day` · `add-command` · `new-mission` · `train-model` ·
-`verify-docs` · `geohot-guidelines` · `bumblebee-doctrine`.
+Subagents (`.claude/agents/`) and skills (`.claude/skills/`) are listed by the harness every
+session; two notes on them:
 
 > **`geohot-guidelines` is standing, not optional**, for anything larger than a one-liner:
 > complexity is the enemy; ask whether a thing can *not* exist before adding a layer; a wide
