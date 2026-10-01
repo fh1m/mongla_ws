@@ -1394,8 +1394,9 @@ class AUVManagerNode(Node):
         # the leak failsafe. It is also the ONLY place per-thruster telemetry
         # presence reaches the wire, and that line is sent once, at first arm.
         note_text = getattr(self.fc, 'note_statustext', None)
+        note_param = getattr(self.fc, 'note_param_value', None)
         _DEMUX = {'NAMED_VALUE_FLOAT': note, 'BATTERY_STATUS': note_batt,
-                  'STATUSTEXT': note_text}
+                  'STATUSTEXT': note_text, 'PARAM_VALUE': note_param}
         # SCALED_IMU2 + ATTITUDE: EVERY sample, not whichever one a 50 Hz timer
         # happens to find in a one-slot cache. Polling a 50 Hz stream at 50 Hz
         # aliases -- measured 2026-09-15: 384 of 2501 `/mongla/imu` messages

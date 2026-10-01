@@ -238,6 +238,8 @@ class SrotFC(FlightController):
         self.master = master
         self._log = log
         self._tx_lock = threading.Lock()
+        self._param_table: dict = {}   # name -> (value, monotonic rx) (#17)
+        self._param_fed = False
         self._boot_time = time.time()
         # Last HEARTBEAT from the VEHICLE (autopilot != INVALID). Our own GCS
         # heartbeat and any other GCS on the link (e.g. Bondor) send
@@ -2724,34 +2726,65 @@ class SrotFC(FlightController):
             time.sleep(_POLL_S)
         return False, 'NO_ACK'
 
-    def get_param(self, name, timeout: float = 2.0):
-        self.master.messages.pop('PARAM_VALUE', None)
+    # ── parameters: one reply per NAME, fed by the reader (issue #17) ───────
+    def note_param_value(self, msg) -> None:
+        """Hook for the manager's MAVLink reader: EVERY PARAM_VALUE, by name.
+
+        ⛔ ONE SLOT, SEVERAL THREADS. get_param / set_param / set_default_gain
+        each POPPED pymavlink's single PARAM_VALUE slot and polled it -- so the
+        telemetry timer's `set_default_gain` could erase an action thread's
+        `channel_role` reply (or overwrite it before it was read), and the loser
+        timed out reading "unreadable" -- which `fire()` turns into a refusal.
+        The reader now files every reply under its own name with a monotonic
+        receipt stamp, and each caller waits for ITS name received after ITS
+        request. Nothing pops, so nothing can be erased.
+        """
+        self._param_table[_param_id(msg)] = (float(msg.param_value),
+                                             time.monotonic())
+        self._param_fed = True
+
+    def _send_param_and_wait(self, name: str, timeout: float, value=None):
+        """Read (`value is None`) or set `name`; return the echoed value or None.
+
+        Both sends sit LEXICALLY inside `_tx_lock`, which
+        `test_srot_tx_lock.py` checks structurally.
+        """
+        name = str(name)
+        wire = name.encode()
+        if not getattr(self, '_param_fed', False):
+            # No reader feeding the table (a bare tool, a unit test): the old
+            # single-slot path, which is safe with one caller.
+            self.master.messages.pop('PARAM_VALUE', None)
+        t_req = time.monotonic()
         with self._tx_lock:
-            self.master.mav.param_request_read_send(
-                sp.VEHICLE_SYSID, sp.VEHICLE_COMPID,
-                name.encode() if isinstance(name, str) else name, -1)
-        deadline = time.monotonic() + timeout
+            if value is None:
+                self.master.mav.param_request_read_send(
+                    sp.VEHICLE_SYSID, sp.VEHICLE_COMPID, wire, -1)
+            else:
+                self.master.mav.param_set_send(
+                    sp.VEHICLE_SYSID, sp.VEHICLE_COMPID, wire, float(value),
+                    mavutil.mavlink.MAV_PARAM_TYPE_REAL32)
+        deadline = t_req + float(timeout)
         while time.monotonic() < deadline:
-            pv = self._cache('PARAM_VALUE')
-            if pv is not None and _param_id(pv) == str(name):
-                return float(pv.param_value)
+            if getattr(self, '_param_fed', False):
+                hit = self._param_table.get(name)
+                if hit is not None and hit[1] >= t_req:
+                    return hit[0]
+            else:
+                pv = self._cache('PARAM_VALUE')
+                if pv is not None and _param_id(pv) == name:
+                    return float(pv.param_value)
             time.sleep(_POLL_S)
         return None
 
+    def get_param(self, name, timeout: float = 2.0):
+        name = name.decode() if isinstance(name, bytes) else name
+        return self._send_param_and_wait(name, timeout)
+
     def set_param(self, name, value, timeout: float = 3.0):
-        self.master.messages.pop('PARAM_VALUE', None)
-        with self._tx_lock:
-            self.master.mav.param_set_send(
-                sp.VEHICLE_SYSID, sp.VEHICLE_COMPID,
-                name.encode() if isinstance(name, str) else name,
-                float(value), mavutil.mavlink.MAV_PARAM_TYPE_REAL32)
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            pv = self._cache('PARAM_VALUE')
-            if pv is not None and _param_id(pv) == str(name):
-                return abs(float(pv.param_value) - float(value)) < 1e-3
-            time.sleep(_POLL_S)
-        return False
+        name = name.decode() if isinstance(name, bytes) else name
+        got = self._send_param_and_wait(name, timeout, value=float(value))
+        return got is not None and abs(got - float(value)) < 1e-3
 
     # ------------------------------------------------------------------ #
     #  Pilot gain -- MANUAL_CONTROL is halved until GAIN=1.0              #
@@ -2906,21 +2939,7 @@ class SrotFC(FlightController):
         param is the durable way to make autonomous manual() commands full
         authority. Returns True on a PARAM_VALUE echo confirming the value.
         """
-        self.master.messages.pop('PARAM_VALUE', None)
-        with self._tx_lock:
-            self.master.mav.param_set_send(
-                sp.VEHICLE_SYSID, sp.VEHICLE_COMPID, b'JS_GAIN_DEFAULT',
-                float(value), mavutil.mavlink.MAV_PARAM_TYPE_REAL32)
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            pv = self._cache('PARAM_VALUE')
-            if pv is not None:
-                pid = getattr(pv, 'param_id', '')
-                pid = pid.decode() if isinstance(pid, bytes) else str(pid)
-                if pid.strip('\x00') == 'JS_GAIN_DEFAULT':
-                    return abs(float(pv.param_value) - float(value)) < 1e-3
-            time.sleep(_POLL_S)
-        return False
+        return self.set_param('JS_GAIN_DEFAULT', value, timeout=timeout)
 
 
 # ---------------------------------------------------------------------- #
