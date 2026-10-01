@@ -6548,3 +6548,38 @@ because the falling filter's P was enormous.
 **Injection-verified:** restoring `+9.80665` fails three tests
 (`57.4224 m of along-track drift, expected 1.0000 m`, `velocity is unobserved`,
 `yaw moved to -10.662 deg`). Full read: **B-77**.
+
+---
+
+## 65. ⭐ THE MIRROR-BRANCH TEST — slope 0 against slope 2, gated on its own standard error
+
+**2026-10-01, issue #55, B-81.** A planar target's two PnP branches, expressed in
+the world (pose yaw + hull yaw) and regressed against the world bearing to the
+target. Measured by projecting a fixed 0.30 m target 3 m away through a moving
+camera into the shipped `solve_pnp`:
+
+| case | bearing change | true slope | mirror slope |
+|---|---|---|---|
+| pure rotation, 8° | **0.00°** | undefined | undefined |
+| 0.3 m lateral | 5.71° | 0.00 | **+2.00** |
+| 0.6 m lateral (either way) | 11.31° | 0.00 | **+2.00** |
+| 0.6 m, 10° pitch | 11.31° | 0.00 | +2.00 |
+| 0.3 m, 0.5 px noise | 5.73° | 0.14 | 1.86 |
+
+**`SLOPE_SE_MAX = 0.25`** — decide only when both slopes' standard errors are at
+most 0.25, which puts 0 and 2 eight sigma apart. 200 seeds per cell, 10 frames,
+lateral 0.1–0.6 m, corner noise 0.5–3.0 px: **0 wrong decisions in 16 000 trials.**
+Decision rate scales with the evidence — 200/200 at 0.3 m / 0.5 px, 94/200 at
+0.3 m / 1 px, 17/200 at 0.6 m / 3 px.
+
+⚠ **Retracted alternative:** a fixed bearing-excursion floor. At 3.8° it still made
+5 wrong decisions in 200 at 2 px. The noise, not the excursion, is what has to be
+beaten, and the standard error measures exactly that.
+
+**`MIRROR_SLOPE = 2.0`, `SLOPE_BAND = 0.5`** — the geometry and two standard errors
+of it. **`LEGACY_RIVAL_MIN = 2`** — one-branch producers only: two frames agreeing
+elsewhere are a second hypothesis, one is a stray; #55's failing case was a 7/3 split.
+
+⚠ **Corner noise on real footage is unmeasured.** These numbers fix the rule's error
+rate, not its decision rate on the vehicle — that needs the forward camera on a
+textured target, translating.

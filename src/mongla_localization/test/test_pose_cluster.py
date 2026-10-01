@@ -12,7 +12,7 @@ import math
 import pytest
 
 from mongla_localization.pose_cluster import (
-    Fused, PoseCluster, PoseSample, _circular_median, _wrap180, slope_of,
+    Fused, PoseCluster, PoseSample, _circular_median, _wrap180,
 )
 
 
@@ -25,16 +25,30 @@ def _feed(c, yaws, *, t0=0.0, dt=0.1, **kw):
 # --- the flip, which is the whole point -------------------------------------
 
 
-def test_a_clean_majority_wins_and_the_mean_would_have_been_wrong():
+def test_a_mirror_majority_is_REFUSED_and_never_averaged():
     # 7 frames at +28, 3 at the mirrored -28. The mean is +11.2 -- a number
-    # that describes neither branch and points the hull between them.
+    # that describes neither branch -- and it is still never the answer.
+    #
+    # ⛔ CORRECTED 2026-10-01 (issue #55). This test used to assert the 7-frame
+    # majority WON. A majority does not resolve a mirror pair: a biased corner
+    # detector hands it to the wrong branch, and #55 anchored a heading 54 deg
+    # against a true 9 exactly that way. With one branch per frame there is no
+    # geometric test to run, so the fuser refuses and names both candidates.
     yaws = [28.0, 27.5, -28.0, 28.4, 27.9, -27.6, 28.1, -28.3, 28.2, 27.7]
     out = _feed(PoseCluster(), yaws).fuse()
-    assert out.decided
+    assert not out.decided
     assert out.support == 7 and out.rival == 3
-    assert abs(out.yaw_deg - 28.0) < 1.0
-    assert abs(sum(yaws) / len(yaws)) < 12.0      # the mean IS near zero-ish
-    assert abs(out.yaw_deg - sum(yaws) / len(yaws)) > 15.0
+    a, b = sorted(out.candidates)
+    assert abs(a + 28.0) < 1.0 and abs(b - 28.0) < 1.0
+    assert abs(sum(yaws) / len(yaws)) < 12.0      # the mean is not either branch
+
+
+def test_a_single_stray_frame_does_not_block_a_clean_answer():
+    """One frame elsewhere is a stray detection, not a second hypothesis."""
+    yaws = [28.0, 27.5, 28.4, 27.9, -28.0, 28.1, 28.2, 27.7]
+    out = _feed(PoseCluster(), yaws).fuse()
+    assert out.decided and out.rule == 'support'
+    assert abs(out.yaw_deg - 28.0) < 1.0 and out.rival == 1
 
 
 def test_an_even_fork_is_refused_rather_than_split():
@@ -123,8 +137,7 @@ def test_range_comes_from_the_winning_cluster_only():
     c = PoseCluster(min_poses=3)
     for y in (25.0, 25.1, 25.2):
         c.add(PoseSample(t=0.0, yaw_deg=y, range_m=2.0))
-    for y in (-25.0, -25.1):
-        c.add(PoseSample(t=0.0, yaw_deg=y, range_m=9.0))   # the losing branch
+    c.add(PoseSample(t=0.0, yaw_deg=-25.0, range_m=9.0))   # one stray frame
     out = c.fuse()
     assert out.decided and abs(out.range_m - 2.0) < 1e-6
 
@@ -135,90 +148,13 @@ def test_spread_reports_the_width_of_the_winning_cluster():
     assert 0.0 <= out.spread_deg <= 3.0
 
 
-# --- ego-motion: the branch that MOVES right, not the one seen most ---------
+# --- ego-motion: RETRACTED (issue #55) ----------------------------------------
 #
-# The two planar-PnP branches are mirror images about the viewing ray and each
-# frame mirrors afresh, so under a hull rotation of dpsi the true branch's pose
-# yaw moves -dpsi and the false one +dpsi. That is unit-free and does not care
-# which branch the detector reported more often -- which is exactly the case
-# that defeats "take the largest cluster".
+# This section asserted that under a hull rotation the true branch slopes -1
+# and the mirror +1, and built its frames by writing the mirror as `-true_yaw`
+# -- i.e. it manufactured the slope it then tested. A physically projected
+# target disproves it: under pure rotation BOTH branches slope -1, and a 7/3
+# wrong-branch majority was accepted and anchored 54 deg against a true 9.
+# The rule and these tests are gone. What replaced them is tested from
+# projected pixels in `mongla_vision/test/test_pose_mirror_truth.py`.
 
-
-def _sweep(true_yaw0, hull_yaws, *, mirrored=False, t0=0.0):
-    """Frames of ONE branch through a hull rotation, as geometry dictates."""
-    out = []
-    psi0 = hull_yaws[0]
-    for i, psi in enumerate(hull_yaws):
-        true_yaw = true_yaw0 - (psi - psi0)          # board fixed in the world
-        yaw = -true_yaw if mirrored else true_yaw
-        out.append(PoseSample(t=t0 + i * 0.1, yaw_deg=yaw, vehicle_yaw_deg=psi))
-    return out
-
-
-def test_the_minority_branch_wins_when_it_moves_correctly():
-    # THE DECISIVE CASE. Seven frames of the mirrored branch, four of the true
-    # one. Counting picks the wrong answer with a clear majority; the slope
-    # picks the right one.
-    hull = [0.0, 2.0, 4.0, 6.0, 8.0, 10.0, 12.0]
-    c = PoseCluster(min_poses=4)
-    for s in _sweep(25.0, hull, mirrored=True):
-        c.add(s)
-    for s in _sweep(25.0, hull[:4], mirrored=False, t0=1.0):
-        c.add(s)
-    out = c.fuse()
-    assert out.decided
-    assert out.rule == 'egomotion', 'counting must not be what decided this'
-    assert out.slope < 0, f'the winning branch must slope -1, got {out.slope}'
-    assert out.support == 4 and out.rival == 7, 'the MINORITY won, on evidence'
-    assert out.yaw_deg > 0, 'the true branch was at +25, the mirror at -25'
-
-
-def test_the_measured_slopes_are_minus_one_and_plus_one():
-    # The prediction is exact, so test the number and not just its sign.
-    hull = [0.0, 3.0, 6.0, 9.0, 12.0, 15.0]
-    true_slope, exc = slope_of(_sweep(20.0, hull))
-    false_slope, _ = slope_of(_sweep(20.0, hull, mirrored=True))
-    assert abs(true_slope - (-1.0)) < 1e-6
-    assert abs(false_slope - (+1.0)) < 1e-6
-    assert exc == pytest.approx(15.0)
-
-
-def test_a_station_keeping_hull_cannot_use_the_test():
-    # dpsi ~ 0: the regression would divide by nothing and return a confident
-    # number built from noise. It must decline and fall back to counting.
-    hull = [10.0, 10.1, 10.0, 9.9, 10.0, 10.1]
-    slope, exc = slope_of(_sweep(18.0, hull))
-    assert math.isnan(slope)
-    assert exc < 4.0
-
-
-def test_it_falls_back_to_support_without_a_heading_stream():
-    # No vehicle_yaw_deg at all -- an older bag, or the state topic down.
-    out = _feed(PoseCluster(min_poses=4), [30.0] * 6 + [-30.0] * 2).fuse()
-    assert out.decided and out.rule == 'support'
-    assert math.isnan(out.slope)
-
-
-def test_two_clusters_sloping_the_same_way_are_not_a_mirror_pair():
-    # Two different objects, not the fork. The mirror test says nothing here
-    # and must not be used to prefer one.
-    hull = [0.0, 3.0, 6.0, 9.0, 12.0]
-    c = PoseCluster(min_poses=3)
-    for s in _sweep(30.0, hull):
-        c.add(s)
-    for s in _sweep(-60.0, hull, t0=2.0):     # also slopes -1
-        c.add(s)
-    out = c.fuse()
-    assert out.rule == 'support'
-
-
-def test_the_rule_that_decided_is_always_reported():
-    # An operator reading a fused pose must be able to tell WHICH test produced
-    # it -- the two have very different failure modes.
-    hull = [0.0, 4.0, 8.0, 12.0, 16.0]
-    c = PoseCluster(min_poses=3)
-    for s in _sweep(22.0, hull):
-        c.add(s)
-    for s in _sweep(22.0, hull, mirrored=True, t0=3.0):
-        c.add(s)
-    assert c.fuse().rule in ('egomotion', 'support')

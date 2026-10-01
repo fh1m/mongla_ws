@@ -117,6 +117,16 @@ def anchor_from(fused, hull_relative_yaw_deg: float,
     support = int(getattr(fused, 'support', 0))
     spread = float(getattr(fused, 'spread_deg', float('nan')))
     rule = str(getattr(fused, 'rule', ''))
+    # ⛔ ONLY A GEOMETRIC RESOLUTION REDEFINES A HEADING (issue #55). A pose
+    # decided by counting can be the mirror branch: a 7/3 wrong-branch majority
+    # was accepted and anchored 54 deg against a true 9. The mirror is wrong by
+    # twice the off-axis angle, and every later turn would inherit it.
+    from mongla_localization.pose_cluster import RULE_VIEWPOINT
+    if rule != RULE_VIEWPOINT:
+        return Anchor(False, support=support, spread_deg=spread, rule=rule,
+                      reason=f'pose decided by {rule or "an unknown rule"!r}, '
+                             f'not by a change of viewpoint: a heading anchor '
+                             f'needs the mirror branch ruled out by geometry')
     if support < min_support:
         return Anchor(False, support=support, spread_deg=spread, rule=rule,
                       reason=f'support {support} < {min_support} for a heading '

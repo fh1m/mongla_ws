@@ -97,10 +97,13 @@ class PoseFuseNode(Node):
         if not msg.ok:
             return
         t, _ = capture_monotonic(getattr(msg, 'header', None))
+        both = bool(getattr(msg, 'branches_valid', False))
         self._cluster.add(PoseSample(
             t=t, yaw_deg=float(msg.yaw_deg), range_m=float(msg.range_m),
             ambiguity=float(msg.ambiguity), reproj_px=float(msg.reproj_px),
-            n_points=int(msg.n_points), vehicle_yaw_deg=self.yaw_at(t)))
+            n_points=int(msg.n_points), vehicle_yaw_deg=self.yaw_at(t),
+            alt_yaw_deg=float(msg.alt_yaw_deg) if both else None,
+            bearing_deg=float(msg.bearing_deg) if both else None))
 
         out = TargetPose()
         out.header = msg.header
@@ -115,12 +118,19 @@ class PoseFuseNode(Node):
             # the width of the answer, now across frames instead of branches.
             out.n_points = int(fused.support)
             out.yaw_spread_deg = float(fused.spread_deg)
-            # WHICH test decided is not decoration: 'egomotion' survives a
+            # WHICH test decided is not decoration: 'viewpoint' survives a
             # detector that reports the wrong branch more often, 'support' does
             # not, and an operator reading a pose needs to know which they have.
             out.reason = fused.rule
         else:
+            # ⛔ THE DISAGREEMENT GOES ON THE WIRE, not into a vote. An
+            # unresolved mirror pair publishes ok=False with BOTH candidate
+            # yaws in `reason` and their separation in `yaw_spread_deg`, so a
+            # consumer can see what was refused and why (issue #55).
             out.reason = fused.reason
+            if len(fused.candidates) == 2:
+                a, b = fused.candidates
+                out.yaw_spread_deg = float(abs(((a - b + 180.0) % 360.0) - 180.0))
         self._pub.publish(out)
 
 

@@ -190,6 +190,13 @@ def to_msg(tp, header=None) -> TargetPose:
         m.yaw_spread_deg = f(tp.yaw_spread_deg)
         m.pitch_spread_deg = f(tp.pitch_spread_deg)
         m.off_axis_deg = f(tp.off_axis_deg)
+        alt = float(getattr(tp, 'alt_yaw_deg', float('nan')))
+        brg = float(getattr(tp, 'bearing_deg', float('nan')))
+        # Set ONLY when both are real numbers -- the scrub above would turn a
+        # missing branch into a confident 0.0, which is why the flag exists.
+        if alt == alt and brg == brg:
+            m.branches_valid = True
+            m.alt_yaw_deg, m.bearing_deg = alt, brg
     return m
 
 

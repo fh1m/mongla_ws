@@ -4560,3 +4560,63 @@ suite 349/349.
 ⚠ **The landing rule still stands, and is what surfaced this at all:** a branch is
 re-run against current `main` before it lands, not against the `main` it was cut
 from. The four failures were real; only the diagnosis was wrong.
+
+---
+
+### B-81 — the mirror-branch discriminant was manufactured, and a wrong majority anchored a heading 45° off ✅ **FIXED 2026-10-01** (issue #55)
+
+**Severity: HIGH when `anchor_heading` is used.** A planar target's PnP has two
+answers, mirror images about the viewing ray. `pose_cluster.slope_of` claimed
+that under a hull rotation the true branch slopes −1 against hull yaw and the
+mirror **+1**, so the slope picks the true branch whichever the detector
+reported more often.
+
+⛔ **RETRACTED — the claim was built into its own tests.** `_sweep(mirrored=True)`
+wrote the mirror as `-true_yaw`, which manufactures the +1 it then asserted. A
+physically projected target disproves it: the mirror sits at about `2β − θ`
+(β the bearing to the target), and a camera yawing in place moves β and θ
+together, so **both branches slope −1**. Reproduced from #55, on `main`:
+
+```
+true  branch yaws   25 23 21 19 17   slope -1
+mirror branch yaws -25 -27 -29 -31 -33  slope -1
+7/3 wrong-branch majority  ->  rule=support, yaw -29, anchor ACCEPTED 54 deg vs 9 deg truth
+```
+
+**What replaced it — measured by projection, not derived.** In the WORLD frame
+(pose yaw + hull yaw) the true branch is constant and the mirror swings with the
+world bearing at slope **2.00** — in either translation direction, through 10° of
+pitch and 0.5 px noise (0.14 / 1.86). So:
+
+- **every frame now votes for BOTH branches** (`TargetPose.alt_yaw_deg`,
+  `bearing_deg`, `branches_valid`), so the solver's preference — the thing a
+  biased detector corrupts — casts no vote at all;
+- the two branch tracks are regressed against world bearing, and the pair is
+  resolved only when one slope sits at 0, the other at 2, and **both standard
+  errors are ≤ 0.25** (measured: 0 wrong decisions in 16 000 trials — see
+  measured-bars §65);
+- **a turn in place is unresolvable, and says so**: both candidates go on the wire
+  (`ok=False`, both yaws in `reason`, their separation in `yaw_spread_deg`), and
+  `anchor_heading` hands that reason back instead of timing out;
+- `anchor_from` accepts **only** `rule == 'viewpoint'`. A counted decision never
+  moves a heading zero, and the legacy one-branch path refuses outright once a
+  second cluster of ≥ 2 frames exists — #55's own case was a 7/3 split, and the old
+  `min_poses` (4) let it through.
+
+**Found on the way:** OpenCV's IPPE returned NaN for both branches on an exact,
+noiseless frame, and the NaN reprojection then made the healthy SQPnP answer lose
+a `<=` comparison, so a solvable frame was refused. A non-finite fit now counts as
+infinitely bad.
+
+⚠ **What this costs.** `anchor_heading` now needs the vehicle to TRANSLATE across
+the target while it watches — about 0.3 m sideways at 3 m at 0.5 px of corner noise.
+A station-keeping or pivoting hull will be refused, correctly. No checked-in
+mission calls `anchor_heading` today.
+
+⚠ **One recorded bag** (`mongla_footage/personal/bag_person_inout_20260924_144732`)
+contains `TargetPose` in the old definition; replaying its `target_pose` topics will
+not deserialize under the new one. `pnp_node` regenerates them from the recorded
+correspondences, which are also in that bag.
+
+**Verified by injection:** letting the paired path decide without the geometry
+fails 6 truth tests; letting `anchor_from` accept any rule fails 2.
