@@ -187,6 +187,12 @@ _GYRO_GAIN_DEFAULT = 0.0          # back-compat for importers
 _GYRO_GAIN_LENS_PIVOT = (1.058, 0.830)
 
 
+# The width the `focal_air_px` / `focal_water_px` parameters are stated for --
+# the 640x360 profile the camera has always streamed. Used ONLY to scale them
+# when no calibration file is given (issue #32).
+FOCAL_PARAMS_WIDTH = 640.0
+
+
 class FlowVelocityNode(Node):
     def __init__(self):
         super().__init__('mongla_flow_velocity')
@@ -333,50 +339,16 @@ class FlowVelocityNode(Node):
         self._td_min_q = float(
             self.get_parameter('time_offset_min_quality').value)
         self._td_rejected = 0
-        cal = str(self.get_parameter('calibration').value or '').strip()
-        if cal:
-            try:
-                self._intr = Intrinsics.from_json(cal, 640, 360)
-                if self._medium != 'water':
-                    self._f_px = self._intr.fx
-                elif self._want_refract:
-                    # ⛔ THE INTRINSICS STAY IN AIR, DELIBERATELY. The lens and
-                    # its distortion coefficients are AIR-SIDE properties,
-                    # calibrated with the camera dry; the water is in front of
-                    # the port, not inside the lens. Scaling K to f_water
-                    # before undistortPoints -- which the previous code did --
-                    # divides by an fx 1.44x too large, so the radial model is
-                    # evaluated at 1/1.44 of the true normalised radius and
-                    # applies only **45 % of the needed correction**, leaving
-                    # up to 4.16 px at the frame edge. That is half an
-                    # adaptive baseline of pure error, and it exists ONLY in
-                    # water mode, which has never run.
-                    #
-                    # Correct order: undistort the LENS in air, rectify the
-                    # PORT, then measure with f_ref.
-                    self._refract = RefractiveRectifier(
-                        self._intr.fx, self._intr.fy,
-                        self._intr.cx, self._intr.cy, n=self._n_water)
-                    self._f_px = self._refract.f_ref
-                else:
-                    # Rectification off: keep the old single-focal-length
-                    # behaviour so the two paths can be A/B'd, and say what it
-                    # costs rather than leaving it to be discovered.
-                    k = f_water / self._intr.fx
-                    self._intr.fx *= k
-                    self._intr.fy *= k
-                    self._f_px = self._intr.fx
-                    self.get_logger().warning(
-                        '[FLOW ] refractive_rectify=false in WATER: a single '
-                        'focal length is exact only at the radius it was '
-                        'fitted at (1-2.8 % anisotropic scale error), and '
-                        'undistortion runs with a water-scaled K that applies '
-                        '~45 % of the lens correction. Both measured.')
-            except Exception as exc:
-                self.get_logger().error(
-                    f'[FLOW ] calibration {cal!r} unreadable ({exc}); falling '
-                    f'back to a single focal length and the frame centre, '
-                    f'which measured a 3 % axis asymmetry on the bench')
+        # ⛔ ISSUE #32: SCALED TO THE FRAMES THAT ARRIVE, not to a constant.
+        # This loaded the calibration for a hard-coded 640x360 whatever the
+        # camera sent: at 1280x720 f was half its true value and EVERY velocity
+        # and distance read 2x, with no error -- `from_json`'s own comment calls
+        # it "a clean 2x error nobody sees". The first frame's shape now decides
+        # (`_on_image`), and a frame of any other size later is refused.
+        self._cal_path = str(self.get_parameter('calibration').value or '').strip()
+        self._f_air, self._f_water = f_air, f_water
+        self._intr_wh = None
+        self._n_wrong_size = 0
         self._n_median_fallback = 0
         self._n_yaw_disagree = 0
         self._last_yaw_img = 0.0
@@ -567,6 +539,85 @@ class FlowVelocityNode(Node):
         self._n_refused = 0
 
     # ── capture -> mailbox (callback thread, must never block) ──────────────
+    def _load_intrinsics(self, width: int, height: int) -> None:
+        """Scale the calibration -- or the focal parameters -- to WxH (#32)."""
+        cal, f_air, f_water = self._cal_path, self._f_air, self._f_water
+        if not cal:
+            # No calibration: the focal parameters are for FOCAL_PARAMS_WIDTH.
+            k = float(width) / FOCAL_PARAMS_WIDTH
+            self._f_px *= k
+            self.get_logger().warning(
+                f'[FLOW ] no calibration: focal parameters scaled x{k:.3f} '
+                f'from {FOCAL_PARAMS_WIDTH:.0f} px wide to the {width}x{height} '
+                f'frames actually arriving')
+            return
+        if cal:
+            try:
+                self._intr = Intrinsics.from_json(cal, width, height)
+                if self._medium != 'water':
+                    self._f_px = self._intr.fx
+                elif self._want_refract:
+                    # ⛔ THE INTRINSICS STAY IN AIR, DELIBERATELY. The lens and
+                    # its distortion coefficients are AIR-SIDE properties,
+                    # calibrated with the camera dry; the water is in front of
+                    # the port, not inside the lens. Scaling K to f_water
+                    # before undistortPoints -- which the previous code did --
+                    # divides by an fx 1.44x too large, so the radial model is
+                    # evaluated at 1/1.44 of the true normalised radius and
+                    # applies only **45 % of the needed correction**, leaving
+                    # up to 4.16 px at the frame edge. That is half an
+                    # adaptive baseline of pure error, and it exists ONLY in
+                    # water mode, which has never run.
+                    #
+                    # Correct order: undistort the LENS in air, rectify the
+                    # PORT, then measure with f_ref.
+                    self._refract = RefractiveRectifier(
+                        self._intr.fx, self._intr.fy,
+                        self._intr.cx, self._intr.cy, n=self._n_water)
+                    self._f_px = self._refract.f_ref
+                else:
+                    # Rectification off: keep the old single-focal-length
+                    # behaviour so the two paths can be A/B'd, and say what it
+                    # costs rather than leaving it to be discovered.
+                    k = f_water / self._intr.fx
+                    self._intr.fx *= k
+                    self._intr.fy *= k
+                    self._f_px = self._intr.fx
+                    self.get_logger().warning(
+                        '[FLOW ] refractive_rectify=false in WATER: a single '
+                        'focal length is exact only at the radius it was '
+                        'fitted at (1-2.8 % anisotropic scale error), and '
+                        'undistortion runs with a water-scaled K that applies '
+                        '~45 % of the lens correction. Both measured.')
+            except Exception as exc:
+                self.get_logger().error(
+                    f'[FLOW ] calibration {cal!r} unreadable ({exc}); falling '
+                    f'back to a single focal length and the frame centre, '
+                    f'which measured a 3 % axis asymmetry on the bench')
+        if self._intr is not None:
+            self.get_logger().info(f'[FLOW ] intrinsics scaled to the first '
+                                   f'frame, {width}x{height}: {self._intr}')
+
+    def _admit_frame_size(self, wh) -> bool:
+        """First frame: scale the intrinsics to it. Later: refuse any other size.
+
+        Refused, not rescaled mid-run: the anchor, the baseline and every
+        buffered point are in the OLD pixel units (issue #32).
+        """
+        if self._intr_wh is None:
+            self._load_intrinsics(*wh)
+            self._intr_wh = tuple(wh)
+            return True
+        if tuple(wh) == self._intr_wh:
+            return True
+        if self._n_wrong_size % 100 == 0:
+            self.get_logger().error(
+                f'[FLOW ] frame {wh[0]}x{wh[1]} != the {self._intr_wh[0]}x'
+                f'{self._intr_wh[1]} the intrinsics were scaled for -- REFUSING '
+                f'it (a mid-run resolution change). Restart flow.')
+        self._n_wrong_size += 1
+        return False
+
     def _on_image(self, msg: Image) -> None:
         try:
             frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
@@ -574,6 +625,8 @@ class FlowVelocityNode(Node):
             self.get_logger().warning(f'[FLOW ] cv_bridge decode failed: {exc!r}')
             return
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        if not self._admit_frame_size((int(gray.shape[1]), int(gray.shape[0]))):
+            return
         # THE CAPTURE STAMP, never `now()`. dt is the denominator of every
         # velocity here, and re-stamping on arrival makes it the scheduler's
         # jitter rather than the shutter interval. This stack has shipped that
