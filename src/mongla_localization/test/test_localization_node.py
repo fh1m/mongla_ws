@@ -531,9 +531,10 @@ def test_aiding_present_is_not_announced():
 G = 9.80665
 
 
-def _board_at(t, yaw_deg, accel_x=0.0):
-    """The board's IMU sample for a level hull at BOARD yaw `yaw_deg`."""
-    m = _Imu(t, accel=(accel_x, 0.0, -G))
+def _board_at(t, yaw_deg, accel_x=0.0, yaw_rate=0.0):
+    """The board's IMU sample for a level hull at BOARD yaw `yaw_deg`,
+    turning at `yaw_rate` rad/s (FRD: + = right)."""
+    m = _Imu(t, gyro=(0.0, 0.0, yaw_rate), accel=(accel_x, 0.0, -G))
     a = math.radians(yaw_deg)
     Rz = np.array([[math.cos(a), -math.sin(a), 0.0],
                    [math.sin(a), math.cos(a), 0.0], [0.0, 0.0, 1.0]])
@@ -543,15 +544,29 @@ def _board_at(t, yaw_deg, accel_x=0.0):
     return m
 
 
-def _fly_board(n, t, seconds, yaw_deg, speed=None, accel_x=0.0):
-    """`seconds` of 50 Hz board samples at BOARD yaw `yaw_deg`.
+def _fly_board(n, t, seconds, yaw_deg, speed=None, accel_x=0.0, from_yaw=None,
+               turn_s=1.0):
+    """`seconds` of 50 Hz board samples ending at BOARD yaw `yaw_deg`.
+
+    `from_yaw`, when given, TURNS the hull there from `from_yaw` over the first
+    `turn_s` seconds, reporting the gyro rate that turn really has (#62). Without
+    it the hull jumped between calls with a ZERO gyro, so `predict` integrated no
+    rotation and the filter followed only once the NIS lockout break let the
+    disagreeing attitude in -- the anchor test exercised the break, not predict.
 
     `speed(t)`, when given, is the TRUE forward speed and is reported as
     body-frame flow; `accel_x` is the matching forward specific force, so the
     accelerometer and the camera tell the same story."""
-    for _ in range(int(round(seconds * 50))):
+    import math as _m
+    n_turn = int(round(turn_s * 50)) if from_yaw is not None else 0
+    rate = (_m.radians(yaw_deg - from_yaw) / turn_s) if n_turn else 0.0
+    for i in range(int(round(seconds * 50))):
         t += 0.02
-        n._on_imu(_board_at(t, yaw_deg, accel_x))
+        if i < n_turn:
+            y = from_yaw + (yaw_deg - from_yaw) * (i + 1) / n_turn
+            n._on_imu(_board_at(t, y, accel_x, yaw_rate=rate))
+        else:
+            n._on_imu(_board_at(t, yaw_deg, accel_x))
         if speed is not None:
             f = type('T', (), {})()
             f.header = _Header(t)
@@ -591,8 +606,14 @@ def test_the_anchor_HOLDS_against_50hz_board_attitude():
     assert _published_frame(n) == frames.POOL
     # And it is an OFFSET, not a sticky number: the hull turns 45 deg right
     # (board +30 -> +75), so its true pool heading is -15.
-    _fly_board(n, t, 2.0, 75.0)
+    breaks_before = n._filter.lockout_breaks
+    _fly_board(n, t, 2.0, 75.0, from_yaw=30.0)     # a REAL turn, gyro and all
     assert n._filter.X.yaw_deg() == pytest.approx(-15.0, abs=1.0)
+    # #62: with the gyro reported, predict carries the turn -- the lockout
+    # break must NOT be what made this pass.
+    assert n._filter.lockout_breaks == breaks_before, (
+        f'{n._filter.lockout_breaks - breaks_before} lockout break(s) during an '
+        f'ordinary turn: the attitude is being forced in, not followed')
 
 
 def test_a_later_anchor_replaces_the_offset_rather_than_stacking():
