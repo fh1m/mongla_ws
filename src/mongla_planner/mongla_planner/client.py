@@ -206,6 +206,7 @@ class MonglaClient:
 
         goal = Move.Goal()
         goal.cmd = cmd
+        given = []
         for name, value in fields.items():
             if value is None:
                 continue
@@ -214,6 +215,10 @@ class MonglaClient:
             if isinstance(value, int) and not isinstance(value, bool):
                 value = float(value)
             setattr(goal, name, value)
+            given.append(name)
+        # Tell the server which fields were GIVEN, so an explicit 0.0 is a zero
+        # and not "unset" (issue #14; see Move.action `set_fields`).
+        goal.set_fields = given
 
         send_future = self._client.send_goal_async(
             goal, feedback_callback=self._on_feedback)
