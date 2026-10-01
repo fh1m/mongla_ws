@@ -111,6 +111,24 @@ class _Axis:
     def v_ss(self, u: float) -> float:
         return float(self.theta[0] * u + self.theta[1])
 
+    def var(self, u: float) -> float:
+        """PREDICTION variance at demand `u`: s^2 (1 + phi' P phi).
+
+        ⛔ ISSUE #58. This returned the fit's residual alone, as if `theta` were
+        known exactly. Recursive least squares carries its own answer: P is the
+        inverse information, so Cov(theta) ~ s^2 P, and the variance of a
+        prediction at regressor phi = [u, 1] is s^2 (1 + phi' P phi) -- the
+        textbook prediction interval. Trained only at one demand (every row
+        [u0, 1], rank one), the slope/offset split is unidentified: P keeps a
+        huge eigenvalue along it (measured 1.5e4 against 4e-3), the prediction
+        AT u0 stays tight -- it IS right there -- and a prediction at any other
+        demand inflates by exactly how unidentified it is. Before, that model
+        predicted 0.20 m/s at zero demand for a hull truly at rest, sigma 0.05.
+        """
+        s = max(self.rms, SIGMA_FLOOR_MPS)
+        phi = np.array([float(u), 1.0])
+        return s * s * (1.0 + max(0.0, float(phi @ self.P @ phi)))
+
 
 class CommandVelocityModel:
     """Body-frame (x forward, y starboard) velocity from commanded demand."""
@@ -160,8 +178,7 @@ class CommandVelocityModel:
         out = []
         for axis, w in ((self.x, self._w[0]), (self.y, self._w[1])):
             if axis.ready:
-                s = max(axis.rms, SIGMA_FLOOR_MPS)
-                out.append((axis.v_ss(w), s * s))
+                out.append((axis.v_ss(w), axis.var(w)))
             else:
                 out.append((0.0, UNREADY_VAR))
         return out[0][0], out[1][0], out[0][1], out[1][1]
@@ -204,9 +221,15 @@ class MotionCheck:
             return self.state
         dt = max(0.0, float(dt))
         judged = False
-        for i, (name, axis, meas, exp) in enumerate(
-                (('x', model.x, vx, pred[0]), ('y', model.y, vy, pred[1]))):
-            if not axis.ready or abs(model._w[i]) < MIN_DEMAND or abs(exp) < MIN_EXPECTED_MPS:
+        for i, (name, axis, meas, exp, var) in enumerate(
+                (('x', model.x, vx, pred[0], pred[2]),
+                 ('y', model.y, vy, pred[1], pred[3]))):
+            # Judge only an expectation the model can stand behind: one that is
+            # distinguishable from zero at 2 sigma. An unidentified model far
+            # from its training demand (#58) would otherwise call a hull that
+            # is moving exactly as it should BLOCKED.
+            if (not axis.ready or abs(model._w[i]) < MIN_DEMAND
+                    or abs(exp) - 2.0 * math.sqrt(max(var, 0.0)) < MIN_EXPECTED_MPS):
                 self._held[i] = 0.0
                 continue
             judged = True
