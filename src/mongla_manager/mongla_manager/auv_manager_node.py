@@ -263,6 +263,33 @@ HEARTBEAT_PERIOD_S = 0.5
 # bench; 20 s is generous enough for a slow boot and short enough to be noticed.
 HEARTBEAT_WAIT_S = 20.0
 
+# ⛔ THE B-72 TRADE-OFF, CLOSED (issue #13). The heartbeat runs on its own thread
+# so blocking callbacks cannot starve it -- which also meant a HUNG manager kept
+# the board fed and its 5 s surface failsafe could never fire. A liveness timer
+# in its own callback group stamps "the executor can still schedule work"; past
+# this many seconds without a stamp the heartbeat is WITHHELD, and the board
+# surfaces the vehicle on its own (3 + 5 = 8 s after the hang). Must clear an
+# ordinary scheduling hiccup; it does not need to clear the 3-10 s blocking
+# callbacks, because those run in OTHER groups on other executor threads.
+EXECUTOR_STALE_S = 3.0
+
+# A mission that ATTACHED (published /mongla/mission_alive) and then went silent
+# this long, with the vehicle armed, is dead: abort, brake, SURFACE. The runner
+# beats at 2 Hz, so this is six missed beats.
+MISSION_SILENT_S = 3.0
+
+
+def mission_watchdog(attached: bool, last_seen: float, now: float,
+                     armed: bool, silent_s: float = MISSION_SILENT_S) -> str:
+    """'surface' | 'detach' | 'none' -- pure, so the rule is tested without ROS.
+
+    'detach' covers a mission that went silent on a DISARMED vehicle: there is
+    nothing to surface, and acting would be noise.
+    """
+    if not attached or (now - last_seen) <= silent_s:
+        return 'none'
+    return 'surface' if armed else 'detach'
+
 
 class _HeartbeatThread:
     """The companion HEARTBEAT on its own daemon thread -- nothing may starve it.
@@ -284,10 +311,15 @@ class _HeartbeatThread:
     because pymavlink shares one sequence counter and one port.
     """
 
-    def __init__(self, send, period_s=HEARTBEAT_PERIOD_S, log=None):
+    def __init__(self, send, period_s=HEARTBEAT_PERIOD_S, log=None,
+                 alive_fn=None):
         self._send = send
         self._period = float(period_s)
         self._log = log
+        # None = always beat. Otherwise beat only while it answers True: a hung
+        # executor goes SILENT so the board's own failsafe fires (issue #13).
+        self._alive_fn = alive_fn
+        self._withholding = False
         self._stop = threading.Event()
         self._thread = threading.Thread(
             target=self._run, name='mongla-heartbeat', daemon=True)
@@ -305,8 +337,25 @@ class _HeartbeatThread:
         fails = 0
         next_t = time.monotonic()
         while not self._stop.is_set():
+            alive = True
+            if self._alive_fn is not None:
+                try:
+                    alive = bool(self._alive_fn())
+                except Exception:              # noqa: BLE001 -- unknown = keep beating
+                    alive = True
+            if not alive:
+                if not self._withholding and self._log is not None:
+                    self._log.error(
+                        '[NET  ] !! EXECUTOR STUCK -- heartbeat WITHHELD so the '
+                        "board's GCS failsafe surfaces the vehicle (issue #13).")
+                self._withholding = True
+            elif self._withholding:
+                self._withholding = False
+                if self._log is not None:
+                    self._log.warning('[NET  ] executor alive again -- heartbeat resumed')
             try:
-                self._send()
+                if alive:
+                    self._send()
                 fails = 0
             except Exception as exc:          # noqa: BLE001 -- must never die
                 fails += 1
@@ -641,7 +690,8 @@ class AUVManagerNode(Node):
         # HEARTBEAT FROM HERE ON, before a single slow bring-up step -- see
         # _HeartbeatThread for why it is not a timer.
         self._hb_thread = _HeartbeatThread(
-            self.fc.send_heartbeat, log=self.get_logger()).start()
+            self.fc.send_heartbeat, log=self.get_logger(),
+            alive_fn=self._executor_alive).start()
         self.get_logger().info(f'[NET  ] flight_controller = {self.fc.name}')
         if self._is_srot:
             self.fc.allow_saturated_depth_arm = bool(
@@ -1175,6 +1225,21 @@ class AUVManagerNode(Node):
         self._publish_static_frames()
         self._health_last = None
         self.create_timer(1.0, self._health_tick, callback_group=self.timer_group)
+        # Issue #13: executor liveness (gates the heartbeat) and the mission
+        # keep-alive watchdog. Each in its OWN group, so neither the blocking
+        # timer_group callbacks nor a slow SURFACE mode change can stall the
+        # liveness stamp.
+        self._liveness_group = MutuallyExclusiveCallbackGroup()
+        self._watchdog_group = MutuallyExclusiveCallbackGroup()
+        self.create_timer(0.2, self._stamp_executor_alive,
+                          callback_group=self._liveness_group)
+        self._mission = {'attached': False, 'name': '', 'seen': 0.0}
+        from std_msgs.msg import String as _String
+        self.create_subscription(_String, '/mongla/mission_alive',
+                                 self._on_mission_alive, 10,
+                                 callback_group=self._watchdog_group)
+        self.create_timer(0.5, self._mission_watchdog_tick,
+                          callback_group=self._watchdog_group)
         # (No heartbeat timer: it runs on `_hb_thread`, started in _setup_mavlink,
         #  because this group also holds callbacks that block for seconds.)
         self.create_timer(0.5,  self.telemetry_tick,   callback_group=self.timer_group)
@@ -1682,6 +1747,64 @@ class AUVManagerNode(Node):
                 + ', '.join(f'{e.parent}->{e.child}' for e in edges))
         except Exception as exc:          # noqa: BLE001 -- never fatal
             self.get_logger().error(f'[FRAME] static tree NOT published: {exc!r}')
+
+    # ── issue #13: who keeps the vehicle honest when a process dies ──────────
+    def _stamp_executor_alive(self) -> None:
+        self._executor_alive_t = time.monotonic()
+
+    def _executor_alive(self) -> bool:
+        """True until the executor has been stuck EXECUTOR_STALE_S.
+
+        Before the first stamp -- bring-up, before spin() -- it is True: the
+        heartbeat thread exists precisely to cover that window.
+        """
+        t = getattr(self, '_executor_alive_t', None)
+        return t is None or (time.monotonic() - t) <= EXECUTOR_STALE_S
+
+    def _on_mission_alive(self, msg) -> None:
+        name = str(msg.data)
+        if name:
+            if not self._mission['attached']:
+                self.get_logger().info(f'[MISSN] mission {name!r} attached -- '
+                                       f'keep-alive watched ({MISSION_SILENT_S:.0f}s)')
+            self._mission.update(attached=True, name=name, seen=time.monotonic())
+        else:
+            if self._mission['attached']:
+                self.get_logger().info(f'[MISSN] mission {self._mission["name"]!r} '
+                                       f'detached cleanly')
+            self._mission.update(attached=False, name='')
+
+    def _mission_watchdog_tick(self) -> None:
+        m = self._mission
+        try:
+            armed = bool(self.fc.is_armed())
+        except Exception:                          # noqa: BLE001 -- unknown = act
+            armed = True
+        action = mission_watchdog(m['attached'], m['seen'], time.monotonic(), armed)
+        if action == 'none':
+            return
+        name = m['name']
+        m.update(attached=False, name='')
+        if action == 'detach':
+            self.get_logger().warning(f'[MISSN] mission {name!r} went silent on a '
+                                      f'DISARMED vehicle -- detached, nothing to do')
+            return
+        self.get_logger().error(
+            f'[MISSN] !! mission {name!r} SILENT {MISSION_SILENT_S:.0f}s+ with the '
+            f'vehicle ARMED -- the mission process is gone. Abort, brake, SURFACE.')
+        try:
+            self.mongla.request_abort()
+        except Exception as exc:                   # noqa: BLE001
+            self.get_logger().error(f'[MISSN] abort raised {exc!r}')
+        try:
+            if self._is_srot:
+                res = self._run_srot_surface({})
+            else:
+                res = self.mongla.surface()
+            self.get_logger().error(f'[MISSN] surface: {getattr(res, "message", res)}')
+        except Exception as exc:                   # noqa: BLE001
+            self.get_logger().error(f'[MISSN] SURFACE FAILED: {exc!r} -- the '
+                                    f"board's own failsafe is the backstop")
 
     def _register_health(self) -> None:
         """Translate what each subsystem already knows into one vocabulary.
