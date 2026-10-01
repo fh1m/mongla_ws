@@ -59,6 +59,24 @@ BIN_DEPTH_CEILING_M   = -0.4    # SHALLOWEST setpoint on the downward align -- s
                                 # ratio/alignment can't lift the hull out of the water (negative m).
 BIN_DROPPER_CHANNEL   = None    # set below, from DROPPER_1_CHANNEL (B53)
 
+# ── Degradation policy -- CONFIGURED, not coded (plan Block 1D) ──────────────────
+#
+# What a task does when the camera it steers on is ABSENT. BumblebeeAS ship
+# `claw_required: false` -- "degrades to front-only if absent" -- as a config
+# value, so the pool-side answer is an edit to one table, not to every mission.
+#
+#   True   the run cannot continue without it: ABORT loudly
+#   False  SKIP the task that needs it, log why, and let every other task score
+#
+# Read by `mongla.camera_usable(name, task=...)` at each task's entry. Before
+# this, only task_bin asked; sauvc_target_acquisition, pool_day_practice and
+# demo_dual_camera called the vision verb anyway, and `_ensure_detector` aborted
+# the WHOLE run over one dead downward USB camera.
+CAMERA_REQUIRED = {
+    'forward':  True,     # the gate, the flare, the torpedo board: nothing scores blind
+    'downward': False,    # the bin / drum drop is one task; lose it, keep the run
+}
+
 # ── Payload channels -- ONE place, and UNASSIGNED (B53) ──────────────────────────
 #
 # ⛔ 0 = NOT ASSIGNED. The old map (1,2 = torpedoes, 3,4 = droppers) was invented:

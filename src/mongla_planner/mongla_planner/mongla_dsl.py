@@ -2392,6 +2392,34 @@ class MonglaMission:
             return Fused(decided=False, reason=str(msg.reason))
         return None
 
+    def camera_usable(self, name: str, *, task: str) -> bool:
+        """May ``task`` run on camera ``name``? The degrade choice, CONFIGURED.
+
+        True when the camera's detector is up. When it is not, the answer comes
+        from `competition_config.CAMERA_REQUIRED` -- never from a branch written
+        into the mission (plan Block 1D):
+
+          required      -> RuntimeError, the same loud abort `_ensure_detector`
+                           would give, but said BEFORE any motion is spent
+          not required  -> False, after a loud SKIP line naming the task; the
+                           caller returns and every later task still scores
+
+        An unknown camera name is treated as required: a typo must not be
+        mistaken for "optional and absent".
+        """
+        cam = str(name).strip().lower()
+        if self.camera_available(cam):
+            return True
+        from mongla_planner.missions.competition_config import CAMERA_REQUIRED
+        if CAMERA_REQUIRED.get(cam, True):
+            raise RuntimeError(
+                f"camera {cam!r} is ABSENT and CAMERA_REQUIRED says the run "
+                f"cannot continue without it (task: {task}). Aborting loudly.")
+        self.log.warning(f"[DEGRADE] camera {cam!r} absent -- SKIPPING {task}. "
+                         f"Every other task in the run still scores "
+                         f"(CAMERA_REQUIRED[{cam!r}] = False).")
+        return False
+
     def camera_available(self, name: str | None = None) -> bool:
         """Is ``name``'s detector actually on the graph? Cached per camera.
 
@@ -2409,11 +2437,11 @@ class MonglaMission:
 
         Use it as the fallback selector the task trees are built from::
 
-            if mongla.camera_available('downward'):
+            if mongla.camera_usable('downward', task='bin drop'):
                 mongla.vision.align('fire', camera='downward', lat=0, fwd=0)
-                mongla.fire(3)
-            else:
-                mongla.log('downward camera absent -- skipping the bin drop')
+                mongla.fire(DROPPER_1_CHANNEL)
+
+        -- `camera_usable` adds the CONFIGURED policy (skip or abort) on top.
 
         Cheap after the first call per camera: the answer is cached, because a
         detector that is up stays up for the run and one that never came up is
