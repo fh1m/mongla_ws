@@ -93,6 +93,9 @@ float32 settle_px          # vision_align: settle gate -- only declare aligned o
                            #   SETTLED on target (like vision_move's held lateral) instead of
                            #   exiting mid-pass through the band. Keyed on error velocity, so a
                            #   steady current does not block it (that is ki_lat's job). 0 = off
+bool    verify_off         # vision_align: skip the post-stop RE-MEASUREMENT (Block 1C). Default
+                           #   false = after braking, wait for align_stable_frames NEW frames
+                           #   and return DRIFTED if the target is out of band once stopped
 float32 coast_s            # vision_align/move: gap-bridging coast window (s). >0 lets the loop
                            #   steer on the tracker's predicted box of the LOCKED target id for up
                            #   to coast_s after a detection drops, at decaying authority -- a brief

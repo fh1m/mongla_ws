@@ -127,9 +127,14 @@ class _Pix(_FakePixhawk):
         pass
 
 
-def _run(name):
+def _run(name, verify=False):
     """Perfectly on-target, every read a NEW frame (age_s=0) -- what a detector
-    faster than the control loop looks like."""
+    faster than the control loop looks like.
+
+    `verify=False` by default HERE because these tests time the STABLE GATE.
+    The post-stop re-measurement (Block 1C) adds `align_stable_frames` more
+    frames on purpose; `test_verification_costs_three_frames_not_more` pins
+    that cost separately."""
     pix = _Pix(name)
     t0 = time.monotonic()
     res = align_loop(
@@ -137,7 +142,8 @@ def _run(name):
         vision_state=_FakeVision(_sample(ex=0.0, ey=0.0, w_frac=0.3, h_frac=0.3)),
         target_class='gate', axes={'lat'}, offsets={}, err_px=40.0,
         duration=3.0, gain=30.0, align_stable_frames=3, lost_grace_s=0.5,
-        brake=False, writers=_FakeWriters(), log=_Log(), abort_fn=None)
+        brake=False, verify=verify, writers=_FakeWriters(), log=_Log(),
+        abort_fn=None)
     return res, time.monotonic() - t0
 
 
@@ -165,6 +171,16 @@ def test_the_20Hz_path_is_not_made_slower():
     _, elapsed = _run('')
     assert elapsed < _ALIGN_STABLE_MIN_S * 2.0, (
         f'{elapsed*1000:.0f} ms -- the floor should bind at 20 Hz, not add a tick')
+
+
+def test_verification_costs_three_frames_not_more():
+    """The re-measurement waits for three NEW frames after the stop. At 20 Hz
+    that is ~0.15 s, and it must not cost the 1.5 s timeout on a target that is
+    plainly still there."""
+    res_v, t_v = _run('', verify=True)
+    res_n, t_n = _run('', verify=False)
+    assert res_v.ok and 'verified' in res_v.reason
+    assert t_v - t_n < 0.35, f'verify cost {1000 * (t_v - t_n):.0f} ms'
 
 
 class _GateSpy(_FakeVision):
