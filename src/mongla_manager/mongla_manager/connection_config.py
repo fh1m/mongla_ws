@@ -204,15 +204,60 @@ _SROT_RAW_FALLBACK = (
 SROT_BAUD = 115200
 
 
+# A udev symlink naming THIS board by its physical USB port -- the only stable
+# identity a serial-less CH340 has. Written by `scripts/udev/make_srot_rule.sh`.
+SROT_UDEV_LINK = '/dev/srot'
+
+
+class AmbiguousSrotSerial(RuntimeError):
+    """More than one device could be the SROT board -- refuse to guess (#20)."""
+
+
+def _distinct(paths) -> list:
+    """Paths that are different DEVICES (a by-id link and its ttyUSB are one)."""
+    seen, out = set(), []
+    for p in paths:
+        real = os.path.realpath(p)
+        if real not in seen:
+            seen.add(real)
+            out.append(p)
+    return out
+
+
 def find_srot_serial() -> str | None:
-    """First SROT-like USB-serial device path (stable by-id preferred), or None."""
+    """The SROT board's serial path, None if absent -- and REFUSES to guess.
+
+    ⛔ ISSUE #20. The board's bridge is a plain CH340 with NO serial number, so
+    its by-id name is shared by every CH340 on the machine -- an ESC flasher, a
+    LoRa dongle, a spare ESP32 DevKit. This used to return the FIRST match, and
+    opening the wrong one resets whatever it is (DTR) and then hung in
+    wait_heartbeat. Order now:
+
+      1. `/dev/srot` -- the udev link for this board's physical port, if made
+      2. a SROT-branded by-id name (the firmware ask) -- unique by construction
+      3. the generic patterns TOGETHER, de-duplicated by device: exactly one ->
+         use it; more than one -> AmbiguousSrotSerial, listing them
+      4. raw ttyUSB/ACM nodes, under the same one-or-refuse rule
+    """
+    if os.path.exists(SROT_UDEV_LINK):
+        return SROT_UDEV_LINK
+    branded = _distinct(sorted(glob('/dev/serial/by-id/*SROT*')))
+    if len(branded) == 1:
+        return branded[0]
+    generic = []
     for pattern in _SROT_BY_ID_GLOBS:
-        hits = sorted(glob(pattern))
-        if hits:
-            return hits[0]
-    for path in _SROT_RAW_FALLBACK:
-        if os.path.exists(path):
-            return path
+        generic += sorted(glob(pattern))
+    tiers = (_distinct(branded + generic),
+             _distinct([p for p in _SROT_RAW_FALLBACK if os.path.exists(p)]))
+    for found in tiers:
+        if len(found) == 1:
+            return found[0]
+        if len(found) > 1:
+            raise AmbiguousSrotSerial(
+                f'{len(found)} devices could be the SROT board: {found}. Opening '
+                f'the wrong one RESETS it. Unplug the others, pass '
+                f'mav_device:=<path>, or pin this board once with '
+                f'scripts/udev/make_srot_rule.sh (-> {SROT_UDEV_LINK}).')
     return None
 
 

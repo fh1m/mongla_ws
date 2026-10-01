@@ -258,6 +258,11 @@ class FeedbackPump:
 # window, so a scheduler hiccup or a slow write still leaves real margin.
 HEARTBEAT_PERIOD_S = 0.5
 
+# How long bring-up waits for the board's first HEARTBEAT before refusing. The
+# board reboots on port open (port_guard.py) and is talking within ~3 s on the
+# bench; 20 s is generous enough for a slow boot and short enough to be noticed.
+HEARTBEAT_WAIT_S = 20.0
+
 
 class _HeartbeatThread:
     """The companion HEARTBEAT on its own daemon thread -- nothing may starve it.
@@ -321,6 +326,31 @@ def _load_sensor_offsets():
         return frames.load()
     except Exception:                 # noqa: BLE001 -- health must not raise
         return None
+
+
+def _validate_fc_kind(kind: str) -> None:
+    """Refuse an unknown backend BEFORE any port is opened (issue #12, item 4)."""
+    from mongla_control.fc import BUILDERS
+    if kind not in BUILDERS:
+        raise ValueError(f'flight_controller={kind!r} is not one of '
+                         f'{sorted(BUILDERS)} -- refusing before opening any port')
+
+
+def _is_dead_port(exc, master) -> bool:
+    """A reader fault that is the CABLE, not the reader (issue #12).
+
+    pymavlink sets `portdead` only from a failed WRITE, so the first failed
+    READ after an unplug arrives as a bare SerialException ("device reports
+    readiness to read but returned no data") while `portdead` is still False --
+    measured on the bench, 2026-10-01. Either signal means the port is gone.
+    """
+    if getattr(master, 'portdead', False):
+        return True
+    try:
+        import serial
+        return isinstance(exc, (serial.SerialException, OSError))
+    except ImportError:                          # pragma: no cover
+        return isinstance(exc, OSError)
 
 
 def _kill_text(kill) -> str:
@@ -515,6 +545,11 @@ class AUVManagerNode(Node):
         self._debug         = bool(self.get_parameter('debug').value)
         self._fc_kind       = str(self.get_parameter('flight_controller').value).strip().lower()
         self._is_srot       = (self._fc_kind == 'srot')
+        # ⛔ VALIDATE BEFORE CONNECTING (issue #12, item 4). A typo used to be
+        # "not srot", which resolved the ArduSub UDP profile and blocked in
+        # wait_heartbeat() before make_flight_controller() could ever say
+        # "unknown flight_controller". Same table the factory builds from.
+        _validate_fc_kind(self._fc_kind)
 
         # ⛔ THE COMMENT HERE USED TO SAY "mutates contextvar in main thread;
         # daemons spawned later still see the default (False)", which was true
@@ -574,8 +609,29 @@ class AUVManagerNode(Node):
         # kernel does not lock a tty; this does. A non-serial endpoint is a no-op.
         self._port_guard = PortGuard(self._profile['conn'], log=self.get_logger())
         self._port_guard.acquire()
+        # ⛔ A PULLED CABLE USED TO BE PERMANENT (issue #12, item 1). The reader
+        # caught the SerialException and retried the dead handle forever;
+        # nothing reopened the port. pymavlink's `autoreconnect` reopens a serial
+        # device IN PLACE (`mavserial.reset()`, same object, so every holder of
+        # `self.master` stays valid) from its WRITE path -- and the heartbeat
+        # thread writes at 2 Hz, so it is the reconnect driver. The by-id path
+        # survives re-enumeration. Serial only: the UDP class has no such option.
+        if str(self._profile['conn']).startswith('/dev/'):
+            baud_kw['autoreconnect'] = True
         self.master  = mavutil.mavlink_connection(self._profile['conn'], **baud_kw)
-        self.master.wait_heartbeat()
+        # ⛔ BOUNDED, AND SAID OUT LOUD (issue #12, item 3). wait_heartbeat() with
+        # no timeout hung the node forever after "Connecting" on a powered-but-
+        # silent board or the wrong device, with no further log line.
+        _hb_deadline = time.monotonic() + HEARTBEAT_WAIT_S
+        while self.master.wait_heartbeat(timeout=2.0) is None:
+            if time.monotonic() >= _hb_deadline:
+                raise RuntimeError(
+                    f'no HEARTBEAT on {self._profile["conn"]} in '
+                    f'{HEARTBEAT_WAIT_S:.0f}s -- wrong device, wrong baud, or a '
+                    f'board that is powered but not running. Check `connect`.')
+            self.get_logger().warning(
+                f'[NET  ] still waiting for a HEARTBEAT on '
+                f'{self._profile["conn"]} ...')
         # Build the backend behind the FlightController HAL. PixhawkFC is-a Pixhawk,
         # so `self.pixhawk` stays a valid alias for every existing direct call; SrotFC
         # exposes the same read surface. `flight_controller=pixhawk` is unchanged.
@@ -1339,11 +1395,29 @@ class AUVManagerNode(Node):
             if text and text != self.last_statustext:
                 self.last_statustext = text
                 self.get_logger().info(f'[ARDUB] {text}')
+            if consec and getattr(self, '_port_was_dead', False) \
+                    and not getattr(self.master, 'portdead', False):
+                self._port_was_dead = False
+                self.get_logger().warning(
+                    '[NET  ] serial port REOPENED -- the board rebooted on reopen '
+                    'and is DISARMED; message rates are re-pinned on its reboot.')
             consec = 0
           except Exception as exc:                    # noqa: BLE001 -- see above
             self._reader_faults += 1
             consec += 1
             self._reader_last_fault = f'{type(exc).__name__}: {exc}'
+            if _is_dead_port(exc, self.master):
+                # The CABLE, not the reader: a dead serial port. The heartbeat
+                # thread's next write reopens it (autoreconnect, issue #12).
+                if consec == 1 or consec % 200 == 0:
+                    self.get_logger().error(
+                        f'[NET  ] !! SERIAL PORT DEAD ({consec} reads): '
+                        f'{self._reader_last_fault}. Reconnecting on the next '
+                        f'heartbeat write; the board reboots on reopen and comes '
+                        f'back DISARMED.')
+                self._port_was_dead = True
+                time.sleep(0.05)
+                continue
             # Log the first, then back off: a persistent fault at 200 Hz would
             # bury the log it is trying to be found in.
             if consec == 1 or consec % 200 == 0:

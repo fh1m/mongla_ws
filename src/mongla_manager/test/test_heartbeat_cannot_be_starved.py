@@ -38,7 +38,9 @@ class _TimedMaster(_FakeMaster):
         self.mav.heartbeat_send = _hb
 
     def wait_heartbeat(self, *a, **k):
-        return None
+        # A real link returns the HEARTBEAT it waited for; None means "timed
+        # out", which bring-up now refuses after HEARTBEAT_WAIT_S (issue #12).
+        return object()
 
 
 class _Log:

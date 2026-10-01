@@ -1348,7 +1348,10 @@ def _resolve_srot_for_check(device: str = '') -> tuple[str, str]:
                                         SROT_UDP_CONN, NETWORK)
     except Exception:                              # noqa: BLE001
         return device or '/dev/ttyUSB0', ''
-    path = find_srot_serial()
+    try:
+        path = find_srot_serial()
+    except Exception as exc:                       # noqa: BLE001 -- AmbiguousSrotSerial
+        return '', f'ambiguous: {exc}'
     if path is not None:
         return path, ''
     return SROT_UDP_CONN, probe_udp_mavlink(NETWORK['mav_port'], 2.0)
@@ -1633,9 +1636,13 @@ def main(argv: list[str] | None = None) -> int:
         # place re-probes UDP (2 s each) and lets them disagree.
         srot_conn, srot_state = _resolve_srot_for_check(srot_device)
         section('D-F. SROT control board'
-                + (' (bridged over UDP)' if not srot_conn.startswith('/dev/')
+                + ('' if not srot_conn
+                   else ' (bridged over UDP)' if not srot_conn.startswith('/dev/')
                    else ' (direct USB serial)'))
-        if srot_state == 'silent':
+        if srot_state.startswith('ambiguous'):
+            # Refused, not guessed (#20): the wrong CH340 would be RESET by the open.
+            emit(FAIL, 'SROT auto-detect', srot_state.split(': ', 1)[1])
+        elif srot_state == 'silent':
             emit(WARN, 'SROT auto-detect',
                  'no USB serial and no MAVLink on UDP -- falling back to '
                  f'{srot_conn}. Plug in the Type-C cable, bring up the BlueOS '
@@ -1645,7 +1652,7 @@ def main(argv: list[str] | None = None) -> int:
                  f'UDP port already held by another process -- could not probe. '
                  f'Using {srot_conn}. A leftover `mongla_manager start` is the '
                  f'usual cause: ss -lunp | grep 14550')
-        for st, lbl, det in _check_srot(skip_mav, srot_conn):
+        for st, lbl, det in (_check_srot(skip_mav, srot_conn) if srot_conn else ()):
             emit(st, lbl, det)
     else:
         # ---- D. network ------------------------------------------------- #
