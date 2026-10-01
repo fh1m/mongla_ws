@@ -14,6 +14,7 @@ and the mission moves on. Search is the mission-authored fallbacks at the
 bottom of this file (pure control), run automatically on target loss.
 """
 
+from mongla_planner.missions.competition_config import DROPPER_1_CHANNEL, TORPEDO_1_CHANNEL  # noqa: E402
 # ┌─────────────────────────────────────────────────────────────────────────────┐
 # │                         OPERATOR TUNABLES                                   │
 # │   Edit these before each run. None = manual manoeuvre / skip that turn.     │
@@ -60,9 +61,9 @@ SLALOM_PER_PIPE_DURATION_S = 25
 TORPEDO_BOARD_ALIGN_S    = 15
 TORPEDO_APPROACH_S       = 30
 TORPEDO_LOCK_S           = 25
-TORPEDO_FIRE_CHANNEL     = 1     # 1=torpedo_1, 2=torpedo_2
+TORPEDO_FIRE_CHANNEL     = TORPEDO_1_CHANNEL   # competition_config (B53)
 BIN_ALIGN_DURATION_S     = 25
-BIN_DROP_CHANNEL         = 3     # 3=dropper_1, 4=dropper_2
+BIN_DROP_CHANNEL         = DROPPER_1_CHANNEL   # competition_config (B53)
 BIN_STABILITY_PAUSE_S    = 3.0
 
 # ── SEARCH (mission-authored fallbacks) ───────────────────────────────────────

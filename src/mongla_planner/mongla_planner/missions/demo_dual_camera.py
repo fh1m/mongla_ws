@@ -27,6 +27,7 @@ LAUNCH (paused:=true is the norm -- detectors start idle, the mission resumes on
 Run:  ros2 run mongla_planner mission demo_dual_camera
 """
 
+from mongla_planner.missions.competition_config import DROPPER_1_CHANNEL, TORPEDO_1_CHANNEL  # noqa: E402
 _FWD = '/mongla_detector_forward'
 _DWN = '/mongla_detector_downward'
 
@@ -65,7 +66,7 @@ def run(mongla, log=None):
                                depth=35, fwd_mode='height', err=30, gain=25,
                                duration=25, max_depth_m=-2.0):
             mongla.pause(2.0)
-            mongla.fire(3)          # dropper channel
+            mongla.fire(DROPPER_1_CHANNEL)   # competition_config (B53)
     elif log:
         log('[demo] bin not seen — skipping to torpedo')
 
@@ -79,7 +80,7 @@ def run(mongla, log=None):
         # Standoff + centre + fire-from-lock (yaw dropped, heading_lock holds Ch4).
         mongla.vision.align('hole', lat=0, depth=0, fwd=55, fwd_mode='area',
                             err=15, gain=25, duration=30, hold=4.0,
-                            fire=1, fire_t=1.5, brake=False, hold_heading=True)
+                            fire=TORPEDO_1_CHANNEL, fire_t=1.5, brake=False, hold_heading=True)
     elif log:
         log('[demo] torpedo hole not seen')
 

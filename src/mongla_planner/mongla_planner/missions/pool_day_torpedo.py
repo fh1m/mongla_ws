@@ -20,6 +20,7 @@ fire-lock deliberately does NOT -- settle would gate the mid-hold fire.)
 
 Ctrl-C at any time → AUV stops and disarms cleanly.
 """
+from mongla_planner.missions.competition_config import TORPEDO_1_CHANNEL  # noqa: E402
 import time
 
 # ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -61,7 +62,7 @@ HOLE_HOLD_S            = 4.0    # station-keep (forward+lat+depth) while firing
 FIRE_T                 = 1.5    # seconds into the hold to fire (must be < HOLE_HOLD_S)
 
 # ── FIRE ─────────────────────────────────────────────────────────────────────
-FIRE_CHANNEL           = 1      # 1=torpedo_1  2=torpedo_2  (int) OR [1,2] for BOTH
+FIRE_CHANNEL           = TORPEDO_1_CHANNEL   # competition_config (B53); a LIST fires several
 FIRE_GAP_S             = 1.0    # seconds between shots when FIRE_CHANNEL is a list
                                 # (solenoid launcher misfires if two fire together)
 

@@ -57,7 +57,30 @@ BIN_DESCEND_FILL      = 0       # optional: descend until the bin fills this % (
 BIN_MAX_DEPTH_M       = -1.6    # deepest allowed setpoint for BIN_DESCEND_FILL (negative m)
 BIN_DEPTH_CEILING_M   = -0.4    # SHALLOWEST setpoint on the downward align -- surface guard so
                                 # ratio/alignment can't lift the hull out of the water (negative m).
-BIN_DROPPER_CHANNEL   = 3       # 3 = dropper_1, 4 = dropper_2 (marker drop)
+BIN_DROPPER_CHANNEL   = None    # set below, from DROPPER_1_CHANNEL (B53)
+
+# ── Payload channels -- ONE place, and UNASSIGNED (B53) ──────────────────────────
+#
+# ⛔ 0 = NOT ASSIGNED. The old map (1,2 = torpedoes, 3,4 = droppers) was invented:
+# read live off the board, 2026-09-22 and again 2026-10-01, those channels are
+# SERVO (the on-board arm) or unroled, and `fire()` refuses every one of them --
+# so every torpedo and every drop would have scored zero while the mission ran.
+#
+#     FIREABLE (SWITCH)   9, 10, 12, 13, 14, 15, 16
+#     SERVO (the arm)     1, 2, 3, 5, 6, 7, 8
+#     unroled             4, 11
+#
+# The roles are FIRMWARE state set in Bondor, and nothing is wired to the
+# payload yet. So these stay 0 until the payload is wired to a SWITCH channel
+# and confirmed: run `ros2 run mongla_manager connect`, take the channel from
+# its FIREABLE list, and set it HERE -- every mission reads these names.
+# `fire(0)` is refused with a reason that says exactly this; it is never a
+# silent no-op, and no mission may hard-code a channel number
+# (`test_missions_never_hard_code_a_payload_channel.py`).
+TORPEDO_1_CHANNEL     = 0
+TORPEDO_2_CHANNEL     = 0
+DROPPER_1_CHANNEL     = 0
+DROPPER_2_CHANNEL     = 0
 
 # ── Payload fire ─────────────────────────────────────────────────────────────────
 FIRE_GAP_S            = 1.0     # seconds BETWEEN channels when firing a LIST (fire=[1,4]/[2,3]).
@@ -186,7 +209,7 @@ SAUVC_DRUM_DESCEND_FILL  = 0      # 0 = OFF: hold the hover depth. A fill-driven
                                   # guessed FOV here descends by an unknown amount
                                   # toward a -5 bottom touch. Measure first.
 SAUVC_DRUM_DEPTH_CEILING_M = -0.4 # surface guard on the downward align
-SAUVC_DROPPER_CHANNEL    = 3      # 3 = dropper_1, 4 = dropper_2
+SAUVC_DROPPER_CHANNEL    = None   # set below, from DROPPER_1_CHANNEL (B53)
 
 # ── SAUVC combinator (sauvc_full) ─────────────────────────────────────────────
 SAUVC_RESERVE_S          = 45.0   # surface + disarm allowance, never offered to a task
@@ -213,3 +236,7 @@ SAUVC_FLARES_WORST_S     = (SAUVC_FLARE_LISTEN_S + 3 * (
 # here. "The AUV has to hold on to the ball till the end of attempt" -- that needs
 # a gripper or a retaining mechanism this vehicle does not carry. Recording the
 # absence so it is not mistaken for an oversight.
+
+# The droppers the bin and SAUVC tasks use -- aliases, never second copies.
+BIN_DROPPER_CHANNEL = DROPPER_1_CHANNEL
+SAUVC_DROPPER_CHANNEL = DROPPER_1_CHANNEL
