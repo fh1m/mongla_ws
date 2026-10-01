@@ -918,9 +918,17 @@ class DetectorNode(Node):
         try:
             self._load_single_model_async(**kw)
             if self._det is not None:
+                # ⛔ THE COUNTER IS NOT RESET HERE (issue #59). Construction is
+                # not recovery: the Hailo constructor even swallows its own
+                # warm-up inference errors. Resetting on a successful BUILD let
+                # a device that builds and never infers rebuild every 15
+                # failures for ever (150 failures -> 10 rebuilds, no exit) and
+                # never reach the exit below. Only a successful INFERENCE
+                # (`_infer_loop`) clears the count -- what the docstring always
+                # promised.
                 self.get_logger().warn('[DET  ] detector REBUILT after '
-                                       'consecutive inference failures')
-                self._infer_fails = 0
+                                       'consecutive inference failures -- it '
+                                       'must now INFER to count as recovered')
         except Exception as exc:                # noqa: BLE001
             self.get_logger().error(f'[DET  ] rebuild failed: {exc!r}')
 

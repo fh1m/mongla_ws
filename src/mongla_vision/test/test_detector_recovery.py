@@ -41,7 +41,9 @@ def _node(rebuild_works=True):
         n._rebuilt.append(1)
         if rebuild_works:
             n._det = object()
-            n._infer_fails = 0
+            # NO counter reset: a rebuild is not a recovery until an inference
+            # succeeds (issue #59). This fake used to reset it, which encoded
+            # the bug as the definition of "a working rebuild".
     n._rebuild_detector = rebuild
     return n
 
@@ -257,3 +259,43 @@ def test_a_FAULT_in_the_seeing_check_never_stops_detection(monkeypatch):
     except Exception:
         pass
     assert n._infer_fails == 4, 'the seeing fault ended the loop'
+
+
+
+def test_issue_59_a_detector_that_BUILDS_but_never_INFERS_still_exits(monkeypatch):
+    """The SHIPPED `_rebuild_detector`, a constructor that succeeds, and an
+    inference that keeps failing -- the Hailo constructor even swallows its own
+    warm-up errors, so this is the realistic failure. It used to rebuild every
+    15 failures for ever: 150 failures, 10 rebuilds, no exit, counter at 0.
+    Falsified by more than one rebuild or by no exit."""
+    n = D.DetectorNode.__new__(D.DetectorNode)
+    n._log = _Log()
+    n.get_logger = lambda: n._log
+    n._infer_fails = 0
+    n._det = object()
+    n._build_kwargs = {'model_path': 'x.hef'}
+    builds = []
+
+    def builds_fine(**kw):
+        builds.append(kw)
+        n._det = object()              # construction SUCCEEDS
+    n._load_single_model_async = builds_fine
+    codes = []
+    monkeypatch.setattr(D.os, '_exit', lambda c: codes.append(c))
+    for _ in range(150):
+        n._on_infer_failure(RuntimeError('persistent inference failure'))
+        if codes:
+            break
+    assert len(builds) == 1, f'{len(builds)} rebuilds -- construction counted as recovery'
+    assert codes == [1], 'a detector that never infers kept claiming to be up'
+
+
+def test_a_rebuild_followed_by_a_REAL_inference_is_a_recovery():
+    """The other half: only a successful inference clears the count."""
+    n = _node()
+    for _ in range(D._INFER_FAIL_REBUILD):
+        n._on_infer_failure(RuntimeError('x'))
+    assert n._infer_fails == D._INFER_FAIL_REBUILD   # rebuild did not clear it
+    n._infer_fails = 0                                # what _infer_loop does on success
+    n._on_infer_failure(RuntimeError('one bad frame later'))
+    assert n._infer_fails == 1
