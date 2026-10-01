@@ -127,6 +127,14 @@
     ]
   },
   "skillOverrides": {
-    "graphify": "user-invocable-only"
+    "graphify": "user-invocable-only",
+    "banner-design": "off",
+    "brand": "off",
+    "daisyui": "off",
+    "design": "off",
+    "design-system": "off",
+    "slides": "off",
+    "ui-styling": "off",
+    "ui-ux-pro-max": "off"
   }
 }
