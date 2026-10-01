@@ -54,10 +54,7 @@ def run(mongla, log=None):
     # anyway makes `_ensure_detector` abort the WHOLE run over one dead camera,
     # taking every later task with it. Skip this task instead and let the rest
     # of the mission score.
-    if not mongla.camera_available('downward'):
-        if log:
-            log('[bin_task] downward camera absent — SKIPPING the bin drop. '
-                'Every other task in the run still scores.')
+    if not mongla.camera_usable('downward', task='bin drop'):
         return
 
     # Point everything at the downward camera. use_camera() auto-switches the live

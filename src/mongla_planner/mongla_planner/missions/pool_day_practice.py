@@ -196,30 +196,31 @@ def run(mongla, log=None):
         # ══════════════════════════════════════════════════════════════════════
         # PHASE 4: BIN  (downward camera)
         # ══════════════════════════════════════════════════════════════════════
-        info('[bin] centring above bin...')
-        if BIN_HEADING_DEG is not None:
-            mongla.turn(BIN_HEADING_DEG)
-        mongla.set_depth(BIN_DEPTH_M, timeout=30)
+        if mongla.camera_usable('downward', task='practice bin drop'):   # skip-or-abort is CONFIGURED
+            info('[bin] centring above bin...')
+            if BIN_HEADING_DEG is not None:
+                mongla.turn(BIN_HEADING_DEG)
+            mongla.set_depth(BIN_DEPTH_M, timeout=30)
 
-        # use_camera auto-switches the live detector to downward (pauses forward)
-        # + flips the HUD. Downward frame: lat=left/right (Ch6), depth axis=fore/aft
-        # SURGE (Ch5, two-sided + braked); ArduSub holds BIN_DEPTH_M on Ch3.
-        mongla.use_camera('downward')
-        mongla.set_model('bin_fire_blood', node=_DWN)
-        mongla.set_classes('fire,blood', node=_DWN)
+            # use_camera auto-switches the live detector to downward (pauses forward)
+            # + flips the HUD. Downward frame: lat=left/right (Ch6), depth axis=fore/aft
+            # SURGE (Ch5, two-sided + braked); ArduSub holds BIN_DEPTH_M on Ch3.
+            mongla.use_camera('downward')
+            mongla.set_model('bin_fire_blood', node=_DWN)
+            mongla.set_classes('fire,blood', node=_DWN)
 
-        if mongla.vision.align(
-                'fire', camera='downward', lat=0, fwd=0,   # downward: lat=Ch6, fwd=Ch5 surge
-                err=BIN_CENTRE_ERR_PX, gain=ALIGN_GAIN, surge_sign=BIN_SURGE_SIGN,
-                duration=BIN_ALIGN_DURATION_S, fallback=creep_forward):
-            info('[bin] aligned — holding for stability...')
-            mongla.pause(BIN_STABILITY_PAUSE_S)
-            mongla.fire(BIN_DROP_CHANNEL)
-            info('[bin] drop complete')
-        else:
-            info('[bin] never centred — skipping drop')
+            if mongla.vision.align(
+                    'fire', camera='downward', lat=0, fwd=0,   # downward: lat=Ch6, fwd=Ch5 surge
+                    err=BIN_CENTRE_ERR_PX, gain=ALIGN_GAIN, surge_sign=BIN_SURGE_SIGN,
+                    duration=BIN_ALIGN_DURATION_S, fallback=creep_forward):
+                info('[bin] aligned — holding for stability...')
+                mongla.pause(BIN_STABILITY_PAUSE_S)
+                mongla.fire(BIN_DROP_CHANNEL)
+                info('[bin] drop complete')
+            else:
+                info('[bin] never centred — skipping drop')
 
-        mongla.use_camera('forward')   # auto-pauses the downward detector
+            mongla.use_camera('forward')   # auto-pauses the downward detector
 
     except Exception as exc:
         if log:

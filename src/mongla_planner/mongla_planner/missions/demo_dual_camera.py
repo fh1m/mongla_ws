@@ -59,16 +59,17 @@ def run(mongla, log=None):
     # ONE call flips the live detector to downward (forward pauses) + the HUD.
     # Downward kwargs remap (see task_bin / downward-camera.md): lat+fwd centre
     # over the bin, depth = descent to a fill%.
-    mongla.use_camera('downward')
-    mongla.set_classes('fire,blood', node=_DWN)
-    if mongla.wait_for('fire', timeout=10):
-        if mongla.vision.align('fire', camera='downward', lat=0, fwd=0,
-                               depth=35, fwd_mode='height', err=30, gain=25,
-                               duration=25, max_depth_m=-2.0):
-            mongla.pause(2.0)
-            mongla.fire(DROPPER_1_CHANNEL)   # competition_config (B53)
-    elif log:
-        log('[demo] bin not seen — skipping to torpedo')
+    if mongla.camera_usable('downward', task='demo bin'):   # skip-or-abort is CONFIGURED
+        mongla.use_camera('downward')
+        mongla.set_classes('fire,blood', node=_DWN)
+        if mongla.wait_for('fire', timeout=10):
+            if mongla.vision.align('fire', camera='downward', lat=0, fwd=0,
+                                   depth=35, fwd_mode='height', err=30, gain=25,
+                                   duration=25, max_depth_m=-2.0):
+                mongla.pause(2.0)
+                mongla.fire(DROPPER_1_CHANNEL)   # competition_config (B53)
+        elif log:
+            log('[demo] bin not seen — skipping to torpedo')
 
     # ── 3. TORPEDO (forward again) ──────────────────────────────────────────────
     # Back to forward: switch the SAME forward detector to its torpedo model (its

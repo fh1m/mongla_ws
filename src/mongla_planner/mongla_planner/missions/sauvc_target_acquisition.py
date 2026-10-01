@@ -63,6 +63,10 @@ def run(mongla, log=None):
 
 def acquire(mongla, log=None):
     """Hover over the blue drum and release. Assumes armed and past the gate."""
+    # Asked BEFORE the dive to hover depth: no motion spent on a task that
+    # cannot see. The skip-or-abort answer is configured (CAMERA_REQUIRED).
+    if not mongla.camera_usable('downward', task='SAUVC drum drop'):
+        return
     mongla.set_depth(SAUVC_DRUM_HOVER_DEPTH_M, timeout=30)
     mongla.use_camera('downward')
     try:
