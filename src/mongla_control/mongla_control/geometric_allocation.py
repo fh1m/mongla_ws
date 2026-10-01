@@ -307,6 +307,7 @@ class GeometricAllocator:
         """
         clamped: dict = {}
         n = len(u)
+        unconstrained = list(u)
         for _ in range(n):                    # at most one clamp per pass
             worst, worst_mag = None, limit + 1e-12
             for i, v in enumerate(u):
@@ -315,20 +316,30 @@ class GeometricAllocator:
             if worst is None:
                 break
             clamped[worst] = limit if u[worst] > 0 else -limit
+            # ⛔ THE PIN IS WRITTEN HERE, BEFORE ANY EARLY EXIT (issue #60).
+            # It used to be copied in only after a successful re-solve, so the
+            # pass that pinned the LAST free thruster broke out with that
+            # thruster still at its out-of-bounds value -- and the caller then
+            # scaled the whole vector by limit/peak, halving thrusters that
+            # were already at their stop. Measured on the CAD hull: asking
+            # twice the all-at-limit wrench delivered half of what pinning
+            # every thruster delivers, on every axis.
+            u = list(u)
+            u[worst] = clamped[worst]
 
             free = [i for i in range(n) if i not in clamped]
             if not free:
-                break
+                break                          # every live thruster is pinned
             # What the request still needs after the pinned thrusters deliver.
             rest = [want[k] - sum(self._b[k][i] * clamped[i] for i in clamped)
                     for k in range(6)]
             try:
                 solved = self._least_squares(rest, free)
             except ValueError:
-                break                          # reduced set is degenerate
-            u = list(u)
-            for i, val in clamped.items():
-                u[i] = val
+                # The reduced set is degenerate. Hand back the UNCONSTRAINED
+                # solution so the caller's uniform scale keeps its direction;
+                # a half-redistributed vector scaled down points nowhere.
+                return unconstrained, {}
             for slot, i in enumerate(free):
                 u[i] = solved[slot]
             if max(abs(v) for v in u) <= limit + 1e-9:
