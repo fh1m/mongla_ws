@@ -26,15 +26,21 @@ def test_the_verb_passes_the_tool_offset_into_the_loop():
 def test_the_loop_applies_it_to_EVERY_centring_axis():
     """lat, yaw and depth all centre the target. Correcting one and not the
     others aims the tool horizontally and the camera vertically."""
-    assert _MV.count('+ tool_du') == 2, 'lat and yaw must both be corrected'
-    assert _MV.count('+ tool_dv') == 2, 'both depth branches must be corrected'
+    # The error lives in ONE helper (`_axis_ctrl`, Block 1C) shared by the
+    # control law and the post-stop re-measurement; the tool offset must be
+    # handed to it on every centring axis.
+    assert _MV.count("_axis_ctrl(ex_now, offsets.get('lat', 0.0), tool_du,") == 1
+    assert _MV.count("_axis_ctrl(ex_now, offsets.get('yaw', 0.0), tool_du,") == 1
+    assert _MV.count("_axis_ctrl(sample.ey, offsets.get('depth', 0.0), tool_dv,") == 2, \
+        'both depth branches must be corrected'
+    assert 'return e_norm - (offset_px + tool_px) / half' in _MV
 
 
 def test_it_is_resolved_PER_TICK_because_the_range_moves():
     """A constant offset computed once would be right at one range only -- and
     the correction is largest exactly where a mission spends its final second."""
     i = _MV.index('tool_du = tool_dv = 0.0')
-    j = _MV.index("ctrl = ex_now - (offsets.get('lat', 0.0) + tool_du)")
+    j = _MV.index("_axis_ctrl(ex_now, offsets.get('lat', 0.0), tool_du,")
     assert i < j, 'the offset is resolved after it is used'
     # inside the loop body: same indent as the axis blocks that follow it
     line = _MV[_MV.rindex('\n', 0, i) + 1:i]

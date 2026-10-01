@@ -54,7 +54,7 @@ from .model_context import ClassRef
 
 # Outcome codes are the single source of truth in the control engine.
 from mongla_control.motion_vision import (
-    ALIGNED, LOST, TIMEOUT, NO_CAMERA, ABORTED,
+    ALIGNED, LOST, TIMEOUT, NO_CAMERA, ABORTED, DRIFTED,
 )
 
 if TYPE_CHECKING:
@@ -67,6 +67,7 @@ _CODE_NAME = {
     TIMEOUT:   'TIMEOUT',
     NO_CAMERA: 'NO_CAMERA',
     ABORTED:   'ABORTED',
+    DRIFTED:   'DRIFTED',
 }
 
 
@@ -188,6 +189,7 @@ class _VisionDSL:
               fwd: Optional[float] = None,
               fwd_mode: str = 'area',
               settle: Optional[float] = None,
+              verify: bool = True,
               depth_step: Optional[float] = None,
               fire_pass: bool = False,
               fire_max_tilt: float = 0.0,
@@ -383,6 +385,7 @@ class _VisionDSL:
                 fwd_fill=float(fwd) if fwd is not None else 0.0,
                 mode=str(fwd_mode),
                 settle_px=float(settle) if settle is not None else 0.0,
+                verify_off=(not verify),
                 depth_step=float(depth_step) if depth_step is not None else 0.0,
                 fire_pass_enabled=bool(fire_pass),
                 fire_max_tilt_deg=float(fire_max_tilt),
@@ -558,6 +561,18 @@ class _VisionDSL:
                     f"[VIS  ] {verb} {target!r}: NO_CAMERA -- pipeline not up "
                     f"(camera={camera!r}); mission continues")
                 return _mk(False, 'NO_CAMERA')
+
+            # ⛔ DRIFTED: centred while driving, off once stopped and re-measured
+            # (Block 1C). Not a success, and not a reason to give up: re-converge
+            # with the budget that is left, and be re-checked again -- the
+            # perceive -> move -> re-measure loop BumblebeeAS's `cluster_goto`
+            # runs. Bounded by the same deadline as everything else here.
+            if code == DRIFTED:
+                if _time.monotonic() >= deadline:
+                    return _mk(False, 'DRIFTED')
+                self.log.info(f"[VIS  ] {verb} {target!r}: drifted once stopped "
+                              f"-- re-aligning ({pos})")
+                continue
 
             if code == LOST and fallback is not None:
                 if _time.monotonic() >= deadline:

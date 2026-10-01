@@ -269,6 +269,9 @@ COMMANDS = {
                     'settle_px>0 = SETTLE GATE: only declare aligned once the hull is '
                     'in-band AND barely moving (|Δerr|<=settle_px) so it ends settled on '
                     'target like vision_move (not mid-pass through the band); 0=off. '
+                    'VERIFY (default on; verify_off=true skips it): after braking, align '
+                    're-measures on align_stable_frames NEW frames and returns DRIFTED if '
+                    'the target is out of the err_px band once stopped, LOST if not re-seen. '
                     'depth_step = per-update depth-setpoint resolution (m, 0.02..0.10; 0='
                     'default 0.02): depth moves SLOWLY in these steps + freezes in the '
                     'deadband so ArduSub settles (no z-wobble). fire_pass_enabled = fire the '
@@ -296,6 +299,7 @@ COMMANDS = {
                      'lost_grace_s', 'align_stable_frames',
                      'lock_target', 'ctrl_conf', 'range_gain_floor', 'ki_lat',
                      'coast_s', 'lock_s', 'fwd_fill', 'mode', 'kp_forward', 'settle_px',
+                     'verify_off',
                      'depth_step', 'fire_pass_enabled', 'hold_heading',
                      'surge_sign', 'max_depth_m', 'depth_ceiling_m', 'fire_gap',
                      'standoff_max_tilt_deg', 'tool'],
@@ -312,7 +316,7 @@ COMMANDS = {
                      'lock_target': False, 'ctrl_conf': 0.0,
                      'range_gain_floor': 1.0, 'ki_lat': 0.0, 'coast_s': 0.8, 'lock_s': 1.0,   # a SWITCH: >0 enables the ladder
                      'fwd_fill': 0.0, 'mode': 'area', 'kp_forward': 200.0,
-                     'settle_px': 0.0, 'depth_step': 0.0,
+                     'settle_px': 0.0, 'verify_off': False, 'depth_step': 0.0,
                      'fire_pass_enabled': False, 'hold_heading': False,
                      'surge_sign': 0.0, 'max_depth_m': 0.0,
                      'depth_ceiling_m': 0.0, 'fire_gap': 0.0,
@@ -398,7 +402,7 @@ STRING_FIELDS = ('target_name', 'camera', 'target_class', 'axes', 'mode',
 
 # Field names that carry a bool. rosidl init these to False.
 BOOL_FIELDS = ('maintain_on', 'hold_through_loss', 'brake_off', 'lock_target',
-               'fire_pass_enabled', 'hold_heading')
+               'fire_pass_enabled', 'hold_heading', 'verify_off')
 
 
 def fields_for(cmd, request, *, runtime_defaults=None):

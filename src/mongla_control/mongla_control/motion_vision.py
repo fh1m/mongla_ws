@@ -59,9 +59,10 @@ LOST      = 1   # target gone past lost_grace_s (DSL runs fallback)
 TIMEOUT   = 2   # duration elapsed without success
 NO_CAMERA = 3   # camera_info never seen -- pipeline not up
 ABORTED   = 4   # cooperative abort (goal cancelled)
+DRIFTED   = 5   # align: centred while driving, OUT of band once stopped and re-measured
 
 _CODE_NAME = {ALIGNED: 'OK', LOST: 'LOST', TIMEOUT: 'TIMEOUT',
-              NO_CAMERA: 'NO_CAMERA', ABORTED: 'ABORTED'}
+              NO_CAMERA: 'NO_CAMERA', ABORTED: 'ABORTED', DRIFTED: 'DRIFTED'}
 
 
 # ---- Tunable defaults (P-gains live as ROS params; these are the floor) #
@@ -332,6 +333,49 @@ _FRESH_ZERO_K = 8.0    # ...plus this many -> zero
 # or above loop rate (age_s ~ 0 every tick) makes every tick a new frame, so
 # behaviour is unchanged there (and the age_s=0 test doubles stay valid).
 _FRAME_EPS_S = 0.005   # min monotonic gap to count a sample as a new detection
+
+
+# ⛔ VERIFY AGAINST A RE-MEASURED POSE, NOT THE CONTROLLER'S OWN ERROR (plan
+# Block 1C; BumblebeeAS's `cluster_goto` does exactly this and gates at 2.5 cm /
+# 1 deg). align declared ALIGNED on the last in-band tick BEFORE it braked, and
+# reported that pre-brake frame's offset as where it ended. The brake, the
+# neutral and the coast that follow were never looked at. So after the hull is
+# stopped, align now waits for `align_stable_frames` NEW detections captured
+# AFTER the brake, and asks the controller's own question of them again.
+#
+# THE BAR IS THE CONTROLLER'S OWN BAND (`eff_err`), on purpose: this checks that
+# the controller's belief survives the stop, so it must not move the goalposts.
+# Bumblebee's 2.5 cm / 1 deg is theirs; ours is not measured yet -- it needs
+# water, and until then no new number is invented here.
+#
+# 1.5 s is how long to wait for those frames: three frames at a 5 Hz detector is
+# 0.6 s, so this is 2.5x margin at the slowest rate the lock ladder is sized
+# for. A target not re-seen in that time is LOST -- not ALIGNED.
+VERIFY_TIMEOUT_S = 1.5
+
+
+def _axis_ctrl(e_norm: float, offset_px: float, tool_px: float,
+               half: float) -> float:
+    """Signed normalised error of one centring axis from its goal.
+
+    ONE copy, used by the control law and by the post-brake re-measurement, so
+    the verification cannot quietly ask a different question.
+    """
+    return e_norm - (offset_px + tool_px) / half
+
+
+def _centring_error_px(sample, *, axes, offsets, tool_du, tool_dv,
+                       half_w, half_h, depth_axis: bool) -> float:
+    """Worst centring error (px) over the active lat / yaw / depth axes."""
+    worst = 0.0
+    for ax in ('lat', 'yaw'):
+        if ax in axes:
+            worst = max(worst, abs(_axis_ctrl(sample.ex, offsets.get(ax, 0.0),
+                                              tool_du, half_w)) * half_w)
+    if depth_axis:
+        worst = max(worst, abs(_axis_ctrl(sample.ey, offsets.get('depth', 0.0),
+                                          tool_dv, half_h)) * half_h)
+    return worst
 
 # ...AND the counter must also span real TIME, which counting frames alone
 # stopped guaranteeing when perception got fast.
@@ -847,6 +891,7 @@ def align_loop(*,
                fwd_mode: str = 'area',
                kp_forward: float = KP_FORWARD_DEFAULT,
                settle_px: float = SETTLE_PX_DEFAULT,
+               verify: bool = True,
                depth_step: float = _MAX_DEPTH_NUDGE,
                downward: bool = False,
                surge_sign: int = +1,
@@ -1303,7 +1348,7 @@ def align_loop(*,
                                            float(_dr[0]), float(_dr[1]), half_w)
 
             if 'lat' in axes:
-                ctrl = ex_now - (offsets.get('lat', 0.0) + tool_du) / half_w
+                ctrl = _axis_ctrl(ex_now, offsets.get('lat', 0.0), tool_du, half_w)
                 epx  = abs(ctrl) * half_w
                 worst = max(worst, epx)
                 p_lat = ctrl * kp_lat * rgain
@@ -1320,7 +1365,7 @@ def align_loop(*,
                 in_band.append(epx <= eff_err)
 
             if 'yaw' in axes:
-                ctrl = ex_now - (offsets.get('yaw', 0.0) + tool_du) / half_w
+                ctrl = _axis_ctrl(ex_now, offsets.get('yaw', 0.0), tool_du, half_w)
                 epx  = abs(ctrl) * half_w
                 worst = max(worst, epx)
                 # Polarity: un-negated, same as the lateral axis (ex > 0 ->
@@ -1366,14 +1411,14 @@ def align_loop(*,
                 # hull drives forward when the bin is ahead and BACK when behind --
                 # the one-sided fwd/fill law can't back up and would never centre.
                 # surge_sign flips polarity for the physical mount (verify disarmed).
-                ctrl = sample.ey - (offsets.get('depth', 0.0) + tool_dv) / half_h
+                ctrl = _axis_ctrl(sample.ey, offsets.get('depth', 0.0), tool_dv, half_h)
                 epx  = abs(ctrl) * half_h
                 worst = max(worst, epx)
                 p_surge = ctrl * kp_lat * rgain
                 fwd_pct = _clamp(p_surge, -g_fwd, g_fwd) * surge_sign
                 in_band.append(epx <= eff_err)
             elif use_vdepth:
-                ctrl = sample.ey - (offsets.get('depth', 0.0) + tool_dv) / half_h
+                ctrl = _axis_ctrl(sample.ey, offsets.get('depth', 0.0), tool_dv, half_h)
                 epx  = abs(ctrl) * half_h
                 worst = max(worst, epx)
                 # Carry the depth error into the 5 Hz setpoint step below (do NOT
@@ -1650,8 +1695,66 @@ def align_loop(*,
                     reason = (f"held {hold_s:.1f}s ({worst:.0f}/{eff_err:.0f}px)"
                               if hold_s > 0.0
                               else f"aligned ({worst:.0f}/{eff_err:.0f}px)")
-                    return Outcome(ALIGNED, reason, worst, last_fill, elapsed,
-                                   end_x_px, end_y_px)
+                    if not verify:
+                        return Outcome(ALIGNED, reason, worst, last_fill, elapsed,
+                                       end_x_px, end_y_px)
+                    # ── VERIFY: re-measure once stopped (see VERIFY_TIMEOUT_S) ──
+                    t_stop = time.monotonic()
+                    seen, v_worst, last_at = 0, 0.0, t_stop
+                    while time.monotonic() - t_stop < VERIFY_TIMEOUT_S:
+                        if abort_fn and abort_fn():
+                            return Outcome(ABORTED, 'aborted while verifying',
+                                           worst, last_fill,
+                                           time.monotonic() - started, end_x_px, end_y_px)
+                        if stream_depth:
+                            pixhawk.set_target_depth(depth_setpoint)
+                        _tick(vision_state, pixhawk)
+                        near = ((locked_ex, locked_ey)
+                                if locked_ex is not None else None)
+                        vs = vision_state.bbox_error(
+                            target_class, near=near, gate_norm=gate_norm,
+                            min_score=ctrl_conf, locked_id=locked_id,
+                            coast_s=0.0, lock_s=0.0)
+                        if not _present(vs) or vs.coasted:
+                            continue
+                        at = time.monotonic() - vs.age_s
+                        # Captured AFTER the stop, and a frame not already counted.
+                        if at <= last_at + _FRAME_EPS_S:
+                            continue
+                        last_at = at
+                        seen += 1
+                        tdu = tdv = 0.0
+                        if tool_offset_fn is not None:
+                            try:
+                                _to = tool_offset_fn()
+                            except Exception:                   # noqa: BLE001
+                                _to = None
+                            if _to is not None:
+                                tdu, tdv = float(_to[0]), float(_to[1])
+                        v_worst = max(v_worst, _centring_error_px(
+                            vs, axes=axes, offsets=offsets, tool_du=tdu,
+                            tool_dv=tdv, half_w=half_w, half_h=half_h,
+                            depth_axis=(use_surge or use_vdepth)))
+                        end_x_px, end_y_px = vs.ex * half_w, vs.ey * half_h
+                        if seen >= align_stable_frames:
+                            break
+                    elapsed = time.monotonic() - started
+                    if seen < align_stable_frames:
+                        return Outcome(
+                            LOST, f'{reason}; then NOT re-seen once stopped '
+                                  f'({seen}/{align_stable_frames} frames in '
+                                  f'{VERIFY_TIMEOUT_S:.1f}s) -- unverified',
+                            worst, last_fill, elapsed, end_x_px, end_y_px)
+                    if v_worst > eff_err:
+                        return Outcome(
+                            DRIFTED, f'centred while driving ({worst:.0f}px), '
+                                     f'{v_worst:.0f}px off once stopped -- out of '
+                                     f'the {eff_err:.0f}px band on {seen} fresh '
+                                     f'frames',
+                            v_worst, last_fill, elapsed, end_x_px, end_y_px)
+                    return Outcome(ALIGNED, f'{reason}; verified {v_worst:.0f}px '
+                                            f'on {seen} frames after stopping',
+                                   v_worst, last_fill, elapsed, end_x_px, end_y_px)
                 # else: inside the hold window -- fall through to the loop tail
                 # and keep correcting (the per-tick _drive above already ran).
                 # ponytail: aligned_at is set ONCE and never reset (unlike

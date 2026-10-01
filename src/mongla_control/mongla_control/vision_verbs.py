@@ -265,7 +265,8 @@ class VisionVerbs:
                      standoff_max_tilt_deg=0.0,
                      tool='',
                      fwd_fill=0.0, mode='area', kp_forward=0.0,
-                     settle_px=0.0, depth_step=0.0, fire_pass_enabled=False,
+                     settle_px=0.0, verify_off=False, depth_step=0.0,
+                     fire_pass_enabled=False,
                      hold_heading=False, surge_sign=0.0, max_depth_m=0.0,
                      depth_ceiling_m=0.0, fire_gap=0.0,
                      fire_max_tilt_deg=0.0):
@@ -448,6 +449,7 @@ class VisionVerbs:
                         fwd_mode=str(mode) or 'area',
                         kp_forward=float(kp_forward) or KP_FORWARD_DEFAULT,
                         settle_px=float(settle_px),
+                        verify=not bool(verify_off),
                         fire_max_tilt_deg=float(fire_max_tilt_deg),
                         # Bound to THIS camera's state: the pose is per-camera
                         # and a downward align must not be gated on what the

@@ -713,3 +713,36 @@ def test_wait_detector_warm_false_when_cold():
     fake._DETECTOR_FRESH_S  = 1.0
     fake._det_cache = {}                                    # never produced -> cold
     assert MonglaMission._wait_detector_warm(fake, 'downward') is False
+
+
+# --------------------------------------------------------------------------- #
+#  Block 1C: DRIFTED re-converges; it is never reported as success             #
+# --------------------------------------------------------------------------- #
+from mongla_control.motion_vision import DRIFTED   # noqa: E402
+
+
+def test_drifted_re_aligns_and_then_succeeds():
+    """Centred while driving, off once stopped: re-converge with the budget
+    left, as `cluster_goto` does. Falsified if DRIFTED returns ok=True."""
+    send = MagicMock(side_effect=[_result(DRIFTED, 96.0), _result(ALIGNED, 6.0)])
+    res = _dsl(send).align('gate', yaw=0, lat=0, duration=10.0)
+    assert res.ok is True and send.call_count == 2
+
+
+def test_drifted_with_no_time_left_is_a_failure_named_drifted():
+    import time as _t
+
+    def slow(*_a, **_k):
+        _t.sleep(0.15)                       # the align itself spends the budget
+        return _result(DRIFTED, 96.0)
+    res = _dsl(MagicMock(side_effect=slow)).align('gate', yaw=0, lat=0,
+                                                  duration=0.1)
+    assert res.ok is False and res.reason == 'DRIFTED'
+
+
+def test_verify_reaches_the_wire_and_defaults_ON():
+    send = MagicMock(return_value=_result(ALIGNED))
+    _dsl(send).align('gate', yaw=0, lat=0)
+    assert send.call_args.kwargs.get('verify_off') is False
+    _dsl(send).align('gate', yaw=0, lat=0, verify=False)
+    assert send.call_args.kwargs.get('verify_off') is True
