@@ -477,6 +477,7 @@ class TestRectifyDisabledFallback:
 
         n = _make(calibration=cal, medium='water', refractive_rectify=False,
                   pool_depth_m=4.0)
+        n._load_intrinsics(640, 360)       # the first frame (issue #32)
         try:
             assert n._refract is None, 'rectification must be off in this arm'
             # The focal length it MEASURES with is the one it UNDISTORTS with.
@@ -496,6 +497,7 @@ class TestRectifyDisabledFallback:
         is a 25 % axis mismatch -- the bug this pairing exists to prevent."""
         n = _make(calibration=_cal_path(), medium='water',
                   refractive_rectify=True, pool_depth_m=4.0)
+        n._load_intrinsics(640, 360)       # the first frame (issue #32)
         try:
             assert n._refract is not None
             assert n._f_px == pytest.approx(n._refract.f_ref)
@@ -829,3 +831,44 @@ class TestFloorHeightIsPublished:
 
     def test_no_tiles_publishes_nothing_rather_than_a_stale_height(self):
         assert self._read(None) == []
+
+
+
+class TestIntrinsicsFollowTheFrames:
+    """Issue #32: the calibration is scaled to the frames that ARRIVE.
+
+    It was scaled to a hard-coded 640x360, so at 1280x720 f was half its true
+    value and every velocity read 2x -- "a clean 2x error nobody sees".
+    """
+
+    def test_a_1280x720_stream_gets_twice_the_640x360_focal(self):
+        cal = _cal_path()
+        small = _make(calibration=cal, medium='air', pool_depth_m=4.0)
+        big = _make(calibration=cal, medium='air', pool_depth_m=4.0)
+        try:
+            assert small._admit_frame_size((640, 360))
+            assert big._admit_frame_size((1280, 720))
+            assert big._f_px == pytest.approx(2.0 * small._f_px, rel=1e-6)
+            assert big._intr.cx == pytest.approx(2.0 * small._intr.cx, rel=1e-6)
+        finally:
+            small.destroy_node()
+            big.destroy_node()
+
+    def test_a_frame_of_another_size_mid_run_is_REFUSED(self):
+        n = _make(calibration=_cal_path(), medium='air', pool_depth_m=4.0)
+        try:
+            assert n._admit_frame_size((640, 360))
+            f0 = n._f_px
+            assert not n._admit_frame_size((1280, 720))
+            assert n._n_wrong_size == 1
+            assert n._f_px == f0, 'rescaled mid-run -- the anchor is in old pixels'
+            assert n._admit_frame_size((640, 360))
+        finally:
+            n.destroy_node()
+
+    def test_the_image_callback_asks_before_anything_else(self):
+        """No capability unreachable: `_on_image` must gate on the size."""
+        import inspect
+        from mongla_vision.flow.flow_node import FlowVelocityNode
+        src = inspect.getsource(FlowVelocityNode._on_image)
+        assert src.index('_admit_frame_size(') < src.index('_slot')
