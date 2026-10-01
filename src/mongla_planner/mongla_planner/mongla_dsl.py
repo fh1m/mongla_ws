@@ -1223,6 +1223,29 @@ class MonglaMission:
                 # A task that cannot be finished must not cost the run. The
                 # deadline already cancelled the goal in flight; keep swimming.
                 results.append((name, 'abandoned'))
+            except (MoveFailed, MoveRejected) as exc:
+                # ⛔ ISSUE #16: ONE FAILED VERB USED TO END THE RUN. Only
+                # TaskAbandoned was caught, so a stall or one busy reply inside
+                # a step left run_plan, the runner disarmed, and the
+                # higher-value steps after it never ran -- while the vision
+                # verbs shrugged off the very same fault. Same policy now: a
+                # step's failure costs that step.
+                #
+                # UNLESS THE VEHICLE CANNOT TAKE A STOP. Whether the failure was
+                # one task's or the vehicle's is MEASURED, not read from the
+                # error text: brake, and if the stop itself is refused or times
+                # out, the link or the vehicle is gone -- re-raise and let the
+                # runner's shutdown take over. Ctrl-C and MissionRefused are not
+                # caught here.
+                try:
+                    self.stop()
+                except (MoveFailed, MoveRejected) as stop_exc:
+                    self.log.error(f'[PLAN ] {name}: {exc} -- and the vehicle '
+                                   f'refused a stop ({stop_exc}): ending the run')
+                    raise exc from stop_exc
+                self.log.warning(f'[PLAN ] {name} FAILED ({exc}); braked, '
+                                 f'moving on to the next step')
+                results.append((name, f'failed: {exc}'))
 
         done = [n for n, o in results if o in ('full', 'fallback')]
         self.log.info(f'[PLAN ] {len(done)}/{len(steps)} steps carried out: '
