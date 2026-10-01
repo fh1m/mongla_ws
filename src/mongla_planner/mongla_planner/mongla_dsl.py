@@ -2373,17 +2373,23 @@ class MonglaMission:
                 TargetPose, topic,
                 lambda msg, c=camera: self._fused_pose.__setitem__(c, msg), 10)
             self.log.info(f'[ANCH ] listening on {topic}')
+        from mongla_localization.pose_cluster import Fused
         deadline = _time.monotonic() + float(timeout)
         while _time.monotonic() < deadline:
             rclpy.spin_once(self.client.node, timeout_sec=0.05)
             msg = self._fused_pose.get(camera)
             if msg is not None and msg.ok:
-                from mongla_localization.pose_cluster import Fused
                 return Fused(decided=True, yaw_deg=float(msg.yaw_deg),
                              range_m=float(msg.range_m),
                              support=int(msg.n_points),
                              spread_deg=float(msg.yaw_spread_deg),
                              rule=str(msg.reason))
+        # ⛔ A REFUSAL IS AN ANSWER. The fuser publishes ok=False WITH the
+        # reason -- for a mirror pair, both candidate yaws (issue #55). Timing
+        # out as "no fused pose" would throw that away; hand it back instead.
+        msg = self._fused_pose.get(camera)
+        if msg is not None:
+            return Fused(decided=False, reason=str(msg.reason))
         return None
 
     def camera_available(self, name: str | None = None) -> bool:

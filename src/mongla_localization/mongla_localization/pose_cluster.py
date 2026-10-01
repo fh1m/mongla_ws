@@ -68,17 +68,47 @@ class PoseSample:
     reproj_px: float = 0.0
     n_points: int = 0
     vehicle_yaw_deg: Optional[float] = None
+    # The OTHER planar-PnP branch for the same frame, and the camera-frame
+    # bearing to the target (+ = right of the optical axis). With both, and
+    # the hull's heading, every frame votes for BOTH hypotheses and the
+    # viewpoint test can tell them apart (see `resolve_mirror`). None = the
+    # producer did not supply them, never "zero".
+    alt_yaw_deg: Optional[float] = None
+    bearing_deg: Optional[float] = None
 
 
-# The hull must actually TURN before ego-motion can separate the branches. A
-# station-keeping vehicle gives dpsi ~ 0, the regression divides by nothing and
-# returns a confident slope from noise -- the exact failure this fuser exists to
-# refuse. Degrees of heading excursion required inside the window.
-MIN_YAW_EXCURSION_DEG = 4.0
+# ⛔ THE RULE THAT DECIDES A MIRROR PAIR (issue #55). A planar target's two PnP
+# branches are reflections about the VIEWING RAY: for yaw, the alternate sits
+# at about `2*beta - theta`, beta the bearing to the target and theta its true
+# normal. Expressed in the WORLD (pose yaw + hull yaw):
+#
+#     true branch    world yaw = theta                 -> slope 0 vs bearing
+#     mirror branch  world yaw = 2*beta_world - theta  -> slope 2 vs bearing
+#
+# measured by projecting a fixed target through a moving camera and solving
+# (`test_pose_mirror_truth.py`): 0.00 and +2.00 exactly, in EITHER translation
+# direction, surviving 10 deg of pitch and 0.5 px noise (0.14 / 1.86).
+#
+# ⛔ ONLY A CHANGE OF VIEWPOINT SEPARATES THEM. A hull that only ROTATES keeps
+# beta_world fixed, so both branches are constant in the world and both fit
+# every frame. That pair is unresolvable from this target alone, and the fuser
+# says so -- it does not count, and it does not guess.
+RULE_VIEWPOINT = 'viewpoint'
+MIRROR_SLOPE = 2.0
+# Each slope must sit within this of 0 or of 2 ...
+SLOPE_BAND = 0.5
+# ... and BOTH slopes must be pinned this tightly (regression standard error).
+# MEASURED, 200 seeds per cell, 10 frames, target at 3 m, lateral 0.1-0.6 m,
+# corner noise 0.5-3.0 px: at 0.25 the rule made ZERO wrong decisions in all
+# 16 000 trials, deciding 200/200 at 0.3 m / 0.5 px and 17/200 at 0.6 m / 3 px.
+# A fixed bearing-excursion floor instead (3.8 deg) still erred 5 times in 200
+# at 2 px: the noise, not the excursion, is what has to be beaten, and the
+# standard error measures exactly that. 0.25 puts 0 and 2 eight sigma apart.
+SLOPE_SE_MAX = 0.25
 
-# The true branch's slope is -1 and the false branch's is +1, so anything
-# inside this band of zero is not evidence either way.
-SLOPE_DEADBAND = 0.25
+# Legacy path only (one branch per frame): a rival cluster this large blocks a
+# counted decision. See `fuse`.
+LEGACY_RIVAL_MIN = 2
 
 
 @dataclass(frozen=True)
@@ -91,8 +121,11 @@ class Fused:
     spread_deg: float = float('nan')   # MAD of the winning cluster
     rival: int = 0              # frames in the NEXT largest cluster
     rule: str = ''              # 'egomotion' | 'support' -- WHICH test decided
-    slope: float = float('nan') # d(pose yaw)/d(hull yaw) of the winner
+    slope: float = float('nan') # d(world yaw)/d(world bearing) of the winner
     reason: str = ''
+    # When two hypotheses both fit, BOTH, camera-relative now -- so the
+    # disagreement reaches the wire instead of being resolved by a vote.
+    candidates: tuple = ()
 
 
 def _wrap180(deg: float) -> float:
@@ -132,55 +165,67 @@ def _circular_median(angles: list[float]) -> float:
 
 
 
-def slope_of(members: list) -> tuple:
-    """d(pose yaw) / d(hull yaw) over a cluster, and the hull's excursion.
-
-    ⛔ THE DISCRIMINANT, AND WHY IT BEATS COUNTING. The two planar-PnP branches
-    are mirror images about the viewing ray, and each frame's solver mirrors
-    afresh. So when the hull yaws by dpsi, the TRUE branch's pose yaw moves by
-    -dpsi (the board is fixed in the world; turning the camera sweeps it the
-    other way) while the FALSE branch, being the mirror, moves by +dpsi.
-
-        true  branch:  d(pose yaw) / d(hull yaw) = -1
-        false branch:  d(pose yaw) / d(hull yaw) = +1
-
-    That is unit-free, needs no calibration, and does not care which branch the
-    detector happens to report more often -- which is the case that defeats
-    "take the largest cluster". A biased corner detector, or a few frames from a
-    slightly different viewpoint, can hand the majority to the wrong branch; it
-    cannot make that branch move the right way under the hull's own rotation.
-
-    The literature resolves this ambiguity with multi-view rotation averaging
-    (Jin et al., arXiv:1909.11888) or by locating the second minimum
-    analytically (Schweighofer & Pinz, TPAMI 2006). Both are about the geometry
-    of the target. This uses something we already have and they did not assume:
-    a heading source good to under 0.01 deg/min, on a hull that is turning
-    anyway.
-
-    Returns `(slope, excursion_deg)`. `slope` is NaN when the hull did not turn
-    enough for the question to mean anything -- a station-keeping vehicle gives
-    dpsi ~ 0, and a regression on that returns a confident number built from
-    noise.
-    """
-    pairs = [(m.vehicle_yaw_deg, m.yaw_deg) for m in members
-             if m.vehicle_yaw_deg is not None]
-    if len(pairs) < 3:
-        return float('nan'), 0.0
-    # Unwrap both series about their first sample so a pass through +/-180 does
-    # not inject a 360 deg step into a regression that reads slope.
-    psi0, th0 = pairs[0]
-    xs = [_wrap180(p - psi0) for p, _ in pairs]
-    ys = [_wrap180(t - th0) for _, t in pairs]
-    excursion = max(xs) - min(xs)
-    if excursion < MIN_YAW_EXCURSION_DEG:
-        return float('nan'), excursion
-    mx = sum(xs) / len(xs)
-    my = sum(ys) / len(ys)
+def _fit(xs: list, ys: list) -> tuple:
+    """Least-squares slope and its standard error. (nan, inf) if undefined."""
+    n = len(xs)
+    if n < 3:
+        return float('nan'), float('inf')
+    mx, my = sum(xs) / n, sum(ys) / n
     sxx = sum((x - mx) ** 2 for x in xs)
-    if sxx <= 1e-9:
-        return float('nan'), excursion
-    sxy = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
-    return sxy / sxx, excursion
+    if sxx <= 1e-12:
+        return float('nan'), float('inf')
+    slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sxx
+    icpt = my - slope * mx
+    rss = sum((y - (icpt + slope * x)) ** 2 for x, y in zip(xs, ys))
+    return slope, math.sqrt(rss / (n - 2) / sxx)
+
+
+def resolve_mirror(samples: list) -> dict:
+    """Which of each frame's two branches is the target, judged by geometry.
+
+    Every frame contributes BOTH branches, so the detector's preference for one
+    -- the thing a biased corner detector corrupts -- casts no vote at all. The
+    branches are tracked across frames by world-yaw continuity, and each track
+    is regressed against the world bearing to the target: the true one is flat
+    (slope 0), the mirror swings at slope 2 (see `MIRROR_SLOPE`).
+
+    Returns a dict with `resolved`, the two tracks' world yaws, slopes and
+    standard errors, and the bearing excursion that bought them.
+    """
+    rows = [(s.vehicle_yaw_deg + s.bearing_deg,
+             s.vehicle_yaw_deg + s.yaw_deg,
+             s.vehicle_yaw_deg + s.alt_yaw_deg) for s in samples]
+    b0 = rows[0][0]
+    A, B = [], []
+    for wb, w1, w2 in rows:
+        x = _wrap180(wb - b0)
+        if not A:
+            A.append((x, w1)); B.append((x, w2))
+            continue
+        keep = _angdiff(w1, A[-1][1]) + _angdiff(w2, B[-1][1])
+        swap = _angdiff(w2, A[-1][1]) + _angdiff(w1, B[-1][1])
+        if keep <= swap:
+            A.append((x, w1)); B.append((x, w2))
+        else:
+            A.append((x, w2)); B.append((x, w1))
+
+    def unwrap(track):
+        ref = track[0][1]
+        return [x for x, _ in track], [_wrap180(y - ref) + ref for _, y in track]
+    xa, ya = unwrap(A)
+    xb, yb = unwrap(B)
+    sa, ea = _fit(xa, ya)
+    sb, eb = _fit(xb, yb)
+    out = dict(resolved=False, track_a=ya, track_b=yb, slope_a=sa, slope_b=sb,
+               se_a=ea, se_b=eb, excursion=(max(xa) - min(xa)) if xa else 0.0,
+               true='')
+    if not (ea <= SLOPE_SE_MAX and eb <= SLOPE_SE_MAX):
+        return out
+    a_true = abs(sa) < SLOPE_BAND and abs(sb - MIRROR_SLOPE) < SLOPE_BAND
+    b_true = abs(sb) < SLOPE_BAND and abs(sa - MIRROR_SLOPE) < SLOPE_BAND
+    if a_true != b_true:
+        out.update(resolved=True, true='a' if a_true else 'b')
+    return out
 
 
 class PoseCluster:
@@ -214,68 +259,92 @@ class PoseCluster:
         if not live:
             return Fused(False, reason='no poses in the window')
 
-        # Gate first, cluster second. A frame the solver could not distinguish
-        # (`ambiguity` -> 1) contributes a coin flip to BOTH branches, so it
-        # cannot break a tie -- it can only make one look like a majority.
-        kept = [s for s in live
-                if s.ambiguity <= self.max_ambiguity
-                and (s.reproj_px <= self.max_reproj_px or s.reproj_px <= 0.0)]
+        # Reprojection gates every frame: a pose that does not explain its own
+        # pixels is not evidence for either branch.
+        fitted = [s for s in live
+                  if s.reproj_px <= self.max_reproj_px or s.reproj_px <= 0.0]
+
+        # ⭐ BOTH BRANCHES, WHEN THE PRODUCER SENT THEM. Then the solver's own
+        # preference never votes, and the viewpoint decides (`resolve_mirror`).
+        paired = [s for s in fitted
+                  if None not in (s.alt_yaw_deg, s.bearing_deg, s.vehicle_yaw_deg)
+                  and all(math.isfinite(v) for v in
+                          (s.yaw_deg, s.alt_yaw_deg, s.bearing_deg,
+                           s.vehicle_yaw_deg))]
+        if len(paired) >= self.min_poses:
+            # The answer is for NOW: the newest heading in the window,
+            # which may belong to a frame that carried only one branch.
+            psi_now = next(s.vehicle_yaw_deg for s in reversed(live)
+                           if s.vehicle_yaw_deg is not None)
+            return self._fuse_paired(paired, psi_now)
+
+        # LEGACY: one branch per frame, no viewpoint data. A frame the solver
+        # could not distinguish (`ambiguity` -> 1) is a coin flip and is dropped.
+        kept = [s for s in fitted if s.ambiguity <= self.max_ambiguity]
         if not kept:
             return Fused(False, considered=0,
                          reason=f'all {len(live)} poses failed the '
                                 f'ambiguity/reprojection gates')
-
-        clusters = self._cluster([s.yaw_deg for s in kept])
-        groups = sorted(clusters, key=len, reverse=True)
-
-        # ⛔ COUNTING IS THE FALLBACK, NOT THE RULE. Ask first how each cluster
-        # MOVES under the hull's own rotation: the true branch slopes -1
-        # against hull yaw and the mirrored one +1, whichever the detector
-        # reported more often. Counting cannot see that, so a biased corner
-        # detector hands the majority -- and the answer -- to the wrong branch.
-        rule = 'support'
-        slope = float('nan')
-        if len(groups) > 1:
-            scored = []
-            for g in groups:
-                sl, exc = slope_of([kept[i] for i in g])
-                if sl == sl and abs(sl) > SLOPE_DEADBAND:   # not NaN, not flat
-                    scored.append((sl, g))
-            # Only decide this way when the branches actually DISAGREE about
-            # direction. Two clusters sloping the same way are not a mirror
-            # pair; they are two different things, and the mirror test says
-            # nothing about which to believe.
-            if len(scored) >= 2 and min(sl for sl, _ in scored) < 0 < max(
-                    sl for sl, _ in scored):
-                sl, g = min(scored, key=lambda sg: sg[0])   # most negative
-                groups = [g] + [h for h in groups if h is not g]
-                rule, slope = 'egomotion', sl
-
+        groups = sorted(self._cluster([s.yaw_deg for s in kept]),
+                        key=len, reverse=True)
         best = groups[0]
         rival = len(groups[1]) if len(groups) > 1 else 0
         support = len(best)
         if support < self.min_poses:
             return Fused(False, considered=len(kept), support=support,
-                         rival=rival, rule=rule, slope=slope,
-                         reason=f'largest cluster has {support} poses, '
-                                f'needs {self.min_poses}')
-
+                         rival=rival, reason=f'largest cluster has {support} '
+                                             f'poses, needs {self.min_poses}')
+        # ⛔ A SECOND SUPPORTED CLUSTER IS A MIRROR PAIR, and a majority does
+        # not resolve it (#55: a 7/3 wrong-branch majority was accepted and
+        # anchored a heading 54 deg against a true 9). Without the second
+        # branch and the bearing there is no geometric test, so: refuse.
+        # Two frames agreeing ELSEWHERE are a second hypothesis; one is a stray
+        # detection. #55's own case was a 7/3 split, so a rival this small
+        # must already block -- `min_poses` (4) let it through.
+        if rival >= LEGACY_RIVAL_MIN:
+            rv = _circular_median([kept[i].yaw_deg for i in groups[1]])
+            bv = _circular_median([kept[i].yaw_deg for i in best])
+            return Fused(False, considered=len(kept), support=support,
+                         rival=rival, candidates=(bv, rv),
+                         reason=f'two branches, {bv:+.1f} deg ({support}) and '
+                                f'{rv:+.1f} deg ({rival}); a majority does not '
+                                f'resolve a mirror pair and this producer sent '
+                                f'no second branch to test')
         members = [kept[i] for i in best]
         yaws = [m.yaw_deg for m in members]
         centre = _circular_median(yaws)
-        spread = _median([_angdiff(y, centre) for y in yaws])
         ranges = [m.range_m for m in members if m.range_m > 0.0]
+        return Fused(True, yaw_deg=centre,
+                     range_m=_median(ranges) if ranges else float('nan'),
+                     support=support, considered=len(kept),
+                     spread_deg=_median([_angdiff(y, centre) for y in yaws]),
+                     rival=rival, rule='support')
+
+    def _fuse_paired(self, paired: list, psi_now: float) -> Fused:
+        """Both branches per frame: the viewpoint decides, or nobody does."""
+        r = resolve_mirror(paired)
+        ca = _wrap180(_circular_median(r['track_a']) - psi_now)
+        cb = _wrap180(_circular_median(r['track_b']) - psi_now)
+        ranges = [m.range_m for m in paired if m.range_m > 0.0]
+        rng = _median(ranges) if ranges else float('nan')
+        if not r['resolved']:
+            return Fused(
+                False, considered=len(paired), range_m=rng,
+                support=len(paired), rival=len(paired), candidates=(ca, cb),
+                reason=(f'mirror pair unresolved: {ca:+.1f} deg (slope '
+                        f'{r["slope_a"]:+.2f}+/-{r["se_a"]:.2f}) or {cb:+.1f} '
+                        f'deg (slope {r["slope_b"]:+.2f}+/-{r["se_b"]:.2f}) '
+                        f'over {r["excursion"]:.1f} deg of bearing; both fit. '
+                        f'Only a change of viewpoint separates them -- '
+                        f'translate sideways, a turn in place cannot'))
+        track = r['track_a'] if r['true'] == 'a' else r['track_b']
+        centre_world = _circular_median(track)
         return Fused(
-            True,
-            yaw_deg=centre,
-            range_m=_median(ranges) if ranges else float('nan'),
-            support=support,
-            considered=len(kept),
-            spread_deg=spread,
-            rival=rival,
-            rule=rule,
-            slope=slope,
-            reason='')
+            True, yaw_deg=_wrap180(centre_world - psi_now), range_m=rng,
+            support=len(paired), considered=len(paired),
+            spread_deg=_median([_angdiff(y, centre_world) for y in track]),
+            rival=len(paired), rule=RULE_VIEWPOINT,
+            slope=r['slope_a'] if r['true'] == 'a' else r['slope_b'])
 
     def _cluster(self, yaws: list[float]) -> list[list[int]]:
         """Greedy grouping by angular distance to a group's running median.

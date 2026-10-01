@@ -12,7 +12,7 @@ import pytest
 
 from mongla_planner.mongla_dsl import MonglaMission
 from mongla_localization.heading_anchor import Anchor
-from mongla_localization.pose_cluster import Fused
+from mongla_localization.pose_cluster import RULE_VIEWPOINT, Fused
 
 
 def _fake(head=30.0, fused=None, offset=None):
@@ -26,7 +26,7 @@ def _fake(head=30.0, fused=None, offset=None):
 
 def test_a_good_fuse_sets_the_offset():
     fake = _fake(head=30.0, fused=Fused(True, yaw_deg=0.0, support=10,
-                                        spread_deg=1.0, rule='egomotion'))
+                                        spread_deg=1.0, rule=RULE_VIEWPOINT))
     got = MonglaMission.anchor_heading(fake, bearing_deg=0.0)
     assert got.ok
     assert got.absolute_deg == pytest.approx(180.0)

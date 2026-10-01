@@ -10,13 +10,14 @@ import math
 
 import pytest
 
+from mongla_localization.pose_cluster import RULE_VIEWPOINT
 from mongla_localization.heading_anchor import (
     Anchor, absolute_heading, anchor_from, apply_offset,
 )
 from mongla_localization.pose_cluster import Fused
 
 
-def _fused(yaw, support=10, spread=1.0, decided=True, rule='egomotion'):
+def _fused(yaw, support=10, spread=1.0, decided=True, rule=RULE_VIEWPOINT):
     return Fused(decided=decided, yaw_deg=yaw, support=support,
                  spread_deg=spread, rule=rule)
 
@@ -102,11 +103,17 @@ def test_a_nan_spread_is_refused_rather_than_compared_away():
 
 
 def test_the_fuse_rule_is_carried_onto_the_anchor():
-    # 'egomotion' survives a detector that reports the wrong branch more often;
-    # 'support' does not, and an operator re-zeroing a heading wants to know.
+    got = anchor_from(_fused(0.0), hull_relative_yaw_deg=0.0,
+                      board_world_bearing_deg=0.0)
+    assert got.ok and got.rule == RULE_VIEWPOINT
+
+
+def test_a_COUNTED_pose_never_redefines_a_heading():
+    """Issue #55: 'support' is a vote, and the vote can be the mirror branch.
+    Only a viewpoint resolution may move the heading zero."""
     got = anchor_from(_fused(0.0, rule='support'), hull_relative_yaw_deg=0.0,
                       board_world_bearing_deg=0.0)
-    assert got.rule == 'support'
+    assert not got.ok and 'viewpoint' in got.reason
 
 
 # --- the unanchored path must not change under anyone's feet ----------------

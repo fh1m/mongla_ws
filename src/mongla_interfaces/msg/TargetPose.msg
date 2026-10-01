@@ -28,3 +28,13 @@ float32 off_axis_deg        # total angle off the board's normal (point estimate
 float32 reproj_px           # how well the pose explains the pixels it was fit to
 float32 ambiguity           # best/second reprojection error; ->1.0 = indistinguishable
 uint16 n_points             # RANSAC inliers the pose was fitted from
+
+# The OTHER planar-PnP branch and the bearing to the target (issue #55). The
+# two branches are mirror images about the viewing ray; carrying both lets the
+# fuser decide between them by a change of viewpoint, not by which one the
+# solver happened to prefer.
+# ⛔ `branches_valid` is the only thing that says these were filled. A float32
+# defaults to 0.0, and a 0 deg mirror or a 0 deg bearing is a plausible lie.
+bool branches_valid
+float32 alt_yaw_deg         # the other branch's yaw, same convention as yaw_deg
+float32 bearing_deg         # + = target centre RIGHT of the optical axis

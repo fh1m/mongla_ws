@@ -121,6 +121,14 @@ class TargetPose:
     pitch_spread_deg: float = 0.0
     n_points: int = 0
     reason: str = ''
+    # ⭐ THE OTHER BRANCH, and where the target is. A planar solve has two
+    # answers mirrored about the viewing ray; `yaw_deg` is one, `alt_yaw_deg`
+    # the other, and `bearing_deg` (+ = right of the optical axis) is that ray.
+    # With the hull's heading these let `pose_cluster.resolve_mirror` tell the
+    # branches apart by geometry instead of by which one the solver preferred
+    # (issue #55). NaN when the solver returned one branch only.
+    alt_yaw_deg: float = float('nan')
+    bearing_deg: float = float('nan')
 
     @property
     def off_axis_deg(self) -> float:
@@ -258,6 +266,16 @@ def solve_pnp(obj_pts, img_pts, K, *, dist=None,
 
     rvec, tvec = np.asarray(rvecs[best], np.float64), np.asarray(tvecs[best], np.float64)
     best_rms = rms(rvec, tvec)
+    # ⛔ IPPE CAN RETURN NaN ON A PERFECT FRAME. Measured 2026-10-01: an exact,
+    # noiseless projection of a 0.30 m board at 3 m came back from
+    # `solvePnPGeneric(IPPE)` with NaN errors and NaN rotations, while SQPnP
+    # solved the same points to the right yaw (19.0 = 25 - 6). A NaN `best_rms`
+    # then made every `<=` below False, the healthy SQPnP answer lost, and the
+    # frame was refused as "non-finite pose". A non-finite fit is infinitely
+    # bad, not incomparable. The alternate branch stays NaN for such a frame,
+    # so it carries no branch pair and the fuser treats it accordingly.
+    if not math.isfinite(best_rms):
+        best_rms = float('inf')
     # THE POINT ESTIMATE comes from SQPnP, which is measurably better at the
     # tail than IPPE's branch (see the table above). IPPE's job was the
     # interval, and it has already done it.
@@ -306,10 +324,20 @@ def solve_pnp(obj_pts, img_pts, K, *, dist=None,
                           pitch_spread_deg=pitch_spread,
                           reason='non-finite pose')
 
+    # The alternate is the IPPE branch FARTHER from the yaw actually reported,
+    # never "index 1": the SQPnP seed and the iterative polish above can walk
+    # to the other branch, and choosing by index would then hand back the
+    # reported answer twice.
+    alt = float('nan')
+    if n > 1:
+        ys = [a[0] for a in angs]
+        alt = max(ys, key=lambda v: abs(((v - yaw + 180.0) % 360.0) - 180.0))
+    t = np.asarray(tvec, np.float64).ravel()
+    bearing = math.degrees(math.atan2(float(t[0]), float(t[2])))
     return TargetPose(ok=True, yaw_deg=yaw, pitch_deg=pitch, roll_deg=roll,
                       range_m=rng, reproj_px=float(best_rms), ambiguity=ratio,
                       yaw_spread_deg=yaw_spread, pitch_spread_deg=pitch_spread,
-                      n_points=len(obj))
+                      n_points=len(obj), alt_yaw_deg=alt, bearing_deg=bearing)
 
 
 def _angles(rvec):
