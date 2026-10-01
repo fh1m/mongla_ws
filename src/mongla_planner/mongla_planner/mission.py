@@ -23,6 +23,7 @@ non-zero iff the mission raised, so wrappers / CI can detect a bad run.
 
 import argparse
 import sys
+import threading
 import time
 
 import rclpy
@@ -118,6 +119,48 @@ def _build_parser(known):
     return parser
 
 
+class MissionKeepAlive:
+    """`/mongla/mission_alive` at 2 Hz while a mission runs (issue #13).
+
+    The manager watches it: a mission that attached and then went silent for
+    MISSION_SILENT_S with the vehicle armed is treated as DEAD -- abort, brake,
+    SURFACE. A thread, not a timer, because the runner only spins inside verb
+    waits and a long synchronous stretch must not read as death. `stop()` sends
+    an empty name: a clean detach, so a normal end never triggers the watchdog.
+    """
+
+    PERIOD_S = 0.5
+
+    def __init__(self, node, name: str):
+        from std_msgs.msg import String
+        self._String = String
+        self._pub = node.create_publisher(String, '/mongla/mission_alive', 10)
+        self._name = str(name)
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True,
+                                        name='mission_keepalive')
+
+    def start(self):
+        self._thread.start()
+        return self
+
+    def _beat(self, data: str) -> None:
+        try:
+            self._pub.publish(self._String(data=data))
+        except Exception:                          # noqa: BLE001 -- context gone
+            pass
+
+    def _run(self) -> None:
+        while not self._stop.wait(self.PERIOD_S):
+            self._beat(self._name)
+
+    def stop(self) -> None:
+        self._stop.set()
+        self._thread.join(timeout=1.0)
+        for _ in range(3):                          # best effort: a clean detach
+            self._beat('')
+
+
 def main(args=None):
     missions = discover()
     parsed   = _build_parser(missions).parse_args(args)
@@ -145,8 +188,10 @@ def main(args=None):
     log_fn = lambda msg: log.info(str(msg))
 
     exit_code = 0
+    keepalive = None
     try:
         client.wait_for_connection(timeout=15.0)
+        keepalive = MissionKeepAlive(node, parsed.name).start()
         log.info(f'=== mission "{parsed.name}" -- start ===')
         missions[parsed.name](mongla, log_fn)
         log.info(f'=== mission "{parsed.name}" -- complete OK ===')
@@ -173,6 +218,10 @@ def main(args=None):
         _safe_shutdown(mongla)
         exit_code = 1
     finally:
+        # AFTER the shutdown / abort sequences above: the manager must not see a
+        # clean detach until the runner has already stopped and disarmed.
+        if keepalive is not None:
+            keepalive.stop()
         mongla.log_scoreboard(json_path='auto', mission=parsed.name)
         node.destroy_node()
         if rclpy.ok():

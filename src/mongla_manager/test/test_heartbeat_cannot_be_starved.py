@@ -53,6 +53,10 @@ class _Log:
 class _StubNode:
     """Just what `_setup_mavlink` reads -- no ROS graph, no port."""
 
+    # The REAL liveness gate (issue #13). Never stamped here -- there is no
+    # executor -- which is the bring-up case: the heartbeat must keep flowing.
+    _executor_alive = amn.AUVManagerNode._executor_alive
+
     def __init__(self):
         self._mode_name = 'test'
         self._profile = {'conn': '/dev/null-mongla-test', 'baud': 115200}
