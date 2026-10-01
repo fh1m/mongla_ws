@@ -94,6 +94,29 @@ _LINK_STALE_S = 3.0
 # (SROT_MESSAGE_RATES), so one normally lands inside 0.1 s.
 _POST_ACK_HB_WAIT_S = 0.3
 
+
+def _rx_age(msg) -> float:
+    """Seconds since `msg` ARRIVED, on the monotonic clock (issue #18).
+
+    ⛔ AGES WERE WALL MINUS WALL. pymavlink stamps `_timestamp` with
+    `time.time()`, and the Pi has no RTC: the first NTP sync at the pool STEPS
+    the clock. A step back of 20 s made a value that stopped arriving 20 s ago
+    read FRESH for 20 s -- LEAK and KILL last-known-good standing in for a
+    silent sensor -- and a step forward made every live value read absent at
+    once. The manager's reader thread now stamps `msg._mono` with
+    `time.monotonic()` the moment a message is received, and every AGE here is
+    measured from that. Wall time survives only in ordering comparisons between
+    two pymavlink stamps, where a step moves both sides together.
+
+    A message this reader never handled (a unit-test fake, a direct
+    `recv_match` in a tool) has no `_mono`; it falls back to the old wall-clock
+    age rather than to "fresh".
+    """
+    mono = getattr(msg, '_mono', None)
+    if mono is not None:
+        return time.monotonic() - float(mono)
+    return time.time() - getattr(msg, '_timestamp', 0.0)
+
 _ACK_MARGIN_S     = 5.0    # slack over the expected leg time before calling it a stall
 _ACK_MIN_BUDGET_S = 8.0    # floor, so a 0.5 s leg still tolerates a slow first ACK
 _STYLE_ROLL_S     = 360.0 / 90.0   # MOVE_STYLE is always a roll at 90 deg/s
@@ -409,7 +432,7 @@ class SrotFC(FlightController):
         if hit is None:
             return None
         value, stamp = hit
-        return value if (time.time() - stamp) <= max_age_s else None
+        return value if (time.monotonic() - stamp) <= max_age_s else None
 
     def flare_order(self, max_age_s: float = 3.0):
         """The run order the board latched, or None.
@@ -456,7 +479,7 @@ class SrotFC(FlightController):
         mname = mname.decode() if isinstance(mname, bytes) else str(mname)
         mname = mname.strip('\x00').strip()
         if mname:
-            self._named_cache[mname] = (float(msg.value), time.time())
+            self._named_cache[mname] = (float(msg.value), time.monotonic())
 
     def _log_info(self, msg):
         if self._log is not None:
@@ -493,7 +516,7 @@ class SrotFC(FlightController):
         hb = self._vehicle_hb()
         if hb is None:
             return False
-        age = time.time() - getattr(hb, '_timestamp', 0.0)
+        age = _rx_age(hb)
         return age <= _LINK_STALE_S
 
     def is_armed(self) -> bool:
@@ -705,7 +728,7 @@ class SrotFC(FlightController):
         if mode not in self._MANUAL_DISCARDING_MODES:
             self._last_mc_mode_warn = 0.0
             return
-        now = time.time()
+        now = time.monotonic()
         if now - getattr(self, '_last_mc_mode_warn', 0.0) < self._MANUAL_WARN_PERIOD_S:
             return
         self._last_mc_mode_warn = now
@@ -1883,7 +1906,7 @@ class SrotFC(FlightController):
         if hb is not None:
             t.armed = bool(hb.base_mode & _ARMED_FLAG)
             t.mode = sp.mode_name(hb.custom_mode)
-            t.link_alive = (time.time() - getattr(hb, '_timestamp', 0.0)) <= _LINK_STALE_S
+            t.link_alive = _rx_age(hb) <= _LINK_STALE_S
         att = self._cache('ATTITUDE')
         if att is not None:
             t.yaw_deg = math.degrees(att.yaw) % 360.0
@@ -2071,7 +2094,7 @@ class SrotFC(FlightController):
 
     def get_attitude_age(self):
         att = self._cache('ATTITUDE')
-        return None if att is None else (time.time() - getattr(att, '_timestamp', 0.0))
+        return None if att is None else _rx_age(att)
 
     def get_mode(self):
         hb = self._vehicle_hb()
@@ -2097,7 +2120,7 @@ class SrotFC(FlightController):
         cur = getattr(msg, 'current_battery', -1)
         current = math.nan if cur == -1 else cur / 100.0
         self._note_battery_step(bid, voltage)
-        self._battery_cache[bid] = (voltage, current, time.time())
+        self._battery_cache[bid] = (voltage, current, time.monotonic())
 
     def _note_battery_step(self, bid: int, voltage: float) -> None:
         """Track how far this instance moves between samples, so an UNWIRED
@@ -2216,7 +2239,7 @@ class SrotFC(FlightController):
         zero. On this vehicle PM1 reads ~1.3 V because nothing is wired to GPIO36.
         """
         self._drain_battery()
-        now = time.time()
+        now = time.monotonic()
         out = {}
         for bid, (v, c, stamp) in self._battery_cache.items():
             if (now - stamp) > max_age_s:
@@ -2283,7 +2306,7 @@ class SrotFC(FlightController):
         # harmless neutral, it is a claim that the hull did not turn.
         if self._ahrs_healthy() is False:
             return None
-        age = time.time() - getattr(att, '_timestamp', 0.0) if getattr(att, '_timestamp', 0.0) else 0.0
+        age = _rx_age(att) if (getattr(att, '_mono', None) is not None or getattr(att, '_timestamp', 0.0)) else 0.0
         boot = getattr(att, 'time_boot_ms', None)
         return {'roll_rate': float(getattr(att, 'rollspeed', 0.0)),
                 'pitch_rate': float(getattr(att, 'pitchspeed', 0.0)),
@@ -2435,7 +2458,7 @@ class SrotFC(FlightController):
 
     def heartbeat_age(self):
         hb = self._vehicle_hb()
-        return None if hb is None else (time.time() - getattr(hb, '_timestamp', 0.0))
+        return None if hb is None else _rx_age(hb)
 
     def send_heartbeat(self):
         """Alias: the manager's `_HeartbeatThread` calls this -- on SROT it IS the

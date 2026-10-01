@@ -847,7 +847,7 @@ def test_named_value_ages_out():
     fc = _fc()
     fc.note_named_value(_nvf('LEAK', 1.0))
     assert fc._named_value('LEAK', max_age_s=100.0) == 1.0
-    fc._named_cache['LEAK'] = (1.0, time.time() - 60.0)
+    fc._named_cache['LEAK'] = (1.0, time.monotonic() - 60.0)   # monotonic cache (#18)
     assert fc._named_value('LEAK', max_age_s=3.0) is None
 
 
@@ -943,7 +943,7 @@ def test_a_dead_link_ages_out_instead_of_being_restamped_forever():
     fc.master.messages['NAMED_VALUE_FLOAT'] = _nvf('GAIN', 0.5)
     assert fc._named_value('GAIN') == 0.5
     # Link dies here. The slot still holds that same message object.
-    fc._named_cache['GAIN'] = (0.5, time.time() - 60.0)
+    fc._named_cache['GAIN'] = (0.5, time.monotonic() - 60.0)   # monotonic cache (#18)
     assert fc._named_value('GAIN', max_age_s=3.0) is None, \
         'a value from a minute ago read as current -- the slot was re-stamped'
 
@@ -1000,7 +1000,7 @@ def test_a_stale_battery_ages_out_rather_than_being_restamped():
     fc = _fc()
     fc.master.messages['BATTERY_STATUS'] = _batt(1, 14740)
     assert sp.BATTERY_ID_THRUSTER in fc.get_batteries()
-    fc._battery_cache[sp.BATTERY_ID_THRUSTER] = (14.74, math.nan, time.time() - 60.0)
+    fc._battery_cache[sp.BATTERY_ID_THRUSTER] = (14.74, math.nan, time.monotonic() - 60.0)   # #18
     assert fc.get_batteries(max_age_s=5.0) == {}, 'dead link re-stamped as fresh'
 
 

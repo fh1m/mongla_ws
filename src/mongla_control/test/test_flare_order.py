@@ -147,6 +147,6 @@ def test_a_latched_order_is_read():
 
 
 def test_an_order_that_stopped_arriving_reads_None():
-    old = time.time() - 60.0
+    old = time.monotonic() - 60.0   # the cache is monotonic (issue #18)
     fc = _fc_with(FLARE_ORD=(123.0, old), FLARE_NON=(1.0, old), FLARE_AGE=(2.0, old))
     assert fc.flare_order() is None
