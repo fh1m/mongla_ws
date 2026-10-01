@@ -94,6 +94,12 @@ _LINK_STALE_S = 3.0
 # (SROT_MESSAGE_RATES), so one normally lands inside 0.1 s.
 _POST_ACK_HB_WAIT_S = 0.3
 
+# How long an aborted or stalled move waits to consume the ACKs its STOP sets in
+# flight (issue #10). The stream task answers the displacement on its next tick
+# and the STOP brakes in well under a second on the bench; 1.0 s bounds an abort
+# that the board never answers, which is then logged, not hung on.
+MOVE_ACK_DRAIN_S = 1.0
+
 
 def _rx_age(msg) -> float:
     """Seconds since `msg` ARRIVED, on the monotonic clock (issue #18).
@@ -828,6 +834,36 @@ class SrotFC(FlightController):
                     f'(ACK said 100 %); a failsafe or mode change cancelled it')
         return None
 
+    def _drain_move_acks(self, wait_s: float = MOVE_ACK_DRAIN_S) -> int:
+        """Consume the terminal SROT_MOVE ACKs a STOP sets in flight (issue #10).
+
+        ⛔ THE NEXT MOVE USED TO READ THEM AS ITS OWN. A STOP displaces the
+        running sequence, and the firmware answers that displacement -- the old
+        sequence's CANCELLED (or ACCEPTED, if it had just completed) -- on its
+        stream task's next tick, followed by the STOP's own terminal ACK. Both
+        ARRIVE AFTER the following command's send, so no timestamp filter can
+        exclude them, and the move ACK carries no sequence id to bind to
+        (`result_param2` is always 0 -- an upstream ask). Returning without
+        consuming them let `yaw_right` report SUCCEEDED in ~20 ms off the STOP's
+        ACCEPTED while the board had only just begun the turn.
+
+        So the exit that CAUSES them waits for them: up to two terminal ACKs
+        (displaced + STOP), bounded by `wait_s`, each cleared as it is seen.
+        Returns how many were consumed.
+        """
+        seen, deadline = 0, time.monotonic() + float(wait_s)
+        last = None
+        while seen < 2 and time.monotonic() < deadline:
+            ack = self._cache('COMMAND_ACK')
+            if (ack is not None and ack is not last
+                    and getattr(ack, 'command', None) == sp.CMD_SROT_MOVE
+                    and getattr(ack, 'result', None) in sp.TERMINAL_ACKS):
+                seen += 1
+                last = ack
+                self._clear_ack()
+            time.sleep(_POLL_S)
+        return seen
+
     def stop_motion(self) -> None:
         """Bring the vehicle to an actual halt.
 
@@ -994,6 +1030,7 @@ class SrotFC(FlightController):
         while time.monotonic() < min(deadline, hard_deadline):
             if abort_fn is not None and abort_fn():
                 self.stop_motion()       # real brake, then STOP -> board CANCELs the seq
+                self._drain_move_acks()  # issue #10: leave nothing for the NEXT move
                 return MoveResult(ABORTED, f'{verb}: aborted (braked to a stop)')
             ack = self._cache('COMMAND_ACK')
             if ack is not None and ack.command == sp.CMD_SROT_MOVE:
@@ -1020,6 +1057,7 @@ class SrotFC(FlightController):
             time.sleep(_POLL_S)
         # No terminal ACK inside the budget -> stall. Brake to be safe.
         self.stop_motion()
+        self._drain_move_acks()          # issue #10, as on abort
         # WARN HERE, not only in the returned string. A stall is the commonest real
         # failure on this link and it used to be reported ONLY as a MoveResult --
         # visible only if whoever received it chose to surface it, and the DSL
