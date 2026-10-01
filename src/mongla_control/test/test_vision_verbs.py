@@ -62,7 +62,10 @@ def test_parse_channels_tolerant_and_clamped():
     assert _parse_channels(' 1 , 2 ') == [1, 2]    # whitespace
     assert _parse_channels('1,junk,2') == [1, 2]   # junk dropped
     assert _parse_channels('9,10') == [9, 10]      # real switch channels survive
-    assert _parse_channels('0,16,17') == [16]      # only 1..16 are addressable
+    # ⛔ NOT clamped any more (B53): 0 is "NOT ASSIGNED" and dropping it made an
+    # unassigned torpedo fire nothing with no error. Out-of-range numbers pass
+    # through so `fire()` refuses each one WITH a reason.
+    assert _parse_channels('0,16,17') == [0, 16, 17]
 
 
 # --------------------------------------------------------------------------- #

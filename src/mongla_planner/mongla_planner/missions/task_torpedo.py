@@ -29,10 +29,11 @@ calibrate it to ~0.3-0.46m off the board.
 Standalone test (torpedo_blood_hole.pt — classes: torpedo(0) blood(1) hole(2)):
     ros2 run mongla_planner mission task_torpedo
 
-fire_channel=1 → torpedo_1 (ESP32 channel 1). Always explicit.
+fire channel = TORPEDO_1_CHANNEL from competition_config (UNASSIGNED until the payload is wired -- B53).
 """
 
 from mongla_planner.missions.competition_config import (
+    TORPEDO_1_CHANNEL,
     TORPEDO_HEADING_DEG,
     TORPEDO_DEPTH_M,
     TORPEDO_BLOOD_FWD_FILL,
@@ -105,7 +106,7 @@ def run(mongla, log=None):
             err=FINE_ERR_PX, gain=_FINE_GAIN, duration=25,
             lock_on=True, hold=TORPEDO_STANDOFF_HOLD_S,
             hold_heading=True,                                  # steady launcher heading (no yaw jitter)
-            fire=1, fire_t=TORPEDO_FIRE_T, fire_gap=FIRE_GAP_S, brake=False,  # torpedo_1, mid-hold
+            fire=TORPEDO_1_CHANNEL, fire_t=TORPEDO_FIRE_T, fire_gap=FIRE_GAP_S, brake=False,  # torpedo_1, mid-hold
             #  ^ fire=[1,2] to launch BOTH torpedoes -- fire_gap spaces them (solenoid)
             fallback=creep_forward)
         if (not locked) and log:

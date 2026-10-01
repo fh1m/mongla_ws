@@ -3085,6 +3085,19 @@ class SrotPayload:
         # the legacy USB driver had one.
         self._fire_lock = threading.Lock()
 
+    def _fireable_text(self) -> str:
+        """The board's own answer to "which channel, then?" for a refusal.
+
+        From the roles ALREADY read (`preflight_roles` reads all 16 at bring-up);
+        never a fresh param round-trip inside a refusal. Says so when nothing has
+        been read, rather than implying the board has no switch channels.
+        """
+        if not self._roles:
+            return '(roles not read yet -- `ros2 run mongla_manager connect` lists them)'
+        sw = sorted(c for c, r in self._roles.items() if r == sp.PCA_ROLE_SWITCH)
+        return (f'(this board: SWITCH {sw})' if sw
+                else '(this board has NO switch channel configured)')
+
     def channel_role(self, channel: int, refresh: bool = False):
         """The board's configured role for a channel, or None if unreadable.
 
@@ -3243,6 +3256,12 @@ class SrotPayload:
         board's own role config, not from a host opinion.
         """
         ch = int(channel)
+        if ch == 0:
+            return FireResult(
+                FIRE_DENIED, ch,
+                f'payload channel NOT ASSIGNED (0) -- set it in '
+                f'missions/competition_config.py from a SWITCH channel '
+                f'{self._fireable_text()} (B53)')
         if ch < 1 or ch > sp.PCA9685_NUM_CH:
             return FireResult(FIRE_DENIED, ch,
                               f'channel {ch} out of range 1..{sp.PCA9685_NUM_CH}')
@@ -3267,13 +3286,14 @@ class SrotPayload:
             return FireResult(
                 FIRE_REJECTED_ARM, ch,
                 f'channel {ch} is a PWM/SERVO channel (the on-board arm). '
-                f'mongla_ws drives SWITCH channels only. Set SERVO{ch}_ROLE=2 in '
-                f'Bondor if this really is a payload channel.')
+                f'mongla_ws drives SWITCH channels only {self._fireable_text()}. '
+                f'Set SERVO{ch}_ROLE=2 in Bondor if this really is a payload '
+                f'channel.')
         if role != sp.PCA_ROLE_SWITCH:
             return FireResult(
                 FIRE_DISABLED, ch,
                 f'channel {ch} role is {role} (disabled) -- driving it would be a '
-                f'silent no-op on the board.')
+                f'silent no-op on the board {self._fireable_text()}.')
 
         # ---- ACTUATE ---------------------------------------------------- #
         # Non-blocking: a queued shot that outlives its align scope is worse than a

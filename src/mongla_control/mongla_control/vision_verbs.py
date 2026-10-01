@@ -63,8 +63,13 @@ def _parse_channels(csv: str):
             ch = int(float(token))
         except ValueError:
             continue
-        if 1 <= ch <= sp.PCA9685_NUM_CH:
-            out.append(ch)
+        # ⛔ KEEP OUT-OF-RANGE NUMBERS -- above all 0, which is "NOT ASSIGNED"
+        # in `competition_config` (B53). Dropping them here turned an unassigned
+        # torpedo into an align that fired nothing, with no error anywhere -- the
+        # same silent-drop this docstring records for the old 1-4 range. Passed
+        # through, `fire()` refuses each one WITH a reason, and that reason lands
+        # in the verb's payload outcome and the log.
+        out.append(ch)
     return out
 
 
