@@ -148,7 +148,9 @@ def run(mongla, log=None):
             fire=FIRE_CHANNEL, fire_t=FIRE_T, fire_gap=FIRE_GAP_S, brake=False,  # mid-hold
             fallback=creep_forward)
         if locked:
-            info(f'Standoff lock held — fired ESP32 channel {FIRE_CHANNEL} mid-hold')
+            # Report what the payload actually DID -- the align held, which says
+            # nothing about whether a round left (B53: channel 0 is refused).
+            info(f'Standoff lock held -- payload outcome: {locked.fired}')
         else:
             info('Hole standoff never locked — fire was withheld (gated on lock)')
     finally:

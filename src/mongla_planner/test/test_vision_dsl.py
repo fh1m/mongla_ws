@@ -746,3 +746,38 @@ def test_verify_reaches_the_wire_and_defaults_ON():
     assert send.call_args.kwargs.get('verify_off') is False
     _dsl(send).align('gate', yaw=0, lat=0, verify=False)
     assert send.call_args.kwargs.get('verify_off') is True
+
+
+def _result_fired(code, fired, err=0.0):
+    r = _result(code, err)
+    r.message = f'{code} fired={fired}'
+    return r
+
+
+@pytest.mark.parametrize('first', [DRIFTED, LOST], ids=['drifted', 'lost'])
+def test_a_shot_that_left_is_NEVER_fired_again_on_re_entry(first):
+    """Falsified if a second goal carrying fire_channels is sent after a FIRED
+    outcome -- that is a second torpedo."""
+    send = MagicMock(side_effect=[_result_fired(first, 'ch9:FIRED', 96.0),
+                                  _result(ALIGNED, 6.0)])
+    res = _dsl(send).align('gate', yaw=0, lat=0, duration=10.0, fire=9,
+                           fallback=(lambda m: None))
+    assert send.call_count == 1, 'the goal was re-sent with the fire in it'
+    assert res.ok is False and res.fired == 'ch9:FIRED'
+
+
+def test_a_REFUSED_shot_may_re_enter_and_try_again():
+    """Nothing left the tube, so re-converging is still allowed."""
+    send = MagicMock(side_effect=[_result_fired(DRIFTED, 'ch0:DENIED', 96.0),
+                                  _result(ALIGNED, 6.0)])
+    res = _dsl(send).align('gate', yaw=0, lat=0, duration=10.0, fire=0)
+    assert send.call_count == 2 and res.ok
+
+
+@pytest.mark.parametrize('fired, left', [
+    ('ch9:FIRED', True), ('ch9:RAISED', True), ('pending', True),
+    ('ch0:DENIED', False), ('ch1:REJECTED_ARM', False), ('none', False),
+    (None, False), ('ch9:DENIED,ch10:FIRED', True)])
+def test_what_counts_as_a_shot_that_left(fired, left):
+    from mongla_planner.vision_dsl import _shot_left
+    assert _shot_left(fired) is left

@@ -186,8 +186,9 @@ def run(mongla, log=None):
                 'hole', camera='forward', yaw=0, lat=0, depth=0,
                 err=FINE_ERR_PX, gain=FINE_GAIN,
                 duration=TORPEDO_LOCK_S, fallback=creep_forward):
-            mongla.fire(TORPEDO_FIRE_CHANNEL)
-            info('[torpedo] fired')
+            shot = mongla.fire(TORPEDO_FIRE_CHANNEL)
+            info('[torpedo] fired' if shot else
+                 f'[torpedo] NOT fired -- {shot.reason}')
         else:
             info('[torpedo] hole never locked — holding fire')
         mongla.pause(2.0)
@@ -215,8 +216,9 @@ def run(mongla, log=None):
                     duration=BIN_ALIGN_DURATION_S, fallback=creep_forward):
                 info('[bin] aligned — holding for stability...')
                 mongla.pause(BIN_STABILITY_PAUSE_S)
-                mongla.fire(BIN_DROP_CHANNEL)
-                info('[bin] drop complete')
+                drop = mongla.fire(BIN_DROP_CHANNEL)
+                info('[bin] drop complete' if drop else
+                     f'[bin] NOT dropped -- {drop.reason}')
             else:
                 info('[bin] never centred — skipping drop')
 

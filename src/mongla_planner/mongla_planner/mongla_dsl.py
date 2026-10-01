@@ -134,6 +134,8 @@ Tunable live (between runs, no rebuild):
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import contextlib
 import json
 import os
@@ -152,7 +154,7 @@ from vision_msgs.msg import Detection2DArray
 from .model_context import ClassRef, ModelRegistry
 from .vision_dsl import _VisionDSL  # noqa: F401 -- re-exported; used by MonglaMission
 
-from .client import MoveFailed, TaskAbandoned, MissionRefused  # arm() raises MoveFailed; task() raises TaskAbandoned; require() raises MissionRefused
+from .client import MoveFailed, MoveRejected, TaskAbandoned, MissionRefused  # arm() raises MoveFailed; task() raises TaskAbandoned; require() raises MissionRefused
 
 
 def _format_outcome(cmd: str, result) -> str:
@@ -404,6 +406,22 @@ def _write_ppm(img, folder: str, stem: str):
         fh.write(f'P6 {w} {h} 255\n'.encode())
         fh.write(b''.join(rows))
     return path
+
+
+# A fused pose older than this is not "where the target is now" (issue #57).
+# The same 1.0 s VisionState.target_pose uses for a single-frame pose.
+FUSED_POSE_MAX_AGE_S = 1.0
+
+
+@dataclass(frozen=True)
+class FireOutcome:
+    """What `mongla.fire()` did. `if mongla.fire(ch):` is True only if it fired."""
+    fired: bool
+    channel: int
+    reason: str = ''
+
+    def __bool__(self) -> bool:
+        return self.fired
 
 
 class MonglaMission:
@@ -1248,11 +1266,23 @@ class MonglaMission:
         a SWITCH channel fires, a PWM channel is REFUSED (it is the on-board arm).
         `ros2 run mongla_manager connect` lists which channels are fireable.
 
-        `result.final_value` carries the outcome code (`FIRE_*` in
-        `mongla_control.fc.base`), so a mission can tell "refused, that channel is
-        the arm" from "the link is down" instead of just seeing success=False.
+        Returns a `FireOutcome`: truthy ONLY when the round left, with the
+        server's reason either way.
+
+        ⛔ A REFUSAL IS A TASK OUTCOME, NOT A MISSION FAILURE. A refused shot
+        sets success=False, which the client raises as MoveFailed -- so the
+        docstring's promise that "a mission can tell refused from link-down"
+        was never true: the mission saw an exception, and a practice run with
+        an unassigned channel (B53) aborted the whole run at the torpedo. The
+        vision verbs never raise on a miss; neither does this. Ctrl-C still
+        propagates (it is not a MoveFailed).
         """
-        return self._send('fire', fire_channel=float(channel))
+        try:
+            r = self._send('fire', fire_channel=float(channel))
+        except (MoveFailed, MoveRejected) as exc:
+            self.log.error(f'[FIRE ] ch={channel} NOT FIRED -- {exc}')
+            return FireOutcome(False, int(channel), str(exc))
+        return FireOutcome(True, int(channel), str(getattr(r, 'message', '') or ''))
 
     # ================================================================== #
     #  Open-loop motion                                                    #
@@ -2369,15 +2399,33 @@ class MonglaMission:
             self._fused_pose = {}
         if camera not in subs:
             topic = f'/mongla/vision/{camera}/target_pose_fused'
+            # Stored WITH its arrival instant (monotonic): the fuser publishes on
+            # every input pose, so silence means the camera or solver stopped.
             subs[camera] = self.client.node.create_subscription(
                 TargetPose, topic,
-                lambda msg, c=camera: self._fused_pose.__setitem__(c, msg), 10)
+                lambda msg, c=camera: self._fused_pose.__setitem__(
+                    c, (msg, _time.monotonic())), 10)
             self.log.info(f'[ANCH ] listening on {topic}')
         from mongla_localization.pose_cluster import Fused
+
+        def fresh():
+            """The cached message if it arrived within FUSED_POSE_MAX_AGE_S.
+
+            ⛔ ISSUE #57: this returned whatever was cached, however old. After
+            the camera or solver stopped, `anchor_heading` paired a fused yaw
+            from minutes ago with the hull's heading NOW -- a heading zero off
+            by however far the hull had turned since.
+            """
+            entry = self._fused_pose.get(camera)
+            if entry is None:
+                return None
+            msg, arrived = entry
+            return msg if _time.monotonic() - arrived <= FUSED_POSE_MAX_AGE_S else None
+
         deadline = _time.monotonic() + float(timeout)
         while _time.monotonic() < deadline:
             rclpy.spin_once(self.client.node, timeout_sec=0.05)
-            msg = self._fused_pose.get(camera)
+            msg = fresh()
             if msg is not None and msg.ok:
                 return Fused(decided=True, yaw_deg=float(msg.yaw_deg),
                              range_m=float(msg.range_m),
@@ -2387,9 +2435,15 @@ class MonglaMission:
         # ⛔ A REFUSAL IS AN ANSWER. The fuser publishes ok=False WITH the
         # reason -- for a mirror pair, both candidate yaws (issue #55). Timing
         # out as "no fused pose" would throw that away; hand it back instead.
-        msg = self._fused_pose.get(camera)
+        msg = fresh()
         if msg is not None:
             return Fused(decided=False, reason=str(msg.reason))
+        entry = self._fused_pose.get(camera)
+        if entry is not None:
+            return Fused(decided=False, reason=(
+                f'last fused pose on {camera} is '
+                f'{_time.monotonic() - entry[1]:.1f}s old (> '
+                f'{FUSED_POSE_MAX_AGE_S:.1f}s): the camera or solver stopped'))
         return None
 
     def camera_usable(self, name: str, *, task: str) -> bool:
