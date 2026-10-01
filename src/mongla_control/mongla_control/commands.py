@@ -152,17 +152,26 @@ COMMANDS = {
         'help':     'Sharp pivot left by `target` degrees within `timeout` s.',
         'fields':   ['target', 'timeout', 'settle'],
         'defaults': {'timeout': 30.0, 'settle': 0.0},
+        # A forgotten target would be a real one (north / the surface / 0 deg)
+        # and is refused instead -- issue #14.
+        'required': ['target'],
     },
     'yaw_right': {
         'help':     'Sharp pivot right by `target` degrees within `timeout` s.',
         'fields':   ['target', 'timeout', 'settle'],
         'defaults': {'timeout': 30.0, 'settle': 0.0},
+        # A forgotten target would be a real one (north / the surface / 0 deg)
+        # and is refused instead -- issue #14.
+        'required': ['target'],
     },
     'turn': {
         'help':     'Rotate to absolute heading `target` degrees (0-360) via shortest '
                     'arc. Direction (left/right) is chosen automatically.',
         'fields':   ['target', 'timeout', 'settle'],
         'defaults': {'timeout': 30.0, 'settle': 0.0},
+        # A forgotten target would be a real one (north / the surface / 0 deg)
+        # and is refused instead -- issue #14.
+        'required': ['target'],
     },
 
     # ---- Depth ----------------------------------------------------- #
@@ -170,6 +179,9 @@ COMMANDS = {
         'help':     'Hold absolute depth (`target` metres, negative below surface).',
         'fields':   ['target', 'timeout', 'settle'],
         'defaults': {'timeout': 30.0, 'settle': 0.0},
+        # A forgotten target would be a real one (north / the surface / 0 deg)
+        # and is refused instead -- issue #14.
+        'required': ['target'],
     },
 
     # ---- Heading lock (depth-hold's yaw cousin) -------------------- #
@@ -429,17 +441,27 @@ def fields_for(cmd, request, *, runtime_defaults=None):
     spec = COMMANDS[cmd]
     spec_defaults    = spec['defaults']
     runtime_defaults = runtime_defaults or {}
+    # ⛔ ISSUE #14. When the sender says which fields it SET, that list decides
+    # -- a given 0.0 is a zero. Only a legacy sender (empty list) falls back to
+    # inferring "unset" from the value, where 0.0 cannot be requested.
+    given = set(getattr(request, 'set_fields', None) or ())
     kwargs = {}
     for field in spec['fields']:
         value = getattr(request, field)
-        if field in STRING_FIELDS:
+        if given:
+            unset = field not in given
+            if unset and field in spec.get('required', ()) \
+                    and field not in runtime_defaults and field not in spec_defaults:
+                raise ValueError(f'{cmd}: {field!r} not set -- it has no default, '
+                                 f'and 0.0 would be a real value, not a guess')
+        elif field in STRING_FIELDS:
             unset = (value == '')
         elif field in BOOL_FIELDS:
             # bool unset == False; defaults explicitly set True or False.
             unset = (value is False) and (field in spec_defaults) and \
                     (spec_defaults[field] is True)
         else:
-            unset = (value == 0.0)
+            unset = (value == 0.0)      # LEGACY sender only -- see above
         if unset:
             if field in runtime_defaults:
                 value = runtime_defaults[field]
