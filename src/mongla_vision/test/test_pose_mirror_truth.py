@@ -266,7 +266,8 @@ def test_the_DSL_hands_back_the_refusal_with_both_candidates():
     _feed_node(n, _frames(yaw_sweep=9.0))
     m = MonglaMission.__new__(MonglaMission)
     m._fused_subs = {'forward': object()}
-    m._fused_pose = {'forward': out[-1]}
+    import time as _t
+    m._fused_pose = {'forward': (out[-1], _t.monotonic())}
     m.client = type('C', (), {'node': None})()
     import mongla_planner.mongla_dsl as D
     real = D.rclpy.spin_once
@@ -279,3 +280,33 @@ def test_the_DSL_hands_back_the_refusal_with_both_candidates():
     assert 'mirror pair unresolved' in fused.reason
     a = anchor_from(fused, 9.0, 205.0)
     assert not a.ok and '+16' in a.reason and '-34' in a.reason
+
+
+def _wait(msg, arrived_ago):
+    """`_wait_fused_pose` against one cached message of a given age."""
+    import time as _t
+    from mongla_planner.mongla_dsl import MonglaMission
+    import mongla_planner.mongla_dsl as D
+    m = MonglaMission.__new__(MonglaMission)
+    m._fused_subs = {'forward': object()}
+    m._fused_pose = {'forward': (msg, _t.monotonic() - arrived_ago)}
+    m.client = type('C', (), {'node': None})()
+    real = D.rclpy.spin_once
+    D.rclpy.spin_once = lambda *a, **k: None
+    try:
+        return MonglaMission._wait_fused_pose(m, 'forward', timeout=0.05)
+    finally:
+        D.rclpy.spin_once = real
+
+
+def test_issue_57_a_STALE_resolved_pose_cannot_anchor_a_heading():
+    """A resolved pose cached 30 s ago, after the camera stopped. Falsified if
+    it comes back decided -- that pairs an old yaw with today's heading."""
+    from mongla_interfaces.msg import TargetPose as Msg
+    old = Msg(ok=True, yaw_deg=10.0, range_m=3.0, n_points=10,
+              yaw_spread_deg=1.0, reason=RULE_VIEWPOINT)
+    got = _wait(old, arrived_ago=30.0)
+    assert got is not None and not got.decided
+    assert 'old' in got.reason and 'stopped' in got.reason
+    fresh = _wait(old, arrived_ago=0.1)
+    assert fresh.decided and fresh.yaw_deg == pytest.approx(10.0)

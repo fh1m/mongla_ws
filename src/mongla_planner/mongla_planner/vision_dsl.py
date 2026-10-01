@@ -61,6 +61,20 @@ if TYPE_CHECKING:
     from .mongla_dsl import MonglaMission
 
 
+def _shot_left(fired) -> bool:
+    """Did any round leave? `fired` is the server's ` fired=` outcome string.
+
+    FIRED left; RAISED is unknown, so it counts as left; `pending` is a shot
+    still in its pulse. Every refusal (DENIED, REJECTED_ARM, NOT_READY,
+    DISABLED, BUSY, THRUSTER_FAULT) left nothing, and `none` never tried.
+    """
+    if not fired:
+        return False
+    if fired == 'pending':
+        return True
+    return any(tok.endswith((':FIRED', ':RAISED')) for tok in fired.split(','))
+
+
 _CODE_NAME = {
     ALIGNED:   'ALIGNED',
     LOST:      'LOST',
@@ -567,6 +581,19 @@ class _VisionDSL:
             # with the budget that is left, and be re-checked again -- the
             # perceive -> move -> re-measure loop BumblebeeAS's `cluster_goto`
             # runs. Bounded by the same deadline as everything else here.
+            # ⛔ NEVER RE-ENTER AFTER A SHOT LEFT. A re-entry re-sends the same
+            # goal, `fire_channels` and all, and the server's `fired` flag is
+            # local to one align -- so a torpedo align that drifted once stopped
+            # (or lost the target after a mid-hold shot) would fire AGAIN, both
+            # tubes with fire=[a, b]. The shot is spent; report and stop.
+            if code in (DRIFTED, LOST) and _shot_left(fired):
+                why = _CODE_NAME.get(code, str(code))
+                self.log.warning(
+                    f"[VIS  ] {verb} {target!r}: {why} after the payload went "
+                    f"({fired}) -- NOT re-entering, a second send would fire "
+                    f"again. {pos}")
+                return _mk(False, why)
+
             if code == DRIFTED:
                 if _time.monotonic() >= deadline:
                     return _mk(False, 'DRIFTED')

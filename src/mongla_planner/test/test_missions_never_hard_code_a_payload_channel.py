@@ -88,3 +88,43 @@ def test_an_unassigned_channel_survives_parsing_into_the_align_fire():
     nothing and nobody was told."""
     from mongla_control.vision_verbs import _parse_channels
     assert _parse_channels('0') == [0]
+
+
+def test_a_refused_fire_is_an_outcome_not_an_exception():
+    """A refusal used to raise MoveFailed out of the mission: with channels
+    unassigned, a practice run aborted at the torpedo. Falsified by a raise, or
+    by a truthy outcome for a shot that did not leave."""
+    from unittest.mock import MagicMock
+    from mongla_planner.client import MoveFailed
+    from mongla_planner.mongla_dsl import MonglaMission
+    m = MagicMock()
+    m._send.side_effect = MoveFailed('fire: ch=0 DENIED: payload channel NOT ASSIGNED')
+    out = MonglaMission.fire(m, 0)
+    assert not out and 'NOT ASSIGNED' in out.reason
+    m._send.side_effect = None
+    m._send.return_value = MagicMock(message='fire: ch=9 FIRED')
+    assert MonglaMission.fire(m, 9)
+
+
+def test_ctrl_c_still_escapes_fire():
+    from unittest.mock import MagicMock
+    from mongla_planner.mongla_dsl import MonglaMission
+    m = MagicMock()
+    m._send.side_effect = KeyboardInterrupt
+    with pytest.raises(KeyboardInterrupt):
+        MonglaMission.fire(m, 9)
+
+
+def test_no_mission_claims_a_shot_it_did_not_check():
+    """`fire(...)` followed by an unconditional 'fired' / 'drop complete' line
+    is a plausible claim standing in for the outcome (CLAUDE.md §8 rule 6)."""
+    import re
+    bad = []
+    for py in sorted(MISSIONS.glob('*.py')):
+        src = py.read_text(encoding='utf-8').split('\n')
+        for i, line in enumerate(src):
+            if re.search(r"^\s*mongla\.fire\(", line):
+                nxt = '\n'.join(src[i + 1:i + 3])
+                if re.search(r"info\('\[\w+\] (fired|drop complete)'\)", nxt):
+                    bad.append(f'{py.name}:{i + 1}')
+    assert not bad, bad
