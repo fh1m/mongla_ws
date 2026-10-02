@@ -48,8 +48,13 @@ class _Imu:
         self.orientation_covariance = [7.6e-5 if attitude else -1.0] + [0.0] * 8
 
 
-def _node():
+def _node(disarmed: bool = False):
     """A LocalizationNode with the ROS machinery stubbed out.
+
+    `disarmed=True` stands in for a board whose demand has read centred for
+    as long as the test runs -- what `SrotFC.demand()` reports on a disarmed
+    hull. Without it the demand is UNKNOWN, and since issue #25 an unknown
+    demand vetoes the ZUPT.
 
     Constructed WITHOUT rclpy: the callbacks are pure functions of a message
     and the filter, and requiring a live graph to test them is what makes
@@ -92,6 +97,11 @@ def _node():
     obj._motion = ln.MotionCheck()
     obj._motion_state = None
     obj._aiding_state = None
+    obj._centred_since = None
+    if disarmed:
+        # Centred long ago, and a demand stream that never goes stale.
+        obj._centred_since = time.monotonic() - 1e3
+        obj._last_demand_t = time.monotonic() + 1e6
     return obj
 
 
@@ -289,7 +299,7 @@ def test_a_TILTED_hull_at_rest_does_not_accelerate():
     a_body = R_true.T @ np.array([0.0, 0.0, -9.80665])
     qw, qx, qy, qz = ln._quat_from_R(R_true)
 
-    n = _node()
+    n = _node(disarmed=True)
     t = 100.0
 
     def sample(tt):
@@ -313,7 +323,7 @@ def test_a_TILTED_hull_at_rest_does_not_accelerate():
 #  ZUPT: stillness is measured, never assumed
 # --------------------------------------------------------------------------- #
 def test_a_still_hull_produces_a_zupt():
-    n = _node()
+    n = _node(disarmed=True)
     t = 100.0
     n._on_imu(_Imu(t))
     for _ in range(120):
@@ -325,7 +335,7 @@ def test_a_still_hull_produces_a_zupt():
 def test_a_MOVING_hull_produces_no_zupt():
     """Declaring 'still' during a slow transit deletes real motion, which is
     the standard way a ZUPT ruins a filter."""
-    n = _node()
+    n = _node(disarmed=True)
     t = 100.0
     n._on_imu(_Imu(t))
     for i in range(120):
@@ -338,7 +348,7 @@ def test_a_MOVING_hull_produces_no_zupt():
 def test_live_flow_suppresses_the_zupt():
     """With flow running, a still hull already measures zero -- a ZUPT adds
     nothing and could only conflict with the measurement."""
-    n = _node()
+    n = _node(disarmed=True)
     t = 100.0
     n._on_imu(_Imu(t))
     for _ in range(120):
@@ -675,7 +685,7 @@ def test_a_floor_correction_is_KEPT_not_undone_by_the_board():
     (reads +32 while the hull has not turned), and the grid keeps reporting
     the true -60. Without folding the correction into the offset, the next
     board sample pulls yaw straight back and the drift bound bounds nothing."""
-    n = _node()
+    n = _node(disarmed=True)
     t = _fly_board(n, 100.0, 1.0, 30.0)
     n._on_heading(type('F', (), {'data': -60.0})())
     t = _fly_board(n, t, 1.0, 32.0)                     # drifted board
@@ -1157,3 +1167,65 @@ def test_a_flow_sample_older_than_the_horizon_is_counted_as_refused():
     n._on_flow(_flow_at(1000.0 - 5.0))                  # far past the horizon
     assert n._n['flow'] == flow
     assert n._n['flow_refused'] == refused + 1
+
+
+# --------------------------------------------------------------------------- #
+#  issue #25: a hull asked to move is not still
+# --------------------------------------------------------------------------- #
+class _Demand:
+    def __init__(self, x, y):
+        self.vector = type('V', (), {'x': x, 'y': y, 'z': 0.0})()
+
+
+def _cruise(n, demand, seconds=5.0, v=0.4):
+    """Level, constant 0.4 m/s forward, no flow: a = 0, |a| = g, gyro ~0 --
+    everything the IMU stillness test can see says STILL."""
+    rng = np.random.default_rng(25)
+    n._filter.X.v = np.array([v, 0.0, 0.0])
+    t = 100.0
+    n._on_imu(_Imu(t))
+    for k in range(int(seconds / 0.02)):
+        t += 0.02
+        g = tuple(rng.normal(0.0, 0.002, 3))
+        a = tuple(np.array([0.0, 0.0, -9.80665]) + rng.normal(0.0, 0.02, 3))
+        n._on_imu(_Imu(t, gyro=g, accel=a))
+        if demand is not None and k % 2 == 0:
+            n._on_demand(_Demand(*demand))
+    return n
+
+
+def test_a_cruising_hull_with_flow_lost_is_not_zero_velocity_updated():
+    """The issue's falsifier. Today's IMU test fires at 1 s and erases v."""
+    n = _cruise(_node(), demand=(0.6, 0.0))
+    assert n._n['zupt'] == 0
+    assert n._filter.X.v[0] > 0.3
+
+
+def test_an_UNKNOWN_demand_is_not_stillness():
+    """On srot the demand is unknown precisely while the board runs a move
+    (`move_forward` is an SROT_MOVE), so unknown must veto, not permit."""
+    n = _cruise(_node(), demand=(float('nan'), float('nan')))
+    assert n._n['zupt'] == 0
+    n = _cruise(_node(), demand=None)
+    assert n._n['zupt'] == 0
+
+
+def test_a_centred_demand_must_hold_long_enough_to_have_stopped():
+    """Thrust off is not hull stopped: it coasts for ~3 time constants."""
+    n = _node()
+    n._on_demand(_Demand(0.0, 0.0))            # centred just now
+    _cruise(n, demand=(0.0, 0.0), seconds=1.5, v=0.0)
+    assert n._n['zupt'] == 0
+
+
+def test_a_long_centred_demand_with_a_still_hull_still_zupts():
+    """The negative control: a disarmed board at rest must keep its ZUPT."""
+    n = _cruise(_node(disarmed=True), demand=(0.0, 0.0), v=0.0)
+    assert n._n['zupt'] >= 1
+
+
+def test_centred_is_the_boards_own_test():
+    """Restated from `actuation_model.CENTRE_EPS` (this package does not
+    depend on mongla_control); one truth, two copies, compared."""
+    am = pytest.importorskip('mongla_control.actuation_model')
+    assert ln.DEMAND_CENTRE_EPS == am.CENTRE_EPS

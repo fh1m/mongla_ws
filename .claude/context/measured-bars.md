@@ -2840,6 +2840,15 @@ ZUPT fired 58 times in 95 s with flow absent. Stillness is measured from the
 gyro and the peak-to-peak of specific force, never from mission intent — a
 hull station-keeping against a current is commanded still and is not.
 
+⚠ **But the IMU test alone also passes a hull cruising at constant velocity**
+(issue #25, 2026-10-02): heading held, no acceleration, |a| = g — and flow
+drops out mid-transit. Since then the thruster demand is a **veto**: the ZUPT
+needs it known and centred (the board's own `CENTRE_EPS` 0.005) for
+max(1 s, 3 τ). Unknown vetoes too — on srot it is unknown exactly while the
+board runs a move. A disarmed board now reports its demand as a known (0, 0),
+so the bench run above (disarmed, demand streaming) keeps its ZUPT. The 3 τ
+is a chosen settle, not a measurement.
+
 ⚠ **`pkill -f auv_manager` matches nothing**; the executable is `start`. An
 orphaned manager held `/dev/ttyUSB0` and kept publishing the pre-attitude
 message format, so new code read as broken while never having run. Same family
