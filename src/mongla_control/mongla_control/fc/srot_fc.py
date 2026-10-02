@@ -811,9 +811,19 @@ class SrotFC(FlightController):
         """(fwd, lat) last sent in [-1, 1], or None when it is not known.
 
         None after any SROT_MOVE (the board owns the demand), before the first
-        frame, and once the stream is older than DEMAND_FRESH_S. Consumed by the
-        command-velocity model, which must predict nothing from an unknown.
+        frame, and once the stream is older than DEMAND_FRESH_S. (0, 0) while a
+        fresh heartbeat says DISARMED. Consumed by the command-velocity model,
+        which must predict nothing from an unknown, and by the ZUPT gate.
         """
+        # ⛔ A DISARMED BOARD DRIVES NO THRUSTER, so its demand is KNOWN: zero.
+        # Without this the demand read "unknown" whenever no MANUAL_CONTROL
+        # stream ran -- every idle moment -- and the localization ZUPT, which
+        # now requires a known-zero demand (issue #25), could never fire on
+        # deck. Only on a FRESH heartbeat: a stale link is unknown, not idle.
+        hb = self._vehicle_hb()
+        if (hb is not None and _rx_age(hb) <= _LINK_STALE_S
+                and not (hb.base_mode & _ARMED_FLAG)):
+            return 0.0, 0.0
         d = getattr(self, '_demand', None)
         if d is None or time.monotonic() - d[2] > self.DEMAND_FRESH_S:
             return None

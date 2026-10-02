@@ -75,6 +75,24 @@ STILL_GYRO_RAD_S = 0.02
 # reading, so a tilted hull shows a large CONSTANT; only variation is motion.
 STILL_ACCEL_SPREAD = 0.25          # m/s^2
 STILL_WINDOW = 50                  # 1.0 s at the board's 50 Hz
+# ⛔ STILLNESS NEEDS A COMMAND TOO (issue #25). The IMU test above cannot tell
+# "still" from "cruising at constant velocity": heading held, no acceleration,
+# |a| = g. Flow drops out mid-transit (bare floor, turbidity), and the ZUPT then
+# deleted real forward velocity at sigma 1 cm/s, once a second, in exactly the
+# regime where dead reckoning was all that was left. The thruster demand is a
+# NECESSARY condition -- a hull asked to move is not still -- never a
+# sufficient one, since a hull commanded still drifts on a current.
+#
+# Centred is the board's own test (`actuation_model.CENTRE_EPS`, mixer.cpp:102):
+# below it the mixer outputs neutral. Restated, not imported -- this package
+# does not depend on mongla_control -- and compared by a test.
+DEMAND_CENTRE_EPS = 0.005
+# How long a centred demand must hold before the hull can have stopped: the
+# thrusters spin down and the hull coasts, so several of the command model's
+# time constants, and never less than the IMU window.
+DEMAND_SETTLE_TAUS = 3.0
+# A demand older than this is UNKNOWN, the same bar the model aid uses.
+DEMAND_FRESH_S = 0.5
 # Flow newer than this means the camera is already reporting velocity, so a
 # ZUPT would add nothing and could only conflict with it.
 FLOW_FRESH_S = 1.0
@@ -185,6 +203,7 @@ class LocalizationNode(Node):
                 self._filter,
                 horizon_s=float(self.declare_parameter('retro_horizon_s', 2.0).value))
         self._last_demand_t = None
+        self._centred_since = None       # when the demand last became centred
         self._motion = MotionCheck()
         self._motion_state = None
 
@@ -525,6 +544,12 @@ class LocalizationNode(Node):
             self._model.step(x, y, dt)
         else:
             self._model.step(None, None, dt)
+        centred = (math.isfinite(x) and math.isfinite(y)
+                   and max(abs(x), abs(y)) < DEMAND_CENTRE_EPS)
+        if not centred:
+            self._centred_since = None
+        elif getattr(self, '_centred_since', None) is None:
+            self._centred_since = now
 
     def _maybe_model_aid(self) -> None:
         """When flow has gone quiet, aid velocity from the learned demand model.
@@ -564,8 +589,20 @@ class LocalizationNode(Node):
         """
         if len(self._still) < self._still.maxlen:
             return
-        if time.monotonic() - self._last_flow_t < FLOW_FRESH_S:
+        now = time.monotonic()
+        if now - self._last_flow_t < FLOW_FRESH_S:
             return                      # flow is live; it already says zero
+        # The command veto: known, centred, and long enough to have stopped.
+        # Unknown demand is NOT stillness -- on srot it is unknown precisely
+        # while the board runs a move.
+        since = getattr(self, '_centred_since', None)
+        if (since is None or self._last_demand_t is None
+                or now - self._last_demand_t > DEMAND_FRESH_S):
+            return
+        settle = max(STILL_WINDOW / 50.0,
+                     DEMAND_SETTLE_TAUS * float(self._model.tau_s))
+        if now - since < settle:
+            return
         gyro = [g for g, _ in self._still]
         acc = [a for _, a in self._still]
         if max(gyro) > STILL_GYRO_RAD_S:

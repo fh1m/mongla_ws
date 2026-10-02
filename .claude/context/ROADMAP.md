@@ -288,7 +288,7 @@ declared but not forwarded (a knob wired to nothing).
 | `velocity_uplink` | `false` | RIEKF body velocity → board (103) | manager |
 | `position_uplink` | `false` | RIEKF pose → board (102) | manager |
 | `mixer_aware` | `true` | srot vision frames prioritised yaw-first + saturation-aware anti-windup | manager `vision.mixer_aware` |
-| `zupt` | `true` | zero-velocity updates when still | localization |
+| `zupt` | `true` | zero-velocity updates when still — and only after the thruster demand has been known-centred for max(1 s, 3 τ) (#25) | localization |
 | `demand_aid` | `true` | velocity from commanded demand on a blank floor | localization |
 | `use_yaw` | `false` | fuse the landmark heading anchor | localization |
 | `retrodict` | `false` | apply flow/depth/fixes at their own stamp, replaying later events (dev: 0.8 ms per sample 60 ms late) | localization |

@@ -1641,6 +1641,31 @@ def test_a_board_primitive_makes_the_demand_UNKNOWN():
     assert fc.demand() is None
 
 
+def test_a_DISARMED_board_has_a_known_zero_demand():
+    """A disarmed board drives no thruster. Reporting that as UNKNOWN left the
+    localization ZUPT -- which now requires a known-zero demand (issue #25) --
+    unable to fire on deck at all."""
+    fc = _fc()
+    fc.master.messages['HEARTBEAT'] = SimpleNamespace(
+        base_mode=0, custom_mode=sp.MODE_STABILIZE, _timestamp=time.time())
+    assert fc.demand() == (0.0, 0.0)
+
+
+def test_an_ARMED_board_with_no_stream_is_still_unknown():
+    fc = _fc()
+    fc.master.messages['HEARTBEAT'] = SimpleNamespace(
+        base_mode=_ARMED, custom_mode=sp.MODE_AUTO, _timestamp=time.time())
+    assert fc.demand() is None
+
+
+def test_a_STALE_disarmed_heartbeat_is_not_a_zero_demand():
+    """A dead link is unknown, not idle."""
+    fc = _fc()
+    fc.master.messages['HEARTBEAT'] = SimpleNamespace(
+        base_mode=0, custom_mode=sp.MODE_STABILIZE, _timestamp=time.time() - 60.0)
+    assert fc.demand() is None
+
+
 def test_a_stale_demand_is_not_a_demand(monkeypatch):
     fc = _fc()
     fc.manual(fwd=0.4, lat=0.0, up=0.0, yaw=0.0)
