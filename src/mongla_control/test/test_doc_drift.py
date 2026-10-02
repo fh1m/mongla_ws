@@ -188,3 +188,22 @@ def test_the_documented_loop_rate_matches_the_shipped_one():
     assert any(abs(n - shipped) <= 0.5 for n in nums), (
         f'VISION_LOOP_HZ_SROT is {shipped}; system-harmony.md §4 says '
         f'{nums} -- the budget has drifted from the code.\n  {row.strip()}')
+
+
+# Interface and verb text that described another vehicle (issue #21, item 5).
+# Text is the right thing to test HERE: these strings are documentation, and
+# `reference/commands.md` is generated from them.
+_STALE_INTERFACE_TEXT = (
+    ('src/mongla_interfaces/action/Move.action', 'ESP32 payload channel'),
+    ('src/mongla_interfaces/action/Move.action', 'log-stub'),
+    ('src/mongla_interfaces/msg/MonglaState.msg', 'ArduSub mode name (MANUAL, ALT_HOLD'),
+    ('src/mongla_control/mongla_control/commands.py',
+     "'Active hold: send neutral 1500 PWM to all six channels.'"),
+    ('src/mongla_planner/package.xml', '<depend>yasmin'),
+)
+
+
+@pytest.mark.parametrize('rel,text', _STALE_INTERFACE_TEXT)
+def test_no_interface_still_describes_the_old_vehicle(rel, text):
+    root = Path(__file__).resolve().parents[3]
+    assert text not in (root / rel).read_text(), f'{rel} still says {text!r}'

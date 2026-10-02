@@ -328,3 +328,36 @@ def test_the_flow_node_stamps_an_soe_frame_after_its_buffer_stamp():
     assert FlowNode._stamp_for(n, 100.0, 0.1) == pytest.approx(100.00785, abs=1e-7)
     n._stamp_src = 'unknown'
     assert FlowNode._stamp_for(n, 100.0, 0.1) == pytest.approx(100.0, abs=1e-9)
+
+
+def test_fit_never_iterates_pairs_while_add_mutates_them():
+    """Issue #21 item 2: `fit` walked the pair deque while the reader thread's
+    `add` appended to it -- RuntimeError: deque mutated during iteration.
+    Forced, not hoped for: the deque pauses inside fit's iteration and lets
+    another thread `add`. With the lock the add must WAIT; without it the add
+    lands mid-iteration and fit raises."""
+    import threading
+    from collections import deque
+    from mongla_vision.flow.flow_timing import ClockMap
+
+    cm = ClockMap(window_s=60.0, min_pairs=10)
+    for k in range(200):
+        b = k * 0.02
+        cm.add(b, 1000.0 + b + 0.003)
+
+    added = threading.Event()
+
+    class _Pausing(deque):
+        def __iter__(self):
+            for i, item in enumerate(deque.__iter__(self)):
+                if i == 1 and not added.is_set():
+                    t = threading.Thread(
+                        target=lambda: (cm.add(5.0, 1005.003), added.set()))
+                    t.start()
+                    added.wait(0.3)       # with the lock the add is blocked
+                yield item
+
+    cm._pairs = _Pausing(cm._pairs)
+    cm.fit()                              # must not raise
+    added.wait(2.0)
+    assert added.is_set(), 'the add never completed'

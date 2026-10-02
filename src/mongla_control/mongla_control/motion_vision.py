@@ -60,6 +60,7 @@ TIMEOUT   = 2   # duration elapsed without success
 NO_CAMERA = 3   # camera_info never seen -- pipeline not up
 ABORTED   = 4   # cooperative abort (goal cancelled)
 DRIFTED   = 5   # align: centred while driving, OUT of band once stopped and re-measured
+NO_DEPTH  = 6   # a depth axis was asked for and there is no depth to hold (#21)
 
 _CODE_NAME = {ALIGNED: 'OK', LOST: 'LOST', TIMEOUT: 'TIMEOUT',
               NO_CAMERA: 'NO_CAMERA', ABORTED: 'ABORTED', DRIFTED: 'DRIFTED'}
@@ -774,8 +775,14 @@ def _srot_drive(fc, *, fwd_pct: float, lat_pct: float, yaw_pct: float,
 
 
 def _read_depth(pixhawk) -> float:
+    """Current depth, or NaN when there is no attitude to read it from.
+
+    ⛔ NOT 0.0 (issue #21). 0.0 is the SURFACE, a real value, and this is used
+    as the depth SETPOINT -- so a missing reading made the vision loop hold
+    the hull at the surface. Absence is NaN, and the loop refuses on it.
+    """
     att = pixhawk.get_attitude()
-    return float(att['depth']) if att else 0.0
+    return float(att['depth']) if att else float('nan')
 
 
 def _vision_yaw_floor(epx: float, eff_err: float, full_pct: float) -> float:
@@ -1080,6 +1087,9 @@ def align_loop(*,
     eff_ceiling = float(depth_ceiling_m) if float(depth_ceiling_m) < 0.0 else _MIN_DEPTH_M
 
     depth_setpoint = _read_depth(pixhawk)
+    if stream_depth and depth_setpoint != depth_setpoint:
+        return Outcome(NO_DEPTH, 'no depth reading to hold: refusing to '
+                                 'stream a depth setpoint', elapsed_s=0.0)
 
     def _drive(lat_pct: float, yaw_pct: float, fwd_pct: float = 0.0) -> None:
         """Write the translation/yaw RC frame, honouring an active lock.

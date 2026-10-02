@@ -7,7 +7,7 @@
 std_msgs/Header header
 
 bool   armed
-string mode              # ArduSub mode name (MANUAL, ALT_HOLD, ...) or '' if unknown
+string mode              # flight mode name -- srot: STABILIZE/ACRO/DEPTH_HOLD/SURFACE/MANUAL/AUTO; pixhawk: ArduSub names -- or '' if unknown
 float32 yaw_deg          # NaN when no AHRS sample
 float32 depth_m          # negative below surface; NaN when no AHRS sample
 float32 battery_voltage  # NaN when no BATTERY_STATUS sample

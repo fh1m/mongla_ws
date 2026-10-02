@@ -59,6 +59,12 @@ import os
 from ament_index_python.packages import get_package_share_directory
 
 
+# Grace between SIGINT and SIGTERM for the manager. Above the manager's
+# EMERGENCY_DISARM_S plus the brake, so a slow disarm confirmation is logged
+# rather than killed mid-poll (a test compares the two).
+MANAGER_SIGTERM_TIMEOUT_S = 12
+
+
 def generate_launch_description():
     args = [
         DeclareLaunchArgument('mode',       default_value='pool',
@@ -320,6 +326,10 @@ def generate_launch_description():
         executable='start',
         name='mongla_manager',
         output='screen',
+        # ⛔ Ctrl-C must outlive the disarm confirmation (issue #21). ros2
+        # launch sends SIGTERM 5 s after SIGINT by default, then SIGKILL; the
+        # manager's emergency disarm waits up to EMERGENCY_DISARM_S (8 s).
+        sigterm_timeout=str(MANAGER_SIGTERM_TIMEOUT_S),
         # Process default warn silences rcl/rmw framework gibberish; the manager's
         # own logger is pinned to info so all Mongla telemetry ([STATE]/[ARDUB]/
         # [RC ]/[ACT]) and the mission progress lines always show.

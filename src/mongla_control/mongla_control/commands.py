@@ -29,7 +29,8 @@ COMMANDS = {
         'defaults': {'timeout': 15.0},
     },
     'disarm': {
-        'help':     'Disarm safely (mode -> MANUAL, neutral, then disarm).',
+        'help':     'Disarm and confirm it took (srot: ARM_DISARM, confirmed on '
+                    'the heartbeat; pixhawk: MANUAL, neutral, then disarm).',
         'fields':   ['timeout'],
         'defaults': {'timeout': 20.0},
     },
@@ -52,7 +53,8 @@ COMMANDS = {
 
     # ---- Stop / pause ---------------------------------------------- #
     'stop': {
-        'help':     'Active hold: send neutral 1500 PWM to all six channels.',
+        'help':     'Halt now (srot: the board\'s MOVE_STOP brake; pixhawk: '
+                    'neutral 1500 PWM on all six channels).',
         'fields':   [],
         'defaults': {},
     },
@@ -234,7 +236,7 @@ COMMANDS = {
     # branches on it and the action client never raises on a miss.
     #
     #   final_value codes: 0=ALIGNED/REACHED 1=LOST 2=TIMEOUT
-    #                      3=NO_CAMERA 4=ABORTED
+    #                      3=NO_CAMERA 4=ABORTED 5=DRIFTED 6=NO_DEPTH
     #
     # gain = hard max-speed cap (% thrust); the P-controller output is
     # clamped to it so the AUV never exceeds it on any axis.

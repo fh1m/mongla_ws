@@ -1336,7 +1336,19 @@ class AUVManagerNode(Node):
             # Check again under lock in case a concurrent goal built the same state.
             if cache_key not in self._vision_states:
                 self._vision_states[cache_key] = vstate
-            return self._vision_states[cache_key]
+            winner = self._vision_states[cache_key]
+        # ⛔ THE LOSER IS CLOSED, NOT DROPPED (issue #21). Two concurrent first
+        # goals for one camera each built a VisionState; the second was simply
+        # not inserted, and its subscriptions stayed alive for the life of the
+        # process.
+        if winner is not vstate:
+            try:
+                vstate.close()
+            except Exception as exc:          # noqa: BLE001 -- best effort
+                self.get_logger().warning(
+                    f'[VST  ] duplicate VisionState for {camera!r} not '
+                    f'closed: {exc!r}')
+        return winner
 
     # ================================================================== #
     #  DVL auto-connect background loop                                   #
@@ -1615,7 +1627,7 @@ class AUVManagerNode(Node):
             result = Move.Result()
             result.success     = False
             result.message     = f'{cmd}: exception -- {exc}'
-            result.final_value = float(attitude['depth']) if attitude else 0.0
+            result.final_value = float(attitude['depth']) if attitude else math.nan
             result.error_value = 0.0
             goal_handle.abort()
             self.get_logger().error(f'[ACT  ] {cmd} FAILED: {exc}')
@@ -1675,7 +1687,7 @@ class AUVManagerNode(Node):
         out.message = (f'surface: SURFACE engaged (ascending, <= {timeout:.0f}s)'
                        if ok else f'surface: could not engage SURFACE -- {reason}')
         att = self.fc.get_attitude()
-        out.final_value = float(att['depth']) if att else 0.0
+        out.final_value = float(att['depth']) if att else math.nan
         out.error_value = 0.0
         if not ok:
             self.get_logger().error(f'[ACT  ] surface FAILED: {reason}')
@@ -1720,7 +1732,7 @@ class AUVManagerNode(Node):
             out.success = res.ok
             out.message = res.reason
             att = self.fc.get_attitude()
-            out.final_value = float(att['depth']) if att else 0.0
+            out.final_value = float(att['depth']) if att else math.nan
             out.error_value = 0.0
             return out
 
@@ -2804,6 +2816,11 @@ _KILL_BANNER = """\033[1;31m
 ╚══════════════════════════════════════════════════════════════╝\033[0m"""
 
 
+# How long the Ctrl-C path waits for the board to confirm the disarm. Kept
+# below the SIGTERM grace bringup.launch.py gives this process
+# (`MANAGER_SIGTERM_TIMEOUT_S` there), with room for the brake before it.
+EMERGENCY_DISARM_S = 8.0
+
 def _emergency_stop(node) -> None:
     """Stop thrusters and disarm. Called from both Ctrl-C and SIGTERM paths."""
     print(_KILL_BANNER, file=sys.stderr)
@@ -2850,7 +2867,12 @@ def _emergency_stop(node) -> None:
 
     ok, reason = None, 'not attempted'
     try:
-        ok, reason = node.pixhawk.disarm()
+        # ⛔ BOUNDED UNDER THE LAUNCH'S GRACE (issue #21). `disarm()` polls up
+        # to 15 s by default, and `ros2 launch` escalates SIGINT to SIGTERM
+        # after its grace -- 5 s unless set -- so a slow confirmation was
+        # killed mid-poll and the operator never saw whether it took.
+        # bringup gives the manager MANAGER_SIGTERM_TIMEOUT_S; this stays under.
+        ok, reason = node.pixhawk.disarm(timeout=EMERGENCY_DISARM_S)
     except Exception as exc:
         reason = repr(exc)
     if ok:

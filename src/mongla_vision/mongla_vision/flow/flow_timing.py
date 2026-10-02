@@ -34,6 +34,7 @@ Every one of the first three is larger than the fourth.
 from __future__ import annotations
 
 import math
+import threading
 from collections import deque
 from typing import Optional, Sequence, Tuple
 
@@ -68,7 +69,7 @@ class ClockMap:
     mapping is not known yet.
     """
 
-    __slots__ = ('_pairs', '_window_s', '_min_pairs', '_skew', '_offset',
+    __slots__ = ('_pairs', '_window_s', '_min_pairs', '_map', '_lock',
                  '_n_fit', '_resid_ms', 'steps')
 
     # ⛔ A STEP IN THE HOST CLOCK IS NOT DELAY. `host - board` is offset plus a
@@ -87,8 +88,14 @@ class ClockMap:
         self._pairs: deque = deque()          # (board_s, host_s)
         self._window_s = float(window_s)
         self._min_pairs = int(min_pairs)
-        self._skew = 1.0                      # host seconds per board second
-        self._offset = 0.0
+        # ⛔ (skew, offset) AS ONE TUPLE, swapped in one assignment (issue #21).
+        # Two statements let a reader on another thread pair the new skew with
+        # the old offset -- a host time off by skew-change x board time, which
+        # at boot-relative seconds is not small. Readers take it ONCE.
+        self._map = (1.0, 0.0)                # host s per board s, offset s
+        # `add` (reader thread) and `fit` (a timer) both walk `_pairs`;
+        # iterating a deque another thread mutates raises RuntimeError.
+        self._lock = threading.Lock()
         self._n_fit = 0
         self._resid_ms = float('nan')
         self.steps = 0                        # host-clock steps detected
@@ -96,6 +103,10 @@ class ClockMap:
     def add(self, board_s: float, host_s: float) -> None:
         if not (math.isfinite(board_s) and math.isfinite(host_s)):
             return
+        with self._lock:
+            self._add(board_s, host_s)
+
+    def _add(self, board_s: float, host_s: float) -> None:
         if self._pairs:
             lb, lh = self._pairs[-1]
             jump = (host_s - board_s) - (lh - lb)
@@ -109,11 +120,13 @@ class ClockMap:
 
     def fit(self) -> bool:
         """Refit from the lower envelope. Returns whether the fit is usable."""
-        n = len(self._pairs)
+        with self._lock:
+            pairs = list(self._pairs)         # a snapshot; `add` keeps going
+        n = len(pairs)
         if n < self._min_pairs:
             return False
-        b = np.fromiter((p[0] for p in self._pairs), float, n)
-        h = np.fromiter((p[1] for p in self._pairs), float, n)
+        b = np.fromiter((p[0] for p in pairs), float, n)
+        h = np.fromiter((p[1] for p in pairs), float, n)
         span = b[-1] - b[0]
         if span < 1.0:
             # Skew and offset are not separable over a short window: a small
@@ -149,8 +162,7 @@ class ClockMap:
         # d = host - board. So
         #     host = board + slope*(board - b0) + intercept
         #          = board*(1 + slope) + (intercept - slope*b0)
-        self._skew = 1.0 + float(slope)
-        self._offset = float(intercept - slope * b[0])
+        self._map = (1.0 + float(slope), float(intercept - slope * b[0]))
         self._n_fit = len(xs)
         self._resid_ms = float(np.median(np.abs(ys - (slope * xs + intercept)))
                                * 1000.0)
@@ -158,7 +170,8 @@ class ClockMap:
 
     def to_host(self, board_s: float) -> float:
         """Board clock -> host clock."""
-        return board_s * self._skew + self._offset
+        skew, offset = self._map
+        return board_s * skew + offset
 
     def to_board(self, host_s: float) -> float:
         """Host clock -> board clock. The exact inverse of `to_host`.
@@ -167,7 +180,8 @@ class ClockMap:
         camera capture -- in the board's own time base, which is the only one
         its 500 Hz gyro history is indexed by.
         """
-        return (host_s - self._offset) / self._skew
+        skew, offset = self._map
+        return (host_s - offset) / skew
 
     @property
     def ready(self) -> bool:
@@ -175,7 +189,7 @@ class ClockMap:
 
     @property
     def skew_ppm(self) -> float:
-        return (self._skew - 1.0) * 1e6
+        return (self._map[0] - 1.0) * 1e6
 
     @property
     def n_pairs(self) -> int:
