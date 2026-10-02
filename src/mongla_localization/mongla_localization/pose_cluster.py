@@ -151,6 +151,33 @@ def _median(xs: list[float]) -> float:
     return s[mid] if n % 2 else 0.5 * (s[mid - 1] + s[mid])
 
 
+def _range_at(samples: list, t_now: float) -> float:
+    """Range AT `t_now`, from a robust straight line through the window.
+
+    ⛔ NOT THE WINDOW MEDIAN (#56). A 15 s window on an approach reports the
+    range from its MIDDLE -- metres long at the end of a run in -- and stamps
+    it as current. Theil-Sen (the median of pairwise slopes, then the median
+    intercept) fits range against capture time and is evaluated at `t_now`:
+    exact for a steady approach, the median itself for a hull holding
+    station, and robust to ~29 % outliers, which is the property the median
+    was there for. Fewer than three usable frames: their median.
+    """
+    pts = [(float(s.t), float(s.range_m)) for s in samples
+           if s.range_m > 0.0 and math.isfinite(s.range_m)]
+    if not pts:
+        return float('nan')
+    if len(pts) < 3:
+        return _median([r for _, r in pts])
+    slopes = [(r2 - r1) / (t2 - t1)
+              for i, (t1, r1) in enumerate(pts) for (t2, r2) in pts[i + 1:]
+              if t2 != t1]
+    if not slopes:
+        return _median([r for _, r in pts])
+    m = _median(slopes)
+    b = _median([r - m * t for t, r in pts])
+    return max(0.0, b + m * float(t_now))
+
+
 def _circular_median(angles: list[float]) -> float:
     """Median of angles that may straddle the +/-180 wrap.
 
@@ -276,7 +303,7 @@ class PoseCluster:
             # which may belong to a frame that carried only one branch.
             psi_now = next(s.vehicle_yaw_deg for s in reversed(live)
                            if s.vehicle_yaw_deg is not None)
-            return self._fuse_paired(paired, psi_now)
+            return self._fuse_paired(paired, psi_now, now)
 
         # LEGACY: one branch per frame, no viewpoint data. A frame the solver
         # could not distinguish (`ambiguity` -> 1) is a coin flip and is dropped.
@@ -285,7 +312,28 @@ class PoseCluster:
             return Fused(False, considered=0,
                          reason=f'all {len(live)} poses failed the '
                                 f'ambiguity/reprojection gates')
-        groups = sorted(self._cluster([s.yaw_deg for s in kept]),
+        # ⛔ IN THE WORLD FRAME WHEN THE HEADINGS EXIST (#56). A camera-frame
+        # median over a turning hull mixes frames taken from different
+        # headings and stamps the result as now: a 1 deg/s turn over 15 s gave
+        # 13 deg against a true 6. Each frame's pose yaw plus the hull's yaw at
+        # THAT frame is a world bearing that a turn does not move; the answer
+        # is re-expressed at the newest heading, as the paired path does. A
+        # producer with no heading keeps the camera-frame median -- there is
+        # nothing to compensate with -- and cannot anchor a heading anyway.
+        psi_now = next((s.vehicle_yaw_deg for s in reversed(live)
+                        if s.vehicle_yaw_deg is not None
+                        and math.isfinite(s.vehicle_yaw_deg)), None)
+        world = psi_now is not None and all(
+            s.vehicle_yaw_deg is not None and math.isfinite(s.vehicle_yaw_deg)
+            for s in kept)
+
+        def yaw_of(s):
+            return _wrap180(s.yaw_deg + s.vehicle_yaw_deg) if world else s.yaw_deg
+
+        def out(y):
+            return _wrap180(y - psi_now) if world else y
+
+        groups = sorted(self._cluster([yaw_of(s) for s in kept]),
                         key=len, reverse=True)
         best = groups[0]
         rival = len(groups[1]) if len(groups) > 1 else 0
@@ -302,8 +350,8 @@ class PoseCluster:
         # detection. #55's own case was a 7/3 split, so a rival this small
         # must already block -- `min_poses` (4) let it through.
         if rival >= LEGACY_RIVAL_MIN:
-            rv = _circular_median([kept[i].yaw_deg for i in groups[1]])
-            bv = _circular_median([kept[i].yaw_deg for i in best])
+            rv = out(_circular_median([yaw_of(kept[i]) for i in groups[1]]))
+            bv = out(_circular_median([yaw_of(kept[i]) for i in best]))
             return Fused(False, considered=len(kept), support=support,
                          rival=rival, candidates=(bv, rv),
                          reason=f'two branches, {bv:+.1f} deg ({support}) and '
@@ -311,22 +359,21 @@ class PoseCluster:
                                 f'resolve a mirror pair and this producer sent '
                                 f'no second branch to test')
         members = [kept[i] for i in best]
-        yaws = [m.yaw_deg for m in members]
+        yaws = [yaw_of(m) for m in members]
         centre = _circular_median(yaws)
-        ranges = [m.range_m for m in members if m.range_m > 0.0]
-        return Fused(True, yaw_deg=centre,
-                     range_m=_median(ranges) if ranges else float('nan'),
+        return Fused(True, yaw_deg=out(centre),
+                     range_m=_range_at(members, now),
                      support=support, considered=len(kept),
                      spread_deg=_median([_angdiff(y, centre) for y in yaws]),
                      rival=rival, rule='support')
 
-    def _fuse_paired(self, paired: list, psi_now: float) -> Fused:
+    def _fuse_paired(self, paired: list, psi_now: float,
+                     now: float) -> Fused:
         """Both branches per frame: the viewpoint decides, or nobody does."""
         r = resolve_mirror(paired)
         ca = _wrap180(_circular_median(r['track_a']) - psi_now)
         cb = _wrap180(_circular_median(r['track_b']) - psi_now)
-        ranges = [m.range_m for m in paired if m.range_m > 0.0]
-        rng = _median(ranges) if ranges else float('nan')
+        rng = _range_at(paired, now)
         if not r['resolved']:
             return Fused(
                 False, considered=len(paired), range_m=rng,
