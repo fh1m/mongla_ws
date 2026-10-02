@@ -455,3 +455,28 @@ def test_the_covariance_is_consistent_with_the_error_it_describes(sigma_accel, b
     is the check that can see it, and the trace check cannot."""
     nees = _nees(sigma_accel)
     assert 7.5 < nees < 11.0, f'mean NEES {nees:.2f}, expected ~9 (was {before})'
+
+
+# --------------------------------------------------------------------------- #
+#  issue #29: a lockout inflates what the stuck channel sees, nothing else
+# --------------------------------------------------------------------------- #
+def test_a_depth_lockout_leaves_biases_and_the_gate_alone():
+    """The issue's falsifier: a converged filter, five depth readings 1 m off.
+    All-of-P x4 quadrupled the bias variances and closed the gate."""
+    f = RIEKF()
+    for k in range(1500):                                 # 30 s, aided
+        f.predict([0, 0, 0], -GRAVITY, 0.02)
+        if k % 5 == 0:
+            f.update_body_velocity_xy(0.0, 0.0, 1e-4, 1e-4)
+            f.update_depth(-1.0, sigma=0.02)
+    f.P[3:6, 3:6] = np.diag([0.12, 0.12, 0.01])          # sigma_vel ~0.5 horizontally
+    bias_before = np.diag(f.P)[9:15].copy()
+    breaks = f.lockout_breaks
+    for _ in range(5):
+        f.update_depth(-2.0, sigma=0.02)
+    assert f.lockout_breaks == breaks + 1, 'the stuck channel was not re-admitted'
+    # Not inflated. The update that follows may only SHRINK them (it is a
+    # Kalman update, and the biases correlate with what depth observes).
+    assert np.all(np.diag(f.P)[9:15] <= bias_before * (1 + 1e-9))
+    assert f._velocity_is_observed()
+    assert np.all(np.linalg.eigvalsh(0.5 * (f.P + f.P.T)) > -1e-12)

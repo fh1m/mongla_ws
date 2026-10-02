@@ -648,7 +648,16 @@ class RIEKF:
             # and leave the filter just as stuck next time.
             self.lockout_breaks += 1
             self.reject_streak[kind] = 0
-            self.P = self.P * REJECT_INFLATION
+            # ⛔ ONLY THE STATES THIS MEASUREMENT OBSERVES (issue #29). All of
+            # P x4 also quadrupled the bias variances -- undoing minutes of
+            # bias learning -- and the velocity block, which could push it
+            # over the observability gate and shut depth and heading out.
+            # A congruence D P D with D = sqrt(k) on the observed states and 1
+            # elsewhere scales that block by k, its cross terms by sqrt(k),
+            # leaves everything else alone, and stays positive semidefinite.
+            seen = np.any(H != 0.0, axis=0)
+            d = np.where(seen, math.sqrt(REJECT_INFLATION), 1.0)
+            self.P = self.P * np.outer(d, d)
             S = H @ self.P @ H.T + R_noise
             try:
                 S_inv = np.linalg.inv(S)
