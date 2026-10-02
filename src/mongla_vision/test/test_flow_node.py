@@ -883,3 +883,44 @@ class TestIntrinsicsFollowTheFrames:
         from mongla_vision.flow.flow_node import FlowVelocityNode
         src = inspect.getsource(FlowVelocityNode._on_image)
         assert src.index('_admit_frame_size(') < src.index('_slot')
+
+
+# --------------------------------------------------------------------------- #
+#  issue #23: the published sigma covers what the fit cannot see
+# --------------------------------------------------------------------------- #
+def _published_sigma(node, vx, vy, h, rates):
+    import types
+    got = []
+    node._pub_vel = types.SimpleNamespace(publish=got.append)
+    node._pub_quality = types.SimpleNamespace(publish=lambda m: None)
+    node._maybe_log = lambda *a, **k: None
+    node._last_rates = rates
+    v = types.SimpleNamespace(vx=vx, vy=vy)
+    node._publish_velocity(v, 100.0, 100, 0.5, h, 0.1, 3)
+    return math.sqrt(got[-1].twist.covariance[0])
+
+
+def test_rotation_the_gains_leave_in_is_inside_the_published_sigma():
+    """The falsifier, on the axis that actually matters: a downward camera's
+    yaw is absorbed by the rigid fit, its PITCH is not. 0.1 rad/s at 0.7 m
+    with the shipped gain of 0 reads as 7 cm/s of motion that is not there,
+    and the fit's own sigma said ~1 mm/s."""
+    n = _make(pool_depth_m=4.0, estimate_time_offset=False)
+    try:
+        false_v = 0.7 * 0.1
+        sigma = _published_sigma(n, false_v, 0.0, 0.7, (0.1, 0.0))
+        assert sigma >= false_v / 3.0
+    finally:
+        n.destroy_node()
+
+
+def test_a_calibrated_gain_earns_a_tighter_sigma_and_scale_is_always_in():
+    n = _make(pool_depth_m=4.0, estimate_time_offset=False,
+              gyro_gain_x=-1.150, gyro_gain_y=-1.095)
+    try:
+        uncal = 0.7 * 0.1
+        sigma = _published_sigma(n, 0.3, 0.0, 0.7, (0.1, 0.0))
+        assert sigma < uncal / 3.0                       # 90 % removed (§12)
+        assert sigma >= 0.036 * 0.3                       # 3.6 % scale (§5)
+    finally:
+        n.destroy_node()
