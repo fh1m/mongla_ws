@@ -51,6 +51,13 @@ trust the rest.
 UNKNOWN. It is not absent** — it is at +330.60 with its duct ring at +351.00, and
 its **8.06 mm offset from the Z centreline is a real pitch moment**. See §3.
 
+> ⛔ **RETRACTED 2026-10-02 (mongla_ws issue #9).** The 8.06 mm is the A2212's
+> *bounding box*, pulled sideways by its mount bracket. The prop hub in the same
+> export sits at **+0.12 mm** and the duct ring at 0.00, so the thrust line is on
+> the axis and pure surge does not pitch the hull. Use z = 0.00012 m. The
+> paragraphs below that build on 8.06 mm describe a capability (trimming an
+> off-axis thruster), not this hull; this needs to reach the firmware team.
+
 **The frame labels differ from our own shipped constants.** PR K measured in the
 glTF export frame (long axis Z); `hull_geometry.yaml` and
 `geometric_allocation.py` are in the CAD frame (long axis Y). Each is internally
