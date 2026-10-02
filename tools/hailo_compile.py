@@ -143,6 +143,45 @@ def calib_frames(n: int, imgsz: int):
     return np.stack(out[:n]).astype('uint8')
 
 
+DFC_MIN_CALIB = 1024
+_DOWNGRADE = re.compile(r'Reducing optimization level to (\d+)')
+
+
+def downgrade_reasons(*, frames: int, gpu, log_lines=()) -> list:
+    """Every reason this build would silently lose optimisation (issue #47).
+
+    The DFC drops AdaRound and fine-tuning in TWO cases, warns, and carries on:
+    fewer than 1024 calibration images, or no GPU. Either way the HEF compiles,
+    loads, runs at full speed, and returns degraded scores. Checked three ways,
+    because each alone has a hole:
+      - the frames ACTUALLY DELIVERED, not requested (`calib_frames` accepts
+        as few as half of what was asked);
+      - the GPU, BEFORE the hour-long optimise (`gpu` None = could not tell);
+      - the DFC's own warning, scraped from its log AFTER, which catches any
+        reason this list does not know about.
+    """
+    why = []
+    if frames < DFC_MIN_CALIB:
+        why.append(f'{frames} calibration frames delivered, below the DFC\'s '
+                   f'{DFC_MIN_CALIB}')
+    if gpu is False:
+        why.append('no GPU visible: the DFC drops to optimisation level 0')
+    for line in log_lines:
+        m = _DOWNGRADE.search(str(line))
+        if m:
+            why.append(f'the DFC reported: {m.group(0)}')
+    return why
+
+
+def _gpu_visible():
+    """True / False if TensorFlow (which the DFC runs on) can say; else None."""
+    try:
+        import tensorflow as tf
+        return bool(tf.config.list_physical_devices('GPU'))
+    except Exception:                       # noqa: BLE001 -- unknown, not absent
+        return None
+
+
 def class_names(pt: pathlib.Path) -> list:
     import yaml
     side = pt.with_suffix('.yaml')
@@ -272,10 +311,52 @@ def main() -> int:
         print('[hailo] ⚠ REDUCED OPTIMIZATION requested. This HEF will have '
               'corrupted scores. Do not deploy it.')
 
-    runner.optimize(calib_frames(a.calib_frames, a.imgsz))
+    frames = calib_frames(a.calib_frames, a.imgsz)
+    gpu = _gpu_visible()
+    before = downgrade_reasons(frames=len(frames), gpu=gpu)
+    if before and not a.allow_reduced_optimization:
+        raise SystemExit('[hailo] REFUSING before the optimise: '
+                         + '; '.join(before) + '. --allow-reduced-optimization '
+                         'for a throwaway build that must not be deployed.')
+
+    import logging
+
+    class _Keep(logging.Handler):
+        lines: list = []
+
+        def emit(self, record):
+            _Keep.lines.append(record.getMessage())
+
+    keep = _Keep(level=logging.WARNING)
+    logging.getLogger().addHandler(keep)
+    # The DFC also writes its own log file in the working directory, through
+    # a logger that may not propagate; read what this optimise appended.
+    dfc_log = pathlib.Path.cwd() / 'hailo_sdk.client.log'
+    start = dfc_log.stat().st_size if dfc_log.exists() else 0
+    try:
+        runner.optimize(frames)
+    finally:
+        logging.getLogger().removeHandler(keep)
+    if dfc_log.exists():
+        with dfc_log.open('r', errors='replace') as fh:
+            fh.seek(start)
+            _Keep.lines.extend(fh.read().splitlines())
+    after = downgrade_reasons(frames=len(frames), gpu=gpu,
+                              log_lines=_Keep.lines)
+    if after and not a.allow_reduced_optimization:
+        raise SystemExit('[hailo] REFUSING after the optimise -- nothing was '
+                         'compiled: ' + '; '.join(after))
     opt = out / f'{a.model}_optimized.har'
     runner.save_har(str(opt))
     print(f'[hailo] optimised -> {opt.name}')
+    # Provenance beside the artifact, so a runtime or a reviewer can see what
+    # this HEF was built with rather than infer it.
+    (out / f'{a.model}.hef.provenance.txt').write_text(
+        f'calibration_frames: {len(frames)}\n'
+        f'gpu_visible: {gpu}\n'
+        f'reduced_optimization: {bool(after)}\n'
+        f'reasons: {after}\n'
+        f'nms_score_th: {a.nms_score_th}\n')
 
     hef = out / f'{a.model}.hef'
     hef.write_bytes(runner.compile())
