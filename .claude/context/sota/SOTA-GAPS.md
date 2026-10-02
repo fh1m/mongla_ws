@@ -20,7 +20,7 @@
 | G-03 | Measure `k_n_per_rpm2` on a fitted thruster | OURS | control | 4 | 1 | 1 | **20.0** | needs thrusters (G2), not water |
 | G-12 | Measure the ESC deadband; the yaw floor may sit inside it | SOTA | control | 4 | 1 | 1 | **20.0** | yes — one thruster on a bench |
 | G-11 | Geometric `B` + one offline pseudo-inverse + **report the scale factor** | SOTA | control | 5 | 2 | 2 | **12.5** | yes — the host half; the report is firmware PR #20 |
-| G-13 | Detect a dead thruster on **current**, not RPM | SOTA | control | 4 | 1 | 2 | **10.0** | needs firmware PR #4 + thrusters |
+| G-13 | Detect a dead thruster on **current**, not RPM | SOTA | control | 4 | 1 | 2 | **10.0** | ⚠ **blocked on HARDWARE**: Bluejay sends no current (#48) -- needs different ESCs or a current sensor |
 | G-14 | Assign materials in CAD and get a real BG | SOTA | control | 4 | 1 | 2 | **10.0** | yes — a scale and a CAD session |
 | G-07 | Measure tool offsets and stop aiming the camera centre | OURS | vision | 4 | 1 | 1 | **20.0** | yes — a tape measure |
 | G-05 | Turn `retrodict` on by default after measuring its Pi cost | OURS | localization | 3 | 1 | 1 | **15.0** | yes — already proven correct |
@@ -266,7 +266,14 @@ undecodable and **958/958 frames reading exactly 0 RPM with nothing attached** �
 here reports a healthy zero for a missing thruster.
 
 **The move.** Firmware PR #4 already decodes per-ESC voltage/current/temperature and discards it;
-getting it on the wire makes the cheap detector possible. Cornell's version — comparing *attempted
+getting it on the wire makes the cheap detector possible.
+
+⚠ **Corrected 2026-10-02 (#48): not on our ESCs.** Bluejay's extended-telemetry schedule
+(`src/Modules/Scheduler.asm`, at 0368d11) sends demag, status, debug1, debug2 and temperature
+frames only, with **no voltage and no current**. The Pico's `CURRENT` case is never fed. The
+current-based detector needs different ESC firmware or a current sensor. That makes it a hardware
+conversation, not a firmware PR. The Cornell-style attempted-versus-actual check below still needs
+nothing new. Cornell's version — comparing *attempted
 against actual* movement — needs nothing new at all.
 
 **The falsifier.** Unplug one thruster on the bench and watch the detector. If current does not
