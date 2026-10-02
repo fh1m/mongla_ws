@@ -82,7 +82,7 @@ Ask K should therefore be argued as: *the mixer is what prevents geometry from
 being used at all*, not merely *the mixer is for a different hull*. Either the
 board computes `M` from geometry at boot, or a per-thruster command path exists.
 Until one of those lands, **dead-thruster tolerance, weighted allocation and
-redistribution are all unreachable**, however well tested they are here.
+priority allocation are all unreachable**, however well tested they are here.
 
 ---
 

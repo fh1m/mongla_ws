@@ -35,7 +35,7 @@ their stack has been in water and ours has not.
 | | |
 |---|---|
 | **Ahead** | 500 Hz on the board, and a host that refuses verbs it cannot honour rather than faking them |
-| **Level** | yaw-first priority turns out to be published DP convention; `REVERSE_EFFICIENCY = 0.77` sits within 1–3 % of the vendor's own 0.754–0.787 |
+| **Level** | yaw-first priority turns out to be published DP convention (in `allocation.prioritise` and, since #44, in the geometric allocator for the tunnel hull, which reads the same ladder); `REVERSE_EFFICIENCY = 0.77` sits within 1–3 % of the vendor's own 0.754–0.787 |
 | **Behind** | **allocation.** Durham's theorem proves clip-after-a-fixed-mix cannot be exact for *any* mixer weights; ours is weaker still — a per-group scale in **demand space**, where ±1 entries overstate surge/sway by **41 %**. Both RoboSub teams with published allocators moved to QP or a documented priority ladder years ago |
 | **Blocked** | the achieved wrench is computed on the board every tick and **transmitted nowhere**, so *no* published anti-windup design in this family is implementable here, whichever we pick |
 | **Unknown** | `k_n_per_rpm2` has no value at all. Every force-domain claim sits behind one load-cell afternoon |

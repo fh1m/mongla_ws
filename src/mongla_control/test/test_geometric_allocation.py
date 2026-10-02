@@ -246,31 +246,31 @@ def test_an_over_large_demand_is_scaled_not_clipped(alloc):
 def test_uniform_scaling_keeps_the_ratio_between_axes(alloc):
     """⚠ THIS IS A PROPERTY OF THE SCALING FALLBACK, NOT OF THE ALLOCATOR.
 
-    It held for every saturating demand until redistribution was added, and the
-    test was written as if it were universal. It is not: redistribution
-    deliberately gives up direction-preservation to recover magnitude, and this
+    It held for every saturating demand until saturation handling was added,
+    and the test was written as if it were universal. It is not: the priority
+    fit deliberately gives up direction-preservation to rank the axes, and this
     test failed the moment the default changed -- correctly. The contract is
     per-mode, so the test is now per-mode."""
-    small = alloc.allocate(surge=0.2, heave=0.1, redistribute=False)
-    huge = alloc.allocate(surge=4.0, heave=2.0, redistribute=False)
+    small = alloc.allocate(surge=0.2, heave=0.1, prioritise=False)
+    huge = alloc.allocate(surge=4.0, heave=2.0, prioritise=False)
 
     r_small = small.achieved[IDX['surge']] / small.achieved[IDX['heave']]
     r_huge = huge.achieved[IDX['surge']] / huge.achieved[IDX['heave']]
     assert r_huge == pytest.approx(r_small, rel=1e-6)
 
 
-def test_redistribution_does_NOT_preserve_direction_and_that_is_the_point(alloc):
+def test_priority_does_NOT_preserve_direction_and_that_is_the_point(alloc):
     """The trade it makes, stated as a test so it cannot be mistaken for a bug.
-    Redistribution bends the wrench's direction in order to deliver more of its
-    magnitude; uniform scaling keeps the direction and delivers less."""
+    The priority fit bends the wrench's direction so the higher-ranked axis is
+    delivered whole; uniform scaling keeps the direction and shorts both."""
     want = {'surge': 4.0, 'heave': 2.0}
-    scaled = alloc.allocate(**want, redistribute=False)
-    spread = alloc.allocate(**want, redistribute=True)
+    scaled = alloc.allocate(**want, prioritise=False)
+    ranked = alloc.allocate(**want)
 
     r_scaled = scaled.achieved[IDX['surge']] / scaled.achieved[IDX['heave']]
-    r_spread = spread.achieved[IDX['surge']] / spread.achieved[IDX['heave']]
-    assert r_spread != pytest.approx(r_scaled, rel=1e-3)
-    assert _err(spread, want) < _err(scaled, want)
+    r_ranked = ranked.achieved[IDX['surge']] / ranked.achieved[IDX['heave']]
+    assert r_ranked != pytest.approx(r_scaled, rel=1e-3)
+    assert ranked.achieved[IDX['heave']] > scaled.achieved[IDX['heave']]
 
 
 def test_a_feasible_demand_is_not_reported_saturated(alloc):
@@ -300,64 +300,114 @@ def test_build_b_is_a_pure_function_of_the_geometry():
     assert b[IDX['yaw']][0] == pytest.approx(-0.5)   # r x axis, arm 0.5 m
 
 
-# ── redistribution: use the authority that exists ───────────────────────────
+# ── priority: who comes up short when the thrusters run out (#44) ─────────
 
-def _err(got, want: dict) -> float:
-    return math.sqrt(sum((v - got.achieved[IDX[k]]) ** 2 for k, v in want.items()))
+def test_the_ladder_is_the_boards_ladder_renamed():
+    """One law, two vocabularies. The order is `allocation.py`'s; this module
+    restates it only because the bench loads it without the package. If either
+    table moves alone, this fails."""
+    from mongla_control import allocation
+    from mongla_control.geometric_allocation import (
+        BOARD_AXIS, HORIZONTAL_PRIORITY, VERTICAL_PRIORITY)
+    assert tuple(BOARD_AXIS[a] for a in HORIZONTAL_PRIORITY) == allocation.HORIZONTAL_PRIORITY
+    assert tuple(BOARD_AXIS[a] for a in VERTICAL_PRIORITY) == allocation.VERTICAL_PRIORITY
 
 
-@pytest.mark.parametrize('want,floor', [
-    ({'heave': 1.2, 'pitch': 0.30}, 0.40),
-    ({'sway': 1.5, 'yaw': 0.15}, 0.50),
-    ({'heave': 1.9, 'pitch': 0.45}, 0.40),
-])
-def test_redistribution_delivers_more_wrench_than_uniform_scaling(alloc, want, floor):
-    """⭐ THE FALSIFIER FOR THIS FEATURE, and it is a measurement not a hope.
+def test_an_unactuated_axis_holds_no_rank():
+    """Issue #9: roll heads the vertical ladder and this hull cannot produce
+    roll. It is dropped before ranking, so pitch is first, not second."""
+    from mongla_control.geometric_allocation import priority_order
+    assert priority_order() == ('yaw', 'pitch', 'sway', 'heave', 'surge')
 
-    A uniform scale keeps the wrench pointing the right way but throws away
-    magnitude from EVERY thruster, including ones with room to spare.
-    Redistribution pins only the thrusters that actually hit a stop and asks the
-    rest for the difference. If that does not measurably reduce the error, the
-    extra code has no reason to exist and should be deleted."""
-    scaled = alloc.allocate(**want, redistribute=False)
-    spread = alloc.allocate(**want, redistribute=True)
 
-    assert _err(spread, want) < _err(scaled, want) * (1.0 - floor)
+L_YAW = 0.1750
+
+
+@pytest.mark.parametrize('sway,yaw', [(1.5, 0.10), (1.5, 0.15), (1.9, 0.20)])
+def test_yaw_is_delivered_whole_and_sway_gets_what_is_left(alloc, sway, yaw):
+    """⭐ THE FALSIFIER FROM #44, and the closed form it must equal.
+
+    The lateral pair is a 2x2 block: yaw needs a differential of yaw/L, and
+    sway gets 2*limit minus that. Total-error least squares delivered 88 %,
+    60 % and 11 % of these yaws -- the last worse than the uniform scale it was
+    written to beat -- because a unit of yaw error weighs 1/33 of a unit of
+    sway error in mixed units."""
+    got = alloc.allocate(sway=sway, yaw=yaw)
+
+    assert got.achieved[IDX['yaw']] == pytest.approx(yaw, abs=1e-9)
+    assert got.achieved[IDX['sway']] == pytest.approx(2.0 - yaw / L_YAW, abs=1e-9)
+
+
+def test_pitch_is_delivered_whole_before_heave(alloc):
+    """The vertical half: attitude before throttle. Least squares gave up 29 %
+    of this pitch to keep heave."""
+    got = alloc.allocate(heave=1.2, pitch=0.30)
+
+    assert got.achieved[IDX['pitch']] == pytest.approx(0.30, abs=1e-9)
+    assert got.achieved[IDX['heave']] < 1.2
 
 
 def test_a_saturating_surge_no_longer_steals_heave_authority(alloc):
     """⛔ THE FAILURE THE FIRMWARE'S OWN COMMENT DESCRIBES, one layer up. Its
     mixer note records that a global scale meant "a hard forward burst silently
     cost a third of the vehicle's roll/pitch authority, in the manoeuvre where
-    you want it most".
-
-    Here surge saturates the axial unit while the vertical pair is nowhere near
-    its limit. Scaling everything back loses 29 % of the heave for no reason;
-    redistribution keeps it whole."""
+    you want it most". Heave outranks surge, so it stays whole."""
     want = {'surge': 1.4, 'heave': 0.9}
-    scaled = alloc.allocate(**want, redistribute=False)
-    spread = alloc.allocate(**want, redistribute=True)
+    scaled = alloc.allocate(**want, prioritise=False)
+    ranked = alloc.allocate(**want)
 
     assert scaled.achieved[IDX['heave']] < 0.7        # authority thrown away
-    assert spread.achieved[IDX['heave']] == pytest.approx(0.9, abs=1e-6)
-    assert 'axial' in spread.clamped
+    assert ranked.achieved[IDX['heave']] == pytest.approx(0.9, abs=1e-6)
+    assert 'axial' in ranked.clamped
 
 
-def test_redistribution_minimises_TOTAL_error_which_can_cost_one_axis(alloc):
-    """⚠ THE HONEST TRADEOFF, pinned so nobody is surprised by it later.
+HULLS = [(), ('lateral_b',), ('vertical_a',), ('lateral_b', 'vertical_a', 'vertical_b')]
 
-    Least squares minimises the total, so an individual axis can end up FURTHER
-    from its request even as the overall error halves. Making one axis win is a
-    question of WEIGHTS -- the yaw-first priority that DP practice uses -- and
-    that is deliberately not built yet."""
-    want = {'heave': 1.2, 'pitch': 0.30}
-    scaled = alloc.allocate(**want, redistribute=False)
-    spread = alloc.allocate(**want, redistribute=True)
 
-    assert _err(spread, want) < _err(scaled, want)
-    # ...and yet pitch alone got worse:
-    assert (abs(0.30 - spread.achieved[IDX['pitch']])
-            > abs(0.30 - scaled.achieved[IDX['pitch']]))
+@pytest.mark.parametrize('disabled', HULLS)
+def test_no_axis_is_shorted_while_its_thrusters_have_room(disabled):
+    """The property that makes it a fit and not a cut: an axis comes up short
+    only because some thruster it needs is AT its stop. Also the #60 guard --
+    a thruster pinned and then scaled off its stop is exactly room left on the
+    table. Seeded, 2000 demands per hull, live and dead thrusters alike."""
+    import random
+    from mongla_control.geometric_allocation import priority_order
+    rng = random.Random(44)
+    a = GeometricAllocator(disabled=disabled)
+    order = priority_order(a.unactuated)
+
+    for _ in range(2000):
+        req = {k: rng.uniform(-3.0, 3.0) for k in order}
+        got = a.allocate(**req)
+        assert max(abs(t) for t in got.thrusts) <= 1.0 + 1e-9, req
+        if any(abs(got.residual[IDX[k]]) > 1e-6 for k in order):
+            if a.allocate(**req, prioritise=False).scale < 1.0:
+                assert got.clamped, req
+
+
+@pytest.mark.parametrize('disabled', [(), ('vertical_a',)])
+def test_the_top_axis_never_does_worse_than_uniform_scaling(disabled):
+    """Lexicographic, not total: the FIRST-ranked axis gets at least what the
+    uniform scale would have given it. Total error in mixed units is not a
+    metric this allocator answers to (#44).
+
+    ⚠ Only on hulls where yaw has a column of its own. With a lateral tunnel
+    dead, yaw and sway come from ONE thruster and are a single direction
+    (`test_killing_a_lateral_tunnel_makes_sway_and_yaw_inseparable`); ranking
+    two halves of one column has no meaning, and the bound does not hold."""
+    import random
+    from mongla_control.geometric_allocation import priority_order
+    rng = random.Random(4444)
+    a = GeometricAllocator(disabled=disabled)
+    order = priority_order(a.unactuated)
+
+    for _ in range(2000):
+        req = {k: rng.uniform(-3.0, 3.0) for k in order}
+        top = order[0]
+        ranked = a.allocate(**req)
+        scaled = a.allocate(**req, prioritise=False)
+        assert (abs(ranked.residual[IDX[top]])
+                <= abs(scaled.residual[IDX[top]]) + 1e-9), req
 
 
 def test_a_clamped_thruster_sits_exactly_at_its_limit(alloc):
@@ -384,7 +434,7 @@ def test_no_thruster_ever_exceeds_its_limit(alloc):
         assert max(abs(t) for t in got.thrusts) <= 1.0 + 1e-9, req
 
 
-def test_redistribution_still_refuses_an_unactuated_axis(alloc):
+def test_priority_still_refuses_an_unactuated_axis(alloc):
     """Saturation handling must not quietly re-admit an impossible request."""
     got = alloc.allocate(heave=1.9, roll=0.8)
 
@@ -392,78 +442,12 @@ def test_redistribution_still_refuses_an_unactuated_axis(alloc):
     assert got.residual[IDX['roll']] == pytest.approx(0.8, abs=1e-9)
 
 
-def test_redistribution_falls_back_to_scaling_when_nothing_is_free(alloc):
-    """With a single thruster left there is nothing to redistribute INTO, so the
-    uniform scale must still bound the output."""
+def test_a_single_thruster_left_is_still_bounded(alloc):
+    """With a single thruster left the fit has one axis to grant, and the
+    output must still sit at the limit, not past it."""
     alloc.disable('lateral_a', 'lateral_b', 'vertical_a', 'vertical_b')
 
     got = alloc.allocate(surge=5.0)
 
     assert abs(got.thrusts[4]) == pytest.approx(1.0, abs=1e-9)
     assert got.saturated
-
-
-# ── issue #60: the last pin must reach the output ───────────────────────────
-
-@pytest.mark.parametrize('disabled', [(), ('lateral_b', 'vertical_a', 'vertical_b')])
-def test_pinning_every_thruster_delivers_the_full_clamp_not_half(disabled):
-    """Ask twice what every live thruster delivers at its stop. The answer is
-    every live thruster AT its stop. The pass that pinned the last free thruster
-    used to exit before writing the pin, leaving that thruster out of bounds, and
-    the caller's uniform scale then halved thrusters already at their limit --
-    half the available wrench on every axis, from a routine meant to add it."""
-    a = GeometricAllocator(disabled=disabled)
-    all_at_limit = tuple(sum(row) for row in a.b)
-    want = tuple(2.0 * v for v in all_at_limit)
-
-    got = a.allocate(**dict(zip(AXES, want)))
-
-    assert got.scale == 1.0
-    for i, name in enumerate(got.names):
-        assert abs(got.thrusts[i]) == pytest.approx(
-            0.0 if name in disabled else 1.0, abs=1e-9), name
-    assert got.achieved == pytest.approx(all_at_limit, abs=1e-9)
-
-
-@pytest.mark.parametrize('disabled', [(), ('lateral_b',), ('vertical_a',),
-                                      ('lateral_b', 'vertical_a', 'vertical_b')])
-def test_redistribution_is_never_worse_than_the_scale_it_replaces(disabled):
-    """The only reason to redistribute is to deliver MORE of the request than a
-    uniform scale. Measured over 80 000 random demands across these four hulls:
-    the stale-pin defect made it worse in 7 786 (9.7 %); with the pin written,
-    in none. A redistribution that can lose to its own fallback is a regression
-    shipped as a feature."""
-    import random
-    rng = random.Random(60)
-    a = GeometricAllocator(disabled=disabled)
-    actuated = [k for k in AXES if k not in UNACTUATED]
-
-    def err(alloc):
-        return sum(alloc.residual[IDX[k]] ** 2 for k in actuated)
-
-    for _ in range(2000):
-        req = {k: rng.uniform(-3.0, 3.0) for k in actuated}
-        mixed = a.allocate(**req)
-        scaled = a.allocate(**req, redistribute=False)
-        assert err(mixed) <= err(scaled) + 1e-9, req
-        if mixed.clamped:
-            assert mixed.scale == 1.0, 'a pinned thruster must never be scaled off its stop'
-
-
-def test_a_degenerate_reduced_solve_falls_back_to_the_UNCONSTRAINED_direction(alloc, monkeypatch):
-    """When the reduced set cannot be solved, the uniform scale must apply to the
-    pseudo-inverse solution, not to a half-redistributed vector."""
-    req = {'heave': 1.9, 'pitch': 0.45}
-    expected = alloc.allocate(**req, redistribute=False)
-    real = alloc._least_squares
-
-    def refuse_reduced(rest, free):
-        if len(free) < len(alloc._live):
-            raise ValueError('degenerate')
-        return real(rest, free)
-
-    monkeypatch.setattr(alloc, '_least_squares', refuse_reduced)
-    got = alloc.allocate(**req)
-
-    assert got.thrusts == pytest.approx(expected.thrusts, abs=1e-12)
-    assert got.clamped == ()
