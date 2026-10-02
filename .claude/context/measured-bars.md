@@ -3368,8 +3368,11 @@ primitive there closes the depth loop, including a plain `move_forward`. Held at
 **Depth error is unchanged from the stationary case at every surge tried, and
 pitch stays under 1°.**
 
-⚠ **And the allocator's parasitic-pitch compensation is NOT why.** The axial unit
-sits 8.1 mm off the centreline, so pure surge also pitches; the geometric
+⚠ **And the allocator's parasitic-pitch compensation is NOT why.** *(Retracted
+2026-10-02, issue #9: the 8.1 mm was the A2212's bounding box, pulled by its
+bracket; the prop hub is at +0.12 mm, so on the real geometry there is almost
+nothing to compensate. The finding below stands for an off-axis thruster.)* The
+run modelled the axial unit 8.1 mm off the centreline, so pure surge also pitched; the geometric
 allocator answers by firing the vertical pair at ∓0.0078. Run with that
 compensation deliberately removed — the axial demand passed straight through —
 the result is **identical**: 0.0250 m and 0.906°. The attitude cascade and the

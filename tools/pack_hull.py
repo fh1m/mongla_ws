@@ -219,7 +219,9 @@ def main(argv=None):
             + quant.tobytes() + colours.tobytes() + parts.tobytes() + idx.tobytes())
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_bytes(blob)
-    print(f"wrote {args.out.relative_to(REPO)}  {len(blob) / 1024:.0f} KB "
+    shown = (args.out.resolve().relative_to(REPO)
+             if args.out.resolve().is_relative_to(REPO) else args.out)
+    print(f"wrote {shown}  {len(blob) / 1024:.0f} KB "
           f"({len(gzip.compress(blob, 9)) / 1024:.0f} KB gzipped)")
 
 

@@ -46,7 +46,7 @@
 #     hull bbox  176.10 x 172.09 x 702.00 mm   fineness 3.986
 #     bore along mesh X: -175.00, +175.00      separation 350.00 mm
 #     bore along mesh Y: -259.50, +259.50      separation 519.00 mm
-#     A2212 axial at mesh +330.60, y +8.06     (CAD -0.3306, z +0.00806)
+#     A2212 axial at mesh +330.60, y +8.06     (motor BOX; its prop hub is +0.12)
 #     Part 3, a 87.99 mm ring 2 mm thick, at mesh +351.00  <- the axial duct
 #
 # So the REST API is no longer the only exact path, and `hull.mgla` is no longer
@@ -89,7 +89,8 @@ frame:
 # ── the five thrusters, measured ─────────────────────────────────────────────
 #
 # ⚠ ALL FIVE SIT ON THE CENTRELINE -- every centre is at x = 0, and the only
-# off-axis figure anywhere is the axial motor's 8.1 mm in Z. They are
+# off-axis figure was the axial motor's 8.1 mm in Z, and that was its bracket
+# (the prop hub is at +0.12 mm; see `axial` below). They are
 # distributed along Y ONLY. That is what makes the vehicle's actuation legible:
 # a force along X at station y makes a moment about Z (YAW); a force along Z at
 # station y makes a moment about X (PITCH); and the axial force lies on Y, so
@@ -139,7 +140,13 @@ thrusters:
   # Position is the reliable signal here and the shape is not.
   - name: axial
     part: A2212
-    position_m: [0.0, -0.3306, 0.0081]
+    # ⛔ z = PROP HUB, +0.12 mm -- NOT the motor box's +8.06 mm (issue #9).
+    # Re-read 2026-10-02 with tools/hull_stations.py from the same export:
+    #   A2212        27.80 x 43.88 x 40.00   centre z +8.06   <- bracket pulls it
+    #   prop (Pt 1)  36.95 x 36.73 x 21.00   centre z +0.12   <- the thrust line
+    #   duct (Pt 3)  87.99 x 87.97 x  2.00   centre z  0.00
+    # A thruster's position is its thrust line, never a part's bounding box.
+    position_m: [0.0, -0.3306, 0.00012]
     axis: [0, 1, 0]
     bore_mm: null          # a motor, not a tunnel; duct ring at y=-351 is 88 mm
     extent_mm: [27.8, 40, 43.9]

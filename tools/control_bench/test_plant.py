@@ -188,14 +188,14 @@ def test_the_wrench_matrix_says_roll_is_unactuated():
     assert any(v != 0.0 for v in b[5]), 'yaw must be actuated'
 
 
-def test_the_axial_thruster_has_a_parasitic_pitch_moment():
-    """The nose unit sits 8.1 mm off the centreline in CAD, so pure surge also
-    pitches. Small, real, and the allocator already compensates it -- recorded
-    here so it cannot be 'cleaned up' as noise."""
+def test_the_axial_thrust_line_is_on_the_axis():
+    """The nose unit's PROP HUB sits 0.12 mm off the centreline; the 8.1 mm
+    once recorded here was its motor's bounding box, pulled sideways by the
+    mount bracket (issue #9). Pure surge therefore does not pitch this hull."""
     b = wrench_matrix(cad_hull_thrusters(20.0))
     axial = -1
     assert b[0][axial] == pytest.approx(1.0), 'axial must be pure surge in force'
-    assert abs(b[4][axial]) == pytest.approx(0.0081, abs=1e-4)
+    assert abs(b[4][axial]) == pytest.approx(0.00012, abs=1e-5)
 
 
 def test_the_frame_remap_puts_the_long_axis_on_surge():

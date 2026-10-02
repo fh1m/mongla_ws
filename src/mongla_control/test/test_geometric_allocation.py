@@ -46,6 +46,31 @@ def test_the_mirrored_geometry_matches_the_yaml_it_came_from():
         assert [float(v) for v in entry['axis']] == pytest.approx(list(axis))
 
 
+def test_the_moment_reference_is_the_yaml_s_centre_of_mass_or_the_origin():
+    """Issue #9: every arm is referenced to a point, and the right point is the
+    CoM. While the yaml says it is unknown the reference stays at the box
+    centre; once it is measured, the constant must follow it."""
+    from mongla_control.geometric_allocation import REFERENCE_M
+    yaml = pytest.importorskip('yaml')
+    path = Path(__file__).resolve().parents[1] / 'config' / 'hull_geometry.yaml'
+    com = yaml.safe_load(path.read_text())['unknown']['centre_of_mass_m']
+    expected = (0.0, 0.0, 0.0) if com is None else tuple(com)
+    assert REFERENCE_M == pytest.approx(expected, abs=1e-9)
+
+
+def test_a_com_below_the_thrust_plane_ties_roll_to_sway():
+    """What setting the CoM will change, pinned before anyone sets it: with
+    the CoM h below the thrust plane, the roll row is h times the sway row
+    (My = r_z * Fx, with r_z = +h for every thruster), so pure sway rolls. The
+    sign is this CAD frame's; the proportionality is the physics."""
+    h = 0.011
+    b = build_b(reference=(0.0, 0.0, -h))
+    for j in range(len(THRUSTERS)):
+        assert b[IDX['roll']][j] == pytest.approx(h * b[IDX['sway']][j], abs=1e-12)
+    assert 'roll' not in __import__(
+        'mongla_control.geometric_allocation', fromlist=['x']).unactuated_axes(b)
+
+
 # ── what the geometry says about the vehicle ────────────────────────────────
 
 def test_roll_is_unactuated_and_that_is_derived_not_declared():
@@ -72,13 +97,12 @@ def test_the_pitch_lever_arm_is_the_measured_one():
     assert B[IDX['pitch']][3] == pytest.approx(0.2595, abs=1e-6)
 
 
-def test_the_axial_offset_produces_a_real_parasitic_pitch():
-    """The axial unit sits 8.1 mm off the centreline in Z, so surge makes a
-    small pitch. It is tiny, it is real, and a +-1 matrix cannot express it at
-    all -- which is the kind of coupling that shows up as a trim nobody can
-    explain."""
-    assert B[IDX['pitch']][4] == pytest.approx(-0.0081, abs=1e-6)
-    assert abs(B[IDX['pitch']][4]) < 0.01
+def test_the_axial_thrust_line_is_the_prop_hub_not_the_motor_box():
+    """Issue #9. The A2212's box centres 8.06 mm off the axis because of its
+    bracket; the prop hub is at +0.12 mm. The 8.06 mm put a surge->pitch moment
+    of 8.1 mN.m per unit into B that the hull does not have."""
+    assert THRUSTERS[4][1][2] == pytest.approx(0.00012, abs=1e-9)
+    assert abs(B[IDX['pitch']][4]) < 2e-4
 
 
 # ── the physics, stated as behaviour ────────────────────────────────────────
@@ -120,21 +144,30 @@ def test_surge_comes_from_the_axial_unit(alloc):
     assert got.thrusts[1] == pytest.approx(0.0, abs=1e-9)
 
 
-def test_the_vertical_pair_TRIMS_OUT_the_axial_parasitic_pitch(alloc):
-    """⭐ THE CAPABILITY A +-1 MIXER CANNOT HAVE, and it was not anticipated when
-    this file was first written -- the test asserted the verticals stayed at
-    zero, and the allocator was right where the test was wrong.
+def _offset_axial(z_m):
+    """The hull with its axial unit moved off the centreline -- the case a
+    re-mounted motor, or a CoM that turns out not to sit on the thrust plane,
+    would create."""
+    moved = list(THRUSTERS)
+    name, pos, axis = moved[4]
+    moved[4] = (name, (pos[0], pos[1], z_m), axis)
+    return GeometricAllocator(thrusters=tuple(moved))
 
-    The axial unit sits 8.1 mm off centre, so 0.6 of surge alone would make a
-    pitch of -0.00486. Asked for surge with pitch = 0, the solver fires the
-    vertical pair at -+0.009364 and cancels it EXACTLY.
 
-    A +-1 mixer carries no moment arms, so it cannot know the axial pitches the
-    hull at all: the vehicle would simply nose up or down whenever it
-    accelerated, and it would read as a trim nobody could explain."""
+def test_the_vertical_pair_TRIMS_OUT_an_off_axis_thruster():
+    """⭐ THE CAPABILITY A +-1 MIXER CANNOT HAVE. Shown on a CONSTRUCTED 8.1 mm
+    offset: the figure first came from the motor's bounding box and is not the
+    hull's (#9), but the capability is real for any off-axis thrust line.
+
+    0.6 of surge alone would make a pitch of -0.00486. Asked for surge with
+    pitch = 0, the solver fires the vertical pair and cancels it EXACTLY. A +-1
+    mixer carries no moment arms, so it cannot know a thruster pitches the
+    hull at all: the vehicle would nose up whenever it accelerated, and it
+    would read as a trim nobody could explain."""
+    alloc = _offset_axial(0.0081)
     got = alloc.allocate(surge=0.6)
 
-    uncorrected = B[IDX['pitch']][4] * 0.6
+    uncorrected = alloc.b[IDX['pitch']][4] * 0.6
     assert uncorrected == pytest.approx(-0.00486, abs=1e-5)
 
     assert got.achieved[IDX['pitch']] == pytest.approx(0.0, abs=1e-12)
@@ -142,10 +175,11 @@ def test_the_vertical_pair_TRIMS_OUT_the_axial_parasitic_pitch(alloc):
     assert abs(got.thrusts[2]) > 1e-4, 'the verticals must actually work here'
 
 
-def test_letting_pitch_float_is_not_the_same_as_demanding_zero(alloc):
+def test_letting_pitch_float_is_not_the_same_as_demanding_zero():
     """The trim above is not a side effect -- it happens because pitch=0 was
     REQUESTED. This pins that the solver is answering the whole wrench, not
     patching one axis."""
+    alloc = _offset_axial(0.0081)
     demanded = alloc.allocate(surge=0.6, pitch=0.0)
     tilted = alloc.allocate(surge=0.6, pitch=0.05)
 

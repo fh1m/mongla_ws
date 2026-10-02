@@ -54,7 +54,13 @@ THRUSTERS: Tuple[Tuple[str, Tuple[float, float, float], Tuple[float, float, floa
     ('lateral_b',  (0.0,  0.1750, 0.0),    (1.0, 0.0, 0.0)),
     ('vertical_a', (0.0, -0.2595, 0.0),    (0.0, 0.0, 1.0)),
     ('vertical_b', (0.0,  0.2595, 0.0),    (0.0, 0.0, 1.0)),
-    ('axial',      (0.0, -0.3306, 0.0081), (0.0, 1.0, 0.0)),
+    # ⛔ z IS THE PROP HUB, NOT THE MOTOR (issue #9). The A2212's bounding box
+    # centres 8.06 mm off the axis because its mount bracket pulls the box
+    # sideways; the prop hub in the same export sits at +0.12 mm and the duct
+    # ring at 0.00. A thruster's position is its THRUST LINE. The 8.06 mm
+    # invented a surge->pitch moment the allocator then spent the vertical pair
+    # cancelling.
+    ('axial',      (0.0, -0.3306, 0.00012), (0.0, 1.0, 0.0)),
 )
 
 # Wrench rows, in the CAD frame. Named for what they physically are so a
@@ -73,18 +79,31 @@ def _cross(a: Sequence[float], b: Sequence[float]) -> Tuple[float, float, float]
             a[0] * b[1] - a[1] * b[0])
 
 
-def build_b(thrusters=THRUSTERS) -> Tuple[Tuple[float, ...], ...]:
+# Moments are taken about this point, in the CAD frame.
+#
+# ⛔ IT IS THE BOUNDING-BOX CENTRE BECAUSE THE CENTRE OF MASS IS UNKNOWN, NOT
+# BECAUSE THE TWO ARE THE SAME (issue #9). Onshape has no material on any part,
+# so `hull_geometry.yaml` holds `unknown.centre_of_mass_m: null`, and a test
+# keeps this constant at the origin until that entry gets a value -- then
+# requires the two to agree. What it moves when set: a CoM `h` below the
+# thrust plane makes the roll row `h` times the sway row, so pure sway rolls
+# the hull and roll stops being cleanly unactuated; and every arm shifts by
+# the offset. Measure it (a float test and a tilt test), do not estimate it.
+REFERENCE_M: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+
+
+def build_b(thrusters=THRUSTERS, reference=REFERENCE_M) -> Tuple[Tuple[float, ...], ...]:
     """The 6xN allocation matrix: force rows then moment rows.
 
     Column j is what thruster j produces at unit output -- its axis as a force,
-    and `r x axis` as a moment. That is the whole model, and it is why the
-    moment arms are real distances instead of signs.
+    and `(r - reference) x axis` as a moment. That is the whole model, and it
+    is why the moment arms are real distances instead of signs.
     """
     rows = [[0.0] * len(thrusters) for _ in range(6)]
     for j, (_name, pos, axis) in enumerate(thrusters):
         n = (axis[0] ** 2 + axis[1] ** 2 + axis[2] ** 2) ** 0.5
         unit = tuple(c / n for c in axis)
-        moment = _cross(pos, unit)
+        moment = _cross(tuple(p - c for p, c in zip(pos, reference)), unit)
         for i in range(3):
             rows[i][j] = unit[i]
             rows[i + 3][j] = moment[i]
@@ -353,10 +372,11 @@ class GeometricAllocator:
         granted = {k: 0.0 for k in order}
 
         # ⚠ MORE THAN ONE PASS, AND WHY. Where the geometry couples axes, a
-        # LOWER axis can move a thruster AWAY from its stop: surge's pitch
-        # compensation (the axial unit's 8.1 mm offset) pulls the vertical pair
-        # inward after pitch has already pinned it. One pass would leave that
-        # room unspent and short pitch and heave while their thrusters had it.
+        # LOWER axis can move a thruster AWAY from its stop: any off-axis
+        # thruster's moment compensation, or the cross-terms a dead tunnel
+        # leaves behind, can pull a pinned pair inward after a higher axis
+        # pinned it. One pass would leave that room unspent and short the
+        # higher axis while its thrusters had it.
         # Each pass only ADDS to a grant, highest rank first, so a later pass
         # can never take from an axis what an earlier one gave.
         for _ in range(len(order) + 1):
