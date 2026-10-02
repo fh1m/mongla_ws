@@ -630,6 +630,10 @@ class MonglaMission:
             # present is not usable, so only a positive focal is kept.
             if len(k) >= 9 and k[0] > 0.0 and k[4] > 0.0:
                 self._cam_k[camera] = (k[0], k[4], k[2], k[5])
+                # The lens travels with K (issue #24): every metric path below
+                # removes it before the port model.
+                self.__dict__.setdefault('_cam_d', {})[camera] = tuple(
+                    float(x) for x in (msg.d or ()))
 
     def _resume_default_detector(self, camera: str) -> None:
         """Resume the default camera's detector, once, at first use.
@@ -1464,9 +1468,10 @@ class MonglaMission:
         fx, fy, cx, cy, _w, _h = o
         medium = getattr(self, 'medium', 'water')
         medium = medium if isinstance(medium, str) else 'water'
+        D = (getattr(self, '_cam_d', None) or {}).get(camera)
         rect, K_rect, _note = rectifier_for(
-            [[fx, 0.0, cx], [0.0, fy, cy], [0.0, 0.0, 1.0]], medium)
-        if rect is None:                          # air: K is already the pinhole
+            [[fx, 0.0, cx], [0.0, fy, cy], [0.0, 0.0, 1.0]], medium, D)
+        if rect is None:                # air, no lens model: K is the pinhole
             class _Identity:
                 @staticmethod
                 def rectify(pts):
@@ -1486,16 +1491,23 @@ class MonglaMission:
         return float(MonglaMission.HFOV_WATER_DEG_BY_CAMERA.get(
             str(cam), MonglaMission.HFOV_WATER_DEG_BY_CAMERA['forward']))
 
+    def _box_row(self, prop_class, camera, default):
+        """Image row of the box `where_offset` read -- the largest one."""
+        name = str(getattr(prop_class, 'class_name', prop_class)).strip().lower()
+        boxes = [r for r in self._records(camera, 1.0) if r[0] == name]
+        if not boxes:
+            return float(default)
+        return float(max(boxes, key=lambda r: r[3] * r[4])[2])
+
     def bearing_to(self, prop_class: str, *, camera: str | None = None,
                    hfov_deg: float | None = None) -> float | None:
         """Bearing from the hull to a visible prop, in WORLD terms. None if unseen.
 
-        Pixel offset to angle, then relative to absolute through the anchored
-        heading. Uses `where_offset`, which is the bbox centre as a fraction of
-        half the frame, so this is the small-angle pinhole reading of a
-        calibrated lens rather than a full unprojection through K. Good to
-        about a degree near the centre and worse at the edge, which is fine for
-        a resection whose geometry gate wants 12 deg of separation.
+        Pixel to angle, then relative to absolute through the anchored
+        heading. With live CameraInfo the box centre is unprojected in full --
+        lens off, then the port, then the pinhole at `K_rect` (issue #24); only
+        without it does this fall back to the FOV reading of `where_offset`,
+        which is good to about a degree near the centre and worse at the edge.
 
         Unanchored, the number returned is relative to boot, so a fix built
         from it is in a rotated frame. `fix_position` says so rather than
@@ -1511,7 +1523,13 @@ class MonglaMission:
             rect, K_rect = wc
             w = MonglaMission._optics(self, cam)[4]
             u = (float(off) + 1.0) * w / 2.0
-            u_r = float(rect.rectify([[u, K_rect[1][2]]])[0][0])
+            # ⛔ THE BOX'S OWN ROW, NOT THE PRINCIPAL ROW (issue #24). Lens and
+            # port are both RADIAL, so where a point lands horizontally depends
+            # on how far it is from the centre in BOTH axes. Reading every box
+            # on row cy undid them for a point that was not there.
+            v = MonglaMission._box_row(self, prop_class, cam, K_rect[1][2])
+            u_r = float(rect.rectify([[u, v]])[0][0])
+            # Azimuth of a pinhole ray is atan(x/f) whatever its height.
             rel = _math.degrees(_math.atan((u_r - K_rect[0][2]) / K_rect[0][0]))
             return (self.absolute_heading() + rel) % 360.0
         half = float(hfov_deg if hfov_deg is not None

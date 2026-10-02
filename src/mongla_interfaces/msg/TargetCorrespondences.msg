@@ -29,7 +29,7 @@ string source               # what produced them, e.g. 'anchor' -- for a bag
 # unset value is a refusal, not an assumption.
 uint8 OPTICS_UNSET=0
 uint8 OPTICS_RAW=1          # straight off the camera; the solver rectifies
-uint8 OPTICS_RECTIFIED=2    # publisher already applied RefractiveRectifier
+uint8 OPTICS_RECTIFIED=2    # publisher already applied optics.rectifier_for (lens, then port)
 uint8 optics
 
 # ⛔ WHICH PIXEL FRAME `image_points` ARE IN. A producer may work at a reduced

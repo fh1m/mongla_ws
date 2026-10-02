@@ -1018,9 +1018,14 @@ class LockNode(Node):
         # CameraInfo arrives with EVERY FRAME, so rebuilding here would
         # reallocate the rectifier and re-log at camera rate. Only a genuine
         # change of intrinsics is an event; anything else is the same K again.
-        if self._K is not None and np.array_equal(K, self._K):
+        # D travels with K (issue #24): the lens comes off before the port.
+        # It acts on normalised coordinates, so it needs no rescaling here.
+        D = tuple(float(v) for v in (msg.d or ()))
+        if (self._K is not None and np.array_equal(K, self._K)
+                and D == getattr(self, '_D', None)):
             return
         self._K = K
+        self._D = D
 
         # ⛔ THE RECTIFIED POINTS NEED THE RECTIFIED K. `rectify` re-projects
         # each ray through `f_ref`, which defaults to `fx * n` -- so a point at
@@ -1033,7 +1038,7 @@ class LockNode(Node):
         # `optics.rectifier_for`. `pnp_node` reads the same helper, so the two
         # cannot disagree about what optics a point set is in.
         from mongla_vision.optics import rectifier_for
-        self._rect, self._K_rect, note = rectifier_for(self._K, self._medium)
+        self._rect, self._K_rect, note = rectifier_for(self._K, self._medium, self._D)
         self.get_logger().info(f'[LOCK ] {note}')
 
     def _publish_correspondences(self, pose, header):

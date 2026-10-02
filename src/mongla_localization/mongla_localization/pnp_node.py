@@ -76,6 +76,7 @@ class PnPNode(Node):
         self._info = None
         self._K_full = None
         self._cache = {}            # (w,h) -> (rect, K_rect)
+        self._D = ()                # CameraInfo.d: the lens, removed before the port
         self._pub = self.create_publisher(TargetPose, topic, 10)
         self.create_subscription(CameraInfo, f'{ns}/camera_info',
                                  self._on_info, 10)
@@ -93,9 +94,16 @@ class PnPNode(Node):
         K = np.array([[k[0], 0.0, k[2]],
                       [0.0, k[4], k[5]],
                       [0.0, 0.0, 1.0]], np.float64)
-        if self._K_full is not None and np.array_equal(K, self._K_full):
+        # ⛔ D TRAVELS WITH K (issue #24). The forward lens is strongly barrel
+        # distorted; solving on its raw pixels biased every off-centre pose.
+        # Distortion coefficients act on NORMALISED coordinates, so unlike K
+        # they need no rescaling for another frame size.
+        D = tuple(float(v) for v in (msg.d or ()))
+        if (self._K_full is not None and np.array_equal(K, self._K_full)
+                and D == self._D):
             return                  # CameraInfo arrives with every frame
         self._K_full = K
+        self._D = D
         self._info = (int(msg.width or 0), int(msg.height or 0))
         self._cache.clear()
         self.get_logger().info(
@@ -118,7 +126,7 @@ class PnPNode(Node):
                       [0.0, f[1][1] * sy, f[1][2] * sy],
                       [0.0, 0.0, 1.0]], np.float64)
         from mongla_vision.optics import rectifier_for
-        rect, K_rect, note = rectifier_for(K, self._medium)
+        rect, K_rect, note = rectifier_for(K, self._medium, self._D)
         self.get_logger().info(f'[PNP  ] {w}x{h}: {note}')
         self._cache[key] = (rect, K_rect)
         return rect, K_rect

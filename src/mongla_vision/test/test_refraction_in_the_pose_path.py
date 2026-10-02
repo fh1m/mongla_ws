@@ -436,3 +436,25 @@ def test_camera_info_does_not_rebuild_the_rectifier_every_frame():
         assert node._rect is not first, (
             'genuinely new intrinsics must rebuild the rectifier')
         assert not np.array_equal(node._K_rect, np.eye(3))
+
+
+def test_the_lock_node_takes_the_lens_off_too():
+    """Issue #24: the anchor's reference and live pixels come off the same
+    distorted lens, so the lock's rectifier must remove it -- in air, where
+    there is no port, it is the ONLY correction -- and a new `d` under an
+    unchanged K must still rebuild it."""
+    pytest.importorskip('rclpy')
+    from sensor_msgs.msg import CameraInfo
+    with _node(medium='air') as node:
+        node._anchor = types.SimpleNamespace(
+            _be=types.SimpleNamespace(w=640, h=480))
+        info = CameraInfo()
+        info.width, info.height = 640, 480
+        info.k = [500.0, 0.0, 320.0, 0.0, 500.0, 240.0, 0.0, 0.0, 1.0]
+        node._on_info(info)
+        assert node._rect is None, 'air with no lens model is the identity'
+        info.d = [-0.36, 0.14, 0.0, 0.0, -0.035]
+        node._on_info(info)
+        assert node._rect is not None, 'a new d was cached away'
+        edge = node._rect.rectify([[620.0, 240.0]])
+        assert float(edge[0][0]) > 640.0, 'barrel distortion pulls the edge IN'
