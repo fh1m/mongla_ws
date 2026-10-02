@@ -52,6 +52,14 @@ LEDGER_BOUND = {
                         'cut; generous on purpose so ordinary parallax does '
                         'not trip it'),
     },
+    'mongla_vision.flow.flow_node': {
+        'FLOW_SCALE_SIGMA_FRAC': (0.036, '1.09 cm on 30 cm — 3.6 %',
+                                  'worst of three taped slides; the scale '
+                                  'term of the published flow sigma (#23)'),
+        'FLOW_ROT_RESIDUAL_CALIBRATED': (0.10, '575.7 → 57.1 mm/s',
+                                         'rotation left after a calibrated '
+                                         'de-rotation gain (#23)'),
+    },
     'mongla_vision.flow.scale_check': {
         'DISAGREE_FRAC': (0.20, None,
                           'the grating and barometric heights may differ by '

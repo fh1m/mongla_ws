@@ -178,6 +178,18 @@ _F_WATER_PX = 741.0
 # mission, while every slide here is translation-dominated. Re-enabling it
 # needs a HIGH-ROTATION test on this hull, with the gain excited at the pivot
 # the vehicle actually rotates about. BUGS.md §11 item 24.
+# ⛔ WHAT THE FIT'S OWN ERROR CANNOT SEE (issue #23). The published variance
+# was the standard error of the mean of the fit residual alone -- ~1 mm/s --
+# while the measured error of this sensor is centimetres. Two terms are added,
+# each from a measurement in measured-bars.md, not a guess:
+#   SCALE: worst of three taped 30 cm slides read 31.09 cm, 3.6 % (§5 of the
+#     downward-camera results; an upper bound -- the tape and hand are in it).
+#   ROTATION: roll/pitch rate makes h * omega of false velocity. With a
+#     de-rotation gain of 0 (the shipped default) all of it remains; a
+#     calibrated gain removed 90 % (575.7 -> 57.1 mm/s, §12), so 10 % remains.
+FLOW_SCALE_SIGMA_FRAC = 0.036
+FLOW_ROT_RESIDUAL_CALIBRATED = 0.10
+
 _GYRO_GAIN_X_DEFAULT = 0.0
 _GYRO_GAIN_Y_DEFAULT = 0.0
 _GYRO_GAIN_DEFAULT = 0.0          # back-compat for importers
@@ -1103,6 +1115,7 @@ class FlowVelocityNode(Node):
         quality = self._quality(v, n_used, disp)
         self._last_quality = quality
         self._last_reason = 'ok'
+        self._last_rates = (pitch_rate, roll_rate)
         self._publish_velocity(v, t, n_used, disp, h, dt, quality)
 
         # Distance is now the INTEGRAL OF GATED VELOCITY. Every refusal above
@@ -1399,6 +1412,16 @@ class FlowVelocityNode(Node):
         t -= self._td
         return t
 
+    def _model_variance(self, v, h) -> float:
+        """Variance the fit cannot see: scale and un-removed rotation (#23)."""
+        speed = math.hypot(float(v.vx), float(v.vy))
+        var = (FLOW_SCALE_SIGMA_FRAC * speed) ** 2
+        pr, rr = getattr(self, '_last_rates', (0.0, 0.0))
+        for rate, gain in ((pr, self._gy), (rr, self._gx)):
+            residual = 1.0 if gain == 0.0 else FLOW_ROT_RESIDUAL_CALIBRATED
+            var += (residual * float(h) * float(rate)) ** 2
+        return var
+
     def _publish_velocity(self, v, t, n_used, disp, h, dt, quality) -> None:
         m = TwistWithCovarianceStamped()
         t = self._stamp_for(t, dt)
@@ -1417,6 +1440,7 @@ class FlowVelocityNode(Node):
         sigma_px = (disp if disp is not None else 1.0) / math.sqrt(
             max(n_used, 1))
         var = (scale * sigma_px) ** 2
+        var += self._model_variance(v, h)
         m.twist.covariance[0] = var          # vx
         m.twist.covariance[7] = var          # vy
         for i in (14, 21, 28, 35):           # z / rpy unobserved here
