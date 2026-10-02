@@ -125,3 +125,68 @@ def test_a_replay_does_not_count_a_rejection_streak_twice():
     assert r.late == 1 and r.replayed == 3
     assert f.reject_streak['position'] == 3
     assert f.lockout_breaks == 0
+
+
+# --------------------------------------------------------------------------- #
+#  issue #31: replay restores EVERYTHING, and nothing is counted twice
+# --------------------------------------------------------------------------- #
+def test_every_filter_attribute_is_either_replay_state_or_configuration():
+    """`gated` was added after the snapshot was written and was not in it, so
+    a replay across a gated update counted it twice. The filter names its
+    replay state; this fails on any attribute in neither list."""
+    f = I.RIEKF()
+    named = set(I.RIEKF.REPLAY_STATE) | set(I.RIEKF.CONFIGURATION)
+    assert set(vars(f)) == named, (
+        f'unclassified: {sorted(set(vars(f)) - named)}; '
+        f'stale names: {sorted(named - set(vars(f)))}')
+
+
+def test_a_replay_does_not_count_a_gated_update_twice():
+    """The issue's unit: a gated update, then a late event that forces a
+    replay across it. `gated` must rise by one, not two."""
+    f = I.RIEKF()
+    f.P[3:6, 3:6] *= 1e6               # velocity unobserved -> the gate shuts
+    rd = Retrodictor(f, horizon_s=1.0)
+    stream = _stream(n=20)
+    for k, (t, g, a, R) in enumerate(stream):
+        rd.run(t, lambda f, g=g, a=a, R=R: _step(f, g, a, R))
+        if k == 10:
+            before = f.gated
+            rd.run(t + 1e-6, lambda f: f.update_depth(0.5, sigma=0.02))
+            assert f.gated == before + 1, 'the depth update was not gated'
+            once = f.gated
+    rd.run(stream[5][0] + 1e-6, _vel)                     # late: replays k=10
+    assert f.gated == once
+
+
+def test_a_late_event_splits_the_step_it_lands_in():
+    """Truth: an on-time filter that propagates to the measurement's instant
+    by hand. Before the split, the late event was applied at the PREVIOUS
+    IMU sample, up to one step early."""
+    stream = _stream()
+    j, h = 40, 0.013                    # lands 13 ms into the step ending at j+1
+
+    ref = I.RIEKF()
+    for k, (t, g, a, R) in enumerate(stream):
+        if k == j + 1:
+            ref.predict(g, a, h)
+            _vel(ref)
+            ref.predict(g, a, DT - h)
+            ref.update_attitude(R, sigma_deg=0.5)
+            continue
+        _step(ref, g, a, R)
+
+    f = I.RIEKF()
+    rd = Retrodictor(f, horizon_s=1.0)
+
+    def make(d, g, a):
+        return lambda f: f.predict(g, a, d)
+
+    for k, (t, g, a, R) in enumerate(stream):
+        rd.run(t, make(DT, g, a), span=DT,
+               make=lambda d, g=g, a=a: make(d, g, a))
+        rd.run(t, lambda f, R=R: f.update_attitude(R, sigma_deg=0.5))
+        if k == j + 5:
+            rd.run(stream[j][0] + h, _vel)
+    np.testing.assert_allclose(f.X.v, ref.X.v, atol=1e-9)
+    np.testing.assert_allclose(f.P, ref.P, atol=1e-9)

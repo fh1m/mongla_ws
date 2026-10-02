@@ -75,6 +75,11 @@ import numpy as np
 # 0.036 m. At rest the accelerometer reads (0, 0, -g) level.
 from mongla_localization.frames import ned_z_from_altitude  # noqa: E402
 
+
+def _dup(v):
+    """A copy where the value is mutable (state, arrays, dicts), else itself."""
+    return v.copy() if hasattr(v, 'copy') else v
+
 GRAVITY = np.array([0.0, 0.0, 9.80665])
 
 # Below this rotation angle the closed-form exponential divides by ~0, so the
@@ -207,6 +212,27 @@ class RIEKF:
         self.vel_sigma_gate = float(vel_sigma_gate)
         self.gated = 0
 
+    # ── replay ───────────────────────────────────────────────────────────────
+    # ⛔ EVERY ATTRIBUTE A PREDICT OR AN UPDATE CAN CHANGE, named in one place
+    # (issue #31). The retrodictor's snapshot was a hand-kept tuple, and `gated`
+    # -- added later -- was not in it, so a replay that re-ran a gated update
+    # counted it twice. Everything else on the filter is CONFIGURATION (`Q`,
+    # `vel_sigma_gate`); a test walks `vars()` and fails on an attribute that is
+    # in neither list, so the next counter cannot be missed the same way.
+    REPLAY_STATE = ('X', 'P', 'accepted', 'rejected', 'reject_streak',
+                    'lockout_breaks', 'gated', '_gyro')
+    CONFIGURATION = ('Q', 'vel_sigma_gate')
+
+    def replay_state(self) -> dict:
+        """A copy of everything a replay must restore."""
+        return {k: _dup(getattr(self, k)) for k in self.REPLAY_STATE}
+
+    def set_replay_state(self, s: dict) -> None:
+        # COPIES again: one snapshot is restored on every replay across it, and
+        # handing back the live dict or array would let the replay write into it.
+        for k, v in s.items():
+            setattr(self, k, _dup(v))
+
     # ── propagation ──────────────────────────────────────────────────────────
     def predict(self, gyro, accel, dt: float) -> None:
         """One IMU step. `gyro` rad/s and `accel` m/s^2, both BODY frame.
@@ -269,6 +295,32 @@ class RIEKF:
         H[:, 3:6] = self.X.R.T
         y = z - self.X.R.T @ self.X.v
         return self._apply(H, y, np.eye(3) * (sigma ** 2), kind=kind)
+
+    def body_velocity_now(self, vx: float, vy: float, accel,
+                          age_s: float) -> Tuple[np.ndarray, np.ndarray]:
+        """Carry a body-frame velocity measured `age_s` ago to NOW.
+
+        d(R^T v)/dt = a + R^T g - omega x (R^T v): a hull holding a constant
+        WORLD velocity on a current while it yaws has a body velocity that
+        ROTATES at -omega with no acceleration at all (issue #31). With the
+        rate and the specific force held over the age -- the same zero-order
+        hold the IMU step itself uses -- the solution is exact:
+
+            v_now = exp(-omega age) v_then + (a + R^T g) age
+
+        rotating the MEASUREMENT itself, so it does not lean on the filter's
+        own velocity estimate. Its vertical component, which flow does not
+        see, is taken from the state. Returns `(v_now, correction)`.
+        """
+        age = max(0.0, float(age_s))
+        v_b = self.X.R.T @ self.X.v
+        then = np.array([float(vx), float(vy), float(v_b[2])])
+        if age == 0.0:
+            return then, np.zeros(3)
+        a = np.asarray(accel, dtype=float).reshape(3) - self.X.ba
+        now = (so3_exp(-self.last_rate() * age) @ then
+               + (a + self.X.R.T @ GRAVITY) * age)
+        return now, now - then
 
     def last_rate(self) -> np.ndarray:
         """Body rate at the latest `predict`, bias-corrected, rad/s FRD.

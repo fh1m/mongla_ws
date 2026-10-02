@@ -60,6 +60,7 @@ def _node():
     obj._last_imu_t = None
     obj._imu_gap_warned = True          # suppress the logger call
     obj._n = {'imu': 0, 'att': 0, 'depth': 0, 'yaw': 0, 'flow': 0, 'fix': 0,
+              'flow_refused': 0, 'depth_refused': 0, 'yaw_refused': 0,
               'zupt': 0, 'grid': 0, 'grid_refused': 0,
               'lane': 0, 'lane_refused': 0, 'model': 0, 'gap': 0, 'gated': 0}
     obj._attitude_sigma_deg = 0.5
@@ -890,7 +891,7 @@ def test_twist_covariance_is_in_the_body_frame_like_the_twist():
 #  retrodict: measurements applied at the instant they describe                #
 # --------------------------------------------------------------------------- #
 
-def _flow_at(t, vx=0.4, vy=-0.1, var=1e-3):
+def _flow_at(t, vx=0.4, vy=-0.1, var=1e-3, var_y=None):
     m = type('T', (), {})()
     m.header = _Header(t)
     m.twist = type('T2', (), {})()
@@ -898,13 +899,21 @@ def _flow_at(t, vx=0.4, vy=-0.1, var=1e-3):
     m.twist.twist.linear = type('L', (), {'x': vx, 'y': vy, 'z': 0.0})()
     m.twist.covariance = [0.0] * 36
     m.twist.covariance[0] = var
-    m.twist.covariance[7] = var
+    m.twist.covariance[7] = var if var_y is None else var_y
     return m
 
 
-def _run(retro, flow_arrives_after, n=80, flow_index=50):
+def _run(retro, flow_arrives_after, n=80, flow_index=50, push=0.3,
+         after_imu_s=0.0):
     """IMU at 50 Hz with a forward push; one flow sample measured at IMU
-    `flow_index` and delivered after IMU `flow_index + flow_arrives_after`."""
+    `flow_index` (plus `after_imu_s`) and delivered after IMU
+    `flow_index + flow_arrives_after`.
+
+    ⚠ The stamp sits EXACTLY on the IMU event by default. It used to be 0.1 ms
+    after it, which the on-time reference cannot honour -- an in-order sample
+    can only be applied at the newest IMU state, there is no future IMU to
+    propagate it with -- while a late one now can (issue #31, the step split).
+    The split itself is pinned by `test_a_late_sample_inside_a_step_...`."""
     from mongla_localization.retro import Retrodictor
     node = _node()
     node._zupt_enabled = False
@@ -913,9 +922,9 @@ def _run(retro, flow_arrives_after, n=80, flow_index=50):
     t0 = 1000.0
     for k in range(n):
         t = t0 + k * 0.02
-        node._on_imu(_Imu(t, accel=(0.3, 0.0, -9.80665)))
+        node._on_imu(_Imu(t, accel=(push, 0.0, -9.80665)))
         if k == flow_index + flow_arrives_after:
-            node._on_flow(_flow_at(t0 + flow_index * 0.02 + 1e-4))
+            node._on_flow(_flow_at(t0 + flow_index * 0.02 + after_imu_s))
     return node
 
 
@@ -926,11 +935,41 @@ def test_retrodict_makes_a_late_flow_sample_land_where_an_on_time_one_would():
     np.testing.assert_allclose(late._filter.X.v, on_time._filter.X.v, atol=1e-9)
     np.testing.assert_allclose(late._filter.X.p, on_time._filter.X.p, atol=1e-9)
     assert late._retro.late == 1 and late._retro.replayed > 0
-    assert np.abs(arrival._filter.X.v - on_time._filter.X.v).max() > 1e-4
+    # Off, the sample is carried to now (issue #31): not the retrodicted
+    # answer -- the 60 ms of state in between saw no measurement -- but no
+    # longer the stale one compared with the present either.
+    assert np.abs(arrival._filter.X.v - on_time._filter.X.v).max() > 1e-6
 
 
-def test_retrodict_off_is_exactly_the_old_on_arrival_path():
+def _arrival(push, var=1e-3, var_y=None):
+    b = _node()
+    b._zupt_enabled = False
+    b._model_aid = False
+    t0 = 1000.0
+    for k in range(80):
+        t = t0 + k * 0.02
+        b._on_imu(_Imu(t, accel=(push, 0.0, -9.80665)))
+        if k == 53:
+            b._on_flow(_flow_at(t, var=var, var_y=var_y))
+    return b
+
+
+def test_retrodict_off_still_applies_on_arrival_when_nothing_moved():
+    """With no acceleration and no rotation the body velocity cannot have
+    changed, so a stale sample costs nothing and the path is exactly the old
+    on-arrival one."""
+    a = _run(retro=False, flow_arrives_after=3, push=0.0)
+    np.testing.assert_allclose(a._filter.X.v, _arrival(0.0)._filter.X.v,
+                               atol=1e-12)
+
+
+def test_retrodict_off_carries_a_stale_sample_to_now():
+    """⛔ Issue #31. Off (the default) the stamp used to be IGNORED: a sample
+    60 ms old under a 0.3 m/s^2 push hit the current state as if it were
+    current. Now it is moved by a * age (0.018 m/s) and keeps half of that as
+    1-sigma -- identical to an on-time sample carrying both."""
     a = _run(retro=False, flow_arrives_after=3)
+    moved = 0.3 * 0.06
     b = _node()
     b._zupt_enabled = False
     b._model_aid = False
@@ -939,8 +978,40 @@ def test_retrodict_off_is_exactly_the_old_on_arrival_path():
         t = t0 + k * 0.02
         b._on_imu(_Imu(t, accel=(0.3, 0.0, -9.80665)))
         if k == 53:
-            b._on_flow(_flow_at(t))
-    np.testing.assert_allclose(a._filter.X.v, b._filter.X.v, atol=1e-12)
+            b._on_flow(_flow_at(t, vx=0.4 + moved,
+                                var=1e-3 + (0.5 * moved) ** 2, var_y=1e-3))
+    np.testing.assert_allclose(a._filter.X.v, b._filter.X.v, atol=1e-9)
+    assert np.abs(a._filter.X.v - _arrival(0.3)._filter.X.v).max() > 1e-5
+
+
+def test_a_late_sample_inside_a_step_is_applied_at_its_own_instant():
+    """Issue #31: a late event used to be applied BEFORE the step it fell
+    in, i.e. at the previous IMU sample. Truth: an on-time filter that splits
+    that step by hand. The retrodicted one must match it."""
+    late = _run(retro=True, flow_arrives_after=3, after_imu_s=0.012)
+
+    from mongla_localization.inekf import RIEKF          # noqa: F401
+    ref = _node()
+    ref._zupt_enabled = False
+    ref._model_aid = False
+    t0 = 1000.0
+    f = ref._filter
+    for k in range(80):
+        t = t0 + k * 0.02
+        if k == 51:
+            # split IMU 51's step at the flow instant, by hand
+            g, acc = (0.0, 0.0, 0.0), (0.3, 0.0, -9.80665)
+            f.predict(g, acc, 0.012)
+            ref._on_flow(_flow_at(t0 + 50 * 0.02 + 0.012))
+            f.predict(g, acc, 0.008)
+            ref._last_imu_t = t
+            # ...and the board attitude that `_on_imu` applies at t51.
+            f.update_attitude(ln._Rz(ref._yaw_offset_deg) @ ref._board_R,
+                              sigma_deg=ref._attitude_sigma_deg)
+            continue
+        ref._on_imu(_Imu(t, accel=(0.3, 0.0, -9.80665)))
+    np.testing.assert_allclose(late._filter.X.v, f.X.v, atol=1e-9)
+    assert late._retro.late == 1
 
 
 # ═══════════════════════════════════════════════════════════════════════════ #
@@ -1026,3 +1097,63 @@ def test_the_aiding_topic_is_not_the_motion_topic():
     n._report_aiding()
     assert n._pub_aiding.sent == ['unaided']
     assert n._pub_motion.sent == [], 'the motion topic must be untouched'
+
+
+# --------------------------------------------------------------------------- #
+#  issue #31 truth test: yawing on a current, flow 300 ms stale, retro OFF
+# --------------------------------------------------------------------------- #
+class _ImuAt(_Imu):
+    def __init__(self, t, yaw, rate):
+        super().__init__(t, gyro=(0.0, 0.0, rate))
+        self.orientation = type('Q', (), {'w': math.cos(yaw / 2), 'x': 0.0,
+                                          'y': 0.0, 'z': math.sin(yaw / 2)})()
+
+
+def _current_while_yawing(widen: bool, seconds=10.0, age=0.3):
+    """A hull holding a 0.3 m/s WORLD velocity (a current) while it yaws at
+    0.5 rad/s: no acceleration at all, yet its BODY velocity rotates, so a
+    300 ms-old body-frame sample is wrong by |v| |w| age = 4.5 cm/s. Flow
+    arrives every 0.1 s at the overconfident 1 mm/s it really reports."""
+    n = _node()
+    n._zupt_enabled = False
+    n._model_aid = False
+    if not widen:
+        n._flow_now = lambda t, vx, vy, a, b: (vx, vy, a, b)
+    rate, v_w = 0.5, np.array([0.3, 0.0, 0.0])
+    t0, dt = 1000.0, 0.02
+    n._filter.X.v = v_w.copy()
+    for k in range(int(seconds / dt)):
+        t = t0 + k * dt
+        n._on_imu(_ImuAt(t, rate * k * dt, rate))
+        if k % 5 == 0 and k * dt > age:
+            yaw_then = rate * (k * dt - age)
+            v_b = _Rz_np(yaw_then).T @ v_w
+            n._on_flow(_flow_at(t - age, vx=v_b[0], vy=v_b[1], var=1e-6))
+    return float(np.linalg.norm(n._filter.X.v - v_w))
+
+
+def _Rz_np(a):
+    c, s = math.cos(a), math.sin(a)
+    return np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
+
+
+def test_a_stale_flow_sample_no_longer_bends_velocity_on_a_turn():
+    """⭐ Measured here: ignoring the age leaves a velocity error of
+    about the |v| |w| age it predicts; widening by the age removes most of it.
+    Retrodiction (off by default, G-05) removes it entirely."""
+    old = _current_while_yawing(widen=False)
+    new = _current_while_yawing(widen=True)
+    print(f'velocity error after 10 s: ignored {old*100:.2f} cm/s, '
+          f'widened {new*100:.2f} cm/s')
+    assert old > 0.02
+    assert new < 0.01
+
+
+def test_a_flow_sample_older_than_the_horizon_is_counted_as_refused():
+    """Issue #31: `n['flow']` rose even when the retrodictor refused the
+    sample, so the aiding diagnostic counted samples that were never fused."""
+    n = _run(retro=True, flow_arrives_after=0)
+    flow, refused = n._n['flow'], n._n['flow_refused']
+    n._on_flow(_flow_at(1000.0 - 5.0))                  # far past the horizon
+    assert n._n['flow'] == flow
+    assert n._n['flow_refused'] == refused + 1

@@ -936,6 +936,14 @@ injected-offset recovery, which is why it is now bounded (`time_offset_max_s`
 the end of exposure, while `uvcvideo` stamps the START — read as
 `V4L2_BUF_FLAG_TSTAMP_SRC_SOE` off a live uvcvideo stream on the dev box. It
 was latent only because `exposure_us` defaults to 0 and no launch sets it.
+⚠ And with `retrodict` off (the default) a flow stamp was **ignored** — a
+sample up to 375 ms old was compared with the present (issue #31). On a
+constructed truth (0.3 m/s current, 0.5 rad/s yaw, flow 300 ms stale at the
+real 1 mm/s σ) that left **4.50 cm/s** of velocity error, exactly |v||ω|·age.
+Widening the variance alone left **4.50 cm/s** — flow is the only horizontal
+velocity observer, so a bias at any variance wins. Carrying the sample to now
+(`RIEKF.body_velocity_now`: rotate by −ω·age, add the specific force) leaves
+**0.00 cm/s**.
 Measuring the real `td` needs the rig **gently
 oscillated about the optical axis** — a *changing* rate, since Li & Mourikis
 show constant velocity is degenerate — and is a few seconds of hand movement.
