@@ -73,7 +73,7 @@ from mongla_vision.detection.detector import Detection
 from mongla_vision.detection.messages import detections_to_array
 from mongla_vision.tracking.follower import Follower
 from mongla_vision.tracking.lock_state import (
-    FULL_AUTHORITY_S, ZERO_AUTHORITY_S, Rung, arbitrate)
+    FULL_AUTHORITY_S, ZERO_AUTHORITY_S, Rung, arbitrate, live_window)
 
 # ⛔ THE BAR FOR HEALING THE FOLLOWER FROM THE ANCHOR. Deliberately ABOVE the
 # anchor's own trust bar (100): a box good enough to report is not
@@ -378,6 +378,11 @@ class LockNode(Node):
         self._det_conf = 0.0
         self._det_cls = ''
         self._det_t = 0.0
+        # The detector's own cadence, from capture stamps of EVERY detection
+        # message (a frame with no match still proves the detector ran). It
+        # sizes how long a detection counts as live -- see `live_window`.
+        self._det_msg_t = 0.0
+        self._det_dt = None
         self._fresh = threading.Event()
 
         self._follower = Follower() if bool(
@@ -1229,6 +1234,13 @@ class LockNode(Node):
                 f'[LOCK ] detection {why} -- the authority decay is measuring '
                 f'age since ARRIVAL, not since capture. Check use_sim_time.')
         with self._lock:
+            if 0.0 < self._det_msg_t < t:
+                dt = t - self._det_msg_t
+                # EMA over ~10 messages: one dropped frame should not swing
+                # the window, a model swap to a slower detector should.
+                self._det_dt = (dt if self._det_dt is None
+                                else 0.9 * self._det_dt + 0.1 * dt)
+            self._det_msg_t = t
             if best is None:
                 self._det_box, self._det_conf = None, 0.0
             else:
@@ -1260,6 +1272,7 @@ class LockNode(Node):
                   det_box, det_conf, det_t = (self._det_box, self._det_conf,
                                               self._det_t)
                   det_cls = self._det_cls
+                  live_s = live_window(self._det_dt)
               if gray is None:
                   continue
               now = time.monotonic()
@@ -1500,6 +1513,7 @@ class LockNode(Node):
                              detection=det_box, detection_conf=det_conf,
                              follow=fb, follow_conf=fc or 0.0,
                              anchor=ab, anchor_conf=ac or 0.0,
+                             live_s=min(live_s, self._full),
                              full_s=self._full, zero_s=self._zero)
               self._n_by_rung[st.rung] = self._n_by_rung.get(st.rung, 0) + 1
               self._publish(st, header_for(st.rung, detection=det_header,

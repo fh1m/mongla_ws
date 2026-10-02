@@ -56,6 +56,7 @@ conf 0.10 — 71 real gaps. A *sampled* sweep cannot measure this at all
 | `vision.lost_grace_s` | 1.00 s — `vision_tunables.py` | 91.5 % | > `coast_s` |
 | kalman `max_predict_s` | 1.50 s — `tracker.yaml` | 94.4 % | > `lost_grace_s` |
 | `track_buffer` | 5.00 s — `tracker.yaml` | **100 %** | ≥ p99 (2.418 s) |
+| `DETECTION_LIVE_S` | 0.098 s (48 ms p95 capture→arrival + one detector interval, observed live by `lock_node`) — `lock_state.py` | below the p50 gap on purpose | a detection older than this has MISSED at least one frame, so a follower on the current frame outranks it (issue #33); the 48 ms is the latency `lock_node` measured, not a gap statistic |
 
 **Verdict: the ladder is correctly sized.** `coast_s` sits just above the p90,
 which is exactly what it is for — routine flicker — and nothing in the archive
