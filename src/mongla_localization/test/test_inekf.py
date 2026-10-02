@@ -234,15 +234,16 @@ def test_the_correction_carries_velocity_too():
 
 def test_the_gate_clears_a_cold_filter():
     """⛔ THE FRAGILITY, AS A TEST RATHER THAN A COMMENT. A freshly built filter
-    has sigma_vel = sqrt(3) * P0_velocity = 0.866, and the gate must sit ABOVE
-    that or it fires on construction and refuses every world-frame update.
+    has a horizontal sigma_vel of sqrt(2) * P0_velocity = 0.707 (the gate is
+    horizontal since issue #28), and the gate must sit ABOVE that or it fires
+    on construction and refuses every world-frame update.
 
     It must also stay BELOW about 1.2, because B-56's damage lands within a
     fraction of a second -- a gate at 1.5 already lets through enough to reach
     377 m on the bench. The usable band is narrow and this test is what stops
     someone raising P0_velocity and silently closing it."""
     f = RIEKF()
-    cold = math.sqrt(f.P[3, 3] + f.P[4, 4] + f.P[5, 5])
+    cold = math.sqrt(f.P[3, 3] + f.P[4, 4])
     assert cold < f.vel_sigma_gate, (
         f'a cold filter ({cold:.3f}) must pass its own gate '
         f'({f.vel_sigma_gate}) or it refuses everything on construction')
@@ -380,3 +381,40 @@ def test_rotate_world_yaw_turns_the_state_AND_its_covariance():
     assert np.allclose(f.X.p, [0.0, 2.0, 0.5], atol=1e-12)
     assert np.allclose(f.X.bg, [0.01, 0.0, 0.0])
     assert f.P[7, 7] == pytest.approx(4.0) and f.P[6, 6] == pytest.approx(0.01)
+
+
+# --------------------------------------------------------------------------- #
+#  issue #28: the gate must be able to REOPEN
+# --------------------------------------------------------------------------- #
+def _body_vel(f, v=(0.2, 0.0)):
+    f.update_body_velocity_xy(v[0], v[1], 1e-4, 1e-4)
+
+
+def test_the_gate_reopens_when_flow_returns_after_a_long_dropout():
+    """The issue's falsifier: 10 s of flow + depth, 120 s of depth alone (the
+    gate closes and vertical variance grows with depth refused -- 60 s, the
+    issue's figure, is not long enough to reach 1.0 from a settled filter),
+    20 s of flow + depth again. The three-axis gate stayed shut for ever, because nothing
+    that was allowed to run could shrink the vertical term."""
+    f = RIEKF()
+    acc = -GRAVITY
+    for k in range(500):                                  # 10 s, aided
+        f.predict([0, 0, 0], acc, 0.02)
+        if k % 5 == 0:
+            _body_vel(f, (0.0, 0.0))
+            f.update_depth(-1.0, sigma=0.02)
+    assert f._velocity_is_observed()
+    for k in range(6000):                                 # 120 s, flow lost
+        f.predict([0, 0, 0], acc, 0.02)
+        if k % 5 == 0:
+            f.update_depth(-1.0, sigma=0.02)
+    assert not f._velocity_is_observed(), 'the gate should have closed'
+    for k in range(1000):                                 # 20 s, flow back
+        f.predict([0, 0, 0], acc, 0.02)
+        if k % 5 == 0:
+            _body_vel(f, (0.0, 0.0))
+            f.update_depth(-1.0, sigma=0.02)
+    assert f._velocity_is_observed(), 'the gate latched shut'
+    gated = f.gated
+    assert f.update_depth(-1.0, sigma=0.02) is not False
+    assert f.gated == gated, 'depth is still being refused'

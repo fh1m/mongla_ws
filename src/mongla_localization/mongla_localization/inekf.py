@@ -431,8 +431,22 @@ class RIEKF:
         through enough to reach 27 m against this gate's 4.9 m -- the damage is
         faster than any timeout can be.
         """
-        return math.sqrt(self.P[3, 3] + self.P[4, 4]
-                         + self.P[5, 5]) < self.vel_sigma_gate
+        # ⛔ HORIZONTAL ONLY (issue #28). The gate summed all three axes, but
+        # flow observes x and y and only DEPTH observes z -- and depth is
+        # refused while the gate is shut. So once it closed, vertical variance
+        # grew with nothing to shrink it, flow's return could not bring the
+        # sum back under the bar, and depth and heading were refused for the
+        # rest of the run. B-56 is an attitude correction rotating an
+        # unobserved HORIZONTAL velocity, so horizontal is what is gated.
+        # Bench numbers unchanged: no-flow 4.935 m, fixes 0.199 / 0.003 m,
+        # healthy 0.1015 m.
+        #
+        # ⚠ APPLYING DEPTH UNCOUPLED WHILE SHUT -- `update_position`'s rule --
+        # WAS TRIED AND DIVERGES: 1.4e14 m on the same no-flow bench run, with
+        # either gate. The attitude coupling it drops from H survives in P, and
+        # with nothing observing horizontal velocity that is enough. Depth
+        # stays refused while this is shut; the fix is that the gate can open.
+        return math.sqrt(self.P[3, 3] + self.P[4, 4]) < self.vel_sigma_gate
 
     def update_depth(self, depth_m: float, sigma: float = 0.02) -> bool:
         """Bar30 depth, NEGATIVE below the surface as everywhere in this stack.
