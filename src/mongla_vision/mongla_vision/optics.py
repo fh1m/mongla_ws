@@ -176,12 +176,76 @@ class RefractiveRectifier:
         return r_px / math.tan(tw)
 
 
-def rectifier_for(K, medium: str):
-    """The rectifier for a camera matrix, and THE K that goes with it.
+class LensUndistorter:
+    """Remove the LENS: distorted pixels -> ideal pinhole pixels at the same K.
 
-    Returns `(rect, K_rect, note)`. `rect` is None in air, where the map is the
-    identity. `note` is a one-line description a node can log, so every
-    consumer says the same thing about the same optics.
+    ⛔ THE LENS IS AIR-SIDE, SO IT COMES OFF FIRST (issue #24). The forward
+    camera's k1 = -0.363 bends the frame edge by several degrees, and the
+    flat-port model above assumes an ideal pinhole behind the glass. Feeding it
+    distorted pixels makes it start from the wrong ray: computed on the forward
+    calibration, a point at u = 1150 of 1280 read 29.1 deg against a true
+    32.7 deg, and a board in the outer third read 13-22 % small. Nothing fails
+    loudly -- PnP fits distorted points with a slightly wrong pose and a small
+    reprojection error.
+
+    Iterated to convergence rather than OpenCV's default five passes. Measured
+    on that calibration: five passes leave 0.05 deg at the frame edge; this
+    leaves none, for microseconds a frame.
+    """
+
+    __slots__ = ('K', 'D')
+
+    def __init__(self, K, D):
+        self.K = np.asarray(K, dtype=np.float64).reshape(3, 3)
+        self.D = np.asarray(D, dtype=np.float64).reshape(-1)
+
+    def rectify(self, pts):
+        import cv2
+        shape = np.asarray(pts).shape
+        p = np.asarray(pts, dtype=np.float64).reshape(-1, 1, 2)
+        if p.shape[0] == 0:
+            return np.asarray(pts, dtype=np.float64)
+        crit = (cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 50, 1e-10)
+        out = cv2.undistortPointsIter(p, self.K, self.D, None, self.K, crit)
+        return out.reshape(shape)
+
+
+class _Chain:
+    """Lens off, then the port. One `rectify`, so no caller can do them in the
+    wrong order or do one of them twice."""
+
+    __slots__ = ('stages',)
+
+    def __init__(self, *stages):
+        self.stages = tuple(s for s in stages if s is not None)
+
+    def rectify(self, pts):
+        for s in self.stages:
+            pts = s.rectify(pts)
+        return pts
+
+
+def has_distortion(D) -> bool:
+    """True when `D` holds any non-zero coefficient. Empty or None is none."""
+    if D is None:
+        return False
+    d = np.asarray(D, dtype=np.float64).reshape(-1)
+    return bool(d.size) and bool(np.any(np.abs(d) > 0.0))
+
+
+def rectifier_for(K, medium: str, D=None):
+    """The rectifier for a camera, and THE K that goes with it.
+
+    Returns `(rect, K_rect, note)`. `rect` maps RAW pixels to pinhole pixels
+    at `K_rect`: the lens distortion `D` (CameraInfo's `d`) comes off first,
+    then the flat port. `rect` is None only when both are the identity -- air
+    and no distortion. `note` is a one-line description a node can log, so
+    every consumer says the same thing about the same optics.
+
+    ⛔ PASS `D`. Every metric forward path once read only K, so a strongly
+    barrel-distorted lens went straight into the port model and from there
+    into PnP, the lock anchor and every bearing (issue #24). `D` stays
+    optional only so a caller with a genuinely undistorted source can say so.
 
     ⛔ THE RECTIFIED POINTS NEED THE RECTIFIED K, and that pairing is the whole
     reason this returns both instead of just the rectifier. `rectify`
@@ -195,15 +259,19 @@ def rectifier_for(K, medium: str):
     K = np.asarray(K, float)
     fx, fy = float(K[0][0]), float(K[1][1])
     cx, cy = float(K[0][2]), float(K[1][2])
+    lens = LensUndistorter(K, D) if has_distortion(D) else None
+    lens_note = ('lens undistorted (k1={:.3f})'.format(float(np.asarray(D).reshape(-1)[0]))
+                 if lens is not None else 'no lens distortion given')
     if str(medium).lower() != 'water':
-        return None, K, ('medium=air: no refraction correction (identity). '
+        return lens, K, (f'medium=air: no refraction correction; {lens_note}. '
                          'Ranges are only valid OUT of water.')
-    rect = RefractiveRectifier(fx, fy, cx, cy)
-    K_rect = np.array([[rect.f_ref, 0.0, cx],
-                       [0.0, rect.f_ref_y, cy],
+    port = RefractiveRectifier(fx, fy, cx, cy)
+    rect = _Chain(lens, port) if lens is not None else port
+    K_rect = np.array([[port.f_ref, 0.0, cx],
+                       [0.0, port.f_ref_y, cy],
                        [0.0, 0.0, 1.0]], float)
     return rect, K_rect, (
-        f'medium=water: flat-port rectification ON, f_air={fx:.1f} -> '
-        f'f_ref={rect.f_ref:.1f} px (centre f_eff '
-        f'{rect.local_focal_px(0.0):.1f}, corner '
-        f'{rect.local_focal_px(min(cx, cy)):.1f})')
+        f'medium=water: {lens_note}; flat-port rectification ON, f_air={fx:.1f} -> '
+        f'f_ref={port.f_ref:.1f} px (centre f_eff '
+        f'{port.local_focal_px(0.0):.1f}, corner '
+        f'{port.local_focal_px(min(cx, cy)):.1f})')
