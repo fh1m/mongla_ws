@@ -3192,6 +3192,24 @@ error, before → after: no-flow 4.935 → 4.935 m, fix 0.50 / 0.01 m 0.201 / 0.
 shut** (`update_position`'s rule) was tried and **diverges: 1.4e14 m** on the
 no-flow run with either gate — the dropped coupling survives in P.
 
+**The board's attitude at rest (issue #36, 2026-10-02).** SROT board on the
+bench, disarmed for the whole run (`base_mode` 81), `ATTITUDE` read directly
+at 50 Hz for 600.0 s, 29 953 samples, no reboot:
+
+| | drift | p2p | Allan dev, tau 0.1 / 1 / 10 / 60 / 120 s |
+|---|---|---|---|
+| yaw | **0.001 deg in 10 min** | 0.043 deg | 0.0011 / 0.0018 / 0.0011 / 0.0011 / 0.0008 deg |
+| roll | — | 0.091 deg | 0.0026 / 0.0077 / 0.0057 / 0.0047 / 0.0029 deg |
+| pitch | — | 0.078 deg | 0.0022 / 0.0059 / 0.0032 / 0.0031 / 0.0019 deg |
+
+⚠ **This does NOT size the attitude update's sigma, and must not be quoted as
+if it did.** At rest the BNO's own stillness handling holds heading; the 0.5 deg
+per-sample sigma is two orders above this noise either way. #36's defect is a
+CORRELATED error -- a magnetic disturbance, an unlocked yaw reference, error
+built up under motion -- counted as 50 independent samples a second. None of
+that exists on a still bench. Sizing it needs the board MOVING against a
+reference: a turntable or an optical heading truth, then the pool.
+
 **Covariance consistency, by Monte Carlo (issue #26, 2026-10-02).** 400 noisy
 propagations of a hull 10 m from the origin at 0.5 m/s, scored against the TRUE
 right-invariant error; a consistent filter's mean NEES is the state dimension,
