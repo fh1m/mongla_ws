@@ -26,7 +26,7 @@ below is **very likely answerable** with a working quota — these are not dead 
 | R-9 | **Masks vs boxes for alignment error** | ⚠ **appears genuinely unstudied.** The field routes around it: oriented boxes (Cornell), keypoints (CMU), features + PnP (Bumblebee) | our own A/B on recorded footage would be a first |
 | R-10 | **Human-minutes per class for model production** | **an empty cell across the entire 2026 auto-labelling literature** | [`BENCH.md` B-9](BENCH.md) — if we time ours, the number does not exist anywhere else |
 | R-11 | **SAM 3 cost per image** | a **97× discrepancy** between two vendor figures on the same H200 could not be reconciled | a careful reading of both sources, or our own benchmark |
-| R-12 | **XFeat on a Raspberry Pi 5** | the published figure is an i5-1135G7 at VGA | measure it on our Pi |
+| R-12 | ~~**XFeat on a Raspberry Pi 5**~~ | the published figure is an i5-1135G7 at VGA | **CLOSED** — measured: 33.1 ms @ 320×240, 1 thread, Pi 5, stack running (`measured-bars.md` §8) |
 
 ---
 

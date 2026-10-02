@@ -61,7 +61,7 @@ their stack has been in water and ours has not.
 | **Level** | the invariant error formulation is what the fixed-lag smoother literature reaches for too |
 | ⚠ **The sharp one** | **NIS/NEES are chi-squared only for an already-tuned filter.** Our `Q` is a nominal diagonal with a position block of **exactly zero** — so a rejection cannot separate an outlier from a mistuned filter, and the five-rejection lockout break with its ×4 inflation rests on that. **An Allan variance is a precondition, not a refinement** |
 | **Behind** | **no divergence detector, no covariance bound, no reset, no relocalization.** The only "am I lost" signal is a 5 Hz log line — written after a measured **635 m of drift in 95 s while publishing a healthy-looking pose** |
-| **Context** | the factor-graph literature's headline underwater numbers (0.099 m ATE, 87 % better) are **DVL numbers**. A DVL-INS dead-reckons at 0.01–0.1 % of distance; we are at **3.4 %** — 30–300× worse, and nothing closes that without acoustics |
+| **Context** | the factor-graph literature's headline underwater numbers (0.099 m ATE, 87 % better) are **DVL numbers**. A DVL-INS dead-reckons at 0.01–0.1 % of distance; we are at **3.4 %** — but that is the wrong comparison (corrected 2026-10-02, #48): the DVL a team like ours would buy, Water Linked's A50, is rated **±1.01 %** (cited from the datasheet, not re-measured here), and most of our 3.4 % is a **height-scale bias** (`sources/vision-velocity-and-odometry.md`), which a measured altitude addresses. Estimate, not measured: with a ~US$400 altimeter, roughly 1–3× an A50, not 30–300× a DVL-INS |
 | **The free win** | `height_above_floor = pool_depth_m + depth_m` is **already written**. One untyped venue constant stands between a correct refusal and a working velocity sensor — and pressure-plus-known-floor is one of only four published routes to absolute scale without a DVL |
 
 ### Planning — ahead of the field, and unable to prove it
@@ -102,7 +102,7 @@ published**. Each one we take is a number that does not currently exist anywhere
 2. **A Pi-class CPU cost for fixed-lag smoothing** — no paper publishes one
 3. **Masks vs boxes for alignment error** — the field routes around the question entirely
 4. **Human-minutes per model class** — an empty cell across the whole 2026 auto-labelling literature
-5. **XFeat on a Raspberry Pi 5** — published figures are laptop-class CPUs
+5. ~~**XFeat on a Raspberry Pi 5** — published figures are laptop-class CPUs~~ — **measured here**: 33.1 ms (30.2 Hz) at 320×240, one thread, stack running (`measured-bars.md` §8). Not a field gap any more (#48).
 
 For a team with a bench and a measurement habit, that is the opportunity, not the obstacle.
 
