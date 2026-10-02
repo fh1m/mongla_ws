@@ -18,6 +18,10 @@ import sys
 from pathlib import Path
 
 import pytest
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -86,8 +90,8 @@ def test_the_node_declares_it_and_applies_it_at_EVERY_construction_site():
     in this package have exactly that shape -- `device_path` landing in `**_`,
     the YAML table nothing loaded, and a param read only at construction -- so
     the helper is asserted to be CALLED, not merely to exist."""
-    src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'detector_node.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'detector_node.py')
     assert "declare_parameter('assoc_conf'" in src
     assert 'def _apply_assoc_conf' in src
     # once per construction site: registry + single-model
@@ -98,9 +102,9 @@ def test_the_launch_and_the_node_agree_on_TYPE():
     """A float param declared as an int (or vice versa) raises
     InvalidParameterTypeException and kills the whole composed process at
     startup. That has happened twice in this package -- once for `range_crop`."""
-    src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'detector_node.py').read_text()
-    assert "declare_parameter('assoc_conf',          0.0)" in src, (
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'detector_node.py')
+    assert "declare_parameter('assoc_conf', 0.0)" in src, (
         'assoc_conf must be declared as a FLOAT literal')
 
 
@@ -108,8 +112,8 @@ def test_control_still_gates_on_ctrl_conf():
     """THE safety property. Publishing lower is only acceptable because the
     control loop has its own floor -- if that gate ever disappears, this change
     becomes "feed low-confidence boxes to the thrusters"."""
-    mv = (Path(__file__).resolve().parents[2] / 'mongla_control'
-          / 'mongla_control' / 'motion_vision.py').read_text()
+    mv = code_of_file(Path(__file__).resolve().parents[2] / 'mongla_control'
+          / 'mongla_control' / 'motion_vision.py')
     assert 'min_score=ctrl_conf' in mv, (
         'the control-side confidence gate is gone -- assoc_conf must not ship '
         'without it')

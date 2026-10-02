@@ -12,10 +12,14 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 _CTL = Path(__file__).resolve().parents[2] / 'mongla_control' / 'mongla_control'
-_VV = (_CTL / 'vision_verbs.py').read_text()
-_MV = (_CTL / 'motion_vision.py').read_text()
-_VS = (Path(__file__).resolve().parents[1] / 'mongla_manager'
-       / 'vision_state.py').read_text()
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
+_VV = code_of_file(_CTL / 'vision_verbs.py')
+_MV = code_of_file(_CTL / 'motion_vision.py')
+_VS = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_manager'
+       / 'vision_state.py')
 
 
 def test_the_verb_passes_the_tool_offset_into_the_loop():
@@ -31,8 +35,11 @@ def test_the_loop_applies_it_to_EVERY_centring_axis():
     # handed to it on every centring axis.
     assert _MV.count("_axis_ctrl(ex_now, offsets.get('lat', 0.0), tool_du,") == 1
     assert _MV.count("_axis_ctrl(ex_now, offsets.get('yaw', 0.0), tool_du,") == 1
-    assert _MV.count("_axis_ctrl(sample.ey, offsets.get('depth', 0.0), tool_dv,") == 2, \
-        'both depth branches must be corrected'
+    # THREE, read off the code: both depth control branches AND the post-stop
+    # re-measurement. On raw text this counted 2, because the third call was
+    # wrapped across lines -- a layout fact the old guard was measuring.
+    assert _MV.count("_axis_ctrl(sample.ey, offsets.get('depth', 0.0), tool_dv,") == 3, \
+        'both depth branches and the re-measurement must be corrected'
     assert 'return e_norm - (offset_px + tool_px) / half' in _MV
 
 
@@ -56,10 +63,12 @@ def test_a_raising_resolver_does_not_take_the_hull_with_it():
 def test_absent_correction_means_previous_behaviour_not_a_refusal():
     """Refusing would break every align without a pose, which is most of them.
     The fallback must be the historical behaviour: aim the camera."""
-    i = _MV.index('tool_du = tool_dv = 0.0')
+    # RAW text on purpose: what is checked here IS the explanation, a comment.
+    raw = (_CTL / 'motion_vision.py').read_text()
+    i = raw.index('tool_du = tool_dv = 0.0')
     # Normalised: a comment wraps, so 'the previous\n # behaviour' is one
     # phrase in the file and two lines on disk.
-    why = ' '.join(_MV[max(0, i - 900):i].replace('#', ' ').split())
+    why = ' '.join(raw[max(0, i - 900):i].replace('#', ' ').split())
     assert 'previous behaviour' in why and 'aiming the camera' in why
 
 

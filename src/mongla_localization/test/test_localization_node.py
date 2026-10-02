@@ -14,6 +14,10 @@ import pytest
 from mongla_localization import frames
 from mongla_localization import localization_node as ln
 from mongla_localization.inekf import RIEKF, State
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 class _NullLogger:
@@ -780,7 +784,7 @@ def test_the_refusal_is_visible_in_the_diagnostic():
     """A channel that silently refuses half its measurements looks exactly like
     one that is not running."""
     import inspect
-    src = inspect.getsource(ln.LocalizationNode._diagnose)
+    src = code_of(ln.LocalizationNode._diagnose)
     assert 'grid' in src
 
 

@@ -30,6 +30,10 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mongla_control import motion_vision as MV        # noqa: E402
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 _SROT_PERIOD = 1.0 / 50.0
 
@@ -100,8 +104,8 @@ def test_no_fixed_rate_sleep_survives_in_the_loops():
     """All six sites, not five. A single missed one is a path that still pays
     the old wait -- and it would be the searching path, where reaction time
     matters most."""
-    src = (Path(__file__).resolve().parents[1] / 'mongla_control'
-           / 'motion_vision.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_control'
+           / 'motion_vision.py')
     assert 'time.sleep(1.0 / _loop_hz(' not in src
     assert src.count('_tick(vision_state, pixhawk)') >= 6
 
@@ -110,7 +114,7 @@ def test_dt_is_measured_not_assumed():
     """`dt` feeds the continuity-lock gate and the lateral integral. Once the
     loop runs at detection rate instead of its nominal tick, a hard-coded
     period overstates both by up to 1.5x."""
-    src = (Path(__file__).resolve().parents[1] / 'mongla_control'
-           / 'motion_vision.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_control'
+           / 'motion_vision.py')
     assert 'dt = min(max(now - _last_pass' in src, \
         'dt is not derived from the clock'

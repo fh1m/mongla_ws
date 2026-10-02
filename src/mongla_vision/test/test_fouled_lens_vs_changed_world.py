@@ -14,6 +14,10 @@ distinction; a test cannot.
 import pytest
 
 from mongla_vision.anchor import health
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 def test_everything_scoring_is_healthy():
@@ -240,8 +244,8 @@ def test_the_trend_never_claims_the_target_is_gone():
 def test_lock_node_uses_the_trend_as_an_enrolment_REASON():
     """Wired, not merely available -- the defect this repo produces most."""
     import pathlib
-    src = (pathlib.Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'lock_node.py').read_text()
+    src = code_of_file(pathlib.Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'lock_node.py')
     assert '_anchor_trend' in src and '_health.trend(' in src
     assert 'falling or' in src, (
         'the trend is computed but not used as a reason to enrol, so the '

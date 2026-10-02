@@ -32,6 +32,10 @@ import pathlib
 import re
 
 import pytest
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 _PKG = pathlib.Path(__file__).resolve().parents[1]
 _CAL_DIR = _PKG / 'config' / 'calibration'
@@ -57,7 +61,7 @@ def test_every_calibration_declares_which_camera_it_describes():
 def test_the_launch_wires_each_calibration_to_a_camera_it_CLAIMS():
     """The guard proper. Parse the launch's own defaults rather than trusting
     the filename -- the filename is the thing that was wrong."""
-    src = _LAUNCH.read_text()
+    src = code_of_file(_LAUNCH)
     # DeclareLaunchArgument('<side>_calibration', default_value=_calib('X'))
     pat = re.compile(
         r"DeclareLaunchArgument\(\s*\n?\s*'(fwd|dwn)_calibration',\s*\n?\s*"
@@ -104,7 +108,7 @@ def test_the_downward_camera_IS_calibrated():
     """The DVL's intrinsics are not optional. Round 38 measured a 3.08 % axis
     asymmetry caused by assuming fx==fy, the frame centre as the principal
     point, and no undistortion -- all three come from this file."""
-    src = _LAUNCH.read_text()
+    src = code_of_file(_LAUNCH)
     m = re.search(r"'dwn_calibration',\s*\n?\s*default_value=_calib\('([^']+)'\)",
                   src)
     assert m, ('the downward camera has no calibration wired. flow_node then '
@@ -121,7 +125,7 @@ def test_the_flow_node_is_actually_LAUNCHABLE():
     It must also receive the SAME calibration the downward camera gets;
     passing them from two places is how they came to disagree in the first
     place (see the module docstring)."""
-    src = _LAUNCH.read_text()
+    src = code_of_file(_LAUNCH)
     assert "executable='flow_node'" in src, (
         'flow_node is in no launch file -- the DVL cannot be brought up with '
         'the rest of the vision stack.')
@@ -252,7 +256,7 @@ def test_camera_node_ACTUALLY_calls_the_resolver_when_unset():
     """The resolver existing is not the same as it being reached -- that gap
     is precisely how the four prior 'config reaches nothing' defects in this
     package happened. Read camera_node's source and prove the wiring."""
-    src = (_PKG / 'mongla_vision' / 'camera_node.py').read_text()
+    src = code_of_file(_PKG / 'mongla_vision' / 'camera_node.py')
     assert 'calibration_for_profile' in src, (
         'camera_node does not call calibration_for_profile, so an unset '
         '`calibration` param still publishes k=0 on the bringup path.')

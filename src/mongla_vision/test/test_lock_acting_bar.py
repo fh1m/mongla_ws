@@ -27,6 +27,10 @@ import pytest
 pytest.importorskip('vision_msgs')
 from vision_msgs.msg import (Detection2D, Detection2DArray,        # noqa: E402
                              ObjectHypothesisWithPose)
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 def _det(score: float, name: str = 'gate', cx: float = 320.0,
@@ -268,8 +272,8 @@ def test_the_derotation_is_actually_applied_to_the_bearing():
     """⛔ §9 INLINE: reading roll and never using it would be the defect this
     repo keeps finding. The world-frame bearing must be rotated by it."""
     from pathlib import Path
-    src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'lock_node.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'lock_node.py')
     assert 'roll = self._roll_fresh()' in src
     assert 'bx * cr - by * sr' in src, 'roll is read but never applied'
 

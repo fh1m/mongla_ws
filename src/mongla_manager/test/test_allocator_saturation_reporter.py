@@ -19,6 +19,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mongla_manager.health import State                    # noqa: E402
 from mongla_manager.health_reporters import allocator      # noqa: E402
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 def test_absent_telemetry_is_UNKNOWN_not_OK():
@@ -71,8 +75,8 @@ def test_every_grading_says_something_and_never_raises(sat):
 def test_the_reporter_is_REGISTERED_not_merely_defined():
     """A grader nothing calls is the defect this repo keeps producing -- most
     recently `lock_s`, which was declared, documented, mapped and never passed."""
-    src = (Path(__file__).resolve().parents[1] / 'mongla_manager'
-           / 'auv_manager_node.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_manager'
+           / 'auv_manager_node.py')
     assert "self._health.register('allocator'" in src
     assert 'allocator_saturation' in src, 'registered but reading nothing'
 

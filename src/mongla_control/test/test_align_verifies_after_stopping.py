@@ -20,6 +20,10 @@ from test_motion_vision import (                     # noqa: E402
     _FakePixhawk, _FakeWriters, _Log, _sample)
 from mongla_control.motion_vision import (           # noqa: E402
     ALIGNED, DRIFTED, LOST, VERIFY_TIMEOUT_S, align_loop)
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 class _Writers(_FakeWriters):
@@ -109,7 +113,7 @@ def test_the_verification_and_the_controller_ask_the_SAME_question():
     re-measurement uses. Falsified if either inlines its own formula again."""
     import inspect
     from mongla_control import motion_vision as mv
-    src = inspect.getsource(mv.align_loop)
+    src = code_of(mv.align_loop)
     assert src.count('_axis_ctrl(') >= 4, 'the control law must use the helper'
     assert '_centring_error_px(' in src
     assert "ex_now - (offsets.get(" not in src

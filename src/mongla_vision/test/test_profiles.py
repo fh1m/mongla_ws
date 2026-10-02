@@ -20,6 +20,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from mongla_vision.detection.profiles import (      # noqa: E402
     DEFAULT, PROFILES, resolve,
 )
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 def test_every_profile_sets_every_knob():
@@ -130,11 +134,11 @@ def test_range_crop_is_an_INT_so_a_profile_can_turn_it_on():
     """A bool has two states and needs three: on, off, and not-said. With a
     bool a profile can never enable it, because False is indistinguishable
     from unset."""
-    src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'detector_node.py').read_text()
-    assert "self.declare_parameter('range_crop',          -1)" in src
-    launch = (Path(__file__).resolve().parents[1] / 'launch'
-              / 'vision_pi.launch.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'detector_node.py')
+    assert "self.declare_parameter('range_crop', -1)" in src
+    launch = code_of_file(Path(__file__).resolve().parents[1] / 'launch'
+              / 'vision_pi.launch.py')
     assert "DeclareLaunchArgument('range_crop', default_value='-1')" in launch
 
 
@@ -143,6 +147,7 @@ def test_conf_is_deliberately_NOT_profile_routed():
     sentinel there would silently disable the clamp -- which measured as the
     tracker emitting NOTHING on real water. Documented as the exception
     rather than left as an inconsistency."""
+    # RAW text on purpose: what is checked here IS the explanation, a comment.
     src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
            / 'detector_node.py').read_text()
     from mongla_vision.detector_node import _UNSET
@@ -154,8 +159,8 @@ def test_conf_is_deliberately_NOT_profile_routed():
 def test_the_profile_resolves_before_anything_reads_a_value():
     """Ordering, which fails silently: a profile that half-applies still
     logs that it applied."""
-    src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'detector_node.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'detector_node.py')
     assert src.index('prof_name = ') < src.index("_p('preprocess'")
 
 
@@ -172,8 +177,8 @@ def test_the_composed_launcher_declares_the_SAME_TYPES_as_the_node():
     import re
     from mongla_vision import detector_dual_node as DD
 
-    src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'detector_node.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'detector_node.py')
     declared = dict(
         (m.group(1), m.group(2).strip())
         for m in re.finditer(r"declare_parameter\('(\w+)',\s*([^)]+)\)", src))

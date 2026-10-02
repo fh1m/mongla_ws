@@ -23,6 +23,10 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from mongla_vision.lock_node import LockNode                      # noqa: E402
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 class _Log:
@@ -120,8 +124,8 @@ def test_an_explicit_width_parameter_still_wins():
 def test_the_subscription_is_LATCHED():
     """A ladder that starts after the detector was aimed must still learn the
     class -- that is what TRANSIENT_LOCAL is for here."""
-    src = (pathlib.Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'lock_node.py').read_text()
+    src = code_of_file(pathlib.Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'lock_node.py')
     i = src.index("f'{ns}/classes_filter'")
     assert '_qos.LATCHED' in src[i:i + 160], (
         'classes_filter is subscribed with a non-latched QoS, so a late ladder '
@@ -135,8 +139,8 @@ def test_the_subscription_is_LATCHED():
 def test_target_class_is_a_LIVE_parameter():
     """The detector and the tracker both take live parameters; the ladder took
     none, so a mission could not aim it without a relaunch."""
-    src = (pathlib.Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'lock_node.py').read_text()
+    src = code_of_file(pathlib.Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'lock_node.py')
     assert 'add_on_set_parameters_callback' in src, (
         'lock_node registers no parameter callback, so `ros2 param set` and '
         'the DSL cannot aim it while a mission runs')

@@ -22,6 +22,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mongla_manager.auv_manager_node import AUVManagerNode   # noqa: E402
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 class _Stamp:
@@ -87,9 +91,9 @@ def test_both_state_publishers_use_the_helper():
     """There are TWO publishers of MonglaState (the fast path and the telemetry
     path). One left on the host clock would make the topic's time base depend
     on which code path produced the message."""
-    src = (Path(__file__).resolve().parents[1] / 'mongla_manager'
-           / 'auv_manager_node.py').read_text()
-    assert src.count('msg.header.stamp    = self._state_stamp()') == 2
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_manager'
+           / 'auv_manager_node.py')
+    assert src.count('msg.header.stamp = self._state_stamp()') == 2
     assert 'msg.header.stamp    = self.get_clock().now().to_msg()' not in src
 
 
@@ -106,8 +110,8 @@ def test_the_board_stamp_is_cached_ONLY_when_the_mapping_SUCCEEDED():
     So the cache must sit INSIDE the `self._imu_clock.ready` branch, before
     the fallback.
     """
-    src = (Path(__file__).resolve().parents[1] / 'mongla_manager'
-           / 'auv_manager_node.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_manager'
+           / 'auv_manager_node.py')
     assert 'self._board_stamp = (stamp_s, time.monotonic())' in src
     cache = src.index('self._board_stamp = (stamp_s, time.monotonic())')
     ready = src.index('if self._imu_clock.ready:')
@@ -132,8 +136,8 @@ def test_flow_node_reads_the_depth_CAPTURE_stamp_not_arrival():
     fix -- and `_vz_down` differences those instants, so the transport jitter
     became a vertical speed that is not happening.
     """
-    fn = (Path(__file__).resolve().parents[2] / 'mongla_vision'
-          / 'mongla_vision' / 'flow' / 'flow_node.py').read_text()
+    fn = code_of_file(Path(__file__).resolve().parents[2] / 'mongla_vision'
+          / 'mongla_vision' / 'flow' / 'flow_node.py')
     assert 'from mongla_vision.stamps import capture_monotonic' in fn, (
         'flow_node does not import capture_monotonic')
 
@@ -151,8 +155,8 @@ def test_flow_node_reads_the_depth_CAPTURE_stamp_not_arrival():
 def test_the_fallback_to_arrival_time_is_LOUD():
     """An unstamped publisher is survivable; a SILENT fallback is not -- the
     velocity would simply be wrong with nothing to explain it."""
-    fn = (Path(__file__).resolve().parents[2] / 'mongla_vision'
-          / 'mongla_vision' / 'flow' / 'flow_node.py').read_text()
+    fn = code_of_file(Path(__file__).resolve().parents[2] / 'mongla_vision'
+          / 'mongla_vision' / 'flow' / 'flow_node.py')
     i = fn.index('def _on_state')
     body = fn[i:i + 1800]
     assert '_state_stamp_warned' in body and 'warning(' in body, (

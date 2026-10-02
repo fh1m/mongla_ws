@@ -14,6 +14,10 @@ from mongla_vision.detection.contours import (
 )
 from mongla_vision.detection.detector import Detection
 from mongla_vision.detector_node import _split_active
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 class TestSplitActive:
@@ -278,7 +282,7 @@ def test_the_STARTUP_path_splits_the_csv_too(monkeypatch):
     """
     import inspect
     import mongla_vision.detector_node as D
-    src = inspect.getsource(D.DetectorNode.__init__)
+    src = code_of(D.DetectorNode.__init__)
     assert '_split_active(active_model)' in src, (
         'startup does not split active_model; a CSV from the launch would '
         'resolve as a single key and silently load one model')

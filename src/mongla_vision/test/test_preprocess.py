@@ -31,6 +31,10 @@ cv2 = pytest.importorskip('cv2')
 from mongla_vision.detection.preprocess import (      # noqa: E402
     DEFAULT_CLIP, make_clahe, make_preprocessor,
 )
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 def _washed_out(w=640, h=360):
@@ -175,8 +179,8 @@ def test_a_BOOL_is_accepted_because_launch_produces_one():
 def test_the_launch_default_survives_the_round_trip():
     """'off' is the natural word and it is the one that breaks. 'none' means
     the same to `make_preprocessor` and stays a string through launch."""
-    launch = (Path(__file__).resolve().parents[1] / 'launch'
-              / 'vision_pi.launch.py').read_text()
+    launch = code_of_file(Path(__file__).resolve().parents[1] / 'launch'
+              / 'vision_pi.launch.py')
     # 'auto' now, not 'none': it is the SENTINEL that lets a profile decide,
     # and it is still a string, so it survives launch's bool coercion of the
     # literal 'off' -- which killed the whole composed process at startup.
@@ -209,10 +213,10 @@ def test_preprocessing_stays_OFF_by_default():
     """Because of the counter-example above. A change that helps one target by
     42 points and hurts another by 64 is a per-water decision, and defaulting
     it on would silently halve detection on clear water."""
-    src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'detector_node.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'detector_node.py')
     # 'auto' is the SENTINEL for "not set", so a profile can decide. The
     # effective default is still off -- `make_preprocessor('off')` is what a
     # profile-less run resolves to.
-    assert "self.declare_parameter('preprocess',          'auto')" in src
+    assert "self.declare_parameter('preprocess', 'auto')" in src
     assert "_p('preprocess', 'off')" in src

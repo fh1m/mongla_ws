@@ -26,13 +26,17 @@ function".
 import inspect
 
 from mongla_manager import auv_manager_node as amn
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 PUMPED_READS = ('check_behaviour_rev', 'set_default_gain')
 
 
 def _src(fn):
-    return inspect.getsource(fn)
+    return code_of(fn)
 
 
 def test_pumped_reads_are_not_in_setup_mavlink():

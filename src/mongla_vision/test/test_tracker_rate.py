@@ -15,6 +15,10 @@ import sys
 from pathlib import Path
 
 import pytest
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -59,8 +63,8 @@ def test_the_node_declares_the_window_in_SECONDS():
     `max_predict_frames`, which is IN the comment that explains the change --
     the same shape as the `_srot_drive` grep that stayed green through exactly
     the edit it guarded."""
-    src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'tracker_node.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'tracker_node.py')
     assert "declare_parameter('max_predict_s'" in src
     assert "declare_parameter('max_predict_frames'" not in src
     assert 'math.ceil(max_pred_s * frame_rate)' in src
@@ -87,8 +91,8 @@ def test_the_rate_is_a_MEDIAN_gap_not_a_span_average():
     """One long gap -- a detector pause, a model switch, a scheduler hiccup --
     drags a span-based mean far more than it shifts the rate the coast windows
     actually see."""
-    src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'tracker_node.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'tracker_node.py')
     assert 'gaps[len(gaps) // 2]' in src
     assert '(_RATE_SAMPLES - 1) / span' not in src
 

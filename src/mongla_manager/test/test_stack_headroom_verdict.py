@@ -72,6 +72,10 @@ def test_the_implausible_depth_line_uses_the_telemetry_sign():
 from mongla_manager.bringup_check import (                    # noqa: E402
     HEAP_BASELINE_BYTES, HEAP_FAIL_BYTES, _heap_verdict,
 )
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 def test_the_measured_heap_passes():
@@ -93,6 +97,6 @@ def test_no_heap_is_unknown_not_healthy():
 
 
 def test_the_heap_verdict_is_actually_graded_in_the_srot_section():
-    src = (Path(__file__).resolve().parents[1] / 'mongla_manager'
-           / 'bringup_check.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_manager'
+           / 'bringup_check.py')
     assert 'out.append(_heap_verdict(named))' in src

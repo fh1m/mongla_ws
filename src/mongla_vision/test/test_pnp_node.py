@@ -12,6 +12,10 @@ either missing or wrong when it was first checked:
 """
 import re
 from pathlib import Path
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 _ROOT = Path(__file__).resolve().parents[3]
 _RECORD = _ROOT / 'scripts' / 'pool_record.sh'
@@ -82,8 +86,8 @@ def test_one_medium_argument_reaches_all_three_nodes():
     assert "DeclareLaunchArgument(\n            'flow_medium'" not in src
     assert src.count("LaunchConfiguration('medium')") >= 3, (
         'medium does not reach flow_node, lock_node and pnp_node')
-    parent = (_ROOT / 'src' / 'mongla_manager' / 'launch'
-              / 'bringup.launch.py').read_text()
+    parent = code_of_file(_ROOT / 'src' / 'mongla_manager' / 'launch'
+              / 'bringup.launch.py')
     assert "DeclareLaunchArgument('medium'" in parent
-    assert "'medium':        LaunchConfiguration('medium')" in parent, (
+    assert "'medium': LaunchConfiguration('medium')" in parent, (
         'bringup declares medium but does not forward it to the vision launch')
