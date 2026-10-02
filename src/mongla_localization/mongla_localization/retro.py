@@ -28,35 +28,30 @@ from __future__ import annotations
 
 import bisect
 from dataclasses import dataclass
-from typing import Callable, List
+from typing import Callable, List, Optional
 
 
 @dataclass
 class _Event:
     t: float
     fn: Callable
-    before: tuple          # filter snapshot taken just before `fn` ran
+    before: dict           # filter snapshot taken just before `fn` ran
+    # A PROPAGATION over (t - span, t], and how to rebuild it over any other
+    # duration -- so a late measurement can land INSIDE it (see `run`). None
+    # for an update, which happens at an instant.
+    span: float = 0.0
+    make: Optional[Callable] = None
 
 
-def snapshot(filt) -> tuple:
+def snapshot(filt) -> dict:
     """Everything an update can change, including the gate's own counters --
-    a replay must not count one measurement's rejection twice."""
-    return (filt.X.copy(), filt.P.copy(), filt.accepted, filt.rejected,
-            dict(filt.reject_streak), filt.lockout_breaks,
-            filt._gyro.copy())
+    a replay must not count one measurement's rejection twice. The filter
+    names the list (`RIEKF.REPLAY_STATE`), so it cannot drift from here."""
+    return filt.replay_state()
 
 
-def restore(filt, snap: tuple) -> None:
-    X, P, acc, rej, streak, breaks, gyro = snap
-    filt.X = X.copy()
-    filt.P = P.copy()
-    filt.accepted, filt.rejected = acc, rej
-    # A COPY: the snapshot is restored on every replay across it, and handing
-    # the live dict back would let the replay's rejections write into it.
-    filt.reject_streak, filt.lockout_breaks = dict(streak), breaks
-    # The rate a late lever-armed flow sample is corrected with must be the
-    # rate at ITS instant, so it is state for replay like everything else.
-    filt._gyro = gyro.copy()
+def restore(filt, snap: dict) -> None:
+    filt.set_replay_state(snap)
 
 
 class Retrodictor:
@@ -70,11 +65,17 @@ class Retrodictor:
         self.late = 0              # events inserted behind the newest
         self.refused = 0           # older than the horizon: not applied
 
-    def run(self, t: float, fn: Callable) -> bool:
-        """Apply `fn(filter)` as of time `t`. False if `t` is too old to reach."""
+    def run(self, t: float, fn: Callable, *, span: float = 0.0,
+            make: Optional[Callable] = None) -> bool:
+        """Apply `fn(filter)` as of time `t`. False if `t` is too old to reach.
+
+        A propagation passes `span` (its duration, ending at `t`) and `make`
+        (`make(duration) -> fn`), which is what lets a later, late measurement
+        split it.
+        """
         ev = self._events
         if not ev or t >= ev[-1].t:
-            self._exec_append(t, fn)
+            self._exec_append(t, fn, span, make)
             self._prune()
             return True
         if t < ev[0].t:
@@ -85,19 +86,36 @@ class Retrodictor:
         tail = ev[i:]
         del ev[i:]
         self.late += 1
-        self._exec_append(t, fn)
+        first = tail[0]
+        if make is None and first.make is not None and first.t - first.span < t:
+            # ⛔ THE LATE EVENT LANDS INSIDE A PROPAGATION (issue #31). Applying
+            # it before that step evaluated it at the PREVIOUS IMU sample, up
+            # to one step (20 ms at 50 Hz) earlier than it happened. Split the
+            # step at `t`: propagate to `t`, apply, propagate the rest. The
+            # IMU sample is held across both halves, exactly as the unsplit
+            # step held it, so this introduces no new approximation.
+            head = t - (first.t - first.span)
+            self._exec_append(t, first.make(head), head, first.make)
+            self._exec_append(t, fn, span, make)
+            rest = first.t - t
+            self._exec_append(first.t, first.make(rest), rest, first.make)
+            tail = tail[1:]
+            self.replayed += 1
+        else:
+            self._exec_append(t, fn, span, make)
         for e in tail:
-            self._exec_append(e.t, e.fn)
+            self._exec_append(e.t, e.fn, e.span, e.make)
         self.replayed += len(tail)
         return True
 
     def newest_t(self):
         return self._events[-1].t if self._events else None
 
-    def _exec_append(self, t: float, fn: Callable) -> None:
+    def _exec_append(self, t: float, fn: Callable, span: float = 0.0,
+                     make: Optional[Callable] = None) -> None:
         before = snapshot(self.filt)
         fn(self.filt)
-        self._events.append(_Event(t, fn, before))
+        self._events.append(_Event(t, fn, before, span, make))
 
     def _prune(self) -> None:
         ev = self._events

@@ -103,11 +103,13 @@ class LocalizationNode(Node):
 
         self._filter = RIEKF()
         self._last_imu_t: float | None = None
+        self._last_accel = None          # body specific force, latest IMU
         self._imu_gap_warned = False
         # Counters, published in the diagnostic line. Which channel is feeding
         # the filter is the first question when a pose looks wrong, and a rate
         # of zero on one input is invisible in the pose itself.
         self._n = {'imu': 0, 'att': 0, 'depth': 0, 'yaw': 0, 'flow': 0,
+                   'flow_refused': 0, 'depth_refused': 0, 'yaw_refused': 0,
                    'fix': 0, 'zupt': 0, 'grid': 0, 'grid_refused': 0,
                    'lane': 0, 'lane_refused': 0, 'model': 0, 'gap': 0,
                    # World-frame updates the observability gate refused. A
@@ -261,7 +263,7 @@ class LocalizationNode(Node):
 
     # ---- inputs ---------------------------------------------------------
 
-    def _apply(self, t, fn) -> bool:
+    def _apply(self, t, fn, *, span: float = 0.0, make=None) -> bool:
         """Run `fn(filter)` as of time `t` (retrodicted), or now (default).
 
         `t=None` means the input carries no stamp: it is applied at the newest
@@ -273,7 +275,7 @@ class LocalizationNode(Node):
             return True
         if t is None:
             t = _now_or(retro.newest_t(), self._last_imu_t or 0.0)
-        return retro.run(float(t), fn)
+        return retro.run(float(t), fn, span=span, make=make)
 
     def _on_imu(self, msg: Imu) -> None:
         t = _stamp_s(msg.header)
@@ -301,7 +303,13 @@ class LocalizationNode(Node):
                 msg.angular_velocity.z)
         accel = (msg.linear_acceleration.x, msg.linear_acceleration.y,
                  msg.linear_acceleration.z)
-        self._apply(t, lambda f, g=gyro, a=accel, d=dt: f.predict(g, a, d))
+        # `make` rebuilds this step over any duration, so a late measurement
+        # can split it at its own instant (retro.py, issue #31).
+        self._apply(t, lambda f, g=gyro, a=accel, d=dt: f.predict(g, a, d),
+                    span=dt,
+                    make=lambda d, g=gyro, a=accel: (
+                        lambda f: f.predict(g, a, d)))
+        self._last_accel = np.asarray(accel, float)
         self._n['imu'] += 1
         self._last_input_t = t
 
@@ -365,9 +373,9 @@ class LocalizationNode(Node):
         t = _opt_stamp(msg)
         depth = float(msg.depth_m)
         if not math.isnan(depth):
-            self._apply(t, lambda f, d=depth, s=self._depth_sigma:
-                        f.update_depth(d, sigma=s))
-            self._n['depth'] += 1
+            ok = self._apply(t, lambda f, d=depth, s=self._depth_sigma:
+                             f.update_depth(d, sigma=s))
+            self._n['depth' if ok else 'depth_refused'] += 1
         yaw = float(msg.yaw_deg)
         # NaN is the documented absence sentinel, and on srot it is now what a
         # board with an unhealthy BNO actually publishes. Feeding NaN into the
@@ -376,9 +384,38 @@ class LocalizationNode(Node):
             # The same board yaw as the attitude stream, so the same offset --
             # raw, it would drag an anchored filter back to boot axes.
             yaw = _wrap180(yaw + self._yaw_offset_deg)
-            self._apply(t, lambda f, y=yaw, s=self._yaw_sigma_deg:
-                        f.update_yaw(y, sigma_deg=s))
-            self._n['yaw'] += 1
+            ok = self._apply(t, lambda f, y=yaw, s=self._yaw_sigma_deg:
+                             f.update_yaw(y, sigma_deg=s))
+            self._n['yaw' if ok else 'yaw_refused'] += 1
+
+    def _flow_now(self, t_meas, vx: float, vy: float, var_x: float,
+                  var_y: float):
+        """Carry a flow sample to NOW, when nothing else accounts for its age.
+
+        ⛔ WITH RETRODICTION OFF (the default) A STAMP WAS IGNORED (issue #31).
+        Flow is stamped at the middle of its baseline -- up to 375 ms back --
+        and was compared with the CURRENT state at its own, overconfident
+        variance. During a turn on a current, or any acceleration, the motion
+        in between became innovation the filter believed: measured in
+        `test_a_stale_flow_sample_no_longer_bends_velocity_on_a_turn` at
+        4.5 cm/s, exactly |v| |w| age.
+
+        ⚠ WIDENING THE VARIANCE ALONE WAS TRIED AND DOES NOT WORK: flow is
+        the only horizontal velocity observer, so a bias at any variance still
+        wins in the end (4.50 -> 4.50 cm/s). The sample is instead MOVED to
+        now (`RIEKF.body_velocity_now`) and keeps half the move as 1-sigma for
+        the rate and acceleration it assumed held. With retrodiction on, it is
+        applied at its own instant and none of this runs.
+        """
+        if (getattr(self, '_retro', None) is not None or t_meas is None
+                or self._last_imu_t is None
+                or getattr(self, '_last_accel', None) is None):
+            return vx, vy, var_x, var_y
+        now, d = self._filter.body_velocity_now(
+            vx, vy, self._last_accel, self._last_imu_t - t_meas)
+        return (float(now[0]), float(now[1]),
+                var_x + (0.5 * float(d[0])) ** 2,
+                var_y + (0.5 * float(d[1])) ** 2)
 
     def _on_flow(self, msg: TwistWithCovarianceStamped) -> None:
         """Downward optical flow: the DVL we do not have.
@@ -408,10 +445,17 @@ class LocalizationNode(Node):
             var_x = floor
         if not (var_y > 0.0) or not math.isfinite(var_y):
             var_y = floor
-        self._apply(_opt_stamp(msg),
-                    lambda f, vx=v.x, vy=v.y, a=max(var_x, 1e-6), b=max(var_y, 1e-6),
-                    r=self._flow_lever_arm:
-                    f.update_body_velocity_xy(vx, vy, a, b, lever_arm=r))
+        t_meas = _opt_stamp(msg)
+        vx_now, vy_now, var_x, var_y = self._flow_now(t_meas, v.x, v.y,
+                                                      var_x, var_y)
+        if not self._apply(t_meas,
+                           lambda f, vx=vx_now, vy=vy_now, a=max(var_x, 1e-6),
+                           b=max(var_y, 1e-6), r=self._flow_lever_arm:
+                           f.update_body_velocity_xy(vx, vy, a, b, lever_arm=r)):
+            # Older than the replay horizon: NOT fused, so not counted as
+            # fused -- the aiding diagnostic read refused samples as aid.
+            self._n['flow_refused'] += 1
+            return
         self._n['flow'] += 1
         now = time.monotonic()
         dt = min(now - self._last_flow_t, 0.25) if self._last_flow_t > 0.0 else 0.0
