@@ -607,6 +607,12 @@ class DetectorNode(Node):
         # Inference runs on a background thread so the ROS executor stays free
         # for param callbacks (live class/model switches) during long inferences.
         self._infer_q: _queue.SimpleQueue = _queue.SimpleQueue()
+        # Serialises the PRODUCERS (issue #37). Drain-then-put is two steps;
+        # with `_on_image` and the direct feed both offering, both could drain
+        # and both put, leaving two frames -- and the worker would infer the
+        # stale one, which a single slot exists to prevent. The consumer only
+        # takes, so it needs no lock.
+        self._offer_lock = threading.Lock()
         # Set while the worker is BLOCKED waiting for a frame, i.e. exactly
         # when a new one would be consumed immediately. A composed camera reads
         # this to decide when to decode, so the detector is fed the instant it
@@ -841,18 +847,19 @@ class DetectorNode(Node):
         self._offer(_DirectFrame(frame_bgr, header))
 
     def _offer(self, item) -> None:
-        while not self._infer_q.empty():
-            try:
-                self._infer_q.get_nowait()
-                # Something was waiting and is now discarded. Under the
-                # composed design this should be ~0: the camera only decodes
-                # when the worker is idle, so nothing should ever queue behind
-                # an unconsumed frame. A rising count means we are decoding
-                # frames the chip never looks at.
-                self._evicted += 1
-            except _queue.Empty:
-                break
-        self._infer_q.put_nowait(item)
+        with self._offer_lock:
+            while not self._infer_q.empty():
+                try:
+                    self._infer_q.get_nowait()
+                    # Something was waiting and is now discarded. Under the
+                    # composed design this should be ~0: the camera only
+                    # decodes when the worker is idle, so nothing should ever
+                    # queue behind an unconsumed frame. A rising count means we
+                    # are decoding frames the chip never looks at.
+                    self._evicted += 1
+                except _queue.Empty:
+                    break
+            self._infer_q.put_nowait(item)
 
     def _on_infer_failure(self, exc) -> None:
         """A node that cannot do its job must stop claiming to be up.

@@ -85,6 +85,9 @@ class NucleusDVLSource(YawSource):
     #  YawSource ABC
     # ------------------------------------------------------------------
 
+    def samples_received(self) -> int:
+        return getattr(self, '_n_samples', 0)
+
     def read_yaw(self) -> float | None:
         with self._lock:
             return self._heading
@@ -283,6 +286,7 @@ class NucleusDVLSource(YawSource):
         if pkt_id == ID_AHRS:
             with self._lock:
                 self._heading = pkt['heading']
+                self._n_samples = getattr(self, '_n_samples', 0) + 1
 
         elif pkt_id == ID_BOTTOMTRACK:
             if not (pkt['beam1_fom_valid'] and pkt['beam2_fom_valid']

@@ -144,11 +144,19 @@ def fix_from_bearings(sightings: Dict[str, float],
 
 
 def _widest_separation(bearings: Sequence[float]) -> float:
-    """Largest angle between any two sightings, in [0, 180]."""
+    """Best CROSSING angle between any two sight lines, in [0, 90].
+
+    ⛔ NOT THE ANGLE BETWEEN THE BEARINGS (issue #37). A sight line is a line,
+    not a ray: two props 175 deg apart put the hull nearly BETWEEN them, the
+    lines are almost the same line, and position along it is unobservable --
+    exactly as for two props 5 deg apart. That case scored 175 and passed a
+    12 deg gate. What conditions the crossing is min(sep, 180 - sep).
+    """
     widest = 0.0
     for i in range(len(bearings)):
         for j in range(i + 1, len(bearings)):
-            widest = max(widest, abs(_wrap180(bearings[i] - bearings[j])))
+            sep = abs(_wrap180(bearings[i] - bearings[j]))
+            widest = max(widest, min(sep, 180.0 - sep))
     return widest
 
 

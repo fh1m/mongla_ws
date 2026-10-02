@@ -9,6 +9,12 @@ read_yaw() -> float | None
     failed calibration gate, etc). Callers MUST hold the last valid
     value for that tick rather than crash or block.
 
+samples_received() -> int | None
+    How many samples have ARRIVED from the sensor, or None if the source
+    cannot tell. Not how many times `read_yaw()` returned a value: that
+    returns a cached sample until it goes stale, so polling it counts polls
+    (issue #37 -- a 1 Hz source read as 20 Hz).
+
 is_healthy() -> bool
     True when read_yaw() is currently producing usable values. Used
     only for startup banners + diagnostic logging — never for
@@ -25,6 +31,9 @@ class YawSource:
 
     def read_yaw(self) -> float | None:
         raise NotImplementedError
+
+    def samples_received(self) -> int | None:
+        return None
 
     def is_healthy(self) -> bool:
         return False

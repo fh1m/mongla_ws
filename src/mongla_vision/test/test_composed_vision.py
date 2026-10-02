@@ -213,6 +213,7 @@ def test_submit_replaces_rather_than_queues():
     det = object.__new__(DN.DetectorNode)
     det._infer_q = _q.SimpleQueue()
     det._evicted = 0
+    det._offer_lock = __import__('threading').Lock()
     det._fed_direct = False
     det.submit_frame('old', 'h1')
     det.submit_frame('new', 'h2')
@@ -355,6 +356,7 @@ def test_submit_frame_records_that_the_direct_path_is_alive():
     det = object.__new__(DN.DetectorNode)
     det._infer_q = _q.SimpleQueue()
     det._evicted = 0
+    det._offer_lock = __import__('threading').Lock()
     det._fed_direct = False
     det.submit_frame('f', 'h')
     assert det._fed_direct is True

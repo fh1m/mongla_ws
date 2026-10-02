@@ -63,3 +63,16 @@ def test_the_issue_s_number_without_the_lens():
     u, v = _pixel(32.7, 0.0)
     got = _fake(u, v, with_d=False).bearing_to('gate', camera='forward')
     assert ((got + 180.0) % 360.0) - 180.0 == pytest.approx(29.1, abs=0.3)
+
+
+def test_a_bearing_uses_the_heading_of_its_own_frame():
+    """Issue #37: mid-turn the detection is older than the heading read now.
+    The hull turned 6 deg since that frame was captured; the bearing must
+    not move with it."""
+    u, v = _pixel(20.0, 0.0)
+    m = _fake(u, v)
+    m._det_capture = {'forward': (100, 0)}
+    m._yaw_hist = [(99.9, 10.0), (100.0, 10.0), (100.05, 13.0), (100.1, 16.0)]
+    m.absolute_heading.return_value = 16.0                # now, after the turn
+    got = m.bearing_to('gate', camera='forward')
+    assert got == pytest.approx(10.0 + 20.0, abs=0.3)

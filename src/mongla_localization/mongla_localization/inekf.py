@@ -275,6 +275,19 @@ class RIEKF:
         self.P = Phi @ self.P @ Phi.T + Qd
         self.P = 0.5 * (self.P + self.P.T)      # keep it symmetric
 
+    def coast(self, dt: float) -> None:
+        """Advance `dt` with NO inertial data: constant velocity, the process
+        noise of the time that passed.
+
+        For an IMU gap (issue #37). Skipping the step froze position for the
+        whole gap -- flow corrects velocity, not position -- and grew no
+        covariance for time nobody measured. This is `predict` with zero body
+        rate and zero world acceleration: position advances by v*dt, and P
+        grows by the same noise model a real step of that length would add.
+        """
+        R = self.X.R
+        self.predict(self.X.bg.copy(), self.X.ba - R.T @ GRAVITY, dt)
+
     def _adapt_noise(self, R, v, p) -> np.ndarray:
         """IMU noise is BODY frame; the right-invariant error is not.
 
