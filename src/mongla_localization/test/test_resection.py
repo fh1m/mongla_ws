@@ -139,3 +139,13 @@ def test_an_observer_well_inside_the_circle_is_fine():
 def test_collinear_props_are_treated_as_dangerous():
     # No circle means no angles-only fix either; saying "safe" would be worse.
     assert on_danger_circle((1.0, 1.0), (0.0, 0.0), (1.0, 0.0), (2.0, 0.0))
+
+
+def test_two_props_nearly_opposite_are_refused_like_two_nearly_together():
+    """Issue #37 item 1: bearings 0 and 175 deg put the hull between the
+    props on almost one line; the old gate scored that 175 and passed it."""
+    from mongla_localization.resection import fix_from_bearings
+    pos = {'a': (0.0, 10.0), 'b': (0.5, -10.0)}
+    got = fix_from_bearings({'a': 0.0, 'b': 175.0}, pos)
+    assert not got.ok
+    assert got.separation_deg == pytest.approx(5.0)

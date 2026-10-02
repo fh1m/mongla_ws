@@ -102,6 +102,7 @@ class SensorsNode(Node):
 
         self._reads_total  = 0
         self._reads_window = 0
+        self._samples_at_print = self._src.samples_received()
         self._last_print   = time.monotonic()
         self.create_timer(self._dt, self._tick)
         self.create_timer(0.05, self._sample)   # 20 Hz pull, well over print rate
@@ -114,7 +115,16 @@ class SensorsNode(Node):
     def _tick(self):
         now = time.monotonic()
         elapsed = max(now - self._last_print, 1e-3)
-        hz      = self._reads_window / elapsed
+        # ⛔ SAMPLES THAT ARRIVED, not polls that returned a value (issue
+        # #37): `read_yaw()` hands back the cached sample until it goes stale,
+        # so a source stuck at 1 Hz read as the 20 Hz poll rate. A source that
+        # cannot count its samples reports NaN rather than the poll count.
+        got = self._src.samples_received()
+        if got is None or self._samples_at_print is None:
+            hz = float('nan')
+        else:
+            hz = (got - self._samples_at_print) / elapsed
+        self._samples_at_print = got
         yaw     = self._src.read_yaw()
         healthy = self._src.is_healthy()
 

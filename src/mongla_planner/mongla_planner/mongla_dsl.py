@@ -595,6 +595,7 @@ class MonglaMission:
         if camera in self._det_subs:
             return
         node = self.client.node
+        self._subscribe_heading_history(node)
         # Match VisionState's QoS so we connect to the same publishers.
         qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.RELIABLE)
         ns = f'/mongla/vision/{camera}'
@@ -604,6 +605,41 @@ class MonglaMission:
         self._info_subs[camera] = node.create_subscription(
             CameraInfo, f'{ns}/camera_info',
             lambda msg, cam=camera: self._on_info(cam, msg), qos)
+
+    def _subscribe_heading_history(self, node) -> None:
+        """Keep the hull's yaw by CAPTURE stamp, so a detection's bearing can
+        use the heading of its own frame (issue #37). Idempotent."""
+        if getattr(self, '_state_sub', None) is not None:
+            return
+        try:
+            from mongla_interfaces.msg import MonglaState
+        except ImportError:                       # an unbuilt workspace
+            return
+        from collections import deque
+        self._yaw_hist = deque(maxlen=400)        # ~20 s at the 20 Hz state
+        self._state_sub = node.create_subscription(
+            MonglaState, '/mongla/state', self._on_state_yaw, 10)
+
+    def _on_state_yaw(self, msg) -> None:
+        y = float(msg.yaw_deg)
+        st = msg.header.stamp
+        t = float(st.sec) + float(st.nanosec) * 1e-9
+        if y == y and t > 0.0:
+            self._yaw_hist.append((t, y))
+
+    def _turned_since(self, camera: str) -> float:
+        """Degrees the hull has turned since `camera`'s newest frame was
+        captured, or 0.0 when either end is unknown (then nothing changes)."""
+        hist = list(getattr(self, '_yaw_hist', ()) or ())
+        cap = self.__dict__.get('_det_capture', {}).get(camera)
+        if not hist or not cap:
+            return 0.0
+        t_cap = float(cap[0]) + float(cap[1]) * 1e-9
+        hist.sort(key=lambda h: h[0])
+        before = [y for t, y in hist if t <= t_cap]
+        if not before:
+            return 0.0
+        return ((hist[-1][1] - before[-1] + 180.0) % 360.0) - 180.0
 
     def _on_detections(self, camera: str, msg) -> None:
         # Copy to plain Python immediately (rclpy reuses the C++ buffer across
@@ -1531,7 +1567,11 @@ class MonglaMission:
             u_r = float(rect.rectify([[u, v]])[0][0])
             # Azimuth of a pinhole ray is atan(x/f) whatever its height.
             rel = _math.degrees(_math.atan((u_r - K_rect[0][2]) / K_rect[0][0]))
-            return (self.absolute_heading() + rel) % 360.0
+            # ⛔ THE HEADING OF THAT FRAME, not of now (issue #37): mid-turn
+            # the detection is a detector latency old, and the hull has
+            # turned since by yaw_rate x latency.
+            then = self.absolute_heading() - MonglaMission._turned_since(self, cam)
+            return (then + rel) % 360.0
         half = float(hfov_deg if hfov_deg is not None
                      else MonglaMission.hfov_water_deg(self, camera)) / 2.0
         return (self.absolute_heading() + float(off) * half) % 360.0

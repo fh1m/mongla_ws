@@ -215,7 +215,10 @@ class FlowVelocityNode(Node):
         # than the whole error budget for a pool leg. Verified to recover the
         # true velocity to 0.000 % against forward-simulated port physics.
         self.declare_parameter('refractive_rectify', True)
-        self.declare_parameter('water_refractive_index', N_WATER)
+        # ⛔ NO `water_refractive_index` PARAMETER HERE (issue #37, B22's rule).
+        # Flow had its own; PnP, the lock and the DSL read `optics.N_WATER`.
+        # Overriding it at the pool for salt water made flow and pose disagree
+        # about the same port. One constant, `optics.N_WATER`, read by all.
         self.declare_parameter('min_net_flow_px', 0.5)
         self.declare_parameter('max_dispersion_ratio', 5.0)
         self.declare_parameter('grid_buckets', 4)
@@ -324,8 +327,8 @@ class FlowVelocityNode(Node):
         self._ransac_px = float(self.get_parameter('ransac_px').value)
         self._fb_px = float(self.get_parameter('fb_reject_px').value)
         self._yaw_sign = float(self.get_parameter('yaw_image_sign').value)
-        self._n_water = float(
-            self.get_parameter('water_refractive_index').value)
+        from mongla_vision import optics
+        self._n_water = float(optics.N_WATER)   # read now, not at import
         self._want_refract = bool(
             self.get_parameter('refractive_rectify').value)
         self._refract = None

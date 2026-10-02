@@ -299,3 +299,45 @@ def test_a_rebuild_followed_by_a_REAL_inference_is_a_recovery():
     n._infer_fails = 0                                # what _infer_loop does on success
     n._on_infer_failure(RuntimeError('one bad frame later'))
     assert n._infer_fails == 1
+
+
+def test_two_producers_never_leave_two_frames_in_the_slot():
+    """Issue #37 item 7: drain-then-put from two threads could leave two
+    items, and the worker would infer the stale one. Forced interleaving: the
+    first producer is paused between its drain and its put."""
+    import queue
+    import threading
+    import types
+    from mongla_vision.detector_node import DetectorNode
+    n = types.SimpleNamespace(_infer_q=queue.SimpleQueue(), _evicted=0,
+                              _offer_lock=threading.Lock())
+    real_put = n._infer_q.put_nowait
+    gate, released = threading.Event(), threading.Event()
+
+    class _Q:
+        def empty(self):
+            return n._q.empty()
+
+        def get_nowait(self):
+            return n._q.get_nowait()
+
+        def put_nowait(self, item):
+            if item == 'first':
+                gate.set()
+                released.wait(0.5)
+            real_put(item)
+
+    n._q = n._infer_q
+    n._infer_q = _Q()
+    t = threading.Thread(target=DetectorNode._offer, args=(n, 'first'))
+    t.start()
+    gate.wait(1.0)
+    t2 = threading.Thread(target=DetectorNode._offer, args=(n, 'second'))
+    t2.start()
+    released.set()
+    t.join(1.0)
+    t2.join(1.0)
+    items = []
+    while not n._q.empty():
+        items.append(n._q.get_nowait())
+    assert items == ['second']

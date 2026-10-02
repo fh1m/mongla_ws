@@ -55,6 +55,9 @@ class CompositeBnoDvlSource(YawSource):
     def read_yaw(self) -> float | None:
         return self._bno.read_yaw()
 
+    def samples_received(self):
+        return self._bno.samples_received()
+
     def is_healthy(self) -> bool:
         """BOTH sources, as the class docstring has always claimed (B11).
 

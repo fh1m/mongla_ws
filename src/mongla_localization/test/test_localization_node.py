@@ -1277,3 +1277,19 @@ def test_attitude_uncertainty_far_from_the_origin_is_position_uncertainty():
     np.testing.assert_allclose(pose, truth_pose, atol=2e-3, rtol=0.05)
     np.testing.assert_allclose(twist, truth_twist, atol=2e-6, rtol=0.05)
     assert math.sqrt(pose[1, 1]) > 0.4          # across-track, from heading
+
+
+def test_an_imu_gap_advances_position_and_grows_the_covariance():
+    """Issue #37 item 8: a 0.5 s gap at 1 m/s must move p by 0.5 m and grow
+    P. It froze p and added nothing."""
+    n = _node()
+    n._zupt_enabled = False
+    n._model_aid = False
+    n._on_imu(_Imu(100.0))
+    n._filter.X.v = np.array([1.0, 0.0, 0.0])
+    p0 = n._filter.X.p.copy()
+    P0 = n._filter.P[6, 6]
+    n._on_imu(_Imu(100.5))                        # 0.5 s later: a gap
+    assert n._n['gap'] == 1
+    assert n._filter.X.p[0] - p0[0] == pytest.approx(0.5, abs=1e-6)
+    assert n._filter.P[6, 6] > P0

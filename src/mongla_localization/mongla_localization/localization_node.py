@@ -315,8 +315,13 @@ class LocalizationNode(Node):
                 self._imu_gap_warned = True
                 self.get_logger().warning(
                     f'[LOCAL] inertial gap {dt:.2f} s > {MAX_PREDICT_DT_S} s: '
-                    f'skipping the step rather than integrating it as one. '
-                    f'Position is coasting on flow and depth alone.')
+                    f'not integrating it as one IMU step -- coasting at '
+                    f'constant velocity and growing the covariance for it.')
+            # ⛔ COAST, DO NOT DROP (issue #37). Dropping froze position for
+            # the gap (flow corrects velocity, not position) and added no
+            # uncertainty for time nobody measured.
+            self._apply(t, lambda f, d=dt: f.coast(d), span=dt,
+                        make=lambda d: (lambda f: f.coast(d)))
             return
         gyro = (msg.angular_velocity.x, msg.angular_velocity.y,
                 msg.angular_velocity.z)

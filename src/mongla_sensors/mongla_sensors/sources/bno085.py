@@ -258,6 +258,9 @@ class BNO085Source:
             return None
         return self._latest_yaw
 
+    def samples_received(self) -> int:
+        return getattr(self, '_n_samples', 0)
+
     def read_yaw(self) -> float | None:
         raw = self._fresh_raw_yaw()
         if raw is None:
@@ -434,6 +437,7 @@ class BNO085Source:
 
                 self._latest_yaw = yaw
                 self._latest_ts  = now
+                self._n_samples = getattr(self, '_n_samples', 0) + 1
                 if 'pitch' in msg:
                     self._latest_pitch    = float(msg['pitch'])
                     self._latest_pitch_ts = now
