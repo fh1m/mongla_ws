@@ -158,3 +158,52 @@ def test_spread_reports_the_width_of_the_winning_cluster():
 # The rule and these tests are gone. What replaced them is tested from
 # projected pixels in `mongla_vision/test/test_pose_mirror_truth.py`.
 
+
+
+# --------------------------------------------------------------------------- #
+#  issue #56: moving frames fused as if they were one
+# --------------------------------------------------------------------------- #
+def test_a_turning_hull_no_longer_smears_the_one_branch_median():
+    """The issue's reproduction, noiseless and on the correct branch: a 1 deg/s
+    turn over 15 s. Camera-frame median: 13 deg against a true 6 at t=14."""
+    from mongla_localization.pose_cluster import PoseCluster, PoseSample
+    c = PoseCluster()
+    for i in range(15):
+        c.add(PoseSample(t=float(i), yaw_deg=20.0 - i, range_m=3.0,
+                         vehicle_yaw_deg=float(i)))
+    got = c.fuse(now=14.0)
+    assert got.decided
+    assert got.yaw_deg == pytest.approx(6.0, abs=1e-6)
+    assert got.spread_deg == pytest.approx(0.0, abs=1e-6)
+
+
+def test_the_range_is_the_range_NOW_on_an_approach():
+    """A 15 s run in at 0.2 m/s from 6 m. The window median reported the
+    middle -- 4.6 m at the end, against a true 3.2 -- stamped as current."""
+    from mongla_localization.pose_cluster import PoseCluster, PoseSample
+    c = PoseCluster()
+    for i in range(15):
+        c.add(PoseSample(t=float(i), yaw_deg=5.0, range_m=6.0 - 0.2 * i,
+                         vehicle_yaw_deg=0.0))
+    got = c.fuse(now=14.0)
+    assert got.range_m == pytest.approx(6.0 - 0.2 * 14, abs=1e-6)
+
+
+def test_the_range_line_keeps_the_medians_robustness():
+    """Holding station at 3 m with three wild frames in fifteen: still 3 m."""
+    from mongla_localization.pose_cluster import PoseCluster, PoseSample
+    c = PoseCluster()
+    for i in range(15):
+        r = 9.0 if i in (3, 8, 12) else 3.0
+        c.add(PoseSample(t=float(i), yaw_deg=5.0, range_m=r,
+                         vehicle_yaw_deg=0.0))
+    assert c.fuse(now=14.0).range_m == pytest.approx(3.0, abs=1e-6)
+
+
+def test_a_producer_with_no_heading_keeps_the_camera_frame_median():
+    from mongla_localization.pose_cluster import PoseCluster, PoseSample
+    c = PoseCluster()
+    for i in range(6):
+        c.add(PoseSample(t=float(i), yaw_deg=10.0, range_m=3.0))
+    got = c.fuse(now=5.0)
+    assert got.decided and got.yaw_deg == pytest.approx(10.0)
