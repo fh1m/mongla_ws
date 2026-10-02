@@ -250,6 +250,10 @@ class RIEKF:
         a = np.asarray(accel, dtype=float).reshape(3) - self.X.ba
 
         R = self.X.R
+        # ⚠ The PRE-STEP v and p, for A and for the noise map alike (issue
+        # #26). They were read after the state advanced, mixing two instants in
+        # one first-order step.
+        v0, p0 = self.X.v.copy(), self.X.p.copy()
         a_world = R @ a + GRAVITY
         self.X.p = self.X.p + self.X.v * dt + 0.5 * a_world * dt * dt
         self.X.v = self.X.v + a_world * dt
@@ -262,21 +266,41 @@ class RIEKF:
         A[3:6, 0:3] = skew(GRAVITY)
         A[6:9, 3:6] = np.eye(3)
         A[0:3, 9:12] = -R
-        A[3:6, 9:12] = -skew(self.X.v) @ R
+        A[3:6, 9:12] = -skew(v0) @ R
         A[3:6, 12:15] = -R
-        A[6:9, 9:12] = -skew(self.X.p) @ R
+        A[6:9, 9:12] = -skew(p0) @ R
 
         Phi = np.eye(self.DIM) + A * dt
-        Qd = self._adapt_noise(R) * dt
+        Qd = self._adapt_noise(R, v0, p0) * dt
         self.P = Phi @ self.P @ Phi.T + Qd
         self.P = 0.5 * (self.P + self.P.T)      # keep it symmetric
 
-    def _adapt_noise(self, R) -> np.ndarray:
-        """IMU noise is BODY frame; the error state is not. Rotate it in."""
-        Q = self.Q.copy()
-        Q[0:3, 0:3] = R @ Q[0:3, 0:3] @ R.T
-        Q[3:6, 3:6] = R @ Q[3:6, 3:6] @ R.T
-        return Q
+    def _adapt_noise(self, R, v, p) -> np.ndarray:
+        """IMU noise is BODY frame; the right-invariant error is not.
+
+        ⛔ THROUGH THE ADJOINT, NOT A ROTATION OF TWO BLOCKS (issue #26).
+        Body-frame noise w enters the right-invariant error as Ad_X w
+        (Barrau & Bonnabel 2017; Hartley et al. 2020):
+
+            Ad_X = [[R,        0, 0],
+                    [skew(v)R, R, 0],
+                    [skew(p)R, 0, R]]      biases: identity
+
+        Rotating only the diagonal dropped every theta-v and theta-p cross term
+        -- the same `skew(p) R` coupling `A` already carries for the gyro bias.
+        Traces still matched a Monte Carlo of the true error (the
+        gravity-coupled growth dominates them), but the CORRELATIONS did not:
+        mean NEES 956 against an expected 9 with the gyro path isolated, a
+        filter certain of combinations of states it had no business being
+        certain of -- `-skew(p)`, the B-56 amplifier, among them.
+        """
+        Ad = np.eye(self.DIM)
+        Ad[0:3, 0:3] = R
+        Ad[3:6, 0:3] = skew(v) @ R
+        Ad[3:6, 3:6] = R
+        Ad[6:9, 0:3] = skew(p) @ R
+        Ad[6:9, 6:9] = R
+        return Ad @ self.Q @ Ad.T
 
     # ── updates ──────────────────────────────────────────────────────────────
     def update_body_velocity(self, v_body, sigma: float = 0.05, *,
