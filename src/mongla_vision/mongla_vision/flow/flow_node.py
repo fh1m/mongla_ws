@@ -215,6 +215,14 @@ class FlowVelocityNode(Node):
         # 50-vs-72 cm height error that produced an 83 % scale gap on the
         # bench. Absence must refuse, not guess.
         self.declare_parameter('pool_depth_m', float('nan'))
+        # ⛔ THE FLOOR IS NOT ONE NUMBER (issue #35). `pool_depth_m` multiplies
+        # every velocity, and real venues slope (TRANSDEC ~1.2 -> 5 m) or step.
+        # State the venue's shallowest and deepest floor and the published
+        # sigma carries the scale error that range implies; left at NaN, the
+        # floor is declared flat at `pool_depth_m` -- an explicit claim, not a
+        # silent one. Tile height, when it is seen, replaces both.
+        self.declare_parameter('pool_depth_min_m', float('nan'))
+        self.declare_parameter('pool_depth_max_m', float('nan'))
         self.declare_parameter('medium', 'water')          # 'air' | 'water'
         self.declare_parameter('focal_air_px', _F_AIR_PX)
         self.declare_parameter('focal_water_px', _F_WATER_PX)
@@ -309,6 +317,17 @@ class FlowVelocityNode(Node):
         cam = str(self.get_parameter('camera').value or 'downward').strip()
         self._cam = cam
         self._pool_depth = float(self.get_parameter('pool_depth_m').value)
+        lo = float(self.get_parameter('pool_depth_min_m').value)
+        hi = float(self.get_parameter('pool_depth_max_m').value)
+        # The RMS of what the ASSUMED depth gets wrong, for a floor anywhere
+        # in [lo, hi]: with a = lo - d and b = hi - d, uniform gives
+        # sqrt((a^2 + ab + b^2) / 3). Not the range's own spread -- the typed
+        # depth is often measured at one end (the dock), not the middle. Not
+        # a measurement of this venue either: the honest size of "somewhere
+        # in the range the venue states".
+        a, b = lo - self._pool_depth, hi - self._pool_depth
+        self._floor_sigma_m = (math.sqrt(max(0.0, (a * a + a * b + b * b) / 3.0))
+                               if all(map(math.isfinite, (a, b))) else 0.0)
         # Lens below the baro port, body FRD metres, or None = not measured
         # (issue #27; see `flow_math.height_above_floor`).
         from mongla_localization import frames as _frames
@@ -1416,6 +1435,10 @@ class FlowVelocityNode(Node):
         """Variance the fit cannot see: scale and un-removed rotation (#23)."""
         speed = math.hypot(float(v.vx), float(v.vy))
         var = (FLOW_SCALE_SIGMA_FRAC * speed) ** 2
+        # The floor's own spread, while the height comes from the typed
+        # constant rather than read off the floor (#35): v scales with h.
+        if getattr(self, '_tile_height', None) is None and float(h) > 0.0:
+            var += (speed * getattr(self, '_floor_sigma_m', 0.0) / float(h)) ** 2
         pr, rr = getattr(self, '_last_rates', (0.0, 0.0))
         for rate, gain in ((pr, self._gy), (rr, self._gx)):
             residual = 1.0 if gain == 0.0 else FLOW_ROT_RESIDUAL_CALIBRATED

@@ -924,3 +924,25 @@ def test_a_calibrated_gain_earns_a_tighter_sigma_and_scale_is_always_in():
         assert sigma >= 0.036 * 0.3                       # 3.6 % scale (§5)
     finally:
         n.destroy_node()
+
+
+def test_a_sloping_floor_is_inside_the_published_sigma():
+    """Issue #35: a floor ramping 4.0 -> 2.5 m under a hull at 1.0 m with
+    `pool_depth_m = 4.0`. At the shallow end the true height is 1.5 m and the
+    node assumes 3.0, so velocity reads 2x. Stating the venue's floor range
+    must put that error inside 3 sigma; leaving it unstated claims a flat
+    floor, and the sigma says nothing about it."""
+    true_v, read_v, h_assumed = 0.3, 0.6, 3.0
+    n = _make(pool_depth_m=4.0, pool_depth_min_m=2.5, pool_depth_max_m=4.0,
+              estimate_time_offset=False)
+    try:
+        sigma = _published_sigma(n, read_v, 0.0, h_assumed, (0.0, 0.0))
+    finally:
+        n.destroy_node()
+    flat = _make(pool_depth_m=4.0, estimate_time_offset=False)
+    try:
+        sigma_flat = _published_sigma(flat, read_v, 0.0, h_assumed, (0.0, 0.0))
+    finally:
+        flat.destroy_node()
+    assert read_v - true_v <= 3.0 * sigma
+    assert sigma_flat < sigma

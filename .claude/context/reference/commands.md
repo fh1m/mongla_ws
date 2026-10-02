@@ -105,6 +105,8 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `dwn_classes` | `` | vision_stack:=pi -- downward class allowlist. |
 | `localization` | `true` | Run the invariant filter (mongla_localization). Read-only: it publishes /mongla/odom and commands nothing, so it is on by default. Set false to take it off the graph. |
 | `flow` | `false` | vision_stack:=pi -- start flow_node (downward-camera velocity). Pairs with the manager's position_source:=flow. |
+| `pool_depth_min_m` | `nan` | flow:=true -- the venue's shallowest floor, metres (#35). |
+| `pool_depth_max_m` | `nan` | flow:=true -- the venue's deepest floor, metres (#35). |
 | `pool_depth_m` | `nan` | flow:=true -- metres from the DOWNWARD camera to the floor. Required: without it flow_node publishes quality 0 and refuses, by design. |
 | `velocity_uplink` | `false` | manager: RIEKF body velocity -> board (VISION_SPEED_ESTIMATE). Needs fw PR #23 to act. |
 | `position_uplink` | `false` | manager: RIEKF pose -> board (VISION_POSITION_ESTIMATE). |
@@ -274,6 +276,8 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `lock_class` | `` | Class the ladder locks onto. Empty = whatever the detector is publishing. |
 | `dwn_lock_class` | `` | Class the DOWNWARD ladder follows. Empty = any class, and no 6-DoF pose (the geometry table is keyed by class). |
 | `pool_depth_m` | `nan` | Water depth in metres. REQUIRED with flow:=true -- the node refuses to publish velocity without it. |
+| `pool_depth_min_m` | `nan` | Shallowest floor in the venue, metres (#35). With pool_depth_max_m, flow's sigma carries the scale error a sloping floor makes. nan = declare it flat. |
+| `pool_depth_max_m` | `nan` | Deepest floor in the venue, metres (#35). |
 | `tile_m` | `0.0` | Floor tile pitch in metres, measured on deck. 0 = OFF. Sets height from the floor and publishes the grid angle that bounds yaw drift. A wrong value rescales every height silently -- measure it. |
 | `caustics` | `true` | flow: erode sun caustics and refuse a bare floor under them (false = always track the raw floor; A/B switch) |
 | `bank_forward` | `` | checkpoint bank (.npz) preloaded into the FORWARD lock node, from tools/build_practice_bank.py. Empty learns live. A preloaded reference is trusted exactly like a live one -- it clears MIN_INLIERS or it does not answer. |

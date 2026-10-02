@@ -308,6 +308,14 @@ def generate_launch_description():
             description='Water depth in metres. REQUIRED with flow:=true -- '
                         'the node refuses to publish velocity without it.'),
         DeclareLaunchArgument(
+            'pool_depth_min_m', default_value='nan',
+            description='Shallowest floor in the venue, metres (#35). With '
+                        'pool_depth_max_m, flow\'s sigma carries the scale '
+                        'error a sloping floor makes. nan = declare it flat.'),
+        DeclareLaunchArgument(
+            'pool_depth_max_m', default_value='nan',
+            description='Deepest floor in the venue, metres (#35).'),
+        DeclareLaunchArgument(
             'tile_m', default_value='0.0',
             description='Floor tile pitch in metres, measured on deck. 0 = '
                         'OFF. Sets height from the floor and publishes the '
@@ -609,6 +617,10 @@ def generate_launch_description():
                  'medium':       LaunchConfiguration('medium'),
                  'pool_depth_m': ParameterValue(
                      LaunchConfiguration('pool_depth_m'), value_type=float),
+                 'pool_depth_min_m': ParameterValue(
+                     LaunchConfiguration('pool_depth_min_m'), value_type=float),
+                 'pool_depth_max_m': ParameterValue(
+                     LaunchConfiguration('pool_depth_max_m'), value_type=float),
                  # The SAME calibration the downward camera_node gets. Passing
                  # them separately is how they came to disagree.
                  'calibration':  LaunchConfiguration('dwn_calibration'),

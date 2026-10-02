@@ -181,6 +181,12 @@ def generate_launch_description():
         # confident wrong speed". So `flow:=true` alone yields quality 0 and
         # nothing else; these two are what make the path usable, and they are
         # exposed here because bringup is where `flow:=true` is offered.
+        DeclareLaunchArgument('pool_depth_min_m', default_value='nan',
+                              description='flow:=true -- the venue\'s '
+                                          'shallowest floor, metres (#35).'),
+        DeclareLaunchArgument('pool_depth_max_m', default_value='nan',
+                              description='flow:=true -- the venue\'s deepest '
+                                          'floor, metres (#35).'),
         DeclareLaunchArgument('pool_depth_m', default_value='nan',
                               description='flow:=true -- metres from the DOWNWARD '
                                           'camera to the floor. Required: without '
@@ -386,6 +392,8 @@ def generate_launch_description():
             'lock_class':    LaunchConfiguration('lock_class'),
             'flow':          LaunchConfiguration('flow'),
             'pool_depth_m':  LaunchConfiguration('pool_depth_m'),
+            'pool_depth_min_m': LaunchConfiguration('pool_depth_min_m'),
+            'pool_depth_max_m': LaunchConfiguration('pool_depth_max_m'),
             'medium':        LaunchConfiguration('medium'),
             'lock':          LaunchConfiguration('lock'),
             'paused':        LaunchConfiguration('paused'),
