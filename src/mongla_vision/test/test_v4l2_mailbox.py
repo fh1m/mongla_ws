@@ -99,6 +99,7 @@ class _Fake(M.V4L2MailboxCamera):
         self._store_age_max = 0.0
         self._last_seq = None
         self._consec_fail, self._last_ok, self._idx = 0, time.monotonic(), 0
+        self._clock_monotonic, self._stamp_source = True, 'soe'
         self._pump = threading.Thread(target=lambda: None)
 
     def deliver(self, seq, cap_t, store_t=None):

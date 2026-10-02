@@ -94,6 +94,23 @@ V4L2_MEMORY_MMAP = 1
 V4L2_FIELD_NONE = 1
 V4L2_BUF_FLAG_TIMESTAMP_MASK = 0x0000E000
 V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC = 0x00002000
+# WHICH INSTANT the stamp marks -- a separate field from which CLOCK it is on,
+# and the one nobody read (issue #34). `uvcvideo`, which serves both vehicle
+# cameras, sets SOE: the stamp is taken when the frame STARTS arriving, so a
+# mid-exposure correction must ADD half the exposure, not subtract it.
+V4L2_BUF_FLAG_TSTAMP_SRC_MASK = 0x00070000
+V4L2_BUF_FLAG_TSTAMP_SRC_EOF = 0x00000000
+V4L2_BUF_FLAG_TSTAMP_SRC_SOE = 0x00010000
+
+
+def stamp_source(flags: int) -> str:
+    """'eof' | 'soe' | 'unknown' for a buffer's flags."""
+    src = int(flags) & V4L2_BUF_FLAG_TSTAMP_SRC_MASK
+    if src == V4L2_BUF_FLAG_TSTAMP_SRC_SOE:
+        return 'soe'
+    if src == V4L2_BUF_FLAG_TSTAMP_SRC_EOF:
+        return 'eof'
+    return 'unknown'
 
 
 def _fourcc(s: str) -> int:
@@ -358,6 +375,7 @@ class V4L2MailboxCamera(Camera):
         t = ctypes.c_int(V4L2_BUF_TYPE_VIDEO_CAPTURE)
         fcntl.ioctl(self._fd, VIDIOC_STREAMON, t)
         self._clock_monotonic: Optional[bool] = None
+        self._stamp_source: Optional[str] = None
 
     # ------------------------------------------------------------------ #
     #  The pump
@@ -451,6 +469,16 @@ class V4L2MailboxCamera(Camera):
                 self._skipped += 1
                 skipped_here += 1
 
+            if self._stamp_source is None:
+                self._stamp_source = stamp_source(b.flags)
+                if self._log:
+                    self._log.info(
+                        f'[CAM  ] {self._device!r} stamps buffers at '
+                        f'{self._stamp_source.upper()} (V4L2 TSTAMP_SRC) -- '
+                        f'a mid-exposure correction must '
+                        + {'soe': 'ADD', 'eof': 'SUBTRACT'}.get(
+                            self._stamp_source, 'NOT GUESS')
+                        + ' half the exposure')
             if self._clock_monotonic is None:
                 self._clock_monotonic = (
                     (b.flags & V4L2_BUF_FLAG_TIMESTAMP_MASK)
@@ -567,9 +595,20 @@ class V4L2MailboxCamera(Camera):
                             cv2.COLOR_YUV2BGR_YUYV)
 
     def is_healthy(self) -> bool:
+        # ⛔ A NON-MONOTONIC CLOCK IS A FAULT, NOT A WARNING (issue #34). Every
+        # frame age is `time.monotonic() - cap_t`; on any other clock that is a
+        # plausible, meaningless number, and the freshness gates and the fire
+        # gate would keep acting on it. Unhealthy is how the camera node and
+        # everything behind it learn to stop.
         return (not self._stop.is_set()
+                and self._clock_monotonic is not False
                 and self._consec_fail < 30
                 and (time.monotonic() - self._last_ok) < 2.0)
+
+    @property
+    def stamp_source(self) -> Optional[str]:
+        """'eof' | 'soe' | 'unknown' once a buffer has arrived, else None."""
+        return self._stamp_source
 
     def info(self) -> dict:
         return {
@@ -588,6 +627,8 @@ class V4L2MailboxCamera(Camera):
             'store_age_ms': (1000.0 * self._store_age_sum
                              / max(self._captured, 1)),
             'store_age_max_ms': 1000.0 * self._store_age_max,
+            'stamp_source': self._stamp_source,
+            'clock_monotonic': self._clock_monotonic,
         }
 
     def close(self) -> None:

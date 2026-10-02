@@ -56,7 +56,7 @@ from geometry_msgs.msg import TwistWithCovarianceStamped, Vector3Stamped
 
 from mongla_interfaces.msg import MonglaState
 from mongla_vision.flow.flow_timing import (
-    TimeOffset, exposure_offset_s, interval_midpoint,
+    TimeOffset, exposure_correction_s, interval_midpoint,
 )
 from mongla_vision.flow.flow_math import (
     CAUSTIC_NCC_MIN, CAUSTIC_TOPHAT_MAX, DistanceAccumulator, HeightFromDivergence, Intrinsics,
@@ -253,6 +253,10 @@ class FlowVelocityNode(Node):
         # TIMING. Each of these is larger than the residual the estimator
         # removes, so they are corrected deterministically first.
         self.declare_parameter('exposure_us', 0.0)      # V4L2 100us units
+        # Which instant the camera driver stamps (V4L2 TSTAMP_SRC). 'soe' is
+        # what `uvcvideo` sets -- both vehicle cameras -- and the camera node
+        # logs what the driver actually reports at stream start (issue #34).
+        self.declare_parameter('stamp_source', 'soe')
         self.declare_parameter('stamp_at_midpoint', True)
         self.declare_parameter('estimate_time_offset', True)
         self.declare_parameter('time_offset_s', 0.0)
@@ -329,6 +333,12 @@ class FlowVelocityNode(Node):
         self._undistort = bool(self.get_parameter('undistort').value)
         self._intr = None
         self._exposure_units = float(self.get_parameter('exposure_us').value)
+        self._stamp_src = str(self.get_parameter('stamp_source').value).lower()
+        if self._stamp_src not in ('soe', 'eof'):
+            self.get_logger().warn(
+                f'[FLOW ] stamp_source={self._stamp_src!r} is neither soe nor '
+                f'eof: NO exposure correction is applied, because a guess is '
+                f'a whole exposure wrong in one direction or the other.')
         self._mid = bool(self.get_parameter('stamp_at_midpoint').value)
         self._td_estimate = bool(self.get_parameter('estimate_time_offset').value)
         self._td = float(self.get_parameter('time_offset_s').value)
@@ -1375,12 +1385,14 @@ class FlowVelocityNode(Node):
 
         2. HALF THE EXPOSURE. The standard image timestamp is mid-exposure.
            Ours reads 15.7 ms on AUTO exposure -- 7.85 ms, larger on its own
-           than the 6 ms tolerance, and it MOVES with the light.
+           than the 6 ms tolerance, and it MOVES with the light. Its SIGN is
+           the driver's stamp source: uvcvideo stamps the START, so this ADDS
+           (issue #34; it used to subtract, a full exposure wrong).
 
         3. td. Whatever fixed lag remains, from `TimeOffset`.
         """
         t = interval_midpoint(t_end - dt, t_end) if self._mid else t_end
-        t -= exposure_offset_s(self._exposure_units)
+        t += exposure_correction_s(self._exposure_units, self._stamp_src)
         t -= self._td
         return t
 

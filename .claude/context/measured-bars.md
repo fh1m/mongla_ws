@@ -931,7 +931,12 @@ The three other corrections — interval midpoint, half-exposure, and the `td`
 estimate — are wired and unit-tested and **still unmeasured on hardware**.
 `td` in particular has no in-water value: every number for it is
 injected-offset recovery, which is why it is now bounded (`time_offset_max_s`
-0.15) rather than trusted. Measuring the real `td` needs the rig **gently
+0.15) rather than trusted. ⚠ The half-exposure term had its **sign** wrong
+(issue #34, fixed 2026-10-02): it subtracted, as if every buffer stamp marked
+the end of exposure, while `uvcvideo` stamps the START — read as
+`V4L2_BUF_FLAG_TSTAMP_SRC_SOE` off a live uvcvideo stream on the dev box. It
+was latent only because `exposure_us` defaults to 0 and no launch sets it.
+Measuring the real `td` needs the rig **gently
 oscillated about the optical axis** — a *changing* rate, since Li & Mourikis
 show constant velocity is degenerate — and is a few seconds of hand movement.
 

@@ -272,3 +272,59 @@ def test_to_board_is_the_exact_inverse_of_to_host():
     assert cm.fit()
     for b in (100.0, 104.321, 105.98):
         assert abs(cm.to_board(cm.to_host(b)) - b) < 1e-5   # 10 us; float64 at 1.7e9 s
+
+
+# --------------------------------------------------------------------------- #
+#  issue #34: the exposure correction's SIGN is the driver's stamp source
+# --------------------------------------------------------------------------- #
+def test_an_soe_stamp_moves_LATER_to_reach_mid_exposure():
+    """The issue's falsifier: SOE, 15.7 ms exposure -> +7.85 ms. It was -7.85,
+    a whole exposure wrong."""
+    from mongla_vision.flow.flow_timing import exposure_correction_s
+    assert exposure_correction_s(157, 'soe') == pytest.approx(+0.00785, abs=1e-6)
+    assert exposure_correction_s(157, 'eof') == pytest.approx(-0.00785, abs=1e-6)
+
+
+def test_an_unknown_source_is_not_guessed():
+    from mongla_vision.flow.flow_timing import exposure_correction_s
+    for src in ('unknown', '', None, 'SOE?'):
+        assert exposure_correction_s(157, src) == 0.0
+
+
+def test_the_mailbox_reads_the_source_off_the_buffer_flags():
+    """uvcvideo sets MONOTONIC | SOE; read live off a uvcvideo stream on the
+    dev box as 'soe'. The flag field is separate from the clock field."""
+    from mongla_vision.cameras.v4l2_mailbox import (
+        V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC, V4L2_BUF_FLAG_TSTAMP_SRC_SOE,
+        stamp_source)
+    assert stamp_source(V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC
+                        | V4L2_BUF_FLAG_TSTAMP_SRC_SOE) == 'soe'
+    assert stamp_source(V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC) == 'eof'
+    assert stamp_source(0x00020000) == 'unknown'
+
+
+def test_a_non_monotonic_clock_makes_the_camera_unhealthy():
+    """A realtime stamp minus time.monotonic() is a plausible, meaningless age;
+    a warning let every freshness gate keep acting on it."""
+    import time
+    import types
+    from mongla_vision.cameras.v4l2_mailbox import V4L2MailboxCamera
+    cam = types.SimpleNamespace(_stop=types.SimpleNamespace(is_set=lambda: False),
+                                _consec_fail=0, _last_ok=time.monotonic(),
+                                _clock_monotonic=True)
+    assert V4L2MailboxCamera.is_healthy(cam)
+    cam._clock_monotonic = False
+    assert not V4L2MailboxCamera.is_healthy(cam)
+
+
+def test_the_flow_node_stamps_an_soe_frame_after_its_buffer_stamp():
+    """Drives the node's own `_stamp_for`, so the sign cannot be right in the
+    helper and wrong at the call site."""
+    import types
+    pytest.importorskip('rclpy')
+    from mongla_vision.flow.flow_node import FlowVelocityNode as FlowNode
+    n = types.SimpleNamespace(_mid=False, _exposure_units=157.0,
+                              _stamp_src='soe', _td=0.0)
+    assert FlowNode._stamp_for(n, 100.0, 0.1) == pytest.approx(100.00785, abs=1e-7)
+    n._stamp_src = 'unknown'
+    assert FlowNode._stamp_for(n, 100.0, 0.1) == pytest.approx(100.0, abs=1e-9)
