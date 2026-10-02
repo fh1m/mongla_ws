@@ -59,6 +59,34 @@ class Rung(Enum):
 FULL_AUTHORITY_S = 0.70
 ZERO_AUTHORITY_S = 2.50
 
+# ⛔ HOW OLD A DETECTION MAY BE AND STILL OUTRANK A RUNG COMPUTED ON THIS FRAME
+# (issue #33). Inside `FULL_AUTHORITY_S` a detection used to win outright and
+# report `age_s=0.0`: a 0.69 s-old box beat a follower tracking the target in
+# the current frame, and said it was fresh. During a 0.3 rad/s turn that is
+# ~170 px of image motion steered on at full authority.
+#
+# A detection is LIVE while it is no older than the pipeline makes every
+# detection: the capture->arrival latency (48 ms p95, measured on the vehicle;
+# 32 ms median) plus one detector interval, during which the next one is not
+# yet due. Older than that, at least one detection has been MISSED, and a rung
+# that ran on the newest frame knows more. `lock_node` passes the interval it
+# observes; the default is the 20 Hz design rate the ladder was sized at.
+DETECTION_LATENCY_P95_S = 0.048
+DESIGN_DETECTION_HZ = 20.0
+DETECTION_LIVE_S = DETECTION_LATENCY_P95_S + 1.0 / DESIGN_DETECTION_HZ
+
+
+def live_window(detection_interval_s: Optional[float]) -> float:
+    """The live window for an observed detection interval, or the design one.
+
+    Never past `FULL_AUTHORITY_S`: a detector slower than that has no live
+    detections to speak of, and the ladder's own decay governs instead.
+    """
+    if not detection_interval_s or detection_interval_s <= 0.0:
+        return DETECTION_LIVE_S
+    return min(FULL_AUTHORITY_S, DETECTION_LATENCY_P95_S + float(detection_interval_s))
+
+
 # A rung's own confidence below this is not worth acting on even if the rung
 # says ok -- it is the same idea as `vision.ctrl_conf` on the detector.
 MIN_RUNG_CONF = 0.10
@@ -138,6 +166,7 @@ def arbitrate(*, now: float, last_detection_t: float,
               follow: Optional[Tuple] = None, follow_conf: float = 0.0,
               anchor: Optional[Tuple] = None, anchor_conf: float = 0.0,
               disagree_px: float = DISAGREE_PX,
+              live_s: float = DETECTION_LIVE_S,
               full_s: float = FULL_AUTHORITY_S,
               zero_s: float = ZERO_AUTHORITY_S,
               min_rung_conf: float = MIN_RUNG_CONF) -> LockState:
@@ -151,10 +180,12 @@ def arbitrate(*, now: float, last_detection_t: float,
     """
     age = float('inf') if last_detection_t <= 0 else max(0.0, now - last_detection_t)
 
-    if (detection is not None and detection_conf >= min_rung_conf
-            and age <= full_s):
-        # A live detection resets the clock: it IS the confirmation the decay
-        # is counting time since.
+    usable_det = (detection is not None and detection_conf >= min_rung_conf
+                  and age <= full_s)
+    if usable_det and age <= live_s:
+        # A live detection is the confirmation the decay counts time since, so
+        # it holds full authority. Its age is REPORTED, never zeroed: absence
+        # is not zero, and neither is 40 ms (issue #33).
         #
         # ⛔ `age <= full_s` IS LOad-BEARING, and its absence was measured on
         # the vehicle. The caller hands in its LAST detection box, and it only
@@ -178,7 +209,7 @@ def arbitrate(*, now: float, last_detection_t: float,
         # and authority declines to LOST.
         return LockState(rung=Rung.DETECTION, xyxy=tuple(detection),
                          rung_conf=float(detection_conf), authority=1.0,
-                         age_s=0.0)
+                         age_s=age)
 
     auth = authority_for(age, full_s, zero_s)
     if auth <= 0.0:
@@ -258,6 +289,14 @@ def arbitrate(*, now: float, last_detection_t: float,
         return LockState(rung=Rung.FOLLOW, xyxy=tuple(follow),
                          rung_conf=float(follow_conf), authority=a, age_s=age,
                          disagreement_px=disagree)
+    if usable_det:
+        # A detection past its live window but inside `full_s`: a follower on
+        # the current frame outranked it above, but it still beats the anchor,
+        # which is fitted on frames up to a whole anchor period old and was
+        # never the detector's equal. Carried with its TRUE age.
+        return LockState(rung=Rung.DETECTION, xyxy=tuple(detection),
+                         rung_conf=float(detection_conf), authority=auth,
+                         age_s=age, disagreement_px=disagree)
     if anchor is not None and anchor_conf >= min_rung_conf:
         return LockState(rung=Rung.ANCHOR, xyxy=tuple(anchor),
                          rung_conf=float(anchor_conf), authority=auth,

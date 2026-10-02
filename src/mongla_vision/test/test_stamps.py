@@ -149,6 +149,7 @@ def _bare_node():
     n._cls = ''
     n._det_box = n._det_header = None
     n._det_conf = n._det_t = 0.0
+    n._det_msg_t, n._det_dt = 0.0, None
     # The acting bar (B-59). Kept LOW here on purpose: these tests are about
     # WHICH CLOCK the decay measures against, not about the confidence gate,
     # and a shipping-strength bar would silently change what they exercise.

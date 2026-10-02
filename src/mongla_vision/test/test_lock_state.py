@@ -45,13 +45,14 @@ def test_a_live_detection_wins_and_RESETS_the_clock():
     assertion demanded the wrong answer for it -- measured on the Pi as
     `rung=detection, authority=1.0` held across a 16 s detector pause.
     """
-    s = arbitrate(now=100.0, last_detection_t=99.9,
+    s = arbitrate(now=100.0, last_detection_t=99.96,
                   detection=BOX, detection_conf=0.9,
                   follow=OTHER, follow_conf=0.9)
     assert s.rung is Rung.DETECTION
     assert s.xyxy == BOX
     assert s.authority == 1.0
-    assert s.age_s == 0.0
+    # Its TRUE age (issue #33): a live box is 40 ms old, not zero.
+    assert s.age_s == pytest.approx(0.04)
 
 
 def test_a_STALE_cached_detection_does_not_masquerade_as_live():
@@ -164,3 +165,55 @@ def test_the_centre_helper_matches_the_box():
     s = LockState(rung=Rung.DETECTION, xyxy=(0.0, 0.0, 100.0, 50.0))
     assert s.centre == (50.0, 25.0)
     assert LockState().centre is None
+
+
+# --------------------------------------------------------------------------- #
+#  issue #33: a detection inside full_s is not automatically LIVE
+# --------------------------------------------------------------------------- #
+def test_a_follower_on_this_frame_outranks_a_0_6_s_old_detection():
+    """The issue's falsifier. 0.6 s without a new detection is a dozen missed
+    frames; the follower tracked the target through them, on the current
+    frame. It wins, and the age says how long it has been."""
+    s = arbitrate(now=10.0, last_detection_t=9.4,
+                  detection=BOX, detection_conf=0.9,
+                  follow=OTHER, follow_conf=0.8)
+    assert s.rung is Rung.FOLLOW
+    assert s.age_s == pytest.approx(0.6)
+
+
+def test_a_detection_from_this_frame_still_wins_with_full_authority():
+    s = arbitrate(now=10.0, last_detection_t=10.0,
+                  detection=BOX, detection_conf=0.9,
+                  follow=OTHER, follow_conf=0.8)
+    assert s.rung is Rung.DETECTION
+    assert s.authority == 1.0
+    assert s.age_s == 0.0
+
+
+def test_a_past_live_detection_still_beats_the_anchor_and_says_its_age():
+    """No follower: the stale-but-usable detection is still the best evidence
+    -- the anchor was never the detector's equal -- but never with age 0."""
+    s = arbitrate(now=10.0, last_detection_t=9.6,
+                  detection=BOX, detection_conf=0.9,
+                  anchor=OTHER, anchor_conf=0.9)
+    assert s.rung is Rung.DETECTION
+    assert s.age_s == pytest.approx(0.4)
+
+
+def test_the_live_window_follows_the_detector_it_is_given():
+    """48 ms of p95 latency plus one detector interval; the design default is
+    the 20 Hz rate the ladder was sized at, and it never exceeds full_s."""
+    from mongla_vision.tracking.lock_state import (
+        DETECTION_LIVE_S, FULL_AUTHORITY_S, live_window)
+    assert DETECTION_LIVE_S == pytest.approx(0.048 + 0.05)
+    assert live_window(None) == pytest.approx(DETECTION_LIVE_S)
+    assert live_window(1 / 15.0) == pytest.approx(0.048 + 1 / 15.0)
+    assert live_window(1 / 3.0) == pytest.approx(0.048 + 1 / 3.0)
+    assert live_window(5.0) == pytest.approx(FULL_AUTHORITY_S)
+    # A 15 fps camera's every detection must be live for its whole interval,
+    # or the rung would flap between DETECTION and FOLLOW on a healthy feed.
+    s = arbitrate(now=10.0, last_detection_t=10.0 - (0.048 + 1 / 15.0) + 1e-6,
+                  detection=BOX, detection_conf=0.9,
+                  follow=OTHER, follow_conf=0.8,
+                  live_s=live_window(1 / 15.0))
+    assert s.rung is Rung.DETECTION

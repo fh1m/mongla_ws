@@ -58,6 +58,8 @@ class _Stub:
         self._det_cls = ''
         self._det_t = 0.0
         self._det_header = None
+        self._det_msg_t = 0.0
+        self._det_dt = None
 
     def get_logger(self):
         return types.SimpleNamespace(warn=lambda *a, **k: None,
@@ -270,3 +272,18 @@ def test_the_derotation_is_actually_applied_to_the_bearing():
            / 'lock_node.py').read_text()
     assert 'roll = self._roll_fresh()' in src
     assert 'bx * cr - by * sr' in src, 'roll is read but never applied'
+
+
+def test_the_detector_cadence_is_read_off_capture_stamps():
+    """Issue #33: the live window is sized by the detector's OWN interval,
+    taken from capture stamps of every message -- a frame with no match still
+    proves the detector ran. A 15 fps camera must read as 1/15 s."""
+    import time
+    stub = _Stub(act_conf=0.5)
+    t0 = time.time() - 1.5                       # every stamp in the past
+    for i in range(20):
+        m = _msg()                                   # no match: still a tick
+        s = t0 + i / 15.0
+        m.header.stamp.sec, m.header.stamp.nanosec = int(s), int((s % 1) * 1e9)
+        _on_det(stub, m)
+    assert stub._det_dt == pytest.approx(1 / 15.0, rel=0.02)
