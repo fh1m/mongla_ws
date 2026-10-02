@@ -23,10 +23,14 @@ import inspect
 import pytest
 
 import mongla_manager.auv_manager_node as amn
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 def _reboot_branch_source():
-    src = inspect.getsource(amn.AUVManagerNode._publish_srot_telemetry)
+    src = code_of(amn.AUVManagerNode._publish_srot_telemetry)
     return src
 
 
@@ -39,7 +43,7 @@ def test_the_reboot_branch_reconfigures_and_not_only_aborts():
 
 
 def test_the_reconfigure_restores_both_things_a_reboot_loses():
-    src = inspect.getsource(amn.AUVManagerNode._reapply_srot_config)
+    src = code_of(amn.AUVManagerNode._reapply_srot_config)
     assert 'set_message_rate' in src, 'stream rates revert on reboot'
     assert 'set_default_gain' in src, \
         'JS_GAIN_DEFAULT reverts to 0.5 -- MANUAL_CONTROL at half authority'
@@ -47,7 +51,7 @@ def test_the_reconfigure_restores_both_things_a_reboot_loses():
 
 def test_a_failed_reconfigure_is_reported_as_an_ERROR_not_swallowed():
     """Half authority that nobody knows about is the whole defect."""
-    src = inspect.getsource(amn.AUVManagerNode._reapply_srot_config)
+    src = code_of(amn.AUVManagerNode._reapply_srot_config)
     tree = ast.parse(src.lstrip())
     handlers = [n for n in ast.walk(tree) if isinstance(n, ast.ExceptHandler)]
     assert handlers, 'a reconfigure that raises must not kill the telemetry tick'
@@ -62,6 +66,6 @@ def test_it_does_not_rerun_the_diagnostic_round_trips():
     """Behaviour-rev and yaw-reference answers cannot change across a reboot of
     the same firmware; re-running them from a 2 Hz tick would add link traffic
     for no information."""
-    src = inspect.getsource(amn.AUVManagerNode._reapply_srot_config)
+    src = code_of(amn.AUVManagerNode._reapply_srot_config)
     assert 'check_behaviour_rev' not in src
     assert 'check_yaw_reference' not in src

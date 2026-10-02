@@ -44,6 +44,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mongla_vision import camera_node as CN                    # noqa: E402
 from mongla_vision import detector_node as DN                  # noqa: E402
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 # --------------------------------------------------------------------------- #
@@ -230,8 +234,8 @@ def test_a_composed_detector_does_not_also_subscribe():
     """Subscribing as well would decode and infer the same picture twice, and
     the topic copy is the slower of the two -- so it would be the one acted on
     half the time, at random."""
-    src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'detector_node.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'detector_node.py')
     assert "self._sub = None if self._direct else self.create_subscription(" in src
 
 
@@ -239,8 +243,8 @@ def test_the_composed_launcher_turns_direct_feed_ON():
     """`direct_feed` defaults False so every existing launch is unchanged; the
     composed process is the only thing that sets it. If it stopped doing so,
     the detector would subscribe AND be fed, silently doubling the work."""
-    src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'detector_dual_node.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'detector_dual_node.py')
     assert "direct = not bool(self.get_parameter('replay').value)" in src, (
         'direct_feed is no longer derived from replay')
     assert "Parameter('direct_feed', value=direct)" in src
@@ -262,8 +266,8 @@ def test_no_parameter_name_means_two_things_in_one_process():
     """
     from mongla_vision import detector_dual_node as DD
 
-    cam_src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
-               / 'camera_node.py').read_text()
+    cam_src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision'
+               / 'camera_node.py')
     camera_params = {
         line.split("'")[1]
         for line in cam_src.splitlines()
@@ -296,9 +300,9 @@ def test_direct_feed_defaults_ON():
     Leaving it off meant the launcher had to remember to switch it on, and
     forgetting cost a double decode+infer with the SLOWER copy winning half
     the time."""
-    src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'detector_node.py').read_text()
-    assert "self.declare_parameter('direct_feed',         True)" in src
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'detector_node.py')
+    assert "self.declare_parameter('direct_feed', True)" in src
 
 
 def test_a_direct_detector_with_no_camera_SUBSCRIBES_rather_than_dying():

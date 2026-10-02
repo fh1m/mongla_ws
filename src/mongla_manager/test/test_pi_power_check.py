@@ -19,6 +19,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mongla_manager.bringup_check import (            # noqa: E402
     FAIL, PASS, WARN, _throttled_verdict)
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 def test_clean_is_a_pass_that_refuses_to_certify():
@@ -71,8 +75,8 @@ def test_every_verdict_is_a_known_status_and_says_something(raw):
 
 def test_the_check_is_REGISTERED_not_merely_defined():
     """A grader nothing calls is the defect class this repo keeps producing."""
-    src = (Path(__file__).resolve().parents[1] / 'mongla_manager'
-           / 'bringup_check.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_manager'
+           / 'bringup_check.py')
     assert '_check_pi_power()' in src.split('def main', 1)[-1] or \
            'st, det = _check_pi_power()' in src, (
         '_check_pi_power is defined but never called from the preflight')

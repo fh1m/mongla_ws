@@ -28,6 +28,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mongla_vision.anchor.pose import target_pose            # noqa: E402
 from mongla_vision.optics import N_WATER, RefractiveRectifier  # noqa: E402
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 @contextlib.contextmanager
@@ -109,8 +113,8 @@ def test_the_rectifier_has_exactly_one_home():
     from mongla_vision.flow import flow_math
     import mongla_vision.optics as optics
     assert flow_math.RefractiveRectifier is optics.RefractiveRectifier
-    src = (Path(__file__).resolve().parents[1] / 'mongla_vision' / 'flow'
-           / 'flow_math.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision' / 'flow'
+           / 'flow_math.py')
     assert 'class RefractiveRectifier' not in src, (
         'flow_math defines its own copy again -- one truth, two copies')
 
@@ -386,8 +390,8 @@ def test_a_crossed_camera_is_refused():
 
 def test_lock_node_publishes_evidence_and_no_longer_solves():
     """Two publishers of one claim is the defect this split removes."""
-    src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'lock_node.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'lock_node.py')
     assert 'TargetCorrespondences' in src
     assert 'target_pose(' not in src, (
         'lock_node solves a pose again -- `pnp_node` is the solver, and two '

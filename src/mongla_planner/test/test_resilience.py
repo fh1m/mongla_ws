@@ -7,6 +7,10 @@ because that is when a mission either degrades or dies.
 import pytest
 
 from mongla_planner.resilience import Attempt, never_fails, retry, selector
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 class _Flaky:
@@ -125,8 +129,8 @@ def test_an_empty_selector_fails_rather_than_claiming_success():
 
 def _full_mission_source():
     import pathlib
-    return (pathlib.Path(__file__).resolve().parents[1] / 'mongla_planner'
-            / 'missions' / 'task_full_2026.py').read_text()
+    return code_of_file(pathlib.Path(__file__).resolve().parents[1] / 'mongla_planner'
+            / 'missions' / 'task_full_2026.py')
 
 
 def test_release_heading_and_stop_are_contained():

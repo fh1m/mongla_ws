@@ -13,6 +13,10 @@ from __future__ import annotations
 
 import ast
 import pathlib
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 # The node moved to this package (it produces a POSE); the launch that starts
 # it still lives with the vision stack, so the two paths differ on purpose.
@@ -22,7 +26,7 @@ _LAUNCH = (_HERE.parent / 'mongla_vision' / 'launch' / 'vision_pi.launch.py')
 
 
 def test_the_node_suffixes_its_topic_with_the_variant():
-    src = _NODE.read_text()
+    src = code_of_file(_NODE)
     assert "f'{ns}/target_pose' + (f'_{variant}' if variant else '')" in src, \
         'the topic must carry the variant, or two solvers share one topic'
 
@@ -30,7 +34,7 @@ def test_the_node_suffixes_its_topic_with_the_variant():
 def test_an_empty_variant_keeps_the_plain_topic():
     # The default solver must not become `/target_pose_` -- every existing
     # consumer subscribes to the plain name.
-    src = _NODE.read_text()
+    src = code_of_file(_NODE)
     assert "if variant else ''" in src
 
 
@@ -66,7 +70,7 @@ def test_the_launch_defines_one_tight_and_one_near_solver():
 
 
 def test_both_solvers_are_started_for_both_cameras():
-    src = _LAUNCH.read_text()
+    src = code_of_file(_LAUNCH)
     for call in ("solver('forward')", "solver('downward')",
                  "solver_near('forward')", "solver_near('downward')"):
         assert call in src, f'{call} is defined but never started'
@@ -75,14 +79,14 @@ def test_both_solvers_are_started_for_both_cameras():
 def test_the_near_solver_actually_opens_the_gate():
     # A "redundant" estimator with the SAME threshold is not redundancy, it is
     # a second copy of the first answer at twice the cost.
-    src = _LAUNCH.read_text()
+    src = code_of_file(_LAUNCH)
     i = src.index('def solver_near')
     body = src[i:i + 1600]
-    assert "'variant':       'near'" in body
+    assert "'variant': 'near'" in body
     assert "'max_reproj_px': 100.0" in body
 
 
 def test_no_two_pnp_nodes_share_a_name():
-    src = _LAUNCH.read_text()
+    src = code_of_file(_LAUNCH)
     names = [line for line in src.splitlines() if 'mongla_pnp' in line and 'name=' in line]
     assert len(set(names)) == len(names), f'duplicate pnp node names: {names}'

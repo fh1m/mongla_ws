@@ -14,6 +14,10 @@ import ast
 from pathlib import Path
 
 import pytest
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 pytest.importorskip('rclpy')
 
@@ -43,8 +47,8 @@ def test_the_motion_layer_still_gates_on_exactly_these_two_methods():
     If the motion layer ever stops checking these names, the wrapper below
     becomes decorative while every other test here still passes.
     """
-    src = (Path(__file__).resolve().parents[2] / 'mongla_control'
-           / 'mongla_control' / 'motion_forward.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[2] / 'mongla_control'
+           / 'mongla_control' / 'motion_forward.py')
     assert "hasattr(yaw_source, 'get_position')" in src
     assert 'reset_position' in src
 

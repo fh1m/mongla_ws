@@ -22,6 +22,10 @@ Text-level: no ROS runtime, no camera.
 """
 import pathlib
 import re
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 _PKG = pathlib.Path(__file__).resolve().parents[1]
 _PI_LAUNCH = _PKG / 'launch' / 'vision_pi.launch.py'
@@ -46,19 +50,19 @@ def test_the_ladder_is_actually_LAUNCHED():
 def test_the_ladder_is_reachable_from_the_launch_BRINGUP_INCLUDES():
     """Names the coupling explicitly, so a future edit to bringup's include
     does not quietly strand the ladder again."""
-    bringup = (_PKG.parents[0] / 'mongla_manager' / 'launch'
-               / 'bringup.launch.py').read_text()
+    bringup = code_of_file(_PKG.parents[0] / 'mongla_manager' / 'launch'
+               / 'bringup.launch.py')
     included = 'vision.launch.py' in bringup
     assert included, (
         'bringup no longer includes vision.launch.py -- update this test and '
         'make sure the ladder is wired into whatever it includes now.')
-    assert "executable='lock_node'" in _MAIN_LAUNCH.read_text()
+    assert "executable='lock_node'" in code_of_file(_MAIN_LAUNCH)
 
 
 def test_the_ladder_can_be_turned_off_without_editing_the_launch():
     """Bumblebee's reflex, and ours: a fallback that needs a code edit is not
     a fallback. On a pool deck it has to be an argument."""
-    src = _PI_LAUNCH.read_text()
+    src = code_of_file(_PI_LAUNCH)
     assert re.search(r"DeclareLaunchArgument\(\s*\n?\s*'lock'", src), (
         'the ladder has no `lock` launch argument, so disabling it on the '
         'deck means editing a launch file.')
@@ -100,12 +104,12 @@ def test_control_consumes_the_ladder_and_it_still_cannot_fabricate():
         'the ladder is wired and published but never consulted -- the '
         'capability is dead weight again')
 
-    node = (_PKG / 'mongla_vision' / 'lock_node.py').read_text()
+    node = code_of_file(_PKG / 'mongla_vision' / 'lock_node.py')
     assert 'have_target' in node, (
         'lock_node no longer gates its published boxes on having a target, so '
         'the ladder could emit a box with nothing behind it')
-    vs = (_PKG.parents[0] / 'mongla_manager' / 'mongla_manager'
-          / 'vision_state.py').read_text()
+    vs = code_of_file(_PKG.parents[0] / 'mongla_manager' / 'mongla_manager'
+          / 'vision_state.py')
     i = vs.index('def _lock_sample')
     body = vs[i:i + 1500]
     assert 'score <= 0.0' in body and 'return None' in body, (
@@ -116,7 +120,7 @@ def test_control_consumes_the_ladder_and_it_still_cannot_fabricate():
 def test_the_ladder_publishes_lock_NOT_detections():
     """The invariant that keeps 'the vehicle has a position' from becoming
     'the vehicle saw the target'."""
-    node = (_PKG / 'mongla_vision' / 'lock_node.py').read_text()
+    node = code_of_file(_PKG / 'mongla_vision' / 'lock_node.py')
     pubs = re.findall(r"create_publisher\([^,]+,\s*f?['\"]?\{?ns\}?([^'\",]*)",
                       node)
     assert pubs, 'no publishers found in lock_node -- has it been rewritten?'
@@ -132,7 +136,7 @@ def test_the_anchor_model_follows_MONGLA_HEF_DIR():
     MONGLA_HEF_DIR; the anchor hardcoded ~/hailo_models, so pointing the env
     var elsewhere moved the detector and silently not the anchor -- costing
     the long-horizon rung with one WARN and no error."""
-    node = (_PKG / 'mongla_vision' / 'lock_node.py').read_text()
+    node = code_of_file(_PKG / 'mongla_vision' / 'lock_node.py')
     # `def _build_anchor`, not `_build_anchor`: the first occurrence of the
     # bare name is the CALL SITE ~20 lines earlier, so a window anchored on it
     # covers the wrong region and this test failed against correct code.

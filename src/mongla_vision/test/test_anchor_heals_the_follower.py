@@ -28,6 +28,10 @@ from __future__ import annotations
 import numpy as np
 
 from mongla_vision.tracking.follower import Follower
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 def _textured(h=240, w=320, seed=0):
@@ -130,7 +134,7 @@ def test_a_reseed_is_counted_so_a_pool_day_can_see_it():
     needs to know the fast rung came back rather than inferring it."""
     from pathlib import Path
 
-    src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'lock_node.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'lock_node.py')
     assert 'self._reseeds' in src
     assert 'reseeded from the' in src, 'the first reseed must be logged'

@@ -14,13 +14,17 @@ this is the only path that reaches it.
 Reads the source: the check must be provable with no camera and no ROS.
 """
 import pathlib
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 _PKG = pathlib.Path(__file__).resolve().parents[1]
 _NODE = _PKG / 'mongla_vision' / 'camera_node.py'
 
 
 def test_camera_node_checks_that_a_profile_device_EXISTS():
-    src = _NODE.read_text()
+    src = code_of_file(_NODE)
     assert 'os.path.exists(probe)' in src, (
         'camera_node never checks that a profile device exists, so the '
         'wrong-host profile fails inside the V4L2 open with no mention of '
@@ -35,7 +39,7 @@ def test_the_message_NAMES_the_fix_not_just_the_problem():
     A first draft of this test searched for one such phrase and failed
     against correct code.
     """
-    src = _NODE.read_text()
+    src = code_of_file(_NODE)
     i = src.find('not exist on this host')
     assert i > 0, 'the wrong-host error message is gone'
     window = src[i:i + 800]

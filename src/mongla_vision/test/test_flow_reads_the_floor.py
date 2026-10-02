@@ -14,8 +14,12 @@ So these tests check reachability and the default, not the arithmetic (which
 """
 import pathlib
 
-SRC = (pathlib.Path(__file__).resolve().parents[1]
-       / 'mongla_vision' / 'flow' / 'flow_node.py').read_text()
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
+SRC = code_of_file(pathlib.Path(__file__).resolve().parents[1]
+       / 'mongla_vision' / 'flow' / 'flow_node.py')
 
 
 def test_the_floor_reader_exists_and_is_CALLED():

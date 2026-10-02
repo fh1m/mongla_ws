@@ -20,9 +20,13 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mongla_manager.auv_manager_node import AUVManagerNode      # noqa: E402
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
-_SRC = (Path(__file__).resolve().parents[1] / 'mongla_manager'
-        / 'auv_manager_node.py').read_text()
+_SRC = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_manager'
+        / 'auv_manager_node.py')
 
 
 class _Log:
@@ -89,8 +93,8 @@ def test_the_uplink_call_site_actually_PASSES_the_index():
 
 def test_the_index_is_not_copied_into_mongla_control():
     """One truth, one copy. `bearing.py` must take the index, never define it."""
-    b = (Path(__file__).resolve().parents[2] / 'mongla_control'
-         / 'mongla_control' / 'bearing.py').read_text()
+    b = code_of_file(Path(__file__).resolve().parents[2] / 'mongla_control'
+         / 'mongla_control' / 'bearing.py')
     assert '1.333' not in b, 'the refractive index was copied into mongla_control'
     assert 'n_medium' in b
     pkg = (Path(__file__).resolve().parents[2] / 'mongla_control'

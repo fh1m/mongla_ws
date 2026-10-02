@@ -20,6 +20,10 @@ import yaml
 
 import mission_ast as MA
 from mongla_planner.missions import competition_config as CFG
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 _MISSION = MA.MISSIONS / 'sauvc_navigation.py'
 
@@ -207,7 +211,7 @@ def test_a_perception_miss_still_attempts_the_mandatory_task():
     """
     assert CFG.SAUVC_BLIND_TRANSIT_ENABLED is True
     assert CFG.SAUVC_BLIND_TRANSIT_S > 0.0
-    src = _MISSION.read_text()
+    src = code_of_file(_MISSION)
     assert 'SAUVC_BLIND_TRANSIT_ENABLED' in src
     tree = _tree()
     navigate = next(n for n in tree.body

@@ -39,8 +39,8 @@ def test_the_resolver_walks_the_same_extension_order():
     """REGRESSION GUARD for the split above. The factory and the resolver each
     keep their own list; a stem that resolves to .hef but dispatches on a list
     that has not heard of .hef would load a Hailo graph through ultralytics."""
-    src = (Path(__file__).resolve().parents[1]
-           / 'mongla_vision' / 'detection' / 'yolo.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1]
+           / 'mongla_vision' / 'detection' / 'yolo.py')
     assert "for ext in ('.hef', '.engine', '.pt'):" in src, (
         'yolo._resolve_model_path no longer walks the factory order')
     assert src.count("for ext in ('.hef', '.engine', '.pt'):") == 2, (
@@ -57,6 +57,10 @@ def test_an_explicit_hef_path_is_passed_through():
 #  Letterbox round-trip -- the part that silently drives the hull the wrong way
 # --------------------------------------------------------------------------- #
 from mongla_vision.detection.hailo import letterbox   # noqa: E402
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 def _unletterbox(b, size, scale, pad_x, pad_y):

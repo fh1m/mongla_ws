@@ -24,6 +24,10 @@ Reads the files; no ROS, no camera.
 import pathlib
 
 import pytest
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 yaml = pytest.importorskip('yaml')
 
@@ -144,7 +148,7 @@ def test_it_AGREES_with_the_simulator_arena_spec_where_both_state_a_number():
 def test_lock_node_ACTUALLY_consults_the_table():
     """The table existing is not the same as it being reached -- that gap is
     how four configs in this package came to reach nothing."""
-    src = (_PKG / 'mongla_vision' / 'lock_node.py').read_text()
+    src = code_of_file(_PKG / 'mongla_vision' / 'lock_node.py')
     assert 'target_geometry' in src, (
         'lock_node never consults the committed table, so target_width_m '
         'still defaults to 0.0 and the 6-DoF path stays refused.')
@@ -168,7 +172,7 @@ def test_an_explicit_parameter_still_WINS():
     """A measured prop beats a rulebook nominal -- that is what SAUVC's
     +/- 5 % tolerance exists to allow for. The fallback must not overwrite an
     operator's measurement."""
-    src = (_PKG / 'mongla_vision' / 'lock_node.py').read_text()
+    src = code_of_file(_PKG / 'mongla_vision' / 'lock_node.py')
     i = src.index('target_width_m')
     window = src[i:i + 1500]
     assert 'self._target_w_m <= 0.0' in window, (

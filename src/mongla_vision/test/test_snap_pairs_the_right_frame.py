@@ -19,6 +19,10 @@ import numpy as np
 import pytest
 
 from mongla_vision.lock_node import _stamp_key
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 def _hdr(sec, nanosec=0):
@@ -104,8 +108,8 @@ def test_the_ring_is_bounded():
 def test_the_snap_site_uses_the_paired_frame():
     """Wiring: the helper exists and the snap actually goes through it."""
     from pathlib import Path
-    src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'lock_node.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'lock_node.py')
     i = src.index('def _loop')
     body = src[i:]
     # The call is `enrol` since the checkpoint bank replaced the single

@@ -99,6 +99,10 @@ def test_resolver_returning_none_or_raising_changes_nothing():
 from pathlib import Path                                         # noqa: E402
 
 from mongla_control.vision_verbs import _derotation_inputs       # noqa: E402
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 class _FC:
@@ -125,7 +129,7 @@ def test_unhealthy_stale_or_uncalibrated_means_no_correction():
 
 
 def test_the_verb_passes_derotation_into_the_loop():
-    src = (Path(__file__).resolve().parents[1] / 'mongla_control'
-           / 'vision_verbs.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_control'
+           / 'vision_verbs.py')
     i = src.index('outcome = align_loop(')
     assert 'derotate_fn=' in src[i:i + 6000], 'align_loop is called without it'

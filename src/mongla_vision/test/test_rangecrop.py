@@ -31,6 +31,10 @@ cv2 = pytest.importorskip('cv2')
 from mongla_vision.detection.rangecrop import (      # noqa: E402
     CropState, RangeCrop, ENTER_FRAC, EXIT_FRAC,
 )
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 def _frame(w=640, h=360):
@@ -153,8 +157,8 @@ def test_the_detector_maps_cropped_boxes_back_before_publishing():
     Asserted on the SOURCE of the shipping loop rather than a copy of it,
     because the round that fixed the Kalman revival bug learned that a test
     which reimplements the loop tests a copy without the defect."""
-    src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'detector_node.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'detector_node.py')
     assert 'crop_state.to_full(d.xyxy)' in src, \
         'cropped detections are published without the offset'
     # ...and the mapping must happen BEFORE the size feedback, or the policy
@@ -169,8 +173,8 @@ def test_the_size_feedback_uses_the_frame_the_DETECTOR_saw():
     a small fraction of the full frame. Comparing against the full frame
     would mean the crop never releases, and the approach would finish at
     69 % recall instead of 100 %."""
-    src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'detector_node.py').read_text()
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'detector_node.py')
     assert 'seen = crop_state.w * crop_state.h' in src
 
 
@@ -178,7 +182,7 @@ def test_it_is_OFF_by_default():
     """Half the field of view is a real cost, and the mission decides whether
     it is worth paying. Nothing that trades away FOV should switch itself on
     without being asked."""
-    src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'detector_node.py').read_text()
-    assert "self.declare_parameter('range_crop',          -1)" in src
+    src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision'
+           / 'detector_node.py')
+    assert "self.declare_parameter('range_crop', -1)" in src
     assert "if int(_p('range_crop', 0)) > 0" in src

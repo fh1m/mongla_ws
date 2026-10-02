@@ -22,6 +22,10 @@ import inspect
 import pathlib
 
 import pytest
+import sys as _sys_ct
+import pathlib as _pl_ct
+_sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 
 def _src(mod_relpath, func_name):
@@ -53,7 +57,7 @@ def test_vision_state_reads_K_and_size_from_one_message():
 def test_bearing_does_not_silently_rescale():
     """The scaling belongs upstream; a second copy is a second way to be wrong."""
     from mongla_control import bearing
-    body = inspect.getsource(bearing.bearing_from_pixels)
+    body = code_of(bearing.bearing_from_pixels)
     code = '\n'.join(l.split('#', 1)[0] for l in body.splitlines())
     assert 'calib_w' not in code and 'calib_size' not in code, \
         'bearing.py grew a calibration-resolution argument; if that is deliberate, ' \
