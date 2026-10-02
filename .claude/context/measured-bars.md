@@ -3192,6 +3192,14 @@ error, before → after: no-flow 4.935 → 4.935 m, fix 0.50 / 0.01 m 0.201 / 0.
 shut** (`update_position`'s rule) was tried and **diverges: 1.4e14 m** on the
 no-flow run with either gate — the dropped coupling survives in P.
 
+**Covariance consistency, by Monte Carlo (issue #26, 2026-10-02).** 400 noisy
+propagations of a hull 10 m from the origin at 0.5 m/s, scored against the TRUE
+right-invariant error; a consistent filter's mean NEES is the state dimension,
+9. Rotating only the two diagonal noise blocks: **9.94 / 64.1 / 379** at
+σ_a 0.1 / 0.01 / 0.003. Mapping the noise through the adjoint Ad_X: **8.99 /
+9.47 / 12.7**. The traces matched either way — the correlations did not. Bench
+B-56 numbers unchanged (healthy 0.1015 → 0.1022 m).
+
 ---
 
 ## 14. ⛔ "The Hailo is running our models at a fifth of its capability" — RETRACTED the same hour

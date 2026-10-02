@@ -418,3 +418,40 @@ def test_the_gate_reopens_when_flow_returns_after_a_long_dropout():
     gated = f.gated
     assert f.update_depth(-1.0, sigma=0.02) is not False
     assert f.gated == gated, 'depth is still being refused'
+
+
+# --------------------------------------------------------------------------- #
+#  issue #26: the noise map is the adjoint -- consistency, by Monte Carlo
+# --------------------------------------------------------------------------- #
+def _nees(sigma_accel, runs=150, T=5.0, dt=0.02):
+    """Mean NEES of the 9 navigation states over `runs` noisy propagations of
+    a hull 10 m from the origin at 0.5 m/s, against the TRUE right-invariant
+    error. A consistent filter scores the state dimension, 9."""
+    from mongla_localization.inekf import so3_log
+    out = []
+    for seed in range(runs):
+        rng = np.random.default_rng(seed)
+        f = RIEKF(P0_attitude=1e-6, P0_velocity=1e-6, P0_position=1e-6,
+                  P0_bias=1e-9, sigma_accel=sigma_accel)
+        p0, v0 = np.array([10.0, 0.0, 0.0]), np.array([0.5, 0.0, 0.0])
+        f.X.p, f.X.v = p0.copy(), v0.copy()
+        pt = p0.copy()
+        sg, sa = math.sqrt(f.Q[0, 0]), math.sqrt(f.Q[3, 3])
+        for _ in range(int(T / dt)):
+            f.predict(rng.normal(0, sg / math.sqrt(dt), 3),
+                      -GRAVITY + rng.normal(0, sa / math.sqrt(dt), 3), dt)
+            pt = pt + v0 * dt
+        dR = f.X.R
+        e = np.concatenate([so3_log(dR), f.X.v - dR @ v0, f.X.p - dR @ pt])
+        out.append(e @ np.linalg.solve(f.P[:9, :9], e))
+    return float(np.mean(out))
+
+
+@pytest.mark.parametrize('sigma_accel,before', [(0.1, 9.94), (0.01, 64.1)])
+def test_the_covariance_is_consistent_with_the_error_it_describes(sigma_accel, before):
+    """Measured with 400 runs: rotating only the diagonal noise blocks scored
+    9.94 and 64.1 (and 379 at sigma_accel 0.003); the adjoint scores 8.99 and
+    9.47. Traces matched either way -- the CORRELATIONS were wrong, so this
+    is the check that can see it, and the trace check cannot."""
+    nees = _nees(sigma_accel)
+    assert 7.5 < nees < 11.0, f'mean NEES {nees:.2f}, expected ~9 (was {before})'
