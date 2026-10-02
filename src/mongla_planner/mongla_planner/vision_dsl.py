@@ -54,7 +54,7 @@ from .model_context import ClassRef
 
 # Outcome codes are the single source of truth in the control engine.
 from mongla_control.motion_vision import (
-    ALIGNED, LOST, TIMEOUT, NO_CAMERA, ABORTED, DRIFTED,
+    ALIGNED, LOST, TIMEOUT, NO_CAMERA, ABORTED, DRIFTED, NO_DEPTH,
 )
 
 if TYPE_CHECKING:
@@ -82,6 +82,7 @@ _CODE_NAME = {
     NO_CAMERA: 'NO_CAMERA',
     ABORTED:   'ABORTED',
     DRIFTED:   'DRIFTED',
+    NO_DEPTH:  'NO_DEPTH',
 }
 
 
@@ -575,6 +576,13 @@ class _VisionDSL:
                     f"[VIS  ] {verb} {target!r}: NO_CAMERA -- pipeline not up "
                     f"(camera={camera!r}); mission continues")
                 return _mk(False, 'NO_CAMERA')
+
+            if code == NO_DEPTH:
+                self.log.error(
+                    f"[VIS  ] {verb} {target!r}: NO_DEPTH -- a depth axis was "
+                    f"asked for and the vehicle reports no depth; refused "
+                    f"rather than holding the surface")
+                return _mk(False, 'NO_DEPTH')
 
             # ⛔ DRIFTED: centred while driving, off once stopped and re-measured
             # (Block 1C). Not a success, and not a reason to give up: re-converge

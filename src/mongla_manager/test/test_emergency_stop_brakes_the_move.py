@@ -134,7 +134,7 @@ class _RecFC:
     def send_neutral(self):
         self._note('send_neutral')
 
-    def disarm(self):
+    def disarm(self, timeout=15.0):
         self._note('disarm')
         return True, 'ok'
 

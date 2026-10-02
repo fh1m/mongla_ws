@@ -14,7 +14,7 @@
 | `arm` | `timeout` | `timeout=15.0` | host | Arm the vehicle (motors hot). |
 | `calc_distance` | `phase` | `phase=start` | host | Downward optical-flow distance bracket: phase='start' latches the axis + resets, 'stop' returns accumulated metres in final_value. DVL-free; runs with detectors paused. |
 | `calibrate_depth` | — | — | host | Re-zero the barometer at the surface (QGC "Calibrate Pressure") so depth reads 0 before a dive. DISARMED + surface only; verifies the re-zero took. Auto-run by mission_reset; also standalone. |
-| `disarm` | `timeout` | `timeout=20.0` | host | Disarm safely (mode -> MANUAL, neutral, then disarm). |
+| `disarm` | `timeout` | `timeout=20.0` | host | Disarm and confirm it took (srot: ARM_DISARM, confirmed on the heartbeat; pixhawk: MANUAL, neutral, then disarm). |
 | `dvl_connect` | — | — | host | Connect to the Nortek Nucleus 1000 DVL over TCP and begin streaming. Must be called before any move_*_dist command when yaw_source is dvl/nucleus_dvl. |
 | `fire` | `fire_channel` | `fire_channel=0.0` | host | Activate payload BOARD channel N (1..16) -- the same n as SERVO{n}_ROLE, no host-side map. The board decides: a SWITCH channel fires, a PWM/SERVO channel is REFUSED (it is the on-board arm). `mongla_manager connect` lists which is which. |
 | `head` | — | — | host | Read current heading (degrees) at execution time. Result is in final_value. Also works as a magic value in other CLI commands: --target head resolves to the live heading the moment the command runs. |
@@ -31,7 +31,7 @@
 | `pause` | `duration` | `duration=2.0` | on the board | Release RC override for N seconds (autopilot takes over). |
 | `set_depth` | `target`, `timeout`, `settle` | `timeout=30.0`, `settle=0.0` | on the board | Hold absolute depth (`target` metres, negative below surface). |
 | `set_mode` | `target_name`, `timeout` | `timeout=8.0` | host | Switch flight mode. srot: STABILIZE|DEPTH_HOLD|SURFACE|MANUAL|ACRO (ALT_HOLD aliases to DEPTH_HOLD). pixhawk: MANUAL|ALT_HOLD|STABILIZE|... |
-| `stop` | — | — | on the board | Active hold: send neutral 1500 PWM to all six channels. |
+| `stop` | — | — | on the board | Halt now (srot: the board's MOVE_STOP brake; pixhawk: neutral 1500 PWM on all six channels). |
 | `style_roll` | `gain`, `timeout`, `flips`, `headroom` | `gain=60.0`, `timeout=20.0`, `flips=1`, `headroom=1.0` | on the board | Style: N×360° roll on Ch2 in ACRO mode, one flip per loop iteration; `timeout` is per flip, not total. BNO085-confirmed (AHRS2 fallback) with direction-locked unwrap. Per flip: optional `headroom` m pre-dive, ACRO roll guarded by a hard surface-depth abort and cos(roll)-modulated Ch3 depth correction, then ALT_HOLD recovery to the origin depth before the next flip. ACRO_BAL_ROLL + ACRO_TRAINER zeroed before and restored after. Cancel mid-flip restores ALT_HOLD then disarms. |
 | `style_yaw` | `flips`, `deg_per_step`, `settle` | `flips=1`, `deg_per_step=90.0`, `settle=1.0` | ⛔ **refused** | Style: N×360° yaw spin in ALT_HOLD. flips full rotations, each as (360/deg_per_step) steps with settle between. BNO heading tracking active. No mode change — safest style verb. |
 | `surface` | `timeout` | `timeout=60.0` | host | Emergency surface: set depth to 0 m and hold until reached. Bypasses command_active gate so it works during a running mission. |

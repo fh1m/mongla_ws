@@ -1710,3 +1710,23 @@ def test_the_gate_is_asked_with_the_operators_tolerance():
            on_locked=lambda: None, fire_t=0.0, fire_max_tilt_deg=7.0,
            tilt_gate_fn=lambda tol: seen.append(tol) or True)
     assert seen and all(t == 7.0 for t in seen)
+
+
+def test_no_depth_reading_refuses_rather_than_holding_the_surface():
+    """Issue #21: with no attitude the captured depth read 0.0 -- the SURFACE
+    -- and was streamed as the setpoint. It now refuses with NO_DEPTH and
+    streams nothing."""
+    from mongla_control.motion_vision import NO_DEPTH, _read_depth
+
+    class _Blind(_FakePixhawk):
+        def get_attitude(self):
+            return None
+
+    pix = _Blind()
+    assert _read_depth(pix) != _read_depth(pix)            # NaN
+    res, _, _ = _align(_FakeVision(_sample(ex=0.0, ey=0.0, w_frac=0.3, h_frac=0.3)),
+                 pix=pix, axes={'lat', 'depth'}, downward=True,
+                 release_yaw=True, surge_sign=-1, err_px=10.0, duration=0.4,
+                 align_stable_frames=99)
+    assert res.code == NO_DEPTH
+    assert pix.depths == []
