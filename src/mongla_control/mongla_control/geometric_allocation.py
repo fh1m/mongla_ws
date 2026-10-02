@@ -103,6 +103,42 @@ def unactuated_axes(b=B) -> Tuple[str, ...]:
 UNACTUATED = unactuated_axes()
 
 
+# ── who wins when the thrusters run out ─────────────────────────────────────
+#
+# ⛔ ONE LAW, TWO VOCABULARIES. The ORDER is `allocation.HORIZONTAL_PRIORITY`
+# and `allocation.VERTICAL_PRIORITY` -- yaw before lateral before forward, and
+# attitude before throttle -- renamed into this module's axes. It is restated
+# rather than imported because `tools/control_bench` loads this file without
+# the package (importing `mongla_control` pulls in ROS), and
+# `test_geometric_allocation.py` fails the moment the two disagree.
+#
+# Why yaw first is written beside the board's table: heading error points the
+# tool at the wrong place; a slightly slow approach does not.
+BOARD_AXIS = {'yaw': 'yaw', 'sway': 'lateral', 'surge': 'forward',
+              'roll': 'roll', 'pitch': 'pitch', 'heave': 'throttle'}
+HORIZONTAL_PRIORITY: Tuple[str, ...] = ('yaw', 'sway', 'surge')
+VERTICAL_PRIORITY: Tuple[str, ...] = ('roll', 'pitch', 'heave')
+
+
+def priority_order(unactuated: Sequence[str] = UNACTUATED) -> Tuple[str, ...]:
+    """The order axes are granted authority in, for one geometry.
+
+    An unactuated axis is dropped BEFORE ranking (issue #9): on the tunnel hull
+    roll heads the vertical ladder, and leaving it there would make it a rank
+    nothing can fill. The two ladders are then interleaved by rank -- yaw and
+    pitch, then sway and heave, then surge -- because they share thrusters
+    wherever the geometry couples them (the axial unit's offset puts surge into
+    pitch), and running one ladder to completion first would let ITS last axis
+    outrank the other's first.
+    """
+    ladders = [[a for a in ladder if a not in unactuated]
+               for ladder in (HORIZONTAL_PRIORITY, VERTICAL_PRIORITY)]
+    order = []
+    for rank in range(max(len(l) for l in ladders)):
+        order += [l[rank] for l in ladders if rank < len(l)]
+    return tuple(order)
+
+
 # ── the solve ────────────────────────────────────────────────────────────────
 
 def _solve(a: list, rhs: list) -> list:
@@ -216,7 +252,7 @@ class GeometricAllocator:
 
     def allocate(self, *, sway=0.0, surge=0.0, heave=0.0,
                  pitch=0.0, roll=0.0, yaw=0.0,
-                 limit: float = 1.0, redistribute: bool = True) -> Allocation:
+                 limit: float = 1.0, prioritise: bool = True) -> Allocation:
         """Solve for thruster outputs producing the requested wrench.
 
         ⛔ AN UNACTUATED AXIS IS REFUSED, NOT SILENTLY DROPPED. Asking for roll
@@ -224,10 +260,12 @@ class GeometricAllocator:
         caller that cannot tell the difference will integrate against it
         forever.
 
-        On saturation the whole solution is scaled back uniformly, preserving
-        the wrench's DIRECTION and losing only its magnitude. That is the same
-        choice the firmware makes per group, and for the same reason: a clipped
-        mix points somewhere nobody asked for.
+        On saturation the axes are granted authority in `priority_order` --
+        yaw first -- so the axis that comes up short is the one the stack
+        ranked last, and `residual` says by how much. `prioritise=False` scales
+        the whole solution uniformly instead, keeping the wrench's direction
+        and losing magnitude on every axis alike; it is kept as the baseline
+        the priority fit is measured against.
         """
         want = [sway, surge, heave, pitch, roll, yaw]
 
@@ -253,20 +291,16 @@ class GeometricAllocator:
             return Allocation((0.0,) * len(self._thrusters), zeros, tuple(want),
                               1.0, refused + ('degenerate',), self._disabled)
 
-        clamped_slots: dict = {}
         scale = 1.0
 
         if max((abs(v) for v in u), default=0.0) > limit:
-            if redistribute:
-                u, clamped_slots = self._redistribute(want, u, limit)
-            if not redistribute or max(abs(v) for v in u) > limit + 1e-9:
-                # Nothing left to redistribute into: fall back to a uniform
-                # scale, which keeps the wrench's DIRECTION and loses only its
-                # magnitude. A clipped mix points somewhere nobody asked for.
-                peak = max(abs(v) for v in u)
-                scale = limit / peak
+            if prioritise:
+                u = self._prioritise(want, limit)
+            else:
+                # Uniform scale: keeps the wrench's DIRECTION and loses its
+                # magnitude on every axis alike.
+                scale = limit / max(abs(v) for v in u)
                 u = [v * scale for v in u]
-                clamped_slots = {}
 
         full = [0.0] * len(self._thrusters)
         for slot, idx in enumerate(self._live):
@@ -275,73 +309,70 @@ class GeometricAllocator:
         achieved = tuple(sum(self._b[i][j] * u[j] for j in range(n))
                          for i in range(6))
         residual = tuple(want[i] - achieved[i] for i in range(6))
-        clamped = tuple(self._thrusters[self._live[s]][0]
-                        for s in sorted(clamped_slots))
+        clamped = tuple(self._thrusters[self._live[s]][0] for s in range(n)
+                        if abs(u[s]) >= limit - 1e-9)
         return Allocation(tuple(full), achieved, residual, scale, refused,
                           self._disabled, clamped)
 
-    # ---- redistribution -------------------------------------------------- #
+    # ---- priority ------------------------------------------------------ #
 
-    def _redistribute(self, want, u, limit):
-        """Pin the thrusters that ran out, then re-solve for the rest.
+    def _prioritise(self, want, limit):
+        """Grant each axis the most it can have, in `priority_order`.
 
-        ⛔ WHY THIS BEATS SCALING EVERYTHING DOWN. A uniform scale keeps the
-        wrench pointing the right way but throws away magnitude from EVERY
-        thruster, including the ones that had room to spare. Redistribution
-        clamps only the ones that actually hit their stop, subtracts what they
-        deliver from the request, and asks the remaining thrusters for the
-        difference -- so authority that exists is used instead of discarded.
+        ⛔ WHY NOT LEAST SQUARES OVER THE SATURATED SET (issue #44). The first
+        version pinned the thrusters that ran out and re-solved the rest for
+        minimum TOTAL error. Total error over these rows adds a force-like
+        residual (fraction of one thruster) to a moment-like one (fraction x
+        metres), so with a 0.175 m yaw arm a unit of yaw error cost 1/33 of a
+        unit of sway error -- and the solver kept sway and dropped heading:
+        sway 1.9 + yaw 0.2 delivered 11 % of the yaw, worse than the uniform
+        scale it was written to beat. There is no weighting that is "right" in
+        mixed units; there is only an ORDER, and the order is a control
+        decision already made in `allocation.py`.
 
-        This is the redistributed pseudo-inverse. The literature notes it is
-        exact in many saturating cases and carries no optimality guarantee,
-        which is why the fallback below still exists.
+        ⭐ AND ON THIS HULL NOTHING IS LOST BY IT. With all five live, B over the
+        five actuated axes is square and invertible: there is no null space, so
+        a saturating demand can only choose WHICH axis comes up short. This
+        makes that choice explicitly.
 
-        ⚠ WHY NOT THE 32 PRECOMPUTED ACTIVE-SET PATTERNS. With five thrusters
-        there are 2^5 saturation patterns and they COULD be inverted offline for
-        lookup-speed allocation. That is the right trade inside a 500 Hz
-        embedded loop. This allocator runs on the companion, where three reduced
-        solves cost microseconds, and a precomputed table would add a generator,
-        a staleness risk against a CAD that is still moving, and nothing
-        measurable. Build the table when a measurement says the iteration is too
-        slow, and not before.
+        The solve is linear, so each axis's own thruster vector is fixed and
+        granting it a fraction `lam` of its request is a 1-D bound on every
+        thruster: the largest `lam` in [0, 1] keeping all of them inside the
+        limit, with what higher axes were granted already in place. That is the
+        same sequential fit `allocation._fit_group` does on the board's mixer.
         """
-        clamped: dict = {}
-        n = len(u)
-        unconstrained = list(u)
-        for _ in range(n):                    # at most one clamp per pass
-            worst, worst_mag = None, limit + 1e-12
-            for i, v in enumerate(u):
-                if i not in clamped and abs(v) > worst_mag:
-                    worst, worst_mag = i, abs(v)
-            if worst is None:
-                break
-            clamped[worst] = limit if u[worst] > 0 else -limit
-            # ⛔ THE PIN IS WRITTEN HERE, BEFORE ANY EARLY EXIT (issue #60).
-            # It used to be copied in only after a successful re-solve, so the
-            # pass that pinned the LAST free thruster broke out with that
-            # thruster still at its out-of-bounds value -- and the caller then
-            # scaled the whole vector by limit/peak, halving thrusters that
-            # were already at their stop. Measured on the CAD hull: asking
-            # twice the all-at-limit wrench delivered half of what pinning
-            # every thruster delivers, on every axis.
-            u = list(u)
-            u[worst] = clamped[worst]
+        n = len(self._live)
+        u = [0.0] * n
+        order = [AXES.index(a) for a in priority_order(self._unactuated)
+                 if abs(want[AXES.index(a)]) > 1e-12]
+        dirs = {}
+        for k in order:
+            single = [0.0] * 6
+            single[k] = want[k]
+            dirs[k] = self._least_squares(single, list(range(n)))
+        granted = {k: 0.0 for k in order}
 
-            free = [i for i in range(n) if i not in clamped]
-            if not free:
-                break                          # every live thruster is pinned
-            # What the request still needs after the pinned thrusters deliver.
-            rest = [want[k] - sum(self._b[k][i] * clamped[i] for i in clamped)
-                    for k in range(6)]
-            try:
-                solved = self._least_squares(rest, free)
-            except ValueError:
-                # The reduced set is degenerate. Hand back the UNCONSTRAINED
-                # solution so the caller's uniform scale keeps its direction;
-                # a half-redistributed vector scaled down points nowhere.
-                return unconstrained, {}
-            for slot, i in enumerate(free):
-                u[i] = solved[slot]
-            if max(abs(v) for v in u) <= limit + 1e-9:
+        # ⚠ MORE THAN ONE PASS, AND WHY. Where the geometry couples axes, a
+        # LOWER axis can move a thruster AWAY from its stop: surge's pitch
+        # compensation (the axial unit's 8.1 mm offset) pulls the vertical pair
+        # inward after pitch has already pinned it. One pass would leave that
+        # room unspent and short pitch and heave while their thrusters had it.
+        # Each pass only ADDS to a grant, highest rank first, so a later pass
+        # can never take from an axis what an earlier one gave.
+        for _ in range(len(order) + 1):
+            moved = False
+            for k in order:
+                du = dirs[k]
+                lam = 1.0 - granted[k]
+                for i in range(n):
+                    if abs(du[i]) <= 1e-12:
+                        continue
+                    bound = limit if du[i] > 0 else -limit
+                    lam = min(lam, (bound - u[i]) / du[i])
+                if lam > 1e-12:
+                    granted[k] += lam
+                    u = [u[i] + lam * du[i] for i in range(n)]
+                    moved = True
+            if not moved:
                 break
-        return u, clamped
+        return u
