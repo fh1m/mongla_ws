@@ -1540,6 +1540,11 @@ class AUVManagerNode(Node):
 
     def cancel_callback(self, goal_handle):
         self.get_logger().info('[ACT  ] Cancel requested -- stopping thrusters')
+        # Remembered HERE, before the abort below: the running verb can exit
+        # and reach `execute_callback`'s result before rclpy has moved the goal
+        # to CANCELING, so `is_cancel_requested` alone loses the race.
+        self._cancelled_goals = getattr(self, '_cancelled_goals', set())
+        self._cancelled_goals.add(bytes(goal_handle.goal_id.uuid))
         # Signal abort FIRST so the running loop exits at its next tick (its
         # own finally neutralises lock-aware), and free the active gate so a
         # queued safety verb (disarm) gets through. Then stop the heading lock
@@ -1555,6 +1560,23 @@ class AUVManagerNode(Node):
         self.mongla.unlock_heading()
         self.pixhawk.send_neutral()
         return CancelResponse.ACCEPT
+
+    def _was_cancelled(self, goal_handle, wait_s: float = 0.5) -> bool:
+        """True once the goal is CANCELING; waits briefly for rclpy to get there.
+
+        `canceled()` is only a legal transition from CANCELING. The cancel
+        callback has already fired the abort, so the verb may finish first;
+        rclpy's own state change follows on another executor thread within
+        milliseconds. Not cancelled at all: False at once, no wait.
+        """
+        uid = bytes(goal_handle.goal_id.uuid)
+        if uid not in getattr(self, '_cancelled_goals', set()):
+            return bool(goal_handle.is_cancel_requested)
+        self._cancelled_goals.discard(uid)
+        deadline = time.monotonic() + wait_s
+        while not goal_handle.is_cancel_requested and time.monotonic() < deadline:
+            time.sleep(0.005)
+        return bool(goal_handle.is_cancel_requested)
 
     def execute_callback(self, goal_handle):
         request = goal_handle.request
@@ -1613,6 +1635,16 @@ class AUVManagerNode(Node):
                 goal_handle.succeed()
                 self.get_logger().info(
                     f'[ACT  ] {cmd} -> DONE ({result.message})')
+            elif self._was_cancelled(goal_handle):
+                # ⛔ A CANCELLED GOAL ENDS CANCELED, not ABORTED (issue #22's
+                # executor test found it). The action contract has two terminal
+                # failure states for a reason: "you asked me to stop" and "I
+                # could not do it" are different facts, and a bag or a tool
+                # reading the status could not tell an operator's cancel from a
+                # failed verb.
+                goal_handle.canceled()
+                self.get_logger().warning(
+                    f'[ACT  ] {cmd} -> CANCELED ({result.message})')
             else:
                 goal_handle.abort()
                 self.get_logger().error(
