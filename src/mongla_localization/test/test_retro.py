@@ -155,7 +155,12 @@ def test_a_replay_does_not_count_a_gated_update_twice():
             rd.run(t + 1e-6, lambda f: f.update_depth(0.5, sigma=0.02))
             assert f.gated == before + 1, 'the depth update was not gated'
             once = f.gated
-    rd.run(stream[5][0] + 1e-6, _vel)                     # late: replays k=10
+    # Late, and deliberately NOT a velocity measurement: one would open the
+    # gate on replay and the depth update would rightly not be gated at all.
+    late_R = stream[5][3]
+    rd.run(stream[5][0] + 1e-6,
+           lambda f: f.update_attitude(late_R, sigma_deg=0.5))  # replays k=10
+    assert rd.replayed > 0
     assert f.gated == once
 
 

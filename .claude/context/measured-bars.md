@@ -3183,6 +3183,15 @@ The observability gate (B-56) remains validated **only against synthetic noise**
 Validating it properly needs the manager and localization node running together
 so the rate and frame are the stack's own. That is a bring-up task, not a script.
 
+⚠ **It could latch shut** (issue #28, 2026-10-02). It summed all three velocity
+variances, but only depth observes z and depth was refused while the gate was
+shut, so after a long enough flow dropout (120 s from a settled filter) it never
+reopened. It now gates on the **horizontal** pair only. Bench, 30 s, 1 m launch
+error, before → after: no-flow 4.935 → 4.935 m, fix 0.50 / 0.01 m 0.201 / 0.003
+→ 0.199 / 0.003 m, healthy 0.1015 → 0.1015 m. **Applying depth uncoupled while
+shut** (`update_position`'s rule) was tried and **diverges: 1.4e14 m** on the
+no-flow run with either gate — the dropped coupling survives in P.
+
 ---
 
 ## 14. ⛔ "The Hailo is running our models at a fifth of its capability" — RETRACTED the same hour
