@@ -221,6 +221,35 @@ def exposure_offset_s(exposure_time_absolute: Optional[float]) -> float:
     return (e * 1e-4) * 0.5           # V4L2 units are 100 us
 
 
+def exposure_correction_s(exposure_time_absolute: Optional[float],
+                          stamp_source: str) -> float:
+    """What to ADD to a buffer stamp to reach mid-exposure. Signed.
+
+    ⛔ THE SIGN DEPENDS ON WHICH INSTANT THE DRIVER STAMPED (issue #34). V4L2
+    says so in a flag (`V4L2_BUF_FLAG_TSTAMP_SRC_*`) that this pipeline never
+    read, and it subtracted half the exposure as if every stamp marked the END.
+    `uvcvideo` -- both vehicle cameras, and read off a live stream on the dev
+    box -- stamps SOE, so mid-exposure is LATER than the stamp:
+
+        'soe'  -> +exposure/2
+        'eof'  -> -exposure/2
+        other  ->  0, because a guess in either direction is a full exposure
+                   wrong in one of them (15.7 ms at the measured auto exposure)
+
+    ⚠ UVC's "start of exposure" is the host's first-packet time, not the
+    sensor's. This makes the correction consistent with what the driver
+    CLAIMS; what remains is a fixed lag for `td` to estimate and for the
+    board-LED bench test to measure.
+    """
+    half = exposure_offset_s(exposure_time_absolute)
+    src = str(stamp_source or '').lower()
+    if src == 'soe':
+        return half
+    if src == 'eof':
+        return -half
+    return 0.0
+
+
 def interval_midpoint(t_start: float, t_end: float) -> float:
     """When an average velocity over [t_start, t_end] actually happened.
 

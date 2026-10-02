@@ -253,10 +253,21 @@ class TestTimingCorrections:
         finally:
             n.destroy_node()
 
-    def test_half_the_exposure_is_subtracted(self):
+    def test_half_the_exposure_follows_the_drivers_stamp_source(self):
         """Mid-exposure is the convention. Ours is 15.7 ms on AUTO -- 7.85 ms,
-        bigger on its own than Qin & Shen's 6 ms tolerance."""
+        bigger on its own than Qin & Shen's 6 ms tolerance.
+
+        ⛔ ITS SIGN IS THE DRIVER'S (issue #34). This test used to assert
+        `100.0 - 0.00785` for every camera, i.e. that every stamp marks the END
+        of exposure. uvcvideo stamps the START (read off a live stream), so
+        the default ADDS; an EOF driver subtracts."""
         n = _make(pool_depth_m=4.0, exposure_us=157.0,
+                  stamp_at_midpoint=False, estimate_time_offset=False)
+        try:
+            assert n._stamp_for(100.0, 0.02) == pytest.approx(100.0 + 0.00785)
+        finally:
+            n.destroy_node()
+        n = _make(pool_depth_m=4.0, exposure_us=157.0, stamp_source='eof',
                   stamp_at_midpoint=False, estimate_time_offset=False)
         try:
             assert n._stamp_for(100.0, 0.02) == pytest.approx(100.0 - 0.00785)
@@ -278,9 +289,9 @@ class TestTimingCorrections:
         n = _make(pool_depth_m=4.0, exposure_us=157.0, stamp_at_midpoint=True,
                   estimate_time_offset=False, time_offset_s=0.010)
         try:
-            # midpoint 99.75, minus 7.85 ms exposure, minus 10 ms offset
+            # midpoint 99.75, PLUS 7.85 ms (an SOE stamp), minus 10 ms offset
             assert n._stamp_for(100.0, 0.5) == pytest.approx(
-                99.75 - 0.00785 - 0.010)
+                99.75 + 0.00785 - 0.010)
         finally:
             n.destroy_node()
 
