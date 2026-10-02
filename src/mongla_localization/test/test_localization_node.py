@@ -1229,3 +1229,51 @@ def test_centred_is_the_boards_own_test():
     depend on mongla_control); one truth, two copies, compared."""
     am = pytest.importorskip('mongla_control.actuation_model')
     assert ln.DEMAND_CENTRE_EPS == am.CENTRE_EPS
+
+
+# --------------------------------------------------------------------------- #
+#  issue #30: publish the covariance of the POSE, not of the invariant error
+# --------------------------------------------------------------------------- #
+def _sampled_truth(f, n=20000, seed=30):
+    """True states drawn from the filter's own belief: xi ~ N(0, P), true =
+    exp(xi) * estimate. Their empirical position / orientation / body-velocity
+    covariance is what the message must report."""
+    from mongla_localization.inekf import so3_exp
+    rng = np.random.default_rng(seed)
+    L = np.linalg.cholesky(f.P[0:9, 0:9] + 1e-15 * np.eye(9))
+    R, v, p = f.X.R, f.X.v, f.X.p
+    pos, rot, vb = [], [], []
+    for _ in range(n):
+        xi = L @ rng.standard_normal(9)
+        dR = so3_exp(xi[0:3])
+        Rt = dR @ R
+        pos.append(dR @ p + xi[6:9] - p)
+        rot.append(xi[0:3])
+        vb.append(Rt.T @ (dR @ v + xi[3:6]) - R.T @ v)
+    return (np.cov(np.hstack([pos, rot]).T), np.cov(np.array(vb).T))
+
+
+def _published(f):
+    from nav_msgs.msg import Odometry
+    from mongla_localization.localization_node import _fill_covariance
+    m = Odometry()
+    _fill_covariance(m, f)
+    return (np.array(m.pose.covariance).reshape(6, 6),
+            np.array(m.twist.covariance).reshape(6, 6)[0:3, 0:3])
+
+
+def test_attitude_uncertainty_far_from_the_origin_is_position_uncertainty():
+    """The issue's case: 12 m down-course, 2 deg of yaw sigma. The dp block
+    alone said 0.1 m; the truth is ~0.42 m across-track."""
+    f = RIEKF()
+    f.X.p = np.array([12.0, 0.0, 1.0])
+    f.X.v = np.array([0.4, 0.1, 0.0])
+    f.P[:] = 0.0
+    f.P[0:3, 0:3] = np.diag([1e-4, 1e-4, math.radians(2.0) ** 2])
+    f.P[3:6, 3:6] = np.eye(3) * 1e-4
+    f.P[6:9, 6:9] = np.eye(3) * 0.01
+    pose, twist = _published(f)
+    truth_pose, truth_twist = _sampled_truth(f)
+    np.testing.assert_allclose(pose, truth_pose, atol=2e-3, rtol=0.05)
+    np.testing.assert_allclose(twist, truth_twist, atol=2e-6, rtol=0.05)
+    assert math.sqrt(pose[1, 1]) > 0.4          # across-track, from heading
