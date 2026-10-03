@@ -269,7 +269,7 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `flow` | `false` |  |
 | `lock` | `false` | Run the lock ladder (follower + XFeat anchor) on the forward camera, publishing <ns>/lock. Control ignores it until vision.lock_s > 0. |
 | `act_conf` | `0.45` | ladder ACTING bar: below this a detection may be associated by the tracker but is not acted on (B-59; measured knee 0.60, shipped 0.45) |
-| `anchor_xfeat_hef` | `false` | run XFeat on the Hailo-8 rather than the Pi CPU. ONLY safe in the detector process -- a separate lock_node takes the chip from the detector |
+| `anchor_xfeat_hef` | `true` | run XFeat on the Hailo-8 rather than the Pi CPU (B-62); safe because the lock is composed with the detector |
 | `anchor_semi_dense` | `false` | semi-dense matching: 2.1-2.6x inliers for +37 % match cost. OFF until frame-to-reference is measured |
 | `target_width_m_forward` | `0.0` | measured TRUE width of the forward target in metres; 0 = use the rulebook nominal. A measured prop beats a nominal, which is what SAUVC +/-5 % allows for |
 | `target_width_m_downward` | `0.0` | measured true width of the downward target, metres |
@@ -406,12 +406,13 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `loop` | `True` |
 | `discover_on_start` | `False` |
 
-**`mongla_vision/detector_dual_node.py`** — 2 parameters
+**`mongla_vision/detector_dual_node.py`** — 3 parameters
 
 | parameter | default |
 |---|---|
 | `device` | `-1` |
 | `replay` | `False` |
+| `lock` | `False` |
 
 **`mongla_vision/detector_node.py`** — 25 parameters
 
@@ -443,7 +444,7 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `range_crop` | `-1` |
 | `vision_profile` | `''` |
 
-**`mongla_vision/lock_node.py`** — 19 parameters
+**`mongla_vision/lock_node.py`** — 20 parameters
 
 | parameter | default |
 |---|---|
@@ -466,6 +467,7 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `zero_authority_s` | `ZERO_AUTHORITY_S` |
 | `target_width_m` | `0.0` |
 | `medium` | `'water'` |
+| `direct_feed` | `False` |
 
 **`mongla_vision/tracker_node.py`** — 16 parameters
 

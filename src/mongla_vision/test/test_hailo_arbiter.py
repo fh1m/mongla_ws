@@ -1,19 +1,25 @@
-"""Two detectors, one chip: the activation arbiter.
+"""Two detectors and the XFeat anchors, one chip: HailoRT's scheduler shares it.
 
-The chip allows exactly one ACTIVE network group. Everything else about
-sharing it was measured on hardware and is recorded in `hailo.py`; what these
-tests hold is the part that can go wrong in software and would be a core dump
-rather than an exception on the vehicle:
+Until 2026-10-03 the chip was shared by hand -- one ACTIVE network group,
+handed back and forth under a process-wide lock held across each inference.
+Measured live with the lock ladders composed into the detector process, that
+lock turned every GIL stall into an idle chip: 69 -> 47 Hz combined at an
+unchanged ~10.5 ms of chip time per call. The ROUND_ROBIN scheduler now owns
+activation (measured 46.1 + 46.1 Hz for the two detectors, stable with four
+groups and a configure/close mid-run).
 
-  * a second detector must CONSTRUCT (the old code activated in __init__, so it
-    could not),
-  * exactly one may hold the activation at any moment,
-  * the handover must be atomic under a MultiThreadedExecutor,
-  * close() must not release the DEVICE while another detector is using it.
+What these tests hold is the contract with the scheduler, which on hardware
+fails as a core dump or a silent stall rather than an exception:
 
-`hailo_platform` is stubbed. That is not a weaker test here: the invariant is
-about our bookkeeping, and the real runtime answers a double activation with a
-segfault, which no test can catch.
+  * one VDevice per process, created WITH the ROUND_ROBIN scheduler;
+  * `activate()` is never called (invalid with the scheduler);
+  * two models are inferring AT THE SAME TIME without waiting on each other
+    -- no Python lock spans another model's inference;
+  * one model's bound buffers are never used by two calls at once;
+  * each group is configured ONCE (per-call configure filled the chip's SRAM);
+  * close() never releases the shared device.
+
+`hailo_platform` is stubbed; the stub raises where the hardware would crash.
 """
 import sys
 import threading
@@ -27,163 +33,87 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
-# --------------------------------------------------------------------------- #
-#  A chip that COUNTS activations and refuses a second one
-# --------------------------------------------------------------------------- #
+ROUND_ROBIN = 'ROUND_ROBIN'
+
+
 class _Chip:
-    """Models the one property that matters: activation is exclusive.
-
-    The real device does not raise on a double activation, it dumps core. This
-    raises instead so a failure is a readable assertion rather than a dead
-    worker.
-    """
-
     def __init__(self):
-        self.active = None
-        self.releases = 0
         self.devices = 0
-        # `configure()` allocates a network group into the chip's ON-CHIP
-        # SRAM; `activate()` only switches between resident groups. Counting
-        # configures is the only way to see the difference from outside, and
-        # without it 19 tests passed while the chip filled up and refused
-        # every inference.
+        self.scheduler = None
         self.configures = 0
+        self.inflight = set()        # models mid-inference right now
+        self.overlap = False         # two models were mid-inference together
+        # Set by a test to hold one model's inference open until released.
+        self.hold = {}
 
 
 CHIP = _Chip()
 
 
-class _Act:
-    def __init__(self, owner):
-        self.owner = owner
-
-    def __enter__(self):
-        # The real swap costs ~4.15 ms. Modelling it as instantaneous is what
-        # made the first version of the thread test USELESS: it passed with the
-        # lock removed, because the unguarded window was too narrow for the GIL
-        # to interleave. A test that cannot fail is not evidence.
-        time.sleep(0.002)
-        assert CHIP.active is None, (
-            f'{self.owner} activated while {CHIP.active} still holds the chip '
-            f'-- on hardware this is a segfault')
-        CHIP.active = self.owner
-        return self
-
-    def __exit__(self, *a):
-        CHIP.active = None
-        CHIP.releases += 1
-
-
-class _Ng:
-    def __init__(self, name):
-        self.name = name
-
-    def create_params(self):
-        return {}
-
-    def activate(self, _p=None):
-        return _Act(self.name)
-
-
-class _Pipe:
-    def __init__(self, ng, *_a):
-        self.ng = ng
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *a):
-        return False
-
-    def infer(self, _feed):
-        # A REAL infer takes ~10 ms, and the whole point of this stub is that
-        # the activation must survive it. The first version returned instantly,
-        # which is why the suite passed while the Pi SEGFAULTED: the other
-        # thread's eviction landed between the two statements below and there
-        # was no window in which to observe it.
-        assert CHIP.active == self.ng.name, (
-            f'inferred on {self.ng.name} while {CHIP.active} is active')
-        time.sleep(0.002)
-        assert CHIP.active == self.ng.name, (
-            f'{CHIP.active} took the chip while {self.ng.name} was mid-infer '
-            f'-- on hardware this is a use-after-free on the stream')
-        return {'out': np.array([[[]]], dtype=object)}
-
-
-# --------------------------------------------------------------------------- #
-#  The ASYNC path (InferModel / run_async), which is what ships
-# --------------------------------------------------------------------------- #
 class _Job:
-    """`run_async` returns a job; `wait()` blocks until the chip is done.
+    """`wait()` RELEASES THE GIL on hardware; `time.sleep` models that."""
 
-    `wait` is `time.sleep`, and that is not laziness -- it is the property
-    under test. The whole reason this API replaced the blocking one is that
-    its wait RELEASES THE GIL (measured: another Python thread woke 0.05 ms
-    late, against 9.21 ms for `InferVStreams.infer`). A stub that spun would
-    model the API we removed.
-    """
-
-    def __init__(self, name):
-        self.name = name
+    def __init__(self, cim):
+        self.cim = cim
 
     def wait(self, _ms):
-        assert CHIP.active == self.name, (
-            f'inferred on {self.name} while {CHIP.active} is active')
+        name = self.cim.name
+        CHIP.inflight.add(name)
+        if len(CHIP.inflight) > 1:
+            CHIP.overlap = True
+        gate = CHIP.hold.get(name)
+        if gate is not None:
+            assert gate.wait(5), f'{name} was held and never released'
         time.sleep(0.002)
-        assert CHIP.active == self.name, (
-            f'{CHIP.active} took the chip while {self.name} was mid-infer '
-            f'-- on hardware this is a use-after-free on the stream')
+        CHIP.inflight.discard(name)
+        self.cim.busy = False
 
 
 class _Bindings:
     def __init__(self):
-        self._in = types.SimpleNamespace(set_buffer=lambda b: None)
-        self._out = types.SimpleNamespace(set_buffer=lambda b: None)
+        ns = types.SimpleNamespace(set_buffer=lambda b: None)
+        self._in = self._out = ns
 
     def input(self):
         return self._in
 
-    def output(self):
+    def output(self, _name=None):
         return self._out
 
 
 class _Cim:
-    """ConfiguredInferModel. `configure()` builds it, `activate()` arms it --
-    two calls, and omitting the second raises HAILO_STREAM_NOT_ACTIVATED on
-    the real device rather than anything that names the missing step."""
-
     def __init__(self, name):
         self.name = name
-        self._armed = False
+        self.busy = False
+        self.exited = False
 
     def __enter__(self):
         return self
 
     def __exit__(self, *a):
+        self.exited = True
         return False
 
     def activate(self):
-        time.sleep(0.002)          # the real swap is ~4.15 ms; see _Act
-        assert CHIP.active is None, (
-            f'{self.name} activated while {CHIP.active} still holds the chip '
-            f'-- on hardware this is a segfault')
-        CHIP.active = self.name
-        self._armed = True
+        raise AssertionError('activate() with the scheduler enabled is invalid '
+                             '-- HailoRT owns activation')
 
     def deactivate(self):
-        CHIP.active = None
-        CHIP.releases += 1
-        self._armed = False
+        raise AssertionError('deactivate() with the scheduler enabled')
 
     def create_bindings(self):
         return _Bindings()
 
     def wait_for_async_ready(self, timeout_ms=0):
-        assert self._armed, 'HAILO_STREAM_NOT_ACTIVATED: activate() was skipped'
+        pass
 
     def run_async(self, _bindings):
-        assert self._armed, 'HAILO_STREAM_NOT_ACTIVATED: activate() was skipped'
-        return _Job(self.name)
+        assert not self.exited, f'{self.name} inferred after close'
+        assert not self.busy, (
+            f'two calls on {self.name} at once -- its bound buffers would be '
+            f'overwritten mid-read')
+        self.busy = True
+        return _Job(self)
 
 
 class _InferModel:
@@ -220,11 +150,16 @@ class _InferModel:
 
 
 class _VDevice:
-    def __init__(self, *_a, **_k):
+    def __init__(self, params=None):
         CHIP.devices += 1
+        CHIP.scheduler = getattr(params, 'scheduling_algorithm', None)
+
+    @staticmethod
+    def create_params():
+        return types.SimpleNamespace(scheduling_algorithm=None)
 
     def configure(self, hef, _cfg):
-        return [_Ng(hef.stem)]
+        raise AssertionError('legacy configure path used')
 
     def create_infer_model(self, path):
         # Sized from the SAME sidecar the detector reads. A stub that invents
@@ -262,11 +197,7 @@ def _install_stub():
     m = types.ModuleType('hailo_platform')
     m.HEF = _HEF
     m.VDevice = _VDevice
-    m.InferVStreams = _Pipe
-    m.HailoStreamInterface = types.SimpleNamespace(PCIe=0)
-    m.ConfigureParams = types.SimpleNamespace(create_from_hef=lambda h, **k: {})
-    m.InputVStreamParams = types.SimpleNamespace(make=lambda ng, **k: {})
-    m.OutputVStreamParams = types.SimpleNamespace(make=lambda ng, **k: {})
+    m.HailoSchedulingAlgorithm = types.SimpleNamespace(ROUND_ROBIN=ROUND_ROBIN)
     m.FormatType = types.SimpleNamespace(UINT8=0, FLOAT32=1)
     sys.modules['hailo_platform'] = m
 
@@ -279,7 +210,6 @@ def hailo(tmp_path, monkeypatch):
     import importlib
     from mongla_vision.detection import hailo as mod
     importlib.reload(mod)
-    monkeypatch.setattr(mod, '_ACTIVE', None, raising=False)
     monkeypatch.setattr(mod, '_DEVICE', None, raising=False)
     return mod
 
@@ -305,8 +235,6 @@ FRAME = np.zeros((360, 640, 3), np.uint8)
 
 # --------------------------------------------------------------------------- #
 def test_a_second_detector_can_be_constructed(hailo, tmp_path):
-    """This is the whole bug. `vision_dual` launches two of these, and the old
-    code activated in __init__ -- so the dual-camera path could never start."""
     a, b = _pair(hailo, tmp_path)
     assert a is not b
 
@@ -318,65 +246,64 @@ def test_one_device_serves_both(hailo, tmp_path):
     assert CHIP.devices == 1
 
 
-def test_nothing_is_activated_until_the_first_infer(hailo, tmp_path):
+def test_the_device_runs_the_ROUND_ROBIN_scheduler(hailo, tmp_path):
+    """Without it, two configured groups cannot both run, and the code would
+    need the hand-off whose lock idled the chip."""
+    a, _ = _pair(hailo, tmp_path)
+    a.infer(FRAME)
+    assert CHIP.scheduler == ROUND_ROBIN
+
+
+def test_nothing_is_configured_until_the_first_infer(hailo, tmp_path):
     _pair(hailo, tmp_path)
-    assert CHIP.active is None
+    assert CHIP.configures == 0
 
 
-def test_inferring_takes_the_chip(hailo, tmp_path):
-    a, _ = _pair(hailo, tmp_path)
-    a.infer(FRAME)
-    assert CHIP.active == 'fwd'
-
-
-def test_the_other_detector_evicts_it(hailo, tmp_path):
+def test_each_group_is_configured_ONCE(hailo, tmp_path):
+    """`configure()` allocates on-chip SRAM. Per-call configure filled the
+    chip: CONTEXT_SWITCH_STATUS_SRAM_MEMORY_FULL, HAILO_OUT_OF_FW_MEMORY(71),
+    then every inference failing forever at 98 % CPU."""
     a, b = _pair(hailo, tmp_path)
-    a.infer(FRAME)
-    b.infer(FRAME)
-    assert CHIP.active == 'dwn'
-
-
-def test_staying_on_one_detector_does_not_swap(hailo, tmp_path):
-    """The mission model -- one camera live, the other paused -- must cost
-    nothing. A swap per frame is 4.15 ms against a 10.18 ms frame."""
-    a, _ = _pair(hailo, tmp_path)
-    for _ in range(20):
+    for _ in range(12):
         a.infer(FRAME)
-    assert CHIP.releases == 0
-
-
-def test_alternating_swaps_once_per_change_not_once_per_frame(hailo, tmp_path):
-    a, b = _pair(hailo, tmp_path)
-    for _ in range(5):
-        a.infer(FRAME)
-    for _ in range(5):
         b.infer(FRAME)
-    assert CHIP.releases == 1
+    assert CHIP.configures == 2
 
 
-def test_two_threads_cannot_both_hold_it(hailo, tmp_path):
-    """Two detector nodes in one process are two rclpy callbacks, and on a
-    MultiThreadedExecutor they run on different threads.
-
-    Two distinct failures, and the second one is the one that actually
-    happened. Both threads observing `_ACTIVE is not self` and both entering is
-    a double activation. But guarding ONLY the handover still segfaulted the
-    Pi: detector A sat inside `pipe.infer()` while B evicted its activation,
-    which is a use-after-free on the stream -- the fault handler showed one
-    thread in `pyhailort.infer` and the other in `activate().__enter__`. The
-    lock has to span the infer, so the stub's infer takes time and checks that
-    the chip is still its own on the way out."""
+def test_two_models_infer_AT_ONCE_and_neither_waits_on_the_other(hailo, tmp_path):
+    """THE PROPERTY THAT WAS MISSING. Detector A is held mid-inference; B must
+    still complete. Under the old process-wide lock, B waited for A -- and on
+    the vehicle A was often waiting for the GIL, not the chip."""
     a, b = _pair(hailo, tmp_path)
+    a.infer(FRAME)
+    b.infer(FRAME)                       # both configured
+    CHIP.hold['fwd'] = threading.Event()
+    t = threading.Thread(target=a.infer, args=(FRAME,))
+    t.start()
+    time.sleep(0.05)                     # A is now inside its wait
+    done = threading.Event()
+    threading.Thread(target=lambda: (b.infer(FRAME), done.set())).start()
+    finished = done.wait(2)
+    CHIP.hold['fwd'].set()
+    t.join(5)
+    assert finished, 'B waited for A: a lock is held across another inference'
+    assert CHIP.overlap
+
+
+def test_one_detector_is_never_entered_twice_at_once(hailo, tmp_path):
+    """Its buffers stay bound; a second call would overwrite them mid-read.
+    Two executor threads can call the same detector."""
+    a, _ = _pair(hailo, tmp_path)
     errs = []
 
-    def spin(det):
+    def spin():
         try:
-            for _ in range(40):
-                det.infer(FRAME)
+            for _ in range(30):
+                a.infer(FRAME)
         except BaseException as e:                               # noqa: BLE001
             errs.append(e)
 
-    ts = [threading.Thread(target=spin, args=(d,)) for d in (a, b, a, b)]
+    ts = [threading.Thread(target=spin) for _ in range(3)]
     for t in ts:
         t.start()
     for t in ts:
@@ -385,44 +312,26 @@ def test_two_threads_cannot_both_hold_it(hailo, tmp_path):
 
 
 def test_close_does_not_release_the_shared_device(hailo, tmp_path):
-    """Pulling the device out from under a detector that still has a graph
-    configured on it is a segfault during shutdown -- the hardest kind to
-    read. The stub raises so this is an assertion instead."""
+    """Pulling the device out from under a model that still has a group
+    configured on it is a segfault. The stub raises so this is an assertion."""
     a, b = _pair(hailo, tmp_path)
     a.infer(FRAME)
     a.close()                                    # must not raise
     b.infer(FRAME)                               # and b must still work
-    assert CHIP.active == 'dwn'
 
 
-def test_closing_the_holder_frees_the_chip(hailo, tmp_path):
+def test_close_hands_the_group_back(hailo, tmp_path):
     a, _ = _pair(hailo, tmp_path)
     a.infer(FRAME)
+    cim = a._cim
     a.close()
-    assert CHIP.active is None
+    assert cim.exited and a._cim is None
 
 
 def test_a_closed_detector_stops_inferring(hailo, tmp_path):
     a, _ = _pair(hailo, tmp_path)
     a.close()
     assert a.infer(FRAME) == []
-
-
-def test_competition_is_reported_rather_than_left_to_be_discovered(hailo, tmp_path):
-    """73.8 Hz across two cameras reads as 'the chip got slower' unless
-    something says the two detectors are fighting over it."""
-    warned = []
-    a = hailo.HailoDetector(
-        model_path=_model(tmp_path, 'fwd', ['gate']), class_allowlist=None,
-        warmup=False, logger=types.SimpleNamespace(
-            info=lambda s: None, warn=warned.append,
-            error=warned.append))
-    b = hailo.HailoDetector(model_path=_model(tmp_path, 'dwn', ['fire']),
-                            class_allowlist=None, warmup=False)
-    for _ in range(hailo._SWAP_WARN_AT * 2):
-        a.infer(FRAME)
-        b.infer(FRAME)
-    assert any('competing for the chip' in w for w in warned)
 
 
 # --------------------------------------------------------------------------- #
@@ -515,48 +424,3 @@ def test_a_LATER_conf_change_is_checked_too(hailo, tmp_path, monkeypatch):
     assert any('BELOW' in w for w in warned['warn'])
 
 
-def test_swapping_does_not_RECONFIGURE_the_graph(tmp_path, hailo):
-    """CONFIGURE ONCE, ACTIVATE MANY -- they are not the same cost.
-
-    `configure()` allocates the network group into the Hailo-8's on-chip
-    SRAM. `activate()` makes an already-resident group the running one.
-    Configuring on every swap allocates a fresh group each time and the chip
-    fills:
-
-        CONTEXT_SWITCH_STATUS_SRAM_MEMORY_FULL
-        HAILO_OUT_OF_FW_MEMORY (71)
-
-    after which EVERY inference fails, forever, in a tight loop -- measured on
-    the vehicle as 98 % CPU, zero detections, and the image topic starved from
-    36 Hz to 1.6. Nineteen tests passed through it, because none of them could
-    see the difference between the two calls.
-    """
-    a = hailo.HailoDetector(model_path=_model(tmp_path, 'fwd', ['gate']),
-                            class_allowlist=None, warmup=False)
-    b = hailo.HailoDetector(model_path=_model(tmp_path, 'dwn', ['fire']),
-                            class_allowlist=None, warmup=False)
-    frame = np.zeros((360, 640, 3), np.uint8)
-
-    CHIP.configures = 0
-    for _ in range(12):          # 24 swaps
-        a.infer(frame)
-        b.infer(frame)
-
-    assert CHIP.configures <= 2, (
-        f'{CHIP.configures} configures for 2 graphs over 24 swaps -- each one '
-        f'allocates chip SRAM that is not reclaimed, and the firmware answers '
-        f'HAILO_OUT_OF_FW_MEMORY once it runs out')
-
-
-def test_the_swap_still_happens(tmp_path, hailo):
-    """The guard on the guard: `configures <= 2` would also pass if the two
-    detectors had stopped taking turns at all, which would be a worse bug."""
-    a = hailo.HailoDetector(model_path=_model(tmp_path, 'fwd', ['gate']),
-                            class_allowlist=None, warmup=False)
-    b = hailo.HailoDetector(model_path=_model(tmp_path, 'dwn', ['fire']),
-                            class_allowlist=None, warmup=False)
-    frame = np.zeros((360, 640, 3), np.uint8)
-    for _ in range(4):
-        a.infer(frame)
-        b.infer(frame)
-    assert a._swaps >= 3 and b._swaps >= 3, (a._swaps, b._swaps)

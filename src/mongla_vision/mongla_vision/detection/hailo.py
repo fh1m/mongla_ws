@@ -88,10 +88,6 @@ _INPUT_FALLBACK = 640
 _ASYNC_READY_MS = 1000
 _ASYNC_WAIT_MS = 1000
 
-# How many activation swaps before saying so. One is the normal handover from
-# a camera switch; a stream of them means two detectors are competing.
-_SWAP_WARN_AT = 20
-
 # The operating point this backend is compiled FOR. Round 24 measured INT8
 # costing ~0.08 of confidence at the 0.20 point while NOT moving the box centre
 # (2.5 px against a 2.72 px fp32-vs-fp32 noise floor), so the detections are
@@ -204,30 +200,46 @@ def emits_raw_heads(hef_path: str) -> bool:
 
 
 # --------------------------------------------------------------------------- #
-#  ONE DEVICE PER PROCESS, ONE ACTIVE GRAPH AT A TIME                         #
+#  ONE DEVICE PER PROCESS, AND HAILORT'S SCHEDULER SHARES IT                  #
 # --------------------------------------------------------------------------- #
-# Measured on this hardware, because all three options look plausible on paper
-# and two of them do not work:
+# Measured on this hardware:
 #
 #   two PROCESSES, a VDevice each   -> HAILO_OUT_OF_PHYSICAL_DEVICES (74) on the
-#                                      second. This is what `vision_dual` does
-#                                      today, so the dual-camera launch has
-#                                      never been able to start.
+#                                      second. Sharing happens in ONE process.
 #   multi_process_service + scheduler -> HailoRTInvalidOperationException. The
 #                                      API accepts the flag; the `hailort_service`
 #                                      daemon it needs is not installed.
-#   ROUND_ROBIN scheduler, one process -> SIGSEGV. Not an exception, a core dump.
-#   ONE process, one VDevice, both HEFs configured, activation handed back and
-#   forth                            -> WORKS. 98.2 Hz on the live graph.
+#   ONE process, activation handed back and forth by hand (what shipped until
+#   2026-10-03)                      -> works: 73.8 Hz across two detectors
+#                                      swapping every frame, 4.15 ms a swap.
+#   ⭐ ONE process, ROUND_ROBIN scheduler (now) -> 46.1 + 46.1 = 92.2 Hz for the
+#                                      same two detectors, and with both XFeat
+#                                      anchors added at a realistic duty
+#                                      (~5 Hz each) the detectors keep 44.4 Hz
+#                                      each. HailoRT switches network groups
+#                                      itself, in C++, with NO Python lock held
+#                                      around an inference.
 #
-# So two detectors must live in ONE process and take turns. The turn-taking is
-# cheap: swapping costs 4.15 ms median against a 10.18 ms frame, and swapping on
-# EVERY frame still gives 73.8 Hz across both cameras (36.9 Hz each). With the
-# mission model -- one camera live, the other paused -- there are no swaps at
-# all. The tail is the thing to know about: one swap in 295 took 42.69 ms.
+# ⛔ RETRACTED: "ROUND_ROBIN scheduler, one process -> SIGSEGV". Re-measured
+# 2026-10-03 on HailoRT 4.24: four network groups, four threads, a group
+# configured while the others were mid-inference and one closed mid-run --
+# zero errors, exit 0, three runs out of three. What DOES segfault is
+# interpreter teardown with groups still configured (see `close_all`), which
+# every bench of that era hit on the way out because none released the device.
+# The crash was real; the attribution was wrong.
+#
+# ⭐ WHY THE HAND-OFF HAD TO GO, measured live (measured-bars §28.6): the
+# hand-off held `_DEVICE_LOCK` across Python code -- letterbox, the
+# `run_async` wrapper, the activation swap -- so whenever the holder lost the
+# GIL to another thread the CHIP sat idle and the other detector waited for
+# a lock whose owner was not even running. With the lock ladders composed
+# into the same process, two detectors fell from 69 to 47 Hz combined at an
+# unchanged ~10.5 ms of chip time per call. A scheduler holds no Python lock,
+# so a thread starved of the GIL delays only itself.
 _DEVICE = None
+# Guards device CREATION and every network-group CONFIGURE. Never held
+# around an inference: the scheduler arbitrates the chip.
 _DEVICE_LOCK = threading.Lock()
-_ACTIVE: Optional['HailoDetector'] = None
 # Everything that configured a network group on `_DEVICE`: the detectors AND
 # the XFeat anchors. Weak, so a dropped object is not kept alive by this.
 _CLAIMANTS: 'weakref.WeakSet' = weakref.WeakSet()
@@ -255,7 +267,7 @@ def close_all() -> None:
     twice. A worker thread still inside an infer holds `_DEVICE_LOCK`, and
     `close()` waits for it rather than pulling the stream out from under it.
     """
-    global _DEVICE, _ACTIVE
+    global _DEVICE
     for c in list(_CLAIMANTS):
         try:
             c.close()
@@ -263,7 +275,6 @@ def close_all() -> None:
             pass
     with _DEVICE_LOCK:
         dev, _DEVICE = _DEVICE, None
-        _ACTIVE = None
     if dev is not None:
         try:
             dev.release()
@@ -305,8 +316,10 @@ def _shared_device():
         # Re-checked inside: the thread that waited here must see the device
         # the winner made, not make a second one.
         if _DEVICE is None:
-            from hailo_platform import VDevice
-            _DEVICE = VDevice()
+            from hailo_platform import HailoSchedulingAlgorithm, VDevice
+            params = VDevice.create_params()
+            params.scheduling_algorithm = HailoSchedulingAlgorithm.ROUND_ROBIN
+            _DEVICE = VDevice(params)
     return _DEVICE
 
 
@@ -417,18 +430,16 @@ class HailoDetector(Detector):
             self._model.input().set_format_type(FormatType.UINT8)
             self._configure_outputs()
 
-        # ACTIVATION IS DEFERRED, and that is the whole point of this class
-        # holding a shared device. Activating here would mean the SECOND
-        # detector constructed in the process fails at construction -- exactly
-        # the failure this replaces, moved one layer down. It is taken on the
-        # first infer and handed over when the other detector needs it.
-        self._cim = None            # ConfiguredInferModel, once activated
+        # CONFIGURED ON FIRST USE, never activated: the scheduler owns
+        # activation. `_infer_lock` guards only THIS detector's bound buffers
+        # (a second infer on the same detector would overwrite them); it is
+        # never shared, so it never makes another model wait.
+        self._cim = None            # ConfiguredInferModel, once configured
         self._bindings = None
         self._in_buf = None
         self._out_buf = None
-        self._swaps = 0
         self._pipe = None
-        self._activation = None
+        self._infer_lock = threading.Lock()
         self._pad_geometry = None
         self._nms_classes = len(self._names)
         self._nms_warned = False
@@ -640,11 +651,9 @@ class HailoDetector(Detector):
     #  Output shape -- the ONE thing a seg HEF does differently
     # ------------------------------------------------------------------ #
     # A detection HEF has a single HAILO_NMS output; a seg HEF has ten raw
-    # tensors. Everything else -- the shared VDevice, the configure-once
-    # activate-many dance, the eviction lock -- is identical and must stay ONE
-    # copy, because that machinery is where every measured failure lived
-    # (SIGSEGV on a concurrent evict, SRAM_MEMORY_FULL on a per-swap
-    # configure). So the subclass overrides exactly these two.
+    # tensors. Everything else -- the shared VDevice, configure-once, the
+    # buffers -- is identical and must stay ONE copy (SRAM_MEMORY_FULL was a
+    # per-swap configure). So the subclass overrides exactly these two.
     def _configure_outputs(self) -> None:
         # Imported HERE, not taken from __init__'s scope. Extracting this hook
         # out of __init__ left the name behind and every detection HEF raised
@@ -661,77 +670,33 @@ class HailoDetector(Detector):
     # ------------------------------------------------------------------ #
     #  Inference
     # ------------------------------------------------------------------ #
-    def _acquire_locked(self):
-        """Take the chip's single activation, evicting whoever holds it.
+    def _configured(self):
+        """This detector's network group, configured on first use. NOT activated.
 
-        THE CALLER MUST HOLD `_DEVICE_LOCK` FOR THE INFER TOO, not just for
-        this. Guarding only the handover was measured as a SIGSEGV on the Pi:
-        detector A sat inside `pipe.infer()` while detector B evicted its
-        activation on another thread -- a use-after-free on the stream, and the
-        stack trace showed exactly that (one thread in `pyhailort.infer`, the
-        other in `activate().__enter__`). Two detector nodes in one process are
-        two rclpy callbacks and a MultiThreadedExecutor puts them on different
-        threads, so this is the normal case, not a corner.
+        Caller holds `self._infer_lock`. `_DEVICE_LOCK` is taken for the
+        configure only -- configuration touches the device -- and never for an
+        inference.
 
-        Serialising the infer costs nothing real: the chip runs one graph at a
-        time regardless, and the measured both-cameras figure (69-74 Hz total)
-        was taken serialised.
+        CONFIGURE ONCE. `configure()` allocates the group into the Hailo-8's
+        on-chip SRAM; doing it per frame filled the chip
+        (CONTEXT_SWITCH_STATUS_SRAM_MEMORY_FULL, HAILO_OUT_OF_FW_MEMORY(71),
+        then every inference failing forever at 98 % CPU). Four groups -- two
+        detectors and two XFeat anchors -- were measured resident together.
+
+        ⛔ NO `activate()`. With the scheduler enabled it is invalid, and the
+        scheduler switches groups itself.
         """
-        global _ACTIVE
-        if _ACTIVE is self and self._cim is not None:
-            return self._cim
-        if _ACTIVE is not None and _ACTIVE is not self:
-            _ACTIVE._release_locked()
-        # `configure()` builds the ConfiguredInferModel; it does NOT activate
-        # it. Skipping `activate()` raises HAILO_STREAM_NOT_ACTIVATED (72) at
-        # the first `run_async`, which reads like an API-mixing problem and is
-        # really a missing call. (It is invalid with the HailoRT scheduler
-        # enabled -- and enabling the scheduler with two graphs SIGSEGVs, so
-        # taking turns by hand is the only arrangement that works here.)
         if self._blocking:
-            self._activation = self._ng.activate(self._ngp)
-            self._activation.__enter__()
-            self._pipe = self._InferVStreams(self._ng, self._ivp, self._ovp)
-            self._pipe.__enter__()
-            _ACTIVE = self
-            self._swaps += 1
+            if self._pipe is None:
+                with _DEVICE_LOCK:
+                    self._pipe = self._InferVStreams(self._ng, self._ivp,
+                                                     self._ovp)
+                    self._pipe.__enter__()
             return self._pipe
-        # CONFIGURE ONCE, ACTIVATE MANY. These are NOT the same cost and
-        # conflating them fills the chip.
-        #
-        # `configure()` allocates the network group into the Hailo-8's
-        # ON-CHIP SRAM. `activate()` merely makes an already-resident group
-        # the running one. Calling configure on every swap -- which is what
-        # this did first -- allocates a fresh group each time and the old ones
-        # are not reclaimed fast enough, so after a few dozen camera switches
-        # the firmware answers:
-        #
-        #     CONTEXT_SWITCH_STATUS_SRAM_MEMORY_FULL
-        #     HAILO_OUT_OF_FW_MEMORY (71)
-        #
-        # ...and then EVERY inference fails, forever, in a tight loop: 98 %
-        # CPU, no detections, and an image topic starved to 1.6 Hz. It was
-        # invisible in the single-detector profiler because that never swaps.
-        #
-        # ⛔ THE CEILING IS AT LEAST THREE GROUPS, NOT TWO -- MEASURED
-        # 2026-09-11, correcting what this comment used to assert. It said
-        # "two configured groups are resident at once here ... and is known to
-        # fit", which was true of what we ran and was never the limit. On this
-        # Hailo-8, `yolov8n_seg` + `gate_sharks` + `bin_fire_blood` all
-        # configure together: three groups, no SRAM error. So a segmentation
-        # model can live BESIDE both detectors rather than evicting one, and
-        # any plan that assumed a two-group budget was solving a constraint
-        # that is not there. The SRAM_MEMORY_FULL failure below is real and
-        # was caused by configuring on every swap, which is a leak, not by a
-        # two-group ceiling.
-        #
-        # Not measured, and therefore not claimed: where the ceiling actually
-        # is, and what a fourth group or a multi-context model costs. The
-        # HEFs differ in that too -- `yolov8n_seg` is Single Context while
-        # `yolov11n_seg` needs three contexts for the same task.
         if self._cim is None:
-            self._cim = self._model.configure()
-            self._cim.__enter__()
+            with _DEVICE_LOCK:
+                self._cim = self._model.configure()
+                self._cim.__enter__()
             # Buffers allocated ONCE and reused. `set_buffer` binds the array,
             # so a fresh allocation per frame would be 640x640x3 of churn
             # inside the hot loop, plus a rebind.
@@ -741,92 +706,53 @@ class HailoDetector(Detector):
             self._bindings = self._cim.create_bindings()
             self._bindings.input().set_buffer(self._in_buf)
             self._bind_outputs()
-        self._cim.activate()
-        _ACTIVE = self
-        self._swaps += 1
-        if self._swaps == _SWAP_WARN_AT and self._log:
-            # Not an error -- the mission model is one camera live -- but
-            # two UNPAUSED detectors thrash the activation, and 73.8 Hz
-            # across both cameras reads as "the chip got slower" unless
-            # something says why.
-            self._log.warn(
-                f'[HAILO] {Path(self._path).name} has taken the activation '
-                f'{self._swaps} times -- another detector is competing for '
-                f'the chip. Each swap costs ~4 ms; pause the camera you are '
-                f'not steering on.')
         return self._cim
-
-    def _release_locked(self) -> None:
-        """Give up the activation. Caller holds `_DEVICE_LOCK`."""
-        for obj in (getattr(self, '_pipe', None),
-                    getattr(self, '_activation', None)):
-            try:
-                if obj is not None:
-                    obj.__exit__(None, None, None)
-            except Exception:
-                pass
-        self._pipe = self._activation = None
-        # DEACTIVATE ONLY. The ConfiguredInferModel stays -- it is the SRAM
-        # allocation, and tearing it down on every swap is what filled the
-        # chip. It is released in `close()`, when the detector is done.
-        if self._cim is not None:
-            try:
-                self._cim.deactivate()
-            except Exception:
-                pass
 
     def infer(self, frame_bgr: np.ndarray) -> List[Detection]:
         if not self._ready or frame_bgr is None:
             return []
         h, w = frame_bgr.shape[:2]
-        # The lock spans acquire AND infer. See `_acquire_locked`.
-        #
-        # It still spans the wait, and that is deliberate: the chip runs one
-        # graph at a time whatever we do, and releasing the lock across the
-        # wait would let the other detector evict this activation mid-flight
-        # -- the use-after-free that was a measured SIGSEGV here.
-        #
-        # THE GIL IS A DIFFERENT LOCK AND `job.wait()` RELEASES IT. That is
-        # the entire reason this path exists: another Python thread -- the
-        # camera's capture pump, an rclpy executor -- runs freely during the
-        # ~10 ms this is waiting, where the blocking API froze all of them.
+        # `job.wait()` RELEASES THE GIL: the camera pump and the executor run
+        # during the ~10 ms this waits, where the blocking API froze them.
+        # And no lock but this detector's own is held, so another model's
+        # inference proceeds on the chip whatever this thread is doing.
         if self._blocking:
             # The diagnostic path keeps the original canvas: it has no bound
             # buffer to write into, and it exists to be byte-comparable with
             # history rather than fast.
             buf, scale, pad_x, pad_y = letterbox(frame_bgr, self._size)
-            with _DEVICE_LOCK:
-                res = self._acquire_locked().infer(
+            with self._infer_lock:
+                res = self._configured().infer(
                     {self._in_name: np.expand_dims(buf, 0)})
             arr = res[self._out_name]
             per_class = arr[0] if len(arr) else []
             return self._boxes_to_detections(per_class, w, h, scale,
                                              pad_x, pad_y)
-        with _DEVICE_LOCK:
-            cim = self._acquire_locked()
+        with self._infer_lock:
+            cim = self._configured()
             # Letterboxed straight into the bound buffer -- the binding is set
-            # up once in `_acquire_locked` and never rebound.
+            # up once in `_configured` and never rebound.
             scale, pad_x, pad_y = self._letterbox_into_bound(frame_bgr)
             cim.wait_for_async_ready(timeout_ms=_ASYNC_READY_MS)
             job = cim.run_async([self._bindings])
             job.wait(_ASYNC_WAIT_MS)
-            raw = self._out_buf
-        # THE ASYNC PATH HANDS BACK A FLAT BUFFER, AND THIS IS THE ONE PLACE
-        # THE TWO APIs GENUINELY DIFFER.
-        #
-        # `InferVStreams` returned a dict keyed by vstream name holding a
-        # ragged per-class object array. `InferModel` writes into the buffer we
-        # bound, and for a HAILO_NMS output that buffer is FLAT float32:
-        #
-        #     [ count_0, (y1 x1 y2 x2 score) * MAX, count_1, ... ]
-        #
-        # with a FIXED per-class stride, so class 1 starts at a constant
-        # offset whatever class 0 detected. Measured on this hardware:
-        # shape (1503,) for a 3-class model = 3 * (1 + 100 * 5).
-        #
-        # Getting this wrong does not raise -- it reads scores as coordinates
-        # and hands the control loop a box that tracks nothing. `_nms_stride`
-        # therefore VALIDATES the arithmetic and says so rather than guessing.
+            # THE ASYNC PATH HANDS BACK A FLAT BUFFER, AND THIS IS THE ONE
+            # PLACE THE TWO APIs GENUINELY DIFFER.
+            #
+            # `InferVStreams` returned a dict keyed by vstream name holding a
+            # ragged per-class object array. `InferModel` writes into the
+            # buffer we bound, and for a HAILO_NMS output that buffer is FLAT
+            # float32:
+            #
+            #     [ count_0, (y1 x1 y2 x2 score) * MAX, count_1, ... ]
+            #
+            # with a FIXED per-class stride (measured (1503,) for a 3-class
+            # model = 3 * (1 + 100 * 5)). Getting this wrong does not raise --
+            # it reads scores as coordinates. `_decode_nms` VALIDATES it.
+            # Decoded under this detector's lock: the buffer stays bound, and
+            # the next infer on this detector would overwrite it mid-read.
+            per_class = self._decode_nms(self._out_buf)
+        return self._boxes_to_detections(per_class, w, h, scale, pad_x, pad_y)
         per_class = self._decode_nms(raw)
         return self._boxes_to_detections(per_class, w, h, scale, pad_x, pad_y)
 
@@ -937,27 +863,22 @@ class HailoDetector(Detector):
         return out
 
     def close(self) -> None:
-        """Drop this detector's activation. The DEVICE stays.
+        """Hand this detector's network group back. The DEVICE stays.
 
         Releasing the shared VDevice here would pull it out from under a second
-        detector that still has a network group configured on it -- a segfault
-        during shutdown, which is the hardest kind to read. It is process-wide
-        and the process is exiting.
+        model that still has a group configured on it. `close_all` releases it
+        at exit, after every group.
         """
-        global _ACTIVE
         self._ready = False
-        with _DEVICE_LOCK:
-            self._release_locked()
-            # The one place the SRAM allocation is actually handed back.
-            if self._cim is not None:
-                try:
-                    self._cim.__exit__(None, None, None)
-                except Exception:
-                    pass
-                self._cim = self._bindings = None
-                self._in_buf = self._out_buf = None
-            if _ACTIVE is self:
-                _ACTIVE = None
+        with self._infer_lock:
+            for obj in (self._pipe, self._cim):
+                if obj is not None:
+                    try:
+                        obj.__exit__(None, None, None)
+                    except Exception:                    # noqa: BLE001
+                        pass
+            self._pipe = self._cim = self._bindings = None
+            self._in_buf = self._out_buf = None
 
     def __repr__(self) -> str:
         return (f'<HailoDetector {Path(self._path).name} '
@@ -1123,15 +1044,14 @@ class HailoSegDetector(HailoDetector):
         from .seg_decode import decode
 
         h, w = frame_bgr.shape[:2]
-        with _DEVICE_LOCK:
-            cim = self._acquire_locked()
+        with self._infer_lock:
+            cim = self._configured()
             scale, pad_x, pad_y = self._letterbox_into_bound(frame_bgr)
             cim.wait_for_async_ready(timeout_ms=_ASYNC_READY_MS)
             cim.run_async([self._bindings]).wait(_ASYNC_WAIT_MS)
-            # Decode INSIDE the lock, unlike the detection path, because the
-            # output buffers stay bound and a second inference on this
-            # detector would overwrite them mid-decode. The chip is idle
-            # meanwhile; the alternative is copying 1.6 MB per frame.
+            # Decode INSIDE this detector's lock: the output buffers stay
+            # bound and a second inference on this detector would overwrite
+            # them mid-decode. Other models keep the chip meanwhile.
             heads = [(self._bufs[b], self._bufs[c], self._bufs[m])
                      for b, c, m in self._heads]
             xyxy, scores, cids, masks = decode(

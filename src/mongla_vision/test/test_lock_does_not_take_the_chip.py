@@ -15,14 +15,18 @@ _LAUNCH = (pathlib.Path(__file__).resolve().parents[1] / 'launch'
            / 'vision_pi.launch.py')
 
 
-def test_the_vehicle_launch_runs_the_anchor_on_the_cpu():
-    from launch.actions import DeclareLaunchArgument
+def test_the_vehicle_launch_starts_no_separate_lock_process():
+    """XFeat is on the chip on the vehicle -- which is safe ONLY because the
+    ladder is composed into the detector process. A separate lock_node in the
+    Pi launch would race the detector for the VDevice again."""
+    from launch_ros.actions import Node
     spec = importlib.util.spec_from_file_location('_vpi', _LAUNCH)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    args = {e.name: e for e in mod.generate_launch_description().entities
-            if isinstance(e, DeclareLaunchArgument)}
-    assert args['anchor_xfeat_hef'].default_value[0].text == 'false'
+    exes = [e.node_executable for e in mod.generate_launch_description().entities
+            if isinstance(e, Node)]
+    assert 'lock_node' not in exes, exes
+    assert 'detector_dual_node' in exes
 
 
 def test_the_node_default_is_the_cpu_too():

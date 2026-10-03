@@ -39,12 +39,17 @@ _TUNABLES = (_PKG.parents[0] / 'mongla_manager' / 'mongla_manager'
 
 
 def test_the_ladder_is_actually_LAUNCHED():
-    for path in (_PI_LAUNCH, _MAIN_LAUNCH):
-        assert "executable='lock_node'" in path.read_text(), (
-            f'lock_node is absent from {path.name}, so the follower and '
-            f'XFeat anchor never run on that path. bringup.launch.py '
-            f'includes vision.launch.py, so wiring only vision_pi leaves the '
-            f'capability unreachable from the documented mission command.')
+    """vision.launch.py starts lock_node; the Pi launch COMPOSES it into the
+    detector process (2026-10-03: as a separate process it raced the
+    detector for the Hailo) -- the `lock` value must reach that process."""
+    assert "executable='lock_node'" in code_of_file(_MAIN_LAUNCH), (
+        'lock_node is absent from vision.launch.py, so the follower and XFeat '
+        'anchor never run on the documented mission path.')
+    pi = code_of_file(_PI_LAUNCH)
+    assert "executable='detector_dual_node'" in pi
+    assert re.search(r"'lock': ParameterValue\(LaunchConfiguration\('lock'\)", pi), (
+        'the Pi launch no longer hands `lock` to the detector process, so the '
+        'composed ladder never runs on the vehicle.')
 
 
 def test_the_ladder_is_reachable_from_the_launch_BRINGUP_INCLUDES():
@@ -66,21 +71,12 @@ def test_the_ladder_can_be_turned_off_without_editing_the_launch():
     assert re.search(r"DeclareLaunchArgument\(\s*\n?\s*'lock'", src), (
         'the ladder has no `lock` launch argument, so disabling it on the '
         'deck means editing a launch file.')
-    # ⚠ The window is STRUCTURAL, not a character count. It used to be
-    # `src[i:i + 1200]`, and adding four loop-closure parameters to the node
-    # pushed `condition=` past 1200 characters -- so a test guarding against
-    # an inert launch argument failed because the block it reads grew. Read to
-    # the end of this Node(...) call instead, which is what it always meant.
-    i = src.index("executable='lock_node'")
-    end = src.index('condition=', i)
-    # To the end of the condition LINE. Stopping at the first ')' after
-    # `condition=` closes LaunchConfiguration, not IfCondition, so the window
-    # ended one character before the text being searched for.
-    window = src[i:src.index('\n', end)]
-    assert "IfCondition(LaunchConfiguration('lock'))" in window, (
-        'lock_node is not gated on the `lock` argument, so the argument is '
-        'inert -- declared and unread, the defect class this package has '
-        'produced four times.')
+    # Composed: the argument is read by the detector process, which builds a
+    # ladder only when it is true (test_dual_node_degrades pins that), so an
+    # inert argument would show here as `lock` never reaching it.
+    assert "'lock': ParameterValue(LaunchConfiguration('lock')" in src, (
+        'the `lock` argument does not reach the detector process -- declared '
+        'and unread, the defect class this package has produced four times.')
 
 
 def test_control_consumes_the_ladder_and_it_still_cannot_fabricate():

@@ -4414,6 +4414,55 @@ double-linked list") or hangs; no node ever called `close()`. Closing each
 group and then releasing the VDevice exits 0 in 1.2 s. `detection/hailo.py`
 now does that from `atexit` for every registered claimant.
 
+### 28.6 ⭐ Composed: XFeat runs on the chip in the live graph (2026-10-03)
+
+Composing each camera's lock ladder into `detector_dual_node` (the only
+process that may own the Hailo) was first measured as a REGRESSION. Detection
+rate published on both cameras, vehicle, both cameras live, `ros2 topic hz`,
+lock off vs on:
+
+| build | lock off | lock on |
+|---|---|---|
+| ladder subscribed to image_raw + camera_info (topic intake) | 71.4 Hz | **21.6 Hz** |
+| + frames by reference (`direct_feed`, `_Tee`) | 72.4 | 41.4 |
+| + camera waits on the mailbox, detector keeps the newest spare frame | 69.2 | 47.0 |
+| + **HailoRT ROUND_ROBIN scheduler** instead of the hand-off | 72.3 | 62.6 |
+| + grey converted only on ticks that read it | 73.2 | **64.0** (65.6, 62.5) |
+
+What each step found, by py-spy on the live process:
+
+- **Topic intake.** In-process image + CameraInfo subscriptions at 134 Hz
+  each (both cameras) kept the executor's MainThread busy for ~50 % of
+  samples, all under the GIL the detector workers need. The ladder's own
+  rungs were idle.
+- **Priority inversion on the hand-off.** Chip time per call was unchanged
+  at ~10.5 ms (lock off and on), but the process-wide `_DEVICE_LOCK` was held
+  across Python code (letterbox, the `run_async` wrapper, the swap). Each
+  time its holder lost the GIL, the chip idled and the other detector waited.
+- **The scheduler, re-measured.** The recorded "ROUND_ROBIN scheduler → SIGSEGV"
+  does not reproduce on HailoRT 4.24: 4 groups × 4 threads, a group
+  configured mid-inference and one closed mid-run, 0 errors, exit 0, 3/3
+  runs. The crash was the exit-teardown crash (§28.5), misattributed. Two
+  detectors under the scheduler: **46.1 + 46.1 Hz** (the hand-off measured
+  73.8 Hz combined). With both XFeat anchors at ~5 Hz: 44.4 + 44.4 Hz.
+  Strict scheduler priority for the detectors starved XFeat to 0 calls and is
+  NOT used.
+
+**In the live graph, on real footage** (`tools/composed_lock_harness.py`,
+gate_sharks on 90 s of archive gate footage, 60 s, vehicle):
+backend `XFeatHailo`, **378 chip calls, p50 17.65 ms, p95 21.39 ms**, 64
+checkpoints enrolled, detections 29.9 Hz, rungs detection 20 % / follow 49 % /
+anchor 0 % / lost 31 %, exit 0. Falsifier (`--cpu-anchor`): backend
+`XFeatONNX`, criterion 1 FAILS, as it must.
+
+⛔ **The harness's first latency bar (15 ms) FAILED at 17.73 ms** and is kept
+on record. It assumed the call has the chip to itself; under the scheduler an
+XFeat call queues behind a detector inference (~10.5 ms) by design. The bar is
+now the CPU path it replaces, 32.9 ms.
+
+⚠ Not shown here: the anchor RUNG taking over (0 % on this clip, whose gaps
+the follower covered). That needs footage with a longer detection gap.
+
 ### 28.4 Owed before this is usable
 
 - ⛔ **Accuracy through INT8 is UNMEASURED.** A HEF that compiles is not a
