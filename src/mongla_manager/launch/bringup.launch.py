@@ -48,7 +48,8 @@ Run the gate+flare mission:
 
 from launch                     import LaunchDescription
 from launch.actions             import (DeclareLaunchArgument, GroupAction,
-                                        IncludeLaunchDescription)
+                                        IncludeLaunchDescription,
+                                        SetEnvironmentVariable)
 from launch.conditions          import IfCondition
 from launch.substitutions       import PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -483,6 +484,14 @@ def generate_launch_description():
     )
 
     return LaunchDescription(args + [
+        # ⛔ ONE BLAS THREAD PER CALL, set before any node imports numpy.
+        # The vehicle runs OpenBLAS (provision_vehicle.sh checks for it), whose pool
+        # defaults to every core in EVERY process. The XFeat matcher already
+        # splits its matmul across `MATCH_THREADS` = 2 Python threads on purpose;
+        # an OpenBLAS pool under each makes 8 threads on 4 cores beside two
+        # detectors and the control loop. Measured on the Pi, 1024x1024x64:
+        # 4.76 ms at blas=1/split=2 against 5.33 ms at blas=4/split=2.
+        SetEnvironmentVariable('OPENBLAS_NUM_THREADS', '1'),
         manager_node,
         localization_node,
         # scoped=True keeps anything set INSIDE from escaping. It does not stop
