@@ -92,6 +92,13 @@ _prune_missing_paths() {  # echo $1 (a ':'-list) minus empty/nonexistent dirs
 export AMENT_PREFIX_PATH="$(_prune_missing_paths "${AMENT_PREFIX_PATH:-}")"
 export CMAKE_PREFIX_PATH="$(_prune_missing_paths "${CMAKE_PREFIX_PATH:-}")"
 
+# ⛔ ALWAYS A CLEAN BUILD. An incremental symlink-install tree keeps what
+# source no longer has -- links to a deleted model broke the vehicle's build on
+# 2026-10-03 and the gate counted the retired model as installed. Nothing
+# stale survives a build.
+rm -rf build install log .pytest_cache
+find src -name __pycache__ -type d -prune -exec rm -rf {} +
+
 # Step 1: build the interface package first so generated types are available.
 # --cmake-args -Wno-dev silences the CMP0148 "warning for project developers"
 # lines that ROS's own rosidl_generator_py cmake emits (not our code) — the
@@ -101,7 +108,10 @@ colcon build --packages-select mongla_interfaces --cmake-args -Wno-dev "$@"
 source install/setup.bash
 
 # Step 2: build the Python packages (control + sensors + manager + planner + vision)
-colcon build --packages-select \
+# --symlink-install: a source edit is live in install/ without a rebuild, so
+# the installed tree cannot quietly lag the source between builds (it did:
+# 2026-10-03 found the dev box's install/ three weeks behind src/).
+colcon build --symlink-install --packages-select \
     mongla_control mongla_sensors mongla_manager mongla_localization mongla_planner mongla_vision "$@"
 
 INSTALL="$(pwd)/install"
