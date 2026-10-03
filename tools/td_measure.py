@@ -147,8 +147,14 @@ def self_test() -> int:
                     + 0.2 * np.sin(2 * np.pi * 0.23 * t + 2.0))
         gyr = np.zeros((len(gyr_t), 3))
         gyr[:, axis] = omega(gyr_t) + rng.normal(0, 0.01, len(gyr_t))
-        for other in {0, 1, 2} - {axis}:
-            gyr[:, other] = rng.normal(0, 0.01, len(gyr_t))
+        # The OTHER axes move too, as a hand wobble does -- independent
+        # rotation of similar size, so the axis choice is actually tested
+        # rather than decided by the excitation gate rejecting pure noise.
+        for j, other in enumerate(sorted({0, 1, 2} - {axis})):
+            f1, f2 = (0.41, 1.3) if j == 0 else (0.57, 2.3)
+            gyr[:, other] = (0.5 * np.sin(2 * np.pi * f1 * gyr_t + 0.4 + j)
+                             + 0.3 * np.sin(2 * np.pi * f2 * gyr_t + 1.7)
+                             + rng.normal(0, 0.01, len(gyr_t)))
         img_t = np.cumsum(rng.normal(1 / 58.7, 0.0015, int(dur * 58.7)))
         img_t = img_t[img_t < dur]
         img_v = sign * omega(img_t - true_ms / 1000.0) + rng.normal(0, 0.03, len(img_t))
