@@ -248,11 +248,16 @@ def main() -> int:
                          'that fail INT8 quantisation (see the error text)')
     a = ap.parse_args()
 
-    pt = pathlib.Path(a.models) / f'{a.model}.pt'
+    pt = (pathlib.Path(a.models) / f'{a.model}.pt').resolve()   # before the chdir below
     if not pt.exists():
         raise SystemExit(f'[hailo] no checkpoint {pt}')
-    out = pathlib.Path(a.out)
+    out = pathlib.Path(a.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
+    # The DFC writes its logs (acceleras.log, allocator.log, hailo_sdk.*.log)
+    # into the WORKING directory. Run from the output directory so they land
+    # beside the artifact they describe -- they were committed to the repo by
+    # accident once -- and so the downgrade scan below reads THIS run's log.
+    os.chdir(out)
 
     names = class_names(pt)
     onnx_path = export_onnx(pt, a.imgsz)

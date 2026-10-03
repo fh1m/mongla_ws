@@ -103,3 +103,9 @@ tools/control_bench/.firmware_rev
 # repo once. Transcripts carry working context that was never meant to ship.
 *_chats.txt
 *-transcript.txt
+
+# Hailo DFC logs: written into the working directory by the compiler.
+# tools/hailo_compile.py runs it from its --out directory; never commit these.
+acceleras.log
+allocator.log
+hailo_sdk.*.log
