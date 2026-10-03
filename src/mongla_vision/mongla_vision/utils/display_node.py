@@ -776,6 +776,8 @@ def _render_splash(w: int, h: int, elapsed: float, camera: str,
 # ---------------------------------------------------------------------------
 
 def main(args=None):
+    from mongla_localization.orphan import die_with_parent
+    die_with_parent()        # an orphan holds devices and duplicates topics
     rclpy.init(args=args)
     node = VisionDisplayNode()
 

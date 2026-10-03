@@ -188,6 +188,8 @@ class VisionNode(Node):
 
 
 def main():
+    from mongla_localization.orphan import die_with_parent
+    die_with_parent()        # an orphan holds devices and duplicates topics
     rclpy.init()
     node = VisionNode()
     try:
