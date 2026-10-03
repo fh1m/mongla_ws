@@ -188,6 +188,14 @@ _F_WATER_PX = 741.0
 #     de-rotation gain of 0 (the shipped default) all of it remains; a
 #     calibrated gain removed 90 % (575.7 -> 57.1 mm/s, §12), so 10 % remains.
 FLOW_SCALE_SIGMA_FRAC = 0.036
+# The camera<->gyro offset the online estimator STARTS from. Measured on the
+# vehicle's own downward camera and SROT board, three 60 s hand-wobble runs:
+# -11.3 ms, sd 0.84 ms (measured-bars, 2026-10-03). It was 0.0, so every run
+# began 11 ms wrong and stayed so until enough rotation arrived for a fit --
+# and on a level transit that may be never. Negative: the board's ATTITUDE
+# rates are stamped AFTER the motion they describe. The estimator still runs
+# and slews from here.
+FLOW_TD_MEASURED_S = -0.0113
 FLOW_ROT_RESIDUAL_CALIBRATED = 0.10
 
 _GYRO_GAIN_X_DEFAULT = 0.0
@@ -282,7 +290,7 @@ class FlowVelocityNode(Node):
         self.declare_parameter('stamp_source', 'soe')
         self.declare_parameter('stamp_at_midpoint', True)
         self.declare_parameter('estimate_time_offset', True)
-        self.declare_parameter('time_offset_s', 0.0)
+        self.declare_parameter('time_offset_s', FLOW_TD_MEASURED_S)
         # A BOUND ON td, because it is no longer only a diagnostic. Once td
         # shifts every velocity stamp, a spurious correlation peak actively
         # CORRUPTS the output instead of logging a warning -- and the slew

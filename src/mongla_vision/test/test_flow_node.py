@@ -246,7 +246,8 @@ class TestTimingCorrections:
         AVERAGE across it. PX4 defines its flow delay 'to the middle of the
         optical flow integration interval'. Our adaptive baseline reaches
         0.75 s, so stamping at the end is wrong by up to 375 ms."""
-        n = _make(pool_depth_m=4.0, exposure_us=0.0, estimate_time_offset=False)
+        n = _make(pool_depth_m=4.0, exposure_us=0.0, estimate_time_offset=False,
+                  time_offset_s=0.0)
         try:
             assert n._stamp_for(100.0, 0.5) == pytest.approx(99.75)
             assert n._stamp_for(100.0, 0.02) == pytest.approx(99.99)
@@ -261,13 +262,14 @@ class TestTimingCorrections:
         `100.0 - 0.00785` for every camera, i.e. that every stamp marks the END
         of exposure. uvcvideo stamps the START (read off a live stream), so
         the default ADDS; an EOF driver subtracts."""
-        n = _make(pool_depth_m=4.0, exposure_us=157.0,
+        n = _make(pool_depth_m=4.0, exposure_us=157.0, time_offset_s=0.0,
                   stamp_at_midpoint=False, estimate_time_offset=False)
         try:
             assert n._stamp_for(100.0, 0.02) == pytest.approx(100.0 + 0.00785)
         finally:
             n.destroy_node()
         n = _make(pool_depth_m=4.0, exposure_us=157.0, stamp_source='eof',
+                  time_offset_s=0.0,
                   stamp_at_midpoint=False, estimate_time_offset=False)
         try:
             assert n._stamp_for(100.0, 0.02) == pytest.approx(100.0 - 0.00785)
@@ -946,3 +948,13 @@ def test_a_sloping_floor_is_inside_the_published_sigma():
         flat.destroy_node()
     assert read_v - true_v <= 3.0 * sigma
     assert sigma_flat < sigma
+
+
+def test_the_time_offset_starts_from_the_measured_value():
+    """It started at 0.0 -- 11 ms wrong on this vehicle until a fit arrived,
+    and a level transit may never supply one (2026-10-03 measurement)."""
+    n = _make(pool_depth_m=4.0)
+    try:
+        assert n._td == pytest.approx(-0.0113)
+    finally:
+        n.destroy_node()
