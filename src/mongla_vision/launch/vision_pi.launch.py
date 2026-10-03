@@ -278,10 +278,19 @@ def generate_launch_description():
             description='ladder ACTING bar: below this a detection may be '
                         'associated by the tracker but is not acted on '
                         '(B-59; measured knee 0.60, shipped 0.45)'),
+        # ⛔ OFF: the lock node is its OWN PROCESS, and the Hailo allows one
+        # VDevice per process. B-62's sharing goes through an IN-PROCESS
+        # registry, so here the lock and the detector RACE for the chip: on
+        # 2026-10-03 the lock won and the vehicle came up with no detection
+        # at all (HAILO_OUT_OF_PHYSICAL_DEVICES on both cameras). The
+        # detector is the primary; the anchor runs at ~3 Hz and its CPU path
+        # costs 32.9 ms a call. Turn this on only with the lock composed into
+        # the detector's process.
         DeclareLaunchArgument(
-            'anchor_xfeat_hef', default_value='true',
-            description='run XFeat on the Hailo-8 rather than the Pi CPU '
-                        '(B-62: 10.89 ms vs 32.9 ms)'),
+            'anchor_xfeat_hef', default_value='false',
+            description='run XFeat on the Hailo-8 rather than the Pi CPU. '
+                        'ONLY safe in the detector process -- a separate '
+                        'lock_node takes the chip from the detector'),
         DeclareLaunchArgument(
             'anchor_semi_dense', default_value='false',
             description='semi-dense matching: 2.1-2.6x inliers for +37 % '

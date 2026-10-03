@@ -129,7 +129,14 @@ class LockNode(Node):
         #
         # Set false to force the CPU path -- on a dev box with no chip the
         # resolver falls back on its own, so this is for A/B measurement.
-        self.declare_parameter('anchor_xfeat_hef', True)
+        #
+        # ⛔ DEFAULT OFF since 2026-10-03. The `_ACTIVE` sharing above works
+        # only INSIDE one process, and lock_node runs as its own: it opened a
+        # second VDevice, raced the detector process for the chip, and when
+        # it won the vehicle had NO detection (HAILO_OUT_OF_PHYSICAL_DEVICES).
+        # The numbers above stand; they need the lock composed with the
+        # detector to be had safely.
+        self.declare_parameter('anchor_xfeat_hef', False)
         # ⭐ Semi-dense matching: 2.1-2.6x the inliers for +37 % match cost
         # (measured, four frame pairs). DEFAULT OFF until frame-to-reference
         # behaviour and inlier CORRECTNESS are measured -- see

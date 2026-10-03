@@ -51,7 +51,9 @@ _KEYS: Dict[str, tuple] = {
     # ships because 0.60 came from one model, one class and one venue.
     'act_conf': (float, 0.45),
     # B-62: XFeat on the Hailo-8 (10.89 ms) rather than the Pi CPU (32.9 ms).
-    'anchor_xfeat_hef': (_as_bool, True),
+    # False since 2026-10-03: a standalone lock_node must not take the chip
+    # (see lock_node). Composed with the detector it is set explicitly.
+    'anchor_xfeat_hef': (_as_bool, False),
     # Semi-dense matching: 2.1-2.6x inliers for +37 % match cost. OFF until
     # frame-to-reference behaviour and inlier correctness are measured.
     'anchor_semi_dense': (_as_bool, False),
