@@ -651,6 +651,8 @@ class CameraNode(Node):
 
 
 def main():
+    from mongla_localization.orphan import die_with_parent
+    die_with_parent()        # holds the camera device
     rclpy.init()
     node = CameraNode()
     try:

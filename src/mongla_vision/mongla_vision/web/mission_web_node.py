@@ -473,6 +473,8 @@ def _make_handler(node: MissionWebNode):
 
 
 def main(argv=None):
+    from mongla_localization.orphan import die_with_parent
+    die_with_parent()        # an orphan holds devices and duplicates topics
     ap = argparse.ArgumentParser(prog='mission_web')
     ap.add_argument('--no-browser', action='store_true',
                     help="don't auto-open the console in a browser")

@@ -209,6 +209,8 @@ def to_msg(tp, header=None) -> TargetPose:
 
 
 def main(argv=None):
+    from mongla_localization.orphan import die_with_parent
+    die_with_parent()        # an orphan holds devices and duplicates topics
     rclpy.init(args=argv)
     node = PnPNode()
     try:

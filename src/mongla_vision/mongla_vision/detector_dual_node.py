@@ -220,6 +220,8 @@ def _no_detector_left(launcher):
 
 
 def main():
+    from mongla_localization.orphan import die_with_parent
+    die_with_parent()        # holds the cameras and the Hailo VDevice
     rclpy.init()
     launcher = _Launcher()
     nodes = [launcher]
