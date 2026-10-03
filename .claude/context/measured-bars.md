@@ -3210,6 +3210,36 @@ built up under motion -- counted as 50 independent samples a second. None of
 that exists on a still bench. Sizing it needs the board MOVING against a
 reference: a turntable or an optical heading truth, then the pool.
 
+**Camera <-> gyro time offset `td`, on the vehicle's own hardware (2026-10-03).**
+Pi 5, the downward Microdia global-shutter camera taped to the SROT board, the
+manager running (ClockMap ready, residual 0.12 ms, board clock -555 ppm), the
+rig twisted by hand about the optical axis, 62 s per run. `tools/td_measure.py`
+correlates the node's planar-fit image yaw against all three gyro axes; its
+`--self-test` recovers injected offsets of +23 / -11 / +4 ms to within 0.3 ms
+and refuses a steady turn. Image yaw matched **gyro z, sign -**, peak 0.86-0.95.
+
+| run | whole-run td | 15 s windows | spread |
+|---|---|---|---|
+| A, auto exposure | **-10.37 ms** | -10.08 / -11.18 / -9.08 / -10.55 | 2.10 ms |
+| B, auto exposure | **-11.86 ms** | -13.44 / -9.49 / -8.40 / -10.39 | 5.04 ms |
+| C, exposure LOCKED 10 ms | **-11.57 ms** | -12.44 / -11.58 / -9.91 / -13.41 | 3.49 ms |
+
+⚠ **NOT MEASURED by the bar written before the run** (every 15 s window
+within 2.0 ms), and the bar is not moved after the fact. What the data does
+say: (1) locking exposure did NOT shrink the scatter -- the auto-exposure
+hypothesis is falsified; (2) the scatter falls as 1/sqrt(window): sd 1.83 /
+1.63 / 1.27 / 0.84 ms at 7.5 / 15 / 30 / 60 s, sd*sqrt(W) flat at 1.3-1.8 --
+estimator noise around a CONSTANT offset, not a drifting one. Best estimate
+**td = -11.3 ms, sd 0.84 ms over three 60 s runs**. To clear a 2 ms bar per
+window, a window needs roughly a minute of motion, not 15 s.
+
+⭐ **The sign is physical evidence.** td < 0 means the scene in a frame appears
+~11 ms AFTER its stamp. A camera cannot record ahead, so it is the GYRO path
+that is late: the board's ATTITUDE rates (BNO fusion) are stamped after the
+motion they describe. The flow node estimates td online and stays inside its
+150 ms bound, so it absorbs this; anything else that pairs ATTITUDE rates with
+camera frames must too.
+
 **Covariance consistency, by Monte Carlo (issue #26, 2026-10-02).** 400 noisy
 propagations of a hull 10 m from the origin at 0.5 m/s, scored against the TRUE
 right-invariant error; a consistent filter's mean NEES is the state dimension,
