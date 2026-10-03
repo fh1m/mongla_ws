@@ -849,7 +849,7 @@ class DetectorNode(Node):
         self._sub = self.create_subscription(
             Image, self._ns_in, self._on_image, qos.IMAGE)
 
-    def submit_frame(self, frame_bgr, header) -> None:
+    def submit_frame(self, frame_bgr, header, *, spare: bool = False) -> None:
         """Hand over an ALREADY-DECODED frame plus the header that describes it.
 
         The header must be the one built from the frame's own capture time.
@@ -858,13 +858,18 @@ class DetectorNode(Node):
         round-32 stamp fixes removed at the two layers either side of this one.
         """
         self._fed_direct = True
-        self._offer(_DirectFrame(frame_bgr, header))
+        self._offer(_DirectFrame(frame_bgr, header), waste=not spare)
 
-    def _offer(self, item) -> None:
+    def _offer(self, item, waste: bool = True) -> None:
+        """Newest wins. `waste=False` for a frame decoded for ANOTHER
+        consumer anyway (the composed lock, `spare=True`): superseding it
+        costs no decode, so it must not count as one."""
         with self._offer_lock:
             while not self._infer_q.empty():
                 try:
                     self._infer_q.get_nowait()
+                    if not waste:
+                        continue
                     # Something was waiting and is now discarded. Under the
                     # composed design this should be ~0: the camera only
                     # decodes when the worker is idle, so nothing should ever

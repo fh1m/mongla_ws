@@ -64,9 +64,10 @@ def test_the_solver_launches_wherever_the_ladder_does():
     """
     src = _LAUNCH.read_text()
     assert "executable='pnp_node'" in src, 'no solver in the vision launch'
-    assert src.count("solver('") == src.count("ladder('"), (
-        'a ladder is launched without a solver, or the reverse')
-    assert src.count("condition=IfCondition(LaunchConfiguration('lock'))") >= 2
+    # The ladders are COMPOSED into the detector for both cameras (one per
+    # live camera, `lock:=`), so both solvers must be started, on that gate.
+    assert "solver('forward')" in src and "solver('downward')" in src
+    assert src.count("condition=IfCondition(LaunchConfiguration('lock'))") >= 1
 
 
 def test_one_medium_argument_reaches_all_three_nodes():

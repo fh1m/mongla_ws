@@ -66,6 +66,14 @@ class Camera:
     def read(self) -> Tuple[Optional[np.ndarray], FrameMeta]:
         raise NotImplementedError
 
+    def wait_new(self, timeout: float) -> None:
+        """Block until a frame newer than the last `read()` may exist.
+
+        The base answer is a plain sleep; a source that knows when a frame
+        lands (the V4L2 mailbox) overrides it with a real wakeup.
+        """
+        time.sleep(min(timeout, 0.001))
+
     def is_healthy(self) -> bool:
         return False
 

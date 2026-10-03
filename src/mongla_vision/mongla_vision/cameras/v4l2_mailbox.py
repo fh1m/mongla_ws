@@ -278,6 +278,11 @@ class V4L2MailboxCamera(Camera):
         # place from the capture path is worth more than the 0.2 us.
         self._slot: Optional[tuple] = None
         self._stop = threading.Event()
+        # Set by the pump after each store; `wait_new` sleeps on it. An Event
+        # never makes the PUMP wait for a consumer (set() only takes the
+        # Condition's lock for the instant a waiter is notified), so the
+        # no-wait rule above still holds.
+        self._new = threading.Event()
         self._served = -1          # sequence of the frame last handed out
         self._captured = 0
         self._dropped_by_driver = 0
@@ -541,10 +546,24 @@ class V4L2MailboxCamera(Camera):
             # One atomic store. The tuple is built first and published last,
             # so a reader never observes a partially-assembled frame.
             self._slot = (payload, cap_t, seq, time.monotonic())
+            self._new.set()
 
     # ------------------------------------------------------------------ #
     #  Camera interface
     # ------------------------------------------------------------------ #
+    def wait_new(self, timeout: float) -> None:
+        """Sleep until the pump stores a frame, instead of polling.
+
+        ⛔ MEASURED, 2026-10-03: a consumer that wants every frame (the
+        composed lock ladder) turned the capture loop's 1 ms poll into ~1000
+        GIL acquisitions a second per camera, and the two detector workers in
+        the same process lost a third of their rate to the convoy. Cleared
+        BEFORE returning, so a frame stored after the clear is still seen by
+        the next `read()` -- it compares sequence numbers, not the event.
+        """
+        if self._new.wait(timeout):
+            self._new.clear()
+
     def read(self) -> Tuple[Optional[np.ndarray], FrameMeta]:
         slot = self._slot          # one atomic load; see __init__
         meta = FrameMeta(frame_index=self._idx, width=self._w, height=self._h)

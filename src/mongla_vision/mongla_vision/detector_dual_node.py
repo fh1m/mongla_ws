@@ -158,6 +158,32 @@ class _Launcher(Node):
         for cam in ('fwd', 'dwn'):
             for key in _CAM_PER_CAMERA:
                 self.declare_parameter(f'{cam}_cam_{key}', _CAM_DEFAULTS[key])
+        # ⭐ THE LOCK LADDER, COMPOSED (2026-10-03). `lock` builds a LockNode
+        # beside each live camera's detector, in THIS process -- the only
+        # place XFeat can run on the Hailo, because the chip allows one
+        # VDevice per process, shared by HailoRT's ROUND_ROBIN scheduler. A
+        # separate lock_node raced the detector for the chip and, when it
+        # won, left the vehicle with no detection at all. Frames reach the
+        # ladder by reference (`_Tee`, `direct_feed`): with topic intake the
+        # composition cost both detectors 71 -> 21.6 Hz (measured-bars 28.6).
+        # Verify on real footage: tools/composed_lock_harness.py.
+        #
+        # Only the values the launch SETS are forwarded (`fwd_lock_*`,
+        # `dwn_lock_*`, shared `lock_*`); the LockNode keeps its own defaults,
+        # so there is no third copy of them here to drift.
+        self.declare_parameter('lock', False)
+        for name, p in list(self._parameter_overrides.items()):
+            if name.startswith(('fwd_lock_', 'dwn_lock_', 'lock_')):
+                self.declare_parameter(name, p.value)
+
+    def lock_overrides(self, cam: str, camera: str):
+        out = [Parameter('camera', value=camera)]
+        for name in sorted(self._parameters):
+            for prefix in (f'{cam}_lock_', 'lock_'):
+                if name.startswith(prefix):
+                    out.append(Parameter(name[len(prefix):],
+                                         value=self.get_parameter(name).value))
+        return out
 
     def camera_overrides(self, cam: str, camera: str):
         out = [Parameter('name', value=camera),
@@ -210,6 +236,60 @@ def _make_failure_hook(launcher, live: list, failed: list, state: dict):
         if state.get('built') and all(c in failed for c in live):
             _no_detector_left(launcher)
     return hook
+
+
+class _Tee:
+    """One camera, two in-process consumers: the detector and the lock.
+
+    `CameraNode` hands frames to ONE sink. The lock takes every decoded frame
+    (its stamp history must hold the frame each detection was computed on),
+    so the camera decodes every frame -- and every one is also OFFERED to the
+    detector, whose slot is newest-wins: an idle worker takes it at once, a
+    busy one finds the newest waiting when it frees up.
+
+    ⛔ MEASURED, 2026-10-03: handing the detector a frame only "if it wants
+    one right now" starved it. The frame decoded for the lock drained the
+    mailbox, and a detector freeing up 1 ms later waited for the NEXT
+    capture -- py-spy put the workers 18-39 % of wall time there. `spare=True`
+    keeps the detector's decoded-but-never-inferred counter honest: these
+    frames were decoded for the lock, not wasted on the detector.
+    """
+
+    def __init__(self, detector, lock):
+        self._det, self._lock = detector, lock
+
+    def wants_frame(self) -> bool:
+        return True                 # the lock wants every frame
+
+    def submit_frame(self, frame_bgr, header) -> None:
+        self._det.submit_frame(frame_bgr, header, spare=True)
+        self._lock.submit_frame(frame_bgr, header)
+
+    def submit_info(self, info) -> None:
+        self._lock.submit_info(info)
+
+
+def _compose_lock(launcher, nodes: list, cam: str, camera: str,
+                  direct: bool):
+    """Build this camera's lock ladder in-process, when `lock` is set.
+
+    `direct`: frames and intrinsics arrive by reference from the camera in
+    this process (see `_Tee`), so the ladder subscribes to neither topic.
+    Under replay there is no camera here and it subscribes as usual.
+    """
+    if not bool(launcher.get_parameter('lock').value):
+        return None
+    from mongla_vision.lock_node import LockNode
+    node = LockNode(f'mongla_lock_{camera}',
+                    parameter_overrides=list(
+                        launcher.lock_overrides(cam, camera))
+                    + [Parameter('direct_feed', value=direct)])
+    nodes.append(node)
+    launcher.get_logger().info(
+        f'[COMP ] {camera}: lock ladder COMPOSED -- one process, one Hailo '
+        f'VDevice shared with the detector'
+        + (', frames by reference' if direct else ''))
+    return node
 
 
 def _no_detector_left(launcher):
@@ -265,14 +345,21 @@ def main():
                 launcher.get_logger().info(
                     f'[COMP ] {camera}: REPLAY -- no camera; consuming '
                     f'/mongla/vision/{camera}/image_raw from a bag.')
+                _compose_lock(launcher, nodes, cam, camera, direct=False)
                 continue
+            # The lock BEFORE the camera, so the camera's first frame already
+            # has both consumers to go to.
+            lock = _compose_lock(launcher, nodes, cam, camera, direct=True)
             try:
                 cam_node = CameraNode(
                     f'mongla_camera_{camera}',
                     parameter_overrides=launcher.camera_overrides(cam, camera),
-                    frame_sink=det)
+                    frame_sink=det if lock is None else _Tee(det, lock))
             except Exception as exc:      # noqa: BLE001 -- any open failure
                 det.destroy_node()
+                if lock is not None:
+                    nodes.remove(lock)
+                    lock.destroy_node()
                 launcher.get_logger().error(
                     f'[COMP ] {camera} camera did NOT come up: {exc}')
                 launcher.get_logger().error(

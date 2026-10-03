@@ -119,8 +119,10 @@ class LockNode(Node):
         # ⭐ DEFAULT ON since the InferModel port (B-62). Measured on the
         # vehicle: 10.89 ms alone and 19.85 ms with the detector inferring,
         # against 32.9 ms for the ONNX path it replaces -- 1.7x even fully
-        # contended, and off the cores the camera pump needs. The two now
-        # share the chip through `detection/hailo.py`'s `_ACTIVE` registry.
+        # contended, and off the cores the camera pump needs. The two share
+        # the chip through HailoRT's scheduler (`detection/hailo.py`); in the
+        # composed graph, 17.65 ms p50 in-graph over 378 calls on archive
+        # footage (tools/composed_lock_harness.py).
         #
         # Cross-backend equivalence checked before flipping this: 875/888/878
         # of 1024 keypoints match between the ONNX and HEF descriptors, so a
@@ -130,8 +132,8 @@ class LockNode(Node):
         # Set false to force the CPU path -- on a dev box with no chip the
         # resolver falls back on its own, so this is for A/B measurement.
         #
-        # ⛔ DEFAULT OFF since 2026-10-03. The `_ACTIVE` sharing above works
-        # only INSIDE one process, and lock_node runs as its own: it opened a
+        # ⛔ DEFAULT OFF since 2026-10-03. Chip sharing works only INSIDE one
+        # process, and a standalone lock_node runs as its own: it opened a
         # second VDevice, raced the detector process for the chip, and when
         # it won the vehicle had NO detection (HAILO_OUT_OF_PHYSICAL_DEVICES).
         # The numbers above stand; they need the lock composed with the
@@ -254,6 +256,10 @@ class LockNode(Node):
         self._bridge = CvBridge()
         self._lock = threading.Lock()
         self._gray = None
+        # A decoded BGR frame handed over by reference (`submit_frame`), not
+        # yet turned grey. Converted on the ladder's own thread, once per
+        # tick it is actually used -- see `submit_frame`.
+        self._pending = None
         self._header = None
         self._recent = collections.deque(maxlen=4)
         self._snap_skew_warned = False
@@ -332,8 +338,20 @@ class LockNode(Node):
                 '[LOCK ] mongla_interfaces/TargetCorrespondences not built -- '
                 'no 6-DoF pose will be published (the ladder is unaffected). '
                 'Rebuild mongla_interfaces to enable it.')
-        self.create_subscription(CameraInfo, f'{ns}/camera_info',
-                                 self._on_info, 10)
+        # ⭐ COMPOSED: FRAMES BY REFERENCE, NO TOPICS (`direct_feed`).
+        # Measured on the vehicle, 2026-10-03: composing this ladder into the
+        # detector's process took both detectors from 71 Hz to 21.6 Hz
+        # combined, with the anchor IDLE. py-spy put the cost in rclpy intake,
+        # not in the ladder: image_raw and camera_info arriving at 134 Hz
+        # each across two cameras, deserialised, dispatched by the executor
+        # and copied by cv_bridge -- all under the GIL the detector workers
+        # need. In-process, the camera already holds the decoded frame; a
+        # reference costs nothing. Same switch, same name, as the detector's.
+        self.declare_parameter('direct_feed', False)
+        self._direct = bool(self.get_parameter('direct_feed').value)
+        if not self._direct:
+            self.create_subscription(CameraInfo, f'{ns}/camera_info',
+                                     self._on_info, 10)
         # ⚠ SET BESIDE THE STATE IT GUARDS, NOT WHERE THE OTHER PARAMETERS ARE
         # READ. `_on_det` runs as soon as the subscription exists, which is
         # earlier in __init__ than the parameter block below, so reading it
@@ -541,8 +559,9 @@ class LockNode(Node):
         # these topics and a contract test enforces it.
         self.create_subscription(Detection2DArray, f'{ns}/detections',
                                  self._on_det, _qos.DETECTIONS)
-        self.create_subscription(Image, f'{ns}/image_raw',
-                                 self._on_img, _qos.IMAGE)
+        if not self._direct:
+            self.create_subscription(Image, f'{ns}/image_raw',
+                                     self._on_img, _qos.IMAGE)
         # SELF-AIMING. `lock_class` is a LAUNCH argument, so a mission that
         # switches target mid-run (gate -> rescue -> red_pipe, which the DSL
         # does on every vision verb via `set_classes`) left the ladder still
@@ -554,7 +573,9 @@ class LockNode(Node):
         # starts after the detector has already been told what to look for.
         self.create_subscription(String, f'{ns}/classes_filter',
                                  self._on_classes_filter, _qos.LATCHED)
-        threading.Thread(target=self._loop, daemon=True).start()
+        self._stopping = threading.Event()
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()
         # LIVE, like the detector and the tracker. The ladder was aimable only
         # at launch, so a mission could not point it at the object it was about
         # to steer on -- it had to be relaunched. `target_class` and
@@ -623,11 +644,10 @@ class LockNode(Node):
                 # ⭐ `.hef` FIRST (B-62). It took three attempts to earn this
                 # default: an own VDevice gave HAILO_OUT_OF_PHYSICAL_DEVICES,
                 # a shared VDevice with a lock gave "Cant activate network
-                # because a network is already activated", and only joining
-                # `detection/hailo.py`'s `_ACTIVE` registry -- where the next
-                # claimant releases the incumbent -- let the anchor and the
-                # detector coexist. The ONNX remains the fallback for a box
-                # with no chip.
+                # because a network is already activated"; the device now runs
+                # HailoRT's scheduler, which owns activation, so the anchor and
+                # the detectors simply coexist. The ONNX remains the fallback
+                # for a box with no chip.
                 exts = (('*.hef', '*.onnx')
                         if bool(self._ladder('anchor_xfeat_hef'))
                         else ('*.onnx', '*.hef'))
@@ -711,6 +731,45 @@ class LockNode(Node):
             self._recent.append((_stamp_key(msg.header), g))
         self._fresh.set()
 
+    # -- composed intake (`direct_feed`) ------------------------------------ #
+    def wants_frame(self) -> bool:
+        """Every frame: the stamp history must hold the frame a detection was
+        computed on, or `_frame_for` refuses the snap. The camera decodes
+        every frame for its own publish slot anyway."""
+        return True
+
+    def submit_frame(self, frame_bgr, header) -> None:
+        """A decoded BGR frame from the camera in this process, by reference.
+
+        No copy and no grey conversion here: this runs on the camera's capture
+        thread, at camera rate. The ladder converts on its own thread, once,
+        only for the frame it actually uses; `_frame_for` converts a history
+        entry only when a snap needs it. The camera decodes a NEW array per
+        frame, so holding the reference is safe.
+        """
+        with self._lock:
+            self._pending = frame_bgr
+            self._header = header
+            self._recent.append((_stamp_key(header), frame_bgr))
+        self._fresh.set()
+
+    def _gray_now(self):
+        """The newest frame in grey, converting a pending one on demand.
+
+        For readers outside the ladder's tick (timers). The ladder converts
+        only on ticks that read the frame, so `self._gray` alone can be a
+        frame or more old.
+        """
+        with self._lock:
+            pending, self._pending = self._pending, None
+        if pending is not None:
+            self._gray = cv2.cvtColor(pending, cv2.COLOR_BGR2GRAY)
+        return self._gray
+
+    def submit_info(self, info) -> None:
+        """CameraInfo straight from the camera; `_on_info` drops repeats."""
+        self._on_info(info)
+
     def _load_bank(self):
         """Preload a practice bank, if one was named.
 
@@ -760,7 +819,10 @@ class LockNode(Node):
             return None
         for k, g in self._recent:
             if k == key:
-                return g
+                # Composed intake stores BGR; it turns grey only here, for
+                # the one frame a snap needs.
+                return g if g.ndim == 2 else cv2.cvtColor(
+                    g, cv2.COLOR_BGR2GRAY)
         return None
 
     def _on_imu(self, msg) -> None:
@@ -1267,12 +1329,13 @@ class LockNode(Node):
         handle, instead of vanishing.
         """
         faults = 0
-        while rclpy.ok():
+        while rclpy.ok() and not self._stopping.is_set():
             try:
               if not self._fresh.wait(0.5):
                   continue
               self._fresh.clear()
               with self._lock:
+                  pending, self._pending = self._pending, None
                   gray = self._gray
                   header = self._header
                   det_header = self._det_header
@@ -1280,9 +1343,34 @@ class LockNode(Node):
                                               self._det_t)
                   det_cls = self._det_cls
                   live_s = live_window(self._det_dt)
-              if gray is None:
-                  continue
               now = time.monotonic()
+              # ⭐ GREY ONLY WHEN THIS TICK READS IT. Every use below is
+              # behind one of these: a detection to reseed on, a follower to
+              # step, an anchor evaluation that is due, or place recognition.
+              # Lost with none of them -- the common case between targets --
+              # the downward camera's 104 frames a second were each converted
+              # for nothing, on the thread that shares a GIL with the
+              # detectors (26 % of the ladder's wall time, measured).
+              need = (det_box is not None
+                      or (self._follower is not None
+                          and self._follower.active)
+                      or (self._anchor is not None
+                          and self._anchor.has_reference
+                          and now >= self._anchor_next)
+                      or self._closer_on)
+              if pending is not None and need:
+                  # Outside the lock: cvtColor releases the GIL, and the
+                  # camera thread must never wait on the ladder.
+                  gray = cv2.cvtColor(pending, cv2.COLOR_BGR2GRAY)
+                  self._gray = gray
+              elif pending is not None:
+                  # Not read this tick; kept so a later reader (a timer) can
+                  # still convert the newest frame.
+                  with self._lock:
+                      if self._pending is None:
+                          self._pending = pending
+              if gray is None and need:
+                  continue
 
               anchor_ran = False
               fb = fc = None
@@ -1668,7 +1756,7 @@ class LockNode(Node):
             return
         K = self._K_rect if getattr(self, '_K_rect', None) is not None \
             else getattr(self, '_K', None)
-        gray = self._gray
+        gray = self._gray_now()
         if K is None or gray is None or self._odom_xy is None:
             return
         yaw = self._yaw_fresh()
@@ -1744,7 +1832,7 @@ class LockNode(Node):
         """
         K = self._K_rect if getattr(self, '_K_rect', None) is not None \
             else getattr(self, '_K', None)
-        gray = self._gray
+        gray = self._gray_now()
         if K is None or gray is None:
             return
         try:
@@ -1765,6 +1853,22 @@ class LockNode(Node):
                     f'[LOCK ] target near frame edge: {v.state} '
                     f'margin={v.h:.3f} (advisory -- no demand is scaled yet; '
                     f'see ladder-register.md)')
+
+    def destroy_node(self):
+        """Stop the ladder thread BEFORE the publishers go.
+
+        ⛔ Found by tools/composed_lock_harness.py: destroyed while its thread
+        was mid-tick, the ladder published on a destroyed handle and logged
+        `ladder fault #1 ... InvalidHandle` on every shutdown -- an ERROR on
+        every Ctrl-C, which teaches an operator to ignore that line.
+        """
+        if hasattr(self, '_stopping'):     # a half-built node has no thread
+            self._stopping.set()
+            self._fresh.set()              # wake a tick waiting for a frame
+        t = getattr(self, '_thread', None)
+        if t is not None and t is not threading.current_thread():
+            t.join(2.0)
+        return super().destroy_node()
 
     def _log_health(self):
         n = self._n_by_rung

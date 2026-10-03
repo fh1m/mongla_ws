@@ -31,6 +31,7 @@ file exists to stop us quoting.
 """
 from __future__ import annotations
 
+import threading
 from typing import Tuple
 
 import numpy as np
@@ -68,29 +69,17 @@ class XFeatHailo:
 
     def __init__(self, hef_path: str, *, top_k: int = 1024,
                  det_thresh: float = 0.05, semi_dense: bool = False):
-        # ⛔ THE PROCESS'S ONE VDevice, AND THE SAME ARBITRATION THE DETECTORS
-        # USE (B-62, measured twice on the vehicle).
-        #
-        #   attempt 1, own VDevice:  HAILO_OUT_OF_PHYSICAL_DEVICES(74)
-        #   attempt 2, shared VDevice + lock:
-        #       "Cant activate network because a network is already activated"
-        #       HAILO_INVALID_OPERATION(6)
-        #
-        # The second failure is not a scheduling problem and no lock fixes it:
-        # HailoRT permits ONE activated network group at a time, the detector
-        # holds its activation for the process's life, and the old
-        # `activate()` + `InferVStreams` idiom asks for a second one per call.
-        #
-        # ⭐ `detection/hailo.py` had already solved this for two detectors on
-        # one chip: a module-level `_ACTIVE` registry where the next claimant
-        # RELEASES the incumbent before activating. Joining that registry --
-        # rather than inventing a parallel one -- is what lets the anchor and
-        # the detector coexist, and it is why this class now speaks
-        # `InferModel` like they do instead of the legacy API.
+        # ⛔ THE PROCESS'S ONE VDevice (B-62): a VDevice of its own gave
+        # HAILO_OUT_OF_PHYSICAL_DEVICES(74). The device runs HailoRT's
+        # ROUND_ROBIN scheduler (see `detection/hailo.py`), so this group and
+        # the detectors' share the chip with no Python lock around an
+        # inference: measured, two detectors keep 44.4 Hz each with both
+        # anchors running ~5 Hz beside them.
         from ..detection import hailo as _hd
 
         self._hd = _hd
-        self._lock = _hd._DEVICE_LOCK
+        # This anchor's own buffers only -- never the chip.
+        self._lock = threading.Lock()
         self.top_k, self.det_thresh = int(top_k), float(det_thresh)
         # ⭐ SEMI-DENSE: every grid cell as a keypoint instead of NMS-selecting
         # 1024 from the same map. Measured on the vehicle, four frame pairs:
@@ -125,13 +114,8 @@ class XFeatHailo:
         # ⚠ GREY, normalised to [0, 1] exactly as the ONNX path does. XFeat
         # takes one channel, which is why B-61's BGR/RGB defect in the
         # DETECTOR path does not touch this one.
-        # ⛔ THE SAME LOCK THE DETECTOR USES, spanning acquire AND infer.
-        # The chip runs one network group at a time whatever we do; releasing
-        # across the wait would let the detector evict this activation
-        # mid-flight, which `detection/hailo.py` recorded as a measured
-        # SIGSEGV. Holding it means the ANCHOR waits for the detector rather
-        # than the other way round -- the correct priority, since a late
-        # detection costs a lock and a late anchor costs a slower re-anchor.
+        # This anchor's lock only: its bound buffers would be overwritten by
+        # a second call mid-read. The chip is shared by the scheduler.
         with self._lock:
             if self._closed:
                 # After `close()` -- the process is exiting and a daemon
@@ -140,7 +124,7 @@ class XFeatHailo:
                 # honest answer, and the anchor treats it as a miss.
                 return (np.zeros((0, 2), np.float32),
                         np.zeros((0, 64), np.float32))
-            cim = self._acquire_locked()
+            cim = self._configured()
             # Into the bound buffer: no per-call allocation, and no per-call
             # activation either, which was most of the 14.5 ms the legacy
             # idiom cost.
@@ -167,22 +151,14 @@ class XFeatHailo:
             return self._post_dense(feats)
         return self._post(feats, kpts)
 
-    def _acquire_locked(self):
-        """Take the chip's single activation, evicting whoever holds it.
+    def _configured(self):
+        """This anchor's network group, configured once. NOT activated.
 
-        ⛔ THE CALLER MUST HOLD `_DEVICE_LOCK`. This is the detector's own
-        protocol, reused rather than reimplemented: `_ACTIVE` names whoever
-        currently owns the activation, and the next claimant releases it
-        first. Two registries would race each other and reintroduce exactly
-        the `HAILO_INVALID_OPERATION(6)` this class was rewritten to fix.
+        Caller holds `self._lock`. The device lock is taken for the configure
+        only; with the scheduler on, `activate()` is invalid and unneeded.
         """
         from hailo_platform import FormatType
 
-        hd = self._hd
-        if hd._ACTIVE is self and self._cim is not None:
-            return self._cim
-        if hd._ACTIVE is not None and hd._ACTIVE is not self:
-            hd._ACTIVE._release_locked()
         if self._cim is None:
             # ⛔ UINT8 IN, NOT FLOAT32. Measured: binding a float32 input gave
             #     Input buffer size 307200 is different than expected 76800
@@ -194,8 +170,9 @@ class XFeatHailo:
             self._model.input().set_format_type(FormatType.UINT8)
             for name in self._out_names():
                 self._model.output(name).set_format_type(FormatType.FLOAT32)
-            self._cim = self._model.configure()
-            self._cim.__enter__()
+            with self._hd._DEVICE_LOCK:
+                self._cim = self._model.configure()
+                self._cim.__enter__()
             self._in_buf = np.zeros((self.h, self.w, 1), np.uint8)
             self._bindings = self._cim.create_bindings()
             self._bindings.input().set_buffer(self._in_buf)
@@ -207,19 +184,12 @@ class XFeatHailo:
                                np.float32)
                 self._out_bufs[name] = buf
                 self._bindings.output(name).set_buffer(buf)
-        self._cim.activate()
-        hd._ACTIVE = self
         return self._cim
 
     def close(self) -> None:
-        """Hand the network group back. Called by `close_all` at exit.
-
-        Mirrors `HailoDetector.close`: deactivate, then exit the
-        ConfiguredInferModel -- the one place its SRAM is returned.
-        """
+        """Hand the network group back. Called by `close_all` at exit."""
         with self._lock:
             self._closed = True
-            self._release_locked()
             if self._cim is not None:
                 try:
                     self._cim.__exit__(None, None, None)
@@ -229,18 +199,6 @@ class XFeatHailo:
 
     def _out_names(self):
         return [o.name for o in self._model.outputs]
-
-    def _release_locked(self) -> None:
-        """Give up the activation so a detector can take it. Caller holds the
-        lock. Mirrors `HailoDetector._release_locked` -- the registry calls
-        this on whichever object it finds, so the two must agree."""
-        if self._cim is not None:
-            try:
-                self._cim.deactivate()
-            except Exception:                                    # noqa: BLE001
-                pass
-        if self._hd._ACTIVE is self:
-            self._hd._ACTIVE = None
 
     def _post_dense(self, feats):
         """Every descriptor-grid cell as a keypoint -- no NMS, no top_k.

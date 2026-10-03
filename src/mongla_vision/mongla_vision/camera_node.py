@@ -410,7 +410,15 @@ class CameraNode(Node):
                 if frame is None or not meta.fresh:
                     # `fresh=False` is the honest answer to "asked faster than
                     # the camera produces", not an error and not a pause.
-                    time.sleep(self._IDLE_WAIT_S)
+                    # Woken by the next frame where the source can say when
+                    # one lands (a 1 ms poll here measured as a GIL convoy
+                    # once a consumer wanted every frame); capped so Ctrl-C
+                    # stays responsive.
+                    wait_new = getattr(self._cam, 'wait_new', None)
+                    if wait_new is not None:
+                        wait_new(self._IDLE_WAIT_S * 50)
+                    else:
+                        time.sleep(self._IDLE_WAIT_S)
                     continue
                 if wanted:
                     self._sink.submit_frame(frame, self._make_header(meta))
@@ -494,6 +502,12 @@ class CameraNode(Node):
 
         self._pub_img.publish(img_msg)
         self._pub_info.publish(info)
+        # A composed consumer that wants intrinsics takes them by reference
+        # too (the lock ladder, `submit_info`), rather than subscribing to a
+        # topic this same process publishes at camera rate.
+        submit_info = getattr(self._sink, 'submit_info', None)
+        if submit_info is not None:
+            submit_info(info)
         self._sent += 1
 
     def _make_header(self, meta):

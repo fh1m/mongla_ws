@@ -45,7 +45,7 @@ def test_groups_close_BEFORE_the_device_is_released(monkeypatch):
     hd.close_all()
     assert sorted(log[:-1]) == ['det_a', 'det_b', 'xfeat'], log
     assert log[-1] == 'device', 'the VDevice went before a group it holds'
-    assert hd._DEVICE is None and hd._ACTIVE is None
+    assert hd._DEVICE is None
     del keep
 
 
@@ -94,29 +94,30 @@ def test_both_backends_register_themselves():
 def test_a_closed_anchor_answers_empty_and_does_not_reconfigure():
     """A daemon thread can still call detect() after the exit hook ran.
     Re-acquiring would configure a fresh group on a device being released."""
+    import threading
     x = XFeatHailo.__new__(XFeatHailo)
-    x._lock = hd._DEVICE_LOCK
+    x._lock = threading.Lock()
     x._closed = True
     x.w, x.h = 320, 240
 
     def _boom():
         raise AssertionError('reconfigured after close')
-    x._acquire_locked = _boom
+    x._configured = _boom
     k, d = x.detect(np.zeros((240, 320), np.uint8))
     assert k.shape == (0, 2) and d.shape == (0, 64)
 
 
-def test_close_hands_back_the_group_and_marks_closed(monkeypatch):
+def test_close_hands_back_the_group_and_marks_closed():
+    import threading
     calls = []
 
     class _Cim:
         def deactivate(self): calls.append('deactivate')
         def __exit__(self, *a): calls.append('exit')
     x = XFeatHailo.__new__(XFeatHailo)
-    x._hd, x._lock, x._closed = hd, hd._DEVICE_LOCK, False
+    x._hd, x._lock, x._closed = hd, threading.Lock(), False
     x._cim, x._bindings = _Cim(), object()
-    monkeypatch.setattr(hd, '_ACTIVE', x)
     x.close()
     assert x._closed and x._cim is None
-    assert calls == ['deactivate', 'exit'], calls
-    assert hd._ACTIVE is None
+    # Scheduler-owned: exit only, never a deactivate.
+    assert calls == ['exit'], calls

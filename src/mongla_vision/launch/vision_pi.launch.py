@@ -61,8 +61,8 @@ _QUIET = ['--log-level', 'warn']
 for _n in ('mongla_detector_dual',
            'mongla_detector_forward', 'mongla_detector_downward',
            'mongla_camera_forward', 'mongla_camera_downward',
-           # The lock ladders: their info lines are where the anchor says
-           # whether XFeat landed on the Hailo-8 or fell back to the CPU.
+           # The composed lock ladders: their info lines are where the anchor
+           # says whether XFeat landed on the Hailo-8 or fell back to the CPU.
            # Filtered out, a vehicle running the 4.5x slower path looked
            # identical to one on the chip.
            'mongla_lock_forward', 'mongla_lock_downward'):
@@ -283,19 +283,17 @@ def generate_launch_description():
             description='ladder ACTING bar: below this a detection may be '
                         'associated by the tracker but is not acted on '
                         '(B-59; measured knee 0.60, shipped 0.45)'),
-        # ⛔ OFF: the lock node is its OWN PROCESS, and the Hailo allows one
-        # VDevice per process. B-62's sharing goes through an IN-PROCESS
-        # registry, so here the lock and the detector RACE for the chip: on
-        # 2026-10-03 the lock won and the vehicle came up with no detection
-        # at all (HAILO_OUT_OF_PHYSICAL_DEVICES on both cameras). The
-        # detector is the primary; the anchor runs at ~3 Hz and its CPU path
-        # costs 32.9 ms a call. Turn this on only with the lock composed into
-        # the detector's process.
+        # ON, and safe, because the lock ladder is COMPOSED into the detector
+        # process below: one process, one VDevice, XFeat and the detectors
+        # sharing it under HailoRT's scheduler (B-62; in-graph 17.65 ms p50
+        # against 32.9 ms on the CPU, tools/composed_lock_harness.py).
+        # As a SEPARATE lock_node it raced the detector for the chip and, on
+        # 2026-10-03, left the vehicle with no detection at all.
         DeclareLaunchArgument(
-            'anchor_xfeat_hef', default_value='false',
-            description='run XFeat on the Hailo-8 rather than the Pi CPU. '
-                        'ONLY safe in the detector process -- a separate '
-                        'lock_node takes the chip from the detector'),
+            'anchor_xfeat_hef', default_value='true',
+            description='run XFeat on the Hailo-8 rather than the Pi CPU '
+                        '(B-62); safe because the lock is composed with '
+                        'the detector'),
         DeclareLaunchArgument(
             'anchor_semi_dense', default_value='false',
             description='semi-dense matching: 2.1-2.6x inliers for +37 % '
@@ -481,6 +479,36 @@ def generate_launch_description():
             'dwn_cam_fps':             LaunchConfiguration('dwn_fps'),
             'fwd_cam_publish_rate_hz': LaunchConfiguration('fwd_publish_hz'),
             'dwn_cam_publish_rate_hz': LaunchConfiguration('dwn_publish_hz'),
+
+            # ⭐ THE LOCK LADDER, IN THIS PROCESS. It was two separate
+            # lock_node processes; the Hailo allows one VDevice per process, so
+            # with XFeat on the chip they raced the detector for it. Composed,
+            # all of them share one VDevice. Why each value is passed:
+            #   act_conf      -- the B-59 acting bar; a pool day must reach it
+            #   target_width  -- the anchor's metric scale; a measured prop
+            #                    beats the rulebook nominal
+            #   medium        -- the lock rectifies its OBJECT points
+            # Place recognition is deliberately NOT plumbed: it configures
+            # itself from ~/.mongla/*.yaml so every launch path behaves alike
+            # (a guard test fails if the plumbing comes back).
+            'lock':                   ParameterValue(
+                LaunchConfiguration('lock'), value_type=bool),
+            'lock_follow':            True,
+            'lock_anchor':            True,
+            'lock_act_conf':          LaunchConfiguration('act_conf'),
+            'lock_anchor_xfeat_hef':  ParameterValue(
+                LaunchConfiguration('anchor_xfeat_hef'), value_type=bool),
+            'lock_anchor_semi_dense': ParameterValue(
+                LaunchConfiguration('anchor_semi_dense'), value_type=bool),
+            'lock_medium':            LaunchConfiguration('medium'),
+            'fwd_lock_target_class':  LaunchConfiguration('lock_class'),
+            'dwn_lock_target_class':  LaunchConfiguration('dwn_lock_class'),
+            'fwd_lock_anchor_bank':   LaunchConfiguration('bank_forward'),
+            'dwn_lock_anchor_bank':   LaunchConfiguration('bank_downward'),
+            'fwd_lock_target_width_m': ParameterValue(
+                LaunchConfiguration('target_width_m_forward'), value_type=float),
+            'dwn_lock_target_width_m': ParameterValue(
+                LaunchConfiguration('target_width_m_downward'), value_type=float),
         }],
     )
 
@@ -499,64 +527,6 @@ def generate_launch_description():
                          # /tracks stays empty while looking healthy.
                          'detector_conf': LaunchConfiguration('conf')}],
             condition=IfCondition(LaunchConfiguration('tracking')),
-        )
-
-    def ladder(camera_name: str, class_arg: str) -> Node:
-        """The continuity ladder, PER CAMERA.
-
-        It used to exist only for `forward`, hard-coded. Every downward task --
-        the bin drop, the dropper alignment -- therefore steered with no
-        gap-bridging at all, while the forward camera had three rungs. Nothing
-        reported that; the capability was simply absent on one half of the
-        vehicle, which is the same shape as the ladder itself being in no
-        launch file.
-        """
-        return Node(
-            package='mongla_vision', executable='lock_node',
-            name=f'mongla_lock_{camera_name}', output='screen',
-            parameters=[{
-                'camera':       camera_name,
-                'target_class': LaunchConfiguration(class_arg),
-                'follow':       True,
-                # The anchor rung is asked for unconditionally and DEGRADES
-                # BY ITSELF: lock_node logs `anchor DISABLED ... the follower
-                # rung still runs` when no xfeat_*.onnx resolves. A second
-                # launch flag for it would only be a way to disable a rung
-                # that already disables itself.
-                'anchor':       True,
-                'anchor_bank':  LaunchConfiguration(f'bank_{camera_name}'),
-                # ⛔ THESE WERE DECLARED IN THE NODE AND NEVER PASSED HERE,
-                # which is the same shape of gap as the yaw one: the parameter
-                # exists, its default is sensible, and NO LAUNCH ARGUMENT
-                # REACHES IT -- so an operator can only change it with
-                # `ros2 param set` after the node is already running.
-                # `act_conf` is the B-59 safety bar, so that is the one that
-                # matters: the bar a pool day would want to raise is the bar a
-                # pool day could not reach.
-                'act_conf':          LaunchConfiguration('act_conf'),
-                'anchor_xfeat_hef':  LaunchConfiguration('anchor_xfeat_hef'),
-                'anchor_semi_dense': LaunchConfiguration('anchor_semi_dense'),
-                # ⭐ `target_width_m` is the metric scale the anchor's range
-                # depends on, and its own comment says "an explicit parameter
-                # WINS: a measured prop beats a rulebook nominal" -- which was
-                # not actionable, because no launch argument reached it.
-                #
-                # ⛔ The place-recognition rung is deliberately NOT plumbed
-                # here. It configures itself from `~/.mongla/*.yaml` so it
-                # behaves the same whichever launch starts the node; a launch
-                # argument would recreate the defect where a capability is
-                # reachable from one launch path and not the one `bringup`
-                # includes. A guard test fails if the plumbing comes back --
-                # and it caught this attempt, which is why the comment is here
-                # rather than the parameter.
-                'target_width_m': LaunchConfiguration(
-                    f'target_width_m_{camera_name}'),
-                # lock_node still rectifies its OBJECT points (reference
-                # pixels scaled to metres); pnp_node rectifies the image side.
-                # Two nodes, one value, one launch argument.
-                'medium':       LaunchConfiguration('medium'),
-            }],
-            condition=IfCondition(LaunchConfiguration('lock')),
         )
 
     def solver(camera_name: str) -> Node:
@@ -655,8 +625,8 @@ def generate_launch_description():
                      LaunchConfiguration('caustics'), value_type=bool),
              }],
              condition=IfCondition(LaunchConfiguration('flow'))),
-        ladder('forward',  'lock_class'),
-        ladder('downward', 'dwn_lock_class'),
+        # The ladders are composed into `detectors` above (`lock:=`), not
+        # started here: as separate processes they raced it for the Hailo.
         solver('forward'),
         solver('downward'),
         solver_near('forward'),

@@ -16,7 +16,7 @@ import pytest
 from mongla_vision import detector_dual_node as dn
 
 
-def _run(camera_factory, replay=False):
+def _run(camera_factory, replay=False, lock=False):
     """Drive main() with fake nodes; return (launcher, built camera names).
 
     ⛔ `replay` must be set explicitly. A bare MagicMock returns a truthy
@@ -36,7 +36,7 @@ def _run(camera_factory, replay=False):
     launcher = MagicMock()
     launcher.get_logger.return_value = MagicMock()
     launcher.get_parameter.side_effect = lambda name: MagicMock(
-        value=replay if name == 'replay' else MagicMock())
+        value={'replay': replay, 'lock': lock}.get(name, MagicMock()))
     with patch.object(dn, 'rclpy'), \
          patch.object(dn, '_Launcher', return_value=launcher), \
          patch.object(dn, 'DetectorNode', MagicMock()), \
@@ -99,3 +99,62 @@ def test_replay_builds_no_cameras_and_keeps_every_detector():
     launcher, built, code = _run(factory, replay=True)
     assert built == [], 'replay built a camera it has no use for'
     assert code is None, 'replay exited as though no camera came up'
+
+
+def test_the_lock_ladder_is_composed_beside_each_live_camera():
+    """One process, one Hailo VDevice: the ladder is built here, not as a
+    separate lock_node that races the detector for the chip (2026-10-03)."""
+    made = {}
+
+    def _lock(name, **kw):
+        node = MagicMock()
+        made[name] = (node, kw)
+        return node
+
+    def factory(role):
+        if role == 'forward':
+            raise RuntimeError('no forward device')
+        return MagicMock()
+
+    with patch('mongla_vision.lock_node.LockNode', side_effect=_lock):
+        launcher, built, code = _run(factory, lock=True)
+    assert code is None
+    # Built BEFORE its camera (so the first frame has both consumers), and
+    # torn down again when that camera does not come up: one ladder per LIVE
+    # camera, and none left behind for the dead one.
+    made['mongla_lock_forward'][0].destroy_node.assert_called_once()
+    # Live: frames by reference, so the ladder subscribes to no image topic.
+    kw = made['mongla_lock_downward'][1]
+    direct = {p.name: p.value for p in kw['parameter_overrides']
+              if p.name == 'direct_feed'}
+    assert direct == {'direct_feed': True}
+
+
+def test_only_the_lock_values_the_launch_sets_are_forwarded():
+    """Per-camera `fwd_lock_*` beats nothing, shared `lock_*` reaches both,
+    and nothing the launch did not set is invented here."""
+    rclpy = pytest.importorskip('rclpy')
+    from rclpy.parameter import Parameter
+    started = not rclpy.ok()
+    if started:
+        rclpy.init()
+    try:
+        orig = dn.Node.__init__
+
+        def patched(self, name, **kw):
+            kw['parameter_overrides'] = [
+                Parameter('lock', value=True),
+                Parameter('lock_act_conf', value=0.6),
+                Parameter('fwd_lock_target_class', value='gate'),
+                Parameter('dwn_lock_target_class', value='bin')]
+            orig(self, name, **kw)
+        with patch.object(dn.Node, '__init__', patched):
+            launcher = dn._Launcher()
+        fwd = {p.name: p.value for p in launcher.lock_overrides('fwd', 'forward')}
+        dwn = {p.name: p.value for p in launcher.lock_overrides('dwn', 'downward')}
+        launcher.destroy_node()
+    finally:
+        if started:
+            rclpy.shutdown()
+    assert fwd == {'camera': 'forward', 'act_conf': 0.6, 'target_class': 'gate'}
+    assert dwn == {'camera': 'downward', 'act_conf': 0.6, 'target_class': 'bin'}
