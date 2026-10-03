@@ -576,12 +576,27 @@ def render(snap: Snapshot, conn) -> list[str]:
                   if sp and r == sp.PCA_ROLE_SWITCH]
         servo = [c for c, r in sorted(snap.roles.items())
                  if sp and r == sp.PCA_ROLE_SERVO]
-        other = [c for c, r in sorted(snap.roles.items())
-                 if not sp or r not in (sp.PCA_ROLE_SWITCH, sp.PCA_ROLE_SERVO)]
+        # ⛔ READ-AS-SOMETHING-ELSE AND NOT-READ-AT-ALL ARE DIFFERENT FACTS
+        # (2026-10-03, on the vehicle). One list said "other/unreadable" and
+        # held only channels that WERE read with another role; a channel whose
+        # read failed is absent from `roles`, so it appeared in no list at all.
+        # Board configuration and a lossy link want different fixes.
+        disabled = [c for c, r in sorted(snap.roles.items())
+                    if sp and r == sp.PCA_ROLE_DISABLED]
+        other = [f'{c}(role {r})' for c, r in sorted(snap.roles.items())
+                 if not sp or r not in (sp.PCA_ROLE_SWITCH, sp.PCA_ROLE_SERVO,
+                                        sp.PCA_ROLE_DISABLED)]
+        n_ch = sp.PCA9685_NUM_CH if sp else 16
+        unread = [c for c in range(1, n_ch + 1) if c not in snap.roles]
         L.append(f'  {GRN}SWITCH{RESET} (mongla_ws may fire)   {switch or "--"}')
         L.append(f'  {DIM}SERVO  (on-board arm, ignored){RESET}  {servo or "--"}')
+        if disabled:
+            L.append(f'  {DIM}DISABLED (role 0, drives nothing){RESET} {disabled}')
         if other:
-            L.append(f'  {YEL}other/unreadable{RESET}              {other}')
+            L.append(f'  {YEL}other role{RESET}                    {other}')
+        if unread:
+            L.append(f'  {YEL}UNREAD (no PARAM_VALUE -- link){RESET}  {unread}  '
+                     f'{DIM}fire() fails closed on these{RESET}')
         L.append(f'  {DIM}fire(N) uses these numbers directly, e.g. '
                  f'`mongla fire --fire_channel {switch[0] if switch else 9}`{RESET}')
 
