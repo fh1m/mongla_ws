@@ -109,6 +109,10 @@ class XFeatHailo:
         self.path = hef_path
         self._target = _hd._shared_device()
         self._model = self._target.create_infer_model(hef_path)
+        # One registry for every network group on the chip, so the exit hook
+        # in `detection/hailo.py` hands this one back too (see `close_all`).
+        _hd._register(self)
+        self._closed = False
         self._cim = None
         self._bindings = None
         self._in_buf = None
@@ -129,6 +133,13 @@ class XFeatHailo:
         # than the other way round -- the correct priority, since a late
         # detection costs a lock and a late anchor costs a slower re-anchor.
         with self._lock:
+            if self._closed:
+                # After `close()` -- the process is exiting and a daemon
+                # thread is still calling. Re-acquiring would CONFIGURE a
+                # fresh group on a device being released; no features is the
+                # honest answer, and the anchor treats it as a miss.
+                return (np.zeros((0, 2), np.float32),
+                        np.zeros((0, 64), np.float32))
             cim = self._acquire_locked()
             # Into the bound buffer: no per-call allocation, and no per-call
             # activation either, which was most of the 14.5 ms the legacy
@@ -149,7 +160,7 @@ class XFeatHailo:
         if feats is None or kpts is None:
             raise RuntimeError(
                 f'{self.path}: expected heads with {_FEAT_CH} and {_KPT_CH} '
-                f'channels, got {[v[0].shape for v in out.values()]}. This HEF '
+                f'channels, got {[v.shape for v in raw.values()]}. This HEF '
                 f'is not an XFeat build.')
         self.last_reliability = rel
         if self.semi_dense:
@@ -199,6 +210,22 @@ class XFeatHailo:
         self._cim.activate()
         hd._ACTIVE = self
         return self._cim
+
+    def close(self) -> None:
+        """Hand the network group back. Called by `close_all` at exit.
+
+        Mirrors `HailoDetector.close`: deactivate, then exit the
+        ConfiguredInferModel -- the one place its SRAM is returned.
+        """
+        with self._lock:
+            self._closed = True
+            self._release_locked()
+            if self._cim is not None:
+                try:
+                    self._cim.__exit__(None, None, None)
+                except Exception:                                # noqa: BLE001
+                    pass
+                self._cim = self._bindings = None
 
     def _out_names(self):
         return [o.name for o in self._model.outputs]
