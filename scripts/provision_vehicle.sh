@@ -111,6 +111,13 @@ say "3. Build"
 r bash -lc "'set -e
   cd ~/$REMOTE_DIR
   source /opt/ros/$ROS_DISTRO_WANT/setup.bash
+  # ⛔ ALWAYS A CLEAN BUILD. An incremental symlink-install tree keeps what
+  # source no longer has: links to a deleted model broke the build on
+  # 2026-10-03 and the gate then counted the retired model as installed.
+  # 42 s buys a vehicle that runs exactly this tree and nothing older.
+  rm -rf build install log .pytest_cache
+  find src -name __pycache__ -type d -prune -exec rm -rf {} +
+  rm -rf ~/.ros/log
   colcon build --symlink-install > build.log 2>&1
   tail -1 build.log'" || {
     echo

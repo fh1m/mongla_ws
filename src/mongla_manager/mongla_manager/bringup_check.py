@@ -838,8 +838,17 @@ def _check_models_hailo(dirs: list[str]) -> tuple[str, str]:
     That is a silent failure, so it is reported as a FAIL rather than a warning.
     """
     hefs: dict[str, bool] = {}
+    # ⛔ A LINK TO NOTHING IS NOT A MODEL (2026-10-03, on the vehicle). A
+    # symlink-install tree keeps links to models deleted from source; counted
+    # as engines they made a retired model fail this gate while nothing could
+    # load it. They are named instead, so the stale tree is visible.
+    dangling = sorted({os.path.basename(p) for d in dirs
+                       for p in glob(os.path.join(d, '*'))
+                       if os.path.islink(p) and not os.path.exists(p)})
     for d in dirs:
         for p in glob(os.path.join(d, '*.hef')):
+            if not os.path.exists(p):
+                continue
             stem = os.path.splitext(os.path.basename(p))[0]
             sidecar = os.path.exists(os.path.join(d, stem + '.yaml'))
             hefs[stem] = hefs.get(stem, False) or sidecar
@@ -866,6 +875,8 @@ def _check_models_hailo(dirs: list[str]) -> tuple[str, str]:
     floors = {}
     for d in dirs:
         for p in glob(os.path.join(d, '*.hef')):
+            if not os.path.exists(p):
+                continue
             th = _baked_floor(p)
             if th is not None:
                 floors[os.path.splitext(os.path.basename(p))[0]] = th
@@ -896,6 +907,12 @@ def _check_models_hailo(dirs: list[str]) -> tuple[str, str]:
             f'({names}) -- correct for a Model Zoo model and not flown, so a '
             f'note rather than a gate. Every model of OURS is at or below the '
             f'configured conf.')
+    if dangling:
+        return WARN, (f'{len(hefs)} Hailo model(s), each with its .yaml '
+                      f'sidecar{seen}; {len(dangling)} DANGLING link(s) to '
+                      f'deleted files ({", ".join(dangling)}) -- a stale '
+                      f'symlink-install tree; rebuild with build_mongla.sh, '
+                      f'which prunes them')
     return PASS, (f'{len(hefs)} Hailo model(s), each with its .yaml '
                   f'sidecar{seen}')
 
