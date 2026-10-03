@@ -2925,8 +2925,46 @@ def _emergency_stop(node) -> None:
     print(file=sys.stderr)
 
 
+_PR_SET_PDEATHSIG = 1
+
+
+def _set_parent_death_signal(sig) -> bool:
+    """Ask the kernel to send `sig` when our parent exits. Linux only."""
+    try:
+        import ctypes
+        libc = ctypes.CDLL(None, use_errno=True)
+        return libc.prctl(_PR_SET_PDEATHSIG, int(sig), 0, 0, 0) == 0
+    except Exception:                       # noqa: BLE001 -- non-Linux: no-op
+        return False
+
+
+def _orphan_guard(node, executor, parent_pid: int):
+    """Handler for the parent-death signal: stop if the parent really is gone.
+
+    ⛔ AN ORPHANED MANAGER IS THE WORST PROCESS ON THE VEHICLE (2026-10-03, on
+    the Pi). `ros2 launch` died on SIGTERM and left every child running: the
+    manager kept the board's port AND kept its heartbeat going, so the board's
+    companion-loss failsafe never fired, with nothing attached that could stop
+    it. When the parent exits the kernel now signals us, and we take the same
+    path as SIGTERM -- brake, neutral, disarm.
+
+    The parent pid is compared because PR_SET_PDEATHSIG fires on the death of
+    the parent THREAD that forked us; a stray signal with the same parent
+    still alive is ignored rather than disarming a running vehicle.
+    """
+    def handler(sig, frame):
+        if os.getppid() == parent_pid:
+            return
+        node.get_logger().error(
+            '[KILL ] parent process died -- this manager is ORPHANED. '
+            'Emergency stop: brake, neutral, disarm.')
+        executor.shutdown(timeout_sec=0)
+    return handler
+
+
 def main(args=None):
     rclpy.init(args=args)
+    parent_pid = os.getppid()
     node = AUVManagerNode()
     executor = MultiThreadedExecutor()
     executor.add_node(node)
@@ -2936,6 +2974,10 @@ def main(args=None):
         executor.shutdown(timeout_sec=0)
 
     signal.signal(signal.SIGTERM, _sigterm_handler)
+    signal.signal(signal.SIGUSR1, _orphan_guard(node, executor, parent_pid))
+    _set_parent_death_signal(signal.SIGUSR1)
+    if os.getppid() != parent_pid:          # died while we were starting
+        _orphan_guard(node, executor, parent_pid)(signal.SIGUSR1, None)
 
     try:
         executor.spin()
