@@ -1428,16 +1428,22 @@ def _check_srot(skip_mav: bool, device: str = '') -> list[tuple[str, str, str]]:
     # A preflight that reboots the flight controller is not a preflight. Opening
     # this port asserts DTR and resets the ESP32 (measured -- fc/port_guard.py),
     # so running bringup_check against a live manager silently disarms the
-    # vehicle and wipes its configured stream rates. Report it as a WARN section
-    # rather than doing it.
+    # vehicle and wipes its configured stream rates. Not doing it is right.
+    #
+    # ⛔ BUT NOT CHECKED IS NOT PASSED (2026-10-03, on the vehicle). This was a
+    # WARN, so with a manager holding the port the whole board section --
+    # barometer, kill, leak, firmware rev -- was skipped and the gate EXITED 0:
+    # it passed over a Bar30 it FAILS with the port free. The question this
+    # gate answers is "can it arm?", and an unread board does not answer it.
     from mongla_control.fc.port_guard import PortGuard, PortBusy
     _guard = PortGuard(port)
     try:
         _guard.acquire()
     except PortBusy as exc:
-        out.append((WARN, 'srot serial port',
-                    f'{port} is already in use -- skipped. Opening it would REBOOT '
-                    f'the board. {str(exc).splitlines()[0]}'))
+        out.append((FAIL, 'srot serial port',
+                    f'{port} is held by another process, so the board was NOT '
+                    f'checked (opening it would REBOOT the board). Stop the '
+                    f'holder and rerun. {str(exc).splitlines()[0]}'))
         return out
 
     conn = None

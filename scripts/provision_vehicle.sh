@@ -108,6 +108,13 @@ ok "synced to $TARGET:~/$REMOTE_DIR"
 # --------------------------------------------------------------------------- #
 say "3. Build"
 
+# ⛔ NOT UNDER A RUNNING MANAGER (2026-10-03). The build wipes install/, so a
+# manager left running keeps executing code that is no longer on disk, and it
+# holds the board's port -- the gate below then cannot read the board.
+if r "pgrep -f '[l]ib/mongla_manager/start' >/dev/null"; then  # [l]: not match this ssh command line itself
+  die "a mongla_manager is RUNNING on the vehicle -- stop it (Ctrl-C, so it disarms) and rerun"
+fi
+
 r bash -lc "'set -e
   cd ~/$REMOTE_DIR
   source /opt/ros/$ROS_DISTRO_WANT/setup.bash
