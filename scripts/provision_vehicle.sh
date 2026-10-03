@@ -81,6 +81,20 @@ else
            sudo usermod -aG dialout \$USER   (then log out and back in)"
 fi
 
+# The BLAS numpy links. Debian's default `libblas3` is the Netlib REFERENCE
+# implementation: measured on the Pi 5, one 1024x1024x64 similarity matmul --
+# the XFeat anchor's matcher -- took 58.6 ms there and 6.4 ms on OpenBLAS, and
+# the whole match 31.6 -> 7.0 ms with identical correspondences. The vehicle
+# runs; it just spends the cores the detectors and the control loop need.
+# Warned, not refused: nothing is wrong, only slow. The launch files pin
+# OPENBLAS_NUM_THREADS=1 once it is there.
+if r "readlink -f /usr/lib/aarch64-linux-gnu/libblas.so.3 | grep -q openblas"; then
+  ok "numpy BLAS is OpenBLAS"
+else
+  warn "numpy runs on the REFERENCE BLAS -- the anchor matcher is ~4.5x slower. Fix with:
+           sudo apt-get install -y libopenblas0-pthread"
+fi
+
 FREE_GB="$(r "df -BG --output=avail \$HOME | tail -1 | tr -dc '0-9'")"
 [[ "${FREE_GB:-0}" -ge 5 ]] || die "only ${FREE_GB}G free in \$HOME; need >= 5G"
 ok "${FREE_GB}G free"

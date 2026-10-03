@@ -4368,6 +4368,52 @@ shortlist, the smaller the relative win: 2.0× at one reference, 1.25× at four.
 speed comes from the similarity matmul, not the network. That reframes the next
 optimisation entirely.
 
+### 28.5 In-process, on the vehicle, and the matcher fixed (2026-10-03)
+
+Measured on the Pi 5 + Hailo-8 in ONE process, through `XFeatHailo.detect()`
+and `XFeatONNX.match()` as shipped, 320×240, real and synthetic frames:
+
+| stage | before | after |
+|---|---|---|
+| `detect()` end to end (chip + copy + post) | 10.06 ms | 10.06 ms |
+| — of which chip + output copy | 4.44 ms | 4.44 ms |
+| — of which host post (shuffle, NMS, sampling) | 5.19 ms | 5.19 ms |
+| `match()`, 1024×1024×64 | **31.4 ms** | **7.05 ms** |
+| one `locate()`, 1 reference | 41.5 ms | **17.1 ms** |
+| bank, shortlist k=4 | 135.7 ms | **38.3 ms** |
+
+⛔ **The 1.43 ms of §28.2 is `hailortcli` throughput, not a call.** One
+blocking call in a Python process is 4.44 ms on the chip and its output copy,
+and 10.06 ms with the host post-processing. §28.3's "1.4 + 31.4 = 32.8 ms"
+used the throughput figure as a latency; the real pre-fix sum was 41.5 ms.
+
+⭐ **The matcher was BLAS-bound, not compute-bound.** numpy on the Pi linked
+Debian's `libblas3` — the Netlib reference BLAS. The 1024×1024×64 similarity
+matmul: **58.6 ms there, 6.4 ms on OpenBLAS (one thread)**. Correspondences on
+34 real frame pairs from both cameras: 22 352 matches, symmetric difference
+**0**. Fixed by `sudo apt-get install libopenblas0-pthread`, checked by
+`provision_vehicle.sh`; the launch files pin `OPENBLAS_NUM_THREADS=1` so the
+matcher's own 2-thread split is the only parallelism (blas=1/split=2 4.76 ms
+against blas=4/split=2 5.33 ms).
+
+Rejected, measured: `cv2.BFMatcher(NORM_L2, crossCheck=True)` returns the same
+matches (symmetric difference 0) but needs 4 threads for 9.6–12.5 ms; an
+onnxruntime MLAS graph (MatMul + both ArgMax) is exact but 20.5 ms at one
+thread; sampling descriptors on the HWC layout is bit-identical and no faster
+(3.71 vs 3.71 ms).
+
+**Four network groups share the chip.** Two detectors (`gate_sharks`,
+`bin_fire_blood`) and two XFeat anchors configured together, round-robin,
+150 rounds: detectors p50 11.36 ms, XFeat p50 11.76 ms (p95 11.82), **0
+errors**. So the composed stack (one lock ladder per camera) fits; the swap
+costs ~1.3–2 ms per claimant change.
+
+⛔ **Every Hailo process crashed at exit.** Left to interpreter teardown, the
+same four-group process exits SIGSEGV (rc 139, sometimes "corrupted
+double-linked list") or hangs; no node ever called `close()`. Closing each
+group and then releasing the VDevice exits 0 in 1.2 s. `detection/hailo.py`
+now does that from `atexit` for every registered claimant.
+
 ### 28.4 Owed before this is usable
 
 - ⛔ **Accuracy through INT8 is UNMEASURED.** A HEF that compiles is not a
