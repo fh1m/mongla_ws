@@ -69,6 +69,7 @@ executor makes the second camera wait a whole inference for the first.
 """
 from __future__ import annotations
 
+import os
 import sys
 
 import rclpy
@@ -186,11 +187,46 @@ class _Launcher(Node):
         return out
 
 
+def _make_failure_hook(launcher, live: list, failed: list, state: dict):
+    """What a composed detector does when its model will not load.
+
+    ⛔ ONE DEAD MODEL USED TO KILL BOTH (2026-10-03, on the vehicle): the
+    forward detector was live on gate_sharks.hef, the downward model had no
+    .hef, and the downward load's exit took the forward detector with it. Same
+    rule as a missing camera: keep the eye that works, say LOUDLY which one is
+    blind, and exit only when none is left -- a process with no detector at
+    all would idle looking healthy. The camera stays up: its frames still feed
+    flow and the recorders.
+    """
+    def hook(det, exc):
+        camera = getattr(det, '_cam_name', None) or det.get_name()
+        failed.append(camera)
+        launcher.get_logger().error(
+            f'[COMP ] {camera} DETECTOR did NOT come up ({exc}). Running '
+            f'WITHOUT {camera} detections -- a mission that steers on it will '
+            f'find nothing. The camera itself stays up.')
+        # Loads are asynchronous: one can fail before the other camera is even
+        # built, so nothing is decided until composition is finished.
+        if state.get('built') and all(c in failed for c in live):
+            _no_detector_left(launcher)
+    return hook
+
+
+def _no_detector_left(launcher):
+    launcher.get_logger().fatal(
+        '[COMP ] NO detector came up. Exiting rather than idling as a '
+        'healthy-looking node.')
+    os._exit(2)
+
+
 def main():
     rclpy.init()
     launcher = _Launcher()
     nodes = [launcher]
     live: list[str] = []
+    failed: list[str] = []
+    state = {'built': False}
+    hook = _make_failure_hook(launcher, live, failed, state)
     try:
         replay = bool(launcher.get_parameter('replay').value)
         for cam, camera in (('fwd', 'forward'), ('dwn', 'downward')):
@@ -199,7 +235,9 @@ def main():
             # thread pool is how the registry path already trips over itself.
             det = DetectorNode(
                 f'mongla_detector_{camera}',
-                parameter_overrides=launcher.overrides(cam, camera))
+                parameter_overrides=launcher.overrides(cam, camera),
+                init_failure_fn=hook)
+            det._cam_name = camera
             # The detector FIRST, so the camera never submits to a half-built
             # sink. `frame_sink=det` is the whole composition -- one Python
             # reference where a topic used to be.
@@ -253,6 +291,9 @@ def main():
                 '[COMP ] NO camera came up. Nothing to detect on -- exiting '
                 'rather than idling as a healthy-looking node.')
             raise SystemExit(1)
+        state['built'] = True
+        if live and all(c in failed for c in live):
+            _no_detector_left(launcher)
         if len(live) == 1:
             launcher.get_logger().warning(
                 f'[COMP ] DEGRADED: {live[0]} only. The chip is uncontended, '
