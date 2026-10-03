@@ -67,10 +67,12 @@ vision-servoed hull means driving away from the target.
 """
 from __future__ import annotations
 
+import atexit
 import os
 import re
 import subprocess
 import threading
+import weakref
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
@@ -226,6 +228,50 @@ def emits_raw_heads(hef_path: str) -> bool:
 _DEVICE = None
 _DEVICE_LOCK = threading.Lock()
 _ACTIVE: Optional['HailoDetector'] = None
+# Everything that configured a network group on `_DEVICE`: the detectors AND
+# the XFeat anchors. Weak, so a dropped object is not kept alive by this.
+_CLAIMANTS: 'weakref.WeakSet' = weakref.WeakSet()
+
+
+def _register(claimant) -> None:
+    """Record a network-group owner so `close_all` can hand it back."""
+    _CLAIMANTS.add(claimant)
+
+
+def close_all() -> None:
+    """Release every configured network group, THEN the VDevice. At exit.
+
+    ⛔ MEASURED ON THE VEHICLE, 2026-10-03: two detectors and two XFeat
+    anchors in one process, left to interpreter teardown, die with SIGSEGV
+    (rc 139, sometimes "corrupted double-linked list") or hang there -- the
+    garbage collector frees the VDevice and the ConfiguredInferModels in
+    whatever order it likes. The same process closing each group and then
+    releasing the device exits 0 in 1.2 s. No node called `close()`, so every
+    Hailo process on the vehicle crashed on the way out, and a SIGINT'd
+    detector that hangs instead is a process holding the chip that the next
+    launch cannot open.
+
+    Registered with `atexit`, so no node has to remember it. Safe to call
+    twice. A worker thread still inside an infer holds `_DEVICE_LOCK`, and
+    `close()` waits for it rather than pulling the stream out from under it.
+    """
+    global _DEVICE, _ACTIVE
+    for c in list(_CLAIMANTS):
+        try:
+            c.close()
+        except Exception:                                    # noqa: BLE001
+            pass
+    with _DEVICE_LOCK:
+        dev, _DEVICE = _DEVICE, None
+        _ACTIVE = None
+    if dev is not None:
+        try:
+            dev.release()
+        except Exception:                                    # noqa: BLE001
+            pass
+
+
+atexit.register(close_all)
 
 
 def _shared_device():
@@ -310,6 +356,7 @@ class HailoDetector(Detector):
         self._size = int(shape[0]) if len(shape) >= 2 else _INPUT_FALLBACK
 
         self._target = _shared_device()
+        _register(self)
 
         # THE ASYNC API, AND THE REASON IS THE GIL, NOT SPEED.
         #
