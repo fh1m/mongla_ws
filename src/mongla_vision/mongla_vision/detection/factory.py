@@ -64,5 +64,18 @@ def make_detector(*, model_path: str, logger=None, **kwargs) -> Detector:
         cls = HailoSegDetector if emits_raw_heads(resolved) else HailoDetector
         return cls(model_path=resolved, logger=logger, **kwargs)
 
+    # ⛔ NAME WHAT IS MISSING (2026-10-03, on the vehicle). A Pi has no torch
+    # and no .engine path; when a model has no .hef there, the resolver falls
+    # back to the .pt and the failure read "No module named 'torch'" -- true,
+    # and useless to an operator on a pool deck. The missing thing is the
+    # compiled engine, so say that.
+    import importlib.util
+    if importlib.util.find_spec('torch') is None:
+        stem = Path(str(resolved)).stem
+        raise FileNotFoundError(
+            f'{stem}: no compiled .hef for this machine (resolved {resolved}), '
+            f'and PyTorch is not installed to run the .pt. Compile it: '
+            f'tools/hailo_compile.sh {stem}, and ship {stem}.hef beside '
+            f'{stem}.yaml.')
     from .yolo import YoloDetector
     return YoloDetector(model_path=resolved, logger=logger, **kwargs)

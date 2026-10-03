@@ -199,7 +199,7 @@ class _DirectFrame(NamedTuple):
 
 class DetectorNode(Node):
     def __init__(self, node_name: str = 'mongla_detector', *,
-                 parameter_overrides=None):
+                 parameter_overrides=None, init_failure_fn=None):
         """`node_name` and `parameter_overrides` exist so TWO of these can live
         in one process, which is not a nicety on the Pi -- it is the only way
         the two-camera path runs at all.
@@ -213,6 +213,10 @@ class DetectorNode(Node):
         """
         super().__init__(node_name,
                          parameter_overrides=list(parameter_overrides or []))
+        # Called instead of exiting when the model fails to load -- set by a
+        # composing owner that has another camera to keep. None: exit, as a
+        # standalone detector must.
+        self._init_failure_fn = init_failure_fn
 
         self.declare_parameter('camera',              'laptop')
         self.declare_parameter('image_topic',         '')
@@ -746,6 +750,16 @@ class DetectorNode(Node):
             # keep claiming to be up. Exit and let a supervisor restart it --
             # which also resolves the common cause, a previous process still
             # holding the device.
+            hook = getattr(self, '_init_failure_fn', None)
+            if hook is not None:
+                # Composed with another camera (detector_dual_node): the owner
+                # decides. Killing the process here took a WORKING detector on
+                # the other camera down with it (2026-10-03, on the vehicle:
+                # forward gate_sharks.hef live, downward model missing its
+                # .hef -> both gone).
+                self.get_logger().fatal(f"[DET  ] detector init FAILED: {exc}")
+                hook(self, exc)
+                return
             self.get_logger().fatal(
                 f"[DET  ] detector init FAILED: {exc}. EXITING: without a model "
                 f"this node would drop every frame silently while looking "
