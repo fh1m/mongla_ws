@@ -379,10 +379,3 @@ session; two notes on them:
 
 **Hooks** (`.claude/hooks/`): block edits to the generated `install/` tree; `py_compile` after
 an edit; run the matching test file for an edited source file.
-
-## graphify
-
-Knowledge graph in `graphify-out/`. For a codebase question run `graphify query "<question>"`
-(a scoped subgraph, usually far smaller than raw grep). `graphify path "<A>" "<B>"` for
-relationships, `graphify explain "<concept>"` for one concept. After changing code, run
-`graphify update .` (AST-only, no API cost).
