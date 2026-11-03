@@ -109,3 +109,10 @@ tools/control_bench/.firmware_rev
 acceleras.log
 allocator.log
 hailo_sdk.*.log
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
+*.gate.lock*
