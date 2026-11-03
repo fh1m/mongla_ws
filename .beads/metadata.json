@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "mongla_ws",
+  "project_id": "fcb302fd-6906-4cec-a70d-edcad97a556e"
+}
