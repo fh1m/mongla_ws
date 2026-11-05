@@ -33,3 +33,28 @@ def test_the_dfcs_own_warning_is_caught_whatever_its_cause():
             "available GPU")
     got = hc.downgrade_reasons(frames=2048, gpu=None, log_lines=['ok', line])
     assert got and 'level to 0' in got[0]
+
+
+# ── the optimiser degrading a FULL build (2026-11-06) ─────────────────────────
+# gate_sharks passed every downgrade check and its fine-tune diverged: median
+# INT8 shift 0.339 on the emulator against -0.010 for a level-0 build.
+
+def test_a_diverged_full_build_is_refused():
+    why = hc.int8_shift_reasons({'n': 133, 'median': 0.339, 'p90': 0.555})
+    assert why and 'degraded' in why[0]
+
+
+def test_the_healthy_builds_measured_so_far_pass():
+    for m in (-0.010, 0.04, 0.06):
+        assert hc.int8_shift_reasons({'n': 133, 'median': m, 'p90': 0.1}) == []
+
+
+def test_too_few_scored_frames_is_unverified_not_passed():
+    """Archive frames without a target score below 0.25 on the float path;
+    a median over three of them is not a measurement."""
+    why = hc.int8_shift_reasons({'n': 3, 'median': 0.0, 'p90': 0.0})
+    assert why and 'UNVERIFIED' in why[0]
+
+
+def test_the_bar_sits_between_the_healthy_and_the_diverged_builds():
+    assert 0.06 < hc.MAX_INT8_SHIFT < 0.339

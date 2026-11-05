@@ -6784,3 +6784,68 @@ elsewhere are a second hypothesis, one is a stray; #55's failing case was a 7/3 
 ⚠ **Corner noise on real footage is unmeasured.** These numbers fix the rule's error
 rate, not its decision rate on the vehicle — that needs the forward camera on a
 textured target, translating.
+
+## 66. ⛔ THE SHIPPED GATE HEF WAS DEGRADED BY ITS OWN FINE-TUNE — level 2 lost 0.34 of confidence that level 0 kept (B-82, issue #47)
+
+**2026-11-06, dev box, no Hailo device: the Dataflow Compiler's emulator.**
+`tools/hailo_int8_shift.py` runs an optimised `.har` as float
+(`SDK_FP_OPTIMIZED`) and as INT8 (`SDK_QUANTIZED`) on the same frames and
+reports the per-frame best-score drop over frames the float path scores
+≥ 0.25. The criteria were written before the run (in the tool's docstring),
+and a self-test recovers synthetic shifts of 0.00 / 0.03 / 0.08 to within 0.004.
+
+Issue #47 asked whether the INT8 loss came from a DOWNGRADED optimiser. The
+counterfactual is the same parsed `gate_sharks` graph and the same model
+script (`conv54` at a16, NMS 0.05), with three optimisation settings. 200
+frames per clip:
+
+| build | `gate.mkv` (n=133) median / p90 | `torpedo.mkv` (n=76) median / p90 |
+|---|---|---|
+| level 0 (no QFT) | **−0.010** / +0.087 | +0.156 / +0.325 |
+| level 2, QFT **off** | **−0.007** / +0.079 | +0.162 / +0.323 |
+| level 2, QFT on: **the shipped `gate_sharks.hef`** (md5 `d331a9bd…`) | **+0.339** / +0.555 | +0.578 / +0.792 |
+
+Float p50 is identical (0.638 / 0.124) in all three, so the float graph is the
+same and only the quantised one differs.
+
+⛔ **The full build is the bad one.** Its own compile log shows why. The
+Quantization-Aware Fine-Tuning distill losses ROSE across epochs (conv47
+0.128 → 0.244 → 0.260, conv51 0.111 → 0.256 → 0.231), and conv54 stayed
+pinned at 1.000. The fine-tune diverged and nothing warned. The healthy
+`gate_rescue_repair` build's QFT stayed flat (0.142 → 0.126). #47's guard
+checks for a downgrade, and this build had none: 1038 frames, GPU, level 2.
+
+**Independent corroboration from the chip.** On the vehicle, the composed
+harness ran this HEF on archive gate footage at conf 0.45 and held the
+detection rung **20 %** of the time (§28.6). The `.pt` detects on **100 %** of
+gate frames at that bar (§ B-59 re-check). A 0.34 confidence drop below a 0.45
+bar predicts exactly that kind of gap.
+
+**Fix, built here:** `hailo_compile.py --finetune off` (level 2, everything but
+QFT). The new build passes the new post-optimise guard at median **−0.013**
+(p90 +0.044, n=64, held-out `gate.mkv`), md5 `3e9e15f0…`, provenance committed
+beside the model. The old HEF is in `~/attic/2026-11-06/`.
+
+**The guard:** after the optimise, `hailo_compile.py` scores INT8 against float
+on frames it was NOT calibrated on. It refuses to compile above
+`MAX_INT8_SHIFT` **0.10**, which sits between the healthy builds (−0.01 on the
+emulator; 0.04–0.06 chip vs `.pt` on `gate_rescue_repair`) and the diverged
+one (0.34). Fewer than 16 scored frames is reported as UNVERIFIED, not as a pass.
+
+⚠ **The emulator is not the chip.** These rank builds against each other.
+**Owed when the Pi is back:** `hailortcli parse-hef` (expect score threshold
+0.050, 3 classes); the md5 on the vehicle; the composed harness re-run on the
+same clip. The bar: detection-rung share well above the old 20 %.
+
+⚠ `torpedo.mkv` holds no gate. Its float detections are B-60 false positives,
+and the larger INT8 drop there reads as INT8 suppressing them. That is not a
+reason to keep the bad build: it lost the true positives too.
+
+**The other surviving build, checked the same way.** `sauvc_sim.hef` (md5
+`07841cf5…`, HAR in `~/hailo/work`) was built at the REDUCED level 1 (QFT
+skipped), which today's downgrade guard would refuse. On its own simulator
+footage, 150 frames per clip, it loses a median **+0.022** (p90 +0.084, n=65)
+and **+0.016** (p90 +0.071, n=148): healthy, inside the 0.10 bar. A reduced
+level is a reason to measure, not proof of damage, and here it did no harm. It
+stays. `bin_fire_blood.hef` matches no surviving HAR, so it can only be measured
+on the chip or after a rebuild.

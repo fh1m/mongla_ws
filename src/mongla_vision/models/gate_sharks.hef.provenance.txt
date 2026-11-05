@@ -1,0 +1,9 @@
+calibration_frames: 1024
+gpu_visible: True
+reduced_optimization: False
+reasons: []
+finetune: off
+int8_shift_median: -0.0129 (n=64, p90 0.0441)
+int8_shift_reasons: []
+nms_score_th: 0.05
+hef_md5: 3e9e15f04e439b11ef0ae81a68bac3d3

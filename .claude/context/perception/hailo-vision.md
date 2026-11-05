@@ -727,7 +727,17 @@ matching, because overlapping same-class boxes defeat greedy assignment. **Had I
 not run that fp32 control I would have reported "quantization destroys 54 % of
 detections", which is badly wrong.**
 
-**What quantization actually costs: about 0.08 of confidence.** The int8 model
+> ⛔ **The 0.08 below is RETRACTED** (measured-bars: it was taken on the
+> swapped-colour path, B-61). On the corrected path INT8 cost **0.04–0.06**
+> chip vs `.pt` (`gate_rescue_repair`), and **−0.01** on the DFC emulator for
+> a healthy `gate_sharks` build. The other finding: a FULL-optimisation build
+> whose fine-tune diverged lost **0.34**, and it was the one shipped (B-82,
+> measured-bars §66). `hailo_compile.py` now refuses a build that loses
+> more than 0.10. Measure every build with `tools/hailo_int8_shift.py`;
+> never budget a fixed number.
+
+**What quantization actually costs: about 0.08 of confidence** (as first
+measured; see the retraction above). The int8 model
 finds the same objects and scores them lower, so they fall under a threshold
 tuned for fp32.
 
@@ -754,7 +764,7 @@ which the low baked threshold is what *permits*:
    value (0.05 used here). It costs nothing — 97.7 FPS either way — and it is
    the only thing that makes step 2 possible, since **runtime conf can only
    tighten**.
-2. Run at roughly **0.12-0.15** where fp32 would use 0.20. Budget ~0.08 of
+2. Run at roughly **0.12-0.15** where fp32 would use 0.20. Budget the measured shift of this build (`hailo_compile.py` records it in the provenance; ~0.08 as first written, retracted) of
    confidence for INT8.
 3. **Do not compensate for localization.** It is not degraded.
 

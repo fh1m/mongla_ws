@@ -134,3 +134,38 @@ swapping one unverified map for another:
 
 **To close fully:** wire the payload to SWITCH channels, set the four names, and
 update `test_the_channels_are_unassigned_until_someone_confirms_them`.
+
+---
+
+## 2. HIGH
+
+### B-82: the shipped `gate_sharks.hef` lost a median 0.34 of confidence to a fine-tune that diverged `MEASURED 2026-11-06 (emulator)`. ✅ **REBUILT 2026-11-06**; ⚠ on-chip check owed
+
+**What.** The forward gate detector the vehicle launches by default was
+compiled at full optimisation: 1038 frames, GPU, level 2. Its
+Quantization-Aware Fine-Tuning diverged (distill losses rose epoch over epoch,
+and conv54 stayed pinned at 1.000). On the DFC emulator the INT8 model scores
+gate frames a median **0.339** lower than its own float model. Level 0 and
+level-2-without-QFT builds of the same graph lose −0.010 and −0.007. At the
+shipped bar of 0.45 that turns most real gates into misses. The vehicle showed
+it: detection rung 20 % on gate footage, where the `.pt` detects 100 %
+(measured-bars §66).
+
+**Why nothing caught it.** #47's guard refuses an optimiser *downgrade*. This
+build had none. A HEF that compiles, loads and runs at full speed is not a
+result. The repo said so in `hailo_compile.py`'s own closing message, and
+the conf sweep on the HEF it asked for was never run.
+
+**Fix.**
+- `hailo_compile.py` now scores INT8 against float on held-out frames after
+  the optimise, and refuses to compile when the median shift exceeds
+  `MAX_INT8_SHIFT` 0.10. It reports fewer than 16 scored frames as UNVERIFIED.
+- `--finetune off` disables QFT for a model whose fine-tune diverges.
+- The rebuilt HEF measures −0.013 (md5 `3e9e15f0…`, provenance in
+  `models/gate_sharks.hef.provenance.txt`).
+- Tests are in `test_hailo_compile_refuses_a_downgrade.py`. Both new branches
+  bite under injection.
+
+**To close.** With the Pi: sync the model, check the md5 against the provenance,
+run `hailortcli parse-hef`, and re-run `tools/composed_lock_harness.py` on the
+same gate clip. The detection-rung share must rise well above 20 %.
