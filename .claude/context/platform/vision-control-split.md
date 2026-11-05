@@ -2,7 +2,7 @@
 
 > **Status (corrected 2026-09-03): step 2 of the migration below IS live; the
 > board's half is not.** The firmware spec is
-> [`Mongla_others/srot-control-board/VISION_API.md`](../../../../Mongla_others/srot-control-board/VISION_API.md).
+> [`Mongla_others/srot-control-board/VISION_API.md`](https://github.com/RakibulIslam1/srot-control-board/blob/main/VISION_API.md).
 >
 > Two corrections to what this header used to say, both of which had been false
 > for a round:

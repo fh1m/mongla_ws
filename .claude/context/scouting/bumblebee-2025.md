@@ -119,7 +119,7 @@ GATE_POINTS_3D = np.array([
 
 **Dock-side calibration checklist**:
 1. Place AUV 1m from gate, centered, camera level
-2. `ros2 run mongla_vision capture_template --camera forward --output templates/gate_front.jpg`
+2. Save one forward frame as `templates/gate_front.jpg` (⚠ no `capture_template` executable exists -- this checklist is the scouted proposal, not a shipped tool)
 3. Confirm template captures both poles and crossbar clearly
 
 ### P1 — Competition day: XFeat Re-ID Gallery

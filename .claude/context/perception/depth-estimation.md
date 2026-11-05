@@ -86,14 +86,14 @@ The `.onnx` is gitignored (binary, ~50 MB). Copy into
 
 ```bash
 # Bbox-area fallback (no model — always works):
-ros2 launch mongla_vision cameras_.launch.py depth:=true
+ros2 launch mongla_vision vision.launch.py depth:=true
 
 # With ONNX model:
-ros2 launch mongla_vision cameras_.launch.py depth:=true \
+ros2 launch mongla_vision vision.launch.py depth:=true \
     depth_model:=$(ros2 pkg prefix mongla_vision)/../../src/mongla_vision/mongla_vision/depth/models/depth_anything_v2_small.onnx
 
 # Verify topic:
-ros2 topic echo /mongla/vision/logitech/vis_range
+ros2 topic echo /mongla/vision/forward/vis_range
 ```
 
 ## HUD integration
