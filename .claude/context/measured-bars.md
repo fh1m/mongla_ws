@@ -2305,15 +2305,30 @@ later mistakes a derivation for a bar.
 
 | constant | value | derivation |
 |---|---|---|
-| `SAUVC_MAX_DEPTH_M` | −1.0 m | floor is 1.2 m at the pool ENDS (1.6 m only at centre); 0.2 m clearance |
-| `SAUVC_GATE_PASS_DEPTH_M` | −0.85 m | floor ≈1.49 m at the 16 m mark, 1.00 m gate on it → opening 0.49–1.49 m; biased high because a gate touch is −2 and a bottom touch is −5 |
-| `SAUVC_DRUM_HOVER_DEPTH_M` | −0.7 m | drum mouth is 0.30 m off the floor → 0.90 m down at the shallow end |
+> ⛔ **RE-DERIVED 2026-11-05.** The rulebook published 30 Oct 2026 moved the
+> venue from the one-off 25 × 16 m pool to an olympic 50 × 25 m pool (floor
+> 1.28 m for 1.8 m off the qualification wall, 2.0 m from 17.5 m; field
+> dimensions ±5 %). Superseded values, kept on record: `SAUVC_MAX_DEPTH_M`
+> −1.0 (1.2 m pool ends), `SAUVC_GATE_PASS_DEPTH_M` −0.85 (1.00 m gate on a
+> ~1.49 m floor), `SAUVC_BLIND_TRANSIT_S` 45 (16 m). Venue file:
+> `courses/sauvc_olympic.yaml`.
+
+| constant | value | derivation |
+|---|---|---|
+| `SAUVC_MAX_DEPTH_M` | −1.35 m | shallowest main-arena floor ~1.66 m at its 10 m edge (where the Surfacing Square floats), 1.57 m less 5 %; 0.2 m clearance |
+| `SAUVC_GATE_PASS_DEPTH_M` | −1.0 m | 1.50 m gate on the 2.0 m floor → opening ~0.4–1.9 m worst case; hull 0.17 m tall fits both sides; biased high because a gate touch is −2 (and no longer fails the task) and a bottom touch is −5 |
+| `SAUVC_DRUM_HOVER_DEPTH_M` | −0.7 m | drum mouth now ~1.7 m down (0.30 m drum on the 2 m floor) → ~1.0 m above it. Unchanged from the old venue, where it was 0.2 m above the mouth's depth margin; lowering it waits on the downward camera's in-water footprint |
+| `SAUVC_QUAL_PASS_DEPTH_M` | −0.5 m | qualification gate hangs ~1.00 m (0.95 m worst) from the surface; surfacing and a bar touch both FAIL, so centred: ~0.41 m to the surface, ~0.36 m to the bar |
+| `SAUVC_QUAL_MAX_DEPTH_M` | −1.0 m | the lane is the pool's shallowest water: 1.28 m at the wall, 1.22 m less 5 %; 0.2 m clearance |
 | `SAUVC_NAV_BUDGET_S` | 300 s | `(900 − RUN_TIME) × 0.03` → 18 bonus points at 300 s, more than the 15-point task. ⛔ The bonus needs **two** tasks completed, and `sauvc_navigation.run()` surfaces and disarms, so navigation alone scores 20 with **no** bonus — the 18 becomes earnable only with the Round 7 combinator. Mission budgets currently sum to **255 s of 300**. |
 
 **⛔ NOT measured — do not treat these as bars:**
 
-1. **`SAUVC_BLIND_TRANSIT_S = 45`.** The dead-reckoned gate leg. 16 m (the
-   rulebook's own distance) at an assumed ~0.35 m/s. **This hull's straight-line
+1. **`SAUVC_BLIND_TRANSIT_S = 40`** (was 45 for the old venue's 16 m), and
+   the qualification legs **`SAUVC_QUAL_BLIND_OUT_S = 32`**,
+   **`SAUVC_QUAL_BLIND_BACK_S = 14`**, **`SAUVC_QUAL_STANDOFF_S = 8`**. The
+   dead-reckoned legs: ~12 m to the gate, ~10 m to the qualification gate and
+   ~4.5 m back, at an assumed ~0.35 m/s. **This hull's straight-line
    speed at gain 40 has never been timed.** Measure a timed straight leg against
    a tape and correct it before trusting the blind branch.
 
