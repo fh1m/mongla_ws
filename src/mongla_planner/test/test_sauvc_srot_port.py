@@ -12,7 +12,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from mongla_control.fc.srot_fc import UNSUPPORTED_VERBS
-from mongla_planner.missions import sauvc_navigation, sauvc_target_acquisition
+from mongla_planner.missions import (
+    sauvc_navigation, sauvc_qualification, sauvc_target_acquisition)
 
 # DSL method -> wire verb, where the names differ.
 _WIRE = {'release_heading': 'unlock_heading'}
@@ -44,7 +45,8 @@ class _Recorder:
         return _call
 
 
-@pytest.mark.parametrize('mission', [sauvc_navigation, sauvc_target_acquisition])
+@pytest.mark.parametrize('mission', [sauvc_navigation, sauvc_qualification,
+                                     sauvc_target_acquisition])
 def test_no_refused_verb_is_sent_on_srot(mission):
     d = _Recorder('srot')
     mission.run(d)
@@ -106,6 +108,8 @@ def test_an_unreadable_or_unknown_backend_raises(monkeypatch, value):
 _DEPTH_GATED_ON_SROT = {
     'sauvc_full':               {'move_back', 'move_forward', 'pause', 'set_depth', 'stop'},
     'sauvc_navigation':         {'move_forward', 'pause', 'set_depth', 'stop'},
+    'sauvc_qualification':      {'move_forward', 'pause', 'set_depth', 'stop',
+                                 'yaw_right'},
     'sauvc_target_acquisition': {'move_forward', 'pause', 'set_depth'},
 }
 

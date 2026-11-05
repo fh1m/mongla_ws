@@ -97,9 +97,13 @@ def test_every_targeted_class_is_in_the_shipped_model():
 # ── 2. rulebook arithmetic: the sloping floor ─────────────────────────────────
 
 # "Touching the bottom of the pool or wall: 5" points -- per occurrence, the
-# harshest penalty in the rulebook. The floor is 1.6 m at the pool centre and
-# 1.2 m at both ends, so a setpoint is only safe if it clears the SHALLOW end.
-_SHALLOW_FLOOR_M = 1.2
+# harshest penalty in the rulebook. The arena figure: floor 1.28 m for 1.8 m
+# off the qualification wall, sloping to 2 m at 17.5 m. The main arena begins
+# at 10 m (floor ~1.66 m there; the Surfacing Square floats over it), so a
+# finals setpoint is only safe if it clears 1.66 m less the rulebook's ±5 %
+# field margin.
+_SHALLOW_FLOOR_M = round(
+    (1.28 + (10.0 - 1.8) / (17.5 - 1.8) * (2.0 - 1.28)) * 0.95, 2)   # 1.57
 _MIN_CLEARANCE_M = 0.2
 
 
@@ -107,7 +111,7 @@ def test_no_sauvc_depth_setpoint_can_ground_the_hull():
     depths = {n: v for n, v in vars(CFG).items()
               if n.startswith('SAUVC_') and n.endswith('_DEPTH_M')}
     assert depths, 'the SAUVC config block declares no depths'
-    floor_guard = -(_SHALLOW_FLOOR_M - _MIN_CLEARANCE_M)   # -1.0 m
+    floor_guard = -(_SHALLOW_FLOOR_M - _MIN_CLEARANCE_M)   # -1.37 m
     assert CFG.SAUVC_MAX_DEPTH_M >= floor_guard, (
         f'SAUVC_MAX_DEPTH_M {CFG.SAUVC_MAX_DEPTH_M} is deeper than the shallow '
         f'end allows ({floor_guard} m)')
@@ -119,16 +123,19 @@ def test_no_sauvc_depth_setpoint_can_ground_the_hull():
 
 
 def test_the_pass_depth_fits_inside_the_gate_opening():
-    """The gate is 100 cm tall on a floor ~1.49 m down at the 16 m mark, so the
-    opening runs from the floor up to ~0.49 m. Pass inside it, biased high:
-    a gate touch is -2, a bottom touch is -5.
+    """The gate is "150cm wide and 150cm tall" on the flat 2 m floor (1.9 m
+    with the ±5 % margin), so the opening runs from the floor up to ~0.4 m.
+    Pass inside it, biased high: a gate touch is -2, a bottom touch is -5.
+    The hull's own 0.17 m height must fit on BOTH sides, not just its centre.
     """
-    floor_at_gate = 1.49
-    top_bar = floor_at_gate - 1.00          # 0.49 m below the surface
+    floor_at_gate = 2.0 * 0.95
+    top_bar = floor_at_gate - 1.50 * 1.05   # worst case: the tallest legal gate
+    half_hull = 0.172 / 2                   # CAD height, tools/pack_hull.py
     depth = -CFG.SAUVC_GATE_PASS_DEPTH_M
-    assert depth > top_bar, \
-        'pass depth is ABOVE the gate top bar -- the hull would go over, not through'
-    assert depth < floor_at_gate, 'pass depth is below the pool floor at the gate'
+    assert depth - half_hull > top_bar, \
+        'the hull top is ABOVE the gate top bar -- it would hit or go over'
+    assert depth + half_hull < floor_at_gate, \
+        'the hull bottom is below the pool floor at the gate'
     assert (depth - top_bar) > (floor_at_gate - depth) * 0.4, \
         'pass depth is not biased away from the -5 floor'
 

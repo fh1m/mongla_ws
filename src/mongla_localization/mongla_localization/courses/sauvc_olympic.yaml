@@ -1,0 +1,113 @@
+# SAUVC course prior for the OLYMPIC-POOL venue -- WHERE the props are, not
+# what they look like. `sauvc26.yaml` is the one-off 25 x 16 m venue; this is
+# the 50 x 25 m pool the rulebook published 30 Oct 2026 describes. The two
+# share prop classes and almost nothing else, which is why they are two files.
+#
+# ⛔ EVERY POSITION HERE IS UNSET, AND THAT IS THE SHIPPED STATE.
+# The rulebook gives ZONES, not points: the gate "may be located anywhere on a
+# horizontal line ... approximately 12m away from the starting zone", the
+# orange flare "anywhere in a rectangular zone 4m-8m from side of the arena,
+# before the gate", the bump flares "anywhere within the main arena", the drum
+# order randomised between attempts. The arena figure is marked "not to scale".
+# So this file ships structure, classes and dimensions only.
+#
+# Fill it in AT THE VENUE with the survey tool, no rebuild:
+#
+#     ros2 run mongla_localization course_survey --course sauvc_olympic \
+#         --prop final_gate --x 12.0 --y 0.0 --bearing 0
+#
+# which writes ~/.mongla/courses/sauvc_olympic.yaml (or $MONGLA_COURSE_DIR)
+# with measured: true. The loader reads that copy first.
+#
+# ⛔ FRAME, STATED ONCE. Origin: the centre of the starting zone. +x runs from
+# the starting zone toward the gate (ACROSS the pool's 25 m width, not along
+# its 50 m length) and is bearing 0. +y is to the right of it and is bearing
+# 90. `depth_m` is NEGATIVE below the surface. `bearing_deg` is the compass
+# direction the prop's FACE points.
+#
+# THE FLOOR, from the figure's side view, along the pool's LENGTH: 1.28 m for
+# the first 1.8 m off the qualification wall, sloping to 2.0 m at 17.5 m, flat
+# 2.0 m beyond. The qualification arenas are the first 10 m; the main arena is
+# the remaining 28 m-wide strip (floor ~1.66 m at its shallow edge, 2.0 m from
+# 17.5 m on). The Surfacing Square sits at that shallow edge. Field dimensions
+# carry a ±5 % margin ("unless otherwise stated").
+#
+# Classes are those of the SAUVC detection model (`sauvc_sim` sidecar). A prop
+# with an empty `detect_class` has NO class in any shipped model: it can be
+# reached only from its surveyed position, never by steering on a detection.
+
+course: sauvc_olympic
+frame: "pool: origin starting-zone centre, +x toward the gate (bearing 0), +y right (bearing 90)"
+
+props:
+  starting_zone:
+    detect_class: starting_zone
+    measured: false
+    note: "140 x 140 cm, marked on the water surface. The origin of this frame.
+           The AUV must submerge BEFORE leaving it."
+
+  qual_gate:
+    detect_class: qual_gate
+    measured: false
+    note: "Qualification gate, 150 cm wide, ~100 cm deep, HANGING FROM THE
+           SURFACE with orange markings both sides; ~10 m from a marked 1 m
+           section of the qualification wall the AUV must touch at the start.
+           Floor ~1.28-1.66 m under it. Not in the finals frame -- qualification
+           is its own run in its own lane."
+
+  orange_flare:
+    detect_class: orange_flare
+    measured: false
+    note: "150 cm tall, ~15 cm diameter. Touching it ABORTS the attempt.
+           Rulebook zone 4-8 m from the starting side, before the gate."
+
+  final_gate:
+    detect_class: final_gate
+    measured: false
+    note: "150 cm wide x 150 cm tall, on the 2 m floor, red/black port and
+           green/black starboard posts, on a line ~12 m from the starting zone.
+           Touching it is -2 and no longer fails the task. bearing_deg = the
+           direction a vehicle passes through it; set it and the gate is this
+           course's heading anchor."
+
+  flare_red:
+    detect_class: flare_red
+    measured: false
+    note: "Bump flare, 80 cm tall, ~1.6 cm pole with a standard golf ball on
+           top. Anywhere in the main arena; the figure draws them in a band
+           beyond the gate. Detectable only within ~0.9 m on the forward camera
+           (16 mm against a 10 px floor) -- position matters."
+
+  flare_yellow:
+    detect_class: flare_yellow
+    measured: false
+    note: "Bump flare, as flare_red."
+
+  flare_blue:
+    detect_class: flare_blue
+    measured: false
+    note: "Bump flare, as flare_red."
+
+  target_mat:
+    detect_class: target_mat
+    measured: false
+    note: "Green mat, 8 m x 2 m, on the 2 m floor, carrying the four drums.
+           The figure puts it at the far side of the arena from the start."
+
+  drum_red_pinger:
+    detect_class: drum_red_pinger
+    measured: false
+    note: "60 cm diameter x 30 cm. The pinger drum (50 points) is separable
+           only acoustically (RJE ULB-362B, 45 kHz); its place on the mat may
+           change between attempts, so a surveyed position is a prior, not an
+           answer."
+
+  surfacing_square:
+    detect_class: ""
+    measured: false
+    note: "200 x 200 cm PVC frame floating on the surface, held by a line, blue
+           markers hanging ~30 cm below it. Next to the qualification gates, at
+           the main arena's shallow edge (floor ~1.66 m). +20 for surfacing
+           inside it without touching any side, after Navigation. NO model
+           emits a class for it: reachable only from this position until one
+           does."
