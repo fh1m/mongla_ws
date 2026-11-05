@@ -67,12 +67,16 @@
 # copy that is read is the installed one, not this source file.
 
 sauvc:
-  # Source: SAUVC 2026 rulebook, https://sauvc.org/rulebook/ (verified against
-  # the live page 2026-09-09; every quotation below is the rulebook's own text).
+  # Source: the SAUVC rulebook, https://sauvc.org/rulebook/ (first verified
+  # 2026-09-09; re-read 2026-11-05 against the edition published 30 Oct 2026,
+  # which moved to a 50x25 m pool and re-worded several props). Every quotation
+  # below is the rulebook's own text; where the current edition changed the
+  # wording, the current wording is quoted. No WIDTH changed except the mat.
 
   qual_gate:
-    # "150cm wide spanning from bottom of the pool to the top, hanging from the
-    #  water surface with orange markings on both port and starboard sides."
+    # "150cm wide and ~100cm deep gate hanging from the water surface with
+    #  orange markings on both port and starboard sides." (It no longer spans
+    #  to the floor: the opening is the top ~1 m of water.)
     #
     # ⛔ 1.50 is the SPAN BETWEEN THE POSTS, and it is the right number only if
     # the detector boxes the whole gate. Our `qual_gate` class does exactly
@@ -81,14 +85,14 @@ sauvc:
     # become the post diameter or every range triples.
     width_m: 1.50
     boxes: whole-gate
-    source: "SAUVC 2026 rulebook, qualifying task"
+    source: "SAUVC rulebook, qualifying task"
 
   final_gate:
-    # "150cm wide and 100cm tall gate with striped red and green markings on
-    #  port and starboard sides respectively."
+    # "150cm wide and 150cm tall gate with striped red and green markings on
+    #  port and starboard sides respectively." (Was 100cm tall.)
     width_m: 1.50
     boxes: whole-gate
-    source: "SAUVC 2026 rulebook, navigation task"
+    source: "SAUVC rulebook, navigation task"
 
   orange_flare:
     # "~15cm diameter flare with height spanning from bottom to top of the
@@ -100,7 +104,7 @@ sauvc:
     width_m: 0.15
     boxes: diameter
     tolerance_note: "rulebook says ~15cm; treat as nominal"
-    source: "SAUVC 2026 rulebook, navigation task"
+    source: "SAUVC rulebook, navigation task"
 
   flare_red:    &bump_flare
     # "80cm tall, ~1.6cm in diameter" -- the coloured bump flares.
@@ -112,7 +116,7 @@ sauvc:
     # believed.
     width_m: 0.016
     boxes: diameter
-    source: "SAUVC 2026 rulebook, target acquisition task"
+    source: "SAUVC rulebook, target acquisition task"
   flare_yellow: *bump_flare
   flare_blue:   *bump_flare
 
@@ -125,7 +129,7 @@ sauvc:
     # solver's ambiguity gate is what catches an over-oblique view.
     width_m: 0.60
     boxes: diameter
-    source: "SAUVC 2026 rulebook, target acquisition task"
+    source: "SAUVC rulebook, target acquisition task"
   drum_blue:       *drum
   drum_red_pinger: *drum
   # ⛔ `drum_red_pinger` IS NOT A VISUAL CLASS. Verified against the rulebook
@@ -146,14 +150,16 @@ sauvc:
   # test_sauvc_target_acquisition.py.
 
   target_mat:
-    # NOT in the rulebook's prose. 2.2 m is the simulator's arena spec
-    # (`sim/.../spec/sauvc.yaml`), taken from the rulebook figure rather than
-    # a quoted sentence. Kept because the mat is a downward-camera landmark,
-    # flagged because it is the one SAUVC entry with no quotable source.
-    width_m: 2.20
+    # "A target zone is defined by a green coloured mat laid out on the floor
+    #  of the pool. The mat is 8m × 2m in size."
+    #
+    # Width is the SHORT side, 2 m: from the downward camera the mat overfills
+    # the frame lengthwise long before it does across. The previous 2.20 came
+    # from the simulator's arena spec when the rulebook gave no figure in
+    # prose; it was flagged `unquoted` then and is now superseded by a quote.
+    width_m: 2.00
     boxes: whole-mat
-    source: "sim arena spec, from the rulebook figure -- NOT quoted prose"
-    unquoted: true
+    source: "SAUVC rulebook, target acquisition task"
 
   starting_zone:
     # "The starting zone is a 140x140cm area marked on the surface of water."

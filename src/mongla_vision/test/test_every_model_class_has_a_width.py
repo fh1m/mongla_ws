@@ -223,13 +223,29 @@ def test_a_broken_override_does_not_erase_the_defaults(monkeypatch):
 
 
 def test_simulator_sourced_numbers_are_marked_as_such():
-    """Organisers' documents are the source; the sim is our own guess."""
+    """Organisers' documents are the source; the sim is our own guess.
+
+    Every entry whose source is not an organiser's document must carry
+    `unquoted: true`, so it is never mistaken for a rulebook figure. The mat
+    was the one such entry until the rulebook quoted it ("8m × 2m"); it must
+    now be the quoted 2 m, not the simulator's 2.2 m.
+    """
     tg = _geometry()
     entry = tg.describe('target_mat')
     assert entry, 'target_mat vanished from the table'
-    assert entry.get('unquoted') is True, (
-        'a width taken from the simulator arena spec must be flagged, so it is '
-        'never mistaken for a rulebook figure: %s' % entry)
+    assert entry.get('width_m') == pytest.approx(2.00), entry
+    assert 'rulebook' in entry.get('source', '').lower(), entry
+    import yaml
+    from pathlib import Path
+    src_table = Path(__file__).resolve().parents[1] / 'config' / 'target_geometry.yaml'
+    table = yaml.safe_load(src_table.read_text())
+    for comp, entries in table.items():
+        for name, e in (entries or {}).items():
+            if not isinstance(e, dict):
+                continue
+            src = str(e.get('source', '')).lower()
+            if 'sim' in src.split() or 'simulator' in src:
+                assert e.get('unquoted') is True, (comp, name, e)
 
 
 def test_the_committed_table_parses():
