@@ -35,8 +35,12 @@ PASS CRITERIA, written before the first run (2026-10-03):
   4. the detector published detections on >= 20 % of frames (the gate is in
      view for most of the archive clip; below that, the clip or the model is
      wrong and nothing else here means anything);
-  5. no exception escaped, and the process exits 0 (the teardown crash this
-     codebase had, rc 139, is checked by the exit code).
+  5. no XFeat call raised, no exception escaped, and the process exits 0
+     (the teardown crash this codebase had, rc 139, is checked by the exit
+     code). A call that raised is an error, never a latency sample: as first
+     written the timer sat in a `finally`, so a chip failing every call could
+     still pass criterion 3 (`score_run`, `measure_calls`; tested in
+     src/mongla_vision/test/test_composed_lock_harness.py).
 
 FALSIFIER: `--cpu-anchor` forces the ONNX anchor. Criterion 1 must FAIL --
 if it passes, the harness is not reading the backend it claims to.
@@ -48,10 +52,52 @@ which a clip may or may not contain.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import statistics
 import sys
 import threading
 import time
+
+
+@contextlib.contextmanager
+def measure_calls(cls):
+    """Time every successful `cls.detect`; record every failure as an error.
+
+    A failed chip call is NOT a latency sample -- timing it in a `finally`
+    once let a run of exceptions pass as "XFeat ran in-graph". Restores the
+    original method on exit, including when the body raises.
+    """
+    out: dict = {'ms': [], 'errors': []}
+    original = cls.__dict__['detect']
+
+    def timed(self, gray):
+        t = time.perf_counter()
+        try:
+            r = original(self, gray)
+        except Exception as e:  # noqa: BLE001 -- recorded, then re-raised
+            out['errors'].append(f'{type(e).__name__}: {e}')
+            raise
+        out['ms'].append((time.perf_counter() - t) * 1e3)
+        return r
+
+    cls.detect = timed
+    try:
+        yield out
+    finally:
+        cls.detect = original
+
+
+def score_run(backend, enrolled, xf_ms, frac, errors):
+    """The pass criteria in the docstring, as (name, ok) pairs."""
+    p50 = statistics.median(xf_ms) if xf_ms else float('nan')
+    return [
+        ('anchor runs on the Hailo-8', backend == 'XFeatHailo'),
+        ('a checkpoint was enrolled', enrolled >= 1),
+        ('XFeat ran in-graph, p50 < 32.9 ms (the CPU path it replaces)',
+         bool(xf_ms) and p50 < 32.9),
+        ('the target was detected on >= 20 % of frames', frac >= 0.20),
+        (f'no XFeat call raised ({len(errors)} did)', not errors),
+    ]
 
 
 def main() -> int:
@@ -78,18 +124,6 @@ def main() -> int:
     from mongla_vision.detector_node import DetectorNode
     from mongla_vision.lock_node import LockNode
 
-    # -- instrumentation: count and time every XFeat call on the chip ------ #
-    xf_ms: list[float] = []
-    _detect = xfeat_hailo.XFeatHailo.detect
-
-    def timed(self, gray):
-        t = time.perf_counter()
-        try:
-            return _detect(self, gray)
-        finally:
-            xf_ms.append((time.perf_counter() - t) * 1e3)
-    xfeat_hailo.XFeatHailo.detect = timed
-
     # The ladder zeroes its rung tally every 5 s when it logs; keep a total.
     rungs: dict = {}
     _health = LockNode._log_health
@@ -98,48 +132,66 @@ def main() -> int:
         for r, n in self._n_by_rung.items():
             rungs[r.value] = rungs.get(r.value, 0) + n
         _health(self)
-    LockNode._log_health = tally
 
+    nodes: list = []
+    ex = None
     rclpy.init()
-    cam = 'forward'
-    det = DetectorNode(f'mongla_detector_{cam}', parameter_overrides=[
-        P('camera', value=cam), P('direct_feed', value=True),
-        P('model_path', value=a.model), P('classes', value=a.target),
-        P('conf', value=a.conf), P('paused', value=False),
-        P('device', value='cpu'), P('publish_debug_image', value=False)])
-    det._cam_name = cam
-    lock = LockNode(f'mongla_lock_{cam}', parameter_overrides=[
-        P('camera', value=cam), P('direct_feed', value=True),
-        P('target_class', value=a.target), P('follow', value=True),
-        P('anchor', value=True),
-        P('anchor_xfeat_hef', value=not a.cpu_anchor),
-        P('act_conf', value=a.conf)])
-    camera = CameraNode(f'mongla_camera_{cam}', parameter_overrides=[
-        P('name', value=cam), P('frame_id', value=cam),
-        P('source', value='video_file'), P('path', value=a.video),
-        P('loop', value=True), P('fps', value=a.fps)],
-        frame_sink=_Tee(det, lock))
+    LockNode._log_health = tally
+    try:
+        with measure_calls(xfeat_hailo.XFeatHailo) as measured:
+            cam = 'forward'
+            det = DetectorNode(f'mongla_detector_{cam}', parameter_overrides=[
+                P('camera', value=cam), P('direct_feed', value=True),
+                P('model_path', value=a.model), P('classes', value=a.target),
+                P('conf', value=a.conf), P('paused', value=False),
+                P('device', value='cpu'), P('publish_debug_image', value=False)])
+            nodes.append(det)
+            det._cam_name = cam
+            lock = LockNode(f'mongla_lock_{cam}', parameter_overrides=[
+                P('camera', value=cam), P('direct_feed', value=True),
+                P('target_class', value=a.target), P('follow', value=True),
+                P('anchor', value=True),
+                P('anchor_xfeat_hef', value=not a.cpu_anchor),
+                P('act_conf', value=a.conf)])
+            nodes.append(lock)
+            camera = CameraNode(f'mongla_camera_{cam}', parameter_overrides=[
+                P('name', value=cam), P('frame_id', value=cam),
+                P('source', value='video_file'), P('path', value=a.video),
+                P('loop', value=True), P('fps', value=a.fps)],
+                frame_sink=_Tee(det, lock))
+            nodes.append(camera)
 
-    # Detection rate as a consumer sees it, off the published topic.
-    probe = rclpy.create_node('composed_lock_probe')
-    seen = {'msgs': 0, 'with_target': 0}
+            # Detection rate as a consumer sees it, off the published topic.
+            probe = rclpy.create_node('composed_lock_probe')
+            nodes.append(probe)
+            seen = {'msgs': 0, 'with_target': 0}
 
-    def on_det(msg):
-        seen['msgs'] += 1
-        seen['with_target'] += bool(msg.detections)
-    probe.create_subscription(Detection2DArray,
-                              f'/mongla/vision/{cam}/detections', on_det,
-                              _qos.DETECTIONS)
+            def on_det(msg):
+                seen['msgs'] += 1
+                seen['with_target'] += bool(msg.detections)
+            probe.create_subscription(Detection2DArray,
+                                      f'/mongla/vision/{cam}/detections',
+                                      on_det, _qos.DETECTIONS)
 
-    ex = MultiThreadedExecutor()
-    for n in (det, lock, camera, probe):
-        ex.add_node(n)
-    t = threading.Thread(target=ex.spin, daemon=True)
-    t.start()
-    t0 = time.monotonic()
-    time.sleep(a.seconds)
-    elapsed = time.monotonic() - t0
-    lock._log_health()                     # fold in the last partial window
+            ex = MultiThreadedExecutor()
+            for n in nodes:
+                ex.add_node(n)
+            threading.Thread(target=ex.spin, daemon=True).start()
+            t0 = time.monotonic()
+            time.sleep(a.seconds)
+            elapsed = time.monotonic() - t0
+            lock._log_health()             # fold in the last partial window
+            ex.shutdown()
+            ex = None
+            xf_ms = list(measured['ms'])
+            errors = list(measured['errors'])
+    finally:
+        if ex is not None:
+            ex.shutdown()
+        for n in reversed(nodes):
+            n.destroy_node()
+        LockNode._log_health = _health
+        rclpy.try_shutdown()
 
     backend = type(getattr(getattr(lock, '_anchor', None), '_be', None)).__name__
     enrolled = int(getattr(lock, '_anchor_enrolled', 0))
@@ -155,26 +207,16 @@ def main() -> int:
           f'{100 * frac:.0f} % with a target')
     print(f'anchor      backend {backend}, {enrolled} checkpoint(s) enrolled')
     print(f'XFeat       {len(xf_ms)} chip call(s), p50 {p50:.2f} ms, '
-          f'p95 {p95:.2f} ms')
+          f'p95 {p95:.2f} ms, {len(errors)} raised')
+    for e in sorted(set(errors))[:5]:
+        print(f'            raised: {e}')
     print('rungs       ' + '  '.join(f'{k}={100 * v / tot:.0f}%'
                                      for k, v in rungs.items()))
 
-    checks = [
-        ('anchor runs on the Hailo-8', backend == 'XFeatHailo'),
-        ('a checkpoint was enrolled', enrolled >= 1),
-        ('XFeat ran in-graph, p50 < 32.9 ms (the CPU path it replaces)',
-         bool(xf_ms) and p50 < 32.9),
-        ('the target was detected on >= 20 % of frames', frac >= 0.20),
-    ]
+    checks = score_run(backend, enrolled, xf_ms, frac, errors)
     for name, ok in checks:
         print(f'  [{"PASS" if ok else "FAIL"}] {name}')
-
-    ex.shutdown()
-    for n in (camera, lock, det, probe):
-        n.destroy_node()
-    rclpy.try_shutdown()
     return 0 if all(ok for _, ok in checks) else 1
-
 
 if __name__ == '__main__':
     sys.exit(main())
