@@ -99,7 +99,7 @@ def end_nodes(onnx_path: pathlib.Path) -> list:
                                         '/cv3.' in n))
 
 
-def calib_frames(n: int, imgsz: int):
+def calib_frames(n: int, imgsz: int, seed: int = 0):
     """Real frames, sampled across the whole archive rather than one clip.
 
     Drawing them from one video would calibrate on one venue's water, which is
@@ -116,7 +116,7 @@ def calib_frames(n: int, imgsz: int):
             f'[hailo] REFUSING: no video under {root}. INT8 scales taken from '
             f'synthetic data lose the faintest detections in real water, so '
             f'this will not substitute noise. Set MONGLA_ARCHIVE.')
-    random.Random(0).shuffle(clips)
+    random.Random(seed).shuffle(clips)
     out, per = [], max(1, n // min(len(clips), 40) + 1)
     for clip in clips:
         if len(out) >= n:
@@ -171,6 +171,36 @@ def downgrade_reasons(*, frames: int, gpu, log_lines=()) -> list:
         if m:
             why.append(f'the DFC reported: {m.group(0)}')
     return why
+
+
+# ⛔ THE OTHER WAY A FULL BUILD GOES WRONG: THE OPTIMISER ITSELF (2026-11-06).
+# The shipped gate_sharks.hef passed every downgrade check -- 1038 frames, a
+# GPU, level 2 -- and its Quantization-Aware Fine-Tuning DIVERGED: distill
+# losses rose 0.13 -> 0.26 across epochs and conv54 sat at 1.000. On the DFC
+# emulator that build loses a median 0.339 of confidence on gate footage
+# where a level-0 build of the same model loses -0.010
+# (tools/hailo_int8_shift.py, measured-bars). Nothing warned. So the optimised
+# model is checked against its own float self on frames it was NOT
+# calibrated on, and a large shift refuses the compile.
+#
+# 0.10: the healthy builds measured so far sit at -0.01 (emulator, level 0)
+# and 0.04-0.06 (chip vs .pt, gate_rescue_repair); the diverged one at 0.34.
+MAX_INT8_SHIFT = 0.10
+MIN_VERIFY_FRAMES = 16
+
+
+def int8_shift_reasons(stats: dict, max_shift: float = MAX_INT8_SHIFT) -> list:
+    """Why an optimised model's INT8 scores cannot be trusted, from the
+    `hailo_int8_shift.shift_stats` of fp vs quantised on held-out frames."""
+    if stats.get('n', 0) < MIN_VERIFY_FRAMES:
+        return [f'only {stats.get("n", 0)} held-out frames scored >= 0.25 on '
+                f'the float path (need {MIN_VERIFY_FRAMES}): INT8 accuracy is '
+                f'UNVERIFIED -- pass --verify-clip footage containing a target']
+    if stats['median'] > max_shift:
+        return [f'INT8 loses a median {stats["median"]:.3f} of confidence '
+                f'against the float model (bar {max_shift:.2f}, p90 '
+                f'{stats["p90"]:.3f}): the optimiser degraded this build']
+    return []
 
 
 def _gpu_visible():
@@ -243,6 +273,15 @@ def main() -> int:
     # Raising just that layer to 16-bit costs a little throughput on one layer
     # and leaves the rest INT8. ⚠ Name the layer the error names; blanket
     # 16-bit would quietly discard the accelerator's main advantage.
+    ap.add_argument('--verify-clip', action='append', default=[],
+                    help='footage containing a target, for the INT8 check '
+                         'after the optimise (default: a fresh archive sample)')
+    ap.add_argument('--allow-int8-shift', action='store_true',
+                    help='compile even if INT8 loses more than '
+                         f'{MAX_INT8_SHIFT} of confidence; must not be deployed')
+    ap.add_argument('--finetune', choices=('on', 'off'), default='on',
+                    help='off disables Quantization-Aware Fine-Tuning, for a '
+                         'model whose fine-tune diverges (see MAX_INT8_SHIFT)')
     ap.add_argument('--a16-layers', default='',
                     help='comma-separated layers to keep at 16-bit, for ones '
                          'that fail INT8 quantisation (see the error text)')
@@ -295,6 +334,8 @@ def main() -> int:
                    f'precision_mode=a16_w16)\n')
         print(f'[hailo] ⚠ {bare} kept at 16-bit: it would not quantise to '
               f'INT8. The rest of the network is unaffected.')
+    if a.finetune == 'off':
+        script += 'post_quantization_optimization(finetune, policy=disabled)\n'
     runner.load_model_script(script)
     print(f'[hailo] model script:\n{script}')
 
@@ -354,6 +395,23 @@ def main() -> int:
     opt = out / f'{a.model}_optimized.har'
     runner.save_har(str(opt))
     print(f'[hailo] optimised -> {opt.name}')
+
+    # The optimised model against its own float self, on frames it was not
+    # calibrated on -- the second, independent observation.
+    import numpy as np
+    from hailo_int8_shift import frames as clip_frames, int8_vs_fp
+    held = (np.concatenate([clip_frames(c, 100, a.imgsz) for c in a.verify_clip])
+            if a.verify_clip else
+            calib_frames(256, a.imgsz, seed=1).astype('float32'))
+    shift = int8_vs_fp(runner, held)
+    print(f'[hailo] INT8 vs float on {len(held)} held-out frames: n={shift["n"]} '
+          f'median {shift["median"]:+.3f} p90 {shift["p90"]:+.3f}')
+    bad = int8_shift_reasons(shift)
+    if bad and not a.allow_int8_shift:
+        raise SystemExit('[hailo] REFUSING after the optimise -- nothing was '
+                         'compiled: ' + '; '.join(bad) + '. Try --finetune off, '
+                         'or --allow-int8-shift for a build that must not be '
+                         'deployed.')
     # Provenance beside the artifact, so a runtime or a reviewer can see what
     # this HEF was built with rather than infer it.
     (out / f'{a.model}.hef.provenance.txt').write_text(
@@ -361,11 +419,21 @@ def main() -> int:
         f'gpu_visible: {gpu}\n'
         f'reduced_optimization: {bool(after)}\n'
         f'reasons: {after}\n'
+        f'finetune: {a.finetune}\n'
+        f'int8_shift_median: {shift["median"]:.4f} (n={shift["n"]}, '
+        f'p90 {shift["p90"]:.4f})\n'
+        f'int8_shift_reasons: {bad}\n'
         f'nms_score_th: {a.nms_score_th}\n')
 
     hef = out / f'{a.model}.hef'
     hef.write_bytes(runner.compile())
     print(f'[hailo] wrote {hef} ({hef.stat().st_size / 1e6:.1f} MB)')
+    # The checksum ties this record to ONE artifact: the vehicle's copy is
+    # checked against it (`md5sum ~/hailo_models/<model>.hef`), because a HEF
+    # rebuilt with the same name is otherwise indistinguishable from the old.
+    import hashlib
+    with (out / f'{a.model}.hef.provenance.txt').open('a') as fh:
+        fh.write(f'hef_md5: {hashlib.md5(hef.read_bytes()).hexdigest()}\n')
 
     # ⚠ A HEF THAT COMPILES IS NOT A RESULT. The threshold is the reason this
     # was run, so verify it off the artifact rather than trusting the request.
