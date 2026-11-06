@@ -794,8 +794,8 @@ def _tool_offset(tool_offset_fn, log) -> Tuple[float, float]:
     close, so it is resolved once per tick because Z moves.
 
     (0, 0) when it cannot be computed (no tool named, no calibration, no range):
-    then the loop aims the camera, which is what every mission has always
-    done. The caller warns; refusing here would break every align with no pose.
+    the previous behaviour, aiming the camera, which is what every mission has
+    always done. The caller warns; refusing would break every align with no pose.
     """
     if tool_offset_fn is None:
         return 0.0, 0.0
