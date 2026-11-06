@@ -57,7 +57,7 @@ def _q_for_dt(dt: float, process_noise: float) -> "np.ndarray":
     `np.eye(4) * process_noise` -- constant, therefore correct at exactly one dt.
     Simply substituting the WNA form fixes the dt-dependence but also moves the
     operating point by ~10^6 at a typical interval, because `process_noise` was
-    tuned (tracker.yaml: 0.05) against that identity matrix and means something
+    tuned (the retired tracker.yaml: 0.05) against that identity matrix and means something
     different here.
 
     So sigma_a^2 is anchored: at `_DT_REF_S` the VELOCITY term reproduces the old

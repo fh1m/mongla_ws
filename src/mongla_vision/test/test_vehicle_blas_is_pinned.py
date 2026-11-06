@@ -20,9 +20,10 @@ LAUNCHES = (
 
 
 def _first_action_index(src: str) -> int:
-    # bringup puts a LogInfo (`file_note`, the settings file it read) between
-    # the arguments and the actions; a log line starts no library.
-    m = re.search(r'return LaunchDescription\(args \+ (?:file_note \+ )?\[', src)
+    # bringup puts a LogInfo (`file_note`, the settings file it read) and the
+    # `nodes:` actions (`params`: a log line, an env var, a parameter file)
+    # between the arguments and the nodes; none of them starts a library.
+    m = re.search(r'return LaunchDescription\(args \+ (?:file_note \+ )?(?:params \+ )?\[', src)
     assert m, 'no `return LaunchDescription(args + [...` to anchor on'
     return m.start()
 

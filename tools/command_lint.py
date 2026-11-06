@@ -103,21 +103,23 @@ def console_scripts(pkg_dir: Path) -> set[str]:
 
 
 def launch_decl(path: Path) -> dict[str, list[str] | None]:
-    """{arg name: choices or None} for every DeclareLaunchArgument in a file."""
-    out: dict[str, list[str] | None] = {}
-    for node in ast.walk(ast.parse(path.read_text())):
-        if not (isinstance(node, ast.Call)
-                and getattr(node.func, 'id', '') == 'DeclareLaunchArgument'):
-            continue
-        if not (node.args and isinstance(node.args[0], ast.Constant)):
-            continue
-        choices = None
-        for kw in node.keywords:
-            if kw.arg == 'choices' and isinstance(kw.value, (ast.List, ast.Tuple)):
-                choices = [str(e.value) for e in kw.value.elts
-                           if isinstance(e, ast.Constant)]
-        out[str(node.args[0].value)] = choices
-    return out
+    """{arg name: choices or None} for every argument a launch file accepts,
+    including the ones it passes through from another launch (launch_ast)."""
+    return {a.name: (list(a.choices) if a.choices else None)
+            for a in _launch_ast().declarations(path)}
+
+
+def _launch_ast():
+    """tools/launch_ast.py, the one static reader of launch arguments."""
+    import importlib.util
+    import sys
+    if 'launch_ast' not in sys.modules:
+        spec = importlib.util.spec_from_file_location(
+            'launch_ast', Path(__file__).resolve().parent / 'launch_ast.py')
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules['launch_ast'] = mod
+        spec.loader.exec_module(mod)
+    return sys.modules['launch_ast']
 
 
 def missions() -> set[str]:

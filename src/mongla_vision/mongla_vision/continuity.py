@@ -192,7 +192,7 @@ def reacquire_times(obs: Sequence[Obs], stable_frames: int = 3) -> List[float]:
 
 # The ladder, so the report answers "is coast_s enough" directly rather than
 # leaving it to be read off a percentile table. Values from
-# vision_tunables.py / motion_vision.py / config/tracker.yaml.
+# vision_tunables.py / motion_vision.py / tracker_node.py.
 LADDER: Tuple[Tuple[str, float], ...] = (
     ('freshness zero (0.20 s)', 0.20),
     ('coast_s (0.80 s)',        0.80),

@@ -2440,6 +2440,10 @@ def main(args=None):
         _orphan_guard(node, executor, parent_pid)(signal.SIGUSR1, None)
 
     try:
+        # Inside the try, so a refusal still runs the teardown below: the
+        # board link is already open by now.
+        from mongla_localization.params_file import refuse_unknown
+        refuse_unknown(node)   # bringup.yaml `nodes:` typos stop here
         executor.spin()
     except KeyboardInterrupt:
         pass

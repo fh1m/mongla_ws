@@ -139,6 +139,27 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 
 ## 2. HIGH
 
+### B-83: the tracker shipped a 2.0 s lost-track buffer while the ledger said 5.0 s `READ 2026-11-06` ✅ **FIXED 2026-11-06**
+
+**What.** `measured-bars.md` sized the lock ladder's last rung at `track_buffer`
+= 5.00 s, covering 100 % of measured gaps against a bar of the p99 (2.418 s),
+and quoted the value from `config/tracker.yaml` (150). Nothing loaded that
+file: it was keyed `tracker_node`, while the vehicle's trackers are
+`mongla_tracker_forward` / `_downward`, and no launch passed it. The node
+shipped its own default, **60**. Roboflow keeps a lost track for
+`int(frame_rate/30 * track_buffer)` frames, so 60 is **2.0 s at any rate,
+below the bar**: a target hidden 2.0-2.4 s came back under a new id. Two
+tests "pinned" the rung by reading the same dead file.
+
+**Fix.** The node ships 150 (5.0 s), the one place the value lives.
+`tracker.yaml` is deleted; `test_tracker_settings_are_honest.py` and
+`test_bars.py` read the node's own default. A live `ros2 param set` of any
+tracker setting except `classes` used to print success and change nothing; it
+is now refused with "read once at startup".
+
+**The lesson** is §9's, again: a citation is not a measurement. The ledger and
+its test agreed with each other, and neither read what runs.
+
 ### B-82: the shipped `gate_sharks.hef` lost a median 0.34 of confidence to a fine-tune that diverged `MEASURED 2026-11-06 (emulator)`. ✅ **REBUILT 2026-11-06**; ⚠ on-chip check owed
 
 **What.** The forward gate detector the vehicle launches by default was

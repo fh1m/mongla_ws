@@ -96,6 +96,51 @@ default: `src/mongla_manager/config/bringup.example.yaml` (generated).
 
 The launch prints which file it read, and every value it took from it.
 
+### Every other knob: the same file, under `nodes:`
+
+A launch argument switches a capability on. Everything else a node has (the
+vision gains, the tracker's buffer, the filter's noise) is a **node
+parameter**, and it goes in the **same file**, under `nodes:`, by node name.
+There is no second file to remember:
+
+```yaml
+vision: true                         # launch arguments at the top level
+pool_depth_m: 1.6
+nodes:                               # node parameters, by node name
+  mongla_manager:
+    vision.kp_yaw: 80.0
+    vision.coast_s: 0.6
+  mongla_tracker_forward:
+    track_buffer: 120
+```
+
+Each setting has exactly one home:
+
+| what | where | when it takes effect |
+|---|---|---|
+| a capability or argument (`vision`, `pool_depth_m`, `conf`) | top level of `bringup.yaml`, or `name:=value` | at launch |
+| a node parameter that is not an argument | `nodes:` in `bringup.yaml` | at launch |
+| a vision gain, for one test | `ros2 param set /mongla_manager vision.kp_yaw 80.0` | the next vision goal; gone at restart |
+| a value for one call in a mission | the verb's own argument (`vision.align(..., gain=30)`) | that call only |
+
+Two mistakes that ROS lets through silently **stop the node** instead, with
+the fix in the message:
+
+- **a misspelt parameter** (`kp_yaww`): ROS would ignore it and run on the
+  default. The node names the closest real one.
+- **a parameter a launch argument already sets** (`vision.mixer_aware` under
+  `nodes:`): launch's own value would win over yours. The node tells you to set
+  the argument (`mixer_aware: false`) at the top level instead.
+
+A wildcard node name (`/**`) is refused at launch, because it would reach every
+node and no node could tell its own typo from another's real parameter. Every
+node and its parameters: [`reference/commands.md`](../reference/commands.md) §4.
+The vision gains, with their defaults, are at the end of the generated example.
+
+A live `ros2 param set` that a node cannot apply is refused rather than
+accepted and ignored. The tracker, for one, reads everything except `classes`
+once at startup.
+
 ---
 
 ## 3. One verb at a time — the `mongla` CLI

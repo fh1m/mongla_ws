@@ -387,6 +387,9 @@ def main():
             launcher.get_logger().warning(
                 f'[COMP ] DEGRADED: {live[0]} only. The chip is uncontended, '
                 f'so this camera runs at full rate.')
+        from mongla_localization.params_file import refuse_unknown
+        for n in nodes:
+            refuse_unknown(n)     # bringup.yaml `nodes:` typos stop here
         ex = MultiThreadedExecutor()
         for n in nodes:
             ex.add_node(n)

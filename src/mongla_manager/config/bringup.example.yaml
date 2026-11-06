@@ -161,3 +161,145 @@
 
 #   foxglove_bridge WebSocket port
 # foxglove_port: 8765
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# fwd_profile: pi_forward
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# dwn_profile: pi_downward
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# fwd_models: ''
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# dwn_models: ''
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# fwd_active: ''
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# dwn_active: ''
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# contours: true
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# preprocess: auto
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# range_crop: -1
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# preprocess_clip: 0.0
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# tracking: true
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# tracker_type: ocsort
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# kalman_adaptive_noise: true
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# fwd_frame_rate: 30.0
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# dwn_frame_rate: 32.0
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# dwn_calibration: ''
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# fwd_calibration: ''
+
+#   (passed to vision_pi.launch.py, which sets the default) ladder ACTING bar:
+#   below this a detection may be associated by the tracker but is not acted
+#   on (B-59; measured knee 0.60, shipped 0.45)
+# act_conf: 0.45
+
+#   (passed to vision_pi.launch.py, which sets the default) run XFeat on the
+#   Hailo-8 rather than the Pi CPU (B-62); safe because the lock is composed
+#   with the detector
+# anchor_xfeat_hef: true
+
+#   (passed to vision_pi.launch.py, which sets the default) semi-dense
+#   matching: 2.1-2.6x inliers for +37 % match cost. OFF until frame-to-
+#   reference is measured
+# anchor_semi_dense: false
+
+#   (passed to vision_pi.launch.py, which sets the default) measured TRUE
+#   width of the forward target in metres; 0 = use the rulebook nominal. A
+#   measured prop beats a nominal, which is what SAUVC +/-5 % allows for
+# target_width_m_forward: 0.0
+
+#   (passed to vision_pi.launch.py, which sets the default) measured true
+#   width of the downward target, metres
+# target_width_m_downward: 0.0
+
+#   (passed to vision_pi.launch.py, which sets the default) Class the DOWNWARD
+#   ladder follows. Empty = any class, and no 6-DoF pose (the geometry table
+#   is keyed by class).
+# dwn_lock_class: ''
+
+#   (passed to vision_pi.launch.py, which sets the default) checkpoint bank
+#   (.npz) preloaded into the FORWARD lock node, from
+#   tools/build_practice_bank.py. Empty learns live. A preloaded reference is
+#   trusted exactly like a live one -- it clears MIN_INLIERS or it does not
+#   answer.
+# bank_forward: ''
+
+#   (passed to vision_pi.launch.py, which sets the default) checkpoint bank
+#   (.npz) preloaded into the DOWNWARD lock node -- places rather than props.
+# bank_downward: ''
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# fwd_fps: 0
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# dwn_fps: 0
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# fwd_publish_hz: 40
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# dwn_publish_hz: 0
+
+#   (passed to vision_pi.launch.py, which sets the default) Consume image_raw
+#   from a RECORDED BAG instead of a camera. Build no camera, keep every
+#   detector, and let `ros2 bag play` drive the graph. This is how a recorded
+#   session becomes a regression fixture: the detector, tracker, lock ladder
+#   and checkpoint bank all run for real, on input that never changes.
+# replay: false
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# fwd_device_path: ''
+
+#   (passed to vision_pi.launch.py, which sets the default)
+# dwn_device_path: ''
+
+# ---- node parameters -------------------------------------------------
+# Every knob that is not a launch argument is a node parameter, and it
+# goes here, under `nodes:`, by node name. Bringup hands it to every node
+# it starts; a node REFUSES a key it does not declare, and a key a launch
+# argument already sets (use the argument above instead). Every node
+# parameter, by node: .claude/context/reference/commands.md section 4.
+#
+# The vision gains below are read per goal, so `ros2 param set
+# /mongla_manager vision.kp_yaw 80.0` also works live, on the next goal.
+#
+# nodes:
+#   mongla_manager:
+#     vision.kp_lat: 60.0
+#     vision.kp_yaw: 60.0
+#     vision.kp_forward: 200.0
+#     vision.lost_grace_s: 1.0
+#     vision.frame_fill_default: 95.0
+#     vision.align_stable_frames: 3.0
+#     vision.range_gain_floor: 1.0
+#     vision.ki_lat: 0.0
+#     vision.ctrl_conf: 0.0
+#     vision.coast_s: 0.8
+#     vision.lock_s: 1.0
+#     vision.surge_sign: -1.0
+#     vision.fire_max_tilt_deg: 0.0

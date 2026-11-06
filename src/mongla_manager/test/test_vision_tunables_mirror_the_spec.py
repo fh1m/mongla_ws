@@ -111,7 +111,7 @@ def test_the_tracker_outlives_the_coast():
     exactly the kind nothing checks.
     """
     import re, os
-    y = os.path.join(_WS, 'src/mongla_vision/config/tracker.yaml')
-    m = re.search(r'max_predict_s:\s*([0-9.]+)', open(y).read())
-    assert m, 'max_predict_s not found in tracker.yaml'
+    y = os.path.join(_WS, 'src/mongla_vision/mongla_vision/tracker_node.py')
+    m = re.search(r"declare_parameter\('max_predict_s',\s*([0-9.]+)\)", open(y).read())
+    assert m, 'max_predict_s has no literal default in tracker_node.py'
     assert float(m.group(1)) >= float(VISION_PARAM_DEFAULTS['vision.coast_s'])

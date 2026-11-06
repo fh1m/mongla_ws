@@ -117,6 +117,38 @@
 | `viewer` | `false` | Open vision_display (OpenCV viewer) alongside vision pipeline |
 | `foxglove` | `false` | Start foxglove_bridge (WebSocket telemetry on foxglove_port). Off the mission path -- pure viz. Needs ros-humble-foxglove-bridge installed. Connect the Foxglove desktop app to ws://<pi>:<foxglove_port>. |
 | `foxglove_port` | `8765` | foxglove_bridge WebSocket port |
+| `fwd_profile` | `pi_forward` | (passed to vision_pi.launch.py, which sets the default) |
+| `dwn_profile` | `pi_downward` | (passed to vision_pi.launch.py, which sets the default) |
+| `fwd_models` | `` | (passed to vision_pi.launch.py, which sets the default) |
+| `dwn_models` | `` | (passed to vision_pi.launch.py, which sets the default) |
+| `fwd_active` | `` | (passed to vision_pi.launch.py, which sets the default) |
+| `dwn_active` | `` | (passed to vision_pi.launch.py, which sets the default) |
+| `contours` | `true` | (passed to vision_pi.launch.py, which sets the default) |
+| `preprocess` | `auto` | (passed to vision_pi.launch.py, which sets the default) |
+| `range_crop` | `-1` | (passed to vision_pi.launch.py, which sets the default) |
+| `preprocess_clip` | `0.0` | (passed to vision_pi.launch.py, which sets the default) |
+| `tracking` | `true` | (passed to vision_pi.launch.py, which sets the default) |
+| `tracker_type` | `ocsort` | (passed to vision_pi.launch.py, which sets the default) |
+| `kalman_adaptive_noise` | `true` | (passed to vision_pi.launch.py, which sets the default) |
+| `fwd_frame_rate` | `30.0` | (passed to vision_pi.launch.py, which sets the default) |
+| `dwn_frame_rate` | `32.0` | (passed to vision_pi.launch.py, which sets the default) |
+| `dwn_calibration` | `` | (passed to vision_pi.launch.py, which sets the default) |
+| `fwd_calibration` | `` | (passed to vision_pi.launch.py, which sets the default) |
+| `act_conf` | `0.45` | (passed to vision_pi.launch.py, which sets the default) ladder ACTING bar: below this a detection may be associated by the tracker but is not acted on (B-59; measured knee 0.60, shipped 0.45) |
+| `anchor_xfeat_hef` | `true` | (passed to vision_pi.launch.py, which sets the default) run XFeat on the Hailo-8 rather than the Pi CPU (B-62); safe because the lock is composed with the detector |
+| `anchor_semi_dense` | `false` | (passed to vision_pi.launch.py, which sets the default) semi-dense matching: 2.1-2.6x inliers for +37 % match cost. OFF until frame-to-reference is measured |
+| `target_width_m_forward` | `0.0` | (passed to vision_pi.launch.py, which sets the default) measured TRUE width of the forward target in metres; 0 = use the rulebook nominal. A measured prop beats a nominal, which is what SAUVC +/-5 % allows for |
+| `target_width_m_downward` | `0.0` | (passed to vision_pi.launch.py, which sets the default) measured true width of the downward target, metres |
+| `dwn_lock_class` | `` | (passed to vision_pi.launch.py, which sets the default) Class the DOWNWARD ladder follows. Empty = any class, and no 6-DoF pose (the geometry table is keyed by class). |
+| `bank_forward` | `` | (passed to vision_pi.launch.py, which sets the default) checkpoint bank (.npz) preloaded into the FORWARD lock node, from tools/build_practice_bank.py. Empty learns live. A preloaded reference is trusted exactly like a live one -- it clears MIN_INLIERS or it does not answer. |
+| `bank_downward` | `` | (passed to vision_pi.launch.py, which sets the default) checkpoint bank (.npz) preloaded into the DOWNWARD lock node -- places rather than props. |
+| `fwd_fps` | `0` | (passed to vision_pi.launch.py, which sets the default) |
+| `dwn_fps` | `0` | (passed to vision_pi.launch.py, which sets the default) |
+| `fwd_publish_hz` | `40` | (passed to vision_pi.launch.py, which sets the default) |
+| `dwn_publish_hz` | `0` | (passed to vision_pi.launch.py, which sets the default) |
+| `replay` | `false` | (passed to vision_pi.launch.py, which sets the default) Consume image_raw from a RECORDED BAG instead of a camera. Build no camera, keep every detector, and let `ros2 bag play` drive the graph. This is how a recorded session becomes a regression fixture: the detector, tracker, lock ladder and checkpoint bank all run for real, on input that never changes. |
+| `fwd_device_path` | `` | (passed to vision_pi.launch.py, which sets the default) |
+| `dwn_device_path` | `` | (passed to vision_pi.launch.py, which sets the default) |
 
 ### `mongla_vision/mission_web.launch.py`
 
@@ -327,6 +359,15 @@ Run with `ros2 run mongla_planner mission <name>`. A model marked ⏳ is not in 
 
 ## 4. Node parameters — `declare_parameter`
 
+Set any of these on the vehicle under `nodes:` in `~/.mongla/bringup.yaml`,
+keyed by the RUNNING node name -- `ros2 node list` prints them, e.g.
+`mongla_manager`, `mongla_tracker_forward`, `mongla_lock_downward`. A misspelt
+key, or one a launch argument already sets, stops that node at launch.
+
+Listed by source file, literal `declare_parameter` calls only. The
+manager's `vision.*` gains are declared from a table and are listed in
+`bringup.example.yaml` instead, with their defaults.
+
 **`mongla_localization/localization_node.py`** — 15 parameters
 
 | parameter | default |
@@ -407,6 +448,17 @@ Run with `ros2 run mongla_planner mission <name>`. A model marked ⏳ is not in 
 | `loop` | `True` |
 | `discover_on_start` | `False` |
 
+**`mongla_vision/depth/depth_estimation_node.py`** — 6 parameters
+
+| parameter | default |
+|---|---|
+| `camera` | `'forward'` |
+| `model_path` | `''` |
+| `run_every_n_frames` | `3` |
+| `publish_depth_map` | `False` |
+| `invert_depth` | `True` |
+| `use_tracks` | `False` |
+
 **`mongla_vision/detector_dual_node.py`** — 3 parameters
 
 | parameter | default |
@@ -445,6 +497,60 @@ Run with `ros2 run mongla_planner mission <name>`. A model marked ⏳ is not in 
 | `range_crop` | `-1` |
 | `vision_profile` | `''` |
 
+**`mongla_vision/flow/distance_estimation_node.py`** — 6 parameters
+
+| parameter | default |
+|---|---|
+| `camera` | `'downward'` |
+| `pool_depth_m` | `4.0` |
+| `camera_focal_px` | `500.0` |
+| `rot_sign_x` | `1.0` |
+| `rot_sign_y` | `1.0` |
+| `flow_smooth_alpha` | `0.4` |
+
+**`mongla_vision/flow/flow_node.py`** — 38 parameters
+
+| parameter | default |
+|---|---|
+| `camera` | `'downward'` |
+| `pool_depth_m` | `float('nan'` |
+| `pool_depth_min_m` | `float('nan'` |
+| `pool_depth_max_m` | `float('nan'` |
+| `medium` | `'water'` |
+| `focal_air_px` | `_F_AIR_PX` |
+| `focal_water_px` | `_F_WATER_PX` |
+| `gyro_gain_x` | `_GYRO_GAIN_X_DEFAULT` |
+| `gyro_gain_y` | `_GYRO_GAIN_Y_DEFAULT` |
+| `rot_fraction_max` | `0.80` |
+| `refractive_rectify` | `True` |
+| `min_net_flow_px` | `0.5` |
+| `max_dispersion_ratio` | `5.0` |
+| `grid_buckets` | `4` |
+| `want_points` | `80` |
+| `target_px` | `8.0` |
+| `max_px` | `25.0` |
+| `max_baseline_s` | `0.75` |
+| `max_rotation_deg` | `6.0` |
+| `use_planar_fit` | `True` |
+| `ransac_px` | `2.0` |
+| `fb_reject_px` | `2.0` |
+| `yaw_image_sign` | `-1.0` |
+| `yaw_cross_check_tol` | `0.25` |
+| `calibration` | `''` |
+| `undistort` | `True` |
+| `exposure_us` | `0.0` |
+| `stamp_source` | `'soe'` |
+| `stamp_at_midpoint` | `True` |
+| `estimate_time_offset` | `True` |
+| `time_offset_s` | `FLOW_TD_MEASURED_S` |
+| `time_offset_max_s` | `0.15` |
+| `time_offset_min_quality` | `0.5` |
+| `tile_m` | `0.0` |
+| `tile_period_s` | `0.5` |
+| `tile_decimate` | `3` |
+| `lane_lines` | `False` |
+| `caustic_suppression` | `True` |
+
 **`mongla_vision/lock_node.py`** — 20 parameters
 
 | parameter | default |
@@ -477,7 +583,7 @@ Run with `ros2 run mongla_planner mission <name>`. A model marked ⏳ is not in 
 | `camera` | `'laptop'` |
 | `tracker_type` | `'ocsort'` |
 | `frame_rate` | `20.0` |
-| `track_buffer` | `60` |
+| `track_buffer` | `150` |
 | `min_hits` | `1` |
 | `iou_threshold` | `0.2` |
 | `track_activation_threshold` | `0.40` |
@@ -490,6 +596,21 @@ Run with `ros2 run mongla_planner mission <name>`. A model marked ⏳ is not in 
 | `kalman_adaptive_noise` | `True` |
 | `max_predict_s` | `1.5` |
 | `frame_rate_warn_ratio` | `1.5` |
+
+**`mongla_vision/utils/display_node.py`** — 10 parameters
+
+| parameter | default |
+|---|---|
+| `camera` | `'forward'` |
+| `cameras` | `'forward` |
+| `video_file_mode` | `False` |
+| `launch_pipeline` | `False` |
+| `model` | `'yolov11n'` |
+| `classes` | `'person'` |
+| `conf` | `0.35` |
+| `max_display_hz` | `30.0` |
+| `yaw_source` | `'mavlink_ahrs'` |
+| `hud_distance` | `False` |
 
 **`mongla_vision/vision_node.py`** — 14 parameters
 
@@ -510,60 +631,13 @@ Run with `ros2 run mongla_planner mission <name>`. A model marked ⏳ is not in 
 | `tick_hz` | `30.0` |
 | `alignment_deadband` | `0.05` |
 
-**`mongla_vision/test_assoc_conf.py`** — 1 parameters
+**`mongla_vision/web/mission_web_node.py`** — 3 parameters
 
 | parameter | default |
 |---|---|
-| `assoc_conf` | `0.0` |
-
-**`mongla_vision/test_camera_fps_override.py`** — 2 parameters
-
-| parameter | default |
-|---|---|
-| `fps` | `30` |
-| `fps` | `0` |
-
-**`mongla_vision/test_composed_vision.py`** — 1 parameters
-
-| parameter | default |
-|---|---|
-| `direct_feed` | `True` |
-
-**`mongla_vision/test_flow_reads_the_floor.py`** — 1 parameters
-
-| parameter | default |
-|---|---|
-| `tile_m` | `0.0` |
-
-**`mongla_vision/test_preprocess.py`** — 1 parameters
-
-| parameter | default |
-|---|---|
-| `preprocess` | `'auto'` |
-
-**`mongla_vision/test_profiles.py`** — 1 parameters
-
-| parameter | default |
-|---|---|
-| `range_crop` | `-1` |
-
-**`mongla_vision/test_rangecrop.py`** — 1 parameters
-
-| parameter | default |
-|---|---|
-| `range_crop` | `-1` |
-
-**`mongla_vision/test_refraction_in_the_pose_path.py`** — 1 parameters
-
-| parameter | default |
-|---|---|
-| `medium` | `'water'` |
-
-**`mongla_vision/test_semi_dense.py`** — 1 parameters
-
-| parameter | default |
-|---|---|
-| `anchor_semi_dense` | `False` |
+| `cameras` | `'` |
+| `web_port` | `8090` |
+| `video_port` | `8080` |
 
 ## 5. The wire — `fc/srot_protocol.py`
 
