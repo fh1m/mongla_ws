@@ -82,6 +82,13 @@ _POLL_S = 0.05    # cache-poll granularity for ack/arm/mode loops
 _ESC_STATUS_CRC_EXTRA = 10
 _ESC_STATUS_LEN = 57
 _STATUSTEXT_RING = 64      # a boot burst is ~13 lines; this holds several
+# The boot burst (task_mavlink.cpp) opens with the reset reason, so this line
+# is how we know we saw a boot at all.
+_BOOT_MARK = 'RST: '
+# The lines in it that change behaviour. Matched by substring, as sent.
+_BOOT_WARNINGS = ('Params reset to build defaults', 'NVS reformatted',
+                  'CAL DEFAULTS', 'MAG cal MISSING', 'SAVE FAILED',
+                  'set but NOT saved')
 _SYS_STATUS_BASE_LEN = 31
 _SYS_STATUS_EXT_END  = 43
 _LINK_STALE_S = 3.0
@@ -283,6 +290,11 @@ class SrotFC:
         # rest -- including "Params reset to build defaults", which silently
         # returns JS_GAIN_DEFAULT to 0.5 and LEAK_EN to 0.
         self._statustext_log = collections.deque(maxlen=_STATUSTEXT_RING)
+        # The boot burst, kept OUT of the ring: a chatty board can push 64 lines
+        # through before preflight reads it, and these are the ones that must
+        # not be lost. None until the burst's first line ('RST: ...') arrives,
+        # so "not seen" and "seen, nothing wrong" are different answers.
+        self._boot_lines = None
         # Per-thruster telemetry presence, parsed from the board's own arm-time
         # announcements. None until the board has said something -- absence is
         # not "all healthy". See `esc_presence()`.
@@ -1170,6 +1182,10 @@ class SrotFC:
             return
         sev = int(getattr(msg, 'severity', 6))
         self._statustext_log.append((time.time(), sev, text))
+        if text.startswith(_BOOT_MARK):
+            self._boot_lines = []            # a new boot: forget the last one's
+        if self._boot_lines is not None and any(k in text for k in _BOOT_WARNINGS):
+            self._boot_lines.append((sev, text))
         self._note_esc_line(text)
 
     def _note_esc_line(self, text: str) -> None:
@@ -1204,21 +1220,38 @@ class SrotFC:
         return [r for r in self._statustext_log if r[0] >= since]
 
     def boot_warnings(self):
-        """The startup announcements that change how the vehicle behaves.
+        """The startup announcements that change how the vehicle behaves, or None.
 
         Returned as (severity, text) so a caller can grade them. These are FAILs,
         not notices: a defaults reset silently reverts the pilot gain to half
         authority and disables the leak failsafe, and the operator's only clue is
         one line in a burst of thirteen.
+
+        None means the boot burst was NEVER SEEN -- the board booted before this
+        process was listening -- so nothing is known. It is not the same answer
+        as [] ("seen, nothing wrong"), and a caller must not render it as one.
+        On USB the port open reboots the board, so the burst normally arrives;
+        `request_boot_announcements` asks for it again otherwise.
         """
-        keys = ('Params reset to build defaults',
-                'NVS reformatted',
-                'CAL DEFAULTS',
-                'MAG cal MISSING',
-                'SAVE FAILED',
-                'set but NOT saved')
-        return [(sev, txt) for _, sev, txt in self._statustext_log
-                if any(k in txt for k in keys)]
+        return None if self._boot_lines is None else list(self._boot_lines)
+
+    def request_boot_announcements(self, timeout: float = 1.5) -> bool:
+        """Ask the board to repeat its boot burst; True once it has been seen.
+
+        `REQUEST_MESSAGE(STATUSTEXT)`. Firmware that does not replay the burst
+        ACCEPTS the request and sends nothing (it accepts every REQUEST_MESSAGE),
+        so the answer is read off the burst arriving, never off the ACK.
+        """
+        if self._boot_lines is not None:
+            return True
+        self._command_long(mavutil.mavlink.MAV_CMD_REQUEST_MESSAGE,
+                           p1=float(mavutil.mavlink.MAVLINK_MSG_ID_STATUSTEXT))
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if self._boot_lines is not None:
+                return True
+            time.sleep(_POLL_S)
+        return False
 
     def esc_presence(self):
         """(present:set|None, lost:set) -- per-thruster telemetry presence.

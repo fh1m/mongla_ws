@@ -703,10 +703,21 @@ class AUVManagerNode(Node):
         (self.get_logger().info if ya_ok else self.get_logger().warning)(
             f'[SROT ] {ya_reason}')
         # Boot announcements that change behaviour (a defaults reset halves the
-        # pilot gain and disables the leak failsafe). The board sends them ONCE,
-        # in a burst at boot, so this sees them only if the manager was listening
-        # then -- an empty answer is "none seen", never "none sent".
-        for sev, txt in self.fc.boot_warnings():
+        # pilot gain and disables the leak failsafe). The board sends them once,
+        # in a burst at boot. On USB our own port open reboots it, so the burst
+        # is normally here already; if not, ask for it again, and if it still
+        # has not come, say that nothing is known rather than print nothing.
+        self.fc.request_boot_announcements()
+        boot = self.fc.boot_warnings()
+        if boot is None:
+            self.get_logger().warning(
+                '[SROT ] boot announcements NOT SEEN: the board booted before the '
+                'manager was listening, and this firmware does not repeat them. A '
+                'params reset (half pilot gain, leak failsafe off) would not show. '
+                'To read them: stop the manager, then `ros2 run mongla_manager '
+                'connect --watch` -- opening the USB port reboots the board, and '
+                'the burst prints.')
+        for sev, txt in boot or []:
             self.get_logger().error(f'[SROT ] board said at boot (sev {sev}): {txt}')
 
     def _setup_yaw_source(self) -> None:

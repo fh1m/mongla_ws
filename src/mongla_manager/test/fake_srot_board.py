@@ -53,8 +53,12 @@ ACK_CANCELLED = 6
 
 class FakeSrotBoard:
     def __init__(self, port: int, *, behaviour_rev: int = 14,
-                 params: dict | None = None):
+                 params: dict | None = None, boot_lines: list | None = None):
         self.port = port
+        # The boot burst, if this board REPEATS it on REQUEST_MESSAGE(STATUSTEXT).
+        # None = today's firmware, which accepts that request and sends nothing.
+        # A UDP link has no auto-reset, so the burst is never seen otherwise.
+        self.boot_lines = boot_lines
         self.behaviour_rev = int(behaviour_rev)
         # PILOT_YAW_RATE / ATC_RAT_YAW_P: the values measured on the bench board
         # (srot_fc.check_yaw_authority). A param the fake does not answer costs
@@ -137,6 +141,10 @@ class FakeSrotBoard:
             self._link.mav.autopilot_version_send(
                 0, 0, self.behaviour_rev, 0, 0, b'\0' * 8, b'\0' * 8,
                 b'\0' * 8, 0, 0, 0)
+            self._ack(c, ACK_ACCEPTED)
+        elif c == ML.MAV_CMD_REQUEST_MESSAGE and int(m.param1) == ML.MAVLINK_MSG_ID_STATUSTEXT:
+            for sev, text in self.boot_lines or []:
+                self._link.mav.statustext_send(sev, text.encode())
             self._ack(c, ACK_ACCEPTED)
         elif c == ML.MAV_CMD_COMPONENT_ARM_DISARM:
             self.armed = m.param1 >= 0.5
