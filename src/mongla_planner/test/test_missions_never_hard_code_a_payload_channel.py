@@ -73,7 +73,7 @@ def test_the_channels_are_unassigned_until_someone_confirms_them():
 
 def test_an_unassigned_channel_is_REFUSED_with_the_way_out():
     """Falsified by FIRED, or by a reason that does not say where to set it."""
-    from mongla_control.fc.srot_fc import SrotPayload
+    from mongla_control.fc.srot_payload import SrotPayload
     from mongla_control.fc.base import FIRE_DENIED
     p = SrotPayload.__new__(SrotPayload)
     p._roles = {9: 2, 10: 2, 1: 1}

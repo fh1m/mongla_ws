@@ -86,7 +86,7 @@ def test_the_manager_publishes_the_imu_the_filter_predicts_on():
     assert "'/mongla/imu'" in mgr
     assert '_publish_imu' in mgr
     fc = code_of_file(ROOT / 'src' / 'mongla_control' / 'mongla_control' / 'fc'
-          / 'srot_fc.py')
+          / 'srot_telemetry.py')
     assert 'def get_imu(self' in fc
 
 

@@ -23,7 +23,8 @@ from pymavlink import mavutil
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from mongla_control.fc.srot_fc import SrotFC, _decode_esc_status   # noqa: E402
+from mongla_control.fc.srot_fc import SrotFC                        # noqa: E402
+from mongla_control.fc.srot_health import _decode_esc_status         # noqa: E402
 
 
 def esc_frame(index, rpm, corrupt=False, truncate=None):

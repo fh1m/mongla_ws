@@ -61,7 +61,7 @@ class FakeSrotBoard:
         self.boot_lines = boot_lines
         self.behaviour_rev = int(behaviour_rev)
         # PILOT_YAW_RATE / ATC_RAT_YAW_P: the values measured on the bench board
-        # (srot_fc.check_yaw_authority). A param the fake does not answer costs
+        # (srot_params.check_yaw_authority). A param the fake does not answer costs
         # the manager's preflight a 3 s timeout, the real board answers them all.
         self.params = {'FRAME_REVERSE': 1.0, 'JS_GAIN_DEFAULT': 1.0,
                        'PILOT_YAW_RATE': 160.0, 'ATC_RAT_YAW_P': 0.18}

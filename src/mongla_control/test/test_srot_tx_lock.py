@@ -26,7 +26,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mongla_control.fc.srot_fc import SrotFC          # noqa: E402
 
-_SRC = Path(__file__).resolve().parents[1] / 'mongla_control' / 'fc' / 'srot_fc.py'
+_FC = Path(__file__).resolve().parents[1] / 'mongla_control' / 'fc'
+# The driver is SrotFC plus its parts (srot_health, srot_bench, ...): every one
+# of them may write the wire, so every one is scanned.
+_SRC = sorted([*_FC.glob('srot_*.py'), _FC / '_srot_base.py'])
 
 
 def _is_tx_lock(item) -> bool:
@@ -44,7 +47,6 @@ def _wire_writes_outside_the_lock():
     is exactly the shape of the round-26 `_srot_drive` guard that passed through
     the change it existed to catch.
     """
-    tree = ast.parse(_SRC.read_text())
     held = []           # stack of bools: is this ancestor a tx-lock `with`?
     offenders = []
 
@@ -60,10 +62,12 @@ def _wire_writes_outside_the_lock():
             if (isinstance(f, ast.Attribute) and f.attr.endswith('_send')
                     and isinstance(f.value, ast.Attribute) and f.value.attr == 'mav'):
                 if not any(held):
-                    offenders.append((f.attr, node.lineno))
+                    offenders.append((f.attr, f'{V.path}:{node.lineno}'))
             self.generic_visit(node)
 
-    V().visit(tree)
+    for path in _SRC:
+        V.path = path.name
+        V().visit(ast.parse(path.read_text()))
     return offenders
 
 
@@ -75,7 +79,7 @@ def test_every_wire_write_is_under_the_lock():
     assert not offenders, (
         'these send the wire without holding _tx_lock, so they can interleave '
         'bytes with a concurrent write: '
-        + ', '.join(f'{n} at srot_fc.py:{ln}' for n, ln in offenders))
+        + ', '.join(f'{n} at {ln}' for n, ln in offenders))
 
 
 def test_the_check_would_notice_an_unlocked_write():
