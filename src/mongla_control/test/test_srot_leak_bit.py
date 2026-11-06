@@ -110,8 +110,8 @@ def test_the_offsets_match_the_firmware_header():
     """Pinned against `lib/mavlink/common/mavlink_msg_sys_status.h`: MIN_LEN 31
     is the base message and the accessors read the extended fields at 31 / 35 /
     39, giving LEN 43. A drift here silently decodes the wrong bytes."""
-    from mongla_control.fc.srot_fc import (_SYS_STATUS_BASE_LEN,
-                                           _SYS_STATUS_EXT_END)
+    from mongla_control.fc.srot_health import (_SYS_STATUS_BASE_LEN,
+                                               _SYS_STATUS_EXT_END)
     assert _SYS_STATUS_BASE_LEN == 31
     assert _SYS_STATUS_EXT_END == 43
     assert sp.SYS_STATUS_SENSOR_LEAK == 2

@@ -101,8 +101,9 @@ def _fast_deadlines(monkeypatch):
     import mongla_control.fc.srot_fc as mod
     monkeypatch.setattr(mod, '_ACK_MIN_BUDGET_S', 0.3)
     monkeypatch.setattr(mod, '_ACK_MARGIN_S', 0.2)
-    monkeypatch.setattr(mod, '_FIRE_PULSE_S', 0.01)
-    monkeypatch.setattr(mod, '_FIRE_ACK_S', 0.01)
+    import mongla_control.fc.srot_payload as pay
+    monkeypatch.setattr(pay, '_FIRE_PULSE_S', 0.01)
+    monkeypatch.setattr(pay, '_FIRE_ACK_S', 0.01)
 
 
 # --------------------------------------------------------------------------- #
@@ -452,7 +453,7 @@ def test_srot_payload_fire_is_a_bounded_pulse_on_the_board_channel():
     returns it to rest. The de-energise is in a `finally`, so it happens even when
     the board never ACKs (this fake never does), which is the case that would
     otherwise leave a solenoid coil latched on with no board-side failsafe."""
-    from mongla_control.fc.srot_fc import SrotPayload
+    from mongla_control.fc.srot_payload import SrotPayload
     fc = _fc()
     fc.master.messages['HEARTBEAT'] = SimpleNamespace(
         base_mode=0, custom_mode=sp.MODE_MANUAL, _timestamp=time.time())
@@ -472,7 +473,7 @@ def test_srot_payload_fire_is_a_bounded_pulse_on_the_board_channel():
 
 
 def test_fire_rejects_a_channel_outside_the_boards_range():
-    from mongla_control.fc.srot_fc import SrotPayload
+    from mongla_control.fc.srot_payload import SrotPayload
     fc = _fc()
     fc.master.messages['HEARTBEAT'] = SimpleNamespace(
         base_mode=0, custom_mode=sp.MODE_MANUAL, _timestamp=time.time())
@@ -484,7 +485,7 @@ def test_fire_rejects_a_channel_outside_the_boards_range():
 
 
 def test_srot_payload_is_ready_tracks_link():
-    from mongla_control.fc.srot_fc import SrotPayload
+    from mongla_control.fc.srot_payload import SrotPayload
     fc = _fc()
     fc.master.messages['HEARTBEAT'] = SimpleNamespace(
         base_mode=0, custom_mode=0, autopilot=0, _timestamp=time.time())
@@ -1070,7 +1071,7 @@ class _RoleFC:
 
 
 def _payload(roles, ack=sp.ACK_ACCEPTED, names=None, funcs=None):
-    from mongla_control.fc.srot_fc import SrotPayload
+    from mongla_control.fc.srot_payload import SrotPayload
     return SrotPayload(_RoleFC(roles, ack, funcs), names=names)
 
 
@@ -1156,8 +1157,8 @@ def test_a_second_concurrent_fire_is_refused_rather_than_queued():
     race, with both callers reporting success. A queued shot is worse than a
     refused one: it fires after the hull has moved off target."""
     import threading
-    from mongla_control.fc.srot_fc import SrotPayload
-    import mongla_control.fc.srot_fc as mod
+    from mongla_control.fc.srot_payload import SrotPayload
+    import mongla_control.fc.srot_payload as mod
     pl = SrotPayload(_RoleFC({9: sp.PCA_ROLE_SWITCH}))
     mod_pulse = mod._FIRE_PULSE_S
     mod._FIRE_PULSE_S = 0.25
@@ -1304,7 +1305,7 @@ def test_a_disagreement_between_host_and_board_is_reported():
         def warning(self, m): self.warns.append(m)
         def error(self, m): pass
     log = _Log()
-    from mongla_control.fc.srot_fc import SrotPayload
+    from mongla_control.fc.srot_payload import SrotPayload
     pl = SrotPayload(_RoleFC({9: sp.PCA_ROLE_SWITCH}, funcs={9: sp.PCA_FUNC_DROPPER}),
                      log=log, names={9: 'torpedo_1'})
     pl.preflight_roles(channels=[9])

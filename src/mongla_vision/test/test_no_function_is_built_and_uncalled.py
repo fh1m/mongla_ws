@@ -70,11 +70,11 @@ DEFERRED_FUNCTIONS = {
         'raw DO_SET_RELAY, deliberately NOT the payload path (its own docstring: '
         'instance-addressed, and a negative instance reaches channels 1-8); kept '
         'for a bench relay test, never for fire()',
-    'src/mongla_control/mongla_control/fc/srot_fc.py:motor_tune':
+    'src/mongla_control/mongla_control/fc/srot_bench.py:motor_tune':
         'the board\'s MOTOR_TUNE; same shape as autotune(), which has '
         '`ros2 run mongla_manager autotune`. It needs the same entry point, and '
         'its first run needs a hull with thrusters fitted (none are)',
-    'src/mongla_control/mongla_control/fc/srot_fc.py:thruster_stalled':
+    'src/mongla_control/mongla_control/fc/srot_health.py:thruster_stalled':
         'signed-RPM stall detection; needs non-zero ESC RPM on the wire, and '
         '958/958 frames read exactly 0 with nothing attached (CLAUDE.md §2). '
         'Its consumer is the manager health report once thrusters are fitted',

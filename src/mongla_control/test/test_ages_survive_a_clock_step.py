@@ -13,7 +13,7 @@ import time
 import pytest
 
 from mongla_control.fc import srot_fc
-from mongla_control.fc.srot_fc import _rx_age
+from mongla_control.fc._srot_base import _rx_age
 
 
 class _Msg:
@@ -57,7 +57,9 @@ def test_the_reader_stamps_every_message_on_receipt():
 def test_no_new_wall_minus_wall_age_in_srot_fc():
     """`time.time() - x` is a DURATION on a clock that steps. The only one
     allowed is `_rx_age`'s documented fallback."""
-    src = (pathlib.Path(srot_fc.__file__)).read_text(encoding='utf-8')
+    fc = pathlib.Path(srot_fc.__file__).parent
+    src = '\n'.join(p.read_text(encoding='utf-8')
+                    for p in sorted([*fc.glob('srot_*.py'), fc / '_srot_base.py']))
     hits = [l.strip() for l in src.splitlines()
             if re.search(r'time\.time\(\)\s*-', l) and not l.strip().startswith('#')]
     assert hits == ["return time.time() - getattr(msg, '_timestamp', 0.0)"], hits

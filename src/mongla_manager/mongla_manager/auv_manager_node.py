@@ -55,7 +55,8 @@ from mongla_interfaces.msg import MonglaState                            # noqa:
 
 from mongla_control import COMMANDS, Mongla, fields_for                 # noqa: E402
 from mongla_control.fc.port_guard import PortGuard                     # noqa: E402
-from mongla_control.fc.srot_fc import SrotFC, SrotPayload                # noqa: E402
+from mongla_control.fc.srot_fc import SrotFC                             # noqa: E402
+from mongla_control.fc.srot_payload import SrotPayload                   # noqa: E402
 from mongla_control.bearing import bearing_from_normalised   # noqa: E402
 from mongla_control.fc.srot_protocol import (                            # noqa: E402
     MSG_ID_ESC_STATUS as SROT_MSG_ID_ESC_STATUS,
