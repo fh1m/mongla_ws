@@ -203,7 +203,9 @@ automatically.
   `position_uplink`, `allow_fw_behaviour_mismatch`, plus the `vision.*` tunables in
   `vision_tunables.py`. There is one board, one heading (the board's AHRS) and one link, so
   there is no backend selector. Launch defaults can come from `~/.mongla/bringup.yaml`
-  (`$MONGLA_BRINGUP`); anything typed as `name:=value` still wins.
+  (`$MONGLA_BRINGUP`); anything typed as `name:=value` still wins. **Node parameters
+  go in the same file, under `nodes:`** -- one file for the deck, and every node
+  refuses a misspelt key or one a launch argument already sets.
 
 Older context files mention `/mongla/arm`, `/mongla/depth_cmd`, `Attitude.msg`,
 `RCOverride.msg`. **None of these exist.**

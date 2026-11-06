@@ -72,25 +72,26 @@ def entry_points() -> dict[str, list[tuple[str, str]]]:
 
 
 def launch_args(only: Path | None = None) -> list[tuple[str, str, str, str]]:
-    """(launch file, argument, default, description) in declaration order."""
+    """(launch file, argument, default, description) in declaration order.
+
+    A passed-through argument (launch_ast) is listed under the file that
+    accepts it, with the description saying where its default lives.
+    """
+    import importlib.util
+    la = sys.modules.get('launch_ast')
+    if la is None:              # registered first: a dataclass needs its module
+        spec = importlib.util.spec_from_file_location('launch_ast', ROOT / 'tools' / 'launch_ast.py')
+        la = sys.modules['launch_ast'] = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(la)
     out = []
     files = [only] if only else sorted((ROOT / 'src').glob('*/launch/*.launch.py'))
     for lf in files:
         rel = f'{lf.parent.parent.name}/{lf.name}'
-        tree = ast.parse(lf.read_text())
-        for node in ast.walk(tree):
-            if not (isinstance(node, ast.Call)
-                    and getattr(node.func, 'id', '') == 'DeclareLaunchArgument'):
-                continue
-            name = (node.args[0].value
-                    if node.args and isinstance(node.args[0], ast.Constant) else '?')
-            default = desc = ''
-            for kw in node.keywords:
-                if kw.arg == 'default_value' and isinstance(kw.value, ast.Constant):
-                    default = str(kw.value.value)
-                if kw.arg == 'description' and isinstance(kw.value, ast.Constant):
-                    desc = re.sub(r'\s+', ' ', str(kw.value.value)).strip()
-            out.append((rel, name, default, desc))
+        for a in la.declarations(lf):
+            desc = a.description
+            if a.source != lf.name:
+                desc = (f'(passed to {a.source}, which sets the default) ' + desc).strip()
+            out.append((rel, a.name, a.default, desc))
     return out
 
 
@@ -155,19 +156,55 @@ def render_example() -> str:
         shown = default if default and not re.search(r'[:#{}\[\],&*!|>%@`\'"]|^\s|\s$', default) \
             else f"'{default}'"
         L += [f'# {name}: {shown}', '']
+    L += _render_example_nodes()
     return '\n'.join(L)
+
+
+def _render_example_nodes() -> list[str]:
+    """The `nodes:` section: the deck-tunable vision gains, with their defaults.
+
+    Read from `vision_tunables.VISION_PARAM_DEFAULTS`, the table the manager
+    declares, so this cannot list a gain the node does not have.
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        'vision_tunables', ROOT / 'src/mongla_manager/mongla_manager/vision_tunables.py')
+    tun = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tun)      # stdlib only: no ROS needed to generate
+    L = ['# ---- node parameters -------------------------------------------------',
+         '# Every knob that is not a launch argument is a node parameter, and it',
+         '# goes here, under `nodes:`, by node name. Bringup hands it to every node',
+         '# it starts; a node REFUSES a key it does not declare, and a key a launch',
+         '# argument already sets (use the argument above instead). Every node',
+         '# parameter, by node: .claude/context/reference/commands.md section 4.',
+         '#',
+         '# The vision gains below are read per goal, so `ros2 param set',
+         '# /mongla_manager vision.kp_yaw 80.0` also works live, on the next goal.',
+         '#',
+         '# nodes:',
+         '#   mongla_manager:']
+    for name, default in tun.VISION_PARAM_DEFAULTS.items():
+        if name == 'vision.mixer_aware':
+            continue                      # the `mixer_aware` argument sets it
+        shown = 'true' if default is True else 'false' if default is False else default
+        L.append(f'#     {name}: {shown}')
+    return L + ['']
 
 
 def node_params() -> dict[str, list[tuple[str, str]]]:
     out: dict[str, list[tuple[str, str]]] = {}
-    for py in sorted((ROOT / 'src').glob('*/*/*.py')):
+    # Every module of every package, nested ones included (flow/, depth/, web/
+    # hold nodes too), and never a test: a probe node there is not the vehicle's.
+    for py in sorted((ROOT / 'src').glob('mongla_*/mongla_*/**/*.py')):
         src = py.read_text(encoding='utf-8', errors='ignore')
         if 'declare_parameter' not in src:
             continue
         found = [(m.group(1), re.sub(r'\s+', ' ', m.group(2)).strip())
                  for m in re.finditer(r"declare_parameter\(\s*'([\w.]+)'\s*,\s*([^,\)]+)", src)]
         if found:
-            out[f'{py.parent.parent.name}/{py.name}'] = found
+            pkg_dir = next(q for q in py.parents if q.parent.name.startswith('mongla_')
+                           and q.name == q.parent.name)
+            out[f'{pkg_dir.name}/{py.relative_to(pkg_dir).as_posix()}'] = found
     return out
 
 
@@ -234,7 +271,15 @@ def render() -> str:
           'closes the depth loop: every one is gated on the two armed bench checks '
           '(CLAUDE.md §2).', '']
     L += missions_table()
-    L += ['', '## 4. Node parameters — `declare_parameter`', '']
+    L += ['', '## 4. Node parameters — `declare_parameter`', '',
+          'Set any of these on the vehicle under `nodes:` in `~/.mongla/bringup.yaml`,',
+          'keyed by the RUNNING node name -- `ros2 node list` prints them, e.g.',
+          '`mongla_manager`, `mongla_tracker_forward`, `mongla_lock_downward`. A misspelt',
+          'key, or one a launch argument already sets, stops that node at launch.',
+          '',
+          'Listed by source file, literal `declare_parameter` calls only. The',
+          'manager\'s `vision.*` gains are declared from a table and are listed in',
+          '`bringup.example.yaml` instead, with their defaults.', '']
     for node, params in node_params().items():
         L += [f'**`{node}`** — {len(params)} parameters', '',
               '| parameter | default |', '|---|---|']

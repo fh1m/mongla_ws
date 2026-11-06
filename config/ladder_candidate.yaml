@@ -53,7 +53,7 @@ candidate:
 # ⛔ THE ORDERING IS A HARD CONSTRAINT: freshness < coast_s < lost_grace_s <
 # kalman < track_buffer, and the tracker buffer must EXCEED coast_s in wall
 # time, or a coasted target vanishes off /tracks before the coast ends and the
-# coast truncates early (tracker.yaml:95). 0.47 < 0.80 holds.
+# coast truncates early (tracker_node.py, max_predict_s). 0.47 < 0.80 holds.
 
 # Applied live -- no rebuild, no relaunch:
 #   ros2 param set /mongla_lock_forward  full_authority_s 0.47

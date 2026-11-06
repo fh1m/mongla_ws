@@ -106,13 +106,12 @@ def test_freshness_zero_reaches_the_median_gap():
 
 def test_track_buffer_covers_the_p99():
     """The last rung is what makes a re-acquisition the SAME id rather than a
-    new one. p99 is 2.418 s and nothing in the archive exceeded 5.0 s."""
-    src = (ROOT / 'mongla_vision' / 'config' / 'tracker.yaml').read_text()
-    m = re.search(r'track_buffer\s*:\s*([0-9.]+)', src)
-    if not m:
-        pytest.skip('track_buffer not in tracker.yaml')
-    assert float(m.group(1)) >= GAP_P99
-
+    new one. p99 is 2.418 s and nothing in the archive exceeded 5.0 s. Read
+    from the node, which is what runs (Roboflow counts it in 30 Hz frames)."""
+    src = (ROOT / 'mongla_vision' / 'mongla_vision' / 'tracker_node.py').read_text()
+    m = re.search(r"declare_parameter\('track_buffer',\s*([0-9.]+)\)", src)
+    assert m, 'track_buffer has no literal default in tracker_node.py'
+    assert float(m.group(1)) / 30.0 >= GAP_P99
 
 # --------------------------------------------------------------------------- #
 #  3. The bars file is real

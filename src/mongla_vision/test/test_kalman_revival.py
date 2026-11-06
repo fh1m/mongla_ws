@@ -191,7 +191,7 @@ def test_a_zero_dt_does_not_zero_Q():
 def test_the_tuned_operating_point_is_preserved_at_the_reference_interval():
     """B09 is a SCALING fix, not a re-tune.
 
-    `kalman_process_noise` (tracker.yaml: 0.05) was tuned against the old
+    `kalman_process_noise` (the retired tracker.yaml: 0.05) was tuned against the old
     `eye(4) * process_noise`. Substituting the WNA form naively moves the
     operating point by ~1e6 at a typical interval. Anchoring sigma_a^2 at the
     measured p50 keeps the velocity term identical there.

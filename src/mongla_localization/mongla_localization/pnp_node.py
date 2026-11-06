@@ -213,6 +213,8 @@ def main(argv=None):
     die_with_parent()        # an orphan holds devices and duplicates topics
     rclpy.init(args=argv)
     node = PnPNode()
+    from mongla_localization.params_file import refuse_unknown
+    refuse_unknown(node)       # bringup.yaml `nodes:` typos stop here
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

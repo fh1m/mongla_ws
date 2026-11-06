@@ -67,7 +67,7 @@ to decide.
 | `srot_recorder.py` | raw MAVLink capture for later analysis |
 | `vision_state.py` | per-camera detection cache; turns a detection into a pixel error |
 | `distance_state.py` · `flow_position.py` | distance travelled, from the downward camera |
-| `vision_tunables.py` + `config/vision_tunables.yaml` | the live-tunable vision gains, in one place |
+| `vision_tunables.py` | the live-tunable vision gains, in one place; set on the deck under `nodes:` in `bringup.yaml` |
 | `dispatch_policy.py` | which verbs go where, on a given backend |
 | `health.py` · `health_reporters.py` | subsystem health, reported rather than assumed |
 | `connection_config.py` | connection profiles and network constants |

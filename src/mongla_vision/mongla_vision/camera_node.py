@@ -669,6 +669,8 @@ def main():
     die_with_parent()        # holds the camera device
     rclpy.init()
     node = CameraNode()
+    from mongla_localization.params_file import refuse_unknown
+    refuse_unknown(node)       # bringup.yaml `nodes:` typos stop here
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

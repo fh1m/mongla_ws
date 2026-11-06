@@ -15,8 +15,8 @@ launch package, so importing them here would make the guard depend on the very
 environment it exists to protect (and it would then skip on a dev box).
 
 Resolution is bounded to the shapes the repo actually uses -- a dict literal, a
-dict comprehension over a module-level tuple of names, and `d['k'] = ...`
-follow-ups. Anything else lands in `_UNRESOLVED_OK`, which is FROZEN: a new
+dict comprehension over a module-level tuple of names, and `d['k'] = ...` or
+`d.update({...})` follow-ups. Anything else lands in `_UNRESOLVED_OK`, which is FROZEN: a new
 unresolvable include fails this file rather than quietly checking nothing.
 """
 from __future__ import annotations
@@ -97,6 +97,13 @@ def _dict_var_keys(tree: ast.AST, consts: dict[str, list[str]]) -> dict[str, set
                 known = out.get(tgt.value.id)
                 if known is not None:
                     known.add(tgt.slice.value)
+        # `d.update({...})`: the explicit pairs added on top of a comprehension.
+        elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+              and node.func.attr == 'update' and isinstance(node.func.value, ast.Name)
+              and node.args and isinstance(node.args[0], ast.Dict)):
+            known = out.get(node.func.value.id)
+            if known is not None:
+                known |= {k.value for k in node.args[0].keys if isinstance(k, ast.Constant)}
     return out
 
 

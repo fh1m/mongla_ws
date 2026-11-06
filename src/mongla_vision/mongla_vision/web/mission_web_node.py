@@ -482,6 +482,8 @@ def main(argv=None):
 
     rclpy.init(args=ros_args)
     node = MissionWebNode()
+    from mongla_localization.params_file import refuse_unknown
+    refuse_unknown(node)       # bringup.yaml `nodes:` typos stop here
     executor = MultiThreadedExecutor(num_threads=4)
     executor.add_node(node)
 

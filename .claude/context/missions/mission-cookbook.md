@@ -1552,7 +1552,7 @@ See `packages/README.md §3` for per-chunk expected outputs and `models/README.m
 - Vision loop body:               `src/mongla_control/mongla_control/motion_vision.py`
 - Vision state cache:             `src/mongla_manager/mongla_manager/vision_state.py`
 - DSL surface:                    `src/mongla_planner/mongla_planner/mongla_dsl.py`
-- ROS param defaults:             `src/mongla_manager/config/vision_tunables.yaml`
+- ROS param defaults:             `src/mongla_manager/mongla_manager/vision_tunables.py`; set them under `nodes:` in `~/.mongla/bringup.yaml`
 - CLI cookbook (deck one-liners): `README.md` §9
 - Architecture (visual flow):     `.claude/context/perception/vision-architecture.md`
 - Roadmap (what's next):          `.claude/context/ROADMAP.md`

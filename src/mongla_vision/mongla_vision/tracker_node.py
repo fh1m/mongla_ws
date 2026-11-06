@@ -13,20 +13,22 @@ Topics:
   in    /mongla/vision/<cam>/camera_info   sensor_msgs/CameraInfo
   out   /mongla/vision/<cam>/tracks        vision_msgs/Detection2DArray  (tracked)
 
-All tracker params are declared as ROS params so they can be tuned live:
-  ros2 param set /mongla_tracker track_buffer 60
-  ros2 param set /mongla_tracker enable_kalman false
+Every tracker setting is a ROS parameter, read ONCE when the node starts (the
+tracker is built in __init__), so a change needs a restart. On the vehicle,
+set them under `nodes:` in ~/.mongla/bringup.yaml, by node name:
 
-A YAML preset lives at config/tracker.yaml:
-  ros2 run mongla_vision tracker_node --ros-args \\
-      --params-file src/mongla_vision/config/tracker.yaml
+    nodes:
+      mongla_tracker_forward:
+        track_buffer: 150
+
+The defaults in __init__ are what runs; there is no separate preset file.
 
 Examples
 --------
 # Default: subscribe to laptop camera
 ros2 run mongla_vision tracker_node --ros-args -p camera:=laptop
 
-# With custom buffer (60 frames = 3 s at 20 Hz)
+# A shorter lost-track buffer: 60 = 2.0 s (Roboflow counts it in 30 Hz frames)
 ros2 run mongla_vision tracker_node --ros-args -p camera:=laptop \\
     -p track_buffer:=60
 """
@@ -172,7 +174,13 @@ class TrackerNode(Node):
         # bytetrack (Roboflow two-stage) | legacy_bytetrack (supervision fallback)
         self.declare_parameter('tracker_type',                'ocsort')
         self.declare_parameter('frame_rate',                  20.0)
-        self.declare_parameter('track_buffer',                60)
+        # Frames a lost track survives, IN 30 Hz FRAMES: Roboflow keeps it for
+        # int(frame_rate/30 * track_buffer) frames, so 150 is 5.0 s at any
+        # rate. Bar: >= the p99 detection gap, 2.418 s (measured-bars.md, the
+        # lock ladder), so a re-acquisition keeps its id. Until 2026-11-06 this
+        # shipped 60 (2.0 s, BELOW the bar) while the ledger quoted 150 from a
+        # config file nothing loaded.
+        self.declare_parameter('track_buffer',                150)
         self.declare_parameter('min_hits',                    1)
         self.declare_parameter('iou_threshold',               0.2)
         self.declare_parameter('track_activation_threshold',  0.40)
@@ -303,7 +311,19 @@ class TrackerNode(Node):
             f"kalman={'on' if self._enable_kal else 'off'}")
 
     def _on_param_change(self, params):
+        """`classes` applies live; everything else is read once at startup.
+
+        So a live set of anything else is REFUSED with the reason. It used to
+        be accepted: `ros2 param set ... track_buffer 150` printed "Set
+        parameter successful" on the deck and changed nothing.
+        """
         from rcl_interfaces.msg import SetParametersResult
+        fixed = [p.name for p in params if p.name != 'classes']
+        if fixed:
+            return SetParametersResult(
+                successful=False,
+                reason=f'{", ".join(fixed)}: read once at startup -- set it under '
+                       f'`nodes:` in bringup.yaml and restart')
         for p in params:
             if p.name == 'classes' and str(p.value) != self._last_classes:
                 self._last_classes = str(p.value)
@@ -452,6 +472,8 @@ def main():
     die_with_parent()        # an orphan holds devices and duplicates topics
     rclpy.init()
     node = TrackerNode()
+    from mongla_localization.params_file import refuse_unknown
+    refuse_unknown(node)       # bringup.yaml `nodes:` typos stop here
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

@@ -13,9 +13,10 @@ That is not a documentation nit, it is a measured operator failure. The
      ran detections, and logged no error -- the only symptom was a latency
      measurement that did not move."
 
-`tracker.yaml` is the sharpest edge, because it is written in exact
-`--params-file` shape (`tracker_node: / ros__parameters:`) -- the form an
-operator hands to `ros2 run --params-file` expecting it to work.
+`tracker.yaml` was the sharpest edge: written in exact `--params-file` shape,
+keyed to a node name the vehicle does not use, and quoted by the ledger while
+the node shipped a different value (B-83). It is deleted; node parameters go
+under `nodes:` in bringup.yaml, which every node checks.
 
 ONE RULE, deliberately: a reader must be able to tell whether editing the file
 does anything. Three ways to satisfy that, all honest:
@@ -23,7 +24,8 @@ does anything. Three ways to satisfy that, all honest:
   * a launch loads it;
   * it carries the NOT LOADED marker and says where to set the value instead;
   * it documents that the OPERATOR loads it explicitly with `--params-file`
-    (`vision_tunables.yaml` is the legitimate case -- opt-in, not dead).
+    (an operator-loaded file would be the legitimate case; none ships now --
+    node parameters go under `nodes:` in bringup.yaml).
 
 Deliberately NOT "mirror every value in both places": a second copy of a number
 is the disease, not the cure. This checks the one property that matters.
@@ -150,16 +152,11 @@ def test_the_marker_points_at_the_real_place_to_set_the_value():
             f'{y.name} says it is not loaded but never says how to set the value')
 
 
-def test_a_file_the_operator_loads_says_how():
-    """The third honest answer: opt-in loading, documented.
-
-    `vision_tunables.yaml` is not dead -- it is meant to be handed to
-    `--params-file` by the operator. It must SAY so, or it is indistinguishable
-    from the inert ones.
+def test_the_retired_tunables_file_stays_gone():
+    """`vision_tunables.yaml` was a fourth copy of the vision gains, loaded only
+    by a hand-typed `--params-file`. By 2026-11-06 it listed 7 of the 15, so the
+    file an operator would have reached for was wrong about half the knobs. The
+    gains are set in ONE place now: `nodes:` in bringup.yaml, whose example is
+    generated from the table the manager declares.
     """
-    p = _ROOT / 'mongla_manager' / 'config' / 'vision_tunables.yaml'
-    if not p.exists():
-        return
-    head = '\n'.join(p.read_text().splitlines()[:30])
-    assert '--params-file' in head, (
-        'vision_tunables.yaml is loadable but never tells the operator to load it')
+    assert not (_ROOT / 'mongla_manager' / 'config' / 'vision_tunables.yaml').exists()

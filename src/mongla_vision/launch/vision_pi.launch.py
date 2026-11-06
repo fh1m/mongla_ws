@@ -84,8 +84,15 @@ def _calib(name: str) -> str:
         return ''
 
 
-def generate_launch_description():
-    args = [
+def arguments() -> list:
+    """Every argument this launch declares, with its default.
+
+    A function so `bringup.launch.py` can re-declare the ones it does not
+    own from HERE, the one place their defaults are written, and so a
+    vision setting reaches `~/.mongla/bringup.yaml` and the bringup command
+    line like any other (see `VISION_PI_PASSTHROUGH` there).
+    """
+    return [
         DeclareLaunchArgument('fwd_profile', default_value='pi_forward'),
         DeclareLaunchArgument('dwn_profile', default_value='pi_downward'),
         DeclareLaunchArgument('fwd_model',   default_value='gate_sharks'),
@@ -427,6 +434,10 @@ def generate_launch_description():
         DeclareLaunchArgument('fwd_device_path', default_value=''),
         DeclareLaunchArgument('dwn_device_path', default_value=''),
     ]
+
+
+def generate_launch_description():
+    args = arguments()
 
     # NO SEPARATE CAMERA PROCESSES. The cameras live inside the same process
     # as the detectors now, so their frames reach inference by reference

@@ -12,8 +12,23 @@ So the same arguments can live in a YAML file on the vehicle:
     pool_depth_m: 1.2
     fwd_model: gate_sharks
 
-and `ros2 launch mongla_manager bringup.launch.py` reads it. Which value wins,
-highest first:
+and `ros2 launch mongla_manager bringup.launch.py` reads it.
+
+The same file also holds NODE PARAMETERS -- the ~200 knobs that are not launch
+arguments (vision gains, lock ladder, filter noise) -- under one key, `nodes:`,
+keyed by node name:
+
+    nodes:
+      mongla_manager:
+        vision.kp_yaw: 80.0           # or nested: vision: {kp_yaw: 80.0}
+
+One file, one place to look on the deck. Bringup hands `nodes:` to every node
+it starts, and each node REFUSES a key it does not declare, because ROS
+ignores one without a word (`mongla_localization/params_file.py`). A key the
+launch file already sets from an argument is refused too: it would lose to
+the argument, so it belongs at the top level under the argument's name.
+
+Which launch-argument value wins, highest first:
 
     1. `name:=value` typed on the command line      (always wins)
     2. the file                                      (the deck's settings)
@@ -38,6 +53,7 @@ import os
 from pathlib import Path
 
 ENV = 'MONGLA_BRINGUP'
+NODES_KEY = 'nodes'
 DEFAULT_PATH = Path.home() / '.mongla' / 'bringup.yaml'
 
 
@@ -71,14 +87,14 @@ def read(path: Path, declared: set[str]) -> dict[str, str]:
     body = yaml.safe_load(path.read_text()) or {}
     if not isinstance(body, dict):
         raise RuntimeError(f'{path}: expected `name: value` lines, got {type(body).__name__}')
-    unknown = sorted(set(body) - declared)
+    unknown = sorted(set(body) - declared - {NODES_KEY})
     if unknown:
         hints = []
         for k in unknown:
             close = difflib.get_close_matches(str(k), declared, n=1)
             hints.append(f'{k!r}' + (f' (did you mean {close[0]!r}?)' if close else ''))
         raise RuntimeError(f'{path}: not a bringup argument: {", ".join(hints)}')
-    return {str(k): _as_launch_string(v) for k, v in body.items()}
+    return {str(k): _as_launch_string(v) for k, v in body.items() if k != NODES_KEY}
 
 
 def apply(args: list) -> tuple[list, dict[str, str], Path | None]:
@@ -109,3 +125,53 @@ def apply(args: list) -> tuple[list, dict[str, str], Path | None]:
             raise RuntimeError(f'{path}: {a.name}: {values[a.name]!r} is not one '
                                f'of {a.choices}') from None
     return out, values, path
+
+
+
+def read_nodes(path: Path) -> dict[str, dict]:
+    """The file's `nodes:` section: {node_name: {param: value}}; refuses a bad shape.
+
+    A wildcard name (`/**`, `mongla_*`) is refused: it reaches every node, so no
+    node could tell its own typo from another node's real parameter.
+    """
+    import yaml
+    body = yaml.safe_load(path.read_text()) or {}
+    nodes = body.get(NODES_KEY) if isinstance(body, dict) else None
+    if nodes is None:
+        return {}
+    if not isinstance(nodes, dict):
+        raise RuntimeError(f'{path}: `{NODES_KEY}:` must map node names to parameters')
+    out = {}
+    for name, params in nodes.items():
+        name = str(name).strip('/')
+        if '*' in name:
+            raise RuntimeError(f'{path}: nodes: {name!r}: name each node; a '
+                               f'wildcard cannot be checked for typos')
+        if not isinstance(params, dict) or 'ros__parameters' in params:
+            raise RuntimeError(f'{path}: nodes: {name!r}: expected `param: value` '
+                               f'lines (no `ros__parameters:` level -- bringup adds it)')
+        out[name] = params
+    return out
+
+
+def node_actions() -> list:
+    """Launch actions that hand `nodes:` to every node bringup starts, or []."""
+    path = config_path()
+    nodes = read_nodes(path) if path is not None else {}
+    if not nodes:
+        return []
+    import tempfile
+    import yaml
+    from launch.actions import LogInfo, SetEnvironmentVariable
+    from launch_ros.actions import SetParametersFromFile
+    from mongla_localization.params_file import APPLIED_ENV
+    # The ROS form of the section. One file per user, rewritten by every
+    # launch, so launches do not pile up copies in /tmp (a RAM disk here).
+    ros_file = os.path.join(tempfile.gettempdir(), f'mongla-nodes-{os.getuid()}.yaml')
+    with open(ros_file, 'w') as f:
+        yaml.safe_dump({n: {'ros__parameters': p} for n, p in nodes.items()}, f)
+    return [
+        LogInfo(msg=f'[bringup] node parameters from {path}: {", ".join(sorted(nodes))}'),
+        SetEnvironmentVariable(APPLIED_ENV, ros_file),
+        SetParametersFromFile(ros_file),
+    ]

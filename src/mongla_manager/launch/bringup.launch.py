@@ -29,6 +29,9 @@ Settings can also live in a file instead of on the command line -- see
     echo 'vision: true' > ~/.mongla/bringup.yaml
     ros2 launch mongla_manager bringup.launch.py         # vision is on
 
+Node parameters (the vision gains and every other knob that is not an
+argument) go in the same file, under `nodes:`. One file for the whole day.
+
 Then, from another shell:
 
     ros2 run mongla_manager bringup_check                 # can it arm?
@@ -59,6 +62,39 @@ from mongla_manager import launch_defaults
 # EMERGENCY_DISARM_S plus the brake, so a slow disarm confirmation is logged
 # rather than killed mid-poll (a test compares the two).
 MANAGER_SIGTERM_TIMEOUT_S = 12
+
+# The vehicle vision stack's own arguments, the ones this file does not
+# declare for itself. Bringup re-declares each FROM `vision_pi.launch.py`
+# (`arguments()` there, the one place their defaults are written) and passes it
+# on explicitly, so every vision setting is an ordinary bringup argument: on
+# the command line, in ~/.mongla/bringup.yaml, in the generated example, and
+# checked by command_lint. Before this they were reachable only by the include
+# leak described below, and bringup.yaml refused them as unknown.
+# `test_bringup_settings_file` fails if this list and the two files disagree.
+VISION_PI_PASSTHROUGH = (
+    'fwd_profile', 'dwn_profile', 'fwd_models', 'dwn_models', 'fwd_active',
+    'dwn_active', 'contours', 'preprocess', 'range_crop', 'preprocess_clip',
+    'tracking', 'tracker_type', 'kalman_adaptive_noise', 'fwd_frame_rate',
+    'dwn_frame_rate', 'dwn_calibration', 'fwd_calibration', 'act_conf',
+    'anchor_xfeat_hef', 'anchor_semi_dense', 'target_width_m_forward',
+    'target_width_m_downward', 'dwn_lock_class', 'bank_forward', 'bank_downward',
+    'fwd_fps', 'dwn_fps', 'fwd_publish_hz', 'dwn_publish_hz', 'replay',
+    'fwd_device_path', 'dwn_device_path',
+)
+
+
+def _vision_pi_arguments(path: str) -> list:
+    """`VISION_PI_PASSTHROUGH`, declared exactly as vision_pi.launch.py does."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('vision_pi_launch', path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    by_name = {a.name: a for a in mod.arguments()}
+    missing = [n for n in VISION_PI_PASSTHROUGH if n not in by_name]
+    if missing:
+        raise RuntimeError(f'bringup passes {missing} to vision_pi.launch.py, which '
+                           f'no longer declares them')
+    return [by_name[n] for n in VISION_PI_PASSTHROUGH]
 
 
 def generate_launch_description():
@@ -263,6 +299,10 @@ def generate_launch_description():
     # Values from ~/.mongla/bringup.yaml (or $MONGLA_BRINGUP) become the
     # defaults; anything typed as name:=value still wins. Printed at startup so
     # the log says which settings did not come from the command line.
+    vision_pi_launch_path = os.path.join(
+        get_package_share_directory('mongla_vision'),
+        'launch', 'vision_pi.launch.py')
+    args += _vision_pi_arguments(vision_pi_launch_path)
     args, from_file, file_path = launch_defaults.apply(args)
     file_note = ([LogInfo(msg=f'[bringup] settings from {file_path}: ' + ', '.join(
         f'{k}={v}' for k, v in sorted(from_file.items())))] if from_file else [])
@@ -302,10 +342,6 @@ def generate_launch_description():
         get_package_share_directory('mongla_vision'),
         'launch', 'vision.launch.py')
 
-    vision_pi_launch_path = os.path.join(
-        get_package_share_directory('mongla_vision'),
-        'launch', 'vision_pi.launch.py')
-
     # ⛔ SCOPED, and the scope is load-bearing. `IncludeLaunchDescription` does
     # NOT scope launch configurations: every `name:=value` given to this file
     # leaks into the included one and overrides its default for any argument of
@@ -322,9 +358,8 @@ def generate_launch_description():
         "'", LaunchConfiguration('vision'), "'.lower() in ('true','1') and '",
         LaunchConfiguration('vision_stack'), "' == '", want, "'"]))
 
-    vision_pi_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(vision_pi_launch_path),
-        launch_arguments={
+    vision_pi_args = {name: LaunchConfiguration(name) for name in VISION_PI_PASSTHROUGH}
+    vision_pi_args.update({
             'fwd_model':     LaunchConfiguration('fwd_model'),
             'dwn_model':     LaunchConfiguration('dwn_model'),
             'fwd_classes':   LaunchConfiguration('fwd_classes'),
@@ -345,7 +380,10 @@ def generate_launch_description():
             'caustics':      LaunchConfiguration('caustics'),
             'lane_lines':    LaunchConfiguration('lane_lines'),
             'tile_m':        LaunchConfiguration('tile_m'),
-        }.items(),
+    })
+    vision_pi_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(vision_pi_launch_path),
+        launch_arguments=vision_pi_args.items(),
         condition=_stack_is('pi'),
     )
 
@@ -417,7 +455,11 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('foxglove')),
     )
 
-    return LaunchDescription(args + file_note + [
+    # The same file's `nodes:` section: node parameters, applied to every node
+    # below. Each node refuses a key it does not declare.
+    params = launch_defaults.node_actions()
+
+    return LaunchDescription(args + file_note + params + [
         # ⛔ ONE BLAS THREAD PER CALL, set before any node imports numpy.
         # The vehicle runs OpenBLAS (provision_vehicle.sh checks for it), whose pool
         # defaults to every core in EVERY process. The XFeat matcher already
