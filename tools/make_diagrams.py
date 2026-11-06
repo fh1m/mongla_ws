@@ -11,7 +11,7 @@ medium, #788294 for labels. Type is Zed Mono, which the page already loads.
 import math, pathlib
 
 OUT = pathlib.Path('docs/assets/diagrams')
-RED, RED_L = '#ff0000', '#ff5747'
+RED, RED_L = '#ff0000', '#ff2a14'   # RED_L == site.css --red-lit, the one lit red
 SEA, SEA_L = '#004eff', '#5a8dff'
 INK, DIM, RULE = '#e4e8ef', '#788294', '#1a2030'
 MONO = 'Zed Mono,ui-monospace,monospace'

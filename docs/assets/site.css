@@ -54,7 +54,7 @@
   --ink-3:#7b8598;          /* 5.4:1 on --d0 — these carry small mono labels */
 
   /* lifted tints: the saturated primitives are STRUCTURE and fail AA as text */
-  --red-lit:#ff5747;
+  --red-lit:#ff2a14;        /* the one lit red: OKLCH L 0.64, inside the dark chart band; 5.6:1 on --d0 */
   --sea-lit:#5a8dff;
 
   /* ── layer 2: semantics ──────────────────────────────────────── */
