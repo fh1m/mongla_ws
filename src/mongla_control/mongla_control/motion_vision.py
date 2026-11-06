@@ -42,7 +42,7 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass
-from typing import Dict, Optional, Set
+from typing import Dict, Optional, Set, Tuple
 
 from .motion_rates import VISION_LOOP_HZ as LOOP_HZ
 from .motion_rates import LOG_THROTTLE_S
@@ -785,6 +785,158 @@ def _live_classes(vision_state):
 # ---------------------------------------------------------------------- #
 #  align_loop -- centre on lat / yaw / depth                             #
 # ---------------------------------------------------------------------- #
+def _tool_offset(tool_offset_fn, log) -> Tuple[float, float]:
+    """(du, dv) pixels from camera centre to where the TOOL points, or (0, 0).
+
+    ⛔ AIM THE TOOL, NOT THE CAMERA. The two axes are parallel, so an
+    uncorrected offset misses by the offset itself AT EVERY RANGE -- it does
+    not shrink as the hull closes in. The correction is `du = fx*x/Z`, LARGE up
+    close, so it is resolved once per tick because Z moves.
+
+    (0, 0) when it cannot be computed (no tool named, no calibration, no range):
+    then the loop aims the camera, which is what every mission has always
+    done. The caller warns; refusing here would break every align with no pose.
+    """
+    if tool_offset_fn is None:
+        return 0.0, 0.0
+    try:
+        to = tool_offset_fn()
+    except Exception as exc:                                  # noqa: BLE001
+        log.error(f'[VIS  ] tool_offset_fn raised {exc!r} -- aiming the camera')
+        return 0.0, 0.0
+    if to is None:
+        return 0.0, 0.0
+    return float(to[0]), float(to[1])
+
+
+def _yaw_command(ctrl: float, epx: float, eff_err: float, kp_yaw: float,
+                 g_yaw: float, fill: float) -> float:
+    """The yaw demand, %, for one tick.
+
+    Polarity un-negated, same as lateral (ex > 0 -> target RIGHT -> yaw RIGHT).
+    Inside the deadband: 0, so the hull settles and an in-band shot does not
+    jitter. Outside: proportional, capped at `g_yaw`.
+
+    ⛔ THE STICTION SNAP BELONGS INSIDE THE FILL GATE, NOT OUTSIDE. Close in
+    (large box) the magnitude is lifted to the smallest yaw the board produces,
+    so the hole-lock does not stall just outside err_px. Far away the rule is
+    the opposite: a minimum on a rate channel is a relay that limit-cycles the
+    hull, which is the far-field wobble VISION_YAW_FLOOR_FILL fixed.
+    """
+    if epx <= eff_err:
+        return 0.0
+    mag = min(abs(ctrl * kp_yaw), g_yaw)
+    if fill >= VISION_YAW_FLOOR_FILL:
+        mag = _srot_yaw_expressible(mag, g_yaw)
+    return math.copysign(mag, ctrl) if mag > 0.0 else 0.0
+
+
+def _forward_range_hold(sample, *, fwd_fill, fwd_mode, kp_forward, g_fwd,
+                        standoff_max_tilt_deg, obliquity_fn, standoff_held, log):
+    """The forward standoff axis for one tick.
+
+    Returns (fwd_pct, in_band, fill, standoff_held). ONE-SIDED: drive forward
+    while the box is smaller than `fwd_fill`, exactly 0 once at or past it --
+    never reverse, so no reverse-kick and no ramming; drag bleeds a small
+    overshoot. Same `_fill` law as move_loop.
+
+    ⛔ AN OBLIQUE TARGET READS AS FURTHER AWAY, SO THE HULL CLOSES IN.
+    `_fill('area')` is sqrt(w*h), Corke & Hutchinson's Z feature (IEEE T-RA
+    17(4) 2001), valid while the target normal is within +/-35 deg of the
+    optical axis; past that the area "will appear diminished, due to
+    perspective, which causes the camera to initially approach the target".
+    Approaching is the dangerous direction, so a PRESENT pose that says too
+    oblique holds the approach.
+
+    FAIL DIRECTION IS THE OPPOSITE OF THE FIRING GATE, deliberately.
+    `square_within` treats "no pose" as not-square because for a shot both mean
+    don't. Here "no pose" is the ordinary case (it needs lock_node, a
+    calibration and a committed width), and treating it as oblique would
+    disable forward drive on every mission without one -- a guard that breaks
+    what it guards.
+    """
+    fill = _fill(sample, fwd_mode)
+    fwd_err = float(fwd_fill) - fill
+    if standoff_max_tilt_deg > 0.0 and fwd_err > FWD_BAND:
+        try:
+            obl = obliquity_fn() if obliquity_fn else None
+        except Exception as exc:                              # noqa: BLE001
+            log.error(f'[VIS  ] obliquity_fn raised {exc!r} -- '
+                      f'treating as unknown; standoff unguarded')
+            obl = None
+        if obl is not None and obl > float(standoff_max_tilt_deg):
+            if not standoff_held:
+                standoff_held = True
+                log.warning(
+                    f'[VIS  ] standoff HELD: target face {obl:.0f} deg '
+                    f'off-normal (> {standoff_max_tilt_deg:.0f}). '
+                    f'sqrt(area) under-reads at this obliquity, so '
+                    f'closing would drive PAST the standoff. Square '
+                    f'up first.')
+            fwd_err = 0.0
+    if fwd_err <= FWD_BAND:
+        return 0.0, True, fill, standoff_held
+    return _clamp(fwd_err * kp_forward, 0.0, g_fwd), False, fill, standoff_held
+
+
+def _verify_after_stop(vision_state, target_class, *, near, gate_norm,
+                       ctrl_conf, locked_id, tool_offset_fn, axes, offsets,
+                       half_w, half_h, depth_axis, frames_needed, eff_err,
+                       worst, fill, started, end_px, reason, abort_fn,
+                       log) -> Outcome:
+    """Re-measure the target once the hull has stopped, and grade the align.
+
+    The controller's own error says where it BELIEVED the target was while
+    driving; this counts `frames_needed` fresh, non-coasted frames captured
+    AFTER the stop (no coasting, no lock widening) and grades the worst of them
+    against the same band. ALIGNED only if re-seen and still in band; LOST if
+    not re-seen within VERIFY_TIMEOUT_S; DRIFTED if seen but out of band.
+    """
+    end_x_px, end_y_px = end_px
+    t_stop = time.monotonic()
+    seen, v_worst, last_at = 0, 0.0, t_stop
+    while time.monotonic() - t_stop < VERIFY_TIMEOUT_S:
+        if abort_fn and abort_fn():
+            return Outcome(ABORTED, 'aborted while verifying', worst, fill,
+                           time.monotonic() - started, end_x_px, end_y_px)
+        _tick(vision_state)
+        vs = vision_state.bbox_error(
+            target_class, near=near, gate_norm=gate_norm,
+            min_score=ctrl_conf, locked_id=locked_id,
+            coast_s=0.0, lock_s=0.0)
+        if not _present(vs) or vs.coasted:
+            continue
+        at = time.monotonic() - vs.age_s
+        # Captured AFTER the stop, and a frame not already counted.
+        if at <= last_at + _FRAME_EPS_S:
+            continue
+        last_at = at
+        seen += 1
+        tdu, tdv = _tool_offset(tool_offset_fn, log)
+        v_worst = max(v_worst, _centring_error_px(
+            vs, axes=axes, offsets=offsets, tool_du=tdu, tool_dv=tdv,
+            half_w=half_w, half_h=half_h, depth_axis=depth_axis))
+        end_x_px, end_y_px = vs.ex * half_w, vs.ey * half_h
+        if seen >= frames_needed:
+            break
+    elapsed = time.monotonic() - started
+    if seen < frames_needed:
+        return Outcome(
+            LOST, f'{reason}; then NOT re-seen once stopped '
+                  f'({seen}/{frames_needed} frames in '
+                  f'{VERIFY_TIMEOUT_S:.1f}s) -- unverified',
+            worst, fill, elapsed, end_x_px, end_y_px)
+    if v_worst > eff_err:
+        return Outcome(
+            DRIFTED, f'centred while driving ({worst:.0f}px), '
+                     f'{v_worst:.0f}px off once stopped -- out of '
+                     f'the {eff_err:.0f}px band on {seen} fresh frames',
+            v_worst, fill, elapsed, end_x_px, end_y_px)
+    return Outcome(ALIGNED, f'{reason}; verified {v_worst:.0f}px '
+                            f'on {seen} frames after stopping',
+                   v_worst, fill, elapsed, end_x_px, end_y_px)
+
+
 def align_loop(*,
                fc,
                vision_state,
@@ -1129,27 +1281,8 @@ def align_loop(*,
             in_band = []
             worst   = 0.0
 
-            # ⛔ AIM THE TOOL, NOT THE CAMERA. The two axes are parallel, so an
-            # uncorrected offset misses by the offset itself AT EVERY RANGE --
-            # it does not shrink as the hull closes in. The correction is the
-            # opposite of a constant: `du = fx*x/Z`, so it is LARGE up close.
-            # Resolved once per tick because Z moves.
-            #
-            # None means it could not be computed (no tool named, no
-            # calibration, or no range) -- then this is exactly the previous
-            # behaviour, aiming the camera, which is what every mission has
-            # always done. The caller warns; refusing here would break every
-            # align that has no pose.
-            tool_du = tool_dv = 0.0
-            if tool_offset_fn is not None:
-                try:
-                    _to = tool_offset_fn()
-                except Exception as exc:                      # noqa: BLE001
-                    log.error(f'[VIS  ] tool_offset_fn raised {exc!r} -- '
-                              f'aiming the camera')
-                    _to = None
-                if _to is not None:
-                    tool_du, tool_dv = float(_to[0]), float(_to[1])
+            # Where the TOOL points, not the camera (see _tool_offset).
+            tool_du, tool_dv = _tool_offset(tool_offset_fn, log)
 
             # Horizontal bearing NOW, not at capture. Forward camera only: a
             # yaw spins the downward image about its centre rather than
@@ -1186,33 +1319,8 @@ def align_loop(*,
                 ctrl = _axis_ctrl(ex_now, offsets.get('yaw', 0.0), tool_du, half_w)
                 epx  = abs(ctrl) * half_w
                 worst = max(worst, epx)
-                # Polarity: un-negated, same as the lateral axis (ex > 0 ->
-                # target RIGHT -> yaw RIGHT). Inside the err_px deadband we
-                # command 0 (let the hull settle, no shot-jitter when the
-                # mission fires in-band). Outside it, pure proportional capped
-                # by g_yaw -- and ONLY when the bbox is large (target close) do
-                # we floor the magnitude to SROT_YAW_MIN_PCT to break thruster
-                # stiction for the tight hole-lock. Far away (small bbox) the
-                # floor is suppressed: a hard minimum on a rate channel is a
-                # relay that limit-cycles the hull, which is the far-field
-                # wobble. See VISION_YAW_FLOOR_FILL.
-                if epx <= eff_err:
-                    yaw_pct = 0.0
-                else:
-                    mag = min(abs(ctrl * kp_yaw), g_yaw)
-                    # Stiction floor only when close (large bbox): a non-zero
-                    # correction is lifted to the smallest yaw the board produces.
-                    if _fill(sample, 'area') >= VISION_YAW_FLOOR_FILL:
-                        # ⛔ THE SNAP BELONGS INSIDE THE FILL GATE, NOT OUTSIDE.
-                        # This is the CLOSE regime, where the floor exists to
-                        # stop the hole-lock stalling just outside err_px. Far
-                        # away (small bbox) the rule is the opposite -- leave
-                        # yaw pure-proportional and let it decay, because a
-                        # minimum on a rate channel is a relay that limit-cycles
-                        # the hull. Lifting a far-field residual here would
-                        # re-create the far-field wobble the fill gate fixed.
-                        mag = _srot_yaw_expressible(mag, g_yaw)
-                    yaw_pct = math.copysign(mag, ctrl) if mag > 0.0 else 0.0
+                yaw_pct = _yaw_command(ctrl, epx, eff_err, kp_yaw, g_yaw,
+                                       _fill(sample, 'area'))
                 in_band.append(epx <= eff_err)
 
             if use_surge:
@@ -1228,60 +1336,13 @@ def align_loop(*,
                 fwd_pct = _clamp(p_surge, -g_fwd, g_fwd) * surge_sign
                 in_band.append(epx <= eff_err)
             if use_fwd:
-                # FORWARD range-hold (the unified standoff shot). ONE-SIDED: drive
-                # forward while the bbox is smaller than the standoff fill, command
-                # exactly 0 once at/past it (never reverse -> no reverse-kick, no
-                # ramming the board; water drag bleeds a small overshoot). The
-                # standoff band joins in_band so the mid-hold fire / exit only
-                # trips once the range is satisfied too. Same _fill law as move_loop.
-                last_fill = _fill(sample, fwd_mode)   # reported in Outcome.fill
-                fwd_err = float(fwd_fill) - last_fill
-                # ⛔ AN OBLIQUE TARGET READS AS FURTHER AWAY, SO THE HULL CLOSES IN.
-                # `_fill('area')` is sqrt(w*h) -- Corke & Hutchinson's sqrt(area)
-                # Z-axis feature (IEEE T-RA 17(4) 2001), chosen there because it is
-                # scalar, rotation-invariant, and "has the dimension of length ...
-                # thus a similar magnitude control gain" as the pixel features. The
-                # SAME paper states its validity bound: it works "when the target
-                # normal is within +/-35 deg of the camera's optical axis", and
-                # past that "its area will appear diminished, due to perspective,
-                # which causes the camera to initially approach the target."
-                #
-                # Approaching is the dangerous direction -- past the intended
-                # standoff into whatever we were standing off FROM.
-                # `fire_max_tilt_deg` already holds the SHOT for obliquity;
-                # nothing held the APPROACH, so the hull could arrive too close
-                # and then correctly refuse to fire.
-                #
-                # FAIL DIRECTION IS THE OPPOSITE OF THE FIRING GATE, deliberately.
-                # `square_within` treats "no pose" as not-square because for a
-                # shot both mean don't. Here "no pose" is the ORDINARY case (a
-                # pose needs lock_node, a calibration and a committed width), so
-                # treating it as oblique would disable forward drive on every
-                # mission without one -- a guard that breaks what it guards. Only
-                # a pose that is PRESENT and says too oblique holds.
-                if standoff_max_tilt_deg > 0.0 and fwd_err > FWD_BAND:
-                    try:
-                        obl = obliquity_fn() if obliquity_fn else None
-                    except Exception as exc:                       # noqa: BLE001
-                        log.error(f'[VIS  ] obliquity_fn raised {exc!r} -- '
-                                  f'treating as unknown; standoff unguarded')
-                        obl = None
-                    if obl is not None and obl > float(standoff_max_tilt_deg):
-                        if not standoff_held:
-                            standoff_held = True
-                            log.warning(
-                                f'[VIS  ] standoff HELD: target face {obl:.0f} deg '
-                                f'off-normal (> {standoff_max_tilt_deg:.0f}). '
-                                f'sqrt(area) under-reads at this obliquity, so '
-                                f'closing would drive PAST the standoff. Square '
-                                f'up first.')
-                        fwd_err = 0.0
-                if fwd_err <= FWD_BAND:
-                    fwd_pct = 0.0
-                    in_band.append(True)
-                else:
-                    fwd_pct = _clamp(fwd_err * kp_forward, 0.0, g_fwd)
-                    in_band.append(False)
+                fwd_pct, fwd_ok, last_fill, standoff_held = _forward_range_hold(
+                    sample, fwd_fill=fwd_fill, fwd_mode=fwd_mode,
+                    kp_forward=kp_forward, g_fwd=g_fwd,
+                    standoff_max_tilt_deg=standoff_max_tilt_deg,
+                    obliquity_fn=obliquity_fn, standoff_held=standoff_held,
+                    log=log)
+                in_band.append(fwd_ok)
 
             last_err_px = worst
             # Freshness-decay: pace LATERAL authority to measurement freshness so
@@ -1453,61 +1514,18 @@ def align_loop(*,
                     if not verify:
                         return Outcome(ALIGNED, reason, worst, last_fill, elapsed,
                                        end_x_px, end_y_px)
-                    # ── VERIFY: re-measure once stopped (see VERIFY_TIMEOUT_S) ──
-                    t_stop = time.monotonic()
-                    seen, v_worst, last_at = 0, 0.0, t_stop
-                    while time.monotonic() - t_stop < VERIFY_TIMEOUT_S:
-                        if abort_fn and abort_fn():
-                            return Outcome(ABORTED, 'aborted while verifying',
-                                           worst, last_fill,
-                                           time.monotonic() - started, end_x_px, end_y_px)
-                        _tick(vision_state)
-                        near = ((locked_ex, locked_ey)
-                                if locked_ex is not None else None)
-                        vs = vision_state.bbox_error(
-                            target_class, near=near, gate_norm=gate_norm,
-                            min_score=ctrl_conf, locked_id=locked_id,
-                            coast_s=0.0, lock_s=0.0)
-                        if not _present(vs) or vs.coasted:
-                            continue
-                        at = time.monotonic() - vs.age_s
-                        # Captured AFTER the stop, and a frame not already counted.
-                        if at <= last_at + _FRAME_EPS_S:
-                            continue
-                        last_at = at
-                        seen += 1
-                        tdu = tdv = 0.0
-                        if tool_offset_fn is not None:
-                            try:
-                                _to = tool_offset_fn()
-                            except Exception:                   # noqa: BLE001
-                                _to = None
-                            if _to is not None:
-                                tdu, tdv = float(_to[0]), float(_to[1])
-                        v_worst = max(v_worst, _centring_error_px(
-                            vs, axes=axes, offsets=offsets, tool_du=tdu,
-                            tool_dv=tdv, half_w=half_w, half_h=half_h,
-                            depth_axis=use_surge))
-                        end_x_px, end_y_px = vs.ex * half_w, vs.ey * half_h
-                        if seen >= align_stable_frames:
-                            break
-                    elapsed = time.monotonic() - started
-                    if seen < align_stable_frames:
-                        return Outcome(
-                            LOST, f'{reason}; then NOT re-seen once stopped '
-                                  f'({seen}/{align_stable_frames} frames in '
-                                  f'{VERIFY_TIMEOUT_S:.1f}s) -- unverified',
-                            worst, last_fill, elapsed, end_x_px, end_y_px)
-                    if v_worst > eff_err:
-                        return Outcome(
-                            DRIFTED, f'centred while driving ({worst:.0f}px), '
-                                     f'{v_worst:.0f}px off once stopped -- out of '
-                                     f'the {eff_err:.0f}px band on {seen} fresh '
-                                     f'frames',
-                            v_worst, last_fill, elapsed, end_x_px, end_y_px)
-                    return Outcome(ALIGNED, f'{reason}; verified {v_worst:.0f}px '
-                                            f'on {seen} frames after stopping',
-                                   v_worst, last_fill, elapsed, end_x_px, end_y_px)
+                    return _verify_after_stop(
+                        vision_state, target_class,
+                        near=((locked_ex, locked_ey)
+                              if locked_ex is not None else None),
+                        gate_norm=gate_norm, ctrl_conf=ctrl_conf,
+                        locked_id=locked_id, tool_offset_fn=tool_offset_fn,
+                        axes=axes, offsets=offsets, half_w=half_w,
+                        half_h=half_h, depth_axis=use_surge,
+                        frames_needed=align_stable_frames, eff_err=eff_err,
+                        worst=worst, fill=last_fill, started=started,
+                        end_px=(end_x_px, end_y_px), reason=reason,
+                        abort_fn=abort_fn, log=log)
                 # else: inside the hold window -- fall through to the loop tail
                 # and keep correcting (the per-tick _drive above already ran).
                 # ponytail: aligned_at is set ONCE and never reset (unlike
