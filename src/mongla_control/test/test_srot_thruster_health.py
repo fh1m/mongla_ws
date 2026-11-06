@@ -211,8 +211,36 @@ def test_a_defaults_reset_is_surfaced():
 
 def test_an_nvs_reformat_is_surfaced():
     fc = _fc()
+    fc.note_statustext(_text('RST: POWERON', 4))
     fc.note_statustext(_text('NVS reformatted - params AND calibration lost', 2))
     assert fc.boot_warnings()
+
+
+def test_a_boot_that_was_never_seen_is_unknown_not_clean():
+    """The manager connected after the board booted: nothing is known, and
+    that must not read as "nothing wrong"."""
+    fc = _fc()
+    fc.note_statustext(_text('CFG r14 FR=1'))
+    assert fc.boot_warnings() is None
+
+
+def test_a_full_ring_does_not_lose_the_boot_warning():
+    """64 lines of chatter after boot used to push the defaults-reset line out
+    of the ring before preflight read it."""
+    fc = _fc()
+    fc.note_statustext(_text('RST: POWERON', 4))
+    fc.note_statustext(_text('Params reset to build defaults', 4))
+    for i in range(200):
+        fc.note_statustext(_text(f'chatter {i}'))
+    assert [t for _, t in fc.boot_warnings()] == ['Params reset to build defaults']
+
+
+def test_a_reboot_starts_a_fresh_boot_record():
+    fc = _fc()
+    fc.note_statustext(_text('RST: POWERON', 4))
+    fc.note_statustext(_text('Params reset to build defaults', 4))
+    fc.note_statustext(_text('RST: SW', 4))
+    assert fc.boot_warnings() == []
 
 
 def test_an_ordinary_boot_raises_nothing():
@@ -220,3 +248,22 @@ def test_an_ordinary_boot_raises_nothing():
     for t in ('Hengla v0.2.0 ready', 'RST: POWERON', 'CAL loaded from NVS'):
         fc.note_statustext(_text(t))
     assert fc.boot_warnings() == []
+
+
+def test_the_replay_request_is_answered_by_the_burst_not_the_ack():
+    """Firmware that cannot replay ACCEPTS the request and sends nothing, so a
+    True from `request_boot_announcements` must come from the burst arriving."""
+    sent = []
+    fc = _fc()
+    fc._command_long = lambda cmd, p1=0.0, **_: sent.append((cmd, p1))
+    assert fc.request_boot_announcements(timeout=0.1) is False
+    assert sent == [(mavutil.mavlink.MAV_CMD_REQUEST_MESSAGE,
+                     float(mavutil.mavlink.MAVLINK_MSG_ID_STATUSTEXT))]
+    assert fc.boot_warnings() is None
+
+    def replay(cmd, p1=0.0, **_):
+        fc.note_statustext(_text('RST: POWERON', 4))
+        fc.note_statustext(_text('MAG cal MISSING - heading stays relative', 4))
+    fc._command_long = replay
+    assert fc.request_boot_announcements(timeout=0.5) is True
+    assert [t for _, t in fc.boot_warnings()] == ['MAG cal MISSING - heading stays relative']
