@@ -46,7 +46,7 @@ def test_the_loop_applies_it_to_EVERY_centring_axis():
 def test_it_is_resolved_PER_TICK_because_the_range_moves():
     """A constant offset computed once would be right at one range only -- and
     the correction is largest exactly where a mission spends its final second."""
-    i = _MV.index('tool_du = tool_dv = 0.0')
+    i = _MV.index('(tool_du, tool_dv) = _tool_offset(tool_offset_fn, log)')
     j = _MV.index("_axis_ctrl(ex_now, offsets.get('lat', 0.0), tool_du,")
     assert i < j, 'the offset is resolved after it is used'
     # inside the loop body: same indent as the axis blocks that follow it
@@ -55,20 +55,19 @@ def test_it_is_resolved_PER_TICK_because_the_range_moves():
 
 
 def test_a_raising_resolver_does_not_take_the_hull_with_it():
-    i = _MV.index('_to = tool_offset_fn()')
+    i = _MV.index('to = tool_offset_fn()')
     block = _MV[i - 200:i + 400]
-    assert 'except Exception' in block and '_to = None' in block
+    assert 'except Exception' in block and 'return (0.0, 0.0)' in block
 
 
 def test_absent_correction_means_previous_behaviour_not_a_refusal():
     """Refusing would break every align without a pose, which is most of them.
     The fallback must be the historical behaviour: aim the camera."""
-    # RAW text on purpose: what is checked here IS the explanation, a comment.
+    # RAW text on purpose: what is checked here IS the explanation, the
+    # resolver's own docstring.
     raw = (_CTL / 'motion_vision.py').read_text()
-    i = raw.index('tool_du = tool_dv = 0.0')
-    # Normalised: a comment wraps, so 'the previous\n # behaviour' is one
-    # phrase in the file and two lines on disk.
-    why = ' '.join(raw[max(0, i - 900):i].replace('#', ' ').split())
+    i = raw.index('def _tool_offset(')
+    why = ' '.join(raw[i:i + 1400].split())
     assert 'previous behaviour' in why and 'aiming the camera' in why
 
 
