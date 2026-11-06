@@ -67,7 +67,10 @@ guessing. They actuate through `MANUAL_CONTROL` in STABILIZE at 50 Hz.
 |---|---|
 | `commands.py` | the registry: one row per verb, the single source of truth |
 | `mongla.py` | the facade: locking, dispatch, and the safety verbs |
-| `fc/srot_fc.py` | the board driver, and `SrotPayload` (the board's PCA9685 over MAVLink) |
+| `fc/srot_fc.py` | the board driver `SrotFC`: the link, arming, modes, the `SROT_MOVE` verbs, `manual()` |
+| `fc/srot_telemetry.py` · `fc/srot_health.py` | what the board reports: attitude, IMU, batteries; STATUSTEXT, the boot burst, reboots, ESC and leak health |
+| `fc/srot_params.py` · `fc/srot_bench.py` · `fc/srot_uplink.py` | parameters and the preflight checks; bench-only motor test / detect / tune; what the host sends the board it sees |
+| `fc/srot_payload.py` · `fc/_srot_base.py` | `SrotPayload` (fire(N) on board channel N); the shared names and the one MAVLink 2 import |
 | `fc/srot_protocol.py` · `fc/base.py` · `fc/port_guard.py` | wire constants, typed outcomes, one owner per port |
 | `motion_vision.py` · `motion_writers.py` · `motion_rates.py` | the two vision loops, what they write, and their tick rate |
 | `vision_verbs.py` | the verbs on top of those loops: mode gating, firing, evidence |

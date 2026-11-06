@@ -23,11 +23,11 @@ case "$f" in
   *.md|*.yaml|*.yml|*.json|*.html|*.launch.py|*.xml|*.ini|*.sh)
     case "$f" in
       "$WS"/*)
-        echo "[Hook] doc guards (retired stack, book reachability and titles)"
+        echo "[Hook] doc guards (retired stack, book reachability and titles, wiki round trip)"
         ( cd "$WS" && python3 -m pytest -q -p no:anyio -p no:cacheprovider \
             test/test_the_retired_stack_stays_retired.py \
             src/mongla_manager/test/test_docs_contract.py \
-            -k 'not published_test_count' 2>&1 | tail -15 )
+            test/test_the_wiki_is_built_from_the_book.py 2>&1 | tail -15 )
         ;;
     esac
     case "$f" in *.launch.py) ;; *) exit 0 ;; esac ;;

@@ -6,6 +6,11 @@ something it is not — `test_docs_contract.py` checks the titles, and fails on 
 here that no link from this page reaches. Code beats docs; a measurement beats both — see
 [`measured-bars.md`](measured-bars.md).
 
+**Read and edit this book in [the wiki](https://github.com/fh1m/mongla_ws/wiki).** Each chapter
+there is built from the file here, and an edit made there is committed back here, where the doc
+tests run (`tools/wiki_build.py`). A new chapter written in the wiki lands in `wiki/`; add it to
+this contents page, or the contract test fails on a page nobody can reach.
+
 The earlier stack (Pixhawk / ArduSub, the Jetson, the simulator) is not documented here. It
 lives, whole, at the tag `last-with-pixhawk-and-sim`.
 
@@ -71,33 +76,34 @@ lives, whole, at the tag `last-with-pixhawk-and-sim`.
 
 44. [Command reference — generated from the code](reference/commands.md)
 45. [The packages](packages/README.md)
+46. [How the docs stay true — the wiki, the files, and the guards](reference/how-the-docs-stay-true.md)
 
 ## Part VII — The record
 
-46. [Measured bars — every number the stack ships, and what measured it](measured-bars.md)
-47. [Mongla / mongla_ws — Unified Bug Register](BUGS.md)
-48. [Upstream asks — `mongla_ws` → `srot-control-board`](upstream/README.md)
-49. [Read coverage of the SROT / Hengla / Bondor repos](upstream/COVERAGE.md)
+47. [Measured bars — every number the stack ships, and what measured it](measured-bars.md)
+48. [Bug register — every defect in mongla_ws, open and fixed](BUGS.md)
+49. [Upstream asks — `mongla_ws` → `srot-control-board`](upstream/README.md)
+50. [Read coverage of the SROT / Hengla / Bondor repos](upstream/COVERAGE.md)
 
 ## Part VIII — Against the world
 
-50. [The verdict — Mongla against the world, in one document](sota/VERDICT.md)
-51. [Against the world — how Mongla compares to the best work there is](sota/README.md)
-52. [Control, against the world](sota/control.md)
-53. [Vision, against the world](sota/vision.md)
-54. [Localization, against the world](sota/localization.md)
-55. [Planning, the DSL and the mission executive, against the world](sota/planning.md)
-56. [The gap ledger — every move, ranked](sota/SOTA-GAPS.md)
+51. [The verdict — Mongla against the world, in one document](sota/VERDICT.md)
+52. [Against the world — how Mongla compares to the best work there is](sota/README.md)
+53. [Control, against the world](sota/control.md)
+54. [Vision, against the world](sota/vision.md)
+55. [Localization, against the world](sota/localization.md)
+56. [Planning, the DSL and the mission executive, against the world](sota/planning.md)
+57. [The gap ledger — every move, ranked](sota/SOTA-GAPS.md)
 
 ## Part IX — The workbench
 
-57. [The workbench — what is being measured, and what it said](workbench/README.md)
-58. [Bench — everything provable without water](workbench/BENCH.md)
-59. [Pool — one section per session, agenda written before travel](workbench/POOL.md)
-60. [Research owed — the questions the sweeps could not answer](workbench/RESEARCH-OWED.md)
+58. [The workbench — what is being measured, and what it said](workbench/README.md)
+59. [Bench — everything provable without water](workbench/BENCH.md)
+60. [Pool — one section per session, agenda written before travel](workbench/POOL.md)
+61. [Research owed — the questions the sweeps could not answer](workbench/RESEARCH-OWED.md)
 
 ## Appendix — Elsewhere
 
-61. [RoboSub Team Intelligence — Mongla Vision Roadmap](scouting/README.md)
-62. [Bumblebee — RoboSub 2025 (1st Place)](scouting/bumblebee-2025.md)
-63. [Future TODO -- shrink `commands.py` registry](future/future-registry-shrinkage.md)
+62. [RoboSub Team Intelligence — Mongla Vision Roadmap](scouting/README.md)
+63. [Bumblebee — RoboSub 2025 (1st Place)](scouting/bumblebee-2025.md)
+64. [Future TODO -- shrink `commands.py` registry](future/future-registry-shrinkage.md)

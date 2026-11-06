@@ -1,7 +1,8 @@
 # PR V — repeat the boot announcements on request
 
-**Branch:** `duburi-ws/boot-announcements-on-request` (prepared locally, builds for
-`esp32doit-devkit-v1`). **Status:** not yet opened.
+**Branch:** `duburi-ws/boot-announcements-on-request` (builds for
+`esp32doit-devkit-v1`). **Status:** opened 2026-11-06 as
+[PR #32](https://github.com/RakibulIslam1/srot-control-board/pull/32).
 
 ## The problem
 

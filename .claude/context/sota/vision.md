@@ -38,7 +38,7 @@ The entire training doctrine is `.claude/skills/train-model/SKILL.md`, **40 line
   anywhere in the repository.** Training is a manual Ultralytics CLI run on another machine.
 - The datasets are not in the tree: `tools/dataset_survey.py:18`, `tools/return_check.py:25-27`
   and `tools/conf_bar.py:13` all point at **hard-coded absolute paths** outside the workspace
-  (`~/Work/.../2025/datasets`, `/home/fh1m/Music/detect`). 10 188 labelled images. Versioning is
+  (`~/Work/.../2025/datasets`, `~/Music/detect`). 10 188 labelled images. Versioning is
   directory names: `robosub_octagon_n_200_final`, `..._final_again3`.
 - **Labelling: nothing.** No CVAT, Label Studio, labelImg or Roboflow-annotate integration.
   `ROADMAP` M6: *real-pool auto-labelling — OPEN, new work; Bumblebee's is dead code.*
