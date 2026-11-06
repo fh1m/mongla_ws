@@ -80,16 +80,6 @@ def _entry_points() -> set:
 _ENTRY_POINT_MODULES = set(_entry_points())
 
 
-def _dotted(path: pathlib.Path) -> str:
-    """`src/mongla_control/mongla_control/fc/srot_fc.py` -> `mongla_control.fc.srot_fc`.
-
-    The outer directory is the colcon package; the inner one is the Python
-    package, and they share a name. The importable path starts at the inner one.
-    """
-    parts = path.relative_to(_SRC).with_suffix('').parts
-    return '.'.join(parts[1:])
-
-
 # module path -> the node/module that must import it
 WIRED: dict = {}
 
@@ -156,71 +146,31 @@ def _modules():
             txt = p.read_text()
             if 'def main(' in txt and 'rclpy' in txt:
                 continue                                  # a node
-            if _dotted(p) in _ENTRY_POINT_MODULES:
+            if _SWEEP.module_name(p) in _ENTRY_POINT_MODULES:
                 continue                                  # invoked by name
             yield rel, p, txt
 
 
-def _import_patterns(dotted: str, pkg_parts: tuple) -> list:
-    """Regexes that match a real import of exactly this module.
+def _load_orphan_sweep():
+    """The ONE answer to "what imports this module" lives in
+    `tools/orphan_sweep.py`. Two copies of it is how a stem match hid
+    `anchor/draw.py` here while the repo-wide guard resolved dotted names."""
+    import importlib.util
+    path = pathlib.Path(__file__).resolve().parents[1] / 'tools' / 'orphan_sweep.py'
+    spec = importlib.util.spec_from_file_location('_orphan_sweep', path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
-    Absolute:  `import a.b.c` · `from a.b.c import X` · `from a.b import c`
-    Relative:  `from .c import X` · `from . import c` · `from ..b.c import X`
-    -- the relative forms are resolved against the IMPORTER's package, so a
-    same-named module in another package cannot satisfy this one.
-    """
-    head, _, leaf = dotted.rpartition('.')
-    pats = [
-        rf'^\s*import\s+{re.escape(dotted)}\b',
-        rf'^\s*from\s+{re.escape(dotted)}\s+import\b',
-    ]
-    if head:
-        pats.append(rf'^\s*from\s+{re.escape(head)}\s+import\s+[^\n]*\b{re.escape(leaf)}\b')
-    return pats
+
+_SWEEP = _load_orphan_sweep()
 
 
 def _imported_by(rel: str) -> list:
-    """Files that really IMPORT this module -- not ones that MENTION it.
-
-    A substring grep is useless: 'approach', 'health' and 'factory' appear in
-    prose all over this tree and read as wired when they are not.
-    """
-    target = _SRC / rel
-    dotted = _dotted(target)
-    parts = dotted.split('.')
-    leaf = parts[-1]
-    abs_pats = _import_patterns(dotted, tuple(parts[:-1]))
-
-    hits = []
-    for p in _SRC.rglob('*.py'):
-        srel = str(p.relative_to(_SRC))
-        if '/test' in srel or p.resolve() == target.resolve():
-            continue
-        try:
-            txt = p.read_text()
-        except (UnicodeDecodeError, OSError):
-            continue
-        if any(re.search(pat, txt, re.M) for pat in abs_pats):
-            hits.append(srel)
-            continue
-        # Relative imports, resolved against THIS importer's own package path.
-        imp_parts = _dotted(p).split('.')[:-1]          # the importer's package
-        for m in re.finditer(r'^\s*from\s+(\.+)([\w.]*)\s+import\s+([^\n#]+)',
-                             txt, re.M):
-            dots, mid, names = m.group(1), m.group(2), m.group(3)
-            up = len(dots) - 1
-            base = imp_parts[:len(imp_parts) - up] if up else list(imp_parts)
-            cand = base + ([s for s in mid.split('.') if s] if mid else [])
-            # `from .pkg.mod import X` -> cand ends at the module
-            if cand == parts:
-                hits.append(srel)
-                break
-            # `from .pkg import mod` -> the module is one of the imported names
-            imported = [n.strip().split(' as ')[0].strip() for n in names.split(',')]
-            if cand == parts[:-1] and leaf in imported:
-                hits.append(srel)
-                break
-    return hits
+    """Files under src/ that really IMPORT this module (relative to src/).
+    Tools do not count: this guard is about what runs on the vehicle."""
+    return [str(pathlib.Path(h).relative_to('src'))
+            for h in _SWEEP.importers(_SRC / rel, tools=False)]
 
 
 def test_the_vision_guard_still_exists():

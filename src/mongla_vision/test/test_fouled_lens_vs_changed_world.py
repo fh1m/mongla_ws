@@ -22,7 +22,7 @@ from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
 def test_everything_scoring_is_healthy():
     v = health.assess([90, 80, 70, 60], [100, 100, 100, 100])
-    assert v.state == health.HEALTHY and v.trust_vision
+    assert v.state == health.HEALTHY and v.state != health.CAMERA
 
 
 def test_one_reference_collapsing_is_the_world():
@@ -30,7 +30,7 @@ def test_one_reference_collapsing_is_the_world():
     other references prove it."""
     v = health.assess([2, 80, 70, 60], [100, 100, 100, 100])
     assert v.state == health.WORLD
-    assert v.trust_vision, 'a changed world must not disarm vision'
+    assert v.state != health.CAMERA, 'a changed world must not disarm vision'
     assert '3' not in v.reason.split('/')[0]      # 1 collapsed, not 3
 
 
@@ -39,7 +39,7 @@ def test_every_reference_collapsing_is_the_camera():
     can be trusted, and hunting for a better view cannot help."""
     v = health.assess([1, 2, 0, 3], [100, 100, 100, 100])
     assert v.state == health.CAMERA
-    assert not v.trust_vision
+    assert v.state == health.CAMERA
 
 
 def test_where_the_boundary_actually_SITS():
@@ -68,7 +68,7 @@ def test_half_collapsing_is_the_world_not_the_camera():
     to stop believing the cameras, so it needs most of the evidence, not
     half."""
     v = health.assess([1, 2, 80, 90], [100, 100, 100, 100])
-    assert v.state == health.WORLD and v.trust_vision
+    assert v.state == health.WORLD and v.state != health.CAMERA
 
 
 # --------------------------------------------------------------------------- #
@@ -84,7 +84,7 @@ def test_too_few_references_refuses():
 def test_unknown_does_not_disarm_vision():
     """'I cannot tell' is not evidence of a fouled lens. Treating it as one
     makes every quiet moment look like a failure."""
-    assert health.assess([0], [100]).trust_vision
+    assert health.assess([0], [100]).state != health.CAMERA
 
 
 def test_references_that_never_scored_are_not_counted_as_collapsed():

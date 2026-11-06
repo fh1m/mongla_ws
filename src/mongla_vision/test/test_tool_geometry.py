@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import mongla_vision.tool_geometry as tg                       # noqa: E402
 from mongla_vision.tool_geometry import (                      # noqa: E402
-    camera_for, is_measured, known_tools, offset_m, pixel_offset)
+    _load, is_measured, known_tools, offset_m, pixel_offset)
 
 FX, FY = 851.2, 858.2          # measured forward camera
 
@@ -39,9 +39,10 @@ def test_the_table_loads_and_names_the_real_tools():
 def test_each_tool_declares_which_camera_aims_it():
     """A dropper aimed by the forward camera is a wiring error that would
     produce a confident, wrong correction."""
-    assert camera_for('dropper') == 'downward'
-    assert camera_for('torpedo') == 'forward'
-    assert camera_for('grabber') == 'forward'
+    cam = {k: (v or {}).get('camera') for k, v in _load().items()}
+    assert cam['dropper'] == 'downward'
+    assert cam['torpedo'] == 'forward'
+    assert cam['grabber'] == 'forward'
 
 
 def test_an_unmeasured_tool_is_DISTINGUISHABLE_from_a_zero_one():

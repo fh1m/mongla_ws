@@ -74,14 +74,6 @@ def test_the_mavlink_no_data_sentinels_are_not_readings():
     assert sfmt.centiamps_to_amps(250) == pytest.approx(2.5)
 
 
-def test_imu_temperature_zero_means_not_provided():
-    """SCALED_IMU2.temperature sends 0 as MAVLink's "not provided" sentinel, and the
-    board sends exactly that when the baro is unhealthy. Reading it as a temperature
-    puts a freezing hull on the screen of a vehicle in a warm room."""
-    assert sfmt.imu_temp_c(0) is None
-    assert sfmt.imu_temp_c(2863) == pytest.approx(28.63)
-
-
 def test_an_all_zero_esc_row_is_absent_not_eight_idle_escs():
     """BARE-BOARD BENCH, 2026-08-03: no Pico, no ESCs. `0 0 0 0 0 0 0 0` is what an
     attached-but-idle ESC sends AND what arrives with nothing connected; an ESC

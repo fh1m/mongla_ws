@@ -134,10 +134,6 @@ class RunBudget:
                 out.append((t.name, 'skip', 0))
         return out
 
-    def projected_points(self, tasks: List[Task]) -> int:
-        return sum(p for _, _, p in self.plan(tasks))
-
-
 def by_points_per_second(tasks: List[Task]) -> List[Task]:
     """Order tasks by value density, highest first.
 

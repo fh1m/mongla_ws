@@ -51,18 +51,16 @@ HEALTHY = 'healthy'
 
 @dataclass(frozen=True)
 class Verdict:
-    """What the bank's per-reference yields imply about the cause."""
+    """What the bank's per-reference yields imply about the cause.
+
+    Only `state == CAMERA` is evidence against the lens. UNKNOWN means "cannot
+    tell" and must never disarm vision, or every quiet moment reads as a fault.
+    """
     state: str
     reason: str
     collapsed: int = 0
     considered: int = 0
 
-    @property
-    def trust_vision(self) -> bool:
-        """⛔ UNKNOWN MUST NOT DISARM VISION. A verdict of 'I cannot tell' is
-        not evidence of a fouled lens, and treating it as one would make every
-        quiet moment look like a failure."""
-        return self.state != CAMERA
 
 
 def assess(current: Sequence[int], best: Sequence[int],

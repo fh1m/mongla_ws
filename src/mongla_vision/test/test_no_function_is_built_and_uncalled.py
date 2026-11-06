@@ -47,6 +47,89 @@ _ROOT = pathlib.Path(__file__).resolve().parents[3]
 _TOOL = _ROOT / 'tools' / 'dead_function_sweep.py'
 
 
+# ⚠ FUNCTIONS THAT ONLY A TEST CALLS, ON PURPOSE, each with the consumer it
+# waits for. Same contract as the module registers: a row is a debt with a
+# name, not a silent gap. Until 2026-11-06 the sweep counted a TEST as a
+# caller, so every one of these read as live -- and so did ten that were
+# deleted that day (`pct_to_mc`, "the old percent API", among them) and two
+# board checks that were wired into the manager's preflight
+# (`check_yaw_authority`, `boot_warnings`), written and never called.
+DEFERRED_FUNCTIONS = {
+    'src/mongla_control/mongla_control/actuation_model.py:fraction_to_demand':
+        'the inverse of demand_to_fraction, for a caller that plans in OUTPUT '
+        'space; every verb today commands demand, so it waits for the first '
+        'controller that asks for a known thrust fraction',
+    'src/mongla_control/mongla_control/allocation.py:limiting_group':
+        'names which authority saturated; waits for an operator readout of the '
+        'host mixer model (the board mixes, so this is a model, not a reading)',
+    'src/mongla_control/mongla_control/allocation.py:headroom':
+        'mixer headroom before clipping; the lateral I-term in motion_vision '
+        'clamps on COMMAND saturation instead, and would consult this only once '
+        'the mixer model is validated against the hull being built',
+    'src/mongla_control/mongla_control/fc/srot_fc.py:set_relay':
+        'raw DO_SET_RELAY, deliberately NOT the payload path (its own docstring: '
+        'instance-addressed, and a negative instance reaches channels 1-8); kept '
+        'for a bench relay test, never for fire()',
+    'src/mongla_control/mongla_control/fc/srot_fc.py:motor_tune':
+        'the board\'s MOTOR_TUNE; same shape as autotune(), which has '
+        '`ros2 run mongla_manager autotune`. It needs the same entry point, and '
+        'its first run needs a hull with thrusters fitted (none are)',
+    'src/mongla_control/mongla_control/fc/srot_fc.py:thruster_stalled':
+        'signed-RPM stall detection; needs non-zero ESC RPM on the wire, and '
+        '958/958 frames read exactly 0 with nothing attached (CLAUDE.md §2). '
+        'Its consumer is the manager health report once thrusters are fitted',
+    'src/mongla_localization/mongla_localization/course_map.py:position_of':
+        'refusing lookup of a surveyed prop position; waits for the first '
+        'mission or fix that resolves a prop by name rather than iterating',
+    'src/mongla_localization/mongla_localization/pool_lines.py:cross_track_m':
+        'metres from a lane line; needs a height source on the lane-line path, '
+        'which the tile grating provides once lane_lines and the grating run '
+        'together in water',
+    'src/mongla_localization/mongla_localization/resection.py:on_danger_circle':
+        'the resection degeneracy check; waits for resection itself to be fused '
+        '(three simultaneous prop sightings, never yet recorded)',
+    'src/mongla_localization/mongla_localization/tile_grating.py:usable_height_m':
+        'the instrument envelope; waits for the tile size of the venue pool, '
+        'which is a measurement on the day',
+    'src/mongla_localization/mongla_localization/tile_grating.py:shift_from_phase':
+        'phase-based displacement, the grating as a velocity sensor; blocked '
+        'on the same pool-floor footage as usable_height_m',
+    'src/mongla_manager/mongla_manager/health_reporters.py:target_lock':
+        'the lock ladder as a health row; needs the ladder\'s decayed authority, '
+        'and /lock carries a confidence instead -- an accessor on VisionState '
+        'first (auv_manager_node, beside the health registrations)',
+    'src/mongla_planner/mongla_planner/resilience.py:retry':
+        'mission-author API: missions live in ~/missions, deliberately out of '
+        'git, so an in-repo caller is not expected',
+    'src/mongla_vision/mongla_vision/anchor/bank.py:wants_refresh':
+        'decay-triggered enrolment; lock_node enrols on scale coverage '
+        '(covers_scale) instead, and this costs a full locate() per ask',
+    'src/mongla_vision/mongla_vision/anchor/bank.py:corroborate':
+        'XFeat arbitration of weak detections; blocked by the reason in its own '
+        'commit (be051dec): the bank cannot yet arbitrate, and the fix is named there',
+    'src/mongla_vision/mongla_vision/qos.py:is_compatible':
+        'QoS compatibility rule; waits for a check that compares each '
+        'subscriber with its publisher at launch',
+    'src/mongla_vision/mongla_vision/tracking/confidence.py:degrading':
+        'ConfidenceTrend, measured as an early warning (0.891 -> 0.357 before the '
+        'box wandered); waits for the control loop to read a trend, not a floor',
+    'src/mongla_vision/mongla_vision/tracking/visibility.py:bearing_from':
+        'object permanence; blocked on two missing signals, see '
+        'perception/ladder-register.md item 5',
+    'src/mongla_vision/mongla_vision/tracking/visibility.py:project_world_target':
+        'object permanence; blocked on two missing signals, see '
+        'perception/ladder-register.md item 5',
+    'src/mongla_vision/mongla_vision/tracking/visibility.py:region_conf_bar':
+        'object permanence; blocked on two missing signals, see '
+        'perception/ladder-register.md item 5',
+}
+
+
+def _key(line: str) -> str:
+    path, _ln, rest = line.split(':', 2)
+    return f"{path}:{rest.strip().split('(')[0]}"
+
+
 def _run(*args, root=None):
     env = dict(os.environ)
     if root is not None:
@@ -83,7 +166,8 @@ def test_the_public_list_is_only_the_two_deferred_modules():
     appearing here is a question to answer, not automatically a defect -- but
     it must be answered rather than accumulate."""
     out = _run()
-    unexplained = [ln for ln in out.splitlines() if ln.startswith('src/')]
+    unexplained = [ln for ln in out.splitlines()
+                   if ln.startswith('src/') and _key(ln) not in DEFERRED_FUNCTIONS]
     assert not unexplained, (
         'function(s) with no caller and no deferred module to explain them:\n  '
         + '\n  '.join(unexplained) +
@@ -124,3 +208,10 @@ def test_the_sweep_catches_a_planted_dead_function(tmp_path):
 
     # and the REAL tree is untouched by any of it
     assert '_planted' not in real.read_text()
+
+
+def test_a_deferred_function_that_got_a_caller_is_dropped_from_the_register():
+    """Once something on the vehicle calls it, the row is fiction: drop it."""
+    live = {_key(ln) for ln in _run().splitlines() if ln.startswith('src/')}
+    stale = sorted(set(DEFERRED_FUNCTIONS) - live)
+    assert not stale, f'now called (or gone) -- drop from DEFERRED_FUNCTIONS: {stale}'

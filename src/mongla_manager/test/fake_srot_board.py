@@ -56,7 +56,11 @@ class FakeSrotBoard:
                  params: dict | None = None):
         self.port = port
         self.behaviour_rev = int(behaviour_rev)
-        self.params = {'FRAME_REVERSE': 1.0, 'JS_GAIN_DEFAULT': 1.0}
+        # PILOT_YAW_RATE / ATC_RAT_YAW_P: the values measured on the bench board
+        # (srot_fc.check_yaw_authority). A param the fake does not answer costs
+        # the manager's preflight a 3 s timeout, the real board answers them all.
+        self.params = {'FRAME_REVERSE': 1.0, 'JS_GAIN_DEFAULT': 1.0,
+                       'PILOT_YAW_RATE': 160.0, 'ATC_RAT_YAW_P': 0.18}
         # On the vehicle 1-8 are SERVO (role 1) and 9-16 SWITCH (role 2).
         for n in range(1, 17):
             self.params[f'SERVO{n}_ROLE'] = 1.0 if n <= 8 else 2.0

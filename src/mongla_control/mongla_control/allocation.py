@@ -72,10 +72,6 @@ class Allocation:
     def saturated(self) -> bool:
         return self.horizontal_scale < 1.0 or self.vertical_scale < 1.0
 
-    @property
-    def worst_scale(self) -> float:
-        return min(self.horizontal_scale, self.vertical_scale)
-
     def limiting_group(self) -> str:
         """Which authority ran out: 'horizontal', 'vertical', 'both', ''."""
         h = self.horizontal_scale < 1.0

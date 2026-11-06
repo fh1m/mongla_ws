@@ -316,13 +316,6 @@ MV_STATE_NAMES = {
 }
 
 
-def mv_state_name(state) -> str:
-    try:
-        return MV_STATE_NAMES.get(int(state), f'mv{int(state)}')
-    except (TypeError, ValueError):
-        return 'idle'
-
-
 # ---------------------------------------------------------------------- #
 #  MANUAL_CONTROL scaling (JETSON_COMMS.md §4, DUBURI_WS_INTEGRATION §4.1)#
 # ---------------------------------------------------------------------- #
@@ -370,24 +363,6 @@ def unit_to_mc_z(u: float) -> int:
     if u != u:                     # NaN
         return MC_Z_NEUTRAL
     return int(round(MC_Z_NEUTRAL + _clamp(u, -1.0, 1.0) * (MC_Z_MAX - MC_Z_NEUTRAL)))
-
-
-def pct_to_mc(p: float) -> int:
-    """-100..100 % -> -1000..1000 (the old percent API -> MANUAL_CONTROL axis).
-
-    NaN -> 0 (neutral), for the same reason as `unit_to_mc` (B35)."""
-    p = float(p)
-    if p != p:
-        return 0
-    return int(round(_clamp(p, -100.0, 100.0) * 10))
-
-
-def pct_to_mc_z(p: float) -> int:
-    """-100..100 % (up positive) -> 0..1000, 500 neutral. NaN -> 500 (B35)."""
-    p = float(p)
-    if p != p:
-        return MC_Z_NEUTRAL
-    return int(round(MC_Z_NEUTRAL + _clamp(p, -100.0, 100.0) * 5))
 
 
 # ---------------------------------------------------------------------- #

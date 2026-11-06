@@ -304,12 +304,6 @@ def _outline_view(outline):
     return v
 
 
-def _eval_detected(records: list, needle: str) -> bool:
-    """True iff any record matches ``needle`` (case-insensitive)."""
-    n = str(needle).strip().lower()
-    return any(rec[0] == n for rec in records)
-
-
 def _eval_where(records: list, needle: str, width: float,
                 band: float) -> tuple:
     """Bearing of the largest matching detection.

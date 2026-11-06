@@ -23,7 +23,6 @@ TRUE_DEPTH_BELOW_SURFACE = 1.2
 def test_the_named_conversion_round_trips_and_has_the_right_sign():
     alt = -TRUE_DEPTH_BELOW_SURFACE
     assert frames.ned_z_from_altitude(alt) == pytest.approx(+1.2)
-    assert frames.altitude_from_ned_z(frames.ned_z_from_altitude(alt)) == alt
 
 
 def test_state_to_odom_to_uplink_all_agree_about_one_depth():

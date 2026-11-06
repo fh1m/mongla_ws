@@ -38,6 +38,8 @@ and `missions/` is loaded dynamically.
 from __future__ import annotations
 
 import argparse
+import ast
+import functools
 import pathlib
 import re
 import sys
@@ -75,33 +77,100 @@ def is_capability(path: pathlib.Path, rel: str, entries: set) -> bool:
     return True
 
 
-def importers(stem: str, exclude: pathlib.Path) -> list:
-    """Files that IMPORT this module -- not ones that merely mention it.
+def module_name(path: pathlib.Path) -> str:
+    """`src/mongla_vision/mongla_vision/anchor/draw.py` -> `mongla_vision.anchor.draw`.
 
-    ⚠ A substring grep is useless: "approach" and "health" appear in prose all
-    over this codebase and both read as wired when they were not.
-
-    ⛔ `tools/` IS SCANNED TOO, and that is not optional. Scanning only `src/`
-    reported `draw_strip.py` as 471 unreachable lines whose own note said
-    "delete it or revive it deliberately" -- and it is imported by
-    `tools/render_real_stills.py`, which generates the site's HUD imagery. A sweep that recommends deleting live
-    code is worse than no sweep.
+    The outer directory is the colcon package, the inner one the Python package;
+    the importable name starts at the inner one. Returns '' outside `src/`.
     """
-    pat = re.compile(
-        rf'^\s*(from\s+\S*\b{stem}\b\s+import|'
-        rf'from\s+\S+\s+import\s+[^\n]*\b{stem}\b|'
-        rf'import\s+\S*\b{stem}\b)', re.M)
-    hits = []
-    searched = list(SRC.rglob('*.py')) + list((ROOT / 'tools').rglob('*.py'))
-    for q in searched:
-        if q == exclude or '/test' in str(q):
+    try:
+        parts = path.resolve().relative_to(SRC.resolve()).with_suffix('').parts
+    except ValueError:
+        return ''
+    parts = parts[1:]
+    if parts and parts[-1] == '__init__':
+        parts = parts[:-1]
+    return '.'.join(parts)
+
+
+def imported_modules(path: pathlib.Path) -> frozenset:
+    """Cached on (path, mtime): a guard asks this of every file once per module."""
+    p = path.resolve()
+    try:
+        key = (p, p.stat().st_mtime_ns)
+    except OSError:
+        return frozenset()
+    return _imported_modules(*key)
+
+
+@functools.lru_cache(maxsize=None)
+def _imported_modules(path: pathlib.Path, _mtime: int) -> frozenset:
+    """Every dotted module name this file's import statements could name.
+
+    Read with `ast`, and relative imports are resolved against this file's own
+    package. `from .x import y` yields both `pkg.x` and `pkg.x.y`, because `y`
+    may be a submodule or a name inside `x`; over-reporting a candidate costs
+    nothing when the question is "does anything import THIS module".
+    """
+    try:
+        tree = ast.parse(path.read_text())
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        return frozenset()
+    own = module_name(path).split('.') if module_name(path) else []
+    pkg = own if path.name == '__init__.py' else own[:-1]
+    out = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            out |= {al.name for al in node.names}
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                if not pkg or node.level - 1 > len(pkg):
+                    continue
+                base = pkg[:len(pkg) - (node.level - 1)]
+            else:
+                base = []
+            mod = base + (node.module.split('.') if node.module else [])
+            if mod:
+                out.add('.'.join(mod))
+            out |= {'.'.join(mod + [al.name]) for al in node.names}
+    return frozenset(out)
+
+
+def importers(target: pathlib.Path, *, tools: bool = True) -> list:
+    """Files that IMPORT this exact module -- not ones that mention it, and not
+    a different module that happens to share its file name.
+
+    ⛔ THE STEM MATCH THIS REPLACES HID A WHOLE MODULE. It matched on the file
+    name, and `mongla_vision` has two `draw.py`: the HUD one is imported, so
+    `anchor/draw.py` -- 143 lines nothing on the vehicle ever ran -- read as
+    imported for its whole life (removed 2026-11-06). Resolving the dotted name is the only answer.
+
+    ⛔ `tools/` IS SCANNED TOO by default. Scanning only `src/` reported
+    `draw_strip.py` as unreachable, and `tools/render_real_stills.py` imports it
+    to render the site's HUD imagery. A sweep that recommends deleting live
+    code is worse than no sweep. Guards about the VEHICLE pass `tools=False`.
+    """
+    want = module_name(target)
+    if not want:
+        return []
+    me = target.resolve()
+    return [rel for q, rel, mods in _index(tools) if q != me and want in mods]
+
+
+@functools.lru_cache(maxsize=None)
+def _index(tools: bool) -> tuple:
+    """(resolved path, path relative to ROOT, modules it imports) per non-test file.
+    Built once per process: the tree does not change while a sweep runs."""
+    files = list(SRC.rglob('*.py'))
+    if tools:
+        files += list((ROOT / 'tools').rglob('*.py'))
+    out = []
+    for q in files:
+        rel = str(q.relative_to(ROOT))
+        if '/test' in rel:
             continue
-        try:
-            if pat.search(q.read_text()):
-                hits.append(str(q.relative_to(ROOT)))
-        except (OSError, UnicodeDecodeError):
-            continue
-    return hits
+        out.append((q.resolve(), rel, imported_modules(q)))
+    return tuple(out)
 
 
 def main() -> int:
@@ -124,7 +193,7 @@ def main() -> int:
             rel = str(p.relative_to(SRC))
             if not is_capability(p, rel, entries):
                 continue
-            if not importers(p.stem, p):
+            if not importers(p):
                 found.append((rel, sum(1 for _ in p.open('rb'))))
         if found:
             total += len(found)

@@ -91,8 +91,6 @@ def test_non_finite_axis_commands_fail_to_NEUTRAL_not_to_full_deflection():
     for bad in HOSTILE if False else (float('nan'),):
         assert sp.unit_to_mc(bad) == 0,               'x/y/r NaN must be neutral (0)'
         assert sp.unit_to_mc_z(bad) == sp.MC_Z_NEUTRAL, 'z NaN must hold depth (500)'
-        assert sp.pct_to_mc(bad) == 0
-        assert sp.pct_to_mc_z(bad) == sp.MC_Z_NEUTRAL
         assert sp.sanitize_speed(bad) == 0.0,         'NaN speed must mean no motion'
 
 
@@ -101,8 +99,6 @@ def test_the_converters_stay_inside_the_firmware_accepted_bands(v):
     """Bands are the firmware's: x/y/r +/-1000, z 0..1000 (mav_commands.cpp:706-709)."""
     assert -1000 <= sp.unit_to_mc(v) <= 1000
     assert 0 <= sp.unit_to_mc_z(v) <= 1000
-    assert -1000 <= sp.pct_to_mc(v) <= 1000
-    assert 0 <= sp.pct_to_mc_z(v) <= 1000
     assert 0.0 <= sp.sanitize_speed(v) <= sp.MOVE_CRUISE_MAX
 
 
