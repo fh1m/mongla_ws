@@ -218,95 +218,7 @@ class DetectorNode(Node):
         # standalone detector must.
         self._init_failure_fn = init_failure_fn
 
-        self.declare_parameter('camera',              'laptop')
-        self.declare_parameter('image_topic',         '')
-        self.declare_parameter('model_path',          'yolov11n')
-        self.declare_parameter('models',              '')     # CSV name=stem pairs
-        self.declare_parameter('active_model',        '')     # registry key to start with
-        self.declare_parameter('device',              'auto')
-        self.declare_parameter('half',                True)   # fp16: ~half the VRAM; coerced off on non-CUDA (yolo.py)
-        self.declare_parameter('conf',                0.35)
-        # BYTE association floor: PUBLISH down to this, while `conf` stays the
-        # floor the control loop steers on (`vision.ctrl_conf`). 0.0 = OFF, and
-        # off is byte-for-byte the previous behaviour.
-        #
-        # Measured on real footage, publish floor the ONLY variable: presence on
-        # hard clips 8.3 -> 34.8 %, and NO change on clips already at 100 %. The
-        # low-score boxes are the occluded and motion-blurred ones (ByteTrack),
-        # which is exactly the AUV case -- our own underwater score p50 is 0.258
-        # against a shipped 0.25 floor, so we were discarding the median.
-        self.declare_parameter('assoc_conf',          0.0)
-        # Per-model confidence overrides: CSV 'name=conf' (e.g.
-        # 'torpedo_blood_hole=0.55,gate_sharks=0.35'). Applies on top of
-        # the uniform `conf` above, targeting individual registry entries, and
-        # PERSISTS across active_model switches (each detector holds its own
-        # threshold). Empty = every model uses `conf`. Live-tunable.
-        self.declare_parameter('model_conf',          '')
-        self.declare_parameter('iou',                 0.5)
-        self.declare_parameter('imgsz',               640)
-        self.declare_parameter('max_det',             100)   # post-NMS cap (live-tunable)
-        self.declare_parameter('classes',             'person')
-        # Outlines are EVIDENCE, and evidence should be switchable at the
-        # pool rather than in a branch -- the same argument as `claw_required:
-        # false` in the champions' configs. Measured cost at the counts a
-        # mission produces: 0.075 ms for one box and 0.46 ms for three masks
-        # against a ~10.5 ms frame, so this exists for an operator who wants
-        # the topic gone, not because the cost forces a choice.
-        self.declare_parameter('publish_contours',    True)
-        # Mask decoding, live. Only a segmentation model can honour it; a box
-        # detector has no masks and says so rather than accepting silently.
-        self.declare_parameter('masks',               True)
-        self.declare_parameter('publish_debug_image', True)
-        self.declare_parameter('debug_image_hz',      5.0)
-        self.declare_parameter('alignment_deadband',  0.05)
-        self.declare_parameter('paused',              False)
-        # ON BY DEFAULT, WITH A FALLBACK, because "off" and "on" both have a
-        # silent failure mode and only one of them is recoverable.
-        #
-        # Direct feed is the arrangement the vehicle runs: the camera in this
-        # process hands frames over by reference. Defaulting it OFF meant the
-        # composed launcher had to remember to switch it on, and forgetting
-        # left the detector subscribing AND being fed -- the same picture
-        # decoded and inferred twice, with the slower copy winning half the
-        # time.
-        #
-        # Defaulting it ON has the opposite risk: a STANDALONE `detector_node`
-        # (vision.launch.py, replay) has no camera in its
-        # process, so it would sit forever receiving nothing, silently. That
-        # is the exact class of bug this round has been removing.
-        #
-        # So it is on, and it SELF-CORRECTS: if no frame arrives by reference
-        # within `_DIRECT_FALLBACK_S`, the node subscribes to the topic and
-        # says so loudly. A misconfiguration costs one warning and two
-        # seconds, never a dead detector.
-        self.declare_parameter('direct_feed',         True)
-        # UNDERWATER CONTRAST PREPROCESSING. 'clahe' or 'off'.
-        #
-        # Measured on real RoboSub 2025 footage: on the gate approach -- 3.7x
-        # blurrier than the bin clip at the same brightness -- it takes target
-        # presence from 10.7 % to 56.2 % and the mean score from 0.226 to
-        # 0.410. On footage that already works it costs nothing: bin stays
-        # 100 %, octagon stays 100 % with a HIGHER mean score.
-        #
-        # Off by default because it is 3.78 ms on the Pi (77 Hz -> ~46), which
-        # is a real trade the operator should make deliberately.
-        self.declare_parameter('preprocess',          'auto')
-        self.declare_parameter('preprocess_clip',     0.0)
-        # RANGE CROP. Feed the detector a centre crop while the target is far,
-        # so it occupies more of the 640x640 the chip sees. Measured on real
-        # labelled data: recall at 4x the training distance goes 65.9 % ->
-        # 100 %, and at 6.7x, 20.2 % -> 67.4 %. It releases automatically on
-        # approach because a fixed crop LOSES close targets (69 % at 1x).
-        # `imgsz` cannot do this on the Hailo -- it is baked into the HEF.
-        # An INT, not a bool: 0/1 are the operator's answer and -1 is
-        # 'not set', which a bool cannot express -- and without a third
-        # state a profile can never turn this on.
-        self.declare_parameter('range_crop',          -1)
-        # ONE WORD instead of four knobs. `vision:=murky` on competition day
-        # beats getting conf/preprocess/clip/crop right under a run clock.
-        # A profile supplies DEFAULTS ONLY -- an explicit parameter still
-        # wins, so debugging keeps the individual knobs.
-        self.declare_parameter('vision_profile',      '')
+        self._declare_parameters()
 
         self._cam_name = str(self.get_parameter('camera').value).strip() or 'cam'
         ns_in  = str(self.get_parameter('image_topic').value).strip() \
@@ -654,6 +566,101 @@ class DetectorNode(Node):
         # name and a baseline to compare against, rather than silence
         # until the first switch.
         self._publish_vision_info()
+
+    def _declare_parameters(self) -> None:
+        """Every ROS parameter this node reads, with its default.
+
+        One place to look for a knob; values are read in __init__.
+        """
+        self.declare_parameter('camera',              'laptop')
+        self.declare_parameter('image_topic',         '')
+        self.declare_parameter('model_path',          'yolov11n')
+        self.declare_parameter('models',              '')     # CSV name=stem pairs
+        self.declare_parameter('active_model',        '')     # registry key to start with
+        self.declare_parameter('device',              'auto')
+        self.declare_parameter('half',                True)   # fp16: ~half the VRAM; coerced off on non-CUDA (yolo.py)
+        self.declare_parameter('conf',                0.35)
+        # BYTE association floor: PUBLISH down to this, while `conf` stays the
+        # floor the control loop steers on (`vision.ctrl_conf`). 0.0 = OFF, and
+        # off is byte-for-byte the previous behaviour.
+        #
+        # Measured on real footage, publish floor the ONLY variable: presence on
+        # hard clips 8.3 -> 34.8 %, and NO change on clips already at 100 %. The
+        # low-score boxes are the occluded and motion-blurred ones (ByteTrack),
+        # which is exactly the AUV case -- our own underwater score p50 is 0.258
+        # against a shipped 0.25 floor, so we were discarding the median.
+        self.declare_parameter('assoc_conf',          0.0)
+        # Per-model confidence overrides: CSV 'name=conf' (e.g.
+        # 'torpedo_blood_hole=0.55,gate_sharks=0.35'). Applies on top of
+        # the uniform `conf` above, targeting individual registry entries, and
+        # PERSISTS across active_model switches (each detector holds its own
+        # threshold). Empty = every model uses `conf`. Live-tunable.
+        self.declare_parameter('model_conf',          '')
+        self.declare_parameter('iou',                 0.5)
+        self.declare_parameter('imgsz',               640)
+        self.declare_parameter('max_det',             100)   # post-NMS cap (live-tunable)
+        self.declare_parameter('classes',             'person')
+        # Outlines are EVIDENCE, and evidence should be switchable at the
+        # pool rather than in a branch -- the same argument as `claw_required:
+        # false` in the champions' configs. Measured cost at the counts a
+        # mission produces: 0.075 ms for one box and 0.46 ms for three masks
+        # against a ~10.5 ms frame, so this exists for an operator who wants
+        # the topic gone, not because the cost forces a choice.
+        self.declare_parameter('publish_contours',    True)
+        # Mask decoding, live. Only a segmentation model can honour it; a box
+        # detector has no masks and says so rather than accepting silently.
+        self.declare_parameter('masks',               True)
+        self.declare_parameter('publish_debug_image', True)
+        self.declare_parameter('debug_image_hz',      5.0)
+        self.declare_parameter('alignment_deadband',  0.05)
+        self.declare_parameter('paused',              False)
+        # ON BY DEFAULT, WITH A FALLBACK, because "off" and "on" both have a
+        # silent failure mode and only one of them is recoverable.
+        #
+        # Direct feed is the arrangement the vehicle runs: the camera in this
+        # process hands frames over by reference. Defaulting it OFF meant the
+        # composed launcher had to remember to switch it on, and forgetting
+        # left the detector subscribing AND being fed -- the same picture
+        # decoded and inferred twice, with the slower copy winning half the
+        # time.
+        #
+        # Defaulting it ON has the opposite risk: a STANDALONE `detector_node`
+        # (vision.launch.py, replay) has no camera in its
+        # process, so it would sit forever receiving nothing, silently. That
+        # is the exact class of bug this round has been removing.
+        #
+        # So it is on, and it SELF-CORRECTS: if no frame arrives by reference
+        # within `_DIRECT_FALLBACK_S`, the node subscribes to the topic and
+        # says so loudly. A misconfiguration costs one warning and two
+        # seconds, never a dead detector.
+        self.declare_parameter('direct_feed',         True)
+        # UNDERWATER CONTRAST PREPROCESSING. 'clahe' or 'off'.
+        #
+        # Measured on real RoboSub 2025 footage: on the gate approach -- 3.7x
+        # blurrier than the bin clip at the same brightness -- it takes target
+        # presence from 10.7 % to 56.2 % and the mean score from 0.226 to
+        # 0.410. On footage that already works it costs nothing: bin stays
+        # 100 %, octagon stays 100 % with a HIGHER mean score.
+        #
+        # Off by default because it is 3.78 ms on the Pi (77 Hz -> ~46), which
+        # is a real trade the operator should make deliberately.
+        self.declare_parameter('preprocess',          'auto')
+        self.declare_parameter('preprocess_clip',     0.0)
+        # RANGE CROP. Feed the detector a centre crop while the target is far,
+        # so it occupies more of the 640x640 the chip sees. Measured on real
+        # labelled data: recall at 4x the training distance goes 65.9 % ->
+        # 100 %, and at 6.7x, 20.2 % -> 67.4 %. It releases automatically on
+        # approach because a fixed crop LOSES close targets (69 % at 1x).
+        # `imgsz` cannot do this on the Hailo -- it is baked into the HEF.
+        # An INT, not a bool: 0/1 are the operator's answer and -1 is
+        # 'not set', which a bool cannot express -- and without a third
+        # state a profile can never turn this on.
+        self.declare_parameter('range_crop',          -1)
+        # ONE WORD instead of four knobs. `vision:=murky` on competition day
+        # beats getting conf/preprocess/clip/crop right under a run clock.
+        # A profile supplies DEFAULTS ONLY -- an explicit parameter still
+        # wins, so debugging keeps the individual knobs.
+        self.declare_parameter('vision_profile',      '')
 
     # ------------------------------------------------------------------ #
     #  Running more than one model on the same frame

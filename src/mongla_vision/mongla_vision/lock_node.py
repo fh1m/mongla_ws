@@ -111,136 +111,7 @@ class LockNode(Node):
                  parameter_overrides=None):
         super().__init__(node_name,
                          parameter_overrides=parameter_overrides or [])
-        self.declare_parameter('camera', 'forward')
-        self.declare_parameter('target_class', '')
-        self.declare_parameter('follow', True)
-        self.declare_parameter('anchor', False)
-        self.declare_parameter('anchor_model', '')
-        # ⭐ DEFAULT ON since the InferModel port (B-62). Measured on the
-        # vehicle: 10.89 ms alone and 19.85 ms with the detector inferring,
-        # against 32.9 ms for the ONNX path it replaces -- 1.7x even fully
-        # contended, and off the cores the camera pump needs. The two share
-        # the chip through HailoRT's scheduler (`detection/hailo.py`); in the
-        # composed graph, 17.65 ms p50 in-graph over 378 calls on archive
-        # footage (tools/composed_lock_harness.py).
-        #
-        # Cross-backend equivalence checked before flipping this: 875/888/878
-        # of 1024 keypoints match between the ONNX and HEF descriptors, so a
-        # checkpoint enrolled on one path is matchable on the other and the
-        # bank does not partition by transport. The identity bar is 40.
-        #
-        # Set false to force the CPU path -- on a dev box with no chip the
-        # resolver falls back on its own, so this is for A/B measurement.
-        #
-        # ⛔ DEFAULT OFF since 2026-10-03. Chip sharing works only INSIDE one
-        # process, and a standalone lock_node runs as its own: it opened a
-        # second VDevice, raced the detector process for the chip, and when
-        # it won the vehicle had NO detection (HAILO_OUT_OF_PHYSICAL_DEVICES).
-        # The numbers above stand; they need the lock composed with the
-        # detector to be had safely.
-        self.declare_parameter('anchor_xfeat_hef', False)
-        # ⭐ Semi-dense matching: 2.1-2.6x the inliers for +37 % match cost
-        # (measured, four frame pairs). DEFAULT OFF until frame-to-reference
-        # behaviour and inlier CORRECTNESS are measured -- see
-        # never-lose-the-target.md. Hailo backend only; the ONNX path keeps
-        # its sparse maths.
-        self.declare_parameter('anchor_semi_dense', False)
-        # A bank built BEFORE the run, from practice footage or stills:
-        # `tools/build_practice_bank.py`. Measured 2026-09-24 -- references
-        # from one run clear the trust bar on 92-100 % of frames of a DIFFERENT
-        # run of the same prop, so the anchor need not wait for a confident
-        # live detection to have something to match against. Which matters
-        # because the moment it is needed is the moment the detector is failing.
-        #
-        # ⛔ A preloaded reference is trusted exactly like a live one: it clears
-        # MIN_INLIERS or it does not answer, and `recognise()` still wants the
-        # detector to agree before any identity is asserted.
-        self.declare_parameter('anchor_bank', '')
-        # ⛔ LOOP CLOSURE IS OFF BY DEFAULT, like every other capability here.
-        # It is the only path in this node that can reach the LOCALISATION
-        # FILTER, and a wrong position fix is not merely wrong -- the filter
-        # shrinks its covariance around it and becomes confident. Off until a
-        # pool day says otherwise.
-        self.declare_parameter('loop_closure',
-                               _lc.defaults()['enabled'])
-        self.declare_parameter('place_period_s',
-                               _lc.defaults()['place_period_s'])
-        self.declare_parameter('place_travel_m',
-                               _lc.defaults()['place_travel_m'])
-        # Height above the floor = pool_depth_m - |depth|. Without it pixels
-        # cannot become metres and every closure is refused, by design.
-        self.declare_parameter('pool_depth_m',
-                               _lc.defaults()['pool_depth_m'])
-        # 3 Hz, not 8. Measured on the Pi with the full stack live, and the
-        # cost is LATENCY rather than throughput -- detection rate is unchanged
-        # at every setting, but the anchor's 33 ms bursts delay the image
-        # pipeline:
-        #
-        #     ladder OFF          det 49.3 Hz   frame age 16.1 ms   idle 82.4 %
-        #     follower only       det 50.6 Hz             18.7 ms        75.3 %
-        #     + anchor @ 8 Hz     det 50.7 Hz             22.8 ms        65.5 %
-        #     + anchor @ 3 Hz     det 50.6 Hz             18.4 ms        66.8 %
-        #
-        # 8 Hz costs +42 % of frame age for NO extra coverage: the anchor is the
-        # long-horizon rung, called on when the follower has already given up,
-        # and the p99 gap it exists to cover is 2.418 s. 3 Hz samples that
-        # seven times over.
-        # PUBLISH RATE -- OFF BY DEFAULT, and the default is the point.
-        #
-        # The ladder tracks on every camera frame (LK wants the smallest
-        # inter-frame motion) and publishes on every frame: MEASURED 132.4 Hz
-        # on the vehicle against detections at 30.5 Hz.
-        #
-        # ⛔ THAT IS NOT WASTE, and an earlier version of this comment said it
-        # was. The reasoning "nobody samples above 20-50 Hz" describes the
-        # HOST loop, which is a limitation of the un-ported vision uplink --
-        # not the architecture. THE CONTROL LOOP IS 500 Hz ON THE SROT BOARD.
-        # Once LANDING_TARGET ingest lands the board closes the visual loop at
-        # that rate and wants bearings as fresh and as often as we can send
-        # them, so capping this publisher would throttle the exact stream the
-        # uplink exists to feed.
-        #
-        # The knob stays for a CPU-bound bench (the ladder costs 16 points of
-        # idle: 53.4 % -> 37.4 %), but 0 = publish every frame is the default
-        # and the design intent. A RUNG CHANGE is never delayed even when a
-        # limit is set -- that transition is the information.
-        # ⛔ THE ACTING BAR (B-59). Below this a detection may be ASSOCIATED by
-        # the tracker but must not be ACTED ON by the ladder. Default 0.45,
-        # deliberately NOT the 0.60 knee that measurement favours: 0.60 is
-        # derived from ONE model, ONE class and ONE venue, and shipping a
-        # control bar that tight on that evidence would trade a measured false
-        # positive for an unmeasured missed detection. 0.45 already removes
-        # the 90.8 %-on-empty-water regime (it falls to 46.8 %) while holding
-        # 98.9 % on the real gate. Raise it to 0.60 per mission once the sweep
-        # has been repeated with visually-confirmed negatives on more venues.
-        self.declare_parameter('act_conf', 0.45)
-        self.declare_parameter('publish_hz', 0.0)
-        # ⭐ 4.5 Hz, RAISED FROM 3.0 ON A RE-MEASUREMENT (B-62).
-        #
-        # The 3 Hz below was set when one anchor evaluation was a "33 ms
-        # burst" on the CPU. Re-measured on the vehicle after XFeat moved to
-        # the accelerator, one full evaluation (detect + match against one
-        # stored checkpoint):
-        #
-        #     CPU   67.0 ms  p95 70.4   -> 3.0 Hz at 20 % duty
-        #     HAILO 44.2 ms  p95 46.3   -> 4.5 Hz at 20 % duty
-        #
-        # ⭐ The CPU number reproduces the shipped 3.0 Hz exactly from first
-        # principles, which is what makes the new one trustworthy: the same
-        # arithmetic on the same duty budget, with only the burst changed.
-        #
-        # What it buys: the anchor pose is REUSED between evaluations, so the
-        # box the ladder steers on can be a full period old. 333 ms -> 222 ms
-        # of worst-case staleness on the rung that exists to cover the p99
-        # 2.418 s gap.
-        #
-        # ⚠ The 8 Hz row in the old table (+42 % frame age for no extra
-        # coverage) was measured at the OLD burst; 4.5 Hz at 44.2 ms is a
-        # LOWER duty than 3 Hz at 67.0 ms, so this costs less latency than
-        # what ships today, not more.
-        self.declare_parameter('anchor_hz', 4.5)
-        self.declare_parameter('full_authority_s', FULL_AUTHORITY_S)
-        self.declare_parameter('zero_authority_s', ZERO_AUTHORITY_S)
+        self._declare_parameters()
 
         cam = str(self.get_parameter('camera').value)
         self._cam = cam
@@ -588,6 +459,143 @@ class LockNode(Node):
             f'[LOCK ] {cam}: follow={self._follower is not None} '
             f'anchor={self._anchor is not None} '
             f'authority {self._full:.2f}->{self._zero:.2f}s  -> {ns}/lock')
+
+    def _declare_parameters(self) -> None:
+        """The ROS parameters this node reads, with their defaults.
+
+        Three more are declared where they are read, beside the reasoning about
+        them: `target_width_m`, `medium` and `direct_feed` (in __init__).
+        """
+        self.declare_parameter('camera', 'forward')
+        self.declare_parameter('target_class', '')
+        self.declare_parameter('follow', True)
+        self.declare_parameter('anchor', False)
+        self.declare_parameter('anchor_model', '')
+        # ⭐ DEFAULT ON since the InferModel port (B-62). Measured on the
+        # vehicle: 10.89 ms alone and 19.85 ms with the detector inferring,
+        # against 32.9 ms for the ONNX path it replaces -- 1.7x even fully
+        # contended, and off the cores the camera pump needs. The two share
+        # the chip through HailoRT's scheduler (`detection/hailo.py`); in the
+        # composed graph, 17.65 ms p50 in-graph over 378 calls on archive
+        # footage (tools/composed_lock_harness.py).
+        #
+        # Cross-backend equivalence checked before flipping this: 875/888/878
+        # of 1024 keypoints match between the ONNX and HEF descriptors, so a
+        # checkpoint enrolled on one path is matchable on the other and the
+        # bank does not partition by transport. The identity bar is 40.
+        #
+        # Set false to force the CPU path -- on a dev box with no chip the
+        # resolver falls back on its own, so this is for A/B measurement.
+        #
+        # ⛔ DEFAULT OFF since 2026-10-03. Chip sharing works only INSIDE one
+        # process, and a standalone lock_node runs as its own: it opened a
+        # second VDevice, raced the detector process for the chip, and when
+        # it won the vehicle had NO detection (HAILO_OUT_OF_PHYSICAL_DEVICES).
+        # The numbers above stand; they need the lock composed with the
+        # detector to be had safely.
+        self.declare_parameter('anchor_xfeat_hef', False)
+        # ⭐ Semi-dense matching: 2.1-2.6x the inliers for +37 % match cost
+        # (measured, four frame pairs). DEFAULT OFF until frame-to-reference
+        # behaviour and inlier CORRECTNESS are measured -- see
+        # never-lose-the-target.md. Hailo backend only; the ONNX path keeps
+        # its sparse maths.
+        self.declare_parameter('anchor_semi_dense', False)
+        # A bank built BEFORE the run, from practice footage or stills:
+        # `tools/build_practice_bank.py`. Measured 2026-09-24 -- references
+        # from one run clear the trust bar on 92-100 % of frames of a DIFFERENT
+        # run of the same prop, so the anchor need not wait for a confident
+        # live detection to have something to match against. Which matters
+        # because the moment it is needed is the moment the detector is failing.
+        #
+        # ⛔ A preloaded reference is trusted exactly like a live one: it clears
+        # MIN_INLIERS or it does not answer, and `recognise()` still wants the
+        # detector to agree before any identity is asserted.
+        self.declare_parameter('anchor_bank', '')
+        # ⛔ LOOP CLOSURE IS OFF BY DEFAULT, like every other capability here.
+        # It is the only path in this node that can reach the LOCALISATION
+        # FILTER, and a wrong position fix is not merely wrong -- the filter
+        # shrinks its covariance around it and becomes confident. Off until a
+        # pool day says otherwise.
+        self.declare_parameter('loop_closure',
+                               _lc.defaults()['enabled'])
+        self.declare_parameter('place_period_s',
+                               _lc.defaults()['place_period_s'])
+        self.declare_parameter('place_travel_m',
+                               _lc.defaults()['place_travel_m'])
+        # Height above the floor = pool_depth_m - |depth|. Without it pixels
+        # cannot become metres and every closure is refused, by design.
+        self.declare_parameter('pool_depth_m',
+                               _lc.defaults()['pool_depth_m'])
+        # 3 Hz, not 8. Measured on the Pi with the full stack live, and the
+        # cost is LATENCY rather than throughput -- detection rate is unchanged
+        # at every setting, but the anchor's 33 ms bursts delay the image
+        # pipeline:
+        #
+        #     ladder OFF          det 49.3 Hz   frame age 16.1 ms   idle 82.4 %
+        #     follower only       det 50.6 Hz             18.7 ms        75.3 %
+        #     + anchor @ 8 Hz     det 50.7 Hz             22.8 ms        65.5 %
+        #     + anchor @ 3 Hz     det 50.6 Hz             18.4 ms        66.8 %
+        #
+        # 8 Hz costs +42 % of frame age for NO extra coverage: the anchor is the
+        # long-horizon rung, called on when the follower has already given up,
+        # and the p99 gap it exists to cover is 2.418 s. 3 Hz samples that
+        # seven times over.
+        # PUBLISH RATE -- OFF BY DEFAULT, and the default is the point.
+        #
+        # The ladder tracks on every camera frame (LK wants the smallest
+        # inter-frame motion) and publishes on every frame: MEASURED 132.4 Hz
+        # on the vehicle against detections at 30.5 Hz.
+        #
+        # ⛔ THAT IS NOT WASTE, and an earlier version of this comment said it
+        # was. The reasoning "nobody samples above 20-50 Hz" describes the
+        # HOST loop, which is a limitation of the un-ported vision uplink --
+        # not the architecture. THE CONTROL LOOP IS 500 Hz ON THE SROT BOARD.
+        # Once LANDING_TARGET ingest lands the board closes the visual loop at
+        # that rate and wants bearings as fresh and as often as we can send
+        # them, so capping this publisher would throttle the exact stream the
+        # uplink exists to feed.
+        #
+        # The knob stays for a CPU-bound bench (the ladder costs 16 points of
+        # idle: 53.4 % -> 37.4 %), but 0 = publish every frame is the default
+        # and the design intent. A RUNG CHANGE is never delayed even when a
+        # limit is set -- that transition is the information.
+        # ⛔ THE ACTING BAR (B-59). Below this a detection may be ASSOCIATED by
+        # the tracker but must not be ACTED ON by the ladder. Default 0.45,
+        # deliberately NOT the 0.60 knee that measurement favours: 0.60 is
+        # derived from ONE model, ONE class and ONE venue, and shipping a
+        # control bar that tight on that evidence would trade a measured false
+        # positive for an unmeasured missed detection. 0.45 already removes
+        # the 90.8 %-on-empty-water regime (it falls to 46.8 %) while holding
+        # 98.9 % on the real gate. Raise it to 0.60 per mission once the sweep
+        # has been repeated with visually-confirmed negatives on more venues.
+        self.declare_parameter('act_conf', 0.45)
+        self.declare_parameter('publish_hz', 0.0)
+        # ⭐ 4.5 Hz, RAISED FROM 3.0 ON A RE-MEASUREMENT (B-62).
+        #
+        # The 3 Hz below was set when one anchor evaluation was a "33 ms
+        # burst" on the CPU. Re-measured on the vehicle after XFeat moved to
+        # the accelerator, one full evaluation (detect + match against one
+        # stored checkpoint):
+        #
+        #     CPU   67.0 ms  p95 70.4   -> 3.0 Hz at 20 % duty
+        #     HAILO 44.2 ms  p95 46.3   -> 4.5 Hz at 20 % duty
+        #
+        # ⭐ The CPU number reproduces the shipped 3.0 Hz exactly from first
+        # principles, which is what makes the new one trustworthy: the same
+        # arithmetic on the same duty budget, with only the burst changed.
+        #
+        # What it buys: the anchor pose is REUSED between evaluations, so the
+        # box the ladder steers on can be a full period old. 333 ms -> 222 ms
+        # of worst-case staleness on the rung that exists to cover the p99
+        # 2.418 s gap.
+        #
+        # ⚠ The 8 Hz row in the old table (+42 % frame age for no extra
+        # coverage) was measured at the OLD burst; 4.5 Hz at 44.2 ms is a
+        # LOWER duty than 3 Hz at 67.0 ms, so this costs less latency than
+        # what ships today, not more.
+        self.declare_parameter('anchor_hz', 4.5)
+        self.declare_parameter('full_authority_s', FULL_AUTHORITY_S)
+        self.declare_parameter('zero_authority_s', ZERO_AUTHORITY_S)
 
 
     def _report_geometry_problems(self):

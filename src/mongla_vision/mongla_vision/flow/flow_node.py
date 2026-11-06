@@ -217,110 +217,7 @@ class FlowVelocityNode(Node):
     def __init__(self):
         super().__init__('mongla_flow_velocity')
 
-        self.declare_parameter('camera', 'downward')
-        # NaN, not 4.0. A default pool depth is a scale factor nobody sets
-        # deliberately multiplying every output -- the same shape as the
-        # 50-vs-72 cm height error that produced an 83 % scale gap on the
-        # bench. Absence must refuse, not guess.
-        self.declare_parameter('pool_depth_m', float('nan'))
-        # ⛔ THE FLOOR IS NOT ONE NUMBER (issue #35). `pool_depth_m` multiplies
-        # every velocity, and real venues slope (TRANSDEC ~1.2 -> 5 m) or step.
-        # State the venue's shallowest and deepest floor and the published
-        # sigma carries the scale error that range implies; left at NaN, the
-        # floor is declared flat at `pool_depth_m` -- an explicit claim, not a
-        # silent one. Tile height, when it is seen, replaces both.
-        self.declare_parameter('pool_depth_min_m', float('nan'))
-        self.declare_parameter('pool_depth_max_m', float('nan'))
-        self.declare_parameter('medium', 'water')          # 'air' | 'water'
-        self.declare_parameter('focal_air_px', _F_AIR_PX)
-        self.declare_parameter('focal_water_px', _F_WATER_PX)
-        self.declare_parameter('gyro_gain_x', _GYRO_GAIN_X_DEFAULT)
-        self.declare_parameter('gyro_gain_y', _GYRO_GAIN_Y_DEFAULT)
-        self.declare_parameter('rot_fraction_max', 0.80)
-        # Correct the FLAT PORT instead of averaging over it. Default ON in
-        # water: a single f_water is exact only at the radius it was fitted
-        # at, and the residual is a 1-2.8 % ANISOTROPIC scale error -- larger
-        # than the whole error budget for a pool leg. Verified to recover the
-        # true velocity to 0.000 % against forward-simulated port physics.
-        self.declare_parameter('refractive_rectify', True)
-        # ⛔ NO `water_refractive_index` PARAMETER HERE (issue #37, B22's rule).
-        # Flow had its own; PnP, the lock and the DSL read `optics.N_WATER`.
-        # Overriding it at the pool for salt water made flow and pose disagree
-        # about the same port. One constant, `optics.N_WATER`, read by all.
-        self.declare_parameter('min_net_flow_px', 0.5)
-        self.declare_parameter('max_dispersion_ratio', 5.0)
-        self.declare_parameter('grid_buckets', 4)
-        self.declare_parameter('want_points', 80)
-        # ADAPTIVE KEYFRAME BASELINE. Emit a velocity once this much image
-        # displacement has accumulated against the anchor, rather than once
-        # per frame. See `_track` for why, and measured-bars for the numbers.
-        self.declare_parameter('target_px', 8.0)
-        self.declare_parameter('max_px', 25.0)
-        self.declare_parameter('max_baseline_s', 0.75)
-        # RE-ANCHOR ON ACCUMULATED ROTATION, not only on displacement and
-        # time. Measured on this camera's own floor texture (see below).
-        self.declare_parameter('max_rotation_deg', 6.0)
-        # PLANAR RIGID FIT. A downward camera on a flat floor sees ONE body
-        # move, so all the points measure the same four numbers. Measured
-        # against a median, truth exact: with 1.5 deg of rotation in an
-        # interval the median reports 4.79 px of translation that did not
-        # happen, the fit 0.055 px.
-        self.declare_parameter('use_planar_fit', True)
-        self.declare_parameter('ransac_px', 2.0)
-        # Forward-backward rejection. LK reports convergence, not correctness:
-        # over a tiled pool floor it converges confidently one tile off.
-        self.declare_parameter('fb_reject_px', 2.0)
-        # Sign relating IMAGE rotation to the vehicle's yaw. MOUNT-SPECIFIC:
-        # it depends which way the camera is clocked in the hull, so it is
-        # calibrated once against the gyro and then monitored, never assumed.
-        self.declare_parameter('yaw_image_sign', -1.0)
-        self.declare_parameter('yaw_cross_check_tol', 0.25)
-        # THE CALIBRATION, not a focal length. fx != fy, the principal point is
-        # not the frame centre, and the lens distorts -- and all three are
-        # axis-dependent, which is why they showed up as a 3 % asymmetry
-        # between forward/back and lateral on real 30 cm slides.
-        self.declare_parameter('calibration', '')
-        self.declare_parameter('undistort', True)
-        # TIMING. Each of these is larger than the residual the estimator
-        # removes, so they are corrected deterministically first.
-        self.declare_parameter('exposure_us', 0.0)      # V4L2 100us units
-        # Which instant the camera driver stamps (V4L2 TSTAMP_SRC). 'soe' is
-        # what `uvcvideo` sets -- both vehicle cameras -- and the camera node
-        # logs what the driver actually reports at stream start (issue #34).
-        self.declare_parameter('stamp_source', 'soe')
-        self.declare_parameter('stamp_at_midpoint', True)
-        self.declare_parameter('estimate_time_offset', True)
-        self.declare_parameter('time_offset_s', FLOW_TD_MEASURED_S)
-        # A BOUND ON td, because it is no longer only a diagnostic. Once td
-        # shifts every velocity stamp, a spurious correlation peak actively
-        # CORRUPTS the output instead of logging a warning -- and the slew
-        # makes a wrong value persist across windows. The plausible range is
-        # bounded by physics we have measured: transport jitter p2p 35 ms,
-        # half-exposure 7.85 ms, and one adaptive baseline 750 ms. Anything
-        # past 150 ms is not a link delay, it is a bad peak.
-        self.declare_parameter('time_offset_max_s', 0.15)
-        self.declare_parameter('time_offset_min_quality', 0.5)
-        # ⛔ THE FLOOR'S OWN TILE, AS A THIRD HEIGHT SOURCE. `pool_depth_m` is,
-        # by this node's own admission below, "the one input nobody measures
-        # carefully" -- and height is a clean multiplier on every velocity we
-        # emit. A tiled floor carries its own scale: `h = f * tile_m / pitch_px`
-        # needs no pool depth, no barometer and no vz estimate.
-        #
-        # `tile_m` is 0.0 = OFF, because a tile size is a VENUE constant. Our
-        # pool is not the competition's, and a wrong tile size does not fail --
-        # it scales every height by the ratio of the two, silently. Measure it
-        # on deck and set it; unset means this stays quiet.
-        self.declare_parameter('tile_m', 0.0)
-        self.declare_parameter('tile_period_s', 0.5)      # 2 Hz; it moves slowly
-        self.declare_parameter('tile_decimate', 3)
-        # Lane-line heading (mod 180) for the yaw drift bound. OFF: a path
-        # marker is also a dark band. See `_read_the_lane`.
-        self.declare_parameter('lane_lines', False)
-        # Sun-caustic handling: erode the floor when the top-hat score says the
-        # sun is painting it, and refuse a bare floor under caustics. ON by
-        # default; OFF tracks the raw floor always (an A/B switch, and the right
-        # setting in an indoor pool where the detector has nothing to find).
-        self.declare_parameter('caustic_suppression', True)
+        self._declare_parameters()
 
         cam = str(self.get_parameter('camera').value or 'downward').strip()
         self._cam = cam
@@ -517,6 +414,116 @@ class FlowVelocityNode(Node):
                 f'(-p pool_depth_m:=<metres> -p medium:=air|water). A default '
                 f'here would turn an unknown SCALE into a confident wrong '
                 f'speed, which is invisible in every plot downstream.')
+
+    def _declare_parameters(self) -> None:
+        """Every ROS parameter this node reads, with its default.
+
+        One place to look for a knob; values are read in __init__.
+        """
+        self.declare_parameter('camera', 'downward')
+        # NaN, not 4.0. A default pool depth is a scale factor nobody sets
+        # deliberately multiplying every output -- the same shape as the
+        # 50-vs-72 cm height error that produced an 83 % scale gap on the
+        # bench. Absence must refuse, not guess.
+        self.declare_parameter('pool_depth_m', float('nan'))
+        # ⛔ THE FLOOR IS NOT ONE NUMBER (issue #35). `pool_depth_m` multiplies
+        # every velocity, and real venues slope (TRANSDEC ~1.2 -> 5 m) or step.
+        # State the venue's shallowest and deepest floor and the published
+        # sigma carries the scale error that range implies; left at NaN, the
+        # floor is declared flat at `pool_depth_m` -- an explicit claim, not a
+        # silent one. Tile height, when it is seen, replaces both.
+        self.declare_parameter('pool_depth_min_m', float('nan'))
+        self.declare_parameter('pool_depth_max_m', float('nan'))
+        self.declare_parameter('medium', 'water')          # 'air' | 'water'
+        self.declare_parameter('focal_air_px', _F_AIR_PX)
+        self.declare_parameter('focal_water_px', _F_WATER_PX)
+        self.declare_parameter('gyro_gain_x', _GYRO_GAIN_X_DEFAULT)
+        self.declare_parameter('gyro_gain_y', _GYRO_GAIN_Y_DEFAULT)
+        self.declare_parameter('rot_fraction_max', 0.80)
+        # Correct the FLAT PORT instead of averaging over it. Default ON in
+        # water: a single f_water is exact only at the radius it was fitted
+        # at, and the residual is a 1-2.8 % ANISOTROPIC scale error -- larger
+        # than the whole error budget for a pool leg. Verified to recover the
+        # true velocity to 0.000 % against forward-simulated port physics.
+        self.declare_parameter('refractive_rectify', True)
+        # ⛔ NO `water_refractive_index` PARAMETER HERE (issue #37, B22's rule).
+        # Flow had its own; PnP, the lock and the DSL read `optics.N_WATER`.
+        # Overriding it at the pool for salt water made flow and pose disagree
+        # about the same port. One constant, `optics.N_WATER`, read by all.
+        self.declare_parameter('min_net_flow_px', 0.5)
+        self.declare_parameter('max_dispersion_ratio', 5.0)
+        self.declare_parameter('grid_buckets', 4)
+        self.declare_parameter('want_points', 80)
+        # ADAPTIVE KEYFRAME BASELINE. Emit a velocity once this much image
+        # displacement has accumulated against the anchor, rather than once
+        # per frame. See `_track` for why, and measured-bars for the numbers.
+        self.declare_parameter('target_px', 8.0)
+        self.declare_parameter('max_px', 25.0)
+        self.declare_parameter('max_baseline_s', 0.75)
+        # RE-ANCHOR ON ACCUMULATED ROTATION, not only on displacement and
+        # time. Measured on this camera's own floor texture (see below).
+        self.declare_parameter('max_rotation_deg', 6.0)
+        # PLANAR RIGID FIT. A downward camera on a flat floor sees ONE body
+        # move, so all the points measure the same four numbers. Measured
+        # against a median, truth exact: with 1.5 deg of rotation in an
+        # interval the median reports 4.79 px of translation that did not
+        # happen, the fit 0.055 px.
+        self.declare_parameter('use_planar_fit', True)
+        self.declare_parameter('ransac_px', 2.0)
+        # Forward-backward rejection. LK reports convergence, not correctness:
+        # over a tiled pool floor it converges confidently one tile off.
+        self.declare_parameter('fb_reject_px', 2.0)
+        # Sign relating IMAGE rotation to the vehicle's yaw. MOUNT-SPECIFIC:
+        # it depends which way the camera is clocked in the hull, so it is
+        # calibrated once against the gyro and then monitored, never assumed.
+        self.declare_parameter('yaw_image_sign', -1.0)
+        self.declare_parameter('yaw_cross_check_tol', 0.25)
+        # THE CALIBRATION, not a focal length. fx != fy, the principal point is
+        # not the frame centre, and the lens distorts -- and all three are
+        # axis-dependent, which is why they showed up as a 3 % asymmetry
+        # between forward/back and lateral on real 30 cm slides.
+        self.declare_parameter('calibration', '')
+        self.declare_parameter('undistort', True)
+        # TIMING. Each of these is larger than the residual the estimator
+        # removes, so they are corrected deterministically first.
+        self.declare_parameter('exposure_us', 0.0)      # V4L2 100us units
+        # Which instant the camera driver stamps (V4L2 TSTAMP_SRC). 'soe' is
+        # what `uvcvideo` sets -- both vehicle cameras -- and the camera node
+        # logs what the driver actually reports at stream start (issue #34).
+        self.declare_parameter('stamp_source', 'soe')
+        self.declare_parameter('stamp_at_midpoint', True)
+        self.declare_parameter('estimate_time_offset', True)
+        self.declare_parameter('time_offset_s', FLOW_TD_MEASURED_S)
+        # A BOUND ON td, because it is no longer only a diagnostic. Once td
+        # shifts every velocity stamp, a spurious correlation peak actively
+        # CORRUPTS the output instead of logging a warning -- and the slew
+        # makes a wrong value persist across windows. The plausible range is
+        # bounded by physics we have measured: transport jitter p2p 35 ms,
+        # half-exposure 7.85 ms, and one adaptive baseline 750 ms. Anything
+        # past 150 ms is not a link delay, it is a bad peak.
+        self.declare_parameter('time_offset_max_s', 0.15)
+        self.declare_parameter('time_offset_min_quality', 0.5)
+        # ⛔ THE FLOOR'S OWN TILE, AS A THIRD HEIGHT SOURCE. `pool_depth_m` is,
+        # by this node's own admission below, "the one input nobody measures
+        # carefully" -- and height is a clean multiplier on every velocity we
+        # emit. A tiled floor carries its own scale: `h = f * tile_m / pitch_px`
+        # needs no pool depth, no barometer and no vz estimate.
+        #
+        # `tile_m` is 0.0 = OFF, because a tile size is a VENUE constant. Our
+        # pool is not the competition's, and a wrong tile size does not fail --
+        # it scales every height by the ratio of the two, silently. Measure it
+        # on deck and set it; unset means this stays quiet.
+        self.declare_parameter('tile_m', 0.0)
+        self.declare_parameter('tile_period_s', 0.5)      # 2 Hz; it moves slowly
+        self.declare_parameter('tile_decimate', 3)
+        # Lane-line heading (mod 180) for the yaw drift bound. OFF: a path
+        # marker is also a dark band. See `_read_the_lane`.
+        self.declare_parameter('lane_lines', False)
+        # Sun-caustic handling: erode the floor when the top-hat score says the
+        # sun is painting it, and refuse a bare floor under caustics. ON by
+        # default; OFF tracks the raw floor always (an A/B switch, and the right
+        # setting in an indoor pool where the detector has nothing to find).
+        self.declare_parameter('caustic_suppression', True)
 
     # ── scale sanity ────────────────────────────────────────────────────────
     def _scale_ready(self):
