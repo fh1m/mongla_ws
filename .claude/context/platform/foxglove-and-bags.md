@@ -44,7 +44,7 @@ scripts/pool_record.sh record gate_am         # Ctrl-C to stop + finalize the ba
 
 **Terminal 3 — drive it** (mission OR CLI — scorecard auto-writes into the folder):
 ```bash
-ros2 run mongla_planner mission fsm_full_2026
+ros2 run mongla_planner mission sauvc_qualification
 #   or hand-fly:  ros2 run mongla_planner mongla arm ; ... ; mongla disarm
 ```
 
@@ -167,9 +167,9 @@ run) alongside `total_s` / `success_count` / `fail_count` / per-verb `phases`. N
 code changes — the runner passes the mission name it already knows.
 
 ```bash
-ros2 run mongla_planner mission fsm_full_2026   # → ~/mongla_runs/fsm_full_2026_<ts>.json
+ros2 run mongla_planner mission sauvc_qualification   # → ~/mongla_runs/sauvc_qualification_<ts>.json
 # put a whole session in one place:
-MONGLA_RUN_DIR=~/mongla_runs/2026-champs ros2 run mongla_planner mission fsm_full_2026
+MONGLA_RUN_DIR=~/mongla_runs/2026-champs ros2 run mongla_planner mission sauvc_qualification
 ```
 `git_sha` is best-effort (2 s timeout, returns `''` if git/the repo is unavailable) — it
 never raises on pool day.
@@ -187,7 +187,7 @@ source scripts/pool_session.sh 2026-champs     # → MONGLA_RUN_DIR=~/mongla_run
 # terminal 1:
 ros2 launch mongla_manager bringup.launch.py vision:=true foxglove:=true 2>&1 | tee $MONGLA_RUN_DIR/manager_console.log
 # terminal 2 (same `source pool_session.sh 2026-champs`):
-ros2 run mongla_planner mission fsm_full_2026  2>&1 | tee $MONGLA_RUN_DIR/mission_console.log
+ros2 run mongla_planner mission sauvc_qualification  2>&1 | tee $MONGLA_RUN_DIR/mission_console.log
 ```
 Now `~/mongla_runs/2026-champs/` holds the bag, the scorecard, the rcl logs, and both
 console tees for that session. The `tee` is optional (rcl logs already persist); it just

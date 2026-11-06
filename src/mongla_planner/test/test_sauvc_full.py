@@ -54,6 +54,11 @@ class _Rec:
     def flare_order(self, **_k):
         return self._order
 
+    def can(self, verb):
+        """As the real DSL: refused on srot iff srot_fc refuses it."""
+        from mongla_control.fc.srot_fc import UNSUPPORTED_VERBS
+        return self.backend != 'srot' or verb not in UNSUPPORTED_VERBS
+
     def __getattr__(self, name):
         def _call(*a, **k):
             self.calls.append((_WIRE.get(name, name), a, k))

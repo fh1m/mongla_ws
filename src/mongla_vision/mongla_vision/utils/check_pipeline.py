@@ -36,8 +36,8 @@ from vision_msgs.msg import Detection2DArray
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Vision pipeline smoke test.')
-    parser.add_argument('--camera',         default='laptop',
-                        help='camera namespace under /mongla/vision/ (default: laptop)')
+    parser.add_argument('--camera',         default='forward',
+                        help='camera namespace under /mongla/vision/ (default: forward)')
     parser.add_argument('--duration',       type=float, default=5.0,
                         help='measurement window seconds (default: 5)')
     parser.add_argument('--min-image-hz',   type=float, default=10.0,

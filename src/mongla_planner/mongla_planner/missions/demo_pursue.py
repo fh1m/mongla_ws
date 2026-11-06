@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""pursue_demo -- torpedo-style approach using align() then move().
+"""demo_pursue -- torpedo-style approach using align() then move().
 
 Demonstrates the competition close-and-fire pattern with the two verbs:
   1. align -- yaw-centre the target (sweep fallback finds it).
@@ -7,7 +7,7 @@ Demonstrates the competition close-and-fire pattern with the two verbs:
               the frame, then back off.
 
 Bench/sim test:
-  ros2 run mongla_planner mission pursue_demo
+  ros2 run mongla_planner mission demo_pursue
   Watch the [VIS] log: bbox fill should grow toward APPROACH_FILL.
 
 Tune: lower APPROACH_FILL (e.g. 55) for a safer standoff;

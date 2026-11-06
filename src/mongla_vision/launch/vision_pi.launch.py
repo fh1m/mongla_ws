@@ -11,11 +11,11 @@ of which is a thing that was silently wrong before:
    swaps under the mission model, where one camera is live and the other is
    paused).
 
-2. conf DEFAULTS TO 0.15. Every other launch path ships 0.35-0.45, which is the
-   CUDA number. INT8 costs ~0.08 of score without moving the box centre, so on
-   this backend that is ~3x too tight -- the most likely single reason a
-   detection is missed. Our HEFs are baked at 0.05 precisely so this point is
-   reachable.
+2. conf IS THE MODEL'S MEASURED BAR, 0.45 for gate_sharks (3.2 % false
+   positives there, 40.8 % at the 0.15 this file used to ship -- the model's
+   sidecar, measured-bars §59). Our HEFs bake the NMS floor at 0.05 so the
+   runtime `conf` is the only bar that decides; the old "INT8 costs ~0.08"
+   allowance was retracted (§66: a healthy build loses ~0.01).
 
 3. THE CALIBRATION IS ACTUALLY PASSED. No launch file in this repo passes it,
    so `CameraInfo.k` publishes all-zero and every pixel->bearing conversion

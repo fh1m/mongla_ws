@@ -6,7 +6,7 @@ against these rather than re-derived.
 
 ```bash
 ros2 launch mongla_sim_bringup sim.launch.py course:=pool_empty \
-    ardusub:=false bridge:=false gui:=false headless:=true t200:=false
+    ardusub:=false bridge:=false gui:=false t200:=false
 python3 drag_survey.py --axes surge,sway --settle 14
 python3 drag_survey.py --axes heave --settle 1.4 --thrust 12
 ```

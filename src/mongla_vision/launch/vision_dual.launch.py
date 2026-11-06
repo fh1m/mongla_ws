@@ -21,7 +21,7 @@ Usage:
 
     # Single model per camera:
     ros2 launch mongla_vision vision_dual.launch.py \\
-        fwd_model:=gate_flare_medium_100ep fwd_classes:=gate,flare \\
+        fwd_model:=gate_sharks fwd_classes:=gate,shark,shaw_fish \\
         dwn_model:=bin_fire_blood dwn_classes:=fire,blood \\
         fwd_device:=0 dwn_device:=4
 
@@ -29,8 +29,8 @@ Usage:
     # runtime; a mission's ClassRef / set_model() needs the model pre-loaded
     # here or it errors "not in registry". Pass the class UNION; per-camera conf:
     ros2 launch mongla_vision vision_dual.launch.py \\
-        fwd_models:=gate_sharks,slalom_red_pipe,torpedo_blood_hole \\
-        fwd_classes:=gate,shark,shaw_fish,red_pipe,torpedo,blood,hole fwd_conf:=0.60 \\
+        fwd_models:=gate_sharks,sauvc_sim \\
+        fwd_classes:=gate,shark,shaw_fish,qual_gate,final_gate,orange_flare fwd_conf:=0.60 \\
         dwn_models:=bin_fire_blood dwn_classes:=fire,blood dwn_conf:=0.70
 
     # Detectors live from the start (no per-task resume):

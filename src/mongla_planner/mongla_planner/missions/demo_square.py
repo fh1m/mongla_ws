@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""square_pattern -- the classic shakedown mission.
+"""demo_square -- the classic shakedown mission.
 
 Four 5-second forward legs separated by 90-degree right turns.
 A 1-second pause before and after each turn drains the residual spin
@@ -11,7 +11,7 @@ Use this to verify:
   - 90-degree yaw_right turns the bow right, not left.
   - move_forward does not crab (if it does, check thruster spin directions).
 
-Run: ros2 run mongla_planner mission square_pattern
+Run: ros2 run mongla_planner mission demo_square
 """
 
 LEG_DURATION_S = 5.0

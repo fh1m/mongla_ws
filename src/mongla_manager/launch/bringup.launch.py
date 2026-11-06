@@ -1,54 +1,47 @@
-"""bringup -- start the AUV control stack (manager + optional vision).
+"""bringup -- start the vehicle: the manager, localization, and optionally vision.
 
-One-command pool-day bringup (defaults: pool mode, DVL auto-connect):
+The one command for the vehicle (SROT board + Pi 5 + Hailo-8):
 
-    # Control only (no vision):
+    # Control only. Talks to the board over USB-C; no cameras.
     ros2 launch mongla_manager bringup.launch.py
 
-    # With vision -- BOTH cameras, measured calibration, Hailo models:
+    # The vehicle with both cameras, the Hailo models and the lock ladder.
     ros2 launch mongla_manager bringup.launch.py vision:=true
 
-    # ...and the downward-camera velocity path (still default-off, unvalidated).
-    # pool_depth_m is REQUIRED -- without it flow_node refuses and publishes
-    # quality 0, deliberately, rather than guessing the scale:
+    # ...plus downward-camera velocity. pool_depth_m is REQUIRED: without it
+    # flow_node refuses and publishes quality 0 rather than guess the scale.
     ros2 launch mongla_manager bringup.launch.py vision:=true flow:=true \\
         pool_depth_m:=1.2
 
-    # Single camera on a dev box / CUDA .pt (what this file used to do ALWAYS):
+    # On the bench, in air: the optics change by ~1.33, so say so.
+    ros2 launch mongla_manager bringup.launch.py vision:=true medium:=air
+
+    # Telemetry for the Foxglove app on ws://<pi>:8765 (pure viewing).
+    ros2 launch mongla_manager bringup.launch.py vision:=true foxglove:=true
+
+    # Single camera, .pt model on a CUDA dev box (not the vehicle path).
     ros2 launch mongla_manager bringup.launch.py vision:=true \\
-        vision_stack:=generic model:=gate_flare_medium_100ep conf:=0.35
+        vision_stack:=generic model:=gate_sharks conf:=0.35
 
-    # Full pool day (BNO085 heading + DVL distance, both cameras, no viewer):
-    ros2 launch mongla_manager bringup.launch.py vision:=true \\
-        yaw_source:=bno085_dvl viewer:=false
+Settings can also live in a file instead of on the command line -- see
+`mongla_manager/launch_defaults.py`. The command line always wins:
 
-    # Bench / sim -- no DVL, use mavlink AHRS:
-    ros2 launch mongla_manager bringup.launch.py mode:=sim yaw_source:=mavlink_ahrs
+    echo 'vision: true' > ~/.mongla/bringup.yaml
+    ros2 launch mongla_manager bringup.launch.py         # vision is on
 
-Multi-model registry (switch models mid-mission without restart):
-    ros2 launch mongla_manager bringup.launch.py vision:=true \\
-        models:="gate=gate_nano_100ep,flare=flare_medium_100ep,combined=gate_flare_medium_100ep" \\
-        active_model:=gate classes:=gate conf:=0.45
+Then, from another shell:
 
-    # In the mission DSL:
-    #   mongla.use('gate')               # phase: gate
-    #   mongla.use('flare', 'flare')     # phase: flare
-    #   mongla.use('combined', 'gate')   # phase: combined model, gate filter
+    ros2 run mongla_manager bringup_check --srot          # can it arm?
+    ros2 run mongla_planner mongla arm
+    ros2 run mongla_planner mission --list
 
-DVL connects automatically on startup (dvl_auto_connect:=true by default).
-Manual override: ros2 run mongla_planner mongla dvl_connect
-
-Vision commands to test gate detection:
-    ros2 run mongla_planner mongla vision_align --camera forward --target_class gate --axes yaw,lat --duration 10
-    ros2 run mongla_planner mongla vision_move  --camera forward --target_class gate --fwd_fill 80 --mode area --duration 15
-
-Run the gate+flare mission:
-    ros2 run mongla_planner mission gate_flare_prequal
+Every argument, its default and its meaning:
+`.claude/context/reference/commands.md` section 3 (generated from this file).
 """
 
 from launch                     import LaunchDescription
 from launch.actions             import (DeclareLaunchArgument, GroupAction,
-                                        IncludeLaunchDescription,
+                                        IncludeLaunchDescription, LogInfo,
                                         SetEnvironmentVariable)
 from launch.conditions          import IfCondition
 from launch.substitutions       import PythonExpression
@@ -58,6 +51,8 @@ from launch_ros.actions         import Node
 from launch_ros.parameter_descriptions import ParameterValue
 import os
 from ament_index_python.packages import get_package_share_directory
+
+from mongla_manager import launch_defaults
 
 
 # Grace between SIGINT and SIGTERM for the manager. Above the manager's
@@ -281,25 +276,26 @@ def generate_launch_description():
                                           'mongla_vision/config.py -- the loaded copy). '
                                           'Default pi_forward matches flight_controller:=srot '
                                           '(Pi box). On the Jetson pass forward.'),
-        DeclareLaunchArgument('model',      default_value='gate_flare_medium_100ep',
-                              description='Single-model: gate_flare_medium_100ep|gate_nano_100ep|gate_medium_100ep|flare_medium_100ep'
-                                          '|yolov11n (ROBOSUB-tested pretrained, sim/bench)|yolo26_nano_pretrained'),
+        DeclareLaunchArgument('model',      default_value='gate_sharks',
+                              description='vision_stack:=generic -- model stem in '
+                                          'mongla_vision/models/ (a <stem>.yaml '
+                                          'sidecar must sit beside it).'),
         DeclareLaunchArgument('models',     default_value='',
-                              description='Multi-model registry (CSV name=stem): '
-                                          '"gate=gate_nano_100ep,combined=gate_flare_medium_100ep"'),
+                              description='vision_stack:=generic -- multi-model '
+                                          'registry, CSV name=stem: '
+                                          '"gate=gate_sharks,bins=bin_fire_blood"'),
         DeclareLaunchArgument('active_model', default_value='',
                               description='Registry key to start with (requires models:="..." to be set)'),
         DeclareLaunchArgument('classes',    default_value='gate',
                               description='CSV class names for detector'),
-        # 0.15 is the Hailo INT8 operating point, and the TOP of the measured
-        # bar (`measured-bars.md`: 0.08 <= conf <= 0.15; above 0.15 loses the
-        # cross-venue gate). It was 0.30 here -- a CUDA-path number, shipped on
-        # the path that never ran. On `vision_stack:=generic` (a .pt on CUDA)
-        # pass conf:=0.35 explicitly.
+        # 0.45 is gate_sharks' measured bar: 3.2 % false positives there
+        # against 40.8 % at the old 0.15 (measured-bars §59, and the model's
+        # sidecar `recommended_conf`). A different model needs its own bar --
+        # read it from that model's sidecar, do not reuse this one.
         DeclareLaunchArgument('conf',       default_value='0.45',
-                              description='Detector confidence floor. 0.15 = Hailo '
-                                          'INT8 operating point; pass 0.35 for the '
-                                          'generic CUDA stack.'),
+                              description='Detector confidence floor. 0.45 is '
+                                          "gate_sharks' measured bar; another "
+                                          "model's bar is in its <stem>.yaml."),
         DeclareLaunchArgument('imgsz',      default_value='640',
                               description='Inference square size. NOTE: a TensorRT .engine bakes '
                                           'imgsz at export -- this only re-scales the .pt fallback. '
@@ -321,6 +317,13 @@ def generate_launch_description():
         DeclareLaunchArgument('foxglove_port', default_value='8765',
                               description='foxglove_bridge WebSocket port'),
     ]
+
+    # Values from ~/.mongla/bringup.yaml (or $MONGLA_BRINGUP) become the
+    # defaults; anything typed as name:=value still wins. Printed at startup so
+    # the log says which settings did not come from the command line.
+    args, from_file, file_path = launch_defaults.apply(args)
+    file_note = ([LogInfo(msg=f'[bringup] settings from {file_path}: ' + ', '.join(
+        f'{k}={v}' for k, v in sorted(from_file.items())))] if from_file else [])
 
     manager_node = Node(
         package='mongla_manager',
@@ -483,7 +486,7 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('foxglove')),
     )
 
-    return LaunchDescription(args + [
+    return LaunchDescription(args + file_note + [
         # ⛔ ONE BLAS THREAD PER CALL, set before any node imports numpy.
         # The vehicle runs OpenBLAS (provision_vehicle.sh checks for it), whose pool
         # defaults to every core in EVERY process. The XFeat matcher already

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""find_person_demo -- canonical vision-driven mission for desk/thruster testing.
+"""demo_find_person -- canonical vision-driven mission for desk/thruster testing.
 
 Uses the pretrained yolov11n model (COCO 80-class, auto-downloads ~5 MB on first
 run) to detect 'person'. No custom weights needed -- ideal for desk testing before
@@ -7,7 +7,7 @@ pool day. Exercises both vision verbs (align + move) and the fallback search.
 
 To run:
     ros2 launch mongla_vision vision.launch.py camera:=laptop model:=yolov11n classes:=person
-    ros2 run mongla_planner mission find_person_demo
+    ros2 run mongla_planner mission demo_find_person
 
 Swap model:
     mongla.models(person='yolov11s')   # ~10 MB, more accurate

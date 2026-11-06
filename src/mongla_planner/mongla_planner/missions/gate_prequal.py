@@ -52,6 +52,9 @@ RETURN_PASS_GAIN = 60.0
 
 
 def run(mongla, log):
+    # The square is flown with DVL distance moves, which only the pixhawk
+    # backend has (the simulator). Refuse on the deck, not at depth.
+    mongla.require('move_forward_dist', why='the square is flown on DVL distance')
     mongla.mission_reset()
     mongla.camera = CAMERA
     mongla.target = TARGET_CLASS

@@ -186,7 +186,7 @@ use the right class *name*; only the case is forgiven.
 ### Using ClassRef
 
 ```python
-mongla.models(gate='gate_flare_medium_100ep')
+mongla.models(gate='gate_sharks')
 
 # ✓ ClassRef — passes through cleanly, reads .class_name
 while not mongla.detected(mongla.models.gate.gate):
@@ -618,7 +618,7 @@ ros2 topic echo /mongla/vision/forward/detections --once
 # Look for: detections[0].results[0].hypothesis.class_id = 'gate' (or 'flare')
 
 # Check the class filter is correct
-ros2 param get /mongla_detector classes
+ros2 param get /mongla_detector_forward classes
 # Expected: 'gate' or 'gate,flare' for competition missions
 ```
 
@@ -664,7 +664,7 @@ def run(mongla, log):
     log.info(f'detected("gate", camera="forward") = {result}')
 
     # 5. ClassRef form
-    mongla.models(gate='gate_flare_medium_100ep')
+    mongla.models(gate='gate_sharks')
     log.info('=== Test 5: ClassRef form ===')
     result = mongla.detected(mongla.models.gate.gate)
     log.info(f'detected(models.gate.gate) = {result}')
@@ -711,10 +711,10 @@ sim_vehicle.py -L RATBeach -v ArduSub -f vectored_6dof --model=JSON --out=udp:0.
 ros2 run mongla_manager start
 
 # Terminal 3a: vision — webcam / sim, detect person with yolov11n (ROBOSUB tested ★)
-ros2 launch mongla_vision cameras_.launch.py model:=yolov11n classes:=person
+ros2 launch mongla_vision vision.launch.py model:=yolov11n classes:=person
 
 # Terminal 3b: vision — pool/competition gate+flare model (swap in for pool day)
-ros2 launch mongla_vision cameras_.launch.py model:=gate_flare_medium_100ep classes:=gate,flare
+ros2 launch mongla_vision vision.launch.py model:=gate_sharks classes:=gate
 
 # Terminal 4: run the autonomous mission (uses whatever classes the detector publishes)
 ros2 run mongla_planner mission gate_flare_autonomous
@@ -736,7 +736,7 @@ ros2 run mongla_planner mission gate_flare_autonomous
 | Class names match code | `ros2 topic echo ... --once` and grep for `class_id` | Name must match your `detected('string')`; matching is case-insensitive (`'Gate'` == `'gate'`) |
 | Cache freshness | `detected('gate', stale_after=0.1)` → should return True when gate visible | Tune `stale_after` for your use case |
 | Correct camera | `ros2 topic echo /mongla/vision/<cam>/detections` exists | Set `mongla.camera = 'forward'` before first loop |
-| Class filter not broken | `ros2 param get /mongla_detector classes` | Call `set_classes('gate,flare')` before orbit loop |
+| Class filter not broken | `ros2 param get /mongla_detector_forward classes` | Call `set_classes('gate,flare')` before orbit loop |
 | Step size vs overshoot | Use `gain=30` + `step=0.5s` → max 0.15m overshoot | Reduce step size, reduce gain |
 | Budget covers search area | 30 steps × 0.5s × 0.3m/s = 4.5m of search | Increase MAX_STEPS if pool lane is longer |
 
@@ -805,7 +805,7 @@ ros2 topic echo /mongla/vision/forward/detections
 ```
 
 If detections arrive but `detected()` returns False, class filter is the culprit.
-Check: `ros2 param get /mongla_detector classes`.
+Check: `ros2 param get /mongla_detector_forward classes`.
 
 ### Error: `detected('gate')` in orbit loop never breaks, AUV spins forever
 
@@ -858,7 +858,7 @@ def creep_forward(mongla):
 
 def run(mongla, log):
     mongla.camera = 'forward'
-    mongla.models(gate='gate_flare_medium_100ep')
+    mongla.models(gate='gate_sharks')
     mongla.arm()
     mongla.set_depth(-0.8)
     mongla.lock_heading(0.0, timeout=180)   # ⛔ refused on srot — pixhawk/sim only;

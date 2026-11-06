@@ -19,7 +19,7 @@ with no hardware. Use it to exercise vision verbs (``vision.align`` /
 
     # Custom models / classes to match your clips:
     ros2 launch mongla_vision video.launch.py \\
-        fwd_video:=/tmp/gate.mp4 fwd_model:=gate_flare_medium_100ep fwd_classes:=gate,flare
+        fwd_video:=/path/to/gate.mp4 fwd_model:=gate_sharks fwd_classes:=gate
 
 Defaults vs vision_dual: detectors start LIVE (paused:=false) so verbs see
 detections immediately, the HUD enables video playback controls + warm-up

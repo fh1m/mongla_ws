@@ -82,6 +82,10 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 
 ## 3. Launch arguments — `DeclareLaunchArgument`
 
+⚠ `ros2 launch` **silently ignores** a `name:=value` the file does not declare. Check the name against the table for THAT file, or put it in `~/.mongla/bringup.yaml`, which refuses unknown names (example: `src/mongla_manager/config/bringup.example.yaml`).
+
+### `mongla_manager/bringup.launch.py`
+
 | argument | default | what it does |
 |---|---|---|
 | `mode` | `pool` | Connection mode: pool|sim|auto|desk|laptop |
@@ -124,16 +128,21 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `paused` | `true` | vision_stack:=pi -- start both detectors paused; the mission resumes the one it needs. false = both infer and compete. |
 | `camera` | `forward` | Camera ROLE -- names the topics and nodes (forward|downward). Change `camera_profile`, not this, to point a role at other hardware. |
 | `camera_profile` | `pi_forward` | Camera HARDWARE profile (CAMERA_PROFILES in mongla_vision/config.py -- the loaded copy). Default pi_forward matches flight_controller:=srot (Pi box). On the Jetson pass forward. |
-| `model` | `gate_flare_medium_100ep` | Single-model: gate_flare_medium_100ep|gate_nano_100ep|gate_medium_100ep|flare_medium_100ep|yolov11n (ROBOSUB-tested pretrained, sim/bench)|yolo26_nano_pretrained |
-| `models` | `` | Multi-model registry (CSV name=stem): "gate=gate_nano_100ep,combined=gate_flare_medium_100ep" |
+| `model` | `gate_sharks` | vision_stack:=generic -- model stem in mongla_vision/models/ (a <stem>.yaml sidecar must sit beside it). |
+| `models` | `` | vision_stack:=generic -- multi-model registry, CSV name=stem: "gate=gate_sharks,bins=bin_fire_blood" |
 | `active_model` | `` | Registry key to start with (requires models:="..." to be set) |
 | `classes` | `gate` | CSV class names for detector |
-| `conf` | `0.45` | Detector confidence floor. 0.15 = Hailo INT8 operating point; pass 0.35 for the generic CUDA stack. |
+| `conf` | `0.45` | Detector confidence floor. 0.45 is gate_sharks' measured bar; another model's bar is in its <stem>.yaml. |
 | `imgsz` | `640` | Inference square size. NOTE: a TensorRT .engine bakes imgsz at export -- this only re-scales the .pt fallback. For TRT, re-export to match (export_engine --all --imgsz <N>), then imgsz:=<N>. |
 | `max_det` | `100` | Post-NMS detection cap (runtime; lower toward ~10 if NMS is the FPS bottleneck on busy frames). |
 | `viewer` | `false` | Open vision_display (OpenCV viewer) alongside vision pipeline |
 | `foxglove` | `false` | Start foxglove_bridge (WebSocket telemetry on foxglove_port). Off the mission path -- pure viz. Needs ros-humble-foxglove-bridge installed. Connect the Foxglove desktop app to ws://<jetson-ip>:<foxglove_port>. |
 | `foxglove_port` | `8765` | foxglove_bridge WebSocket port |
+
+### `mongla_vision/mission_web.launch.py`
+
+| argument | default | what it does |
+|---|---|---|
 | `cameras` | `both` | rig: both (vision_dual) | forward | downward (single camera via vision.launch.py) |
 | `web_port` | `8090` | HTTP port for the mission console + SSE |
 | `video_port` | `8080` | web_video_server MJPEG port |
@@ -160,6 +169,11 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `imgsz` | `640` |  |
 | `max_det` | `100` |  |
 | `tracking` | `true` |  |
+
+### `mongla_vision/video.launch.py`
+
+| argument | default | what it does |
+|---|---|---|
 | `fwd_video` | `` | Forward-camera video (e.g. a gate dataset clip). At least one of fwd_video / dwn_video is required. |
 | `dwn_video` | `` | Downward-camera video (e.g. a bin dataset clip). |
 | `fwd_model` | `gate_sharks` | YOLO model stem for the forward detector. |
@@ -172,6 +186,11 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `tracking` | `true` |  |
 | `imgsz` | `640` |  |
 | `max_det` | `100` |  |
+
+### `mongla_vision/vision.launch.py`
+
+| argument | default | what it does |
+|---|---|---|
 | `profile` | `` | Camera HARDWARE profile (CAMERA_PROFILES) (pi_forward|pi_downward|forward|...). Empty = same as `camera`. Set this to keep the role name while changing which unit it opens. |
 | `lock` | `false` | Run the lock ladder (follower + XFeat anchor), publishing <ns>/lock. Costs ~23 % of the detection rate, measured. Control ignores it until vision.lock_s > 0 -- turn both on together. |
 | `lock_class` | `` |  |
@@ -207,6 +226,11 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `pool_depth_m` | `4.0` | Water column surface->floor (m); metric scale for flow. |
 | `camera_focal_px` | `500.0` | Camera f_px (intrinsics calibration; distance scale rides on it). |
 | `hud_distance` | `true` | HUD pre-arms the distance panel. |
+
+### `mongla_vision/vision_dual.launch.py`
+
+| argument | default | what it does |
+|---|---|---|
 | `fwd_device` | `0` | /dev/videoN index for the forward camera — LAST-RESORT fallback, only used on a box with no /dev/mongla_cam_* symlink (dev box). On the Jetson the port-stable symlink wins automatically (see device_path below). |
 | `dwn_device` | `4` | /dev/videoN index for the downward camera (dev-box fallback; the Jetson symlink wins automatically) |
 | `fwd_device_path` | `` | override device for forward (empty = auto /dev/mongla_cam_forward) |
@@ -239,6 +263,11 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `pool_depth_m` | `4.0` | Water column surface->floor (m); metric scale for flow. |
 | `camera_focal_px` | `500.0` | Downward camera f_px (intrinsics calibration; scale rides on it). |
 | `hud_distance` | `true` | HUD pre-arms the distance panel (shows on calc_distance). |
+
+### `mongla_vision/vision_pi.launch.py`
+
+| argument | default | what it does |
+|---|---|---|
 | `fwd_profile` | `pi_forward` |  |
 | `dwn_profile` | `pi_downward` |  |
 | `fwd_model` | `gate_sharks` |  |
@@ -291,6 +320,35 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `replay` | `false` | Consume image_raw from a RECORDED BAG instead of a camera. Build no camera, keep every detector, and let `ros2 bag play` drive the graph. This is how a recorded session becomes a regression fixture: the detector, tracker, lock ladder and checkpoint bank all run for real, on input that never changes. |
 | `fwd_device_path` | `` |  |
 | `dwn_device_path` | `` |  |
+
+## 3b. Missions — `mongla_planner/missions/`
+
+Run with `ros2 run mongla_planner mission <name>`. A model marked ⏳ is not in `src/mongla_vision/models/`: it arrives on a water day, and until then the mission refuses at `set_model`. A refused verb that the mission asks about first (`mongla.can` / `mongla.require`) is safe on srot.
+
+| mission | what it does | models it loads | refused on srot |
+|---|---|---|---|
+| `demo_arc` | side-by-side comparison of sharp vs curved turns. | — | `arc` (asks first) |
+| `demo_dual_camera` | gate → bin → torpedo across TWO cameras, ONE detector at a time. | `gate_sharks`, `torpedo_blood_hole` ⏳ not shipped | — |
+| `demo_find_person` | canonical vision-driven mission for desk/thruster testing. | — | — |
+| `demo_heading_lock` | continuous heading-hold during a strafing square. | — | `lock_heading` (asks first) |
+| `demo_move_see` | minimal open-loop + vision demo (two-verb). | — | — |
+| `demo_pursue` | torpedo-style approach using align() then move(). | — | — |
+| `demo_square` | the classic shakedown mission. | — | — |
+| `gate_prequal` | RoboSub gate prequalification with DVL square pattern. | — | `move_forward_dist` (asks first) |
+| `pool_day_practice` | Pool day practice run: Gate → Slalom → Torpedo → Bin. | `bin_fire_blood`, `gate_sharks`, `slalom_red_pipe` ⏳ not shipped, `torpedo_blood_hole` ⏳ not shipped | `lock_heading` (asks first) |
+| `pool_day_torpedo` | Pool day torpedo practice: align → approach → fine-lock → fire. | `torpedo_blood_hole` ⏳ not shipped | `lock_heading` (asks first) |
+| `sauvc_full` | SAUVC 2026 full run: Navigation, Target Acquisition, then (opt-in) the flares. | `sauvc_sim` | `lock_heading` (asks first) |
+| `sauvc_navigation` | SAUVC 2026 Navigation — swim through the red/green gate. THE mandatory task. | `sauvc_sim` | `lock_heading` (asks first) |
+| `sauvc_qualification` | SAUVC Qualification — through the hanging gate, U-turn, back through it. | `sauvc_sim` | `lock_heading` (asks first) |
+| `sauvc_target_acquisition` | SAUVC 2026 Target Acquisition — drop the ball into the BLUE drum. 30 points. | `sauvc_sim` | — |
+| `sim_shakedown` | prove the sim <-> autonomy loop end to end. | — | — |
+| `task_bin` | Bin drop task — DOWNWARD camera, hover over the bin, drop a marker. | `bin_fire_blood` | — |
+| `task_full_2026` | Full RoboSub 2026 competition run: Gate → Slalom → Bin → Torpedo → Return+Roll. | — | `lock_heading` (asks first) |
+| `task_gate` | Gate task — find the gate and drive through it. | `gate_sharks` | — |
+| `task_return` | Return task — find gate again, pass back through, style roll. | `gate_sharks` | — |
+| `task_slalom` | Slalom task — weave through red pipes. | `slalom_red_pipe` ⏳ not shipped | — |
+| `task_torpedo` | Torpedo task — align on board, approach via blood, standoff-lock hole, fire. | `torpedo_blood_hole` ⏳ not shipped | `lock_heading` (asks first) |
+| `test` | a scratch bench mission, retargeted 2026-09-28. | `gate_sharks` | `lock_heading` (asks first) |
 
 ## 4. Node parameters — `declare_parameter`
 

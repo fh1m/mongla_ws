@@ -13,7 +13,7 @@ tracker tuning, and mission logic without pool time.
 ros2 launch mongla_vision vision.launch.py \
     video_file:=/path/to/pool_run.mp4 \
     classes:=gate \
-    model:=gate_flare_medium_100ep
+    model:=gate_sharks
 
 # Loop disabled — stop at end of file:
 ros2 launch mongla_vision vision.launch.py \
@@ -46,7 +46,7 @@ ros2 launch mongla_vision video.launch.py \
 # One camera only (forward), custom model/classes to match the clip:
 ros2 launch mongla_vision video.launch.py \
     fwd_video:=/path/to/gate.mp4 \
-    fwd_model:=gate_flare_medium_100ep fwd_classes:=gate,flare
+    fwd_model:=gate_sharks fwd_classes:=gate
 
 # Single pass (no loop) for a clean one-shot mission-sequence run:
 ros2 launch mongla_vision video.launch.py fwd_video:=/path/gate.mp4 loop:=false
@@ -147,8 +147,8 @@ also supported, see below):
 # Option A: mp4 via video_file source (simplest, full pipeline runs normally)
 ros2 launch mongla_vision vision.launch.py \
     video_file:=/home/fh1m/bags/pool_run.mp4 \
-    model:=gate_flare_medium_100ep \
-    classes:=gate,flare \
+    model:=gate_sharks \
+    classes:=gate \
     conf:=0.45 \
     loop:=false
 
@@ -158,18 +158,18 @@ ros2 bag play /home/fh1m/bags/pool_run_20250515 \
     --rate 0.5   # play at half speed for easier inspection
 # Then start detector+tracker separately:
 ros2 run mongla_vision detector_node --ros-args \
-    -p camera:=forward -p model_path:=gate_flare_medium_100ep -p classes:=gate
+    -p camera:=forward -p model_path:=gate_sharks -p classes:=gate
 ```
 
 ### 3. Iterate on model / classes without relaunching
 
 ```bash
 # While video is running, switch class filter live:
-ros2 param set /mongla_detector classes flare
-ros2 param set /mongla_detector classes "gate,flare"
+ros2 param set /mongla_detector_forward classes flare
+ros2 param set /mongla_detector_forward classes "gate,flare"
 
 # Switch to a different model in the registry (if launched with models:=...):
-ros2 param set /mongla_detector active_model combined
+ros2 param set /mongla_detector_forward active_model combined
 ```
 
 ### 4. Run a mission script against the video replay
@@ -189,10 +189,10 @@ ros2 run mongla_manager start --ros-args -p mode:=sim
 # Terminal 3: video pipeline (replays pool run)
 ros2 launch mongla_vision vision.launch.py \
     video_file:=/home/fh1m/bags/pool_run.mp4 \
-    camera:=forward model:=gate_flare_medium_100ep classes:=gate
+    camera:=forward model:=gate_sharks classes:=gate
 
 # Terminal 4: run the mission
-ros2 run mongla_planner mission gate_flare_prequal
+ros2 run mongla_planner mission sauvc_qualification
 ```
 
 The mission calls `mongla.vision.align(target='gate', ...)` and

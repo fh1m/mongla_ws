@@ -127,7 +127,7 @@ With sim + stack up:
 ```bash
 ros2 run mongla_planner mission --list
 ros2 run mongla_planner mission sim_shakedown         # end-to-end loop check
-ros2 run mongla_planner mission gate_flare_prequal    # or your mission id
+ros2 run mongla_planner mission sauvc_qualification  # or your mission id
 
 # or drive manually
 ros2 run mongla_planner mongla arm

@@ -78,7 +78,8 @@ def run(mongla, log=None):
     # so the approach + terminal lock hold heading WITHOUT vision-yaw (Ch4 stays
     # steady -> no close-in yaw limit-cycle on the 20 kg hull). move() and the
     # terminal align() omit yaw, so they take the release_yaw path automatically.
-    mongla.lock_heading(timeout=120)
+    if mongla.can('lock_heading'):   # refused on srot: the board holds heading
+        mongla.lock_heading(timeout=120)
     try:
         # ── 2. Coarse approach: COAST forward until blood fills the frame ──────
         #     brake=False -> no reverse-kick exit; the terminal verb closes the rest.

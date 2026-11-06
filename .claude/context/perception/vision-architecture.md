@@ -303,11 +303,13 @@ into a bug report.
 
 ### Model files
 
-Drop `<stem>.pt` + `<stem>.yaml` pairs into `src/mongla_vision/models/`.
+Drop `<stem>.pt` (dev box) / `<stem>.hef` (vehicle) + `<stem>.yaml` into
+`src/mongla_vision/models/`. On the vehicle the `.yaml` is mandatory: a `.hef`
+carries no class names, and without it every frame is a silent `[]`.
 The YAML maps integer class ids to human names:
 
 ```yaml
-# gate_v1.yaml
+# gate_sharks.yaml
 names:
   0: gate
 ```
@@ -315,9 +317,8 @@ names:
 The detector logs the full class table at startup. Pass the **stem** (no `.pt`):
 
 ```bash
-ros2 launch mongla_vision vision.launch.py camera:=forward model:=gate_v1 classes:=gate
-ros2 launch mongla_vision vision.launch.py camera:=forward model:=flare_v1 classes:=flare
-ros2 launch mongla_vision vision.launch.py camera:=forward model:=gate_flare_v1 classes:=gate,flare
+ros2 launch mongla_vision vision.launch.py camera:=forward model:=gate_sharks classes:=gate
+ros2 launch mongla_vision vision.launch.py camera:=forward model:=sauvc_sim classes:=qual_gate,orange_flare
 ```
 
 ### Switching class filter live
@@ -337,7 +338,7 @@ Run the full pipeline on a pre-recorded `.mp4` / `.avi`:
 
 ```bash
 ros2 launch mongla_vision vision.launch.py camera:=forward \
-    video_file:=/tmp/pool_run.mp4 model:=gate_v1 classes:=gate
+    video_file:=/path/to/pool_run.mp4 model:=gate_sharks classes:=gate
 ```
 
 `video_file` is one of the camera sources in `BUILDERS` (`factory.py`).

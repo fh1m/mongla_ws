@@ -1,6 +1,6 @@
 ---
 name: vision-model-reviewer
-description: Reviews YOLO11 training and detection configs for the competition vision models. Use when editing detector.yaml, training scripts, dataset layouts, or detection thresholds.
+description: Reviews YOLO11 training and detection configs for the competition vision models. Use when editing model sidecars (models/<stem>.yaml), training scripts, dataset layouts, or detection thresholds.
 tools: Read, Grep, Bash, WebFetch
 ---
 
@@ -16,7 +16,7 @@ You review **YOLO11 training and detection configuration** for the Duburi vision
   heavy for the frame budget.
 - **Dataset** — train/val split, class balance, augmentation suited to underwater
   (color shift, motion blur), enough images/class (roadmap: ~100–200/class).
-- **Classes** — `classes` filter in `detector.yaml` matches the model's trained names;
+- **Classes** — the `classes` a launch or mission names match the model sidecar's `names`;
   `classes_filter` topic usage consistent.
 - **Pipeline** — TraceAnnotator + BoxCornerAnnotator + LabelAnnotator already optimal;
   async inference worker thread present; GPU fail-fast (`select_device`) intact.
@@ -25,7 +25,7 @@ You review **YOLO11 training and detection configuration** for the Duburi vision
 
 ## References
 
-- `src/mongla_vision/config/detector.yaml`, `config/cameras.yaml`
+- `src/mongla_vision/models/<stem>.yaml` (sidecars), `config/cameras.yaml`
 - `.claude/context/perception/vision-architecture.md`, `ROADMAP.md`, `depth-estimation.md`
 - `src/mongla_vision/mongla_vision/detection/yolo.py`
 

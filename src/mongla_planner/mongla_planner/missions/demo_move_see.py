@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""move_and_see -- minimal open-loop + vision demo (two-verb).
+"""demo_move_see -- minimal open-loop + vision demo (two-verb).
 
   arm
   set_depth (-0.5 m)          depth-hold engaged; autopilot owns vertical
@@ -13,7 +13,7 @@
 Sim / webcam testing (yolov11n pretrained):
   ros2 run mongla_vision vision_display --ros-args \\
       -p launch_pipeline:=true -p model:=yolov11n -p classes:=person
-  ros2 run mongla_planner mission move_and_see
+  ros2 run mongla_planner mission demo_move_see
 
 Live tuning (no rebuild):
   ros2 param set /mongla_manager vision.kp_lat 80.0

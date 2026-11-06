@@ -473,7 +473,7 @@ ros2 run mongla_sim_bringup mongla_sim sim --headless course:=sauvc26_final
 ros2 launch mongla_vision vision_dual.launch.py \
     fwd_topic:=/mongla/sim/front_camera/image_fx \
     dwn_topic:=/mongla/sim/bottom_camera/image_fx \
-    model:=gate_sharks dwn_model:=bin_fire_blood \
+    fwd_model:=gate_sharks dwn_model:=bin_fire_blood \
     device_cls:=cpu paused:=false
 ```
 

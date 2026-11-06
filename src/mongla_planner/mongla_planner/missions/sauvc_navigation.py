@@ -74,7 +74,7 @@ def run(mongla, log=None):
         # srot refuses `lock_heading`: the board holds heading itself at 500 Hz
         # (STABILIZE for vision, AUTO for moves). On ArduSub the host lock is
         # what keeps the blind-transit line straight.
-        if mongla.backend != 'srot':
+        if mongla.can('lock_heading'):   # refused on srot: the board holds heading
             mongla.lock_heading(0.0, timeout=SAUVC_NAV_BUDGET_S)
         navigate(mongla, log)
     finally:

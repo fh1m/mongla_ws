@@ -41,6 +41,11 @@ class _Recorder:
 
         self.vision = _Vision()
 
+    def can(self, verb):
+        """As the real DSL: refused on srot iff srot_fc refuses it."""
+        from mongla_control.fc.srot_fc import UNSUPPORTED_VERBS
+        return self.backend != 'srot' or verb not in UNSUPPORTED_VERBS
+
     def __getattr__(self, name):
         def _call(*a, **k):
             self.sent.append((name, a, k))

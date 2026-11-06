@@ -31,7 +31,7 @@ ln -s /home/fh1m/Envs/dockers/auv-ros2/model.onnx \
 Pass the full path via the `model_path` ROS parameter:
 
 ```bash
-ros2 run mongla_vision depth_estimator \
+ros2 run mongla_vision depth_estimation_node \
   --ros-args \
   -p camera:=forward \
   -p model_path:=$(pwd)/src/mongla_vision/mongla_vision/depth/models/depth-anything-v2-small.onnx \

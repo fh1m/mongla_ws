@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""heading_lock_demo -- continuous heading-hold during a strafing square.
+"""demo_heading_lock -- continuous heading-hold during a strafing square.
 
 Demonstrates that heading_lock runs as a background correction while
 other commands (move_forward, move_left, move_right) execute in the
@@ -17,7 +17,7 @@ Use this to verify:
   - move_left / move_right strafe the right way (left = leftward, right = rightward).
   - yaw_left during an active lock re-aims the lock at the new heading.
 
-Run: ros2 run mongla_planner mission heading_lock_demo
+Run: ros2 run mongla_planner mission demo_heading_lock
 """
 
 LEG_DURATION_S = 3.0
@@ -27,6 +27,7 @@ PIVOT_DEG      = 45.0    # mid-mission yaw to prove lock retargeting
 
 
 def run(mongla, log):
+    mongla.require('lock_heading', why='this demo exists to show the host heading lock')
     mongla.mission_reset()
     # arm + depth-hold: standard startup.
     mongla.arm()
