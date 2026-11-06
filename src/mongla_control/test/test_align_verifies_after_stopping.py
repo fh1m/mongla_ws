@@ -116,5 +116,6 @@ def test_the_verification_and_the_controller_ask_the_SAME_question():
     src = code_of(mv.align_loop)
     # one per controlled axis: lat, yaw, and the downward camera's surge
     assert src.count('_axis_ctrl(') >= 3, 'the control law must use the helper'
-    assert '_centring_error_px(' in src
+    assert '_verify_after_stop(' in src, 'align must re-measure after stopping'
+    assert '_centring_error_px(' in code_of(mv._verify_after_stop)
     assert "ex_now - (offsets.get(" not in src
