@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 600" width="1160" height="600" role="img" aria-label="Six packages: every command is one goal on one action, and one node talks to the board"><style>text{font-family:Zed Mono,ui-monospace,monospace}.l{font-size:9.5px;fill:#788294;letter-spacing:.14em}.v{font-size:11px;fill:#e4e8ef}.r{font-size:10px;fill:#ff5747;letter-spacing:.06em}.b{font-size:10px;fill:#5a8dff;letter-spacing:.06em}.h{font-size:17px;fill:#fff;font-weight:700;letter-spacing:-.02em}.big{font-size:30px;fill:#fff;font-weight:700;letter-spacing:-.04em}</style>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 600" width="1160" height="600" role="img" aria-label="Six packages: every command is one goal on one action, and one node talks to the board"><style>text{font-family:Zed Mono,ui-monospace,monospace}.l{font-size:9.5px;fill:#788294;letter-spacing:.14em}.v{font-size:11px;fill:#e4e8ef}.r{font-size:10px;fill:#ff2a14;letter-spacing:.06em}.b{font-size:10px;fill:#5a8dff;letter-spacing:.06em}.h{font-size:17px;fill:#fff;font-weight:700;letter-spacing:-.02em}.big{font-size:30px;fill:#fff;font-weight:700;letter-spacing:-.04em}</style>
 <rect width="1160" height="600" fill="#05070a"/>
 <text x="32.0" y="46.0" class="h" text-anchor="start">Six packages, and the one road between them</text>
 <text x="32.0" y="68.0" class="l" text-anchor="start">EVERY COMMAND IS ONE GOAL ON ONE ACTION · EXACTLY ONE NODE TOUCHES THE BOARD</text>
@@ -22,8 +22,8 @@
 <text x="416.0" y="146.0" class="l" text-anchor="start">one action:  /mongla/move</text>
 <text x="416.0" y="163.0" class="l" text-anchor="start">one topic:   /mongla/state</text>
 <text x="416.0" y="216.0" class="r" text-anchor="start">23 verbs, one goal at a time</text>
-<line x1="332" y1="165" x2="396" y2="165" stroke="#ff5747" stroke-width="1.6"/>
-<path d="M396,165 L387.9,168.8 L387.9,161.2 z" fill="#ff5747"/>
+<line x1="332" y1="165" x2="396" y2="165" stroke="#ff2a14" stroke-width="1.6"/>
+<path d="M396,165 L387.9,168.8 L387.9,161.2 z" fill="#ff2a14"/>
 <path d="M332,310 H690 V200 H712" fill="none" stroke="#5a8dff" stroke-width="1.6"/><path d="M716,200 l-9,-4 v8 z" fill="#5a8dff"/>
 <text x="352.0" y="302.0" class="b" text-anchor="start">detections · lock · flow -> the vision loops</text>
 <line x1="182" y1="392" x2="182" y2="420" stroke="#5a8dff" stroke-width="1.6"/>
@@ -35,16 +35,16 @@
 <text x="736.0" y="163.0" class="l" text-anchor="start">on the board. Serves the action,</text>
 <text x="736.0" y="180.0" class="l" text-anchor="start">runs the vision loops, publishes state</text>
 <text x="736.0" y="216.0" class="r" text-anchor="start">start · connect · bringup_check</text>
-<line x1="650" y1="165" x2="716" y2="165" stroke="#ff5747" stroke-width="1.6"/>
-<path d="M716,165 L707.9,168.8 L707.9,161.2 z" fill="#ff5747"/>
+<line x1="650" y1="165" x2="716" y2="165" stroke="#ff2a14" stroke-width="1.6"/>
+<path d="M716,165 L707.9,168.8 L707.9,161.2 z" fill="#ff2a14"/>
 <rect x="720" y="262" width="408" height="130" fill="#0a0d13" stroke="#ff0000" stroke-width="1"/>
 <text x="736.0" y="286.0" class="v" text-anchor="start">mongla_control</text>
 <text x="736.0" y="308.0" class="l" text-anchor="start">the verbs and the board driver.</text>
 <text x="736.0" y="325.0" class="l" text-anchor="start">A library, no nodes: one class,</text>
 <text x="736.0" y="342.0" class="l" text-anchor="start">one board, one link</text>
 <text x="736.0" y="378.0" class="r" text-anchor="start">SrotFC · srot_protocol</text>
-<line x1="924" y1="230" x2="924" y2="258" stroke="#ff5747" stroke-width="1.6"/>
-<path d="M924,258 L920.2,249.9 L927.8,249.9 z" fill="#ff5747"/>
+<line x1="924" y1="230" x2="924" y2="258" stroke="#ff2a14" stroke-width="1.6"/>
+<path d="M924,258 L920.2,249.9 L927.8,249.9 z" fill="#ff2a14"/>
 <path d="M924,392 C924,430 924,440 924,470" fill="none" stroke="#ff0000" stroke-width="3"/>
 <text x="908.0" y="424.0" class="r" text-anchor="end">ONE USB-C CABLE</text>
 <text x="908.0" y="440.0" class="r" text-anchor="end">MAVLINK 2 · COMPID 191</text>
