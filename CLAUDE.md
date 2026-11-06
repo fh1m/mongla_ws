@@ -354,6 +354,11 @@ not port it back. A capability that needs something from it is rebuilt against t
   ever ran read as live. Imports resolve by dotted name now, in one place
   (`tools/orphan_sweep.py`); a deliberate wait goes in `DEFERRED_FUNCTIONS`
   with its consumer named.
+- **The docs are read and edited in the [GitHub wiki](https://github.com/fh1m/mongla_ws/wiki).**
+  Each page is also a file under `.claude/context/` (or `docs/`), and `.github/workflows/wiki.yml`
+  keeps them the same: a wiki edit is committed back here after the doc guards pass, and a push
+  to main rebuilds the wiki. So editing the file here *is* editing the wiki; do that when the edit
+  goes with a code change. `tools/wiki_build.py` says how, and its test proves the round trip.
 - ⛔ **Docs change in the same commit as the code they describe — not after.** A
   removal is not finished until every file that names the removed thing says what
   is true now: docs, skills, agents, launch comments, test docstrings, the site.

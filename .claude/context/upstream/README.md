@@ -94,6 +94,8 @@ this table exists so that cannot happen silently again. Every row is a live URL 
 | **M** | PR [**#26**](https://github.com/RakibulIslam1/srot-control-board/pull/26) | **2026-09-24** |
 | **N** | PR [**#27**](https://github.com/RakibulIslam1/srot-control-board/pull/27) | **2026-09-24** |
 | **O** | PR [**#28**](https://github.com/RakibulIslam1/srot-control-board/pull/28) | **2026-09-24** |
+| doc rename `JETSON_*` → `COMPANION_*` | PR [**#31**](https://github.com/RakibulIslam1/srot-control-board/pull/31) | **2026-11-06** |
+| **V** | PR [**#32**](https://github.com/RakibulIslam1/srot-control-board/pull/32) | **2026-11-06** |
 
 Each of the four adds exactly one document at their repo root and changes no code,
 so none of them needs a `SROT_FW_BEHAVIOUR_REV` bump to merge — the bump each *ask*
@@ -103,8 +105,8 @@ would require is named inside the document, per the reciprocal rule below.
 mode and asks them to decline it rather than ship it unmarked. File it only when
 somebody is ready to own that conversation.
 
-Their repos are also checked out locally at
-`/home/fh1m/Envs/dockers/auv-ros2/Mongla_others/{srot-control-board,srot-ground-station,srot-esc-flasher}`.
+Their repos are also checked out locally, beside this workspace, under
+`Mongla_others/{srot-control-board,srot-ground-station,srot-esc-flasher}`.
 Read the firmware there; ⛔ still never commit to it.
 
 **The 2026-09-24 ecosystem review** — every issue, patch and research note filed

@@ -10,7 +10,7 @@
 for, a neural accelerator that does nothing but see, and a rule that no number appears anywhere
 in this repository without the measurement that produced it.**
 
-[![tests](https://img.shields.io/badge/tests-4%20018%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![in water](https://img.shields.io/badge/in%20water-never-critical)](#what-is-true-today) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
+[![tests](https://img.shields.io/badge/tests-4%20029%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![in water](https://img.shields.io/badge/in%20water-never-critical)](#what-is-true-today) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
 
 **[The Shift](https://fh1m.github.io/mongla_ws/the-shift.html)** · **[Capability map](https://fh1m.github.io/mongla_ws/capability-map.html)** · **[The site](https://fh1m.github.io/mongla_ws/)** · [Run it](#run-it) · [Fundamentals](#the-fundamentals) · [Docs](#every-document-in-this-repository) · [Story](#three-acts)
 
@@ -108,11 +108,50 @@ git clone https://github.com/fh1m/mongla_ws && cd mongla_ws
 ./build_mongla.sh                      # colcon build, six packages
 source install/setup.bash
 
-# the tests (6 suites, 4 018 of them, ~5 minutes)
-python3 -m pytest src/mongla_control/test src/mongla_vision/test src/mongla_manager/test \
-                  src/mongla_planner/test src/mongla_localization/test -q
+# the tests (6 suites, 4 037 of them, ~5 minutes)
+python3 -m pytest -q                   # all six; a full run rewrites docs/stats.json
 ```
 </details>
+
+---
+
+## Configure it: one file
+
+Everything you can set on the vehicle lives in **one file**, `~/.mongla/bringup.yaml`. On a pool
+deck at the competition there is no time to remember which of three places a setting lives in,
+so there is only one place.
+
+```yaml
+# ~/.mongla/bringup.yaml
+vision: true                 # top level: launch arguments, the capability switches
+pool_depth_m: 1.6
+nodes:                       # under nodes: every other parameter, by node name
+  mongla_manager:
+    vision.kp_yaw: 80.0
+  mongla_tracker_forward:
+    track_buffer: 120
+```
+
+Then a plain `ros2 launch mongla_manager bringup.launch.py` uses it. Typing `name:=value` on the
+command line still wins, for one run.
+
+The file refuses the two mistakes ROS lets through without a word. A **misspelt key** stops the
+launch and names the closest real one: ROS itself would ignore `kp_yaww` and run on the default.
+A **parameter a launch argument already sets** stops it too, because the argument would
+silently win over your value.
+
+| you want to change… | put it… | it lasts… |
+|---|---|---|
+| a capability (`vision`, `localization`, `flow`…) | top level of `bringup.yaml` | every launch |
+| any node parameter | `nodes:` in `bringup.yaml` | every launch |
+| a vision gain, for one test | `ros2 param set /mongla_manager vision.kp_yaw 80.0` | until restart |
+| a value for one call in a mission | the verb's own argument | that call |
+
+Every capability is **off until you switch it on**, so you bring the vehicle up bare and add one
+switch at a time. The template, with every key and its default, is
+[`config/bringup.example.yaml`](src/mongla_manager/config/bringup.example.yaml). It is generated
+from the code, as is the [full list of switches, nodes and parameters](.claude/context/reference/commands.md).
+Combinations worth knowing: [`launch-combinations.md`](.claude/context/platform/launch-combinations.md).
 
 ---
 
@@ -510,14 +549,14 @@ five stops — fairings, pressure can, thrusters, handle — you can jump straig
 
 | package | what it owns | Python LOC | test files |
 |---|---|---:|---:|
-| [`mongla_vision`](.claude/context/packages/mongla_vision/README.md) | cameras, Hailo detection, the lock ladder, optical flow, optics | 28 915 | 125 |
-| [`mongla_control`](.claude/context/packages/mongla_control/README.md) | the verbs and the board driver — a pure library, **zero entry points** | 9 955 | 63 |
-| [`mongla_planner`](.claude/context/packages/mongla_planner/README.md) | the `mongla` CLI, the mission DSL, the missions | 7 285 | 37 |
-| [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | `auv_manager_node` — the one node that talks to the board | 8 013 | 62 |
-| [`mongla_localization`](.claude/context/packages/mongla_localization/README.md) | the right-invariant EKF, retrodiction, course priors | 4 560 | 29 |
+| [`mongla_vision`](.claude/context/packages/mongla_vision/README.md) | cameras, Hailo detection, the lock ladder, optical flow, optics | 27 175 | 125 |
+| [`mongla_control`](.claude/context/packages/mongla_control/README.md) | the verbs and the board driver — a pure library, **zero entry points** | 10 062 | 63 |
+| [`mongla_planner`](.claude/context/packages/mongla_planner/README.md) | the `mongla` CLI, the mission DSL, the missions | 7 241 | 37 |
+| [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | `auv_manager_node` — the one node that talks to the board | 7 619 | 62 |
+| [`mongla_localization`](.claude/context/packages/mongla_localization/README.md) | the right-invariant EKF, retrodiction, course priors | 4 637 | 30 |
 | [`mongla_interfaces`](.claude/context/packages/mongla_interfaces/README.md) | one action, one state topic — the entire ROS surface | IDL | — |
 
-**316 test files against the source.** The ROS surface really is that small: one action
+**317 test files against the source.** The ROS surface really is that small: one action
 `/mongla/move` carrying one verb per goal, and one topic `/mongla/state` publishing on change,
 where an absent value is `NaN` and never `0.0`.
 
@@ -720,16 +759,18 @@ is how a team finds out at the venue.
 
 ### The tests are the argument
 
+<!-- stats:table:begin -->
 ```
 mongla_control       1 159 passed        the verbs, the wire, the refusals
 mongla_vision        1 501 passed        detection, the lock ladder, optics, flow
-mongla_manager         509 passed        the node, bring-up gates, the docs contract
+mongla_manager         508 passed        the node, bring-up gates, the docs contract
 mongla_planner         411 passed        the CLI, the DSL, the missions
 mongla_localization    405 passed        the filter, retrodiction, course priors
-test/ (repo-wide)       33 passed        nothing unreachable, the retired stack stays retired
+test/ (repo-wide)       45 passed        nothing unreachable, the retired stack stays retired
                      ─────────────
-                     4 018 passed, 0 failed
+                     4 029 passed, 0 failed
 ```
+<!-- stats:table:end -->
 
 > *"Computing science has very convincingly shown that simplicity is a necessary precondition for
 > reliability."* — Edsger W. Dijkstra, [EWD1175](https://www.cs.utexas.edu/~EWD/transcriptions/EWD11xx/EWD1175.html)
@@ -747,7 +788,7 @@ Some of those tests are unusual enough to be worth naming:
 ```mermaid
 flowchart LR
     DEV["a change"] --> HOOK["editor hooks<br/>py_compile + the matching test file<br/>+ the doc guards on a doc edit"]
-    HOOK --> UNIT["6 suites · 4 018 tests"]
+    HOOK --> UNIT["6 suites · 4 029 tests"]
     UNIT --> GUARD["the drift guards"]
     GUARD --> G1["test_doc_drift<br/>docs vs code"]
     GUARD --> G2["test_srot_protocol_drift<br/>our wire copy vs THEIR headers"]
@@ -814,7 +855,26 @@ it, are in [`.claude/context/upstream/`](.claude/context/upstream/README.md).
 This README is a map, not the territory. The documents below are the territory, and they are
 kept beside the code they describe rather than pasted in here.
 
-Read them in order as **[the Mongla book](.claude/context/README.md)** — 46 chapters in seven parts,
+**The docs live in [the wiki](https://github.com/fh1m/mongla_ws/wiki).** Read them there, organise
+them there, and edit them there: the book is its sidebar, every page has its own short name, and
+any page can be changed from the browser. Each page is also a file in this repository, and the two
+are kept the same automatically ([`.github/workflows/wiki.yml`](.github/workflows/wiki.yml)):
+
+- **a wiki edit** is turned back into its file, checked by the doc guards, and committed to `main`
+  under the editor's name. An edit that breaks a guard becomes a pull request that says what failed;
+- **a push to `main`** rebuilds the wiki from the files, so a code change and its documentation
+  can still land in one commit.
+
+The [site](https://fh1m.github.io/mongla_ws/) tells the story, with the interactive explainers.
+
+What keeps them true: [`test_docs_contract.py`](src/mongla_manager/test/test_docs_contract.py)
+fails on a document the book does not reach or a link that does not resolve;
+[`test_doc_drift.py`](src/mongla_control/test/test_doc_drift.py) fails on a document that states a
+constant the code no longer holds. The [command reference](.claude/context/reference/commands.md)
+is generated from the code, and the test counts on this page and the site are rewritten by
+every full test run ([`tools/published_counts.py`](tools/published_counts.py)).
+
+Read them in order as **[the Mongla book](.claude/context/README.md)** — 64 chapters in nine parts,
 from why the vehicle exists to every number it has measured. Or dip in:
 
 **Start here**

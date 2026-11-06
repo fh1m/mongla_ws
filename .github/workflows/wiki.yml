@@ -1,0 +1,147 @@
+name: Wiki
+
+# The wiki is where the docs are read and edited. Each page is also a file in
+# this repo, because the doc guards run against files, in the same commit as
+# the code they describe. This keeps the two the same, in both directions:
+#
+#   push to main  -> publish: build the pages from the files, force-push the wiki
+#   wiki edit     -> pull:    turn the edited pages back into files, run the doc
+#                             guards, commit to main under the editor's name, then
+#                             publish (so the sidebar and page names follow)
+#
+# If a wiki edit breaks a guard (a link to no page, a stale constant), it is not
+# committed to main: it goes to a branch and a pull request says what failed.
+# The edit stays in the wiki meanwhile.
+#
+# How the conversion works and what it guarantees: tools/wiki_build.py.
+#
+# The wiki's git repository exists only after its first page is created by hand
+# (Wiki tab -> "Create the first page" -> Save). Until then publishing fails
+# and says so.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.claude/context/**'
+      - 'docs/*.md'
+      - 'tools/wiki_build.py'
+      - '.github/workflows/wiki.yml'
+  gollum:
+  workflow_dispatch:
+
+permissions:
+  contents: write          # main, and <repo>.wiki.git
+  pull-requests: write     # only when a wiki edit fails a guard
+
+concurrency:
+  group: wiki
+  cancel-in-progress: false   # never drop a wiki edit half-way
+
+env:
+  # The doc guards that need nothing but Python. The rest need ROS and run on
+  # the dev box with the full suite.
+  GUARDS: >-
+    src/mongla_manager/test/test_docs_contract.py
+    src/mongla_control/test/test_doc_drift.py
+    test/test_the_retired_stack_stays_retired.py
+    test/test_the_wiki_is_built_from_the_book.py
+    test/test_published_test_counts_are_the_last_run.py
+
+jobs:
+  pull:
+    if: github.event_name == 'gollum' && github.event.sender.type != 'Bot'
+    runs-on: ubuntu-latest
+    outputs:
+      committed: ${{ steps.commit.outputs.committed }}
+    steps:
+      # A public wiki can be open to any GitHub user (repo Settings -> Wiki ->
+      # "Restrict editing to users in teams with push access"). Only someone who
+      # could push to main anyway gets an edit committed to it.
+      - name: Only an editor with write access
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WHO: ${{ github.event.sender.login }}
+        run: |
+          perm=$(gh api "repos/${{ github.repository }}/collaborators/${WHO}/permission" --jq .permission || echo none)
+          case "$perm" in admin|maintain|write) ;; *)
+            echo "::error::${WHO} cannot push to this repository (${perm}); the wiki edit is not committed."
+            exit 1 ;;
+          esac
+
+      - uses: actions/checkout@v4
+        with: { ref: main, fetch-depth: 0 }
+
+      - name: Fetch the wiki
+        run: git clone -q "https://github.com/${{ github.repository }}.wiki.git" "$RUNNER_TEMP/wiki"
+
+      - name: Turn the pages back into files
+        id: pull
+        run: |
+          python3 tools/wiki_build.py pull "$RUNNER_TEMP/wiki" | tee "$RUNNER_TEMP/changed"
+          [ -s "$RUNNER_TEMP/changed" ] && echo "any=1" >> "$GITHUB_OUTPUT" || echo "nothing changed"
+
+      - name: Run the doc guards
+        id: guards
+        if: steps.pull.outputs.any == '1'
+        continue-on-error: true
+        run: |
+          pip install -q pytest pyyaml
+          python3 -m pytest -q -p no:cacheprovider $GUARDS 2>&1 | tee "$RUNNER_TEMP/guards"
+          exit "${PIPESTATUS[0]}"
+
+      - name: Commit under the editor's name
+        id: commit
+        if: steps.pull.outputs.any == '1'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WHO: ${{ github.event.sender.login }}
+          WHO_ID: ${{ github.event.sender.id }}
+          PAGES: ${{ join(github.event.pages.*.title, ', ') }}
+          GUARDS_OK: ${{ steps.guards.outcome == 'success' }}
+        run: |
+          git config user.name  "$WHO"
+          git config user.email "${WHO_ID}+${WHO}@users.noreply.github.com"
+          git add -A .claude/context docs
+          git commit -q -m "docs(wiki): ${PAGES}" -m "Edited in the wiki by ${WHO}."
+          if [ "$GUARDS_OK" = "true" ]; then
+            git push -q origin HEAD:main
+            echo "committed=1" >> "$GITHUB_OUTPUT"
+          else
+            branch="wiki-edit/${GITHUB_RUN_ID}"
+            git push -q origin "HEAD:refs/heads/${branch}"
+            { echo "A wiki edit (${PAGES}) fails the doc guards, so it was not committed to main."
+              echo "The edit is still in the wiki. Fix it there or here; merging this applies it."
+              echo; echo '```'; tail -40 "$RUNNER_TEMP/guards"; echo '```'; } > "$RUNNER_TEMP/body"
+            gh pr create --base main --head "$branch" --title "docs(wiki): ${PAGES}" --body-file "$RUNNER_TEMP/body"
+          fi
+
+  publish:
+    needs: pull
+    # After a wiki edit was committed, or on a push / manual run.
+    if: >-
+      always() &&
+      (github.event_name != 'gollum' || needs.pull.outputs.committed == '1')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main }
+
+      - name: Build the pages
+        run: python3 tools/wiki_build.py build "$RUNNER_TEMP/wiki"
+
+      - name: Push to the wiki
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          cd "$RUNNER_TEMP/wiki"
+          git init -q -b master
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Built from ${REPO}@$(git -C "$GITHUB_WORKSPACE" rev-parse --short HEAD)"
+          if ! git push -q --force "https://x-access-token:${TOKEN}@github.com/${REPO}.wiki.git" master; then
+            echo "::error::Could not push the wiki. If it has no pages yet, open the Wiki tab, create any first page, save, then re-run this workflow."
+            exit 1
+          fi

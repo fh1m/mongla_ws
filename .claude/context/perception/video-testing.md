@@ -146,14 +146,14 @@ also supported, see below):
 ```bash
 # Option A: mp4 via video_file source (simplest, full pipeline runs normally)
 ros2 launch mongla_vision vision.launch.py \
-    video_file:=/home/fh1m/bags/pool_run.mp4 \
+    video_file:=~/bags/pool_run.mp4 \
     model:=gate_sharks \
     classes:=gate \
     conf:=0.45 \
     loop:=false
 
 # Option B: ROS2 bag replay (preserves original timestamps, no video_file needed)
-ros2 bag play /home/fh1m/bags/pool_run_20250515 \
+ros2 bag play ~/bags/pool_run_20250515 \
     --topics /mongla/vision/forward/image_raw \
     --rate 0.5   # play at half speed for easier inspection
 # Then start detector+tracker separately:

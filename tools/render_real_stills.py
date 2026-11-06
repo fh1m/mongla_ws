@@ -27,6 +27,13 @@ import numpy as np
 REPO = pathlib.Path(__file__).resolve().parent.parent
 _ARCHIVE_ENV = os.environ.get("MONGLA_ARCHIVE")
 ARCHIVE = pathlib.Path(_ARCHIVE_ENV) if _ARCHIVE_ENV else None
+
+
+def _home_relative(path) -> str:
+    """`/home/<you>/x` -> `~/x`: the manifest is published, a home path is not."""
+    home = str(pathlib.Path.home())
+    s = str(path)
+    return '~' + s[len(home):] if s == home or s.startswith(home + '/') else s
 OUT = REPO / "docs" / "imgs" / "real"
 W = 1920
 
@@ -163,7 +170,7 @@ def main(argv=None):
               f"{', '.join(d.class_name for d in dets[:3])}")
 
     (OUT / "manifest.json").write_text(json.dumps(
-        {"archive": str(ARCHIVE), "conf": args.conf,
+        {"archive": _home_relative(ARCHIVE), "conf": args.conf,
          "scenes": manifest, "no_detections": empty}, indent=2))
     print(f"\n{len(manifest)} stills + manifest -> {OUT.relative_to(REPO)}")
     if empty:

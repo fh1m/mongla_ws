@@ -4677,7 +4677,7 @@ footage it produces weak, badly-placed boxes: confidence **p50 0.49**, and it
 fires on the gate clip as readily as the torpedo clip. The crops fed to the bank
 were therefore not of the prop, and the bank learned what was in them: water.
 
-⚠ **`/home/fh1m/Music/detect` holds 118 trained model directories**, including
+⚠ **`~/Music/detect` holds 118 trained model directories**, including
 per-prop torpedo, gate, octagon and bin models. Measured over four torpedo
 models on the same frames:
 

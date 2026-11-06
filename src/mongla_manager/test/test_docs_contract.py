@@ -363,72 +363,10 @@ def test_generated_command_reference_matches_the_code():
     assert r.returncode == 0, r.stdout + r.stderr
 
 
-def test_the_published_test_count_is_the_real_one():
-    """The passing-test count is quoted on the site, three times in the README,
-    and baked into the banner art. Five copies of one fact, and it went stale
-    within an hour the first time: adding a guard to this very file changed the
-    count and nothing noticed.
+# The published test counts are guarded by
+# test/test_published_test_counts_are_the_last_run.py: one docs/stats.json,
+# written by every full run, copied into the README and the site.
 
-    Two things are checked, and the difference between them matters:
-      * every published copy says the SAME number (that is the drift that bites);
-      * that number is consistent with what the suites actually collect --
-        collection counts skips and xfails too, so the passing count must be
-        just below it, never above.
-    A full run is the only thing that proves "passing", and it takes four
-    minutes; this catches the copies going out of step, which is the real risk.
-    """
-    import subprocess
-    import sys
-    published = {}
-    # ⛔ These patterns used to hard-code the thousands digit as `3` and add
-    # 3 000 to the match. The count passed 4 000 on 2026-09-30, at which point
-    # every pattern would have matched NOTHING -- and a pattern that matches
-    # nothing raises the `no published test count matched` assert below, so the
-    # guard fails loudly rather than passing on a stale number. It is still the
-    # wrong failure, so the thousands digit is captured now.
-    for path, pattern in (
-            (ROOT / 'README.md', r'tests-(\d)%20(\d{3})%20passing'),
-            (ROOT / 'README.md', r'6 suites, (\d)[\s\u202f](\d{3}) of them'),
-            (ROOT / 'README.md', r'(\d)[\s\u202f](\d{3}) passed, 0 failed'),
-            (ROOT / 'README.md', r'6 suites · (\d)[\s\u202f](\d{3}) tests'),
-            (DOCS / 'index.html', r'<b>(\d)[\s\u202f]*(?:&#8239;)?(\d{3})</b>'),
-            # the banner stopped quoting the count on 2026-09-22 (three chips,
-            # all measurements); nothing there to drift any more
-    ):
-        found = re.findall(pattern, path.read_text(encoding='utf-8'))
-        assert found, f'no published test count matched {pattern!r} in {path.name}'
-        published[f'{path.name}:{pattern[:22]}'] = {
-            1000 * int(k) + int(n) for k, n in found}
-
-    values = set().union(*published.values())
-    assert len(values) == 1, f'published counts disagree: {published}'
-    claimed = values.pop()
-
-    collected = 0
-    # ⛔ A package MISSING from this list once let the published count match
-    # the omission rather than the repo. A count guard that skips a package
-    # cannot catch a count drift in that package -- so every package with a
-    # test/ directory is listed.
-    # The sixth suite is the repo-wide guards in test/.
-    for suite in ('src/mongla_control/test', 'src/mongla_vision/test',
-                  'src/mongla_manager/test', 'src/mongla_planner/test',
-                  'src/mongla_localization/test', 'test'):
-        pkg = suite
-        r = subprocess.run([sys.executable, '-m', 'pytest', suite,
-                            '--collect-only', '-q', '-p', 'no:cacheprovider'],
-                           capture_output=True, text=True, cwd=ROOT)
-        m = re.search(r'(\d+) tests? collected', r.stdout)
-        if not m:
-            pytest.skip(f'cannot collect {pkg} here (ROS env not sourced?)')
-        collected += int(m.group(1))
-
-    # collection includes the skips and the one xfail; passing must sit just under
-    assert claimed <= collected, (
-        f'the README/site claim {claimed} passing but only {collected} tests exist')
-    assert collected - claimed <= 15, (
-        f'{collected} collected vs {claimed} published passing: that gap is too big to be '
-        f'skips — re-run the suites and update README.md, docs/index.html and '
-        f'tools/make_banner.py (then re-run tools/make_banner.py)')
 
 
 def test_competition_placements_match_the_official_sheets():

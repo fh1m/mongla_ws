@@ -1,4 +1,4 @@
-# Mongla / mongla_ws — Unified Bug Register
+# Bug register — every defect in mongla_ws, open and fixed
 
 > **This file is the SINGLE tracker for code defects in `mongla_ws`.**
 > It replaces the bug content previously spread across `known-issues.md`,

@@ -896,10 +896,10 @@ a pool-day line item, not a software task.**
 machine** — located 2026-09-23:
 
 ```
-/home/fh1m/Work/Projects/Duburi/2025/raw_videos/robosub/clips/octagon/octagon_1.mp4
-/home/fh1m/Work/Projects/Duburi/2025/raw_videos/final_run/octagon_Bottom.mkv
-/home/fh1m/Work/Projects/Duburi/2025/raw_videos/final_run/Salom_red.mkv
-/home/fh1m/Work/Mine/r_&_d/heading_down_test_vid.mp4          (also under ~/Documents, ~/Work/Projects)
+~/Work/Projects/Duburi/2025/raw_videos/robosub/clips/octagon/octagon_1.mp4
+~/Work/Projects/Duburi/2025/raw_videos/final_run/octagon_Bottom.mkv
+~/Work/Projects/Duburi/2025/raw_videos/final_run/Salom_red.mkv
+~/Work/Mine/r_&_d/heading_down_test_vid.mp4          (also under ~/Documents, ~/Work/Projects)
 ```
 
 ⚠ `final_run/bin.mkv` was not in the same search; the other three floors and §28's 898-pair

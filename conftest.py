@@ -89,3 +89,53 @@ def _pin_to_source():
 
 
 PINNED = _pin_to_source()
+
+
+# --------------------------------------------------------------------------- #
+#  The published test counts come from the last FULL run, never by hand.      #
+# --------------------------------------------------------------------------- #
+# A run that covered every suite, with no -k / -m / -x / --lf / --deselect and
+# nothing left unreported, writes docs/stats.json and copies it into the README
+# and the site (tools/published_counts.py). Anything less leaves them alone, so a
+# quick run of one file never publishes a smaller number.
+_OUTCOMES = {}          # nodeid -> outcome ('passed', 'failed', 'skipped', ...)
+
+
+def pytest_runtest_logreport(report):
+    """One outcome per test, in the words pytest's own summary uses."""
+    xfail = hasattr(report, 'wasxfail')
+    if report.failed:
+        outcome = 'failed' if report.when == 'call' else 'error'
+    elif report.skipped:
+        outcome = 'xfailed' if xfail else 'skipped'
+    elif report.when == 'call':
+        outcome = 'xpassed' if xfail else 'passed'
+    else:
+        return                      # a passing setup/teardown says nothing new
+    if _OUTCOMES.get(report.nodeid) != 'error':     # an error is final
+        _OUTCOMES[report.nodeid] = outcome
+
+
+def _full_run(session) -> bool:
+    opt = session.config.option
+    narrowed = (opt.keyword or opt.markexpr or opt.maxfail or getattr(opt, 'lf', False)
+                or getattr(opt, 'deselect', None) or getattr(opt, 'failedfirst', False))
+    return (not narrowed and session.testscollected > 0
+            and len(_OUTCOMES) == session.testscollected)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    if not _full_run(session):
+        return
+    sys.path.insert(0, str(_ROOT / 'tools'))
+    import published_counts
+    counts = {}
+    for nodeid, outcome in _OUTCOMES.items():
+        suite = published_counts.suite_of(nodeid.split('::')[0])
+        if suite is None:
+            continue
+        c = counts.setdefault(suite, {})
+        c[outcome] = c.get(outcome, 0) + 1
+    if set(counts) != set(published_counts.SUITE_NAMES):
+        return                      # not every suite ran: not a full run
+    published_counts.record(counts, session.testscollected)
