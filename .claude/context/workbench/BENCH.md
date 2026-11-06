@@ -235,10 +235,12 @@ it is a linter with opinions, not a proof of anything.
 **Why.** J04: a verb the backend refuses, discovered underwater. The FSM layer carried a capability
 flag with **zero callers** and every plan ended one state after DIVE.
 
-**Result.** The FSM layer was **retired** (3,550 lines). The oracle now lives in the DSL —
-`mongla.can(verb)` reads `srot_fc.UNSUPPORTED_VERBS` **at call time**, so there is no second copy
-to drift. `test_run_plan.py` executes the path; **injecting the J04 shape fails 4 of 12 tests**,
-including the exact "attempted a refused verb" case. Guard verified to bite, then restored.
+**Result.** The FSM layer was **retired** (3,550 lines). The oracle then lived in the DSL and
+read the refusal list at call time; `test_run_plan.py` executed the path, and **injecting the J04
+shape failed 4 of 12 tests**, including the exact "attempted a refused verb" case. Guard verified
+to bite, then restored. **Superseded 2026-11-06:** the refused verbs were deleted with the old
+backend, so a mission cannot name one — `test_every_mission_runs_against_the_real_dsl.py` now
+proves every mission sends real verbs with real kwargs.
 
 **Lands in:** `BUGS.md` J04 (closed), `sota/SOTA-GAPS.md` G-01 (closed)
 
@@ -262,7 +264,7 @@ link is not clean at that rate and the uplink plan changes.
 ## B-13 · Does the loop rate matter?  `[ ]`
 
 **Why.** **No AUV-specific study was found** tying loop rate to performance — every AUV control
-paper the sweep reached ran at **10–100 Hz**, and ArduSub's 400 Hz is an *in-air* inheritance. Our
+paper the sweep reached ran at **10–100 Hz**, and the 400 Hz common in hobby autopilots is an *in-air* inheritance. Our
 500 Hz board may be buying headroom rather than stability, and that should be said accurately.
 
 **Procedure.** Log `DEPTH_ERR` and attitude error at full rate, then decimate the **controller** to

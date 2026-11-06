@@ -2,7 +2,7 @@
 
 Used by `camera_node` and `vision_node` at startup. Adding a new camera
 source = one line in `BUILDERS` plus the source class itself; nothing else
-changes. Mirrors `mongla_sensors.factory.make_yaw_source` exactly.
+changes.
 """
 
 
@@ -84,24 +84,6 @@ def _build_ros_topic(*, node=None, topic=None, frame_id='ros_cam', name='ros_top
         expected_fps=expected_fps, logger=logger)
 
 
-def _build_jetson_stub(**_):
-    raise NotImplementedError(
-        "jetson camera not implemented yet. "
-        "Use source='webcam' (laptop dev) or source='ros_topic' (Gazebo / BlueOS).")
-
-
-def _build_blueos_stub(**_):
-    raise NotImplementedError(
-        "blueos camera not implemented yet. "
-        "Use source='webcam' (laptop dev) or source='ros_topic' (Gazebo / BlueOS).")
-
-
-def _build_mavlink_stub(**_):
-    raise NotImplementedError(
-        "mavlink camera not implemented yet. "
-        "Use source='webcam' (laptop dev) or source='ros_topic' (Gazebo / BlueOS).")
-
-
 def _build_video_file(*, path='', loop=True, width=0, height=0, fps=0,
                       frame_id='video_cam', name='video', logger=None, **_):
     if not path:
@@ -114,17 +96,11 @@ def _build_video_file(*, path='', loop=True, width=0, height=0, fps=0,
         loop=loop, frame_id=frame_id, name=name, logger=logger)
 
 
-# Stubs are wired up so users hitting `source='jetson'` get the per-stub
-# "not implemented yet" message instead of a generic "unknown source"
-# error from make_camera. Same UX as mongla_sensors.factory.
 BUILDERS = {
     'webcam':      _build_webcam,
     'v4l2':        _build_v4l2,
     'ros_topic':   _build_ros_topic,
     'video_file':  _build_video_file,
-    'jetson':      _build_jetson_stub,
-    'blueos':      _build_blueos_stub,
-    'mavlink':     _build_mavlink_stub,
 }
 
 
@@ -134,7 +110,7 @@ def make_camera(source_name, /, **kwargs):
     Parameters
     ----------
     source_name : str
-        One of `BUILDERS` keys: 'webcam', 'ros_topic', 'jetson', ...
+        One of `BUILDERS` keys: 'webcam', 'v4l2', 'ros_topic', 'video_file'.
         Positional-only so kwargs can carry their own `name` (camera
         instance label) without colliding with the dispatch key.
     **kwargs
@@ -144,8 +120,6 @@ def make_camera(source_name, /, **kwargs):
     ------
     ValueError
         If `source_name` is unknown or required kwargs are missing.
-    NotImplementedError
-        If `source_name` points at a stub source (jetson / blueos / mavlink).
     Exception
         Hardware/driver errors propagate (e.g. cv2 fails to open). Caller
         is responsible for failing loudly at startup -- no silent fallback.

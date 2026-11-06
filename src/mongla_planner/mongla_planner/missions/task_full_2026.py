@@ -31,7 +31,7 @@ def _chunk(name: str):
 
 
 def run(mongla, log=None):
-    mongla.mission_reset()   # clear heading lock + abort from any previous run
+    mongla.mission_reset()   # clear the abort flag and any demand from a previous run
     # Load chunks here so pool-day edits take effect without colcon build.
     gate    = _chunk('task_gate')
     slalom  = _chunk('task_slalom')
@@ -44,8 +44,6 @@ def run(mongla, log=None):
         mongla.pause(10.0)
         mongla.arm()
         mongla.set_depth(GATE_SEARCH_DEPTH_M, timeout=30)
-        if mongla.can('lock_heading'):   # refused on srot: the board holds heading
-            mongla.lock_heading(0.0, timeout=600)
 
         for name, chunk in [
             ('gate',    gate),
@@ -66,10 +64,9 @@ def run(mongla, log=None):
         raise
     finally:
         # ⛔ CLEANUP RAN AS ONE BLOCK, SO THE FIRST FAILURE ATE THE REST.
-        # `release_heading()` raising meant `stop()` and `disarm()` never ran,
-        # and the exception that surfaced was the cleanup's rather than the
-        # mission's. Contain each step so one cannot cost the others.
-        never_fails(mongla.release_heading, log=log, name='release_heading')
+        # A cleanup step raising meant `disarm()` never ran, and the exception
+        # that surfaced was the cleanup's rather than the mission's. Contain
+        # each step so one cannot cost the others.
         never_fails(mongla.stop, log=log, name='stop')
         # ⛔ DISARM IS DELIBERATELY NOT CONTAINED. Every other step here is
         # tidying; this one is the safety path, and a failed disarm that

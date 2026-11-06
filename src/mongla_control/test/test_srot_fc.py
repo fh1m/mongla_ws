@@ -343,7 +343,7 @@ def test_manual_coerces_nonfinite_axis_to_neutral():
 
 
 # --------------------------------------------------------------------------- #
-#  Pixhawk-compatible surface (lets the manager treat SrotFC as a drop-in)      #
+#  The read surface the manager consumes (attitude, battery, depth)           #
 # --------------------------------------------------------------------------- #
 def test_get_attitude_returns_degrees_dict():
     fc = _fc()
@@ -355,13 +355,12 @@ def test_get_attitude_returns_degrees_dict():
     assert att['depth'] == pytest.approx(-1.2)   # negative below surface
 
 
-def test_depth_sign_matches_pixhawk_convention():
-    """Submerged reads NEGATIVE on the SROT backend, exactly as AHRS2 does on
-    Pixhawk. This is the regression guard for the double-negation bug: every
-    depth guard in the stack (STYLE_ROLL_SURFACE_GUARD_M, motion_vision's
-    _MIN_DEPTH_M / max_depth_m / depth_ceiling_m, calibrate_depth's refusal)
-    compares against a NEGATIVE constant, so a positive-down reading did not
-    error -- it silently stopped every one of them from ever firing."""
+def test_depth_reads_negative_below_the_surface():
+    """Submerged reads NEGATIVE. This is the regression guard for the
+    double-negation bug: the depth guards in the stack (surface()'s SURFACED_M
+    wait, calibrate_depth's refusal) compare against a NEGATIVE constant, so a
+    positive-down reading did not error -- it silently stopped every one of
+    them from ever firing."""
     fc = _fc()
     fc.master.messages['ATTITUDE'] = SimpleNamespace(_timestamp=time.time(), yaw=0.0, roll=0.0, pitch=0.0)
     for board_depth_m in (0.5, 2.0, 8.0):
@@ -381,14 +380,7 @@ def test_get_mode_and_battery():
         base_mode=0, custom_mode=sp.MODE_STABILIZE, _timestamp=time.time())
     fc.master.messages['BATTERY_STATUS'] = SimpleNamespace(voltages=[15200])
     assert fc.get_mode() == 'STABILIZE'
-    assert fc.get_battery()['voltage'] == pytest.approx(15.2)   # dict, matches Pixhawk
-
-
-def test_noop_writes_do_not_raise_and_send_nothing():
-    fc = _fc()
-    fc.send_att_pos_mocap(90.0)          # no-op (board fuses the IMU on-board)
-    assert fc.get_rc_channels() is None  # no RC input path -- no radio on the vehicle
-    assert not fc.master.mav.sent        # neither reached the wire
+    assert fc.get_battery()['voltage'] == pytest.approx(15.2)
 
 
 def test_set_message_rate_sends_511():
@@ -429,7 +421,7 @@ def test_get_angular_rates_uses_rate_suffixed_keys():
     assert 'age_s' in r
 
 
-def test_get_battery_is_a_dict_like_pixhawk():
+def test_get_battery_is_a_dict():
     fc = _fc()
     fc.master.messages['BATTERY_STATUS'] = SimpleNamespace(
         voltages=[15200], current_battery=350)
@@ -647,86 +639,6 @@ def test_repeated_stop_stays_a_single_stop():
 # --------------------------------------------------------------------------- #
 #  The unsupported-verb contract                                                #
 # --------------------------------------------------------------------------- #
-def test_unsupported_verbs_are_disjoint_from_move_verbs():
-    from mongla_control.fc.srot_fc import UNSUPPORTED_VERBS
-    assert not (UNSUPPORTED_VERBS & MOVE_VERBS)
-    # The ones that still lie or crash rather than refuse. `vision_align` came
-    # OFF this list on 2026-09-03 -- it actuates through MANUAL_CONTROL now; see
-    # test_no_facade_mode_gate_is_reachable_on_srot's 'ported' bucket. The two
-    # kept here are the ones with no such path: `lock_heading` returns success
-    # and holds nothing, and `arc` would pass an absolute heading where the board
-    # expects a yaw RATE.
-    for verb in ('lock_heading', 'arc'):
-        assert verb in UNSUPPORTED_VERBS
-    assert 'vision_align' not in UNSUPPORTED_VERBS
-    assert 'vision_move' not in UNSUPPORTED_VERBS
-    # move_back came OFF the list: MOVE_BACK=1 was always on the wire and the verb
-    # was refused only for a missing _build_params branch. It is a board verb now.
-    assert 'move_back' in MOVE_VERBS and 'move_back' not in UNSUPPORTED_VERBS
-
-
-def _assert_srot_ported(names):
-    """A 'ported' verb needs BOTH halves, or the bucket is a hole in the guard.
-
-    Checked structurally, from source, because the whole point of the invariant
-    is to catch someone removing a name from UNSUPPORTED_VERBS without doing the
-    work -- and 'I added it to the allowed set' is exactly that mistake wearing a
-    different hat.
-    """
-    from pathlib import Path
-    pkg = Path(__file__).resolve().parents[1] / 'mongla_control'
-    vv = (pkg / 'vision_verbs.py').read_text()
-    mv = (pkg / 'motion_vision.py').read_text()
-    assert '_srot_backend(self.pixhawk)' in vv, (
-        'vision_verbs no longer skips the ArduSub mode gate on srot, so a '
-        f'ported verb in {sorted(names)} would hit _ensure_alt_hold and raise')
-    assert '_is_srot(pixhawk)' in mv and '_srot_drive(' in mv, (
-        'motion_vision no longer has a srot actuation branch, so a ported verb '
-        'would call send_rc_override, which SrotFC does not implement')
-
-
-def test_no_facade_mode_gate_is_reachable_on_srot():
-    """INVARIANT: every facade verb that engages an ArduSub-only mode gate must be
-    either collapsed to the board (MOVE_VERBS) or refused (UNSUPPORTED_VERBS).
-
-    This is what makes the ALT_HOLD->DEPTH_HOLD alias safe. The alias exists so a
-    literal `set_mode('ALT_HOLD')` in a mission works, but it also means
-    `_ensure_alt_hold` / `_ensure_yaw_capable_mode` would now SUCCEED on srot --
-    and the code right after each of them calls `set_target_depth` or
-    `send_rc_override`, which SrotFC does not implement. Today none of those verbs
-    can reach the facade, so the gates are dead code on this backend.
-
-    If someone later removes a verb from UNSUPPORTED_VERBS without porting its
-    body, this test fails instead of the vehicle finding out.
-    """
-    from mongla_control.fc.srot_fc import UNSUPPORTED_VERBS
-    gated = {
-        'set_depth', 'surface',                       # _ensure_alt_hold
-        'vision_align', 'vision_move',                # _ensure_alt_hold
-        'arc', 'style_roll', 'style_yaw',             # _ensure_yaw_capable_mode
-        'turn', 'yaw_left', 'yaw_right',              # _ensure_yaw_capable_mode
-    }
-    # THE THIRD BUCKET, added 2026-09-03. A verb can also be PORTED: it reaches
-    # the facade, but the gate it would have hit is skipped for this backend and
-    # its body actuates through a primitive SrotFC does implement. That is what
-    # `vision_align` / `vision_move` now are -- `vision_verbs` skips
-    # `_ensure_alt_hold` on srot and `motion_vision._drive` writes
-    # MANUAL_CONTROL instead of `send_rc_override`.
-    #
-    # This bucket is deliberately NOT a free pass. A verb only belongs here once
-    # BOTH halves exist, and the two assertions below check for both, so adding a
-    # name here without doing the work fails exactly as an un-refused verb did.
-    ported = {'vision_align', 'vision_move'}
-    _assert_srot_ported(ported)
-    # 'surface' is intercepted in the manager (_run_srot_surface) rather than
-    # collapsed or refused -- it is the one deliberate exception.
-    handled = MOVE_VERBS | UNSUPPORTED_VERBS | ported | {'surface'}
-    unreachable = gated - handled
-    assert not unreachable, (
-        f'{sorted(unreachable)} would reach a facade mode gate on srot, then call '
-        f'a Pixhawk-only primitive. Port them or add them to UNSUPPORTED_VERBS.')
-
-
 # --------------------------------------------------------------------------- #
 #  Firmware behaviour revision -- the RUNTIME interlock for the removed brake   #
 # --------------------------------------------------------------------------- #
@@ -1546,26 +1458,18 @@ def test_manual_still_sends_the_frame_rather_than_raising():
 # --------------------------------------------------------------------------- #
 #  The facade's FC surface, DERIVED rather than hand-typed                      #
 # --------------------------------------------------------------------------- #
-# `test_no_facade_mode_gate_is_reachable_on_srot` above pins the verbs someone
-# REMEMBERED to list in its `gated` set. That catches the removal direction (a verb
-# leaving UNSUPPORTED_VERBS without being ported) and nothing else: a NEW call to a
-# Pixhawk-only primitive, inside a verb nobody listed, sails straight through.
-#
-# This derives the surface from the source instead. It walks the facade for every
-# `self.pixhawk.<attr>` and asks the only question that matters on this backend:
-# does that attribute exist on SrotFC? If it does not, the verb that owns it must
-# be in a bucket that keeps it away from the board.
-#
-# `self.pixhawk` holds a SrotFC on the srot backend -- the attribute name is a
-# historical lie the HAL did not rename (BUGS.md), which is exactly why a human
-# reading these call sites does not notice the mismatch and a test must.
+# A hand-typed list of verbs catches only the calls someone REMEMBERED. This
+# derives the surface from the source instead: it walks the facade for every
+# `self.fc.<attr>` and asks the one question that matters -- does that attribute
+# exist on SrotFC? A new call to a primitive the board does not have fails here,
+# at the desk, instead of as an AttributeError in the water.
 
 import ast as _ast
 import pathlib as _pathlib
 
 
 def _facade_fc_calls():
-    """{attribute -> {enclosing method names}} for every `self.pixhawk.X` in the facade."""
+    """{attribute -> {enclosing method names}} for every `self.fc.X` in the facade."""
     root = _pathlib.Path(__file__).resolve().parents[1] / 'mongla_control'
     found: dict = {}
     for fname in ('mongla.py', 'vision_verbs.py'):
@@ -1576,44 +1480,26 @@ def _facade_fc_calls():
             for node in _ast.walk(fn):
                 if (isinstance(node, _ast.Attribute)
                         and isinstance(node.value, _ast.Attribute)
-                        and node.value.attr == 'pixhawk'
+                        and node.value.attr == 'fc'
                         and isinstance(node.value.value, _ast.Name)
                         and node.value.value.id == 'self'):
                     found.setdefault(node.attr, set()).add(fn.name)
     return found
 
 
-def test_every_facade_fc_call_resolves_on_srot_or_its_verb_is_handled():
-    """A facade call that SrotFC lacks must belong to a verb the board never runs.
+def test_every_facade_fc_call_exists_on_srot():
+    """A facade call SrotFC lacks is an AttributeError on the vehicle.
 
-    This is the ADD direction. Introduce `self.pixhawk.set_target_depth(...)` in a
-    fresh verb and this fails immediately, where the hand-typed `gated` set above
-    would stay green until someone remembered to add the verb name to it.
+    There is one backend, so there are no buckets: every `self.fc.X` the
+    facade makes must resolve on `SrotFC`. Introduce
+    `self.fc.set_target_depth(...)` in a fresh verb and this fails at once.
     """
-    from mongla_control.fc.base import FlightController
-    from mongla_control.fc.srot_fc import MOVE_VERBS, UNSUPPORTED_VERBS
-
     calls = _facade_fc_calls()
-    assert calls, 'found no self.pixhawk.* calls -- the AST walk broke, not the code'
-
-    ported = {'vision_align', 'vision_move'}
-    handled = MOVE_VERBS | UNSUPPORTED_VERBS | ported | {'surface'}
-
-    offenders = []
-    for attr, owners in sorted(calls.items()):
-        if hasattr(SrotFC, attr) or hasattr(FlightController, attr):
-            continue
-        # Only the methods that are themselves verbs can be reasoned about by
-        # bucket; a private helper is reached THROUGH a verb, so treat any
-        # unhandled owner as an offender.
-        unhandled = {o for o in owners if o not in handled}
-        if unhandled:
-            offenders.append((attr, sorted(unhandled)))
-
-    assert not offenders, (
-        'these facade calls do not exist on SrotFC and their verbs are not '
-        'collapsed/refused/ported, so they would AttributeError on the vehicle: '
-        + '; '.join(f'{a} (in {", ".join(o)})' for a, o in offenders))
+    assert calls, 'found no self.fc.* calls -- the AST walk broke, not the code'
+    missing = {a: sorted(o) for a, o in sorted(calls.items()) if not hasattr(SrotFC, a)}
+    assert not missing, (
+        'these facade calls do not exist on SrotFC: '
+        + '; '.join(f'{a} (in {", ".join(o)})' for a, o in missing.items()))
 
 
 # --------------------------------------------------------------------------- #

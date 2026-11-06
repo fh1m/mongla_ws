@@ -9,14 +9,15 @@ owns search/recovery via a Python ``fallback`` function.
 
 Two loops
 ---------
-``align_loop`` -- centre the target on the selected axes (lat / yaw /
-    depth), each with an optional pixel offset. Exits when every active
+``align_loop`` -- centre the target on the selected axes (lat / yaw, and
+    on the downward camera image-Y as surge), each with an optional pixel
+    offset. Exits when every active
     axis is within ``err_px`` for ``align_stable_frames`` ticks.
 
 ``move_loop`` -- drive forward until the target's bounding box fills the
     frame to ``fwd_fill`` (measured by ``mode`` = area/width/height),
     optionally holding a lateral pixel offset (``maintain``). Never
-    re-centres yaw/depth; depth is left to ArduSub's depth-hold.
+    re-centres yaw; the board holds depth.
 
 Both return an :class:`Outcome` whose ``code`` the facade copies into
 ``Move.Result.final_value`` so the DSL can branch without the action
@@ -29,8 +30,7 @@ Sign rules (forward camera, image y grows downward)
   yaw : target-right -> yaw RIGHT toward it -> NO negate (same polarity as
         lateral; pool-verified -- the old `-ex` negation drove away from the
         target)
-  lat : Ch6 > 1500 = strafe RIGHT, so target-right needs Ch6 > 1500 -> NO negate
-  depth: target below -> descend -> depth setpoint more negative
+  lat : positive = strafe RIGHT, so target-right needs a positive demand -> NO negate
 
 Offsets (pixels, signed): a positive ``lat``/``yaw`` offset keeps the
 target that many px to the RIGHT of centre; a positive ``depth`` offset
@@ -44,12 +44,9 @@ import time
 from dataclasses import dataclass
 from typing import Dict, Optional, Set
 
-from .pixhawk import Pixhawk
 from .motion_rates import VISION_LOOP_HZ as LOOP_HZ
-from .motion_rates import VISION_LOOP_HZ_SROT
-from .motion_rates import DEPTH_SETPOINT_HZ as DEPTH_HZ
 from .motion_rates import LOG_THROTTLE_S
-from .motion_writers import REVERSE_KICK_SEC, _interruptible_sleep, is_srot
+from .motion_writers import REVERSE_KICK_SEC, _interruptible_sleep
 from . import actuation_model
 
 
@@ -60,7 +57,6 @@ TIMEOUT   = 2   # duration elapsed without success
 NO_CAMERA = 3   # camera_info never seen -- pipeline not up
 ABORTED   = 4   # cooperative abort (goal cancelled)
 DRIFTED   = 5   # align: centred while driving, OUT of band once stopped and re-measured
-NO_DEPTH  = 6   # a depth axis was asked for and there is no depth to hold (#21)
 
 _CODE_NAME = {ALIGNED: 'OK', LOST: 'LOST', TIMEOUT: 'TIMEOUT',
               NO_CAMERA: 'NO_CAMERA', ABORTED: 'ABORTED', DRIFTED: 'DRIFTED'}
@@ -69,7 +65,6 @@ _CODE_NAME = {ALIGNED: 'OK', LOST: 'LOST', TIMEOUT: 'TIMEOUT',
 # ---- Tunable defaults (P-gains live as ROS params; these are the floor) #
 KP_LAT_DEFAULT     = 60.0
 KP_YAW_DEFAULT     = 60.0
-KP_DEPTH_DEFAULT   = 0.05
 KP_FORWARD_DEFAULT = 200.0
 
 # align_loop's optional SETTLE gate (opt-in; off by default). Why align can end
@@ -101,19 +96,14 @@ SETTLE_PX_DEFAULT = 0.0   # 0 = settle gate off (legacy exit-on-position-in-band
 FWD_BAND = 0.03   # |fwd_fill - fill| within this -> at standoff, forward neutral
 
 # Yaw is THE essential axis for micro-aligning + holding against a small
-# target (the torpedo 'hole'). Pure-proportional yaw falls below the T200
-# spin-up threshold near centre, so a small residual error commands only a
-# few PWM and the thruster never turns -- the hull drifts off and the tight
-# hole-lock stalls just outside err_px. Mirror heading_lock: zero inside the
-# err_px deadband, else floor the magnitude so corrections actually move the
-# hull. Starting value copied from heading_lock.LOCK_SPEED_MIN_PCT; it is a
-# hardware spin-up assumption, NOT a measured value -- confirm on pool day
-# with the bare Ch4 check (does the floor visibly spin the yaw thrusters?).
-VISION_YAW_MIN_PCT = 5.0
-
-# ⛔ ON SROT THAT CONSTANT IS A GUESS, AND THE MEASURED NUMBER IS DIFFERENT.
-# `attitude_control.cpp:87` gates the yaw stick at a hardcoded 0.02, AFTER
-# PILOT_EXPO. Below it the board is not taking a rate command at all -- it is
+# target (the torpedo 'hole'). Pure-proportional yaw falls below what the
+# board actuates near centre, so a small residual error commands nothing and
+# the hole-lock stalls just outside err_px. So: zero inside the err_px
+# deadband, and close in, a floor at the smallest command that moves the hull.
+#
+# That smallest command is MEASURED, not guessed (the first version copied a
+# 5.0 % spin-up assumption from an older autopilot). `attitude_control.cpp:87`
+# gates the yaw stick at a hardcoded 0.02, AFTER PILOT_EXPO. Below it the board is not taking a rate command at all -- it is
 # HOLDING HEADING. Above it the output jumps straight to 17.4 % of full scale,
 # because `MOT_SPIN_MIN` lifts every non-zero demand into [0.15, 1].
 #
@@ -123,17 +113,18 @@ VISION_YAW_MIN_PCT = 5.0
 #
 #     stick 2.80 %  ->  yaw torque 0.000000  ->   0.00 % output
 #     stick 2.86 %  ->  yaw torque 0.010369  ->  17.42 % output
-#     stick 5.00 %  ->  yaw torque 0.018140  ->  19.12 % output   (this constant)
+#     stick 5.00 %  ->  yaw torque 0.018140  ->  19.12 % output   (the old guess)
 #     stick 100  %  ->  yaw torque 0.506651  ->  70.67 % output
 #
 # ⚠ Two consequences, and the second is the one that changes behaviour.
-#  1. 5.0 is 1.75x higher than the smallest command that moves the hull.
-#  2. THE TAPER BELOW CANNOT TAPER. `_vision_yaw_floor` ramps the floor from 0
-#     to 5 % across the approach band; on this backend every value in (0, 2.856)
-#     produces EXACTLY ZERO output while still holding yaw away from the board's
-#     heading hold, and every value in [2.856, 5] produces 17.4-19.1 %. It is a
-#     step function wearing a ramp's clothes.
-# So on srot the close-in floor SNAPS UP to the smallest value that actuates:
+#  1. The old 5.0 was 1.75x higher than the smallest command that moves the hull.
+#  2. A TAPER CANNOT TAPER. A floor ramped from 0 across an approach band (the
+#     `_vision_yaw_floor` this file carried until 2026-11-06) produces EXACTLY
+#     ZERO output for every value in (0, 2.856) and 17.4-19.1 % above it: a step
+#     function wearing a ramp's clothes. Once the snap below existed the ramp
+#     changed nothing -- 1 050 cases, identical output -- except at kp_yaw=0,
+#     where it commanded yaw the caller had switched off. So it was deleted.
+# So the close-in floor SNAPS UP to the smallest value that actuates:
 # inside the fill gate a non-zero correction becomes at least 2.8561 % (17.4 % of
 # full scale), capped by the caller's g_yaw. Rounding DOWN was tried and is
 # wrong -- it stalls the hole-lock just outside err_px, which is the exact
@@ -147,7 +138,7 @@ VISION_YAW_MIN_PCT = 5.0
 # produces no thrust, full stop.
 SROT_YAW_MIN_PCT = 100.0 * actuation_model.yaw_rate_command_floor()   # 2.8561 %
 
-# The yaw floor above is a hard minimum command outside the deadband. On Ch4
+# The yaw floor above is a hard minimum command outside the deadband. On yaw
 # (a yaw RATE) that is a relay feeding an integrator -- a limit-cycle oscillator
 # that wobbles the hull left/right when aligning a small, distant target. Gate
 # it on bbox fill so it only engages CLOSE (large bbox), where it does its real
@@ -156,16 +147,8 @@ SROT_YAW_MIN_PCT = 100.0 * actuation_model.yaw_rate_command_floor()   # 2.8561 %
 # Pool-tunable: confirm the re-engage distance on pool day.
 VISION_YAW_FLOOR_FILL = 0.25
 
-# The close-in yaw floor above must not be a hard relay either: a hard min on the
-# Ch4 rate channel just outside the deadband slams the hull, overshoots, and
-# limit-cycles (the reported terminal yaw jitter). Taper the floor to 0 across
-# this px band above the deadband so a small residual eases in -- mirrors
-# heading_lock._lock_floor / motion_yaw._yaw_floor (the proven fix, applied twice
-# already on the discrete-turn + lock paths). Pool-tunable.
-VISION_YAW_APPROACH_BAND_PX = 40.0
-
 # Inertial arrival brake (lateral + forward-on-fill-stop). The vision loops drive
-# open-loop translation (Ch5/Ch6); on arrival the hull coasts on water inertia in
+# open-loop translation (surge/lateral); on arrival the hull coasts on water inertia in
 # its last travel direction, drifting off the planned position so the next mission
 # step starts wrong. Mirror the control verbs' reverse-kick brake, but scale it to
 # how hard the loop was actually translating just before exit -- a trailing EMA of
@@ -176,28 +159,40 @@ VISION_YAW_APPROACH_BAND_PX = 40.0
 VISION_BRAKE_GAIN    = 0.6    # reverse-kick % = this * |EMA command %|
 VISION_BRAKE_MIN_PCT = 6.0    # gate: skip the kick below this |EMA| (deadband exit)
 VISION_BRAKE_CAP_PCT = 30.0   # never reverse-kick harder than this
-_BRAKE_EMA_ALPHA     = 0.3    # per-tick EMA weight (~0.4 s memory at LOOP_HZ)
+# The brake's momentum proxy is an EMA with a time constant in SECONDS. It was
+# tuned as a weight of 0.3 per tick on the 20 Hz loop, i.e. tau = -0.05/ln(0.7)
+# = 0.140 s. Per tick it was rate-dependent: once the loop woke on data (~77 Hz)
+# the same weight decayed ~4x faster, and through the arrival dwell (N in-band
+# frames + _ALIGN_STABLE_MIN_S at ~0 command) a 30 % strafe fell under
+# VISION_BRAKE_MIN_PCT before the brake read it, so the brake never fired.
+_BRAKE_EMA_TAU_S     = 0.140
+
+
+def _ema_step(ema: float, value: float, dt_s: float) -> float:
+    """One step of the brake EMA over `dt_s` seconds -- same memory at any rate."""
+    alpha = 1.0 - math.exp(-max(dt_s, 0.0) / _BRAKE_EMA_TAU_S)
+    return ema + alpha * (value - ema)
 
 # --- Range-adaptive gain schedule (Layer 1) -------------------------------- #
 # The law is P on NORMALIZED pixel error, so the image shift per unit hull
 # motion grows ~1/range (~ bbox fill): a kp critically damped far-field is
 # OVER-gained close-in, oscillating the 20 kg hull off a small target. Scale the
-# lat/depth kp DOWN as fill grows -- 1.0 below FILL_LO (far, full gain), ramping
+# lat/surge kp DOWN as fill grows -- 1.0 below FILL_LO (far, full gain), ramping
 # linearly to `floor` at/above FILL_HI (close, gentle). `floor` is the only deck
 # knob (vision.range_gain_floor; 1.0 = off); the ramp endpoints stay constants.
-# Yaw is EXCLUDED -- terminal yaw is delegated to heading_lock, and near-field
-# yaw has its own stiction floor that ADDS authority (opposite intent).
-VISION_RANGE_GAIN_FILL_LO = 0.25   # fill below which lat/depth gain is unscaled
+# Yaw is EXCLUDED -- near-field yaw has its own stiction floor that ADDS
+# authority (opposite intent).
+VISION_RANGE_GAIN_FILL_LO = 0.25   # fill below which lat/surge gain is unscaled
 VISION_RANGE_GAIN_FILL_HI = 0.60   # fill at/above which gain is fully floored
 
 # --- Lateral anti-windup integral (Layer 2) -------------------------------- #
-# Ch6 lateral is OPEN-LOOP thrust with no downstream position hold, so a steady
+# Lateral is OPEN-LOOP thrust with no downstream position hold, so a steady
 # current leaves a steady-state offset pure-P cannot null. A small bounded
 # I-term (accumulated ONLY while holding, clamped to ±I_LAT_MAX, frozen on
 # output saturation, reset on target loss) cancels it. ki rides
 # vision.ki_lat (default 0 = OFF until the range damping is confirmed -- an
-# integral on an under-damped loop makes it worse). Yaw/depth get NO I-term
-# (Ch4 rate + ALT_HOLD already integrate downstream).
+# integral on an under-damped loop makes it worse). Yaw gets NO I-term: the
+# board's heading hold already integrates downstream.
 VISION_I_LAT_MAX = 15.0   # |lateral integral| clamp, % thrust
 
 # --- Continuity lock (Layer 3) --------------------------------------------- #
@@ -245,7 +240,7 @@ def _lock_gate(dt_s: float) -> float:
     return max(VISION_LOCK_GATE_MIN, min(VISION_LOCK_GATE_NORM, scaled))
 
 # --- Minimum achievable deadband ------------------------------------------- #
-# A 20 kg hull on open-loop Ch6 thrust against a bbox that itself jitters a few
+# A 20 kg hull on open-loop lateral thrust against a bbox that itself jitters a few
 # px per frame cannot hold a literal 0 px error -- and `err=0` from the operator
 # means "use the default" anyway (the rosidl-0 = unset live-tuning convention in
 # commands.fields_for, NOT a literal zero deadband). So clamp the EFFECTIVE
@@ -261,8 +256,8 @@ MIN_ALIGN_ERR_PX = 5.0
 # output while the hull drives blind for a whole frame period over-drives by
 # ~Kp*e*T_frame -- the low-FPS twitchiness. Fix: full command authority the
 # instant a frame lands, then decay the LATERAL/FORWARD command toward neutral as
-# the sample ages, hard-zero once we are driving blind. Yaw/depth are NOT decayed
-# (Ch4 is a rate ArduSub bleeds; depth is ArduSub's hold). At healthy FPS frames
+# the sample ages, hard-zero once we are driving blind. Yaw is NOT decayed: it
+# is a rate demand the board's heading hold absorbs. At healthy FPS frames
 # refresh before VISION_FRESH_FULL_S so the factor stays 1.0 -- zero behaviour
 # change; the decay only engages when detections are slow or drop out. ZERO_S is
 # below _STALE_LIMIT_S so the command zeroes BEFORE "target lost" declares.
@@ -392,7 +387,7 @@ def _centring_error_px(sample, *, axes, offsets, tool_du, tool_dv,
 #
 # Requiring both a frame count and a dwell keeps each doing the job it can:
 # frames rule out a re-read, time rules out a burst. At 20 Hz this is satisfied
-# on the same tick the third frame lands, so the ArduSub path is unchanged
+# on the same tick the third frame lands, so nothing changes
 # except when the detector jitters, where it can cost one extra frame (~10 ms)
 # -- the right price for not firing a torpedo on 20 ms of evidence. At 3-4 Hz
 # three frames already span 0.75-1.0 s and this never binds.
@@ -403,16 +398,10 @@ _ALIGN_STABLE_MIN_S = 0.10
 # detector that has died while the last box is still cached.
 _STALE_LIMIT_S = 1.0
 
-# Depth setpoint nudge ceiling per tick at gain=100 (scaled by gain/100).
-_MAX_DEPTH_NUDGE = 0.02   # metres / tick
-
 # Pass-through commit: how long to keep driving forward AFTER the target
 # leaves the frame, so the hull fully clears the gate. Overridable per
 # call via move(..., hold=<s>).
 _PASSTHROUGH_COMMIT_S = 2.0
-
-# Surfacing safety floor: never command shallower than 0.2 m.
-_MIN_DEPTH_M = -0.2
 
 VALID_AXES = {'lat', 'yaw', 'depth'}
 VALID_MODES = {'area', 'width', 'height'}
@@ -591,14 +580,14 @@ def _warn_low_fps(log, fresh: float, sample) -> None:
 
     Fires only for a LIVE box (a coast has its own decay semantics) whose
     freshness has fallen below ``_FRESH_WARN_FLOOR``. Pure observability: raising
-    detector FPS (TensorRT ``.engine``) is the fix; at healthy FPS fresh==1.0 and
+    detector FPS (a compiled ``.hef``, one detector at a time) is the fix; at healthy FPS fresh==1.0 and
     this never fires.
     """
     if log is None or getattr(sample, 'coasted', False) or fresh >= _FRESH_WARN_FLOOR:
         return
     log.info(
         f"[VIS  ] low detector FPS: lat/fwd authority {fresh * 100:.0f}% "
-        f"(bbox {sample.age_s * 1000:.0f}ms stale) -- raise FPS (.engine) if "
+        f"(bbox {sample.age_s * 1000:.0f}ms stale) -- raise FPS (.hef) if "
         f"the approach stalls",
         throttle_duration_sec=LOG_THROTTLE_S)
 
@@ -632,7 +621,7 @@ def _brake_axis(axis_writer, ema_pct: float, brake_gain: float,
     EMA (loop already tapered into the deadband -- gentle convergence /
     hole-lock) is gated out so the kick never disturbs a steady hull.
 
-    Leaves the axis at the kick PWM; the caller goes neutral next (its
+    Leaves the axis at the kick; the caller goes neutral next (its
     normal exit path), so a separate settle is not needed here.
     """
     if abs(ema_pct) < VISION_BRAKE_MIN_PCT:
@@ -642,12 +631,7 @@ def _brake_axis(axis_writer, ema_pct: float, brake_gain: float,
     if log is not None:
         log.info(f'[{label:<5}] brake -- reverse {mag:.0f}% '
                  f'x {REVERSE_KICK_SEC:.2f}s (ema={ema_pct:+.0f}%)')
-    # NOTE: on a lat+depth align, writers.lateral routes through
-    # send_rc_override(lateral=) which drops Ch3 throttle from the 65535
-    # ALT_HOLD release to 1500 for this REVERSE_KICK_SEC. That is intentional and
-    # benign -- 1500 = "hold depth" in ALT_HOLD and matches the send_neutral the
-    # caller issues immediately after; do NOT "fix" it back to a release.
-    axis_writer(Pixhawk.percent_to_pwm(kick))
+    axis_writer(kick)
     _interruptible_sleep(REVERSE_KICK_SEC, abort_fn)
 
 
@@ -670,12 +654,7 @@ def _present(sample) -> bool:
     return sample is not None and sample.age_s <= _STALE_LIMIT_S
 
 
-# `_is_srot` now lives in `motion_writers.is_srot` -- `make_writers` has to
-# branch on it too (B30), and a second copy is how the two would disagree.
-_is_srot = is_srot
-
-
-def _tick(vision_state, fc) -> None:
+def _tick(vision_state) -> None:
     """Wait for the next observation, or the tick timeout -- whichever first.
 
     THE LOOP USED TO SLEEP A FIXED PERIOD. Against an asynchronous producer
@@ -695,17 +674,12 @@ def _tick(vision_state, fc) -> None:
     Falls back to a plain sleep when there is no VisionState (unit tests, the
     non-vision callers), so nothing depends on the wake-up existing.
     """
-    period = 1.0 / _loop_hz(fc)
+    period = 1.0 / LOOP_HZ
     waiter = getattr(vision_state, 'wait_for_sample', None)
     if waiter is None:
         time.sleep(period)
         return
     waiter(period)
-
-
-def _loop_hz(fc) -> float:
-    """Tick rate for THIS backend. See motion_rates for why they differ."""
-    return VISION_LOOP_HZ_SROT if _is_srot(fc) else LOOP_HZ
 
 
 def _mixer_saturated(lat_pct: float, yaw_pct: float, fwd_pct: float) -> bool:
@@ -731,30 +705,6 @@ def _srot_drive(fc, *, fwd_pct: float, lat_pct: float, yaw_pct: float,
                 prioritise: bool = True) -> None:
     """Write one MANUAL_CONTROL frame for the srot board.
 
-    WHY THIS IS NOT `PixhawkFC.manual()` FOR BOTH BACKENDS. The HAL's `manual()`
-    exists on both, but the ArduSub one maps onto `send_rc_override` with all
-    four channels written -- it cannot express the two RELEASE semantics this
-    loop depends on:
-
-      * `release_yaw` releases Ch4 (65535) so the background `HeadingLock` owns
-        yaw. Writing yaw=1500 instead races the lock's own stream, which is the
-        fight the `_drive` docstrings below already warn about.
-      * `throttle_ch = 65535` releases Ch3 so ArduSub's ALT_HOLD owns depth.
-
-    So the ArduSub path is left EXACTLY as it was -- it is the configuration
-    that placed 8th at RoboSub 2025 -- and srot gets its own branch.
-
-    On srot both releases have a different and simpler answer: there is no host
-    heading lock (`lock_heading` is refused on this backend), the board holds
-    attitude and heading itself at 500 Hz in STABILIZE, and MANUAL_CONTROL has
-    no "release" -- every frame carries all four axes. So `release_yaw` becomes
-    "command zero yaw and let the board hold", which is the same intent through
-    a better mechanism.
-
-    `up` is always 0. The depth axis needs `set_target_depth`, which SrotFC does
-    not implement; `vision_verbs` refuses a depth-axis align on this backend
-    rather than letting it silently do nothing.
-
     ⛔ PRIORITISED BEFORE IT LEAVES. The board scales a saturated horizontal
     group UNIFORMLY, so a large lateral correction steals yaw in the same
     proportion -- measured on the mixer at fwd 0.9 / lat 0.9 / yaw 0.3, yaw
@@ -774,40 +724,12 @@ def _srot_drive(fc, *, fwd_pct: float, lat_pct: float, yaw_pct: float,
     fc.manual(fwd=fwd, lat=lat, up=0.0, yaw=yaw)
 
 
-def _read_depth(pixhawk) -> float:
-    """Current depth, or NaN when there is no attitude to read it from.
-
-    ⛔ NOT 0.0 (issue #21). 0.0 is the SURFACE, a real value, and this is used
-    as the depth SETPOINT -- so a missing reading made the vision loop hold
-    the hull at the surface. Absence is NaN, and the loop refuses on it.
-    """
-    att = pixhawk.get_attitude()
-    return float(att['depth']) if att else float('nan')
-
-
-def _vision_yaw_floor(epx: float, eff_err: float, full_pct: float) -> float:
-    """Stiction-breaking yaw floor (%), tapered across the approach band.
-
-    Full ``full_pct`` at/above ``eff_err + VISION_YAW_APPROACH_BAND_PX``, then
-    linearly to 0 at the ``eff_err`` deadband edge, so a small residual near the
-    lock eases in instead of a hard min-PWM relay limit-cycling the hull on the
-    Ch4 rate channel (the close-in yaw wobble). Mirrors heading_lock._lock_floor
-    and motion_yaw._yaw_floor. Pure; only meaningful for ``epx > eff_err`` (inside
-    the deadband the loop commands 0 and never calls this).
-    """
-    band = VISION_YAW_APPROACH_BAND_PX
-    if band <= 0.0 or epx >= eff_err + band:
-        return full_pct
-    frac = (epx - eff_err) / band       # 1.0 at band edge -> 0 at deadband edge
-    return full_pct * max(0.0, frac)
-
-
 def _srot_yaw_expressible(mag_pct: float, cap_pct: float) -> float:
     """Round a NON-ZERO yaw magnitude (%) UP to something the board can produce.
 
     ⛔ WHY UP AND NOT DOWN. Between 0 and `SROT_YAW_MIN_PCT` the board produces
     no thrust at all, so a demand in that range is a correction that does not
-    happen. The old code reached it through the taper and stalled just outside
+    happen. The old code reached it through a taper and stalled just outside
     the deadband -- which is the exact failure the yaw floor was written for.
     Rounding up costs a relay; rounding down costs convergence, and a verb that
     times out having never moved is worse than one that wobbles in.
@@ -832,8 +754,7 @@ def _srot_yaw_expressible(mag_pct: float, cap_pct: float) -> float:
     branch of `attitude::stabilize`, so neither disturbs the hold. The reason to
     act here is the stall, not the hold.
 
-    Pure; srot only. The ArduSub path has no such gate and keeps the taper --
-    see `_vision_yaw_floor`.
+    Pure.
     """
     if mag_pct <= 0.0:
         return 0.0
@@ -865,7 +786,7 @@ def _live_classes(vision_state):
 #  align_loop -- centre on lat / yaw / depth                             #
 # ---------------------------------------------------------------------- #
 def align_loop(*,
-               pixhawk: Pixhawk,
+               fc,
                vision_state,
                target_class: str,
                axes: Set[str],
@@ -880,12 +801,9 @@ def align_loop(*,
                hold_s: float = 0.0,
                kp_lat: float = KP_LAT_DEFAULT,
                kp_yaw: float = KP_YAW_DEFAULT,
-               kp_depth: float = KP_DEPTH_DEFAULT,
                lost_grace_s: float = 1.0,
                hold_through_loss: bool = False,
                align_stable_frames: int = 3,
-               depth_sign: int = +1,
-               release_yaw: bool = False,
                lock_on: bool = False,
                ctrl_conf: float = 0.0,
                range_gain_floor: float = 1.0,
@@ -899,11 +817,8 @@ def align_loop(*,
                kp_forward: float = KP_FORWARD_DEFAULT,
                settle_px: float = SETTLE_PX_DEFAULT,
                verify: bool = True,
-               depth_step: float = _MAX_DEPTH_NUDGE,
                downward: bool = False,
                surge_sign: int = +1,
-               max_depth_m: float = 0.0,
-               depth_ceiling_m: float = 0.0,
                on_locked=None,
                fire_t: float = 0.0,
                fire_pass: bool = False,
@@ -920,11 +835,12 @@ def align_loop(*,
     """Hold ``target_class`` at the requested pixel offset on each active axis.
 
     ``axes`` is a subset of {'lat','yaw','depth'}; ``offsets`` carries the
-    signed pixel offset for each active axis (0 = centre). Returns an
-    Outcome -- never raises on a miss.
+    signed pixel offset for each active axis (0 = centre). ``depth`` exists
+    only on the downward camera, where it is image-Y driven as surge.
+    Returns an Outcome -- never raises on a miss.
 
     ``hold_s`` > 0 turns the verb into an ACTIVE station-keep: once centred,
-    the loop keeps running its lat/yaw/depth corrections for hold_s seconds
+    the loop keeps running its corrections for hold_s seconds
     (fighting water inertia) before exiting ALIGNED, instead of exiting on the
     first stable tick. hold_s counts against ``duration`` -- budget
     duration >= approach + hold_s or the verb TIMEOUTs mid-hold.
@@ -949,35 +865,18 @@ def align_loop(*,
     points shot when full alignment was not reached. Never fires when the target was
     never seen or only coasted.
 
-    ``depth_step`` -- per-UPDATE depth-setpoint resolution (m). The depth axis steps
-    the ArduSub ALT_HOLD setpoint by AT MOST this each 5 Hz update and FREEZES it
-    inside the deadband, so ArduSub settles between steps (no z-wobble). 0.02 slow ..
-    0.10 coarse -- the SOLE depth-rate knob (depth has no % speed cap like lat/yaw;
-    to drop the depth axis entirely, omit 'depth' from ``axes``).
-
     ``downward`` -- DOWNWARD-CAMERA FRAME REMAP (bottom-mounted cam, looks at the
     pool floor). The bin task hovers ABOVE the target, so the body axes rotate:
-      * ``lat`` (image-X) -> Ch6 lateral strafe  -- SAME as forward.
-      * ``depth`` (image-Y) -> Ch5 SURGE fore/aft -- REMAPPED. Two-sided P-on-pixel
+      * ``lat`` (image-X) -> lateral strafe  -- SAME as forward.
+      * ``depth`` (image-Y) -> SURGE fore/aft -- REMAPPED. Two-sided P-on-pixel
         modelled on the lat axis (rgain + freshness-decay + arrival reverse-kick
-        brake), NOT the depth setpoint. Ch5 is open-loop timed thrust so it MUST be
+        brake), NOT the depth setpoint. Surge is open-loop timed thrust so it MUST be
         braked or the 20 kg hull coasts past the bin. ``surge_sign`` flips its
         polarity for the physical mount (verify DISARMED with vision_thrust_check --
         a wrong sign is positive feedback that drives the hull AWAY from the bin).
-      * ``fwd_fill`` (optional) -> DEPTH DESCENT = the "approach" (get closer to the
-        bin for the drop). Driven by the SAME depth_step logic as the forward depth
-        axis: PROPORTIONAL to the fill deficit, capped at ``depth_step`` m/update,
-        deadband-frozen at the fill target. ONE-SIDED (descends only -> can't
-        surface). Bounded shallow by ``depth_ceiling_m`` (surface guard) and deep by
-        ``max_depth_m`` (floor). 0 = no vision depth; ArduSub holds ``set_depth`` (the
-        minimum-viable bin path is lat + surge + set_depth hold + drop).
-      * fire -> dropper (channels 3/4) via ``on_locked`` -- same mechanism as torpedo.
-    ``depth_ceiling_m`` (< 0) is the shallowest setpoint allowed on ANY depth motion
-    (defaults to _MIN_DEPTH_M); a bin mission sets e.g. -0.4 so alignment can't
-    surface the hull. yaw is released to ``heading_lock`` (no vision-yaw on the bin).
-    ``move_loop`` is meaningless on a downward camera (surging doesn't grow fill);
-    the DSL guards ``move(camera='downward')``.
-
+      * fire -> dropper via ``on_locked`` -- same mechanism as torpedo.
+    The board holds depth (``set_depth``) and heading throughout; yaw is not
+    driven on the downward camera.
     ``report_fn`` (if given) is called every PRESENT tick with the signed
     from-centre pixel offset ``(x_off, y_off)`` of the target -- a live-telemetry
     sink for action feedback. It stays rclpy-free (just a callable); the caller
@@ -989,10 +888,10 @@ def align_loop(*,
         largest box), so a second hole / spurious box can't steal the aim. Resets
         to largest-area acquisition after a real loss (LOST exit).
       * ``ctrl_conf`` -- control-side minimum detection score to accept a box.
-      * ``range_gain_floor`` -- scales lat/depth kp DOWN as the bbox fills the
+      * ``range_gain_floor`` -- scales lat/surge kp DOWN as the bbox fills the
         frame (close) to stop the close-in overshoot (1.0 = off).
       * ``ki_lat`` -- lateral integral gain; cancels the steady-current offset of
-        the open-loop Ch6 axis, accumulated only during the hold (0 = off).
+        the open-loop lateral axis, accumulated only during the hold (0 = off).
       * ``settle_px`` -- settle gate (0 = off). When > 0, a tick only counts toward
         the stable-frame exit if the worst error is in-band AND barely moving
         (|Δworst| <= settle_px) -- so align exits SETTLED on target (like move's
@@ -1004,7 +903,7 @@ def align_loop(*,
       align ALSO drives forward toward ``fwd_fill`` (fraction of frame, measured by
       ``fwd_mode``), ONE-SIDED -- drive while the bbox is smaller than the standoff,
       neutral at/past it. Forward joins the in-band stable/fire gate, so a mid-hold
-      fire only leaves once lat/depth AND the standoff range are all satisfied. With
+      fire only leaves once lat/yaw AND the standoff range are all satisfied. With
       ``fwd_fill`` = 0 (default) there is no forward axis and behaviour is unchanged.
     """
     bad = axes - VALID_AXES
@@ -1012,6 +911,13 @@ def align_loop(*,
         raise ValueError(f"align_loop: unknown axes {sorted(bad)}")
     if not axes:
         raise ValueError("align_loop: at least one axis required")
+    # The board takes no depth setpoint over this wire, so nothing here may
+    # pretend to move one. vision_verbs refuses both with the reason first.
+    if 'depth' in axes and not downward:
+        raise ValueError("align_loop: 'depth' is a downward-camera (surge) axis")
+    if downward and float(fwd_fill) > 0.0:
+        raise ValueError("align_loop: fwd_fill on the downward camera is a "
+                         "depth descent, which the board does not take")
 
     if not _camera_ready(vision_state):
         return Outcome(NO_CAMERA, "camera pipeline not up (no camera_info)",
@@ -1027,96 +933,13 @@ def align_loop(*,
     g_fwd   = gain                       # forward range-hold capped by the global gain
     use_fwd = float(fwd_fill) > 0.0      # optional forward standoff / downward-descent axis
 
-    # SIGN GUARD: depths are NEGATIVE metres below the surface, so max_depth_m (floor) and
-    # depth_ceiling_m (surface guard) must be < 0. A POSITIVE value is a sign error -- it
-    # silently reads as OFF (eff_ceiling below falls back to _MIN_DEPTH_M; the descent
-    # fail-safe requires max_depth_m < 0), which mis-leads the operator into thinking they
-    # set a floor. Warn loudly instead of failing silently; the values still read as OFF.
-    if float(max_depth_m) > 0.0 or float(depth_ceiling_m) > 0.0:
-        log.warning(
-            f"[VIS  ] depth bound is POSITIVE (max_depth_m={float(max_depth_m):+.2f} "
-            f"depth_ceiling={float(depth_ceiling_m):+.2f}) -- depths are NEGATIVE metres; "
-            f"treating positive as OFF. Pass NEGATIVE metres to bound the descent.")
-
-    # FAIL-SAFE: on a downward camera the fwd_fill axis DESCENDS (one-sided, deeper)
-    # toward the fill target. Without a deep floor (`max_depth_m` < 0) an unreachable
-    # fill would drive the hull into the pool floor. Require the floor to enable the
-    # descent; otherwise drop the fill axis and just hold ArduSub depth. (Forward
-    # cameras are unaffected -- there fwd_fill is a Ch5 standoff, not a descent.)
-    if downward and use_fwd and float(max_depth_m) >= 0.0:
-        log.warning("[VIS  ] downward fill->depth descent needs max_depth_m<0 "
-                    "(deep floor) -- ignoring fwd_fill, holding ArduSub depth")
-        use_fwd = False
-
-    use_depth   = 'depth' in axes
-    # DOWNWARD: the 'depth' axis drives Ch5 SURGE (image-Y), not the depth setpoint;
-    # ArduSub's ALT_HOLD owns Ch3 (mission set_depth), and the optional fwd_fill axis
-    # descends that setpoint. FORWARD: the 'depth' axis drives the depth setpoint.
-    use_surge   = use_depth and downward          # image-Y -> Ch5 fore/aft
-    use_vdepth  = use_depth and not downward      # image-Y -> depth setpoint (forward)
-    # Stream the depth setpoint whenever a vision axis owns depth (forward 'depth' axis)
-    # OR we are on the DOWNWARD camera. THE DOWNWARD BUG: previously this streamed only on
-    # a downward *descent* (use_fwd), so a downward SURGE-only align (lat + Ch5 surge, no
-    # descent -- the bin task) released Ch3 (65535) while streaming NOTHING. Nothing then
-    # asserted depth-hold and the negatively-buoyant hull sank to the floor, ignoring
-    # set_depth. Streaming the (constant, when there is no descent deficit) setpoint here
-    # holds depth via ArduSub's position controller -- the SAME proven mechanism the
-    # forward torpedo-standoff depth axis already uses. Release Ch3 exactly when we stream
-    # (so ArduSub's depth PID is the sole Ch3 consumer); otherwise hold neutral 1500.
-    # SROT: no setpoint stream exists (SrotFC has no `set_target_depth`; every
-    # MANUAL_CONTROL frame carries up=0 and the board's mode owns depth), so a
-    # downward lat/surge align streams nothing. Without this a downward align on
-    # srot raises AttributeError on the first 5 Hz tick or the first blind frame.
-    stream_depth = (use_vdepth or downward) and not _is_srot(pixhawk)
-    throttle_ch = 65535 if stream_depth else 1500
-    # depth_step is the per-UPDATE setpoint resolution (m): the depth axis moves the
-    # ArduSub ALT_HOLD setpoint by AT MOST this each 5 Hz update, so max slew =
-    # depth_step * DEPTH_HZ (0.1 m/s at the 0.02 default). It is the operator's depth-
-    # rate knob (0.02 fine/slow .. 0.10 coarse) -- a metres cap, NOT a % like lat/yaw
-    # (depth has no per-axis % gain). Slower + stepped + deadband-frozen lets ArduSub's
-    # ALT_HOLD PID actually settle between steps instead of chasing a setpoint that
-    # jitters with the bbox (the z-wobble). At the engine level max_nudge=0 would
-    # freeze depth entirely, but the verb coerces an unset (0.0) depth_step to the
-    # default -- to skip the depth axis, omit 'depth' from ``axes``.
-    max_nudge   = max(float(depth_step), 0.0)
-    # Shallowest depth the setpoint may reach (negative m). Guards the DOWNWARD path
-    # especially: ratio/alignment math must never drive the hull toward the surface.
-    # Defaults to the global _MIN_DEPTH_M when unset (depth_ceiling_m >= 0), so the
-    # forward path is byte-unchanged; a mission passes e.g. -0.4 to keep the bin run
-    # safely submerged.
-    eff_ceiling = float(depth_ceiling_m) if float(depth_ceiling_m) < 0.0 else _MIN_DEPTH_M
-
-    depth_setpoint = _read_depth(pixhawk)
-    if stream_depth and depth_setpoint != depth_setpoint:
-        return Outcome(NO_DEPTH, 'no depth reading to hold: refusing to '
-                                 'stream a depth setpoint', elapsed_s=0.0)
+    use_surge = 'depth' in axes          # downward image-Y -> surge fore/aft
 
     def _drive(lat_pct: float, yaw_pct: float, fwd_pct: float = 0.0) -> None:
-        """Write the translation/yaw RC frame, honouring an active lock.
-
-        When ``release_yaw`` is set the background heading lock owns Ch4,
-        so touch only throttle/forward/lateral and leave yaw released --
-        writing yaw=1500 here would race the lock's 20 Hz Ch4 stream
-        (the same fight ``move_loop`` avoids via ``send_rc_translation``).
-
-        ``fwd_pct`` is the optional forward range-hold command (Ch5); it is 0
-        unless the forward standoff axis is active (``fwd_fill`` > 0).
-        """
-        if _is_srot(pixhawk):
-            # release_yaw -> command 0 yaw; the board holds heading at 500 Hz.
-            _srot_drive(pixhawk, fwd_pct=fwd_pct, lat_pct=lat_pct,
-                        yaw_pct=0.0 if release_yaw else yaw_pct,
-                        prioritise=mixer_aware)
-        elif release_yaw:
-            pixhawk.send_rc_translation(
-                throttle=throttle_ch, forward=Pixhawk.percent_to_pwm(fwd_pct),
-                lateral=Pixhawk.percent_to_pwm(lat_pct))
-        else:
-            pixhawk.send_rc_override(
-                forward=Pixhawk.percent_to_pwm(fwd_pct),
-                lateral=Pixhawk.percent_to_pwm(lat_pct),
-                yaw=Pixhawk.percent_to_pwm(yaw_pct),
-                throttle=throttle_ch)
+        """One MANUAL_CONTROL frame. ``fwd_pct`` is the forward range-hold
+        (or the downward surge); 0 unless that axis is active."""
+        _srot_drive(fc, fwd_pct=fwd_pct, lat_pct=lat_pct, yaw_pct=yaw_pct,
+                    prioritise=mixer_aware)
 
     def _pass_fire() -> None:
         """fire_pass fallback: on a NATURAL exit (TIMEOUT / hold-complete) without a
@@ -1142,9 +965,6 @@ def align_loop(*,
     fired       = False  # on_locked fired once at fire_t into the hold (payload mid-hold)
     _sq_warned  = [False]  # one line per command, not one per tick
     last_log    = 0.0
-    last_depth  = 0.0
-    depth_ctrl  = 0.0    # depth axis error carried from axis-calc into the 5 Hz step
-    depth_epx   = 0.0
     last_err_px = float('inf')
     standoff_held = False
     last_fill   = 0.0    # bbox fill on the forward axis (0 unless use_fwd) -> Outcome.fill
@@ -1155,8 +975,7 @@ def align_loop(*,
     end_x_px    = math.nan  # signed from-centre px of target at last seen frame
     end_y_px    = math.nan
     lat_ema     = 0.0   # trailing EMA of the signed lateral command -> brake proxy
-    surge_ema   = 0.0   # downward: trailing EMA of the signed Ch5 surge command -> brake proxy
-    fill_deficit = 0.0  # downward fill->depth: (target_fill - fill), carried into the 5 Hz step
+    surge_ema   = 0.0   # downward: trailing EMA of the signed surge command -> brake proxy
     lat_i       = 0.0   # lateral integral accumulator (Layer 2; 0 unless ki_lat>0)
     # ⛔ THE MIXER'S OWN LIMIT, WHICH THE EXISTING ANTI-WINDUP CANNOT SEE.
     # `abs(p_lat + lat_i) < g_lat` watches the SOFTWARE gain cap. The board
@@ -1168,7 +987,7 @@ def align_loop(*,
     # computed after lateral in this loop; one tick of lag on a limit that
     # persists for many is immaterial.
     was_saturated = False
-    loop_hz     = _loop_hz(pixhawk)          # backend-dependent; see motion_rates
+    loop_hz     = LOOP_HZ
     # Nominal tick. Used to SEED the measured dt below and as its ceiling;
     # the loop no longer sleeps a fixed period (see `_tick`), so treating this
     # as the real interval would misstate both the lock gate and the integral
@@ -1216,12 +1035,8 @@ def align_loop(*,
     if downward:
         # Loudly announce the rotated frame so the operator never mistakes a
         # downward align's axis meanings for the forward ones (see docstring).
-        fill_note = (f", fill->depth descend to {fwd_fill*100:.0f}% "
-                     f"@ depth_step={max_nudge:.02f}m (ceil {eff_ceiling:.1f}m, "
-                     f"floor {max_depth_m:.1f}m)" if use_fwd else
-                     f", depth held by ArduSub (no fill axis; ceil {eff_ceiling:.1f}m)")
-        log.info(f"[VIS  ] downward frame: image-X->lat Ch6, image-Y->surge Ch5 "
-                 f"(sign {surge_sign:+d}){fill_note}")
+        log.info(f"[VIS  ] downward frame: image-X->lateral, image-Y->surge "
+                 f"(sign {surge_sign:+d}); depth held by the board")
 
     started  = time.monotonic()
     deadline = started + max(duration, 0.0)
@@ -1265,13 +1080,6 @@ def align_loop(*,
                 stable = 0
                 lat_i = 0.0   # bleed integral windup while blind
                 _drive(0.0, 0.0)
-                # Keep asserting depth-hold while blind on ANY streaming path (forward
-                # depth axis OR any downward align) -- _drive released Ch3 (65535), so
-                # without this the hull would sink during a target dropout. Gated on
-                # stream_depth (not use_depth) so a downward surge-only/lat-only align
-                # keeps holding through the loss too.
-                if stream_depth:
-                    pixhawk.set_target_depth(depth_setpoint)
                 if lost_since is None:
                     lost_since = now
                 if (not hold_through_loss) and (now - lost_since) >= lost_grace_s:
@@ -1290,7 +1098,7 @@ def align_loop(*,
                         log.debug(f"[VIS  ] align LOST {now - lost_since:.1f}s "
                                   f"(grace {lost_grace_s:.1f}s)")
                     last_log = now
-                _tick(vision_state, pixhawk)
+                _tick(vision_state)
                 continue
 
             saw_target = True
@@ -1308,7 +1116,7 @@ def align_loop(*,
             # sample keeps the existing id). No-op when coasting is off.
             if not sample.coasted and sample.track_id >= 0:
                 locked_id = sample.track_id
-            # Range-adaptive gain: soften lat/depth kp as the bbox fills the frame
+            # Range-adaptive gain: soften lat/surge kp as the bbox fills the frame
             # (close) so the 20 kg hull doesn't overshoot a small target.
             rgain = _range_gain(_fill(sample, 'area'), range_gain_floor)
             # Signed from-centre offset of the target THIS tick: the end-position
@@ -1362,7 +1170,7 @@ def align_loop(*,
                 epx  = abs(ctrl) * half_w
                 worst = max(worst, epx)
                 p_lat = ctrl * kp_lat * rgain
-                # Lateral integral (Layer 2): Ch6 is open-loop, so only the
+                # Lateral integral (Layer 2): Lateral is open-loop, so only the
                 # integral nulls a steady-current offset. Accumulate ONLY during
                 # the hold (aligned_at set), conditional on the output not being
                 # saturated (anti-windup), clamped. ki_lat=0 -> exactly P.
@@ -1383,7 +1191,7 @@ def align_loop(*,
                 # command 0 (let the hull settle, no shot-jitter when the
                 # mission fires in-band). Outside it, pure proportional capped
                 # by g_yaw -- and ONLY when the bbox is large (target close) do
-                # we floor the magnitude to VISION_YAW_MIN_PCT to break T200
+                # we floor the magnitude to SROT_YAW_MIN_PCT to break thruster
                 # stiction for the tight hole-lock. Far away (small bbox) the
                 # floor is suppressed: a hard minimum on a rate channel is a
                 # relay that limit-cycles the hull, which is the far-field
@@ -1392,16 +1200,9 @@ def align_loop(*,
                     yaw_pct = 0.0
                 else:
                     mag = min(abs(ctrl * kp_yaw), g_yaw)
-                    # Stiction floor only when close (large bbox), and TAPERED across
-                    # the approach band above the deadband so it eases to 0 at the
-                    # edge instead of a hard min-PWM relay that limit-cycles the hull
-                    # on Ch4 (the close-in yaw wobble). Mirrors the heading_lock /
-                    # motion_yaw taper -- see _vision_yaw_floor.
-                    floor_pct = (SROT_YAW_MIN_PCT if _is_srot(pixhawk)
-                                 else VISION_YAW_MIN_PCT)
+                    # Stiction floor only when close (large bbox): a non-zero
+                    # correction is lifted to the smallest yaw the board produces.
                     if _fill(sample, 'area') >= VISION_YAW_FLOOR_FILL:
-                        mag = max(mag, _vision_yaw_floor(
-                            epx, eff_err, min(floor_pct, g_yaw)))
                         # ⛔ THE SNAP BELONGS INSIDE THE FILL GATE, NOT OUTSIDE.
                         # This is the CLOSE regime, where the floor exists to
                         # stop the hole-lock stalling just outside err_px. Far
@@ -1410,13 +1211,12 @@ def align_loop(*,
                         # minimum on a rate channel is a relay that limit-cycles
                         # the hull. Lifting a far-field residual here would
                         # re-create the far-field wobble the fill gate fixed.
-                        if _is_srot(pixhawk):
-                            mag = _srot_yaw_expressible(mag, g_yaw)
+                        mag = _srot_yaw_expressible(mag, g_yaw)
                     yaw_pct = math.copysign(mag, ctrl) if mag > 0.0 else 0.0
                 in_band.append(epx <= eff_err)
 
             if use_surge:
-                # DOWNWARD: the 'depth' axis (image-Y) drives Ch5 SURGE fore/aft.
+                # DOWNWARD: the 'depth' axis (image-Y) drives SURGE fore/aft.
                 # Two-sided P modelled on the lat axis (same kp/cap/rgain), so the
                 # hull drives forward when the bin is ahead and BACK when behind --
                 # the one-sided fwd/fill law can't back up and would never centre.
@@ -1427,26 +1227,7 @@ def align_loop(*,
                 p_surge = ctrl * kp_lat * rgain
                 fwd_pct = _clamp(p_surge, -g_fwd, g_fwd) * surge_sign
                 in_band.append(epx <= eff_err)
-            elif use_vdepth:
-                ctrl = _axis_ctrl(sample.ey, offsets.get('depth', 0.0), tool_dv, half_h)
-                epx  = abs(ctrl) * half_h
-                worst = max(worst, epx)
-                # Carry the depth error into the 5 Hz setpoint step below (do NOT
-                # move the setpoint here every 20 Hz tick -- that gives ArduSub a
-                # target sliding at up to max_nudge*LOOP_HZ and it never settles).
-                depth_ctrl, depth_epx = ctrl, epx
-                in_band.append(epx <= eff_err)
-
-            if use_fwd and downward:
-                # DOWNWARD: the fill axis drives a DEPTH DESCENT (get closer to the
-                # bin for the drop), not Ch5. One-sided: descend while the bbox is
-                # smaller than fwd_fill, hold at/past it. Carried into the 5 Hz depth
-                # step (deep-floor bounded there). Never surges Ch5 here -- Ch5 is the
-                # surge axis above.
-                last_fill = _fill(sample, fwd_mode)   # reported in Outcome.fill
-                fill_deficit = float(fwd_fill) - last_fill
-                in_band.append(fill_deficit <= FWD_BAND)
-            elif use_fwd:
+            if use_fwd:
                 # FORWARD range-hold (the unified standoff shot). ONE-SIDED: drive
                 # forward while the bbox is smaller than the standoff fill, command
                 # exactly 0 once at/past it (never reverse -> no reverse-kick, no
@@ -1505,7 +1286,7 @@ def align_loop(*,
             last_err_px = worst
             # Freshness-decay: pace LATERAL authority to measurement freshness so
             # the loop doesn't blind-drive on a stale bbox between slow frames
-            # (yaw/depth excluded -- ArduSub bleeds Ch4, holds depth). At healthy
+            # (yaw excluded; the board holds depth). At healthy
             # FPS fresh==1.0 so this is a no-op. A COASTED sample decays on the
             # coast curve instead (gap decay), not freshness -- see _authority.
             fresh = _authority(sample, coast_s, det_interval, pipe_age)
@@ -1523,50 +1304,14 @@ def align_loop(*,
             # current carries a nonzero integral (lat_i) but ~0 motion, so
             # including it would make the arrival brake reverse-kick a stationary
             # hull off the spot it was holding. Exclude lat_i here.
-            lat_ema += _BRAKE_EMA_ALPHA * (p_lat * fresh - lat_ema)
+            lat_ema = _ema_step(lat_ema, p_lat * fresh, dt)
             if use_surge:
-                # Downward Ch5 surge is open-loop timed thrust (like lat/Ch6) -- track
+                # Downward surge is open-loop timed thrust (like lateral) -- track
                 # its EMA so the arrival brake bleeds the fore/aft coast, or the hull
                 # sails past the bin. fwd_pct already carries the signed, fresh-decayed
                 # surge command, so the EMA is the true momentum proxy and the brake
                 # reverse-kicks opposite it regardless of surge_sign.
-                surge_ema += _BRAKE_EMA_ALPHA * (fwd_pct - surge_ema)
-            if stream_depth and (now - last_depth) >= 1.0 / DEPTH_HZ:
-                # Step the ALT_HOLD setpoint at 5 Hz (not 20) so the depth PID reaches
-                # each step before the next: slow, stable, resolution = depth_step.
-                if use_vdepth:
-                    # FORWARD: image-Y drives the setpoint; FROZEN inside the deadband
-                    # (no z-wobble). eff_ceiling keeps it never shallower than the
-                    # surface guard; max_depth_m (when set <0) keeps it never DEEPER
-                    # than the floor -- the forward axis is two-sided (a target below
-                    # centre drives it deeper), so without this a persistent low target
-                    # could walk the setpoint into the pool floor. Symmetric with the
-                    # downward clamp below; opt-in (max_depth_m>=0 -> forward unchanged).
-                    if depth_epx > eff_err:
-                        step = _clamp(depth_ctrl * kp_depth * rgain,
-                                      -max_nudge, max_nudge) * depth_sign
-                        depth_setpoint = min(depth_setpoint - step, eff_ceiling)
-                        if max_depth_m < 0.0:
-                            depth_setpoint = max(depth_setpoint, max_depth_m)
-                else:
-                    # DOWNWARD. With a descent (use_fwd) this is the "approach" (get closer
-                    # to the bin for the drop), driven by the SAME depth_step logic as the
-                    # forward axis -- PROPORTIONAL to the fill deficit, capped at
-                    # depth_step/update, and FROZEN inside the fill deadband (FWD_BAND) so it
-                    # settles instead of chasing bbox jitter. ONE-SIDED (descends deeper only,
-                    # never ascends -> can't surface). Bounded both ways: never shallower than
-                    # eff_ceiling (surface guard), never deeper than max_depth_m (floor).
-                    # WITHOUT a descent (surge-only / lat-only bin align) fill_deficit stays
-                    # 0, so this branch does NOT step -- it re-streams the CONSTANT captured
-                    # depth_setpoint below, holding set_depth (the downward depth-hold fix).
-                    if fill_deficit > FWD_BAND:
-                        step = min(fill_deficit, 1.0) * max_nudge   # decelerates as it nears
-                        depth_setpoint = min(depth_setpoint - step, eff_ceiling)
-                        if max_depth_m < 0.0:
-                            depth_setpoint = max(depth_setpoint, max_depth_m)
-                pixhawk.set_target_depth(depth_setpoint)
-                last_depth = now
-
+                surge_ema = _ema_step(surge_ema, fwd_pct, dt)
             # Settle gate (opt-in): require the hull to also be barely MOVING, not
             # just in-band, before a tick counts toward the stable-frame exit -- so
             # align ends settled on target (like move's held lateral) instead of
@@ -1684,13 +1429,13 @@ def align_loop(*,
                     # stops square and the next mission step starts from the
                     # planned position. Gated on the EMA, so a gently-converged
                     # lock (hole-lock) exits with ~0 EMA and is NOT kicked.
-                    # Yaw/depth never brake.
+                    # Yaw never brakes.
                     if brake and 'lat' in axes:
                         _brake_axis(writers.lateral, lat_ema, brake_gain,
                                     abort_fn=abort_fn, log=log, label='VBRK')
-                    # Downward: also bleed the Ch5 SURGE coast (fore/aft) so the hull
-                    # stops square over the bin instead of sailing past. Ch5 open-loop
-                    # timed thrust coasts exactly like Ch6 -- same self-gating brake.
+                    # Downward: also bleed the SURGE coast (fore/aft) so the hull
+                    # stops square over the bin instead of sailing past. Surge is open-loop
+                    # timed thrust coasts exactly like lateral -- same self-gating brake.
                     if brake and use_surge:
                         _brake_axis(writers.forward, surge_ema, brake_gain,
                                     abort_fn=abort_fn, log=log, label='VBRK')
@@ -1716,9 +1461,7 @@ def align_loop(*,
                             return Outcome(ABORTED, 'aborted while verifying',
                                            worst, last_fill,
                                            time.monotonic() - started, end_x_px, end_y_px)
-                        if stream_depth:
-                            pixhawk.set_target_depth(depth_setpoint)
-                        _tick(vision_state, pixhawk)
+                        _tick(vision_state)
                         near = ((locked_ex, locked_ey)
                                 if locked_ex is not None else None)
                         vs = vision_state.bbox_error(
@@ -1744,7 +1487,7 @@ def align_loop(*,
                         v_worst = max(v_worst, _centring_error_px(
                             vs, axes=axes, offsets=offsets, tool_du=tdu,
                             tool_dv=tdv, half_w=half_w, half_h=half_h,
-                            depth_axis=(use_surge or use_vdepth)))
+                            depth_axis=use_surge))
                         end_x_px, end_y_px = vs.ex * half_w, vs.ey * half_h
                         if seen >= align_stable_frames:
                             break
@@ -1784,7 +1527,7 @@ def align_loop(*,
                     f"[ offset lat={x_off:+.0f} depth={y_off:+.0f}px ] "
                     f"'{target_class}' -> err {worst:.0f}/{eff_err:.0f}px")
                 last_log = now
-            _tick(vision_state, pixhawk)
+            _tick(vision_state)
     finally:
         try:
             writers.neutral()
@@ -1796,7 +1539,7 @@ def align_loop(*,
 #  move_loop -- drive forward to a bbox fill ratio                       #
 # ---------------------------------------------------------------------- #
 def move_loop(*,
-              pixhawk: Pixhawk,
+              fc,
               vision_state,
               target_class: str,
               fwd_fill: float,
@@ -1815,7 +1558,6 @@ def move_loop(*,
               kp_lat: float = KP_LAT_DEFAULT,
               lost_grace_s: float = 1.0,
               hold_through_loss: bool = False,
-              release_yaw: bool = False,
               range_gain_floor: float = 1.0,
               coast_s: float = 0.0,
               lock_s: float = 0.0,
@@ -1840,8 +1582,7 @@ def move_loop(*,
       the normal loss path (LOST -> mission fallback search).
 
     ``maintain_on`` holds a lateral pixel offset (``maintain_px``) while
-    driving; depth and yaw are never commanded (ArduSub holds depth;
-    heading lock or the autopilot holds yaw). Returns an Outcome -- never
+    driving; depth and yaw are never commanded (the board holds both). Returns an Outcome -- never
     raises on a miss.
 
     ``report_fn`` (if given) is called every PRESENT tick with the signed
@@ -1862,20 +1603,9 @@ def move_loop(*,
     g_lat = gain if gain_lat is None else gain_lat
 
     def _drive(fwd_pct: float, lat_pct: float) -> None:
-        if _is_srot(pixhawk):
-            # move never commands yaw on either backend.
-            _srot_drive(pixhawk, fwd_pct=fwd_pct, lat_pct=lat_pct, yaw_pct=0.0,
-                        prioritise=mixer_aware)
-            return
-        if release_yaw:
-            pixhawk.send_rc_translation(
-                forward=Pixhawk.percent_to_pwm(fwd_pct),
-                lateral=Pixhawk.percent_to_pwm(lat_pct))
-        else:
-            pixhawk.send_rc_override(
-                forward=Pixhawk.percent_to_pwm(fwd_pct),
-                lateral=Pixhawk.percent_to_pwm(lat_pct),
-                yaw=1500, throttle=1500)
+        # move never commands yaw: the board holds heading.
+        _srot_drive(fc, fwd_pct=fwd_pct, lat_pct=lat_pct, yaw_pct=0.0,
+                    prioritise=mixer_aware)
 
     seen_once    = False
     lost_since:   Optional[float] = None
@@ -1908,9 +1638,14 @@ def move_loop(*,
     det_interval  = 0.0
     last_seen_at  = 0.0
     pipe_age      = 0.0
+    _last_pass    = started
     try:
         while True:
             now     = time.monotonic()
+            # Seconds since the last pass, for the brake EMA. Clamped like
+            # align_loop's: a stall must not dump a huge step into it.
+            dt = min(max(now - _last_pass, 1e-3), 4.0 / LOOP_HZ)
+            _last_pass = now
             elapsed = now - started
             if abort_fn and abort_fn():
                 return Outcome(ABORTED, "aborted", last_lat_err, last_fill, elapsed,
@@ -1951,7 +1686,7 @@ def move_loop(*,
                     return Outcome(ALIGNED, "passed through", last_lat_err,
                                    last_fill, elapsed, end_x_px, end_y_px)
                 _drive(gain, 0.0)   # no detection -> no lateral, just drive on
-                _tick(vision_state, pixhawk)
+                _tick(vision_state)
                 continue
 
             if not present:
@@ -1975,7 +1710,7 @@ def move_loop(*,
                         log.debug(f"[VIS  ] move LOST {now - lost_since:.1f}s "
                                   f"(grace {lost_grace_s:.1f}s)")
                     last_log = now
-                _tick(vision_state, pixhawk)
+                _tick(vision_state)
                 continue
 
             seen_once    = True
@@ -2014,7 +1749,7 @@ def move_loop(*,
                 last_lat_err = abs(ctrl) * half_w
                 rgain = _range_gain(_fill(sample, mode), range_gain_floor)
                 lat_pct = _clamp(ctrl * kp_lat * rgain, -g_lat, g_lat) * fresh
-            lat_ema += _BRAKE_EMA_ALPHA * (lat_pct - lat_ema)
+            lat_ema = _ema_step(lat_ema, lat_pct, dt)
 
             if passthrough:
                 # Drive forward at the speed cap until the target leaves frame.
@@ -2025,7 +1760,7 @@ def move_loop(*,
                     log.info(f"[ move PASS-THROUGH fill={fill * 100:.0f}% "
                              f"lat={x_off:+.0f}px ] ['{target_class}'] -> clear gate")
                     last_log = now
-                _tick(vision_state, pixhawk)
+                _tick(vision_state)
                 continue
 
             if fill >= fwd_fill:
@@ -2033,7 +1768,7 @@ def move_loop(*,
                     reached_at = now
                 # Station-keep: zero forward, keep correcting lateral if asked.
                 _drive(0.0, lat_pct)
-                fwd_ema += _BRAKE_EMA_ALPHA * (0.0 - fwd_ema)   # forward decays while holding
+                fwd_ema = _ema_step(fwd_ema, 0.0, dt)   # forward decays while holding
                 if hold_s <= 0.0 or (now - reached_at) >= hold_s:
                     # Arrival: bleed the forward (and maintain-strafe) inertia so the
                     # hull halts in front of the target instead of creeping into it.
@@ -2053,7 +1788,7 @@ def move_loop(*,
                 # approach past the fill target (yaw/depth untouched).
                 fwd_pct = _clamp((fwd_fill - fill) * kp_forward, 0.0, gain) * fresh
                 _drive(fwd_pct, lat_pct)
-                fwd_ema += _BRAKE_EMA_ALPHA * (fwd_pct - fwd_ema)
+                fwd_ema = _ema_step(fwd_ema, fwd_pct, dt)
 
             if (now - last_log) >= LOG_THROTTLE_S:
                 hold_tag = ("" if reached_at is None
@@ -2062,7 +1797,7 @@ def move_loop(*,
                     f"[ move fill={fill * 100:.0f}% -> {fwd_fill * 100:.0f}% "
                     f"lat={x_off:+.0f}px ] ['{target_class}']{hold_tag}")
                 last_log = now
-            _tick(vision_state, pixhawk)
+            _tick(vision_state)
     finally:
         try:
             writers.neutral()

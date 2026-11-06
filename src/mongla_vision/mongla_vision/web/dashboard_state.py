@@ -29,7 +29,7 @@ def param_value_for(name: str, value: Any) -> Tuple[str, Any]:
 
     ``ros_type`` is one of 'double' | 'integer' | 'bool' | 'string'. The node
     maps it to an rcl_interfaces ParameterValue. Coercion is explicit so a JSON
-    number/str lands on the right ArduSub-side type.
+    number/str lands on the right ROS parameter type.
 
     Raises ``ValueError`` on a value that cannot be coerced to the target type
     (e.g. ``conf=null`` or ``conf={...}``) so the caller returns a clean

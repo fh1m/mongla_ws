@@ -5,8 +5,8 @@ The point of this file is the first test. `drum_red_pinger` is worth 50 against
 the SAUVC card and the most expensive thing to get wrong. It is identified
 ACOUSTICALLY -- "Drum Pinger: RJE International Pinger Model No. ULB-362B/45 kHz"
 -- and the rulebook describes no visual marking whatsoever. The class is
-separable in our training data only because `sauvc_drum_red_pinger/model.sdf`
-paints a yellow emissive band on the simulator model. No hydrophone is fitted.
+separable in simulator-rendered training data only because the retired
+simulator painted a yellow emissive band on that drum. No hydrophone is fitted.
 
 So a mission that steers on it does not score 50; it drops into a random 10-point
 drum while the log says it found the pinger. That is a plausible number standing
@@ -60,7 +60,7 @@ def test_no_sauvc_mission_steers_on_the_acoustic_pinger_drum():
     assert not offenders, (
         f'{sorted(offenders)} steer on drum_red_pinger. The pinger is ACOUSTIC '
         '(45 kHz) and no hydrophone is fitted; the class is separable only '
-        'because the simulator paints a yellow band on that drum. Steering on it '
+        'because the retired simulator painted a yellow band on that drum. Steering on it '
         'drops into a 10-point drum while reporting 50.')
 
 
@@ -70,8 +70,8 @@ def test_the_geometry_table_still_records_why():
     text = path.read_text()
     assert 'ULB-362B' in text, \
         'the acoustic-pinger finding was deleted from the geometry table'
-    assert 'pinger_band' in text, \
-        'the simulator-artifact explanation was deleted from the geometry table'
+    assert 'NO visual marking' in text, \
+        'the no-visual-marking explanation was deleted from the geometry table'
     # And the entry itself must still exist and match plain red, since the two
     # drums are geometrically identical.
     data = yaml.safe_load(text)['sauvc']
@@ -104,30 +104,6 @@ def test_the_hover_depth_cannot_ground_the_hull():
     mouth_depth = 1.2 - 0.30
     assert -CFG.SAUVC_DRUM_HOVER_DEPTH_M < mouth_depth, \
         'hover depth is below the drum mouth at the shallow end of the pool'
-
-
-def test_the_descent_stays_off_while_the_downward_fov_is_unmeasured():
-    """A fill-driven descent converts an unmeasured FOV into metres of dive.
-
-    Turning it on is fine once the downward camera's in-water FOV is measured --
-    but then this test must be updated deliberately, which is the point.
-    """
-    assert CFG.SAUVC_DRUM_DESCEND_FILL == 0, (
-        'SAUVC_DRUM_DESCEND_FILL was enabled; measure the DOWNWARD in-water FOV '
-        'and record it in measured-bars.md before trusting a fill-to-depth map')
-
-
-def test_the_downward_align_is_bounded_by_the_sauvc_floor_guard():
-    node = MA.tree(_NAME)
-    consts = MA.module_consts(node)
-    bounds = {}
-    for call in MA.calls(node, 'set_vision_param'):
-        if len(call.args) == 2 and isinstance(call.args[0], ast.Constant):
-            bounds.setdefault(call.args[0].value, []).append(call.args[1])
-    assert 'max_depth_m' in bounds, 'the descent floor is never set'
-    values = {MA.resolve(v, consts) for v in bounds['max_depth_m']}
-    assert CFG.SAUVC_MAX_DEPTH_M in values, \
-        'the floor is not set from SAUVC_MAX_DEPTH_M'
 
 
 # ── 4. the shape ──────────────────────────────────────────────────────────────

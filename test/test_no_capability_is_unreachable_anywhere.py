@@ -32,9 +32,9 @@ register. Nothing is listed twice, and `test_the_vision_guard_still_exists` fail
 if that file is moved or renamed so the split cannot silently become a hole.
 
 ⚠ WHY MATCHING BY STEM IS NOT ENOUGH, once more than one package is in scope.
-Four basenames are ambiguous across packages -- `factory.py` appears FOUR times
-(`mongla_control/fc`, `mongla_sensors`, `mongla_vision`, `mongla_vision/detection`),
-and `base.py`, `health.py`, `draw.py` twice each. The vision guard matches on stem,
+Three basenames are ambiguous across packages -- `factory.py`, `health.py` and
+`draw.py` appear twice each (`health.py` in `mongla_manager` and
+`mongla_vision/anchor`). The vision guard matches on stem,
 so `mongla_vision/anchor/health.py` is currently satisfied by ANY import of a
 module called `health` -- including `mongla_manager`'s unrelated one, which is
 imported twice. It happens to be genuinely wired today, so the assertion is right
@@ -55,7 +55,7 @@ _SRC = _ROOT / 'src'
 
 # This file's scope. mongla_vision is deliberately excluded -- see the docstring.
 _OWNED = ('mongla_control', 'mongla_localization', 'mongla_manager',
-          'mongla_planner', 'mongla_sensors')
+          'mongla_planner')
 _VISION_GUARD = _SRC / 'mongla_vision' / 'test' / \
     'test_no_capability_is_built_and_unreachable.py'
 
@@ -284,16 +284,16 @@ def test_every_capability_module_is_in_the_register():
 def test_the_matcher_is_package_aware_not_stem_aware():
     """⛔ THE REGRESSION GUARD FOR THIS FILE'S OWN MATCHER.
 
-    `factory.py` exists four times in this tree and `base.py` twice. A stem
-    matcher reports every one of them wired as soon as ANY `factory` is imported,
+    `health.py` exists in `mongla_manager` and in `mongla_vision/anchor`. A stem
+    matcher reports both wired as soon as ANY `health` is imported,
     which is how a guard starts passing for the wrong reason. Assert that two
     same-named modules in different packages resolve to different importer sets.
     """
-    a = 'mongla_control/mongla_control/fc/base.py'
-    b = 'mongla_sensors/mongla_sensors/sources/base.py'
+    a = 'mongla_manager/mongla_manager/health.py'
+    b = 'mongla_vision/mongla_vision/anchor/health.py'
     assert (_SRC / a).is_file() and (_SRC / b).is_file(), 'fixtures moved'
     ha, hb = set(_imported_by(a)), set(_imported_by(b))
-    assert ha and hb, f'both should be wired: fc/base={ha}, sources/base={hb}'
+    assert ha and hb, f'both should be wired: manager/health={ha}, anchor/health={hb}'
     assert ha != hb, (
         'the matcher cannot tell two same-named modules apart, so every '
         'ambiguous basename in the tree would report as wired'

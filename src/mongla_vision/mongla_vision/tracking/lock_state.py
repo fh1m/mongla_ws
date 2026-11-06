@@ -149,8 +149,8 @@ def authority_for(age_s: float,
     """Linear ramp from 1.0 to 0.0 across [full_s, zero_s].
 
     Linear rather than a cliff because a cliff makes the hull lurch at the
-    moment the lock ages out -- the same relay behaviour that made
-    `heading_lock` limit-cycle until its floor was tapered.
+    moment the lock ages out -- the same relay behaviour that makes a hard
+    floor on a rate channel limit-cycle the hull (motion_vision's fill gate).
     """
     if age_s != age_s:                       # NaN -- never seen
         return 0.0

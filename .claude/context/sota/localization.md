@@ -70,7 +70,7 @@ validity, and the consumer **cannot see the no-aiding condition at all**.
 
 ### 1.5 What is not present
 
-**DVL** — drivers exist (`mongla_sensors/sources/nucleus_dvl.py`), the DSL has `dvl_connect()`,
+**DVL** — none fitted, no driver on `main` (the old one is at the tag `last-with-pixhawk-and-sim`),
 and the estimator has **zero DVL subscriptions**; every "flow DVL" in a docstring is the optical
 substitute. **USBL / acoustic positioning** — absent entirely. **Hydrophone** — absent, and the
 SAUVC pinger drum (50 points) is separable only acoustically. **Magnetometer** — deliberately not

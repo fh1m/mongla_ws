@@ -94,7 +94,7 @@ def test_valid_move_types_is_zero_to_nine():
 
 def test_cmd_ids():
     assert sp.CMD_SROT_MOVE == 31000
-    assert sp.CMD_USER_1 == 31010     # style_yaw -> yaw spin
+    assert sp.CMD_USER_1 == 31010     # yaw spin (no verb sends it)
 
 
 def test_mv_state_names():
@@ -111,21 +111,14 @@ def test_sanitize_speed_clamps_to_cruise_max():
     assert sp.sanitize_speed(-0.2) == 0.0                    # negative -> 0
 
 
-def test_alt_hold_is_accepted_as_an_alias_for_depth_hold():
-    """Seven shipped missions call set_mode('ALT_HOLD') literally. The firmware's
-    own header documents the equivalence (`DEPTH_HOLD = 2, // ArduSub ALT_HOLD`),
-    so accepting the alias is correct, not a fudge."""
-    assert sp.mode_int('ALT_HOLD') == sp.MODE_DEPTH_HOLD
-    assert sp.mode_int('alt_hold') == sp.MODE_DEPTH_HOLD
-    # But it must still report its own name back, not the alias.
-    assert sp.mode_name(sp.MODE_DEPTH_HOLD) == 'DEPTH_HOLD'
-
-
-def test_position_modes_are_not_aliased():
-    """POSHOLD/GUIDED must keep failing loudly: the board has NO position estimate,
-    so silently accepting them would promise station-keeping it cannot deliver."""
-    assert sp.mode_int('POSHOLD') is None
-    assert sp.mode_int('GUIDED') is None
+def test_mode_names_the_board_lacks_are_refused():
+    """Only the board's own mode names are accepted. POSHOLD/GUIDED would promise
+    station-keeping the board cannot deliver (it has no position estimate), and
+    ALT_HOLD is another autopilot's name: the board's depth hold is DEPTH_HOLD. Each
+    returns None, so `set_mode` fails loudly instead of guessing."""
+    for name in ('POSHOLD', 'GUIDED', 'ALT_HOLD'):
+        assert sp.mode_int(name) is None, name
+    assert sp.mode_int('DEPTH_HOLD') == sp.MODE_DEPTH_HOLD
 
 
 def test_companion_is_an_onboard_computer_not_a_generic_gcs():
@@ -135,7 +128,7 @@ def test_companion_is_an_onboard_computer_not_a_generic_gcs():
     filler heartbeat as 255/190 -- byte-identical to what we used to send -- so
     the firmware cannot tell the companion from the ground station, and a
     source-specific GCS failsafe is impossible to write. The failure that buys:
-    a DEAD JETSON with Bondor still connected holds the failsafe open, and the
+    a DEAD COMPANION with Bondor still connected holds the failsafe open, and the
     vehicle station-keeps at depth when it should be surfacing.
 
     Reverting this to 190 would silently re-close that door, so pin it.

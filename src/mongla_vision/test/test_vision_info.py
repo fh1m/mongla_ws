@@ -45,7 +45,7 @@ def test_the_model_name_is_published_and_is_the_STEM():
     assert len(sent) == 1
     assert sent[0].database_location == 'gate_sharks', (
         'the model identity here must be the stem this stack uses everywhere '
-        'else -- set_model, ClassRef and the .engine sidecar all key on it')
+        'else -- set_model, ClassRef and the .yaml sidecar all key on it')
 
 
 def test_every_switch_bumps_the_version():

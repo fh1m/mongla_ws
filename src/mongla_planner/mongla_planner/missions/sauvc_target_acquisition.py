@@ -18,10 +18,10 @@ test_sauvc_target_acquisition.py fails if any mission ever steers on the pinger.
 and must be completed before attempting any other task." This chunk assumes the
 gate is behind us -- run `sauvc_navigation` first, or a combinator that does.
 
-Downward-camera axis remap (full table: .claude/context/perception/downward-camera.md):
-    image-X   -> Ch6 LATERAL strafe   -- align `lat`
-    image-Y   -> Ch5 SURGE fore/aft   -- align `fwd`
-    bbox fill -> DEPTH descent        -- align `depth` (OFF here, see config)
+Downward-camera axes (full table: .claude/context/perception/downward-camera.md):
+    image-X   -> LATERAL strafe   -- align `lat`
+    image-Y   -> SURGE fore/aft   -- align `fwd`
+The board holds SAUVC_DRUM_HOVER_DEPTH_M throughout; no vision axis moves depth.
 
 ★ Before an armed run, VERIFY the surge sign DISARMED:
     ros2 run mongla_vision vision_thrust_check --camera downward
@@ -43,11 +43,8 @@ from mongla_planner.missions.competition_config import (
     SAUVC_DRUM_ALIGN_S,
     SAUVC_DRUM_CENTRE_ERR_PX,
     SAUVC_DRUM_CLASS,
-    SAUVC_DRUM_DEPTH_CEILING_M,
-    SAUVC_DRUM_DESCEND_FILL,
     SAUVC_DRUM_HOVER_DEPTH_M,
     SAUVC_DRUM_SETTLE_S,
-    SAUVC_MAX_DEPTH_M,
     SEARCH_CREEP_S,
     SEARCH_FORWARD_GAIN,
 )
@@ -72,15 +69,8 @@ def acquire(mongla, log=None):
     try:
         mongla.set_model(_MODEL, node=_DWN)
         mongla.set_classes(SAUVC_DRUM_CLASS, node=_DWN)
-        # Depth bounds are set once per mission, not per align call. The floor is
-        # the SAUVC shallow-end guard: 1.2 m of water at the pool ends, and a
-        # bottom touch is -5 points per occurrence.
-        mongla.set_vision_param('max_depth_m', SAUVC_MAX_DEPTH_M)
-        mongla.set_vision_param('depth_ceiling', SAUVC_DRUM_DEPTH_CEILING_M)
-
         aligned = mongla.vision.align(
             SAUVC_DRUM_CLASS, camera='downward', lat=0, fwd=0,
-            depth=(SAUVC_DRUM_DESCEND_FILL or None), fwd_mode='height',
             err=SAUVC_DRUM_CENTRE_ERR_PX, gain=SAUVC_ALIGN_GAIN,
             duration=SAUVC_DRUM_ALIGN_S, fallback=creep_forward)
 
@@ -95,11 +85,6 @@ def acquire(mongla, log=None):
             log(f'[SAUVC] never centred over {SAUVC_DRUM_CLASS} -- ball HELD. '
                 'Check the downward detector resumed and vision.surge_sign.')
     finally:
-        for _p in ('max_depth_m', 'depth_ceiling'):
-            try:
-                mongla.set_vision_param(_p, 0.0)
-            except Exception:   # noqa: BLE001 -- reset is best-effort
-                pass
         mongla.use_camera('forward')
 
 

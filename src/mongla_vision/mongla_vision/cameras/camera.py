@@ -16,7 +16,7 @@ read() -> (frame: np.ndarray BGR | None, meta: FrameMeta)
 is_healthy() -> bool
     True when the source is currently producing usable frames. Used for
     startup banners and the diag log line, never for runtime fallback —
-    one source per launch is the design (mirrors mongla_sensors).
+    one source per launch is the design.
 
 info() -> dict
     Snapshot of the source's view of the world: width, height, fps,
@@ -61,7 +61,7 @@ class FrameMeta:
 
 class Camera:
     name:        str = 'base'
-    source_kind: str = 'abstract'      # 'webcam' / 'ros_topic' / 'jetson' / ...
+    source_kind: str = 'abstract'      # 'webcam' / 'v4l2' / 'ros_topic' / 'video_file'
 
     def read(self) -> Tuple[Optional[np.ndarray], FrameMeta]:
         raise NotImplementedError

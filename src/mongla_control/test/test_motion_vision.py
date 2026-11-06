@@ -3,8 +3,9 @@
 `motion_vision.align_loop` / `move_loop` are the most competition-relevant
 control code, so the pixel-error convergence, the `gain`-as-max-speed clamp,
 the fill-ratio exit per `mode`, the `maintain` lateral hold, and the
-loss -> grace -> LOST path are pinned here with lightweight fakes. No ROS /
-MAVLink needed -- only the pure `Pixhawk.percent_to_pwm` static is used.
+loss -> grace -> LOST path are pinned here with lightweight fakes. No ROS,
+no board: `_FakeBoard` records each MANUAL_CONTROL frame as percent demand,
+0 = neutral, sign = direction.
 """
 
 import time
@@ -70,33 +71,29 @@ class _FakeVision:
         return self._samples
 
 
-class _FakePixhawk:
+class _FakeBoard:
+    """Records every `manual()` frame as percent demand per axis (0 = neutral).
+
+    `manual()` takes unit demand in [-1, 1]; the loops think in percent, so
+    the record is scaled back to percent to keep the assertions in the loop's
+    own units.
+    """
+
     def __init__(self):
-        self.rc = []          # recorded send_rc_override kwargs
-        self.translations = []
-        self.depths = []
+        self.rc = []          # one dict per frame: forward/lateral/yaw/throttle %
 
     def get_attitude(self):
         return {'depth': -0.5}
 
-    def send_rc_override(self, **kw):
-        self.rc.append(kw)
-
-    def send_rc_translation(self, **kw):
-        self.translations.append(kw)
-
-    def set_target_depth(self, d):
-        self.depths.append(d)
-
-    @staticmethod
-    def percent_to_pwm(pct):
-        return max(1100, min(1900, int(1500 + (pct / 100.0) * 400)))
+    def manual(self, fwd=0.0, lat=0.0, up=0.0, yaw=0.0):
+        self.rc.append({'forward': fwd * 100.0, 'lateral': lat * 100.0,
+                        'yaw': yaw * 100.0, 'throttle': up * 100.0})
 
 
 class _FakeWriters:
     """Stand-in for the Writers bundle.
 
-    The loops drive translation via `pixhawk` directly; only the arrival
+    The loops drive translation via `fc.manual` directly; only the arrival
     brake (`_brake_axis`) writes through `writers.forward`/`.lateral`, so
     these lists capture exactly the brake kicks (empty when braking is
     gated out / disabled).
@@ -137,10 +134,10 @@ class _CapLog:
 
 
 def _align(vision, pix=None, **kw):
-    pix = pix or _FakePixhawk()
+    pix = pix or _FakeBoard()
     writers = _FakeWriters()
     defaults = dict(
-        pixhawk=pix, vision_state=vision, target_class='gate',
+        fc=pix, vision_state=vision, target_class='gate',
         axes={'yaw', 'lat'}, offsets={}, err_px=40.0, duration=0.4, gain=30.0,
         align_stable_frames=3, lost_grace_s=0.1,
         writers=writers, log=_Log(), abort_fn=None)
@@ -149,10 +146,10 @@ def _align(vision, pix=None, **kw):
 
 
 def _move(vision, pix=None, **kw):
-    pix = pix or _FakePixhawk()
+    pix = pix or _FakeBoard()
     writers = _FakeWriters()
     defaults = dict(
-        pixhawk=pix, vision_state=vision, target_class='gate',
+        fc=pix, vision_state=vision, target_class='gate',
         fwd_fill=0.8, mode='area', duration=0.4, gain=30.0,
         lost_grace_s=0.1, writers=writers, log=_Log(), abort_fn=None)
     defaults.update(kw)
@@ -245,28 +242,12 @@ def test_align_err_above_floor_is_honored():
     assert '/8px' in out.reason, f'expected the honored 8px deadband, got {out.reason!r}'
 
 
-def test_align_release_yaw_writes_translation_not_ch4():
-    # When the heading lock owns Ch4, a lat-only align must drive lateral via
-    # send_rc_translation and never write Ch4 through send_rc_override.
-    pix = _FakePixhawk()
-    out, _, _ = _align(_FakeVision(_sample(ex=1.0)), pix=pix,
-                       axes={'lat'}, kp_lat=60.0, gain=30.0,
-                       release_yaw=True, duration=0.25)
-    assert out.code == TIMEOUT
-    assert pix.translations, 'expected send_rc_translation writes'
-    assert not pix.rc, 'must not write Ch4 via send_rc_override under release_yaw'
-    cap = _FakePixhawk.percent_to_pwm(30.0)
-    lateral = [t['lateral'] for t in pix.translations
-               if t.get('lateral', 1500) != 1500]
-    assert lateral and max(lateral) <= cap
-
-
 def test_align_warns_when_boxes_present_but_none_match():
     # The detector IS publishing boxes but none are our class -> the classic
     # "HUD shows a box, AUV won't move" trap. A throttled warning must fire.
     log = _CapLog()
     vis = _FakeVision(None, classes=['flare', 'rescue'])
-    align_loop(pixhawk=_FakePixhawk(), vision_state=vis, target_class='gate',
+    align_loop(fc=_FakeBoard(), vision_state=vis, target_class='gate',
                axes={'lat'}, offsets={}, err_px=40.0, duration=0.3, gain=30.0,
                lost_grace_s=2.0, writers=_FakeWriters(), log=log, abort_fn=None)
     # Emitted at debug so it doesn't pollute the operator view, but the
@@ -303,7 +284,7 @@ def test_align_hold_keeps_correcting_then_exits_aligned():
     assert out.code == ALIGNED
     assert 'held' in out.reason
     assert out.elapsed_s >= hold_s      # held the window, not exit-on-stable
-    lat_cmds = [c['lateral'] for c in pix.rc if c.get('lateral', 1500) != 1500]
+    lat_cmds = [c['lateral'] for c in pix.rc if c.get('lateral', 0) != 0]
     assert lat_cmds, 'expected active lateral corrections DURING the hold'
     # Materially longer than the hold_s=0 exit-on-stable path on the same target.
     base, _, _ = _align(_FakeVision(_sample(ex=0.1)), hold_s=0.0, duration=2.0)
@@ -318,7 +299,7 @@ def test_align_fires_on_locked_once_mid_hold():
     assert out.code == ALIGNED
     assert len(calls) == 1               # fired exactly once, not every tick
     # The loop kept issuing lateral corrections (fire didn't end the hold).
-    lat_cmds = [c['lateral'] for c in pix.rc if c.get('lateral', 1500) != 1500]
+    lat_cmds = [c['lateral'] for c in pix.rc if c.get('lateral', 0) != 0]
     assert lat_cmds, 'expected corrections to continue after the fire'
 
 
@@ -406,8 +387,8 @@ def test_align_gain_caps_speed():
     out, pix, _ = _align(_FakeVision(_sample(ex=1.0)),
                          axes={'lat'}, kp_lat=60.0, gain=30.0, duration=0.25)
     assert out.code == TIMEOUT          # never centres -> times out
-    cap = _FakePixhawk.percent_to_pwm(30.0)
-    lateral = [c['lateral'] for c in pix.rc if c.get('lateral', 1500) != 1500]
+    cap = (30.0)
+    lateral = [c['lateral'] for c in pix.rc if c.get('lateral', 0) != 0]
     assert lateral, 'expected lateral thrust commands'
     assert max(lateral) <= cap
     assert max(lateral) == cap          # full error saturates exactly at gain
@@ -415,69 +396,43 @@ def test_align_gain_caps_speed():
 
 def test_align_yaw_same_polarity_as_lateral():
     # Sign regression pin: yaw must use the SAME polarity as the working lateral
-    # axis on the same `ex` (no negation). ex>0 -> Ch4>1500, matching lateral's
-    # ex>0 -> Ch6>1500. This guards against re-introducing the old `-ctrl`
+    # axis on the same `ex` (no negation). ex>0 -> Ch4>0, matching lateral's
+    # ex>0 -> Ch6>0. This guards against re-introducing the old `-ctrl`
     # negation. (Physical yaw DIRECTION is pool-verified, not asserted here --
     # this test only pins the numeric polarity / lateral-parity.)
-    pix = _FakePixhawk()
+    pix = _FakeBoard()
     out, _, _ = _align(_FakeVision(_sample(ex=1.0)), pix=pix,
                        axes={'yaw'}, kp_yaw=60.0, gain=30.0, duration=0.25)
     assert out.code == TIMEOUT          # full-right never centres -> times out
-    cap = _FakePixhawk.percent_to_pwm(30.0)   # 1620
-    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 1500) != 1500]
+    cap = (30.0)   # 1620
+    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 0) != 0]
     assert yaw, 'expected yaw thrust commands on Ch4'
-    assert min(yaw) > 1500, 'ex>0 must give Ch4>1500 (same polarity as lateral)'
+    assert min(yaw) > 0, 'ex>0 must give Ch4>0 (same polarity as lateral)'
     assert max(yaw) == cap, 'full error saturates exactly at gain'
 
 
 def test_align_yaw_polarity_mirrors_for_negative_ex():
-    # Mirror pin: ex<0 -> Ch4<1500 (same sign relationship as lateral).
-    pix = _FakePixhawk()
+    # Mirror pin: ex<0 -> Ch4<0 (same sign relationship as lateral).
+    pix = _FakeBoard()
     _align(_FakeVision(_sample(ex=-1.0)), pix=pix,
            axes={'yaw'}, kp_yaw=60.0, gain=30.0, duration=0.25)
-    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 1500) != 1500]
+    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 0) != 0]
     assert yaw, 'expected yaw thrust commands on Ch4'
-    assert max(yaw) < 1500, 'ex<0 must give Ch4<1500 (mirrors lateral polarity)'
+    assert max(yaw) < 0, 'ex<0 must give Ch4<0 (mirrors lateral polarity)'
 
 
 def test_align_yaw_neutral_when_in_band():
     # No shot-jitter: when the target is inside err_px the yaw channel must
-    # command exactly 1500 (still) so the mission can fire on a steady hull.
-    pix = _FakePixhawk()
+    # command exactly 0 (still) so the mission can fire on a steady hull.
+    pix = _FakeBoard()
     # ex=0.05 on a 640px frame -> epx = 0.05*320 = 16px, inside err_px=40.
     out, _, _ = _align(_FakeVision(_sample(ex=0.05)), pix=pix,
                        axes={'yaw'}, kp_yaw=60.0, gain=30.0, err_px=40.0)
     assert out.code == ALIGNED                 # in-band -> stable -> aligned
-    yaws = [c.get('yaw', 1500) for c in pix.rc]
+    yaws = [c.get('yaw', 0) for c in pix.rc]
     assert yaws, 'expected yaw RC frames'
-    assert all(y == 1500 for y in yaws), (
-        'in-band yaw must be neutral 1500 (no thrust when aligned)')
-
-
-def test_align_yaw_min_floor_spins_thruster_when_close():
-    # The hole-lock fix, CLOSE regime: a large bbox (fill >= VISION_YAW_FLOOR_FILL)
-    # means the target is near, so a small OUT-of-band yaw error whose pure-
-    # proportional output is below the stiction floor is bumped UP toward the floor
-    # so micro-corrections don't die in the dead-zone. With the TAPER the lift is
-    # proportional to how far past the deadband we are -- a real bump (> pure P) but
-    # below the full hard floor (no relay slam). This is the anti-jitter fix.
-    from mongla_control.motion_vision import (
-        _vision_yaw_floor, VISION_YAW_MIN_PCT)
-    pix = _FakePixhawk()
-    # Big bbox -> close. err_px=10, ex=0.0625 -> epx=20px (out of band). Tiny kp_yaw
-    # so pure proportional (0.0625*10 = 0.625%) sits below the tapered floor at 20px.
-    ex, kp = 0.0625, 10.0
-    _align(_FakeVision(_sample(ex=ex, w_frac=0.6, h_frac=0.6)), pix=pix,
-           axes={'yaw'}, kp_yaw=kp, gain=30.0, err_px=10.0, duration=0.25)
-    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 1500) != 1500]
-    assert yaw, 'expected yaw thrust on a small out-of-band error'
-    floor_pct = _vision_yaw_floor(ex * 320.0, 10.0, min(VISION_YAW_MIN_PCT, 30.0))
-    prop_pwm  = _FakePixhawk.percent_to_pwm(ex * kp)               # pure proportional
-    floor_pwm = _FakePixhawk.percent_to_pwm(floor_pct)            # tapered floor
-    hard_pwm  = _FakePixhawk.percent_to_pwm(VISION_YAW_MIN_PCT)   # full hard floor (1520)
-    assert min(yaw) >= floor_pwm, 'tapered floor must lift the tiny proportional'
-    assert min(yaw) > prop_pwm, 'floor must actually add authority over pure P'
-    assert max(yaw) < hard_pwm, 'taper must NOT slam the full hard floor (no relay)'
+    assert all(y == 0 for y in yaws), (
+        'in-band yaw must be neutral 0 (no thrust when aligned)')
 
 
 def test_align_yaw_no_floor_when_far_pure_proportional():
@@ -485,16 +440,16 @@ def test_align_yaw_no_floor_when_far_pure_proportional():
     # the target is distant. The floor MUST be suppressed so yaw stays pure
     # proportional and decays into the deadband -- a hard minimum on a rate channel
     # is a relay that limit-cycles (the left/right far-field wobble).
-    from mongla_control.motion_vision import VISION_YAW_MIN_PCT
-    pix = _FakePixhawk()
-    # Small bbox -> far. Same small error as the close test, but proportional
-    # 3.6% (pwm 1514) must be left as-is, BELOW the 5% floor pwm (1520).
-    _align(_FakeVision(_sample(ex=0.06, w_frac=0.05, h_frac=0.05)), pix=pix,
+    from mongla_control.motion_vision import SROT_YAW_MIN_PCT
+    pix = _FakeBoard()
+    # Small bbox -> far. ex=0.04 is 12.8 px, out of the 10 px band; pure
+    # proportional is 0.04 * 60 = 2.4 %, BELOW the board's 2.856 % yaw floor.
+    # Far away it must be left as-is, not snapped up to the floor.
+    _align(_FakeVision(_sample(ex=0.04, w_frac=0.05, h_frac=0.05)), pix=pix,
            axes={'yaw'}, kp_yaw=60.0, gain=30.0, err_px=10.0, duration=0.25)
-    floor_pwm = _FakePixhawk.percent_to_pwm(VISION_YAW_MIN_PCT)   # 1520
-    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 1500) != 1500]
+    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 0) != 0]
     assert yaw, 'expected proportional yaw thrust on a small far-field error'
-    assert max(yaw) < floor_pwm, (
+    assert max(yaw) < SROT_YAW_MIN_PCT, (
         'far-field yaw must stay pure-proportional below the floor (no relay)')
 
 
@@ -502,11 +457,11 @@ def test_align_yaw_floor_never_exceeds_gain_cap():
     # If the operator picks a gain below the floor (very slow fine-lock), the
     # gain cap must still win -- the floor must never push thrust above gain.
     # Close bbox so the floor path actually runs.
-    pix = _FakePixhawk()
+    pix = _FakeBoard()
     _align(_FakeVision(_sample(ex=1.0, w_frac=0.6, h_frac=0.6)), pix=pix,
            axes={'yaw'}, kp_yaw=60.0, gain=3.0, err_px=10.0, duration=0.25)
-    cap = _FakePixhawk.percent_to_pwm(3.0)     # gain=3% -> 1512
-    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 1500) != 1500]
+    cap = (3.0)     # gain=3% -> 1512
+    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 0) != 0]
     assert yaw, 'expected yaw thrust commands'
     assert max(yaw) == cap, 'gain cap must bound the floor (floor <= gain)'
 
@@ -518,14 +473,14 @@ def test_align_per_axis_gain_caps_yaw_independently_of_lat():
     # gain=40 globally, yaw_gain=10 just for yaw: full-right target saturates
     # both axes, so yaw clamps at 10% (slow micro-align) while lateral still
     # drives at the global 40% cap.
-    pix = _FakePixhawk()
+    pix = _FakeBoard()
     _align(_FakeVision(_sample(ex=1.0)), pix=pix,
            axes={'yaw', 'lat'}, kp_yaw=60.0, kp_lat=60.0,
            gain=40.0, gain_yaw=10.0, err_px=10.0, duration=0.25)
-    yaw_cap = _FakePixhawk.percent_to_pwm(10.0)   # 1540
-    lat_cap = _FakePixhawk.percent_to_pwm(40.0)   # 1660
-    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 1500) != 1500]
-    lat = [c['lateral'] for c in pix.rc if c.get('lateral', 1500) != 1500]
+    yaw_cap = (10.0)   # 1540
+    lat_cap = (40.0)   # 1660
+    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 0) != 0]
+    lat = [c['lateral'] for c in pix.rc if c.get('lateral', 0) != 0]
     assert yaw and lat
     assert max(yaw) == yaw_cap, 'yaw must clamp at its own per-axis cap (10%)'
     assert max(lat) == lat_cap, 'lateral must still use the global gain (40%)'
@@ -533,92 +488,26 @@ def test_align_per_axis_gain_caps_yaw_independently_of_lat():
 
 def test_align_per_axis_gain_unset_inherits_global():
     # yaw_gain left None -> inherits gain=20; full-right saturates at 20%.
-    pix = _FakePixhawk()
+    pix = _FakeBoard()
     _align(_FakeVision(_sample(ex=1.0)), pix=pix,
            axes={'yaw'}, kp_yaw=60.0, gain=20.0, err_px=10.0, duration=0.25)
-    cap = _FakePixhawk.percent_to_pwm(20.0)   # 1580
-    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 1500) != 1500]
+    cap = (20.0)   # 1580
+    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 0) != 0]
     assert yaw and max(yaw) == cap, 'unset per-axis gain must inherit the global cap'
-
-
-def test_align_depth_step_scales_nudge():
-    # depth setpoint excursion scales with depth_step (the per-update resolution
-    # knob), NOT gain_depth: a larger depth_step deepens more over the same run.
-    # (gain_depth no longer drives depth -- depth_step is the sole depth-rate knob.)
-    def _depth_excursion(step):
-        pix = _FakePixhawk()
-        _align(_FakeVision(_sample(ey=1.0, w_frac=0.3, h_frac=0.3)), pix=pix,
-               axes={'depth'}, kp_depth=0.05, gain=40.0, depth_step=step,
-               err_px=10.0, duration=0.6, align_stable_frames=99)
-        return abs(pix.depths[-1] - (-0.5)) if pix.depths else 0.0
-    small = _depth_excursion(0.02)
-    large = _depth_excursion(0.08)
-    assert large > small > 0.0, (
-        'depth_step must scale the depth nudge (0.08 deepens more than 0.02)')
 
 
 # --------------------------------------------------------------------------- #
 #  Downward depth-hold (the "bin dives to the pool floor" fix)                 #
 # --------------------------------------------------------------------------- #
-def test_align_downward_surge_only_holds_depth_constant():
-    # THE BUG: a downward SURGE-only align (lat + Ch5 surge, no descent -- the bin
-    # task) released Ch3 while streaming NO depth setpoint, so nothing asserted
-    # depth-hold and the hull sank to the floor ignoring set_depth. The fix streams
-    # the CONSTANT captured depth (get_attitude=-0.5) every tick -- proving depth is
-    # actively held. Pre-fix pix.depths would be EMPTY (the sink).
-    pix = _FakePixhawk()
-    _align(_FakeVision(_sample(ex=0.0, ey=0.0, w_frac=0.3, h_frac=0.3)), pix=pix,
-           axes={'lat', 'depth'}, downward=True, release_yaw=True, surge_sign=-1,
-           err_px=10.0, duration=0.4, align_stable_frames=99)
-    assert pix.depths, 'downward surge-only align must STREAM depth (hold), not sink'
-    assert all(d == pytest.approx(-0.5) for d in pix.depths), (
-        'no descent -> the held setpoint must stay CONSTANT at the captured depth')
-
-
-def test_align_downward_releases_ch3_while_streaming():
-    # Consistent with the proven forward depth-axis path: when we stream the depth
-    # setpoint we release Ch3 (65535) so ArduSub's depth PID is the sole Ch3 consumer.
-    pix = _FakePixhawk()
-    _align(_FakeVision(_sample(ex=0.0, ey=0.0, w_frac=0.3, h_frac=0.3)), pix=pix,
-           axes={'lat', 'depth'}, downward=True, release_yaw=True, surge_sign=-1,
-           err_px=10.0, duration=0.4, align_stable_frames=99)
-    assert pix.translations, 'release_yaw downward align drives via send_rc_translation'
-    assert all(t.get('throttle') == 65535 for t in pix.translations), (
-        'Ch3 released (65535) on the streamed downward path')
-
-
-def test_align_forward_lat_yaw_does_not_stream_depth():
-    # REGRESSION GUARD: a FORWARD lat/yaw-only align must be byte-unchanged -- no
-    # spurious depth streaming, Ch3 held neutral 1500 (ArduSub latches depth-hold).
-    pix = _FakePixhawk()
-    _align(_FakeVision(_sample(ex=0.0, ey=0.0, w_frac=0.3, h_frac=0.3)), pix=pix,
-           axes={'lat', 'yaw'}, err_px=10.0, duration=0.4, align_stable_frames=99)
-    assert pix.depths == [], 'forward lat/yaw-only must NOT stream a depth setpoint'
-    assert pix.rc and all(r.get('throttle') == 1500 for r in pix.rc), (
-        'forward non-depth align holds Ch3 neutral 1500')
-
-
-def test_align_positive_depth_bound_warns():
-    # SIGN GUARD: depths are negative metres; a POSITIVE max_depth_m / depth_ceiling is
-    # a sign error that silently reads as OFF -- warn loudly instead of misleading.
-    log = _CapLog()
-    _align(_FakeVision(_sample(ex=0.0, ey=0.0, w_frac=0.3, h_frac=0.3)),
-           axes={'lat', 'depth'}, downward=True, release_yaw=True, surge_sign=-1,
-           max_depth_m=0.6, depth_ceiling_m=0.2,
-           err_px=10.0, duration=0.2, align_stable_frames=99, log=log)
-    assert any('POSITIVE' in w for w in log.warnings), (
-        'a positive depth bound must emit a loud sign-error warning')
-
-
 def test_align_yaw_and_lat_share_one_override_packet():
     # "Wired" when multiple axes are active: yaw + lat must land in the SAME
     # send_rc_override frame (not split / not clobbering each other).
-    pix = _FakePixhawk()
+    pix = _FakeBoard()
     _align(_FakeVision(_sample(ex=1.0)), pix=pix,
            axes={'yaw', 'lat'}, kp_yaw=60.0, kp_lat=60.0, gain=30.0,
            err_px=10.0, duration=0.25)
     both = [c for c in pix.rc
-            if c.get('lateral', 1500) != 1500 and c.get('yaw', 1500) != 1500]
+            if c.get('lateral', 0) != 0 and c.get('yaw', 0) != 0]
     assert both, 'yaw+lat align must emit Ch6 and Ch4 in the same RC packet'
 
 
@@ -637,56 +526,56 @@ def test_freshness_pure_function():
 def test_align_lateral_decays_when_sample_stale():
     # A STALE-but-present sample (age in the decay band) must command LESS lateral
     # than the identical FRESH sample -- the loop stops blind-driving on old data.
-    fresh_pix = _FakePixhawk()
+    fresh_pix = _FakeBoard()
     _align(_FakeVision(_sample(ex=1.0, age_s=0.0)), pix=fresh_pix,
            axes={'lat'}, kp_lat=60.0, gain=30.0, duration=0.2)
-    stale_pix = _FakePixhawk()
-    _align(_FakeVision(_sample(ex=1.0, age_s=0.30)), pix=stale_pix,
+    stale_pix = _FakeBoard()
+    _align(_FakeVision(_sample(ex=1.0, age_s=0.15)), pix=stale_pix,
            axes={'lat'}, kp_lat=60.0, gain=30.0, duration=0.2)
-    fresh_lat = max(abs(c['lateral'] - 1500) for c in fresh_pix.rc
-                    if c.get('lateral', 1500) != 1500)
-    stale_lat = max(abs(c['lateral'] - 1500) for c in stale_pix.rc
-                    if c.get('lateral', 1500) != 1500)
+    fresh_lat = max(abs(c['lateral'] - 0) for c in fresh_pix.rc
+                    if c.get('lateral', 0) != 0)
+    stale_lat = max(abs(c['lateral'] - 0) for c in stale_pix.rc
+                    if c.get('lateral', 0) != 0)
     assert stale_lat < fresh_lat, 'a stale frame must decay the lateral command'
 
 
 def test_align_lateral_zero_when_blind():
     # Sample older than the zero threshold (but < _STALE_LIMIT_S so still "present")
     # -> lateral authority is fully decayed: never blind-drive on a dead frame.
-    pix = _FakePixhawk()
+    pix = _FakeBoard()
     # Past the CEILING, not the floor: the zero threshold is derived from
     # the sensor now (see `_fresh_bounds`), so only an age beyond
     # VISION_FRESH_ZERO_MAX_S is blind for EVERY camera. The property under
     # test -- a blind sample must not drive -- is unchanged.
     _align(_FakeVision(_sample(ex=1.0, age_s=VISION_FRESH_ZERO_MAX_S + 0.05)), pix=pix,
            axes={'lat'}, kp_lat=60.0, gain=30.0, duration=0.2)
-    laterals = [c.get('lateral', 1500) for c in pix.rc]
-    assert laterals and all(l == 1500 for l in laterals), (
+    laterals = [c.get('lateral', 0) for c in pix.rc]
+    assert laterals and all(l == 0 for l in laterals), (
         'a frame past the freshness-zero age must command neutral lateral (no blind drive)')
 
 
 def test_align_yaw_not_decayed_by_freshness():
-    # Yaw is excluded from freshness-decay (Ch4 is a rate ArduSub bleeds). Even a
+    # Yaw is excluded from freshness-decay (yaw is a rate command the board integrates). Even a
     # stale frame still drives full yaw -- so yaw authority is unchanged by age.
-    pix = _FakePixhawk()
+    pix = _FakeBoard()
     _align(_FakeVision(_sample(ex=1.0, age_s=0.30)), pix=pix,
            axes={'yaw'}, kp_yaw=60.0, gain=30.0, duration=0.2)
-    cap = _FakePixhawk.percent_to_pwm(30.0)
-    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 1500) != 1500]
+    cap = (30.0)
+    yaw = [c['yaw'] for c in pix.rc if c.get('yaw', 0) != 0]
     assert yaw and max(yaw) == cap, 'yaw must NOT be freshness-decayed (full authority)'
 
 
 def test_move_forward_decays_when_sample_stale():
-    far_fresh = _FakePixhawk()
+    far_fresh = _FakeBoard()
     _move(_FakeVision(_sample(w_frac=0.1, h_frac=0.1, age_s=0.0)), pix=far_fresh,
           fwd_fill=0.8, gain=30.0, duration=0.2)
-    far_stale = _FakePixhawk()
-    _move(_FakeVision(_sample(w_frac=0.1, h_frac=0.1, age_s=0.30)), pix=far_stale,
+    far_stale = _FakeBoard()
+    _move(_FakeVision(_sample(w_frac=0.1, h_frac=0.1, age_s=0.15)), pix=far_stale,
           fwd_fill=0.8, gain=30.0, duration=0.2)
-    fresh_fwd = max(abs(c['forward'] - 1500) for c in far_fresh.rc
-                    if c.get('forward', 1500) != 1500)
-    stale_fwd = max(abs(c['forward'] - 1500) for c in far_stale.rc
-                    if c.get('forward', 1500) != 1500)
+    fresh_fwd = max(abs(c['forward'] - 0) for c in far_fresh.rc
+                    if c.get('forward', 0) != 0)
+    stale_fwd = max(abs(c['forward'] - 0) for c in far_stale.rc
+                    if c.get('forward', 0) != 0)
     assert stale_fwd < fresh_fwd, 'a stale frame must decay the forward approach command'
 
 
@@ -694,14 +583,16 @@ def test_brake_reads_post_decay_command():
     # The brake EMA must see the POST-decay lateral command, so the two stacked
     # mechanisms don't double-count. A sustained strafe that arrives on STALE
     # frames (decayed) must brake LESS than the identical strafe on FRESH frames.
-    drift_fresh = [_sample(ex=0.6, age_s=0.0)] * 4 + [_sample(ex=0.0, age_s=0.0)] * 4
+    # 10 strafe frames = 0.2 s at the fake's 50 Hz tick: the strafe the brake
+    # was tuned on (4 frames at 20 Hz). The EMA is in seconds, so is this.
+    drift_fresh = [_sample(ex=0.6, age_s=0.0)] * 10 + [_sample(ex=0.0, age_s=0.0)] * 10
     _, _, fresh_w = _align(_FakeVision(drift_fresh), axes={'lat'}, kp_lat=60.0,
                            gain=30.0, err_px=40.0, duration=2.0)
-    drift_stale = [_sample(ex=0.6, age_s=0.30)] * 4 + [_sample(ex=0.0, age_s=0.30)] * 4
+    drift_stale = [_sample(ex=0.6, age_s=0.30)] * 10 + [_sample(ex=0.0, age_s=0.30)] * 10
     _, _, stale_w = _align(_FakeVision(drift_stale), axes={'lat'}, kp_lat=60.0,
                            gain=30.0, err_px=40.0, duration=2.0)
-    fresh_kick = max((1500 - p) for p in fresh_w.laterals) if fresh_w.laterals else 0
-    stale_kick = max((1500 - p) for p in stale_w.laterals) if stale_w.laterals else 0
+    fresh_kick = max((0 - p) for p in fresh_w.laterals) if fresh_w.laterals else 0
+    stale_kick = max((0 - p) for p in stale_w.laterals) if stale_w.laterals else 0
     assert fresh_kick > 0, 'fresh sustained strafe should brake'
     assert stale_kick < fresh_kick, (
         'brake must read the post-decay command -- a decayed approach brakes less')
@@ -714,7 +605,7 @@ def test_align_operator_line_format():
     log = _CapLog()
     # ex=0.5 on a 640px frame -> +160px to the right of centre; never reaches
     # the err band, so the loop logs the offset line and times out.
-    align_loop(pixhawk=_FakePixhawk(), vision_state=_FakeVision(_sample(ex=0.5)),
+    align_loop(fc=_FakeBoard(), vision_state=_FakeVision(_sample(ex=0.5)),
                target_class='gate', axes={'lat'}, offsets={}, err_px=10.0,
                duration=0.3, gain=30.0, kp_lat=60.0,
                writers=_FakeWriters(), log=log, abort_fn=None)
@@ -735,7 +626,7 @@ def test_yaw_never_driven_when_yaw_axis_absent():
     big_offset = _sample(ex=0.8, w_frac=0.5, h_frac=0.5)   # area-fill 0.5 >= 0.25
     _, pix, _ = _align(_FakeVision(big_offset), axes={'lat'})
     assert pix.rc, 'expected RC frames to be written'
-    assert all(frame['yaw'] == 1500 for frame in pix.rc), \
+    assert all(frame['yaw'] == 0 for frame in pix.rc), \
         f'yaw driven without a yaw axis: {[f["yaw"] for f in pix.rc]}'
 
 
@@ -745,7 +636,7 @@ def test_yaw_floor_DOES_drive_when_yaw_axis_present():
     # that re-introduced yaw drive, rather than passing vacuously).
     big_offset = _sample(ex=0.8, w_frac=0.5, h_frac=0.5)
     _, pix, _ = _align(_FakeVision(big_offset), axes={'yaw', 'lat'})
-    assert any(frame['yaw'] != 1500 for frame in pix.rc), \
+    assert any(frame['yaw'] != 0 for frame in pix.rc), \
         'yaw axis requested but Ch4 never left neutral'
 
 
@@ -758,22 +649,24 @@ def test_align_brake_fires_after_sustained_strafe():
     # so the hull stops square instead of coasting sideways.
     from mongla_control.motion_vision import VISION_BRAKE_MIN_PCT
     # Off-centre for a while (drives +lat), then snaps into band -> ALIGNED.
-    drift = [_sample(ex=0.6)] * 4 + [_sample(ex=0.0)] * 4
-    pix = _FakePixhawk()
+    # 10 strafe frames = 0.2 s at the fake's 50 Hz tick: the strafe the brake
+    # was tuned on (4 frames at 20 Hz). The EMA is in seconds, so is this.
+    drift = [_sample(ex=0.6)] * 10 + [_sample(ex=0.0)] * 10
+    pix = _FakeBoard()
     out, _, writers = _align(_FakeVision(drift), pix=pix,
                              axes={'lat'}, kp_lat=60.0, gain=30.0,
                              err_px=40.0, duration=2.0)
     assert out.code == ALIGNED
     assert writers.laterals, 'expected a lateral brake kick on arrival'
-    # EMA of +lat drive -> reverse kick is BELOW neutral (Ch6 < 1500).
-    assert min(writers.laterals) < 1500, 'brake must reverse the drive direction'
+    # EMA of +lat drive -> the reverse kick is negative lateral.
+    assert min(writers.laterals) < 0, 'brake must reverse the drive direction'
 
 
 def test_align_brake_gated_on_gentle_convergence():
     # THE fire-on-align safety pin: a target already in-band (EMA ~ 0, e.g. the
     # gently-converged hole-lock) must NOT be kicked -- a brake here would shove
     # the hull off the lock right before the mission fires.
-    pix = _FakePixhawk()
+    pix = _FakeBoard()
     out, _, writers = _align(_FakeVision(_sample(ex=0.0)), pix=pix,
                              axes={'lat'}, kp_lat=60.0, gain=30.0, err_px=40.0)
     assert out.code == ALIGNED
@@ -806,14 +699,16 @@ def test_align_brake_fires_on_fast_snap_in():
                              axes={'lat'}, kp_lat=60.0, gain=25.0,
                              err_px=14.0, duration=5.0)
     assert out.code == ALIGNED
-    assert writers.laterals and min(writers.laterals) < 1500, (
+    assert writers.laterals and min(writers.laterals) < 0, (
         'a fast snap-in keeps EMA above the gate -> a reverse kick fires '
         '(documents why fire-from-lock uses brake=False)')
 
 
 def test_align_brake_off_suppresses_kick():
     # brake=False must coast even after a hard strafe.
-    drift = [_sample(ex=0.6)] * 4 + [_sample(ex=0.0)] * 4
+    # 10 strafe frames = 0.2 s at the fake's 50 Hz tick: the strafe the brake
+    # was tuned on (4 frames at 20 Hz). The EMA is in seconds, so is this.
+    drift = [_sample(ex=0.6)] * 10 + [_sample(ex=0.0)] * 10
     out, _, writers = _align(_FakeVision(drift),
                              axes={'lat'}, kp_lat=60.0, gain=30.0,
                              err_px=40.0, duration=2.0, brake=False)
@@ -873,8 +768,8 @@ def test_move_drives_forward_when_far():
     out, pix, _ = _move(_FakeVision(_sample(w_frac=0.1, h_frac=0.1)),
                         fwd_fill=0.8, gain=30.0, duration=0.25)
     assert out.code == TIMEOUT
-    cap = _FakePixhawk.percent_to_pwm(30.0)
-    fwd = [c['forward'] for c in pix.rc if c.get('forward', 1500) != 1500]
+    cap = (30.0)
+    fwd = [c['forward'] for c in pix.rc if c.get('forward', 0) != 0]
     assert fwd, 'expected forward thrust commands'
     assert max(fwd) <= cap
 
@@ -885,8 +780,8 @@ def test_move_maintain_lateral_clamped():
     out, pix, _ = _move(_FakeVision(_sample(ex=1.0, w_frac=0.1, h_frac=0.1)),
                         fwd_fill=0.8, maintain_on=True, maintain_px=0.0,
                         kp_lat=60.0, gain=30.0, duration=0.25)
-    cap = _FakePixhawk.percent_to_pwm(30.0)
-    lateral = [c['lateral'] for c in pix.rc if c.get('lateral', 1500) != 1500]
+    cap = (30.0)
+    lateral = [c['lateral'] for c in pix.rc if c.get('lateral', 0) != 0]
     assert lateral
     assert max(lateral) <= cap
 
@@ -899,11 +794,11 @@ def test_move_per_axis_gain_lat_caps_strafe_not_forward():
                         fwd_fill=0.8, maintain_on=True, maintain_px=0.0,
                         kp_lat=60.0, gain=50.0, gain_lat=10.0, duration=0.25)
     assert out.code == TIMEOUT
-    fwd = [c['forward'] for c in pix.rc if c.get('forward', 1500) != 1500]
-    lat = [c['lateral'] for c in pix.rc if c.get('lateral', 1500) != 1500]
+    fwd = [c['forward'] for c in pix.rc if c.get('forward', 0) != 0]
+    lat = [c['lateral'] for c in pix.rc if c.get('lateral', 0) != 0]
     assert fwd and lat
-    assert max(fwd) <= _FakePixhawk.percent_to_pwm(50.0), 'forward keeps the global cap'
-    assert max(lat) == _FakePixhawk.percent_to_pwm(10.0), 'strafe uses its own cap'
+    assert max(fwd) <= (50.0), 'forward keeps the global cap'
+    assert max(lat) == (10.0), 'strafe uses its own cap'
 
 
 def test_move_brake_fires_forward_on_fill_stop():
@@ -916,7 +811,7 @@ def test_move_brake_fires_forward_on_fill_stop():
                             gain=40.0, hold_s=0.0, duration=2.0)
     assert out.code == ALIGNED
     assert writers.forwards, 'expected a forward brake kick on fill-stop arrival'
-    assert min(writers.forwards) < 1500, 'forward brake must reverse the drive'
+    assert min(writers.forwards) < 0, 'forward brake must reverse the drive'
 
 
 def test_move_passthrough_never_brakes():
@@ -987,8 +882,8 @@ def test_move_passthrough_ignores_fill_stop():
     out, pix, _ = _move(_FakeVision(big), passthrough=True, fwd_fill=0.8,
                         gain=30.0, duration=0.25)
     assert out.code == TIMEOUT          # target never leaves -> drives the whole budget
-    cap = _FakePixhawk.percent_to_pwm(30.0)
-    fwd = [c['forward'] for c in pix.rc if c.get('forward', 1500) != 1500]
+    cap = (30.0)
+    fwd = [c['forward'] for c in pix.rc if c.get('forward', 0) != 0]
     assert fwd, 'pass-through must keep commanding forward thrust'
     assert max(fwd) <= cap
 
@@ -1009,8 +904,8 @@ def test_range_gain_pure():
 
 
 def _max_lat_dev(pix):
-    """Largest |lateral-1500| the loop commanded (0 if it never strafed)."""
-    devs = [abs(c['lateral'] - 1500) for c in pix.rc if 'lateral' in c]
+    """Largest |lateral-0| the loop commanded (0 if it never strafed)."""
+    devs = [abs(c['lateral'] - 0) for c in pix.rc if 'lateral' in c]
     return max(devs) if devs else 0
 
 
@@ -1044,8 +939,8 @@ def test_lateral_integral_clamped():
     s = _sample(ex=0.1, w_frac=0.3, h_frac=0.3)
     _, pix, _ = _align(_FakeVision(s), axes={'lat'}, gain=100.0,
                        hold_s=0.4, duration=0.7, ki_lat=999.0, i_lat_max=5.0)
-    # p = 0.1*60 = 6%; + i_lat_max 5% = 11% -> PWM 1500 + 0.11*400 = 1544.
-    assert _max_lat_dev(pix) <= _FakePixhawk.percent_to_pwm(11.0) - 1500 + 1
+    # p = 0.1*60 = 6%; + i_lat_max 5% = 11% -> PWM 0 + 0.11*400 = 1544.
+    assert _max_lat_dev(pix) <= (11.0) - 0 + 1
 
 
 def test_lock_on_passes_near_and_gate():
@@ -1054,7 +949,11 @@ def test_lock_on_passes_near_and_gate():
     vis = _FakeVision(_sample(ex=0.2, ey=-0.1, w_frac=0.3, h_frac=0.3))
     _align(vis, axes={'lat'}, lock_on=True, ctrl_conf=0.55)
     kw = vis.last_kw
-    assert kw['gate_norm'] == pytest.approx(VISION_LOCK_GATE_NORM)
+    # The gate scales with the interval between detections (`_lock_gate`), so
+    # its value depends on the tick; what must hold is that a gate is PASSED,
+    # and never tighter than its floor.
+    from mongla_control.motion_vision import VISION_LOCK_GATE_MIN
+    assert kw['gate_norm'] >= VISION_LOCK_GATE_MIN
     assert kw['min_score'] == pytest.approx(0.55)
     assert kw['near'] == pytest.approx((0.2, -0.1))   # last accepted centre
 
@@ -1107,8 +1006,8 @@ def test_authority_splits_live_vs_coasted():
 
 
 def _max_lat_kick(pix):
-    lats = [c['lateral'] for c in pix.rc if c.get('lateral', 1500) != 1500]
-    return max((p - 1500) for p in lats) if lats else 0
+    lats = [c['lateral'] for c in pix.rc if c.get('lateral', 0) != 0]
+    return max((p - 0) for p in lats) if lats else 0
 
 
 def test_coasted_sample_steers_at_reduced_authority():
@@ -1132,7 +1031,7 @@ def test_coasted_sample_steers_at_reduced_authority():
 # --------------------------------------------------------------------------- #
 def _fwd_cmds(pix):
     """Forward (Ch5) commands from send_rc_override that are not neutral."""
-    return [c['forward'] for c in pix.rc if c.get('forward', 1500) != 1500]
+    return [c['forward'] for c in pix.rc if c.get('forward', 0) != 0]
 
 
 def test_align_no_forward_axis_when_fwd_fill_zero():
@@ -1140,26 +1039,26 @@ def test_align_no_forward_axis_when_fwd_fill_zero():
     # Target far on the fill metric but centred laterally; forward must stay neutral.
     out, pix, _ = _align(_FakeVision(_sample(ex=0.0, h_frac=0.1)),
                          axes={'lat'}, duration=0.3)
-    assert all(c.get('forward', 1500) == 1500 for c in pix.rc), \
+    assert all(c.get('forward', 0) == 0 for c in pix.rc), \
         "fwd_fill=0 must never write a forward command"
 
 
 def test_align_forward_drives_when_far():
-    # bbox smaller than the standoff -> drive forward (>1500), one-sided.
+    # bbox smaller than the standoff -> drive forward (>0), one-sided.
     out, pix, _ = _align(_FakeVision(_sample(ex=0.0, h_frac=0.1)),
                          axes={'lat'}, fwd_fill=0.5, fwd_mode='height',
                          duration=0.3)
     fwds = _fwd_cmds(pix)
-    assert fwds and max(fwds) > 1500, "far target must drive forward"
+    assert fwds and max(fwds) > 0, "far target must drive forward"
 
 
 def test_align_forward_one_sided_never_reverses_at_standoff():
     # bbox AT/PAST the standoff -> forward commanded EXACTLY neutral, never a
-    # reverse PWM (<1500). Pins "no reverse-kick / no ramming the board".
+    # reverse PWM (<0). Pins "no reverse-kick / no ramming the board".
     out, pix, _ = _align(_FakeVision(_sample(ex=0.0, h_frac=0.9)),
                          axes={'lat'}, fwd_fill=0.5, fwd_mode='height',
                          duration=0.3)
-    assert all(c.get('forward', 1500) <= 1500 for c in pix.rc), \
+    assert all(c.get('forward', 0) <= 0 for c in pix.rc), \
         "forward must never reverse (one-sided)"
     # lat centred AND fill past standoff -> both in-band -> ALIGNED.
     assert out.code == ALIGNED
@@ -1171,7 +1070,7 @@ def test_align_forward_neutral_inside_band():
     out, pix, _ = _align(
         _FakeVision(_sample(ex=0.0, h_frac=fill - FWD_BAND * 0.5)),
         axes={'lat'}, fwd_fill=fill, fwd_mode='height', duration=0.3)
-    assert all(c.get('forward', 1500) == 1500 for c in pix.rc), \
+    assert all(c.get('forward', 0) == 0 for c in pix.rc), \
         "inside FWD_BAND the forward axis must be neutral"
 
 
@@ -1207,7 +1106,7 @@ def test_align_forward_decays_with_authority():
         # Past the ceiling -- blind under any derived threshold. See above.
         _FakeVision(_sample(ex=0.0, h_frac=0.1, age_s=VISION_FRESH_ZERO_MAX_S + 0.05)),
         axes={'lat'}, fwd_fill=0.5, fwd_mode='height', duration=0.3)
-    assert all(c.get('forward', 1500) == 1500 for c in pix.rc), \
+    assert all(c.get('forward', 0) == 0 for c in pix.rc), \
         "a stale sample must not drive forward (freshness-decayed to neutral)"
 
 
@@ -1424,83 +1323,9 @@ def test_fire_pass_withheld_on_coasted_only():
 # --------------------------------------------------------------------------- #
 #  Depth: deadband-freeze + stepped slew (the z-wobble fix)                    #
 # --------------------------------------------------------------------------- #
-def test_depth_setpoint_frozen_inside_deadband():
-    # An in-band (centred) depth target FREEZES the ALT_HOLD setpoint -- ArduSub
-    # holds instead of chasing bbox-y jitter. Every streamed setpoint == start.
-    pix = _FakePixhawk()
-    _align(_FakeVision(_sample(ey=0.0, age_s=0.0)), pix=pix, axes={'depth'},
-           duration=0.3)
-    assert pix.depths, 'depth axis must stream a setpoint'
-    assert all(abs(d - (-0.5)) < 1e-9 for d in pix.depths), \
-        'setpoint must stay frozen at start depth when in-band'
-
-
-def test_depth_step_bounds_setpoint_slew_out_of_band():
-    # Out of the deadband the setpoint steps toward target by <= depth_step per
-    # 5 Hz update (the resolution knob) -- never a fast slew ArduSub can't track.
-    pix = _FakePixhawk()
-    step = 0.05
-    _align(_FakeVision(_sample(ey=1.0, age_s=0.0)), pix=pix, axes={'depth'},
-           depth_step=step, duration=0.6, align_stable_frames=99)
-    assert len(pix.depths) >= 2, 'expected multiple depth updates'
-    deltas = [abs(b - a) for a, b in zip(pix.depths, pix.depths[1:])]
-    assert max(deltas) <= step + 1e-9, \
-        f'each depth update must move <= depth_step ({max(deltas)} > {step})'
-
-
-def test_depth_setpoint_never_shallower_than_floor():
-    # The surface floor (_MIN_DEPTH_M) is preserved: an upward (shallower) target
-    # can't drive the setpoint above the floor.
-    from mongla_control.motion_vision import _MIN_DEPTH_M
-    pix = _FakePixhawk()
-    _align(_FakeVision(_sample(ey=-1.0, age_s=0.0)), pix=pix, axes={'depth'},
-           depth_step=0.1, duration=0.6, align_stable_frames=99, depth_sign=+1)
-    assert all(d <= _MIN_DEPTH_M + 1e-9 for d in pix.depths), \
-        'setpoint must never rise above the surface floor'
-
-
 # A shallow floor the descent actually REACHES within the test window, so the
 # clamp genuinely engages (starts ~-0.5, steps deeper ~0.05/update at 5 Hz).
 _FWD_FLOOR = -0.7
-
-
-def test_forward_depth_deep_floor_clamps():
-    # CTRL-11: the FORWARD depth axis is two-sided -- a target persistently BELOW
-    # centre (ey=+1) walks the setpoint deeper. With max_depth_m set (<0) it must
-    # never pass that deep floor (pool-floor guard), symmetric with the downward path.
-    pix = _FakePixhawk()
-    _align(_FakeVision(_sample(ey=+1.0, age_s=0.0)), pix=pix, axes={'depth'},
-           depth_step=0.1, duration=2.0, align_stable_frames=99, depth_sign=+1,
-           max_depth_m=_FWD_FLOOR)
-    assert pix.depths, 'expected depth updates'
-    assert all(d >= _FWD_FLOOR - 1e-9 for d in pix.depths), \
-        f'forward depth must never pass max_depth_m ({min(pix.depths)} < {_FWD_FLOOR})'
-    assert min(pix.depths) == pytest.approx(_FWD_FLOOR, abs=0.06), \
-        'the descent must actually REACH the floor (else the clamp is untested)'
-
-
-def test_forward_depth_unbounded_without_max_depth_regression():
-    # max_depth_m unset (>=0) -> forward path byte-unchanged: the setpoint steps
-    # deeper PAST where the floor would have clamped it, proving the fix is opt-in.
-    pix = _FakePixhawk()
-    _align(_FakeVision(_sample(ey=+1.0, age_s=0.0)), pix=pix, axes={'depth'},
-           depth_step=0.1, duration=2.0, align_stable_frames=99, depth_sign=+1)
-    assert min(pix.depths) < _FWD_FLOOR - 1e-3, \
-        'without max_depth_m the forward depth axis is unclamped (regression guard)'
-
-
-# --------------------------------------------------------------------------- #
-#  Yaw floor taper (the close-in yaw-jitter fix)                               #
-# --------------------------------------------------------------------------- #
-def test_vision_yaw_floor_tapers_to_zero_at_deadband():
-    from mongla_control.motion_vision import (
-        _vision_yaw_floor, VISION_YAW_APPROACH_BAND_PX as BAND)
-    full, eff = 5.0, 10.0
-    assert _vision_yaw_floor(eff, eff, full) == 0.0            # deadband edge -> 0
-    assert _vision_yaw_floor(eff + BAND, eff, full) == full    # band edge -> full
-    assert _vision_yaw_floor(eff + 2 * BAND, eff, full) == full  # beyond -> full
-    mid = _vision_yaw_floor(eff + 0.5 * BAND, eff, full)
-    assert 0.0 < mid < full, 'floor must taper monotonically inside the band'
 
 
 # --------------------------------------------------------------------------- #
@@ -1508,18 +1333,18 @@ def test_vision_yaw_floor_tapers_to_zero_at_deadband():
 # --------------------------------------------------------------------------- #
 def _fwd_pwms(pix):
     """Ch5 (forward/surge) PWMs commanded via send_rc_override, excluding neutral."""
-    return [c['forward'] for c in pix.rc if c.get('forward', 1500) != 1500]
+    return [c['forward'] for c in pix.rc if c.get('forward', 0) != 0]
 
 
 def test_downward_surge_drives_ch5_from_image_y():
     # DOWNWARD: the 'depth' axis (image-Y) drives Ch5 SURGE, two-sided. A target
-    # BELOW centre (ey>0) drives forward (Ch5>1500); ABOVE (ey<0) drives back.
+    # BELOW centre (ey>0) drives forward (Ch5>0); ABOVE (ey<0) drives back.
     fwd = _fwd_pwms(_align(_FakeVision(_sample(ey=1.0)), axes={'lat', 'depth'},
                            downward=True, err_px=10.0, duration=0.25)[1])
-    assert fwd and max(fwd) > 1500, 'target below (ey>0) must surge FORWARD on Ch5'
+    assert fwd and max(fwd) > 0, 'target below (ey>0) must surge FORWARD on Ch5'
     back = _fwd_pwms(_align(_FakeVision(_sample(ey=-1.0)), axes={'lat', 'depth'},
                             downward=True, err_px=10.0, duration=0.25)[1])
-    assert back and min(back) < 1500, 'target above (ey<0) must surge BACK on Ch5'
+    assert back and min(back) < 0, 'target above (ey<0) must surge BACK on Ch5'
 
 
 def test_downward_surge_sign_flips_fore_aft():
@@ -1527,7 +1352,7 @@ def test_downward_surge_sign_flips_fore_aft():
     fwd = _fwd_pwms(_align(_FakeVision(_sample(ey=1.0)), axes={'lat', 'depth'},
                            downward=True, surge_sign=-1, err_px=10.0,
                            duration=0.25)[1])
-    assert fwd and max(fwd) < 1500, 'surge_sign=-1 must reverse fore/aft'
+    assert fwd and max(fwd) < 0, 'surge_sign=-1 must reverse fore/aft'
 
 
 def test_downward_surge_freshness_decays_with_sample_age():
@@ -1541,8 +1366,8 @@ def test_downward_surge_freshness_decays_with_sample_age():
     stale = _fwd_pwms(_align(_FakeVision(_sample(ey=1.0, age_s=0.35)),
                              axes={'lat', 'depth'}, downward=True,
                              err_px=10.0, duration=0.25)[1])
-    fresh_mag = max((abs(p - 1500) for p in fresh), default=0)
-    stale_mag = max((abs(p - 1500) for p in stale), default=0)
+    fresh_mag = max((abs(p - 0) for p in fresh), default=0)
+    stale_mag = max((abs(p - 0) for p in stale), default=0)
     assert fresh_mag > 0, 'fresh surge should drive Ch5 off neutral'
     assert stale_mag < fresh_mag * 0.5, \
         f'a stale sample must decay the surge (stale {stale_mag} vs fresh {fresh_mag})'
@@ -1552,85 +1377,20 @@ def test_downward_lat_still_drives_ch6():
     # image-X still drives Ch6 lateral on a downward camera (unchanged).
     _, pix, _ = _align(_FakeVision(_sample(ex=1.0)), axes={'lat', 'depth'},
                        downward=True, err_px=10.0, duration=0.25)
-    lat = [c['lateral'] for c in pix.rc if c.get('lateral', 1500) != 1500]
-    assert lat and max(lat) > 1500, 'target right (ex>0) must strafe RIGHT on Ch6'
-
-
-def test_downward_depth_axis_does_not_move_setpoint():
-    # On downward the 'depth' axis is SURGE, so it must NOT step the ALT_HOLD depth
-    # setpoint (that would sink/surface the hull). Any streamed depth == start.
-    _, pix, _ = _align(_FakeVision(_sample(ey=1.0)), axes={'lat', 'depth'},
-                       downward=True, err_px=10.0, duration=0.3)
-    assert all(abs(d - (-0.5)) < 1e-9 for d in pix.depths), \
-        'downward depth axis must not drive the depth setpoint (it is surge)'
-
-
-def test_forward_depth_axis_unchanged_regression():
-    # FORWARD camera (downward=False, the default): the 'depth' axis still drives
-    # the depth setpoint and NOT Ch5 -- the remap must not leak into forward.
-    _, pix, _ = _align(_FakeVision(_sample(ey=1.0)), axes={'lat', 'depth'},
-                       err_px=10.0, duration=0.3)
-    assert not _fwd_pwms(pix), 'forward depth axis must never drive Ch5 surge'
-    assert pix.depths and pix.depths[-1] < -0.5, \
-        'forward depth axis must still deepen the setpoint on ey>0'
-
-
-def test_downward_fill_to_depth_descends_bounded():
-    # DOWNWARD + fwd_fill: descend (deeper) while the bbox is below the fill target,
-    # bounded by max_depth_m so it can't drive into the pool floor.
-    floor = -0.56
-    _, pix, _ = _align(_FakeVision(_sample(ey=0.0, w_frac=0.1, h_frac=0.1)),
-                       axes={'lat', 'depth'}, downward=True, fwd_fill=0.8,
-                       fwd_mode='height', max_depth_m=floor, err_px=10.0, duration=1.0)
-    assert pix.depths and pix.depths[-1] < -0.5, 'fill<target must DESCEND (deeper)'
-    assert min(pix.depths) >= floor - 1e-9, \
-        'descent must never pass max_depth_m (the deep floor)'
-
-
-def test_downward_descent_step_bounded_by_depth_step():
-    # The descent uses the depth_step logic: each 5 Hz update moves the setpoint by
-    # AT MOST depth_step m (proportional to the fill deficit, so <= that cap).
-    step = 0.03
-    _, pix, _ = _align(_FakeVision(_sample(ey=0.0, w_frac=0.1, h_frac=0.1)),
-                       axes={'lat', 'depth'}, downward=True, fwd_fill=0.9,
-                       fwd_mode='height', depth_step=step, max_depth_m=-2.0,
-                       err_px=10.0, duration=1.0)
-    deltas = [abs(b - a) for a, b in zip(pix.depths, pix.depths[1:])]
-    assert deltas and max(deltas) <= step + 1e-9, \
-        f'each descent update must move <= depth_step ({max(deltas)} > {step})'
-
-
-def test_downward_descent_frozen_at_fill_target():
-    # Once the bbox fills to the target (deficit within FWD_BAND), the descent
-    # FREEZES -- the setpoint holds instead of chasing bbox jitter (no z-wobble).
-    _, pix, _ = _align(_FakeVision(_sample(ey=0.0, w_frac=0.95, h_frac=0.95)),
-                       axes={'lat', 'depth'}, downward=True, fwd_fill=0.8,
-                       fwd_mode='height', max_depth_m=-2.0, err_px=10.0, duration=0.5)
-    assert all(abs(d - (-0.5)) < 1e-9 for d in pix.depths), \
-        'at/past the fill target the depth setpoint must be frozen (no descent)'
-
-
-def test_depth_ceiling_clamps_forward_ascent():
-    # depth_ceiling_m is the shallowest allowed setpoint on ANY depth motion. A
-    # FORWARD depth align whose target is well ABOVE centre (ey<0 -> ascend) must
-    # never drive the setpoint shallower than the ceiling (surface guard).
-    ceil = -0.4
-    _, pix, _ = _align(_FakeVision(_sample(ey=-1.0)), axes={'lat', 'depth'},
-                       depth_ceiling_m=ceil, err_px=10.0, duration=0.6,
-                       align_stable_frames=99)
-    assert pix.depths, 'depth axis must stream a setpoint'
-    assert max(pix.depths) <= ceil + 1e-9, \
-        'setpoint must never rise shallower than depth_ceiling_m (surface guard)'
+    lat = [c['lateral'] for c in pix.rc if c.get('lateral', 0) != 0]
+    assert lat and max(lat) > 0, 'target right (ex>0) must strafe RIGHT on Ch6'
 
 
 def test_downward_surge_brakes_on_arrival():
-    # Ch5 surge coasts (open-loop timed thrust) like Ch6 -- the arrival brake must
+    # Surge coasts (open-loop timed thrust) like lateral -- the arrival brake must
     # kick the forward axis so the hull stops square over the bin. A hard snap-in
     # (large ey then centred) crosses the brake gate -> writers.forward is written.
-    seq = [_sample(ey=0.8)] * 4 + [_sample(ey=0.0)] * 4
+    # 10 strafe frames = 0.2 s at the fake's 50 Hz tick: the strafe the brake
+    # was tuned on (4 frames at 20 Hz). The EMA is in seconds, so is this.
+    seq = [_sample(ey=0.8)] * 10 + [_sample(ey=0.0)] * 10
     _, _, writers = _align(_FakeVision(seq), axes={'lat', 'depth'}, downward=True,
                            align_stable_frames=3, err_px=10.0, duration=0.6)
-    assert writers.forwards, 'downward arrival must brake the Ch5 surge coast'
+    assert writers.forwards, 'downward arrival must brake the surge coast'
 
 
 # --------------------------------------------------------------------------- #
@@ -1712,21 +1472,24 @@ def test_the_gate_is_asked_with_the_operators_tolerance():
     assert seen and all(t == 7.0 for t in seen)
 
 
-def test_no_depth_reading_refuses_rather_than_holding_the_surface():
-    """Issue #21: with no attitude the captured depth read 0.0 -- the SURFACE
-    -- and was streamed as the setpoint. It now refuses with NO_DEPTH and
-    streams nothing."""
-    from mongla_control.motion_vision import NO_DEPTH, _read_depth
+# --------------------------------------------------------------------------- #
+#  The board takes no depth setpoint: the depth axes refuse, loudly           #
+# --------------------------------------------------------------------------- #
+def test_forward_depth_axis_is_refused_not_ignored():
+    """On the forward camera `depth` would be a depth setpoint, which this wire
+    does not carry. A loop that accepted it and moved nothing would report a
+    centring it never attempted -- so it raises before a single frame."""
+    pix = _FakeBoard()
+    with pytest.raises(ValueError, match='downward-camera'):
+        _align(_FakeVision(_sample(ey=0.5)), pix=pix, axes={'lat', 'depth'})
+    assert pix.rc == [], 'nothing may reach the board before the refusal'
 
-    class _Blind(_FakePixhawk):
-        def get_attitude(self):
-            return None
 
-    pix = _Blind()
-    assert _read_depth(pix) != _read_depth(pix)            # NaN
-    res, _, _ = _align(_FakeVision(_sample(ex=0.0, ey=0.0, w_frac=0.3, h_frac=0.3)),
-                 pix=pix, axes={'lat', 'depth'}, downward=True,
-                 release_yaw=True, surge_sign=-1, err_px=10.0, duration=0.4,
-                 align_stable_frames=99)
-    assert res.code == NO_DEPTH
-    assert pix.depths == []
+def test_downward_fill_descent_is_refused_not_ignored():
+    """`fwd_fill` on the downward camera means 'descend until the box fills',
+    i.e. a depth descent. Refused for the same reason."""
+    pix = _FakeBoard()
+    with pytest.raises(ValueError, match='depth descent'):
+        _align(_FakeVision(_sample()), pix=pix, axes={'lat'}, downward=True,
+               fwd_fill=0.5)
+    assert pix.rc == []

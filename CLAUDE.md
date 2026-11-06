@@ -132,21 +132,29 @@ ros2 run mongla_manager bringup_check --srot # grades each subsystem, exits non-
 `connect` **reports** (always exits 0); `bringup_check` **grades and gates**. Use the first to
 look, the second to decide.
 
-### Verb routing on srot
+### Where each verb runs
+
+23 verbs; the generated list is [`reference/commands.md`](.claude/context/reference/commands.md).
 
 | Group | Verbs | Where it runs |
 |---|---|---|
 | On the board | `move_forward` `move_back` `move_left` `move_right` `yaw_left` `yaw_right` `turn` `set_depth` `stop` `pause` `style_roll` | one `SROT_MOVE`, braked on the board |
-| Host | `arm` `disarm` `set_mode` `head` `surface` `mission_reset` `calibrate_depth` `calc_distance` `fire` `vision_align` `vision_move` … | a loop here, or one message |
-| **Refused** | `lock_heading` `move_forward_dist` `move_back_dist` `move_lateral_dist` `arc` `style_yaw` | `srot_fc.UNSUPPORTED_VERBS` — refused *before* dispatch |
+| Host | `arm` `disarm` `set_mode` `head` `surface` `mission_reset` `calibrate_depth` `calc_distance` `fire` `motor_test` `vision_align` `vision_move` | a loop here, or one message |
 
-`vision_align` / `vision_move` came out of the refusal set on 2026-09-03 and actuate through
-`MANUAL_CONTROL` in STABILIZE. ⛔ On srot the **depth-setpoint axes are refused**: the forward
-`depth` axis, and the downward fill-driven descent. Downward lat + surge runs normally.
+The board holds heading and depth at 500 Hz, so there is no host heading lock and no
+distance-closed move: those verbs needed a host-side heading source or a DVL and went with the
+old backend. `vision_align` / `vision_move` actuate through `MANUAL_CONTROL` in STABILIZE.
+⛔ **The vision loops never command depth**: the forward camera's image-Y axis and a
+fill-driven descent both raise `ValueError` — `set_depth` first, then align. Downward lat +
+surge runs normally.
 
-There is **no** `set_target_depth`, no `ALT_HOLD`, no `RC_CHANNELS_OVERRIDE` and no
-per-channel release on this backend. Modes are STABILIZE · ACRO · DEPTH_HOLD · SURFACE ·
-MANUAL · AUTO plus the tuning modes. Depth is reported as altitude: **negative below the
+⛔ **`surface()` is the last motion.** Every board verb — `stop` included — is a `SROT_MOVE`,
+which enters AUTO and so takes the hull back out of SURFACE. A cleanup that ends
+`surface(); stop()` holds the vehicle at depth; `test_sauvc_srot_port.py` refuses it.
+
+Modes are STABILIZE · ACRO · DEPTH_HOLD · SURFACE · MANUAL · AUTO · PATTERN plus the tuning
+modes; a name the board does not have (`ALT_HOLD`, `POSHOLD`, `GUIDED`) resolves to nothing and is refused.
+There is no `RC_CHANNELS_OVERRIDE`. Depth is reported as altitude: **negative below the
 surface**.
 
 ---
@@ -155,7 +163,7 @@ surface**.
 
 ```
 [mongla CLI] ─┐
-[mission]    ─┼── /mongla/move (one action, 31 verbs) ──► auv_manager_node ──USB-C──► SROT board
+[mission]    ─┼── /mongla/move (one action, 23 verbs) ──► auv_manager_node ──USB-C──► SROT board
 [run_plan]   ─┘                                              │                         (500 Hz)
                                                              └──► /mongla/state, /mongla/imu,
                                                                   /mongla/esc_rpm, /mongla/demand
@@ -164,10 +172,10 @@ surface**.
 
 **Exactly one node touches the board**: `auv_manager_node`. Everything else is a client.
 
-Seven packages, one page each in [`.claude/context/packages/`](.claude/context/packages/README.md):
-`mongla_control` (verbs + the flight-controller boundary) · `mongla_manager` (the node) ·
+Six packages, one page each in [`.claude/context/packages/`](.claude/context/packages/README.md):
+`mongla_control` (verbs + the board driver) · `mongla_manager` (the node) ·
 `mongla_vision` · `mongla_localization` · `mongla_planner` (CLI, DSL, missions) ·
-`mongla_sensors` · `mongla_interfaces` (one action, one state topic).
+`mongla_interfaces` (one action, one state topic).
 
 **Every command, generated from the code**:
 [`reference/commands.md`](.claude/context/reference/commands.md) — verbs, fields, defaults, what
@@ -191,8 +199,11 @@ automatically.
 - **Action** `/mongla/move` (`mongla_interfaces/action/Move`) — one verb per goal.
 - **Topic** `/mongla/state` (`MonglaState`) — armed, mode, yaw, depth, battery; `NaN` when
   absent, published on change.
-- Params: `flight_controller` (`srot` default), `mode`, `yaw_source` (`mavlink_ahrs` — reads
-  the board), plus the `vision.*` tunables in `vision_tunables.py`.
+- Params: `mav_device` (empty = find the board), `payload_channels`, `velocity_uplink`,
+  `position_uplink`, `allow_fw_behaviour_mismatch`, plus the `vision.*` tunables in
+  `vision_tunables.py`. There is one board, one heading (the board's AHRS) and one link, so
+  there is no backend selector. Launch defaults can come from `~/.mongla/bringup.yaml`
+  (`$MONGLA_BRINGUP`); anything typed as `name:=value` still wins.
 
 Older context files mention `/mongla/arm`, `/mongla/depth_cmd`, `Attitude.msg`,
 `RCOverride.msg`. **None of these exist.**
@@ -267,17 +278,12 @@ run; `scripts/pool_record.sh` records and replays a bag; scorecards land in `MON
 
 ---
 
-## 7. Simulator
+## 7. What is not on main
 
-[`sim/`](sim/) is a second colcon workspace in this repo: Gazebo, a pool with courses and
-props, both cameras, ground truth, and an operator lab. It runs **ArduSub SITL by design** —
-it is a physics environment, not the vehicle — so it uses `flight_controller:=pixhawk`.
-
-What transfers: control behaviour and every verb. What does **not**: detection thresholds and
-vision gains, because sim imagery is too clean.
-
-[`sim/README.md`](sim/README.md) · [`sim/.context/INDEX.md`](sim/.context/INDEX.md) ·
-[`legacy-pixhawk-and-sitl.md`](.claude/context/platform/legacy-pixhawk-and-sitl.md)
+`main` is the Pi + Hailo-8 + SROT vehicle and nothing else. The earlier stack — the Pixhawk /
+ArduSub backend, the Jetson, the BNO085/DVL sensor package and the Gazebo + ArduSub SITL
+simulator — is preserved, whole, at the tag **`last-with-pixhawk-and-sim`**. Read it there; do
+not port it back. A capability that needs something from it is rebuilt against the board.
 
 ---
 
@@ -340,6 +346,20 @@ vision gains, because sim imagery is too clean.
   correct code, passing tests, and nothing on the vehicle. Decide at write time — that is the
   only moment anyone knows whether a consumer exists.
   `test_no_capability_is_built_and_unreachable.py` enforces it.
+- ⛔ **Docs change in the same commit as the code they describe — not after.** A
+  removal is not finished until every file that names the removed thing says what
+  is true now: docs, skills, agents, launch comments, test docstrings, the site.
+  This rule exists because the 2026-11-06 backend removal deleted the code in one
+  commit and left **53 live files** describing it — a package page drawing the
+  deleted driver, a runbook listing "refused" verbs that no longer existed, a guide
+  whose first step started the deleted simulator. Three guards hold it, and the
+  edit hook runs the first two on every doc edit:
+  `test/test_the_retired_stack_stays_retired.py` (every tracked file, every
+  retired token, each exemption with its reason), `test_docs_contract.py` (every
+  context doc reachable from the book, under its own title; every link resolves),
+  and `tools/gen_reference.py` + `test_operator_commands_are_real.py` (every
+  command a doc tells an operator to type exists). A doc that cannot be made true
+  is deleted, not left.
 - **Truth tests, not agreement tests.** Comparing a new estimator against the incumbent
   measures agreement and cannot rank them; construct a case where truth is known.
 - **Refuse loudly.** A verb that reports success while the vehicle does nothing is the failure
@@ -378,4 +398,5 @@ session; two notes on them:
 > `BUGS.md` were guards someone removed.
 
 **Hooks** (`.claude/hooks/`): block edits to the generated `install/` tree; `py_compile` after
-an edit; run the matching test file for an edited source file.
+an edit; run the matching test file for an edited source file, and the doc guards for an
+edited doc, skill, agent or config.

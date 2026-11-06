@@ -57,7 +57,7 @@ Sonix global-shutter unit — the one that does 210 Hz — is the **downward** c
 (`measured-bars.md` §17.1; the two profiles were once swapped, which is the round-38 trap).
 
 ⭐ **So on the forward path the chip is idle two thirds of the time.** 98 Hz of detector behind a
-30 Hz camera is not a throughput problem at all. And the consumer, `VISION_LOOP_HZ_SROT`, ticks at
+30 Hz camera is not a throughput problem at all. And the consumer, `VISION_LOOP_HZ`, ticks at
 **50 (soaked 49.86 Hz, 0.00 % late ticks)** — so above ~50 Hz delivered, extra frames buy the
 control loop **latency and freshness, not rate**. §8 works this through; **every rate claim in
 §1–§7 must be read against 27–30 Hz on the forward camera, not 98.**
@@ -729,7 +729,7 @@ and no new dependency.**
 | **forward camera (Fantech), distinct stamps, shipped `fps: 60`** | **30.18 Hz** | `config.py` `'pi_forward'` |
 | forward path end to end, image → detections | **30.03 → 27.11 Hz**, CPU **89.3 % idle** | `config.py` |
 | downward camera (Sonix) via `V4L2MailboxCamera` | **211.0 Hz** @640×360, **120.4 Hz** @1280×720 | §17.1 |
-| **the consumer**, `VISION_LOOP_HZ_SROT` | **50** (soaked 49.86 Hz, 0.00 % late) | `measured-bars.md` L60 |
+| **the consumer**, `VISION_LOOP_HZ` | **50** (soaked 49.86 Hz, 0.00 % late) | `measured-bars.md` L60 |
 | the recorded 53.9 Hz | ⚠ **stale, "needs re-measuring"** | §17.3 |
 
 ⚠ **That column is not apples to apples, and the difference is the whole point.** §17's header

@@ -1,6 +1,6 @@
 # Command reference — every verb on `/mongla/move`
 
-One action, thirty-one verbs. This page says what each one does, what it takes, and — the part
+One action, twenty-three verbs. This page says what each one does, what it takes, and — the part
 that matters on this vehicle — **where it actually runs**.
 
 The canonical list is the `COMMANDS` registry in
@@ -20,23 +20,21 @@ is in this document and not in that registry, the document is wrong.
 All three end up as the same goal on `/mongla/move`, served by `auv_manager_node`. The CLI is
 generated from the registry, so a new verb appears in it with no extra code.
 
-## Where a verb runs (srot board)
+## Where a verb runs
 
 ```
-                    ┌─ refused        6 verbs — not supported on this backend
-   your verb ───────┼─ on the board  11 verbs — one primitive, run and braked at 500 Hz
-                    └─ host loop     the rest — a loop here, or a single message
+   your verb ───────┬─ on the board  11 verbs — one primitive, run and braked at 500 Hz
+                    └─ host          12 verbs — a loop here, or a single message
 ```
 
 | Group | Verbs |
 |---|---|
 | **On the board** | `move_forward` `move_back` `move_left` `move_right` `yaw_left` `yaw_right` `turn` `set_depth` `stop` `pause` `style_roll` |
-| **Host loop or single message** | `arm` `disarm` `set_mode` `head` `surface` `mission_reset` `calibrate_depth` `calc_distance` `unlock_heading` `dvl_connect` `fire` `vision_align` `vision_move` |
-| **Refused on srot** | `lock_heading` `move_forward_dist` `move_back_dist` `move_lateral_dist` `arc` `style_yaw` |
+| **Host loop or single message** | `arm` `disarm` `set_mode` `head` `surface` `mission_reset` `calibrate_depth` `calc_distance` `fire` `motor_test` `vision_align` `vision_move` |
 
-A refused verb fails immediately with a message naming the reason. It is never silently
-accepted — a verb that reports success while the vehicle does nothing is the failure mode this
-design exists to prevent.
+There is no third group. A verb the board cannot run does not exist: the manager answers
+`Unknown command` and nothing reaches the wire. A missing low-level capability is a firmware
+pull request ([`upstream/`](../upstream/README.md)), not a host emulation.
 
 > ⛔ **A board-side move can still be denied.** Every on-board primitive runs in the board's
 > automatic mode, which closes the depth loop — and that loop has never run closed in water.
@@ -56,26 +54,22 @@ Required fields have no default.
 | `disarm` | `timeout`→20 s | safe shutdown |
 | `set_mode` | `target_name`, `timeout`→8 s | STABILIZE · DEPTH_HOLD · SURFACE · MANUAL · ACRO |
 | `head` | — | read the current heading into the result |
-| `stop` | — | active hold: neutral on every axis |
-| `pause` | `duration`→2 s | release control for N seconds |
-| `mission_reset` | — | clear carried-over state; re-zero the barometer |
+| `stop` | — | halt now: the board's `MOVE_STOP` brake |
+| `pause` | `duration`→2 s | hold station for N seconds: the board's `MOVE_HOLD` |
+| `mission_reset` | — | clear the abort flag, zero the demand; re-zero depth if disarmed at the surface |
 | `calibrate_depth` | — | re-zero the barometer at the surface (disarmed only) |
 | `calc_distance` | `phase`→`start` | bracket a move and measure how far it went, from the downward camera |
-| `surface` | `timeout`→60 s | ascend to the surface and hold; works during a running mission |
+| `surface` | `timeout`→60 s | brake, then the board's SURFACE mode; works during a running mission |
 | `move_forward` / `move_back` | `duration`, `gain`→80, `settle`→0 | timed drive |
 | `move_left` / `move_right` | `duration`, `gain`→80, `settle`→0 | timed strafe |
 | `yaw_left` / `yaw_right` | `target`, `timeout`→30 s, `settle` | relative turn, in degrees |
 | `turn` | `target`, `timeout`→30 s, `settle` | absolute heading; direction chosen for you |
 | `set_depth` | `target`, `timeout`→30 s, `settle` | hold a depth (negative metres) |
-| `style_roll` | `gain`→60, `timeout`→20 s, `flips`→1, `headroom`→1 m | N full rolls |
-| `fire` | board channel 1–16 | actuate a payload channel |
+| `style_roll` | `flips`→1, `timeout`→20 s | N full rolls, run by the board |
+| `fire` | `fire_channel` (board channel 1–16) | actuate a payload channel |
+| `motor_test` | `target`→1 (thruster 1–8), `gain`→20, `duration`→2 s | spin one thruster; requires ARMED |
 | `vision_align` | see below | hold a target at a chosen pixel offset |
 | `vision_move` | see below | drive toward or through a target |
-| `lock_heading` / `unlock_heading` | `target`, `timeout`→300 s | background heading hold (**refused on srot**) |
-| `arc` | `duration`, `gain`→50, `target_yaw` | curved path (**refused on srot**) |
-| `style_yaw` | `flips`→1, `deg_per_step`→90, `settle` | spin in steps (**refused on srot**) |
-| `move_*_dist` | `distance_m`, `gain`, `dvl_tolerance`→0.1 | closed-loop distance (**refused on srot**) |
-| `dvl_connect` | — | connect a Doppler velocity log (not fitted) |
 
 ### Two conventions that catch everyone
 
@@ -102,11 +96,15 @@ refuses while the board's depth controller is saturated, which is what a broken 
 looks like from outside.
 
 `stop`, `surface` and `disarm` bypass the "a command is already running" gate, so they work
-during a mission. `stop` is an *active* hold — it commands neutral — while `pause` releases
-control entirely for a few seconds.
+during a mission. `stop` brakes and `pause` holds station; both are board primitives, so both
+enter AUTO.
 
-`mission_reset` belongs at the top of every mission: it clears state carried over from a
-previous run and re-zeroes the barometer while the vehicle is still on the surface. Which is
+⛔ **`surface()` is the last motion.** Every board verb — `stop` included — is a `SROT_MOVE`,
+which enters AUTO and takes the hull back out of SURFACE. A cleanup that ends
+`surface(); stop()` holds the vehicle at depth.
+
+`mission_reset` belongs at the top of every mission: it clears the abort flag carried over
+from a previous run and re-zeroes the barometer while the vehicle is still on the surface. Which is
 also why a mission must never call another mission's `run()` mid-dive — see
 [`sauvc_full`](../../../src/mongla_planner/mongla_planner/missions/sauvc_full.py).
 
@@ -152,6 +150,7 @@ the real outcome is a code:
 | `TIMEOUT` (2) | the budget elapsed |
 | `NO_CAMERA` (3) | the camera pipeline never came up |
 | `ABORTED` (4) | the goal was cancelled |
+| `DRIFTED` (5) | `align` centred while moving, then re-measured out of band once stopped |
 
 "I could not see it" is a normal outcome for a mission to branch on, not an exception to crash
 into. The DSL wraps the code in a result that also carries **where the target was** when the
@@ -171,16 +170,15 @@ Always check `saw_target` before reading a pixel position: `NaN < threshold` is 
 | Axis | Forward camera | Downward camera |
 |---|---|---|
 | `lat` | strafe sideways | strafe sideways |
-| `yaw` | turn toward it | turn toward it |
-| `depth` | change depth | **drive fore/aft** (the image's vertical axis is fore/aft when looking down) |
-| `fwd` | forward standoff, as a fill fraction | descend toward the target, as a fill fraction |
+| `yaw` | turn toward it | turn toward it (rarely useful top-down) |
+| `fwd` | forward standoff, as a fill fraction — one-sided, never reverses | **drive fore/aft** on the image's vertical axis — two-sided, braked, signed by `surge_sign` |
 
-The downward camera's remap is the single most confusing thing in the vision API, and it exists
-so that a mission always names the *physical* axis it means.
+On the wire the downward fore/aft axis is still called `depth` (it is image-Y); the DSL calls
+it `fwd` so a mission names the *physical* axis it means.
 
-⛔ **On srot, any axis that moves the depth setpoint is refused**: the forward `depth` axis and
-the downward fill-driven descent. Sideways and fore/aft on the downward camera run normally.
-The board owns depth, and the host has no way to stream it a setpoint.
+⛔ **Depth is never a vision axis.** The board owns it: `set_depth` first, then align. The
+forward camera's image-Y axis and a downward fill-driven descent both raise `ValueError`
+before anything is sent.
 
 ### Search: `fallback`
 
@@ -203,8 +201,8 @@ waiting, which is usually right in turbid water.
 loop is still correcting rather than after it has drifted:
 
 ```python
-mongla.vision.align('hole', camera='forward', lat=0, depth=0,
-                    hold=6.0, fire=1, fire_t=3.0, brake=False)
+mongla.vision.align('hole', camera='forward', lat=0,
+                    hold=6.0, fire=TORPEDO_1_CHANNEL, fire_t=3.0, brake=False)
 ```
 
 The shot is gated on a **fresh** detection — a new live box, not a predicted or frozen one —
@@ -214,12 +212,13 @@ back in the result.
 ## Payload
 
 `fire` takes a **board channel number**, 1–16, exactly as the board's own configuration names
-it. There is no host-side map to get out of step. A channel configured as a switch fires; a
-channel configured as the on-board arming output is refused.
+it (`SERVOn_ROLE`). There is no host-side map to get out of step. A channel configured as a
+switch fires; a servo or unroled channel is refused, and so is `0` — what every payload
+constant in `competition_config.py` is until the payload is wired.
 
 ```bash
 ros2 run mongla_manager connect      # lists which channels are fireable
-ros2 run mongla_planner mongla fire --fire_channel 3
+ros2 run mongla_planner mongla fire --fire_channel 9
 ```
 
 ## Measuring a move without a DVL
@@ -233,15 +232,6 @@ travelled = mongla.calc_distance(phase='stop').final_value
 The downward camera accumulates distance over the floor while the move runs. Bench-measured
 worst error **1.09 cm over 30 cm**. It works with the detectors paused, because it needs the
 floor's texture rather than any detection.
-
-## The refused six, and why
-
-| Verb | Why it is refused on srot | Unblocked by |
-|---|---|---|
-| `lock_heading` | the board holds heading itself at 500 Hz; a host lock would fight it | nothing — this is by design |
-| `move_forward_dist` · `move_back_dist` · `move_lateral_dist` | they need a distance the board measures; a timed guess reported 2.361 m for a 1.0 m command on the old stack | firmware PR #23 |
-| `arc` | the board's arc takes a yaw *rate*, ours takes a heading — a mismatch that would quietly curve the wrong way | a decision, then a port |
-| `style_yaw` | the board's spin primitive covers it, with different parameters | a port |
 
 ---
 

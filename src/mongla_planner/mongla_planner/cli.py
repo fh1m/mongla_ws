@@ -10,7 +10,7 @@ Usage:
 
 Examples:
     ros2 run mongla_planner mongla arm
-    ros2 run mongla_planner mongla set_mode --target_name ALT_HOLD
+    ros2 run mongla_planner mongla set_mode --target_name DEPTH_HOLD
     ros2 run mongla_planner mongla set_depth --target -1.5
     ros2 run mongla_planner mongla move_forward --duration 5 --gain 60
     ros2 run mongla_planner mongla yaw_left --target 90
@@ -19,10 +19,6 @@ Examples:
     ros2 run mongla_planner mongla pause --duration 3
     ros2 run mongla_planner mongla stop
     ros2 run mongla_planner mongla disarm
-
-On the SROT board `arc`, `lock_heading`, `style_yaw` and the `*_dist` verbs
-are refused before dispatch (srot_fc.UNSUPPORTED_VERBS); they run on the
-pixhawk backend (the simulator) only.
 """
 
 import argparse
@@ -61,8 +57,7 @@ def _float_or_head(value):
     'head' is resolved at send time to the live heading reading from
     the active yaw source -- use it anywhere a float target is accepted:
 
-        mongla lock_heading --target head
-        mongla yaw_left --target head
+        mongla turn --target head
     """
     if str(value).strip().lower() == _HEAD_SENTINEL:
         return _HEAD_SENTINEL

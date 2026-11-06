@@ -7,7 +7,7 @@ stale sample -- fell straight back to that same cached attitude. /mongla/state
 then published a frozen, confident vehicle: safety rule 6's "plausible number
 standing in for an absent measurement".
 
-Real `SrotFC` on a fake master, real `MavlinkAhrsSource`, the node's real
+Real `SrotFC` on a fake master, real `BoardYaw`, the node's real
 methods run unbound on a stub; only the age of the cached ATTITUDE is varied.
 """
 import math
@@ -20,7 +20,7 @@ from builtin_interfaces.msg import Time
 
 from mongla_manager import auv_manager_node as amn
 from mongla_control.fc import srot_fc as srot_mod
-from mongla_sensors.sources.mavlink_ahrs import MavlinkAhrsSource, STALE_SECONDS
+from mongla_manager.yaw_source import BoardYaw, STALE_SECONDS
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]
                        / 'mongla_control' / 'test'))
@@ -46,8 +46,8 @@ class _Pub:
 
 class _StubNode:
     def __init__(self, fc):
-        self.pixhawk = self.fc = fc
-        self.yaw_source = MavlinkAhrsSource(fc)
+        self.fc = fc
+        self.yaw_source = BoardYaw(fc)
         self.state_publisher = _Pub()
 
     def _state_stamp(self):

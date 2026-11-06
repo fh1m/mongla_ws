@@ -1,6 +1,6 @@
 """Hailo-8 detector backend: a compiled ``.hef`` behind the same `Detector` API.
 
-Replaces the Jetson's TensorRT path on the Raspberry Pi 5 + AI HAT+. Round 29
+The vehicle's detector, on the Raspberry Pi 5 + AI HAT+. Round 29
 measured this pipeline at **98.0 Hz** on `gate_sharks` against a
 `hailortcli --hw-only` benchmark of **97.9 FPS** on the same HEF -- so the host
 code is at 100 % of the chip and there is no preprocessing overhead left to
@@ -8,7 +8,7 @@ recover. The full campaign, including why the ceiling is the model's CONTEXT
 COUNT and why async inference buys exactly nothing here, is in
 `.claude/context/perception/hailo-vision.md`.
 
-Four things differ from `.pt` / `.engine`, and each is silent if missed
+Four things differ from a `.pt`, and each is silent if missed
 ---------------------------------------------------------------------
 1. **The HEF carries no class names.** A `.pt` has `model.names`; a `.hef` has
    nothing. The `<stem>.yaml` sidecar therefore stops being advisory -- without
@@ -23,7 +23,7 @@ Four things differ from `.pt` / `.engine`, and each is silent if missed
    exactly this reason: it is free (97.7 FPS either way) and it leaves the
    operating point a runtime decision.
 
-3. **Run at conf 0.10-0.15, not the CUDA path's 0.45.**
+3. **Run at conf 0.10-0.15, not the .pt path's 0.45.**
 
    MEASURED ON REAL COMPETITION FOOTAGE (2026-09-04), which the round-24
    figure below was not -- that one was a score DISTRIBUTION with the camera
@@ -91,7 +91,7 @@ _ASYNC_WAIT_MS = 1000
 # The operating point this backend is compiled FOR. Round 24 measured INT8
 # costing ~0.08 of confidence at the 0.20 point while NOT moving the box centre
 # (2.5 px against a 2.72 px fp32-vs-fp32 noise floor), so the detections are
-# there and score lower. Every launch path ships 0.35-0.45, which is the CUDA
+# there and score lower. Every launch path ships 0.35-0.45, which is the .pt
 # number.
 _INT8_OPERATING_POINT_MIN = 0.12
 _INT8_OPERATING_POINT_MAX = 0.15

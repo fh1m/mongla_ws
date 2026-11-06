@@ -1,10 +1,10 @@
-# SROT control-board integration (branch `srot`)
+# SROT board integration — how the host drives Hengla
 
 > ⛔ **PRE-DIVE: read [`BUGS.md`](../BUGS.md) FIRST.** The axis
 > configuration is currently **UNKNOWN** — `CAL_MDIR` is not `[+1]×8` as §8.2 assumed, and it
 > multiplies with `MOT_n_DIRECTION`. §8.2's "config is correct" conclusion is superseded.
 >
-> **Firmware baseline for this branch (at the time of the original integration — SUPERSEDED,
+> **Firmware baseline (at the time of the original integration — SUPERSEDED,
 > not current): `srot-control-board` @ `3bd247b`, `SROT_FW_BEHAVIOUR_REV 9`.**
 > **FLASHED to the vehicle 2026-08-07**, all 232 params re-read afterwards with **zero
 > drift** and `CAL_*` intact. The board now reports **rev 14** (root `CLAUDE.md` §2); the
@@ -58,168 +58,27 @@
 > Board-side source of truth: `Mongla_others/srot-control-board/{DUBURI_WS_INTEGRATION,
 > JETSON_COMMS,ALGORITHMS,AUDIT,PARAMETERS}.md`.
 
-## Bench history, 2026-08 — SROT reached over a UDP bridge
+## Bench history, 2026-08 — what the board taught us
 
-> The vehicle today is **one USB-C cable** from the Pi to the board. This section records the
-> August bench rig, where the board was reached through a bridge on a second computer. It stays
-> because the findings in it are about the **board**, not the bridge — `FRAME_REVERSE`, the
-> double-inversion hazard, the Bar30 fix and payload identity all still apply.
+The vehicle is **one USB-C cable** from the Pi to the board. In August the board was reached
+through a serial→UDP bridge on a second computer while the hull was rewired; the bridge's own
+quirks (a stale serial fd after every flash, ~8–9 % framing loss, port contention with Bondor)
+belong to that rig and went with it. What stays here is what the rig taught us about the
+**board** — `FRAME_REVERSE`, the double-inversion hazard, `FS_GCS_COMPID`, the Bar30 fix and
+payload identity all still apply.
 
-The SROT board has no Ethernet, so while the hull is still wired Pi-first the board hangs
-off the **Raspberry Pi's USB** and reaches us as **UDP**, instead of the designed direct
-USB-C-to-Jetson cable. This works and is fully verified — but read the link-quality
-caveat at the end before planning a mission around it.
+⛔ **Telemetry is not evidence of an uplink.** Probe a command path before trusting a
+session — a link can stream perfectly in one direction and carry nothing in the other:
 
-**Measured topology** (`.1`/`.2` were swapped in CLAUDE.md until 2026-08-03):
-
-| Host | Address | Note |
-|---|---|---|
-| BlueOS Pi | **192.168.2.2** | Pi MAC OUI, BlueOS **1.4.2**, also the gateway |
-| Topside / dev box | **192.168.2.1** | Blue Robotics' standard topside address |
-| SROT board | `/dev/ttyUSB0` **on the Pi** | CH340 `1a86:7523` |
-
-### Why Bridget, and not the Autopilot Manager
-
-BlueOS's ArduPilot Manager will **never** adopt this board — it lists only known ArduPilot
-boards (`/v1.0/available_boards` returns SITL alone) and the SROT reports
-`MAV_AUTOPILOT_GENERIC` on a CH340. **Bridget** (port 27353) is the right service: a *raw
-byte* serial↔UDP bridge with no MAVLink awareness. That matters twice — it needs no board
-recognition, and it **injects no heartbeats of its own**, which a router like
-mavlink-router would. The firmware feeds its GCS failsafe off *any* foreign heartbeat, so
-an injecting router would hold that failsafe open on our behalf.
-
-### Setup — one call, idempotent, safe to re-run
-
-```bash
-# create (HTTP 201). udp_listen_port is ALSO the source port Bridget sends from.
-curl -s -X POST http://192.168.2.2:27353/v1.0/bridges -H 'Content-Type: application/json' \
-  -d '{"serial_path":"/dev/ttyUSB0","baud":115200,"ip":"192.168.2.1",
-       "udp_target_port":14550,"udp_listen_port":14551}'
-
-curl -s http://192.168.2.2:27353/v1.0/bridges          # verify
-curl -s http://192.168.2.2:27353/v1.0/serial_ports     # is the board even on the Pi?
-# DELETE takes the SAME body; delete->recreate->reconnect verified working.
+```python
+import os; os.environ['MAVLINK20'] = '1'      # BEFORE importing pymavlink
+from pymavlink import mavutil
+m  = mavutil.mavlink_connection('/dev/ttyUSB0', baud=115200)
+hb = m.wait_heartbeat(timeout=15)
+m.mav.param_request_read_send(m.target_system, hb.get_srcComponent() or 1,
+                              b'FRAME_REVERSE', -1)
+print(m.recv_match(type='PARAM_VALUE', blocking=True, timeout=5))   # None => uplink dead
 ```
-
-`ip` is where Bridget **sends**; `udp_listen_port` is what it **binds and sends from**.
-Because it transmits from its listen port, a pymavlink `udpin:` — which replies to the
-source of the last datagram — *should* land back exactly where Bridget listens. That is the
-one property to re-verify if these numbers are ever changed: telemetry flowing proves
-nothing about the uplink.
-
-> **⛔ MEASURED 2026-08-07 — that bidirectionality did NOT hold.** Downlink was perfect and
-> **the uplink was completely dead**. This is precisely the trap the sentence above warns
-> about, so it is worth recording that it actually fired on the real vehicle.
->
-> Downlink, from `udpin:0.0.0.0:14550`, source tuple **`192.168.2.2:14551`** exactly as
-> documented: `HEARTBEAT` (sys 1 comp 1, `MAV_TYPE_SUBMARINE`), `ATTITUDE`,
-> `BATTERY_STATUS`, `ESC_TELEMETRY_1_TO_4` / `_5_TO_8`, ~21 `NAMED_VALUE_FLOAT`s.
->
-> Uplink: **nothing came back at all.** Tested with `MAV_CMD_REQUEST_MESSAGE` (148), then
-> with `PARAM_REQUEST_READ` on three separate params, three retries each — zero
-> `COMMAND_ACK`, zero `PARAM_VALUE`, while telemetry streamed throughout. Replies went to
-> the true source tuple (pymavlink `udpin:` replies to sender), so this was not a
-> client-side addressing mistake.
->
-> `PARAM_REQUEST_READ` was the deliberate second probe: "custom SROT firmware does not
-> implement `REQUEST_MESSAGE`" would look identical to a dead uplink, and params rule that
-> out — the firmware certainly implements those.
->
-> **Cause not isolated.** Two candidates we could not separate remotely:
-> 1. **BlueOS routing.** `ardupilot-manager`'s bidirectional *"GCS Server Link"*
->    (`udpin 0.0.0.0:14550`) was `enabled: false`. A `PUT` to
->    `/ardupilot-manager/v1.0/endpoints/` flipped the stored flag to `true` but returned
->    **HTTP 500**, and `udpout:192.168.2.2:14550` still gave no heartbeat — the router
->    evidently never reloaded. A BlueOS / mavlink-router restart is the untried next step.
-> 2. **A one-way serial leg** — BlueOS reading the board's TX while its own TX never
->    reaches the board. A wiring question, not a software one.
->
-> `mavlink2rest` is not a useful view here: it only ever showed component **194** sending
-> `COMMAND_LONG`, and never saw comp 1 at all.
->
-> **Run this before trusting any UDP session** — telemetry is not evidence:
-> ```python
-> import os; os.environ['MAVLINK20'] = '1'      # BEFORE importing pymavlink
-> from pymavlink import mavutil
-> m  = mavutil.mavlink_connection('udpin:0.0.0.0:14550')
-> hb = m.wait_heartbeat(timeout=15)
-> m.mav.param_request_read_send(m.target_system, hb.get_srcComponent() or 1,
->                               b'FRAME_REVERSE', -1)
-> print(m.recv_match(type='PARAM_VALUE', blocking=True, timeout=5))   # None => uplink dead
-> ```
-
-> **⚖ RECONCILIATION (mongla_ws, on merge of PR #5).** Keep the probe — it is a good gate and
-> the finding is honest. But **do not read it as "the UDP uplink does not work"**: it worked
-> here, over this same Bridget configuration, the day before. On **2026-08-06** we ran, all
-> from `udpin:0.0.0.0:14550`:
->
-> - `[SROT ] firmware behaviour rev 4 (>= 2 required)` and the `bringup_check --srot`
->   `[PASS] FW behaviour rev` line. That value comes from `check_behaviour_rev()`, which
->   requests msgid 148 with **`MAV_CMD_REQUEST_MESSAGE` — the exact probe reported as
->   silent.** A number came back.
-> - `[PAYLOAD] board roles: FIREABLE (switch) [9..16] | arm/PWM [1..8] | unreadable none` —
->   sixteen sequential `PARAM_REQUEST_READ`s, sixteen `PARAM_VALUE` replies, **zero
->   unreadable**. That is the second probe, sixteen times over.
-> - `fire(9) -> FIRED`, i.e. a `DO_SET_SERVO` that returned `COMMAND_ACK`.
->
-> So the uplink is not structurally dead, and the Bridget path is not retired. **What
-> changed in between is physical, and both suspects are already documented here:**
->
-> 1. **The board was unplugged, flashed on the dev box, and re-seated** for rev 6, then
->    again for rev 7. That is precisely the trap in
->    [AFTER EVERY FLASH](#-after-every-flash-the-bridge-is-dead-but-still-looks-alive) —
->    Bridget keeps a dead `/dev/ttyUSB0` fd and still lists the bridge as healthy. **Delete
->    and recreate the bridge** before concluding anything about the link.
-> 2. **A re-seated USB connector with a one-way leg** — which is candidate #2 above, and
->    matches the reported signature (perfect downlink, zero uplink) exactly. Note the Bar30
->    fault on this hull was also a connector.
->
-> **✅ ADJUDICATED 2026-08-07, same day: cause #1. The uplink is fine.** Measured from this
-> dev box on `192.168.2.1`:
->
-> ```
-> FRAME_REVERSE -> 1.0   (0.0s)            first PARAM_REQUEST_READ, first try
-> 12/12 params read       FS_GCS_*, MOT_1..8_DIRECTION, CAL_LVL_*, MAG_YAW_REF, JS_GAIN_DEFAULT
-> bringup_check --srot -> [PASS] FW behaviour rev  7      via MAV_CMD_REQUEST_MESSAGE(148)
-> ```
->
-> That last line is **their exact silent probe**, answering. The decisive detail is what the
-> link was: **a Bridget bridge created from nothing** — the pre-emptive `DELETE` returned
-> `{"detail":"Bridge doesn't exist."}` — on a `/dev/ttyUSB0` that had been absent from
-> BlueOS's own `serial_ports` enumeration minutes earlier. So this is not "it works for us
-> and not for them"; it is the reflash trap, reproduced and then cleared by the documented
-> fix. **PR #5's finding #1 is the stale fd, not a property of the UDP path.**
->
-> Their downlink came from `192.168.2.2:14551`, so a bridge *did* exist when they measured —
-> that is consistent, not contradictory: a bridge whose serial fd has died still forwards
-> nothing toward the board while continuing to list as healthy. Perfect downlink with a dead
-> uplink is exactly what a half-dead bridge looks like.
->
-> **Keep the probe.** It correctly caught a real broken link, and the standing rule is
-> unchanged: after any flash, unplug or re-seat, **delete and recreate the bridge before
-> trusting the session**, then probe.
->
-> **Independently corroborated by the firmware team (PR #6), from the other end.** The same
-> board over **direct USB (COM8)** took a full 232-param `PARAM_REQUEST_LIST`, multiple
-> `PARAM_SET` round-trips confirmed by `PARAM_VALUE` echo, and `PREFLIGHT_STORAGE` returning
-> both the `COMMAND_ACK` and the rev-7 `"Params saved to flash"` statustext. So the board's
-> serial RX and MAVLink command handling are **fully functional** — which rules out the
-> firmware and the board's receiver, and leaves the fault Pi-side, exactly where the
-> recreated-bridge evidence puts it. Two independent measurements, same conclusion.
-
-### Host side — no code change needed
-
-`resolve_srot_profile()` already takes any pymavlink connection string and only attaches
-a baud when the target starts with `/dev/`, and `SrotFC` is transport-agnostic.
-
-```bash
-ros2 run mongla_manager bringup_check --srot --srot-device=udpin:0.0.0.0:14550
-ros2 run mongla_manager connect --path udpin:0.0.0.0:14550 --watch
-ros2 run mongla_manager start --ros-args -p mav_device:=udpin:0.0.0.0:14550 \
-                                         -p yaw_source:=mavlink_ahrs
-```
-
-Pass the **same endpoint to all three** — `mode` still does not apply on srot.
 
 ### ⛔ IN-WATER 2026-08-06: every axis reversed + flips in STABILIZE
 
@@ -288,13 +147,12 @@ divergent loop, and the vehicle reaches full deflection before an operator can r
 ### ✅ FLASHED rev 6 — 2026-08-06, and what state the vehicle is in
 
 Board moved to the dev box on USB (`1a86:7523` → `/dev/ttyUSB0`), erased, flashed, restored.
-**Flashing is impossible over the BlueOS bridge** and this is structural, not a policy: an
-ESP32 enters its bootloader only when `esptool` toggles **DTR→EN** and **RTS→GPIO0**, and
-Bridget's entire API is `serial_path / baud / ip / udp_target_port / udp_listen_port` — no
-line control, so the sequence cannot be conveyed. Any flash needs the board on a USB host.
+**Flashing needs the board on a USB host**, structurally: an ESP32 enters its bootloader only
+when `esptool` toggles **DTR→EN** and **RTS→GPIO0**, and no serial-over-network bridge
+conveys line control.
 
-Measured on the way past, confirming the earlier bridge finding from the other direction:
-**0.0 % `BAD_DATA` on direct serial** (436 msgs/5 s) against ~8–9 % over the bridge.
+Measured on the way past: **0.0 % `BAD_DATA` on direct serial** (436 msgs/5 s), against
+~8–9 % over the August UDP bridge.
 
 | step | result |
 |---|---|
@@ -308,7 +166,7 @@ Measured on the way past, confirming the earlier bridge finding from the other d
 
 - **`FS_GCS_COMPID` 0 → 191.** The backup captured **bench mode, saved to flash**. Restoring
   that verbatim would have put a bench escape hatch into a flight vehicle, where a dead
-  Jetson can no longer be told from a live GCS and the hull station-keeps instead of
+  companion can no longer be told from a live GCS and the hull station-keeps instead of
   surfacing. ⚠ **Check this value before every water session** — Bondor's bench mode is
   runtime-only *until someone presses Save*, and someone did.
   **⛔ AND IT REGRESSED. Measured 2026-08-07: `FS_GCS_ENABLE=1`, `FS_GCS_COMPID=0` — bench
@@ -598,7 +456,7 @@ Board on this dev box, `/dev/ttyUSB0`, by-id `usb-1a86_USB_Serial-if00-port0` (C
 | `bringup_check --srot` | **0 FAIL, exit 0** — every SROT line PASS |
 | fw behaviour rev | **7** (via `MAV_CMD_REQUEST_MESSAGE(148)`) |
 | `FS_GCS_COMPID` | **191**, written and confirmed in flash (above) |
-| barometer spread | **2.94 mbar** on USB vs **5.87** over the bridge — visibly cleaner |
+| barometer spread | **2.94 mbar** on USB vs **5.87** over the August bridge — visibly cleaner |
 | Bar30 health | healthy; `AUTO`/`DEPTH_HOLD` available |
 | manager startup | connects, banner correct, `/mongla/state` populating |
 | payload roles | FIREABLE (switch) `[1,2,3,4, 9..16]` · arm/PWM `[5,6,7,8]` · **unreadable none** |
@@ -618,173 +476,23 @@ Board on this dev box, `/dev/ttyUSB0`, by-id `usb-1a86_USB_Serial-if00-port0` (C
   neither of which depends on the sensor's self-assessment. **Prefer relative turns until
   the state is observable** (§8.8 in the firmware PR).
 
-### ⛔ AFTER EVERY FLASH: the bridge is dead but still looks alive
+### ⛔ Bondor and the companion-lost failsafe — do not arm from Bondor alone
 
-**This is the single most likely reason "we cannot connect any more".** OBSERVED
-2026-08-06, after the rev-5 flash: neither mongla_ws nor Bondor could connect. The bridge
-was listed, `/dev/ttyUSB0` was listed, the Pi pinged — and **zero datagrams arrived**.
+`FS_GCS_SYSID`/`FS_GCS_COMPID` (255/191) scope the companion-lost failsafe to **one named
+source — mongla_ws**. Bondor is **255/190**, so its heartbeat never feeds that timer. The
+board latches "companion seen" once the named source has appeared, so a Bondor-only session
+on a *freshly booted* board is fine — but once mongla_ws has connected **in that power
+cycle**, arming with only Bondor trips the failsafe ~5 s later: out of MANUAL into
+**SURFACE**, and the four verticals spin up. Measured 2026-08-06; it reads as "arming ran the
+motors on its own" and is neither a Bondor nor a firmware bug.
 
-A Bridget bridge holds an **open file descriptor** on `/dev/ttyUSB0`. Flashing the board
-re-enumerates the USB device, so that fd dies — but Bridget keeps the bridge in its list
-and the API answers exactly as it does when everything is healthy. Nothing is visibly
-wrong anywhere, and nothing works.
-
-**Fix: delete and re-POST the identical bridge.** It comes straight back.
-
-```bash
-B='{"serial_path":"/dev/ttyUSB0","baud":115200,"ip":"192.168.2.1","udp_target_port":14550,"udp_listen_port":14551}'
-curl -s -X DELETE http://192.168.2.2:27353/v1.0/bridges -H 'Content-Type: application/json' -d "$B"
-curl -s -X POST   http://192.168.2.2:27353/v1.0/bridges -H 'Content-Type: application/json' -d "$B"
-```
-
-`connect`, `bringup_check --srot` and `mongla_manager start` now **print those two lines
-for you** when nothing arrives (`connection_config.diagnose_bridge`), and distinguish
-"BlueOS has no bridge" from "bridge configured and still silent" — the second being the
-reflash signature.
-
-### ⚠ Link quality: measurably worse than direct serial — bench use, not water
-
-| | direct USB-C serial | via BlueOS/Bridget |
-|---|---|---|
-| `BAD_DATA` | **zero in 15 s** (bench 2026-08-02) | **8.0 / 8.7 / 9.1 %** — three fixed-rate 12 s runs |
-| command round-trip | — | **11/12** (`AUTOPILOT_VERSION`), 8 ms avg |
-
-**What is being lost is real telemetry, not the known-undecodable message.** Decode the
-`BAD_DATA` payloads and their msgids are **251 `NAMED_VALUE_FLOAT`, 74 `VFR_HUD`, 30
-`ATTITUDE`, 147 `BATTERY_STATUS`, 1 `SYS_STATUS`**. `ESC_STATUS(291)` is *not* in there —
-pymavlink surfaces it separately as `UNKNOWN_291` (~225/run) and it never enters the
-`BAD_DATA` count. Worth stating explicitly because "it's just the 291 we already know
-about" is the obvious wrong reading of this number, and it is wrong.
-
-> ⚠ Measure `BAD_DATA` at **fixed** message rates. An earlier pass that changed the ESC
-> rate mid-measurement produced a meaningless 9.6→17.1→23.2 % spread on an unchanged link.
-
-**Mechanism:** Bridget chunks the serial stream at arbitrary byte offsets — only **77 % of
-datagrams begin on a message boundary** (`0xFD`), and only 84 of 296 `BAD_DATA` events
-start with `0xFD`; the rest begin mid-message. Reassembling the datagrams into one
-continuous stream and re-parsing recovers most of it, so the **bytes are largely intact
-and this is framing, not the wire**. It is *not* saturation either: dropping the telemetry
-rates did not reduce it (the link sits at ~73 % of 115200 regardless). (Straddling alone
-would be harmless — pymavlink buffers across `parse_char` — so the loss implies datagrams
-are also being dropped or reordered, not merely split.)
-
-**So: use this rig for bring-up, telemetry and bench verification. For an autonomous
-in-water run, put the board back on the Jetson's USB-C cable** — the designed
-architecture, and the one with zero observed frame loss. MAVLink has no retransmission,
-so a lost `COMMAND_LONG` is a lost arm or a lost move with nothing in any log.
-
-**Known gap — Bondor cannot share this link.** A Bridget bridge targets exactly one
-`ip:port`, so the companion and the ground station cannot both receive from it. Two
-consumers would need a fan-out router; there is none, and we deliberately did not build
-one — the water-test discipline is **take turns**. See the next section, because the
-collision does not fail the way you would expect.
-
-### Bondor (the GCS) over the same UDP link — take turns, and mind the port
-
-**⛔ DO NOT ARM FROM BONDOR WHILE mongla_ws IS DISCONNECTED.** This is the one sharp edge
-in the take-turns workflow and it bit us on 2026-08-06: arming produced
-`CRIT Failsafe: surfacing (companion lost)` followed by thrusters 5-8 spinning, which
-reads as "arming ran the motors on its own in MANUAL". It is neither a Bondor bug nor a
-firmware bug.
-
-`FS_GCS_SYSID`/`FS_GCS_COMPID` (255/191 on this board) scope the companion-lost failsafe
-to **one named source — mongla_ws**. Bondor is **255/190**, so its 1 Hz heartbeat never
-feeds that timer no matter how healthy the link looks. The board only latches
-"companion seen" once the named source has appeared, so a Bondor-only session on a
-*freshly booted* board is fine — which is exactly why this never reproduces on a bench
-where mongla_ws is never run. But once mongla_ws has connected **in that power cycle**,
-arming with only Bondor connected trips the failsafe ~5 s later, which switches out of
-MANUAL into **SURFACE** and drives the four vertical thrusters (5-8) up. `rpm=0` then
-raises `STALLED` on each of them.
-
-Config, tuning, calibration, param save/export and payload roles need **no arming at
-all** — do all of that with Bondor alone, freely.
-
-**The one exception is motor direction.** Verifying it needs `DO_MOTOR_TEST`, which the
-firmware hard-gates on armed (`mav_commands.cpp`: *"Arm motors before testing motors"*),
-so that task genuinely cannot be done from Bondor without arming.
-
-**Bondor now has a BENCH MODE for exactly this**, one click from the banner that reports
-the problem. It sets `FS_GCS_COMPID = 0`, the firmware's own documented wildcard: the
-failsafe still runs, it just accepts any component on the configured sysid, so Bondor's
-heartbeat satisfies it and arming is safe on the bench.
-
-Three properties make that safe, and they are load-bearing:
-
-- It is a **`PARAM_SET` only, never `PREFLIGHT_STORAGE`** — a power cycle restores the
-  flight value by itself, so the safe state is the default and forgetting is harmless.
-- ⚠ **Do not press Save on the Parameters tab while bench mode is active**, or it becomes
-  permanent. This matters because the runbook below tells you to Save for payload roles —
-  so do the payload/param save *before* enabling bench mode, or restore first.
-- A **Restore flight config** button appears whenever the wildcard is active, so the state
-  is never invisible.
-
-**Never take the wildcard into the water:** with it set, a dead Jetson cannot be told
-apart from a live GCS, so the vehicle would station-keep instead of surfacing — which is
-the entire reason the two ids differ. Verify `FS_GCS_COMPID = 191` before any autonomous
-run (`bringup_check --srot` reads it, and a confirmed read needs several samples: over the
-bridge, `PARAM_SET` echoes and `PARAM_REQUEST_READ` replies share pymavlink's single
-slot, so one sample can lag by a write).
-
-**Bondor already had Direct UDP**; it had simply never been used. Connect settings:
-
-| field | value |
-|---|---|
-| Transport | **Direct UDP** |
-| Listen port | **14550** |
-| Vehicle host / port | **LEAVE BLANK** |
-
-Blank host is load-bearing: it makes `udpLink.ts` set `fixedRemote = false` so the peer is
-auto-learned from the incoming datagram (`192.168.2.2:14551`). Typing an address pins
-replies to one Bridget may not send from.
-
-**⛔ ONE PROCESS AT A TIME, and the failure is not the one you would guess.** MEASURED:
-two processes both binding 14550 with `SO_REUSEADDR` — which Bondor does and pymavlink
-does — **both binds succeed, and the newcomer takes the stream** (544 datagrams vs a
-trickle over 6 s). So opening Bondor during a mission does *not* fail visibly: Bondor works
-fine and **silently starves mongla_ws** of telemetry and command ACKs. Bondor now probes the
-port before binding and shows a red **PORT CONFLICT** chip that incoming data does not
-clear. Check `ss -ulnp | grep 14550` is empty before connecting either one.
-
-### Better: stop sharing the port — give each consumer its own endpoint
-
-"One process at a time" is a workaround for a socket collision, not a real constraint of
-the vehicle. **BlueOS will fan the same MAVLink stream out to as many UDP destinations as
-you ask it to**, so Bondor and mongla_ws never have to contend for one socket.
-
-Observed live on this vehicle — `ardupilot-manager` was already doing exactly this:
-
-```
-GCS Client Link   udpout  192.168.2.1:14550     enabled   <- topside / Bondor
-mongla_agile          udpout  192.168.2.69:14550    enabled   <- mongla_ws dev box
-```
-
-Two independent `udpout` endpoints, two different hosts, one board. Neither can starve the
-other, because they are not sharing a socket — the `SO_REUSEADDR` steal only happens when
-two processes bind *the same* port on *the same* host.
-
-Add one per consumer:
-
-```bash
-curl -s -X POST http://192.168.2.2/ardupilot-manager/v1.0/endpoints/ \
-  -H 'Content-Type: application/json' \
-  -d '[{"name":"mongla-jetson","owner":"User","connection_type":"udpout",
-        "place":"192.168.2.69","argument":14550,"persistent":true,
-        "protected":false,"enabled":true}]'
-
-curl -s http://192.168.2.2/ardupilot-manager/v1.0/endpoints/   # note the TRAILING SLASH
-```
-
-⚠ The trailing slash matters — without it the API 307-redirects and returns an empty body,
-which reads as "no endpoints configured" and is misleading.
-
-Each consumer then binds `udpin:0.0.0.0:14550` **on its own machine** and auto-learns the
-peer as usual. Nothing about the per-process connection string changes; what changes is
-that they are no longer on the same host fighting for the same port.
-
-**This does not fix the dead uplink documented above** — it removes the contention problem
-only. Verify uplink per endpoint with the `PARAM_REQUEST_READ` probe; a fanned-out `udpout`
-endpoint carries telemetry outward regardless of whether the return path works.
+Config, tuning, calibration, param save/export and payload roles need **no arming** — do them
+with Bondor alone. The one exception is motor direction (`DO_MOTOR_TEST` is gated on armed);
+Bondor's **BENCH MODE** covers it by setting `FS_GCS_COMPID = 0` with a `PARAM_SET` only,
+never `PREFLIGHT_STORAGE`, so a power cycle restores the flight value. ⚠ **Never press Save
+while bench mode is active**, and never take the wildcard into the water: a dead companion
+could no longer be told from a live GCS, and the vehicle would station-keep instead of
+surfacing. `bringup_check --srot` grades `FS_GCS_COMPID` and FAILs on the wildcard.
 
 ### Payload identity comes from the board (`SERVOn_FUNCTION`)
 
@@ -802,7 +510,7 @@ payload map is firing the manipulator arm during a drop.
 
 Set it in **Bondor → Payload → Function**, then **Save** on the Parameters tab (it is
 NVS-backed and does not persist without the save). mongla_ws reads all 16 roles *and*
-functions in one traversal at bring-up (~4 s over the bridge) and prints them:
+functions in one traversal at bring-up and prints them:
 
 ```
 [PAYLOAD] board roles: FIREABLE (switch) [9..16] | arm/PWM [1..8] | unreadable none
@@ -855,157 +563,120 @@ in the runbook below remain the gate. "Bar30 fixed" must never be read as "depth
 ⚠ Note `|−0.115| < 0.90`, so `check_depth_loop_settled` still passes — it is an
 anti-saturation guard, never a proof the loop works.
 
-**The depth loop has still never run closed**, it gates *every* AUTO move (`move_forward`
-included — there is no depth-free path through AUTO), and the two **armed** bench checks
-in the runbook below remain the gate. "Bar30 fixed" must never be read as "depth verified".
 
 ## The offload boundary
-**The board owns:** attitude + depth hold, thrust allocation (vectored 6DOF), timed
-motion primitives **with on-board braking**, heading hold between/within legs, arming +
-pre-arm checks, leak/low-batt/GCS-loss failsafes → SURFACE, ESC RPM telemetry.
-**The Jetson owns:** perception, mission logic, *which* verb next, DVL position loops,
-vision servoing, payload sequencing, logging.
 
-## Architecture — the FlightController HAL (built, `mongla_control/fc/`)
+**The board owns:** attitude + depth hold, heading hold, thrust allocation (vectored 6-DOF),
+timed motion primitives **with on-board braking**, arming + pre-arm checks, leak / low-battery
+/ companion-lost failsafes → SURFACE, ESC RPM telemetry.
+**The Pi owns:** perception, mission logic, *which* verb next, vision servoing, payload
+sequencing, localization, logging.
+
+## The driver (`mongla_control/fc/`)
+
 ```
-fc/base.py         FlightController ABC + Telemetry + MoveResult DTOs
-fc/srot_protocol.py THE wire constants (cmd 31000, type codes, modes, ACKs, MC scaling)
-fc/srot_fc.py      SROT backend (MANUAL_CONTROL, SROT_MOVE + ACK relay, telemetry)
-fc/pixhawk_fc.py   ArduSub backend (IS-A Pixhawk + intent methods) — unchanged behaviour
-fc/factory.py      make_flight_controller('pixhawk'|'srot', master, log)
+fc/base.py          Telemetry + MoveResult, the types the facade and the node share
+fc/srot_protocol.py THE wire constants (cmd 31000, move types, modes, ACKs, MC scaling)
+fc/srot_fc.py       SrotFC: MANUAL_CONTROL, SROT_MOVE + ACK relay, telemetry, payload
+fc/port_guard.py    one process per serial port
 ```
-ROS param **`flight_controller`** (`srot`|`pixhawk`). **The launch and node default is
-`srot`** (set 2026-09-08, when main became the SROT vehicle; it was briefly `pixhawk` between
-the srot→main merge and that date, and the `pixhawk` branch now preserves that tree). Both backends coexist on the same
-vehicle for A/B (`:=pixhawk` for the ArduSub/BlueOS path). The ABC exposes intent:
-`arm/disarm/set_mode/manual(fwd,lat,up,yaw)/move(verb,*,on_progress,abort_fn)/telemetry/
-send_gcs_heartbeat`. `manual()` is the streamed servo primitive (vision + DVL loops);
-`move()` is one on-board SROT_MOVE + its four-terminal ACK relay.
+
+`SrotFC` exposes intent: `arm` / `disarm` / `set_mode` / `manual(fwd, lat, up, yaw)` /
+`move(verb, *, on_progress, abort_fn)` / `stop_motion` / telemetry / `send_heartbeat`.
+`manual()` is the streamed axis demand the vision loops use; `move()` is one on-board
+`SROT_MOVE` and its four-terminal ACK relay. There is one backend, so there is no selector.
 
 ## The verb table (`fc/srot_fc.py:_build_params` + `MOVE_VERBS`)
-**Clean SROT_MOVE (31000) collapses** — `move()` sends one command, relays the ACK:
+
+**One `SROT_MOVE` (31000) each** — `move()` sends one command and relays the ACK:
+
 | mongla verb | p1 type | params |
 |---|---|---|
-| `move_forward` | 0 forward | p2=duration, p3=speed(gain/100) |
-| `move_left`/`move_right` | 2/3 strafe | p2=duration, p3=speed |
-| `yaw_left`/`yaw_right` | 4 turn (**relative**) | p2=∓degrees, p4=0 |
+| `move_forward` / `move_back` | 0 / 1 | p2=duration, p3=speed (gain/100) |
+| `move_left` / `move_right` | 2 / 3 strafe | p2=duration, p3=speed |
+| `yaw_left` / `yaw_right` | 4 turn (**relative**) | p2=∓degrees, p4=0 |
 | `turn` | 4 turn (**absolute**) | p2=heading, p4=1 — **needs `MAG_YAW_REF=1`** |
-| `set_depth` | 5 dive | p2=**−target** (mongla neg → SROT pos depth); refuses target>0 |
-| `stop` | 6 brake | (also the ROS-cancel wire action) |
-| `pause` | 7 hold | station-keep (no channel-release exists on SROT) |
+| `set_depth` | 5 dive | p2=**−target** (mongla negative → SROT positive depth); refuses target>0 |
+| `stop` | 6 brake | also the ROS-cancel wire action |
+| `pause` | 7 hold | station-keep (there is no channel release on this board) |
 | `style_roll` | 8 style | p2=count (roll only, 90°/s) |
 
-> **`arc` is NOT mapped** and is excluded from `MOVE_VERBS`. mongla's `arc` holds an
-> ABSOLUTE target heading while curving; SROT's `MOVE_ARC` p4 is a signed yaw **rate** with
-> no heading lock. Passing the heading as a rate would spin the hull, so `arc` is refused
-> (see `UNSUPPORTED_VERBS`) until a host-side heading→rate arc lands.
+**On the host, not through `move()`:** `arm` / `disarm` / `set_mode` (COMPONENT_ARM_DISARM
+400 / DO_SET_MODE 176, with the mode **verified**, because a silent refusal looks exactly like
+success); `surface` → `Mongla.surface()`: `stop_motion()`, then `set_mode('SURFACE')`, then
+wait for the depth to read within `SURFACED_M` of zero; `fire` → `SrotPayload` (the board's
+PCA9685 over `DO_SET_SERVO`), which takes the **board channel directly** (`fire(9)` =
+`DO_SET_SERVO param1 = 9` = `SERVO9_ROLE`) and refuses any channel the board does not call a
+SWITCH; `head`, `mission_reset`, `calibrate_depth`, `calc_distance`, `motor_test`;
+`vision_align` / `vision_move` via `manual()` in STABILIZE.
 
-**Not through `move()` — implemented:** `arm`/`disarm`/`set_mode` (COMPONENT_ARM_DISARM 400 /
-DO_SET_MODE 176); **`surface` → `stop_motion()` + `set_mode('SURFACE')`** (mode 9), handled
-in `auv_manager_node._run_srot_surface` because the facade's `surface` is `set_depth(0)` and
-would die on the ArduSub-only ALT_HOLD gate; `fire` → **`SrotPayload`** (the board's PCA9685
-over `DO_SET_SERVO`/`DO_SET_RELAY` — there is NO separate USB ESP32 any more), which
-takes the **board channel directly** (`fire(9)` = `DO_SET_SERVO param1 = 9` = `SERVO9_ROLE`)
-and refuses any channel the board does not call a SWITCH;
-`dvl_connect`, `calc_distance`, `head`, `mission_reset`, `calibrate_depth` (host-side, work
-unchanged).
+⛔ **`surface()` is the last motion.** `stop` is itself a `SROT_MOVE`, which enters AUTO, so a
+`stop()` after `surface()` takes the hull back out of SURFACE. `test_sauvc_srot_port.py`
+refuses a board move after `surface()` in any mission.
 
-**`move_back` is NO LONGER REFUSED.** `MOVE_BACK = 1` was always valid on the wire and your own
-brake path was already commanding it; it was refused purely for a missing two-line
-`_build_params` branch. That branch now exists, so `move_back` is a normal collapse verb
-(p1=1, p2=duration, p3=speed) — the same shape as `move_forward`.
+**What is not here, and why.** A host heading lock, distance-closed moves (`*_dist`), `arc`
+and a STYLE yaw spin belonged to the old backend. The board holds heading itself, there is no DVL
+to close a distance on, `MOVE_ARC` takes a yaw *rate* where the old `arc` held an absolute
+heading, and the board has no selectable STYLE axis. They were deleted rather than refused; a
+mission that still names one fails at the node with `Unknown command`.
 
-**REFUSED on srot (`srot_fc.UNSUPPORTED_VERBS`, checked in `execute_callback` BEFORE
-dispatch → clean `success=False`):** `lock_heading`, `move_forward_dist` /
-`move_back_dist` / `move_lateral_dist`, `vision_align` / `vision_move`, `arc`, `style_yaw`.
-Each reaches a Pixhawk-only primitive (`send_rc_*` / `set_target_depth`) or the ALT_HOLD
-gate. **They are refused rather than left to fall through because falling through was worse
-than failing:** `lock_heading` returned `success=True` while holding nothing (and flooded 50
-swallowed `AttributeError`/s for the lock's 300 s life), and `move_back` raised an
-`AttributeError` even though `MOVE_BACK=1` exists on the wire. Removing a verb from that set
-is how the port lands. `unlock_heading` still works (it only stops a lock + sends neutral).
+## How the board differs from what a host loop expects
 
-## Backend gotchas (why the SROT path differs)
-- ~~**No `SET_MESSAGE_INTERVAL`**~~ — **NO LONGER TRUE as of fw `SROT_FW_BEHAVIOUR_REV 2`.**
-  `MAV_CMD_SET_MESSAGE_INTERVAL` (511) **and** `GET_MESSAGE_INTERVAL` (510) are implemented and
-  bench-measured on COM19 (2026-08-01, USB serial, props off — an observed rate over a short
-  window, not a guaranteed spec): ATTITUDE pinned from 10.8 Hz to **55.2 Hz**, VFR_HUD
-  5.4 → 11.0 Hz. Treat 50 Hz as the number to design against. Rate
-  pinning is now **enabled** on srot (`SROT_MESSAGE_RATES` in the manager). This matters
-  concretely: `_imu_rates_tick` publishes at 50 Hz and was oversampling a 10 Hz stream 5×,
-  feeding the optical-flow rotation compensation stale attitude between real samples.
-  Two refusals remain, both deliberate: HEARTBEAT cannot be disabled (`interval < 0` on
-  HEARTBEAT is answered **DENIED**, not silently ignored), and an unknown msgid is DENIED
-  rather than accepted-and-dropped.
-- **No RC-channel release / `NO_OVERRIDE`** — `MANUAL_CONTROL` always carries all 4 axes.
-  `release_yaw` (vision) → send `r=0` and rely on the board's centred-stick heading hold.
-- **No depth-setpoint stream** — `SET_POSITION_TARGET_*` is UNSUPPORTED. Depth = a mode
-  (`DEPTH_HOLD` latches current) or a DIVE move. The `motion_vision` downward fill→depth
-  descent must be re-expressed as periodic small dives (Phase 8).
-- **Heartbeat is two things:** the 5 Hz *neutral-RC* `heartbeat.py` is **harmful** on SROT
-  (neutral MANUAL_CONTROL fights an AUTO move) → disable it. The ≥1 Hz **MAVLink** HEARTBEAT
-  (`SrotFC.send_gcs_heartbeat`) is **mandatory** — 5 s silence surfaces the vehicle.
-- **`GAIN` boots at 0.5** → MANUAL_CONTROL is halved. `SrotFC.set_default_gain(1.0)` at
-  bring-up; verify against the `GAIN` NAMED_VALUE_FLOAT.
-- **Mode strings change** (ArduSub names → SROT 0/1/2/9/19/23). Audit missions/FSM for
-  hardcoded `'ALT_HOLD'` checks — `set_depth` engages ALT_HOLD on Pixhawk, a DIVE-in-AUTO
-  on SROT.
-- **Transport (current, Bondor-era):** the SROT board plugs **straight into the dev-box /
-  Jetson over USB Type-C @115200** — **no BlueOS / no UDP router**. `connection_config.
-  resolve_srot_profile()` autodetects the USB-serial port (CP210x / CH340 / CH9102 / ESP32
-  by-id, `ttyUSB*/ttyACM*` fallback); `-p mav_device:=/dev/serial/by-id/<yours>` overrides (a
-  device path or any pymavlink conn string, so a future `udpout:192.168.2.2:14550` still
-  works). Vehicle sysid/compid 1/1, source 255/190. **`flight_controller` defaults to `srot`
-  on this branch** (`:=pixhawk` for the ArduSub/BlueOS path).
+- **Message rates are pinnable** (fw rev ≥ 2): `MAV_CMD_SET_MESSAGE_INTERVAL` (511) and
+  `GET_MESSAGE_INTERVAL` (510) work; ATTITUDE pinned from 10.8 Hz to **55.2 Hz** on the bench.
+  `SROT_MESSAGE_RATES` in the manager sets them. HEARTBEAT cannot be disabled, and an unknown
+  msgid is DENIED rather than accepted-and-dropped.
+- **`MANUAL_CONTROL` always carries all four axes.** There is no RC override and no per-axis
+  release; an axis you are not driving is sent as 0 and the board's centred-stick hold keeps
+  it.
+- **No depth-setpoint stream** — `SET_POSITION_TARGET_*` is UNSUPPORTED. Depth is a mode
+  (`DEPTH_HOLD` latches the current depth) or a DIVE move, so the vision loops never command
+  depth: `set_depth` first, then align.
+- **The ≥1 Hz MAVLink HEARTBEAT is mandatory** — 5 s of silence surfaces the vehicle — and it
+  comes from the manager's heartbeat thread, which nothing in an action callback may block.
+- **`JS_GAIN` boots at 0.5**, which halves MANUAL_CONTROL. `SrotFC.set_default_gain()` sets it
+  at bring-up; verify against the `GAIN` NAMED_VALUE_FLOAT.
+- **Modes are the board's** (STABILIZE 0, ACRO 1, DEPTH_HOLD 2, SURFACE 9, MANUAL 19, AUTO 23,
+  STUNT 100, PATTERN 101, plus the tuning modes 20–22). A mode name the board does not have (`ALT_HOLD`, `POSHOLD`) resolves to
+  nothing and `set_mode` refuses it.
+- **Transport:** one USB-C cable at 115200. `connection_config.resolve_srot_profile()` finds
+  the board (CP210x / CH340 / CH9102 by-id, `ttyUSB*`/`ttyACM*` fallback) and refuses to guess
+  between two; `-p mav_device:=` overrides with a path or any pymavlink connection string.
+  Vehicle sysid/compid 1/1; we are 255/191.
 
-## ⚠ Bench bring-up runbook (board benchable now; each step gates the next)
+## ⚠ Bench bring-up runbook (each step gates the next)
+
 Prereqs (operator, via **Bondor** — no mongla_ws code): ESCs on **Bluejay** (`DSHOT_BIDIR=1`,
-`RPM_LOOP=1`) or ESC_STATUS RPM is absent; thruster **directions** verified (motor-detect);
-**Bar30 fitted**; a **`.params` export** taken and committed to `config/srot/` (a
-`PARAM_DEFAULTS_VER` bump wipes `CAL_*` — otherwise unrecoverable).
+`RPM_LOOP=1`) or ESC RPM is absent; thruster **directions** verified (motor-detect);
+**Bar30 fitted**; a **`.params` export** taken (a `PARAM_DEFAULTS_VER` bump wipes `CAL_*` —
+otherwise unrecoverable).
 
-1. **Telemetry (props off):** `flight_controller:=srot`; confirm `/mongla/state` populates
-   (yaw/depth/armed/mode) + `/mongla/esc_rpm`. Nothing actuates.
-2. **arm/disarm (props off):** from the CLI. Confirm pre-arm STATUSTEXT surfaces on reject.
-3. **`manual()` per axis:** teleop each of fwd/lat/up/yaw **individually**, verify direction
-   vs `docs/THRUSTER_MAP.md`. A wrong sign is positive feedback — fix `MOT_n_DIRECTION` in
-   Bondor, never in code.
+1. **Telemetry (props off):** `ros2 run mongla_manager connect --watch`, then the manager;
+   confirm `/mongla/state` populates (yaw/depth/armed/mode) and `/mongla/esc_rpm`. Nothing
+   actuates.
+2. **arm/disarm (props off):** from the CLI. Confirm the pre-arm STATUSTEXT surfaces on a
+   reject.
+3. **`manual()` per axis:** each of fwd/lat/up/yaw **individually**, direction checked against
+   the firmware's `docs/THRUSTER_MAP.md`. A wrong sign is positive feedback — fix it on the
+   board (`FRAME_REVERSE` / `MOT_n_DIRECTION`), never in code.
 4. **⚠ DEPTH LOOP — MANDATORY, the depth loop has NEVER run closed (AUDIT R1):**
-   - Enter `DEPTH_HOLD`, raise & lower the sub by hand: verticals must push **back toward**
+   - Enter `DEPTH_HOLD`, raise & lower the hull by hand: verticals must push **back toward**
      the latched depth, not away.
    - Force SURFACE (trip the leak input) at depth: the demand must be **ascend**.
 
    > ⚠ **This gates EVERY AUTO move, not just the dive-dependent verbs.** `SROT_MOVE`
    > auto-enters `AUTO`, and the `AUTO` branch calls `depth::setTarget(md.depth_target)` +
    > `depth::update(...)` underneath **every** primitive (fw `task_control_loop.cpp:236-237`)
-   > — there is **no depth-free path through AUTO**. So a plain `move_forward` with no
+   > — there is **no depth-free path through AUTO**. A plain `move_forward` with no
    > `set_depth` anywhere still runs the unverified loop, and a vertical runaway mid-leg is
-   > indistinguishable from a buoyancy problem in the water. Earlier revisions of this line
-   > scoped the gate to `DIVE` / `set_depth` / vision-depth, which reads as "skip these if
-   > you are only driving forward". That is backwards.
+   > indistinguishable from a buoyancy problem in the water.
    >
    > A successful **in-air** `move_forward` is not partial validation: at ~0 m the latched
    > target and the measurement agree, so the loop is never actually exercised.
-5. **`move()` collapse verbs:** each runs + reports ~3 Hz progress; ROS-cancel brakes (type 6);
-   a preempting second move resolves the first as PREEMPTED (not a hang).
-6. **Vision:** `motion_vision` port (Phase 8) — lat/yaw/fwd via `manual()`, depth via mode.
-
-## What works on the SROT backend today (verb support matrix)
-**WORKS (wired + unit-tested; bench-verify on the board):** `arm` / `disarm` / `set_mode`;
-the collapse moves `move_forward` / `move_left` / `move_right` / `yaw_left` / `yaw_right` /
-`turn` / `set_depth`(dive) / `stop` / `pause`(hold) / `style_roll`; **`surface`** (SURFACE
-mode); `unlock_heading`; `head`, `mission_reset`, `calibrate_depth`, `calc_distance`,
-`dvl_connect` (host-side); `fire` **on any board channel the board calls a SWITCH**; telemetry →
-`/mongla/state` (yaw/**depth**/batt/mode/armed) + the GCS heartbeat.
-
-**REFUSED with a clear message (`UNSUPPORTED_VERBS`, see the verb table above):**
-`vision_align` / `vision_move`, `move_*_dist` (DVL), `lock_heading`, `arc`,
-`style_yaw`. Do not treat "wired + all green" as "every verb works on srot."
-
-> **`move_back` moved out of this list** (see above). `arc` and `style_yaw` remain genuine
-> firmware gaps, not host gaps: `arc` needs an absolute-heading arc on the board, `style_yaw`
-> needs a selectable STYLE axis + rate. Both are buildable on request — they are simply not
-> built, and refusing is the honest state.
+5. **`move()` verbs:** each runs and reports ~3 Hz progress; ROS-cancel brakes (type 6); a
+   preempting second move resolves the first as PREEMPTED, not a hang.
+6. **Vision:** `vision_thrust_check` disarmed for every sign, then `vision_align` armed in
+   STABILIZE, props clear.
 
 ### Firmware behaviour rev 3 (2026-08-02) — absence became a signal
 
@@ -1307,17 +978,17 @@ plus detected motor directions, recoverable only from a Bondor parameter export.
   now latches an explicit `s_resolved` flag. This bug predates the srot branch.)
 - **A FIFTH ACK result exists** — `TEMPORARILY_REJECTED` (3) on a state-mutex miss, not in
   `JETSON_COMMS.md`'s four-result table. Treated as terminal + reported as retryable.
-- **Depth sign** — `VFR_HUD.alt` already arrives NEGATIVE-below-surface (our convention, same
-  as Pixhawk AHRS2). We were negating it a second time, which made `/mongla/state.depth_m`
+- **Depth sign** — `VFR_HUD.alt` already arrives NEGATIVE-below-surface (our convention).
+  We were negating it a second time, which made `/mongla/state.depth_m`
   positive when submerged and silently disabled every depth guard in the stack (they all
   compare against a negative constant, so none of them errored — they just stopped firing).
 - **⚠ pymavlink's DEFAULT dialect is MAVLink *1* (`dialects.v10.ardupilotmega`), where
   `ESC_TELEMETRY_1_TO_4`/`_5_TO_8` (11030/11031) DO NOT EXIST.** Measured in-vehicle: the
   board's ESC frames arrive and are reported as `UNKNOWN_291` / `UNKNOWN_11030` /
   `UNKNOWN_11031` — zero RPM that looks exactly like an ESC or wiring fault. `MAVLINK20=1`
-  must be set **before** pymavlink is imported. `pixhawk.py` has always done this, which is
-  the only reason it worked; `fc/srot_fc.py` now does it too, so importing the srot backend
-  on its own (`bringup_check`, a test, a script) no longer silently loses ESC telemetry.
+  must be set **before** pymavlink is imported. `fc/srot_fc.py` does it at import, so
+  importing the driver on its own (`bringup_check`, a test, a script) never silently loses ESC
+  telemetry.
   The drift test now asserts against `mavutil.mavlink.mavlink_map` — **the map the vehicle
   actually decodes with** — not against the `dialects.v20` module, which is a different
   object and was passing while the runtime path decoded nothing.
@@ -1339,40 +1010,11 @@ plus detected motor directions, recoverable only from a Bondor parameter export.
   was too small, writes silently failed). Assume `set_default_gain()`'s `JS_GAIN_DEFAULT=1.0`
   never stuck → `MANUAL_CONTROL` at half authority. **Reflash + read back `GAIN`.**
 
-## Status (branch `srot`)
-- **DONE:** the HAL foundation (`14eb27a`) + integration doc (`6f3aea5`) + **the manager
-  wiring** (`7f3d6e8` + review fixes): `flight_controller:=srot` was the **default on the srot branch**; the main merge briefly made it `pixhawk`, and on 2026-09-08 it went back to **`srot`** as main became the SROT vehicle (the RoboSub 2025 configuration is preserved on the `pixhawk` branch). It connects
-  over **direct USB serial**, banner shows `SROT board · firmware Hengla · USB serial`, the
-  collapse verbs route through `fc.move()` + the 4-terminal ACK relay, telemetry populates
-  `/mongla/state`. Build clean; ~670 tests green. mavlink-reviewer + advisor signed off (arc
-  dropped, `manual()` NaN-safe, verified fail-closed arm-abort, HEARTBEAT source-filtered).
-- **READINESS FIXES (this pass):** real abort brake, leg-derived ACK deadline, the 5th ACK
-  result, `surface` revived, `UNSUPPORTED_VERBS` guard, depth sign, collapse verbs now take
-  `mongla.lock` + the disarmed gate, fail-loud payload map, protocol drift test.
-  **Verdict: ready for tethered bench work; the two depth checks below still gate any dive.**
-- **VISION IS NOW SPEC'D, NOT PORTED.** The `motion_vision` port is **superseded**: rather than
-  re-expressing the 20 Hz host loop as `manual()` streaming, the loop **moves to the board**.
-  We stream one `LANDING_TARGET` (149) per frame as a **bearing in radians** and the board
-  closes every axis at 500 Hz. Spec: `Mongla_others/srot-control-board/VISION_API.md`; our
-  side: [`vision-control-split.md`](vision-control-split.md).
-  > ⛔ **CORRECTED 2026-09-07.** The last sentence here said
-  > *"until the firmware implements it, `vision_align`/`vision_move` stay in
-  > `UNSUPPORTED_VERBS`"*. **They came OUT of that set on 2026-09-03**
-  > (`srot_fc.py:1943`) and actuate today via `MANUAL_CONTROL` in STABILIZE.
-  > The board half is still unbuilt, so the *plan* above is accurate — but
-  > the verbs are live, and a reader trusting this sentence would not test
-  > them. `lock_heading` is the one that genuinely stays refused, so no host
-  > lock races the board's own hold.
-- **NEXT:** the DVL-distance streamed path + `lock_heading` semantics; commit the Bondor
-  `.params` export. `/mongla/esc_rpm` is **done** (was blocked on the firmware emitting
-  11030/11031 — it now does). Once the board serves vision: **measure the two cameras' FOV at
-  640×480** ~~→ angle conversion → uplink → re-point the two verbs~~ — **DONE
-  2026-09-07**: 73.88°/63.82° air, held-out validated, shipping in
-  `config/calibration/`; `bearing.py` converts; `send_landing_target` ships
-  default-off. That measurement was the
-  critical path and it is a bench task, not a code task.
-- **Cross-repo rules:** [`cross-repo-contract.md`](cross-repo-contract.md) (mirrored as
-  `AGENTS.md` in each sibling repo).
-- **BENCH-GATED:** the runbook above (needs the board; first real validation — no SROT SITL).
-  Plug in USB, `ros2 run mongla_manager start`, watch the banner + `/mongla/state`. Depth stays
-  unproven until the hand-verification (step 4) passes.
+## Status
+
+The live status — what is verified, what is built, what water and the firmware still have
+to decide — is [`ROADMAP.md`](../ROADMAP.md), the one status file. The integration history
+(the srot branch, the merge to main) is in `git log`.
+
+Cross-repo rules: [`cross-repo-contract.md`](cross-repo-contract.md) (mirrored as `AGENTS.md`
+in each sibling repo).

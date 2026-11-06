@@ -24,8 +24,10 @@ import re
 #  Link identity (JETSON_COMMS.md §1)                                     #
 # ---------------------------------------------------------------------- #
 # The vehicle (SROT board) is sysid 1 / compid 1; commands target it. We
-# present as a GCS/companion (255/190, the pymavlink convention). The Jetson
-# MUST beat a >=1 Hz HEARTBEAT or the board trips its GCS failsafe and surfaces.
+# present as the onboard computer, 255/191 (below). The companion MUST beat a
+# >=1 Hz HEARTBEAT or the board trips its GCS failsafe and surfaces.
+# (JETSON_COMMS.md is the firmware repo's filename for this contract; the name
+# predates the Pi.)
 VEHICLE_SYSID   = 1
 VEHICLE_COMPID  = 1        # MAV_COMP_ID_AUTOPILOT1
 SOURCE_SYSID    = 255
@@ -35,8 +37,8 @@ SOURCE_SYSID    = 255
 # The board's LoRa bridge synthesises its filler heartbeat as 255/190 -- byte-identical
 # to what we used to send -- so the firmware could not distinguish the companion from
 # the ground station. That makes a source-specific GCS failsafe impossible to write:
-# a parameter naming "the Jetson" as 255/190 also matches the bridge, so a DEAD JETSON
-# with Bondor still connected holds the failsafe open and the vehicle station-keeps
+# a parameter naming "the companion" as 255/190 also matches the bridge, so a DEAD
+# COMPANION with Bondor still connected holds the failsafe open and the vehicle station-keeps
 # when it should surface. The firmware team declined to ship a fake fix for this
 # (their JETSON_FEEDBACK §4) and asked us to take a distinct id. This is that.
 #
@@ -51,8 +53,7 @@ SOURCE_SYSID    = 255
 # failsafe stops recognising us and it SURFACES mid-mission, looking for all the
 # world like a link fault. test_srot_protocol_drift pins both against params.cpp.
 #
-# Applied on the SROT path only (auv_manager_node._setup_mavlink); the pixhawk
-# backend keeps pymavlink's defaults so it stays byte-identical to history.
+# Applied in auv_manager_node._setup_mavlink, before the link opens.
 SOURCE_COMPID   = 191
 GCS_FAILSAFE_MS = 5000     # board surfaces after this much HEARTBEAT silence
 BAUD            = 115200   # ESP32 UART0; used on the direct-serial path
@@ -99,7 +100,7 @@ ACK_NAMES = {ACK_ACCEPTED: 'ACCEPTED', ACK_TEMPORARILY_REJECTED: 'TEMPORARILY_RE
 CMD_SROT_MOVE = 31000      # the one custom verb; rides inside a COMMAND_LONG
 CMD_DO_SET_SERVO = 183     # PCA9685 servo channel -> µs (payload release servo)
 CMD_DO_SET_RELAY = 181     # PCA9685 MOSFET/switch channel on/off (payload solenoid)
-CMD_USER_1    = 31010      # yaw spin (stunt)   -- style_yaw has no STYLE equivalent
+CMD_USER_1    = 31010      # yaw spin (stunt)   -- no verb sends it; style_roll uses CMD_USER_3
 CMD_USER_2    = 31011      # pitch spin (stunt)
 CMD_USER_3    = 31012      # roll spin (stunt)
 CMD_USER_4    = 31013      # pattern
@@ -177,8 +178,7 @@ def parse_flare_order(text: str) -> tuple:
 #   * MOTORS MUST BE ARMED. Disarmed returns MAV_RESULT_FAILED with
 #     "Arm motors before testing motors."
 #   * IT IS A KEEP-ALIVE, NOT A ONE-SHOT. The board expires the test when the
-#     resends stop -- and expiry AUTO-DISARMS. That is by design (it mirrors
-#     ArduSub's verify_motor_test), so "the vehicle disarmed when I let go" is
+#     resends stop -- and expiry AUTO-DISARMS. That is by design, so "the vehicle disarmed when I let go" is
 #     the feature, not a fault.
 #   * THE WINDOW IS CLAMPED to 600..3000 ms whatever p4 says, and p4 = 0 gives
 #     600. Bondor asks for 1 s and refreshes every 300 ms.
@@ -230,10 +230,8 @@ MODE_AUTO        = 23   # the mode SROT_MOVE runs in (auto-entered on a move)
 MODE_STUNT       = 100  # N x 360 spin on one axis (CMD_USER_1/2/3)
 MODE_PATTERN     = 101  # multi-step pattern (CMD_USER_4)
 
-# custom_mode int -> name. MonglaState.mode carries the name; note DEPTH_HOLD is
-# the SROT analogue of ArduSub ALT_HOLD but the NAMES differ -- any mission/FSM
-# that branches on a mode string must be audited (set_depth engages ALT_HOLD on
-# Pixhawk but a DIVE-in-AUTO on SROT).
+# custom_mode int -> name. MonglaState.mode carries the name. `set_depth` does
+# not enter DEPTH_HOLD: it is a SROT_MOVE, which runs in AUTO.
 #
 # This is the COMPLETE FlightMode enum (fw state_types.h:33-45), not a selection of
 # the ones we drive. `custom_mode` can carry any of them, and an unmapped value
@@ -255,16 +253,8 @@ MODE_NAMES = {
 }
 MODE_INTS = {name: num for num, name in MODE_NAMES.items()}
 
-# ArduSub mode names accepted as aliases, so a mission written for the Pixhawk
-# backend does not have to branch. ALT_HOLD *is* DEPTH_HOLD -- the firmware's own
-# header says so verbatim: `DEPTH_HOLD = 2, // ArduSub ALT_HOLD` (state_types.h).
-# Without this, every mission with a literal set_mode('ALT_HOLD') -- there are
-# seven -- dies on srot with "unknown SROT mode".
-#
-# Deliberately NOT aliased: POSHOLD and GUIDED. The board has no position
-# estimate at all, so silently accepting them would promise station-keeping it
-# cannot deliver. Those still fail loudly, which is correct.
-MODE_ALIASES = {'ALT_HOLD': MODE_DEPTH_HOLD}
+# Deliberately absent: POSHOLD and GUIDED. The board has no position estimate,
+# so a mode name promising station-keeping fails loudly in `mode_int`.
 
 # Modes the board reports but DO_SET_MODE cannot select -- they are entered by
 # command only (DUBURI_WS_INTEGRATION.md §4.2 "Settable by DO_SET_MODE?").
@@ -288,14 +278,11 @@ def mode_name(custom_mode) -> str:
 def mode_int(name) -> int | None:
     """Mode name -> custom_mode int for a SETTABLE mode, else None (fail-loud upstream).
 
-    Accepts the ArduSub aliases in MODE_ALIASES (currently just ALT_HOLD, which
-    is the same mode as DEPTH_HOLD) so Pixhawk-era missions run unmodified.
-
     Returns None for MODE_NOT_SETTABLE (STUNT/PATTERN): those are real modes that
     `mode_name` must still name, but DO_SET_MODE cannot enter them -- use the
     CMD_USER_* commands."""
     key = str(name).strip().upper()
-    num = MODE_INTS.get(key, MODE_ALIASES.get(key))
+    num = MODE_INTS.get(key)
     if num is None or num in MODE_NOT_SETTABLE:
         return None
     return num

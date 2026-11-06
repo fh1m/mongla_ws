@@ -12,8 +12,8 @@ from mongla_planner.mongla_dsl import MonglaMission
 
 def test_adds_vision_prefix_when_omitted():
     fake = MagicMock()
-    MonglaMission.set_vision_param(fake, 'max_depth_m', -1.6)
-    fake._set_manager_param.assert_called_once_with('vision.max_depth_m', -1.6)
+    MonglaMission.set_vision_param(fake, 'lost_grace_s', 1.5)
+    fake._set_manager_param.assert_called_once_with('vision.lost_grace_s', 1.5)
 
 
 def test_keeps_existing_vision_prefix():
@@ -24,7 +24,7 @@ def test_keeps_existing_vision_prefix():
 
 def test_coerces_value_to_float():
     fake = MagicMock()
-    MonglaMission.set_vision_param(fake, 'depth_ceiling', -0.4)
+    MonglaMission.set_vision_param(fake, 'lost_grace_s', 2)
     (name, value), _ = fake._set_manager_param.call_args
-    assert name == 'vision.depth_ceiling'
-    assert isinstance(value, float) and value == -0.4
+    assert name == 'vision.lost_grace_s'
+    assert isinstance(value, float) and value == 2.0

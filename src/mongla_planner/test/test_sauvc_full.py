@@ -8,16 +8,13 @@ from types import SimpleNamespace
 import pytest
 
 import mission_ast as MA
-from mongla_control.fc.srot_fc import UNSUPPORTED_VERBS
 from mongla_planner.client import TaskAbandoned
 from mongla_planner.missions import sauvc_full
 
-_WIRE = {'release_heading': 'unlock_heading'}
 
 
 class _Rec:
-    def __init__(self, backend='srot', vision_ok=True, order=None, abandon=()):
-        self.backend = backend
+    def __init__(self, vision_ok=True, order=None, abandon=()):
         self.calls = []          # (name, args, kwargs)
         self.notes = {}
         self._order = order
@@ -54,14 +51,9 @@ class _Rec:
     def flare_order(self, **_k):
         return self._order
 
-    def can(self, verb):
-        """As the real DSL: refused on srot iff srot_fc refuses it."""
-        from mongla_control.fc.srot_fc import UNSUPPORTED_VERBS
-        return self.backend != 'srot' or verb not in UNSUPPORTED_VERBS
-
     def __getattr__(self, name):
         def _call(*a, **k):
-            self.calls.append((_WIRE.get(name, name), a, k))
+            self.calls.append((name, a, k))
             return True
         return _call
 
@@ -70,17 +62,8 @@ def _classes(rec):
     return [c[1][0] for c in rec.calls if c[0] == 'set_classes']
 
 
-@pytest.mark.parametrize('flares', [False, True])
-def test_no_refused_verb_on_srot(monkeypatch, flares):
-    monkeypatch.setattr(sauvc_full, 'SAUVC_FLARES_ENABLED', flares)
-    d = _Rec('srot')
-    sauvc_full.run(d)
-    assert not set(d.sent) & UNSUPPORTED_VERBS
-    assert 'lock_heading' in [c[0] for c in _run('pixhawk').calls]
-
-
-def _run(backend, **kw):
-    d = _Rec(backend, **kw)
+def _run(**kw):
+    d = _Rec(**kw)
     sauvc_full.run(d)
     return d
 
@@ -88,30 +71,30 @@ def _run(backend, **kw):
 def test_mission_reset_runs_once_before_arm_never_at_depth():
     """Each chunk's run() starts with mission_reset, which re-zeroes the baro;
     the combinator must call navigate()/acquire(), not run()."""
-    s = _run('srot').sent
+    s = _run().sent
     assert s.count('mission_reset') == 1
     assert s.index('mission_reset') < s.index('arm')
 
 
 def test_a_blind_or_failed_gate_is_recorded_unconfirmed():
-    d = _run('srot', vision_ok=False)
+    d = _run(vision_ok=False)
     msg, ok = d.notes['navigation'][-1]
     assert not ok and msg.startswith('unconfirmed')
-    assert _run('srot').notes['navigation'][-1] == ('confirmed', True)
+    assert _run().notes['navigation'][-1] == ('confirmed', True)
 
 
 def test_an_abandoned_navigation_still_attempts_target_acquisition():
-    d = _run('srot', abandon={'navigation'})
+    d = _run(abandon={'navigation'})
     assert 'task:target_acquisition' in d.sent
     assert d.sent[-1] == 'disarm'
 
 
 def test_flares_follow_the_lora_order_else_bump_all(monkeypatch):
     monkeypatch.setattr(sauvc_full, 'SAUVC_FLARES_ENABLED', True)
-    ordered = _run('srot', order=('blue', 'red', 'yellow'))
+    ordered = _run(order=('blue', 'red', 'yellow'))
     flare = [c for c in _classes(ordered) if c.startswith('flare_')]
     assert flare == ['flare_blue', 'flare_red', 'flare_yellow']
-    default = _run('srot', order=None)
+    default = _run(order=None)
     assert [c for c in _classes(default) if c.startswith('flare_')] == \
         ['flare_red', 'flare_yellow', 'flare_blue']
     assert any('no LoRa order' in m for m, _ in default.notes['flares'])
@@ -119,7 +102,7 @@ def test_flares_follow_the_lora_order_else_bump_all(monkeypatch):
 
 def test_flares_are_off_by_default_and_say_so():
     assert sauvc_full.SAUVC_FLARES_ENABLED is False
-    d = _run('srot')
+    d = _run()
     assert 'task:flares' not in d.sent
     assert any('skipped' in m for m, _ in d.notes['flares'])
 

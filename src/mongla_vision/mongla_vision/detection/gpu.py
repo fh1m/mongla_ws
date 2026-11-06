@@ -1,7 +1,7 @@
-"""select_device — single decision point for laptop / docker / Jetson.
+"""select_device — single decision point for the .pt path on a dev box.
 
 Called once at YoloDetector construction. Fail-fast on missing CUDA so a
-broken docker/Jetson is loud at startup, not slow during a mission. The
+broken docker is loud at startup, not slow during a mission. The
 log line is the canary you grep for during deployment ("am I really on
 GPU?"). CPU is opt-in via `device='cpu'` (or 'auto' to pick whatever's
 available).
@@ -53,7 +53,7 @@ def select_device(requested: str = _DEFAULT, *, logger=None) -> str:
             # _DEFAULT, not req -- req is 'auto' here (no colon), so splitting it
             # crashed with IndexError on any CUDA host whenever _DEFAULT carried an
             # index (which it always does: 'cuda:0'). That made `device: auto` an
-            # instant detector crash on the Jetson -- the exact competition host.
+            # instant detector crash on any CUDA host.
             idx = int(_DEFAULT.split(':', 1)[1]) if ':' in _DEFAULT else 0
             _emit(f"[VIS  ] using {_DEFAULT} ({torch.cuda.get_device_name(idx)})  "
                   f"torch={torch.__version__}  cuda={torch.version.cuda}")

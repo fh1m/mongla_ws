@@ -63,12 +63,11 @@ def _try_step(label: str, fn) -> bool:
 
 
 def _safe_shutdown(mongla) -> None:
-    """Best-effort release-heading + stop + disarm. The uniform end-of-run safety
+    """Best-effort stop + disarm. The uniform end-of-run safety
     net -- called on BOTH the success and unhandled-exception paths so a mission
     can never leave the runner ARMED. Each step is isolated (a failure on one
     still attempts the next) and idempotent (safe if the mission already disarmed).
     """
-    _try_step('release heading lock', lambda: mongla.unlock_heading())
     _try_step('stop thrusters',       lambda: mongla.stop())
     _try_step('disarm',               lambda: mongla.disarm())
 
@@ -89,10 +88,6 @@ def _abort_sequence(mongla, log, mission_name: str) -> None:
     # MonglaClient that holds the goal handle, so it was a silent no-op.)
     _try_step('cancel active goal', lambda: mongla.client.cancel_active())
 
-    # Release the heading lock FIRST and as its own isolated step: disarm() also
-    # stops it, but doing it explicitly means a leaked lock is dropped even if
-    # disarm() later fails (and covers any mission run outside this runner).
-    _try_step('release heading lock', lambda: mongla.unlock_heading())
     _try_step('stop thrusters', lambda: mongla.stop())
     _try_step('disarm',         lambda: mongla.disarm())
 

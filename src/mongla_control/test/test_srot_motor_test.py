@@ -179,8 +179,8 @@ def test_the_parameters_are_in_ArduPilot_order():
 
 
 def test_the_success_message_says_the_board_will_disarm():
-    """"The vehicle disarmed when I let go" is the DESIGNED end state (it
-    mirrors ArduSub's verify_motor_test), not a fault -- so the message says so
+    """"The vehicle disarmed when I let go" is the DESIGNED end state, not a
+    fault -- so the message says so
     rather than leaving the operator to diagnose it."""
     ok, why = _fc().motor_test(2, 10.0, seconds=0.4)
     assert ok is True and 'disarm' in why.lower()

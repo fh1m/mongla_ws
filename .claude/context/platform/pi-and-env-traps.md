@@ -49,7 +49,7 @@
   ```
   Verified on numpy 1.26.4: `tr.OCSORTTracker` + `tr.ByteTrackTracker` instantiate
   and run real `update()` calls; the node wrapper builds `engine=ocsort`. So OC-SORT
-  (the documented default) **does** work on this Jetson — you do **not** have to
+  (the documented default) **does** work on the Pi — you do **not** have to
   accept the legacy ByteTrack fallback.
 - **Watch:** if a future `pip install` upgrades to `trackers 2.5.0`, the engine
   silently disappears again (broken wheel). Re-pin to `2.4.0 --no-deps`. Re-evaluate
@@ -62,28 +62,16 @@
 > pip3 install --no-deps --force-reinstall "trackers==2.4.0"
 > ```
 > Benign remaining log noise (safe to ignore): numpy "smallest subnormal … is zero"
-> UserWarning (aarch64 build quirk), TRT `NvMapMemAlloc … error 12` / "engine plan
-> across different models of devices", and the `target=None deprecated` FutureWarning.
+> UserWarning (aarch64 build quirk) and the `target=None deprecated` FutureWarning.
 
-### E4. cv2 windows die under VSCode Remote-SSH — `Can't initialize GTK backend` (no `$DISPLAY`)
-> **Jetson-only, not yet reconfirmed on Pi 5.** Written and verified entirely against the old
-> Jetson Orin Nano companion (display owner `mongla-jetson`, remote-desktop viewing on `:1`).
-> The underlying GTK/`$DISPLAY` mechanism is generic to any headless-SSH Linux box, so the fix
-> likely still applies on the Pi, but nobody has re-verified it there — treat the device-specific
-> details (display user, remote-desktop viewing path) as Jetson-era until someone confirms.
-- **Symptom (distinct from E2!):** launched from a **VSCode Remote-SSH / plain-ssh**
+### E4. cv2 windows die over SSH — `Can't initialize GTK backend` (no `$DISPLAY`)
+- **Symptom (distinct from E2):** launched from a VSCode Remote-SSH or plain `ssh`
   terminal, `vision_display` crashes at `cv2.namedWindow` with
-  `Can't initialize GTK backend in function 'cvInitSystem'` and exit code 1. The
-  detector then takes ~15 s to SIGKILL (TensorRT load blocks the SIGINT handler —
-  benign). E2 was *headless OpenCV* (no GTK compiled in); **E4 is the opposite** —
-  OpenCV *has* GTK, but a headless SSH shell has **no display server** (`$DISPLAY`
-  empty), so the GUI has nowhere to draw. (Over the old full remote-desktop session
-  it worked because that terminal inherited the desktop's `DISPLAY`.)
-- **Root cause:** the GNOME/Xorg session runs on display **`:1`** (owned by the same
-  `mongla-jetson` user; socket `/tmp/.X11-unix/X1`). A VSCode Remote-SSH integrated
-  terminal starts with `$DISPLAY` unset and never inherits it.
-- **Fix (host-local, in `~/.zshrc`):** when `$DISPLAY` is empty, auto-point GUI apps
-  at the live local X socket — guarded so it never clobbers a real desktop terminal:
+  `Can't initialize GTK backend in function 'cvInitSystem'`. E2 was OpenCV *without*
+  GTK; here OpenCV *has* GTK, but the SSH shell has no display server — `$DISPLAY`
+  is empty, so the window has nowhere to draw.
+- **Fix (host-local, in `~/.zshrc`):** when `$DISPLAY` is empty, point GUI apps at
+  the live local X socket, guarded so a real desktop terminal is never clobbered:
   ```sh
   if [ -z "$DISPLAY" ]; then
       for _d in /tmp/.X11-unix/X*; do
@@ -91,66 +79,23 @@
       done; unset _d
   fi
   ```
-  `DISPLAY=:1` alone is enough (it falls back to the valid `~/.Xauthority` cookie).
-  Verified on-device: a fresh headless zsh resolves `DISPLAY=:1` and `vision_display`
-  opens its HUD without error.
-- **Where the window appears:** on the **Jetson's** display `:1` — so you still *view*
-  it via remote desktop / VNC, but **all editing + launching happens in VSCode
-  Remote-SSH** (the latency win). NOT in the committed `.vscode/settings.json`:
-  hardcoding `DISPLAY` there would break a teammate's *local* VSCode (forcing `:1`
-  over their real `:0`). To drop remote desktop for *viewing* too, expose the
-  annotated `…/image_debug` topic via `web_video_server`/Foxglove (browser over
-  VSCode's auto port-forward) — not installed today; future task.
+  Not in the committed `.vscode/settings.json`: a hard-coded `DISPLAY` breaks a
+  teammate's local VSCode.
+- **Better on the vehicle:** don't open a window at all. The annotated
+  `…/image_debug` topic is served by `web_video_server` and Foxglove
+  ([`foxglove-and-bags.md`](foxglove-and-bags.md)), viewable in a browser over
+  VSCode's port-forward.
 
-### E5. Payload CH340 has no `/dev/ttyUSB*` after carrier-board/SSD swap — **2026-07-10**
-> **Jetson-only, not yet reconfirmed on Pi 5.** Root cause and verification are both specific to
-> the Tegra kernel (`5.15.185-tegra`) and the Orin Nano carrier board. The `brltty`-steals-CH340
-> half is Ubuntu-generic and plausibly still bites on the Pi, but the missing-`ch341`-driver half
-> is Tegra-kernel-specific and `tools/install_ch341_driver.sh` builds against Tegra headers —
-> re-verify (or port the script) on the Pi before trusting this section there.
-- **Symptom:** `lsusb` shows `1a86:7523 QinHeng Electronics CH340` (payload ESP32
-  board is on the bus), but `start … -p payload_port:=auto` logs
-  `[PAYLOAD] no port found (auto-detect excluded: set())` and `fire()` becomes a
-  log-stub. `ls /dev/ttyUSB*` → nothing (only `/dev/ttyACM0`, the BNO085).
-- **Root cause (two independent, both introduced by the 2026-07 carrier-board +
-  SSD swap onto a fresh Tegra kernel):**
-  1. **Kernel missing the CH341 driver.** The new `5.15.185-tegra` kernel shipped
-     with `# CONFIG_USB_SERIAL_CH341 is not set` — no `ch341.ko` anywhere in
-     `/lib/modules/$(uname -r)`. The CH340 enumerates on USB but the kernel never
-     creates `/dev/ttyUSB*`, so pyserial `list_ports` (and thus payload
-     auto-detect) sees nothing. `cdc_acm` (the BNO085 ESP32-C3) is unaffected — it
-     needs no vendor driver, which is why the BNO worked and the payload didn't.
-  2. **`brltty` steals the CH340.** Ubuntu's braille-display driver claims any
-     `1a86:7523` via a udev rule and holds it through `usbfs` (interface driver
-     shows `usbfs`), blocking `ch341` even once the module exists — the classic
-     Arduino/ESP-on-Ubuntu trap.
-- **Fix (durable, idempotent):** run **`tools/install_ch341_driver.sh`**. It purges
-  `brltty` + its udev rule, builds `ch341.ko` out-of-tree against the running
-  kernel headers (fetches the 5.15 `ch341.c`), `depmod`s it in (so `modules.alias`
-  auto-loads it for `1a86:7523` on any port at boot/replug), loads it, and rebinds
-  the already-attached board without a physical replug. Re-run after any kernel
-  update / SSD reflash. Requires `/lib/modules/$(uname -r)/build`, gcc, make, curl.
-- **Verified on-device (Orin Nano, 2026-07-10):** after the script, `/dev/ttyUSB0`
-  (`usb-1a86_USB_Serial-if00-port0`, driver `ch341`) appears, `PayloadDriver`
-  auto-detects + connects, and `bringup`/`start` re-connect the payload.
-- **Self-diagnosing now:** `PayloadDriver.connect()` calls
-  `_diagnose_missing_port()` — when the board is on the bus but has no tty node it
-  logs the actual cause (`held by brltty (usbfs)` / `no ch341 driver bound` /
-  `bound but no node yet`) and points at the script, instead of the old blank
-  `no port found`.
+### E5. The SROT board has no `/dev/ttyUSB*` — `brltty` or a missing `ch341`
+The board's USB serial is a CH340 (`1a86:7523`), which needs the kernel's `ch341`
+driver. Two independent faults leave it on the bus (`lsusb` shows it) with no tty
+node, so `find_srot_serial()` finds nothing:
+1. **`brltty` steals it.** Ubuntu's braille-display daemon claims every `1a86:7523`
+   through a udev rule and holds it via `usbfs`, blocking `ch341`. Ubuntu 24.04
+   ships it by default. `tools/setup_pi_hailo.sh` purges it.
+2. **The kernel has no `ch341`.** A custom or vendor kernel can ship with
+   `CONFIG_USB_SERIAL_CH341` unset; `modinfo ch341` says whether this one has it.
+`bringup_check --srot` grades both (section C) and prints the fix.
 
 ---
 
----
-
-## Forks we evaluated (so we don't revisit)
-
-### `BumblebeeAS/ardupilot_fix` — STALE DUD (evaluated 2026-04)
-
-* **Source:** https://github.com/BumblebeeAS/ardupilot_fix
-* **State vs upstream:** **1 commit ahead, 3911 commits behind** `ArduPilot/master`. 0 stars, 0 forks. No CI configured.
-* **The single commit** (`xelisce`, 2025-05-23, "hard code variables into file fix, passed all tests"): adds 9 unused declarations to `libraries/AP_DDS/AP_DDS_Client.cpp`. No semantic ArduSub change. No new mode, no new failsafe, no new MAVLink behaviour.
-* **Verdict:** nothing to learn or pull. The fork name suggests a fix for something interesting but the diff is non-semantic. Stay on the upstream Sub-stable-V4.5.x branch documented in [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md).
-* **Re-evaluate when:** the fork's `xelisce` author (or `BumblebeeAS` org) ships a second semantic commit. Until then, do not spend an evening "evaluating" this again.
-
----

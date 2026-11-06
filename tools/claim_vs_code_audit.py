@@ -49,7 +49,7 @@ roots = sys.argv[1:] or ['src']
 for root in roots:
     for f in sorted(pathlib.Path(root).rglob('*.py')):
         p = str(f)
-        if '/test' in p or '__pycache__' in p or '/sim/' in p:
+        if '/test' in p or '__pycache__' in p:
             continue
         try:
             src = f.read_text(encoding='utf-8'); tree = ast.parse(src)

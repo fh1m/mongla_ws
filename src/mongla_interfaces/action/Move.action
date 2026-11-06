@@ -2,15 +2,14 @@
 # `cmd` is any verb in the COMMANDS registry (mongla_control/commands.py is
 # the single source of truth; this list is illustrative, not exhaustive):
 string  cmd          # arm | disarm | set_mode | head | stop | pause | surface |
-                     # mission_reset | move_forward | move_back | move_left |
-                     # move_right | move_forward_dist | move_back_dist |
-                     # move_lateral_dist | yaw_left | yaw_right | turn | arc |
-                     # set_depth | lock_heading | unlock_heading | dvl_connect |
-                     # style_yaw | style_roll | vision_align | vision_move | fire
-float32 duration     # seconds  (move_*, arc, pause, vision_*)
-float32 gain         # 0-100 %  (move_*, arc; vision_*: hard max-speed cap)
-float32 target       # metres   (set_depth) or
-                     # degrees  (yaw_*, lock_heading: 0=current heading)
+                     # mission_reset | calibrate_depth | calc_distance |
+                     # move_forward | move_back | move_left | move_right |
+                     # yaw_left | yaw_right | turn | set_depth | style_roll |
+                     # vision_align | vision_move | motor_test | fire
+float32 duration     # seconds  (move_*, pause, motor_test, vision_*)
+float32 gain         # 0-100 %  (move_*, motor_test; vision_*: hard max-speed cap)
+float32 target       # metres   (set_depth, negative below the surface),
+                     # degrees  (yaw_*, turn), or the motor index (motor_test)
 # ⛔ WHICH FIELDS THE SENDER ACTUALLY SET (issue #14). A float field defaults
 # to 0.0, so "0.0" could not be told from "not given": `move_forward(gain=0)`
 # became 80 % thrust and `turn` with no target turned to NORTH. The client lists
@@ -19,29 +18,19 @@ float32 target       # metres   (set_depth) or
 # EMPTY = a legacy sender, and the old "0.0 means unset" rule still applies.
 string[] set_fields
 string  target_name  # mode string  (set_mode)
-float32 timeout      # max wait (all commands; lock_heading auto-releases)
+float32 timeout      # max wait (all commands)
 float32 settle       # post-command neutral-hold seconds; 0 = axis-natural settle only
-float32 yaw_rate_pct # DEPRECATED (inert) -- arc now closes on target_yaw, not a yaw-rate stick
-float32 target_yaw   # `arc`: ABSOLUTE heading (deg) to curve toward and hold while driving forward
 string  phase        # `calc_distance`: 'start' | 'stop' (downward optical-flow odometry bracket)
-
-# ---- style_* fields  (ignored by every non-style command) ----------
-float32 flips        # style_*: number of complete 360° rotations (default 1)
-float32 headroom     # style_roll/pitch: pre-dive margin metres before ACRO (default 1.0)
-float32 deg_per_step # style_yaw: yaw step size degrees (default 90.0)
-
-# ---- DVL distance fields  (ignored by non-DVL commands) ----------
-float32 distance_m     # target distance in metres (move_*_dist)
-float32 dvl_tolerance  # stop when |error| <= this, metres (default 0.1)
+float32 flips        # style_roll: number of complete 360° rotations (default 1)
 
 # ---- vision_align / vision_move fields  (ignored by non-vision cmds) ---
-string  camera             # 'forward' | 'downward' | 'laptop' | 'sim_front'
+string  camera             # 'forward' | 'downward' | 'laptop'
 string  target_class       # class from the loaded model ('' = first available)
 # vision_align: which axes are active + their signed pixel offset from centre.
-string  axes               # CSV subset of 'lat,yaw,depth' (the active axes)
+string  axes               # CSV subset of 'lat,yaw,depth' (depth = surge, downward camera only)
 float32 offset_lat         # px offset on lateral axis (+ = keep target right of centre)
 float32 offset_yaw         # px offset on yaw axis     (+ = keep target right of centre)
-float32 offset_depth       # px offset on depth axis   (+ = keep target below centre)
+float32 offset_depth       # px offset on the 'depth' axis: downward camera only, image-Y -> SURGE (+ = target below centre)
 # vision_move: how far to drive in.
 float32 fwd_fill           # % of frame the bbox must fill to count as reached (0 = default 95)
 string  mode               # fill metric: 'area' (default) | 'width' | 'height'
@@ -51,8 +40,6 @@ float32 hold_s             # seconds to station-keep after reaching fwd_fill (0 
 # per-axis speed caps -- each overrides `gain` on one axis (0 = inherit gain).
 float32 gain_lat           # lateral speed cap   (vision_align lat; vision_move maintain)
 float32 gain_yaw           # yaw speed cap       (vision_align yaw)
-float32 gain_depth         # INERT (kept for wire compat; anchor_align uses it). vision_align
-                           #   depth rate is set by depth_step (m/update), not a % cap.
 # inertial arrival brake -- bleeds translational momentum so the hull stops where
 # planned (align lateral; move forward+maintain on a fill-stop). Yaw/depth never
 # brake; PASS-THROUGH and abort/loss exits never brake. ON by default: brake_off
@@ -69,16 +56,15 @@ float32 fire_channel       # BOARD channel to fire mid-hold, 1..16 (= SERVO{n}_R
 # The channel number IS the board's `SERVO{n}_ROLE` (1..16, no host-side map), so
 # the same field drives a dropper solenoid, a torpedo launcher, a grabber release
 # or anything else wired to the PCA9685. Nothing in this action, and nothing in
-# any of the 31 verbs, is named for a competition task -- the stack is a set of
+# any of the verbs, is named for a competition task -- the stack is a set of
 # AUV CAPABILITIES that missions compose, and `test_the_command_surface_is_task_free`
 # keeps it that way.
-string  fire_channels      # vision_align: CSV channels fired once mid-hold, e.g. "1,2" ('' = none)
+string  fire_channels      # vision_align: CSV board channels fired once mid-hold, e.g. "9,10" ('' = none)
 float32 fire_t             # seconds into the hold to fire (0 = at hold start; must be < hold_s)
 # vision tuning -- NOT mission-facing; the manager fills these from vision.* ROS
 # params at dispatch (rosidl-zero triggers substitution). Mission DSL leaves them 0.
-float32 kp_lat             # P gain on lateral/yaw pixel error  (0 = use vision.kp_lat)
+float32 kp_lat             # P gain on lateral pixel error      (0 = use vision.kp_lat)
 float32 kp_yaw             # P gain on yaw pixel error          (0 = use vision.kp_yaw)
-float32 kp_depth           # P gain on depth pixel error        (0 = use vision.kp_depth)
 float32 kp_forward         # P gain on fill error (vision_move) (0 = use vision.kp_forward)
 float32 lost_grace_s       # seconds to coast on target loss before reporting LOST (0 = 1.0)
 float32 align_stable_frames# distinct in-band DETECTIONS (not loop ticks) before ALIGNED -- a
@@ -94,7 +80,7 @@ float32 range_gain_floor   # vision_align/move: lat/depth kp multiplier when the
                            #   frame (close) -- softens gain to stop the close-in overshoot of a
                            #   20 kg hull (1.0 = off, ~0.3 = gentle; 0 = use vision.range_gain_floor)
 float32 ki_lat             # vision_align: lateral integral gain, cancels the steady-current
-                           #   offset of the open-loop Ch6 axis during the hold (0 = off)
+                           #   offset of the open-loop lateral axis during the hold (0 = off)
 float32 settle_px          # vision_align: settle gate -- only declare aligned once the hull is
                            #   in-band AND barely moving (|Δerr| px <= this), so align ends
                            #   SETTLED on target (like vision_move's held lateral) instead of
@@ -115,26 +101,14 @@ float32 lock_s             # vision_align/move: consult the LOCK LADDER (lock_no
                            #   loss being declared on schedule. The value is a FLAG, not a
                            #   horizon -- the horizon lives in the node (full authority 0.70 s,
                            #   zero at 2.50 s). 0 = use vision.lock_s.
-float32 depth_step         # vision_align: per-UPDATE depth-setpoint resolution (m). Depth moves the
-                           #   ArduSub ALT_HOLD setpoint by AT MOST this each 5 Hz update and FREEZES
-                           #   inside the deadband, so ArduSub settles between steps (no z-wobble).
-                           #   0.02 fine/slow .. 0.10 coarse. 0 = default (0.02). Not scaled by gain.
 bool    fire_pass_enabled  # vision_align: if true, fire the payload at command end (TIMEOUT or hold
                            #   complete) EVEN IF never fully aligned, as long as the target was seen
                            #   live+recently (within lost_grace_s) -- a guaranteed partial-points shot.
                            #   Off = fire only on a strict in-band lock (never off-target).
-bool    hold_heading       # vision_align: when yaw is released to the background heading lock, widen
-                           #   the lock's deadband for the hold so the launcher heading holds STEADY
-                           #   instead of micro-correcting sub-deg noise (the terminal yaw jitter).
-# ---- downward-camera frame remap (camera=downward/sim_bottom) ----
-float32 surge_sign         # vision_align downward: +1/-1 polarity of the Ch5 SURGE axis (image-Y ->
+# ---- downward-camera frame remap (camera=downward) ----
+float32 surge_sign         # vision_align downward: +1/-1 polarity of the SURGE axis (image-Y ->
                            #   fore/aft). Flips for the physical bottom-cam mount. 0 = +1 (rosidl unset).
                            #   VERIFY DISARMED (vision_thrust_check) -- a wrong sign drives AWAY from the bin.
-float32 max_depth_m        # vision_align downward fwd_fill->depth: deepest allowed setpoint (negative m)
-                           #   for the descend-to-fill, so an unreachable fill can't drive into the floor.
-                           #   0 = off (no deep bound; only the shallow _MIN_DEPTH_M applies).
-float32 depth_ceiling_m    # vision_align: SHALLOWEST allowed depth setpoint (negative m) on ANY depth
-                           #   motion -- the surface guard so ratio/alignment math can't lift the hull out
 float32 fire_max_tilt_deg  # vision_align: HOLD the payload shot unless the target's face is
                            # square to our shot axis within this many degrees. A round leaves
                            # along the hull's axis, so a centred box is not enough -- fired
@@ -146,7 +120,6 @@ float32 fire_max_tilt_deg  # vision_align: HOLD the payload shot unless the targ
                            # NOT SQUARE -- an absent lock_node, an uncalibrated camera or an
                            # unset target_width_m all HOLD the shot, because for a firing
                            # gate the fail-safe direction is do not fire.
-                           #   of the water. 0 = default (_MIN_DEPTH_M, -0.2 m). Bin mission sets ~ -0.4.
 string  tool               # vision_align: WHICH TOOL is being aimed, from config/tool_geometry.yaml
                            #   ('torpedo', 'dropper', 'grabber', 'camera_forward', ...).
                            #   ⛔ The align centres the target on the CAMERA axis. A tool mounted
@@ -169,29 +142,20 @@ float32 standoff_max_tilt_deg  # vision_align: HOLD THE APPROACH while the targe
                            #   deliberate: a pose needs lock_node + a calibration + a committed
                            #   width, so "no pose" is the ordinary case and failing closed would
                            #   disable forward drive on every mission without one.
-float32 fire_gap           # vision_align: seconds BETWEEN channels when firing a LIST (fire=[1,4]) -- the
+float32 fire_gap           # vision_align: seconds BETWEEN channels when firing a LIST (fire=[9,10]) -- the
                            #   solenoid launcher misfires if two go together. 0 = back-to-back (single-shot
                            #   unaffected). ~1.0 for the dual torpedo/dropper drop.
 ---
-# Result — axis-correct (set on the axis the command actually moves):
-#   yaw_left / yaw_right :  final_value = final yaw [deg, 0..360]
-#                           error_value = remaining heading error [deg, signed]
-#   set_depth            :  final_value = final depth [m, negative below surface]
-#                           error_value = |target - final| [m]
-#   move_*               :  final_value = final depth [m]   (no axis odometry yet)
-#                           error_value = 0.0
-#   arc                  :  final_value = final yaw [deg, 0..360]
-#                           error_value = heading drift vs expected [deg, signed]
-#   lock_heading         :  final_value = locked target heading [deg, 0..360]
-#                           error_value = 0.0
-#   unlock_heading       :  final_value = current depth [m]
-#                           error_value = 0.0
+# Result — final_value is set on the axis the command moves:
+#   yaw_left / yaw_right / turn :  final_value = heading after [deg, 0..360]
+#   set_depth / move_* / pause  :  final_value = depth after [m, negative below surface]
+#   motor_test                  :  final_value = the motor index
+#   fire                        :  final_value = the FireResult code
+#   head                        :  final_value = heading now [deg]
 #   arm / disarm / stop  :  final_value = current depth [m]
-#                           error_value = 0.0
 #   vision_align         :  success     = True (the verb ran; never fails the mission)
 #                           final_value = outcome code (0=ALIGNED,1=LOST,2=TIMEOUT,
-#                                         3=NO_CAMERA,4=ABORTED,5=DRIFTED,
-#                                         6=NO_DEPTH)
+#                                         3=NO_CAMERA,4=ABORTED,5=DRIFTED)
 #                           error_value = worst per-axis residual px from the goal
 #   vision_move          :  success     = True (the verb ran)
 #                           final_value = outcome code (0=REACHED, see above)

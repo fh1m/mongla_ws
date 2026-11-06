@@ -2,7 +2,7 @@
 
 Two-verb vision:
   1. Arm + depth → short launch drive into starting range
-  2. align() on 'torpedo' board (yaw + lat + depth) — creep fallback finds it
+  2. align() on 'torpedo' board (yaw + lat) — creep fallback finds it
   3. move() forward on 'blood' until it fills the frame (height metric)
   4. align() a tight lock on 'hole' (small err, slow) → fire on a confirmed lock
 
@@ -14,9 +14,11 @@ Launch:
 Live gain tuning (between runs, no rebuild):
     ros2 param set /mongla_manager vision.kp_yaw 70.0
     ros2 param set /mongla_manager vision.kp_lat 60.0
-    ros2 param set /mongla_manager vision.kp_depth 0.05
 (The coarse board align uses a per-call settle= to exit squared-up; the terminal
 fire-lock deliberately does NOT -- settle would gate the mid-hold fire.)
+
+⚠ The vertical aim is TORPEDO_DEPTH_M: the board owns depth, so no vision axis
+moves the hull up or down. Read the terminal align's end_y_px and correct it.
 
 Ctrl-C at any time → AUV stops and disarms cleanly.
 """
@@ -58,7 +60,7 @@ HOLE_STANDOFF_FILL     = 35     # hole height % of frame at the firing standoff
 BOARD_ALIGN_S          = 20.0
 BLOOD_APPROACH_S       = 35.0
 HOLE_LOCK_S            = 30.0
-HOLE_HOLD_S            = 4.0    # station-keep (forward+lat+depth) while firing
+HOLE_HOLD_S            = 4.0    # station-keep (forward+lat) while firing
 FIRE_T                 = 1.5    # seconds into the hold to fire (must be < HOLE_HOLD_S)
 
 # ── FIRE ─────────────────────────────────────────────────────────────────────
@@ -74,7 +76,7 @@ _FWD = '/mongla_detector_forward'
 
 
 def run(mongla, log=None):
-    mongla.mission_reset()   # clear heading lock + abort from any previous run
+    mongla.mission_reset()   # clear the abort flag and any demand from a previous run
 
     def info(msg):
         if log:
@@ -89,9 +91,8 @@ def run(mongla, log=None):
 
     # ── 1. Arm + depth ────────────────────────────────────────────────────────
     mongla.arm()
-    # Everything after arm is wrapped so a mid-run exception ALWAYS releases the
-    # heading lock and disarms -- a leaked lock would keep driving Ch4, and a
-    # leaked arm would keep the thrusters live.
+    # Everything after arm is wrapped so a mid-run exception ALWAYS disarms --
+    # a leaked arm would keep the thrusters live.
     try:
         mongla.set_depth(TORPEDO_DEPTH_M)
         info(f'Armed. Descending to {TORPEDO_DEPTH_M}m — waiting for depth settle')
@@ -109,18 +110,13 @@ def run(mongla, log=None):
         mongla.set_model('torpedo_blood_hole', node=_FWD)
         mongla.set_classes('torpedo,blood,hole', node=_FWD)
 
-        # ── 3. Coarse align on the board (yaw + lat + depth) ──────────────────
+        # ── 3. Coarse align on the board (yaw + lat) ──────────────────────────
         info('Coarse align on torpedo board ...')
-        # settle= -> exit SETTLED (hull stopped) so lock_heading captures a clean heading.
+        # settle= -> exit SETTLED (hull stopped), so the board holds a clean heading.
         mongla.vision.align(
-            'torpedo', camera='forward', yaw=0, lat=0, depth=0,
+            'torpedo', camera='forward', yaw=0, lat=0,
             err=BOARD_ERR_PX, gain=BOARD_GAIN, duration=BOARD_ALIGN_S, settle=8,
             fallback=creep_forward)
-
-        # Hand yaw to the background heading lock so the approach + terminal lock
-        # hold heading WITHOUT vision-yaw (no close-in yaw limit-cycle).
-        if mongla.can('lock_heading'):   # refused on srot: the board holds heading
-            mongla.lock_heading(timeout=120)
 
         # ── 4. Coarse approach: COAST forward until blood fills the frame ──────
         #     brake=False -> no reverse-kick exit; the terminal verb closes the rest.
@@ -131,21 +127,20 @@ def run(mongla, log=None):
             gain=APPROACH_GAIN, duration=BLOOD_APPROACH_S, brake=False,
             fallback=creep_forward)
 
-        # ── 5. UNIFIED STANDOFF SHOT: forward-standoff + lat/depth + hold + fire ──
-        #     ONE verb drives to the firing standoff (fwd=, height), centres lat+depth
-        #     (NO yaw -> heading_lock holds Ch4), continuity-locks the hole, and fires
-        #     MID-HOLD while still glued AND parked at the standoff. brake=False.
+        # ── 5. STANDOFF SHOT: forward-standoff + lat + hold + fire ────────────
+        #     ONE verb drives to the firing standoff (fwd=, height), centres lat
+        #     (no yaw axis -- the board holds heading), continuity-locks the hole,
+        #     and fires MID-HOLD while parked at the standoff. brake=False.
         #     NOTE: the forward-close is capped by the fine gain (FINE_GAIN, 12%) --
         #     no separate forward gain -- so budget HOLE_LOCK_S to reach the standoff,
         #     or raise BLOOD_FWD_FILL so the coast lands closer.
         info('Standoff lock on hole + mid-hold fire ...')
         mongla.set_classes('hole', node=_FWD)
         locked = mongla.vision.align(
-            'hole', camera='forward', lat=0, depth=0,          # NO yaw -> heading_lock
+            'hole', camera='forward', lat=0,
             fwd=HOLE_STANDOFF_FILL, fwd_mode='height',          # drive to + hold standoff
             err=HOLE_ERR_PX, gain=FINE_GAIN, duration=HOLE_LOCK_S,
             lock_on=True, hold=HOLE_HOLD_S,
-            hold_heading=True,                                  # steady launcher heading (no yaw jitter)
             fire=FIRE_CHANNEL, fire_t=FIRE_T, fire_gap=FIRE_GAP_S, brake=False,  # mid-hold
             fallback=creep_forward)
         if locked:
@@ -157,7 +152,6 @@ def run(mongla, log=None):
     finally:
         # ── 6. Done / safe-stop (runs on any exit, incl. exception) ───────────
         info('Torpedo practice complete. Disarming.')
-        mongla.unlock_heading()
         mongla.pause_detector('forward')
         mongla.stop()
         mongla.disarm()

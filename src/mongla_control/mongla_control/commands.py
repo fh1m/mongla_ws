@@ -10,8 +10,7 @@ all read from here -- adding a new command is two edits, no more:
        the row's `cmd` and `fields`.
 
 Field names map directly to fields on `mongla_interfaces.action.Move`
-(`duration`, `gain`, `target`, `target_name`, `timeout`, `settle`,
-`target_yaw`, ...). The dispatch just does
+(`duration`, `gain`, `target`, `target_name`, `timeout`, `settle`, ...). The dispatch just does
 `getattr(mongla, cmd)(**kwargs_built_from_fields)`.
 
 `defaults` covers the case where the operator omits a field. Any field
@@ -29,14 +28,14 @@ COMMANDS = {
         'defaults': {'timeout': 15.0},
     },
     'disarm': {
-        'help':     'Disarm and confirm it took (srot: ARM_DISARM, confirmed on '
-                    'the heartbeat; pixhawk: MANUAL, neutral, then disarm).',
+        'help':     'Disarm and confirm it took on the board\'s HEARTBEAT. '
+                    'Signals abort first, so a running verb stops.',
         'fields':   ['timeout'],
         'defaults': {'timeout': 20.0},
     },
     'set_mode': {
-        'help':     'Switch flight mode. srot: STABILIZE|DEPTH_HOLD|SURFACE|MANUAL|ACRO '
-                    '(ALT_HOLD aliases to DEPTH_HOLD). pixhawk: MANUAL|ALT_HOLD|STABILIZE|...',
+        'help':     'Switch board mode: STABILIZE|DEPTH_HOLD|SURFACE|MANUAL|ACRO, '
+                    'and verify it took (a silent refusal looks like success).',
         'fields':   ['target_name', 'timeout'],
         'defaults': {'timeout': 8.0},
     },
@@ -53,20 +52,18 @@ COMMANDS = {
 
     # ---- Stop / pause ---------------------------------------------- #
     'stop': {
-        'help':     'Halt now (srot: the board\'s MOVE_STOP brake; pixhawk: '
-                    'neutral 1500 PWM on all six channels).',
+        'help':     'Halt now: the board\'s MOVE_STOP brake.',
         'fields':   [],
         'defaults': {},
     },
     'mission_reset': {
-        'help':     'Stop heading lock, clear abort event, send RC neutral. '
-                    'Call at start of every mission run() to clear state '
-                    'carried forward from any previous mission.',
+        'help':     'Clear the abort flag, zero the demand, and re-zero depth if '
+                    'disarmed at the surface. First line of every mission.',
         'fields':   [],
         'defaults': {},
     },
     'calibrate_depth': {
-        'help':     'Re-zero the barometer at the surface (QGC "Calibrate Pressure") '
+        'help':     'Re-zero the barometer at the surface '
                     'so depth reads 0 before a dive. DISARMED + surface only; verifies '
                     'the re-zero took. Auto-run by mission_reset; also standalone.',
         'fields':   [],
@@ -75,13 +72,14 @@ COMMANDS = {
     'calc_distance': {
         'help':     "Downward optical-flow distance bracket: phase='start' latches "
                     "the axis + resets, 'stop' returns accumulated metres in "
-                    "final_value. DVL-free; runs with detectors paused.",
+                    "final_value.",
         'fields':   ['phase'],
         'defaults': {'phase': 'start'},
     },
     'surface': {
-        'help':     'Emergency surface: set depth to 0 m and hold until reached. '
-                    'Bypasses command_active gate so it works during a running mission.',
+        'help':     'Emergency surface: brake, then the board\'s SURFACE mode '
+                    '(ascend and hold). Bypasses the busy gate, so it works during '
+                    'a running mission.',
         # timeout is the ascent budget. It MUST be registered (not just hardcoded in
         # surface()) so the client result-backstop covers the full ascent -- else the
         # 12 s safety floor truncates a deep emergency surface mid-water (a safety bug).
@@ -89,12 +87,12 @@ COMMANDS = {
         'defaults': {'timeout': 60.0},
     },
     'pause': {
-        'help':     'Release RC override for N seconds (autopilot takes over).',
+        'help':     'Hold station for `duration` s (the board\'s MOVE_HOLD).',
         'fields':   ['duration'],
         'defaults': {'duration': 2.0},
     },
 
-    # ---- Forward / back  (Ch5) ------------------------------------- #
+    # ---- Forward / back -------------------------------------------- #
     'move_forward': {
         'help':     'Drive forward for `duration` s at `gain` percent thrust.',
         'fields':   ['duration', 'gain', 'settle'],
@@ -106,7 +104,7 @@ COMMANDS = {
         'defaults': {'gain': 80.0, 'settle': 0.0},
     },
 
-    # ---- Left / right  (Ch6) --------------------------------------- #
+    # ---- Left / right ---------------------------------------------- #
     'move_left': {
         'help':     'Strafe left for `duration` s at `gain` percent thrust.',
         'fields':   ['duration', 'gain', 'settle'],
@@ -120,35 +118,11 @@ COMMANDS = {
 
     # ---- Style maneuvers ------------------------------------------- #
     'style_roll': {
-        'help':     'Style: N×360° roll on Ch2 in ACRO mode, one flip per loop '
-                    'iteration; `timeout` is per flip, not total. '
-                    'BNO085-confirmed (AHRS2 fallback) with direction-locked '
-                    'unwrap. Per flip: optional `headroom` m pre-dive, ACRO '
-                    'roll guarded by a hard surface-depth abort and '
-                    'cos(roll)-modulated Ch3 depth correction, then ALT_HOLD '
-                    'recovery to the origin depth before the next flip. '
-                    'ACRO_BAL_ROLL + ACRO_TRAINER zeroed before and restored '
-                    'after. Cancel mid-flip restores ALT_HOLD then disarms.',
-        'fields':   ['gain', 'timeout', 'flips', 'headroom'],
-        'defaults': {'gain': 60.0, 'timeout': 20.0, 'flips': 1, 'headroom': 1.0},
+        'help':     'Style: `flips` x 360 deg roll, run by the board '
+                    '(MOVE_STYLE). `timeout` bounds the whole manoeuvre.',
+        'fields':   ['flips', 'timeout'],
+        'defaults': {'flips': 1, 'timeout': 20.0},
     },
-    'style_yaw': {
-        'help':     'Style: N×360° yaw spin in ALT_HOLD. flips full rotations, '
-                    'each as (360/deg_per_step) steps with settle between. '
-                    'BNO heading tracking active. No mode change — safest style verb.',
-        'fields':   ['flips', 'deg_per_step', 'settle'],
-        'defaults': {'flips': 1, 'deg_per_step': 90.0, 'settle': 1.0},
-    },
-
-    # ---- Curved motion to an absolute heading ---------------------- #
-    'arc': {
-        'help':     'Curved motion to an ABSOLUTE heading: drives forward at '
-                    '`gain` pct for `duration` s while a PID turns the hull to '
-                    '`target_yaw` (deg) and holds it. Turn direction auto-computed.',
-        'fields':   ['duration', 'gain', 'target_yaw', 'settle'],
-        'defaults': {'gain': 50.0, 'target_yaw': 0.0, 'settle': 0.0},
-    },
-
     # ---- Yaw  (sharp pivots) --------------------------------------- #
     'yaw_left': {
         'help':     'Sharp pivot left by `target` degrees within `timeout` s.',
@@ -186,48 +160,6 @@ COMMANDS = {
         'required': ['target'],
     },
 
-    # ---- Heading lock (depth-hold's yaw cousin) -------------------- #
-    'lock_heading': {
-        'help':     'Stream Ch4 rate-overrides driven by yaw_source until '
-                    'unlock_heading. target=0 means lock current heading.',
-        'fields':   ['target', 'timeout'],
-        'defaults': {'target': 0.0, 'timeout': 300.0},
-    },
-    'unlock_heading': {
-        'help':     'Stop the heading-lock streamer, send neutral.',
-        'fields':   [],
-        'defaults': {},
-    },
-
-    # ---- DVL ------------------------------------------------------- #
-    'dvl_connect': {
-        'help':     'Connect to the Nortek Nucleus 1000 DVL over TCP and begin '
-                    'streaming. Must be called before any move_*_dist command '
-                    'when yaw_source is dvl/nucleus_dvl.',
-        'fields':   [],
-        'defaults': {},
-    },
-
-    # ---- DVL distance-based motion --------------------------------- #
-    'move_forward_dist': {
-        'help':     'Drive forward `distance_m` metres using DVL position feedback. '
-                    'Falls back to open-loop timed drive if no DVL position available.',
-        'fields':   ['distance_m', 'gain', 'dvl_tolerance', 'settle'],
-        'defaults': {'gain': 60.0, 'dvl_tolerance': 0.1, 'settle': 0.0},
-    },
-    'move_back_dist': {
-        'help':     'Drive backward `distance_m` metres using DVL position feedback. '
-                    'Falls back to open-loop timed drive if no DVL position available.',
-        'fields':   ['distance_m', 'gain', 'dvl_tolerance', 'settle'],
-        'defaults': {'gain': 60.0, 'dvl_tolerance': 0.1, 'settle': 0.0},
-    },
-    'move_lateral_dist': {
-        'help':     'Strafe `distance_m` metres (positive=right, negative=left) '
-                    'using DVL position feedback.',
-        'fields':   ['distance_m', 'gain', 'dvl_tolerance', 'settle'],
-        'defaults': {'gain': 36.0, 'dvl_tolerance': 0.1, 'settle': 0.0},
-    },
-
     # ---- Vision verbs --------------------------------------------- #
     # Exactly two, pixel-native, recover-don't-fail. The control loop
     # reads /detections directly (the topic the HUD shows). Both verbs
@@ -236,87 +168,50 @@ COMMANDS = {
     # branches on it and the action client never raises on a miss.
     #
     #   final_value codes: 0=ALIGNED/REACHED 1=LOST 2=TIMEOUT
-    #                      3=NO_CAMERA 4=ABORTED 5=DRIFTED 6=NO_DEPTH
+    #                      3=NO_CAMERA 4=ABORTED 5=DRIFTED
     #
     # gain = hard max-speed cap (% thrust); the P-controller output is
     # clamped to it so the AUV never exceeds it on any axis.
     'vision_align': {
-        'help':     'Centre target_class on the active axes (CSV of lat,yaw,depth) '
-                    'each at its signed pixel offset (offset_lat/yaw/depth; 0=centre). '
-                    'Aligned when every active axis is within err_px. gain caps speed; '
-                    'gain_lat/gain_yaw override the cap on the lat/yaw axis (0 = inherit '
-                    'gain) so e.g. yaw can micro-align slowly while lateral stays brisk '
-                    # `%%`, not `%`: argparse interpolates a help string
-                    # (`self._get_help_string(action) % params`), so a bare
-                    # `% c` here is read as a %c conversion and
-                    # `mongla --help` died with `TypeError: %c requires int
-                    # or char`. The two other percent signs in this file were
-                    # already escaped; this one was missed, and nothing caught
-                    # it because no test runs --help.
-                    '(depth rate is set by depth_step, not a %% cap). '
+        'help':     'Centre target_class on the active axes (CSV of lat,yaw; on the '
+                    'downward camera also depth, which drives SURGE) each at its signed '
+                    'pixel offset (offset_lat/yaw/depth; 0=centre). Aligned when every '
+                    'active axis is within err_px. gain caps speed; gain_lat/gain_yaw '
+                    'override the cap per axis (0 = inherit gain). '
                     'On arrival the lateral inertia is braked (reverse-kick) so the hull '
-                    'stops square; brake_off=true coasts, brake_gain scales the kick. A '
-                    'gently-converged lock exits with ~0 momentum and is not kicked. '
-                    'hold_s>0 turns it into an ACTIVE station-keep: once centred it keeps '
-                    'correcting for hold_s seconds (fighting water inertia, e.g. to hold a '
-                    'torpedo-hole lock steady for the shot) before exiting -- budget '
-                    'duration >= approach + hold_s. '
-                    'fire_channels (CSV e.g. "1,2") fires those payload channels ONCE '
-                    'mid-hold, fire_t seconds into the hold (0 = at hold start), on a '
-                    'background thread so the loop keeps correcting while the shot leaves '
-                    '-- so a torpedo launches while still glued to the hole (no '
-                    'align-then-fire drift). Requires fire_t < hold_s (else clamped to 0). '
-                    'On duration expiry it logs NOT-aligned and the mission continues. '
-                    'hold_through_loss=true coasts on target loss (set by the DSL when '
-                    'no fallback search is supplied). '
-                    'lock_target=true locks onto the acquired target (steers to the box '
-                    'nearest the last-accepted centre, not the largest) so a second hole / '
-                    'spurious box cannot steal the aim. ctrl_conf is a control-side min '
-                    'score to accept a box. range_gain_floor softens lat/depth gain when '
-                    'the bbox fills the frame (close) to stop overshoot. ki_lat adds a '
-                    'lateral integral during the hold to null a steady current. '
-                    'fwd_fill>0 adds a forward range-hold axis (mode=area/width/height, '
-                    'kp_forward gain): align ALSO drives forward to that fill %% and holds '
-                    'the standoff -- one verb does forward-standoff + lat/depth + hold + '
-                    'mid-hold fire (the torpedo standoff shot). The fire is gated on the '
-                    'standoff too. fwd_fill=0 (default) = no forward axis. '
-                    'settle_px>0 = SETTLE GATE: only declare aligned once the hull is '
-                    'in-band AND barely moving (|Δerr|<=settle_px) so it ends settled on '
-                    'target like vision_move (not mid-pass through the band); 0=off. '
-                    'VERIFY (default on; verify_off=true skips it): after braking, align '
-                    're-measures on align_stable_frames NEW frames and returns DRIFTED if '
-                    'the target is out of the err_px band once stopped, LOST if not re-seen. '
-                    'depth_step = per-update depth-setpoint resolution (m, 0.02..0.10; 0='
-                    'default 0.02): depth moves SLOWLY in these steps + freezes in the '
-                    'deadband so ArduSub settles (no z-wobble). fire_pass_enabled = fire the '
-                    'payload at command end even if never fully aligned, as long as the '
-                    'target was seen live+recently (a guaranteed partial-points shot). '
-                    'hold_heading = widen the heading-lock deadband during the hold so the '
-                    'launcher heading holds steady (no terminal yaw jitter) when yaw is '
-                    'released to the lock. '
-                    'DOWNWARD CAMERA (camera=downward/sim_bottom): the frame rotates -- '
-                    'image-X still drives Ch6 lateral, but the depth axis (image-Y) drives '
-                    'Ch5 SURGE fore/aft (two-sided, braked), and fwd_fill DESCENDS the '
-                    'ALT_HOLD depth to that bbox fill using the depth_step logic (proportional, '
-                    'deadband-frozen, one-sided). Bounded by max_depth_m (deepest) and '
-                    'depth_ceiling_m (shallowest -- surface guard so alignment cannot lift the '
-                    'hull out of the water). surge_sign (+1/-1) flips fore/aft for the mount '
-                    '(verify DISARMED). fire drops droppers (3/4). fire_gap spaces multi-channel '
-                    'shots (fire=[1,4]) apart in seconds (solenoid needs the gap). See the bin task.',
+                    'stops square; brake_off=true coasts, brake_gain scales the kick. '
+                    'hold_s>0 keeps correcting for hold_s seconds once centred (station-'
+                    'keep for a shot) -- budget duration >= approach + hold_s. '
+                    'fire_channels (CSV e.g. "9,10") fires those board channels ONCE, '
+                    'fire_t seconds into the hold, on a background thread so the loop '
+                    'keeps correcting while the shot leaves. fire_gap spaces multi-channel '
+                    'shots apart in seconds. fire_pass_enabled fires at command end even '
+                    'if never fully aligned, as long as the target was seen recently. '
+                    'hold_through_loss=true coasts on target loss. lock_target=true steers '
+                    'to the box nearest the last-accepted centre, not the largest. '
+                    'ctrl_conf is a control-side min score. range_gain_floor softens gain '
+                    'when the bbox fills the frame. ki_lat adds a lateral integral during '
+                    'the hold. fwd_fill>0 (forward camera) adds a forward range-hold axis '
+                    '(mode=area/width/height, kp_forward gain) to that fill %% and gates '
+                    'the shot on the standoff. settle_px>0 declares aligned only once the '
+                    'hull is in-band AND barely moving. VERIFY (verify_off=true skips it) '
+                    're-measures on align_stable_frames new frames after braking: DRIFTED '
+                    'if out of band, LOST if not re-seen. surge_sign (+1/-1) flips the '
+                    'downward surge for the mount. The board holds depth and heading '
+                    'itself; a forward depth axis and a downward fwd_fill are REFUSED.',
         'fields':   ['camera', 'target_class', 'axes',
                      'offset_lat', 'offset_yaw', 'offset_depth',
                      'err_px', 'duration', 'gain',
                      'gain_lat', 'gain_yaw',
                      'brake_off', 'brake_gain', 'hold_s', 'hold_through_loss',
                      'fire_channels', 'fire_t',
-                     'kp_lat', 'kp_yaw', 'kp_depth',
+                     'kp_lat', 'kp_yaw',
                      'lost_grace_s', 'align_stable_frames',
                      'lock_target', 'ctrl_conf', 'range_gain_floor', 'ki_lat',
                      'coast_s', 'lock_s', 'fwd_fill', 'mode', 'kp_forward', 'settle_px',
-                     'verify_off',
-                     'depth_step', 'fire_pass_enabled', 'hold_heading',
-                     'surge_sign', 'max_depth_m', 'depth_ceiling_m', 'fire_gap',
-                     'standoff_max_tilt_deg', 'tool'],
+                     'verify_off', 'fire_pass_enabled',
+                     'surge_sign', 'fire_gap',
+                     'standoff_max_tilt_deg', 'fire_max_tilt_deg', 'tool'],
         'defaults': {'camera': 'forward', 'target_class': '',
                      'axes': '', 'offset_lat': 0.0, 'offset_yaw': 0.0,
                      'offset_depth': 0.0, 'err_px': 40.0,
@@ -325,16 +220,16 @@ COMMANDS = {
                      'brake_off': False, 'brake_gain': 0.0, 'hold_s': 0.0,
                      'hold_through_loss': False,
                      'fire_channels': '', 'fire_t': 0.0,
-                     'kp_lat': 60.0, 'kp_yaw': 60.0, 'kp_depth': 0.05,
+                     'kp_lat': 60.0, 'kp_yaw': 60.0,
                      'lost_grace_s': 1.0, 'align_stable_frames': 3.0,
                      'lock_target': False, 'ctrl_conf': 0.0,
                      'range_gain_floor': 1.0, 'ki_lat': 0.0, 'coast_s': 0.8, 'lock_s': 1.0,   # a SWITCH: >0 enables the ladder
                      'fwd_fill': 0.0, 'mode': 'area', 'kp_forward': 200.0,
-                     'settle_px': 0.0, 'verify_off': False, 'depth_step': 0.0,
-                     'fire_pass_enabled': False, 'hold_heading': False,
-                     'surge_sign': 0.0, 'max_depth_m': 0.0,
-                     'depth_ceiling_m': 0.0, 'fire_gap': 0.0,
-                     'standoff_max_tilt_deg': 0.0, 'tool': ''},
+                     'settle_px': 0.0, 'verify_off': False,
+                     'fire_pass_enabled': False,
+                     'surge_sign': 0.0, 'fire_gap': 0.0,
+                     'standoff_max_tilt_deg': 0.0, 'fire_max_tilt_deg': 0.0,
+                     'tool': ''},
     },
     'vision_move': {
         'help':     'Drive forward toward target_class. fwd_fill > 0 stops once the bbox '
@@ -343,7 +238,7 @@ COMMANDS = {
                     'PASS-THROUGH: drive until the target is seen and then leaves the frame, '
                     'plus a commit overshoot (hold_s, else ~2s) to carry the hull through a '
                     'gate. maintain_on holds a maintain_px lateral offset while moving; depth '
-                    'and yaw are left to ArduSub / heading lock. gain caps forward speed; '
+                    'and heading are held by the board. gain caps forward speed; '
                     'gain_lat overrides the cap on the maintain strafe (0 = inherit gain). '
                     'On a fill-stop arrival the forward (and maintain) inertia is braked so '
                     'the hull halts in front of the target instead of creeping in; '
@@ -369,7 +264,7 @@ COMMANDS = {
                      # publishing at zero. Any value > 0 enables it.
                      'lock_s': 1.0},
     },
-    # ---- Per-thruster identification (SROT only) -------------------- #
+    # ---- Per-thruster identification ------------------------------- #
     #
     # ⭐ The board has implemented MAV_CMD_DO_MOTOR_TEST the whole time and
     # `SrotFC.motor_test` has driven it since 2026-09-07, but there was no verb,
@@ -382,7 +277,7 @@ COMMANDS = {
     # ⛔ THIS TURNS A THRUSTER. Props off, or the vehicle restrained.
     'motor_test': {
         'help':     'Spin ONE thruster (1-8) at `gain` percent for `duration` s. '
-                    'SROT only; requires ARMED. The board expires the test and '
+                    'Requires ARMED. The board expires the test and '
                     'DISARMS within 3 s of the last keep-alive, which is the '
                     'safety mechanism -- there is no stop command. '
                     'PROPS OFF OR VEHICLE RESTRAINED.',
@@ -416,7 +311,7 @@ STRING_FIELDS = ('target_name', 'camera', 'target_class', 'axes', 'mode',
 
 # Field names that carry a bool. rosidl init these to False.
 BOOL_FIELDS = ('maintain_on', 'hold_through_loss', 'brake_off', 'lock_target',
-               'fire_pass_enabled', 'hold_heading', 'verify_off')
+               'fire_pass_enabled', 'verify_off')
 
 
 def fields_for(cmd, request, *, runtime_defaults=None):

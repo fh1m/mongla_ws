@@ -19,11 +19,11 @@ finding.
   integer, failsafe timeout or channel base re-typed elsewhere is a finding, even when the
   value is currently right — `test_srot_protocol_drift.py` exists because a second copy is how
   this breaks.
-- **Verb routing.** A new or changed verb must land in exactly one bucket: on-board
-  primitive (`MOVE_VERBS`), host path, or refused (`UNSUPPORTED_VERBS`). A verb that is in
-  none of them reaches ArduSub-only primitives and fails in a worse way than a refusal.
-- **Refusals are loud.** A verb this backend cannot do must raise with a reason. Flag any path
-  that returns success while commanding nothing.
+- **Verb routing.** A new or changed verb is either an on-board primitive (`MOVE_VERBS`, one
+  `SROT_MOVE`) or a host path. There is no third bucket: a verb the board cannot run does not
+  exist, and a facade call `SrotFC` lacks fails `test_every_facade_fc_call_exists_on_srot`.
+- **Refusals are loud.** A request the board cannot honour must raise with a reason. Flag any
+  path that returns success while commanding nothing.
 - **Mode gating.** MANUAL_CONTROL only reaches the thrusters in an accepted mode. `set_mode`
   is best-effort on this wire (no ACK), so a change of mode must be **re-read and verified**.
   AUTO does not exit by itself.
@@ -48,6 +48,6 @@ finding.
 
 ## Out of scope
 
-The `pixhawk` backend and the simulator's ArduSub path — see
-[`legacy-pixhawk-and-sitl.md`](../context/platform/legacy-pixhawk-and-sitl.md). Do not port ArduSub
-assumptions (ALT_HOLD, RC channel overrides, a host heading lock) into srot code.
+The earlier stack, which lives at the tag `last-with-pixhawk-and-sim`. Do not port its
+assumptions (ALT_HOLD, RC channel overrides, a host heading lock) back into this code; a finding
+that one has crept in is in scope.

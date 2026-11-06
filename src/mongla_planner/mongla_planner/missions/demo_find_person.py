@@ -15,7 +15,7 @@ Swap model:
 
 The two verbs
 -------------
-mongla.vision.align(target, *, lat=, yaw=, depth=, err=, duration=, gain=, fallback=)
+mongla.vision.align(target, *, lat=, yaw=, err=, duration=, gain=, fallback=)
     Hold the target at a signed pixel offset on each active axis (a number
     activates the axis; 0 = centre). Returns a truthy VisionResult when
     centred; never raises on a miss.
@@ -50,7 +50,6 @@ def run(mongla, log):
     mongla.camera = CAMERA
 
     mongla.arm()
-    mongla.set_mode('ALT_HOLD')
     mongla.set_depth(DIVE_DEPTH_M, settle=1.0)
 
     target = mongla.models.person.person   # ClassRef — sets model + class automatically
@@ -69,7 +68,7 @@ def run(mongla, log):
     # Deliberate de-target then re-acquire: tests the full search → lock cycle.
     mongla.yaw_left(90.0)
     mongla.vision.align(
-        target, camera=CAMERA, yaw=0, depth=0,
+        target, camera=CAMERA, yaw=0,
         err=ALIGN_ERR_PX, gain=ALIGN_GAIN, duration=ALIGN_DURATION_S,
         fallback=sweep_yaw)
 

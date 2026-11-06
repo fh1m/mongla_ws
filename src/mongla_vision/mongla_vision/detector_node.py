@@ -223,7 +223,7 @@ class DetectorNode(Node):
         self.declare_parameter('model_path',          'yolov11n')
         self.declare_parameter('models',              '')     # CSV name=stem pairs
         self.declare_parameter('active_model',        '')     # registry key to start with
-        self.declare_parameter('device',              'cuda:0')
+        self.declare_parameter('device',              'auto')
         self.declare_parameter('half',                True)   # fp16: ~half the VRAM; coerced off on non-CUDA (yolo.py)
         self.declare_parameter('conf',                0.35)
         # BYTE association floor: PUBLISH down to this, while `conf` stays the
@@ -271,7 +271,7 @@ class DetectorNode(Node):
         # time.
         #
         # Defaulting it ON has the opposite risk: a STANDALONE `detector_node`
-        # (vision.launch.py, the Jetson, sim, replay) has no camera in its
+        # (vision.launch.py, replay) has no camera in its
         # process, so it would sit forever receiving nothing, silently. That
         # is the exact class of bug this round has been removing.
         #
@@ -389,8 +389,8 @@ class DetectorNode(Node):
 
             def _load_one(name: str, stem: str):
                 # The backend follows the extension the resolver found on THIS
-                # machine: .hef on the Pi + AI HAT+, .engine on the Jetson, .pt
-                # anywhere. Missions pass stems, so nothing above this changes.
+                # machine: .hef on the Pi + AI HAT+, .pt on a
+                # dev box. Missions pass stems, so nothing above this changes.
                 det = make_detector(
                     model_path=stem,
                     device=device, conf=conf, iou=iou, imgsz=imgsz,
@@ -591,8 +591,8 @@ class DetectorNode(Node):
         self._last_align_log = 0.0
         self.create_timer(2.0, self._log_health)
         # Slow and at INFO, unlike `_log_health`, because this is an
-        # OPERATIONAL property and not a debugging one: the chip has ~45 % of
-        # the Orin's TOPS, so the pipeline's contract is that every inference
+        # OPERATIONAL property and not a debugging one: the chip's compute is
+        # the scarce resource, so the pipeline's contract is that every inference
         # lands on the newest frame available. 0.1 Hz is invisible in a log
         # and enough to notice a drift.
         self.create_timer(10.0, self._log_efficiency)
@@ -623,7 +623,7 @@ class DetectorNode(Node):
         # goes idle instead of on the publisher's clock -- which is the whole
         # latency argument for composing them.
         self._want = threading.Event()
-        # COMPUTE-WASTE ACCOUNTING. The chip has ~45 % of the Orin's TOPS, so
+        # COMPUTE-WASTE ACCOUNTING. The chip's compute is the scarce resource, so
         # an inference spent on a frame that was already superseded is compute
         # we cannot afford. These make that measurable instead of assumed:
         #   _evicted    a decoded frame replaced in the slot before it was
@@ -783,7 +783,7 @@ class DetectorNode(Node):
         """Say which model is live, and bump the epoch so a switch is visible.
 
         `database_location` is the model STEM, which is this stack's model
-        identity everywhere else (`set_model`, `ClassRef`, the `.engine`
+        identity everywhere else (`set_model`, `ClassRef`, the `.yaml`
         sidecar) -- a second naming scheme here would be a third answer to
         "which model is that".
         """
@@ -1160,8 +1160,7 @@ class DetectorNode(Node):
 
             # Skip the overlay render + encode + publish entirely when no one is
             # subscribed to image_debug (autonomous runs with viewer:=false). This
-            # is pure overhead on the inference thread otherwise -- a free win that
-            # grows once TensorRT speeds inference up.
+            # is pure overhead on the inference thread otherwise -- a free win.
             if (self._publish_dbg
                     and self._pub_dbg.get_subscription_count() > 0
                     and (time.monotonic() - self._last_dbg) >= self._dbg_min_dt):

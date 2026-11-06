@@ -15,7 +15,7 @@ Examples
 --------
 ros2 run mongla_vision vision_check
 ros2 run mongla_vision vision_check --camera laptop --duration 5
-ros2 run mongla_vision vision_check --camera sim_front --require-class person
+ros2 run mongla_vision vision_check --camera downward --require-class bin
 """
 
 from __future__ import annotations

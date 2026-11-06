@@ -15,9 +15,6 @@
 #
 # Pick a profile at launch with -p profile:=<name>. To override fields
 # inline, set the source-specific params (device / topic / width / ...).
-#
-# 'jetson_*' / 'blueos' / 'mavlink' currently raise NotImplementedError on
-# construction -- they're listed so future profiles drop in by config edit.
 
 mongla_vision:
   cameras:
@@ -112,7 +109,7 @@ mongla_vision:
       fourcc:      MJPG
       frame_id:    downward_cam
 
-    # Vehicle — Blue Robotics Low-Light HD USB on Jetson Orin Nano.
+    # Generic USB camera roles (no calibration declared). The vehicle uses pi_*.
     # Bench override: -p device:=N at launch (no file edit needed).
     forward:
       source:   webcam
@@ -132,22 +129,6 @@ mongla_vision:
       fps:      30
       frame_id: downward_cam
 
-    sim_front:
-      source:          ros_topic
-      topic:           /mongla/sim/front_camera/image_raw
-      expected_width:  640
-      expected_height: 480
-      expected_fps:    30
-      frame_id:        front_cam
-
-    sim_bottom:
-      source:          ros_topic
-      topic:           /mongla/sim/bottom_camera/image_raw
-      expected_width:  640
-      expected_height: 480
-      expected_fps:    30
-      frame_id:        bottom_cam
-
     # Auto-discover: pick first available USB device. Use discover_on_start:=true
     # on camera_node to log which physical devices map to which indices.
     auto:
@@ -157,8 +138,3 @@ mongla_vision:
       height:   480
       fps:      30
       frame_id: auto_cam
-
-    jetson_front:  { source: jetson  }
-    jetson_bottom: { source: jetson  }
-    blueos:        { source: blueos  }
-    mavlink:       { source: mavlink }

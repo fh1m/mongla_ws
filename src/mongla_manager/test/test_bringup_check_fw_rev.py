@@ -231,7 +231,7 @@ def test_wildcarded_gcs_failsafe_is_a_hard_fail():
     `bringup_check --srot` reported 0 FAIL. Bench mode had been saved to flash.
 
     0 is the wildcard, so any station -- Bondor on the bench -- keeps the failsafe fed.
-    In water a dead Jetson then looks like a live GCS and the hull station-keeps
+    In water a dead companion then looks like a live GCS and the hull station-keeps
     instead of surfacing. That is the failure this line exists to catch."""
     from mongla_manager.bringup_check import _gcs_failsafe_verdict
     status, label, detail = _gcs_failsafe_verdict(1.0, 0.0)

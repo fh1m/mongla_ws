@@ -25,8 +25,7 @@ def _tree():
 class _Recorder:
     """Plays the DSL: records every call; vision returns what it is told."""
 
-    def __init__(self, vision_ok=True, backend='srot'):
-        self.backend = backend
+    def __init__(self, vision_ok=True):
         self.sent = []
         rec = self
 
@@ -40,11 +39,6 @@ class _Recorder:
                 return vision_ok
 
         self.vision = _Vision()
-
-    def can(self, verb):
-        """As the real DSL: refused on srot iff srot_fc refuses it."""
-        from mongla_control.fc.srot_fc import UNSUPPORTED_VERBS
-        return self.backend != 'srot' or verb not in UNSUPPORTED_VERBS
 
     def __getattr__(self, name):
         def _call(*a, **k):
@@ -145,15 +139,6 @@ def test_a_blind_leg_is_flown_but_never_counted():
     assert sorted(blind) == sorted([CFG.SAUVC_QUAL_BLIND_OUT_S,
                                     CFG.SAUVC_QUAL_BLIND_BACK_S])
     assert Q.run(_Recorder(vision_ok=True)) == 2
-
-
-def test_heading_is_locked_on_pixhawk_and_not_on_srot():
-    d = _Recorder(backend='pixhawk')
-    Q.run(d)
-    assert 'lock_heading' in d.names()
-    d = _Recorder(backend='srot')
-    Q.run(d)
-    assert 'lock_heading' not in d.names()
 
 
 # ── 4. elapsed time ───────────────────────────────────────────────────────────

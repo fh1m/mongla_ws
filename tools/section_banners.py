@@ -11,7 +11,7 @@ is the measurement itself:
 
     fundamentals  a 500 Hz comb, and the step response of the loop it drives
     machine       the hull in profile, dimensioned -- 702.0 mm off the CAD
-    ledger        50 entries as marks, the 8 retractions struck through
+    ledger        one mark per ledger entry, the retractions struck through (counted)
     open          the waterline, and how far under it this vehicle has been
 
     python3 tools/section_banners.py            # write all four
@@ -80,24 +80,39 @@ def hull() -> str:
     return (f'<g><path d="{body}" fill="none" stroke="{RED}" stroke-width="2.2"/>{tun}{nose}{dim}</g>')
 
 
+def _ledger():
+    """The entries, counted by the same reader the site's core sample uses."""
+    import ledger_strip
+    return ledger_strip.read_ledger(ledger_strip.LEDGER.read_text(encoding='utf-8'))
+
+
 def ledger() -> str:
-    """Fifty entries as fifty marks. Eight of them take an earlier result back
-    and are struck through; five more measured an idea and the answer was no."""
-    back, refused = {3, 9, 14, 21, 27, 33, 40, 46}, {6, 17, 24, 36, 44}
+    """One mark per ledger entry, in the order they were written. The ones that
+    take an earlier result back are struck through; the ones that measured an
+    idea and left it off are short. Counted from measured-bars.md, never typed."""
+    entries = _ledger()
+    step = min(13.0, 740.0 / max(len(entries) - 1, 1))
     out = []
-    for i in range(50):
-        x = 20 + i * 13
-        if i in back:
-            out.append(f'<line x1="{x}" y1="36" x2="{x}" y2="116" stroke="{RED}" stroke-width="2.4"/>'
-                       f'<line x1="{x - 7}" y1="86" x2="{x + 7}" y2="66" stroke="{INK}" stroke-width="1.6"/>')
-        elif i in refused:
-            out.append(f'<line x1="{x}" y1="52" x2="{x}" y2="116" stroke="#d99a2b" stroke-width="2.4"/>')
+    for i, e in enumerate(entries):
+        x = 20 + i * step
+        if e.kind == 'back':
+            out.append(f'<line x1="{x:.1f}" y1="36" x2="{x:.1f}" y2="116" stroke="{RED}" stroke-width="2.4"/>'
+                       f'<line x1="{x - 5:.1f}" y1="86" x2="{x + 5:.1f}" y2="66" stroke="{INK}" stroke-width="1.4"/>')
+        elif e.kind == 'no':
+            out.append(f'<line x1="{x:.1f}" y1="52" x2="{x:.1f}" y2="116" stroke="#d99a2b" stroke-width="2.4"/>')
         else:
-            out.append(f'<line x1="{x}" y1="28" x2="{x}" y2="116" stroke="{INK2}" stroke-width="2.4" '
+            out.append(f'<line x1="{x:.1f}" y1="28" x2="{x:.1f}" y2="116" stroke="{INK2}" stroke-width="2.4" '
                        f'stroke-opacity=".55"/>')
-    out.append(f'<text x="20" y="150" class="tiny">50 entries · <tspan fill="{RED}">8 struck through</tspan>'
-               f' · <tspan fill="#d99a2b">5 measured and left off</tspan></text>')
+    back = sum(e.kind == 'back' for e in entries)
+    no = sum(e.kind == 'no' for e in entries)
+    out.append(f'<text x="20" y="150" class="tiny">{len(entries)} entries · '
+               f'<tspan fill="{RED}">{back} struck through</tspan>'
+               f' · <tspan fill="#d99a2b">{no} measured and left off</tspan></text>')
     return '<g>' + ''.join(out) + '</g>'
+
+
+def ledger_rows() -> str:
+    return f'{sum(e.rows for e in _ledger()):,}'
 
 
 def waterline() -> str:
@@ -124,7 +139,7 @@ BANNERS = [
     ('machine', 'Act two // the machine', 'The body it all has to move.',
      '84,248', '△', 'triangles, read off the CAD itself', hull),
     ('ledger', 'The evidence // the ledger', 'Every number, and what it cost.',
-     '390', 'rows', 'measurements, with the ones we took back', ledger),
+     ledger_rows(), 'rows', 'measurements, with the ones we took back', ledger),
     ('open', 'Act three // open', 'Nothing here has been in water.',
      '0', 'm', 'depth reached by this platform, to date', waterline),
 ]

@@ -25,7 +25,7 @@ from mongla_planner.missions.competition_config import (
 
 
 def run(mongla, log=None):
-    mongla.mission_reset()   # clear heading lock + abort from any previous run
+    mongla.mission_reset()   # clear the abort flag and any demand from a previous run
     if SLALOM_HEADING_DEG is not None:
         mongla.turn(SLALOM_HEADING_DEG)
 

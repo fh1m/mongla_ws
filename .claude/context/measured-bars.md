@@ -127,7 +127,7 @@ footage rather than against the next rung up.
 >
 > **The figure therefore stays unmeasured.** It needs both cameras attached;
 > substituting a one-camera number would not be the same quantity.
-| `VISION_LOOP_HZ_SROT` | 50 — `motion_vision.py` | soaked 90 s: **49.86 Hz**, 0.00 % late ticks | ≥ 25 Hz sustained |
+| `VISION_LOOP_HZ` | 50 — `motion_vision.py` | soaked 90 s: **49.86 Hz**, 0.00 % late ticks | ≥ 25 Hz sustained |
 | camera FOV | 63.8° air / **46.7° water** ±0.7 | 25 views, `calibrateCameraRO`, held-out validated | ±1.5° |
 | frame staleness | — | mailbox **16.9 ms** vs 396 ms on a plain queue | ≤ 50 ms |
 
@@ -2740,10 +2740,11 @@ tuning problem.
 
 ★ **And for anything large the detector is not what runs out first, the water
 is.** A standoff chosen from optics alone parks a gate approach 38 m out. The
-crossover between the two regimes is computable per prop, which is why
-`standoff_for` takes the minimum of the two and a visibility figure that is
-NOT ours to assume. 6 m is an optimistic competition-pool default; measure it
-at the venue and override it.
+crossover between the two regimes is computable per prop: take the minimum
+of the two, with a visibility figure that is NOT ours to assume. 6 m is an
+optimistic competition-pool default; measure it at the venue. (The
+`standoff_for` helper that computed this drove by distance, which the board
+refuses, and was removed with it; the arithmetic above is the record.)
 
 ---
 

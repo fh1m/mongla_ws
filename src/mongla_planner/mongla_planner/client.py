@@ -42,19 +42,10 @@ class TaskAbandoned(RuntimeError):
     """A `mongla.task(...)` deadline passed: the in-flight goal was cancelled."""
 
 
-class MissionRefused(RuntimeError):
-    """`mongla.require(verb)` found a verb this backend will not run.
-
-    Raised on the deck, before the vehicle is committed -- deliberately the
-    opposite of the retired FSM layer, which converted the same refusal into an
-    ABORT wired to SURFACE and ended the run looking orderly (J04).
-    """
-
-
 # Verbs a passed task deadline never blocks: stopping, surfacing and releasing
 # the vehicle must always be sendable, especially from the fallback that runs
 # BECAUSE a task was abandoned.
-_DEADLINE_EXEMPT = frozenset({'disarm', 'stop', 'surface', 'unlock_heading',
+_DEADLINE_EXEMPT = frozenset({'disarm', 'stop', 'surface',
                               'mission_reset', 'pause', 'set_mode'})
 
 
@@ -85,8 +76,7 @@ _CANCEL_TIMEOUT_S        = 5.0    # bound the cancel handshake too
 # the disarm backstop must never wait on a healthy-server assumption.
 _QUICK_DEADLINE_S = 12.0
 _QUICK_CMDS = frozenset({
-    'disarm', 'stop', 'surface', 'mission_reset', 'unlock_heading', 'arm',
-    'set_mode',
+    'disarm', 'stop', 'mission_reset', 'arm', 'set_mode',
 })
 
 # Detection-interrupt for vision-verb fallbacks (see begin_search_interrupt). When
@@ -184,9 +174,8 @@ class MonglaClient:
         refuses the goal, `MoveFailed` if the server accepted but
         `result.success == False`.
 
-        `fields` map directly onto `Move.Goal` field names: any of
-        `duration`, `gain`, `target`, `target_name`, `timeout`,
-        `settle`, `yaw_rate_pct`. Unset fields stay at their rosidl
+        `fields` map directly onto `Move.Goal` field names (`duration`,
+        `gain`, `target`, `target_name`, `timeout`, `settle`, ...). Unset fields stay at their rosidl
         defaults (0.0 / '').
         """
         if cmd not in COMMANDS:

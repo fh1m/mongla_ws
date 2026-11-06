@@ -18,7 +18,8 @@ payload.
 import logging
 
 from mongla_control.mongla import Mongla
-from mongla_control.fc.base import FIRE_THRUSTER_FAULT, FIRE_NOT_READY
+from mongla_control.fc.base import (FIRE_FIRED, FIRE_NOT_READY, FIRE_THRUSTER_FAULT,
+                                   FireResult)
 
 
 class _FC:
@@ -39,15 +40,11 @@ class _Payload:
 
     def fire(self, ch):
         self.fired.append(ch)
-        return True
+        return FireResult(FIRE_FIRED, ch)
 
 
 def _mongla(verdict, payload=None):
-    d = Mongla.__new__(Mongla)                 # no MAVLink, no threads
-    d.pixhawk = _FC(verdict)
-    d.log = logging.getLogger('test_prefire')
-    d._payload = payload
-    return d
+    return Mongla(_FC(verdict), logging.getLogger('test_prefire'), payload=payload)
 
 
 def test_a_KNOWN_BAD_thruster_REFUSES_the_shot():
@@ -76,15 +73,6 @@ def test_a_HEALTHY_hull_FIRES():
     pl = _Payload()
     assert _mongla((True, 'all 8 thrusters reporting'), pl)._fire_payload(3).ok
     assert pl.fired == [3]
-
-
-def test_a_backend_with_NO_thruster_health_still_FIRES():
-    """The pixhawk backend has no such method. Absence of a gate is not a fault."""
-    pl = _Payload()
-    d = _mongla(None, pl)
-    d.pixhawk = object()                       # genuinely has no such method
-    assert d._fire_payload(4).ok
-    assert pl.fired == [4]
 
 
 def test_a_RAISING_probe_is_not_a_hull_fault():

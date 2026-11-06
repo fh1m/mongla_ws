@@ -37,9 +37,9 @@ It does NOT validate closed-loop dynamics -- convergence, overshoot, the
 align(hold=) station-keep, or arrival braking -- because the scene won't move
 when the AUV does. align/move will chase a bbox that moves on the file's
 schedule, never truly converging unless the clip happens to show a centred
-target. For dynamics, use Gazebo/SITL; for detection + sequencing, use this.
+target. Dynamics need the vehicle; for detection + sequencing, use this.
 
-Pair with control in separate terminals (SITL for /mongla/state + the manager)
+Pair with control in separate terminals (the manager for /mongla/state)
 exactly as documented in .claude/context/perception/video-testing.md.
 """
 

@@ -1,10 +1,8 @@
 # `mongla.detected()` paradigm — complete reference
 
-> **Backend note.** The vehicle is the SROT board (firmware Hengla) + a Raspberry Pi 5 with a
-> Hailo-8. `lock_heading`, `move_*_dist`, `arc` and `style_yaw` are **refused** there, `ALT_HOLD`
-> is not one of its modes, and the depth-setpoint vision axes are refused. Where this page shows
-> an older idiom, the current contract is [`command-reference.md`](command-reference.md) and the
-> legacy path is [`legacy-pixhawk-and-sitl.md`](../platform/legacy-pixhawk-and-sitl.md).
+> **Every verb below runs on the SROT board.** The board holds depth and heading itself, so
+> depth is never a vision axis — `set_depth` first, then align. The verb contract is
+> [`command-reference.md`](command-reference.md).
 
 > **Purpose of this file:** Every fact, rule, gotcha, and test procedure
 > for the `mongla.detected()` conditional-loop paradigm. Read this before
@@ -29,7 +27,7 @@ one left over from the last move.
 **Per-class last-seen window (not the single latest frame).** `detected()` and
 `wait_for()` track the last-seen monotonic stamp *per class* and return True
 while `now - last_seen <= stale_after` (default 1.0 s). This is **flicker-
-tolerant**: at low/uneven detection FPS (3-4 Hz on the Orin Nano, worse under
+tolerant**: at low/uneven detection FPS (a slow detector runs 3-4 Hz, worse under
 motion blur) a class routinely drops out of *individual* raw `/detections`
 frames; keying off only the latest frame made `detected()` false-negate on
 those gaps and a `while not detected(): <search>` loop could never break even
@@ -401,30 +399,25 @@ These run the action round-trip (and incidentally service callbacks).
 are still where the *time* in a mission is spent:
 
 ```python
-mongla.move_forward(s)      # on-board SROT_MOVE, s seconds (all backends)
+mongla.move_forward(s)      # on-board SROT_MOVE, s seconds
 mongla.move_back(s)
 mongla.move_left(s)
 mongla.move_right(s)
 mongla.yaw_left(deg)
 mongla.yaw_right(deg)
-mongla.arc(s)                        # ⛔ refused on srot — pixhawk/sim only
 mongla.set_depth(m)
 mongla.arm()
 mongla.disarm()
-mongla.pause(s)             # NO_OVERRIDE for s seconds
+mongla.pause(s)             # the board's MOVE_HOLD for s seconds
 mongla.stop()
-mongla.lock_heading(deg)             # ⛔ refused on srot — pixhawk/sim only
-mongla.dvl_connect()                 # ⛔ no DVL is fitted on any vehicle — pixhawk/sim only
-mongla.move_forward_dist(m)          # ⛔ refused on srot — pixhawk/sim only
-mongla.move_lateral_dist(m)          # ⛔ refused on srot — pixhawk/sim only
-mongla.vision.align(...)   # centre on lat/yaw/depth (signed px offsets)
+mongla.turn(deg)            # absolute heading, held by the board
+mongla.vision.align(...)   # centre on lat/yaw (signed px offsets); downward: lat + surge
 mongla.vision.move(...)    # drive forward to a bbox fill ratio
 ```
 
-On srot, `lock_heading`, `dvl_connect`, `move_forward_dist`, `move_lateral_dist` and `arc`
-are refused before dispatch (`UNSUPPORTED_VERBS` in `srot_fc.py`) — a `detected()`-paradigm
-mission on the fielded vehicle should not call them; use timed `move_forward`/`move_left`/
-`move_right`/`yaw_left`/`yaw_right` instead.
+There is no distance-closed move and no host heading lock: no DVL is fitted, and the board
+holds heading itself. Distance is a timed `move_forward`, or the downward camera's
+`calc_distance` bracket.
 
 ### Non-blocking (return almost immediately, do NOT update cache meaningfully)
 
@@ -469,7 +462,7 @@ for _ in range(36):   # 36 × 10° = full 360°
 **Conditional branch:**
 ```python
 if mongla.detected('flare', stale_after=0.5):
-    mongla.vision.align('flare', yaw=0, depth=0)
+    mongla.vision.align('flare', yaw=0, lat=0)
 else:
     mongla.move_forward(2.0, gain=35)
 ```
@@ -701,32 +694,29 @@ def run(mongla, log):
 2. Expected: `detected()` returns `False` (cache stops updating, hits stale_after).
 3. AUV should hit its budget (`MAX_STEPS`) and fall back gracefully.
 
-### 8.4 Integration test — full detected()-paradigm mission in sim
+### 8.4 Integration test — a real mission against the real DSL
+
+The whole mission runs off the vehicle against the real `MonglaDSL` with a fake board, so a
+verb the board does not have, or a kwarg a verb does not take, fails here and not in the
+pool:
 
 ```bash
-# Terminal 1: SITL
-sim_vehicle.py -L RATBeach -v ArduSub -f vectored_6dof --model=JSON --out=udp:0.0.0.0:14550
-
-# Terminal 2: manager
-ros2 run mongla_manager start
-
-# Terminal 3a: vision — webcam / sim, detect person with yolov11n (ROBOSUB tested ★)
-ros2 launch mongla_vision vision.launch.py model:=yolov11n classes:=person
-
-# Terminal 3b: vision — pool/competition gate+flare model (swap in for pool day)
-ros2 launch mongla_vision vision.launch.py model:=gate_sharks classes:=gate
-
-# Terminal 4: run the autonomous mission (uses whatever classes the detector publishes)
-ros2 run mongla_planner mission gate_flare_autonomous
-
-# What to watch for:
-# - AUV creeps forward in short steps until 'gate' appears in detections
-# - Once gate detected, vision.align() takes over (smooth P-loop centring)
-# - After align, vision.move() drives forward to the gate fill ratio
-# - After gate pass, search loop for flare (yaw sweep + detected('flare'))
-# - After flare lock: orbit with detected('gate') break in each step
-# - Scoreboard JSON written on exit
+python3 -m pytest -q src/mongla_planner/test/test_every_mission_runs_against_the_real_dsl.py
 ```
+
+The detection side is checked on archive footage, with the real detector, tracker and lock
+ladder ([`video-testing.md`](../perception/video-testing.md)):
+
+```bash
+ros2 launch mongla_vision video.launch.py fwd_video:=<clip.mp4> fwd_model:=gate_sharks
+ros2 topic hz /mongla/vision/forward/detections     # what detected() will see
+```
+
+What to watch for on the vehicle:
+- the hull creeps forward in short steps until `gate` appears in detections;
+- once it does, `vision.align()` takes over and centres it;
+- after the align, `vision.move()` drives forward to the gate fill ratio;
+- the scorecard JSON is written on exit.
 
 ### 8.5 Things to check and tweak
 
@@ -814,7 +804,7 @@ set `classes='flare'`.
 
 **Fix:** restore the filter before the orbit:
 ```python
-mongla.vision.align(mongla.models.gate.flare, yaw=0, depth=0)   # ← sets classes='flare'
+mongla.vision.align(mongla.models.gate.flare, yaw=0, lat=0)   # ← sets classes='flare'
 mongla.set_classes('gate,flare')   # ← REQUIRED before orbit
 for _ in range(18):
     if mongla.detected('gate', stale_after=0.3):
@@ -842,12 +832,9 @@ at the edge of the frame or partially occluded.
 
 ## 10. Design patterns — canonical mission templates
 
-⚠ Patterns A, C and E below are transcribed from `missions/gate_flare_autonomous.py`, a
-pixhawk/DVL-era mission. `lock_heading()`, `release_heading()` and `move_forward_dist()` are
-in `srot_fc.py`'s `UNSUPPORTED_VERBS` and are **⛔ refused on srot — pixhawk/sim only**; no
-DVL is fitted on the fielded vehicle. Each refused call below is tagged inline; the srot-safe
-substitute is a timed `move_forward(...)`, and the board itself holds heading at 500 Hz so an
-explicit heading lock is unnecessary on that backend.
+The board holds heading at 500 Hz, so no template locks it; distance is timed, because no
+DVL is fitted. The missions that use these shapes for real are `task_gate.py`,
+`task_torpedo.py` and `sauvc_full.py`.
 
 ### Pattern A: Search-then-align (the core paradigm)
 
@@ -861,8 +848,6 @@ def run(mongla, log):
     mongla.models(gate='gate_sharks')
     mongla.arm()
     mongla.set_depth(-0.8)
-    mongla.lock_heading(0.0, timeout=180)   # ⛔ refused on srot — pixhawk/sim only;
-                                             # the board holds heading on its own on srot
 
     # Search for gate — creep forward until visible
     MAX_SEARCH_STEPS = 60
@@ -872,7 +857,7 @@ def run(mongla, log):
         mongla.move_forward(0.5, gain=30)
     else:
         log.warn('gate not found — aborting')
-        mongla.set_depth(0.0)
+        mongla.surface()
         mongla.disarm()
         return
 
@@ -881,12 +866,9 @@ def run(mongla, log):
                         err=40, gain=30, duration=20, fallback=creep_forward)
     mongla.vision.move(mongla.models.gate.gate, fwd=80, mode='height',
                        gain=45, duration=20, fallback=creep_forward)
-    mongla.move_forward_dist(3.0, gain=60)   # ⛔ refused on srot — pixhawk/sim only.
-                                              # srot: mongla.move_forward(2.0, gain=60)
-                                              # (timed, no DVL commit available)
+    mongla.move_forward(2.0, gain=60)        # commit through: timed, no DVL
 
-    mongla.release_heading()   # ⛔ refused on srot — pixhawk/sim only; no-op needed there
-    mongla.set_depth(0.0)
+    mongla.surface()                         # the last motion -- nothing after it moves
     mongla.disarm()
 ```
 
@@ -907,8 +889,8 @@ else:
 ### Pattern C: Orbit with detection exit
 
 ```python
-# After aligning to flare (centre yaw + depth, then close in):
-mongla.vision.align(mongla.models.gate.flare, yaw=0, depth=0, fallback=creep_forward)
+# After aligning to flare (centre yaw + lat, then close in):
+mongla.vision.align(mongla.models.gate.flare, yaw=0, lat=0, fallback=creep_forward)
 mongla.vision.move(mongla.models.gate.flare, fwd=38, mode='height', fallback=creep_forward)
 
 # Restore both classes before orbit
@@ -924,8 +906,7 @@ for _ in range(18):                        # 18 × 20° = 360°
 # Re-align on gate if found
 if mongla.detected('gate', stale_after=0.5):
     mongla.vision.align(mongla.models.gate.gate, yaw=0, lat=0, fallback=creep_forward)
-    mongla.move_forward_dist(1.5, gain=60)   # ⛔ refused on srot — pixhawk/sim only.
-                                              # srot: mongla.move_forward(1.0, gain=60)
+    mongla.move_forward(1.0, gain=60)        # timed commit
 ```
 
 ### Pattern D: Multi-target branch
@@ -939,18 +920,16 @@ if mongla.detected('gate', stale_after=0.5):
     mongla.vision.align('gate', yaw=0, lat=0)
 elif mongla.detected('flare', stale_after=0.5):
     log('flare visible but no gate — centre then approach')
-    mongla.vision.align('flare', yaw=0, depth=0)
+    mongla.vision.align('flare', yaw=0, lat=0)
     mongla.vision.move('flare', fwd=38, mode='height')
 else:
     log('nothing visible — advancing')
     mongla.move_forward(2.0, gain=35)
 ```
 
-### Pattern E: Conditional DVL pass
+### Pattern E: Branch the commit on the align result
 
-⛔ **This pattern needs `move_forward_dist()`, refused on srot — pixhawk/sim only.** There is
-no DVL fitted, so on the fielded vehicle both branches collapse to a timed `move_forward`; the
-`if result.ok:` split (different open-loop distance/gain per branch) is still worth keeping.
+Both branches are timed (no DVL is fitted); what differs is how confident the commit is.
 
 ```python
 result = mongla.vision.align(
@@ -960,9 +939,8 @@ result = mongla.vision.align(
 )
 
 if result.ok:
-    # Vision aligned — use DVL for precise gate passage
-    mongla.move_forward_dist(3.0, gain=60)   # ⛔ refused on srot — pixhawk/sim only.
-                                              # srot: mongla.move_forward(2.0, gain=60)
+    # Vision aligned — a short, brisk commit through the gate
+    mongla.move_forward(2.0, gain=60)
 else:
     # Vision did not centre (gate moved or lost) — open-loop fallback
     log.warn('gate alignment failed — open-loop passage attempt')
@@ -984,7 +962,7 @@ search until it is there        →   while not mongla.detected('gate'):
                                         mongla.move_forward(0.5, gain=30)
 line up on it                   →   mongla.vision.align('gate', yaw=0, lat=0, ...)
 close on it                     →   mongla.vision.move('gate', fwd=80, mode='height')
-go through it                   →   mongla.move_forward_dist(3.0, gain=60)
+go through it                   →   mongla.move_forward(2.0, gain=60)
 ```
 
 Each `detected()`-based loop is one self-contained step, which is what makes a
@@ -994,9 +972,8 @@ mission readable as prose rather than as a graph.
 verbs in explicit state nodes — 3,550 lines that had never executed, carrying a
 defect (J04) that ended every run one state after DIVE. What it promised for
 missions bigger than a linear script now lives in the DSL: `mongla.run_plan()`
-takes the steps as a declaration, decides between them from the live clock,
-skips a step whose verb the backend refuses, gives each its own deadline, and
-records every outcome. See [`mission-cookbook.md`](mission-cookbook.md).
+takes the steps as a declaration, decides between them from the live clock
+(full / fallback / skip), gives each its own deadline, and records every outcome. See [`mission-cookbook.md`](mission-cookbook.md).
 
 ---
 
@@ -1006,7 +983,7 @@ records every outcome. See [`mission-cookbook.md`](mission-cookbook.md).
 - Two-verb vision DSL: `src/mongla_planner/mongla_planner/vision_dsl.py` (`vision.align` / `vision.move`)
 - Detection topic source: `src/mongla_vision/mongla_vision/detector_node.py` (publishes `Detection2DArray`)
 - Vision state (manager side): `src/mongla_manager/mongla_manager/vision_state.py` (`bbox_error()`, used by vision verbs, NOT by `detected()`)
-- Mission samples: `src/mongla_planner/mongla_planner/missions/gate_flare_autonomous.py` (canonical use), `pool_day_practice.py` (full two-verb run + fallbacks)
+- Mission samples: `src/mongla_planner/mongla_planner/missions/task_gate.py` (search → align → move), `pool_day_practice.py` (full two-verb run + fallbacks)
 - Mission cookbook: `.claude/context/missions/mission-cookbook.md` §7.6
 - Client/DSL API: `.claude/context/missions/client-and-dsl-api.md` §2.5
 - Declared plans: `mongla.run_plan()` / `mongla.step()` in `src/mongla_planner/mongla_planner/mongla_dsl.py`

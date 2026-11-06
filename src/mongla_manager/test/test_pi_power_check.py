@@ -1,10 +1,9 @@
 """The companion is a Pi, and it had no power check.
 
-Section L grades `nvpmodel`, which is Jetson-only -- on the vehicle it returns
-PASS "not a Jetson (nvpmodel absent) -- skipped". So the board every mission
-actually runs on was graded on power by nothing at all, while the change map
-lists a measured `get_throttled = 0x50000` (under-voltage since boot) as a hard
-gate before water.
+Section L used to grade the previous companion's power mode, which on the Pi
+returned PASS "absent -- skipped". So the computer every mission actually runs on
+was graded on power by nothing at all, while the change map lists a measured
+`get_throttled = 0x50000` (under-voltage since boot) as a hard gate before water.
 
 `vcgencmd get_throttled` is a bitmask whose LOW half is "now" and HIGH half is
 "has happened since boot". The sticky half is the one a preflight needs: a
@@ -80,4 +79,4 @@ def test_the_check_is_REGISTERED_not_merely_defined():
     assert '_check_pi_power()' in src.split('def main', 1)[-1] or \
            'st, det = _check_pi_power()' in src, (
         '_check_pi_power is defined but never called from the preflight')
-    assert 'L2. Raspberry Pi power' in src
+    assert 'L. Raspberry Pi power' in src

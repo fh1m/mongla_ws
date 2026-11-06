@@ -1,11 +1,10 @@
-"""The align loop's yaw axis, driven on the SROT backend.
+"""The align loop's yaw axis, through `_srot_drive`, at loop level.
 
-⛔ WHY THIS FILE EXISTS. Every loop test in `test_motion_vision.py` runs on
-`_FakePixhawk`, whose `name` is not `'srot'`, so the whole `_is_srot(pixhawk)`
-branch of `align_loop` had NO loop-level coverage at all. The srot yaw law was
-shipped for one commit rounding corrections DOWN to zero, which stalls the
-hole-lock just outside `err_px` -- the exact failure the yaw floor was written
-for -- and no test here would have caught it.
+⛔ WHY THIS FILE EXISTS. The srot yaw law once shipped rounding corrections
+DOWN to zero, which stalls the hole-lock just outside `err_px` -- the exact
+failure the yaw floor was written for -- and nothing at loop level caught it.
+This file drives `align_loop` against a board that records the MANUAL_CONTROL
+frames, so the floor is checked where it acts.
 """
 import sys
 from pathlib import Path
@@ -47,7 +46,7 @@ def _align_srot(vision, fc=None, **kw):
     fc = fc or _FakeSrot()
     writers = _FakeWriters()
     defaults = dict(
-        pixhawk=fc, vision_state=vision, target_class='gate',
+        fc=fc, vision_state=vision, target_class='gate',
         axes={'yaw'}, offsets={}, err_px=40.0, duration=0.4, gain=30.0,
         align_stable_frames=3, lost_grace_s=0.1,
         writers=writers, log=_Log(), abort_fn=None)
@@ -68,7 +67,7 @@ def test_a_close_small_residual_still_actuates():
     """⭐ THE FALSIFIER FOR THE ROUND-DOWN BUG. Big bbox (close, so the floor is
     armed), a residual just outside the deadband, and a kp low enough that pure
     proportional lands under the gate -- which is what `range_gain_floor` does
-    close in. The old taper actuated here; rounding down does not."""
+    close in. The snap actuates here; rounding down does not."""
     # ex 0.15 -> 48 px, 8 px past a 40 px deadband. kp 10 -> P = 1.5 %.
     _align_srot(_FakeVision(_sample(ex=0.15, w_frac=0.6, h_frac=0.6)),
                 kp_yaw=10.0, err_px=40.0, duration=0.3)
@@ -79,6 +78,16 @@ def test_a_close_small_residual_still_actuates():
     assert sent, 'a close residual outside the deadband commanded NO yaw at all'
     assert min(sent) >= SROT_YAW_MIN_PCT - 1e-6, (
         'yaw was commanded below the board gate -- it produces no thrust')
+
+
+def test_a_zero_yaw_gain_commands_no_yaw_close_in():
+    """⛔ THE DEFECT THE DELETED TAPER CARRIED. Close in, outside the deadband,
+    with kp_yaw=0 the operator has switched yaw OFF. The taper still produced a
+    floor from the pixel error alone, and the snap lifted it to 17 % of full
+    scale -- yaw nobody asked for. Proportional to zero is zero."""
+    _, fc = _align_srot(_FakeVision(_sample(ex=0.3, w_frac=0.6, h_frac=0.6)),
+                        kp_yaw=0.0, err_px=40.0, duration=0.3)
+    assert _yaws_pct(fc) == [], 'kp_yaw=0 still commanded yaw'
 
 
 def test_nothing_is_commanded_inside_the_deadband():

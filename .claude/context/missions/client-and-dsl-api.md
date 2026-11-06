@@ -54,10 +54,10 @@ mongla.move_left(2.0, gain=35)
 mongla.turn(90.0)                           # absolute heading; direction chosen for you
 mongla.yaw_right(45.0)                      # relative
 
-mongla.stop()                               # active neutral hold
-mongla.pause(2.0)                           # release control briefly
-mongla.surface()
-mongla.fire(3)                              # board channel 1..16
+mongla.stop()                               # the board's MOVE_STOP brake
+mongla.pause(2.0)                           # hold station: the board's MOVE_HOLD
+mongla.fire(DROPPER_1_CHANNEL)              # a board channel, by name from competition_config
+mongla.surface()                            # the LAST motion: every verb above re-enters AUTO
 ```
 
 **`gain` is a ceiling, not a target.** **Depth is negative.** Both are worth saying twice.
@@ -86,8 +86,8 @@ Both verbs return a result that is truthy only when the target was actually reac
 carries what the camera last saw:
 
 ```python
-res = mongla.vision.align('hole', lat=0, depth=0, duration=25)
-res.status        # 'ALIGNED' | 'LOST' | 'TIMEOUT' | 'NO_CAMERA' | 'ABORTED' | 'FAILED'
+res = mongla.vision.align('hole', lat=0, duration=25)
+res.status        # 'ALIGNED' | 'LOST' | 'TIMEOUT' | 'NO_CAMERA' | 'ABORTED' | 'DRIFTED' | 'FAILED'
 res.saw_target    # was it ever seen?
 res.x_px, res.y_px  # signed pixels from centre at the last sighting; NaN if never seen
 res.last_err_px   # residual from the goal
@@ -161,7 +161,7 @@ mongla.run_plan([
     mongla.step('gate',   points=100, worst_case_s=120, run=gate,
                 fallback=blind_transit, fallback_s=25, fallback_points=40),
     mongla.step('bins',   points=200, worst_case_s=180, run=bins),
-    mongla.step('flares', points=50,  worst_case_s=90,  run=flares, needs='fire'),
+    mongla.step('flares', points=50,  worst_case_s=90,  run=flares),
 ])
 ```
 
@@ -170,7 +170,6 @@ front, because by the second task the clock has moved and the world has changed.
 
 | | |
 |---|---|
-| `needs='fire'` | skips the step if the backend refuses that verb, with the reason on the scorecard |
 | the verdict | runs the full body, the fallback, or nothing |
 | the deadline | each body runs inside its own `task(...)`, so an overrun is cancelled in flight |
 | `TaskAbandoned` | caught — **a task that cannot be finished must not cost the run** |
@@ -179,8 +178,7 @@ front, because by the second task the clock has moved and the world has changed.
 be pointed at `disarm` by a config edit. `order='by_value'` sorts by points per second first — use
 it to decide what to *drop*, not the order to swim, because it does not know where the props are.
 
-It returns `[(name, outcome)]` with outcome one of `full`, `fallback`, `skipped`, `unsupported`,
-`abandoned`.
+It returns `[(name, outcome)]` with outcome one of `full`, `fallback`, `skipped`, `abandoned`.
 
 `task()` is what turns a deadline into a *clean* abandonment: the in-flight goal is cancelled
 (the vehicle brakes and neutralises as with any cancel) and `TaskAbandoned` is raised so the
@@ -194,7 +192,7 @@ mongla.use_camera('downward')       # switch the sticky camera and the live dete
 mongla.set_model('sauvc_sim')
 mongla.set_classes('final_gate')
 mongla.set_conf(0.15)
-mongla.set_vision_param('max_depth_m', -1.6)   # a manager tunable, for this mission
+mongla.set_vision_param('lost_grace_s', 1.5)   # a manager tunable, for this mission
 mongla.pause_detector('forward')
 mongla.resume_detector('downward')
 mongla.save_evidence('forward', 'after_align')  # write the annotated frame beside the run
@@ -203,27 +201,6 @@ mongla.save_evidence('forward', 'after_align')  # write the annotated frame besi
 Setting a model or class aborts loudly if the detector node is not on the graph. That is
 deliberate: the alternative is a mission that idles forever against a target nothing is
 looking for.
-
-## Knowing the vehicle
-
-```python
-mongla.backend        # 'srot' or 'pixhawk'
-```
-
-Read once from the manager, and it **raises rather than guessing** if the manager cannot be
-reached. Missions use it to skip a verb one backend refuses:
-
-```python
-if mongla.can('lock_heading'):
-    mongla.lock_heading(0.0)       # on srot the board holds heading itself
-
-mongla.require('fire', why='this task drops a marker')   # refuse on the deck, not underwater
-```
-
-`can()` reads `srot_fc.UNSUPPORTED_VERBS` **at call time** — the same frozenset the manager checks
-before dispatch — so there is no second list to fall out of step. That mattered: the retired FSM
-layer carried its own capability flag, never consulted it, and every plan ended one state after
-DIVE (`BUGS.md` J04). `require()` raises `MissionRefused` when there is no sensible branch.
 
 ## The escape hatch
 
@@ -252,7 +229,7 @@ client.last_goal_id                    # the same 8 hex characters the manager l
 | Exception | When |
 |---|---|
 | `MoveRejected` | the server refused the goal |
-| `MoveFailed` | it ran and reported failure — including a verb this backend refuses |
+| `MoveFailed` | it ran and reported failure — including a verb the manager does not know |
 | `MoveTimeout` | no result inside the budget |
 | `TaskAbandoned` | a task deadline passed; the goal was cancelled |
 

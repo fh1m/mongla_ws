@@ -4,7 +4,7 @@ Public exports:
   Camera                    abstract base every camera source implements
   make_camera               factory: source-name -> Camera
   make_camera_from_profile  factory: CAMERA_PROFILES dict -> Camera
-  CAMERA_PROFILES           named profile dict (laptop, sim_front, ...)
+  CAMERA_PROFILES           named profile dict (forward, downward, laptop, ...)
   Detector, Detection       detection ABC + plain dataclass result
   YoloDetector              Ultralytics YOLO11 wrapper (yolov11n default)
   draw                      module of pure-function visual overlays

@@ -1,65 +1,65 @@
 # mongla_control — the verbs, and the line between us and the hardware
 
-**13.2k lines · 865 tests · no ROS nodes · [`src/mongla_control`](../../../../src/mongla_control)**
+**no ROS nodes · [`src/mongla_control`](../../../../src/mongla_control)**
 
 This package answers two questions:
 
 1. **What does "move forward" actually mean?** Every verb's implementation lives here.
-2. **Who are we talking to?** One class per flight controller, behind one interface, so the
-   rest of the codebase never has to ask which hardware is fitted.
+2. **How do we talk to the board?** One driver, `SrotFC`, over one USB-C link.
 
 It is a plain Python library: it starts no nodes and subscribes to nothing — `mongla_manager`
-imports it. That separation is what lets 865 tests exercise the real control logic with no ROS
+imports it. That separation is what lets the tests exercise the real control logic with no ROS
 graph and no vehicle.
 
 ---
 
-## The flight-controller boundary
+## The board boundary
 
 ```
             Mongla facade  (one method per verb)
                    │
-        FlightController  (the interface: arm, mode, manual, move, fire, read)
+                SrotFC   (arm, mode, manual, move, fire, read)
                    │
-        ┌──────────┴───────────┐
-     SrotFC                 PixhawkFC
-  the SROT board          ArduSub — how the simulator flies
+          MAVLink 2 over USB-C, compid 191
+                   │
+        SROT board — Hengla firmware, 500 Hz
 ```
 
-`fc/base.py` defines the boundary and the typed outcomes. `fc/srot_protocol.py` is the **one
-copy** of the wire constants shared with the firmware, and a test reads the firmware's own
-headers to prove it has not drifted. `fc/port_guard.py` enforces that one process owns the
-serial port — a second one gets a clear error instead of a corrupted link.
+`fc/base.py` defines the typed outcomes every board call returns. `fc/srot_protocol.py` is the
+**one copy** of the wire constants shared with the firmware, and a test reads the firmware's
+own headers to prove it has not drifted. `fc/port_guard.py` enforces that one process owns the
+serial port — a second one gets a clear error instead of a corrupted link. There is one board,
+so there is no backend interface and no selector; the earlier stack lives at the tag
+`last-with-pixhawk-and-sim`.
 
 ## The verbs
 
-Thirty of them, in one registry (`commands.py`). Adding one touches two places: a row in that
-registry and a method of the same name on the facade. The CLI, the action server and the
+Twenty-three of them, in one registry (`commands.py`). Adding one touches two places: a row in
+that registry and a method of the same name on the facade. The CLI, the action server and the
 Python client pick it up with no further edits.
-
-On the srot board they fall into three groups:
 
 | Group | Verbs | What happens |
 |---|---|---|
-| **On the board** | `move_forward` · `move_back` · `move_left` · `move_right` · `yaw_left` · `yaw_right` · `turn` · `set_depth` · `stop` · `pause` · `style_roll` | one command, run and braked on the board at 500 Hz |
-| **Here, as a loop** | `vision_align` · `vision_move` · `arm` · `disarm` · `set_mode` · `fire` · `surface` · `mission_reset` and the rest | a host loop, or a single message |
-| **Refused** | `lock_heading` · `move_forward_dist` · `move_back_dist` · `move_lateral_dist` · `arc` · `style_yaw` | not supported on this backend; refused before dispatch, with the reason |
+| **On the board** | `move_forward` · `move_back` · `move_left` · `move_right` · `yaw_left` · `yaw_right` · `turn` · `set_depth` · `stop` · `pause` · `style_roll` | one `SROT_MOVE`, run and braked on the board at 500 Hz |
+| **Here** | `arm` · `disarm` · `set_mode` · `head` · `surface` · `mission_reset` · `calibrate_depth` · `calc_distance` · `fire` · `motor_test` · `vision_align` · `vision_move` | a host loop, or a single message |
 
-Refusing loudly is the point. The failure it prevents — a verb that reports success while the
-vehicle does nothing — is the one that ends a competition run with nobody knowing why.
+A name that is not in the registry fails at the node with `Unknown command` and puts nothing on
+the wire. There is no third "refused" group: a verb the board cannot run does not exist.
 
 ## The two vision verbs
 
 Only two, and they are pixel-native: no metric model of the world is needed to use them.
 
-- **`vision_align`** — hold the target at a chosen offset on whichever axes you name
-  (sideways, yaw, depth, and a forward standoff). It can also hold station for a few seconds
-  and fire the payload mid-hold, on a *fresh* detection.
+- **`vision_align`** — hold the target at a chosen offset on the axes you name (sideways, yaw,
+  and a forward standoff or, on the downward camera, surge). It can hold station for a few
+  seconds and fire the payload mid-hold, on a *fresh* detection. It never commands depth:
+  `set_depth` first, then align.
 - **`vision_move`** — drive toward the target until it fills a chosen fraction of the frame,
   or straight through it.
 
-Neither raises. Both return an outcome — aligned, lost, timed out, no camera, aborted — plus
-where the target was when the verb ended, so a mission can recover instead of guessing.
+Neither raises. Both return an outcome — aligned, lost, timed out, no camera, aborted,
+drifted — plus where the target was when the verb ended, so a mission can recover instead of
+guessing. They actuate through `MANUAL_CONTROL` in STABILIZE at 50 Hz.
 
 ## The map
 
@@ -67,15 +67,17 @@ where the target was when the verb ended, so a mission can recover instead of gu
 |---|---|
 | `commands.py` | the registry: one row per verb, the single source of truth |
 | `mongla.py` | the facade: locking, dispatch, and the safety verbs |
-| `fc/` | the backends, the wire constants, the port guard |
-| `motion_vision.py` | the two vision loops |
+| `fc/srot_fc.py` | the board driver, and `SrotPayload` (the board's PCA9685 over MAVLink) |
+| `fc/srot_protocol.py` · `fc/base.py` · `fc/port_guard.py` | wire constants, typed outcomes, one owner per port |
+| `motion_vision.py` · `motion_writers.py` · `motion_rates.py` | the two vision loops, what they write, and their tick rate |
 | `vision_verbs.py` | the verbs on top of those loops: mode gating, firing, evidence |
-| `allocation.py` | what the mixer will *actually* deliver, and fitting a demand yaw-first |
-| `motion_forward.py` · `motion_lateral.py` · `motion_yaw.py` · `motion_depth.py` | per-axis motion, used on the ArduSub path |
-| `heading_lock.py` · `heartbeat.py` | ArduSub-only: a background heading hold, and the keepalive that stops it disarming |
-| `payload.py` | the older USB payload driver (on srot the board's own outputs are used) |
+| `allocation.py` · `actuation_model.py` | what the mixer will *actually* deliver, and what the board does with a demand |
+| `geometric_allocation.py` · `hydrodynamics.py` | the hull's real thruster geometry and what its shape implies |
 | `bearing.py` · `nav_filter.py` | pixel → bearing, and the small filters the loops share |
 | `errors.py` | the typed failures every verb raises |
+
+The heartbeat and the heading source live in `mongla_manager` (`_HeartbeatThread`,
+`yaw_source.BoardYaw`), next to the link they serve.
 
 ## Why `allocation.py` exists
 
@@ -90,7 +92,7 @@ something the mixer can honour. Below saturation it changes nothing.
 python3 -m pytest -q src/mongla_control/test
 ```
 
-865 tests. The style matters more than the count: the board is faked at the wire, so a test
+The style matters more than the count (that lives in [the packages page](../README.md)): the board is faked at the wire, so a test
 fails when a *real* defect is injected. Several of these tests exist precisely because an
 earlier version of them passed while the vehicle was broken.
 

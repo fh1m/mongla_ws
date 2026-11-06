@@ -36,7 +36,6 @@ def run(mongla, log):
     mongla.target = TARGET_CLASS
 
     mongla.arm()
-    mongla.set_mode('ALT_HOLD')
     mongla.set_depth(DIVE_DEPTH_M, settle=1.0)
 
     mongla.vision.align(

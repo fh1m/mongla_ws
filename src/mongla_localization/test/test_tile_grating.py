@@ -219,30 +219,6 @@ def test_shift_from_phase_handles_missing_inputs():
 
 
 # --------------------------------------------------------------------------- #
-#  our own simulator, which does NOT have a tiled floor
-# --------------------------------------------------------------------------- #
-def test_our_sim_floor_textures_are_correctly_refused():
-    """⛔ A SIM-FIDELITY FINDING AS MUCH AS AN ALGORITHM ONE. Measured: our
-    SAUVC and RoboSub floor textures carry 0.65 % and 0.67 % of their spectral
-    energy in the dominant peak -- they are noise-like, not tiled. A real
-    competition pool is tiled and our simulated one is not, so this capability
-    cannot be rehearsed in sim until the texture is replaced.
-    """
-    import pathlib
-
-    import cv2
-
-    root = pathlib.Path(__file__).resolve().parents[3]
-    base = root / 'sim/src/mongla_sim_worlds/models'
-    for rel in ('sauvc_textures/pool_floor.png', 'robosub_textures/pool_floor.png'):
-        path = base / rel
-        if not path.exists():
-            pytest.skip(f'{rel} not present')
-        im = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
-        assert detect(im) is None, f'{rel} should not read as a grating'
-
-
-# --------------------------------------------------------------------------- #
 #  measure(): decimation, which is what makes this affordable at all
 # --------------------------------------------------------------------------- #
 def test_decimation_preserves_the_measurement():

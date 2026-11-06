@@ -3,7 +3,9 @@
 ⛔ WHAT THIS REPLACES. `VISION_YAW_MIN_PCT = 5.0` labels itself "a hardware
 spin-up assumption, NOT a measured value". On the srot backend it is now
 measured, and it is wrong in both directions at once: too high to be the
-smallest usable command, and attached to a taper that cannot taper.
+smallest usable command, and attached to a taper that could not taper (the taper
+was deleted on 2026-11-06: once the snap existed it changed nothing except at
+kp_yaw=0, where it commanded yaw that had been switched off).
 
 The firmware fact underneath, `attitude_control.cpp:87`:
 
@@ -73,12 +75,10 @@ def test_a_different_expo_moves_the_floor():
 #  The snap
 # --------------------------------------------------------------------------- #
 
-def test_srot_floor_is_below_the_guessed_constant():
+def test_srot_floor_is_the_derived_value():
+    """Derived from the board's stick gate and expo, not guessed (the 5.0 %
+    it replaced was 1.75x the smallest command that moves the hull)."""
     assert mv.SROT_YAW_MIN_PCT == pytest.approx(2.8561, abs=1e-3)
-    assert mv.SROT_YAW_MIN_PCT < mv.VISION_YAW_MIN_PCT
-    # and the guess is 1.75x the measured floor -- recorded so the ratio is
-    # visible if either number is ever edited
-    assert mv.VISION_YAW_MIN_PCT / mv.SROT_YAW_MIN_PCT == pytest.approx(1.751, rel=1e-2)
 
 
 @pytest.mark.parametrize('mag,want', [
@@ -151,11 +151,3 @@ def test_a_sub_gate_demand_does_not_disturb_the_boards_heading_hold():
         assert hold_torque(pct) == pytest.approx(baseline), (
             f'{pct} % disturbed the hold -- the retracted claim would be true '
             f'after all, and the docstrings need changing back')
-
-
-def test_the_taper_is_left_alone_for_the_ardusub_path():
-    """⛔ DO NOT 'SIMPLIFY' THIS AWAY. `_vision_yaw_floor` fixed a real observed
-    close-in wobble, and on ArduSub -- where PWM is continuous and there is no
-    MOT_SPIN_MIN relay -- the taper does what it says. Only srot snaps."""
-    tapered = mv._vision_yaw_floor(15.0, 10.0, 5.0)
-    assert 0.0 < tapered < 5.0, 'the taper must still produce intermediate values'

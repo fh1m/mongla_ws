@@ -22,7 +22,7 @@ An explicit `calibration` param still wins -- `vision_pi.launch.py` keeps
 working unchanged, and an operator can always point at a file by hand.
 
 NOTE ON WHY `forward` FINDS NOTHING AND THAT IS CORRECT: `forward` and
-`pi_forward` are DIFFERENT PHYSICAL CAMERAS (Blue Robotics on the Jetson vs
+`pi_forward` are DIFFERENT PHYSICAL CAMERAS (a generic USB role vs
 the Fantech on the Pi). We hold calibrations for the two Pi units only, so
 `camera:=forward` resolves to '' and says so. Binding it to the Pi file
 because the names look alike is exactly the round-38 defect

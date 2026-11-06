@@ -3,7 +3,7 @@
 `_emergency_stop` is the Ctrl-C / SIGTERM path, and CLAUDE.md safety rule 1 makes
 it non-negotiable: "Ctrl-C on the manager triggers Mongla.stop() + disarm()".
 
-Its "stop the thrusters" step was `pixhawk.send_neutral()`. On srot that is a zero
+Its "stop the thrusters" step was `fc.send_neutral()`. On srot that is a zero
 MANUAL_CONTROL frame -- and a SROT_MOVE leaves the board in AUTO, where the
 firmware overwrites every pilot axis from the movement primitive and the frame is
 DISCARDED (B28). Ctrl-C arrives most often DURING a move, so the one step that
@@ -82,14 +82,6 @@ def test_the_emergency_stop_brakes_before_it_goes_neutral():
         'brake before disarm, so the hull decelerates instead of coasting'
 
 
-def test_the_brake_step_is_guarded_for_the_pixhawk_backend():
-    """PixhawkFC has no stop_motion; an unguarded call would break that path."""
-    from mongla_control.pixhawk import Pixhawk
-    assert not hasattr(Pixhawk, 'stop_motion')
-    assert "hasattr(node.fc, 'stop_motion')" in _emergency_stop_source(), \
-        'the srot-only brake must be feature-detected, not assumed'
-
-
 def test_every_step_stays_isolated():
     """A failing brake must not prevent the disarm below it."""
     src = _emergency_stop_source()
@@ -114,7 +106,6 @@ class _Facade:
 
     def __init__(self):
         self._abort_event = threading.Event()
-        self._heading_lock = None
 
     def request_abort(self):
         self._abort_event.set()
@@ -142,7 +133,7 @@ class _RecFC:
 class _StubNode:
     def __init__(self):
         self.mongla = _Facade()
-        self.fc = self.pixhawk = _RecFC(self.mongla._abort_event)
+        self.fc = _RecFC(self.mongla._abort_event)
         self.heartbeat = type('H', (), {'stop': lambda self: None})()
         self.yaw_source = type('Y', (), {'close': lambda self: None})()
         self._vision_states = {}

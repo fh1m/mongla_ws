@@ -1,6 +1,6 @@
 """RosTopicCamera — subscribes to a sensor_msgs/Image topic.
 
-Used for Gazebo, BlueOS image_transport, or any other already-publishing
+Used for bag replays, or any other already-publishing
 source. We hold the latest frame in a tiny single-slot buffer; reads are
 non-blocking and just hand back whatever the subscriber thread last
 received. `fresh=True` only when read() consumes a frame that was newer
@@ -56,8 +56,8 @@ class RosTopicCamera(Camera):
 
         # SENSOR_DATA (BEST_EFFORT), not a depth-10 RELIABLE queue.
         #
-        # Camera publishers -- Gazebo's ros_gz image_bridge, underwater_fx,
-        # BlueOS image_transport -- all publish BEST_EFFORT. A RELIABLE
+        # Camera publishers -- our camera_node, image_transport, most drivers
+        # -- publish BEST_EFFORT. A RELIABLE
         # subscriber is QoS-INCOMPATIBLE with a BEST_EFFORT publisher, and rclpy
         # does not raise: it logs one WARN and then delivers NOTHING, forever.
         # The pipeline comes up clean, every node reports healthy, and the

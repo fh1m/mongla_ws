@@ -6,8 +6,8 @@ the vision stack. The rule the whole thing rests on:
   * BOTH cameras stream the whole time (two camera_nodes, independent of detection).
   * Only ONE detector INFERS at a time -- `use_camera(name)` pauses every other
     detector and resumes this one. Paused = the camera still streams, its detector
-    just stops running YOLO. That is what keeps the 8 GB Jetson off the
-    concurrent-inference OOM wall -- NOT unloading models.
+    just stops running inference. One model graph live on the Hailo at a time
+    is what keeps it off the SRAM ceiling (two groups -> SRAM_MEMORY_FULL).
 
 So the sequence is forward(gate) → downward(bin) → forward(torpedo): each
 `use_camera` flips which single detector is live (and flips the HUD), with a
@@ -57,15 +57,14 @@ def run(mongla, log=None):
 
     # ── 2. BIN (downward) ───────────────────────────────────────────────────────
     # ONE call flips the live detector to downward (forward pauses) + the HUD.
-    # Downward kwargs remap (see task_bin / downward-camera.md): lat+fwd centre
-    # over the bin, depth = descent to a fill%.
+    # Downward kwargs (see task_bin / downward-camera.md): lat + fwd (surge)
+    # centre over the bin; the board holds the depth set before the dive.
     if mongla.camera_usable('downward', task='demo bin'):   # skip-or-abort is CONFIGURED
         mongla.use_camera('downward')
         mongla.set_classes('fire,blood', node=_DWN)
         if mongla.wait_for('fire', timeout=10):
             if mongla.vision.align('fire', camera='downward', lat=0, fwd=0,
-                                   depth=35, fwd_mode='height', err=30, gain=25,
-                                   duration=25, max_depth_m=-2.0):
+                                   err=30, gain=25, duration=25):
                 mongla.pause(2.0)
                 mongla.fire(DROPPER_1_CHANNEL)   # competition_config (B53)
         elif log:
@@ -78,10 +77,10 @@ def run(mongla, log=None):
     mongla.set_model('torpedo_blood_hole', node=_FWD)
     mongla.set_classes('torpedo,blood,hole', node=_FWD)
     if mongla.wait_for('hole', timeout=10):
-        # Standoff + centre + fire-from-lock (yaw dropped, heading_lock holds Ch4).
-        mongla.vision.align('hole', lat=0, depth=0, fwd=55, fwd_mode='area',
+        # Standoff + centre + fire-from-lock (no yaw axis: the board holds heading).
+        mongla.vision.align('hole', lat=0, fwd=55, fwd_mode='area',
                             err=15, gain=25, duration=30, hold=4.0,
-                            fire=TORPEDO_1_CHANNEL, fire_t=1.5, brake=False, hold_heading=True)
+                            fire=TORPEDO_1_CHANNEL, fire_t=1.5, brake=False)
     elif log:
         log('[demo] torpedo hole not seen')
 

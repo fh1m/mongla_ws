@@ -1,24 +1,23 @@
 #!/usr/bin/env python3
-"""SrotFC -- the SROT/Hengla flight-controller backend behind the FlightController HAL.
+"""SrotFC -- the host side of the SROT board (firmware Hengla).
 
 SROT speaks MAVLink 2 (sysid/compid 1/1) and owns the motion primitives on-board:
 attitude + depth hold, thrust allocation, timed moves with braking, heading hold,
 failsafes. So this backend is thin -- it sends **intent** and relays the board's
 own progress/terminal ACKs. The wire constants all live in `srot_protocol.py`.
 
-THREADING RULE (inherited from `pixhawk.py`): only the manager's reader thread
-calls `recv_match()`; every read here is a non-blocking `master.messages` cache
-lookup. Every write goes through `self._tx_lock` (pymavlink shares one seq counter
-+ encode buffer across threads).
+THREADING RULE: only the manager's reader thread calls `recv_match()`; every
+read here is a non-blocking `master.messages` cache lookup. Every write goes
+through `self._tx_lock` (pymavlink shares one seq counter + encode buffer across
+threads).
 
-What does NOT port from Pixhawk (see DUBURI_WS_INTEGRATION.md / the plan):
-  * `SET_POSITION_TARGET_*` depth-setpoint stream -> UNSUPPORTED on SROT; depth is
-    a mode (DEPTH_HOLD latches current) or a DIVE move.
-  * `RC_CHANNELS_OVERRIDE` / per-channel release -> SROT uses MANUAL_CONTROL, all
-    four axes always sent (no NO_OVERRIDE).
-  * `SET_MESSAGE_INTERVAL` -> SROT rates are fixed on-board; the manager must skip it.
-  * The 5 Hz neutral-RC "heartbeat" (heartbeat.py) is harmful here (fights an AUTO
-    move); only the >=1 Hz MAVLink HEARTBEAT matters (5 s silence -> board surfaces).
+What the board does NOT have, so nothing here pretends to:
+  * no depth-setpoint stream -- depth is a mode (DEPTH_HOLD latches the current
+    depth) or a DIVE move;
+  * no RC override and no per-channel release -- MANUAL_CONTROL only, all four
+    axes always sent;
+  * no RC heartbeat -- only the >=1 Hz MAVLink HEARTBEAT matters (5 s of silence
+    and the board surfaces).
 
 ⚠ The board's depth loop has never run closed (AUDIT R1) -- DIVE/DEPTH_HOLD are
 bench-unverified. The facade gates dive-dependent verbs; this layer just sends them.
@@ -34,7 +33,7 @@ import struct
 import threading
 import time
 
-# MUST precede the pymavlink import, exactly as `mongla_control.pixhawk` does.
+# MUST precede the pymavlink import.
 #
 # pymavlink binds ONE dialect module at import time, chosen from the environment, and
 # the default is `dialects.v10.ardupilotmega` -- MAVLink *1*. ESC_TELEMETRY_1_TO_4
@@ -43,17 +42,15 @@ import time
 # callback, just zero RPM that looks exactly like an ESC or wiring fault. This is the
 # same trap that cost Bondor every RPM packet via ESC_STATUS.
 #
-# It happened to work only because `mongla_control/__init__` reaches `pixhawk.py`
-# first and pixhawk.py sets this. Anything importing `fc.srot_fc` on its own --
-# bringup_check, a test, a script -- got MAVLink 1 and lost the ESC telemetry. Setting
-# it here too is idempotent and removes the import-order dependency.
+# Anything importing `fc.srot_fc` -- the manager, bringup_check, a test, a script --
+# gets MAVLink 2 from this line, with no import-order dependency.
 #
 # MEASURED on the board (COM19, in-vehicle): with the default dialect the board's own
 # ESC frames arrive and are reported as UNKNOWN_291 / UNKNOWN_11030 / UNKNOWN_11031.
 os.environ['MAVLINK20'] = '1'
 from pymavlink import mavutil                      # noqa: E402
 
-from .base import (FlightController, Telemetry, MoveResult, FireResult,
+from .base import (Telemetry, MoveResult, FireResult,
                    SUCCEEDED, PREEMPTED, FAILED, DENIED, TIMEOUT, ABORTED,
                    FIRE_FIRED, FIRE_REJECTED_ARM, FIRE_DISABLED, FIRE_DENIED,
                    FIRE_NO_ACK, FIRE_NOT_READY, FIRE_BUSY)
@@ -242,9 +239,9 @@ _DEPTH_ARM_TAIL = (
     'then re-check with `ros2 run mongla_manager connect`')
 
 
-class SrotFC(FlightController):
-    """SROT backend. Constructed with a pre-opened mavutil master + optional logger,
-    exactly like `Pixhawk` (connection lives in the manager / connection_config)."""
+class SrotFC:
+    """The board. Constructed with a pre-opened mavutil master + optional logger
+    (the connection lives in the manager / connection_config)."""
 
     name = 'srot'
 
@@ -258,8 +255,7 @@ class SrotFC(FlightController):
         # Last HEARTBEAT from the VEHICLE (autopilot != INVALID). Our own GCS
         # heartbeat and any other GCS on the link (e.g. Bondor) send
         # MAV_AUTOPILOT_INVALID; the reader thread caches the latest HEARTBEAT
-        # regardless of source, so mode/armed must prefer the vehicle's -- same
-        # guard Pixhawk uses via _last_autopilot_hb.
+        # regardless of source, so mode/armed must prefer the vehicle's.
         self._last_vehicle_hb = None
         # (move_type, speed) of the last translation leg sent, for the abort brake.
         self._last_leg = None
@@ -521,8 +517,7 @@ class SrotFC(FlightController):
         ONBOARD_CONTROLLER, not GCS: we are a companion computer, and now that we
         also identify as compid 191 (MAV_COMP_ID_ONBOARD_COMPUTER) declaring
         MAV_TYPE_GCS would contradict that on the same frame -- exactly the
-        ambiguity the compid change exists to remove. `pixhawk.py` has always sent
-        ONBOARD_CONTROLLER; this backend was the inconsistent one.
+        ambiguity the compid change exists to remove.
 
         Safe: nothing reads the field. The firmware's heartbeat handler branches on
         sysid/compid only (fw mav_commands.cpp:687), and our own `_vehicle_hb`
@@ -1991,7 +1986,7 @@ class SrotFC(FlightController):
             t.yaw_deg = math.degrees(att.yaw) % 360.0
             t.roll_deg = math.degrees(att.roll)
             t.pitch_deg = math.degrees(att.pitch)
-        # Depth: NEGATIVE below the surface, same as Pixhawk/AHRS2 and as
+        # Depth: NEGATIVE below the surface, as
         # MonglaState.msg documents. VFR_HUD.alt is already in that convention
         # (fw sends alt = -depth), so pass it through -- see get_attitude().
         # Stays NaN until VFR_HUD arrives (5 Hz).
@@ -2063,7 +2058,7 @@ class SrotFC(FlightController):
                 t.esc_temp_c = t.esc_temp_c + tuple(
                     int(x) for x in getattr(block, 'temperature', ()) or ())
 
-        # Everything below is SROT-only and has no Pixhawk equivalent. Each stays NaN
+        # Everything below is board-specific. Each stays NaN
         # (not 0.0) when the board has not said it -- the board SUPPRESSES values it
         # cannot stand behind, so absence is a distinct, meaningful state.
         thr = self.get_batteries().get(sp.BATTERY_ID_THRUSTER)
@@ -2111,24 +2106,17 @@ class SrotFC(FlightController):
         return t
 
     # ------------------------------------------------------------------ #
-    #  Pixhawk-compatible surface                                         #
+    #  Summary getters -- what the manager's state and HUD paths read      #
     # ------------------------------------------------------------------ #
-    # auv_manager_node reads the vehicle through the historical Pixhawk method
-    # names (get_attitude/get_mode/is_armed/...). Exposing the same names here
-    # -- reading SROT telemetry, no-op'ing the ArduSub-only writes -- lets the
-    # manager treat `self.fc` as a drop-in on the srot backend with only a few
-    # guarded changes (skip the neutral-RC heartbeat + the BNO->EKF mocap tick).
 
     def get_attitude(self):
         """{'yaw'(deg 0..360),'roll'(deg),'pitch'(deg),'depth'(m)} or None.
 
-        Same shape as Pixhawk.get_attitude so the manager's telemetry/state path
-        is unchanged. yaw in degrees (ATTITUDE is radians).
+        yaw in degrees (ATTITUDE is radians).
 
-        DEPTH SIGN: this stack's convention -- MonglaState.msg, set_depth's input,
-        STYLE_ROLL_SURFACE_GUARD_M, motion_vision's _MIN_DEPTH_M / max_depth_m /
-        depth_ceiling_m -- is NEGATIVE below the surface, matching Pixhawk's
-        AHRS2.altitude. The board is positive-DOWN internally but already negates
+        DEPTH SIGN: this stack's convention -- MonglaState.msg, set_depth's input
+        -- is NEGATIVE below the surface. The board is positive-DOWN internally
+        but already negates
         on the wire (`VFR_HUD.alt = -depth`, fw mav_stream.cpp:210-218), so alt is
         ALREADY in our convention. Pass it straight through: negating here too
         made /mongla/state.depth_m positive when submerged, which silently
@@ -2280,8 +2268,7 @@ class SrotFC(FlightController):
         axis and zero is the sensor, not the encoding.
 
         A confident 0.0 is the worst possible failure here: `_effective_yaw_deg`
-        would publish heading 0.0, `heading_lock` would close its 50 Hz Ch4 loop
-        on it, and `turn` would believe it was already pointing north. Nothing
+        would publish heading 0.0, and `turn` would believe it was already pointing north. Nothing
         anywhere logged a fault, because nothing asked.
 
         This is the barometer gate's twin. That half was fixed when a failing
@@ -2334,8 +2321,7 @@ class SrotFC(FlightController):
     def get_battery(self):
         """{'voltage','current'} (V/A) for the MAIN battery (id 0), or None.
 
-        Matches Pixhawk's dict contract (the manager reads battery['voltage']), so
-        /mongla/state is unchanged. Pinned to id 0 rather than 'whatever arrived
+        The manager reads battery['voltage'] for /mongla/state. Pinned to id 0 rather than 'whatever arrived
         last' -- see note_battery for why that distinction is not cosmetic.
         """
         self._drain_battery()
@@ -2345,15 +2331,12 @@ class SrotFC(FlightController):
         voltage, current, _ = hit
         return {'voltage': voltage, 'current': current}
 
-    def get_rc_channels(self):
-        return None            # SROT has no RC-channel readback (MANUAL_CONTROL only)
-
     def get_statustext(self):
         st = self._statustext()
         return st or None
 
     def get_angular_rates(self):
-        """Body-frame angular rates (rad/s) from ATTITUDE, matching Pixhawk's contract:
+        """Body-frame angular rates (rad/s) from ATTITUDE:
         {'roll_rate','pitch_rate','yaw_rate','age_s'} or None. The manager's
         _imu_rates_tick reads the *_rate keys, so they MUST match exactly.
 
@@ -2535,10 +2518,6 @@ class SrotFC(FlightController):
         self._accel_votes = (vote, n)
         return vote if n >= self._ACCEL_FRAME_VOTES else None
 
-    def heartbeat_age(self):
-        hb = self._vehicle_hb()
-        return None if hb is None else _rx_age(hb)
-
     def send_heartbeat(self):
         """Alias: the manager's `_HeartbeatThread` calls this -- on SROT it IS the
         mandatory >=1 Hz GCS HEARTBEAT (2 Hz thread > the 1 Hz failsafe floor)."""
@@ -2553,10 +2532,6 @@ class SrotFC(FlightController):
         own idle demand is also zero. Only a defensive fallback on SROT;
         stop/pause route through move()."""
         self.manual(0.0, 0.0, 0.0, 0.0)
-
-    def send_att_pos_mocap(self, yaw_deg):
-        """No-op: SROT fuses the BNO on-board; there is no external EKF to feed."""
-        return None
 
     # LANDING_TARGET (149) -- the vision uplink `VISION_API.md` specifies.
     #
@@ -2715,7 +2690,7 @@ class SrotFC(FlightController):
         return True
 
     def set_message_rate(self, message_id, hz):
-        """MAV_CMD_SET_MESSAGE_INTERVAL (511). Fire-and-forget, like Pixhawk's.
+        """MAV_CMD_SET_MESSAGE_INTERVAL (511). Fire-and-forget.
 
         This was a no-op -- "SROT telemetry rates are fixed on-board" -- which made
         the board's 10 Hz ATTITUDE the hard ceiling on every host loop, un-raisable
@@ -3084,20 +3059,11 @@ def _build_params(verb: str, kw: dict):
     if verb == 'move_forward':
         return (sp.MOVE_FORWARD, dur, speed, 0.0, tmo)
     if verb == 'move_back':
-        # MOVE_BACK=1 has always existed on the wire, and the old host brake already
-        # commanded it on every forward abort -- the verb was refused only because
-        # this branch was missing, so it fell through to the Pixhawk path and raised
-        # AttributeError. Pure host-side gap, no firmware change involved.
         return (sp.MOVE_BACK, dur, speed, 0.0, tmo)
     if verb == 'move_left':
         return (sp.MOVE_STRAFE_L, dur, speed, 0.0, tmo)
     if verb == 'move_right':
         return (sp.MOVE_STRAFE_R, dur, speed, 0.0, tmo)
-    # NOTE: 'arc' is deliberately NOT mapped. mongla's arc holds an ABSOLUTE target
-    # heading (target_yaw, deg) while curving forward; SROT MOVE_ARC p4 is a signed
-    # yaw RATE (deg/s) with no heading lock -- different primitives. Passing the
-    # heading as a rate would spin the hull. Deferred until a host-side heading->rate
-    # arc lands; arc is excluded from MOVE_VERBS so it never routes here on SROT.
     if verb == 'yaw_left':
         return (sp.MOVE_TURN, -abs(_bounded_turn(kw)), 0.0,
                 float(sp.TURN_RELATIVE), tmo)
@@ -3120,60 +3086,13 @@ def _build_params(verb: str, kw: dict):
     raise KeyError(f"verb '{verb}' has no SROT_MOVE mapping")
 
 
-# Verbs this backend can express as a single SROT_MOVE (the facade routes these
-# through move(); everything else -- arm/disarm/set_mode, manual-streamed
-# move_*_dist / vision, fire, dvl -- goes through the other methods or stays host-side).
+# The verbs the board runs as one SROT_MOVE. Every other verb is host-side:
+# arm/disarm/set_mode, fire, motor_test and the two vision verbs (which stream
+# MANUAL_CONTROL in STABILIZE, never entering AUTO).
 MOVE_VERBS = frozenset({
     'move_forward', 'move_back', 'move_left', 'move_right',
     'yaw_left', 'yaw_right', 'turn', 'set_depth', 'stop', 'pause', 'style_roll',
-})   # 'arc' excluded: heading-hold vs SROT's rate-arc mismatch (see _build_params)
-
-
-# Verbs that must be REFUSED on this backend rather than dispatched.
-#
-# Everything here reaches Pixhawk-only primitives that SrotFC does not implement
-# (`send_rc_override` / `send_rc_translation` / `send_rc_yaw_only` /
-# `set_target_depth`) or gates on the ArduSub-only ALT_HOLD mode. Left to fall
-# through, each fails in a way that is WORSE than an honest refusal:
-#
-#   lock_heading  returns success=True and holds nothing, while HeadingLock's
-#                 daemon swallows an AttributeError 50x/second for the lock's
-#                 300 s lifetime. A mission that believes its heading is held
-#                 will dead-reckon straight off course -- the single most
-#                 dangerous of these.
-#   *_dist        DVL-driven distance moves; the streamed path is not ported.
-#   vision_*      the 20 Hz vision loop writes RC channels directly.
-#   arc/style_yaw die at the ALT_HOLD mode gate with a confusing ModeChangeError.
-#
-# The manager checks this BEFORE dispatch and returns a clean success=False, which
-# is what `srot-integration.md` always claimed the behaviour was. Removing a verb
-# from this set is how the port lands: implement it, then delete the line.
-UNSUPPORTED_VERBS = frozenset({
-    'lock_heading',
-    'move_forward_dist', 'move_back_dist', 'move_lateral_dist',
-    'arc', 'style_yaw',
 })
-
-# `vision_align` / `vision_move` CAME OUT of the set above (2026-09-03). They now
-# actuate through `SrotFC.manual()` -> MANUAL_CONTROL, in STABILIZE, where the
-# board holds attitude and heading at 500 Hz and the host servos lat/yaw/fwd on
-# top. That path does NOT enter AUTO, so it does not touch the depth-loop gate
-# that every SROT_MOVE goes through.
-#
-# WHAT UN-REFUSING COSTS, because it is not free. `UNSUPPORTED_VERBS` was the
-# ONLY thing making the host motion stack unreachable on this backend --
-# `heading_lock`, `motion_yaw`, `motion_depth` are all still present and
-# imported by `mongla.py`. Removing an entry re-arms whatever that verb touches.
-# For these two that is bounded and checked:
-#   * the depth-SETPOINT axes are REFUSED in `vision_verbs` (forward `depth` and
-#     the downward fill->depth descent need `set_target_depth`, which this class
-#     does not implement); downward lat + surge runs and streams no setpoint;
-#   * `_ensure_alt_hold` is skipped -- ALT_HOLD is an ArduSub mode this board
-#     does not have, and hitting the facade's mode gate is what made `surface`
-#     do nothing on this backend;
-#   * `lock_heading` stays refused, so no host lock races the board's own hold.
-# `test_no_facade_mode_gate_is_reachable_on_srot` pins that every verb is in
-# exactly one of these buckets, so the next removal cannot be silent.
 
 
 # ---------------------------------------------------------------------- #
@@ -3203,10 +3122,9 @@ _FIRE_ACK_S   = 0.35  # ACK budget. MUST stay < _FIRE_PULSE_S -- see fire().
 
 
 class SrotPayload:
-    """Payload driver for the SROT backend: the board's PCA9685 expander over
-    MAVLink. Duck-types the USB `PayloadDriver` surface (`is_ready`, `fire`,
-    `port_path`) so the Mongla facade is unchanged; there is NO separate USB
-    ESP32 anymore, so the old CH340 auto-detect must not run on srot.
+    """The payload: the board's PCA9685 expander, driven over the same MAVLink
+    link as everything else. The facade calls `is_ready` and `fire`; there is
+    no separate payload board and nothing to auto-detect.
 
     `names` is cosmetic only -- {board_channel: label} used in logs and preflight.
     It NEVER routes: `fire(N)` always addresses board channel N, so a stale label
@@ -3314,7 +3232,7 @@ class SrotPayload:
             # Retry once. This is 16 sequential param round-trips, and on a lossy
             # link a single dropped PARAM_VALUE reports a perfectly healthy channel
             # as UNREADABLE -- which reads exactly like a mis-roled board. MEASURED
-            # over the BlueOS/Bridget bridge (~8% frame loss): one channel of the 16
+            # over a lossy network bridge (~8% frame loss): one channel of the 16
             # came back unreadable on the first pass and fine on a retry. Only here:
             # `fire()` must not spend a second round-trip at the moment a mission is
             # glued to a target.
@@ -3385,10 +3303,6 @@ class SrotPayload:
     def is_ready(self) -> bool:
         # The payload rides the same MAVLink link as everything else.
         return bool(getattr(self._fc, 'link_alive', lambda: True)())
-
-    @property
-    def port_path(self) -> str:
-        return 'SROT MAVLink (PCA9685 DO_SET_SERVO)'
 
     def fire(self, channel: int) -> FireResult:
         """Activate BOARD channel `channel` (1..16) as a bounded pulse.
@@ -3488,6 +3402,3 @@ class SrotPayload:
         st = self._fc._statustext() if hasattr(self._fc, '_statustext') else ''
         return FireResult(FIRE_DENIED, ch,
                           f'{who}: board answered {name}' + (f' ({st})' if st else ''))
-
-    def disconnect(self) -> None:
-        pass

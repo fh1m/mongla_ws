@@ -1,9 +1,8 @@
 """The board's own control code, running on this machine.
 
 ⛔ WHY THIS EXISTS. A Hengla control change was testable NOWHERE but the vehicle.
-`sim/` runs ArduSub SITL by design, so it exercises verbs and host behaviour and
-never the board's control laws. Every control question therefore cost a pool
-session -- and you cannot run a months-long tuning campaign at one experiment per
+Nothing on the host runs the board's control laws, so every control question
+cost a pool session -- and you cannot run a months-long tuning campaign at one experiment per
 pool day.
 
 WHAT IS ACTUALLY EXECUTING. `mixer.cpp` and `thrust_trim.cpp`, compiled from the

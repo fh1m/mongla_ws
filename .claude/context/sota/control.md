@@ -9,33 +9,32 @@
 
 ### 1.1 The one-paragraph shape
 
-Two actuation backends behind one HAL (`src/mongla_control/mongla_control/fc/base.py`). On
-**ArduSub/Pixhawk** the host runs *every* outer loop in Python over `RC_CHANNELS_OVERRIDE`. On
-**srot** the host sends *intent* (`SROT_MOVE`, cmd 31000) and the board runs the loops at 500 Hz;
-the only streamed host loop left is the vision loop over `MANUAL_CONTROL`.
+> Re-read against the code on 2026-11-06, when the second backend left `main` (tag
+> `last-with-pixhawk-and-sim`). Loops are located by name below, not by line range, because a range rots.
 
-**Every controller in the package is P, P-with-floor, or PID on a scalar error.** There is no
-state-space, no LQR, no MPC, no QP, no pseudo-inverse, no feedforward plant model, no added mass,
-no drag model, and no acceleration or jerk limit anywhere in the stack.
+One board, one driver (`fc/srot_fc.py`). The host sends *intent* (`SROT_MOVE`, cmd 31000) and
+the board runs every attitude, depth and timed-motion loop at 500 Hz; the only streamed host
+loop left is the vision loop, over `MANUAL_CONTROL` in STABILIZE.
 
-### 1.2 Every loop that exists
+**Every controller on the host is P or PI on a scalar pixel error.** There is no state-space,
+no LQR, no MPC, no QP, no pseudo-inverse, no feedforward plant model, no added mass, no drag
+model, and no acceleration or jerk limit anywhere in the host stack.
 
-| loop | file:line | rate | law |
-|---|---|---|---|
-| vision **lateral** | `motion_vision.py:1230-1245` | detection rate (floor 50 Hz srot / 20 Hz ArduSub, `motion_rates.py:15-32`) | **PI** on normalised pixel error, `p_lat = ctrl·kp_lat·rgain`, `lat_i` clamped ±15 % |
-| vision **yaw** | `motion_vision.py:1247-1274` | same | **P + tapered stiction floor**, deadband, no I, no D |
-| vision **depth** | `motion_vision.py:1288-1296, 1392-1426` | setpoint stepped at 5 Hz | **rate-limited P integrator into ArduSub's own PID**; refused on srot |
-| vision **surge** (downward) | `motion_vision.py:1276-1287` | same | two-sided P reusing `kp_lat` |
-| **standoff** (forward fill) | `motion_vision.py:1307-1361` | same | **one-sided** P on fill deficit, never reverses |
-| `_YawPID` | `motion_yaw.py:134-189` | 10 Hz | **full PID**, dt-normalised. Kp 1.2 %/deg, Ki 0.03, Kd 0.5; integral reset on sign flip and inside tolerance |
-| `HeadingLock` | `heading_lock.py:311-375` | 50 Hz | **pure P**, deadband 1.0°, tapered floor 5 %→0 over 1–6°. Ch4 only |
-| `hold_depth` | `motion_depth.py:79-253` | 5 Hz | **no host PID** — a setpoint streamer with a 2.5 s ramp, hull-tracking clamp, 0.30 m brake zone |
-| `thrust_loop` | `motion_writers.py:161-204` | 20 Hz | **open loop**; heading drift logged, not corrected |
-| `drive_*_dist` | `motion_forward.py:180-285` | 20 Hz | **bang-bang** + reverse-kick brake; refuses without a position source |
-| `style_roll` depth hold | `mongla.py:625-800` | 20 Hz | cos-modulated P inside ACRO, hard surface abort at −0.15 m |
+### 1.2 Every loop that exists on the host
 
-Output conversion is one line: `percent_to_pwm` (`pixhawk.py:763-780`), `1500 + pct/100·400`
-clamped to 1100–1900 — **the ±100 % limit is enforced at the wire, not in any controller.**
+All in `motion_vision.align_loop` / `move_loop`, at `VISION_LOOP_HZ = 50` (`motion_rates.py`).
+
+| loop | where | law |
+|---|---|---|
+| vision **lateral** | `p_lat = ctrl·kp_lat·rgain` | **PI** on normalised pixel error, `lat_i` clamped; `ki_lat` ships 0 |
+| vision **yaw** | the `epx <= eff_err` block | **P + a snap-up floor** to `SROT_YAW_MIN_PCT` (2.856 %, measured on the board's own code) inside the fill gate only; deadband, no I, no D |
+| vision **surge** (downward) | `use_surge` | two-sided P reusing `kp_lat`, polarity `surge_sign` |
+| **standoff** (forward fill) | `use_fwd` | **one-sided** P on fill deficit, never reverses |
+| arrival brake | `_brake_axis` | a reverse kick (`REVERSE_KICK_SEC = 0.20`), self-gating on momentum |
+
+Depth is not a host loop: a forward image-Y depth axis and a downward fill-driven descent both
+raise `ValueError`. Output is `fc.manual(fwd, lat, up, yaw)`, each axis −1..1, clamped in
+`srot_protocol` — **the ±100 % limit is enforced at the wire, not in any controller.**
 
 ### 1.3 Allocation — the only place the mixer is reasoned about
 
@@ -54,7 +53,7 @@ clamped to 1100–1900 — **the ±100 % limit is enforced at the wire, not in a
 
 Consumed from exactly two places, both in the vision path: `motion_vision.py:629-645`
 (`_mixer_saturated` → lateral anti-windup) and `:648-692` (`_srot_drive` → priority fit before the
-frame leaves). **Nothing on the ArduSub RC-override path consults it at all.**
+frame leaves).
 
 ⛔ Two facts the file states about itself: the board's scale-down **is never reported on any
 message** (`:3-15`), so the host recomputes it forward; and the ±1 entries are a **demand mix, not
@@ -78,30 +77,26 @@ geometry** — used as a force sum they overestimate surge/sway by √2 = 41 %
 | axis | host | board |
 |---|---|---|
 | roll / pitch | nothing — `MANUAL_CONTROL` has no such field | 500 Hz stabiliser |
-| heading | nothing during vision (`release_yaw` → yaw 0); discrete turns are `MOVE_TURN` intent | 500 Hz hold + turn state machine |
+| heading | the vision yaw axis only while aligning; discrete turns are `MOVE_TURN` intent | 500 Hz hold + turn state machine |
 | depth | **nothing** — `up = 0.0` always; no `set_target_depth`; depth-setpoint aligns refused | `DEPTH_HOLD` latch or `MOVE_DIVE` — ⛔ **never run closed** |
 | surge / sway | the vision P loop, host-prioritised, streamed as `MANUAL_CONTROL` | mixer + the unreported group scale-down |
 | timed legs, braking | send intent, relay ACKs | ramp, cruise, brake (the host brake was removed at fw rev 2) |
 
-Refused before dispatch (`srot_fc.py:2823-2827`): `lock_heading`, `move_forward_dist`,
-`move_back_dist`, `move_lateral_dist`, `arc`, `style_yaw`.
+A host heading lock, distance-closed moves, `arc` and a STYLE yaw spin left with the old
+backend: the board holds heading itself and there is no DVL to close a distance on.
 
 ### 1.6 The setpoint shaping that does exist
 
-No Ruckig (measured and rejected), no jerk limit, no online trajectory generation. What exists:
-`smoothstep` / `smootherstep` (`motion_easing.py:11-29` — quintic chosen because ArduSub
-differentiates the setpoint, so a C¹ corner appears as a rate spike), `trapezoid_ramp` (`:32-51`,
-a thrust-scale envelope, not a velocity profile), the yaw sweep (`motion_yaw.py:336`), the depth
-ramp (`motion_depth.py:198-212`), and the 5 Hz vision depth step (max slew 0.1 m/s).
+No Ruckig (measured and rejected), no jerk limit, no online trajectory generation on the host.
+The board ramps, cruises and brakes its own timed moves (`MOVE_*` primitives); the host's only
+shaping is the vision loops' gain caps and the arrival brake.
 
 ### 1.7 Honest labels already in the code
 
-`VISION_YAW_MIN_PCT = 5.0` — *"a hardware spin-up assumption, NOT a measured value"*
-(`motion_vision.py:104-109`). `VISION_YAW_FLOOR_FILL`, `VISION_YAW_APPROACH_BAND_PX`, the four
-brake constants, `MIN_ALIGN_ERR_PX`, `FWD_BAND`, `LOCK_HOLD_DEADBAND_DEG` — all labelled
-**pool-tunable**, none measured. `heading_lock.py:96-99` states the pure-P **steady-state droop**
-under a sustained disturbance as a known, accepted error. `STYLE_ROLL_DEPTH_KP = 150.0` and its
-three siblings cite no measurement at all.
+`VISION_YAW_FLOOR_FILL`, the brake constants, `MIN_ALIGN_ERR_PX` and `FWD_BAND` are labelled
+**pool-tunable**, none measured. `SROT_YAW_MIN_PCT` replaced a 5.0 % *"hardware spin-up
+assumption, NOT a measured value"* with a number measured on the board's own
+`attitude_control.cpp` (`tools/control_bench`).
 
 Shipped **off** by default: `ki_lat = 0.0` (lateral integral), `range_gain_floor = 1.0`
 (range-adaptive gain scheduling), `settle_px = 0.0`.

@@ -11,16 +11,6 @@
 #
 # Each line shows the repository default.
 
-#   Connection mode: pool|sim|auto|desk|laptop
-# mode: pool
-
-#   Yaw source: mavlink_ahrs|dvl|bno085|bno085_dvl
-# yaw_source: mavlink_ahrs
-
-#   Autopilot backend: srot|pixhawk (srot = the SROT/Hengla board over USB
-#   serial; pixhawk = the ArduSub/BlueOS path)
-# flight_controller: srot
-
 #   SROT serial device, '' = autodetect. A path (/dev/serial/by-id/...) or any
 #   pymavlink connection string
 # mav_device: ''
@@ -34,30 +24,11 @@
 #   braked stop -- leave false
 # allow_fw_behaviour_mismatch: false
 
-#   (no description)
-# dvl_host: 192.168.2.201
-
-#   (no description)
-# dvl_port: 9000
-
-#   BNO085 device, or "auto" to scan USB VID/PID.
-# bno085_port: auto
-
-#   Re-zero the barometer at the surface. TRUE on the pool hull. The simulator
-#   passes false: SITL ACKs the calibration and then stops tracking depth.
-# baro_calibration: true
-
-#   Payload board device, or "auto" to scan USB VID/PID.
-# payload_port: auto
-
-#   Auto-connect DVL at startup (true|false)
-# dvl_auto_connect: true
-
 #   Start camera + detector alongside manager
 # vision: false
 
 #   pi = both cameras + calibration (vision_pi.launch.py, the vehicle);
-#   generic = single camera, no calibration (vision.launch.py, dev/CUDA).
+#   generic = single camera, no calibration (vision.launch.py, dev box).
 # vision_stack: pi
 
 #   vision_stack:=pi -- vision_pi's own profile argument (its `vision:=`).
@@ -151,8 +122,7 @@
 # camera: forward
 
 #   Camera HARDWARE profile (CAMERA_PROFILES in mongla_vision/config.py -- the
-#   loaded copy). Default pi_forward matches flight_controller:=srot (Pi box).
-#   On the Jetson pass forward.
+#   loaded copy). Default pi_forward is the vehicle's Fantech.
 # camera_profile: pi_forward
 
 #   vision_stack:=generic -- model stem in mongla_vision/models/ (a
@@ -173,9 +143,8 @@
 #   model's bar is in its <stem>.yaml.
 # conf: 0.45
 
-#   Inference square size. NOTE: a TensorRT .engine bakes imgsz at export --
-#   this only re-scales the .pt fallback. For TRT, re-export to match
-#   (export_engine --all --imgsz <N>), then imgsz:=<N>.
+#   Inference square size for a .pt. A .hef bakes its input size at compile
+#   time and ignores this.
 # imgsz: 640
 
 #   Post-NMS detection cap (runtime; lower toward ~10 if NMS is the FPS
@@ -187,7 +156,7 @@
 
 #   Start foxglove_bridge (WebSocket telemetry on foxglove_port). Off the
 #   mission path -- pure viz. Needs ros-humble-foxglove-bridge installed.
-#   Connect the Foxglove desktop app to ws://<jetson-ip>:<foxglove_port>.
+#   Connect the Foxglove desktop app to ws://<pi>:<foxglove_port>.
 # foxglove: false
 
 #   foxglove_bridge WebSocket port

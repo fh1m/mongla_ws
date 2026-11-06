@@ -133,11 +133,10 @@ def _full_mission_source():
             / 'missions' / 'task_full_2026.py')
 
 
-def test_release_heading_and_stop_are_contained():
-    # Running them as one block meant the first failure ate the rest: a
-    # release_heading that raised left the vehicle armed.
+def test_stop_is_contained():
+    # Running cleanup as one block meant the first failure ate the rest: a
+    # step that raised left the vehicle armed.
     src = _full_mission_source()
-    assert 'never_fails(mongla.release_heading' in src
     assert 'never_fails(mongla.stop' in src
 
 
@@ -158,6 +157,6 @@ def test_a_failing_first_cleanup_step_no_longer_blocks_the_others():
         calls.append('release')
         raise RuntimeError('lock node gone')
 
-    never_fails(release, name='release_heading')
+    never_fails(release, name='release_lock')
     never_fails(lambda: calls.append('stop') or True, name='stop')
     assert calls == ['release', 'stop']

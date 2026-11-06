@@ -42,21 +42,8 @@ GATE_PASS_FWD_FILL    = 80      # gate bbox height % of frame that means "throug
 SLALOM_PIPE_OFFSET_PX = 80      # lateral pixel offset from pipe centre (positive=right)
 SLALOM_FWD_FILL       = 60      # pipe bbox height % of frame at closest pass
 
-# ── Bin (DOWNWARD camera: image-X→lat Ch6, image-Y→surge Ch5, fill→depth) ────────
+# ── Bin (DOWNWARD camera: image-X → lateral, image-Y → surge) ─────────────────
 BIN_CENTRE_ERR_PX     = 30      # how tightly to centre over the bin before dropping
-BIN_SURGE_SIGN        = +1      # NOTE: no longer read by task_bin -- the downward Ch5
-                                # fore/aft polarity is now the PERMANENT `vision.surge_sign`
-                                # deck default (-1) in mongla_manager/vision_tunables.py, so
-                                # missions omit surge_sign entirely. Kept here for reference;
-                                # to change the mount polarity edit vision.surge_sign (or set
-                                # it live: `ros2 param set /mongla_manager vision.surge_sign -1`).
-                                # VERIFY DISARMED: vision_thrust_check --camera downward.
-BIN_DESCEND_FILL      = 0       # optional: descend until the bin fills this % (height) for a
-                                # closer drop. 0 = OFF (hold BIN_DEPTH_M; core path). When >0,
-                                # bounded by BIN_MAX_DEPTH_M so it can't drive into the floor.
-BIN_MAX_DEPTH_M       = -1.6    # deepest allowed setpoint for BIN_DESCEND_FILL (negative m)
-BIN_DEPTH_CEILING_M   = -0.4    # SHALLOWEST setpoint on the downward align -- surface guard so
-                                # ratio/alignment can't lift the hull out of the water (negative m).
 BIN_DROPPER_CHANNEL   = None    # set below, from DROPPER_1_CHANNEL (B53)
 
 # ── Degradation policy -- CONFIGURED, not coded (plan Block 1D) ──────────────────
@@ -112,18 +99,14 @@ TORPEDO_BLOOD_FWD_FILL = 30     # blood bbox height % at end of COARSE approach 
 # hold steady than point-blank -- so tune this so the hull parks ~0.3-0.46m off the board
 # (smaller fill = further back). Read the live `[ align … fwd>=…% ]` line to calibrate.
 TORPEDO_STANDOFF_FILL  = 35     # hole bbox height % of frame at the firing standoff
-TORPEDO_STANDOFF_HOLD_S = 4.0   # seconds to station-keep (forward+lat+depth) while firing
+TORPEDO_STANDOFF_HOLD_S = 4.0   # seconds to station-keep (forward+lat) while firing
 TORPEDO_FIRE_T         = 1.0    # seconds into the hold to fire (must be < STANDOFF_HOLD_S;
-                                # leaves ~3 s for a CH340-reconnect-delayed shot to still land)
+                                # leaves ~3 s of hold after the shot)
 
 # ── Search behaviour (mission-authored fallback functions) ──────────────────────
 SEARCH_FORWARD_GAIN   = 40      # % gain for forward creep between detections
 SEARCH_CREEP_S        = 0.6     # seconds of forward creep per fallback cycle
 SEARCH_YAW_STEP_DEG   = 20      # yaw step per sweep look
-
-# ── Style roll ────────────────────────────────────────────────────────────────
-STYLE_ROLL_HEADROOM_M = 0.4     # depth below surface for ACRO roll clearance
-STYLE_ROLL_GAIN       = 60      # roll speed gain
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  SAUVC — everything above this line is RoboSub. Kept in one file so the
@@ -137,7 +120,6 @@ STYLE_ROLL_GAIN       = 60      # roll speed gain
 #  floor runs 1.28 m at the qualification wall, slopes to 2 m by 17.5 m, and is
 #  2 m across most of the main arena, with a 1.5 m gate ~12 m out. Every depth
 #  below was re-derived from the current figure (`courses/sauvc_olympic.yaml`).
-#  The simulator world (sim/.../spec/sauvc.yaml) still models the old venue.
 # ══════════════════════════════════════════════════════════════════════════════
 
 # ── Run budget ────────────────────────────────────────────────────────────────
@@ -274,12 +256,6 @@ SAUVC_DRUM_HOVER_DEPTH_M = -0.7   # hover height for the drop. Drums stand on th
 SAUVC_DRUM_CENTRE_ERR_PX = 30     # how tightly to centre over the 0.60 m mouth
 SAUVC_DRUM_ALIGN_S       = 60.0   # budget for the downward centring
 SAUVC_DRUM_SETTLE_S      = 3.0    # settle over the drum before releasing
-SAUVC_DRUM_DESCEND_FILL  = 0      # 0 = OFF: hold the hover depth. A fill-driven
-                                  # descent needs the DOWNWARD camera's in-water
-                                  # FOV, which is not measured on this hull -- a
-                                  # guessed FOV here descends by an unknown amount
-                                  # toward a -5 bottom touch. Measure first.
-SAUVC_DRUM_DEPTH_CEILING_M = -0.4 # surface guard on the downward align
 SAUVC_DROPPER_CHANNEL    = None   # set below, from DROPPER_1_CHANNEL (B53)
 
 # ── SAUVC combinator (sauvc_full) ─────────────────────────────────────────────

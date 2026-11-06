@@ -19,9 +19,9 @@ ros2 run mongla_vision camera_node --ros-args -p profile:=laptop
 ros2 run mongla_vision camera_node --ros-args \\
     -p source:=webcam -p device:=0 -p width:=640 -p height:=480 -p fps:=30 -p name:=laptop
 
-# Subscribe to a Gazebo camera topic and re-publish under our namespace
+# Subscribe to any Image topic (e.g. a bag replay) and re-publish under our namespace
 ros2 run mongla_vision camera_node --ros-args \\
-    -p source:=ros_topic -p topic:=/mongla/sim/front_camera/image_raw -p name:=sim_front
+    -p source:=ros_topic -p topic:=/replay/forward/image_raw -p name:=forward
 """
 
 import os
@@ -74,7 +74,7 @@ class CameraNode(Node):
                          parameter_overrides=list(parameter_overrides or []))
         self._sink = frame_sink
 
-        self.declare_parameter('profile',         '')        # e.g. 'laptop' / 'sim_front'
+        self.declare_parameter('profile',         '')        # e.g. 'forward' / 'laptop'
         self.declare_parameter('source',          '')        # explicit override
         self.declare_parameter('name',            '')
         self.declare_parameter('topic',           '')        # for source=ros_topic
@@ -250,8 +250,8 @@ class CameraNode(Node):
                     f'Deliberate: a camera outrunning its detector spends CPU '
                     f'decoding frames the detector drops.')
             # A profile's device_path names a udev symlink that exists on ONE
-            # host. `pi_forward` is the Pi box's Fantech; `forward` is the
-            # Jetson's Blue Robotics unit. Running the wrong one for the host
+            # host. `pi_forward` is the Pi box's Fantech; `forward` is a
+            # generic USB role. Running the wrong one for the host
             # otherwise fails inside the V4L2 open with no mention of the
             # profile, which is the single most likely way to lose a pool
             # session to a launch argument.
@@ -261,7 +261,7 @@ class CameraNode(Node):
                 self.get_logger().error(
                     f'[CAM  ] profile {profile_name!r} wants {probe}, which does '
                     f'not exist on this host. That device is a udev symlink '
-                    f'created per vehicle -- a Pi profile (pi_*) on the Jetson, '
+                    f'created per vehicle -- a Pi profile (pi_*) on a dev box, '
                     f'or the reverse, gives exactly this. Pass the profile for '
                     f'the host you are on: bringup.launch.py camera_profile:=...')
             # device_path (by-path symlink) > int device override > profile default.

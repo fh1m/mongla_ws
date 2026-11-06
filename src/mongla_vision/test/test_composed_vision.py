@@ -180,7 +180,7 @@ def test_one_decode_serves_both_the_sink_and_the_topic():
 
 
 def test_no_sink_behaves_exactly_as_before():
-    """The un-composed path -- `vision.launch.py`, the Jetson, sim -- must be
+    """The un-composed path -- `vision.launch.py`, replay -- must be
     untouched by any of this."""
     node = _camera(sink=None, publish_hz=0)
     _run_loop(node, 0.1)
@@ -306,8 +306,8 @@ def test_direct_feed_defaults_ON():
 
 
 def test_a_direct_detector_with_no_camera_SUBSCRIBES_rather_than_dying():
-    """The risk of defaulting it on: a standalone `detector_node` -- sim,
-    replay, the Jetson, `vision.launch.py` -- has no camera in its process and
+    """The risk of defaulting it on: a standalone `detector_node` --
+    replay, `vision.launch.py` -- has no camera in its process and
     would receive NOTHING, for ever, with no error. That is precisely the
     failure mode this round exists to remove, so the default carries its own
     recovery."""

@@ -1,10 +1,9 @@
-"""B47 -- bringup's camera hardware must match the vehicle bringup starts.
+"""B47 -- bringup's camera hardware must be the vehicle's camera.
 
-⛔ WHY THIS FILE EXISTS. `bringup.launch.py` defaults
-`flight_controller:=srot` -- the SROT board and the Pi box, which is the
-default vehicle on main -- while `camera` defaulted to `forward`, the
-JETSON's Blue Robotics profile. Nothing reconciled the two, and both halves
-of the mismatch are silent.
+⛔ WHY THIS FILE EXISTS. `bringup.launch.py` starts the Pi + SROT vehicle, but
+`camera` used to default to `forward` -- a generic USB profile with no fourcc
+and no calibration. Nothing tied the hardware profile to the vehicle, and the
+mismatch is silent.
 
 Measured on the Pi, running the documented bringup line:
 
@@ -49,26 +48,16 @@ def _defaults(path):
         r"default_value=\s*'([^']*)'", src))
 
 
-def test_the_camera_profile_matches_the_default_flight_controller():
-    d = _defaults(_BRINGUP)
-    fc = d.get('flight_controller')
-    profile = d.get('camera_profile')
-    assert fc, 'bringup declares no flight_controller default'
+def test_the_camera_profile_is_the_pi_camera():
+    profile = _defaults(_BRINGUP).get('camera_profile')
     assert profile is not None, (
         'bringup declares no camera_profile. Without it the camera ROLE and '
-        'the camera HARDWARE are the same string, so pointing a role at the '
-        'other vehicle renames every topic.')
-    if fc == 'srot':
-        assert profile.startswith('pi_'), (
-            f'flight_controller defaults to {fc!r} (the Pi box) but '
-            f'camera_profile defaults to {profile!r}, which is a Jetson '
-            f'profile. Measured cost of exactly this mismatch: 5.00 Hz '
-            f'instead of 15.00, and CameraInfo.k all zero.')
-    elif fc == 'pixhawk':
-        assert not profile.startswith('pi_'), (
-            f'flight_controller defaults to {fc!r} (the Jetson) but '
-            f'camera_profile defaults to the Pi profile {profile!r}, whose '
-            f'device_path does not exist there.')
+        'the camera HARDWARE are the same string, so pointing a role at '
+        'different hardware renames every topic.')
+    assert profile.startswith('pi_'), (
+        f'camera_profile defaults to {profile!r}, which is not the vehicle '
+        f'camera. Measured cost of exactly this mismatch: 5.00 Hz instead of '
+        f'15.00, and CameraInfo.k all zero.')
 
 
 def test_the_camera_ROLE_default_has_not_been_renamed():

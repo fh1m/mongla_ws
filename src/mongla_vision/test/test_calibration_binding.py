@@ -221,13 +221,13 @@ def test_every_calibration_resolves_back_from_the_profile_it_CLAIMS():
 
 
 def test_a_profile_nobody_calibrated_resolves_to_EMPTY_not_a_guess():
-    """`forward` and `pi_forward` are DIFFERENT PHYSICAL CAMERAS (Blue
-    Robotics on the Jetson vs the Fantech on the Pi). Name similarity must
+    """`forward` and `pi_forward` are DIFFERENT PHYSICAL CAMERAS (a
+    generic USB role vs the Fantech on the Pi). Name similarity must
     never bind one to the other's intrinsics: a wrong calibration is worse
     than none, because it yields confident bearings wrong by a fixed factor
     with nothing logging a fault."""
     resolve = _load_binding().calibration_for_profile
-    for profile in ('forward', 'downward', 'laptop', 'sim_front', ''):
+    for profile in ('forward', 'downward', 'laptop', ''):
         assert resolve(profile) == '', (
             f'{profile!r} resolved to a calibration. No file declares it, so '
             f'this can only be a name-similarity guess -- the round-38 defect '

@@ -138,7 +138,7 @@ models trained *for* this water. An open-vocabulary model would start worse and
 degrade faster.
 
 ⚠ OWL-ViT additionally needs image↔text embedding interaction **at inference**,
-which is why NanoOWL exists and why it targets a Jetson rather than a Hailo.
+which is why NanoOWL exists and why it targets an NVIDIA GPU rather than a Hailo.
 
 ⭐ **Where they do belong: labelling, not flying.** An open-vocabulary detector
 is good enough on the EASY frames of our archive to pre-label them, and those

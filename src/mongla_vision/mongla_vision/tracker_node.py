@@ -78,7 +78,7 @@ def _build_tracker(tracker_type, *, track_buffer, frame_rate, min_hits,
 
     'ocsort'/'bytetrack' use the Roboflow `trackers` library;
     'legacy_bytetrack' falls back to the supervision ByteTrack wrapper. If the
-    Roboflow lib fails to import (bad Jetson install), fall back to legacy with
+    Roboflow lib fails to import (bad install), fall back to legacy with
     a loud WARN rather than crash the node -- tracking degraded, not dead.
     """
     ttype = (tracker_type or 'ocsort').strip().lower()
@@ -325,7 +325,7 @@ class TrackerNode(Node):
 
         Measured over a window rather than asserted, because the answer is a
         property of the machine: the same launch gives 98 Hz on the Pi's Hailo
-        path, 20-30 Hz on the Jetson's TensorRT one and 3-4 Hz on a raw .pt --
+        path and 3-4 Hz on a raw .pt --
         and the vehicle's two cameras do not even match each other (55 Hz
         forward against 15 Hz downward, measured). One `frame_rate` cannot be
         right for all of them, so the node says which one it is actually

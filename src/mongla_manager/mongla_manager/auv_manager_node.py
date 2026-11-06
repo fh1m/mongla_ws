@@ -20,9 +20,9 @@ maps to a same-named method on `Mongla`. Adding a new command means a
 row in commands.py and a method on Mongla -- this file does not need
 to change.
 
-The MAVLINK20 env var is owned by `mongla_control.pixhawk` so we don't
-duplicate it here. The console format env is set in this file because
-it must be in place BEFORE rclpy is imported.
+Two env vars are set here because each must be in place BEFORE the import it
+governs: MAVLINK20 before pymavlink (the board speaks MAVLink 2 only), and the
+console format before rclpy.
 """
 
 import os
@@ -37,6 +37,7 @@ from collections import deque
 # in favour of a compact `[INFO] <message>` so our [CMD  ]/[YAW  ]/[STATE] tags
 # are the loudest thing on screen. Must be set BEFORE rclpy is imported.
 os.environ.setdefault('RCUTILS_CONSOLE_OUTPUT_FORMAT', '[{severity}] {message}')
+os.environ['MAVLINK20'] = '1'
 
 from pymavlink import mavutil                                            # noqa: E402
 
@@ -52,11 +53,9 @@ from rclpy.executors import MultiThreadedExecutor                        # noqa:
 from mongla_interfaces.action import Move                                # noqa: E402
 from mongla_interfaces.msg import MonglaState                            # noqa: E402
 
-from mongla_control import (                                            # noqa: E402
-    COMMANDS, Mongla, Heartbeat, Pixhawk, fields_for, tracing,
-)
-from mongla_control.fc import make_flight_controller
+from mongla_control import COMMANDS, Mongla, fields_for                 # noqa: E402
 from mongla_control.fc.port_guard import PortGuard                     # noqa: E402
+from mongla_control.fc.srot_fc import SrotFC, SrotPayload                # noqa: E402
 from mongla_control.bearing import bearing_from_normalised   # noqa: E402
 from mongla_control.fc.srot_protocol import (                            # noqa: E402
     MSG_ID_ESC_STATUS as SROT_MSG_ID_ESC_STATUS,
@@ -64,13 +63,7 @@ from mongla_control.fc.srot_protocol import (                            # noqa:
     SOURCE_COMPID as SROT_SOURCE_COMPID,
     uplink_class_num as srot_uplink_class_num,
 )
-from mongla_control.fc.srot_fc import MOVE_VERBS as SROT_MOVE_VERBS       # noqa: E402
-from mongla_control.fc.srot_fc import (                                   # noqa: E402
-    UNSUPPORTED_VERBS as SROT_UNSUPPORTED_VERBS)
-from mongla_control.mongla import _UNARM_SAFE as MONGLA_UNARM_SAFE        # noqa: E402
-from mongla_control.tracing import command_scope                          # noqa: E402
-from mongla_control.payload import PayloadDriver                         # noqa: E402
-from mongla_sensors import make_yaw_source                               # noqa: E402
+from .yaw_source import BoardYaw                                         # noqa: E402
 from mongla_vision  import wait_vision_state_ready                       # noqa: E402
 
 from . import srot_format as _sfmt                                          # noqa: E402
@@ -78,10 +71,7 @@ from . import srot_changes as _schg                                        # noq
 from . import health as _health
 from mongla_localization.frames import BODY as _BODY_FRAME       # noqa: E402
 from . import health_reporters as _hr
-from .connection_config import (                                             # noqa: E402
-    DEFAULT_FLIGHT_CONTROLLER, DEFAULT_MODE, NETWORK, PROFILES, resolve_mode,
-    resolve_profile, resolve_srot_profile,
-)
+from .connection_config import resolve_srot_profile                         # noqa: E402
 from .dispatch_policy   import (goal_acceptance, _CommandGate,             # noqa: E402
                                 COMMAND_GATE_STALE_S)
 from .vision_state     import VisionState                                # noqa: E402
@@ -91,6 +81,9 @@ from .vision_tunables  import (                                          # noqa:
     snapshot_from_node,
 )
 
+
+# Board verbs relay the board's progress fraction as action feedback.
+from mongla_control.fc.srot_fc import MOVE_VERBS as _BOARD_VERBS_WITH_PROGRESS  # noqa: E402
 
 SEPARATOR = '=' * 52
 
@@ -102,21 +95,9 @@ _SROT_DEPTH_OUT_WARN = 0.90
 BAT_CHANGE_THRESH   = 0.2    # volts
 FORCE_PRINT_SECONDS = 30.0   # always reprint even if nothing changed
 
-# Telemetry stream rates we explicitly request from ArduSub at startup
-# via MAV_CMD_SET_MESSAGE_INTERVAL. Without this ArduSub picks defaults
-# (typically 4 Hz for AHRS2) which silently caps how tight our control
-# loops can be.
-MESSAGE_RATES = {
-    mavutil.mavlink.MAVLINK_MSG_ID_AHRS2:          50,   # Hz -- yaw/depth source
-    mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE:       50,   # Hz -- body gyro rates (flow rotation-comp)
-    mavutil.mavlink.MAVLINK_MSG_ID_BATTERY_STATUS:  1,
-    mavutil.mavlink.MAVLINK_MSG_ID_RC_CHANNELS:     5,
-}
-
-# SROT streams a different set, so it gets its own table rather than reusing the
-# ArduSub one:
-#   * no AHRS2 -- attitude is ATTITUDE, depth is VFR_HUD
-#   * no RC input at all (there is no radio on the vehicle), so RC_CHANNELS is moot
+# The telemetry rates requested from the board at startup (SET_MESSAGE_INTERVAL):
+#   * attitude is ATTITUDE, depth is VFR_HUD
+#   * no RC input at all (there is no radio on the vehicle)
 #   * ESC_TELEMETRY_1_TO_4/5_TO_8 carry the RPM (ESC_STATUS msgid 291 is absent from
 #     every pymavlink dialect -- see SrotFC.telemetry)
 #
@@ -186,9 +167,7 @@ class FeedbackPump:
 
     `yaw_provider` is an optional ``fn(attitude) -> (yaw_deg, label)``
     injected by the node so the feedback line reports the same yaw the
-    control loops close on (BNO when configured, AHRS otherwise). When
-    omitted we fall back to Pixhawk AHRS so the old call site still
-    works.
+    verbs read. When omitted, the attitude's own yaw.
 
     `vision_provider` is an optional ``fn() -> (x_px, y_px) | None`` -- the live
     signed target-from-centre px the active vision verb reports. When it returns
@@ -196,9 +175,9 @@ class FeedbackPump:
     can watch a vision verb converge in real time via `ros2 topic echo`.
     """
 
-    def __init__(self, pixhawk, goal_handle, yaw_provider=None,
+    def __init__(self, fc, goal_handle, yaw_provider=None,
                  vision_provider=None):
-        self._pixhawk         = pixhawk
+        self._fc              = fc
         self._goal_handle     = goal_handle
         self._yaw_provider    = yaw_provider
         self._vision_provider = vision_provider
@@ -225,7 +204,7 @@ class FeedbackPump:
         fails = 0
         while not self._stop.is_set():
           try:
-            attitude = self._pixhawk.get_attitude()
+            attitude = self._fc.get_attitude()
             if attitude is not None:
                 if self._yaw_provider is not None:
                     yaw_deg, _ = self._yaw_provider(attitude)
@@ -301,12 +280,12 @@ class _HeartbeatThread:
     up to 3 s. While either ran, no heartbeat left -- and the board SURFACES the
     vehicle after 5 s of silence (CLAUDE.md safety rule 3). Worse, the timer
     only existed once `executor.spin()` started, so every second of bring-up
-    after the port opened (preflight reads, BNO probe, vision pool, payload
-    join -- many seconds) was already silent.
+    after the port opened (preflight reads, payload roles -- many seconds)
+    was already silent.
 
     So it is started the moment the MAVLink backend exists and runs on
     `time.monotonic` (a wall-clock step cannot stall or burst it). Thread-safe
-    on the wire: both backends' `send_heartbeat` take the FC's `_tx_lock`, the
+    on the wire: `send_heartbeat` takes the FC's `_tx_lock`, the
     same lock every other writer (reader-thread replies, action threads) holds,
     because pymavlink shares one sequence counter and one port.
     """
@@ -377,14 +356,6 @@ def _load_sensor_offsets():
         return None
 
 
-def _validate_fc_kind(kind: str) -> None:
-    """Refuse an unknown backend BEFORE any port is opened (issue #12, item 4)."""
-    from mongla_control.fc import BUILDERS
-    if kind not in BUILDERS:
-        raise ValueError(f'flight_controller={kind!r} is not one of '
-                         f'{sorted(BUILDERS)} -- refusing before opening any port')
-
-
 def _is_dead_port(exc, master) -> bool:
     """A reader fault that is the CABLE, not the reader (issue #12).
 
@@ -440,8 +411,8 @@ class AUVManagerNode(Node):
         self._setup_parameters()
         self._setup_mavlink()
         self._setup_reader_and_warmup()
-        self._preflight_payload()       # start payload connect in background (parallel to BNO)
-        self._setup_yaw_source()        # BNO probe blocks here (≤3s with warm device)
+        self._preflight_payload()       # read channel roles off the board
+        self._setup_yaw_source()
         self._setup_vision_pool()
         self._setup_heartbeat_and_payload()
         self._setup_action_server()
@@ -451,27 +422,11 @@ class AUVManagerNode(Node):
     # ------------------------------------------------------------------ #
 
     def _setup_parameters(self) -> None:
-        """Declare and read all ROS parameters; resolve mode/profile."""
-        self.declare_parameter('mode',             DEFAULT_MODE)
-        # Override the profile's connection string at the CLI:
-        #   -p mav_device:=/dev/ttyACM0
-        #   -p mav_device:=udpin:0.0.0.0:14560
-        # Empty string (default) means use the resolved profile.
+        """Declare and read all ROS parameters; resolve the board's serial port."""
+        # The board's serial device. '' (default) = find it (/dev/srot, then
+        # the CH340 by-id link). Any pymavlink connection string also works:
+        #   -p mav_device:=/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0
         self.declare_parameter('mav_device',       '')
-        self.declare_parameter('smooth_yaw',       False)
-        self.declare_parameter('smooth_translate', False)
-        self.declare_parameter('yaw_source',           'mavlink_ahrs')
-        # Position for the *_dist verbs. 'none' = no position source, which is
-        # what a hull with no DVL has had until now: those verbs REFUSE.
-        # 'flow' wraps the yaw source with the bottom camera's flow-derived
-        # position. Default stays 'none' -- see _setup_yaw_source.
-        self.declare_parameter('position_source',      'none')
-        self.declare_parameter('bno085_port',          'auto')
-        self.declare_parameter('bno085_baud',          115200)
-        self.declare_parameter('payload_port',         'auto')
-        # Pool default True. The sim launch sets it False: ArduSub SITL's
-        # barometer ACKs PREFLIGHT_CALIBRATION and then stops tracking depth.
-        self.declare_parameter('baro_calibration',     True)
         # LANDING_TARGET vision uplink (VISION_API.md). OFF by default: the
         # board parses msgid 149 and silently DROPS it today, so this is a
         # producer built ahead of its consumer. '' = disabled; set to a camera
@@ -528,35 +483,8 @@ class AUVManagerNode(Node):
         # host-side index) now mean something completely different (1..16, the
         # board channel), and on the default role layout channel 1 is the ARM.
         self.declare_parameter('payload_fire_map',     '')
-        self.declare_parameter('nucleus_dvl_host',     '192.168.2.201')
-        self.declare_parameter('nucleus_dvl_port',     9000)
-        self.declare_parameter('nucleus_dvl_password', 'nortek')
-        # dvl_auto_connect: background retry at startup; eliminates manual dvl_connect
-        self.declare_parameter('dvl_auto_connect',  True)
-        self.declare_parameter('dvl_retry_s',       5.0)
-        # debug:=true flips per-command MAVLink trace + raises logger to DEBUG
+        # debug:=true raises this node's logger to DEBUG
         self.declare_parameter('debug',            False)
-        # flight_controller: which autopilot backend the HAL builds.
-        #   'srot' (DEFAULT) -- the SROT board running Hengla, over direct USB
-        #        Type-C serial. No Pixhawk, no Pi, no BlueOS, no UDP. This is
-        #        the vehicle.
-        #   'pixhawk' -- the ArduSub/BlueOS path. Still fully supported; pass
-        #        flight_controller:=pixhawk for it (the sim does exactly that).
-        #
-        # ⛔ THE DEFAULT FLIPPED TO 'srot' ON 2026-09-08, AND THE REASON IT WAS
-        # 'pixhawk' UNTIL THEN IS WORTH KEEPING. The srot->main merge landed
-        # "without changing what main does", so the default stayed on the
-        # configuration that placed 8th at RoboSub 2025. That tiebreaker has
-        # expired: the hull now IS the SROT board, and a default naming a
-        # backend the vehicle does not have is the stale claim, not the safe one.
-        #
-        # The 8th-place configuration is not gone -- it is preserved whole on the
-        # `pixhawk` branch (b483722, the pre-merge tree), which is where to look
-        # for it rather than reconstructing it from this parameter.
-        #
-        # Both directions still fail LOUDLY (no heartbeat) rather than silently.
-        # Flipping it back is this one line, deliberately.
-        self.declare_parameter('flight_controller', DEFAULT_FLIGHT_CONTROLLER)
         # allow_fw_behaviour_mismatch: proceed against firmware older than
         # srot_protocol.FW_BEHAVIOUR_REV_REQUIRED. OFF by default and it should stay
         # off. On pre-rev-2 firmware MOVE_STOP COASTS -- it applies zero braking thrust
@@ -574,43 +502,11 @@ class AUVManagerNode(Node):
         self.declare_parameter('allow_saturated_depth_arm', False)
         declare_vision_params(self)
 
-        requested_mode      = str(self.get_parameter('mode').value)
         mav_device          = str(self.get_parameter('mav_device').value).strip()
-        self._smooth_yaw    = bool(self.get_parameter('smooth_yaw').value)
-        self._smooth_tr     = bool(self.get_parameter('smooth_translate').value)
-        self._yaw_src_name  = str(self.get_parameter('yaw_source').value)
-        self._pos_src_name  = str(
-            self.get_parameter('position_source').value).strip().lower()
-        self._bno_port      = str(self.get_parameter('bno085_port').value)
-        self._bno_baud      = int(self.get_parameter('bno085_baud').value)
-        self._payload_port  = str(self.get_parameter('payload_port').value)
         self._payload_fire_map = str(self.get_parameter('payload_fire_map').value)
         self._payload_channels = str(self.get_parameter('payload_channels').value)
-        self._dvl_host      = str(self.get_parameter('nucleus_dvl_host').value)
-        self._dvl_port      = int(self.get_parameter('nucleus_dvl_port').value)
-        self._dvl_passwd    = str(self.get_parameter('nucleus_dvl_password').value)
-        self._dvl_auto      = bool(self.get_parameter('dvl_auto_connect').value)
-        self._dvl_retry_s   = float(self.get_parameter('dvl_retry_s').value)
         self._debug         = bool(self.get_parameter('debug').value)
-        self._fc_kind       = str(self.get_parameter('flight_controller').value).strip().lower()
-        self._is_srot       = (self._fc_kind == 'srot')
-        # ⛔ VALIDATE BEFORE CONNECTING (issue #12, item 4). A typo used to be
-        # "not srot", which resolved the ArduSub UDP profile and blocked in
-        # wait_heartbeat() before make_flight_controller() could ever say
-        # "unknown flight_controller". Same table the factory builds from.
-        _validate_fc_kind(self._fc_kind)
-
-        # ⛔ THE COMMENT HERE USED TO SAY "mutates contextvar in main thread;
-        # daemons spawned later still see the default (False)", which was true
-        # and far too kind. `_enabled` WAS a contextvar, a new thread starts
-        # with an empty context, and this node runs a MultiThreadedExecutor --
-        # so every action callback, which is where every `command_scope()` is
-        # entered, read False. `debug:=true` produced no `cmd=` tag on any
-        # frame, ever, while looking like it worked. The switch is now a plain
-        # module global; see `tracing.py` and
-        # `test_tracing_crosses_thread_boundaries.py`.
         if self._debug:
-            tracing.set_enabled(True)
             try:
                 import rclpy.logging
                 self.get_logger().set_level(rclpy.logging.LoggingSeverity.DEBUG)
@@ -619,25 +515,17 @@ class AUVManagerNode(Node):
                     f'debug:=true: could not raise logger level to DEBUG ({exc}); '
                     f'tag will still apply but [MAV ] lines may not print')
 
-        self._mode_name = resolve_mode(requested_mode, logger=self.get_logger())
-        if self._is_srot:
-            # SROT connects over direct USB Type-C serial -- bypass the BlueOS/UDP
-            # profile machinery entirely (mode still labels the yaw-source hints).
-            self._profile = resolve_srot_profile(
-                mav_device, logger=self.get_logger())
-        else:
-            self._profile = resolve_profile(
-                self._mode_name, mav_device=mav_device, logger=self.get_logger())
+        self._profile = resolve_srot_profile(mav_device, logger=self.get_logger())
 
     def _setup_mavlink(self) -> None:
         """Open MAVLink connection, wait for heartbeat, pin telemetry rates."""
         self.get_logger().info(
-            f'Connecting ({self._mode_name}) -> {self._profile["conn"]} ...')
+            f'Connecting -> {self._profile["conn"]} ...')
         baud_kw = {'baud': self._profile['baud']} if self._profile['baud'] else {}
         # Identify as an ONBOARD COMPUTER (191) on srot, not as "some GCS" (pymavlink's
         # default 190). The board's LoRa bridge synthesises its filler heartbeat as
         # 255/190 -- the same identity we were using -- so the firmware could not tell
-        # the companion from the ground station. Consequence: a DEAD JETSON with Bondor
+        # the companion from the ground station. Consequence: a DEAD COMPANION with Bondor
         # still connected holds the GCS failsafe open, and the vehicle station-keeps
         # when it should surface. A distinct compid is what lets the firmware key
         # FS_GCS_SYSID/FS_GCS_COMPID on us specifically (their JETSON_FEEDBACK §4).
@@ -646,12 +534,8 @@ class AUVManagerNode(Node):
         # id is not its own (`msg.compid != MAV_COMPONENT_ID || msg.sysid !=
         # MAV_SYSTEM_ID`, fw mav_commands.cpp:687), so 191 keeps the failsafe fed
         # exactly as 190 did.
-        #
-        # srot ONLY -- the pixhawk path keeps pymavlink's defaults so it stays
-        # byte-identical to history, which is the whole promise of that backend.
-        if self._is_srot:
-            baud_kw['source_system'] = SROT_SOURCE_SYSID
-            baud_kw['source_component'] = SROT_SOURCE_COMPID
+        baud_kw['source_system'] = SROT_SOURCE_SYSID
+        baud_kw['source_component'] = SROT_SOURCE_COMPID
         # Claim the port BEFORE opening it. On srot every open reboots the flight
         # controller (fc/port_guard.py has the measurements), so a second process
         # touching this device mid-mission is a silent disarm-and-reinit. The
@@ -681,53 +565,28 @@ class AUVManagerNode(Node):
             self.get_logger().warning(
                 f'[NET  ] still waiting for a HEARTBEAT on '
                 f'{self._profile["conn"]} ...')
-        # Build the backend behind the FlightController HAL. PixhawkFC is-a Pixhawk,
-        # so `self.pixhawk` stays a valid alias for every existing direct call; SrotFC
-        # exposes the same read surface. `flight_controller=pixhawk` is unchanged.
-        self.fc = make_flight_controller(
-            self._fc_kind, master=self.master, log=self.get_logger())
-        self.pixhawk = self.fc
+        self.fc = SrotFC(self.master, log=self.get_logger())
         # HEARTBEAT FROM HERE ON, before a single slow bring-up step -- see
         # _HeartbeatThread for why it is not a timer.
         self._hb_thread = _HeartbeatThread(
             self.fc.send_heartbeat, log=self.get_logger(),
             alive_fn=self._executor_alive).start()
-        self.get_logger().info(f'[NET  ] flight_controller = {self.fc.name}')
-        if self._is_srot:
-            self.fc.allow_saturated_depth_arm = bool(
-                self.get_parameter('allow_saturated_depth_arm').value)
-            self.fc.allow_fw_behaviour_mismatch = bool(
-                self.get_parameter('allow_fw_behaviour_mismatch').value)
-            # The two round-trip READS -- behaviour rev and JS_GAIN_DEFAULT -- used to
-            # run here and could never succeed. Both land their reply in
-            # `master.messages`, which only fills while SOMETHING DRAINS THE LINK, and
-            # the reader thread does not start until `_setup_reader_and_warmup()`.
-            # Nothing between `wait_heartbeat()` and that point calls recv_*, so the
-            # replies were parsed by no one: `check_behaviour_rev` burned its 3x2 s of
-            # retries and reported FW_BEHAVIOUR_REV_UNKNOWN on every single startup.
-            #
-            # That is worse than a missing read. Its warning says the firmware may be
-            # pre-rev-2, i.e. that MOVE_STOP COASTS with no host brake -- so the one
-            # bring-up check meant to catch an un-brakeable hull cried wolf every time,
-            # and an operator who believed it would ground a perfectly good board.
-            # (The ARM-time call in `SrotFC.arm()` was always fine: by then the reader
-            # is running. Only the bring-up copy was broken -- on serial too, this is
-            # not a UDP/BlueOS artefact.)
-            #
-            # They now run from `_srot_preflight_reads()`, straight after the reader
-            # starts. Rate pinning stays here: `set_message_rate` is fire-and-forget
-            # and reads no reply, so it works with nobody draining.
-            # Pin rates. This used to be skipped: "SROT rates are fixed on-board (no
-            # SET_MESSAGE_INTERVAL)". Firmware behaviour rev 2 implements 511 and 510,
-            # so ATTITUDE is no longer stuck at the board's 10 Hz default -- which was
-            # the ceiling on every host loop, and left _imu_rates_tick republishing a
-            # 10 Hz stream at 50 Hz (5x oversampling into the flow rotation-comp).
-            for msg_id, hz in SROT_MESSAGE_RATES.items():
-                self.pixhawk.set_message_rate(msg_id, hz)
-        else:
-            # Pin rates so ArduSub streams at the rates we need (default ~4 Hz).
-            for msg_id, hz in MESSAGE_RATES.items():
-                self.pixhawk.set_message_rate(msg_id, hz)
+        self.fc.allow_saturated_depth_arm = bool(
+            self.get_parameter('allow_saturated_depth_arm').value)
+        self.fc.allow_fw_behaviour_mismatch = bool(
+            self.get_parameter('allow_fw_behaviour_mismatch').value)
+        # The round-trip READS (behaviour rev, JS_GAIN_DEFAULT, ...) cannot run
+        # here: their replies land in `master.messages`, which only fills while
+        # the reader thread drains the link, and it has not started yet. Run
+        # here, `check_behaviour_rev` burned its retries and reported UNKNOWN on
+        # every startup -- a bring-up check crying wolf about an un-brakeable
+        # hull. They run from `_srot_preflight_reads()`, after the reader starts.
+        #
+        # Rate pinning does work here: `set_message_rate` is fire-and-forget.
+        # Without it ATTITUDE sits at the board's 10 Hz default, the ceiling on
+        # every host loop.
+        for msg_id, hz in SROT_MESSAGE_RATES.items():
+            self.fc.set_message_rate(msg_id, hz)
 
     def _start_recorder(self) -> None:
         """Open the raw .tlog if `record:=<tag>` was given, else leave it None.
@@ -771,15 +630,14 @@ class AUVManagerNode(Node):
                 f'[REC  ] recording DISABLED -- could not open the log: {exc!r}')
 
     def _setup_reader_and_warmup(self) -> None:
-        """Start the MAVLink reader thread, then wait for AHRS2 + autopilot HB.
+        """Start the MAVLink reader thread, then wait for the first attitude.
 
-        Reader must start BEFORE yaw_source init — BNO085 calibration calls
-        pixhawk.get_attitude() and returns None if the reader isn't running.
+        The reader is the only thread that calls recv_match; every getter reads
+        the cache it fills, so nothing can read the board before it starts.
         """
         self.last_statustext = ''
         self.prev_state      = {}
         self.last_print_time = 0.0
-        self.prev_rc         = None
         # Fast HUD cache: armed/mode/battery reused by the 20 Hz instrument tick
         self._fast_armed  = False
         self._fast_mode   = ''
@@ -789,21 +647,19 @@ class AUVManagerNode(Node):
             target=self.reader_loop, daemon=True)
         self.reader_thread.start()
         # Only NOW can a round-trip read see its reply -- see _setup_mavlink.
-        if self._is_srot:
-            self._srot_preflight_reads()
+        self._srot_preflight_reads()
 
-        # Warmup: wait for both AHRS2 and a valid autopilot heartbeat.
+        # Warmup: wait for the first ATTITUDE and a decoded mode.
         _deadline = time.monotonic() + 4.0
         while time.monotonic() < _deadline:
-            if (self.pixhawk.get_attitude() is not None
-                    and self.pixhawk.get_mode() != 'UNKNOWN'):
+            if (self.fc.get_attitude() is not None
+                    and self.fc.get_mode() != 'UNKNOWN'):
                 break
             time.sleep(0.05)
         else:
             self.get_logger().warning(
-                '[NET  ] AHRS2 or autopilot heartbeat not received within 4s. '
-                'BNO085 calibration may still fail. '
-                'Check MAVLink link and ArduSub telemetry rate config.')
+                '[NET  ] no ATTITUDE or no decoded mode within 4s -- heading and '
+                'depth read as absent until it arrives. Check `connect --watch`.')
 
     def _srot_preflight_reads(self) -> None:
         """SROT bring-up reads that need a reply. Call AFTER the reader thread starts.
@@ -841,123 +697,13 @@ class AUVManagerNode(Node):
         (self.get_logger().info if yr_ok else self.get_logger().warning)(
             f'[SROT ] {yr_reason}')
 
-    # Heading sources whose yaw we trust enough to rotate a velocity by. The
-    # hull compass is not one of them: `mavlink_ahrs` on the aluminium hull is
-    # the source §6 of CLAUDE.md calls untrusted, and flow position rotates
-    # body velocity into the latched frame, so heading error becomes CROSS-TRACK
-    # position error directly -- 5 deg over 1 m is 8.7 cm, and the return-leg
-    # measurements say cross-track drift already dominates.
-    _POSITION_TRUSTED_YAW = ('bno085', 'bno085_dvl', 'dvl_bno', 'dvl',
-                             'nucleus_dvl', 'bno085_sim_dvl', 'sim_dvl')
-
-    def _wrap_position_source(self) -> None:
-        """Optionally give the yaw source a position, from the bottom camera.
-
-        `drive_forward_dist` / `drive_lateral_dist` duck-type on
-        `get_position`/`reset_position`, which ONLY the Nortek sources provide
-        -- and the Nortek is not fitted. So on this hull those verbs have been
-        dead. `FlowPositionSource` supplies exactly that contract from
-        `flow_node`, without the motion layer changing at all, which matters
-        because those files carry the runaway guards added after measuring
-        11.3 m of travel on a 1.0 m command.
-
-        OFF BY DEFAULT. In-water accuracy is unvalidated (dry bench: 103.4 % of
-        truth, +-7 % height uncertainty), so an operator opts in per run. The
-        capability is that the verbs are runnable AND refuse honestly; it is
-        not that they are trustworthy.
-        """
-        name = self._pos_src_name
-        if name in ('', 'none', 'off', 'false'):
-            return
-        if name != 'flow':
-            self.get_logger().error(
-                f"[FLOWP] position_source={name!r} is unknown. Known: "
-                f"'none' (default), 'flow'. Leaving the *_dist verbs without "
-                f"a position source.")
-            return
-        if hasattr(self.yaw_source, 'get_position'):
-            self.get_logger().info(
-                f'[FLOWP] position_source:=flow ignored -- '
-                f'{self.yaw_source.name!r} already supplies a position.')
-            return
-        # The displacement is rotated by the RIEKF's attitude, which is seeded
-        # from `/mongla/imu`. On srot that is the board's fused BNO085 -- not a
-        # hull compass -- so the warning is for the pixhawk path only.
-        if not self._is_srot and self._yaw_src_name not in self._POSITION_TRUSTED_YAW:
-            self.get_logger().warning(
-                f'[FLOWP] position_source:=flow with yaw_source='
-                f'{self._yaw_src_name!r}. Flow gives velocity in the BODY '
-                f'frame and this rotates it by that heading, so heading error '
-                f'lands directly in cross-track position (5 deg over 1 m is '
-                f'8.7 cm). Prefer a BNO-backed heading for distance moves.')
-        try:
-            from mongla_manager.flow_position import FlowPositionSource
-            self.yaw_source = FlowPositionSource(
-                self, self.yaw_source, camera='downward')
-        except Exception as exc:      # noqa: BLE001 -- never block startup
-            self.get_logger().error(
-                f'[FLOWP] could not attach flow position ({exc}); the *_dist '
-                f'verbs stay refused.')
-
     def _setup_yaw_source(self) -> None:
-        """Instantiate yaw source, print startup banner, start DVL auto-connect."""
-        _DVL_SOURCES = {'dvl', 'nucleus_dvl', 'bno085_dvl', 'dvl_bno'}
-        # The BNO085 moved onto the SROT board (I2C0) and the separate ESP32-C3 +
-        # BNO085 USB board was removed from the hull. Selecting a source that reads
-        # it will fail in make_yaw_source with a bare SerialException about a missing
-        # port, which reads like a loose cable rather than "that board is gone". Say
-        # the true thing first; the raise below still stops startup.
-        if self._is_srot and self._yaw_src_name in ('bno085', 'bno085_dvl', 'dvl_bno'):
-            self.get_logger().error(
-                f'[SENS ] yaw_source={self._yaw_src_name!r} reads the USB ESP32-C3 + '
-                f'BNO085 board, which is NOT FITTED on the srot vehicle -- the BNO085 '
-                f'is on the control board now. Use yaw_source:=mavlink_ahrs (the '
-                f'board\'s own fused ATTITUDE, same sensor, 500 Hz).')
-        try:
-            self.yaw_source = make_yaw_source(
-                self._yaw_src_name,
-                pixhawk=self.pixhawk,
-                port=self._bno_port,
-                baud=self._bno_baud,
-                nucleus_dvl_host=self._dvl_host,
-                nucleus_dvl_port=self._dvl_port,
-                nucleus_dvl_password=self._dvl_passwd,
-                logger=self.get_logger(),
-            )
-        except Exception as exc:
-            self.get_logger().fatal(
-                f'[SENS ] yaw_source={self._yaw_src_name!r} failed to init: {exc}')
-            raise
-
-        self._wrap_position_source()
-
-        # Duck-typed: only BNO085Source has read_pitch/read_roll.
-        self._bno_mocap_active: bool = hasattr(self.yaw_source, 'read_pitch')
-
-        # Banner
-        yaw_tag = 'glide' if self._smooth_yaw else 'snap(PID)'
-        tr_tag  = 'eased' if self._smooth_tr  else 'constant'
-        yaw_src_label = self.yaw_source.name
-        if self._yaw_src_name == 'bno085':
-            yaw_src_label = f'{yaw_src_label} ({self._bno_port} @ {self._bno_baud})'
-            offset = getattr(self.yaw_source, 'offset_deg', None)
-            if offset is not None:
-                yaw_src_label += f'  Earth-ref offset: {offset:+.2f} deg'
-        elif self._yaw_src_name in _DVL_SOURCES:
-            connect_hint = ('auto-connecting...' if self._dvl_auto
-                            else 'DISCONNECTED -- call dvl_connect')
-            yaw_src_label = (f'{yaw_src_label} '
-                             f'({self._dvl_host}:{self._dvl_port}  {connect_hint})')
-
+        """Heading comes from the board's own fused attitude (yaw_source.py)."""
+        self.yaw_source = BoardYaw(self.fc)
         self.get_logger().info(SEPARATOR)
+        self.get_logger().info(' MONGLA AUV MANAGER')
         self.get_logger().info(
-            f' MONGLA AUV MANAGER  |  mode: {self._mode_name}')
-        if self._is_srot:
-            self.get_logger().info(
-                ' Autopilot: SROT board  ·  firmware: Hengla  ·  link: USB serial')
-        else:
-            self.get_logger().info(
-                ' Autopilot: Pixhawk / ArduSub  ·  link: BlueOS/UDP')
+            ' Autopilot: SROT board  ·  firmware: Hengla  ·  link: USB serial')
         self.get_logger().info(
             f' Connection: {self._profile["conn"]}'
             + (f' @ {self._profile["baud"]}' if self._profile.get('baud') else ''))
@@ -968,83 +714,42 @@ class AUVManagerNode(Node):
         self.get_logger().info(
             f' MAVLink: sys={self.master.target_system} '
             f'comp={self.master.target_component}  (v2.0)')
-        self.get_logger().info(f' Profiles: yaw={yaw_tag}  translate={tr_tag}')
-        self.get_logger().info(f' Yaw source: {yaw_src_label}')
-        if self._mode_name in ('pool', 'laptop'):
-            self.get_logger().info(
-                f' Expect BlueOS "{NETWORK["endpoint"]}" -> UDP Client '
-                f'{NETWORK["jetson_ip"]}:{NETWORK["mav_port"]}')
-        if self._yaw_src_name == 'bno085' and self._mode_name in ('sim', 'laptop', 'desk'):
-            self.get_logger().info(
-                ' [HINT ] BNO is the yaw source for ALL Python loops '
-                '(yaw_*, lock_heading, translation heading-hold, [STATE], '
-                'feedback). On a desk SITL the BNO chip does NOT move when '
-                'ArduSub yaws in Gazebo -- so absolute-yaw verbs terminate '
-                'only when you physically rotate the BNO board. Use '
-                'yaw_source:=mavlink_ahrs for desk SITL smoke tests; keep '
-                'bno085 for pool runs where the board moves with the AUV.')
+        self.get_logger().info(' Heading: the board\'s fused ATTITUDE')
         self.get_logger().info(SEPARATOR)
 
-        if self._dvl_auto and self._yaw_src_name in _DVL_SOURCES:
-            self._dvl_auto_retry_s = self._dvl_retry_s
-            threading.Thread(
-                target=self._dvl_auto_connect_loop,
-                daemon=True, name='dvl_auto_connect').start()
-
     def _preflight_payload(self) -> None:
-        """Prepare the payload driver.
+        """Payload: board channels over MAVLink (DO_SET_SERVO), read off the board.
 
-        SROT: the payload is INTEGRATED into the board (PCA9685 over MAVLink,
-        DO_SET_SERVO/DO_SET_RELAY) -- there is NO separate USB ESP32. Critically,
-        that old board was a CH340 (1a86:7523), the SAME chip as the SROT board, so
-        running the USB auto-detect here would grab the SROT serial port. Build the
-        MAVLink-backed SrotPayload instead; no USB scan, no thread.
-
-        Pixhawk: the historical USB PayloadDriver, connected in a background thread
-        (concurrent with the BNO085 probe; joined in _setup_heartbeat_and_payload).
+        There is no separate payload board. fire(N) addresses board channel N
+        (= the n in SERVO{n}_ROLE); which channels are fireable is read from
+        the board at bring-up, never assumed.
         """
-        if self._is_srot:
-            from mongla_control.fc.srot_fc import SrotPayload
-            # A launch file still passing the removed routing param must STOP, not be
-            # quietly ignored: its numbers were host-side indices 1..4, and the same
-            # numbers now address board channels 1..4 -- which on the default role
-            # layout are the on-board ARM. Failing closed here is the whole migration.
-            if self._payload_fire_map.strip():
-                self._payload = None
-                self._payload_thread = None
-                self.get_logger().error(
-                    '[PAYLOAD] REFUSING TO ARM THE PAYLOAD: `payload_fire_map` is set '
-                    f'({self._payload_fire_map!r}) but that parameter was REMOVED. '
-                    'fire(N) now addresses BOARD channel N directly (N = DO_SET_SERVO '
-                    'param1 = the n in SERVO{n}_ROLE), so the old 1..4 channel numbers '
-                    'now point at completely different hardware -- on the default role '
-                    'layout, at the manipulator arm. Delete payload_fire_map and pass '
-                    'the real board channels to fire(); use payload_channels:="9:torpedo_1, '
-                    '11:dropper_1" if you want names in the logs. Payload DISABLED.')
-                return
-            names = _parse_payload_channels(self._payload_channels, self.get_logger())
-            self._payload = SrotPayload(self.fc, log=self.get_logger(), names=names)
-            self._payload_thread = None
-            self.get_logger().info(
-                '[PAYLOAD] SROT: PCA9685 over MAVLink (DO_SET_SERVO), no separate USB '
-                'board. fire(N) addresses BOARD channel N; which channels are fireable '
-                'is read from the board (SERVO{n}_ROLE), never assumed.')
-            # Read every channel role off the board NOW, so a mission aimed at the
-            # arm is caught on the deck rather than mid-drop. This is also what
-            # tells the operator which channels are actually fireable today.
-            try:
-                self._payload.preflight_roles()
-            except Exception as exc:                # noqa: BLE001 -- advisory only
-                self.get_logger().warn(
-                    f'[PAYLOAD] could not read channel roles: {exc!r} -- fire() '
-                    f'FAILS CLOSED on any channel whose role it cannot read')
+        # A launch still passing the removed routing param must STOP, not be
+        # quietly ignored: its numbers were host-side indices 1..4, and the same
+        # numbers now address board channels 1..4 -- which on the default role
+        # layout are the on-board ARM. Failing closed here is the whole migration.
+        if self._payload_fire_map.strip():
+            self._payload = None
+            self.get_logger().error(
+                '[PAYLOAD] REFUSING TO ARM THE PAYLOAD: `payload_fire_map` is set '
+                f'({self._payload_fire_map!r}) but that parameter was REMOVED. '
+                'fire(N) addresses BOARD channel N directly (N = DO_SET_SERVO '
+                'param1 = the n in SERVO{n}_ROLE), so the old 1..4 channel numbers '
+                'point at completely different hardware -- on the default role '
+                'layout, at the manipulator arm. Delete payload_fire_map and pass '
+                'the real board channels to fire(); use payload_channels:="9:torpedo_1, '
+                '11:dropper_1" if you want names in the logs. Payload DISABLED.')
             return
-        self._payload = PayloadDriver()
-        _pl_port = None if self._payload_port in ('auto', '') else self._payload_port
-        self._payload_thread = threading.Thread(
-            target=lambda: self._payload.connect(port=_pl_port, exclude=set()),
-            daemon=True, name='payload-connect')
-        self._payload_thread.start()
+        names = _parse_payload_channels(self._payload_channels, self.get_logger())
+        self._payload = SrotPayload(self.fc, log=self.get_logger(), names=names)
+        # Read every channel role off the board NOW, so a mission aimed at the
+        # arm is caught on the deck rather than mid-drop.
+        try:
+            self._payload.preflight_roles()
+        except Exception as exc:                # noqa: BLE001 -- advisory only
+            self.get_logger().warning(
+                f'[PAYLOAD] could not read channel roles: {exc!r} -- fire() '
+                f'FAILS CLOSED on any channel whose role it cannot read')
 
     def _setup_vision_pool(self) -> None:
         """Initialise the lazy per-camera VisionState pool."""
@@ -1052,46 +757,19 @@ class AUVManagerNode(Node):
         self._vision_lock         = threading.Lock()
 
     def _setup_heartbeat_and_payload(self) -> None:
-        """Start heartbeat, join payload connect thread, build Mongla facade."""
-        self.heartbeat = Heartbeat(self.pixhawk, log=self.get_logger())
-        # The Heartbeat streams NEUTRAL RC at 5 Hz (ArduSub FS_PILOT_INPUT guard).
-        # On SROT that fights an on-board AUTO move, and the mandatory >=1 Hz MAVLink
-        # HEARTBEAT is already sent by _hb_thread (2 Hz) -> do NOT stream it.
-        if not self._is_srot:
-            self.heartbeat.start()
-
-        # Payload connect ran in parallel with BNO probe — join now (USB path only;
-        # SROT's MAVLink payload has no thread).
-        if self._payload_thread is not None:
-            self._payload_thread.join(timeout=5.0)
-            if self._payload_thread.is_alive():
-                # Thread still running after timeout — treat as not connected.
-                self.get_logger().warning(
-                    '[PAYLOAD] connect timed out — fire() calls will log-stub only')
-            elif self._payload.is_ready:
-                self.get_logger().info(
-                    f'[PAYLOAD] verified + connected on {self._payload.port_path}')
-            else:
-                self.get_logger().info(
-                    '[PAYLOAD] not found — fire() calls will log-stub only')
-
+        """Build the Mongla facade. The >=1 Hz MAVLink HEARTBEAT the board
+        needs is sent by _hb_thread; nothing streams RC on this backend."""
         # Lazy DistanceState bridge for calc_distance (built on first use so
         # single-camera / no-distance runs never create the service clients).
         self._distance_state = None
 
         self.mongla = Mongla(
-            self.pixhawk,
+            self.fc,
             log=self.get_logger(),
-            smooth_yaw=self._smooth_yaw,
-            smooth_translate=self._smooth_tr,
             yaw_source=self.yaw_source,
             vision_state_provider=self._vision_state_for,
             distance_provider=self._distance_state_for,
-            heartbeat=self.heartbeat,
             payload=self._payload,
-            # False only in simulation -- SITL's baro cannot be calibrated and
-            # the attempt is destructive. See Mongla._run_baro_calibration.
-            baro_calibration=self.get_parameter('baro_calibration').value,
         )
 
     def _distance_state_for(self):
@@ -1144,7 +822,7 @@ class AUVManagerNode(Node):
         # estimator (rotation compensation). Vector3Stamped: x=pitch_rate,
         # y=roll_rate, z=yaw_rate (rad/s); header.stamp = sample time so the
         # vision node can interpolate the rate to each flow frame-pair. Sourced
-        # from Pixhawk ATTITUDE (pinned 50 Hz), NOT the BNO -- see get_angular_rates.
+        # from the board's ATTITUDE (pinned 50 Hz) -- see get_angular_rates.
         from geometry_msgs.msg import Vector3Stamped
         self._Vector3Stamped = Vector3Stamped
         self.imu_rates_publisher = self.create_publisher(
@@ -1201,21 +879,20 @@ class AUVManagerNode(Node):
         self._srot_prev_fields = None
         self._srot_block_period = float(
             self.get_parameter('srot_telemetry_period_s').value)
-        if self._is_srot:
-            from std_msgs.msg import Int32MultiArray
-            self._Int32MultiArray = Int32MultiArray
-            self.esc_rpm_publisher = self.create_publisher(
-                Int32MultiArray, '/mongla/esc_rpm', 10)
-            # The flare order the operator sent over LoRa (fw comms/flare_order.h).
-            # TRANSIENT_LOCAL so a mission that subscribes late still gets the last one;
-            # the JSON carries latched_at, so a late reader can refuse an old order.
-            from std_msgs.msg import String
-            from rclpy.qos import QoSProfile, DurabilityPolicy
-            self._String = String
-            self.flare_order_publisher = self.create_publisher(
-                String, '/mongla/flare_order',
-                QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
-            self._flare_key = None
+        from std_msgs.msg import Int32MultiArray
+        self._Int32MultiArray = Int32MultiArray
+        self.esc_rpm_publisher = self.create_publisher(
+            Int32MultiArray, '/mongla/esc_rpm', 10)
+        # The flare order the operator sent over LoRa (fw comms/flare_order.h).
+        # TRANSIENT_LOCAL so a mission that subscribes late still gets the last one;
+        # the JSON carries latched_at, so a late reader can refuse an old order.
+        from std_msgs.msg import String
+        from rclpy.qos import QoSProfile, DurabilityPolicy
+        self._String = String
+        self.flare_order_publisher = self.create_publisher(
+            String, '/mongla/flare_order',
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        self._flare_key = None
 
         # HEALTH. 1 Hz, and it only speaks when the vehicle's overall state
         # CHANGES -- a board that logs every second is a board nobody reads,
@@ -1243,7 +920,7 @@ class AUVManagerNode(Node):
         # (No heartbeat timer: it runs on `_hb_thread`, started in _setup_mavlink,
         #  because this group also holds callbacks that block for seconds.)
         self.create_timer(0.5,  self.telemetry_tick,   callback_group=self.timer_group)
-        # Fast tick: 20 Hz HUD compass + depth (AHRS2 pinned to 50 Hz).
+        # Fast tick: 20 Hz HUD compass + depth (ATTITUDE pinned to 50 Hz).
         # Separate callback group so it can fire between telemetry ticks.
         self.fast_group = MutuallyExclusiveCallbackGroup()
         self.create_timer(0.05, self._fast_state_tick, callback_group=self.fast_group)
@@ -1262,123 +939,26 @@ class AUVManagerNode(Node):
         # The tick already early-returns on an empty camera, so an idle timer
         # costs one comparison at `vision_uplink_hz`. A mission can now aim the
         # uplink the way it aims everything else, without a relaunch.
-        if self._is_srot:
-            hz = max(1.0, float(self.get_parameter('vision_uplink_hz').value))
-            self._uplink_cam_logged = None
-            self.create_timer(1.0 / hz, self._vision_uplink_tick,
-                              callback_group=self.timer_group)
-            cam0 = str(self.get_parameter('vision_uplink_camera').value).strip()
-            self.get_logger().info(
-                f'[VIS  ] LANDING_TARGET uplink armed @ {hz:.0f} Hz, '
-                f'camera={cam0 or "(none -- idle until set)"} '
-                f'(the board does not consume msgid 149 yet -- producer only)')
-            # Subscribed unconditionally, gated per message on the parameter, so
-            # `ros2 param set ... velocity_uplink true` works mid-run -- the
-            # startup-only-timer defect this file has already had once.
-            from nav_msgs.msg import Odometry
-            self._vel_uplink_n = 0
-            self._pos_uplink_n = 0
-            self._pos_reset = 0
-            self._pos_last = None
-            self.create_subscription(Odometry, '/mongla/odom',
-                                     self._on_odom_uplink, 10,
-                                     callback_group=self.timer_group)
-
-        # BNO->EKF3 mocap injection is an ArduSub/BlueOS feature; SROT fuses the
-        # BNO on-board, so there is no external EKF to feed (skip on the srot path).
-        if self._bno_mocap_active and not self._is_srot:
-            self.create_timer(0.05, self._mocap_tick, callback_group=self.timer_group)
-            self.get_logger().info('[SENS ] ATT_POS_MOCAP yaw injection active (20 Hz).')
-            self._verify_extnav_params()
-
-    # ================================================================== #
-    #  Vision state pool -- lazily built per camera, preflighted once     #
-    # ================================================================== #
-
-    def _vision_state_for(self, camera: str):
-        """Return (and build on first call) the VisionState for `camera`.
-
-        The control loop reads ``/detections`` directly (the topic the HUD
-        shows); the tracker keeps running for display only. Subscriptions
-        stay alive for the rest of the process lifetime so repeat vision_*
-        goals don't pay the preflight wait twice. The FIRST build for a
-        camera requires a live detection (``require_detection``) so a goal
-        fails fast with a clear "no boxes" rather than silently chasing an
-        empty cache.
-        """
-        cache_key = camera
-
-        with self._vision_lock:
-            cached = self._vision_states.get(cache_key)
-            if cached is not None:
-                return cached
-            self.get_logger().info(
-                f'[VST  ] building VisionState for camera={camera!r}')
-            vstate = VisionState(self, camera=camera,
-                                 logger=self.get_logger())
-
-        # Preflight outside the lock — it just polls VisionState's diags.
-        # The FIRST build waits (up to 10 s) for a live detection so the
-        # pipeline has time to warm up before the loop starts. The loop
-        # itself tolerates no-detection (grace -> LOST -> DSL fallback), so
-        # we cache the state either way and never pay this wait twice.
-        try:
-            wait_vision_state_ready(
-                vstate, timeout=10.0, require_detection=True,
-                log=self.get_logger())
-        except Exception as exc:
-            self.get_logger().warning(
-                f'[VST  ] preflight for {camera!r} did not pass within '
-                f'10s: {exc!r}; first goal starts cold (loop will search '
-                f'via its fallback)')
-
-        with self._vision_lock:
-            # Check again under lock in case a concurrent goal built the same state.
-            if cache_key not in self._vision_states:
-                self._vision_states[cache_key] = vstate
-            winner = self._vision_states[cache_key]
-        # ⛔ THE LOSER IS CLOSED, NOT DROPPED (issue #21). Two concurrent first
-        # goals for one camera each built a VisionState; the second was simply
-        # not inserted, and its subscriptions stayed alive for the life of the
-        # process.
-        if winner is not vstate:
-            try:
-                vstate.close()
-            except Exception as exc:          # noqa: BLE001 -- best effort
-                self.get_logger().warning(
-                    f'[VST  ] duplicate VisionState for {camera!r} not '
-                    f'closed: {exc!r}')
-        return winner
-
-    # ================================================================== #
-    #  DVL auto-connect background loop                                   #
-    # ================================================================== #
-
-    def _dvl_auto_connect_loop(self):
-        """Background thread: try to connect the DVL, retry on failure.
-
-        Runs until the DVL is connected successfully. After first
-        success, sleeps forever (daemon thread dies with the process).
-        This eliminates the manual `mongla dvl_connect` step for
-        standard pool-day workflow.
-        """
-        src = self.yaw_source
-        if src is None or not hasattr(src, 'connect'):
-            return
-
-        attempt = 0
-        while True:
-            attempt += 1
-            try:
-                src.connect()   # type: ignore[union-attr]
-                self.get_logger().info(
-                    f'[DVL  ] auto-connect succeeded (attempt {attempt})')
-                return
-            except Exception as exc:
-                self.get_logger().warning(
-                    f'[DVL  ] auto-connect attempt {attempt} failed: {exc}  '
-                    f'-- retrying in {self._dvl_auto_retry_s:.0f}s')
-                time.sleep(self._dvl_auto_retry_s)
+        hz = max(1.0, float(self.get_parameter('vision_uplink_hz').value))
+        self._uplink_cam_logged = None
+        self.create_timer(1.0 / hz, self._vision_uplink_tick,
+                          callback_group=self.timer_group)
+        cam0 = str(self.get_parameter('vision_uplink_camera').value).strip()
+        self.get_logger().info(
+            f'[VIS  ] LANDING_TARGET uplink armed @ {hz:.0f} Hz, '
+            f'camera={cam0 or "(none -- idle until set)"} '
+            f'(the board does not consume msgid 149 yet -- producer only)')
+        # Subscribed unconditionally, gated per message on the parameter, so
+        # `ros2 param set ... velocity_uplink true` works mid-run -- the
+        # startup-only-timer defect this file has already had once.
+        from nav_msgs.msg import Odometry
+        self._vel_uplink_n = 0
+        self._pos_uplink_n = 0
+        self._pos_reset = 0
+        self._pos_last = None
+        self.create_subscription(Odometry, '/mongla/odom',
+                                 self._on_odom_uplink, 10,
+                                 callback_group=self.timer_group)
 
     # ================================================================== #
     #  MAVLink reader -- only place recv_match() is called                #
@@ -1391,7 +971,7 @@ class AUVManagerNode(Node):
         # drained through it and only the last name -- GAIN -- is left, until the next burst.
         # Sampling the slot therefore does not miss LEAK occasionally; it misses it always.
         # This loop is the only place that sees the names in between, so it is the only place
-        # the de-multiplexing can happen. Pixhawk has no such hook and is untouched.
+        # the de-multiplexing can happen.
         #
         # BATTERY_STATUS has the identical problem one layer down: the board sends
         # instance 0 (PM1 electronics) and instance 1 (PM2 thruster pack) at 2 Hz each,
@@ -1469,7 +1049,7 @@ class AUVManagerNode(Node):
                 fn = _DEMUX.get(msg.get_type())
                 if fn is not None:
                     fn(msg)
-            text = self.pixhawk.get_statustext()
+            text = self.fc.get_statustext()
             if text and text != self.last_statustext:
                 self.last_statustext = text
                 self.get_logger().info(f'[ARDUB] {text}')
@@ -1547,8 +1127,7 @@ class AUVManagerNode(Node):
         self._cancelled_goals.add(bytes(goal_handle.goal_id.uuid))
         # Signal abort FIRST so the running loop exits at its next tick (its
         # own finally neutralises lock-aware), and free the active gate so a
-        # queued safety verb (disarm) gets through. Then stop the heading lock
-        # (it must not outlive a cancelled goal) and send a backstop neutral.
+        # queued safety verb (disarm) gets through. Then a backstop neutral.
         self.mongla.request_abort()
         # ⚠ Releasing here is deliberate (a queued `disarm` must get through) and
         # it is ALSO how a cancel let an ordinary `move_*` in while the cancelled
@@ -1557,8 +1136,7 @@ class AUVManagerNode(Node):
         # DRAINING, which `claim()` treats as busy for everything except a safety
         # verb. The cancelled loop clears it from its own `finally`.
         self._gate.begin_drain()
-        self.mongla.unlock_heading()
-        self.pixhawk.send_neutral()
+        self.fc.send_neutral()
         return CancelResponse.ACCEPT
 
     def _was_cancelled(self, goal_handle, wait_s: float = 0.5) -> bool:
@@ -1599,7 +1177,7 @@ class AUVManagerNode(Node):
         self.get_logger().info(f'[ACT  ] {cmd} -> EXECUTING (goal {gid})')
 
         try:
-            with FeedbackPump(self.pixhawk, goal_handle,
+            with FeedbackPump(self.fc, goal_handle,
                               yaw_provider=self._effective_yaw_deg,
                               vision_provider=self.mongla.vision_telemetry):
                 # Re-snapshot params for every goal so freshly-set
@@ -1609,27 +1187,10 @@ class AUVManagerNode(Node):
                 self.mongla.vision_mixer_aware = bool(
                     snap.get('vision.mixer_aware', True))
                 kwargs = fields_for(cmd, request, runtime_defaults=runtime)
-                if self._is_srot and cmd in SROT_UNSUPPORTED_VERBS:
-                    # Refuse BEFORE dispatch. Left to fall through, these reach
-                    # Pixhawk-only primitives and fail in ways worse than a clean
-                    # refusal -- lock_heading in particular would report success
-                    # while holding nothing. See srot_fc.UNSUPPORTED_VERBS.
-                    result = Move.Result()
-                    result.success = False
-                    result.message = (
-                        f'{cmd}: not supported on the SROT backend yet '
-                        f'(needs the MANUAL_CONTROL-streamed port)')
-                    result.final_value = 0.0
-                    result.error_value = 0.0
-                elif self._is_srot and cmd in SROT_MOVE_VERBS:
-                    # Collapse verb on the SROT backend: one on-board SROT_MOVE +
-                    # its four-terminal ACK relay, instead of the host motion loop.
-                    result = self._run_srot_move(cmd, kwargs, goal_handle)
-                elif self._is_srot and cmd == 'surface':
-                    result = self._run_srot_surface(kwargs)
-                else:
-                    method = getattr(self.mongla, cmd)
-                    result = method(**kwargs)
+                method = getattr(self.mongla, cmd)
+                if cmd in _BOARD_VERBS_WITH_PROGRESS:
+                    kwargs['on_progress'] = self._progress_relay(cmd, goal_handle)
+                result = method(**kwargs)
 
             if result.success:
                 goal_handle.succeed()
@@ -1655,7 +1216,7 @@ class AUVManagerNode(Node):
             # Best-effort: surface current depth so the operator sees
             # *something*. Detail (target/current/error) is in
             # result.message.
-            attitude = self.pixhawk.get_attitude()
+            attitude = self.fc.get_attitude()
             result = Move.Result()
             result.success     = False
             result.message     = f'{cmd}: exception -- {exc}'
@@ -1664,15 +1225,11 @@ class AUVManagerNode(Node):
             goal_handle.abort()
             self.get_logger().error(f'[ACT  ] {cmd} FAILED: {exc}')
 
-            # When a movement raises mid-loop, the per-axis cleanup
-            # `stop()` is skipped, which can leave a stale Ch4 RC
-            # override or SET_POSITION_TARGET setpoint active.
-            # Neutralise explicitly so the next command starts from a
-            # known state. Use the lock-aware writer so a still-active
-            # heading lock keeps Ch4 (a raw send_neutral would clobber it
-            # for one tick and the lock would just re-assert anyway).
+            # A verb that raised mid-loop skipped its own neutral, so the
+            # last MANUAL_CONTROL demand may still be in force. Zero it so
+            # the next verb starts from a known state.
             try:
-                self.mongla._writers().neutral()
+                self.fc.send_neutral()
             except Exception as cleanup_exc:
                 self.get_logger().warn(
                     f'[ACT  ] post-failure neutralise raised: {cleanup_exc}')
@@ -1681,92 +1238,16 @@ class AUVManagerNode(Node):
         finally:
             self._gate.release()
 
-    def _run_srot_surface(self, kwargs):
-        """Emergency surface on the SROT backend: engage the board's SURFACE mode.
-
-        The facade's `surface` is `set_depth(0)`, which goes through
-        `_ensure_alt_hold` -> ALT_HOLD, an ArduSub mode the board does not have.
-        So on srot the verb raised ModeChangeError and did NOTHING -- a safety verb
-        that bypasses the busy gate specifically so it can always run, then didn't.
-
-        SURFACE (mode 9) is the board's own ascend-and-hold failsafe state: it
-        drives depth::setTarget(0) through the depth PID, or an open-loop ascent
-        (DEPTH_LOST_ASCENT) when there is no depth sensor -- which is exactly the
-        behaviour wanted when things have gone wrong. It is also the ONE mode the
-        board never blocks for a missing Bar30.
-
-        Braked first: the board keeps running the active movement primitive until
-        something displaces it, and SURFACE alone does not abort a move.
-
-        ⛔ THE ABORT IS LEFT SET -- SURFACE *IS* THE ABORT. `goal_callback` calls
-        `request_abort()` when surface arrives while another verb runs, and this
-        used to `_abort_event.clear()` on its very next line. The flag is the only
-        thing that stops the host loops -- `vision_align`/`vision_move` stream
-        MANUAL_CONTROL at 20-50 Hz and a queued `_fire_async` shot waits on it --
-        and clearing it within microseconds of setting it meant they usually never
-        saw it: the align kept driving and the shot still fired after the
-        operator said "surface". Nothing here waits on the flag (brake + one mode
-        change, no loop), so the clear protected nothing. The next verb clears it
-        at its own entry (`_command_scope`, `_run_srot_move`, `arm`), which is
-        where a stale abort is dealt with everywhere else.
-        """
-        timeout = float(kwargs.get('timeout', 60.0) or 60.0)
-        self.fc.stop_motion()                     # brake + cancel any running leg
-        ok, reason = self.fc.set_mode('SURFACE')
-
-        out = Move.Result()
-        out.success = bool(ok)
-        out.message = (f'surface: SURFACE engaged (ascending, <= {timeout:.0f}s)'
-                       if ok else f'surface: could not engage SURFACE -- {reason}')
-        att = self.fc.get_attitude()
-        out.final_value = float(att['depth']) if att else math.nan
-        out.error_value = 0.0
-        if not ok:
-            self.get_logger().error(f'[ACT  ] surface FAILED: {reason}')
-        return out
-
-    def _run_srot_move(self, cmd, kwargs, goal_handle):
-        """Dispatch a collapse verb to the SROT board as one SROT_MOVE.
-
-        Builds a Move.Result from the backend's MoveResult (never raises), streams
-        ~3 Hz progress as action feedback, and passes the cooperative abort hook so
-        a goal cancel brakes the board.
-
-        Takes `mongla.lock` and applies the same disarmed gate as the facade's
-        `_command_scope`. This path bypasses the facade entirely, so without these
-        it was the ONLY dispatch route with no host-side arm check and no
-        serialisation -- and the board's own pre-arm checks just IMU-healthy plus
-        not-calibrating (fw arming.cpp:11-31), not depth, ESCs, leak or battery.
-        The other two things `_command_scope` does are moot here: the neutral-RC
-        heartbeat is never started on srot, and a deferred heading lock cannot
-        exist because lock_heading is refused on this backend.
-        """
-        with self.mongla.lock, command_scope(cmd):
-            self.mongla._abort_event.clear()
-            if cmd not in MONGLA_UNARM_SAFE and not self.fc.is_armed():
-                out = Move.Result()
-                out.success = False
-                out.message = f'{cmd}: AUV is disarmed -- call arm() first'
-                out.final_value = 0.0
-                out.error_value = 0.0
-                return out
-
-            def _on_progress(frac):
-                fb = Move.Feedback()
-                fb.phase         = cmd
-                fb.current_value = float(frac)
-                fb.status_line   = f'{cmd} {frac * 100:.0f}%'
-                goal_handle.publish_feedback(fb)
-
-            res = self.fc.move(cmd, on_progress=_on_progress,
-                               abort_fn=self.mongla._abort_fn, **kwargs)
-            out = Move.Result()
-            out.success = res.ok
-            out.message = res.reason
-            att = self.fc.get_attitude()
-            out.final_value = float(att['depth']) if att else math.nan
-            out.error_value = 0.0
-            return out
+    @staticmethod
+    def _progress_relay(cmd, goal_handle):
+        """The board's progress fraction, relayed as action feedback."""
+        def relay(frac):
+            fb = Move.Feedback()
+            fb.phase         = cmd
+            fb.current_value = float(frac)
+            fb.status_line   = f'{cmd} {frac * 100:.0f}%'
+            goal_handle.publish_feedback(fb)
+        return relay
 
     # ================================================================== #
     #  Timers                                                             #
@@ -1842,10 +1323,7 @@ class AUVManagerNode(Node):
         except Exception as exc:                   # noqa: BLE001
             self.get_logger().error(f'[MISSN] abort raised {exc!r}')
         try:
-            if self._is_srot:
-                res = self._run_srot_surface({})
-            else:
-                res = self.mongla.surface()
+            res = self.mongla.surface(wait=False)
             self.get_logger().error(f'[MISSN] surface: {getattr(res, "message", res)}')
         except Exception as exc:                   # noqa: BLE001
             self.get_logger().error(f'[MISSN] SURFACE FAILED: {exc!r} -- the '
@@ -1855,7 +1333,7 @@ class AUVManagerNode(Node):
         """Translate what each subsystem already knows into one vocabulary.
 
         Every reporter is wrapped so a missing method is UNKNOWN rather than an
-        AttributeError: the manager runs against two backends and a sim, and a
+        AttributeError: a
         health board that crashes the node it is watching is worse than no
         board at all.
         """
@@ -1916,6 +1394,65 @@ class AUVManagerNode(Node):
         # one from the other would publish an invented number in a health line --
         # the exact failure this board exists to catch. It needs a real accessor
         # on VisionState first. Tracked as B01 in .claude/context/BUGS.md.
+
+    # ================================================================== #
+    #  Vision state pool -- lazily built per camera, preflighted once     #
+    # ================================================================== #
+
+    def _vision_state_for(self, camera: str):
+        """Return (and build on first call) the VisionState for `camera`.
+
+        The control loop reads ``/detections`` directly (the topic the HUD
+        shows); the tracker keeps running for display only. Subscriptions
+        stay alive for the rest of the process lifetime so repeat vision_*
+        goals don't pay the preflight wait twice. The FIRST build for a
+        camera requires a live detection (``require_detection``) so a goal
+        fails fast with a clear "no boxes" rather than silently chasing an
+        empty cache.
+        """
+        cache_key = camera
+
+        with self._vision_lock:
+            cached = self._vision_states.get(cache_key)
+            if cached is not None:
+                return cached
+            self.get_logger().info(
+                f'[VST  ] building VisionState for camera={camera!r}')
+            vstate = VisionState(self, camera=camera,
+                                 logger=self.get_logger())
+
+        # Preflight outside the lock — it just polls VisionState's diags.
+        # The FIRST build waits (up to 10 s) for a live detection so the
+        # pipeline has time to warm up before the loop starts. The loop
+        # itself tolerates no-detection (grace -> LOST -> DSL fallback), so
+        # we cache the state either way and never pay this wait twice.
+        try:
+            wait_vision_state_ready(
+                vstate, timeout=10.0, require_detection=True,
+                log=self.get_logger())
+        except Exception as exc:
+            self.get_logger().warning(
+                f'[VST  ] preflight for {camera!r} did not pass within '
+                f'10s: {exc!r}; first goal starts cold (loop will search '
+                f'via its fallback)')
+
+        with self._vision_lock:
+            # Check again under lock in case a concurrent goal built the same state.
+            if cache_key not in self._vision_states:
+                self._vision_states[cache_key] = vstate
+            winner = self._vision_states[cache_key]
+        # ⛔ THE LOSER IS CLOSED, NOT DROPPED (issue #21). Two concurrent first
+        # goals for one camera each built a VisionState; the second was simply
+        # not inserted, and its subscriptions stayed alive for the life of the
+        # process.
+        if winner is not vstate:
+            try:
+                vstate.close()
+            except Exception as exc:          # noqa: BLE001 -- best effort
+                self.get_logger().warning(
+                    f'[VST  ] duplicate VisionState for {camera!r} not '
+                    f'closed: {exc!r}')
+        return winner
 
     def _live_vision_state(self):
         """A VisionState from the pool, or None before any vision goal has run.
@@ -1997,42 +1534,6 @@ class AUVManagerNode(Node):
                 f"[ORDER] flare order {'-'.join(order['colours'])} "
                 f"nonce {order['nonce']} (latched {order['age_s']:.1f} s ago)")
 
-    def _verify_extnav_params(self) -> None:
-        """Confirm ArduSub will actually fuse the ATT_POS_MOCAP yaw we stream.
-
-        The feed is inert unless VISO_TYPE=1 (instantiates the MAVLink
-        visual-odom backend; without it the message is dropped before the
-        EKF) AND EK3_SRC1_YAW=6 (ExternalNav yaw source). Both live on the
-        flight controller, not in this repo, so we read them back and WARN
-        loudly on mismatch rather than silently streaming into a void. A
-        None read means the param is absent -- on a Pixhawk 2.4.8 that's the
-        1 MB (fmuv2) build, which strips visual-odom entirely.
-        """
-        log  = self.get_logger()
-        # Short per-param timeout: bounds startup delay to ~2 s even when the
-        # params are absent (e.g. a 1 MB build that lacks VISO_TYPE).
-        viso = self.pixhawk.get_param('VISO_TYPE', timeout=1.0)
-        yaw  = self.pixhawk.get_param('EK3_SRC1_YAW', timeout=1.0)
-
-        if viso is None:
-            log.warn('[SENS ] VISO_TYPE not readable -- BNO yaw will NOT be '
-                     'fused. Likely a 1 MB (fmuv2) build with no visual-odom; '
-                     'flash the 2 MB (fmuv3) ArduSub build.')
-            return
-        ok = True
-        if int(round(viso)) != 1:
-            ok = False
-            log.warn(f'[SENS ] VISO_TYPE={viso:.0f} (need 1) -- ATT_POS_MOCAP '
-                     'dropped before the EKF. Set VISO_TYPE=1.')
-        if yaw is None or int(round(yaw)) != 6:
-            ok = False
-            shown = 'unreadable' if yaw is None else f'{yaw:.0f}'
-            log.warn(f'[SENS ] EK3_SRC1_YAW={shown} (need 6=ExternalNav) -- '
-                     'BNO yaw not fused. Set EK3_SRC1_YAW=6.')
-        if ok:
-            log.info('[SENS ] EKF external-nav yaw confirmed '
-                     '(VISO_TYPE=1, EK3_SRC1_YAW=6).')
-
     def _vision_uplink_tick(self) -> None:
         """Send ONE LANDING_TARGET for the currently selected target, or nothing.
 
@@ -2104,21 +1605,14 @@ class AUVManagerNode(Node):
         except Exception as exc:                      # noqa: BLE001
             self.get_logger().warn(f'[VIS  ] landing_target send failed: {exc}')
 
-    def _mocap_tick(self) -> None:
-        """Stream BNO085 yaw to ArduSub EKF3 at 20 Hz via ATT_POS_MOCAP."""
-        yaw = self.yaw_source.read_yaw()
-        if yaw is None:
-            return   # BNO stale — skip; EKF uses gyro integration until data resumes
-        self.pixhawk.send_att_pos_mocap(yaw)
-
     def _fast_state_tick(self):
         """Publish heading + depth at 20 Hz for real-time HUD instruments.
 
-        Reads fresh attitude from the Pixhawk cache (AHRS2 pinned to 50 Hz)
+        Reads fresh attitude from the reader's cache (ATTITUDE pinned to 50 Hz)
         and reuses the last-known armed/mode/battery from telemetry_tick.
         """
         self._publish_demand()
-        attitude = self.pixhawk.get_attitude()
+        attitude = self.fc.get_attitude()
         if attitude is None:
             return
         yaw_deg, _ = self._effective_yaw_deg(attitude)
@@ -2174,7 +1668,7 @@ class AUVManagerNode(Node):
         established -- an unmapped board clock is not a host clock, and
         publishing it as one would be worse than the jitter it replaces.
         """
-        rates = self.pixhawk.get_angular_rates()
+        rates = self.fc.get_angular_rates()
         if rates is None:
             return
 
@@ -2287,11 +1781,10 @@ class AUVManagerNode(Node):
         giving them two independently-fitted mappings would invent a lag
         between two halves of one sample.
 
-        Silently absent when the backend has no `get_imu` (Pixhawk) or when the
-        board says the IMU is unhealthy -- a filter that gets no message coasts,
+        Silently absent when the board says the IMU is unhealthy -- a filter that gets no message coasts,
         which is correct; one that gets zeros integrates a lie.
         """
-        getter = getattr(self.pixhawk, 'get_imu', None)
+        getter = getattr(self.fc, 'get_imu', None)
         if getter is None:
             return
         imu = getter() if imu_msg is None else getter(imu_msg=imu_msg, att_msg=att_msg)
@@ -2345,49 +1838,26 @@ class AUVManagerNode(Node):
         self.imu_publisher.publish(msg)
 
     def _effective_yaw_deg(self, attitude):
-        """Return ``(yaw_deg, label)`` -- the SAME yaw the control loops
-        close on: ``yaw_source.read_yaw()`` when a source is configured,
-        the (age-gated) board attitude only when none is, and
-        ``(None, 'N/A')`` when neither has a fresh value.
+        """Return ``(yaw_deg, label)`` -- the SAME yaw the verbs read:
+        ``yaw_source.read_yaw()``, or ``(None, 'N/A')`` when it is stale.
 
-        ⛔ NO FALLBACK FROM A CONFIGURED SOURCE. This used to fall through to
-        ``attitude['yaw']`` whenever the source returned None -- and None is
-        how a source says STALE (``MavlinkAhrsSource._is_fresh``: 250 ms;
-        ``BNO085Source``: ``_STALE_S``). So the freshness gate was undone one
-        line later: after a USB drop /mongla/state kept publishing the last yaw
-        pymavlink ever cached, and it was not even the yaw the loops were
-        using (they got None and held). Absent is absent -- NaN downstream.
+        ⛔ NO FALLBACK TO THE CACHED ATTITUDE. None is how the source says
+        STALE (250 ms). Falling through to ``attitude['yaw']`` undid that gate
+        one line later: after a USB drop /mongla/state kept publishing the
+        last yaw pymavlink ever cached. Absent is absent -- NaN downstream.
+        The board also reports NaN yaw when its IMU is unhealthy; that is
+        absence too, and NaN comparisons are silently False in every guard.
         """
-        source = getattr(self, 'yaw_source', None)
-        if source is not None:
-            yaw = source.read_yaw()
-            if yaw is None:
-                return None, 'N/A'
-            # Short-label for the [STATE] line. 'MAVLINK_AHRS' ->
-            # 'AHRS' keeps the line tidy; custom sources (BNO085,
-            # DVL, WITMOTION) render as-is.
-            raw_name = getattr(source, 'name', 'SRC')
-            label = 'AHRS' if raw_name == 'MAVLINK_AHRS' else raw_name
-            return float(yaw), label
-        if attitude is not None:
-            # NaN IS ABSENCE HERE, and this branch used to pass it straight out.
-            # `SrotFC.get_attitude` returns NaN yaw when the board reports the
-            # BNO unhealthy (measured live after a bad boot); on srot there is
-            # no second AHRS to fall through to, so without this check the
-            # gate upstream would be a knob wired to nothing -- NaN would reach
-            # `/mongla/state.yaw_deg` and `heading_lock` exactly where 0.0 used
-            # to, and NaN comparisons are silently False in every guard.
-            yaw = float(attitude['yaw'])
-            if not math.isnan(yaw):
-                return yaw, 'AHRS'
-        return None, 'N/A'
+        yaw = self.yaw_source.read_yaw()
+        if yaw is None or math.isnan(float(yaw)):
+            return None, 'N/A'
+        return float(yaw), 'AHRS'
 
     def telemetry_tick(self):
-        attitude = self.pixhawk.get_attitude()
-        battery  = self.pixhawk.get_battery()
-        rc       = self.pixhawk.get_rc_channels()
-        mode     = self.pixhawk.get_mode()
-        armed    = self.pixhawk.is_armed()
+        attitude = self.fc.get_attitude()
+        battery  = self.fc.get_battery()
+        mode     = self.fc.get_mode()
+        armed    = self.fc.is_armed()
 
         yaw_deg, yaw_label = self._effective_yaw_deg(attitude)
 
@@ -2406,7 +1876,6 @@ class AUVManagerNode(Node):
                 f'command that never ran -- this should not happen; capture the log.')
 
         self._maybe_print_state(attitude, battery, mode, armed, yaw_deg, yaw_label)
-        self._maybe_print_rc(rc)
         self._publish_state(attitude, battery, mode, armed, yaw_deg)
         self._publish_srot_telemetry()
 
@@ -2421,7 +1890,7 @@ class AUVManagerNode(Node):
         """
         try:
             for msg_id, hz in SROT_MESSAGE_RATES.items():
-                self.pixhawk.set_message_rate(msg_id, hz)
+                self.fc.set_message_rate(msg_id, hz)
             gain_ok = self.fc.set_default_gain()
         except Exception as exc:                     # noqa: BLE001 -- best-effort
             self.get_logger().error(
@@ -2444,16 +1913,10 @@ class AUVManagerNode(Node):
         """Surface the parts of SrotFC.telemetry() that nothing else reads.
 
         `telemetry()` was fully implemented and had no production caller -- the
-        manager reads the vehicle through the Pixhawk-compat surface
-        (get_attitude/get_battery/...), which has no RPM or leak. So the decode
+        manager reads the vehicle through the summary getters
+        (get_attitude/get_battery/...), which have no RPM or leak. So the decode
         work, including the ESC_TELEMETRY fallback, went nowhere.
         """
-        # Gate on the BACKEND, not on the RPM publisher: the [SROT ] block and the
-        # leak latch below have nothing to do with /mongla/esc_rpm, and tying them to
-        # it meant a manager without that publisher silently lost all of them.
-        if not self._is_srot:
-            return
-
         # An unplanned FC restart, checked here for the same reason `telemetry()`
         # is: `check_for_reboot()` was fully implemented, documented and unit
         # tested, and called by NOTHING outside its own test. A detector nobody
@@ -2584,7 +2047,7 @@ class AUVManagerNode(Node):
         self._srot_prev_fields = fields
 
     def _maybe_print_srot_block(self, tel):
-        """The verbose SROT telemetry block -- everything Pixhawk never had.
+        """The verbose SROT telemetry block -- everything the summary getters omit.
 
         Rate-limited by `srot_telemetry_period_s` (0 disables). This is deliberately
         periodic rather than on-change: for the first water test the operator wants a
@@ -2644,8 +2107,6 @@ class AUVManagerNode(Node):
             return
 
         arm_str   = 'ARM' if armed  else '---'
-        # Show the yaw source label (BNO / AHRS) so the operator can
-        # tell at a glance which sensor is actually driving the loops.
         if yaw_deg is not None:
             yaw_str = f'{yaw_deg:6.1f} ({yaw_label})'
         else:
@@ -2667,25 +2128,6 @@ class AUVManagerNode(Node):
             'bat':   battery['voltage'] if battery else 0,
         }
         self.last_print_time = now
-
-    def _maybe_print_rc(self, rc):
-        """Print the RC line only when an active channel actually
-        changed -- otherwise the same line repeats every 0.5 s for the
-        duration of a forward move and drowns the log."""
-        if not rc or len(rc) < 6:
-            return
-        drive  = (rc[2], rc[3], rc[4], rc[5])
-        active = any(abs(value - 1500) > 50 for value in drive)
-        if active and drive != self.prev_rc:
-            parts = []
-            for label, value in zip(('Thr', 'Yaw', 'Fwd', 'Lat'), drive):
-                if abs(value - 1500) > 50:
-                    parts.append(f'{label}:{value}')
-            self.get_logger().info('[RC   ] ' + '  '.join(parts))
-            self.prev_rc = drive
-        elif not active and self.prev_rc is not None:
-            self.get_logger().info('[RC   ] all neutral')
-            self.prev_rc = None
 
     # A board sample older than this is not the state we are publishing, so
     # fall back rather than stamp a fresh message with a stale capture time.
@@ -2831,9 +2273,8 @@ class AUVManagerNode(Node):
         msg.header.frame_id = _BODY_FRAME
         msg.armed           = bool(armed)
         msg.mode            = mode if mode else ''
-        # Publish the yaw the control loops actually use (BNO when it's
-        # the configured source, Pixhawk AHRS otherwise) so downstream
-        # consumers of /mongla/state see the same number as [STATE].
+        # Publish the yaw the verbs read, so downstream consumers of
+        # /mongla/state see the same number as [STATE].
         msg.yaw_deg         = float(yaw_deg) if yaw_deg is not None else math.nan
         msg.depth_m         = float(attitude['depth'])  if attitude else math.nan
         msg.battery_voltage = float(battery['voltage']) if battery  else math.nan
@@ -2875,9 +2316,6 @@ def _emergency_stop(node) -> None:
     # streaming MANUAL_CONTROL and a delayed torpedo could still leave. It goes
     # first because it cannot fail on the wire and every later step can.
     _step('signal abort',       lambda: node.mongla.request_abort())
-    _step('stop heading lock',  lambda: node.mongla._heading_lock.stop()
-                                        if node.mongla._heading_lock else None)
-    _step('stop heartbeat',     lambda: node.heartbeat.stop())
 
     # ⛔ BRAKE A RUNNING LEG FIRST, AND ON SROT `send_neutral` CANNOT DO IT (B42).
     #
@@ -2891,11 +2329,9 @@ def _emergency_stop(node) -> None:
     # the disarm is the step that fails.
     #
     # MOVE_STOP is the board's own brake, it is honoured in AUTO, and from fw
-    # rev 2 it decelerates on-board. Pixhawk has no `stop_motion`, so this is
-    # guarded rather than assumed.
-    if hasattr(node.fc, 'stop_motion'):
-        _step('brake running move', lambda: node.fc.stop_motion())
-    _step('send neutral RC',    lambda: node.pixhawk.send_neutral())
+    # rev 2 it decelerates on-board.
+    _step('brake running move', lambda: node.fc.stop_motion())
+    _step('send neutral',       lambda: node.fc.send_neutral())
 
     ok, reason = None, 'not attempted'
     try:
@@ -2904,7 +2340,7 @@ def _emergency_stop(node) -> None:
         # after its grace -- 5 s unless set -- so a slow confirmation was
         # killed mid-poll and the operator never saw whether it took.
         # bringup gives the manager MANAGER_SIGTERM_TIMEOUT_S; this stays under.
-        ok, reason = node.pixhawk.disarm(timeout=EMERGENCY_DISARM_S)
+        ok, reason = node.fc.disarm(timeout=EMERGENCY_DISARM_S)
     except Exception as exc:
         reason = repr(exc)
     if ok:

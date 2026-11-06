@@ -4,8 +4,8 @@
 The mission DSL's ``use_camera`` already keeps exactly one detector inferring
 (pauses every other known detector, resumes the target). This gives the SAME
 exclusivity from the command line -- so a manual switch can't leave two
-detectors inferring at once, which is the concurrent-inference OOM on the 8 GB
-Jetson. Prefer this over a bare ``ros2 param set <one detector> paused false``,
+detectors inferring at once, which the Hailo cannot hold
+(two graphs exceed its SRAM). Prefer this over a bare ``ros2 param set <one detector> paused false``,
 which resumes one WITHOUT pausing the other.
 
 Examples

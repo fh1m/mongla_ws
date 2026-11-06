@@ -26,12 +26,16 @@ python3 -m pip install -q --break-system-packages --no-deps \
         'supervision==0.26.1' 'trackers==2.4.0'
 
 say "3/6  ROS packages mongla_ws declares"
-ROS_PKGS="ros-jazzy-yasmin ros-jazzy-yasmin-ros ros-jazzy-vision-msgs
-          ros-jazzy-cv-bridge ros-jazzy-image-transport ros-jazzy-foxglove-bridge
+# Exactly the ROS packages the package.xml files declare -- no more. A stale
+# entry here is a package the vehicle installs and nothing imports.
+ROS_PKGS="ros-jazzy-vision-msgs ros-jazzy-cv-bridge ros-jazzy-foxglove-bridge
           ros-jazzy-rosbag2-storage-mcap ros-jazzy-web-video-server
-          ros-jazzy-rosbridge-server python3-colcon-common-extensions python3-rosdep"
+          python3-pil python3-colcon-common-extensions python3-rosdep"
+# Operator tooling, off the mission path: a mission runs inside tmux over mosh
+# so a dropped tether never kills it. platform/remote-access.md.
+OPS_PKGS="mosh tmux"
 MISSING=""
-for p in $ROS_PKGS; do
+for p in $ROS_PKGS $OPS_PKGS; do
   dpkg -s "$p" >/dev/null 2>&1 || MISSING="$MISSING $p"
 done
 # Only reach for sudo if something is actually absent, so a re-run needs no
@@ -41,6 +45,14 @@ if [ -n "$MISSING" ]; then
   sudo apt-get install -y -q $MISSING
 else
   echo "  all present, nothing to do"
+fi
+# brltty claims every CH340 (1a86:7523) as a braille display and holds it
+# through usbfs, so the SROT board never gets a /dev/ttyUSB* node. Ubuntu
+# ships it by default. bringup_check grades it (C); this removes it.
+# pi-and-env-traps.md E5.
+if dpkg -s brltty >/dev/null 2>&1; then
+  echo "  purging brltty (it steals the SROT board's CH340)"
+  sudo apt-get purge -y -q brltty
 fi
 
 say "4/6  HailoRT Python bindings (NOT on PyPI -- built from source)"
@@ -63,7 +75,7 @@ source /opt/ros/jazzy/setup.bash
 python3 - <<'PY'
 import sys
 mods = ['numpy','cv2','scipy','filterpy','supervision','trackers','pymavlink',
-        'serial','yaml','hailo_platform','rclpy','cv_bridge','vision_msgs.msg']
+        'serial','yaml','PIL','hailo_platform','rclpy','cv_bridge','vision_msgs.msg']
 bad = []
 for m in mods:
     try: __import__(m, fromlist=['x'])

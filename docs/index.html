@@ -110,7 +110,7 @@
       <div class="tape" aria-hidden="true"><i></i><em>0</em><em>30 cm</em></div>
       <b>1.09 cm</b><span>worst error over a 30 cm slide, against a tape measure. The red sliver on the tape is that error, to scale.</span>
     </div>
-    <div class="f"><span class="silk">Tests</span><b>4 479</b><span>passing, none failing</span></div>
+    <div class="f"><span class="silk">Tests</span><b>3 999</b><span>passing, none failing</span></div>
     <div class="g warn"><span class="silk">In water</span><b>0 dives</b><span>Nothing on this platform has been in water. Every number here says where it was taken.</span></div>
   </div>
  </div>
@@ -185,7 +185,7 @@
    </div>
    <figcaption><strong>Simulated</strong>: the same gate, one turbidity parameter apart — drag to
      compare. This is the single variable that decides whether a run scores or ends, which is
-     why the simulator models it at all. The real water is further down the page, and every
+     why the simulator we rehearsed in modelled it at all. The real water is further down the page, and every
      threshold behind these rows is in
      <a href="https://github.com/fh1m/mongla_ws/blob/main/.claude/context/measured-bars.md">measured-bars.md</a>
      with its method beside it.</figcaption>
@@ -289,7 +289,7 @@
     <tr><td data-l="layer">Raspberry Pi 5 + Hailo-8</td><td data-l="what it owns">Detection, tracking, optical-flow velocity</td>
         <td class="num" data-l="rate">53.9 Hz</td><td data-l="state"><span class="st bench">bench</span></td></tr>
     <tr><td data-l="layer">Host control</td><td data-l="what it owns">Verbs, vision loops, mission logic</td>
-        <td class="num" data-l="rate">20–50 Hz</td><td data-l="state"><span class="st bench">bench</span></td></tr>
+        <td class="num" data-l="rate">50 Hz</td><td data-l="state"><span class="st bench">bench</span></td></tr>
     <tr><td data-l="layer">Estimation</td><td data-l="what it owns">Right-invariant EKF, late measurements replayed in order</td>
         <td class="num" data-l="rate">—</td><td data-l="state"><span class="st soft">software</span></td></tr>
     <tr><td data-l="layer">Anything at all, in water</td><td data-l="what it owns">—</td><td class="num" data-l="rate">—</td>
@@ -729,7 +729,7 @@
   <table class="ledger">
    <thead><tr><th>repository</th><th>what it is</th><th>who owns it</th><th>how we reach it</th></tr></thead>
    <tbody>
-    <tr><td><em>Mongla</em></td><td>Perception, estimation, mission language, simulator — this repository</td>
+    <tr><td><em>Mongla</em></td><td>Perception, estimation, mission language — this repository</td>
         <td><a href="https://github.com/fh1m">Muhammad Fahim Faisal</a></td><td class="num">—</td></tr>
     <tr><td><em>Hengla</em> — srot-control-board</td><td>The firmware. ESP32 dual-core plus an RP2350 thruster co-processor</td>
         <td><a href="https://github.com/RakibulIslam1">Rakibul Islam</a></td><td class="num">MAVLink 2 over one USB-C cable</td></tr>
@@ -1174,7 +1174,7 @@
    <svg viewBox="0 0 1000 150" role="img">
     <line class="run__path" x1="70" y1="62" x2="860" y2="62"/>
     <line class="run__lit" x1="70" y1="62" x2="860" y2="62"/>
-    <g class="run__n" style="--i:0"><circle cx="70" cy="62" r="7"/><text class="lab" x="70" y="34">Arm</text><text class="rate" x="70" y="92">once</text><line class="fail" x1="70" y1="100" x2="70" y2="116"/><text class="why" x="70" y="130">refuses</text></g><g class="run__n" style="--i:1"><circle cx="202" cy="62" r="7"/><text class="lab" x="202" y="34">Look</text><text class="rate" x="202" y="92">53.9 Hz</text><line class="fail" x1="202" y1="100" x2="202" y2="116"/><text class="why" x="202" y="130">[ ] forever</text></g><g class="run__n" style="--i:2"><circle cx="333" cy="62" r="7"/><text class="lab" x="333" y="34">Decide</text><text class="rate" x="333" y="92">1.0 s</text><line class="fail" x1="333" y1="100" x2="333" y2="116"/><text class="why" x="333" y="130">a flicker</text></g><g class="run__n" style="--i:3"><circle cx="465" cy="62" r="7"/><text class="lab" x="465" y="34">Centre</text><text class="rate" x="465" y="92">20–50 Hz</text><line class="fail" x1="465" y1="100" x2="465" y2="116"/><text class="why" x="465" y="130">LOST</text></g><g class="run__n" style="--i:4"><circle cx="597" cy="62" r="7"/><text class="lab" x="597" y="34">Hold</text><text class="rate" x="597" y="92">175 fr</text><line class="fail" x1="597" y1="100" x2="597" y2="116"/><text class="why" x="597" y="130">stated loss</text></g><g class="run__n" style="--i:5"><circle cx="728" cy="62" r="7"/><text class="lab" x="728" y="34">Drive</text><text class="rate" x="728" y="92">500 Hz</text><line class="fail" x1="728" y1="100" x2="728" y2="116"/><text class="why" x="728" y="130">depth loop</text></g><g class="run__n" style="--i:6"><circle cx="860" cy="62" r="7"/><text class="lab" x="860" y="34">Know</text><text class="rate" x="860" y="92">—</text><line class="fail" x1="860" y1="100" x2="860" y2="116"/><text class="why" x="860" y="130">no DVL</text></g>
+    <g class="run__n" style="--i:0"><circle cx="70" cy="62" r="7"/><text class="lab" x="70" y="34">Arm</text><text class="rate" x="70" y="92">once</text><line class="fail" x1="70" y1="100" x2="70" y2="116"/><text class="why" x="70" y="130">refuses</text></g><g class="run__n" style="--i:1"><circle cx="202" cy="62" r="7"/><text class="lab" x="202" y="34">Look</text><text class="rate" x="202" y="92">53.9 Hz</text><line class="fail" x1="202" y1="100" x2="202" y2="116"/><text class="why" x="202" y="130">[ ] forever</text></g><g class="run__n" style="--i:2"><circle cx="333" cy="62" r="7"/><text class="lab" x="333" y="34">Decide</text><text class="rate" x="333" y="92">1.0 s</text><line class="fail" x1="333" y1="100" x2="333" y2="116"/><text class="why" x="333" y="130">a flicker</text></g><g class="run__n" style="--i:3"><circle cx="465" cy="62" r="7"/><text class="lab" x="465" y="34">Centre</text><text class="rate" x="465" y="92">50 Hz</text><line class="fail" x1="465" y1="100" x2="465" y2="116"/><text class="why" x="465" y="130">LOST</text></g><g class="run__n" style="--i:4"><circle cx="597" cy="62" r="7"/><text class="lab" x="597" y="34">Hold</text><text class="rate" x="597" y="92">175 fr</text><line class="fail" x1="597" y1="100" x2="597" y2="116"/><text class="why" x="597" y="130">stated loss</text></g><g class="run__n" style="--i:5"><circle cx="728" cy="62" r="7"/><text class="lab" x="728" y="34">Drive</text><text class="rate" x="728" y="92">500 Hz</text><line class="fail" x1="728" y1="100" x2="728" y2="116"/><text class="why" x="728" y="130">depth loop</text></g><g class="run__n" style="--i:6"><circle cx="860" cy="62" r="7"/><text class="lab" x="860" y="34">Know</text><text class="rate" x="860" y="92">—</text><line class="fail" x1="860" y1="100" x2="860" y2="116"/><text class="why" x="860" y="130">no DVL</text></g>
     <g class="run__gate"><rect x="928" y="22" width="5" height="80" rx="2"/><rect x="972" y="22" width="5" height="80" rx="2"/>
      <rect x="928" y="22" width="49" height="4" rx="2"/></g>
     <g class="run__sub"><rect x="-22" y="55" width="36" height="14" rx="7"/><circle cx="8" cy="62" r="2.2"/></g>
@@ -1194,7 +1194,7 @@
     <tr><td>Decide it is there</td><td><code>detected('gate')</code> asks whether the class was seen inside a recency window, not whether it is in this exact frame</td>
         <td class="num">1.0 s window</td><td>A flicker does not count as absence. An <code>if</code> here runs once — a moving search needs a loop</td></tr>
     <tr><td>Centre it</td><td><code>vision.align</code> drives lateral and yaw on the signed pixel offset from frame centre</td>
-        <td class="num">20–50 Hz host</td><td>Never raises. Returns <span class="num">ALIGNED</span>, <span class="num">LOST</span>, <span class="num">TIMEOUT</span>, <span class="num">NO_CAMERA</span> or <span class="num">ABORTED</span> — and where it ended</td></tr>
+        <td class="num">50 Hz host</td><td>Never raises. Returns <span class="num">ALIGNED</span>, <span class="num">LOST</span>, <span class="num">TIMEOUT</span>, <span class="num">NO_CAMERA</span> or <span class="num">ABORTED</span> — and where it ended</td></tr>
     <tr><td>Hold the lock</td><td>Live box, then tracker coast, then a geometric anchor matching image structure</td>
         <td class="numr">175 frames</td><td>Refuses rather than inventing. The ladder ends in a stated loss</td></tr>
     <tr><td>Drive through</td><td>One <code>SROT_MOVE</code>; the board runs and brakes the primitive itself</td>
@@ -1567,78 +1567,6 @@
  </div>
 </section>
 
-<section id="sim" data-chapter="the simulator">
- <div class="wrap">
-  <p class="mark">The simulator <i>//</i> 20,649 lines, thirteen courses, one purpose</p>
-  <h2 class="col">A place to be wrong that costs nothing.</h2>
-  <p class="lede col quiet">A second colcon workspace inside this repository: Gazebo, both
-    competition pools, thirteen courses, both cameras, ground truth, and an operator lab. It is
-    not a demo. It is where every recovery path in the stack got run for the first time, because
-    a pool day is four hours long and a bug is cheaper here.</p>
-
-  <div class="simgal">
-   <figure class="simgal__hero">
-    <img src="imgs/sim/sim-bluerov-gate.webp" alt="A BlueROV2 Heavy hovering beside the gate in the simulated pool, the slalom poles and task boards behind it" loading="lazy" width="1600" height="789">
-    <figcaption><span class="silk">Gazebo <i>//</i> the stand-in hull</span> A BlueROV2 Heavy at the
-      gate, flown by ArduSub SITL. It is not our vehicle, on purpose: the simulator is a physics
-      environment, and every verb it runs goes through the same interface the board uses.</figcaption>
-   </figure>
-   <figure><img src="imgs/sim/sim-gate-course.webp" alt="The gate and the slalom poles from the start of the course" loading="lazy" width="1600" height="789">
-    <figcaption><span class="silk">the gate and the slalom</span></figcaption></figure>
-   <figure><img src="imgs/sim/sim-bins-torpedo.webp" alt="The bins and the torpedo board in the simulated pool" loading="lazy" width="1600" height="789">
-    <figcaption><span class="silk">bins and the torpedo board</span></figcaption></figure>
-   <figure><img src="imgs/sim/sim-slalom.webp" alt="The slalom poles, red and white, from low in the water" loading="lazy" width="1600" height="789">
-    <figcaption><span class="silk">slalom, from low</span></figcaption></figure>
-   <figure><img src="imgs/sim/sim-pool-overview.webp" alt="The whole simulated pool, the task tables and the octagon target" loading="lazy" width="1600" height="789">
-    <figcaption><span class="silk">the whole course</span></figcaption></figure>
-  </div>
-
-  <table class="ledger">
-   <thead><tr><th>what it models</th><th>why it had to be modelled</th><th>the number</th></tr></thead>
-   <tbody>
-    <tr><td>Real T200 thrust curve</td><td>A straight line was wrong by a quarter of full thrust, so fine alignment behaved nothing like the pool</td><td class="num">12.24 N error</td></tr>
-    <tr><td>Water current</td><td>The lateral integral term existed to fight a current the simulator did not have</td><td class="num">0.12 m/s → 1.374 m in 40 s</td></tr>
-    <tr><td>Camera field of view <em>in water</em></td><td>The in-air figure showed more of the course than the vehicle can ever see, so every search pattern was tuned against a view that does not exist</td><td class="num">80° → 57.7°</td></tr>
-    <tr><td>Bar30 noise</td><td>Ours was ten times too noisy on the one sensor every mission depends on</td><td class="num">0.02 m → 0.002 m</td></tr>
-    <tr><td>Fault injection</td><td>Five recovery paths existed in the code and had never once executed</td><td class="num">DVL · camera · link · battery · thruster</td></tr>
-    <tr><td>Ground-truth labels</td><td>Hand labelling does not scale; the bounding-box sensor is occlusion-correct and free</td><td class="num">12.83 Hz vs 12.75 baseline</td></tr>
-   </tbody>
-  </table>
-
-
-
-  <div class="split" style="align-items:start">
-   <div>
-  <p class="quiet">Each of those rows started as a thing that looked
-    fine. The pattern repeats so exactly that it became a rule: <em>the simulator's job is not to
-    look right, it is to be wrong in the same places the water is.</em> A static prop generates
-    contact and cannot be pushed. A cylinder and a box return no collision at all in one physics
-    engine, so the vehicle drove through every gate leg and slalom pipe for months. Fog does not
-    reach camera sensors, so thirteen courses shared one clarity while claiming six.</p>
-
-  <p class="quiet">The archive higher up this page came out of here — 4,925 labelled frames,
-    27 classes, both competitions — and so did the honest finding that two of those sessions
-    detect nothing under the current weights.</p>
-   </div>
-  <figure class="faults" aria-label="The five fault paths the simulator can inject">
-    <span class="silk silk--b">fault injection · five recovery paths that had never once executed</span>
-    <ol>
-      <li><b>DVL dropout</b><span>the sensor we do not have, failing the way it would</span></li>
-      <li><b>camera loss</b><span>vision verbs must return NO_CAMERA, not hang</span></li>
-      <li><b>link silence</b><span>the board surfaces after 5 s — does the host agree?</span></li>
-      <li><b>battery sag</b><span>held 3 s while armed, and the board acts alone</span></li>
-      <li><b>thruster failure</b><span>the allocation has to fit the demand with what is left</span></li>
-    </ol>
-    <figcaption>Every one of these paths existed in the code and had never run. A pool day is four
-      hours long; a fault you can inject on a laptop costs nothing. This is the simulator's real
-      job — not looking like water, but being wrong in the same places water is.</figcaption>
-  </figure>
-  </div>
-   <blockquote class="pull">A simulator is where you are allowed to be wrong <em>cheaply</em> — which is only worth anything if you remember it is not the water.
-   <footer>the simulator</footer></blockquote>
- </div>
-</section>
-
 <section class="chapter">
  <div class="wrap" data-no="III">
   <div class="no">III</div>
@@ -1761,8 +1689,8 @@
   <p class="col quiet" style="margin-top:30px">Mirpur and Arizona are not the same problem. One is
     hazy and even; the other is bright, with caustics that sweep the floor and look exactly like
     motion. A threshold tuned in one is wrong in the other — which is why every number in this
-    stack carries the conditions it was taken under, and why the simulator above bothers to model
-    caustics at all.</p>
+    stack carries the conditions it was taken under, and why the rehearsal modelled caustics at
+    all.</p>
 
   <p class="col quiet">The archive is 20&#8239;GB and stays out of this repository. What ships is
     six stills and a <code>manifest.json</code> naming the exact source frame behind each one, so
@@ -1875,7 +1803,7 @@
     <div><span class="silk">Blind</span><b>175</b><span>frames held with no detector</span></div>
     <div><span class="silk">Velocity</span><b>1.09 cm</b><span>worst error, 30 cm slide</span></div>
     <div><span class="silk">Mesh</span><b>0.9 mm</b><span>hull tessellation in the viewer</span></div>
-    <div class="wide"><span class="silk silk--lit">Suites</span><b>4 479</b><span>passing across six suites; 0 failed</span></div>
+    <div class="wide"><span class="silk silk--lit">Suites</span><b>3 999</b><span>passing across six suites; 0 failed</span></div>
   </div>
   <p class="col quiet" style="margin-top:34px">Each of these lives in a ledger with its method, its
     conditions and the bar it had to clear — and the tests read that file, so a number cannot drift
@@ -2088,7 +2016,7 @@
    </li>
    <li>
     <span class="silk">The competition this is aimed at</span>
-    <p class="why">The rulebooks are the specification every prop in the simulator was built from</p>
+    <p class="why">The rulebooks are the specification every prop and every mission is measured against</p>
     <p class="go"><a href="https://robonation.org/programs/robosub/">RoboSub</a> · <a href="https://sauvc.org/">SAUVC</a></p>
    </li>
    <li>
@@ -4086,17 +4014,17 @@
       ctx.beginPath(); ctx.moveTo(x, y - 26); ctx.lineTo(x, y + 26); ctx.stroke();
     }
     txt('sensors → control → DShot, every tick, nothing else on this core', 70, 210, INK, 12);
-    // our commands, 25x slower
+    // our commands, 10x slower
     var y2 = 300;
     for (var j = 0; j < 40; j++){
-      if (j % 25 !== 0) continue;
+      if (j % 10 !== 0) continue;
       var x2 = 70 + j * 20.5;
       ctx.strokeStyle = SEA; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.moveTo(x2, y2 - 20); ctx.lineTo(x2, y2 + 20); ctx.stroke();
     }
     ctx.strokeStyle = 'rgba(90,160,255,.3)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(70, y2); ctx.lineTo(890, y2); ctx.stroke();
-    txt('our demand, about 20 Hz — 25 board corrections between any two of them',
+    txt('our demand, 50 Hz — 10 board corrections between any two of them',
         70, 350, SEA, 12, 700);
     txt('sampling: a loop answers disturbances to half its rate — 250 Hz of authority',
         70, 388, INK3, 11);

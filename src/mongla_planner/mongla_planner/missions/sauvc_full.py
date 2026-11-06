@@ -23,9 +23,9 @@ detection range is measured in water.
 Run it:
     ros2 run mongla_planner mission sauvc_full
 
-⚠ NOT FLOWN. Tests execute the sequencing against a recorder, on both backends.
+⚠ NOT FLOWN. Tests execute the sequencing against a recorder.
 
-⛔ ON SROT, `move_*`, `set_depth`, `pause` and `stop` are SROT_MOVE primitives: they
+⛔ `move_*`, `set_depth`, `pause` and `stop` are SROT_MOVE primitives: they
 enter AUTO, which closes the never-closed depth loop, so the board denies them until
 the two bench checks pass. That includes the search creep fallback. The vision
 verbs themselves run in STABILIZE and are not gated (test_sauvc_srot_port.py).
@@ -68,8 +68,6 @@ def run(mongla, log=None):
         mongla.pause(SAUVC_TETHER_PAUSE_S)
         mongla.arm()
         mongla.set_depth(SAUVC_SEARCH_DEPTH_M, timeout=30)
-        if mongla.can('lock_heading'):   # refused on srot: the board holds heading
-            mongla.lock_heading(0.0, timeout=SAUVC_RUN_BUDGET_S)
 
         _navigation(mongla, log)
         mongla.note('target_reacquisition', 'skipped: no gripper fitted', success=False)
@@ -80,9 +78,7 @@ def run(mongla, log=None):
             mongla.note('flares', 'skipped: SAUVC_FLARES_ENABLED is off '
                         '(flare detection range unmeasured)', success=False)
     finally:
-        mongla.release_heading()
         mongla.surface()
-        mongla.stop()
         mongla.disarm()
 
 

@@ -95,12 +95,10 @@ anything.
 
 ⛔ **Closed 2026-09-22 by deleting the layer**, not by fixing it. The guard was written first and
 *did* bite — the reproduction failed exactly as predicted — and then the operator retired the
-whole FSM tree (3,550 lines that had never executed). The lesson was kept where missions actually
-run: `mongla.can(verb)` reads `srot_fc.UNSUPPORTED_VERBS` **at call time** (one truth, not the
-second copy that caused J04), `mongla.require(verb)` refuses on the deck rather than underwater,
-and `run_plan` skips a step whose `needs=` verb the backend refuses — with the skip on the
-scorecard. `test_run_plan.py` executes that path, and the J04 shape was injected back in to
-confirm the new guards fail against it (4 of 12 fail with the oracle stubbed to always say yes).
+whole FSM tree (3,550 lines that had never executed). The lesson then moved into the DSL as a capability oracle,
+and the J04 shape was injected back in to confirm it bit (4 of 12 failed). On 2026-11-06 the
+refused verbs left with the old backend, so there is no oracle left to consult: a mission can
+only name a real verb, and `test_every_mission_runs_against_the_real_dsl.py` proves it.
 
 **The gap.** All eight FSM plans build a `LockHeadingState`; srot refuses `lock_heading`; the
 refusal raises; `base_state.py:44-54` converts any exception to `ABORT`; every plan wires

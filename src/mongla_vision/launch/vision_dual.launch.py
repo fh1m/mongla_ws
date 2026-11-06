@@ -7,7 +7,7 @@ targets via ``mongla.set_model(... camera='forward')`` /
 ``resume_detector('downward')`` -- so per-task model/class hot-switching
 just works.
 
-Both detectors start PAUSED by default (saves Jetson GPU); each task
+Both detectors start PAUSED by default (saves the Hailo); each task
 chunk calls ``mongla.resume_detector(<cam>)`` then ``pause_detector``.
 
 Start it AFTER the control stack (``mongla start`` / bringup).
@@ -68,15 +68,15 @@ def generate_launch_description():
         DeclareLaunchArgument('fwd_device',   default_value='0',
                               description='/dev/videoN index for the forward camera — LAST-RESORT '
                                           'fallback, only used on a box with no /dev/mongla_cam_* '
-                                          'symlink (dev box). On the Jetson the port-stable symlink '
+                                          'symlink (dev box). On the vehicle the port-stable symlink '
                                           'wins automatically (see device_path below).'),
         DeclareLaunchArgument('dwn_device',   default_value='4',
                               description='/dev/videoN index for the downward camera (dev-box fallback; '
-                                          'the Jetson symlink wins automatically)'),
+                                          'the vehicle symlink wins automatically)'),
         # PORT-STABLE identity for two IDENTICAL cameras (same VID/PID). Leave EMPTY and
         # the node auto-binds /dev/mongla_cam_<forward|downward> WHEN THAT SYMLINK EXISTS
-        # (Jetson) — so forward/downward NEVER swap on reboot/re-plug. The raw int index
-        # 0/4 above is NOT stable: /dev/videoN renumbers on the Orin and silently swaps the
+        # (vehicle) — so forward/downward NEVER swap on reboot/re-plug. The raw int index
+        # 0/4 above is NOT stable: /dev/videoN renumbers across boots and silently swaps the
         # two identical cameras (this is the exact "forward/downward reversed" bug). Set a
         # value here ONLY to force a specific device; a non-empty value overrides the symlink.
         # See .claude/context/perception/dual-camera-setup.md.
@@ -120,13 +120,12 @@ def generate_launch_description():
                                           'CSV name=conf (e.g. torpedo_blood_hole=0.55)'),
         DeclareLaunchArgument('dwn_model_conf', default_value='',
                               description='Per-model conf overrides on downward, CSV name=conf'),
-        DeclareLaunchArgument('device_cls',   default_value='cuda:0',
-                              description='Inference device for YOLO (cuda:0 | cpu)'),
+        DeclareLaunchArgument('device_cls',   default_value='auto',
+                              description='Inference device for a .pt (auto | cuda:0 | cpu); '
+                                          'a .hef ignores it'),
         DeclareLaunchArgument('imgsz',        default_value='640',
-                              description='Inference square size (both detectors). NOTE: a TensorRT '
-                                          '.engine bakes imgsz at export -- this only re-scales the '
-                                          '.pt fallback. For TRT, re-export to match: '
-                                          'export_engine --all --imgsz <N>, then imgsz:=<N> here.'),
+                              description='Inference square size for a .pt (both detectors). '
+                                          'A .hef bakes its input size and ignores this.'),
         DeclareLaunchArgument('max_det',      default_value='100',
                               description='Post-NMS detection cap, both detectors (runtime; lower '
                                           'toward ~10 if NMS is the FPS bottleneck on busy frames).'),
@@ -213,7 +212,7 @@ def generate_launch_description():
                 'name':    profile,
                 'device':  LaunchConfiguration(device_arg),
                 # PORT-STABLE identity: an empty device_path falls back to the
-                # /dev/mongla_cam_<profile> udev symlink WHEN IT EXISTS (Jetson),
+                # /dev/mongla_cam_<profile> udev symlink WHEN IT EXISTS (vehicle),
                 # else '' -> the int device index (dev box). This makes
                 # forward/downward immune to /dev/videoN renumbering on
                 # reboot/re-plug (the raw index 0/4 is NOT stable — the enumeration

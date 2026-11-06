@@ -164,8 +164,8 @@ measure and ask for.
 
 | The design choice | What it gives |
 |---|---|
-| a 500 Hz loop we wrote, on a core nothing else can interrupt | the vehicle stabilises 25× faster than the host could ever ask it to |
-| a host loop at about 20 Hz | the Pi only *steers*; it is never on the hook for staying level |
+| a 500 Hz loop we wrote, on a core nothing else can interrupt | the vehicle stabilises 10× faster than the host ever asks it to |
+| a host loop at 50 Hz | the Pi only *steers*; it is never on the hook for staying level |
 | per-motor RPM and current on the wire | "is thruster 3 spinning?" has an answer — once the presence bit ships |
 | every sensor on one board, one clock | a late reading still carries the instant it was true |
 | eleven flight modes, in source we can read | a twelfth is a pull request, not a vendor request |
@@ -174,10 +174,6 @@ measure and ask for.
 
 The full, evidence-backed list — what is verified on a bench, what is built but never flown,
 and what is blocked — is the **[Capability Map](capability-map.html)**.
-
-The simulator is the one place a third-party autopilot remains: it runs ArduSub SITL as a
-physics harness, by design, because it is an environment and not the vehicle. See
-[`sim/README.md`](https://github.com/fh1m/mongla_ws/blob/main/sim/README.md).
 
 ---
 

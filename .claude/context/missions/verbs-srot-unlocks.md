@@ -1,17 +1,13 @@
-# What moving to srot unlocks, verb by verb
+# The verbs the board could give us, and has not yet
 
 > Measured on `tools/control_bench` against the live board's parameters
 > (`workbench/data/board_params_20260923.json`), and read in the firmware at
-> `bff7400`. Nothing here is inferred from the pixhawk stack.
+> `bff7400`.
 
-The framing that was wrong. Moving from ArduSub to srot looked like a **loss** —
-`srot_fc.UNSUPPORTED_VERBS` refuses six verbs the pixhawk path had
-(`lock_heading`, `move_*_dist`, `arc`, `style_yaw`). But the refusal list is the
-only place the change was written down, so the ledger only ever showed the debit.
-
-The board exposes capabilities ArduSub never gave us, and most of them have a
+The board exposes capabilities with no verb on our side yet. Most of them have a
 working MAVLink handler on one side and a driver method on the other, with
-nothing joining them.
+nothing joining them. A verb that needs a firmware change is a pull request,
+listed in §3 with the ask that carries it.
 
 ---
 
@@ -65,8 +61,7 @@ offered to missions.
 | verb | the firmware change | ask |
 |---|---|---|
 | **`hold_heading`** | ⭐ `attitude::holdYaw(float)` **already exists**, is declared at `attitude_control.h:30` and is already called in the flight path from `task_control_loop.cpp:238` — but only in AUTO. STABILIZE, the one mode that honours `MANUAL_CONTROL`, cannot reach it. A `MAV_CMD` and one call | [`pr-n`](../upstream/pr-n-caps-literals-and-the-heading-hold-setpoint.md) §2 |
-| **`lock_heading`** (un-refuse) | the same change. Today it is in `UNSUPPORTED_VERBS` because there is no heading-hold setpoint to move | [`pr-n`](../upstream/pr-n-caps-literals-and-the-heading-hold-setpoint.md) §2 |
-| **`move_*_dist`**, **`arc`** (un-refuse) | these need closed-loop distance, which needs velocity ingest on the board | [`pr-g`](../upstream/pr-g-optical-flow-ingest.md) |
+| **a distance-closed move**, **`arc`** | these need closed-loop distance, which needs velocity ingest on the board | [`pr-g`](../upstream/pr-g-optical-flow-ingest.md) |
 | **a per-thruster demand** | the mixer takes six body axes. `motor_test` reaches ONE motor at a time through a keep-alive, which is an instrument, not an actuator. A real allocator needs eight simultaneous per-thruster demands | [`pr-k`](../upstream/pr-k-the-mixer-is-for-a-different-hull.md) |
 
 ---
@@ -77,6 +72,6 @@ offered to missions.
 measurement or a mission needs it.** `pattern` is listed above and is bottom of
 the list precisely because nothing needs it.
 
-And the harder rule, from `CLAUDE.md` §8.6: **never claim a verb worked without
+And the harder rule, from `CLAUDE.md` §8 rule 6: **never claim a verb worked without
 seeing the value it produced.** Every verb here that reaches the board must
 return what the board did, not what we asked it to do.

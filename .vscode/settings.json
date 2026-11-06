@@ -1,5 +1,5 @@
 {
-  // ── Mongla / mongla_ws — tuned for VSCode Remote-SSH onto the Jetson ──
+  // ── Mongla / mongla_ws — tuned for VSCode Remote-SSH onto the Pi ──
   // The single biggest source of editor lag on a colcon workspace is the
   // file watcher + search indexing the generated build/ install/ log/ trees
   // (~1k+ churning files). Excluding them makes editing missions/code snappy

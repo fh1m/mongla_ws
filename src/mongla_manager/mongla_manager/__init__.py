@@ -1,11 +1,6 @@
-"""mongla_manager -- ROS2 ActionServer + connection profiles.
+"""mongla_manager -- the ROS 2 action server that owns the SROT board.
 
-The Python `MonglaClient`, `mongla` CLI, and mission scripts that USE
-the action server have moved to the `mongla_planner` package. This
-package now contains ONLY the server side: the manager node, its
-connection profiles, and the dispatcher.
+The Python `MonglaClient`, the `mongla` CLI and the mission scripts that USE
+the action server live in `mongla_planner`. This package is the server side:
+the manager node, how it finds the board, and the operator tools.
 """
-
-from .connection_config import DEFAULT_MODE, PROFILES
-
-__all__ = ['PROFILES', 'DEFAULT_MODE']

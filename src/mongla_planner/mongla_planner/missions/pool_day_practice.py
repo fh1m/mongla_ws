@@ -40,7 +40,7 @@ BIN_HEADING_DEG          = None  # heading from torpedo to bin
 ALIGN_ERR_PX             = 40    # "centred" pixel tolerance
 FINE_ERR_PX              = 14    # tight tolerance for the torpedo hole lock
 BIN_CENTRE_ERR_PX        = 30    # centring tolerance over the bin
-BIN_SURGE_SIGN           = +1    # downward Ch5 fore/aft polarity -- verify DISARMED
+BIN_SURGE_SIGN           = +1    # downward fore/aft (surge) polarity -- verify DISARMED
                                  # (vision_thrust_check --camera downward); -1 if reversed
 ALIGN_GAIN               = 30    # max speed while centring
 APPROACH_GAIN            = 35    # max speed while driving forward
@@ -78,7 +78,7 @@ _DWN = '/mongla_detector_downward'
 
 
 def run(mongla, log=None):
-    mongla.mission_reset()   # clear heading lock + abort from any previous run
+    mongla.mission_reset()   # clear the abort flag and any demand from a previous run
 
     def info(msg):
         if log:
@@ -92,8 +92,6 @@ def run(mongla, log=None):
         mongla.set_depth(GATE_SEARCH_DEPTH_M, timeout=30)
         if GATE_HEADING_DEG is not None:
             mongla.turn(GATE_HEADING_DEG)
-        if mongla.can('lock_heading'):   # refused on srot: the board holds heading
-            mongla.lock_heading(0.0, timeout=600)
 
         # ══════════════════════════════════════════════════════════════════════
         # PHASE 1: GATE
@@ -173,7 +171,7 @@ def run(mongla, log=None):
         mongla.set_classes('torpedo,blood,hole', node=_FWD)
 
         mongla.vision.align(
-            'torpedo', camera='forward', yaw=0, lat=0, depth=0,
+            'torpedo', camera='forward', yaw=0, lat=0,
             err=ALIGN_ERR_PX, gain=ALIGN_GAIN,
             duration=TORPEDO_BOARD_ALIGN_S, fallback=creep_forward)
 
@@ -184,7 +182,7 @@ def run(mongla, log=None):
 
         mongla.set_classes('hole', node=_FWD)
         if mongla.vision.align(
-                'hole', camera='forward', yaw=0, lat=0, depth=0,
+                'hole', camera='forward', yaw=0, lat=0,
                 err=FINE_ERR_PX, gain=FINE_GAIN,
                 duration=TORPEDO_LOCK_S, fallback=creep_forward):
             shot = mongla.fire(TORPEDO_FIRE_CHANNEL)
@@ -205,14 +203,14 @@ def run(mongla, log=None):
             mongla.set_depth(BIN_DEPTH_M, timeout=30)
 
             # use_camera auto-switches the live detector to downward (pauses forward)
-            # + flips the HUD. Downward frame: lat=left/right (Ch6), depth axis=fore/aft
-            # SURGE (Ch5, two-sided + braked); ArduSub holds BIN_DEPTH_M on Ch3.
+            # + flips the HUD. Downward frame: lat = left/right, fwd = fore/aft
+            # SURGE (two-sided + braked); the board holds BIN_DEPTH_M.
             mongla.use_camera('downward')
             mongla.set_model('bin_fire_blood', node=_DWN)
             mongla.set_classes('fire,blood', node=_DWN)
 
             if mongla.vision.align(
-                    'fire', camera='downward', lat=0, fwd=0,   # downward: lat=Ch6, fwd=Ch5 surge
+                    'fire', camera='downward', lat=0, fwd=0,   # downward: fwd = surge
                     err=BIN_CENTRE_ERR_PX, gain=ALIGN_GAIN, surge_sign=BIN_SURGE_SIGN,
                     duration=BIN_ALIGN_DURATION_S, fallback=creep_forward):
                 info('[bin] aligned — holding for stability...')
@@ -230,7 +228,6 @@ def run(mongla, log=None):
             log(f'[practice] ABORT: {exc}')
         raise
     finally:
-        mongla.release_heading()
         mongla.stop()
         mongla.disarm()
         info('[practice] disarmed — run complete')

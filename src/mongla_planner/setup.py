@@ -21,7 +21,7 @@ setup(
     maintainer='Muhammad Fahim Faisal',
     description=(
         'Mission planner: MonglaClient Python API + `mongla` CLI + '
-        'mission scripts. Reserved space for YASMIN state machines.'
+        'mission scripts and the state machines that compose them.'
     ),
     license='MIT',
     entry_points={

@@ -385,7 +385,7 @@ that would change what we do:
   the history: four separate gates refused the yaw reference and none of them
   printed the number it refused on.
 - **`ARCHITECTURE.md` is the stalest file in their tree** — it still says the
-  board presents as ArduSub 4.1.0 with ~90 compat dummy params, and lists 7
+  board spoofs an ArduPilot identity with ~90 compat dummy params, and lists 7
   modes where there are 11, omitting **AUTO (23) — the entire companion
   interface**. Do not use it for the wire contract.
 - **`HARDWARE.md` has the battery voltage/current ADC pins swapped** relative

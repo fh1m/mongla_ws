@@ -170,8 +170,8 @@ def test_the_documented_loop_rate_matches_the_shipped_one():
     """§4's budget is only useful if its rows track the code."""
     rates = (ROOT / 'mongla_control' / 'mongla_control'
              / 'motion_rates.py').read_text()
-    m = re.search(r'^VISION_LOOP_HZ_SROT\s*=\s*([0-9.]+)', rates, re.M)
-    assert m, 'VISION_LOOP_HZ_SROT not found'
+    m = re.search(r'^VISION_LOOP_HZ\s*=\s*([0-9.]+)', rates, re.M)
+    assert m, 'VISION_LOOP_HZ not found'
     shipped = float(m.group(1))
     # ⛔ NOT a bare `str(shipped) in text` -- "35" appears in a dozen
     # unrelated numbers, so that form passed with the constant changed from
@@ -186,7 +186,7 @@ def test_the_documented_loop_rate_matches_the_shipped_one():
     nums = [float(x) for x in re.findall(r'([0-9]+\.?[0-9]*) Hz', row)]
     assert nums, f'no Hz figure in the control-loop row: {row}'
     assert any(abs(n - shipped) <= 0.5 for n in nums), (
-        f'VISION_LOOP_HZ_SROT is {shipped}; system-harmony.md §4 says '
+        f'VISION_LOOP_HZ is {shipped}; system-harmony.md §4 says '
         f'{nums} -- the budget has drifted from the code.\n  {row.strip()}')
 
 
@@ -196,7 +196,6 @@ def test_the_documented_loop_rate_matches_the_shipped_one():
 _STALE_INTERFACE_TEXT = (
     ('src/mongla_interfaces/action/Move.action', 'ESP32 payload channel'),
     ('src/mongla_interfaces/action/Move.action', 'log-stub'),
-    ('src/mongla_interfaces/msg/MonglaState.msg', 'ArduSub mode name (MANUAL, ALT_HOLD'),
     ('src/mongla_control/mongla_control/commands.py',
      "'Active hold: send neutral 1500 PWM to all six channels.'"),
     ('src/mongla_planner/package.xml', '<depend>yasmin'),

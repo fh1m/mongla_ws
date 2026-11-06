@@ -1,72 +1,61 @@
-# Mongla-ws Python dependencies (pip)
+# Mongla -- third-party Python packages (pip)
 # ----------------------------------------------------------------------
-# These are the THIRD-PARTY Python packages the workspace imports
-# directly. ROS2 dependencies (rclpy, sensor_msgs, vision_msgs,
-# cv_bridge, ...) come from the ROS2 Humble apt feed -- see
-# docs/JETSON_SETUP.md for the apt one-liner.
+# What the code imports that ROS does not provide. ROS packages (rclpy,
+# cv_bridge, sensor_msgs, ...) come from apt: ROS 2 Jazzy on the vehicle
+# (Raspberry Pi 5, Ubuntu 24.04), Humble on dev boxes.
 #
-# Install on a fresh Jetson / dev box, AFTER `apt install ros-humble-...`:
+#     pip install -r requirements.txt            # dev box
 #
-#     pip install -r requirements.txt
-#
-# ON JETSON: install `torch` and `torchvision` from NVIDIA's JetPack
-# wheel index BEFORE running the line above (the PyPI torch wheel is
-# x86_64 / desktop-CUDA only and will silently fall back to CPU). See
-# docs/JETSON_SETUP.md "PyTorch on Jetson" for the version table.
-#
-# Versions are LOWER bounds verified against ROS2 Humble + JetPack 6.0.
+# The vehicle does NOT use this file: tools/setup_pi_hailo.sh installs the Pi,
+# with the exact pins that hold on Ubuntu 24.04. Three rules there, each a
+# silent failure if broken (.claude/context/platform/pi-and-env-traps.md):
+#   * OpenCV is the SYSTEM cv2 (apt python3-opencv). A pip opencv shadows it,
+#     has no window backend, and drags numpy 2 in.
+#   * numpy stays 1.x: cv_bridge and the system cv2 are built against the 1.x
+#     ABI and fail with `_ARRAY_API not found` under 2.x.
+#   * hailo_platform is not on PyPI: setup_pi_hailo.sh builds it from source
+#     against the installed libhailort, at the same version.
 # ----------------------------------------------------------------------
 
-# ---- MAVLink (autopilot link) -----------------------------------------
-# Used by `mongla_control.pixhawk` (the only file that imports pymavlink).
-# >=2.4.41 ships MAVLink2 + ArduSub mode mapping the manager relies on.
+# ===================== the vehicle (and every dev box) =================
+
+# The board link: MAVLink 2 over the SROT board's USB serial.
+# fc/srot_fc.py and every tools/srot_*.py.
 pymavlink>=2.4.41
-
-# ---- BNO085 IMU (yaw source) ------------------------------------------
-# Used by `mongla_sensors.sources.bno085`. Talks to the ESP32-C3 bridge
-# over USB serial (see firmware/esp32c3_bno085.md).
+# serial port probing in the manager and the bench tools
 pyserial>=3.5
 
-# ---- Vision: arrays, image I/O, drawing -------------------------------
-# numpy is pulled in transitively by ultralytics + cv_bridge; pinning
-# explicitly so a fresh install doesn't accidentally land on numpy 2.x
-# (which torch / cv_bridge on Humble are still catching up to).
+# Pinned below 2.0 -- see the numpy rule above.
 numpy>=1.24,<2.0
 
-# OpenCV: used by camera_node, draw, ros_topic, webcam adapter.
-# *** JETSON: do NOT pip-install this. *** The apt `python3-opencv` /
-# JetPack system cv2 is GUI-capable (GTK) and NumPy-1.x ABI; a pip
-# opencv-python(-headless) shadows it (headless has no window backend →
-# vision_display dies) AND pulls numpy>=2 (breaks cv_bridge). See
-# requirements-jetson.txt + jetson-and-env-traps.md §E2. On x86 dev boxes pip is fine.
-opencv-python>=4.8; platform_machine == "x86_64"
-
-# ---- Vision: object detection (YOLO) ----------------------------------
-# Ultralytics pulls torch/torchvision as transitive deps. On Jetson
-# install torch/torchvision from NVIDIA's JetPack wheel index FIRST so
-# pip doesn't replace them with the CPU-only PyPI wheels.
-ultralytics>=8.1.0
-
-# ---- Vision: tracking (OC-SORT / ByteTrack + Kalman) ------------------
-# Roboflow `trackers` is the primary engine behind the Tracker ABC
-# (tracker_node, OC-SORT default); supervision provides the legacy
-# ByteTrack fallback (+ `draw_video`); filterpy provides the Kalman filter
-# used by `mongla_vision.tracking.kalman` to smooth track bboxes.
-# *** JETSON: pin trackers==2.4.0 and install --no-deps. *** The 2.5.0
-# PyPI wheel is a broken dud with no module, and the numpy>=2 dep-pin is a
-# red herring — see requirements-jetson.txt + jetson-and-env-traps.md §E3.
+# Tracking (tracking/roboflow_tracker.py, bytetrack.py, kalman.py). All three
+# are imported lazily, and each has a logged fallback.
+# trackers: 2.4.0 exactly. The 2.5.0 wheel on PyPI contains no module, and its
+# numpy>=2 requirement is spurious, so on the Pi install it with --no-deps:
+#     pip install --no-deps "trackers==2.4.0"
 trackers>=2.4.0,<2.5.0
-supervision>=0.18.0
+# supervision: <=0.26.1 on numpy 1.x (0.30 uses np.long, which is numpy-2 only)
+supervision>=0.18.0,<=0.26.1
 filterpy>=1.4.5
 
-# ---- Vision: monocular depth (OPTIONAL) -------------------------------
-# `mongla_vision.depth.depth_estimation_node` runs Depth Anything V2-Small
-# as an ONNX graph via onnxruntime. It is imported lazily: if absent, the
-# node logs a warning and falls back to bbox-area proximity, so this line
-# is optional. On Jetson prefer `onnxruntime-gpu` from NVIDIA's index.
-onnxruntime>=1.16; platform_machine == "x86_64"
+# HUD text rendering (_text_engine.py)
+Pillow>=9.0
 
-# ---- Test runner (CI + colcon test) ----------------------------------
-# Required for the mongla_control unit tests; colcon also calls into
-# pytest under the hood for `colcon test`.
+# OPTIONAL. ONNX runtime for the XFeat matcher (anchor/xfeat_onnx.py) and the
+# monocular depth node (depth/depth_estimation_node.py). Imported lazily; the
+# Hailo path (anchor/xfeat_hailo.py) does not need it.
+onnxruntime>=1.16
+
+# ===================== dev box only ====================================
+
+# .pt models: replaying archive footage on a desktop GPU (detection/yolo.py).
+# The vehicle runs .hef on the Hailo-8 and never imports these.
+ultralytics>=8.1.0; platform_machine == "x86_64"
+# pip OpenCV is fine on x86 dev boxes; on the Pi see the OpenCV rule above.
+opencv-python>=4.8; platform_machine == "x86_64"
+
+# plots in tools/ (scorers, sweeps)
+matplotlib>=3.5; platform_machine == "x86_64"
+
+# tests
 pytest>=7.0

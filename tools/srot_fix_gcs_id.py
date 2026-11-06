@@ -3,7 +3,7 @@
 
 WHY THIS IS A SCRIPT AND NOT TWO CLICKS. This param has now reverted to the bench
 wildcard (COMPID=0) twice, each time after being "set". 0 means any station satisfies
-the GCS failsafe, so a dead Jetson looks like a live GCS and the hull station-keeps
+the GCS failsafe, so a dead companion looks like a live GCS and the hull station-keeps
 instead of surfacing. The failure is silent in both directions -- a PARAM_SET that
 never landed looks exactly like one that did, and on this board so does a save that
 never reached NVS.
@@ -18,7 +18,7 @@ So every step is confirmed rather than assumed:
   5. re-read after the save
 
 Transport is auto-detected exactly the way the manager does it (direct USB serial
-first, then the BlueOS bridge over UDP), so this works on the deck or on the bench.
+first, then a serial->UDP bridge), so this works on the deck or on the bench.
 Direct USB is preferable for a write: 0% BAD_DATA vs ~8-9% over the bridge.
 
 Run with --revert to put the bench wildcard back (COMPID=0) if you need bench mode.
@@ -29,7 +29,7 @@ import argparse
 import sys
 import time
 
-# Repo-relative, so this runs on the Jetson and on any clone. Falls back to whatever
+# Repo-relative, so this runs on the vehicle and on any clone. Falls back to whatever
 # is already importable (a sourced install/) if the src layout is not where we expect.
 from pathlib import Path
 _SRC = Path(__file__).resolve().parent.parent / 'src'

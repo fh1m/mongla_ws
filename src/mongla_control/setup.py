@@ -14,7 +14,7 @@ setup(
     install_requires=['setuptools', 'pymavlink', 'pyserial'],
     zip_safe=True,
     maintainer='Muhammad Fahim Faisal',
-    description='Mongla control stack: Pixhawk MAVLink wrapper and Mongla command facade',
+    description='Mongla control stack: the SROT board driver and the Mongla command facade',
     license='MIT',
     tests_require=['pytest'],
     entry_points={

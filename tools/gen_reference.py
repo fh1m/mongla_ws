@@ -6,9 +6,8 @@ drifting the moment someone edited the code beside it. This one is derived:
 
   * the verbs come from `mongla_control/commands.py` -- the single table the
     CLI, the action server and the Python client all read;
-  * whether a verb runs ON THE BOARD, on the host, or is REFUSED comes from
-    `fc/srot_fc.py` (`UNSUPPORTED_VERBS`, and which verbs `_build_params`
-    actually maps to a SROT_MOVE primitive);
+  * whether a verb runs ON THE BOARD or on the host comes from `fc/srot_fc.py`
+    (which verbs `_build_params` actually maps to a SROT_MOVE primitive);
   * the executables come from each package's `setup.py` console_scripts;
   * the launch arguments come from `DeclareLaunchArgument` in the launch files;
   * the node parameters come from `declare_parameter` calls;
@@ -49,17 +48,14 @@ def verbs() -> dict:
     return ns['COMMANDS']
 
 
-def srot_routing() -> tuple[set, set]:
-    """(refused, on-board) verb names, read out of srot_fc.py."""
+def board_verbs() -> set:
+    """Verb names the board runs as one SROT_MOVE, read out of srot_fc.py."""
     src = (PKG / 'fc' / 'srot_fc.py').read_text()
-    m = re.search(r'UNSUPPORTED_VERBS\s*=\s*frozenset\(\{(.*?)\}\)', src, re.S)
-    refused = set(re.findall(r"'([a-z_]+)'", m.group(1))) if m else set()
     body = src[src.index('def _build_params'):]
     nxt = body.find('\ndef ', 1)
     if nxt > 0:
         body = body[:nxt]
-    board = set(re.findall(r"verb == '([a-z_]+)'", body))
-    return refused, board - refused
+    return set(re.findall(r"verb == '([a-z_]+)'", body))
 
 
 def entry_points() -> dict[str, list[tuple[str, str]]]:
@@ -100,10 +96,11 @@ def launch_args(only: Path | None = None) -> list[tuple[str, str, str, str]]:
 
 def missions_table() -> list[str]:
     """One row per mission: what it is, which models it loads and whether they
-    ship, and which board-refused verbs it calls (and whether it asks first)."""
-    refused, _ = srot_routing()
+    ship, and which board moves it calls -- each enters AUTO, which closes the
+    depth loop, so each is gated on the two armed bench checks."""
+    board = board_verbs()
     shipped = {p.stem for p in (ROOT / 'src/mongla_vision/models').glob('*.yaml')}
-    rows = ['| mission | what it does | models it loads | refused on srot |',
+    rows = ['| mission | what it does | models it loads | board moves (depth-gated) |',
             '|---|---|---|---|']
     d = ROOT / 'src/mongla_planner/mongla_planner/missions'
     for f in sorted(d.glob('*.py')):
@@ -125,10 +122,8 @@ def missions_table() -> list[str]:
                            for m in stems) or '—'
         calls = sorted({n.func.attr for n in ast.walk(tree)
                         if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
-                        and n.func.attr in refused})
-        asks = 'can(' in text or 'require(' in text
-        ref = ', '.join(f'`{c}`' for c in calls) + (' (asks first)' if asks else ' ⛔ unguarded') \
-            if calls else '—'
+                        and n.func.attr in board})
+        ref = ', '.join(f'`{c}`' for c in calls) or '—'
         rows.append(f'| `{f.stem}` | {first} | {models} | {ref} |')
     return rows
 
@@ -193,7 +188,7 @@ def wire_constants() -> list[tuple[str, str]]:
 
 def render() -> str:
     C = verbs()
-    refused, board = srot_routing()
+    board = board_verbs()
     L = ['# Command reference — generated from the code',
          '',
          '> ⚠ **This file is generated.** Do not edit it by hand: run',
@@ -201,25 +196,20 @@ def render() -> str:
          '> Every row below was read out of the file named beside it, never written from memory.',
          '',
          f'**{len(C)} verbs.** On the SROT board **{len(board)}** run as one `SROT_MOVE` '
-         f'primitive, which the board runs *and brakes* itself; **{len(refused)}** are refused '
-         'before dispatch; the rest are host-side loops or single messages.',
+         f'primitive, which the board runs *and brakes* itself; the rest are host-side '
+         'loops or single messages.',
          '',
          '## 1. Verbs — `mongla_control/commands.py`', '',
          '| verb | fields | defaults | on srot | what it does |',
          '|---|---|---|---|---|']
     for name in sorted(C):
         spec = C[name]
-        where = ('⛔ **refused**' if name in refused
-                 else 'on the board' if name in board else 'host')
+        where = 'on the board' if name in board else 'host'
         fields = ', '.join(f'`{f}`' for f in spec.get('fields', [])) or '—'
         defaults = ', '.join(f'`{k}={v}`' for k, v in spec.get('defaults', {}).items()) or '—'
         help_text = re.sub(r'\s+', ' ', str(spec.get('help', ''))).strip()
         L.append(f'| `{name}` | {fields} | {defaults} | {where} | {help_text} |')
     L += ['',
-          f'Refused on srot: {", ".join(f"`{v}`" for v in sorted(refused))} — from '
-          '`srot_fc.UNSUPPORTED_VERBS`. The board has no such primitive, and faking one '
-          'host-side is how a mission comes to believe it moved a distance it never moved.',
-          '',
           "## 2. Executables — each package's `setup.py`", '',
           '| run it with | module |', '|---|---|']
     for pkg, eps in entry_points().items():
@@ -240,8 +230,9 @@ def render() -> str:
     L += ['', '## 3b. Missions — `mongla_planner/missions/`', '',
           'Run with `ros2 run mongla_planner mission <name>`. A model marked ⏳ is '
           'not in `src/mongla_vision/models/`: it arrives on a water day, and until '
-          'then the mission refuses at `set_model`. A refused verb that the mission '
-          'asks about first (`mongla.can` / `mongla.require`) is safe on srot.', '']
+          'then the mission refuses at `set_model`. A board move enters AUTO, which '
+          'closes the depth loop: every one is gated on the two armed bench checks '
+          '(CLAUDE.md §2).', '']
     L += missions_table()
     L += ['', '## 4. Node parameters — `declare_parameter`', '']
     for node, params in node_params().items():

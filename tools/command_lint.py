@@ -39,7 +39,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC_DIRS = [ROOT / 'src', ROOT / 'sim' / 'src']
+SRC_DIRS = [ROOT / 'src']
 
 # Documents that record what WAS true. They may quote a retired command as
 # evidence; they are listed, never failed.
@@ -137,12 +137,6 @@ def model_stems() -> set[str]:
     return {p.stem for p in (ROOT / 'src/mongla_vision/models').glob('*.yaml')}
 
 
-def srot_refused() -> set[str]:
-    src = (ROOT / 'src/mongla_control/mongla_control/fc/srot_fc.py').read_text()
-    m = re.search(r'UNSUPPORTED_VERBS\s*=\s*(?:frozenset\()?\{(.*?)\}', src, re.S)
-    return set(re.findall(r"'([a-z_]+)'", m.group(1))) if m else set()
-
-
 _CAMERAS = ('forward', 'downward', 'laptop', 'dual')
 
 
@@ -203,7 +197,7 @@ def commands_in(text: str):
 def sources():
     pats = ['README.md', 'CLAUDE.md', 'AGENTS.md', 'docs/**/*.md', 'docs/*.html',
             '.claude/context/**/*.md', 'src/**/*.py', 'src/**/*.md',
-            'scripts/**/*.sh', 'tools/**/*.sh', 'sim/**/*.md', 'sim/src/**/*.py']
+            'scripts/**/*.sh', 'tools/**/*.sh']
     seen = set()
     for pat in pats:
         for p in ROOT.glob(pat):
@@ -225,7 +219,6 @@ class Checker:
         self.scripts = {k: console_scripts(v) for k, v in self.pkgs.items()}
         self.missions = missions()
         self.models = model_stems()
-        self.refused = srot_refused()
         self.parser = mongla_parser()
         self.nodes = node_names()
         self._launch: dict[Path, dict] = {}
@@ -340,7 +333,7 @@ class Checker:
             sub = self.parser._subparsers._group_actions[0].choices
             if args[0] not in sub:
                 return [f'`mongla {args[0]}`: no such verb']
-            return self._refused(args[0], context)
+            return []
         import contextlib
         import io
         err = io.StringIO()
@@ -353,13 +346,6 @@ class Checker:
                 msg = err.getvalue().strip().splitlines()
                 return [f'`mongla {" ".join(args)}`: '
                         f'{msg[-1] if msg else "rejected by the CLI"}']
-        return self._refused(args[0], context)
-
-    def _refused(self, verb, context):
-        sim = re.search(r'sim|pixhawk|ardusub|sitl', context, re.I)
-        if verb in self.refused and not sim:
-            return [f'`{verb}` is REFUSED on srot (srot_fc.UNSUPPORTED_VERBS); '
-                    'say it is pixhawk/sim-only or use another verb']
         return []
 
 
@@ -373,8 +359,6 @@ def lint() -> list[Finding]:
             continue
         lines = text.split('\n')
         for n, cmd in commands_in(text):
-            # The simulator runs ArduSub SITL (flight_controller:=pixhawk) by
-            # design, so a verb srot refuses is correct in its files.
             ctx = (str(path.relative_to(ROOT)) + ' '
                    + ' '.join(lines[max(0, n - 3):n + 1]))
             for problem in ck.check(cmd, ctx, text):

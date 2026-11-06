@@ -34,7 +34,7 @@ so a red flare goes dark rather than red at range while blue and green survive.
 A chromatic prior must therefore be measured PER CLASS and PER RANGE, not
 asserted -- which is what this does, against labelled ground truth.
 
-    python3 tools/chromatic_prior_check.py --dataset sim/datasets/<run>
+    python3 tools/chromatic_prior_check.py --dataset mongla_data/<run>
 
 ⛔ WHAT WOULD FALSIFY IT: prop chromaticity inside the labelled box that is not
 separable from the same frame's water. Reported as the gap between the two,

@@ -1,4 +1,4 @@
-# The Jetson↔SROT vision/control split
+# The Pi↔SROT vision/control split
 
 > **Status (corrected 2026-09-03): step 2 of the migration below IS live; the
 > board's half is not.** The firmware spec is
@@ -23,19 +23,19 @@
 
 ## The problem
 
-Our vision control loop runs **20 Hz in Python on the Jetson**, computing thrust from pixel
-error and pushing it down a USB link, while closing over a **10 Hz `ATTITUDE`** stream. The
+Our vision control loop runs **50 Hz in Python on the Pi**, computing thrust from pixel
+error and pushing it down a USB link, while closing over a **50 Hz `ATTITUDE`** stream. The
 SROT board runs a **500 Hz** loop, owns all 8 thrusters, and is told nothing about the target.
 
 Control authority and perception are on opposite sides of a cable, and the loop is closed on
 the wrong side of it. That is why alignment fights inertia on a 20 kg hull: a correction
-derived from a 20 Hz observation, transported over serial, arrives after the hull has moved.
+derived from a 50 Hz observation, transported over serial, arrives after the hull has moved.
 
 Raising gains does not fix this — it is a loop-rate and latency problem, not a tuning problem.
 
 ## The split
 
-**Jetson = perception. Board = control.** Per frame the Jetson emits **one**
+**Pi = perception. Board = control.** Per frame the Pi emits **one**
 `LANDING_TARGET` (msgid 149) describing the currently-selected target as a **bearing**, and
 the board closes every axis at 500 Hz with the IMU in hand.
 
@@ -79,7 +79,7 @@ None of it needs 500 Hz. **Selection is perception; stabilisation is control.**
 
 ### What each side owns
 
-| Stays on the Jetson | Moves to the board |
+| Stays on the Pi | Moves to the board |
 |---|---|
 | detection, tracking, coast, continuity lock | the control law for every axis |
 | the control-side conf gate (`ctrl_conf`) | thrust allocation, heading and depth |
@@ -132,8 +132,9 @@ The host loop is not deleted; it becomes the fallback and the reference implemen
    | `fallback=` | **stays here** — DSL search orchestration |
    | `lock_on=` / `coast_s` / `ctrl_conf` | **stay here** — selection policy |
 
-   They are then removed from `UNSUPPORTED_VERBS`.
-5. **The host loop stays** for the Pixhawk backend, which is unchanged throughout, and as the
+   The verbs already run today on the host loop; this changes where the loop closes, not
+   whether the verbs exist.
+5. **The host loop stays** — as the path a board without the consumer still runs, and as the
    thing we diff against when the board's behaviour surprises us.
 
 ## Open on our side
@@ -175,7 +176,7 @@ USB-C cable to the board.
   this even if you were neutral on it. Your downward path rotates image-Y into surge and carries
   a `surge_sign = -1` mount fact; a wrong sign there is *positive feedback*, i.e. the vehicle
   accelerates away from the target rather than oscillating around it. Keeping the rotation on
-  the Jetson means it stays where `vision_thrust_check` already validates it **disarmed**, and
+  the Pi means it stays where `vision_thrust_check` already validates it **disarmed**, and
   the board's axis bitmask then means exactly one thing on both cameras. The alternative — the
   board learning a per-camera mount — buys nothing and puts a sign error 500 Hz closer to the
   thrusters.
@@ -190,7 +191,7 @@ Your `_authority()` deliberately does not double-decay a Kalman-coasted box — 
 board cannot honour it because **neither fact is on the wire**. Without them the board sees a
 coasted target as a fresh one and applies its own staleness decay on top of yours: coasted
 targets decay roughly 2× too fast and the coast dies inside ~0.4 s, well inside the ladder above
-(0.10 / 0.40 / 0.80 / 1.00 s). The observable symptom is a target that "sticks" on the Jetson
+(0.10 / 0.40 / 0.80 / 1.00 s). The observable symptom is a target that "sticks" on the Pi
 while the board has already given up authority.
 
 Proposal: carry both in `LANDING_TARGET`'s unused `x` / `y` / `z` fields —
@@ -210,11 +211,11 @@ first two rungs as specified. If either side moves a rung, it moves in both repo
 change — that ordering (authority reaches zero *before* loss is declared) is what turns a
 dropout into a glide instead of a lurch.
 
-**Fire gating stays on the Jetson — your code makes the argument.** The stable-frame counter is
+**Fire gating stays on the Pi — your code makes the argument.** The stable-frame counter is
 a three-valued state machine over *frame identity* (`_FRAME_EPS_S`), and a frozen detector still
 produces a fresh-looking value stream; the board cannot see frame identity and so cannot
 reproduce that guard. One honest consequence, so it does not surprise anyone later: `in_band` is
-computed from the control axes today, so once control moves down, the Jetson must recompute
+computed from the control axes today, so once control moves down, the Pi must recompute
 in-band from the bearings it is already sending. That is cheap — it has the deadband in radians
 — and it keeps the frozen-detector guard intact, which is the entire reason fire gating stays.
 

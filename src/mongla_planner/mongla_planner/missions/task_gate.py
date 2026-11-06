@@ -24,7 +24,7 @@ _FWD = '/mongla_detector_forward'
 
 
 def run(mongla, log=None):
-    mongla.mission_reset()   # clear heading lock + abort from any previous run
+    mongla.mission_reset()   # clear the abort flag and any demand from a previous run
     mongla.resume_detector('forward')
     mongla.set_model('gate_sharks', node=_FWD)
     mongla.set_classes('gate,shark,shaw_fish', node=_FWD)

@@ -58,10 +58,7 @@ class _StubNode:
     _executor_alive = amn.AUVManagerNode._executor_alive
 
     def __init__(self):
-        self._mode_name = 'test'
         self._profile = {'conn': '/dev/null-mongla-test', 'baud': 115200}
-        self._is_srot = True
-        self._fc_kind = 'srot'
         self._log = _Log()
 
     def get_logger(self):
