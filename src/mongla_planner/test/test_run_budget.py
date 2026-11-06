@@ -117,12 +117,6 @@ def test_the_plan_spends_the_budget_in_order():
     assert got[2] == ('torpedo', 'fallback', 100)   # 105 s left, 180 needed
 
 
-def test_the_plan_projects_what_the_run_would_score():
-    b, _ = _budget(total=300.0, reserve=45.0)
-    b.start()
-    assert b.projected_points([GATE, BIN, TORPEDO]) == 400
-
-
 def test_a_long_first_task_starves_the_rest_which_is_the_whole_warning():
     b, _ = _budget(total=250.0, reserve=45.0)       # 205 s
     b.start()

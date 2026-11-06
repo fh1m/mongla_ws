@@ -48,10 +48,10 @@ import sys
 # fail `--private` on every run afterwards.
 ROOT = pathlib.Path(os.environ.get('MONGLA_SWEEP_ROOT')
                     or pathlib.Path(__file__).resolve().parents[1])
-# Every tree that could hold a caller: the packages, the tools, the simulator's
-# own workspace, and the mission scripts.
+# Every tree that could hold a caller: the packages, the tools and the mission
+# scripts. A TEST is not a caller (see `_is_test`).
 SRC = ROOT / 'src'
-SEARCH = ('src', 'tools', 'sim', 'missions', 'scripts')
+SEARCH = ('src', 'tools', 'missions', 'scripts')
 
 # Called by the language, a framework, or the ROS graph -- never by name here.
 _EXEMPT_EXACT = {'main', 'setup', 'teardown', 'generate_launch_description'}
@@ -76,6 +76,10 @@ _EXEMPT_PUBLIC_METHODS_OF = {'MonglaMission'}
 # A ROS node's own plumbing: a timer or subscription callback is passed as a
 # reference, which the AST scan DOES see -- so these are not exempted. Only
 # names invoked purely by a framework's own convention are.
+
+
+def _is_test(rel: pathlib.Path) -> bool:
+    return rel.parts[0] == 'test' or 'test' in rel.parts[1:-1]
 
 
 def _py_files():
@@ -111,6 +115,13 @@ def _defs_and_refs():
         # launch file. Those are consumers, not capabilities.
         shipped = (rel.parts[0] == 'src' and '/test' not in str(rel)
                    and 'launch' not in rel.parts and rel.name != 'setup.py')
+        # ⛔ A TEST IS NOT A CALLER. Counting test references let a function
+        # that only its own test ever ran read as live: 24 of them on
+        # 2026-11-06, among them `pct_to_mc`, "the old percent API", kept alive
+        # by the test that pinned its rounding. Nothing on the vehicle reaches
+        # a name only a test spells, which is exactly the defect looked for.
+        if _is_test(rel):
+            continue
         api, methods = set(), set()
         for cls in (n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)):
             methods |= {f for f in cls.body
@@ -226,7 +237,7 @@ def _unreachable_modules() -> set:
             rel = str(p.relative_to(SRC))
             if not mod.is_capability(p, rel, entries):
                 continue
-            if not mod.importers(p.stem, p):
+            if not mod.importers(p):
                 out.add(p.stem)
         return out
     except Exception as exc:                                     # noqa: BLE001

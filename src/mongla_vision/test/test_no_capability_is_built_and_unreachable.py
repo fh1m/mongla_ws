@@ -200,28 +200,26 @@ def _modules():
         yield rel, p, txt
 
 
-def _imported_by(name: str) -> list:
-    """Files that actually IMPORT this module -- not ones that MENTION it.
+def _load_orphan_sweep():
+    """The ONE answer to "what imports this module" lives in
+    `tools/orphan_sweep.py`. Two copies of it is how a stem match hid
+    `anchor/draw.py` here while the repo-wide guard resolved dotted names."""
+    import importlib.util
+    path = pathlib.Path(__file__).resolve().parents[3] / 'tools' / 'orphan_sweep.py'
+    spec = importlib.util.spec_from_file_location('_orphan_sweep', path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
-    ⚠ A plain substring grep is useless here: "approach" and "health" appear
-    in prose all over this codebase and both read as wired when they were
-    not. Only a real import statement counts.
-    """
-    stem = pathlib.Path(name).stem
-    hits = []
-    for p in _SRC.rglob('*.py'):
-        rel = str(p.relative_to(_SRC))
-        if '/test' in rel or p.name == pathlib.Path(name).name:
-            continue
-        try:
-            txt = p.read_text()
-        except (UnicodeDecodeError, OSError):
-            continue
-        if re.search(rf'^\s*(from\s+\S*\b{stem}\b\s+import|'
-                     rf'from\s+\S+\s+import\s+[^\n]*\b{stem}\b|'
-                     rf'import\s+\S*\b{stem}\b)', txt, re.M):
-            hits.append(rel)
-    return hits
+
+_SWEEP = _load_orphan_sweep()
+
+
+def _imported_by(rel: str) -> list:
+    """Files under src/ that really IMPORT this module (relative to src/).
+    Tools do not count: this guard is about what runs on the vehicle."""
+    return [str(pathlib.Path(h).relative_to('src'))
+            for h in _SWEEP.importers(_SRC / rel, tools=False)]
 
 
 @pytest.mark.parametrize('rel,consumer', sorted(WIRED.items()))

@@ -10,7 +10,7 @@
 for, a neural accelerator that does nothing but see, and a rule that no number appears anywhere
 in this repository without the measurement that produced it.**
 
-[![tests](https://img.shields.io/badge/tests-3%20999%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![in water](https://img.shields.io/badge/in%20water-never-critical)](#what-is-true-today) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
+[![tests](https://img.shields.io/badge/tests-3%20991%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![in water](https://img.shields.io/badge/in%20water-never-critical)](#what-is-true-today) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
 
 **[The Shift](https://fh1m.github.io/mongla_ws/the-shift.html)** · **[Capability map](https://fh1m.github.io/mongla_ws/capability-map.html)** · **[The site](https://fh1m.github.io/mongla_ws/)** · [Run it](#run-it) · [Fundamentals](#the-fundamentals) · [Docs](#every-document-in-this-repository) · [Story](#three-acts)
 
@@ -108,7 +108,7 @@ git clone https://github.com/fh1m/mongla_ws && cd mongla_ws
 ./build_mongla.sh                      # colcon build, six packages
 source install/setup.bash
 
-# the tests (6 suites, 3 999 of them, ~5 minutes)
+# the tests (6 suites, 3 991 of them, ~5 minutes)
 python3 -m pytest src/mongla_control/test src/mongla_vision/test src/mongla_manager/test \
                   src/mongla_planner/test src/mongla_localization/test -q
 ```
@@ -721,14 +721,14 @@ is how a team finds out at the venue.
 ### The tests are the argument
 
 ```
-mongla_control       1 157 passed        the verbs, the wire, the refusals
-mongla_vision        1 498 passed        detection, the lock ladder, optics, flow
+mongla_control       1 155 passed        the verbs, the wire, the refusals
+mongla_vision        1 494 passed        detection, the lock ladder, optics, flow
 mongla_manager         497 passed        the node, bring-up gates, the docs contract
-mongla_planner         413 passed        the CLI, the DSL, the missions
+mongla_planner         411 passed        the CLI, the DSL, the missions
 mongla_localization    403 passed        the filter, retrodiction, course priors
 test/ (repo-wide)       31 passed        nothing unreachable, the retired stack stays retired
                      ─────────────
-                     3 999 passed, 0 failed
+                     3 991 passed, 0 failed
 ```
 
 > *"Computing science has very convincingly shown that simplicity is a necessary precondition for
@@ -747,7 +747,7 @@ Some of those tests are unusual enough to be worth naming:
 ```mermaid
 flowchart LR
     DEV["a change"] --> HOOK["editor hooks<br/>py_compile + the matching test file<br/>+ the doc guards on a doc edit"]
-    HOOK --> UNIT["6 suites · 3 999 tests"]
+    HOOK --> UNIT["6 suites · 3 991 tests"]
     UNIT --> GUARD["the drift guards"]
     GUARD --> G1["test_doc_drift<br/>docs vs code"]
     GUARD --> G2["test_srot_protocol_drift<br/>our wire copy vs THEIR headers"]

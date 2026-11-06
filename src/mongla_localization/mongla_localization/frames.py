@@ -105,11 +105,6 @@ def ned_z_from_altitude(altitude_m: float) -> float:
     return -float(altitude_m)
 
 
-def altitude_from_ned_z(z_ned: float) -> float:
-    """+0.6 NED z -> -0.6 m, the MonglaState convention."""
-    return -float(z_ned)
-
-
 # ── the tree ─────────────────────────────────────────────────────────────────
 #
 #   map (ENU) ── pool (NED)                          static

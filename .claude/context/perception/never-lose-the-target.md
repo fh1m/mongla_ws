@@ -577,7 +577,8 @@ homography fit:
 
 ⭐ The ladder uses **`corners` only** — to build the anchor rung's bounding
 box. Grepping the whole tree for consumers of `.theta` and `.scale` finds
-exactly one: `anchor/draw.py:135`, a debug text label reading `scale x1.03`.
+none (the one debug overlay that printed `scale`, `anchor/draw.py`, was removed
+on 2026-11-06 because nothing on the vehicle ever ran it).
 
 **Two capabilities are being computed and discarded on every anchor
 evaluation:**

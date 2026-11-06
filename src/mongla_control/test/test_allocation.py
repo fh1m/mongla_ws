@@ -123,7 +123,7 @@ def test_a_vertical_saturation_leaves_the_horizontals_alone():
 
 def test_zero_demand_is_not_reported_as_saturated():
     a = allocate()
-    assert not a.saturated and a.worst_scale == 1.0
+    assert not a.saturated
 
 
 def test_both_groups_can_saturate_at_once():

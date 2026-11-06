@@ -92,18 +92,6 @@ def centiamps_to_amps(centiamps) -> float | None:
     return int(centiamps) / 100.0
 
 
-def imu_temp_c(raw) -> float | None:
-    """SCALED_IMU2.temperature (centi-degC) -> degC.
-
-    `0` is MAVLink's "not provided" sentinel here, NOT a reading of 0 C -- and the board
-    sends exactly that when the barometer is unhealthy. Treating it as a temperature puts a
-    freezing hull on the screen of a vehicle sitting in a warm room.
-    """
-    if raw is None or int(raw) == 0:
-        return None
-    return int(raw) / 100.0
-
-
 def rpm_row(values) -> str:
     """Per-thruster RPM as a fixed-width row, or `--` when no ESC telemetry arrived.
 

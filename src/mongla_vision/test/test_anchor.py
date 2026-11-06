@@ -131,7 +131,6 @@ def test_snap_reports_the_keypoint_count_as_a_health_signal():
     it now, not when the lock silently never engages."""
     a = Anchor(_Backend(n=137))
     assert a.snap(np.zeros((240, 320), np.uint8)) == 137
-    assert a.reference_keypoints == 137
 
 
 def test_an_identical_view_locates_with_many_inliers():

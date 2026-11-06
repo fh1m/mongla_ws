@@ -345,7 +345,13 @@ not port it back. A capability that needs something from it is rebuilt against t
   modules found on 2026-09-24, five of them written that day**. Every one looked finished:
   correct code, passing tests, and nothing on the vehicle. Decide at write time — that is the
   only moment anyone knows whether a consumer exists.
-  `test_no_capability_is_built_and_unreachable.py` enforces it.
+  `test_no_capability_is_built_and_unreachable.py` enforces it for modules,
+  `test_no_function_is_built_and_uncalled.py` for functions. **A test is not a
+  caller**: until 2026-11-06 both counted one, a stem match let `anchor/draw.py`
+  pass because a different `draw.py` was imported, and 34 functions only tests
+  ever ran read as live. Imports resolve by dotted name now, in one place
+  (`tools/orphan_sweep.py`); a deliberate wait goes in `DEFERRED_FUNCTIONS`
+  with its consumer named.
 - ⛔ **Docs change in the same commit as the code they describe — not after.** A
   removal is not finished until every file that names the removed thing says what
   is true now: docs, skills, agents, launch comments, test docstrings, the site.

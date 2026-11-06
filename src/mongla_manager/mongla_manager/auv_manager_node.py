@@ -696,6 +696,18 @@ class AUVManagerNode(Node):
         yr_ok, yr_reason = self.fc.check_yaw_reference()
         (self.get_logger().info if yr_ok else self.get_logger().warning)(
             f'[SROT ] {yr_reason}')
+        # A yaw demand the board ACCEPTS and the mixer turns into no thrust: the
+        # dead band opens if PILOT_YAW_RATE falls below ~80 deg/s, which is what a
+        # params reset does. Written 2026-09-23 and called by nothing until here.
+        ya_ok, ya_reason = self.fc.check_yaw_authority()
+        (self.get_logger().info if ya_ok else self.get_logger().warning)(
+            f'[SROT ] {ya_reason}')
+        # Boot announcements that change behaviour (a defaults reset halves the
+        # pilot gain and disables the leak failsafe). The board sends them ONCE,
+        # in a burst at boot, so this sees them only if the manager was listening
+        # then -- an empty answer is "none seen", never "none sent".
+        for sev, txt in self.fc.boot_warnings():
+            self.get_logger().error(f'[SROT ] board said at boot (sev {sev}): {txt}')
 
     def _setup_yaw_source(self) -> None:
         """Heading comes from the board's own fused attitude (yaw_source.py)."""
@@ -1393,7 +1405,8 @@ class AUVManagerNode(Node):
         # CONFIDENCE in class_id/score, which is a different quantity. Deriving
         # one from the other would publish an invented number in a health line --
         # the exact failure this board exists to catch. It needs a real accessor
-        # on VisionState first. Tracked as B01 in .claude/context/BUGS.md.
+        # on VisionState first. Tracked in DEFERRED_FUNCTIONS
+        # (mongla_vision/test/test_no_function_is_built_and_uncalled.py).
 
     # ================================================================== #
     #  Vision state pool -- lazily built per camera, preflighted once     #

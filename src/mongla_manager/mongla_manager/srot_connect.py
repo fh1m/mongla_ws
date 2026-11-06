@@ -191,10 +191,9 @@ def collect(conn, seconds: float) -> Snapshot:
             # ESP-NOW). Same single-slot trap as NAMED_VALUE_FLOAT -- key by id.
             bid = int(getattr(msg, 'id', 0))
             volts = list(getattr(msg, 'voltages', []) or [])
-            raw = volts[0] if volts else 0xFFFF
-            v = None if raw in (0, 0xFFFF) else raw / 1000.0
-            cur = getattr(msg, 'current_battery', -1)
-            snap.batteries[bid] = (v, None if cur == -1 else cur / 100.0)
+            snap.batteries[bid] = (
+                sfmt.mv_to_volts(volts[0] if volts else None),
+                sfmt.centiamps_to_amps(getattr(msg, 'current_battery', None)))
         elif mtype == 'SCALED_PRESSURE2':
             snap.press_samples.append(float(msg.press_abs))
         elif mtype == 'STATUSTEXT':

@@ -55,6 +55,18 @@ def test_pumped_reads_live_in_the_preflight_helper():
         assert f'{name}(' in src, f'{name}() should be called from _srot_preflight_reads()'
 
 
+# Warn-only checks that were written and never called (found 2026-11-06 by
+# dead_function_sweep once test callers stopped counting). Pinned so the call
+# cannot quietly leave again.
+PREFLIGHT_WARNINGS = ('check_yaw_authority', 'boot_warnings')
+
+
+def test_the_warn_only_board_checks_are_called_at_preflight():
+    src = _src(amn.AUVManagerNode._srot_preflight_reads)
+    for name in PREFLIGHT_WARNINGS:
+        assert f'{name}(' in src, f'{name}() is written but nothing calls it'
+
+
 def test_preflight_runs_after_the_reader_thread_starts():
     """Ordering is the whole point: before .start() the helper is just as blind."""
     src = _src(amn.AUVManagerNode._setup_reader_and_warmup)

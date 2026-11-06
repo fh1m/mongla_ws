@@ -181,7 +181,6 @@ def test_movement_phase_codes_match_the_firmware_enum():
     for index, fw_name in enumerate(names):
         assert expected.get(fw_name) == index, (
             f'firmware {fw_name} == {index}, srot_protocol has {expected.get(fw_name)}')
-    assert sp.mv_state_name(6) == 'hold' and sp.mv_state_name(7) == 'done'
 
 
 def test_payload_and_link_constants_match():

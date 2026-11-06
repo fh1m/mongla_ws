@@ -83,12 +83,6 @@ def is_measured(tool: str) -> bool:
     return bool(e) and not bool(e.get('unmeasured', False))
 
 
-def camera_for(tool: str):
-    """Which camera aims this tool, or None."""
-    e = _load().get(str(tool or '').strip())
-    return (e or {}).get('camera') or None
-
-
 def known_tools():
     return sorted(_load())
 

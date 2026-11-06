@@ -333,18 +333,8 @@ def test_where_reflects_latest_frame_not_seen_window(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-#  Pure cores: _eval_detected / _eval_where (no ROS)                          #
+#  Pure core: _eval_where (no ROS)                          #
 # --------------------------------------------------------------------------- #
-def test_eval_detected_present_absent_caseinsensitive():
-    import mongla_planner.mongla_dsl as dd
-    recs = [_rec('gate'), _rec('flare')]
-    assert dd._eval_detected(recs, 'gate') is True
-    assert dd._eval_detected(recs, 'GATE') is True       # case-insensitive
-    assert dd._eval_detected(recs, ' Flare ') is True    # trimmed
-    assert dd._eval_detected(recs, 'hole') is False
-    assert dd._eval_detected([], 'gate') is False
-
-
 def test_eval_where_left_center_right():
     import mongla_planner.mongla_dsl as dd
     W = 640.0

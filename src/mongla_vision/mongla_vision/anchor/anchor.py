@@ -249,10 +249,6 @@ class Anchor:
     def has_reference(self) -> bool:
         return self._ref_desc is not None and len(self._ref_desc) > 0
 
-    @property
-    def reference_keypoints(self) -> int:
-        return 0 if self._ref_kpts is None else int(len(self._ref_kpts))
-
     # -- relocate ----------------------------------------------------------- #
     def locate(self, gray: np.ndarray) -> AnchorPose:
         """Where is the reference in this frame?"""

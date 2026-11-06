@@ -34,14 +34,6 @@ def test_unit_to_mc_z_clamps():
     assert sp.unit_to_mc_z(-9.0) == 0
 
 
-def test_pct_helpers_match_unit_helpers():
-    # The percent API (-100..100) and the unit API (-1..1) must agree at scale.
-    assert sp.pct_to_mc(50.0) == sp.unit_to_mc(0.5) == 500
-    assert sp.pct_to_mc_z(100.0) == sp.unit_to_mc_z(1.0) == 1000
-    assert sp.pct_to_mc_z(0.0) == 500
-    assert sp.pct_to_mc(-100.0) == -1000
-
-
 # --------------------------------------------------------------------------- #
 #  Mode name/int round-trips                                                    #
 # --------------------------------------------------------------------------- #
@@ -95,11 +87,6 @@ def test_valid_move_types_is_zero_to_nine():
 def test_cmd_ids():
     assert sp.CMD_SROT_MOVE == 31000
     assert sp.CMD_USER_1 == 31010     # yaw spin (no verb sends it)
-
-
-def test_mv_state_names():
-    assert sp.mv_state_name(sp.MV_CRUISE) == 'cruise'
-    assert sp.mv_state_name(sp.MV_DONE) == 'done'
 
 
 # --------------------------------------------------------------------------- #
