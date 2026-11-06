@@ -6,9 +6,13 @@ separation between gate-present and gate-absent footage, against +84.2 at 0.30
 for `gate_sharks` (measured-bars section 59). The weights are at
 ~/models/retired/.
 
-Retargeted to `gate` rather than guarded like `robosub_gate_rescue`, because
+Retargeted to `gate` rather than retired with it, because
 this is a scratch file for exercising the verbs and the PROP it points at is
 incidental -- the alignment behaviour it tests is the same.
+
+It called `vision.anchor_snap / anchor_align / anchor_clear`, which came from
+an experiment (commit 304c94b2) that never merged; those lines were removed
+because the mission died on them with an AttributeError.
 """
 _FWD = '/mongla_detector_forward'
 
@@ -16,7 +20,8 @@ SEARCH_TIME = 5
 def run(mongla, log=None):
     mongla.mission_reset()
     # mongla.countdown(5)
-    mongla.lock_heading(0.0, timeout=600)   # BNO085 heading lock for full run
+    if mongla.can('lock_heading'):   # refused on srot: the board holds heading
+        mongla.lock_heading(0.0, timeout=600)
     mongla.set_mode('ALT_HOLD', timeout=10)
     mongla.arm()
     mongla.set_depth(-0.3, timeout=10)
@@ -31,11 +36,6 @@ def run(mongla, log=None):
         'gate', camera='forward', lat=0, lat_gain=40,hold=2,
         err=0, gain=20, duration=15)
     
-    mongla.vision.anchor_snap(target='gate' , conf=0.6, err=10)
-    mongla.vision.anchor_align(err=10, theta=0.05, duration=10,
-                           hold=True, gain=30)
-    mongla.vision.anchor_clear()
-
     
     mongla.vision.move(
         'gate', camera='forward', hold = 2, 

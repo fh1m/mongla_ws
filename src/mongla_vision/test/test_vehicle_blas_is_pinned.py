@@ -5,6 +5,7 @@ XFeat matcher's 1024x1024x64 matmul took 58.6 ms there against 6.4 ms on
 OpenBLAS. OpenBLAS's own pool defaults to every core in every process, which
 under the matcher's deliberate 2-thread split is 8 threads on 4 cores.
 """
+import re
 import sys
 from pathlib import Path
 
@@ -19,7 +20,11 @@ LAUNCHES = (
 
 
 def _first_action_index(src: str) -> int:
-    return src.index('return LaunchDescription(args + [')
+    # bringup puts a LogInfo (`file_note`, the settings file it read) between
+    # the arguments and the actions; a log line starts no library.
+    m = re.search(r'return LaunchDescription\(args \+ (?:file_note \+ )?\[', src)
+    assert m, 'no `return LaunchDescription(args + [...` to anchor on'
+    return m.start()
 
 
 def test_every_vehicle_launch_pins_one_blas_thread():

@@ -42,7 +42,7 @@ def test_cuda_requested_but_missing_raises(fake_torch):
         select_device('cuda:0')
     msg = str(exc.value)
     assert 'CUDA' in msg or 'cuda' in msg.lower()
-    assert "device='cpu'" in msg, 'must point user at the cpu workaround'
+    assert "device:=cpu" in msg, 'must point user at the cpu workaround'
 
 
 def test_cpu_explicit(fake_torch):

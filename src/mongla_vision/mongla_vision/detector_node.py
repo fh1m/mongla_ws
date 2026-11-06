@@ -10,12 +10,12 @@ Topics:
 Single-model launch (unchanged from v1):
 -----------------------------------------
   ros2 run mongla_vision detector_node --ros-args -p camera:=forward \\
-      -p model_path:=gate_flare_medium_100ep -p classes:=gate -p conf:=0.45
+      -p model_path:=gate_sharks -p classes:=gate -p conf:=0.45
 
   Live class switch (no restart):
-      ros2 param set /mongla_detector classes flare
-      ros2 param set /mongla_detector classes "gate,flare"
-      ros2 param set /mongla_detector classes ""   # all classes
+      ros2 param set /mongla_detector_forward classes flare
+      ros2 param set /mongla_detector_forward classes "gate,flare"
+      ros2 param set /mongla_detector_forward classes ""   # all classes
 
 Multi-model launch (registry mode):
 -------------------------------------
@@ -24,16 +24,16 @@ Multi-model launch (registry mode):
   ``active_model``:
 
   ros2 run mongla_vision detector_node --ros-args -p camera:=forward \\
-      -p models:="gate=gate_nano_100ep,flare=flare_medium_100ep,combined=gate_flare_medium_100ep" \\
+      -p models:="gate=gate_sharks,sauvc=sauvc_sim" \\
       -p active_model:=gate -p classes:=gate -p conf:=0.45
 
   Live model + class switch (no restart):
-      ros2 param set /mongla_detector active_model flare
-      ros2 param set /mongla_detector classes flare
+      ros2 param set /mongla_detector_forward active_model sauvc
+      ros2 param set /mongla_detector_forward classes orange_flare
 
   Via launch file (bringup.launch.py):
       ros2 launch mongla_manager bringup.launch.py vision:=true \\
-          models:="gate=gate_nano_100ep,combined=gate_flare_medium_100ep" \\
+          vision_stack:=generic models:="gate=gate_sharks,sauvc=sauvc_sim" \\
           active_model:=gate classes:=gate
 
   Via mission DSL:
@@ -131,10 +131,10 @@ def _split_active(spec: str):
 
 
 def _parse_models_param(s: str) -> Dict[str, str]:
-    """Parse 'gate=gate_nano_100ep,flare=flare_medium_100ep' → {name: stem}.
+    """Parse 'gate=gate_sharks,sauvc=sauvc_sim' → {name: stem}.
 
     Bare entries without '=' use the stem as both name and path:
-        'gate_nano_100ep' → {'gate_nano_100ep': 'gate_nano_100ep'}
+        'gate_sharks' → {'gate_sharks': 'gate_sharks'}
     """
     result: Dict[str, str] = {}
     for part in s.split(','):

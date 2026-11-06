@@ -39,10 +39,10 @@ offline analysis** instead.
 
 ```bash
 # Start tracker_node alongside the detector (default true):
-ros2 launch mongla_vision cameras_.launch.py with_tracking:=true
+ros2 launch mongla_vision vision.launch.py tracking:=true
 
 # depth_estimation_node can optionally read /tracks instead of /detections:
-ros2 launch mongla_vision cameras_.launch.py depth:=true   # use_tracks=with_tracking
+ros2 launch mongla_vision vision.launch.py depth:=true   # use_tracks=with_tracking
 ```
 
 See `.claude/context/perception/vision-architecture.md` (topic contract) for the full

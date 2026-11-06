@@ -92,7 +92,8 @@ def run(mongla, log=None):
         mongla.set_depth(GATE_SEARCH_DEPTH_M, timeout=30)
         if GATE_HEADING_DEG is not None:
             mongla.turn(GATE_HEADING_DEG)
-        mongla.lock_heading(0.0, timeout=600)
+        if mongla.can('lock_heading'):   # refused on srot: the board holds heading
+            mongla.lock_heading(0.0, timeout=600)
 
         # ══════════════════════════════════════════════════════════════════════
         # PHASE 1: GATE

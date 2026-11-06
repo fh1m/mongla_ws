@@ -15,8 +15,8 @@ Convention
   implementation modules and skipped.
 * A file is a mission iff it exposes a top-level callable named `run`
   with signature `run(mongla, log)`.
-* Mission name = file stem. So `missions/follow_gate.py` becomes
-  `ros2 run mongla_planner mission follow_gate`.
+* Mission name = file stem. So `missions/<my_mission>.py` becomes
+  `ros2 run mongla_planner mission <my_mission>`.
 
 Hot-reload (no colcon build needed)
 ------------------------------------

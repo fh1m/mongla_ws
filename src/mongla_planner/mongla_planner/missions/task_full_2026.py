@@ -1,9 +1,7 @@
 """Full RoboSub 2026 competition run: Gate → Slalom → Bin → Torpedo → Return+Roll.
 
-Detected-paradigm combinator (flat, non-FSM). For the YASMIN FSM version:
-    ros2 run mongla_planner mission fsm_full_2026
+Detected-paradigm combinator: the five task chunks run in order.
 
-Launch (detected-paradigm):
     ros2 run mongla_planner mission task_full_2026
 
 Chunks are loaded at run() time (not module import), so pool-day edits to
@@ -46,7 +44,8 @@ def run(mongla, log=None):
         mongla.pause(10.0)
         mongla.arm()
         mongla.set_depth(GATE_SEARCH_DEPTH_M, timeout=30)
-        mongla.lock_heading(0.0, timeout=600)   # BNO085 heading lock for full run
+        if mongla.can('lock_heading'):   # refused on srot: the board holds heading
+            mongla.lock_heading(0.0, timeout=600)
 
         for name, chunk in [
             ('gate',    gate),

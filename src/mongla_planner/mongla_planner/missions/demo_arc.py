@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""arc_demo -- side-by-side comparison of sharp vs curved turns.
+"""demo_arc -- side-by-side comparison of sharp vs curved turns.
 
 Phase A (sharp): forward → pause → yaw → pause → forward
   Each verb settles cleanly before the next one runs. Good for
@@ -14,7 +14,7 @@ Use this to verify:
   - arc(target_yaw) sweeps onto an absolute heading (auto-computed direction).
   - pause() actually stops forward momentum before a turn.
 
-Run: ros2 run mongla_planner mission arc_demo
+Run: ros2 run mongla_planner mission demo_arc
 """
 
 LEG_DURATION_S = 4.0
@@ -26,6 +26,7 @@ ARC_TARGETS    = (90.0, 0.0)   # absolute headings to sweep onto in Phase B
 
 
 def run(mongla, log):
+    mongla.require('arc', why='this demo exists to compare arc with a sharp turn')
     mongla.mission_reset()
     # arm + depth: standard startup sequence.
     mongla.arm()

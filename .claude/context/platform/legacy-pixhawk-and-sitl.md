@@ -92,3 +92,4 @@ They are in git history at `ae61b3b^` if the numbers in them are ever needed:
 |---|---|---|
 | `perception/camera-calibration.md` | superseded almost line for line | [`perception/camera-and-calibration.md`](../perception/camera-and-calibration.md), which carries the measured in-water figures |
 | `missions/mission-design.md` | the 2025 (Pixhawk + DVL) mission architecture, including calibrated values for a hull we no longer fly | [`missions/mission-cookbook.md`](../missions/mission-cookbook.md) — the FSM layer was retired 2026-09-22 |
+| `mission-cookbook.md` §7 *DVL distance moves* (7.1–7.5, 7.7), §6.2 *square with heading lock*, §6.11 *Dubomini* | recipes for a DVL and a host heading lock, neither of which exists on the vehicle; every one called a verb srot refuses | the timed moves and `calc_distance` in the cookbook; retired 2026-11-06, in git history before that date |

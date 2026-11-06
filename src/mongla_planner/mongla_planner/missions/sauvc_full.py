@@ -68,7 +68,7 @@ def run(mongla, log=None):
         mongla.pause(SAUVC_TETHER_PAUSE_S)
         mongla.arm()
         mongla.set_depth(SAUVC_SEARCH_DEPTH_M, timeout=30)
-        if mongla.backend != 'srot':            # srot holds heading on the board
+        if mongla.can('lock_heading'):   # refused on srot: the board holds heading
             mongla.lock_heading(0.0, timeout=SAUVC_RUN_BUDGET_S)
 
         _navigation(mongla, log)

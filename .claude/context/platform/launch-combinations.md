@@ -1,273 +1,246 @@
-# Launch Combinations — the "so we never fail" master reference
+# The operator runbook — every command, verified
 
-> **Backend note.** The vehicle is the SROT board (firmware Hengla) + a Raspberry Pi 5 with a
-> Hailo-8. `lock_heading`, `move_*_dist`, `arc` and `style_yaw` are **refused** there, `ALT_HOLD`
-> is not one of its modes, and the depth-setpoint vision axes are refused. Where this page shows
-> an older idiom, the current contract is [`command-reference.md`](../missions/command-reference.md) and the
-> legacy path is [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md).
+Every command on this page is checked by `tools/command_lint.py`: the launch
+file exists, every `name:=value` is a declared argument (`ros2 launch` ignores
+an undeclared one **silently**), choices are respected, every model has its
+`<stem>.yaml` sidecar, every verb flag is a real field, every mission exists.
+`test_operator_commands_are_real.py` fails the build if one drifts.
 
-> Every launch / run command for the **tested competition path**, with all args and
-> combinations. Copy-paste ready. Scope (per pool-day decision): **controls (all), object-detection
-> vision, DSL, CLI, mission_web viewer.** The experimental estimators (`depth:=`, `distance:=`,
-> optical-flow) are **off by default** and listed once at the end — do not enable them on a scored run
-> unless you've tested them.
+The complete generated list of arguments, defaults, verbs, missions and node
+parameters is [`reference/commands.md`](../reference/commands.md). This page is
+the **order you run them in**.
 
-Source every shell first:
-```bash
-cd ~/Ros_workspaces/mongla_ws && source install/setup.bash
-```
+The vehicle: SROT board (Hengla) over one USB-C cable, Raspberry Pi 5 with a
+Hailo-8, forward and downward cameras.
 
 ---
 
-## 0. Preflight (always, start of session)
+## 0. Every terminal
 
 ```bash
-ros2 run mongla_manager bringup_check          # 12-section per-subsystem preflight (A–L)
-ros2 run mongla_manager bringup_check --strict # any WARN -> non-zero (hard pre-mission gate)
-ros2 run mongla_manager bringup_check --skip-mavlink   # skip the UDP 14550 probe (bench)
-ros2 run mongla_vision  vision_check --camera forward --require-class gate  # topic health
+cd ~/Ros_workspaces/mongla_ws
+source install/setup.bash
+source scripts/pool_session.sh gate_practice_am   # same label in every terminal
 ```
+
+`pool_session.sh` puts the bag, the scorecard and every node's log for this run
+in one folder, `~/mongla_runs/<label>`. Source it — executing it does nothing.
 
 ---
 
-## 1. Control node (`mongla_manager`) — the MAVLink brain
+## 1. Before anything arms
 
-The single node that owns the autopilot link + `/mongla/move` action. One of these per session.
-
-### 1a. Bare `start` (node defaults: `mode=auto`, `yaw_source=mavlink_ahrs`)
 ```bash
-ros2 run mongla_manager start                              # auto-resolve link, bench/sim
-ros2 run mongla_manager start --ros-args -p mode:=sim      # Gazebo / SITL
-ros2 run mongla_manager start --ros-args -p mode:=pool     # Pi on AUV, BlueOS pushes 14550
-ros2 run mongla_manager start --ros-args -p mode:=desk     # Pixhawk USB via BlueOS
-ros2 run mongla_manager start --ros-args -p mode:=laptop   # tether laptop on the switch
-ros2 run mongla_manager start --ros-args -p debug:=true    # [MAV ...] frame trace
+ros2 run mongla_manager connect --watch          # everything the board sends; Ctrl-C to stop
+ros2 run mongla_manager bringup_check            # grades each subsystem; exits non-zero on a FAIL
+ros2 run mongla_manager bringup_check --strict   # a WARN is also a failure: the pre-mission gate
 ```
 
-`yaw_source` (heading authority): `mavlink_ahrs` (bench/sim) · `bno085` (pool, no DVL) ·
-`dvl` (pool + DVL heading+position) · `bno085_dvl` (BNO heading + DVL position):
-```bash
-ros2 run mongla_manager start --ros-args -p mode:=pool -p yaw_source:=bno085
-```
+`connect` **reports** and always exits 0. `bringup_check` **grades**. Look with
+the first, decide with the second. Read the firmware revision, `FRAME_REVERSE`
+and barometer health off them before arming — an unhealthy barometer refuses
+every move verb (CLAUDE.md §2).
 
-### 1b. `bringup.launch.py` — control + optional vision + Foxglove (the operator launch)
-Args: `mode yaw_source dvl_host dvl_port dvl_auto_connect vision camera model models active_model
-classes conf imgsz max_det viewer foxglove foxglove_port`
-```bash
-# control only, BNO heading (pool default this launch: mode=pool, yaw_source=dvl)
-ros2 launch mongla_manager bringup.launch.py mode:=pool yaw_source:=bno085
-# control + a single-model forward detector, no HUD window (headless)
-ros2 launch mongla_manager bringup.launch.py mode:=pool yaw_source:=bno085 \
-    vision:=true camera:=forward model:=gate_sharks classes:=gate,shark,shaw_fish viewer:=false
-# control + vision + Foxglove bridge (ws://<ip>:8765)
-ros2 launch mongla_manager bringup.launch.py mode:=pool yaw_source:=bno085 vision:=true foxglove:=true
-```
+Propellers clear and a human on the kill switch before section 3.
 
 ---
 
-## 2. Object-detection vision — `vision.launch.py` (ONE camera)
+## 2. Bring the vehicle up
 
-Args: `camera device device_path width height fps video_file topic loop model models active_model
-classes conf iou device_cls imgsz max_det paused debug_image_hz viewer tracking tracker_type
-track_buffer min_hits max_predict depth depth_model distance pool_depth_m camera_focal_px hud_distance`
+**One launch owns the board:** `bringup.launch.py`. Bring it up bare, then add
+one capability at a time.
 
-**Identity is the model STEM** (the `.pt`/`.engine` basename) — `model:=`, `models:=`, ClassRef,
-`set_model('<stem>')` all match it.
+| what you want | command |
+|---|---|
+| control only (board + `/mongla/move`) | `ros2 launch mongla_manager bringup.launch.py` |
+| + both cameras and detectors | `ros2 launch mongla_manager bringup.launch.py vision:=true` |
+| + a different forward model | `ros2 launch mongla_manager bringup.launch.py vision:=true fwd_model:=sauvc_sim` |
+| + the downward camera's velocity | `ros2 launch mongla_manager bringup.launch.py vision:=true flow:=true pool_depth_m:=1.6` |
+| + the lock ladder on one class | `ros2 launch mongla_manager bringup.launch.py vision:=true lock_class:=gate` |
+| no localization | `ros2 launch mongla_manager bringup.launch.py localization:=false` |
+| + Foxglove on ws://\<pi\>:8765 | `ros2 launch mongla_manager bringup.launch.py vision:=true foxglove:=true` |
+| a named serial device | `ros2 launch mongla_manager bringup.launch.py mav_device:=/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0` |
+| on the bench, in air | `ros2 launch mongla_manager bringup.launch.py vision:=true medium:=air` |
 
-```bash
-# SINGLE camera, SINGLE model
-ros2 launch mongla_vision vision.launch.py camera:=forward \
-    model:=gate_sharks classes:=gate,shark,shaw_fish conf:=0.55
+Notes that cost runs when forgotten:
 
-# SINGLE camera, port-stable by-path device (2 identical USB cams -> pin the port)
-ros2 launch mongla_vision vision.launch.py camera:=forward \
-    device_path:=/dev/v4l/by-path/platform-xhci-hcd.1-usb-0:1:1.0-video-index0 \
-    model:=gate_sharks classes:=gate,shark,shaw_fish
+- `pool_depth_m` is metres **from the downward camera to the floor**. Without
+  it `flow_node` publishes quality 0 and refuses — by design.
+- Both detectors start **paused**; the mission resumes the one it needs.
+  `paused:=false` makes both infer and compete for the Hailo.
+- `medium:=air` is for the bench only. It changes the refraction the vision
+  nodes correct for.
 
-# SINGLE camera, MULTI-model registry (switch active_model live from DSL/UI)
-ros2 launch mongla_vision vision.launch.py camera:=forward \
-    models:=gate_sharks,slalom_red_pipe,torpedo_blood_hole \
-    classes:=gate,shark,shaw_fish,red_pipe,torpedo,blood,hole conf:=0.55
+### The same switches from a file
 
-# headless (no cv2 HUD window) — pair with web_video_server / mission_web
-ros2 launch mongla_vision vision.launch.py camera:=forward model:=gate_sharks viewer:=false
+Typing twelve arguments at the pool is twelve chances to mistype one. Put them
+in `~/.mongla/bringup.yaml` instead:
 
-# per-model conf override in a registry (name=conf, live-tunable too)
-ros2 launch mongla_vision vision.launch.py camera:=forward \
-    models:=gate_sharks,torpedo_blood_hole \
-    model_conf:=torpedo_blood_hole=0.65 conf:=0.50
-
-# DATASET VIDEO (no hardware — drives the full camera->detector->image_debug chain)
-ros2 launch mongla_vision vision.launch.py camera:=forward video_file:=/path/clip.mp4 loop:=true \
-    model:=gate_sharks classes:=gate,shark,shaw_fish
+```yaml
+vision: true
+fwd_model: sauvc_sim
+flow: true
+pool_depth_m: 1.6
 ```
-Knobs: `imgsz:=640` (export-baked for `.engine`; re-scales `.pt` only) · `max_det:=100` ·
-`conf:=` (whole-registry) · `paused:=true` (start not inferring) · `debug_image_hz:=12` (MJPEG
-smoothness) · `tracker_type:=ocsort|bytetrack`.
+
+and run the bare `ros2 launch mongla_manager bringup.launch.py`. Precedence is
+**command line > file > code default**. A misspelt key or a value outside the
+allowed choices **refuses the launch** with the file and line named — unlike a
+misspelt `name:=value`, which ROS ignores. Every key, commented, with its
+default: `src/mongla_manager/config/bringup.example.yaml` (generated).
+
+| | |
+|---|---|
+| use another file | `MONGLA_BRINGUP=~/venues/sauvc.yaml ros2 launch mongla_manager bringup.launch.py` |
+| ignore the file | `MONGLA_BRINGUP=none ros2 launch mongla_manager bringup.launch.py` |
+
+The launch prints which file it read, and every value it took from it.
 
 ---
 
-## 3. Object-detection vision — `vision_dual.launch.py` (TWO cameras)
+## 3. One verb at a time — the `mongla` CLI
 
-Args: `fwd_device dwn_device fwd_device_path dwn_device_path fwd_model fwd_models fwd_classes
-dwn_model dwn_models dwn_classes fwd_conf dwn_conf fwd_model_conf dwn_model_conf device_cls imgsz
-max_det paused debug_image_hz viewer tracking tracker_type fwd_video dwn_video fwd_loop dwn_loop`
-
-```bash
-# DOUBLE camera, one model each
-ros2 launch mongla_vision vision_dual.launch.py \
-    fwd_model:=gate_sharks fwd_classes:=gate,shark,shaw_fish \
-    dwn_model:=bin_fire_blood   dwn_classes:=fire,blood
-
-# DOUBLE camera, MULTI-model forward registry + single downward
-ros2 launch mongla_vision vision_dual.launch.py \
-    fwd_models:=gate_sharks,slalom_red_pipe,torpedo_blood_hole \
-    fwd_classes:=gate,shark,shaw_fish,red_pipe,torpedo,blood,hole \
-    dwn_model:=bin_fire_blood dwn_classes:=fire,blood
-
-# DOUBLE camera, port-stable by-path (the 2-identical-cam case)
-ros2 launch mongla_vision vision_dual.launch.py \
-    fwd_device_path:=/dev/v4l/by-path/...-video-index0 \
-    dwn_device_path:=/dev/v4l/by-path/...-video-index0 \
-    fwd_model:=gate_sharks dwn_model:=bin_fire_blood
-
-# DOUBLE dataset video (no hardware)
-ros2 launch mongla_vision vision_dual.launch.py \
-    fwd_video:=/path/fwd.mp4 dwn_video:=/path/dwn.mp4 fwd_loop:=true dwn_loop:=true \
-    fwd_model:=gate_sharks dwn_model:=bin_fire_blood
-```
-
----
-
-## 4. Mission console — `mission_web.launch.py` ★ (pool-day browser surface)
-
-One command: camera(s) + detector(s) + `web_video_server` (MJPEG) + the `mission_web` console
-(SSE + control), auto-opens `http://localhost:8090`. Args: `cameras web_port video_port no_browser
-paused debug_image_hz viewer fwd_* dwn_* imgsz max_det tracking`.
-
-```bash
-# DOUBLE camera (default cameras:=both -> vision_dual), one model each
-ros2 launch mongla_vision mission_web.launch.py \
-    fwd_model:=gate_sharks fwd_classes:=gate,shark,shaw_fish \
-    dwn_model:=bin_fire_blood dwn_classes:=fire,blood
-
-# DOUBLE camera, MULTI-model forward registry
-ros2 launch mongla_vision mission_web.launch.py \
-    fwd_models:=gate_sharks,slalom_red_pipe,torpedo_blood_hole \
-    fwd_classes:=gate,shark,shaw_fish,red_pipe,torpedo,blood,hole dwn_model:=bin_fire_blood
-
-# SINGLE forward (cameras:=forward -> vision.launch.py; console shows ONE panel, no phantom 2nd)
-ros2 launch mongla_vision mission_web.launch.py cameras:=forward \
-    fwd_model:=gate_sharks fwd_classes:=gate,shark,shaw_fish
-
-# SINGLE downward, device override + own model
-ros2 launch mongla_vision mission_web.launch.py cameras:=downward \
-    dwn_device:=0 dwn_model:=bin_fire_blood dwn_classes:=fire,blood
-
-# DATASET VIDEO (no hardware)
-ros2 launch mongla_vision mission_web.launch.py fwd_video:=/path/fwd.mp4 dwn_video:=/path/dwn.mp4
-
-# ports / no auto-open (headless box, forward the port yourself)
-ros2 launch mongla_vision mission_web.launch.py web_port:=8090 video_port:=8080 no_browser:=true
-```
-- `cameras:=both|forward|downward`. A one-camera box **must** use `forward`/`downward` (else the
-  absent 2nd `camera_node` crashes).
-- Missing `web_video_server` (apt pkg, not a repo dep) degrades to console-only with an
-  `apt install ros-humble-web-video-server` hint — it does **not** abort the launch.
-- Everything the UI switches (camera / model / conf / classes / pause) writes the **same ROS surface
-  the DSL writes**, so UI and a running DSL mission stay in lock-step.
-
----
-
-## 5. CLI — direct `/mongla/move` verbs (`mongla` entry, needs a running control node)
+Needs section 2 running. Each line is one `/mongla/move` goal.
 
 ```bash
 ros2 run mongla_planner mongla arm
-ros2 run mongla_planner mongla set_depth --target -0.5
-ros2 run mongla_planner mongla turn --target 90              # absolute heading, dir auto
-ros2 run mongla_planner mongla yaw_right --target 90
-ros2 run mongla_planner mongla move_forward --duration 5 --gain 80
-ros2 run mongla_planner mongla arc --duration 4 --gain 50 --yaw_rate_pct 30
-ros2 run mongla_planner mongla lock_heading --target 0 --timeout 120
-ros2 run mongla_planner mongla unlock_heading
-ros2 run mongla_planner mongla calibrate_depth              # re-zero baro at surface (disarmed)
-ros2 run mongla_planner mongla fire --channel 1             # torpedo(1/2)/dropper(3/4)
+ros2 run mongla_planner mongla set_depth --target -0.5         # metres, negative below the surface
+ros2 run mongla_planner mongla move_forward --duration 3 --gain 40
+ros2 run mongla_planner mongla move_left --duration 2 --gain 40
+ros2 run mongla_planner mongla yaw_right --target 90           # relative, degrees
+ros2 run mongla_planner mongla turn --target 180               # absolute heading, shortest arc
+ros2 run mongla_planner mongla head                            # read the heading
+ros2 run mongla_planner mongla stop
+ros2 run mongla_planner mongla surface
 ros2 run mongla_planner mongla disarm
-# vision verbs (need a detector running):
+```
+
+Vision verbs — a detector must be running and **resumed**:
+
+```bash
 ros2 run mongla_planner mongla vision_align --camera forward --target_class gate \
     --axes yaw,lat --err_px 40 --gain 30 --duration 20
 ros2 run mongla_planner mongla vision_move --camera forward --target_class gate \
-    --fwd_fill 80 --mode area --gain 35 --duration 20
+    --fwd_fill 40 --mode area --gain 35 --duration 20
 ```
-Full verb set: `arm disarm set_mode head stop mission_reset calibrate_depth surface pause
-move_forward move_back move_left move_right style_roll style_yaw arc yaw_left yaw_right turn
-set_depth lock_heading unlock_heading dvl_connect move_forward_dist move_back_dist
-move_lateral_dist vision_align vision_move fire` (+ `calc_distance`, experimental).
-Per this page's own top banner: `lock_heading`, `move_forward_dist`, `move_back_dist`,
-`move_lateral_dist`, `arc`, `style_yaw` are **refused before dispatch on `srot`** (the CLI
-examples above for `arc` and `lock_heading` are kept here for the `pixhawk` backend / reference,
-not as things to copy-paste on `srot`).
-Live gain tune (applies on the NEXT goal): `ros2 param set /mongla_manager vision.kp_yaw 80.0`.
+
+`--fwd_fill` is **percent** of the frame the box fills when the verb stops
+(40 = 40 %); `--err_px` is the centring tolerance in pixels.
+
+Bench-only, disarmed at the surface:
+
+```bash
+ros2 run mongla_planner mongla calibrate_depth                 # re-zero the barometer
+ros2 run mongla_planner mongla motor_test --target 1 --gain 20 --duration 2
+ros2 run mongla_planner mongla fire --fire_channel 9           # BOARD channel N, 1..16
+```
+
+`fire` drives board channel N — the same N as `SERVOn_ROLE`. There is no
+host-side map; read the role off `connect --watch` first.
+
+**Refused on this vehicle, before dispatch:** `lock_heading`,
+`move_forward_dist`, `move_back_dist`, `move_lateral_dist`, `arc`, `style_yaw`.
+They return failure with the reason; nothing moves. Every flag of every verb:
+`ros2 run mongla_planner mongla <verb> -h`.
+
+Live tuning applies on the **next** goal:
+
+```bash
+ros2 param set /mongla_manager vision.kp_yaw 80.0
+```
 
 ---
 
-## 6. Missions — the runner (`mission` entry)
+## 4. Missions
 
 ```bash
 ros2 run mongla_planner mission --list
-# detected()-paradigm task chunks + full run:
-ros2 run mongla_planner mission task_gate
-ros2 run mongla_planner mission task_full_2026
-# YASMIN FSM (per-task or full):
-ros2 run mongla_planner mission fsm_full_2026
-# pool-day practice:
-ros2 run mongla_planner mission pool_day_practice
+ros2 run mongla_planner mission sauvc_qualification
+ros2 run mongla_planner mission sauvc_full
 ```
-Available: `task_{gate,slalom,bin,torpedo,return}`, `task_full_2026`,
-`fsm_{slalom,bin,torpedo,return,full_2026}`, `gate_flare_fsm`, `prequal_fsm`, `gate_then_bin_fsm`,
-`gate_flare_autonomous`, `pool_day_{practice,torpedo}`, `robosub_{gate_rescue,prequal}`,
-`demo_{arc,find_person,heading_lock,move_see,square,pursue,dual_camera}`.
+
+Which missions exist, which models each loads (and which of those are not
+shipped yet), and which refused verbs each guards: the generated table,
+[`reference/commands.md` §3b](../reference/commands.md). A mission that needs
+a refused verb asks with `mongla.can()` or refuses at its first line with
+`mongla.require()` — it never thrusts open-loop in its place.
 
 ---
 
-## 7. Detection FPS (Pi) — the Hailo `.hef` backend
-
-The default and only production path on the Pi 5 + Hailo-8 is a compiled `.hef` model
-(`src/mongla_vision/mongla_vision/detection/factory.py` picks `.hef` first, then `.engine`,
-then `.pt`, by file extension — see [`hailo-vision.md`](../perception/hailo-vision.md)).
-There is no runtime "build the engine on the box" step for Hailo the way TensorRT has one —
-compilation happens once, off-device, on the training/dev box:
+## 5. Record and replay
 
 ```bash
-# on the dev box, not the Pi — full sequence and traps: hailo-vision.md "Reproducing the compile"
-yolo export model=<stem>.pt format=onnx opset=11 nms=False
-hailo parser onnx <stem>.onnx --hw-arch hailo8 --start-node-names images --end-node-names ...
-hailo optimize <stem>.har --hw-arch hailo8 --calib-set-path calib_set.npy --model-script <stem>.alls
-hailo compiler <stem>_optimized.har --hw-arch hailo8   # -> <stem>.hef
+scripts/pool_record.sh record gate_run_1          # the debug allowlist, into $MONGLA_RUN_DIR
+scripts/pool_record.sh record --full gate_run_1   # + raw images (large)
+scripts/pool_record.sh list
+scripts/pool_record.sh replay ~/mongla_runs/gate_practice_am/gate_run_1
 ```
-Copy the resulting `<stem>.hef` **and its mandatory `<stem>.yaml` sidecar** (class labels — a
-missing sidecar means an empty allowlist and a silent `[]` every frame) to `~/models` on the
-Pi. The detector auto-prefers `.hef` over `.engine`/`.pt`. Live `conf`/`classes`/`max_det` still
-apply; NMS/IoU thresholds are baked in at compile time (`detector.yaml`'s aren't re-applied).
 
-**The TensorRT `.engine` path (`nvpmodel -m 0 && jetson_clocks`, `export_engine --all`) is
-Jetson-only and legacy** — kept for anyone still building the retired Jetson variant, not for
-the Pi. See [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md) for that era's context;
-`nvpmodel`/`jetson_clocks` do not exist on a Pi 5 (`bringup_check --srot` already treats a
-missing `nvpmodel` as "not a Jetson — skipped", not a fault).
+To re-run the vision stack on a recorded bag instead of live cameras:
+
+```bash
+ros2 launch mongla_vision vision_pi.launch.py replay:=true
+```
 
 ---
 
-## 8. Experimental estimators — OFF by default, NOT for a scored run untested
+## 6. Vision without the board
+
+For the desk, footage and tuning. None of these touch the board.
 
 ```bash
-# monocular depth proximity (vis_range) — depth:=true
-ros2 launch mongla_vision vision.launch.py camera:=forward model:=gate_sharks depth:=true
-# DVL-free downward optical-flow distance (calc_distance) — distance:=true + hud_distance:=true
-ros2 launch mongla_vision vision.launch.py camera:=downward distance:=true hud_distance:=true \
-    pool_depth_m:=4.0
+# both cameras, the vehicle's own vision stack
+ros2 launch mongla_vision vision_pi.launch.py
+ros2 launch mongla_vision vision_pi.launch.py fwd_model:=sauvc_sim paused:=false
+
+# one camera, one model
+ros2 launch mongla_vision vision.launch.py camera:=forward model:=gate_sharks classes:=gate,shark,shaw_fish
+
+# one camera, two models, switched live by the mission
+ros2 launch mongla_vision vision.launch.py camera:=forward models:=gate=gate_sharks,sauvc=sauvc_sim active_model:=gate
+
+# archive footage through the full pipeline
+ros2 launch mongla_vision video.launch.py fwd_video:=/path/clip.mp4 fwd_model:=gate_sharks
+
+# the browser console on http://localhost:8090
+ros2 launch mongla_vision mission_web.launch.py cameras:=forward fwd_model:=gate_sharks
 ```
-`calc_distance('stop')` now reports a **failure** (not a phantom 0.0 m) if the estimator node isn't
-publishing — so a distance-gated move can't silently think it travelled 0 m. Still: prove it in
-practice before trusting it on a scored task.
+
+Is the pipeline alive?
+
+```bash
+ros2 run mongla_vision vision_check --camera forward --require-class gate
 ```
+
+Shipped models and their classes: `gate_sharks` (gate, shark, shaw_fish) ·
+`bin_fire_blood` (blood, fire) · `sauvc_sim` (qual_gate, final_gate,
+orange_flare, flare_red/yellow/blue, drum_red/blue, drum_red_pinger,
+starting_zone, target_mat). These are development harnesses; the models that
+fly are trained on the day.
+
+---
+
+## 7. A new model
+
+```bash
+./tools/hailo_compile.sh my_stem --nms-score-th 0.05
+```
+
+Copy `my_stem.hef` **and** `my_stem.yaml` to `~/models` on the Pi — a missing
+sidecar is an empty allowlist and a silent `[]` every frame — then select it
+with `fwd_model:=my_stem` or a line in `~/.mongla/bringup.yaml`. The whole
+procedure: the `train-model` skill and [`hailo-vision.md`](../perception/hailo-vision.md).
+
+---
+
+## 8. Stopping
+
+| | |
+|---|---|
+| stop moving | `ros2 run mongla_planner mongla stop` |
+| come up | `ros2 run mongla_planner mongla surface` |
+| everything | Ctrl-C on the bringup terminal — the manager stops and disarms |
+| link lost | the board surfaces on its own after 5 s without a heartbeat |
+
+`stop`, `surface` and `disarm` bypass the busy gate: they run even while
+another verb is executing.

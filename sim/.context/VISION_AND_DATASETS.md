@@ -172,7 +172,7 @@ ros2 launch mongla_vision vision_dual.launch.py \
 ros2 launch mongla_vision vision_dual.launch.py \
     fwd_topic:=/mongla/sim/front_camera/image_fx \
     dwn_topic:=/mongla/sim/bottom_camera/image_fx \
-    fwd_models:=gate_sharks,torpedo_blood_hole \
+    fwd_models:=gate_sharks,sauvc_sim \
     dwn_models:=bin_fire_blood \
     device_cls:=cpu paused:=false
 ```

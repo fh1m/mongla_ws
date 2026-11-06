@@ -654,7 +654,7 @@ loop measured here is strictly serial), not from a smaller model.
 ## Consequences for the pipeline — read before integrating
 
 - **`conf` can only be tightened, never loosened.** The HEF bakes in
-  `Score threshold: 0.200` and `IoU: 0.70` at compile time. `detector.yaml`'s
+  `Score threshold: 0.200` and `IoU: 0.70` at compile time. The detector's
   live `conf` param and `vision.ctrl_conf` still work *above* 0.2, but nothing
   at runtime can go below it. To detect fainter targets the HEF must be
   **recompiled**. This differs from both the `.pt` and `.engine` backends, where

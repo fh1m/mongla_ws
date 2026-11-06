@@ -18,12 +18,15 @@ is a plain Python module that exposes one `run(mongla, log)` function.
 > This cookbook predates the move to the SROT board, and some recipes still show the older
 > backend's idioms. The **DSL verbs are unchanged** — what changed is where they run:
 >
-> - **`lock_heading` is refused on srot.** The board holds heading itself at 500 Hz. Guard it:
->   `if mongla.backend != 'srot': mongla.lock_heading(0.0)`
+> - **`lock_heading` is refused on srot.** The board holds heading itself at 500 Hz. Ask
+>   first: `if mongla.can('lock_heading'): mongla.lock_heading(0.0)`. A mission that cannot
+>   do without a verb says so up front with `mongla.require('<verb>', why=...)`.
 > - **`ALT_HOLD` is not a mode on this board.** `set_depth` works; the board owns depth. A
 >   recipe that engages ALT_HOLD explicitly is describing the legacy path.
 > - **`move_*_dist`, `arc` and `style_yaw` are refused on srot.** Use the timed moves, or the
->   downward camera's own distance bracket (`calc_distance`).
+>   downward camera's own distance bracket (`calc_distance`). The DVL recipes that used
+>   to live here were retired (no DVL is fitted); see
+>   [`legacy-pixhawk-and-sitl.md`](../platform/legacy-pixhawk-and-sitl.md).
 > - **On the downward camera, the depth-setpoint axes are refused**: sideways and fore/aft
 >   run normally.
 >
@@ -133,14 +136,14 @@ def sweep_yaw(mongla, should_stop):
 Custom model syntax is **identical** — only the name changes:
 
 ```python
-mongla.models(gate='gate_flare_medium_100ep')    # custom weights in models/
+mongla.models(gate='gate_sharks')                # a stem in models/ (sidecar beside it)
 mongla.models(person='yolov11n')                 # COCO pretrained, auto-download
 ```
 
 **Run the canonical demo mission:**
 
 ```bash
-ros2 launch mongla_vision cameras_.launch.py camera:=laptop
+ros2 launch mongla_vision vision.launch.py camera:=laptop
 ros2 run mongla_planner mission demo_find_person
 ```
 
@@ -152,68 +155,55 @@ ros2 run mongla_planner mission demo_find_person
 
 ## 1. Mental model in 60 seconds
 
-A mission is a script. Each line is **one MAVLink command** that runs
-to completion (or raises) before the next line starts. There is no
-parallelism inside a mission — it's a straight line, top to bottom.
+A mission is a script. Each line sends **one verb** to the manager and waits
+for it to finish before the next line starts. There is no parallelism inside a
+mission: it runs top to bottom.
 
-Two namespaces, one DSL:
+Two namespaces, one object:
 
-| Namespace | What it does                       | Closed loop?          |
-| --------- | ---------------------------------- | --------------------- |
-| `mongla.*`        | Open-loop motion (RC overrides + ALT_HOLD setpoints) | No |
-| `mongla.vision.*` | Closed-loop, bbox-driven motion                       | Yes |
+| Namespace | What it does | Who closes the loop |
+|---|---|---|
+| `mongla.*` | timed moves, turns, depth, arm/disarm | **the SROT board**, at 500 Hz |
+| `mongla.vision.*` | steer on a detection (`align`, `move`) | the Pi, on pixel error, 20 Hz |
 
-**Both live on the same `mongla` object.** A mission usually pings
-between them: open-loop to *go somewhere*, vision to *land precisely*.
+A mission usually alternates: a timed move to *get near*, then the two vision
+verbs to *land precisely*.
 
 ```python
 def run(mongla, log):
     mongla.camera = 'forward'
     mongla.arm()
     mongla.set_depth(-0.5)
-    mongla.move_forward(3.0, gain=60)               # open-loop -- get to the area
-    mongla.vision.align('gate', yaw=0, lat=0,       # closed-loop -- centre on it
+    mongla.move_forward(3.0, gain=60)               # timed -- get to the area
+    mongla.vision.align('gate', yaw=0, lat=0,       # vision -- centre on it
                         gain=30, duration=20)
-    mongla.vision.move('gate', fwd=80, mode='area', # closed-loop -- drive in
+    mongla.vision.move('gate', fwd=80, mode='area', # vision -- drive in
                        gain=35, duration=20)
-    mongla.move_back(2.0, gain=60)                  # open-loop -- withdraw
+    mongla.move_back(2.0, gain=60)                  # timed -- withdraw
     mongla.disarm()
 ```
-
-That's the entire pattern: open-loop to *go somewhere*, then the two vision
-verbs (`align` to *centre*, `move` to *close in*) to *land precisely*. The
-rest of this cookbook fills in the two verbs and their tuning.
 
 ---
 
 ## 2. Hard rules (read them, internalise them)
 
-1. **One axis per command.** A `move_forward` only writes Ch5. A
-   `yaw_right` only writes Ch4. Mixing axes is the controller's job
-   (`arc` for forward+yaw, `vision.align` for any subset of
-   lat/yaw/depth). This is AXIS ISOLATION and it is what keeps the
-   sub predictable.
+1. **One verb, one job.** `move_forward` drives forward; `yaw_right` turns.
+   Mixing axes is what `vision.align` is for (any subset of lat / yaw / depth).
+   Predictable verbs are what make a mission debuggable from its log.
 
-2. **Vision informs control, never fights it.** The two vision verbs
-   talk *to* the same control stack the open-loop verbs use. They
-   don't open a parallel channel. So `mongla.vision.align(t, yaw=0)`
-   is exactly `yaw_right` driven by a bbox-error P loop instead of a
-   clock, and `mongla.vision.move(t)` is `move_forward` shaped by bbox
-   fill instead of a stopwatch.
+2. **Vision informs control, never fights it.** `vision.align(t, yaw=0)` is a
+   turn driven by a pixel error instead of a clock; `vision.move(t)` is a
+   forward drive that stops on how much of the frame the target fills.
 
-3. **Sticky context.** `mongla.camera` and `mongla.target` default to
-   `'forward'` and `'person'`. Set `mongla.camera` once at the top of
-   the mission (or per call with `camera=`), and pass the target as
-   the first positional arg to each verb. Switch cameras mid-mission
-   with `mongla.use_camera('downward')`.
+3. **Sticky context.** `mongla.camera` defaults to `'forward'`. Set it once at
+   the top (or per call with `camera=`); switch mid-mission with
+   `mongla.use_camera('downward')`.
 
-4. **`gain` caps speed, `err` sets precision, `duration` bounds time.**
-   `gain` is a **hard max-speed cap** (% thrust), not a target speed —
-   the AUV never exceeds it. `err` is the pixel tolerance for "centred".
-   `duration` is the total time budget (search fallbacks count against
-   it). The P-gains themselves have live `vision.*` ROS-param fallbacks
-   on `auv_manager_node` — leave them out of the mission and tune from
-   the deck:
+4. **`gain` caps speed, `err` sets precision, `duration` bounds time.** `gain`
+   is a hard ceiling in % thrust, never a target. `err` is the pixel tolerance
+   for "centred". `duration` is the whole time budget, search fallbacks
+   included. The P-gains are live ROS parameters on the manager -- tune them
+   from the deck, not in the mission:
 
    ```bash
    ros2 param set /mongla_manager vision.kp_yaw       80.0
@@ -221,38 +211,46 @@ rest of this cookbook fills in the two verbs and their tuning.
    ros2 param set /mongla_manager vision.lost_grace_s  1.0
    ```
 
-5. **Every verb blocks until the action server returns.** No
-   threading. If you want a background hold (yaw lock during motion),
-   use `mongla.lock_heading(...)` — that's the one verb that returns
-   immediately and runs a daemon thread.
+5. **Every verb blocks until it is done.** No threads in a mission.
 
-6. **Vision verbs never raise; open-loop verbs do.** `align` / `move`
-   honour a **never-fail contract**: on timeout or target loss they
-   log the miss, return a falsy `VisionResult`, and the mission
-   continues to the next line. Open-loop verbs (`arm`, `move_forward`,
-   `yaw_right`, ...) still raise `MoveRejected` / `MoveFailed` on
-   rejection. Wrap the whole mission in a try/finally that calls
-   `mongla.disarm()` for a guaranteed safe exit.
+6. **Vision verbs never raise; motion verbs report.** `align` / `move` return a
+   falsy `VisionResult` on timeout or loss and the mission carries on. A
+   motion verb returns a result whose `.success` is False when the board
+   refused or the move stalled -- check it when the next line depends on it.
+   The mission runner stops, brakes and disarms on any exit, including Ctrl-C.
+
+7. **Ask before using a verb the board may refuse.** `arc`, `lock_heading`,
+   `style_yaw` and the `*_dist` verbs are refused on srot:
+   `if mongla.can('lock_heading'): ...`, or `mongla.require('arc', why=...)`
+   to stop the mission on the deck rather than discover it at depth.
 
 ---
 
 ## 3. The verbs
 
-### 3.1  Open-loop motion (`mongla.*`)
+### 3.1  Motion (`mongla.*`)
 
-Every verb is a method on the `MonglaMission` instance you receive
-in `run(mongla, log)`. Defaults match the action server's
-`COMMANDS` registry; pass kwargs to override.
+Every verb is a method on the `MonglaMission` you receive in
+`run(mongla, log)`. The full generated table, with what runs on the board and
+what is refused: [`reference/commands.md`](../reference/commands.md).
+
+⛔ **Every motion verb below enters the board's AUTO mode, and AUTO closes the
+depth loop -- which has never run closed in water.** Two armed bench checks
+gate them all (CLAUDE.md §2). The vision verbs run in STABILIZE and are not
+gated.
 
 #### Power & mode
 
 ```python
-mongla.arm()                                # waits for ACK (timeout=15s)
-mongla.disarm()
-mongla.set_mode('STABILIZE')                # srot: STABILIZE | DEPTH_HOLD | SURFACE | MANUAL | ACRO
+mongla.arm()                     # waits for the board to confirm (timeout=15 s)
+mongla.disarm()                  # confirmed on the heartbeat
+mongla.set_mode('STABILIZE')     # STABILIZE | DEPTH_HOLD | SURFACE | MANUAL | ACRO
 ```
 
-#### Translations (Ch5 forward, Ch6 lateral)
+`set_mode` is best-effort on this wire: a refusal looks exactly like success
+unless you read the mode back. The vision verbs do that for you.
+
+#### Timed moves
 
 ```python
 mongla.move_forward(seconds, gain=80, settle=0.0)
@@ -261,95 +259,54 @@ mongla.move_left   (seconds, gain=80, settle=0.0)
 mongla.move_right  (seconds, gain=80, settle=0.0)
 ```
 
-| Param   | Type  | Meaning                                                     |
-| ------- | ----- | ----------------------------------------------------------- |
-| seconds | float | Drive duration. Open-loop: time-of-flight, NOT distance.    |
-| gain    | float | Stick percentage, 0..100. >50% in pool, ~30% on the bench. |
-| settle  | float | Extra hold-still seconds *after* the drive completes.       |
+| Param | Meaning |
+|---|---|
+| `seconds` | how long to push. Time, **not** distance: there is no DVL. |
+| `gain` | % thrust ceiling, 0..100. ~30 on the bench, 50-80 in the pool. |
+| `settle` | extra still time after the move. |
 
-> Switch to **eased** translation profiles (trapezoidal ramp, no
-> reverse-kick brake) by launching the manager with
-> `--ros-args -p smooth_translate:=true`. The verb names don't change.
+Each is one `SROT_MOVE`: the board runs it **and brakes** at the end itself.
 
 #### Depth
 
 ```python
-mongla.set_depth(metres, timeout=30.0, settle=0.0)   # drive-to-depth (blocks)
+mongla.set_depth(metres, timeout=30.0, settle=0.0)
 ```
 
-`set_depth` auto-engages ALT_HOLD if not already in it, then drives
-the AUV to the target via `SET_POSITION_TARGET_GLOBAL_INT` and
-returns once the controller is within 0.05 m of the target for 0.5 s.
-`metres` is **negative below surface**: `set_depth(-1.5)` = 1.5 m
-deep.
+`metres` is **negative below the surface**: `set_depth(-1.5)` is 1.5 m down.
+The board holds the depth afterwards; there is no `lock_depth`.
 
-There is **no `lock_depth` verb** — and you don't need one. ArduSub's
-onboard ALT_HOLD inherently latches whatever altitude is current the
-moment Ch3 (throttle) returns to neutral 1500. So once `set_depth`
-returns, the autopilot's 400 Hz internal depth PID continues to hold
-that depth for free, with zero further MAVLink traffic from us. The
-[`Heartbeat`](../../../src/mongla_control/mongla_control/heartbeat.py)
-daemon keeps streaming neutral RC overrides at 5 Hz in the
-background so ArduSub never trips the `FS_PILOT_INPUT` failsafe and
-disarms — that is the *only* depth-related continuous traffic.
+⛔ An unhealthy barometer makes the board refuse DEPTH_HOLD and AUTO, so every
+motion verb is denied: the vehicle arms and does not move.
+`ros2 run mongla_manager bringup_check --srot` reads this off `SYS_STATUS`.
 
-#### Yaw (sharp pivots)
+#### Turns
 
 ```python
-mongla.yaw_left (degrees, timeout=30.0, settle=0.0)
-mongla.yaw_right(degrees, timeout=30.0, settle=0.0)
+mongla.yaw_left (degrees, timeout=30.0, settle=0.0)   # relative, to port
+mongla.yaw_right(degrees, timeout=30.0, settle=0.0)   # relative, clockwise from above
+mongla.turn(degrees)                                  # absolute -- needs MAG_YAW_REF=1
 ```
 
-Engages ALT_HOLD if needed (pixhawk/sim). Auto-suspends `lock_heading` for the
-duration and re-targets it on exit — pixhawk/sim only; on srot there is no
-background lock to suspend, the board just turns. The verb sign is implicit
-(`yaw_left(90)` rotates +90° to port; the underlying signed degrees
-get flipped for you).
-
-#### Curved trajectory (`arc`)
-
-⛔ **refused on srot — pixhawk/sim only.** `arc` takes a yaw rate; the board's own `arc`
-primitive takes a heading, and that field-shape mismatch is exactly why it's in
-`srot_fc.UNSUPPORTED_VERBS`.
-
-```python
-mongla.arc(seconds, gain=50, target_yaw=0.0, settle=0.0)
-```
-
-Forward thrust *and* yaw in **one** RC packet. Suspends
-`lock_heading`, re-targets to the exit heading. Negative `gain`
-runs the arc in reverse. The DSL/CLI field is `target_yaw` (an absolute heading), not a rate
-— there is no `yaw_rate_pct` field.
-
-#### Heading lock (background)
-
-```python
-if mongla.backend != 'srot':                      # srot: the board holds heading
-    mongla.lock_heading(degrees=0.0, timeout=300.0)   # returns immediately
-... mission body ...
-mongla.release_heading()                          # joins the daemon
-```
-
-Spawns a 20 Hz proportional Ch4 yaw-rate streamer
-([`heading_lock.py`](../../../src/mongla_control/mongla_control/heading_lock.py))
-in a background thread. The loop reads heading from the configured
-`yaw_source` (BNO085 / AHRS / SITL), computes a yaw error, and
-writes a clamped Ch4 RC override every 50 ms — this is what
-ArduSub interprets as "the pilot is requesting this yaw rate", so
-the closed-loop is Python -> Ch4 -> ArduSub's 400 Hz attitude
-stabiliser. `degrees=0` means *lock at the current heading right
-now*. The thread auto-suspends during yaw / arc / pause and
-re-targets on exit.
+Firmware behaviour rev 10 inverted yaw; the manager refuses a board below the
+required revision at connect and again in `arm()`.
 
 #### Stop / pause
 
 ```python
-mongla.stop()                # 1500 PWM on every channel for 0.6s
-mongla.pause(2.0)            # NO_OVERRIDE for 2s -- autopilot takes over
+mongla.stop()          # the board's MOVE_STOP brake
+mongla.pause(2.0)      # station-keep for 2 s
 ```
 
-`stop` is **active hold**; `pause` is **release**. Use `stop`
-between commands, `pause` for stabilisation between mode changes.
+⛔ **AUTO never exits by itself.** After a move, manual frames are discarded
+until the mode changes. The vision verbs set STABILIZE and verify it took.
+
+#### Refused on srot (pixhawk / simulator only)
+
+`arc`, `lock_heading`, `style_yaw`, `move_forward_dist`,
+`move_back_dist`, `move_lateral_dist`. They run in the simulator, which flies
+ArduSub SITL by design. On the vehicle they return `success=False` before
+anything is sent.
 
 ---
 
@@ -417,8 +374,8 @@ measured by `mode`:
 `maintain=±px` holds a lateral pixel offset while driving (`None` = pure
 forward; never touches lat/yaw/depth). `hold=s` station-keeps at the fill
 target for `s` seconds before exiting (`None` = exit on reach). **`move`
-never re-centres yaw or depth** — ArduSub's ALT_HOLD owns depth, and the
-heading lock (or the autopilot) owns yaw.
+never re-centres yaw or depth** — the board holds depth, and holds heading in
+STABILIZE (on the simulator's ArduSub, ALT_HOLD and the heading lock do).
 
 ```python
 mongla.vision.move('gate', fwd=80, mode='area')                    # drive through gate
@@ -516,7 +473,7 @@ and jitter-free boxes for the mission-control HUD (and feeds the depth
 node). It never sits in the control loop. Launch it for a nicer HUD:
 
 ```bash
-ros2 launch mongla_vision cameras_.launch.py with_tracking:=true
+ros2 launch mongla_vision vision.launch.py tracking:=true
 ```
 
 ### Holding on a target
@@ -550,16 +507,15 @@ ORBIT_STEPS   = 12      # 12 × 30° = 360°
 ORBIT_STEP    = 30.0
 HOLD_PER_STEP = 3.0
 
-mongla.models(gate='gate_flare_medium_100ep')
 for _ in range(ORBIT_STEPS):
     mongla.yaw_left(ORBIT_STEP, timeout=10.0, settle=0.3)   # pivot in place
-    mongla.vision.align(mongla.models.gate.flare,
+    mongla.vision.align('orange_flare',
                         yaw=0, depth=0, gain=30,
                         duration=HOLD_PER_STEP)             # re-centre on the flare
 ```
 
-The 12-step polygon approximates a circle for pre-qual. For a smoother arc,
-replace the loop body with `mongla.arc(...)` calls.
+The 12-step polygon approximates a circle. (`arc` would be smoother, but it is
+refused on srot.)
 
 ### Re-centring while driving forward
 
@@ -580,7 +536,7 @@ offset the entire way, no re-centre loop needed.
 
 ```bash
 # 1. Launch vision stack with the HUD tracker enabled
-ros2 launch mongla_vision cameras_.launch.py with_tracking:=true
+ros2 launch mongla_vision vision.launch.py tracking:=true
 
 # 2. Topic health check
 ros2 run mongla_vision vision_check --camera laptop
@@ -609,139 +565,98 @@ ros2 run mongla_vision tracker_check --camera laptop --class person
 
 ## 3.4  Model and class selection
 
-### Drop-and-use — no YAML required
+### A model is three files with one stem
 
-Drop any `.pt` file into `src/mongla_vision/models/`. The detector reads
-class names from the model's embedded names table (`model.names`), which
-Ultralytics always populates at training time. **No sidecar YAML needed.**
+A model is chosen by its **stem**, the file name without extension. The
+detector looks in `src/mongla_vision/models/` (mirrored from `~/models` by
+`./build_mongla.sh`):
 
 ```
 models/
-├── gate_nano_100ep.pt            # gate only, nano, fast
-├── gate_medium_100ep.pt          # gate only, medium accuracy
-├── gate_medium_200ep.pt          # gate only, fine-tuned 200 ep
-├── flare_medium_100ep.pt         # flare only
-└── gate_flare_medium_100ep.pt    # gate + flare combined  (prequal default)
+├── gate_sharks.pt     # weights, for the dev box (CUDA)
+├── gate_sharks.hef    # compiled for the Hailo-8 -- what the VEHICLE runs
+└── gate_sharks.yaml   # the sidecar: class names + the measured conf bar
 ```
 
-Optional YAML override (only if you need to remap class IDs):
-```yaml
-# gate_flare_medium_100ep.yaml  -- optional; omit this and model.names is used
-names:
-  0: gate
-  1: flare
-```
+⛔ **On the vehicle the sidecar is mandatory.** A `.hef` carries no class
+names, so a missing `<stem>.yaml` means an empty allowlist and a silent `[]`
+every frame while the pipeline looks healthy. (A `.pt` on a dev box can fall
+back to the names embedded in the weights; do not rely on that.)
 
-### Selecting model and classes at launch
+The models that ship are development harnesses, swapped on water days:
+
+| stem | classes | used by |
+|---|---|---|
+| `gate_sharks` | `gate`, `shark`, `shaw_fish` | forward camera default |
+| `bin_fire_blood` | `blood`, `fire` | downward camera default |
+| `sauvc_sim` | `qual_gate`, `final_gate`, flares, drums, `target_mat`, ... | the SAUVC missions |
+
+How to train and compile a new one: the `train-model` skill
+(`.claude/skills/train-model/SKILL.md`).
+
+### Choosing the model
 
 ```bash
-# ── Sim / webcam / bench (ROBOSUB-tested pretrained ★) ──────────────────────
-# yolov11n detects COCO 80 classes — use 'person' to test demo_move_see
-ros2 launch mongla_vision cameras_.launch.py model:=yolov11n classes:=person
+# The vehicle -- both cameras, Hailo:
+ros2 launch mongla_manager bringup.launch.py vision:=true \
+    fwd_model:=gate_sharks dwn_model:=bin_fire_blood
 
-# Or single-command launch+display:
-ros2 run mongla_vision vision_display --ros-args \
-    -p launch_pipeline:=true -p model:=yolov11n -p classes:=person
-
-# ── Pool / competition custom models ─────────────────────────────────────────
-# Gate-only model
-ros2 launch mongla_vision cameras_.launch.py model:=gate_medium_100ep classes:=gate
-
-# Flare-only model
-ros2 launch mongla_vision cameras_.launch.py model:=flare_medium_100ep classes:=flare
-
-# Combined model — gate approach phase
-ros2 launch mongla_vision cameras_.launch.py \
-    model:=gate_flare_medium_100ep classes:=gate
-
-# Combined model — show both classes (debug)
-ros2 launch mongla_vision cameras_.launch.py \
-    model:=gate_flare_medium_100ep classes:=gate,flare
+# A dev box, one camera, .pt on CUDA. yolov11n is COCO -- 'person' for desk tests:
+ros2 launch mongla_vision vision.launch.py model:=yolov11n classes:=person
 ```
 
-### Switching class filter live (no node restart)
+A mission names its model in ONE place, so a swap is a one-line edit:
 
-The model is loaded once at launch. `classes` is a post-inference allowlist —
-same forward pass every frame, different box list published. Change it:
+```python
+mongla.set_model('sauvc_sim', node='/mongla_detector_forward')
+mongla.set_classes('qual_gate', node='/mongla_detector_forward')
+```
+
+`test_missions_only_name_classes_a_model_emits.py` fails if a mission names a
+class its model does not emit.
+
+### Switching the class filter live (no restart)
+
+`classes` is a post-inference allowlist: same forward pass every frame,
+different box list published.
 
 ```bash
-# Shell
-ros2 param set /mongla_detector classes gate
-ros2 param set /mongla_detector classes flare
-ros2 param set /mongla_detector classes "gate,flare"
-ros2 param set /mongla_detector classes ""    # publish ALL model classes
+ros2 param set /mongla_detector_forward classes gate
+ros2 param set /mongla_detector_forward classes ""     # every class the model has
 ```
+
+### A worked mission: `sauvc_qualification`
+
+The clearest complete example in the repo, and srot-safe end to end:
+`src/mongla_planner/mongla_planner/missions/sauvc_qualification.py`. Its shape:
 
 ```python
-# Manual control (only needed when NOT using mongla.models ClassRef targets):
-mongla.set_classes('gate')
-mongla.set_classes('flare')
-mongla.set_classes('gate,flare')
-mongla.set_classes('')          # all classes
-mongla.set_classes(['gate', 'flare'])  # list form also accepted
-# When using mongla.models.gate.gate as target=, set_classes is called automatically.
+def _pass(mongla, blind_s, leg, log):
+    """One gate pass: centre, drive through, else dead-reckon."""
+    locked = mongla.vision.align(_GATE, camera='forward', yaw=0, lat=0,
+                                 err=SAUVC_ALIGN_ERR_PX, gain=SAUVC_ALIGN_GAIN,
+                                 duration=SAUVC_QUAL_GATE_ALIGN_S,
+                                 fallback=creep_forward)
+    passed = None
+    if locked:
+        # fwd=None: drive until the gate leaves the frame, then commit to clear it.
+        passed = mongla.vision.move(_GATE, camera='forward', fwd=None,
+                                    hold=SAUVC_GATE_COMMIT_S, gain=SAUVC_APPROACH_GAIN,
+                                    duration=SAUVC_QUAL_GATE_MOVE_S,
+                                    fallback=creep_forward)
+    if SAUVC_QUAL_BLIND_ENABLED and not passed:
+        mongla.move_forward(blind_s, gain=SAUVC_BLIND_GAIN)   # flown, never COUNTED
+    return bool(passed)
 ```
 
-### Full gate+flare prequal mission pattern
+Three habits it shows that every mission should copy:
 
-```python
-def run(mongla, log):
-    mongla.mission_reset()
-    mongla.camera = 'forward'
-    mongla.models(gate='gate_flare_medium_100ep')   # register once; use anywhere
-
-    # Tether removal window -- operator disconnects tether during countdown
-    mongla.countdown(10)
-
-    mongla.arm()
-    mongla.set_mode('ALT_HOLD')
-    mongla.set_depth(-1.0, settle=2.0)
-    mongla.dvl_connect()
-
-    # Gate phase — ClassRef auto-switches model+class in each verb call
-    mongla.vision.align(mongla.models.gate.gate, yaw=0, lat=0,
-                        gain=30, duration=20, fallback=creep_forward)
-    mongla.vision.move(mongla.models.gate.gate, fwd=80, mode='area',
-                       gain=35, duration=20, fallback=creep_forward)
-    mongla.move_forward_dist(3.5, gain=60.0)
-
-    # Flare phase — yaw+depth centre, then close in on bbox height
-    mongla.vision.align(mongla.models.gate.flare, yaw=0, depth=0,
-                        gain=30, duration=20, fallback=sweep_yaw)
-    mongla.vision.move(mongla.models.gate.flare, fwd=45, mode='height',
-                       gain=35, duration=20, fallback=creep_forward)
-
-    # Orbit flare 360° — yaw step, then re-centre at each stop
-    for _ in range(12):
-        mongla.yaw_left(30.0, timeout=10.0, settle=0.3)
-        mongla.vision.align(mongla.models.gate.flare, yaw=0, depth=0,
-                            gain=30, duration=3.0)
-
-    # Return through the gate
-    mongla.yaw_right(180.0, timeout=25.0, settle=0.5)
-    mongla.vision.align(mongla.models.gate.gate, yaw=0, lat=0,
-                        gain=30, duration=20, fallback=sweep_yaw)
-    mongla.vision.move(mongla.models.gate.gate, fwd=80, mode='area',
-                       gain=35, duration=20, fallback=creep_forward)
-    mongla.move_forward_dist(3.5, gain=60.0)
-
-    mongla.stop()
-    mongla.set_depth(0.0)
-    mongla.disarm()
-
-
-# ── Mission-authored fallback search patterns (pure control) ────────────────────
-def creep_forward(mongla):
-    mongla.move_forward(0.6, gain=40)
-
-def sweep_yaw(mongla, should_stop):
-    for _ in range(6):
-        mongla.yaw_right(20)
-        if should_stop():           # bail the moment the target reappears
-            return
-```
-
-See `missions/gate_flare_prequal.py` for the production-tuned version of this.
+1. **Every constant is named** and lives in `competition_config.py`, with the
+   reason beside it.
+2. **A verb the board refuses is asked about, not assumed**:
+   `if mongla.can('lock_heading'): mongla.lock_heading(...)`.
+3. **A guess is never counted as a success.** The blind leg is flown, but the
+   return value only counts what vision confirmed.
 
 ### Edge cases and robustness notes (from preview footage)
 
@@ -751,7 +666,7 @@ See `missions/gate_flare_prequal.py` for the production-tuned version of this.
 | Gate fills 90%+ of frame (too close) | `move` exits the moment fill ≥ `fwd`; pick a smaller `fwd` (e.g. 80) with `mode='area'` |
 | Flare at distance (narrow, ~10% frame height) | `align(yaw=0, depth=0)` still has signal; `move(fwd=45, mode='height')` closes in |
 | Detection flicker in turbid water | the loop coasts for `vision.lost_grace_s` (default 1.0 s) before LOST; raise it to ride out longer drop-outs |
-| False positives (non-target debris) | `conf=0.45` in detector.yaml already filters these; real detections are 0.90-0.97 |
+| False positives (non-target debris) | the shipped `conf:=0.45` already filters these; real detections are 0.90-0.97 |
 
 **`mode`** guidance (the `move` fill metric):
 - `'area'` (√(w·h)) — use for gates and bins (wide, squat objects)
@@ -772,14 +687,14 @@ removing the tether during this window leaves the AUV fully autonomous.
 ### Offline pre-pool testing with a video file
 
 ```bash
-# Run gate model on recorded pool footage
-ros2 launch mongla_vision cameras_.launch.py \
-    video_file:=/tmp/pool_run.mp4 model:=gate_flare_medium_100ep classes:=gate
+# Run the gate model on recorded pool footage
+ros2 launch mongla_vision vision.launch.py \
+    video_file:=/path/to/pool_run.mp4 model:=gate_sharks classes:=gate
 
-# Loop OFF (stop at EOF), with ByteTrack
-ros2 launch mongla_vision cameras_.launch.py \
-    video_file:=/tmp/gate_run.mp4 model:=gate_medium_100ep classes:=gate \
-    loop:=false with_tracking:=true
+# Loop OFF (stop at EOF), with the tracker
+ros2 launch mongla_vision vision.launch.py \
+    video_file:=/path/to/gate_run.mp4 model:=gate_sharks classes:=gate \
+    loop:=false tracking:=true
 ```
 
 All downstream nodes (`detector_node`, `tracker_node`, vision verbs)
@@ -822,8 +737,9 @@ if maintain_on:                     # optional lateral hold while driving
 # yaw and depth are NEVER commanded by move (ArduSub holds depth; lock holds yaw)
 ```
 
-- Depth integrates **incrementally** so ALT_HOLD never sees a step jump
-  (`nudge = 0.02 m × gain/100` per tick).
+- Depth integrates **incrementally** (`nudge = 0.02 m × gain/100` per tick)
+  -- on the simulator. ⛔ On srot the depth-setpoint axes are refused (the
+  board owns depth), so `depth=` on the forward camera does nothing there.
 - Sign rules (forward cam): `ex>0` = target right, `ey>0` = target below.
   Ch4>1500 = yaw RIGHT and Ch6>1500 = strafe RIGHT (current hull), so neither
   yaw nor lat is negated — both share `ex` polarity (pool-verified 2026-06).
@@ -846,7 +762,7 @@ Reference implementation:
 | -------------------- | ----------- | ------------------------------------------------------------------- |
 | `vision.kp_yaw`      | 30 .. 90    | Too low: slow centre. Too high: oscillation around dead-on.         |
 | `vision.kp_lat`      | 30 .. 90    | Same as yaw, but with strafe oscillation.                           |
-| `vision.kp_depth`    | 0.02 .. 0.1 | Too low: target drifts vertically. Too high: ALT_HOLD fights you.   |
+| `vision.kp_depth`    | 0.02 .. 0.1 | simulator only (refused on srot). Too low: drifts vertically; too high: fights the depth hold. |
 | `vision.kp_forward`  | 100 .. 300  | Too low: never reaches target distance. Too high: surge / overshoot. |
 
 ### Settle / loss / fill
@@ -883,22 +799,6 @@ def run(mongla, log):
     mongla.arm()
     mongla.set_depth(-0.5)
     mongla.pause(2.0)
-    mongla.set_depth(0.0)
-    mongla.disarm()
-```
-
-### 6.2  Square pattern with heading lock
-
-```python
-def run(mongla, log):
-    mongla.arm()
-    mongla.set_depth(-1.0)
-    if mongla.backend != 'srot':                  # srot holds heading on the board
-        mongla.lock_heading()                     # latch current heading
-    for _ in range(4):
-        mongla.move_forward(3.0, gain=60)
-        mongla.yaw_right(90.0)                    # lock auto-retargets
-    mongla.release_heading()
     mongla.set_depth(0.0)
     mongla.disarm()
 ```
@@ -1091,33 +991,6 @@ mongla.vision.align('torpedo', yaw=60, depth=-40,
 > `vision_lock_fire`, `vision_acquire`, `look_around`) were all deleted in the
 > two-verb rewrite. Use the axis values on `align` / `maintain` on `move`.
 
-### 6.11  Dubomini — vision-held position (no DVL)
-
-Dubomini 2.0 has no DVL. Use `align` on lat+yaw+depth to hold station on a
-detected target. Launch with `yaw_source:=bno085` and `dvl_auto_connect:=false`.
-
-```python
-# Mongla_agile bringup: ros2 run mongla_manager start
-#   --ros-args -p yaw_source:=bno085 -p dvl_auto_connect:=false
-
-def run(mongla, log):
-    mongla.camera = 'forward'
-    mongla.arm()
-    mongla.set_depth(-0.6, settle=1.0)
-
-    # Hold station on the gate using vision (replaces POSHOLD — Mongla_agile has no DVL).
-    # No fallback: align holds through brief losses and rides out the duration.
-    mongla.vision.align('gate', yaw=0, lat=0, depth=0, gain=30, duration=30)
-
-    # Approach: forward open-loop (no DVL distance available).
-    mongla.move_forward(5.0, gain=55)
-    mongla.disarm()
-```
-
-VehicleProfile auto-selects Dubomini vs Duburi 4.5 at runtime via `VehicleProfile.auto()` —
-`has_dvl=False` means `move_forward_dist` falls back to an open-loop time estimate (and logs a
-warning) rather than implying DVL precision it doesn't have.
-
 ### 6.12  Torpedo firing (align → move → fine-lock → fire)
 
 There's no lock-fire verb. Firing is just **`if align(...): fire(n)`** — the
@@ -1235,128 +1108,7 @@ mongla.fire(3)         # dropper_1
 
 ---
 
-## 7. DVL distance moves
-
-DVL-based closed-loop distance commands are available when `yaw_source` has a
-DVL component (`dvl`, `nucleus_dvl`, `bno085_dvl`). Auto-connect means you
-don't need `dvl_connect` in the mission — the manager's background thread has
-already connected before any mission code runs.
-
-### 7.1  Basic DVL forward / back move
-
-```python
-def run(mongla, log):
-    mongla.arm()
-    mongla.set_depth(-0.8, settle=1.0)
-    # DVL closed-loop: stops exactly 2.0 m from start position
-    mongla.move_forward_dist(2.0, gain=60)
-    # Return to start (same tolerance applies — stops when back within 0.1 m)
-    mongla.move_back_dist(2.0, gain=60)
-    mongla.disarm()
-```
-
-### 7.2  Heading-stable DVL translation (recommended pattern)
-
-Lock heading BEFORE starting the DVL move. The lock owns Ch4 (yaw rate) and
-holds the AUV pointed at the target while DVL drives Ch5 (forward) or Ch6
-(lateral). Do NOT call `unlock_heading` between them.
-
-```python
-def run(mongla, log):
-    mongla.arm()
-    mongla.set_depth(-0.8, settle=1.0)
-
-    # Lock heading at 0° and keep it active throughout
-    mongla.lock_heading(0.0, timeout=120)   # ← positional arg, not target=
-
-    # DVL moves — heading lock stays alive, no yaw drift
-    mongla.move_forward_dist(3.0, gain=60)
-    mongla.move_lateral_dist(1.0, gain=36)      # strafe 1 m right
-    mongla.move_forward_dist(2.0, gain=60)
-
-    mongla.release_heading()   # ← release_heading(), not unlock_heading()
-    mongla.disarm()
-```
-
-### 7.3  Vision approach + DVL final run
-
-Use vision to centre on the target, then DVL for a precise close-in. `align`
-owns yaw while it runs, so lock heading only AFTER the alignment phase:
-
-```python
-def run(mongla, log):
-    mongla.camera = 'forward'
-    mongla.arm()
-    mongla.set_depth(-1.0)
-
-    # Phase 1: yaw-centre on the gate (sweep to find it if it's not in frame).
-    mongla.vision.align('gate', yaw=0, gain=30, duration=30, fallback=sweep_for_gate)
-
-    # Phase 2: lock the (post-alignment) heading so DVL drives straight in.
-    mongla.lock_heading(0.0, timeout=120)   # 0 = lock current heading
-
-    # Phase 3: drive through gate with DVL precision.
-    mongla.move_forward_dist(4.0, gain=60)
-
-    mongla.release_heading()
-    mongla.disarm()
-
-
-def sweep_for_gate(mongla, should_stop):
-    for _ in range(6):
-        if should_stop():
-            return
-        mongla.yaw_right(15); mongla.pause(0.4)
-```
-
-### 7.4  Composite BNO+DVL (recommended pool config)
-
-`yaw_source=bno085_dvl` uses BNO085 heading (stable gyro fusion) + DVL position.
-Configure in `config/sensors.yaml`:
-
-```yaml
-mongla_manager:
-  ros__parameters:
-    yaw_source: bno085_dvl
-```
-
-Mission code is identical — the yaw source selection is transparent to the DSL.
-
-### 7.5  Orbit scan — `detected()` search loop
-
-There's no scan/orbit verb anymore. Searching is a mission-authored loop: yaw
-in steps, polling `mongla.detected()` (non-blocking, **case-insensitive**) at
-each stop, then hand off to `align`. The same pattern, written as a function,
-is exactly what you pass to a vision verb as a `fallback`.
-
-```python
-def run(mongla, log):
-    mongla.models(gate='gate_flare_medium_100ep')
-    mongla.camera = 'forward'
-    mongla.arm()
-    mongla.set_depth(-1.0, settle=1.0)
-
-    # Orbit right in 20° steps until the gate is found (18 × 20° = 360°).
-    found = False
-    for _ in range(18):
-        if mongla.detected(mongla.models.gate.gate, stale_after=0.5):
-            found = True
-            break
-        mongla.yaw_right(20); mongla.pause(1.5)
-
-    if found:
-        log('gate found — aligning')
-        mongla.vision.align(mongla.models.gate.gate, yaw=0, lat=0,
-                            gain=30, duration=10)
-    else:
-        log('gate not found — advancing and retrying')
-        mongla.move_forward(3.0, gain=35)
-```
-
-> Prefer to fold the search into the verb itself: pass the loop as a `fallback`
-> and `align` will run it on target loss, then re-enter — all inside `duration`.
-
-### 7.6  Vision queries — `detected()` / `wait_for()` / `where()`
+## 7. Vision queries — `detected()` / `wait_for()` / `where()`
 
 Three client-side reads of the `/detections` stream let open-loop motion react
 to what the camera sees, then hand off to vision-closed control. Each **pumps
@@ -1399,59 +1151,41 @@ else:
 #### Core paradigm
 
 ```python
+_FWD = '/mongla_detector_forward'
+
 def run(mongla, log):
     mongla.camera = 'forward'
-    mongla.models(gate='gate_flare_medium_100ep')
+    mongla.set_model('sauvc_sim', node=_FWD)          # the ONE line naming the model
+    mongla.set_classes('qual_gate,orange_flare', node=_FWD)
     mongla.arm()
     mongla.set_depth(-0.8)
-    mongla.lock_heading(0.0, timeout=180)
 
-    # ── Search: creep forward until gate visible ──────────────────────── #
-    MAX_STEPS = 60   # safety budget: 60 × 0.5s = 30s of search
+    # ── Search: creep forward until the gate is visible ───────────────── #
+    MAX_STEPS = 60   # safety budget: 60 × 0.5 s = 30 s of search
     for _ in range(MAX_STEPS):
-        if mongla.detected(mongla.models.gate.gate, stale_after=0.5):
+        if mongla.detected('qual_gate', stale_after=0.5):
             break
-        mongla.move_forward(0.5, gain=30)  # 0.5s steps → max 0.15m overshoot
+        mongla.move_forward(0.5, gain=30)  # 0.5 s steps → ≤ 0.15 m overshoot
     else:
-        log.warn('gate not found — aborting')
-        mongla.set_depth(0.0); mongla.disarm(); return
+        log.warn('gate not found — surfacing')
+        mongla.surface(); mongla.disarm(); return
 
     # ── Align and pass ────────────────────────────────────────────────── #
-    mongla.vision.align(mongla.models.gate.gate, yaw=0, lat=0,
-                        gain=30, duration=20)
-    mongla.vision.move(mongla.models.gate.gate, fwd=80, mode='area',
-                       gain=55, duration=20)
-    mongla.move_forward_dist(3.0, gain=60)
+    mongla.vision.align('qual_gate', yaw=0, lat=0, gain=30, duration=20)
+    mongla.vision.move('qual_gate', fwd=None, hold=2.0, gain=55, duration=20)
 
-    # ── Search: yaw-sweep for flare ────────────────────────────────────── #
-    mongla.set_classes('gate,flare')          # must set BEFORE detecting flare
-    for _ in range(36):                       # 36 × 10° = full 360°
-        if mongla.detected('flare', stale_after=0.5):
+    # ── Search: yaw-sweep for the flare ───────────────────────────────── #
+    for _ in range(36):                       # 36 × 10° = full turn
+        if mongla.detected('orange_flare', stale_after=0.5):
             break
         mongla.yaw_right(10); mongla.pause(0.5)
 
-    if mongla.detected('flare', stale_after=0.5):
-        mongla.vision.align(mongla.models.gate.flare, yaw=0,
-                            gain=30, duration=20)
-        mongla.vision.move(mongla.models.gate.flare, fwd=60, mode='height',
+    if mongla.detected('orange_flare', stale_after=0.5):
+        mongla.vision.align('orange_flare', yaw=0, gain=30, duration=20)
+        mongla.vision.move('orange_flare', fwd=60, mode='height',
                            gain=35, duration=20)
 
-        # ── Orbit flare: exit when gate re-appears ─────────────────────── #
-        # IMPORTANT: passing the flare ClassRef above called set_classes('flare').
-        # Restore both BEFORE the orbit loop.
-        mongla.set_classes('gate,flare')
-        for _ in range(18):                   # 18 × 20° = 360°
-            if mongla.detected('gate', stale_after=0.3):
-                break
-            mongla.yaw_right(20); mongla.pause(1.0)
-
-        if mongla.detected('gate', stale_after=0.5):
-            mongla.vision.align(mongla.models.gate.gate, yaw=0, lat=0,
-                                gain=30, duration=15)
-            mongla.move_forward_dist(1.5, gain=60)
-
-    mongla.release_heading()
-    mongla.set_depth(0.0)
+    mongla.surface()
     mongla.disarm()
 ```
 
@@ -1478,11 +1212,11 @@ detector publishes flare detections only. `detected('gate')` will always return
 
 **Blocking (action round-trip — where mission time is spent):**
 `move_forward`, `move_back`, `move_left`, `move_right`, `yaw_left`, `yaw_right`,
-`arc`, `set_depth`, `arm`, `disarm`, `pause`, `stop`, `lock_heading`,
-`dvl_connect`, `move_forward_dist`, `move_lateral_dist`, ALL `vision.*` verbs.
+`turn`, `set_depth`, `arm`, `disarm`, `pause`, `stop`, `surface`, ALL `vision.*`
+verbs.
 
 **Instant (no action goal):**
-`mongla.camera =`, `mongla.target =`, `mongla.models(...)`.
+`mongla.camera =`, `mongla.can(...)`, `detected()` / `where()` (bounded pumps).
 
 `detected()`/`where()` **pump the node themselves** (bounded: ≤0.25 s warm,
 ≤0.60 s cold-on-first-frame), so they read the current frame regardless of
@@ -1500,10 +1234,10 @@ while not mongla.detected('gate'):
 while not mongla.detected('gate'):
     mongla.move_forward(0.5)
 
-# ✗ Class filter trap — align(flare_ref) set classes='flare', gate never detected
-mongla.vision.align(mongla.models.gate.flare, yaw=0)
+# ✗ Class filter trap — the allowlist only names the flare, so the gate never arrives
+mongla.set_classes('orange_flare', node=_FWD)
 for _ in range(18):
-    if mongla.detected('gate'):   # ALWAYS FALSE until set_classes('gate,flare')
+    if mongla.detected('qual_gate'):   # ALWAYS FALSE until set_classes includes it
         break
 
 # ✗ Wrong camera — polling 'forward' while the bin is under the downward cam
@@ -1522,7 +1256,7 @@ success. Branch on it directly; pair it with `detected()` to pick the next targe
 if mongla.vision.align('gate', yaw=0, lat=0, gain=30, duration=20,
                        fallback=sweep_for_gate):
     mongla.vision.move('gate', fwd=80, mode='area', gain=35, duration=20)
-    mongla.move_forward_dist(3.0, gain=60)
+    mongla.move_forward(4.0, gain=60)       # timed: there is no DVL
 else:
     log.warn('gate never centred — advancing blindly')
     mongla.move_forward(4.0, gain=35)
@@ -1565,31 +1299,15 @@ ros2 topic hz /mongla/vision/forward/detections   # should be 15-25 Hz
 ros2 topic echo /mongla/vision/forward/detections --once   # look for class_id
 
 # 3. Confirm class filter correct
-ros2 param get /mongla_detector classes   # should be 'gate' or 'gate,flare'
+ros2 param get /mongla_detector_forward classes   # what the allowlist is now
 
 # 4. Test one detected() call from CLI (Python one-liner approach):
-ros2 run mongla_planner mission detected_test   # see detected-paradigm.md §8.2
+# copy the detected_test.py example from detected-paradigm.md §8.2 into missions/ first
 ```
 
 Full testing guide: [`.claude/context/missions/detected-paradigm.md §8`](detected-paradigm.md).
 
-### 7.7  DVL gotchas
-
-- `move_forward_dist` / `move_lateral_dist` call `reset_position()` internally.
-  No need to call it explicitly unless building your own control loop.
-- If `yaw_source` has no DVL component (e.g. `mavlink_ahrs` or `bno085`), both
-  commands fall back to open-loop time estimate and log a warning. They never
-  raise; the mission continues.
-- Heading lock MUST stay active during DVL moves (see §7.2). Suspending it
-  causes the AUV to weather-cock.
-- After a long DVL session, if you switch to `yaw_source=bno085` (not
-  `bno085_dvl`), restart the manager. The BNO calibration runs at startup using
-  the Pixhawk AHRS heading; if the Pixhawk AHRS drifted during the DVL session,
-  the BNO offset will be stale.
-
----
-
-## 7.5  Competition mission chunks (RoboSub 2026)
+## 7.5  Competition mission chunks
 
 The full 2026 competition run is built as five standalone chunk files directly
 in `missions/` plus a combinator in `missions/task_full_2026.py`.
@@ -1714,7 +1432,6 @@ readings after navigation.
 
 ```python
 # missions/task_full_2026.py  — detected()-paradigm sequential combinator
-# Fixed API usage (post cec7f37): positional move_forward, lock_heading, release_heading
 def run(mongla, log=None):
     gate    = _chunk('task_gate')
     slalom  = _chunk('task_slalom')
@@ -1725,7 +1442,8 @@ def run(mongla, log=None):
         mongla.pause(10.0)
         mongla.arm()
         mongla.set_depth(GATE_SEARCH_DEPTH_M, timeout=30)
-        mongla.lock_heading(0.0, timeout=600)   # ← positional, not target=
+        if mongla.can('lock_heading'):   # refused on srot: the board holds heading
+            mongla.lock_heading(0.0, timeout=600)
         for name, chunk in [('gate',gate),('slalom',slalom),('bin',_bin),
                              ('torpedo',torpedo),('return',_return)]:
             try:
@@ -1783,16 +1501,15 @@ See `packages/README.md §3` for per-chunk expected outputs and `models/README.m
 ## 8. Designing your own mission, step by step
 
 1. **Pick a stable starting condition.** `arm()` then `set_depth(-0.5)`
-   gives you altitude headroom and engages ALT_HOLD.
+   puts the hull clear of the surface, where the board holds depth.
 2. **Decide what each phase isolates.** A phase that drives forward
    blindly is `move_forward`. A phase that centres on a target is
    `vision.align`; a phase that closes in on it is `vision.move`.
    Don't mix them inside one verb; chain them.
-3. **Use `lock_heading()` whenever you do open-loop translations.** It
-   keeps yaw drift bounded for free. Depth needs no equivalent --
-   `set_depth(...)` already hands depth back to ArduSub's onboard
-   ALT_HOLD, which holds it for the rest of the mission with zero
-   further traffic from us.
+3. **Let the board hold heading and depth.** On srot every move is a
+   `SROT_MOVE` the board runs with its own 500 Hz attitude and depth loops;
+   there is nothing to lock from the host. (On the simulator's ArduSub,
+   guard a host lock with `if mongla.can('lock_heading'):`.)
 4. **`align` first, `move` second.** Settle yaw/lat/depth on the
    target with `vision.align` *before* committing to a `vision.move`
    close-in — otherwise the bbox error grows as you approach.

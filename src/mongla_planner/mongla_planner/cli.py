@@ -14,12 +14,15 @@ Examples:
     ros2 run mongla_planner mongla set_depth --target -1.5
     ros2 run mongla_planner mongla move_forward --duration 5 --gain 60
     ros2 run mongla_planner mongla yaw_left --target 90
-    ros2 run mongla_planner mongla arc --duration 4 --gain 50 --target_yaw 90
-    ros2 run mongla_planner mongla lock_heading --target 0 --timeout 120
-    ros2 run mongla_planner mongla unlock_heading
+    ros2 run mongla_planner mongla turn --target 90
+    ros2 run mongla_planner mongla vision_align --target_class gate --camera forward
     ros2 run mongla_planner mongla pause --duration 3
     ros2 run mongla_planner mongla stop
     ros2 run mongla_planner mongla disarm
+
+On the SROT board `arc`, `lock_heading`, `style_yaw` and the `*_dist` verbs
+are refused before dispatch (srot_fc.UNSUPPORTED_VERBS); they run on the
+pixhawk backend (the simulator) only.
 """
 
 import argparse

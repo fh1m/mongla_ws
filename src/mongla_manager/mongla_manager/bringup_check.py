@@ -1871,10 +1871,10 @@ def _print_launch_hint(srot: bool = False) -> None:
           '# mode=auto picks the right profile')
     print('    ros2 launch mongla_vision vision.launch.py camera:=forward  '
           '# vision pipeline (optional)')
-    print('    ros2 run mongla_planner mission move_and_see   '
+    print('    ros2 run mongla_planner mission demo_move_see  '
           '# demo mission')
     print()
-    print('  DVL distance commands (pool, yaw_source=dvl or bno085_dvl):')
+    print('  DVL distance commands (pixhawk + a fitted DVL only; refused on srot):')
     print('    ros2 run mongla_planner mongla move_forward_dist --distance_m 2.0')
 
 

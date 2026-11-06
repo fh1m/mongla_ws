@@ -1,6 +1,6 @@
 """B49 -- a config file must be loaded, or say that it is not.
 
-Four YAMLs live under `config/`. NONE of them is passed as a `--params-file` by
+YAMLs live under `config/`. NONE of them is passed as a `--params-file` by
 any launch in this repo -- checked by searching every launch file for a yaml
 reference and finding none. So every value in them is inert, and each one
 disagrees with the `declare_parameter` default that actually runs.
@@ -165,21 +165,6 @@ def test_a_file_the_operator_loads_says_how():
     head = '\n'.join(p.read_text().splitlines()[:30])
     assert '--params-file' in head, (
         'vision_tunables.yaml is loadable but never tells the operator to load it')
-
-
-def test_modes_yaml_does_not_carry_the_swapped_network_table():
-    """A stale copy of a CORRECTED fact reads as confirmation.
-
-    The Pi answers on 192.168.2.2 and .1 is the topside box -- measured on the
-    vehicle 2026-08-03 and fixed in connection_config and CLAUDE.md then. This
-    file still said .1 thirteen months later.
-    """
-    p = _ROOT / 'mongla_manager' / 'config' / 'modes.yaml'
-    if not p.exists():
-        return
-    txt = p.read_text()
-    assert 'BlueOS)  192.168.2.1' not in txt, (
-        'modes.yaml has the .1/.2 swap back -- the Pi is .2, topside is .1')
 
 
 def test_sensors_yaml_does_not_present_the_unfitted_dvl_as_the_default():

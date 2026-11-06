@@ -26,8 +26,8 @@ panel; both uses vision_dual.
 
     # Registry (runtime model switching from the UI dropdown / DSL):
     ros2 launch mongla_vision mission_web.launch.py \\
-        fwd_models:=gate_sharks,slalom_red_pipe,torpedo_blood_hole \\
-        fwd_classes:=gate,shark,shaw_fish,red_pipe,torpedo,blood,hole
+        fwd_models:=gate_sharks,sauvc_sim \\
+        fwd_classes:=gate,shark,shaw_fish,qual_gate,final_gate,orange_flare
 
 Port-forward :web_port (console) and :video_port (streams) to a dev-box browser,
 or just open http://localhost:<web_port> on the Jetson NoMachine desktop.

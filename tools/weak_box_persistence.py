@@ -213,7 +213,7 @@ def main() -> int:
                     help='max frames to read from a clip')
     ap.add_argument('--topic', default='/mongla/vision/forward/detections')
     ap.add_argument('--bar', type=float, default=0.45,
-                    help='shipped acting bar (detector.yaml conf)')
+                    help='shipped acting bar (the launch `conf` default)')
     ap.add_argument('--floor', type=float, default=0.0,
                     help='lowest score the detector publishes')
     ap.add_argument('--gate', type=float, default=40.0)

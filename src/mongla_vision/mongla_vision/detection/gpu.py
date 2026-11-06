@@ -71,7 +71,7 @@ def select_device(requested: str = _DEFAULT, *, logger=None) -> str:
                 f"device={requested!r} requested but CUDA is not available. "
                 f"torch={torch.__version__} torch.cuda.is_available()=False. "
                 f"Either fix CUDA install (driver / cuda toolkit / matching torch wheel) "
-                f"or set device='cpu' in detector.yaml to run on CPU.")
+                f"or start the detector with -p device:=cpu to run on CPU.")
         idx = 0
         if ':' in req:
             try:
