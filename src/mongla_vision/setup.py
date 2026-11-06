@@ -44,7 +44,6 @@ setup(
             'vision_thrust_check = mongla_vision.utils.check_thrust:main',
             'tracker_check       = mongla_vision.utils.check_tracker:main',
             'vision_display      = mongla_vision.utils.display_node:main',
-            'export_engine       = mongla_vision.utils.export_engine:main',
             'switch_camera       = mongla_vision.utils.switch_camera:main',
             # Calibration is a MISSION capability: on competition ground a
             # knocked lens or a swapped camera has to be recalibrated, and if

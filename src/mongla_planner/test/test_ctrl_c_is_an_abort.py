@@ -107,7 +107,7 @@ def test_why_the_default_handler_is_refused():
     """The measurement behind the fix, re-run: under rclpy's default handler a
     publish after Ctrl-C fails; with NO handler it succeeds."""
     script = textwrap.dedent('''
-        import os, signal, sys, threading, rclpy
+        import os, signal, sys, threading, time, rclpy
         from rclpy.signals import SignalHandlerOptions
         from std_msgs.msg import String
         opt = getattr(SignalHandlerOptions, sys.argv[1])
@@ -115,8 +115,13 @@ def test_why_the_default_handler_is_refused():
         n = rclpy.create_node('ctrl_c_probe')
         p = n.create_publisher(String, 'ctrl_c_probe', 1)
         threading.Timer(0.3, lambda: os.kill(os.getpid(), signal.SIGINT)).start()
+        # Short spins up to a long deadline: one 5 s spin let the timeout win
+        # the race under a loaded full-suite run, and the probe then measured
+        # nothing ('NO_INTERRUPT').
+        deadline = time.monotonic() + 20.0
         try:
-            rclpy.spin_until_future_complete(n, rclpy.task.Future(), timeout_sec=5)
+            while time.monotonic() < deadline:
+                rclpy.spin_once(n, timeout_sec=0.05)
             print('NO_INTERRUPT')
         except KeyboardInterrupt:
             try:

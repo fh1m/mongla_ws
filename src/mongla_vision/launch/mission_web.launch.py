@@ -3,8 +3,8 @@
 Brings up camera(s) + detector(s) + web_video_server (MJPEG video) + the
 mission_web console node, which auto-opens the browser. Detectors start LIVE
 (paused:=false) so streams show immediately; the console's per-camera Pause and
-"Make live cam" (exclusive) controls let you drop to one detector if the Jetson
-GPU is bound. Video (annotated image_debug) is on :video_port; the console + SSE
+"Make live cam" (exclusive) controls let you drop to one detector if the Hailo
+is bound. Video (annotated image_debug) is on :video_port; the console + SSE
 data on :web_port.
 
 `cameras:=` selects the rig -- both (default), forward, or downward. A single
@@ -30,7 +30,7 @@ panel; both uses vision_dual.
         fwd_classes:=gate,shark,shaw_fish,qual_gate,final_gate,orange_flare
 
 Port-forward :web_port (console) and :video_port (streams) to a dev-box browser,
-or just open http://localhost:<web_port> on the Jetson NoMachine desktop.
+or open http://<vehicle>:<web_port> directly.
 """
 
 import os

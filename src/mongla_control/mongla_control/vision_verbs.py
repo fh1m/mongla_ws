@@ -9,25 +9,28 @@ the align/move outcome rides in ``Move.Result.final_value`` as an
 integer code so the mission DSL branches on it and the action client
 never raises on a miss.
 
-Mixed into ``Mongla`` via multiple inheritance; uses only the base
-facade helpers (``_command_scope``, ``_writers``, ``_resolve_vision_state``,
-``_send_neutral_and_settle``, ``_ensure_alt_hold``, ``_suspend_heading_lock``,
-``_retarget_heading_lock``, ``_current_heading``, ``_make_result``,
-``_lock_active``, ``_abort_fn``, ``_fire_payload``, ``report_vision``) --
+Both stream MANUAL_CONTROL to the board in STABILIZE: the board holds
+attitude, heading and depth at 500 Hz and these verbs add lat / yaw / forward
+on top. Neither moves the depth setpoint -- the board takes none over this
+wire -- so a forward ``depth`` axis and a downward fill-driven descent are
+REFUSED with the reason, never run as a verb that silently holds depth.
+
+Mixed into ``Mongla``; uses only the facade helpers (``_command_scope``,
+``_writers``, ``_resolve_vision_state``, ``_send_neutral_and_settle``,
+``_make_result``, ``_abort_fn``, ``_fire_payload``, ``report_vision``) --
 nothing rclpy-aware.
 """
 
 import threading
 import time
-from contextlib import nullcontext
 
 from .errors import MovementError
 from .fc import srot_protocol as sp
 
 from .motion_vision import (
     align_loop, move_loop,
-    KP_LAT_DEFAULT, KP_YAW_DEFAULT, KP_DEPTH_DEFAULT, KP_FORWARD_DEFAULT,
-    VISION_BRAKE_GAIN, _MAX_DEPTH_NUDGE,
+    KP_LAT_DEFAULT, KP_YAW_DEFAULT, KP_FORWARD_DEFAULT,
+    VISION_BRAKE_GAIN,
 )
 
 
@@ -91,11 +94,6 @@ def _derotation_inputs(fc, vstate):
     if ppr is None:
         return None
     return float(rates['yaw_rate']), float(ppr)
-
-
-def _srot_backend(fc) -> bool:
-    """True when actuation goes to the srot board rather than ArduSub."""
-    return getattr(fc, 'name', '') == 'srot'
 
 
 # Modes in which a streamed MANUAL_CONTROL actually reaches the thrusters.
@@ -262,7 +260,7 @@ class VisionVerbs:
                      brake_off=False, brake_gain=0.0, hold_s=0.0,
                      hold_through_loss=False,
                      fire_channels='', fire_t=0.0,
-                     kp_lat=0.0, kp_yaw=0.0, kp_depth=0.0,
+                     kp_lat=0.0, kp_yaw=0.0,
                      lost_grace_s=0.0, align_stable_frames=0.0,
                      lock_target=False, ctrl_conf=0.0,
                      range_gain_floor=0.0, ki_lat=0.0, coast_s=0.0,
@@ -270,15 +268,16 @@ class VisionVerbs:
                      standoff_max_tilt_deg=0.0,
                      tool='',
                      fwd_fill=0.0, mode='area', kp_forward=0.0,
-                     settle_px=0.0, verify_off=False, depth_step=0.0,
+                     settle_px=0.0, verify_off=False,
                      fire_pass_enabled=False,
-                     hold_heading=False, surge_sign=0.0, max_depth_m=0.0,
-                     depth_ceiling_m=0.0, fire_gap=0.0,
+                     surge_sign=0.0, fire_gap=0.0,
                      fire_max_tilt_deg=0.0):
         """Hold ``target_class`` at the requested pixel offset on each axis.
 
         ``axes`` is a CSV subset of ``lat,yaw,depth``; each active axis
-        uses its matching ``offset_*`` (signed px, 0 = centre). Returns a
+        uses its matching ``offset_*`` (signed px, 0 = centre). ``depth`` is
+        the DOWNWARD camera's image-Y, driven as SURGE fore/aft; on the forward
+        camera it would move the depth setpoint and is refused. Returns a
         Move.Result with ``success=True`` and the outcome code in
         ``final_value``.
 
@@ -338,51 +337,25 @@ class VisionVerbs:
                                                     outcomes=fire_state['outcomes'])
         on_locked = _fire_and_keep if channels else None
 
+        is_downward = camera == 'downward'
+        if 'depth' in axis_set and not is_downward:
+            raise MovementError(
+                "vision_align: the forward 'depth' axis moves the depth setpoint, "
+                "which the board does not take over this wire. Use lat/yaw (and "
+                "fwd_fill for range), with depth held by set_depth.")
+        if is_downward and float(fwd_fill) > 0.0:
+            raise MovementError(
+                "vision_align: fwd_fill on the downward camera is a depth DESCENT, "
+                "which needs a streamed depth setpoint the board does not take. "
+                "Centre with lat + depth (surge) and set the height with set_depth.")
+
         with self._command_scope('vision_align'):
             self._send_neutral_and_settle()
-            # Backend precondition FIRST, before resolving the camera. A board
-            # in SURFACE will discard everything this verb sends, so there is
-            # no point subscribing to a vision state (which can block waiting
-            # for the first CameraInfo) only to refuse afterwards.
-            if _srot_backend(self.pixhawk):
-                _require_srot_vision_mode(self.pixhawk, self.log, 'vision_align')
+            # Mode FIRST, before resolving the camera: a board in SURFACE
+            # discards everything this verb sends, so there is no point waiting
+            # for a CameraInfo only to refuse afterwards.
+            _require_srot_vision_mode(self.fc, self.log, 'vision_align')
             vstate = self._resolve_vision_state(camera)
-            is_downward   = camera in ('downward', 'sim_bottom')
-            depth_sign    = -1 if is_downward else +1
-            touches_yaw   = 'yaw' in axis_set
-            touches_depth = 'depth' in axis_set
-            # ALT_HOLD needed when we command the depth setpoint (forward 'depth'
-            # axis or downward fill->depth), AND on any downward align -- there the
-            # 'depth' axis drives Ch5 surge while ArduSub must still hold the mission
-            # depth on Ch3 (or we'd sink/surface uncommanded).
-            # SROT: ALT_HOLD is an ArduSub mode this board does not have, and
-            # the depth axis needs `set_target_depth` (SET_POSITION_TARGET),
-            # which SrotFC does not implement. REFUSE rather than run an align
-            # whose depth axis silently does nothing -- a mission that believes
-            # it is descending onto a bin and is not is the dangerous version.
-            # STABILIZE is the mode here: the board holds attitude and heading
-            # at 500 Hz and lat/yaw/fwd servo on top of it.
-            #
-            # What srot refuses is only what MOVES the depth setpoint: the forward
-            # 'depth' axis and the downward fill->depth descent (`fwd_fill` on
-            # the downward camera). A downward lat + surge align is plain
-            # MANUAL_CONTROL translation -- the firmware computes fwd/lat before
-            # its mode switch, identically to the forward align that already
-            # runs here -- so refusing it inherited an ArduSub-only reason.
-            if _srot_backend(self.pixhawk):
-                moves_setpoint = ((touches_depth and not is_downward) or
-                                  (is_downward and float(fwd_fill) > 0.0))
-                if moves_setpoint:
-                    raise MovementError(
-                        "vision_align: a depth-setpoint axis (forward 'depth', or "
-                        "the downward fill->depth descent) is not supported on "
-                        "the SROT backend -- it needs a streamed depth setpoint, "
-                        "which this board does not take. Use lat/yaw/fwd (and "
-                        "lat + surge on downward), or drive depth with a separate "
-                        "set_depth once the depth loop is water-verified.")
-            elif touches_depth or is_downward or float(fwd_fill) > 0.0:
-                self._ensure_alt_hold('vision_align')
-
             stable = int(align_stable_frames) or 3
             fire_note = (f' fire={channels}@{eff_fire_t:.1f}s' if channels else '')
             fwd_note = (f' fwd>={float(fwd_fill):.0f}%({mode})'
@@ -393,108 +366,66 @@ class VisionVerbs:
                 f'gain={float(gain):.0f}% dur={float(duration):.0f}s '
                 f'hold={float(hold_s):.0f}s{fire_note}')
 
-            # Ch4 arbitration, gated on the YAW AXIS (not on lock-state): the
-            # verb writes Ch4 ONLY when yaw is a requested align axis. When yaw
-            # is an axis we suspend the lock and the loop drives Ch4 itself.
-            # When yaw is NOT an axis we ALWAYS release Ch4 (send_rc_translation,
-            # lateral-only) so the verb never commands yaw the operator didn't
-            # ask for, and never clobbers a live lock's Ch4 stream (the
-            # lat/depth-align-fights-lock jitter). With a lock active the lock
-            # holds heading on BNO; with no lock, Ch4 falls to the heartbeat /
-            # ArduSub -- either way the verb stays off the yaw channel.
-            release_yaw = not touches_yaw
-            # Fire-window quiet mode: only meaningful when yaw is released (the
-            # background heading lock owns Ch4). Widen the lock deadband so it holds
-            # a steady launcher heading instead of chasing sub-deg noise while the
-            # torpedo fires; always restored in the finally. No-op if no lock active.
-            hold_lock = release_yaw and bool(hold_heading)
-            if hold_lock:
-                self._set_lock_hold(True)
-            try:
-                with self._suspend_heading_lock() if touches_yaw else nullcontext():
-                    # ⛔ SAY IT BEFORE THE SHOT, NOT AFTER. An unmeasured tool reads as
-                    # ZERO offset -- byte-identical to aiming the camera, which is what
-                    # every mission has always done, and therefore silent. But it is
-                    # exactly the case that misses: the geometry says the round leaves a
-                    # parallel axis and the miss equals the offset at every range.
-                    self._warn_tool_geometry(tool, vstate)
-                    outcome = align_loop(
-                        pixhawk=self.pixhawk, vision_state=vstate,
-                        target_class=target_class, axes=axis_set, offsets=offsets,
-                        err_px=float(err_px), duration=float(duration),
-                        gain=float(gain),
-                        gain_lat=float(gain_lat) or float(gain),
-                        gain_yaw=float(gain_yaw) or float(gain),
-                        brake=not bool(brake_off),
-                        brake_gain=float(brake_gain) or VISION_BRAKE_GAIN,
-                        hold_s=float(hold_s),
-                        kp_lat=float(kp_lat) or KP_LAT_DEFAULT,
-                        kp_yaw=float(kp_yaw) or KP_YAW_DEFAULT,
-                        kp_depth=float(kp_depth) or KP_DEPTH_DEFAULT,
-                        lost_grace_s=float(lost_grace_s) or 1.0,
-                        hold_through_loss=bool(hold_through_loss),
-                        align_stable_frames=stable,
-                        depth_sign=depth_sign,
-                        release_yaw=release_yaw,
-                        lock_on=bool(lock_target),
-                        ctrl_conf=float(ctrl_conf),
-                        range_gain_floor=float(range_gain_floor) or 1.0,
-                        ki_lat=float(ki_lat),
-                        coast_s=float(coast_s),
-                        mixer_aware=bool(getattr(self, 'vision_mixer_aware', True)),
-                        # ⛔ WITHOUT THIS LINE THE LADDER IS UNREACHABLE.
-                        # `align_loop` has accepted `lock_s` since the ladder
-                        # was built and NO caller ever passed it, so it kept its
-                        # 0.0 default and `bbox_error` never consulted the
-                        # follower or the anchor. The deck param, the launch
-                        # wiring, the action doc and the staging note all
-                        # described a capability that could not be switched on.
-                        lock_s=float(lock_s),
-                        fwd_fill=float(fwd_fill) / 100.0,   # % -> fraction (like move)
-                        fwd_mode=str(mode) or 'area',
-                        kp_forward=float(kp_forward) or KP_FORWARD_DEFAULT,
-                        settle_px=float(settle_px),
-                        verify=not bool(verify_off),
-                        fire_max_tilt_deg=float(fire_max_tilt_deg),
-                        # Bound to THIS camera's state: the pose is per-camera
-                        # and a downward align must not be gated on what the
-                        # forward camera can see.
-                        tilt_gate_fn=getattr(vstate, 'square_within', None),
-                        # The APPROACH guard. Distinct from `square_within`
-                        # above: that folds "no pose" into "not square", which
-                        # is right for a shot and wrong for an approach.
-                        standoff_max_tilt_deg=float(standoff_max_tilt_deg),
-                        obliquity_fn=getattr(vstate, 'obliquity_deg', None),
-                        # Aim the TOOL. Resolved by the manager, which is the
-                        # layer allowed to import mongla_vision -- the geometry
-                        # table lives there and mongla_control must not depend
-                        # on it (same rule as the refractive index).
-                        tool_offset_fn=((lambda: vstate.tool_offset_px(tool))
-                                        if tool and hasattr(vstate, 'tool_offset_px')
-                                        else None),
-                        # Steer on where the target is NOW: the board's gyro
-                        # rate x the box's age since capture. None (no fresh
-                        # rate, no calibration) = the historical behaviour.
-                        derotate_fn=((lambda: _derotation_inputs(self.pixhawk, vstate))
-                                     if hasattr(vstate, 'px_per_rad') else None),
-                        depth_step=float(depth_step) or _MAX_DEPTH_NUDGE,
-                        downward=is_downward,
-                        # SIGN-ONLY: coerce to exactly +1/-1 (rosidl-0 -> +1) so it can
-                        # never scale Ch5 past the gain cap -- it only flips fore/aft.
-                        surge_sign=(-1 if float(surge_sign) < 0.0 else +1),
-                        max_depth_m=float(max_depth_m),      # deep floor for fill->depth (0=off)
-                        depth_ceiling_m=float(depth_ceiling_m),  # shallow surface guard (0=default)
-                        on_locked=on_locked,
-                        fire_t=eff_fire_t,
-                        fire_pass=bool(fire_pass_enabled),
-                        report_fn=self.report_vision,
-                        writers=self._writers(), log=self.log,
-                        abort_fn=self._abort_fn)
-            finally:
-                if hold_lock:
-                    self._set_lock_hold(False)
-            if touches_yaw:
-                self._retarget_heading_lock(self._current_heading())
+            # ⛔ SAY IT BEFORE THE SHOT, NOT AFTER. An unmeasured tool reads as
+            # ZERO offset -- byte-identical to aiming the camera, and therefore
+            # silent. But it is exactly the case that misses: the round leaves
+            # a parallel axis and the miss equals the offset at every range.
+            self._warn_tool_geometry(tool, vstate)
+            outcome = align_loop(
+                fc=self.fc, vision_state=vstate,
+                target_class=target_class, axes=axis_set, offsets=offsets,
+                err_px=float(err_px), duration=float(duration),
+                gain=float(gain),
+                gain_lat=float(gain_lat) or float(gain),
+                gain_yaw=float(gain_yaw) or float(gain),
+                brake=not bool(brake_off),
+                brake_gain=float(brake_gain) or VISION_BRAKE_GAIN,
+                hold_s=float(hold_s),
+                kp_lat=float(kp_lat) or KP_LAT_DEFAULT,
+                kp_yaw=float(kp_yaw) or KP_YAW_DEFAULT,
+                lost_grace_s=float(lost_grace_s) or 1.0,
+                hold_through_loss=bool(hold_through_loss),
+                align_stable_frames=stable,
+                lock_on=bool(lock_target),
+                ctrl_conf=float(ctrl_conf),
+                range_gain_floor=float(range_gain_floor) or 1.0,
+                ki_lat=float(ki_lat),
+                coast_s=float(coast_s),
+                mixer_aware=bool(getattr(self, 'vision_mixer_aware', True)),
+                # ⛔ WITHOUT THIS LINE THE LADDER IS UNREACHABLE: `align_loop`
+                # accepted `lock_s` for weeks while no caller passed it.
+                lock_s=float(lock_s),
+                fwd_fill=float(fwd_fill) / 100.0,   # % -> fraction (like move)
+                fwd_mode=str(mode) or 'area',
+                kp_forward=float(kp_forward) or KP_FORWARD_DEFAULT,
+                settle_px=float(settle_px),
+                verify=not bool(verify_off),
+                fire_max_tilt_deg=float(fire_max_tilt_deg),
+                # Bound to THIS camera's state: the pose is per-camera.
+                tilt_gate_fn=getattr(vstate, 'square_within', None),
+                # The APPROACH guard. Distinct from `square_within`, which
+                # folds "no pose" into "not square" -- right for a shot,
+                # wrong for an approach.
+                standoff_max_tilt_deg=float(standoff_max_tilt_deg),
+                obliquity_fn=getattr(vstate, 'obliquity_deg', None),
+                # Aim the TOOL. Resolved by the manager, which is the layer
+                # allowed to import mongla_vision.
+                tool_offset_fn=((lambda: vstate.tool_offset_px(tool))
+                                if tool and hasattr(vstate, 'tool_offset_px')
+                                else None),
+                # Steer on where the target is NOW: gyro rate x box age.
+                derotate_fn=((lambda: _derotation_inputs(self.fc, vstate))
+                             if hasattr(vstate, 'px_per_rad') else None),
+                downward=is_downward,
+                # SIGN-ONLY: exactly +1/-1 (rosidl 0 -> +1), so it can never
+                # scale surge past the gain cap -- it only flips fore/aft.
+                surge_sign=(-1 if float(surge_sign) < 0.0 else +1),
+                on_locked=on_locked,
+                fire_t=eff_fire_t,
+                fire_pass=bool(fire_pass_enabled),
+                report_fn=self.report_vision,
+                writers=self._writers(), log=self.log,
+                abort_fn=self._abort_fn)
             self._send_neutral_and_settle()
             return self._make_result(
                 True, f'vision_align: {outcome.reason}'
@@ -511,8 +442,8 @@ class VisionVerbs:
         immediately so the 20 Hz station-keep keeps correcting while the payload
         actuates (``payload.fire`` can sleep ~2 s on a CH340 reconnect). Each
         channel re-checks the cooperative abort right before its write, so a
-        torpedo never leaves after an emergency stop. The shared payload serial
-        is serialised inside ``PayloadDriver.fire`` (a lock), so overlapping a
+        torpedo never leaves after an emergency stop. Payload writes are
+        serialised inside ``SrotPayload.fire`` (a lock), so overlapping a
         later standalone ``fire()`` goal is safe.
 
         ``gap_s`` > 0 spaces MULTIPLE channels apart (fire=[1,4]): the solenoid
@@ -596,7 +527,7 @@ class VisionVerbs:
         # don't drive into it), so a fill-stop move would drive forever. The bin
         # task centres with align(camera='downward') and descends via its fill
         # axis; there is no move() phase. Reject explicitly rather than misbehave.
-        if camera in ('downward', 'sim_bottom'):
+        if camera == 'downward':
             return self._make_result(
                 True, "vision_move: not supported on a downward camera "
                       "(use vision_align -- surge doesn't grow downward fill)",
@@ -606,17 +537,8 @@ class VisionVerbs:
         passthrough = float(fwd_fill) <= 0.0
         with self._command_scope('vision_move'):
             self._send_neutral_and_settle()
-            if _srot_backend(self.pixhawk):
-                _require_srot_vision_mode(self.pixhawk, self.log, 'vision_move')
+            _require_srot_vision_mode(self.fc, self.log, 'vision_move')
             vstate = self._resolve_vision_state(camera)
-            # move_loop drives forward but never commands depth -- it relies
-            # on ArduSub's onboard depth hold. Ensure ALT_HOLD so the approach
-            # holds depth even when a mission jumps straight to vision_move
-            # without a prior set_depth (from MANUAL the setpoint is dropped).
-            # SROT holds depth on-board (or not at all, in STABILIZE); there
-            # is no ALT_HOLD to ensure and no host depth stream to start.
-            if not _srot_backend(self.pixhawk):
-                self._ensure_alt_hold('vision_move')
             self.log.info(
                 f'[CMD  ] vision_move camera={camera!r} class={target_class!r} '
                 f'{"PASS-THROUGH" if passthrough else "fwd_fill=%.0f%%" % float(fwd_fill)} '
@@ -624,7 +546,7 @@ class VisionVerbs:
                 f'maintain={"%+.0fpx" % maintain_px if maintain_on else "off"} '
                 f'hold={float(hold_s):.0f}s gain={float(gain):.0f}%')
             outcome = move_loop(
-                pixhawk=self.pixhawk, vision_state=vstate,
+                fc=self.fc, vision_state=vstate,
                 target_class=target_class,
                 fwd_fill=float(fwd_fill) / 100.0,
                 mode=str(mode) or 'area',
@@ -641,10 +563,6 @@ class VisionVerbs:
                 kp_lat=float(kp_lat) or KP_LAT_DEFAULT,
                 lost_grace_s=float(lost_grace_s) or 1.0,
                 hold_through_loss=bool(hold_through_loss),
-                # move never computes a yaw command, so it must ALWAYS leave Ch4
-                # alone (lock owns it on BNO, else heartbeat/ArduSub hold) --
-                # never write Ch4=1500 against a live lock.
-                release_yaw=True,
                 range_gain_floor=float(range_gain_floor) or 1.0,
                 coast_s=float(coast_s),
                 mixer_aware=bool(getattr(self, 'vision_mixer_aware', True)),
@@ -674,5 +592,5 @@ class VisionVerbs:
             raise RuntimeError(
                 f"vision_state_provider({camera!r}) returned None; "
                 f"check the camera name matches a running detector_node "
-                f"(e.g. 'forward', 'downward', 'sim_front').")
+                f"('forward' or 'downward').")
         return vstate

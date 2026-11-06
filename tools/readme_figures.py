@@ -38,16 +38,12 @@ WIDTH = 1500
 
 # (file stem, css selector, js to run first so the figure shows the right state)
 FIGURES = [
-    ('numbers',     '#surface .bento', ''),
     ('wire-frame',  '.wire', ''),
     # the theatre, parked on a named stage: the selector cannot go stale
     # silently, because a missing figure is reported and the README guard fails
     ('stop-chip',   '#theatre .theatre__stage',
      "var t=document.querySelectorAll('#tbar [role=\"tab\"], #tbar button'); "
      "if (t.length > 2) t[2].click();"),
-    ('stop-lock',   '#theatre .theatre__stage',
-     "var t=document.querySelectorAll('#tbar [role=\"tab\"], #tbar button'); "
-     "if (t.length > 4) t[4].click();"),
     ('colour-loss', '.colour', ''),
     ('lock-ladder', '.rungs2', ''),
     ('ledger',      '.core', ''),

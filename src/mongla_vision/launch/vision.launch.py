@@ -1,7 +1,7 @@
 """vision -- single-camera vision subsystem (camera + detector + tracker + viewer).
 
 The one launch file for any single-camera setup: live USB webcam, a
-pre-recorded video file, or a ROS image topic (Gazebo / re-published
+pre-recorded video file, or a ROS image topic (a bag replay / re-published
 stream). Brings up the whole perception chain and names the detector
 node ``mongla_detector_<camera>`` so the mission DSL
 (``mongla.set_model(... camera='forward')`` etc.) and
@@ -11,7 +11,7 @@ Start it AFTER the control stack (``mongla start`` / bringup), then run
 vision missions.
 
 Usage:
-    # Live forward camera, pool gate model. On the Jetson pass the PORT-STABLE
+    # Live forward camera, pool gate model. On the vehicle pass the PORT-STABLE
     # by-path symlink (the int device index 0/2 is wrong there -> camera_node
     # crashes at startup without it):
     ros2 launch mongla_vision vision.launch.py camera:=forward \\
@@ -24,9 +24,9 @@ Usage:
     # Replay a recorded run:
     ros2 launch mongla_vision vision.launch.py video_file:=/tmp/pool_run.mp4 classes:=gate
 
-    # Gazebo / re-published image topic:
-    ros2 launch mongla_vision vision.launch.py camera:=sim_front \\
-        topic:=/mongla/sim/front_camera/image_raw
+    # Any sensor_msgs/Image topic (a bag replay, a re-published stream):
+    ros2 launch mongla_vision vision.launch.py camera:=forward \\
+        topic:=/replay/forward/image_raw
 
     # Start paused (resume per task to save GPU):
     ros2 launch mongla_vision vision.launch.py camera:=forward paused:=true
@@ -60,9 +60,6 @@ _QUIET = ['--log-level', 'warn']
 #       FutureWarning.
 #   EGL_LOG_LEVEL=fatal   -> kills libEGL "DRI3: failed to query the version"
 #       (emitted by the GL stack under `ssh -X` forwarding).
-# TensorRT's one-shot [TRT] startup lines come from its own C++ logger inside
-# ultralytics and intentionally stay -- they print once and the cross-device
-# "engine plan across different models" line is a real heads-up worth seeing.
 # To get the raw warnings back for debugging, run the node via `ros2 run`
 # (which doesn't inherit this env) or `PYTHONWARNINGS=default`.
 _QUIET_ENV = {
@@ -86,7 +83,7 @@ def generate_launch_description():
         # They were the same value, so pointing the forward role at the Pi's
         # Fantech meant renaming the role -- measured on the Pi, running the
         # documented bringup gave 5.00 Hz and k=0, because the `forward`
-        # profile is the Jetson's Blue Robotics unit: no `fourcc: MJPG` (so
+        # profile was the old Blue Robotics unit: no `fourcc: MJPG` (so
         # YUYV, 3x slower) and no calibration declares it.
         DeclareLaunchArgument('profile',       default_value='',
                               description='Camera HARDWARE profile (CAMERA_PROFILES) '
@@ -107,15 +104,15 @@ def generate_launch_description():
                         'vision.lock_s > 0 -- turn both on together.'),
         DeclareLaunchArgument('lock_class', default_value=''),
         DeclareLaunchArgument('camera',        default_value='forward',
-                              description='Camera profile (forward|downward|sim_front|laptop|...). '
+                              description='Camera profile (forward|downward|laptop|auto). '
                                           'Drives node names: mongla_detector_<camera>.'),
         DeclareLaunchArgument('device',        default_value='-1',
                               description='/dev/videoN index; -1 = use profile default'),
-        # PORT-STABLE identity, same as vision_dual. On the Jetson the forward/downward
+        # PORT-STABLE identity, same as vision_dual. On the vehicle the forward/downward
         # USB cameras do NOT enumerate at a stable int index (the raw /dev/videoN
         # renumbers on reboot/re-plug and silently swaps the two identical cameras).
         # Leave this EMPTY and the node auto-binds /dev/mongla_cam_<camera> WHEN THAT
-        # SYMLINK EXISTS (Jetson) -- so a single-cam launch always opens the right
+        # SYMLINK EXISTS (vehicle) -- so a single-cam launch always opens the right
         # physical camera. A non-empty value forces a specific device (overrides the
         # symlink); on a dev box with no symlink it falls back to the int `device`.
         DeclareLaunchArgument('device_path',   default_value='',
@@ -133,7 +130,7 @@ def generate_launch_description():
         DeclareLaunchArgument('video_file',    default_value='',
                               description='Path to a video file; when set, replaces the live webcam'),
         DeclareLaunchArgument('topic',         default_value='',
-                              description='ROS image topic to consume (Gazebo / re-published stream). '
+                              description='ROS image topic to consume (bag replay / re-published stream). '
                                           'Ignored when video_file is set.'),
         DeclareLaunchArgument('loop',          default_value='true',
                               description='Loop the video file at EOF (video_file only)'),
@@ -149,13 +146,12 @@ def generate_launch_description():
                               description='CSV class filter; empty = all model classes'),
         DeclareLaunchArgument('conf',          default_value='0.35'),
         DeclareLaunchArgument('iou',           default_value='0.5'),
-        DeclareLaunchArgument('device_cls',    default_value='cuda:0',
-                              description='Inference device for YOLO (cuda:0 | cpu)'),
+        DeclareLaunchArgument('device_cls',    default_value='auto',
+                              description='Inference device for a .pt (auto | cuda:0 | cpu); '
+                                          'a .hef ignores it'),
         DeclareLaunchArgument('imgsz',         default_value='640',
-                              description='Inference square size. NOTE: a TensorRT .engine bakes '
-                                          'imgsz at export -- this arg only re-scales the .pt '
-                                          'fallback. To bench a size on TRT, re-export to match: '
-                                          'export_engine --all --imgsz <N>, then imgsz:=<N> here.'),
+                              description='Inference square size for a .pt. A .hef bakes its '
+                                          'input size at compile time and ignores this.'),
         DeclareLaunchArgument('max_det',       default_value='100',
                               description='Post-NMS detection cap (runtime; lower toward ~10 if '
                                           'NMS is the FPS bottleneck on busy frames).'),
@@ -228,7 +224,7 @@ def generate_launch_description():
             'topic':           topic,
             'device':          LaunchConfiguration('device'),
             # PORT-STABLE identity: an empty device_path falls back to the
-            # /dev/mongla_cam_<camera> udev symlink WHEN IT EXISTS (Jetson), else
+            # /dev/mongla_cam_<camera> udev symlink WHEN IT EXISTS (vehicle), else
             # '' -> the int device index (dev box). Keeps forward/downward immune
             # to /dev/videoN renumbering on reboot/re-plug (the raw index is NOT
             # stable — the enumeration order flips, swapping the two identical cams).

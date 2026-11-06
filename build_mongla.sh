@@ -10,7 +10,7 @@
 # ── Device-local models + missions sync (kept OUT of git) ────────────────────
 # The competition YOLO weights (*.pt/*.engine/*.onnx/*.hef) and the personal test
 # missions (rakib_*) change too fast to live in git and are big/private, so the
-# source-of-truth for them lives OUTSIDE the repo on the Jetson:
+# source-of-truth for them lives OUTSIDE the repo on the vehicle:
 #     ~/models    -> src/mongla_vision/models/   (put the Pi's .hef here too --
 #                    the sync copies every regular file, so nothing to change)
 #     ~/missions  -> src/mongla_planner/mongla_planner/missions/
@@ -67,7 +67,7 @@ source /opt/ros/humble/setup.bash 2>/dev/null || true
 
 # Wipe stale Python package dirs so colcon sees a clean slate.
 # mongla_interfaces is ament_cmake so its install dir is managed correctly by CMake.
-for pkg in mongla_control mongla_manager mongla_sensors mongla_localization mongla_planner mongla_vision; do
+for pkg in mongla_control mongla_manager mongla_localization mongla_planner mongla_vision; do
     rm -rf "install/$pkg" "build/$pkg"
 done
 
@@ -112,12 +112,12 @@ source install/setup.bash
 # the installed tree cannot quietly lag the source between builds (it did:
 # 2026-10-03 found the dev box's install/ three weeks behind src/).
 colcon build --symlink-install --packages-select \
-    mongla_control mongla_sensors mongla_manager mongla_localization mongla_planner mongla_vision "$@"
+    mongla_control mongla_manager mongla_localization mongla_planner mongla_vision "$@"
 
 INSTALL="$(pwd)/install"
 PY=python3.10
 
-for pkg in mongla_control mongla_manager mongla_sensors mongla_localization mongla_planner mongla_vision; do
+for pkg in mongla_control mongla_manager mongla_localization mongla_planner mongla_vision; do
     PREFIX="$INSTALL/$pkg"
     DIST="$PREFIX/local/lib/$PY/dist-packages"
     SITE="$PREFIX/lib/$PY/site-packages"
@@ -141,10 +141,8 @@ echo ""
 echo "Build done. Source with:"
 echo "  source install/setup.bash"
 echo "Then:"
-echo "  ros2 run mongla_manager auv_manager --ros-args -p mode:=sim"
+echo "  ros2 run mongla_manager bringup_check              # can it arm?"
+echo "  ros2 launch mongla_manager bringup.launch.py         # the vehicle"
+echo "  ros2 launch mongla_manager bringup.launch.py vision:=true"
 echo "  ros2 run mongla_planner mongla <cmd> [--field value ...]"
-echo "  ros2 run mongla_planner mission demo_square"
-echo "Vision (single camera + YOLO11 detector + tracker + viewer):"
-echo "  ros2 launch mongla_vision vision.launch.py camera:=forward"
-echo "Vision (dual camera, competition):"
-echo "  ros2 launch mongla_vision vision_dual.launch.py"
+echo "  ros2 run mongla_planner mission --list"

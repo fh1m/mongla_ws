@@ -11,7 +11,7 @@ move-type code sends a valid command that does the wrong thing; a wrong mode int
 DENIED with no clue why; a wrong `PCA_RELAY_BASE_CH` fires the wrong payload channel.
 There is no exception to catch -- only a vehicle behaving oddly in the water.
 
-Skips cleanly when the sibling repo is not checked out (CI, a fresh clone, the Jetson),
+Skips cleanly when the sibling repo is not checked out (CI, a fresh clone, the Pi),
 so this can never block a build. It is a canary, not a dependency.
 """
 
@@ -24,7 +24,7 @@ from mongla_control.fc import srot_protocol as sp
 
 # The firmware repo lives under Mongla_others/, a sibling of Ros_workspaces/.
 # Walk up rather than counting parents, so this survives the workspace being
-# moved or nested differently on the Jetson. SROT_FW_DIR overrides.
+# moved or nested differently on the Pi. SROT_FW_DIR overrides.
 def _find_firmware() -> Path | None:
     import os
     override = os.environ.get('SROT_FW_DIR')
@@ -282,7 +282,7 @@ def test_esc_status_291_is_absent_from_our_dialect():
 
     Measured on the board in-vehicle: with the default dialect the ESC frames arrive and
     are reported as UNKNOWN_291 / UNKNOWN_11030 / UNKNOWN_11031. Importing `srot_fc`
-    (which sets MAVLINK20 before importing pymavlink, as pixhawk.py does) is what makes
+    (which sets MAVLINK20 before importing pymavlink) is what makes
     the map below the real one. Test what runs.
     """
     from mongla_control.fc import srot_fc            # noqa: F401  -- sets MAVLINK20

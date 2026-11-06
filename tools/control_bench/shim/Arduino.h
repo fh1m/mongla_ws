@@ -2,9 +2,8 @@
 //  A host shim for Arduino.h, so the board's control code compiles natively.
 //
 //  ⛔ WHY THIS EXISTS. Until now a Hengla control change was testable NOWHERE
-//  but the vehicle: `sim/` runs ArduSub SITL by design, so it exercises verbs and
-//  host behaviour and never the board's own control laws. Every control question
-//  therefore cost a pool session, and you do not out-tune a serious competitor at
+//  but the vehicle: nothing on the host runs the board's own control laws. Every
+//  control question therefore cost a pool session, and you do not out-tune a serious competitor at
 //  one experiment per pool day.
 //
 //  It is possible because the firmware's control maths is PURE. Measured across

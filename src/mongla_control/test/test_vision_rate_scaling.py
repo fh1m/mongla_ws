@@ -1,8 +1,8 @@
 """Two timing constants that were tuned at 20 Hz and stopped meaning what they
 said when perception got fast.
 
-The Hailo path runs the detector at 55-98 Hz and the srot control loop at
-50 Hz, against the 20 Hz both of these were sized for. Neither raised anything
+The Hailo detector runs at 55-98 Hz and the control loop at 50 Hz, against
+the 20 Hz both of these were sized for. Neither raised anything
 when the rate changed -- a constant expressed in TICKS or in FRAMES silently
 becomes a different physical quantity when the rate underneath it moves, which
 is the whole failure mode here.
@@ -22,8 +22,8 @@ _TUNED_DT = 1.0 / VISION_LOCK_GATE_HZ
 
 
 def test_the_design_interval_is_unchanged():
-    """The ArduSub path ran a 20 Hz detector and is the configuration that
-    placed 8th. Any scaling that moves it is wrong whatever else it fixes."""
+    """The gate was tuned at a 20 Hz detection interval. Any scaling that moves
+    the value AT that interval is wrong, whatever else it fixes."""
     assert _lock_gate(_TUNED_DT) == pytest.approx(VISION_LOCK_GATE_NORM)
 
 
@@ -112,22 +112,11 @@ from mongla_control.motion_vision import align_loop, ALIGNED    # noqa: E402
 from types import SimpleNamespace                              # noqa: E402
 
 from test_motion_vision import (                                # noqa: E402
-    _FakePixhawk, _FakeVision, _FakeWriters, _Log, _sample)
+    _FakeBoard, _FakeVision, _FakeWriters, _Log, _sample)
+from mongla_control.motion_vision import LOOP_HZ                 # noqa: E402
 
 
-class _Pix(_FakePixhawk):
-    """`name` is what selects the loop rate -- the srot path ticks at 50 Hz,
-    which is where three frames stop spanning enough time."""
-
-    def __init__(self, name=''):
-        super().__init__()
-        self.name = name
-
-    def manual(self, **kw):
-        pass
-
-
-def _run(name, verify=False):
+def _run(verify=False):
     """Perfectly on-target, every read a NEW frame (age_s=0) -- what a detector
     faster than the control loop looks like.
 
@@ -135,10 +124,10 @@ def _run(name, verify=False):
     The post-stop re-measurement (Block 1C) adds `align_stable_frames` more
     frames on purpose; `test_verification_costs_three_frames_not_more` pins
     that cost separately."""
-    pix = _Pix(name)
+    pix = _FakeBoard()
     t0 = time.monotonic()
     res = align_loop(
-        pixhawk=pix,
+        fc=pix,
         vision_state=_FakeVision(_sample(ex=0.0, ey=0.0, w_frac=0.3, h_frac=0.3)),
         target_class='gate', axes={'lat'}, offsets={}, err_px=40.0,
         duration=3.0, gain=30.0, align_stable_frames=3, lost_grace_s=0.5,
@@ -147,38 +136,29 @@ def _run(name, verify=False):
     return res, time.monotonic() - t0
 
 
-def test_a_perfect_target_still_aligns_on_both_backends():
-    """The floor must not turn a good lock into a TIMEOUT."""
-    for name in ('', 'srot'):
-        res, _ = _run(name)
-        assert res.code == ALIGNED, name
+def test_a_perfect_target_aligns():
+    """The dwell floor must not turn a good lock into a TIMEOUT."""
+    res, _ = _run()
+    assert res.code == ALIGNED
 
 
-def test_the_50Hz_path_cannot_declare_aligned_in_three_ticks():
+def test_the_50Hz_loop_cannot_declare_aligned_in_three_ticks():
     """THE POINT. At 50 Hz three ticks span 0.04 s; the dwell three frames
     bought at 20 Hz is 0.10 s. Without the floor this exits in 60 ms on
     evidence spanning 40 ms -- and the same counter arms the mid-hold fire."""
-    _, elapsed = _run('srot')
+    _, elapsed = _run()
     assert elapsed >= _ALIGN_STABLE_MIN_S, (
         f'aligned in {elapsed*1000:.0f} ms, less than the '
         f'{_ALIGN_STABLE_MIN_S*1000:.0f} ms of evidence three frames bought at '
         f'the rate this was tuned at')
 
 
-def test_the_20Hz_path_is_not_made_slower():
-    """Three ticks at 20 Hz already span 0.10 s, so the floor is satisfied on
-    the same tick the third frame lands. It must not cost an extra one."""
-    _, elapsed = _run('')
-    assert elapsed < _ALIGN_STABLE_MIN_S * 2.0, (
-        f'{elapsed*1000:.0f} ms -- the floor should bind at 20 Hz, not add a tick')
-
-
 def test_verification_costs_three_frames_not_more():
-    """The re-measurement waits for three NEW frames after the stop. At 20 Hz
-    that is ~0.15 s, and it must not cost the 1.5 s timeout on a target that is
+    """The re-measurement waits for three NEW frames after the stop -- ~0.06 s
+    at 50 Hz -- and must not cost the 1.5 s timeout on a target that is
     plainly still there."""
-    res_v, t_v = _run('', verify=True)
-    res_n, t_n = _run('', verify=False)
+    res_v, t_v = _run(verify=True)
+    res_n, t_n = _run(verify=False)
     assert res_v.ok and 'verified' in res_v.reason
     assert t_v - t_n < 0.35, f'verify cost {1000 * (t_v - t_n):.0f} ms'
 
@@ -198,9 +178,9 @@ class _GateSpy(_FakeVision):
         return super().bbox_error(*a, **kw)
 
 
-def _gate_used(name):
+def _gate_used():
     v = _GateSpy(_sample(ex=0.0, ey=0.0, w_frac=0.3, h_frac=0.3))
-    align_loop(pixhawk=_Pix(name), vision_state=v, target_class='gate',
+    align_loop(fc=_FakeBoard(), vision_state=v, target_class='gate',
                axes={'lat'}, offsets={}, err_px=40.0, duration=0.4, gain=30.0,
                align_stable_frames=3, lost_grace_s=0.5, lock_on=True,
                brake=False, writers=_FakeWriters(), log=_Log(), abort_fn=None)
@@ -211,8 +191,7 @@ def test_the_loop_STARTS_at_the_control_period_then_widens():
     """Before any interval has been observed there is nothing to key on, so it
     starts at the shortest gap possible -- tight. Erring tight pre-acquisition
     is safe: there is no lock to drop yet."""
-    for name, hz in (('', 20.0), ('srot', 50.0)):
-        assert _gate_used(name) == pytest.approx(_lock_gate(1.0 / hz))
+    assert _gate_used() == pytest.approx(_lock_gate(1.0 / LOOP_HZ))
 
 
 class _SlowCamera(_GateSpy):
@@ -235,7 +214,7 @@ class _SlowCamera(_GateSpy):
     def bbox_error(self, *a, **kw):
         self.gates.append(kw.get('gate_norm'))
         self.n += 1
-        dt = 1.0 / 50.0                       # the srot control period
+        dt = 1.0 / LOOP_HZ                    # the control period
         age = (self.n % self.every) * dt      # 0 on a new frame, then ageing
         s = self._samples if not isinstance(self._samples, list) else self._samples[0]
         return SimpleNamespace(ex=s.ex, ey=s.ey, w_frac=s.w_frac, h_frac=s.h_frac,
@@ -247,7 +226,7 @@ def test_the_gate_WIDENS_to_the_observed_detection_interval():
     one -- twice as wide. Keying it on the control period is what made it 1.7x
     too tight on the vehicle."""
     v = _SlowCamera(_sample(ex=0.0, ey=0.0, w_frac=0.3, h_frac=0.3), every=2)
-    align_loop(pixhawk=_Pix('srot'), vision_state=v, target_class='gate',
+    align_loop(fc=_FakeBoard(), vision_state=v, target_class='gate',
                axes={'lat'}, offsets={}, err_px=40.0, duration=0.6, gain=30.0,
                align_stable_frames=3, lost_grace_s=0.5, lock_on=True,
                brake=False, writers=_FakeWriters(), log=_Log(), abort_fn=None)

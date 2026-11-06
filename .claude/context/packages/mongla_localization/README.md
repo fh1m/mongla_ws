@@ -1,6 +1,6 @@
 # mongla_localization — where am I, and am I moving?
 
-**3.6k lines · 244 tests · [`src/mongla_localization`](../../../../src/mongla_localization)**
+**[`src/mongla_localization`](../../../../src/mongla_localization)**
 
 Underwater there is no GPS: radio does not travel through water. The usual answer is a
 **DVL** — a sonar that measures speed over the seabed. We do not have one fitted.
@@ -87,7 +87,7 @@ tile grating — so each can be enabled alone and measured.
 python3 -m pytest -q src/mongla_localization/test
 ```
 
-244 tests, most built on truth by construction: generate a trajectory, feed the filter, compare
+Most of the tests are built on truth by construction: generate a trajectory, feed the filter, compare
 against the trajectory it came from. The replay test compares a late measurement against the
 same measurement applied on time and asserts they land in the same place — with the old
 on-arrival behaviour failing that same check.

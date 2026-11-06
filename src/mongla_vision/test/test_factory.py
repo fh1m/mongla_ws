@@ -10,8 +10,7 @@ from mongla_vision.config import CAMERA_PROFILES, get_profile
 
 def test_builders_known_keys():
     assert set(BUILDERS) == {
-        'webcam', 'v4l2', 'ros_topic', 'video_file',
-        'jetson', 'blueos', 'mavlink'}
+        'webcam', 'v4l2', 'ros_topic', 'video_file'}
 
 
 def test_unknown_source_raises_with_helpful_message():
@@ -21,22 +20,6 @@ def test_unknown_source_raises_with_helpful_message():
     assert 'unknown camera source' in msg
     assert 'webcam' in msg            # known list cited
     assert 'ros_topic' in msg
-
-
-def test_jetson_stub_raises_not_implemented():
-    with pytest.raises(NotImplementedError) as exc:
-        make_camera('jetson')
-    assert 'jetson camera not implemented' in str(exc.value).lower()
-
-
-def test_blueos_stub_raises_not_implemented():
-    with pytest.raises(NotImplementedError):
-        make_camera('blueos')
-
-
-def test_mavlink_stub_raises_not_implemented():
-    with pytest.raises(NotImplementedError):
-        make_camera('mavlink')
 
 
 def test_ros_topic_requires_node():
@@ -70,11 +53,6 @@ def test_get_profile_unknown_lists_known():
 def test_camera_profiles_have_source_key():
     for name, profile in CAMERA_PROFILES.items():
         assert 'source' in profile, f'profile {name!r} missing source key'
-
-
-def test_make_camera_from_profile_jetson_stub_still_raises_not_impl():
-    with pytest.raises(NotImplementedError):
-        make_camera_from_profile(get_profile('jetson_front'))
 
 
 def test_make_camera_from_profile_requires_source():

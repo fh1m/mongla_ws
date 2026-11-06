@@ -1,4 +1,4 @@
-"""The committed geometry table: reachable, sourced, and agreeing with the sim.
+"""The committed geometry table: reachable and sourced.
 
 ⛔ WHY THIS FILE EXISTS. `target_width_m` was an operator parameter defaulting
 to 0.0, so `lock_node`'s 6-DoF branch published
@@ -7,7 +7,7 @@ the vehicle. A number that must be typed correctly per mission, under
 pressure, for an answer whose wrongness is invisible, is a defect waiting for
 a pool day.
 
-Three things can go wrong and only one of them is loud:
+Two things can go wrong and neither of them is loud:
 
   * the file is not installed -> every class resolves to 0.0 on a clean
     deploy and the metric path silently stays refused (the round-1 defect, in
@@ -15,9 +15,6 @@ Three things can go wrong and only one of them is loud:
   * a width is the prop's largest dimension rather than the width of WHAT THE
     DETECTOR BOXES -> every range is wrong by a fixed factor, with nothing
     logging a fault;
-  * this table and the simulator's arena spec disagree -> a rulebook change
-    lands in one and not the other, and sim-tuned behaviour stops matching the
-    pool.
 
 Reads the files; no ROS, no camera.
 """
@@ -33,14 +30,6 @@ yaml = pytest.importorskip('yaml')
 
 _PKG = pathlib.Path(__file__).resolve().parents[1]
 _TABLE = _PKG / 'config' / 'target_geometry.yaml'
-# The simulator is a SEPARATE colcon workspace (sim/COLCON_IGNORE), so it can
-# never be imported from here -- but it can be read, and that is the whole
-# point of this cross-check.
-# _PKG is src/mongla_vision, so parents[1] is the WORKSPACE ROOT and the sim
-# lives beside src/. This was parents[2] and resolved one level too high, so
-# the cross-check below skipped silently -- "a cross-check that compares
-# nothing always passes", which is the failure its own assertion warns about.
-_SIM_SPEC = _PKG.parents[1] / 'sim' / 'src' / 'mongla_sim_worlds' / 'spec'
 
 
 def _table():
@@ -106,43 +95,6 @@ def test_the_classes_MATCH_a_shipped_model():
         f'target_geometry names SAUVC classes the shipped model does not '
         f'emit: {unknown}. Those entries can never be looked up. Known: '
         f'{sorted(names)}')
-
-
-def test_it_AGREES_with_the_simulator_arena_spec_where_both_state_a_number():
-    """One truth, two files. They serve different purposes -- the sim spec
-    builds a world, this feeds a pose solver -- but where both name the same
-    physical dimension they must not disagree, or a rulebook change lands in
-    one and sim-tuned behaviour stops matching the pool."""
-    spec = _SIM_SPEC / 'sauvc.yaml'
-    if not spec.is_file():
-        pytest.skip('simulator arena spec not present')
-    sim = (yaml.safe_load(spec.read_text()) or {}).get('props', {})
-    table = _table()['sauvc']
-    # (table class, sim prop, sim key) -- only where BOTH describe the same
-    # physical quantity.
-    pairs = [
-        ('qual_gate',     'qualification_gate', 'width'),
-        ('final_gate',    'final_gate',         'width'),
-        ('orange_flare',  'orange_flare',       'diameter'),
-        ('flare_red',     'bump_flare',         'diameter'),
-        ('drum_red',      'drum',               'diameter'),
-        ('starting_zone', 'starting_zone',      'size'),
-    ]
-    checked = 0
-    bad = []
-    for cls, prop, key in pairs:
-        if prop not in sim or key not in (sim.get(prop) or {}):
-            continue
-        checked += 1
-        a, b = float(table[cls]['width_m']), float(sim[prop][key])
-        if abs(a - b) > 1e-6:
-            bad.append(f'{cls}: table={a} sim {prop}.{key}={b}')
-    assert checked >= 4, (
-        f'only {checked} dimensions were comparable -- has the sim spec '
-        f'changed shape? A cross-check that compares nothing always passes.')
-    assert not bad, (
-        'the geometry table and the simulator arena spec disagree:\n  '
-        + '\n  '.join(bad))
 
 
 def test_lock_node_ACTUALLY_consults_the_table():

@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """``ros2 run mongla_manager connect`` -- point at the SROT board, see the vehicle.
 
-The Pixhawk + Pi stack had a dozen ways to look at the vehicle (BlueOS web UI, QGC,
-MAVProxy, the ArduSub console). The SROT board has one USB cable and no web UI, so
-this is that surface: open the serial link, and print everything the board says.
+The SROT board has one USB cable and no web UI, so this is the surface for
+looking at the vehicle: open the serial link, and print everything the board says.
 
-WHY THIS IS NOT `bringup_check --srot`. That is a pass/fail GATE -- it grades, it
+WHY THIS IS NOT `bringup_check`. That is a pass/fail GATE -- it grades, it
 exits non-zero, and `--strict` makes any WARN fatal. Those are the right semantics
 for "may I dive", and the wrong ones for "show me the vehicle": a monitor that exits
 non-zero because something is merely unusual cannot be left running while you watch a
@@ -39,11 +38,10 @@ from pymavlink import mavutil                                        # noqa: E40
 from mongla_control.fc.port_guard import PortGuard, PortBusy
 
 try:
-    from .connection_config import (find_srot_serial, SROT_BAUD,
-                                resolve_srot_profile, diagnose_bridge)
+    from .connection_config import find_srot_serial, SROT_BAUD, resolve_srot_profile
 except ImportError:                                                  # direct execution
     from mongla_manager.connection_config import (find_srot_serial, SROT_BAUD,
-                                                  resolve_srot_profile, diagnose_bridge)
+                                                  resolve_srot_profile)
 
 
 class _StderrLogger:
@@ -436,7 +434,7 @@ def render(snap: Snapshot, conn) -> list[str]:
         L.append(f'  {RED}!! behaviour rev {rev} < {sp.FW_BEHAVIOUR_REV_REQUIRED} required '
                  f'-- MOVE_STOP COASTS, the host brake is gone{RESET}')
 
-    # ---- power: TWO batteries, which Pixhawk never had -------------------- #
+    # ---- power: TWO batteries -------------------- #
     L.append(f'\n{BOLD}== power =={RESET}')
     labels = {0: 'PM1 electronics', 1: 'PM2 thruster pack'}
     for bid in sorted(snap.batteries) or []:
@@ -700,7 +698,7 @@ def main(argv=None) -> int:
     ap.add_argument('--path', default=None,
                     help='serial device, OR any pymavlink connection string when the '
                          'board is not on this host -- e.g. udpin:0.0.0.0:14550 for a '
-                         'SROT reached through a BlueOS/Bridget serial->UDP bridge. '
+                         'SROT reached through a serial->UDP bridge. '
                          'Default: autodetect local USB serial, same as the manager.')
     ap.add_argument('--baud', type=int, default=SROT_BAUD)
     ap.add_argument('--duration', type=float, default=6.0,
@@ -760,10 +758,10 @@ def main(argv=None) -> int:
             print('  Board powered? Correct port?', file=sys.stderr)
         else:
             # On a bridged link "silent" has one more failure mode than on serial:
-            # the board can be perfectly healthy with the bridge simply not running --
-            # or, after a reflash, LISTED but holding a dead file descriptor.
-            for line in diagnose_bridge():
-                print(f'  {line}', file=sys.stderr)
+            # the board can be healthy with the bridge simply not running -- or,
+            # after a reflash, still running on a dead file descriptor.
+            print('  Is the serial->UDP bridge running? After a reflash, restart it.',
+                  file=sys.stderr)
         return 2
 
     # Read-only: AUTOPILOT_VERSION is not streamed, it must be asked for. Nothing

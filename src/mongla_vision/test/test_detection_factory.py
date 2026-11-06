@@ -22,17 +22,15 @@ from mongla_vision.detection.factory import (      # noqa: E402
 # --------------------------------------------------------------------------- #
 def test_extension_picks_the_backend():
     assert backend_for('/models/gate_sharks.hef') == 'hailo'
-    assert backend_for('/models/gate_sharks.engine') == 'yolo'
     assert backend_for('/models/gate_sharks.pt') == 'yolo'
 
 
-def test_hef_is_preferred_over_engine_and_pt():
-    """A device has one compiled artifact and it is the fast one: measured
-    82.3 Hz (Hailo) vs 20-30 (TensorRT) vs 3-4 (raw PyTorch). If this order ever
-    changes, `yolo._resolve_model_path` must change with it -- they walk the
-    same list, and disagreeing means resolving one file and loading another."""
-    assert KNOWN_EXTENSIONS.index('.hef') < KNOWN_EXTENSIONS.index('.engine')
-    assert KNOWN_EXTENSIONS.index('.engine') < KNOWN_EXTENSIONS.index('.pt')
+def test_hef_is_preferred_over_pt():
+    """The compiled artifact is the fast one: measured 82.3 Hz (Hailo) vs 3-4
+    (raw PyTorch). If this order ever changes, `yolo._resolve_model_path` must
+    change with it -- they walk the same list, and disagreeing means resolving
+    one file and loading another."""
+    assert KNOWN_EXTENSIONS == ('.hef', '.pt')
 
 
 def test_the_resolver_walks_the_same_extension_order():
@@ -41,9 +39,9 @@ def test_the_resolver_walks_the_same_extension_order():
     that has not heard of .hef would load a Hailo graph through ultralytics."""
     src = code_of_file(Path(__file__).resolve().parents[1]
            / 'mongla_vision' / 'detection' / 'yolo.py')
-    assert "for ext in ('.hef', '.engine', '.pt'):" in src, (
+    assert "for ext in ('.hef', '.pt'):" in src, (
         'yolo._resolve_model_path no longer walks the factory order')
-    assert src.count("for ext in ('.hef', '.engine', '.pt'):") == 2, (
+    assert src.count("for ext in ('.hef', '.pt'):") == 2, (
         'both the source-tree and share-dir search roots must agree')
 
 

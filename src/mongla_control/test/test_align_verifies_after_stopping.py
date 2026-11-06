@@ -17,7 +17,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(__file__))
 from test_motion_vision import (                     # noqa: E402
-    _FakePixhawk, _FakeWriters, _Log, _sample)
+    _FakeBoard, _FakeWriters, _Log, _sample)
 from mongla_control.motion_vision import (           # noqa: E402
     ALIGNED, DRIFTED, LOST, VERIFY_TIMEOUT_S, align_loop)
 import sys as _sys_ct
@@ -61,7 +61,7 @@ def _align(after, before=None):
     w = _Writers()
     vs = _Scene(w, before or _sample(ex=0.0, w_frac=0.3, h_frac=0.3), after)
     t0 = time.monotonic()
-    out = align_loop(pixhawk=_FakePixhawk(), vision_state=vs, target_class='gate',
+    out = align_loop(fc=_FakeBoard(), vision_state=vs, target_class='gate',
                      axes={'lat'}, offsets={}, err_px=40.0, duration=5.0,
                      gain=30.0, align_stable_frames=3, lost_grace_s=0.5,
                      brake=False, writers=w, log=_Log(), abort_fn=None)
@@ -100,7 +100,7 @@ def test_verify_off_is_the_old_behaviour_exactly():
     w = _Writers()
     vs = _Scene(w, _sample(ex=0.0, w_frac=0.3, h_frac=0.3),
                 _sample(ex=0.30, w_frac=0.3, h_frac=0.3))
-    out = align_loop(pixhawk=_FakePixhawk(), vision_state=vs, target_class='gate',
+    out = align_loop(fc=_FakeBoard(), vision_state=vs, target_class='gate',
                      axes={'lat'}, offsets={}, err_px=40.0, duration=5.0,
                      gain=30.0, align_stable_frames=3, lost_grace_s=0.5,
                      brake=False, verify=False, writers=w, log=_Log(),
@@ -114,6 +114,7 @@ def test_the_verification_and_the_controller_ask_the_SAME_question():
     import inspect
     from mongla_control import motion_vision as mv
     src = code_of(mv.align_loop)
-    assert src.count('_axis_ctrl(') >= 4, 'the control law must use the helper'
+    # one per controlled axis: lat, yaw, and the downward camera's surge
+    assert src.count('_axis_ctrl(') >= 3, 'the control law must use the helper'
     assert '_centring_error_px(' in src
     assert "ex_now - (offsets.get(" not in src

@@ -24,13 +24,12 @@ mongla_manager:
       # Raise if centring is sluggish; lower if the sub oscillates. The
       # P-controller output is then clamped to the per-call `gain` cap, so
       # these set responsiveness while `gain` sets the speed ceiling.
-      kp_lat:      60.0   # Ch6 strafe percent  (vision_align lat, vision_move maintain)
-      kp_yaw:      60.0   # Ch4 yaw percent     (vision_align yaw)
-      kp_depth:    0.05   # metres of depth setpoint nudge per tick (vision_align depth)
-      kp_forward: 200.0   # Ch5 forward percent per unit fill error (vision_move)
+      kp_lat:      60.0   # lateral percent  (vision_align lat, vision_move maintain)
+      kp_yaw:      60.0   # yaw percent      (vision_align yaw)
+      kp_forward: 200.0   # forward percent per unit fill error (vision_move)
 
       # ---- Loss handling ----------------------------------------------
-      # Seconds the server coasts (neutral RC) on target loss before
+      # Seconds the server coasts (neutral demand) on target loss before
       # reporting LOST so the mission DSL can run its fallback search.
       # Raise for turbid pool water with bursty detector drops.
       lost_grace_s: 1.0

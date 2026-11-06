@@ -15,7 +15,7 @@ export MONGLA_HEF_DIR=~/hailo_models
 
 # The HEFs are baked at nms_scores_th=0.05 so runtime conf can be TIGHTENED
 # (it can never be loosened below the baked value). INT8 scores ~0.08 lower
-# than fp32, measured, so run 0.12-0.15 where the Jetson path uses 0.20.
+# than fp32, measured, so run 0.12-0.15 where a .pt uses 0.20.
 export MONGLA_HAILO_CONF=0.15
 
 # Camera: 640x360 @ 210 fps MJPG.

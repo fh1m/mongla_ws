@@ -57,12 +57,12 @@ answers, every time, on success **and** failure:
 ## 2. `VisionResult` — the finish-state
 
 ```python
-res = mongla.vision.align('hole', yaw=0, lat=0, depth=0)
+res = mongla.vision.align('hole', yaw=0, lat=0)
 # res is a VisionResult:
 res.ok           # bool  — True only when ALIGNED (move: reached fill / passed through)
-res.status       # str   — 'ALIGNED'|'LOST'|'TIMEOUT'|'NO_CAMERA'|'ABORTED'|'FAILED'
+res.status       # str   — 'ALIGNED'|'LOST'|'TIMEOUT'|'NO_CAMERA'|'ABORTED'|'DRIFTED'|'FAILED'
 res.reason       # str   — same string as status (alias)
-res.code         # int   — raw outcome code (ALIGNED=0,LOST=1,TIMEOUT=2,NO_CAMERA=3,ABORTED=4)
+res.code         # int   — raw outcome code (ALIGNED=0,LOST=1,TIMEOUT=2,NO_CAMERA=3,ABORTED=4,DRIFTED=5)
 res.x_px         # float — SIGNED px of target from frame CENTRE at the LAST SEEN frame
 res.y_px         # float —   (+x = target ended RIGHT, +y = target ended BELOW); NaN if never seen
 res.saw_target   # bool  — was the target detected at least once during the verb
@@ -76,7 +76,7 @@ bool(res)        # == res.ok  ->  `if mongla.vision.align(...):` still works unc
 
 These are the **target's position relative to frame centre** on the **last frame the
 verb saw it**, in pixels. They are the **raw observable** — independent of any `lat=`/
-`yaw=`/`depth=` offset you asked for.
+`yaw=`/`fwd=` offset you asked for.
 
 | Value | Meaning | To centre it, the hull must… |
 |---|---|---|
@@ -120,7 +120,7 @@ isn't in view. The verb's log line and `res.status` say which. (See
 
 - **`x_px`/`y_px`** = where the target is **relative to frame centre** (raw, offset-blind).
 - **`last_err_px`** = worst residual from the **goal you asked for** (centre **+** your
-  `lat=`/`yaw=`/`depth=` offset). This is "how far from *aligned*".
+  `lat=`/`yaw=`/`fwd=` offset). This is "how far from *aligned*".
 
 If you align dead-centre (`lat=0, yaw=0`) they track each other. If you align to an
 offset (`lat=80` — keep the target 80 px right), `x_px≈80` at success while
@@ -166,8 +166,8 @@ def pass_gate(mongla):
 
 ### 3.2 Torpedo — note the miss for the NEXT shot
 ```python
-res = mongla.vision.align('hole', yaw=0, lat=0, depth=0, err=12,
-                          gain=25, yaw_gain=10, hold=4, fire=1, fire_t=1,
+res = mongla.vision.align('hole', lat=0, err=12,
+                          gain=25, hold=4, fire=TORPEDO_1_CHANNEL, fire_t=1,
                           brake=False)            # fire mid-hold (see §4)
 if not res and res.saw_target:
     log(f'shot likely off: hole ended ({res.x_px:+.0f},{res.y_px:+.0f})px '
@@ -176,20 +176,20 @@ if not res and res.saw_target:
 
 ### 3.3 Bin — drop only when actually centred, else reposition by sign
 ```python
-res = mongla.vision.align('bin', camera='downward', lat=0, depth=0,
+res = mongla.vision.align('bin', camera='downward', lat=0, fwd=0,
                           err=25, duration=12)
 if res:
-    mongla.fire(3)                              # dropper
+    mongla.fire(DROPPER_1_CHANNEL)
 elif res.saw_target and abs(res.x_px) < 60:
     mongla.move_right(0.5) if res.x_px > 0 else mongla.move_left(0.5)
-    if mongla.vision.align('bin', camera='downward', lat=0, depth=0, err=25):
-        mongla.fire(3)
+    if mongla.vision.align('bin', camera='downward', lat=0, fwd=0, err=25):
+        mongla.fire(DROPPER_1_CHANNEL)
 # else: never saw the bin -> hold drop, continue search
 ```
 
 > **Downward camera note:** `x_px` is still "left/right in the image". On the downward
-> cam that maps to the hull's lateral axis the same way; depth (`y_px`) maps to
-> forward/back of the image. Confirm the physical mapping at the pool before trusting
+> cam that maps to the hull's lateral axis the same way; `y_px` maps to
+> forward/back of the image (the surge axis, `fwd=`). Confirm the physical mapping at the pool before trusting
 > a downward recovery sign (the forward-cam table above is pool-verified; the downward
 > cam is not).
 
@@ -202,21 +202,21 @@ and the torpedo leaving lets the hull drift off the hole. `fire`/`fire_t` fire t
 payload **while `align` is still actively correcting**, so the shot leaves *glued*.
 
 ```python
-mongla.vision.align('hole', yaw=0, lat=0, depth=0,
+mongla.vision.align('hole', lat=0,
                     hold=4,            # active station-keep for 4 s after centring
-                    fire=1,            # fire payload channel 1 (1/2=torpedo, 3/4=dropper)
+                    fire=TORPEDO_1_CHANNEL,   # a board channel, named in competition_config
                     fire_t=1,          # 1 s into the hold (0 = at the moment it locks)
                     brake=False)       # no pre-shot lateral nudge
 ```
 
-- **`fire`** — a channel `int` or a list (`fire=[1, 2]` fires both, one-by-one). 1/2 =
-  torpedo, 3/4 = dropper.
+- **`fire`** — a board channel `int` or a list (`fire=[TORPEDO_1_CHANNEL, TORPEDO_2_CHANNEL]`
+  fires both, one-by-one, `fire_gap` apart). Unassigned channels are 0 and refused.
 - **`fire_t`** — seconds **into the hold window** to fire. `0` = the instant the lock is
   confirmed. Must be `< hold` (else it's clamped to `0` with a loud warning).
 - **Gated on alignment, distinct frames, AND a fresh new frame — three conditions, all
   on the same tick:** the shot leaves on the first **stably-aligned** tick at/after
   `fire_t`, where "stable" means `align_stable_frames` **distinct in-band detections**
-  (not 20 Hz loop ticks — a re-read frame counts once, so one lucky frame at low FPS
+  (not 50 Hz loop ticks — a re-read frame counts once, so one lucky frame at low FPS
   can't arm it), **and** that tick must be one where a **genuinely new, non-coasted
   detection just landed** (`is_new_frame and not coasted`). This `is_new_frame` gate
   (2026-07-01, D12) replaced the old `age_s ≤ 0.10 s` window: at 3-4 Hz that window was
@@ -227,18 +227,14 @@ mongla.vision.align('hole', yaw=0, lat=0, depth=0,
   a stale box even while `stable` stands held at threshold through a mid-hold freeze. So
   a torpedo **never** fires (a) off-target, (b) on a frozen detector's re-read frame, or
   (c) on a tracker-coasted (Kalman-predicted) box during a `coast_s` gap. Raise real
-  detector FPS (`[YOLO] backend=TensorRT`) so new frames — hence fire opportunities —
+  detector FPS (the Hailo path, `hailo-vision.md`) so new frames — hence fire opportunities —
   are plentiful (still the single biggest lever on fire reliability).
 - **`fire_pass=True`** (opt-in) — if the strict in-band fire above never landed, fire
   the payload anyway on a **natural exit** (TIMEOUT or hold-complete), provided the
   target was seen **live within `lost_grace_s`** (never on a never-seen or coasted-only
   target). A guaranteed partial-points shot when full alignment wasn't reached — "fire
   *something* if we saw it." Off by default (strict lock only).
-- **`hold_heading=True`** (opt-in) — when yaw is released to the background heading lock
-  (the terminal hole-lock drops the yaw axis), widen the lock deadband 1°→3° for the
-  hold so the launcher heading holds **steady** instead of micro-correcting sub-degree
-  noise (the terminal yaw jitter). Use it on the yaw-dropped fire-lock.
-- **Non-blocking:** the fire runs on a background thread so the 20 Hz correction loop
+- **Non-blocking:** the fire runs on a background thread so the 50 Hz correction loop
   never stalls (the payload board can sleep ~2 s on a USB reconnect). The hull keeps
   correcting through the shot.
 - **Always pair with `brake=False`** on a fire-from-lock — the arrival brake's pre-shot

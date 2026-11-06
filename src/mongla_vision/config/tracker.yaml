@@ -37,9 +37,9 @@ tracker_node:
     # MEASURES the real arrival rate and warns once if it disagrees by more
     # than frame_rate_warn_ratio, naming the real coast in seconds.
     #
-    # 20 is the Jetson/ArduSub figure and is DELIBERATELY LEFT as the default:
-    # this file is the fallback, and the two vehicles disagree with each other
-    # AND with themselves. Measured on the Pi: forward 55 Hz, downward 15 Hz.
+    # 20 is DELIBERATELY LEFT as the default: this file is the fallback, and
+    # the two cameras disagree with each other. Measured on the Pi: forward
+    # 55 Hz, downward 15 Hz.
     # vision_pi.launch.py sets it per camera, which is the only place it can be
     # right, because one number cannot serve two cameras at different rates.
     frame_rate: 20.0

@@ -1,43 +1,23 @@
-"""Movement-layer exceptions.
+"""Verb-layer exceptions.
 
-Raised by the per-axis modules (motion_yaw, motion_forward, motion_lateral, motion_depth)
-and by `Mongla` itself to fail loudly to the action server instead of
-silently returning. The ActionServer catches these in its execute
-callback, sets `Move.Result.success = False`, and aborts the goal so
-callers (CLI, mission scripts) see the failure.
+Raised by `Mongla` and the vision verbs to fail loudly instead of returning a
+success that moved nothing. The action server catches them, sets
+`Move.Result.success = False` with the message, and aborts the goal, so the
+CLI and mission scripts see the failure.
 
-Three flavours, narrow on purpose:
-
-  MovementError    -- Base class. Catch this if you want all
-                      movement-layer failures (timeouts, mode
-                      rejections, bad inputs).
-  MovementTimeout  -- Yaw or depth loop reached its deadline without
-                      locking inside tolerance. Includes target /
-                      current values in the string for log triage.
-  ModeChangeError  -- Autopilot refused to enter a mode we needed
-                      (e.g. ALT_HOLD for yaw or set_depth). NOT
-                      swallowed -- the move cannot succeed, so the
-                      action result has to reflect it.
+  MovementError  -- base class: a verb that cannot do what it was asked
+                    (a refused mode, an axis the board does not take).
+  NotArmedError  -- a motion verb on a disarmed vehicle.
 """
 
 
 class MovementError(Exception):
-    """Base class for any movement-layer failure surfaced to the operator."""
-
-
-class MovementTimeout(MovementError):
-    """Yaw or depth loop reached its deadline without locking on target."""
-
-
-class ModeChangeError(MovementError):
-    """Autopilot refused the requested mode within the timeout."""
+    """A verb that cannot do what it was asked. The message says why."""
 
 
 class NotArmedError(MovementError):
     """Command rejected because the AUV is not armed.
 
-    ArduSub silently drops every RC_CHANNELS_OVERRIDE and
-    SET_POSITION_TARGET_GLOBAL_INT frame while disarmed, so motion
-    commands would appear to succeed but produce no thrust.
-    Call arm() first.
+    The board ignores motion demands while disarmed, so a motion command
+    would appear to succeed but produce no thrust. Call arm() first.
     """

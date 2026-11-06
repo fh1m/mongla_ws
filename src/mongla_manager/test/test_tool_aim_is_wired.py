@@ -28,18 +28,18 @@ def test_the_verb_passes_the_tool_offset_into_the_loop():
 
 
 def test_the_loop_applies_it_to_EVERY_centring_axis():
-    """lat, yaw and depth all centre the target. Correcting one and not the
-    others aims the tool horizontally and the camera vertically."""
+    """lat, yaw and the image-Y axis all centre the target. Correcting one and
+    not the others aims the tool horizontally and the camera vertically."""
     # The error lives in ONE helper (`_axis_ctrl`, Block 1C) shared by the
     # control law and the post-stop re-measurement; the tool offset must be
     # handed to it on every centring axis.
     assert _MV.count("_axis_ctrl(ex_now, offsets.get('lat', 0.0), tool_du,") == 1
     assert _MV.count("_axis_ctrl(ex_now, offsets.get('yaw', 0.0), tool_du,") == 1
-    # THREE, read off the code: both depth control branches AND the post-stop
-    # re-measurement. On raw text this counted 2, because the third call was
-    # wrapped across lines -- a layout fact the old guard was measuring.
-    assert _MV.count("_axis_ctrl(sample.ey, offsets.get('depth', 0.0), tool_dv,") == 3, \
-        'both depth branches and the re-measurement must be corrected'
+    # TWO, read off the code: the image-Y control branch (downward surge -- the
+    # forward camera's depth axis is refused on srot) AND the post-stop
+    # re-measurement, which is wrapped across lines and only counts on code text.
+    assert _MV.count("_axis_ctrl(sample.ey, offsets.get('depth', 0.0), tool_dv,") == 2, \
+        'the image-Y branch and the re-measurement must both be corrected'
     assert 'return e_norm - (offset_px + tool_px) / half' in _MV
 
 

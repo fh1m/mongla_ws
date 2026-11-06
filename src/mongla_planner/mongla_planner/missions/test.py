@@ -20,9 +20,6 @@ SEARCH_TIME = 5
 def run(mongla, log=None):
     mongla.mission_reset()
     # mongla.countdown(5)
-    if mongla.can('lock_heading'):   # refused on srot: the board holds heading
-        mongla.lock_heading(0.0, timeout=600)
-    mongla.set_mode('ALT_HOLD', timeout=10)
     mongla.arm()
     mongla.set_depth(-0.3, timeout=10)
     mongla.pause(2)
@@ -47,10 +44,9 @@ def run(mongla, log=None):
     mongla.move_forward(4, gain=35)
     mongla.set_depth(-0.5, timeout=10)
 
-    # mongla.style_roll(flips=5, headroom=0.2, gain=80)
+    # mongla.style_roll(flips=5)
 
     mongla.pause(1.0)
-    mongla.release_heading()
     mongla.stop()
     mongla.disarm()
     mongla.pause_detector('forward')

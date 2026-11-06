@@ -11,8 +11,8 @@ reported:
 0x2408 has neither 3D_GYRO (0x01) nor 3D_ACCEL (0x02) set, while `present`
 has both -- so the board KNEW and said so on a field nothing read. Meanwhile
 `get_attitude()` returned yaw 0.0 as a number, `_effective_yaw_deg` published
-it to `/mongla/state`, and `heading_lock` would have closed a 50 Hz Ch4 loop
-on a heading the vehicle does not have.
+it to `/mongla/state`, and every heading consumer -- the board's own hold included -- would have
+closed a loop on a heading the vehicle does not have.
 
 After the operator power-cycled the board the same probe returned accel
 (-27, -179, 978) mG -- magnitude 0.995 g, gravity included, matching the

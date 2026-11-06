@@ -12,12 +12,10 @@ Open-loop motion verbs sit directly on `mongla`:
     mongla.move_left(seconds) / mongla.move_right(seconds)
     mongla.yaw_left(degrees) / mongla.yaw_right(degrees)
     mongla.turn(heading_deg)        -- absolute heading, direction auto-selected
-    mongla.arc(target_yaw, seconds=4, gain=50)   # curve onto an absolute heading
-    mongla.lock_heading(degrees)  / mongla.release_heading()
     mongla.pause(seconds) / mongla.stop()
 
-Depth is held automatically by ArduSub's onboard ALT_HOLD. `set_depth`
-engages the mode and drives to the target; the autopilot holds it afterwards.
+Each of these is ONE move the SROT board runs and brakes itself; the board
+holds depth and heading at 500 Hz between them.
 
 Closed-loop vision lives under `mongla.vision` as exactly two verbs:
 
@@ -25,8 +23,9 @@ Closed-loop vision lives under `mongla.vision` as exactly two verbs:
                         err=40, duration=20, gain=30, fallback=None, camera=None)
         Centre the target on the selected axes. Each of lat/yaw/depth is
         None (axis off) or a signed pixel offset from centre (0 = centre,
-        +=right/below, -=left/above). lat+yaw are horizontal (Ch6 strafe /
-        Ch4 rotate); depth is vertical. At least one axis is required.
+        +=right/below, -=left/above). lat strafes and yaw rotates; depth is
+        image-Y, and on the downward camera it drives SURGE (the board holds
+        the real depth). At least one axis is required.
 
     mongla.vision.move(target, *, fwd=95, mode='area', maintain=None,
                        hold=None, err=40, duration=20, gain=30,
@@ -34,7 +33,7 @@ Closed-loop vision lives under `mongla.vision` as exactly two verbs:
         Drive forward until the bbox fills `fwd` % of the frame. mode is
         'area' | 'width' | 'height' (slalom uses 'height'). `maintain` holds
         a px lateral offset while driving; `hold` station-keeps after reach.
-        Never re-centres; depth is left to ArduSub's depth-hold.
+        Never re-centres; depth is held by the board.
 
 Both return a `VisionResult(ok, reason, code, last_err_px, fill)` and
 NEVER raise on a miss — on timeout/loss they log "not aligned/reached"
@@ -138,6 +137,7 @@ from dataclasses import dataclass
 
 import contextlib
 import json
+import math
 import os
 import subprocess
 import sys
@@ -154,7 +154,7 @@ from vision_msgs.msg import Detection2DArray
 from .model_context import ClassRef, ModelRegistry
 from .vision_dsl import _VisionDSL  # noqa: F401 -- re-exported; used by MonglaMission
 
-from .client import MoveFailed, MoveRejected, TaskAbandoned, MissionRefused  # arm() raises MoveFailed; task() raises TaskAbandoned; require() raises MissionRefused
+from .client import MoveFailed, MoveRejected, TaskAbandoned  # arm() raises MoveFailed; task() raises TaskAbandoned
 
 
 def _format_outcome(cmd: str, result) -> str:
@@ -471,8 +471,8 @@ class MonglaMission:
         # probes each detector node at most once).
         self._param_clients: dict[str, object] = {}
         self._detector_ok:   set[str] = set()
-        # Single-live-detector orchestration (Jetson VRAM: never run two detectors
-        # at once). `_live_camera` is the camera whose detector is currently
+        # Single-live-detector orchestration (the Hailo holds one model's
+        # context at a time: never run two detectors at once). `_live_camera` is the camera whose detector is currently
         # resumed; a vision verb / use_camera on a DIFFERENT camera pauses the old
         # one, resumes the new, points the HUD at it, and settles -- see
         # _activate_camera. None = nothing resumed yet (launch starts both paused).
@@ -552,8 +552,9 @@ class MonglaMission:
     # Timeouts (seconds) for the per-call pump. _PUMP_WARM_S must be >= ~2 real
     # frame-periods or the pump returns having seen no frame newer than `start`,
     # and the query falls back to the per-class last-seen window (see _present).
-    # The detector can run slow (medium model on the Orin Nano, sometimes 3-4 Hz
-    # -> ~0.25-0.33 s/frame), so 0.40 s covers ~1.5 frames at 3-4 Hz. The pump
+    # Sized for a slow detector (3-4 Hz -> ~0.25-0.33 s/frame), so 0.40 s covers
+    # ~1.5 frames even there; the Hailo path runs far faster (14.7-27 Hz,
+    # cameras.yaml). The pump
     # early-returns the instant a fresh frame lands, so this only costs latency
     # on a miss. Raise it if your real FPS is lower.
     _PUMP_WARM_S = 0.40   # ~1.5 frame-periods at 3-4 Hz; early-returns when fresh
@@ -1169,20 +1170,17 @@ class MonglaMission:
 
     def step(self, name: str, *, points: int, worst_case_s: float,
              run, fallback=None, fallback_s: float = 0.0,
-             fallback_points: int = 0, needs: str = ''):
+             fallback_points: int = 0):
         """One declared piece of a run. Pairs with `run_plan()`.
 
         `run` and `fallback` are CALLABLES taking `(mongla)` -- never verb
         names, the same rule `resilience.py` holds: a mechanism that accepts a
         verb name can be pointed at `disarm` by a config edit.
-
-        `needs` names a verb the step cannot work without; the plan skips the
-        step when the backend refuses it, instead of discovering that mid-dive.
         """
         return {'name': str(name), 'points': int(points),
                 'worst_case_s': float(worst_case_s), 'run': run,
                 'fallback': fallback, 'fallback_s': float(fallback_s),
-                'fallback_points': int(fallback_points), 'needs': str(needs)}
+                'fallback_points': int(fallback_points)}
 
     def run_plan(self, steps, *, order: str = 'as_written'):
         """Execute a declared plan, re-deciding from the LIVE clock each time.
@@ -1198,15 +1196,13 @@ class MonglaMission:
                             run=gate, fallback=blind_transit,
                             fallback_s=25, fallback_points=40),
                 mongla.step('bins',   points=200, worst_case_s=180, run=bins),
-                mongla.step('flares', points=50,  worst_case_s=90,
-                            run=flares, needs='fire'),
+                mongla.step('flares', points=50,  worst_case_s=90, run=flares),
             ])
 
         What it handles so the author does not:
           * the budget verdict per step (full / fallback / skip),
           * a deadline per step, so an overrun is abandoned rather than eating
             the run -- `TaskAbandoned` is caught here and the plan continues,
-          * a verb the backend refuses (`needs=`), skipped with a reason,
           * every outcome on the scorecard.
 
         `order='by_value'` sorts by points per second first. ⚠ It ignores where
@@ -1231,12 +1227,6 @@ class MonglaMission:
         results = []
         for s in steps:
             name = s['name']
-
-            if s['needs'] and not self.can(s['needs']):
-                self.note(name, f"skipped: backend refuses {s['needs']!r}",
-                          success=False)
-                results.append((name, 'unsupported'))
-                continue
 
             verdict = self.worth_attempting(
                 name, points=s['points'], worst_case_s=s['worst_case_s'],
@@ -1275,7 +1265,7 @@ class MonglaMission:
                 # one task's or the vehicle's is MEASURED, not read from the
                 # error text: brake, and if the stop itself is refused or times
                 # out, the link or the vehicle is gone -- re-raise and let the
-                # runner's shutdown take over. Ctrl-C and MissionRefused are not
+                # runner's shutdown take over. Ctrl-C is not
                 # caught here.
                 try:
                     self.stop()
@@ -1305,18 +1295,22 @@ class MonglaMission:
     def stop(self):
         return self._send('stop')
 
-    def surface(self):
-        """Emergency surface: ascend to 0 m depth. Safe to call during a running mission."""
-        return self._send('surface')
+    def surface(self, timeout: float = 60.0):
+        """Surface: the board's SURFACE mode, waiting up to `timeout` s for the
+        depth to read ~0. Safe to call during a running mission."""
+        return self._send('surface', timeout=float(timeout))
 
     def head(self) -> float:
-        """Return live heading (degrees) at call time.
+        """Return live heading (degrees) at call time; NaN if none came back.
 
             h = mongla.head()
-            mongla.lock_heading(target=h)
+            mongla.turn(h + 90)
+
+        The server REFUSES (MoveFailed) when the board has no fresh heading,
+        so a turn is never computed from an absent one.
         """
         result = self._send('head')
-        return result.final_value if result is not None else 0.0
+        return result.final_value if result is not None else math.nan
 
     def pause(self, seconds: float):
         return self._send('pause', duration=float(seconds))
@@ -1398,7 +1392,7 @@ class MonglaMission:
         """Rotate to absolute heading `degrees` (0-360) via shortest arc.
 
         Direction is chosen automatically — no left/right prefix needed.
-        Internally calls yaw_snap or yaw_glide depending on smooth_yaw.
+        Absolute headings need the board's magnetic reference (YAW_REF LOCKED).
 
         Examples::
 
@@ -1410,41 +1404,10 @@ class MonglaMission:
                           target=float(degrees),
                           timeout=timeout, settle=settle)
 
-    def arc(self, target_yaw: float, seconds: float = 4.0, *,
-            gain: float = 50.0, settle: float = 0.0):
-        """Curve onto an ABSOLUTE heading while driving forward.
+    def style_roll(self, *, flips: int = 1, timeout: float = 20.0):
+        """`flips` x 360 deg roll, run by the board. `timeout` bounds the whole manoeuvre."""
+        return self._send('style_roll', flips=flips, timeout=timeout)
 
-        Drives forward at ``gain`` %% for ``seconds`` while a PID turns the hull
-        to ``target_yaw`` (absolute degrees) and holds it -- the trajectory
-        curves onto the heading then straightens (a sweeping "turn-and-go").
-        Turn direction is auto-computed; ``seconds`` sets how far it travels.
-        E.g. ``mongla.arc(90, 4)`` sweeps onto heading 90° over a 4 s forward run.
-        """
-        return self._send('arc',
-                          duration=float(seconds), gain=gain,
-                          target_yaw=float(target_yaw), settle=settle)
-
-    def style_roll(self, *, gain: float = 60.0, timeout: float = 20.0,
-                  flips: int = 1, headroom: float = 1.0):
-        """N×360° roll in ACRO mode (timeout is per flip). Pre-dives headroom m per flip to avoid surfacing."""
-        return self._send('style_roll', gain=gain, timeout=timeout,
-                          flips=flips, headroom=headroom)
-
-    def style_yaw(self, *, flips: int = 1, deg_per_step: float = 90.0,
-                  settle: float = 1.0):
-        """N×360° yaw spin in ALT_HOLD. flips full rotations via deg_per_step yaw snaps."""
-        return self._send('style_yaw', flips=flips, deg_per_step=deg_per_step,
-                          settle=settle)
-
-    def lock_heading(self, degrees: float = 0.0, *, timeout: float = 300.0):
-        return self._send('lock_heading',
-                          target=float(degrees), timeout=timeout)
-
-    def release_heading(self):
-        return self._send('unlock_heading')
-
-    # ================================================================== #
-    #  DVL                                                                 #
     # ================================================================== #
 
     # Settle after a live-detector switch so the resumed detector's first frames
@@ -2142,184 +2105,6 @@ class MonglaMission:
         return (float(width_px) / 2.0) / _math.tan(
             _math.radians(MonglaMission.hfov_water_deg(self, camera) / 2.0))
 
-    def standoff_for_prop(self, prop_class: str, *, visibility_m: float | None = None,
-                          width_px: float = 640.0, camera: str | None = None) -> float:
-        """How close we must be for `prop_class` to be comfortably detectable.
-
-        Arithmetic, not a habit: a prop of known width projects to a box of
-        `f * w / Z` pixels, the detector was MEASURED to fall off a cliff at
-        about 10 px of box width, and the answer is clamped by how far the
-        water lets us see. Which term binds depends on the prop -- pixels for a
-        slalom pipe at 1.7 m, water for a gate whose pixel-limited range is
-        154 m.
-        """
-        from mongla_vision.acquire import VISIBILITY_M, standoff_for
-        from mongla_vision.target_geometry import width_for
-
-        w = width_for(str(prop_class))
-        if w <= 0.0:
-            return float(visibility_m if visibility_m is not None else VISIBILITY_M)
-        return standoff_for(
-            w, self.focal_px(width_px, camera=camera),
-            visibility_m=(VISIBILITY_M if visibility_m is None else visibility_m))
-
-    def acquire(self, prop: str, *, camera: str | None = None,
-                visibility_m: float | None = None,
-                stale_after: float = 1.0, max_legs: int = 8):
-        """Get the prop ON CAMERA: approach to a computed standoff, then search.
-
-        ⛔ THE DEAD ZONE THIS CLOSES. `goto_prop` stops short by design, and an
-        ARBITRARY standoff can leave the hull where the prop is present and
-        undetectable -- too far for the box to survive the detector, with the
-        mission unable to tell "not there" from "too far to see". So the
-        standoff is computed from the prop's committed width, the measured
-        detector floor and the water, and only then does a search make sense.
-
-        ⛔ AND THE SEARCH IS A RACE, WHICH IS THEIR IDIOM AND NOT A TIMEOUT.
-        Each leg is run in short segments with a detection check between them,
-        so the moment the prop appears the leg is abandoned mid-flight. A
-        search that completes its pattern before looking has already swum past
-        the answer.
-
-        The pattern is an expanding square sized from the error we actually
-        carry -- the fix residual plus what a heading error throws a leg of
-        this length off its line -- so a confident fix searches a small box and
-        a shaky one searches a big one, with nobody choosing a number. Legs are
-        closed with the distance verb, never timed.
-
-        Returns an `Attempt`: `branch` says whether the approach alone found
-        it, which leg did, or that the pattern ran out.
-        """
-        from mongla_planner.resilience import Attempt
-        from mongla_vision.acquire import expanding_box, search_radius_m, total_path_m
-
-        cls = str(prop)
-        course = getattr(self, '_course', None)
-        detect_class = cls
-        if course is not None and cls in course.props:
-            detect_class = course.props[cls].detect_class or cls
-
-        standoff = self.standoff_for_prop(detect_class, visibility_m=visibility_m,
-                                          camera=camera)
-        self.log.info(f'[ACQ  ] {cls!r}: computed standoff {standoff:.2f} m '
-                      f'(class {detect_class!r})')
-
-        leg = self.goto_prop(cls, standoff_m=standoff)
-        if self.detected(detect_class, camera=camera, stale_after=stale_after):
-            self.log.info(f'[ACQ  ] {cls!r} on camera after the approach')
-            return Attempt(f'acquire:{cls}', True, branch='approach')
-
-        residual = 0.0
-        fix = self.fix_position()
-        if fix.ok:
-            residual = float(fix.residual_m)
-        reach = search_radius_m(residual, standoff)
-        legs = expanding_box(max(0.5, reach / 2.0), reach_m=reach * 2.0,
-                             max_legs=max_legs)
-        self.log.warning(
-            f'[ACQ  ] {cls!r} not visible at the standoff. Searching an '
-            f'expanding box: reach {reach:.1f} m, {len(legs)} legs, '
-            f'{total_path_m(legs):.1f} m of swimming.')
-
-        for l in legs:
-            self.yaw_right(l.turn_deg)
-            if self._run_watching(l.run_m, detect_class, camera, stale_after):
-                self.log.info(f'[ACQ  ] {cls!r} found on search leg {l.index}')
-                return Attempt(f'acquire:{cls}', True, branch=f'leg{l.index}')
-        return Attempt(f'acquire:{cls}', False, tries=len(legs),
-                       error=f'{cls!r} not found within {reach * 2.0:.1f} m of '
-                             f'the prior. It is not where the map says.')
-
-    def _run_watching(self, metres: float, detect_class: str,
-                      camera: str | None, stale_after: float,
-                      segment_m: float = 0.5) -> bool:
-        """Run `metres`, checking for the class between short segments.
-
-        The imperative form of their `Parallel(SuccessOnOne)[motion, seen]`:
-        a detection abandons the leg mid-flight instead of after it. Segment
-        length is the granularity of that preemption, and shorter is not free
-        -- each segment is a separate closed-loop command.
-        """
-        remaining = float(metres)
-        while remaining > 1e-3:
-            step = min(float(segment_m), remaining)
-            self.move_forward_dist(step)
-            remaining -= step
-            if self.detected(detect_class, camera=camera, stale_after=stale_after):
-                return True
-        return False
-
-    def goto_prop(self, prop: str, *, standoff_m: float = 2.0,
-                  gain: float = 50.0, max_leg_m: float = 12.0):
-        """Dead-reckon to within `standoff_m` of a prop, then hand to perception.
-
-        ⛔ THE WHOLE POINT IS THAT IT STOPS SHORT. This does not arrive at the
-        prop, it arrives in DETECTION RANGE of it, which is all a prior map can
-        honestly deliver: the map is a rulebook and a tape measure, and the last
-        couple of metres belong to the camera. That is how the team that wins
-        does waypoints -- and on the task where perception was hardest they
-        shipped plain waypoints and never ran the filter they had built.
-
-        Everything it needs is refused loudly rather than guessed:
-
-          * a loaded course with a MEASURED position for the prop;
-          * an anchored heading, or the turn would be in a boot-relative frame;
-          * a position fix, which needs two visible props and real geometry;
-          * a closed-loop distance verb. ⛔ It never falls back to a timed
-            guess -- that fallback once drove 2.361 m for a 1.0 m command and
-            reported success, which is worse than refusing because the mission
-            believes it arrived.
-
-        Returns the `Attempt` of the leg, or a refusal naming the missing part.
-        """
-        from mongla_planner.resilience import Attempt
-        from mongla_localization.resection import _wrap180
-        from mongla_localization.course_map import bearing_to, range_to
-        import math as _math
-
-        course = getattr(self, '_course', None)
-        if course is None:
-            return Attempt(f'goto:{prop}', False,
-                           error='no course loaded: use_course(<name>) first')
-        try:
-            target = course.position_of(prop)       # raises when unmeasured
-        except (KeyError, ValueError) as exc:
-            return Attempt(f'goto:{prop}', False, error=str(exc))
-
-        fix = self.fix_position()
-        if not fix.ok:
-            return Attempt(f'goto:{prop}', False,
-                           error=f'no position fix, so nothing to reckon from: '
-                                 f'{fix.reason}')
-
-        here = (fix.x_m, fix.y_m)
-        bearing = bearing_to(here, target)
-        leg = range_to(here, target) - float(standoff_m)
-        if leg <= 0.0:
-            self.log.info(f'[GOTO ] already inside the {standoff_m:.1f} m '
-                          f'standoff of {prop!r}; perception takes it from here')
-            return Attempt(f'goto:{prop}', True, branch='already_there')
-        if leg > float(max_leg_m):
-            return Attempt(
-                f'goto:{prop}', False,
-                error=f'{leg:.1f} m leg exceeds max_leg_m={max_leg_m:.0f}; a '
-                      f'dead-reckoned run that long accumulates more error than '
-                      f'the standoff it is aiming for')
-
-        self.log.info(
-            f'[GOTO ] {prop!r} at ({target[0]:+.1f}, {target[1]:+.1f}) is '
-            f'{bearing:.0f} deg and {leg + standoff_m:.1f} m away; turning and '
-            f'running {leg:.1f} m to a {standoff_m:.1f} m standoff')
-        self.turn(self.absolute_to_relative(bearing))
-        res = self.move_forward_dist(leg, gain=gain)
-        ok = bool(res)
-        if not ok:
-            self.log.warning(
-                f'[GOTO ] the distance leg did not close. There is no timed '
-                f'fallback here on purpose: search for {prop!r} instead of '
-                f'assuming the vehicle arrived.')
-        return Attempt(f'goto:{prop}', ok, branch='dead_reckon')
-
     def use_course(self, name: str):
         """Load the prop priors for a course. Returns the `Course`.
 
@@ -2621,9 +2406,9 @@ class MonglaMission:
 
         Called by ``use_camera`` and automatically by a vision verb whose camera
         differs from the live one, so ``camera='downward'`` in a verb "just works"
-        (never two detectors at once on the Jetson). Best-effort on the detector
-        params: a missing node warns, doesn't raise -- a pure-control sim has no
-        detectors and must not crash here."""
+        (never two detectors at once on the Hailo). Best-effort on the detector
+        params: a missing node warns, doesn't raise -- a run without vision has
+        no detectors and must not crash here."""
         if name == self._live_camera:
             return
         self._publish_active_camera(name)   # HUD follows (latched topic; always safe)
@@ -2648,7 +2433,7 @@ class MonglaMission:
         try:
             self.resume_detector(name)
             switched = True
-        except Exception as exc:            # noqa: BLE001 -- best-effort (no detector = sim)
+        except Exception as exc:            # noqa: BLE001 -- best-effort (no detector node)
             self.log.warning(f'[CAM  ] resume {name!r} detector skipped: {exc}')
         if switched:
             # Per-mission override wins; else the class default headroom.
@@ -2673,7 +2458,7 @@ class MonglaMission:
             self.log.warning(f'[CAM  ] active_camera publish skipped: {exc}')
 
     def calc_distance(self, phase: str):
-        """Downward optical-flow distance bracket (DVL-free). OWNS the camera switch.
+        """Downward optical-flow distance bracket. OWNS the camera switch.
 
         ``calc_distance('start')`` enters distance mode: pause BOTH YOLO detectors
         (LK flow is CPU -- no detector runs, freeing the GPU + honouring "not
@@ -2716,31 +2501,6 @@ class MonglaMission:
             self.log.warning(f'[DIST ] restore camera {prior!r} skipped: {exc}')
         self.log.info(f'[MISSION] distance mode OFF -> {metres:+.3f}m  (camera -> {prior!r})')
         return metres
-
-    def dvl_connect(self):
-        """Connect Nortek Nucleus 1000 DVL over TCP."""
-        return self._send('dvl_connect')
-
-    def move_forward_dist(self, metres: float, *, gain: float = 60.0,
-                          tolerance: float = 0.1, settle: float = 0.0):
-        """Drive forward `metres` metres using DVL closed-loop feedback."""
-        return self._send('move_forward_dist',
-                          distance_m=float(metres),
-                          gain=gain, dvl_tolerance=tolerance, settle=settle)
-
-    def move_back_dist(self, metres: float, *, gain: float = 60.0,
-                       tolerance: float = 0.1, settle: float = 0.0):
-        """Drive backward `metres` metres using DVL closed-loop feedback."""
-        return self._send('move_back_dist',
-                          distance_m=float(metres),
-                          gain=gain, dvl_tolerance=tolerance, settle=settle)
-
-    def move_lateral_dist(self, metres: float, *, gain: float = 36.0,
-                          tolerance: float = 0.1, settle: float = 0.0):
-        """Strafe `metres` metres (positive=right) using DVL feedback."""
-        return self._send('move_lateral_dist',
-                          distance_m=float(metres),
-                          gain=gain, dvl_tolerance=tolerance, settle=settle)
 
     # ================================================================== #
     #  Vision detector control                                             #
@@ -3150,13 +2910,10 @@ class MonglaMission:
     def set_vision_param(self, name: str, value: float) -> None:
         """Set a manager ``vision.*`` tunable live (applies to the NEXT vision goal).
 
-        For per-MISSION control of a deck tunable without touching every verb call
-        -- e.g. a downward bin run fixes its depth floor/ceiling ONCE at the top of
-        the mission instead of passing ``max_depth_m=`` / ``depth_ceiling=`` on each
-        ``vision.align``::
+        For per-MISSION control of a deck tunable without touching every verb
+        call -- e.g. a run in turbid water raises the loss grace ONCE at the top::
 
-            mongla.set_vision_param('max_depth_m', -1.6)   # enables+bounds the descent
-            mongla.set_vision_param('depth_ceiling', -0.4) # surface guard
+            mongla.set_vision_param('lost_grace_s', 1.5)
 
         ``name`` is the stem with or without the ``vision.`` prefix. The manager
         re-snapshots ``vision.*`` per goal, so the next align picks it up. Raises if
@@ -3187,77 +2944,6 @@ class MonglaMission:
         if not res.successful:
             raise RuntimeError(f'set {node_name}.{name}={value!r} rejected: {res.reason}')
 
-    _backend_cache = None
-
-    @property
-    def backend(self) -> str:
-        """The manager's `flight_controller` ('srot' or 'pixhawk'), read once.
-
-        Missions branch on it for verbs one backend refuses (`lock_heading` on
-        srot, where the board holds heading itself). Raises when the manager
-        cannot be read: guessing a backend would send a refused verb or skip a
-        needed one, and neither is safe to discover mid-run.
-        """
-        if self._backend_cache is None:
-            node_name = self._MANAGER_NODE
-            ros_node = self.client.node
-            cli = ros_node.create_client(GetParameters, f'{node_name}/get_parameters')
-            try:
-                if not cli.wait_for_service(timeout_sec=3.0):
-                    raise RuntimeError(f'{node_name}/get_parameters unavailable')
-                fut = cli.call_async(GetParameters.Request(names=['flight_controller']))
-                rclpy.spin_until_future_complete(ros_node, fut, timeout_sec=5.0)
-                resp = fut.result()
-                if resp is None or not resp.values:
-                    raise RuntimeError(f'{node_name}.flight_controller unreadable')
-                kind = str(resp.values[0].string_value).strip().lower()
-                if kind not in ('srot', 'pixhawk'):
-                    raise RuntimeError(f'{node_name}.flight_controller={kind!r} unknown')
-            finally:
-                ros_node.destroy_client(cli)
-            self._backend_cache = kind
-        return self._backend_cache
-
-    def can(self, verb: str) -> bool:
-        """Will this verb actually do something on the backend we are flying?
-
-        The capability oracle the retired FSM layer had and never consulted: it
-        carried a `VehicleProfile.has_heading_lock` that was False on srot and
-        had **zero callers**, so every plan dispatched `lock_heading` anyway, the
-        refusal raised, and the run ended one state after DIVE (J04). A mission
-        branches on this instead:
-
-            if mongla.can('lock_heading'):
-                mongla.lock_heading(90)
-
-        ONE TRUTH, not a second copy: the answer is read out of
-        `srot_fc.UNSUPPORTED_VERBS`, the same frozenset the manager checks before
-        dispatch. A hand-maintained list here would be the second place to
-        disagree -- which is exactly how J04 happened.
-        """
-        if self.backend != 'srot':
-            return True
-        try:
-            from mongla_control.fc.srot_fc import UNSUPPORTED_VERBS
-        except Exception:                       # control package not importable
-            self.log.warn(f"[DSL  ] can({verb!r}): srot_fc unreadable, assuming yes")
-            return True
-        return verb not in UNSUPPORTED_VERBS
-
-    def require(self, verb: str, *, why: str = '') -> None:
-        """Refuse the mission NOW if a verb it depends on cannot run.
-
-        For the case where there is no sensible branch: better to fail on the
-        deck, loudly, than to discover it underwater. The opposite of what the
-        FSM did, which was to convert the refusal into a silent surface.
-        """
-        if self.can(verb):
-            return
-        reason = f' ({why})' if why else ''
-        raise MissionRefused(
-            f"{verb!r} is refused on backend {self.backend!r}{reason} -- "
-            f"branch on mongla.can({verb!r}) or author a fallback")
-
     def pause_detector(self, camera: str | None = None, *,
                        node: str | None = None) -> None:
         """Pause inference on a detector node (frame still consumed from queue)."""
@@ -3277,7 +2963,7 @@ class MonglaMission:
         node = self._detector_node(camera, node)
         self._set_detector_param(node, 'paused', False)
         # This camera is now the live detector. Recording it means a later switch
-        # to a DIFFERENT camera pauses THIS one (never two detectors on the Jetson),
+        # to a DIFFERENT camera pauses THIS one (never two detectors on the Hailo),
         # even when a mission resumed it manually rather than via _activate_camera.
         self._live_camera = cam
         self.log.info(f"[DSL  ] {node} resumed")
@@ -3429,4 +3115,3 @@ class MonglaMission:
             return result
 
         return _wrapped
-

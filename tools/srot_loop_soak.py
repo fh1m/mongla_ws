@@ -1,6 +1,6 @@
 """The shipping config, sustained. A sweep finds a ceiling; a soak finds drift.
 
-VISION_LOOP_HZ_SROT is 50, not the 70 the sweep reached, and this checks that
+VISION_LOOP_HZ is 50, not the 70 the sweep reached, and this checks that
 choice holds over minutes rather than seconds. Jitter is reported as a
 DISTRIBUTION, because a control loop is hurt by its worst ticks, not its median.
 """
@@ -15,7 +15,7 @@ from mongla_control.bearing import BearingFilter, bearing_from_pixels
 from mongla_control.fc import srot_protocol as sp
 from mongla_control.fc.port_guard import PortGuard
 from mongla_control.fc.srot_fc import SrotFC
-from mongla_control.motion_rates import VISION_LOOP_HZ_SROT
+from mongla_control.motion_rates import VISION_LOOP_HZ
 from mongla_vision.detection.factory import make_detector
 
 W,H=640,360
@@ -23,9 +23,9 @@ c=json.load(open(os.path.expanduser('~/mongla_ws/src/mongla_vision/config/calibr
 Kc,D=c['camera_matrix'],c['distortion_coefficients']
 sx,sy=W/c['image_width'],H/c['image_height']
 K=[Kc[0][0]*sx,0,Kc[0][2]*sx,0,Kc[1][1]*sy,Kc[1][2]*sy,0,0,1]
-HZ=VISION_LOOP_HZ_SROT
+HZ=VISION_LOOP_HZ
 SECONDS=float(sys.argv[1]) if len(sys.argv)>1 else 90.0
-print(f"soak: VISION_LOOP_HZ_SROT = {HZ} Hz for {SECONDS:.0f} s\n")
+print(f"soak: VISION_LOOP_HZ = {HZ} Hz for {SECONDS:.0f} s\n")
 
 g=PortGuard('/dev/ttyUSB0'); g.acquire()
 conn=mavutil.mavlink_connection('/dev/ttyUSB0',baud=115200,

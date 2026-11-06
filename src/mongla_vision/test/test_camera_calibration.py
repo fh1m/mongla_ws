@@ -118,8 +118,8 @@ def test_no_calibration_AND_no_profile_leaves_camera_info_untouched():
 
 
 def test_an_uncalibrated_PROFILE_still_leaves_camera_info_untouched():
-    """`forward` is a real profile with no calibration (it is the Jetson's
-    Blue Robotics unit, not the Pi's Fantech). It must resolve to nothing
+    """`forward` is a real profile with no calibration (it is a generic
+    USB role, not the Pi's Fantech). It must resolve to nothing
     rather than to the similarly-named `pi_forward` file."""
     load, fill = _methods()
     s = _Stub('', profile='forward')

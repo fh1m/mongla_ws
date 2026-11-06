@@ -2,7 +2,7 @@
 """Where does the vision->thrust loop saturate, and on what?
 
 `VISION_LOOP_HZ = 20` was chosen when perception was 3-4 Hz on a .pt and
-20-30 Hz on TensorRT. The AI HAT does ~70-80 Hz, so the constant is now the
+20-30 Hz on the old GPU path. The AI HAT does ~70-80 Hz, so the constant is now the
 binding constraint on the behaviours that actually hurt -- terminal alignment
 and the close-in torpedo lock. This finds the real ceiling instead of guessing
 a new number.

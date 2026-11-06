@@ -121,8 +121,7 @@ def test_the_uplink_timer_is_created_UNCONDITIONALLY():
     """
     i = _SRC.index('LANDING_TARGET uplink armed')
     setup = _SRC[max(0, i - 1200):i]
-    assert 'if self._is_srot:' in setup, 'the srot gate is gone'
-    assert "if uplink_cam and self._is_srot:" not in _SRC, (
+    assert 'if uplink_cam:' not in setup, (
         'the timer is gated on the camera being set at startup again -- setting '
         'it mid-mission will silently do nothing')
     # the tick must still refuse an empty camera, or an idle timer sends garbage

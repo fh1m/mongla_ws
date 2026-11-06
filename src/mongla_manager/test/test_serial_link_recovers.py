@@ -10,7 +10,7 @@ sample 95.7 s), and the board came back DISARMED.
 import serial
 import pytest
 
-from mongla_manager.auv_manager_node import _is_dead_port, _validate_fc_kind
+from mongla_manager.auv_manager_node import _is_dead_port
 
 
 class _Master:
@@ -31,14 +31,3 @@ def test_portdead_alone_is_enough():
 
 def test_a_reader_bug_is_not_called_a_dead_cable():
     assert not _is_dead_port(KeyError('x'), _Master(dead=False))
-
-
-@pytest.mark.parametrize('kind', ['srot', 'pixhawk'])
-def test_a_known_backend_passes(kind):
-    _validate_fc_kind(kind)
-
-
-def test_a_typo_is_refused_before_any_port_is_opened():
-    """It used to resolve the ArduSub UDP profile and hang in wait_heartbeat()."""
-    with pytest.raises(ValueError, match="'srto'"):
-        _validate_fc_kind('srto')

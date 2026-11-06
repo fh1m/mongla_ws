@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """vision_node -- single-process diagnostic for camera + detector.
 
-The vision cousin of `mongla_sensors.sensors_node`: one node, no inter-node
-topic hop, no ROS publishing required (still publishes image_debug if
+One node, no inter-node topic hop, no ROS publishing required (still publishes image_debug if
 asked). Use this to smoke-test that:
 
   * the chosen camera source produces frames
-  * the YOLO model loads, picks GPU, and returns detections
+  * the model loads and returns detections
   * the visualization layer renders correctly end-to-end
 
 Examples
@@ -49,7 +48,7 @@ class VisionNode(Node):
         self.declare_parameter('profile',             'laptop')
         self.declare_parameter('source',              '')        # explicit override
         self.declare_parameter('topic',               '')        # for source=ros_topic
-        self.declare_parameter('device',              'cuda:0')
+        self.declare_parameter('device',              'auto')
         self.declare_parameter('model_path',          'yolov11n')
         self.declare_parameter('classes',             'person')
         self.declare_parameter('conf',                0.35)

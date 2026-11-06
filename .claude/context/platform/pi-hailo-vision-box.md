@@ -1,18 +1,16 @@
-# The Pi + AI HAT+ vision box — measured, built, and ready for srot over USB
+# The Pi + AI HAT+ vision box — the measurement that chose the companion
 
-> **Status: the box works.** Ubuntu 24.04 / ROS 2 Jazzy, `colcon build` green on
-> all 6 packages, **829 autonomy tests passed / 0 failed**, and
-> camera → Hailo-8 → `vision_msgs/Detection2DArray` running at **72.4 Hz on the
-> live ROS graph**. Everything below was measured on the hardware, 2026-09-02.
->
-> **Nothing in `mongla_ws`'s critical path was changed to achieve this.** The
-> Jetson + BlueOS + Pixhawk stack that placed 8th at RoboSub 2025 is untouched.
+> **What this is: the measurement record that made the Pi the companion** (2026-09-02).
+> Ubuntu 24.04 / ROS 2 Jazzy, `colcon build` green, camera → Hailo-8 →
+> `vision_msgs/Detection2DArray` at **72.4 Hz on the live ROS graph** that day. It compared
+> the Pi against the stack the vehicle then ran (Pixhawk + BlueOS + a Jetson); that stack is
+> preserved at the tag `last-with-pixhawk-and-sim` and is not on main.
 
 ## Why this box exists
 
-The Jetson Orin is shortaged, price-inflated, fragile, and **one already burned
-at RoboSub 2025** — with the entire vision pipeline on it. This is the
-diversification path: a Raspberry Pi 5 + AI HAT+ (Hailo-8, 26 TOPS).
+The Jetson Orin was short-supplied, price-inflated and fragile, and **one burned at RoboSub
+2025** with the entire vision pipeline on it. The Raspberry Pi 5 + AI HAT+ (Hailo-8, 26 TOPS)
+was the way out.
 
 ## The headline number
 
@@ -29,7 +27,7 @@ as separate processes**, which is how the real stack runs:
 | temp | 48 °C, no active throttle |
 
 **A 4 GB Pi 5 runs the complete vision + control workload at 1 GHz with 70 % of
-the CPU idle.** Jetson TensorRT on the same model class is 20–30 Hz.
+the CPU idle.** The Jetson's TensorRT ran the same model class at 20–30 Hz.
 
 ### An error worth keeping, because it would have inverted the recommendation
 
@@ -48,9 +46,9 @@ It was a **harness artifact**: one process, one GIL. `auv_manager_node` and
 CPU was ~20 % busy throughout — it was never compute. **Without that control the
 recommendation would have been srot-for-a-reason-that-does-not-exist.**
 
-## main vs srot, measured
+## The old stack vs srot, measured (2026-09-02)
 
-| | main (Pixhawk + BlueOS) | srot |
+| | Pixhawk + BlueOS (then main) | srot |
 |---|---|---|
 | vision on the Pi | 79.2 Hz alone, 76.9 Hz with control | 79.2 Hz |
 | control jitter, separate process | sd 0.03–0.07 ms | n/a — off-host |
@@ -63,43 +61,12 @@ stops being in any real-time loop: `heading_lock`, `motion_writers`,
 `motion_yaw`, `motion_depth` and the 5 Hz neutral-RC heartbeat are **deleted,
 not ported**, and 80 Hz of contended outbound writes becomes 2 Hz.
 
-~~**The catch, stated plainly:** `vision_align` / `vision_move` are in srot's
-`UNSUPPORTED_VERBS` today — the exact verbs this box exists to feed. And srot's
-GATE 0 (axis config unknown) and GATE 2 (depth loop never closed) are open. So
-build the Hailo backend against **main** first, where every verb works, and
-carry it to srot when its gates close.~~
+## The real unlock was software
 
-> ⛔ **CORRECTED 2026-09-03.** `vision_align` / `vision_move` came **out** of
-> `UNSUPPORTED_VERBS` on 2026-09-03 and now actuate through `SrotFC.manual()` ->
-> `MANUAL_CONTROL` in STABILIZE (see
-> [`vision-control-split.md`](vision-control-split.md)). They are **not** refused
-> on srot. This paragraph's premise — and the "build against main first" argument
-> it was the headline reason for — no longer holds; the numbers below (72.4 Hz /
-> 85.1 Hz) predate that un-refusal. GATE 2 (the depth loop never closed) is still
-> open and still gates `set_depth`/vision depth axes, but the vision-move verbs
-> themselves are live on srot today.
-
-## The real unlock, and it is software
-
-`VISION_LOOP_HZ = 20.0` (`motion_rates.py`). Perception now runs at **~79 Hz**
-into a **20 Hz** consumer — **the AI HAT is ~4x faster than the loop consuming
-it, so most of its speed is currently invisible.** That 20 Hz was chosen when
-perception was 3–4 Hz on a `.pt`.
-
-> ⛔ **CLEARED 2026-09-07 — third doc found asserting this blocker, and the
-> other two were corrected the same day.** Both cameras are calibrated and
-> the files SHIP: forward fx 851.23 / **73.88° air**, downward fx 1027.87 /
-> **63.82° air**, ±0.7°, `calibrateCameraRO`, held-out validated. `K` and `D`
-> publish on every frame (measured off the wire on the vehicle). The
-> backwards state below — the simulator having a calibrated FOV the vehicle
-> did not — is resolved in the vehicle's favour, and the sim's derived 57.7°
-> is a *different lens*, not a disagreement.
-
-~~**Blocked on one bench measurement that blocks both main and srot:** camera FOV
-does not exist anywhere in `mongla_ws` — no HFOV, no calibration, `K`/`D`
-published empty. Pixels cannot become radians without it. (`sim/.context/` has a
-derived in-water **57.7°**; *the simulator has a calibrated FOV the vehicle does
-not*, which is backwards.)~~
+`VISION_LOOP_HZ` was **20** (`motion_rates.py`) when this was measured: perception at
+**~79 Hz** feeding a **20 Hz** consumer, so most of the AI HAT's speed was invisible. The 20
+dated from perception at 3–4 Hz on a `.pt`. It is **50** now, soaked at 49.86 Hz with 0.00 %
+late ticks (`measured-bars.md`).
 
 ## What was installed, and the two traps that were live
 

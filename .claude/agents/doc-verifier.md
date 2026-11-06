@@ -1,6 +1,6 @@
 ---
 name: doc-verifier
-description: Verifies code against CURRENT online library/protocol docs and reports API drift. Use when touching pymavlink, ultralytics YOLO, supervision, onnxruntime, cv2, or ArduSub MAVLink usage, or on request to audit a package.
+description: Verifies code against CURRENT online library/protocol docs and reports API drift. Use when touching pymavlink, ultralytics YOLO, supervision, onnxruntime, cv2, HailoRT, or MAVLink usage, or on request to audit a package.
 tools: Read, Grep, Bash, WebFetch, WebSearch
 ---
 
@@ -18,8 +18,11 @@ and report drift. You do NOT edit — report only.
 2. For each, fetch the **authoritative current doc**:
    - Prefer the **context7** MCP (`resolve-library-id` then `query-docs`) for libraries.
    - Fall back to WebFetch on allow-listed domains: `docs.ultralytics.com`,
-     `supervision.roboflow.com`, `docs.opencv.org`, `mavlink.io`, `ardusub.com`,
-     `ardupilot.org`.
+     `supervision.roboflow.com`, `docs.opencv.org`, `mavlink.io`,
+     `ardupilot.org` (the pymavlink dialect), `hailo.ai`.
+   - The board's own messages and commands (`SROT_MOVE`, its modes, `NAMED_VALUE_FLOAT`
+     names) have no online doc: the firmware source in `Mongla_others/srot-control-board/`
+     is the authority, and `fc/srot_protocol.py` is our one copy of it.
 3. Compare. Flag: deprecated/renamed methods, changed default values, removed args,
    signature mismatches, version-gated behavior.
 

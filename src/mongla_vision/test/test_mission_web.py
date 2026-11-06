@@ -119,7 +119,7 @@ def test_camera_view_sorts_by_conf_and_counts():
 def test_snapshot_shape_and_active_flag():
     store = {'cameras': {'forward': _cam(), 'downward': _cam(present=False)},
              'active_camera': 'forward',
-             'state': {'armed': True, 'mode': 'ALT_HOLD', 'yaw': 12.0,
+             'state': {'armed': True, 'mode': 'DEPTH_HOLD', 'yaw': 12.0,
                        'depth': -1.2, 'batt': 15.6},
              'ts': 111.0}
     snap = build_snapshot(store, video_port=8080)
@@ -127,7 +127,7 @@ def test_snapshot_shape_and_active_flag():
     assert snap['active_camera'] == 'forward'
     assert snap['cameras']['downward']['present'] is False
     assert snap['cameras']['forward']['fps'] == 12.3
-    assert snap['state']['mode'] == 'ALT_HOLD'
+    assert snap['state']['mode'] == 'DEPTH_HOLD'
 
 
 def test_stale_class_has_no_count_entry():

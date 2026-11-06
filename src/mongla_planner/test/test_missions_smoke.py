@@ -56,7 +56,7 @@ def test_every_mission_accepts_runner_call():
 def test_known_missions_are_present():
     """Hard-code the missions we ship today so a deletion is loud."""
     reg = discover()
-    for name in ('demo_square', 'demo_arc', 'demo_heading_lock'):
+    for name in ('demo_square', 'sauvc_qualification', 'sauvc_full'):
         assert name in reg, f'expected mission {name!r} to be registered'
 
 
@@ -103,18 +103,15 @@ from unittest.mock import MagicMock, call
 from mongla_planner.mission import _safe_shutdown
 
 
-def test_safe_shutdown_releases_stops_disarms_in_order():
+def test_safe_shutdown_stops_then_disarms():
     d = MagicMock()
     _safe_shutdown(d)
-    d.unlock_heading.assert_called_once()
-    d.stop.assert_called_once()
-    d.disarm.assert_called_once()
+    assert [c[0] for c in d.mock_calls] == ['stop', 'disarm']
 
 
 def test_safe_shutdown_continues_after_a_step_fails():
     # a failure on one step must NOT prevent the disarm (each step isolated)
     d = MagicMock()
-    d.unlock_heading.side_effect = RuntimeError('lock stuck')
     d.stop.side_effect = RuntimeError('stop failed')
     _safe_shutdown(d)                       # must not raise
     d.disarm.assert_called_once()           # disarm still attempted

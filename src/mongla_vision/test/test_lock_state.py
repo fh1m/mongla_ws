@@ -131,8 +131,7 @@ def test_authority_is_full_inside_the_p90_gap_and_zero_past_the_p99():
 
 def test_the_ramp_is_LINEAR_not_a_cliff():
     """A cliff makes the hull lurch the moment the lock ages out -- the relay
-    behaviour that made `heading_lock` limit-cycle until its floor was
-    tapered."""
+    behaviour a hard floor on a rate channel produces."""
     mid = (FULL_AUTHORITY_S + ZERO_AUTHORITY_S) * 0.5
     assert authority_for(mid) == pytest.approx(0.5, abs=1e-6)
 

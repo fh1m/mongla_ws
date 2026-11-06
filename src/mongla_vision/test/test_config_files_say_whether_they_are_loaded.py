@@ -15,9 +15,7 @@ That is not a documentation nit, it is a measured operator failure. The
 
 `tracker.yaml` is the sharpest edge, because it is written in exact
 `--params-file` shape (`tracker_node: / ros__parameters:`) -- the form an
-operator hands to `ros2 run --params-file` expecting it to work. `sensors.yaml`
-is the next sharpest: `setup.py` INSTALLS it to `share/`, i.e. exactly where a
-live config would be, and it still names the unfitted DVL as the yaw source.
+operator hands to `ros2 run --params-file` expecting it to work.
 
 ONE RULE, deliberately: a reader must be able to tell whether editing the file
 does anything. Three ways to satisfy that, all honest:
@@ -165,14 +163,3 @@ def test_a_file_the_operator_loads_says_how():
     head = '\n'.join(p.read_text().splitlines()[:30])
     assert '--params-file' in head, (
         'vision_tunables.yaml is loadable but never tells the operator to load it')
-
-
-def test_sensors_yaml_does_not_present_the_unfitted_dvl_as_the_default():
-    """The specific claim that already propagated into two documents (B46)."""
-    p = _ROOT / 'mongla_sensors' / 'config' / 'sensors.yaml'
-    if not p.exists():
-        return
-    head = '\n'.join(p.read_text().splitlines()[:30])
-    assert _MARK in head, 'sensors.yaml is installed to share/ and must say it is inert'
-    assert 'NOT FITTED' in head or 'not fitted' in head, (
-        'sensors.yaml still offers the DVL without saying it is not on the hull')

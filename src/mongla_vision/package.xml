@@ -5,9 +5,9 @@
   <name>mongla_vision</name>
   <version>0.1.0</version>
   <description>
-    Perception package for Mongla: a uniform Camera interface (laptop webcam,
-    Gazebo image topic, plus Jetson/BlueOS/MAVLink stubs), YOLO11 detector (yolov11n)
-    with GPU-first inference, and rich on-image visualizations (boxes, labels,
+    Perception package for Mongla: a uniform Camera interface (USB webcam,
+    V4L2 mailbox, video file, ROS image topic), a Hailo-8 detector (.hef) with a
+    YOLO11 .pt fallback for dev boxes, and rich on-image visualizations (boxes, labels,
     crosshair, alignment markers, offset readout) so problems are visible in
     one frame. ByteTrack + Kalman filtering in v2/v3.
   </description>
@@ -24,9 +24,10 @@
   <exec_depend>cv_bridge</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
   <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>python3-pil</exec_depend>
   <exec_depend>mongla_interfaces</exec_depend>
   <exec_depend>rcl_interfaces</exec_depend>
-  <!-- MJPEG video pipe for the mission_web console (apt: ros-humble-web-video-server) -->
+  <!-- MJPEG video pipe for the mission_web console (apt: ros-jazzy-web-video-server on the Pi, ros-humble-* on dev boxes) -->
   <exec_depend>web_video_server</exec_depend>
 
   <test_depend>ament_pep257</test_depend>

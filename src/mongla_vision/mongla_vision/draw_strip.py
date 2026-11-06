@@ -340,8 +340,7 @@ def _draw_instruments_row(strip: np.ndarray, w: int,
     cmp_cy = r4_y + cmp_r + int(5 * sf)
     mini_compass(strip, cmp_cx, cmp_cy, cmp_r, yaw, fs_scale=sf)
 
-    _SRC_MAP = {'mavlink_ahrs': 'MAVLNK', 'bno085': 'BNO085',
-                'dvl': 'DVL', 'bno085_dvl': 'BNO+DVL'}
+    _SRC_MAP = {'mavlink_ahrs': 'MAVLNK'}
     src_lbl = _SRC_MAP.get(yaw_source, (yaw_source or '?').upper())
     fs_src  = 0.28 * sf
     sw, _   = pil_text_size(src_lbl, fs_src)

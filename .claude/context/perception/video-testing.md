@@ -172,33 +172,23 @@ ros2 param set /mongla_detector_forward classes "gate,flare"
 ros2 param set /mongla_detector_forward active_model combined
 ```
 
-### 4. Run a mission script against the video replay
+### 4. Exercise a mission without the vehicle
 
-Since `video_file` publishes identical ROS topics to a live camera, mission
-scripts work unchanged. Run the control stack in sim mode (no actual thrusters)
-and let the mission react to detections from the recording:
+There is no simulator on `main` (it lives at the tag `last-with-pixhawk-and-sim`), so a
+mission is exercised in two halves, each against something real:
 
 ```bash
-# Terminal 1: SITL sim (no real Pixhawk needed — just provides /mongla/state)
-sim_vehicle.py -L RATBeach -v ArduSub -f vectored_6dof --model=JSON \
-    --out=udp:0.0.0.0:14550
+# The mission LOGIC: every mission runs against the real DSL and a fake board,
+# so a verb the board does not have or a kwarg a verb does not take fails here.
+python3 -m pytest -q src/mongla_planner/test/test_every_mission_runs_against_the_real_dsl.py
 
-# Terminal 2: control stack
-ros2 run mongla_manager start --ros-args -p mode:=sim
-
-# Terminal 3: video pipeline (replays pool run)
-ros2 launch mongla_vision vision.launch.py \
-    video_file:=/home/fh1m/bags/pool_run.mp4 \
-    camera:=forward model:=gate_sharks classes:=gate
-
-# Terminal 4: run the mission
-ros2 run mongla_planner mission sauvc_qualification
+# The DETECTION side: the real detector, tracker and lock ladder on a recording.
+ros2 launch mongla_vision video.launch.py fwd_video:=<clip.mp4> fwd_model:=gate_sharks
+ros2 topic hz /mongla/vision/forward/detections      # what detected() will see
 ```
 
-The mission calls `mongla.vision.align(target='gate', ...)` and
-`mongla.vision.move(...)` against the recorded frames. Thrust commands go to
-SITL (or are silently dropped if the AUV isn't armed), so the mission *logic*
-is exercised without water.
+Joining the two halves -- a mission thrusting against recorded frames -- needs the board on
+the bench, props clear and a human on the kill switch (CLAUDE.md §8).
 
 > **⚠️ Video testing is OPEN-LOOP on vision — know what it does and does NOT
 > validate.** The clip plays on its own timeline and does **not** react to
@@ -210,7 +200,7 @@ is exercised without water.
 > `align(hold=)` station-keep, or arrival braking — because the scene won't move
 > when the AUV does. `align`/`move` will chase a bbox that moves on the file's
 > schedule and never truly converge unless the clip happens to show a centred
-> target. For dynamics use Gazebo/SITL; for detection + sequencing use video.
+> target. Dynamics need the vehicle; for detection + sequencing, use video.
 
 ---
 

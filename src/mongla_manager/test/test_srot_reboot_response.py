@@ -62,11 +62,10 @@ class _Mongla:
 
 
 class _Node:
-    def __init__(self, rebooted=False, command_active=True, is_srot=True):
+    def __init__(self, rebooted=False, command_active=True):
         self.fc = _FC(rebooted)
         self.mongla = _Mongla()
         self.command_active = command_active
-        self._is_srot = is_srot
         self._leak_latched = False
         self.esc_rpm_publisher = None
         self._log = _Log()
@@ -124,14 +123,6 @@ def test_a_restart_with_nothing_running_is_not_an_abort():
     already logged the restart itself, so nothing is lost by staying quiet."""
     n = _tick(rebooted=True, command_active=False)
     assert n.mongla.aborts == 0
-
-
-def test_the_pixhawk_backend_is_left_alone():
-    """`check_for_reboot` is a SROT method. This branch also runs on
-    flight_controller:=pixhawk, where calling it would raise inside a 2 Hz
-    timer -- the tick is gated on the backend for that reason."""
-    n = _tick(is_srot=False)
-    assert n.fc.checks == 0
 
 
 def test_a_restart_also_reconfigures_the_board():

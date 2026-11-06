@@ -68,14 +68,13 @@ def test_bring_up_before_the_executor_spins_still_beats():
 
 
 # ── the watchdog, acting ─────────────────────────────────────────────────────
-def _node(armed, srot=True):
+def _node(armed):
     n = SimpleNamespace()
     n._mission = {'attached': True, 'name': 'pool_day_practice',
                   'seen': time.monotonic() - 10.0}
     n.fc = SimpleNamespace(is_armed=lambda: armed)
     n.mongla = MagicMock()
-    n._is_srot = srot
-    n._run_srot_surface = MagicMock(return_value=SimpleNamespace(message='SURFACE engaged'))
+    n.mongla.surface.return_value = SimpleNamespace(message='SURFACE engaged')
     n.get_logger = lambda: MagicMock()
     return n
 
@@ -84,14 +83,15 @@ def test_a_dead_mission_on_an_armed_vehicle_is_aborted_and_SURFACED():
     n = _node(armed=True)
     M.AUVManagerNode._mission_watchdog_tick(n)
     n.mongla.request_abort.assert_called_once()
-    n._run_srot_surface.assert_called_once()
+    # wait=False: the watchdog runs on a timer and must not block it
+    n.mongla.surface.assert_called_once_with(wait=False)
     assert n._mission['attached'] is False, 'it must act once, not every tick'
 
 
 def test_a_dead_mission_on_a_disarmed_vehicle_is_only_detached():
     n = _node(armed=False)
     M.AUVManagerNode._mission_watchdog_tick(n)
-    n._run_srot_surface.assert_not_called()
+    n.mongla.surface.assert_not_called()
     assert n._mission['attached'] is False
 
 
@@ -100,7 +100,7 @@ def test_an_empty_beat_is_a_clean_detach():
     M.AUVManagerNode._on_mission_alive(n, SimpleNamespace(data=''))
     assert n._mission['attached'] is False
     M.AUVManagerNode._mission_watchdog_tick(n)
-    n._run_srot_surface.assert_not_called()
+    n.mongla.surface.assert_not_called()
 
 
 # ── the runner's side ────────────────────────────────────────────────────────

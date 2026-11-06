@@ -15,7 +15,6 @@
   <depend>vision_msgs</depend>
   <depend>mongla_control</depend>
   <depend>mongla_interfaces</depend>
-  <depend>mongla_sensors</depend>
   <depend>mongla_vision</depend>
 
   <!-- Optional operator-debug tooling (off the mission path, opt-in via

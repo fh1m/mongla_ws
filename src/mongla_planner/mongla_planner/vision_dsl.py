@@ -2,23 +2,23 @@
 
 Exactly two mission-facing verbs, both pixel-native and recover-don't-fail:
 
-    mongla.vision.align(target, *, lat=None, yaw=None, depth=None,
+    mongla.vision.align(target, *, lat=None, yaw=None, fwd=None,
                         err=40, duration=20, gain=30,
-                        lat_gain=None, yaw_gain=None, depth_step=None,
+                        lat_gain=None, yaw_gain=None,
                         brake=True, brake_gain=None, hold=None,
-                        fire_pass=False, hold_heading=False,
-                        fallback=None, camera=None)
+                        fire_pass=False, fallback=None, camera=None)
 
     mongla.vision.move(target, *, fwd=95, mode='area', maintain=None,
                        hold=None, err=40, duration=20, gain=30,
                        lat_gain=None, brake=True, brake_gain=None,
                        fallback=None, camera=None)
 
-Axis rule (align): each of ``lat`` / ``yaw`` / ``depth`` is ``None`` =
-axis OFF; a number = axis ON, where the number is the **signed pixel
-offset from centre** (``0`` = centre, ``+`` = right/below, ``-`` =
-left/above). ``lat`` + ``yaw`` are horizontal (strafe / rotate),
-``depth`` is vertical. At least one axis is required.
+Axis rule (align): each of ``lat`` / ``yaw`` is ``None`` = axis OFF; a
+number = axis ON, where the number is the **signed pixel offset from
+centre** (``0`` = centre, ``+`` = right/below, ``-`` = left/above).
+``lat`` strafes, ``yaw`` rotates. On the downward camera ``fwd`` is a third
+centring axis: image-Y drives SURGE. Depth is never a vision axis -- the
+board holds depth itself; reach the depth with ``set_depth`` first.
 
 Neither verb ever raises on a miss. The server always returns
 ``success=True``; the align/move outcome rides in ``Move.Result.final_value``
@@ -54,7 +54,7 @@ from .model_context import ClassRef
 
 # Outcome codes are the single source of truth in the control engine.
 from mongla_control.motion_vision import (
-    ALIGNED, LOST, TIMEOUT, NO_CAMERA, ABORTED, DRIFTED, NO_DEPTH,
+    ALIGNED, LOST, TIMEOUT, NO_CAMERA, ABORTED, DRIFTED,
 )
 
 if TYPE_CHECKING:
@@ -82,7 +82,6 @@ _CODE_NAME = {
     NO_CAMERA: 'NO_CAMERA',
     ABORTED:   'ABORTED',
     DRIFTED:   'DRIFTED',
-    NO_DEPTH:  'NO_DEPTH',
 }
 
 
@@ -184,12 +183,11 @@ class _VisionDSL:
         return self._dsl._send(cmd, **fields)
 
     # ================================================================== #
-    #  align -- centre on lat / yaw / depth at signed pixel offsets       #
+    #  align -- centre on lat / yaw (/ surge) at signed pixel offsets     #
     # ================================================================== #
     def align(self, target=None, *,
               lat: Optional[float] = None,
               yaw: Optional[float] = None,
-              depth: Optional[float] = None,
               err: float = 40.0,
               duration: float = 20.0,
               gain: float = 30.0,
@@ -205,94 +203,80 @@ class _VisionDSL:
               fwd_mode: str = 'area',
               settle: Optional[float] = None,
               verify: bool = True,
-              depth_step: Optional[float] = None,
               fire_pass: bool = False,
               fire_max_tilt: float = 0.0,
               standoff_max_tilt: float = 0.0,
               tool: str = '',
-              hold_heading: bool = False,
               surge_sign: Optional[int] = None,
-              max_depth_m: Optional[float] = None,
-              depth_ceiling: Optional[float] = None,
               fire_gap: Optional[float] = None,
               evidence: bool = False,
               fallback: Optional[Callable] = None,
               camera: Optional[str] = None) -> VisionResult:
         """Hold ``target`` at the requested pixel offset on each active axis.
 
-        Pass a number to ``lat`` / ``yaw`` / ``depth`` to activate that
-        axis (the number is the signed px offset from centre; ``0`` =
-        centre). At least one axis is required. Returns a
-        :class:`VisionResult`; never raises on a miss.
+        Pass a number to ``lat`` / ``yaw`` to activate that axis (the number
+        is the signed px offset from centre; ``0`` = centre). At least one
+        axis is required. Returns a :class:`VisionResult`; never raises on a
+        miss.
 
-        DOWNWARD CAMERA (``camera='downward'``) -- the kwargs REMAP because the
-        bottom cam looks straight down (full table: downward-camera.md)::
+        The board holds depth and heading at 500 Hz the whole time; this
+        streams lateral, yaw and (``fwd``) forward demand on top. So depth is
+        not a vision axis: ``set_depth`` first, then align.
 
-            forward cam :  lat=Ch6 strafe   depth=Ch3 up/down   fwd=fwd standoff(fill)
-            downward cam:  lat=Ch6 strafe   fwd=Ch5 surge px     depth=descent(fill%)
+        FORWARD CAMERA: ``fwd`` (% frame fill, optional) adds a forward
+        range-hold to that standoff, measured by ``fwd_mode``
+        (area/width/height). It is ONE-SIDED -- drives forward while too far,
+        neutral at or past the standoff, never reverses -- and a mid-hold
+        ``fire`` is gated on reaching it::
 
-        i.e. on downward ``fwd`` is the fore/aft SURGE pixel offset (image-Y, 0 =
-        centre) and ``depth`` is the DESCENT target as a bbox fill %% (measured by
-        ``fwd_mode`` = area/width/height). ``lat`` is unchanged. The centring axes
-        are then ``lat`` + ``fwd``; ``depth`` is the optional approach. A bin drop
-        reads ``align('fire', camera='downward', lat=0, fwd=0, depth=30,
-        fwd_mode='height', surge_sign=…, max_depth_m=<neg floor>)``. Physically
-        identical to the old ``lat/depth/fwd`` downward form -- ONLY the kwarg names
-        swap; the Ch5 output and ``surge_sign`` behaviour are byte-identical, so a
-        previously-verified sign stays valid. (A DISARMED ``vision_thrust_check
-        --camera downward`` is still the standard pre-armed check -- it just
-        confirms you're now driving surge with the ``fwd=`` kwarg, not re-hunting a
-        changed sign.)
+            align('hole', lat=0, fwd=25, fwd_mode='height',
+                  lock_on=True, hold=4, fire=9, fire_t=1.5, brake=False)
+
+        DOWNWARD CAMERA (``camera='downward'``): the camera looks straight
+        down, so ``fwd`` is the fore/aft SURGE pixel offset (image-Y, 0 =
+        centre), two-sided and braked, with ``surge_sign`` flipping it for the
+        mount. A bin drop reads::
+
+            mongla.set_depth(BIN_DEPTH_M)
+            align('bin', camera='downward', lat=0, fwd=0)
+
+        VERIFY the surge sign DISARMED first
+        (``vision_thrust_check --camera downward``): a wrong sign is positive
+        feedback.
 
         ``gain`` is the global max-speed cap (% thrust). ``lat_gain`` /
         ``yaw_gain`` override that cap on the lat/yaw axis; leave them
-        unset to inherit ``gain``. (Depth has no % cap -- its rate is set
-        by ``depth_step``, metres per update.) This is for slow, stable
-        per-axis micro-alignment -- e.g. ``align('hole', yaw=0, lat=0,
-        gain=25, yaw_gain=10)`` creeps yaw in while lateral stays brisk
-        (a 20 kg hull needs the yaw inertia fought gently to hold a tight
-        torpedo-hole lock). Note ``*_gain=0`` / unset means *inherit*, NOT
-        *disable* -- to drop an axis, omit it (``lat`` / ``yaw`` /
-        ``depth`` = None).
+        unset to inherit ``gain``. This is for slow, stable per-axis
+        micro-alignment -- e.g. ``align('hole', yaw=0, lat=0, gain=25,
+        yaw_gain=10)`` creeps yaw in while lateral stays brisk. Note
+        ``*_gain=0`` / unset means *inherit*, NOT *disable* -- to drop an
+        axis, omit it.
 
         ``brake`` (on by default) reverse-kicks the lateral axis on arrival
         to bleed water inertia, so the hull stops square and the next
         mission step starts from the planned position. It is self-gating: a
         gently-converged lock (the hole-lock) exits with ~0 momentum and is
         NOT kicked, so a fire-on-align shot is never disturbed. Pass
-        ``brake=False`` to coast; ``brake_gain`` scales the kick. Yaw/depth
-        never brake.
+        ``brake=False`` to coast; ``brake_gain`` scales the kick. Yaw never
+        brakes.
 
         ``hold`` (seconds) turns align into an ACTIVE station-keep: once
         centred, the loop keeps running its corrections for ``hold`` s --
         fighting water inertia/current -- before returning, instead of exiting
-        the instant it's centred. It holds lat/yaw/depth (and forward range when
+        the instant it's centred. It holds lat/yaw (and forward range when
         ``fwd`` is set). ``hold`` counts against ``duration``: budget
         ``duration >= approach + hold`` or the verb TIMEOUTs mid-hold. For a
         fire-from-lock pass ``brake=False`` so there's no pre-shot lateral nudge.
 
-        ``fwd`` (% frame fill, optional) adds a forward range-hold axis so align
-        ALSO drives the hull forward to that standoff and holds it -- ONE verb
-        does forward-standoff + lat/depth centering + station-keep + mid-hold
-        fire (the unified torpedo standoff shot). ``fwd_mode`` is the fill metric
-        (area/width/height; ``height`` for the torpedo board/hole). The forward
-        term is ONE-SIDED (drives forward while too far, neutral at/past the
-        standoff -- never reverses), and the fire is gated on reaching the
-        standoff too. Leave ``fwd=None`` (default) for the lat/yaw/depth-only
-        align (e.g. a coarse board centre)::
-
-            align('hole', lat=0, depth=0, fwd=25, fwd_mode='height',
-                  lock_on=True, hold=4, fire=1, fire_t=1.5, brake=False)
-
-        ``fire`` (channel int or list, e.g. ``fire=1`` or ``fire=[1, 2]`` --
-        1/2=torpedo, 3/4=dropper) fires the payload WHILE the hold loop is
+        ``fire`` (BOARD channel int or list, e.g. ``fire=9`` or
+        ``fire=[9, 10]``) fires the payload WHILE the hold loop is
         still correcting, ``fire_t`` seconds into the hold (0 = at hold start),
         on a background thread so the 20 Hz correction never stalls on the
         payload write. This is the accurate-shot pattern: instead of
         ``align(hold=3)`` THEN ``fire()`` (the gap drifts the hull off the hole
         and the shot misses), the torpedo leaves WHILE glued::
 
-            align('hole', yaw=0, lat=0, depth=0, hold=4, fire=1, fire_t=1,
+            align('hole', yaw=0, lat=0, hold=4, fire=9, fire_t=1,
                   brake=False)
 
         Requires ``hold > fire_t`` (else fire_t is clamped to 0 -- fire at hold
@@ -301,18 +285,15 @@ class _VisionDSL:
         ``fire_t``; if the hull never holds the lock during the hold window the
         shot is NOT fired (deliberate -- a torpedo never launches off-target).
         So budget enough ``hold`` to actually settle on the target before
-        ``fire_t``. CAVEAT: on a CH340 payload reconnect the shot can leave up
-        to ~2 s late (threading keeps the loop alive, it can't make the board
-        faster) -- use a small ``fire_t`` and generous ``hold`` so a delayed
-        shot still lands inside the hold window.
+        ``fire_t``.
 
         ``settle`` (px, default None=off) is a per-call SETTLE GATE: align only
         declares aligned once the worst error is in-band AND barely moving
         (``|Δerr| <= settle``) between ticks -- so it ends SETTLED on target (like
         ``move``'s continuously-held lateral) instead of exiting mid-pass through
         the band and coasting off on inertia. Use it on a COARSE align that must
-        exit clean for the next step (e.g. the board centre, so ``lock_heading``
-        captures a steady heading). **Do NOT use it on a terminal fire-lock**: the
+        exit clean for the next step (e.g. the board centre before the
+        standoff). **Do NOT use it on a terminal fire-lock**: the
         mid-hold ``fire`` is gated on the same stable-frame counter, so a settle
         threshold below the bbox jitter (~5px) can suppress the shot -- the fire
         lock wants ``lock_on`` + ``hold`` + ``ki_lat``, not ``settle``. Keyed on
@@ -323,8 +304,8 @@ class _VisionDSL:
         is acquired, the loop steers to the detection NEAREST the last-accepted
         centre (within a gate) instead of the largest box -- so a second hole /
         spurious box can't steal the aim during a close-in fire. Use it on the
-        terminal hole/bin lock (``align('hole', lat=0, depth=0, lock_on=True,
-        hold=..., fire=1)``); leave it off for far-field acquisition. The
+        terminal hole/bin lock (``align('hole', lat=0, lock_on=True,
+        hold=..., fire=9)``); leave it off for far-field acquisition. The
         control-side conf floor (``vision.ctrl_conf``), the close-in gain
         softening (``vision.range_gain_floor``) and the hold integral
         (``vision.ki_lat``) are deck ROS params -- set them with
@@ -332,32 +313,23 @@ class _VisionDSL:
         the next goal); see ``.claude/context/missions/precision-alignment.md``.
         """
         cam = self._resolve_camera(camera)
-        # ── DOWNWARD-CAMERA ARG SWAP (operator-facing kwarg remap) ──────────────
-        # The bottom cam looks straight down, so the axes you *think* in rotate.
-        # `lat` stays Ch6 strafe (image-X), but the other two SWAP so the kwargs
-        # match hovering over a bin/target:
-        #     fwd   -> Ch5 SURGE fore/aft  (image-Y pixel offset; 0 = centre)
-        #     depth -> DEPTH DESCENT       (bbox fill %, measured by `fwd_mode`)
-        # So `fwd` is ALWAYS the fore/aft joystick and `depth` ALWAYS drives the
-        # real depth setpoint. This is a PURE kwarg remap: physically identical to
-        # the align engine's existing downward frame-rotation (Ch5 surge from the
-        # image-Y pixel, fill->depth descent) -- align_loop, the wire fields, and
-        # every thruster sign are UNCHANGED. Only which kwarg you type is swapped.
-        # Full axis table + why: .claude/context/perception/downward-camera.md + CLAUDE.md.
-        if cam in ('downward', 'sim_bottom'):
-            depth, fwd = fwd, depth   # fwd->depth-axis (Ch5 surge); depth->fwd_fill (descent)
-
+        # On the wire the third axis is called `depth` -- it is image-Y. On the
+        # downward camera image-Y is fore/aft, so the engine drives SURGE from it
+        # and `fwd` is that axis. On the forward camera image-Y would be a depth
+        # demand, which the board owns, so the forward call has no such axis.
+        downward = (cam == 'downward')
+        surge = fwd if downward else None
+        if downward:
+            fwd = None
         active = [(name, val) for name, val in
-                  (('lat', lat), ('yaw', yaw), ('depth', depth))
+                  (('lat', lat), ('yaw', yaw), ('depth', surge))
                   if val is not None]
         if not active:
             raise ValueError(
                 "vision.align needs at least one centring axis as a KEYWORD with "
                 "a number: align('gate', yaw=0, lat=0) centres on yaw+lat "
                 "(0 = centre, a number = signed px offset). On camera='downward' "
-                "the centring axes are lat (Ch6) + fwd (Ch5 surge); `depth` there "
-                "is the fill%->descent add-on, not a centring axis. Bare names "
-                "like align('gate', yaw, lat) do not work -- axes are keyword-only.")
+                "`fwd` is the surge centring axis. Axes are keyword-only.")
 
         axes_csv = ','.join(name for name, _ in active)
         offsets = {name: float(val) for name, val in active}
@@ -401,15 +373,11 @@ class _VisionDSL:
                 mode=str(fwd_mode),
                 settle_px=float(settle) if settle is not None else 0.0,
                 verify_off=(not verify),
-                depth_step=float(depth_step) if depth_step is not None else 0.0,
                 fire_pass_enabled=bool(fire_pass),
                 fire_max_tilt_deg=float(fire_max_tilt),
                 standoff_max_tilt_deg=float(standoff_max_tilt),
                 tool=str(tool or ''),
-                hold_heading=bool(hold_heading),
                 surge_sign=float(surge_sign) if surge_sign is not None else 0.0,
-                max_depth_m=float(max_depth_m) if max_depth_m is not None else 0.0,
-                depth_ceiling_m=float(depth_ceiling) if depth_ceiling is not None else 0.0,
                 fire_gap=float(fire_gap) if fire_gap is not None else 0.0)
 
         res = self._orchestrate('align', tgt, cam, duration, fallback, _one_shot)
@@ -529,7 +497,7 @@ class _VisionDSL:
                 result = one_shot(remaining)
             except (MoveFailed, MoveRejected) as exc:
                 # A vision verb must never abort a mission. Setup errors --
-                # bad camera name, ALT_HOLD rejected, disarmed, server abort --
+                # bad camera name, STABILIZE refused, disarmed, server abort --
                 # surface here as a non-fatal FAILED outcome so the mission
                 # moves on to its next step instead of unwinding.
                 self.log.error(
@@ -576,13 +544,6 @@ class _VisionDSL:
                     f"[VIS  ] {verb} {target!r}: NO_CAMERA -- pipeline not up "
                     f"(camera={camera!r}); mission continues")
                 return _mk(False, 'NO_CAMERA')
-
-            if code == NO_DEPTH:
-                self.log.error(
-                    f"[VIS  ] {verb} {target!r}: NO_DEPTH -- a depth axis was "
-                    f"asked for and the vehicle reports no depth; refused "
-                    f"rather than holding the surface")
-                return _mk(False, 'NO_DEPTH')
 
             # ⛔ DRIFTED: centred while driving, off once stopped and re-measured
             # (Block 1C). Not a success, and not a reason to give up: re-converge

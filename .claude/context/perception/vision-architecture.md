@@ -1,14 +1,12 @@
 # Vision Architecture (`mongla_vision`)
 
-> **Backend note.** The vehicle is the SROT board (firmware Hengla) + a Raspberry Pi 5 with a
-> Hailo-8. `lock_heading`, `move_*_dist`, `arc` and `style_yaw` are **refused** there, `ALT_HOLD`
-> is not one of its modes, and the depth-setpoint vision axes are refused. Where this page shows
-> an older idiom, the current contract is [`command-reference.md`](../missions/command-reference.md) and the
-> legacy path is [`legacy-pixhawk-and-sitl.md`](../platform/legacy-pixhawk-and-sitl.md).
+> The vehicle is the SROT board (firmware Hengla) + a Raspberry Pi 5 with a Hailo-8. The board
+> holds depth and heading at 500 Hz; the vision verbs stream lateral, yaw and forward demand on
+> top as `MANUAL_CONTROL`. The verb contract is
+> [`command-reference.md`](../missions/command-reference.md).
 
-Authoritative design notes for the perception package. Mirrors the
-`mongla_sensors` pattern: ABC + factory + per-source class + standalone
-diagnostic node.
+Authoritative design notes for the perception package. One pattern throughout: ABC +
+factory + per-source class + standalone diagnostic node.
 
 ## File map
 
@@ -38,7 +36,7 @@ src/mongla_vision/mongla_vision/
     contours.py           # Detections -> outlines. A box and a mask become the same thing here.
     detector.py           # Abstract Detector — every detection backend implements this.
     factory.py            # Pick a detector backend from the resolved model path. One seam, three callers.
-    gpu.py                # select_device — single decision point for laptop / docker / Jetson.
+    gpu.py                # select_device — the CUDA decision for the .pt path on a dev box.
     hailo.py              # Hailo-8 detector backend: a compiled ``.hef`` behind the same `Detector` API.
     messages.py           # Convert internal Detection objects to vision_msgs.
     preprocess.py         # Contrast preprocessing for underwater frames, measured on real footage.
@@ -62,10 +60,9 @@ src/mongla_vision/mongla_vision/
     tracker.py            # Tracker ABC and TrackedDetection dataclass.
   utils/
     check_pipeline.py     # vision_check -- standalone health probe for the perception pipeline.
-    check_thrust.py       # vision_thrust_check -- end-to-end smoke test: detection -> RC channel.
+    check_thrust.py       # vision_thrust_check -- end-to-end smoke test: detection -> the demand the loop would send.
     check_tracker.py      # tracker_check -- health probe for the tracking pipeline.
     display_node.py       # vision_display -- smooth OpenCV viewer for the perception pipeline.
-    export_engine.py      # export_engine -- build TensorRT FP16 engines from the .pt models.
     switch_camera.py      # switch_camera -- resume ONE detector, pause the others (CLI exclusivity).
     water_check.py        # Which water is this? Characterise the pool before trusting a model in it.
   web/
@@ -73,7 +70,6 @@ src/mongla_vision/mongla_vision/
     dashboard_state.py    # Pure (rclpy-free) helpers for the mission-web console.
     mission_web_node.py   # mission_web -- browser mission-control console for the Mongla vision stack.
   _text_engine.py         # TrueType text rendering engine for HUD widgets.
-  acquire.py              # How close is close enough to SEE a prop, and what to do when you cannot.
   camera_node.py          # camera_node -- read from a Camera and publish standard ROS image topics.
   config.py               # Named camera profiles. THIS DICT IS THE ONE THE CODE READS.
   continuity.py           # Detection continuity: the statistics the whole lock ladder is tuned on.
@@ -99,8 +95,7 @@ src/mongla_vision/mongla_vision/
 ```
 
 Naming rule: every file is named after the thing inside it. No `base.py`,
-no `to_ros.py`, no `nodes/` or `viz/` subfolders. Per-user request,
-`mongla_sensors` is NOT renamed to match.
+no `to_ros.py`, no `nodes/` or `viz/` subfolders.
 
 ## Topic contract
 
@@ -136,8 +131,8 @@ publish + pause-others/resume-target — so UI and DSL converge. Video is served
 co-launched `web_video_server` (MJPEG of `image_debug`, `:8080`); the node never touches
 image bytes. Browser routes (`:8090`): `GET /` + `/static/*` (SPA), `GET /events` (SSE
 ~12 Hz JSON snapshot), `POST /api/detector/<cam>/param {name,value}`,
-`POST /api/active_camera {camera}`. Launch: `mission_web.launch.py` (see JETSON_SETUP §5
-Option D) — `cameras:=both` (vision_dual) | `forward` | `downward` (single via
+`POST /api/active_camera {camera}`. Launch: `mission_web.launch.py` (see
+[`launch-combinations.md`](../platform/launch-combinations.md)) — `cameras:=both` (vision_dual) | `forward` | `downward` (single via
 vision.launch.py; the node's `cameras` param is set to match so a single-camera console
 shows one panel, no phantom). **Robust to a missing `web_video_server`** (apt pkg, not a
 repo dep): the launch resolves it defensively and degrades to console-only with an
@@ -186,7 +181,7 @@ authoritative input; `/tracks` is a display / analysis convenience EXCEPT for th
 opt-in gap-bridging coast (`vision.coast_s>0`), where it is consulted only to fill
 a tick that has no live detection — never to override one.
 
-`<cam>` is the camera profile name (`laptop`, `sim_front`, `sim_bottom`, ...).
+`<cam>` is the camera name (`forward`, `downward`, `laptop`, ...).
 `vision_msgs/Detection2D.results[0].hypothesis.class_id` is a **string**
 (rosidl-required); we publish the human label (`'person'`, `'gate'`)
 straight in there so downstream filters stay readable
@@ -219,13 +214,12 @@ one place. `detection/factory.py` keeps the preference order and
 `yolo._resolve_model_path` walks the same list when it turns a stem into a path:
 
 ```python
-KNOWN_EXTENSIONS = ('.hef', '.engine', '.pt')   # most preferred first
+KNOWN_EXTENSIONS = ('.hef', '.pt')   # most preferred first
 def backend_for(path):                          # '.hef' -> hailo, else yolo
 ```
 
-So on the vehicle a compiled **`.hef` wins and runs on the Hailo-8**; a `.engine`
-(TensorRT) or a `.pt` (PyTorch) is what a dev box without the accelerator falls
-back to, transparently. Confirm which one you actually got from the backend
+So on the vehicle a compiled **`.hef` wins and runs on the Hailo-8**; a `.pt`
+(PyTorch) is what a dev box without the accelerator falls back to, transparently. Confirm which one you actually got from the backend
 canary line the detector logs at startup:
 
 ```
@@ -243,21 +237,16 @@ Measured on the vehicle (`tools/hailo_stages.py`, synthetic frames): letterbox
 Python pipeline is at the chip's own ceiling; NMS runs on-chip, which is why
 decode costs 0.02 ms. See [`hailo-vision.md`](hailo-vision.md).
 
-> **History.** This section used to describe building TensorRT engines on a
-> Jetson (`nvpmodel -m 0 && jetson_clocks`, JetPack-locked engines). That was
-> the previous platform. The `.engine` path still exists in the loader for dev
-> boxes that have one; nothing on the current vehicle uses it.
-
 ### FPS ↔ control coupling
 
-The vision loop runs at `VISION_LOOP_HZ` (20 Hz) but the detector may publish
+The vision loop runs at `VISION_LOOP_HZ` (50 Hz) but the detector may publish
 far slower, so the same bbox is re-used for several ticks. `align_loop`/
 `move_loop` **freshness-decay** the translational command (`_freshness(age_s)`:
 full authority while fresh, linearly to zero by `VISION_FRESH_ZERO_S`, hard-zero
-when blind) on **lat/fwd only** — yaw is a rate ArduSub bleeds, depth is its
-hold. At healthy FPS the factor is 1.0 (no behaviour change); at low/variable
+when blind) on **lat/fwd only** — yaw is a rate the board's own loop bleeds, and depth is
+the board's hold. At healthy FPS the factor is 1.0 (no behaviour change); at low/variable
 FPS it caps the per-frame over-drive (`Kp·e·T_frame`) that otherwise makes the
-hull twitch on stale data. Raising FPS (TensorRT) is the primary fix; this is
+hull twitch on stale data. Raising FPS is the primary fix; this is
 the per-frame safety guard, complementary to the arrival brake (end-of-command).
 
 ## Visualization layers
@@ -275,7 +264,7 @@ the per-frame safety guard, complementary to the arrival brake (end-of-command).
  5. Red "STALE FRAME" banner across top if `healthy=False`
 
 **UI strip (150 px below video)** — `_render_ui_strip()` builds on a dark `C_BG` surface:
- - Brand header: `● BRACU  DUBURI ●` centered; accent separator below
+ - Header bar: `MONGLA`, FPS and a LIVE/VIDEO badge; accent separator below
  - Left block: `[PERCEPTION]` → `[CLASSES]` → `[ALIGNMENT]` panels (SRC/FPS/DET/TGT status)
  - Right block (right-anchored):
    - `[STATE]` panel: DEPTH / YAW / MODE / BATT / ARMED
@@ -285,7 +274,7 @@ the per-frame safety guard, complementary to the arrival brake (end-of-command).
  - Footer: full-width heading tape (±60°, cardinal marks, 3-digit readout above center)
 
 **Real-time instruments**: `auv_manager_node` publishes `/mongla/state` at 20 Hz via
-`_fast_state_tick()` (fresh AHRS2 yaw + depth, reusing cached armed/mode/battery). The slower
+`_fast_state_tick()` (fresh board yaw + depth, reusing cached armed/mode/battery). The slower
 `telemetry_tick` at 2 Hz handles logging and armed/mode/battery cache updates. This keeps the
 compass needle and depth bar latency under 50 ms even though a full telemetry log line only
 prints on change.
@@ -350,7 +339,7 @@ downstream vision verbs see identical topics either way.
 Space=pause, →/←=±1 s, ↑/↓=±10 s, `.`/`,`=±1 frame (best while paused).
 
 **Full workflow** — recording pool runs, running mission scripts against video,
-tracker tuning, ROS2 service/topic control, sim+video setup:
+tracker tuning, ROS2 service/topic control:
 → [`video-testing.md`](video-testing.md)
 
 ## Adding a new camera source
@@ -370,8 +359,8 @@ through the factory.
 
 1. Subclass `Detector` in a new file under `detection/`.
 2. Implement `infer(frame_bgr) -> list[Detection]` and `class_names()`.
-3. Wire it from `detector_node.py` behind a `backend:=` ROS param if you
-   want runtime selection (today there's only `yolo`, so it's hardcoded).
+3. Give it an extension and a row in `detection/factory.py`: the artifact's extension
+   picks the backend (`.hef` → Hailo, `.pt` → YOLO), so there is no `backend:=` param.
 
 The pipeline downstream of `Detector` doesn't care which model is in the
 box.
@@ -402,28 +391,28 @@ auv_manager_node
         v
 mongla_control.motion_vision.align_loop   (move_loop for vision_move)
   +-- reads VisionState.bbox_error(target)            -- normalized pixel error
-  +-- 20 Hz  send_rc_override / send_rc_translation (lateral / yaw / forward)
-  +-- 5  Hz  set_target_depth(setpoint += clamp(ey * kp_depth))  -- align depth axis
+  +-- 50 Hz  fc.manual(fwd, lat, yaw) -- one MANUAL_CONTROL frame, STABILIZE
   +-- gain clamps every axis (hard max-speed cap)
-  +-- returns Outcome code: ALIGNED / LOST / TIMEOUT / NO_CAMERA / ABORTED
+  +-- returns Outcome code: ALIGNED / LOST / TIMEOUT / NO_CAMERA / ABORTED / DRIFTED
 ```
 
 Why the loop is in the manager, not the client:
 
-- One MAVLink owner. Anything else risks two writers fighting for Ch4/5/6.
-- Sub-100 ms feedback path. ActionClient -> manager -> Pixhawk RTT is
+- One MAVLink owner. Anything else risks two writers fighting over one demand.
+- Sub-100 ms feedback path. ActionClient -> manager -> board is
   one process hop; running the loop inside the manager removes the
   network/IPC jitter.
 - Preflight is a polling check on an existing `VisionState`. No
   `spin_once` from inside an action callback, no second subscription set.
 
-**`align_loop`** centres the target on any subset of `{lat, yaw, depth}`,
-each axis carrying a signed pixel offset (`0` = centre). It exits ALIGNED
-when every active axis stays within `err_px` for `align_stable_frames`
-consecutive ticks. **`move_loop`** drives forward until the bbox fills
+**`align_loop`** centres the target on any subset of `{lat, yaw}` — plus, on the
+downward camera, a fore/aft surge axis from image-Y — each axis carrying a
+signed pixel offset (`0` = centre). It exits ALIGNED when every active axis
+stays within `err_px` for `align_stable_frames` distinct detections, then
+re-measures after braking (`DRIFTED` if it moved out of band). **`move_loop`** drives forward until the bbox fills
 `fwd_fill` of the frame (metric `mode` = `area` / `width` / `height`),
 optionally holding a lateral pixel offset (`maintain`); it never re-centres
-yaw/depth (ArduSub holds depth, the heading lock holds yaw).
+yaw/depth (the board holds both).
 
 Search and recovery are **not** verbs: the mission DSL owns them via
 `mongla.detected()` poll loops and the `fallback=` search function passed
@@ -431,38 +420,33 @@ to either verb (see [`client-and-dsl-api.md`](../missions/client-and-dsl-api.md)
 Model + class switching lives in `mongla_planner/model_context.py`
 (`ClassRef` → `set_model` + `set_classes`) and runs before each goal.
 
-These two verbs plus the standalone `fire` verb (no vision — direct ESP32
-serial; `fire_channel` 1/2=torpedo, 3/4=dropper) are the entire vision
-surface. `target_class` matching is case-insensitive.
+These two verbs plus the standalone `fire` verb (a board channel over
+MAVLink, see below) are the entire vision surface. `target_class` matching is case-insensitive.
 
 **Loss handling:** a detection older than `_STALE_LIMIT_S` (1.0 s) counts
-as "no target this tick". The loop coasts (neutral RC) until `lost_grace_s`
+as "no target this tick". The loop coasts (neutral demand) until `lost_grace_s`
 (default 1.0 s) elapses, then returns `LOST` so the DSL can run its
 `fallback`; with `hold_through_loss=True` (set by the DSL when no fallback
 is supplied) it instead coasts through the loss until `duration` expires.
 
 ### Downward camera contract
 
-`vision_verbs.vision_align` applies one automatic adaptation for a
-floor-facing camera:
+On a floor-facing camera image-Y is fore/aft, so `vision_verbs.vision_align`
+drives **surge** from it rather than depth (`downward=is_downward` into the
+loop), two-sided and braked, with `surge_sign` flipping it for the mount. The
+DSL names that axis `fwd`. A depth axis on the forward camera, and a downward
+fill-driven descent, both raise `ValueError` before anything is sent: depth is
+the board's. Yaw cannot be inferred from a bbox looking straight down, so
+leave it off:
 
 ```python
-is_downward = camera in ('downward', 'sim_bottom')
-depth_sign  = -1 if is_downward else +1     # negate the depth-axis correction
-```
-
-`depth_sign = -1` flips the depth-axis nudge so a target that grows in the
-downward view (vehicle already close) does not command a further descent.
-That is the engine's only orientation special-case — `vision_move` has
-none. On a floor-facing camera, drive lateral centring off the `lat` axis
-(`ex` → Ch6 strafe); yaw cannot be inferred from a bbox looking straight
-down, so leave it off:
-
-```python
-# Strafe-centre a bin under the AUV on the downward camera
+# Centre a bin under the AUV on the downward camera
+mongla.set_depth(BIN_DEPTH_M)
 mongla.camera = 'downward'
-mongla.vision.align('bin', lat=0, err=30, duration=20)
+mongla.vision.align('bin', lat=0, fwd=0, err=30, duration=20)
 ```
+
+Full axis remap: [`downward-camera.md`](downward-camera.md).
 
 ### Camera switching in a mission
 
@@ -478,7 +462,7 @@ mongla.vision.move('gate', fwd=80, mode='area', gain=35, duration=20)
 # Switch to downward camera for bin task
 mongla.camera = 'downward'
 mongla.target  = 'bin'
-mongla.vision.align(lat=0, err=30, duration=20)   # target falls back to mongla.target='bin'
+mongla.vision.align(lat=0, fwd=0, err=30, duration=20)   # target falls back to mongla.target='bin'
 ```
 
 The camera name must match a running `camera_node` profile — verify with
@@ -488,39 +472,32 @@ Verifying the chain before pool day:
 
 ```
 ros2 run mongla_vision vision_check                 # detector publishing?
-ros2 run mongla_vision vision_thrust_check          # detection -> RC echo?
+ros2 run mongla_vision vision_thrust_check          # detection -> demand, disarmed?
 ros2 run mongla_planner mission demo_find_person    # full mission rehearsal
 ```
 
-### Payload actuation (PayloadDriver)
+### Payload actuation
 
-`mongla_control/payload.py` — write-only ESP32-C3 USB serial driver. Fires torpedoes (ch 1/2)
-and droppers (ch 3/4) by sending ASCII digit bytes `b'1'`..`b'4'` over USB CDC.
+There is no payload board and nothing to auto-detect. The payload is the SROT board's own
+PCA9685 expander, driven over the same MAVLink link (`SrotPayload` in
+`mongla_control/fc/srot_fc.py`):
 
 ```
 MonglaMission.fire(channel)
   v
-Mongla.fire(fire_channel)            # 'fire' COMMANDS verb (command-scoped)
+Mongla.fire(fire_channel)            # 'fire' COMMANDS verb
   v
-Mongla._fire_payload(channel)        # raw helper; also for mission "align then fire"
+SrotPayload.fire(channel)            # BOARD channel N, the same n as SERVO{n}_ROLE
   v
-PayloadDriver.fire(channel)          # serial.write(bytes([0x30 + channel]))
-  v
-ESP32-C3 GPIO → relay → actuator
+SROT board PCA9685 -> switch -> actuator
 ```
 
-**Auto-detect at startup**: `auv_manager_node` scans Espressif/CH340 USB-by-id globs,
-excludes the BNO085 port, and connects the first match. Startup banner:
-```
-[PAYLOAD] connected on /dev/serial/by-id/usb-Espressif_...
-[PAYLOAD] not found — fire() calls will log-stub only
-```
+`fire(N)` always addresses board channel N; there is no host-side wiring table to go stale.
+The board's role for the channel decides: a SWITCH channel fires, a servo or unroled
+channel is refused with the board's fireable list in the message, and `0` — every payload
+constant in `competition_config.py` until the payload is wired — is refused.
+`ros2 run mongla_manager connect` lists the fireable channels.
 
-Check: `mongla.payload_ready` → `bool`.
-
-The `fire` verb (and the raw `_fire_payload` helper) decides:
-- `fire_channel > 0` → ESP32 serial (`PayloadDriver`)
-- `fire_channel == 0` → log-only stub
-
-There is **no** vision-fire verb. Missions compose vision with a fire call,
-e.g. `if mongla.vision.align('torpedo_hole', yaw=0, lat=0, depth=0).ok: mongla.fire(1)`.
+There is **no** vision-fire verb. Missions compose vision with a fire, either mid-hold
+(`align(..., hold=4, fire=TORPEDO_1_CHANNEL)`) or after a confirmed lock:
+`if mongla.vision.align('hole', lat=0): mongla.fire(TORPEDO_1_CHANNEL)`.

@@ -4,45 +4,35 @@
 > `python3 tools/gen_reference.py`. A test fails if it has drifted from the source.
 > Every row below was read out of the file named beside it, never written from memory.
 
-**31 verbs.** On the SROT board **11** run as one `SROT_MOVE` primitive, which the board runs *and brakes* itself; **6** are refused before dispatch; the rest are host-side loops or single messages.
+**23 verbs.** On the SROT board **11** run as one `SROT_MOVE` primitive, which the board runs *and brakes* itself; the rest are host-side loops or single messages.
 
 ## 1. Verbs — `mongla_control/commands.py`
 
 | verb | fields | defaults | on srot | what it does |
 |---|---|---|---|---|
-| `arc` | `duration`, `gain`, `target_yaw`, `settle` | `gain=50.0`, `target_yaw=0.0`, `settle=0.0` | ⛔ **refused** | Curved motion to an ABSOLUTE heading: drives forward at `gain` pct for `duration` s while a PID turns the hull to `target_yaw` (deg) and holds it. Turn direction auto-computed. |
 | `arm` | `timeout` | `timeout=15.0` | host | Arm the vehicle (motors hot). |
-| `calc_distance` | `phase` | `phase=start` | host | Downward optical-flow distance bracket: phase='start' latches the axis + resets, 'stop' returns accumulated metres in final_value. DVL-free; runs with detectors paused. |
-| `calibrate_depth` | — | — | host | Re-zero the barometer at the surface (QGC "Calibrate Pressure") so depth reads 0 before a dive. DISARMED + surface only; verifies the re-zero took. Auto-run by mission_reset; also standalone. |
-| `disarm` | `timeout` | `timeout=20.0` | host | Disarm and confirm it took (srot: ARM_DISARM, confirmed on the heartbeat; pixhawk: MANUAL, neutral, then disarm). |
-| `dvl_connect` | — | — | host | Connect to the Nortek Nucleus 1000 DVL over TCP and begin streaming. Must be called before any move_*_dist command when yaw_source is dvl/nucleus_dvl. |
+| `calc_distance` | `phase` | `phase=start` | host | Downward optical-flow distance bracket: phase='start' latches the axis + resets, 'stop' returns accumulated metres in final_value. |
+| `calibrate_depth` | — | — | host | Re-zero the barometer at the surface so depth reads 0 before a dive. DISARMED + surface only; verifies the re-zero took. Auto-run by mission_reset; also standalone. |
+| `disarm` | `timeout` | `timeout=20.0` | host | Disarm and confirm it took on the board's HEARTBEAT. Signals abort first, so a running verb stops. |
 | `fire` | `fire_channel` | `fire_channel=0.0` | host | Activate payload BOARD channel N (1..16) -- the same n as SERVO{n}_ROLE, no host-side map. The board decides: a SWITCH channel fires, a PWM/SERVO channel is REFUSED (it is the on-board arm). `mongla_manager connect` lists which is which. |
 | `head` | — | — | host | Read current heading (degrees) at execution time. Result is in final_value. Also works as a magic value in other CLI commands: --target head resolves to the live heading the moment the command runs. |
-| `lock_heading` | `target`, `timeout` | `target=0.0`, `timeout=300.0` | ⛔ **refused** | Stream Ch4 rate-overrides driven by yaw_source until unlock_heading. target=0 means lock current heading. |
-| `mission_reset` | — | — | host | Stop heading lock, clear abort event, send RC neutral. Call at start of every mission run() to clear state carried forward from any previous mission. |
-| `motor_test` | `target`, `gain`, `duration` | `target=1.0`, `gain=20.0`, `duration=2.0` | host | Spin ONE thruster (1-8) at `gain` percent for `duration` s. SROT only; requires ARMED. The board expires the test and DISARMS within 3 s of the last keep-alive, which is the safety mechanism -- there is no stop command. PROPS OFF OR VEHICLE RESTRAINED. |
+| `mission_reset` | — | — | host | Clear the abort flag, zero the demand, and re-zero depth if disarmed at the surface. First line of every mission. |
+| `motor_test` | `target`, `gain`, `duration` | `target=1.0`, `gain=20.0`, `duration=2.0` | host | Spin ONE thruster (1-8) at `gain` percent for `duration` s. Requires ARMED. The board expires the test and DISARMS within 3 s of the last keep-alive, which is the safety mechanism -- there is no stop command. PROPS OFF OR VEHICLE RESTRAINED. |
 | `move_back` | `duration`, `gain`, `settle` | `gain=80.0`, `settle=0.0` | on the board | Drive backward for `duration` s at `gain` percent thrust. |
-| `move_back_dist` | `distance_m`, `gain`, `dvl_tolerance`, `settle` | `gain=60.0`, `dvl_tolerance=0.1`, `settle=0.0` | ⛔ **refused** | Drive backward `distance_m` metres using DVL position feedback. Falls back to open-loop timed drive if no DVL position available. |
 | `move_forward` | `duration`, `gain`, `settle` | `gain=80.0`, `settle=0.0` | on the board | Drive forward for `duration` s at `gain` percent thrust. |
-| `move_forward_dist` | `distance_m`, `gain`, `dvl_tolerance`, `settle` | `gain=60.0`, `dvl_tolerance=0.1`, `settle=0.0` | ⛔ **refused** | Drive forward `distance_m` metres using DVL position feedback. Falls back to open-loop timed drive if no DVL position available. |
-| `move_lateral_dist` | `distance_m`, `gain`, `dvl_tolerance`, `settle` | `gain=36.0`, `dvl_tolerance=0.1`, `settle=0.0` | ⛔ **refused** | Strafe `distance_m` metres (positive=right, negative=left) using DVL position feedback. |
 | `move_left` | `duration`, `gain`, `settle` | `gain=80.0`, `settle=0.0` | on the board | Strafe left for `duration` s at `gain` percent thrust. |
 | `move_right` | `duration`, `gain`, `settle` | `gain=80.0`, `settle=0.0` | on the board | Strafe right for `duration` s at `gain` percent thrust. |
-| `pause` | `duration` | `duration=2.0` | on the board | Release RC override for N seconds (autopilot takes over). |
+| `pause` | `duration` | `duration=2.0` | on the board | Hold station for `duration` s (the board's MOVE_HOLD). |
 | `set_depth` | `target`, `timeout`, `settle` | `timeout=30.0`, `settle=0.0` | on the board | Hold absolute depth (`target` metres, negative below surface). |
-| `set_mode` | `target_name`, `timeout` | `timeout=8.0` | host | Switch flight mode. srot: STABILIZE|DEPTH_HOLD|SURFACE|MANUAL|ACRO (ALT_HOLD aliases to DEPTH_HOLD). pixhawk: MANUAL|ALT_HOLD|STABILIZE|... |
-| `stop` | — | — | on the board | Halt now (srot: the board's MOVE_STOP brake; pixhawk: neutral 1500 PWM on all six channels). |
-| `style_roll` | `gain`, `timeout`, `flips`, `headroom` | `gain=60.0`, `timeout=20.0`, `flips=1`, `headroom=1.0` | on the board | Style: N×360° roll on Ch2 in ACRO mode, one flip per loop iteration; `timeout` is per flip, not total. BNO085-confirmed (AHRS2 fallback) with direction-locked unwrap. Per flip: optional `headroom` m pre-dive, ACRO roll guarded by a hard surface-depth abort and cos(roll)-modulated Ch3 depth correction, then ALT_HOLD recovery to the origin depth before the next flip. ACRO_BAL_ROLL + ACRO_TRAINER zeroed before and restored after. Cancel mid-flip restores ALT_HOLD then disarms. |
-| `style_yaw` | `flips`, `deg_per_step`, `settle` | `flips=1`, `deg_per_step=90.0`, `settle=1.0` | ⛔ **refused** | Style: N×360° yaw spin in ALT_HOLD. flips full rotations, each as (360/deg_per_step) steps with settle between. BNO heading tracking active. No mode change — safest style verb. |
-| `surface` | `timeout` | `timeout=60.0` | host | Emergency surface: set depth to 0 m and hold until reached. Bypasses command_active gate so it works during a running mission. |
+| `set_mode` | `target_name`, `timeout` | `timeout=8.0` | host | Switch board mode: STABILIZE|DEPTH_HOLD|SURFACE|MANUAL|ACRO, and verify it took (a silent refusal looks like success). |
+| `stop` | — | — | on the board | Halt now: the board's MOVE_STOP brake. |
+| `style_roll` | `flips`, `timeout` | `flips=1`, `timeout=20.0` | on the board | Style: `flips` x 360 deg roll, run by the board (MOVE_STYLE). `timeout` bounds the whole manoeuvre. |
+| `surface` | `timeout` | `timeout=60.0` | host | Emergency surface: brake, then the board's SURFACE mode (ascend and hold). Bypasses the busy gate, so it works during a running mission. |
 | `turn` | `target`, `timeout`, `settle` | `timeout=30.0`, `settle=0.0` | on the board | Rotate to absolute heading `target` degrees (0-360) via shortest arc. Direction (left/right) is chosen automatically. |
-| `unlock_heading` | — | — | host | Stop the heading-lock streamer, send neutral. |
-| `vision_align` | `camera`, `target_class`, `axes`, `offset_lat`, `offset_yaw`, `offset_depth`, `err_px`, `duration`, `gain`, `gain_lat`, `gain_yaw`, `brake_off`, `brake_gain`, `hold_s`, `hold_through_loss`, `fire_channels`, `fire_t`, `kp_lat`, `kp_yaw`, `kp_depth`, `lost_grace_s`, `align_stable_frames`, `lock_target`, `ctrl_conf`, `range_gain_floor`, `ki_lat`, `coast_s`, `lock_s`, `fwd_fill`, `mode`, `kp_forward`, `settle_px`, `verify_off`, `depth_step`, `fire_pass_enabled`, `hold_heading`, `surge_sign`, `max_depth_m`, `depth_ceiling_m`, `fire_gap`, `standoff_max_tilt_deg`, `tool` | `camera=forward`, `target_class=`, `axes=`, `offset_lat=0.0`, `offset_yaw=0.0`, `offset_depth=0.0`, `err_px=40.0`, `duration=20.0`, `gain=30.0`, `gain_lat=0.0`, `gain_yaw=0.0`, `brake_off=False`, `brake_gain=0.0`, `hold_s=0.0`, `hold_through_loss=False`, `fire_channels=`, `fire_t=0.0`, `kp_lat=60.0`, `kp_yaw=60.0`, `kp_depth=0.05`, `lost_grace_s=1.0`, `align_stable_frames=3.0`, `lock_target=False`, `ctrl_conf=0.0`, `range_gain_floor=1.0`, `ki_lat=0.0`, `coast_s=0.8`, `lock_s=1.0`, `fwd_fill=0.0`, `mode=area`, `kp_forward=200.0`, `settle_px=0.0`, `verify_off=False`, `depth_step=0.0`, `fire_pass_enabled=False`, `hold_heading=False`, `surge_sign=0.0`, `max_depth_m=0.0`, `depth_ceiling_m=0.0`, `fire_gap=0.0`, `standoff_max_tilt_deg=0.0`, `tool=` | host | Centre target_class on the active axes (CSV of lat,yaw,depth) each at its signed pixel offset (offset_lat/yaw/depth; 0=centre). Aligned when every active axis is within err_px. gain caps speed; gain_lat/gain_yaw override the cap on the lat/yaw axis (0 = inherit gain) so e.g. yaw can micro-align slowly while lateral stays brisk (depth rate is set by depth_step, not a %% cap). On arrival the lateral inertia is braked (reverse-kick) so the hull stops square; brake_off=true coasts, brake_gain scales the kick. A gently-converged lock exits with ~0 momentum and is not kicked. hold_s>0 turns it into an ACTIVE station-keep: once centred it keeps correcting for hold_s seconds (fighting water inertia, e.g. to hold a torpedo-hole lock steady for the shot) before exiting -- budget duration >= approach + hold_s. fire_channels (CSV e.g. "1,2") fires those payload channels ONCE mid-hold, fire_t seconds into the hold (0 = at hold start), on a background thread so the loop keeps correcting while the shot leaves -- so a torpedo launches while still glued to the hole (no align-then-fire drift). Requires fire_t < hold_s (else clamped to 0). On duration expiry it logs NOT-aligned and the mission continues. hold_through_loss=true coasts on target loss (set by the DSL when no fallback search is supplied). lock_target=true locks onto the acquired target (steers to the box nearest the last-accepted centre, not the largest) so a second hole / spurious box cannot steal the aim. ctrl_conf is a control-side min score to accept a box. range_gain_floor softens lat/depth gain when the bbox fills the frame (close) to stop overshoot. ki_lat adds a lateral integral during the hold to null a steady current. fwd_fill>0 adds a forward range-hold axis (mode=area/width/height, kp_forward gain): align ALSO drives forward to that fill %% and holds the standoff -- one verb does forward-standoff + lat/depth + hold + mid-hold fire (the torpedo standoff shot). The fire is gated on the standoff too. fwd_fill=0 (default) = no forward axis. settle_px>0 = SETTLE GATE: only declare aligned once the hull is in-band AND barely moving (|Δerr|<=settle_px) so it ends settled on target like vision_move (not mid-pass through the band); 0=off. VERIFY (default on; verify_off=true skips it): after braking, align re-measures on align_stable_frames NEW frames and returns DRIFTED if the target is out of the err_px band once stopped, LOST if not re-seen. depth_step = per-update depth-setpoint resolution (m, 0.02..0.10; 0=default 0.02): depth moves SLOWLY in these steps + freezes in the deadband so ArduSub settles (no z-wobble). fire_pass_enabled = fire the payload at command end even if never fully aligned, as long as the target was seen live+recently (a guaranteed partial-points shot). hold_heading = widen the heading-lock deadband during the hold so the launcher heading holds steady (no terminal yaw jitter) when yaw is released to the lock. DOWNWARD CAMERA (camera=downward/sim_bottom): the frame rotates -- image-X still drives Ch6 lateral, but the depth axis (image-Y) drives Ch5 SURGE fore/aft (two-sided, braked), and fwd_fill DESCENDS the ALT_HOLD depth to that bbox fill using the depth_step logic (proportional, deadband-frozen, one-sided). Bounded by max_depth_m (deepest) and depth_ceiling_m (shallowest -- surface guard so alignment cannot lift the hull out of the water). surge_sign (+1/-1) flips fore/aft for the mount (verify DISARMED). fire drops droppers (3/4). fire_gap spaces multi-channel shots (fire=[1,4]) apart in seconds (solenoid needs the gap). See the bin task. |
-| `vision_move` | `camera`, `target_class`, `fwd_fill`, `mode`, `maintain_px`, `maintain_on`, `hold_s`, `err_px`, `duration`, `gain`, `gain_lat`, `brake_off`, `brake_gain`, `hold_through_loss`, `kp_forward`, `kp_lat`, `lost_grace_s`, `range_gain_floor`, `coast_s`, `lock_s` | `camera=forward`, `target_class=`, `fwd_fill=95.0`, `mode=area`, `maintain_px=0.0`, `maintain_on=False`, `hold_s=0.0`, `err_px=40.0`, `duration=20.0`, `gain=30.0`, `gain_lat=0.0`, `brake_off=False`, `brake_gain=0.0`, `hold_through_loss=False`, `kp_forward=200.0`, `kp_lat=60.0`, `lost_grace_s=1.0`, `range_gain_floor=1.0`, `coast_s=0.8`, `lock_s=1.0` | host | Drive forward toward target_class. fwd_fill > 0 stops once the bbox fills that %% of the frame (mode = area/width/height; height for tall slalom). fwd_fill <= 0 (e.g. --fwd_fill -1, or DSL move(fwd=None)) is PASS-THROUGH: drive until the target is seen and then leaves the frame, plus a commit overshoot (hold_s, else ~2s) to carry the hull through a gate. maintain_on holds a maintain_px lateral offset while moving; depth and yaw are left to ArduSub / heading lock. gain caps forward speed; gain_lat overrides the cap on the maintain strafe (0 = inherit gain). On a fill-stop arrival the forward (and maintain) inertia is braked so the hull halts in front of the target instead of creeping in; PASS-THROUGH never brakes (it must coast through the gate). brake_off=true coasts, brake_gain scales the kick. Does NOT re-centre. |
+| `vision_align` | `camera`, `target_class`, `axes`, `offset_lat`, `offset_yaw`, `offset_depth`, `err_px`, `duration`, `gain`, `gain_lat`, `gain_yaw`, `brake_off`, `brake_gain`, `hold_s`, `hold_through_loss`, `fire_channels`, `fire_t`, `kp_lat`, `kp_yaw`, `lost_grace_s`, `align_stable_frames`, `lock_target`, `ctrl_conf`, `range_gain_floor`, `ki_lat`, `coast_s`, `lock_s`, `fwd_fill`, `mode`, `kp_forward`, `settle_px`, `verify_off`, `fire_pass_enabled`, `surge_sign`, `fire_gap`, `standoff_max_tilt_deg`, `fire_max_tilt_deg`, `tool` | `camera=forward`, `target_class=`, `axes=`, `offset_lat=0.0`, `offset_yaw=0.0`, `offset_depth=0.0`, `err_px=40.0`, `duration=20.0`, `gain=30.0`, `gain_lat=0.0`, `gain_yaw=0.0`, `brake_off=False`, `brake_gain=0.0`, `hold_s=0.0`, `hold_through_loss=False`, `fire_channels=`, `fire_t=0.0`, `kp_lat=60.0`, `kp_yaw=60.0`, `lost_grace_s=1.0`, `align_stable_frames=3.0`, `lock_target=False`, `ctrl_conf=0.0`, `range_gain_floor=1.0`, `ki_lat=0.0`, `coast_s=0.8`, `lock_s=1.0`, `fwd_fill=0.0`, `mode=area`, `kp_forward=200.0`, `settle_px=0.0`, `verify_off=False`, `fire_pass_enabled=False`, `surge_sign=0.0`, `fire_gap=0.0`, `standoff_max_tilt_deg=0.0`, `fire_max_tilt_deg=0.0`, `tool=` | host | Centre target_class on the active axes (CSV of lat,yaw; on the downward camera also depth, which drives SURGE) each at its signed pixel offset (offset_lat/yaw/depth; 0=centre). Aligned when every active axis is within err_px. gain caps speed; gain_lat/gain_yaw override the cap per axis (0 = inherit gain). On arrival the lateral inertia is braked (reverse-kick) so the hull stops square; brake_off=true coasts, brake_gain scales the kick. hold_s>0 keeps correcting for hold_s seconds once centred (station-keep for a shot) -- budget duration >= approach + hold_s. fire_channels (CSV e.g. "9,10") fires those board channels ONCE, fire_t seconds into the hold, on a background thread so the loop keeps correcting while the shot leaves. fire_gap spaces multi-channel shots apart in seconds. fire_pass_enabled fires at command end even if never fully aligned, as long as the target was seen recently. hold_through_loss=true coasts on target loss. lock_target=true steers to the box nearest the last-accepted centre, not the largest. ctrl_conf is a control-side min score. range_gain_floor softens gain when the bbox fills the frame. ki_lat adds a lateral integral during the hold. fwd_fill>0 (forward camera) adds a forward range-hold axis (mode=area/width/height, kp_forward gain) to that fill %% and gates the shot on the standoff. settle_px>0 declares aligned only once the hull is in-band AND barely moving. VERIFY (verify_off=true skips it) re-measures on align_stable_frames new frames after braking: DRIFTED if out of band, LOST if not re-seen. surge_sign (+1/-1) flips the downward surge for the mount. The board holds depth and heading itself; a forward depth axis and a downward fwd_fill are REFUSED. |
+| `vision_move` | `camera`, `target_class`, `fwd_fill`, `mode`, `maintain_px`, `maintain_on`, `hold_s`, `err_px`, `duration`, `gain`, `gain_lat`, `brake_off`, `brake_gain`, `hold_through_loss`, `kp_forward`, `kp_lat`, `lost_grace_s`, `range_gain_floor`, `coast_s`, `lock_s` | `camera=forward`, `target_class=`, `fwd_fill=95.0`, `mode=area`, `maintain_px=0.0`, `maintain_on=False`, `hold_s=0.0`, `err_px=40.0`, `duration=20.0`, `gain=30.0`, `gain_lat=0.0`, `brake_off=False`, `brake_gain=0.0`, `hold_through_loss=False`, `kp_forward=200.0`, `kp_lat=60.0`, `lost_grace_s=1.0`, `range_gain_floor=1.0`, `coast_s=0.8`, `lock_s=1.0` | host | Drive forward toward target_class. fwd_fill > 0 stops once the bbox fills that %% of the frame (mode = area/width/height; height for tall slalom). fwd_fill <= 0 (e.g. --fwd_fill -1, or DSL move(fwd=None)) is PASS-THROUGH: drive until the target is seen and then leaves the frame, plus a commit overshoot (hold_s, else ~2s) to carry the hull through a gate. maintain_on holds a maintain_px lateral offset while moving; depth and heading are held by the board. gain caps forward speed; gain_lat overrides the cap on the maintain strafe (0 = inherit gain). On a fill-stop arrival the forward (and maintain) inertia is braked so the hull halts in front of the target instead of creeping in; PASS-THROUGH never brakes (it must coast through the gate). brake_off=true coasts, brake_gain scales the kick. Does NOT re-centre. |
 | `yaw_left` | `target`, `timeout`, `settle` | `timeout=30.0`, `settle=0.0` | on the board | Sharp pivot left by `target` degrees within `timeout` s. |
 | `yaw_right` | `target`, `timeout`, `settle` | `timeout=30.0`, `settle=0.0` | on the board | Sharp pivot right by `target` degrees within `timeout` s. |
-
-Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `move_lateral_dist`, `style_yaw` — from `srot_fc.UNSUPPORTED_VERBS`. The board has no such primitive, and faking one host-side is how a mission comes to believe it moved a distance it never moved.
 
 ## 2. Executables — each package's `setup.py`
 
@@ -59,7 +49,6 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `ros2 run mongla_manager connect` | `mongla_manager.srot_connect:main` |
 | `ros2 run mongla_manager flare_order` | `mongla_manager.flare_order_send:main` |
 | `ros2 run mongla_manager autotune` | `mongla_manager.srot_autotune:main` |
-| `ros2 run mongla_sensors sensors_node` | `mongla_sensors.sensors_node:main` |
 | `ros2 run mongla_vision camera_node` | `mongla_vision.camera_node:main` |
 | `ros2 run mongla_vision detector_node` | `mongla_vision.detector_node:main` |
 | `ros2 run mongla_vision detector_dual_node` | `mongla_vision.detector_dual_node:main` |
@@ -71,7 +60,6 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `ros2 run mongla_vision vision_thrust_check` | `mongla_vision.utils.check_thrust:main` |
 | `ros2 run mongla_vision tracker_check` | `mongla_vision.utils.check_tracker:main` |
 | `ros2 run mongla_vision vision_display` | `mongla_vision.utils.display_node:main` |
-| `ros2 run mongla_vision export_engine` | `mongla_vision.utils.export_engine:main` |
 | `ros2 run mongla_vision switch_camera` | `mongla_vision.utils.switch_camera:main` |
 | `ros2 run mongla_vision calibrate` | `mongla_vision.calibration.guide:main` |
 | `ros2 run mongla_vision calibrate_solve` | `mongla_vision.calibration.solver:main` |
@@ -88,20 +76,11 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 
 | argument | default | what it does |
 |---|---|---|
-| `mode` | `pool` | Connection mode: pool|sim|auto|desk|laptop |
-| `yaw_source` | `mavlink_ahrs` | Yaw source: mavlink_ahrs|dvl|bno085|bno085_dvl |
-| `flight_controller` | `srot` | Autopilot backend: srot|pixhawk (srot = the SROT/Hengla board over USB serial; pixhawk = the ArduSub/BlueOS path) |
 | `mav_device` | `` | SROT serial device, '' = autodetect. A path (/dev/serial/by-id/...) or any pymavlink connection string |
 | `payload_channels` | `` | OPTIONAL labels for the log, "<board_channel>:<name>", e.g. "9:torpedo_1, 11:dropper_1". Labels ONLY -- fire(N) always addresses board channel N; nothing here routes a shot |
 | `allow_fw_behaviour_mismatch` | `false` | Arm against firmware older than FW_BEHAVIOUR_REV_REQUIRED. Accepts an un-braked stop -- leave false |
-| `dvl_host` | `192.168.2.201` |  |
-| `dvl_port` | `9000` |  |
-| `bno085_port` | `auto` | BNO085 device, or "auto" to scan USB VID/PID. |
-| `baro_calibration` | `true` | Re-zero the barometer at the surface. TRUE on the pool hull. The simulator passes false: SITL ACKs the calibration and then stops tracking depth. |
-| `payload_port` | `auto` | Payload board device, or "auto" to scan USB VID/PID. |
-| `dvl_auto_connect` | `true` | Auto-connect DVL at startup (true|false) |
 | `vision` | `false` | Start camera + detector alongside manager |
-| `vision_stack` | `pi` | pi = both cameras + calibration (vision_pi.launch.py, the vehicle); generic = single camera, no calibration (vision.launch.py, dev/CUDA). |
+| `vision_stack` | `pi` | pi = both cameras + calibration (vision_pi.launch.py, the vehicle); generic = single camera, no calibration (vision.launch.py, dev box). |
 | `vision_profile` | `fast` | vision_stack:=pi -- vision_pi's own profile argument (its `vision:=`). Renamed here because `vision` is this file's boolean on/off switch. |
 | `fwd_model` | `gate_sharks` | vision_stack:=pi -- forward-camera model stem. |
 | `dwn_model` | `bin_fire_blood` | vision_stack:=pi -- downward-camera model stem. |
@@ -127,16 +106,16 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `lock` | `true` | vision_stack:=pi -- start lock_node (follower + XFeat anchor continuity ladder). |
 | `paused` | `true` | vision_stack:=pi -- start both detectors paused; the mission resumes the one it needs. false = both infer and compete. |
 | `camera` | `forward` | Camera ROLE -- names the topics and nodes (forward|downward). Change `camera_profile`, not this, to point a role at other hardware. |
-| `camera_profile` | `pi_forward` | Camera HARDWARE profile (CAMERA_PROFILES in mongla_vision/config.py -- the loaded copy). Default pi_forward matches flight_controller:=srot (Pi box). On the Jetson pass forward. |
+| `camera_profile` | `pi_forward` | Camera HARDWARE profile (CAMERA_PROFILES in mongla_vision/config.py -- the loaded copy). Default pi_forward is the vehicle's Fantech. |
 | `model` | `gate_sharks` | vision_stack:=generic -- model stem in mongla_vision/models/ (a <stem>.yaml sidecar must sit beside it). |
 | `models` | `` | vision_stack:=generic -- multi-model registry, CSV name=stem: "gate=gate_sharks,bins=bin_fire_blood" |
 | `active_model` | `` | Registry key to start with (requires models:="..." to be set) |
 | `classes` | `gate` | CSV class names for detector |
 | `conf` | `0.45` | Detector confidence floor. 0.45 is gate_sharks' measured bar; another model's bar is in its <stem>.yaml. |
-| `imgsz` | `640` | Inference square size. NOTE: a TensorRT .engine bakes imgsz at export -- this only re-scales the .pt fallback. For TRT, re-export to match (export_engine --all --imgsz <N>), then imgsz:=<N>. |
+| `imgsz` | `640` | Inference square size for a .pt. A .hef bakes its input size at compile time and ignores this. |
 | `max_det` | `100` | Post-NMS detection cap (runtime; lower toward ~10 if NMS is the FPS bottleneck on busy frames). |
 | `viewer` | `false` | Open vision_display (OpenCV viewer) alongside vision pipeline |
-| `foxglove` | `false` | Start foxglove_bridge (WebSocket telemetry on foxglove_port). Off the mission path -- pure viz. Needs ros-humble-foxglove-bridge installed. Connect the Foxglove desktop app to ws://<jetson-ip>:<foxglove_port>. |
+| `foxglove` | `false` | Start foxglove_bridge (WebSocket telemetry on foxglove_port). Off the mission path -- pure viz. Needs ros-humble-foxglove-bridge installed. Connect the Foxglove desktop app to ws://<pi>:<foxglove_port>. |
 | `foxglove_port` | `8765` | foxglove_bridge WebSocket port |
 
 ### `mongla_vision/mission_web.launch.py`
@@ -194,14 +173,14 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `profile` | `` | Camera HARDWARE profile (CAMERA_PROFILES) (pi_forward|pi_downward|forward|...). Empty = same as `camera`. Set this to keep the role name while changing which unit it opens. |
 | `lock` | `false` | Run the lock ladder (follower + XFeat anchor), publishing <ns>/lock. Costs ~23 % of the detection rate, measured. Control ignores it until vision.lock_s > 0 -- turn both on together. |
 | `lock_class` | `` |  |
-| `camera` | `forward` | Camera profile (forward|downward|sim_front|laptop|...). Drives node names: mongla_detector_<camera>. |
+| `camera` | `forward` | Camera profile (forward|downward|laptop|auto). Drives node names: mongla_detector_<camera>. |
 | `device` | `-1` | /dev/videoN index; -1 = use profile default |
 | `device_path` | `` | override device (empty = auto /dev/mongla_cam_<camera> symlink if present, else int `device`) |
 | `width` | `640` |  |
 | `height` | `480` |  |
 | `fps` | `0` | 0 = use the camera profile fps |
 | `video_file` | `` | Path to a video file; when set, replaces the live webcam |
-| `topic` | `` | ROS image topic to consume (Gazebo / re-published stream). Ignored when video_file is set. |
+| `topic` | `` | ROS image topic to consume (bag replay / re-published stream). Ignored when video_file is set. |
 | `loop` | `true` | Loop the video file at EOF (video_file only) |
 | `model` | `yolov11n` | Model stem (models/) or .pt path (single-model mode). Pool: gate_sharks / gate_flare_medium_100ep. |
 | `models` | `` | CSV name=stem registry for hot model switching: "gate=gate_nano_100ep,combined=gate_flare_medium_100ep" |
@@ -209,8 +188,8 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `classes` | `` | CSV class filter; empty = all model classes |
 | `conf` | `0.35` |  |
 | `iou` | `0.5` |  |
-| `device_cls` | `cuda:0` | Inference device for YOLO (cuda:0 | cpu) |
-| `imgsz` | `640` | Inference square size. NOTE: a TensorRT .engine bakes imgsz at export -- this arg only re-scales the .pt fallback. To bench a size on TRT, re-export to match: export_engine --all --imgsz <N>, then imgsz:=<N> here. |
+| `device_cls` | `auto` | Inference device for a .pt (auto | cuda:0 | cpu); a .hef ignores it |
+| `imgsz` | `640` | Inference square size for a .pt. A .hef bakes its input size at compile time and ignores this. |
 | `max_det` | `100` | Post-NMS detection cap (runtime; lower toward ~10 if NMS is the FPS bottleneck on busy frames). |
 | `paused` | `false` | Start the detector paused (resume_detector(camera) per task) |
 | `debug_image_hz` | `10.0` | Annotated image_debug publish rate (raise toward inference FPS for a smoother web/mission_web stream) |
@@ -231,8 +210,8 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 
 | argument | default | what it does |
 |---|---|---|
-| `fwd_device` | `0` | /dev/videoN index for the forward camera — LAST-RESORT fallback, only used on a box with no /dev/mongla_cam_* symlink (dev box). On the Jetson the port-stable symlink wins automatically (see device_path below). |
-| `dwn_device` | `4` | /dev/videoN index for the downward camera (dev-box fallback; the Jetson symlink wins automatically) |
+| `fwd_device` | `0` | /dev/videoN index for the forward camera — LAST-RESORT fallback, only used on a box with no /dev/mongla_cam_* symlink (dev box). On the vehicle the port-stable symlink wins automatically (see device_path below). |
+| `dwn_device` | `4` | /dev/videoN index for the downward camera (dev-box fallback; the vehicle symlink wins automatically) |
 | `fwd_device_path` | `` | override device for forward (empty = auto /dev/mongla_cam_forward) |
 | `dwn_device_path` | `` | override device for downward (empty = auto /dev/mongla_cam_downward) |
 | `fwd_model` | `gate_sharks` | Single YOLO model stem (used only when fwd_models is empty) |
@@ -245,8 +224,8 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 | `dwn_conf` | `0.35` | Uniform conf for the downward detector |
 | `fwd_model_conf` | `` | Per-model conf overrides on forward, CSV name=conf (e.g. torpedo_blood_hole=0.55) |
 | `dwn_model_conf` | `` | Per-model conf overrides on downward, CSV name=conf |
-| `device_cls` | `cuda:0` | Inference device for YOLO (cuda:0 | cpu) |
-| `imgsz` | `640` | Inference square size (both detectors). NOTE: a TensorRT .engine bakes imgsz at export -- this only re-scales the .pt fallback. For TRT, re-export to match: export_engine --all --imgsz <N>, then imgsz:=<N> here. |
+| `device_cls` | `auto` | Inference device for a .pt (auto | cuda:0 | cpu); a .hef ignores it |
+| `imgsz` | `640` | Inference square size for a .pt (both detectors). A .hef bakes its input size and ignores this. |
 | `max_det` | `100` | Post-NMS detection cap, both detectors (runtime; lower toward ~10 if NMS is the FPS bottleneck on busy frames). |
 | `paused` | `true` | Start both detectors paused (resume_detector per task) |
 | `debug_image_hz` | `10.0` | Annotated image_debug publish rate (the browser-stream smoothness knob; raise toward inference FPS for a web viewer) |
@@ -323,32 +302,28 @@ Refused on srot: `arc`, `lock_heading`, `move_back_dist`, `move_forward_dist`, `
 
 ## 3b. Missions — `mongla_planner/missions/`
 
-Run with `ros2 run mongla_planner mission <name>`. A model marked ⏳ is not in `src/mongla_vision/models/`: it arrives on a water day, and until then the mission refuses at `set_model`. A refused verb that the mission asks about first (`mongla.can` / `mongla.require`) is safe on srot.
+Run with `ros2 run mongla_planner mission <name>`. A model marked ⏳ is not in `src/mongla_vision/models/`: it arrives on a water day, and until then the mission refuses at `set_model`. A board move enters AUTO, which closes the depth loop: every one is gated on the two armed bench checks (CLAUDE.md §2).
 
-| mission | what it does | models it loads | refused on srot |
+| mission | what it does | models it loads | board moves (depth-gated) |
 |---|---|---|---|
-| `demo_arc` | side-by-side comparison of sharp vs curved turns. | — | `arc` (asks first) |
-| `demo_dual_camera` | gate → bin → torpedo across TWO cameras, ONE detector at a time. | `gate_sharks`, `torpedo_blood_hole` ⏳ not shipped | — |
-| `demo_find_person` | canonical vision-driven mission for desk/thruster testing. | — | — |
-| `demo_heading_lock` | continuous heading-hold during a strafing square. | — | `lock_heading` (asks first) |
-| `demo_move_see` | minimal open-loop + vision demo (two-verb). | — | — |
-| `demo_pursue` | torpedo-style approach using align() then move(). | — | — |
-| `demo_square` | the classic shakedown mission. | — | — |
-| `gate_prequal` | RoboSub gate prequalification with DVL square pattern. | — | `move_forward_dist` (asks first) |
-| `pool_day_practice` | Pool day practice run: Gate → Slalom → Torpedo → Bin. | `bin_fire_blood`, `gate_sharks`, `slalom_red_pipe` ⏳ not shipped, `torpedo_blood_hole` ⏳ not shipped | `lock_heading` (asks first) |
-| `pool_day_torpedo` | Pool day torpedo practice: align → approach → fine-lock → fire. | `torpedo_blood_hole` ⏳ not shipped | `lock_heading` (asks first) |
-| `sauvc_full` | SAUVC 2026 full run: Navigation, Target Acquisition, then (opt-in) the flares. | `sauvc_sim` | `lock_heading` (asks first) |
-| `sauvc_navigation` | SAUVC 2026 Navigation — swim through the red/green gate. THE mandatory task. | `sauvc_sim` | `lock_heading` (asks first) |
-| `sauvc_qualification` | SAUVC Qualification — through the hanging gate, U-turn, back through it. | `sauvc_sim` | `lock_heading` (asks first) |
-| `sauvc_target_acquisition` | SAUVC 2026 Target Acquisition — drop the ball into the BLUE drum. 30 points. | `sauvc_sim` | — |
-| `sim_shakedown` | prove the sim <-> autonomy loop end to end. | — | — |
-| `task_bin` | Bin drop task — DOWNWARD camera, hover over the bin, drop a marker. | `bin_fire_blood` | — |
-| `task_full_2026` | Full RoboSub 2026 competition run: Gate → Slalom → Bin → Torpedo → Return+Roll. | — | `lock_heading` (asks first) |
-| `task_gate` | Gate task — find the gate and drive through it. | `gate_sharks` | — |
-| `task_return` | Return task — find gate again, pass back through, style roll. | `gate_sharks` | — |
-| `task_slalom` | Slalom task — weave through red pipes. | `slalom_red_pipe` ⏳ not shipped | — |
-| `task_torpedo` | Torpedo task — align on board, approach via blood, standoff-lock hole, fire. | `torpedo_blood_hole` ⏳ not shipped | `lock_heading` (asks first) |
-| `test` | a scratch bench mission, retargeted 2026-09-28. | `gate_sharks` | `lock_heading` (asks first) |
+| `demo_dual_camera` | gate → bin → torpedo across TWO cameras, ONE detector at a time. | `gate_sharks`, `torpedo_blood_hole` ⏳ not shipped | `pause`, `set_depth` |
+| `demo_find_person` | canonical vision-driven mission for desk/thruster testing. | — | `move_forward`, `set_depth`, `stop`, `yaw_left`, `yaw_right` |
+| `demo_move_see` | minimal open-loop + vision demo (two-verb). | — | `move_back`, `move_forward`, `set_depth`, `yaw_left` |
+| `demo_pursue` | torpedo-style approach using align() then move(). | — | `move_back`, `move_forward`, `set_depth`, `stop`, `yaw_right` |
+| `demo_square` | the classic shakedown mission. | — | `move_forward`, `pause`, `set_depth`, `yaw_right` |
+| `pool_day_practice` | Pool day practice run: Gate → Slalom → Torpedo → Bin. | `bin_fire_blood`, `gate_sharks`, `slalom_red_pipe` ⏳ not shipped, `torpedo_blood_hole` ⏳ not shipped | `move_forward`, `pause`, `set_depth`, `stop`, `turn` |
+| `pool_day_torpedo` | Pool day torpedo practice: align → approach → fine-lock → fire. | `torpedo_blood_hole` ⏳ not shipped | `move_forward`, `set_depth`, `stop`, `turn` |
+| `sauvc_full` | SAUVC 2026 full run: Navigation, Target Acquisition, then (opt-in) the flares. | `sauvc_sim` | `move_back`, `move_forward`, `pause`, `set_depth` |
+| `sauvc_navigation` | SAUVC 2026 Navigation — swim through the red/green gate. THE mandatory task. | `sauvc_sim` | `move_forward`, `pause`, `set_depth` |
+| `sauvc_qualification` | SAUVC Qualification — through the hanging gate, U-turn, back through it. | `sauvc_sim` | `move_forward`, `pause`, `set_depth`, `yaw_right` |
+| `sauvc_target_acquisition` | SAUVC 2026 Target Acquisition — drop the ball into the BLUE drum. 30 points. | `sauvc_sim` | `move_forward`, `pause`, `set_depth` |
+| `task_bin` | Bin drop task — DOWNWARD camera, hover over the bin, drop a marker. | `bin_fire_blood` | `move_forward`, `pause`, `set_depth`, `turn` |
+| `task_full_2026` | Full RoboSub 2026 competition run: Gate → Slalom → Bin → Torpedo → Return+Roll. | — | `pause`, `set_depth` |
+| `task_gate` | Gate task — find the gate and drive through it. | `gate_sharks` | `move_forward`, `pause`, `set_depth` |
+| `task_return` | Return task — find gate again, pass back through, style roll. | `gate_sharks` | `move_forward`, `pause`, `set_depth`, `style_roll`, `turn` |
+| `task_slalom` | Slalom task — weave through red pipes. | `slalom_red_pipe` ⏳ not shipped | `move_forward`, `pause`, `turn` |
+| `task_torpedo` | Torpedo task — align on board, approach via blood, standoff-lock hole, fire. | `torpedo_blood_hole` ⏳ not shipped | `move_forward`, `pause`, `set_depth`, `turn` |
+| `test` | a scratch bench mission, retargeted 2026-09-28. | `gate_sharks` | `move_forward`, `move_left`, `pause`, `set_depth`, `stop` |
 
 ## 4. Node parameters — `declare_parameter`
 
@@ -393,20 +368,11 @@ Run with `ros2 run mongla_planner mission <name>`. A model marked ⏳ is not in 
 | `max_ambiguity` | `0.9` |
 | `max_reproj_px` | `10.0` |
 
-**`mongla_manager/auv_manager_node.py`** — 29 parameters
+**`mongla_manager/auv_manager_node.py`** — 14 parameters
 
 | parameter | default |
 |---|---|
-| `mode` | `DEFAULT_MODE` |
 | `mav_device` | `''` |
-| `smooth_yaw` | `False` |
-| `smooth_translate` | `False` |
-| `yaw_source` | `'mavlink_ahrs'` |
-| `position_source` | `'none'` |
-| `bno085_port` | `'auto'` |
-| `bno085_baud` | `115200` |
-| `payload_port` | `'auto'` |
-| `baro_calibration` | `True` |
 | `record` | `''` |
 | `vision_uplink_camera` | `''` |
 | `vision_uplink_class` | `''` |
@@ -416,33 +382,10 @@ Run with `ros2 run mongla_planner mission <name>`. A model marked ⏳ is not in 
 | `position_uplink` | `False` |
 | `payload_channels` | `''` |
 | `payload_fire_map` | `''` |
-| `nucleus_dvl_host` | `'192.168.2.201'` |
-| `nucleus_dvl_port` | `9000` |
-| `nucleus_dvl_password` | `'nortek'` |
-| `dvl_auto_connect` | `True` |
-| `dvl_retry_s` | `5.0` |
 | `debug` | `False` |
-| `flight_controller` | `DEFAULT_FLIGHT_CONTROLLER` |
 | `allow_fw_behaviour_mismatch` | `False` |
 | `srot_telemetry_period_s` | `2.0` |
 | `allow_saturated_depth_arm` | `False` |
-
-**`mongla_manager/test_preflight_never_opens_the_autopilot.py`** — 1 parameters
-
-| parameter | default |
-|---|---|
-| `flight_controller` | `DEFAULT_FLIGHT_CONTROLLER` |
-
-**`mongla_sensors/sensors_node.py`** — 6 parameters
-
-| parameter | default |
-|---|---|
-| `yaw_source` | `'mavlink_ahrs'` |
-| `bno085_port` | `'/dev/ttyACM0'` |
-| `bno085_baud` | `115200` |
-| `calibrate` | `False` |
-| `mavlink_url` | `'udpin:0.0.0.0:14550'` |
-| `print_period_s` | `0.5` |
 
 **`mongla_vision/camera_node.py`** — 15 parameters
 
@@ -481,7 +424,7 @@ Run with `ros2 run mongla_planner mission <name>`. A model marked ⏳ is not in 
 | `model_path` | `'yolov11n'` |
 | `models` | `''` |
 | `active_model` | `''` |
-| `device` | `'cuda:0'` |
+| `device` | `'auto'` |
 | `half` | `True` |
 | `conf` | `0.35` |
 | `assoc_conf` | `0.0` |
@@ -555,7 +498,7 @@ Run with `ros2 run mongla_planner mission <name>`. A model marked ⏳ is not in 
 | `profile` | `'laptop'` |
 | `source` | `''` |
 | `topic` | `''` |
-| `device` | `'cuda:0'` |
+| `device` | `'auto'` |
 | `model_path` | `'yolov11n'` |
 | `classes` | `'person'` |
 | `conf` | `0.35` |

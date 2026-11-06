@@ -54,7 +54,6 @@ def rig():
 
     def patched(self, name, **kw):
         kw['parameter_overrides'] = list(kw.get('parameter_overrides', [])) + [
-            Parameter('flight_controller', value='srot'),
             Parameter('mav_device', value=f'udpin:127.0.0.1:{port}')]
         orig(self, name, **kw)
 
@@ -165,11 +164,14 @@ def test_a_cancel_brakes_the_board_and_ends_CANCELED(armed):
     assert time.monotonic() - t < 2.5
 
 
-def test_a_refused_verb_puts_nothing_on_the_wire(armed):
+def test_a_verb_the_vehicle_does_not_have_puts_nothing_on_the_wire(armed):
+    """A mission written for the old backend sends `lock_heading`. It must
+    fail by name, at the node, with nothing reaching the board."""
     ac, board = armed
     n = len(board.received)
     r = _wait(_send(ac, 'lock_heading', target=10.0))
-    assert not r.result.success and 'not supported' in r.result.message
+    assert not r.result.success
+    assert 'Unknown command: lock_heading' in r.result.message
     cmds = [m for m in board.received[n:] if m.get_type() == 'COMMAND_LONG'
             and m.command == CMD_SROT_MOVE]
     assert cmds == []

@@ -106,6 +106,10 @@ Their repos are also checked out locally at
 `/home/fh1m/Envs/dockers/auv-ros2/Mongla_others/{srot-control-board,srot-ground-station,srot-esc-flasher}`.
 Read the firmware there; ⛔ still never commit to it.
 
+**The 2026-09-24 ecosystem review** — every issue, patch and research note filed
+across all three SROT repositories in one pass, with its evidence:
+[`review-2026-09-24/`](review-2026-09-24/README.md).
+
 **Filed as issues rather than PRs**, so severity stays legible — both are in
 [`pr-b-telemetry-budget.md`](pr-b-telemetry-budget.md) §5:
 the `JS_ARM` / `JS_ARM_TOGGLE` pre-arm bypass (safety), and four points of doc

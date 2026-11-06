@@ -13,12 +13,12 @@ Raspberry Pi 5 + Hailo-8  ──USB serial 115200──  SROT board  ──1 Mba
                                                        └── LoRa ── Bondor (srot-ground-station)
 ```
 
-**No BlueOS, no UDP router.** The Pi 5 connects to the board's USB-C port directly. Bondor is a
+**No router, no network hop.** The Pi 5 connects to the board's USB-C port directly. Bondor is a
 parallel, independent link and is **not** in the control path.
 
-> The companion computer was a Jetson Orin Nano during an earlier SROT integration; it is now
-> the Raspberry Pi 5 + Hailo-8 AI HAT (root `CLAUDE.md`; [`the-shift.md`](../../../docs/the-shift.md)).
-> `mongla_ws` and `/mongla/*` naming predates both and is kept for the test vehicle's tooling.
+> The companion is the Raspberry Pi 5 + Hailo-8 AI HAT (root `CLAUDE.md`;
+> [`the-shift.md`](../../../docs/the-shift.md)). The `mongla_ws` and `/mongla/*` names are
+> kept for the test vehicle's tooling.
 
 | Repo | Owns |
 |---|---|
@@ -27,7 +27,7 @@ parallel, independent link and is **not** in the control path.
 | **srot-ground-station** | parameters, calibration, tuning, motor test, manual piloting |
 | **srot-esc-flasher** | one-time bench tool; Bluejay onto the ESCs (precondition for RPM) |
 
-**The division is deliberate: the Jetson does perception; the board does control.** See
+**The division is deliberate: the Pi does perception; the board does control.** See
 [`vision-control-split.md`](vision-control-split.md) for the vision half of that contract.
 
 ---
@@ -53,10 +53,11 @@ exception is raised, the vehicle just behaves wrong.
    `DENIED`, plus `TEMPORARILY_REJECTED` on a mutex miss. `IN_PROGRESS` is not terminal. An
    action client that never gets a terminal result **hangs** — worse than any error.
 
-4. **Depth sign: `VFR_HUD.alt` is negative below the surface.** Our whole stack compares depth
-   against negative constants (`STYLE_ROLL_SURFACE_GUARD_M`, `_MIN_DEPTH_M`, `max_depth_m`,
-   `depth_ceiling_m`), so a sign flip does not error — it silently disables every depth guard.
-   We shipped exactly that bug and it was invisible until read.
+4. **Depth sign: `VFR_HUD.alt` is negative below the surface.** `MonglaState.depth` carries
+   it unchanged, and consumers do arithmetic on it — the flow node's height above the floor
+   is `pool_depth_m + depth_m` (`flow/flow_math.py`). A sign flip does not error; it makes
+   every such number plausible and wrong. We shipped exactly that bug once and it was
+   invisible until read.
 
 5. **A heartbeat ≥ 1 Hz is mandatory** or the board surfaces after `GCS_FAILSAFE_MS`.
 
@@ -79,23 +80,21 @@ docs have drifted from its code repeatedly, and we have been misled by it — a 
 "clamped at ≥ 0" that was not clamped, a "brake to a halt" that coasts, a four-result ACK table
 missing a fifth result. When a doc and the code disagree, **the code is ground truth.**
 
-**Workarounds for firmware defects must be documented and self-retiring.** We carry a host-side
-brake because `MOVE_STOP` applies zero thrust; the drift test **fails when the firmware fixes
-it**, so we remove the workaround rather than braking twice. Any future workaround should have
-the same property.
+**Workarounds for firmware defects must be documented and self-retiring.** The precedent: we
+carried a host-side brake while `MOVE_STOP` applied zero thrust, with a drift test that **failed
+when the firmware fixed it** — and when it did, the brake was deleted rather than braking twice.
+What replaced it is an interlock, not a workaround: `check_behaviour_rev()` refuses to arm a
+board below `FW_BEHAVIOUR_REV_REQUIRED`, because older firmware coasts on `stop`. Any future
+workaround needs the same exit.
 
 **Send findings upstream, ranked by what blocks us.** `srot-control-board/JETSON_FEEDBACK.md`
 is ours to maintain. It is filtered to "what can the companion not fix from its own side" —
 not general firmware review.
 
-**The two backends must stay separable.** `flight_controller:=pixhawk|srot` selects at runtime;
-`PixhawkFC` **is-a** `Pixhawk`, so the legacy path is byte-identical. Do not let srot-specific
-behaviour leak into shared code — gate on `_is_srot` or put it behind the HAL.
-
-**Verb support on srot is partial and honest about it.** `srot_fc.UNSUPPORTED_VERBS` refuses
-what is not ported rather than letting it fail obscurely. Removing a verb from that set is how
-the port lands — implement, then delete the line. `test_no_facade_mode_gate_is_reachable_on_srot`
-enforces that nothing reaches an ArduSub-only mode gate.
+**There is one board and one backend.** `SrotFC` is the only driver; there is no backend
+selector and no `_is_srot` branch to add. The Pixhawk path lives on the tag
+`last-with-pixhawk-and-sim` and is not ported back. A verb the board cannot run does not exist
+— a missing low-level capability is a firmware pull request, not a host-side emulation.
 
 ---
 

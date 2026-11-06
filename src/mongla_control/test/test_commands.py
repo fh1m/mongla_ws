@@ -38,22 +38,6 @@ def test_fields_for_substitutes_default_when_unset():
     assert kwargs == {'duration': 5.0, 'gain': 80.0, 'settle': 0.0}
 
 
-def test_arc_command_has_target_yaw_field():
-    """`arc` closes on an absolute heading via target_yaw (not a yaw-rate stick)."""
-    spec = COMMANDS['arc']
-    assert 'target_yaw' in spec['fields']
-    assert spec['defaults']['target_yaw'] == 0.0
-    assert 'yaw_rate_pct' not in spec['fields']   # removed from arc
-
-
-def test_lock_unlock_heading_registered():
-    """heading-lock pair must round-trip through the registry."""
-    assert 'lock_heading'   in COMMANDS
-    assert 'unlock_heading' in COMMANDS
-    assert COMMANDS['unlock_heading']['fields'] == []
-    assert COMMANDS['lock_heading']['defaults']['timeout'] == 300.0
-
-
 def test_fields_for_keeps_explicit_zero_when_no_default():
     """`set_depth` has no default for `target`; an explicit 0.0 must
     survive (hold at surface is a valid command)."""
@@ -68,31 +52,26 @@ def test_fields_for_keeps_explicit_zero_when_no_default():
 def test_fields_for_string_field_uses_default_when_empty():
     goal = Move.Goal()
     goal.cmd = 'set_mode'
-    goal.target_name = 'ALT_HOLD'
+    goal.target_name = 'DEPTH_HOLD'
     # timeout 0.0 -> 8.0
     kwargs = fields_for('set_mode', goal)
-    assert kwargs == {'target_name': 'ALT_HOLD', 'timeout': 8.0}
+    assert kwargs == {'target_name': 'DEPTH_HOLD', 'timeout': 8.0}
 
 
-# vision_align: surge_sign / max_depth_m / depth_ceiling_m are now deck tunables
-# (vision.*). The manager's runtime_defaults substitute them when the goal leaves
-# them at the rosidl zero -- exactly the layered-default path this asserts.
+# vision_align: surge_sign is a deck tunable (vision.surge_sign). The manager's
+# runtime_defaults substitute it when the goal leaves it at the rosidl zero --
+# exactly the layered-default path this asserts.
 def test_vision_align_downward_fields_in_spec():
-    fields = COMMANDS['vision_align']['fields']
-    for f in ('surge_sign', 'max_depth_m', 'depth_ceiling_m'):
-        assert f in fields
+    assert 'surge_sign' in COMMANDS['vision_align']['fields']
 
 
 def test_vision_align_surge_sign_substituted_when_omitted():
     goal = Move.Goal()
     goal.cmd = 'vision_align'
     # surge_sign left at rosidl 0.0 -> manager's vision.surge_sign (-1) fills it.
-    rd = {'surge_sign': -1.0, 'max_depth_m': 0.0, 'depth_ceiling_m': 0.0}
+    rd = {'surge_sign': -1.0}
     kwargs = fields_for('vision_align', goal, runtime_defaults=rd)
     assert kwargs['surge_sign'] == -1.0
-    # forward-safe: depth bounds stay 0.0 (OFF) unless a mission sets them
-    assert kwargs['max_depth_m'] == 0.0
-    assert kwargs['depth_ceiling_m'] == 0.0
 
 
 def test_vision_align_explicit_surge_sign_wins_over_tunable():
@@ -102,15 +81,6 @@ def test_vision_align_explicit_surge_sign_wins_over_tunable():
     rd = {'surge_sign': -1.0}
     kwargs = fields_for('vision_align', goal, runtime_defaults=rd)
     assert kwargs['surge_sign'] == 1.0         # non-zero request is not overridden
-
-
-def test_vision_align_depth_bounds_substituted_when_mission_sets_them():
-    goal = Move.Goal()
-    goal.cmd = 'vision_align'
-    rd = {'max_depth_m': -1.6, 'depth_ceiling_m': -0.4}   # bin run set them at start
-    kwargs = fields_for('vision_align', goal, runtime_defaults=rd)
-    assert kwargs['max_depth_m'] == -1.6
-    assert kwargs['depth_ceiling_m'] == -0.4
 
 
 def test_string_fields_constant_matches_actual_string_typed_fields():

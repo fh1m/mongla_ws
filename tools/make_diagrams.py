@@ -170,7 +170,7 @@ def frame_budget():
 
     o.append(f'<line x1="{ms(0):.1f}" y1="248" x2="{ms(18.55):.1f}" y2="248" stroke="{RED_L}"/>')
     o.append(f'<path d="M{ms(0):.1f},244 v8 M{ms(18.55):.1f},244 v8" stroke="{RED_L}"/>')
-    o.append(txt(ms(18.55) + 8, 252, 'one host command · 53.9 Hz', 'r'))
+    o.append(txt(ms(18.55) + 8, 252, 'reaches the vision verb · 53.9 Hz through the graph; it commands at 50 Hz', 'r'))
 
     ay = 282
     o.append(f'<line x1="{x0}" y1="{ay}" x2="{x1}" y2="{ay}" stroke="{RULE}"/>')
@@ -192,7 +192,79 @@ def frame_budget():
     return '\n'.join(o)
 
 
-for name, fn in (('loop-rate', loop_rate), ('field-of-view', fov), ('frame-budget', frame_budget)):
+# ── 4. the six packages, drawn as the one road between them ─────────────
+def package_map():
+    """Not a box per package: the ROAD. Everything that commands the vehicle is
+    a client of one action, and exactly one node touches the board. Perception
+    (blue, the medium) feeds that node; the command path (red, the machine)
+    leaves it down one cable. Counts are deliberately absent -- they live in
+    .claude/context/packages/README.md, the one copy."""
+    W, H = 1160, 600
+    o = [head(W, H, 'Six packages: every command is one goal on one action, and one node talks to the board')]
+    o.append(f'<rect width="{W}" height="{H}" fill="#05070a"/>')   # shown on GitHub too, either theme
+    o.append(txt(32, 46, 'Six packages, and the one road between them', 'h'))
+    o.append(txt(32, 68, 'EVERY COMMAND IS ONE GOAL ON ONE ACTION · EXACTLY ONE NODE TOUCHES THE BOARD'))
+
+    def box(x, y, w, h, title, lines, col, code=None):
+        o.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" fill="#0a0d13" stroke="{col}" stroke-width="1"/>')
+        o.append(txt(x + 16, y + 24, title, 'v'))
+        for i, l in enumerate(lines):
+            o.append(txt(x + 16, y + 46 + 17 * i, l))
+        if code:
+            o.append(txt(x + 16, y + h - 14, code, 'r' if col in (RED, RED_L) else 'b' if col == SEA else 'v'))
+
+    def arrow(x1, y1, x2, y2, col, dash=False):
+        d = ' stroke-dasharray="5 4"' if dash else ''
+        o.append(f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{col}" stroke-width="1.6"{d}/>')
+        ang = math.atan2(y2 - y1, x2 - x1)
+        a1, a2 = ang + 2.7, ang - 2.7
+        o.append(f'<path d="M{x2},{y2} L{x2 + 9 * math.cos(a1):.1f},{y2 + 9 * math.sin(a1):.1f} '
+                 f'L{x2 + 9 * math.cos(a2):.1f},{y2 + 9 * math.sin(a2):.1f} z" fill="{col}"/>')
+
+    # the clients
+    box(32, 100, 300, 130, 'mongla_planner', ['the mission DSL, the `mongla` CLI,', 'missions and state machines'],
+        DIM, "mongla arm · mission sauvc_full")
+    box(32, 262, 300, 130, 'mongla_vision', ['cameras → Hailo-8 → tracker →', 'the lock ladder · optical flow'],
+        SEA, 'detections · lock · velocity')
+    box(32, 424, 300, 130, 'mongla_localization', ['right-invariant EKF on the board IMU;', 'late measurements replayed'],
+        SEA, '/mongla/odom')
+
+    # the road: one action, one state topic
+    box(400, 100, 250, 130, 'mongla_interfaces', ['one action:  /mongla/move', 'one topic:   /mongla/state'],
+        RED, '23 verbs, one goal at a time')
+    arrow(332, 165, 396, 165, RED_L)
+    o.append(f'<path d="M332,310 H690 V200 H712" fill="none" stroke="{SEA_L}" stroke-width="1.6"/>'
+             f'<path d="M716,200 l-9,-4 v8 z" fill="{SEA_L}"/>')
+    o.append(txt(352, 302, 'detections · lock · flow -> the vision loops', 'b'))
+    arrow(182, 392, 182, 420, SEA_L)
+    o.append(txt(192, 410, 'flow velocity', 'b'))
+
+    # the one node, the library, the cable, the board
+    box(720, 100, 408, 130, 'mongla_manager', ['auv_manager_node: the ONLY node',
+        'on the board. Serves the action,', 'runs the vision loops, publishes state'], RED,
+        'start · connect · bringup_check')
+    arrow(650, 165, 716, 165, RED_L)
+    box(720, 262, 408, 130, 'mongla_control', ['the verbs and the board driver.',
+        'A library, no nodes: one class,', 'one board, one link'], RED, 'SrotFC · srot_protocol')
+    arrow(924, 230, 924, 258, RED_L)
+
+    # the cable, drawn as a cable, and the board
+    o.append(f'<path d="M924,392 C924,430 924,440 924,470" fill="none" stroke="{RED}" stroke-width="3"/>')
+    o.append(txt(908, 424, 'ONE USB-C CABLE', 'r', 'end'))
+    o.append(txt(908, 440, 'MAVLINK 2 · COMPID 191', 'r', 'end'))
+    o.append(f'<rect x="720" y="470" width="408" height="84" fill="#120607" stroke="{RED}" stroke-width="1.4"/>')
+    o.append(txt(736, 496, 'SROT board · firmware Hengla', 'v'))
+    o.append(txt(736, 518, 'holds attitude, depth and heading at 500 Hz;'))
+    o.append(txt(736, 535, 'runs and brakes every move by itself'))
+    arrow(980, 466, 980, 398, DIM, dash=True)
+    o.append(txt(992, 424, 'IMU · DEPTH'))
+    o.append(txt(992, 440, 'ESC RPM'))
+    o.append('</svg>')
+    return '\n'.join(o)
+
+
+for name, fn in (('loop-rate', loop_rate), ('field-of-view', fov), ('frame-budget', frame_budget),
+                 ('package-map', package_map)):
     p = OUT / f'{name}.svg'
     p.write_text(fn())
     import xml.etree.ElementTree as ET

@@ -11,7 +11,7 @@ from mongla_vision.detector_node import _model_stem, DetectorNode
 def test_model_stem_bare_and_path_and_ext():
     assert _model_stem('gate_sharks') == 'gate_sharks'
     assert _model_stem('/models/gate_sharks.pt') == 'gate_sharks'
-    assert _model_stem('  gate_sharks.engine ') == 'gate_sharks'
+    assert _model_stem('  gate_sharks.hef ') == 'gate_sharks'
     assert _model_stem('yolov11n') == 'yolov11n'
 
 

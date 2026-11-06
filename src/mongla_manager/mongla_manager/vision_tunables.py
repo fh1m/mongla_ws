@@ -33,11 +33,10 @@ from typing import Any, Dict
 # Mirrors the spec defaults in mongla_control/commands.py exactly so
 # nothing changes if the operator never sets a param.
 VISION_PARAM_DEFAULTS: Dict[str, Any] = {
-    # P-gains: pct thrust per unit normalized pixel error (kp_depth is m/tick).
+    # P-gains: pct thrust per unit normalized pixel error.
     # Mirror the engine defaults in mongla_control/motion_vision.py.
     'vision.kp_lat':              60.0,
     'vision.kp_yaw':              60.0,
-    'vision.kp_depth':             0.05,
     'vision.kp_forward':         200.0,
     # lost_grace_s: seconds the server coasts on target loss before reporting
     # LOST (so the DSL can run a fallback search). 1.0 s rides typical pool
@@ -46,20 +45,20 @@ VISION_PARAM_DEFAULTS: Dict[str, Any] = {
     # frame_fill_default: % of frame the bbox must fill for vision_move to count
     # as "reached" when the mission leaves fwd_fill at 0.
     'vision.frame_fill_default':  95.0,
-    # align_stable_frames: distinct in-band DETECTIONS (not 20 Hz loop ticks)
+    # align_stable_frames: distinct in-band DETECTIONS (not 50 Hz loop ticks)
     # every active axis must satisfy before vision_align reports ALIGNED. Counting
     # detections (a re-read of one frame counts once) makes this FPS-independent:
     # at low detector FPS a single lucky frame can no longer declare aligned (or
     # arm the mid-hold fire). 3 frames ~ 0.1-0.15 s at 20-30 Hz, ~0.75-1 s at 3-4 Hz.
     'vision.align_stable_frames':  3.0,
     # --- precision-alignment knobs (close-in robustness; all default OFF) -----
-    # range_gain_floor: lat/depth kp multiplier when the bbox FILLS the frame
+    # range_gain_floor: lat/surge kp multiplier when the bbox FILLS the frame
     # (close). Normalized-pixel P-control's loop gain rises ~1/range, so a kp
     # stable far-field over-drives close-in and the 20 kg hull oscillates off a
     # small target. Scaling kp down near the target (1.0=off, ~0.3=gentle)
     # restores damping. 1.0 keeps today's behaviour until the operator dials it.
     'vision.range_gain_floor':     1.0,
-    # ki_lat: lateral integral gain. Ch6 lateral is open-loop thrust with no
+    # ki_lat: lateral integral gain. Lateral is open-loop thrust with no
     # downstream position hold, so a steady current leaves a steady-state offset
     # pure-P can't null. A small ki (active only during the hold, clamped,
     # frozen on saturation, reset on loss) cancels it. 0 = off until the range
@@ -107,23 +106,13 @@ VISION_PARAM_DEFAULTS: Dict[str, Any] = {
     # board scale uniformly -- the pre-2026-09-14 behaviour, kept as an A/B
     # switch. Not a goal field: the manager hands it to the facade per goal.
     'vision.mixer_aware':          True,
-    # --- downward-camera / depth-bound tunables (moved off per-align kwargs) ---
-    # surge_sign: polarity of the DOWNWARD Ch5 SURGE axis (image-Y -> fore/aft) for
+    # --- downward-camera tunable ---
+    # surge_sign: polarity of the DOWNWARD SURGE axis (image-Y -> fore/aft) for
     # the bottom-cam mount. This hull needs -1 (a target AHEAD must drive FORWARD);
     # PERMANENT default so no mission has to pass it. Downward-only (the forward path
     # never reads surge_sign). A mission passing +1 (non-zero) overrides. VERIFY
     # DISARMED with `vision_thrust_check --camera downward` if the mount changes.
     'vision.surge_sign':          -1.0,
-    # max_depth_m / depth_ceiling: deepest / shallowest ALLOWED depth setpoint on a
-    # vision_align depth axis (negative metres). Moved here so a downward bin run
-    # sets its floor/ceiling ONCE per mission instead of on every align() call.
-    # Default 0.0 = OFF: the FORWARD depth axis (torpedo standoff) is unchanged, and
-    # the engine's built-in surface guard (_MIN_DEPTH_M) still applies. A downward
-    # mission sets these at startup (mongla.set_vision_param); a NEGATIVE max_depth_m
-    # also enables the downward fill->depth descent (align_loop disables that descent
-    # when max_depth_m >= 0 as a fail-safe against an unbounded dive).
-    'vision.max_depth_m':          0.0,
-    'vision.depth_ceiling':        0.0,
 
     # AIM GATE. How far the TARGET'S FACE may be tilted from square to our shot
     # axis and still allow the payload to fire, in degrees. 0.0 = OFF, which is
@@ -152,7 +141,6 @@ _FIELDS_PER_COMMAND: Dict[str, Dict[str, str]] = {
     'vision_align': {
         'kp_lat':              'vision.kp_lat',
         'kp_yaw':              'vision.kp_yaw',
-        'kp_depth':            'vision.kp_depth',
         'lost_grace_s':        'vision.lost_grace_s',
         'align_stable_frames': 'vision.align_stable_frames',
         'range_gain_floor':    'vision.range_gain_floor',
@@ -161,8 +149,6 @@ _FIELDS_PER_COMMAND: Dict[str, Dict[str, str]] = {
         'coast_s':             'vision.coast_s',
         'lock_s':              'vision.lock_s',
         'surge_sign':          'vision.surge_sign',
-        'max_depth_m':         'vision.max_depth_m',
-        'depth_ceiling_m':     'vision.depth_ceiling',
         'fire_max_tilt_deg':   'vision.fire_max_tilt_deg',
     },
     'vision_move': {

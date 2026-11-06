@@ -112,7 +112,7 @@ say "2. Sync the tree"
 # that is generated, huge, or belongs to the dev box stays here.
 rsync -az --delete --info=stats1 \
   --exclude 'build/' --exclude 'install/' --exclude 'log/' --exclude 'logs/' \
-  --exclude '.git/' --exclude 'graphify-out/' --exclude 'sim/' \
+  --exclude '.git/' --exclude 'graphify-out/' \
   --exclude 'docs/' --exclude '__pycache__/' --exclude '*.pyc' \
   --exclude '*.tlog' --exclude '*.tlog.raw' --exclude '*.tar.gz' \
   --exclude '.pytest_cache/' \

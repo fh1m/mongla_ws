@@ -33,9 +33,8 @@ def test_the_emergency_disarm_is_bounded_and_asks_for_that_bound():
 
     fc = _Fc()
     node = types.SimpleNamespace(
-        fc=fc, pixhawk=fc,
-        mongla=types.SimpleNamespace(request_abort=lambda: None,
-                                     _heading_lock=None),
+        fc=fc,
+        mongla=types.SimpleNamespace(request_abort=lambda: None),
         heartbeat=types.SimpleNamespace(stop=lambda: None),
         yaw_source=types.SimpleNamespace(close=lambda: None),
         _vision_states={})

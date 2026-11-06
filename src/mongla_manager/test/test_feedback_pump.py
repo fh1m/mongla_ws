@@ -3,7 +3,7 @@
 The pump streams Move.Feedback while a goal runs. A vision verb feeds live
 signed target-from-centre px via a provider; the pump must publish them as
 err_x_px/err_y_px (NaN when there's no fresh vision tick / non-vision verb).
-A fake pixhawk + goal_handle keep it ROS-free.
+A fake board + goal_handle keep it ROS-free.
 """
 
 import math
@@ -12,7 +12,7 @@ import time
 from mongla_manager.auv_manager_node import FeedbackPump
 
 
-class _FakePixhawk:
+class _FakeBoard:
     def get_attitude(self):
         return {'yaw': 12.0, 'depth': -0.5}
 
@@ -27,7 +27,7 @@ class _FakeGoalHandle:
 
 def _pump_once(vision_provider):
     gh = _FakeGoalHandle()
-    pump = FeedbackPump(_FakePixhawk(), gh, vision_provider=vision_provider)
+    pump = FeedbackPump(_FakeBoard(), gh, vision_provider=vision_provider)
     with pump:
         # let the 0.4s-interval worker publish at least once
         deadline = time.monotonic() + 1.5

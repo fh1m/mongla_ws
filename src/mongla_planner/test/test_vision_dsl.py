@@ -117,11 +117,11 @@ def test_align_lost_without_fallback_returns_false():
 
 
 def test_align_never_dies_on_server_failure():
-    # A server-side failure (bad camera, ALT_HOLD rejected, disarmed, abort)
+    # A server-side failure (bad camera, STABILIZE refused, disarmed, abort)
     # raises MoveFailed inside _send. The verb MUST catch it and return a
     # non-fatal VisionResult so the mission moves on -- never propagate.
     dsl = _dsl(MagicMock(side_effect=MoveFailed(
-        'Goal "vision_align" FAILED: ALT_HOLD rejected')))
+        'Goal "vision_align" FAILED: STABILIZE refused')))
     res = dsl.align('gate', yaw=0, lat=0, duration=0.5)
     assert isinstance(res, VisionResult)
     assert res.ok is False
@@ -452,7 +452,7 @@ def test_align_no_fire_defaults_to_empty():
 # --------------------------------------------------------------------------- #
 def test_align_lock_on_sets_lock_target():
     send = MagicMock(return_value=_result(ALIGNED))
-    _dsl(send).align('hole', lat=0, depth=0, lock_on=True)
+    _dsl(send).align('hole', lat=0, lock_on=True)
     _, kwargs = send.call_args
     assert kwargs['lock_target'] is True
 
@@ -600,54 +600,58 @@ def test_align_hold_defaults_to_zero():
 
 
 # --------------------------------------------------------------------------- #
-#  Downward-camera KWARG SWAP: fwd -> Ch5 surge (offset_depth/'depth' axis),   #
-#  depth -> fill->descent (fwd_fill). Physical wire unchanged; only which      #
-#  kwarg feeds which field swaps. Forward camera must be UNAFFECTED.           #
+#  The image-Y axis. On the wire it is called `depth`; what it drives depends   #
+#  on the camera. Downward: image-Y is fore/aft, so `fwd` is the SURGE offset.  #
+#  Forward: image-Y would be a depth demand, which the board owns at 500 Hz,    #
+#  so the forward call has no such axis and `fwd` is the fill standoff.         #
 # --------------------------------------------------------------------------- #
-def test_downward_swaps_fwd_to_surge_and_depth_to_fill():
+def test_downward_fwd_is_the_surge_axis_and_there_is_no_descent():
     send = MagicMock(return_value=_result(ALIGNED, 0.0))
     dsl = _dsl(send)
-    # bin drop: lat centre (Ch6), fwd=5 surge (Ch5, image-Y), depth=30 -> descend 30% height
-    dsl.align('fire', camera='downward', lat=0, fwd=5, depth=30, fwd_mode='height')
+    dsl.align('fire', camera='downward', lat=0, fwd=5)
     _, kw = send.call_args
-    axes = set(kw['axes'].split(','))
-    assert axes == {'lat', 'depth'}                 # surge rides the 'depth' wire axis
+    assert set(kw['axes'].split(',')) == {'lat', 'depth'}  # surge rides 'depth'
     assert kw['offset_lat'] == pytest.approx(0.0)
-    assert kw['offset_depth'] == pytest.approx(5.0)  # user fwd -> Ch5 surge offset
-    assert kw['fwd_fill'] == pytest.approx(30.0)     # user depth -> fill descent target
-    assert kw['mode'] == 'height'
+    assert kw['offset_depth'] == pytest.approx(5.0)        # user fwd -> surge offset
+    assert kw['fwd_fill'] == pytest.approx(0.0)            # never a fill descent
 
 
 def test_downward_fwd_zero_is_active_surge_centre():
     # fwd=0 must ACTIVATE surge-to-centre (0 != unset) -- the None/0 distinction
-    # that forces the swap to live in the DSL, not the rosidl-0 wire layer.
+    # that forces the mapping to live in the DSL, not the rosidl-0 wire layer.
     send = MagicMock(return_value=_result(ALIGNED, 0.0))
     dsl = _dsl(send)
-    dsl.align('fire', camera='downward', lat=0, fwd=0)   # no descent
-    _, kw = send.call_args
-    assert set(kw['axes'].split(',')) == {'lat', 'depth'}  # surge active at 0
-    assert kw['offset_depth'] == pytest.approx(0.0)
-    assert kw['fwd_fill'] == pytest.approx(0.0)            # no descent
-
-
-def test_downward_depth_only_without_centre_axis_raises():
-    # descend-only (no lat, no fwd surge) has no centring axis -> ValueError,
-    # analogous to a forward fwd-only align.
-    dsl = _dsl(MagicMock(return_value=_result(ALIGNED)))
-    with pytest.raises(ValueError):
-        dsl.align('fire', camera='downward', depth=30)
-
-
-def test_forward_camera_fwd_depth_unchanged():
-    # REGRESSION: on a forward camera the swap must NOT happen -- depth is a
-    # pixel axis, fwd is the fill standoff (the torpedo form).
-    send = MagicMock(return_value=_result(ALIGNED, 0.0))
-    dsl = _dsl(send)
-    dsl.align('hole', camera='forward', lat=0, depth=0, fwd=25, fwd_mode='height')
+    dsl.align('fire', camera='downward', lat=0, fwd=0)
     _, kw = send.call_args
     assert set(kw['axes'].split(',')) == {'lat', 'depth'}
-    assert kw['offset_depth'] == pytest.approx(0.0)   # depth = pixel axis (centre)
-    assert kw['fwd_fill'] == pytest.approx(25.0)       # fwd = fill standoff
+    assert kw['offset_depth'] == pytest.approx(0.0)
+    assert kw['fwd_fill'] == pytest.approx(0.0)
+
+
+def test_an_align_with_no_centring_axis_raises():
+    dsl = _dsl(MagicMock(return_value=_result(ALIGNED)))
+    with pytest.raises(ValueError):
+        dsl.align('fire', camera='downward')
+    with pytest.raises(ValueError):
+        dsl.align('hole', camera='forward', fwd=25)   # a standoff is not centring
+
+
+def test_depth_is_not_a_vision_axis_and_saying_so_fails_at_the_call():
+    """The board holds depth. A mission passing `depth=` meant something the
+    vehicle will not do; it fails at the call, before any goal is sent."""
+    send = MagicMock(return_value=_result(ALIGNED))
+    with pytest.raises(TypeError):
+        _dsl(send).align('hole', lat=0, depth=0)
+    send.assert_not_called()
+
+
+def test_forward_camera_fwd_is_the_fill_standoff():
+    send = MagicMock(return_value=_result(ALIGNED, 0.0))
+    dsl = _dsl(send)
+    dsl.align('hole', camera='forward', lat=0, fwd=25, fwd_mode='height')
+    _, kw = send.call_args
+    assert set(kw['axes'].split(',')) == {'lat'}
+    assert kw['fwd_fill'] == pytest.approx(25.0)
     assert kw['mode'] == 'height'
 
 

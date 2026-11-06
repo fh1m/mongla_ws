@@ -1,10 +1,12 @@
 # Precision terminal alignment — hold steady & don't miss the hole
 
-> **Backend note.** The vehicle is the SROT board (firmware Hengla) + a Raspberry Pi 5 with a
-> Hailo-8. `lock_heading`, `move_*_dist`, `arc` and `style_yaw` are **refused** there, `ALT_HOLD`
-> is not one of its modes, and the depth-setpoint vision axes are refused. Where this page shows
-> an older idiom, the current contract is [`command-reference.md`](command-reference.md) and the
-> legacy path is [`legacy-pixhawk-and-sitl.md`](../platform/legacy-pixhawk-and-sitl.md).
+> Payload channels are the named constants in `missions/competition_config.py`; they are
+> unassigned (0, refused by `fire()`) until the payload is wired to a SWITCH channel.
+>
+> **The board holds depth and heading at 500 Hz the whole time.** `align` streams lateral,
+> yaw and (with `fwd=`) forward demand on top, as `MANUAL_CONTROL` in STABILIZE. Depth is not
+> a vision axis: `set_depth` first, then align. The verb contract is
+> [`command-reference.md`](command-reference.md).
 
 > **Status:** BUILT on `main`. Every knob is **opt-in** — an un-tuned run behaves
 > exactly like before (`range_gain_floor=1.0`, `ki_lat=0`, `ctrl_conf=0`,
@@ -38,7 +40,7 @@ the shot.
 **Can't hold still.** The law is P-control on *normalized* pixel error, so the
 image shift per unit hull motion grows ~`1/range` (~ bbox fill). A `kp` that's
 critically damped far away is **over-gained up close** → the heavy hull
-oscillates. And the lateral axis (Ch6) is open-loop thrust with no downstream
+oscillates. And the lateral axis is open-loop thrust with no downstream
 position hold, so a steady current leaves a standing offset pure-P can't null.
 
 ---
@@ -49,26 +51,24 @@ position hold, so a steady current leaves a standing offset pure-P can't null.
 |---|---|---|---|---|
 | `lock_on=True` | **per-call** on `vision.align(...)` | `False` | misclass | Once the target is acquired, steer to the box **nearest the last-accepted centre** (within a gate), not the largest — a 2nd hole / spurious box can't steal the aim. Resets to largest-area acquisition after a real loss. |
 | `vision.ctrl_conf` | **ROS param** (deck) | `0.0` | misclass | Control-side **minimum detection score** to accept a box as the target. Distinct from the detector's global `conf`: gates only what the *control loop* steers on. |
-| `vision.range_gain_floor` | **ROS param** (deck) | `1.0` | overshoot | Scales **lat/depth** kp **down** as the bbox fills the frame (close). `1.0` = off; `~0.3` = gentle close-in. Applies to `align` and `move`'s `maintain`. |
+| `vision.range_gain_floor` | **ROS param** (deck) | `1.0` | overshoot | Scales **lat/surge** kp **down** as the bbox fills the frame (close). `1.0` = off; `~0.3` = gentle close-in. Applies to `align` and `move`'s `maintain`. |
 | `vision.ki_lat` | **ROS param** (deck) | `0.0` | current drift | **Lateral** integral gain; cancels the steady-current offset, accumulated **only during the hold**, clamped, frozen on saturation, reset on loss. **Lateral only** by design. |
-| `settle=<px>` | **per-call** on `vision.align(...)` | `None` (off) | **align ends off-target** (the "move centres better than align" report) | **Settle gate.** `align` exits once *position* is in-band for `align_stable_frames` **distinct detections** — so a hull strafing **through** centre at speed can declare ALIGNED mid-pass and coast out on inertia (and the returned px is measured *before* the arrival brake, so it reads clean while the hull ends dirty). `move`'s `maintain` looks near-perfect because it never exits on lateral — it corrects continuously and is genuinely settled when it stops. `settle>0` ports that: a tick only counts toward the exit if the worst error is in-band **AND** barely moving (`|Δerr| ≤ settle`), so `align` ends **settled** on target. Keyed on **error velocity**, not command magnitude, so a steady current (which holds a non-zero command at a perfect lock) does **not** block it — that steady-state offset is `ki_lat`'s job. **Per-call, not a deck param, and NOT for the terminal fire-lock:** the mid-hold `fire` rides the same stable-frame counter, so a `settle` below the bbox jitter (~5px) can **suppress the shot**. Use it on a **coarse** exit-and-move-on align (e.g. the board centre, so `lock_heading` captures a clean heading); the fire-lock wants `lock_on` + `hold` + `ki_lat` instead. |
+| `settle=<px>` | **per-call** on `vision.align(...)` | `None` (off) | **align ends off-target** (the "move centres better than align" report) | **Settle gate.** `align` exits once *position* is in-band for `align_stable_frames` **distinct detections** — so a hull strafing **through** centre at speed can declare ALIGNED mid-pass and coast out on inertia (and the returned px is measured *before* the arrival brake, so it reads clean while the hull ends dirty). `move`'s `maintain` looks near-perfect because it never exits on lateral — it corrects continuously and is genuinely settled when it stops. `settle>0` ports that: a tick only counts toward the exit if the worst error is in-band **AND** barely moving (`|Δerr| ≤ settle`), so `align` ends **settled** on target. Keyed on **error velocity**, not command magnitude, so a steady current (which holds a non-zero command at a perfect lock) does **not** block it — that steady-state offset is `ki_lat`'s job. **Per-call, not a deck param, and NOT for the terminal fire-lock:** the mid-hold `fire` rides the same stable-frame counter, so a `settle` below the bbox jitter (~5px) can **suppress the shot**. Use it on a **coarse** exit-and-move-on align (e.g. the board centre, before the standoff); the fire-lock wants `lock_on` + `hold` + `ki_lat` instead. |
 | `err=<px>` | **per-call** on `vision.align(...)` | `40` | tightness | Pixel deadband. A **small positive** value is the tight knob (`err=8`). **`err=0` ≠ zero tolerance** — it means "use the default / `vision.err_px` param" (rosidl `0==unset` is load-bearing for live-tuning; an explicit 0 and an omitted field are indistinguishable on the wire). The effective deadband is floored at `MIN_ALIGN_ERR_PX` (≈5px bbox jitter) so an over-tight `err` can't perpetually TIMEOUT, and is **printed at align start** + stated in the success line (`aligned (N/Mpx)`) so it's never a surprise. |
 | `vision.coast_s` | **ROS param** (deck) | `0.8` | detection flicker | **Gap-bridging coast.** When the `hole` detection drops for a fraction of a second, the lock loses the axis it was steering on and the hull drifts off-aim — the torpedo misses. With `coast_s>0`, the loop keeps steering on the tracker's **coasted (Kalman-predicted) box of the locked id** for up to `coast_s` after the real detection drops, at **decaying authority**, so the bbox never "disappears" for a brief flicker. **ON by default at 0.8 s** — the operator states it was run in water; no measurement of it is recorded in this repo, so treat the value as operator-confirmed, not as a logged result. Set `0` for the byte-identical raw-`/detections` control arm — a live detection always overrides, and the coast is conf-exempt **only for the locked id** (see [`BUGS.md`](../BUGS.md) D10). Pair with `lock_on=True` so the id you coast is the right hole. **Ladder:** `coast_s` (~0.8) **must** be `< vision.lost_grace_s` (1.0) and `<` the tracker `max_predict`/buffer in wall-time. |
-| `depth_step=<m>` | **per-call** on `vision.align(...)` | `None` (→0.02) | **depth z-wobble** | **Per-update depth-setpoint resolution.** The depth axis nudges an ArduSub **ALT_HOLD setpoint** (not raw RC). It moves that setpoint by **≤ `depth_step` m each 5 Hz update** and **freezes it inside the deadband**, so ArduSub's depth PID settles between steps instead of chasing a setpoint that jitters with the bbox-y (the up/down bob when the `depth` axis is on). `0.02` = slow/fine, `0.10` = coarse/faster; max slew = `depth_step × 5 Hz`. The **sole** depth-rate knob — depth has no `%` gain like lat/yaw. To drop depth entirely, omit the axis. See [`BUGS.md`](../BUGS.md) D12. |
 | `fire_pass=True` | **per-call** on `vision.align(...)` | `False` | **no points if we can't fully align** | **Guaranteed end-of-command shot.** If the strict in-band mid-hold fire never landed (couldn't hold a fresh lock in time), fire the payload anyway on a **natural exit** (TIMEOUT / hold-complete) — provided the target was seen **live within `lost_grace_s`** (never on a never-seen or coasted-only target). "Fire *something* if we saw the hole." Off = strict lock only. |
-| `hold_heading=True` | **per-call** on `vision.align(...)` | `False` | **terminal yaw jitter** | **Fire-window quiet mode.** At the hole you **drop the yaw axis** so Ch4 is owned by the background `heading_lock`; on the 20 kg hull the lock limit-cycles against the lateral-strafe yaw moment, so the launcher wobbles a few degrees left/right. `hold_heading=True` widens the lock deadband (`1°→3°`, `LOCK_HOLD_DEADBAND_DEG`) **for the duration of the call** so the lock holds steady and only corrects real drift; restored on exit. At a ~0.4 m standoff a few degrees of hull yaw is a small linear error and `lat` still centres the shot. Use it on the yaw-dropped fire-lock. |
 
 **Reading the logs (don't confuse these two lines):**
 - The detector's always-on `[ offset lat=… depth=…px ] '<class>' bearing (live)` is **raw bbox offset telemetry** — it fires whenever the class is seen, verb running or not. It is *not* an alignment verdict.
 - The verb's `vision_align: aligned (N/Mpx)` is the **outcome**: residual `N` within the effective deadband `M`.
 
 **Why those axis choices** (don't "fix" them):
-- The integral is **lateral-only**. Yaw is a Ch4 *rate* (ArduSub's rate loop
-  already integrates → an I-term double-integrates/winds up); depth is ALT_HOLD
-  (its own integral). Only open-loop Ch6 lateral has a true steady-state offset.
+- The integral is **lateral-only**. Yaw is a *rate* demand (the board's rate loop
+  already integrates → an I-term double-integrates and winds up); depth is the
+  board's own closed loop. Only open-loop lateral has a true steady-state offset.
 - The range-gain softening **excludes yaw** — near-field yaw has a separate
-  stiction *floor* that deliberately *adds* authority; and at the hole we hand
-  yaw to `heading_lock` entirely (see §4).
+  stiction *floor* that deliberately *adds* authority; and at the hole yaw is
+  left to the board's heading hold entirely (see §4).
 
 Code-tunable constants (rarely touched; edit `motion_vision.py` if a target
 legitimately moves faster than the gate or the ramp window is wrong):
@@ -85,19 +85,21 @@ dial in water). Keep them separate: the mission says *what to do*, the params sa
 *how hard*.
 
 ```python
-# UNIFIED STANDOFF SHOT: forward-standoff + lat/depth + hold + mid-hold fire in
-# ONE verb. fwd= adds the forward range-hold axis: align drives the hull to the
-# standoff fill and HOLDS it while centering lat/depth -- no separate move()/align
-# seam where the hull drifts. lat+depth only (yaw -> heading_lock, see §4),
-# continuity lock so a 2nd hole can't steal the aim, fire MID-HOLD.
+# UNIFIED STANDOFF SHOT: forward-standoff + lat + hold + mid-hold fire in ONE
+# verb. fwd= adds the forward range-hold axis: align drives the hull to the
+# standoff fill and HOLDS it while centring lat -- no separate move()/align seam
+# where the hull drifts. lat only (the board holds heading, see §4), continuity
+# lock so a 2nd hole can't steal the aim, fire MID-HOLD.
+mongla.set_depth(TORPEDO_DEPTH_M)          # depth first: it is not a vision axis
 mongla.set_classes('hole', node='/mongla_detector_forward')
 res = mongla.vision.align(
     'hole', camera='forward',
-    lat=0, depth=0,                       # NO yaw -> heading_lock holds Ch4
+    lat=0,                                # NO yaw -> the board holds heading
     fwd=35, fwd_mode='height',            # drive to + HOLD the firing standoff
     err=15, gain=12, duration=25,
     lock_on=True,                         # continuity lock (misclass fix)
-    hold=4, fire=1, fire_t=1.5,           # station-keep + mid-hold torpedo
+    hold=4, fire=TORPEDO_1_CHANNEL,       # station-keep + mid-hold torpedo
+    fire_t=1.5,
     brake=False)                          # never brake on a fire-from-lock
 ```
 
@@ -115,7 +117,7 @@ only thing closing distance and it reverse-kicked out on the first fill-touch.
 > **The fire only leaves on a LIVE, FRESH sighting of the hole.** Three independent
 > gates protect the shot, and all must hold on the same tick: (1) **alignment** —
 > every active axis in-band; (2) **distinct frames** — `align_stable_frames` counts
-> real detections, not 20 Hz loop ticks, so a single frame re-read at low FPS can't
+> real detections, not 50 Hz loop ticks, so a single frame re-read at low FPS can't
 > arm it; (3) **a fresh new frame** — the fire tick must be one where a genuinely new,
 > non-coasted detection just landed (`is_new_frame and not coasted`). This replaced the
 > old `age_s ≤ VISION_FRESH_FULL_S` (0.10 s) window (2026-07-01, D12): at 3-4 Hz that
@@ -128,8 +130,8 @@ only thing closing distance and it reverse-kicked out on the first fill-touch.
 > not to *take the shot*. If the hole detection is dropping at the standoff, the shot
 > waits for a fresh box (within the hold window) rather than firing blind — or set
 > `fire_pass=True` for a guaranteed partial-points shot at command end if the strict
-> lock never lands. Raising real detector FPS (`[YOLO] backend=TensorRT`) is still the
-> single biggest lever on fire reliability.
+> lock never lands. Real detector FPS is still the single biggest lever on fire
+> reliability ([`hailo-vision.md`](../perception/hailo-vision.md)).
 
 Tuning is live from the deck and applies on the **next** goal — no mission edit,
 no restart:
@@ -145,7 +147,7 @@ a deck param (it also gates the mid-hold fire, so a global value could silently
 suppress the torpedo shot). Put it on a coarse exit-and-move-on align in mission code:
 
 ```python
-mongla.vision.align('torpedo', yaw=0, lat=0, depth=0, settle=8, ...)  # exit settled
+mongla.vision.align('torpedo', yaw=0, lat=0, settle=8, ...)  # exit settled
 ```
 
 You can also branch on the rich result (see [`vision-results.md`](vision-results.md)):
@@ -161,57 +163,30 @@ if not res and res.saw_target and res.x_px > 30:
 
 Compose the verbs into three phases — this is how the fixes work together:
 
-> ⛔ **On srot this exact pattern does not run.** `lock_heading()` /
-> `unlock_heading()` are refused before dispatch, and the `depth` axis of
-> `align` is refused too (it needs a streamed depth setpoint the board does not
-> take). The srot shape of the same idea: drop the lock calls entirely — the
-> board holds heading itself at 500 Hz in STABILIZE, which is what the lock was
-> emulating — and drive `lat` / `yaw` / `fwd` only, adding depth with a separate
-> `set_depth` once the depth loop is water-verified. The pattern below is
-> pixhawk/sim, and is kept because the reasoning about phases, standoff and the
-> settle gate carries over unchanged.
-
 ```
-COARSE   align('torpedo', yaw=0, lat=0, depth=0)        # all axes: square up + null heading
-   |     lock_heading()                                 # hand heading to the background lock
+DEPTH    set_depth(TORPEDO_DEPTH_M)                     # the board closes depth from here on
+COARSE   align('torpedo', yaw=0, lat=0, settle=8)       # square up + centre, exit settled
 APPROACH move('blood', fwd=.., mode='height', brake=False)  # COAST into range (no reverse-kick exit)
    |
-TERMINAL align('hole', lat=0, depth=0, lock_on=True,    # lat+depth only -> Ch4 owned by lock
+TERMINAL align('hole', lat=0, lock_on=True,             # lat only -> the board owns heading
                 fwd=35, fwd_mode='height',              # forward-standoff in the SAME verb
-                hold_heading=True,                      # widen lock deadband -> steady launcher heading
-                depth_step=0.05,                        # slow, stepped depth -> no z-wobble (optional)
-                hold=4, fire=1, fire_t=1.5, brake=False)  # steady, no yaw wobble, fire mid-hold
-   |     unlock_heading()
+                hold=4, fire=TORPEDO_1_CHANNEL, fire_t=1.5, brake=False)
 ```
 
-The APPROACH `move('blood')` is now a **coarse** "get into hole-detection range"
-step (`brake=False` so it coasts in without the reverse-kick exit); the TERMINAL
+The APPROACH `move('blood')` is a **coarse** "get into hole-detection range" step
+(`brake=False` so it coasts in without the reverse-kick exit); the TERMINAL
 `align('hole', fwd=..)` then **closes the last bit to the standoff and holds it in
-one verb** — there is no longer a verb seam where the hull drifts forward/back
-between "stopped approaching" and "started the hole lock."
+one verb** — there is no verb seam where the hull drifts forward/back between
+"stopped approaching" and "started the hole lock."
 
-**Why omit `yaw` at the hole.** An `align` call that does **not** include the
-`yaw` axis **never writes Ch4** — the verb takes the `release_yaw` path and
-writes lateral via `send_rc_translation`, gated purely on the *yaw axis being
-absent* (not on lock-state, since 2026-06-29). So if a `heading_lock` is active
-it holds heading on its steady BNO P-loop; if not, Ch4 falls to the heartbeat /
-ArduSub — either way the verb stays off the yaw channel instead of fighting it.
-**Null the heading during COARSE, then `lock_heading()` before the terminal
-phase** so the lock captures the right heading and the hull holds steady on BNO
-while lat/depth correct.
+**Why omit `yaw` at the hole.** An `align` without the `yaw` axis sends a zero yaw
+stick, and in STABILIZE the board hands any yaw stick below its gate to its own
+**heading hold** on the board's AHRS at 500 Hz. That is a steadier heading than a
+vision-yaw loop at camera rate can give a 20 kg hull while it strafes. **Null the
+heading during COARSE** (`yaw=0`), so the hold captures the heading that points
+the launcher at the board, then drop `yaw` for the terminal phase.
 
-> **"The yaw jitters while I align — should I release the heading lock?" No.**
-> Releasing it hands yaw to ArduSub's aluminum-hull compass — the *worst* jitter
-> source. The wobble was the lock's old hard min-PWM floor limit-cycling against
-> the lateral-strafe yaw moment (a relay on a rate channel); fixed 2026-06-29 by
-> **tapering** the floor (`heading_lock`, mirrors the `motion_yaw` `ab2014f`
-> fix — see [`BUGS.md`](../BUGS.md) D7). Keep the BNO lock; it is
-> the right heading authority up close.
-
-**The lock must be ACTIVE for a steady hold:** `lock_heading()` activates
-immediately only when the vehicle is **armed** (mid-mission, after
-`set_depth`/`align`/`move`, it is). If you script it from a disarmed state,
-activation is *deferred* to the first armed command. The reference mission is
+The reference mission is
 [`missions/task_torpedo.py`](../../../src/mongla_planner/mongla_planner/missions/task_torpedo.py).
 
 ---
@@ -222,10 +197,10 @@ activation is *deferred* to the first armed command. The reference mission is
   under-damped (oscillating) loop makes it *worse*. Order: tune
   `range_gain_floor` until the close-in oscillation stops, *then* raise `ki_lat`.
 - **Don't keep `yaw` in the terminal `align`** if you want heading held by the
-  lock — including the yaw axis *suspends* the heading lock and re-introduces the
-  Ch4 vision-yaw wobble. Pick one owner of Ch4.
+  board — a live yaw axis replaces the board's heading hold with the vision-yaw
+  loop and re-introduces its wobble. Pick one owner of yaw.
 - **Don't set `range_gain_floor=0`.** `0` is the "unset" sentinel (→ falls back to
-  the param/`1.0`); a true 0 would kill lat/depth authority up close anyway.
+  the param/`1.0`); a true 0 would kill lat/surge authority up close anyway.
   Use `~0.3` for gentle, `1.0` for off.
 - **Don't use `lock_on` for far-field acquisition / search.** It's for *after*
   you've acquired the target; during search you want largest-area + the
@@ -262,9 +237,9 @@ activation is *deferred* to the first armed command. The reference mission is
    ```bash
    ros2 param set /mongla_manager vision.ki_lat 0.4             # raise slowly
    ```
-4. **Terminal phase check.** With `lock_heading` engaged and a yaw-less terminal
-   `align`, confirm Ch4 is steady (no vision-yaw wobble) and the hull holds within
-   `err` for the hold while the torpedo leaves mid-hold.
+4. **Terminal phase check.** With a yaw-less terminal `align`, confirm the heading
+   is steady on `/mongla/state` (the board's hold, no vision-yaw wobble) and the
+   hull holds within `err` for the hold while the torpedo leaves mid-hold.
 
 All four params are read fresh on every new goal, so tune between attempts without
 restarting anything.
@@ -273,9 +248,10 @@ restarting anything.
 
 ## 7. Other tasks
 
-- **Bins (downward cam):** same pattern — `align('fire', lat=0, depth=0,
-  lock_on=True, hold=…, fire=3, brake=False)` to lock a dropper on the bin
-  marker; raise `range_gain_floor` for the close hold. (`lock_on` works on any
+- **Bins (downward cam):** same pattern after `set_depth` — `align('fire',
+  camera='downward', lat=0, fwd=0, lock_on=True, hold=…, fire=DROPPER_1_CHANNEL, brake=False)`
+  locks a dropper on the bin marker (on the downward camera `fwd` is the surge
+  offset, see [`downward-camera.md`](../perception/downward-camera.md)); raise `range_gain_floor` for the close hold. (`lock_on` works on any
   camera.) **Always `brake=False` on a fire-from-hold** (see §5).
 - **Gate-through / slalom:** `range_gain_floor` also softens `move`'s `maintain`
   strafe, so the lateral offset hold is gentler as the target fills the frame.

@@ -10,7 +10,7 @@
 for, a neural accelerator that does nothing but see, and a rule that no number appears anywhere
 in this repository without the measurement that produced it.**
 
-[![tests](https://img.shields.io/badge/tests-4%20479%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![in water](https://img.shields.io/badge/in%20water-never-critical)](#what-is-true-today) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
+[![tests](https://img.shields.io/badge/tests-3%20999%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![in water](https://img.shields.io/badge/in%20water-never-critical)](#what-is-true-today) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
 
 **[The Shift](https://fh1m.github.io/mongla_ws/the-shift.html)** · **[Capability map](https://fh1m.github.io/mongla_ws/capability-map.html)** · **[The site](https://fh1m.github.io/mongla_ws/)** · [Run it](#run-it) · [Fundamentals](#the-fundamentals) · [Docs](#every-document-in-this-repository) · [Story](#three-acts)
 
@@ -64,7 +64,7 @@ Take yours.
 | If you are… | Start here | Then |
 |---|---|---|
 | **judging this project** (a professor, a competition judge, a reviewer) | [What is true today](#what-is-true-today) · [Capability map](https://fh1m.github.io/mongla_ws/capability-map.html) — every capability with its evidence and an honest state | [The ledger](#the-ledger), including everything we got wrong |
-| **thinking of contributing** | [Run it](#run-it) · [The seven packages](#the-seven-packages) | [Adding a verb](#adding-a-verb-is-two-edits) — it is two edits, and `.claude/context/` has a page per package |
+| **thinking of contributing** | [Run it](#run-it) · [The six packages](#the-six-packages) | [Adding a verb](#adding-a-verb-is-two-edits) — it is two edits, and `.claude/context/` has a page per package |
 | **an embedded / firmware engineer** | [What crosses the cable](#what-crosses-the-cable-44-bytes) · [The four repositories](#four-repositories-one-wire) | [`fc/srot_protocol.py`](src/mongla_control/mongla_control/fc/srot_protocol.py) — our single copy of the wire contract, and the [asks we have sent upstream](.claude/context/upstream/README.md) |
 | **learning robotics** (you have never built one of these) | [The fundamentals](#the-fundamentals) — control loops, PID, state estimation, optical flow, detection, underwater optics, from first principles | the **[interactive explainers](https://fh1m.github.io/mongla_ws/#pid)** on the site, where you can turn the gains yourself and watch it fail |
 | **here for the story** | [Three acts](#three-acts) | [Why keep going](#why-keep-going) |
@@ -73,20 +73,21 @@ Take yours.
 
 ## Run it
 
-Nothing here needs the vehicle. The simulator is a second colcon workspace inside this
-repository, and every verb runs against it.
+Most of it runs without the vehicle. The vision pipeline replays real footage or a recorded
+bag, the missions run against the real DSL in the test suite, and only the verbs need the board.
 
 ```bash
-# 1. build (mirrors ~/models and ~/missions in, then builds all seven packages)
+# 1. build (mirrors ~/models and ~/missions in, then builds all six packages)
 ./build_mongla.sh && source install/setup.bash
 
-# 2. bring the stack up — no hardware required if you drop `flight_controller:=srot`
-ros2 launch mongla_manager bringup.launch.py vision:=true
+# 2. no hardware: the full vision pipeline on recorded footage
+ros2 launch mongla_vision video.launch.py fwd_video:=/path/to/gate.mp4
 
-# 3. ask it something
+# 3. the vehicle: the board on USB-C, then ask it something
+ros2 launch mongla_manager bringup.launch.py vision:=true
 ros2 run mongla_planner mongla arm
 ros2 run mongla_planner mongla move_forward --duration 3 --gain 40
-ros2 run mongla_planner mongla --help          # all 30 verbs, generated from one table
+ros2 run mongla_planner mongla --help          # all 23 verbs, generated from one table
 ```
 
 With the board attached, these two answer the only two questions that matter before you put
@@ -104,14 +105,10 @@ The first **reports**. The second **grades and gates** — it is the one that re
 
 ```bash
 git clone https://github.com/fh1m/mongla_ws && cd mongla_ws
-./build_mongla.sh                      # colcon build, seven packages
+./build_mongla.sh                      # colcon build, six packages
 source install/setup.bash
 
-# the simulator: Gazebo, a pool, both cameras, ground truth
-cd sim && ./build_sim.sh && source install/setup.bash
-ros2 launch mongla_sim_bringup sim.launch.py   # ArduSub SITL by design — see sim/README.md
-
-# the tests (6 suites, 4 479 of them, ~5 minutes)
+# the tests (6 suites, 3 999 of them, ~5 minutes)
 python3 -m pytest src/mongla_control/test src/mongla_vision/test src/mongla_manager/test \
                   src/mongla_planner/test src/mongla_localization/test -q
 ```
@@ -158,7 +155,7 @@ thinking on the Pi.**
 flowchart TB
     subgraph PI["Raspberry Pi 5 + Hailo-8 · the thinking half"]
         direction TB
-        CLI["mongla CLI<br/>30 verbs"] --> ACT
+        CLI["mongla CLI<br/>23 verbs"] --> ACT
         MIS["mission scripts<br/>Python DSL"] --> ACT
         ACT["/mongla/move<br/>one ROS action"] --> MGR
         MGR["auv_manager_node<br/>the ONLY node that talks to the board"]
@@ -199,7 +196,7 @@ flowchart LR
     M -->|"MAVLink 2 over USB-C"| H
     B -->|"serial · UDP 14550 · LoRa 433 MHz"| H
     F -->|"4-way interface, on the bench"| H
-    M -.->|"pull requests only<br/>9 asks sent, each with evidence"| H
+    M -.->|"pull requests and issues only<br/>each with its evidence"| H
     H -.->|"never commits here"| M
 ```
 
@@ -237,7 +234,6 @@ sequenceDiagram
     AS->>AS: busy gate · abort flag · arm state
     AS->>FC: move('move_forward', duration=3, gain=40)
     FC->>FC: _build_params → p1..p5 (the one verb table)
-    Note over FC,BD: refused here if the verb is in UNSUPPORTED_VERBS
     FC->>BD: COMMAND_LONG · CMD_SROT_MOVE · 44 bytes
     BD-->>FC: COMMAND_ACK — IN_PROGRESS
     loop every tick until a terminal ACK
@@ -510,19 +506,18 @@ five stops — fairings, pressure can, thrusters, handle — you can jump straig
 
 ---
 
-## The seven packages
+## The six packages
 
 | package | what it owns | Python LOC | test files |
 |---|---|---:|---:|
-| [`mongla_vision`](.claude/context/packages/mongla_vision/README.md) | cameras, Hailo detection, the lock ladder, optical flow, optics | 24 000 | 85 |
-| [`mongla_control`](.claude/context/packages/mongla_control/README.md) | the verbs and the flight-controller boundary — a pure library, **zero entry points** | 13 236 | 62 |
-| [`mongla_planner`](.claude/context/packages/mongla_planner/README.md) | the `mongla` CLI, the mission DSL, the missions | 11 006 | 32 |
-| [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | `auv_manager_node` — the one node that talks to the board | 8 498 | 46 |
-| [`mongla_localization`](.claude/context/packages/mongla_localization/README.md) | the right-invariant EKF, retrodiction, course priors | 3 592 | 20 |
-| [`mongla_sensors`](.claude/context/packages/mongla_sensors/README.md) | sensor drivers and firmware helpers | 1 906 | 4 |
+| [`mongla_vision`](.claude/context/packages/mongla_vision/README.md) | cameras, Hailo detection, the lock ladder, optical flow, optics | 28 915 | 125 |
+| [`mongla_control`](.claude/context/packages/mongla_control/README.md) | the verbs and the board driver — a pure library, **zero entry points** | 9 955 | 63 |
+| [`mongla_planner`](.claude/context/packages/mongla_planner/README.md) | the `mongla` CLI, the mission DSL, the missions | 7 285 | 37 |
+| [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | `auv_manager_node` — the one node that talks to the board | 8 013 | 62 |
+| [`mongla_localization`](.claude/context/packages/mongla_localization/README.md) | the right-invariant EKF, retrodiction, course priors | 4 560 | 29 |
 | [`mongla_interfaces`](.claude/context/packages/mongla_interfaces/README.md) | one action, one state topic — the entire ROS surface | IDL | — |
 
-**249 test files against the source.** The ROS surface really is that small: one action
+**316 test files against the source.** The ROS surface really is that small: one action
 `/mongla/move` carrying one verb per goal, and one topic `/mongla/state` publishing on change,
 where an absent value is `NaN` and never `0.0`.
 
@@ -531,21 +526,20 @@ where an absent value is `NaN` and never `0.0`.
 ```python
 # 1. a row in src/mongla_control/mongla_control/commands.py
 'move_forward': {
-    'help':     'Swim forward for a duration at a thrust cap.',
-    'fields':   ['duration', 'gain', 'timeout'],
-    'defaults': {'gain': 30.0, 'timeout': 0.0},
+    'help':     'Drive forward for `duration` s at `gain` percent thrust.',
+    'fields':   ['duration', 'gain', 'settle'],
+    'defaults': {'gain': 80.0, 'settle': 0.0},
 },
 # 2. a method of the same name on the facade. That is all.
 ```
 
 The CLI, the action server and the Python client all read that one table, so `--help`, argument
-parsing and dispatch follow automatically. **30 verbs** today.
+parsing and dispatch follow automatically. **23 verbs** today.
 
-⛔ **Six of them are refused on the board** — `lock_heading`, `move_forward_dist`,
-`move_back_dist`, `move_lateral_dist`, `arc`, `style_yaw` — because the board has no such
-primitive and faking one host-side is how a mission comes to believe it moved a metre it never
-moved. They are refused *before dispatch*, by name, in
-[`srot_fc.UNSUPPORTED_VERBS`](src/mongla_control/mongla_control/fc/srot_fc.py).
+⛔ **There is no verb the board cannot run.** A host heading lock and distance-closed moves
+existed for the old backend; the board holds heading itself
+and there is no DVL to close a distance on, so they were deleted rather than refused. Faking one
+host-side is how a mission comes to believe it moved a metre it never moved.
 
 ---
 
@@ -704,20 +698,20 @@ the kind of thing that goes stale — `test_doc_drift.py` fails any doc that sta
 
 ## The ledger
 
-<p align="center"><img src="docs/imgs/banners/ledger.png" alt="The ledger: fifty entries drawn as fifty marks — eight struck through because they take an earlier result back, five amber because the measurement said no." width="100%"></p>
+<p align="center"><img src="docs/imgs/banners/ledger.png" alt="The ledger: one mark per entry — 18 struck through because they take an earlier result back, 7 amber because the measurement said no." width="100%"></p>
 
 > *"It doesn't make any difference how beautiful your guess is… If it disagrees with experiment,
 > it's wrong."* — Richard Feynman
 
 [`measured-bars.md`](.claude/context/measured-bars.md) is the file this project is really built
-on: **50 entries, 390 rows of numbers**, each with the method, the conditions and the bar it had
+on: **108 entries, 850 rows of numbers**, each with the method, the conditions and the bar it had
 to clear. Tests read it. A constant that drifts from it fails CI.
 
-**8 of those 50 entries say in their own title that they took an earlier result back.** Five
+**18 of those 108 entries say in their own title that they took an earlier result back.** 7
 more measured an idea and concluded it should stay switched off. The retractions live in the
 same file as the results that stand, in the middle rather than in an appendix:
 
-<p align="center"><img src="docs/imgs/readme/ledger.webp" alt="The measurement ledger as a core sample: one column per entry in the order written, red for the eight that took a result back." width="100%"></p>
+<p align="center"><img src="docs/imgs/readme/ledger.webp" alt="The measurement ledger as a core sample: one column per entry in the order written, red for the 18 that took a result back." width="100%"></p>
 
 <p align="center"><img src="docs/imgs/readme/retractions.webp" alt="Five retractions, each with the belief struck through and the measurement beneath it." width="100%"></p>
 
@@ -727,13 +721,14 @@ is how a team finds out at the venue.
 ### The tests are the argument
 
 ```
-mongla_control       1 114 passed        the verbs, the wire, the refusals
-mongla_vision        1 030 passed        detection, the lock ladder, optics, flow
-mongla_manager         466 passed        the node, bring-up gates, the docs contract
-mongla_planner         420 passed        the CLI, the DSL, the missions
-mongla_localization     286 passed       the filter, retrodiction, course priors
+mongla_control       1 157 passed        the verbs, the wire, the refusals
+mongla_vision        1 498 passed        detection, the lock ladder, optics, flow
+mongla_manager         497 passed        the node, bring-up gates, the docs contract
+mongla_planner         413 passed        the CLI, the DSL, the missions
+mongla_localization    403 passed        the filter, retrodiction, course priors
+test/ (repo-wide)       31 passed        nothing unreachable, the retired stack stays retired
                      ─────────────
-                     4 479 passed, 0 failed
+                     3 999 passed, 0 failed
 ```
 
 > *"Computing science has very convincingly shown that simplicity is a necessary precondition for
@@ -751,16 +746,18 @@ Some of those tests are unusual enough to be worth naming:
 
 ```mermaid
 flowchart LR
-    DEV["a change"] --> HOOK["editor hooks<br/>py_compile + the matching test file"]
-    HOOK --> UNIT["6 suites · 4 479 tests"]
+    DEV["a change"] --> HOOK["editor hooks<br/>py_compile + the matching test file<br/>+ the doc guards on a doc edit"]
+    HOOK --> UNIT["6 suites · 3 999 tests"]
     UNIT --> GUARD["the drift guards"]
     GUARD --> G1["test_doc_drift<br/>docs vs code"]
     GUARD --> G2["test_srot_protocol_drift<br/>our wire copy vs THEIR headers"]
-    GUARD --> G3["test_docs_contract<br/>published figures vs measurements"]
-    G1 --> SIM["the simulator<br/>every recovery path, no water needed"]
-    G2 --> SIM
-    G3 --> SIM
-    SIM --> BENCH["the bench: the real board,<br/>armed, propellers off"]
+    GUARD --> G3["test_docs_contract<br/>published figures vs measurements<br/>every doc reachable from the book"]
+    GUARD --> G4["test_the_retired_stack_stays_retired<br/>every tracked file vs the stack we left"]
+    G1 --> REPLAY["recorded footage and bags<br/>the vision pipeline, no water needed"]
+    G2 --> REPLAY
+    G3 --> REPLAY
+    G4 --> REPLAY
+    REPLAY --> BENCH["the bench: the real board,<br/>armed, propellers off"]
     BENCH --> POOL["a pool day — four hours,<br/>and the only thing that settles it"]
     POOL -.->|"has not happened yet"| WATER["🟢 WATER"]
 ```
@@ -792,44 +789,6 @@ flowchart TB
     C2 --> LOG
     C3 --> LOG
 ```
-
----
-
-## The simulator
-
-[`sim/`](sim/) is a second colcon workspace inside this repository: Gazebo, a pool with courses
-and props, both cameras, ground truth, fault injection and an operator lab — **six packages,
-20 649 lines.** It runs **ArduSub SITL by design**: it is a physics environment, not the
-vehicle, so it uses `flight_controller:=pixhawk`.
-
-What transfers: control behaviour and every verb. What does **not**: detection thresholds and
-vision gains, because simulator imagery is too clean. That distinction is the whole reason the
-site labels simulator frames as [the rehearsal](https://fh1m.github.io/mongla_ws/#archive) and
-real footage as [the water](https://fh1m.github.io/mongla_ws/#water-real).
-
-<p align="center"><img src="docs/imgs/sim/sim-bluerov-gate.webp" alt="A BlueROV2 Heavy stand-in hull beside the gate in the simulated pool, the slalom poles and task boards behind it" width="100%"></p>
-
-<table><tr>
-<td width="50%"><img src="docs/imgs/sim/sim-gate-course.webp" alt="The gate and the slalom from the start of the simulated course"></td>
-<td width="50%"><img src="docs/imgs/sim/sim-bins-torpedo.webp" alt="The bins and the torpedo board in the simulated pool"></td>
-</tr><tr>
-<td><img src="docs/imgs/sim/sim-slalom.webp" alt="The slalom poles from low in the water"></td>
-<td><img src="docs/imgs/sim/sim-pool-overview.webp" alt="The whole simulated course, the task tables and the octagon"></td>
-</tr></table>
-
-<sub>Gazebo, 2026-09-12. The hull is a BlueROV2 Heavy flown by ArduSub SITL — deliberately not
-our vehicle: the simulator is a physics environment, and every verb goes through the same
-interface the board uses.</sub>
-
-The simulator earned its place by being wrong in the same places the pool is:
-
-| what it models | why it had to | the number |
-|---|---|---|
-| the real T200 thrust curve | a straight line was wrong by a quarter of full thrust | 12.2 % |
-| water current | the lateral integral term existed to fight a current the sim did not have | 0.12 m/s → 1.374 m in 40 s |
-| camera FOV *in water* | the in-air figure showed more course than the vehicle can ever see | 63.8° → 46.7° |
-| Bar30 noise | ours was ten times too noisy on the one sensor every mission depends on | 0.02 m → 0.002 m |
-| fault injection | five recovery paths existed in the code and had never once executed | DVL · camera · link · battery · thruster |
 
 ---
 
@@ -867,39 +826,39 @@ from why the vehicle exists to every number it has measured. Or dip in:
 | [`ROADMAP.md`](.claude/context/ROADMAP.md) | **the one status file** — where we are, what is left, what is blocked |
 | [`measured-bars.md`](.claude/context/measured-bars.md) | every shipped constant with the measurement behind it, retractions included |
 | [`BUGS.md`](.claude/context/BUGS.md) | the single defect register |
-| [`reference/commands.md`](.claude/context/reference/commands.md) | **generated from the code**: all 30 verbs with their fields and defaults, which ones the board runs and which it refuses, every executable, launch argument, node parameter and wire constant |
+| [`reference/commands.md`](.claude/context/reference/commands.md) | **generated from the code**: all 23 verbs with their fields and defaults, which ones run on the board, every executable, launch argument, node parameter and wire constant |
 
 <details>
-<summary>**The platform** — [`.claude/context/platform/`](.claude/context/platform/) · 17 documents</summary>
+<summary>**The platform** — [`.claude/context/platform/`](.claude/context/platform/) · 16 documents</summary>
 
-`srot-architecture` · `srot-integration` (the traps that cost us runs) · `srot-board-soul` ·
-`cross-repo-contract` · `vision-control-split` · `vehicle-spec` · `pi-hailo-vision-box` ·
-`pi-and-env-traps` · `launch-combinations` · `pool-day` · `remote-access` · `foxglove-and-bags` ·
-`ros2-conventions` · `system-harmony` · `mongla-sim` · `legacy-pixhawk-and-sitl` (only for the simulator's
-ArduSub SITL harness)
+`srot-architecture` · `srot-integration` (the traps that cost us runs) · `srot-board-soul` · `cross-repo-contract` ·
+`vision-control-split` · `vehicle-spec` · `pi-hailo-vision-box` · `pi-and-env-traps` ·
+`launch-combinations` · `first-pool-verification` · `pool-day` · `pool-day-round-4a` ·
+`remote-access` · `foxglove-and-bags` · `ros2-conventions` · `system-harmony`
 
 </details>
 
 <details>
-<summary>**Perception** — [`.claude/context/perception/`](.claude/context/perception/) · 14 documents</summary>
+<summary>**Perception** — [`.claude/context/perception/`](.claude/context/perception/) · 16 documents</summary>
 
-`hailo-vision` · `vision-architecture` · `underwater-vision` · `camera-and-calibration` ·
-`camera-latency` · `detection-continuity` · `depth-estimation` · `downward-camera` ·
-`dual-camera-setup` · `pipeline-hardening` · `sensors-pipeline` · `video-testing`
+`hailo-vision` · `vision-architecture` · `vision-what-to-do-next` · `underwater-vision` ·
+`camera-and-calibration` · `camera-colour-decision` · `camera-latency` · `detection-continuity` ·
+`never-lose-the-target` · `ladder-register` · `depth-estimation` · `downward-camera` ·
+`dual-camera-setup` · `pipeline-hardening` · `tau-plan` · `video-testing`
 
 </details>
 
 <details>
-<summary>**Missions** — [`.claude/context/missions/`](.claude/context/missions/) · 9 documents</summary>
+<summary>**Missions** — [`.claude/context/missions/`](.claude/context/missions/) · 7 documents</summary>
 
-`command-reference` (all 30 verbs) · `client-and-dsl-api` · `mission-cookbook` ·
-`detected-paradigm` · `precision-alignment` · `vision-results`
+`command-reference` (all 23 verbs) · `client-and-dsl-api` · `mission-cookbook` · `detected-paradigm` ·
+`precision-alignment` · `vision-results` · `verbs-srot-unlocks`
 
 </details>
 
 **Per package** — [`.claude/context/packages/`](.claude/context/packages/README.md) · one page each ·
 **Upstream asks** — [`.claude/context/upstream/`](.claude/context/upstream/README.md) ·
-**The simulator** — [`sim/README.md`](sim/README.md) and [`sim/.context/`](sim/.context/INDEX.md)
+**The earlier stack** (Pixhawk, Jetson, the simulator) — the tag `last-with-pixhawk-and-sim`
 
 ---
 
@@ -1155,8 +1114,8 @@ search rather than by reading the page.</sub>
 This is a two-person project that would be better with more people in it. The useful shapes of
 help, in order:
 
-1. **Run it and tell us what broke.** The simulator needs no hardware. A reproducible failure is
-   worth more than a feature.
+1. **Run it and tell us what broke.** The vision pipeline runs on recorded footage with no
+   hardware. A reproducible failure is worth more than a feature.
 2. **Attack a measurement.** Every number in `measured-bars.md` names its method. If the method
    is wrong, that is the most valuable bug you can file — several entries in the ledger exist
    because someone did exactly that.

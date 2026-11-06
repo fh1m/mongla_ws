@@ -28,7 +28,7 @@ from .gpu      import select_device
 # the right pretrained weights without the caller knowing the short stem.
 #
 # ROBOSUB-TESTED pretrained for sim/bench/webcam testing (COCO 80-class, person class):
-#   yolov11n  — fastest; works on CPU and Jetson Orin Nano  ← recommended default
+#   yolov11n  — fastest; works on CPU  ← recommended default
 #   yolov11s  — a notch more accurate
 #
 # Pool / competition custom models go in src/mongla_vision/models/ as .pt files
@@ -104,14 +104,9 @@ def _resolve_model_path(name: str) -> str:
     To use an absolute path: pass ``/path/to/model.pt`` or set
     ``model:=/abs/path.pt`` in the launch arg / models registry.
     """
-    if (os.sep in name or name.endswith('.pt') or name.endswith('.engine')
-            or name.endswith('.hef')):
+    if os.sep in name or name.endswith('.pt') or name.endswith('.hef'):
         return name
 
-    # Prefer a TensorRT .engine over the .pt when one sits beside it: on the
-    # Jetson the engine is 3-6x faster. Engines are device + TRT-version locked
-    # (built on the Jetson via `ros2 run mongla_vision export_engine`), so on a
-    # dev box without one we transparently fall back to the .pt.
     # MONGLA_HEF_DIR FIRST, when it is set. `tools/pi_env.sh` has exported it
     # since the Pi was set up and NOTHING read it, so the export was a lie: a
     # HEF that lived only there resolved to nothing, or worse to a stale .pt of
@@ -127,9 +122,8 @@ def _resolve_model_path(name: str) -> str:
     src_models = _find_src_models_dir()
     if src_models is not None:
         # .hef first: on the Pi + AI HAT+ it is the compiled artifact for THIS
-        # machine, the same role .engine plays on the Jetson. A device only ever
-        # has one of the three, so the order is just "prefer what was compiled".
-        for ext in ('.hef', '.engine', '.pt'):
+        # machine; the .pt is the dev-box fallback (footage replay, training).
+        for ext in ('.hef', '.pt'):
             cand = src_models / f'{name}{ext}'
             if cand.exists():
                 return str(cand)
@@ -139,7 +133,7 @@ def _resolve_model_path(name: str) -> str:
         from ament_index_python.packages import get_package_share_directory
         share = get_package_share_directory('mongla_vision')
         share_models_dir = str(Path(share) / 'models')
-        for ext in ('.hef', '.engine', '.pt'):
+        for ext in ('.hef', '.pt'):
             cand = Path(share) / 'models' / f'{name}{ext}'
             if cand.exists():
                 return str(cand)
@@ -198,23 +192,15 @@ class YoloDetector(Detector):
         self._max_det = int(max_det)
 
         resolved_path = _resolve_model_path(model_path)
-        self._is_engine = str(resolved_path).endswith('.engine')
-        # All Mongla models are detectors. A TensorRT .engine carries no task
-        # metadata, so ultralytics otherwise WARNs "Unable to automatically
-        # guess model task, assuming 'task=detect'" once per engine at load;
-        # state it explicitly to silence that and avoid a wrong guess.
+        # All Mongla models are detectors; say so rather than let ultralytics guess.
         self._model = YOLO(resolved_path, task='detect')
-        # A TensorRT engine is already bound to the device it was built on;
-        # YOLO.to() can raise for engines, so only move .pt models.
-        if not self._is_engine:
-            try:
-                self._model.to(self._device)
-            except Exception as exc:
-                raise RuntimeError(
-                    f"failed to move {resolved_path!r} to {self._device}: {exc!r}") from exc
+        try:
+            self._model.to(self._device)
+        except Exception as exc:
+            raise RuntimeError(
+                f"failed to move {resolved_path!r} to {self._device}: {exc!r}") from exc
         if self._log:
-            backend = 'TensorRT engine' if self._is_engine else 'PyTorch .pt'
-            self._log.info(f"[YOLO ] backend={backend}  ({Path(resolved_path).name})")
+            self._log.info(f"[YOLO ] backend=PyTorch .pt  ({Path(resolved_path).name})")
 
         # Prefer class names from a sidecar YAML (e.g. yolo26_nano_pretrained.yaml)
         # so custom models can override the embedded names table.

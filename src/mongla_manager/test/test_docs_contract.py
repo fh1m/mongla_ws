@@ -89,35 +89,70 @@ def test_every_relative_markdown_link_resolves():
 
 
 # ── 3. the entry points describe the vehicle we fly ─────────────────────────
+#
+# The token sweep across EVERY file lives in test/test_the_retired_stack_stays_retired.py.
+# What is left here is the one positive claim: a reader is told where the old stack went,
+# and no page pretends to document it from main.
 
-# Tokens that only ever appear when a document is presenting the OLD platform as
-# the current one. A historical sentence uses the past tense and does not need
-# these exact strings; every one of them was live in these files before the
-# 2026-09-19 pass.
-RETIRED = ('Jetson Orin Nano', 'ArduSub 4.x', 'Pixhawk 2.4.8', 'BlueOS')
+def test_the_retired_stack_is_pointed_at_not_documented():
+    """CLAUDE.md names the tag; no legacy page survives on main to drift."""
+    assert 'last-with-pixhawk-and-sim' in (ROOT / 'CLAUDE.md').read_text(), (
+        'CLAUDE.md no longer says where the earlier stack lives')
+    legacy = sorted(str(p.relative_to(ROOT)) for p in CTX.rglob('legacy-*.md'))
+    assert not legacy, f'a legacy page is back on main: {legacy}'
+
 
 ENTRY_POINTS = ('README.md', 'CLAUDE.md', 'docs/index.html', 'docs/_config.yml')
 
 
-@pytest.mark.parametrize('name', ENTRY_POINTS)
-def test_the_entry_points_do_not_present_the_retired_platform(name):
-    text = (ROOT / name).read_text()
-    hits = [tok for tok in RETIRED if tok in text]
-    assert not hits, (
-        f'{name} presents the retired platform ({hits}). The Pixhawk + Jetson '
-        f'stack lives on the `pixhawk` branch; the live path is the SROT board '
-        f'and the Pi. One page may describe the old path: '
-        f'.claude/context/platform/legacy-pixhawk-and-sitl.md')
+# ── 3b. the book indexes every shelf, by each document's own title ──────────
+
+def _book_entries():
+    """{target path -> title} for every numbered entry in .claude/context/README.md."""
+    out = {}
+    for title, href in re.findall(r'^\d+\. \[(.+)\]\(([^)]+)\)\s*$',
+                                  (CTX / 'README.md').read_text(), re.M):
+        out[(CTX / href).resolve()] = title
+    return out
 
 
-def test_the_legacy_page_exists_so_the_simulator_is_not_undocumented():
-    """The pixhawk backend and ArduSub SITL are still live code. Retiring the
-    documentation without this page would leave `sim/` unexplained."""
-    found = list(CTX.rglob('legacy-pixhawk-and-sitl.md'))
-    assert found, 'the legacy page was deleted; sim/ has no documentation'
-    page = found[0]
-    text = page.read_text()
-    assert 'SITL' in text and 'pixhawk' in text
+def _first_heading(path):
+    for line in path.read_text(encoding='utf-8').splitlines():
+        if line.startswith('# '):
+            return line[2:].strip()
+    return None
+
+
+def test_every_shelved_document_is_reachable_from_the_book():
+    """A doc no reader can reach is how documents get buried: nobody reads it,
+    nobody updates it, and it goes on asserting what used to be true. Reachable
+    means linked from the book, or from a document the book reaches -- the
+    upstream asks are indexed by `upstream/README.md`, not one by one."""
+    book = _book_entries()
+    assert len(book) > 40, f'parsed only {len(book)} entries -- the parser broke'
+    seen, todo = set(), [CTX / 'README.md', *book]
+    while todo:
+        doc = Path(todo.pop()).resolve()
+        if doc.is_dir():                    # a link to a folder indexes what is in it
+            todo += [p for p in doc.rglob('*.md') if p.resolve() not in seen]
+            continue
+        if doc in seen or doc.suffix != '.md' or not doc.is_file():
+            continue
+        seen.add(doc)
+        todo += [(doc.parent / h).resolve() for h in _targets(doc) if h]
+    buried = [str(p.relative_to(ROOT)) for p in sorted(CTX.rglob('*.md'))
+              if p.resolve() not in seen]
+    assert not buried, ('no link from .claude/context/README.md reaches these -- add '
+                        'them to the book, link them from a page that is, or delete '
+                        'them:\n  ' + '\n  '.join(buried))
+
+
+def test_every_book_title_is_its_documents_own_heading():
+    """The book cannot describe a document as something it is not."""
+    bad = [f'{p.relative_to(ROOT)}: book says {t!r}, the page says {_first_heading(p)!r}'
+           for p, t in _book_entries().items()
+           if p.is_file() and _first_heading(p) != t]
+    assert not bad, 'book titles drifted:\n  ' + '\n  '.join(bad)
 
 
 # ── 4. the two flagship documents ───────────────────────────────────────────
@@ -160,7 +195,7 @@ RETIRED_NAME = 'duburi'
 FOREIGN = ('TASKS_FROM_DUBURI_WS', 'DUBURI_WS_INTEGRATION', 'INTEGRATION_DUBURI_WS',
            'DUBURI_WS_PR', 'bracuduburi')
 
-CODE_ROOTS = ('src', 'sim/src', 'scripts', 'tools')
+CODE_ROOTS = ('src', 'scripts', 'tools')
 
 
 # Only source-shaped files, and never the recorded datasets (gigabytes of frames).
@@ -265,6 +300,23 @@ def test_site_ledger_strip_is_counted_from_the_ledger():
     assert r.returncode == 0, r.stdout + r.stderr
 
 
+def test_the_readme_ledger_counts_are_the_ledgers():
+    """The README states the same counts in prose. It said 50 entries / 8 taken
+    back for six weeks after the file passed 100 / 18 -- a second copy nobody
+    regenerated. Counted by the reader the site and the banner use."""
+    import sys
+    sys.path.insert(0, str(ROOT / 'tools'))
+    import ledger_strip
+    e = ledger_strip.read_ledger(ledger_strip.LEDGER.read_text(encoding='utf-8'))
+    n, rows = len(e), sum(x.rows for x in e)
+    back, no = sum(x.kind == 'back' for x in e), sum(x.kind == 'no' for x in e)
+    text = ' '.join((ROOT / 'README.md').read_text(encoding='utf-8').split())
+    for want in (f'**{n} entries, {rows:,} rows of numbers**',
+                 f'**{back} of those {n} entries say in their own title',
+                 f'{no} more measured an idea'):
+        assert want in text, f'README.md does not say {want!r} -- re-count from measured-bars.md'
+
+
 def test_every_css_token_the_site_uses_is_defined():
     """A `var(--x)` naming a token that does not exist is not an error in CSS:
     the declaration is silently dropped. That is how the two Markdown pages lost
@@ -353,13 +405,16 @@ def test_the_published_test_count_is_the_real_one():
     claimed = values.pop()
 
     collected = 0
-    # ⛔ `mongla_sensors` was MISSING from this list, so the collector saw
-    # 3 795 where six suites actually collect 3 829 -- and the published
-    # "5 suites" matched the omission rather than the repo. A count guard that
-    # skips a package cannot catch a count drift in that package.
-    for pkg in ('mongla_control', 'mongla_vision', 'mongla_manager',
-                'mongla_planner', 'mongla_localization', 'mongla_sensors'):
-        r = subprocess.run([sys.executable, '-m', 'pytest', f'src/{pkg}/test',
+    # ⛔ A package MISSING from this list once let the published count match
+    # the omission rather than the repo. A count guard that skips a package
+    # cannot catch a count drift in that package -- so every package with a
+    # test/ directory is listed.
+    # The sixth suite is the repo-wide guards in test/.
+    for suite in ('src/mongla_control/test', 'src/mongla_vision/test',
+                  'src/mongla_manager/test', 'src/mongla_planner/test',
+                  'src/mongla_localization/test', 'test'):
+        pkg = suite
+        r = subprocess.run([sys.executable, '-m', 'pytest', suite,
                             '--collect-only', '-q', '-p', 'no:cacheprovider'],
                            capture_output=True, text=True, cwd=ROOT)
         m = re.search(r'(\d+) tests? collected', r.stdout)

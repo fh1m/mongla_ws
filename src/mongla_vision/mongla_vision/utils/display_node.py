@@ -37,8 +37,8 @@ Camera / display keyboard shortcuts (always active)
   d            → switch to downward camera
   D            → toggle depth map overlay
 
-Only ONE camera is ever subscribed/streamed at a time (Jetson USB-2 bus +
-unified-memory budget); the old 'b' side-by-side view was removed because it
+Only ONE camera is ever subscribed/streamed at a time (USB bus +
+memory budget); the old 'b' side-by-side view was removed because it
 force-streamed BOTH cameras at once. Switch with f/d instead.
 
 Video file keyboard shortcuts (active when video_file_mode:=true)
@@ -191,7 +191,7 @@ class VisionDisplayNode(Node):
         self._pipeline_procs: list[subprocess.Popen] = []
 
         # Runtime camera switching state. Exactly ONE camera is subscribed at a
-        # time -- the HUD never streams both at once (Jetson USB-2 / memory budget).
+        # time -- the HUD never streams both at once (USB / memory budget).
         self._cam_subs: list = []  # 6 camera-specific subs, replaced by _switch_camera
         # Deferred subscription action (set by main thread, executed by timer in executor).
         # Values: None | '<camera_name>'
@@ -604,7 +604,7 @@ def _draw_mission_panel(out, *, camera, fps, primary, native_w, native_h,
     drawn in the display node (off the detector/GPU path), no FPS cost."""
     h, w = out.shape[:2]
     sf = max(0.9, w / 1920.0)
-    downward = camera in ('downward', 'sim_bottom')
+    downward = camera == 'downward'
     badge = 'DOWNWARD' if downward else 'FORWARD'
     badge_col = (255, 210, 40) if downward else (60, 230, 120)   # cyan-ish / green (BGR)
 

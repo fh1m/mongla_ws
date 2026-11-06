@@ -3,7 +3,7 @@
 **Mongla** is written and maintained by:
 
 **Muhammad Fahim Faisal** — author.
-Autonomy: perception, localization, control integration, the mission language, the simulator,
+Autonomy: perception, localization, control integration, the mission language
 and this repository.
 <fh1m.dev@gmail.com> · [fh1m.github.io](https://fh1m.github.io/) · [@fh1m](https://github.com/fh1m)
 
@@ -37,9 +37,8 @@ this repository is the software and its measurements.
 
 ## Third-party work
 
-- Simulator hull meshes derive from [`bluerov2_gz`](https://github.com/clydemcqueen/bluerov2_gz)
-  by Clyde McQueen (MIT) — see
-  `sim/src/mongla_sim_description/models/mongla_heavy/ATTRIBUTION.md`.
+- The retired simulator (tag `last-with-pixhawk-and-sim`) derived its hull meshes from
+  [`bluerov2_gz`](https://github.com/clydemcqueen/bluerov2_gz) by Clyde McQueen (MIT).
 - Built on ROS 2, MAVLink, Hailo's runtime, Ultralytics YOLO, supervision and YASMIN, each
   under its own licence.
 

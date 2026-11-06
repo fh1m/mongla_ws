@@ -45,9 +45,9 @@ Strongest first. Use the highest rung the change can reach.
 |---|---|---|
 | 1 | Water / bench run with the board attached | only with a human on the kill switch; nothing here has been in water |
 | 2 | `ros2 run mongla_manager bringup_check --srot` | anything touching the board, arming, or bring-up gating |
-| 3 | `./build_mongla.sh` then `pytest` (293 test files) | any source change — this is the default rung |
-| 4 | The sim: `sim/` with `flight_controller:=pixhawk` | control behaviour and verb semantics. **Not** detection thresholds or vision gains — sim imagery is too clean |
-| 5 | Replay a recorded bag (`scripts/pool_record.sh`) | perception and tracking changes, against real footage |
+| 3 | `./build_mongla.sh` then `pytest` | any source change — this is the default rung |
+| 4 | Replay a recorded bag (`scripts/pool_record.sh`) or archive footage (`video.launch.py`) | perception and tracking changes, against real footage |
+| 5 | `tools/control_bench` — the board's own C++ compiled natively | control behaviour against the firmware's real attitude and mixer code |
 | 6 | A targeted `pytest src/<pkg>/test/test_<thing>.py` | a single focused change |
 
 ### Guards that must stay green

@@ -27,11 +27,10 @@ source scripts/pool_session.sh gate_am     # exports MONGLA_RUN_DIR + ROS_LOG_DI
 
 **Terminal 1 — preflight + vehicle + telemetry + live viz** (the launch file is the
 `ros2 run mongla_manager start` equivalent that *also* wires vision + Foxglove; the same
-`-p` params become `arg:=` — `bno085_port`/`payload_port` default to `auto` already):
+`-p` params become `arg:=`, and an empty `mav_device` finds the board):
 ```bash
-ros2 run mongla_manager bringup_check         # 12-section preflight; fix any FAIL first
-ros2 launch mongla_manager bringup.launch.py \
-     mode:=pool yaw_source:=bno085 vision:=true foxglove:=true
+ros2 run mongla_manager bringup_check --srot  # graded preflight; fix any FAIL first
+ros2 launch mongla_manager bringup.launch.py vision:=true foxglove:=true
 ```
 > Prefer your existing `ros2 run mongla_manager start …`? It has no Foxglove arg — start
 > the bridge yourself in a spare terminal:
@@ -105,7 +104,7 @@ and re-save the JSON.
 
 Mongla is **FPS-coupled** (the vision loop freshness-decays the translational command by
 frame age). `foxglove_bridge` viewing raw images from two cameras over FathomX is real
-tether bandwidth + serialization on the Orin Nano — the classic "new bottleneck." So:
+tether bandwidth + serialization on the Pi — the classic "new bottleneck." So:
 
 ```bash
 # baseline (bridge OFF):
@@ -123,7 +122,7 @@ very useful, near-zero cost.
 A team abroad on venue Wi-Fi cannot depend on a cloud login. We resolved this by
 standardizing on **Lichtblick** (the offline-safe fork — see §4), which has no account
 wall at all. **Still prove it before run day**, on the actual competition laptop: connect
-to `ws://<jetson-ip>:8765` with **internet OFF** and confirm it connects and the layout
+to `ws://mongla.local:8765` with **internet OFF** and confirm it connects and the layout
 loads. (If you instead use the official Foxglove desktop app, this gate is where its
 login prompt would bite you — hence the Lichtblick choice.)
 
@@ -198,8 +197,8 @@ gives you the exact colored terminal output too. (Manual equivalent, no helper:
 
 ## 4. Ground station (dev box) — the viewer + offline replay
 
-> **How you reach the Pi at all** (mosh+tmux terminal, NoMachine desktop, killing the
-> polkit password popups, drop-proof recovery) is its own guide:
+> **How you reach the Pi at all** (the mosh + tmux terminal that a dropped tether cannot
+> kill) is its own guide:
 > [`remote-access.md`](remote-access.md). This section is just the **viewer**.
 
 The Pi runs the **bridge** (server); the dev box / operator laptop runs the **viewer**
@@ -213,7 +212,7 @@ Foxglove-WebSocket protocol as the bridge.
 ```bash
 # viewer (offline-safe): latest .deb from github.com/lichtblick-suite/lichtblick/releases
 sudo apt install -y /path/to/lichtblick-<ver>-linux-amd64.deb   # provides `lichtblick`
-# bridge (attach the viewer to LOCAL sim for dry practice):
+# bridge (attach the viewer to a LOCAL replay for dry practice):
 sudo apt install -y ros-humble-foxglove-bridge
 # MCAP storage plugin -- REQUIRED for `pool_record.sh replay` / `ros2 bag play` here.
 # Stock Humble desktop only has sqlite3, so without this an MCAP bag errors
@@ -237,11 +236,11 @@ dev box (that's why it's robust across the network).
 > bridge terminal: a good client logs a channel subscription; a version-mismatched one logs
 > `Dropping client …: handshake failed`.
 
-**Dry practice with NO AUV (local sim on the dev box):** the bridge runs here too, so you
-can rehearse the whole Foxglove workflow against Gazebo SITL before pool day:
+**Dry practice with NO AUV (a recorded run on the dev box):** the bridge runs here too, so
+you can rehearse the whole Foxglove workflow against a real bag before pool day:
 ```bash
-ros2 launch mongla_manager bringup.launch.py mode:=sim yaw_source:=mavlink_ahrs \
-    vision:=true foxglove:=true viewer:=false
+scripts/pool_record.sh replay ~/mongla_runs/bag_<run>_<ts>      # terminal 1
+ros2 run foxglove_bridge foxglove_bridge --ros-args -p port:=8765   # terminal 2
 # then Lichtblick → ws://localhost:8765
 ```
 
@@ -249,7 +248,7 @@ ros2 launch mongla_manager bringup.launch.py mode:=sim yaw_source:=mavlink_ahrs 
 without the pool). Bags live in `~/mongla_runs` on the Pi; copy the whole run folder
 so the bag, scorecard, and logs come together:
 ```bash
-rsync -av mongla@mongla.local:~/mongla_runs/  ~/mongla_runs/     # or scp -r
+rsync -av fh1m@mongla.local:~/mongla_runs/  ~/mongla_runs/     # or scp -r
 # replay locally (needs the MCAP plugin above + mongla_interfaces built here):
 scripts/pool_record.sh replay ~/mongla_runs/bag_gate_run_<ts>
 # then Lichtblick → ws://localhost:8765 sees the replayed topics.

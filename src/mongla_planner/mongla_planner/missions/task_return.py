@@ -17,8 +17,6 @@ from mongla_planner.missions.competition_config import (
     ALIGN_ERR_PX,
     ALIGN_GAIN,
     APPROACH_GAIN,
-    STYLE_ROLL_HEADROOM_M,
-    STYLE_ROLL_GAIN,
     SEARCH_FORWARD_GAIN,
     SEARCH_CREEP_S,
 )
@@ -52,7 +50,7 @@ def run(mongla, log=None):
 
     # ── Surface, then style roll ───────────────────────────────────────────────
     mongla.set_depth(GATE_SEARCH_DEPTH_M, timeout=20)
-    mongla.style_roll(flips=1, headroom=STYLE_ROLL_HEADROOM_M, gain=STYLE_ROLL_GAIN)
+    mongla.style_roll(flips=1)
 
 
 # ── Mission-authored fallback search patterns (pure control) ────────────────────

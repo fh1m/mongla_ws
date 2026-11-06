@@ -5,8 +5,11 @@
 > `src/`; every "BUILT" row has a caller. Board and Pi were NOT connected for this pass, so
 > anything that needs them is stated as last-known with its date.
 >
-> **This file supersedes, for status:** `ROADMAP.md` (last updated 2026-06-24,
-> Pixhawk era), `ROADMAP.md`, `.claude/plans/eventual-bubbling-cocoa.md`,
+> **2026-11-06:** the Pixhawk / ArduSub backend, the Jetson, `mongla_sensors` and the simulator
+> left `main` (tag `last-with-pixhawk-and-sim`). The platform rows below were re-read against the
+> tree that day; rows not touched keep their own dates.
+>
+> **This file supersedes, for status:** the 2026-06-24 roadmap, `.claude/plans/eventual-bubbling-cocoa.md`,
 > `bumblebee-study/CAPABILITY-MAP.md` (body), `bumblebee-study/rounds/round19-gap-reaudit.md`,
 > the findings ledger `bumblebee-study/rounds/round12-findings-ledger.md` (statuses only — its
 > evidence stays there), and the memory `project_research_implement_queue.md`. Those files keep
@@ -22,12 +25,12 @@
 ## 1. Where we are headed
 
 **Platform (decided, built):** the SROT board runs every inner loop at 500 Hz with the BNO085 in
-hand; the Raspberry Pi + Hailo-8 does perception and estimation and feeds the board. Pixhawk /
-ArduSub is the preserved `pixhawk` branch, not the target. Missions are still Pixhawk-era and
-have never run on srot + Pi. **The YASMIN FSM layer was retired on 2026-09-22** -- 3,550 lines
-that had never executed, carrying a defect (J04) that ended every run one state after DIVE.
-Missions are the DSL, and the DSL grew `can()`, `require()` and `run_plan()` to cover what the
-FSM was supposed to.
+hand; the Raspberry Pi + Hailo-8 does perception and estimation and feeds the board. `main` has
+one backend and 23 verbs, every one of which the board runs or the host runs; there is no
+refused set. Missions use only those verbs and have never run in water. **The YASMIN FSM
+layer was retired on 2026-09-22** -- 3,550 lines that had never executed, carrying a defect
+(J04) that ended every run one state after DIVE. Missions are the DSL, and `run_plan()` covers
+what the FSM was supposed to.
 
 **Competitions:** SAUVC (breach ends the attempt, flare order told to the team after Navigation;
 the rulebook published 30 Oct 2026 moved it from the one-off indoor 25 × 16 m pool to an
@@ -43,8 +46,8 @@ not by competition, with a deck-side override for every venue constant.
    depth + prop fixes, uplinked to the board. *(host side built; board side is PRs #11, #18, #23)*
 3. **Close vision loops on the board** — bearings in radians uplinked, board servoes at 500 Hz.
    *(host side built; board side is PR #18, then stages 2–4 of `VISION_API.md`)*
-4. **Missions that score on srot** — port missions off Pixhawk-era verbs, add course priors,
-   budget and fallbacks. *(not started on srot)*
+4. **Missions that score on srot** — course priors, budget and fallbacks on the board's verbs.
+   *(host side built for SAUVC; nothing flown)*
 5. **Run-level autonomy** — budget-driven task choice, score-aware abandonment, explainable misses.
 
 ---
@@ -125,7 +128,7 @@ re-ask.
 
 | # | Item | State | Note |
 |---|---|---|---|
-| C1 | `move_*_dist`, `arc`, `style_yaw`, `lock_heading` on srot | REFUSED (`srot_fc.UNSUPPORTED_VERBS`) | un-refuse `move_*_dist` ONLY after #23 merges, and in that same change flip `velocity_uplink` default to true (DIST refuses to start with no velocity) |
+| C1 | A distance-closed move | **OPEN, firmware** | no host verb exists; it needs velocity ingest on the board (#23). When it merges, add the verb as a board primitive and flip `velocity_uplink` default to true in the same change. The host heading lock, `arc` and the STYLE yaw spin left with the old backend (2026-11-06): the board holds heading, and its own primitives cover the rest |
 | C2 | `velocity_uplink` / `position_uplink` on by default | OFF (both `False`) | gated on #23 and G1 |
 | C3 | Altitude HOLD verb (height above floor as a Z mode) | OPEN | height is published (`floor_height`, `mongla.floor_height()`); holding it needs G1 |
 | C4 | Near-surface gain set | **DEFERRED (evidence) 2026-09-17** | board depth PID is one fixed gain set (`depth_control.cpp:40`); near-surface suction/wave coupling is a moving-body-in-waves effect and SAUVC 2026 is indoor. After G1, log `DEPTH_ERR` vs depth; add gains (firmware PR) only if the data show a near-surface error |
@@ -166,7 +169,7 @@ re-ask.
 
 | # | Item | State | Note |
 |---|---|---|---|
-| M1 | Port missions + FSM off Pixhawk-era verbs | IN PROGRESS | **B1 DONE 2026-09-17:** srot now refuses only the axes that MOVE a depth setpoint (forward `depth`, downward fill->depth descent); downward lat + surge runs, and `align_loop` no longer streams `set_target_depth` on srot (`test_srot_vision_actuation.py`, 3 injections bite). **Open for water, not host:** in STABILIZE nothing holds depth during an align. Measure first (armed, STABILIZE, zero heave, log depth ~20 s); only a real sag justifies an opt-in DEPTH_HOLD vision mode, gated like AUTO (depth loop never run closed; a baro refusal silently forces STABILIZE). **B2 DONE 2026-09-17:** `sauvc_navigation` skips `lock_heading` on srot via new `mongla.backend` (reads the manager's `flight_controller` once, raises rather than guesses); `sauvc_target_acquisition` needed no change after B1. `test_sauvc_srot_port.py` executes both `run()`s and checks sent verbs against `UNSUPPORTED_VERBS`. **B3 DONE 2026-09-17:** `sauvc_full` (one dive: navigation, target acquisition, flares opt-in) -- see M3. Missions still NOT FLOWN. ⛔ On srot their `move_*`/`set_depth`/`pause`/`stop` (incl. the creep fallback and blind transit) enter AUTO and are denied until the depth-loop bench checks pass; frozen per mission in `test_sauvc_srot_port.py` |
+| M1 | Missions on the board's verbs | **DONE (host) 2026-11-06** | every mission sends only the 23 verbs (`test_every_mission_runs_against_the_real_dsl.py`); the capability queries were deleted with the backend selector. **Open for water, not host:** in STABILIZE nothing but the board holds depth during an align — measure first (armed, STABILIZE, zero heave, log depth ~20 s). ⛔ Every board move (incl. the creep fallback and blind transit) enters AUTO and is denied until the depth-loop bench checks pass (`test_sauvc_srot_port.py`). Missions NOT FLOWN |
 | M2 | SAUVC Task 4: listen station → `mongla.flare_order(timeout=)` → bump in order, else bump all | **HOST DONE 2026-09-17** | `sauvc_full._flares` (colour->class map, ordered or bump-all, off by default via `SAUVC_FLARES_ENABLED`). In water needs H1, #24 and the P6/P7 flare-range measurement |
 | M3 | Use `run_budget` in a real mission | **DONE (host) 2026-09-17** | `sauvc_full` is the first caller of `use_budget`, `worth_attempting` and `task()`: each chunk has a deadline and is abandoned cleanly, Task 3 is skipped by name (no gripper), a blind gate transit is recorded `unconfirmed` via new `mongla.note()`, chunks are called via `navigate()`/`acquire()` (their `run()` re-zeroes the baro). Task 4 (listen for the LoRa order, else bump all) is behind `SAUVC_FLARES_ENABLED=False` until P6 measures flare detection range. `test_sauvc_full.py` (3 injections bite); the pinger sweep now over-approximates variable class arguments |
 | M4 | SAUVC qualification run + the rulebook re-read | **HOST DONE 2026-11-05** | `sauvc_qualification`: dive to the 0.95 m hanging opening, pass `qual_gate` with `fwd=None`, swim a standoff so the 1.5 m gate fits the frame again, `yaw_right(180)` (clockwise -- the same turn the pre-competition video must show), pass back, and only then surface. Each pass has a blind leg that is flown but never counted. Venue constants re-derived from the current figure: `SAUVC_MAX_DEPTH_M` -1.0 -> -1.35 (main-arena shallow edge 1.66 m less 5 %), `SAUVC_GATE_PASS_DEPTH_M` -0.85 -> -1.0 (gate now 1.5 m tall on a 2 m floor), blind transit 45 -> 40 s (gate ~12 m, not 16), `target_mat` width 2.20 (sim) -> 2.00 (now quoted). `test_sauvc_qualification.py` (4 injections bite), `test_course_sauvc_olympic.py`. NOT FLOWN: on srot every non-vision step, the U-turn included, waits on G1. Open: the Surfacing Square (+20) has no class in any model -- reachable only from a surveyed position |
@@ -179,7 +182,7 @@ re-ask.
 | # | Item | State |
 |---|---|---|
 | D2 | **The project became Mongla (2026-09-20)** | **DONE** | the author left BRAC University on principle and continues independently; 868 paths and 805 files renamed by an explicit token map (13 ROS packages, `/mongla/*`, `class Mongla`, the `mongla` CLI, `MONGLA_*`, `~/.mongla`); one authorship identity across every package and the licence; `AUTHORS.md` added; the university named only in the past tense; the public site rebuilt. Guards in `test_docs_contract.py` hold both halves. ⚠ **Owner action:** rename the GitHub repo to `mongla_ws` — the tree already points there |
-| D1 | **Documentation pass (2026-09-19)** | **DONE** | `docs/the-shift.md` (the platform change from first principles) and `docs/capability-map.md` (every capability with evidence and a verification state) published; six diagrams drawn; a page per package under `.claude/context/packages/` plus a stub in each `src/<pkg>/`; command and DSL references rewritten srot-first; README, CLAUDE.md and the Pages site rebuilt; 23 Pixhawk-era documents retired to the `pixhawk` branch with one `legacy-pixhawk-and-sitl.md` kept for the simulator; `test_docs_contract.py` guards links, package pages and the entry points (4 injections bite) |
+| D1 | **Documentation pass (2026-09-19)** | **DONE** | `docs/the-shift.md` (the platform change from first principles) and `docs/capability-map.md` (every capability with evidence and a verification state) published; six diagrams drawn; a page per package under `.claude/context/packages/` plus a stub in each `src/<pkg>/`; command and DSL references rewritten srot-first; README, CLAUDE.md and the Pages site rebuilt; 23 documents about the earlier platform retired (the whole earlier stack now lives at the tag `last-with-pixhawk-and-sim`); `test_docs_contract.py` guards links, package pages and the entry points (4 injections bite) |
 | O1 | Per-task Foxglove/Lichtblick layouts | **DONE 2026-09-17** -- `foxglove/{bins_downward,localization,board_health}.json`; `test_foxglove_layouts.py` fails when a layout plots a topic nothing publishes |
 | O2 | `ImageAnnotations` from perception | **DEFERRED** -- `foxglove_msgs` not installed; burned-in `image_debug` covers it |
 | O3 | Warmup | **DONE 2026-09-17** -- warmup already existed; now TIMED: Hailo logs first vs second infer ms, YOLO first vs last pass (`warmup_ms`) |
@@ -259,15 +262,12 @@ Tests: `test_opt_in_consumers.py` (9, real rclpy publishers), each injection-ver
 
 ---
 
-## 8. Documentation debt found in this pass
+## 8. Documentation debt
 
-| Where | Claim | Truth |
-|---|---|---|
-| `CLAUDE.md` §2b | firmware "behaviour rev 7" | `config.h:805` is **rev 14** |
-| `CLAUDE.md` §2b | `vision_align` / `vision_move` refused on srot | un-refused 2026-09-03; `UNSUPPORTED_VERBS` is `lock_heading`, `move_*_dist`, `arc`, `style_yaw` |
-| `CLAUDE.md` §2b | `move_*_dist` "stay refused permanently" | planned un-refusal after PR #23 (C1) |
-| `ROADMAP.md` | "single source of truth", updated 2026-06-24 | Pixhawk era; superseded by this file |
-| `CAPABILITY-MAP.md` body | "Nothing is built yet" | Tiers 0–5 largely built; §4 lists what is not |
+The 2026-11-06 purge removed the retired stack from every live doc and from the code, and
+`test_the_retired_stack_stays_retired.py` now fails on any live file that names it again.
+Prior-art citations (`sota/`, `upstream/`, `scouting/`) and the defect history (`BUGS.md`) are
+exempt by path, because what a competitor runs is a fact about them.
 
 ---
 

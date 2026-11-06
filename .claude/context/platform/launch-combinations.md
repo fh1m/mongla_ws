@@ -138,9 +138,8 @@ ros2 run mongla_planner mongla fire --fire_channel 9           # BOARD channel N
 `fire` drives board channel N — the same N as `SERVOn_ROLE`. There is no
 host-side map; read the role off `connect --watch` first.
 
-**Refused on this vehicle, before dispatch:** `lock_heading`,
-`move_forward_dist`, `move_back_dist`, `move_lateral_dist`, `arc`, `style_yaw`.
-They return failure with the reason; nothing moves. Every flag of every verb:
+A name that is not one of the 23 verbs fails at the node with `Unknown command`, and nothing
+reaches the board. Every flag of every verb:
 `ros2 run mongla_planner mongla <verb> -h`.
 
 Live tuning applies on the **next** goal:
@@ -159,11 +158,10 @@ ros2 run mongla_planner mission sauvc_qualification
 ros2 run mongla_planner mission sauvc_full
 ```
 
-Which missions exist, which models each loads (and which of those are not
-shipped yet), and which refused verbs each guards: the generated table,
-[`reference/commands.md` §3b](../reference/commands.md). A mission that needs
-a refused verb asks with `mongla.can()` or refuses at its first line with
-`mongla.require()` — it never thrusts open-loop in its place.
+Which missions exist and which models each loads (and which of those are not
+shipped yet): the generated table, [`reference/commands.md` §3b](../reference/commands.md).
+Every mission sends only real verbs with real kwargs —
+`test_every_mission_runs_against_the_real_dsl.py` runs each one to prove it.
 
 ---
 

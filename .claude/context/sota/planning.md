@@ -60,9 +60,9 @@ after DIVE.** No test covered it — `test_sauvc_srot_port.py` executes only the
 *script* missions against `UNSUPPORTED_VERBS`.
 
 ✅ **Resolved 2026-09-22 by retiring the layer** (operator decision; J03 had framed exactly this
-choice). 3,550 lines deleted. The capability oracle now lives where missions actually run —
-`mongla.can(verb)`, reading `srot_fc.UNSUPPORTED_VERBS` at call time — and `run_plan` skips a step
-whose `needs=` verb the backend refuses. See §5.
+choice). 3,550 lines deleted. The capability oracle then moved into the DSL; on 2026-11-06 the refused
+verbs themselves left with the old backend, so there is nothing left to refuse — a mission can
+only name the 23 verbs, and `test_every_mission_runs_against_the_real_dsl.py` proves each one does.
 
 ### 1.5 The constants that are still blank
 

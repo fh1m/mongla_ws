@@ -33,9 +33,8 @@ CAMERA_PROFILES = {
         'frame_id': 'laptop_cam',
     },
 
-    # ---- Vehicle: Blue Robotics Low-Light HD USB (Jetson Orin Nano) ----- #
-    # device indices assume clean Jetson USB enumeration (no IR cameras).
-    # Override at pool-day with  device:=N  if enumeration differs.
+    # ---- Generic USB roles (no calibration declared) ------------------- #
+    # Override with  device:=N  if enumeration differs.
     # ── Raspberry Pi 5 + AI HAT+ (see cameras.yaml for the full rationale) ──
     # 640x360@210 is what makes the Hailo's 70-80 Hz visible: with the 30 fps
     # 'forward' profile the ROS graph published 29.2 Hz, camera-capped.
@@ -137,34 +136,6 @@ CAMERA_PROFILES = {
         'fps':      30,
         'frame_id': 'downward_cam',
     },
-
-    # ---- Gazebo SITL: forward / down -- topics depend on the world ----- #
-    # The bluerov2_gz model used today does NOT ship a camera plugin; you
-    # need to add a <sensor type="camera"> + <plugin filename="ignition-..."/>
-    # block to model.sdf. Until then point this at whatever Image topic is
-    # available (e.g. a re-published webcam over a ros_gz bridge).
-    'sim_front': {
-        'source':         'ros_topic',
-        'topic':          '/mongla/sim/front_camera/image_raw',
-        'expected_width': 640,
-        'expected_height': 480,
-        'expected_fps':    30,
-        'frame_id':       'front_cam',
-    },
-    'sim_bottom': {
-        'source':         'ros_topic',
-        'topic':          '/mongla/sim/bottom_camera/image_raw',
-        'expected_width': 640,
-        'expected_height': 480,
-        'expected_fps':    30,
-        'frame_id':       'bottom_cam',
-    },
-
-    # ---- Future: on-vehicle (raise NotImplementedError today) ---------- #
-    'jetson_front':  {'source': 'jetson'},
-    'jetson_bottom': {'source': 'jetson'},
-    'blueos':        {'source': 'blueos'},
-    'mavlink':       {'source': 'mavlink'},
 }
 
 

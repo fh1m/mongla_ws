@@ -1,6 +1,6 @@
 # mongla_planner — how you tell the vehicle what to do
 
-**11k lines · 405 tests · [`src/mongla_planner`](../../../../src/mongla_planner)**
+**[`src/mongla_planner`](../../../../src/mongla_planner)**
 
 Three ways in, one road out: a command line for a single verb, a Python mission language for a
 run, and state machines for missions that want explicit states. All of them send the same goal
@@ -50,7 +50,6 @@ Grouped by what you are doing:
 | **Navigate to something known** | `use_course` `acquire` `goto_prop` `anchor_on` `absolute_heading` |
 | **Manage the run** | `task` `use_budget` `worth_attempting` `note` `countdown` `log_scoreboard` |
 | **Configure vision live** | `use_camera` `set_model` `set_classes` `set_conf` `set_vision_param` `pause_detector` `resume_detector` |
-| **Know the vehicle** | `backend` — `'srot'` or `'pixhawk'` |
 
 ### Three ideas worth knowing before writing a mission
 
@@ -103,7 +102,7 @@ and which verbs a backend will accept.
 python3 -m pytest -q src/mongla_planner/test
 ```
 
-405 tests. Mission guards read a mission's own *call arguments* out of its syntax tree rather
+Mission guards read a mission's own *call arguments* out of its syntax tree rather
 than its prose — an earlier guard passed because the string it matched happened to sit in an
 import line.
 

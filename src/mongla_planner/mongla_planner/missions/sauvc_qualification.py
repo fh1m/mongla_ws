@@ -79,14 +79,10 @@ def run(mongla, log=None):
         # height band, and there is no search depth shallower than it that
         # is not closer to a surfacing failure.
         mongla.set_depth(SAUVC_QUAL_PASS_DEPTH_M, timeout=20)
-        if mongla.can('lock_heading'):   # refused on srot: the board holds heading
-            mongla.lock_heading(0.0, timeout=SAUVC_QUAL_BUDGET_S)
         confirmed = qualify(mongla, log)
     finally:
-        mongla.release_heading()
         # Time stops at the second pass; surfacing after it costs nothing.
         mongla.surface()
-        mongla.stop()
         mongla.disarm()
     return confirmed
 

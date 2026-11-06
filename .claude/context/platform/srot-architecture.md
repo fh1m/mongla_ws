@@ -20,10 +20,10 @@ not interchangeable: SROT names the hardware, the NVS namespaces, the repos and
 `"Hengla v0.2.0"`; the wire reports `MAV_AUTOPILOT_GENERIC` on a
 `MAV_TYPE_SUBMARINE` frame.
 
-That autopilot id is a deliberate, documented cost: QGroundControl's and BlueOS's
+That autopilot id is a deliberate, documented cost: QGroundControl's
 setup pages are ArduPilot-gated and therefore stay empty. **Bondor is the ground
 station** — not QGC. Their own comment records that an `APM_COMPAT_*` block once
-spoofed "ArduSub V4.1.0" to unlock those pages and was removed rather than left
+spoofed an ArduPilot version string to unlock those pages and was removed rather than left
 to mislead.
 
 **Our opinion: correct, and we should stop treating QGC compatibility as a goal.**
@@ -344,7 +344,7 @@ into this failure. Three responses, in order of cost:
 1. **Do not command lat and yaw together in the terminal phase.** We already have
    the mechanism and already recommend it for a different reason:
    `precision-alignment.md` says drop the `yaw` axis at the hole and let
-   `heading_lock` hold Ch4. **That advice is now much better founded than when it
+   the board's own heading hold keep yaw. **That advice is now much better founded than when it
    was written** — it was justified as avoiding vision-yaw wobble; it in fact
    avoids the mixer's ±45° attractor entirely, because a single-axis command
    keeps all four horizontals at equal magnitude (the §3 pure-lateral rows show
@@ -427,9 +427,7 @@ we understood least. Traced through `config.h`, `yaw_ref.cpp` and
 **Attitude never uses the magnetometer.** Roll, pitch and yaw come from the
 BNO085's **6-axis GAME rotation vector** — mag-free by construction — so
 "thruster/metal fields can never move roll/pitch/yaw" (`config.h:160`). That is a
-deliberate and, for an aluminium hull with eight thrusters, an excellent choice.
-It is the same conclusion we reached independently on the Pixhawk path, where we
-distrust ArduSub's compass inside the hull.
+deliberate and, for an aluminium hull full of thrusters, an excellent choice.
 
 The magnetometer is then used **exactly once**:
 
@@ -474,7 +472,7 @@ underneath it free-runs.** Their own comment states the consequence
 
 At 0.5–3 °/min, a 15-minute RoboSub run accumulates **7.5° to 45° of heading
 error**, silently, with `YAW_REF` still reporting LOCKED the whole time. Every
-absolute `MOVE_TURN`, every `lock_heading`, and every dead-reckoned leg inherits
+absolute `MOVE_TURN`, every heading hold, and every dead-reckoned leg inherits
 it. **Nothing on the wire says the heading has gone stale, because from the
 firmware's point of view nothing has changed.**
 

@@ -8,9 +8,8 @@ deliberate and written down. Where they agree, a doc claiming they differ sends
 the operator looking for a knob that is already set.
 
 Both failures had happened. CLAUDE.md and ros2-conventions.md both said the
-launch brings the vehicle up on `yaw_source:=dvl` while the node defaults to
-`mavlink_ahrs`. The launch says `mavlink_ahrs` too. The DVL is not fitted, so
-the docs described a pool bring-up on a heading source that does not exist.
+launch brought the vehicle up on a DVL heading while the node defaulted to the
+board's AHRS -- on a hull with no DVL fitted.
 
 This is a text-level check on purpose: it needs no ROS runtime, so it runs in
 the same suite as everything else, and it reads the two files an operator
@@ -25,13 +24,11 @@ _LAUNCH = os.path.join(_PKG, 'launch', 'bringup.launch.py')
 _NODE   = os.path.join(_PKG, 'mongla_manager', 'auv_manager_node.py')
 
 
-# The ONE deliberate difference, with its reason. Adding an entry here is a
+# Deliberate differences, each with its reason. Adding an entry here is a
 # decision to be made in review, not a way to make this test pass: it means the
 # vehicle starts differently under `ros2 launch` than under `ros2 run`.
-_DELIBERATE = {
-    # launch pins the pool profile; the bare node resolves the environment.
-    'mode': ('pool', 'auto'),
-}
+# There are none today.
+_DELIBERATE: dict = {}
 
 
 def _launch_defaults():
@@ -95,12 +92,13 @@ def test_a_listed_difference_has_not_quietly_gone_away():
         f'ros2-conventions.md, which describe the split')
 
 
-def test_yaw_source_is_the_same_on_both_paths():
-    """Named explicitly because the docs were wrong about this one for a while.
-
-    The DVL is not fitted (`vehicle-spec.md` "DVL status"). If the launch ever
-    defaults to a DVL-backed heading source again, that is a decision that has
-    to be made deliberately -- not inherited from a stale table.
+def test_no_backend_selector_survives_on_either_path():
+    """One board, one heading source, one link. `flight_controller`,
+    `yaw_source` and the `mode` connection profile chose between backends that
+    no longer exist on this vehicle; a selector with one legal value is a typo
+    waiting to be made on the pool deck.
     """
     launch, node = _launch_defaults(), _node_defaults()
-    assert launch['yaw_source'] == node['yaw_source'] == 'mavlink_ahrs'
+    for knob in ('flight_controller', 'yaw_source', 'mode', 'position_source'):
+        assert knob not in launch, f'bringup.launch.py declares {knob!r} again'
+        assert knob not in node, f'the node declares {knob!r} again'

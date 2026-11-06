@@ -71,18 +71,13 @@ def run(mongla, log=None):
         mongla.pause(SAUVC_TETHER_PAUSE_S)
         mongla.arm()
         mongla.set_depth(SAUVC_SEARCH_DEPTH_M, timeout=30)
-        # srot refuses `lock_heading`: the board holds heading itself at 500 Hz
-        # (STABILIZE for vision, AUTO for moves). On ArduSub the host lock is
-        # what keeps the blind-transit line straight.
-        if mongla.can('lock_heading'):   # refused on srot: the board holds heading
-            mongla.lock_heading(0.0, timeout=SAUVC_NAV_BUDGET_S)
+        # The board holds heading itself at 500 Hz (STABILIZE for vision, AUTO
+        # for moves), which is what keeps the blind-transit line straight.
         navigate(mongla, log)
     finally:
-        mongla.release_heading()
         # Surfacing at the end of the run is worth +5 in the rulebook and costs
         # nothing, so it is part of the mission rather than left to buoyancy.
         mongla.surface()
-        mongla.stop()
         mongla.disarm()
 
 

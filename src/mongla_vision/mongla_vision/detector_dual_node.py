@@ -6,8 +6,8 @@ nothing and removes the last soft target in the frame path.
 
 WHY THIS EXECUTABLE EXISTS
 --------------------------
-`vision_dual.launch.py` starts two `detector_node` PROCESSES. On the Jetson
-that is fine -- CUDA is happy with two contexts. On the Pi + AI HAT+ the second
+`vision_dual.launch.py` starts two `detector_node` PROCESSES. On a CUDA dev
+box that is fine. On the Pi + AI HAT+ the second
 one dies with `HAILO_OUT_OF_PHYSICAL_DEVICES (74)`, so the two-camera path has
 never started on this hardware. Measured, along with the two alternatives that
 look like they should work and do not:
@@ -121,7 +121,7 @@ _DEFAULTS = {
     # the most likely reason a detection is missed. `hailo.py` warns if it is
     # raised back.
     'conf': 0.15, 'model_conf': '', 'image_topic': '',
-    'device': 'cuda:0', 'half': True, 'iou': 0.5, 'imgsz': 640,
+    'device': 'auto', 'half': True, 'iou': 0.5, 'imgsz': 640,
     'max_det': 100, 'publish_contours': True,
     'publish_debug_image': True, 'debug_image_hz': 5.0,
     'alignment_deadband': 0.05, 'paused': False,

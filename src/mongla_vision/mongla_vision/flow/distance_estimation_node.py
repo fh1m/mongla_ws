@@ -2,8 +2,8 @@
 """distance_estimation_node -- downward-camera optical-flow distance (DVL-free).
 
 Accumulates metric distance travelled along ONE latched axis from sparse
-Lucas-Kanade optical flow on the downward camera, rotation-compensated by Pixhawk
-gyro rates and metric-scaled by Bar30 depth + a configured pool_depth_m. Bounded
+Lucas-Kanade optical flow on the downward camera, rotation-compensated by the board's
+gyro rates and metric-scaled by board depth + a configured pool_depth_m. Bounded
 by calc_distance('start'/'stop') via the latched distance_control topic.
 
 Topics
@@ -39,7 +39,7 @@ from mongla_vision.flow.flow_math import (
     interp_rate,
 )
 
-# Shi-Tomasi corner + LK params (CPU, real-time on Jetson at 640x480).
+# Shi-Tomasi corner + LK params (CPU, real-time on the Pi 5 at 640x480).
 _FEATURE_PARAMS = dict(maxCorners=120, qualityLevel=0.01, minDistance=8, blockSize=7)
 _LK_PARAMS      = dict(winSize=(21, 21), maxLevel=3,
                        criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01))

@@ -7,8 +7,8 @@
   <description>
     Mongla high-level mission planner. Provides the MonglaClient Python
     API over /mongla/move, the `mongla` CLI, and a registry of mission
-    scripts (square_pattern, arc_demo, heading_lock_demo). Future home
-    for YASMIN state-machine plans that extend the same Python client.
+    scripts (missions/), and the state machines that compose them
+    (state_machines/).
   </description>
   <maintainer email="fh1m.dev@gmail.com">Muhammad Fahim Faisal</maintainer>
   <license>MIT</license>

@@ -1,9 +1,8 @@
-"""The vision loops must actuate the SROT board, and must not touch ArduSub.
+"""The vision loops actuate the SROT board through MANUAL_CONTROL, end to end.
 
-`vision_align` / `vision_move` came out of `UNSUPPORTED_VERBS` on 2026-09-03.
-That set was the ONLY thing keeping the host motion stack unreachable on this
-backend, so the port needs a check that runs the real loop rather than one that
-greps for a function name.
+These run the REAL loops against a board fake that implements only what
+`SrotFC` does, so a loop reaching for anything else fails here rather than on
+the vehicle.
 
 A grep was written first and is recorded here as insufficient: renaming the
 DEFINITION of `_srot_drive` left every call site containing the string, so the
@@ -22,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from mongla_control.motion_vision import (       # noqa: E402
-    _is_srot, _srot_drive, align_loop, move_loop,
+    _srot_drive, align_loop, move_loop,
 )
 
 from test_motion_vision import (                 # noqa: E402
@@ -54,12 +53,6 @@ class _FakeSrot:
         return 'STABILIZE'
 
 
-def test_the_backend_predicate_is_not_true_for_pixhawk():
-    from test_motion_vision import _FakePixhawk
-    assert _is_srot(_FakeSrot()) is True
-    assert _is_srot(_FakePixhawk()) is False
-
-
 def test_srot_drive_scales_percent_to_unit():
     """The loops speak percent (-100..100); MANUAL_CONTROL speaks -1..1. A
     missing /100 is a 100x command, which on a real vehicle is full deflection
@@ -80,7 +73,7 @@ def _run_align(**kw):
     fc = _FakeSrot()
     writers = _FakeWriters()
     defaults = dict(
-        pixhawk=fc, vision_state=_FakeVision(_sample(ex=0.6, ey=0.0)),
+        fc=fc, vision_state=_FakeVision(_sample(ex=0.6, ey=0.0)),
         target_class='gate', axes={'yaw', 'lat'}, offsets={}, err_px=40.0,
         duration=0.3, gain=30.0, align_stable_frames=3, lost_grace_s=0.1,
         writers=writers, log=_Log(), abort_fn=None)
@@ -128,20 +121,18 @@ def test_gain_actually_caps_the_command():
 
 def test_move_actuates_through_manual_control_on_srot():
     fc = _FakeSrot()
-    move_loop(pixhawk=fc, vision_state=_FakeVision(_sample(ex=0.0, h_frac=0.2)),
+    move_loop(fc=fc, vision_state=_FakeVision(_sample(ex=0.0, h_frac=0.2)),
               target_class='gate', fwd_fill=80.0, mode='area',
               maintain_px=None, duration=0.3, gain=30.0, lost_grace_s=0.1,
               writers=_FakeWriters(), log=_Log(), abort_fn=None)
     assert fc.manual_calls, 'move_loop drove nothing on the srot backend'
     assert all(c[3] == 0.0 for c in fc.manual_calls), (
-        'move must never command yaw -- it is true on the ArduSub path and must '
-        'stay true here')
+        'move must never command yaw -- the board holds heading')
 
 
 def test_no_frame_ever_commands_the_depth_axis():
-    """`up` is not ported: SrotFC has no set_target_depth, and vision_verbs
-    refuses a depth-axis align. A non-zero `up` slipping through would be
-    uncommanded vertical thrust."""
+    """The board holds depth, so every vision frame carries up=0. A non-zero
+    `up` slipping through would be uncommanded vertical thrust."""
     fc = _run_align()
     assert all(c[2] == 0.0 for c in fc.manual_calls)
 
@@ -268,7 +259,7 @@ def test_an_unknown_mode_is_refused_not_assumed_fine():
 # guard says nothing about whether the guarded path invokes it.
 #
 # So this drives the REAL verb against a board in SURFACE.
-from contextlib import contextmanager, nullcontext   # noqa: E402
+from contextlib import contextmanager   # noqa: E402
 from mongla_control.vision_verbs import VisionVerbs  # noqa: E402
 
 
@@ -280,7 +271,7 @@ class _VerbHarness(VisionVerbs):
     """
 
     def __init__(self, fc):
-        self.pixhawk = fc
+        self.fc = fc
         self.log = _Log()
 
     @contextmanager
@@ -292,9 +283,6 @@ class _VerbHarness(VisionVerbs):
 
     def _resolve_vision_state(self, _camera):
         raise AssertionError('reached the vision state -- the mode gate did NOT fire')
-
-    def _ensure_alt_hold(self, _verb):
-        raise AssertionError('took the ArduSub branch on a srot backend')
 
     def _make_result(self, *a, **k):
         raise AssertionError('produced a result -- the mode gate did NOT fire')
@@ -391,7 +379,7 @@ def _run_align_real_writers(**kw):
     sent = []
     fc = _real_srot(sent)
     defaults = dict(
-        pixhawk=fc, vision_state=_FakeVision(_sample(ex=0.6, ey=0.0)),
+        fc=fc, vision_state=_FakeVision(_sample(ex=0.6, ey=0.0)),
         target_class='gate', axes={'yaw', 'lat'}, offsets={}, err_px=40.0,
         duration=0.3, gain=30.0, align_stable_frames=3, lost_grace_s=0.1,
         writers=make_writers(fc), log=_Log(), abort_fn=None)
@@ -444,7 +432,7 @@ def test_align_reaches_the_arrival_brake_on_srot_through_REAL_writers():
     fc = _real_srot(sent)
     spy = _SpyWriters(make_writers(fc))
     try:
-        align_loop(pixhawk=fc, vision_state=_FakeVision(list(_APPROACH)),
+        align_loop(fc=fc, vision_state=_FakeVision(list(_APPROACH)),
                    target_class='gate', axes={'lat'}, offsets={}, err_px=40.0,
                    duration=2.0, gain=100.0, align_stable_frames=3,
                    lost_grace_s=0.5, writers=spy, log=_Log(), abort_fn=None)
@@ -466,7 +454,7 @@ def test_the_brake_kick_leaves_as_MANUAL_CONTROL_not_an_RC_frame():
     sent = []
     fc = _real_srot(sent)
     spy = _SpyWriters(make_writers(fc))
-    align_loop(pixhawk=fc, vision_state=_FakeVision(list(_APPROACH)),
+    align_loop(fc=fc, vision_state=_FakeVision(list(_APPROACH)),
                target_class='gate', axes={'lat'}, offsets={}, err_px=40.0,
                duration=2.0, gain=100.0, align_stable_frames=3,
                lost_grace_s=0.5, writers=spy, log=_Log(), abort_fn=None)
@@ -478,7 +466,7 @@ def test_move_runs_end_to_end_on_srot_through_real_writers():
     sent = []
     fc = _real_srot(sent)
     try:
-        move_loop(pixhawk=fc, vision_state=_FakeVision(_sample(ex=0.0, h_frac=0.2)),
+        move_loop(fc=fc, vision_state=_FakeVision(_sample(ex=0.0, h_frac=0.2)),
                   target_class='gate', fwd_fill=60.0, mode='height',
                   err_px=40.0, duration=0.3, gain=30.0, lost_grace_s=0.1,
                   writers=make_writers(fc), log=_Log(), abort_fn=None)
@@ -490,9 +478,9 @@ def test_move_runs_end_to_end_on_srot_through_real_writers():
 def test_no_test_in_this_file_may_fake_the_writers_for_srot():
     """A guard on the GUARD: faking make_writers is what hid B30 for a whole round.
 
-    Not a ban on `_FakeWriters` -- it is fine for the pixhawk-path tests above.
-    This asserts only that at least one srot path exercises the real builder, so
-    the backend-specific branch can never again be entirely stubbed out.
+    Not a ban on `_FakeWriters`. This asserts only that at least one test
+    exercises the real builder, so the writers can never again be entirely
+    stubbed out.
     """
     import inspect
     src = inspect.getsource(sys.modules[__name__])
@@ -504,21 +492,20 @@ def test_no_test_in_this_file_may_fake_the_writers_for_srot():
 # --------------------------------------------------------------------------- #
 #  Downward on srot: lat + surge run, the setpoint axes are refused
 # --------------------------------------------------------------------------- #
-# The downward refusal used to be blanket, inherited from ArduSub (a downward
-# align releases Ch3 and must stream a setpoint). On srot every MANUAL_CONTROL
-# frame carries up=0 and there is no stream at all, so lat + surge is the same
-# translation the forward align already sends. What stays refused is anything
-# that MOVES the setpoint: the forward 'depth' axis and the downward descent.
+# Every MANUAL_CONTROL frame carries up=0 -- the board holds depth -- so a
+# downward lat + surge align is the same translation the forward align sends.
+# What is refused is anything that would MOVE the depth: the forward 'depth'
+# axis and the downward fill-driven descent.
 
 def test_a_downward_lat_surge_align_runs_on_srot_through_blind_frames():
-    """Executes BOTH depth-stream sites: the 5 Hz tick (target present) and
-    the blind branch (target absent). `_FakeSrot` has no `set_target_depth`,
-    so either site reaching for it raises AttributeError here -- the honest
-    outcome a permissive mock would hide."""
+    """Present, then blind, then present again: both the tracking path and the
+    blind branch must drive surge through MANUAL_CONTROL and never touch the
+    vertical axis. `_FakeSrot` implements only what SrotFC does, so a call
+    to anything else raises here rather than passing quietly."""
     present = _sample(ex=0.4, ey=0.3)
     samples = [present] * 12 + [None] * 6 + [present] * 12
     fc = _run_align(vision_state=_FakeVision(samples), axes={'lat', 'depth'},
-                    downward=True, depth_sign=-1, duration=0.8,
+                    downward=True, surge_sign=-1, duration=0.8,
                     lost_grace_s=5.0)
     assert fc.manual_calls, 'downward align drove nothing on srot'
     assert any(abs(c[0]) > 0.01 for c in fc.manual_calls), (
@@ -535,12 +522,6 @@ class _GateHarness(_VerbHarness):
 
     def _resolve_vision_state(self, _camera):
         return object()
-
-    def _suspend_heading_lock(self):
-        return nullcontext()
-
-    def _set_lock_hold(self, _on):
-        pass
 
     report_vision = _abort_fn = None
 
@@ -565,7 +546,7 @@ def test_setpoint_axes_are_refused_on_srot(kw, _stop_at_loop):
     h = _GateHarness(_ModeFC(mode='STABILIZE'))
     with pytest.raises(MovementError) as exc:
         h.vision_align(target_class='gate', **kw)
-    assert 'depth-setpoint' in str(exc.value)
+    assert 'depth setpoint' in str(exc.value)
 
 
 @pytest.mark.parametrize('kw', [

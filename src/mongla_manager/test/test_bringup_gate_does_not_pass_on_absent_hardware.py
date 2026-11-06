@@ -1,7 +1,7 @@
 """The pre-flight gate must not PASS on hardware that is not there.
 
 ⛔ WHY THIS FILE EXISTS. Measured on the vehicle on 2026-09-22, with **both
-cameras physically removed and sitting in the lab**, `bringup_check --srot`
+cameras physically removed and sitting in the lab**, `bringup_check`
 reported:
 
     [PASS] USB cameras    2 USB camera(s): platform-1000800000.codec-video-index0,
@@ -9,18 +9,15 @@ reported:
 
 Those are the Raspberry Pi's hardware video **codec** and its **ISP backend**.
 They are `/dev/v4l/by-path/*-video-index0` nodes that exist whether or not a
-camera is plugged in, and the filter took anything matching that glob. On the
-Jetson the defect could not appear, because that platform has no such nodes --
-so this shipped the moment the default platform became a Pi.
+camera is plugged in, and the filter took anything matching that glob.
 
 A pre-flight gate that passes on a hull with no cameras is worse than no gate:
 it is the failure this repository keeps naming, a plausible answer standing in
 for an absent measurement, in the one tool whose entire job is to refuse.
 
-The same run exposed section K checking for a TensorRT `.engine` and advising
-`export_engine --all (ON THE JETSON)`. The default platform is a Pi 5 with a
-Hailo-8, where the flight artifact is a `.hef` -- so that check could never
-pass, on any correctly-configured vehicle.
+The same run exposed section K checking for an artifact the vehicle cannot run.
+The platform is a Pi 5 with a Hailo-8, where the flight artifact is a `.hef`
+with its `.yaml` sidecar; that is what section K now checks.
 """
 import sys
 from pathlib import Path

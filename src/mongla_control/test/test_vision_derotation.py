@@ -8,7 +8,7 @@ import math
 
 from mongla_control.motion_vision import _derotated_ex, DEROTATE_MAX_AGE_S
 
-from test_motion_vision import _FakeVision, _FakePixhawk, _sample, _align
+from test_motion_vision import _FakeVision, _FakeBoard, _sample, _align
 
 
 PX_PER_RAD = 741.0 * 1.333      # forward camera fx in air x n_water
@@ -52,12 +52,11 @@ def test_age_is_capped_so_a_stale_box_is_not_extrapolated_forever():
 #  Through the loop: a correction that never reaches the command is nothing.  #
 # --------------------------------------------------------------------------- #
 def _lat_cmds(pix):
-    return [kw.get('lateral') for kw in pix.translations + pix.rc
-            if kw.get('lateral') not in (None, 1500)]
+    return [kw['lateral'] for kw in pix.rc if kw['lateral'] != 0]
 
 
 def _run(derotate_fn, sample, **kw):
-    pix = _FakePixhawk()
+    pix = _FakeBoard()
     _align(_FakeVision(sample), pix=pix, axes={'lat'}, err_px=5.0,
            duration=0.15, derotate_fn=derotate_fn, **kw)
     return _lat_cmds(pix)
@@ -70,8 +69,8 @@ def test_the_loop_steers_on_the_derotated_bearing():
     raw = _run(None, s)
     fixed = _run(lambda: (2.5, PX_PER_RAD), s)
     assert raw and fixed
-    assert raw[0] > 1500, raw[:3]            # uncorrected: strafe right
-    assert fixed[0] < 1500, fixed[:3]        # corrected: strafe left
+    assert raw[0] > 0, raw[:3]               # uncorrected: strafe right
+    assert fixed[0] < 0, fixed[:3]           # corrected: strafe left
 
 
 def test_a_coasted_box_is_not_derotated_twice():

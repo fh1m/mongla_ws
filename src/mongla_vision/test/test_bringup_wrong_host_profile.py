@@ -1,10 +1,9 @@
 """A profile for the WRONG HOST must say so, not fail inside V4L2.
 
 `pi_forward` names /dev/mongla_cam_forward, a udev symlink that exists on the
-Pi box; `forward` names the Jetson's Blue Robotics unit. bringup defaults
-`camera_profile:=pi_forward` to match its own `flight_controller:=srot`, so a
-Jetson operator passing `vision:=true` without `camera_profile:=forward` gets
-a device that is not there.
+Pi box; `forward` is a generic USB role. bringup defaults
+`camera_profile:=pi_forward`, so the same launch on a dev box with no such
+symlink gets a device that is not there.
 
 Without this the failure surfaces from inside the camera open, naming neither
 the profile nor the host -- on a pool deck that is a lost session for a launch
@@ -47,5 +46,5 @@ def test_the_message_NAMES_the_fix_not_just_the_problem():
         'the wrong-host error does not name `camera_profile`, the argument '
         'the operator actually has to change.')
     assert 'pi_' in window, (
-        'the message does not distinguish the Pi profiles from the Jetson '
+        'the message does not distinguish the Pi profiles from the generic '
         'ones, which is the discrimination the operator must make.')

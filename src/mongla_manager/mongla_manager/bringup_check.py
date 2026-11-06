@@ -1,38 +1,28 @@
 #!/usr/bin/env python3
-"""bringup_check -- RoboSub-proof pre-flight probe.
+"""bringup_check -- the pre-flight gate for the SROT vehicle.
 
 Walks every subsystem the AUV needs and reports whether each is not just
 *present* but *connected and usable*, so problems are caught on the deck
 instead of mid-mission.  Sections:
 
-  A. Compute / environment   ROS sourced, mongla pkgs import, disk free
-  B. Vision dependencies     numpy<2, system cv2 (not pip-shadowed), trackers
-  C. Serial drivers          ch341 (payload) present, brltty absent
-  D. Network                 BlueOS + Jetson reachability
-  E. MAVLink / autopilot     heartbeat, ARMED state, flight mode, battery V
-  F. Pixhawk USB             direct CDC device (desk mode)
-  G. Yaw source (BNO085)     USB CDC streaming {"yaw":...}
-  H. DVL (Nortek Nucleus)    IP reachable + control port open
-  I. Payload board (CH340)   port found + serial link verified (safe '0' byte)
-  J. Cameras                 forward + downward USB cameras enumerated
-  K. Vision models           Hailo .hef + its .yaml sidecar (TensorRT off-platform)
-  L. Jetson power mode       MAXN for full inference FPS
+  A.   Compute / environment   ROS sourced, mongla pkgs import, disk free
+  B.   Vision dependencies     numpy<2, system cv2 (not pip-shadowed), trackers
+  C.   Serial drivers          ch341 (the board's CH340) present, brltty absent
+  D-F. SROT control board      link, HEARTBEAT, FW behaviour rev, baro, failsafe
+  G.   Yaw source              the board's BNO085, over MAVLink
+  I.   Payload                 board channels over MAVLink
+  J.   Cameras                 forward + downward USB cameras enumerated
+  K.   Vision models           Hailo .hef + its .yaml sidecar
+  L.   Raspberry Pi power      under-voltage / throttling
 
 Each check prints PASS / WARN / FAIL.  Exit code is 0 when no FAIL (WARNs
 are advisory).  Pass ``--strict`` to make any WARN also exit non-zero (a
-hard pre-mission gate).  ``--skip-mavlink`` skips the UDP 14550 probe.
-
-``--srot`` switches sections D/E/F/I to the **SROT control board** (direct USB
-serial, firmware Hengla): it probes the serial port, the vehicle HEARTBEAT,
-armed state, depth telemetry and GAIN, and skips BlueOS / UDP 14550 / Pixhawk
-USB / the payload CH340 entirely -- on a SROT vehicle none of those exist, so
-they would pass or fail for the wrong reasons, and the payload scan would grab
-the board's own port (same CH340 VID/PID).
+hard pre-mission gate).  ``--skip-mavlink`` skips the board probe.
 
 Usage:
     ros2 run mongla_manager bringup_check
     ros2 run mongla_manager bringup_check --strict
-    ros2 run mongla_manager bringup_check --srot        # SROT-based vehicle
+    ros2 run mongla_manager bringup_check --srot-device=udpin:0.0.0.0:14550
 """
 
 from __future__ import annotations
@@ -41,13 +31,11 @@ import os
 import pathlib
 import re
 import shutil
-import socket
 import subprocess
 import sys
 import time
 from glob import glob
 
-from .connection_config import NETWORK, resolve_mode
 
 PASS = 'PASS'
 WARN = 'WARN'
@@ -67,86 +55,6 @@ def _line(tag: str, label: str, detail: str = '') -> None:
 # --------------------------------------------------------------------------- #
 # low-level probes
 # --------------------------------------------------------------------------- #
-def _ping(ip: str, timeout_s: int = 1) -> bool:
-    """One ICMP echo via /bin/ping (no root needed). Returns True if up.
-
-    Fixed argv so the IP cannot be interpolated into a shell; `ip` comes from
-    NETWORK (compile-time constant).
-    """
-    try:
-        result = subprocess.run(
-            ['ping', '-c', '1', '-W', str(int(timeout_s)), str(ip)],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            timeout=timeout_s + 1)
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
-    return result.returncode == 0
-
-
-def _udp_listening(port: int) -> bool:
-    """True iff the local host already has a listener on UDP `port`."""
-    sample = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        sample.bind(('0.0.0.0', port))
-        return False
-    except OSError:
-        return True
-    finally:
-        sample.close()
-
-
-def _udp_recv_one(port: int, timeout_s: float = 2.0) -> bool:
-    """Try to receive a single packet on UDP `port`."""
-    sample = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sample.settimeout(timeout_s)
-    try:
-        sample.bind(('0.0.0.0', port))
-        sample.recvfrom(2048)
-        return True
-    except (socket.timeout, OSError):
-        return False
-    finally:
-        try:
-            sample.close()
-        except Exception:
-            pass
-
-
-# VID/PIDs that are NOT the Pixhawk even though they enumerate as ttyACM/USB:
-# BNO085 (ESP32-C3 native CDC) and the CH340 payload board.
-_NON_PIXHAWK_VIDPID = {(0x303a, 0x1001), (0x1a86, 0x7523),
-                       (0x1a86, 0x7522), (0x1a86, 0x55d4)}
-
-
-def _pixhawk_devices() -> list:
-    """Serial devices that are plausibly the Pixhawk (desk/USB mode).
-
-    by-id name matches are trusted outright. The bare ttyACM* fallback is
-    filtered so the BNO085 (ttyACM0 on this hull) and the CH340 payload are
-    never mis-reported as the autopilot.
-    """
-    named = (glob('/dev/serial/by-id/*Pixhawk*') +
-             glob('/dev/serial/by-id/*PX4*') +
-             glob('/dev/serial/by-id/*ArduPilot*'))
-    found = set(named)
-
-    try:
-        from serial.tools import list_ports
-        for info in list_ports.comports():
-            dev = info.device
-            if not (dev.startswith('/dev/ttyACM') or dev.startswith('/dev/ttyUSB')):
-                continue
-            if (info.vid, info.pid) in _NON_PIXHAWK_VIDPID:
-                continue
-            # An unknown ACM/USB device that isn't the BNO/payload MIGHT be the
-            # Pixhawk on direct USB. Only add ttyACM* (ArduPilot enumerates ACM).
-            if dev.startswith('/dev/ttyACM'):
-                found.add(dev)
-    except Exception:
-        pass
-    return sorted(found)
-
-
 # --------------------------------------------------------------------------- #
 # A. compute / environment
 # --------------------------------------------------------------------------- #
@@ -187,7 +95,7 @@ def _check_disk() -> tuple[str, str]:
 
 
 # --------------------------------------------------------------------------- #
-# B. vision dependencies (the JetPack pitfalls, pi-and-env-traps.md E1-E3)
+# B. vision dependencies (pi-and-env-traps.md E1-E3)
 # --------------------------------------------------------------------------- #
 def _check_vision_deps() -> list[tuple[str, str, str]]:
     out: list[tuple[str, str, str]] = []
@@ -260,13 +168,13 @@ def _pkg_present(md, name: str) -> bool:
 
 
 # --------------------------------------------------------------------------- #
-# C. serial drivers (payload CH340 + brltty trap, pi-and-env-traps.md E5)
+# C. serial drivers (the board's CH340 + brltty trap, pi-and-env-traps.md E5)
 # --------------------------------------------------------------------------- #
 def _check_serial_drivers() -> list[tuple[str, str, str]]:
     out: list[tuple[str, str, str]] = []
 
-    # ch341 must exist for the CH340 payload board to get a /dev/ttyUSB* node.
-    # A fresh Tegra kernel (carrier-board/SSD swap) can ship without it.
+    # ch341 must exist for the SROT board's CH340 to get a /dev/ttyUSB* node.
+    # A fresh kernel can ship without it.
     have_ch341 = subprocess.run(['modinfo', 'ch341'],
                                 stdout=subprocess.DEVNULL,
                                 stderr=subprocess.DEVNULL).returncode == 0 \
@@ -274,11 +182,11 @@ def _check_serial_drivers() -> list[tuple[str, str, str]]:
     if have_ch341 is None:
         out.append((PASS, 'ch341 driver', 'modinfo absent -- skipped'))
     elif have_ch341:
-        out.append((PASS, 'ch341 driver', 'available (payload can enumerate)'))
+        out.append((PASS, 'ch341 driver', 'available (the board can enumerate)'))
     else:
         out.append((WARN, 'ch341 driver MISSING',
-                    'payload CH340 will have no /dev/ttyUSB* -- run '
-                    'tools/install_ch341_driver.sh (pi-and-env-traps.md E5)'))
+                    'the SROT board will have no /dev/ttyUSB* -- this kernel '
+                    'lacks ch341 (pi-and-env-traps.md E5)'))
 
     # brltty greedily grabs the CH340 (1a86:7523) as a braille display.
     try:
@@ -286,231 +194,13 @@ def _check_serial_drivers() -> list[tuple[str, str, str]]:
                                    capture_output=True, text=True).stdout
         if '\nii  brltty' in installed or installed.startswith('ii  brltty'):
             out.append((WARN, 'brltty installed',
-                        'steals the payload CH340 via usbfs -- '
+                        'steals the SROT board\'s CH340 via usbfs -- '
                         'sudo apt-get purge -y brltty (pi-and-env-traps.md E5)'))
         else:
-            out.append((PASS, 'brltty absent', 'payload CH340 not hijacked'))
+            out.append((PASS, 'brltty absent', 'the board\'s CH340 is not hijacked'))
     except (FileNotFoundError, OSError):
         pass  # not a dpkg system
     return out
-
-
-# --------------------------------------------------------------------------- #
-# E. MAVLink / autopilot (heartbeat + armed + mode + battery)
-# --------------------------------------------------------------------------- #
-def _check_mavlink() -> list[tuple[str, str, str]]:
-    port = NETWORK['mav_port']
-
-    # If a listener is already bound, the manager/SITL is running -- don't
-    # steal the port; just confirm it's there.
-    if _udp_listening(port):
-        return [(PASS, f'UDP {port} listener bound',
-                 'manager / SITL already running -- deep probe skipped')]
-
-    # Otherwise deep-probe with pymavlink: bind, wait for a heartbeat, and
-    # read ARMED state + flight mode + battery. Releases the port on exit.
-    try:
-        from pymavlink import mavutil
-    except Exception as exc:  # noqa: BLE001
-        if _udp_recv_one(port, timeout_s=2.0):
-            return [(PASS, f'UDP {port}', 'received one packet (pymavlink absent)')]
-        return [(WARN, f'UDP {port}', f'no packets; pymavlink absent ({exc})')]
-
-    import time
-    out: list[tuple[str, str, str]] = []
-    conn = None
-    try:
-        conn = mavutil.mavlink_connection(f'udpin:0.0.0.0:{port}')
-        # Wait for a heartbeat from a REAL autopilot -- BlueOS's mavlink-router
-        # and any GCS also emit HEARTBEATs (autopilot=INVALID), and matching
-        # those gives a bogus sys=0 / armed / mode reading.
-        hb = None
-        deadline = time.time() + 5.0
-        while time.time() < deadline:
-            msg = conn.recv_match(type='HEARTBEAT', timeout=1.0, blocking=True)
-            if msg is None:
-                continue
-            if msg.autopilot == mavutil.mavlink.MAV_AUTOPILOT_INVALID:
-                continue  # GCS / onboard computer / router heartbeat
-            hb = msg
-            conn.target_system = msg.get_srcSystem()
-            conn.target_component = msg.get_srcComponent()
-            break
-        if hb is None:
-            out.append((WARN, f'UDP {port} no autopilot heartbeat',
-                        'BlueOS not pushing / SITL down / use mode=desk'))
-            return out
-        out.append((PASS, 'MAVLink heartbeat',
-                    f'sys={conn.target_system} comp={conn.target_component}'))
-
-        # Pre-start, ArduSub streams only what's been requested (the manager
-        # sets rates at startup). Ask for the extended-status group so the
-        # battery check below actually gets a SYS_STATUS.
-        try:
-            conn.mav.request_data_stream_send(
-                conn.target_system, conn.target_component,
-                mavutil.mavlink.MAV_DATA_STREAM_EXTENDED_STATUS, 2, 1)
-        except Exception:
-            pass
-
-        # Armed state -- a deck check MUST see disarmed.
-        armed = bool(hb.base_mode &
-                     mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED)
-        if armed:
-            out.append((WARN, 'vehicle ARMED',
-                        'expected DISARMED on the deck -- verify before water'))
-        else:
-            out.append((PASS, 'vehicle disarmed', 'safe deck state'))
-
-        try:
-            mode = conn.flightmode
-            out.append((PASS, 'flight mode', str(mode)))
-        except Exception as exc:                    # noqa: BLE001
-            # B21: this used to `pass`, appending NO ROW AT ALL. In a checklist a
-            # check that can vanish is worse than one that fails -- a FAIL is
-            # read, an absent line is not, and the exit code was unchanged either
-            # way, so the gate passed with a check silently missing. The two
-            # neighbours here already emit on both branches (the armed check
-            # PASS/WARNs; the battery read treats 0/65535 as unknown).
-            out.append((WARN, 'flight mode',
-                        f'unreadable: {type(exc).__name__}'))
-
-        # Battery from SYS_STATUS (voltage_battery in mV; 0/65535 = unknown).
-        volts = None
-        sysst = conn.recv_match(type='SYS_STATUS', timeout=3, blocking=True)
-        if sysst is not None and getattr(sysst, 'voltage_battery', 0) not in (0, 65535):
-            volts = sysst.voltage_battery / 1000.0
-        else:
-            bat = conn.recv_match(type='BATTERY_STATUS', timeout=2, blocking=True)
-            if bat is not None:
-                cells = [v for v in getattr(bat, 'voltages', []) if 0 < v < 65535]
-                if cells:
-                    volts = sum(cells) / 1000.0
-        if volts is not None:
-            if volts < _BATT_FLAT_V:
-                out.append((WARN, 'battery voltage',
-                            f'{volts:.2f} V -- FLAT, swap/charge before mission'))
-            elif volts < _BATT_LOW_V:
-                out.append((WARN, 'battery voltage',
-                            f'{volts:.2f} V -- low for a 4S pack'))
-            else:
-                out.append((PASS, 'battery voltage', f'{volts:.2f} V'))
-        else:
-            out.append((WARN, 'battery voltage',
-                        'no SYS_STATUS/BATTERY_STATUS -- telemetry not flowing yet'))
-        return out
-    except Exception as exc:  # noqa: BLE001
-        out.append((WARN, f'UDP {port} probe error', f'{exc}'))
-        return out
-    finally:
-        try:
-            if conn is not None:
-                conn.close()
-        except Exception:
-            pass
-
-
-# --------------------------------------------------------------------------- #
-# H. DVL
-# --------------------------------------------------------------------------- #
-def _check_dvl(host: str, port: int) -> tuple[str, str]:
-    if not _ping(host, timeout_s=1):
-        return WARN, f'{host} unreachable (DVL off, not on switch, or sim mode)'
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(2.0)
-    try:
-        s.connect((host, port))
-        s.close()
-        return PASS, f'reachable at {host}:{port}'
-    except (socket.timeout, ConnectionRefusedError, OSError) as exc:
-        return WARN, f'ping OK but TCP {port} not accepting ({exc})'
-
-
-# --------------------------------------------------------------------------- #
-# G. BNO085 yaw source
-# --------------------------------------------------------------------------- #
-def _check_bno085_auto() -> tuple[str, str]:
-    try:
-        from mongla_sensors.sources.bno085 import auto_detect_port
-    except Exception as exc:  # noqa: BLE001
-        return WARN, f'mongla_sensors not importable yet: {exc}'
-    try:
-        path = auto_detect_port(baud=115200, logger=None)
-    except RuntimeError as exc:
-        return WARN, f'no BNO085 streaming yet ({str(exc).splitlines()[0]})'
-    except Exception as exc:  # noqa: BLE001
-        return WARN, f'auto-detect raised: {exc!r}'
-    return PASS, f'streaming on {path}'
-
-
-# --------------------------------------------------------------------------- #
-# I. payload board (CH340) -- present AND link-verified
-# --------------------------------------------------------------------------- #
-def _check_payload() -> tuple[str, str]:
-    """Auto-detect the payload board and verify the serial link is usable.
-
-    A successful connect writes only VERIFY_BYTE ('0'), which is outside the
-    fire command set ('1'-'4'), with dtr/rts=False -- no channel can fire.
-    """
-    try:
-        from mongla_control.payload import PayloadDriver
-    except Exception as exc:  # noqa: BLE001
-        return WARN, f'mongla_control.payload not importable: {exc}'
-
-    # B47: NEVER hand this probe the flight-controller link. The SROT board is a
-    # CH340 and enumerates as 1a86:7523 -- byte for byte the payload DevKit's
-    # VID/PID -- so on this hull an unfiltered scan returns the AUTOPILOT, and
-    # the verify step below OPENS it, which reboots it. The `exclude` parameter
-    # existed for exactly this and was being passed an empty set.
-    #
-    # This is belt to the braces of the backend default above: the srot branch
-    # skips this section entirely, so reaching here at all means someone asked
-    # for the pixhawk path. That is not a reason to let a preflight reboot the
-    # autopilot.
-    fc_exclude: set[str] = set()
-    try:
-        from .connection_config import find_srot_serial
-        _fc = find_srot_serial()
-        if _fc:
-            fc_exclude.add(_fc)
-    except Exception:                           # noqa: BLE001 -- advisory
-        pass
-
-    try:
-        port = PayloadDriver.auto_detect_port(exclude=fc_exclude)
-    except Exception as exc:  # noqa: BLE001
-        return WARN, f'auto-detect raised: {exc!r}'
-
-    if not port and fc_exclude:
-        return WARN, ('no payload board on USB bus -- the only CH340 present is '
-                      f'the flight controller ({sorted(fc_exclude)[0]}), which this '
-                      'check must not open (opening it reboots the board)')
-
-    if not port:
-        # Explain WHY -- board on the bus but no node (ch341/brltty), or absent.
-        try:
-            hint = PayloadDriver._diagnose_missing_port()
-        except Exception:
-            hint = None
-        if hint:
-            return WARN, hint
-        return WARN, ('no payload board on USB bus '
-                      '(fire() will log-stub -- ok for control-only tests)')
-
-    # Verify the link opens and accepts a byte.
-    drv = PayloadDriver()
-    try:
-        ok = drv.connect(port=port)
-    except Exception as exc:  # noqa: BLE001
-        return WARN, f'found {port} but open/verify failed: {exc!r}'
-    finally:
-        try:
-            drv.disconnect()
-        except Exception:
-            pass
-    if ok:
-        return PASS, f'verified serial link on {port}'
-    return WARN, f'found {port} but verify failed (board not responding)'
 
 
 # --------------------------------------------------------------------------- #
@@ -532,8 +222,7 @@ def _physical_cameras() -> list[str]:
         # `platform-1000880000.pisp_be-video-index0`. Measured on the vehicle
         # 2026-09-22 with BOTH cameras physically removed: this check reported
         # "[PASS] 2 USB camera(s)". A pre-flight gate that passes on a hull with
-        # no cameras is worse than no gate, and on the Jetson this never showed
-        # because that platform has no such nodes.
+        # no cameras is worse than no gate.
         if '-usb-' not in base:
             continue
         key = base.split('-video-index')[0]      # includes :1.x interface
@@ -565,7 +254,7 @@ def _check_cameras() -> tuple[str, str]:
 
 
 # --------------------------------------------------------------------------- #
-# K. vision models (TensorRT engine vs slow .pt fallback)
+# K. vision models (Hailo .hef + sidecar)
 # --------------------------------------------------------------------------- #
 def _models_dirs() -> list[str]:
     """All plausible model dirs (src dev tree + installed share), existing only.
@@ -602,13 +291,7 @@ def _models_dirs() -> list[str]:
 
 
 def _hailo_present() -> bool:
-    """Is a Hailo accelerator on this machine?
-
-    The default platform is a Pi 5 + Hailo-8, where the compiled artifact is a
-    `.hef` and TensorRT does not exist. Checking for a `.engine` there is a
-    check that can never pass, and it was shipping advice to run an exporter
-    "ON THE JETSON" -- a machine this vehicle is not.
-    """
+    """Is a Hailo accelerator on this machine?"""
     if glob('/dev/hailo*'):
         return True
     return shutil.which('hailortcli') is not None
@@ -620,25 +303,15 @@ def _check_models() -> tuple[str, str]:
         return WARN, 'models dir not found -- vision detection disabled'
     if _hailo_present():
         return _check_models_hailo(dirs)
-    # Merge by stem across dirs; a stem is engine-accelerated if a .engine
-    # exists for it in ANY model dir.
-    stems: dict[str, bool] = {}
-    for d in dirs:
-        for p in glob(os.path.join(d, '*.pt')):
-            stem = os.path.splitext(os.path.basename(p))[0]
-            has_engine = os.path.exists(os.path.join(d, stem + '.engine'))
-            stems[stem] = stems.get(stem, False) or has_engine
+    # A dev box: the .pt path replays footage, it is not the vehicle path.
+    stems = sorted({os.path.splitext(os.path.basename(p))[0]
+                    for d in dirs for p in glob(os.path.join(d, '*.pt'))})
     if not stems:
-        return WARN, (f'no .pt weights in {", ".join(dirs)} '
-                      '(gitignored -- copy them onto the Jetson)')
-    with_engine = [s for s, e in stems.items() if e]
-    if len(with_engine) == len(stems):
-        return PASS, (f'{len(stems)} model(s), all TensorRT-accelerated '
-                      '(.engine present)')
-    missing = [s for s, e in stems.items() if not e]
-    return WARN, (f'{len(with_engine)}/{len(stems)} models have a .engine; '
-                  f'{", ".join(missing)} will run slow .pt (~3-4 Hz) -- '
-                  'ros2 run mongla_vision export_engine --all (ON THE JETSON)')
+        return WARN, (f'no Hailo here and no .pt weights in {", ".join(dirs)} '
+                      '-- vision detection disabled')
+    return WARN, (f'no Hailo accelerator on this host: {len(stems)} .pt model(s) '
+                  'will run on CPU/CUDA (~3-4 Hz on CPU). Fine for footage '
+                  'replay; the vehicle runs the .hef')
 
 
 def _check_sensor_offsets() -> tuple[str, str]:
@@ -918,33 +591,7 @@ def _check_models_hailo(dirs: list[str]) -> tuple[str, str]:
 
 
 # --------------------------------------------------------------------------- #
-# L. Jetson power
-# --------------------------------------------------------------------------- #
-def _check_jetson_power() -> tuple[str, str]:
-    try:
-        out = subprocess.run(['nvpmodel', '-q'], capture_output=True, text=True,
-                             timeout=3).stdout
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        return PASS, 'not a Jetson (nvpmodel absent) -- skipped'
-    text = out.replace('\n', ' ').strip()
-    low = text.lower()
-    # Mode 0 is the HIGHEST-performance nvpmodel mode on Orin. On a "Super" board
-    # that is MAXN (~25W); on an older/backup board it's the top 15W mode -- both
-    # are the correct max for THAT board, so mode 0 = PASS either way (do NOT nag
-    # for "MAXN" by name -- a non-Super board has no MAXN and its 15W max is fine).
-    # jetson_clocks pins clocks to that mode's ceiling and does NOT survive a
-    # reboot, so PASS still reminds to (re-)run it -- an un-pinned board silently
-    # runs the detector at half FPS.
-    if 'nv power mode: 0' in low or ': 0' in low or 'maxn' in low:
-        return PASS, (f'max-perf mode ({text[:48]}) -- also run '
-                      '`sudo jetson_clocks` (does NOT survive reboot)')
-    return WARN, (f'NOT max-perf mode ({text[:48]}) -- run: sudo nvpmodel -m 0 '
-                  '&& sudo jetson_clocks  (mode 0 = this board\'s max; on a '
-                  'non-Super board that is its top 15W mode -- expected, not MAXN)')
-
-
-# --------------------------------------------------------------------------- #
-# L2. Raspberry Pi power / throttling
+# L. Raspberry Pi power / throttling
 # --------------------------------------------------------------------------- #
 # `vcgencmd get_throttled` is a bitmask. The LOW half is "happening RIGHT NOW",
 # the HIGH half is "has happened since boot" -- and the sticky half is the one
@@ -1076,7 +723,7 @@ def _gcs_failsafe_verdict(enable: float | None,
 
     `0` is the wildcard -- the board then counts ANY heartbeat that is not its own, so
     Bondor on the bench keeps the failsafe satisfied. In the water that means a dead
-    Jetson is indistinguishable from a live GCS: the failsafe never fires, and a hull
+    companion is indistinguishable from a live GCS: the failsafe never fires, and a hull
     with nobody driving it station-keeps instead of surfacing. `191`
     (MAV_COMP_ID_ONBOARD_COMPUTER) is our compid and scopes it to the companion.
 
@@ -1102,7 +749,7 @@ def _gcs_failsafe_verdict(enable: float | None,
     if int(compid) == 0:
         return (FAIL, 'GCS failsafe WILDCARDED (bench mode)',
                 f'FS_GCS_COMPID=0 saved to flash -- any station satisfies the failsafe, '
-                f'so a dead Jetson will NOT surface the hull. Set it to {ours} and save '
+                f'so a dead companion will NOT surface the hull. Set it to {ours} and save '
                 f'(on fw rev >= 7 wait for the "Params saved to flash" statustext, not '
                 f'the ACK -- the NVS write is deferred)')
     return (WARN, 'GCS failsafe scoped elsewhere',
@@ -1362,7 +1009,7 @@ def _resolve_srot_for_check(device: str = '') -> tuple[str, str]:
         return device, ''
     try:
         from .connection_config import (find_srot_serial, probe_udp_mavlink,
-                                        SROT_UDP_CONN, NETWORK)
+                                        SROT_UDP_CONN, MAV_UDP_PORT)
     except Exception:                              # noqa: BLE001
         return device or '/dev/ttyUSB0', ''
     try:
@@ -1371,17 +1018,14 @@ def _resolve_srot_for_check(device: str = '') -> tuple[str, str]:
         return '', f'ambiguous: {exc}'
     if path is not None:
         return path, ''
-    return SROT_UDP_CONN, probe_udp_mavlink(NETWORK['mav_port'], 2.0)
+    return SROT_UDP_CONN, probe_udp_mavlink(MAV_UDP_PORT, 2.0)
 
 
 def _check_srot(skip_mav: bool, device: str = '') -> list[tuple[str, str, str]]:
     """SROT board: port/endpoint, vehicle heartbeat, GAIN, depth sign.
 
-    Replaces the BlueOS/UDP-14550/Pixhawk-USB probes, which on a direct-USB SROT
-    vehicle pass or fail for entirely the wrong reasons.
-
-    `device` accepts any pymavlink connection string for the transitional setup where
-    the board hangs off a Pi and reaches us as UDP through a BlueOS/Bridget bridge.
+    `device` accepts any pymavlink connection string, for a rig where the board
+    hangs off another host and reaches us as UDP through a serial->UDP bridge.
     Without it this section can only ever FAIL on such a rig -- `find_srot_serial()`
     looks for a local CH340 that is, correctly, plugged into the Pi instead. That is
     the tool that decides whether to go in the water reporting "no board" about a
@@ -1389,7 +1033,7 @@ def _check_srot(skip_mav: bool, device: str = '') -> list[tuple[str, str, str]]:
     """
     out: list[tuple[str, str, str]] = []
     try:
-        from .connection_config import find_srot_serial, SROT_BAUD, resolve_srot_profile
+        from .connection_config import SROT_BAUD, resolve_srot_profile
     except Exception as exc:                       # noqa: BLE001
         return [(FAIL, 'connection_config import', str(exc))]
 
@@ -1568,51 +1212,21 @@ def main(argv: list[str] | None = None) -> int:
     # `--help` used to fall through and run the FULL hardware probe -- an operator
     # asking what the flags are instead got a 12-section scan of the vehicle.
     if '-h' in argv or '--help' in argv:
-        print('usage: bringup_check [--srot|--pixhawk] [--srot-device=<conn>] [--strict]\n'
-              '                     [--skip-mavlink]\n'
+        print('usage: bringup_check [--srot-device=<conn>] [--strict] [--skip-mavlink]\n'
               '\n'
-              '  --srot           SROT control board over direct USB serial (this\n'
-              '                   branch\'s default vehicle). Replaces the network /\n'
-              '                   UDP-14550 / Pixhawk-USB probes, which on a SROT\n'
-              '                   vehicle pass or fail for entirely the wrong reasons.\n'
-              '  --srot-device=   board is not on THIS host: any pymavlink conn\n'
-              '                   string, e.g. udpin:0.0.0.0:14550 when the SROT is\n'
-              '                   on the Pi behind a BlueOS/Bridget serial->UDP\n'
-              '                   bridge. Without it this section FAILs "no board"\n'
-              '                   on a rig whose board is streaming fine.\n'
+              '  --srot-device=   the board is not on THIS host: any pymavlink conn\n'
+              '                   string, e.g. udpin:0.0.0.0:14550 behind a\n'
+              '                   serial->UDP bridge. Without it this section FAILs\n'
+              '                   "no board" on a rig whose board is streaming fine.\n'
               '  --strict         any WARN exits non-zero (hard pre-mission gate)\n'
-              '  --skip-mavlink   skip the autopilot probe (no board/link attached)\n'
+              '  --skip-mavlink   skip the board probe (no board/link attached)\n'
+              '  --srot           accepted and ignored (srot is the only backend)\n'
               '\n'
-              'Exit 0 = nothing FAILed. On --srot the line that gates the water is\n'
-              '"FW behaviour rev": below 2 the board coasts on stop and arm() refuses.')
+              'Exit 0 = nothing FAILed. The line that gates the water is\n'
+              '"FW behaviour rev": below the floor arm() refuses.')
         return 0
     strict = '--strict' in argv
     skip_mav = '--skip-mavlink' in argv
-    # The SROT vehicle has no Pi, no BlueOS, no UDP and no Pixhawk: sections D/E/F
-    # would report on infrastructure that is not supposed to exist.
-    #
-    # B47: this was `'--srot' in argv` -- opt-IN, defaulting to the pixhawk path
-    # long after `flight_controller` defaulted to srot. The bare
-    # `ros2 run mongla_manager bringup_check` that CLAUDE.md tells the operator to
-    # run "at the start of every session" therefore took the PIXHAWK branch on an
-    # SROT hull, and section I opened the flight controller believing it was the
-    # payload board (both enumerate as 1a86:7523; measured on the vehicle, the
-    # ONLY such device is the SROT board). Opening it reboots it.
-    #
-    # The default now comes from the same constant the manager declares, so the
-    # tool and the stack cannot disagree again. `--srot` still forces it on;
-    # `--pixhawk` forces it off for the preserved ArduSub configuration.
-    if '--srot' in argv:
-        srot = True
-    elif '--pixhawk' in argv:
-        srot = False
-    else:
-        try:
-            from .connection_config import DEFAULT_FLIGHT_CONTROLLER
-        except Exception:                       # noqa: BLE001 -- fail SAFE, not open
-            DEFAULT_FLIGHT_CONTROLLER = 'srot'
-        srot = (DEFAULT_FLIGHT_CONTROLLER == 'srot')
-    # Transitional rig: board on the Pi, reaching us as UDP via a BlueOS bridge.
     srot_device = next((a.split('=', 1)[1] for a in argv
                         if a.startswith('--srot-device=')), '')
 
@@ -1631,7 +1245,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f' {title}')
 
     print('=' * 72)
-    print(' mongla bringup_check -- RoboSub pre-flight'
+    print(' mongla bringup_check -- pre-flight'
           + ('  [STRICT]' if strict else ''))
     print('=' * 72)
 
@@ -1643,128 +1257,63 @@ def main(argv: list[str] | None = None) -> int:
     emit(st, 'disk free (/)', det)
 
     # ---- B. vision dependencies ------------------------------------ #
-    section('B. Vision dependencies (JetPack pitfalls)')
+    section('B. Vision dependencies')
     for st, lbl, det in _check_vision_deps():
         emit(st, lbl, det)
 
     # ---- C. serial drivers ----------------------------------------- #
-    section('C. Serial drivers (payload CH340)')
+    section("C. Serial drivers (the board's CH340)")
     for st, lbl, det in _check_serial_drivers():
         emit(st, lbl, det)
 
-    if srot:
-        # ---- D-F (SROT): the board, however it is attached ---------------- #
-        # Resolve ONCE here so the section header, the checks and the closing
-        # startup hint all describe the SAME transport. Resolving in more than one
-        # place re-probes UDP (2 s each) and lets them disagree.
-        srot_conn, srot_state = _resolve_srot_for_check(srot_device)
-        section('D-F. SROT control board'
-                + ('' if not srot_conn
-                   else ' (bridged over UDP)' if not srot_conn.startswith('/dev/')
-                   else ' (direct USB serial)'))
-        if srot_state.startswith('ambiguous'):
-            # Refused, not guessed (#20): the wrong CH340 would be RESET by the open.
-            emit(FAIL, 'SROT auto-detect', srot_state.split(': ', 1)[1])
-        elif srot_state == 'silent':
-            emit(WARN, 'SROT auto-detect',
-                 'no USB serial and no MAVLink on UDP -- falling back to '
-                 f'{srot_conn}. Plug in the Type-C cable, bring up the BlueOS '
-                 'bridge, or pass --srot-device=<conn>')
-        elif srot_state == 'busy':
-            emit(WARN, 'SROT auto-detect',
-                 f'UDP port already held by another process -- could not probe. '
-                 f'Using {srot_conn}. A leftover `mongla_manager start` is the '
-                 f'usual cause: ss -lunp | grep 14550')
-        for st, lbl, det in (_check_srot(skip_mav, srot_conn) if srot_conn else ()):
-            emit(st, lbl, det)
-    else:
-        # ---- D. network ------------------------------------------------- #
-        section('D. Network reachability')
-        if _ping(NETWORK['blueos_ip']):
-            emit(PASS, 'BlueOS', NETWORK['blueos_ip'])
-        else:
-            emit(WARN, 'BlueOS unreachable',
-                 f"{NETWORK['blueos_ip']}  (expected in pool/desk mode)")
-        if _ping(NETWORK['jetson_ip']):
-            emit(PASS, 'Jetson', NETWORK['jetson_ip'])
-        else:
-            emit(WARN, 'Jetson unreachable',
-                 f"{NETWORK['jetson_ip']}  (skip if you ARE the Jetson)")
-
-        # ---- E. MAVLink / autopilot ------------------------------------ #
-        section('E. MAVLink / autopilot')
-        if skip_mav:
-            emit(WARN, 'MAVLink probe skipped', '--skip-mavlink')
-        else:
-            for st, lbl, det in _check_mavlink():
-                emit(st, lbl, det)
-
-        # ---- F. Pixhawk USB -------------------------------------------- #
-        section('F. Pixhawk USB (desk mode)')
-        pix = _pixhawk_devices()
-        if pix:
-            emit(PASS, 'Pixhawk USB CDC', pix[0])
-        else:
-            emit(PASS, 'no Pixhawk USB device', 'ok for UDP/BlueOS pool mode')
+    # ---- D-F. the board, however it is attached ------------------------ #
+    # Resolve ONCE here so the section header, the checks and the closing
+    # startup hint all describe the SAME transport. Resolving in more than one
+    # place re-probes UDP (2 s each) and lets them disagree.
+    srot_conn, srot_state = _resolve_srot_for_check(srot_device)
+    section('D-F. SROT control board'
+            + ('' if not srot_conn
+               else ' (bridged over UDP)' if not srot_conn.startswith('/dev/')
+               else ' (direct USB serial)'))
+    if srot_state.startswith('ambiguous'):
+        # Refused, not guessed (#20): the wrong CH340 would be RESET by the open.
+        emit(FAIL, 'SROT auto-detect', srot_state.split(': ', 1)[1])
+    elif srot_state == 'silent':
+        emit(WARN, 'SROT auto-detect',
+             'no USB serial and no MAVLink on UDP -- falling back to '
+             f'{srot_conn}. Plug in the Type-C cable, or pass --srot-device=<conn>')
+    elif srot_state == 'busy':
+        emit(WARN, 'SROT auto-detect',
+             f'UDP port already held by another process -- could not probe. '
+             f'Using {srot_conn}. A leftover `mongla_manager start` is the '
+             f'usual cause: ss -lunp | grep 14550')
+    for st, lbl, det in (_check_srot(skip_mav, srot_conn) if srot_conn else ()):
+        emit(st, lbl, det)
 
     # ---- G. yaw source ---------------------------------------------- #
-    # Both G and H probe hardware that is NOT FITTED on a srot vehicle. Left
-    # ungated they emit two WARNs the operator can do nothing about -- and one of
-    # them ("Plug the ESP32-C3 in") instructs them to reinstall a board that was
-    # deliberately removed. Unactionable WARNs are not free: they train an operator
-    # to skim the WARN column, which is where the firmware-rev gate lives.
-    if srot:
-        section('G. Yaw source (BNO085 on the control board)')
-        emit(PASS, 'BNO085 rides the MAVLink link',
-             'on the board (I2C0), fused at 500 Hz -> ATTITUDE; '
-             'use yaw_source:=mavlink_ahrs')
-        _line('NOTE', 'USB ESP32-C3 + BNO085', 'REMOVED from the hull -- '
-              'yaw_source:=bno085 would open a device that is not there')
-    else:
-        section('G. Yaw source (BNO085)')
-        st, det = _check_bno085_auto()
-        emit(st, 'BNO085 auto-detect', det)
-        if st == PASS:
-            _line('NOTE', 'EKF ext-nav yaw needs', 'VISO_TYPE=1, EK3_SRC1_YAW=6 '
-                  '(2 MB fmuv3); manager re-checks at startup')
-
-    # ---- H. DVL ----------------------------------------------------- #
-    if srot:
-        section('H. DVL (Nortek Nucleus 1000)')
-        _line('NOTE', 'DVL not fitted', 'never validated in water and not on the '
-              'SROT wire; move_*_dist stay refused (vehicle-spec.md "DVL status")')
-    else:
-        section('H. DVL (Nortek Nucleus 1000)')
-        st, det = _check_dvl(NETWORK['dvl_ip'], NETWORK['dvl_port'])
-        emit(st, 'Nucleus 1000', det)
+    section('G. Yaw source (BNO085 on the control board)')
+    emit(PASS, 'BNO085 rides the MAVLink link',
+         'on the board (I2C0), fused at 500 Hz -> ATTITUDE')
 
     # ---- I. payload ------------------------------------------------- #
-    if srot:
-        # The payload is the board's own PCA9685 over MAVLink -- there is no separate
-        # USB board to probe, and probing would be actively harmful: the old payload
-        # ESP32 is the SAME CH340 VID/PID as the SROT board, so the scan opens the
-        # board's own port and fights the MAVLink link.
-        section('I. Payload (SROT PCA9685 over MAVLink)')
-        emit(PASS, 'payload transport', 'PCA9685 over MAVLink; no separate USB board')
-        # The transport being up is NOT the payload working, and the old PASS on this
-        # line is what hid the dead fire() path: link up, line green, nothing able
-        # to actuate.
-        #
-        # NOTE, not WARN, and the distinction is load-bearing: whether a channel is
-        # fireable is a board ROLE read over a live MAVLink link by the running node,
-        # which a standalone preflight has no session for. An unconditional WARN would
-        # make `--strict` -- the hard pre-mission gate -- exit non-zero on EVERY srot
-        # run for a condition nobody can clear from here. A gate that always fails is
-        # a gate people stop running. Say the true thing and point at the answer.
-        _line('NOTE', 'payload channels',
-              'fire(N) addresses BOARD channel N directly (no map). Which channels '
-              'are fireable is read from the board at bring-up -- confirm the '
-              'manager logs "[PAYLOAD] board roles: FIREABLE (switch) [...]" and '
-              'that your intended channel is in that list')
-    else:
-        section('I. Payload board (CH340)')
-        st, det = _check_payload()
-        emit(st, 'payload serial link', det)
+    # The payload is the board's own channels over MAVLink -- there is no
+    # separate USB board to probe, and probing a CH340 here would open the
+    # board's own port (fc/port_guard.py: opening it reboots the board).
+    section('I. Payload (board channels over MAVLink)')
+    emit(PASS, 'payload transport', 'board channels over MAVLink; no separate USB board')
+    # The transport being up is NOT the payload working, and a PASS on this
+    # line is what once hid a dead fire() path.
+    #
+    # NOTE, not WARN, and the distinction is load-bearing: whether a channel is
+    # fireable is a board ROLE read over a live MAVLink link by the running node,
+    # which a standalone preflight has no session for. An unconditional WARN would
+    # make `--strict` -- the hard pre-mission gate -- exit non-zero on EVERY
+    # run for a condition nobody can clear from here.
+    _line('NOTE', 'payload channels',
+          'fire(N) addresses BOARD channel N directly (no map). Which channels '
+          'are fireable is read from the board at bring-up -- confirm the '
+          'manager logs "[PAYLOAD] board roles: FIREABLE (switch) [...]" and '
+          'that your intended channel is in that list')
 
     # ---- J. cameras ------------------------------------------------- #
     section('J. Cameras (forward + downward)')
@@ -1772,9 +1321,9 @@ def main(argv: list[str] | None = None) -> int:
     emit(st, 'USB cameras', det)
 
     # ---- K. vision models ------------------------------------------ #
-    section('K. Vision models (Hailo .hef, or TensorRT off-platform)')
+    section('K. Vision models (Hailo .hef + sidecar)')
     st, det = _check_models()
-    emit(st, 'model engines', det)
+    emit(st, 'model artifacts', det)
 
     # ---- K1b. Can the model tell the prop from the water? ----------- #
     section('K1b. Model separation (does it WORK, not just load?)')
@@ -1791,42 +1340,20 @@ def main(argv: list[str] | None = None) -> int:
     st, det = _check_build_freshness()
     emit(st, 'build vs src', det)
 
-    # ---- L. Jetson power ------------------------------------------- #
-    section('L. Jetson power mode (vision FPS)')
-    st, det = _check_jetson_power()
-    emit(st, 'GPU power mode', det)
-
-    # ---- L2. Pi power ---------------------------------------------- #
-    # The vehicle is a Pi, so section L above always PASSes as "not a Jetson"
-    # and the companion had NO power check at all. An under-voltage that has
-    # already occurred is invisible without this.
-    section('L2. Raspberry Pi power (under-voltage / throttling)')
+    # ---- L. Pi power ------------------------------------------------ #
+    # An under-voltage that has already occurred is invisible without this.
+    section('L. Raspberry Pi power (under-voltage / throttling)')
     st, det = _check_pi_power()
     emit(st, 'pi throttling', det)
 
-    # ---- resolved mode + launch hint ------------------------------- #
+    # ---- the link the manager will use ------------------------------ #
     section('Manager startup hint')
-    if srot:
-        # `mode` selects among the UDP-14550 PROFILES, which resolve_srot_profile()
-        # bypasses entirely -- there is no BlueOS to listen to. Printing
-        # "auto-detected mode='sim'" on a real SROT vehicle is worse than printing
-        # nothing: it looks like the preflight thinks this is a simulation.
-        # Still true when bridged: `mode` picks among the UDP PROFILES, and
-        # resolve_srot_profile() bypasses those whether the transport is a device
-        # or an endpoint. But the operator must pass the SAME endpoint to the
-        # manager, so print the command rather than the word "serial".
-        if srot_conn.startswith('/dev/'):
-            emit(PASS, 'connection',
-                 f'direct USB serial ({srot_conn}) -- auto-detected; `mode` does '
-                 f'not apply on srot')
-        else:
-            emit(PASS, 'connection',
-                 f'bridged over UDP ({srot_conn}) -- the manager auto-detects the '
-                 f'same endpoint; `mode` does not apply on srot')
+    if srot_conn.startswith('/dev/'):
+        emit(PASS, 'connection', f'direct USB serial ({srot_conn}) -- auto-detected')
     else:
-        chosen = resolve_mode('auto', logger=None)
-        emit(PASS, f'auto-detected mode={chosen!r}',
-             'picked by mode=auto (the default)')
+        emit(PASS, 'connection',
+             f'bridged over UDP ({srot_conn}) -- the manager auto-detects the '
+             f'same endpoint')
 
     # ---- summary --------------------------------------------------- #
     print()
@@ -1839,43 +1366,28 @@ def main(argv: list[str] | None = None) -> int:
         print(f'  0 FAIL, {warnings} WARN -- review above before pool day.')
         rc = 1 if strict else 0
         print('  Launch with:')
-        _print_launch_hint(srot)
+        _print_launch_hint()
     else:
         print('  All checks PASS. Launch with:')
-        _print_launch_hint(srot)
+        _print_launch_hint()
         rc = 0
     print('=' * 72)
     return rc
 
 
-def _print_launch_hint(srot: bool = False) -> None:
-    if srot:
-        # Deliberately NOT the pixhawk hint: it recommends move_forward_dist, which is
-        # permanently refused on srot (no DVL fitted, never validated), and a bare
-        # `start` whose defaults are right but whose profile talk is meaningless here.
-        print('    ros2 launch mongla_manager bringup.launch.py   '
-              '# srot + mavlink_ahrs are the defaults')
-        print('      # fire(N) = BOARD channel N -- see the [PAYLOAD] roles line;'
-              ' nothing else needs setting')
-        print('    ros2 run mongla_planner mongla arm')
-        print('    ros2 run mongla_planner mongla move_forward --duration 5 --gain 40')
-        print('    ros2 run mongla_planner mongla stop')
-        print()
-        print('  ⛔ BEFORE WATER -- the depth loop has never run closed, and it runs')
-        print('     under EVERY AUTO move (move_forward included), not just set_depth:')
-        print('    ros2 run mongla_planner mongla set_mode --target_name DEPTH_HOLD')
-        print('      1. hand-raise/lower the sub -> verticals must push BACK toward depth')
-        print('      2. trip the leak input at depth -> the demand must be ASCEND')
-        return
-    print('    ros2 run mongla_manager start              '
-          '# mode=auto picks the right profile')
-    print('    ros2 launch mongla_vision vision.launch.py camera:=forward  '
-          '# vision pipeline (optional)')
-    print('    ros2 run mongla_planner mission demo_move_see  '
-          '# demo mission')
+def _print_launch_hint() -> None:
+    print('    ros2 launch mongla_manager bringup.launch.py')
+    print('      # fire(N) = BOARD channel N -- see the [PAYLOAD] roles line;'
+          ' nothing else needs setting')
+    print('    ros2 run mongla_planner mongla arm')
+    print('    ros2 run mongla_planner mongla move_forward --duration 5 --gain 40')
+    print('    ros2 run mongla_planner mongla stop')
     print()
-    print('  DVL distance commands (pixhawk + a fitted DVL only; refused on srot):')
-    print('    ros2 run mongla_planner mongla move_forward_dist --distance_m 2.0')
+    print('  ⛔ BEFORE WATER -- the depth loop has never run closed, and it runs')
+    print('     under EVERY AUTO move (move_forward included), not just set_depth:')
+    print('    ros2 run mongla_planner mongla set_mode --target_name DEPTH_HOLD')
+    print('      1. hand-raise/lower the sub -> verticals must push BACK toward depth')
+    print('      2. trip the leak input at depth -> the demand must be ASCEND')
 
 
 if __name__ == '__main__':

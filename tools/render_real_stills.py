@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 """Run the REAL 2025 models over REAL competition footage and render the real HUD.
 
-This is the companion to tools/render_hud_stills.py, and the difference between
-them is the whole point. That one runs a SIMULATOR-trained detector over
-SIMULATOR-rendered frames; it is a rehearsal. This one loads the weights that
-were trained during the 2025 season and runs them over the footage actually
+It loads the weights that were trained during the 2025 season and runs them over the footage actually
 recorded at Mirpur and at RoboSub in Arizona.
 
 The archive lives outside the repository -- roughly 20 GB of video and 12,914
@@ -106,7 +103,7 @@ def compose(img, dets, primary, fps, vis_range):
         fps=fps, healthy=True, tracking_on=True, n_tracks=len(dets),
         primary_track_id=1 if primary else None,
         configured_classes=[d.class_name for d in dets][:6] or ["-"],
-        state=State(), yaw_source="bno085", deadband=12.0,
+        state=State(), yaw_source="mavlink_ahrs", deadband=12.0,
         err_x_history=[ex * 0.6, ex * 0.8, ex],
         err_y_history=[ey * 0.6, ey * 0.8, ey],
         conf_history=[d.score for d in dets][:8] or [0.0],

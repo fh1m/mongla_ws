@@ -4,7 +4,7 @@
 <package format="3">
   <name>mongla_control</name>
   <version>0.1.0</version>
-  <description>Mongla control stack: Pixhawk MAVLink wrapper + Mongla command facade -- no ROS2 node.</description>
+  <description>Mongla control stack: the SROT board driver + the Mongla command facade -- no ROS 2 node.</description>
   <maintainer email="fh1m.dev@gmail.com">Muhammad Fahim Faisal</maintainer>
   <license>MIT</license>
 

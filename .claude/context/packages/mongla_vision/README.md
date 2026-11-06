@@ -1,6 +1,6 @@
 # mongla_vision — eyes, and everything that keeps them honest
 
-**24k lines · 824 tests · [`src/mongla_vision`](../../../../src/mongla_vision)**
+**[`src/mongla_vision`](../../../../src/mongla_vision)**
 
 The largest package, because seeing underwater is the hard part. Water bends light, absorbs
 red first, moves particles through the frame and throws caustics across the floor. A detector
@@ -42,8 +42,8 @@ The Hailo-8 runs the network. Measured: **80.9 Hz** standalone, **53.9 Hz** thro
 ROS graph, **18.0 ms** from photon to detection. Segmentation masks are decoded without ever
 leaving integer arithmetic — 31.5 ms down to **0.93 ms**, bit-for-bit identical.
 
-The detector picks its backend from the artifact it is given: a Hailo binary, a TensorRT
-engine, or plain PyTorch. Same interface, so nothing above it changes.
+The detector picks its runtime from the artifact it is given: a Hailo binary (`.hef`) on the
+vehicle, or plain PyTorch (`.pt`) on a dev box. Same interface, so nothing above it changes.
 
 ### 4. Hold the target when the detector blinks
 
@@ -96,7 +96,7 @@ instinct is strong; the data says no.
 python3 -m pytest -q src/mongla_vision/test
 ```
 
-824 tests, including ones that run on real recorded footage rather than synthetic images, and
+The tests include ones that run on real recorded footage rather than synthetic images, and
 one that reads `measured-bars.md` so a documented threshold cannot drift from the shipped
 value.
 

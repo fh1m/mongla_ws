@@ -149,20 +149,14 @@ class _Strict:
 class _Mission(_Strict):
     """Stands in for MonglaMission."""
 
-    def __init__(self, run, backend):
+    def __init__(self, run):
         super().__init__(mongla_dsl.MonglaMission, run, 'mongla')
-        self.backend = backend
         self.vision = _Strict(vision_dsl._VisionDSL, run, 'mongla.vision')
         self.models = _Any(True)
         self.client = _Any(True)
         self.log = _Any(True)
         self.camera = 'forward'
         self.target = ''
-
-    def can(self, verb):
-        self._run.tick('mongla.can')
-        from mongla_control.fc.srot_fc import UNSUPPORTED_VERBS
-        return self.backend != 'srot' or verb not in UNSUPPORTED_VERBS
 
     def __getattr__(self, name):
         if inspect.getattr_static(self._cls, name, None) is not None:
@@ -198,20 +192,19 @@ class _Run:
 MISSIONS = sorted(discover().items())
 
 
-@pytest.mark.parametrize('backend', ['srot', 'pixhawk'])
 @pytest.mark.parametrize('truth', [True, False], ids=['all_seen', 'nothing_seen'])
 @pytest.mark.parametrize('name,run', MISSIONS, ids=[n for n, _ in MISSIONS])
-def test_mission_runs_to_its_end_against_real_signatures(name, run, truth, backend,
+def test_mission_runs_to_its_end_against_real_signatures(name, run, truth,
                                                          monkeypatch):
     monkeypatch.setattr(time, 'sleep', lambda s: None)
     r = _Run(truth)
-    mongla = _Mission(r, backend)
+    mongla = _Mission(r)
     try:
         run(mongla, _Any(True))
     except _Budget:
         pass
     except (TypeError, AttributeError, NameError, KeyError) as exc:
-        pytest.fail(f'{name} ({backend}, {"all seen" if truth else "nothing seen"}): '
+        pytest.fail(f'{name} ({"all seen" if truth else "nothing seen"}): '
                     f'{type(exc).__name__}: {exc}')
     except Exception as exc:                           # noqa: BLE001
         # A mission is allowed to refuse ITSELF (MissionRefused, a deliberate
@@ -228,9 +221,9 @@ def test_mission_runs_to_its_end_against_real_signatures(name, run, truth, backe
 def test_the_stand_in_catches_the_defect_it_exists_for():
     """Injection: a call the real DSL would reject must fail here."""
     r = _Run(True)
-    m = _Mission(r, 'srot')
+    m = _Mission(r)
     with pytest.raises(TypeError):
-        m.lock_heading(target=0.0, timeout=1)          # real kwarg is `degrees`
+        m.set_depth(depth=-1.0, timeout=1)             # real argument is `meters`
     with pytest.raises(AttributeError):
         m.no_such_verb()
     with pytest.raises(TypeError):

@@ -1,6 +1,6 @@
 # mongla_manager — the node that owns the vehicle
 
-**8.5k lines · 469 tests · [`src/mongla_manager`](../../../../src/mongla_manager)**
+**[`src/mongla_manager`](../../../../src/mongla_manager)**
 
 Exactly one process in the running system holds the link to the flight-control board. This is
 it. Everything else — the CLI, a mission, a state machine, the web console — asks *this* node
@@ -18,16 +18,15 @@ mongla arm ─────► /mongla/move (action) ─────► auv_manag
                                                     │
                                     ┌───────────────┼────────────────┐
                                     ▼               ▼                ▼
-                          refused on this    run ON THE BOARD   run HERE as a
-                          backend, clearly   as one primitive   host-side loop
+                          not a verb:        run ON THE BOARD   run HERE as a
+                          Unknown command    as one primitive   host-side loop
 ```
 
 The node answers three questions for every goal:
 
-1. **Is this verb supported on this backend?** Six are refused on the srot board —
-   `lock_heading`, the three distance moves, `arc`, `style_yaw`. They are refused *before
-   dispatch*, with a message saying why: a refusal is safer than a verb that silently does
-   nothing.
+1. **Is this a verb at all?** A name that is not in the registry fails with
+   `Unknown command` and puts nothing on the wire — a mission written for the old backend
+   fails by name instead of silently doing nothing.
 2. **Can the board do it better than we can?** Eleven verbs — the moves, turns, `set_depth`,
    `stop`, `pause`, `style_roll` — collapse into a single on-board primitive. The board runs
    and brakes the motion itself at 500 Hz and reports when it is done.
@@ -41,8 +40,8 @@ The node answers three questions for every goal:
 | `/mongla/state` | armed, mode, heading, depth, battery | on change plus a heartbeat; a missing number is `NaN`, never `0.0` |
 | `/mongla/imu` · `/mongla/imu_rates` | the board's inertial data | stamped with the board's own clock where available |
 | `/mongla/demand` | what we just asked for | the estimator uses it to predict motion |
-| `/mongla/esc_rpm` | per-thruster RPM | srot only — it did not exist before |
-| `/mongla/flare_order` | the competition order received over the radio | srot only, latched |
+| `/mongla/esc_rpm` | per-thruster RPM | from the board's ESC telemetry; a message count never proves a thruster is alive |
+| `/mongla/flare_order` | the competition order received over the radio | latched |
 
 ## Entry points
 
@@ -96,7 +95,7 @@ vehicle up bare, then add one at a time.
 python3 -m pytest -q src/mongla_manager/test
 ```
 
-469 tests (pytest-collected cases), no hardware required: the board, the cameras and the ROS graph are all faked at
+No test needs hardware: the board, the cameras and the ROS graph are all faked at
 their real boundaries. Several tests read the documentation in `.claude/context/` and fail
 when a documented constant no longer matches the code.
 

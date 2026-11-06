@@ -14,7 +14,7 @@ the bug. Architecture and reasoning: [The Shift](../../../docs/the-shift.md).
 | ESCs | BLHeli_S reflashed to **Bluejay** | bidirectional DShot — this is what makes RPM telemetry exist |
 | Flight controller | **SROT board**, firmware **Hengla** | ESP32 (dual core) + RP2350 Pico |
 | Companion | **Raspberry Pi 5 + Hailo-8 AI HAT** | ROS 2 Jazzy on the vehicle |
-| Link | one **USB-C** cable, MAVLink 2 @ 115200 | no network, no router, no BlueOS |
+| Link | one **USB-C** cable, MAVLink 2 @ 115200 | no network, no router |
 | IMU | BNO085, **on the board**, fused up to 400 Hz | read at 500 Hz by the control loop |
 | Depth | Bar30 / MS5837, **on the board** | reported as altitude: negative below the surface |
 | Leak · kill · water temp | on the board | kill state comes from the power board over ESP-NOW |
@@ -36,9 +36,9 @@ the bug. Architecture and reasoning: [The Shift](../../../docs/the-shift.md).
 
 | Thing | Status |
 |---|---|
-| **DVL** (Nortek Nucleus 1000) | never fitted, never validated in water. Distance comes from the downward camera; the `*_dist` verbs are refused on srot |
+| **DVL** (Nortek Nucleus 1000) | never fitted, never validated in water. Distance comes from the downward camera; there is no distance-closed move verb |
 | **External IMU board** (ESP32-C3 + BNO085) | removed 2026-08-01 — the IMU is on the SROT board |
-| **Pixhawk / ArduSub / BlueOS** | replaced. Preserved on the `pixhawk` branch; see [`legacy-pixhawk-and-sitl.md`](legacy-pixhawk-and-sitl.md) |
+| **Pixhawk / ArduSub / BlueOS** | replaced by the SROT board. The old stack is preserved at the tag `last-with-pixhawk-and-sim` |
 | **Hydrophone** | none. Any task that identifies a prop acoustically is not separable for us |
 | **Thrusters, currently** | not mounted for bench work — 958/958 ESC frames read zero, which is why thruster health reads UNKNOWN |
 

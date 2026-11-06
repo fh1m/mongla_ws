@@ -5,7 +5,7 @@
 repo's guard against its oldest and most expensive defect -- a module that is
 written, tested, and imported by nothing -- and it covers **one package**.
 Five others had never been swept: `mongla_control` (1 283 tests),
-`mongla_localization`, `mongla_planner`, `mongla_sensors`, `mongla_manager`.
+`mongla_localization`, `mongla_planner`, `mongla_manager`.
 
 Swept for the first time on 2026-09-25, it found four:
 
@@ -84,8 +84,7 @@ def importers(stem: str, exclude: pathlib.Path) -> list:
     ⛔ `tools/` IS SCANNED TOO, and that is not optional. Scanning only `src/`
     reported `draw_strip.py` as 471 unreachable lines whose own note said
     "delete it or revive it deliberately" -- and it is imported by
-    `tools/render_hud_stills.py` and `tools/render_real_stills.py`, which
-    generate the site's HUD imagery. A sweep that recommends deleting live
+    `tools/render_real_stills.py`, which generates the site's HUD imagery. A sweep that recommends deleting live
     code is worse than no sweep.
     """
     pat = re.compile(

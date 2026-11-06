@@ -50,7 +50,7 @@ the forward mount is the **single largest vision win available, and it is a
 purchase, not a sprint.**
 
 ⭐⭐ **And here is the sharpest way to say why it matters.** The consumer ticks at
-**50 Hz** (`VISION_LOOP_HZ_SROT`, soaked 49.86 Hz) while detections arrive at
+**50 Hz** (`VISION_LOOP_HZ`, soaked 49.86 Hz) while detections arrive at
 **27.11 Hz** — so **the vision servo acts on a stale detection roughly half its
 ticks.** That is not a throughput complaint; it is the control loop steering on
 old information every other tick.
@@ -348,7 +348,7 @@ useful than the items.
 **The recurring shapes**, worth naming so they can be spotted next time:
 
 1. **Always-on multipliers bought for rare frames** — TTA, SAHI, tiling.
-2. **Benchmarks from hardware we do not have** — every laptop and Jetson figure;
+2. **Benchmarks from hardware we do not have** — every laptop and borrowed-GPU figure;
    our Pi is 2.4–4× slower than the i5 in the XFeat paper.
 3. **Gains measured against a baseline weaker than ours** — most flow accuracy
    tables, against an estimator already at 0.07 %.

@@ -15,23 +15,16 @@ is a plain Python module that exposes one `run(mongla, log)` function.
 
 > ## ⛔ Read this before copying a recipe
 >
-> This cookbook predates the move to the SROT board, and some recipes still show the older
-> backend's idioms. The **DSL verbs are unchanged** — what changed is where they run:
+> - **The board holds depth and heading at 500 Hz.** There is no host heading lock and no
+>   depth vision axis: `set_depth` first, then align. On the downward camera `fwd=` is the
+>   fore/aft surge offset; on the forward camera it is the fill standoff.
+> - **Distance is time.** No DVL is fitted, so there is no distance-closed move: use the timed
+>   moves, or the downward camera's own distance bracket (`calc_distance`).
+> - **`surface()` is the last motion.** Every board verb, `stop` included, re-enters AUTO and
+>   takes the hull back down.
 >
-> - **`lock_heading` is refused on srot.** The board holds heading itself at 500 Hz. Ask
->   first: `if mongla.can('lock_heading'): mongla.lock_heading(0.0)`. A mission that cannot
->   do without a verb says so up front with `mongla.require('<verb>', why=...)`.
-> - **`ALT_HOLD` is not a mode on this board.** `set_depth` works; the board owns depth. A
->   recipe that engages ALT_HOLD explicitly is describing the legacy path.
-> - **`move_*_dist`, `arc` and `style_yaw` are refused on srot.** Use the timed moves, or the
->   downward camera's own distance bracket (`calc_distance`). The DVL recipes that used
->   to live here were retired (no DVL is fitted); see
->   [`legacy-pixhawk-and-sitl.md`](../platform/legacy-pixhawk-and-sitl.md).
-> - **On the downward camera, the depth-setpoint axes are refused**: sideways and fore/aft
->   run normally.
->
-> The current contract is [`command-reference.md`](command-reference.md); the legacy path is
-> [`legacy-pixhawk-and-sitl.md`](../platform/legacy-pixhawk-and-sitl.md).
+> The verb contract is [`command-reference.md`](command-reference.md); the generated table is
+> [`reference/commands.md`](../reference/commands.md).
 
 ---
 
@@ -88,8 +81,10 @@ the two verbs behave** and **how to tune them**.
 
 ## 0.5 Desk / Bench Testing with Pretrained Model (yolov11n + person)
 
-No custom weights yet? Run this on a laptop with a webcam — no pool, no vehicle
-needed (use `mode:=sim` or just call the mission runner without arming).
+No custom weights yet? Run the vision half on a laptop with a webcam — no pool, no
+vehicle. The detector, tracker and verbs' pixel errors are real; the motion lines need a
+connected board, so run them on the bench board with the props off, or check the mission
+off-vehicle against the real DSL (`test_every_mission_runs_against_the_real_dsl.py`).
 
 ```python
 def run(mongla, log):
@@ -164,7 +159,7 @@ Two namespaces, one object:
 | Namespace | What it does | Who closes the loop |
 |---|---|---|
 | `mongla.*` | timed moves, turns, depth, arm/disarm | **the SROT board**, at 500 Hz |
-| `mongla.vision.*` | steer on a detection (`align`, `move`) | the Pi, on pixel error, 20 Hz |
+| `mongla.vision.*` | steer on a detection (`align`, `move`) | the Pi, on pixel error, 50 Hz |
 
 A mission usually alternates: a timed move to *get near*, then the two vision
 verbs to *land precisely*.
@@ -180,6 +175,7 @@ def run(mongla, log):
     mongla.vision.move('gate', fwd=80, mode='area', # vision -- drive in
                        gain=35, duration=20)
     mongla.move_back(2.0, gain=60)                  # timed -- withdraw
+    mongla.surface()                                # the last motion
     mongla.disarm()
 ```
 
@@ -188,7 +184,8 @@ def run(mongla, log):
 ## 2. Hard rules (read them, internalise them)
 
 1. **One verb, one job.** `move_forward` drives forward; `yaw_right` turns.
-   Mixing axes is what `vision.align` is for (any subset of lat / yaw / depth).
+   Mixing axes is what `vision.align` is for (any subset of lat / yaw, plus a
+   forward standoff or a downward surge).
    Predictable verbs are what make a mission debuggable from its log.
 
 2. **Vision informs control, never fights it.** `vision.align(t, yaw=0)` is a
@@ -219,10 +216,10 @@ def run(mongla, log):
    refused or the move stalled -- check it when the next line depends on it.
    The mission runner stops, brakes and disarms on any exit, including Ctrl-C.
 
-7. **Ask before using a verb the board may refuse.** `arc`, `lock_heading`,
-   `style_yaw` and the `*_dist` verbs are refused on srot:
-   `if mongla.can('lock_heading'): ...`, or `mongla.require('arc', why=...)`
-   to stop the mission on the deck rather than discover it at depth.
+7. **`surface()` is the last motion.** Every board verb is a `SROT_MOVE`,
+   which enters AUTO and takes the hull back out of SURFACE. A cleanup that ends
+   `surface(); stop()` holds the vehicle at depth; `test_sauvc_srot_port.py`
+   refuses it.
 
 ---
 
@@ -232,7 +229,7 @@ def run(mongla, log):
 
 Every verb is a method on the `MonglaMission` you receive in
 `run(mongla, log)`. The full generated table, with what runs on the board and
-what is refused: [`reference/commands.md`](../reference/commands.md).
+what runs here: [`reference/commands.md`](../reference/commands.md).
 
 ⛔ **Every motion verb below enters the board's AUTO mode, and AUTO closes the
 depth loop -- which has never run closed in water.** Two armed bench checks
@@ -301,12 +298,8 @@ mongla.pause(2.0)      # station-keep for 2 s
 ⛔ **AUTO never exits by itself.** After a move, manual frames are discarded
 until the mode changes. The vision verbs set STABILIZE and verify it took.
 
-#### Refused on srot (pixhawk / simulator only)
-
-`arc`, `lock_heading`, `style_yaw`, `move_forward_dist`,
-`move_back_dist`, `move_lateral_dist`. They run in the simulator, which flies
-ArduSub SITL by design. On the vehicle they return `success=False` before
-anything is sent.
+A verb that is not in the table does not exist: the manager answers
+`Unknown command` and nothing reaches the board.
 
 ---
 
@@ -319,7 +312,7 @@ of `target` in `camera`; both treat `gain` as a hard max-speed cap; and
 `VisionResult`, so the mission simply continues to the next line.
 
 ```python
-mongla.vision.align(target, *, lat=None, yaw=None, depth=None,
+mongla.vision.align(target, *, lat=None, yaw=None, fwd=None,
                     err=40, duration=20, gain=30,
                     fallback=None, camera=None) -> VisionResult
 
@@ -346,18 +339,20 @@ ClassRef (which auto-switches model + class filter first).
 
 #### `align` — centre the target on selected axes
 
-Each of `lat` / `yaw` / `depth` is **`None` = axis OFF**, or a **number =
-axis ON**, where the number is the **signed pixel offset from centre**
-(`0` = dead centre, `+` = right/below, `-` = left/above). `lat` + `yaw` are
-horizontal (Ch6 strafe / Ch4 rotate); `depth` is vertical. **At least one
-axis is required.** `align` reports `ALIGNED` once *every* active axis sits
-within `err` px for `vision.align_stable_frames` ticks (3 @ 20 Hz ≈ 0.15 s).
+Each of `lat` / `yaw` is **`None` = axis OFF**, or a **number = axis ON**, where
+the number is the **signed pixel offset from centre** (`0` = dead centre, `+` =
+right, `-` = left). `lat` strafes, `yaw` rotates. On the **downward** camera `fwd`
+is a third centring axis — the fore/aft surge offset (image-Y). On the forward
+camera `fwd` is a one-sided fill standoff, not a centring axis. **At least one
+centring axis is required.** `align` reports `ALIGNED` once *every* active axis
+sits within `err` px for `vision.align_stable_frames` **distinct detections**,
+then re-measures after braking (`DRIFTED` if it moved out of band).
 
 ```python
 mongla.vision.align('gate', yaw=0, lat=0)                      # centre horizontally
-mongla.vision.align('hole', yaw=0, lat=0, depth=0, err=12)     # tight 3-axis lock
+mongla.vision.align('hole', yaw=0, lat=0, err=12)              # tight lock
 mongla.vision.align('red_pipe', yaw=0, lat=80)                 # hold pipe 80 px right
-mongla.vision.align('fire', lat=0, depth=0, camera='downward') # downward: lat + fore/aft
+mongla.vision.align('fire', lat=0, fwd=0, camera='downward')   # downward: lat + fore/aft
 ```
 
 #### `move` — drive forward to a bbox fill ratio
@@ -375,7 +370,7 @@ measured by `mode`:
 forward; never touches lat/yaw/depth). `hold=s` station-keeps at the fill
 target for `s` seconds before exiting (`None` = exit on reach). **`move`
 never re-centres yaw or depth** — the board holds depth, and holds heading in
-STABILIZE (on the simulator's ArduSub, ALT_HOLD and the heading lock do).
+STABILIZE.
 
 ```python
 mongla.vision.move('gate', fwd=80, mode='area')                    # drive through gate
@@ -397,9 +392,9 @@ You branch on it directly:
 # brake=False on the fire path: the arrival brake can emit a 0.2s kick on a fast
 # snap-in, nudging the hull off-aim between lock-confirm and fire(). No benefit
 # when firing from a lock (you are not moving away), so disable it.
-if mongla.vision.align('hole', yaw=0, lat=0, depth=0, err=12, gain=25, yaw_gain=10,
+if mongla.vision.align('hole', yaw=0, lat=0, err=12, gain=25, yaw_gain=10,
                        brake=False):
-    mongla.fire(1)                       # fire only on a confirmed lock
+    mongla.fire(TORPEDO_1_CHANNEL)       # only on a confirmed lock
 else:
     log.info('hole never locked — holding fire')
 ```
@@ -411,6 +406,7 @@ else:
 | 2      | `TIMEOUT`   | `duration` elapsed without success                     |
 | 3      | `NO_CAMERA` | camera pipeline not up (no `camera_info`)              |
 | 4      | `ABORTED`   | goal cancelled (cooperative abort)                     |
+| 5      | `DRIFTED`   | align: centred while moving, out of band once stopped and re-measured |
 | —      | `FAILED`    | DSL-side server/setup error (bad camera, disarmed, …)  |
 
 A miss never stops the mission — control falls through to the next step.
@@ -510,12 +506,11 @@ HOLD_PER_STEP = 3.0
 for _ in range(ORBIT_STEPS):
     mongla.yaw_left(ORBIT_STEP, timeout=10.0, settle=0.3)   # pivot in place
     mongla.vision.align('orange_flare',
-                        yaw=0, depth=0, gain=30,
+                        yaw=0, gain=30,
                         duration=HOLD_PER_STEP)             # re-centre on the flare
 ```
 
-The 12-step polygon approximates a circle. (`arc` would be smoother, but it is
-refused on srot.)
+The 12-step polygon approximates a circle; there is no `arc` verb.
 
 ### Re-centring while driving forward
 
@@ -653,8 +648,7 @@ Three habits it shows that every mission should copy:
 
 1. **Every constant is named** and lives in `competition_config.py`, with the
    reason beside it.
-2. **A verb the board refuses is asked about, not assumed**:
-   `if mongla.can('lock_heading'): mongla.lock_heading(...)`.
+2. **The cleanup ends on `surface()`**, and nothing that moves comes after it.
 3. **A guess is never counted as a success.** The blind leg is flown, but the
    return value only counts what vision confirmed.
 
@@ -664,7 +658,7 @@ Three habits it shows that every mission should copy:
 |-----------|-----------|
 | Gate partially off-frame (one post visible) | `align`'s yaw axis steers toward the visible bbox centre — no special code needed |
 | Gate fills 90%+ of frame (too close) | `move` exits the moment fill ≥ `fwd`; pick a smaller `fwd` (e.g. 80) with `mode='area'` |
-| Flare at distance (narrow, ~10% frame height) | `align(yaw=0, depth=0)` still has signal; `move(fwd=45, mode='height')` closes in |
+| Flare at distance (narrow, ~10% frame height) | `align(yaw=0, lat=0)` still has signal; `move(fwd=45, mode='height')` closes in |
 | Detection flicker in turbid water | the loop coasts for `vision.lost_grace_s` (default 1.0 s) before LOST; raise it to ride out longer drop-outs |
 | False positives (non-target debris) | the shipped `conf:=0.45` already filters these; real detections are 0.90-0.97 |
 
@@ -681,7 +675,7 @@ mongla.countdown(15, message='Stand clear. Starting autonomous run.')
 ```
 
 Prints an ASCII box countdown to stdout. The mission continues immediately
-after. All onboard compute (Pi, Pi, DVL, Pixhawk) is self-sufficient —
+after. Everything the run needs is on the vehicle (the Pi and the board) —
 removing the tether during this window leaves the AUV fully autonomous.
 
 ### Offline pre-pool testing with a video file
@@ -707,42 +701,43 @@ behave identically with `video_file` as with a live camera.
 The control engine is two P-loops on **pixel error** (`motion_vision.py`).
 `gain` clamps every output; `err` (px) is the settle tolerance.
 
-**`align_loop`** — one tick @ 20 Hz:
+**`align_loop`** — one tick @ 50 Hz:
 ```
 sample = vision_state.bbox_error(target_class)        # None if class absent
 if sample is None or sample.age_s > lost_grace_s:
-    -> write neutral RC, hold depth setpoint, count toward LOST
+    -> send a neutral demand, count toward LOST
 else:
     half_w, half_h = W/2, H/2
     # per ACTIVE axis: signed pixel control error (offset shifts the aim point)
     'yaw':   ctrl = sample.ex - off_yaw/half_w;  epx = |ctrl|*half_w
-             yaw_pct = clamp( ctrl * kp_yaw, -gain, +gain)      -> Ch4 (no negate)
+             yaw_pct   = clamp( ctrl * kp_yaw, -gain, +gain)    -> MANUAL_CONTROL r
     'lat':   ctrl = sample.ex - off_lat/half_w;  epx = |ctrl|*half_w
-             lat_pct = clamp( ctrl * kp_lat, -gain, +gain)      -> Ch6
-    'depth': ctrl = sample.ey - off_dep/half_h;  epx = |ctrl|*half_h
-             depth_setpt -= clamp(ctrl*kp_depth, -nudge, +nudge) * depth_sign
-    ALIGNED when every active axis has epx <= err_px for align_stable_frames ticks
+             lat_pct   = clamp( ctrl * kp_lat, -gain, +gain)    -> MANUAL_CONTROL y
+    'surge': ctrl = sample.ey - off_dep/half_h;  epx = |ctrl|*half_h     # DOWNWARD only
+             surge_pct = clamp( ctrl * kp_lat * surge_sign, -gain, +gain) -> MANUAL_CONTROL x
+    ALIGNED when every active axis has epx <= err_px for align_stable_frames detections,
+    then VERIFY: re-measure after braking -> DRIFTED if out of band, LOST if not re-seen
 ```
 
-**`move_loop`** — one tick @ 20 Hz:
+**`move_loop`** — one tick @ 50 Hz:
 ```
 fill = {'area': sqrt(w_frac*h_frac), 'width': w_frac, 'height': h_frac}[mode]
 if fill >= fwd_fill:                # reached -> station-keep, exit after hold_s
     fwd_pct = 0
 else:
-    fwd_pct = clamp((fwd_fill - fill) * kp_forward, 0, gain)        -> Ch5
+    fwd_pct = clamp((fwd_fill - fill) * kp_forward, 0, gain)        -> MANUAL_CONTROL x
 if maintain_on:                     # optional lateral hold while driving
     ctrl    = sample.ex - maintain_px/half_w
-    lat_pct = clamp(ctrl * kp_lat, -gain, +gain)                    -> Ch6
-# yaw and depth are NEVER commanded by move (ArduSub holds depth; lock holds yaw)
+    lat_pct = clamp(ctrl * kp_lat, -gain, +gain)                    -> MANUAL_CONTROL y
+# yaw and depth are NEVER commanded by move: the board holds both in STABILIZE
 ```
 
-- Depth integrates **incrementally** (`nudge = 0.02 m × gain/100` per tick)
-  -- on the simulator. ⛔ On srot the depth-setpoint axes are refused (the
-  board owns depth), so `depth=` on the forward camera does nothing there.
-- Sign rules (forward cam): `ex>0` = target right, `ey>0` = target below.
-  Ch4>1500 = yaw RIGHT and Ch6>1500 = strafe RIGHT (current hull), so neither
-  yaw nor lat is negated — both share `ex` polarity (pool-verified 2026-06).
+- The demand goes out as `MANUAL_CONTROL` in STABILIZE; the board's 500 Hz loop holds depth
+  and heading underneath it. A forward-camera depth axis raises `ValueError`.
+- Sign rules (forward cam): `ex>0` = target right, `ey>0` = target below. A positive yaw
+  demand turns right and a positive lateral demand strafes right, so neither yaw nor lat is
+  negated — both share `ex` polarity. The downward surge sign depends on the mount:
+  `surge_sign`, verified disarmed with `vision_thrust_check --camera downward`.
 - `gain` is a hard clamp on every output — the AUV never exceeds it.
 
 Reference implementation:
@@ -762,7 +757,6 @@ Reference implementation:
 | -------------------- | ----------- | ------------------------------------------------------------------- |
 | `vision.kp_yaw`      | 30 .. 90    | Too low: slow centre. Too high: oscillation around dead-on.         |
 | `vision.kp_lat`      | 30 .. 90    | Same as yaw, but with strafe oscillation.                           |
-| `vision.kp_depth`    | 0.02 .. 0.1 | simulator only (refused on srot). Too low: drifts vertically; too high: fights the depth hold. |
 | `vision.kp_forward`  | 100 .. 300  | Too low: never reaches target distance. Too high: surge / overshoot. |
 
 ### Settle / loss / fill
@@ -770,7 +764,7 @@ Reference implementation:
 | Param                        | Sane range | Notes                                          |
 | ---------------------------- | ---------- | ---------------------------------------------- |
 | `vision.lost_grace_s`        | 0.5 .. 1.5 | Seconds the loop coasts on a loss before reporting LOST (then the `fallback` runs). Longer tolerates more dropped frames. |
-| `vision.align_stable_frames` | 2 .. 5     | Ticks @ 20 Hz every active axis must stay within `err` before `align` reports ALIGNED. 3 ≈ 0.15 s. |
+| `vision.align_stable_frames` | 2 .. 5     | Distinct detections every active axis must stay within `err` before `align` reports ALIGNED. 3 ≈ 0.1 s at 30 Hz, ~1 s at 3 Hz. |
 | `vision.frame_fill_default`  | 60 .. 95   | `move`'s `fwd` fill % used when the mission leaves `fwd` unset. |
 
 The other knobs — `err` (pixel tolerance), `duration` (time budget), `gain`
@@ -857,16 +851,16 @@ def reacquire(mongla, should_stop):
             return
 ```
 
-### 6.5  Full 3-axis align, then forward close-in
+### 6.5  Full align, then forward close-in
 
 ```python
 def run(mongla, log):
     mongla.camera = 'forward'
     mongla.arm()
-    mongla.set_depth(-1.5)
-    # align owns the three centring axes at once (yaw + lat + depth);
+    mongla.set_depth(-1.5)               # the board owns depth from here on
+    # align owns the two centring axes at once (yaw + lat);
     # then move owns the forward close-in. Two verbs, full lock.
-    mongla.vision.align('gate', yaw=0, lat=0, depth=0,
+    mongla.vision.align('gate', yaw=0, lat=0,
                         gain=30, duration=20, fallback=creep_forward)
     mongla.vision.move('gate', fwd=80, mode='area', gain=35, duration=20)
     mongla.disarm()
@@ -932,8 +926,8 @@ def run(mongla, log):
     # Phase 2: descend and switch to the downward camera for the bin
     mongla.set_depth(-1.5, settle=1.5)
     mongla.use_camera('downward')
-    # downward cam: lat = left/right, depth axis = fore/aft (see §6.9)
-    mongla.vision.align('bin', lat=0, depth=0, err=30, gain=30, duration=20)
+    # downward cam: lat = left/right, fwd = fore/aft surge (see §6.9)
+    mongla.vision.align('bin', lat=0, fwd=0, err=30, gain=30, duration=20)
     mongla.disarm()
 ```
 
@@ -941,33 +935,33 @@ def run(mongla, log):
 
 The downward camera looks straight down, so `align`'s axes do different
 physical work than on the forward camera. Centre over the target with
-`lat` + `depth` (skip `yaw`; `align` has no `forward` axis):
+`lat` + `fwd` (skip `yaw`):
 
-- `lat=0`   → Ch6 strafe: centres the target **left/right** in the frame.
-- `depth=0` → nudges the AUV to centre the target along the **fore/aft**
-  (image-Y) sense; the loop auto-flips `depth_sign` for the downward cam.
-  This `depth_sign` flip is the **only** automatic downward adaptation.
+- `lat=0` → strafe: centres the target **left/right** in the frame.
+- `fwd=0` → surge: centres the target **fore/aft** (image-Y), two-sided and
+  braked. `surge_sign` flips it for the mount; verify it disarmed with
+  `vision_thrust_check --camera downward` — a wrong sign is positive feedback.
 - `yaw` is skipped — top-down yaw from a bbox is unreliable.
-- forward *fill* is a separate concern: it lives on `move`, never on `align`.
+- depth is the board's: `set_depth` before the align, never during it.
 
 ```python
 mongla.use_camera('downward')
 
-# CORRECT: lat + depth centre the AUV over the bin; yaw off.
-mongla.vision.align('fire', lat=0, depth=0, err=30, gain=30, duration=20)
+# CORRECT: lat + fwd centre the AUV over the bin; yaw off.
+mongla.vision.align('fire', lat=0, fwd=0, err=30, gain=30, duration=20)
 
 # WRONG: yaw-only does nothing useful from a top-down view.
 # mongla.vision.align('fire', yaw=0, duration=20)
 ```
 
-Mirrors `missions/task_bin.py`. If you use a custom camera id other than
-`'downward'`, the `depth_sign` flip does not apply — handle polarity yourself.
+Mirrors `missions/task_bin.py`. The axis remap is explained once in
+[`downward-camera.md`](../perception/downward-camera.md).
 
 ### 6.10  Offset alignment (the axis value IS the offset)
 
 There is no separate `offset_x` / `offset_y` kwarg any more. The **number you
-pass to `lat` / `yaw` / `depth` IS the signed pixel offset** from centre
-(`0` = centre, `+` = right/below, `-` = left/above). For `move`, `maintain=±px`
+pass to `lat` / `yaw` (and, downward, `fwd`) IS the signed pixel offset** from
+centre (`0` = centre, `+` = right/below, `-` = left/above). For `move`, `maintain=±px`
 holds a lateral offset while driving forward.
 
 **Slalom side-of-pipe pass** — sit 80 px right of the pipe, then drive in
@@ -978,11 +972,12 @@ mongla.vision.move('red_pipe', fwd=60, mode='height', maintain=80,
                    gain=35, duration=15)
 ```
 
-**Torpedo board bullseye** — aim 60 px right and 40 px above the board centre
-(one horizontal axis — `yaw` here — plus `depth` for the vertical):
+**Torpedo board bullseye** — aim 60 px right of the board centre. The vertical
+is not a vision axis on the forward camera: set the shot's depth with
+`set_depth` first.
 ```python
-mongla.vision.align('torpedo', yaw=60, depth=-40,
-                    err=14, gain=20, duration=15)
+mongla.set_depth(TORPEDO_DEPTH_M)
+mongla.vision.align('torpedo', yaw=60, err=14, gain=20, duration=15)
 ```
 
 > **Renamed/removed:** the old `offset_x` / `offset_y` kwargs and the per-axis
@@ -998,19 +993,19 @@ fine `align` is truthy only when the hole is centred within `err`, so it is its
 own fire gate. Coarse-align the board, close in on `blood`, then take a tight
 `hole` lock.
 
-**Pattern: always call `mission_reset()` first.** This stops any leftover heading lock and clears
-the abort event from the previous run — critical for back-to-back pool runs.
+**Pattern: always call `mission_reset()` first.** It clears the abort flag from the previous run
+and zeroes the demand — critical for back-to-back pool runs.
 
 ```python
 def run(mongla, log):
-    mongla.mission_reset()   # ★ ALWAYS first — clears heading lock + abort from previous run
+    mongla.mission_reset()   # ★ ALWAYS first — clears the abort from the previous run
     mongla.camera = 'forward'
     mongla.models(torpedo='torpedo_blood_hole')   # classes: torpedo, blood, hole
     mongla.arm()
     mongla.set_depth(-1.2)
 
-    # 1. Coarse board align (yaw + lat + depth); creep forward to find it.
-    mongla.vision.align(mongla.models.torpedo.torpedo, yaw=0, lat=0, depth=0,
+    # 1. Coarse board align (yaw + lat); creep forward to find it.
+    mongla.vision.align(mongla.models.torpedo.torpedo, yaw=0, lat=0,
                         err=40, gain=30, duration=15, fallback=creep_forward)
 
     # 2. Approach: drive forward until 'blood' fills 30% of frame height.
@@ -1018,14 +1013,15 @@ def run(mongla, log):
                        gain=35, duration=30, fallback=creep_forward)
 
     # 3. Fine hole lock (tight err, slow gain). Fire ONLY on a confirmed lock.
-    if mongla.vision.align(mongla.models.torpedo.hole, yaw=0, lat=0, depth=0,
+    if mongla.vision.align(mongla.models.torpedo.hole, lat=0,
                            err=14, gain=12, duration=25, fallback=creep_forward):
-        mongla.fire(1)       # torpedo_1 — 1/2 = torpedo, 3/4 = dropper
+        mongla.fire(TORPEDO_1_CHANNEL)   # from competition_config -- never a number
         log.info('torpedo fired on stable lock')
     else:
         log.warning('hole never locked — holding fire')
 
     mongla.move_forward(2.0, gain=40)   # clear the board
+    mongla.surface()                    # the last motion
     mongla.disarm()
 
 
@@ -1037,7 +1033,7 @@ def creep_forward(mongla):
 
 | Field | Notes |
 |---|---|
-| `mongla.fire(channel)` | 1/2 = torpedo, 3/4 = dropper. **Always pass the channel explicitly.** |
+| `mongla.fire(channel)` | a **board** channel, always by name from `competition_config.py` (`TORPEDO_1_CHANNEL`, `DROPPER_1_CHANNEL`). Unassigned is 0, and `fire(0)` is refused. |
 | `err` (fine lock) | small px tolerance (e.g. 14) so the fire only triggers dead-on. |
 | `gain` (fine lock) | low (e.g. 12) — gentle, precise corrections at close range. |
 | `fwd` / `mode` | approach stop: drive until `blood` fills `fwd`% by `mode='height'`. |
@@ -1051,7 +1047,7 @@ def creep_forward(mongla):
 
 ### 6.13  Bin drop (downward camera + dropper)
 
-Centre over the bin on the downward camera with `align` (lat + depth), then
+Centre over the bin on the downward camera with `align` (lat + fwd), then
 drop. `align` is truthy only when centred within `err`, so it gates the drop.
 
 ```python
@@ -1063,14 +1059,15 @@ def run(mongla, log):
 
     # Fly over and centre on the bin with the downward camera.
     mongla.use_camera('downward')
-    if mongla.vision.align(mongla.models.bin.fire, lat=0, depth=0,
+    if mongla.vision.align(mongla.models.bin.fire, lat=0, fwd=0,
                            err=30, gain=30, duration=45, fallback=creep_forward):
         mongla.pause(3.0)        # stability confirmation before the drop
-        mongla.fire(3)           # dropper_1 — channel always explicit
+        mongla.fire(DROPPER_1_CHANNEL)
     else:
         log.warning('bin never centred — skipping drop')
 
     mongla.use_camera('forward')
+    mongla.surface()
     mongla.disarm()
 
 
@@ -1078,8 +1075,8 @@ def creep_forward(mongla):
     mongla.move_forward(0.6, gain=40)
 ```
 
-Mirrors `missions/task_bin.py`. The downward-cam `depth_sign` flip is automatic
-(see §6.9); everything else is the same two-verb vocabulary as the forward cam.
+Mirrors `missions/task_bin.py`. On the downward camera `fwd` is surge (see §6.9);
+everything else is the same two-verb vocabulary as the forward cam.
 
 ---
 
@@ -1096,9 +1093,9 @@ mongla.move_forward(2.0, gain=60)
 
 # Or: centre over a bin, hold briefly, then drop.
 mongla.use_camera('downward')
-mongla.vision.align('fire', lat=0, depth=0, err=30, gain=30, duration=20)
+mongla.vision.align('fire', lat=0, fwd=0, err=30, gain=30, duration=20)
 mongla.pause(3.0)      # let it settle
-mongla.fire(3)         # dropper_1
+mongla.fire(DROPPER_1_CHANNEL)
 ```
 
 **Arrive vs. stay:**
@@ -1216,7 +1213,7 @@ detector publishes flare detections only. `detected('gate')` will always return
 verbs.
 
 **Instant (no action goal):**
-`mongla.camera =`, `mongla.can(...)`, `detected()` / `where()` (bounded pumps).
+`mongla.camera =`, `detected()` / `where()` (bounded pumps).
 
 `detected()`/`where()` **pump the node themselves** (bounded: ≤0.25 s warm,
 ≤0.60 s cold-on-first-frame), so they read the current frame regardless of
@@ -1266,7 +1263,7 @@ mongla.yaw_right(45)
 if mongla.detected('gate', stale_after=0.5):
     mongla.vision.align('gate', yaw=0, lat=0, gain=30, duration=15)
 elif mongla.detected('flare', stale_after=0.5):
-    mongla.vision.align('flare', yaw=0, depth=0, gain=30, duration=15)
+    mongla.vision.align('flare', yaw=0, lat=0, gain=30, duration=15)
 else:
     log.warn('no targets visible after yaw step')
 ```
@@ -1319,7 +1316,8 @@ The flat layout is required: `discover()` only globs `missions/*.py` (non-recurs
 | Category | Prefix | Examples |
 |---|---|---|
 | Competition chunks (detected-paradigm) | `task_` | `task_gate`, `task_slalom`, `task_bin`, `task_torpedo`, `task_return`, `task_full_2026` |
-| Demos / development | `demo_` | `demo_arc`, `demo_square`, `demo_heading_lock`, `demo_move_see`, `demo_pursue`, `demo_find_person` |
+| Demos / development | `demo_` | `demo_square`, `demo_move_see`, `demo_pursue`, `demo_find_person`, `demo_dual_camera` |
+| SAUVC | `sauvc_` | `sauvc_qualification`, `sauvc_navigation`, `sauvc_target_acquisition`, `sauvc_full` |
 
 ### Key patterns introduced by the competition missions
 
@@ -1382,14 +1380,13 @@ mongla.vision.move('gate', fwd=80, mode='height', gain=35, duration=25)
 
 #### Downward camera centering (bin task)
 
-With the downward camera, `align` re-maps the axes for you: `lat` is left/right
-and `depth` is fore/aft (the `depth_sign` flip is automatic). Pass `lat`/`depth`
-offsets — never `yaw` — to centre over the bin:
+With the downward camera, `lat` is left/right and `fwd` is the fore/aft surge
+offset. Pass `lat`/`fwd` — never `yaw` — to centre over the bin:
 
 ```python
-# Centre over the bin: lat (left/right) + depth (fore/aft), no yaw.
+# Centre over the bin: lat (left/right) + fwd (fore/aft surge), no yaw.
 mongla.use_camera('downward')
-mongla.vision.align('fire', lat=0, depth=0, err=30, gain=30, duration=20)
+mongla.vision.align('fire', lat=0, fwd=0, err=30, gain=30, duration=20)
 ```
 
 Tuning that used to be per-call kwargs (`kp_lat`, deadband) is now ROS params —
@@ -1397,13 +1394,14 @@ Tuning that used to be per-call kwargs (`kp_lat`, deadband) is now ROS params �
 
 #### Fire channels — always explicit
 
-There's no lock-fire verb. Fire after a truthy fine `align` (its own gate), and
-always name the channel:
+Fire after a truthy fine `align` (its own gate), or mid-hold with `fire=` on the
+align itself, and always name the channel from `competition_config.py` — a mission
+that hard-codes a number fails `test_missions_never_hard_code_a_payload_channel.py`:
 
 ```python
-mongla.fire(3)                        # dropper_1 — always explicit
-if mongla.vision.align('hole', lat=0, depth=0, err=14, gain=12, duration=15):
-    mongla.fire(1)                    # torpedo_1 — only when locked dead-on
+mongla.fire(DROPPER_1_CHANNEL)
+if mongla.vision.align('hole', lat=0, err=14, gain=12, duration=15):
+    mongla.fire(TORPEDO_1_CHANNEL)    # only when locked dead-on
 ```
 
 ### Pool-day constants (`competition_config.py`)
@@ -1433,6 +1431,7 @@ readings after navigation.
 ```python
 # missions/task_full_2026.py  — detected()-paradigm sequential combinator
 def run(mongla, log=None):
+    mongla.mission_reset()
     gate    = _chunk('task_gate')
     slalom  = _chunk('task_slalom')
     _bin    = _chunk('task_bin')
@@ -1442,8 +1441,6 @@ def run(mongla, log=None):
         mongla.pause(10.0)
         mongla.arm()
         mongla.set_depth(GATE_SEARCH_DEPTH_M, timeout=30)
-        if mongla.can('lock_heading'):   # refused on srot: the board holds heading
-            mongla.lock_heading(0.0, timeout=600)
         for name, chunk in [('gate',gate),('slalom',slalom),('bin',_bin),
                              ('torpedo',torpedo),('return',_return)]:
             try:
@@ -1451,8 +1448,8 @@ def run(mongla, log=None):
             except Exception as exc:
                 if log: log(f'[MISSION] {name} FAILED: {exc} — continuing')
     finally:
-        mongla.release_heading()   # ← release_heading, not unlock_heading
-        mongla.stop(); mongla.disarm()
+        never_fails(mongla.stop, log=log, name='stop')   # contained: tidying
+        mongla.disarm()                                  # NOT contained: the safety path
 ```
 
 ### A declared plan (`run_plan`)
@@ -1468,13 +1465,13 @@ mongla.run_plan([
     mongla.step('gate',   points=100, worst_case_s=120, run=gate,
                 fallback=blind_transit, fallback_s=25, fallback_points=40),
     mongla.step('bins',   points=200, worst_case_s=180, run=bins),
-    mongla.step('flares', points=50,  worst_case_s=90,  run=flares, needs='fire'),
+    mongla.step('flares', points=50,  worst_case_s=90,  run=flares),
 ])
 ```
 
 `run_plan` asks the budget for a verdict **between** steps, from the live clock —
-never once, up front. It skips a step whose `needs=` verb the backend refuses, runs
-each body inside its own deadline, catches `TaskAbandoned` and keeps swimming, and
+never once, up front (full / fallback / skip). It runs each body inside its own
+deadline, catches `TaskAbandoned` and keeps swimming, and
 puts every outcome on the scorecard.
 
 ### Individual chunk test commands
@@ -1508,13 +1505,12 @@ See `packages/README.md §3` for per-chunk expected outputs and `models/README.m
    Don't mix them inside one verb; chain them.
 3. **Let the board hold heading and depth.** On srot every move is a
    `SROT_MOVE` the board runs with its own 500 Hz attitude and depth loops;
-   there is nothing to lock from the host. (On the simulator's ArduSub,
-   guard a host lock with `if mongla.can('lock_heading'):`.)
-4. **`align` first, `move` second.** Settle yaw/lat/depth on the
+   there is nothing to lock from the host.
+4. **`align` first, `move` second.** Settle yaw/lat on the
    target with `vision.align` *before* committing to a `vision.move`
    close-in — otherwise the bbox error grows as you approach.
-5. **Always provide an exit.** `disarm()` at the end (or in a
-   `finally:` block).
+5. **Always provide an exit.** `surface()` as the last motion, then
+   `disarm()` — in a `finally:` block.
 6. **Bake gains into `vision.*` ROS params, not the mission.** The
    `kp_*` gains, `lost_grace_s`, and `align_stable_frames` live on the
    deck; keep `err`/`gain`/`duration` per-call. A mission that runs the
@@ -1527,40 +1523,36 @@ See `packages/README.md §3` for per-chunk expected outputs and `models/README.m
 ## 9. Gotchas
 
 - **`align` with no axis raises `ValueError`.** You must pass a number to
-  at least one of `lat=`, `yaw=`, `depth=` (`0` = centre). Target itself
+  at least one of `lat=`, `yaw=` (or, downward, `fwd=`) (`0` = centre). `depth=` is
+  not an argument at all: it raises `TypeError`. Target itself
   may be a class string, a `mongla.models.<alias>.<class>` ClassRef, or
   sticky `mongla.target` — but the axis is never optional.
 - **No `fallback` means no search.** A vision verb that can't see the
   target just runs out its `duration` and returns a falsy `VisionResult`
   (`LOST`/`TIMEOUT`); it never spins in place looking. If the target may
   start off-frame, pass a `fallback` search fn (see §3.2 / §6.4).
-- **Downward camera: the `depth_sign` flip is automatic.** When
-  `camera='downward'` (or `'sim_bottom'`) the loop flips `depth_sign=-1`
-  so the `depth` axis nudges fore/aft sensibly. The axis *choice* is still
-  yours: centre over a bin with `lat=0, depth=0` (left/right + fore/aft),
-  never `yaw` (see §6.9, mirrors `missions/task_bin.py`). A custom camera
-  ID other than `'downward'`/`'sim_bottom'` won't get the flip — rename it
-  or override at the manager.
+- **Downward camera: `fwd` is surge, and its sign is the mount's.** On
+  `camera='downward'`, `fwd` drives fore/aft from image-Y, flipped by
+  `surge_sign` (deck param `vision.surge_sign`). Centre over a bin with
+  `lat=0, fwd=0`, never `yaw` (see §6.9, mirrors `missions/task_bin.py`).
+  Verify the sign disarmed first: a wrong one drives away from the bin.
 - **Open-loop seconds are NOT distances.** Currents and battery
   state change the metres-per-second mapping every run. Use vision
   verbs for precision; use open-loop for *getting close*.
 - **`mongla.stop()` between vision verbs is usually unnecessary** —
-  every vision verb exits with a neutral RC write. Add `stop` only
+  every vision verb exits with a neutral demand. Add `stop` only
   if you need an *extra* settle pause.
 
 ---
 
 ## 10. Cross-references
 
-- Open-loop verb implementations: `src/mongla_control/mongla_control/{motion_forward,motion_lateral,motion_yaw,motion_depth,heading_lock}.py`
-- DVL distance verbs:             `src/mongla_control/mongla_control/{motion_forward,motion_lateral}.py` (`drive_*_dist`)
-- DVL sources:                    `src/mongla_sensors/mongla_sensors/sources/{nucleus_dvl,composite_bno_dvl}.py`
+- Board verbs (one `SROT_MOVE` each): `src/mongla_control/mongla_control/fc/srot_fc.py`
+- The verb registry:              `src/mongla_control/mongla_control/commands.py`
 - Vision loop body:               `src/mongla_control/mongla_control/motion_vision.py`
 - Vision state cache:             `src/mongla_manager/mongla_manager/vision_state.py`
 - DSL surface:                    `src/mongla_planner/mongla_planner/mongla_dsl.py`
 - ROS param defaults:             `src/mongla_manager/config/vision_tunables.yaml`
-- DVL integration reference:      `.claude/context/platform/legacy-pixhawk-and-sitl.md`
-- Sensors pipeline design:        `.claude/context/perception/sensors-pipeline.md`
 - CLI cookbook (deck one-liners): `README.md` §9
 - Architecture (visual flow):     `.claude/context/perception/vision-architecture.md`
 - Roadmap (what's next):          `.claude/context/ROADMAP.md`

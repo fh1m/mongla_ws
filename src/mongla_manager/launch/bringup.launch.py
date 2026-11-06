@@ -19,7 +19,7 @@ The one command for the vehicle (SROT board + Pi 5 + Hailo-8):
     # Telemetry for the Foxglove app on ws://<pi>:8765 (pure viewing).
     ros2 launch mongla_manager bringup.launch.py vision:=true foxglove:=true
 
-    # Single camera, .pt model on a CUDA dev box (not the vehicle path).
+    # Single camera, .pt model on a dev box (footage replay; not the vehicle path).
     ros2 launch mongla_manager bringup.launch.py vision:=true \\
         vision_stack:=generic model:=gate_sharks conf:=0.35
 
@@ -31,7 +31,7 @@ Settings can also live in a file instead of on the command line -- see
 
 Then, from another shell:
 
-    ros2 run mongla_manager bringup_check --srot          # can it arm?
+    ros2 run mongla_manager bringup_check                 # can it arm?
     ros2 run mongla_planner mongla arm
     ros2 run mongla_planner mission --list
 
@@ -63,36 +63,7 @@ MANAGER_SIGTERM_TIMEOUT_S = 12
 
 def generate_launch_description():
     args = [
-        DeclareLaunchArgument('mode',       default_value='pool',
-                              description='Connection mode: pool|sim|auto|desk|laptop'),
-        # Default is mavlink_ahrs since the SROT board became the flight controller.
-        #
-        # It used to be 'dvl', which is now wrong twice over. The BNO085 moved ONTO
-        # the control board (I2C0) and the separate ESP32-C3 + BNO085 USB board was
-        # removed from the hull, so 'bno085' opens a device that is not fitted; and
-        # 'dvl' made VehicleProfile report has_dvl=True on srot, which routed the FSM
-        # into move_forward_dist -- a verb srot_fc hard-refuses.
-        #
-        # mavlink_ahrs reads the board's own fused ATTITUDE through fc.get_attitude():
-        # the same BNO085 part, one layer closer to the thrusters, fused at 500 Hz and
-        # now pinnable to ~50 Hz on the wire. Pass yaw_source:=dvl explicitly if a
-        # Nucleus is actually fitted and validated on the vehicle you are running.
-        DeclareLaunchArgument('yaw_source', default_value='mavlink_ahrs',
-                              description='Yaw source: mavlink_ahrs|dvl|bno085|bno085_dvl'),
-        # ---- SROT backend -------------------------------------------------- #
-        # These four were declared on the NODE but not here, so the documented
-        # pool-day command could not configure a SROT vehicle at all: the operator
-        # had to drop to `ros2 run mongla_manager start --ros-args -p ...`, which
-        # is a different command from the one every doc gives.
-        # Default 'srot': this launch is the pool command in every doc, and the
-        # hull is the SROT board running Hengla. The ArduSub/BlueOS path is still
-        # here -- pass flight_controller:=pixhawk, which is what the sim does --
-        # and the 8th-place configuration is preserved whole on the `pixhawk`
-        # branch. See the node's declaration for the full reasoning.
-        DeclareLaunchArgument('flight_controller', default_value='srot',
-                              description='Autopilot backend: srot|pixhawk '
-                                          '(srot = the SROT/Hengla board over USB '
-                                          'serial; pixhawk = the ArduSub/BlueOS path)'),
+        # ---- the board ------------------------------------------------------ #
         DeclareLaunchArgument('mav_device', default_value='',
                               description="SROT serial device, '' = autodetect. A path "
                                           '(/dev/serial/by-id/...) or any pymavlink '
@@ -109,35 +80,12 @@ def generate_launch_description():
                               description='Arm against firmware older than '
                                           'FW_BEHAVIOUR_REV_REQUIRED. Accepts an '
                                           'un-braked stop -- leave false'),
-        DeclareLaunchArgument('dvl_host',        default_value='192.168.2.201'),
-        DeclareLaunchArgument('dvl_port',        default_value='9000'),
-        # 'auto' scans USB VID/PID for the CH340 payload board, which is the
-        # right default on the vehicle. In simulation there is no CH340: point
-        # this at the PTY that `payload_sim` creates
-        # (payload_port:=/tmp/mongla-$USER/payload) and fire() works there too.
-        # 'auto' scans USB VID/PID for the ESP32-C3 (303a:1001). In sim there
-        # is no ESP32: point this at the PTY that `bno085_sim` creates
-        # (bno085_port:=/tmp/mongla-$USER/bno085) and yaw_source:=bno085 --
-        # what the vehicle actually flies -- works there too.
-        DeclareLaunchArgument('bno085_port', default_value='auto',
-                              description='BNO085 device, or "auto" to scan '
-                                          'USB VID/PID.'),
-        DeclareLaunchArgument(
-            'baro_calibration', default_value='true',
-            description='Re-zero the barometer at the surface. TRUE on the pool '
-                        'hull. The simulator passes false: SITL ACKs the '
-                        'calibration and then stops tracking depth.'),
-        DeclareLaunchArgument('payload_port', default_value='auto',
-                              description='Payload board device, or "auto" to '
-                                          'scan USB VID/PID.'),
-        DeclareLaunchArgument('dvl_auto_connect', default_value='true',
-                              description='Auto-connect DVL at startup (true|false)'),
         DeclareLaunchArgument('vision',     default_value='false',
                               description='Start camera + detector alongside manager'),
         # WHICH vision stack. `pi` is the VEHICLE path: vision_pi.launch.py runs
         # BOTH cameras through detector_dual_node, wires the measured calibration
         # JSONs by name, and can start flow_node. `generic` is the single-camera
-        # dev/CUDA path (vision.launch.py) this file used to include
+        # dev-box path (vision.launch.py) this file used to include
         # unconditionally -- which meant the documented pool-day command brought
         # up one camera, no calibration, and a model that is not on the vehicle.
         DeclareLaunchArgument('vision_stack', default_value='pi',
@@ -145,7 +93,7 @@ def generate_launch_description():
                               description='pi = both cameras + calibration '
                                           '(vision_pi.launch.py, the vehicle); '
                                           'generic = single camera, no calibration '
-                                          '(vision.launch.py, dev/CUDA).'),
+                                          '(vision.launch.py, dev box).'),
         # vision_pi's own `vision` argument is its PROFILE ('fast'|...), while
         # `vision` HERE is the boolean that decides whether vision starts at
         # all. Launch forwards configurations into an include, so `vision:=true`
@@ -256,10 +204,8 @@ def generate_launch_description():
                               description='Camera ROLE -- names the topics and nodes '
                                           '(forward|downward). Change `camera_profile`, '
                                           'not this, to point a role at other hardware.'),
-        # ⛔ THIS DEFAULT MUST AGREE WITH `flight_controller` ABOVE.
-        # `flight_controller` defaults to srot, i.e. the default vehicle on
-        # main is the SROT board + Pi box -- but `camera` defaulted to the
-        # Jetson's Blue Robotics profile, and the two were never reconciled.
+        # ⛔ THIS DEFAULT IS THE PI'S CAMERA. `camera` once defaulted to a
+        # generic USB profile, which is not the camera on the vehicle.
         # Measured on the Pi running the documented bringup line: 5.00 Hz and
         # CameraInfo.k all zero, because the `forward` profile carries no
         # `fourcc: MJPG` (YUYV is 3x slower on this unit) and no calibration
@@ -270,12 +216,10 @@ def generate_launch_description():
         # The role is NOT renamed: /mongla/vision/forward/... and
         # mongla_detector_forward are what 96 call sites and the DSL's own
         # `camera='forward'` default bind to. Only the hardware moves.
-        # On the Jetson, pass camera_profile:=forward.
         DeclareLaunchArgument('camera_profile', default_value='pi_forward',
                               description='Camera HARDWARE profile (CAMERA_PROFILES in '
                                           'mongla_vision/config.py -- the loaded copy). '
-                                          'Default pi_forward matches flight_controller:=srot '
-                                          '(Pi box). On the Jetson pass forward.'),
+                                          'Default pi_forward is the vehicle\'s Fantech.'),
         DeclareLaunchArgument('model',      default_value='gate_sharks',
                               description='vision_stack:=generic -- model stem in '
                                           'mongla_vision/models/ (a <stem>.yaml '
@@ -297,10 +241,8 @@ def generate_launch_description():
                                           "gate_sharks' measured bar; another "
                                           "model's bar is in its <stem>.yaml."),
         DeclareLaunchArgument('imgsz',      default_value='640',
-                              description='Inference square size. NOTE: a TensorRT .engine bakes '
-                                          'imgsz at export -- this only re-scales the .pt fallback. '
-                                          'For TRT, re-export to match (export_engine --all '
-                                          '--imgsz <N>), then imgsz:=<N>.'),
+                              description='Inference square size for a .pt. A .hef bakes '
+                                          'its input size at compile time and ignores this.'),
         DeclareLaunchArgument('max_det',    default_value='100',
                               description='Post-NMS detection cap (runtime; lower toward ~10 if NMS '
                                           'is the FPS bottleneck on busy frames).'),
@@ -313,7 +255,7 @@ def generate_launch_description():
                               description='Start foxglove_bridge (WebSocket telemetry on foxglove_port). '
                                           'Off the mission path -- pure viz. Needs '
                                           'ros-humble-foxglove-bridge installed. Connect the Foxglove '
-                                          'desktop app to ws://<jetson-ip>:<foxglove_port>.'),
+                                          'desktop app to ws://<pi>:<foxglove_port>.'),
         DeclareLaunchArgument('foxglove_port', default_value='8765',
                               description='foxglove_bridge WebSocket port'),
     ]
@@ -335,20 +277,9 @@ def generate_launch_description():
         # manager's emergency disarm waits up to EMERGENCY_DISARM_S (8 s).
         sigterm_timeout=str(MANAGER_SIGTERM_TIMEOUT_S),
         # Process default warn silences rcl/rmw framework gibberish; the manager's
-        # own logger is pinned to info so all Mongla telemetry ([STATE]/[ARDUB]/
-        # [RC ]/[ACT]) and the mission progress lines always show.
+        # own logger is pinned to info so all Mongla telemetry ([STATE]/[ACT]) and the mission progress lines always show.
         ros_arguments=['--log-level', 'warn', '--log-level', 'mongla_manager:=info'],
         parameters=[{
-            'mode':                 LaunchConfiguration('mode'),
-            'yaw_source':           LaunchConfiguration('yaw_source'),
-            'nucleus_dvl_host':     LaunchConfiguration('dvl_host'),
-            'nucleus_dvl_port':     LaunchConfiguration('dvl_port'),
-            'nucleus_dvl_password': 'nortek',
-            'dvl_auto_connect':     LaunchConfiguration('dvl_auto_connect'),
-            'payload_port':         LaunchConfiguration('payload_port'),
-            'baro_calibration':     LaunchConfiguration('baro_calibration'),
-            'bno085_port':          LaunchConfiguration('bno085_port'),
-            'flight_controller':    LaunchConfiguration('flight_controller'),
             'mav_device':           LaunchConfiguration('mav_device'),
             'payload_channels':     LaunchConfiguration('payload_channels'),
             # value_type=bool so a malformed value fails HERE, at launch, with a clear

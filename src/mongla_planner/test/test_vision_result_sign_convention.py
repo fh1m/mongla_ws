@@ -47,9 +47,9 @@ def test_the_dsl_docstring_chases_the_target_rather_than_fleeing_it():
 def test_the_docstring_agrees_with_vision_results_md():
     """Two copies of a sign convention is how they came to disagree."""
     root = pathlib.Path(__file__).resolve().parents[3]
-    md = root / '.claude' / 'context' / 'vision-results.md'
-    if not md.is_file():
-        pytest.skip('vision-results.md not in this checkout')
+    md = root / '.claude' / 'context' / 'missions' / 'vision-results.md'
+    # A skip here hid this check for weeks after the doc moved to missions/.
+    assert md.is_file(), f'{md} is gone -- the sign convention has no second copy to check'
     text = md.read_text(encoding='utf-8')
 
     # The authoritative table rows, e.g. "| `x_px > 0` | ... strafe **right** ..."
