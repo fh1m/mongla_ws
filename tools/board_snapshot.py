@@ -20,6 +20,8 @@ the moment it was taken, because a live reading is only true of the board it
 came from, on the day it came from it.
 """
 from __future__ import annotations
+import os
+os.environ['MAVLINK20'] = '1'   # before pymavlink, or ESC/v2 frames decode as UNKNOWN (fc/_srot_base.py)
 
 import argparse
 import json

@@ -37,6 +37,8 @@ wire. Do not read a column of this matrix as newtons.
     python3 tools/mixer_map.py --arm          # the real sweep
 """
 from __future__ import annotations
+import os
+os.environ['MAVLINK20'] = '1'   # before pymavlink, or ESC/v2 frames decode as UNKNOWN (fc/_srot_base.py)
 
 import argparse
 import json

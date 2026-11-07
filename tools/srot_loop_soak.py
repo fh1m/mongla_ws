@@ -5,11 +5,13 @@ choice holds over minutes rather than seconds. Jitter is reported as a
 DISTRIBUTION, because a control loop is hurt by its worst ticks, not its median.
 """
 import math, os, statistics as st, sys, time, json
+os.environ['MAVLINK20'] = '1'   # before pymavlink, or ESC/v2 frames decode as UNKNOWN (fc/_srot_base.py)
 WS=os.path.expanduser('~/mongla_ws/src')
 for p in ('mongla_control','mongla_vision'):
     q=os.path.join(WS,p)
     if q not in sys.path: sys.path.insert(0,q)
 import cv2; cv2.setNumThreads(0)
+import os
 from pymavlink import mavutil
 from mongla_control.bearing import BearingFilter, bearing_from_pixels
 from mongla_control.fc import srot_protocol as sp

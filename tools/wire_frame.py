@@ -14,6 +14,8 @@ or a constant and re-run: the figure follows, or the round-trip assert fails.
     python3 tools/wire_frame.py --check    # exit 1 if the page has drifted
 """
 from __future__ import annotations
+import os
+os.environ['MAVLINK20'] = '1'   # before pymavlink, or ESC/v2 frames decode as UNKNOWN (fc/_srot_base.py)
 
 import argparse
 import html

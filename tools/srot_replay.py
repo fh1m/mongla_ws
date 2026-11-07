@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import collections
 import os
+os.environ['MAVLINK20'] = '1'   # before pymavlink, or ESC/v2 frames decode as UNKNOWN (fc/_srot_base.py)
 import shutil
 import statistics as st
 import subprocess

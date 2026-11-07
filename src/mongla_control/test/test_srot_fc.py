@@ -11,6 +11,8 @@ import time
 from types import SimpleNamespace
 
 import pytest
+import os
+os.environ['MAVLINK20'] = '1'   # before pymavlink, or ESC/v2 frames decode as UNKNOWN (fc/_srot_base.py)
 from pymavlink import mavutil
 
 from mongla_control.fc.srot_fc import SrotFC, _build_params, MOVE_VERBS

@@ -13,6 +13,8 @@ why none of them was noticed as untested:
 The rule they share: a check that cannot fail is worse than no check, because
 the operator reads a line that looks like verification.
 """
+import os
+os.environ['MAVLINK20'] = '1'   # before pymavlink, or ESC/v2 frames decode as UNKNOWN (fc/_srot_base.py)
 import sys
 import time
 from pathlib import Path
