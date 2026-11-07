@@ -61,6 +61,35 @@ Neither raises. Both return an outcome — aligned, lost, timed out, no camera, 
 drifted — plus where the target was when the verb ended, so a mission can recover instead of
 guessing. They actuate through `MANUAL_CONTROL` in STABILIZE at 50 Hz.
 
+### One tick of `vision_align`
+
+Both loops are classes in `motion_vision.py`, `_Align` and `_Move`, over a shared `_VisionLoop`
+that owns the outcome, the frame clock, the lost-target ladder and the promise that every exit
+leaves the thrusters neutral. Each tick is a fixed sequence of named stages, so a stage can be
+read, and tested, on its own:
+
+```mermaid
+flowchart LR
+    T["step(now)"] --> C{"aborted?<br/>out of time?"}
+    C -->|yes| O1["ABORTED / TIMEOUT<br/>(pass_fire if opted in)"]
+    C -->|no| S["sense()<br/>newest sample"]
+    S --> P{"target<br/>present?"}
+    P -->|no| L["drive(0, 0)<br/>lost() — coast, then LOST"]
+    P -->|yes| A["acquire()<br/>lock the track"]
+    A --> M["command()<br/>P + I on the pixel error"]
+    M --> F["× freshness<br/>stale box → less authority"]
+    F --> D["drive(lat, yaw, fwd)"]
+    D --> N["count_frame()<br/>inside the error band?"]
+    N --> H{"held long<br/>enough?"}
+    H -->|yes| HO["hold() → fire_if_due()<br/>→ ALIGNED"]
+    H -->|no| T
+```
+
+`_Move` has the same skeleton with `commit` (a pass-through that has cleared the gate),
+`maintain` (lateral centring) and `approach` (drive until the target fills the frame) in place
+of the align stages. `run()` wraps the loop in `try/finally: neutral_on_exit()`, so an
+exception anywhere in a stage still stops the thrusters.
+
 ## The map
 
 | File | Role |

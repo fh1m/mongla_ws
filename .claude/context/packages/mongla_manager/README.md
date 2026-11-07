@@ -33,15 +33,61 @@ The node answers three questions for every goal:
 3. **Otherwise, run it here.** Vision alignment is the important case: a loop on this node
    streams axis demands while the board stabilises underneath.
 
+### One verb at a time, and only its owner can free the gate
+
+Goals arrive on their own threads, so the node keeps a **gate**: the verb that claims it gets a
+token, and only the holder of that token can release it. That is what stops a pre-empted verb
+from freeing the gate its successor now holds (B-84). An unknown verb is refused before it
+claims anything. While a verb runs, any other verb is rejected, except `stop`, `disarm` and
+`surface`, which are accepted and pre-empt it.
+
+```mermaid
+sequenceDiagram
+    participant A as goal A (move_forward)
+    participant G as gate
+    participant B as goal B (stop)
+    A->>G: claim() → token 1
+    B->>G: claim() pre-empts → token 2
+    A->>G: confirm(move_forward)
+    G-->>A: None — superseded before it started
+    Note over A: aborts: "superseded before it started -- not run"
+    A->>G: release(1)
+    G-->>A: refused — token 2 holds the gate
+    B->>G: confirm(stop) → token 2
+    Note over B: runs
+    B->>G: release(2) → gate free
+```
+
 ## What it publishes
 
 | Topic | What | Notes |
 |---|---|---|
 | `/mongla/state` | armed, mode, heading, depth, battery | on change plus a heartbeat; a missing number is `NaN`, never `0.0` |
 | `/mongla/imu` · `/mongla/imu_rates` | the board's inertial data | stamped with the board's own clock where available |
-| `/mongla/demand` | what we just asked for | the estimator uses it to predict motion |
+| `/mongla/demand` | the forward and lateral demand in force on the board, `NaN` when unknown | the estimator uses it to predict motion; see *where the demand comes from* below |
 | `/mongla/esc_rpm` | per-thruster RPM | from the board's ESC telemetry; a message count never proves a thruster is alive |
 | `/mongla/flare_order` | the competition order received over the radio | latched |
+
+### Where the demand comes from
+
+The command-velocity model and the ZUPT gate both need to know what the thrusters are being
+asked for, and must hear *unknown* rather than a guess. `SrotFC.demand()` asks three sources,
+best first:
+
+```mermaid
+flowchart TD
+    Q{"fresh heartbeat<br/>says DISARMED?"} -->|yes| Z["(0, 0) — known:<br/>a disarmed board drives nothing"]
+    Q -->|no| E{"board's echo<br/>DEM_FWD + DEM_LAT<br/>both under 1 s old?"}
+    E -->|yes| EV["what the mixer was handed<br/>— in every mode, board moves included"]
+    E -->|"no (older firmware)"| H{"our own MANUAL_CONTROL<br/>under 0.25 s old?"}
+    H -->|yes| HV["what we sent"]
+    H -->|"no, or an SROT_MOVE ran"| U["None → published as NaN"]
+```
+
+The echo outranks our own record because in AUTO the board **discards** MANUAL_CONTROL: the
+record would be a confident demand the thrusters never saw. The echo needs firmware with
+[srot-control-board#33](https://github.com/RakibulIslam1/srot-control-board/pull/33); without
+it, behaviour is exactly as before.
 
 ## Entry points
 
