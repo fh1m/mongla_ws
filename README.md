@@ -570,7 +570,7 @@ What it is, what was wrong with it, and the eight steps from a blank SD card:
 | [`mongla_vision`](.claude/context/packages/mongla_vision/README.md) | cameras, Hailo detection, the lock ladder, optical flow, optics | 27 397 | 125 |
 | [`mongla_control`](.claude/context/packages/mongla_control/README.md) | the verbs and the board driver — a pure library, **zero entry points** | 10 598 | 64 |
 | [`mongla_planner`](.claude/context/packages/mongla_planner/README.md) | the `mongla` CLI, the mission DSL, the missions | 7 675 | 41 |
-| [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | `auv_manager_node` — the one node that talks to the board | 7 951 | 65 |
+| [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | `auv_manager_node` — the one node that talks to the board | 7 957 | 65 |
 | [`mongla_localization`](.claude/context/packages/mongla_localization/README.md) | the right-invariant EKF, retrodiction, course priors | 4 815 | 31 |
 | [`mongla_interfaces`](.claude/context/packages/mongla_interfaces/README.md) | one action, one state topic — the entire ROS surface | IDL | — |
 
