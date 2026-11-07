@@ -46,6 +46,7 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from archive_root import archive_root                        # noqa: E402
+from footage_inventory import VIDEO_EXT                      # noqa: E402
 
 A = archive_root()
 
