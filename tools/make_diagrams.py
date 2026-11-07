@@ -359,8 +359,71 @@ def first_swim():
     o.append('</svg>')
     return '\n'.join(o)
 
+# ── 6. which value wins: default, the settings file, the command line ────
+def precedence():
+    """Three layers stacked; for each argument the highest layer that says
+    anything wins. Defaults are read out of bringup.launch.py, so the bottom
+    row cannot disagree with the file; the other two rows are an example."""
+    import ast
+    tree = ast.parse(pathlib.Path('src/mongla_manager/launch/bringup.launch.py').read_text())
+    default = {}
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Call) and getattr(n.func, 'id', '') == 'DeclareLaunchArgument' \
+                and n.args and isinstance(n.args[0], ast.Constant):
+            for k in n.keywords:
+                if k.arg == 'default_value' and isinstance(k.value, ast.Constant):
+                    default[n.args[0].value] = k.value.value
+    keys = ['vision', 'pool_depth_m', 'medium', 'conf']
+    layers = [('TYPED', 'name:=value on the command line', {'pool_depth_m': '1.4', 'medium': 'air'}),
+              ('THE FILE', '~/.mongla/bringup.yaml', {'vision': 'true', 'pool_depth_m': '1.6'}),
+              ('THE DEFAULT', 'written in bringup.launch.py', {k: default[k] for k in keys})]
+    W, H = 1160, 470
+    x0, cw, y0, rh = 300, 200, 130, 62
+    o = [head(W, H, 'Which value a launch argument takes: the highest layer that sets it')]
+    o.append(f'<rect width="{W}" height="{H}" fill="#05070a"/>')
+    o.append(txt(32, 46, 'Which value wins', 'h'))
+    o.append(txt(32, 68, 'FOR EACH ARGUMENT, THE HIGHEST LAYER THAT SAYS ANYTHING · DEFAULTS READ FROM bringup.launch.py'))
+    for i, k in enumerate(keys):
+        o.append(txt(x0 + cw * i + cw / 2, y0 - 14, k, 'v', 'middle'))
+    win = {}
+    for k in keys:
+        for li, (_, _, vals) in enumerate(layers):
+            if k in vals:
+                win[k] = li
+                break
+    for li, (name, sub, vals) in enumerate(layers):
+        y = y0 + rh * li
+        o.append(f'<line x1="32" y1="{y}" x2="{x0 + cw * len(keys)}" y2="{y}" stroke="{RULE}" stroke-width="1"/>')
+        o.append(txt(32, y + 28, name, 'v'))
+        o.append(txt(32, y + 44, sub))
+        for i, k in enumerate(keys):
+            cx = x0 + cw * i + cw / 2
+            if k not in vals:
+                o.append(txt(cx, y + 36, '--', 'l', 'middle'))
+                continue
+            won = win[k] == li
+            if won:
+                o.append(f'<rect x="{cx - 70}" y="{y + 14}" width="140" height="34" fill="none" stroke="{RED_L}" stroke-width="1.6"/>')
+            o.append(txt(cx, y + 36, vals[k], 'r' if won else 'l', 'middle'))
+    yr = y0 + rh * len(layers) + 40
+    o.append(f'<line x1="32" y1="{yr - 24}" x2="{x0 + cw * len(keys)}" y2="{yr - 24}" stroke="{INK}" stroke-width="1.2"/>')
+    o.append(txt(32, yr + 6, 'WHAT THE NODES GET', 'v'))
+    for i, k in enumerate(keys):
+        cx = x0 + cw * i + cw / 2
+        ytop = y0 + rh * win[k] + 48
+        o.append(f'<line x1="{cx}" y1="{ytop}" x2="{cx}" y2="{yr - 10}" stroke="{RED}" stroke-width="1.2" stroke-dasharray="3 3"/>')
+        o.append(txt(cx, yr + 6, layers[win[k]][2][k], 'v', 'middle'))
+    for i, ln in enumerate(('A file key that no launch argument declares refuses the launch and names the closest real one.',
+                            'A misspelt name:=value is ignored by ros2 launch without a word, which is why the file is the safer place.',
+                            'MONGLA_BRINGUP=none ignores the file; MONGLA_BRINGUP=/other/file.yaml reads another one.')):
+        o.append(txt(32, yr + 44 + 16 * i, ln, 'l'))
+    o.append('</svg>')
+    return '\n'.join(o)
+
+
 for name, fn in (('loop-rate', loop_rate), ('field-of-view', fov), ('frame-budget', frame_budget),
-                 ('package-map', package_map), ('first-swim', first_swim)):
+                 ('package-map', package_map), ('first-swim', first_swim),
+                 ('precedence', precedence)):
     p = OUT / f'{name}.svg'
     p.write_text(fn())
     import xml.etree.ElementTree as ET

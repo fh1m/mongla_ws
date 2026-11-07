@@ -89,7 +89,12 @@ Notes that cost runs when forgotten:
 ### The same switches from a file
 
 Typing twelve arguments at the pool is twelve chances to mistype one. Put them
-in `~/.mongla/bringup.yaml` instead:
+in `~/.mongla/bringup.yaml` instead. When the same argument is in more than one place, the highest layer
+that sets it wins:
+
+![For each argument the highest layer that sets it wins: typed, then the file, then the default](../../../docs/assets/diagrams/precedence.svg)
+
+The file looks like this:
 
 ```yaml
 vision: true
