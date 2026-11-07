@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Allan deviation of the board's IMU -- the measurement `Q` has never had.
 
-⛔ WHY THIS EXISTS. `inekf.py` ships process noise as a NOMINAL DIAGONAL:
+Why this exists. `inekf.py` ships process noise as a NOMINAL DIAGONAL:
 
     sigma_gyro 0.01, sigma_accel 0.1, bias 1e-4 / 1e-3, and a position block of
     EXACTLY ZERO
@@ -18,7 +18,7 @@ So today a rejection cannot distinguish "this measurement is an outlier" from
 "this filter is mistuned", and the lockout break is built on top of that. This
 run is a PRECONDITION for the gate meaning anything -- not a refinement.
 
-WHAT IT PRODUCES, per axis:
+What it produces, per axis:
 
     angle/velocity random walk   the tau^-1/2 slope -- white noise. This is the
                                  number sigma_gyro / sigma_accel should BE.
@@ -32,7 +32,7 @@ WHAT IT PRODUCES, per axis:
     python3 tools/allan_variance.py --analyse imu_allan_<stamp>.bin
     python3 tools/allan_variance.py --selftest      # truth test, no hardware
 
-⚠ THE OVERCLAIM THIS TOOL REFUSES TO MAKE. Bias instability is only readable if
+The overclaim this tool refuses to make. Bias instability is only readable if
 the curve has actually TURNED -- if the minimum sits at the longest tau, the log
 was too short and that "minimum" is just where the data ran out. That is the
 classic way this measurement is reported wrongly, and `characterise()` returns
@@ -191,7 +191,7 @@ def log_imu(port: str, hours: float, out_path: Path) -> Path:
     with open(out_path, 'wb') as f:
         while time.time() < t_end:
             now = time.time()
-            # ⚠ BOTH CHECKS LIVE ABOVE THE RECEIVE, on purpose. Put them below
+            # Both checks live above the receive, on purpose. Put them below
             # the `msg is None: continue` and a stream that dies at hour 1 never
             # flushes and never complains again -- you find out at hour 12.
             if now - last_flush > CHECKPOINT_S:
@@ -201,7 +201,7 @@ def log_imu(port: str, hours: float, out_path: Path) -> Path:
                       flush=True)
                 last_flush = now
             if now - last_msg > STALE_S and not complained:
-                print(f'⚠ no IMU frame for {now - last_msg:.0f} s -- the board may '
+                print(f'WARNING: no IMU frame for {now - last_msg:.0f} s -- the board may '
                       f'have reset or the port re-enumerated. Still listening.',
                       flush=True)
                 complained = True
@@ -285,7 +285,7 @@ def analyse(path: Path) -> int:
         jitter = float(np.std(np.diff(t))) * 1e3
         print(f'host arrival jitter was sd {jitter:.2f} ms, excluded')
 
-    # ⚠ THE GAP CHECK. Allan deviation assumes UNIFORM sampling. A dropped frame
+    # The gap check. Allan deviation assumes UNIFORM sampling. A dropped frame
     # is not a lost sample, it is a hole, and averaging across it reports a
     # longer tau than was actually observed -- silently, and in the direction
     # that flatters the part. The board's own clock is what makes this visible:
@@ -295,7 +295,7 @@ def analyse(path: Path) -> int:
     holes = int(np.sum(step > 3 * nominal))
     if holes:
         lost = float(np.sum(step[step > 3 * nominal]) / nominal) - holes
-        print(f'⚠ {holes} gaps in the board clock ({lost:.0f} samples missing, '
+        print(f'WARNING: {holes} gaps in the board clock ({lost:.0f} samples missing, '
               f'{100.0 * lost / (t.size + lost):.3f} % of the record; '
               f'worst {step.max() / nominal:.1f} x the {nominal:.1f} ms period)')
         if lost / (t.size + lost) > 0.001:
@@ -310,12 +310,12 @@ def analyse(path: Path) -> int:
         print(f'IMU temperature {tc.min() / 100:.1f} to {tc.max() / 100:.1f} C '
               f'(span {span:.2f} C)')
         if span > 2.0:
-            print('⚠ that span is large enough to move bias. Any rate-random-walk '
+            print('WARNING: that span is large enough to move bias. Any rate-random-walk '
                   'read off this curve may be thermal, not intrinsic.')
     else:
         print('IMU temperature field is not populated by this firmware')
     if hours < MIN_USEFUL_HOURS:
-        print(f'⚠ {hours:.2f} h is under the {MIN_USEFUL_HOURS} h floor -- the '
+        print(f'WARNING: {hours:.2f} h is under the {MIN_USEFUL_HOURS} h floor -- the '
               f'bias-instability minimum will very likely be unresolved.')
 
     for name, data, kind in (('gyro', gyro, 'gyro'), ('accel', accel, 'accel')):
@@ -336,7 +336,7 @@ def analyse(path: Path) -> int:
                         f"at tau={c['bias_instability_tau_s']:.1f} s")
             print(f'  {axis}: {wtxt};  {btxt}')
             if c['bias_instability_tau_s'] and c['bias_instability_tau_s'] > 0.01 * hours * 3600:
-                print(f'       ⚠ that minimum sits past 1 % of the record; '
+                print(f'       WARNING: that minimum sits past 1 % of the record; '
                       f'overlapping Allan has few independent samples there')
 
     print('\nWhat to do with these:')
@@ -384,7 +384,7 @@ def selftest() -> int:
     # the refusal must fire: pure white noise never turns, so bias instability
     # MUST come back unresolved rather than as the last point
     if not c['bias_unresolved']:
-        print('  ⛔ bias instability was reported for a pure white-noise signal, '
+        print('  ERROR: bias instability was reported for a pure white-noise signal, '
               'which has no minimum -- the refusal is broken')
         ok = False
     else:
@@ -396,7 +396,7 @@ def selftest() -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--log', action='store_true', help='record from the board')
-    # ⚠ THE BOARD PRESENTS TWO SERIAL DEVICES, and only one speaks MAVLink:
+    # The board presents two serial devices, and only one speaks MAVLink:
     #   /dev/ttyUSB0  CH340 (1a86:7523)  -- the ESP32. MAVLink. THIS one.
     #                 Addressed BY-ID: it re-enumerates, and the number moves.
     #   /dev/ttyACM0  Pico 2 (2e8a:000f) -- the RP2350's ESC debug console, which

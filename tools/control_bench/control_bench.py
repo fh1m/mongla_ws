@@ -1,15 +1,15 @@
 """The board's own control code, running on this machine.
 
-⛔ WHY THIS EXISTS. A Hengla control change was testable NOWHERE but the vehicle.
+Why this exists. A Hengla control change was testable NOWHERE but the vehicle.
 Nothing on the host runs the board's control laws, so every control question
 cost a pool session -- and you cannot run a months-long tuning campaign at one experiment per
 pool day.
 
-WHAT IS ACTUALLY EXECUTING. `mixer.cpp` and `thrust_trim.cpp`, compiled from the
+What is actually executing. `mixer.cpp` and `thrust_trim.cpp`, compiled from the
 firmware checkout by `build.sh`, unmodified, linked into a shared library. Not a
 Python port. Not a description. The same source the board runs.
 
-⚠ WHAT THIS BENCH DOES **NOT** COVER, stated first because the boundary is the
+What this bench does **not** cover, stated first because the boundary is the
 whole point:
 
   * `task_control_loop.cpp` is NOT linked -- it pulls in FreeRTOS. So the
@@ -38,7 +38,7 @@ BOARD_PARAMS = (HERE / '../../.claude/context/workbench/data'
 LIB = HERE / 'libcontrolbench.so'
 NUM_THRUSTERS = 8
 
-# ⛔ THIS HULL'S CONFIGURATION, read live off the board on 2026-09-22. The mixer
+# This hull's configuration, read live off the board on 2026-09-22. The mixer
 # alone does NOT reproduce the vehicle: two board-level facts sit around it, and
 # omitting them made the first falsifier run miss by a mean of 712 counts of 999
 # -- not a small error, a structurally different answer.
@@ -71,7 +71,7 @@ def _load() -> ctypes.CDLL:
     lib = ctypes.CDLL(str(LIB))
     f32, f32p = ctypes.c_float, ctypes.POINTER(ctypes.c_float)
     lib.bench_num_thrusters.restype = ctypes.c_int
-    # ⚠ WITHOUT THESE, ctypes ASSUMES int AND SILENTLY TRUNCATES. A char* came
+    # WITHOUT THESE, ctypes ASSUMES int AND SILENTLY TRUNCATES. A char* came
     # back as an int and the coverage test failed with 'int has no decode' --
     # cheap here, but the same omission on a float-returning symbol returns a
     # plausible number instead of an error.
@@ -153,7 +153,7 @@ class Board:
     def defaults(self) -> 'Board':
         """The `config.h` compile-time defaults.
 
-        ⛔ THESE ARE NOT THIS VEHICLE. `DEF_PILOT_YAW_RATE` is 45.0 and the live
+        These are not this vehicle. `DEF_PILOT_YAW_RATE` is 45.0 and the live
         board reads back 160.0, so every yaw torque computed here is low by
         3.556x. Use `from_board()` for anything that touches the attitude
         cascade, and reserve `defaults()` for the mixer and the output stage,
@@ -210,7 +210,7 @@ class Board:
     def is_board_parameterised(self) -> bool:
         """True when `from_board()` supplied the parameters.
 
-        ⚠ Read this before quoting an attitude-cascade number. The mixer does
+        Read this before quoting an attitude-cascade number. The mixer does
         not care; the cascade does, by a factor of 3.556 on yaw."""
         return self._from_board is not None
 
@@ -248,7 +248,7 @@ class Board:
               frame_reverse=None, dirs=None) -> list[int]:
         """Body demands -> the DShot values THIS HULL would actually clock out.
 
-        ⛔ USE THIS, NOT `mix()` + `to_dshot()`, for anything compared against
+        Use this, not `mix()` + `to_dshot()`, for anything compared against
         the vehicle. The mixer alone is not the vehicle: `FRAME_REVERSE` negates
         every axis before it and the per-motor direction product is applied
         after it. Driving the bare mixer and calling the result "the board" was
@@ -271,7 +271,7 @@ class Board:
     def reset(self) -> 'Board':
         """Clear the attitude controller's integrators and the learned trim.
 
-        ⚠ Call this between scenarios. The rate PID carries an integrator and
+        Call this between scenarios. The rate PID carries an integrator and
         `feedforward` carries a learned trim, so a run that does not reset
         inherits the previous one -- which is a real effect on the vehicle and a
         confounder on the bench."""
@@ -289,7 +289,7 @@ class Board:
         rate PID. Returns the (roll, pitch, yaw) TORQUE demands it hands the
         mixer, each -1..1.
 
-        ⛔ This is why `actuation_model.demand_to_fraction` refuses `yaw`: on
+        This is why `actuation_model.demand_to_fraction` refuses `yaw`: on
         this board a yaw stick is not a demand, it is an input to a controller
         whose output depends on heading error and body rate. That output is what
         this returns."""
@@ -305,7 +305,7 @@ class Board:
         """One tick of `attitude::acro` -- the inner rate PID alone, with the
         sticks as body-rate commands scaled by `MAX_ACRO_RATE` (4.0 rad/s).
 
-        ⭐ NOTE WHAT IS MISSING. `stabilize()` gates the yaw stick at a
+        Note what is missing. `stabilize()` gates the yaw stick at a
         hardcoded 0.02 and hands anything smaller to heading hold. `acro()` has
         NO such gate -- attitude_control.cpp:117-124 is expo, scale, rate PID,
         and nothing else. Whether that actually buys expressible small yaw is a
@@ -334,12 +334,12 @@ class Board:
                      dt: float = 0.002) -> tuple:
         """One tick of `depth::update`. Returns (throttle_demand, target_m).
 
-        ⛔ THE LOOP THAT HAS NEVER RUN CLOSED ON THE VEHICLE. `SROT_MOVE`
+        The loop that has never run closed on the vehicle. `SROT_MOVE`
         enters AUTO and every primitive there closes this, including a plain
         `move_forward` -- and an in-air move proves nothing, because at ~0 m the
         target and the measurement agree.
 
-        ⚠ DEPTH IS NEGATIVE BELOW THE SURFACE here, as everywhere in this
+        Depth is negative below the surface here, as everywhere in this
         stack, because that is what the board reports over `VFR_HUD`. The
         plant's Fossen z is positive DOWN, so `Plant.depth_m` already flips it.
         """
@@ -351,7 +351,7 @@ class Board:
 
     def set_feedforward(self, *, drag_rll=None, drag_pit=None, drag_yaw=None,
                         xc_yaw2rll=None, trim_en=None) -> 'Board':
-        """⚠ EVERY ONE OF THESE SHIPS AT ZERO, on the live board as well as in
+        """Every one of these ships at zero, on the live board as well as in
         config.h -- read back over MAVLink on 2026-09-23. Setting one here
         explores what it WOULD do; it does not describe the vehicle."""
         if drag_rll is not None or drag_pit is not None or drag_yaw is not None:
@@ -378,7 +378,7 @@ class Board:
         self._lib.bench_set_millis(int(ms))
 
     def set_battery(self, volts: float, dt_s: float = 0.1) -> None:
-        """Feed the thruster-pack voltage. ⚠ `DEF_MOT_BAT_V_MAX` is 0.0, so
+        """Feed the thruster-pack voltage. `DEF_MOT_BAT_V_MAX` is 0.0, so
         compensation is OFF in the shipped configuration and this does nothing
         until `bat_v_max` is also set."""
         self._lib.bench_set_battery(volts, dt_s)
@@ -396,7 +396,7 @@ class Board:
 
 
 def pilot_expo(d: float, expo: float = 0.30) -> float:
-    """⚠ THE ONE STAGE THAT IS NOT THE FIRMWARE'S COMPILED CODE.
+    """The one stage that is not the firmware's compiled code.
 
     `task_control_loop.cpp:161` applies this before the mixer, but that
     translation unit needs FreeRTOS, so it is reproduced here. It is three

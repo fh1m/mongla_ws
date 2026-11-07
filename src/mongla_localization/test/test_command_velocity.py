@@ -199,7 +199,7 @@ def test_a_hull_against_a_WALL_is_BLOCKED_within_hold_plus_lag():
 
 
 def test_a_blocked_hull_does_not_TEACH_the_model_that_thrust_makes_no_speed():
-    """⛔ Without the learning gate a hull pinned on a pipe drags g toward 0,
+    """Without the learning gate a hull pinned on a pipe drags g toward 0,
     and then no later wall is ever detected."""
     m, _ = _learned()
     g0 = m.x.theta[0]

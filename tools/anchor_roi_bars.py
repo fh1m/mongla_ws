@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Re-derive the identity bar for the references PRODUCTION actually builds.
 
-⛔ WHY THIS EXISTS. §22 swept the identity bar to 60 inliers using WHOLE-FRAME
+Why this exists. §22 swept the identity bar to 60 inliers using WHOLE-FRAME
 references -- 1024 keypoints spread over water, pool edge and prop. But
 `lock_node` enrols with `roi=det_box`, so a shipped reference holds only the
 keypoints inside the detection box, which is a fraction of that. A bar derived
@@ -9,7 +9,7 @@ from one configuration and applied to another is the recurring defect in this
 codebase, and it fails in the worst direction: 60 may be UNREACHABLE for a true
 match, so re-acquisition would never fire and nothing would log a fault.
 
-PRODUCTION SHAPE, EXACTLY. References are cropped to a real detector box;
+Production shape, exactly. References are cropped to a real detector box;
 queries are FULL FRAMES, because `locate()` matches the live frame whole. Boxes
 come from our own YOLO graph via onnxruntime rather than from hand-drawn
 rectangles, so the crops are the ones the vehicle would really get.

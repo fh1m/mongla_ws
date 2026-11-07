@@ -45,7 +45,7 @@ thrust. It is resolution near zero.**
 
 ## 2. What we ask for, ranked
 
-### 2.1 ⭐ Turn smoothly from zero — so `MOT_SPIN_MIN` can go to 0
+### 2.1 Turn smoothly from zero — so `MOT_SPIN_MIN` can go to 0
 
 What makes a floor necessary today:
 
@@ -60,7 +60,7 @@ speed and can produce rated torque there.
 
 What it buys us, concretely:
 
-- the 16.2 % quantum disappears, so a small correction stops being a **lurch**. ⚠ Read
+- the 16.2 % quantum disappears, so a small correction stops being a **lurch**. Read
   §6.6 before weighting this: we have since measured the floor's steady-state cost in
   closed loop and it is about a tenth of a degree, which is *not* the problem. The
   problem is the size of the smallest step, not the jitter it leaves behind;
@@ -92,7 +92,7 @@ station-keeping and correcting, **reverse is not the rare direction.**
   literature; current is what separates a fouled prop from a dead phase. The Pico already
   decodes current and discards it (see [`pr-c`](pr-c-pico-esc-health.md)), so the wire side is
   half-built — the ask here is that the ESC actually measures it.
-- ⚠ **Do not make closed-loop shaft speed the primary control mode.** Sørensen's comparison of
+- **Caution: Do not make closed-loop shaft speed the primary control mode.** Sørensen's comparison of
   thruster control modes is unambiguous: under wave-induced inflow a shaft-speed controller
   delivers wildly less thrust than a torque controller (order 18 N against 65 N in the reported
   case), because holding rpm constant while inflow changes is precisely the wrong thing to do.
@@ -117,7 +117,7 @@ are three A2212 placeholders. Once the real unit exists, **name the bodies** —
 part name per thruster is what lets `tools/pull_hull_geometry.js` re-derive geometry every time
 the design moves, instead of us identifying a thruster by where it happens to sit.
 
-And while it is on the list: ⭐ **assign materials.** Onshape reports no material on any part,
+And while it is on the list: **assign materials.** Onshape reports no material on any part,
 so mass, centre of mass and the inertia tensor are not merely unmeasured but *uncomputable*.
 That blocks every claim in newtons, the CoB restoring term the firmware already has written,
 and INDI's 6×6 effectiveness matrix. It is a dropdown per part, once the hull material is
@@ -130,7 +130,7 @@ chosen.
 **Not more thrust.** Authority is not our limit; resolution is. A thruster with twice the peak
 and the same floor makes the problem worse, because the quantum scales with the peak.
 
-⛔ ~~**Not a faster thruster.**~~ **RETRACTED 2026-09-23 — see §7.** We argued that
+**Warning:** ~~**Not a faster thruster.**~~ **RETRACTED 2026-09-23 — see §7.** We argued that
 because a T100-class unit's dead time (~0.59 s) already dwarfs the 2 ms control loop,
 response time was not where the win is. We then built a closed-loop bench and measured it,
 and the conclusion is the opposite: **thruster lag dominates everything else by one to two
@@ -176,11 +176,11 @@ died — which is §2.3 — not for it to never die.
 driven by an ESC running **Bluejay** firmware.
 
 Datasheet, as supplied: 28 × 24 mm, 3S/4S, 8 mm shaft, 56 g, 15–25 A standard / 30 A max,
-370 W max, "max thrust 1200 g". ⚠ That thrust figure is **in air, with an 8×4.5 aeroprop, at
+370 W max, "max thrust 1200 g". That thrust figure is **in air, with an 8×4.5 aeroprop, at
 14.7 V**. It carries no information about this vehicle. Water loads a propeller by orders of
 magnitude more than air, and the number below is the one that matters instead.
 
-### 6.1 ⛔ This motor is torque-limited for this job, and that lands squarely on our floor
+### 6.1 This motor is torque-limited for this job, and that lands squarely on our floor
 
 Torque constant follows from KV: `Kt = 9.55 / KV = 0.0104 N·m/A`. At the 30 A absolute
 maximum that is **0.31 N·m**, and at a sane continuous 15 A it is **0.156 N·m**.
@@ -189,13 +189,13 @@ A T200-class thruster absorbs roughly `Q = P / (2πn) ≈ 350 W / (2π × 3500/6
 full output. So the 2212 has **on the order of a sixth of that torque continuously**, and the
 propeller has to be designed down to it rather than the motor up to the propeller.
 
-⚠ **The control consequence is the one that costs us the competition run, and it is not
+**Caution: The control consequence is the one that costs us the competition run, and it is not
 "less thrust".** If the propeller is sized so that ordinary cruise and station-keeping sit at
 **20 % throttle**, then our measured **16.22 % minimum non-zero output** is *the whole usable
 band*. Every correction the vehicle can express is a lurch, and there is no host-side gain that
 changes it — `MOT_SPIN_MIN` is a floor, not a slope.
 
-⭐ **So propeller sizing is a control-resolution decision, and it is the cheapest lever on this
+**Key point: So propeller sizing is a control-resolution decision, and it is the cheapest lever on this
 page.** Size the resin propeller — diameter and pitch — so that the hull's *cruise* thrust sits
 at **50–70 % of throttle**, not at 20 %. Same motor, same ESC, same firmware; the fixed
 16.22 % quantum goes from being the entire operating range to being a small part of it. The
@@ -206,7 +206,7 @@ Concretely, what we need from the propeller design in order to check it:
 cruise.** If that torque exceeds ~0.15 N·m, the propeller is too big for this motor and the
 vehicle will live permanently in the bottom of the throttle range.
 
-### 6.2 ⭐ Run the motor **wet**, with no shaft seal — it answers §2.1 directly
+### 6.2 Run the motor **wet**, with no shaft seal — it answers §2.1 directly
 
 §2.1 asked for a thruster that turns smoothly from zero, and named shaft-seal and bearing
 static friction as one of the three reasons a floor is needed at all.
@@ -216,7 +216,7 @@ epoxy-potted, rotor and bearings running wet, no dynamic seal anywhere — remov
 entirely. There is no seal to break out of. It is also the better thermal answer for a motor
 that will be run at high current and low rpm, which is exactly the regime §6.1 puts it in.
 
-⚠ Costs, stated honestly: viscous drag from the rotor turning in water (a continuous loss,
+**Caution:** Costs, stated honestly: viscous drag from the rotor turning in water (a continuous loss,
 but a *smooth* one — it is damping, not stiction, and damping is a term the controller can
 model); and bearings must be water-rated (stainless or ceramic, not the stock shielded steel).
 
@@ -236,18 +236,18 @@ exact static-friction term that forces the floor we are trying to remove.
 
 **Does not give us**, and this needs a decision:
 
-- ⛔ **current.** Bluejay runs on BLHeli_S-class hardware, which typically has **no current
+- **Warning: current.** Bluejay runs on BLHeli_S-class hardware, which typically has **no current
   shunt at all**. §2.3 asked for current alongside rpm because rpm alone tops out around 78 %
   fault-classification accuracy. If the chosen ESC has no shunt, that ask moves to the hardware
   side: either pick an ESC variant that has one, or accept that per-thruster current comes from
   our own sense board (H-4) after all.
-- ⛔ **sensored / FOC startup.** Bluejay is sensorless six-step. §2.1's third reason for the
+- **Warning: sensored / FOC startup.** Bluejay is sensorless six-step. §2.1's third reason for the
   floor — the ESC not knowing rotor position at rest — **stands**. Worse, sensorless
   commutation relies on back-EMF, which is weakest at low rpm, so the §6.1 operating point is
   also the point of greatest desync risk. §6.2 and §6.1 are the two mitigations available
   without changing ESC family.
 
-⚠ **Verify before relying on it:** the exact Bluejay build, the ESC hardware it is flashed to,
+**Caution: Verify before relying on it:** the exact Bluejay build, the ESC hardware it is flashed to,
 and whether that hardware has a current shunt. Three facts, one afternoon.
 
 ### 6.4 The resin propeller
@@ -262,7 +262,7 @@ day, then re-measure. If it fails either, the finding is cheap now and expensive
 
 | §  | state after this news |
 |---|---|
-| 2.1 smooth from zero | **partly answered** — §6.2 (wet, no seal) removes the friction term. Cogging and sensorless startup remain. ⭐ §6.1 (propeller sizing) is now the larger lever |
+| 2.1 smooth from zero | **partly answered** — §6.2 (wet, no seal) removes the friction term. Cogging and sensorless startup remain. §6.1 (propeller sizing) is now the larger lever |
 | 2.2 symmetric reverse | **still open, and now cheaper** — the propeller is custom, so a symmetric section is a design choice rather than a procurement one |
 | 2.3 rpm + current | **half answered** — Bluejay gives rpm. Current depends on whether the ESC has a shunt; see §6.3 |
 | 2.4 thrust curve | **unchanged and now urgent** — `MOT_THST_EXPO = 0.65` describes a T200. This motor and propeller will not share its shape, and §6.1 cannot be checked without the curve |
@@ -271,7 +271,7 @@ day, then re-measure. If it fails either, the finding is cheap now and expensive
 
 ---
 
-## 6.6 ⚠ A correction to §2.1, measured — the floor's cost is the STEP, not the jitter
+## 6.6 A correction to §2.1, measured — the floor's cost is the STEP, not the jitter
 
 Added 2026-09-23, after building a closed-loop bench: your firmware's control code
 compiled natively, flying a Fossen 6-DOF plant built from this hull's own geometry.
@@ -306,7 +306,7 @@ jitter. We are asking for it so the vehicle has **small steps available at all**
 so a 2° correction can be a 2° correction instead of either nothing or a lurch,
 and so an incremental controller has increments to work with.
 
-⭐ **And it reprioritises §6.1.** If the smallest step is 16.2 % of full scale,
+**Key point: And it reprioritises §6.1.** If the smallest step is 16.2 % of full scale,
 then making full scale *smaller* — by sizing the propeller so cruise sits at
 50–70 % throttle rather than 20 % — shrinks the absolute size of every lurch, with
 no change to motor, ESC or firmware. That is the cheapest lever on this page and
@@ -315,7 +315,7 @@ it is a propeller-sizing decision, not a control one.
 
 ---
 
-## 7. ⭐ Designing the custom thruster for RESPONSE TIME — and it is mostly geometry
+## 7. Designing the custom thruster for RESPONSE TIME — and it is mostly geometry
 
 Added 2026-09-23 from closed-loop measurement. This section **replaces** the "not a faster
 thruster" line in §4, which was wrong.
@@ -367,7 +367,7 @@ and the water in the duct has to be accelerated first. Momentum theory gives a s
 | ring / nozzle only | 84 mm | 40 mm | 21 ms |
 | wider bore, same length | 100 mm | 150 mm | 94 ms |
 
-⭐ **We are already seven times faster than a T100 before anyone designs anything**, because
+**Key point: We are already seven times faster than a T100 before anyone designs anything**, because
 short tunnel thrusters are inherently quick. The 0.59 s figure that scared us is a big open
 propeller, not a 130 mm tunnel.
 
@@ -375,12 +375,12 @@ propeller, not a 130 mm tunnel.
 
 | lever | scaling | what it is worth |
 |---|---|---|
-| ⭐ **duct length** | `τ ∝ L` | **the biggest one, and it is a CAD change** — not a motor, ESC or firmware change. 150 → 75 mm halves the lag |
+| **Key point: duct length** | `τ ∝ L` | **the biggest one, and it is a CAD change** — not a motor, ESC or firmware change. 150 → 75 mm halves the lag |
 | thrust at the operating point | `τ ∝ 1/√T` | 4× the thrust for half the lag — a poor trade on its own |
-| bore | `τ ∝ bore` | ⚠ easy to get backwards: a **wider** bore is **slower**, because there is more water to move |
+| bore | `τ ∝ bore` | **Caution:** easy to get backwards: a **wider** bore is **slower**, because there is more water to move |
 | propeller inertia | `τ ∝ J` (rotor term only) | ~15 ms of a ~80 ms total. Keep the resin prop light, but it is not where the win is |
 
-### 7.4 ⭐ And it does NOT conflict with §6.1
+### 7.4 And it does NOT conflict with §6.1
 
 §6.1 asks that the propeller be sized so cruise sits at 50–70 % throttle rather than 20 %,
 for command resolution. That is about **maximum** thrust; `τ` depends on the thrust being
@@ -388,13 +388,13 @@ produced **at the operating point**. The two asks are independent and can both b
 
 ### 7.5 What we would ask the mechanical design to do
 
-1. ⭐ **Keep the ducts as short as hydrodynamically acceptable.** Every millimetre of duct is
+1. **Key point: Keep the ducts as short as hydrodynamically acceptable.** Every millimetre of duct is
    directly proportional to lag, and lag is the dominant control term. If a 150 mm tunnel can
    become 100 mm without losing efficiency, that is 26 ms off the vehicle's response.
 2. **Keep the propeller light.** Resin already helps; hollow or thin the hub if it is free.
 3. **Tell us the real number.** A step-response test — command a step, log rpm and thrust
    against time, fit a first-order lag — is an afternoon with a load cell and it replaces
-   every estimate on this page. ⚠ Momentum theory ignores duct-wall friction, the inlet
+   every estimate on this page. Momentum theory ignores duct-wall friction, the inlet
    contraction, and the break-away of a stopped propeller, so treat the table above as
    RANKING design choices rather than as numbers to quote.
 4. **Do not widen the bore to buy thrust** without checking §7.3 — it costs response time

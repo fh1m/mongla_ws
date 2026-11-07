@@ -1,6 +1,6 @@
 """Camera calibration as a VEHICLE capability, not a bench script.
 
-⛔ WHY THIS IS IN THE PACKAGE AND NOT IN `tools/`. On competition ground we
+Why this is in the package and not in `tools/`. On competition ground we
 may have to recalibrate a camera -- a lens knocked, a unit swapped, a spare
 fitted -- and if we cannot, the vision uplink aims with the wrong focal
 length and the downward camera's velocity scale is wrong by the same factor.

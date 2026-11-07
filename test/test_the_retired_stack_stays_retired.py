@@ -1,6 +1,6 @@
 """The retired stack stays retired -- in code, docs, config, skills, agents and tests.
 
-⛔ WHY THIS EXISTS. The Pixhawk / ArduSub backend, the Jetson, the BNO085/DVL sensor
+Why this exists. The Pixhawk / ArduSub backend, the Jetson, the BNO085/DVL sensor
 package and the Gazebo + SITL simulator left `main` on 2026-11-06 (tag
 `last-with-pixhawk-and-sim`). The code went in one commit. The prose did not: a
 sweep the same day found **53 live files** still describing the old vehicle -- a

@@ -4,7 +4,7 @@
 The SROT board has one USB cable and no web UI, so this is the surface for
 looking at the vehicle: open the serial link, and print everything the board says.
 
-WHY THIS IS NOT `bringup_check`. That is a pass/fail GATE -- it grades, it
+Why this is not `bringup_check`. That is a pass/fail GATE -- it grades, it
 exits non-zero, and `--strict` makes any WARN fatal. Those are the right semantics
 for "may I dive", and the wrong ones for "show me the vehicle": a monitor that exits
 non-zero because something is merely unusual cannot be left running while you watch a
@@ -282,7 +282,7 @@ def read_roles(conn, timeout: float = 0.6) -> dict:
     or the on-board manipulator arm (PWM), and driving the arm during a drop is the
     failure this whole read exists to prevent.
 
-    ⚠ RETRIED, because a single dropped reply is indistinguishable from a channel
+    RETRIED, because a single dropped reply is indistinguishable from a channel
     that is not a switch. OBSERVED on the bridged link: channel 9 disappeared from
     BOTH the SWITCH and SERVO lists between two runs a minute apart -- one lost
     PARAM_VALUE out of 16 -- which reads to an operator as "9 is not fireable" when
@@ -415,7 +415,7 @@ def render(snap: Snapshot, conn) -> list[str]:
     else:
         mode = sp.mode_name(getattr(hb, 'custom_mode', -1))
     rev = int(getattr(av, 'middleware_sw_version', 0)) if av else None
-    # ⛔ THIS LINE USED TO RENDER `Hengla v0.0.0` WHEN THE BOARD HAD NOT
+    # This line used to render `Hengla v0.0.0` when the board had not
     # ANSWERED. AUTOPILOT_VERSION is one-shot and must be asked for, so an
     # unanswered request left `fsw = 0`, and the bit-shifts turned that into a
     # version number that looks like a real reading of a very old board. That
@@ -503,7 +503,7 @@ def render(snap: Snapshot, conn) -> list[str]:
     lvl, msg = baro_verdict(snap.press_samples)
     col = {'OK': GRN, 'WARN': YEL, 'FAIL': RED}[lvl]
     L.append(f'  barometer       {col}{lvl}{RESET}  {msg}')
-    # ⚠ VFR_HUD.alt is NOT gated on baro health in the firmware (mav_stream.cpp:258),
+    # VFR_HUD.alt is NOT gated on baro health in the firmware (mav_stream.cpp:258),
     # unlike SCALED_PRESSURE2/WTEMP which ARE suppressed. So the board keeps streaming a
     # depth -- `-0.000` -- with no Bar30 fitted at all, and that number is meaningless.
     # Cross-check against the health bit rather than trusting the value's presence.
@@ -573,7 +573,7 @@ def render(snap: Snapshot, conn) -> list[str]:
                   if sp and r == sp.PCA_ROLE_SWITCH]
         servo = [c for c, r in sorted(snap.roles.items())
                  if sp and r == sp.PCA_ROLE_SERVO]
-        # ⛔ READ-AS-SOMETHING-ELSE AND NOT-READ-AT-ALL ARE DIFFERENT FACTS
+        # Read-as-something-else and not-read-at-all are different facts
         # (2026-10-03, on the vehicle). One list said "other/unreadable" and
         # held only channels that WERE read with another role; a channel whose
         # read failed is absent from `roles`, so it appeared in no list at all.
@@ -611,7 +611,7 @@ def render(snap: Snapshot, conn) -> list[str]:
                  f'drop rate {sysst.drop_rate_comm / 100.0:.2f}%')
 
     # ---- safety config ----------------------------------------------------- #
-    # A DISABLED GATE IS INVISIBLE. Twenty-one board params default to zero and
+    # A disabled gate is invisible. Twenty-one board params default to zero and
     # several of them gate safety behaviour; nothing errors when one is off, the
     # feature simply never happens. This section is the only place that looks.
     L.append(f'\n{BOLD}== safety config =={RESET}   '

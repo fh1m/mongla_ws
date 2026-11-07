@@ -2,7 +2,7 @@
 """Export XFeat to an ONNX the Hailo compiler can parse -- and prove it is the
 same network.
 
-⛔ THE PROBLEM, MEASURED. The stock export fails to parse for Hailo-8:
+The problem, measured. The stock export fails to parse for Hailo-8:
 
     UnsupportedShuffleLayerError in op /Transpose_30 ... and 70 more
 
@@ -14,12 +14,12 @@ which torch traces as a pile of 5-D slicing because it is written with
     x.unfold(2, ws, ws).unfold(3, ws, ws).reshape(B, C, H//ws, W//ws, ws**2)
      .permute(0, 1, 4, 2, 3).reshape(B, -1, H//ws, W//ws)
 
-⭐ THAT IS SPACE-TO-DEPTH, which torch already has as `pixel_unshuffle` and
+That is space-to-depth, which torch already has as `pixel_unshuffle` and
 which Hailo supports natively. Substituting it is not an approximation:
 verified `torch.equal` on random input, and this tool re-verifies the WHOLE
 network against the stock ONNX before writing anything.
 
-⚠ WHY THE VERIFICATION IS NOT OPTIONAL. The published advice for this is
+Why the verification is not optional. The published advice for this is
 "replace some layers into mathematically equivalent layers". A substitution
 that is *nearly* equivalent would produce a network that compiles, runs, and
 returns subtly different descriptors -- which would show up as a slightly worse
@@ -56,7 +56,7 @@ def main() -> int:
         # Identical to the stock implementation, as one supported op.
         return F.pixel_unshuffle(x, ws)
 
-    # THE WEIGHTS ARE A PARAMETER. Without --weights this tool exports
+    # The weights are a parameter. Without --weights this tool exports
     # stock under whatever name it is given, which would be invisible
     # until someone measured the HEF and got the stock numbers back.
     w = a.weights or os.path.join(a.src, 'weights', 'xfeat.pt')
@@ -91,7 +91,7 @@ def main() -> int:
             output_names=['feats', 'keypoints', 'heatmap'], dynamo=False)
         print(f'  wrote {dst} ({os.path.getsize(dst)/1e6:.1f} MB)')
 
-    print('\n  ⚠ Parsing is not compiling. Next: translate, then optimise with '
+    print('\n  WARNING: Parsing is not compiling. Next: translate, then optimise with '
           'REAL turbid calibration frames, then re-run the murky-clip table '
           'through the HEF -- a HEF that compiles is not a result.')
     return 0

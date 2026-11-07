@@ -21,7 +21,7 @@ measures three things:
 The shortlist is the only one of the three that breaks the linearity, so it is
 the only one that answers "can the bank hold a hundred places?".
 
-⚠ WHAT THIS DOES NOT MEASURE: whether the shortlist RETRIEVES THE RIGHT
+What this does not measure: whether the shortlist RETRIEVES THE RIGHT
 reference. That is an accuracy question and it needs real footage, not random
 descriptors -- `tools/bank_shortlist_accuracy.py` is that experiment. A fast
 shortlist that returns the wrong reference is worse than a slow bank.

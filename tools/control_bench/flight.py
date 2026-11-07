@@ -6,7 +6,7 @@
       -> plant                                                force   -> motion
       -> gyro + AHRS                                          motion  -> back in
 
-⛔ WHY THE FIRMWARE MIXER IS NOT IN THAT CHAIN, and it is not an oversight.
+Why the firmware mixer is not in that chain, and it is not an oversight.
 `mixer.cpp` allocates for `vectored_6dof` -- EIGHT T200s at 45 degrees. The hull
 in CAD has FIVE orthogonal thrusters with roll unactuated. Pushing one through
 the other would simulate a vehicle that does not exist, so the loop uses our
@@ -17,11 +17,11 @@ and real firmware everywhere the firmware is hull-INDEPENDENT:
     oneToDshot         one demand -> one DShot value, incl. MOT_SPIN_MIN. REAL.
     mixer.cpp          the one hull-specific piece, and the one we replace.
 
-⭐ THAT SUBSTITUTION IS ALSO THE MEASUREMENT. `compare_allocators` runs the
+That substitution is also the measurement. `compare_allocators` runs the
 identical manoeuvre both ways on the same plant, which is what turns upstream
 ask K from an argument into a number.
 
-⚠ MOT_SPIN_MIN IS DELIBERATELY INSIDE THE LOOP. The DShot value is converted
+MOT_SPIN_MIN is deliberately inside the loop. The DShot value is converted
 back to a thrust fraction rather than the pre-quantisation demand being used, so
 the 16.22 % smallest-non-zero-output floor acts on every tick -- which is the
 single effect most likely to decide whether precision alignment works.
@@ -39,7 +39,7 @@ from plant import (Damping, Inertia, Plant, _load_pure,           # noqa: E402
                    cad_hull_thrusters, wrench_matrix)
 
 ga = _load_pure('geometric_allocation')
-# ⛔ THE DSHOT BANDS, FROM THE ONE COPY. This file used to decode the reverse
+# The DSHOT bands, from the one copy. This file used to decode the reverse
 # band as `-(v - 47)`, where every other copy in the repo uses 48 -- and
 # `test_bench_matches_the_board` states the reason: "48 and 1048 are each a
 # zero". The off-by-one made a stopped thruster read as -1/999 of full reverse
@@ -49,7 +49,7 @@ _am = _load_pure('actuation_model')
 
 DSHOT_SPAN = float(_am.DSHOT_SPAN)
 
-# ⛔ FlightMode, from `include/state_types.h`. NOT a magic number -- the first
+# FlightMode, from `include/state_types.h`. NOT a magic number -- the first
 # version of this file passed `mode=3`, which is not a FlightMode at all, so
 # `feedforward::apply` took its `stabilized` branch as FALSE and returned the
 # demands untouched. Every feedforward gain then measured identically, which
@@ -61,7 +61,7 @@ MODE_AUTO = 23
 
 
 # ═══════════════════════════════════════════════════════════════════════════ #
-#  ⛔ THE FRAME SEAM, and it produced a runaway the first time it was missed
+#  The frame seam, and it produced a runaway the first time it was missed
 # ═══════════════════════════════════════════════════════════════════════════ #
 #
 # `geometric_allocation` reads `hull_geometry.yaml` straight through, so it
@@ -76,7 +76,7 @@ MODE_AUTO = 23
 #     surge  sway  roll  pitch    same sign
 #     heave  yaw                  INVERTED, because body z = -cad z
 #
-# ⚠ THE FIRST VERSION OF THIS FILE MISSED IT and the yaw loop ran away to
+# The first version of this file missed it and the yaw loop ran away to
 # -1988 degrees in six seconds -- positive feedback, because the allocator
 # produced the opposite moment to the one the cascade asked for. It is worth
 # noticing that a runaway is the LUCKY outcome: had the gain been lower it
@@ -150,14 +150,14 @@ class Vehicle:
                  inertia: Inertia | None = None, from_board: bool = True,
                  thruster_tau_s: float = 0.0):
         """`thruster_tau_s` -- first-order lag from commanded to delivered
-        thrust. ⛔ IT IS NOT ZERO ON A REAL THRUSTER, and the default is zero
+        thrust. IT IS NOT ZERO ON A REAL THRUSTER, and the default is zero
         only because ours is unmeasured. A T100-class unit's thrust dead time is
         reported around 0.59 s; a small custom unit will be faster, but it will
         not be instant. It is the term most likely to dominate every argument
         about loop rate, so it is modelled explicitly rather than assumed away.
         """
         self.board = Board()
-        # ⛔ The cascade must run on the VEHICLE's gains, not config.h's. The
+        # The cascade must run on the VEHICLE's gains, not config.h's. The
         # defaults differ by 3.556x on PILOT_YAW_RATE alone.
         self.board.from_board() if from_board else self.board.defaults()
         self.plant = Plant(inertia or Inertia(), damping)
@@ -183,13 +183,13 @@ class Vehicle:
         return self.max_thrust_n
 
     def ideal_drag_gain(self, axis: int = 5) -> float:
-        """⭐ The `ATC_DRAG_*` value that would cancel THIS PLANT's drag exactly.
+        """The `ATC_DRAG_*` value that would cancel THIS PLANT's drag exactly.
 
         The firmware adds `atc_drag_yaw * gz * |gz|` to the normalised demand;
         the plant subtracts `q * r * |r|` newton-metres. They cancel when
         `atc_drag * torque_per_unit = q`.
 
-        ⚠ CIRCULAR IF USED ALONE, and that is the point of `fly`'s
+        Circular if used alone, and that is the point of `fly`'s
         `drag_gain_scale`. We chose the plant's drag, so of course a gain
         derived from it cancels. The question worth asking is not "does a
         perfect gain help" but "how wrong may it be before it hurts", because
@@ -211,7 +211,7 @@ class Vehicle:
         allocator demand -- which is not the vehicle, and exists only to MEASURE
         what MOT_SPIN_MIN costs by difference.
         """
-        # ⛔ RESET THE PLANT, NOT JUST THE BOARD. An earlier version reset only
+        # Reset the plant, not just the board. An earlier version reset only
         # the controller, so a reused Vehicle started each run from the previous
         # run's attitude and rates -- and the results looked like a feedforward
         # effect rather than like leftover state. A bench that carries state
@@ -223,7 +223,7 @@ class Vehicle:
         if controller is not None:
             controller.reset()
         self.board.reset()
-        # ⚠ The five feedforward gains ship at 0.0 on the live board. Anything
+        # The five feedforward gains ship at 0.0 on the live board. Anything
         # non-zero here is an EXPLORATION of what they would do, never a
         # description of the vehicle.
         ff = (0.0 if drag_gain_scale is None
@@ -233,7 +233,7 @@ class Vehicle:
             self.board.hold_yaw(hold_yaw)
         tr = Trace()
         t = 0.0
-        # ⛔ DECIMATION IS NOT THE SAME AS A BIGGER `dt`, and conflating them
+        # Decimation is not the same as a bigger `dt`, and conflating them
         # would answer a different question. The PLANT always integrates at
         # `dt`; only the CONTROLLER is run less often, and its output is HELD
         # between updates -- which is what a slower control task actually does.
@@ -248,7 +248,7 @@ class Vehicle:
             sr, sp, sy = stick(t)
             if controller is not None:
                 if held is None or k % every == 0:
-                    # ⭐ INDI needs the torque ACTUALLY delivered, which after
+                    # INDI needs the torque ACTUALLY delivered, which after
                     # the allocator, the DShot quantiser and the thruster lag is
                     # not the torque that was asked for. Feeding back the demand
                     # instead is the `use_achieved=False` case, and it is what
@@ -259,7 +259,7 @@ class Vehicle:
                         tau_applied=self._applied_norm, dt=dt * every)
                 tq_r, tq_p, tq_y = held
             elif held is None or k % every == 0:
-                # ⚠ The controller's own dt must be its ACTUAL period, or its
+                # The controller's own dt must be its ACTUAL period, or its
                 # integral and derivative terms are scaled for a rate it is not
                 # running at -- which would measure a detuned controller rather
                 # than a slower one.
@@ -310,7 +310,7 @@ class Vehicle:
 
 
 def sweep_drag(build, run, *, cds=((0.15, 0.80), (0.25, 1.00), (0.30, 1.20))):
-    """⭐ RUN A COMPARISON ACROSS THE WHOLE DRAG BAND, not at one guess.
+    """Run a comparison ACROSS the whole drag band, not at one guess.
 
     Drag is the plant's unmeasured term. A conclusion that holds at every
     corner of the plausible band is a finding; one that flips inside it is a

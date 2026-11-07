@@ -130,8 +130,8 @@ def test_the_normalised_entry_point_forwards_the_medium():
 
 
 # --------------------------------------------------------------------------
-#  ⛔ THE INDEPENDENT CHECK. Everything above compares the implementation with
-#  `asin(sin(ta)/N)` -- THE SAME EXPRESSION THE IMPLEMENTATION USES. Those tests
+#  The independent check. Everything above compares the implementation with
+#  `asin(sin(ta)/N)` -- the same expression the implementation uses. Those tests
 #  are self-consistent: they pin the arithmetic, and they would ALL still pass
 #  if the correction ran in the wrong direction (multiplying by n instead of
 #  dividing), which would make every bearing 33 % too SMALL instead of too

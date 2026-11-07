@@ -13,7 +13,7 @@ Every mission file in
 is a plain Python module that exposes one `run(mongla, log)` function.
 
 
-> ## ⛔ Read this before copying a recipe
+> ## Read this before copying a recipe
 >
 > - **The board holds depth and heading at 500 Hz.** There is no host heading lock and no
 >   depth vision axis: `set_depth` first, then align. On the downward camera `fwd=` is the
@@ -231,7 +231,7 @@ Every verb is a method on the `MonglaMission` you receive in
 `run(mongla, log)`. The full generated table, with what runs on the board and
 what runs here: [`reference/commands.md`](../reference/commands.md).
 
-⛔ **Every motion verb below enters the board's AUTO mode, and AUTO closes the
+**Warning: Every motion verb below enters the board's AUTO mode, and AUTO closes the
 depth loop -- which has never run closed in water.** Two armed bench checks
 gate them all (CLAUDE.md §2). The vision verbs run in STABILIZE and are not
 gated.
@@ -273,7 +273,7 @@ mongla.set_depth(metres, timeout=30.0, settle=0.0)
 `metres` is **negative below the surface**: `set_depth(-1.5)` is 1.5 m down.
 The board holds the depth afterwards; there is no `lock_depth`.
 
-⛔ An unhealthy barometer makes the board refuse DEPTH_HOLD and AUTO, so every
+**Warning:** An unhealthy barometer makes the board refuse DEPTH_HOLD and AUTO, so every
 motion verb is denied: the vehicle arms and does not move.
 `ros2 run mongla_manager bringup_check --srot` reads this off `SYS_STATUS`.
 
@@ -295,7 +295,7 @@ mongla.stop()          # the board's MOVE_STOP brake
 mongla.pause(2.0)      # station-keep for 2 s
 ```
 
-⛔ **AUTO never exits by itself.** After a move, manual frames are discarded
+**Warning: AUTO never exits by itself.** After a move, manual frames are discarded
 until the mode changes. The vision verbs set STABILIZE and verify it took.
 
 A verb that is not in the table does not exist: the manager answers
@@ -573,7 +573,7 @@ models/
 └── gate_sharks.yaml   # the sidecar: class names + the measured conf bar
 ```
 
-⛔ **On the vehicle the sidecar is mandatory.** A `.hef` carries no class
+**Warning: On the vehicle the sidecar is mandatory.** A `.hef` carries no class
 names, so a missing `<stem>.yaml` means an empty allowlist and a silent `[]`
 every frame while the pipeline looks healthy. (A `.pt` on a dev box can fall
 back to the names embedded in the weights; do not rely on that.)
@@ -998,7 +998,7 @@ and zeroes the demand — critical for back-to-back pool runs.
 
 ```python
 def run(mongla, log):
-    mongla.mission_reset()   # ★ ALWAYS first — clears the abort from the previous run
+    mongla.mission_reset()   # ALWAYS first — clears the abort from the previous run
     mongla.camera = 'forward'
     mongla.models(torpedo='torpedo_blood_hole')   # classes: torpedo, blood, hole
     mongla.arm()
@@ -1223,21 +1223,21 @@ seen or its `timeout`.
 #### Forbidden patterns
 
 ```python
-# ✗ Step too long — 0.6m overshoot at gain=30
+# Wrong: Step too long — 0.6m overshoot at gain=30
 while not mongla.detected('gate'):
     mongla.move_forward(2.0, gain=30)
 
-# ✗ No safety budget — runs forever if detector offline
+# Wrong: No safety budget — runs forever if detector offline
 while not mongla.detected('gate'):
     mongla.move_forward(0.5)
 
-# ✗ Class filter trap — the allowlist only names the flare, so the gate never arrives
+# Wrong: Class filter trap — the allowlist only names the flare, so the gate never arrives
 mongla.set_classes('orange_flare', node=_FWD)
 for _ in range(18):
     if mongla.detected('qual_gate'):   # ALWAYS FALSE until set_classes includes it
         break
 
-# ✗ Wrong camera — polling 'forward' while the bin is under the downward cam
+# Wrong camera — polling 'forward' while the bin is under the downward cam
 mongla.use_camera('forward')
 while not mongla.detected('bin'):   # never True — bin is on 'downward'
     ...
@@ -1477,7 +1477,7 @@ puts every outcome on the scorecard.
 ### Individual chunk test commands
 
 ```bash
-# ✅ runnable today (gate_sharks.pt exists)
+# Right: runnable today (gate_sharks.pt exists)
 ros2 run mongla_planner mission task_gate
 ros2 run mongla_planner mission task_return
 

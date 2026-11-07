@@ -1,9 +1,9 @@
 """Absolute position from bearings to props whose positions we know.
 
-⛔ THE INVERSION THAT MAKES THIS WORTH BUILDING. A team that could not localise
+The inversion that makes this worth building. A team that could not localise
 underwater fixed it by putting extra obstacles in their pool, and wrote the
 method off because you cannot do that at a venue. That has it backwards: a
-COMPETITION COURSE IS THE DENSEST LANDMARK FIELD WE WILL EVER SEE. Gate,
+Competition course is the densest landmark field we will ever see. Gate,
 slalom, bins, torpedo board, octagon -- every one at a surveyed position, with
 the rulebook fixing its size, and a detector that already finds them. The thing
 they had to fake is the thing the venue hands us.
@@ -12,7 +12,7 @@ So this is not SLAM. There is no map to build and no loop to close: the map is
 the rulebook plus a tape measure, and the only unknown is where WE are.
 Surveyors solved that in 1615.
 
-TWO REGIMES, AND THE DIFFERENCE IS THE HEADING.
+Two regimes, and the difference is the heading.
 
   * **Heading known** (Tier 3.2 anchored it on a landmark): each sighting puts
     us on a LINE through that prop, and two lines cross. Well conditioned
@@ -90,7 +90,7 @@ def fix_from_bearings(sightings: Dict[str, float],
     satisfies `n . (P - L) = 0` where `n` is perpendicular to `d` -- because
     that is linear in `P` and needs no per-landmark range as an unknown.
 
-    ⛔ THE GEOMETRY IS CHECKED BEFORE THE ALGEBRA. Two nearly parallel lines
+    The geometry is checked before the algebra. Two nearly parallel lines
     still intersect, just a long way away and with enormous sensitivity: at
     10 deg of separation a 1 deg bearing error moves the fix by a tenth of the
     range. The solve would succeed and hand back a confident, wrong position,
@@ -146,7 +146,7 @@ def fix_from_bearings(sightings: Dict[str, float],
 def _widest_separation(bearings: Sequence[float]) -> float:
     """Best CROSSING angle between any two sight lines, in [0, 90].
 
-    ⛔ NOT THE ANGLE BETWEEN THE BEARINGS (issue #37). A sight line is a line,
+    Not the angle between the bearings (issue #37). A sight line is a line,
     not a ray: two props 175 deg apart put the hull nearly BETWEEN them, the
     lines are almost the same line, and position along it is unobservable --
     exactly as for two props 5 deg apart. That case scored 175 and passed a
@@ -179,7 +179,7 @@ def on_danger_circle(p: Tuple[float, float],
                      frac: float = DANGER_CIRCLE_FRAC) -> bool:
     """Is the observer on the circle through the three props?
 
-    ⛔ THE FAILURE THAT RETURNS A PLAUSIBLE NUMBER. With the heading unknown,
+    The failure that returns a plausible number. With the heading unknown,
     only the angles BETWEEN sightings are measurable, and every point on the
     circle through the three props subtends the SAME pair of angles. The
     problem then has infinitely many solutions and a solver will still hand

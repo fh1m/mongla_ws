@@ -1,6 +1,6 @@
 """Every capability module is either REACHED by a node, or says why not.
 
-⛔ THIS REPO'S OLDEST DEFECT, and the count is now in double figures:
+This repo's oldest defect, and the count is now in double figures:
 
   * the lock ladder was built, measured, given an entry point -- and appeared
     in no launch file;
@@ -69,7 +69,7 @@ WIRED = {
     'mongla_vision/mongla_vision/flow/scale_check.py': 'flow/flow_node.py',
 }
 
-# ⚠ NOT wired, ON PURPOSE, each with the consumer it needs. A row here is a
+# NOT wired, ON PURPOSE, each with the consumer it needs. A row here is a
 # debt with a name, not a silent gap.
 DEFERRED = {
     'mongla_vision/mongla_vision/tracking/cascade.py': (
@@ -90,7 +90,7 @@ DEFERRED = {
         'vehicle first.'),
     'mongla_vision/mongla_vision/tracking/presence.py': (
         'the rung BELOW detection -- track-before-detect, which postpones the '
-        'threshold and accumulates sub-threshold evidence across frames. ⛔ IT '
+        'threshold and accumulates sub-threshold evidence across frames. ERROR: IT '
         'MAY NEVER BE WIRED, and the reason is B-59: on real water the band '
         'below the bar is not faint signal, it is confident open-water FALSE '
         'POSITIVES. The gate model fires on 90.8 % of gate-free frames at the '
@@ -103,13 +103,13 @@ DEFERRED = {
         'MIN_RUN 6 to stay under 1 % false chains -- longer than the median '
         'gap. Precedent: continuity.py, whose person-in-air constants were '
         'also not shipped. '
-        '⭐ HALF THE BLOCKER LIFTED 2026-09-28, and it was lifted by a MODEL '
+        'RESULT: HALF THE BLOCKER LIFTED 2026-09-28, and it was lifted by a MODEL '
         'CHANGE nobody re-checked. B-59 is model-SPECIFIC: re-run with the '
         'same tool on the same clips, `gate_sharks` separates +84.2 points at '
         '0.30 and +96.8 at 0.45, where `gate_rescue_repair` gives +0.0 at '
         'every bar. The band below the bar on THAT graph is signal, not '
         'hallucination -- see section 59. '
-        '⛔ THE OTHER HALF STANDS, and a second measurement replaced it: on '
+        'ERROR: THE OTHER HALF STANDS, and a second measurement replaced it: on '
         'gate.mkv `gate_sharks` detects the gate in 900 of 900 frames at '
         '0.892-0.932, so there are NO GAPS to accumulate across and the rung '
         'has nothing to do. Its value shrinks exactly as the detector '
@@ -135,7 +135,7 @@ DEFERRED = {
         'is live code with an out-of-tree consumer. It stays DEFERRED rather '
         'than WIRED because no NODE imports it -- the register tracks the '
         'vehicle, and a tools-only consumer is a real but different kind of '
-        'reachability. ⚠ Nearly deleted on the strength of a sweep that could '
+        'reachability. WARNING: Nearly deleted on the strength of a sweep that could '
         'not see tools/; the sweep now scans it.'),
     'mongla_vision/mongla_vision/time_to_contact.py': (
         'BLOCKER CORRECTED 2026-09-28 (section 62). It was "needs metres we do '
@@ -149,7 +149,7 @@ DEFERRED = {
         'known start range, which makes true tau a straight line and the '
         'filter a fit rather than a guess.'),
     'mongla_vision/mongla_vision/approach.py': (
-        '⚠ AND ITS BANDS CAME FROM THE RETIRED GRAPH. `tools/approach_band.py` '
+        'WARNING: AND ITS BANDS CAME FROM THE RETIRED GRAPH. `tools/approach_band.py` '
         'was run against `gate_rescue_repair`, whose documented failure mode '
         'is half-frame boxes over empty water -- so the peaks may be peaks of '
         'hallucination, and the module\'s own docstring says class bands '
@@ -162,7 +162,7 @@ DEFERRED = {
         'ships OFF by design: its gain is DECLARED, not measured, and it '
         'needs a labelled per-venue set to calibrate. Wiring it before that '
         'would put an unmeasured constant in the detection path. '
-        '⛔ STRENGTHENED 2026-09-28 -- the blocker is now EVIDENCE, not just '
+        'ERROR: STRENGTHENED 2026-09-28 -- the blocker is now EVIDENCE, not just '
         'absence. This module maps a TURBIDITY statistic onto a confidence '
         'adjustment, and that family has now failed twice on real data: '
         '`underwater.recommend()` was deleted for fitting exactly such a rule '
@@ -179,7 +179,7 @@ DEFERRED = {
 def _modules():
     """Capability modules only.
 
-    ⚠ Three exemptions, each a real reachability path that an import grep
+    Three exemptions, each a real reachability path that an import grep
     cannot see -- getting these wrong makes the test cry wolf and it will be
     deleted rather than obeyed:
       * ROS nodes are LAUNCHED, not imported;
@@ -242,7 +242,7 @@ def test_a_deferred_capability_that_got_wired_is_promoted():
     """Housekeeping with teeth: once something IS imported, it must move to
     WIRED, or the register slowly becomes fiction.
 
-    ⛔ AN IMPORT FROM ANOTHER DEFERRED MODULE IS NOT REACHABILITY, and reading
+    An import from another deferred module is not reachability, and reading
     it as one would invert this test's purpose. `presence.py` imports
     `visibility.py` for its arming interlock; both are deferred, so nothing on
     the vehicle reaches either, and promoting visibility on that evidence

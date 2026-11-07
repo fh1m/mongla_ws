@@ -31,7 +31,7 @@ class LockSetupMixin:
         self.declare_parameter('follow', True)
         self.declare_parameter('anchor', False)
         self.declare_parameter('anchor_model', '')
-        # ⭐ DEFAULT ON since the InferModel port (B-62). Measured on the
+        # DEFAULT ON since the InferModel port (B-62). Measured on the
         # vehicle: 10.89 ms alone and 19.85 ms with the detector inferring,
         # against 32.9 ms for the ONNX path it replaces -- 1.7x even fully
         # contended, and off the cores the camera pump needs. The two share
@@ -47,14 +47,14 @@ class LockSetupMixin:
         # Set false to force the CPU path -- on a dev box with no chip the
         # resolver falls back on its own, so this is for A/B measurement.
         #
-        # ⛔ DEFAULT OFF since 2026-10-03. Chip sharing works only INSIDE one
+        # DEFAULT OFF since 2026-10-03. Chip sharing works only INSIDE one
         # process, and a standalone lock_node runs as its own: it opened a
         # second VDevice, raced the detector process for the chip, and when
         # it won the vehicle had NO detection (HAILO_OUT_OF_PHYSICAL_DEVICES).
         # The numbers above stand; they need the lock composed with the
         # detector to be had safely.
         self.declare_parameter('anchor_xfeat_hef', False)
-        # ⭐ Semi-dense matching: 2.1-2.6x the inliers for +37 % match cost
+        # Semi-dense matching: 2.1-2.6x the inliers for +37 % match cost
         # (measured, four frame pairs). DEFAULT OFF until frame-to-reference
         # behaviour and inlier CORRECTNESS are measured -- see
         # never-lose-the-target.md. Hailo backend only; the ONNX path keeps
@@ -67,11 +67,11 @@ class LockSetupMixin:
         # live detection to have something to match against. Which matters
         # because the moment it is needed is the moment the detector is failing.
         #
-        # ⛔ A preloaded reference is trusted exactly like a live one: it clears
+        # A preloaded reference is trusted exactly like a live one: it clears
         # MIN_INLIERS or it does not answer, and `recognise()` still wants the
         # detector to agree before any identity is asserted.
         self.declare_parameter('anchor_bank', '')
-        # ⛔ LOOP CLOSURE IS OFF BY DEFAULT, like every other capability here.
+        # Loop closure is off by default, like every other capability here.
         # It is the only path in this node that can reach the LOCALISATION
         # FILTER, and a wrong position fix is not merely wrong -- the filter
         # shrinks its covariance around it and becomes confident. Off until a
@@ -100,13 +100,13 @@ class LockSetupMixin:
         # long-horizon rung, called on when the follower has already given up,
         # and the p99 gap it exists to cover is 2.418 s. 3 Hz samples that
         # seven times over.
-        # PUBLISH RATE -- OFF BY DEFAULT, and the default is the point.
+        # Publish rate -- off by default, and the default is the point.
         #
         # The ladder tracks on every camera frame (LK wants the smallest
         # inter-frame motion) and publishes on every frame: MEASURED 132.4 Hz
         # on the vehicle against detections at 30.5 Hz.
         #
-        # ⛔ THAT IS NOT WASTE, and an earlier version of this comment said it
+        # That is not waste, and an earlier version of this comment said it
         # was. The reasoning "nobody samples above 20-50 Hz" describes the
         # HOST loop, which is a limitation of the un-ported vision uplink --
         # not the architecture. THE CONTROL LOOP IS 500 Hz ON THE SROT BOARD.
@@ -119,7 +119,7 @@ class LockSetupMixin:
         # idle: 53.4 % -> 37.4 %), but 0 = publish every frame is the default
         # and the design intent. A RUNG CHANGE is never delayed even when a
         # limit is set -- that transition is the information.
-        # ⛔ THE ACTING BAR (B-59). Below this a detection may be ASSOCIATED by
+        # The acting bar (B-59). Below this a detection may be ASSOCIATED by
         # the tracker but must not be ACTED ON by the ladder. Default 0.45,
         # deliberately NOT the 0.60 knee that measurement favours: 0.60 is
         # derived from ONE model, ONE class and ONE venue, and shipping a
@@ -130,7 +130,7 @@ class LockSetupMixin:
         # has been repeated with visually-confirmed negatives on more venues.
         self.declare_parameter('act_conf', 0.45)
         self.declare_parameter('publish_hz', 0.0)
-        # ⭐ 4.5 Hz, RAISED FROM 3.0 ON A RE-MEASUREMENT (B-62).
+        # 4.5 Hz, RAISED FROM 3.0 ON A RE-MEASUREMENT (B-62).
         #
         # The 3 Hz below was set when one anchor evaluation was a "33 ms
         # burst" on the CPU. Re-measured on the vehicle after XFeat moved to
@@ -140,7 +140,7 @@ class LockSetupMixin:
         #     CPU   67.0 ms  p95 70.4   -> 3.0 Hz at 20 % duty
         #     HAILO 44.2 ms  p95 46.3   -> 4.5 Hz at 20 % duty
         #
-        # ⭐ The CPU number reproduces the shipped 3.0 Hz exactly from first
+        # The CPU number reproduces the shipped 3.0 Hz exactly from first
         # principles, which is what makes the new one trustworthy: the same
         # arithmetic on the same duty budget, with only the burst changed.
         #
@@ -149,7 +149,7 @@ class LockSetupMixin:
         # of worst-case staleness on the rung that exists to cover the p99
         # 2.418 s gap.
         #
-        # ⚠ The 8 Hz row in the old table (+42 % frame age for no extra
+        # The 8 Hz row in the old table (+42 % frame age for no extra
         # coverage) was measured at the OLD burst; 4.5 Hz at 44.2 ms is a
         # LOWER duty than 3 Hz at 67.0 ms, so this costs less latency than
         # what ships today, not more.
@@ -198,18 +198,18 @@ class LockSetupMixin:
                 # and no error.
                 roots = [d for d in (os.environ.get('MONGLA_HEF_DIR', '').strip(),
                                      '~/hailo_models') if d]
-                # ⛔ `.hef` FIRST (B-62). This globbed `xfeat_*.onnx` only, so
+                # `.hef` FIRST (B-62). This globbed `xfeat_*.onnx` only, so
                 # the compiled HEF sitting in the SAME directory was never a
                 # candidate and the anchor ran on the Pi's CPU: measured
                 # 32.9 ms per call (30.4 FPS) against 1.43 ms (701 FPS) on the
                 # accelerator. A 23x gap, spent on the cores the camera pump
                 # and the rclpy executor need.
                 #
-                # ⚠ The ONNX stays as the fallback, and it is a real one: the
+                # The ONNX stays as the fallback, and it is a real one: the
                 # dev box has no chip, and a vehicle whose HEF is missing must
                 # still get an anchor rung rather than lose it to a
                 # FileNotFoundError.
-                # ⭐ `.hef` FIRST (B-62). It took three attempts to earn this
+                # `.hef` FIRST (B-62). It took three attempts to earn this
                 # default: an own VDevice gave HAILO_OUT_OF_PHYSICAL_DEVICES,
                 # a shared VDevice with a lock gave "Cant activate network
                 # because a network is already activated"; the device now runs
@@ -236,12 +236,12 @@ class LockSetupMixin:
             # the evaluation period. The dev box and the Pi differ by 2.2x on
             # the identical work (14.4 vs 31.4 ms), so a constant width would
             # be wrong on one of them.
-            # ⭐ THE ACCELERATOR WHEN THE ARTIFACT IS ONE (B-62), the CPU
+            # The accelerator when the artifact is one (B-62), the CPU
             # otherwise. Both backends share `xfeat_onnx`'s post-processing and
             # matcher, so a checkpoint enrolled through either is matchable by
             # the other -- the bank must not partition by transport.
             #
-            # ⚠ DEGRADES RATHER THAN DIES. A HEF that will not configure --
+            # Degrades rather than dies. A HEF that will not configure --
             # the detector already holding the device, a driver mismatch, a
             # dev box with no chip at all -- falls back to ONNX with a loud
             # warning. Losing 31 ms per call is bad; losing the anchor rung

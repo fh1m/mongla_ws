@@ -20,7 +20,7 @@ the bug. Architecture and reasoning: [The Shift](../../../docs/the-shift.md).
 | Leak · kill · water temp | on the board | kill state comes from the power board over ESP-NOW |
 | Batteries | **two packs**: electronics (PM1) and thrusters (PM2) | de-multiplex `BATTERY_STATUS` by `id` |
 | Cameras | 2 × USB — forward and downward | measured calibration in `mongla_vision/config/calibration/` |
-| Radio | LoRa (SX127x) to the Bondor ground station | ⛔ needs an external antenna: an aluminium hull is a Faraday cage |
+| Radio | LoRa (SX127x) to the Bondor ground station | **Warning:** needs an external antenna: an aluminium hull is a Faraday cage |
 | Payload | the board's own outputs; `fire(N)` = **board channel N** (1–16) | the board's channel role decides whether it fires |
 
 ### Measured, not assumed

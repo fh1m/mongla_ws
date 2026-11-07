@@ -48,7 +48,7 @@ SROT_MESSAGE_RATES = {
     # scaled -- with a gyro sample shared across three camera frames, that
     # subtraction is using the wrong omega for two of them.
     #
-    # ⛔ A 100 Hz request ACKs ACCEPTED and delivers 50: the firmware's
+    # A 100 Hz request ACKs ACCEPTED and delivers 50: the firmware's
     # RATE_MIN_MS = 20 floor. The ACK is a claim; the arrival rate is the fact.
     mavutil.mavlink.MAVLINK_MSG_ID_SCALED_IMU2:    50,   # Hz -- gyro, de-rotation
     mavutil.mavlink.MAVLINK_MSG_ID_VFR_HUD:        10,   # depth
@@ -92,7 +92,7 @@ def _parse_payload_channels(spec: str, log=None) -> dict:
 HEARTBEAT_WAIT_S = 20.0
 
 
-# ⛔ THE B-72 TRADE-OFF, CLOSED (issue #13). The heartbeat runs on its own thread
+# The B-72 trade-off, closed (issue #13). The heartbeat runs on its own thread
 # so blocking callbacks cannot starve it -- which also meant a HUNG manager kept
 # the board fed and its 5 s surface failsafe could never fire. A liveness timer
 # in its own callback group stamps "the executor can still schedule work"; past
@@ -124,7 +124,7 @@ def mission_watchdog(attached: bool, last_seen: float, now: float,
 class _HeartbeatThread:
     """The companion HEARTBEAT on its own daemon thread -- nothing may starve it.
 
-    ⛔ WHY NOT A ROS TIMER. It used to be `create_timer(0.5, heartbeat_tick)` in
+    Why not a ROS timer. It used to be `create_timer(0.5, heartbeat_tick)` in
     the MutuallyExclusive `timer_group`, sharing one slot with callbacks that
     BLOCK: `_vision_uplink_tick` -> `_vision_state_for` waits up to 10 s for a
     first CameraInfo, and `_reapply_srot_config` -> `set_default_gain` busy-waits

@@ -58,7 +58,7 @@ def test_a_KNOWN_BAD_thruster_REFUSES_the_shot():
 
 
 def test_UNKNOWN_thruster_health_still_FIRES():
-    """⛔ The regression that would silently cost every payload point.
+    """The regression that would silently cost every payload point.
 
     This is the vehicle's real state today, so if this test ever inverts, the
     torpedo stops leaving the tube at competition and nothing logs an error.

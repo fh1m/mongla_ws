@@ -6,7 +6,7 @@ attitude + depth hold, thrust allocation, timed moves with braking, heading hold
 failsafes. So this backend is thin -- it sends **intent** and relays the board's
 own progress/terminal ACKs. The wire constants all live in `srot_protocol.py`.
 
-THREADING RULE: only the manager's reader thread calls `recv_match()`; every
+Threading rule: only the manager's reader thread calls `recv_match()`; every
 read here is a non-blocking `master.messages` cache lookup. Every write goes
 through `self._tx_lock` (pymavlink shares one seq counter + encode buffer across
 threads).
@@ -19,10 +19,10 @@ What the board does NOT have, so nothing here pretends to:
   * no RC heartbeat -- only the >=1 Hz MAVLink HEARTBEAT matters (5 s of silence
     and the board surfaces).
 
-⚠ The board's depth loop has never run closed (AUDIT R1) -- DIVE/DEPTH_HOLD are
+The board's depth loop has never run closed (AUDIT R1) -- DIVE/DEPTH_HOLD are
 bench-unverified. The facade gates dive-dependent verbs; this layer just sends them.
 
-WHERE EACH PART LIVES. `SrotFC` is one class assembled from one file per concern,
+Where each part lives. `SrotFC` is one class assembled from one file per concern,
 so a bug report names a file:
 
   srot_fc.py         the link, arm/disarm, modes, the SROT_MOVE verbs, manual()
@@ -232,7 +232,7 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
         Carried in `AUTOPILOT_VERSION.middleware_sw_version` (the board has no
         middleware, so the field was free), requested with MAV_CMD_REQUEST_MESSAGE.
 
-        WHY THIS EXISTS AT RUNTIME. `test_firmware_behaviour_rev_is_new_enough`
+        Why this exists at runtime. `test_firmware_behaviour_rev_is_new_enough`
         checks the same number, but it reads the firmware repo off disk and skips
         when that repo is not checked out beside the workspace -- which is exactly
         the situation on the vehicle. As a vehicle-side guarantee it is worth zero.
@@ -266,7 +266,7 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
         likely a dropped frame than a rev-1 board, and refusing to even talk to
         the vehicle on a comms hiccup is its own hazard.
 
-        ⛔ AT ARM IT REFUSES. That asymmetry was decided when the floor was rev 2
+        At ARM it refuses. That asymmetry was decided when the floor was rev 2
         and the cost of an old board was a `stop` that coasts. The floor is now
         rev 10, because below it the board's yaw sense is INVERTED: every turn
         goes the wrong way and any loop closed on yaw -- the vision verbs --
@@ -362,8 +362,8 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
     def _named_value(self, name, max_age_s: float = 3.0):
         """Latest NAMED_VALUE_FLOAT for `name`, or None if it has not arrived recently.
 
-        WHY THIS IS NOT A ONE-LINE CACHE READ. SROT multiplexes MV_STATE / LEAK / WTEMP /
-        GAIN / CURR / KILL and a dozen stack counters onto NAMED_VALUE_FLOAT, and pymavlink
+        Why this is not a one-line cache read. SROT multiplexes MV_STATE / LEAK / WTEMP /
+        Gain / curr / kill and a dozen stack counters onto NAMED_VALUE_FLOAT, and pymavlink
         keeps exactly ONE message per msgid. Reading `master.messages['NAMED_VALUE_FLOAT']`
         and comparing `.name` therefore succeeds only when the value you want happened to be
         the most recent to arrive -- roughly 1 call in 15. Against LEAK that is not a latency
@@ -410,7 +410,7 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
         our table for `max_age_s` instead of only until the next NAMED_VALUE_FLOAT of ANY
         name lands.
 
-        EACH MESSAGE IS FOLDED ONCE, and that identity check is load-bearing: pymavlink
+        Each message is folded once, and that identity check is load-bearing: pymavlink
         never clears its slot, so re-folding the same object would re-stamp it as fresh on
         every call and `max_age_s` could never fire -- a value from a dead link would read
         as current forever, which is the exact failure the freshness stamp exists to catch.
@@ -512,7 +512,7 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
         motionless vehicle -- the silent-success shape that has already cost this
         project a round in SURFACE mode and a disarmed `SROT_MOVE`.
 
-        ⛔ REFUSES ONLY ON KNOWN-ENGAGED, and that asymmetry is deliberate.
+        Refuses only on known-engaged, and that asymmetry is deliberate.
         `kill_switch is None` means the second board is not talking (unpowered,
         out of range, `ESPNOW_EN = 0`, or simply not built), which is a perfectly
         ordinary bench configuration. Refusing on unknown would make `arm()`
@@ -531,7 +531,7 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
     def check_depth_loop_settled(self):
         """(ok, reason). Refuse to arm while the depth controller is already saturated.
 
-        OBSERVED ON THE VEHICLE, 2026-08-02, disarmed and stationary on a bench:
+        Observed on the vehicle, 2026-08-02, disarmed and stationary on a bench:
         `DEPTH_OUT = -1.00` (full scale) with `DEPTH_ERR = -3.1 m`, because the Bar30
         was reporting a phantom depth. Arming into that state is not a subtle risk --
         the mixer's throttle column is **-1 on all four vertical thrusters and 0 on all
@@ -541,7 +541,7 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
 
         In water it is a vehicle that dives or surfaces the moment it arms.
 
-        ⚠ THIS READS `DEPTH_CMD`, NOT `DEPTH_OUT`, AND THAT CHANGE IS LOAD-BEARING.
+        This reads `DEPTH_CMD`, not `DEPTH_OUT`, and that change is load-bearing.
         It used to read `DEPTH_OUT` (the real controller's last output). From fw rev 8
         that field is SUPPRESSED while the controller is not running -- which is the
         honest-absence fix we asked for, and it made this guard STRUCTURALLY DEAD:
@@ -583,7 +583,7 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
             # blocking the arm. Say which it is; do not report it as "settled".
             return True, 'depth preview absent (barometer unhealthy -- AUTO will refuse)'
         depth_p = self.depth_p or sp.DEPTH_P_DEFAULT
-        # SATURATION FIRST. While clamped the true depth is beyond the clamp, so the
+        # Saturation first. While clamped the true depth is beyond the clamp, so the
         # recovery below would report a harmless-looking value for the very case this
         # guard exists to catch -- the 2026-08-02 phantom baro pinned DEPTH_CMD at
         # -1.00, which back-converts to a benign-looking -0.23 m.
@@ -656,7 +656,7 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
         deadline = sent + timeout
         while time.monotonic() < deadline:
             hb = self._vehicle_hb()
-            # ⛔ ONLY A HEARTBEAT HEARD SINCE THE COMMAND. pymavlink keeps the last
+            # Only a heartbeat heard since the command. pymavlink keeps the last
             # one forever, so a cache that already showed the target -- or a link
             # that died minutes ago in that mode -- confirmed the change at once,
             # and the caller drove on a mode the board may not be in. The vision
@@ -706,7 +706,7 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
         streamed 20 Hz servo primitive, so a single NaN from a vision loop must not
         crash the send -- it degrades to 'hold' for that tick.
 
-        THE MODE GUARD IS THE POINT, NOT DECORATION (B28). In `AUTO` and `SURFACE`
+        The mode guard is the point, not decoration (B28). In `AUTO` and `SURFACE`
         the firmware DISCARDS this frame -- every axis of it -- and says nothing:
 
             AUTO     fwd = md.fwd; lat = md.lat        task_control_loop.cpp:243
@@ -773,7 +773,7 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
         command-velocity model, which must predict nothing from an unknown, and
         by the ZUPT gate.
         """
-        # ⛔ A DISARMED BOARD DRIVES NO THRUSTER, so its demand is KNOWN: zero.
+        # A disarmed board drives no thruster, so its demand is KNOWN: zero.
         # Without this the demand read "unknown" whenever no MANUAL_CONTROL
         # stream ran -- every idle moment -- and the localization ZUPT, which
         # now requires a known-zero demand (issue #25), could never fire on
@@ -795,7 +795,7 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
     def _cut_short_by_mode_change(self, t_ack: float):
         """Why a move ACKed ACCEPTED,100 did not really complete -- or None.
 
-        ⛔ THE BOARD REPORTS A CANCELLED MOVE AS DONE. When a failsafe (leak,
+        The board reports a cancelled move as done. When a failsafe (leak,
         battery, companion loss), a baro loss or a disarm displaces AUTO, the
         running move is cancelled and then latched as finished, so the terminal
         ACK is ACCEPTED at 100 %. Taken at its word, the mission advances to its
@@ -807,7 +807,7 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
         Judged on a HEARTBEAT newer than the ACK, waited for briefly; with no
         vehicle heartbeat at all there is nothing to judge and the ACK stands.
 
-        ⛔ AN OLDER HEARTBEAT IS NOT EVIDENCE. If none newer than the ACK lands
+        An older heartbeat is not evidence. If none newer than the ACK lands
         inside the wait, the only heartbeat in hand was sent BEFORE the move
         ended -- ARMED and in AUTO by construction, whatever the failsafe did
         since. Judging on it reported every cut-short move as completed exactly
@@ -838,7 +838,7 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
     def _drain_move_acks(self, wait_s: float = MOVE_ACK_DRAIN_S) -> int:
         """Consume the terminal SROT_MOVE ACKs a STOP sets in flight (issue #10).
 
-        ⛔ THE NEXT MOVE USED TO READ THEM AS ITS OWN. A STOP displaces the
+        The next move used to read them as its own. A stop displaces the
         running sequence, and the firmware answers that displacement -- the old
         sequence's CANCELLED (or ACCEPTED, if it had just completed) -- on its
         stream task's next tick, followed by the STOP's own terminal ACK. Both
@@ -922,12 +922,12 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
         of any kind. Separate from `set_servo` because the plain form is a raw
         fire-and-forget wire wrapper and several callers want it that way.
 
-        ⚠ ON and OFF are the SAME command id (183) and pymavlink keeps one message
+        ON and OFF are the SAME command id (183) and pymavlink keeps one message
         per msgid, so the ACK slot MUST be cleared immediately before each send or
         this reads the previous pulse's answer. That is the same single-slot hazard
         documented at length in `_named_value`.
 
-        ⚠ Clearing the cache is NOT sufficient on its own, and this was MEASURED:
+        Clearing the cache is NOT sufficient on its own, and this was MEASURED:
         probing the live board with back-to-back DO_SET_SERVO commands read the
         PREVIOUS command's DENIED as the next command's answer, because clearing
         pymavlink's cache does nothing about an ACK still sitting in the socket
@@ -968,10 +968,10 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
             return MoveResult(DENIED, f'{verb}: {exc}')
         if not _finite(p1, p2, p3, p4, p5):
             return MoveResult(DENIED, f'{verb}: non-finite parameter -- refused host-side')
-        # ⚠ AN ABSOLUTE TURN IS ONLY A COMPASS HEADING WITH A LOCKED YAW
+        # An absolute turn is only a compass heading with a locked yaw
         # REFERENCE (#15). Checked HERE, not once at startup: YAW_REF is a live
         # state machine that restarts at SAMPLING after every board reboot.
-        # WARNED, NOT REFUSED, deliberately: the search sweeps call
+        # Warned, not refused, deliberately: the search sweeps call
         # `turn(head() + step)`, a target in the board's OWN frame, which is
         # correct whether or not that frame is magnetic. Only a heading taken
         # from the course (GATE_HEADING_DEG ...) is wrong unlocked -- and the verb
@@ -984,7 +984,7 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
                                f'correct for a head()-relative target, WRONG for a '
                                f'compass heading from the course')
 
-        # ⛔ NEVER SEND A SROT_MOVE INTO SURFACE. The firmware's SROT_MOVE handler
+        # Never send a SROT_MOVE into surface. The firmware's SROT_MOVE handler
         # sets `mode = AUTO` unconditionally (mav_commands.cpp), so the next leg of
         # a mission -- or a plain `stop` -- quietly undoes a leak/battery/GCS
         # failsafe SURFACE, or the operator's own `surface`, and the hull re-dives
@@ -1022,7 +1022,7 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
         Now `deadline` is a SILENCE window, refreshed by genuine progress, under an
         absolute ceiling so a board that reports progress for ever still terminates.
 
-        ⛔ REFRESH ONLY ON *NEW* PROGRESS. `_cache()` returns the same COMMAND_ACK
+        Refresh only on *new* progress. `_cache()` returns the same COMMAND_ACK
         object every poll until a new one lands, so refreshing on every sighting
         would let ONE stale IN_PROGRESS hold the deadline open indefinitely --
         turning the backstop into a hang. That is why the reset is inside the
@@ -1134,7 +1134,7 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
 def _speed_from_gain(kw) -> float:
     """Move.Goal.gain is a 0..100 % thrust cap -> SROT 0..1 speed (clamped to cruise).
 
-    A NON-FINITE GAIN IS REFUSED, NOT COERCED. `sanitize_speed` maps NaN to 0.0,
+    A non-finite gain is refused, not coerced. `sanitize_speed` maps NaN to 0.0,
     which is the correct fail-safe for the STREAMING path (`manual()` cannot raise
     once per 20 Hz tick, and zero means no motion). It is the wrong answer for a
     ONE-SHOT verb: the board would accept a perfectly valid "move at speed 0",
@@ -1154,7 +1154,7 @@ def _depth_to_dive(kw) -> float:
     """mongla set_depth target is NEGATIVE metres (below surface); SROT DIVE p2 is a
     POSITIVE depth. Refuse a positive target (would be above the surface).
 
-    ⛔ THE NON-FINITE CHECK IS FIRST, AND IT IS NOT DECORATION (B35). `target > 0.0`
+    The non-finite check is first, and it is not decoration (B35). `target > 0.0`
     is False for NaN -- every comparison against NaN is -- so the one guard written
     to reject a bad depth target used to ACCEPT NaN and emit it as p2. `-inf` got
     through the same way and became `-(-inf)` = **+inf**: a request to dive to
@@ -1175,7 +1175,7 @@ def _depth_to_dive(kw) -> float:
 def _finite_param(name: str, value: float) -> float:
     """A wire parameter, or a ValueError NAMING the field that was not finite.
 
-    ⚠ THIS IS NOT WHAT STOPS NaN REACHING THE WIRE. `move()` already refuses the
+    This is not what stops NaN REACHING THE WIRE. `move()` already refuses the
     whole frame via the `_finite(*vals)` predicate above -- and the board refuses
     it again (fw `mav_commands.cpp:279-292`). Both of those say only
     "non-finite parameter"; this says WHICH ONE, at the point where the field

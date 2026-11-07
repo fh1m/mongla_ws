@@ -1,6 +1,6 @@
 """An unknown class name must not filter EVERY detection away.
 
-⛔ `HailoDetector.update_allowlist` mapped requested names to class ids. If a
+`HailoDetector.update_allowlist` mapped requested names to class ids. If a
 name did not exist in the model, it contributed no id -- and if EVERY requested
 name was unknown, the allowlist became an empty set, which filters everything.
 The detector then returns [] on every frame, the graph publishes at full rate,

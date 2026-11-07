@@ -6,7 +6,7 @@ preloaded rather than learned live. Preloading is worth a great deal: on the
 run there may be no confident detection to enrol from at the moment the anchor
 is needed, which is exactly when the detector is failing.
 
-THE TEST. Two clips of the same venue and the same prop, recorded as separate
+The test. Two clips of the same venue and the same prop, recorded as separate
 runs, are the closest thing the archive has to "practice then competition":
 
     mirpur_torpedo  <-> mirpur_torpedo_1     same venue, same prop, two runs
@@ -15,7 +15,7 @@ References are snapped across clip A and matched against frames of clip B.
 Within-clip matching is measured alongside as the control, because a
 cross-run number means nothing without the same-run number beside it.
 
-⚠ WHAT THIS CANNOT SETTLE. Two runs on one day share water, light and
+What this cannot settle. Two runs on one day share water, light and
 turbidity. A practice session days earlier, or a different pool, is a larger
 domain shift than this measures, and a positive result here is necessary
 evidence rather than sufficient. Stated so the number is not over-claimed.
@@ -113,7 +113,7 @@ def main() -> int:
                 continue
             vals = [best_over_bank(net, bank, q) for q in qs]
             v = np.array(vals, float)
-            tag = 'same run' if qn == an else '⭐ CROSS-RUN'
+            tag = 'same run' if qn == an else 'RESULT: CROSS-RUN'
             print(f'{an:<15} {qn:<15} {np.median(v):>7.0f} '
                   f'{np.percentile(v, 10):>5.0f} {v.max():>5.0f} '
                   f'{(v >= a.bar).mean():>8.0%}  {tag}')

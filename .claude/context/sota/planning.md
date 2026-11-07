@@ -40,12 +40,12 @@ control, and a `__getattr__` escape hatch to the raw client (`:3104`).
 - The FSM graph (YASMIN 5.x) was built **once before arm** and was static; `full_competition.py`
   branched on `profile` at *construction* time, never at runtime. **The layer is gone** (§1.4).
 - `run_budget.by_points_per_second()` had **zero callers**; so did `RunBudget.plan` and
-  `projected_points`. ✅ `run_plan(order='by_value')` now calls the first and the machinery is live.
+  `projected_points`. `run_plan(order='by_value')` now calls the first and the machinery is live.
 - The entire adaptive layer is: one scalar clock, three `worth_attempting()` yes/no/degraded
   decisions in `sauvc_full.py`, and a fixed expanding-box search whose radius comes from the fix
   residual (`acquire()`, `:1953-2018`).
 
-### 1.4 ⛔ The defect this map found — and the layer it killed
+### 1.4 The defect this map found — and the layer it killed
 
 `state_machines/README.md` (now deleted) claimed that a plan leaning on `LockHeadingState`
 *"will not fail loudly — those verbs are refused and the plan continues."* **The code did the
@@ -59,7 +59,7 @@ plan wires `ABORT: 'SURFACE'` on `LOCK_HDG`.
 after DIVE.** No test covered it — `test_sauvc_srot_port.py` executes only the three SAUVC
 *script* missions against `UNSUPPORTED_VERBS`.
 
-✅ **Resolved 2026-09-22 by retiring the layer** (operator decision; J03 had framed exactly this
+**Resolved 2026-09-22 by retiring the layer** (operator decision; J03 had framed exactly this
 choice). 3,550 lines deleted. The capability oracle then moved into the DSL; on 2026-11-06 the refused
 verbs themselves left with the old backend, so there is nothing left to refuse — a mission can
 only name the 23 verbs, and `test_every_mission_runs_against_the_real_dsl.py` proves each one does.
@@ -74,7 +74,7 @@ ship every prop `measured: false` with no coordinates at all.
 
 ## 2. What the best work does
 
-> Source dossier: [`sources/sota-planning.md`](sources/sota-planning.md). ⚠ The sweep ran with
+> Source dossier: [`sources/sota-planning.md`](sources/sota-planning.md). The sweep ran with
 > **zero web-search budget** (exhausted session-wide) and worked through arXiv, GitHub and
 > bibliographic APIs only. The RoboSub/SAUVC TDRs could not be reached at all — that gap is named
 > in §6.
@@ -103,8 +103,8 @@ are a few hundred lines of Python that read top to bottom.
 |---|---|---|
 | **PLEXIL** (NASA) | **7 named deployments** — Curiosity's drill, LADEE, ISS among them | deterministic execution semantics with contingency handling, formally validatable |
 | **T-REX** (MBARI) | ported onto a **HUGIN AUV**, validated in a 2017 NTNU-FFI cruise | timeline-based deliberation inside a look-ahead window, on a real AUV |
-| **PlanSys2** | ROS 2, IROS 2021, 492★ | PDDL plans compiled **into** behaviour trees — and it **replans dynamically** |
-| **COLA2** (Girona) | Ictineu AUV, 98+ citations | ⭐ the mission language compiles to a **Petri net with reachability-based safety proofs** |
+| **PlanSys2** | ROS 2, IROS 2021, 492| PDDL plans compiled **into** behaviour trees — and it **replans dynamically** |
+| **COLA2** (Girona) | Ictineu AUV, 98+ citations | **Key point:** the mission language compiles to a **Petri net with reachability-based safety proofs** |
 
 **COLA2 is the one worth stealing from.** It is the only architecture found with an actual
 mathematical route to a pre-flight safety proof — the thing we need most, because **we cannot test
@@ -176,7 +176,7 @@ here before this dive.
 
 | rejected | why |
 |---|---|
-| **The YASMIN FSM layer** | ⛔ **Retired 2026-09-22.** 3,550 lines that had never executed, carrying J04 — every plan aborted to SURFACE one state after DIVE on srot. The published case for a graph representation is *maintainability at scale* (Iovino et al.), and behaviour is representation-independent; our missions are short, linear and read top to bottom. What the layer promised now lives in the DSL: `can()`, `require()`, `run_plan()`. |
+| **The YASMIN FSM layer** | **Warning: Retired 2026-09-22.** 3,550 lines that had never executed, carrying J04 — every plan aborted to SURFACE one state after DIVE on srot. The published case for a graph representation is *maintainability at scale* (Iovino et al.), and behaviour is representation-independent; our missions are short, linear and read top to bottom. What the layer promised now lives in the DSL: `can()`, `require()`, `run_plan()`. |
 | **Adopting behaviour trees in its place** | Same reasoning, plus: a BT would have reproduced J04 exactly — the defect was a capability check that existed and was never consulted, which no representation prevents. |
 | **PDDL / PlanSys2** | The gap it fills is dynamic replanning over a symbolic domain. Our course is five known tasks on a clock; `run_plan`'s per-step re-decision covers the part of that we can use, without a planner, a domain file, or a second execution engine. |
 | **LTL/STL mission specs** | Never found flown — planning-time artefacts. Revisit only if the pre-flight checker (P-1) needs a property language, and then as a checking notation, not an execution one. |

@@ -1,6 +1,6 @@
 """The attitude half of the sensor-health gate, which was missing.
 
-⛔ MEASURED ON THE VEHICLE, 2026-09-11. After a bad boot the SROT board
+Measured on the vehicle, 2026-09-11. After a bad boot the SROT board
 reported:
 
     SYS_STATUS present=0x80203c0b health=0x2408

@@ -1,6 +1,6 @@
 """Every end of every vision link, checked against the rule the middleware uses.
 
-WHY THIS FILE EXISTS
+Why this file exists
 --------------------
 A RELIABLE subscriber against a BEST_EFFORT publisher receives NOTHING. rclpy
 logs one warning at construction and is silent afterwards, so the symptom is a

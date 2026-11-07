@@ -25,7 +25,7 @@
   the tree derives these from an Allan variance.
 - One shared gate (`:355-420`): NIS against `CHI2_99 = {1: 6.635, 2: 9.210, 3: 11.345}`, plus a
   **lockout break** — after 5 consecutive rejections the gate is bypassed once and `P *= 4.0`.
-  ⛔ That runs *toward* the measurement; it is not a divergence guard.
+  **Warning:** That runs *toward* the measurement; it is not a divergence guard.
 
 ### 1.2 The eleven sources, and what ships on
 
@@ -43,7 +43,7 @@
 | 10 | prop fix | `H[0,6]=1, H[1,7]=1` | σ from `point.z` | mission-called |
 | 11 | command-velocity aid | as #5 | flow stale ≥ 1 s, demand ≤ 0.5 s, model ready | on, silent until learned |
 
-⛔ **Grid and lane are inert until an anchor arrives** (`localization_node.py:495-507`), and the
+**Warning: Grid and lane are inert until an anchor arrives** (`localization_node.py:495-507`), and the
 course files ship with **every position unset and `measured: false`**, so `fix_position`,
 `fix_from_prop` and `anchor_on` all refuse on an unsurveyed venue. `place_prop` (and the
 `survey_course` mission around it) fills an unset or nominal position from the vehicle's own
@@ -55,7 +55,7 @@ sightings; a `measured: true` prop is only checked against them, never overwritt
 snapshot taken just before it ran**; a late event restores, truncates and replays the tail. Cost
 is proportional to lateness, not horizon. The departure from textbook OOSM is deliberate and
 measured: dropping attitude updates on replay diverged to **7.1e6 m in 35 s** (`:10-19`).
-⛔ **Off by default** — `retrodict=False` (`localization_node.py:154`).
+**Warning: Off by default** — `retrodict=False` (`localization_node.py:154`).
 
 ### 1.4 What happens when it is lost — the honest answer
 
@@ -84,7 +84,7 @@ assumption. **Sonar** — absent. **GPS** — absent.
 
 ## 2. What the best work does
 
-> Source dossier: [`sources/sota-localization.md`](sources/sota-localization.md). ⚠ This sweep ran
+> Source dossier: [`sources/sota-localization.md`](sources/sota-localization.md). This sweep ran
 > with **zero web-search budget** (exhausted session-wide before its first query) and worked
 > through the arXiv API, Semantic Scholar and direct fetches. Three topics could not be reached at
 > all — they are named in §6, not papered over.
@@ -99,7 +99,7 @@ assumption. **Sonar** — absent. **GPS** — absent.
   against a plain ESKF (0.58° / 0.20 m vs 1.13° / 0.26 m) — but benchmarked on a **desktop
   R9 7950X**.
 
-⛔ **No paper found gives a Pi-5-class CPU cost for any of it.** The question "can a fixed-lag
+**Warning: No paper found gives a Pi-5-class CPU cost for any of it.** The question "can a fixed-lag
 window run on a Pi 5 beside a vision graph" is **unanswered by the literature** — so moving off
 our filter cannot be justified from published numbers, only from our own measurement. That is a
 finding, not a gap in the search.
@@ -108,7 +108,7 @@ finding, not a gap in the search.
 
 **Contact-aided factor-graph localization** ([arXiv 2608.26932](https://arxiv.org/html/2608.26932))
 is the standout result: **0.099 m ATE** best case, **87 % error reduction** over a DVL-only
-baseline, 0.90 m harbour revisit error. ⛔ It **assumes a DVL**, and reports no timing figure.
+baseline, 0.90 m harbour revisit error. It **assumes a DVL**, and reports no timing figure.
 
 The honest reading: the factor-graph literature's headline underwater numbers are *DVL numbers*.
 Our 3.4 % flow drift floor is not being compared against 0.099 m ATE on equal terms.
@@ -126,7 +126,7 @@ Our gate is a χ²-99 % test with **unmeasured Q and R**. So a rejection cannot 
 top of a statistic that is not valid until the noise model is. **An Allan variance is therefore a
 precondition for trusting the gate**, not an optional refinement.
 
-⛔ **No published online divergence detector with a detection-rate table was found.** Covariance
+**Warning: No published online divergence detector with a detection-rate table was found.** Covariance
 inflation is confirmed as standard practice (ensemble/data-assimilation literature,
 [arXiv 1806.10655](https://arxiv.org/pdf/1806.10655)) but **with no numeric trigger threshold**
 comparable to our ×4-after-5.
@@ -148,7 +148,7 @@ For scale, from the VO dive: a **DVL-INS dead-reckons at 0.01–0.1 % of distanc
 |---|---|---|---|
 | L-1 | **say when the estimate is untrustworthy** | a 5 Hz **log line**, written after a measured **635 m of drift in 95 s** while publishing a healthy-looking pose | nothing on a topic; `pose()` sees only the frame id, never the aiding state |
 | L-2 | tune Q and R from **measured** noise | nominal diagonals, **no Allan variance anywhere in the tree**; position process noise is **exactly zero** | our χ² gate is only valid for a tuned filter — so the gate, the lockout break and the ×4 inflation all rest on an unmeasured foundation |
-| L-3 | recover an absolute fix after a blackout | **no relocalization path at all** | ⛔ and the sweep could not reach the underwater kidnapped-robot literature, so we do not even know the field's answer yet (§6) |
+| L-3 | recover an absolute fix after a blackout | **no relocalization path at all** | **Warning:** and the sweep could not reach the underwater kidnapped-robot literature, so we do not even know the field's answer yet (§6) |
 | L-4 | carry independent sources so one failure is survivable | 11 sources on paper, but **grid and lane are inert until an anchor arrives**, and the course files ship with **no positions**, so `fix_position`/`anchor_on` refuse | on an unsurveyed venue the map half is unreachable by design |
 | L-5 | smooth over a window where it pays | filter only | **unanswered by the literature on our hardware** — a Pi-5 measurement is the only way to decide |
 

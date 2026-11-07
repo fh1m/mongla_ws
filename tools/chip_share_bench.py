@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """XFeat + detector on one Hailo-8, via the scheduler and the sync API.
 
-⛔ TWO PROCESSES CANNOT: a second client gets
+Two processes cannot: a second client gets
 HAILO_OUT_OF_PHYSICAL_DEVICES(74) while the first keeps full rate. Sharing has
 to happen inside one process.
 
-⛔ AND TWO GROUPS CANNOT BOTH BE `activate()`d: that raises
+And two groups cannot both be `activate()`d: that raises
 HailoRTInvalidOperationException. With the SCHEDULER enabled you do not
 activate at all -- HailoRT time-slices the configured groups itself, which is
 the supported mechanism and the one this measures.

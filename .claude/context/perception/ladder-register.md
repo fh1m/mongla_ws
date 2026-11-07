@@ -4,7 +4,7 @@
 > the 2026-09-23/25 rounds, its evidence, and its REAL wiring state read from
 > `test_no_capability_is_built_and_unreachable.py` rather than from memory.
 >
-> ⛔ The repo's oldest and most expensive defect is a module that is finished,
+> **Warning:** The repo's oldest and most expensive defect is a module that is finished,
 > tested, and imported by nothing. Ten of the fourteen below are in that state
 > **on purpose**, each with a named blocker. A row here is a debt with a name.
 
@@ -36,7 +36,7 @@ approach controller reads), replay mode, and — new — the **acting bar** belo
 
 | module | what it would give | blocked on |
 |---|---|---|
-| **`tracking/visibility.py`** ⭐ | **the FOV guard. There is no field-of-view constraint anywhere in `mongla_control`, so perception can be perfect and the lock still dies because the vehicle turned away** | a consumer in the vision verbs: yaw/lateral demand scaled by `Visibility.scale`, and only the component making the bearing WORSE. Control change ⇒ needs a pool day |
+| **`tracking/visibility.py`** | **the FOV guard. There is no field-of-view constraint anywhere in `mongla_control`, so perception can be perfect and the lock still dies because the vehicle turned away** | a consumer in the vision verbs: yaw/lateral demand scaled by `Visibility.scale`, and only the component making the bearing WORSE. Control change ⇒ needs a pool day |
 | `tracking/cascade.py` | association cascade; expensive appearance stage only on detections motion cannot explain, with a MEASURED ego-motion stage no published tracker has | `tracker_node` calls its tracker library directly; inserting a cascade touches the association hot path, rate must be measured on the vehicle |
 | `tracking/reid.py` | the 179-switch fix, using XFeat already loaded at 701 FPS instead of a 15–25 ms Re-ID net | crop descriptors at track birth/death |
 | `tracking/presence.py` | the rung BELOW detection (track-before-detect) | **B-59 — may never wire.** The band below the bar is confident hallucination, not faint signal |
@@ -86,7 +86,7 @@ ends**:
 2. **outside the frame** — `visibility.py` exists and is not wired, so nothing
    stops the vehicle turning away from a target it is successfully tracking.
 
-⭐ **(2) is the largest remaining gap in the whole pipeline** and the only one
+**Key point: (2) is the largest remaining gap in the whole pipeline** and the only one
 whose module is already written and measured.
 
 ---
@@ -98,7 +98,7 @@ whose module is already written and measured.
 
 ### Blocking, in order
 
-1. ✅ **B-60 RESOLVED by model selection.**
+1. **B-60 RESOLVED by model selection.**
    `pendrive_2/final/models/gate/weights/best.pt` scores **100 % positive and
    0.0 % across 1 200 negative frames from 3 venues**, at every threshold.
    The shipped model fires on 100 % of a gate-free clip at 0.15. Remaining:
@@ -106,16 +106,16 @@ whose module is already written and measured.
    `gate, shark, shaw_fish` and NOT `rescue`/`repair`, so promoting it changes
    the mission surface; and it must be compiled at >= 1024 calibration frames
    before it flies.
-2. ✅ **The archive was searched.** `tools/model_inventory.py`: **208 `.pt`,
+2. **The archive was searched.** `tools/model_inventory.py`: **208 `.pt`,
    96 unique after content dedup, 29 with a gate class.** 96/96 have never
    been measured against absent-prop footage — that column is now tracked.
 3. **`rescue` / `repair` / `sauvc_sim` / `bin_fire_blood` still unmeasured**
    for the same defect.
-4. ✅ **B-61 — ROOT CAUSE FOUND AND FIXED: BGR/RGB.** The Hailo input path
+4. **B-61 — ROOT CAUSE FOUND AND FIXED: BGR/RGB.** The Hailo input path
    never converted `cv2`'s BGR to the RGB the model was trained on, so the
    chip ran on colour-swapped pixels since the backend was written. Proved by
    reproducing it on the `.pt` with no chip involved: the same swap turns
-   `gate=0.78` into `repair=0.92 @0,0`. ⚠ **Two wrong diagnoses came first**
+   `gate=0.78` into `repair=0.92 @0,0`. **Two wrong diagnoses came first**
    (decode stride; the DFC calibration cliff — a real defect, fixed
    separately, but not this one). **Every HEF-path measurement must be
    re-taken**: 80.9/53.9 Hz, the murky INT8 table, "INT8 costs 0.08". The
@@ -133,10 +133,10 @@ whose module is already written and measured.
 5. **`visibility.py`** — `assess()` is wired advisory; **`WorldTarget`,
    `project_world_target`, `region_conf_bar` are reached by TESTS ONLY.** That
    is the object-permanence half: what lets a target leaving frame become a
-   navigation problem rather than a forgotten one. ⚠ The reachability register
+   navigation problem rather than a forgotten one. The reachability register
    cannot see this — it checks modules, not capabilities.
 
-   ⛔ **The blocker, measured 2026-09-25, is two missing signals — not a
+   **Warning: The blocker, measured 2026-09-25, is two missing signals — not a
    missing consumer.** `WorldTarget.observe()` needs `vehicle_xy`, `yaw_deg`,
    `bearing_deg` and `range_m`. `lock_node` has the first (`_odom_xy`) and can
    compute the third (`bearing_from_pixel`). It has **neither yaw** (never
@@ -161,11 +161,11 @@ whose module is already written and measured.
    Round 14 / POS_HOLD without DVL · downward place-bank preloading ·
    Hailo async API (13.4 → ~7 ms) · `geometric_allocation.py` triage
 
-   ✅ **`track_id` is NOT missing** — checked 2026-09-25.
+   **`track_id` is NOT missing** — checked 2026-09-25.
    `tracker_node.py:432` sets `d2.id = str(td.track_id)` on `/tracks`, and
    `check_tracker.py` reads `d.id` (the field `vision_msgs/Detection2D`
    actually has; there is no `tracking_id`). The backlog entry claiming "its
-   absence makes every id-switch number meaningless" was stale. ⚠ What is
+   absence makes every id-switch number meaningless" was stale. What is
    genuinely absent is an id on **`/detections`** — the DETECTOR's output has
    no track identity, because association happens downstream in
    `tracker_node`. That is by design, and it is why re-ID cannot be fed from
@@ -181,7 +181,7 @@ whose module is already written and measured.
 701 FPS … waits on tracker_node supplying crop descriptors at track birth and
 death"*. Fixing B-62 was supposed to unblock it. It does not.
 
-⛔ **`tracker_node` has no images.** It subscribes to exactly two topics —
+**Warning: `tracker_node` has no images.** It subscribes to exactly two topics —
 `detections` and `camera_info` — and nothing else. It owns track identity and
 has never seen a pixel. Re-ID needs a *crop descriptor*, so the missing
 ingredient was never XFeat's cost; it is that the node holding the identity
@@ -191,18 +191,18 @@ cannot compute an appearance at all.
 
 1. **Subscribe images in `tracker_node`.** Puts a second full-resolution
    subscriber on the hot path and duplicates the camera mailbox the detector
-   already owns. ⚠ Measured elsewhere in this repo: a queue-bound consumer sees
+   already owns. Measured elsewhere in this repo: a queue-bound consumer sees
    396 ms of staleness against 16.9 ms on the mailbox, so this is the option
    most likely to be quietly wrong.
 2. **Compute descriptors in the DETECTOR**, which already holds the frame and
    the boxes, and publish them alongside the detections. Costs a wire format
    and bandwidth, but the frame is already in hand and correctly stamped.
-3. **Move identity into `lock_node`**, which has frames and XFeat today. ⛔ But
+3. **Move identity into `lock_node`**, which has frames and XFeat today. But
    `lock_node` tracks ONE target by design, and re-ID exists for the
    multi-object case — this would be re-architecting around the tool we happen
    to have.
 
-⭐ **(2) is the honest one**, and it is the same shape as a decision this repo
+**Key point: (2) is the honest one**, and it is the same shape as a decision this repo
 already made: the detector owns the frame, so anything needing pixels and
 boxes together belongs where both already are. It is a wire-format change and
 needs its rate measured before it ships.
@@ -225,19 +225,19 @@ Five rows; four resolve cleanly and **one is real**:
 
 | topic | verdict |
 |---|---|
-| `/mongla/esc_rpm` | ✅ diagnostic, CLI and Foxglove read it |
-| `/mongla/localization/aiding` | ✅ diagnostic |
-| `/vis_range_map` | ✅ "debug only" by its own docstring; `display_node` reads it |
-| `/target_pose` | ✅ false alarm — `pnp_node` builds the name in a VARIABLE, invisible to a source scan |
-| **`/target_pose_fused`** | ⛔ **published by `pose_fuse_node`, read by nothing** |
+| `/mongla/esc_rpm` | diagnostic, CLI and Foxglove read it |
+| `/mongla/localization/aiding` | diagnostic |
+| `/vis_range_map` | "debug only" by its own docstring; `display_node` reads it |
+| `/target_pose` | false alarm — `pnp_node` builds the name in a VARIABLE, invisible to a source scan |
+| **`/target_pose_fused`** | **Warning: published by `pose_fuse_node`, read by nothing** |
 
-⭐ **What is being wasted.** `pose_fuse_node` subscribes every estimator's
+**Key point: What is being wasted.** `pose_fuse_node` subscribes every estimator's
 single-frame answer and publishes the one the support agrees on — a fused,
 outlier-rejected pose, with `pose_cluster`'s decision rule behind it. Every
 consumer today reads the RAW `/target_pose` instead: one frame's answer from
 whichever estimator happened to produce it.
 
-⚠ **This was a deliberate split**, and the node's docstring defends it: a
+**Caution: This was a deliberate split**, and the node's docstring defends it: a
 consumer wanting the latest reading and one wanting the settled reading are
 different consumers, and collapsing them would remove the ability to compare
 an estimator against its own fused output. So the topic existing unread is
@@ -245,7 +245,7 @@ NOT automatically wrong.
 
 **What is wrong is that no consumer chose.** The fused topic was built for the
 control path — the settled answer is what you steer on — and the control path
-never switched. ⛔ Do not flip it blind: the fusion adds latency by
+never switched. Do not flip it blind: the fusion adds latency by
 construction (it waits for support), and `vision_verbs` acts on a freshness
 decay. The measurement to make first is **fused-vs-raw latency against
 accuracy on a recorded bag**, which is exactly what publishing both was meant

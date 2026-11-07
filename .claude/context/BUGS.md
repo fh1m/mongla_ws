@@ -29,12 +29,12 @@
 > fitted), FSM (J02, J03 — never run), or docs-only (B24, whose doc half is done
 > and whose code half is B06).
 >
-> ⚠ **B28 is the one srot-path item still open, and only half of it is ours.** The
+> **Caution: B28 is the one srot-path item still open, and only half of it is ours.** The
 > host guard is fixed and tested; the firmware fix is upstream PR
 > srot-control-board#15, source-verified but **not bench-demonstrated** — the board
 > refuses to arm without the thruster pack.
 >
-> ⚠ **J02 is inert only because J03 is true.** `SurfaceState` swallows the failure
+> **Caution: J02 is inert only because J03 is true.** `SurfaceState` swallows the failure
 > of `set_depth(0.0)` and returns `SUCCEED` unconditionally — a failed ascent
 > reported as success. Fix it **before** the FSM is ever switched on for a run.
 
@@ -62,7 +62,7 @@ logic right?" would have passed all three.
 
 ## 1. CRITICAL
 
-### B53 — every payload channel the missions use is REFUSED by this board `MEASURED 2026-09-22, re-read 2026-10-01` ✅ **MAP REMOVED 2026-10-01** — channels await the wired payload
+### B53 — every payload channel the missions use is REFUSED by this board `MEASURED 2026-09-22, re-read 2026-10-01` **MAP REMOVED 2026-10-01** — channels await the wired payload
 **`missions/competition_config.py` vs the board's `SERVOn_ROLE` params**
 
 Read live off the board, all 16 channels, twice each (retry on timeout):
@@ -88,15 +88,15 @@ What the missions believe (`competition_config.py:60,189`, `pool_day_practice.py
 | `pool_day_practice.py:206` | 3 | SERVO | `FIRE_REJECTED_ARM` |
 | `demo_dual_camera.py:68` | 3 | SERVO | `FIRE_REJECTED_ARM` |
 
-⛔ **If this board's roles are representative, every drop and every torpedo scores
+**Warning: If this board's roles are representative, every drop and every torpedo scores
 zero** — the dropper and target-acquisition tasks in full.
 
-✅ **The guard works.** `fire()` fails closed: it refuses a SERVO channel rather
+**The guard works.** `fire()` fails closed: it refuses a SERVO channel rather
 than writing `DO_SET_SERVO` to the on-board arm, and refuses an unreadable role
 rather than guessing. Nothing here silently no-ops. That is the design working
 exactly as intended, and it is why this was findable on a bench.
 
-⚠ **TWO HYPOTHESES, AND THIS ONE IS NOT OURS TO CLOSE.**
+**Caution: TWO HYPOTHESES, AND THIS ONE IS NOT OURS TO CLOSE.**
 
 1. **The mission channel map is wrong** and should point at 9/10/12–16.
 2. **This bench board's `SERVOn_ROLE` params are simply unconfigured.** "1–8 servo,
@@ -122,7 +122,7 @@ swapping one unverified map for another:
   `TORPEDO_1/2_CHANNEL`, `DROPPER_1/2_CHANNEL`, all **0 = NOT ASSIGNED**, with the
   board's live read written beside them. `BIN_`/`SAUVC_DROPPER_CHANNEL` are aliases.
   Five missions that hard-coded 1 or 3 now read those names.
-- ⛔ **A silent drop was found on the way.** `vision_verbs._parse_channels` dropped
+- **Warning: A silent drop was found on the way.** `vision_verbs._parse_channels` dropped
   anything outside 1..16 — so `align(fire=0)` would have fired *nothing* with no
   error. Out-of-range numbers now pass through, and `fire()` refuses each with a
   reason that lands in the verb's payload outcome.
@@ -139,7 +139,7 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 
 ## 2. HIGH
 
-### B-84: a pre-empted verb freed the gate its pre-emptor held `READ 2026-11-07 (cloud audit)` ✅ **FIXED 2026-11-07**
+### B-84: a pre-empted verb freed the gate its pre-emptor held `READ 2026-11-07 (cloud audit)` **FIXED 2026-11-07**
 
 **What.** `disarm` pre-empts a running `move_forward`: it claims the command gate
 and signals an abort. The move's loop then exits, and its `finally` called
@@ -156,7 +156,7 @@ longer starts a drain nobody would end. An unknown verb is rejected in
 `COMMAND_GATE_STALE_S`. Tests: `test_command_gate.py`,
 `test_unknown_verbs_never_claim_the_gate.py`, both injection-verified.
 
-### B-85: confirmations read off messages from before the command `READ 2026-11-07 (cloud audit)` ✅ **FIXED 2026-11-07**
+### B-85: confirmations read off messages from before the command `READ 2026-11-07 (cloud audit)` **FIXED 2026-11-07**
 
 pymavlink keeps the last message of each type forever, and four places took
 that cache as the board's answer:
@@ -174,7 +174,7 @@ stamp; the Pi has no RTC and the first NTP sync steps it. Tests in
 `test_stale_telemetry_is_absent.py`. The test fakes gained what a real board
 does: a 10 Hz heartbeat, and arrival stamps.
 
-### B-86: arm proceeded when the board would not say its firmware revision `READ 2026-11-07 (cloud audit)` ✅ **FIXED 2026-11-07**
+### B-86: arm proceeded when the board would not say its firmware revision `READ 2026-11-07 (cloud audit)` **FIXED 2026-11-07**
 
 The "warn but proceed" rule for a silent board was decided when the floor was
 rev 2 and the cost of an old board was a coasting `stop`. The floor is now
@@ -184,7 +184,7 @@ seconds, so "no answer" means firmware older than `REQUEST_MESSAGE` or a link
 too poor to arm on. Arm now refuses; connect still only warns;
 `allow_fw_behaviour_mismatch:=true` overrides, loudly.
 
-### B-87: a surface nobody saw was reported as reached, and the abort promised one `READ 2026-11-07 (cloud audit)` ✅ **FIXED 2026-11-07**
+### B-87: a surface nobody saw was reported as reached, and the abort promised one `READ 2026-11-07 (cloud audit)` **FIXED 2026-11-07**
 
 `surface()` returned `success=True` after its timeout with the hull still at
 depth. It now fails, saying the board is still ascending; SURFACE stays engaged.
@@ -202,7 +202,7 @@ monotonic clock; unreachable lines in `hailo.py` deleted; docstrings that named
 functions that do not exist. **Read and rejected:** "`manual()` records a NaN
 axis as a known zero" -- the NaN is *sent* as 0, so 0 is the demand in force.
 
-### B-83: the tracker shipped a 2.0 s lost-track buffer while the ledger said 5.0 s `READ 2026-11-06` ✅ **FIXED 2026-11-06**
+### B-83: the tracker shipped a 2.0 s lost-track buffer while the ledger said 5.0 s `READ 2026-11-06` **FIXED 2026-11-06**
 
 **What.** `measured-bars.md` sized the lock ladder's last rung at `track_buffer`
 = 5.00 s, covering 100 % of measured gaps against a bar of the p99 (2.418 s),
@@ -223,7 +223,7 @@ is now refused with "read once at startup".
 **The lesson** is §9's, again: a citation is not a measurement. The ledger and
 its test agreed with each other, and neither read what runs.
 
-### B-82: the shipped `gate_sharks.hef` lost a median 0.34 of confidence to a fine-tune that diverged `MEASURED 2026-11-06 (emulator)`. ✅ **REBUILT 2026-11-06**; ⚠ on-chip check owed
+### B-82: the shipped `gate_sharks.hef` lost a median 0.34 of confidence to a fine-tune that diverged `MEASURED 2026-11-06 (emulator)`. **REBUILT 2026-11-06**; on-chip check owed
 
 **What.** The forward gate detector the vehicle launches by default was
 compiled at full optimisation: 1038 frames, GPU, level 2. Its

@@ -90,7 +90,7 @@ class RoboflowTracker(Tracker):
                  detector_conf: float = 0.0):
         """`detector_conf` is the floor the DETECTOR is publishing at.
 
-        THE TRACKER'S CONFIDENCE GATES MUST NOT EXCEED IT, and until this was
+        The tracker's confidence gates must not exceed it, and until this was
         measured they did, by 4x, which meant the tracker emitted NOTHING on
         real underwater footage.
 

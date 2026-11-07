@@ -1,6 +1,6 @@
 # RoboSub 2026 course prior — WHERE the props are, not what they look like.
 #
-# ⛔ EVERY POSITION HERE IS UNSET, AND THAT IS THE SHIPPED STATE.
+# Every position here is unset, and that is the shipped state.
 # We have not measured a RoboSub pool. A course file with plausible-looking
 # coordinates would dead-reckon the vehicle to a place nobody measured, and it
 # would do it confidently -- the exact defect class this stack keeps finding.
@@ -16,7 +16,7 @@
 # Deck first, package last: a course re-measured at the venue must beat one
 # committed months earlier.
 #
-# ⛔ FRAME, STATED ONCE. +x runs along the course and is bearing 0. +y is to
+# Frame, stated once. +x runs along the course and is bearing 0. +y is to
 # the right of it and is bearing 90. `depth_m` is NEGATIVE below the surface,
 # matching every other depth in this stack. `bearing_deg` is the compass
 # direction the prop's FACE points -- the same number `anchor_heading()` needs,

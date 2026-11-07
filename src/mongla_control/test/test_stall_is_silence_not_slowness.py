@@ -15,7 +15,7 @@ The deadline is now a SILENCE window refreshed by genuine progress, under an
 absolute ceiling (`_STALL_HARD_MULT`) so a board that reports progress for ever
 still terminates.
 
-⛔ THE STALE-ACK TRAP IS WHY THIS IS DELICATE. `_cache()` returns the SAME
+The stale-ack trap is why this is delicate. `_cache()` returns the SAME
 COMMAND_ACK object on every poll until a new one lands. Refreshing the deadline on
 every *sighting* of an IN_PROGRESS would let ONE stale ACK hold it open for ever,
 converting the backstop into a hang. The refresh therefore lives inside the
@@ -63,7 +63,7 @@ def test_a_single_stale_in_progress_still_stalls():
     elapsed = time.monotonic() - t0
 
     assert res.code == srot_mod.TIMEOUT
-    # ⛔ CHECKING THE CODE ALONE DOES NOT CATCH THIS, and the first version of this
+    # Checking the code alone does not catch this, and the first version of this
     # test did exactly that. If the deadline is refreshed on every SIGHTING of the
     # cached ACK, it is held open for ever and the run is terminated by the HARD
     # CAP instead -- same TIMEOUT code, ~4x later. Verified: the broken version

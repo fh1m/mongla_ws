@@ -18,7 +18,7 @@
 cd srot-control-board
 git fetch origin && git checkout -b review-2026-09-24/safety origin/main   # base was f1d3ba9
 git am ../mongla_ws/.claude/context/upstream/review-2026-09-24/srot-control-board/patches/*.patch
-pio run          # ⚠ NOT compiled in the review container (registry blocked) -- every env must build
+pio run          # NOT compiled in the review container (registry blocked) -- every env must build
 git push -u origin review-2026-09-24/safety
 ```
 Open the PR with the title and body in [`srot-control-board/PR_BODY.md`](srot-control-board/PR_BODY.md). That body lists the bench checks, and the **one behaviour change to verify in Bondor**: MOTOR_TUNE is now "arm, then select".
@@ -57,7 +57,7 @@ File one issue per file in [`srot-control-board/issues/`](srot-control-board/iss
 | 32 The angular "drag feedforward" is positive feedback on measured rate | Medium (latent, defaults 0) |
 | 35 ESC_FLASHING.md puts Bluejay PWM (48/24 kHz) inside or next to the pinger bands; move to 96 kHz before any hydrophone work (host: fh1m/mongla_ws#45) | Medium |
 
-⚠ **Not yet drafted.** The round-2 drafting was stopped part-way. What remains lives in the research reports below. Draft them from the reports, verifying each claim at `f1d3ba9` first:
+**Caution: Not yet drafted.** The round-2 drafting was stopped part-way. What remains lives in the research reports below. Draft them from the reports, verifying each claim at `f1d3ba9` first:
 - **[`research/firmware_deep.md`](research/firmware_deep.md):** M2 move brake is open-loop; M3 no max-depth limit; M4 reversals near zero; M7 SD log format and ~5 Hz actual rate; M8 unpinned libraries; the 10 Lows; the failsafe matrix; and the proposals (a single failsafe evaluator, Pico/ESC health as an input, a self-describing log).
 - **[`research/cross_stack.md`](research/cross_stack.md):**
   - A: a move cut short by a failsafe is ACKed 100 %;

@@ -55,7 +55,7 @@ Consumed from exactly two places, both in the vision path: `motion_vision/contro
 (`_mixer_saturated` → lateral anti-windup) and `:648-692` (`_srot_drive` → priority fit before the
 frame leaves).
 
-⛔ Two facts the file states about itself: the board's scale-down **is never reported on any
+**Warning:** Two facts the file states about itself: the board's scale-down **is never reported on any
 message** (`:3-15`), so the host recomputes it forward; and the ±1 entries are a **demand mix, not
 geometry** — used as a force sum they overestimate surge/sway by √2 = 41 %
 (`estimator/thrust_model.py:45-51`).
@@ -78,7 +78,7 @@ geometry** — used as a force sum they overestimate surge/sway by √2 = 41 %
 |---|---|---|
 | roll / pitch | nothing — `MANUAL_CONTROL` has no such field | 500 Hz stabiliser |
 | heading | the vision yaw axis only while aligning; discrete turns are `MOVE_TURN` intent | 500 Hz hold + turn state machine |
-| depth | **nothing** — `up = 0.0` always; no `set_target_depth`; depth-setpoint aligns refused | `DEPTH_HOLD` latch or `MOVE_DIVE` — ⛔ **never run closed** |
+| depth | **nothing** — `up = 0.0` always; no `set_target_depth`; depth-setpoint aligns refused | `DEPTH_HOLD` latch or `MOVE_DIVE` — **never run closed** |
 | surge / sway | the vision P loop, host-prioritised, streamed as `MANUAL_CONTROL` | mixer + the unreported group scale-down |
 | timed legs, braking | send intent, relay ACKs | ramp, cruise, brake (the host brake was removed at fw rev 2) |
 
@@ -146,7 +146,7 @@ IP is not worth it. And
 order of magnitude of those of simpler methods. The performance gains … are found to be small on
 the average, but sometimes significant."*
 
-⚠ Two warnings that apply directly to this hull: iteration count **cannot be guaranteed**, so an
+**Caution:** Two warnings that apply directly to this hull: iteration count **cannot be guaranteed**, so an
 embedded implementation must accept sub-optimality at a cap; and *"anti-cycling procedures are
 indeed needed since symmetric effectors may easily lead to degeneracies"* — a symmetric
 4-tunnel + 1-axial layout is exactly the degenerate case.
@@ -179,7 +179,7 @@ same everywhere: feed back the **achieved** `τ = B·Proj_U(u)`, not the demande
 The survey states the quantity plainly: *"the allocated generalized force τ = BProj_U(u) may be
 different from the required/commanded force τ_c"* — and the allocator knows `Δτ` for free.
 
-⛔ **Our firmware computes that Δτ every tick and throws it away.** The per-group divide is never
+**Warning: Our firmware computes that Δτ every tick and throws it away.** The per-group divide is never
 reported on any message (`allocation.py:3-15`, firmware PR #20). **No anti-windup design in this
 family is implementable on our vehicle today, whichever one we pick.**
 
@@ -193,11 +193,11 @@ family is implementable on our vehicle today, whichever one we pick.**
 | 16 V | 5.25 kgf | 4.10 kgf | **0.781** | 3600 |
 | 20 V | 6.70 kgf | 5.05 kgf | **0.754** | — |
 
-✅ Our `REVERSE_EFFICIENCY = 0.77` sits **within 1–3 % of the vendor's own ratio across 12–20 V**.
+Our `REVERSE_EFFICIENCY = 0.77` sits **within 1–3 % of the vendor's own ratio across 12–20 V**.
 It is one of the few constants in the stack that survives contact with a datasheet — though it is
 voltage-dependent and degrades as voltage rises.
 
-⛔ **The vendor data is bollard-only**, by the definition of bollard (*"zero advance speed… the
+**Warning: The vendor data is bollard-only**, by the definition of bollard (*"zero advance speed… the
 only flow over the propeller is that induced by its own rotation"*). A `k` fitted to that
 spreadsheet is **a `k` at J = 0 by construction**, and over-predicts thrust at any transit speed —
 which is exactly the warning `thrust_model.py:16-32` already carries about itself.
@@ -228,7 +228,7 @@ to as low as 10 percent of the side force measured at zero forward vehicle veloc
 jet obstructs the hull boundary layer, and the resulting suction **counteracts the force on the
 blades**.
 
-⚠ Provenance is weak — neither patent cites academic literature for the figure, and the primary
+**Caution:** Provenance is weak — neither patent cites academic literature for the figure, and the primary
 academic sources (Palmer, Hearn & Stevenson, IEEE OCEANS; *Ocean Systems Engineering* on drift
 angle) were behind 403s. But the mechanism is the **same advance-ratio effect as §2.4, showing up
 on the lateral axis**.
@@ -257,7 +257,7 @@ saturation is.**
   [arXiv:2504.16037](https://arxiv.org/html/2504.16037v1) on a BlueROV2 Heavy — an EKF bank with a
   Bayesian posterior over failure models identifies a two-thruster failure **within 0.1 s**, and
   soft switching reaches p = 0.9 within 5 s after a mid-run model change.
-- ⛔ **The channel matters.** Published AUV thruster FDI datasets are built from **voltage, current
+- **Warning: The channel matters.** Published AUV thruster FDI datasets are built from **voltage, current
   and speed** per thruster. We have `ESC_STATUS(291)` undecodable here and **958/958 frames reading
   exactly 0 RPM with nothing attached** — an RPM-based detector on this vehicle would report a
   healthy zero for a missing thruster. **Current is the discriminating channel**, and it is exactly
@@ -282,7 +282,7 @@ saturation is.**
 - When passive is not enough, the published fix is **an internal moving mass**
   ([internal rolling mass](https://link.springer.com/chapter/10.1007/978-3-319-07488-7_16)), not a
   roll thruster. Worth knowing, because "add a thruster" is not the field's default.
-- ⛔ **We cannot evaluate any of this on our hull**: Onshape reports **no material assigned to any
+- **Warning: We cannot evaluate any of this on our hull**: Onshape reports **no material assigned to any
   part**, so mass, CoG, CoB and therefore BG cannot be computed. Without BG there is no published
   way to state our roll restoring moment — so "roll is passively stable" is currently an
   assumption, not a finding.
@@ -301,11 +301,11 @@ mixers — Bumblebee to QP in two consecutive reports, Caltech to a documented p
 
 ### 2.9 Control laws — and an uncomfortable question about our own headline
 
-> Source dossier: [`sources/sota-control-laws.md`](sources/sota-control-laws.md). ⚠ Ran with
+> Source dossier: [`sources/sota-control-laws.md`](sources/sota-control-laws.md). Ran with
 > **zero web-search budget**; worked through the arXiv API and direct fetches. Most of the
 > classical marine system-ID literature (IEEE/Elsevier/MDPI) was unreachable — §6.
 
-⛔ **RETRACTED 2026-09-23 — "nobody has taken it underwater" was WRONG.** The claim below was made
+**Warning: RETRACTED 2026-09-23 — "nobody has taken it underwater" was WRONG.** The claim below was made
 by a sweep running on **zero search budget**, and the very first search after the quota was
 restored refuted it. INDI is not an unexplored idea underwater; it is a **published method with an
 open-source reference implementation on a vehicle whose thruster topology matches our firmware's**:
@@ -325,7 +325,7 @@ directly on us:
 - **INDI-QP** performs prioritised allocation *and* fault tolerance in a single method — it
   "safely executes the inspection even with fewer than six functional thrusters". That is the
   allocation gap (C-1, C-3) and the control law answered together.
-- ⭐ *"**No RPM measurements needed** for fault tolerance in INDI-QP."* Decisive here: our per-ESC
+- **Key point:** *"**No RPM measurements needed** for fault tolerance in INDI-QP."* Decisive here: our per-ESC
   RPM channel reads **0 in 958/958 frames with nothing attached**, so every RPM-based fault
   detector we considered was built on a channel that cannot discriminate.
 
@@ -338,7 +338,7 @@ underwater"].**
 [Smeur, Chu & de Croon (arXiv 1701.07254)](https://arxiv.org/abs/1701.07254): **512 Hz** on a real
 quadrotor, **7× lower gust deviation than PID — 0.21 m vs 1.51 m**. It needs only a
 finite-difference angular-acceleration estimate and a control-effectiveness matrix,
-**identifiable from a single test flight** — not a hydrodynamic model. ⛔ **No underwater
+**identifiable from a single test flight** — not a hydrodynamic model. **No underwater
 application was found anywhere**, actively searched, zero hits.
 
 That combination — sensor-based, model-light, high-rate, and unexplored in water — is the single
@@ -372,7 +372,7 @@ measured exactly (±1, all four horizontal axes). The map INDI actually needs is
 acceleration**, and that still requires a vehicle free to rotate. The bench gives the first factor
 and nothing of the second.
 
-⛔ **Prerequisite 3 — and this is the one that moved against us. `MOT_SPIN_MIN` and INDI are in
+**Warning: Prerequisite 3 — and this is the one that moved against us. `MOT_SPIN_MIN` and INDI are in
 direct conflict.** The measured floor means the smallest output the vehicle can command is **15 %
 of full scale**; there is no such thing as a small actuator increment. An incremental controller
 whose increments are all quantised to 15 % is not an incremental controller. INDI would be
@@ -389,7 +389,7 @@ board runs its own IMU at 500 Hz. Running a sensor-based incremental law at 50 H
 different and worse controller. If INDI happens here it is a **firmware collaboration** in which we
 supply the analysis and the identification data, not a host feature we can ship alone.
 
-#### ⚠ Is 500 Hz justified?
+#### Is 500 Hz justified?
 
 **No AUV-specific study was found that ties loop rate to performance.** Every AUV control paper the
 sweep reached ran at **10–100 Hz**. ArduSub/Pixhawk's 400 Hz is an *in-air* inheritance. The
@@ -402,7 +402,7 @@ full rate, then decimate the *controller* to 250 / 100 / 50 Hz and compare. If n
 degrades until 50 Hz, the 500 Hz board is buying headroom for something else — still worth having,
 but it should be said accurately.
 
-⚠ Also worth knowing before assuming a parameter set exists: **Fossen's own MSS toolbox ships
+**Caution:** Also worth knowing before assuming a parameter set exists: **Fossen's own MSS toolbox ships
 REMUS100, NPS-AUV and DSRV — and no BlueROV2 or Girona500.**
 
 ---

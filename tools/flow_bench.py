@@ -5,12 +5,12 @@ Runs the SHIPPING flow modules (`flow_math`, `flow_velocity`, `NavEstimator`)
 on the real bottom camera and the real srot gyro, and reports the distance it
 believes it travelled against a distance you measured with a tape.
 
-⛔ IT DRIVES WHAT SHIPS. Not a parallel implementation of it -- round 33 lost a
+It drives what ships. Not a parallel implementation of it -- round 33 lost a
 finding to exactly that, when a test reimplemented the node's loop and passed
 against a copy without the bug. If this bench is accurate and the vehicle is
 not, the difference is wiring, not maths.
 
-ONE PHASE PER INVOCATION, because an unattended protocol measures an untouched
+One phase per invocation, because an unattended protocol measures an untouched
 rig. Each run prompts, counts down, records a window, and stops.
 
     python3 tools/flow_bench.py check                  # preflight, moves nothing
@@ -18,11 +18,11 @@ rig. Each run prompts, counts down, records a window, and stops.
     python3 tools/flow_bench.py back  --truth 0.30
     python3 tools/flow_bench.py lat   --truth 0.30
 
-HEIGHT IS LENS TO FLOOR and there is no default: velocity scales linearly with
+Height is lens to floor and there is no default: velocity scales linearly with
 it, so a guessed height is a clean multiplier on every number below. Pass
 --height.
 
-⛔ THE FRAME-RATE TRAP THIS BENCH EXISTS TO EXPOSE. `MIN_NET_FLOW_PX = 0.5` is
+The frame-rate trap this bench exists to expose. `MIN_NET_FLOW_PX = 0.5` is
 a per-interval PIXEL floor, so the SPEED it refuses depends on the frame rate:
 
     v_min = min_flow_px * h / (f * dt)
@@ -278,7 +278,7 @@ def run(args):
         print(f'    truth     : {args.truth * 100:.1f} cm')
         print(f'    ERROR     : {err * 100:+.2f} cm  '
               f'({100.0 * abs(d) / args.truth:.1f} % of truth)')
-        # THE HEIGHT THE OPTICS IMPLY, given the tape. Velocity scales
+        # The height the optics imply, given the tape. Velocity scales
         # linearly with h, so any scale error lands here -- and this turns an
         # unexplained percentage into a number you can check with the same
         # tape. If this disagrees with the measured lens-to-floor by more than
@@ -451,16 +451,16 @@ def sweep(cap, args, f_px, h):
 
 def _synth_adaptive(base, args, f_px, h, step_px, n, frame_dt,
                     target_px=8.0, max_px=25.0):
-    """ADAPTIVE KEYFRAME BASELINE -- the answer to the fixed-rate floor.
+    """Adaptive keyframe baseline -- the answer to the fixed-rate floor.
 
-    ⛔ WHY THE FIXED BASELINE FAILS. `MIN_NET_FLOW_PX` is a per-interval pixel
+    Why the fixed baseline fails. `MIN_NET_FLOW_PX` is a per-interval pixel
     floor, so the SPEED it refuses is `min_px * h / (f * dt)` -- it scales with
     the frame rate. Measured on this camera at h=0.72: at 210 Hz it refuses
     everything below 0.147 m/s, and it refuses by returning NO measurement,
     which reads downstream as "not moving". A 30 cm move at 5 cm/s produced
     0 of 1260 usable intervals and reported 0.0 cm.
 
-    THE FIX IS NOT A SMALLER CONSTANT. Lower the floor and noise integrates
+    The fix is not a smaller constant. Lower the floor and noise integrates
     into drift; raise the rate and slow motion vanishes. Both are symptoms of
     measuring over a FIXED time when the thing that matters is DISPLACEMENT.
 
@@ -563,7 +563,7 @@ def _synth_run(base, args, f_px, h, step_px, n, dt):
 def synth(cap, args, f_px, h):
     """Recover a KNOWN displacement from real texture. Truth is exact.
 
-    ⛔ VALIDATE THE INSTRUMENT BEFORE IT MEASURES. A real slide couples four
+    Validate the instrument before it measures. A real slide couples four
     unknowns at once -- how far the rig actually went, how flat it stayed, what
     the height really is, and whether the maths is right. Digitally translating
     a REAL frame by a KNOWN pixel count removes three of them, so if this comes

@@ -1,6 +1,6 @@
 """Take GEOMETRY from the structure, IDENTITY from the symbol on it.
 
-⛔ THE MISTAKE THIS REPLACES, and it is one line of mission code. "Pass under
+The mistake this replaces, and it is one line of mission code. "Pass under
 the side showing our animal" is usually written as `where('rescue')` -- is the
 symbol left or right OF THE FRAME. That is the wrong reference. The frame
 centre is where the CAMERA is pointing, not where the gate's divider is, so the

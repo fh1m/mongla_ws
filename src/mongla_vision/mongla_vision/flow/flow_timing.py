@@ -1,8 +1,8 @@
 """Timing. The thing that decides whether de-rotation helps or hurts.
 
-⛔ WHY THIS MODULE EXISTS, in one number. De-rotation subtracts `f·ω·Δt`, so a
+Why this module exists, in one number. De-rotation subtracts `f·ω·Δt`, so a
 timing error between the camera and the gyro leaves uncorrected flow
-PROPORTIONAL TO ω. Measured on this rig: 5 ms costs 1.6 px at 0.64 rad/s and
+Proportional to ω. Measured on this rig: 5 ms costs 1.6 px at 0.64 rad/s and
 2.9 px at 1.13. Qin & Shen (IROS 2018) put the tolerance for an uncompensated
 offset at **6 ms** before VIO degrades substantially.
 
@@ -17,7 +17,7 @@ jitter is entirely transport: ESP32 UART FIFO thresholding plus USB-serial
 scheduling. The board's own `time_boot_ms` has none of it and we were
 discarding it -- it was read only by the reboot detector.
 
-THE ORDER HERE IS DELIBERATE: remove what can be KNOWN before estimating what
+The order here is deliberate: remove what can be KNOWN before estimating what
 cannot. Three deterministic errors, then one estimator for the remainder.
 
   1. `ClockMap`      board time -> host time, without TIMESYNC (the board does
@@ -44,7 +44,7 @@ import numpy as np
 class ClockMap:
     """Map a remote device clock onto the host clock. Offset AND skew.
 
-    ⛔ THE PROBLEM. MAVLink `TIMESYNC` would solve this with a ping-pong, and
+    The problem. MAVLink `TIMESYNC` would solve this with a ping-pong, and
     the srot board does not implement it: 0 of 12 requests answered, measured.
     So the only signal available is one-way -- pairs of (board_time,
     host_arrival) -- and the transport delay in between is variable and
@@ -72,7 +72,7 @@ class ClockMap:
     __slots__ = ('_pairs', '_window_s', '_min_pairs', '_map', '_lock',
                  '_n_fit', '_resid_ms', 'steps')
 
-    # ⛔ A STEP IN THE HOST CLOCK IS NOT DELAY. `host - board` is offset plus a
+    # A step in the host clock is not delay. `host - board` is offset plus a
     # NON-NEGATIVE transport delay, so it can rise by a stall but can only FALL
     # by as much delay as the previous sample carried -- milliseconds. A fall
     # past STEP_BACK_S, or a rise past STEP_FWD_S, is the host clock jumping
@@ -88,7 +88,7 @@ class ClockMap:
         self._pairs: deque = deque()          # (board_s, host_s)
         self._window_s = float(window_s)
         self._min_pairs = int(min_pairs)
-        # ⛔ (skew, offset) AS ONE TUPLE, swapped in one assignment (issue #21).
+        # (skew, offset) AS ONE TUPLE, swapped in one assignment (issue #21).
         # Two statements let a reader on another thread pair the new skew with
         # the old offset -- a host time off by skew-change x board time, which
         # at boot-relative seconds is not small. Readers take it ONCE.
@@ -211,11 +211,11 @@ class ClockMap:
 def exposure_offset_s(exposure_time_absolute: Optional[float]) -> float:
     """Half the exposure, in seconds. The MID-EXPOSURE convention.
 
-    ⛔ NOT A REFINEMENT, AND NOT CONSTANT. The standard image timestamp is the
+    Not a refinement, and not constant. The standard image timestamp is the
     MIDDLE of the exposure, because the average position of everything in the
     frame is where it was when half the exposure had elapsed. The literature
     states the camera-IMU offset as "fixed communication and triggering delays
-    PLUS HALF EXPOSURE TIME".
+    Plus half exposure time".
 
     Ours is 15.7 ms on auto exposure in this light -- **7.85 ms**, larger than
     the transport jitter and larger than the offset most papers estimate. And
@@ -239,7 +239,7 @@ def exposure_correction_s(exposure_time_absolute: Optional[float],
                           stamp_source: str) -> float:
     """What to ADD to a buffer stamp to reach mid-exposure. Signed.
 
-    ⛔ THE SIGN DEPENDS ON WHICH INSTANT THE DRIVER STAMPED (issue #34). V4L2
+    The sign depends on which instant the driver stamped (issue #34). V4L2
     says so in a flag (`V4L2_BUF_FLAG_TSTAMP_SRC_*`) that this pipeline never
     read, and it subtracted half the exposure as if every stamp marked the END.
     `uvcvideo` -- both vehicle cameras, and read off a live stream on the dev
@@ -250,7 +250,7 @@ def exposure_correction_s(exposure_time_absolute: Optional[float],
         other  ->  0, because a guess in either direction is a full exposure
                    wrong in one of them (15.7 ms at the measured auto exposure)
 
-    ⚠ UVC's "start of exposure" is the host's first-packet time, not the
+    UVC's "start of exposure" is the host's first-packet time, not the
     sensor's. This makes the correction consistent with what the driver
     CLAIMS; what remains is a fixed lag for `td` to estimate and for the
     board-LED bench test to measure.
@@ -267,7 +267,7 @@ def exposure_correction_s(exposure_time_absolute: Optional[float],
 def interval_midpoint(t_start: float, t_end: float) -> float:
     """When an average velocity over [t_start, t_end] actually happened.
 
-    ⛔ THE BIGGEST TIMING ERROR IN THIS PIPELINE, and it is not subtle.
+    The biggest timing error in this pipeline, and it is not subtle.
     Flow gives DISPLACEMENT over an interval, so dividing by dt gives the
     AVERAGE velocity across it -- which belongs at the midpoint. PX4 defines
     its own flow delay parameter exactly this way: "to the middle of the
@@ -286,7 +286,7 @@ def interval_midpoint(t_start: float, t_end: float) -> float:
 class TimeOffset:
     """Camera<->gyro offset by trace correlation with a parabolic peak fit.
 
-    ⛔ WHY THIS METHOD AND NOT THE OTHERS. From the 2025 review of camera /
+    Why this method and not the others. From the 2025 review of camera /
     LiDAR / IMU spatiotemporal calibration:
 
         hardware sync            best, needs a strobe line          we have none
@@ -303,7 +303,7 @@ class TimeOffset:
     is exactly the input trace correlation wants, and it reaches sub-millisecond
     accuracy without an estimator, a noise model, or a target.
 
-    THE PARABOLIC FIT IS WHAT MAKES IT SUB-SAMPLE. The correlation is evaluated
+    The parabolic fit is what makes it sub-sample. The correlation is evaluated
     on a discrete lag grid, so the raw peak is quantised to one step. Fitting a
     parabola through the peak and its two neighbours recovers the true maximum
     between samples -- the standard sub-sample time-delay estimator.
@@ -341,7 +341,7 @@ class TimeOffset:
     def estimate(self, step_s: float = 0.002) -> Optional[float]:
         """Return td in seconds, or None.
 
-        ⛔ SIGN CONVENTION, stated because a sign error here steers the
+        SIGN CONVENTION, stated because a sign error here steers the
         de-rotation the WRONG WAY and doubles the residual instead of removing
         it -- and it produces a plausible number while doing so.
 
@@ -364,7 +364,7 @@ class TimeOffset:
         gt = np.fromiter((p[0] for p in self._gyro), float, len(self._gyro))
         gv = np.fromiter((p[1] for p in self._gyro), float, len(self._gyro))
 
-        # EXCITATION GATE. Constant (or absent) rotation is degenerate: the
+        # Excitation gate. Constant (or absent) rotation is degenerate: the
         # correlation of two flat signals peaks wherever noise says, and the
         # parabola will happily interpolate a confident answer out of it.
         if float(np.std(iv)) < self._min_rms or float(np.std(gv)) < self._min_rms:
@@ -384,7 +384,7 @@ class TimeOffset:
         #      2 ms  2 ms      0.195 ms    0.336 ms   <- knee
         #      1 ms  2 ms      0.195 ms    0.337 ms   (no further gain)
         #
-        # A FINER LAG STEP MAKES IT WORSE, which is worth stating because the
+        # A finer lag step makes it worse, which is worth stating because the
         # instinct is to shrink both: at a 10 ms grid, going 2 -> 0.5 ms took
         # the mean from 0.259 to 0.451. The parabola is fitted to three points
         # spanning the peak, and steps far narrower than the interpolation
@@ -414,7 +414,7 @@ class TimeOffset:
             # would be reporting the window, not the offset.
             self._quality = 0.0
             return None
-        # PARABOLIC SUB-SAMPLE PEAK. y = ax^2+bx+c through three points; the
+        # Parabolic sub-sample peak. y = ax^2+bx+c through three points; the
         # vertex offset is the classic (y- - y+) / (2*(y- - 2y0 + y+)).
         y0, ym, yp = corr[k], corr[k - 1], corr[k + 1]
         den = (ym - 2.0 * y0 + yp)

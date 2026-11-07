@@ -1,12 +1,12 @@
 """The vehicle must not steer its own target out of frame — and must remember
 where it went if it does.
 
-⛔ THE GAP. Every rung, cue and re-identification built so far works in the
+The gap. Every rung, cue and re-identification built so far works in the
 IMAGE PLANE, downstream of where the vehicle chose to point. There is no
 field-of-view guard anywhere in mongla_control, so the perception stack can be
 perfect and still lose the lock because the controller turned away.
 
-⛔ AND THE PRIORITY IS NOT NEGOTIABLE. Visibility is a SOFT constraint. A
+And the priority is not negotiable. Visibility is a SOFT constraint. A
 vehicle that holds a lock into a wall has optimised the wrong thing, which is
 why the 2026 safety-critical result keeps collision hard and gives
 field-of-view slack.
@@ -28,9 +28,9 @@ def test_a_centred_target_is_safe():
 
 
 def test_a_target_near_the_edge_is_flagged_before_it_leaves():
-    """⭐ The point: warn while there is still time to act.
+    """The point: warn while there is still time to act.
 
-    ⛔ AND WHY THE BARRIER IS RECTANGULAR. Against the published CONICAL
+    And why the barrier is rectangular. Against the published CONICAL
     barrier this same box scored h = +0.061 -- comfortably "safe" -- because a
     cone only closes at the diagonal CORNER, so a target can walk out of the
     left edge with margin reported the whole way. A camera's image is a
@@ -55,7 +55,7 @@ def test_the_barrier_decreases_as_the_target_moves_off_axis():
 
 
 def test_the_guard_needs_no_RANGE():
-    """⭐ WHY THIS FORMULATION AND NOT ANOTHER. Range is the number we are
+    """Why this formulation and not another. Range is the number we are
     least sure of on a monocular vehicle with no DVL; the barrier is computed
     from the box centre and intrinsics alone."""
     import inspect
@@ -73,7 +73,7 @@ def test_damping_is_tapered_not_a_cliff():
 
 
 def test_visibility_is_SOFT():
-    """⛔ Collision stays hard, field of view gets slack. A vehicle that holds
+    """Collision stays hard, field of view gets slack. A vehicle that holds
     a lock into a wall has optimised the wrong thing."""
     assert SLACK is True
 
@@ -99,7 +99,7 @@ def test_a_target_seen_ahead_is_remembered_in_the_world():
 
 
 def test_after_the_vehicle_turns_the_bearing_back_is_known():
-    """⭐ THE WHOLE POINT. Image-plane tracking forgets the moment the box
+    """The whole point. Image-plane tracking forgets the moment the box
     leaves; a world-frame memory turns that into a navigation problem."""
     t = WorldTarget()
     t.observe((0.0, 0.0), yaw_deg=0.0, bearing_deg=0.0, range_m=5.0, now=0.0)
@@ -115,7 +115,7 @@ def test_after_the_vehicle_moves_the_bearing_updates():
 
 
 def test_a_stale_memory_answers_NOTHING():
-    """⛔ A position from a minute ago is not knowledge, it is a rumour."""
+    """A position from a minute ago is not knowledge, it is a rumour."""
     t = WorldTarget(max_age_s=10.0)
     t.observe((0.0, 0.0), yaw_deg=0.0, bearing_deg=0.0, range_m=5.0, now=0.0)
     assert t.bearing_from((0.0, 0.0), 0.0, now=5.0) is not None
@@ -136,7 +136,7 @@ def test_a_bad_range_is_REFUSED_not_stored():
 
 
 def test_the_memory_carries_no_confidence_that_looks_like_a_sighting():
-    """⛔ It stores where the target WAS. Nothing downstream may read it as
+    """It stores where the target WAS. Nothing downstream may read it as
     'the target is there now'."""
     t = WorldTarget()
     t.observe((0.0, 0.0), 0.0, 0.0, 5.0, 0.0)
@@ -145,7 +145,7 @@ def test_the_memory_carries_no_confidence_that_looks_like_a_sighting():
 
 
 # --------------------------------------------------------------------------- #
-#  ⭐ PRIOR-GUIDED DETECTION -- measured on the recorded session, section 56
+#  PRIOR-GUIDED DETECTION -- measured on the recorded session, section 56
 # --------------------------------------------------------------------------- #
 from mongla_vision.tracking.visibility import (project_world_target,
                                                region_conf_bar)
@@ -162,7 +162,7 @@ def test_a_target_to_the_left_projects_left():
 
 
 def test_range_does_not_change_the_projected_pixel():
-    """⭐ Bearing only. A target's horizontal pixel depends on its BEARING,
+    """Bearing only. A target's horizontal pixel depends on its BEARING,
     not on how far away it is -- and range is what we are least sure of."""
     near = project_world_target((2.0, 1.0), (0.0, 0.0), 0.0, W, H, FX)
     far = project_world_target((20.0, 10.0), (0.0, 0.0), 0.0, W, H, FX)
@@ -170,7 +170,7 @@ def test_range_does_not_change_the_projected_pixel():
 
 
 def test_a_target_behind_the_vehicle_has_NO_pixel():
-    """⛔ Projecting it anyway would silently fold it back into the frame."""
+    """Projecting it anyway would silently fold it back into the frame."""
     assert project_world_target((-5.0, 0.0), (0.0, 0.0), 0.0, W, H, FX) is None
 
 
@@ -189,6 +189,6 @@ def test_outside_the_predicted_region_the_strict_bar_applies():
 
 
 def test_NO_prior_means_the_strict_bar_everywhere():
-    """⛔ An absent prediction must never be read as a permissive one."""
+    """An absent prediction must never be read as a permissive one."""
     assert region_conf_bar(None, W / 2, H / 2, W,
                            inside_bar=0.20, outside_bar=0.50) == 0.50

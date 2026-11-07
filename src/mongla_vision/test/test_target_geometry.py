@@ -1,6 +1,6 @@
 """The committed geometry table: reachable and sourced.
 
-⛔ WHY THIS FILE EXISTS. `target_width_m` was an operator parameter defaulting
+Why this file exists. `target_width_m` was an operator parameter defaulting
 to 0.0, so `lock_node`'s 6-DoF branch published
 `ok=false, reason='target_width_m unset'` and the metric path had never run on
 the vehicle. A number that must be typed correctly per mission, under

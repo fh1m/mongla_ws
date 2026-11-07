@@ -1,6 +1,6 @@
 """Two independent estimates, compared -- the failure neither can catch alone.
 
-⛔ THE BLIND SPOT. The follower's only quality signals are forward-backward
+The blind spot. The follower's only quality signals are forward-backward
 error and point survival, and both are SELF-REFERENTIAL: they measure whether
 LK tracked its own points consistently, not whether those points are on the
 target. A follower that has smoothly latched onto a passing fish, or slid onto
@@ -9,14 +9,14 @@ survival**. The tracking literature names this exactly -- similarity-based
 checks "struggle to detect slow, cumulative drift, or cases where the tracker
 settles on a visually similar but incorrect background patch".
 
-⭐ The anchor is the independent witness. It is fitted frame-to-REFERENCE
+The anchor is the independent witness. It is fitted frame-to-REFERENCE
 against a stored patch, so its errors are uncorrelated with LK's: it cannot
 drift *with* the follower because it never integrates. Until this, `arbitrate`
 returned the follower whenever its own confidence cleared the bar and never
 looked at the anchor box -- two independent estimates of one target, in one
 function, never compared.
 
-⚠ DISAGREEMENT DEMOTES, IT DOES NOT SWAP. When the centres separate we know
+Disagreement demotes, it does not swap. When the centres separate we know
 one is wrong and NOT which; preferring the anchor would be a guess. The ladder
 keeps the follower's box (the fresher of the two) and cuts AUTHORITY, which is
 the response that is correct under either explanation.
@@ -54,7 +54,7 @@ def test_agreeing_rungs_leave_authority_untouched():
 
 
 def test_a_drifted_follower_is_demoted_even_with_perfect_self_checks():
-    """⭐⭐ THE CASE THE LADDER COULD NOT SEE. `follow_conf` is 0.9 -- the
+    """The case the ladder could not see. `follow_conf` is 0.9 -- the
     follower is certain, because its points round-trip perfectly. They are
     simply on the wrong object. Only the anchor disagrees."""
     s = _call(follow=_box(320, 240), anchor=_box(320 + 4 * DISAGREE_PX, 240))
@@ -82,7 +82,7 @@ def test_disagreement_just_inside_the_bar_costs_nothing():
 
 
 def test_one_rung_alone_reports_NaN_not_zero():
-    """⛔ Absent is not agreement. With no anchor there is nothing to compare,
+    """Absent is not agreement. With no anchor there is nothing to compare,
     and 0.0 would read as 'they agree perfectly' to any consumer."""
     s = _call(follow=_box(320, 240), anchor=None)
     assert s.rung is Rung.FOLLOW
@@ -109,7 +109,7 @@ def test_a_lost_ladder_is_unaffected():
 
 
 def test_a_detection_outranks_the_cross_check():
-    """⚠ A real detection is ground truth for this frame. It must not be
+    """A real detection is ground truth for this frame. It must not be
     demoted because one carried rung disagrees with another."""
     s = _call(follow=_box(320, 240), anchor=_box(600, 240),
               detection=_box(318, 241), detection_conf=0.9,
@@ -132,7 +132,7 @@ def _decayed(**kw):
 
 
 def test_two_agreeing_rungs_earn_MORE_authority_than_one():
-    """⭐ THE IDEA FROM `r_&_d/features_v9.py`. Its fusion boosted confidence
+    """The idea from `r_&_d/features_v9.py`. Its fusion boosted confidence
     when the EKF and the visual estimate agreed on direction; the first
     version of this cross-check only punished disagreement and threw that
     half away.
@@ -148,7 +148,7 @@ def test_two_agreeing_rungs_earn_MORE_authority_than_one():
 
 
 def test_the_boost_needs_the_witness_to_be_confident_itself():
-    """⚠ A low-confidence anchor agreeing is not corroboration -- it is two
+    """A low-confidence anchor agreeing is not corroboration -- it is two
     guesses. `anchor_conf` must clear the same bar the anchor rung would."""
     weak = _decayed(follow=_box(320, 240), anchor=_box(322, 241),
                     anchor_conf=0.0).authority
@@ -157,7 +157,7 @@ def test_the_boost_needs_the_witness_to_be_confident_itself():
 
 
 def test_the_boost_never_exceeds_full_authority():
-    """⛔ Authority is a fraction of what the control loop may do. Boosting
+    """Authority is a fraction of what the control loop may do. Boosting
     past 1.0 would let a CARRIED rung outrank a fresh detection."""
     s = _call(follow=_box(320, 240), anchor=_box(321, 240))
     assert s.authority <= 1.0

@@ -1,6 +1,6 @@
 """One QoS table for the vision topics, imported by every end of every link.
 
-WHY THIS FILE EXISTS
+Why this file exists
 --------------------
 A RELIABLE subscriber against a BEST_EFFORT publisher is INCOMPATIBLE. rclpy
 does not raise. It logs one warning at construction and then delivers nothing,
@@ -18,7 +18,7 @@ A comment in five files is not a mechanism; a shared constant is. Import from
 here rather than constructing a `QoSProfile` inline, and the two ends of a
 link cannot disagree about a topic they both name.
 
-THE POLICIES, AND THE REASONING BEHIND EACH
+The policies, and the reasoning behind each
 -------------------------------------------
 ``IMAGE`` -- BEST_EFFORT, KEEP_LAST **depth 1**.
     A frame stream is a MAILBOX, not a queue: only the newest frame has any

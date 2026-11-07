@@ -1,6 +1,6 @@
 # SROT board integration — how the host drives Hengla
 
-> ⛔ **PRE-DIVE: read [`BUGS.md`](../BUGS.md) FIRST.** The axis
+> **Warning: PRE-DIVE: read [`BUGS.md`](../BUGS.md) FIRST.** The axis
 > configuration is currently **UNKNOWN** — `CAL_MDIR` is not `[+1]×8` as §8.2 assumed, and it
 > multiplies with `MOT_n_DIRECTION`. §8.2's "config is correct" conclusion is superseded.
 >
@@ -12,7 +12,7 @@
 > `src/mongla_control/mongla_control/fc/srot_protocol.py` — read it there, not the number
 > above, which is a historical baseline only.
 >
-> ⚠ **"Rev 7 is additive — nothing that worked on rev 6 changes" is true of the FIRMWARE
+> **Caution: "Rev 7 is additive — nothing that worked on rev 6 changes" is true of the FIRMWARE
 > DEFAULTS and false of THIS HULL** (corrected on merge of PR #5, 2026-08-07). Five other
 > commits shipped inside the single 6→7 bump, and two of them change how this vehicle
 > moves: **`FRAME_REVERSE`** (new param, default 0, **set to 1 here**) negates all six axis
@@ -40,12 +40,12 @@
 > pass — see the motor-direction section below; nobody should hand-set `MOT_n_DIRECTION` again.
 > Read [`srot-architecture.md`](srot-architecture.md) first if you have not.
 >
-> **⚠ YAW IS ABSOLUTE FROM REV 4.** `ATTITUDE.yaw` and `VFR_HUD.heading` are a magnetic compass
+> **YAW IS ABSOLUTE FROM REV 4.** `ATTITUDE.yaw` and `VFR_HUD.heading` are a magnetic compass
 > heading, not a value relative to wherever the board booted. A heading recorded against rev <= 3,
 > or compared across a vehicle reset, is **not the same number**. Absolute `MOVE_TURN` (p4=1) now
 > actually turns to the heading it is given — it needs `MAG_YAW_REF=1`, which is the new default.
 >
-> **⚠ DEPTH AND TEMPERATURE CAN NOW BE ABSENT.** `NAMED_VALUE_FLOAT("WTEMP")` and
+> **DEPTH AND TEMPERATURE CAN NOW BE ABSENT.** `NAMED_VALUE_FLOAT("WTEMP")` and
 > `SCALED_PRESSURE2` are **suppressed** when the barometer is unhealthy or stale, and
 > `SCALED_IMU2.temperature` sends MAVLink's `0` "not provided" sentinel. Treat absence as "no
 > data", never as zero. This is deliberate: before rev 3 a Bar30 whose calibration PROM was read
@@ -67,7 +67,7 @@ belong to that rig and went with it. What stays here is what the rig taught us a
 **board** — `FRAME_REVERSE`, the double-inversion hazard, `FS_GCS_COMPID`, the Bar30 fix and
 payload identity all still apply.
 
-⛔ **Telemetry is not evidence of an uplink.** Probe a command path before trusting a
+**Warning: Telemetry is not evidence of an uplink.** Probe a command path before trusting a
 session — a link can stream perfectly in one direction and carry nothing in the other:
 
 ```python
@@ -80,7 +80,7 @@ m.mav.param_request_read_send(m.target_system, hb.get_srcComponent() or 1,
 print(m.recv_match(type='PARAM_VALUE', blocking=True, timeout=5))   # None => uplink dead
 ```
 
-### ⛔ IN-WATER 2026-08-06: every axis reversed + flips in STABILIZE
+### IN-WATER 2026-08-06: every axis reversed + flips in STABILIZE
 
 Symptoms: in MANUAL on the joystick, forward/back, yaw and depth all drove the **opposite**
 way; in STABILIZE the vehicle **flipped** after arming. Thruster directions had been
@@ -128,7 +128,7 @@ MOT_n_DIRECTION = +1 for all 8
 CAL_MDIRn       = [-1, +1, +1, +1, +1, +1, +1, -1]
 ```
 
-⚠ That `CAL_MDIR` pattern is itself suspect — MOTOR_DETECT run on a vehicle whose
+**Caution:** That `CAL_MDIR` pattern is itself suspect — MOTOR_DETECT run on a vehicle whose
 thrust is globally inverted will mis-detect. Do not trust it as a baseline.
 
 **Procedure — OUT OF THE WATER, props clear, one step at a time:**
@@ -144,7 +144,7 @@ thrust is globally inverted will mis-detect. Do not trust it as a baseline.
 Do not skip to STABILIZE to "see if it is fixed": with an inverted sign it is a
 divergent loop, and the vehicle reaches full deflection before an operator can react.
 
-### ✅ FLASHED rev 6 — 2026-08-06, and what state the vehicle is in
+### Right: FLASHED rev 6 — 2026-08-06, and what state the vehicle is in
 
 Board moved to the dev box on USB (`1a86:7523` → `/dev/ttyUSB0`), erased, flashed, restored.
 **Flashing needs the board on a USB host**, structurally: an ESP32 enters its bootloader only
@@ -167,9 +167,9 @@ Measured on the way past: **0.0 % `BAD_DATA` on direct serial** (436 msgs/5 s), 
 - **`FS_GCS_COMPID` 0 → 191.** The backup captured **bench mode, saved to flash**. Restoring
   that verbatim would have put a bench escape hatch into a flight vehicle, where a dead
   companion can no longer be told from a live GCS and the hull station-keeps instead of
-  surfacing. ⚠ **Check this value before every water session** — Bondor's bench mode is
+  surfacing. **Check this value before every water session** — Bondor's bench mode is
   runtime-only *until someone presses Save*, and someone did.
-  **⛔ AND IT REGRESSED. Measured 2026-08-07: `FS_GCS_ENABLE=1`, `FS_GCS_COMPID=0` — bench
+  **AND IT REGRESSED. Measured 2026-08-07: `FS_GCS_ENABLE=1`, `FS_GCS_COMPID=0` — bench
   mode is back in flash**, one day after being corrected to 191. This is not a one-off; it
   is what this param does when Bondor is used on the bench and someone saves. Prose in a doc
   did not hold it, so it is now a **graded preflight line** (`_gcs_failsafe_verdict`,
@@ -180,14 +180,14 @@ Measured on the way past: **0.0 % `BAD_DATA` on direct serial** (436 msgs/5 s), 
   # on fw rev >= 7 wait for STATUSTEXT "Params saved to flash", NOT the COMMAND_ACK --
   # the ACK means "request received"; the NVS write is deferred to the Core-0 update()
   ```
-  **✅ FIXED + VERIFIED over direct USB 2026-08-07** — written, re-read, `PREFLIGHT_STORAGE`,
+  **FIXED + VERIFIED over direct USB 2026-08-07** — written, re-read, `PREFLIGHT_STORAGE`,
   and confirmed by the rev-7 statustext:
   ```
   COMMAND_ACK = 0 (ACCEPTED -- request received, NOT written)
   STATUSTEXT: Calibration saved + verified on flash
   STATUSTEXT: Params saved to flash          <- the one that means the NVS write happened
   ```
-  ⚠ **Match `"Params saved"`, not just `"saved"`.** The board emits **two** lines and the
+  **Caution: Match `"Params saved"`, not just `"saved"`.** The board emits **two** lines and the
   *calibration* one comes first — our first attempt matched it, returned early, and reported
   a params write it had not seen. That recreates rev 7's own silence-means-success bug on the
   client side. `bringup_check --srot` now grades this param (`_gcs_failsafe_verdict`) and
@@ -208,7 +208,7 @@ thruster's true sign and store it in `CAL_MDIR`, which is the readable, per-thru
 On rev 6 it converges in one pass from any starting state, and an inconclusive run now
 reports FAIL and changes nothing instead of silently resetting all eight.
 
-> ### ⛔ BEFORE YOU RUN IT: `MOTOR_DETECT` and `FRAME_REVERSE` are redundant, and stack
+> ### BEFORE YOU RUN IT: `MOTOR_DETECT` and `FRAME_REVERSE` are redundant, and stack
 >
 > **A successful MOTOR_DETECT makes `FRAME_REVERSE = 1` wrong.** They are two different
 > fixes for the same symptom, and after detect converges only one of them is still needed.
@@ -248,7 +248,7 @@ reports FAIL and changes nothing instead of silently resetting all eight.
 > inversion is **not** in the motor directions — look at the attitude/gyro convention next,
 > and do not simply put `FRAME_REVERSE` back, because that hides which of the two is wrong.
 
-### ⛔ FOLLOW-UP: a global flip cannot fix a RELATIVE asymmetry
+### FOLLOW-UP: a global flip cannot fix a RELATIVE asymmetry
 
 Reversing all eight `MOT_n_DIRECTION` fixed the manual axes, then STABILIZE span the
 vehicle about **yaw**, and autotune reported `RollRate ... CLAMP`, `PitchRate FAIL: period
@@ -292,7 +292,7 @@ Then, in order: **MANUAL first** (no attitude feedback, so it cannot flip) — p
 must not yaw, pure throttle must not roll or pitch. **STABILIZE only after that.**
 **Autotune last.**
 
-⚠ **Do not re-run MOTOR_DETECT to "fix" this** — it is what introduced the asymmetry, by
+**Caution: Do not re-run MOTOR_DETECT to "fix" this** — it is what introduced the asymmetry, by
 detecting against thrust that was already globally inverted. And these two writes are
 runtime-only: **Save on the Parameters tab only after in-water verification.**
 
@@ -333,7 +333,7 @@ STABILIZE, which is exactly where this vehicle sat on 2026-08-06.
 comes up as-flown. Note this makes the **factory default correct** for the first time — the
 "factory default is +1, which is the known-wrong state" reasoning above no longer applies.
 
-#### ✅ RESOLVED 2026-08-07 — the board is in the intended configuration
+#### Right: RESOLVED 2026-08-07 — the board is in the intended configuration
 
 Read over the bridge, disarmed, MANUAL:
 
@@ -350,18 +350,18 @@ reading M1/M8-only off a board on 08-07). Also confirmed: `CAL_LVL_R` 0.0396 / `
 
 **The hazard below did not occur. Keep the section** — it is the reason the check exists,
 and the configuration can regress the moment anyone hand-edits motor directions again.
-⚠ `FRAME_REVERSE` is still **unverified under thrust**: MANUAL axes first, STABILIZE second,
+**Caution:** `FRAME_REVERSE` is still **unverified under thrust**: MANUAL axes first, STABILIZE second,
 autotune last.
 
-> ⛔ **This pairing is correct only until MOTOR_DETECT succeeds.** `CAL_MDIR` is all `+1`,
+> **Warning: This pairing is correct only until MOTOR_DETECT succeeds.** `CAL_MDIR` is all `+1`,
 > i.e. detect has **never** written to this board — so the first successful run is ahead of
 > us, not behind. Detect converges every thruster to *agree* with its mixer column, at which
 > point `FRAME_REVERSE = 1` inverts the corrected frame and every axis is backwards again.
 > **After a SUCCESS detect, `FRAME_REVERSE` must go to 0 in the same session.** Full
-> derivation and sequence: [the ⛔ box in the MOTOR_DETECT section](#-before-you-run-it-motor_detect-and-frame_reverse-are-redundant-and-stack)
+> derivation and sequence: [the box in the MOTOR_DETECT section](#-before-you-run-it-motor_detect-and-frame_reverse-are-redundant-and-stack)
 > (firmware team, PR #6).
 
-#### ⛔ The double-inversion hazard — check this before you arm
+#### The double-inversion hazard — check this before you arm
 
 **`MOT_n_DIRECTION = [-1] × 8`, which the 2026-08-06 restore above deliberately wrote and
 which this document told you to verify, is no longer the intended configuration** — and it
@@ -393,7 +393,7 @@ all"* — and is why the vehicle span about yaw in STABILIZE. The vertical group
 same way on roll (`M[5..8][roll] = [+1,-1,+1,-1]` → `[+1,-1,+1,+1]`), which is the halved
 roll/pitch authority behind `CLAMP` / `period unstable`.
 
-> ### ✅ SETTLED 2026-08-07 — the board is in the GOOD state
+> ### Right: SETTLED 2026-08-07 — the board is in the GOOD state
 >
 > Read off the vehicle over COM8, **twice**: once as a pre-flash backup and again after
 > flashing `d6f1da5`, with a full 232-param diff between them showing **zero drift**.
@@ -410,7 +410,7 @@ roll/pitch authority behind `CLAMP` / `period unstable`.
 >
 > Note `CAL_MDIR` is all `+1`, i.e. MOTOR_DETECT has never successfully written to this
 > board — effective direction is `MOT_n_DIRECTION × CAL_MDIR = MOT_n_DIRECTION`. That is
-> also why the ⛔ box in the MOTOR_DETECT section above matters: the first successful detect
+> also why the box in the MOTOR_DETECT section above matters: the first successful detect
 > will change this, and `FRAME_REVERSE` has to come off in the same session.
 >
 > The reasoning below is kept because it is correct and is the thing to re-run if the
@@ -442,11 +442,11 @@ test at the same positive throttle, **5, 6, 7 and 8 must all push the same way**
 (`task_control_loop.cpp:789`), so it is a real test of the direction flags — it just cannot
 see `FRAME_REVERSE`, which is applied inside the mixed path only.
 
-⚠ **`FRAME_REVERSE` is unverified under thrust** — the firmware team flagged this in PR #5
+**Caution: `FRAME_REVERSE` is unverified under thrust** — the firmware team flagged this in PR #5
 and props were off. MANUAL axes first (no attitude feedback, so it cannot flip), STABILIZE
 only after that, autotune last.
 
-### ✅ Full-stack verification over direct USB — 2026-08-07
+### Right: Full-stack verification over direct USB — 2026-08-07
 
 Board on this dev box, `/dev/ttyUSB0`, by-id `usb-1a86_USB_Serial-if00-port0` (CH340
 `1a86:7523`). Everything below measured, not inferred.
@@ -464,7 +464,7 @@ Board on this dev box, `/dev/ttyUSB0`, by-id `usb-1a86_USB_Serial-if00-port0` (C
 
 **`mongla_ws` is compatible with the current firmware and needs no code change to fly it.**
 
-⚠ Two things this does **not** prove, both still open:
+**Caution:** Two things this does **not** prove, both still open:
 - **The depth loop.** `DEPTH_OUT +0.00` disarmed is a *stale register*, not a settled loop
   (that is the §8.1 ask in the firmware PR). The two armed checks still gate every AUTO move.
 - **`MAGACC 2` does not close the mag gate.** The firmware needs `>= 2`
@@ -476,7 +476,7 @@ Board on this dev box, `/dev/ttyUSB0`, by-id `usb-1a86_USB_Serial-if00-port0` (C
   neither of which depends on the sensor's self-assessment. **Prefer relative turns until
   the state is observable** (§8.8 in the firmware PR).
 
-### ⛔ Bondor and the companion-lost failsafe — do not arm from Bondor alone
+### Bondor and the companion-lost failsafe — do not arm from Bondor alone
 
 `FS_GCS_SYSID`/`FS_GCS_COMPID` (255/191) scope the companion-lost failsafe to **one named
 source — mongla_ws**. Bondor is **255/190**, so its heartbeat never feeds that timer. The
@@ -489,7 +489,7 @@ motors on its own" and is neither a Bondor nor a firmware bug.
 Config, tuning, calibration, param save/export and payload roles need **no arming** — do them
 with Bondor alone. The one exception is motor direction (`DO_MOTOR_TEST` is gated on armed);
 Bondor's **BENCH MODE** covers it by setting `FS_GCS_COMPID = 0` with a `PARAM_SET` only,
-never `PREFLIGHT_STORAGE`, so a power cycle restores the flight value. ⚠ **Never press Save
+never `PREFLIGHT_STORAGE`, so a power cycle restores the flight value. **Never press Save
 while bench mode is active**, and never take the wildcard into the water: a dead companion
 could no longer be told from a live GCS, and the vehicle would station-keep instead of
 surfacing. `bringup_check --srot` grades `FS_GCS_COMPID` and FAILs on the wildcard.
@@ -528,7 +528,7 @@ value silently renames every payload after it. `test_srot_protocol_drift` refere
 three copies, including Bondor's, because Bondor's only gate is `npm run typecheck` and
 that cannot see the firmware.
 
-### ✅ Bar30 fixed — and why that is NOT "depth verified"
+### Right: Bar30 fixed — and why that is NOT "depth verified"
 
 The connector fault is **resolved**, measured on the vehicle 2026-08-03 against the
 2026-08-02 failure:
@@ -543,7 +543,7 @@ The connector fault is **resolved**, measured on the vehicle 2026-08-03 against 
 `bringup_check --srot` now grades `barometer 983.7 mbar, spread 5.92` and `depth loop
 settled` as PASS. The arming hazard from the phantom-depth saturation is gone.
 
-**⛔ That is the barometer, not the loop.** On rev 4, `DEPTH_CMD` read `-0.329202` while
+**That is the barometer, not the loop.** On rev 4, `DEPTH_CMD` read `-0.329202` while
 `DEPTH_OUT` and `DEPTH_ERR` read **exactly 0.000 across 90+ samples** — a live controller
 with a −0.33 m command against a +0.01 m measurement cannot produce zero error, so the loop
 was not running while disarmed. `check_depth_loop_settled` passing proves only
@@ -560,7 +560,7 @@ conclusion for opposite reasons, which is why the conclusion has not moved:
 **The depth loop has still never run closed**, it gates *every* AUTO move (`move_forward`
 included — there is no depth-free path through AUTO), and the two **armed** bench checks
 in the runbook below remain the gate. "Bar30 fixed" must never be read as "depth verified".
-⚠ Note `|−0.115| < 0.90`, so `check_depth_loop_settled` still passes — it is an
+**Caution:** Note `|−0.115| < 0.90`, so `check_depth_loop_settled` still passes — it is an
 anti-saturation guard, never a proof the loop works.
 
 
@@ -613,7 +613,7 @@ PCA9685 over `DO_SET_SERVO`), which takes the **board channel directly** (`fire(
 SWITCH; `head`, `mission_reset`, `calibrate_depth`, `calc_distance`, `motor_test`;
 `vision_align` / `vision_move` via `manual()` in STABILIZE.
 
-⛔ **`surface()` is the last motion.** `stop` is itself a `SROT_MOVE`, which enters AUTO, so a
+**Warning: `surface()` is the last motion.** `stop` is itself a `SROT_MOVE`, which enters AUTO, so a
 `stop()` after `surface()` takes the hull back out of SURFACE. `test_sauvc_srot_port.py`
 refuses a board move after `surface()` in any mission.
 
@@ -647,7 +647,7 @@ mission that still names one fails at the node with `Unknown command`.
   between two; `-p mav_device:=` overrides with a path or any pymavlink connection string.
   Vehicle sysid/compid 1/1; we are 255/191.
 
-## ⚠ Bench bring-up runbook (each step gates the next)
+## Bench bring-up runbook (each step gates the next)
 
 Prereqs (operator, via **Bondor** — no mongla_ws code): ESCs on **Bluejay** (`DSHOT_BIDIR=1`,
 `RPM_LOOP=1`) or ESC RPM is absent; thruster **directions** verified (motor-detect);
@@ -662,12 +662,12 @@ otherwise unrecoverable).
 3. **`manual()` per axis:** each of fwd/lat/up/yaw **individually**, direction checked against
    the firmware's `docs/THRUSTER_MAP.md`. A wrong sign is positive feedback — fix it on the
    board (`FRAME_REVERSE` / `MOT_n_DIRECTION`), never in code.
-4. **⚠ DEPTH LOOP — MANDATORY, the depth loop has NEVER run closed (AUDIT R1):**
+4. **DEPTH LOOP — MANDATORY, the depth loop has NEVER run closed (AUDIT R1):**
    - Enter `DEPTH_HOLD`, raise & lower the hull by hand: verticals must push **back toward**
      the latched depth, not away.
    - Force SURFACE (trip the leak input) at depth: the demand must be **ascend**.
 
-   > ⚠ **This gates EVERY AUTO move, not just the dive-dependent verbs.** `SROT_MOVE`
+   > **Caution: This gates EVERY AUTO move, not just the dive-dependent verbs.** `SROT_MOVE`
    > auto-enters `AUTO`, and the `AUTO` branch calls `depth::setTarget(md.depth_target)` +
    > `depth::update(...)` underneath **every** primitive (fw `task_control_loop.cpp:236-237`)
    > — there is **no depth-free path through AUTO**. A plain `move_forward` with no
@@ -699,13 +699,13 @@ Rev 3 landed with the board **in the vehicle**, and its theme is that the firmwa
    the deck the symptom is "it arms and then does nothing".
 3. **`WTEMP` and `SCALED_PRESSURE2` are suppressed when the baro is unhealthy**, and
    `SCALED_IMU2.temperature` sends MAVLink's `0` "not provided". Absence is the signal.
-   ⚠ **`VFR_HUD` is NOT gated on `depth_ok`** — and `VFR_HUD.alt` is where we read depth. So
+   **Caution: `VFR_HUD` is NOT gated on `depth_ok`** — and `VFR_HUD.alt` is where we read depth. So
    our depth number keeps arriving on a board that has declared its baro dead. That is safe
    only because the same `depth_ok` flag *also* refuses AUTO (`task_control_loop.cpp:107`
    and `:348` use the identical condition), so no closed-loop move ever runs on it. Read
    health from `SYS_STATUS`, never infer it from the presence of a depth value.
 
-> ⛔ **CORRECTED 2026-09-07. `FW_BEHAVIOUR_REV_REQUIRED` IS 10, NOT 2**
+> **Warning: CORRECTED 2026-09-07. `FW_BEHAVIOUR_REV_REQUIRED` IS 10, NOT 2**
 > (`srot_protocol.py:733`). The paragraph below was true when written and has
 > been false since round 26, which is the dangerous kind of stale: it names a
 > **safety floor**, and a reader who trusts it believes the host will fly a
@@ -753,7 +753,7 @@ The uniform-lottery framing is wrong: the burst has a fixed order, and `LEAK` is
 check is load-bearing, because pymavlink never clears its slot and re-folding would re-stamp
 a dead value as fresh forever, defeating the `max_age_s` the table exists to enforce.
 
-### ⛔ Bench findings, 2026-08-02 — measured on the vehicle, not inferred
+### Bench findings, 2026-08-02 — measured on the vehicle, not inferred
 
 The board was on the dev box inside the AUV, disarmed, thrusters off. Read-only.
 **Two faults block the water test and one host bug was fixed as a result.**
@@ -831,7 +831,7 @@ because its old numbers (1..4) are now valid board channels that on the default 
 ARE the arm. `payload_channels:="9:torpedo_1"` supplies labels for the log and nothing else;
 a stale label can mislabel a line but cannot misdirect a shot.
 
-**⚠ The "1-8 arm / 9-16 switch" split is a DEFAULT, not a rule.** It is only the initial value
+**The "1-8 arm / 9-16 switch" split is a DEFAULT, not a rule.** It is only the initial value
 of `SERVO{n}_ROLE` (fw `params.cpp:368-371`: `(c < 8) ? 1.0f : 2.0f`), and every channel is
 independently re-rolable from Bondor. Any host table encoding that split is wrong the moment
 someone uses the feature — which is why we read all 16 roles at bring-up and print them.
@@ -842,12 +842,12 @@ someone uses the feature — which is why we read all 16 roles at bring-up and p
 when the shot did not go out, and the vision mid-hold fire logs a refusal at ERROR instead of
 discarding it.
 
-⚠ **`FIRED` means the board ACCEPTED the command, not that a solenoid moved.** The firmware
+**Caution: `FIRED` means the board ACCEPTED the command, not that a solenoid moved.** The firmware
 streams no actuator readback of any kind and its PCA9685 driver sets its health flag with no
 I2C probe, so a physically disconnected expander ACKs exactly like a working one. This is the
 strongest claim the wire supports.
 
-⛔ **The board does NOT yet enforce the role contract — we do.** `DO_SET_SERVO` on a role-1
+**Warning: The board does NOT yet enforce the role contract — we do.** `DO_SET_SERVO` on a role-1
 channel writes `servo_us` and returns `ACCEPTED` (fw `mav_commands.cpp:475-481`): it moves the
 arm and reports success. Until `MAV_CMD_SROT_PAYLOAD_FIRE` lands (spec:
 `TASKS_FROM_DUBURI_WS.md` §7), the host-side role read is the only interlock. Also unfixed
@@ -858,13 +858,13 @@ all leave it energised, so the host's `finally` OFF is the only thing that clear
 reads the µs as a LEVEL for a role-2 channel (`mav_commands.cpp:471-479`) — so one code path
 covers both, and the role check is the only thing distinguishing them.
 
-⚠ **`preflight_roles()` needs the reader thread running.** `get_param` reads the pymavlink
+**Caution: `preflight_roles()` needs the reader thread running.** `get_param` reads the pymavlink
 cache and never calls `recv_match()` itself, so with no reader every role reads `None` and the
 payload reports UNREADABLE — indistinguishable from a mis-roled board. The manager starts the
 reader before `_preflight_payload`; `test_the_reader_thread_starts_before_the_payload_role_read`
 pins that ordering.
 
-### ⚠ A timed move is NOT voltage-independent (firmware, confirmed 2026-08-03)
+### A timed move is NOT voltage-independent (firmware, confirmed 2026-08-03)
 
 `move_forward --duration N --gain G` is **purely timed** — no distance sensor, no estimate — and
 at the firmware's shipped defaults **nothing compensates for battery voltage**. All three
@@ -874,7 +874,7 @@ mechanisms that would are off:
 |---|---|---|
 | slow per-thruster RPM trim | `THR_TRIM_EN` | **0** (recommended route; not water-validated) |
 | mixer battery feedforward | `MOT_BAT_V_MAX` | **0** = off (also needs `ESPNOW_EN=1` + the 2nd board) |
-| Pico closed-loop RPM | `RPM_LOOP` | **0** — ⚠ deliberately, it oscillates in the stabilisation path |
+| Pico closed-loop RPM | `RPM_LOOP` | **0** — deliberately, it oscillates in the stabilisation path |
 
 Throttle commands **volts, not thrust** (`RPM ~ duty·V_batt/Kv`, `thrust ~ RPM²`): a T200 at the
 same PWM makes 3.71 kgf at 12 V and 6.7 kgf at 20 V. **So the same `move_forward` travels
@@ -909,7 +909,7 @@ legitimately absent, and every one of these is a place a `0` would have lied:
 
 | Field | Absent because | Trap |
 |---|---|---|
-| depth / pressure / `WTEMP` | no Bar30 | ⚠ **`VFR_HUD.alt` is NOT gated on baro health** (`mav_stream.cpp:258`), unlike `SCALED_PRESSURE2`/`WTEMP` which *are* suppressed. The board streams `-0.000 m` with no barometer fitted at all, so read the `SYS_STATUS` health bit — never infer health from the presence of a depth value |
+| depth / pressure / `WTEMP` | no Bar30 | **Caution: `VFR_HUD.alt` is NOT gated on baro health** (`mav_stream.cpp:258`), unlike `SCALED_PRESSURE2`/`WTEMP` which *are* suppressed. The board streams `-0.000 m` with no barometer fitted at all, so read the `SYS_STATUS` health bit — never infer health from the presence of a depth value |
 | `Vservo` / battery id 1 | `Vservo` **is** PM2, the thruster pack, which arrives over ESP-NOW from the 2nd board | absent ≠ 0 V |
 | ESC temps | no Pico, no ESCs | an ESC reporting 0 °C is implausible → an all-zero temp row means nothing is attached. **RPM is different**: 0 RPM is legitimate for a stopped ESC, so only a *missing frame* is `--` |
 | `DEPTH_OUT` / `DEPTH_ERR` | the depth loop does not run without a barometer | — |
@@ -934,12 +934,12 @@ ROS/`pymavlink` site-packages this workspace depends on:
 
 | env | built 2026-08-03 |
 |---|---|
-| `esp32doit-devkit-v1` | ✅ RAM 24.3%, Flash 29.6% |
-| `pico` | ✅ (14m42s — RP2350 toolchain fetch) |
-| `second-board` | ✅ (12s) |
-| `groundstation-esp32`, `esp32_4way`, `esp32_4way_diag` | ❌ *"Nothing to build"* — **stale env definitions**, their `build_src_filter` points at `src/groundstation/` and `src/esp32_4way/`, which have never existed in that repo. Those sources live in `srot-ground-station/` and `srot-esc-flasher/src/esp32_4way/` |
+| `esp32doit-devkit-v1` | RAM 24.3%, Flash 29.6% |
+| `pico` | (14m42s — RP2350 toolchain fetch) |
+| `second-board` | (12s) |
+| `groundstation-esp32`, `esp32_4way`, `esp32_4way_diag` | *"Nothing to build"* — **stale env definitions**, their `build_src_filter` points at `src/groundstation/` and `src/esp32_4way/`, which have never existed in that repo. Those sources live in `srot-ground-station/` and `srot-esc-flasher/src/esp32_4way/` |
 
-⛔ **Build only. Do not flash without an explicit decision.** `app0` must stay at `0x10000`
+**Warning: Build only. Do not flash without an explicit decision.** `app0` must stay at `0x10000`
 (PlatformIO hardcodes the app offset and does *not* read it from the CSV — moving it makes
 every upload land where the bootloader will not look), and the 20 KB → 128 KB NVS change means
 `pio run -t erase` first, which **wipes the `CAL_*` block** — accel, mag and level calibration
@@ -957,7 +957,7 @@ plus detected motor directions, recoverable only from a Bondor parameter export.
   The firmware now captures the outgoing leg's axis and speed *before* zeroing them and
   restores both into `PH_BRAKE`, so `MOVE_STOP` decelerates on its own.
   `SrotFC._brake_last_leg` **has been deleted**; `stop_motion()` is a bare `MOVE_STOP`.
-  ⚠ **This is the one change with a hull-relevant failure mode in BOTH directions:** run this
+  **Caution: This is the one change with a hull-relevant failure mode in BOTH directions:** run this
   host code against pre-REV-2 firmware and `stop` coasts again; run the old host code against
   REV-2 firmware and the hull is braked **twice** — a reverse leg on top of the board's own
   deceleration. Do not mix.
@@ -985,7 +985,7 @@ plus detected motor directions, recoverable only from a Bondor parameter export.
   We were negating it a second time, which made `/mongla/state.depth_m`
   positive when submerged and silently disabled every depth guard in the stack (they all
   compare against a negative constant, so none of them errored — they just stopped firing).
-- **⚠ pymavlink's DEFAULT dialect is MAVLink *1* (`dialects.v10.ardupilotmega`), where
+- **pymavlink's DEFAULT dialect is MAVLink *1* (`dialects.v10.ardupilotmega`), where
   `ESC_TELEMETRY_1_TO_4`/`_5_TO_8` (11030/11031) DO NOT EXIST.** Measured in-vehicle: the
   board's ESC frames arrive and are reported as `UNKNOWN_291` / `UNKNOWN_11030` /
   `UNKNOWN_11031` — zero RPM that looks exactly like an ESC or wiring fault. `MAVLINK20=1`
@@ -1009,7 +1009,7 @@ plus detected motor directions, recoverable only from a Bondor parameter export.
   probabilistic**. Not yet fixed either side. Firmware proposal: move LEAK onto `SYS_STATUS`
   sensor-health bits, where it is a dedicated bit that cannot be overwritten by a temperature
   reading. Say the word and it lands.
-- **⚠ params may not have persisted before firmware `8cb4203`** (fw R14: the NVS partition
+- **params may not have persisted before firmware `8cb4203`** (fw R14: the NVS partition
   was too small, writes silently failed). Assume `set_default_gain()`'s `JS_GAIN_DEFAULT=1.0`
   never stuck → `MANUAL_CONTROL` at half authority. **Reflash + read back `GAIN`.**
 

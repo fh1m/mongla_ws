@@ -36,7 +36,7 @@ def test_pressing_the_port_must_command_ASCEND():
 
 
 def test_the_INVERTED_case_is_a_FAIL_and_says_so():
-    """⛔ The defect this exists to catch. Deeper -> descend is a runaway."""
+    """The defect this exists to catch. Deeper -> descend is a runaway."""
     m = _load()
     v, txt = m.sign_verdict(-0.22, -0.70)
     assert v == 'FAIL'
@@ -85,7 +85,7 @@ def test_an_uncalibrated_OFFSET_does_not_break_the_test():
 
 
 def test_a_SATURATED_baseline_cannot_pass_and_says_why():
-    """⛔ The hole the operator's warning exposed. DEPTH_CMD clamps at +/-1, so a
+    """The hole the operator's warning exposed. DEPTH_CMD clamps at +/-1, so a
     baseline at the rail has nowhere to move in the ascend direction -- a press
     produces no delta and a CORRECT board would read INCONCLUSIVE, or FAIL on a
     noise sample. It must be reported as its own state."""

@@ -29,13 +29,13 @@ needs a camera, a neural network and time. It lives on a **Raspberry Pi 5 with a
 
 ```mermaid
 flowchart LR
-    subgraph THINK["🧠 Raspberry Pi 5 + Hailo-8 — thinking"]
+    subgraph THINK["Raspberry Pi 5 + Hailo-8 — thinking"]
         direction TB
         EYE["cameras<br/>newest frame wins"] --> NET["Hailo-8 detector<br/>what is that?"]
         NET --> MIS["your mission<br/>a Python script"]
         MIS --> MGR["auv_manager_node<br/>the only door to the board"]
     end
-    subgraph REFLEX["⚡ SROT board — reflexes, 500 Hz"]
+    subgraph REFLEX["SROT board — reflexes, 500 Hz"]
         direction TB
         CTRL["heading · depth · brakes"] --> MOT["thrusters"]
     end
@@ -55,12 +55,12 @@ story from first principles and assumes no background in robotics.
 
 Every claim in this project carries a label, and no page mixes them up:
 
-| | label | what it means |
-|:--:|---|---|
-| 🟣 | **BENCH** | seen working on the bench, on recorded footage, or on the live board |
-| 🟡 | **BUILT** | written and tested, but never run on a swimming vehicle |
-| 🔴 | **BLOCKED** | waiting on water, a firmware change or new hardware |
-| 🟢 | **WATER** | proven with the vehicle swimming. **Nothing has this label yet.** |
+| label | what it means |
+|---|---|
+| **BENCH** | seen working on the bench, on recorded footage, or on the live board |
+| **BUILT** | written and tested, but never run on a swimming vehicle |
+| **BLOCKED** | waiting on water, a firmware change or new hardware |
+| **WATER** | proven with the vehicle swimming. **Nothing has this label yet.** |
 
 The [Capability Map](../../../docs/capability-map.md) puts a label and a piece of evidence
 beside every capability. The [ledger of measurements](../measured-bars.md) holds every

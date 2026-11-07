@@ -6,7 +6,7 @@ positions were read off the CAD on 2026-09-23 -- that pushing two tunnels the
 same way makes no moment, that pushing them opposite ways makes yaw with the
 measured lever arm, and that no combination of any of them makes roll.
 
-⚠ Units are signed fractions of one thruster's output, never newtons. There is
+Units are signed fractions of one thruster's output, never newtons. There is
 no `k_n_per_rpm2` in this tree and the CAD has no material, so nothing here
 converts to force or predicts motion.
 """
@@ -155,7 +155,7 @@ def _offset_axial(z_m):
 
 
 def test_the_vertical_pair_TRIMS_OUT_an_off_axis_thruster():
-    """⭐ THE CAPABILITY A +-1 MIXER CANNOT HAVE. Shown on a CONSTRUCTED 8.1 mm
+    """The capability a +-1 mixer cannot have. Shown on a CONSTRUCTED 8.1 mm
     offset: the figure first came from the motor's bounding box and is not the
     hull's (#9), but the capability is real for any off-axis thrust line.
 
@@ -191,7 +191,7 @@ def test_letting_pitch_float_is_not_the_same_as_demanding_zero():
 # ── refusal, which is the point ─────────────────────────────────────────────
 
 def test_a_roll_demand_is_REFUSED_not_quietly_dropped(alloc):
-    """⛔ The failure this guards. Rounding an impossible request to zero lets a
+    """The failure this guards. Rounding an impossible request to zero lets a
     controller integrate against an axis with no actuator behind it, forever."""
     got = alloc.allocate(roll=0.5)
 
@@ -216,7 +216,7 @@ def test_no_roll_asked_means_nothing_refused(alloc):
 # ── a dead thruster is a limit, not a rewrite ───────────────────────────────
 
 def test_killing_a_lateral_tunnel_costs_yaw_but_keeps_the_vehicle_flying(alloc):
-    """⭐ The single strongest argument for allocating over geometry: a +-1
+    """The single strongest argument for allocating over geometry: a +-1
     mixer cannot express a dead thruster AT ALL. Here it is one call, and the
     remaining four re-solve."""
     alloc.disable('lateral_a')
@@ -278,7 +278,7 @@ def test_an_over_large_demand_is_scaled_not_clipped(alloc):
 
 
 def test_uniform_scaling_keeps_the_ratio_between_axes(alloc):
-    """⚠ THIS IS A PROPERTY OF THE SCALING FALLBACK, NOT OF THE ALLOCATOR.
+    """This is a property of the scaling fallback, not of the allocator.
 
     It held for every saturating demand until saturation handling was added,
     and the test was written as if it were universal. It is not: the priority
@@ -359,7 +359,7 @@ L_YAW = 0.1750
 
 @pytest.mark.parametrize('sway,yaw', [(1.5, 0.10), (1.5, 0.15), (1.9, 0.20)])
 def test_yaw_is_delivered_whole_and_sway_gets_what_is_left(alloc, sway, yaw):
-    """⭐ THE FALSIFIER FROM #44, and the closed form it must equal.
+    """The falsifier from #44, and the closed form it must equal.
 
     The lateral pair is a 2x2 block: yaw needs a differential of yaw/L, and
     sway gets 2*limit minus that. Total-error least squares delivered 88 %,
@@ -382,7 +382,7 @@ def test_pitch_is_delivered_whole_before_heave(alloc):
 
 
 def test_a_saturating_surge_no_longer_steals_heave_authority(alloc):
-    """⛔ THE FAILURE THE FIRMWARE'S OWN COMMENT DESCRIBES, one layer up. Its
+    """The failure the firmware's own comment describes, one layer up. Its
     mixer note records that a global scale meant "a hard forward burst silently
     cost a third of the vehicle's roll/pitch authority, in the manoeuvre where
     you want it most". Heave outranks surge, so it stays whole."""
@@ -425,7 +425,7 @@ def test_the_top_axis_never_does_worse_than_uniform_scaling(disabled):
     uniform scale would have given it. Total error in mixed units is not a
     metric this allocator answers to (#44).
 
-    ⚠ Only on hulls where yaw has a column of its own. With a lateral tunnel
+    Only on hulls where yaw has a column of its own. With a lateral tunnel
     dead, yaw and sway come from ONE thruster and are a single direction
     (`test_killing_a_lateral_tunnel_makes_sway_and_yaw_inseparable`); ranking
     two halves of one column has no meaning, and the bound does not hold."""

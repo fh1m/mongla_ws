@@ -1,6 +1,6 @@
 """test -- a scratch bench mission, retargeted 2026-09-28.
 
-⚠ IT USED TO STEER ON `rescue`, which no shipped model emits: the
+It used to steer on `rescue`, which no shipped model emits: the
 `gate_rescue_repair` graph was retired because it measured +0.0 points of
 separation between gate-present and gate-absent footage, against +84.2 at 0.30
 for `gate_sharks` (measured-bars section 59). The weights are at

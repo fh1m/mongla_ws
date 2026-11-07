@@ -63,12 +63,12 @@ def run(mongla, log=None):
             log(f'[MISSION] ABORT: {exc}')
         raise
     finally:
-        # ⛔ CLEANUP RAN AS ONE BLOCK, SO THE FIRST FAILURE ATE THE REST.
+        # Cleanup ran as one block, so the first failure ate the rest.
         # A cleanup step raising meant `disarm()` never ran, and the exception
         # that surfaced was the cleanup's rather than the mission's. Contain
         # each step so one cannot cost the others.
         never_fails(mongla.stop, log=log, name='stop')
-        # ⛔ DISARM IS DELIBERATELY NOT CONTAINED. Every other step here is
+        # Disarm is deliberately not contained. Every other step here is
         # tidying; this one is the safety path, and a failed disarm that
         # reported success is the single failure this stack cannot tolerate.
         # It raises, loudly, even from a finally.

@@ -27,7 +27,7 @@ def goal_acceptance(cmd, command_active, safety_verbs=SAFETY_VERBS):
 
 # ── the gate that enforces the policy above ──────────────────────────────────
 #
-# ⛔ WHY THIS IS AN OBJECT AND NOT A BOOL. `goal_acceptance` is the right rule and
+# Why this is an object and not a bool. `goal_acceptance` is the right rule and
 # it was always correct; the defect was that applying it took TWO steps in two
 # different callbacks:
 #
@@ -41,7 +41,7 @@ def goal_acceptance(cmd, command_active, safety_verbs=SAFETY_VERBS):
 # A test-and-set has to be ONE operation, so the state and the rule live together
 # and the rule is applied while the lock is held. There is no public setter.
 #
-# ⚠ THE LOCK IS HELD ONLY ACROSS THE DECISION. It never wraps a MAVLink write, a
+# The lock is held only ACROSS the decision. It never wraps a MAVLink write, a
 # motion loop, or anything that can block -- a gate that can deadlock the action
 # server is worse than the race it replaces.
 import threading
@@ -136,7 +136,7 @@ class _CommandGate:
     def release(self, token) -> bool:
         """End the claim `token` names, including its drain. False if not ours.
 
-        ⛔ A PRE-EMPTED LOOP MUST NOT FREE ITS PRE-EMPTOR'S CLAIM. Before the
+        A pre-empted loop must not free its pre-emptor's claim. Before the
         token, `release()` cleared whatever held the gate: `disarm` pre-empts a
         `move_forward`, the move's `finally` runs, and the gate is empty while
         `disarm` is still executing -- so an ordinary verb could start beside it.
@@ -152,7 +152,7 @@ class _CommandGate:
     def reap_stale(self):
         """Release and return a claim that was never confirmed. None if nothing leaked.
 
-        ⚠ Only UNCONFIRMED claims. A long-running command is confirmed and must
+        Only UNCONFIRMED claims. A long-running command is confirmed and must
         never be timed out here -- a `move_forward 120` is not a leak.
         """
         with self._lock:

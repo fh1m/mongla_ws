@@ -1,9 +1,9 @@
-# ⭐ ONE lock-ladder constant is measurably wrong. The other four are right.
+# ONE lock-ladder constant is measurably wrong. The other four are right.
 #
-# ⛔ NOT THE DEFAULTS. The shipped values are unchanged; this is the A/B arm
+# Not the defaults. The shipped values are unchanged; this is the A/B arm
 # for a pool day, and it exists to be refuted.
 #
-# TWO INDEPENDENT DATASETS, OPPOSITE BIASES, ONE AGREEMENT
+# Two independent datasets, opposite biases, one agreement
 # -------------------------------------------------------
 # `continuity.py` states that six constants protect a target lock and that
 # every one is sized from the detection RATE and from the others' ordering --
@@ -23,11 +23,11 @@
 #       kalman predict  1.50 s     93.2 %       97.8 %
 #       track_buffer    5.00 s     99.7 %      100.0 %
 #
-# ⭐ The two disagree about the UPPER rungs and agree about the LOWEST one.
+# The two disagree about the UPPER rungs and agree about the LOWEST one.
 # That agreement is the finding: a third of real gaps outrun the rung meant to
 # absorb ordinary ones, on a person in air AND on props in water.
 #
-# ⛔ AN EARLIER VERSION OF THIS FILE CHANGED ALL FIVE, sized from (A) alone:
+# An earlier version of this file changed all five, sized from (A) alone:
 # 0.33 / 1.12 / 1.84 / 3.04 / 7.64 s. Real footage refutes it. In water,
 # p99 is 0.47 s, so coasting 1.12 s would hold a dead target more than twice
 # as long as any real gap -- and a coast that outlives the target is how a
@@ -50,7 +50,7 @@ candidate:
   kalman_predict_s:  1.50     # unchanged
   track_buffer_s:    5.00     # unchanged
 
-# ⛔ THE ORDERING IS A HARD CONSTRAINT: freshness < coast_s < lost_grace_s <
+# The ordering is a hard constraint: freshness < coast_s < lost_grace_s <
 # kalman < track_buffer, and the tracker buffer must EXCEED coast_s in wall
 # time, or a coasted target vanishes off /tracks before the coast ends and the
 # coast truncates early (tracker_node.py, max_predict_s). 0.47 < 0.80 holds.
@@ -60,7 +60,7 @@ candidate:
 #   ros2 param set /mongla_lock_downward full_authority_s 0.47
 # Revert with 0.20.
 #
-# ⚠ WHAT WOULD REFUTE IT: a pool run where 0.47 s holds a stale box long
+# What would refute it: a pool run where 0.47 s holds a stale box long
 # enough to steer the hull at a target that has genuinely gone. Score `lost`
 # AND false holds, not `lost` alone -- a ladder that never reports a loss has
 # not solved the problem, it has stopped asking the question.

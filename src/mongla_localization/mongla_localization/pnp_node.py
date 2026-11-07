@@ -1,6 +1,6 @@
 """One PnP solver for every evidence source. Subscribe correspondences, publish a pose.
 
-WHY A SEPARATE NODE AND NOT A FUNCTION CALL IN EACH PRODUCER. `lock_node` used
+Why a separate node and not a function call in each producer. `lock_node` used
 to match, solve and publish in one place, so the pose could only ever come from
 the anchor's patch. Splitting the evidence (`TargetCorrespondences`) from the
 solve makes three things possible that were not:
@@ -16,7 +16,7 @@ solve makes three things possible that were not:
     publish to distinct topics, which is what item 2.7 needs and what a single
     fused publisher structurally prevents.
 
-⛔ THE TWO SILENT SCALE ERRORS THIS NODE EXISTS TO NOT MAKE. Both produce a
+The two silent scale errors this node exists to not make. Both produce a
 plausible number and no warning, and both were already documented in
 `lock_node` before this node existed:
 
@@ -57,7 +57,7 @@ class PnPNode(Node):
         self._max_reproj_px = float(
             self.declare_parameter('max_reproj_px', MAX_REPROJ_PX).value)
 
-        # ⛔ REDUNDANCY IS CHEAPER THAN PICKING THE RIGHT NUMBER. A
+        # Redundancy is cheaper than picking the right number. A
         # reprojection gate that is tight enough to reject a bad solve at 3 m
         # also rejects a good one at 0.4 m, where the board fills the frame and
         # a few pixels of contour error are ordinary. BumblebeeAS run exactly
@@ -94,7 +94,7 @@ class PnPNode(Node):
         K = np.array([[k[0], 0.0, k[2]],
                       [0.0, k[4], k[5]],
                       [0.0, 0.0, 1.0]], np.float64)
-        # ⛔ D TRAVELS WITH K (issue #24). The forward lens is strongly barrel
+        # D TRAVELS WITH K (issue #24). The forward lens is strongly barrel
         # distorted; solving on its raw pixels biased every off-centre pose.
         # Distortion coefficients act on NORMALISED coordinates, so unlike K
         # they need no rescaling for another frame size.

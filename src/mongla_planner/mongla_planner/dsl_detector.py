@@ -47,7 +47,7 @@ class DetectorMixin:
         """Block until `vision_info` shows `name` live with a NEW epoch, then drop
         every detection cached before it. Raises if the detector never confirms.
 
-        ⛔ WHY: the parameter set returning is not the model running. Until the
+        WHY: the parameter set returning is not the model running. Until the
         detector republishes `vision_info`, frames in the cache came from the OLD
         model, and a `detected()` right after a switch can answer about a class
         the new model does not even have.
@@ -96,8 +96,8 @@ class DetectorMixin:
         ``_ensure_detector``'s 5 s ``wait_for_service`` on every switch of a
         single-camera run. Best-effort: any error -> treat as absent (skip).
 
-        ⛔ `settle` EXISTS BECAUSE AN INSTANT GRAPH READ ANSWERS "ABSENT" FOR A
-        NODE THAT IS RUNNING. `get_node_names` reports what DDS discovery has
+        `settle` exists because an instant graph read answers "absent" for a
+        Node that is running. `get_node_names` reports what DDS discovery has
         found SO FAR, and a mission's first query runs a fraction of a second
         after its own node is created -- before the detector has been
         discovered. Measured on the vehicle: `detected('gate')` returned in
@@ -189,7 +189,7 @@ class DetectorMixin:
         task's behaviour depends on.
         """
         ros_node = self.client.node
-        # ⛔ A DUPLICATE NODE NAME MAKES THIS WRITE A COIN FLIP. Two processes
+        # A duplicate node name makes this write a coin flip. Two processes
         # can hold the same node name -- an orphaned launch, a second stack
         # started by mistake -- and ROS does not arbitrate: the service call
         # lands on whichever answers, which may be the one NOT driving the
@@ -243,7 +243,7 @@ class DetectorMixin:
         contribute detections, which arrive merged in the same
         `Detection2DArray` and outlined in the same `TargetContours`.
 
-        ⚠ Two models is not free and is not a default. The accelerator runs one
+        Two models is not free and is not a default. The accelerator runs one
         graph at a time and each handover costs ~4 ms, so the frame rate is the
         sum plus the swaps -- measured 37.5 Hz for a pair against 95 Hz for one
         model. Ask for both when a task needs both, not for the whole mission.
@@ -346,7 +346,7 @@ class DetectorMixin:
     def set_node(self, kind: str, *, camera: str | None = None, **params) -> None:
         """Set parameters on ANY node in the stack, by subsystem name.
 
-        ⛔ WHY THIS EXISTS. A census of the tree found 164 declared parameters
+        Why this exists. A census of the tree found 164 declared parameters
         across 13 nodes and a DSL that could write two groups of them: the
         detector, and the manager's ``vision.*``. Everything else -- the
         tracker's coast and Kalman noise, the camera's exposure and rate, the

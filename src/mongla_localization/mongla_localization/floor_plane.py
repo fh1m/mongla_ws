@@ -1,17 +1,17 @@
 """Range to a point on a KNOWN horizontal plane, from one pixel. No object size.
 
-⛔ WHAT THIS ADDS. `range_to` reads distance off a box WIDTH, so it needs the
+What this adds. `range_to` reads distance off a box WIDTH, so it needs the
 prop's real width, a box that is not cut by the frame edge, and a detector
 that draws the box tight. Lose any of those -- a drum half out of frame, a pipe
 whose width the model never learned, a partly occluded base -- and there is no
 range at all. But the pool hands us a second, size-free relation: things STAND
-ON THE FLOOR (drums, flares, the slalom feet) or HANG FROM A KNOWN DEPTH (the
+On the floor (drums, flares, the slalom feet) or HANG FROM A KNOWN DEPTH (the
 RoboSub gate bar). A ray through the pixel where the object meets that plane
 hits it at exactly one point, and the depth sensor already knows how far above
 the plane we are. SYNTHESIS item 7; BumblebeeAS intersect corner rays with a
 known plane for the same reason.
 
-⛔ WHEN IT IS WORSE THAN `range_to`, written down so nobody assumes otherwise.
+When it is worse than `range_to`, written down so nobody assumes otherwise.
 The ground range is `h / tan(theta)`, theta the ray's angle below horizontal,
 so `dR/dtheta = h / sin(theta)^2`. At h = 1 m and R = 3 m, ONE DEGREE of
 unmodelled pitch moves the answer 17 cm; a 0.30 m drum at the same range read
@@ -21,13 +21,13 @@ and steep (sigma shrinks as theta grows), and -- the reason it exists -- when
 the size-based method returns nothing. Both sigmas are derived, so a caller
 can take the smaller.
 
-⛔ THE PLANE IS A CLAIM ABOUT THE POOL. The SAUVC floor SLOPES, 1.6 m at the
+The plane is a claim about the pool. The SAUVC floor SLOPES, 1.6 m at the
 centre and 1.2 m at the ends, so a flat-floor assumption is up to 0.4 m wrong
 in `h`, which scales the range by the same fraction (R * dh / h). Pass the
 depth of the floor WHERE THE TARGET IS, and a `plane_sigma_m` that says how
 well you know it.
 
-⛔ OPTICS. Pixels must be in the same optics as `fx, fy, cx, cy`: water focal
+OPTICS. Pixels must be in the same optics as `fx, fy, cx, cy`: water focal
 length, and rectified pixels with the rectified K (the 1/n scale trap
 `pnp_node` documents). Roll is NOT modelled: srot holds roll near zero
 (measured -0.81 deg on the bench); at 5 deg the lateral error is ~9 % of range.

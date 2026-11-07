@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Drive the flow node's WATER path with synthetic motion through REAL optics.
 
-⛔ WHAT THIS DOES AND DOES NOT PROVE. Every velocity number in
+What this does and does not prove. Every velocity number in
 `measured-bars.md` §13 -- the 30 cm slides, the 0.02 cm synthetic control --
 was taken with `medium='air'` and PREDATES the refractive rectifier. The
 rectified path has been verified to come up on the vehicle and its maths is
@@ -20,7 +20,7 @@ It does NOT prove the physical port obeys Snell's law with a thin-window
 approximation. Port thickness, a non-planar window and any tilt are absent
 from both sides of this test. **That is water-only** and stays owed.
 
-THE FORWARD MODEL IS INDEPENDENT OF THE THING UNDER TEST, deliberately. It
+The forward model is independent of the thing under test, deliberately. It
 is written here as ray trig on ground-plane geometry -- pick the ray, refract
 it into water, intersect the floor, translate the floor point, re-project --
 and never imports `RefractiveRectifier`, which works in normalised-coordinate
@@ -190,7 +190,7 @@ def main():
         gray = grab(a.device, a.width, a.height_px)
         print(f'frame {gray.shape} mean={gray.mean():.1f} sd={gray.std():.1f}')
         if gray.std() < 8:
-            print('  ⚠ almost no texture -- this measures the dark room, '
+            print('  WARNING: almost no texture -- this measures the dark room, '
                   'not the model')
         step = a.step_cm / 100.0
         print(f'\n{a.steps} steps x {a.step_cm} cm at h = {a.height} m\n')

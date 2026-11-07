@@ -1,6 +1,6 @@
 """Round 5 -- INDI against the tuned cascade, on our own plant.
 
-⛔ THE PLAN'S FALSIFIER, QUOTED: "against the tuned cascade PID from Round 3,
+The plan's falsifier, quoted: "against the tuned cascade PID from Round 3,
 under an injected disturbance, INDI must win on the bench before it is ever
 proposed for the board. If it cannot beat a well-tuned PID on our own plant, it
 does not fly -- and that is a publishable result either way."
@@ -43,7 +43,7 @@ def _indi(v, k_rate=20.0, cutoff=30.0):
 # ═══════════════════════════════════════════════════════════════════════════ #
 
 def test_indi_must_not_be_pointed_at_an_unactuated_axis():
-    """⛔ FOUND BY RUNNING IT. An incremental law keeps adding until it sees the
+    """Found by running it. An incremental law keeps adding until it sees the
     acceleration it asked for. On roll -- which this hull cannot actuate, B
     being rank 5 of 6 -- no acceleration is ever coming, so the increment winds
     to its clamp and the Euler coupling drags yaw off target.
@@ -68,7 +68,7 @@ def test_the_increment_is_limited_to_ACHIEVABLE_torque():
 
 
 # ═══════════════════════════════════════════════════════════════════════════ #
-#  ⭐ The verdict
+#  The verdict
 # ═══════════════════════════════════════════════════════════════════════════ #
 
 def test_indi_does_win_the_step_response():
@@ -83,7 +83,7 @@ def test_indi_does_win_the_step_response():
 
 
 def test_but_indi_LOSES_disturbance_rejection_which_is_the_falsifier():
-    """⛔ THE TEST THE PLAN ACTUALLY SET, and INDI fails it. Against a 1.5 N.m
+    """The test the plan actually set, and INDI fails it. Against a 1.5 N.m
     torque burst INDI deviates about 3.6x further than the cascade -- the
     OPPOSITE of the quadrotor result that motivated trying it at all (7x lower
     gust deviation, 0.21 m against 1.51 m)."""
@@ -96,7 +96,7 @@ def test_but_indi_LOSES_disturbance_rejection_which_is_the_falsifier():
 
 
 def test_indis_no_drag_model_advantage_is_real_but_worthless_here():
-    """⭐ WHY THE HEADLINE CLAIM DOES NOT PAY. INDI needs no drag model. Neither
+    """Why the headline claim does not pay. Indi needs no drag model. Neither
     does the cascade on this vehicle: swing drag 10x and the cascade's settle
     time moves under 7 %, because the yaw axis is RATE-limited by
     PILOT_YAW_RATE rather than drag-limited. An advantage over a problem we do
@@ -112,7 +112,7 @@ def test_indis_no_drag_model_advantage_is_real_but_worthless_here():
 
 
 def test_indi_destabilises_when_the_inertia_estimate_is_wrong():
-    """⛔⛔ THE RESULT THAT DECIDES IT, and it relocates the blocker.
+    """The result that decides it, and it relocates the blocker.
 
     `tau = tau_applied + I (wdot_des - wdot_meas)` needs an accurate I. Ours is
     a UNIFORM-BODY GUESS -- a real hull is a shell with its battery placed

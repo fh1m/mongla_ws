@@ -187,7 +187,7 @@ class VisionState:
 
         This used to be `time.monotonic()` at message arrival, and everything
         downstream that believes it reads FRAME AGE was in fact reading AGE
-        SINCE THE MESSAGE LANDED:
+        Since the message landed:
 
           _freshness       decays the lateral command by it
           the coast ladder 0.10 / 0.40 / 0.80 / 1.00 s are measured in it
@@ -281,7 +281,7 @@ class VisionState:
     def wait_for_sample(self, timeout: float) -> bool:
         """Block until a new detections message lands, or `timeout` elapses.
 
-        THIS REPLACES A FIXED-RATE SLEEP IN THE CONTROL LOOP, and the reason
+        This replaces a fixed-rate sleep in the control loop, and the reason
         is the same one that moved `camera_node` off a timer: a fixed-rate
         poll against an asynchronous producer waits, on average, half a period
         for data that had already arrived.
@@ -356,12 +356,12 @@ class VisionState:
     def square_within(self, tol_deg: float, max_age_s: float = 1.0) -> bool:
         """Is the target square to us within `tol_deg`, ALLOWING for the flip?
 
-        THE GATE. Both flip branches are legitimate answers, so squareness only
+        The gate. Both flip branches are legitimate answers, so squareness only
         counts if the WORSE of them is inside tolerance -- reading the point
         estimate alone fires on the lucky branch, which is the exact failure
         this whole path exists to prevent.
 
-        NO POSE MEANS NOT SQUARE. An absent `lock_node`, an uncalibrated
+        No pose means not square. An absent `lock_node`, an uncalibrated
         camera, an unset `target_width_m` or a refused decomposition all return
         False. For a firing gate the fail-safe direction is "do not fire", and
         this is the only place that choice is made.
@@ -376,7 +376,7 @@ class VisionState:
     def tool_offset_px(self, tool: str, max_age_s: float = 1.0):
         """Signed (du, dv) px that puts the target on TOOL's axis, or None.
 
-        ⛔ THE MISS EQUALS THE OFFSET AT EVERY RANGE. An align centres the
+        The miss equals the offset at every range. An align centres the
         target on the CAMERA axis; a tool mounted elsewhere acts along a
         PARALLEL axis, so the error does not shrink as the hull closes in. A
         10 cm offset misses a 4.75 cm-radius torpedo opening from 1 m and from
@@ -546,7 +546,7 @@ class VisionState:
             # anchor). Opt-in, and it CANNOT fabricate -- `lock_node` publishes
             # nothing once its own authority reaches zero, so an absent message
             # is the loss being declared on schedule rather than hidden.
-            # ⚠ `lock_s` IS A SWITCH, NOT A DURATION, and its name says
+            # `lock_s` is a switch, not a duration, and its name says
             # otherwise. Any positive value enables the ladder; the magnitude
             # is never compared to anything, so `lock_s:=2.5` and `lock_s:=0.1`
             # behave identically.

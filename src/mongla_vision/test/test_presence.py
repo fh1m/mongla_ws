@@ -48,7 +48,7 @@ def test_a_dim_target_in_the_interior_is_declared_after_min_run():
 
 
 def test_a_departed_target_is_refused_however_well_its_boxes_chain():
-    """⭐ THE CASE THE MODULE EXISTS FOR. The measurement found the departed
+    """The case the module exists for. The measurement found the departed
     regime links at 1.000 -- better than the in-view regime's 0.938. A chain
     is therefore NOT evidence on its own. Armed on a detection in the margin
     band, a perfect chain must still be refused."""
@@ -129,7 +129,7 @@ def test_confidence_is_capped_below_a_detection():
 
 
 def test_the_strongest_box_is_taken_not_the_nearest():
-    """⛔ Picking the nearest box to our own prediction would let the chain
+    """Picking the nearest box to our own prediction would let the chain
     chase itself. Given a weak box exactly on the prediction and a stronger
     one offset within the gate, the stronger must win."""
     acc = make()

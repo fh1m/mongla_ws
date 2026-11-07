@@ -1,8 +1,8 @@
 """B22 -- the water refractive index has ONE source, and the two Snell
 transforms stay inverses when it changes.
 
-⛔ READ THIS BEFORE EDITING. The obvious test -- "air -> water -> air round-trips"
--- PASSES ON THE BROKEN CODE. The defect was that `solver.fov_for_medium` (the
+Read this before editing. The obvious test -- "air -> water -> air round-trips"
+-- passes on the broken code. The defect was that `solver.fov_for_medium` (the
 inverse) hardcoded the literal `1.333` while `refract` (the forward) read
 `N_WATER`, and those two numbers are equal today. A round-trip at the shipped
 index therefore cannot tell the fixed code from the broken code.

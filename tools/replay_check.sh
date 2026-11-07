@@ -17,7 +17,7 @@ set -euo pipefail
 
 BAG="${1:?usage: replay_check.sh <bag-dir> [label] [rate]}"
 LABEL="${2:-replay}"
-# ⛔ RATE IS A FIDELITY CONTROL, NOT A CONVENIENCE. Measured 2026-09-24: played
+# Rate is a fidelity control, not a convenience. Measured 2026-09-24: played
 # at 1.0, the Pi managed 20.5 Hz of detections against 41.2 Hz live on the same
 # footage -- it cannot both play a 4.7 GB bag and infer at full rate. The lock
 # ladder decays authority with TIME, so half the detections per second reads as

@@ -1,6 +1,6 @@
 """98 corners from a patch with nothing in it, and 88 % of them die.
 
-⛔ THE TRAP, MEASURED. `goodFeaturesToTrack` returns MORE corners from a flat,
+The trap, measured. `goodFeaturesToTrack` returns MORE corners from a flat,
 noisy patch than from a textured one -- sensor noise in a flat region produces
 plenty of local maxima, and the detector has no way to know they are noise. So
 `Follower.reset()` returned a healthy point count for a box that could not be
@@ -15,7 +15,7 @@ Over 155 boxes on four archive clips, binned by patch grey-level std:
       5 - 10         21            22                 0.91
      20+             19            21                 0.95
 
-⭐ THE FIX IS A REFUSAL, NOT A RESCUE. Two model-free rungs were built and
+The fix is a refusal, not a rescue. Two model-free rungs were built and
 measured for exactly these frames and BOTH failed: a colour back-projection
 loses to a decoy box on 69 % of gate.mkv frames, and NCC template matching
 returns a confident 0.891 peak whose margin over its own second-best is +0.005.
@@ -51,7 +51,7 @@ def _textured(h=120, w=160, seed=1):
 
 
 def test_the_noise_patch_really_does_yield_plenty_of_corners():
-    """⛔ THE PREMISE, CHECKED FIRST. If `goodFeaturesToTrack` refused this
+    """The premise, checked first. If `goodFeaturesToTrack` refused this
     patch by itself the gate would be pointless -- the whole finding is that it
     does NOT refuse, and returns a reassuring number."""
     import cv2
@@ -71,7 +71,7 @@ def test_a_patch_with_no_information_is_refused_at_seed_time():
 
 
 def test_a_textured_patch_is_still_accepted():
-    """⚠ THE OTHER HALF. A gate that refuses everything is not a gate."""
+    """The other half. A gate that refuses everything is not a gate."""
     f = Follower()
     assert f.reset(_textured(), (10.0, 10.0, 150.0, 110.0)) > 0
     assert f.active
@@ -88,7 +88,7 @@ def test_the_refusal_says_why():
 
 
 def test_the_bar_is_the_measured_one_not_a_round_number():
-    """⛔ THE BAR IS AN OPERATING POINT, chosen by the cost of each mistake:
+    """The bar is an operating point, chosen by the cost of each mistake:
     at 2.0 a refusal is right 86.7 % of the time for a 19.4 % refusal rate,
     where 4.0 buys a lower miss rate at 49.7 % refused. Raising it is a
     decision about coverage, not a tidy-up."""

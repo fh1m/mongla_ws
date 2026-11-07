@@ -1,6 +1,6 @@
 """Lamb's added-mass coefficients, checked against cases where truth is KNOWN.
 
-⛔ WHY THESE ARE TRUTH TESTS AND NOT AGREEMENT TESTS. Comparing this
+Why these are truth tests and not agreement tests. Comparing this
 implementation against another implementation, or against the sim's BlueROV2
 numbers, would measure agreement and could not rank them. Potential-flow added
 mass has EXACT closed-form answers in two limits, and both are reachable from
@@ -27,7 +27,7 @@ from mongla_control import hydrodynamics as hy
 # --------------------------------------------------------------------------- #
 
 def test_the_sphere_limit_is_one_half():
-    """⭐ A sphere carries exactly half its displaced mass as added mass, on
+    """A sphere carries exactly half its displaced mass as added mass, on
     both axes, and has ZERO added inertia in rotation. Approached from the
     prolate side, because the formulas are singular at e = 0."""
     k = hy.lamb_coefficients(1.0, 0.99999)
@@ -45,7 +45,7 @@ def test_the_slender_limit_is_zero_and_one():
 
 
 def test_the_slender_limit_of_the_ROTATIONAL_coefficient_is_one():
-    """⛔ ADDED BECAUSE INJECTION-VERIFICATION CAUGHT ITS ABSENCE. Multiplying
+    """Added because injection-verification caught its absence. Multiplying
     k' by 0.93 passed all sixteen earlier tests: the sphere limit checks
     k' == 0, and 0.93 * 0 is still 0. The coefficient the PITCH AND YAW loops
     depend on was effectively untested.
@@ -70,7 +70,7 @@ def test_the_rotational_coefficient_is_bounded_and_monotone():
 
 
 def test_this_hull_pays_a_real_rotational_penalty():
-    """⚠ THE NUMBER THAT SIZES THE ATTITUDE LOOPS. At fineness 4 the hull
+    """The number that sizes the attitude loops. At fineness 4 the hull
     carries 61 % of the displaced fluid's transverse moment as added inertia,
     so pitch and yaw are ~1.6x more sluggish than the dry vehicle suggests.
     Anyone tuning ATC_RAT_PIT_* or ATC_RAT_YAW_* against a dry-spun hull is
@@ -91,7 +91,7 @@ def test_this_hull_pays_a_real_rotational_penalty():
 def test_against_the_published_table(fineness, k1, k2):
     """A CROSS-CHECK, at the tolerance the evidence deserves -- not the proof.
 
-    ⚠ THE TOLERANCE HERE IS DELIBERATELY LOOSER THAN THE LIMIT TESTS ABOVE, and
+    The tolerance here is deliberately looser than the limit tests above, and
     the reason is about evidence rather than about physics. These four rows are
     three-decimal table values; the limits are exact closed forms. When the
     f = 2 row disagreed by 0.0022 the tempting move was to adjust the
@@ -122,7 +122,7 @@ def test_an_oblate_body_is_refused():
 
 
 # --------------------------------------------------------------------------- #
-#  ⭐ The mass-free result
+#  The mass-free result
 # --------------------------------------------------------------------------- #
 
 def test_the_effective_mass_ratio_needs_no_mass():
@@ -130,7 +130,7 @@ def test_the_effective_mass_ratio_needs_no_mass():
     volume, no density. 1.72x more INERTIA laterally than axially, from the
     fineness ratio alone.
 
-    ⛔ INERTIA ONLY. It does not follow that strafing is worse than turning and
+    Inertia only. It does not follow that strafing is worse than turning and
     driving -- this hull has TWO lateral thrusters against ONE axial unit, so
     the heavier axis may also be the better-actuated one. That comparison needs
     the allocator and a drag number."""
@@ -145,7 +145,7 @@ def test_this_hull_is_slender_enough_to_care():
 
 
 def test_no_roll_coefficient_is_offered():
-    """⚠ RETRACTED CLAIM, kept as a test so it is not re-argued. This file
+    """RETRACTED CLAIM, kept as a test so it is not re-argued. This file
     briefly said roll added inertia is "EXACTLY zero, and physical". That is
     true of a SMOOTH body of revolution; ours has four transverse bores, which
     is exactly something for the fluid to grip, so the real value is small but
@@ -167,7 +167,7 @@ def test_mass_is_computable_and_comes_out_as_a_band():
 
 
 def test_the_free_flooding_tunnels_are_subtracted():
-    """⛔ THE ERROR THIS TEST EXISTS FOR, and it shipped for one commit. Four
+    """The error this test exists for, and it shipped for one commit. Four
     84 mm bores pass clean through the hull: the water in them moves WITH the
     vehicle, so it is inside the envelope and outside the displaced volume.
     Omitting them overstated the mass by 23 % -- enough that the published
@@ -199,7 +199,7 @@ def test_the_band_is_ordered_by_prismatic_coefficient():
     """The spheroid is the lower bound and the bare cylinder the upper; a real
     faired hull is between them and nearer the cylinder."""
     assert hy.CP_SPHEROID < hy.CP_TORPEDO < hy.CP_CYLINDER
-    # ⚠ The upper bound is the bare cylinder LESS the tunnels -- displaced
+    # The upper bound is the bare cylinder LESS the tunnels -- displaced
     # volume is never the raw envelope on a hull with through-bores.
     assert (hy.displaced_volume_m3(hy.CP_CYLINDER)
             == pytest.approx(hy.enclosing_cylinder_volume_m3()
@@ -216,7 +216,7 @@ def test_sea_water_is_not_fresh_water():
 
 
 # --------------------------------------------------------------------------- #
-#  ⭐ The sim seed is the wrong SHAPE CLASS
+#  The sim seed is the wrong SHAPE CLASS
 # --------------------------------------------------------------------------- #
 
 def test_the_bluerov2_seed_is_refuted_for_this_hull():
@@ -242,7 +242,7 @@ def test_uniform_inertia_is_flagged_as_the_weak_one():
 
 
 # --------------------------------------------------------------------------- #
-#  ⭐ Thruster response -- the term the closed-loop bench found dominates
+#  Thruster response -- the term the closed-loop bench found dominates
 # --------------------------------------------------------------------------- #
 
 def test_the_duct_term_beats_the_rotor_term():
@@ -280,7 +280,7 @@ def test_thrust_helps_only_as_a_square_root():
 
 
 def test_a_wider_bore_is_slower():
-    """⚠ THE TRADE THAT IS EASY TO GET BACKWARDS. A bigger bore makes more
+    """The trade that is easy to get backwards. A bigger bore makes more
     thrust for the same disc loading AND responds more slowly, because there is
     more water to move. tau ~ bore."""
     narrow = hy.duct_response_s(bore_mm=60, duct_length_mm=150, thrust_n=20.0)

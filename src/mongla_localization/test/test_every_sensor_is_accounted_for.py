@@ -1,7 +1,7 @@
 """Every signal the vehicle produces is either USED for localisation, or has a
 stated reason why not.
 
-⛔ THE DEFECT CLASS. This stack has repeatedly built a capability and left it
+The defect class. This stack has repeatedly built a capability and left it
 unreachable: the lock ladder in no launch file, `lock_s` held at 0, the
 checkpoint bank's `position=` never passed, `device_path` read and ignored. A
 sensor that nobody consumes fails the same way and is even quieter, because
@@ -12,7 +12,7 @@ where it can fail. Adding a signal without deciding its role breaks this test,
 which is the point: the decision is forced at the time the signal appears,
 not remembered later.
 
-⚠ Text-level. It proves a topic is SUBSCRIBED and reasoned about, not that the
+Text-level. It proves a topic is SUBSCRIBED and reasoned about, not that the
 measurement is any good.
 """
 import pathlib
@@ -36,7 +36,7 @@ USED = {
 }
 
 # ---- deliberately NOT a localisation input, with the reason ---------------
-# ⚠ Each of these is a DECISION, not an oversight. Re-argue it rather than
+# Each of these is a DECISION, not an oversight. Re-argue it rather than
 # deleting the row.
 EXCLUDED = {
     '/mongla/esc_rpm':
@@ -104,7 +104,7 @@ def test_no_sensor_is_silently_unaccounted_for(src):
 
 
 def test_heading_does_not_depend_on_a_magnetometer(src):
-    """⭐ THE DESIGN, stated so it cannot be quietly changed.
+    """THE DESIGN, stated so it cannot be quietly changed.
 
     Heading is taken as an EARTH REFERENCE once at the start and held by the
     gyro; the magnetometer is not trusted, because a hull full of thrusters

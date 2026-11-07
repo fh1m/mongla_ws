@@ -15,7 +15,7 @@ from mongla_vision.time_to_contact import (INSIDE, NEVER, OK,
 
 
 def test_a_vehicle_closing_on_a_fixed_prop_has_a_finite_ttc():
-    """⭐ THE WHOLE POINT. A stationary-observer solver returns 'never' here,
+    """The whole point. A stationary-observer solver returns 'never' here,
     because the PROP is not moving -- the closing motion is entirely ours."""
     c = ttc(rel_pos=(10.0, 0.0, 0.0), target_vel=(0.0, 0.0, 0.0),
             ego_vel=(1.0, 0.0, 0.0), radius_m=0.5)
@@ -45,7 +45,7 @@ def test_a_receding_target_never_contacts():
 
 
 def test_a_pass_alongside_is_not_an_approach():
-    """⛔ THE CASE range/speed GETS WRONG. The vehicle closes fast but will
+    """THE CASE range/speed GETS WRONG. The vehicle closes fast but will
     pass 3 m to the side; a linear range-over-speed estimate calls that a
     contact in a few seconds."""
     c = ttc(rel_pos=(10.0, 3.0, 0.0), target_vel=(0.0, 0.0, 0.0),

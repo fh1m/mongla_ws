@@ -124,7 +124,7 @@ def _fields_from_args(cmd, args):
 def main():
     args = _build_parser().parse_args()
 
-    # ⛔ NO rclpy SIGINT handler. rclpy's default one SHUTS THE CONTEXT DOWN on
+    # NO rclpy SIGINT handler. rclpy's default one SHUTS THE CONTEXT DOWN on
     # Ctrl-C, so the abort path below cannot publish a cancel, stop or
     # disarm -- measured: `publisher's context is invalid`. Python's own
     # handler still raises KeyboardInterrupt; the context stays usable.

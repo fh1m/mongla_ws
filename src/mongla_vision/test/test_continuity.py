@@ -96,7 +96,7 @@ def test_every_ladder_rung_is_a_real_constant():
     """If a rung drifts from the code the report silently answers about a
     threshold nobody ships.
 
-    READ FROM SOURCE, NEVER IMPORTED. This test used to `from
+    Read from source, never imported. This test used to `from
     mongla_control.motion_vision import VISION_FRESH_ZERO_S`, and in a git
     worktree that import resolves to the MAIN workspace's `install/` tree --
     a different commit. It duly reported 0.4 against a source that says

@@ -1,6 +1,6 @@
 """Frames: the names, the sensor offsets, and the conversions -- one owner.
 
-⛔ WHY THIS FILE EXISTS (issues #19 and #27). The stack is FRD body / NED world
+Why this file exists (issues #19 and #27). The stack is FRD body / NED world
 throughout, deliberately, and that stays. What it lacked was any statement of
 WHERE its sensors are relative to one another, and any transform at the ROS
 boundary. So:
@@ -93,7 +93,7 @@ def load(path: Optional[pathlib.Path] = None) -> Offsets:
 #             position.z, and VISION_POSITION_ESTIMATE, which MAVLink defines
 #             in NED.
 #
-# ⛔ NO INTERFACE CHANGES SIGN HERE. Changing either would silently invert
+# No interface changes sign here. Changing either would silently invert
 # every depth guard on the other side (it has happened: `SrotFC.get_attitude`
 # once negated an already-negative depth and every guard stopped firing).
 # What changes is that the flip has a NAME, and `test_depth_sign.py` walks one
@@ -121,7 +121,7 @@ def ned_z_from_altitude(altitude_m: float) -> float:
 # filter in pool axes, so odom_ned coordinates ARE pool coordinates and
 # `map -> odom` is the identity.
 #
-# ⚠ `odom_ned` IS NOT CONTINUOUS ACROSS THE ANCHOR, and REP-105 says odom
+# `odom_ned` is not continuous ACROSS the anchor, and REP-105 says odom
 # should be. The heading anchor ROTATES the filter state (`rotate_world_yaw`),
 # so `odom_ned -> mongla` jumps in yaw -- and in x/y by the same rotation about
 # the origin -- exactly once, at the anchor. Anyone adding `robot_localization`
@@ -132,7 +132,7 @@ def ned_z_from_altitude(altitude_m: float) -> float:
 # instead of in the state; not done, because every consumer today wants the
 # pool-axis estimate itself.
 #
-# ⚠ `{cam}_cam` HAS BODY AXES, NOT OPTICAL ONES. It is the frame flow publishes
+# `{cam}_cam` has body axes, not optical ones. It is the frame flow publishes
 # in, and flow's velocity is already remapped to body x/y by `flow_node`. An
 # optical frame (z out of the lens) belongs to the IMAGE and needs the measured
 # image->body signs -- `flow_node.py` records four wrong answers reached

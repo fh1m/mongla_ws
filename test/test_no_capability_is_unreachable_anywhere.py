@@ -1,6 +1,6 @@
 """Every capability module in EVERY package is reached, or says why not.
 
-⛔ THE GAP THIS CLOSES. `mongla_vision/test/test_no_capability_is_built_and_
+The gap this closes. `mongla_vision/test/test_no_capability_is_built_and_
 unreachable.py` is this repo's guard against its own oldest and most expensive
 defect -- code that is correct, tested, and not on the vehicle. It works. It also
 scans exactly ONE of the seven packages:
@@ -20,18 +20,18 @@ lines, and one of them is the allocator for the hull now being built:
     mongla_control/nav_filter.py                  138
     mongla_manager/estimator/thrust_model.py      107
 
-⚠ AND THE FIRST COUNT WAS 114, WHICH WAS WRONG. The sweep that produced it used
+And the first count was 114, which was wrong. The sweep that produced it used
 `(^|[^\\w.])<stem>` to find imports -- excluding a leading dot, which rejects
 `from .srot_fc import` and `from mongla_control.fc.srot_fc import`, i.e. nearly
 every real import in the tree. Reported as a finding it would have been absurd and
 the guard would have been ignored. Look at the value, not the reasoning.
 
-⛔ SCOPE, SO THE TWO FILES CANNOT DISAGREE. This file owns the six non-vision
+Scope, so the two files cannot disagree. This file owns the six non-vision
 packages. `mongla_vision` stays with its own guard, which holds the vision
 register. Nothing is listed twice, and `test_the_vision_guard_still_exists` fails
 if that file is moved or renamed so the split cannot silently become a hole.
 
-⚠ WHY MATCHING BY STEM IS NOT ENOUGH, once more than one package is in scope.
+Why matching by stem is not enough, once more than one package is in scope.
 Three basenames are ambiguous across packages -- `factory.py`, `health.py` and
 `draw.py` appear twice each (`health.py` in `mongla_manager` and
 `mongla_vision/anchor`). The vision guard matches on stem,
@@ -72,7 +72,7 @@ def _entry_points() -> set:
     return out
 
 
-# ⚠ THE FULL DOTTED MODULE, not its package. Taking rsplit('.', 1)[0] gives
+# The full dotted module, not its package. Taking rsplit('.', 1)[0] gives
 # `mongla_manager` for every entry point, which exempts NOTHING and then flags
 # bringup_check, course_survey, flare_order_send and srot_autotune -- all four of
 # which are documented `ros2 run` commands. A guard whose first run reports four
@@ -83,11 +83,11 @@ _ENTRY_POINT_MODULES = set(_entry_points())
 # module path -> the node/module that must import it
 WIRED: dict = {}
 
-# ⚠ NOT wired, ON PURPOSE, each with the consumer it needs. A row here is a debt
+# NOT wired, ON PURPOSE, each with the consumer it needs. A row here is a debt
 # with a name, not a silent gap. Same contract as the vision register.
 DEFERRED = {
     'mongla_control/mongla_control/geometric_allocation.py': (
-        '⭐ THE BIGGEST ONE, and it is the allocator for the hull actually being '
+        'RESULT: THE BIGGEST ONE, and it is the allocator for the hull actually being '
         'built: measured moment arms, roll refused rather than rounded, a dead '
         'thruster expressible. Nothing that flies imports it -- only its own test '
         'and tools/control_bench, which are off the mission path. The live path is '
@@ -110,7 +110,7 @@ DEFERRED = {
         'a complementary/heading filter superseded by mongla_localization: the '
         'RIEKF in `inekf.py` plus `heading_anchor.py` own fusion now, and '
         '`yaw_source=mavlink_ahrs` reads the board directly. Kept only because no '
-        'one has confirmed the DVL-era callers are all gone. ⚠ DELETE IT or name '
+        'one has confirmed the DVL-era callers are all gone. WARNING: DELETE IT or name '
         'its consumer -- 138 lines of superseded estimator reads as current and '
         'gets copied, which is exactly how draw_strip.py became a problem.'),
     'mongla_manager/mongla_manager/estimator/thrust_model.py': (
@@ -126,7 +126,7 @@ DEFERRED = {
 def _modules():
     """Capability modules in the packages this file owns.
 
-    ⚠ Three exemptions, each a real reachability path an import grep cannot see.
+    Three exemptions, each a real reachability path an import grep cannot see.
     Getting these wrong makes the test cry wolf, and a guard that cries wolf gets
     deleted rather than obeyed:
       * ROS nodes are LAUNCHED, not imported;
@@ -232,7 +232,7 @@ def test_every_capability_module_is_in_the_register():
 
 
 def test_the_matcher_is_package_aware_not_stem_aware():
-    """⛔ THE REGRESSION GUARD FOR THIS FILE'S OWN MATCHER.
+    """The regression guard for this file's own matcher.
 
     `health.py` exists in `mongla_manager` and in `mongla_vision/anchor`. A stem
     matcher reports both wired as soon as ANY `health` is imported,

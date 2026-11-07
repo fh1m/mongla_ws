@@ -17,7 +17,7 @@ BATTERY_STATUS instance 1 is the disambiguator, free: the board SUPPRESSES it
 rather than zeroing it when the ESP-NOW link is stale, so its presence IS the
 link liveness.
 
-⚠ OBSERVED LIVE before this fix: a session logged `thruster --` (no instance 1,
+OBSERVED LIVE before this fix: a session logged `thruster --` (no instance 1,
 so no link) and `KILL clear` in the same status row.
 """
 import sys
@@ -36,7 +36,7 @@ from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 class _FC(SrotFC):
     """Drives the REAL `telemetry()`. Only its six inputs are stubbed.
 
-    ⚠ AN EARLIER VERSION OF THIS FILE REIMPLEMENTED the tri-state logic in the
+    An earlier version of this file reimplemented the tri-state logic in the
     test helper. It passed, and it would have kept passing through any change to
     `telemetry()` -- the "compare what SHIPS, not a parallel implementation"
     trap, which this project has now hit three times (`_srot_drive` grepped for
@@ -81,7 +81,7 @@ def _kill_of(*, kill, link_up):
 #  The three states
 # --------------------------------------------------------------------------- #
 def test_NO_LINK_is_UNKNOWN_not_CLEAR():
-    """⛔ The defect, in one line. The board reports kill=false on link loss, so
+    """The defect, in one line. The board reports kill=false on link loss, so
     without the BATTERY_STATUS cross-check this reads as a live, safe vehicle."""
     assert _kill_of(kill=False, link_up=False) is None
     assert _kill_of(kill=True, link_up=False) is None, \
@@ -125,7 +125,7 @@ def test_arm_REFUSES_when_power_is_KNOWN_cut():
 
 
 def test_arm_ALLOWS_on_UNKNOWN():
-    """⛔ The asymmetry. A vehicle with no second board is an ordinary bench
+    """The asymmetry. A vehicle with no second board is an ordinary bench
     configuration; refusing on unknown would make arm() unreachable there --
     the same trap as refusing a torpedo on UNKNOWN thruster health."""
     ok, why = _ArmFC(None).check_thruster_power()

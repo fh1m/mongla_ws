@@ -3,17 +3,17 @@
 They look like `MOTOR_DETECT` and differ from it in four ways that each produce
 a WRONG ANSWER rather than an error, so each has a test here:
 
-  * THEY FINISH IN STABILIZE, NOT MANUAL (fw task_control_loop.cpp:830-833 and
+  * they finish in STABILIZE, not manual (fw task_control_loop.cpp:830-833 and
     :846-853). Code modelled on detect watches for MANUAL, waits out the whole
     timeout on a run that SUCCEEDED, and reports failure.
-  * MOTOR_TUNE IS GATED ON A PARAM THAT DEFAULTS TO ZERO (`MTUNE_EN`,
+  * MOTOR_TUNE is gated on a param that defaults to zero (`MTUNE_EN`,
     fw config.h:588). SET_MODE alone is accepted and the tuner never starts --
     the silent-no-op shape that already cost us a round in SURFACE.
-  * AUTOTUNE HAS THREE TRIGGERS AND TWO OF THEM LATCH. `ATUNE` and
+  * autotune has three triggers and two of them latch. `ATUNE` and
     `MAV_CMD_USER_5` set `autotune_active` with no reference to arming; the
     firmware's own comment records a disarmed `ATUNE` starting a full-authority
     tune on the NEXT arm. We enter by mode only.
-  * MOTOR_TUNE FITS ON PER-MOTOR RPM, which on this vehicle has never been
+  * MOTOR_TUNE fits on per-motor RPM, which on this vehicle has never been
     non-zero. It must warn on UNKNOWN and refuse on KNOWN-BAD -- never the
     reverse, or the method is unreachable forever.
 """
@@ -153,7 +153,7 @@ def test_autotune_refuses_DISARMED():
 
 
 def test_autotune_NEVER_writes_the_ATUNE_param():
-    """⛔ The latch. `ATUNE` and MAV_CMD_USER_5 set autotune_active with no
+    """The latch. `ATUNE` and MAV_CMD_USER_5 set autotune_active with no
     reference to arming, and the firmware records a disarmed ATUNE starting a
     full-authority tune on the NEXT arm. We enter by mode only."""
     m = _Master(params=dict(_PIDS), finish_after=3,
@@ -167,7 +167,7 @@ def test_autotune_NEVER_writes_the_ATUNE_param():
 
 
 def test_autotune_completes_on_STABILIZE_not_MANUAL():
-    """⛔ The end state that would break a detect-shaped implementation."""
+    """The end state that would break a detect-shaped implementation."""
     m = _Master(params=dict(_PIDS), finish_after=3,
                 run_mode=sp.MODE_AUTOTUNE, writes={'RATE_YAW_P': 5.0})
     fc = _fc(m)
@@ -216,7 +216,7 @@ def test_autotune_abort_LEAVES_THE_MODE_AND_DISARMS():
 #  MOTOR_TUNE
 # --------------------------------------------------------------------------- #
 def test_motor_tune_refuses_when_MTUNE_EN_is_ZERO_and_does_not_enter_the_mode():
-    """⛔ The silent no-op. DEF_MTUNE_EN = 0.0f, so the mode is accepted and the
+    """The silent no-op. DEF_MTUNE_EN = 0.0f, so the mode is accepted and the
     tuner never starts -- the vehicle sits in MOTOR_TUNE doing nothing."""
     m = _Master(params=dict(_MT, MTUNE_EN=0.0))
     fc = _fc(m)
@@ -244,7 +244,7 @@ def test_motor_tune_REFUSES_a_known_bad_thruster():
 
 
 def test_motor_tune_RUNS_on_UNKNOWN_health_but_says_so():
-    """⛔ The same asymmetry as the pre-fire gate. `None` is this hull's
+    """The same asymmetry as the pre-fire gate. `None` is this hull's
     permanent state; refusing on it makes the method unreachable forever."""
     m = _Master(params=dict(_MT), finish_after=3,
                 run_mode=sp.MODE_MOTOR_TUNE, writes={'FF_A': 3.0})
@@ -278,7 +278,7 @@ def test_motor_tune_that_changed_nothing_is_not_success():
 
 
 def test_the_tune_REPORTS_PROGRESS_instead_of_going_silent():
-    """⛔ A gap in our own first version, found by reading the firmware.
+    """A gap in our own first version, found by reading the firmware.
 
     The board publishes STUNT_PRG and the live limit-cycle measurement
     AT_N / AT_AMP / AT_TU / AT_OKPCT, added for a stated reason: "so a run can

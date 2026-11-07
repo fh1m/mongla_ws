@@ -12,13 +12,13 @@ standing when the hull is in the water.
              prerequisite for believing anything `detect` reports.
   detect     pulse all eight and CORRECT each sign from the gyro response.
 
-ORDER MATTERS AND THE TOOL DOES NOT ENFORCE IT, because enforcing it would
+Order matters and the tool does not enforce it, because enforcing it would
 mean tracking state we cannot verify. `detect` writes signs derived from an
 assumed motor->position map; if `test` has not confirmed that map, `detect`
 produces a self-consistent calibration for a vehicle wired differently from
 the one the mixer believes in.
 
-⚠ `detect` NEEDS WATER and a hull free to rotate. In air the gyro response is
+`detect` NEEDS WATER and a hull free to rotate. In air the gyro response is
 below the 0.05 rad/s gate: the run reports FAIL and writes nothing on fw rev 6
 and later -- before that it reset every thruster to +1 and reported SUCCESS,
 which is why the firmware revision is checked here rather than assumed.

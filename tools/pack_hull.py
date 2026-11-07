@@ -73,13 +73,13 @@ def load_mesh(path: Path):
 
     def accessor(i):
         acc = gltf["accessors"][i]
-        # ⛔ A DEFAULT ONSHAPE EXPORT LANDS HERE, and it used to do so as a bare
+        # A default onshape export lands here, and it used to do so as a bare
         # `KeyError: 'bufferView'` twelve frames deep. Onshape emits
         # KHR_draco_mesh_compression unless you turn it off, and a Draco primitive
         # keeps its bufferView inside the extension rather than on the accessor --
         # so every accessor in the file looks malformed.
         #
-        # ⭐ AND FOR GEOMETRY YOU DO NOT NEED THIS FILE DECODED AT ALL. glTF
+        # And for geometry you do not need this file decoded at all. glTF
         # requires exact min/max on every POSITION accessor, written by the
         # exporter from the CAD, and Draco does not touch them: they live in the
         # JSON chunk. `hull_stations.py` reads the thruster stations straight out

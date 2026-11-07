@@ -1,6 +1,6 @@
 """What the board actually does with a demand, and how to undo it.
 
-⛔ WHY THIS EXISTS. Between a host demand and a thruster there are four shaping
+Why this exists. Between a host demand and a thruster there are four shaping
 stages, and until 2026-09-22 the host modelled none of them. The visible symptom
 is `VISION_YAW_MIN_PCT = 5.0` in `motion_vision.py`, which the code itself
 labels "a hardware spin-up assumption, NOT a measured value" -- a floor invented
@@ -22,12 +22,12 @@ THE CHAIN, transcribed from the firmware (srot-control-board, Hengla):
       -> DShot 3D band                   mixer.cpp:136
          forward 1049..2047, reverse 48..1047
 
-VERIFIED AGAINST THE BOARD on 2026-09-22, nothing attached to any ESC, armed in
+Verified against the board on 2026-09-22, nothing attached to any ESC, armed in
 STABILIZE, eleven demand levels read off the RP2350 console: worst error
 **3 counts of 999 (0.30 %)**, and that one is at full scale where the band
 saturates. Raw capture: `.claude/context/workbench/data/mixer_ladder.json`.
 
-⛔ THE FINDING THAT MATTERS MORE THAN THE GAIN. `MOT_SPIN_MIN` lifts every
+The finding that matters more than the gain. `MOT_SPIN_MIN` lifts every
 non-zero demand into [spin_min, 1] -- the firmware comment says "so the smallest
 command crosses the prop deadband instead of doing nothing then lurching". The
 consequence is that **the smallest output this vehicle can command is 15 % of
@@ -35,7 +35,7 @@ full scale.** A demand of 0.001 and a demand of 0.02 both produce roughly that.
 No host-side gain changes it: it is a floor, not a slope. Precision alignment
 has a minimum actuation step, and it is large.
 
-⚠ WHAT THIS DOES NOT GIVE YOU. Newtons. Every number here is a DShot command
+What this does not give you. Newtons. Every number here is a DShot command
 fraction. `k_n_per_rpm2` still has no value, so nothing here converts to force,
 and a column of the mixer is not a thrust. Do not use this to predict motion.
 """
@@ -62,7 +62,7 @@ DSHOT_SPAN = 999
 # outright (mixer.cpp:102), so the floor does not apply.
 CENTRE_EPS = 0.005
 
-# ⛔ THE FOUR AXES DO NOT SHARE A PATH, and assuming they do is wrong by 17 %.
+# The four axes do not share a path, and assuming they do is wrong by 17 %.
 # `task_control_loop.cpp:158-165` applies PILOT_EXPO to forward and lateral
 # ONLY, before the mode switch. Then, in STABILIZE (:167+):
 #
@@ -127,7 +127,7 @@ def _solve_pilot_expo(t: float, expo: float = DEF_PILOT_EXPO) -> float:
     return 0.5 * (lo + hi)
 
 
-# ⛔ THE YAW STICK GATE -- a HARDCODED LITERAL in the firmware, not a parameter.
+# The yaw stick gate -- a HARDCODED LITERAL in the firmware, not a parameter.
 #
 #   attitude_control.cpp:87   if (fabsf(yaw_stick) > 0.02f) { ...rate command... }
 #                             else  { ...HOLD the last heading... }
@@ -136,7 +136,7 @@ def _solve_pilot_expo(t: float, expo: float = DEF_PILOT_EXPO) -> float:
 # heading. So a host yaw demand under this gate does not produce "a little yaw",
 # it produces NONE, and it is compared AFTER PILOT_EXPO has been applied.
 #
-# ⚠ It cannot be read off the vehicle, because it is not a parameter. That is
+# It cannot be read off the vehicle, because it is not a parameter. That is
 # upstream ask N. Until it is one, this constant and the firmware are two copies
 # of one truth, and `test_yaw_gate_matches_the_firmware` is what keeps them equal.
 STABILIZE_YAW_STICK_GATE = 0.02
@@ -150,7 +150,7 @@ def yaw_rate_command_floor(pilot: float = DEF_PILOT_EXPO) -> float:
     i.e. 2.856 % of stick. At 2.80 % the output is exactly zero; at 2.86 % it is
     17.42 % of full scale. There is nothing in between -- see `min_fraction`.
 
-    ⚠ THIS IS A FLOOR ON EXPRESSIBILITY, NOT A STICTION FIX. Below it the board
+    This is a floor on expressibility, not a stiction fix. Below it the board
     holds heading, which is usually the better behaviour; a host law that floors
     its demand to just above the gate takes heading-hold away and replaces it
     with a 17 % lurch. Use it to decide whether a yaw correction is expressible
@@ -165,7 +165,7 @@ def demand_to_fraction(d: float, *, axis: str = 'fwd',
                        spin_min: float = DEF_MOT_SPIN_MIN) -> float:
     """A single-axis demand in -1..1 -> signed output fraction of full scale.
 
-    ⛔ `axis` is not decoration. `fwd`/`lat` are shaped by PILOT_EXPO and `up`
+    `axis` is not decoration. `fwd`/`lat` are shaped by PILOT_EXPO and `up`
     is not; passing the default for a heave command overstates it by about 17 %.
     `yaw` RAISES, because in STABILIZE yaw is the attitude controller's output
     and depends on heading error and body rate -- there is no static function
@@ -200,7 +200,7 @@ def fraction_to_demand(f: float, *, axis: str = 'fwd',
     """The demand that produces output fraction `f`. The inverse of
     `demand_to_fraction`, for a caller that wants a known output.
 
-    ⛔ RETURNS 0.0 FOR ANYTHING BELOW THE FLOOR, rather than the smallest
+    Returns 0.0 for anything below the floor, rather than the smallest
     non-zero demand. Asking for 5 % when the vehicle cannot produce less than
     15 % has no answer, and returning a demand that silently delivers three
     times what was asked is the failure this module exists to stop. A caller
@@ -224,7 +224,7 @@ def min_fraction(*, axis: str = 'fwd', pilot: float = DEF_PILOT_EXPO,
     """The smallest non-zero output this vehicle can ACHIEVE, as a fraction of
     full scale. Not a deadband to push through -- a floor.
 
-    ⚠ This is NOT `spin_min`. The floor is the bottom of the lifted range, but
+    This is NOT `spin_min`. The floor is the bottom of the lifted range, but
     the smallest demand that survives the centre test still passes through
     `pilot_expo` and `thrust_expo` on the way, so the achievable minimum is
     strictly above `spin_min`: 0.1583 against 0.1500 at the shipped parameters.

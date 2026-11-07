@@ -1,13 +1,13 @@
 """The Hailo input path must hand the chip RGB, not the BGR cv2 gives us.
 
-⛔ B-61, AND IT COST A DAY. `letterbox` and `_letterbox_into_bound` both wrote
+B-61, and it cost a day. `letterbox` and `_letterbox_into_bound` both wrote
 the frame into the input buffer without converting BGR to RGB, so the
 accelerator ran on colour-swapped pixels -- red and blue exchanged -- for as
 long as this backend has existed. Nothing raised, nothing slowed down, no
 frame was dropped. The detector simply answered a different question:
 `gate=0.78 @56,246` became `repair=0.92 @0,0`.
 
-⚠ TWO WRONG DIAGNOSES CAME FIRST, both consistent with the symptom:
+Two wrong diagnoses came first, both consistent with the symptom:
   1. a decode stride bug in the `HAILO NMS BY CLASS` buffer -- disproved by
      dumping the raw buffer, which the packed-layout walk matched exactly;
   2. the DFC's calibration cliff (258 frames against a 1024 threshold, which
@@ -19,7 +19,7 @@ deliberately swapped and getting the HEF's exact signature back, class and
 origin box included. A defect that survives two plausible explanations is
 found by reproducing it somewhere the suspected component does not exist.
 
-⭐ ultralytics converts internally, which is why the `.pt` path always looked
+ultralytics converts internally, which is why the `.pt` path always looked
 healthy -- and why every measurement taken through it stays valid.
 
 These tests need no Hailo hardware: they check the frame preparation, which is
@@ -41,7 +41,7 @@ def _bgr_marker(h=120, w=200):
 
 
 def test_letterbox_hands_back_rgb_not_bgr():
-    """⭐ THE DEFECT ITSELF. A pure-blue BGR frame must arrive as pure-blue
+    """The defect itself. A pure-blue BGR frame must arrive as pure-blue
     RGB -- energy in channel 2, not channel 0. Before the fix this returned
     the bytes untouched and the chip saw red."""
     out, _s, px, py = letterbox(_bgr_marker(), 256)
@@ -82,7 +82,7 @@ def test_a_red_frame_round_trips_the_other_way():
 
 
 def test_the_async_bound_path_converts_too():
-    """⛔ THE PATH THAT ACTUALLY FLIES. `_letterbox_into_bound` is a second
+    """The path that actually flies. `_letterbox_into_bound` is a second
     implementation for the async API, and fixing only `letterbox` would leave
     the vehicle running on swapped channels while the tests passed.
 

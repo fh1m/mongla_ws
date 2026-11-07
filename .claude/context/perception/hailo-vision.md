@@ -1,4 +1,4 @@
-<!-- ⛔ PROVENANCE WARNING, ADDED 2026-09-28. Retiring `gate_rescue_repair`
+<!-- PROVENANCE WARNING, ADDED 2026-09-28. Retiring `gate_rescue_repair`
      renamed the model across 85 files by TEXTUAL SUBSTITUTION, and this file
      took ~20 of those hits. Every benchmark below -- the 10.19/9.54 ms decode
      pair, 97.8 FPS vs 92.4, 8.34 ms, 10.49 ms / 95.4 Hz, 85.4 -> 95.3 Hz, the
@@ -58,7 +58,7 @@ All: `UINT8 NHWC(640x640x3)` in, `FLOAT32 HAILO NMS BY CLASS` out.
 take it. And **NMS is genuinely baked on-chip** (`HAILO NMS`, `Op YOLOV8`), which
 is why host decode measures 0.02 ms.
 
-⚠ **The stock models are baked at 0.200**, so the 0.12-0.15 operating point
+**Caution: The stock models are baked at 0.200**, so the 0.12-0.15 operating point
 `hailo.py` recommends is reachable only on our custom models.
 
 ## 2. Where a frame's time actually goes
@@ -451,7 +451,7 @@ sudo install -m 0644 ~/hailort_drivers/linux/pcie/51-hailo-udev.rules /etc/udev/
 sudo modprobe hailo_pci
 ```
 
-**⛔ The trap that makes `install_dkms` fail on a standalone clone.** The
+**The trap that makes `install_dkms` fail on a standalone clone.** The
 driver's `Kbuild` hardcodes `COMMON_INCLUDE_DIRECTORY=../../../../common/include`
 — it expects to live at `<hailort_root>/hailort/drivers/linux/pcie`. From a bare
 `hailort-drivers` clone that path escapes the repo, and `install_dkms` dies on
@@ -727,7 +727,7 @@ matching, because overlapping same-class boxes defeat greedy assignment. **Had I
 not run that fp32 control I would have reported "quantization destroys 54 % of
 detections", which is badly wrong.**
 
-> ⛔ **The 0.08 below is RETRACTED** (measured-bars: it was taken on the
+> **Warning: The 0.08 below is RETRACTED** (measured-bars: it was taken on the
 > swapped-colour path, B-61). On the corrected path INT8 cost **0.04–0.06**
 > chip vs `.pt` (`gate_rescue_repair`), and **−0.01** on the DFC emulator for
 > a healthy `gate_sharks` build. The other finding: a FULL-optimisation build
@@ -959,7 +959,7 @@ the quantisation, so neither tensor ever has to become float:
 | boxes only | **0.93 ms** | **0.62 ms** |
 | with masks, **6 detections** | **2.98 ms** | 2.68 ms |
 
-⚠ **Class gating now buys 0.3 ms, not 26.** A model trained on our classes is
+**Caution: Class gating now buys 0.3 ms, not 26.** A model trained on our classes is
 still wanted — for **accuracy**, because a COCO head will never fire on a gate
 or a bin — but the CPU argument for it is gone. Do not repeat it to the team.
 
@@ -985,7 +985,7 @@ image through `yolov8n-seg.pt` on the dev box and through the HEF on the chip:
 transposed DFL read or a swapped letterbox pad produces boxes that are
 plausible and wrong, and nothing raises.
 
-⚠ **Two different area comparisons, and an earlier note here conflated them.**
+**Caution: Two different area comparisons, and an earlier note here conflated them.**
 It said "mask areas within 0.2 %", which was the before/after of the
 sigmoid/dequant fold — 10833 → 10846 and 88972 → 88927 px, i.e. the
 optimisation changes essentially nothing. That is true and it is not a
@@ -1008,7 +1008,7 @@ rendering: `_tint_mask` drawn over `bus.jpg` puts the tint on the people, the
 bus and the skateboard with no visible offset, which is what proves the
 proto-crop → letterbox-undo → box-anchor chain rather than any unit test.
 
-⚠ **If the masks are ever used for metric work, this bias is a scale error of
+**Caution: If the masks are ever used for metric work, this bias is a scale error of
 up to ~18 % in area, i.e. ~9 % in linear extent.** Take geometry from the box
 or from a contour with its own gate, not from raw mask area.
 
@@ -1029,7 +1029,7 @@ and the geometry flips only when the crop's hysteresis toggles. Repaints are
 per-toggle, not per-frame. A crop of genuinely varying size would silently
 return this path to the old cost while producing correct output.
 
-⛔ The bars must be repainted when the frame shape changes. Only the interior
+**Warning:** The bars must be repainted when the frame shape changes. Only the interior
 is written, so otherwise a differently-shaped frame is framed by the previous
 geometry's image data instead of grey — a border of stale pixels the detector
 is free to find objects in. Tested, and the test was injection-verified against
@@ -1060,7 +1060,7 @@ three network groups resident — and logs
     [DET  ] running 2 models on every frame: 'gate_sharks' +
     ['yolov8n_seg']. ... the frame rate is the SUM plus the swaps
 
-⛔ **`*_active` selects FROM `*_models`**, so a multi-model launch needs both
+**Warning: `*_active` selects FROM `*_models`**, so a multi-model launch needs both
 arguments. A single-model launch (`fwd_model:=`) has no registry and the node
 refuses any `active_model` that is not the loaded stem — which is the correct
 refusal and not a bug.
@@ -1077,7 +1077,7 @@ and a plain `rclpy` subscriber reads a real message — `camera='forward'`,
 detection model carries no orientation — with the `offset` N+1 invariant and
 the in-frame bounds holding on the wire.
 
-⛔ **RETRACTED: an earlier version of this note claimed "a non-interactive ssh
+**Warning: RETRACTED: an earlier version of this note claimed "a non-interactive ssh
 session on this Pi cannot see ROS topics".** That was written from ONE failed
 check and it is false — the rates above were taken from exactly such a
 session. The real trap is narrower and worth knowing, because it looks

@@ -1,6 +1,6 @@
 """`STRING_FIELDS` / `BOOL_FIELDS` mirror `Move.action` and must not drift.
 
-⛔ THE DEFECT THIS EXISTS FOR, found by running the CLI rather than reading it.
+The defect this exists for, found by running the CLI rather than reading it.
 `tool` was added to the action (as `string`), to the command spec, to the verb,
 to the loop and to the DSL -- and the `--tool` flag still died with
 

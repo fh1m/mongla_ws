@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The same model on STILLS it was trained from, and on VIDEO of the same run.
 
-WHY THIS EXISTS. Every one of our 2025 competition models reports mAP50 =
+Why this exists. Every one of our 2025 competition models reports mAP50 =
 0.995 in its training log -- and on real footage of the same competition the
 target is detected in a small fraction of frames. A validation score answers
 "can it find the object in a frame like the ones it trained on". It does not

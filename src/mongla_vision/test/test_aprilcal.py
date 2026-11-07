@@ -1,6 +1,6 @@
 """Max ERE and next-best-pose: the AprilCal machinery, pinned.
 
-⛔ WHY THIS EXISTS. Reprojection RMS is quiet exactly where you have no data,
+Why this exists. Reprojection RMS is quiet exactly where you have no data,
 so it cannot tell a well-constrained calibration from an under-determined
 one. This project has three instances: fx of 835.7, 969.9 and 1011.2, each
 with a comfortable residual, and calib.io says it in one line -- "low
@@ -133,7 +133,7 @@ class TestNextBestPose:
 class TestItShipsWithThePackage:
     """Calibration must be REACHABLE on the vehicle, not just present.
 
-    ⛔ A capability that exists only as a file in `tools/` is not a
+    A capability that exists only as a file in `tools/` is not a
     capability at a competition: `tools/` is not installed, so on a fresh
     deploy the command simply is not there. This package has four recorded
     instances of a config or a helper that reached nothing; an entry point
@@ -169,7 +169,7 @@ class TestItShipsWithThePackage:
 class TestItRunsWithoutROS:
     """The calibration maths must not need rclpy. It needs cv2 and numpy.
 
-    ⛔ THIS BROKE ON THE OPERATOR, mid-session, on the Solve button, with a
+    This broke on the operator, mid-session, on the Solve button, with a
     complete 24-frame capture already on disk. The `tools/` shim did
     `from mongla_vision.calibration.solver import main` after putting the
     source tree on sys.path, which drags in `mongla_vision/__init__.py` ->
@@ -231,7 +231,7 @@ class TestItRunsWithoutROS:
 class TestItTakesOverCleanly:
     """A restart must just work, and must not shoot itself.
 
-    ⛔ ON COMPETITION GROUND YOU DO NOT GO PID HUNTING. A second launch died
+    On competition ground you do not go PID hunting. A second launch died
     on `OSError: [Errno 98] Address already in use`, and the remedy -- find
     the process, notice there are TWO of them because `ros2 run` execs the
     node as a child, kill both -- is the wrong job beside a pool with a run
@@ -291,7 +291,7 @@ class TestItTakesOverCleanly:
 class TestTheSolveButtonPointsAtSomethingReal:
     """The solve subprocess path must exist.
 
-    ⛔ IT DID NOT. When calibration moved into the package, `fov_solve.py`
+    It did not. When calibration moved into the package, `fov_solve.py`
     became `solver.py` and the argv that launches it kept the old name. A
     stale string surviving a rename is invisible until someone presses the
     button -- and the button is pressed at the END of a capture session, so

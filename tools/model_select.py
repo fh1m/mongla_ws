@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Rank candidate models by what deployment actually needs.
 
-THE PROBLEM, MEASURED ON OUR OWN ARCHIVE. Three octagon models, all
+The problem, measured on our own archive. Three octagon models, all
 reporting mAP50 = 0.9950 on their own validation split, evaluated on two
 sessions none of them trained on:
 
@@ -19,7 +19,7 @@ weights, same dataset, same epochs, same lr, `seed: 0`, `deterministic:
 true`. The 43-point recall gap is run-to-run variance that nothing in the
 training log surfaces.
 
-WHAT TO USE INSTEAD
+What to use instead
 
   * `mAP50` is SATURATED. Every one of the 25 archived runs reports 0.995,
     most reaching it by epoch 27-38 of 200-300. It cannot rank anything.
@@ -34,14 +34,14 @@ model per session, which is minutes.
 
     python3 tools/model_select.py --models m1.pt m2.pt --sessions dirA dirB
 
-⛔ RECALL ALONE RANKED THE WRONG MODEL FOR WEEKS, AND THIS TOOL IS WHY. Every
+Recall alone ranked the wrong model for weeks, and this tool is why. Every
 session above CONTAINS the prop, so a model that fires constantly scores
 perfect recall and ranks first. Measured 2026-09-25 on the shipped gate model
 (B-60): 100 % of frames on a real gate, and **100 % of frames on a gate-FREE
 clip at conf 0.15 and 0.30** -- a separation of +0.0 points. It was the
 best-ranked model here and it cannot tell a gate from an empty pool.
 
-⭐ A model already in the archive scored 100 % positive and **0.0 % across
+A model already in the archive scored 100 % positive and **0.0 % across
 1 200 negative frames from 3 venues**. Ranking on recall could never have
 found it, because both models have recall 1.0.
 

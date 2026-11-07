@@ -89,7 +89,7 @@ def test_state_after_a_usb_drop_is_NaN_not_the_last_value():
 
 
 def test_a_stale_depth_is_absent_even_beside_a_fresh_attitude():
-    """⛔ Cloud audit, 2026-11-07. ATTITUDE was age-gated and VFR_HUD was not, so
+    """Cloud audit, 2026-11-07. ATTITUDE was age-gated and VFR_HUD was not, so
     a depth stream that stopped kept publishing its last value -- a confident
     -1.7 m from a board that had said nothing for a minute -- as long as the
     IMU stream lived. INJECTION-VERIFIED: read VFR_HUD through `_cache`

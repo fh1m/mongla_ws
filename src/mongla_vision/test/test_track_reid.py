@@ -4,7 +4,7 @@ The measurement behind this: 179 identity switches in a 253 s recording of one
 person in one room. ByteTrack associates on motion, so a target that leaves and
 returns cannot be matched to the track it came from.
 
-⛔ THE FAILURE MODES ARE NOT SYMMETRIC, so neither are these tests. A missed
+The failure modes are not symmetric, so neither are these tests. A missed
 re-identification costs one extra id. A WRONG one welds two objects into one
 identity and every consumer downstream believes the target teleported. Most of
 what follows is therefore about refusing.
@@ -52,7 +52,7 @@ def test_a_weak_match_is_refused():
 
 
 def test_an_ambiguous_match_is_refused_even_when_strong():
-    """⛔ THE UNRECOVERABLE CASE. Two identities that both match well is
+    """The unrecoverable case. Two identities that both match well is
     exactly where a wrong merge happens, and an absolute bar cannot see it."""
     a, b, new = desc(seed=1), desc(seed=2), desc(seed=3)
     r = TrackReid(matcher_from({(id(a), id(new)): 100,

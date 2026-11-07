@@ -58,7 +58,7 @@ We compute this companion-side and send radians, so **nothing changes on your
 side** — this is a correction to the document, so that the next person deriving
 a bearing from it does not reintroduce the bias.
 
-## 3. ⚠ `31001` IS ALLOCATED TWICE, IN THIS REPO, BY US
+## 3. `31001` IS ALLOCATED TWICE, IN THIS REPO, BY US
 
 This is the item to action first, because it is a wire constant and both
 claimants are still unimplemented — so today both return `UNSUPPORTED` and the

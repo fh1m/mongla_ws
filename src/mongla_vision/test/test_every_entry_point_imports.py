@@ -1,6 +1,6 @@
 """Every console script in every package must at least IMPORT.
 
-⛔ THE DEFECT THIS CLOSES, FOUND BY ACCIDENT. `underwater.recommend()` was
+The defect this closes, found by accident. `underwater.recommend()` was
 deleted on purpose -- it mapped frame statistics onto a CLAHE verdict using
 thresholds fitted to two clips, and re-measuring across 17 configurations
 showed preprocessing was never positive. The deletion was right and the
@@ -13,11 +13,11 @@ long as nobody happened to run it. No test imported an entry point, so the
 whole class was invisible: `test_no_capability_is_built_and_unreachable.py`
 checks that modules are reachable, not that reachable ones load.
 
-⚠ IMPORT ONLY, NOT EXECUTION. Running these needs a board, a camera or a ROS
+Import only, not execution. Running these needs a board, a camera or a ROS
 graph. But an entry point that cannot be imported can never run anywhere, and
 that is decidable here in milliseconds.
 
-⚠ A MISSING THIRD-PARTY DEPENDENCY IS NOT A FAILURE. `ultralytics`, `torch`,
+A missing third-party dependency is not a failure. `ultralytics`, `torch`,
 `hailo_platform` and `cv_bridge` are absent on plenty of dev boxes; the test
 skips those and fails on a name that does not exist in OUR code.
 """
@@ -77,7 +77,7 @@ def test_the_entry_point_imports(pkg, name, module):
 
 
 def test_the_deleted_recommend_stays_deleted():
-    """⛔ The specific name, because the deletion carries a measurement: the
+    """The specific name, because the deletion carries a measurement: the
     CLAHE rule was fitted to two clips and is negative on the third venue."""
     from mongla_vision import underwater
 

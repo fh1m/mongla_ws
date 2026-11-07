@@ -1,6 +1,6 @@
 """`motor_test` -- the verb that turns ONE thruster.
 
-⛔ THE SAFETY SHAPE IS THE POINT. The board expires the test when the
+The safety shape is the point. The board expires the test when the
 keep-alives stop, and expiry AUTO-DISARMS. There is no stop command and none is
 wanted: silence IS the stop. So the things worth testing are that the verb
 cannot hold a motor spinning past its deadline, that a refusal from the board
@@ -101,7 +101,7 @@ def test_the_index_is_reported_back_so_a_log_says_which_motor(motor):
 
 
 def test_the_verb_is_gated_on_ARMED_by_the_command_scope():
-    """⛔ NOT a courtesy check. The board refuses a motor test when disarmed, and
+    """NOT a courtesy check. The board refuses a motor test when disarmed, and
     `_command_scope` refuses it here first, so a disarmed caller learns without
     a round trip -- and, more importantly, `motor_test` is deliberately NOT in
     `_UNARM_SAFE`. A verb that spins a propeller must never be unarm-safe."""
@@ -117,7 +117,7 @@ def test_the_verb_is_gated_on_ARMED_by_the_command_scope():
 
 
 def test_a_long_test_is_not_truncated_by_the_client_backstop():
-    """⛔ THE "DOESN'T ARM, 12 s CROSSED" CLASS OF BUG. The planner client bounds
+    """THE "DOESN'T ARM, 12 s CROSSED" CLASS OF BUG. The planner client bounds
     how long it waits for a result at the goal's OWN limit plus a margin, read
     from this same registry. `motor_test` registers `duration`, so a 30 s
     thruster run gets a 45 s backstop rather than a fixed floor that would

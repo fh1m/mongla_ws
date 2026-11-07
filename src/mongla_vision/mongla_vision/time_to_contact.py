@@ -5,19 +5,19 @@ The prototype this comes from (`person_tracker.py`) solves the right equation
 than a linear range/speed estimate -- and then assumes the observer is
 stationary, which its own comment says.
 
-⭐ WE ARE ONE SUBTRACTION FROM THE MOVING-VEHICLE FORM, because we have an
+We are one subtraction from the moving-vehicle form, because we have an
 ego-velocity the prototype did not: the downward camera, verified to 1.09 cm
 over 30 cm. Subtract the vehicle's own velocity from the relative velocity and
 the answer is correct for a vehicle that is itself moving, which is the only
 case that ever occurs.
 
-WHY A QUADRATIC AND NOT range/speed. `range/speed` is the time to reach the
+Why a quadratic and not range/speed. `range/speed` is the time to reach the
 target's CENTRE along the current line of sight. It is wrong whenever the
 closing motion is not head-on -- a pass alongside reads as an approach -- and
 it cannot express "closest approach never reaches the safety radius", which is
 the answer a standoff manoeuvre actually needs.
 
-⛔ AND IT REFUSES RATHER THAN EXTRAPOLATING. Below a noise floor on the
+And it refuses rather than extrapolating. Below a noise floor on the
 closing rate the honest answer is "never", not a large finite number: a TTC of
 900 s and a TTC of "not approaching" lead to different decisions, and a
 controller cannot tell them apart if both arrive as floats.
@@ -65,7 +65,7 @@ def time_to_contact(rel_pos: Sequence[float],
     `rel_pos`   target position relative to the vehicle, metres, any frame
                 in which both velocities are also expressed.
     `target_vel` the target's velocity in that frame (zero for a fixed prop).
-    `ego_vel`   the VEHICLE's own velocity. ⭐ This is the term the prototype
+    `ego_vel`   the VEHICLE's own velocity. This is the term the prototype
                 lacked; without it a vehicle closing on a stationary prop
                 computes a TTC of infinity.
     """

@@ -52,7 +52,7 @@ class FlowChecksMixin:
         """True when the motion is the light on the floor, not the hull.
 
         The interval is then refused and the anchor retaken."""
-        # ⛔ SUN ON A BARE FLOOR. Erosion strips the filaments, but on a floor
+        # Sun on a bare floor. Erosion strips the filaments, but on a floor
         # with no dark texture of its own what is left are the caustic CELLS,
         # which boil between frames and still move with the waves. A rigid
         # floor keeps its patches; cells do not. Refuse rather than publish
@@ -74,7 +74,7 @@ class FlowChecksMixin:
         """Translation, yaw and scale fitted together, when enabled.
 
         -> (flow, n_used, disp)"""
-        # THE RIGID FIT, with the median kept as a VISIBLE fallback. A floor
+        # The rigid fit, with the median kept as a VISIBLE fallback. A floor
         # too bare to give 8 agreeing points cannot support a 4-DOF fit, and
         # in that regime a median of what little there is beats refusing
         # outright -- but the fallback is counted and logged, because a sensor
@@ -146,7 +146,7 @@ class FlowChecksMixin:
     def _cross_check_yaw(self, t: float, dt: float) -> None:
         """Image-derived yaw against the gyro's. Free, and always on.
 
-        ⛔ WHY THIS IS WORTH ITS OWN METHOD. The planar fit measures the
+        Why this is worth its own method. The planar fit measures the
         rotation of the floor in the image, and for a downward camera that IS
         the vehicle's yaw. The gyro measures the same quantity through
         completely different physics. Two independent sensors reading one
@@ -198,7 +198,7 @@ class FlowChecksMixin:
                             f'{got * 1000:+.2f}, quality '
                             f'{self._td_est.quality:.2f}, peak '
                             f'{self._td_est.peak_correlation:.2f})')
-                        # ⭐ THE PEAK, NOT ONLY THE QUALITY. Quality is height x
+                        # The peak, not only the quality. Quality is height x
                         # prominence, so a low value means EITHER the two yaw
                         # series barely correlate OR they correlate broadly and
                         # the lag is poorly determined. Those want opposite

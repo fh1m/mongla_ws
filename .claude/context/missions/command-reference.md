@@ -36,7 +36,7 @@ There is no third group. A verb the board cannot run does not exist: the manager
 `Unknown command` and nothing reaches the wire. A missing low-level capability is a firmware
 pull request ([`upstream/`](../upstream/README.md)), not a host emulation.
 
-> ⛔ **A board-side move can still be denied.** Every on-board primitive runs in the board's
+> **Warning: A board-side move can still be denied.** Every on-board primitive runs in the board's
 > automatic mode, which closes the depth loop — and that loop has never run closed in water.
 > Until the two bench checks pass, the board may refuse these moves outright. That includes
 > the search creep a vision verb falls back on. See
@@ -99,7 +99,7 @@ looks like from outside.
 during a mission. `stop` brakes and `pause` holds station; both are board primitives, so both
 enter AUTO.
 
-⛔ **`surface()` is the last motion.** Every board verb — `stop` included — is a `SROT_MOVE`,
+**Warning: `surface()` is the last motion.** Every board verb — `stop` included — is a `SROT_MOVE`,
 which enters AUTO and takes the hull back out of SURFACE. A cleanup that ends
 `surface(); stop()` holds the vehicle at depth.
 
@@ -176,7 +176,7 @@ Always check `saw_target` before reading a pixel position: `NaN < threshold` is 
 On the wire the downward fore/aft axis is still called `depth` (it is image-Y); the DSL calls
 it `fwd` so a mission names the *physical* axis it means.
 
-⛔ **Depth is never a vision axis.** The board owns it: `set_depth` first, then align. The
+**Warning: Depth is never a vision axis.** The board owns it: `set_depth` first, then align. The
 forward camera's image-Y axis and a downward fill-driven descent both raise `ValueError`
 before anything is sent.
 

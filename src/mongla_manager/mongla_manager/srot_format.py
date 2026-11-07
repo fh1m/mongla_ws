@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """One place that decides how a SROT value is rendered. Pure, no I/O, no pymavlink.
 
-WHY THIS EXISTS. The same telemetry reaches an operator through four different paths --
+Why this exists. The same telemetry reaches an operator through four different paths --
 `connect`'s snapshot, `connect --watch`'s dashboard, `--json`, and the manager's periodic
 `[SROT ]` log block. When each formats independently they drift, and the drift is not
 cosmetic: a field that reads `--` in one place and `0.00` in another is the exact bug this

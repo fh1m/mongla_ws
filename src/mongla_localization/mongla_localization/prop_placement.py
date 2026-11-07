@@ -6,7 +6,7 @@ lost a scoring drop because its course file put a prop one spacing away from
 where the prop actually stood. Its filter refined prop positions online. Ours
 took every position from the course file and could only refuse an unset one.
 
-⛔ THE ERROR THAT DOES NOT AVERAGE AWAY. Each sighting is `hull + range x
+The error that does not average away. Each sighting is `hull + range x
 direction`. The range and the bearing noise are fresh on every frame, so they
 shrink with the number of sightings. The hull's own position error is NOT
 fresh: every sighting in one pass is taken from the same drifted estimate, and

@@ -1,13 +1,13 @@
 """Optical flow -> BODY VELOCITY. The observation an estimator can actually use.
 
-WHY VELOCITY AND NOT DISTANCE. `distance_estimation_node` accumulates metres
+Why velocity and not distance. `distance_estimation_node` accumulates metres
 travelled, which is an INTEGRAL: its error grows without bound and it cannot be
 fused as a measurement, because a filter needs a quantity with a stationary
 error, not a running sum of one. Velocity is that quantity. This module
 produces it; the accumulator stays where it is for the operator readout it was
 written for.
 
-⛔ THE GEOMETRY, AND THE ONE FACT THE WHOLE THING TURNS ON.
+The geometry, and the one fact the whole thing turns on.
 
 A camera looking at a plane a distance `h` away sees two kinds of image motion,
 and they scale differently:
@@ -28,14 +28,14 @@ That asymmetry is the entire design. It means:
 
 So:  v = h * (flow_px/dt - f*omega) / f
 
-⛔ AND THE FAILURE MODE THAT DOES NOT ANNOUNCE ITSELF. When the vehicle rotates
+And the failure mode that does not announce itself. When the vehicle rotates
 much more than it translates, `flow_px/dt` and `f*omega` are two large numbers
 whose DIFFERENCE is the small quantity we want. Ordinary noise on either then
 dominates the result, and the answer stays plausible while meaning nothing --
 same shape as the planar-pose flip. `rot_fraction` reports exactly this ratio,
 and a consumer must gate on it rather than on the velocity looking reasonable.
 
-WHAT THIS DOES NOT DO. It does not integrate, does not filter, and does not
+What this does not do. It does not integrate, does not filter, and does not
 guess `h`. A missing height is a refusal, not a default: a default height turns
 an unknown scale into a confident wrong speed.
 """
@@ -56,17 +56,17 @@ MIN_NET_FLOW_PX = 0.5
 
 # COHERENCE. Maximum ratio of per-point flow DISPERSION to flow MAGNITUDE.
 #
-# ⛔ A SANITY BOUND, NOT A NOISE DISCRIMINATOR -- and this constant started life
+# A sanity bound, not a noise discriminator -- and this constant started life
 # at 0.5 on evidence that turned out to be contaminated. Recorded in full,
 # because the mistake is more instructive than the number.
 #
-# THE ORIGINAL REASONING: over a flat surface at constant range a translation
+# The original reasoning: over a flat surface at constant range a translation
 # moves every point by nearly the same vector, so points that disagree as much
 # as they move cannot be observing one. A run on a "static" camera showed 21
 # intervals with large flow and a dispersion/magnitude ratio of 0.84-1.03, and
 # 0.5 was set to exclude them.
 #
-# WHAT WAS WRONG: the operator had knocked the camera during that run. Those 21
+# What was wrong: the operator had knocked the camera during that run. Those 21
 # intervals were REAL MOTION, and they sit squarely inside the distribution
 # real motion actually has -- measured over four controlled slides, moving
 # intervals run to a ratio median of 0.40-0.89 with a p90 of 1.02-3.76. The
@@ -74,7 +74,7 @@ MIN_NET_FLOW_PX = 0.5
 # to the floor: a small tilt makes range vary across the image, so a genuine
 # translation produces genuine dispersion.
 #
-# WHAT IT COST, measured on a 50 cm one-way slide at 0.50 m:
+# What it cost, measured on a 50 cm one-way slide at 0.50 m:
 #
 #     gate   intervals   net cm   path cm
 #     0.5       104       -12.3     15.9     <- the shipped value
@@ -86,7 +86,7 @@ MIN_NET_FLOW_PX = 0.5
 # The gate was discarding SIXTY PER CENT of the real displacement, and every
 # rejected interval is displacement the integral never sees.
 #
-# AND IT WAS NEVER LOAD-BEARING: on a genuinely static camera -- 727 intervals,
+# And it was never load-bearing: on a genuinely static camera -- 727 intervals,
 # peak flow 0.069 px -- the MAGNITUDE floor alone produced zero false
 # velocities without this gate doing anything at all. So 5.0 is kept purely as
 # insurance against wildly incoherent flow (a moving object crossing the view,
@@ -131,7 +131,7 @@ def flow_velocity(dx_px: float, dy_px: float, dt: float, *,
     downward camera, or a known-size target's range for a forward one. They are
     the same quantity in this equation.
 
-    ⛔ `fy_px` IS NOT A REFINEMENT. Pixels are not square on this sensor:
+    `fy_px` is not a refinement. Pixels are not square on this sensor:
     calibration gives fx 513.94 and fy 516.93 at 640 px, a ratio of 1.0058.
     The two image axes therefore convert to metres with DIFFERENT constants,
     and using one for both makes the axis that rides image-y read 0.58 % high.

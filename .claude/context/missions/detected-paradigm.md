@@ -56,13 +56,13 @@ The single most common mistake (and the original "2nd command never runs"
 bug report) is treating an `if` as a loop:
 
 ```python
-# ✗ WRONG — an if executes once; this is NOT a circle search
+# WRONG — an if executes once; this is NOT a circle search
 if mongla.detected('gate'):
     mongla.move_forward(2)
 else:
     mongla.yaw_left(90)        # runs at most once, then the script falls through
 
-# ✓ CORRECT — a moving search loops until seen
+# CORRECT — a moving search loops until seen
 while not mongla.detected('gate'):
     mongla.yaw_left(30)        # keep turning until the gate comes into frame
 mongla.move_forward(2)         # runs once the loop exits
@@ -186,11 +186,11 @@ use the right class *name*; only the case is forgiven.
 ```python
 mongla.models(gate='gate_sharks')
 
-# ✓ ClassRef — passes through cleanly, reads .class_name
+# Right: ClassRef — passes through cleanly, reads .class_name
 while not mongla.detected(mongla.models.gate.gate):
     mongla.move_forward(0.5, gain=30)
 
-# ✓ string form — identical result
+# Right: string form — identical result
 while not mongla.detected('gate'):
     mongla.move_forward(0.5, gain=30)
 ```
@@ -267,11 +267,11 @@ mongla.vision.align('gate', yaw=0, lat=0, fallback=sweep)
 ### Rule 1 — Short steps in search loops (0.5 s or less)
 
 ```python
-# ✓ CORRECT — 0.5s steps, max overshoot ~0.15m at gain=30
+# CORRECT — 0.5s steps, max overshoot ~0.15m at gain=30
 while not mongla.detected('gate'):
     mongla.move_forward(0.5, gain=30)
 
-# ✗ WRONG — 2.0s steps, max overshoot ~0.6m at gain=30
+# WRONG — 2.0s steps, max overshoot ~0.6m at gain=30
 while not mongla.detected('gate'):
     mongla.move_forward(2.0, gain=30)   # gate was seen 0.4s in, AUV drives 1.6s past it
 ```
@@ -284,11 +284,11 @@ is 0.57 m of overshoot. Use 0.5 s or less to keep overshoot below 0.15 m.
 ### Rule 2 — Always have a safety budget
 
 ```python
-# ✗ No safety net — runs forever if detector is offline or target never appears
+# Wrong: No safety net — runs forever if detector is offline or target never appears
 while not mongla.detected('gate'):
     mongla.move_forward(0.5, gain=30)
 
-# ✓ Bounded — give up after N steps, handle failure explicitly
+# Right: Bounded — give up after N steps, handle failure explicitly
 MAX_STEPS = 60   # 60 × 0.5s = 30s total search budget
 for _ in range(MAX_STEPS):
     if mongla.detected('gate'):
@@ -309,7 +309,7 @@ specified class appears in the detection topic** — `detected()` for any other
 class will always return `False`.
 
 ```python
-# ✗ BUG: vision.align with flare ClassRef sets classes='flare'
+# BUG: vision.align with flare ClassRef sets classes='flare'
 #         Then detected('gate') can never be True — detector only publishes flare
 mongla.vision.align(mongla.models.gate.flare, yaw=0)  # ← sets classes='flare'
 for _ in range(18):
@@ -319,7 +319,7 @@ for _ in range(18):
 ```
 
 ```python
-# ✓ CORRECT: restore both classes before the loop
+# CORRECT: restore both classes before the loop
 mongla.vision.align(mongla.models.gate.flare, yaw=0)  # sets classes='flare'
 mongla.set_classes('gate,flare')   # ← restore detection of both
 for _ in range(18):
@@ -351,15 +351,15 @@ hang). But it busy-spins the CPU doing nothing. Prefer `wait_for` (to wait in
 place) or a small move (to search):
 
 ```python
-# ✓ BEST for waiting in place — one call, no busy-loop
+# BEST for waiting in place — one call, no busy-loop
 if mongla.wait_for('gate', timeout=10):
     ...
 
-# ✓ search WHILE moving — the loop both polls and makes progress
+# Right: search WHILE moving — the loop both polls and makes progress
 while not mongla.detected('gate'):
     mongla.move_forward(0.5, gain=30)
 
-# ⚠ works but wasteful — busy-polls (~8 Hz) doing nothing; use wait_for instead
+# works but wasteful — busy-polls (~8 Hz) doing nothing; use wait_for instead
 while not mongla.detected('gate'):
     pass
 ```
@@ -372,16 +372,16 @@ work without setting anything. For a downward-camera task you must switch
 first, or `detected()` subscribes the wrong topic.
 
 ```python
-# ✓ forward cam — default is already 'forward'
+# Right: forward cam — default is already 'forward'
 while not mongla.detected('gate'):       # /mongla/vision/forward/detections
     mongla.move_forward(0.5, gain=30)
 
-# ✓ downward cam — switch before the loop (use_camera logs the change)
+# Right: downward cam — switch before the loop (use_camera logs the change)
 mongla.use_camera('downward')
 while not mongla.detected('bin'):         # /mongla/vision/downward/detections
     mongla.move_forward(0.5, gain=30)
 
-# ✓ or override per call without changing the sticky context
+# Right: or override per call without changing the sticky context
 while not mongla.detected('bin', camera='downward'):
     mongla.move_forward(0.5, gain=30)
 ```
@@ -503,7 +503,7 @@ for _ in range(18):
 
 **Busy poll-loop (works, but wasteful — use `wait_for`):**
 ```python
-# ⚠ detected() pumps, so this DOES exit when the gate appears, but it
+# detected() pumps, so this DOES exit when the gate appears, but it
 #   busy-spins (~8 Hz) doing nothing. Prefer wait_for('gate', timeout=...).
 while not mongla.detected('gate'):
     pass
@@ -511,14 +511,14 @@ while not mongla.detected('gate'):
 
 **Too-long steps:**
 ```python
-# ✗ 5.0s step → up to 1.5m overshoot at gain=30
+# Wrong: 5.0s step → up to 1.5m overshoot at gain=30
 while not mongla.detected('gate'):
     mongla.move_forward(5.0, gain=30)
 ```
 
 **Missing class filter restore:**
 ```python
-# ✗ vision.align(flare_ref) calls set_classes('flare')
+# Wrong: vision.align(flare_ref) calls set_classes('flare')
 #    The loop below can never see gate
 mongla.vision.align(mongla.models.gate.flare, yaw=0)
 for _ in range(18):
@@ -529,21 +529,21 @@ for _ in range(18):
 
 **Querying wrong camera:**
 ```python
-# ✗ camera left at 'forward' but the bin detector publishes on 'downward'
+# Wrong: camera left at 'forward' but the bin detector publishes on 'downward'
 while not mongla.detected('bin'):     # subscribes forward/detections (nothing there)
     mongla.move_forward(0.5)          # runs until budget exhausted
 ```
 
 **Unbounded loops:**
 ```python
-# ✗ If detector is offline, this runs forever
+# Wrong: If detector is offline, this runs forever
 while not mongla.detected('gate'):
     mongla.move_forward(0.5, gain=30)
 ```
 
 **Checking stale cache after a long pause:**
 ```python
-# ✗ If stale_after=1.0 but the detector is running at 25 Hz, a 2.0s
+# Wrong: If stale_after=1.0 but the detector is running at 25 Hz, a 2.0s
 #    pause where no callbacks fire could leave the cache stale.
 #    (This can't actually happen because pause() calls send() which
 #    spins until_future_complete — but be aware if you ever use bare time.sleep)
@@ -968,7 +968,7 @@ go through it                   →   mongla.move_forward(2.0, gain=60)
 Each `detected()`-based loop is one self-contained step, which is what makes a
 mission readable as prose rather than as a graph.
 
-⛔ **The YASMIN FSM layer was retired on 2026-09-22.** It wrapped these same DSL
+**Warning: The YASMIN FSM layer was retired on 2026-09-22.** It wrapped these same DSL
 verbs in explicit state nodes — 3,550 lines that had never executed, carrying a
 defect (J04) that ended every run one state after DIVE. What it promised for
 missions bigger than a linear script now lives in the DSL: `mongla.run_plan()`

@@ -51,7 +51,7 @@ object, sense reversed per class. After the second torpedo shot,
 `seq_relocalise` computes `(odom_yaw + torp_yaw − board_yaw) % 2π` into a
 global `zero_yaw` — **the board becomes a heading reference for later
 tasks.** Directly portable to our boot-relative BNO.
-⚠ Their FOG "directed-yaw lock" is a config comment with **no code**. Intent,
+**Caution:** Their FOG "directed-yaw lock" is a config comment with **no code**. Intent,
 not mechanism. Do not cite it as precedent.
 
 **4. Retrain during the competition, by hand.** Torpedo model trained the day

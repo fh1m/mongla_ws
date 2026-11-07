@@ -114,7 +114,7 @@ VISION_PARAM_DEFAULTS: Dict[str, Any] = {
     # DISARMED with `vision_thrust_check --camera downward` if the mount changes.
     'vision.surge_sign':          -1.0,
 
-    # AIM GATE. How far the TARGET'S FACE may be tilted from square to our shot
+    # Aim gate. How far the TARGET'S FACE may be tilted from square to our shot
     # axis and still allow the payload to fire, in degrees. 0.0 = OFF, which is
     # byte-identical to the pre-gate behaviour, so no existing mission changes.
     # A sensible pool starting point is 5-8 deg: measured pose accuracy is

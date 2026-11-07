@@ -6,7 +6,7 @@ needs no new sensor: a dirty port collapses the yield against EVERY reference
 at once, while a moved target collapses only the one that used to win, and the
 bank already computes both numbers on every lookup.
 
-⚠ These test the SEPARATOR, not the phenomenon. No port has been fouled on
+These test the SEPARATOR, not the phenomenon. No port has been fouled on
 purpose, so the thresholds are declared rather than measured and the tests say
 what the logic does, not what silt does. `measured-bars.md` records that
 distinction; a test cannot.
@@ -43,7 +43,7 @@ def test_every_reference_collapsing_is_the_camera():
 
 
 def test_where_the_boundary_actually_SITS():
-    """⚠ The bar is 0.8 of the searched references, and it is DECLARED, not
+    """The bar is 0.8 of the searched references, and it is DECLARED, not
     measured -- no port has been fouled on purpose.
 
     So this pins where it sits rather than pretending a measurement chose it.
@@ -64,7 +64,7 @@ def test_where_the_boundary_actually_SITS():
 
 
 def test_half_collapsing_is_the_world_not_the_camera():
-    """⛔ THE ASYMMETRY IS DELIBERATE. Calling a fouled lens is an instruction
+    """The asymmetry is deliberate. Calling a fouled lens is an instruction
     to stop believing the cameras, so it needs most of the evidence, not
     half."""
     v = health.assess([1, 2, 80, 90], [100, 100, 100, 100])
@@ -131,7 +131,7 @@ def test_the_bank_keeps_the_per_reference_yields():
 #  Memory contamination: the bank must not remember a view of the FAULT
 # --------------------------------------------------------------------------- #
 def test_a_fouled_camera_refuses_enrolment():
-    """⛔ A reference snapped while the port is silted is a view of the fault,
+    """A reference snapped while the port is silted is a view of the fault,
     not of the target, and once stored every later lookup matches against it.
 
     DAM4SAM measures robustness 0.887 -> 0.944 for keeping degraded frames out
@@ -204,7 +204,7 @@ def test_force_overrides_the_contamination_guard():
 
 
 # --------------------------------------------------------------------------- #
-#  ⭐ ANTICIPATION -- predicting a loss instead of reacting to one
+#  ANTICIPATION -- predicting a loss instead of reacting to one
 # --------------------------------------------------------------------------- #
 def test_a_falling_trend_says_prepare():
     """The reference worth having is the one from BEFORE the detection is
@@ -234,7 +234,7 @@ def test_an_already_dead_signal_does_not_report_a_fall():
 
 
 def test_the_trend_never_claims_the_target_is_gone():
-    """⛔ It licenses ONE action -- enrol now -- and no other. The ladder's
+    """It licenses ONE action -- enrol now -- and no other. The ladder's
     rule stands: no rung fabricates a position."""
     t = health.trend([300, 280, 40, 30])
     assert t.prepare

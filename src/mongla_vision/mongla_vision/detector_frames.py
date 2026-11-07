@@ -112,7 +112,7 @@ class DetectorFramesMixin:
         finally:
             self._want.clear()
         if self.get_parameter('paused').value:
-            # ⛔ SAY SO. A paused detector consumes frames and publishes
+            # Say so. A paused detector consumes frames and publishes
             # NOTHING: the camera runs, `image_raw` flows, the
             # `/detections` publisher is registered and live, and zero
             # messages ever appear. Every liveness check passes.

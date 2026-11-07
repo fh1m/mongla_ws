@@ -1,19 +1,19 @@
 """Stitch a track's identity back together after a gap. The 179-switch fix.
 
-⛔ THE MEASUREMENT THAT FORCED THIS. On a 253 s vehicle recording the tracker
+The measurement that forced this. On a 253 s vehicle recording the tracker
 reported **179 identity switches** -- the same person, walking in and out of
 one room, assigned a new id 179 times. That number read 0 until the id was
 read from the right field (`Detection2D.id`, not the non-existent
 `tracking_id`), so the fragmentation had been invisible rather than absent.
 
-WHY IT HAPPENS. ByteTrack and OC-SORT associate on MOTION: IoU plus a Kalman
+Why it happens. ByteTrack and OC-SORT associate on MOTION: IoU plus a Kalman
 prediction. Across a real gap the prediction decays and the overlap is gone,
 so a returning target cannot be matched to the track it came from and a new id
 is minted. Nothing in a motion-only tracker can recognise a thing it has seen
 before -- that is not a bug in ByteTrack, it is the boundary of what motion
 can tell you.
 
-⭐ THE STATE OF THE ART AGREES, AND NAMES THE PRICE. BoT-SORT unifies motion
+The state of the art agrees, and names the price. BoT-SORT unifies motion
 prediction with appearance modelling and explicit camera-motion compensation
 "to maintain stable object identities"; McByte++ (2026) reports up to
 **+6.1 IDF1** from adding online re-identification to a tracking-by-detection
@@ -21,14 +21,14 @@ pipeline. The standard objection is cost: a dedicated Re-ID embedding network
 runs **15-25 ms per frame** on top of detection, which an embedded AUV budget
 does not have.
 
-⭐⭐ WE DO NOT PAY THAT COST. XFeat is ALREADY loaded and already running for
+We do not pay that cost. XFeat is ALREADY loaded and already running for
 the anchor rung -- measured at 701 FPS on the Hailo-8 (section 38) and sharing
 the chip with the detector for about 10 % of its throughput (section 32). The
 descriptor that re-identifies a place can re-identify a target. This is the
 one piece of the SOTA recipe we can afford precisely because we built it for
 something else.
 
-⛔ AND THE FAILURE MODE IS ASYMMETRIC, SO THE GATES ARE TOO. A missed
+And the failure mode is asymmetric, so the gates are too. A missed
 re-identification costs one extra id -- an inconvenience. A WRONG one welds
 two different objects into one identity, and every consumer downstream then
 believes the target teleported. So this refuses unless the evidence is strong,
@@ -38,7 +38,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 import math
 
-# ⭐ NOT A NEW CONSTANT. The identity bar measured in section 25 on
+# Not a new constant. The identity bar measured in section 25 on
 # ROI-cropped references -- the same configuration a track crop produces.
 # 15 is the TRACKING bar and sits inside the far distribution; asserting
 # identity needs more evidence than following a box does.
@@ -52,7 +52,7 @@ MAX_AGE_S = 30.0
 # for a target that just left, not the checkpoint bank.
 CAPACITY = 16
 
-# ⛔ A re-identification must beat the RUNNER-UP by this factor. Two stored
+# A re-identification must beat the RUNNER-UP by this factor. Two stored
 # identities that both match moderately well is exactly the ambiguous case
 # where a wrong merge happens, and an absolute bar alone cannot see it.
 MARGIN = 1.5
@@ -106,7 +106,7 @@ class TrackReid:
                keypoints, descriptors) -> bool:
         """Remember an identity that has just been lost.
 
-        ⛔ An empty descriptor set is NOT stored. It can never match, and it
+        An empty descriptor set is NOT stored. It can never match, and it
         would occupy a slot that a usable identity needs -- the same rule the
         checkpoint bank applies to an empty reference.
         """
@@ -164,7 +164,7 @@ class TrackReid:
         if best_n < self.min_inliers:
             return refuse(f'{best_n} inliers < {self.min_inliers}',
                           inliers=best_n, runner_up=second)
-        # ⛔ THE MARGIN. Two identities that both match moderately is the
+        # The margin. Two identities that both match moderately is the
         # ambiguous case, and merging the wrong pair is unrecoverable.
         if second > 0 and best_n < self.margin * second:
             return refuse(f'ambiguous: {best_n} vs {second} runner-up',

@@ -13,7 +13,7 @@ It is the same defect that a fixed-rate timer caused in `camera_node`, where
 it measured 8.4 ms, one layer further down the same chain. The vehicle's
 reaction time is the SUM of these, so each one is worth removing on its own.
 
-WHAT MUST NOT CHANGE
+What must not change
 --------------------
 The timeout is a FLOOR, not a rate. The loop's time-based work -- freshness
 decay, hold timing, the arrival brake, the overall deadline -- has to keep
@@ -55,7 +55,7 @@ class _State:
 
 
 def test_a_waiting_detection_wakes_the_loop_immediately():
-    """THE POINT. If a sample is ready the loop must not sit out the rest of
+    """The point. If a sample is ready the loop must not sit out the rest of
     its period -- that wait is the latency being removed."""
     st = _State(returns=True)
     t0 = time.monotonic()

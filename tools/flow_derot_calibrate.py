@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Re-derive the de-rotation gains ON THIS MOUNT, from a tilt-only wave.
 
-⛔ THIS WAS OWED AND WRITTEN DOWN. `measured-bars.md` §12, verbatim: "For the
+This was owed and written down. `measured-bars.md` §12, verbatim: "For the
 vehicle: the axis mapping and the method carry over; **this gain does not**,
 whatever its cause. Re-derive it on the hull." The gains were fitted on a rig
 where the camera and IMU were rigidly coupled in a known orientation; the IMU
@@ -24,7 +24,7 @@ node passes `roll_rate = -gx * roll` into `rotation_flow_px` and SUBTRACTS
 which is zero exactly when **gx = -S_x**. So fit `S`, negate it, and that is
 the parameter. Same for `gy` with pitch and image-y.
 
-⚠ EXCITATION IS THE WHOLE DIFFICULTY, and the ledger already says why:
+Excitation is the whole difficulty, and the ledger already says why:
 "Least squares never refuses -- gate a fit on excitation AND held-out score,
 or it returns confident nonsense", and "excite one axis at a time; correlated
 regressors leave the split undetermined while the fit looks healthy". A hand
@@ -210,7 +210,7 @@ def main():
               'rotation coupling.')
         return 1
     if r['fold_sd'] > 0.25 * abs(r['slope']):
-        print('\n  ⚠ folds disagree by more than 25 % of the slope -- '
+        print('\n  WARNING: folds disagree by more than 25 % of the slope -- '
               'repeatability is\n  poor, so treat the sign as the result and '
               'the magnitude as provisional.')
     print(f"\n  Set with:  -p gyro_gain_{'x' if a.axis == 'roll' else 'y'}"

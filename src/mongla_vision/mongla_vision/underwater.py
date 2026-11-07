@@ -1,12 +1,12 @@
 """Underwater image statistics, and what they predict about detection.
 
-WHY A MODULE AND NOT A SCRIPT. Three separate things now need the same
+Why a module and not a script. Three separate things now need the same
 numbers -- the water check an operator runs poolside, the dataset survey that
 tells us which conditions we have data for, and the preprocessing decision
 itself. Three copies of "how blurry is this frame" is how two of them come to
 disagree, which is the defect the camera profile table already had.
 
-WHAT THESE QUANTITIES ARE, AND WHY THESE ONES
+What these quantities are, and why these ones
 
 Underwater imaging degrades in ways that are physically distinct, and lumping
 them into "bad visibility" is what makes a fix work on one pool and fail on
@@ -34,7 +34,7 @@ the next:
                for first and it explains the least: the two clips that
                behaved oppositely under CLAHE had brightness 170 and 174.
 
-THE POINT IS TO GENERALISE, NOT TO FIT ROBOSUB. A competition venue we have
+The point is to generalise, not to fit ROBOSUB. A competition venue we have
 never seen is characterised by these five numbers, and a preprocessing choice
 made from them travels; a choice made from "this is the RoboSub pool" does
 not.

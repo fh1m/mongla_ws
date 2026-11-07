@@ -51,7 +51,7 @@ def test_a_pool_frame_pose_is_returned_and_decoded():
 
 
 def test_an_UNANCHORED_pose_is_withheld():
-    """⛔ Before the anchor the estimate is in the board's boot frame, so
+    """Before the anchor the estimate is in the board's boot frame, so
     comparing it against a course coordinate compares across a rotation. The
     numbers look exactly like a good reading."""
     m = _mission(_Odom(frame='odom'))
@@ -196,7 +196,7 @@ def _prop_fixer(course, *, offset=0.0, bearing=0.0, rng=(3.0, 0.09)):
 
 
 def test_one_prop_at_a_known_bearing_and_range_places_the_hull():
-    """⛔ THE DVL WE DO NOT HAVE. `fix_position()` needs TWO props 12 degrees
+    """The DVL we do not have. `fix_position()` needs TWO props 12 degrees
     apart; one prop of known width at a surveyed position pins the hull on its
     own, which is visible far more often."""
     m = _prop_fixer(_course(gate=(10.0, 0.0)), bearing=0.0, rng=(4.0, 0.16))

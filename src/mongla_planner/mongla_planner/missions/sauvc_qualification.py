@@ -22,12 +22,12 @@ run, so every depth here sits in the 0.95 m opening under the surface and
 inside the lane's own floor guard, and nothing surfaces until both passes are
 done.
 
-⚠ NOT FLOWN. Verified only that it imports, that it steers on a class the
+Not flown. Verified only that it imports, that it steers on a class the
 shipped model emits, that its depths fit the opening and the lane's floor, that
 its budgets fit the run, and that it sends no verb srot refuses. Every blind
 duration and the standoff are unmeasured; the detector is sim-trained.
 
-⛔ ON SROT, `move_*`, `set_depth`, `pause`, `stop` and `yaw_right` are SROT_MOVE
+ON SROT, `move_*`, `set_depth`, `pause`, `stop` and `yaw_right` are SROT_MOVE
 primitives: they enter AUTO, which closes the never-closed depth loop, so the
 board denies them until the two bench checks pass -- the U-turn included. The
 vision verbs run in STABILIZE and are not gated (test_sauvc_srot_port.py).

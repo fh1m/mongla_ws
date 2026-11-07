@@ -1,9 +1,9 @@
 """The rung BELOW detection: accumulate evidence the detector refused to call.
 
-WHERE IT SITS. Every rung we had begins with a detection and describes how to
+Where it sits. Every rung we had begins with a detection and describes how to
 survive losing it:
 
-    PRESENCE   <-- THIS. sub-threshold evidence, no detection required
+    Presence   <-- this. sub-threshold evidence, no detection required
     DETECTION  the model clears `conf` and names a class
     FOLLOW     LK carries the last box                    frame-to-frame
     ANCHOR     XFeat re-finds the scene                   frame-to-reference
@@ -12,14 +12,14 @@ survive losing it:
 Nothing started below DETECTION, so "in sight but dim" and "gone" were the
 same state to us. This rung separates them.
 
-⭐ THE IDEA IS OLD AND IT IS NOT OURS. Track-before-detect comes out of radar
+The idea is old and it is not ours. Track-before-detect comes out of radar
 and infrared small-target work: when one frame cannot clear a threshold,
-POSTPONE THE THRESHOLD and accumulate across frames until the accumulation
+Postpone the threshold and accumulate across frames until the accumulation
 clears one. Published results track at SNR 1 dB, far below single-frame
 detectability. We apply it to the boxes our own detector already emits and
 then throws away -- it publishes down to 0.202 while the acting bar is 0.45.
 
-MEASURED ON OUR OWN FOOTAGE, not borrowed from the papers
+Measured on our own footage, not borrowed from the papers
 (`tools/weak_box_persistence.py`, 10 425 frames, bag_person_inout_20260924):
 
     regime               pairs   linked   time-free control   ratio
@@ -32,7 +32,7 @@ control -- boxes paired across DIFFERENT gaps, so time is removed rather than
 merely stirred -- links at 9.0 %. Stable across a bar sweep that grows the
 sample to 200 pairs (8.4x to 13.7x).
 
-⛔ THE TRAP THIS MODULE EXISTS TO AVOID. Look at the exit/entry row: it links
+The trap this module exists to avoid. Look at the exit/entry row: it links
 at 1.000 as well. Consecutive linking ALONE does not separate a dim target
 from a departed one, because weak boxes pile up against the edge the subject
 left through and chain beautifully. Only the control column separates them,
@@ -41,13 +41,13 @@ alone would report a confident presence for a target that is already gone --
 precisely the failure mode CLAUDE.md section 8.6 names as the one that ends
 competition runs.
 
-⭐ WHAT SEPARATES THEM AT RUNTIME IS WHERE THE LAST REAL DETECTION SAT. An
+What separates them at runtime is where the last real detection sat. An
 in-view dropout is bracketed by detections in the frame interior; a departure
 is bracketed by one in the margin band. That is `visibility.assess`, already
 measured and already shipped. So this rung REFUSES to accumulate when the last
 detection was leaving, and the refusal is the feature rather than a gap in it.
 
-⛔⛔ READ THIS BEFORE WIRING ANY OF IT. The numbers above are a PERSON IN AIR.
+read this before wiring any of it. The numbers above are a PERSON IN AIR.
 On real underwater footage the premise does not hold: the band below the bar is
 not faint signal but confident open-water false positives. `gate_rescue_repair`
 claims a gate on **90.8 % of gate-free frames** at the shipped 0.15, drawing
@@ -68,7 +68,7 @@ re-derived WITH negative clips (`tools/negative_clip_check.py`), and these
 constants are re-swept on water. It may turn out never to be wired, and that is
 an acceptable outcome for it.
 
-WHAT IT NEVER CLAIMS. Not a detection, not an identity, not a box to act on.
+What it never claims. Not a detection, not an identity, not a box to act on.
 It answers one question -- "is there still something of that class where the
 target was?" -- with a bearing and a capped confidence the control path weighs
 exactly as it weighs a follow. Anything more would be the plausible number
@@ -174,7 +174,7 @@ class PresenceAccumulator:
         """Every accepted detection resets the rung and decides whether it may
         run at all.
 
-        ⛔ The margin test is a safety interlock, not a tuning knob: a target
+        The margin test is a safety interlock, not a tuning knob: a target
         last seen leaving the frame must not be accumulated, because that is
         the regime where the measurement says weak boxes chain just as well
         while meaning nothing.
@@ -212,7 +212,7 @@ class PresenceAccumulator:
             self._chain = None
             return Presence(False, reason='no linked box')
 
-        # ⛔ STRONGEST, NOT NEAREST. Picking the box closest to our own
+        # Strongest, not nearest. Picking the box closest to our own
         # prediction lets the chain chase itself and manufacture a run out of
         # noise -- the accumulator would be measuring its own extrapolation.
         # The strongest candidate is chosen without reference to where we

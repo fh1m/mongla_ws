@@ -1,6 +1,6 @@
 """`import mongla_vision` must not need rclpy.
 
-⛔ WHY THIS IS A GUARD AND NOT A STYLE RULE. The calibration tool runs on a dev
+Why this is a guard and not a style rule. The calibration tool runs on a dev
 box with no ROS install, and it loads `calibration/solver.py` BY PATH for that
 reason. Twice, a comment in this package records the failure that forced it:
 `mongla_vision/__init__.py` imported `preflight`, which imported `rclpy.node`
@@ -11,7 +11,7 @@ The chain is gone -- `preflight` needed rclpy only for `assert_vision_ready`,
 which was exported for its whole life and called by nothing. This test keeps it
 gone, because the annotation that brings it back is one line and looks harmless.
 
-⚠ NOT A BAN ON rclpy IN THE PACKAGE. Every node in it imports rclpy and must.
+Not a ban on rclpy IN THE PACKAGE. Every node in it imports rclpy and must.
 The rule is only about what `__init__.py` pulls in at import time.
 """
 from __future__ import annotations
@@ -63,7 +63,7 @@ def test_preflight_itself_does_not_import_rclpy():
     import ast
     from pathlib import Path
 
-    # AST, NOT A SUBSTRING. The docstring EXPLAINS the rclpy executor and the
+    # Ast, not a substring. The docstring EXPLAINS the rclpy executor and the
     # imports that were removed, so a text search matches the explanation and
     # would fail forever -- the same mistake that made the loop-closure guard
     # reject its own comment.
@@ -83,7 +83,7 @@ def test_preflight_itself_does_not_import_rclpy():
 
 
 def test_the_live_preflight_is_the_state_one():
-    """⛔ The node-based `assert_vision_ready` must not come back without a
+    """The node-based `assert_vision_ready` must not come back without a
     caller. `utils/check_pipeline.py` already measures those three topics, and
     it is the right tool: it reports a fixed window, where a preflight exits on
     the first good window and caches."""

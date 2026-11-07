@@ -123,7 +123,7 @@ class SeeMixin:
     def _resume_default_detector(self, camera: str) -> None:
         """Resume the default camera's detector, once, at first use.
 
-        ⛔ WHY THIS IS NOT INSIDE THE QUERY. Every query funnels through
+        Why this is not inside the query. Every query funnels through
         `_pump_detections`, and none of them reached `_activate_camera` -- only
         `use_camera` and the vision verbs did. So against a launch that starts
         both detectors paused (which is the correct default: two live models
@@ -131,7 +131,7 @@ class SeeMixin:
         `while not mongla.detected('gate')` polls a detector that will never
         infer: an empty cache, forever, no error and no timeout.
 
-        ⛔ AND WHY THE SETTLE IS SHORTER THAN THE RECENCY WINDOW. Finding the
+        And why the settle is shorter than the recency window. Finding the
         detector means waiting for DDS discovery, and the wait happens INSIDE
         the caller's query. At 1.5 s it made `detected(stale_after=1.0)` --
         "seen within the last second" -- meaningless: frames that arrived just
@@ -269,7 +269,7 @@ class SeeMixin:
                     break          # searching blind wastes the whole budget
                 mongla.yaw_right(20)
 
-        ⛔ `'ok'` MEANS NONE OF THOSE FAULTS, NOT A GOOD IMAGE. Defocus and mild
+        `'ok'` means none of those faults, not a good image. Defocus and mild
         fog are NOT detectable from the image alone without firing on ordinary
         murky footage -- measured on the real 2025 archive, see seeing.py.
         None = the detector has not published (paused camera, not running).
@@ -349,7 +349,7 @@ class SeeMixin:
                 use_outline: bool = False) -> str:
         """Which side OF THE STRUCTURE the symbol is on: left/right/centre.
 
-        ⛔ NOT `where()`, AND THE DIFFERENCE DECIDES THE GATE. `where()` answers
+        Not `where()`, and the difference decides the gate. `where()` answers
         "left or right of the FRAME", which is where the camera is pointing.
         The gate's divider is a property of the gate, so a hull sitting off to
         one side reads a correctly-placed placard as the wrong side and flies

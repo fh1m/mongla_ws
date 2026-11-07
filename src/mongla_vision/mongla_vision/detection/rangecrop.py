@@ -1,6 +1,6 @@
 """Trade field of view for range, automatically, when the target is far.
 
-THE MEASUREMENT THAT MOTIVATES IT. Simulated approach on real labelled data
+The measurement that motivates it. Simulated approach on real labelled data
 (the bin dataset, its own model, conf 0.15) -- recall against apparent
 target size:
 
@@ -15,11 +15,11 @@ Recall falls off a CLIFF past ~3x the training distance -- 99 % to 66 % to
 20 % -- and cropping recovers almost all of it, because the target then
 occupies more of the 640x640 the chip actually sees.
 
-WHY NOT JUST RAISE imgsz. On the Hailo it is baked into the HEF (all three
+Why not just raise imgsz. On the Hailo it is baked into the HEF (all three
 of ours are `NHWC(640x640x3)`), so it is a compile-time decision, not a knob.
 Cropping reaches the same place at runtime.
 
-IT IS A REAL TRADE, AND BOTH SIDES ARE MEASURED. Half the field of view lost
+It is a real trade, and both sides are measured. Half the field of view lost
 36 objects outright in that run -- they fell outside the crop -- and CLOSE
 targets drop to 69 % because they no longer fit inside it. So a fixed crop is
 strictly worse than no crop for a prop you are next to.
@@ -29,7 +29,7 @@ switch is on the observed target size, which the detector already reports, so
 it costs nothing to know and the vehicle is never cropped when it is
 manoeuvring close.
 
-HYSTERESIS IS NOT OPTIONAL. A single threshold on a quantity that jitters
+Hysteresis is not optional. A single threshold on a quantity that jitters
 makes the field of view flap frame to frame, which is worse than either
 state: the control loop sees the target appear and vanish for reasons that
 have nothing to do with the water. Enter and exit are separated.

@@ -36,7 +36,7 @@ def test_agreeing_heights_report_agreement():
 
 
 def test_a_disagreement_is_REPORTED_not_resolved():
-    """⛔ It says the two differ, never which is right. pool_depth_m is the
+    """It says the two differ, never which is right. pool_depth_m is the
     one nobody measures, and silently preferring either is how a stack
     acquires a number it cannot defend."""
     x = ScaleCrossCheck()
@@ -104,7 +104,7 @@ def test_it_ships_off():
 
 
 def test_calibration_never_manufactures_a_detection():
-    """⛔ THE WHOLE RISK. A calibration that can invent confidence would do it
+    """The whole risk. A calibration that can invent confidence would do it
     in exactly the conditions where the stack can least check it."""
     assert calibrate(0.0, 5, enabled=True).value == 0.0
 
@@ -126,7 +126,7 @@ def test_murkier_water_raises_more_than_clear_water():
 # --------------------------------------------------------------------------- #
 #  The approach band
 # --------------------------------------------------------------------------- #
-# ⛔ THESE THREE USED TO PASS NO CLASS, and that was the defect rather than a
+# These three used to pass no class, and that was the defect rather than a
 # convenience: one global band (0.25-0.45) served three classes whose measured
 # peaks are 0.15, 0.52 and 0.80+. `advise` now requires the class, and the full
 # per-class behaviour is covered in `test_approach_band_is_measured.py`.
@@ -139,7 +139,7 @@ def test_inside_the_band_it_holds():
 
 
 def test_too_close_it_BACKS_OFF():
-    """⭐ The half section 23 measured and a 'minimise range' controller cannot
+    """The half section 23 measured and a 'minimise range' controller cannot
     express: confidence rises and then FALLS. Measured for `gate` at
     0.45-0.60 of frame height, so 0.80 is past it."""
     a = advise(0.80 * 640, 640, 'gate')

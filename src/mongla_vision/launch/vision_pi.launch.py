@@ -3,7 +3,7 @@
 This is `vision_dual` for the Pi, and it differs in exactly three ways -- each
 of which is a thing that was silently wrong before:
 
-1. ONE DETECTOR PROCESS, not two. The chip allows one VDevice per process, so
+1. One detector process, not two. The chip allows one VDevice per process, so
    `vision_dual`'s second `detector_node` dies with
    HAILO_OUT_OF_PHYSICAL_DEVICES (74) and the two-camera path has never
    started here. `detector_dual_node` holds both, keeps both node names, and
@@ -17,7 +17,7 @@ of which is a thing that was silently wrong before:
    runtime `conf` is the only bar that decides; the old "INT8 costs ~0.08"
    allowance was retracted (§66: a healthy build loses ~0.01).
 
-3. THE CALIBRATION IS ACTUALLY PASSED. No launch file in this repo passes it,
+3. The calibration is actually passed. No launch file in this repo passes it,
    so `CameraInfo.k` publishes all-zero and every pixel->bearing conversion
    silently falls back to a GUESSED field of view -- on a stack whose whole
    uplink contract is bearings. The measured intrinsics
@@ -106,7 +106,7 @@ def arguments() -> list:
         # filter and the published vision_info. Empty means the registry's
         # first entry, which is what shipped before this existed.
         #
-        # ⛔ REQUIRES A REGISTRY. `*_active` selects FROM `*_models`, so both
+        # Requires a registry. `*_active` selects FROM `*_models`, so both
         # must be given and every name must appear in the registry:
         #
         #     fwd_models:=gate_sharks,yolov8n_seg \
@@ -118,7 +118,7 @@ def arguments() -> list:
         # the forward camera beside the downward detector -- three network
         # groups resident -- and logs the cost warning.
         #
-        # ⚠ Not free. The accelerator runs one graph at a time and each
+        # Not free. The accelerator runs one graph at a time and each
         # handover costs ~4 ms, so two models is the SUM plus the swaps --
         # measured 37.5 Hz for a pair against 95 Hz for one.
         DeclareLaunchArgument('fwd_active',  default_value=''),
@@ -135,7 +135,7 @@ def arguments() -> list:
             description='INT8 operating point. NOT the CUDA path\'s 0.35-0.45 '
                         '-- see the module docstring.'),
         DeclareLaunchArgument('max_det',   default_value='100'),
-        # UNDERWATER CONTRAST PREPROCESSING -- 'clahe' or 'off'.
+        # Underwater contrast preprocessing -- 'clahe' or 'off'.
         # Measured on real RoboSub 2025 footage: target presence 10.7 % ->
         # 56.2 % on the blurry gate approach, no cost on footage that already
         # works. 3.78 ms/frame on the Pi (77 Hz -> ~46), which is why it is
@@ -195,7 +195,7 @@ def arguments() -> list:
         #
         # The 1.8x gap is worth carrying: `ros2 topic hz` UNDER-REPORTS on a
         # loaded Pi, so every rate quoted from it is a floor, not a figure.
-        # ⛔ THESE SIZE THE COAST WINDOW, AND BOTH WERE STALE.
+        # These size the coast window, and both were stale.
         # `tracker_node` converts its `max_predict_s` (1.5 s) into FRAMES as
         # ceil(max_predict_s * frame_rate), and that frame count is the
         # outermost rung of the coast ladder
@@ -220,7 +220,7 @@ def arguments() -> list:
         # runtime -- that warning is what surfaced this.
         DeclareLaunchArgument('fwd_frame_rate', default_value='30.0'),
         DeclareLaunchArgument('dwn_frame_rate', default_value='32.0'),
-        # ⛔ THESE WERE THE WRONG WAY ROUND, and both halves were live.
+        # These were the wrong way round, and both halves were live.
         # The only calibration we hold declares itself, in its own metadata,
         # as `pi_test_global_shutter (Microdia USB)` -- USB vendor 0c45,
         # which is the SONIX unit, which is the DOWNWARD camera. It was
@@ -258,19 +258,19 @@ def arguments() -> list:
         # OFF by default because it needs `pool_depth_m`, which it REFUSES to
         # guess: height is a clean multiplier on every velocity it emits.
         DeclareLaunchArgument('flow', default_value='false'),
-        # THE LOCK LADDER. Built, measured, and in no launch file until now --
+        # The lock ladder. Built, measured, and in no launch file until now --
         # so the follower and XFeat anchor had never run in a mission. It
         # publishes `<ns>/lock`, NEVER `/detections`: a followed or anchored
         # box on the detector's topic is indistinguishable from something the
         # detector saw, and every consumer including the HUD would report a
         # detection that never happened.
         #
-        # ⛔ STARTING IT DOES NOT STEER THE VEHICLE. The control loop consults
+        # Starting it does not steer the vehicle. The control loop consults
         # the ladder only when `vision.lock_s > 0`, and that stays 0. This
         # publishes the evidence so it can be watched on the deck before
         # anything acts on it -- the same staging the firmware vision uplink
         # uses (echo the numbers, confirm they match, THEN actuate).
-        # DEFAULT OFF, DELIBERATELY. Measured A/B on the vehicle: the ladder
+        # Default off, deliberately. Measured A/B on the vehicle: the ladder
         # costs 23 % of the forward detection rate (30.23 -> 23.14 Hz) and
         # 30 % of the downward (42.71 -> 29.82). `vision.lock_s` is 0, so the
         # control loop does not read `/lock` -- paying a quarter of perception
@@ -369,7 +369,7 @@ def arguments() -> list:
                         "value, so one argument, or the three drift apart and "
                         "each reports a plausible number."),
         # 0 = the profile's own rate (210), AND THAT REVERSES THE 60 THIS
-        # SHIPPED WITH LAST ROUND. The cap was measured correctly and is now
+        # Shipped with last round. The cap was measured correctly and is now
         # wrong, because the mailbox changed what a captured frame costs.
         #
         # The cap's evidence: uncapped 20.2/21.3 det/s, capped-60 32.3/31.2 --
@@ -397,7 +397,7 @@ def arguments() -> list:
         # 1.4 ms of CPU to halve the age is the right side of that trade.
         DeclareLaunchArgument('fwd_fps', default_value='0'),
         DeclareLaunchArgument('dwn_fps', default_value='0'),
-        # CAPTURE FAST, PUBLISH AT THE CONSUMER'S RATE. These are different
+        # Capture fast, publish at the consumer's rate. These are different
         # knobs and conflating them cost a measured regression: uncapping
         # `fps` alone took the image age down (26.0 -> 23.6 ms) and pushed the
         # DETECTION age UP (47.5 -> 62.6), because every captured frame was
@@ -439,13 +439,13 @@ def arguments() -> list:
 def generate_launch_description():
     args = arguments()
 
-    # NO SEPARATE CAMERA PROCESSES. The cameras live inside the same process
+    # No separate camera processes. The cameras live inside the same process
     # as the detectors now, so their frames reach inference by reference
     # instead of by topic -- see `detector_dual_node`. Their parameters arrive
     # here `fwd_cam_`/`dwn_cam_`-prefixed for the same reason the detectors'
     # do: launch's `name=`/`parameters=` are process-wide.
 
-    # NO `name=` HERE, DELIBERATELY. Launch implements it as `-r __node:=`,
+    # No `name=` here, deliberately. Launch implements it as `-r __node:=`,
     # which is PROCESS-wide: setting it renamed all THREE nodes in this process
     # to `mongla_detector_dual` and ros2 warned about duplicate names. The
     # launcher's own default name is already `mongla_detector_dual`, and the two
@@ -491,7 +491,7 @@ def generate_launch_description():
             'fwd_cam_publish_rate_hz': LaunchConfiguration('fwd_publish_hz'),
             'dwn_cam_publish_rate_hz': LaunchConfiguration('dwn_publish_hz'),
 
-            # ⭐ THE LOCK LADDER, IN THIS PROCESS. It was two separate
+            # The lock ladder, in this process. It was two separate
             # lock_node processes; the Hailo allows one VDevice per process, so
             # with XFeat on the chip they raced the detector for it. Composed,
             # all of them share one VDevice. Why each value is passed:
@@ -602,7 +602,7 @@ def generate_launch_description():
         )
 
     return LaunchDescription(args + [
-        # ⛔ ONE BLAS THREAD PER CALL, set before any node imports numpy.
+        # One BLAS thread per call, set before any node imports numpy.
         # The vehicle runs OpenBLAS (provision_vehicle.sh checks for it), whose pool
         # defaults to every core in EVERY process. The XFeat matcher already
         # splits its matmul across `MATCH_THREADS` = 2 Python threads on purpose;

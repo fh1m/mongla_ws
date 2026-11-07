@@ -8,7 +8,7 @@ ladder can be checked against reality instead of against itself.
 
     coast_s 0.80    lost_grace_s 1.00    kalman 1.50    track_buffer 5.00
 
-WHY NOT A SAMPLED SWEEP -- the mistake that produced this file. Sampling every
+Why not a sampled sweep -- the mistake that produced this file. Sampling every
 Nth frame makes the smallest observable gap one sample interval. At a ~1-4 s
 interval EVERY gap exceeds a 0.8 s rung by construction, and the first run of
 this measurement duly reported 307 of 307 gaps over `coast_s`: a devastating
@@ -18,10 +18,10 @@ returns a plausible number and no error at all.
 Two further artifacts, both caught the same way -- by a number that implied an
 implausible mechanism:
 
-  * CONCATENATING WINDOWS FABRICATES A GAP spanning the jump between them.
+  * concatenating windows fabricates a gap spanning the jump between them.
     That is where a 113 s "gap" inside a 30 s window came from. Gaps are
     collected per window and only then pooled.
-  * A CONTAINER CAN LIE ABOUT FPS. Mirpur's mkv reports 1000.0 (ffprobe says
+  * a container can lie about FPS. Mirpur's mkv reports 1000.0 (ffprobe says
     `0/0`), which silently divides every gap by ~30 -- in the flattering
     direction. Anything outside 5..120 fps is skipped and said so.
 

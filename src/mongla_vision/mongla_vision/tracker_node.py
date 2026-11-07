@@ -4,7 +4,7 @@
 Sits between detector_node and everything downstream. Takes raw per-frame
 Detection2DArray, runs ByteTrack + optional Kalman smoothing, and publishes
 a Detection2DArray with a stable id per track in `Detection2D.id`.
-⚠ The field is `id`. vision_msgs/Detection2D has no `tracking_id`;
+The field is `id`. vision_msgs/Detection2D has no `tracking_id`;
 this docstring said otherwise and `check_tracker.py` believed it,
 raising AttributeError on the first track of every run.
 
@@ -109,13 +109,13 @@ def _build_tracker(tracker_type, *, track_buffer, frame_rate, min_hits,
 def kalman_pass(kalman, tracked, frame_t):
     """Smooth every track's centre, reviving any filter a real box returns to.
 
-    EXTRACTED SO THE TEST CAN DRIVE IT. The suite already had a test that
+    Extracted so the test can drive it. The suite already had a test that
     composed the tracker and the smoother and then reimplemented this loop in
     a local helper (`test_roboflow_tracker.py:116`) -- so it tested a copy,
     and the copy did not contain the bug below. A test that reimplements the
     thing it guards is the `_srot_drive` grep in another costume.
 
-    THE BUG. This used to be:
+    The bug. This used to be:
 
         if kalman.is_expired(td.track_id):
             continue

@@ -1,6 +1,6 @@
 """Velocity from what we COMMANDED, learned while the floor was readable.
 
-⛔ THE HOLE THIS FILLS. Every velocity input the filter has comes from the
+The hole this fills. Every velocity input the filter has comes from the
 downward camera, and the floor instruments this round added (tile grating,
 lane line) need texture too. On a bare, untextured or turbid floor flow
 refuses, and the filter is left integrating an accelerometer -- quadratic
@@ -16,19 +16,19 @@ estimates the model's error rather than trusting a constant. DeepVL (ICRA
     v_ss = g * u + b        per body axis, u = demand in [-1, 1]
     v    = first-order lag of v_ss with time constant tau
 
-LEARNED, NEVER ASSUMED. `g` and `b` are fitted by recursive least squares
+Learned, never assumed. `g` and `b` are fitted by recursive least squares
 against flow velocity WHILE FLOW IS HEALTHY -- the easy regime calibrates the
 hard one. Until an axis has enough excited samples and a small enough
 residual it predicts NOTHING. A plausible default gain would be the
 `pool_depth_m = 4.0` hazard: a number nobody measured, scaling every
 position downstream.
 
-WHY LINEAR IN u. On srot the demand maps linearly to DShot; thrust goes as
+Why linear in u. On srot the demand maps linearly to DShot; thrust goes as
 RPM^2 and quadratic drag as v^2, so steady speed goes roughly as RPM, i.e. as
 u. The residual gate decides whether that holds on the day -- if it does
 not, the axis never becomes ready.
 
-WHAT `b` ABSORBS, AND WHAT IT CANNOT. A steady current biases water-relative
+What `b` absorbs, and what it cannot. A steady current biases water-relative
 speed against the floor-relative speed flow measures; `b` soaks up its body-
 frame component. The body frame rotates with the hull and the current does
 not, so after a turn `b` is wrong until relearned. Forgetting (`lam`) bounds
@@ -54,7 +54,7 @@ MIN_SAMPLES = 100          # excited samples per axis before it may predict
 MAX_RESIDUAL_MPS = 0.10    # predictive RMS above this: the model does not fit
 SIGMA_FLOOR_MPS = 0.05     # never claim better than the flow it learned from
 UNREADY_VAR = 1.0e4        # variance handed on for an unready axis
-# ⛔ INNOVATION GATE. Once an axis is ready, a sample more than this many sigmas
+# Innovation gate. Once an axis is ready, a sample more than this many sigmas
 # off the prediction is REJECTED, not learned and not scored. Without it a hull
 # held against a pipe raised the residual RMS inside one second, the axis
 # declared itself unready, and the blocked check went UNKNOWN before it could
@@ -116,7 +116,7 @@ class _Axis:
     def var(self, u: float) -> float:
         """PREDICTION variance at demand `u`: s^2 (1 + phi' P phi).
 
-        ⛔ ISSUE #58. This returned the fit's residual alone, as if `theta` were
+        ISSUE #58. This returned the fit's residual alone, as if `theta` were
         known exactly. Recursive least squares carries its own answer: P is the
         inverse information, so Cov(theta) ~ s^2 P, and the variance of a
         prediction at regressor phi = [u, 1] is s^2 (1 + phi' P phi) -- the
@@ -189,7 +189,7 @@ class CommandVelocityModel:
 # --------------------------------------------------------------------------- #
 #  The same model, read backwards: commanded motion that did not happen
 # --------------------------------------------------------------------------- #
-# ⛔ WHY THIS LIVES HERE. Once the model knows what a demand SHOULD produce,
+# Why this lives here. Once the model knows what a demand SHOULD produce,
 # a floor that does not move under a strong demand is a measurement: the hull
 # is against a prop, snagged, or a thruster is dead. A timed `move_forward`
 # into a gate leg reports success today; nothing in the stack can tell a hull

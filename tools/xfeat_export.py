@@ -3,20 +3,20 @@
 
     python3 tools/xfeat_export.py --src <accelerated_features> --out ~/hailo_models
 
-WHY ONNX AND NOT TORCH ON THE PI: the vehicle has no torch and adding it for one
+Why ONNX and not torch on the PI: the vehicle has no torch and adding it for one
 model is a large dependency for a 2.7 MB network. onnxruntime has a prebuilt
 aarch64 wheel and measured, on the Pi with the vision stack running:
 
     640x480   145.6 ms (1 thread)  /  88.0 ms (3)
     320x240    33.1 ms (1 thread)  /  18.2 ms (3)   <- 30 Hz on ONE core
 
-WHY 320x240 IS THE DEFAULT: it is the size the anchor can afford at rate, and it
+Why 320x240 is the default: it is the size the anchor can afford at rate, and it
 was verified to KEEP the lock -- every murky archive clip still reaches a trusted
 homography at 320x240 (56-260 inliers). Downscaling is the cheapest possible
 speedup and also the easiest way to silently destroy the thing being measured,
 so it was measured rather than assumed.
 
-THE EXPORT IS FIXED-SHAPE. Feeding another size throws rather than resizing,
+The export is fixed-shape. Feeding another size throws rather than resizing,
 which is deliberate: a silent resize would change the pixel scale of every pose
 the anchor reports.
 """

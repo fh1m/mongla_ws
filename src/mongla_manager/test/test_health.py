@@ -133,7 +133,7 @@ def test_A_TALKING_BOARD_WITH_NO_ESCS_IS_NOT_EIGHT_HAPPY_THRUSTERS():
 
 
 def test_a_kill_switch_NOBODY_CAN_SEE_is_not_CLEAR():
-    """⛔ UNKNOWN is not OK, and here it is not FAILED either.
+    """UNKNOWN is not OK, and here it is not FAILED either.
 
     The switch lives on the 2nd board and reaches us over ESP-NOW; the firmware
     reports kill=false on link loss on purpose, so `KILL = 0` on the wire means
@@ -199,7 +199,7 @@ def _manager_stub(fc=None, det_hz=None):
     from mongla_manager.auv_manager_node import AUVManagerNode as N
     m = SimpleNamespace()
     m.fc = fc or SimpleNamespace()
-    # ⛔ THIS USED TO SET `m.vision`, AND PRODUCTION NEVER HAS SUCH AN ATTRIBUTE.
+    # This used to set `m.vision`, and production never has such an attribute.
     # The stub manufactured it, so the D16 detector tests below were green against
     # a lookup the real node could not perform: `_detection_rate_hz` read
     # `getattr(self, 'vision', None)`, always missed, and the `detector` reporter
@@ -243,7 +243,7 @@ def test_the_tick_speaks_only_when_the_STATE_CHANGES():
 
 
 def test_a_DEAD_DETECTOR_reaches_the_board():
-    """THE D16 SIGNAL. A detector that aborts keeps every topic and every
+    """The D16 signal. A detector that aborts keeps every topic and every
     process; only the RATE changes, and nothing was watching it."""
     m = _manager_stub(fc=SimpleNamespace(link_alive=lambda: True), det_hz=0.0)
     m._register_health()
@@ -349,7 +349,7 @@ def test_leak_sensor_separates_NOT_WATCHING_from_DRY():
 
 
 def test_pilot_gain_reports_HALF_AUTHORITY_rather_than_healthy():
-    """⛔ THE STATE THIS BOARD WAS MEASURED IN. GAIN boots at 0.5 and the
+    """The state this board was measured in. Gain boots at 0.5 and the
     `JS_GAIN_DEFAULT` parameter cannot reach the live value -- the firmware
     latches it before a companion finishes connecting. At 0.5 the vehicle arms,
     moves and reports healthy while every MANUAL_CONTROL demand, which is how

@@ -3,7 +3,7 @@
 `config/target_geometry.yaml` holds the numbers and their rulebook sources;
 this resolves a class name to one width in metres.
 
-⛔ WHY A MODULE AND NOT A LAUNCH PARAMETER. `target_width_m` was an operator
+Why a module and not a launch parameter. `target_width_m` was an operator
 parameter defaulting to 0.0, so the 6-DoF path published
 `ok=false, reason='target_width_m unset'` and the metric branch had never run
 on the vehicle. A number that must be typed correctly, per mission, under
@@ -13,7 +13,7 @@ because a measured prop beats a rulebook nominal.
 
 The width is that of WHAT THE DETECTOR BOXES. See the YAML's header.
 
-★ OUR POOL IS NOT THE VENUE. We practise against props we built, and ours are
+our pool is not the venue. We practise against props we built, and ours are
 not the handbook's sizes -- a home-cut gate is a different width from a RoboSub
 gate, and a range computed from the handbook number against our prop is wrong by
 exactly that ratio. So the committed table is a DEFAULT, never a hardcoding:
@@ -22,7 +22,7 @@ exactly that ratio. So the committed table is a DEFAULT, never a hardcoding:
                                                    holding target_geometry.yaml)
     ~/.mongla/target_geometry.yaml                (picked up with no env var)
 
-★ THIS IS A TARGET LIBRARY, NOT A COMPETITION TABLE. The competition groupings
+this is a target library, not a competition table. The competition groupings
 below are only where the shipped defaults happen to be SOURCED from; they are
 not what the capability is for. The vehicle's actual claim is: name any label,
 state how wide the thing you box is, and the hull can reach it metrically from
@@ -46,7 +46,7 @@ with no `source:` is still honoured -- refusing a measured number over missing
 paperwork would be the worse failure -- but `overridden: true` is stamped on it
 so the provenance of a surprising range is one lookup away.
 
-★ AN EDITED OVERRIDE IS PICKED UP LIVE. The override files are stat'd on each
+an edited override is picked up live. The override files are stat'd on each
 lookup and re-read when their mtime or size changes, so correcting a prop width
 mid-session does NOT need a node restart -- which matters because the moment
 you discover the number is wrong is the moment you are standing at the pool
@@ -54,7 +54,7 @@ with the vehicle in the water. Staleness here is not a performance question:
 a correction that silently does not apply is worse than no correction, because
 the operator believes it did.
 
-⛔ WHAT STILL NEEDS AN EVENT. `lock_node` captures the width into
+What still needs an event. `lock_node` captures the width into
 `self._target_w_m`, and it re-resolves on every target-class change
 (`_retarget_width`), not on a timer. So an edit lands at the next class switch
 -- or immediately, by re-pinning `target_class`:
@@ -66,7 +66,7 @@ The committed table inside the package is a different matter: it is read from
 the INSTALLED share, so editing the source copy still needs a colcon build.
 That is what the override files are for.
 
-⛔ AND: the committed defaults come from the ORGANISERS' documents, never from
+AND: the committed defaults come from the ORGANISERS' documents, never from
 our simulator. The two SAUVC entries taken from the sim arena spec carry
 `unquoted: true` for that reason. A sim prop's size is our own guess wearing a
 number's clothes.
@@ -212,7 +212,7 @@ def _is_entry(value):
 def _put(table, group, name, entry, origin):
     """Install one override, DISPLACING the shipped entry of the same label.
 
-    ⛔ Not merely adding it. A flat override lands in its own group, and
+    Not merely adding it. A flat override lands in its own group, and
     `width_for` searches every group and REFUSES when two disagree -- so
     overriding a shipped class from a flat file would have made that class
     resolve to 0.0, silently turning off the prop the operator was trying to

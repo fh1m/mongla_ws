@@ -50,7 +50,7 @@ demand is worth 28 more.
 A break-away floor applied to a **continuous stabilisation demand** turns the
 actuator into a **relay**, and a relay inside a feedback loop limit-cycles.
 
-⚠ **RETRACTED IN PART, 2026-09-23 — see the second addendum.** This section
+**Caution: RETRACTED IN PART, 2026-09-23 — see the second addendum.** This section
 originally went on to claim the relay *explains* the close-in oscillation we had
 been chasing. We have since closed the loop on a plant and measured it: the
 magnitude quantisation on its own limit-cycles at about **a tenth of a degree
@@ -136,7 +136,7 @@ prop turning                                   → no floor; allow small demands
 This keeps the floor exactly where you proved it necessary and removes it exactly
 where precision matters — during a hold, when the thrusters are already running.
 
-### ⛔ The fallback is not optional, and it sequences this behind #10
+### The fallback is not optional, and it sequences this behind #10
 
 On our vehicle RPM has been **exactly 0 in 958/958 recorded `ESC_STATUS` frames**.
 A floor gated on `rpm > threshold` is therefore a **no-op on any hull whose
@@ -209,7 +209,7 @@ void toDshot(const float norm[NUM_THRUSTERS], const int8_t dir[NUM_THRUSTERS],
              bool armed, int16_t dshot[NUM_THRUSTERS]) {
     for (int m = 0; m < NUM_THRUSTERS; ++m) {
         if (!armed) { dshot[m] = DSHOT_DISARMED; continue; }
-        // ⛔ FAIL TO TODAY'S BEHAVIOUR. No presence bit for this thruster means no
+        // FAIL TO TODAY'S BEHAVIOUR. No presence bit for this thruster means no
         // trustworthy rpm, so the floor STAYS. Without this the change is a no-op on
         // any hull without working bidir DShot -- and worse, a PARTIAL telemetry set
         // would give one axis four motors that disagree about their floor, which is a
@@ -317,7 +317,7 @@ We built a Fossen 6-DOF plant and flew your control code on it:
 analytic properties the equations of motion must have (`νᵀC(ν)ν == 0` to 1e-12,
 terminal speed `√(F/q)`, the small-angle roll period), not against another model.
 
-## 1. ⛔ The magnitude argument is smaller than we said
+## 1. The magnitude argument is smaller than we said
 
 Yaw hold, your gains read off the board, steady state over the last 2 s of a
 10 s hold:
@@ -341,7 +341,7 @@ magnitude, not a number, and we are not quoting it to three figures.
 **Conclusion we are handing you against our own interest: the steady-state
 pointing cost of `MOT_SPIN_MIN` does not justify this issue on its own.**
 
-## 2. ⭐ But §3 does, and here it is again in demand space
+## 2. But §3 does, and here it is again in demand space
 
 The original §3 table was in stick units, which made it depend on
 `PILOT_YAW_RATE`. Re-measured in **demand space**, where it depends on nothing
@@ -363,7 +363,7 @@ discontinuously as the controller sweeps its own axis ratio cannot be stabilised
 by any choice of gains**, and a vision align sweeps exactly that ratio as it
 converges.
 
-## 3. ⚠ And this is specific to `vectored_6dof` — which sharpens the ask
+## 3. And this is specific to `vectored_6dof` — which sharpens the ask
 
 Our closed-loop run used the **five-thruster CAD hull** through a geometric
 allocator: orthogonal thrusters, each axis on its own pair, so the ±45° pairing
@@ -375,7 +375,7 @@ competition vehicles rather than on the hull now in CAD. It is still worth fixin
 that frame is what the firmware ships, and it is what anyone else running Hengla
 on a vectored hull will hit.
 
-## 4. ⭐ Hysteresis still fixes it — and now for the better reason
+## 4. Hysteresis still fixes it — and now for the better reason
 
 The proposal in §5 is unchanged and its justification is stronger. During a hold
 every thruster is already turning, so a hysteretic floor keeps all four alive;

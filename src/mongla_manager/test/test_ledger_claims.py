@@ -1,6 +1,6 @@
 """Pin the CARRIED WORK LEDGER's machine-checkable claims against the tree.
 
-⛔ WHY. The ledger in `.claude/plans/` is what decides what each round works on.
+WHY. The ledger in `.claude/plans/` is what decides what each round works on.
 On 2026-09-07 an audit found **five of its seven "open engineering" items were
 already DONE** and still listed as open — `system-harmony.md` was recorded as
 "never written" when it had been written a round earlier and is 177 lines long;
@@ -16,7 +16,7 @@ verify "we ran the experiment" — but it can verify every claim of the form "fi
 X does not exist yet", "symbol Y is referenced nowhere", or "branches differ",
 which is where the rot actually happened.
 
-⚠ These tests fail when the LEDGER is stale, not when the code is broken. The
+These tests fail when the LEDGER is stale, not when the code is broken. The
 fix is to update the ledger.
 """
 import re
@@ -35,7 +35,7 @@ _MARKER = '### Open engineering, not blocked'
 def _ledger() -> str:
     """The plan file that actually CONTAINS the ledger — not the newest one.
 
-    ⛔ B27. This used to take "the most recently modified plan file". Writing any
+    B27. This used to take "the most recently modified plan file". Writing any
     new plan beside the workspace therefore re-pointed the guard at a file with no
     ledger section, every assertion `pytest.skip`ped, and the suite went from
     `3 xfailed, 0 skipped` to `1 xfailed, 5 skipped` with nothing failing and
@@ -109,7 +109,7 @@ def test_uplink_really_does_send_coasted_and_gap_age():
     """The ledger called this "the one with a latent cross-repo bug" long after
     the caller began passing both fields.
 
-    ⛔ THIS TEST'S FIRST VERSION WAS THE `_srot_drive` DEFECT AGAIN. It asserted
+    This test's first version was the `_srot_drive` defect again. It asserted
     `'coasted=' in body`, and `coasted=False` contains `coasted=` -- so hardcoding
     the field back to a literal passed cleanly. Verified: that injection was the
     one of four this file did NOT catch.

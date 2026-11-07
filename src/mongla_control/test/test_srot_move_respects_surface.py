@@ -96,7 +96,7 @@ def test_moves_still_go_out_in_normal_modes():
 
 
 def test_a_heartbeat_from_before_the_ack_cannot_vouch_for_the_move():
-    """⛔ Cloud audit, 2026-11-07. With no heartbeat after the ACK, the one in
+    """Cloud audit, 2026-11-07. With no heartbeat after the ACK, the one in
     hand predates the move's end: ARMED and AUTO whatever a failsafe did since.
     Judged on it, a cut-short move read as completed exactly when the link was
     struggling. INJECTION-VERIFIED: drop the stale-heartbeat return and this

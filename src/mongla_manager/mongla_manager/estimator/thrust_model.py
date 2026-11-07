@@ -6,14 +6,14 @@ has ever supplied it. It is a PURE function of numbers already on our wire,
 so all of it is testable on a bench with no thrusters attached -- which is the
 only reason it exists this round.
 
-⛔ NOTHING CALLS THIS YET, AND THAT IS DELIBERATE. Measured on this vehicle: 958
+Nothing calls this yet, and that is deliberate. Measured on this vehicle: 958
 CRC-valid ESC_STATUS frames across two recorded sessions, every rpm exactly 0.
 No non-zero RPM has ever crossed this wire. Wiring a thrust model to a signal
 that has only ever been zero would add a confident zero to the estimator's
 prediction, which is worse than adding nothing.
 
 ────────────────────────────────────────────────────────────────────────────
-THE BIAS HAS A SIGN, AND IT IS THE FLATTERING ONE
+The bias has a sign, and it is the flattering one
 ────────────────────────────────────────────────────────────────────────────
 `thrust ~ RPM^2` is a BOLLARD-PULL relation -- true at zero forward speed. The
 thrust coefficient KT falls roughly linearly with advance ratio J = V/(nD), so
@@ -42,7 +42,7 @@ from typing import Optional, Sequence, Tuple
 _FWD_SIGN = (-1.0, -1.0, +1.0, +1.0)
 _LAT_SIGN = (+1.0, -1.0, +1.0, -1.0)
 
-# ⛔ THE MIXER MATRIX IS A DEMAND MIX, NOT A GEOMETRY. Its entries are +/-1
+# The mixer matrix is a demand mix, not a geometry. Its entries are +/-1
 # because it distributes a normalised demand; the thrusters themselves sit at
 # 45 deg in the horizontal plane, so a real FORCE sum takes the cos(45) =
 # 0.7071 component. Using the matrix's own +/-1 for a force sum overestimates
@@ -64,7 +64,7 @@ def body_accel_from_rpm(
 
     `k_n_per_rpm2` is Newtons of forward thrust per RPM^2 for ONE thruster.
 
-    ⛔ IT HAS NO DEFAULT ON PURPOSE. Neither our stack nor the firmware carries
+    It has no default on purpose. Neither our stack nor the firmware carries
     an absolute N-per-RPM^2 figure -- the board uses RPM only as a RELATIVE
     proxy, learning per-motor gain ratios and never a Newton. A plausible
     constant here would silently multiply every acceleration the estimator ever

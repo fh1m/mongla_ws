@@ -1,6 +1,6 @@
 """A shipped constant and the measurement behind it, compared mechanically.
 
-⛔ THE DEFECT THIS CLOSES, AND IT IS THE EXPENSIVE ONE. `measured-bars.md`
+The defect this closes, and it is the expensive one. `measured-bars.md`
 holds 104 entries and is the reason anything here is believable. Nothing read
 it. Tests checked that the SITE quoted the ledger correctly and that docs did
 not go stale — but no test compared a **number in the code** against the
@@ -14,16 +14,16 @@ check we had for weeks. Re-measured, the peak sat at 0.45-0.60 for `gate` and
 0.80-1.20 for `repair`: the shipped band matched **no class**, and for one of
 them it would have commanded BACK OFF from the best view the detector gets.
 
-⭐ THE RULE THIS MAKES EXECUTABLE is the repo's own: *one truth, two copies is
+The rule this makes executable is the repo's own: *one truth, two copies is
 the bug -- make one read the other, or have a test compare them.* A constant
 and its ledger entry are two copies. This is the comparison.
 
-HOW TO ADD ONE. Put the constant in `LEDGER_BOUND` with the exact digits the
+How to add one. Put the constant in `LEDGER_BOUND` with the exact digits the
 ledger states. The test then fails if either side moves without the other --
 in BOTH directions, which is the point: a constant retuned without re-measuring
 is as much a defect as a ledger that drifts from the code.
 
-⚠ IT IS OPT-IN AND THAT IS DELIBERATE. Retro-fitting 104 entries would be
+It is opt-in and that is deliberate. Retro-fitting 104 entries would be
 busywork and most constants are not ledger-bound. A number earns a row here
 when getting it wrong costs a run.
 """
@@ -69,7 +69,7 @@ LEDGER_BOUND = {
                           'this much before it is a fault'),
     },
     'mongla_vision.approach': {
-        # ⛔ THE ONE THAT WAS WRONG. Each band is a measured peak bin from
+        # The one that was wrong. Each band is a measured peak bin from
         # tools/approach_band.py, not a chosen range.
         'BANDS': ({'gate': (0.45, 0.60),
                    'rescue': (0.10, 0.20),
@@ -89,7 +89,7 @@ def _ledger_text():
 @pytest.mark.parametrize('mod,attr', [(m, a) for m, d in LEDGER_BOUND.items()
                                       for a in d])
 def test_the_shipped_value_is_the_one_in_the_register(mod, attr):
-    """⛔ BOTH DIRECTIONS. A constant retuned without re-measuring is as much a
+    """Both directions. A constant retuned without re-measuring is as much a
     defect as a ledger that drifted from the code -- this cannot tell which
     side moved, and says so rather than guessing."""
     want, _needle, why = LEDGER_BOUND[mod][attr]
@@ -106,7 +106,7 @@ def test_the_shipped_value_is_the_one_in_the_register(mod, attr):
                                       for a in d
                                       if LEDGER_BOUND[m][a][1] is not None])
 def test_the_ledger_still_states_the_number(mod, attr):
-    """⚠ A value can match a row here and still have no measurement behind it
+    """A value can match a row here and still have no measurement behind it
     -- which is exactly how the approach band survived. Check the LEDGER
     itself still contains the digits, so deleting the entry breaks the build
     rather than quietly orphaning the constant."""
@@ -127,7 +127,7 @@ def test_every_bound_module_actually_imports():
 
 
 def test_the_register_is_not_empty_and_names_its_reasons():
-    """⛔ A guard that has been emptied is worse than no guard: it still shows
+    """A guard that has been emptied is worse than no guard: it still shows
     green. Every row must carry a reason, so nobody adds a bare number."""
     assert LEDGER_BOUND, 'the register was emptied'
     for mod, entries in LEDGER_BOUND.items():

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render what the ladder SEES, frame by frame, so it can be checked by eye.
 
-⛔ WHY THIS EXISTS. Every number in `measured-bars.md` §20-§28 is an inlier
+Why this exists. Every number in `measured-bars.md` §20-§28 is an inlier
 count, and an inlier count says a match is good without saying good AT WHAT.
 Two hundred inliers on the prop and two hundred on the pool wall behind it are
 the same number and completely different situations -- §22 is exactly that
@@ -144,7 +144,7 @@ def main() -> int:
     # Enrol from the FIRST third, query the LAST -- otherwise the bank is being
     # shown the frames it was built from and every quad is trivially correct.
     #
-    # ⭐ Enrolment is gated on SCALE COVERAGE, which is the production rule: a
+    # Enrolment is gated on SCALE COVERAGE, which is the production rule: a
     # view earns a slot when its apparent size is outside the band the bank
     # already holds, even while the existing references match fine.
     for j in range(a.refs):
@@ -163,7 +163,7 @@ def main() -> int:
             x1, y1, x2, y2 = roi
             ann = {'aim': ((x1 + x2) / 2, (y1 + y2) / 2),
                    'q1': (x1 + (x2 - x1) * 0.3, y1 + (y2 - y1) * 0.3)}
-        # ⛔ SCALE COVERAGE IS ADDITIVE IN PRODUCTION, NOT RESTRICTIVE.
+        # Scale coverage is additive in production, not restrictive.
         # `lock_node` enrols when `not has_reference or stale or uncovered` --
         # an uncovered scale is one MORE reason to take a checkpoint, never a
         # reason to skip one. An earlier version of this harness inverted that

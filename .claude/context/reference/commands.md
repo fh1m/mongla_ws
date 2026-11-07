@@ -1,6 +1,6 @@
 # Command reference — generated from the code
 
-> ⚠ **This file is generated.** Do not edit it by hand: run
+> WARNING: **This file is generated.** Do not edit it by hand: run
 > `python3 tools/gen_reference.py`. A test fails if it has drifted from the source.
 > Every row below was read out of the file named beside it, never written from memory.
 
@@ -70,7 +70,7 @@
 
 ## 3. Launch arguments — `DeclareLaunchArgument`
 
-⚠ `ros2 launch` **silently ignores** a `name:=value` the file does not declare. Check the name against the table for THAT file, or put it in `~/.mongla/bringup.yaml`, which refuses unknown names (example: `src/mongla_manager/config/bringup.example.yaml`).
+WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not declare. Check the name against the table for THAT file, or put it in `~/.mongla/bringup.yaml`, which refuses unknown names (example: `src/mongla_manager/config/bringup.example.yaml`).
 
 ### `mongla_manager/bringup.launch.py`
 
@@ -666,5 +666,5 @@ One action and one topic, on purpose:
 | `/mongla/move` | `mongla_interfaces/action/Move` | one verb per goal |
 | `/mongla/state` | `mongla_interfaces/msg/MonglaState` | armed, mode, yaw, depth, battery; **`NaN` when absent, never `0.0`**; published on change |
 
-⛔ `/mongla/arm`, `/mongla/depth_cmd`, `Attitude.msg` and `RCOverride.msg` appear in older notes. **None of them exist.**
+ERROR: `/mongla/arm`, `/mongla/depth_cmd`, `Attitude.msg` and `RCOverride.msg` appear in older notes. **None of them exist.**
 

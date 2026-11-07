@@ -4,13 +4,13 @@
 # Body FRD, metres, origin = the IMU chip on the SROT board:
 #   x forward (toward the nose), y right (starboard), z DOWN.
 #
-# ⛔ `null` MEANS NOT MEASURED, AND IS NOT ZERO. Every consumer treats null as
+# `null` means not measured, and is not zero. Every consumer treats null as
 # "uncorrected, and say so": flow is fused without its lever arm and its height
 # without the baro offset -- exactly the behaviour before these corrections
 # existed -- and the manager's `frames` health line reads DEGRADED, naming what
 # the missing number costs. A measured zero is written `[0.0, 0.0, 0.0]`.
 #
-# ⛔ DO NOT FILL THESE FROM CAD. The CAD models the thrusters and not the
+# Do not fill these from CAD. The CAD models the thrusters and not the
 # electronics tray, and the board's position in the hull is not final. Tape
 # them on the built vehicle -- IMU chip to the centre of each lens's front
 # element, and to the Bar30's port -- and record the date and the method in

@@ -39,7 +39,7 @@ _LINK_STALE_S = 3.0
 def _rx_age(msg) -> float:
     """Seconds since `msg` ARRIVED, on the monotonic clock (issue #18).
 
-    ⛔ AGES WERE WALL MINUS WALL. pymavlink stamps `_timestamp` with
+    Ages were wall minus wall. pymavlink stamps `_timestamp` with
     `time.time()`, and the Pi has no RTC: the first NTP sync at the pool STEPS
     the clock. A step back of 20 s made a value that stopped arriving 20 s ago
     read FRESH for 20 s -- LEAK and KILL last-known-good standing in for a

@@ -12,7 +12,7 @@ NOT a candidate here -- it measures 9.6 Hz on the Pi against a 50 Hz consumer
 (section 19).  It is here only to answer: if ROOT-SIFT also reads 4/4, then 4/4
 says the clips are easy, not that XFeat is special.
 
-THE FINGERPRINT.  The XFeat column cannot be regenerated on this box (no
+The fingerprint.  The XFeat column cannot be regenerated on this box (no
 `xfeat.onnx` here), so the ROOT-SIFT numbers are compared against a recorded
 column.  That only counts if the frames match.  ORB is run FIRST, on the same
 extracted frames, and must reproduce its recorded reference keypoint counts

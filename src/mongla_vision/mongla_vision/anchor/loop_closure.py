@@ -3,7 +3,7 @@
 A dead-reckoning filter with no GPS and no DVL cannot bound its own drift. A
 recognised place can -- `inekf.update_position` takes exactly the (x, y) the
 bank stores with each checkpoint. That makes this the highest-value thing the
-checkpoint bank can do, and also the most dangerous: ⛔ a wrong hard constraint
+checkpoint bank can do, and also the most dangerous: a wrong hard constraint
 does not merely add error, it makes the filter CONFIDENT about it, and a
 confident wrong position is worse than an honest drifting one.
 
@@ -12,13 +12,13 @@ gate can be tested without a vehicle, which matters because the vehicle cannot
 test this at all today (one camera, and a barometer that reports "not
 initialised").
 
-WHAT IS CLAIMED. Proximity, not displacement: "the vehicle is at the stored
+What is claimed. Proximity, not displacement: "the vehicle is at the stored
 place, give or take the apparent offset". Resolving the homography's offset
 into world x and y would need YAW as well as altitude, and a yaw error rotates
 the fix into a confidently wrong place. Claiming proximity needs only scale,
 and the offset magnitude is folded into sigma instead of into the position.
 
-THE BAR. Section 24 measured the downward camera separating same-place from
+The bar. Section 24 measured the downward camera separating same-place from
 different-place by an order of magnitude: near p50 76-192 inliers, far p50
 9-16. `MIN_INLIERS` for tracking is 15, which sits INSIDE the far
 distribution -- ample to follow a target, useless to assert a position. The
@@ -36,7 +36,7 @@ from typing import Optional
 # distribution entirely. 6.7x the 15-inlier tracking bar, deliberately.
 CLOSURE_INLIERS = 100
 
-# ⛔ SELF-CLOSURE. Seconds after enrolment the current frame matches the
+# SELF-CLOSURE. Seconds after enrolment the current frame matches the
 # reference it was just made from, at hundreds of inliers. The filter would
 # receive its OWN recent estimate back as a low-sigma measurement and shrink
 # its covariance on zero new information -- the textbook way to make an EKF
@@ -57,7 +57,7 @@ OFFSET_ERR_PX = 3.0
 # places; a prop is not a position, and today's forward bank is full of crops
 # of a PERSON who walks about.
 #
-# ⚠ ONE shared label, not one per place. `CheckpointBank.locate(label=...)`
+# ONE shared label, not one per place. `CheckpointBank.locate(label=...)`
 # filters by EQUALITY, so 'place:0', 'place:1' ... would each be searched
 # alone and a revisit would never find its neighbours. Which place it was is
 # already answered by the winning reference's index and its stored position.
@@ -98,7 +98,7 @@ class PlaceLog:
         self._last_xy = None
 
     def should_enrol(self, now: float, xy) -> bool:
-        """⛔ A place with no position is worthless: it can never be a fix.
+        """A place with no position is worthless: it can never be a fix.
 
         So unlike a prop checkpoint, an unlocalised frame is NOT enrolled. The
         bank would accept it happily and it would occupy a slot that can never
@@ -153,11 +153,11 @@ BACKEND_CENTRE = (160.0, 120.0)
 def offset_metres(pose, m_per_px: float, centre=BACKEND_CENTRE) -> float:
     """How far the stored view has moved, in metres, measured at the CENTRE.
 
-    ⛔ NOT H[0,2]/H[1,2]. Those are the translation only for a pure shift
+    NOT H[0,2]/H[1,2]. Those are the translation only for a pure shift
     about the origin; under any rotation, scale or perspective they are not
     the offset at all, and every prototype in this lineage read them anyway.
 
-    ⛔ AND NOT THE WARP OF THE ORIGIN EITHER, which is the same mistake
+    And not the warp of the origin either, which is the same mistake
     wearing a hat: `H @ [0, 0, 1]` IS the third column of H. This function had
     that bug, and `test_the_offset_is_read_from_the_warp...` caught it. The
     point warped has to be one the homography's rotation and perspective terms
@@ -220,7 +220,7 @@ def consider(pose, *, ref_age_s: float, travel_m: float, ref_sigma_m: float,
         return Closure(False, f'reference {pose.index} is among the newest '
                               f'{exclude_newest}', inliers=pose.inliers)
 
-    # ⛔ SCALE. Pixels become metres only with a height above the floor, and
+    # SCALE. Pixels become metres only with a height above the floor, and
     # there is no height without a working barometer. Substituting a constant
     # here would put a plausible number where a measurement is missing, which
     # is this codebase's recurring defect.
@@ -237,7 +237,7 @@ def consider(pose, *, ref_age_s: float, travel_m: float, ref_sigma_m: float,
                               f'too far from the stored place to call it one',
                        inliers=pose.inliers, offset_m=off)
 
-    # ⭐ SIGMA IS COMPOSED, NEVER CONSTANT. A closure is only as good as the
+    # Sigma is composed, never constant. A closure is only as good as the
     # position the reference itself carries, so a closure onto a
     # badly-localised checkpoint must inherit that badness. Closures compose,
     # and a chain of them onto one drifting anchor is how a filter convinces
@@ -256,7 +256,7 @@ def consider(pose, *, ref_age_s: float, travel_m: float, ref_sigma_m: float,
 # --------------------------------------------------------------------------- #
 #  Configuration, WITHOUT launch plumbing
 # --------------------------------------------------------------------------- #
-# ⛔ NOT A LAUNCH ARGUMENT. Threading a switch through launch means declaring
+# Not a launch argument. Threading a switch through launch means declaring
 # it in every launch file that starts the node, and this package has already
 # shipped four capabilities that were reachable from one launch path and not
 # the one `bringup` actually includes. Loop closure nearly became the fifth:
@@ -284,7 +284,7 @@ _KEYS = {
 
 def defaults() -> dict:
     return {
-        'enabled': False,          # ⛔ the only vision path into the filter
+        'enabled': False,          # the only vision path into the filter
         'min_inliers': CLOSURE_INLIERS,
         'min_age_s': MIN_REF_AGE_S,
         'min_travel_m': MIN_TRAVEL_M,
@@ -298,7 +298,7 @@ def defaults() -> dict:
 def load_config(path: str = CONFIG_PATH, log=None) -> dict:
     """Deck settings, merged over the defaults. Never raises.
 
-    ⚠ A malformed file must not take the vision stack down on a pool deck, so
+    A malformed file must not take the vision stack down on a pool deck, so
     every failure degrades to the defaults AND SAYS SO. Silently ignoring a
     file the operator just edited is the worse failure: they would watch for a
     behaviour change that was never loaded.

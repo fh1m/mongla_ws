@@ -5,7 +5,7 @@ The same algorithm `flow_node` ships -- adaptive keyframe baseline, forward-
 backward rejection, planar rigid fit, gyro de-rotation -- with the frame, the
 surviving correspondences and the accumulating distance all visible at once.
 
-⛔ WHY A CONSOLE AND NOT A COUNTDOWN. A blind run over ssh asks the operator to
+Why a console and not a countdown. A blind run over ssh asks the operator to
 slide a rig against a stopwatch they cannot see, and then reports one number
 they have to trust. The first live attempt caught 0.57 cm of a 30 cm slide and
 NOTHING in the output said whether the rig moved late, moved outside the
@@ -15,7 +15,7 @@ glance.
     python3 tools/flow_console.py --height 0.72
     then open http://<pi>:8092/
 
-⚠ ThreadingHTTPServer, never HTTPServer: an MJPEG handler never returns, and a
+ThreadingHTTPServer, never HTTPServer: an MJPEG handler never returns, and a
 single-threaded server therefore serves the video and NOTHING else -- every
 other endpoint hangs with no error anywhere. That has already cost this project
 an evening.
@@ -165,7 +165,7 @@ def worker(args):
     if not cap.isOpened():
         raise SystemExit(f'cannot open {args.device}')
 
-    # SELF-TEST SOURCE. Not a mock of the pipeline -- the pipeline is
+    # Self-test source. Not a mock of the pipeline -- the pipeline is
     # untouched; only the frames are synthesised, by warping ONE REAL frame
     # from this camera by a known amount. That exercises capture, scoring,
     # logging and the HTTP path end to end against EXACT truth, which a still
@@ -239,7 +239,7 @@ def worker(args):
         if SIM_RESET.is_set():
             SIM_RESET.clear()
             if sim is not None:
-                # HOLD BEFORE MOVING. Re-arming rewinds the synthetic travel,
+                # Hold before moving. Re-arming rewinds the synthetic travel,
                 # which teleports the scene by the whole previous slide (214 px
                 # for 30 cm) in one frame. That is an artifact of the test
                 # source -- a real operator cannot teleport a floor -- but it
@@ -350,7 +350,7 @@ def worker(args):
 
         # ---- armed capture: find the move, score it, log it ----------------
         #
-        # ⛔ STILLNESS IS JUDGED ON POSITION, NOT ON INSTANTANEOUS VELOCITY,
+        # Stillness is judged on position, not on instantaneous velocity,
         # and the reason is the absence-is-not-zero rule applied to my own
         # code. The first version read `speed = hypot(vx,vy) if v.ok else 0`,
         # so a REFUSED interval counted as zero speed -- and a burst of
@@ -377,7 +377,7 @@ def worker(args):
                 moved_recently = float('inf')
             travelled = math.hypot(x - cap_x0, y - cap_y0)
 
-            # THE OPERATOR ENDS THE RUN. No stillness heuristic beats the
+            # The operator ends the run. No stillness heuristic beats the
             # person who just stopped sliding, and three of them have now been
             # wrong here in a row -- each one closing the capture mid-slide and
             # reporting a correct sensor as short. Auto-stop is kept as a

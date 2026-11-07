@@ -1,6 +1,6 @@
 """The build script names packages explicitly, so a new one must be added to it.
 
-⛔ WHAT THIS CATCHES. `build_mongla.sh` does not discover packages, it lists
+What this catches. `build_mongla.sh` does not discover packages, it lists
 them. A package added to `src/` and not to that list is never built, never
 installed, and on the vehicle its nodes simply do not exist -- while every test
 on the dev box passes, because pytest imports from source. The failure surfaces

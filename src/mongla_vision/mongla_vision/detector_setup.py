@@ -58,7 +58,7 @@ class DetectorSetupMixin:
         self.declare_parameter('debug_image_hz',      5.0)
         self.declare_parameter('alignment_deadband',  0.05)
         self.declare_parameter('paused',              False)
-        # ON BY DEFAULT, WITH A FALLBACK, because "off" and "on" both have a
+        # On by default, with a fallback, because "off" and "on" both have a
         # silent failure mode and only one of them is recoverable.
         #
         # Direct feed is the arrangement the vehicle runs: the camera in this
@@ -78,7 +78,7 @@ class DetectorSetupMixin:
         # says so loudly. A misconfiguration costs one warning and two
         # seconds, never a dead detector.
         self.declare_parameter('direct_feed',         True)
-        # UNDERWATER CONTRAST PREPROCESSING. 'clahe' or 'off'.
+        # Underwater contrast preprocessing. 'clahe' or 'off'.
         #
         # Measured on real RoboSub 2025 footage: on the gate approach -- 3.7x
         # blurrier than the bin clip at the same brightness -- it takes target
@@ -90,7 +90,7 @@ class DetectorSetupMixin:
         # is a real trade the operator should make deliberately.
         self.declare_parameter('preprocess',          'auto')
         self.declare_parameter('preprocess_clip',     0.0)
-        # RANGE CROP. Feed the detector a centre crop while the target is far,
+        # Range crop. Feed the detector a centre crop while the target is far,
         # so it occupies more of the 640x640 the chip sees. Measured on real
         # labelled data: recall at 4x the training distance goes 65.9 % ->
         # 100 %, and at 6.7x, 20.2 % -> 67.4 %. It releases automatically on
@@ -112,7 +112,7 @@ class DetectorSetupMixin:
     def _set_extra(self, names) -> List[str]:
         """Resolve the SECONDARY models -- the ones run beside the primary.
 
-        ⛔ WHY A SECONDARY LIST AND NOT A PLURAL `self._det`. Everything that
+        Why a secondary list and not a plural `self._det`. Everything that
         makes a model "the" model -- the class allowlist, `vision_info`, the
         alignment line, the debug overlay's model tag -- is written against a
         single active detector in eighteen places. Pluralising that would turn
@@ -151,7 +151,7 @@ class DetectorSetupMixin:
     def _merge_extra(self, frame, detections: list) -> list:
         """Run each secondary model on the same frame and merge the results.
 
-        ⛔ CLASS IDS ARE REMINTED FROM LABELS WHEN MODELS ARE MERGED, and only
+        Class IDS are reminted from labels when models are merged, and only
         then. Two models each number their own classes from zero, so
         `gate`(0) from one and `person`(0) from the other collide in-process --
         the debug palette gives them one colour and any consumer that keys on
@@ -189,7 +189,7 @@ class DetectorSetupMixin:
                 half=half, max_det=max_det, class_allowlist=allowlist,
                 logger=self.get_logger())
         except Exception as exc:
-            # ⛔ D16's TWIN, AT INIT. Returning here left `self._det` None and
+            # D16's twin, at init. Returning here left `self._det` None and
             # the infer loop then dropped every frame at `if det is None:
             # continue` -- silently, forever, while the node answered param
             # queries and logged "chip efficiency". Observed on the vehicle:

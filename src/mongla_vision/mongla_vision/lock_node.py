@@ -13,7 +13,7 @@ can still stand behind an answer. `class_id` names the rung, `score` is the
 arbiter's confidence (rung trust x time decay), so a consumer that already
 knows how to read detections needs no new message type and no new units.
 
-WHY A SEPARATE TOPIC AND NOT `/detections`. Publishing a followed or anchored
+Why a separate topic and not `/detections`. Publishing a followed or anchored
 box onto the detector's topic would make it indistinguishable from something
 the detector actually saw -- every downstream consumer, the HUD included, would
 report a detection that never happened. The rung name and the separate topic
@@ -54,7 +54,7 @@ except ImportError:                    # message not built in this workspace
 from std_msgs.msg import String
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Vector3Stamped
-# ⚠ OPTIONAL, like TargetCorrespondences above. A workspace that has not
+# OPTIONAL, like TargetCorrespondences above. A workspace that has not
 # rebuilt mongla_interfaces must still get a working ladder: losing vehicle
 # state costs the object-permanence rung, not the lock.
 try:
@@ -74,7 +74,7 @@ from .lock_setup import LockSetupMixin
 from .lock_inputs import LockInputsMixin
 from .lock_publish import LockPublishMixin
 
-# ⛔ THE BAR FOR HEALING THE FOLLOWER FROM THE ANCHOR. Deliberately ABOVE the
+# The bar for healing the follower from the anchor. Deliberately ABOVE the
 # anchor's own trust bar (100): a box good enough to report is not
 # automatically good enough to restart the fast rung on, because a reseeded
 # follower then carries FULL authority for the rest of the gap. Set at the
@@ -129,7 +129,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
         cam = str(self.get_parameter('camera').value)
         self._cam = cam
         ns = f'/mongla/vision/{cam}'
-        # AN EXPLICIT target_class WINS and freezes the aim. Anything else and
+        # An explicit target_class wins and freezes the aim. Anything else and
         # the ladder aims ITSELF at whatever the mission told the detector to
         # look for -- see `_on_classes_filter`.
         self._cls_pinned = str(self.get_parameter('target_class').value).strip()
@@ -222,7 +222,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
                 '[LOCK ] mongla_interfaces/TargetCorrespondences not built -- '
                 'no 6-DoF pose will be published (the ladder is unaffected). '
                 'Rebuild mongla_interfaces to enable it.')
-        # ⭐ COMPOSED: FRAMES BY REFERENCE, NO TOPICS (`direct_feed`).
+        # Composed: Frames by reference, no topics (`direct_feed`).
         # Measured on the vehicle, 2026-10-03: composing this ladder into the
         # detector's process took both detectors from 71 Hz to 21.6 Hz
         # combined, with the anchor IDLE. py-spy put the cost in rclpy intake,
@@ -236,15 +236,15 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
         if not self._direct:
             self.create_subscription(CameraInfo, f'{ns}/camera_info',
                                      self._on_info, 10)
-        # ⚠ SET BESIDE THE STATE IT GUARDS, NOT WHERE THE OTHER PARAMETERS ARE
+        # Set beside the state it guards, not where the other parameters are
         # READ. `_on_det` runs as soon as the subscription exists, which is
         # earlier in __init__ than the parameter block below, so reading it
         # there left a window where a detection arriving mid-construction
         # raised AttributeError inside the callback -- caught by
         # test_stamps.py, but it is a real startup race and not a test
         # artifact.
-        # ⭐ THE DECK FILE WINS OVER THE DEFAULT, AND A LAUNCH ARGUMENT WINS
-        # OVER BOTH. One file (`~/.mongla/ladder.yaml`) changes the ladder
+        # The deck file wins over the default, and a launch argument wins
+        # Over both. One file (`~/.mongla/ladder.yaml`) changes the ladder
         # whichever launch started the node -- the pattern `loop_closure`
         # already proved and has a guard test for. An explicitly-passed launch
         # parameter still overrides it, so a mission can pin a value without
@@ -253,7 +253,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
         self._ladder_cfg = _ld_load(log=self.get_logger())
         _ld_def = _ld_defaults()
 
-        # ⚠ NOT named `_cfg`: a DIFFERENT local `_cfg` exists further down
+        # NOT named `_cfg`: a DIFFERENT local `_cfg` exists further down
         # for the loop-closure block, and two closures with one name in one
         # __init__ is a shadowing bug waiting to be written.
         def _ladder(name):
@@ -273,7 +273,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
         self._depth_m = float('nan')
         self._armed = False
         self._state_t = 0.0
-        # ⭐ OBJECT PERMANENCE, downward camera only -- see `_remember_world`
+        # OBJECT PERMANENCE, downward camera only -- see `_remember_world`
         # for why the forward camera cannot have it without a measured range.
         try:
             from .tracking.visibility import WorldTarget
@@ -326,7 +326,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
             self._build_anchor()
 
         # ---- loop closure ------------------------------------------------
-        # ⛔ CONFIGURED BY THE NODE, NOT BY LAUNCH. A switch threaded through
+        # Configured by the node, not by launch. A switch threaded through
         # launch has to be declared in every launch file that starts this
         # node, and this package has already shipped capabilities reachable
         # from one launch path and not the one `bringup` includes. Loop
@@ -373,7 +373,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
         self._closures = 0
         self._closure_refusals = collections.Counter()
         if self._closer_on:
-            # ⛔ DOWNWARD ONLY. A forward bank holds crops of TARGETS -- today's
+            # Downward only. A forward bank holds crops of TARGETS -- today's
             # fixture is literally a person walking about -- and matching a
             # moving object is not a vehicle position. The floor does not move.
             if self._camera != 'downward':
@@ -386,13 +386,13 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
             else:
                 self.create_subscription(Odometry, '/mongla/odom',
                                          self._on_odom, _qos.sensor())
-                # ⭐ THE FLOOR'S OWN HEIGHT, from the tile grating in
+                # The floor's own height, from the tile grating in
                 # `flow_node`. That is a MEASUREMENT of the floor; flow_node
                 # declines to publish the pool_depth arithmetic under this
                 # name precisely because it is not one.
                 self.create_subscription(Range, f'{ns}/floor_height',
                                          self._on_floor_height, 10)
-                # ⭐ THE VEHICLE'S OWN STATE. The ladder ran without ever
+                # The vehicle's own state. The ladder ran without ever
                 # knowing which way the hull was pointing: it had odometry
                 # (where) and floor height (how high) but no yaw, so a target
                 # leaving the frame could not be turned into a world bearing
@@ -400,7 +400,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
                 # was unreachable for want of one number the board already
                 # publishes.
                 #
-                # ⚠ `yaw_deg` is NaN when the board has no AHRS sample, and
+                # `yaw_deg` is NaN when the board has no AHRS sample, and
                 # every consumer must gate on that rather than treat NaN as
                 # zero. A heading of "0 because we do not know" points the
                 # memory due north, which is worse than having no memory.
@@ -421,13 +421,13 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
                     f'{self._places.travel_m:.1f} m, offered as a fix at '
                     f'>= {_lc.CLOSURE_INLIERS} inliers.')
 
-        # ⭐ THE DECOMPOSITION, PUBLISHED (Round 11, half-built until now).
+        # The decomposition, published (Round 11, half-built until now).
         # Every anchor fit produces tx, ty, theta and scale, and until this
         # the ladder read `corners` alone -- the only consumer of theta/scale
         # in the whole tree was a debug text label. Two real signals were
         # computed and discarded on every evaluation.
         #
-        # ⚠ PUBLISHED, NOT ACTED ON. Bumblebee reflex 1 is "redundancy beats
+        # Published, not acted on. Bumblebee reflex 1 is "redundancy beats
         # optimisation" -- their gate runs five pose sources. This is a SECOND
         # range estimate beside the follower's, fitted frame-to-REFERENCE
         # rather than frame-to-frame, and a second is worth more than a
@@ -491,7 +491,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
         with self._lock:
             self._gray = g
             self._header = msg.header
-            # A SHORT HISTORY, so a detection can be paired with the frame it
+            # A short history, so a detection can be paired with the frame it
             # was actually computed on. See `_frame_for`. Four frames at the
             # anchor backend's resolution is ~300 kB; the detector's own
             # capture->arrival latency is 32 ms median / 48 p95, which is one
@@ -541,7 +541,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
     def _frame_for(self, det_header):
         """The frame a detection was computed on, not merely the newest one.
 
-        ⛔ WHAT THIS FIXES. `snap` defines the anchor's reference patch, and
+        What this fixes. `snap` defines the anchor's reference patch, and
         that patch IS the object model: its width is taken to be the target's
         true width, so every later range is scaled by it. It was snapped from
         the CURRENT frame using the LAST detection's box, with nothing
@@ -583,10 +583,10 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
                        else h.id)
             if self._cls and name != self._cls:
                 continue
-            # ⛔ AN ACTING BAR, NOT MERELY "NOT ZERO" (B-59). This accepted the
+            # An acting bar, not merely "not zero" (B-59). This accepted the
             # highest-scoring box with score > 0 as THE target, at full
             # authority. Measured on real Mirpur footage, the now-RETIRED
-            # `gate_rescue_repair` graph (⚠ not `gate_sharks`, which replaced
+            # `gate_rescue_repair` graph (not `gate_sharks`, which replaced
             # it on 2026-09-28 and against which this bar has NOT been
             # re-derived -- see measured-bars section 59)
             # claims a gate on 90.8 % of GATE-FREE frames at conf 0.15 --
@@ -598,7 +598,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
             # seeded on it, the anchor enrolled against it, and the vision
             # verbs drove the hull at it -- section 8.6's failure exactly.
             #
-            # ⚠ The bar lives HERE and not only in the detector because the
+            # The bar lives HERE and not only in the detector because the
             # detector's `conf` is deliberately permissive: the tracker needs
             # low-scoring boxes to maintain association across a gap. What may
             # be ASSOCIATED and what may be ACTED ON are different questions,
@@ -614,7 +614,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
                                 b.center.position.y - hh,
                                 b.center.position.x + hw,
                                 b.center.position.y + hh))
-        # THE DECAY CLOCK. `_det_t` is what `arbitrate` measures authority
+        # The decay clock. `_det_t` is what `arbitrate` measures authority
         # against, so it must be when the frame was SEEN, not when the message
         # landed here. Arrival time under-reports every gap by the whole
         # capture->inference->transport chain -- measured at 32 ms median,
@@ -705,7 +705,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
             det_cls = self._det_cls
             live_s = live_window(self._det_dt)
         now = time.monotonic()
-        # ⭐ GREY ONLY WHEN THIS TICK READS IT. Every use below is
+        # Grey only when this tick reads it. Every use below is
         # behind one of these: a detection to reseed on, a follower to
         # step, an anchor evaluation that is due, or place recognition.
         # Lost with none of them -- the common case between targets --
@@ -759,7 +759,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
         det_header, det_box, det_conf, det_cls = (f.det_header, f.det_box,
                                                   f.det_conf, f.det_cls)
         anchor_ran = False
-        # ⛔ THE DEFECT THIS REPLACED. The guard here used to be
+        # The defect this replaced. The guard here used to be
         # `not self._anchor.has_reference`, so the reference was
         # snapped ONCE and never refreshed. Measured 2026-09-24 on
         # the archive clips, inliers against that frozen reference:
@@ -780,7 +780,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
         # per frame to learn what we just measured.
         stale = (self._anchor.has_reference
                  and self._anchor_inliers < self._anchor._refresh)
-        # ⭐ AND the criterion that matters more, per §21.2: the bank
+        # AND the criterion that matters more, per §21.2: the bank
         # buys VIEWPOINT DIVERSITY, not freshness. A target whose
         # apparent size is outside the band the bank covers earns a
         # slot even while the existing references are matching fine
@@ -791,7 +791,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
         # screen.
         uncovered = (det_box is not None
                      and not self._anchor.covers_scale(gray, det_box))
-        # ⛔ AND THE REASON THE BANK WAS STAYING EMPTY.
+        # And the reason the bank was staying empty.
         # `stale` only fires when the match is BAD -- but when it is
         # bad the target may already be lost, and when it is good
         # nothing is ever added, so the bank never grows. Measured on
@@ -807,7 +807,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
         # detection earns a slot -- diversity then emerges from the
         # run instead of being predicted by a heuristic.
         room = self._anchor.size < self._anchor._cap
-        # ⛔ THROTTLED, AND NOT FOR TIDINESS. `enrol()` runs a full
+        # Throttled, and not for tidiness. `enrol()` runs a full
         # `locate()` to decide whether a candidate agrees with the
         # bank, and a candidate that keeps being REFUSED leaves
         # `stale` true -- so an unthrottled path retries that match on
@@ -821,7 +821,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
         # bank is evaluated cannot help, because nothing has changed
         # its mind in between.
         may_try = now >= self._anchor_enrol_next
-        # ⭐ A FALLING TREND IS A REASON TO ENROL, alongside stale /
+        # A falling trend is a reason to enrol, alongside stale /
         # uncovered / room. It is the only one of the four that is
         # PREDICTIVE: the others describe the bank, this describes
         # where the view is heading. It licenses nothing else --
@@ -840,7 +840,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
                 not self._anchor.has_reference or stale or uncovered
                 or room):
             self._anchor_enrol_next = now + self._anchor_period
-            # THE FRAME THE BOX BELONGS TO, not merely the newest.
+            # The frame the box belongs to, not merely the newest.
             # This patch becomes the object model, so pairing it with
             # the wrong frame scales every range that follows.
             snap_gray = self._frame_for(det_header)
@@ -889,7 +889,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
             # AnchorPose the rest of this node already consumes, so
             # nothing downstream learns that there is now more than
             # one reference.
-            # ⭐ THE PER-REFERENCE YIELDS, WHICH USED TO BE THROWN
+            # The per-reference yields, which used to be thrown
             # AWAY. A fouled port collapses the match against EVERY
             # reference at once; a target that left collapses only
             # the one that used to win. Both arrive at the ladder as
@@ -898,7 +898,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
             # `bp` alone cannot carry that: it is a statement about
             # the whole shortlist.
             self._note_anchor_health()
-            # ⭐ ANTICIPATE, do not merely react. A falling match
+            # ANTICIPATE, do not merely react. A falling match
             # quality predicts the next seconds will be worse, and
             # the reference worth having is the one from BEFORE the
             # detection is lost. Snapping then is cheap and
@@ -924,7 +924,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
         """The anchor's box and confidence, and the follower reseeded from it."""
         ab = ac = None
         p = self._anchor_pose
-        # ⭐ EVERY fit publishes its decomposition, including the
+        # EVERY fit publishes its decomposition, including the
         # ones with no usable corner quad -- theta and scale are
         # fitted from the same inliers and are valid whether or not
         # the warped quad is. Gating them on `corners` would discard
@@ -936,7 +936,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
             ab = (float(q[:, 0].min()), float(q[:, 1].min()),
                   float(q[:, 0].max()), float(q[:, 1].max()))
             ac = p.confidence
-            # ⭐⭐ THE LADDER HEALS UPWARD, NOT ONLY DOWNWARD.
+            # The ladder heals upward, not only downward.
             #
             # Until this, `_follower.reset()` was called on an
             # accepted DETECTION and nowhere else. So when LK's
@@ -954,7 +954,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
             # call (measured 8.0 ms for the whole LK step) and buys
             # back the 50 Hz rung for the rest of the gap.
             #
-            # ⛔ ONLY WHEN THE FOLLOWER IS DEAD AND THE ANCHOR IS
+            # Only when the follower is dead and the anchor is
             # CONFIDENT. Reseeding a LIVE follower would replace a
             # frame-fresh box with one up to 222 ms old, and
             # reseeding from a weak fit would restart the fast rung
@@ -1021,7 +1021,7 @@ class LockNode(LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
     def destroy_node(self):
         """Stop the ladder thread BEFORE the publishers go.
 
-        ⛔ Found by tools/composed_lock_harness.py: destroyed while its thread
+        Found by tools/composed_lock_harness.py: destroyed while its thread
         was mid-tick, the ladder published on a destroyed handle and logged
         `ladder fault #1 ... InvalidHandle` on every shutdown -- an ERROR on
         every Ctrl-C, which teaches an operator to ignore that line.

@@ -15,16 +15,16 @@ listed in §3 with the ask that carries it.
 
 | verb | what it does | what it unblocks | state |
 |---|---|---|---|
-| **`motor_test`** | spin ONE thruster (1–8) at a signed percentage for N s | ⭐ thrust curve (`k_n_per_rpm2` is `null`), dead-thruster identification, motor-direction verification, and the bollard curve ask M §2.4 needs. A **signed** throttle runs it backwards, which is how `REVERSE_EFFICIENCY = 0.77` stops being a quoted number | ✅ **shipped** `f594ecf` |
+| **`motor_test`** | spin ONE thruster (1–8) at a signed percentage for N s | **Key point:** thrust curve (`k_n_per_rpm2` is `null`), dead-thruster identification, motor-direction verification, and the bollard curve ask M §2.4 needs. A **signed** throttle runs it backwards, which is how `REVERSE_EFFICIENCY = 0.77` stops being a quoted number | **shipped** `f594ecf` |
 | **`get_param` / `set_param`** | read/write one board parameter by MAVLink name | every tuning experiment becomes a one-liner instead of a Python session. `SrotFC.get_param` already exists; today the only way to set one is a script | ⏳ next |
-| **`rate`** | body-rate command in **ACRO** | ⭐ free-decay rotation identification (Round 4a → `ATC_DRAG_*`), and the command shape INDI needs. See §2 | ⏳ needs a host loop |
+| **`rate`** | body-rate command in **ACRO** | **Key point:** free-decay rotation identification (Round 4a → `ATC_DRAG_*`), and the command shape INDI needs. See §2 | ⏳ needs a host loop |
 | **`style_pitch`** | N × 360° pitch spin | `MAV_CMD_USER_2` is implemented on the board and has no verb, while `style_roll` (USER_3) does. A pure symmetry gap | ⏳ trivial |
 | **`autotune`** | board-side relay autotune | `CMD_USER_5` plus progress readback both exist. It tunes the rate PIDs *on the vehicle*, which is the loop we cannot tune from here | ⏳ |
 | **`pattern`** | the board's multi-step pattern | `CMD_USER_4` exists | ⏳ low value |
 
 ---
 
-## 2. ⭐ ACRO is the real unlock, and it is not what it looks like
+## 2. ACRO is the real unlock, and it is not what it looks like
 
 `attitude::acro()` (`attitude_control.cpp:117-124`) is the inner rate PID alone:
 expo, scale by `MAX_ACRO_RATE` (4.0 rad/s), rate PID. **No stick gate.**
@@ -43,7 +43,7 @@ So ACRO commands yaw where STABILIZE commands nothing — **2.86× finer command
 resolution** — and reaches 84.8 % of full scale against 70.7 %, because
 `MAX_ACRO_RATE` (4.0 rad/s) exceeds `PILOT_YAW_RATE` (2.793 rad/s).
 
-⛔ **What it does NOT fix, and the reason it is not the answer to precision
+**Warning: What it does NOT fix, and the reason it is not the answer to precision
 alignment.** `MOT_SPIN_MIN` lives in the mixer, downstream of both modes: the
 smallest non-zero thrust is ~16 % of full scale either way. **ACRO buys command
 resolution and headroom, not precision.** And it costs heading hold and attitude
@@ -60,7 +60,7 @@ offered to missions.
 
 | verb | the firmware change | ask |
 |---|---|---|
-| **`hold_heading`** | ⭐ `attitude::holdYaw(float)` **already exists**, is declared at `attitude_control.h:30` and is already called in the flight path from `task_control_loop.cpp:238` — but only in AUTO. STABILIZE, the one mode that honours `MANUAL_CONTROL`, cannot reach it. A `MAV_CMD` and one call | [`pr-n`](../upstream/pr-n-caps-literals-and-the-heading-hold-setpoint.md) §2 |
+| **`hold_heading`** | **Key point:** `attitude::holdYaw(float)` **already exists**, is declared at `attitude_control.h:30` and is already called in the flight path from `task_control_loop.cpp:238` — but only in AUTO. STABILIZE, the one mode that honours `MANUAL_CONTROL`, cannot reach it. A `MAV_CMD` and one call | [`pr-n`](../upstream/pr-n-caps-literals-and-the-heading-hold-setpoint.md) §2 |
 | **a distance-closed move**, **`arc`** | these need closed-loop distance, which needs velocity ingest on the board | [`pr-g`](../upstream/pr-g-optical-flow-ingest.md) |
 | **a per-thruster demand** | the mixer takes six body axes. `motor_test` reaches ONE motor at a time through a keep-alive, which is an instrument, not an actuator. A real allocator needs eight simultaneous per-thruster demands | [`pr-k`](../upstream/pr-k-the-mixer-is-for-a-different-hull.md) |
 
@@ -68,7 +68,7 @@ offered to missions.
 
 ## 4. The rule this file exists to enforce
 
-⛔ **A verb is not shipped because it is possible. It is shipped because a
+**Warning: A verb is not shipped because it is possible. It is shipped because a
 measurement or a mission needs it.** `pattern` is listed above and is bottom of
 the list precisely because nothing needs it.
 

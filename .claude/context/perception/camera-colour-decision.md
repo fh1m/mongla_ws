@@ -8,7 +8,7 @@ replacing both cameras.
 
 ---
 
-## 1. ⛔ The Sonix downward camera is monochrome — measured, not assumed
+## 1. The Sonix downward camera is monochrome — measured, not assumed
 
 Captured at 1280×720 MJPG on the vehicle and inspected per-pixel:
 
@@ -23,7 +23,7 @@ saturation mean 0.00   p99 0.0
 colour information is not washed out, it is mathematically absent — the UVC
 driver is replicating one grey plane into three channels.
 
-## 2. ⛔ And seven of eleven SAUVC classes are named by colour
+## 2. And seven of eleven SAUVC classes are named by colour
 
 `models/sauvc_sim.yaml`:
 
@@ -35,7 +35,7 @@ driver is replicating one grey plane into three channels.
 `flare_red` / `flare_yellow` / `flare_blue` are **the same object differing only
 in colour**. So are `drum_red` / `drum_blue`.
 
-### 2.1 ⭐ The number that settles it
+### 2.1 The number that settles it
 
 Rec.601 luma — literally what a mono sensor records — with underwater
 attenuation applied (red ≈1.0/m, green ≈0.25/m, blue ≈0.05/m):
@@ -47,17 +47,17 @@ attenuation applied (red ≈1.0/m, green ≈0.25/m, blue ≈0.05/m):
 | yellow | 225.9 | 144.6 | 74.5 | 43.4 |
 | blue | 29.1 | **27.7** | 25.0 | 22.6 |
 
-⛔ **At 1 m depth red reads 28.0 and blue reads 27.7 — a difference of 0.3 out of
+**Warning: At 1 m depth red reads 28.0 and blue reads 27.7 — a difference of 0.3 out of
 255.** That is below sensor noise. `drum_red` and `drum_blue` are the same object.
 
-⭐ **And it is worse than "poor separation": it is NON-MONOTONIC with depth.**
+**Key point: And it is worse than "poor separation": it is NON-MONOTONIC with depth.**
 Red and blue collide at 1 m, then separate at 3 m as red goes black. **Any
 brightness threshold calibrated at one depth is wrong at another**, which is the
 failure mode that cannot be tuned out.
 
 ---
 
-## 3. ⭐ But mono is the RIGHT sensor for the downward camera — keep it
+## 3. But mono is the RIGHT sensor for the downward camera — keep it
 
 The flow node's `_on_image` (`flow/flow_setup.py`) and the distance node's frame callback both do
 `cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)` **as their first act**. Optical flow
@@ -72,11 +72,11 @@ And a mono sensor is *better* there:
 - a **global shutter**, which the flow estimator needs because a rolling shutter
   skews the image while the hull moves.
 
-⛔ **Do not "fix" the downward camera. It is correct.**
+**Warning: Do not "fix" the downward camera. It is correct.**
 
 ---
 
-## 4. ⚠ FIRST, AND FREE: test the forward camera before buying anything
+## 4. FIRST, AND FREE: test the forward camera before buying anything
 
 **The forward unit is a Fantech, and its colour status has never been tested** —
 it was not connected when the measurement above was taken, and `config.py`
@@ -87,7 +87,7 @@ records nothing about colour for either camera.
 | if the Fantech is… | then |
 |---|---|
 | **colour** | the split is already right — mono downward, colour forward — and the only forward problem is its **30.18 Hz ceiling** (`measured-bars.md` §17) |
-| **mono** | ⛔ the colour classes are undetectable today and a forward replacement is required |
+| **mono** | **Warning:** the colour classes are undetectable today and a forward replacement is required |
 
 **Run this first.** It is `/tmp/is_mono.py`, thirty seconds, and it decides
 whether this is a purchase or a non-problem.
@@ -98,7 +98,7 @@ whether this is a purchase or a non-problem.
 
 MJPG 1280×800 @120 fps, global shutter, colour, USB 2.0, ~11,857 BDT.
 
-### ⭐ What is right about it
+### What is right about it
 
 - **Colour AND global shutter** — the combination we need for forward, and not
   common at this price.
@@ -106,9 +106,9 @@ MJPG 1280×800 @120 fps, global shutter, colour, USB 2.0, ~11,857 BDT.
   *separately* the largest vision bottleneck we measured.
 - **Two synchronised sensors** in one purchase.
 
-### ⚠ Three things to get right before ordering
+### Three things to get right before ordering
 
-**1. ⛔ Do not buy it for stereo. USB 2.0 will not carry it.**
+**1. Do not buy it for stereo. USB 2.0 will not carry it.**
 
 | stream | bandwidth |
 |---|---|
@@ -117,11 +117,11 @@ MJPG 1280×800 @120 fps, global shutter, colour, USB 2.0, ~11,857 BDT.
 | single eye 1280×800 @120 | 147 Mbps — comfortable |
 
 The listing's "2560×800 120FPS" is above what the bus delivers in practice.
-Expect a lower rate or heavier JPEG compression. ⭐ **Buy it as two independent
+Expect a lower rate or heavier JPEG compression. **Buy it as two independent
 colour global-shutter cameras**, which is the genuinely useful thing, and treat
 any stereo as a bonus to be measured, not assumed.
 
-**2. ⚠ The lens option costs target pixels.** Water divides air FOV by ~1.33:
+**2. The lens option costs target pixels.** Water divides air FOV by ~1.33:
 
 | lens | in water | 0.2 m hole at 5 m |
 |---|---|---|
@@ -130,10 +130,10 @@ any stereo as a bonus to be measured, not assumed.
 | 125° | 110.6° | 13.3 px |
 | 160°/180° | 153.6°/180° | 9.5 / 8.1 px |
 
-⭐ **Prefer the narrowest option offered** for the forward mount. Wide FOV sounds
+**Key point: Prefer the narrowest option offered** for the forward mount. Wide FOV sounds
 like more information and is fewer pixels on the thing you must hit.
 
-**3. ⚠ Every calibration is per-lens.** Our measured **46.7° in water** belongs to
+**3. Every calibration is per-lens.** Our measured **46.7° in water** belongs to
 one specific lens; `measured-bars.md` already records a live mix-up of which
 intrinsics belonged to which camera. A new lens means a new calibration before
 any pose or standoff number is trusted.
@@ -142,7 +142,7 @@ any pose or standoff number is trusted.
 
 ## 6. The recommendation
 
-1. ⭐ **Test the Fantech for colour first.** Free, thirty seconds, and it may
+1. **Key point: Test the Fantech for colour first.** Free, thirty seconds, and it may
    make the rest unnecessary.
 2. **Keep the mono Sonix on the downward mount.** It is the correct sensor for
    flow and replacing it would be a regression.
@@ -152,7 +152,7 @@ any pose or standoff number is trusted.
 4. **Order the narrowest lens option**, use the two sensors independently rather
    than as a stereo pair, and **re-calibrate** before trusting any geometry.
 
-⚠ **One thing this note does not settle:** whether the detector, retrained on
+**Caution: One thing this note does not settle:** whether the detector, retrained on
 colour imagery, actually separates the colour classes in real murky water. Red is
 **0.5 luma at 5 m** even to a colour sensor's red channel — colour helps, but
 attenuation is physics and no sensor recovers light that never arrived. That is

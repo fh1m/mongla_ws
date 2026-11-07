@@ -237,7 +237,7 @@ def render() -> str:
     board = board_verbs()
     L = ['# Command reference — generated from the code',
          '',
-         '> ⚠ **This file is generated.** Do not edit it by hand: run',
+         '> WARNING: **This file is generated.** Do not edit it by hand: run',
          '> `python3 tools/gen_reference.py`. A test fails if it has drifted from the source.',
          '> Every row below was read out of the file named beside it, never written from memory.',
          '',
@@ -262,7 +262,7 @@ def render() -> str:
         for exe, target in eps:
             L.append(f'| `ros2 run {pkg} {exe}` | `{target}` |')
     L += ['', '## 3. Launch arguments — `DeclareLaunchArgument`', '',
-          '⚠ `ros2 launch` **silently ignores** a `name:=value` the file does not '
+          'WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not '
           'declare. Check the name against the table for THAT file, or put it in '
           '`~/.mongla/bringup.yaml`, which refuses unknown names '
           '(example: `src/mongla_manager/config/bringup.example.yaml`).']
@@ -305,7 +305,7 @@ def render() -> str:
           '| `/mongla/state` | `mongla_interfaces/msg/MonglaState` | armed, mode, yaw, depth, '
           'battery; **`NaN` when absent, never `0.0`**; published on change |',
           '',
-          '⛔ `/mongla/arm`, `/mongla/depth_cmd`, `Attitude.msg` and `RCOverride.msg` appear in '
+          'ERROR: `/mongla/arm`, `/mongla/depth_cmd`, `Attitude.msg` and `RCOverride.msg` appear in '
           'older notes. **None of them exist.**', '']
     return '\n'.join(L) + '\n'
 

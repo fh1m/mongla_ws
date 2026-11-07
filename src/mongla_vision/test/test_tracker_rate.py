@@ -163,7 +163,7 @@ def test_a_wrong_frame_rate_is_named_with_the_real_coast():
 
 
 def test_the_startup_transient_does_not_decide_it():
-    """THE LIVE DEFECT. The first run on the Pi warned that a 55 Hz camera was
+    """The live defect. The first run on the Pi warned that a 55 Hz camera was
     arriving at 15 -- and it was, for the first two seconds, while both
     detectors still contended for the chip. Without the warm-up, a burst of
     slow frames at t=0 is the whole measurement."""

@@ -5,13 +5,13 @@ the floor, and that height multiplies every velocity the filter receives --
 so a 20 % height error is a 20 % velocity error, integrated into position
 without limit and with no symptom anywhere.
 
-⭐ WE HAVE TWO INDEPENDENT HEIGHTS AND HAVE NEVER COMPARED THEM.
+We have two independent heights and have never compared them.
   * the tile grating measures the floor directly (`floor_height`);
   * `pool_depth_m - |depth|` is arithmetic on the board's barometer.
 They share no sensor, so their agreement is evidence and their disagreement is
 a fault that is otherwise invisible.
 
-⛔ AND IT REPORTS, IT DOES NOT PICK. A divergence says the two disagree, never
+And it reports, it does not pick. A divergence says the two disagree, never
 which one is wrong -- and `pool_depth_m` is the one nobody measures. Silently
 preferring either is how a stack acquires a number it cannot defend. The same
 rule `flow_node` already follows for its optical cross-check.
@@ -21,7 +21,7 @@ median rather than a mean (one bad pair must not move the answer), confidence
 from the coefficient of variation, a minimum sample count, and ageing so a
 calibration cannot outlive the conditions it was measured in.
 
-⚠ AND THE FRAME CONFUSION THAT PROTOTYPE FLAGGED IN ITSELF: bottom-referenced
+And the frame confusion that prototype flagged in itself: bottom-referenced
 ALTITUDE is not surface-referenced DEPTH. They are different quantities with
 the same units, and this module never fuses one as the other -- it compares
 two estimates of the SAME quantity, altitude.
@@ -66,7 +66,7 @@ class ScaleCrossCheck:
 
     def add(self, grating_m: float, baro_m: float,
             now: Optional[float] = None) -> None:
-        """⛔ A pair with either side absent is NOT stored. Half a comparison
+        """A pair with either side absent is NOT stored. Half a comparison
         is not a comparison, and storing it would let the sample count -- the
         thing `min_samples` gates on -- be met by data that cannot answer."""
         if not (grating_m > 0.0 and baro_m > 0.0):

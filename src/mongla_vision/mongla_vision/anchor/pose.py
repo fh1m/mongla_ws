@@ -1,6 +1,6 @@
 """Metric 6-DoF pose of a known-size planar target. The firing solution.
 
-WHAT THIS IS FOR. "The hole is detected and centred" is not the same as "a
+What this is for. "The hole is detected and centred" is not the same as "a
 torpedo fired now goes through it". A round leaves along the hull's axis, so
 what matters is the angle between that axis and the board's normal, and a
 centred bbox cannot express it. This returns the correction directly:
@@ -10,7 +10,7 @@ centred bbox cannot express it. This returns the correction directly:
     reproj_px                        how well the solution explains the pixels
     ambiguity                        how much to believe any of it
 
-⛔ TWO SOLVERS, AND NEITHER REPLACES THE OTHER -- measured on our own data
+Two solvers, and neither replaces the other -- measured on our own data
 rather than taken from a citation. IPPE is from 2014; SQPnP (Terzakis &
 Lourakis, ECCV 2020) is newer and, on constructed ground truth with our patch
 size and our tilt range, better at the tail:
@@ -44,7 +44,7 @@ was measured COARSE on real footage -- reference-dependent by 4.7 deg median,
     (Collins & Bartoli, IJCV 2014).
   * **The ambiguity becomes MEASURABLE.** This is the important one.
 
-⛔ PLANAR POSE FLIP AMBIGUITY -- the thing that made the homography route
+Planar pose flip ambiguity -- the thing that made the homography route
 unusable, named. When a planar target's projection is close to affine (small,
 distant, or viewed near head-on) there are genuinely TWO poses that explain the
 correspondences, related by a flip about the line of sight. Both are correct
@@ -63,7 +63,7 @@ Two consequences worth stating because both were learned the expensive way:
   2. **It is WORST head-on**, which is exactly the terminal firing geometry.
      The regime where we need it most is the regime where it is weakest.
 
-⛔ AND THE GATE THAT LOOKS OBVIOUS IS WRONG. Refusing whenever the two branches
+And the gate that looks obvious is wrong. Refusing whenever the two branches
 fit equally well throws away the answer in exactly the firing geometry.
 Measured, true yaw against the two branches at 2.0 m with 0.5 px of noise:
 
@@ -121,7 +121,7 @@ class TargetPose:
     pitch_spread_deg: float = 0.0
     n_points: int = 0
     reason: str = ''
-    # ⭐ THE OTHER BRANCH, and where the target is. A planar solve has two
+    # The other branch, and where the target is. A planar solve has two
     # answers mirrored about the viewing ray; `yaw_deg` is one, `alt_yaw_deg`
     # the other, and `bearing_deg` (+ = right of the optical axis) is that ray.
     # With the hull's heading these let `pose_cluster.resolve_mirror` tell the
@@ -167,7 +167,7 @@ def target_pose(ref_pts, live_pts, K, *, width_m: float,
     needs, and the reason the answer is metric. `K` must be the camera matrix at
     the resolution the points are in.
 
-    ★ THIS IS THE PATCH ADAPTER, NOT THE SOLVER. All it does is turn a snapped
+    this is the patch adapter, not the solver. All it does is turn a snapped
     reference patch into object points in metres and hand them to `solve_pnp`.
     Any other evidence source that can state where its points are ON THE TARGET
     -- a board layout, a set of opening centres, a segmentation contour --
@@ -209,7 +209,7 @@ def solve_pnp(obj_pts, img_pts, K, *, dist=None,
     and therefore the flip INTERVAL; a non-coplanar set does not, and its
     spreads are reported as 0.0 because there is genuinely no second branch.
 
-    ⛔ PIXELS AND `K` MUST BE IN THE SAME OPTICS. Underwater, a flat port is not
+    Pixels and `K` must be in the same optics. Underwater, a flat port is not
     a pinhole, so points either both go through `optics.RefractiveRectifier`
     with the rectified `K`, or neither does. Rectifying one side compares water
     geometry against air geometry and puts the entire error into the pose,
@@ -266,7 +266,7 @@ def solve_pnp(obj_pts, img_pts, K, *, dist=None,
 
     rvec, tvec = np.asarray(rvecs[best], np.float64), np.asarray(tvecs[best], np.float64)
     best_rms = rms(rvec, tvec)
-    # ⛔ IPPE CAN RETURN NaN ON A PERFECT FRAME. Measured 2026-10-01: an exact,
+    # IPPE CAN RETURN NaN ON A PERFECT FRAME. Measured 2026-10-01: an exact,
     # noiseless projection of a 0.30 m board at 3 m came back from
     # `solvePnPGeneric(IPPE)` with NaN errors and NaN rotations, while SQPnP
     # solved the same points to the right yaw (19.0 = 25 - 6). A NaN `best_rms`
@@ -276,7 +276,7 @@ def solve_pnp(obj_pts, img_pts, K, *, dist=None,
     # so it carries no branch pair and the fuser treats it accordingly.
     if not math.isfinite(best_rms):
         best_rms = float('inf')
-    # THE POINT ESTIMATE comes from SQPnP, which is measurably better at the
+    # The point estimate comes from SQPnP, which is measurably better at the
     # tail than IPPE's branch (see the table above). IPPE's job was the
     # interval, and it has already done it.
     try:
@@ -309,7 +309,7 @@ def solve_pnp(obj_pts, img_pts, K, *, dist=None,
     yaw, pitch, roll = _angles(rvec)
     rng = float(np.linalg.norm(tvec))
 
-    # ⛔ NON-FINITE IS A REFUSAL -- the same guard `geometry.py` calls
+    # Non-finite is a refusal -- the same guard `geometry.py` calls
     # load-bearing rather than defensive, applied at the other end of the same
     # pipeline. MEASURED 2026-09-10: a refraction-rectified 0.30 m square at
     # 1.0 m and 0.35 m off-axis comes back from solvePnP as ok with

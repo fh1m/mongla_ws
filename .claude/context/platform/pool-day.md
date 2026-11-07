@@ -22,7 +22,7 @@ lines that matter:
   still arming.
 - **Depth loop settled** — refuses to arm while the depth controller is saturated.
 
-⛔ **The board's depth loop has never run closed in water.** Two armed bench checks gate every
+**Warning: The board's depth loop has never run closed in water.** Two armed bench checks gate every
 on-board move, including `move_forward`. Until they pass, expect the board to deny moves. This
 is the single most likely reason a session goes nowhere.
 

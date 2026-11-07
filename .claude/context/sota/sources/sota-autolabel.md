@@ -81,7 +81,7 @@ the AQUA20 benchmark.
 **13 labelled images per class buys 81.8 % macro F1; 144 matches a fully supervised ConvNeXt
 (88.5 vs 88.9).** The authors note this runs on commodity hardware with no task-specific
 neural-network training, and that the label-efficiency *curve shape* reproduced on a second
-dataset. ⚠ This is **classification, not detection** — it tells you how cheaply a frozen
+dataset. This is **classification, not detection** — it tells you how cheaply a frozen
 foundation feature separates underwater *categories*, not how cheaply it localises them.
 
 ---
@@ -114,7 +114,7 @@ Headline vs the prior open-vocab YOLO: **YOLOE-v8-S beats YOLO-Worldv2-S by +3.5
 3× less training cost and 1.4× inference speedup**; YOLOE-v8-L hits **23.5 AP^m** zero-shot
 segmentation vs **19.8 AP^m** for a *fine-tuned* YOLO-Worldv2-L.
 
-⚠ Note the whole table sits **below 36 AP**. The best open-vocab YOLO is a ~35-AP labeller.
+**Caution:** Note the whole table sits **below 36 AP**. The best open-vocab YOLO is a ~35-AP labeller.
 That is the ceiling on what a text prompt alone can hand a student.
 
 ### 3b. Grounding DINO family — [arXiv 2303.05499](https://arxiv.org/pdf/2303.05499) · [Grounding DINO 1.5, arXiv 2405.10300](https://arxiv.org/abs/2405.10300v2)
@@ -129,7 +129,7 @@ Grounding DINO 1.5 Pro at **55.7 LVIS AP** is the strongest *box* labeller found
 pass — ~20 AP above the best YOLOE. Its cost is the 38 min/VOC-dataset figure Voxel51
 measured for Grounding DINO (§4a), i.e. **12.7× slower than YOLO-World** for the same job.
 
-⛔ Grounding DINO is a **DETR-family transformer**. Fine as a teacher; it cannot be the
+**Warning:** Grounding DINO is a **DETR-family transformer**. Fine as a teacher; it cannot be the
 deployed student on Hailo-8.
 
 ### 3c. OWLv2 / OWL-ST — [Scaling Open-Vocabulary Object Detection, arXiv 2306.09683](https://arxiv.org/abs/2306.09683)
@@ -143,7 +143,7 @@ detectors already at **~10 M examples**.
 This is the strongest published evidence that pseudo-labels alone move the rare-class needle —
 and rare-class is our regime.
 
-⛔ OWLv2 is a ViT. Teacher only.
+**Warning:** OWLv2 is a ViT. Teacher only.
 
 ### 3d. YOLOE-26 / YOLO26 auto-labelling workflow — *verified, but thin*
 
@@ -167,7 +167,7 @@ and fine-tune a plain YOLO26 on them. Every published number from the walkthroug
 | imgsz / batch / device | **960** / 8 / Apple MPS |
 | Checkpoint | `yolo26s.pt` |
 
-⛔ The walkthrough reports mAP50 and mAP50-95 only *qualitatively* ("strong numbers for a
+**Warning:** The walkthrough reports mAP50 and mAP50-95 only *qualitatively* ("strong numbers for a
 small 2-class pilot") and gives **no auto-labelling wall-clock and no manual-labelling
 comparison**. So the one genuinely transferable datum is **4–7 exemplars per class and
 2/41 images needing a human fix**, which is a ~95 % hands-off rate at 41 images — far too
@@ -237,7 +237,7 @@ Reported numbers:
 | DanceTrack | HOTA **62.0**, MOTA **64.1**, IDF1 **72.5** |
 | BDD100K | mHOTA **53.7**, mIDF1 **47.8** |
 
-⛔ **The paper claims "comparable accuracy to manual annotation while dramatically reducing
+**Warning: The paper claims "comparable accuracy to manual annotation while dramatically reducing
 annotation time" in its abstract but publishes no annotation-time, cost, or head-to-head
 manual-baseline measurement.** And **recall 0.224** on MOT17 is the number that should stop
 us: for a system whose only predictive metric is cross-session *recall*, an auto-labeller
@@ -287,13 +287,13 @@ IEEE Access) is the cleanest template paper. What it actually did:
 
 **The headline retention number: ~1.7 pp of MOTA lost for 7.77× fewer parameters.**
 
-⚠ Two honest caveats the paper itself states: (a) deployment validation is **analytic, not
+**Caution:** Two honest caveats the paper itself states: (a) deployment validation is **analytic, not
 measured** — the Orin NX 16 GB budget (11.1 GB used, **4.9 GB headroom**) is computed from
 A10 measurements, and on-device benchmarking is listed as follow-up work; (b) the ~1 FPS
 throughput on an A10 is an artefact of SAM 3's stateful streaming session, and the paper
 notes Orin NX has ≈**1/5 the memory bandwidth and 1/10 the FLOPs** of an A10.
 
-⚠ Also: this is a **tracking + embedding** distillation, not a detector auto-labelling
+**Caution:** Also: this is a **tracking + embedding** distillation, not a detector auto-labelling
 pipeline, and the student is a ViT — it would **not** compile for Hailo-8. It is a method
 template for the *loss and the substitution trick*, not a recipe to copy.
 
@@ -368,7 +368,7 @@ and notes that its 1 %-label result (25.81) exceeds the supervised baseline trai
 [PL-DC](https://arxiv.org/html/2505.11075v1) reports gains of **+11.6 / +9.2 / +7.0 / +6.0
 mAP at 1 / 2 / 5 / 10 %**.
 
-⚠ Every number here is Faster R-CNN on COCO with an i.i.d. split. None of these papers
+**Caution:** Every number here is Faster R-CNN on COCO with an i.i.d. split. None of these papers
 report cross-session or cross-venue recall, which is the only metric that has predicted
 deployment for us. Treat the *shape* (10 % of labels → ~90 % of full mAP) as transferable
 and the absolute values as not.
@@ -411,7 +411,7 @@ Every row is float mAP → **hardware (INT8) mAP** → FPS, at the listed input 
    yolov8n runs at **1036 FPS device-only**, yolov11n at 185, yolo26n at 155, yolov11x at
    **18.3**. Even the x-model at 53.1 HW mAP would sustain ~18 Hz device-only. The
    accuracy/speed trade is far from exhausted.
-3. ⚠ **Correction to the brief.** A transformer detector *is* in the Hailo-8 zoo —
+3. **Caution: Correction to the brief.** A transformer detector *is* in the Hailo-8 zoo —
    `detr_resnet_v1_18_bn`, 800×800, **31.5 HW mAP at 30.5 FPS**. So "transformers don't
    compile" is too strong as stated: *DETR-ResNet18 compiles and is benchmarked*. What I
    found **no** evidence for is **RT-DETR** on Hailo-8 — it is absent from the zoo list. The
@@ -465,7 +465,7 @@ The DFC supports **4/8/16-bit int weights and 8/16-bit uint activations**, and H
 quantisation-aware loss that pushes weights onto the grid. For 4-bit layers, naïve calibration
 is poor even after finetuning, so Hailo clips outlier weights before finetuning.
 
-⚠ Hailo publishes the *method* but I found **no quantitative "QFT recovers X mAP points"
+**Caution:** Hailo publishes the *method* but I found **no quantitative "QFT recovers X mAP points"
 figure** in their docs. And `format="hailo"` does **not** expose QAT — it is
 post-training-quantisation with calibration only. QAT is a DFC-level escape hatch, not a
 one-liner.
@@ -528,7 +528,7 @@ class into an existing archive.
 | 4 | Fine-tune the CNN student. Only published pilot: 15 epochs, `patience=8`, best at **epoch 7**, imgsz 960, batch 8, `yolo26s.pt` | **[no published time]** | [PyImageSearch YOLOE-26](https://pyimagesearch.com/2026/08/31/train-yolo26-on-a-custom-dataset-with-yoloe-26-auto-labeling/) |
 | 5 | Assemble **≥1 024 in-domain calibration images** — from the 10 188 archive, **never the COCO128 fallback** | **[no published time]**; the count is a hard sourced requirement | [Ultralytics Hailo export](https://docs.ultralytics.com/integrations/hailo/) |
 | 6 | `model.export(format="hailo", name="hailo8", imgsz=640)` → `.hef`. Replaces the 6-step manual DFC compile; needs a **Linux x86_64** host | **[no published time]** | [Ultralytics](https://docs.ultralytics.com/integrations/hailo/) · [Hailo Community](https://community.hailo.ai/t/export-ultralytics-yolo-models-straight-to-hailo-format-hailo-is-now-available/19678) |
-| 7 | Verify INT8 retention before flying it. Published **on Hailo-8L, not Hailo-8**, with **in-domain** calibration: YOLOv8n **~100 %**, YOLO11n **~96 %**, YOLO26n **~93 %** of mAP50. ⚠ Different chip from step 6's `name="hailo8"`; no Hailo-8 figure published | **[no published time]** | [Ultralytics Hailo export](https://docs.ultralytics.com/integrations/hailo/) |
+| 7 | Verify INT8 retention before flying it. Published **on Hailo-8L, not Hailo-8**, with **in-domain** calibration: YOLOv8n **~100 %**, YOLO11n **~96 %**, YOLO26n **~93 %** of mAP50. Different chip from step 6's `name="hailo8"`; no Hailo-8 figure published | **[no published time]** | [Ultralytics Hailo export](https://docs.ultralytics.com/integrations/hailo/) |
 
 **What the accumulated numbers predict.** Fully hands-off costs about **5 mAP50 points** on
 easy classes (VOC 0.768 vs 0.817; COCO 0.538 vs 0.588) and **collapses on long-tail classes
@@ -538,7 +538,7 @@ The published escape hatches from the long-tail collapse, ranked by measured eff
 (+12 pp of full performance)**, **semi-supervised training on the unlabelled archive
 (+10.56 mAP at a 10 % label budget)**.
 
-⚠ **The step with the largest unmeasured risk is the one with no published number at all.**
+**Caution: The step with the largest unmeasured risk is the one with no published number at all.**
 Nothing in this literature measures held-out-*session* recall. A pipeline scoring 0.768 mAP50
 on an i.i.d. split says nothing about the 29.2 %-vs-72.7 % cross-session spread already
 observed on this vehicle at identical mAP50.

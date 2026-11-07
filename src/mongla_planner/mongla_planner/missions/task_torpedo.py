@@ -13,7 +13,7 @@ Two-verb vision, phased so the close-in shot is robust (see
      MID-HOLD fire (the torpedo leaves while the loop is still glued to the
      hole and parked at the standoff).
 
-⚠ THE VERTICAL AIM IS THE DEPTH SETPOINT. The board owns depth, so no vision
+The vertical aim is the depth setpoint. The board owns depth, so no vision
 axis moves the hull up or down: the hole's height is met by TORPEDO_DEPTH_M.
 Read the terminal align's `end_y_px` on the first runs and correct the depth.
 
@@ -83,7 +83,7 @@ def run(mongla, log=None):
         gain=APPROACH_GAIN, duration=30, brake=False,
         fallback=creep_forward)
 
-    # ── 3. STANDOFF SHOT: forward-standoff + lat + hold + mid-hold fire ───────
+    # ── 3. Standoff shot: forward-standoff + lat + hold + mid-hold fire ───────
     # No yaw axis: the board holds heading, so the launcher does not jitter.
     mongla.set_classes('hole', node=_FWD)
     locked = mongla.vision.align(

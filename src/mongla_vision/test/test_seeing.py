@@ -96,7 +96,7 @@ def test_it_recovers():
 
 @pytest.mark.skipif(not os.path.isdir(ARCHIVE), reason='real archive not on this machine')
 def test_REAL_FOOTAGE_never_reads_as_blind():
-    """⛔ The negative control that decides the thresholds. Every clip, every
+    """The negative control that decides the thresholds. Every clip, every
     frame of its first 20 s: not one may leave OK."""
     bad = []
     n = 0

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Mine the frames the detector is most confidently WRONG about.
 
-⛔ WHAT THIS IS FOR (B-60). `gate_sharks` fires a `gate` on 28 of 34
+What this is for (B-60). `gate_sharks` fires a `gate` on 28 of 34
 visually-clean clips -- 0.81 on bare pool floor, 0.89 on empty water, 0.60 on
 pool tiles. No confidence bar separates those, because the score is not wrong:
 the learned concept is. The class has latched onto pool structure -- lane
@@ -12,13 +12,13 @@ A model learns that when its training set contains only frames that CONTAIN
 the prop. It is never shown a pool with no gate in it, so "pool" and "gate"
 are never separated. The fix is not tuning. It is showing it the negative.
 
-⭐ HARD negatives, not random ones. A frame the model already ignores teaches
+HARD negatives, not random ones. A frame the model already ignores teaches
 nothing. The valuable frames are the ones where it is confidently wrong, so
 this keeps the HIGHEST-scoring detections from clips a human has confirmed do
 not contain the class, and writes them with an EMPTY label file -- which is
 how YOLO is told "there is nothing of any class here".
 
-⚠ THE CLIP LIST IS AN ASSERTION, NOT A GUESS. `--negative` means somebody
+The clip list is an assertion, not a guess. `--negative` means somebody
 looked at `tools/label_contact_sheet.py`'s sheet and confirmed the prop is
 absent. Feeding it a clip that does contain the prop teaches the model to
 suppress a true detection, which is a worse defect than the one being fixed.
@@ -108,7 +108,7 @@ def main() -> int:
         for score, frame_no, img in got:
             name = f'neg_{stem}_{frame_no:06d}'
             cv2.imwrite(os.path.join(img_dir, name + '.jpg'), img)
-            # ⭐ AN EMPTY LABEL FILE IS THE WHOLE POINT. In YOLO an image with
+            # An empty label file is the whole point. In YOLO an image with
             # a zero-byte .txt is a declared background: "nothing of any class
             # is here". Omitting the file instead would make the loader skip
             # the image entirely and teach nothing.
@@ -125,7 +125,7 @@ def main() -> int:
     print(f'\nwrote {total} background frames to {out}')
     print('  images/  the frames the model was most confidently wrong on')
     print('  labels/  one EMPTY .txt each -- YOLO reads that as "background"')
-    print('\n⚠ Add these to the TRAINING split only. A background frame in the '
+    print('\nWARNING: Add these to the TRAINING split only. A background frame in the '
           'validation split inflates precision without proving anything, and '
           'the whole point is that this model already scores perfectly on a '
           'set that holds no background.')

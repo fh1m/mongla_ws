@@ -7,7 +7,7 @@ uncapping capture made detections 26.0 -> 23.6 ms fresher and detections 47.5
 -> 62.6 ms STALER in the same run, because every captured frame was also
 published.
 
-WHAT IS MEASURED
+What is measured
 ----------------
 `header.stamp` is the CAPTURE instant -- `camera_node` derives it from the
 kernel's `v4l2_buffer.timestamp` and `detector_node` passes the same header
@@ -19,7 +19,7 @@ Timing a callback would measure something close to the OPPOSITE: a message
 already queued arrives in microseconds and is old, one we waited for arrives
 slowly and is new.
 
-WHY ONE TOOL, USED ON BOTH SIDES
+Why one tool, used on both sides
 --------------------------------
 Composition is expected to move this by single-digit milliseconds. Two
 different scripts cannot resolve that. Fix the camera count and the pause

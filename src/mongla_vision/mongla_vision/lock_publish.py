@@ -34,7 +34,7 @@ class LockPublishMixin:
         evidence and a bad solve look identical afterwards. Correspondences on
         a bag are re-solvable with a different gate, months later.
 
-        ⛔ THE OBJECT SIDE IS RECTIFIED HERE; THE IMAGE SIDE IS NOT. Object
+        The object side is rectified here; the image side is not. Object
         points are reference PIXELS scaled to metres, so they must go through
         the flat-port map or the object model itself is distorted -- that is
         this node's business, because this node owns the patch. The live pixels
@@ -118,7 +118,7 @@ class LockPublishMixin:
     def _publish_decomposition(self, pose, header) -> None:
         """theta, scale and the range they imply -- the anchor's other outputs.
 
-        ⭐ WHAT EACH ONE IS.
+        What each one is.
 
         `scale` > 1 means the reference patch appears LARGER than when it was
         stored, i.e. we are CLOSER. It is a range RATIO against the moment of
@@ -127,13 +127,13 @@ class LockPublishMixin:
         now reaches this node.
 
         `theta` is in-plane rotation against a FIXED reference, not an
-        integrated rate. ⚠ It is hull ROLL only on the DOWNWARD camera; on the
+        integrated rate. It is hull ROLL only on the DOWNWARD camera; on the
         forward camera the same number is a mixture of roll and the target
         being tilted, and publishing it as roll would be the plausible-number
         defect this repo keeps finding. The frame_id says which camera it came
         from so a consumer can decide.
 
-        ⛔ NaN WHEN UNKNOWN, never 0.0. A scale of 1.0 means "the same
+        NaN WHEN UNKNOWN, never 0.0. A scale of 1.0 means "the same
         distance"; absent must not read as that.
         """
         if self._decomp_pub is None or pose is None or not getattr(pose, 'ok', False):
@@ -148,7 +148,7 @@ class LockPublishMixin:
         m.header.frame_id = self._cam
         m.vector.x = th
         m.vector.y = sc
-        # ⭐ THE PER-CLASS TABLE, not the operator parameter.
+        # The per-class table, not the operator parameter.
         # `target_geometry.yaml` replaced `target_width_m` precisely because
         # one width for every prop is wrong, and `width_for()` is what the
         # 6-DoF path already uses. An explicit `target_width_m` still wins --
@@ -168,7 +168,7 @@ class LockPublishMixin:
         """Hold the target in WORLD coordinates, so leaving frame is not
         forgetting (`visibility.WorldTarget`).
 
-        ⛔ DOWNWARD CAMERA ONLY, AND THAT IS THE WHOLE POINT. `WorldTarget`
+        Downward camera only, and that is the whole point. `WorldTarget`
         needs an absolute RANGE, and it refuses a guessed one by design: "a
         remembered position built from a guessed range would send the vehicle
         confidently to the wrong place." For a FORWARD target we genuinely do
@@ -176,14 +176,14 @@ class LockPublishMixin:
         if the prop's true width is known -- so this stays disabled there
         rather than inventing a number.
 
-        ⭐ For the DOWNWARD camera the range is measured: `_altitude_m()` is
+        For the DOWNWARD camera the range is measured: `_altitude_m()` is
         the height above the floor from `flow_node`'s tile grating, and a
         target on the floor is exactly that far away, corrected for the
         off-axis angle. That is why this rung can be switched on for one
         camera and not the other -- not a limitation of the memory, a fact
         about which sensor measures what.
 
-        ⚠ Every input is gated on being FRESH and FINITE. Yaw, odometry and
+        Every input is gated on being FRESH and FINITE. Yaw, odometry and
         altitude each go NaN when their source cannot stand behind them, and
         the memory refuses rather than storing a confident wrong place.
         """
@@ -206,7 +206,7 @@ class LockPublishMixin:
                                             float(K[0][0]), float(K[1][1]))
             if not math.isfinite(bz) or bz <= 1e-6:
                 return
-            # ⭐ DE-ROTATE BY HULL ROLL, from the operator's R&D fusion:
+            # De-rotate by hull roll, from the operator's R&D fusion:
             #     dx' = dx*cos(roll) - dy*sin(roll)
             #     dy' = dx*sin(roll) + dy*cos(roll)
             # The downward camera is bolted to the hull, so a rolled hull
@@ -215,11 +215,11 @@ class LockPublishMixin:
             # the error is INVISIBLE -- the bearing is perfectly
             # self-consistent, just in the wrong frame.
             #
-            # ⛔ ROLL IS UNACTUATED on this five-thruster hull (5 of 6 DOF),
+            # Roll is unactuated on this five-thruster hull (5 of 6 DOF),
             # so it cannot be nulled by the controller and must be
             # compensated here.
             #
-            # ⚠ NaN roll leaves the bearing ALONE rather than assuming level.
+            # NaN roll leaves the bearing ALONE rather than assuming level.
             # Assuming zero is a confident claim that the hull is flat, which
             # is the plausible-number defect; leaving it uncorrected is an
             # honest smaller claim.
@@ -245,13 +245,13 @@ class LockPublishMixin:
     def _note_visibility(self, x1, y1, x2, y2) -> None:
         """How much field of view is left before the target leaves the frame.
 
-        ⭐ THE LARGEST REMAINING GAP IN THE PIPELINE. There is no field-of-view
+        The largest remaining gap in the pipeline. There is no field-of-view
         constraint anywhere in `mongla_control`, so perception can be perfect
         and the lock still dies because the vehicle turned away from a target
         it was tracking successfully. `tracking/visibility.py` has existed,
         measured and tested, importable by nothing.
 
-        ⚠ ADVISORY ONLY, AND DELIBERATELY SO. The real fix is to scale the
+        Advisory only, and deliberately so. The real fix is to scale the
         yaw/lateral demand by `Visibility.scale` -- and ONLY the component that
         makes the bearing worse, or the vehicle stops approaching a target that
         is dead centre. That is a control-path change, and B-59 is a fresh

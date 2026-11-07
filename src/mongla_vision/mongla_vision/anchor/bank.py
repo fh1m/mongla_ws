@@ -1,6 +1,6 @@
 """Several references instead of one, and a policy for when to add another.
 
-⛔ THE DEFECT THIS FIXES, AND ITS MEASUREMENT. `lock_node.py` snapped the anchor
+The defect this fixes, and its measurement. `lock_node.py` snapped the anchor
 reference ONCE -- the guard was literally `not self._anchor.has_reference` --
 and never refreshed it while a reference existed. Measured 2026-09-24 on the
 archive clips, through the shipped backend at 320x240, matching each frame
@@ -18,24 +18,24 @@ trust bar. A reference does not fail suddenly; it decays with elapsed time. The
 same frames against a FRESH reference are the +1 s column, so this is not a
 limit of the descriptor -- it is a limit of never taking a new photograph.
 
-WHAT THIS IS, IN THE LITERATURE'S TERMS. Long-term tracking (LTMU, Dai et al.,
+What this is, in the literature's terms. Long-term tracking (LTMU, Dai et al.,
 CVPR 2020) is a local tracker, a re-detector, a VERIFIER and a META-UPDATER --
 the last answering "is the tracker ready for updating in this frame?". Our
 ladder had the first two: the LK follower and the Hailo detector. This module is
 the other two, and it gets the verifier nearly free, because a MAGSAC inlier
 count against a real reference already IS a geometric verification.
 
-WHY IT COMPOSES `Anchor` RATHER THAN REPLACING IT. Every reference here is an
+Why it composes `Anchor` rather than replacing it. Every reference here is an
 ordinary `Anchor` over a shared backend. The ROI scaling, the homography, the
 pose, the refusal below `min_inliers` -- all of it is code already measured on
 footage, and a second implementation would be a second thing to keep true. The
 bank adds exactly what a plain list cannot: which reference answered, which to
 throw away, and when to take a new one.
 
-THE ENROLMENT POLICY IS PORTED, INCLUDING ITS BUG. The shape comes from a
+The enrolment policy is ported, including its bug. The shape comes from a
 prototype gallery (`dino_idea_v12.py:409-467`): cap the bank, enrol only from a
 confident detection that ALSO already agrees with the bank, score best-of-bank
-rather than mean. ⛔ But that implementation can never fill: its match returns
+rather than mean. But that implementation can never fill: its match returns
 0.0 for an empty bank while enrolment demands a score above 0.7, so the first
 entry is impossible and the gallery stays empty forever -- its author left a
 warning at `:995` ("No templates learned yet") which is that deadlock firing.
@@ -43,7 +43,7 @@ warning at `:995` ("No templates learned yet") which is that deadlock firing.
 `test_the_bootstrap_deadlock_is_injection_verified` restores the broken rule to
 prove the guard is real.
 
-EVICTION IS BY YIELD, NOT AGE. The table above says what decays is usefulness;
+Eviction is by yield, not age. The table above says what decays is usefulness;
 age is only a proxy for it. A reference that still carries the most inliers is
 the one to keep however old it is, and the newest is not automatically better.
 """
@@ -59,7 +59,7 @@ import numpy as np
 
 from .anchor import Anchor, AnchorPose, MIN_COSSIM, MIN_INLIERS
 
-# ⭐ HOW MANY REFERENCES, AND WHY IT IS NO LONGER A CONSTANT.
+# How many references, and why it is no longer a constant.
 #
 # This shipped at 5, copied from the prototype gallery. Measured 2026-09-24
 # (`measured-bars.md` §20), matching is LINEAR in bank size -- one
@@ -71,7 +71,7 @@ from .anchor import Anchor, AnchorPose, MIN_COSSIM, MIN_INLIERS
 #    10 refs      122.9 ms     314.0 ms   <- at the 3 Hz budget already
 #   100 refs      853.2 ms    3146.5 ms
 #
-# ⛔ Batching the bank into one GEMM does NOT fix it: 1.5-1.7x on the dev box
+# Batching the bank into one GEMM does NOT fix it: 1.5-1.7x on the dev box
 # and NOTHING on the Pi (3146 -> 3136 ms), because at this shape the matmul is
 # already bound by something a bigger call does not change. That optimisation
 # was measured and dropped.
@@ -91,7 +91,7 @@ CAPACITY = 64
 #
 #     k=1  17.6 %     k=2  9.3 %     k=3  6.3 %     k=5  1.9 %     k=8  0.7 %
 #
-# ⚠ Recall@1 is only 50.8 %, and that is not the number to steer by: several
+# Recall@1 is only 50.8 %, and that is not the number to steer by: several
 # references are nearly as good, so a "wrong" shortlist costs yield rather than
 # the lock. k=5 is the knee. 8 is the ceiling this constant sets, not the
 # default -- the default is whatever the time budget affords, below.
@@ -104,13 +104,13 @@ BUDGET_FRACTION = 0.45
 
 # A detection must be at least this confident before its view is worth storing.
 #
-# ⛔ WAS 0.60, AND IT STARVED THE BANK. Measured on Mirpur torpedo footage
+# Was 0.60, and it starved the bank. Measured on Mirpur torpedo footage
 # through our own YOLO graph: the detector's confidences are p50 **0.49**
 # (min 0.22, max 0.85), so a 0.60 floor refused **10 of 13** candidate views
 # and the bank ended a whole clip holding ONE reference -- which then asserted
 # identity on 0 % of later frames, where a 14-reference bank asserted on 3 of 8.
 #
-# ⚠ And a fixed absolute floor is the wrong SHAPE here, not just the wrong
+# And a fixed absolute floor is the wrong SHAPE here, not just the wrong
 # number: §6b records our own detector's recall swinging 29.2 / 72.7 / 68.3 %
 # across venues, so a confidence that means different things in different water
 # cannot have a threshold set once.
@@ -123,7 +123,7 @@ BUDGET_FRACTION = 0.45
 # keep obvious noise out of long-term memory.
 CONF_FLOOR = 0.25
 
-# ⛔ HOW MANY REFERENCES BEFORE THE BANK MAY JUDGE A CANDIDATE.
+# How many references before the bank may judge a candidate.
 #
 # `enrol` requires a candidate to AGREE with the bank, which stops it learning
 # a distractor. But a bank of one reference from one viewpoint cannot judge:
@@ -139,7 +139,7 @@ AGREEMENT_MIN = 3
 
 # Ask for a new checkpoint while the best one is still working.
 #
-# ⚠ RE-DERIVED TWICE, AND BOTH EARLIER VALUES WERE WRONG FOR PRODUCTION.
+# Re-derived twice, and both earlier values were wrong for production.
 # The first (40) was reasoned from a decay that §21.1 then withdrew -- the
 # curves oscillate rather than decay, so a threshold near the typical match
 # fires on troughs and churns the bank. The second problem is the one §22.2
@@ -158,7 +158,7 @@ AGREEMENT_MIN = 3
 # than on every trough.
 REFRESH_INLIERS = 25
 
-# ⭐ THE SCALE-COVERAGE TRIGGER, and it is the meta-updater's PRIMARY criterion.
+# The scale-coverage trigger, and it is the meta-updater's PRIMARY criterion.
 #
 # §21.1 withdrew the decay story: references oscillate rather than decay, so a
 # threshold on inlier count fires on troughs. §21.2 replaced it -- what the bank
@@ -176,7 +176,7 @@ REFRESH_INLIERS = 25
 # that references overlap, far enough that five of them span a useful range.
 SCALE_COVERAGE = 1.6
 
-# ⛔ THE BAR FOR ASSERTING AN IDENTITY, which is NOT the bar for tracking.
+# The bar for asserting an identity, which is NOT the bar for tracking.
 #
 # `MIN_INLIERS = 15` answers "is this the same scene as the reference" -- asked
 # of a reference a live detection just supplied, so identity is already known.
@@ -195,7 +195,7 @@ SCALE_COVERAGE = 1.6
 #     bar 40: keeps  64 %,          admits  14 %
 #     bar 60: keeps  57 %,          admits   0 %
 #
-# ⛔ THAT SWEEP USED WHOLE-FRAME REFERENCES AND PRODUCTION DOES NOT.
+# That sweep used whole-frame references and production does not.
 # `lock_node` enrols with `roi=det_box`, so a shipped reference holds only the
 # keypoints inside the box -- measured median 376 against 1024. Re-swept on
 # production-shaped references (`tools/anchor_roi_bars.py`):
@@ -205,11 +205,11 @@ SCALE_COVERAGE = 1.6
 #     bar 40: keeps  64 %,          admits   7 %          <- this
 #     bar 60: keeps  14 %,          admits   0 %          <- was shipped
 #
-# ⛔ At 60 a true re-acquisition fires on 14 % of frames, i.e. essentially
+# At 60 a true re-acquisition fires on 14 % of frames, i.e. essentially
 # never, and nothing would log a fault. That is the failure direction that
 # hides: a capability that silently does not work.
 #
-# ⚠ 40 admits 7 % of other-prop frames rather than 0 %, and that is deliberate:
+# 40 admits 7 % of other-prop frames rather than 0 %, and that is deliberate:
 # `recognise()` does not decide on geometry alone. The detector must also agree
 # on the class, and its failure mode is missing things rather than confusing
 # them -- so a 7 % geometric false rate meets a semantic check that does not
@@ -217,7 +217,7 @@ SCALE_COVERAGE = 1.6
 IDENTITY_INLIERS = 40
 
 # How stale a detector hypothesis may be and still corroborate an identity.
-# ⭐ THE DETECTOR IS THE IDENTITY AUTHORITY, not the bank. Its failure mode is
+# The detector is the identity authority, not the bank. Its failure mode is
 # semantic -- it MISSES things -- rather than confusing one prop for another, so
 # even a hypothesis far below the control-confidence gate is strong evidence of
 # WHAT is in frame while being useless as a position. That is exactly the
@@ -423,7 +423,7 @@ class CheckpointBank:
     def shortlist_k(self) -> int:
         """How many references this box can afford to match, right now.
 
-        ⭐ Derived, not configured. The same code picks a wider shortlist on a
+        Derived, not configured. The same code picks a wider shortlist on a
         dev box than on a Pi because it has MEASURED one match on the machine
         it is running on -- 14.4 ms against 31.4 ms for the identical work.
         A constant here would be wrong on one of the two by a factor of two.
@@ -452,12 +452,12 @@ class CheckpointBank:
         """
         bootstrap = not self._refs and not self._require_agreement_always
 
-        # ⛔ MEMORY CONTAMINATION. A reference snapped while the CAMERA is
+        # Memory contamination. A reference snapped while the CAMERA is
         # degraded -- silt on the port, a bubble, the lights gone -- is not a
         # view of the target. It is a view of the fault, and once it is in the
         # bank every later lookup is asked to match against it.
         #
-        # ⭐ Three independent 2026 results converge on this. DAM4SAM splits
+        # Three independent 2026 results converge on this. DAM4SAM splits
         # memory into recent-appearance and distractor-resolving banks
         # "to prevent memory contamination and improve re-detection after
         # occlusion", and measures robustness 0.887 -> 0.944 for it;
@@ -513,7 +513,7 @@ class CheckpointBank:
         self._att.append(None if attitude is None
                          else tuple(float(v) for v in attitude))
         self._depth.append(float(depth_m))
-        # ⭐ ANNOTATIONS: named points marked once on the reference -- a hole
+        # ANNOTATIONS: named points marked once on the reference -- a hole
         # centre, an aim point, the spot a marker must be dropped on. `locate()`
         # warps them into the live frame through the SAME homography the pose
         # comes from, so they are found without a detector that was ever
@@ -524,7 +524,7 @@ class CheckpointBank:
         # not have: correspondences -> PnP was already here (`anchor/pose.py`),
         # but nothing carried MEANING attached to the reference.
         #
-        # ⚠ In FULL-FRAME pixels of the enrolled image, like `roi`, and scaled
+        # In FULL-FRAME pixels of the enrolled image, like `roi`, and scaled
         # to backend pixels here for the same reason `snap` scales the ROI: the
         # homography is fitted in backend pixels and mixing the two silently
         # moves every annotation.
@@ -599,17 +599,17 @@ class CheckpointBank:
 
     # -- persistence: the bank can be built before the run ------------------ #
     #
-    # ⭐ WHY THIS EXISTS. On the run there may be no confident detection to
+    # Why this exists. On the run there may be no confident detection to
     # enrol from at the moment the anchor is needed -- which is precisely when
     # the detector is failing, i.e. the case the rung exists for. A bank
     # prepared on practice footage does not have that dependency.
     #
     # Measured 2026-09-24 (`measured-bars.md` §21.3): references snapped on one
     # run clear the trust bar on 92 % and 100 % of frames of a DIFFERENT run of
-    # the same prop. ⛔ And on a generic structural view they clear it on 8 %.
+    # the same prop. And on a generic structural view they clear it on 8 %.
     # So preloading is a per-target capability, not a per-vehicle one.
     #
-    # ⛔ A PRELOADED REFERENCE IS TRUSTED EXACTLY LIKE A LIVE ONE: it answers
+    # A preloaded reference is trusted exactly like a live one: it answers
     # through `MIN_INLIERS` or it does not answer. Preloading changes where a
     # checkpoint comes from, never what it has to prove -- which is what keeps
     # the octagon result a visible refusal instead of a confident wrong lock.
@@ -649,7 +649,7 @@ class CheckpointBank:
     def load(self, path: str, *, append: bool = False) -> int:
         """Read a bank back. Returns how many references were added.
 
-        ⛔ REFUSES A BANK BUILT AT ANOTHER RESOLUTION. Keypoints are stored in
+        Refuses a bank built at another resolution. Keypoints are stored in
         BACKEND pixels, so loading 640x480 references into a 320x240 backend
         would silently halve every coordinate -- no error, a plausible
         homography, and every pose wrong by a factor of two. That is the exact
@@ -727,7 +727,7 @@ class CheckpointBank:
         once. `None` searches everything, which is the re-identification
         question: not "is this the gate" but "what is this".
 
-        ⭐ ONLY THE TOP-k BY SIGNATURE ARE MATCHED, and k is measured rather
+        ONLY THE TOP-k BY SIGNATURE ARE MATCHED, and k is measured rather
         than configured -- see `shortlist_k()`. This is what makes the bank's
         cost independent of its size: 100 references cost what 5 do.
         """
@@ -736,7 +736,7 @@ class CheckpointBank:
         pool = [i for i in range(len(self._refs))
                 if label is None or self._labels[i] == label]
 
-        # ⭐ THE LOCALISER AS A PRIOR, and it is the cheapest false-positive
+        # The localiser as a prior, and it is the cheapest false-positive
         # filter available. §24 measured the downward camera separating same
         # place from different place -- but its far tail still clears the
         # tracking bar on 17-55 % of pairs, which is why loop closure needs a
@@ -746,7 +746,7 @@ class CheckpointBank:
         #
         # `radius_m` should come from the FILTER'S OWN UNCERTAINTY, not from a
         # constant -- a confident filter gates hard, a drifting one gates
-        # loosely and eventually not at all. ⛔ Checkpoints with no stored
+        # loosely and eventually not at all. Checkpoints with no stored
         # position are KEPT, never silently dropped: absent is not far away.
         if near is not None and radius_m > 0.0:
             x, y = float(near[0]), float(near[1])
@@ -758,7 +758,7 @@ class CheckpointBank:
         if not pool:
             return BankPose(ok=False)
 
-        # ⭐ DETECT ONCE. Every reference is asked about the SAME frame, so the
+        # Detect once. Every reference is asked about the SAME frame, so the
         # backbone runs here and the features are handed to each one --
         # `Anchor.locate_features`. Previously each reference detected for
         # itself and the signature detected again, so a 4-wide shortlist ran
@@ -776,7 +776,7 @@ class CheckpointBank:
 
         best = BankPose(ok=False, searched=len(pool))
         t0 = time.perf_counter()
-        # ⭐ KEPT, NOT MAXED AWAY. The per-reference yields of ONE lookup are
+        # Kept, not maxed away. The per-reference yields of ONE lookup are
         # what separates a fouled lens from a changed world: a dirty port
         # collapses every reference at once, a moved target collapses only the
         # one that used to win. `best` cannot carry that -- it is a statement
@@ -842,20 +842,20 @@ class CheckpointBank:
                   attitude=None) -> BankPose:
         """Locate, then ask whether the bank may ASSERT this is that thing.
 
-        ⛔ WHY THIS IS SEPARATE FROM `locate()`. Geometry alone was measured
+        Why this is separate from `locate()`. Geometry alone was measured
         unable to tell one prop from another inside one venue: whole-frame
         references from a torpedo run cleared `MIN_INLIERS` on 100 % of GATE
         frames and said 'torpedo' (`measured-bars.md` §22). `locate()` answers
         "where", which is all a rung with a detector-supplied reference needs.
         Asserting "what" needs more, and this is the more.
 
-        THREE CHECKS THAT FAIL FOR UNRELATED REASONS, which is the whole point
+        Three checks that fail for unrelated reasons, which is the whole point
         -- turbidity blinds the detector and the matcher together and moves the
         IMU not at all:
 
           geometry    inliers >= `identity_inliers` (60, measured to admit 0 %
                       of the other-prop frames while keeping 57 % of true ones)
-          semantics   a detector hypothesis of the SAME class, recently. ⭐ The
+          semantics   a detector hypothesis of the SAME class, recently. The
                       detector is the identity authority: it misses things, it
                       does not confuse a gate for a torpedo, so a hypothesis far
                       below the control-confidence gate is still strong evidence
@@ -863,7 +863,7 @@ class CheckpointBank:
           kinematics  the vehicle's attitude is within `identity_att_deg` of
                       where the checkpoint was taken
 
-        UNKNOWN IS NOT AGREEMENT. A check whose input is absent -- no detector
+        Unknown is not agreement. A check whose input is absent -- no detector
         hypothesis passed, no attitude stored -- is skipped and SAID SO in
         `identity_why`, never counted as a pass. A caller that wants a hard
         corroboration requirement can read `identity_why` and refuse; one that
@@ -906,7 +906,7 @@ class CheckpointBank:
     def _warp(ann: Optional[dict], pose) -> Optional[dict]:
         """Carry the reference's annotated points into the live frame.
 
-        ⭐ THIS IS WHAT MAKES THE BANK A TRAININGLESS DETECTOR. A point marked
+        This is what makes the bank a trainingless detector. A point marked
         once on a reference photograph -- a hole centre, an aim point -- lands
         in the live frame through the SAME homography the pose came from. No
         model was ever trained to find that point, and it is located even when
@@ -934,7 +934,7 @@ class CheckpointBank:
                     overlap: float = 0.3) -> BankPose:
         """Does the bank agree that THIS BOX is the thing it remembers?
 
-        ⭐ THE TWO-WAY USE, and it is one mechanism. A detector confidence is a
+        The two-way use, and it is one mechanism. A detector confidence is a
         semantic opinion with no geometry behind it; the bank's inliers are
         geometry with no semantics. Asking the bank about a specific box gets
         both, and answers two opposite questions at once:
@@ -946,20 +946,20 @@ class CheckpointBank:
             failure that steals the vehicle, and the one a confidence
             threshold alone cannot catch at any setting
 
-        ⚠ ITS DISCRIMINATION DEPENDS ENTIRELY ON THE DETECTOR -- §30, §31.
+        Its discrimination depends entirely on the detector -- §30, §31.
         Scored with a model never trained for the footage, the distractor clip
         beat the true clip (26 vs 20 median inliers) and no threshold
         separated them. With the per-prop model for that footage, the
         distractor drops to a median of **0** against 10 -- a 9.5x separation
         from the same code.
 
-        ⛔ So this is only as good as the box it is handed, and it must not be
+        So this is only as good as the box it is handed, and it must not be
         wired into a control path until it has been scored with the model that
         will actually run beside it. Mask-based enrolment was proposed as the
         fix in §30 and MEASURED WORSE (§31): a tight prop box leaves too little
         to segment.
 
-        ⛔ IT DOES NOT INVENT A FUSED SCORE. There is no principled way to
+        It does not invent a fused score. There is no principled way to
         combine "0.31 confident" with "62 inliers" into one number, and a
         fabricated one would be acted on as though it meant something. The
         caller gets the inlier count, the overlap, and a verdict, and decides.

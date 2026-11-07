@@ -1,6 +1,6 @@
 """The bench tools must not lie to the node they measure.
 
-⛔ WHY THIS FILE EXISTS. `flow_launch_check.py` and `flow_derot_ab.py`
+Why this file exists. `flow_launch_check.py` and `flow_derot_ab.py`
 publish a synthetic `/mongla/state` so `flow_node` has a height on a bench
 with no barometer. One of them also filled in `yaw_deg = 0.0`.
 
@@ -15,11 +15,11 @@ sign, and FOUR causes were investigated and refuted -- gyro noise, axis
 mapping, de-rotation gains, projection axis -- before anyone suspected the
 instrument. After the fix the same slide read 31.94 cm, 106.5 %.
 
-ZERO IS NOT "UNSET". It is a confident claim of due north. The node skips a
+Zero is not "unset". It is a confident claim of due north. The node skips a
 NaN field, so NaN is the only honest thing a fake state message can say
 about a quantity it does not measure.
 
-READS THE FILES, NEVER IMPORTS THEM -- these are `tools/` scripts with ROS
+Reads the files, never imports them -- these are `tools/` scripts with ROS
 imports at module scope, and a test that imports in a worktree resolves
 against the main workspace's stale `install/` tree.
 """

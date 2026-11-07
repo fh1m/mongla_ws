@@ -98,8 +98,8 @@ def obb_angle_deg(points: np.ndarray) -> int:
     (_, _), (w, h), ang = cv2.minAreaRect(points.astype(np.float32))
     if w <= 0.0 or h <= 0.0:
         return ANGLE_UNKNOWN
-    # ⛔ `minAreaRect` REPORTS THE ANGLE OF ITS `w` EDGE, WHICH IS NOT ALWAYS
-    # THE LONG ONE. Returning it raw makes a rectangle's reported orientation
+    # `minAreaRect` reports the angle of its `w` edge, which is not always
+    # The long one. Returning it raw makes a rectangle's reported orientation
     # jump by 90 degrees depending on which edge OpenCV happened to call the
     # width -- a 30-degree target reads as 120 and nothing errors. An OBB
     # angle only means anything to a consumer if it is the LONG axis, so

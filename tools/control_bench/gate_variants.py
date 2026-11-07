@@ -1,9 +1,9 @@
 """Three candidate fixes for B-56, measured against each other on the bench.
 
-⛔ NONE OF THESE IS IN THE FILTER YET. They are subclasses so the bench can rank
+None of these is in the filter yet. They are subclasses so the bench can rank
 them before anything ships, which is the whole point of having a plant.
 
-    A  OBSERVABILITY GATE -- refuse a world-frame update while velocity is
+    A  observability gate -- refuse a world-frame update while velocity is
        unobserved. Measured separation is 1880x (sigma_vel 0.012 m/s with flow
        against 22.8 without), so the signal is not marginal.
 
@@ -103,7 +103,7 @@ VARIANTS = {
 
 
 class Hybrid(RIEKF):
-    """⭐ D -- A's TRIGGER with B's ACTION, and the position fix let through.
+    """D -- A's TRIGGER with B's ACTION, and the position fix let through.
 
     The ranking made the tension explicit. Gating the whole update (A) is the
     only thing that helps when no fix is available, because it stops depth and
@@ -156,9 +156,9 @@ VARIANTS['D  hybrid'] = Hybrid
 
 
 class StalenessGate(RIEKF):
-    """⭐ E -- gate on TIME SINCE the last velocity update, not on covariance.
+    """E -- gate on TIME SINCE the last velocity update, not on covariance.
 
-    ⛔ WHY THE COVARIANCE THRESHOLD WAS THE WRONG SIGNAL. It has to sit below a
+    Why the covariance threshold was the wrong signal. It has to sit below a
     freshly constructed filter's own sigma_vel (sqrt(3) * P0_velocity = 0.866)
     or the gate fires on a cold start and refuses everything. But it also has to
     fire within a fraction of a second of losing velocity, because that is how
@@ -171,7 +171,7 @@ class StalenessGate(RIEKF):
     timeout regardless of what its covariance happens to be; and the threshold
     is a physical quantity an operator can reason about rather than a tuned one.
 
-    ⚠ The action is still D's: depth and yaw are REFUSED while stale, because
+    The action is still D's: depth and yaw are REFUSED while stale, because
     they inject attitude and buy nothing horizontal; a position fix is still
     APPLIED, with `H[:, 0:3]` zeroed so it pins position without rotating the
     state.

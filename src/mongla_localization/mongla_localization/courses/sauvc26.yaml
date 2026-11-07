@@ -1,6 +1,6 @@
 # SAUVC 2026 course prior -- WHERE the props are, not what they look like.
 #
-# ⛔ EVERY POSITION HERE IS UNSET, AND THAT IS THE SHIPPED STATE.
+# Every position here is unset, and that is the shipped state.
 # The rulebook gives ZONES, not points: the gate "anywhere on a horizontal line
 # ... approximately 16m away from the starting zone", the orange flare "anywhere
 # in a rectangular zone 4m-8m from side of the arena", the bump flares
@@ -16,7 +16,7 @@
 # which writes ~/.mongla/courses/sauvc26.yaml (or $MONGLA_COURSE_DIR) with
 # measured: true. The loader reads that copy first.
 #
-# ⛔ FRAME, STATED ONCE. Origin: the centre of the starting zone. +x runs from
+# Frame, stated once. Origin: the centre of the starting zone. +x runs from
 # the starting zone toward the gate and is bearing 0. +y is to the right of it
 # and is bearing 90. `depth_m` is NEGATIVE below the surface. `bearing_deg` is
 # the compass direction the prop's FACE points.

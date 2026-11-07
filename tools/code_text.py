@@ -1,6 +1,6 @@
 """A module's CODE, for the tests that must assert on source text (issue #22).
 
-⛔ WHY. Dozens of guards here read a `.py` file and assert that a string is,
+WHY. Dozens of guards here read a `.py` file and assert that a string is,
 or is not, `in` it. Read raw, that passes on a COMMENT or a docstring that
 mentions the line, fails on a harmless reformat, and a `not in` check is
 dodged by any change of spacing. This returns the code with comments and

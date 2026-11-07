@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render every clip's strongest detection of one class, so a human can label.
 
-⛔ WHY THIS EXISTS. Every detection bar in `measured-bars.md` section 1 was
+Why this exists. Every detection bar in `measured-bars.md` section 1 was
 derived from labelled held-out PAIRS -- frames that contain the prop. A set
 built that way cannot measure a false positive on open water, because it holds
 no open water. That is how B-59 hid: `gate_sharks` claims a `gate` on
@@ -19,7 +19,7 @@ clip's HIGHEST-scoring detection of the class with the box drawn on it. If the
 strongest example in a whole clip is empty water, the clip is a negative and
 every weaker box in it is too.
 
-⚠ It labels nothing itself. It renders; a person decides.
+It labels nothing itself. It renders; a person decides.
 
     python3 tools/label_contact_sheet.py --model <model.pt> --class gate
 """
@@ -53,7 +53,7 @@ def best_tile(model, clip: pathlib.Path, idx: int, label: str,
               stride: int, limit: int):
     """The frame carrying this clip's strongest detection of `idx`.
 
-    ⭐ THE STRONGEST, not a random or a first hit. A label has to survive the
+    THE STRONGEST, not a random or a first hit. A label has to survive the
     clip's best case: if even the most confident example is empty water, the
     whole clip is a negative for that class.
     """
@@ -138,7 +138,7 @@ def main() -> int:
     dst = os.path.join(out_dir, f'sheet_{a.cls}.jpg')
     cv2.imwrite(dst, sheet)
     print(f'\nwrote {dst}  ({len(rows)} clips)')
-    print('⚠ LOOK AT IT. A clip whose STRONGEST box is empty water is a '
+    print('WARNING: LOOK AT IT. A clip whose STRONGEST box is empty water is a '
           'negative for this class; pass those to negative_clip_check.py '
           '--negative. Do not label from filenames.')
     return 0

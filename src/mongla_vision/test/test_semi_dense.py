@@ -1,6 +1,6 @@
 """Semi-dense matching: every grid cell, instead of 1024 NMS keypoints.
 
-⭐ WHY IT EXISTS. Measured on the vehicle across four frame pairs, semi-dense
+Why it exists. Measured on the vehicle across four frame pairs, semi-dense
 finds **2.1-2.6x the inliers** of the sparse path -- 589/210/218/202 against
 229/80/105/92 -- for +37 % match cost (45.85 ms vs 33.50). The number that
 decides it: the anchor's trust bar is **100 inliers**, and on the weakest pair
@@ -10,7 +10,7 @@ It needs no new model. The network already emits the full 30x40x64 descriptor
 map and the sparse path NMS-selects from that same map, so sparse throws away
 a map it has already paid for.
 
-⚠ DEFAULT OFF, and these tests do not argue otherwise. Two things are
+DEFAULT OFF, and these tests do not argue otherwise. Two things are
 unmeasured: frame-to-REFERENCE behaviour (the measurement was
 frame-to-frame, while the anchor matches a checkpoint stored seconds ago from
 another viewpoint) and whether the extra inliers are CORRECT rather than
@@ -55,7 +55,7 @@ def test_every_grid_cell_becomes_a_keypoint():
 
 
 def test_coordinates_are_full_resolution_not_grid_indices():
-    """⛔ THE TRAP. The map is 30x40 and the image is 240x320; returning grid
+    """The trap. The map is 30x40 and the image is 240x320; returning grid
     indices would put every keypoint in the top-left eighth of the frame and
     still look like a plausible keypoint set. Cell centres at stride 8 is what
     matches the sampling the sparse path does."""
@@ -91,7 +91,7 @@ def test_the_switch_actually_switches():
 
 
 def test_the_default_is_OFF():
-    """⚠ The measurement that justifies semi-dense was frame-to-frame; the
+    """The measurement that justifies semi-dense was frame-to-frame; the
     anchor's job is frame-to-reference. Until that is measured the default
     must stay off, and this test is what stops it drifting on."""
     import inspect

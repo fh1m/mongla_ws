@@ -1,13 +1,13 @@
 """How close should the vehicle get before it trusts what it sees?
 
-⛔ THE OBVIOUS ANSWER IS WRONG, AND WE MEASURED IT. "Closer is better" fails:
+The obvious answer is wrong, and we measured it. "Closer is better" fails:
 section 23 measured detector confidence against apparent size on real footage
 and found it rises and then FALLS AGAIN on several classes. Very close, the
 prop overflows the frame, context is lost and the detector does worse than it
 did at range. So the approach setpoint is a BAND, not a minimum range: a
 controller told to minimise range drives through the band and out the far side.
 
-⛔⛔ AND THE BAND THIS MODULE SHIPPED WAS AN INVENTION WITH A CITATION ATTACHED.
+and the band this module shipped was an invention with a citation attached.
 It read `BAND_LO = 0.25, BAND_HI = 0.45` and cited section 23 -- but section 23
 measured against sqrt(box area) IN PIXELS, reported by quartile, and this
 module compares against `box_height / frame_height`. Those are different
@@ -25,13 +25,13 @@ the exact way this module exists to prevent: confidence rises all the way to
 the frame edge, and a 0.25-0.45 band would have commanded BACK OFF from the
 best view the detector ever gets.
 
-⭐ SO THE BAND IS PER CLASS, AND A CLASS WITH NO MEASUREMENT GETS NO ADVICE.
+So the band is per class, and a class with no measurement gets no advice.
 `advise()` needs the class name. Given one that is not in the table it returns
 HOLD and says why -- never a default band, because a default band is exactly
 what was wrong here. Re-measure with `tools/approach_band.py` when the model
 changes; class ids belong to one graph and do not transfer.
 
-⭐ AND EVIDENCE ACCUMULATES ACROSS VIEWPOINTS, NOT ACROSS FRAMES. Fifty frames
+And evidence accumulates ACROSS viewpoints, not ACROSS frames. Fifty frames
 of a stationary vehicle are one observation seen fifty times; multiplying their
 likelihoods manufactures certainty out of a single look. The bank can say
 whether the viewpoint actually changed, so that is the gate.
@@ -43,7 +43,7 @@ import math
 # `tools/approach_band.py` on the shipped gate_rescue_repair graph. These are
 # the measured peak bins -- not a band anyone chose the look of.
 #
-# ⚠ `repair` is MONOTONIC to the frame edge over the range the archive covers,
+# `repair` is MONOTONIC to the frame edge over the range the archive covers,
 # so its upper bound is 1.20 rather than a measured fall. That is "we never saw
 # it get worse", not "it never does", and a controller should read the upper
 # bound as absent rather than as a peak.
@@ -53,7 +53,7 @@ BANDS = {
     'repair': (0.80, 1.20),
 }
 
-# ⛔ NO DEFAULT BAND. The previous global (0.25, 0.45) matched none of the three
+# No default band. The previous global (0.25, 0.45) matched none of the three
 # measured classes and would have commanded BACK OFF from `repair`'s best view.
 # An unmeasured class gets HOLD and a reason.
 # Viewpoint change, in bank inliers, below which two looks are ONE look.
@@ -89,7 +89,7 @@ def advise(box_h_px: float, frame_h_px: float, class_name: str = '',
     if s < lo:
         return Approach(CLOSE, f'{s:.2f} of frame, below the {lo:.2f} band', s)
     if s > hi:
-        # ⭐ THE COUNTER-INTUITIVE HALF. Backing off IMPROVES detection here,
+        # The counter-intuitive half. Backing off IMPROVES detection here,
         # and a controller that only ever closes cannot express it.
         return Approach(BACK_OFF,
                         f'{s:.2f} of frame, past the {hi:.2f} band -- '
@@ -109,7 +109,7 @@ class Evidence:
     def observe(self, conf: float, bank_inliers) -> bool:
         """Fold one detection in. Returns whether it counted.
 
-        ⛔ A look that matches the previous reference too well is the SAME
+        A look that matches the previous reference too well is the SAME
         look. Counting it is how a vehicle holding station talks itself into
         certainty about one observation.
         """

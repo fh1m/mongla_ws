@@ -11,7 +11,7 @@ Run it BEFORE any armed manoeuvre and again AFTER a successful MOTOR_DETECT — 
 writes `CAL_MDIR`, so the two snapshots are how you prove what it changed. Diff them
 with `--compare <file>`.
 
-⚠ A SUCCESSFUL MOTOR_DETECT MAKES `FRAME_REVERSE = 1` WRONG. Detect converges every
+A successful MOTOR_DETECT makes `FRAME_REVERSE = 1` wrong. Detect converges every
 thruster to agree with its mixer column; `FRAME_REVERSE` then negates all six demands
 and re-inverts the corrected frame. After a SUCCESS, `FRAME_REVERSE` must go to 0 in
 the same session (`BUGS.md` gate 1).
@@ -153,13 +153,13 @@ else:
         elif uniform:
             note = 'every axis inverted — uniform, so torques intact; FRAME_REVERSE fixes it'
         else:
-            note = '⛔ NON-UNIFORM — broken torques, the 2026-08-06 yaw-spin fault'
+            note = 'ERROR: NON-UNIFORM — broken torques, the 2026-08-06 yaw-spin fault'
         print(f'    if w = {_fmt(w)}  ({label:<26}) -> net {_fmt(net)}  {note}')
     print('\n  ONLY PHYSICAL THRUST SEPARATES THESE. Run gate 0 before arming:')
     print('    per-thruster motor test (props on, hull restrained), or')
     print('    in-water MOTOR_DETECT, armed — require SUCCESS.')
     if int(fr) == 1 and len(set(eff)) == 1 and eff[0] == 1:
-        print('\n  ⛔ AND NOTE: this is also the POST-DETECT shape. A successful')
+        print('\n  ERROR: AND NOTE: this is also the POST-DETECT shape. A successful')
         print('  MOTOR_DETECT drives effective to agree with the mixer, after which')
         print('  FRAME_REVERSE = 1 re-inverts every axis. If detect has just')
         print('  SUCCEEDED, set FRAME_REVERSE = 0 now (gate 1).')

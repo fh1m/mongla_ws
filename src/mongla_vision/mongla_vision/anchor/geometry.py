@@ -7,7 +7,7 @@ shot's actual precondition. A centred bounding box says the board is in front
 of us; it cannot say whether we are square to it, and a round fired at 30 deg
 off-normal misses an opening it was perfectly centred on.
 
-WHAT THIS ADDS, and what it deliberately does not:
+What this adds, and what it deliberately does not:
 
     tilt_deg    angle between the plane normal and the optical axis.
                 0 = square on. THE new quantity.
@@ -30,7 +30,7 @@ different distances, and the apparent scale genuinely differs across the image
 The honest response is not a cleverer scalar. It is to report the tilt, so a
 caller knows when the scalar means anything -- which is what this module is for.
 
-⛔ WHAT IT IS GOOD FOR, MEASURED ON REAL FOOTAGE -- READ THIS BEFORE WIRING IT.
+What it is good for, measured on real footage -- read this before wiring it.
 
 Exact against synthetic ground truth (every tilt 0-65 deg, at real matcher
 noise of 1.55 px, with hull rotation up to 2 deg). On a real archive torpedo
@@ -38,7 +38,7 @@ approach it is **coarse, not precise**, and the honest bound is:
 
     per-frame tilt            p90 frame-to-frame swing 39 deg  -- unusable raw
     31-frame rolling median   p90 frame-to-frame swing  1.3 deg -- looks perfect
-    TWO INDEPENDENT SNAPS     disagree by 4.7 deg median, 17.5 p90
+    Two independent snaps     disagree by 4.7 deg median, 17.5 p90
 
 **The third line is the one that matters.** Smoothing produces a stable number
 that is still reference-dependent: the errors are NOT zero-mean, so aggregating
@@ -60,7 +60,7 @@ the tilt only 14.0 vs 11.5 deg), hull rotation (6.7 deg at 2 deg of rotation,
 plane isolation by ROI (WORSE: 58-73 deg p90, because a tighter ROI means fewer
 keypoints and worse conditioning).
 
-⛔ THE CORRESPONDENCES ARE REQUIRED, AND THIS IS THE WHOLE DESIGN.
+The correspondences are required, and this is the whole design.
 `decomposeHomographyMat` returns FOUR solutions. Two of them face the camera,
 so the obvious rule -- "take the normal with n_z < 0" -- picks between them by
 accident. Measured against known ground truth:
@@ -92,7 +92,7 @@ _AXIS = np.array([0.0, 0.0, -1.0])
 
 # Minimum median inlier displacement, in pixels, before a tilt is worth having.
 #
-# THE TILT IS UNOBSERVABLE WITHOUT TRANSLATIONAL BASELINE -- with none, H is
+# The tilt is unobservable without translational baseline -- with none, H is
 # K R K^-1 and carries no plane term at all. That is not a threshold anyone can
 # reason to, so it was measured: synthetic planes at 10/25/40 deg, 0.5 px of
 # matcher noise, 40 trials each.
@@ -193,7 +193,7 @@ def plane_geometry(H, K, ref_pts, live_pts,
         return PlaneGeometry(ok=False)
     idxs = [int(i) for i in np.ravel(keep)]
     n = np.asarray(Ns[idxs[0]], np.float64).ravel()
-    # NON-FINITE IS A REFUSAL, and this guard is load-bearing rather than
+    # Non-finite is a refusal, and this guard is load-bearing rather than
     # defensive. Without it `norm <= 0.0` is FALSE for NaN, `n / NaN` is NaN,
     # and `max(-1, min(1, NaN))` evaluates to 1.0 in CPython -- so `acos` gives
     # 0.0 and a failed decomposition is reported as A PERFECTLY SQUARE BOARD.

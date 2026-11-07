@@ -5,20 +5,20 @@
     tools/td_measure.py --record 45 --out run.npz   # live: manager must run
     tools/td_measure.py --analyse run.npz
 
-⛔ WHY. `td` is the one timing term in the flow pipeline with no measurement
+WHY. `td` is the one timing term in the flow pipeline with no measurement
 anywhere (measured-bars, "What this does NOT cover"). The flow node estimates
 it online, but only logs every sixth accepted window and only after the gates
 it ships with. This records the two series the node correlates -- image yaw
 rate from the node's own planar rigid fit, and the board gyro as the manager
 publishes it on `/mongla/imu_rates` -- and scores them offline.
 
-THE TWO CLOCKS ARE THE NODE'S CLOCKS. Images carry the mailbox's kernel
+The two clocks are the node's clocks. Images carry the mailbox's kernel
 capture stamp on the wall clock (`meta.stamp_wall`, what camera_node puts in
 the header); gyro samples carry the board time mapped through `ClockMap`
 (what the manager stamps). `td` is the offset between exactly those, so the
 number is the one the flow node would use.
 
-WHAT IT IS ALLOWED TO CALL A MEASUREMENT, written before the run:
+What it is allowed to call a measurement, written before the run:
   * the excitation gate passes (a changing rotation rate -- a steady turn is
     degenerate, Li & Mourikis);
   * every window of the run gives an estimate at or above the node's quality

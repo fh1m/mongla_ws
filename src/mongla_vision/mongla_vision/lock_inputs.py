@@ -27,7 +27,7 @@ class LockInputsMixin:
     def _on_imu(self, msg) -> None:
         """Hull roll from the board's fused BNO085.
 
-        ⛔ THE -1.0 CONVENTION IS LOAD-BEARING. `auv_manager_node` sets
+        The -1.0 convention is load-bearing. `auv_manager_node` sets
         `orientation_covariance[0] = -1.0` when the board cannot supply
         attitude -- the ROS "no data" marker -- and publishes a
         structurally-valid message anyway. Reading the quaternion without
@@ -61,7 +61,7 @@ class LockInputsMixin:
     def _on_state(self, msg) -> None:
         """The hull's heading, depth and armed state.
 
-        ⛔ NaN IS THE ABSENT VALUE AND IS KEPT AS ONE. The board suppresses a
+        NaN IS THE ABSENT VALUE AND IS KEPT AS ONE. The board suppresses a
         yaw it cannot stand behind, and `MonglaState` carries that through as
         NaN. Coercing it to 0.0 here would hand every downstream rung a
         confident heading of due north -- the repo's recurring defect, a
@@ -90,7 +90,7 @@ class LockInputsMixin:
     def _on_odom(self, msg) -> None:
         """The filter's own estimate: where it thinks it is, and how sure.
 
-        ⛔ SIGMA IS READ, NOT ASSUMED. It gates the bank search radius and it
+        Sigma is read, not assumed. It gates the bank search radius and it
         is half of every closure's own sigma, so a zero covariance here (the
         ROS default for "not filled in") would claim perfect knowledge. Absent
         is NaN, which every gate downstream refuses.
@@ -107,7 +107,7 @@ class LockInputsMixin:
     def _note_anchor_health(self) -> None:
         """Say WHICH failure this is, when the bank stops matching.
 
-        ⚠ Reported, not acted on. The thresholds in `anchor/health.py` are
+        Reported, not acted on. The thresholds in `anchor/health.py` are
         DECLARED -- no port has been fouled on purpose -- so this logs a
         verdict for an operator and changes no control path. Wiring it to
         behaviour needs a measured bar first.
@@ -138,17 +138,17 @@ class LockInputsMixin:
     def _altitude_m(self) -> float:
         """Height above the floor. NaN when it cannot be known.
 
-        ⭐ THE MEASURED FLOOR FIRST. `flow_node` publishes `floor_height` from
+        The measured floor first. `flow_node` publishes `floor_height` from
         the tile grating, and refuses to publish the pool_depth arithmetic
         under that name because `pool_depth_m - |depth|` is a typed constant
         minus a depth, not a measurement of the floor. This agrees: the
         grating wins, and it must be FRESH -- a stale height is a different
         altitude wearing the right units.
 
-        ⚠ The pool_depth fallback stays, because an operator who has measured
+        The pool_depth fallback stays, because an operator who has measured
         their pool may legitimately supply it. It says what it is, once.
 
-        ⛔ AND THERE IS NO THIRD OPTION. Pixels become metres only with this
+        And there is no third option. Pixels become metres only with this
         number; a default would put a plausible value where a measurement is
         missing, the recurring defect in this codebase. The bench barometer
         read "not initialised" (section 37), so with neither source this
@@ -187,7 +187,7 @@ class LockInputsMixin:
 
         # ---- recognise ---------------------------------------------------
         if self._anchor.size:
-            # ⭐ THE FILTER'S OWN UNCERTAINTY IS THE SEARCH RADIUS. A confident
+            # The filter's own uncertainty is the search radius. A confident
             # filter refuses to consider a place 20 m away; a drifting one
             # widens until it gates on nothing, which is exactly right -- the
             # prior should stop helping precisely when it stops being one.
@@ -211,7 +211,7 @@ class LockInputsMixin:
             if c.ok:
                 self._closures += 1
                 m = PointStamped()
-                # THE MATCHED FRAME'S header, on the board clock -- not now().
+                # The matched frame's header, on the board clock -- not now().
                 # A fix stamped on arrival is replayed at the wrong instant by
                 # the filter's retrodiction, which is the one thing that makes
                 # a late measurement safe.
@@ -236,7 +236,7 @@ class LockInputsMixin:
 
         # ---- remember ----------------------------------------------------
         if self._places.should_enrol(now, xy):
-            # ⛔ WHOLE FRAME, no ROI. The ~100-inlier bar was derived on
+            # WHOLE FRAME, no ROI. The ~100-inlier bar was derived on
             # whole-frame downward references (section 24); cropping would
             # repeat section 25, where a bar measured on one configuration was
             # shipped against another and silently never fired.
@@ -251,7 +251,7 @@ class LockInputsMixin:
     def _m_per_px(self) -> float:
         """Metres per BACKEND pixel on the floor. NaN without an altitude.
 
-        ⭐ THE RECTIFIED K, NOT THE AIR ONE. `_on_info` already scales the
+        THE RECTIFIED K, NOT THE AIR ONE. `_on_info` already scales the
         intrinsics to the backend's own grid -- which is the grid the
         homography is defined on -- and `rectifier_for` returns the K that
         matches the flat-port correction. Using the air focal length underwater
@@ -297,7 +297,7 @@ class LockInputsMixin:
         self._K = K
         self._D = D
 
-        # ⛔ THE RECTIFIED POINTS NEED THE RECTIFIED K. `rectify` re-projects
+        # The rectified points need the rectified K. `rectify` re-projects
         # each ray through `f_ref`, which defaults to `fx * n` -- so a point at
         # water angle tw lands at radius `f_ref * tan(tw)`, a true pinhole of
         # focal `f_ref`. Feeding those points to PnP with the AIR K would leave

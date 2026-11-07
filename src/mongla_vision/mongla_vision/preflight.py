@@ -4,17 +4,17 @@ Called by `auv_manager_node`, once per process, before the first vision verb
 of a mission dispatches: `wait_vision_state_ready` polls the `VisionState` the
 manager already owns.
 
-⛔ IT POLLS AN EXISTING VisionState AND SUBSCRIBES TO NOTHING. That is the
+It polls an existing VisionState AND SUBSCRIBES TO NOTHING. That is the
 whole design. VisionState is owned by the rclpy executor thread, so a preflight
 that opened its own subscriptions would have to spin rclpy from inside an
 action callback -- re-entering the executor from a worker, with the heartbeat
 running. Sleep-and-check from the outside cannot.
 
-⛔ THE READINESS SIGNAL IS DETECTIONS, NOT FRAMES, and the reason is a bug that
+The readiness signal is detections, not frames, and the reason is a bug that
 cost 10 s on the first vision verb of every mission. See the note in
 `wait_vision_state_ready`.
 
-⚠ A SECOND, NODE-BASED PREFLIGHT USED TO LIVE HERE. `assert_vision_ready`
+A second, node-based preflight used to live here. `assert_vision_ready`
 opened its own three subscriptions, counted a window and raised with the
 failing stage named -- 99 lines, exported from `mongla_vision/__init__.py`,
 and called by NOTHING for its whole life. Its docstring named two consumers,
@@ -74,7 +74,7 @@ def wait_vision_state_ready(vision_state, *,
     `require_detection=True` waits for a fresh Sample (any class) to
     appear; otherwise we settle for "detections flowing + camera_info".
 
-    THE READINESS SIGNAL IS DETECTIONS, NOT FRAMES. It used to be
+    The readiness signal is detections, not frames. It used to be
     `diagnostics()['image_frames'] >= 5`, which could never become true:
     `VisionState` subscribed to `image_raw` RELIABLE while `camera_node`
     publishes it BEST_EFFORT, so the counter stayed at 0 and this function

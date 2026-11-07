@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """How PRECISELY does XFeat recover a pose at 320x240 versus 640x480?
 
-⚠ RECALL AND PRECISION ARE DIFFERENT QUESTIONS, and this project has only ever
+Recall and precision are different questions, and this project has only ever
 measured the first. §19 found 640 WORSE on inliers (33 against 69 on murky
 footage) and the shipped backend is 320. But "how often does it match" and
 "how exactly does it match when it does" are not the same number, and a
 homography good enough to hold a lock can still be too coarse to stand behind
 a metric pose.
 
-⭐ TRUTH IS CONSTRUCTED, NOT BORROWED. A known homography is applied to a real
+Truth is constructed, not borrowed. A known homography is applied to a real
 frame and the estimate is compared against it. Comparing 320 against 640
 directly would measure AGREEMENT, which cannot rank them -- the mistake this
 codebase has a rule against.
 
-THE NUMBER. Mean corner reprojection error, in pixels OF THE SOURCE FRAME, so
+The number. Mean corner reprojection error, in pixels OF THE SOURCE FRAME, so
 the two resolutions are compared in one common unit rather than each in its
 own. A 320 error of 1 px and a 640 error of 1 px are not the same error.
 """
@@ -139,7 +139,7 @@ def main():
     if len(ks) == 2:
         a, b = (np.mean(totals[k]) for k in ks)
         better = ks[0] if a < b else ks[1]
-        print(f'\n⭐ {better} is more precise '
+        print(f'\nRESULT: {better} is more precise '
               f'({min(a,b):.2f} px against {max(a,b):.2f} px, '
               f'{max(a,b)/max(min(a,b),1e-9):.2f}x)')
     return 0

@@ -1,6 +1,6 @@
 """The vehicle's own answer to "where am I", fused from every sensor it has.
 
-⛔ WHY THIS NODE EXISTS AT ALL. `inekf.py` landed as a tested library with no
+Why this node exists at all. `inekf.py` landed as a tested library with no
 caller -- 19 unit tests, a converging filter, and nothing on the vehicle ever
 constructing one. That is the failure the bumblebee doctrine names directly:
 effort is not points, and a module nothing calls scores zero however good it
@@ -20,7 +20,7 @@ interval has sd 0.00 ms where host arrival has sd 6.67 ms and p2p 35.12. This
 node reads `header.stamp` and never `now()`, or it would put all of that
 jitter back into dt.
 
-NO IMU, NO PREDICT. There is deliberately no synthetic propagation when the
+No IMU, no predict. There is deliberately no synthetic propagation when the
 inertial stream stops. A filter that holds its state and keeps taking depth,
 yaw and flow updates is honest about having no new inertial information; one
 that invents `a = 0` to keep a timer fed is dead-reckoning on an assumption
@@ -75,7 +75,7 @@ STILL_GYRO_RAD_S = 0.02
 # reading, so a tilted hull shows a large CONSTANT; only variation is motion.
 STILL_ACCEL_SPREAD = 0.25          # m/s^2
 STILL_WINDOW = 50                  # 1.0 s at the board's 50 Hz
-# ⛔ STILLNESS NEEDS A COMMAND TOO (issue #25). The IMU test above cannot tell
+# Stillness needs a command too (issue #25). The IMU test above cannot tell
 # "still" from "cruising at constant velocity": heading held, no acceleration,
 # |a| = g. Flow drops out mid-transit (bare floor, turbidity), and the ZUPT then
 # deleted real forward velocity at sigma 1 cm/s, once a second, in exactly the
@@ -135,14 +135,14 @@ class LocalizationNode(Node):
                    # job -- but a count that RISES while flow is healthy means
                    # the threshold is wrong for this vehicle. See B-56.
                    'gated': 0}
-        # ⭐ Whether the OBSERVABILITY GATE is open, latched so it is published
+        # Whether the OBSERVABILITY GATE is open, latched so it is published
         # only on change. See `_report_aiding`.
         self._aiding_state = None
         self._still: deque = deque(maxlen=STILL_WINDOW)
         self._last_flow_t = 0.0
         self._attitude_seeded = False
         self._anchored = False
-        # ⛔ BOARD YAW + THIS = POOL YAW. Zero until an anchor arrives. Every
+        # Board yaw + this = pool yaw. Zero until an anchor arrives. Every
         # board attitude (and board yaw, under `use_yaw`) is rotated by it
         # before it reaches the filter -- see `_on_heading` for why the anchor
         # has to live HERE and not as a one-off filter update.
@@ -154,7 +154,7 @@ class LocalizationNode(Node):
 
         cam = str(self.declare_parameter('flow_camera', 'downward').value)
         self._flow_sigma = float(self.declare_parameter('flow_sigma', 0.05).value)
-        # ⛔ THE DOWNWARD CAMERA IS NOT AT THE IMU (issue #27). `None` until it
+        # The downward camera is not at the IMU (issue #27). `None` until it
         # is taped on the built hull -- and None means UNCORRECTED, exactly the
         # behaviour before this existed, reported rather than hidden. It is not
         # a zero standing in for a measurement.
@@ -254,16 +254,16 @@ class LocalizationNode(Node):
         # by `mongla.motion()`: a timed move into a prop reports success, and
         # this is the only thing that can tell the mission it went nowhere.
         self._pub_motion = self.create_publisher(String, '/mongla/localization/motion', latched)
-        # ⭐ 'aided' | 'unaided' -- is horizontal position OBSERVABLE right now?
+        # 'aided' | 'unaided' -- is horizontal position OBSERVABLE right now?
         #
-        # ⛔ WHY THIS IS A TOPIC AND NOT A FIELD ON `/mongla/state`. That message
+        # Why this is a topic and not a field on `/mongla/state`. That message
         # is `auv_manager_node`'s and describes the BOARD -- armed, mode, yaw,
         # depth, battery. The filter lives in this process, so routing a
         # localization fact through the manager would need a new `.msg` field
         # AND a topic to carry it across the process boundary anyway. The fact
         # belongs on the node that owns it.
         #
-        # ⚠ AND IT IS NOT `/mongla/localization/motion`. That one answers "is
+        # And it is not `/mongla/localization/motion`. That one answers "is
         # the hull physically moving as commanded" -- a prop, a snag, a dead
         # thruster. This answers "can the filter see where it is". A blocked
         # hull is perfectly well localised; an unaided one is not.
@@ -317,7 +317,7 @@ class LocalizationNode(Node):
                     f'[LOCAL] inertial gap {dt:.2f} s > {MAX_PREDICT_DT_S} s: '
                     f'not integrating it as one IMU step -- coasting at '
                     f'constant velocity and growing the covariance for it.')
-            # ⛔ COAST, DO NOT DROP (issue #37). Dropping froze position for
+            # Coast, do not drop (issue #37). Dropping froze position for
             # the gap (flow corrects velocity, not position) and added no
             # uncertainty for time nobody measured.
             self._apply(t, lambda f, d=dt: f.coast(d), span=dt,
@@ -337,7 +337,7 @@ class LocalizationNode(Node):
         self._n['imu'] += 1
         self._last_input_t = t
 
-        # ⛔ THE SPLIT, ENFORCED HERE. The board owns attitude; without this
+        # The split, enforced here. The board owns attitude; without this
         # line the companion propagates its own and DIVERGES -- measured on
         # the vehicle before it was added: 7.1e6 m of position in 35 s. An
         # unaided inertial attitude error grows through the gravity coupling
@@ -354,14 +354,14 @@ class LocalizationNode(Node):
         if msg.orientation_covariance[0] >= 0.0:
             self._board_R = _R_from_quat(msg.orientation.w, msg.orientation.x,
                                          msg.orientation.y, msg.orientation.z)
-            # ⛔ INTO THE POOL FRAME BEFORE THE FILTER SEES IT. The board's yaw
+            # Into the pool frame before the filter sees it. The board's yaw
             # is boot-relative; once anchored, handing it over raw pins the
             # filter back to boot axes at 50 Hz while `frame_id` says `pool`.
             # Rz on the LEFT changes yaw only: R = Rz(yaw) Ry(pitch) Rx(roll)
             # in the board's Z-Y-X convention, so Rz(off) R keeps roll/pitch.
             R_meas = _Rz(self._yaw_offset_deg) @ self._board_R
             if not self._attitude_seeded:
-                # ⛔ THE FIRST ATTITUDE IS AN INITIALISATION, NOT A CORRECTION.
+                # The first attitude is an initialisation, not a correction.
                 # The filter starts at identity; the board starts wherever the
                 # hull is pointing. Measured on the vehicle at -168.3 deg of
                 # yaw, correcting into that from identity produced 345
@@ -416,7 +416,7 @@ class LocalizationNode(Node):
                   var_y: float):
         """Carry a flow sample to NOW, when nothing else accounts for its age.
 
-        ⛔ WITH RETRODICTION OFF (the default) A STAMP WAS IGNORED (issue #31).
+        With retrodiction off (the default) A STAMP WAS IGNORED (issue #31).
         Flow is stamped at the middle of its baseline -- up to 375 ms back --
         and was compared with the CURRENT state at its own, overconfident
         variance. During a turn on a current, or any acceleration, the motion
@@ -424,7 +424,7 @@ class LocalizationNode(Node):
         `test_a_stale_flow_sample_no_longer_bends_velocity_on_a_turn` at
         4.5 cm/s, exactly |v| |w| age.
 
-        ⚠ WIDENING THE VARIANCE ALONE WAS TRIED AND DOES NOT WORK: flow is
+        Widening the variance alone was tried and does not work: flow is
         the only horizontal velocity observer, so a bias at any variance still
         wins in the end (4.50 -> 4.50 cm/s). The sample is instead MOVED to
         now (`RIEKF.body_velocity_now`) and keeps half the move as 1-sigma for
@@ -444,7 +444,7 @@ class LocalizationNode(Node):
     def _on_flow(self, msg: TwistWithCovarianceStamped) -> None:
         """Downward optical flow: the DVL we do not have.
 
-        ⛔ X AND Y ONLY. A bottom-looking camera cannot see vertical velocity,
+        X AND Y ONLY. A bottom-looking camera cannot see vertical velocity,
         and the flow node says so by marking `covariance[14]` as -1.0 -- the
         ROS convention for an unobserved component. Its `linear.z` is 0.0
         because nothing ever set it, and feeding that to a 3-D update asserts
@@ -559,7 +559,7 @@ class LocalizationNode(Node):
     def _maybe_model_aid(self) -> None:
         """When flow has gone quiet, aid velocity from the learned demand model.
 
-        ⛔ ONLY WHILE FLOW IS STALE, on the same `FLOW_FRESH_S` the ZUPT uses, so
+        Only while flow is stale, on the same `FLOW_FRESH_S` the ZUPT uses, so
         there is one notion of "flow is dead". With flow live the model would
         be fed back the numbers it was fitted to -- agreement by construction.
         """
@@ -584,7 +584,7 @@ class LocalizationNode(Node):
         with flow running, a still hull already measures zero and this adds
         nothing.
 
-        ⛔ THE CALLER OWNS THE STATIONARITY TEST, and getting it wrong is how a
+        The caller owns the stationarity test, and getting it wrong is how a
         ZUPT ruins a filter -- declaring "still" during a slow constant-speed
         transit deletes real motion. So stillness is MEASURED, never assumed
         and never taken from mission intent: the hull station-keeping against
@@ -623,7 +623,7 @@ class LocalizationNode(Node):
     def _on_heading(self, msg: Float32) -> None:
         """An absolute world heading from the landmark anchor.
 
-        ⛔ THIS IS WHAT MAKES `frame_id` TRUE. The board's yaw is excellent and
+        This is what makes `frame_id` true. The board's yaw is excellent and
         is not a pool bearing: it is relative to boot, or to magnetic north
         through a reference that may not have locked (`MAGACC` 0.0, `YAW_REF`
         0.0, `COMP_SEEN` 0.0 on this hull, measured). Until an anchor arrives
@@ -634,7 +634,7 @@ class LocalizationNode(Node):
         flow integrates into position through the SAME rotation, so every
         dead-reckoned metre would walk off along an offset nobody measured.
 
-        ⛔ AN OFFSET, NOT AN UPDATE -- the defect this replaced. This used to be
+        An offset, not an update -- the defect this replaced. This used to be
         one `update_yaw` against a filter the board pins at 0.5 deg, 50 times a
         second. Any anchor more than ~5 deg from boot yaw was chi-square
         REJECTED; one that got in was pulled back to boot axes by the next
@@ -649,7 +649,7 @@ class LocalizationNode(Node):
         the sequence, exactly as the seed is. A later anchor replaces the
         offset and rotates by the difference.
 
-        ⚠ THE PAIRING IS BY ARRIVAL. The message carries the hull's absolute
+        The pairing is by arrival. The message carries the hull's absolute
         heading at the moment the mission computed it, and it is paired here
         with the newest board sample. Mid-turn, the latency between the two is
         heading error. Carrying the mission's own `offset_deg` would remove
@@ -659,7 +659,7 @@ class LocalizationNode(Node):
         if not math.isfinite(heading):
             return
         if self._board_R is None:
-            # ⛔ REFUSED, NOT HELD. An absolute heading means nothing without
+            # Refused, not held. An absolute heading means nothing without
             # the board yaw it was paired with, and a latched anchor delivered
             # to a node that has not yet heard the board may be minutes old --
             # the hull has turned since. A wrong heading zero is worse than
@@ -678,7 +678,7 @@ class LocalizationNode(Node):
         self._n['yaw'] += 1
         if not self._anchored:
             self._anchored = True
-            # Connect `pool` to the hull, once. ⚠ The same claim the odometry
+            # Connect `pool` to the hull, once. The same claim the odometry
             # header has always made at this moment: pool AXES. The origin is
             # still where the filter started until a position fix moves it
             # (see `RIEKF.rotate_world_yaw`), so this is not a pool position.
@@ -694,7 +694,7 @@ class LocalizationNode(Node):
     def _on_floor_grid(self, msg: Float32) -> None:
         """The floor's tile grid: a DRIFT BOUND on yaw, not a heading source.
 
-        ⛔ WHAT THIS CAN AND CANNOT DO. A square grid is identical from four
+        What this can and cannot do. A square grid is identical from four
         directions, so it can never say which way the hull faces. What it can
         say is that the residual between our heading and the grid should be
         CONSTANT -- so any movement of that residual is accumulated gyro drift,
@@ -733,13 +733,13 @@ class LocalizationNode(Node):
         before = self._filter.X.yaw_deg()
         self._apply(None, lambda f, y=snapped, s=self._grid_sigma_deg:
                     f.update_yaw(y, sigma_deg=s))
-        # ⛔ WHAT THE FLOOR MOVED GOES INTO THE OFFSET, or it is undone. The
+        # What the floor moved goes into the offset, or it is undone. The
         # next board attitude, 20 ms later, would pull yaw straight back to
         # board + offset: a drift bound that bounds nothing. Folding the
         # accepted correction (the filter's own gain, so a 1 deg floor against
         # a 0.2 deg board moves a few percent a sample) into the offset makes
         # the board agree with it from then on. A refused update moves 0.
-        # ⚠ Taken once, at arrival: a retrodicted replay re-runs the update
+        # Taken once, at arrival: a retrodicted replay re-runs the update
         # and may move yaw by a slightly different amount than was folded in.
         moved = _wrap180(self._filter.X.yaw_deg() - before)
         self._yaw_offset_deg = _wrap180(self._yaw_offset_deg + moved)
@@ -772,7 +772,7 @@ class LocalizationNode(Node):
         self._report_aiding()
         st = self._filter.X
         m = Odometry()
-        # ⛔ THE STAMP IS THE LATEST INPUT'S, NOT `now()`. Every input to this
+        # The stamp is the latest input's, not `now()`. Every input to this
         # filter is stamped on the BOARD's clock through `ClockMap`, and
         # stamping the output on the host wall clock reintroduces exactly the
         # transport jitter that mapping exists to remove -- measured at 6.67 ms
@@ -788,7 +788,7 @@ class LocalizationNode(Node):
         # `pool` is a CLAIM, and it is only true once the heading is anchored.
         m.header.frame_id = frames.POOL if self._anchored else frames.ODOM
         # Both frames are NED (z down: position.z is +depth) with an FRD child.
-        # ⚠ `odom_ned`, not `odom`: REP-103 reserves `odom` for ENU, and a tool
+        # `odom_ned`, not `odom`: REP-103 reserves `odom` for ENU, and a tool
         # reading this under `odom` drew the hull CLIMBING as it dived (#19).
         m.child_frame_id = frames.BODY
         m.pose.pose.position.x = float(st.p[0])
@@ -822,7 +822,7 @@ class LocalizationNode(Node):
 
     def _diagnose(self) -> None:
         n = self._n
-        # ⛔ THE ONE DEGRADATION AN OPERATOR MUST BE TOLD ABOUT. With attitude
+        # The one degradation an operator must be told about. With attitude
         # and depth alone, horizontal velocity is COMPLETELY unobserved --
         # depth constrains z, attitude constrains R, nothing constrains vx/vy
         # -- so bias and attitude residual integrate twice without bound.
@@ -918,7 +918,7 @@ def _fill_covariance(msg: Odometry, filt: RIEKF) -> None:
     [theta | v | p | bg | ba], so attitude is block 0:3 and position 6:9.
     """
     P = filt.P
-    # ⛔ P IS THE COVARIANCE OF THE RIGHT-INVARIANT ERROR, NOT OF POSITION
+    # P IS THE COVARIANCE OF THE RIGHT-INVARIANT ERROR, NOT OF POSITION
     # (issue #30). True = exp(xi) * estimate, so to first order
     #     p_true = p + dtheta x p + dp     ->  dp_pos = dp - skew(p) dtheta
     # and copying the dp block alone left out what the attitude uncertainty
@@ -936,7 +936,7 @@ def _fill_covariance(msg: Odometry, filt: RIEKF) -> None:
     # the x and y variances on a 90 degree heading, and every consumer that
     # weights by axis (the board's distance leg, flow position) gets the
     # other axis's confidence.
-    # ⚠ And unlike position it needs no attitude term: v_body_true =
+    # And unlike position it needs no attitude term: v_body_true =
     # R^T exp(-dtheta) (exp(dtheta) v + dv) = R^T (v + dv) to first order --
     # the dtheta parts cancel, so R^T P_vv R IS the body-velocity covariance.
     R = filt.X.R

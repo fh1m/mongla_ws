@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Two models, one class: does AGREEMENT kill the false positives?
 
-⛔ THE SITUATION NOBODY ACTED ON. We ship two graphs that both detect `gate`:
+The situation nobody acted on. We ship two graphs that both detect `gate`:
 
     gate_rescue_repair   claims a gate on 90.8 % of gate-free frames at the
                          shipped 0.15, half-frame boxes over empty turquoise
@@ -14,12 +14,12 @@ Only one runs. The other is a false-positive machine -- but a false-positive
 machine whose errors have NO REASON to coincide with the good model's, because
 they were trained on different data with different classes.
 
-⭐ BUMBLEBEE REFLEX 1, LITERALLY. "When you cannot pick a threshold, RUN BOTH."
+Bumblebee reflex 1, literally. "When you cannot pick a threshold, RUN BOTH."
 Their 2026 gate runs FIVE pose estimators in parallel. The ensemble literature
 says the same thing for detection: an intersection-based ensemble filters false
 positives, because two independent errors rarely land in the same place.
 
-THE TEST. Per frame, on clips asserted to contain the prop and clips asserted
+The test. Per frame, on clips asserted to contain the prop and clips asserted
 not to, compare:
 
     A alone          the shipped model
@@ -30,7 +30,7 @@ and report the positive rate and the worst negative rate for each. The
 question is whether AND buys separation that neither has alone, and at what
 cost in true detections.
 
-⚠ `detector_dual_node` already runs two models off ONE decode, so the vehicle
+`detector_dual_node` already runs two models off ONE decode, so the vehicle
 cost of this is one more Hailo group, not one more camera pipeline.
 """
 from __future__ import annotations
@@ -132,7 +132,7 @@ def main() -> int:
             wp = min(r[i] for r in pos)
             wn = max(r[i] for r in neg)
             print(f'{tag:<34}{wp:>8.1f}%{wn:>8.1f}%{wp - wn:>+11.1f} pts')
-        print('\n⚠ AND can only LOSE true detections -- it is an intersection. '
+        print('\nWARNING: AND can only LOSE true detections -- it is an intersection. '
               'The question is whether the false positives it removes are '
               'worth the true ones it costs, and both columns are printed so '
               'that is a decision rather than a slogan.')

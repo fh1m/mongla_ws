@@ -67,7 +67,7 @@ def test_the_tool_and_the_module_decode_identically():
 
 
 def test_no_other_copy_of_the_band_arithmetic_exists():
-    """⛔ THE COPY THAT WENT WRONG WAS THE ONE NOTHING COMPARED. `mixer_map.py`
+    """The copy that went wrong was the one nothing compared. `mixer_map.py`
     has a standalone copy for a stated reason and the test above compares it.
     `tools/control_bench/` had TWO more, uncompared, and they disagreed:
     `flight.py` decoded the reverse band as `-(v - 47)` where every other copy

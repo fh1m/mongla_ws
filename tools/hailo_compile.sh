@@ -7,14 +7,14 @@
 #   ./tools/hailo_compile.sh gate_sharks --nms-score-th 0.05
 #   ./tools/hailo_compile.sh --check            # verify the toolchain only
 #
-# ⛔ TRAP 1 -- PYTHONPATH. A sourced ROS overlay puts its own site-packages
+# Trap 1 -- pythonpath. A sourced ROS overlay puts its own site-packages
 # AHEAD of the venv's, so the venv is shadowed and the DFC imports the wrong
 # onnx (1.22 rather than 1.16). It surfaces as
 #     ModuleNotFoundError: No module named 'onnx.mapping'
 # which reads like a dependency bug and is not: pinning onnx changes nothing,
 # because pip writes to a directory Python never reaches. Hence `env -u`.
 #
-# ⛔ TRAP 2 -- the DFC and HailoRT are version-locked. The vehicle runs
+# TRAP 2 -- the DFC and HailoRT are version-locked. The vehicle runs
 # HailoRT 4.24.0, which pairs with DFC 3.x. The 5.3.0 wheel sitting beside the
 # 3.34.0 one pairs with HailoRT 5.x and yields a HEF the Pi refuses to load,
 # reporting an architecture mismatch that looks like a hardware fault.
@@ -24,7 +24,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 log() { printf '[hailo] %s\n' "$*"; }
 
-# ⛔ $HOME IS NOT THE USER'S HOME HERE. Inside the dev container it is
+# $home is not the user's home here. Inside the dev container it is
 # `/home/fh1m/Envs/dockers/auv-ros2`, so `~/Downloads` and `~/hailo-dfc-venv`
 # both resolve to paths that do not exist while looking perfectly reasonable.
 # Resolve against real candidates instead of trusting one variable.
@@ -43,7 +43,7 @@ if [ ! -x "$VENV/bin/python" ]; then
     python3 -m venv "$VENV"
 fi
 
-# ⚠ Probe with the SAME cleaned environment the compile uses. Probing with the
+# Probe with the SAME cleaned environment the compile uses. Probing with the
 # ambient one would find the ROS overlay's packages and report a working
 # toolchain that then fails the moment it matters.
 if ! env -u PYTHONPATH "$VENV/bin/python" -c 'import hailo_sdk_client' 2>/dev/null; then

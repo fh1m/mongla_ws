@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Every model on this box, what it detects, and whether it has been checked.
 
-⛔ WHY THIS EXISTS. Four models ship in `src/mongla_vision/models/`. There are
+Why this exists. Four models ship in `src/mongla_vision/models/`. There are
 **66 `.pt` files on this machine, 32 of them carrying a gate class**, spread
 across the model directories, three pendrive backups and a 2026 season
 folder. Work proceeded for weeks on the four, while dedicated
@@ -11,13 +11,13 @@ That is the same shape as the footage problem: a `find` from the repo root
 does not reach `Work/`, `Music/detect` or `tmp/smol backups/`, so "we don't
 have one" kept being concluded from a search that could not have found one.
 
-⭐ IT DEDUPLICATES BY CONTENT. The same weights appear under several names --
+It deduplicates by content. The same weights appear under several names --
 `Music/detect/.../best.pt` and
 `tmp/smol backups/pendrive_2/MODELS_USA/.../best.pt` are frequently
 byte-identical. Ranking both wastes a GPU hour and reports a "tie" that is one
 model counted twice.
 
-⚠ `verified_negatives` IS THE COLUMN THAT MATTERS. A model is not usable
+`verified_negatives` is the column that matters. A model is not usable
 because it exists and has classes; it is usable when it has been measured on
 footage where the prop is ABSENT (`tools/negative_clip_check.py`). B-60: the
 shipped gate model scores **0.92 on a clip with no gate**, higher than the
@@ -44,14 +44,14 @@ sys.path.insert(0, str(HERE))
 def _roots() -> tuple:
     """Every place models have actually been found.
 
-    ⛔ The archive paths are RESOLVED, never written here:
+    The archive paths are RESOLVED, never written here:
     `test_no_live_code_carries_the_retired_project_name` bans the old project
     name from live code, and `archive_root.py` exists so tools read it from
     `$MONGLA_ARCHIVE` or `~/.mongla/archive_root` instead. Hardcoding it is
     also how a tool silently stops finding anything when the archive moves.
     """
     here = pathlib.Path(__file__).resolve().parents[1]
-    # ⛔ NOT Path.home(). Inside the dev container $HOME is the workspace
+    # NOT Path.home(). Inside the dev container $HOME is the workspace
     # root, so `~/Downloads` resolves to a directory that does not exist while
     # looking perfectly reasonable -- the same trap `hailo_compile.sh`
     # documents. Resolve against the real login directory.
@@ -123,7 +123,7 @@ def scan(roots):
                 'sha1': digest,
                 'size_mb': round(p.stat().st_size / 1e6, 1),
                 'mtime': dt.date.fromtimestamp(p.stat().st_mtime).isoformat(),
-                # ⛔ Nothing here may set this true. It becomes true only when
+                # Nothing here may set this true. It becomes true only when
                 # negative_clip_check.py has been run with visually-confirmed
                 # negative clips and the result recorded.
                 'verified_negatives': False,
@@ -169,7 +169,7 @@ def main() -> int:
         json.dump(rows, fh, indent=1)
     print(f'\nwrote {dst}')
     unver = sum(1 for r in uniq if not r['verified_negatives'])
-    print(f'⚠ {unver}/{len(uniq)} unique models have NEVER been measured '
+    print(f'WARNING: {unver}/{len(uniq)} unique models have NEVER been measured '
           f'against footage where the prop is ABSENT. Until that is done a '
           f"model's numbers describe only how it behaves when the answer is "
           f'yes -- which is how B-60 hid. Run tools/negative_clip_check.py.')

@@ -20,7 +20,7 @@
 | G-03 | Measure `k_n_per_rpm2` on a fitted thruster | OURS | control | 4 | 1 | 1 | **20.0** | needs thrusters (G2), not water |
 | G-12 | Measure the ESC deadband; the yaw floor may sit inside it | SOTA | control | 4 | 1 | 1 | **20.0** | yes — one thruster on a bench |
 | G-11 | Geometric `B` + one offline pseudo-inverse + **report the scale factor** | SOTA | control | 5 | 2 | 2 | **12.5** | yes — the host half; the report is firmware PR #20 |
-| G-13 | Detect a dead thruster on **current**, not RPM | SOTA | control | 4 | 1 | 2 | **10.0** | ⚠ **blocked on HARDWARE**: Bluejay sends no current (#48) -- needs different ESCs or a current sensor |
+| G-13 | Detect a dead thruster on **current**, not RPM | SOTA | control | 4 | 1 | 2 | **10.0** | **Caution: blocked on HARDWARE**: Bluejay sends no current (#48) -- needs different ESCs or a current sensor |
 | G-14 | Assign materials in CAD and get a real BG | SOTA | control | 4 | 1 | 2 | **10.0** | yes — a scale and a CAD session |
 | G-07 | Measure tool offsets and stop aiming the camera centre | OURS | vision | 4 | 1 | 1 | **20.0** | yes — a tape measure |
 | G-05 | Turn `retrodict` on by default after measuring its Pi cost | OURS | localization | 3 | 1 | 1 | **15.0** | yes — already proven correct |
@@ -93,7 +93,7 @@ anything.
 
 ### ~~G-01~~ — every FSM plan aborts to SURFACE on srot · `OURS` · planning · **CLOSED**
 
-⛔ **Closed 2026-09-22 by deleting the layer**, not by fixing it. The guard was written first and
+**Warning: Closed 2026-09-22 by deleting the layer**, not by fixing it. The guard was written first and
 *did* bite — the reproduction failed exactly as predicted — and then the operator retired the
 whole FSM tree (3,550 lines that had never executed). The lesson then moved into the DSL as a capability oracle,
 and the J04 shape was injected back in to confirm it bit (4 of 12 failed). On 2026-11-06 the
@@ -266,7 +266,7 @@ here reports a healthy zero for a missing thruster.
 **The move.** Firmware PR #4 already decodes per-ESC voltage/current/temperature and discards it;
 getting it on the wire makes the cheap detector possible.
 
-⚠ **Corrected 2026-10-02 (#48): not on our ESCs.** Bluejay's extended-telemetry schedule
+**Caution: Corrected 2026-10-02 (#48): not on our ESCs.** Bluejay's extended-telemetry schedule
 (`src/Modules/Scheduler.asm`, at 0368d11) sends demag, status, debug1, debug2 and temperature
 frames only, with **no voltage and no current**. The Pico's `CURRENT` case is never fed. The
 current-based detector needs different ESC firmware or a current sensor. That makes it a hardware
@@ -296,7 +296,7 @@ becomes a ballast problem — which is a hardware answer, found by a software me
 
 **The gap.** Our deployment path is six manual Dataflow Compiler steps with recorded traps.
 `model.export(format="hailo")` has existed since **ultralytics 8.4.97** and covers YOLOv8 / YOLO11
-/ YOLO26 including custom models. ⛔ It wants **≥1 024 in-domain calibration images**, and **with
+/ YOLO26 including custom models. It wants **≥1 024 in-domain calibration images**, and **with
 none supplied it silently falls back to COCO128** — the exact silent-failure shape this codebase
 keeps catching elsewhere. We currently calibrate on 320 real pool frames.
 

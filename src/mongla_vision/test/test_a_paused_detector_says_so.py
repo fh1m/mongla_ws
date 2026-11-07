@@ -1,6 +1,6 @@
 """A paused detector must announce itself.
 
-⛔ WHY. `paused` makes the worker consume each frame and publish nothing. The
+WHY. `paused` makes the worker consume each frame and publish nothing. The
 camera runs, `image_raw` flows, the `/detections` publisher is registered and
 live, and zero messages ever appear -- every liveness check this project owns
 passes while the pipeline does nothing.

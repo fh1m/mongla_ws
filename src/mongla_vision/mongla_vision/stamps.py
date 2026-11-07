@@ -1,6 +1,6 @@
 """When was this actually SEEN? One implementation, every consumer.
 
-THE DEFECT THIS EXISTS TO STOP, which this codebase has now shipped four
+The defect this exists to stop, which this codebase has now shipped four
 times: a message carries the instant its data was captured, and the code that
 needs that instant reads a local clock instead.
 
@@ -15,14 +15,14 @@ freshness gate measure something other than freshness. That is the signature:
 out too small, which is always the direction that makes the vehicle act with
 more confidence than it has earned.
 
-TWO CLOCK DOMAINS, AND MIXING THEM IS THE SECOND HALF OF THE BUG.
+Two clock domains, and mixing them is the second half of the bug.
 `header.stamp` is WALL time -- it has to be, because it crosses hosts, and the
 monotonic clock is meaningless off the machine that read it. Every freshness
 gate in the stack is MONOTONIC, because wall time can step. Both offsets are
 read at the same instant here so the difference between them is the conversion
 and nothing else.
 
-FAIL SAFE, NOT FAIL SILENT. A stamp that is absent, in the future, or absurdly
+Fail safe, not fail silent. A stamp that is absent, in the future, or absurdly
 old means a publisher we do not understand -- `use_sim_time`, an NTP step, a
 node still stamping `now()`. Arrival time is then the HONEST answer, and the
 caller is told so it can say it once. The alternative is handing a control loop

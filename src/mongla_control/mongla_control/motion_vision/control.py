@@ -16,7 +16,7 @@ from ..motion_writers import REVERSE_KICK_SEC, _interruptible_sleep
 from .. import actuation_model
 
 # ---- Outcome codes (copied to Move.Result.final_value) --------------- #
-# ⚠ A SEPARATE CODE SPACE from `fc.base` (SUCCEEDED, TIMEOUT = 4, ABORTED = 5,
+# A separate code space from `fc.base` (SUCCEEDED, TIMEOUT = 4, ABORTED = 5,
 # ...), which grades a board verb. Same names, different numbers: compare an
 # `Outcome.code` only against the names below, and a `MoveResult.code` only
 # against fc.base's. No module imports both sets today; keep it that way.
@@ -73,7 +73,7 @@ FWD_BAND = 0.03   # |fwd_fill - fill| within this -> at standoff, forward neutra
 # That smallest command is MEASURED, not guessed (the first version copied a
 # 5.0 % spin-up assumption from an older autopilot). `attitude_control.cpp:87`
 # gates the yaw stick at a hardcoded 0.02, AFTER PILOT_EXPO. Below it the board is not taking a rate command at all -- it is
-# HOLDING HEADING. Above it the output jumps straight to 17.4 % of full scale,
+# Holding heading. Above it the output jumps straight to 17.4 % of full scale,
 # because `MOT_SPIN_MIN` lifts every non-zero demand into [0.15, 1].
 #
 # Measured on `tools/control_bench` -- the board's own attitude_control.cpp and
@@ -85,9 +85,9 @@ FWD_BAND = 0.03   # |fwd_fill - fill| within this -> at standoff, forward neutra
 #     stick 5.00 %  ->  yaw torque 0.018140  ->  19.12 % output   (the old guess)
 #     stick 100  %  ->  yaw torque 0.506651  ->  70.67 % output
 #
-# ⚠ Two consequences, and the second is the one that changes behaviour.
+# Two consequences, and the second is the one that changes behaviour.
 #  1. The old 5.0 was 1.75x higher than the smallest command that moves the hull.
-#  2. A TAPER CANNOT TAPER. A floor ramped from 0 across an approach band (the
+#  2. A taper cannot taper. A floor ramped from 0 across an approach band (the
 #     `_vision_yaw_floor` this file carried until 2026-11-06) produces EXACTLY
 #     ZERO output for every value in (0, 2.856) and 17.4-19.1 % above it: a step
 #     function wearing a ramp's clothes. Once the snap below existed the ramp
@@ -99,7 +99,7 @@ FWD_BAND = 0.03   # |fwd_fill - fill| within this -> at standoff, forward neutra
 # wrong -- it stalls the hole-lock just outside err_px, which is the exact
 # failure this floor was written for.
 #
-# ⚠ AND ONE CLAIM WE HAD TO RETRACT. It is NOT true that a sub-gate demand
+# And one claim we had to retract. It is NOT true that a sub-gate demand
 # disturbs the board's heading hold while a true zero does not. Measured
 # 2026-09-23 with a 5 deg heading error: sticks of 0.0, 0.5, 1.0, 2.0 and 2.8 %
 # all produce the same hold torque, -0.097075. They land in the same branch of
@@ -192,7 +192,7 @@ VISION_LOCK_GATE_MIN = 0.05
 def _lock_gate(dt_s: float) -> float:
     """The continuity-lock gate for a gap of `dt_s` between accepted centres.
 
-    THE CLOCK IS THE DETECTION INTERVAL, NOT THE CONTROL TICK, and getting that
+    The clock is the detection interval, not the control tick, and getting that
     wrong is a defect I shipped and had to correct. The gate limits how far the
     box may jump between ACCEPTED CENTRES -- and a centre only changes when a
     new detection lands. Scaling by the control period made it 1.7x TIGHTER
@@ -231,7 +231,7 @@ MIN_ALIGN_ERR_PX = 5.0
 # change; the decay only engages when detections are slow or drop out. ZERO_S is
 # below _STALE_LIMIT_S so the command zeroes BEFORE "target lost" declares.
 #
-# NOTHING HERE IS TIED TO A PARTICULAR CAMERA. The thresholds are DERIVED at
+# Nothing here is tied to a particular camera. The thresholds are DERIVED at
 # runtime from two quantities the loop observes: the pipeline latency and the
 # detection interval. A competition can put any sensor in front of us and this
 # has to keep meaning the same thing.
@@ -262,7 +262,7 @@ MIN_ALIGN_ERR_PX = 5.0
 #               from producing a threshold tighter than the pipeline
 #   * ceilings  bound the derivation, and this is the part that matters.
 #
-# THE FULL CEILING EXISTS BECAUSE DERIVATION ALONE IS UNSAFE. Feed this a
+# The full ceiling exists because derivation alone is unsafe. Feed this a
 # pipeline that is ALWAYS 300 ms late and it concludes "300 ms is normal here"
 # and grants full authority -- which is exactly wrong. An observation 300 ms
 # old is 20 cm of travel at this hull's 0.65 m/s cruise, whatever the reason
@@ -300,7 +300,7 @@ _FRESH_ZERO_K = 8.0    # ...plus this many -> zero
 _FRAME_EPS_S = 0.005   # min monotonic gap to count a sample as a new detection
 
 
-# ⛔ VERIFY AGAINST A RE-MEASURED POSE, NOT THE CONTROLLER'S OWN ERROR (plan
+# Verify against a re-measured pose, not the controller's own error (plan
 # Block 1C; BumblebeeAS's `cluster_goto` does exactly this and gates at 2.5 cm /
 # 1 deg). align declared ALIGNED on the last in-band tick BEFORE it braked, and
 # reported that pre-brake frame's offset as where it ended. The brake, the
@@ -308,7 +308,7 @@ _FRAME_EPS_S = 0.005   # min monotonic gap to count a sample as a new detection
 # stopped, align now waits for `align_stable_frames` NEW detections captured
 # AFTER the brake, and asks the controller's own question of them again.
 #
-# THE BAR IS THE CONTROLLER'S OWN BAND (`eff_err`), on purpose: this checks that
+# The bar is the controller's own band (`eff_err`), on purpose: this checks that
 # the controller's belief survives the stop, so it must not move the goalposts.
 # Bumblebee's 2.5 cm / 1 deg is theirs; ours is not measured yet -- it needs
 # water, and until then no new number is invented here.
@@ -432,7 +432,7 @@ def _fresh_bounds(interval_s: float = 0.0, pipe_age_s: float = 0.0):
     if interval_s <= 0.0 and pipe_age_s <= 0.0:
         return VISION_FRESH_FULL_S, VISION_FRESH_ZERO_S
     interval_s = max(0.0, interval_s)
-    # THE OBSERVED PIPELINE IS TRUSTED ONLY UP TO THE SAFETY CAP. Beyond it
+    # The observed pipeline is trusted only up to the safety cap. Beyond it
     # the pipeline is degraded, and a degraded pipeline must not be allowed to
     # EXTEND the window we are willing to steer in -- that is the derivation
     # arguing itself into more trust the worse things get. Measured effect: a
@@ -452,7 +452,7 @@ def _fresh_bounds(interval_s: float = 0.0, pipe_age_s: float = 0.0):
     return full, zero
 
 
-# ⛔ A BOX IS WHERE THE TARGET WAS. `sample.age_s` runs from CAPTURE (median
+# A box is where the target was. `sample.age_s` runs from CAPTURE (median
 # 22 ms forward, 46 ms downward on the vehicle, and it keeps growing while a
 # 20 Hz loop re-reads one frame). The hull keeps yawing in that time, so a
 # world-fixed target has moved f*tan(w*age) in the image. At 0.5 rad/s over
@@ -626,7 +626,7 @@ def _present(sample) -> bool:
 def _tick(vision_state) -> None:
     """Wait for the next observation, or the tick timeout -- whichever first.
 
-    THE LOOP USED TO SLEEP A FIXED PERIOD. Against an asynchronous producer
+    The loop used to sleep a fixed period. Against an asynchronous producer
     that costs, on average, half a period of pure waiting for data that has
     already arrived: detections land ~77 Hz (13 ms) and the srot loop ticked
     at 50 Hz (20 ms), so every command was computed from an observation up to
@@ -674,7 +674,7 @@ def _srot_drive(fc, *, fwd_pct: float, lat_pct: float, yaw_pct: float,
                 prioritise: bool = True) -> None:
     """Write one MANUAL_CONTROL frame for the srot board.
 
-    ⛔ PRIORITISED BEFORE IT LEAVES. The board scales a saturated horizontal
+    Prioritised before it leaves. The board scales a saturated horizontal
     group UNIFORMLY, so a large lateral correction steals yaw in the same
     proportion -- measured on the mixer at fwd 0.9 / lat 0.9 / yaw 0.3, yaw
     arrives at 0.143. `prioritise` fits the demand host-side, yaw first, so the
@@ -696,14 +696,14 @@ def _srot_drive(fc, *, fwd_pct: float, lat_pct: float, yaw_pct: float,
 def _srot_yaw_expressible(mag_pct: float, cap_pct: float) -> float:
     """Round a NON-ZERO yaw magnitude (%) UP to something the board can produce.
 
-    ⛔ WHY UP AND NOT DOWN. Between 0 and `SROT_YAW_MIN_PCT` the board produces
+    Why up and not down. Between 0 and `SROT_YAW_MIN_PCT` the board produces
     no thrust at all, so a demand in that range is a correction that does not
     happen. The old code reached it through a taper and stalled just outside
     the deadband -- which is the exact failure the yaw floor was written for.
     Rounding up costs a relay; rounding down costs convergence, and a verb that
     times out having never moved is worse than one that wobbles in.
 
-    ⚠ THE RELAY IS UNAVOIDABLE HERE, not a choice we are making. `MOT_SPIN_MIN`
+    The relay is unavoidable here, not a choice we are making. `MOT_SPIN_MIN`
     puts the smallest non-zero output at ~17.4 % of full scale, so there is no
     gentler value to pick. The real fix is a heading-hold SETPOINT we can move,
     which makes small yaw a continuous function of heading error instead of a
@@ -711,13 +711,13 @@ def _srot_yaw_expressible(mag_pct: float, cap_pct: float) -> float:
     axis can do, and it is 17.4 % rather than the 19.1 % the guessed constant
     was producing.
 
-    ⛔ AN EXACT ZERO STAYS ZERO. Only a correction the loop actually wants is
+    An exact zero stays zero. Only a correction the loop actually wants is
     lifted; `mag_pct == 0` means the error is inside the deadband.
 
     `cap_pct` is the caller's speed cap (`g_yaw`): we never exceed it, so a
     mission that asked for a gentle yaw does not get a lurch because of this.
 
-    ⚠ NOT a claim about heading hold. Measured 2026-09-23: with a 5 deg heading
+    NOT a claim about heading hold. Measured 2026-09-23: with a 5 deg heading
     error, sticks of 0.0, 0.5, 1.0, 2.0 and 2.8 % ALL produce the same hold
     torque (-0.097075). A sub-gate demand and a true zero land in the same
     branch of `attitude::stabilize`, so neither disturbs the hold. The reason to
@@ -757,7 +757,7 @@ def _live_classes(vision_state):
 def _tool_offset(tool_offset_fn, log) -> Tuple[float, float]:
     """(du, dv) pixels from camera centre to where the TOOL points, or (0, 0).
 
-    ⛔ AIM THE TOOL, NOT THE CAMERA. The two axes are parallel, so an
+    Aim the tool, not the camera. The two axes are parallel, so an
     uncorrected offset misses by the offset itself AT EVERY RANGE -- it does
     not shrink as the hull closes in. The correction is `du = fx*x/Z`, LARGE up
     close, so it is resolved once per tick because Z moves.
@@ -786,7 +786,7 @@ def _yaw_command(ctrl: float, epx: float, eff_err: float, kp_yaw: float,
     Inside the deadband: 0, so the hull settles and an in-band shot does not
     jitter. Outside: proportional, capped at `g_yaw`.
 
-    ⛔ THE STICTION SNAP BELONGS INSIDE THE FILL GATE, NOT OUTSIDE. Close in
+    The stiction snap belongs inside the fill gate, not outside. Close in
     (large box) the magnitude is lifted to the smallest yaw the board produces,
     so the hole-lock does not stall just outside err_px. Far away the rule is
     the opposite: a minimum on a rate channel is a relay that limit-cycles the
@@ -809,7 +809,7 @@ def _forward_range_hold(sample, *, fwd_fill, fwd_mode, kp_forward, g_fwd,
     never reverse, so no reverse-kick and no ramming; drag bleeds a small
     overshoot. Same `_fill` law as move_loop.
 
-    ⛔ AN OBLIQUE TARGET READS AS FURTHER AWAY, SO THE HULL CLOSES IN.
+    An oblique target reads as further away, so the hull closes in.
     `_fill('area')` is sqrt(w*h), Corke & Hutchinson's Z feature (IEEE T-RA
     17(4) 2001), valid while the target normal is within +/-35 deg of the
     optical axis; past that the area "will appear diminished, due to
@@ -817,7 +817,7 @@ def _forward_range_hold(sample, *, fwd_fill, fwd_mode, kp_forward, g_fwd,
     Approaching is the dangerous direction, so a PRESENT pose that says too
     oblique holds the approach.
 
-    FAIL DIRECTION IS THE OPPOSITE OF THE FIRING GATE, deliberately.
+    Fail direction is the opposite of the firing gate, deliberately.
     `square_within` treats "no pose" as not-square because for a shot both mean
     don't. Here "no pose" is the ordinary case (it needs lock_node, a
     calibration and a committed width), and treating it as oblique would

@@ -9,7 +9,7 @@ different things about them:
   * the WORLD moved -- the target left, the vehicle turned, the current pushed
     it off. Vision is fine, and the answer is to search.
 
-⛔ Nothing in this stack can currently tell them apart, so both arrive as "the
+Nothing in this stack can currently tell them apart, so both arrive as "the
 anchor is not matching" and get the same response. The signal that separates
 them is already computed on every bank lookup and thrown away:
 
@@ -21,7 +21,7 @@ is why the best-of-bank answer alone cannot carry it. It needs no new
 measurement, no new sensor and no new model -- only that the per-reference
 yields are looked at instead of maxed over.
 
-⚠ THIS IS A HYPOTHESIS WITH A MECHANISM, NOT A MEASURED RESULT. It has never
+This is a hypothesis with a mechanism, not a measured result. It has never
 been run against a fouled port, because we have never fouled one on purpose.
 The thresholds below are therefore DECLARED, not measured, and
 `measured-bars.md` records them as such. What is defensible today is the
@@ -105,27 +105,27 @@ def assess(current: Sequence[int], best: Sequence[int],
 
 
 # --------------------------------------------------------------------------- #
-#  ⭐ ANTICIPATION -- the piece the ladder was missing
+#  ANTICIPATION -- the piece the ladder was missing
 # --------------------------------------------------------------------------- #
-# ⛔ THE LADDER ONLY EVER REACTED. Every rung below DETECTION fires AFTER the
+# The ladder only ever reacted. Every rung below DETECTION fires AFTER the
 # detection is already gone: the follower takes over once there is nothing to
 # follow from, and the anchor is asked once the box has vanished. By then the
 # best reference that could have been snapped -- the one from while the view
 # was still good -- is a second in the past and unrecoverable.
 #
-# ⭐ THE STATE OF THE ART CALLS THIS INTROSPECTION. Online detection monitoring
+# The state of the art calls this introspection. Online detection monitoring
 # predicts performance drops "using the detector's internal features", without
 # ground truth, and frames the decision as trading a false alarm against
 # absenting from detection. What it needs is a per-frame quality signal that
 # does not require a label.
 #
-# ⭐⭐ WE ALREADY COMPUTE ONE. XFeat's inlier count against the bank falls as
+# We already compute one. XFeat's inlier count against the bank falls as
 # the water thickens, as the target turns away, as range opens -- all the
 # things that precede a lost detection. It is measured on every bank lookup
 # and was being used only to pick a winner. A FALLING TREND is a prediction
 # that the next seconds will be worse than the last.
 #
-# ⛔ AND IT MUST NOT BECOME A CONTROL INPUT ON ITS OWN. This says "prepare",
+# And it must not become a control input on its own. This says "prepare",
 # never "the target is gone". The ladder's rule stands: no rung fabricates.
 # The only action it licenses is cheap and reversible -- snap a reference now,
 # while there is still something worth remembering.
@@ -151,7 +151,7 @@ class Trend:
 
     @property
     def prepare(self) -> bool:
-        """⭐ The ONLY thing a falling trend licenses: remember something now,
+        """The ONLY thing a falling trend licenses: remember something now,
         while the view is still good enough to be worth remembering."""
         return self.state == FALLING
 

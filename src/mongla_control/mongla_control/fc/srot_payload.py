@@ -9,7 +9,7 @@ from . import srot_protocol as sp
 # ---------------------------------------------------------------------- #
 #  SrotPayload -- payload over MAVLink (replaces the obsolete USB ESP32)  #
 # ---------------------------------------------------------------------- #
-# THERE IS NO HOST-SIDE CHANNEL MAP, DELIBERATELY.
+# There is no host-side channel map, deliberately.
 #
 # `fire(N)` addresses BOARD channel N -- literally `DO_SET_SERVO param1`, 1..16,
 # the same N that names `SERVO{N}_ROLE` and the same N printed by
@@ -130,7 +130,7 @@ class SrotPayload:
         consult, and the full read is the thing that retires the "1-8 servo / 9-16
         switch" folklore by printing what the board ACTUALLY has.
 
-        ⚠ REQUIRES THE READER THREAD TO BE RUNNING. `get_param` reads the pymavlink
+        Requires the reader thread to be running. `get_param` reads the pymavlink
         message cache and never calls `recv_match()` itself (the stack's threading
         rule), so with no reader every role comes back None and every channel reads
         UNREADABLE -- indistinguishable from a mis-roled board. `auv_manager_node`
@@ -154,7 +154,7 @@ class SrotPayload:
             # policy. Measured over the bridge: 16 reads take ~0.7 s, so 32 is ~1.4 s
             # at bring-up only.
             #
-            # ⚠ Do NOT pipeline these two requests. `get_param` pops the single
+            # Do NOT pipeline these two requests. `get_param` pops the single
             # PARAM_VALUE slot and polls it; two replies in flight means the second
             # overwrites the first, and the first then times out indistinguishably
             # from a dropped frame -- permanently, on a lossy link.

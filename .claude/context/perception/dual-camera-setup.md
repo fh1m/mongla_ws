@@ -12,7 +12,7 @@ not a name — it is a race. Address a camera by the **USB port it is plugged in
 (`/dev/v4l/by-path/...`), which is stable across reboots and re-plugs, and give each port a
 role in the launch profile.
 
-⛔ **Roles have been wrong before.** The global-shutter camera is the **downward** one and the
+**Warning: Roles have been wrong before.** The global-shutter camera is the **downward** one and the
 rolling-shutter camera is **forward**; a udev rule once bound those names backwards, so
 `pi_forward` opened the bottom camera. Everything downstream — calibration, field of view,
 range — was then attached to the wrong physical lens for nine days.

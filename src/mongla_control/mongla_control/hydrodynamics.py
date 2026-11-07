@@ -1,6 +1,6 @@
 """What the hull's SHAPE implies, before anybody weighs anything.
 
-⛔ THE CLAIM THIS FILE EXISTS TO RETRACT. `hull_geometry.yaml` said:
+The claim this file exists to retract. `hull_geometry.yaml` said:
 
     mass_kg: null   # Onshape reports NO MATERIAL on any part, so mass cannot
                     # be computed. A scale closes it. Every force claim waits here.
@@ -17,13 +17,13 @@ That is false, and it blocked the entire force domain for no reason. Two facts:
 So mass is computable today, to a band, and the band is narrow enough to design
 against. A scale still collapses it, and it should still be run.
 
-⭐ AND THE BEST RESULT HERE NEEDS NO VOLUME AT ALL. Lamb's added-mass
+And the best result here needs no volume at all. Lamb's added-mass
 coefficients are functions of the FINENESS RATIO alone. They are dimensionless,
 mass-free, volume-free, and exact for a body of revolution -- which our hull is,
 to within the 4 mm difference between its 176.1 mm and 172.1 mm cross-section.
 Everything in `LAMB` below is knowable with a tape measure.
 
-WHAT THIS IS NOT. It is not a substitute for Round 4's in-water identification.
+What this is not. It is not a substitute for Round 4's in-water identification.
 Added mass is potential flow -- it is the honest part. DRAG is viscous and no
 closed form predicts it to better than tens of percent; `coast_down` is what
 measures that. Nothing here produces a drag coefficient.
@@ -43,7 +43,7 @@ HULL_LENGTH_MM = 702.0
 HULL_BEAM_MM = 176.1          # the X cross-section
 HULL_HEIGHT_MM = 172.1        # the Z cross-section
 
-# ⚠ WATER IS NOT ONE DENSITY, and the difference is not negligible: 2.8 %
+# Water is not one density, and the difference is not negligible: 2.8 %
 # between a fresh pool and the sea, which lands directly on every force claim.
 # The competition pool decides which one applies, and a claim that does not say
 # which it used is incomplete.
@@ -59,7 +59,7 @@ CP_SPHEROID = 2.0 / 3.0
 CP_TORPEDO = 0.80
 CP_CYLINDER = 1.0
 
-# ⛔ THE TUNNELS DO NOT DISPLACE, and forgetting that is a 23 % error.
+# The tunnels do not displace, and forgetting that is a 23 % error.
 # Four through-bores pass clean through the hull: water sits in them and moves
 # with the vehicle, so they are inside the envelope and OUTSIDE the displaced
 # volume. The first version of this module omitted them and published a mass
@@ -78,7 +78,7 @@ class AddedMass:
     `k1` acts along the long axis, `k2` on both transverse axes, and `kp`
     (Lamb's k') on rotation about a transverse axis -- pitch and yaw.
 
-    ⚠ THESE DESCRIBE A SMOOTH SEALED SPHEROID, WHICH OUR HULL IS NOT. Four
+    These describe a smooth sealed spheroid, which our hull is not. Four
     84 mm bores pass through it. They break the axisymmetry the formulas assume
     and they let fluid through the body, so on the real hull k2 and k' are
     over-estimates of the potential-flow part and the tunnels add an entrained
@@ -86,7 +86,7 @@ class AddedMass:
     SHAPE CONTRIBUTION of the faired envelope, good to maybe 10-20 % on the
     transverse axes, and let Round 4's free-decay measure the truth.
 
-    ⛔ THERE IS NO ROLL TERM, and that is a LIMIT OF THE MODEL, not a claim
+    There is no roll term, and that is a LIMIT OF THE MODEL, not a claim
     about the vehicle. For a smooth body of revolution spun about its own axis
     the potential-flow added inertia is exactly zero -- there is nothing for the
     fluid to grip. Our hull has four transverse bores, which is precisely
@@ -136,7 +136,7 @@ def lamb_coefficients(length_m: float, diameter_m: float) -> AddedMass:
 def hull_added_mass() -> AddedMass:
     """This vehicle's coefficients, from the CAD envelope.
 
-    ⚠ The cross-section is 176.1 x 172.1 mm -- not quite round. The mean is
+    The cross-section is 176.1 x 172.1 mm -- not quite round. The mean is
     used, and the 4 mm of asymmetry is below the precision of treating a faired
     hull as a spheroid at all.
     """
@@ -153,7 +153,7 @@ def enclosing_cylinder_volume_m3() -> float:
 def tunnel_void_m3() -> float:
     """Volume of the four free-flooding thruster tunnels. 3.106 L.
 
-    ⚠ This is water that travels WITH the vehicle. It is not displaced, so it
+    This is water that travels WITH the vehicle. It is not displaced, so it
     subtracts from buoyancy -- and it is entrained, so it adds to the mass that
     has to be accelerated. Those are two separate effects of the same 3.1 L and
     only the first one is modelled here.
@@ -168,9 +168,9 @@ def displaced_volume_m3(cp: float = CP_TORPEDO) -> float:
 
 
 def neutral_mass_kg(cp: float = CP_TORPEDO, rho: float = RHO_FRESH) -> float:
-    """⭐ The vehicle's DRY mass, ASSUMING it is ballasted neutral.
+    """The vehicle's DRY mass, ASSUMING it is ballasted neutral.
 
-    ⛔ THE ASSUMPTION IS THE WHOLE CONTENT, so state it wherever this is
+    The assumption is the whole content, so state it wherever this is
     quoted. If the hull floats or sinks, this is the displaced mass and not the
     vehicle's, and the two differ by exactly the net buoyancy -- which is the
     quantity a pool test measures directly and a scale does not.
@@ -190,13 +190,13 @@ def mass_band_kg(rho: float = RHO_FRESH) -> tuple[float, float, float]:
 
 
 def effective_mass_ratio() -> float:
-    """⭐ How much more INERTIA this hull has laterally than axially. Mass-free.
+    """How much more INERTIA this hull has laterally than axially. Mass-free.
 
     Survives nearly every unknown -- no mass, no volume, no material, no
     density -- because it is (1+k2)/(1+k1) and falls straight out of the
     fineness ratio. Subject to the tunnel caveat in `AddedMass`.
 
-    ⛔ IT IS A STATEMENT ABOUT INERTIA AND NOTHING ELSE. It does NOT follow
+    It is a statement about inertia and nothing else. It does NOT follow
     that strafing is worse than turning and driving, and an earlier version of
     this file said exactly that. Which manoeuvre wins depends on the THRUST
     available per axis and on drag, and this hull has TWO lateral thrusters
@@ -211,7 +211,7 @@ def effective_mass_ratio() -> float:
 def uniform_inertia_per_kg() -> tuple[float, float]:
     """(Ixx, Iyy=Izz) per kg for a UNIFORM spheroid of this shape, m^2.
 
-    ⚠ UNIFORM IS WRONG AND THIS IS THE WEAKEST FUNCTION HERE. A real hull is a
+    Uniform is wrong and this is the weakest function here. A real hull is a
     shell with its heavy parts (battery, pressure housing) placed deliberately,
     so the true inertia is not the uniform figure and can differ substantially.
     Use this to size a gain, never to claim a moment. The honest instrument is
@@ -223,7 +223,7 @@ def uniform_inertia_per_kg() -> tuple[float, float]:
 
 
 # ═══════════════════════════════════════════════════════════════════════════ #
-#  ⭐ Thruster response time -- the term that dominates everything else
+#  Thruster response time -- the term that dominates everything else
 # ═══════════════════════════════════════════════════════════════════════════ #
 #
 # Measured on the closed-loop bench 2026-09-23: against a yaw torque burst,
@@ -250,7 +250,7 @@ def rotor_spinup_s(*, inertia_kg_m2: float, torque_nm: float,
 
 def duct_response_s(*, bore_mm: float, duct_length_mm: float,
                     thrust_n: float, rho: float = RHO_FRESH) -> float:
-    """⭐ THE DOMINANT TERM, and it is pure geometry.
+    """The dominant term, and it is pure geometry.
 
         tau = L * sqrt(rho * A / T)
 
@@ -260,7 +260,7 @@ def duct_response_s(*, bore_mm: float, duct_length_mm: float,
     entrained column rho*A*L must be brought to it, which gives the expression
     above.
 
-    ⭐ THE THREE DESIGN LEVERS FALL STRAIGHT OUT OF IT:
+    The three design levers fall straight out of it:
 
         tau ~ L           halve the duct, halve the lag. THE BIGGEST ONE.
         tau ~ 1/sqrt(T)   four times the thrust, half the lag
@@ -271,7 +271,7 @@ def duct_response_s(*, bore_mm: float, duct_length_mm: float,
     the ~0.59 s reported for a T100-class unit, before anybody designs
     anything -- short tunnel thrusters are inherently quick.
 
-    ⚠ FIRST-ORDER AND IDEAL. Momentum theory ignores duct wall friction, the
+    First-order and ideal. Momentum theory ignores duct wall friction, the
     inlet contraction, and the fact that a stopped propeller has to break away
     before any of this starts. Treat it as the term that RANKS design choices,
     not as a number to quote. A step-response test on the real unit settles it.

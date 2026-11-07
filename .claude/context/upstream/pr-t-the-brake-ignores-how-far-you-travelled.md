@@ -8,7 +8,7 @@
 travelled. With the shipped defaults, any leg shorter than **≈0.21 s** ends up
 moving **backwards**, and a 3 s leg has only **4.6 %** of its momentum removed.
 
-Computed from their source and defaults. ⚠ Not water-verified — it predicts a
+Computed from their source and defaults. Not water-verified — it predicts a
 displacement, and that needs a pool.
 
 ---
@@ -49,13 +49,13 @@ Forward impulse over a leg of `T` seconds at commanded `v`, with ramp `a`:
 
 Brake impulse — note what it does *not* contain:
 
-    I_b = g · v · (k · v) = g·k·v²        ⛔ no T at all
+    I_b = g · v · (k · v) = g·k·v²        no T at all
 
 At `v = 0.4` that is `I_b = 0.0528` for every leg, whether it ran 0.1 s or 100 s.
 
 | leg `T` | forward impulse | brake impulse | brake / forward |
 |---|---|---|---|
-| 0.10 s | 0.0125 | 0.0528 | **422 %** ⛔ net reversal |
+| 0.10 s | 0.0125 | 0.0528 | **422 %** net reversal |
 | 0.21 s | 0.0528 | 0.0528 | **100 %** — the crossover |
 | 0.50 s | 0.168 | 0.0528 | 31 % |
 | 1.00 s | 0.368 | 0.0528 | 14 % |
@@ -64,7 +64,7 @@ At `v = 0.4` that is `I_b = 0.0528` for every leg, whether it ran 0.1 s or 100 s
 So the same verb is a violent reversal at one end and a rounding error at the
 other, and nothing on the vehicle notices because there is no velocity estimate.
 
-⛔ **Short legs are not a corner case for us.** Precision alignment and the
+**Warning: Short legs are not a corner case for us.** Precision alignment and the
 approach to every prop are exactly where sub-second legs are issued, and they are
 where being pushed backwards is least recoverable.
 
@@ -92,14 +92,14 @@ impulse reaches `brake_frac · s_impulse`, or time it as
 function of the distance travelled, makes short legs proportionate, and makes long
 legs actually brake.
 
-⚠ `MOVE_BRAKE_K` and `MOVE_BRAKE_GAIN` change meaning under this, so it wants a
+**Caution:** `MOVE_BRAKE_K` and `MOVE_BRAKE_GAIN` change meaning under this, so it wants a
 `PARAM_DEFAULTS_VER` bump and a note — and honestly it wants the free-decay
 measurement our [PR O](pr-o-thruster-step-response.md) asks for, because the right
 brake fraction is a drag question. **A momentum-proportional brake with a guessed
 coefficient still beats a duration-blind one with a measured coefficient**, so we
 would take this change before that measurement rather than after.
 
-⭐ Cheap check that needs no water: assert monotonicity — that net impulse over
+**Key point:** Cheap check that needs no water: assert monotonicity — that net impulse over
 (cruise + brake) never changes sign as `T` decreases. That is the property being
 violated, and it is a pure function of these two phases.
 

@@ -208,7 +208,7 @@ every payload after it.
 Read end to end: firmware 22.8 k lines, Bondor 6.9 k, ESC flasher 3.4 k. What
 follows is only what changes how `mongla_ws` behaves.
 
-## 9. ⛔ A move can report COMPLETE while it is still running
+## 9. A move can report COMPLETE while it is still running
 
 `snapshot()` caches last-good values for the thruster block and explains why:
 *"a 3 ms miss is not rare … the previous behaviour transmitted all-zero RPM,
@@ -249,7 +249,7 @@ frame, because a dead IMU freezes the attitude rather than dropping it.
 **Signed per-thruster RPM.** `ESC_STATUS` (291) is `int32` and signed;
 `ESC_TELEMETRY_*` is `uint16` magnitude. pymavlink does not discard 291 — it
 returns `MAVLink_unknown` carrying the whole frame (`UNKNOWN_291`), 434/434
-CRC-valid on a recorded dive. ⚠ **That return happens BEFORE the CRC check**, so
+CRC-valid on a recorded dive. **That return happens BEFORE the CRC check**, so
 validate `x25crc` with `crc_extra = 10` yourself. Built: `esc_status_rpm()`.
 
 **Per-thruster presence.** `thrusters.esc_present` reaches the wire ONLY as
@@ -282,7 +282,7 @@ FAILs.
   it finishes FAIL below 0.05 rad/s, which is what an in-air run produces.
   Adding both driver methods is right; describing either as closing GATE 0 is
   not.
-- **⚠ `MOTOR_DETECT` is not a neutral read on this board.** `MOT_n_DIRECTION`
+- **`MOTOR_DETECT` is not a neutral read on this board.** `MOT_n_DIRECTION`
   and `CAL_MDIRn` **multiply**, this hull has `MOT_1`/`MOT_8 = -1` set
   **runtime-only, deliberately unsaved**, and `FRAME_REVERSE = 1` — which a
   successful detect makes wrong. Running it changes stored calibration that

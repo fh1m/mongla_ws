@@ -1,6 +1,6 @@
 """Calibrating IN WATER: a separate answer, kept separate.
 
-⛔ WHY THIS MODE EXISTS AT ALL. The normal path is the Pinax one -- calibrate
+Why this mode exists at all. The normal path is the Pinax one -- calibrate
 once in AIR and correct the flat port's refraction analytically, which is
 what `RefractiveRectifier` already does. So an in-water calibration is not
 the primary method; it is the VALIDATION of that correction, and
@@ -202,7 +202,7 @@ def test_each_medium_gets_its_own_capture_FOLDER(fs):
 
 
 def test_switching_to_water_does_not_resume_the_AIR_capture():
-    """⛔ The defect this exists for produces a CORRECT-LOOKING file.
+    """The defect this exists for produces a CORRECT-LOOKING file.
 
     Solve installs `..._water.json`; the frames inside it were taken in air.
     Every naming and file-content test above passes, because the artifact is

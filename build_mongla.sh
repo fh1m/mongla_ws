@@ -92,7 +92,7 @@ _prune_missing_paths() {  # echo $1 (a ':'-list) minus empty/nonexistent dirs
 export AMENT_PREFIX_PATH="$(_prune_missing_paths "${AMENT_PREFIX_PATH:-}")"
 export CMAKE_PREFIX_PATH="$(_prune_missing_paths "${CMAKE_PREFIX_PATH:-}")"
 
-# ⛔ ALWAYS A CLEAN BUILD. An incremental symlink-install tree keeps what
+# Always a clean build. An incremental symlink-install tree keeps what
 # source no longer has -- links to a deleted model broke the vehicle's build on
 # 2026-10-03 and the gate counted the retired model as installed. Nothing
 # stale survives a build.

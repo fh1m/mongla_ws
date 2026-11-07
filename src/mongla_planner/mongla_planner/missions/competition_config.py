@@ -17,7 +17,7 @@ BIN_DEPTH_M           = -1.0    # downward camera must see bin clearly
 TORPEDO_DEPTH_M       = None    # align with hole center; fill at pool
 
 # ── Headings (degrees) — fill after compass survey ─────────────────────────────
-# ⚠ SROT YAW SENSE CHANGED AT FIRMWARE REV 10 (2026-08-07). Before rev 10 an
+# SROT yaw sense changed at firmware rev 10 (2026-08-07). Before rev 10 an
 # improper axis transform left the frame left-handed and yaw SILENTLY INVERTED
 # while roll and pitch read correctly -- turning right made yaw DECREASE, measured
 # in water. Any heading written down against a rev <= 9 board is NEGATED on a rev
@@ -66,7 +66,7 @@ CAMERA_REQUIRED = {
 
 # ── Payload channels -- ONE place, and UNASSIGNED (B53) ──────────────────────────
 #
-# ⛔ 0 = NOT ASSIGNED. The old map (1,2 = torpedoes, 3,4 = droppers) was invented:
+# 0 = not assigned. The old map (1,2 = torpedoes, 3,4 = droppers) was invented:
 # read live off the board, 2026-09-22 and again 2026-10-01, those channels are
 # SERVO (the on-board arm) or unroled, and `fire()` refuses every one of them --
 # so every torpedo and every drop would have scored zero while the mission ran.
@@ -114,7 +114,7 @@ SEARCH_YAW_STEP_DEG   = 20      # yaw step per sweep look
 #  constant: a different pool and a different rulebook, so a value tuned for
 #  one is wrong for the other.
 #  Source for every number below: https://sauvc.org/rulebook/ as published
-#  30 Oct 2026 (re-read 2026-11-05). ⛔ The venue CHANGED between rulebooks:
+#  30 Oct 2026 (re-read 2026-11-05). The venue CHANGED between rulebooks:
 #  the 2026-09-09 read described a one-off 25x16 m pool with a 1.6/1.2 m floor
 #  and a 1.0 m gate 16 m out; the current one is an olympic 50x25 m pool whose
 #  floor runs 1.28 m at the qualification wall, slopes to 2 m by 17.5 m, and is
@@ -127,7 +127,7 @@ SEARCH_YAW_STEP_DEG   = 20      # yaw step per sweep look
 # attempts AND setup, and the bonus is `(900 - RUN_TIME) * 0.03` once at least
 # two tasks are done -- so a 300 s run is worth 18 bonus points, MORE than the
 # 15-point Navigation task itself. Elapsed time is a scored resource, not slack.
-# ⛔ The bonus needs TWO tasks. As shipped, `sauvc_navigation.run()` surfaces and
+# The bonus needs TWO tasks. As shipped, `sauvc_navigation.run()` surfaces and
 # disarms at the end, so a navigation-only run scores 20 (15 + 5 surfacing) and
 # earns NO timing bonus. Chaining navigation into target acquisition on one dive
 # is what makes the 18 points real, and that combinator does not exist yet.
@@ -184,7 +184,7 @@ SAUVC_GATE_MOVE_S       = 90.0   # ~12 m of transit plus the commit window
 # not zero the run. If the gate is never locked, dead-reckon the leg the rulebook
 # itself gives us: "approximately 12m away from the starting zone".
 SAUVC_BLIND_TRANSIT_ENABLED = True
-SAUVC_BLIND_TRANSIT_S       = 40.0  # ⚠ UNMEASURED on this hull. 12 m at ~0.35 m/s
+SAUVC_BLIND_TRANSIT_S       = 40.0  # UNMEASURED on this hull. 12 m at ~0.35 m/s
                                     # is ~34 s; 40 s carries the hull ~2 m past
                                     # the gate line so the back-most part clears.
                                     # Measure a timed straight leg in the pool and
@@ -217,7 +217,7 @@ SAUVC_QUAL_GATE_MOVE_S   = 75.0   # ~10 m out, plus the commit window
 # After the forward pass the hull is barely through. A 1.5 m gate overfills a
 # 46.7° in-water frame inside ~2.5 m (1.5 / (2 tan 23.35°) / 0.7), so turning
 # in place leaves an align with no whole gate to centre on. Swim on first.
-SAUVC_QUAL_STANDOFF_S    = 8.0    # ⚠ UNMEASURED. ~2.8 m at ~0.35 m/s
+SAUVC_QUAL_STANDOFF_S    = 8.0    # UNMEASURED. ~2.8 m at ~0.35 m/s
 SAUVC_QUAL_TURN_DEG      = 180.0  # yaw_right: CLOCKWISE, which is also the turn
                                   # the qualification video must show
 SAUVC_QUAL_TURN_TIMEOUT_S = 30.0
@@ -225,8 +225,8 @@ SAUVC_QUAL_TURN_TIMEOUT_S = 30.0
 # zero the qualifier. The rulebook gives the outbound leg ("approximately 10m");
 # the return leg is the standoff plus the commit distance, ~4.5 m.
 SAUVC_QUAL_BLIND_ENABLED = True
-SAUVC_QUAL_BLIND_OUT_S   = 32.0   # ⚠ UNMEASURED. 10 m at ~0.35 m/s is ~29 s
-SAUVC_QUAL_BLIND_BACK_S  = 14.0   # ⚠ UNMEASURED. ~4.5 m at ~0.35 m/s is ~13 s
+SAUVC_QUAL_BLIND_OUT_S   = 32.0   # UNMEASURED. 10 m at ~0.35 m/s is ~29 s
+SAUVC_QUAL_BLIND_BACK_S  = 14.0   # UNMEASURED. ~4.5 m at ~0.35 m/s is ~13 s
 # Ceiling for the whole run. Qualification time is a tie-breaker only, so this
 # is a bound on a stuck mission, not a score.
 SAUVC_QUAL_BUDGET_S      = 420.0
@@ -236,7 +236,7 @@ SAUVC_QUAL_BUDGET_S      = 420.0
 #  will be blue in color, while the rest are red in color." -- "60cm in diameter
 #  and 30cm in depth."  Blue 30 pts, red-with-pinger 50, other red 10.
 #
-# ⛔ WE TARGET THE BLUE DRUM, AND ONLY THE BLUE DRUM. The 50-point drum is
+# We target the blue drum, and only the blue drum. The 50-point drum is
 # identified ACOUSTICALLY ("RJE International Pinger Model No. ULB-362B/45 kHz");
 # the rulebook describes no visual marking at all, and no hydrophone is fitted to
 # this vehicle. The `drum_red_pinger` class exists in sauvc_sim.yaml only because
@@ -248,7 +248,7 @@ SAUVC_DRUM_CLASS         = 'drum_blue'
 SAUVC_DRUM_HOVER_DEPTH_M = -0.7   # hover height for the drop. Drums stand on the
                                   # 2 m floor and are 0.30 m deep, so their mouths
                                   # are ~1.7 m down and this hovers ~1.0 m above
-                                  # them. ⚠ Kept from the old venue (mouths ~0.9 m
+                                  # them. Kept from the old venue (mouths ~0.9 m
                                   # down then): a 1 m ball drop is a longer fall
                                   # than it was. Lowering it needs the downward
                                   # camera's in-water footprint at that height --
@@ -263,23 +263,23 @@ SAUVC_RESERVE_S          = 45.0   # surface + disarm allowance, never offered to
 SAUVC_DRUM_WORST_S       = 90.0   # hover dive + downward align + settle + release
 
 # Task 4, Communication & Localization: 20 per bump flare, +60 for all three in
-# the order sent over LoRa. ⛔ OFF by default. A 16 mm pole at the 10 px floor is
+# the order sent over LoRa. OFF by default. A 16 mm pole at the 10 px floor is
 # detectable at <= ~0.9 m on the forward camera (measured-bars.md, P6 DATA OPEN),
 # so an align on a flare from transit is expected NOT to acquire. Enable after
 # the pool measurement, not before.
 SAUVC_FLARES_ENABLED     = False
 SAUVC_FLARE_LISTEN_S     = 45.0   # hold for the LoRa order; None -> default order
 SAUVC_FLARE_DEFAULT_ORDER = ('red', 'yellow', 'blue')   # bump-all when no order
-SAUVC_FLARE_ALIGN_S      = 40.0   # ⚠ UNMEASURED
-SAUVC_FLARE_MOVE_S       = 30.0   # ⚠ UNMEASURED
+SAUVC_FLARE_ALIGN_S      = 40.0   # UNMEASURED
+SAUVC_FLARE_MOVE_S       = 30.0   # UNMEASURED
 SAUVC_FLARE_STOP_FILL    = 85     # % of frame HEIGHT: a 0.8 m pole fills it at contact range
 SAUVC_FLARE_GAIN         = 25     # slow: a bump, not a ram
-SAUVC_FLARE_PUSH_S       = 2.0    # ⚠ UNMEASURED short push to tip the ball
-SAUVC_FLARE_BACKOFF_S    = 3.0    # ⚠ UNMEASURED
+SAUVC_FLARE_PUSH_S       = 2.0    # UNMEASURED short push to tip the ball
+SAUVC_FLARE_BACKOFF_S    = 3.0    # UNMEASURED
 SAUVC_FLARES_WORST_S     = (SAUVC_FLARE_LISTEN_S + 3 * (
     SAUVC_FLARE_ALIGN_S + SAUVC_FLARE_MOVE_S + SAUVC_FLARE_PUSH_S + SAUVC_FLARE_BACKOFF_S))
 
-# ⛔ Task 3 (Target Reacquisition, 60 pts) is NOT implemented and has no config
+# Task 3 (Target Reacquisition, 60 pts) is NOT implemented and has no config
 # here. "The AUV has to hold on to the ball till the end of attempt" -- that needs
 # a gripper or a retaining mechanism this vehicle does not carry. Recording the
 # absence so it is not mistaken for an oversight.

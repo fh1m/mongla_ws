@@ -1,6 +1,6 @@
 """The pool floor is a surveyed 2-D grating. Read it like an optical encoder.
 
-⛔ THE INVERSION THIS MODULE IS BUILT ON. `measured-bars.md` records the known
+The inversion this module is built on. `measured-bars.md` records the known
 killer for our optical flow: *"the texture that defeats optical flow is a
 repeating tile pattern under water."* A uniform tiled floor has no distinctive
 corners, so Lucas-Kanade has nothing to track and every patch matches every
@@ -33,12 +33,12 @@ FFT reads three quantities off it that we currently pay dearly for elsewhere:
             walks away without bound; phase is an absolute sub-tile coordinate
             that is the same on minute one and minute ten.
 
-⚠ WHAT THIS IS NOT. Phase is absolute only modulo the tile pitch -- it bounds
+What this is not. Phase is absolute only modulo the tile pitch -- it bounds
 drift to one tile, it does not localise the vehicle in the pool. Counting which
 tile you are on needs continuity, and continuity is exactly what a dropout
 breaks. Stated here so nobody reads "drift-free" as "a global fix".
 
-⚠ AND IT REFUSES. Measured while writing this: our own SAUVC and RoboSub sim
+And it refuses. Measured while writing this: our own SAUVC and RoboSub sim
 floor textures carry only 0.65 % and 0.67 % of their spectral energy in the
 dominant peak -- they are noise-like, not tiled, so this module correctly
 returns None on them. That is a sim-fidelity finding as much as an algorithm
@@ -58,7 +58,7 @@ import numpy as np
 # before we call the floor periodic. Measured: a noise-like texture sits near
 # 0.65 %, a real square grid is far above this. The bar is deliberately set
 # where a NEGATIVE control fails, not where a positive one passes.
-# SWEPT AGAINST BOTH CONTROLS, not chosen. At 0.020 every negative refuses but
+# Swept against both controls, not chosen. At 0.020 every negative refuses but
 # the grid only survives noise sigma 10; at 0.010 every negative STILL refuses
 # and the grid survives sigma 30; at 0.005 the negatives start passing. So the
 # bar sits at the last value where the negative control holds, which is the
@@ -125,8 +125,8 @@ def snap_to_grid(current_yaw_deg: float, grid_angle_deg: float,
                  period_deg: float = 90.0) -> Optional[float]:
     """Pull a drifting yaw back onto the floor's grid. None if it is too far.
 
-    ⛔ THIS IS THE HALF THAT MATTERS, AND IT IS NOT A HEADING SOURCE -- IT IS A
-    DRIFT BOUND. The grid gives orientation modulo 90 degrees, so it cannot
+    This is the half that matters, and it is not a heading source -- it is a
+    Drift bound. The grid gives orientation modulo 90 degrees, so it cannot
     tell you which way you are facing; a square floor looks identical from four
     directions. What it CAN do is say that whatever your heading is, its
     residual against the grid should be constant -- so any accumulated gyro
@@ -165,7 +165,7 @@ def measure(gray, *, decimate: int = 3,
             min_strength: float = MIN_PEAK_FRACTION) -> Optional[Grating]:
     """`detect` on a decimated frame, with the period scaled back to full pixels.
 
-    ⛔ DECIMATION IS FREE HERE, AND THAT IS NOT OBVIOUS. Throwing away pixels
+    Decimation is free here, and that is not obvious. Throwing away pixels
     normally costs accuracy; it does not here, because the quantity being read
     is a COARSE spatial frequency -- the tile pitch -- not fine detail. An
     area-averaged decimation is a low-pass filter, and a low-pass filter cannot
@@ -209,7 +209,7 @@ def measure(gray, *, decimate: int = 3,
 def usable_height_m(focal_px: float, tile_m: float, frame_px: int) -> tuple:
     """(min, max) height over the floor where this instrument works.
 
-    ⛔ THE ENVELOPE IS PHYSICAL, NOT A TUNING CHOICE. You cannot measure a
+    The envelope is physical, not a tuning choice. You cannot measure a
     period you only see four times, so the frame must contain at least
     `MIN_PEAK_RADIUS_BINS` full cycles; and a pattern finer than
     `MIN_PERIOD_PX` is past the blur limit underwater. Those two bounds turn
@@ -268,7 +268,7 @@ def detect(gray: np.ndarray, *, min_strength: float = MIN_PEAK_FRACTION
 
     iy, ix = np.unravel_index(int(np.argmax(mag)), mag.shape)
     iy, ix = _fundamental(mag, iy, ix, cy, cx)
-    # ⛔ SUB-BIN, OR THE HEIGHT IS QUANTISED. An FFT bin is an integer, so the
+    # Sub-bin, or the height is quantised. An FFT bin is an integer, so the
     # recovered period lands on a discrete ladder: measured against known
     # truth, a 48 px grid read back as 51.2 px -- 6.67 % error, which becomes
     # 6.67 % on every velocity derived from the height. A parabolic fit
@@ -297,7 +297,7 @@ def detect(gray: np.ndarray, *, min_strength: float = MIN_PEAK_FRACTION
     if strength < min_strength:
         return None
 
-    # ⛔ WHICH GATE DOES THE WORK -- ESTABLISHED BY INJECTION, NOT BY ARGUMENT.
+    # Which gate does the work -- established by injection, not by argument.
     #
     # A smooth illumination gradient, which is what an underwater scene with
     # light falloff actually looks like, was accepted at 35 % "strength" --
@@ -341,8 +341,8 @@ def detect(gray: np.ndarray, *, min_strength: float = MIN_PEAK_FRACTION
 def _fundamental(mag, iy: int, ix: int, cy: int, cx: int) -> Tuple[int, int]:
     """Step from a harmonic down to the grid's fundamental, if one is there.
 
-    ⛔ THIN GROUT IS AN IMPULSE TRAIN, AND AN IMPULSE TRAIN'S HARMONICS ARE AS
-    STRONG AS ITS FUNDAMENTAL. The tallest bin is then a coin toss between f,
+    Thin grout is an impulse train, and an impulse train's harmonics are as
+    Strong as its fundamental. The tallest bin is then a coin toss between f,
     2f and 3f. Measured on synthetic grids with 3 px grout, 80 px period,
     swept over 36 angles: the period came back at 1/2 or 1/3 in 17 of 36 --
     and height is `f * tile / period`, so height and every flow velocity
@@ -418,7 +418,7 @@ def _orthogonal_period(mag, cy, cx, fy, fx) -> Optional[float]:
 def shift_from_phase(before: Grating, after: Grating) -> Optional[float]:
     """Displacement along the carrier, in PIXELS, from the phase difference.
 
-    ⛔ WRAPPED, and the wrap is the whole caveat. The answer lies in
+    WRAPPED, and the wrap is the whole caveat. The answer lies in
     `[-period/2, +period/2)`; a real motion larger than half a tile between
     frames comes back as a small motion in the opposite direction. At 30 Hz
     and a 0.15 m tile that bound is generous, but it is a bound, and a caller

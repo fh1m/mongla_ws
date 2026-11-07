@@ -333,7 +333,7 @@ class _VisionDSL:
 
         axes_csv = ','.join(name for name, _ in active)
         offsets = {name: float(val) for name, val in active}
-        # ORDER MATTERS: program the detector (model/class for a ClassRef) + confirm
+        # Order matters: program the detector (model/class for a ClassRef) + confirm
         # it's up BEFORE activating the camera, so _activate_camera's settle warms
         # the NEW config. If we resumed first (old order) the settle would warm the
         # OLD model -- wasting it and briefly emitting wrong-class boxes -- and the
@@ -545,12 +545,12 @@ class _VisionDSL:
                     f"(camera={camera!r}); mission continues")
                 return _mk(False, 'NO_CAMERA')
 
-            # ⛔ DRIFTED: centred while driving, off once stopped and re-measured
+            # DRIFTED: centred while driving, off once stopped and re-measured
             # (Block 1C). Not a success, and not a reason to give up: re-converge
             # with the budget that is left, and be re-checked again -- the
             # perceive -> move -> re-measure loop BumblebeeAS's `cluster_goto`
             # runs. Bounded by the same deadline as everything else here.
-            # ⛔ NEVER RE-ENTER AFTER A SHOT LEFT. A re-entry re-sends the same
+            # Never re-enter after a shot left. A re-entry re-sends the same
             # goal, `fire_channels` and all, and the server's `fired` flag is
             # local to one align -- so a torpedo align that drifted once stopped
             # (or lost the target after a mid-hold shot) would fire AGAIN, both

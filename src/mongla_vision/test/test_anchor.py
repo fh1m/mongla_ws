@@ -13,7 +13,7 @@ was confident:
 On `torp_up_1` the detector lost the target for 175 consecutive frames and the
 anchor produced a trusted pose on every one.
 
-WHAT THE ANCHOR ACTUALLY HOLDS, stated so it is not overclaimed: the snapped
+What the anchor actually holds, stated so it is not overclaimed: the snapped
 VIEW, not the prop. For an approach or a station-keep those are the same thing.
 For a target that moves independently of the scene they are not, and the anchor
 would hold the background -- which is why it is a rung beneath the detector and

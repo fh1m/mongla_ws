@@ -1,12 +1,12 @@
 """What is still worth attempting, given the clock. Effort is not points.
 
-⛔ TIER 5 IS NOT IN THE CAPABILITY MAP. The map runs 0-4 and stops at mission
+Tier 5 is not in the capability map. The map runs 0-4 and stops at mission
 composition. This is the layer above it, named here rather than assumed: Tiers
 0-4 make the vehicle CAPABLE, and Tier 5 is what turns capability into a SCORED
 RUN. The first item is the clock, because it is the constraint every other
 decision sits inside and the one no amount of perception removes.
 
-⛔ THE LESSON THIS ENCODES. BumblebeeAS built an 11-file, ~3,000-line slalom
+The lesson this encodes. BumblebeeAS built an 11-file, ~3,000-line slalom
 pipeline with a 2000-particle filter, and no mother tree imports any of it --
 they dead-reckon past the slalom. A team that could build the hard thing still
 shipped waypoints where perception was hardest, because a run is scored on
@@ -17,7 +17,7 @@ case does. A task that overruns does not merely fail: it consumes the budget of
 every task after it, which is how one greedy attempt at 300 points costs three
 easy ones.
 
-⛔ AND THE ONE THING THE CLOCK MAY NOT SKIP. Surfacing, disarming and getting
+And the one thing the clock may not skip. Surfacing, disarming and getting
 out of the water are not tasks competing for budget -- they are the reserve the
 budget is measured against. `remaining()` is net of that reserve, so a plan can
 never spend the seconds that get the hull back.
@@ -69,7 +69,7 @@ class RunBudget:
         self.log: List[str] = []
 
     def start(self) -> None:
-        """⛔ Called on ARM, not on script start. A mission that spends two
+        """Called on ARM, not on script start. A mission that spends two
         minutes waiting for a tether to be removed has not started its run, and
         counting that time makes every later decision pessimistic by exactly
         the wrong amount."""
@@ -115,7 +115,7 @@ class RunBudget:
     def plan(self, tasks: List[Task]) -> List[tuple]:
         """Dry-run the whole list against the clock as it stands NOW.
 
-        ⚠ A PLAN, NOT A PROMISE. It assumes every task takes its worst case,
+        A plan, not a promise. It assumes every task takes its worst case,
         which is what makes it safe to act on and also means the real run will
         usually have room for more. Re-ask `verdict` between tasks rather than
         trusting this list to the end.
@@ -137,7 +137,7 @@ class RunBudget:
 def by_points_per_second(tasks: List[Task]) -> List[Task]:
     """Order tasks by value density, highest first.
 
-    ⚠ ORDERING IS NOT FREE ON A COURSE. This ranks by points per second and
+    Ordering is not free on a course. This ranks by points per second and
     ignores where the props are, so it is a planning INPUT, not a running
     order: swimming across the pool to take a dense task and back again can
     cost more than it earns. Use it to decide what to drop, not what order to

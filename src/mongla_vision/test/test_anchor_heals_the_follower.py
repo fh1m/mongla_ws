@@ -1,18 +1,18 @@
 """The ladder climbs rungs, not only falls down them.
 
-⛔ THE ONE-WAY RATCHET THIS FIXES. `_follower.reset()` was called on an
+The one-way ratchet this fixes. `_follower.reset()` was called on an
 accepted DETECTION and nowhere else. So when LK's points died mid-gap --
 exactly what the survival and forward-backward gates exist to detect -- the
 fast ~50 Hz rung stayed dead until a detection came back, **even though the
 anchor was still finding the target every 222 ms**. Every rung could fall and
 none could climb.
 
-⭐ The anchor's box is a legitimate seed, and a better one than the follower's
+The anchor's box is a legitimate seed, and a better one than the follower's
 own: it is fitted frame-to-REFERENCE against a stored patch, so unlike a
 carried box it has not drifted. `goodFeaturesToTrack` inside it finds the same
 corners LK wanted.
 
-⚠ THE TWO REFUSALS ARE THE DESIGN, not caution:
+The two refusals are the design, not caution:
   * a LIVE follower is never reseeded -- that would replace a frame-fresh box
     with one up to 222 ms old;
   * a weak fit is never used -- restarting the fast rung on a bad box hands it
@@ -58,7 +58,7 @@ def test_a_dead_follower_can_be_reseeded_from_a_box():
 
 
 def test_the_revived_follower_actually_tracks():
-    """⭐ A reseed that produces points but cannot step would be a false heal:
+    """A reseed that produces points but cannot step would be a false heal:
     the ladder would believe the fast rung was back."""
     f = Follower()
     g0 = _textured(seed=1)
@@ -69,7 +69,7 @@ def test_the_revived_follower_actually_tracks():
 
 
 def test_a_featureless_box_refuses_rather_than_pretending():
-    """⛔ Reseeding into flat water must FAIL, not return a follower that
+    """Reseeding into flat water must FAIL, not return a follower that
     reports a box it cannot track. `reset` returns 0 and stays inactive."""
     f = Follower()
     flat = np.full((240, 320), 128, np.uint8)
@@ -78,7 +78,7 @@ def test_a_featureless_box_refuses_rather_than_pretending():
 
 
 def test_the_reseed_bar_is_stricter_than_the_report_bar():
-    """⚠ THE BAR IS THE POINT. A box good enough to report (100 inliers) is
+    """The bar is the point. A box good enough to report (100 inliers) is
     not automatically good enough to restart the fast rung on, because a
     reseeded follower carries full authority for the rest of the gap."""
     from mongla_vision.lock_node import _ANCHOR_RESEED_INLIERS
@@ -90,7 +90,7 @@ def test_the_reseed_bar_is_stricter_than_the_report_bar():
 
 
 def test_the_heal_is_wired_into_the_ladder_loop():
-    """⛔ THE §9 CHECK, INLINE. The mechanism above is worthless if the ladder
+    """The §9 check, inline. The mechanism above is worthless if the ladder
     never calls it -- which is the defect this repo keeps finding. Assert the
     call site exists, guarded by both refusals."""
     from pathlib import Path
@@ -101,7 +101,7 @@ def test_the_heal_is_wired_into_the_ladder_loop():
                 / 'lock_node.py')
     tree = ast.parse(src_path.read_text())
 
-    # ⛔ AST, NOT A SUBSTRING. A substring check passed when the call was
+    # Ast, not a substring. A substring check passed when the call was
     # neutered to `reset(gray, ab) if False else 0` -- the text was still
     # there and the test still agreed. Find a real `reset(gray, ab)` CALL,
     # then require its enclosing `if` to mention both guards.

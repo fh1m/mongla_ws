@@ -1,6 +1,6 @@
 """The lock ladder must be LAUNCHED, and must not FABRICATE when it steers.
 
-⛔ WHY THIS FILE EXISTS. `lock_node` -- the follower + XFeat anchor ladder --
+Why this file exists. `lock_node` -- the follower + XFeat anchor ladder --
 was built, measured (its own `anchor_hz` comment carries a Pi table, and the
 anchor was recorded holding 175 consecutive frames the detector lost), given
 a console_scripts entry point, and then appeared in **no launch file**. It
@@ -11,7 +11,7 @@ Two halves, and they fail in opposite directions:
 
   * NOT WIRED -- the capability is dead weight. Nothing errors, because
     nothing asks for it.
-  * WIRED AND CONSUMED AT ONCE -- the control loop would start steering on
+  * wired and consumed at once -- the control loop would start steering on
     followed and anchored boxes the moment the launch changed, with no deck
     measurement in between. `vision.lock_s` gated that until measured: the
     ladder published evidence first, exactly as the firmware vision uplink is
@@ -138,7 +138,7 @@ def test_the_anchor_model_follows_MONGLA_HEF_DIR():
     # covers the wrong region and this test failed against correct code.
     i = node.index('def _build_anchor')
     window = node[i:i + 1600]
-    # ⛔ Match the CALL, not the name. A first draft asserted
+    # Match the CALL, not the name. A first draft asserted
     # `'MONGLA_HEF_DIR' in window` and passed against code where the lookup
     # had been replaced by '' -- because the comment ABOVE it still said
     # MONGLA_HEF_DIR. The test was reading prose. Injection is what exposed

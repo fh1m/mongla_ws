@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Every clip, its venue, its date, and whether it is CLEAN -- before training.
 
-⛔ WHY THIS EXISTS. A fine-tune was run on 4 304 frames of which 60 % carried
+Why this exists. A fine-tune was run on 4 304 frames of which 60 % carried
 YOLO bounding boxes, class names and confidences BURNED INTO THE PIXELS. The
 network was taught to match hard-edged synthetic rectangles and crisp glyphs
 that do not exist at inference, and the measured cost was a uniform ~19-inlier
@@ -15,7 +15,7 @@ guess and this already cost a run.
 It also reports DATE and VENUE, so the training/held-out split can be made on
 something real rather than on whichever folder happened to be convenient.
 
-AND IT REPORTS THE WATER, from `mongla_vision.underwater` -- the same statistics
+And it reports the water, from `mongla_vision.underwater` -- the same statistics
 `water_check` reads off a live camera, not a second implementation of "how
 blurry is this frame". That matters for a split: `sharp 315 / sat 160` (the gate
 approach) and `sharp 1241 / sat 28` (bin and torpedo) are two different optical
@@ -25,7 +25,7 @@ Measured across the whole archive on 2026-09-26, which is wider than either:
 median sharpness runs **8.5 to 3088**, a 363x range, with saturation 20 to 176
 and cast -13 to +124.
 
-⚠ AND SHARPNESS IS NOT ONLY THE WATER. The lowest clip, a 2026 testing day at
+And sharpness is not only the water. The lowest clip, a 2026 testing day at
 8.5, is four times below Mirpur -- but its five probe frames were looked at, and
 they are a blank pool wall and a bare floor with one lane rope. That is real
 underwater footage, not a lens cap, and the number is honest; it is just scene
@@ -33,7 +33,7 @@ content as much as clarity, because a Laplacian variance has nothing to measure
 on a plain wall. Two clips with the same sharpness are not necessarily in the
 same water.
 
-⚠ NO PREPROCESSING VERDICT, and that is not an omission. The CLAHE rule fitted
+No preprocessing verdict, and that is not an omission. The CLAHE rule fitted
 to two clips was deleted from `underwater.py` after re-measuring on raw
 detection rate across 17 configurations, where it was never positive.
 """
@@ -64,7 +64,7 @@ import numpy as np
 
 VIDEO_EXT = ('.mp4', '.mkv', '.avi', '.mov', '.MP4', '.MKV', '.AVI')
 
-# ⛔ THE FIRST DETECTOR HERE WAS WRONG AND WOULD HAVE THROWN THE ARCHIVE AWAY.
+# The first detector here was wrong and would have thrown the archive away.
 # It flagged "saturated AND bright" pixels as overlay ink -- but bright
 # turquoise pool water is exactly that, so it rejected 32 of 33 clips
 # including `torpedo_shark_up_3.mkv` and `bin_front_#2.mp4`, which are raw
@@ -79,7 +79,7 @@ VIDEO_EXT = ('.mp4', '.mkv', '.avi', '.mov', '.MP4', '.MKV', '.AVI')
 #
 #     threshold 8 -> catches 56 % of annotated, flags 0 % of raw
 #
-# ⚠ 56 % IS NOT A GOOD DETECTOR, and it is not relied on as one. The real
+# 56 % is not a good detector, and it is not relied on as one. The real
 # defence is that the contaminated archive is simply not a source any more;
 # this gate is belt-and-braces for anything annotated that got filed with the
 # raw footage. It is tuned for ZERO false rejection, because throwing away
@@ -93,7 +93,7 @@ PROBE_FRAMES = 5
 def annotated_score(path: str, n: int = PROBE_FRAMES):
     """Median axis-aligned line count, plus the frames it decoded to get it.
 
-    ⭐ THE FRAMES COME BACK because the water statistics need frames and this
+    The frames come back because the water statistics need frames and this
     function has already paid for them. The previous version opened every clip
     a SECOND time to read one mid-clip frame for the colour ratio; now one pass
     feeds the overlay gate, the ratios and the water character, and the ratios
@@ -168,7 +168,7 @@ def main():
     sys.path.insert(0, here)
     from archive_root import archive_root
     A = archive_root()
-    # ⛔ TWO SOURCES ONLY: the raw archive and the current season. The
+    # Two sources only: the raw archive and the current season. The
     # annotated-prediction archive is not a source at all -- that is what
     # cost a training run, and no detector is trusted in its place.
     # `A` is .../<year>/raw_videos, so the season root is TWO levels up, not
@@ -231,7 +231,7 @@ def main():
               f'{np.median(ca):>+7.0f}')
 
     if dirty:
-        print(f'\n⛔ REJECTED as annotated ({len(dirty)}):')
+        print(f'\nERROR: REJECTED as annotated ({len(dirty)}):')
         for r in sorted(dirty, key=lambda x: -x['annotated_score'])[:10]:
             print(f'   {r["annotated_score"]:.3f}  {r["path"][-72:]}')
         if len(dirty) > 10:

@@ -1,6 +1,6 @@
 """The SROT yaw gate: measured on the board's own code, not assumed.
 
-⛔ WHAT THIS REPLACES. `VISION_YAW_MIN_PCT = 5.0` labels itself "a hardware
+What this replaces. `VISION_YAW_MIN_PCT = 5.0` labels itself "a hardware
 spin-up assumption, NOT a measured value". On the srot backend it is now
 measured, and it is wrong in both directions at once: too high to be the
 smallest usable command, and attached to a taper that could not taper (the taper
@@ -95,7 +95,7 @@ def test_a_sub_gate_correction_is_lifted_to_something_that_actuates(mag, want):
 
 
 def test_an_exact_zero_is_never_lifted():
-    """⛔ The deadband must stay a deadband. Lifting 0 would make the loop
+    """The deadband must stay a deadband. Lifting 0 would make the loop
     command 17 % of full scale while it is already on target."""
     assert mv._srot_yaw_expressible(0.0, 100.0) == 0.0
 
@@ -109,7 +109,7 @@ def test_the_callers_speed_cap_is_respected():
 
 
 def test_it_never_rounds_a_correction_DOWN():
-    """⛔ THE BUG THIS REPLACES, and it was shipped for one commit. Rounding a
+    """The bug this replaces, and it was shipped for one commit. Rounding a
     sub-gate correction down to zero stalls the hole-lock just outside err_px --
     the exact failure the yaw floor was written for. Worked example: with
     kp_yaw scaled to 10 by range_gain_floor, the old taper actuated across the
@@ -121,7 +121,7 @@ def test_it_never_rounds_a_correction_DOWN():
 
 
 def test_a_sub_gate_demand_does_not_disturb_the_boards_heading_hold():
-    """⚠ A RETRACTION, kept as a test so it is not re-argued. The first version
+    """A RETRACTION, kept as a test so it is not re-argued. The first version
     of this change claimed a true zero leaves heading hold engaged while a
     sub-gate demand takes it away. That is false: both land in the same branch
     of `attitude::stabilize`, and the bench measured identical hold torque

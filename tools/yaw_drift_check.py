@@ -1,6 +1,6 @@
 """Yaw drift with an OBJECTIVE stillness gate.
 
-⛔ WHY THIS EXISTS. Every previous drift measurement in this project trusted
+Why this exists. Every previous drift measurement in this project trusted
 "the board is on a bench" as evidence that the board was STILL. It is not
 evidence, and it has now been wrong twice: round 26's "+51.9 deg/min" and this
 round's "+38.4 deg/min" were both a hull being handled. The operator has just

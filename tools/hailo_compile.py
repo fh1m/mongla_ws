@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Compile an ultralytics checkpoint to a HEF, reproducibly.
 
-⚠ RUN IT THROUGH `tools/hailo_compile.sh`, never directly. That wrapper owns
+Run it through `tools/hailo_compile.sh`, never directly. That wrapper owns
 the venv and clears `PYTHONPATH`, and without it the DFC silently imports the
 ROS overlay's onnx and dies claiming `onnx.mapping` is missing.
 
     ./tools/hailo_compile.sh gate_sharks --nms-score-th 0.05
 
-⭐ WHY THIS TOOL EXISTS. A HEF bakes its NMS score threshold into the on-chip
+Why this tool exists. A HEF bakes its NMS score threshold into the on-chip
 post-process; no ROS parameter can lower it, because the chip has already
 thrown those boxes away. Parsing all four deployed HEFs on 2026-09-24 found
 `sauvc_sim` and `bin_fire_blood` at 0.050, stock `yolov11n` at 0.200 -- and
@@ -32,7 +32,7 @@ THE STEPS, and why each is where it is:
   4. optimise                 INT8, calibrated on REAL frames
   5. compile  .har -> .hef
 
-⛔ THE CALIBRATION SET IS NOT A FORMALITY. INT8 quantisation picks its scales
+The calibration set is not a formality. INT8 quantisation picks its scales
 from whatever it is shown. Calibrating on clean or synthetic imagery and then
 flying in murky water is how a model loses its faintest detections -- exactly
 the ones the low score threshold exists to keep. Frames come from the real
@@ -80,7 +80,7 @@ def export_onnx(pt: pathlib.Path, imgsz: int) -> pathlib.Path:
 def end_nodes(onnx_path: pathlib.Path) -> list:
     """Read the cut points out of the graph.
 
-    ⛔ Hardcoding these is how you get a HEF that compiles cleanly and detects
+    Hardcoding these is how you get a HEF that compiles cleanly and detects
     nothing: the head sits at `model.22` on YOLOv8 and `model.23` on YOLO11,
     and nothing downstream complains about cutting in the wrong place.
     """
@@ -135,7 +135,7 @@ def calib_frames(n: int, imgsz: int, seed: int = 0):
                          f'of {n} requested across {len(clips)} clips.')
     print(f'[hailo] calibration: {len(out)} frames from {len(clips)} clips '
           f'under {root}')
-    # ⛔ uint8, NOT float32. 1024 x 640 x 640 x 3 is 1.26 GB as uint8 and
+    # uint8, NOT float32. 1024 x 640 x 640 x 3 is 1.26 GB as uint8 and
     # 5.0 GB as float32 -- and it was that 5 GB which pushed me to cut the set
     # to 256 frames, crossing the DFC's 1024 optimisation cliff and producing
     # the corrupted HEF in B-61. The DFC casts internally, so staging narrow
@@ -173,7 +173,7 @@ def downgrade_reasons(*, frames: int, gpu, log_lines=()) -> list:
     return why
 
 
-# ⛔ THE OTHER WAY A FULL BUILD GOES WRONG: THE OPTIMISER ITSELF (2026-11-06).
+# The other way a full build goes wrong: The optimiser itself (2026-11-06).
 # The shipped gate_sharks.hef passed every downgrade check -- 1038 frames, a
 # GPU, level 2 -- and its Quantization-Aware Fine-Tuning DIVERGED: distill
 # losses rose 0.13 -> 0.26 across epochs and conv54 sat at 1.000. On the DFC
@@ -236,7 +236,7 @@ def main() -> int:
     ap.add_argument('--imgsz', type=int, default=640)
     ap.add_argument('--nms-score-th', type=float, default=0.05)
     ap.add_argument('--nms-iou-th', type=float, default=0.70)
-    # ⛔ 1024 IS A CLIFF, NOT A GUIDELINE. Below it the DFC prints
+    # 1024 is a cliff, not a guideline. Below it the DFC prints
     #
     #   [warning] Reducing optimization level to 1 (the accuracy won't be
     #   optimized and compression won't be used) because there's less data
@@ -247,7 +247,7 @@ def main() -> int:
     # corrupted scores. Measured: a 258-frame build scored `repair` 0.86 on
     # every frame of gate.mkv where the .pt scored `gate` 0.53-0.89 (B-61).
     #
-    # ⚠ I set this to 256 myself to avoid an OOM, which is how the cliff got
+    # I set this to 256 myself to avoid an OOM, which is how the cliff got
     # crossed. The memory problem is real -- 1024 x 640 x 640 x 3 float32 is
     # 5.0 GB resident -- and the fix is uint8 staging in `calib_frames`, not a
     # smaller set. `--allow-reduced-optimization` exists for a deliberate
@@ -256,7 +256,7 @@ def main() -> int:
     ap.add_argument('--allow-reduced-optimization', action='store_true',
                     help='proceed below 1024 frames; the HEF will have '
                          'corrupted scores and must not be deployed')
-    # ⛔ THE ESCAPE HATCH FOR A LAYER THAT WILL NOT QUANTISE. Some models fail
+    # The escape hatch for a layer that will not quantise. Some models fail
     # with, for example:
     #
     #   NegativeSlopeExponentNonFixable: Quantization failed in layer
@@ -271,7 +271,7 @@ def main() -> int:
     # calibration set out as the cause.
     #
     # Raising just that layer to 16-bit costs a little throughput on one layer
-    # and leaves the rest INT8. ⚠ Name the layer the error names; blanket
+    # and leaves the rest INT8. Name the layer the error names; blanket
     # 16-bit would quietly discard the accelerator's main advantage.
     ap.add_argument('--verify-clip', action='append', default=[],
                     help='footage containing a target, for the INT8 check '
@@ -317,7 +317,7 @@ def main() -> int:
     runner.save_har(str(har))
     print(f'[hailo] parsed -> {har.name}')
 
-    # ⭐ THE THRESHOLD THIS WHOLE TOOL IS ABOUT. It is compiled in here and
+    # The threshold this whole tool is about. It is compiled in here and
     # cannot be changed afterwards by any runtime setting.
     script = (
         'normalization1 = normalization([0.0, 0.0, 0.0], '
@@ -332,14 +332,14 @@ def main() -> int:
         bare = layer.split('/')[-1]
         script += (f'quantization_param([{bare}], '
                    f'precision_mode=a16_w16)\n')
-        print(f'[hailo] ⚠ {bare} kept at 16-bit: it would not quantise to '
+        print(f'[hailo] WARNING: {bare} kept at 16-bit: it would not quantise to '
               f'INT8. The rest of the network is unaffected.')
     if a.finetune == 'off':
         script += 'post_quantization_optimization(finetune, policy=disabled)\n'
     runner.load_model_script(script)
     print(f'[hailo] model script:\n{script}')
 
-    # ⛔ THE CLIFF, REFUSED BEFORE THE HOUR IS SPENT. Issue #47 asked for a
+    # The cliff, refused before the hour is spent. Issue #47 asked for a
     # build guard on the DFC's "Reducing optimization level" warning; this is
     # it, checked on the input rather than scraped from the log, so it fires
     # before the 40-minute optimise rather than after.
@@ -354,7 +354,7 @@ def main() -> int:
             f'--allow-reduced-optimization for a throwaway build that must '
             f'not be deployed.')
     if a.calib_frames < 1024:
-        print('[hailo] ⚠ REDUCED OPTIMIZATION requested. This HEF will have '
+        print('[hailo] WARNING: REDUCED OPTIMIZATION requested. This HEF will have '
               'corrupted scores. Do not deploy it.')
 
     frames = calib_frames(a.calib_frames, a.imgsz)
@@ -435,7 +435,7 @@ def main() -> int:
     with (out / f'{a.model}.hef.provenance.txt').open('a') as fh:
         fh.write(f'hef_md5: {hashlib.md5(hef.read_bytes()).hexdigest()}\n')
 
-    # ⚠ A HEF THAT COMPILES IS NOT A RESULT. The threshold is the reason this
+    # A HEF that compiles is not a result. The threshold is the reason this
     # was run, so verify it off the artifact rather than trusting the request.
     print(f'\n[hailo] VERIFY before deploying -- a compile that succeeded '
           f'proves nothing about the number you asked for:\n'

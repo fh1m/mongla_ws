@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Does the RULEBOOK's colour find the prop, with no model at all?
 
-⭐ THE OBSERVATION NOBODY ACTED ON. Eight of the eleven SAUVC classes are named
+The observation nobody acted on. Eight of the eleven SAUVC classes are named
 by their colour, because the rulebook FIXES it worldwide:
 
     qualification gate   "orange markings on both port and starboard sides"
@@ -17,11 +17,11 @@ already exploits. A detector built on them needs **no model, no training set
 and no venue calibration**, and it cannot be wrong about a venue it has never
 seen.
 
-⭐⭐ AND THE MAIN GATE'S RED/GREEN RESOLVES PORT FROM STARBOARD -- a geometric
+And the main gate's red/green resolves port from starboard -- a geometric
 ambiguity a class-only detector structurally cannot answer. That is Bumblebee
 reflex 2, separate GEOMETRY from IDENTITY, handed to us by the rulebook.
 
-⛔ WHY THIS IS NOT THE COLOUR RUNG SECTION 58 REJECTED. That one built a
+Why this is not the colour rung section 58 rejected. That one built a
 histogram of a RoboSub gate -- a structure whose colour the rules do not fix
 and which is, in our water, the same hue-saturation cluster as the water behind
 it. It lost to a decoy box on 69 % of frames and was rightly killed. Here the
@@ -29,14 +29,14 @@ colour is a published property of the object, and the question is different:
 not "can a histogram of this patch find it again" but "is the rulebook's colour
 separable from pool water at all".
 
-⚠ UNDERWATER, RED DIES FIRST. Absorption removes red within roughly two metres,
+Underwater, red dies first. Absorption removes red within roughly two metres,
 so a red flare goes dark rather than red at range while blue and green survive.
 A chromatic prior must therefore be measured PER CLASS and PER RANGE, not
 asserted -- which is what this does, against labelled ground truth.
 
     python3 tools/chromatic_prior_check.py --dataset mongla_data/<run>
 
-⛔ WHAT WOULD FALSIFY IT: prop chromaticity inside the labelled box that is not
+What would falsify it: prop chromaticity inside the labelled box that is not
 separable from the same frame's water. Reported as the gap between the two,
 per class, so it is a number rather than an impression.
 """
@@ -54,7 +54,7 @@ import numpy as np
 def lab_chroma(bgr):
     """(a*, b*) from CIE Lab -- chromaticity with LIGHTNESS REMOVED.
 
-    ⛔ NOT HSV. Hue is undefined at low saturation and wraps, so a dim prop and
+    NOT HSV. Hue is undefined at low saturation and wraps, so a dim prop and
     a dim patch of water get hues that are noise and a mean that is nonsense --
     which is how the section 58 histogram rung fooled itself. Lab's a*/b* plane
     is a real Euclidean space: distance in it means colour difference, it does
@@ -130,7 +130,7 @@ def main() -> int:
         nm = names[c] if c < len(names) else str(c)
         print(f'{nm:<18}{len(v):>6}{da:>+8.1f}{db:>+8.1f}{d:>10.1f}{p10:>8.1f}'
               f'   {" + ".join(reads) if reads else "-- no chromatic offset"}')
-    print('\n⚠ `distance` is the median separation from the water in the same '
+    print('\nWARNING: `distance` is the median separation from the water in the same '
           'frame; `p10` is the worst decile, which is the number a detector '
           'would actually have to clear. A class whose p10 is near zero is NOT '
           'findable by colour however good its median looks.')

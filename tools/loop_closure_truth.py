@@ -14,11 +14,11 @@ TWO ARMS, because a closure has two ways to be wrong and they are opposites:
 
   CROSS-CLIP  build a bank from clip A and replay clip B. Every closure here is
               FALSE by construction: the vehicle has never been in venue B's
-              pool while holding venue A's map. ⛔ THIS ARM IS THE TEST. Any
+              pool while holding venue A's map. THIS ARM IS THE TEST. Any
               non-zero count is a bar that is too low, and the number to report
               is the threshold at which it reaches zero.
 
-⚠ WHAT THIS CANNOT DO. There is no ground-truth trajectory for these clips, so
+What this cannot do. There is no ground-truth trajectory for these clips, so
 a same-clip closure cannot be proven to be a real revisit. The cross-clip arm
 needs no ground truth at all, which is why the bar is set from it.
 """
@@ -36,7 +36,7 @@ sys.path.insert(0, HERE)
 from archive_root import archive_root                        # noqa: E402
 
 A = archive_root()
-# ⛔ IMPORTED AS A PACKAGE, not loaded by file path. `bank.py` uses relative
+# Imported as a package, not loaded by file path. `bank.py` uses relative
 # imports (`from .anchor import ...`), so file-loading it raises "attempted
 # relative import with no known parent package". Put the package's parent on
 # sys.path and import normally, which also guarantees this measures the SAME
@@ -105,7 +105,7 @@ def main():
             seen += 1
             best = max(best, int(bp.inliers))
             for b in bars:
-                # ⛔ exclude_newest=0 HERE, and it is not a loosening.
+                # exclude_newest=0 HERE, and it is not a loosening.
                 # With a 12-reference bank, the production value of 2 removes
                 # indices 10-11 -- and for a clip probed just after its bank
                 # was built, those are exactly the references the frames
@@ -154,12 +154,12 @@ def main():
     print('worst false count per bar:',
           '  '.join(f'{b}:{worst[b]}' for b in sorted(worst)))
     if clean:
-        print(f'⭐ lowest bar with ZERO false closures: {min(clean)}   '
+        print(f'RESULT: lowest bar with ZERO false closures: {min(clean)}   '
               f'(shipped bar is {lc.CLOSURE_INLIERS})')
         if min(clean) > lc.CLOSURE_INLIERS:
-            print(f'⛔ THE SHIPPED BAR IS TOO LOW on this footage.')
+            print(f'ERROR: THE SHIPPED BAR IS TOO LOW on this footage.')
     else:
-        print('⛔ NO BAR TESTED reaches zero false closures.')
+        print('ERROR: NO BAR TESTED reaches zero false closures.')
     return 0
 
 

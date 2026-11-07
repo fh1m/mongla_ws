@@ -69,7 +69,7 @@ class PoseFuseNode(Node):
     def yaw_at(self, t: float):
         """Heading in effect at `t`: the last state stamped at or before it.
 
-        ⛔ SORT BY THE STAMP ONLY. `sorted(self._yaw_hist)` sorted whole tuples, so
+        SORT by the stamp only. `sorted(self._yaw_hist)` sorted whole tuples, so
         on a stamp TIE it fell through to comparing the second element -- and that
         element is `None` whenever the board's yaw is absent, because `_on_state`
         maps this stack's NaN convention onto None. `None < float` raises, inside a
@@ -123,7 +123,7 @@ class PoseFuseNode(Node):
             # not, and an operator reading a pose needs to know which they have.
             out.reason = fused.rule
         else:
-            # ⛔ THE DISAGREEMENT GOES ON THE WIRE, not into a vote. An
+            # The disagreement goes on the wire, not into a vote. An
             # unresolved mirror pair publishes ok=False with BOTH candidate
             # yaws in `reason` and their separation in `yaw_spread_deg`, so a
             # consumer can see what was refused and why (issue #55).

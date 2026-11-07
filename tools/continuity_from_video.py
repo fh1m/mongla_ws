@@ -64,7 +64,7 @@ def main() -> int:
         if total < 30:
             cap.release()
             continue
-        # ⛔ REFUSE AN IMPLAUSIBLE FRAME RATE. The Mirpur MKVs report fps=250
+        # Refuse an implausible frame rate. The Mirpur MKVs report fps=250
         # and fps=1000 -- variable-frame-rate containers that OpenCV cannot
         # read honestly. EVERY number here is a duration, so a wrong time base
         # silently compresses the gaps: those clips produced a p50 of 6 ms and
@@ -72,7 +72,7 @@ def main() -> int:
         # as "real water says the ladder is generous". A gap measured on a
         # fictional clock is not a small gap, it is not a gap at all.
         if not (5.0 <= fps <= 120.0):
-            print(f'  === {name} ===\n    ⛔ REFUSED: fps reads {fps:.0f}, '
+            print(f'  === {name} ===\n    ERROR: REFUSED: fps reads {fps:.0f}, '
                   f'which is not a real rate. Every measurement here is a '
                   f'DURATION, so this clip cannot be timed.')
             cap.release()
@@ -88,7 +88,7 @@ def main() -> int:
                 break
             for _ in range(args.stride - 1):
                 cap.grab()
-            # ⛔ TIME IS THE FRAME'S OWN, from the clip's rate -- not the wall
+            # Time is the frame's own, from the clip's rate -- not the wall
             # clock of this script. A gap measured in processing time would
             # measure this laptop, not the water.
             t = (start + k) / fps

@@ -6,7 +6,7 @@
 
 ---
 
-## 🤖 AI Provenance
+## AI Provenance
 <!-- Required if any code in this PR was AI-assisted.
      Delete this section only if 100% human-written. -->
 

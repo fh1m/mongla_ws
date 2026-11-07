@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Measure camera latency against the KERNEL's own capture timestamp.
 
-WHY NOT JUST TIME `cap.read()`
+Why not just time `cap.read()`
 ------------------------------
 Timing `read()` measures how long the call took, which is the one thing that is
 NOT the latency. A frame that was already sitting in the driver's queue returns
@@ -23,7 +23,7 @@ also what makes the DRAIN experiment possible: dequeue-and-requeue moves a
 buffer without decoding it, so "throw away everything stale" costs almost
 nothing, where OpenCV's `read()` pays a full MJPEG decode per discarded frame.
 
-WHAT IT REPORTS
+What it reports
     age at dequeue      how old a frame is the instant the kernel hands it over
     queue depth         how many frames are waiting behind it
     drain cost          what it costs to discard them
@@ -111,14 +111,14 @@ class Pix(ctypes.Structure):
 
 
 class Format(ctypes.Structure):
-    # THE UNION IS 8-BYTE ALIGNED. `struct v4l2_format` is
+    # The union is 8-BYTE aligned. `struct v4l2_format` is
     # `{ __u32 type; union {...} fmt; }` and the union contains 64-bit members,
     # so the compiler puts 4 bytes of padding after `type`. ctypes packs it at
     # offset 4 unless the union itself has 8-byte alignment, and then EVERY
     # field reads four bytes early: width lands in the padding and reads 0,
     # height reads what was actually width.
     #
-    # THE SIZE ASSERTION DID NOT CATCH THIS -- 4 bytes of padding at the front
+    # The size assertion did not catch this -- 4 bytes of padding at the front
     # and 4 fewer at the back gives the same 208 total. Two struct bugs in this
     # file were found by a number looking wrong; `--check` compares against
     # v4l2-ctl, which is the only thing that actually proves a layout.

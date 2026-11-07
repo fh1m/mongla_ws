@@ -43,7 +43,7 @@ def test_the_gate_is_the_same_VELOCITY_at_every_interval():
 
 
 def test_the_CONTROL_rate_does_not_enter_it():
-    """THE DEFECT I SHIPPED AND CORRECTED. The gate governs the jump between
+    """The defect I shipped and corrected. The gate governs the jump between
     ACCEPTED CENTRES, and a centre only changes when a new detection lands.
     Keying it on the control period made it 1.7x TIGHTER than tuned at 50 Hz
     control over a 30 Hz camera -- dropping the lock on a real target, which is
@@ -143,7 +143,7 @@ def test_a_perfect_target_aligns():
 
 
 def test_the_50Hz_loop_cannot_declare_aligned_in_three_ticks():
-    """THE POINT. At 50 Hz three ticks span 0.04 s; the dwell three frames
+    """The point. At 50 Hz three ticks span 0.04 s; the dwell three frames
     bought at 20 Hz is 0.10 s. Without the floor this exits in 60 ms on
     evidence spanning 40 ms -- and the same counter arms the mid-hold fire."""
     _, elapsed = _run()

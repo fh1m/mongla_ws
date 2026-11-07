@@ -1,11 +1,11 @@
 """Never lose the target: an association cascade, cheapest cue first.
 
-⛔ THE PROBLEM, MEASURED. 179 identity switches in 253 s (section 54), and a
+The problem, measured. 179 identity switches in 253 s (section 54), and a
 lock ladder whose lowest rung is outrun by a third of real gaps (section 51).
 Both are the same failure: the tracker associates on MOTION alone, so anything
 motion cannot explain becomes a new identity.
 
-⭐ THE SOTA SHAPE. Enhanced CenterTrack (2026) reports IDF1 75.5 -> 82.5 from a
+The SOTA shape. Enhanced CenterTrack (2026) reports IDF1 75.5 -> 82.5 from a
 THREE-STAGE CASCADE -- Mahalanobis motion, then IoU, then centroid distance --
 where each stage sees only what the previous one failed to match. BoT-SORT adds
 appearance and explicit camera-motion compensation for the same purpose.
@@ -15,7 +15,7 @@ The cascade is what makes appearance AFFORDABLE. A dedicated Re-ID network at
 15-25 ms/frame is unaffordable if it runs on every track; it is nearly free if
 it runs only on the handful the cheap stages could not explain.
 
-⭐⭐ AND ONE STAGE HERE IS NOT IN ANY OF THOSE PAPERS. BoT-SORT estimates
+And one stage here is not in any of those papers. BoT-SORT estimates
 camera motion by fitting an affine transform BETWEEN IMAGES -- because a
 surveillance camera has no other way to know it moved. This vehicle does: the
 downward camera is a verified velocity sensor (1.09 cm over 30 cm, section 5)
@@ -24,7 +24,7 @@ and the board reports attitude at 50 Hz with the gyro bias already removed
 whose motion is in question. A target that "moved" because the VEHICLE moved
 is explained before appearance is ever consulted.
 
-⛔ WHAT THIS MODULE IS NOT. It does not fabricate a box. A stage that cannot
+What this module is not. It does not fabricate a box. A stage that cannot
 explain a detection passes it on; a detection no stage explains becomes a new
 track, honestly. The ladder already refuses to invent a position and this does
 not change that -- it reduces how often the question has to be asked.
@@ -47,7 +47,7 @@ IOU_GATE = 0.30
 # because the compensation itself carries error.
 EGO_IOU_GATE = 0.20
 
-# ⛔ Appearance is the expensive stage. Never ask it about more than this many
+# Appearance is the expensive stage. Never ask it about more than this many
 # unmatched detections in one frame -- the cost must stay bounded even in the
 # pathological case where the detector fires on a cloud of silt.
 MAX_APPEARANCE_CALLS = 4
@@ -84,12 +84,12 @@ def ego_pixel_shift(vx_mps: float, vy_mps: float, yaw_rate_dps: float,
                     dt_s: float, m_per_px: float, fx_px: float) -> Tuple[float, float]:
     """How far the IMAGE moved because the VEHICLE moved, in pixels.
 
-    ⭐ MEASURED, NOT FITTED. `vx`/`vy` come from the downward camera's verified
+    Measured, not fitted. `vx`/`vy` come from the downward camera's verified
     velocity, `yaw_rate` from the board's IMU. BoT-SORT has to estimate this
     from image content; we read it from sensors that do not share a failure
     mode with the thing being tracked.
 
-    ⛔ Returns (nan, nan) when scale is unknown. Pixels become metres only with
+    Returns (nan, nan) when scale is unknown. Pixels become metres only with
     an altitude, and substituting a constant would put a plausible number where
     a measurement is missing -- the recurring defect in this codebase.
     """
@@ -153,7 +153,7 @@ class AssociationCascade:
             out.append(Assoc(di, tid, MOTION, v, f'IoU {v:.2f}'))
 
         # ---- stage 2: the same test, after removing OUR OWN motion ----
-        # ⛔ SKIPPED, not assumed zero, when the shift is unknown. A vehicle
+        # SKIPPED, not assumed zero, when the shift is unknown. A vehicle
         # that cannot measure its own motion must not claim it did not move.
         dx, dy = ego_shift
         if still and free_tracks and dx == dx and dy == dy and (dx or dy):
@@ -170,7 +170,7 @@ class AssociationCascade:
 
         # ---- stage 3: appearance, on the few that are left ------------
         if still and self._appearance is not None:
-            # ⛔ THE COST BOUND. This is what makes a 15-25 ms Re-ID stage
+            # The cost bound. This is what makes a 15-25 ms Re-ID stage
             # affordable: it is asked about a handful, not about every track.
             budget = min(self.max_appearance_calls, len(still))
             leftover: List[int] = []
@@ -198,7 +198,7 @@ class AssociationCascade:
 def _best_first(dets, free_tracks, score, gate, unmatched):
     """Match the best-scoring (detection, track) pair first, then the next.
 
-    ⛔ NOT IN DETECTION ORDER. Each detection used to take the track it
+    Not in detection order. Each detection used to take the track it
     overlapped most, in the order the detector listed them -- so detection 0
     could take the track detection 1 overlapped far better, and detection 1
     then fell through to a new identity. Order-dependent identity switches are

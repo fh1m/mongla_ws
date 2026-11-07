@@ -11,7 +11,7 @@ class FlowFloorMixin:
     def _read_the_floor(self, gray, t: float) -> None:
         """Read the tile grating, at a low rate, and keep what it says.
 
-        ⛔ WHY THIS IS NOT IN THE PER-FRAME PATH. A full-frame pass costs
+        Why this is not in the per-frame path. A full-frame pass costs
         28.90 ms, which is an entire frame budget at 30 Hz; decimated x3 it is
         ~1.5 ms, and height and heading move slowly enough that 2 Hz is ample.
         Running it per frame would have made a free measurement expensive.
@@ -63,7 +63,7 @@ class FlowFloorMixin:
         # optical cross-check follows: a divergence does not say WHICH input is
         # wrong, and `pool_depth_m` is the one nobody measures.
         #
-        # ⛔ THIS USED TO BE ONE SAMPLE AND A BARE `d > 0.20`, so a single bad
+        # This used to be one sample and a bare `d > 0.20`, so a single bad
         # grating read -- a caustic, a drain cover, one frame of a passing
         # shadow -- latched a warning that never cleared, and a slow genuine
         # drift that never spiked was never reported at all.
@@ -92,7 +92,7 @@ class FlowFloorMixin:
         3.4 ms at x3, with the heading unchanged to 0.01 deg -- orientation is
         invariant under isotropic scaling, so the pixels bought nothing.
 
-        ⛔ OFF BY DEFAULT, AND NOT BECAUSE LANE LINES VARY. World Aquatics fixes
+        Off by default, and not because lane lines vary. World Aquatics fixes
         them. It is off because a PATH MARKER is also a dark elongated band on
         the floor, and a heading pulled toward one is wrong by exactly the
         angle the marker was laid at. Localization bounds the pull at

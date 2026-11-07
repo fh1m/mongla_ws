@@ -1,6 +1,6 @@
 """Every method `lock_node` calls on itself must exist.
 
-⛔ WHY THIS EXISTS. `_build_anchor()` called `self._load_bank()`, and the
+Why this exists. `_build_anchor()` called `self._load_bank()`, and the
 method was never defined -- a patch matched on the wrong signature and silently
 inserted nothing. Nothing caught it: the vision suite never constructs
 `LockNode` (it needs rclpy and a ROS graph), so the first thing to notice was

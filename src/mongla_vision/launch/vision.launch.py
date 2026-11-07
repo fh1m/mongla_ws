@@ -90,7 +90,7 @@ def generate_launch_description():
                                           '(pi_forward|pi_downward|forward|...). '
                                           "Empty = same as `camera`. Set this to keep the "
                                           'role name while changing which unit it opens.'),
-        # THE LOCK LADDER, on the launch bringup actually includes.
+        # The lock ladder, on the launch bringup actually includes.
         # It was wired into vision_pi.launch.py first -- which the docs and
         # `bringup.launch.py` do not use -- so the capability would have been
         # reachable only from the path a mission does not run. Same default

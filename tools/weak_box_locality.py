@@ -8,7 +8,7 @@ the bar anywhere admits noise at the same rate it admits targets, and the
 mechanism is worse than useless -- it would feed the tracker exactly the
 false positives the bar exists to reject.
 
-⛔ THE CONTROL MATTERS MORE THAN THE MEASUREMENT. "Near the last sighting" is
+The control matters more than the measurement. "Near the last sighting" is
 meaningless without knowing how near a RANDOM box would be, so the same
 distance is computed against uniformly-drawn points over the frame. If the two
 distributions agree, there is no locality and the prior is worthless.
@@ -94,11 +94,11 @@ def main() -> int:
     print(f'within a {r_frac:.0f} px prior radius:  '
           f'weak {a:.0f} %   random {b:.0f} %')
     if a > b * 1.3:
-        print(f'\n⭐ LOCALITY IS REAL: {a / max(b, 1e-9):.2f}x more of the weak '
+        print(f'\nRESULT: LOCALITY IS REAL: {a / max(b, 1e-9):.2f}x more of the weak '
               f'boxes fall near the last sighting than chance. A region-aware '
               f'bar admits targets faster than it admits noise.')
     else:
-        print('\n⛔ NO LOCALITY. The weak boxes are no closer to the last '
+        print('\nERROR: NO LOCALITY. The weak boxes are no closer to the last '
               'sighting than random, so a region-aware bar would admit noise '
               'at the same rate as targets. The mechanism does not apply.')
     return 0

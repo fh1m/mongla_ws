@@ -24,7 +24,7 @@ PASS CRITERIA, written before the first run (2026-10-03):
      < 32.9 ms -- the ONNX anchor on the Pi's CPU (B-62). Beating the path
      it replaces is the claim; anything slower and the chip bought nothing.
 
-     ⛔ AS FIRST WRITTEN, THIS BAR WAS 15 ms AND IT FAILED: p50 17.73 ms,
+     As first written, this bar was 15 ms AND IT FAILED: p50 17.73 ms,
      p95 20.33 ms over 378 calls (2026-10-03, gate_sharks on archive gate
      footage). Kept on record rather than quietly moved. The 15 ms assumed
      the call has the chip to itself; under the scheduler an XFeat call that

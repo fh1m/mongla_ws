@@ -221,7 +221,7 @@ in-band from the bearings it is already sending. That is cheap — it has the de
 
 **Build order we commit to, firmware-side**, matching `VISION_API.md` §8 exactly: decode +
 `VIS_*` telemetry echo → staleness + failsafe wiring → yaw axis dry → yaw + lateral wet →
-standoff → depth (⛔ **behind the depth-loop bench gate**, which has still never passed) → hold.
+standoff → depth (**behind the depth-loop bench gate**, which has still never passed) → hold.
 
 ## Cross-repo rules
 

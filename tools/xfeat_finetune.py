@@ -6,23 +6,23 @@ control, the INT8 survival -- is STOCK weights trained on MegaDepth: clear,
 natural, above-water imagery. We own gigabytes of the one domain it was never
 trained on.
 
-⭐ IT NEEDS NO LABELS. Upstream's `xfeat_synthetic` scheme builds training
+It needs no labels. Upstream's `xfeat_synthetic` scheme builds training
 pairs from a plain folder of images by warping them (homography + thin-plate
 spline) and keeping the warp as exact correspondence ground truth. So the whole
 input is: a folder of frames from our own archive.
 
-⭐ AND THE SECOND HALF IS A PHYSICS MODEL, not more augmentation for its own
+And the second half is a physics model, not more augmentation for its own
 sake. Beer-Lambert attenuation -- per-channel exp(-k*d) -- is how water
 actually removes light: red first, then green, blue last. Randomising k across
 a plausible range generates the turbidity variation our archive does not
 happen to contain.
 
-⛔ AND THIS DOES NOT CONTRADICT THE PREPROCESSING BAN. We ban enhancement at
+And this does not contradict the preprocessing ban. We ban enhancement at
 INFERENCE (17 configurations, 95 % of gate detections destroyed). Degrading
 TRAINING data to match the test domain is the opposite operation: enhancement
 pretends the water is clear, augmentation teaches the network it is not.
 
-⛔ THE HELD-OUT VENUE IS NOT OPTIONAL. Our own detector recall swings
+The held-out venue is not optional. Our own detector recall swings
 29.2 / 72.7 / 68.3 % across venues, so a descriptor fine-tuned on our archive
 can overfit to OUR POOLS. Train on a venue subset, score on a venue never
 trained on, and report THAT number -- a fine-tune scored on its training
@@ -52,17 +52,17 @@ A = archive_root()
 # Venues, kept apart on purpose. `mirpur` is the HELD-OUT venue: the murky
 # table's two hardest clips come from it, so scoring there after training
 # elsewhere is the honest test.
-# ⭐ EVERY ARCHIVE WE OWN, because a descriptor's training set is the one
+# Every archive we own, because a descriptor's training set is the one
 # place where more real domain data is unambiguously better. These are five
 # separate physical archives (see the footage memo); a `find` rooted at the
 # repo reaches none of them.
-# ⛔ TWO SOURCES ONLY: the raw archive and the current season. The
+# Two sources only: the raw archive and the current season. The
 # annotated-prediction archive (`Music/detect`, 92 `predict*` directories) is
 # NOT a source. It supplied 60 % of the first training set as YOLO output with
 # boxes, class names and confidences burned into the pixels, and cost 1.5 h of
 # GPU teaching the descriptor to match furniture it will never see again.
 #
-# ⛔ AND NO AUTOMATIC ANNOTATION DETECTOR IS TRUSTED IN ITS PLACE. Two were
+# And no automatic annotation detector is trusted in its place. Two were
 # written and both failed against real footage:
 #   * "saturated AND bright" flagged 32 of 33 clips -- bright turquoise pool
 #     water is exactly that, so it was detecting water;
@@ -78,13 +78,13 @@ SOURCES = ('raw_videos', 'season2026')
 # a descriptor has limited capacity to spend.
 DRY_CLIPS = ('octagon_front_1.mp4', 'octagon_2.mp4')
 
-# ⭐ HELD OUT: a different VENUE on a different DATE, not a random split.
+# Held out: a different VENUE on a different DATE, not a random split.
 # Mirpur is the murky table's venue and its two hardest clips; a random split
 # would leak the same pool, the same day and the same water into both sides
 # and report a number that means nothing.
 HELD_OUT_VENUE = 'Mirpur'
 
-# ⭐ BALANCED BY (venue, date). robosub 2025 has 25 clips and the 2026 season
+# BALANCED BY (venue, date). robosub 2025 has 25 clips and the 2026 season
 # has 7; sampling per clip would make the descriptor mostly an August-2025
 # specialist. Each venue-date group contributes the same budget instead.
 FRAMES_PER_GROUP = 380
@@ -107,13 +107,13 @@ def clips(root: str) -> list:
     return sorted(out)
 
 
-# ⭐ CALIBRATED AGAINST THE REAL ARCHIVE, not invented. Measured over 20
+# Calibrated against the real archive, not invented. Measured over 20
 # un-annotated clips spanning both years and every venue:
 #
 #     R/B  0.305 .. 0.977   (median 0.432)
 #     G/B  0.968 .. 1.085   (median 1.047)
 #
-# ⛔ THE FIRST VERSION OF THIS FUNCTION WAS WILDLY OUT. Sampling k and depth
+# The first version of this function was wildly out. Sampling k and depth
 # independently (k_R-k_B up to 1.15 per m, depth to 6 m) produces R/B as low
 # as exp(-6.9) = 0.001 -- three hundred times more red-starved than the worst
 # frame we have ever recorded, applied ON TOP of footage that is already blue.
@@ -146,7 +146,7 @@ def beer_lambert(img: np.ndarray, rb: float, gb: float,
     return np.clip(out + veil, 0, 255).astype(np.uint8)
 
 
-# ⛔ ANNOTATED FOOTAGE IS POISON FOR A DESCRIPTOR. YOLO prediction output has
+# Annotated footage is poison for a descriptor. YOLO prediction output has
 # bounding boxes, class names and confidences BURNED INTO THE PIXELS: hard
 # edges, pure saturated hues, perfectly straight lines and crisp glyphs.
 # Those are the easiest features in any frame and they do not exist at
@@ -157,7 +157,7 @@ def beer_lambert(img: np.ndarray, rb: float, gb: float,
 # was 60 % of the first training set.
 #
 # Two gates, because a path name is a heuristic: exclude the directories, then
-# REJECT BY PIXELS, so annotated video stored anywhere else is still caught.
+# Reject by pixels, so annotated video stored anywhere else is still caught.
 ANNOTATED_HINTS = ('predict', 'runs/detect', 'labelled', 'labeled', 'annot')
 SATURATED_FRAC_MAX = 0.004        # 0.4 % of pixels
 
@@ -244,7 +244,7 @@ def main():
 
     print(f'\n{total} training frames in {train_dir}')
     if total < args.min_frames:
-        print(f'⛔ {total} < {args.min_frames}: upstream reserves 3000 images '
+        print(f'ERROR: {total} < {args.min_frames}: upstream reserves 3000 images '
               f'plus a test split from this folder and refuses to start '
               f'below that. Raise --per-group.')
         return 1

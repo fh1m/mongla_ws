@@ -6,7 +6,7 @@ grown apart: the one that was WIRED but had no refusals (`distance_traveled`,
 a scalar integral) and the one that had every refusal and NO CONSUMERS
 (`flow_velocity`). Neither was usable alone.
 
-⛔ WHY VELOCITY IS THE PRIMARY OUTPUT AND DISTANCE IS DERIVED FROM IT.
+Why velocity is the primary output and distance is derived from it.
 An accumulated distance grows whether the hull tracks its heading or drifts
 sideways, so it cannot answer the question every station-keeping task actually
 asks -- "am I moving, which way, and do I still know where I am". It is also an
@@ -28,7 +28,7 @@ that makes translation recoverable at all.
 
     v = h * (flow_px/dt - f*omega) / f
 
-⛔ WHAT WE PUBLISH WHEN WE DO NOT KNOW. `quality` follows the MAVLink
+What we publish when we do not know. `quality` follows the MAVLink
 `OPTICAL_FLOW_RAD` convention where **0 means no valid flow**, and a refused
 interval publishes quality 0 and NO velocity. It never publishes 0 m/s for a
 measurement it could not make: a confident zero is a measurement, and an
@@ -171,7 +171,7 @@ class FlowVelocityNode(FlowSetupMixin, FlowChecksMixin, FlowFloorMixin, FlowPubl
         self._td_min_q = float(
             self.get_parameter('time_offset_min_quality').value)
         self._td_rejected = 0
-        # ⛔ ISSUE #32: SCALED TO THE FRAMES THAT ARRIVE, not to a constant.
+        # Issue #32: Scaled to the frames that arrive, not to a constant.
         # This loaded the calibration for a hard-coded 640x360 whatever the
         # camera sent: at 1280x720 f was half its true value and EVERY velocity
         # and distance read 2x, with no error -- `from_json`'s own comment calls
@@ -213,7 +213,7 @@ class FlowVelocityNode(FlowSetupMixin, FlowChecksMixin, FlowFloorMixin, FlowPubl
         # because it is a different quantity measured at a different rate and a
         # consumer wanting one rarely wants the other.
         self._pub_grid = self.create_publisher(Float32, f'{ns}/floor_grid_deg', 10)
-        # HEIGHT ABOVE THE FLOOR, when the floor itself says so. It was measured
+        # Height above the floor, when the floor itself says so. It was measured
         # here to scale velocity and then thrown away, while every floor task
         # (a bin drop, a floor search, a sloped SAUVC floor) wants exactly this
         # rather than depth below the surface. Published ONLY from the tile
@@ -259,7 +259,7 @@ class FlowVelocityNode(FlowSetupMixin, FlowChecksMixin, FlowFloorMixin, FlowPubl
         self._n_ok = 0
         self._n_refused = 0
 
-        # THE FRAME PATH IS A ONE-DEEP MAILBOX AND A WORKER THREAD, not the
+        # The frame path is a one-deep mailbox and a worker thread, not the
         # executor. The bottom camera runs at 211 Hz and one LK interval costs
         # ~8 ms on one core, so the node cannot and should not process every
         # frame -- it must process the NEWEST one and drop the rest. A queue
@@ -340,7 +340,7 @@ class FlowVelocityNode(FlowSetupMixin, FlowChecksMixin, FlowFloorMixin, FlowPubl
           - `max_baseline_s`: a hard ceiling so a still hull still reports
           - **accumulated rotation**: see below
 
-        ⛔ ROTATION IS NOT COVERED BY THE OTHERS, and assuming it was is the
+        Rotation is not covered by the others, and assuming it was is the
         mistake this method exists to prevent. The tempting argument is that
         rotation inflates the median so displacement-ripeness fires anyway --
         round 38 measured a median inventing 4.79 px under 1.5 deg. **That
@@ -428,7 +428,7 @@ class FlowVelocityNode(FlowSetupMixin, FlowChecksMixin, FlowFloorMixin, FlowPubl
     def _process(self, gray, t, seq) -> None:
         """Track against the ANCHOR; emit a velocity when it is worth one.
 
-        ⛔ THE DEFECT THIS REPLACES, measured on this camera at h=0.72 m.
+        The defect this replaces, measured on this camera at h=0.72 m.
         `MIN_NET_FLOW_PX` is a per-interval PIXEL floor, so the SPEED it
         refuses scales with the frame rate: `min_px * h / (f * dt)`. Running
         flow at the camera's native 210 Hz therefore refuses everything below
@@ -448,7 +448,7 @@ class FlowVelocityNode(FlowSetupMixin, FlowChecksMixin, FlowFloorMixin, FlowPubl
         state, so a fixed high rate blinds the sensor in exactly the regime it
         exists for.
 
-        LOWERING THE CONSTANT IS NOT THE FIX -- that trades a blind spot for
+        Lowering the constant is not the fix -- that trades a blind spot for
         integrated noise, and both are symptoms of measuring over a fixed TIME
         when the thing that matters is DISPLACEMENT. So the baseline stretches
         until there is something to measure: every emitted interval carries
@@ -478,7 +478,7 @@ class FlowVelocityNode(FlowSetupMixin, FlowChecksMixin, FlowFloorMixin, FlowPubl
             # The anchor is unusable; re-seed here rather than reporting a
             # refusal for every frame until something changes.
             #
-            # SAY WHICH FAILURE IT IS. "LK lost the anchor" reads as a
+            # Say which failure it is. "LK lost the anchor" reads as a
             # tracking bug and sends an operator after the algorithm; on a
             # dark or textureless floor -- the normal case in murky water --
             # the truth is that there was nothing to track. The two are
@@ -506,7 +506,7 @@ class FlowVelocityNode(FlowSetupMixin, FlowChecksMixin, FlowFloorMixin, FlowPubl
         n_used = int(np.asarray(status).reshape(-1).astype(bool).sum())
         mag = math.hypot(flow[0], flow[1])
         dt = t - self._anchor_t
-        # ⛔ ROTATION IS A RIPENESS CRITERION, and its absence was a hole.
+        # Rotation is a ripeness criterion, and its absence was a hole.
         # Ripeness asked about DISPLACEMENT, track count and TIME -- never
         # rotation. The baseline stretches when the hull moves SLOWLY, which
         # is station-keeping, our most common state; so a hull holding
@@ -524,7 +524,7 @@ class FlowVelocityNode(FlowSetupMixin, FlowChecksMixin, FlowFloorMixin, FlowPubl
         # Graceful to ~10 deg, then a knee. 6 deg sits inside the graceful
         # region with margin, and re-anchoring costs one corner detection.
         #
-        # SEEDING LK WITH THE GYRO WAS TRIED FIRST AND MEASURED TO DO NOTHING:
+        # Seeding LK with the gyro was tried first and measured to do nothing:
         # at our rates the displacement is already inside LK's basin (identical
         # results to three decimals), and at large rotation the extra points a
         # seed recovers FAIL forward-backward -- 0 -> 5 of 192 at 48 deg. The
@@ -546,8 +546,8 @@ class FlowVelocityNode(FlowSetupMixin, FlowChecksMixin, FlowFloorMixin, FlowPubl
                                                 flow, n_used, disp)
 
         self._n_tracks = n_used
-        # ⛔ THE ANCHOR ADVANCES UNCONDITIONALLY, SO A REFUSAL DISCARDS THE
-        # TRAVEL IT COVERED -- and that is DELIBERATE, having been changed
+        # The anchor advances unconditionally, so a refusal discards the
+        # Travel it covered -- and that is DELIBERATE, having been changed
         # and changed back on measurement.
         #
         # The change looked obviously right: `_evaluate` can refuse an
@@ -621,7 +621,7 @@ class FlowVelocityNode(FlowSetupMixin, FlowChecksMixin, FlowFloorMixin, FlowPubl
         if height is not None:
             self._last_height = height
         h = self._last_height
-        # THE FLOOR'S OWN ANSWER, when it has one. Preferred over the
+        # The floor's own answer, when it has one. Preferred over the
         # pool-depth path because it is a direct measurement of the quantity we
         # actually need, with no `pool_depth_m` in it -- and because when the
         # two disagree the one derived from an unmeasured constant is the one
@@ -637,7 +637,7 @@ class FlowVelocityNode(FlowSetupMixin, FlowChecksMixin, FlowFloorMixin, FlowPubl
         # adaptive baseline dt reaches ~0.5 s at 2 cm/s, and de-rotation
         # subtracts `f * omega * dt`, so a midpoint that lands on the peak of
         # a swing scales that error by the whole interval.
-        # ⛔ THE INTERVAL IS SHIFTED BY td BEFORE THE GYRO IS READ. td > 0
+        # The interval is shifted by td BEFORE THE GYRO IS READ. td > 0
         # means the image timestamps are LATE, so an image stamped t shows the
         # world at t - td, and the gyro that belongs with it is the gyro from
         # then. Getting this sign wrong steers de-rotation the wrong way and

@@ -286,7 +286,7 @@ def _R_pitch(rad):
 
 
 def test_a_TILTED_hull_at_rest_does_not_accelerate():
-    """⛔ THE ACTUAL VEHICLE FAILURE, reproduced.
+    """The actual vehicle failure, reproduced.
 
     A level hull cancels gravity whatever the filter believes, so the level
     test above cannot see this bug. The hull was pitched -15.8 degrees
@@ -502,7 +502,7 @@ def test_the_odom_stamp_is_the_inputs_not_the_wall_clock():
 
 
 def test_no_velocity_aiding_is_announced():
-    """⛔ MEASURED: with ZUPT off and no flow, the vehicle's position ran to
+    """MEASURED: with ZUPT off and no flow, the vehicle's position ran to
     635 m in 95 s while the filter published a healthy-looking pose the entire
     time. Attitude and depth leave horizontal velocity completely unobserved.
     A filter in that state is not degraded, it is not an estimate."""
@@ -603,7 +603,7 @@ def _published_frame(n):
 
 
 def test_the_anchor_HOLDS_against_50hz_board_attitude():
-    """⛔ TRUTH: the board boots with the hull at +30 deg (its own frame); the
+    """TRUTH: the board boots with the hull at +30 deg (its own frame); the
     hull's true pool heading is -60. After the anchor and 5 s of the board
     pinning attitude at 50 Hz, the published yaw must be the POOL's.
 
@@ -642,7 +642,7 @@ def test_a_later_anchor_replaces_the_offset_rather_than_stacking():
 
 
 def test_flow_dead_reckons_along_the_POOL_heading_after_the_anchor():
-    """⛔ TRUTH: hull faces pool -60 (board +30), accelerates straight ahead at
+    """TRUTH: hull faces pool -60 (board +30), accelerates straight ahead at
     0.5 m/s^2 for 1 s and cruises at 0.5 m/s for 3 s: 1.75 m along its nose.
     Flow and the accelerometer both report it in the BODY frame, and the
     filter turns them into the world through its R -- so the track must run
@@ -685,7 +685,7 @@ def test_the_anchor_survives_a_retrodicted_replay_across_it():
 
 
 def test_a_floor_correction_is_KEPT_not_undone_by_the_board():
-    """⛔ TRUTH: anchored at pool -60 (board +30). The board then drifts +2 deg
+    """TRUTH: anchored at pool -60 (board +30). The board then drifts +2 deg
     (reads +32 while the hull has not turned), and the grid keeps reporting
     the true -60. Without folding the correction into the offset, the next
     board sample pulls yaw straight back and the drift bound bounds nothing."""
@@ -711,7 +711,7 @@ def test_the_grid_is_ignored_until_the_heading_is_anchored():
     into a confident wrong one."""
     n = _node()
     n._anchored = False
-    # ⛔ 0.0 DELIBERATELY, and the choice is the test. The filter starts at yaw
+    # 0.0 DELIBERATELY, and the choice is the test. The filter starts at yaw
     # 0, so a grid at 0 needs NO correction and sails through the aliasing
     # guard -- leaving the anchored check as the only thing that can stop it.
     # An earlier version of this test used 30.0, which the aliasing guard
@@ -722,7 +722,7 @@ def test_the_grid_is_ignored_until_the_heading_is_anchored():
 
 
 def test_a_small_drift_is_corrected_by_the_floor():
-    """⛔ NO MAGNETOMETER, NO PROP, NO DETECTION. Our hull deliberately never
+    """No magnetometer, no prop, no detection. Our hull deliberately never
     fuses a magnetometer -- the thrusters sit beside it -- so a free-running
     BNO drifts without bound. The floor's grid bounds it."""
     n = _node()
@@ -749,7 +749,7 @@ def test_a_large_disagreement_is_REFUSED_and_COUNTED():
 
 
 def test_the_lane_line_uses_its_OWN_symmetry_not_the_grids():
-    """⛔ THE DISCRIMINATING CASE. Hull at yaw 90, feature at 0. For a square
+    """The discriminating case. Hull at yaw 90, feature at 0. For a square
     grid that is zero residual (90 is a grid direction) and applies. For a
     lane line, 90 degrees is the WRONG BRANCH -- the line runs across the hull
     -- and must be refused. If the node passed the grid's period to the lane,
@@ -923,7 +923,7 @@ def _run(retro, flow_arrives_after, n=80, flow_index=50, push=0.3,
     `flow_index` (plus `after_imu_s`) and delivered after IMU
     `flow_index + flow_arrives_after`.
 
-    ⚠ The stamp sits EXACTLY on the IMU event by default. It used to be 0.1 ms
+    The stamp sits EXACTLY on the IMU event by default. It used to be 0.1 ms
     after it, which the on-time reference cannot honour -- an in-order sample
     can only be applied at the newest IMU state, there is no future IMU to
     propagate it with -- while a late one now can (issue #31, the step split).
@@ -978,7 +978,7 @@ def test_retrodict_off_still_applies_on_arrival_when_nothing_moved():
 
 
 def test_retrodict_off_carries_a_stale_sample_to_now():
-    """⛔ Issue #31. Off (the default) the stamp used to be IGNORED: a sample
+    """Issue #31. Off (the default) the stamp used to be IGNORED: a sample
     60 ms old under a 0.3 m/s^2 push hit the current state as if it were
     current. Now it is moved by a * age (0.018 m/s) and keeps half of that as
     1-sigma -- identical to an on-time sample carrying both."""
@@ -1048,7 +1048,7 @@ def test_aiding_is_reported_as_aided_on_a_healthy_filter():
 
 
 def test_aiding_flips_to_unaided_when_velocity_stops_being_observed():
-    """⛔ THE SIGNAL A MISSION NEEDS. The pose keeps publishing and keeps
+    """The signal a mission needs. The pose keeps publishing and keeps
     looking healthy the whole time velocity is unobserved -- that is exactly
     what made B-56 hard to see. This is the machine-readable version of the
     warning the node already logs."""
@@ -1085,7 +1085,7 @@ def test_aiding_recovers_when_velocity_is_measured_again():
 
 
 def test_a_filter_without_the_gate_reports_aided_rather_than_crashing():
-    """⚠ The node must survive a filter that predates the gate -- a replayed
+    """The node must survive a filter that predates the gate -- a replayed
     bag, or a swapped estimator. An unreadable gate is reported as aided, which
     is the pre-B-56 behaviour, rather than stopping the node."""
     n = _node()
@@ -1100,7 +1100,7 @@ def test_a_filter_without_the_gate_reports_aided_rather_than_crashing():
 
 
 def test_the_aiding_topic_is_not_the_motion_topic():
-    """⚠ TWO DIFFERENT QUESTIONS, and conflating them would be easy.
+    """Two different questions, and conflating them would be easy.
     `motion` answers "is the hull moving as commanded" -- a prop, a snag, a
     dead thruster. `aiding` answers "can the filter see where it is". A blocked
     hull is perfectly well localised; an unaided one is not."""
@@ -1152,7 +1152,7 @@ def _Rz_np(a):
 
 
 def test_a_stale_flow_sample_no_longer_bends_velocity_on_a_turn():
-    """⭐ Measured here: ignoring the age leaves a velocity error of
+    """Measured here: ignoring the age leaves a velocity error of
     about the |v| |w| age it predicts; widening by the age removes most of it.
     Retrodiction (off by default, G-05) removes it entirely."""
     old = _current_while_yawing(widen=False)

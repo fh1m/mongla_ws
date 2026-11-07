@@ -1,12 +1,12 @@
 """The FOLLOW rung must carry SIZE, not only position.
 
-⛔ WHY IT MATTERS. Section 23 measured detector confidence against apparent
+Why it matters. Section 23 measured detector confidence against apparent
 size and found it peaks mid-range, which is why the approach controller reads
 size rather than range. A follower that can only translate reports a constant
 size while the target grows, so the controller sees a target that never gets
 closer and drives through the band.
 
-⭐ THE RECIPE IS OLD AND PROVEN: pyramidal Lucas-Kanade, a forward-backward
+The recipe is old and proven: pyramidal Lucas-Kanade, a forward-backward
 check, and a RANSAC similarity fit. A 2026 mobile-robot comparison puts
 optical flow at RMSE 10.79 px @ 30 fps against CSRT's 252.35 px @ 4 fps. We
 already had the first two legs; this is the third.
@@ -44,7 +44,7 @@ def test_a_pure_translation_is_followed():
 
 
 def test_an_approaching_target_grows_the_box():
-    """⭐ THE POINT. Translation alone reports a constant size while the
+    """The point. Translation alone reports a constant size while the
     target closes; the controller then never sees it arrive."""
     f = Follower()
     img = textured(seed=1)
@@ -66,7 +66,7 @@ def test_a_receding_target_shrinks_the_box():
 
 
 def test_an_absurd_scale_is_refused_not_trusted():
-    """⛔ A target does not double in one frame. A fit that says so has
+    """A target does not double in one frame. A fit that says so has
     latched onto something else, and the box falls back to translation."""
     f = Follower()
     img = textured(seed=3)

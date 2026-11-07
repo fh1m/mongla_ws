@@ -27,7 +27,7 @@ class SrotBench:
         can identify a thruster by making it turn was reachable only from
         Bondor.
 
-        THE KEEP-ALIVE IS THE SAFETY MECHANISM, WHICH IS WHY THIS OWNS IT.
+        The keep-alive is the safety mechanism, which is why this owns it.
         The board expires the test when the resends stop, and expiry
         auto-disarms -- so a caller that spins a motor and then wedges must not
         be able to hold it spinning. This blocks for the duration and pumps from
@@ -39,7 +39,7 @@ class SrotBench:
         Returns (ok, reason). ARMED is required and refused messages come back
         as the board's own text.
 
-        ⚠ PROPS OFF, OR THE VEHICLE RESTRAINED. This turns a thruster.
+        Props off, or the vehicle restrained. This turns a thruster.
         """
         n = int(motor_1based)
         if not 1 <= n <= 8:
@@ -165,13 +165,13 @@ class SrotBench:
                      abort_fn=None) -> tuple:
         """Run the board's MOTOR_DETECT (mode 20). Returns (ok, reason).
 
-        CONFIRMATION IS THE POINT OF THIS METHOD. Called without the token it
+        Confirmation is the point of this method. Called without the token it
         does not run -- it reads the three live values and returns them as the
         refusal text, so the only way to reach the token is to have been shown
         what it will change. A bool `force=True` would have made an accidental
         full-thruster run one keystroke away.
 
-        WE DO NOT CHECK FOR WATER, AND SAY SO RATHER THAN PRETENDING TO. There
+        We do not check for water, and say so rather than pretending to. There
         is no wet sensor on this vehicle; the depth reading at the surface is
         the same whether the hull is in a pool or on a bench. The refusal text
         states the requirement instead of implying it was verified.
@@ -330,7 +330,7 @@ class SrotBench:
         then depth-hold -- and it WRITES AND PERSISTS EVERY ONE OF THOSE PIDs.
         The firmware's own warning is 'AUTOTUNE started - thrusters WILL drive'.
 
-        ⛔ WE ENTER BY SET_MODE, DELIBERATELY, AND NOT BY THE `ATUNE` PARAM.
+        We enter by SET_MODE, deliberately, and not by the `ATUNE` param.
         There are three trigger paths -- SET_MODE 21, `MAV_CMD_USER_5`, and
         `PARAM_SET ATUNE >= 1` -- and the latter two set `autotune_active`
         with no reference to arming. It LATCHES: the firmware comment at
@@ -340,7 +340,7 @@ class SrotBench:
         showing MANUAL'. They mitigated it by reflecting the trigger into the
         mode; we avoid arming the latch at all.
 
-        WE DO NOT CHECK FOR WATER, AND SAY SO RATHER THAN PRETENDING TO. There
+        We do not check for water, and say so rather than pretending to. There
         is no wet sensor. Run in air and the relay never establishes a limit
         cycle -- the hull cannot rotate freely -- so it consumes its phases and
         writes gains fitted to nothing.
@@ -406,7 +406,7 @@ class SrotBench:
         plant. Averaged across motors, written to RPM_KP/KI/FF_A/IDLE +
         MOT_SPIN_MIN, persisted, and pushed to the Pico.
 
-        ⛔ TWO PRECONDITIONS THAT EACH FAIL SILENTLY.
+        Two preconditions that each fail silently.
 
         1. `MTUNE_EN` must be > 0.5 and it DEFAULTS TO ZERO (fw config.h:588
            `DEF_MTUNE_EN = 0.0f`). The gate is
@@ -449,7 +449,7 @@ class SrotBench:
             return False, f'motor tune refused -- {why}'
         warn = ''
         if health is None:
-            warn = ('\n  ⚠ thruster telemetry UNKNOWN -- this tune FITS on per-motor '
+            warn = ('\n  WARNING: thruster telemetry UNKNOWN -- this tune FITS on per-motor '
                     'RPM. If the ESCs are not Bluejay-flashed it will spin motors '
                     'and fit nothing.')
 
@@ -488,11 +488,11 @@ class SrotBench:
                 + f'\n\n  {sp.MOTOR_TUNE_ENABLE_PARAM:<14} '
                 + ('--  (unreadable)' if en is None else
                    f'{en:.1f}  ' + ('OK' if en > 0.5 else
-                                    '⛔ DISABLED -- the mode would do NOTHING'))
+                                    'ERROR: DISABLED -- the mode would do NOTHING'))
                 + '\n  live signed RPM  '
                 + ('-- (no ESC telemetry at all)' if rpm is None else str(list(rpm)))
                 + f'\n  thruster health  {hwhy}'
-                + ('\n  ⚠ this tune FITS ON RPM. All-zero means it has no plant.'
+                + ('\n  WARNING: this tune FITS ON RPM. All-zero means it has no plant.'
                    if health is not True else '')
                 + '\n\nRequires: ARMED, IN WATER, props on. There is no wet sensor\n'
                   'on this vehicle -- nothing verified that for you.\n'

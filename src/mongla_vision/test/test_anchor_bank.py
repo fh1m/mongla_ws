@@ -1,6 +1,6 @@
 """The checkpoint bank: many references, and a policy for when to add one.
 
-WHY THIS EXISTS, WITH THE MEASUREMENT. `lock_node.py:633` snaps the anchor
+Why this exists, with the measurement. `lock_node.py:633` snaps the anchor
 reference ONCE -- the guard is literally `not self._anchor.has_reference` -- and
 never refreshes it. Measured 2026-09-24 on the archive clips, through the
 shipped backend at 320x240, inliers against that one frozen reference:
@@ -38,7 +38,7 @@ from mongla_vision.anchor.anchor import MIN_INLIERS             # noqa: E402
 # A backend that is exactly as clever as the test needs and no cleverer.
 # --------------------------------------------------------------------------- #
 # One row per possible identity, and BIGGER than the largest identity any test
-# builds (scene_id * 1000 + n_points). ⛔ At 8192 rows scene 9 aliased onto
+# builds (scene_id * 1000 + n_points). At 8192 rows scene 9 aliased onto
 # scene 1 -- 9000 % 8192 = 808 -- so "a different scene" quietly became the same
 # scene and the cross-scene refusal test passed nothing. Identity collisions are
 # exactly the failure this table exists to make impossible.
@@ -54,7 +54,7 @@ class FakeBackend:
     (ident_hi, ident_lo, x, y). Real pixels would make this a test of OpenCV's
     corner detector instead of a test of the bank.
 
-    ⚠ IT IS SHAPED LIKE THE BACKEND (240x320) ON PURPOSE. `enrol` scales
+    It is shaped like the backend (240x320) on purpose. `enrol` scales
     annotations from full-frame pixels into backend pixels using
     `gray.shape`, exactly as `Anchor.snap` scales the ROI. A carrier of some
     other shape would silently exercise a scale factor of 80 and the test would
@@ -97,7 +97,7 @@ def view(scene_id, n_points, *, drop=0):
     simulated -- points that left frame are gone, and the ones that remain are
     unmoved. That is the shape of the measured decay.
 
-    ⛔ A POINT'S POSITION IS A FUNCTION OF ITS IDENTITY, never of its row. The
+    A point's position is a function of its identity, never of its row. The
     first version of this helper drew positions from a sequential RNG, so
     dropping five identities shifted every remaining point and the homography
     between two views of one scene stopped being the identity -- the test then
@@ -164,7 +164,7 @@ def test_a_view_that_does_not_agree_with_the_bank_is_refused():
     """Scene 2 shares no identities with scene 1, so it matches nothing. This
     is the gate that stops the bank learning a distractor.
 
-    ⚠ It only applies ONCE THE BANK CAN JUDGE -- `AGREEMENT_MIN` references.
+    It only applies ONCE THE BANK CAN JUDGE -- `AGREEMENT_MIN` references.
     See the test below for why."""
     b = bank(agreement_min=2)
     b.enrol(view(1, 400), roi=None, det_conf=0.9)
@@ -175,7 +175,7 @@ def test_a_view_that_does_not_agree_with_the_bank_is_refused():
 
 
 def test_a_THIN_bank_does_not_adjudicate_the_second_deadlock():
-    """⛔ THE SECOND BOOTSTRAP DEADLOCK, and it shipped.
+    """The second bootstrap deadlock, and it shipped.
 
     `enrol` requires a candidate to agree with the bank. A bank of ONE
     reference from ONE viewpoint cannot judge: measured on Mirpur torpedo
@@ -321,7 +321,7 @@ def test_the_shortlist_never_searches_more_than_the_bank_holds():
 
 
 def test_shortlist_width_falls_when_a_match_is_measured_to_be_slow():
-    """⭐ The width is DERIVED from the cost measured on the machine it runs
+    """The width is DERIVED from the cost measured on the machine it runs
     on. A constant would be wrong on one of dev box and Pi by 2.2x."""
     b = bank(period_s=0.333, max_shortlist=8, budget_fraction=0.45)
     assert b.shortlist_k() == 8, 'untimed, it must start at the ceiling'
@@ -413,7 +413,7 @@ def test_a_saved_bank_reloads_and_still_matches(tmp_path):
 
 
 def test_a_preloaded_reference_still_has_to_clear_the_bar(tmp_path):
-    """⛔ The octagon result: a preloaded bank scored 8 % on a different run of
+    """The octagon result: a preloaded bank scored 8 % on a different run of
     a generic structural view. Preloading changes where a checkpoint comes
     from, never what it has to prove -- so the wrong scene must still refuse."""
     b = bank()
@@ -505,7 +505,7 @@ def test_a_weak_match_is_refused_even_with_the_detector_agreeing():
 
 
 def test_the_detector_overrules_a_strong_geometric_match():
-    """⭐ The whole point. The bank's geometry said 'torpedo' on gate frames;
+    """The whole point. The bank's geometry said 'torpedo' on gate frames;
     the detector's failure mode is missing things, not confusing them."""
     b = bank()
     b.enrol(rich(1), roi=None, det_conf=0.9, label='torpedo')
@@ -542,7 +542,7 @@ def test_attitude_wraps_at_180_rather_than_reporting_a_huge_gap():
 
 
 def test_an_unknown_check_is_reported_never_silently_passed():
-    """UNKNOWN IS NOT AGREEMENT. A caller that needs hard corroboration must be
+    """Unknown is not agreement. A caller that needs hard corroboration must be
     able to see that a check did not run."""
     b = bank()
     b.enrol(rich(1), roi=None, det_conf=0.9, label='torpedo')
@@ -583,7 +583,7 @@ def test_a_bank_saved_without_attitude_loads_as_unknown_not_as_zero():
 # 11. Annotations: finding a thing no model was trained to find
 # --------------------------------------------------------------------------- #
 def test_an_annotated_point_is_carried_into_the_live_frame():
-    """⭐ The trainingless-detector property. A point marked once on a
+    """The trainingless-detector property. A point marked once on a
     reference -- a hole centre, an aim point -- lands in the live frame through
     the same homography the pose came from. Published competition practice:
     feature correspondences locate the holes, and no detector is trained on
@@ -659,7 +659,7 @@ def test_no_gate_is_applied_without_a_radius():
 
 
 def test_a_checkpoint_with_no_position_is_kept_not_dropped():
-    """⛔ Absent is not far away. Dropping unpositioned checkpoints under a
+    """Absent is not far away. Dropping unpositioned checkpoints under a
     spatial gate would silently discard every reference enrolled before the
     localiser had a fix."""
     b = bank()
@@ -709,7 +709,7 @@ def test_coverage_widens_as_references_are_added():
 
 
 def test_a_whole_frame_reference_claims_no_scale():
-    """⛔ NaN rather than the frame diagonal. Treating a whole-frame reference
+    """NaN rather than the frame diagonal. Treating a whole-frame reference
     as covering the largest scale would suppress every close-range enrolment,
     which is the exact failure this criterion exists to fix."""
     b = bank()
@@ -736,7 +736,7 @@ def test_scale_is_recorded_in_backend_pixels():
 # 14. corroborate(): one mechanism, two opposite failures
 # --------------------------------------------------------------------------- #
 def test_a_weak_detection_the_bank_corroborates_is_usable():
-    """⭐ The common case on our own footage: the detector's median confidence
+    """The common case on our own footage: the detector's median confidence
     on murky water is 0.49, so a prop that is really there is routinely
     reported at a confidence nobody would act on. Geometry can say it is
     there."""
@@ -763,7 +763,7 @@ def test_a_confident_detection_the_bank_contradicts_is_refused():
 
 
 def test_a_match_somewhere_else_does_not_corroborate_this_box():
-    """⛔ Without the overlap test, a real match anywhere in frame would
+    """Without the overlap test, a real match anywhere in frame would
     corroborate a box anywhere else -- the bank would be agreeing that the
     prop is where the detector says purely because the prop is visible."""
     b = bank()

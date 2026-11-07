@@ -235,7 +235,7 @@ class TestASecondaryModelCannotTearDownThePrimary:
     def test_anything_the_merge_raises_leaves_the_counter_at_zero(self, monkeypatch):
         """The merge must sit OUTSIDE the primary's failure `try`.
 
-        ⛔ An earlier version of this test made the secondary detector raise,
+        An earlier version of this test made the secondary detector raise,
         and the injection that moved the merge back inside the `try` still
         passed -- because `_merge_extra` catches a detector exception itself,
         so that test could never distinguish the two placements. It checked the
@@ -267,7 +267,7 @@ class TestASecondaryModelCannotTearDownThePrimary:
 
 
 def test_the_STARTUP_path_splits_the_csv_too(monkeypatch):
-    """⛔ A knob wired to nothing, caught by reading rather than by a test.
+    """A knob wired to nothing, caught by reading rather than by a test.
 
     The live parameter handler split `active_model` on commas from the first
     draft; the STARTUP path did not, because the patch that was supposed to

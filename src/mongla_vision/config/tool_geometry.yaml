@@ -1,17 +1,17 @@
-# WHERE EACH TOOL IS, relative to the camera that aims it.
+# Where each tool is, relative to the camera that aims it.
 #
-# ⛔ THE DEFECT THIS EXISTS FOR. Every vision align centres the TARGET ON THE
+# The defect this exists for. Every vision align centres the TARGET ON THE
 # CAMERA AXIS and then fires a device mounted somewhere else. The round leaves
 # the LAUNCHER's axis, and the two axes are parallel, so:
 #
-#     THE MISS EQUALS THE OFFSET, AT EVERY RANGE.
+#     The miss equals the offset, at every range.
 #
 # It does not shrink as you close in -- a 10 cm offset misses a 4.75 cm-radius
 # torpedo opening from 1 m and from 3 m alike. Nothing in the stack knew any
 # tool was anywhere but the optical centre, so this was invisible: a perfectly
 # centred box, a clean fire gate, and a shot that could not have gone in.
 #
-# ⛔ HOW THE NUMBERS ARE DEFINED, because a sign error here is worse than no
+# How the numbers are defined, because a sign error here is worse than no
 # entry at all. Offsets are the tool's position IN THE CAMERA'S OPTICAL FRAME,
 # in METRES, measured from the camera's optical centre with the hull upright:
 #
@@ -22,12 +22,12 @@
 # So a launcher mounted 12 cm BELOW and 4 cm RIGHT of the forward camera is
 # `x: 0.04, y: 0.12, z: 0.0`.
 #
-# ⛔ z IS NOT A LEVER ARM. Because the axes are parallel, only x and y move the
+# z IS NOT A LEVER ARM. Because the axes are parallel, only x and y move the
 # aim point; z changes the range at which the round starts, not where it goes.
 # It is carried so the geometry is complete and so a future non-parallel mount
 # has somewhere to live -- it is NOT currently applied.
 #
-# ⛔ HOW THE CORRECTION USES THEM, and why it needs a range. To put the target
+# How the correction uses them, and why it needs a range. To put the target
 # on the TOOL axis rather than the camera axis, the target must sit at image
 #
 #     u = cx + fx * x / Z      v = cy + fy * y / Z
@@ -39,7 +39,7 @@
 # aims the camera as it always did -- but says so, loudly, because that is
 # exactly the shot that will miss.
 #
-# ⛔ MEASURE THESE. Every entry below is `unmeasured: true` and reads as ZERO
+# Measure these. Every entry below is `unmeasured: true` and reads as ZERO
 # OFFSET, which is byte-for-byte today's behaviour. That is deliberate: a
 # guessed offset is worse than a known-absent one, because it moves the aim
 # point with false confidence. Measuring is a tape-measure job on the hull:

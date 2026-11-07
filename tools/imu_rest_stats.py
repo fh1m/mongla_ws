@@ -98,7 +98,7 @@ def main():
     print(f'|accel|   {mag.mean():.4f} ± {mag.std():.4f} m/s²  '
           f'({mag.mean()/G:.4f} g)')
     if mag.std() > 0.5:
-        print('  ⚠ the board MOVED during this record -- these are not '
+        print('  WARNING: the board MOVED during this record -- these are not '
               'rest statistics')
 
     report('gyro', g, dt, 'deg/s', scale=180.0 / np.pi)

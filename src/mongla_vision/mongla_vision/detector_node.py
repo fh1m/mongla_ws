@@ -145,7 +145,7 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
         def _p(name, default):
             """Explicit parameter wins; else the profile; else the default.
 
-            "EXPLICIT" IS DECIDED BY A SENTINEL, NOT BY COMPARING TO THE
+            "explicit" is decided by a sentinel, not by comparing to the
             DEFAULT, and the difference is not academic. A launch file always
             passes every parameter -- `preprocess:='none'`, `range_crop:=False`
             -- so a comparison against the declared default sees the launch's
@@ -297,7 +297,7 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
         # asks the middleware to hold and retransmit frames for a consumer that
         # is going to throw all but the newest away in `_on_image` anyway --
         # buying latency and CPU for nothing.
-        # DIRECT FEED. When a composed process hands frames straight in (see
+        # Direct feed. When a composed process hands frames straight in (see
         # `vision_stack_node`), subscribing as well would decode and infer the
         # same picture twice -- and the topic copy is the SLOWER of the two,
         # so it would also be the one the detector acted on half the time.
@@ -357,7 +357,7 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
         # why the console polls `get_parameters` for `classes` instead.
         self._pub_classes  = self.create_publisher(
             String, f'{ns_out}/classes_filter', qos.LATCHED)
-        # CAN THIS CAMERA SEE? 'ok' | 'covered' | 'washout' | 'glare' | 'frozen',
+        # Can this camera see? 'ok' | 'covered' | 'washout' | 'glare' | 'frozen',
         # latched, on change. No boxes means nothing is there OR the camera is
         # blind, and a mission cannot tell those apart without this. Thresholds
         # measured on the real 2025 archive; see mongla_vision/seeing.py.
@@ -366,7 +366,7 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
         self._seeing_state = None
         self._pub_seeing = self.create_publisher(
             String, f'{ns_out}/seeing', qos.LATCHED)
-        # ⛔ WHICH MODEL PRODUCED THE DETECTIONS YOU ARE HOLDING. A mission
+        # Which model produced the detections you are holding. A mission
         # switches the detector mid-run -- gate, then rescue, then red_pipe --
         # and a consumer acting on a box that a PREVIOUS model produced is
         # steering at the wrong thing while everything looks healthy. Nothing
@@ -429,7 +429,7 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
         # goes idle instead of on the publisher's clock -- which is the whole
         # latency argument for composing them.
         self._want = threading.Event()
-        # COMPUTE-WASTE ACCOUNTING. The chip's compute is the scarce resource, so
+        # Compute-waste accounting. The chip's compute is the scarce resource, so
         # an inference spent on a frame that was already superseded is compute
         # we cannot afford. These make that measurable instead of assumed:
         #   _evicted    a decoded frame replaced in the slot before it was
@@ -464,7 +464,7 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
     def _on_infer_failure(self, exc) -> None:
         """A node that cannot do its job must stop claiming to be up.
 
-        ⛔ WHAT THIS REPLACES (BUGS.md D16). The old handler logged and
+        What this replaces (BUGS.md D16). The old handler logged and
         continued, forever. Observed on the vehicle: a `HAILO_STREAM_ABORT(63)`
         left this node ALIVE -- process up, topics up, subscriptions up, `pgrep`
         satisfied -- logging a failure on every frame and publishing zero
@@ -525,7 +525,7 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
         try:
             self._load_single_model_async(**kw)
             if self._det is not None:
-                # ⛔ THE COUNTER IS NOT RESET HERE (issue #59). Construction is
+                # The counter is not reset here (issue #59). Construction is
                 # not recovery: the Hailo constructor even swallows its own
                 # warm-up inference errors. Resetting on a successful BUILD let
                 # a device that builds and never infers rebuild every 15
@@ -542,7 +542,7 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
     def _infer_loop_guarded(self):
         """`_infer_loop`, but a raise is LOGGED and the loop restarts.
 
-        ⛔ A PYTHON THREAD THAT RAISES SIMPLY ENDS. No traceback in the node's
+        A python thread that raises simply ends. No traceback in the node's
         log, no exit code, no fault anywhere -- the node stays up, the
         subscriptions stay up, the publisher stays registered, and
         `/detections` goes quiet for ever. Only `det.infer()` was guarded;
@@ -596,7 +596,7 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
             if out is None:
                 continue
             detections, infer_frame, crop_state = out
-        # ⛔ AFTER the counter is cleared, and outside this try. The
+        # AFTER the counter is cleared, and outside this try. The
         # failure counter escalates to REBUILDING THE PRIMARY DETECTOR,
         # and the primary just succeeded -- letting a secondary model's
         # exception land in the same counter would tear down a healthy
@@ -661,7 +661,7 @@ class DetectorNode(DetectorSetupMixin, DetectorFramesMixin, DetectorPublishMixin
     def _back_to_full_frame(self, frame, detections, crop_state):
         """Detections in full-frame pixels, and the crop told how big the target was."""
         if crop_state is not None and crop_state.active and detections:
-            # BACK TO FULL-FRAME COORDINATES. Everything downstream -- the
+            # Back to full-frame coordinates. Everything downstream -- the
             # pixel error, the bearing, the HUD -- is full-frame, and a
             # missed offset does not raise: it steers at a point displaced
             # by the crop origin, which reads as a calibration fault.

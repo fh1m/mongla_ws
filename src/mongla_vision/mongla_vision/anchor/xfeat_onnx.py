@@ -1,6 +1,6 @@
 """XFeat on the vehicle: ONNX + numpy, no torch.
 
-WHY XFEAT AND NOT ORB -- measured on our own footage, not chosen from a paper.
+Why XFEAT and not ORB -- measured on our own footage, not chosen from a paper.
 Reference snapped at 40 % of each clip, matched FRAME-TO-REFERENCE at +1/3/5/8 s,
 `USAC_MAGSAC` homography, counting inliers (a homography needs ~15 to be
 trusted):
@@ -18,7 +18,7 @@ loses on every murky clip (torpedo_1: XFeat 4/4, EP2-S64 1/4). IMC2022 is clear
 natural imagery; turbid water is a different domain and the ranking does not
 survive the move.
 
-WHY IT FITS. ONNX, 2.7 MB, measured on the Pi with the vision stack running:
+Why it fits. ONNX, 2.7 MB, measured on the Pi with the vision stack running:
 
     640x480   145.6 ms (1 thread)  /  88.0 ms (3)
     320x240    33.1 ms (1 thread)  /  18.2 ms (3)   <- 30 Hz on ONE core
@@ -27,7 +27,7 @@ and 320x240 keeps the lock (every murky clip still 4/4). So this runs at the
 anchor's 5-10 Hz inside a fraction of one spare core, while the detector keeps
 the Hailo and the fast rung keeps LK.
 
-THE POST-PROCESSING IS XFEAT'S OWN, PORTED. The exported graph stops at the
+The post-processing is XFEAT'S own, ported. The exported graph stops at the
 three heads (`feats` 64xH/8xW/8, `keypoints` 65 channels, `heatmap`); keypoint
 decoding, NMS, sampling and normalisation happen here in numpy. They are ported
 from `modules/xfeat.py` rather than reinvented -- a softmax over 65 channels
@@ -157,7 +157,7 @@ class XFeatONNX:
 
         # Descriptors live at 1/8 resolution; sample them at the keypoints.
         #
-        # BILINEAR, NOT NEAREST. Nearest-neighbour was tried first and it is
+        # Bilinear, not nearest. Nearest-neighbour was tried first and it is
         # not a rounding detail: measured against torch XFeat on the same
         # frames it returned ~55 % of the inliers (Mirpur gate 119 vs 260,
         # clear torpedo 262 vs 445) while finding the SAME 1024 keypoints and
@@ -193,7 +193,7 @@ class XFeatONNX:
         a blank frame onto whichever reference point is least dissimilar, which
         produces a full match list and a confident, meaningless homography.
 
-        ⛔ TWO OPTIMISATIONS HERE, AND BOTH RETURN THE SAME MATCHES. That is
+        Two optimisations here, and both return the same matches. That is
         the bar: a faster matcher that returns *different* correspondences is
         not a faster matcher, it is a different one, and every number measured
         about the anchor -- inliers, hold length, the 175-frame rescue -- would
@@ -237,7 +237,7 @@ class XFeatONNX:
         and that one line was 23 % of the entire rung. `cv2.reduceArgMax` walks
         it in OpenCV's own kernel and returns the same indices exactly.
 
-        ⛔ RETRACTED, 2026-10-03: "the matmul is genuinely compute-bound".
+        RETRACTED, 2026-10-03: "the matmul is genuinely compute-bound".
         It was BLAS-bound. The Pi's numpy linked Debian's default `libblas3`,
         the Netlib REFERENCE implementation, which is why cv2.gemm (also
         unoptimised for this shape) agreed with it at 58.6 ms -- two slow

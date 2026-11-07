@@ -85,7 +85,7 @@ def test_NO_POSE_leaves_the_approach_UNGUARDED_on_purpose():
     """
     i = _SRC.index('if standoff_max_tilt_deg > 0.0')
     why = _SRC[max(0, i - 1600):i]
-    assert 'FAIL DIRECTION IS THE OPPOSITE' in why
+    assert 'Fail direction is the opposite' in why
     assert 'square_within' in why
 
 

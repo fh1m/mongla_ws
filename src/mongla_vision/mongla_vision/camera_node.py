@@ -127,7 +127,7 @@ class CameraNode(Node):
         self._frame_id = str(self._info.get('frame_id') or self._cam_name)
 
         ns = f'/mongla/vision/{self._cam_name}'
-        # A MAILBOX, NOT A QUEUE -- the DDS half of the same problem the
+        # A mailbox, not a queue -- the DDS half of the same problem the
         # capture side has. An int depth here means KEEP_LAST at that depth
         # with RELIABLE reliability, so a slow subscriber makes the middleware
         # HOLD frames and retransmit them: the consumer then works through a
@@ -266,7 +266,7 @@ class CameraNode(Node):
                     f'the host you are on: bringup.launch.py camera_profile:=...')
             # device_path (by-path symlink) > int device override > profile default.
             #
-            # ⛔ BOTH KEYS, and the bug this fixes was exactly one of them. A
+            # BOTH KEYS, and the bug this fixes was exactly one of them. A
             # profile carries its own `device_path` (`config.py`: pi_forward is
             # `/dev/mongla_cam_forward`). Overriding only `device` left that
             # entry untouched, so the v4l2 mailbox -- which reads `device_path`
@@ -372,7 +372,7 @@ class CameraNode(Node):
         """
         try:
             while rclpy.ok():
-                # THE RATE GATE COMES BEFORE THE READ, because `read()` is
+                # The rate gate comes before the read, because `read()` is
                 # where the JPEG is DECODED.
                 #
                 # It used to sit inside `_publish`, i.e. AFTER the decode, so
@@ -478,7 +478,7 @@ class CameraNode(Node):
             self._dropped += 1
             return
 
-        # THE CAPTURE TIME, NOT NOW(). This stamped `now()` at PUBLISH time,
+        # The capture time, not now(). This stamped `now()` at PUBLISH time,
         # which makes the header say the frame is 0 ms old at the instant it
         # leaves the node -- no matter how long it sat in the driver's queue or
         # this node's own. Everything downstream that reasons about age reads
@@ -642,7 +642,7 @@ class CameraNode(Node):
         self.get_logger().info(
             f"[CAM  ] {marker}  {self._cam_name}  pub={hz:5.1f}Hz  "
             f"sent={sent}  dropped={dropped}{extra}")
-        # ⛔ DELTA, NOT RESET (B41). `_sent`/`_dropped` are incremented by the
+        # Delta, not reset (B41). `_sent`/`_dropped` are incremented by the
         # CAPTURE THREAD and this runs on a ROS timer thread. Read-then-zero is
         # two operations: an increment landing between them was silently lost, so
         # this line under-reported drops -- on the one readout an operator uses to

@@ -1,6 +1,6 @@
 """`paused` must default the same way everywhere, and mean what it says.
 
-⛔ THE DEFECT THIS FIXES, measured on the vehicle. `vision_pi.launch.py` --
+The defect this fixes, measured on the vehicle. `vision_pi.launch.py` --
 the VEHICLE launch, the one `bringup.launch.py` includes for a mission --
 declared:
 

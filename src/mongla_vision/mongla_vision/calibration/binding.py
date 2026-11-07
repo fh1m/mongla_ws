@@ -1,6 +1,6 @@
 """Which calibration belongs to which camera -- resolved ONCE, from the data.
 
-⛔ WHY THIS IS A MODULE AND NOT A LINE IN EACH LAUNCH FILE.
+Why this is a module and not a line in each launch file.
 
 `vision_pi.launch.py` wires calibrations by passing an explicit path per
 camera. `vision.launch.py` -- the launch `bringup.launch.py` includes, i.e.
@@ -21,7 +21,7 @@ every future one, gets it by construction.
 An explicit `calibration` param still wins -- `vision_pi.launch.py` keeps
 working unchanged, and an operator can always point at a file by hand.
 
-NOTE ON WHY `forward` FINDS NOTHING AND THAT IS CORRECT: `forward` and
+Note on why `forward` finds nothing and that is correct: `forward` and
 `pi_forward` are DIFFERENT PHYSICAL CAMERAS (a generic USB role vs
 the Fantech on the Pi). We hold calibrations for the two Pi units only, so
 `camera:=forward` resolves to '' and says so. Binding it to the Pi file

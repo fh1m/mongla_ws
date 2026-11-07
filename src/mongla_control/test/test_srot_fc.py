@@ -831,7 +831,7 @@ def test_behaviour_rev_required_still_matches_what_we_assume():
     The two numbers are asserted separately on purpose: bumping the tracker is routine
     bookkeeping, raising the requirement is a decision to refuse hardware.
 
-    *** THE "EVERY REV IS ADDITIVE" CLAIM ABOVE EXPIRED AT REV 10. ***  It held for
+    *** the "every rev is additive" claim above expired at rev 10. ***  It held for
     3..9 and the reasoning is kept because it is still the right test to apply. Two
     later revisions fail it:
 
@@ -899,7 +899,7 @@ def _batt(bid, millivolts, centiamps=-1):
 
 
 def test_get_battery_is_pinned_to_the_main_pack_not_whatever_arrived_last():
-    """MEASURED ON THE VEHICLE: the board streams id 0 (PM1 electronics, 1.35 V) and
+    """Measured on the vehicle: the board streams id 0 (PM1 electronics, 1.35 V) and
     id 1 (PM2 thruster pack, 14.74 V) at 2 Hz EACH, and pymavlink caches per MSGID.
     Sampling that slot alternates between two voltages an order of magnitude apart --
     so /mongla/state's battery reading was a coin flip on which battery it meant."""
@@ -1631,7 +1631,7 @@ def test_disarmed_still_wins_over_the_echo():
 # --------------------------------------------------------------------------- #
 
 def test_a_cached_heartbeat_already_in_the_mode_does_not_confirm_set_mode():
-    """⛔ Cloud audit, 2026-11-07. pymavlink keeps the last HEARTBEAT forever, so
+    """Cloud audit, 2026-11-07. pymavlink keeps the last HEARTBEAT forever, so
     a cache that already read STABILIZE -- or a link that died in STABILIZE --
     'confirmed' set_mode at once, and the vision verbs then streamed
     MANUAL_CONTROL into a board that may be in AUTO, which discards it.

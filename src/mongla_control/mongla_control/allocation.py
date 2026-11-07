@@ -1,6 +1,6 @@
 """What the mixer will actually deliver, computed before we ask for it.
 
-⛔ THE VEHICLE SILENTLY LOSES AUTHORITY AND NOTHING ON THIS SIDE KNOWS. The
+The vehicle silently loses authority and nothing on this side knows. The
 board's mixer computes a per-group scale-down when a demand drives any thruster
 past full (`mixer.cpp`: `if (maxabs[g] > 1.0f) out[m] /= maxabs[g]`) and then
 throws that number away -- it is never reported on any message. So when a
@@ -13,7 +13,7 @@ integrating a lateral error while the horizontal group is already clipped. The
 loop cannot tell "the target is not moving because I am too weak" from "the
 target is not moving because I am saturated".
 
-⛔ AND NO FIRMWARE CHANGE IS NEEDED TO FIX IT, which is the point of this file.
+And no firmware change is needed to fix it, which is the point of this file.
 The demand is OURS -- we composed it -- and the mixer matrix is a published
 constant of the frame. So the saturation is a pure function of numbers we
 already hold, and can be computed BEFORE the frame is sent rather than
@@ -23,7 +23,7 @@ The firmware half is still worth asking for (reporting `maxabs` costs two
 lines and would confirm this against the board's own arithmetic), but it is a
 cross-check, not a dependency.
 
-THE BLOCK-DIAGONAL STRUCTURE IS LOAD-BEARING and was a real firmware bug once.
+The block-diagonal structure is load-bearing and was a real firmware bug once.
 Motors 1-4 are non-zero only in yaw/forward/lateral; motors 5-8 only in
 roll/pitch/throttle. The two groups share no axis and no thruster, so they
 saturate INDEPENDENTLY. Computing one global scale coupled them: a saturating
@@ -39,7 +39,7 @@ from typing import Sequence, Tuple
 
 # Columns: roll, pitch, yaw, throttle, forward, lateral. Rows: motors 1..8.
 # SUB_FRAME_VECTORED_6DOF, mirrored from the firmware's `mixer.cpp` M[][].
-# ⚠ TWO COPIES OF ONE TRUTH. `test_srot_protocol_drift.py` reads the firmware
+# Two copies of one truth. `test_srot_protocol_drift.py` reads the firmware
 # headers directly for the wire constants; this matrix is the same class of
 # shared fact and carries the same risk, so it is asserted against the
 # firmware source by `test_allocation.py` rather than trusted.
@@ -140,7 +140,7 @@ def largest_axis_within_budget(axis: str, *, others: dict | None = None
                                ) -> float:
     """The biggest demand on `axis` that still fits, given the others.
 
-    ⛔ THE USE CASE THAT MOTIVATES IT. A vision loop wants the largest lateral
+    The use case that motivates it. A vision loop wants the largest lateral
     correction the hull can actually deliver while a heading lock is already
     spending yaw authority. Asking for more than this is not merely wasted --
     the mixer scales the WHOLE GROUP uniformly, so an over-large lateral
@@ -172,7 +172,7 @@ def largest_axis_within_budget(axis: str, *, others: dict | None = None
 # Priority when the horizontal group runs out. The order is a CONTROL decision
 # and is stated here rather than buried in a caller.
 #
-# ⛔ YAW FIRST, AND THAT IS THE OPPOSITE OF WHAT UNIFORM SCALING DOES. The
+# Yaw first, and that is the opposite of what uniform scaling does. The
 # board scales the whole group together, so a large forward demand steals yaw
 # in the same proportion -- and yaw is the axis a launcher, a dropper and a
 # gate transit all depend on. Heading error points the tool at the wrong place;

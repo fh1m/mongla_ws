@@ -70,7 +70,7 @@ def test_a_leak_reads_true():
 
 
 def test_the_truncated_health_field_still_decodes():
-    """THE CASE THAT ACTUALLY OCCURS. Measured on the live board: the payload
+    """The case that actually occurs. Measured on the live board: the payload
     arrives at 40 bytes, not its declared 43, because MAVLink v2 drops trailing
     zeros -- `health_extended` is cut to one byte. Without zero-padding, the
     unpack reads past the end and the leak read fails exactly when the payload

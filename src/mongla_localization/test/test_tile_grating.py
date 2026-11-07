@@ -1,6 +1,6 @@
 """The floor as an instrument -- and the negative controls that shaped it.
 
-⛔ READ THE NEGATIVES FIRST. Three discriminants were tried against a smooth
+Read the negatives first. Three discriminants were tried against a smooth
 illumination gradient, which is what an underwater scene with light falloff
 actually looks like. Two of them ACCEPTED it:
 
@@ -101,7 +101,7 @@ def test_the_period_is_recovered_within_one_percent(period):
 
 @pytest.mark.parametrize('angle', [0.0, 7.0, 15.0, 30.0, 44.0, 60.0, 75.0])
 def test_the_grid_angle_is_recovered_within_one_degree(angle):
-    """⛔ THE HEADLINE. This is an ABSOLUTE heading in the pool frame -- tiles
+    """The headline. This is an ABSOLUTE heading in the pool frame -- tiles
     are laid square to the walls -- obtained with no prop, no detection and no
     landmark in view."""
     g = detect(grid(period=32.0, angle_deg=angle))
@@ -112,7 +112,7 @@ def test_the_grid_angle_is_recovered_within_one_degree(angle):
 
 
 def test_it_survives_heavy_blur_which_is_the_whole_point():
-    """⛔ TURBID WATER IS THE CASE THIS EXISTS FOR. Blur destroys the corners a
+    """Turbid water is the case this exists for. Blur destroys the corners a
     feature tracker needs and leaves the carrier untouched -- a low-pass filter
     cannot move a spectral peak. Measured: 21 px of Gaussian blur changes the
     recovered period by nothing at all."""
@@ -167,7 +167,7 @@ def test_height_comes_off_the_floors_own_tile_size(h_true):
 
 
 def test_the_operating_envelope_is_stated_not_assumed():
-    """⛔ A BIG-TILE POOL AT LOW ALTITUDE IS OUTSIDE THIS INSTRUMENT. Five
+    """A big-tile pool at low altitude is outside this instrument. Five
     cycles must fit in frame, so the usable height depends on the venue's tile
     size -- which is a world constant that must be measured on deck, never
     inherited from the last pool."""
@@ -222,7 +222,7 @@ def test_shift_from_phase_handles_missing_inputs():
 #  measure(): decimation, which is what makes this affordable at all
 # --------------------------------------------------------------------------- #
 def test_decimation_preserves_the_measurement():
-    """⛔ THE COST ARGUMENT. A full 640x480 pass is 28.90 ms -- an entire frame
+    """The cost argument. A full 640x480 pass is 28.90 ms -- an entire frame
     budget at 30 Hz. At /3 it is ~1.5 ms. Decimation is free here because the
     quantity read is a COARSE frequency and an area-average is a low-pass
     filter, which cannot move a peak far below its cutoff."""
@@ -292,7 +292,7 @@ def test_the_four_fold_ambiguity_is_respected_not_resolved():
 
 
 def test_a_large_disagreement_is_REFUSED_not_applied():
-    """⛔ THE SAFETY. A correction beyond the bound means the estimate and the
+    """The safety. A correction beyond the bound means the estimate and the
     floor disagree about WHICH grid line is which -- a four-fold aliasing
     error. Applying it snaps the hull 90 degrees onto the wrong branch. A
     drifting heading is still roughly right; a confidently wrong one is not."""

@@ -1,6 +1,6 @@
 """The shutter must be pinned, and the blur cap must be the right arithmetic.
 
-⛔ WHY. `webcam.py` never touched exposure, so both mission cameras ran on
+WHY. `webcam.py` never touched exposure, so both mission cameras ran on
 whatever the driver's auto picked. Measured on the forward Fantech that was
 Aperture Priority at `exposure_time_absolute = 2000` -- a **200 ms shutter**.
 Frames came out at mean 26.6 with every hand movement smeared; manual exp 50
@@ -27,7 +27,7 @@ _SRC = (pathlib.Path(__file__).resolve().parents[1]
 def _shipped():
     """The REAL `blur_capped_exposure`, lifted out of the source file.
 
-    ⛔ NOT A RESTATEMENT. The first version of this test reimplemented the
+    Not a restatement. The first version of this test reimplemented the
     rule locally, and an injected defect -- making the cap lengthen as well
     as shorten -- left it GREEN, because it was checking the copy. That is
     the round-33 failure verbatim: the one test that could have caught the

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Step-by-step guided camera calibration in a browser.
 
-⛔ WHY A SCRIPT OF POSES AND NOT A FREEFORM CAPTURE. A calibration fails in a
+Why a script of poses and not a freeform capture. A calibration fails in a
 way that LOOKS LIKE SUCCESS: too little tilt leaves focal length and distance
 confounded, and the fit then returns a LOW reprojection RMS with a WRONG
 focal length. That is how this project's downward camera produced fx = 835.7,
@@ -73,7 +73,7 @@ def _load_solver():
 FIND = cv2.CALIB_CB_ADAPTIVE_THRESH | cv2.CALIB_CB_NORMALIZE_IMAGE
 CRIT = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 GRID = 3
-# ⛔ TILT BANDS ARE ROS'S SKEW, AND THE OLD METRIC WAS BROKEN.
+# Tilt bands are ros's skew, and the old metric was broken.
 #
 # The first version compared the board's two DIAGONALS. That is zero for the
 # motion an operator actually makes: tilting about a horizontal or vertical
@@ -96,7 +96,7 @@ GRID = 3
 # which is sensitive to exactly the symmetric tilt the diagonals cannot see.
 #
 # The band edges come from that mapping, and the top band stops at ~45 deg
-# ON PURPOSE. calib.io's guidance is explicit: use up to +/-45 degrees,
+# On purpose. calib.io's guidance is explicit: use up to +/-45 degrees,
 # because "tilting more is usually not a good idea as feature localization
 # accuracy suffers and can become biased". Asking for "as steep as you can"
 # is asking for a worse calibration.
@@ -206,7 +206,7 @@ def band_of(t):
 def set_camera(dev, exposure, brightness):
     """Force a SHORT manual exposure. This is the motion-blur fix.
 
-    ⛔ MEASURED, AND IT IS NOT A PREFERENCE. The camera sits in Aperture
+    Measured, and it is not a preference. The camera sits in Aperture
     Priority auto by default, and in this room that chose
     `exposure_time_absolute = 2000` -- a 200 ms shutter. Every hand movement
     smears, the board stops being findable, and the operator concludes the
@@ -275,7 +275,7 @@ def capture_loop(st, dev, width, height, jpeg_w, exposure, brightness):
             K, D = st.K, st.D
         shown = f
         if undist and K is not None:
-            # ⛔ THE ONLY CHECK AN OPERATOR CAN MAKE WITH THEIR EYES. Every
+            # The only check an operator can make with their eyes. Every
             # other number here is a statistic; this is the calibration doing
             # its job. Straight edges in the world must come out straight --
             # if the frame edges still bow, the distortion model is wrong and
@@ -325,7 +325,7 @@ def capture_loop(st, dev, width, height, jpeg_w, exposure, brightness):
 def detect_loop(st, det_w):
     """Match the live pose against the current step, and take it when held.
 
-    ⛔ THREE MEASUREMENTS THAT SETTLE HOW THIS IS TUNED, so the next person
+    Three measurements that settle how this is tuned, so the next person
     does not re-derive them:
 
     **480 px is the optimum, not a compromise.** Hit rate on 21 real board
@@ -382,7 +382,7 @@ def detect_loop(st, det_w):
         band = band_of(tilt_of(full, st.cols))
         gx = min(GRID - 1, int(cx / w * GRID))
         gy = min(GRID - 1, int(cy / h * GRID))
-        # ⛔ TILT IS "AT LEAST", NOT "EXACTLY". Demanding an exact band made
+        # Tilt is "at least", not "exactly". Demanding an exact band made
         # the steps very fiddly to satisfy -- the operator reported being
         # rejected repeatedly -- without buying anything: the script asks for
         # increasing tilt as it goes, so accepting MORE tilt than asked still
@@ -390,7 +390,7 @@ def detect_loop(st, det_w):
         # because for those "more" is precisely what must not be accepted.
         okc = (gy, gx) == (ty, tx)
         okt = (band == 0) if tb == 0 else (band >= tb)
-        # ⛔ SHARPNESS IS A CAPTURE GATE, not something to discover in the
+        # Sharpness is a capture gate, not something to discover in the
         # solve. Measured on 21 frames taken under the old auto-exposure:
         # median 7.30 px against OpenCV's documented < 3 px target, only 3
         # of 13 in spec. A blurred view is not a cheap view -- it biases the
@@ -438,7 +438,7 @@ def detect_loop(st, det_w):
 def assess(st, cols, rows, square, size):
     """Refit from what is captured, report Max ERE, and suggest the next pose.
 
-    ⛔ THIS IS THE APRILCAL LOOP, and it replaces "capture 24 poses because a
+    This is the aprilcal loop, and it replaces "capture 24 poses because a
     script says so" with "capture until the calibration stops being
     uncertain". Their measured result is 6-8 images to under 1 px, so a fixed
     24 is both slower than necessary and no guarantee.
@@ -942,7 +942,7 @@ def make_handler(st, solve_argv, solve_dest, cal_dir, restart):
 
         def do_POST(self):
             if self.path.startswith('/switch'):
-                # ⛔ RE-EXEC RATHER THAN RETARGET THE THREADS. The capture
+                # Re-exec rather than retarget the threads. The capture
                 # thread owns an open V4L2 handle and the detector owns an
                 # anchor; unwinding both live is a race for no gain. The
                 # process replaces itself with the same argv bar the camera,
@@ -1046,7 +1046,7 @@ def make_handler(st, solve_argv, solve_dest, cal_dir, restart):
 def camera_identity(dev):
     """Who this camera actually IS -- card name and USB VID:PID.
 
-    ⛔ THIS IS THE FIELD THAT WOULD HAVE CAUGHT THE WRONG-CAMERA BUG. The one
+    This is the field that would have caught the wrong-camera bug. The one
     calibration this project held was named for one camera, described a
     second, and was wired to a third, for four days, and nothing could see it
     because the file did not record what it was taken with. `applies_to`
@@ -1127,7 +1127,7 @@ def list_cameras(cal_dir):
                 'max_ere_px': d.get('max_ere_px'),
                 'views': d.get('views_used'),
             }
-            # ⛔ THREE STATES, NOT TWO. "confirmed" needs the USB id recorded
+            # Three states, not two. "confirmed" needs the USB id recorded
             # AT CAPTURE and matching now. "unverified" is a file that plausibly
             # belongs but cannot prove it -- which is every calibration taken
             # before identity was recorded, and is exactly the state the
@@ -1153,7 +1153,7 @@ def list_cameras(cal_dir):
 def default_calibration_dir():
     """Where calibrations live, found robustly.
 
-    ⛔ THIS WAS WRONG WHEN INSTALLED, TWICE, AND FAILED QUIETLY BOTH TIMES.
+    This was wrong when installed, twice, and failed quietly both times.
 
     First version built `<this file>/../../src/mongla_vision/config/
     calibration`, which is right in the source tree and nonsense in
@@ -1213,7 +1213,7 @@ def default_calibration_dir():
 def capture_dir(applies_to, medium):
     """Where this camera's frames for THIS medium live.
 
-    ⛔ THE MEDIUM IS PART OF THE PATH, NOT JUST THE FILENAME. Switching to
+    The medium is part of the path, not just the filename. Switching to
     water re-execs and `resume()` picks up whatever is in `--out`. With one
     shared folder that is the AIR capture set, and Solve would install it as
     `..._water.json`: a filename saying water over pixels taken in air --
@@ -1231,7 +1231,7 @@ def restart_argv(argv, cur_profile, cur_medium, device=None,
                  applies_to=None, grid=None, square=None, medium=None):
     """The argv a re-exec should run with. Pure, so it can be driven.
 
-    ⛔ `--out` IS ALWAYS REWRITTEN, from BOTH the profile and the medium.
+    `--out` is always rewritten, from BOTH the profile and the medium.
     An earlier version rewrote it only when the profile changed, so a
     medium-only switch re-execed pointing at the previous capture folder,
     `resume()` picked up the AIR frames, and Solve installed them as
@@ -1263,7 +1263,7 @@ def restart_argv(argv, cur_profile, cur_medium, device=None,
 def _solver():
     """The solver module, loaded BY PATH.
 
-    ⛔ NOT `from mongla_vision.calibration.solver import ...`. `tools/` loads
+    NOT `from mongla_vision.calibration.solver import ...`. `tools/` loads
     this file by path precisely so the calibration tool does not need a ROS
     environment, and does not need this package installed either.
 
@@ -1317,7 +1317,7 @@ def library(cal_dir):
 def apply_calibration(cal_dir, src_file, dev, applies_to):
     """Bind an existing calibration to a connected camera.
 
-    ⛔ APPLYING IS THE OPERATOR ASSERTING "this is the same physical unit",
+    Applying is the operator asserting "this is the same physical unit",
     and the file must say so rather than pretend it was measured here. So the
     connected camera's identity is written in ALONGSIDE
     `identity_source: operator asserted at apply time` -- never as though it
@@ -1368,7 +1368,7 @@ def apply_calibration(cal_dir, src_file, dev, applies_to):
 def reap_previous(port, wait_s=6.0):
     """Kill any EARLIER instance of this tool, then wait for it to let go.
 
-    ⛔ ON COMPETITION GROUND YOU DO NOT GO PID HUNTING. A second `ros2 run
+    On competition ground you do not go PID hunting. A second `ros2 run
     mongla_vision calibrate` used to die on `OSError: [Errno 98] Address
     already in use`, and the fix -- find the process, work out that there are
     TWO of them, kill both -- is exactly the wrong thing to be doing beside a
@@ -1383,7 +1383,7 @@ def reap_previous(port, wait_s=6.0):
     (catches an instance started under a different name), and whoever LOOKS
     like this tool (catches one that has not bound yet, mid-startup).
 
-    ⚠ Never kills anything in our OWN process group -- that includes the
+    Never kills anything in our OWN process group -- that includes the
     `ros2 run` wrapper that launched us, and killing it would take us with
     it.
     """
@@ -1515,7 +1515,7 @@ def main():
     # Download button can never serve a different file than Solve wrote.
     dest = os.path.join(install, _solver().calibration_filename(
         a.applies_to, a.width, a.height, a.medium))
-    # ⛔ `solver.py`, NOT `fov_solve.py`. The name changed when calibration
+    # `solver.py`, NOT `fov_solve.py`. The name changed when calibration
     # moved into the package and this path did not, so the Solve button would
     # have launched a file that does not exist -- a stale string surviving a
     # rename, which is the same defect class as the calibration filename that

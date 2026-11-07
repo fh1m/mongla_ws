@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """What does the model say when the prop is NOT there?
 
-⛔ THE GAP THIS CLOSES. Every detection bar in `measured-bars.md` section 1 was
+The gap this closes. Every detection bar in `measured-bars.md` section 1 was
 derived from labelled held-out PAIRS -- frames that contain the prop. A set
 built that way cannot measure a false positive on open water, because it
 contains no open water. So a model that fires confidently on empty pool scores
@@ -18,11 +18,11 @@ At the shipped 0.15 the model claimed a gate on 90.8 % of gate-free frames,
 with half-frame boxes over empty turquoise at 0.44-0.56. That is B-59, and it
 was invisible to every check we had.
 
-WHAT IT REPORTS. Per-frame detection rate for one class on clips you assert
+What it reports. Per-frame detection rate for one class on clips you assert
 CONTAIN the prop and clips you assert do NOT. The separation between those two
 columns is the only honest basis for a confidence bar.
 
-⚠ IT CANNOT CHECK YOUR LABELS. "negative" means you looked at the clip and the
+It cannot check your labels. "negative" means you looked at the clip and the
 prop is not in it. Get that wrong and this reports nonsense with total
 confidence -- so render the boxes and look, the way B-59 was actually caught.
 
@@ -126,7 +126,7 @@ def main() -> int:
     pos = [p for t, p in rows if t == 'present']
     neg = [p for t, p in rows if t == 'ABSENT']
     if not pos:
-        print('\n⚠ no positive clip given, so this shows the false-positive '
+        print('\nWARNING: no positive clip given, so this shows the false-positive '
               'rate alone and cannot recommend a bar.')
         return 0
 
@@ -140,8 +140,8 @@ def main() -> int:
               f'{sep:+7.1f} pts')
         if best is None or sep > best[1]:
             best = (b, sep)
-    print(f'\n⭐ widest separation at conf {best[0]:.2f} ({best[1]:+.1f} pts). '
-          f'⚠ This is a per-FRAME detection rate on the clips you named, not '
+    print(f'\nRESULT: widest separation at conf {best[0]:.2f} ({best[1]:+.1f} pts). '
+          f'WARNING: This is a per-FRAME detection rate on the clips you named, not '
           f'a recall figure: a frame where the prop is out of view counts '
           f'against the positive column. Treat it as where to look, then '
           f'confirm by rendering the boxes.')

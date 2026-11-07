@@ -1,9 +1,9 @@
 """Aim the TOOL, not the camera.
 
-⛔ THE DEFECT. Every vision align centres the target on the CAMERA axis and
+The defect. Every vision align centres the target on the CAMERA axis and
 then actuates a device mounted somewhere else. The axes are parallel, so
 
-    THE MISS EQUALS THE OFFSET, AT EVERY RANGE.
+    The miss equals the offset, at every range.
 
 It does not shrink as the hull closes in -- a 10 cm offset misses a
 4.75 cm-radius torpedo opening from 1 m and from 3 m alike. Nothing logged a
@@ -46,7 +46,7 @@ def test_each_tool_declares_which_camera_aims_it():
 
 
 def test_an_unmeasured_tool_is_DISTINGUISHABLE_from_a_zero_one():
-    """⛔ A zero offset and an unmeasured one are the same NUMBER and not the
+    """A zero offset and an unmeasured one are the same NUMBER and not the
     same CLAIM. `camera_forward` is exactly zero from itself; `torpedo` is zero
     because nobody has held a tape to it. Collapsing them makes the warning
     that matters unprintable."""

@@ -1,6 +1,6 @@
 """Alpha-beta filters for navigation signals. One core, three wrappers.
 
-WHY ALPHA-BETA AND NOT AN EMA, once, here
+Why alpha-beta and not an EMA, once, here
 ------------------------------------------
 Measured on this vehicle's own bearing stream (see `bearing.BearingFilter`),
 against real detector noise plus a 30 deg/s slew:
@@ -19,20 +19,20 @@ lag than the raw signal. Every navigation signal on this vehicle is a smoothly
 moving physical quantity sampled with noise, which is exactly the case that
 holds for.
 
-THREE THINGS EVERY ONE OF THESE NEEDS, and each has bitten something
+Three things every one of these needs, and each has bitten something
 --------------------------------------------------------------------
-1. A RESET GATE. A velocity state keeps extrapolating across a discontinuity,
+1. A reset gate. A velocity state keeps extrapolating across a discontinuity,
    so a jump makes the filter fly past the new value. Measured on the bearing:
    a 12 deg step overshoots 1.51 deg and takes 21 frames to settle; treating a
    large residual as a NEW measurement removes it entirely.
-2. GAP HANDLING. Extrapolating a velocity across a real dropout walks the
+2. Gap handling. Extrapolating a velocity across a real dropout walks the
    estimate somewhere it was never measured, while reporting confidently.
 3. HONEST ABSENCE. `update(None)` clears the state and returns None rather
    than holding the last value. What absence MEANS is the caller's decision --
    grace windows, coast, the uplink's send-nothing contract -- and a filter
    that invents continuity takes that decision away from it.
 
-WHAT NOT TO FILTER
+What not to filter
 ------------------
 A range/standoff measure. Lag on the axis that closes distance is a collision,
 and the forward axis is one-sided by design. `BearingFilter` deliberately

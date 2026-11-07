@@ -11,7 +11,7 @@ IMU's. So every turn wrote `omega x r` of velocity that does not exist into
 the estimate: at 0.5 rad/s of yaw with the lens 0.25 m ahead of the IMU, that
 is 0.125 m/s sideways, fused at the flow node's millimetre-per-second sigma.
 
-⛔ THIS IS NOT THE DEROTATION GAIN. measured-bars §12 fits the IMAGE flow a
+This is not the derotation gain. measured-bars §12 fits the IMAGE flow a
 pitch or roll produces (`f * omega * dt`) and has its own open 12 % excess. The
 lever arm is the camera's physical TRANSLATION during a rotation, which flow
 measures correctly and which the filter must attribute to rotation rather than
@@ -19,7 +19,7 @@ to the hull. A yaw about a vertical axis through the IMU produces no
 derotation term at all and a large lever-arm term, which is why the truth case
 below is a yaw.
 
-⛔ THE SIGN IS PINNED TWICE. `flow_node.py` records a pivot lever arm that
+The sign is pinned twice. `flow_node.py` records a pivot lever arm that
 "came out WRONG" once already. So the case is run with r and with -r: the
 right sign cancels the error, the wrong sign DOUBLES it, and a reader can see
 which is which without trusting the algebra.
@@ -124,7 +124,7 @@ def test_the_rate_used_is_the_bias_corrected_one():
 
 
 def test_a_LATE_flow_sample_is_corrected_with_the_rate_AT_ITS_STAMP():
-    """⛔ Flow reaches the filter through the replay path, often late. The
+    """Flow reaches the filter through the replay path, often late. The
     rate used for `omega x r` must be the rate when the image pair was taken,
     not the rate when the message arrived.
 

@@ -29,7 +29,7 @@ def test_a_mirror_majority_is_REFUSED_and_never_averaged():
     # 7 frames at +28, 3 at the mirrored -28. The mean is +11.2 -- a number
     # that describes neither branch -- and it is still never the answer.
     #
-    # ⛔ CORRECTED 2026-10-01 (issue #55). This test used to assert the 7-frame
+    # CORRECTED 2026-10-01 (issue #55). This test used to assert the 7-frame
     # majority WON. A majority does not resolve a mirror pair: a biased corner
     # detector hands it to the wrong branch, and #55 anchored a heading 54 deg
     # against a true 9 exactly that way. With one branch per frame there is no

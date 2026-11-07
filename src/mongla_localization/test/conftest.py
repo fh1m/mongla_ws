@@ -1,15 +1,15 @@
 """Let the node tests run without a built `mongla_interfaces`.
 
-⛔ WHY. `localization_node` subscribes to `/mongla/state`, so it imports
+WHY. `localization_node` subscribes to `/mongla/state`, so it imports
 `MonglaState` at module scope. On a dev box `mongla_interfaces` is not built,
 so `test_localization_node.py` could not even be COLLECTED -- roughly fifty node
 tests that only ever ran on the vehicle, which is the opposite of what a unit
 test is for.
 
-⚠ THE STUB IS INSTALLED ONLY IF THE REAL PACKAGE IS ABSENT. On the vehicle, and
+The stub is installed only if the real package is absent. On the vehicle, and
 in any built workspace, the generated message wins and nothing here runs.
 
-⛔ AND IT IS PARSED FROM THE `.msg` / `.action` FILES, NOT HAND-WRITTEN. The
+And it is parsed from the `.msg` / `.action` files, not hand-written. The
 first version was a bare attribute bag, and it broke a `mongla_control` test
 that legitimately introspects `Move.Goal.get_fields_and_field_types()` -- turning
 a clean "module not found" into a confusing AttributeError, which is worse than
@@ -67,7 +67,7 @@ def _install_stub() -> None:
         pass
 
     pkg = types.ModuleType('mongla_interfaces')
-    # ⚠ `__path__` MATTERS. Without it Python refuses `mongla_interfaces.action`
+    # `__path__` MATTERS. Without it Python refuses `mongla_interfaces.action`
     # with "not a package", which breaks collection of every sibling test that
     # reaches the action -- a stub that fixes one import and breaks another.
     pkg.__path__ = []

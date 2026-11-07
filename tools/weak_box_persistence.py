@@ -9,7 +9,7 @@ FOLLOW, ANCHOR and the place bank are all ways of surviving after a detection
 is lost, and none of them can start without one. This is the only idea we have
 found that would extend the ladder BELOW its first rung.
 
-⛔ THE REGIME IS THE WHOLE QUESTION, AND THE FIRST VERSION OF THIS TOOL GOT IT
+The regime is the whole question, and the first version of this tool got it
 WRONG. Most gaps in a walk-in/walk-out recording are the subject LEAVING THE
 FRAME. The target is absent, so the weak boxes in those gaps are noise by
 construction, and measuring them answers a question nobody asked. What matters
@@ -21,12 +21,12 @@ before any statistic means anything:
                (visibility margin >= MARGIN_ENTER) and near each other
     EXIT/ENTRY a bracket sits in the margin band, or the brackets are far apart
 
-⭐ EXIT/ENTRY IS THE FREE NEGATIVE CONTROL. The target really is gone there, so
+Exit/entry is the free negative control. The target really is gone there, so
 its link probability is what pure noise scores on our own hardware, in our own
 water, with our own detector. Track-before-detect applies only if IN-VIEW
 stands well above shuffle AND EXIT/ENTRY sits near it.
 
-WHY LINK PROBABILITY AND NOT LONGEST RUN. Longest run is capped by the length
+Why link probability and not longest run. Longest run is capped by the length
 of the stretch it is measured in, and our median gap is a few frames, so the
 statistic saturates and every population converges toward the same ceiling.
 Worse, shuffling a 4-frame stretch barely destroys time -- every frame stays
@@ -97,7 +97,7 @@ def read_bag(path, topic, bar, floor):
 def read_video(clip, model_path, bar, floor, imgsz, limit):
     """Same split, but from real underwater footage through the .pt.
 
-    ⭐ WHY THIS MODE EXISTS. The bag was recorded through stock `yolov11n`,
+    Why this mode exists. The bag was recorded through stock `yolov11n`,
     whose HEF bakes a 0.200 NMS floor -- ABOVE the 0.15 acting bar -- so it
     holds no sub-threshold population at all and the measurement read
     `pairs = 0`. The ultralytics path has no such floor, so running the same
@@ -133,7 +133,7 @@ def read_video(clip, model_path, bar, floor, imgsz, limit):
 def gap_stretches(strong, min_len, cls=None):
     """Frames with no strong detection OF THE TRACKED CLASS.
 
-    ⛔ `cls=None` counts any class as filling the gap, which is wrong for the
+    `cls=None` counts any class as filling the gap, which is wrong for the
     ladder and produced a nonsense result before it was fixed: on gate.mkv a
     `repair` detection masked every `gate` dropout, so the tool reported ZERO
     gaps in 1 200 frames of footage the continuity study found gaps in. The
@@ -279,7 +279,7 @@ def main() -> int:
                     pairs.append((p, q))
             pool.extend(p for _i, p in picks if p)
         rate, n = link_rate(pairs, args.gate)
-        # ⭐ THE CONTROL: boxes drawn from DIFFERENT gaps, so time is removed
+        # The control: boxes drawn from DIFFERENT gaps, so time is removed
         # entirely rather than stirred inside a four-frame stretch.
         ctrl = 0.0
         if len(pool) >= 2 and n:
@@ -295,14 +295,14 @@ def main() -> int:
     iv, ee = verdict.get('in_view'), verdict.get('exit_entry')
     print()
     if iv and iv == iv and iv >= 1.5 and (not ee or ee != ee or iv >= 1.4 * ee):
-        print(f'⭐ IN-SIGHT EVIDENCE PERSISTS at {iv:.2f}x above a time-free '
+        print(f'RESULT: IN-SIGHT EVIDENCE PERSISTS at {iv:.2f}x above a time-free '
               f'control, while the exit/entry regime -- where the target is '
               f'genuinely gone -- scores {ee:.2f}x. Sub-threshold energy is '
               f'temporally structured exactly where the ladder needs it, so '
               f'accumulating it accumulates signal. Track-before-detect '
               f'applies.')
         return 0
-    print(f'⛔ IN-SIGHT {iv:.2f}x vs EXIT/ENTRY {ee:.2f}x. The in-sight regime '
+    print(f'ERROR: IN-SIGHT {iv:.2f}x vs EXIT/ENTRY {ee:.2f}x. The in-sight regime '
           f'is not separated from the regime where the target is absent, so '
           f'accumulating post-NMS weak boxes would manufacture a track out of '
           f'noise. Track-before-detect does not apply TO THESE BOXES -- which '

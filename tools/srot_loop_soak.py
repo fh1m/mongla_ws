@@ -35,7 +35,7 @@ conn=mavutil.mavlink_connection('/dev/ttyUSB0',baud=115200,
 conn.wait_heartbeat(timeout=10)
 fc=SrotFC(conn,log=None)
 fc.set_message_rate(mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE,50)
-# B28: REFUSE TO MEASURE INTO A BOARD THAT DISCARDS THE COMMAND.
+# B28: Refuse to measure into a board that discards the command.
 # `SROT_MOVE` leaves the board latched in AUTO, and in AUTO the firmware
 # throws away every axis of MANUAL_CONTROL and reports nothing. A sweep run
 # in that state drives zero thrust and still prints a full set of numbers --

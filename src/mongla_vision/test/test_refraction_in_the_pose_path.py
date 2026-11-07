@@ -257,7 +257,7 @@ def _square_obj_and_img(width_m, Z):
 
 @pytest.mark.parametrize('Z', [0.6, 1.0, 2.0])
 def test_the_pose_survives_the_node_boundary_and_recovers_the_range(Z):
-    """END TO END across the split, in metres -- the check the old one was not.
+    """End to end across the split, in metres -- the check the old one was not.
 
     This replaced a source-text assertion that `target_pose(ref_pts, live_pts,
     self._K_rect` appeared in `lock_node.py`. That guard was protecting the

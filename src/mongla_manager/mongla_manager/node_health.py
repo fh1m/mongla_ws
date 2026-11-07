@@ -103,7 +103,7 @@ class HealthMixin:
             getattr(fc, 'thruster_health', lambda: None)()))
         self._health.register('thruster_power', lambda: _hr.thruster_power(
             getattr(fc.telemetry(), 'kill_switch', None)))
-        # ⛔ PILOT GAIN. The board boots at 0.5, the parameter write cannot reach
+        # Pilot gain. The board boots at 0.5, the parameter write cannot reach
         # the live value, and at 0.5 every MANUAL_CONTROL demand -- which is how
         # both vision verbs actuate -- is halved with nothing to indicate it.
         # The firmware's own source says a pool session was lost to exactly
@@ -114,7 +114,7 @@ class HealthMixin:
             _load_sensor_offsets()))
         self._health.register('detector', lambda: _hr.detector(
             self._detection_rate_hz()))
-        # ⛔ LEAK. Nine reporters were defined here and six were registered; this
+        # LEAK. Nine reporters were defined here and six were registered; this
         # was one of the three that never ran, and it is the one written for a
         # flooding hull. It returns FAILED for `LEAK_EN = 0` -- the state this
         # board was MEASURED in -- because a disabled failsafe still reads dry,
