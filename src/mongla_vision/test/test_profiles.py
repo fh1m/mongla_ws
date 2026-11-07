@@ -23,7 +23,7 @@ from mongla_vision.detection.profiles import (      # noqa: E402
 import sys as _sys_ct
 import pathlib as _pl_ct
 _sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
-from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
+from code_text import code_of_file  # noqa: E402  (issue #22)
 
 
 def test_every_profile_sets_every_knob():
@@ -122,7 +122,7 @@ def test_unset_is_a_SENTINEL_not_a_comparison_to_the_default():
 
     A knob is unset when it holds a value that means nothing on its own.
     """
-    from mongla_vision.detector_node import _UNSET, _is_unset
+    from mongla_vision.detector_params import _UNSET, _is_unset
 
     assert _UNSET['preprocess'] == 'auto'
     assert _UNSET['range_crop'] == -1
@@ -149,8 +149,8 @@ def test_conf_is_deliberately_NOT_profile_routed():
     rather than left as an inconsistency."""
     # RAW text on purpose: what is checked here IS the explanation, a comment.
     src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'detector_node.py').read_text()
-    from mongla_vision.detector_node import _UNSET
+           / 'detector_params.py').read_text()
+    from mongla_vision.detector_params import _UNSET
     assert 'conf' not in _UNSET, (
         "conf must not be profile-routed -- it feeds the tracker clamp")
     assert 'DELIBERATELY ABSENT' in src, 'the exception must be explained'

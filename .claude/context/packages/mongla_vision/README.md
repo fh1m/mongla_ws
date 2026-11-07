@@ -87,6 +87,11 @@ may refuse a frame), `flow_floor.py` (tile-grid heading and lane lines), `flow_p
 (topics and the log) and `flow_constants.py` (the measured constants, each in
 `measured-bars.md`).
 
+`detector_node` likewise: `detector_node.py` (the inference loop and its recovery),
+`detector_setup.py` (parameters, model loading, live changes), `detector_frames.py` (mailbox
+and direct feed), `detector_publish.py` (topics and operator log lines) and
+`detector_params.py` (pure parameter parsing).
+
 ## Tools
 
 ```bash

@@ -11,8 +11,10 @@ mistaken in turn for a broken model, a wrong confidence, an empty class
 allowlist and a dead worker thread -- because the one thing the node never
 mentioned was that it had been told not to work.
 """
-import ast
-from pathlib import Path
+import sys as _sys_ct
+_sys_ct.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import source_of  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 NODE = (Path(__file__).resolve().parents[1] / 'mongla_vision'
         / 'detector_node.py')
@@ -21,7 +23,7 @@ LAUNCH = (Path(__file__).resolve().parents[1] / 'launch'
 
 
 def test_the_paused_branch_warns():
-    src = NODE.read_text()
+    src = source_of(NODE)
     i = src.index("if self.get_parameter('paused').value:")
     window = src[i:i + 1200]
     assert '.warn(' in window, (

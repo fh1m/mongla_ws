@@ -10,6 +10,9 @@ that about a message.
 `database_version` bumped on every switch so a consumer comparing two reads
 KNOWS a switch happened rather than guessing.
 """
+import sys as _sys_ct
+_sys_ct.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import source_of  # noqa: E402
 import types
 from pathlib import Path
 
@@ -66,7 +69,7 @@ def test_it_is_latched_and_published_at_startup_and_on_every_switch():
     Wiring, read off the source: the numeric behaviour above is driven, and the
     end-to-end publish is verified on the vehicle where the models exist.
     """
-    src = _SRC.read_text()
+    src = source_of(_SRC)
     assert "VisionInfo, f'{ns_out}/vision_info', qos.LATCHED" in src, (
         'vision_info is not latched -- a consumer joining after the detector '
         'would never learn the model')
