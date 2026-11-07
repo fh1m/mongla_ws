@@ -100,6 +100,7 @@ The recurring failure in this project is not a broken subsystem; it is two chang
 and no way to tell which one moved the result. If the day has three questions, it has three
 runs.
 
-Related: [`foxglove-and-bags.md`](foxglove-and-bags.md) ·
+Related: [`first-swim.md`](first-swim.md) (the control-only route, step by step) ·
+[`foxglove-and-bags.md`](foxglove-and-bags.md) ·
 [`srot-integration.md`](srot-integration.md) ·
 [`capability-map.md`](../capability-map.md) · [`ROADMAP.md`](../ROADMAP.md)

@@ -71,44 +71,45 @@ lives, whole, at the tag `last-with-pixhawk-and-sim`.
 37. [The operator runbook — every command, verified](platform/launch-combinations.md)
 38. [First pool day — what to verify, in order](platform/first-pool-verification.md)
 39. [Pool day](platform/pool-day.md)
-40. [Round 4a — the identification pool day, as a script](platform/pool-day-round-4a.md)
-41. [Environment traps — dependency pitfalls that take down the vision launch](kutum/pi-and-env-traps.md)
-42. [Ground-station remote access — drive the Pi without a remote desktop](kutum/remote-access.md)
-43. [Operator tooling — Foxglove, rosbag record/replay, scorecards](platform/foxglove-and-bags.md)
-44. [ROS 2 conventions — the surface and the coding standards](platform/ros2-conventions.md)
+40. [The first swim — control only, as a script](platform/first-swim.md)
+41. [Round 4a — the identification pool day, as a script](platform/pool-day-round-4a.md)
+42. [Environment traps — dependency pitfalls that take down the vision launch](kutum/pi-and-env-traps.md)
+43. [Ground-station remote access — drive the Pi without a remote desktop](kutum/remote-access.md)
+44. [Operator tooling — Foxglove, rosbag record/replay, scorecards](platform/foxglove-and-bags.md)
+45. [ROS 2 conventions — the surface and the coding standards](platform/ros2-conventions.md)
 
 ## Part VI — Reference
 
-45. [Command reference — generated from the code](reference/commands.md)
-46. [The packages](packages/README.md)
-47. [How the docs stay true — the wiki, the files, and the guards](reference/how-the-docs-stay-true.md)
+46. [Command reference — generated from the code](reference/commands.md)
+47. [The packages](packages/README.md)
+48. [How the docs stay true — the wiki, the files, and the guards](reference/how-the-docs-stay-true.md)
 
 ## Part VII — The record
 
-48. [Measured bars — every number the stack ships, and what measured it](measured-bars.md)
-49. [Bug register — every defect in mongla_ws, open and fixed](BUGS.md)
-50. [Upstream asks — `mongla_ws` → `srot-control-board`](upstream/README.md)
-51. [Read coverage of the SROT / Hengla / Bondor repos](upstream/COVERAGE.md)
+49. [Measured bars — every number the stack ships, and what measured it](measured-bars.md)
+50. [Bug register — every defect in mongla_ws, open and fixed](BUGS.md)
+51. [Upstream asks — `mongla_ws` → `srot-control-board`](upstream/README.md)
+52. [Read coverage of the SROT / Hengla / Bondor repos](upstream/COVERAGE.md)
 
 ## Part VIII — Against the world
 
-52. [The verdict — Mongla against the world, in one document](sota/VERDICT.md)
-53. [Against the world — how Mongla compares to the best work there is](sota/README.md)
-54. [Control, against the world](sota/control.md)
-55. [Vision, against the world](sota/vision.md)
-56. [Localization, against the world](sota/localization.md)
-57. [Planning, the DSL and the mission executive, against the world](sota/planning.md)
-58. [The gap ledger — every move, ranked](sota/SOTA-GAPS.md)
+53. [The verdict — Mongla against the world, in one document](sota/VERDICT.md)
+54. [Against the world — how Mongla compares to the best work there is](sota/README.md)
+55. [Control, against the world](sota/control.md)
+56. [Vision, against the world](sota/vision.md)
+57. [Localization, against the world](sota/localization.md)
+58. [Planning, the DSL and the mission executive, against the world](sota/planning.md)
+59. [The gap ledger — every move, ranked](sota/SOTA-GAPS.md)
 
 ## Part IX — The workbench
 
-59. [The workbench — what is being measured, and what it said](workbench/README.md)
-60. [Bench — everything provable without water](workbench/BENCH.md)
-61. [Pool — one section per session, agenda written before travel](workbench/POOL.md)
-62. [Research owed — the questions the sweeps could not answer](workbench/RESEARCH-OWED.md)
+60. [The workbench — what is being measured, and what it said](workbench/README.md)
+61. [Bench — everything provable without water](workbench/BENCH.md)
+62. [Pool — one section per session, agenda written before travel](workbench/POOL.md)
+63. [Research owed — the questions the sweeps could not answer](workbench/RESEARCH-OWED.md)
 
 ## Appendix — Elsewhere
 
-63. [RoboSub Team Intelligence — Mongla Vision Roadmap](scouting/README.md)
-64. [Bumblebee — RoboSub 2025 (1st Place)](scouting/bumblebee-2025.md)
-65. [Future TODO -- shrink `commands.py` registry](future/future-registry-shrinkage.md)
+64. [RoboSub Team Intelligence — Mongla Vision Roadmap](scouting/README.md)
+65. [Bumblebee — RoboSub 2025 (1st Place)](scouting/bumblebee-2025.md)
+66. [Future TODO -- shrink `commands.py` registry](future/future-registry-shrinkage.md)
