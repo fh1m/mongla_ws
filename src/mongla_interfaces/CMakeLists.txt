@@ -9,6 +9,7 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "action/Move.action"
   "msg/MonglaState.msg"
+  "msg/FloorHeading.msg"
   "msg/TargetPose.msg"
   "msg/TargetCorrespondences.msg"
   "msg/TargetContours.msg"

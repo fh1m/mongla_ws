@@ -698,10 +698,45 @@ def test_a_floor_correction_is_KEPT_not_undone_by_the_board():
     assert n._filter.X.yaw_deg() == pytest.approx(-58.0, abs=0.5)
     for _ in range(100):                                # 10 s of 10 Hz grid
         t = _fly_board(n, t, 0.1, 32.0)
-        n._on_floor_grid(type('F', (), {'data': -60.0})())
+        n._on_floor_grid(type('F', (), {'heading_deg': -60.0})())
     t = _fly_board(n, t, 1.0, 32.0)                     # board has the last word
     assert n._n['grid'] > 0
     assert n._filter.X.yaw_deg() == pytest.approx(-60.0, abs=0.5)
+
+
+def _grid_seen_at(t_frame, pool_yaw_deg):
+    """A floor-grid heading read from the frame taken at `t_frame`."""
+    m = type('FH', (), {})()
+    m.header = _Header(t_frame)
+    m.heading_deg = pool_yaw_deg
+    return m
+
+
+def test_a_late_floor_heading_is_judged_against_the_yaw_of_its_frame():
+    """TRUTH, B-91. No drift at all: the board is right, and the grid agrees
+    with the board at every instant. The hull turns at 10 deg/s, and each grid
+    reading arrives 0.3 s after the frame it was read from. So each reading is
+    3 deg behind the heading of NOW, and exactly the heading of ITS frame.
+
+    Judged on arrival, every reading looks like 3 deg of drift and is folded
+    into the yaw offset: the filter ends the turn several degrees from a
+    board that never drifted. Replayed at its stamp it is zero residual, and
+    the filter ends where the board says. Measured: -1.55 deg judged on
+    arrival, -0.01 deg replayed. Replay needs `retrodict:=true`; with it off
+    (the default) every measurement, this one included, lands on arrival."""
+    n = _node(disarmed=True)
+    n._retro = ln.Retrodictor(n._filter, horizon_s=2.0)
+    t = _fly_board(n, 100.0, 1.0, 30.0)
+    n._on_heading(type('F', (), {'data': -60.0})())    # pool = board - 90
+    t = _fly_board(n, t, 1.0, 30.0)
+    late_s, board = 0.3, 30.0
+    for _ in range(20):                                # 30 -> 50 deg, 10 deg/s
+        t = _fly_board(n, t, 0.1, board + 1.0, from_yaw=board, turn_s=0.1)
+        board += 1.0
+        n._on_floor_grid(_grid_seen_at(t - late_s, (board - 10.0 * late_s) - 90.0))
+    t = _fly_board(n, t, 1.0, board)                   # the board has the last word
+    assert n._n['grid'] > 0, 'no grid reading was applied -- the test proves nothing'
+    assert n._filter.X.yaw_deg() == pytest.approx(board - 90.0, abs=0.5)
 
 
 # --------------------------------------------------------------------------- #
@@ -718,7 +753,7 @@ def test_the_grid_is_ignored_until_the_heading_is_anchored():
     # guard -- leaving the anchored check as the only thing that can stop it.
     # An earlier version of this test used 30.0, which the aliasing guard
     # refused on its own, so the test passed with the anchored gate deleted.
-    n._on_floor_grid(type('F', (), {'data': 0.0})())
+    n._on_floor_grid(type('F', (), {'heading_deg': 0.0})())
     assert n._n['grid'] == 0, 'the grid was applied in the boot frame'
     assert n._n['grid_refused'] == 0, 'it should not even be considered'
 
@@ -729,7 +764,7 @@ def test_a_small_drift_is_corrected_by_the_floor():
     BNO drifts without bound. The floor's grid bounds it."""
     n = _node()
     n._anchored = True
-    n._on_floor_grid(type('F', (), {'data': 0.0})())
+    n._on_floor_grid(type('F', (), {'heading_deg': 0.0})())
     assert n._n['grid'] == 1
     assert n._n['grid_refused'] == 0
 
@@ -744,7 +779,7 @@ def test_a_large_disagreement_is_REFUSED_and_COUNTED():
                               [1.0, 0.0, 0.0],
                               [0.0, 0.0, 1.0]])
     n._grid_max_corr_deg = 5.0
-    n._on_floor_grid(type('F', (), {'data': 60.0})())
+    n._on_floor_grid(type('F', (), {'heading_deg': 60.0})())
     assert n._n['grid'] == 0
     assert n._n['grid_refused'] == 1
 
@@ -761,9 +796,9 @@ def test_the_lane_line_uses_its_OWN_symmetry_not_the_grids():
     n._filter.X.R = np.array([[0.0, -1.0, 0.0],      # yaw = +90 deg
                               [1.0, 0.0, 0.0],
                               [0.0, 0.0, 1.0]])
-    n._on_floor_grid(type('F', (), {'data': 0.0})())
+    n._on_floor_grid(type('F', (), {'heading_deg': 0.0})())
     assert n._n['grid'] == 1
-    n._on_lane_line(type('F', (), {'data': 0.0})())
+    n._on_lane_line(type('F', (), {'heading_deg': 0.0})())
     assert n._n['lane'] == 0
     assert n._n['lane_refused'] == 1
 
@@ -771,14 +806,14 @@ def test_the_lane_line_uses_its_OWN_symmetry_not_the_grids():
 def test_a_lane_line_along_the_hull_is_applied_and_counted():
     n = _node()
     n._anchored = True
-    n._on_lane_line(type('F', (), {'data': 0.0})())
+    n._on_lane_line(type('F', (), {'heading_deg': 0.0})())
     assert n._n['lane'] == 1
 
 
 def test_the_lane_line_is_ignored_until_anchored():
     n = _node()
     n._anchored = False
-    n._on_lane_line(type('F', (), {'data': 0.0})())
+    n._on_lane_line(type('F', (), {'heading_deg': 0.0})())
     assert n._n['lane'] == 0 and n._n['lane_refused'] == 0
 
 

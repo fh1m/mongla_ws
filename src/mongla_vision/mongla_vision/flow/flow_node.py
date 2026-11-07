@@ -64,7 +64,7 @@ from sensor_msgs.msg import Image, Range
 from std_msgs.msg import Float32, Float32MultiArray, String, UInt8
 from geometry_msgs.msg import TwistWithCovarianceStamped, Vector3Stamped
 
-from mongla_interfaces.msg import MonglaState
+from mongla_interfaces.msg import FloorHeading, MonglaState
 from mongla_vision.flow.flow_timing import TimeOffset
 from mongla_vision.flow.flow_math import (
     DistanceAccumulator,
@@ -194,7 +194,7 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
         # degrees. Its own topic rather than folded into the velocity message,
         # because it is a different quantity measured at a different rate and a
         # consumer wanting one rarely wants the other.
-        self._pub_grid = self.create_publisher(Float32, f'{ns}/floor_grid_deg', 10)
+        self._pub_grid = self.create_publisher(FloorHeading, f'{ns}/floor_grid_deg', 10)
         # Height above the floor, when the floor itself says so. It was measured
         # here to scale velocity and then thrown away, while every floor task
         # (a bin drop, a floor search, a sloped SAUVC floor) wants exactly this
@@ -202,7 +202,7 @@ class FlowVelocityNode(FlowFrameMixin, FlowSetupMixin, FlowChecksMixin, FlowFloo
         # grating: the pool_depth path is depth minus a typed constant, which
         # is not a measurement of the floor at all. Absent means unknown.
         self._pub_floor_h = self.create_publisher(Range, f'{ns}/floor_height', 10)
-        self._pub_lane = self.create_publisher(Float32, f'{ns}/lane_heading_deg', 10)
+        self._pub_lane = self.create_publisher(FloorHeading, f'{ns}/lane_heading_deg', 10)
         self._pub_dist = self.create_publisher(Float32, f'{ns}/distance_traveled', 10)
         self._pub_debug = self.create_publisher(Float32MultiArray,
                                                 f'{ns}/distance_debug', 10)

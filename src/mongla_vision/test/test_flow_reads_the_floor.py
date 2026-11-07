@@ -99,8 +99,8 @@ def _node(**params):
     from test_flow_node import _make                            # noqa: E402
     n = _make(**params)
     n.published = {'grid': [], 'lane': []}
-    n._pub_grid.publish = lambda m: n.published['grid'].append(m.data)
-    n._pub_lane.publish = lambda m: n.published['lane'].append(m.data)
+    n._pub_grid.publish = lambda m: n.published['grid'].append(m.heading_deg)
+    n._pub_lane.publish = lambda m: n.published['lane'].append(m.heading_deg)
     return n
 
 
