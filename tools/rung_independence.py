@@ -26,6 +26,7 @@ they are dead AT THE SAME TIME versus what independence would predict.
 
     python3 tools/rung_independence.py --video clip.mkv --box cx,cy,w,h
     python3 tools/rung_independence.py --video clip.mkv     # centre box
+    python3 tools/rung_independence.py --video clip.mkv --xfeat ~/models/xfeat_320x240.onnx
 
 A joint-failure rate above the independent prediction is the finding. It does
 not prove a third rung helps; it proves the existing two do not cover each
@@ -46,8 +47,10 @@ _LK = dict(winSize=(21, 21), maxLevel=3,
 
 # Below these a rung has nothing to offer the ladder.
 LK_DEAD = 0.30          # fraction of seeded points surviving
-XF_DEAD = 12            # matches
 HIST_DEAD = 0.20        # peak back-projection response, normalised
+# The anchor needs MIN_INLIERS (15) geometric inliers to answer. Matches are an
+# upper bound on inliers, so fewer than 15 matches is certainly dead.
+XF_DEAD = 15
 
 
 def hist_model(bgr, box):
@@ -82,15 +85,21 @@ def main() -> int:
     ap.add_argument('--frames', type=int, default=400)
     ap.add_argument('--reseed', type=int, default=60,
                     help='re-seed every N frames, standing in for a detection')
+    ap.add_argument('--xfeat', default='',
+                    help='an xfeat_*.onnx export (tools/xfeat_export.py); '
+                         'without it the xf column reads --')
     a = ap.parse_args()
 
-    try:
+    # The anchor's own matcher, so the xf column counts what the anchor would
+    # count: mutual nearest-neighbour matches between the reference and now.
+    xfeat = None
+    if a.xfeat:
         sys.path.insert(0, 'src/mongla_vision')
-        from mongla_vision.anchor.xfeat import XFeat          # noqa: F401
-        have_xf = True
-    except Exception as exc:                                  # noqa: BLE001
-        print(f'(no XFeat here: {exc}; xf column will read --)')
-        have_xf = False
+        from mongla_vision.anchor.xfeat_onnx import XFeatONNX
+        xfeat = XFeatONNX(a.xfeat)
+    else:
+        print('(no --xfeat model given; the xf column will read --)')
+    ref_desc = None
 
     cap = cv2.VideoCapture(a.video)
     if not cap.isOpened():
@@ -130,12 +139,11 @@ def main() -> int:
                 pts = p1.reshape(-1, 2)[keep]
 
         xf = float('nan')
-        if have_xf:
-            try:
-                from mongla_vision.anchor.xfeat import match_pair
-                xf = float(match_pair(ref_gray, gray))
-            except Exception:                                 # noqa: BLE001
-                xf = float('nan')
+        if xfeat is not None:
+            if ref_desc is None:
+                ref_desc = xfeat.detect(ref_gray)[1]
+            i0, _ = XFeatONNX.match(ref_desc, xfeat.detect(gray)[1])
+            xf = float(len(i0))
 
         hp = hist_peak(f, model, box)
         rows.append((lk, xf, hp))
@@ -147,6 +155,7 @@ def main() -> int:
             pts = (p.reshape(-1, 2) + np.array([box[0], box[1]], np.float32)
                    if p is not None else None)
             ref_gray = gray.copy()
+            ref_desc = None
         prev = gray
     cap.release()
 
@@ -167,15 +176,29 @@ def main() -> int:
     print(f'  HIST dead (peak <{HIST_DEAD:.2f})   : {hist_dead.mean():6.1%}')
     joint = float((lk_dead & hist_dead).mean())
     indep = float(lk_dead.mean() * hist_dead.mean())
-    print(f'  BOTH dead                     : {joint:6.1%}   '
+    print(f'  LK and HIST both dead         : {joint:6.1%}   '
           f'(independence predicts {indep:6.1%})')
+    shared = joint > indep
+    if not np.isnan(v[:, 1]).all():
+        xf_dead = v[:, 1] < XF_DEAD
+        print(f'  XF   matches  p10 {q(1, 10):.0f}  p50 {q(1, 50):.0f}  '
+              f'p90 {q(1, 90):.0f}')
+        print(f'  XF   dead (<{XF_DEAD} matches)     : {xf_dead.mean():6.1%}')
+        joint_xf = float((lk_dead & xf_dead).mean())
+        indep_xf = float(lk_dead.mean() * xf_dead.mean())
+        print(f'  LK and XF both dead           : {joint_xf:6.1%}   '
+              f'(independence predicts {indep_xf:6.1%})')
+        shared = shared or joint_xf > indep_xf
     if lk_dead.mean() > 0:
         print(f'  HIST alive while LK dead      : '
               f'{float((lk_dead & ~hist_dead).sum()) / max(lk_dead.sum(), 1):6.1%} '
               f'of the frames LK could not carry')
-    print('\nWARNING: Joint failure ABOVE the independent prediction means the rungs '
-          'share a failure mode, so the ladder\'s redundancy is smaller than '
-          'its rung count suggests.')
+    if shared:
+        print('\nWARNING: joint failure is ABOVE the independent prediction: the '
+              'rungs share a failure mode, so the ladder\'s redundancy is smaller '
+              'than its rung count suggests.')
+    else:
+        print('\nok: no pair of rungs fails together more often than independence predicts.')
     return 0
 
 

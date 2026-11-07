@@ -23,7 +23,6 @@ an evening.
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import math
 import os
@@ -41,19 +40,10 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_HERE)
 
 
-def _load(name, rel):
-    spec = importlib.util.spec_from_file_location(name, os.path.join(_ROOT, rel))
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-_fm = _load('_fc_flow_math',
-            'src/mongla_vision/mongla_vision/distance/flow_math.py')
-_fv = _load('_fc_flow_velocity',
-            'src/mongla_vision/mongla_vision/distance/flow_velocity.py')
-_ne = _load('_fc_nav', 'src/mongla_manager/mongla_manager/estimator/nav_estimator.py')
+# The shipping flow modules, imported as a package; neither needs ROS.
+sys.path.insert(0, os.path.join(_ROOT, 'src', 'mongla_vision'))
+from mongla_vision.flow import flow_math as _fm          # noqa: E402
+from mongla_vision.flow import flow_velocity as _fv      # noqa: E402
 
 _FEATURE_PARAMS = dict(maxCorners=160, qualityLevel=0.01, minDistance=8,
                        blockSize=7)
@@ -182,7 +172,7 @@ def worker(args):
 
     anchor = anchor_pts = None
     anchor_t = None
-    cap_t0 = cap_last = None
+    cap_t0 = None
     pos_hist = deque()
     cap_x0 = cap_y0 = 0.0
     cap_pts = []
@@ -254,7 +244,7 @@ def worker(args):
             used = refused = fallback = 0
             anchor = None
             move_t = 0.0
-            cap_t0 = cap_last = None
+            cap_t0 = None
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         H, W = gray.shape[:2]

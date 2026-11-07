@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """flow_bench -- measure the bottom camera AS A DVL against a tape measure.
 
-Runs the SHIPPING flow modules (`flow_math`, `flow_velocity`, `NavEstimator`)
+Runs the SHIPPING flow modules (`flow_math`, `flow_velocity`)
 on the real bottom camera and the real srot gyro, and reports the distance it
 believes it travelled against a distance you measured with a tape.
 
@@ -51,33 +51,13 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_HERE)
 
 
-def _load(name, relpath):
-    """Load ONE shipping module by path, without its package __init__.
-
-    `mongla_vision/__init__` reaches rclpy, so a plain import would make this
-    bench require a sourced ROS environment to measure optical flow -- which it
-    does not need: flow_math, flow_velocity and nav_estimator import numpy and
-    nothing else. Loading the files directly keeps the bench runnable on any
-    box while still exercising THE CODE THAT SHIPS, which is the property that
-    matters. A reimplementation here would be worthless.
-    """
-    import importlib.util
-    path = os.path.join(_ROOT, relpath)
-    if not os.path.exists(path):
-        raise SystemExit(f'cannot find {path} -- run from the workspace root')
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-_fm = _load('_fb_flow_math',
-            'src/mongla_vision/mongla_vision/distance/flow_math.py')
-_fv = _load('_fb_flow_velocity',
-            'src/mongla_vision/mongla_vision/distance/flow_velocity.py')
-_ne = _load('_fb_nav_estimator',
-            'src/mongla_manager/mongla_manager/estimator/nav_estimator.py')
+# The shipping modules, imported as a package. Neither `mongla_vision` nor
+# its `flow` subpackage needs ROS at import time, so the bench runs on any box
+# with numpy and OpenCV while still exercising THE CODE THAT SHIPS -- a
+# reimplementation here would be worthless.
+sys.path.insert(0, os.path.join(_ROOT, 'src', 'mongla_vision'))
+from mongla_vision.flow import flow_math as _fm          # noqa: E402
+from mongla_vision.flow import flow_velocity as _fv      # noqa: E402
 
 flow_dispersion = _fm.flow_dispersion
 solve_planar_motion = _fm.solve_planar_motion
@@ -85,7 +65,6 @@ forward_backward_error = _fm.forward_backward_error
 interp_rate = _fm.interp_rate
 robust_flow = _fm.robust_flow
 flow_velocity = _fv.flow_velocity
-NavEstimator = _ne.NavEstimator
 
 F_AIR_PX = 513.94          # 1027.87 at 1280 wide, /2 for 640. Round 25.
 F_WATER_PX = 741.0
@@ -293,9 +272,6 @@ def run(args):
           f'({100.0 * res["refused"] / max(1, res["used"] + res["refused"]):.0f} %)')
     print(f'    px/interval median {res["px_med"]:.2f}  '
           f'p90 {res["px_p90"]:.2f}')
-    print(f'    filter    : px={res["nav_px"] * 100:+.2f} '
-          f'py={res["nav_py"] * 100:+.2f} cm  sigma={res["nav_sigma"] * 100:.2f} cm  '
-          f'({res["nav_fixes"]} fixes, {res["nav_rejected"]} gated out)')
     print(f'    gyro rms  : {res["gyro_rms"]:.4f} rad/s')
     print(f'    frames    : {res["frames"]} captured   '
           f'median-fallback {res["fallback"]}')
@@ -654,7 +630,6 @@ def measure(cap, gyro, args, f_px, h, seconds, live=False):
     + de-rotation from the mean gyro rate over the baseline. If this and the
     vehicle disagree, the difference is wiring, not maths.
     """
-    nav = NavEstimator()
     anchor = anchor_pts = None
     anchor_t = None
     used = refused = frames = 0
@@ -768,11 +743,6 @@ def measure(cap, gyro, args, f_px, h, seconds, live=False):
         elif move_t0 is not None and move_last is not None \
                 and (t - move_last) >= args.still_s and not move_done:
             move_done = True
-        sigma = max(1e-3, (h / (f_px * dt)) * (disp if disp else 1.0)
-                    / math.sqrt(max(1, n_ok)))
-        yaw = math.radians(gyro.yaw_deg) if gyro else 0.0
-        nav.predict(t, yaw)
-        nav.update_velocity(v.vx, v.vy, sigma)
         dist_x += v.vx * dt
         dist_y += v.vy * dt
         path += math.hypot(v.vx, v.vy) * dt
@@ -785,10 +755,7 @@ def measure(cap, gyro, args, f_px, h, seconds, live=False):
 
     dur = time.monotonic() - t_start
     axis = dist_y if args.phase == 'lat' else dist_x
-    st = nav.state()
     return dict(dist=axis, dist_x=dist_x, dist_y=dist_y, path=path,
-                nav_px=st.px, nav_py=st.py, nav_sigma=st.pos_sigma,
-                nav_fixes=st.n_fixes, nav_rejected=st.n_rejected,
                 used=used, refused=refused, reasons=reasons, dur=dur,
                 frames=frames, skipped=0, fallback=fallback,
                 move_x=mx1 - mx0, move_y=my1 - my0,
