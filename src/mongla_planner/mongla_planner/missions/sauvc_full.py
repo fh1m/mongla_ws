@@ -65,7 +65,7 @@ def run(mongla, log=None):
     mongla.mission_reset()
     mongla.use_budget(SAUVC_RUN_BUDGET_S, reserve_s=SAUVC_RESERVE_S)
     try:
-        mongla.pause(SAUVC_TETHER_PAUSE_S)
+        mongla.countdown(SAUVC_TETHER_PAUSE_S)
         mongla.arm()
         mongla.set_depth(SAUVC_SEARCH_DEPTH_M, timeout=30)
 

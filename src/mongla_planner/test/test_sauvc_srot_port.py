@@ -12,10 +12,11 @@ which of those each mission calls.
 # bench checks not passed, the board denies them -- and the vision verbs' creep
 # fallback, the blind gate transit and the flare push are all among them.
 # Frozen, so a new depth-gated call is a visible diff, not a pool-day surprise.
+# The tether window is `countdown()`, on the host, not `pause()` (B-89).
 _DEPTH_GATED_ON_SROT = {
-    'sauvc_full':               {'move_back', 'move_forward', 'pause', 'set_depth'},
-    'sauvc_navigation':         {'move_forward', 'pause', 'set_depth'},
-    'sauvc_qualification':      {'move_forward', 'pause', 'set_depth', 'yaw_right'},
+    'sauvc_full':               {'move_back', 'move_forward', 'set_depth'},
+    'sauvc_navigation':         {'move_forward', 'set_depth'},
+    'sauvc_qualification':      {'move_forward', 'set_depth', 'yaw_right'},
     'sauvc_target_acquisition': {'move_forward', 'pause', 'set_depth'},
 }
 

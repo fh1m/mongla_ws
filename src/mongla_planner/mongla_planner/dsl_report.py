@@ -104,7 +104,28 @@ class ReportMixin:
 
     def countdown(self, seconds: int = 10, *,
                   message: str = "Wire removed  --  Mongla is now autonomous. Good luck."):
-        """Print a tether-removal countdown and return."""
+        """The tether-removal window: a countdown on THIS host, before `arm()`.
+
+        Host-side on purpose. The board refuses every SROT_MOVE while disarmed
+        (firmware `mav_commands.cpp`, "SROT_MOVE refused: arm first"), so a
+        `pause()` taken as the tether window fails the mission at its first
+        line. B-89.
+
+        Refuses on an ssh session outside tmux or screen: pulling the tether
+        ends that session, the mission process dies with it, and the manager's
+        watchdog surfaces the vehicle. Safe, and the run is lost.
+
+        Ticks on monotonic deadlines, so the window is `seconds` long however
+        long each redraw takes (a sleep(1) per tick ran ~2 ms long per tick on
+        Kutum, measured-bars §timing).
+        """
+        if (os.environ.get('SSH_CONNECTION') and not os.environ.get('TMUX')
+                and not os.environ.get('STY')):
+            raise RuntimeError(
+                'countdown refused: this is an ssh session outside tmux. Pulling '
+                'the tether would kill the mission and the manager would surface '
+                'the vehicle. Start it as: tmux new -s run, then the mission.')
+        seconds = max(1, int(round(seconds)))
         width = 66
         border_h = '━' * width
         tl, tr, bl, br = '┏', '┓', '┗', '┛'
@@ -130,13 +151,15 @@ class ReportMixin:
         ])
         print()
 
-        for remaining in range(seconds, 0, -1):
+        t0 = _time.monotonic()
+        for k in range(seconds):
+            remaining = seconds - k
             bar_total = 40
-            filled    = int(bar_total * (seconds - remaining) / seconds)
+            filled    = int(bar_total * k / seconds)
             bar       = '█' * filled + '░' * (bar_total - filled)
             sys.stdout.write(f'\r  T-{remaining:3d}s  [{bar}]  ')
             sys.stdout.flush()
-            _time.sleep(1)
+            _time.sleep(max(0.0, t0 + (k + 1) - _time.monotonic()))
 
         sys.stdout.write('\r' + ' ' * 60 + '\r')
         sys.stdout.flush()

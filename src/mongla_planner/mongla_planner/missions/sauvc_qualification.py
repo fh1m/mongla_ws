@@ -73,7 +73,7 @@ def run(mongla, log=None):
     mongla.mission_reset()
     confirmed = 0
     try:
-        mongla.pause(SAUVC_TETHER_PAUSE_S)
+        mongla.countdown(SAUVC_TETHER_PAUSE_S)
         mongla.arm()
         # Dive straight to the pass depth: the whole lane is the opening's
         # height band, and there is no search depth shallower than it that

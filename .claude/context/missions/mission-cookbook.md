@@ -674,9 +674,34 @@ mongla.countdown(10)          # 10-second window, default message
 mongla.countdown(15, message='Stand clear. Starting autonomous run.')
 ```
 
-Prints an ASCII box countdown to stdout. The mission continues immediately
-after. Everything the run needs is on the vehicle (the Pi and the board) —
-removing the tether during this window leaves the AUV fully autonomous.
+Prints an ASCII box countdown to stdout, on monotonic deadlines, and returns.
+Everything the run needs is on the vehicle (the Pi and the board), so removing
+the tether during this window leaves the AUV fully autonomous.
+
+**Warning:** take the tether window with `countdown()`, never `pause()`. Every
+board verb is a SROT_MOVE and the board refuses them all while disarmed, so a
+`pause(10)` before `arm()` fails the mission at its first line (B-89;
+`test_no_board_verb_before_arm.py` refuses it).
+
+**Warning:** `countdown()` refuses on an ssh session outside tmux or screen.
+Pulling the tether ends that session; the mission dies with it, and the
+manager's watchdog surfaces the vehicle. Run missions as `tmux new -s run`.
+
+### Control only: `out_and_back`
+
+Dive, swim straight, a clockwise half turn (`yaw_right(180)`), swim back, then
+a slow forward leg so the thrusters are running when a diver turns the kill
+switch. Board verbs only: no camera, no odometry, so a vision fault cannot end
+it. `TURN = 'square'` swaps the in-place turn for two right angles. If the kill
+switch is engaged while armed, the manager disarms (B-90), so turning the knob
+back cannot resume a move. Every duration is unmeasured until the first wet
+session times the straight leg.
+
+```bash
+tmux new -s run
+ros2 launch mongla_manager bringup.launch.py      # one pane
+ros2 run mongla_planner mission out_and_back      # another
+```
 
 ### Offline pre-pool testing with a video file
 
@@ -1316,6 +1341,7 @@ The flat layout is required: `discover()` only globs `missions/*.py` (non-recurs
 | Category | Prefix | Examples |
 |---|---|---|
 | Competition chunks (detected-paradigm) | `task_` | `task_gate`, `task_slalom`, `task_bin`, `task_torpedo`, `task_return`, `task_full_2026` |
+| Control only | — | `out_and_back` |
 | Demos / development | `demo_` | `demo_square`, `demo_move_see`, `demo_pursue`, `demo_find_person`, `demo_dual_camera` |
 | SAUVC | `sauvc_` | `sauvc_qualification`, `sauvc_navigation`, `sauvc_target_acquisition`, `sauvc_full` |
 

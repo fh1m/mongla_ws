@@ -87,7 +87,7 @@ def run(mongla, log=None):
     try:
         # ── ARM + INITIAL SET ─────────────────────────────────────────────────
         info('[practice] pausing to remove tether...')
-        mongla.pause(TETHER_REMOVE_PAUSE_S)
+        mongla.countdown(TETHER_REMOVE_PAUSE_S)
         mongla.arm()
         mongla.set_depth(GATE_SEARCH_DEPTH_M, timeout=30)
         if GATE_HEADING_DEG is not None:
