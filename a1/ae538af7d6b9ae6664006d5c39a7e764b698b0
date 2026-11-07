@@ -1,0 +1,30 @@
+src/mongla_vision/mongla_vision/anchor/bank.py
+  s_b4c45e3235679b::t_399a68df75fe22 46-50,65,256
+  s_b4c45e3235679b::t_8bb477d7303a4f 64
+  s_b4c45e3235679b::t_59fda37b0f9d55 63
+.claude/context/packages/mongla_vision/README.md
+  s_b4c45e3235679b::t_25012e97e4e9f9 170-171
+src/mongla_vision/test/test_no_function_is_built_and_uncalled.py
+  s_b4c45e3235679b::t_25012e97e4e9f9 103
+src/mongla_vision/mongla_vision/anchor/bank_lookup.py
+  s_b4c45e3235679b::t_24c9d907dde363 8-52
+  s_b4c45e3235679b::t_f8760203069c45 1-7,53-350
+src/mongla_vision/mongla_vision/anchor/bank_store.py
+  s_b4c45e3235679b::t_127faa767b480a 1-107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "a1ae538af7d6b9ae6664006d5c39a7e764b698b0",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
