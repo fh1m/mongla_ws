@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 530" width="1160" height="530" role="img" aria-label="The control-only swim: out through the gate, a clockwise half turn, back, and the kill switch"><style>text{font-family:Zed Mono,ui-monospace,monospace}.l{font-size:9.5px;fill:#788294;letter-spacing:.14em}.v{font-size:11px;fill:#e4e8ef}.r{font-size:10px;fill:#ff2a14;letter-spacing:.06em}.b{font-size:10px;fill:#5a8dff;letter-spacing:.06em}.h{font-size:17px;fill:#fff;font-weight:700;letter-spacing:-.02em}.big{font-size:30px;fill:#fff;font-weight:700;letter-spacing:-.04em}</style>
+<rect width="1160" height="530" fill="#05070a"/>
+<text x="32.0" y="46.0" class="h" text-anchor="start">The first swim, from above, in depth, and in the turn</text>
+<text x="32.0" y="68.0" class="l" text-anchor="start">BOARD VERBS ONLY · NO CAMERA · NO ODOMETRY · NUMBERS READ FROM out_and_back.py</text>
+<text x="32.0" y="108.0" class="v" text-anchor="start">FROM ABOVE</text>
+<text x="32.0" y="124.0" class="l" text-anchor="start">leg lengths are durations: the speed at each gain is not measured yet</text>
+<rect x="296" y="142" width="8" height="16" fill="#e4e8ef"/>
+<rect x="296" y="202" width="8" height="16" fill="#e4e8ef"/>
+<text x="300.0" y="234.0" class="v" text-anchor="middle">GATE</text>
+<path d="M170,180 H600 A40.0,40.0 0 0 1 600,260 H170" fill="none" stroke="#ff0000" stroke-width="2"/>
+<line x1="170" y1="260" x2="60" y2="260" stroke="#ff0000" stroke-width="2" stroke-dasharray="4 4"/>
+<path d="M425,180 l-10,-5 v10 z" fill="#ff0000"/>
+<path d="M415,260 l10,-5 v10 z" fill="#ff0000"/>
+<circle cx="170" cy="180" r="5" fill="#05070a" stroke="#e4e8ef" stroke-width="1.4"/>
+<text x="158.0" y="184.0" class="v" text-anchor="end">START</text>
+<text x="460.0" y="168.0" class="r" text-anchor="middle">move_forward 10 s at 50 %</text>
+<text x="650.0" y="216.0" class="r" text-anchor="start">yaw_right 180</text>
+<text x="650.0" y="232.0" class="l" text-anchor="start">sent as 2 x 90</text>
+<text x="460.0" y="282.0" class="r" text-anchor="middle">move_forward 10 s at 50 %</text>
+<text x="60.0" y="282.0" class="r" text-anchor="start">20 s at 25 %</text>
+<text x="60.0" y="298.0" class="l" text-anchor="start">a diver turns the kill switch</text>
+<text x="32.0" y="330.0" class="v" text-anchor="start">IN DEPTH</text>
+<text x="32.0" y="346.0" class="l" text-anchor="start">width is the seconds the mission sets; the board ends the dive, the turn and the climb itself</text>
+<line x1="32" y1="380" x2="712" y2="380" stroke="#1a2030" stroke-width="1"/>
+<text x="720.0" y="384.0" class="l" text-anchor="start">0 m</text>
+<text x="720.0" y="444.0" class="l" text-anchor="start">-0.8 m</text>
+<line x1="32.0" y1="374" x2="32.0" y2="446" stroke="#1a2030" stroke-width="1"/>
+<text x="96.1" y="468.0" class="v" text-anchor="middle">countdown</text>
+<text x="96.1" y="484.0" class="l" text-anchor="middle">15 s</text>
+<text x="96.1" y="500.0" class="l" text-anchor="middle">tether on</text>
+<line x1="160.2" y1="374" x2="160.2" y2="446" stroke="#1a2030" stroke-width="1"/>
+<text x="195.2" y="468.0" class="b" text-anchor="middle">dive</text>
+<text x="195.2" y="484.0" class="l" text-anchor="middle">unmeasured</text>
+<line x1="230.2" y1="374" x2="230.2" y2="446" stroke="#1a2030" stroke-width="1"/>
+<text x="272.9" y="468.0" class="v" text-anchor="middle">out</text>
+<text x="272.9" y="484.0" class="l" text-anchor="middle">10 s</text>
+<line x1="315.6" y1="374" x2="315.6" y2="446" stroke="#1a2030" stroke-width="1"/>
+<text x="350.6" y="468.0" class="b" text-anchor="middle">turn</text>
+<text x="350.6" y="484.0" class="l" text-anchor="middle">unmeasured</text>
+<line x1="385.6" y1="374" x2="385.6" y2="446" stroke="#1a2030" stroke-width="1"/>
+<text x="428.4" y="468.0" class="v" text-anchor="middle">back</text>
+<text x="428.4" y="484.0" class="l" text-anchor="middle">10 s</text>
+<line x1="471.1" y1="374" x2="471.1" y2="446" stroke="#1a2030" stroke-width="1"/>
+<text x="556.5" y="468.0" class="v" text-anchor="middle">hold</text>
+<text x="556.5" y="484.0" class="l" text-anchor="middle">20 s</text>
+<text x="556.5" y="500.0" class="l" text-anchor="middle">kill switch</text>
+<line x1="642.0" y1="374" x2="642.0" y2="446" stroke="#1a2030" stroke-width="1"/>
+<text x="677.0" y="468.0" class="b" text-anchor="middle">climb</text>
+<text x="677.0" y="484.0" class="l" text-anchor="middle">unmeasured</text>
+<text x="677.0" y="500.0" class="l" text-anchor="middle">surface</text>
+<path d="M32.0,380 L160.2,380 L160.2,380 L230.2,440 L230.2,440 L315.6,440 L315.6,440 L385.6,440 L385.6,440 L471.1,440 L471.1,440 L642.0,440 L642.0,440 L712.0,380" fill="none" stroke="#5a8dff" stroke-width="2"/>
+<text x="800.0" y="108.0" class="v" text-anchor="start">WHY THE HALF TURN IS SPLIT</text>
+<text x="800.0" y="124.0" class="l" text-anchor="start">the board turns the short way round</text>
+<circle cx="980" cy="250" r="74" fill="none" stroke="#1a2030" stroke-width="1"/>
+<line x1="980" y1="250" x2="980" y2="182" stroke="#e4e8ef" stroke-width="1.6"/>
+<line x1="980" y1="250" x2="980" y2="318" stroke="#e4e8ef" stroke-width="1.6" stroke-dasharray="3 3"/>
+<text x="980.0" y="166.0" class="v" text-anchor="middle">heading now</text>
+<text x="980.0" y="344.0" class="v" text-anchor="middle">target, 180 away</text>
+<path d="M990,190 A58,58 0 0 1 990,310" fill="none" stroke="#ff2a14" stroke-width="2"/>
+<path d="M970,190 A58,58 0 0 0 970,310" fill="none" stroke="#5a8dff" stroke-width="2" stroke-dasharray="5 4"/>
+<text x="1062.0" y="254.0" class="r" text-anchor="start">clockwise</text>
+<text x="898.0" y="254.0" class="b" text-anchor="end">other way</text>
+<text x="800.0" y="382.0" class="l" text-anchor="start">At 180 neither way is shorter. With</text>
+<text x="800.0" y="398.0" class="l" text-anchor="start">0.2 deg of yaw noise, a float32 copy</text>
+<text x="800.0" y="414.0" class="l" text-anchor="start">of the board's arithmetic went clockwise</text>
+<text x="800.0" y="430.0" class="l" text-anchor="start">0.498 of the time. So any turn over</text>
+<text x="800.0" y="446.0" class="l" text-anchor="start">120 deg is sent as equal legs, and a</text>
+<text x="800.0" y="462.0" class="l" text-anchor="start">90 deg leg has a short way round.</text>
+<text x="800.0" y="484.0" class="r" text-anchor="start">measured-bars §68 · MAX_TURN_LEG_DEG</text>
+</svg>
