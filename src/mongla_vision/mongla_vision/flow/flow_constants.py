@@ -41,6 +41,14 @@ _LK_PARAMS = dict(winSize=(31, 31), maxLevel=3,
 # available here: a clean 44 % multiplier on every velocity, invisible in every
 # plot, integrated by everything downstream. So `medium` is an explicit
 # parameter with no safe default -- it is printed at startup.
+# Shi-Tomasi corners for the flow tracker. Bucketing is applied on top so the
+# corners spread across the frame rather than clustering on one bright patch of
+# grout: a clustered set makes a rotation and a translation look alike, and a
+# pool floor is exactly the repetitive lattice where that bites.
+_FEATURE_PARAMS = dict(maxCorners=160, qualityLevel=0.01, minDistance=8,
+                       blockSize=7)
+_MIN_TRACKS = 6
+
 _F_AIR_PX = 513.94
 
 

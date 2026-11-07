@@ -46,13 +46,11 @@ from mongla_vision.flow import flow_math as _fm          # noqa: E402
 from mongla_vision.flow import flow_velocity as _fv      # noqa: E402
 from mongla_vision.flow import flow_features as _ff      # noqa: E402
 
-_FEATURE_PARAMS = dict(maxCorners=160, qualityLevel=0.01, minDistance=8,
-                       blockSize=7)
-_LK_PARAMS = dict(winSize=(31, 31), maxLevel=3,
-                  criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT,
-                            30, 0.01))
-_MIN_TRACKS = 6
-F_AIR, F_WATER = 513.94, 741.0
+# The node's own tracker settings and focal lengths.
+from mongla_vision.flow.flow_constants import (           # noqa: E402
+    _LK_PARAMS, _MIN_TRACKS,
+    _F_AIR_PX as F_AIR, _F_WATER_PX as F_WATER,
+)
 
 STATE = {
     'x': 0.0, 'y': 0.0, 'vx': 0.0, 'vy': 0.0, 'q': 0, 'pts': 0,

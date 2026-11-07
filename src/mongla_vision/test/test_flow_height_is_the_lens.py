@@ -33,7 +33,10 @@ def test_an_offset_that_puts_the_lens_under_the_floor_is_refused():
 def test_flow_node_reads_the_offset_from_the_one_frames_file():
     """No capability ships unreachable: both callers must pass it."""
     import pathlib
-    root = pathlib.Path(__file__).resolve().parents[1] / 'mongla_vision' / 'flow'
-    src = (root / 'flow_node.py').read_text(encoding='utf-8')
+    import sys
+    here = pathlib.Path(__file__).resolve()
+    sys.path.insert(0, str(here.parents[3] / 'tools'))
+    from code_text import source_of
+    src = source_of(here.parents[1] / 'mongla_vision' / 'flow' / 'flow_node.py')
     assert 'baro_to_downward_cam_z()' in src
     assert 'self._lens_below_baro)' in src

@@ -67,15 +67,12 @@ interp_rate = _fm.interp_rate
 robust_flow = _fm.robust_flow
 flow_velocity = _fv.flow_velocity
 
-F_AIR_PX = 513.94          # 1027.87 at 1280 wide, /2 for 640. Round 25.
-F_WATER_PX = 741.0
-
-_FEATURE_PARAMS = dict(maxCorners=160, qualityLevel=0.01, minDistance=8,
-                       blockSize=7)
-_LK_PARAMS = dict(winSize=(21, 21), maxLevel=3,
-                  criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT,
-                            30, 0.01))
-_MIN_TRACKS = 6
+# The node's own tracker settings and focal lengths, so the bench measures
+# what ships rather than a copy that can drift from it.
+from mongla_vision.flow.flow_constants import (           # noqa: E402
+    _FEATURE_PARAMS, _LK_PARAMS, _MIN_TRACKS,
+    _F_AIR_PX as F_AIR_PX, _F_WATER_PX as F_WATER_PX,
+)
 
 
 class Gyro:
