@@ -19,6 +19,12 @@ from .node_support import (BAT_CHANGE_THRESH, DEPTH_CHANGE_THRESH, FORCE_PRINT_S
 
 
 class TelemetryMixin:
+    # A board sample older than this is not the state we are publishing, so
+    # fall back rather than stamp a fresh message with a stale capture time.
+    # 0.2 s is 10 ATTITUDE periods at the pinned 50 Hz -- loose enough that an
+    # ordinary scheduling hiccup does not flip the source back and forth.
+    _BOARD_STAMP_MAX_AGE_S = 0.2
+
     def _publish_static_frames(self) -> None:
         """The tree's fixed edges (issue #19): FRD<->FLU, NED<->ENU, and each
         camera mount that has been MEASURED. Here because this node always
