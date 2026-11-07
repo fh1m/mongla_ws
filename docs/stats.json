@@ -1,6 +1,6 @@
 {
-  "collected": 4335,
-  "passed": 4327,
+  "collected": 4337,
+  "passed": 4329,
   "failed": 0,
   "skipped": 7,
   "xfailed": 1,
@@ -12,7 +12,7 @@
       "failed": 0
     },
     "mongla_vision": {
-      "passed": 1525,
+      "passed": 1527,
       "skipped": 2,
       "failed": 0
     },
@@ -38,11 +38,11 @@
   "code": {
     "packages": {
       "mongla_vision": {
-        "loc": 27371,
+        "loc": 27397,
         "test_files": 125
       },
       "mongla_control": {
-        "loc": 10600,
+        "loc": 10598,
         "test_files": 64
       },
       "mongla_planner": {
@@ -50,7 +50,7 @@
         "test_files": 41
       },
       "mongla_manager": {
-        "loc": 7894,
+        "loc": 7951,
         "test_files": 65
       },
       "mongla_localization": {
