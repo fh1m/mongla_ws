@@ -108,22 +108,11 @@ def letterbox(im: np.ndarray, size: int):
     nh, nw = int(round(h * s)), int(round(w * s))
     out = np.full((size, size, 3), 114, np.uint8)
     px, py = (size - nw) // 2, (size - nh) // 2
-    # BGR -> RGB. The model was trained on RGB and cv2 hands us BGR (B-61).
-    # This step was missing, so the chip ran on colour-swapped frames -- red
-    # and blue exchanged in every pixel -- for as long as this backend has
-    # existed. It never raised, never dropped a frame and never slowed down;
-    # it just answered a different question.
-    #
-    # Reproduced WITHOUT Hailo, which is what settles it: feeding the .pt
-    # the same swap turns `gate=0.78 @56,246` into `repair=0.92 @0,0` -- the
-    # HEF's exact signature, class and origin box included. Two wrong
-    # diagnoses came first (a decode stride bug, then the DFC's calibration
-    # cliff) because both were consistent with the symptom; only the
-    # side-by-side comparison against the .pt on identical frames named it.
-    #
-    # ultralytics does this conversion internally, which is why the .pt
-    # path always looked healthy and every measurement taken through it
-    # remains valid.
+    # BGR -> RGB. The model was trained on RGB and cv2 hands us BGR. Without
+    # this the chip answers on colour-swapped frames and nothing raises: the
+    # .pt fed the same swap turns `gate=0.78` into `repair=0.92 @0,0`.
+    # ultralytics converts internally, so the .pt path never needed it.
+    # The diagnosis, including the two wrong ones first: BUGS B-61.
     out[py:py + nh, px:px + nw] = cv2.cvtColor(
         cv2.resize(im, (nw, nh), interpolation=cv2.INTER_LINEAR),
         cv2.COLOR_BGR2RGB)

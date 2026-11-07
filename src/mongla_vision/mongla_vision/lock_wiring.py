@@ -356,11 +356,9 @@ class LockWiringMixin:
         """/lock and the anchor decomposition out; detections, images and the
         mission's class filter in.
         """
-        # The decomposition, published (Round 11, half-built until now).
-        # Every anchor fit produces tx, ty, theta and scale, and until this
-        # the ladder read `corners` alone -- the only consumer of theta/scale
-        # in the whole tree was a debug text label. Two real signals were
-        # computed and discarded on every evaluation.
+        # Every anchor fit produces tx, ty, theta and scale. The ladder itself
+        # reads only the corners, so theta and scale go out here rather than
+        # being computed and dropped on every evaluation.
         #
         # Published, not acted on. Bumblebee reflex 1 is "redundancy beats
         # optimisation" -- their gate runs five pose sources. This is a SECOND

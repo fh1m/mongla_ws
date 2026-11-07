@@ -302,3 +302,23 @@ the conf sweep on the HEF it asked for was never run.
 **To close.** With the Pi: sync the model, check the md5 against the provenance,
 run `hailortcli parse-hef`, and re-run `tools/composed_lock_harness.py` on the
 same gate clip. The detection-rung share must rise well above 20 %.
+
+### B-61: the Hailo detector ran on colour-swapped frames `REPRODUCED 2026-09-25` **FIXED 2026-09-25**
+
+**What.** `letterbox` in `detection/hailo.py` resized the camera's BGR frame
+and handed it to the chip as it was. The models are trained on RGB, so the
+chip saw red and blue exchanged in every pixel for as long as the backend had
+existed. Nothing raised, no frame was dropped and the rate did not change; the
+detector answered a different question.
+
+**How it was found.** Two wrong diagnoses came first, a decode stride bug and
+then the DFC's calibration cliff, because both fit the symptom. What named it
+was the `.pt` model run side by side on identical frames, without Hailo: fed the
+same swap, it turned `gate=0.78 @56,246` into `repair=0.92 @0,0`, the HEF's
+exact signature, class and origin box included. ultralytics converts BGR to RGB
+internally, which is why the `.pt` path always looked healthy and every
+measurement taken through it stands.
+
+**Fix.** `letterbox` converts BGR to RGB as it resizes.
+`test_hailo_channel_order.py` holds it. Timing figures measured before the
+fix carry the caveat in measured-bars (the photon-to-detection row).
