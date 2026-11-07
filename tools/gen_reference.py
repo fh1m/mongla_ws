@@ -310,11 +310,50 @@ def render() -> str:
     return '\n'.join(L) + '\n'
 
 
+PKGS = ('mongla_control', 'mongla_manager', 'mongla_vision', 'mongla_localization',
+        'mongla_planner')
+MAP_BEGIN, MAP_END = '<!-- modules:begin -->', '<!-- modules:end -->'
+
+
+def _summary(py: Path) -> str:
+    """A module's docstring summary line, minus a leading `name -- `."""
+    doc = ast.get_docstring(ast.parse(py.read_text(encoding='utf-8'))) or ''
+    line = doc.strip().split('\n')[0].strip() if doc.strip() else ''
+    return re.sub(r'^[\w.]+\s+(--|—)\s+', '', line)
+
+
+def module_map(pkg: str) -> str:
+    """Every module of a package with its own one-line summary, by folder."""
+    root = ROOT / 'src' / pkg / pkg
+    rows = ['Generated from each module\'s docstring by `tools/gen_reference.py`; a module',
+            'with no summary line shows as *(no summary)* until it gets one.', '',
+            '| module | what it is |', '|---|---|']
+    for py in sorted(root.rglob('*.py'), key=lambda q: (len(q.relative_to(root).parts), str(q))):
+        if py.name == '__init__.py' or '__pycache__' in py.parts:
+            continue
+        what = _summary(py).replace('|', '\\|') or '*(no summary)*'
+        rows.append(f'| `{py.relative_to(root).as_posix()}` | {what} |')
+    return '\n'.join(rows)
+
+
+def package_pages() -> dict:
+    """Each package page with its module map block brought up to date."""
+    out = {}
+    for pkg in PKGS:
+        page = ROOT / '.claude' / 'context' / 'packages' / pkg / 'README.md'
+        text = page.read_text(encoding='utf-8')
+        if text.count(MAP_BEGIN) != 1 or text.count(MAP_END) != 1:
+            raise SystemExit(f'{page.relative_to(ROOT)}: needs one {MAP_BEGIN} / {MAP_END} pair')
+        head, rest = text.split(MAP_BEGIN, 1)
+        out[page] = f'{head}{MAP_BEGIN}\n{module_map(pkg)}\n{MAP_END}{rest.split(MAP_END, 1)[1]}'
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--check', action='store_true', help='exit 1 if the doc has drifted')
     args = ap.parse_args()
-    outputs = {OUT: render(), EXAMPLE: render_example()}
+    outputs = {OUT: render(), EXAMPLE: render_example(), **package_pages()}
     if args.check:
         stale = [p for p, body in outputs.items()
                  if not p.exists() or p.read_text() != body]

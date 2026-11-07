@@ -15,20 +15,19 @@ no other file needs editing.
 ## Steps
 
 1. **Registry** — `src/mongla_control/mongla_control/commands.py`
-   Add a `CommandSpec` row to the `COMMANDS` dict. Match the shape of an existing verb
-   (`move_forward`, `yaw_left`, `fire`). Set `verb`, `timeout`, and any
-   goal-field defaults the verb reads.
+   Add a row to the `COMMANDS` dict: `'help'` (the CLI's one-liner), `'fields'` (the
+   `Move.Goal` fields the verb reads, by name) and `'defaults'` (every field that may be
+   omitted; a field without a default is required). Copy the shape of a neighbour
+   (`move_forward`, `yaw_left`, `fire`).
 
 2. **Facade method** — `src/mongla_control/mongla_control/mongla.py`
-   Add a same-named method on `Mongla`. Follow the lock-and-dispatch pattern of a
-   neighboring verb:
-   - acquire `self._lock`,
-   - check `_abort_event` once per loop tick,
-   - bounded `while` with a `time.monotonic()` timeout,
-   - single return path,
-   - on exception → `self.stop()`.
-   A board motion is one `SROT_MOVE` through `SrotFC` (see `move_forward`); a host loop writes
-   `fc.manual(...)` through `motion_writers.py` rather than inlining MANUAL_CONTROL math.
+   Add a method on `Mongla` with the same name, taking the row's fields as parameters
+   (plus `on_progress=None`). It returns a `Move.Result`.
+   - A board motion is one line: `return self._board('<verb>', on_progress, ...)`, as
+     `move_forward` does — one `SROT_MOVE`, braked on the board.
+   - A host loop runs under `self.lock`, checks the abort flag once per tick, is bounded
+     by a `time.monotonic()` deadline, and writes thrust through `motion_writers.py`
+     rather than inlining MANUAL_CONTROL arithmetic.
 
 3. **Test** — `src/mongla_control/test/test_commands.py`
    Add a stub asserting the verb is in `COMMANDS` and maps to a `Mongla` attribute.
@@ -43,4 +42,4 @@ colcon test --packages-select mongla_control --pytest-args -k commands
 ```
 
 If the verb closes a control axis, ask the `srot-reviewer` agent to check mode
-preconditions and RC channel direction before pool use.
+preconditions and the MANUAL_CONTROL axis signs before pool use.

@@ -115,3 +115,31 @@ on-arrival behaviour failing that same check.
 
 Related: [`mongla_vision`](../mongla_vision/README.md) (where velocity comes from) ·
 [Capability Map](../../capability-map.md)
+
+## Every module
+
+<!-- modules:begin -->
+Generated from each module's docstring by `tools/gen_reference.py`; a module
+with no summary line shows as *(no summary)* until it gets one.
+
+| module | what it is |
+|---|---|
+| `command_velocity.py` | Velocity from what we COMMANDED, learned while the floor was readable. |
+| `course_map.py` | Where the props are, per course. The prior half of perceive-then-move. |
+| `course_survey.py` | ``ros2 run mongla_localization course_survey`` -- write MEASURED prop positions. |
+| `floor_plane.py` | Range to a point on a KNOWN horizontal plane, from one pixel. No object size. |
+| `frames.py` | Frames: the names, the sensor offsets, and the conversions -- one owner. |
+| `heading_anchor.py` | Recover an ABSOLUTE heading from a prop whose world bearing is known. |
+| `inekf.py` | Right-invariant EKF on SE_2(3): where the hull is, from what it can feel. |
+| `localization_node.py` | The vehicle's own answer to "where am I", fused from every sensor it has. |
+| `orphan.py` | Every long-running node dies with its parent. |
+| `params_file.py` | The node half of `~/.mongla/bringup.yaml`: a typo in `nodes:` stops the node. |
+| `pnp_node.py` | One PnP solver for every evidence source. Subscribe correspondences, publish a pose. |
+| `pool_lines.py` | The lane line is a surveyed straight edge. Read a heading off it. |
+| `pose_cluster.py` | Fuse a stream of single-frame poses into one answer, with its support. |
+| `pose_fuse_node.py` | Subscribe single-frame poses, publish the one the support agrees on. |
+| `prop_placement.py` | Where a prop is, from several sightings of it taken from where we think we are. |
+| `resection.py` | Absolute position from bearings to props whose positions we know. |
+| `retro.py` | Apply every filter event at the instant it describes, not the instant it arrived. |
+| `tile_grating.py` | The pool floor is a surveyed 2-D grating. Read it like an optical encoder. |
+<!-- modules:end -->

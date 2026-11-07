@@ -133,3 +133,39 @@ earlier version of them passed while the vehicle was broken.
 
 Related: [`mongla_manager`](../mongla_manager/README.md) (who calls this) ·
 [Capability Map](../../capability-map.md) · [The Shift](../../the-shift.md)
+
+## Every module
+
+<!-- modules:begin -->
+Generated from each module's docstring by `tools/gen_reference.py`; a module
+with no summary line shows as *(no summary)* until it gets one.
+
+| module | what it is |
+|---|---|
+| `actuation_model.py` | What the board actually does with a demand, and how to undo it. |
+| `allocation.py` | What the mixer will actually deliver, computed before we ask for it. |
+| `bearing.py` | Pixels to bearings. The conversion that gives our vision gains units. |
+| `commands.py` | Single source of truth for every /mongla/move command. |
+| `errors.py` | Verb-layer exceptions. |
+| `geometric_allocation.py` | Allocate a wrench to thrusters using the hull's real geometry. |
+| `hydrodynamics.py` | What the hull's SHAPE implies, before anybody weighs anything. |
+| `mongla.py` | one method per verb. |
+| `motion_rates.py` | The vision loops' tick rate and log throttle. |
+| `motion_writers.py` | What the vision loops write to the board, and how they wait. |
+| `nav_filter.py` | Alpha-beta filters for navigation signals. One core, three wrappers. |
+| `vision_verbs.py` | Vision verbs for the Mongla facade -- exactly two, pixel-native. |
+| `fc/_srot_base.py` | The few names every part of the SROT driver shares. |
+| `fc/base.py` | The result types every board call returns, and the vehicle snapshot. |
+| `fc/port_guard.py` | One process owns the srot serial port. Everything else is refused, loudly. |
+| `fc/srot_bench.py` | Bench verbs: motor test, motor detect, autotune and motor tune. |
+| `fc/srot_fc.py` | the host side of the SROT board (firmware Hengla). |
+| `fc/srot_health.py` | What the board says about itself: its announcements, reboots, thrusters and leak. |
+| `fc/srot_params.py` | Board parameters and the preflight checks that read them. |
+| `fc/srot_payload.py` | SrotPayload: fire(N) on board channel N, over MAVLink. Split out of srot_fc.py. |
+| `fc/srot_protocol.py` | SROT wire protocol -- the SINGLE source of the SROT/Hengla MAVLink constants. |
+| `fc/srot_telemetry.py` | Reading the vehicle: attitude, IMU, batteries, and the one telemetry snapshot. |
+| `fc/srot_uplink.py` | What the host tells the board it sees: a vision target, a speed, a position. |
+| `motion_vision/align.py` | `align_loop`: centre a target on the chosen axes and hold it there. |
+| `motion_vision/control.py` | What both vision loops share: outcome codes, tuned constants, pure helpers, |
+| `motion_vision/move.py` | `move_loop`: drive toward a target until it fills the frame, or through it. |
+<!-- modules:end -->
