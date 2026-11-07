@@ -1,0 +1,40 @@
+.claude/context/packages/mongla_control/README.md
+  s_b4c45e3235679b::t_1735468d390dbb 176,178
+src/mongla_control/mongla_control/motion_vision/srot_drive.py
+  s_b4c45e3235679b::t_ea36ab2cddb611 1-133
+src/mongla_control/mongla_control/motion_vision/__init__.py
+  s_b4c45e3235679b::t_2f7a03a2826ec3 94-116
+src/mongla_control/mongla_control/motion_vision/control.py
+  s_b4c45e3235679b::t_c452281e77c3d1 71
+  s_b4c45e3235679b::t_2f7a03a2826ec3 4-6,19
+  s_b4c45e3235679b::t_b92498de352ba3 72-73
+  s_b4c45e3235679b::t_a2ff361bab4ac3 70
+src/mongla_vision/test/test_bars.py
+  s_b4c45e3235679b::t_b2386b5b7b2c2d 52
+src/mongla_control/mongla_control/motion_vision/move.py
+  s_b4c45e3235679b::t_2f7a03a2826ec3 34-36,39-41
+src/mongla_vision/test/test_continuity.py
+  s_b4c45e3235679b::t_b2386b5b7b2c2d 126
+src/mongla_control/mongla_control/motion_vision/align.py
+  s_b4c45e3235679b::t_2f7a03a2826ec3 45-53
+.claude/context/sota/control.md
+  s_b4c45e3235679b::t_29ae8330714381 54-56
+src/mongla_control/mongla_control/motion_vision/freshness.py
+  s_b4c45e3235679b::t_ea36ab2cddb611 1-233
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "acc92d917da79c4169f4cdb3f0a48b629601f688",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
