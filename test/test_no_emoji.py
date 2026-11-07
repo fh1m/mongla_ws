@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TEXT = re.compile(r'\.(py|md|html|ya?ml|sh|txt|js|css|json|toml|cfg)$')
 # Pictographs, dingbats, misc symbols and the emoji variation selector. Box
 # drawing, arrows, maths and the degree sign are typography and stay.
-EMOJI = re.compile('[☀-➿⬀-⯿\U0001F000-\U0001FAFF️]')
+EMOJI = re.compile(r'[\u2600-\u27BF\u2B00-\u2BFF\U0001F000-\U0001FAFF\uFE0F]')
 
 
 def _tracked():
