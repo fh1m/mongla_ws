@@ -18,7 +18,8 @@ is committed to main under the editor's name. `test_the_wiki_is_built_from_the_b
 proves the round trip loses nothing: every page, built and pulled, is its file.
 
 WHAT THE WIKI HOLDS
-  * Home        the book's contents page, under a short front door
+  * Home        the front page, `.claude/context/wiki/Home.md`: what Mongla is, in pictures
+  * the book    the contents page, `.claude/context/README.md`, every chapter in order
   * _Sidebar    the book, part by part, on every page
   * _Footer     where the code, the site and the defect register are
   * one page    per document the book reaches, titled by its own first heading
@@ -42,6 +43,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BOOK = ROOT / '.claude' / 'context' / 'README.md'
 NEW_PAGES = ROOT / '.claude' / 'context' / 'wiki'
+HOME = NEW_PAGES / 'Home.md'
 REPO_URL = 'https://github.com/fh1m/mongla_ws'
 SITE_URL = 'https://fh1m.github.io/mongla_ws/'
 BLOB = f'{REPO_URL}/blob/main'
@@ -53,9 +55,16 @@ _LINK = re.compile(r'(!?\[[^\]\n]*\]\()([^)\s]+)(\))')
 _FENCE = re.compile(r'^\s*(```|~~~)')
 _IMAGE = {'.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp'}
 
-# Generated text is fenced by these, so `pull` can take it off again exactly.
+# Generated text is fenced by this, so `pull` can take it off again exactly.
 _FOOT = '\n\n<!-- wiki:generated -->\n'
-_HEAD_BEGIN, _HEAD_END = '<!-- wiki:front-door -->\n', '<!-- /wiki:front-door -->\n'
+# The site's pages open with Jekyll front matter, which the wiki would print as
+# text. It is taken off for the wiki and put back from the file on `pull`.
+_FRONT_MATTER = re.compile(r'\A---\n.*?\n---\n\n?', re.S)
+# A block only the site can run (the capability map's live tally is JavaScript)
+# is fenced in the file; the wiki gets a hidden marker in its place, and `pull`
+# puts the block back from the file.
+_SITE_ONLY = re.compile(r'^<!-- site-only:.*?^<!-- /site-only -->\n', re.S | re.M)
+_SITE_MARK = '<!-- site-only block {}: kept in the repository file -->\n'
 
 
 # --------------------------------------------------------------------------- #
@@ -107,7 +116,7 @@ def _publishable(path: Path) -> bool:
 
 def _reached() -> list[Path]:
     """Every markdown file the book reaches by following links, book first."""
-    seen, todo = [], [BOOK]
+    seen, todo = [], [BOOK, HOME]
     while todo:
         path = todo.pop(0)
         if path in seen:
@@ -137,8 +146,8 @@ def pages() -> dict[Path, str]:
     for path in reached:
         if _stub_target(path, reached):
             continue
-        name = 'Home' if path == BOOK else _slug(_title(path))
-        if path != BOOK and (not name or name in taken
+        name = 'Home' if path == HOME else _slug(_title(path))
+        if path != HOME and (not name or name in taken
                              or name.lower() in ('home', '_sidebar', '_footer')):
             name = _path_slug(path)          # two "README"-titled pages, say
         if name in taken:
@@ -252,59 +261,39 @@ def _from_wiki(src: Path, target: str, by_name: dict[str, Path]) -> str:
 # --------------------------------------------------------------------------- #
 def render(path: Path, names: dict[Path, str]) -> str:
     """repo file -> wiki page."""
-    text = path.read_text(encoding='utf-8')
+    text = _FRONT_MATTER.sub('', path.read_text(encoding='utf-8'), count=1)
+    n = iter(range(1_000))
+    text = _SITE_ONLY.sub(lambda m: _SITE_MARK.format(next(n)), text)
     body = _map_links(text, lambda t: _to_wiki(path, t, names))
     rel = path.relative_to(ROOT).as_posix()
     foot = (f'{_FOOT}---\n*Edit this page here in the wiki: the edit is committed to '
             f'[`{rel}`]({BLOB}/{rel}), where the doc tests check it.*\n')
-    head = _front_door(names) if path == BOOK else ''
-    return head + body + foot
+    return body + foot
 
 
 def unrender(page: str, path: Path, names: dict[Path, str]) -> str:
     """wiki page -> repo file: the inverse of `render`."""
-    if page.startswith(_HEAD_BEGIN):
-        page = page.split(_HEAD_END, 1)[1]
     page = page.split(_FOOT, 1)[0]
     if not page.endswith('\n'):
         page += '\n'
     by_name = {n: p for p, n in names.items() if not _is_stub(p, names)}
     # A link the file already has keeps the exact text it was written with, so
     # an edit to one paragraph does not rewrite every link on the page.
-    known = {}
+    known, front = {}, ''
     if path.is_file():
-        _map_links(path.read_text(encoding='utf-8'),
-                   lambda t: known.setdefault(_to_wiki(path, t, names), t))
-    return _map_links(page, lambda t: known.get(t) or _from_wiki(path, t, by_name))
-
-
-def _front_door(names: dict[Path, str]) -> str:
-    """Above the book on Home: what this is, and the six doors people actually want."""
-    def page(rel):
-        return names[ROOT / rel]
-    doors = [
-        ('Why it is built this way', page('docs/the-shift.md')),
-        ('What it can do, with evidence', page('docs/capability-map.md')),
-        ('Where it stands, what is blocked', page('.claude/context/ROADMAP.md')),
-        ('Every verb, generated from the code', page('.claude/context/reference/commands.md')),
-        ('Every launch switch and combination', page('.claude/context/platform/launch-combinations.md')),
-        ('Every known defect', page('.claude/context/BUGS.md')),
-    ]
-    rows = '\n'.join(f'| {what} | [{n.replace("-", " ")}]({n}) |' for what, n in doors)
-    return (f'{_HEAD_BEGIN}'
-            f'**Mongla** is the autonomy stack of an underwater robot: a ROS 2 companion '
-            f'(Raspberry Pi 5 + Hailo-8) driving the SROT control board. This wiki is its '
-            f'documentation. Every page can be edited here; the edit is committed to the '
-            f'[repository]({REPO_URL}), where tests check every link and every number.\n\n'
-            f'| if you want… | read |\n|---|---|\n{rows}\n\n'
-            f'The [site]({SITE_URL}) tells the story with interactive explainers. '
-            f'Below is the whole book, in reading order.\n\n'
-            f'{_HEAD_END}')
+        old = path.read_text(encoding='utf-8')
+        _map_links(old, lambda t: known.setdefault(_to_wiki(path, t, names), t))
+        hit = _FRONT_MATTER.match(old)
+        front = hit.group(0) if hit else ''
+        blocks = _SITE_ONLY.findall(old)
+        page = re.sub(r'^' + re.escape(_SITE_MARK).replace(r'\{\}', r'(\d+)'),
+                      lambda m: blocks[int(m.group(1))], page, flags=re.M)
+    return front + _map_links(page, lambda t: known.get(t) or _from_wiki(path, t, by_name))
 
 
 def sidebar(names: dict[Path, str]) -> str:
     """The book, part by part, each part folded so the sidebar stays short."""
-    out = ['### [The Mongla book](Home)', '']
+    out = [f'### [Mongla](Home) · [the book]({names[BOOK]})', '']
     open_part = False
     for line in BOOK.read_text(encoding='utf-8').splitlines():
         if line.startswith('## '):
@@ -322,7 +311,7 @@ def sidebar(names: dict[Path, str]) -> str:
 
 def footer(names: dict[Path, str]) -> str:
     ctx = BOOK.parent
-    return (f'[Code]({REPO_URL}) · [Site]({SITE_URL}) · '
+    return (f'[Home](Home) · [The book]({names[BOOK]}) · [Code]({REPO_URL}) · [Site]({SITE_URL}) · '
             f'[Defects]({names[ctx / "BUGS.md"]}) · [Roadmap]({names[ctx / "ROADMAP.md"]}) · '
             f'Pages are edited here and committed to the repository.\n')
 
@@ -347,8 +336,12 @@ def build(out: Path) -> int:
 def pull(wiki: Path) -> list[str]:
     """Write every wiki page back to its file. Returns the files that changed."""
     names = pages()
-    manifest = json.loads((wiki / MANIFEST).read_text(encoding='utf-8')) \
-        if (wiki / MANIFEST).is_file() else {}
+    # The manifest says which file each page was built from. A wiki that was
+    # never built (its first page made by hand) has none: use the repo's names.
+    manifest = {n: p.relative_to(ROOT).as_posix() for p, n in names.items()
+                if not _is_stub(p, names)}
+    if (wiki / MANIFEST).is_file():
+        manifest.update(json.loads((wiki / MANIFEST).read_text(encoding='utf-8')))
     changed = []
     for page in sorted(wiki.glob('*.md')):
         name = page.stem
