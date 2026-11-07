@@ -1,0 +1,20 @@
+docs/index.html
+  s_b4c45e3235679b::t_bc3c0124b10772 397,662,723,2072-2073
+  s_b4c45e3235679b::t_94747d7b19b974 1466-1468,1821,2019,2104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "ec96e1aabb3511b3583c8274a3d48714e34544c2",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
