@@ -44,6 +44,7 @@ from launch.events                import Shutdown
 from launch.substitutions         import LaunchConfiguration, PythonExpression
 from launch_ros.actions           import Node
 from launch_ros.parameter_descriptions import ParameterValue
+from mongla_localization import launch_defaults
 
 # Quiet by default: camera/tracker/depth emit only warnings+ so the console
 # isn't flooded during a mission (YOLO itself is already verbose=False). The
@@ -336,7 +337,11 @@ def generate_launch_description():
                       on_exit=[EmitEvent(event=Shutdown())]),
     )
 
+    # `launch: vision:` in ~/.mongla/bringup.yaml re-defaults these, and its
+    # `nodes:` reach the nodes below -- only when this file is the one typed.
+    args, settings = launch_defaults.for_launch_file(args, __file__)
+
     return LaunchDescription(
-        args + [camera_node, detector_node, tracker_node, lock_node, depth_node,
+        args + settings + [camera_node, detector_node, tracker_node, lock_node, depth_node,
                 flow_node, image_viewer, shutdown_on_viewer_exit]
     )

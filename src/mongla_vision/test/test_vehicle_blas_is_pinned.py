@@ -22,8 +22,9 @@ LAUNCHES = (
 def _first_action_index(src: str) -> int:
     # bringup puts a LogInfo (`file_note`, the settings file it read) and the
     # `nodes:` actions (`params`: a log line, an env var, a parameter file)
-    # between the arguments and the nodes; none of them starts a library.
-    m = re.search(r'return LaunchDescription\(args \+ (?:file_note \+ )?(?:params \+ )?\[', src)
+    # between the arguments and the nodes; vision_pi puts `settings` (the same
+    # two, from its `launch:` section). None of them starts a library.
+    m = re.search(r'return LaunchDescription\(args \+ (?:file_note \+ )?(?:params \+ )?(?:settings \+ )?\[', src)
     assert m, 'no `return LaunchDescription(args + [...` to anchor on'
     return m.start()
 

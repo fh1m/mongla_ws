@@ -129,12 +129,38 @@ nodes:                               # node parameters, by node name
     track_buffer: 120
 ```
 
+### The other launch files: the same file, under `launch:`
+
+`vision.launch.py`, `vision_dual.launch.py`, `vision_pi.launch.py`,
+`video.launch.py` and `mission_web.launch.py` are typed directly on the bench
+and against footage. Each reads its own section, named after the file:
+
+```yaml
+launch:
+  video:                             # ros2 launch mongla_vision video.launch.py
+    fwd_video: /footage/gate.mp4
+  vision_dual:                       # ros2 launch mongla_vision vision_dual.launch.py
+    fwd_model: gate_sharks
+    viewer: false
+```
+
+The rules are bringup's: the command line still wins, a key the file does not
+declare refuses the launch with the closest real name, and so does a section
+name that is not a launch file. `nodes:` reaches the nodes of whichever file
+was typed.
+
+**Key point:** a section applies only to the launch file on the command line.
+Bringup includes `vision_pi.launch.py` and passes its arguments itself, so the
+`vision_pi:` section is not read under bringup; set those arguments at the top
+level. The template lists every section with its defaults.
+
 Each setting has exactly one home:
 
 | what | where | when it takes effect |
 |---|---|---|
 | a capability or argument (`vision`, `pool_depth_m`, `conf`) | top level of `bringup.yaml`, or `name:=value` | at launch |
 | a node parameter that is not an argument | `nodes:` in `bringup.yaml` | at launch |
+| an argument of a vision launch file typed on its own | `launch: <file>:` in `bringup.yaml`, or `name:=value` | at launch |
 | a vision gain, for one test | `ros2 param set /mongla_manager vision.kp_yaw 80.0` | the next vision goal; gone at restart |
 | a value for one call in a mission | the verb's own argument (`vision.align(..., gain=30)`) | that call only |
 

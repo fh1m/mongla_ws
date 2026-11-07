@@ -112,6 +112,9 @@ vision: true                 # top level: the capability switches
 nodes:                       # under nodes: any node parameter, by node name
   mongla_manager:
     vision.kp_yaw: 80.0
+launch:                      # under launch: each other launch file, by name
+  video:
+    fwd_video: /footage/gate.mp4
 ```
 
 Every capability starts **off**. Bring the vehicle up bare, switch one thing on, and measure

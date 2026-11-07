@@ -24,7 +24,7 @@ The one command for the vehicle (SROT board + Pi 5 + Hailo-8):
         vision_stack:=generic model:=gate_sharks conf:=0.35
 
 Settings can also live in a file instead of on the command line -- see
-`mongla_manager/launch_defaults.py`. The command line always wins:
+`mongla_localization/launch_defaults.py`. The command line always wins:
 
     echo 'vision: true' > ~/.mongla/bringup.yaml
     ros2 launch mongla_manager bringup.launch.py         # vision is on
@@ -55,7 +55,7 @@ from launch_ros.parameter_descriptions import ParameterValue
 import os
 from ament_index_python.packages import get_package_share_directory
 
-from mongla_manager import launch_defaults
+from mongla_localization import launch_defaults
 
 
 # Grace between SIGINT and SIGTERM for the manager. Above the manager's

@@ -37,6 +37,7 @@ from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+from mongla_localization import launch_defaults
 
 # Framework chatter off, our own nodes at info. Same convention as the other
 # launch files: a process default of `warn` with per-logger `info` pins.
@@ -601,7 +602,11 @@ def generate_launch_description():
             condition=IfCondition(LaunchConfiguration('lock')),
         )
 
-    return LaunchDescription(args + [
+    # `launch: vision_pi:` in ~/.mongla/bringup.yaml re-defaults these, and its
+    # `nodes:` reach the nodes below -- only when this file is the one typed.
+    args, settings = launch_defaults.for_launch_file(args, __file__)
+
+    return LaunchDescription(args + settings + [
         # One BLAS thread per call, set before any node imports numpy.
         # The vehicle runs OpenBLAS (kutum/doctor.sh checks for it), whose pool
         # defaults to every core in EVERY process. The XFeat matcher already

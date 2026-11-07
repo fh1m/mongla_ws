@@ -146,7 +146,7 @@ def render_example() -> str:
          '#     ros2 launch mongla_manager bringup.launch.py',
          '# uses them. `name:=value` on the command line still wins over this file.',
          '# A key that is not listed here stops the launch (a typo cannot vanish).',
-         '# How it works: src/mongla_manager/mongla_manager/launch_defaults.py',
+         '# How it works: src/mongla_localization/mongla_localization/launch_defaults.py',
          '#',
          '# Each line shows the repository default.', '']
     for _, name, default, desc in launch_args(BRINGUP):
@@ -156,8 +156,30 @@ def render_example() -> str:
         shown = default if default and not re.search(r'[:#{}\[\],&*!|>%@`\'"]|^\s|\s$', default) \
             else f"'{default}'"
         L += [f'# {name}: {shown}', '']
+    L += _render_example_sections()
     L += _render_example_nodes()
     return '\n'.join(L)
+
+
+def _render_example_sections() -> list[str]:
+    """`launch:` -- one section per launch file other than bringup, with its
+    arguments and defaults. Each applies only when that file is typed."""
+    L = ['# ---- other launch files ----------------------------------------------',
+         '# `ros2 launch mongla_vision <name>.launch.py` reads `launch: <name>:`.',
+         '# A section applies ONLY to the file typed on the command line: when',
+         '# bringup includes vision_pi, set those arguments at the top level above.',
+         '# What each argument does: .claude/context/reference/commands.md.',
+         '#',
+         '# launch:']
+    for lf in sorted((ROOT / 'src').glob('*/launch/*.launch.py')):
+        if lf == BRINGUP:
+            continue
+        L.append(f"#   {lf.name.removesuffix('.launch.py')}:")
+        for _, name, default, _desc in launch_args(lf):
+            shown = default if default and not re.search(r'[:#{}\[\],&*!|>%@`\'"]|^\s|\s$', default) \
+                else f"'{default}'"
+            L.append(f'#     {name}: {shown}')
+    return L + ['']
 
 
 def _render_example_nodes() -> list[str]:
