@@ -1,0 +1,59 @@
+.claude/context/packages/mongla_vision/README.md
+  s_b4c45e3235679b::t_1e4c07387b5e0f 84-89
+.claude/context/perception/camera-colour-decision.md
+  s_b4c45e3235679b::t_fccd1d3b42dd60 62
+README.md
+  s_b4c45e3235679b::t_62827da51cc0e5 13,111,552,765-766,771,791
+src/mongla_vision/mongla_vision/flow/flow_constants.py
+  s_b4c45e3235679b::t_946b35abdfd816 1-149
+  s_b4c45e3235679b::t_3b6e843c4ef10e 150-155
+src/mongla_vision/mongla_vision/flow/flow_checks.py
+  s_b4c45e3235679b::t_946b35abdfd816 16
+  s_b4c45e3235679b::t_166cdf38c9f52e 1-15,17-264
+docs/stats.json
+  s_b4c45e3235679b::t_62827da51cc0e5 2-4,15,20-22,41
+src/mongla_vision/test/test_flow_reads_the_floor.py
+  s_b4c45e3235679b::t_f37f9c12d18e5b 20
+  s_b4c45e3235679b::t_678d0e49c67a55 25-31,62,67,73,211
+src/mongla_vision/test/test_flow_node.py
+  s_b4c45e3235679b::t_3b6e843c4ef10e 27-28,30,158,165,971
+  s_b4c45e3235679b::t_678d0e49c67a55 796
+src/mongla_vision/test/test_shipped_constants_match_the_ledger.py
+  s_b4c45e3235679b::t_678d0e49c67a55 55
+src/mongla_vision/test/test_no_capability_is_built_and_unreachable.py
+  s_b4c45e3235679b::t_fccd1d3b42dd60 63
+src/mongla_vision/mongla_vision/flow/flow_node.py
+  s_b4c45e3235679b::t_946b35abdfd816 83
+  s_b4c45e3235679b::t_62827da51cc0e5 37-38
+  s_b4c45e3235679b::t_c133374bafed0a 36,39-45
+  s_b4c45e3235679b::t_13363d9b3c3234 68,70-79,84-87,98-99
+src/mongla_manager/test/test_feature_switches.py
+  s_b4c45e3235679b::t_ce11050471d95b 11,16-18,45
+docs/index.html
+  s_b4c45e3235679b::t_62827da51cc0e5 113,1806
+src/mongla_vision/mongla_vision/flow/flow_setup.py
+  s_b4c45e3235679b::t_946b35abdfd816 16
+  s_b4c45e3235679b::t_8f271c9fafb6ad 1-15,17-324
+src/mongla_vision/mongla_vision/flow/flow_timing.py
+  s_b4c45e3235679b::t_3b6e843c4ef10e 39
+src/mongla_vision/mongla_vision/flow/flow_floor.py
+  s_b4c45e3235679b::t_98d9c883c55fac 1-117
+src/mongla_vision/mongla_vision/flow/flow_publish.py
+  s_b4c45e3235679b::t_3cba8142c0f96a 1-108
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "695d4ab1c156b0a29a4dd1806950faddb6ccecee",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
