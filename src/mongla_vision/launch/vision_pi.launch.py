@@ -259,9 +259,7 @@ def arguments() -> list:
         # OFF by default because it needs `pool_depth_m`, which it REFUSES to
         # guess: height is a clean multiplier on every velocity it emits.
         DeclareLaunchArgument('flow', default_value='false'),
-        # The lock ladder. Built, measured, and in no launch file until now --
-        # so the follower and XFeat anchor had never run in a mission. It
-        # publishes `<ns>/lock`, NEVER `/detections`: a followed or anchored
+        # The lock ladder: the follower and the XFeat anchor. It publishes `<ns>/lock`, NEVER `/detections`: a followed or anchored
         # box on the detector's topic is indistinguishable from something the
         # detector saw, and every consumer including the HUD would report a
         # detection that never happened.

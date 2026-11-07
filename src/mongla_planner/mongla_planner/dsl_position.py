@@ -20,10 +20,9 @@ class WhereMixin:
     # files through the flat port (`optics.fov_air_to_water`):
     #   downward  Microdia global shutter, fx 1027.87 @1280: 63.8 air -> 46.7 water
     #   forward   Fantech Luminous C30,    fx  851.23 @1280: 73.9 air -> 53.6 water
-    # This was ONE constant, 46.7, measured on the global-shutter unit when it
-    # was still called "forward". The cameras were re-assigned on 2026-09-07 and
-    # the constant stayed, so every forward-camera range read 17 % long and every
-    # forward bearing 13 % short, with nothing logging a fault.
+    # Per camera, never one shared value: the lenses differ, and the downward
+    # camera's 46.7 applied to the forward one reads every range 17 % long and
+    # every bearing 13 % short, with nothing logging a fault.
     HFOV_WATER_DEG_BY_CAMERA = {'forward': 53.6, 'downward': 46.7}
 
     def _optics(self, camera):
@@ -166,11 +165,10 @@ class WhereMixin:
             sightings[name] = bearing
         got = fix_from_bearings(sightings, positions)
         if got.ok:
-            # Feed the filter, not just the log. `update_position` is the only
-            # channel that bounds horizontal drift, and until this line the fix
-            # was computed, printed, and thrown away -- the filter had no
-            # caller for the one measurement it cannot replace. Best-effort:
-            # a missing localization node must not fail a mission step.
+            # Feed the filter, not just the log: `update_position` is the only
+            # thing that bounds horizontal drift, and this fix is its only
+            # source. Best-effort: a missing localization node must not fail a
+            # mission step.
             self._publish_fix(got.x_m, got.y_m, camera=camera or self.camera)
             self.log.info(
                 f'[FIX  ] pool position ({got.x_m:+.2f}, {got.y_m:+.2f}) m from '

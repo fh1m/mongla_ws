@@ -477,8 +477,8 @@ def uplink_class_num(name) -> int:
                               UPLINK_CLASS_UNSPECIFIED)
 
 
-# The timeout ladder, declared as a cross-repo contract in VISION_API.md and
-# asserted NOWHERE until now. The ordering is the whole point: each rung must
+# The timeout ladder, a cross-repo contract in VISION_API.md, asserted here
+# and by the tests. The ordering is the whole point: each rung must
 # expire strictly before the next, so authority reaches zero BEFORE loss is
 # declared -- which is what makes a detection dropout a glide rather than a
 # lurch. One edit to any of these silently breaks that, and the symptom is a
