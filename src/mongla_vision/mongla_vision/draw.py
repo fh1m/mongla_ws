@@ -22,7 +22,7 @@ from typing import List, Optional
 import numpy as np
 
 from .draw_widgets import (
-    C_BG, C_ACCENT, C_AMBER, C_OK, C_ERR, C_TEXT, C_DIM, C_BORDER,
+    C_BG, C_ACCENT, C_AMBER, C_OK, C_ERR, C_TEXT, C_DIM,
 )
 from .draw_video import render_video_section
 from .detection.detector import Detection, largest

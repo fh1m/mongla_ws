@@ -21,8 +21,8 @@ PAIRS=[
  ('octagon  2nd held-out ','robosub_octagon_n_200_final','TASK_5_OCTAGON/ext/slot-1_obb'),
  ('gate     CROSS-VENUE  ','robosub_gate_200_final2','TASK_1_GATE/Mirpur/sun_june_29/gate-1'),
 ]
-print(f'\n  PRECISION and RECALL vs CONF -- the measurement the 0.15->0.10')
-print(f'  decision never made (it moved on presence, which cannot see an FP).\n')
+print('\n  PRECISION and RECALL vs CONF -- the measurement the 0.15->0.10')
+print('  decision never made (it moved on presence, which cannot see an FP).\n')
 for tag,mn,ds in PAIRS:
     try:
         with contextlib.redirect_stdout(io.StringIO()),contextlib.redirect_stderr(io.StringIO()):

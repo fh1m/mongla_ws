@@ -33,7 +33,6 @@ from sensor_msgs.msg import Image
 from cv_bridge        import CvBridge
 
 from mongla_vision import (
-    CAMERA_PROFILES,
     make_camera, make_camera_from_profile,
     get_profile, draw,
 )

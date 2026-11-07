@@ -135,7 +135,6 @@ def main():
 
     # ---- ROS: encode + serialise, once per published frame ---------------
     try:
-        import rclpy
         from cv_bridge import CvBridge
         br = CvBridge()
         _measure('cv_bridge cv2_to_imgmsg',

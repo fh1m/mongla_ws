@@ -147,8 +147,8 @@ def main() -> int:
     if abs(r['fit']['K'][0,0]-K_TRUE[0,0])/K_TRUE[0,0] < 0.02:
         fails.append("degenerate: synthetic case is not actually degenerate; "
                      "the test has stopped testing anything")
-    print(f"  (this is the failure mode that produced fx=835.7 on the real "
-          f"camera; its training RMS looked fine)")
+    print("  (this is the failure mode that produced fx=835.7 on the real "
+          "camera; its training RMS looked fine)")
 
     print("\n" + "=" * 60)
     if fails:

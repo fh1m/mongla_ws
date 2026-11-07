@@ -37,7 +37,6 @@ Usage (on the vehicle, downward camera, lit scene):
 """
 import argparse
 import json
-import math
 import os
 import sys
 

@@ -9,7 +9,7 @@ says where the remembered scene went.
 Enrol from the first frames, then locate on everything after, live, on the Pi.
 """
 import sys, time, importlib.util
-import numpy as np, cv2
+import cv2
 
 SRC = '/home/fh1m/mongla_ws/src/mongla_vision'
 sys.path.insert(0, SRC)

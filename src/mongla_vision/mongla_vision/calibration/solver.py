@@ -534,7 +534,7 @@ def main() -> int:
     kk = 'ro' if use_ro else 'std'
     samples = [(r[kk + '_K'], r[kk + '_D']) for r in recs]
     ere, worst = max_ere(samples, w, h)
-    print(f"\n-- Max ERE (AprilCal, IROS 2013) --")
+    print("\n-- Max ERE (AprilCal, IROS 2013) --")
     print(f"  worst-case disagreement between equally plausible calibrations:"
           f" {ere:.3f} px")
     print(f"  bar: < 1.0 px  ->  {'PASS' if ere < 1.0 else 'NOT YET'}"
@@ -547,7 +547,7 @@ def main() -> int:
 
     fxs = np.array([r['ro_fx' if use_ro else 'std_fx'] for r in recs])
     fx_sd = float(fxs.std(ddof=1)) if len(fxs) > 1 else float('nan')
-    print(f"\n-- stability --")
+    print("\n-- stability --")
     print(f"  fx across folds: {fxs.mean():.2f} +/- {fx_sd:.2f} px "
           f"(min {fxs.min():.2f}, max {fxs.max():.2f})")
 
@@ -565,7 +565,7 @@ def main() -> int:
         fit_now['K'].copy(), fit_now['D'].copy(),
         flags=cv2.CALIB_USE_INTRINSIC_GUESS)
     sigma_fx = float(np.asarray(sd_int).ravel()[0])
-    print(f"\n-- conditioning --")
+    print("\n-- conditioning --")
     print(f"  board tilt spanned: {tilts.min():.1f} .. {tilts.max():.1f} deg "
           f"(median {np.median(tilts):.1f})")
     tilt_ok = tilts.max() >= 25.0 and (tilts.max() - tilts.min()) >= 15.0
@@ -600,15 +600,13 @@ def main() -> int:
     if external:
         board_w, dist_z = external
         # widest observed board span in pixels, over the most frontal view
-        best, best_px = None, 0.0
+        best_px = 0.0
         for ip in ips:
             p = ip.reshape(-1, 2)
-            span = p[:, 0].max() - p[:, 0].min()
-            if span > best_px:
-                best_px, best = span, p
+            best_px = max(best_px, p[:, 0].max() - p[:, 0].min())
         fx_ext = best_px * dist_z / board_w
         err = 100 * (fx_ext - fit['K'][0, 0]) / fit['K'][0, 0]
-        print(f"\n-- external check (does not come from the optimizer) --")
+        print("\n-- external check (does not come from the optimizer) --")
         print(f"  board {board_w*100:.1f} cm at {dist_z*100:.1f} cm spans {best_px:.1f} px"
               f"  ->  fx ~= {fx_ext:.1f}   ({err:+.1f} % vs solve)")
         print(f"  {'consistent' if abs(err) < 5 else 'DISAGREES -- investigate before shipping'}"
@@ -708,9 +706,9 @@ def main() -> int:
 
     if air_note:
         out['air_fov_note'] = air_note
-        print(f"\n  MEDIUM = WATER: the fitted FOV is the WATER figure. The "
-              f"air numbers\n  are inverse-Snell derivations, not "
-              f"measurements.")
+        print("\n  MEDIUM = WATER: the fitted FOV is the WATER figure. The "
+              "air numbers\n  are inverse-Snell derivations, not "
+              "measurements.")
 
     path = os.path.join(outdir, 'calibration.json')
     with open(path, 'w') as fh:

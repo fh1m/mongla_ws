@@ -115,9 +115,9 @@ def main():
     frame = np.zeros((360, 640, 3), np.uint8)
     det.infer(frame)                      # warm up
 
-    print(f'\n  "woke late" = how long ANOTHER Python thread waited to be '
-          f'scheduled.\n  Read the two controls first: if they do not '
-          f'separate, the run is void.\n')
+    print('\n  "woke late" = how long ANOTHER Python thread waited to be '
+          'scheduled.\n  Read the two controls first: if they do not '
+          'separate, the run is void.\n')
     _measure('CONTROL sleep (frees)', lambda: time.sleep(0.010), a.seconds)
 
     def _spin():

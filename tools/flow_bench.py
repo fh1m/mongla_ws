@@ -336,7 +336,7 @@ def compare(cap, args, f_px, h):
     fdt = args.decimate / args.fps
 
     print(f'\n    MEDIAN vs PLANAR RIGID FIT  ({W}x{H}, dt={fdt * 1000:.1f} ms)')
-    print(f'    truth is the applied transform, exact\n')
+    print('    truth is the applied transform, exact\n')
     hdr = (f'    {"case":<34} {"median dx,dy":>16} {"planar dx,dy":>16} '
            f'{"med err":>9} {"pln err":>9} {"yaw meas":>10} {"yaw true":>9}')
     print(hdr)
@@ -384,8 +384,8 @@ def compare(cap, args, f_px, h):
         print(f'    {label:<34} {ms:>16} {ps:>16} '
               f'{m_err:>9.3f} {p_err:>9.3f} {ys:>10} {true_yaw:>9.3f}')
 
-    print(f'\n    err = |estimated - true| translation of the optical axis, px.')
-    print(f'    yaw in rad/s; the planar fit measures it, the median cannot.')
+    print('\n    err = |estimated - true| translation of the optical axis, px.')
+    print('    yaw in rad/s; the planar fit measures it, the median cannot.')
     print(f'    inliers on the last case: {pm.n_inliers}/{pm.n_points}, '
           f'residual {pm.residual_px:.3f} px')
 
@@ -440,7 +440,7 @@ def sweep(cap, args, f_px, h):
         f2 = ' ' if 97.0 <= p2 <= 103.0 else '!'
         row += f'  || {p2:6.1f}%{f2}{u2:>4}/{u2 + r2:<4}'
         print(row)
-    print(f'\n    "!" = outside +-3 %.  used/total intervals after the gates.')
+    print('\n    "!" = outside +-3 %.  used/total intervals after the gates.')
     print(f'    v_min from the {args.min_flow}px floor:')
     for dec in decs:
         dt = dec / args.fps
@@ -585,7 +585,7 @@ def synth(cap, args, f_px, h):
     step_px = total_px / n
     dt = args.decimate / args.fps
 
-    print(f'\n    SYNTHETIC TRANSLATION -- truth is exact')
+    print('\n    SYNTHETIC TRANSLATION -- truth is exact')
     print(f'      {truth_m * 100:.1f} cm at h={h:.3f} f={f_px:.2f} '
           f'= {total_px:.2f} px total')
     print(f'      {n} steps of {step_px:.3f} px, dt={dt * 1000:.2f} ms '

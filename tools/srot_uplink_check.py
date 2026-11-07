@@ -5,10 +5,10 @@ Two things to establish, and only one of them is about code:
   2. the bearing is RIGHT -- checked against a target at a known pixel column,
      where the pinhole answer is independently computable from fx and cx
 """
-import math, sys, threading, time
+import math, sys, time
 sys.path.insert(0, '/home/fh1m/mongla_ws/src/mongla_control')
 sys.path.insert(0, '/home/fh1m/mongla_ws/src/mongla_vision')
-import numpy as np, cv2
+import cv2
 cv2.setNumThreads(0)
 import os
 os.environ['MAVLINK20'] = '1'   # before pymavlink, or ESC/v2 frames decode as UNKNOWN (fc/_srot_base.py)

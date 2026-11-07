@@ -30,7 +30,6 @@ import collections
 import math
 import os
 os.environ['MAVLINK20'] = '1'   # before pymavlink, or ESC/v2 frames decode as UNKNOWN (fc/_srot_base.py)
-import re
 import subprocess
 import sys
 import threading
@@ -42,9 +41,6 @@ for _pkg in ('mongla_control', 'mongla_vision', 'mongla_manager'):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from pymavlink import mavutil                                   # noqa: E402
-from mongla_control.fc import srot_protocol as sp               # noqa: E402
-from mongla_control.fc.srot_fc import SrotFC                    # noqa: E402
 from mongla_control.nav_filter import DepthFilter, HeadingFilter  # noqa: E402
 
 SERIAL_CAPACITY_BPS = 115200 / 10.0     # 8N1 -> 10 bits per byte

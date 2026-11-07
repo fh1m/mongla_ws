@@ -29,7 +29,7 @@ structure -- that the two causes are separable in principle from data already
 in hand -- and the refusal to report a verdict from too little evidence.
 """
 from dataclasses import dataclass
-from typing import Optional, Sequence
+from typing import Sequence
 
 # Fewer references than this and "all of them" means nothing: one reference
 # cannot distinguish "every view failed" from "the only view failed".

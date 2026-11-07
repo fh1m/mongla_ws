@@ -26,8 +26,8 @@ happened to show.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-from typing import Iterable, Optional
+from dataclasses import dataclass
+from typing import Optional
 
 # A pose whose two flip branches disagree by less than this is not really
 # ambiguous; the solver already picked. Above it, the frame carries a genuine

@@ -16,7 +16,6 @@ detector produce below the acting threshold, and where was it?
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 
 

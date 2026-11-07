@@ -22,7 +22,6 @@ number that predicts a competition we have never seen.
     python3 tools/recall_matrix.py --matrix models.txt datasets.txt
 """
 import argparse
-import glob
 import os
 import random
 import sys

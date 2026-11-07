@@ -92,7 +92,7 @@ def _build_parser():
             # params apply. For everything else, prefill the spec default.
             cli_default = None if live_tuned else spec['defaults'].get(field)
             help_default = (
-                f'(default: the vision.* manager parameter; set it under nodes: in bringup.yaml)'
+                '(default: the vision.* manager parameter; set it under nodes: in bringup.yaml)'
                 if live_tuned and has_default
                 else (f'(default: {spec["defaults"][field]})'
                       if has_default else '(required)'))

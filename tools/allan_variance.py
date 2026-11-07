@@ -336,8 +336,8 @@ def analyse(path: Path) -> int:
                         f"at tau={c['bias_instability_tau_s']:.1f} s")
             print(f'  {axis}: {wtxt};  {btxt}')
             if c['bias_instability_tau_s'] and c['bias_instability_tau_s'] > 0.01 * hours * 3600:
-                print(f'       WARNING: that minimum sits past 1 % of the record; '
-                      f'overlapping Allan has few independent samples there')
+                print('       WARNING: that minimum sits past 1 % of the record; '
+                      'overlapping Allan has few independent samples there')
 
     print('\nWhat to do with these:')
     print('  * the white-noise number IS sigma_gyro / sigma_accel in inekf.py')

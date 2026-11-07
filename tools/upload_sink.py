@@ -4,7 +4,7 @@ on 127.0.0.1:8778 and writes each frame as a PNG. A 2800px dataURL is far too
 large to hand back through a browser-automation return value, so the rig posts
 it here instead. Binds loopback only.
 """
-import http.server, base64, pathlib, sys
+import http.server, base64, pathlib
 OUT = pathlib.Path('/tmp/claude-1000/renders'); OUT.mkdir(exist_ok=True)
 class H(http.server.BaseHTTPRequestHandler):
     def do_POST(self):

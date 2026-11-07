@@ -47,7 +47,6 @@ def main() -> int:
     a = ap.parse_args()
 
     sys.path.insert(0, a.src)
-    import numpy as np
     import torch
     import torch.nn.functional as F
     from modules.model import XFeatModel

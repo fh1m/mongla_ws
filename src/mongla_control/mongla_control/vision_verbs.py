@@ -25,7 +25,6 @@ import threading
 import time
 
 from .errors import MovementError
-from .fc import srot_protocol as sp
 
 from .motion_vision import (
     align_loop, move_loop,

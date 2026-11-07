@@ -31,7 +31,6 @@ import os
 import sys
 
 import cv2
-import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, '..', 'src', 'mongla_vision')

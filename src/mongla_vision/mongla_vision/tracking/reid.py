@@ -34,9 +34,8 @@ two different objects into one identity, and every consumer downstream then
 believes the target teleported. So this refuses unless the evidence is strong,
 and it says why.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
-import math
 
 # Not a new constant. The identity bar measured in section 25 on
 # ROI-cropped references -- the same configuration a track crop produces.

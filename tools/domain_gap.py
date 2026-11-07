@@ -90,8 +90,8 @@ def main():
             pres = 100.0 * seen / n
             print(f'\n    THE DOMAIN GAP: {rec:.1f} % on stills, '
                   f'{pres:.1f} % on video of the same competition.')
-            print(f'    A validation score answers a different question than '
-                  f'"will it hold a lock while moving".')
+            print('    A validation score answers a different question than '
+                  '"will it hold a lock while moving".')
     print()
     return 0
 

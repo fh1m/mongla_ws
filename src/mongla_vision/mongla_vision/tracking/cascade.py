@@ -29,7 +29,7 @@ explain a detection passes it on; a detection no stage explains becomes a new
 track, honestly. The ladder already refuses to invent a position and this does
 not change that -- it reduces how often the question has to be asked.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 import math
 

@@ -12,7 +12,7 @@ pipelining should recover most of it. If it does not, the overhead is
 per-inference and no amount of restructuring helps -- which is equally worth
 knowing, and is the honest outcome to report.
 """
-import argparse, os, sys, time, statistics as st
+import argparse, os, time, statistics as st
 import numpy as np
 from hailo_platform import (HEF, VDevice, HailoStreamInterface, InferVStreams,
                             ConfigureParams, InputVStreamParams,

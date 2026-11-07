@@ -33,11 +33,9 @@ person moves it away from the distribution the detector learned.
     python3 tools/water_check.py --video clip.mkv      # a recording
 """
 import argparse
-import statistics as st
 import sys
 
 import cv2
-import numpy as np
 
 # From the two measured clips. Deliberately a WIDE band in the middle where
 # the honest answer is "measure it both ways" -- a threshold that pretends to

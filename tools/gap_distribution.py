@@ -27,7 +27,7 @@ implausible mechanism:
 
 Usage:  python3 tools/gap_distribution.py
 """
-import sys, os, glob, contextlib, io, cv2
+import sys, os, contextlib, io, cv2
 sys.path.insert(0,'src/mongla_vision')
 from mongla_vision.continuity import Obs, analyse, LADDER, _pct
 from ultralytics import YOLO

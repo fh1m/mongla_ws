@@ -45,7 +45,6 @@ from __future__ import annotations
 import argparse
 import os
 import pathlib
-import sys
 
 import cv2
 import numpy as np

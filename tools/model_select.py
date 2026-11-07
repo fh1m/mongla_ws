@@ -97,9 +97,9 @@ def main():
     rows.sort(reverse=True)
     print(f'\n  PICK: {rows[0][2]}  (worst-session recall '
           f'{100 * rows[0][0]:.1f} %)')
-    print(f'  Ranked on the WORST session, not the mean: a model that is '
-          f'excellent\n  on one venue and useless on another loses the run '
-          f'it is used in.\n')
+    print('  Ranked on the WORST session, not the mean: a model that is '
+          'excellent\n  on one venue and useless on another loses the run '
+          'it is used in.\n')
     if len(rows) > 1:
         spread = rows[0][0] - rows[-1][0]
         print(f'  spread between best and worst candidate: '

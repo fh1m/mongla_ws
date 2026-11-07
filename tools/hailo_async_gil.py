@@ -22,7 +22,6 @@ number cannot distinguish the subject from a badly-scheduling machine.
 import argparse
 import os
 import statistics as st
-import sys
 import threading
 import time
 
