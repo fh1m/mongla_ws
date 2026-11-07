@@ -1,0 +1,116 @@
+src/mongla_manager/mongla_manager/node_vision.py
+  s_b4c45e3235679b::t_f301a4463d0927 6,10-11
+  s_b4c45e3235679b::t_9e4cefbdf12e58 12-13,15
+  s_b4c45e3235679b::t_41bf67aa68e7d2 1-5,7-9,14,16-317
+src/mongla_manager/mongla_manager/node_setup.py
+  s_b4c45e3235679b::t_9e4cefbdf12e58 10,13,17,20-21
+  s_b4c45e3235679b::t_f301a4463d0927 6,9,11,14-16,18-19
+  s_b4c45e3235679b::t_cade7061cf85c3 12,22
+  s_b4c45e3235679b::t_41bf67aa68e7d2 1-5,7-8,23-407
+src/mongla_planner/mongla_planner/dsl_cameras.py
+  s_b4c45e3235679b::t_1cc33f5c251ec7 1-203
+.claude/context/packages/mongla_planner/README.md
+  s_b4c45e3235679b::t_909d2d139c1b11 77,82
+  s_b4c45e3235679b::t_6c67fa4306a3eb 78-81
+src/mongla_manager/test/test_ledger_claims.py
+  s_b4c45e3235679b::t_3ddc47e35fc2f3 126
+src/mongla_manager/test/test_health.py
+  s_b4c45e3235679b::t_a61f208d1d8a87 6-7
+  s_b4c45e3235679b::t_c464c7b4790224 272
+  s_b4c45e3235679b::t_3ddc47e35fc2f3 296
+src/mongla_manager/mongla_manager/auv_manager_node.py
+  s_b4c45e3235679b::t_caceb79d90dbd1 23-37
+  s_b4c45e3235679b::t_cade7061cf85c3 69
+  s_b4c45e3235679b::t_7fff86683457e0 70-77,83-84,194,215-216
+  s_b4c45e3235679b::t_41bf67aa68e7d2 217-218,696,723-726
+src/mongla_planner/test/test_vision_dsl.py
+  s_b4c45e3235679b::t_1ab9f8676b6fe9 279,294,310,324,344,347-349,354,358,365-368,373,387,395,409,475-482,489,499,515,521
+src/mongla_manager/test/test_vision_state_is_built_once.py
+  s_b4c45e3235679b::t_af48e7420f27ef 12
+  s_b4c45e3235679b::t_c464c7b4790224 26-27
+src/mongla_manager/test/test_heartbeat_cannot_be_starved.py
+  s_b4c45e3235679b::t_af48e7420f27ef 21
+  s_b4c45e3235679b::t_c464c7b4790224 82-83,118
+tools/dead_function_sweep.py
+  s_b4c45e3235679b::t_d5966a7511a7e0 75-79
+src/mongla_manager/mongla_manager/node_support.py
+  s_b4c45e3235679b::t_f301a4463d0927 1-3,8-10,15-60
+  s_b4c45e3235679b::t_cade7061cf85c3 11-14
+  s_b4c45e3235679b::t_c3960611fa5879 4-7,61-239
+src/mongla_localization/test/test_the_filter_has_a_caller.py
+  s_b4c45e3235679b::t_99ad361be754a9 21-30,75,83,92,105,158-159,170,179
+src/mongla_manager/test/test_allocator_saturation_reporter.py
+  s_b4c45e3235679b::t_3ddc47e35fc2f3 79
+.claude/context/reference/commands.md
+  s_b4c45e3235679b::t_0cea84a1c7469d 412
+src/mongla_manager/test/test_state_is_stamped_on_the_board_clock.py
+  s_b4c45e3235679b::t_3ddc47e35fc2f3 95,114
+src/mongla_planner/mongla_planner/dsl_support.py
+  s_b4c45e3235679b::t_2f0decd3fa6b23 6-7
+  s_b4c45e3235679b::t_1cc33f5c251ec7 1-5,8-218
+.claude/context/packages/mongla_manager/README.md
+  s_b4c45e3235679b::t_909d2d139c1b11 63-68
+src/mongla_manager/test/test_feature_switches.py
+  s_b4c45e3235679b::t_3ddc47e35fc2f3 21-22
+src/mongla_planner/test/test_opt_in_consumers.py
+  s_b4c45e3235679b::t_067b2848817aee 18-19,192
+  s_b4c45e3235679b::t_1ab9f8676b6fe9 194
+src/mongla_planner/mongla_planner/dsl_detections.py
+  s_b4c45e3235679b::t_46b9a073eb28af 17
+  s_b4c45e3235679b::t_1cc33f5c251ec7 1-10,12-14,16,18-449
+  s_b4c45e3235679b::t_2f0decd3fa6b23 11,15
+src/mongla_planner/mongla_planner/mongla_dsl.py
+  s_b4c45e3235679b::t_2f0decd3fa6b23 161
+  s_b4c45e3235679b::t_1ed70f189b1b65 132-144
+  s_b4c45e3235679b::t_050e10e550e2c9 160,162-166,222
+  s_b4c45e3235679b::t_1cc33f5c251ec7 376-385,873-878,912-914
+src/mongla_manager/test/test_uplink_sends_water_bearings.py
+  s_b4c45e3235679b::t_3ddc47e35fc2f3 28-32
+src/mongla_planner/mongla_planner/dsl_detector.py
+  s_b4c45e3235679b::t_2f0decd3fa6b23 12
+  s_b4c45e3235679b::t_46b9a073eb28af 14
+  s_b4c45e3235679b::t_1cc33f5c251ec7 1-11,13,15-516
+src/mongla_manager/test/test_launch_and_node_defaults_agree.py
+  s_b4c45e3235679b::t_3ddc47e35fc2f3 24
+src/mongla_manager/test/test_health_reporters_sensor_offsets.py
+  s_b4c45e3235679b::t_c464c7b4790224 24
+src/mongla_planner/mongla_planner/dsl_position.py
+  s_b4c45e3235679b::t_5b8a3a405e279f 15,20-30,52,75,79-80,108,112,118,125,128,408,480,594
+  s_b4c45e3235679b::t_46b9a073eb28af 16
+  s_b4c45e3235679b::t_1cc33f5c251ec7 1-11,14,17-19,31-51,53-74,76-78,81-107,109-111,113-117,119-124,126-127,129-407,409-479,481-593,595-801
+  s_b4c45e3235679b::t_2f0decd3fa6b23 12-13
+src/mongla_manager/mongla_manager/node_telemetry.py
+  s_b4c45e3235679b::t_cade7061cf85c3 10
+  s_b4c45e3235679b::t_528840e4abd278 16-18,38
+  s_b4c45e3235679b::t_41bf67aa68e7d2 1-5,7-9,13,19-37,39-602
+  s_b4c45e3235679b::t_f301a4463d0927 6,11-12
+  s_b4c45e3235679b::t_9e4cefbdf12e58 14-15
+src/mongla_manager/test/test_mission_keepalive.py
+  s_b4c45e3235679b::t_ce265bf71589fb 35
+  s_b4c45e3235679b::t_af48e7420f27ef 17
+  s_b4c45e3235679b::t_c464c7b4790224 29
+src/mongla_manager/mongla_manager/node_health.py
+  s_b4c45e3235679b::t_f301a4463d0927 6
+  s_b4c45e3235679b::t_9e4cefbdf12e58 10
+  s_b4c45e3235679b::t_cade7061cf85c3 9,11
+  s_b4c45e3235679b::t_41bf67aa68e7d2 1-5,7-8,12-142
+src/mongla_control/test/test_srot_move_respects_surface.py
+  s_b4c45e3235679b::t_c464c7b4790224 130
+  s_b4c45e3235679b::t_3676c44f3a0839 16-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "ff280e45881eb210c2c91ce32d91ab611537b036",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
