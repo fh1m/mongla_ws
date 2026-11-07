@@ -109,7 +109,7 @@ def run_arm(label, gray, cal, medium, rectify, n_warp, steps, step_m, height):
     """One arm: warp with `n_warp`, measure with the node in `medium`."""
     import rclpy
     from rclpy.parameter import Parameter
-    from mongla_vision.distance.flow_node import FlowVelocityNode
+    from mongla_vision.flow.flow_node import FlowVelocityNode
 
     raw = json.load(open(cal))
     s = gray.shape[1] / raw['image_width']
