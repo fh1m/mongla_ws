@@ -161,7 +161,7 @@ class CameraNode(Node):
                 self.get_logger().info(
                     f'[CAM  ] publish rate follows the camera: {rate:.1f} Hz '
                     f'(set publish_rate_hz to pin it)')
-        # A positive publish_rate_hz THROTTLES; it no longer paces. The
+        # A positive publish_rate_hz THROTTLES; it never paces. The
         # capture thread publishes on arrival, so this is a ceiling for the
         # cases that genuinely want one (a remote viewer, a bandwidth cap) and
         # 0 -- the default -- means "as fast as the camera produces".

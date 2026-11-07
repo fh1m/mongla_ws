@@ -564,7 +564,7 @@ def main(args=None):
 
             # Splash shows only until the detector has EVER published (all modes).
             # Uses the one-way _ever_detected latch, NOT _last_det_t (which a camera
-            # switch resets to 0) -- so switching cameras no longer re-shows the
+            # switch resets to 0) -- so switching cameras does not re-show the
             # startup splash while the new detector spins up.
             _initializing = not node._ever_detected
 

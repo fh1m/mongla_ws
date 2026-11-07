@@ -64,10 +64,9 @@ from .anchor import Anchor, MIN_COSSIM, MIN_INLIERS
 from .bank_lookup import LookupMixin
 from .bank_store import StoreMixin
 
-# How many references, and why it is no longer a constant.
+# How many references the bank holds, and why matching does not visit them all.
 #
-# This shipped at 5, copied from the prototype gallery. Measured 2026-09-24
-# (`measured-bars.md` §20), matching is LINEAR in bank size -- one
+# Matching every reference is LINEAR in bank size (`measured-bars.md` §20) -- one
 # 1024x1024x64 similarity matrix plus a mutual-NN pass per reference:
 #
 #                 dev box        Pi 5

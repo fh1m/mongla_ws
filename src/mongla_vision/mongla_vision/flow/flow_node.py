@@ -125,11 +125,11 @@ class FlowVelocityNode(FlowSetupMixin, FlowChecksMixin, FlowFloorMixin, FlowPubl
         f_air = float(self.get_parameter('focal_air_px').value)
         f_water = float(self.get_parameter('focal_water_px').value)
         self._f_px = f_water if self._medium == 'water' else f_air
-        # The gyro's ONLY remaining consumer is de-rotation inside
-        # flow_velocity (`pitch_rate`/`roll_rate` below). It used to also seed
-        # LK's initial guess; that was measured and REJECTED (nothing survived
-        # the 2 px forward-backward gate), so these gains no longer influence
-        # tracking at all -- only the rotational term subtracted afterwards.
+        # The gyro's only consumer is de-rotation inside flow_velocity
+        # (`pitch_rate`/`roll_rate` below): these gains shape the rotational
+        # term subtracted afterwards, never tracking. Seeding LK's initial
+        # guess from the gyro was measured and rejected (nothing survived the
+        # 2 px forward-backward gate).
         self._gx = float(self.get_parameter('gyro_gain_x').value)
         self._gy = float(self.get_parameter('gyro_gain_y').value)
         self._rot_max = float(self.get_parameter('rot_fraction_max').value)

@@ -105,7 +105,7 @@ class FlowSetupMixin:
         self.declare_parameter('stamp_at_midpoint', True)
         self.declare_parameter('estimate_time_offset', True)
         self.declare_parameter('time_offset_s', FLOW_TD_MEASURED_S)
-        # A bound on td, because it is no longer only a diagnostic. Once td
+        # A bound on td, because it is not only a diagnostic. Once td
         # shifts every velocity stamp, a spurious correlation peak actively
         # CORRUPTS the output instead of logging a warning -- and the slew
         # makes a wrong value persist across windows. The plausible range is

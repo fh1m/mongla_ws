@@ -48,7 +48,7 @@ VISION_PARAM_DEFAULTS: Dict[str, Any] = {
     # align_stable_frames: distinct in-band DETECTIONS (not 50 Hz loop ticks)
     # every active axis must satisfy before vision_align reports ALIGNED. Counting
     # detections (a re-read of one frame counts once) makes this FPS-independent:
-    # at low detector FPS a single lucky frame can no longer declare aligned (or
+    # at low detector FPS a single lucky frame cannot declare aligned (or
     # arm the mid-hold fire). 3 frames ~ 0.1-0.15 s at 20-30 Hz, ~0.75-1 s at 3-4 Hz.
     'vision.align_stable_frames':  3.0,
     # --- precision-alignment knobs (close-in robustness; all default OFF) -----

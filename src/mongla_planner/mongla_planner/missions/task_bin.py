@@ -42,7 +42,7 @@ def run(mongla, log=None):
     mongla.set_depth(BIN_DEPTH_M, timeout=30)
 
     # The eye this task needs may not be there. A camera that fails to open
-    # no longer takes the vision stack down with it -- the other camera keeps
+    # does not take the vision stack down with it -- the other camera keeps
     # running and this one's detector is simply absent. Calling a vision verb
     # anyway makes `_ensure_detector` abort the WHOLE run over one dead camera,
     # taking every later task with it. Skip this task instead and let the rest
