@@ -263,8 +263,104 @@ def package_map():
     return '\n'.join(o)
 
 
+# ── 5. the first swim: the route from above, the depth by phase, the turn ─
+def first_swim():
+    """The control-only route, drawn as the route. The numbers are read from
+    missions/out_and_back.py and the leg limit from mongla.py, so the drawing
+    cannot disagree with the code. Phases the board ends by itself (the dive,
+    the turn, the climb) have no measured duration yet: they get a fixed width
+    marked 'unmeasured', not a guess."""
+    import ast
+
+    def consts(path):
+        tree = ast.parse(pathlib.Path(path).read_text())
+        out = {}
+        for n in tree.body:
+            if isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name):
+                try:
+                    out[n.targets[0].id] = ast.literal_eval(n.value)
+                except ValueError:
+                    pass                    # a computed value; none of these is read
+        return out
+    C = consts('src/mongla_planner/mongla_planner/missions/out_and_back.py')
+    leg = consts('src/mongla_control/mongla_control/mongla.py')['MAX_TURN_LEG_DEG']
+    W, H = 1160, 530
+    o = [head(W, H, 'The control-only swim: out through the gate, a clockwise half turn, back, and the kill switch')]
+    o.append(f'<rect width="{W}" height="{H}" fill="#05070a"/>')
+    o.append(txt(32, 46, 'The first swim, from above, in depth, and in the turn', 'h'))
+    o.append(txt(32, 68, 'BOARD VERBS ONLY · NO CAMERA · NO ODOMETRY · NUMBERS READ FROM out_and_back.py'))
+
+    # from above: east is out; the hull turns clockwise and comes home below
+    yo, yb, xs, xg, xt = 180, 260, 170, 300, 600
+    r = (yb - yo) / 2
+    o.append(txt(32, 108, 'FROM ABOVE', 'v'))
+    o.append(txt(32, 124, 'leg lengths are durations: the speed at each gain is not measured yet'))
+    for y in (yo - 30, yo + 30):                                   # the gate, two posts
+        o.append(f'<rect x="{xg - 4}" y="{y - 8}" width="8" height="16" fill="{INK}"/>')
+    o.append(txt(xg, yo + 54, 'GATE', 'v', 'middle'))
+    o.append(f'<path d="M{xs},{yo} H{xt} A{r},{r} 0 0 1 {xt},{yb} H{xs}" fill="none" stroke="{RED}" stroke-width="2"/>')
+    o.append(f'<line x1="{xs}" y1="{yb}" x2="60" y2="{yb}" stroke="{RED}" stroke-width="2" stroke-dasharray="4 4"/>')
+    for x, y, d in ((420, yo, 1), (420, yb, -1)):                  # direction of travel
+        o.append(f'<path d="M{x + 5 * d},{yo if y == yo else yb} l{-10 * d},-5 v10 z" fill="{RED}"/>')
+    o.append(f'<circle cx="{xs}" cy="{yo}" r="5" fill="#05070a" stroke="{INK}" stroke-width="1.4"/>')
+    o.append(txt(xs - 12, yo + 4, 'START', 'v', 'end'))
+    o.append(txt(460, yo - 12, f"move_forward {C['OUT_S']:g} s at {C['GAIN']:g} %", 'r', 'middle'))
+    o.append(txt(xt + r + 10, (yo + yb) / 2 - 4, f"yaw_right {C['TURN_DEG']:g}", 'r'))
+    o.append(txt(xt + r + 10, (yo + yb) / 2 + 12, f"sent as 2 x {C['TURN_DEG'] / 2:g}"))
+    o.append(txt(460, yb + 22, f"move_forward {C['BACK_S']:g} s at {C['GAIN']:g} %", 'r', 'middle'))
+    o.append(txt(60, yb + 22, f"{C['HOLD_S']:g} s at {C['HOLD_GAIN']:g} %", 'r'))
+    o.append(txt(60, yb + 38, 'a diver turns the kill switch'))
+
+    # in depth: width is the mission's own seconds; fixed where the board decides
+    y0, y1, x0, x1, unk = 380, 440, 32, 712, 70.0
+    o.append(txt(32, 330, 'IN DEPTH', 'v'))
+    o.append(txt(32, 346, 'width is the seconds the mission sets; the board ends the dive, the turn and the climb itself'))
+    # (name, seconds or None, depth at start, depth at end, third line)
+    phases = [('countdown', C['TETHER_S'], 0, 0, 'tether on'), ('dive', None, 0, 1, ''),
+              ('out', C['OUT_S'], 1, 1, ''), ('turn', None, 1, 1, ''),
+              ('back', C['BACK_S'], 1, 1, ''), ('hold', C['HOLD_S'], 1, 1, 'kill switch'),
+              ('climb', None, 1, 0, 'surface')]
+    known = sum(p[1] for p in phases if p[1])
+    scale = (x1 - x0 - unk * sum(1 for p in phases if not p[1])) / known
+    o.append(f'<line x1="{x0}" y1="{y0}" x2="{x1}" y2="{y0}" stroke="{RULE}" stroke-width="1"/>')
+    o.append(txt(x1 + 8, y0 + 4, '0 m'))
+    o.append(txt(x1 + 8, y1 + 4, f"{C['DEPTH_M']:g} m"))
+    x, pts = x0, []
+    for name, sec, d0, d1, note in phases:
+        w = sec * scale if sec else unk
+        pts += [(x, y1 if d0 else y0), (x + w, y1 if d1 else y0)]
+        o.append(f'<line x1="{x:.1f}" y1="{y0 - 6}" x2="{x:.1f}" y2="{y1 + 6}" stroke="{RULE}" stroke-width="1"/>')
+        o.append(txt(x + w / 2, y1 + 28, name, 'v' if sec else 'b', 'middle'))
+        o.append(txt(x + w / 2, y1 + 44, f'{sec:g} s' if sec else 'unmeasured', 'l', 'middle'))
+        if note:
+            o.append(txt(x + w / 2, y1 + 60, note, 'l', 'middle'))
+        x += w
+    o.append('<path d="M' + ' L'.join(f'{px:.1f},{py}' for px, py in pts)
+             + f'" fill="none" stroke="{SEA_L}" stroke-width="2"/>')
+
+    # the turn: why the half turn is sent as two quarter turns
+    cx, cy, R = 980, 250, 74
+    o.append(txt(800, 108, 'WHY THE HALF TURN IS SPLIT', 'v'))
+    o.append(txt(800, 124, 'the board turns the short way round'))
+    o.append(f'<circle cx="{cx}" cy="{cy}" r="{R}" fill="none" stroke="{RULE}" stroke-width="1"/>')
+    o.append(f'<line x1="{cx}" y1="{cy}" x2="{cx}" y2="{cy - R + 6}" stroke="{INK}" stroke-width="1.6"/>')
+    o.append(f'<line x1="{cx}" y1="{cy}" x2="{cx}" y2="{cy + R - 6}" stroke="{INK}" stroke-width="1.6" stroke-dasharray="3 3"/>')
+    o.append(txt(cx, cy - R - 10, 'heading now', 'v', 'middle'))
+    o.append(txt(cx, cy + R + 20, 'target, 180 away', 'v', 'middle'))
+    o.append(f'<path d="M{cx + 10},{cy - R + 14} A{R - 16},{R - 16} 0 0 1 {cx + 10},{cy + R - 14}" fill="none" stroke="{RED_L}" stroke-width="2"/>')
+    o.append(f'<path d="M{cx - 10},{cy - R + 14} A{R - 16},{R - 16} 0 0 0 {cx - 10},{cy + R - 14}" fill="none" stroke="{SEA_L}" stroke-width="2" stroke-dasharray="5 4"/>')
+    o.append(txt(cx + R + 8, cy + 4, 'clockwise', 'r'))
+    o.append(txt(cx - R - 8, cy + 4, 'other way', 'b', 'end'))
+    for i, ln in enumerate(('At 180 neither way is shorter. With', '0.2 deg of yaw noise, a float32 copy',
+                            "of the board's arithmetic went clockwise", '0.498 of the time. So any turn over',
+                            f'{leg:g} deg is sent as equal legs, and a', '90 deg leg has a short way round.')):
+        o.append(txt(800, 382 + 16 * i, ln, 'l'))
+    o.append(txt(800, 484, 'measured-bars §68 · MAX_TURN_LEG_DEG', 'r'))
+    o.append('</svg>')
+    return '\n'.join(o)
+
 for name, fn in (('loop-rate', loop_rate), ('field-of-view', fov), ('frame-budget', frame_budget),
-                 ('package-map', package_map)):
+                 ('package-map', package_map), ('first-swim', first_swim)):
     p = OUT / f'{name}.svg'
     p.write_text(fn())
     import xml.etree.ElementTree as ET
