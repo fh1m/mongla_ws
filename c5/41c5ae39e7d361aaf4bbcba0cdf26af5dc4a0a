@@ -1,0 +1,89 @@
+src/mongla_vision/mongla_vision/anchor/health.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 32
+src/mongla_planner/mongla_planner/resilience.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 26
+tools/gil_probe.py
+  s_b4c45e3235679b::t_d8640be38fc46e 118-120
+src/mongla_vision/mongla_vision/calibration/solver.py
+  s_b4c45e3235679b::t_d8640be38fc46e 537,550,568,603,606,609,709-711
+tools/gap_distribution.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 30
+src/mongla_vision/mongla_vision/underwater.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 45
+tools/live_anchor_check.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 12
+tools/loop_closure_truth.py
+  s_b4c45e3235679b::t_d8640be38fc46e 160
+src/mongla_planner/mongla_planner/run_budget.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 30-31
+src/mongla_vision/mongla_vision/anchor/xfeat_onnx.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 39
+tools/domain_gap.py
+  s_b4c45e3235679b::t_d8640be38fc46e 93-94
+src/mongla_vision/mongla_vision/tracking/cascade.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 32
+tools/model_select.py
+  s_b4c45e3235679b::t_d8640be38fc46e 100-102
+tools/hef_vs_cpu.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 12
+tools/upload_sink.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 7
+src/mongla_vision/launch/vision_pi.launch.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 37
+tools/unchecked_error_returns.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 13
+tools/control_bench/gate_variants.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 28
+tools/srot_uplink_check.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 8,11
+tools/conf_bar.py
+  s_b4c45e3235679b::t_d8640be38fc46e 24-25
+src/mongla_localization/mongla_localization/pose_cluster.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 29-30
+src/mongla_vision/mongla_vision/tracking/confidence.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 56
+tools/hailo_async.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 15
+src/mongla_vision/mongla_vision/anchor/pose.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 95
+tools/dataset_survey.py
+  s_b4c45e3235679b::t_d8640be38fc46e 93
+tools/flow_launch_check.py
+  s_b4c45e3235679b::t_d8640be38fc46e 218
+src/mongla_planner/mongla_planner/cli.py
+  s_b4c45e3235679b::t_d8640be38fc46e 95
+tools/allan_variance.py
+  s_b4c45e3235679b::t_d8640be38fc46e 339-340
+tools/defect_class_sweep.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 3
+src/mongla_vision/mongla_vision/draw.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 25
+tools/preview_docs.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 8
+src/mongla_manager/mongla_manager/health.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 36,38
+tools/flow_bench.py
+  s_b4c45e3235679b::t_d8640be38fc46e 339,387-388,443,588
+src/mongla_vision/mongla_vision/tracking/reid.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 37
+tools/test_fov_solve.py
+  s_b4c45e3235679b::t_d8640be38fc46e 150-151
+src/mongla_vision/mongla_vision/continuity.py
+  s_b4c45e3235679b::t_dc563b9e1e9c4c 44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "c541c5ae39e7d361aaf4bbcba0cdf26af5dc4a0a",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
