@@ -1,0 +1,30 @@
+kutum/README.md
+  s_b4c45e3235679b::t_4d1701f1071ae0 26,29-53
+  s_b4c45e3235679b::t_85f67bb8a53e26 54
+kutum/system/netplan/60-kutum-eth.yaml
+  s_b4c45e3235679b::t_a902a32e5c4727 1-12
+kutum/setup.sh
+  s_b4c45e3235679b::t_5c6572e5149ca0 26-27,37,45,64-74,100,110,116-119,136-173,175
+  s_b4c45e3235679b::t_b3771a6d65352f 47-53,59-61
+kutum/doctor.sh
+  s_b4c45e3235679b::t_b3771a6d65352f 136-138,140-142
+  s_b4c45e3235679b::t_da577a0192c99f 149,155-164,167-184
+  s_b4c45e3235679b::t_21a91c8e319ba9 130,165-166
+  s_b4c45e3235679b::t_bfa6a6870bdd55 185
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "e810204e3b0e115022b4f4a7c35c2245178b6dcb",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
