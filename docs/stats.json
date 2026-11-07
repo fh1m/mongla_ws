@@ -38,7 +38,7 @@
   "code": {
     "packages": {
       "mongla_vision": {
-        "loc": 27449,
+        "loc": 27448,
         "test_files": 125
       },
       "mongla_control": {
