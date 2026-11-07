@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """flow_node -- the bottom camera AS A VELOCITY SENSOR. Our DVL substitute.
 
-This replaces `distance_estimation_node` and folds the two flow paths that had
+On the vehicle (`vision_pi.launch.py`, `flow:=true`) this replaces
+`distance_estimation_node`, which only the generic stack still starts
+(`vision.launch.py distance:=true`). It folds the two flow paths that had
 grown apart: the one that was WIRED but had no refusals (`distance_traveled`,
 a scalar integral) and the one that had every refusal and NO CONSUMERS
 (`flow_velocity`). Neither was usable alone.
