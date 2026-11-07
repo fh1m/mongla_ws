@@ -214,6 +214,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `flow/flow_constants.py` | Measured constants shared by `flow_node` and its mixins. |
 | `flow/flow_features.py` | Which pixels the flow node may trust: corners, caustics, and the round trip. |
 | `flow/flow_floor.py` | FlowVelocityNode, part 3 of 5: what the floor itself says -- tile grid heading and lane lines. |
+| `flow/flow_frame.py` | The flow node's per-frame work: pick the points, wait for the motion, judge it. |
 | `flow/flow_math.py` | pure functions for downward-camera optical-flow distance. |
 | `flow/flow_node.py` | the bottom camera AS A VELOCITY SENSOR. Our DVL substitute. |
 | `flow/flow_publish.py` | FlowVelocityNode, part 4 of 5: every topic the node writes, and its periodic log. |
