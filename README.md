@@ -1,7 +1,7 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/imgs/mongla-banner.png">
   <source media="(prefers-color-scheme: light)" srcset="docs/imgs/mongla-banner-light.png">
-  <img alt="Mongla, মোংলা — an autonomy stack for autonomous underwater vehicles, set as the title of a nautical chart: depth contours and soundings off the Port of Mongla, a dive track through the course from the gate to the octagon, and the hull at the end of it with its sonar open. Three measured numbers: a 500 Hz control loop, 18.0 ms from photon to detection, a 46.7 degree field of view in water." src="docs/imgs/mongla-banner-light.png">
+  <img alt="Mongla, মোংলা — an autonomy stack for autonomous underwater vehicles, set as the title of a nautical chart: depth contours and soundings off the Port of Mongla, a dive track through the course from the gate to the octagon, and the hull at the end of it with its sonar open. Three measured numbers: a 500 Hz control loop, 18.0 ms from photon to detection, a 46.7 degree field of view in water, computed from the air calibration by Snell's law." src="docs/imgs/mongla-banner-light.png">
 </picture>
 
 # Mongla
@@ -10,7 +10,7 @@
 for, a neural accelerator that does nothing but see, and a rule that no number appears anywhere
 in this repository without the measurement that produced it.**
 
-[![tests](https://img.shields.io/badge/tests-4%20412%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![in water](https://img.shields.io/badge/in%20water-never-critical)](#what-is-true-today) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
+[![tests](https://img.shields.io/badge/tests-4%20579%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![in water](https://img.shields.io/badge/in%20water-never-critical)](#what-is-true-today) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
 
 **[The Shift](https://fh1m.github.io/mongla_ws/the-shift.html)** · **[Capability map](https://fh1m.github.io/mongla_ws/capability-map.html)** · **[The site](https://fh1m.github.io/mongla_ws/)** · [Run it](#run-it) · [Fundamentals](#the-fundamentals) · [Docs](#every-document-in-this-repository) · [Story](#three-acts)
 
@@ -108,7 +108,7 @@ git clone https://github.com/fh1m/mongla_ws && cd mongla_ws
 ./build_mongla.sh                      # colcon build, six packages
 source install/setup.bash
 
-# the tests (6 suites, 4 420 of them, ~5 minutes)
+# the tests (6 suites, 4 587 of them, ~5 minutes)
 python3 -m pytest -q                   # all six; a full run rewrites docs/stats.json
 ```
 </details>
@@ -576,10 +576,10 @@ What it is, what was wrong with it, and the eight steps from a blank SD card:
 
 | package | what it owns | Python LOC | test files |
 |---|---|---:|---:|
-| [`mongla_vision`](.claude/context/packages/mongla_vision/README.md) | cameras, Hailo detection, the lock ladder, optical flow, optics | 27 477 | 125 |
-| [`mongla_control`](.claude/context/packages/mongla_control/README.md) | the verbs and the board driver — a pure library, **zero entry points** | 10 510 | 64 |
+| [`mongla_vision`](.claude/context/packages/mongla_vision/README.md) | cameras, Hailo detection, the lock ladder, optical flow, optics | 27 518 | 125 |
+| [`mongla_control`](.claude/context/packages/mongla_control/README.md) | the verbs and the board driver — a pure library, **zero entry points** | 10 513 | 64 |
 | [`mongla_planner`](.claude/context/packages/mongla_planner/README.md) | the `mongla` CLI, the mission DSL, the missions | 7 678 | 41 |
-| [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | `auv_manager_node` — the one node that talks to the board | 7 824 | 67 |
+| [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | `auv_manager_node` — the one node that talks to the board | 7 791 | 67 |
 | [`mongla_localization`](.claude/context/packages/mongla_localization/README.md) | the right-invariant EKF, retrodiction, course priors | 5 063 | 31 |
 | [`mongla_interfaces`](.claude/context/packages/mongla_interfaces/README.md) | one action, one state topic — the entire ROS surface | IDL | — |
 
@@ -790,13 +790,13 @@ is how a team finds out at the venue.
 <!-- stats:table:begin -->
 ```
 mongla_control       1 176 passed        the verbs, the wire, the refusals
-mongla_vision        1 535 passed        detection, the lock ladder, optics, flow
+mongla_vision        1 537 passed        detection, the lock ladder, optics, flow
 mongla_manager         790 passed        the node, bring-up gates, the docs contract
 mongla_planner         440 passed        the CLI, the DSL, the missions
 mongla_localization    412 passed        the filter, retrodiction, course priors
-test/ (repo-wide)       59 passed        nothing unreachable, the retired stack stays retired
+test/ (repo-wide)      224 passed        nothing unreachable, the retired stack stays retired
                      ─────────────
-                     4 412 passed, 0 failed
+                     4 579 passed, 0 failed
 ```
 <!-- stats:table:end -->
 
@@ -816,7 +816,7 @@ Some of those tests are unusual enough to be worth naming:
 ```mermaid
 flowchart LR
     DEV["a change"] --> HOOK["editor hooks<br/>py_compile + the matching test file<br/>+ the doc guards on a doc edit"]
-    HOOK --> UNIT["6 suites · 4 412 tests"]
+    HOOK --> UNIT["6 suites · 4 579 tests"]
     UNIT --> GUARD["the drift guards"]
     GUARD --> G1["test_doc_drift<br/>docs vs code"]
     GUARD --> G2["test_srot_protocol_drift<br/>our wire copy vs THEIR headers"]
@@ -1160,7 +1160,7 @@ fetching, that is noted rather than hidden.
 |---|---|
 | [A Revised Underwater Image Formation Model](https://openaccess.thecvf.com/content_cvpr_2018/html/Akkaynak_A_Revised_Underwater_CVPR_2018_paper.html) — Akkaynak & Treibitz, CVPR 2018 | why the atmospheric haze model is simply wrong underwater |
 | [Sea-thru](https://openaccess.thecvf.com/content_CVPR_2019/html/Akkaynak_Sea-Thru_A_Method_for_Removing_Water_From_Underwater_Images_CVPR_2019_paper.html) — Akkaynak & Treibitz, CVPR 2019 | the physically grounded way to take the water back out |
-| [Flat Refractive Geometry](https://csms.haifa.ac.il/profiles/tTreibitz/webfiles/flat_refractive_geometry.pdf) — Treibitz, Schechner & Singh | what a flat port does to your camera model — the 63.8° → 46.7° story |
+| [Flat Refractive Geometry](https://csms.haifa.ac.il/profiles/tTreibitz/webfiles/flat_refractive_geometry.pdf) — Treibitz, Schechner & Singh | what a flat port does to your camera model — the 63.8° → 46.7° story, which is Snell's law until a pool checks it |
 
 </details>
 
