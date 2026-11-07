@@ -6,12 +6,11 @@ import math
 import time
 import numpy as np
 from std_msgs.msg import UInt8
-from mongla_vision.flow.flow_math import (
+from mongla_vision.flow.flow_math import interp_rate, solve_planar_motion
+from mongla_vision.flow.flow_features import (
     CAUSTIC_NCC_MIN,
     patch_ncc_median,
     forward_backward_error,
-    interp_rate,
-    solve_planar_motion,
 )
 from .flow_constants import (  # noqa: F401
     FLOW_ROT_RESIDUAL_CALIBRATED,

@@ -58,10 +58,11 @@ _ROOT = os.path.dirname(_HERE)
 sys.path.insert(0, os.path.join(_ROOT, 'src', 'mongla_vision'))
 from mongla_vision.flow import flow_math as _fm          # noqa: E402
 from mongla_vision.flow import flow_velocity as _fv      # noqa: E402
+from mongla_vision.flow import flow_features as _ff      # noqa: E402
 
 flow_dispersion = _fm.flow_dispersion
 solve_planar_motion = _fm.solve_planar_motion
-forward_backward_error = _fm.forward_backward_error
+forward_backward_error = _ff.forward_backward_error
 interp_rate = _fm.interp_rate
 robust_flow = _fm.robust_flow
 flow_velocity = _fv.flow_velocity

@@ -13,9 +13,13 @@ import pytest
 
 cv2 = pytest.importorskip('cv2')
 
-from mongla_vision.flow.flow_math import (          # noqa: E402
-    CAUSTIC_TOPHAT_MAX, caustic_score, detect_corners, robust_flow,
-    suppress_caustics)
+from mongla_vision.flow.flow_math import robust_flow
+from mongla_vision.flow.flow_features import (
+    CAUSTIC_TOPHAT_MAX,
+    caustic_score,
+    detect_corners,
+    suppress_caustics,
+)
 
 LK = dict(winSize=(31, 31), maxLevel=3,
           criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01))
@@ -91,7 +95,7 @@ def test_erosion_costs_nothing_without_caustics():
 
 
 def test_patch_ncc_is_one_for_a_rigid_shift_and_low_for_new_noise():
-    from mongla_vision.flow.flow_math import patch_ncc_median
+    from mongla_vision.flow.flow_features import patch_ncc_median
     rng = np.random.default_rng(3)
     a = (rng.random((120, 120)) * 255).astype(np.uint8)
     b = np.roll(a, 3, axis=1)
