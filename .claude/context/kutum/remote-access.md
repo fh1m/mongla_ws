@@ -2,7 +2,7 @@
 
 > **What this is:** how to drive the vehicle's Pi from the ground-station laptop over the
 > tether. **Off the mission path**: nothing here touches control or vision code.
-> `tools/setup_pi_hailo.sh` installs both tools below.
+> `sudo kutum/setup.sh --system` installs both tools below ([Kutum](README.md)).
 
 ## The one idea: a mission never depends on a GUI
 
@@ -41,7 +41,7 @@ Drop the tether and `mosh` reconnects. If the whole link died, `mosh` again and
 
 - **Foxglove / Lichtblick** (recommended, already wired): launch with `foxglove:=true`, then
   on the laptop *Open connection → Foxglove WebSocket →* `ws://mongla.local:8765`. Setup, the
-  FPS check and offline replay: [`foxglove-and-bags.md`](foxglove-and-bags.md).
+  FPS check and offline replay: [`foxglove-and-bags.md`](../platform/foxglove-and-bags.md).
 - **Browser MJPEG** (`web_video_server`): no app needed.
   ```bash
   ros2 run web_video_server web_video_server        # on the Pi, in tmux
@@ -51,6 +51,6 @@ Drop the tether and `mosh` reconnects. If the whole link died, `mosh` again and
 
 > **The viewer must not cost frames.** Confirm
 > `ros2 topic hz /mongla/vision/forward/detections` is unchanged with a viewer attached, and
-> view **one** camera at a time over the tether. [`foxglove-and-bags.md`](foxglove-and-bags.md) §1.
+> view **one** camera at a time over the tether. [`foxglove-and-bags.md`](../platform/foxglove-and-bags.md) §1.
 
 A cv2 window over SSH has no display to draw on: [`pi-and-env-traps.md`](pi-and-env-traps.md) E4.

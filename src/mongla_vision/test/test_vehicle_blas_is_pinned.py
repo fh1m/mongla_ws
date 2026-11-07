@@ -47,9 +47,9 @@ def test_the_pin_comes_BEFORE_any_node():
             f'{p.name}: the BLAS pin is not the first action ({pin})')
 
 
-def test_provisioning_checks_for_openblas_and_names_the_fix():
-    sh = (ROOT / 'scripts/provision_vehicle.sh').read_text()
-    assert 'libblas.so.3 | grep -q openblas' in sh
-    assert 'sudo apt-get install -y libopenblas0-pthread' in sh
-    # Checked BEFORE --check-only stops, or the check never runs on its own.
-    assert sh.index('grep -q openblas') < sh.index('check-only: stopping')
+def test_kutum_installs_openblas_and_the_doctor_checks_for_it():
+    setup = (ROOT / 'kutum/setup.sh').read_text()
+    doctor = (ROOT / 'kutum/doctor.sh').read_text()
+    assert 'libopenblas0-pthread' in setup.split('PKGS=', 1)[1].split('"', 2)[1]
+    assert 'libblas.so.3 | grep -q openblas' in doctor
+    assert 'libopenblas0-pthread' in doctor   # the WARNING names the fix

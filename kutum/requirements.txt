@@ -1,0 +1,13 @@
+# The vehicle's Python packages that apt does not provide, pinned to the
+# versions measured working on Kutum (2026-11-07). numpy, cv2, yaml, serial
+# and PIL come from apt, so pip can never shadow them.
+#
+# supervision==0.26.1 and trackers==2.4.0 are NOT here: both hard-require
+# opencv-python, so kutum/setup.sh installs them with --no-deps.
+#
+# Each pin must satisfy the range in the root requirements.txt, or name the
+# package it is a dependency of; test/test_kutum.py checks that.
+pymavlink==2.4.49
+filterpy==1.4.5
+scipy==1.17.1          # dependency of filterpy; pinned so a fresh machine resolves the same
+onnxruntime==1.29.0

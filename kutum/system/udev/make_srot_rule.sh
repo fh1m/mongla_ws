@@ -7,13 +7,16 @@
 # port it will live in; `find_srot_serial()` then prefers /dev/srot, and refuses
 # to guess when two CH340s are present without it.
 #
-#   scripts/udev/make_srot_rule.sh [/dev/ttyUSBx]      # default: the one CH340
+#   kutum/system/udev/make_srot_rule.sh [/dev/ttyUSBx]      # default: the one CH340
 #
 # Moving the board to a different USB port means running this again.
 set -euo pipefail
 dev="${1:-}"
 if [ -z "$dev" ]; then
-  mapfile -t cands < <(ls /dev/serial/by-id/ 2>/dev/null | grep -E '1a86|USB_Serial|CH340' | sed 's#^#/dev/serial/by-id/#')
+  cands=()
+  for f in /dev/serial/by-id/*; do
+    case "$f" in *1a86*|*USB_Serial*|*CH340*) cands+=("$f") ;; esac
+  done
   if [ "${#cands[@]}" -ne 1 ]; then
     echo "found ${#cands[@]} CH340 devices: ${cands[*]:-none}" >&2
     echo "unplug the others, or pass the board's /dev/ttyUSBx explicitly" >&2

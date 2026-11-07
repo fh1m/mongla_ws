@@ -65,7 +65,7 @@ EXEMPT = {
     '.claude/context/capability-map.md': 'each capability beside what the old stack could do',
     'docs/capability-map.md': 'each capability beside what the old stack could do',
     '.claude/context/the-whole-chain.md': 'what other teams buy, against what we own',
-    '.claude/context/platform/pi-hailo-vision-box.md': 'the measurement that chose the Pi, against the companion it replaced',
+    '.claude/context/kutum/pi-hailo-vision-box.md': 'the measurement that chose the Pi, against the companion it replaced',
     '.claude/context/perception/hailo-vision.md': 'the chip measured against the baseline it replaced',
     '.claude/skills/bumblebee-doctrine/': 'describes the champions\' stack, which runs ArduSub',
     'tools/make_diagrams.py': 'draws the BEFORE half of the-shift diagram',

@@ -53,8 +53,8 @@ def test_the_pt_is_still_the_fallback_on_a_box_with_no_accelerator(tree):
 
 
 def test_MONGLA_HEF_DIR_is_read(tree, tmp_path, monkeypatch):
-    """`tools/pi_env.sh` has exported this since the Pi was built and NOTHING
-    read it, so the export was a lie."""
+    """`kutum/env.sh` exports this on the vehicle. Until it was read, the export
+    was a lie."""
     hefs = tmp_path / 'hailo_models'
     _touch(hefs, 'gate.hef')
     monkeypatch.setenv('MONGLA_HEF_DIR', str(hefs))
@@ -91,7 +91,7 @@ def test_a_stem_missing_from_the_env_dir_falls_through_rather_than_failing(
 
 
 def test_a_tilde_in_the_env_is_expanded(tree, tmp_path, monkeypatch):
-    """`pi_env.sh` writes `~/hailo_models`, and an unexpanded tilde is a
+    """`kutum/env.sh` writes `~/hailo_models`, and an unexpanded tilde is a
     directory that does not exist -- which falls through silently."""
     home = tmp_path / 'home'
     _touch(home / 'hailo_models', 'gate.hef')

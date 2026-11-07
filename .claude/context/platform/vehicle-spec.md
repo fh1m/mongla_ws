@@ -57,5 +57,5 @@ camera for nine days (17 % range error).
 
 Related: [`srot-architecture.md`](srot-architecture.md) ·
 [`srot-integration.md`](srot-integration.md) ·
-[`pi-hailo-vision-box.md`](pi-hailo-vision-box.md) ·
+[`pi-hailo-vision-box.md`](../kutum/pi-hailo-vision-box.md) ·
 [`capability-map.md`](../capability-map.md)

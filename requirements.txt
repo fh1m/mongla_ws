@@ -6,14 +6,14 @@
 #
 #     pip install -r requirements.txt            # dev box
 #
-# The vehicle does NOT use this file: tools/setup_pi_hailo.sh installs the Pi,
-# with the exact pins that hold on Ubuntu 24.04. Three rules there, each a
-# silent failure if broken (.claude/context/platform/pi-and-env-traps.md):
+# The vehicle does NOT use this file: kutum/setup.sh installs it from
+# kutum/requirements.txt, with the exact pins that hold on Ubuntu 24.04. Three rules there, each a
+# silent failure if broken (.claude/context/kutum/pi-and-env-traps.md):
 #   * OpenCV is the SYSTEM cv2 (apt python3-opencv). A pip opencv shadows it,
 #     has no window backend, and drags numpy 2 in.
 #   * numpy stays 1.x: cv_bridge and the system cv2 are built against the 1.x
 #     ABI and fail with `_ARRAY_API not found` under 2.x.
-#   * hailo_platform is not on PyPI: setup_pi_hailo.sh builds it from source
+#   * hailo_platform is not on PyPI: kutum/setup.sh builds it from source
 #     against the installed libhailort, at the same version.
 # ----------------------------------------------------------------------
 

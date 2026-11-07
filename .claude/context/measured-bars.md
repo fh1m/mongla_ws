@@ -4523,7 +4523,7 @@ Debian's `libblas3` — the Netlib reference BLAS. The 1024×1024×64 similarity
 matmul: **58.6 ms there, 6.4 ms on OpenBLAS (one thread)**. Correspondences on
 34 real frame pairs from both cameras: 22 352 matches, symmetric difference
 **0**. Fixed by `sudo apt-get install libopenblas0-pthread`, checked by
-`provision_vehicle.sh`; the launch files pin `OPENBLAS_NUM_THREADS=1` so the
+`kutum/doctor.sh`; the launch files pin `OPENBLAS_NUM_THREADS=1` so the
 matcher's own 2-thread split is the only parallelism (blas=1/split=2 4.76 ms
 against blas=4/split=2 5.33 ms).
 

@@ -110,15 +110,8 @@ pip install --no-deps 'supervision==0.26.1' 'trackers==2.4.0'
 
 ## Layout
 
-```
-~/mongla_ws          the srot branch, built (plain colcon build -- NOT
-                     --symlink-install; mixing the two makes CMake try to
-                     replace a real directory with a symlink and the build dies)
-~/hailo_models       *.hef + the *.yaml sidecars, OUTSIDE the workspace so a
-                     rebuild cannot delete them
-~/pi_env.sh          source this in every terminal
-~/hailo_bench        measurement harnesses
-```
+Where everything lives on the vehicle, and which file put it there, is in the
+Kutum chapter: [the home folder](README.md#the-home-folder).
 
 **The `.yaml` sidecar is mandatory, not advisory.** A `.hef` carries no class
 names, so without it the allowlist is empty and the detector returns `[]` on

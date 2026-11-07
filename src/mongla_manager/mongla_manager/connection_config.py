@@ -58,7 +58,7 @@ SROT_BAUD = 115200
 
 
 # A udev symlink naming THIS board by its physical USB port -- the only stable
-# identity a serial-less CH340 has. Written by `scripts/udev/make_srot_rule.sh`.
+# identity a serial-less CH340 has. Written by `kutum/system/udev/make_srot_rule.sh`.
 SROT_UDEV_LINK = '/dev/srot'
 
 
@@ -110,7 +110,7 @@ def find_srot_serial() -> str | None:
                 f'{len(found)} devices could be the SROT board: {found}. Opening '
                 f'the wrong one RESETS it. Unplug the others, pass '
                 f'mav_device:=<path>, or pin this board once with '
-                f'scripts/udev/make_srot_rule.sh (-> {SROT_UDEV_LINK}).')
+                f'kutum/system/udev/make_srot_rule.sh (-> {SROT_UDEV_LINK}).')
     return None
 
 
