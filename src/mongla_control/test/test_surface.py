@@ -144,8 +144,11 @@ def test_it_waits_until_the_depth_reads_surfaced():
 def test_a_surface_never_seen_says_so_and_reports_the_depth():
     fc = _FC(depth=-1.4)
     _, out = _run(fc, wait=True, timeout=0.3)
-    assert out.success is True          # SURFACE is engaged; the board keeps ascending
-    assert 'still at -1.40' in out.message
+    # SURFACE is engaged and the board keeps ascending, but the surface was not
+    # SEEN, so it is not reported as reached (safety rule 6). INJECTION-VERIFIED:
+    # return True on the timeout path and this fails.
+    assert out.success is False
+    assert 'still at -1.40' in out.message and 'still ascending' in out.message
     assert out.final_value == pytest.approx(-1.4)
 
 

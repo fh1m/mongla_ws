@@ -74,6 +74,12 @@ class _Hb:
         self._m = master
 
     @property
+    def _mono(self):
+        """Always just received: the board streams HEARTBEAT at 10 Hz, and the
+        driver confirms a mode change only on one heard after the command."""
+        return time.monotonic()
+
+    @property
     def custom_mode(self):
         self._m.tick()
         return self._m.mode

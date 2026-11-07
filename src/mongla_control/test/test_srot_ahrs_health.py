@@ -74,7 +74,7 @@ class _FC(SrotFC):
             return _Msg(xacc=0, yacc=0, zacc=0, xgyro=0, ygyro=0, zgyro=0,
                         time_boot_ms=1000, _timestamp=1.0)
         if key == 'VFR_HUD':
-            return _Msg(alt=-1.18)
+            return _Msg(alt=-1.18, _timestamp=time.time())
         return None
 
     def _baro_healthy(self):

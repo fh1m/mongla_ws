@@ -27,7 +27,7 @@ class SrotTelemetry:
             t.armed = bool(hb.base_mode & _ARMED_FLAG)
             t.mode = sp.mode_name(hb.custom_mode)
             t.link_alive = _rx_age(hb) <= _LINK_STALE_S
-        att = self._cache('ATTITUDE')
+        att = self._fresh('ATTITUDE')
         if att is not None:
             t.yaw_deg = math.degrees(att.yaw) % 360.0
             t.roll_deg = math.degrees(att.roll)
@@ -47,7 +47,7 @@ class SrotTelemetry:
         # the board already refuses DEPTH_HOLD/AUTO on the same condition
         # (fw task_control_loop.cpp:107 and :348), so this stays consistent with
         # what the vehicle will actually let you do.
-        vhud = self._cache('VFR_HUD')
+        vhud = self._fresh('VFR_HUD')
         if vhud is not None and self._baro_healthy() is not False:
             t.depth_m = float(vhud.alt)
         # Read through the per-instance table, NOT `_cache('BATTERY_STATUS')`. The raw
@@ -187,7 +187,7 @@ class SrotTelemetry:
         # confident 0.00 m off a board with no Bar30 fitted, and every depth guard here
         # compares against a negative constant (they would simply stop firing).
         depth = math.nan
-        vhud = self._cache('VFR_HUD')
+        vhud = self._fresh('VFR_HUD')
         if vhud is not None and self._baro_healthy() is not False:
             depth = float(vhud.alt)
         # The SAME gate as depth above, on the other sensor. NaN, not a dropped
@@ -210,8 +210,30 @@ class SrotTelemetry:
         return None if att is None else _rx_age(att)
 
     def get_mode(self):
+        """The board's mode, or 'UNKNOWN' -- including when the link has gone quiet.
+
+        A heartbeat older than _LINK_STALE_S says what the mode WAS. Reported as
+        current, it let a dead link read "STABILIZE" to every caller that gates
+        on the mode. (Cloud audit, 2026-11-07.)"""
         hb = self._vehicle_hb()
-        return sp.mode_name(hb.custom_mode) if hb is not None else 'UNKNOWN'
+        if hb is None or _rx_age(hb) > _LINK_STALE_S:
+            return 'UNKNOWN'
+        return sp.mode_name(hb.custom_mode)
+
+    def _fresh(self, name):
+        """The cached `name` message, or None once it is older than _LINK_STALE_S.
+
+        ⛔ pymavlink keeps the last message of each type forever. ATTITUDE is
+        pinned at 50 Hz and VFR_HUD at 5 Hz, so one older than the link window
+        means the stream stopped -- and its last value is a plausible number
+        standing in for an absent measurement (safety rule 6). VFR_HUD in
+        particular was read with no age at all, beside an ATTITUDE that was
+        gated, so depth could freeze while yaw went absent. (Cloud audit,
+        2026-11-07.)"""
+        msg = self._cache(name)
+        if msg is None or _rx_age(msg) > _LINK_STALE_S:
+            return None
+        return msg
 
     def note_battery(self, msg):
         """Hook for the manager's MAVLink reader thread -- de-multiplex by instance id.

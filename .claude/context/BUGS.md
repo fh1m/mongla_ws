@@ -139,6 +139,69 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 
 ## 2. HIGH
 
+### B-84: a pre-empted verb freed the gate its pre-emptor held `READ 2026-11-07 (cloud audit)` ✅ **FIXED 2026-11-07**
+
+**What.** `disarm` pre-empts a running `move_forward`: it claims the command gate
+and signals an abort. The move's loop then exits, and its `finally` called
+`release()`, which cleared **whatever** held the gate. The gate was empty while
+`disarm` was still executing, so an ordinary verb could start beside it. Two
+`stop`s back to back had the same shape, because a verb name cannot say which
+claim is which.
+
+**Fix.** A claim carries a token. `confirm()` hands it to the goal that reached
+`execute_callback` (once: a second goal for the same claim is refused, not run
+unguarded), and only that token can `release()`. A cancel on an idle gate no
+longer starts a drain nobody would end. An unknown verb is rejected in
+`goal_callback`, before it can claim anything; it used to hold the gate for
+`COMMAND_GATE_STALE_S`. Tests: `test_command_gate.py`,
+`test_unknown_verbs_never_claim_the_gate.py`, both injection-verified.
+
+### B-85: confirmations read off messages from before the command `READ 2026-11-07 (cloud audit)` ✅ **FIXED 2026-11-07**
+
+pymavlink keeps the last message of each type forever, and four places took
+that cache as the board's answer:
+
+| where | what it believed | now |
+|---|---|---|
+| `set_mode` | a cached heartbeat already in the mode, or a dead link's last one, confirmed the change at once | only a heartbeat heard *after* the command |
+| a move's "did a failsafe cut it short?" | with no heartbeat after the ACK, judged on the one before it: ARMED and AUTO by construction | **fails, unverified** -- the manager asks for 10 Hz, so silence is the news |
+| `VFR_HUD` depth | no age at all, beside an age-gated ATTITUDE | absent once older than `_LINK_STALE_S` |
+| `get_mode` | a minutes-old heartbeat's mode, as current | `UNKNOWN` |
+
+The payload ACK wait also moved from the wall clock to the reader's monotonic
+stamp; the Pi has no RTC and the first NTP sync steps it. Tests in
+`test_srot_fc.py`, `test_srot_move_respects_surface.py`,
+`test_stale_telemetry_is_absent.py`. The test fakes gained what a real board
+does: a 10 Hz heartbeat, and arrival stamps.
+
+### B-86: arm proceeded when the board would not say its firmware revision `READ 2026-11-07 (cloud audit)` ✅ **FIXED 2026-11-07**
+
+The "warn but proceed" rule for a silent board was decided when the floor was
+rev 2 and the cost of an old board was a coasting `stop`. The floor is now
+**rev 10**, because below it the board's yaw sense is inverted and every loop
+closed on yaw diverges. `read_behaviour_rev` already asks three times over six
+seconds, so "no answer" means firmware older than `REQUEST_MESSAGE` or a link
+too poor to arm on. Arm now refuses; connect still only warns;
+`allow_fw_behaviour_mismatch:=true` overrides, loudly.
+
+### B-87: a surface nobody saw was reported as reached, and the abort promised one `READ 2026-11-07 (cloud audit)` ✅ **FIXED 2026-11-07**
+
+`surface()` returned `success=True` after its timeout with the hull still at
+depth. It now fails, saying the board is still ascending; SURFACE stays engaged.
+The mission's Ctrl-C banner printed "Mongla will surface on positive buoyancy"
+and a three-second countdown that waited on nothing. This hull's net buoyancy
+has never been measured, and nothing on that path commands SURFACE (on purpose:
+the thrusters go off). It now says what was done. `_try_step` printed `[OK]` for
+a disarm the board *refused*, because the refusal is returned, not raised.
+
+**Also from that audit, fixed:** tracker association is order-independent
+(best pair first; `cascade.py`, deferred module); a flow calibration that fails
+to load now takes the whole no-calibration path, focal scaling included; the
+lock node counts and logs frames it cannot decode; `bringup_check` waits on the
+monotonic clock; unreachable lines in `hailo.py` deleted; docstrings that named
+functions that do not exist. **Read and rejected:** "`manual()` records a NaN
+axis as a known zero" -- the NaN is *sent* as 0, so 0 is the demand in force.
+
 ### B-83: the tracker shipped a 2.0 s lost-track buffer while the ledger said 5.0 s `READ 2026-11-06` ✅ **FIXED 2026-11-06**
 
 **What.** `measured-bars.md` sized the lock ladder's last rung at `track_buffer`

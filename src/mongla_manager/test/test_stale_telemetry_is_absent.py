@@ -32,7 +32,7 @@ def _fc_with_attitude(age_s):
     fc.master.messages['ATTITUDE'] = SimpleNamespace(
         yaw=math.radians(123.0), roll=0.0, pitch=0.0,
         _timestamp=time.time() - age_s)
-    fc.master.messages['VFR_HUD'] = SimpleNamespace(alt=-1.7)
+    fc.master.messages['VFR_HUD'] = SimpleNamespace(_timestamp=time.time(), alt=-1.7)
     return fc
 
 
@@ -86,3 +86,24 @@ def test_state_after_a_usb_drop_is_NaN_not_the_last_value():
     (msg,) = node.state_publisher.msgs
     assert math.isnan(msg.yaw_deg), f'frozen yaw {msg.yaw_deg} published'
     assert math.isnan(msg.depth_m), f'frozen depth {msg.depth_m} published'
+
+
+def test_a_stale_depth_is_absent_even_beside_a_fresh_attitude():
+    """⛔ Cloud audit, 2026-11-07. ATTITUDE was age-gated and VFR_HUD was not, so
+    a depth stream that stopped kept publishing its last value -- a confident
+    -1.7 m from a board that had said nothing for a minute -- as long as the
+    IMU stream lived. INJECTION-VERIFIED: read VFR_HUD through `_cache`
+    instead of `_fresh` and this fails."""
+    fc = _fc_with_attitude(age_s=0.0)
+    fc.master.messages['VFR_HUD'] = SimpleNamespace(
+        _timestamp=time.time() - 60.0, alt=-1.7)
+    att = fc.get_attitude()
+    assert att is not None and math.isnan(att['depth'])
+    assert math.isnan(fc.telemetry().depth_m)
+
+
+def test_a_stale_heartbeat_is_an_unknown_mode():
+    fc = _fc_with_attitude(age_s=0.0)
+    fc.master.messages['HEARTBEAT'] = SimpleNamespace(
+        base_mode=0, autopilot=0, custom_mode=0, _timestamp=time.time() - 60.0)
+    assert fc.get_mode() == 'UNKNOWN'

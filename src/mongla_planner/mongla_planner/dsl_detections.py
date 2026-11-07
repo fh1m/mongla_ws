@@ -307,7 +307,7 @@ class SeeMixin:
             if mongla.wait_for('gate', timeout=8):
                 mongla.vision.align('gate', yaw=0, lat=0)
             else:
-                mongla.recover()           # never showed up
+                sweep_yaw(mongla, should_stop)   # your fallback; never showed up
 
         For a search that should KEEP MOVING while looking, use a
         ``while not mongla.detected(...): <small move>`` loop instead.

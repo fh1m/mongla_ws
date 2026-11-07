@@ -228,10 +228,15 @@ class Mongla(VisionVerbs):
         seen = 'depth unreadable' if depth is None else f'still at {depth:+.2f} m'
         self.log.warning(f'[ACT  ] surface: SURFACE engaged but {seen} after '
                          f'{float(timeout):.0f} s')
-        # SURFACE is engaged and the board keeps ascending; the verb did what it
-        # could, so it succeeds -- and says plainly that the surface was not seen.
+        # SURFACE is engaged and the board keeps ascending -- but the surface was
+        # not SEEN, so this is not a success (safety rule 6: never claim a verb
+        # worked without seeing the value it produced). It used to return True
+        # here, and a mission's next step -- usually disarm, or "we are up, open
+        # the hatch" -- ran on a hull still at depth. Nothing is undone by
+        # failing: the board stays in SURFACE. (Cloud audit, 2026-11-07.)
         return self._make_result(
-            True, f'surface: SURFACE engaged, {seen} after {float(timeout):.0f} s',
+            False, f'surface: SURFACE engaged, but {seen} after '
+                   f'{float(timeout):.0f} s -- the board is still ascending',
             final_value=math.nan if depth is None else depth)
 
     # Depth within this of zero counts as surfaced. ⚠ UNMEASURED: 0.20 m is a

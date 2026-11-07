@@ -115,9 +115,10 @@ on branch, issue and PR creation — so **none of these are on their repo yet.**
 there. ⚠ **Post the PR K correction on their #25 first** — it is the document the
 firmware team would implement a mixer from, and it is wrong.
 
-**Drafted, NOT sent (need operator OK):**
-`srot-control-board/PR_DEMAND_ECHO_AND_HEAP_MIN_2026-09-14.md` (DEM_FWD/DEM_LAT echo, HEAP_MIN)
-and `PR_SENSOR_HEALTH_AND_TIME_2026-09-11.md`. Mixer `maxabs` is already inside #20 — do not
+**Sent 2026-11-07:** the DEM_FWD/DEM_LAT echo and HEAP_MIN, as
+[srot-control-board#33](https://github.com/RakibulIslam1/srot-control-board/pull/33); the host
+already prefers the echo when the board sends it. **Drafted, NOT sent (need operator OK):**
+`PR_SENSOR_HEALTH_AND_TIME_2026-09-11.md`. Mixer `maxabs` is already inside #20 — do not
 re-ask.
 
 ---

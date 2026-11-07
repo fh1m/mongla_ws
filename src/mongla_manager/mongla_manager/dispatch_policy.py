@@ -68,6 +68,12 @@ class _CommandGate:
     def __init__(self, stale_s: float = COMMAND_GATE_STALE_S) -> None:
         self._lock = threading.Lock()
         self._cmd = None          # the verb holding it, or None
+        # Which CLAIM holds it. A verb name cannot say: `stop` can pre-empt
+        # `stop`, and a pre-empted loop's `finally` must not free the gate its
+        # pre-emptor now holds. Kept through a drain, so the cancelled loop is
+        # the one that ends it.
+        self._token = 0
+        self._next_token = 0
         self._claimed_at = 0.0    # monotonic, for the leak reaper
         self._confirmed = False   # execute_callback was reached
         self._draining = False
@@ -89,35 +95,59 @@ class _CommandGate:
             accept, signal_abort = policy(cmd, busy)
             if accept:
                 # A safety verb pre-empting a running command takes the gate from
-                # it. The running loop's own `finally` then calls release(), which
-                # must NOT clear a claim that is no longer its own -- see release().
+                # it. The running loop's own `finally` then calls release() with
+                # ITS token, which no longer matches -- see release().
+                self._next_token += 1
+                self._token = self._next_token
                 self._cmd = cmd
                 self._claimed_at = time.monotonic()
                 self._confirmed = False
                 self._draining = False
             return accept, signal_abort
 
-    def confirm(self, cmd) -> bool:
-        """Mark the claim as having reached execute_callback. False if it is not ours."""
+    def confirm(self, cmd):
+        """The claim reached execute_callback: return its token, or None.
+
+        None means the gate does not hold an unconfirmed claim for `cmd` -- it
+        was reaped, or a later claim took it over (a second `stop` arriving
+        before the first one started). Running anyway would drive the board
+        unguarded, so the caller refuses the goal instead.
+        """
         with self._lock:
-            if self._cmd != cmd:
-                return False
+            if self._cmd != cmd or self._confirmed:
+                return None
             self._confirmed = True
-            return True
+            return self._token
 
     def begin_drain(self) -> None:
-        """A cancelled loop is winding down: busy for everything but a safety verb."""
+        """A cancelled loop is winding down: busy for everything but a safety verb.
+
+        Only when something holds the gate. A drain with no owner would never be
+        released, because nothing is left to call release(), and the gate would
+        refuse every ordinary verb until the node restarts.
+        """
         with self._lock:
+            if self._cmd is None:
+                return
             self._cmd = None
             self._confirmed = False
             self._draining = True
 
-    def release(self) -> None:
-        """Release the gate at the end of a command, including a drain."""
+    def release(self, token) -> bool:
+        """End the claim `token` names, including its drain. False if not ours.
+
+        ⛔ A PRE-EMPTED LOOP MUST NOT FREE ITS PRE-EMPTOR'S CLAIM. Before the
+        token, `release()` cleared whatever held the gate: `disarm` pre-empts a
+        `move_forward`, the move's `finally` runs, and the gate is empty while
+        `disarm` is still executing -- so an ordinary verb could start beside it.
+        """
         with self._lock:
+            if token is None or token != self._token:
+                return False
             self._cmd = None
             self._confirmed = False
             self._draining = False
+            return True
 
     def reap_stale(self):
         """Release and return a claim that was never confirmed. None if nothing leaked.

@@ -17,6 +17,7 @@ a WRONG ANSWER rather than an error, so each has a test here:
     non-zero. It must warn on UNKNOWN and refuse on KNOWN-BAD -- never the
     reverse, or the method is unreachable forever.
 """
+import time
 import re
 import sys
 from pathlib import Path
@@ -60,6 +61,12 @@ class _Hb:
 
     def __init__(self, master):
         self._m = master
+
+    @property
+    def _mono(self):
+        """Always just received: the board streams HEARTBEAT at 10 Hz, and the
+        driver confirms a mode change only on one heard after the command."""
+        return time.monotonic()
 
     @property
     def custom_mode(self):

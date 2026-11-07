@@ -166,12 +166,12 @@ def test_a_cancel_brakes_the_board_and_ends_CANCELED(armed):
 
 def test_a_verb_the_vehicle_does_not_have_puts_nothing_on_the_wire(armed):
     """A mission written for the old backend sends `lock_heading`. It must
-    fail by name, at the node, with nothing reaching the board."""
+    be refused at the node -- as a REJECTED goal, before it can claim the
+    command gate -- with nothing reaching the board."""
     ac, board = armed
     n = len(board.received)
-    r = _wait(_send(ac, 'lock_heading', target=10.0))
-    assert not r.result.success
-    assert 'Unknown command: lock_heading' in r.result.message
+    gh = _send(ac, 'lock_heading', target=10.0)
+    assert not gh.accepted
     cmds = [m for m in board.received[n:] if m.get_type() == 'COMMAND_LONG'
             and m.command == CMD_SROT_MOVE]
     assert cmds == []

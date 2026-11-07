@@ -40,7 +40,7 @@ def _run_goal(gate, cmd, hand_off_s, tally):
     if not accept:
         return
     time.sleep(hand_off_s)              # ACCEPT -> EXECUTING, on another thread
-    gate.confirm(cmd)
+    token = gate.confirm(cmd)
     with tally['lock']:
         tally['n'] += 1
         tally['max'] = max(tally['max'], tally['n'])
@@ -49,7 +49,7 @@ def _run_goal(gate, cmd, hand_off_s, tally):
     finally:
         with tally['lock']:
             tally['n'] -= 1
-        gate.release()
+        gate.release(token)
 
 
 @pytest.mark.parametrize('hand_off_s', [0.020, 0.005, 0.001])
@@ -87,9 +87,9 @@ def test_a_safety_verb_still_preempts_a_running_command():
 def test_an_ordinary_verb_is_still_rejected_while_busy():
     gate = _CommandGate()
     gate.claim('move_forward', goal_acceptance)
-    gate.confirm('move_forward')
+    token = gate.confirm('move_forward')
     assert gate.claim('move_left', goal_acceptance) == (False, False)
-    gate.release()
+    gate.release(token)
     assert gate.claim('move_left', goal_acceptance) == (True, False)
 
 
@@ -134,3 +134,54 @@ def test_the_policy_itself_is_untouched():
     assert goal_acceptance('move_forward', True) == (False, False)
     assert goal_acceptance('disarm', True) == (True, True)
     assert COMMAND_GATE_STALE_S > 0.5
+
+
+def test_a_preempted_loop_cannot_free_its_preemptors_claim():
+    """⛔ The cloud audit's HIGH finding, 2026-11-07. `disarm` pre-empts a running
+    `move_forward`; the move's `finally` releases the gate on its way out. Before
+    the token, that release cleared `disarm`'s claim too, and an ordinary verb
+    could then start while `disarm` was still executing.
+
+    INJECTION-VERIFIED: make `release` ignore its token and this fails."""
+    gate = _CommandGate()
+    gate.claim('move_forward', goal_acceptance)
+    move = gate.confirm('move_forward')
+    assert gate.claim('disarm', goal_acceptance) == (True, True)
+    disarm = gate.confirm('disarm')
+    assert gate.release(move) is False, 'the pre-empted loop does not own the gate'
+    assert gate.active, 'disarm is still executing'
+    assert gate.claim('move_left', goal_acceptance) == (False, False), \
+        'an ordinary verb must not start beside a running disarm'
+    assert gate.release(disarm) is True
+    assert not gate.active
+
+
+def test_one_claim_is_confirmed_once():
+    """Two `stop`s back to back: the second claim takes the gate over, so only
+    one of the two goals may run under it. A verb name cannot tell them apart."""
+    gate = _CommandGate()
+    gate.claim('stop', goal_acceptance)
+    gate.claim('stop', goal_acceptance)        # busy -> safety verb pre-empts
+    first = gate.confirm('stop')
+    assert first is not None
+    assert gate.confirm('stop') is None, 'the second goal must be refused, not run unguarded'
+    assert gate.release(None) is False
+
+
+def test_a_drain_with_no_owner_is_not_started():
+    """A cancel that lands when nothing holds the gate would leave it DRAINING
+    with nobody left to release it, refusing every ordinary verb until restart."""
+    gate = _CommandGate()
+    gate.begin_drain()
+    assert not gate.active
+    assert gate.claim('move_left', goal_acceptance) == (True, False)
+
+
+def test_the_cancelled_loop_ends_its_own_drain():
+    gate = _CommandGate()
+    gate.claim('move_forward', goal_acceptance)
+    token = gate.confirm('move_forward')
+    gate.begin_drain()
+    assert gate.active
+    assert gate.release(token) is True
+    assert not gate.active

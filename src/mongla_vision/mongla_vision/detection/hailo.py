@@ -753,8 +753,6 @@ class HailoDetector(Detector):
             # the next infer on this detector would overwrite it mid-read.
             per_class = self._decode_nms(self._out_buf)
         return self._boxes_to_detections(per_class, w, h, scale, pad_x, pad_y)
-        per_class = self._decode_nms(raw)
-        return self._boxes_to_detections(per_class, w, h, scale, pad_x, pad_y)
 
     def _boxes_to_detections(self, per_class, w, h, scale, pad_x, pad_y):
         """Per-class boxes -> Detections. ONE copy, shared by both APIs.

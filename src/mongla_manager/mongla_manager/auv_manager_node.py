@@ -538,6 +538,12 @@ class AUVManagerNode(SetupMixin, HealthMixin, VisionLinkMixin, TelemetryMixin, N
         return self._gate.active
 
     def goal_callback(self, goal_request):
+        # A verb that does not exist is refused here, before it can claim the
+        # gate: claimed and then refused in execute_callback, it held the gate
+        # for COMMAND_GATE_STALE_S and every real verb in that window bounced.
+        if goal_request.cmd not in COMMANDS:
+            self.get_logger().warn(f'[ACT  ] Rejected unknown command {goal_request.cmd!r}')
+            return GoalResponse.REJECT
         # ONE atomic operation: decide and claim together. `goal_acceptance` stays
         # the pure policy (and stays unit-testable); the gate applies it under its
         # own lock so no second caller can observe the pre-claim state.
@@ -603,9 +609,20 @@ class AUVManagerNode(SetupMixin, HealthMixin, VisionLinkMixin, TelemetryMixin, N
             goal_handle.abort()
             return result
 
-        # Already claimed in goal_callback. Confirm the hand-off arrived so a leak
-        # shows up here rather than as a mystery rejection three verbs later.
-        self._gate.confirm(cmd)
+        # Already claimed in goal_callback. Confirm the hand-off arrived, and take
+        # the claim's token: only that token can release the gate, so a loop a
+        # safety verb pre-empted cannot free the gate while the safety verb runs.
+        token = self._gate.confirm(cmd)
+        if token is None:
+            # Reaped as a leak, or a later claim took the gate over before this
+            # goal started (a second `stop` behind the first). Running now would
+            # drive the board with nothing guarding it.
+            result = Move.Result()
+            result.success = False
+            result.message = f'{cmd}: superseded before it started -- not run'
+            goal_handle.abort()
+            self.get_logger().warn(f'[ACT  ] {cmd} -> NOT RUN (gate held by a later claim)')
+            return result
         try:
             gid = bytes(bytearray(goal_handle.goal_id.uuid)).hex()[:8]
         except Exception:                   # noqa: BLE001 -- a log field only
@@ -672,7 +689,7 @@ class AUVManagerNode(SetupMixin, HealthMixin, VisionLinkMixin, TelemetryMixin, N
             return result
 
         finally:
-            self._gate.release()
+            self._gate.release(token)
 
     @staticmethod
     def _progress_relay(cmd, goal_handle):

@@ -258,25 +258,39 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
                 time.sleep(_POLL_S)
         return None
 
-    def check_behaviour_rev(self):
-        """(ok, reason). Fail-closed on a KNOWN-too-old board; loud but permissive
-        when the board did not answer at all.
+    def check_behaviour_rev(self, for_arm: bool = False):
+        """(ok, reason). Fail-closed on a KNOWN-too-old board, and -- when
+        ``for_arm`` -- on a board that did not answer at all.
 
-        The asymmetry is deliberate. "Board says rev 1" is a definite statement that
-        `stop` will coast, and refusing is right. "Board said nothing" is far more
-        likely a dropped frame or a firmware without REQUEST_MESSAGE than a genuine
-        rev-1 board, and bricking a vehicle on a comms hiccup is its own hazard --
-        so that case warns hard on every attempt and lets the operator proceed.
+        At connect a silent board only warns: there "board said nothing" is more
+        likely a dropped frame than a rev-1 board, and refusing to even talk to
+        the vehicle on a comms hiccup is its own hazard.
+
+        ⛔ AT ARM IT REFUSES. That asymmetry was decided when the floor was rev 2
+        and the cost of an old board was a `stop` that coasts. The floor is now
+        rev 10, because below it the board's yaw sense is INVERTED: every turn
+        goes the wrong way and any loop closed on yaw -- the vision verbs --
+        diverges, while roll and pitch read correctly so nothing looks wrong.
+        `read_behaviour_rev` has already asked three times over six seconds, so
+        "no answer" means firmware without REQUEST_MESSAGE (older than the floor)
+        or a link too poor to arm on. `allow_fw_behaviour_mismatch:=true` still
+        overrides, loudly. Reversed on the cloud audit's finding, 2026-11-07.
         """
         rev = self.read_behaviour_rev()
         need = sp.FW_BEHAVIOUR_REV_REQUIRED
         if rev is None:
-            self._log_warn(
-                f'[SROT ] !! could not read SROT_FW_BEHAVIOUR_REV from the board '
-                f'(AUTOPILOT_VERSION unanswered). Host expects >= {need}. If this '
-                f'firmware predates 2026-08-01, MOVE_STOP COASTS and there is no '
-                f'host-side brake -- stop/abort will NOT decelerate. Proceeding.')
-            return True, 'FW_BEHAVIOUR_REV_UNKNOWN'
+            what = (f'could not read SROT_FW_BEHAVIOUR_REV from the board '
+                    f'(AUTOPILOT_VERSION unanswered). Host expects >= {need}; below '
+                    f'rev 10 the board turns every yaw backwards')
+            if not for_arm:
+                self._log_warn(f'[SROT ] !! {what}. Connecting anyway; arm will refuse.')
+                return True, 'FW_BEHAVIOUR_REV_UNKNOWN'
+            if self.allow_fw_behaviour_mismatch:
+                self._log_warn(f'[SROT ] !! OVERRIDDEN: {what}.')
+                return True, 'FW_BEHAVIOUR_REV_UNKNOWN_OVERRIDDEN'
+            self._log_warn(f'[SROT ] !! REFUSING TO ARM: {what}. Set '
+                           f'allow_fw_behaviour_mismatch:=true to arm anyway.')
+            return False, f'FW_BEHAVIOUR_REV_UNKNOWN: {what}'
         if rev >= need:
             if not self._behaviour_rev_logged:
                 self._log_info(f'[SROT ] firmware behaviour rev {rev} (>= {need} required)')
@@ -313,8 +327,9 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
     def _command_long(self, command, p1=0.0, p2=0.0, p3=0.0, p4=0.0,
                       p5=0.0, p6=0.0, p7=0.0, confirmation=0):
         if command == sp.CMD_SROT_MOVE:
-            # An on-board primitive ramps its own demand and reports none, so
-            # from here the host no longer knows what the thrusters are asked.
+            # An on-board primitive ramps its own demand, so the host's record
+            # of what it sent stops being true. Only the board's DEM_* echo
+            # (firmware with #33) can say what the thrusters are asked now.
             self._demand = None
         with self._tx_lock:
             self.master.mav.command_long_send(
@@ -471,7 +486,7 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
         before anything can move, and every path to motion goes through it, so it is
         where a known-too-old board has to be turned away. See `check_behaviour_rev`.
         """
-        ok, reason = self.check_behaviour_rev()
+        ok, reason = self.check_behaviour_rev(for_arm=True)
         if not ok:
             return False, reason
         ok, reason = self.check_depth_loop_settled()
@@ -633,14 +648,22 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
         if target is None:
             return False, (f"unknown SROT mode '{mode}' -- valid: "
                        f"{', '.join(sorted(sp.MODE_INTS))}")
+        sent = time.monotonic()
         self._command_long(
             mavutil.mavlink.MAV_CMD_DO_SET_MODE,
             p1=float(mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED),
             p2=float(target))
-        deadline = time.monotonic() + timeout
+        deadline = sent + timeout
         while time.monotonic() < deadline:
             hb = self._vehicle_hb()
-            if hb is not None and int(hb.custom_mode) == target:
+            # ⛔ ONLY A HEARTBEAT HEARD SINCE THE COMMAND. pymavlink keeps the last
+            # one forever, so a cache that already showed the target -- or a link
+            # that died minutes ago in that mode -- confirmed the change at once,
+            # and the caller drove on a mode the board may not be in. The vision
+            # verbs rely on this to know MANUAL_CONTROL will be honoured.
+            # (Cloud audit, 2026-11-07.)
+            if (hb is not None and int(hb.custom_mode) == target
+                    and _rx_age(hb) < time.monotonic() - sent):
                 return True, mode
             time.sleep(_POLL_S)
         cur = sp.mode_name(getattr(self._vehicle_hb(), 'custom_mode', -1))
@@ -714,6 +737,11 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
             self.master.mav.manual_control_send(sp.VEHICLE_SYSID, x, y, z, r, 0)
         # What was SENT, after coercion and clamping -- the one funnel every
         # srot writer passes through. Read by `demand()`.
+        #
+        # A NaN axis is SENT as 0, so the demand in force on the board is 0 and is
+        # recorded as such -- the board acts on the wire, not on the request.
+        # (A cloud audit read this as "an unknown recorded as known"; it is not:
+        # `test_demand_is_what_was_SENT_after_clamping` pins it, 2026-11-07.)
         self._demand = (x / sp.MC_AXIS_MAX, y / sp.MC_AXIS_MAX, time.monotonic())
 
     # A MANUAL_CONTROL frame older than this is not a demand in force: the
@@ -722,13 +750,28 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
     # as a live one.
     DEMAND_FRESH_S = 0.25
 
-    def demand(self):
-        """(fwd, lat) last sent in [-1, 1], or None when it is not known.
+    # The board's own echo of what its mixer was handed (DEM_FWD / DEM_LAT,
+    # srot-control-board PR #33). It rides the NAMED_VALUE_FLOAT block, whose
+    # default period is 500 ms, so two periods is the oldest echo still in force.
+    DEMAND_ECHO_FRESH_S = 1.0
 
-        None after any SROT_MOVE (the board owns the demand), before the first
-        frame, and once the stream is older than DEMAND_FRESH_S. (0, 0) while a
-        fresh heartbeat says DISARMED. Consumed by the command-velocity model,
-        which must predict nothing from an unknown, and by the ZUPT gate.
+    def demand(self):
+        """(fwd, lat) in [-1, 1] in force on the board, or None when it is not known.
+
+        Three sources, in order of how much they know:
+          1. a fresh heartbeat saying DISARMED -> (0, 0), known;
+          2. the board's echo (DEM_FWD / DEM_LAT), when both are fresh -- the
+             demand the mixer was actually handed, in every mode, so an
+             SROT_MOVE is no longer a blind spot;
+          3. the host's own MANUAL_CONTROL record, younger than DEMAND_FRESH_S
+             -- firmware without the echo. None after any SROT_MOVE (the board
+             owns the demand), before the first frame, and once stale.
+
+        The echo outranks the host's record because the record is what was
+        SENT, and in AUTO the board discards MANUAL_CONTROL: the record would be
+        a confident demand the thrusters never saw. Consumed by the
+        command-velocity model, which must predict nothing from an unknown, and
+        by the ZUPT gate.
         """
         # ⛔ A DISARMED BOARD DRIVES NO THRUSTER, so its demand is KNOWN: zero.
         # Without this the demand read "unknown" whenever no MANUAL_CONTROL
@@ -739,6 +782,11 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
         if (hb is not None and _rx_age(hb) <= _LINK_STALE_S
                 and not (hb.base_mode & _ARMED_FLAG)):
             return 0.0, 0.0
+        fwd = self._named_value('DEM_FWD', self.DEMAND_ECHO_FRESH_S)
+        lat = self._named_value('DEM_LAT', self.DEMAND_ECHO_FRESH_S)
+        if (fwd is not None and lat is not None
+                and math.isfinite(fwd) and math.isfinite(lat)):
+            return float(fwd), float(lat)
         d = getattr(self, '_demand', None)
         if d is None or time.monotonic() - d[2] > self.DEMAND_FRESH_S:
             return None
@@ -758,6 +806,14 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
 
         Judged on a HEARTBEAT newer than the ACK, waited for briefly; with no
         vehicle heartbeat at all there is nothing to judge and the ACK stands.
+
+        ⛔ AN OLDER HEARTBEAT IS NOT EVIDENCE. If none newer than the ACK lands
+        inside the wait, the only heartbeat in hand was sent BEFORE the move
+        ended -- ARMED and in AUTO by construction, whatever the failsafe did
+        since. Judging on it reported every cut-short move as completed exactly
+        when the link was struggling. The manager asks for HEARTBEAT at 10 Hz, so
+        silence for _POST_ACK_HB_WAIT_S is itself the news: fail, unverified.
+        (Cloud audit, 2026-11-07.)
         """
         hb = self._vehicle_hb()
         if hb is None:
@@ -766,6 +822,10 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
         while getattr(hb, '_timestamp', 0.0) < t_ack and time.monotonic() < deadline:
             time.sleep(_POLL_S)
             hb = self._vehicle_hb() or hb
+        if getattr(hb, '_timestamp', 0.0) < t_ack:
+            return (f'unverified -- no heartbeat after the ACK within '
+                    f'{_POST_ACK_HB_WAIT_S:.1f} s, so whether a failsafe cut the '
+                    f'move short cannot be told')
         mode = sp.mode_name(getattr(hb, 'custom_mode', None))
         base = getattr(hb, 'base_mode', None)
         if base is not None and not (base & _ARMED_FLAG):
@@ -891,13 +951,18 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
         ON and OFF are both 183. So also require the ACK to be NEWER than our send.
         """
         self._clear_ack()
-        t_send = time.time()          # wall clock: pymavlink stamps _timestamp with time.time()
+        sent = time.monotonic()
         self.set_servo(channel_1based, us)
-        deadline = time.monotonic() + timeout
+        deadline = sent + timeout
         while time.monotonic() < deadline:
             ack = self._cache('COMMAND_ACK')
+            # Heard since the send, on the reader's monotonic stamp (`_rx_age`).
+            # It compared wall clocks, and an ACK with no stamp at all counted as
+            # fresh -- the default was the send time itself. The Pi has no RTC,
+            # so the first NTP sync at the pool can step the wall clock between
+            # the send and the answer. (Cloud audit, 2026-11-07.)
             if (ack is not None and ack.command == sp.CMD_DO_SET_SERVO
-                    and getattr(ack, '_timestamp', t_send) >= t_send):
+                    and _rx_age(ack) < time.monotonic() - sent):
                 return int(ack.result)
             time.sleep(_POLL_S)
         return None

@@ -162,3 +162,22 @@ def test_iou_and_shift_are_sane():
     assert iou(box(0, 0), box(0, 0)) == pytest.approx(1.0)
     assert iou(box(0, 0), box(500, 500)) == 0.0
     assert shift_box(box(0, 0), 10, 5) == (10, 5, 50, 45)
+
+
+def test_association_does_not_depend_on_detection_order():
+    """⛔ Cloud audit, 2026-11-07. Greedy in detection order let the first
+    detection take the track the second overlapped far better; the second then
+    became a NEW identity. Truth is constructed: track 7 sits exactly on
+    detection B, and A only grazes it.
+    INJECTION-VERIFIED: sort the pairs by detection index instead of score and
+    this fails."""
+    # A prefers track 7 (IoU 0.33) over 9 (0.25); B IS track 7 (IoU 1.0).
+    A = [0.0, 0.0, 10.0, 10.0]
+    B = [5.0, 0.0, 15.0, 10.0]
+    tracks = {7: [5.0, 0.0, 15.0, 10.0], 9: [-6.0, 0.0, 4.0, 10.0]}
+    assert iou(A, tracks[7]) > iou(A, tracks[9]) > 0.2
+    for dets in ([A, B], [B, A]):
+        out = AssociationCascade(iou_gate=0.2).associate(dets, dict(tracks))
+        by_det = {tuple(dets[a.det_index]): a.track_id for a in out}
+        assert by_det[tuple(B)] == 7, 'B is exactly where track 7 predicted'
+        assert by_det[tuple(A)] == 9

@@ -72,7 +72,7 @@ Vision queries -- detected() / wait_for() / where():
     if mongla.wait_for('gate', timeout=8):
         mongla.vision.align('gate', yaw=0, lat=0)
     else:
-        mongla.recover()
+        sweep_yaw(mongla, should_stop)   # the fallback defined above
 
     # steer by bearing: 'left' | 'center' | 'right' | 'unknown'
     {'left':  lambda: mongla.yaw_left(20),
@@ -741,8 +741,11 @@ class MonglaMission(SeeMixin, WhereMixin, CameraMixin, DetectorMixin):
         a SWITCH channel fires, a PWM channel is REFUSED (it is the on-board arm).
         `ros2 run mongla_manager connect` lists which channels are fireable.
 
-        Returns a `FireOutcome`: truthy ONLY when the round left, with the
-        server's reason either way.
+        Returns a `FireOutcome`: truthy ONLY when the board ACCEPTED the
+        activation -- it energised the channel -- with the server's reason either
+        way. That is not "the round left": nothing on the vehicle senses a
+        launcher or dropper actually releasing, so a jammed one still reads
+        truthy. Score a shot on what the camera sees afterwards, not on this.
 
         ⛔ A REFUSAL IS A TASK OUTCOME, NOT A MISSION FAILURE. A refused shot
         sets success=False, which the client raises as MoveFailed -- so the

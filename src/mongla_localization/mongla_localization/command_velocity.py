@@ -34,9 +34,11 @@ frame component. The body frame rotates with the hull and the current does
 not, so after a turn `b` is wrong until relearned. Forgetting (`lam`) bounds
 how long, and the sigma handed on is the fitted residual, not a guess.
 
-Only MANUAL_CONTROL demand is modelled. An on-board SROT_MOVE primitive ramps
-its own demand and reports none, so the host does not know it -- and a model
-fed an unknown input must predict nothing, not zero.
+The demand comes from `SrotFC.demand()`. A board that echoes its mixer input
+(DEM_FWD / DEM_LAT, srot-control-board#33) makes it known in every mode,
+on-board SROT_MOVE primitives included. Older firmware echoes nothing, so there
+only MANUAL_CONTROL demand is known and a board primitive reads as unknown --
+and a model fed an unknown input must predict nothing, not zero.
 """
 from __future__ import annotations
 
