@@ -137,9 +137,9 @@ and against footage. Each reads its own section, named after the file:
 
 ```yaml
 launch:
-  video:                             # ros2 launch mongla_vision video.launch.py
+  video:                             # read when video.launch.py is the file typed
     fwd_video: /footage/gate.mp4
-  vision_dual:                       # ros2 launch mongla_vision vision_dual.launch.py
+  vision_dual:                       # read when vision_dual.launch.py is typed
     fwd_model: gate_sharks
     viewer: false
 ```
