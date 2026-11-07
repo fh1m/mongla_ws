@@ -1,0 +1,32 @@
+.claude/context/packages/mongla_vision/README.md
+  s_b4c45e3235679b::t_eb4a21d1f97e87 77-85
+src/mongla_manager/mongla_manager/vision_choice.py
+  s_b4c45e3235679b::t_5bbb02beb282a5 1-371
+src/mongla_manager/mongla_manager/vision_state.py
+  s_b4c45e3235679b::t_c166b62cf5f095 34-36
+  s_b4c45e3235679b::t_5bbb02beb282a5 48,59-60,63
+.claude/context/packages/mongla_manager/README.md
+  s_b4c45e3235679b::t_eb4a21d1f97e87 120-121,194
+src/mongla_vision/test/test_lock_wiring.py
+  s_b4c45e3235679b::t_c166b62cf5f095 22-24
+src/mongla_manager/test/test_lock_s_is_a_switch.py
+  s_b4c45e3235679b::t_c166b62cf5f095 15,18-20,26,43
+.claude/context/missions/detected-paradigm.md
+  s_b4c45e3235679b::t_eb4a21d1f97e87 985
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "5c657a1e0096c7c0089f2eb75854aa2fc68c1105",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
