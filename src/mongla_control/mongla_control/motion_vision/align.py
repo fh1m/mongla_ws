@@ -244,7 +244,7 @@ class _Align(_VisionLoop):
         # persists for many is immaterial.
         self.was_saturated = False
         # Nominal tick. Used to SEED the measured dt below and as its ceiling;
-        # the loop no longer sleeps a fixed period (see `_tick`), so treating this
+        # the loop does not sleep a fixed period (see `_tick`), so treating this
         # as the real interval would misstate both the lock gate and the integral
         # term the moment the loop starts running at detection rate.
         self.dt_nominal = 1.0 / LOOP_HZ
