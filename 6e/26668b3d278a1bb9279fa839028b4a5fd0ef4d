@@ -1,0 +1,47 @@
+src/mongla_control/test/test_windup_against_the_mixer.py
+  s_b4c45e3235679b::t_f037f3f16d27b1 57
+  s_b4c45e3235679b::t_726f8e6b17f167 66-68
+src/mongla_vision/test/test_flow_node.py
+  s_b4c45e3235679b::t_8ea6ddecb10d16 961-984
+src/mongla_control/test/test_loop_wakes_on_data.py
+  s_b4c45e3235679b::t_f037f3f16d27b1 97-100,104-105,114
+src/mongla_vision/mongla_vision/lock_node.py
+  s_b4c45e3235679b::t_03fd0cad37dc9c 744-752
+  s_b4c45e3235679b::t_f7b2d1b8bb499e 35,110-123,1365,1375-1389,1394-1464,1468-1687,1691-1726
+  s_b4c45e3235679b::t_f6c3f65efe69d3 1390-1393,1465-1467,1688-1690
+  s_b4c45e3235679b::t_f59048738eec79 1727
+src/mongla_manager/test/test_tool_aim_is_wired.py
+  s_b4c45e3235679b::t_726f8e6b17f167 36-38,41-44,51-52,54-58
+src/mongla_control/mongla_control/motion_vision.py
+  s_b4c45e3235679b::t_028fda360ee292 45-46,945-1063,1184-1185,1187,1204-1387,1390-1638,1644-1646,1648-1650,1652,1654-1698,1754-1755,1757,1764-1794,1796-1951
+  s_b4c45e3235679b::t_a9971a7cb0575b 55-58
+src/mongla_control/test/test_align_verifies_after_stopping.py
+  s_b4c45e3235679b::t_e026616dc8b58a 116
+src/mongla_vision/test/test_lock_wiring.py
+  s_b4c45e3235679b::t_726f8e6b17f167 101
+src/mongla_vision/mongla_vision/flow/flow_node.py
+  s_b4c45e3235679b::t_ad040a385853a6 297
+  s_b4c45e3235679b::t_2529d580775f1e 602
+  s_b4c45e3235679b::t_12218b277db39e 952-1006,1029,1031,1050-1051,1053,1096
+  s_b4c45e3235679b::t_343ac339e0a0c5 604,649-657,662-669
+  s_b4c45e3235679b::t_9ae6c561039dc6 1007-1009,1032-1034,1054,1056
+  s_b4c45e3235679b::t_2f2bc8619226da 670
+src/mongla_vision/mongla_vision/detector_node.py
+  s_b4c45e3235679b::t_088664ae113103 1002-1005,1007-1008,1010-1013,1016-1017,1021-1022,1024-1031,1033,1050-1051,1053-1229
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "6e26668b3d278a1bb9279fa839028b4a5fd0ef4d",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
