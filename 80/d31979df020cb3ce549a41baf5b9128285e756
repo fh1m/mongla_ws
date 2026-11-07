@@ -1,0 +1,25 @@
+tools/ledger_strip.py
+  s_b4c45e3235679b::t_47ed6677214071 107-126,133
+.claude/context/measured-bars.md
+  s_b4c45e3235679b::t_47ed6677214071 21-135
+test/test_no_emoji.py
+  s_b4c45e3235679b::t_afae36399c0415 15
+tools/_site_splice.py
+  s_b4c45e3235679b::t_47ed6677214071 15-17,19,22,29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "80d31979df020cb3ce549a41baf5b9128285e756",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
