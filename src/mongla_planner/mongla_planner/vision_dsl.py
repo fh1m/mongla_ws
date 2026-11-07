@@ -106,7 +106,7 @@ class VisionResult:
             if res.x_px > 30: mongla.move_right(1)
             elif res.x_px < -30: mongla.move_left(1)
         else:                         # never saw the gate
-            mongla.search()
+            search(mongla)            # the mission's own fallback (DSL has none)
 
     Fields:
       ``ok``          -- True iff aligned (align) / reached fill (move).

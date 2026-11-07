@@ -702,8 +702,8 @@ def _read_param(conn, name: str, tries: int = 3, timeout_s: float = 1.2):
     for _ in range(tries):
         conn.mav.param_request_read_send(
             sp.VEHICLE_SYSID, sp.VEHICLE_COMPID, name.encode(), -1)
-        end = time.time() + timeout_s
-        while time.time() < end:
+        end = time.monotonic() + timeout_s
+        while time.monotonic() < end:
             msg = conn.recv_match(type='PARAM_VALUE', blocking=True, timeout=0.4)
             if msg is None:
                 continue
@@ -1094,9 +1094,9 @@ def _check_srot(skip_mav: bool, device: str = '') -> list[tuple[str, str, str]]:
     conn = None
     try:
         conn = mavutil.mavlink_connection(port, **baud_kw)
-        deadline = time.time() + 6.0
+        deadline = time.monotonic() + 6.0
         hb = None
-        while time.time() < deadline:
+        while time.monotonic() < deadline:
             msg = conn.recv_match(type='HEARTBEAT', blocking=True, timeout=2.0)
             if msg is None:
                 break
@@ -1131,8 +1131,8 @@ def _check_srot(skip_mav: bool, device: str = '') -> list[tuple[str, str, str]]:
         out.append(_behaviour_rev_verdict(rev, sp.FW_BEHAVIOUR_REV_REQUIRED))
 
         # Collect a couple of seconds of telemetry for the value checks.
-        end = time.time() + 2.5
-        while time.time() < end:
+        end = time.monotonic() + 2.5
+        while time.monotonic() < end:
             conn.recv_match(blocking=True, timeout=0.5)
 
         vhud = conn.messages.get('VFR_HUD')
@@ -1155,8 +1155,8 @@ def _check_srot(skip_mav: bool, device: str = '') -> list[tuple[str, str, str]]:
         # Barometer + depth loop. Both need SEVERAL samples (the failure mode is
         # variance, not a bad single reading), so gather a window before judging.
         press, named = [], {}
-        end = time.time() + 6.0
-        while time.time() < end:
+        end = time.monotonic() + 6.0
+        while time.monotonic() < end:
             msg = conn.recv_match(blocking=True, timeout=0.5)
             if msg is None:
                 continue

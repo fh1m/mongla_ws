@@ -145,19 +145,12 @@ class AssociationCascade:
         pending = list(range(len(detections)))
 
         # ---- stage 1: motion ------------------------------------------
-        still: List[int] = []
-        for di in pending:
-            best_id, best = None, 0.0
-            for tid, pbox in free_tracks.items():
-                v = iou(detections[di], pbox)
-                if v > best:
-                    best_id, best = tid, v
-            if best_id is not None and best >= self.iou_gate:
-                free_tracks.pop(best_id)
-                self._note(MOTION)
-                out.append(Assoc(di, best_id, MOTION, best, f'IoU {best:.2f}'))
-            else:
-                still.append(di)
+        still = []
+        for di, tid, v in _best_first(
+                pending, free_tracks,
+                lambda d, box: iou(detections[d], box), self.iou_gate, still):
+            self._note(MOTION)
+            out.append(Assoc(di, tid, MOTION, v, f'IoU {v:.2f}'))
 
         # ---- stage 2: the same test, after removing OUR OWN motion ----
         # ⛔ SKIPPED, not assumed zero, when the shift is unknown. A vehicle
@@ -165,20 +158,14 @@ class AssociationCascade:
         dx, dy = ego_shift
         if still and free_tracks and dx == dx and dy == dy and (dx or dy):
             again: List[int] = []
-            for di in still:
-                best_id, best = None, 0.0
-                for tid, pbox in free_tracks.items():
-                    v = iou(detections[di], shift_box(pbox, dx, dy))
-                    if v > best:
-                        best_id, best = tid, v
-                if best_id is not None and best >= self.ego_iou_gate:
-                    free_tracks.pop(best_id)
-                    self._note(EGO)
-                    out.append(Assoc(di, best_id, EGO, best,
-                                     f'IoU {best:.2f} after ego shift '
-                                     f'({dx:+.0f},{dy:+.0f}) px'))
-                else:
-                    again.append(di)
+            for di, tid, v in _best_first(
+                    still, free_tracks,
+                    lambda d, box: iou(detections[d], shift_box(box, dx, dy)),
+                    self.ego_iou_gate, again):
+                self._note(EGO)
+                out.append(Assoc(di, tid, EGO, v,
+                                 f'IoU {v:.2f} after ego shift '
+                                 f'({dx:+.0f},{dy:+.0f}) px'))
             still = again
 
         # ---- stage 3: appearance, on the few that are left ------------
@@ -206,3 +193,34 @@ class AssociationCascade:
             out.append(Assoc(di, None, NEW, 0.0, 'no stage explained it'))
         out.sort(key=lambda a: a.det_index)
         return out
+
+
+def _best_first(dets, free_tracks, score, gate, unmatched):
+    """Match the best-scoring (detection, track) pair first, then the next.
+
+    ⛔ NOT IN DETECTION ORDER. Each detection used to take the track it
+    overlapped most, in the order the detector listed them -- so detection 0
+    could take the track detection 1 overlapped far better, and detection 1
+    then fell through to a new identity. Order-dependent identity switches are
+    the very failure this module exists to remove. Best pair first is
+    order-independent and, at the handful of props in a frame, the same answer
+    the Hungarian method gives without adding SciPy to the vehicle.
+    (Cloud audit, 2026-11-07.)
+
+    Pops matched tracks from `free_tracks`, appends unmatched detections to
+    `unmatched` in their original order, and returns ``[(det, track, score)]``.
+    """
+    pairs = sorted(((score(d, box), d, tid)
+                    for d in dets for tid, box in free_tracks.items()),
+                   key=lambda p: -p[0])
+    taken_d, out = set(), []
+    for v, d, tid in pairs:
+        if v < gate:
+            break
+        if d in taken_d or tid not in free_tracks:
+            continue
+        free_tracks.pop(tid)
+        taken_d.add(d)
+        out.append((d, tid, v))
+    unmatched.extend(d for d in dets if d not in taken_d)
+    return out

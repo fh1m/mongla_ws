@@ -219,7 +219,10 @@ class FakeSrotBoard:
                             else m.param_id.decode()).rstrip('\0')
                     self.params[name] = float(m.param_value)
                     self._on_param_read(m)
-            if now - last_hb >= 0.5:
+            # 10 Hz: what the manager asks the real board for (SROT_MESSAGE_RATES),
+            # and what a finished move waits on -- a move is only believed done on
+            # a heartbeat heard after its ACK.
+            if now - last_hb >= 0.1:
                 self._heartbeat()
                 last_hb = now
             if now - last_tel >= 0.05:

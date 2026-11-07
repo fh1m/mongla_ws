@@ -80,7 +80,12 @@ class _FakeMaster:
 
 
 def _fc():
-    return SrotFC(_FakeMaster())
+    """A board on current firmware: it answers AUTOPILOT_VERSION, as a real one
+    does, because arm() refuses a board whose revision it cannot read."""
+    m = _FakeMaster()
+    m.messages['AUTOPILOT_VERSION'] = SimpleNamespace(
+        middleware_sw_version=sp.FW_BEHAVIOUR_REV, flight_sw_version=131072)
+    return SrotFC(m)
 
 
 def _ack(result, command=sp.CMD_SROT_MOVE, progress=100):
@@ -243,14 +248,6 @@ def test_arm_abort_disarms_and_returns_aborted():
     assert disarms, 'an aborted arm must command a disarm (never strand armed)'
 
 
-def test_set_mode_confirms_via_heartbeat():
-    fc = _fc()
-    fc.master.messages['HEARTBEAT'] = SimpleNamespace(
-        base_mode=0, custom_mode=sp.MODE_DEPTH_HOLD, _timestamp=time.time())
-    ok, reason = fc.set_mode('DEPTH_HOLD', timeout=1.0)
-    assert ok and reason == 'DEPTH_HOLD'
-
-
 def test_set_mode_unknown_name_fails_fast():
     ok, reason = _fc().set_mode('WARP', timeout=0.1)
     assert not ok and 'unknown SROT mode' in reason
@@ -266,7 +263,7 @@ def test_telemetry_decodes_attitude_depth_and_mode():
         base_mode=_ARMED, custom_mode=sp.MODE_AUTO, _timestamp=now)
     fc.master.messages['ATTITUDE'] = SimpleNamespace(_timestamp=time.time(), 
         yaw=math.radians(90.0), roll=0.0, pitch=0.0)
-    fc.master.messages['VFR_HUD'] = SimpleNamespace(alt=-2.5)   # alt = -depth
+    fc.master.messages['VFR_HUD'] = SimpleNamespace(_timestamp=time.time(), alt=-2.5)   # alt = -depth
     fc.master.messages['BATTERY_STATUS'] = SimpleNamespace(voltages=[16000])
     t = fc.telemetry()
     assert t.armed is True and t.mode == 'AUTO'
@@ -352,7 +349,7 @@ def test_get_attitude_returns_degrees_dict():
     fc = _fc()
     fc.master.messages['ATTITUDE'] = SimpleNamespace(_timestamp=time.time(), 
         yaw=math.radians(45.0), roll=0.0, pitch=0.0)
-    fc.master.messages['VFR_HUD'] = SimpleNamespace(alt=-1.2)
+    fc.master.messages['VFR_HUD'] = SimpleNamespace(_timestamp=time.time(), alt=-1.2)
     att = fc.get_attitude()
     assert att['yaw'] == pytest.approx(45.0)
     assert att['depth'] == pytest.approx(-1.2)   # negative below surface
@@ -368,7 +365,7 @@ def test_depth_reads_negative_below_the_surface():
     fc.master.messages['ATTITUDE'] = SimpleNamespace(_timestamp=time.time(), yaw=0.0, roll=0.0, pitch=0.0)
     for board_depth_m in (0.5, 2.0, 8.0):
         # The board sends alt = -depth (fw mav_stream.cpp:210-218).
-        fc.master.messages['VFR_HUD'] = SimpleNamespace(alt=-board_depth_m)
+        fc.master.messages['VFR_HUD'] = SimpleNamespace(_timestamp=time.time(), alt=-board_depth_m)
         assert fc.get_attitude()['depth'] < 0.0
         assert fc.telemetry().depth_m < 0.0
 
@@ -654,7 +651,9 @@ def _fc_reporting_rev(rev):
     """SrotFC whose fake board answers AUTOPILOT_VERSION with `rev`, or None for a
     board that never answers at all."""
     fc = _fc()
-    if rev is not None:
+    if rev is None:
+        del fc.master.messages['AUTOPILOT_VERSION']
+    else:
         fc.master.messages['AUTOPILOT_VERSION'] = SimpleNamespace(
             middleware_sw_version=rev, flight_sw_version=131072)
     return fc
@@ -704,21 +703,39 @@ def test_current_firmware_rev_arms_normally():
     assert ok is True
 
 
-def test_a_silent_board_warns_but_does_not_brick_the_vehicle():
-    """Asymmetry on purpose: 'board says rev 1' is a definite statement that stop
-    will coast, and refusing is right. 'board said nothing' is far more likely a
-    dropped frame, and refusing to arm on a comms hiccup is its own hazard."""
+def test_a_silent_board_is_refused_at_arm_but_still_connects():
+    """The floor is rev 10 because below it every yaw goes BACKWARDS. A board
+    that will not say its revision after three requests over six seconds is
+    either older than REQUEST_MESSAGE or on a link too poor to arm on, so arm
+    refuses -- but the connect-time check only warns, so the operator can still
+    read the board. (Until 2026-11-07 arm warned and proceeded.)
+    INJECTION-VERIFIED: return True for an unknown rev at arm and this fails."""
     fc = _fc_reporting_rev(None)
+    fc.read_behaviour_rev = lambda *a, **k: None      # skip the 6 s of retries
     warnings = []
     fc._log = SimpleNamespace(info=lambda m: None, warning=warnings.append)
+    ok, reason = fc.check_behaviour_rev()
+    assert ok is True and reason == 'FW_BEHAVIOUR_REV_UNKNOWN'
+    ok, reason = fc.arm(timeout=0.2)
+    assert ok is False and reason.startswith('FW_BEHAVIOUR_REV_UNKNOWN')
+    assert not any(kind == 'cmd' and cmd == _ARM_CMD
+                   for kind, cmd, _p in fc.master.mav.sent), 'it must not even try'
+    assert any('REFUSING TO ARM' in w for w in warnings)
+
+
+def test_a_silent_board_arms_only_with_the_override():
+    fc = _fc_reporting_rev(None)
+    fc.read_behaviour_rev = lambda *a, **k: None
+    warnings = []
+    fc._log = SimpleNamespace(info=lambda m: None, warning=warnings.append)
+    fc.allow_fw_behaviour_mismatch = True
     fc.master.auto_ack = SimpleNamespace(
         command=_ARM_CMD, result=sp.ACK_ACCEPTED, progress=0)
     fc.master.messages['HEARTBEAT'] = SimpleNamespace(
         base_mode=_ARMED, autopilot=0, custom_mode=0, _timestamp=time.time())
     ok, _reason = fc.arm(timeout=1.0)
     assert ok is True
-    assert any('BEHAVIOUR_REV' in w for w in warnings), \
-        'a silent board must still say so loudly'
+    assert any('OVERRIDDEN' in w for w in warnings), 'an override must still shout'
 
 
 def test_the_override_is_opt_in_and_still_shouts():
@@ -1225,7 +1242,7 @@ def test_depth_is_suppressed_when_the_board_calls_the_barometer_unhealthy():
     guard, all of which compare against negative constants and would just stop firing."""
     fc = _fc()
     fc.master.messages['ATTITUDE'] = SimpleNamespace(_timestamp=time.time(), roll=0.0, pitch=0.0, yaw=0.0)
-    fc.master.messages['VFR_HUD'] = SimpleNamespace(alt=-0.0, heading=160)
+    fc.master.messages['VFR_HUD'] = SimpleNamespace(_timestamp=time.time(), alt=-0.0, heading=160)
     fc.master.messages['SYS_STATUS'] = _sys_status(False)
     assert math.isnan(fc.get_attitude()['depth'])
     assert math.isnan(fc.telemetry().depth_m)
@@ -1234,7 +1251,7 @@ def test_depth_is_suppressed_when_the_board_calls_the_barometer_unhealthy():
 def test_depth_passes_through_when_the_barometer_is_healthy():
     fc = _fc()
     fc.master.messages['ATTITUDE'] = SimpleNamespace(_timestamp=time.time(), roll=0.0, pitch=0.0, yaw=0.0)
-    fc.master.messages['VFR_HUD'] = SimpleNamespace(alt=-1.5, heading=160)
+    fc.master.messages['VFR_HUD'] = SimpleNamespace(_timestamp=time.time(), alt=-1.5, heading=160)
     fc.master.messages['SYS_STATUS'] = _sys_status(True)
     assert fc.get_attitude()['depth'] == pytest.approx(-1.5)
 
@@ -1245,7 +1262,7 @@ def test_depth_is_not_blanked_before_the_first_sys_status_arrives():
     for the first half-second of every connection."""
     fc = _fc()
     fc.master.messages['ATTITUDE'] = SimpleNamespace(_timestamp=time.time(), roll=0.0, pitch=0.0, yaw=0.0)
-    fc.master.messages['VFR_HUD'] = SimpleNamespace(alt=-2.0, heading=160)
+    fc.master.messages['VFR_HUD'] = SimpleNamespace(_timestamp=time.time(), alt=-2.0, heading=160)
     assert fc.get_attitude()['depth'] == pytest.approx(-2.0)
 
 
@@ -1506,7 +1523,7 @@ def test_every_facade_fc_call_exists_on_srot():
 
 
 # --------------------------------------------------------------------------- #
-#  demand(): what was SENT, for the command-velocity model                      #
+#  demand(): what is in force, for the command-velocity model                 #
 # --------------------------------------------------------------------------- #
 def test_demand_is_None_before_any_frame():
     assert _fc().demand() is None
@@ -1561,3 +1578,88 @@ def test_a_stale_demand_is_not_a_demand(monkeypatch):
     real = time.monotonic
     monkeypatch.setattr(time, 'monotonic', lambda: real() + fc.DEMAND_FRESH_S + 0.1)
     assert fc.demand() is None
+
+
+def _echo(fc, fwd, lat, age_s=0.0):
+    """The board's DEM_FWD / DEM_LAT echo (srot-control-board PR #33)."""
+    t = time.monotonic() - age_s
+    fc._named_cache['DEM_FWD'] = (fwd, t)
+    fc._named_cache['DEM_LAT'] = (lat, t)
+
+
+def test_the_boards_echo_makes_a_board_move_KNOWN():
+    """The point of the echo: during SROT_MOVE the host's record is None, and
+    the board now says what its mixer was handed."""
+    fc = _fc()
+    fc.stop_motion()                       # an SROT_MOVE: the host's record is gone
+    _echo(fc, 0.35, -0.1)
+    assert fc.demand() == (0.35, -0.1)
+
+
+def test_the_echo_outranks_what_the_host_SENT():
+    """In AUTO the board discards MANUAL_CONTROL, so the host's record can be a
+    demand the thrusters never saw. The mixer's own number wins."""
+    fc = _fc()
+    fc.manual(fwd=0.8, lat=0.0, up=0.0, yaw=0.0)
+    _echo(fc, 0.0, 0.0)
+    assert fc.demand() == (0.0, 0.0)
+
+
+def test_a_stale_or_half_echo_falls_back_to_the_host_record():
+    """Firmware without the echo, or a link that stopped sending it, must read
+    exactly as before -- not as a four-second-old demand."""
+    fc = _fc()
+    fc.manual(fwd=0.4, lat=0.2, up=0.0, yaw=0.0)
+    _echo(fc, 0.9, 0.9, age_s=fc.DEMAND_ECHO_FRESH_S + 0.5)
+    assert fc.demand() == (0.4, 0.2)
+    fc._named_cache['DEM_FWD'] = (0.9, time.monotonic())   # only one axis fresh
+    assert fc.demand() == (0.4, 0.2)
+    fc.stop_motion()
+    assert fc.demand() is None
+
+
+def test_a_non_finite_echo_is_not_a_demand():
+    fc = _fc()
+    fc.stop_motion()
+    _echo(fc, float('nan'), 0.0)
+    assert fc.demand() is None
+
+
+def test_disarmed_still_wins_over_the_echo():
+    fc = _fc()
+    fc.master.messages['HEARTBEAT'] = SimpleNamespace(
+        base_mode=0, custom_mode=sp.MODE_STABILIZE, _timestamp=time.time())
+    _echo(fc, 0.5, 0.5)
+    assert fc.demand() == (0.0, 0.0)
+
+
+# --------------------------------------------------------------------------- #
+#  set_mode is confirmed by a heartbeat heard AFTER the command               #
+# --------------------------------------------------------------------------- #
+
+def test_a_cached_heartbeat_already_in_the_mode_does_not_confirm_set_mode():
+    """⛔ Cloud audit, 2026-11-07. pymavlink keeps the last HEARTBEAT forever, so
+    a cache that already read STABILIZE -- or a link that died in STABILIZE --
+    'confirmed' set_mode at once, and the vision verbs then streamed
+    MANUAL_CONTROL into a board that may be in AUTO, which discards it.
+    INJECTION-VERIFIED: drop the `_rx_age(hb) < ...` term and this fails."""
+    fc = _fc()
+    fc.master.messages['HEARTBEAT'] = SimpleNamespace(
+        base_mode=_ARMED, autopilot=0, custom_mode=sp.MODE_STABILIZE,
+        _timestamp=time.time() - 10.0)          # heard 10 s ago, nothing since
+    ok, reason = fc.set_mode('STABILIZE', timeout=0.2)
+    assert ok is False, 'a heartbeat from before the command is not an answer'
+
+
+def test_a_heartbeat_heard_after_the_command_confirms_set_mode():
+    fc = _fc()
+    master = fc.master
+    orig = master.mav.command_long_send
+
+    def send(*a):
+        orig(*a)
+        master.messages['HEARTBEAT'] = SimpleNamespace(
+            base_mode=_ARMED, autopilot=0, custom_mode=sp.MODE_STABILIZE,
+            _timestamp=time.time() + 0.01)
+    master.mav.command_long_send = send
+    assert fc.set_mode('STABILIZE', timeout=1.0) == (True, 'STABILIZE')

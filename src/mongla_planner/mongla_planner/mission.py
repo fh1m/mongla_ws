@@ -24,7 +24,6 @@ non-zero iff the mission raised, so wrappers / CI can detect a bad run.
 import argparse
 import sys
 import threading
-import time
 
 import rclpy
 from rclpy.node import Node
@@ -40,26 +39,41 @@ _ABORT_BANNER = """\
 ╔══════════════════════════════════════════════════════════════╗
 ║              ██  MISSION ABORT  ██                           ║
 ║                                                              ║
-║   Ctrl-C received — initiating emergency surface sequence.   ║
+║   Ctrl-C received — cancelling, stopping thrusters, disarming.║
 ╚══════════════════════════════════════════════════════════════╝\033[0m"""
 
-_SURFACE_COUNTDOWN = """\
-\033[33m  ▸ Mongla will surface on positive buoyancy.\033[0m
-\033[33m  ▸ Stand clear of the pool.\033[0m
-\033[1;33m
-  Surfacing in  3 ...{r2}  2 ...{r1}  1 ...{r0}  ☑  done.
-\033[0m"""
+# ⛔ NOT "Mongla will surface". This used to print a three-second "Surfacing
+# in 3 ... 2 ... 1 ... done" countdown that waited on nothing and measured
+# nothing, under a line promising the hull would rise on positive buoyancy. The
+# net buoyancy of this hull has never been measured (CLAUDE.md §1: no material is
+# assigned to any CAD part, so mass cannot be computed), and nothing on this path
+# commands the board's SURFACE mode -- deliberately: an operator who hits Ctrl-C
+# beside the pool wants the thrusters OFF, not driving the hull upward. So the
+# terminal says what was done, and what it cannot know.
+_AFTER_ABORT = """\
+\033[33m  ▸ Thrusters commanded off. The hull rises only if it is positively
+    buoyant, which has not been measured. Watch it; recover it by hand.\033[0m
+\033[33m  ▸ Stand clear of the pool.\033[0m"""
 
 
 def _try_step(label: str, fn) -> bool:
-    """Run fn(); print a colored result line. Returns True on success."""
+    """Run fn(); print a colored result line. Returns True on success.
+
+    A verb that RETURNS a refusal is a failure too. `disarm()` hands back the
+    board's result rather than raising, so printing [OK] for "no exception"
+    told the operator a disarm had taken when the board had refused it.
+    """
     try:
-        fn()
-        print(f'  {label:<24s} \033[32m[OK]\033[0m', file=sys.stderr)
-        return True
+        res = fn()
     except Exception as exc:
         print(f'  {label:<24s} \033[33m[--]\033[0m  ({exc!r})', file=sys.stderr)
         return False
+    if res is not None and getattr(res, 'success', True) is False:
+        msg = getattr(res, 'message', '') or 'refused'
+        print(f'  {label:<24s} \033[31m[NO]\033[0m  ({msg})', file=sys.stderr)
+        return False
+    print(f'  {label:<24s} \033[32m[OK]\033[0m', file=sys.stderr)
+    return True
 
 
 def _safe_shutdown(mongla) -> None:
@@ -91,16 +105,7 @@ def _abort_sequence(mongla, log, mission_name: str) -> None:
     _try_step('stop thrusters', lambda: mongla.stop())
     _try_step('disarm',         lambda: mongla.disarm())
 
-    # Cosmetic countdown — actual surfacing is on positive buoyancy.
-    parts = []
-    for _ in range(3):
-        time.sleep(1.0)
-        parts.append('\033[32m✔\033[0m')
-
-    print(
-        _SURFACE_COUNTDOWN.format(r2=parts[0], r1=parts[1], r0=parts[2]),
-        file=sys.stderr,
-    )
+    print(_AFTER_ABORT, file=sys.stderr)
     log.warn(f'mission "{mission_name}" aborted by user')
 
 

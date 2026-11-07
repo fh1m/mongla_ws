@@ -602,9 +602,12 @@ fc/port_guard.py    one process per serial port
 | `style_roll` | 8 style | p2=count (roll only, 90°/s) |
 
 **On the host, not through `move()`:** `arm` / `disarm` / `set_mode` (COMPONENT_ARM_DISARM
-400 / DO_SET_MODE 176, with the mode **verified**, because a silent refusal looks exactly like
-success); `surface` → `Mongla.surface()`: `stop_motion()`, then `set_mode('SURFACE')`, then
-wait for the depth to read within `SURFACED_M` of zero; `fire` → `SrotPayload` (the board's
+400 / DO_SET_MODE 176, with the mode **verified** on a heartbeat heard *after* the command,
+because a silent refusal looks exactly like success and a cached heartbeat already in that
+mode used to count as the answer); `surface` → `Mongla.surface()`: `stop_motion()`, then
+`set_mode('SURFACE')`, then wait for the depth to read within `SURFACED_M` of zero. If it
+never does, the verb **fails** and says the board is still ascending: SURFACE stays engaged,
+but a surface nobody saw is not reported as reached; `fire` → `SrotPayload` (the board's
 PCA9685 over `DO_SET_SERVO`), which takes the **board channel directly** (`fire(9)` =
 `DO_SET_SERVO param1 = 9` = `SERVO9_ROLE`) and refuses any channel the board does not call a
 SWITCH; `head`, `mission_reset`, `calibrate_depth`, `calc_distance`, `motor_test`;

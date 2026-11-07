@@ -74,12 +74,38 @@ def test_stop_in_surface_is_a_no_op_not_a_re_dive():
     assert not _moves_sent(fc)
 
 
+def _board_answers(fc, hb_after_ack):
+    """The ACK lands on send; a heartbeat after it only if `hb_after_ack`."""
+    master = fc.master
+    orig = master.mav.command_long_send
+
+    def send(*a):
+        orig(*a)
+        master.messages['COMMAND_ACK'] = _ack(sp.ACK_ACCEPTED)
+        if hb_after_ack:
+            master.messages['HEARTBEAT'] = _hb('AUTO', t=time.time() + 0.01)
+    master.mav.command_long_send = send
+
+
 def test_moves_still_go_out_in_normal_modes():
     fc = _fc_with_board('AUTO')
-    fc.master.auto_ack = _ack(sp.ACK_ACCEPTED)
+    _board_answers(fc, hb_after_ack=True)    # the board sends HEARTBEAT at 10 Hz
     res = fc.move('move_forward', duration=3.0, gain=50.0)
     assert res.code == SUCCEEDED
     assert _moves_sent(fc)
+
+
+def test_a_heartbeat_from_before_the_ack_cannot_vouch_for_the_move():
+    """⛔ Cloud audit, 2026-11-07. With no heartbeat after the ACK, the one in
+    hand predates the move's end: ARMED and AUTO whatever a failsafe did since.
+    Judged on it, a cut-short move read as completed exactly when the link was
+    struggling. INJECTION-VERIFIED: drop the stale-heartbeat return and this
+    reports SUCCEEDED."""
+    fc = _fc_with_board('AUTO')
+    _board_answers(fc, hb_after_ack=False)
+    res = fc.move('move_forward', duration=3.0, gain=50.0)
+    assert res.code == FAILED, res.reason
+    assert 'unverified' in res.reason
 
 
 def test_a_move_cut_short_by_a_failsafe_surface_is_failed_not_completed():
