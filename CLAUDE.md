@@ -23,7 +23,9 @@ measurement, the measurement wins — and both belong in
 
 **Three states, never blurred.** Say which one you mean:
 **RUNS TODAY** (on the bench / on footage) · **BUILT, NEVER FLOWN** · **BLOCKED** (on
-hardware, water, or a firmware merge). Nothing on this platform has been in water.
+hardware, water, or a firmware merge). **This stack and the Mongla hull have never been in
+water.** The SROT board has, once: on 2026-08-07, in the old competition hull and driven by the
+firmware team's own tools (their commits `09d0033`, `f533bd2`).
 
 ---
 
@@ -77,9 +79,14 @@ final either — a capability that needs a new sensor is a conversation with the
 
 ## 2. Working with the board — the traps that cost us runs
 
-**Warning: The depth loop has never run closed.** `SROT_MOVE` enters the board's automatic mode and
-**every** primitive there closes the depth loop — including a plain `move_forward`. Two armed
-bench checks gate all of them. An in-air move is *not* partial validation (at ~0 m, target and
+**Warning: The depth loop has never run closed under this stack.** `SROT_MOVE` enters the board's
+automatic mode and **every** primitive there closes the depth loop — including a plain
+`move_forward`. Two armed bench checks gate all of them. The 2026-08-07 water test closed it
+in `DEPTH_HOLD` on the old hull: it bounced at `DEPTH_P` 3.0, was tuned in water to
+P 0.5 / I 0.1 / D 0.01 (now the defaults), and a `DEPTH_HOLD` to `AUTO` transition crashed the
+board, which the bench could not reproduce because it needs a live barometer. So nothing has
+validated `AUTO`, the mode every move verb uses. The firmware's own comments still say "never
+run closed", which is older than that test. An in-air move is *not* partial validation (at ~0 m, target and
 measurement agree). [`srot-integration.md`](.claude/context/platform/srot-integration.md)
 
 **Warning: Firmware version is a hull-safety interlock.** The board reports `SROT_FW_BEHAVIOUR_REV`;
