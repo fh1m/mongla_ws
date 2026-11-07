@@ -1,0 +1,32 @@
+src/mongla_localization/test/test_every_sensor_is_accounted_for.py
+  s_b4c45e3235679b::t_e3213705695a2b 20,26-27,74
+src/mongla_localization/test/test_localization_node.py
+  s_b4c45e3235679b::t_d95a51603e9ab1 16-17,200,272-273,280,306,440,558,813,895,1025,1061,1081,1112,1237,1264
+src/mongla_localization/test/test_real_board_at_rest.py
+  s_b4c45e3235679b::t_d95a51603e9ab1 15
+src/mongla_localization/mongla_localization/localization_node.py
+  s_b4c45e3235679b::t_e3213705695a2b 32-38
+  s_b4c45e3235679b::t_e57de8ab6757c8 57,60,63-64,67
+.claude/context/packages/mongla_localization/README.md
+  s_b4c45e3235679b::t_e3213705695a2b 134,136
+src/mongla_localization/mongla_localization/localization_inputs.py
+  s_b4c45e3235679b::t_2511b126108d1e 1-593
+src/mongla_localization/mongla_localization/localization_publish.py
+  s_b4c45e3235679b::t_c7e08acc6f361f 1-179
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "4ef83006a299ef9e7737d18b80ca0d1badf43d28",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
