@@ -1,0 +1,37 @@
+src/mongla_vision/mongla_vision/lock_frames.py
+  s_b4c45e3235679b::t_c63aa4d23a5002 1-6,26-199
+  s_b4c45e3235679b::t_2af12b80c3a2df 7-25
+src/mongla_vision/mongla_vision/lock_node.py
+  s_b4c45e3235679b::t_ba459da97acaad 29-30,51,93-94
+  s_b4c45e3235679b::t_c63aa4d23a5002 31-32,53,104-111
+  s_b4c45e3235679b::t_1e5e9f1d5421fb 48
+src/mongla_vision/mongla_vision/lock_setup.py
+  s_b4c45e3235679b::t_2af12b80c3a2df 4
+  s_b4c45e3235679b::t_264da629751fe0 16
+.claude/context/reference/commands.md
+  s_b4c45e3235679b::t_126b0731fd7793 563-565
+src/mongla_vision/test/test_target_geometry.py
+  s_b4c45e3235679b::t_522882d7c0fc6f 107,128
+src/mongla_vision/test/test_snap_pairs_the_right_frame.py
+  s_b4c45e3235679b::t_2af12b80c3a2df 21
+.claude/context/packages/mongla_vision/README.md
+  s_b4c45e3235679b::t_126b0731fd7793 154,159
+src/mongla_vision/mongla_vision/lock_wiring.py
+  s_b4c45e3235679b::t_ba459da97acaad 1-394
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "65ae22d95b647fbc3f7f03323569b18d925e055a",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
