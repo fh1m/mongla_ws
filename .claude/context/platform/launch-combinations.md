@@ -28,10 +28,12 @@ Hailo-8, forward and downward cameras.
 ## 0. Every terminal
 
 ```bash
-cd ~/Ros_workspaces/mongla_ws
-source install/setup.bash
+cd ~/mongla_ws                                    # on Kutum; ROS and the workspace are already sourced
 source scripts/pool_session.sh gate_practice_am   # same label in every terminal
 ```
+
+On a dev box, `cd` to your checkout and `source install/setup.bash` first; Kutum's
+`env.sh` does both for every shell on the vehicle.
 
 `pool_session.sh` puts the bag, the scorecard and every node's log for this run
 in one folder, `~/mongla_runs/<label>`. Source it — executing it does nothing.

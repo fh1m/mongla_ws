@@ -1,6 +1,6 @@
 """The preflight firmware-behaviour-rev gate.
 
-This grades the one number that decides whether `stop` decelerates 20 kg of hull.
+This grades the one number that decides whether `stop` decelerates ten-plus kilograms of hull.
 Below `FW_BEHAVIOUR_REV_REQUIRED` the board's MOVE_STOP applies zero braking thrust
 and this host no longer carries the reverse-leg brake that used to cover it -- so a
 misgrade here is a silent failure in the water, not an error anyone would see.
@@ -231,7 +231,7 @@ def test_the_reader_thread_starts_before_the_payload_role_read():
 # --------------------------------------------------------------------------- #
 def test_wildcarded_gcs_failsafe_is_a_hard_fail():
     """MEASURED on the vehicle 2026-08-07: FS_GCS_ENABLE=1, FS_GCS_COMPID=0, and
-    `bringup_check --srot` reported 0 FAIL. Bench mode had been saved to flash.
+    `bringup_check` reported 0 FAIL. Bench mode had been saved to flash.
 
     0 is the wildcard, so any station -- Bondor on the bench -- keeps the failsafe fed.
     In water a dead companion then looks like a live GCS and the hull station-keeps

@@ -11,7 +11,7 @@
 # and it exits 1 on any FAIL, so `kutum/deploy.sh` can stop on it.
 #
 # What it does NOT grade: the board, the cameras' images, the models. Those are
-# the vehicle's, and `ros2 run mongla_manager bringup_check --srot` grades them.
+# the vehicle's, and `ros2 run mongla_manager bringup_check` grades them.
 # This grades the machine underneath: the OS, ROS, the Hailo, Python, the
 # system files kutum/system/ installs, and what boots.
 #

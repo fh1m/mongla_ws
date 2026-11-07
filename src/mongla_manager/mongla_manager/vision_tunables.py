@@ -54,7 +54,7 @@ VISION_PARAM_DEFAULTS: Dict[str, Any] = {
     # --- precision-alignment knobs (close-in robustness; all default OFF) -----
     # range_gain_floor: lat/surge kp multiplier when the bbox FILLS the frame
     # (close). Normalized-pixel P-control's loop gain rises ~1/range, so a kp
-    # stable far-field over-drives close-in and the 20 kg hull oscillates off a
+    # stable far-field over-drives close-in and the hull oscillates off a
     # small target. Scaling kp down near the target (1.0=off, ~0.3=gentle)
     # restores damping. 1.0 keeps today's behaviour until the operator dials it.
     'vision.range_gain_floor':     1.0,

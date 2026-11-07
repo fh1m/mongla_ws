@@ -24,8 +24,9 @@ measurement, the measurement wins — and both belong in
 **Three states, never blurred.** Say which one you mean:
 **RUNS TODAY** (on the bench / on footage) · **BUILT, NEVER FLOWN** · **BLOCKED** (on
 hardware, water, or a firmware merge). **This stack and the Mongla hull have never been in
-water.** The SROT board has, once: on 2026-08-07, in the old competition hull and driven by the
-firmware team's own tools (their commits `09d0033`, `f533bd2`).
+water.** The SROT board has: on 2026-08-06 and 2026-08-07, in the old Dubomini hull, driven by the
+firmware team's own tools (their commits `09d0033`, `f533bd2`; our record is
+`srot-integration.md`, *IN-WATER 2026-08-06*).
 
 ---
 
@@ -81,7 +82,7 @@ final either — a capability that needs a new sensor is a conversation with the
 
 **Warning: The depth loop has never run closed under this stack.** `SROT_MOVE` enters the board's
 automatic mode and **every** primitive there closes the depth loop — including a plain
-`move_forward`. Two armed bench checks gate all of them. The 2026-08-07 water test closed it
+`move_forward`. Two armed bench checks gate all of them. The 2026-08-06/07 water tests closed it
 in `DEPTH_HOLD` on the old hull: it bounced at `DEPTH_P` 3.0, was tuned in water to
 P 0.5 / I 0.1 / D 0.01 (now the defaults), and a `DEPTH_HOLD` to `AUTO` transition crashed the
 board, which the bench could not reproduce because it needs a live barometer. So nothing has
@@ -103,7 +104,7 @@ intended configuration** and would cancel it. Read the parameters before arming.
 
 **Warning: An unhealthy barometer refuses `DEPTH_HOLD`/`AUTO`/`PATTERN`** — and since `SROT_MOVE`
 enters `AUTO`, that means **every move verb is denied**: the vehicle arms and simply will not
-move. `bringup_check --srot` reads this off `SYS_STATUS`. `VFR_HUD` is *not* gated on baro
+move. `bringup_check` reads this off `SYS_STATUS`. `VFR_HUD` is *not* gated on baro
 health and is where we read depth, so **never infer sensor health from the presence of a depth
 value**.
 
@@ -130,7 +131,7 @@ a missing number in `MonglaState` is `NaN`.
 
 ```bash
 ros2 run mongla_manager connect --watch      # everything the board sends; no ROS graph needed
-ros2 run mongla_manager bringup_check --srot # grades each subsystem, exits non-zero on a fault
+ros2 run mongla_manager bringup_check # grades each subsystem, exits non-zero on a fault
 ```
 
 `connect` **reports** (always exits 0); `bringup_check` **grades and gates**. Use the first to
@@ -268,7 +269,7 @@ kutum/backup.sh fh1m@mongla.local              # pull what only the vehicle has
 source install/setup.bash
 
 ros2 launch mongla_manager bringup.launch.py vision:=true    # the vehicle
-ros2 run mongla_manager bringup_check --srot                 # can it arm?
+ros2 run mongla_manager bringup_check                 # can it arm?
 ros2 run mongla_planner mongla arm                           # one verb
 ros2 run mongla_planner mission --list                       # missions
 ```
@@ -293,7 +294,7 @@ card). The chapter is [`.claude/context/kutum/`](.claude/context/kutum/README.md
 | script | runs on | what it does |
 |---|---|---|
 | `setup.sh --system` | the Pi, with sudo, **once per machine** | Hailo driver, firmware and runtime from source; udev, systemd, netplan; passwordless sudo for `fh1m`; then the user half and the doctor. The operator runs it, because it asks for the Wi-Fi password |
-| `deploy.sh fh1m@mongla.local` | the dev box, after every change | sync the tree, run the doctor, clean build, run `bringup_check --srot`. Stops on a doctor `FAIL`, exits non-zero if the gate refuses, and refuses while a `mongla_manager` runs there |
+| `deploy.sh fh1m@mongla.local` | the dev box, after every change | sync the tree, run the doctor, clean build, run `bringup_check`. Stops on a doctor `FAIL`, exits non-zero if the gate refuses, and refuses while a `mongla_manager` runs there |
 | `doctor.sh` | either (read-only) | `ok` / `WARNING` / `FAIL` for every assumption the stack makes about the machine; exits 1 on `FAIL` |
 | `backup.sh fh1m@mongla.local` | the dev box | pull what only the vehicle has, into `~/kutum-backup/mongla/` (`--runs` adds runs and footage) |
 | `env.sh` | every shell on the Pi | ROS and the workspace, already sourced |

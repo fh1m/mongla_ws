@@ -138,7 +138,7 @@ def align_loop(*,
       * ``depth`` (image-Y) -> SURGE fore/aft -- REMAPPED. Two-sided P-on-pixel
         modelled on the lat axis (rgain + freshness-decay + arrival reverse-kick
         brake), NOT the depth setpoint. Surge is open-loop timed thrust so it MUST be
-        braked or the 20 kg hull coasts past the bin. ``surge_sign`` flips its
+        braked or the hull coasts past the bin. ``surge_sign`` flips its
         polarity for the physical mount (verify DISARMED with vision_thrust_check --
         a wrong sign is positive feedback that drives the hull AWAY from the bin).
       * fire -> dropper via ``on_locked`` -- same mechanism as torpedo.
@@ -423,7 +423,7 @@ class _Align(_VisionLoop):
         c = self.c
         half_w, half_h = self.half_w, self.half_h
         # Range-adaptive gain: soften lat/surge kp as the bbox fills the frame
-        # (close) so the 20 kg hull doesn't overshoot a small target.
+        # (close) so the hull doesn't overshoot a small target.
         rgain = _range_gain(_fill(sample, 'area'), c.range_gain_floor)
         yaw_pct = lat_pct = p_lat = fwd_pct = 0.0
         in_band = []

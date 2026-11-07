@@ -31,7 +31,7 @@ class SrotArming:
         the situation on the vehicle. As a vehicle-side guarantee it is worth zero.
         The hazard it is supposed to guard is silent in both directions: pre-rev-2
         firmware COASTS on MOVE_STOP and we no longer carry a host brake, so a
-        `stop` or an abort simply does not decelerate 20 kg of hull, with nothing
+        `stop` or an abort simply does not decelerate ten-plus kilograms of hull, with nothing
         in any log to say why. That has to be caught on the wire, before arming.
 
         A rev of 0 is NOT "unknown" -- it is what firmware older than 2026-08-01

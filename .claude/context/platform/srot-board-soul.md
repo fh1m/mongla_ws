@@ -270,7 +270,7 @@ one. Two change vehicle behaviour silently:
   translation) and `LEAK_EN` back to 0.
 - **`"NVS reformatted"`** — additionally loses the sensor calibration.
 
-`boot_warnings()` surfaces these; they belong in `bringup_check --srot` as
+`boot_warnings()` surfaces these; they belong in `bringup_check` as
 FAILs.
 
 ## 13. Corrections to what this document said before the sweep

@@ -29,7 +29,7 @@ source scripts/pool_session.sh gate_am     # exports MONGLA_RUN_DIR + ROS_LOG_DI
 `ros2 run mongla_manager start` equivalent that *also* wires vision + Foxglove; the same
 `-p` params become `arg:=`, and an empty `mav_device` finds the board):
 ```bash
-ros2 run mongla_manager bringup_check --srot  # graded preflight; fix any FAIL first
+ros2 run mongla_manager bringup_check  # graded preflight; fix any FAIL first
 ros2 launch mongla_manager bringup.launch.py vision:=true foxglove:=true
 ```
 > Prefer your existing `ros2 run mongla_manager start …`? It has no Foxglove arg — start

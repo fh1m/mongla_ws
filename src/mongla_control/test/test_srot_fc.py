@@ -204,7 +204,7 @@ def test_a_stall_brakes_the_vehicle_and_not_only_the_caller():
     and on a stall it streams IN_PROGRESS forever (a failsafe mid-leg takes it
     out of AUTO without ever resolving) -- so the host deadline is the only
     terminator there is. Returning TIMEOUT without braking hands control back
-    to a mission that believes the move ended, while a 20 kg hull is still
+    to a mission that believes the move ended, while a hull of ten kilograms or more is still
     driving the leg.
 
     The abort path has asserted its brake since it was written; this path did
@@ -666,7 +666,7 @@ def test_arm_is_refused_on_firmware_older_than_required():
     """THE regression this whole interlock exists for.
 
     Rev 1 COASTS on MOVE_STOP and we deleted `_brake_last_leg`, so `stop` and every
-    abort would apply zero braking thrust to 20 kg of hull with nothing in the log.
+    abort would apply zero braking thrust to ten-plus kilograms of hull with nothing in the log.
     Arming is the last gate before anything can move, so it is where a known-bad
     board has to be turned away.
     """

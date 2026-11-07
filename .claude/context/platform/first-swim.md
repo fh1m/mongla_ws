@@ -27,7 +27,7 @@ So the run depends on four things only, and each has a check below:
 
 | what | what can go wrong | where it is checked |
 |---|---|---|
-| the board | the depth loop has never run closed; every move closes it | step 2 |
+| the board | the automatic mode's depth loop has never run closed under this stack; every move closes it | step 2 |
 | Kutum | the mission dies when the tether is pulled | step 4 |
 | the thrusters | the mixer is for a different hull, or an axis is inverted | step 2 |
 | the kill switch | power is cut but the board stays armed | step 6 |
@@ -85,7 +85,7 @@ RTC-to-system offset are checked here, not on the day.
 
 ```bash
 ros2 run mongla_manager connect --watch       # look
-ros2 run mongla_manager bringup_check --srot  # decide: exits non-zero on a fault
+ros2 run mongla_manager bringup_check  # decide: exits non-zero on a fault
 ```
 
 Read, in this order:
@@ -101,8 +101,11 @@ Read, in this order:
    (step 4 there). Every move in this mission closes the depth loop, including
    the straight legs. Until both checks pass, this page stops here.
 5. **The mixer matches the hull in the water.** The firmware mixes for eight
-   thrusters; the current CAD has five. Which hull swims is a decision, not a
-   check, and it has to be made before step 5.
+   thrusters, the old Dubomini matrix. The Mongla hull has five in the CAD and
+   seven when finished, and its mixer is open as
+   [srot-control-board#39](https://github.com/RakibulIslam1/srot-control-board/pull/39).
+   Which hull swims, and which `FRAME_CLASS` the board runs for it, is a decision,
+   not a check, and it has to be made before step 5.
 
 ## 3. The kill switch, on the bench
 
@@ -164,7 +167,8 @@ The first run is a measurement, not a performance. Before the second:
   from it, not from hope.
 - **The turn:** on the outside camera, was it clockwise, and how far did it
   overshoot? A turn that never reaches its target is reported done at 100 %
-  (firmware item 5 on the upstream list), so check it on the outside camera, not in the log.
+  ([srot-control-board#36](https://github.com/RakibulIslam1/srot-control-board/issues/36)),
+  so check it on the outside camera, not in the log.
 - **Depth:** held within what band, on each leg.
 
 Each goes in [`measured-bars.md`](../measured-bars.md) with its conditions, and

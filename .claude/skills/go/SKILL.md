@@ -44,7 +44,7 @@ Strongest first. Use the highest rung the change can reach.
 | Rung | Oracle | When |
 |---|---|---|
 | 1 | Water / bench run with the board attached | only with a human on the kill switch; nothing here has been in water |
-| 2 | `ros2 run mongla_manager bringup_check --srot` | anything touching the board, arming, or bring-up gating |
+| 2 | `ros2 run mongla_manager bringup_check` | anything touching the board, arming, or bring-up gating |
 | 3 | `./build_mongla.sh` then `pytest` | any source change — this is the default rung |
 | 4 | Replay a recorded bag (`scripts/pool_record.sh`) or archive footage (`video.launch.py`) | perception and tracking changes, against real footage |
 | 5 | `tools/control_bench` — the board's own C++ compiled natively | control behaviour against the firmware's real attitude and mixer code |

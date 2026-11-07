@@ -95,7 +95,7 @@ node, so `find_srot_serial()` finds nothing:
    ships it by default. `sudo kutum/setup.sh --system` purges it.
 2. **The kernel has no `ch341`.** A custom or vendor kernel can ship with
    `CONFIG_USB_SERIAL_CH341` unset; `modinfo ch341` says whether this one has it.
-`bringup_check --srot` grades both (section C) and prints the fix.
+`bringup_check` grades both (section C) and prints the fix.
 
 ---
 

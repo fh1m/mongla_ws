@@ -1,4 +1,4 @@
-"""Bringup checks of the SROT board (`bringup_check --srot`): firmware, barometer, depth loop, failsafe, memory.
+"""Bringup checks of the SROT board (`bringup_check`): firmware, barometer, depth loop, failsafe, memory.
 
 The verdict functions are pure -- they take values already read -- so each is tested
 without a board. `_check_srot` is the one that talks to it, read-only.

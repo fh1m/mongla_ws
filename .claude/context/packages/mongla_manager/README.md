@@ -95,7 +95,7 @@ it, behaviour is exactly as before.
 |---|---|
 | `ros2 run mongla_manager start` | the node itself (also `auv_manager`, `auv_manager_node`) |
 | `ros2 run mongla_manager connect` | open the board's link and print everything it sends — no ROS graph, no built workspace needed. `--watch` for live, `--json` for machines |
-| `ros2 run mongla_manager bringup_check` | preflight that grades each subsystem and exits non-zero on a real fault; `--srot` adds the board-specific checks |
+| `ros2 run mongla_manager bringup_check` | preflight that grades each subsystem and exits non-zero on a real fault; the board is checked whenever one answers (`--skip-mavlink` skips it, `--strict` fails on a WARN) |
 | `ros2 run mongla_manager autotune` | run the board's own gain tuning, in water, behind a typed confirmation |
 | `ros2 run mongla_manager flare_order` | send the competition's flare order to the vehicle over the radio |
 
@@ -113,7 +113,7 @@ to decide.
 | `node_health.py` | the health report and the two watchdogs |
 | `node_support.py` | the node's shared constants and the heartbeat thread |
 | `bringup_check.py` | the preflight: its sections in order, and the exit code |
-| `bringup_host.py` · `bringup_board.py` · `bringup_grade.py` | the checks of the computer, the checks of the board (`--srot`), and the PASS/WARN/FAIL line they all report in |
+| `bringup_host.py` · `bringup_board.py` · `bringup_grade.py` | the checks of the computer, the checks of the board, and the PASS/WARN/FAIL line they all report in |
 | `srot_connect.py` · `srot_format.py` · `srot_changes.py` | reading the board, formatting it, showing what changed |
 | `srot_autotune.py` | the operator's front end to the board's tuning routine |
 | `srot_recorder.py` | raw MAVLink capture for later analysis |
@@ -140,7 +140,7 @@ ros2 launch mongla_manager bringup.launch.py vision:=true
 ros2 run mongla_manager start
 
 # is the board healthy enough to arm?
-ros2 run mongla_manager bringup_check --srot
+ros2 run mongla_manager bringup_check
 ```
 
 Every capability in the launch file is a switch with a default we can defend. Bring the
@@ -171,7 +171,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | module | what it is |
 |---|---|
 | `auv_manager_node.py` | AUV Manager Node -- Terminal 1. |
-| `bringup_board.py` | Bringup checks of the SROT board (`bringup_check --srot`): firmware, barometer, depth loop, failsafe, memory. |
+| `bringup_board.py` | Bringup checks of the SROT board (`bringup_check`): firmware, barometer, depth loop, failsafe, memory. |
 | `bringup_check.py` | the pre-flight gate for the SROT vehicle. |
 | `bringup_grade.py` | How every bringup check reports: a grade and one aligned line. |
 | `bringup_host.py` | Bringup checks of the computer itself: ROS, disk, drivers, cameras, models, the Hailo, power. |

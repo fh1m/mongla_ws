@@ -81,7 +81,7 @@ def draw() -> Path:
     fig.text(0.80, 0.83, 'owned by', color=MUTED, fontsize=9.5, va='bottom')
     fig.text(0.02, 0.045, 'kutum/doctor.sh reads every layer back, read-only.   '
              'Nothing here grades the board, the cameras or the models: '
-             'bringup_check --srot does.', color=WARM, fontsize=9.5)
+             'bringup_check does.', color=WARM, fontsize=9.5)
     buf = io.BytesIO()
     fig.savefig(buf, format='png', facecolor=BG)
     plt.close(fig)

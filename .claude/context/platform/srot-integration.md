@@ -82,6 +82,14 @@ print(m.recv_match(type='PARAM_VALUE', blocking=True, timeout=5))   # None => up
 
 ### IN-WATER 2026-08-06: every axis reversed + flips in STABILIZE
 
+> **Warning: This is a record, not a procedure to follow today.** It happened on the old
+> eight-thruster hull (Dubomini), on firmware rev 6. Rev 7 added `FRAME_REVERSE`, which fixes
+> the same symptom at the axis layer and is set to 1 on our hull. Setting all eight
+> `MOT_n_DIRECTION = -1` on top of it **cancels** that fix and inverts every axis again.
+> Read the parameters with `connect --watch` before changing any of them, and see
+> [srot-control-board#34](https://github.com/RakibulIslam1/srot-control-board/issues/34)
+> for why MOTOR_DETECT and `FRAME_REVERSE` cannot both be right.
+
 Symptoms: in MANUAL on the joystick, forward/back, yaw and depth all drove the **opposite**
 way; in STABILIZE the vehicle **flipped** after arming. Thruster directions had been
 verified against the documentation, and level calibration had been done.
@@ -173,7 +181,7 @@ Measured on the way past: **0.0 % `BAD_DATA` on direct serial** (436 msgs/5 s), 
   mode is back in flash**, one day after being corrected to 191. This is not a one-off; it
   is what this param does when Bondor is used on the bench and someone saves. Prose in a doc
   did not hold it, so it is now a **graded preflight line** (`_gcs_failsafe_verdict`,
-  section D) that FAILs — `bringup_check --srot` had been reporting **0 FAIL on a vehicle in
+  section D) that FAILs — `bringup_check` had been reporting **0 FAIL on a vehicle in
   bench mode**. Fix and persist:
   ```bash
   # Bondor -> Parameters -> FS_GCS_COMPID = 191 -> Save
@@ -190,7 +198,7 @@ Measured on the way past: **0.0 % `BAD_DATA` on direct serial** (436 msgs/5 s), 
   **Caution: Match `"Params saved"`, not just `"saved"`.** The board emits **two** lines and the
   *calibration* one comes first — our first attempt matched it, returned early, and reported
   a params write it had not seen. That recreates rev 7's own silence-means-success bug on the
-  client side. `bringup_check --srot` now grades this param (`_gcs_failsafe_verdict`) and
+  client side. `bringup_check` now grades this param (`_gcs_failsafe_verdict`) and
   reads `FS_GCS_COMPID=191 (scoped to us)`.
 - **`MOT_n_DIRECTION` → −1 (all eight).** The factory default is +1, which is the state that
   produced the reversed axes in the first place, so restoring defaults would have handed
@@ -200,7 +208,7 @@ Measured on the way past: **0.0 % `BAD_DATA` on direct serial** (436 msgs/5 s), 
 **Final state:** rev 6 · MANUAL · disarmed · motor dirs uniform · `CAL_LVL_R/P` restored ·
 `FS_GCS_COMPID` 191 · `JS_GAIN_DEFAULT` 1.0 · payload roles restored (1-4 + 9-16 SWITCH,
 5-8 SERVO) · **`DEPTH_OUT` 0.000 — the wound-up integrator is gone**, cleared by the erase.
-`bringup_check --srot` → **0 FAIL**.
+`bringup_check` → **0 FAIL**.
 
 **Still owed, and it is the whole point of rev 6: run MOTOR_DETECT in water, armed.** The
 current directions are a *global* correction that happens to work; detect will derive each
@@ -453,7 +461,7 @@ Board on this dev box, `/dev/ttyUSB0`, by-id `usb-1a86_USB_Serial-if00-port0` (C
 
 | check | result |
 |---|---|
-| `bringup_check --srot` | **0 FAIL, exit 0** — every SROT line PASS |
+| `bringup_check` | **0 FAIL, exit 0** — every SROT line PASS |
 | fw behaviour rev | **7** (via `MAV_CMD_REQUEST_MESSAGE(148)`) |
 | `FS_GCS_COMPID` | **191**, written and confirmed in flash (above) |
 | barometer spread | **2.94 mbar** on USB vs **5.87** over the August bridge — visibly cleaner |
@@ -492,7 +500,7 @@ Bondor's **BENCH MODE** covers it by setting `FS_GCS_COMPID = 0` with a `PARAM_S
 never `PREFLIGHT_STORAGE`, so a power cycle restores the flight value. **Never press Save
 while bench mode is active**, and never take the wildcard into the water: a dead companion
 could no longer be told from a live GCS, and the vehicle would station-keep instead of
-surfacing. `bringup_check --srot` grades `FS_GCS_COMPID` and FAILs on the wildcard.
+surfacing. `bringup_check` grades `FS_GCS_COMPID` and FAILs on the wildcard.
 
 ### Payload identity comes from the board (`SERVOn_FUNCTION`)
 
@@ -540,7 +548,7 @@ The connector fault is **resolved**, measured on the vehicle 2026-08-03 against 
 | depth in air | +0.9 … +6.8 m | −0.05 … +0.07 m |
 | `DEPTH_OUT` | pinned **−1.00** | **0.000** |
 
-`bringup_check --srot` now grades `barometer 983.7 mbar, spread 5.92` and `depth loop
+`bringup_check` now grades `barometer 983.7 mbar, spread 5.92` and `depth loop
 settled` as PASS. The arming hazard from the phantom-depth saturation is gone.
 
 **That is the barometer, not the loop.** On rev 4, `DEPTH_CMD` read `-0.329202` while
@@ -557,7 +565,8 @@ outputs are *not* evidence of a healthy loop either: a live controller tracking 
 command cannot hold a constant error to three decimals. Both readings support the same
 conclusion for opposite reasons, which is why the conclusion has not moved:
 
-**The depth loop has still never run closed**, it gates *every* AUTO move (`move_forward`
+**The depth loop has still never run closed in `AUTO`** (the 2026-08-06/07 water tests closed
+`DEPTH_HOLD` only, and the transition to `AUTO` crashed the board), it gates *every* AUTO move (`move_forward`
 included — there is no depth-free path through AUTO), and the two **armed** bench checks
 in the runbook below remain the gate. "Bar30 fixed" must never be read as "depth verified".
 **Caution:** Note `|−0.115| < 0.90`, so `check_depth_loop_settled` still passes — it is an
@@ -695,7 +704,7 @@ Rev 3 landed with the board **in the vehicle**, and its theme is that the firmwa
    whose depth loop has never run closed, that is what the first dive would have flown on.
 2. **An unhealthy or stale baro now refuses `DEPTH_HOLD`/`AUTO`/`PATTERN`.** `SROT_MOVE`
    enters `AUTO`, so this means **every move verb is denied** — `move_forward` included.
-   `bringup_check --srot` reads it via `_baro_health_verdict` off `SYS_STATUS`, because on
+   `bringup_check` reads it via `_baro_health_verdict` off `SYS_STATUS`, because on
    the deck the symptom is "it arms and then does nothing".
 3. **`WTEMP` and `SCALED_PRESSURE2` are suppressed when the baro is unhealthy**, and
    `SCALED_IMU2.temperature` sends MAVLink's `0` "not provided". Absence is the signal.

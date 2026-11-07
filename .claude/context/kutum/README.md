@@ -65,7 +65,7 @@ vehicle sources. Usage, flags and the rebuild checklist are in
 **Key point:** the doctor and `bringup_check` split the work at the USB port. The doctor
 grades the machine — the OS, ROS, the Hailo, Python, the system files and what boots. It
 never looks at the board, the cameras' images or the models. `ros2 run mongla_manager
-bringup_check --srot` grades those, and the doctor will happily say "no FAIL" on a vehicle
+bringup_check` grades those, and the doctor will happily say "no FAIL" on a vehicle
 whose board is unplugged.
 
 ## The machine, as measured
@@ -138,7 +138,7 @@ The steps, in order, are in [`kutum/README.md`](../../../kutum/README.md#when-ku
 - **Not a configuration manager.** One machine, one owner, Bash that ships with the OS. Ansible
   or Nix would be a second language to keep in your head for a problem that is five files
   long. The day there are three vehicles, that answer changes.
-- **Not the vehicle's gate.** The doctor grades the computer; `bringup_check --srot` decides
+- **Not the vehicle's gate.** The doctor grades the computer; `bringup_check` decides
   whether the vehicle can arm.
 - **Not a place for experiments.** Research on the vehicle runs from the deployed tree or in
   `~/data/hailo_bench/`, and what it finds comes back through git like everything else.

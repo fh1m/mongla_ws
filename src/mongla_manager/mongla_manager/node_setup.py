@@ -96,7 +96,7 @@ class SetupMixin:
         # srot_protocol.FW_BEHAVIOUR_REV_REQUIRED. OFF by default and it should stay
         # off. On pre-rev-2 firmware MOVE_STOP COASTS -- it applies zero braking thrust
         # -- and the host-side reverse-leg brake that used to cover that has been
-        # removed, so `stop` and every abort would simply not decelerate 20 kg of hull,
+        # removed, so `stop` and every abort would simply not decelerate ten-plus kilograms of hull,
         # with nothing in any log to say why. Setting this true is accepting that.
         self.declare_parameter('allow_fw_behaviour_mismatch', False)
         # Verbose SROT telemetry block period (s); 0 disables. Default 2.0 --

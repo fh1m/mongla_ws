@@ -69,7 +69,7 @@ On the vehicle, every shell already has ROS and the workspace (`env.sh`), so:
 
 ```bash
 ~/mongla_ws/kutum/doctor.sh
-ros2 run mongla_manager bringup_check --srot
+ros2 run mongla_manager bringup_check
 ```
 
 **Caution:** `deploy.sh` does a clean build, which deletes `install/`. It refuses while a
@@ -99,7 +99,7 @@ that. From a blank SD card to a gated vehicle:
    `rsync -a --exclude .backed-up ~/kutum-backup/mongla/ fh1m@mongla.local:~/`
 7. From the dev box: `kutum/deploy.sh fh1m@mongla.local`. The detector models travel with
    the tree (they are untracked files in `src/mongla_vision/models/`, so they come from
-   the dev box's copy). It builds and runs `bringup_check --srot`.
+   the dev box's copy). It builds and runs `bringup_check`.
 8. **Plug in the board** and pin it once:
    `~/mongla_ws/kutum/system/udev/make_srot_rule.sh`.
 
