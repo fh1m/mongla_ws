@@ -1,0 +1,58 @@
+src/mongla_interfaces/msg/TargetPose.msg
+  s_b4c45e3235679b::t_f67142837c9b3c 36
+tools/control_bench/shim/Arduino.h
+  s_b4c45e3235679b::t_f67142837c9b3c 4,16,64
+.claude/context/missions/mission-cookbook.md
+  s_b4c45e3235679b::t_f67142837c9b3c 1510
+.claude/context/missions/verbs-srot-unlocks.md
+  s_b4c45e3235679b::t_f67142837c9b3c 19-23
+tools/control_bench/bench_api.cpp
+  s_b4c45e3235679b::t_f67142837c9b3c 46,77,86,102,117,129
+tools/control_bench/shim/freertos/semphr.h
+  s_b4c45e3235679b::t_f67142837c9b3c 6
+tools/udev/99-mongla-cameras.rules
+  s_b4c45e3235679b::t_f67142837c9b3c 34
+.claude/context/reference/commands.md
+  s_b4c45e3235679b::t_a54048f928b25e 334,338,344-345,355-356
+src/mongla_planner/mongla_planner/missions/competition_config.py
+  s_b4c45e3235679b::t_363c6fdb241bd4 218
+tools/control_bench/shim/freertos/FreeRTOS.h
+  s_b4c45e3235679b::t_f67142837c9b3c 3,19
+src/mongla_localization/test/test_lens_comes_off_before_the_port.py
+  s_b4c45e3235679b::t_363c6fdb241bd4 39
+test/test_claims_say_where_they_came_from.py
+  s_b4c45e3235679b::t_f413d46435a16f 1-99,101-112
+  s_b4c45e3235679b::t_987afbe0f6e3e7 100
+src/mongla_interfaces/action/Move.action
+  s_b4c45e3235679b::t_f67142837c9b3c 13,55,125,141
+tools/gen_reference.py
+  s_b4c45e3235679b::t_f67142837c9b3c 122,299
+src/mongla_interfaces/msg/TargetContours.msg
+  s_b4c45e3235679b::t_f67142837c9b3c 4,32,55
+.claude/context/platform/vehicle-spec.md
+  s_b4c45e3235679b::t_363c6fdb241bd4 64
+src/mongla_planner/test/test_fix_position.py
+  s_b4c45e3235679b::t_363c6fdb241bd4 104-105
+test/test_no_emoji.py
+  s_b4c45e3235679b::t_958d33686ecbda 12-13,16-17
+src/mongla_planner/mongla_planner/dsl_position.py
+  s_b4c45e3235679b::t_363c6fdb241bd4 44
+src/mongla_interfaces/msg/TargetCorrespondences.msg
+  s_b4c45e3235679b::t_f67142837c9b3c 24,35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "4079ba876ea538978ca13bda286000b520181164",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
