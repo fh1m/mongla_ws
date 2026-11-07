@@ -40,8 +40,7 @@ def run(mongla, log=None):
     _return = _chunk('task_return')
 
     try:
-        # 10-second window to remove tether before thrusters arm
-        mongla.pause(10.0)
+        mongla.countdown(10)            # the tether window, host-side: the board refuses moves disarmed
         mongla.arm()
         mongla.set_depth(GATE_SEARCH_DEPTH_M, timeout=30)
 

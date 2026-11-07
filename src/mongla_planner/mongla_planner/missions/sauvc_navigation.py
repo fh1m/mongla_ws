@@ -68,7 +68,7 @@ def run(mongla, log=None):
     """Full standalone SAUVC Navigation run: arm, navigate, surface, disarm."""
     mongla.mission_reset()
     try:
-        mongla.pause(SAUVC_TETHER_PAUSE_S)
+        mongla.countdown(SAUVC_TETHER_PAUSE_S)
         mongla.arm()
         mongla.set_depth(SAUVC_SEARCH_DEPTH_M, timeout=30)
         # The board holds heading itself at 500 Hz (STABILIZE for vision, AUTO
