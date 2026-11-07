@@ -56,7 +56,7 @@ not by competition, with a deck-side override for every venue constant.
 
 | # | Item | State | Owner / evidence |
 |---|---|---|---|
-| G1 | **Board depth loop has never run closed.** Every srot move enters AUTO, which closes depth, so this gates `move_forward` too | OPEN (last read 2026-09-15: `DEPTH_OUT` absent while disarmed) | bench: the two armed checks in `srot-integration.md` |
+| G1 | **Board depth loop has never run closed under this stack.** Every srot move enters AUTO, which closes depth, so this gates `move_forward` too. It did close in `DEPTH_HOLD` once, on the old hull in the firmware team's 2026-08-07 water test, where the DEPTH_HOLD to AUTO transition crashed the board (fw `09d0033`, `f533bd2`) | OPEN (last read 2026-09-15: `DEPTH_OUT` absent while disarmed) | bench: the two armed checks in `srot-integration.md` |
 | G1b | **Warning: `FRAME_REVERSE` vs MOTOR_DETECT.** On this hull `FRAME_REVERSE = 1`, and MOTOR_DETECT converges to the configuration that cancels it — so a detect run leaves every axis inverted in every closed-loop mode, and Motor Test confirms the wrong answer. **Do not run MOTOR_DETECT on this hull until upstream `pr-q` lands** | OPEN (upstream, unsent) | `upstream/pr-q-motor-detect-and-frame-reverse.md`; source-read, not bench-verified |
 | G2 | **Thrusters fitted and ESC RPM non-zero.** 958/958 ESC frames read 0 with nothing attached; `THR_TRIM_EN=0` WARN | OPEN (hardware) | blocks `thrust_model`, the RPM velocity sensor, ESC current as a BLOCKED channel |
 | G3 | **Firmware PR merge.** 21 of our PRs open on `srot-control-board`, none merged since 2026-09-03 (re-checked 2026-09-17: #1-#24 all OPEN) | OPEN | `gh pr list -R RakibulIslam1/srot-control-board`; see §3 |
@@ -94,13 +94,13 @@ first**; twice already the thing to ask for was already open.
 | SAUVC | **#24** flare order over LoRa (`MAV_CMD_SROT_FLARE_ORDER` 31020) | Task 4; also needs H1 |
 | GS | ground station **#4** absent telemetry renders 0.00 m; joystick disable sends no neutral | operator display honesty |
 
-### ⏳ 2026-09-25 — FIVE MORE, WRITTEN AND UNSENT (no write access)
+### 2026-09-25 batch — written then, sent 2026-11-07
 
-Bodies in [`upstream/`](upstream/README.md); PR P's firmware code is a patch in
-[`upstream/patches/`](upstream/patches/) that applies to their `main` at `f1d3ba9`
-and whose 85 host-side tests pass. The session that wrote them had **read-only**
-GitHub access to `srot-control-board` — `403 Resource not accessible by integration`
-on branch, issue and PR creation — so **none of these are on their repo yet.**
+Bodies in [`upstream/`](upstream/README.md). They waited six weeks because the session
+that wrote them had read-only GitHub access. Now **P is PR [#39](https://github.com/RakibulIslam1/srot-control-board/pull/39)** (the
+patch built natively but not for the ESP32 until one stale call was fixed), and
+**Q, R, S, T, U are issues [#34](https://github.com/RakibulIslam1/srot-control-board/issues/34) to [#38](https://github.com/RakibulIslam1/srot-control-board/issues/38)**. #25 carries the
+corrected geometry and the final seven-thruster hull.
 
 | Tier | doc | What it unlocks |
 |---|---|---|
