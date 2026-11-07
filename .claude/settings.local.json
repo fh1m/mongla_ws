@@ -125,16 +125,5 @@
       "mcp__plugin_ecc_chrome-devtools__evaluate_script",
       "Bash(cd *)"
     ]
-  },
-  "skillOverrides": {
-    "graphify": "user-invocable-only",
-    "banner-design": "off",
-    "brand": "off",
-    "daisyui": "off",
-    "design": "off",
-    "design-system": "off",
-    "slides": "off",
-    "ui-styling": "off",
-    "ui-ux-pro-max": "off"
   }
 }
