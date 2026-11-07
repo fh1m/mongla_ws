@@ -26,12 +26,13 @@ executor up behind the very frames it is meant to bridge.
 
 The files:
     lock_node.py      the node, its worker loop, the ladder tick, arbitration
-    lock_setup.py     parameters, publishers, subscriptions
-    lock_inputs.py    the frame, detection and state callbacks
+    lock_setup.py     parameters, the anchor and bank, live retuning
+    lock_wiring.py    the steps __init__ runs: state, publishers, subscriptions
+    lock_inputs.py    the attitude, odometry, floor-height and camera-info callbacks
+    lock_frames.py    the image and detection callbacks, and the direct feed
     lock_anchor.py    the anchor rung: enrol or locate against the bank
     lock_publish.py   what goes out on /lock and its companions
 """
-import collections
 import os
 
 os.environ.setdefault('RCUTILS_CONSOLE_OUTPUT_FORMAT', '[{severity}] {message}')
@@ -43,45 +44,15 @@ from typing import NamedTuple
 import cv2
 
 import rclpy
-from cv_bridge import CvBridge
 from rclpy.node import Node
-from sensor_msgs.msg import CameraInfo, Image
-from vision_msgs.msg import Detection2DArray
 
-try:                                   # noqa: SIM105
-    from mongla_interfaces.msg import TargetCorrespondences
-except ImportError:                    # message not built in this workspace
-    # The LADDER must survive it. Correspondences are an addition to what this
-    # node does, not a precondition, so an unbuilt interface costs the 6-DoF
-    # path and nothing else -- the follower and anchor rungs still publish
-    # `/lock`, which is what the control loop steers on.
-    TargetCorrespondences = None
-
-from std_msgs.msg import String
-from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Vector3Stamped
-# OPTIONAL, like TargetCorrespondences above. A workspace that has not
-# rebuilt mongla_interfaces must still get a working ladder: losing vehicle
-# state costs the object-permanence rung, not the lock.
-try:
-    from mongla_interfaces.msg import MonglaState
-except ImportError:                                              # noqa: BLE001
-    MonglaState = None
-from geometry_msgs.msg import PointStamped
-from sensor_msgs.msg import Range
-from mongla_vision.anchor import loop_closure as _lc
-from mongla_vision.anchor import health as _health
-
-from mongla_vision import qos as _qos
-from mongla_vision.stamps import capture_monotonic
-from mongla_vision.tracking.follower import Follower
 from mongla_vision.tracking.lock_state import Rung, arbitrate, live_window
 from .lock_setup import LockSetupMixin
+from .lock_wiring import LockWiringMixin
 from .lock_inputs import LockInputsMixin
+from .lock_frames import LockFramesMixin
 from .lock_publish import LockPublishMixin
 from .lock_anchor import AnchorMixin
-
-
 
 
 def header_for(rung, *, detection, frame, anchor):
@@ -119,7 +90,8 @@ class _Tick(NamedTuple):
     now: float
 
 
-class LockNode(AnchorMixin, LockSetupMixin, LockInputsMixin, LockPublishMixin, Node):
+class LockNode(AnchorMixin, LockSetupMixin, LockWiringMixin, LockInputsMixin,
+               LockFramesMixin, LockPublishMixin, Node):
     def __init__(self, node_name: str = 'mongla_lock', *,
                  parameter_overrides=None):
         super().__init__(node_name,
@@ -129,334 +101,14 @@ class LockNode(AnchorMixin, LockSetupMixin, LockInputsMixin, LockPublishMixin, N
         cam = str(self.get_parameter('camera').value)
         self._cam = cam
         ns = f'/mongla/vision/{cam}'
-        # An explicit target_class wins and freezes the aim. Anything else and
-        # the ladder aims ITSELF at whatever the mission told the detector to
-        # look for -- see `_on_classes_filter`.
-        self._cls_pinned = str(self.get_parameter('target_class').value).strip()
-        self._cls = self._cls_pinned
-        self._full = float(self.get_parameter('full_authority_s').value)
-        self._zero = float(self.get_parameter('zero_authority_s').value)
-
-        self._bridge = CvBridge()
-        self._lock = threading.Lock()
-        self._gray = None
-        # A decoded BGR frame handed over by reference (`submit_frame`), not
-        # yet turned grey. Converted on the ladder's own thread, once per
-        # tick it is actually used -- see `submit_frame`.
-        self._pending = None
-        self._header = None
-        self._recent = collections.deque(maxlen=4)
-        self._snap_skew_warned = False
-        self._det_header = None
-        self._anchor_header = None
-        self._stamp_warned = False
-        self._pose_was_ok = None
-        self._pose_pub_t = 0.0
-        # 6-DoF: needs K at the BACKEND's resolution (the frame H is fitted in)
-        # and the target's true width. Both absent by default -- no width means
-        # no metric answer, and guessing one would make every range wrong by a
-        # constant nobody could see.
-        self._K = None
-        self._target_w_m = float(
-            self.declare_parameter('target_width_m', 0.0).value or 0.0)
-        # An explicit parameter WINS -- a measured prop beats a rulebook
-        # nominal, which is what SAUVC's +/- 5 % tolerance exists to allow for.
-        # Otherwise fall back to the committed table, keyed by the class we are
-        # locking onto. Without this the default is 0.0 and the 6-DoF branch
-        # publishes `ok=false, reason='target_width_m unset'` forever: the
-        # metric path has never once run on the vehicle.
-        # Ungated on purpose: what the table IGNORED must be reported whether
-        # or not this node needs a lookup. Inside the `if` below it would stay
-        # silent exactly when `target_width_m` was passed explicitly -- which is
-        # the case where a broken override matters most, because the operator
-        # believes the file is doing something.
-        self._report_geometry_problems()
-        if self._target_w_m <= 0.0 and self._cls:
-            from mongla_vision.target_geometry import width_for, describe
-            w = width_for(self._cls)
-            if w > 0.0:
-                self._target_w_m = w
-                d = describe(self._cls)
-                self.get_logger().info(
-                    f"[LOCK ] target width {w:.4f} m for {self._cls!r} "
-                    f"({d.get('boxes', '?')}; {d.get('source', 'no source')})")
-            else:
-                self.get_logger().warn(
-                    f'[LOCK ] no committed width for {self._cls!r}, and '
-                    f'target_width_m is unset -- the 6-DoF pose will refuse. '
-                    f'Fix on the deck without a rebuild: put the width in '
-                    f'~/.mongla/target_geometry.yaml (or set '
-                    f'MONGLA_TARGET_GEOMETRY), or pass target_width_m.')
-        # MEDIUM. A flat port is not a pinhole: the ray from a point at water
-        # angle tw leaves at air angle ta with sin(ta) = n*sin(tw), so the
-        # effective focal length grows with field angle -- 10.6 % centre to
-        # corner on this camera, and the pose path was reading the AIR K with
-        # raw pixels. Ray-traced against the shipped model, the error at the
-        # frame corner is +34 px at 0.3 m and +46 px at 2 m. Default 'water'
-        # matches `flow_node` and `pnp_node` -- one `medium:=` launch
-        # argument feeds all three -- and the choice is LOGGED at
-        # startup because it silently rescales every range this node publishes.
-        #
-        # Placed AFTER the width lookup on purpose: `test_target_geometry`
-        # asserts `width_for(self._cls)` lands within 1500 chars of
-        # `target_width_m`, and splitting that block pushed it out of range.
-        self._medium = str(
-            self.declare_parameter('medium', 'water').value or 'water').lower()
-        if self._medium not in ('water', 'air'):
-            raise ValueError(
-                f"medium must be 'water' or 'air', got {self._medium!r}")
-        self._rect = None
-        self._K_rect = None
-        self._pub_min_dt = 0.0
-        self._last_pub_t = 0.0
-        self._last_pub_rung = None
-        # Evidence, not a pose: `pnp_node` subscribes to this and publishes
-        # `{ns}/target_pose`. Solving here as well would put two publishers on
-        # one claim, which is the defect this split exists to remove.
-        self._pub_corr = (
-            self.create_publisher(TargetCorrespondences,
-                                  f'{ns}/correspondences', _qos.DETECTIONS)
-            if TargetCorrespondences is not None else None)
-        if TargetCorrespondences is None:
-            self.get_logger().warn(
-                '[LOCK ] mongla_interfaces/TargetCorrespondences not built -- '
-                'no 6-DoF pose will be published (the ladder is unaffected). '
-                'Rebuild mongla_interfaces to enable it.')
-        # Composed: Frames by reference, no topics (`direct_feed`).
-        # Measured on the vehicle, 2026-10-03: composing this ladder into the
-        # detector's process took both detectors from 71 Hz to 21.6 Hz
-        # combined, with the anchor IDLE. py-spy put the cost in rclpy intake,
-        # not in the ladder: image_raw and camera_info arriving at 134 Hz
-        # each across two cameras, deserialised, dispatched by the executor
-        # and copied by cv_bridge -- all under the GIL the detector workers
-        # need. In-process, the camera already holds the decoded frame; a
-        # reference costs nothing. Same switch, same name, as the detector's.
-        self.declare_parameter('direct_feed', False)
-        self._direct = bool(self.get_parameter('direct_feed').value)
-        if not self._direct:
-            self.create_subscription(CameraInfo, f'{ns}/camera_info',
-                                     self._on_info, 10)
-        # Set beside the state it guards, not where the other parameters are
-        # READ. `_on_det` runs as soon as the subscription exists, which is
-        # earlier in __init__ than the parameter block below, so reading it
-        # there left a window where a detection arriving mid-construction
-        # raised AttributeError inside the callback -- caught by
-        # test_stamps.py, but it is a real startup race and not a test
-        # artifact.
-        # The deck file wins over the default, and a launch argument wins
-        # Over both. One file (`~/.mongla/ladder.yaml`) changes the ladder
-        # whichever launch started the node -- the pattern `loop_closure`
-        # already proved and has a guard test for. An explicitly-passed launch
-        # parameter still overrides it, so a mission can pin a value without
-        # editing the deck.
-        from .ladder_config import defaults as _ld_defaults, load_config as _ld_load
-        self._ladder_cfg = _ld_load(log=self.get_logger())
-        _ld_def = _ld_defaults()
-
-        # NOT named `_cfg`: a DIFFERENT local `_cfg` exists further down
-        # for the loop-closure block, and two closures with one name in one
-        # __init__ is a shadowing bug waiting to be written.
-        def _ladder(name):
-            """An explicitly-set launch/param value wins; otherwise the deck
-            file's. Equality with the shipped default is how "not explicitly
-            set" is detected -- ROS does not distinguish a default from a
-            value that happens to equal it, so a mission wanting the default
-            AND a deck override of it must edit the deck."""
-            v = self.get_parameter(name).value
-            return v if v != _ld_def[name] else self._ladder_cfg[name]
-
-        self._ladder = _ladder
-        self._act_conf = float(_ladder('act_conf'))
-        self._roll_rad = float('nan')
-        self._imu_t = 0.0
-        self._yaw_deg = float('nan')
-        self._depth_m = float('nan')
-        self._armed = False
-        self._state_t = 0.0
-        # OBJECT PERMANENCE, downward camera only -- see `_remember_world`
-        # for why the forward camera cannot have it without a measured range.
-        try:
-            from .tracking.visibility import WorldTarget
-            self._world = WorldTarget()
-        except Exception:                                        # noqa: BLE001
-            self._world = None
-        self._reseeds = 0
-        self._vis_state = None
-        self._vis_last = None
-        self._det_box = None
-        self._det_conf = 0.0
-        self._det_cls = ''
-        self._det_t = 0.0
-        # The detector's own cadence, from capture stamps of EVERY detection
-        # message (a frame with no match still proves the detector ran). It
-        # sizes how long a detection counts as live -- see `live_window`.
-        self._det_msg_t = 0.0
-        self._det_dt = None
-        self._fresh = threading.Event()
-
-        self._follower = Follower() if bool(
-            self.get_parameter('follow').value) else None
-        self._anchor = None
-        # Inliers the last bank evaluation produced, and the reference that
-        # produced them. Starts at 0, which cannot read as stale because
-        # staleness is gated on `has_reference` -- an empty bank is not a
-        # decayed one, and the two need different answers.
-        self._anchor_inliers = 0
-        self._anchor_best = None
-        self._anchor_enrolled = 0
-        # What the bank is holding. One bank can carry several kinds of thing,
-        # so a checkpoint is tagged with the class it was enrolled from and the
-        # search is restricted to it -- otherwise "where is the gate" could be
-        # answered by a torpedo board that happened to match better.
-        self._anchor_label = ''
-        # Earliest monotonic time another enrolment may be ATTEMPTED. See the
-        # throttle note at the enrol site.
-        self._anchor_enrol_next = 0.0
-        self._anchor_pose = None
-        self._anchor_next = 0.0
-        self._anchor_period = 1.0 / max(
-            float(self.get_parameter('anchor_hz').value), 0.5)
-        # Read it, or the parameter is decoration -- the "declared and unread"
-        # defect this package has produced four times. `/target_pose` already
-        # got this treatment (see the note at the anchor publish: 96.5 Hz for a
-        # 3 Hz quantity); this is the same fix for `/lock`.
-        _phz = float(self.get_parameter('publish_hz').value)
-        self._pub_min_dt = (1.0 / _phz) if _phz > 0.0 else 0.0
-        if bool(self.get_parameter('anchor').value):
-            self._build_anchor()
-
-        # ---- loop closure ------------------------------------------------
-        # Configured by the node, not by launch. A switch threaded through
-        # launch has to be declared in every launch file that starts this
-        # node, and this package has already shipped capabilities reachable
-        # from one launch path and not the one `bringup` includes. Loop
-        # closure nearly became the next: it went into vision_pi.launch.py
-        # while bringup includes vision.launch.py.
-        #
-        # Precedence: an explicitly-set ROS parameter wins (so `ros2 param
-        # set` and any launch that does pass one still work), otherwise
-        # ~/.mongla/loop_closure.yaml, otherwise the defaults. The deck file
-        # is the same pattern the course priors already use.
-        cfg = _lc.load_config(log=self.get_logger())
-
-        def _cfg(name, key):
-            p = self.get_parameter(name)
-            if p.type_ != rclpy.parameter.Parameter.Type.NOT_SET:
-                v = p.value
-                # A parameter left at its declared default is not a decision;
-                # the file is. Only a value that DIFFERS from the default
-                # overrides the file, so an operator's edit is not silently
-                # outvoted by a default nobody set.
-                if v != _lc.defaults()[key]:
-                    return v
-            return cfg[key]
-
-        self._closer_on = bool(_cfg('loop_closure', 'enabled'))
-        self._places = _lc.PlaceLog(
-            float(_cfg('place_period_s', 'place_period_s')),
-            float(_cfg('place_travel_m', 'place_travel_m')))
-        self._pool_depth = float(_cfg('pool_depth_m', 'pool_depth_m'))
-        self._closure_cfg = cfg
-        self._odom_xy = None          # (x, y) m, pool frame
-        self._odom_sigma = float('nan')
-        self._odom_z = float('nan')   # filter depth, negative below surface
-        self._odom_t = 0.0
-        self._floor_h = float('nan')
-        self._floor_h_t = 0.0
-        self._pool_depth_warned = False
-        self._last_health = _health.UNKNOWN
-        # Recent bank yields, oldest first. Short on purpose: this answers
-        # "is it getting worse NOW", not "what has the run been like".
-        self._anchor_trend = collections.deque(maxlen=8)
-        self._prepared = 0
-        self._fix_pub = None
-        self._closures = 0
-        self._closure_refusals = collections.Counter()
-        if self._closer_on:
-            # Downward only. A forward bank holds crops of TARGETS -- today's
-            # fixture is literally a person walking about -- and matching a
-            # moving object is not a vehicle position. The floor does not move.
-            if self._camera != 'downward':
-                self.get_logger().warn(
-                    '[LOCK ] loop_closure requested on the '
-                    f'{self._camera} camera and REFUSED. A forward bank holds '
-                    'targets, and a target that moves is not a place. Run it '
-                    'on the downward camera.')
-                self._closer_on = False
-            else:
-                self.create_subscription(Odometry, '/mongla/odom',
-                                         self._on_odom, _qos.sensor())
-                # The floor's own height, from the tile grating in
-                # `flow_node`. That is a MEASUREMENT of the floor; flow_node
-                # declines to publish the pool_depth arithmetic under this
-                # name precisely because it is not one.
-                self.create_subscription(Range, f'{ns}/floor_height',
-                                         self._on_floor_height, 10)
-                # The vehicle's own state. The ladder ran without ever
-                # knowing which way the hull was pointing: it had odometry
-                # (where) and floor height (how high) but no yaw, so a target
-                # leaving the frame could not be turned into a world bearing
-                # and `visibility.WorldTarget` -- the object-permanence rung --
-                # was unreachable for want of one number the board already
-                # publishes.
-                #
-                # `yaw_deg` is NaN when the board has no AHRS sample, and
-                # every consumer must gate on that rather than treat NaN as
-                # zero. A heading of "0 because we do not know" points the
-                # memory due north, which is worse than having no memory.
-                if MonglaState is not None:
-                    self._state_sub = self.create_subscription(
-                        MonglaState, '/mongla/state', self._on_state, 10)
-                else:
-                    self.get_logger().warn(
-                        '[LOCK ] mongla_interfaces/MonglaState not built -- '
-                        'the ladder runs without vehicle yaw, so any '
-                        'world-frame target memory stays disabled. Rebuild '
-                        'mongla_interfaces to enable it.')
-                self._fix_pub = self.create_publisher(
-                    PointStamped, '/mongla/localization/fix', 10)
-                self.get_logger().info(
-                    '[LOCK ] loop closure ON: places remembered every '
-                    f'{self._places.period_s:.0f} s or '
-                    f'{self._places.travel_m:.1f} m, offered as a fix at '
-                    f'>= {_lc.CLOSURE_INLIERS} inliers.')
-
-        # The decomposition, published (Round 11, half-built until now).
-        # Every anchor fit produces tx, ty, theta and scale, and until this
-        # the ladder read `corners` alone -- the only consumer of theta/scale
-        # in the whole tree was a debug text label. Two real signals were
-        # computed and discarded on every evaluation.
-        #
-        # Published, not acted on. Bumblebee reflex 1 is "redundancy beats
-        # optimisation" -- their gate runs five pose sources. This is a SECOND
-        # range estimate beside the follower's, fitted frame-to-REFERENCE
-        # rather than frame-to-frame, and a second is worth more than a
-        # replacement. A consumer that wants to fuse them can; nothing is
-        # forced to.
-        self._decomp_pub = self.create_publisher(
-            Vector3Stamped, f'{ns}/anchor_decomposition', 10)
-        self._pub = self.create_publisher(Detection2DArray, f'{ns}/lock',
-                                          _qos.DETECTIONS)
-        # Shared profiles, never a hand-rolled QoS: a RELIABLE/BEST_EFFORT
-        # mismatch is answered by rclpy with one WARN and then silence --
-        # clean launch, healthy nodes, zero frames. `mongla_vision.qos` owns
-        # these topics and a contract test enforces it.
-        self.create_subscription(Detection2DArray, f'{ns}/detections',
-                                 self._on_det, _qos.DETECTIONS)
-        if not self._direct:
-            self.create_subscription(Image, f'{ns}/image_raw',
-                                     self._on_img, _qos.IMAGE)
-        # SELF-AIMING. `lock_class` is a LAUNCH argument, so a mission that
-        # switches target mid-run (gate -> rescue -> red_pipe, which the DSL
-        # does on every vision verb via `set_classes`) left the ladder still
-        # following the FIRST class -- silently, and only on the rung that is
-        # supposed to save the lock. At the pool that reads as "the ladder is
-        # broken" when it is merely aimed somewhere else.
-        #
-        # `classes_filter` is LATCHED, so this also works when the ladder
-        # starts after the detector has already been told what to look for.
-        self.create_subscription(String, f'{ns}/classes_filter',
-                                 self._on_classes_filter, _qos.LATCHED)
+        # The steps run in this order on purpose: each comment inside them that
+        # says "placed after" or "set beside the state it guards" depends on it.
+        self._setup_target()
+        self._setup_pose_inputs(ns)
+        self._setup_ladder_state()
+        self._setup_rungs()
+        self._setup_loop_closure(ns)
+        self._setup_outputs(ns)
         self._stopping = threading.Event()
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
@@ -473,176 +125,6 @@ class LockNode(AnchorMixin, LockSetupMixin, LockInputsMixin, LockPublishMixin, N
             f'anchor={self._anchor is not None} '
             f'authority {self._full:.2f}->{self._zero:.2f}s  -> {ns}/lock')
 
-    # -- inputs ------------------------------------------------------------- #
-    def _on_img(self, msg):
-        try:
-            g = cv2.cvtColor(self._bridge.imgmsg_to_cv2(msg, 'bgr8'),
-                             cv2.COLOR_BGR2GRAY)
-        except Exception as exc:                          # noqa: BLE001
-            # Counted and said, never swallowed: a camera publishing an
-            # encoding this cannot convert starves the whole ladder, and the
-            # only symptom was a lock that never formed. (Cloud audit, 2026-11-07.)
-            self._n_bad_frames = getattr(self, '_n_bad_frames', 0) + 1
-            if self._n_bad_frames in (1, 10, 100) or self._n_bad_frames % 1000 == 0:
-                self.get_logger().error(
-                    f'[LOCK ] frame {self._n_bad_frames} undecodable '
-                    f'({msg.encoding!r}: {exc}) -- the ladder gets no image')
-            return
-        with self._lock:
-            self._gray = g
-            self._header = msg.header
-            # A short history, so a detection can be paired with the frame it
-            # was actually computed on. See `_frame_for`. Four frames at the
-            # anchor backend's resolution is ~300 kB; the detector's own
-            # capture->arrival latency is 32 ms median / 48 p95, which is one
-            # to two frames, so four is the p95 with headroom and no more.
-            self._recent.append((_stamp_key(msg.header), g))
-        self._fresh.set()
-
-    # -- composed intake (`direct_feed`) ------------------------------------ #
-    def wants_frame(self) -> bool:
-        """Every frame: the stamp history must hold the frame a detection was
-        computed on, or `_frame_for` refuses the snap. The camera decodes
-        every frame for its own publish slot anyway."""
-        return True
-
-    def submit_frame(self, frame_bgr, header) -> None:
-        """A decoded BGR frame from the camera in this process, by reference.
-
-        No copy and no grey conversion here: this runs on the camera's capture
-        thread, at camera rate. The ladder converts on its own thread, once,
-        only for the frame it actually uses; `_frame_for` converts a history
-        entry only when a snap needs it. The camera decodes a NEW array per
-        frame, so holding the reference is safe.
-        """
-        with self._lock:
-            self._pending = frame_bgr
-            self._header = header
-            self._recent.append((_stamp_key(header), frame_bgr))
-        self._fresh.set()
-
-    def _gray_now(self):
-        """The newest frame in grey, converting a pending one on demand.
-
-        For readers outside the ladder's tick (timers). The ladder converts
-        only on ticks that read the frame, so `self._gray` alone can be a
-        frame or more old.
-        """
-        with self._lock:
-            pending, self._pending = self._pending, None
-        if pending is not None:
-            self._gray = cv2.cvtColor(pending, cv2.COLOR_BGR2GRAY)
-        return self._gray
-
-    def submit_info(self, info) -> None:
-        """CameraInfo straight from the camera; `_on_info` drops repeats."""
-        self._on_info(info)
-
-    def _frame_for(self, det_header):
-        """The frame a detection was computed on, not merely the newest one.
-
-        What this fixes. `snap` defines the anchor's reference patch, and
-        that patch IS the object model: its width is taken to be the target's
-        true width, so every later range is scaled by it. It was snapped from
-        the CURRENT frame using the LAST detection's box, with nothing
-        comparing the two stamps -- and the detector's box is 32 ms median /
-        48 p95 behind the frame in hand. On a moving hull that box no longer
-        bounds the target in the frame it is applied to, so the reference patch
-        clips the target or swallows background, and the error is baked into
-        the model for the whole lock.
-
-        Matching the stamp removes the error rather than bounding it, which is
-        affordable HERE and only here: snapping happens once, so waiting for
-        the right frame costs nothing, while the steering rungs must act on
-        whatever they have and use freshness decay instead.
-        """
-        key = _stamp_key(det_header)
-        if key is None:
-            return None
-        for k, g in self._recent:
-            if k == key:
-                # Composed intake stores BGR; it turns grey only here, for
-                # the one frame a snap needs.
-                return g if g.ndim == 2 else cv2.cvtColor(
-                    g, cv2.COLOR_BGR2GRAY)
-        return None
-
-    # A floor height older than this is not this vehicle's altitude any more.
-    _FLOOR_H_MAX_AGE_S = 2.0
-
-    def _on_det(self, msg):
-        best = None
-        best_name = ''
-        for d in msg.detections:
-            if not d.results:
-                continue
-            h = d.results[0]
-            score = float(h.hypothesis.score if hasattr(h, 'hypothesis')
-                          else h.score)
-            name = str(h.hypothesis.class_id if hasattr(h, 'hypothesis')
-                       else h.id)
-            if self._cls and name != self._cls:
-                continue
-            # An acting bar, not merely "not zero" (B-59). This accepted the
-            # highest-scoring box with score > 0 as THE target, at full
-            # authority. Measured on real Mirpur footage, the now-RETIRED
-            # `gate_rescue_repair` graph (not `gate_sharks`, which replaced
-            # it on 2026-09-28 and against which this bar has NOT been
-            # re-derived -- see measured-bars section 59)
-            # claims a gate on 90.8 % of GATE-FREE frames at conf 0.15 --
-            # half-frame boxes over empty turquoise at 0.44-0.56, confirmed by
-            # rendering them. Separation between gate-present and gate-absent
-            # footage is +0.0 points at 0.15 and at 0.30, and +74.0 at 0.60.
-            #
-            # With no bar here the ladder locked onto open water: the follower
-            # seeded on it, the anchor enrolled against it, and the vision
-            # verbs drove the hull at it -- section 8.6's failure exactly.
-            #
-            # The bar lives HERE and not only in the detector because the
-            # detector's `conf` is deliberately permissive: the tracker needs
-            # low-scoring boxes to maintain association across a gap. What may
-            # be ASSOCIATED and what may be ACTED ON are different questions,
-            # and conflating them turned a 0.15 detector bar into a 0.15
-            # control bar.
-            if score < self._act_conf:
-                continue
-            if best is None or score > best[0]:
-                best_name = name
-                b = d.bbox
-                hw, hh = b.size_x * 0.5, b.size_y * 0.5
-                best = (score, (b.center.position.x - hw,
-                                b.center.position.y - hh,
-                                b.center.position.x + hw,
-                                b.center.position.y + hh))
-        # The decay clock. `_det_t` is what `arbitrate` measures authority
-        # against, so it must be when the frame was SEEN, not when the message
-        # landed here. Arrival time under-reports every gap by the whole
-        # capture->inference->transport chain -- measured at 32 ms median,
-        # 48 p95 -- always in the flattering direction, so the ladder holds
-        # full authority slightly past the point the measurement justifies.
-        t, why = capture_monotonic(msg.header)
-        if why and not self._stamp_warned:
-            self._stamp_warned = True
-            self.get_logger().warn(
-                f'[LOCK ] detection {why} -- the authority decay is measuring '
-                f'age since ARRIVAL, not since capture. Check use_sim_time.')
-        with self._lock:
-            if 0.0 < self._det_msg_t < t:
-                dt = t - self._det_msg_t
-                # EMA over ~10 messages: one dropped frame should not swing
-                # the window, a model swap to a slower detector should.
-                self._det_dt = (dt if self._det_dt is None
-                                else 0.9 * self._det_dt + 0.1 * dt)
-            self._det_msg_t = t
-            if best is None:
-                self._det_box, self._det_conf = None, 0.0
-            else:
-                self._det_conf, self._det_box = best
-                self._det_cls = best_name
-                self._det_t = t
-                self._det_header = msg.header
-
-    # -- the ladder --------------------------------------------------------- #
     def _loop(self):
         """The lock ladder. GUARDED (B44 class).
 
@@ -809,20 +291,6 @@ class LockNode(AnchorMixin, LockSetupMixin, LockInputsMixin, LockPublishMixin, N
             t.join(2.0)
         return super().destroy_node()
 
-def _stamp_key(header):
-    """A hashable identity for a header stamp, or None when it carries none.
-
-    Compared as (sec, nanosec) integers rather than a float: a float seconds
-    value loses nanosecond resolution at ROS epoch magnitudes, so two different
-    frames can compare equal -- which would silently pair the wrong ones, the
-    exact failure this exists to prevent.
-    """
-    if header is None:
-        return None
-    st = header.stamp
-    if st.sec == 0 and st.nanosec == 0:
-        return None
-    return (int(st.sec), int(st.nanosec))
 
 def main():
     from mongla_localization.orphan import die_with_parent

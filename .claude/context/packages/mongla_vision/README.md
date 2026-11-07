@@ -151,10 +151,12 @@ with no summary line shows as *(no summary)* until it gets one.
 | `identity.py` | Take GEOMETRY from the structure, IDENTITY from the symbol on it. |
 | `ladder_config.py` | One deck file for the ladder's switches, read by the node itself. |
 | `lock_anchor.py` | The anchor rung: enrol a reference or locate against the bank, and box what it found. |
+| `lock_frames.py` | LockNode's image and detection inputs: by topic, or by reference when composed. |
 | `lock_inputs.py` | LockNode's inputs besides images and detections: attitude, odometry, |
 | `lock_node.py` | run the ladder, publish one target position. |
 | `lock_publish.py` | LockNode's outputs: the /lock box, its decomposition, the pose |
 | `lock_setup.py` | LockNode's setup: parameters, the anchor and the bank, and live retuning. |
+| `lock_wiring.py` | The steps LockNode.__init__ runs, in order: what it locks onto, the inputs, |
 | `optics.py` | Flat-port refraction -- the ONE place the water refractive index lives. |
 | `preflight.py` | Vision preflight -- block until the perception pipeline is alive. |
 | `qos.py` | One QoS table for the vision topics, imported by every end of every link. |

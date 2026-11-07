@@ -18,7 +18,7 @@ import types
 import numpy as np
 import pytest
 
-from mongla_vision.lock_node import _stamp_key
+from mongla_vision.lock_frames import _stamp_key
 import sys as _sys_ct
 import pathlib as _pl_ct
 _sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
