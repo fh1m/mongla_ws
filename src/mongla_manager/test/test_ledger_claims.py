@@ -123,7 +123,7 @@ def test_uplink_really_does_send_coasted_and_gap_age():
     main workspace's stale `install/` tree.
     """
     import ast
-    node = (_WS / 'src' / 'mongla_manager' / 'mongla_manager' / 'auv_manager_node.py')
+    node = (_WS / 'src' / 'mongla_manager' / 'mongla_manager' / 'node_vision.py')
     tree = ast.parse(node.read_text(), str(node))
     fn = next((n for n in ast.walk(tree)
                if isinstance(n, ast.FunctionDef) and n.name == '_vision_uplink_tick'), None)

@@ -60,7 +60,12 @@ to decide.
 
 | File | Role |
 |---|---|
-| `auv_manager_node.py` | the node: link ownership, the action server, dispatch, telemetry |
+| `auv_manager_node.py` | the node's core: link ownership, the reader thread, the action server, dispatch, shutdown |
+| `node_setup.py` | bring-up: every node parameter, the board link, the recorder, the preflight reads |
+| `node_telemetry.py` | what is published: `/mongla/state`, imu, esc_rpm, demand, the console blocks |
+| `node_vision.py` | the vision state the verbs read, and the uplinks to the board |
+| `node_health.py` | the health report and the two watchdogs |
+| `node_support.py` | the node's shared constants and the heartbeat thread |
 | `bringup_check.py` | the preflight, section by section |
 | `srot_connect.py` · `srot_format.py` · `srot_changes.py` | reading the board, formatting it, showing what changed |
 | `srot_autotune.py` | the operator's front end to the board's tuning routine |

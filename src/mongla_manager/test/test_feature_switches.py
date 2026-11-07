@@ -18,8 +18,8 @@ _VISION_PI = os.path.join(_SRC, 'mongla_vision', 'launch', 'vision_pi.launch.py'
 
 # launch arg -> (node source, parameter name it must land on, where it is passed)
 SWITCHES = {
-    'velocity_uplink': ('mongla_manager/mongla_manager/auv_manager_node.py', 'velocity_uplink', _BRINGUP),
-    'position_uplink': ('mongla_manager/mongla_manager/auv_manager_node.py', 'position_uplink', _BRINGUP),
+    'velocity_uplink': ('mongla_manager/mongla_manager/node_setup.py', 'velocity_uplink', _BRINGUP),
+    'position_uplink': ('mongla_manager/mongla_manager/node_setup.py', 'position_uplink', _BRINGUP),
     'mixer_aware':     ('mongla_manager/mongla_manager/vision_tunables.py', 'vision.mixer_aware', _BRINGUP),
     'zupt':            ('mongla_localization/mongla_localization/localization_node.py', 'zupt', _BRINGUP),
     'demand_aid':      ('mongla_localization/mongla_localization/localization_node.py', 'demand_aid', _BRINGUP),

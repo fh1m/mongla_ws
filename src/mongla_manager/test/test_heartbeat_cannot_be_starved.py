@@ -18,6 +18,7 @@ import time
 from types import SimpleNamespace
 
 from mongla_manager import auv_manager_node as amn
+from mongla_manager import node_setup, node_support
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]
                        / 'mongla_control' / 'test'))
@@ -78,8 +79,8 @@ class _NoGuard:
 
 def test_heartbeats_keep_flowing_while_the_node_is_blocked(monkeypatch):
     master = _TimedMaster()
-    monkeypatch.setattr(amn, 'PortGuard', _NoGuard)
-    monkeypatch.setattr(amn.mavutil, 'mavlink_connection', lambda *a, **k: master)
+    monkeypatch.setattr(node_setup, 'PortGuard', _NoGuard)
+    monkeypatch.setattr(node_setup.mavutil, 'mavlink_connection', lambda *a, **k: master)
 
     node = _StubNode()
     try:
@@ -114,7 +115,7 @@ def test_the_heartbeat_thread_stops_and_survives_a_failing_send():
         if len(calls) == 1:
             raise OSError('write failed')
 
-    hb = amn._HeartbeatThread(_send, period_s=0.05, log=_Log()).start()
+    hb = node_support._HeartbeatThread(_send, period_s=0.05, log=_Log()).start()
     time.sleep(0.4)
     hb.stop()
     n = len(calls)

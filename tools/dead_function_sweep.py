@@ -72,7 +72,11 @@ _EXEMPT_PREFIX = ('test_', '__')
 # `tools/gen_reference.py` already fails if one is undocumented. Private
 # methods of the same class are still checked -- nothing outside can reach
 # those.
-_EXEMPT_PUBLIC_METHODS_OF = {'MonglaMission'}
+# `MonglaMission` is one class in several files (mongla_dsl.py says which part
+# holds what); its mixins carry the same API, so they are listed with it. A new
+# part has to be added here, which is the moment to decide it is mission API.
+_EXEMPT_PUBLIC_METHODS_OF = {'MonglaMission',
+                             'SeeMixin', 'WhereMixin', 'CameraMixin', 'DetectorMixin'}
 # A ROS node's own plumbing: a timer or subscription callback is passed as a
 # reference, which the AST scan DOES see -- so these are not exempted. Only
 # names invoked purely by a framework's own convention are.

@@ -76,7 +76,7 @@ def test_the_reporter_is_REGISTERED_not_merely_defined():
     """A grader nothing calls is the defect this repo keeps producing -- most
     recently `lock_s`, which was declared, documented, mapped and never passed."""
     src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_manager'
-           / 'auv_manager_node.py')
+           / 'node_health.py')
     assert "self._health.register('allocator'" in src
     assert 'allocator_saturation' in src, 'registered but reading nothing'
 

@@ -25,8 +25,11 @@ import pathlib as _pl_ct
 _sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
 from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 
-_SRC = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_manager'
-        / 'auv_manager_node.py')
+# The node is one class in several files (auv_manager_node.py says which part
+# holds what); the uplink spans the core, setup and the vision link.
+_PKG = Path(__file__).resolve().parents[1] / 'mongla_manager'
+_SRC = '\n'.join(code_of_file(p) for p in
+                 [_PKG / 'auv_manager_node.py', *sorted(_PKG.glob('node_*.py'))])
 
 
 class _Log:

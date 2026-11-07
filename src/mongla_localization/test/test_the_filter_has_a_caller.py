@@ -18,6 +18,16 @@ ROOT = Path(__file__).resolve().parents[3]
 PKG = ROOT / 'src' / 'mongla_localization'
 
 
+
+def _whole(pkg, core, parts):
+    """The source of a class written as one core file plus mixin parts (the
+    board driver, the manager node, the mission DSL): each core file's
+    docstring says which part holds what. A wiring check asks whether the
+    class does a thing, not which of its files does it."""
+    d = ROOT / 'src' / pkg / pkg
+    files = [d / core, *sorted(p for p in d.glob(parts) if p != d / core)]
+    return '\n'.join(code_of_file(f) for f in files)
+
 def test_the_node_is_an_entry_point():
     """Without this, `ros2 run mongla_localization localization_node` and the
     launch file's `executable=` both fail at runtime, not at build."""
@@ -62,8 +72,7 @@ def test_the_resection_fix_is_published_to_the_filter():
     caller is the difference between a filter that converges and one that
     dead-reckons with confidence.
     """
-    dsl = code_of_file(ROOT / 'src' / 'mongla_planner' / 'mongla_planner'
-           / 'mongla_dsl.py')
+    dsl = _whole('mongla_planner', 'mongla_dsl.py', 'dsl_*.py')
     assert '_publish_fix' in dsl
     assert '/mongla/localization/fix' in dsl
 
@@ -71,8 +80,7 @@ def test_the_resection_fix_is_published_to_the_filter():
 def test_the_fused_pose_is_readable_from_a_mission():
     """If it is not in the DSL it cannot be used by a mission, which is the
     operator's stated bar for a capability existing at all."""
-    dsl = code_of_file(ROOT / 'src' / 'mongla_planner' / 'mongla_planner'
-           / 'mongla_dsl.py')
+    dsl = _whole('mongla_planner', 'mongla_dsl.py', 'dsl_*.py')
     assert 'def pose(self' in dsl
     assert '/mongla/odom' in dsl
 
@@ -81,8 +89,7 @@ def test_the_manager_publishes_the_imu_the_filter_predicts_on():
     """The one input with no alternative source. Without `/mongla/imu` the
     filter never calls `predict` and is a measurement blender, not an
     estimator -- and it would still publish a confident pose."""
-    mgr = code_of_file(ROOT / 'src' / 'mongla_manager' / 'mongla_manager'
-           / 'auv_manager_node.py')
+    mgr = _whole('mongla_manager', 'auv_manager_node.py', 'node_*.py')
     assert "'/mongla/imu'" in mgr
     assert '_publish_imu' in mgr
     fc = code_of_file(ROOT / 'src' / 'mongla_control' / 'mongla_control' / 'fc'
@@ -95,8 +102,7 @@ def test_the_single_prop_fix_exists_and_is_wired():
     width at a surveyed position pins the hull on its own. That is the
     difference between localising when the course cooperates and localising
     whenever anything is in view."""
-    dsl = code_of_file(ROOT / 'src' / 'mongla_planner' / 'mongla_planner'
-           / 'mongla_dsl.py')
+    dsl = _whole('mongla_planner', 'mongla_dsl.py', 'dsl_*.py')
     assert 'def fix_from_prop(self' in dsl
     assert 'def range_to(self' in dsl
     # The fix must carry its own sigma: pose error from a planar target grows
@@ -149,10 +155,8 @@ def test_prioritised_allocation_reaches_the_srot_frame():
 def test_the_demand_reaches_the_command_velocity_model():
     """Board funnel -> manager topic -> localization model -> filter. Any link
     missing and the model learns nothing and aids with nothing, silently."""
-    fc = code_of_file(ROOT / 'src' / 'mongla_control' / 'mongla_control' / 'fc'
-          / 'srot_fc.py')
-    mgr = code_of_file(ROOT / 'src' / 'mongla_manager' / 'mongla_manager'
-           / 'auv_manager_node.py')
+    fc = _whole('mongla_control', 'fc/srot_fc.py', 'fc/srot_*.py')
+    mgr = _whole('mongla_manager', 'auv_manager_node.py', 'node_*.py')
     node = code_of_file(PKG / 'mongla_localization' / 'localization_node.py')
     manual = fc[fc.index('    def manual('):fc.index('    def stop_motion(')]
     assert 'self._demand = (' in manual
@@ -163,8 +167,7 @@ def test_the_demand_reaches_the_command_velocity_model():
 
 def test_the_blocked_check_is_published_and_readable_from_a_mission():
     node = code_of_file(PKG / 'mongla_localization' / 'localization_node.py')
-    dsl = code_of_file(ROOT / 'src' / 'mongla_planner' / 'mongla_planner'
-           / 'mongla_dsl.py')
+    dsl = _whole('mongla_planner', 'mongla_dsl.py', 'dsl_*.py')
     assert 'self._motion.observe(' in node
     assert "'/mongla/localization/motion'" in node
     assert "'/mongla/localization/motion'" in dsl and 'def motion(self' in dsl
@@ -173,8 +176,7 @@ def test_the_blocked_check_is_published_and_readable_from_a_mission():
 def test_the_seeing_check_runs_in_the_detector_and_is_readable_from_a_mission():
     det = code_of_file(ROOT / 'src' / 'mongla_vision' / 'mongla_vision'
            / 'detector_node.py')
-    dsl = code_of_file(ROOT / 'src' / 'mongla_planner' / 'mongla_planner'
-           / 'mongla_dsl.py')
+    dsl = _whole('mongla_planner', 'mongla_dsl.py', 'dsl_*.py')
     loop = det[det.index('    def _infer_loop('):]
     assert 'self._report_seeing(frame)' in loop
     assert "f'{ns_out}/seeing'" in det
