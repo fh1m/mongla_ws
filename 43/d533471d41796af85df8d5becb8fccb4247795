@@ -1,0 +1,61 @@
+.claude/context/missions/client-and-dsl-api.md
+  s_b4c45e3235679b::t_7f951542ff878e 112
+src/mongla_planner/mongla_planner/missions/survey_course.py
+  s_b4c45e3235679b::t_7ce56ea62ebf80 1-62
+docs/index.html
+  s_b4c45e3235679b::t_b62d5247ca93dc 325-326,1730-1732,1734
+  s_b4c45e3235679b::t_023711e2563ccd 113,1806
+src/mongla_planner/mongla_planner/dsl_position.py
+  s_b4c45e3235679b::t_14500053e6cf78 552-593,596-640
+  s_b4c45e3235679b::t_7a77b11b2eac45 594-595
+.claude/context/packages/mongla_localization/README.md
+  s_b4c45e3235679b::t_7f951542ff878e 64
+  s_b4c45e3235679b::t_f700bbd3e2e33a 79-96
+.claude/context/ROADMAP.md
+  s_b4c45e3235679b::t_7f951542ff878e 149
+.claude/context/sota/localization.md
+  s_b4c45e3235679b::t_7f951542ff878e 48-50
+src/mongla_planner/test/test_survey_course.py
+  s_b4c45e3235679b::t_5d21dfb17936a3 1-56
+src/mongla_localization/mongla_localization/prop_placement.py
+  s_b4c45e3235679b::t_3a85fc35a21c2e 1-124
+.claude/context/packages/mongla_planner/README.md
+  s_b4c45e3235679b::t_7f951542ff878e 49
+tools/fig_prop_placement.py
+  s_b4c45e3235679b::t_f94881fab40d8f 9
+  s_b4c45e3235679b::t_bd1ff2c20e8e37 76,94,113-115,117-124,126-127
+  s_b4c45e3235679b::t_674829ee837a56 1-8,10-75,77-93,95-112,116,125,128-158
+.claude/context/measured-bars.md
+  s_b4c45e3235679b::t_7f951542ff878e 6853-6884
+src/mongla_planner/test/test_pose_and_prop_fix.py
+  s_b4c45e3235679b::t_71e838d4887ca2 263-358
+docs/stats.json
+  s_b4c45e3235679b::t_023711e2563ccd 2-3,10,25,29,45,49-50,57-58,61
+.claude/context/reference/commands.md
+  s_b4c45e3235679b::t_4b084591733725 352
+src/mongla_localization/test/test_prop_placement.py
+  s_b4c45e3235679b::t_282d0381384c04 127-153
+  s_b4c45e3235679b::t_b609732ba7a686 1-126
+README.md
+  s_b4c45e3235679b::t_1f731d07bf60e3 746
+  s_b4c45e3235679b::t_023711e2563ccd 13,111,553-554,556,559,764,767-768,771,791
+  s_b4c45e3235679b::t_b55f0e8279c80c 749
+docs/capability-map.md
+  s_b4c45e3235679b::t_ada237af0ee96f 140
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "43d533471d41796af85df8d5becb8fccb4247795",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
