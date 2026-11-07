@@ -1,0 +1,33 @@
+src/mongla_vision/mongla_vision/camera_node.py
+  s_b4c45e3235679b::t_6aee5501dba304 164
+src/mongla_control/mongla_control/motion_vision/align.py
+  s_b4c45e3235679b::t_6aee5501dba304 247
+src/mongla_manager/mongla_manager/vision_tunables.py
+  s_b4c45e3235679b::t_6aee5501dba304 51
+src/mongla_vision/mongla_vision/flow/flow_setup.py
+  s_b4c45e3235679b::t_6aee5501dba304 108
+src/mongla_vision/mongla_vision/flow/flow_node.py
+  s_b4c45e3235679b::t_6aee5501dba304 128-132
+src/mongla_vision/mongla_vision/anchor/bank.py
+  s_b4c45e3235679b::t_6aee5501dba304 67,69
+src/mongla_planner/mongla_planner/missions/task_bin.py
+  s_b4c45e3235679b::t_6aee5501dba304 45
+src/mongla_vision/mongla_vision/utils/display_node.py
+  s_b4c45e3235679b::t_6aee5501dba304 567
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "29900125f7dceb3d414c492a938945066b90a819",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
