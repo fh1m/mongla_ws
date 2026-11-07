@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import statistics
 import sys
@@ -38,10 +37,9 @@ from pymavlink import mavutil                                        # noqa: E40
 from mongla_control.fc.port_guard import PortGuard, PortBusy
 
 try:
-    from .connection_config import find_srot_serial, SROT_BAUD, resolve_srot_profile
+    from .connection_config import SROT_BAUD, resolve_srot_profile
 except ImportError:                                                  # direct execution
-    from mongla_manager.connection_config import (find_srot_serial, SROT_BAUD,
-                                                  resolve_srot_profile)
+    from mongla_manager.connection_config import SROT_BAUD, resolve_srot_profile
 
 
 class _StderrLogger:
@@ -345,6 +343,17 @@ def read_safety_gates(conn, timeout: float = 0.6) -> dict:
     return out
 
 
+def _baro_healthy(sysst):
+    """The board's own barometer-health bit; None with no SYS_STATUS.
+
+    Depth is read from VFR_HUD, which is not gated on this bit, so the presence
+    of a depth value says nothing about the sensor behind it."""
+    if sysst is None:
+        return None
+    bit = mavutil.mavlink.MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE
+    return bool(sysst.onboard_control_sensors_health & bit)
+
+
 def watch_fields(snap: Snapshot) -> dict:
     """The subset of a Snapshot the change log watches, in display units.
 
@@ -358,10 +367,7 @@ def watch_fields(snap: Snapshot) -> dict:
     sysst = snap.get('SYS_STATUS')
     n = snap.named
 
-    baro_ok = None
-    if sysst is not None:
-        bit = mavutil.mavlink.MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE
-        baro_ok = bool(sysst.onboard_control_sensors_health & bit)
+    baro_ok = _baro_healthy(sysst)
 
     batt = snap.batteries
     main = batt.get(sp.BATTERY_ID_MAIN if sp else 0)
@@ -395,25 +401,34 @@ def watch_fields(snap: Snapshot) -> dict:
     }
 
 
-def render(snap: Snapshot, conn) -> list[str]:
-    """The report. Every absent value renders `--`, never 0."""
-    L: list[str] = []
-    n = snap.named
-    hb = snap.get('HEARTBEAT')
-    av = snap.get('AUTOPILOT_VERSION')
-    att = snap.get('ATTITUDE')
-    hud = snap.get('VFR_HUD')
-    sysst = snap.get('SYS_STATUS')
-    pwr = snap.get('POWER_STATUS')
+def _armed(hb) -> bool:
+    """True when the heartbeat says ARMED; False when it does not, or is absent."""
+    return bool(getattr(hb, 'base_mode', 0)
+                & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED) if hb else False
 
-    armed = bool(getattr(hb, 'base_mode', 0)
-                 & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED) if hb else False
+
+def _mode(hb) -> str:
+    """The board's mode name, `--` with no heartbeat, `??` with no protocol."""
     if sp is None:
-        mode = '?? (srot_protocol unavailable -- mode NOT decoded)'
-    elif hb is None:
-        mode = '--'
-    else:
-        mode = sp.mode_name(getattr(hb, 'custom_mode', -1))
+        return '?? (srot_protocol unavailable -- mode NOT decoded)'
+    if hb is None:
+        return '--'
+    return sp.mode_name(getattr(hb, 'custom_mode', -1))
+
+
+def render(snap: Snapshot, conn) -> list[str]:
+    """The report, one section per function. Every absent value renders `--`, never 0."""
+    return (_board(snap) + _power(snap) + _attitude(snap) + _depth(snap)
+            + _thrusters(snap) + _payload(snap) + _firmware_health(snap)
+            + _safety_config(conn) + _link(snap))
+
+
+def _board(snap: Snapshot) -> list[str]:
+    """Firmware, behaviour revision, armed state and mode."""
+    av = snap.get('AUTOPILOT_VERSION')
+    armed = _armed(snap.get('HEARTBEAT'))
+    mode = _mode(snap.get('HEARTBEAT'))
+    L: list[str] = []
     rev = int(getattr(av, 'middleware_sw_version', 0)) if av else None
     # This line used to render `Hengla v0.0.0` when the board had not
     # ANSWERED. AUTOPILOT_VERSION is one-shot and must be asked for, so an
@@ -432,8 +447,14 @@ def render(snap: Snapshot, conn) -> list[str]:
     if rev is not None and sp is not None and rev < sp.FW_BEHAVIOUR_REV_REQUIRED:
         L.append(f'  {RED}!! behaviour rev {rev} < {sp.FW_BEHAVIOUR_REV_REQUIRED} required '
                  f'-- MOVE_STOP COASTS, the host brake is gone{RESET}')
+    return L
 
-    # ---- power: TWO batteries -------------------- #
+
+def _power(snap: Snapshot) -> list[str]:
+    """The two batteries, the rail, and the pilot gain."""
+    n = snap.named
+    pwr = snap.get('POWER_STATUS')
+    L: list[str] = []
     L.append(f'\n{BOLD}== power =={RESET}')
     labels = {0: 'PM1 electronics', 1: 'PM2 thruster pack'}
     for bid in sorted(snap.batteries) or []:
@@ -455,8 +476,15 @@ def render(snap: Snapshot, conn) -> list[str]:
              f'pilot GAIN {_f(n.get("GAIN"), "{:.2f}")}'
              + (f'  {YEL}<- halves MANUAL_CONTROL until 1.0{RESET}'
                 if (n.get('GAIN') or 1.0) < 0.99 else ''))
+    return L
 
-    # ---- attitude --------------------------------------------------------- #
+
+def _attitude(snap: Snapshot) -> list[str]:
+    """Roll, pitch, heading, and whether the board hears the companion."""
+    n = snap.named
+    att = snap.get('ATTITUDE')
+    hud = snap.get('VFR_HUD')
+    L: list[str] = []
     L.append(f'\n{BOLD}== attitude =={RESET}   {DIM}(heading is ABSOLUTE magnetic from rev 4){RESET}')
     if att is not None:
         # HEADING IS 0..360, matching the board's OLED, VFR_HUD.heading and
@@ -491,8 +519,16 @@ def render(snap: Snapshot, conn) -> list[str]:
                    f'scoped to. Check FS_GCS_SYSID/FS_GCS_COMPID against our '
                    f'sysid/compid; the GCS failsafe is not watching us.')
     L.append(f'  companion seen  {_cs_txt}')
+    return L
 
-    # ---- depth + environment ---------------------------------------------- #
+
+def _depth(snap: Snapshot) -> list[str]:
+    """Barometer, depth, water temperature, leak, kill switch, depth loop."""
+    n = snap.named
+    hud = snap.get('VFR_HUD')
+    sysst = snap.get('SYS_STATUS')
+    mode = _mode(snap.get('HEARTBEAT'))
+    L: list[str] = []
     L.append(f'\n{BOLD}== depth / environment =={RESET}')
     # WHY the baro is unhealthy, not just that depth withdrew. 0 is the GOOD code,
     # so an absent reading must never be rendered as 0.
@@ -507,10 +543,7 @@ def render(snap: Snapshot, conn) -> list[str]:
     # unlike SCALED_PRESSURE2/WTEMP which ARE suppressed. So the board keeps streaming a
     # depth -- `-0.000` -- with no Bar30 fitted at all, and that number is meaningless.
     # Cross-check against the health bit rather than trusting the value's presence.
-    _baro_ok = None
-    if sysst is not None:
-        _bit = mavutil.mavlink.MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE
-        _baro_ok = bool(sysst.onboard_control_sensors_health & _bit)
+    _baro_ok = _baro_healthy(sysst)
     _depth_raw = getattr(hud, 'alt', None)
     if _baro_ok is False or (_baro_ok is None and not snap.press_samples):
         L.append(f'  depth           {sfmt.ABSENT}   {DIM}(VFR_HUD streams a value even '
@@ -541,8 +574,13 @@ def render(snap: Snapshot, conn) -> list[str]:
     lvl, msg = depth_loop_verdict(n, mode)
     col = {'OK': GRN, 'WARN': YEL, 'FAIL': RED}[lvl]
     L.append(f'  depth loop      {col}{lvl}{RESET}  {msg}')
+    return L
 
-    # ---- thrusters -------------------------------------------------------- #
+
+def _thrusters(snap: Snapshot) -> list[str]:
+    """ESC RPM and temperature, and what an all-zero row means."""
+    armed = _armed(snap.get('HEARTBEAT'))
+    L: list[str] = []
     L.append(f'\n{BOLD}== thrusters =={RESET}')
     rpm, temp = [], []
     for blk in ('ESC_TELEMETRY_1_TO_4', 'ESC_TELEMETRY_5_TO_8'):
@@ -564,8 +602,12 @@ def render(snap: Snapshot, conn) -> list[str]:
     else:
         L.append(f'  rpm             {sfmt.ABSENT}   {DIM}(no ESC telemetry -- no Pico '
                  f'co-processor, or ESCs not running Bluejay){RESET}')
+    return L
 
-    # ---- payload: which channels mongla_ws may drive ---------------------- #
+
+def _payload(snap: Snapshot) -> list[str]:
+    """Which payload channels mongla_ws may drive; nothing when roles were not read."""
+    L: list[str] = []
     if snap.roles:
         L.append(f'\n{BOLD}== payload (PCA9685) =={RESET}   '
                  f'{DIM}role is a FIRMWARE param, set in Bondor{RESET}')
@@ -596,8 +638,14 @@ def render(snap: Snapshot, conn) -> list[str]:
                      f'{DIM}fire() fails closed on these{RESET}')
         L.append(f'  {DIM}fire(N) uses these numbers directly, e.g. '
                  f'`mongla fire --fire_channel {switch[0] if switch else 9}`{RESET}')
+    return L
 
-    # ---- firmware health -------------------------------------------------- #
+
+def _firmware_health(snap: Snapshot) -> list[str]:
+    """Free heap, task stacks, load and drop rate."""
+    n = snap.named
+    sysst = snap.get('SYS_STATUS')
+    L: list[str] = []
     L.append(f'\n{BOLD}== firmware health =={RESET}')
     L.append(f'  free heap       {_f(n.get("HEAP"), "{:.0f}", " B")}')
     stacks = {k: v for k, v in n.items() if k.startswith('STK_')}
@@ -609,8 +657,12 @@ def render(snap: Snapshot, conn) -> list[str]:
     if sysst is not None:
         L.append(f'  load            {sysst.load / 10.0:.1f}%     '
                  f'drop rate {sysst.drop_rate_comm / 100.0:.2f}%')
+    return L
 
-    # ---- safety config ----------------------------------------------------- #
+
+def _safety_config(conn) -> list[str]:
+    """Board parameters that silently disable a safety behaviour."""
+    L: list[str] = []
     # A disabled gate is invisible. Twenty-one board params default to zero and
     # several of them gate safety behaviour; nothing errors when one is off, the
     # feature simply never happens. This section is the only place that looks.
@@ -634,8 +686,13 @@ def render(snap: Snapshot, conn) -> list[str]:
                 L.append(f'  {col}{bad[0]:<4}{RESET} {name:<14} {shown}   {col}{bad[2]}{RESET}')
         if not findings:
             L.append(f'  {GRN}every gate live{RESET}')
+    return L
 
-    # ---- link ------------------------------------------------------------- #
+
+def _link(snap: Snapshot) -> list[str]:
+    """Message rates over the window, named values, and recent STATUSTEXT."""
+    n = snap.named
+    L: list[str] = []
     L.append(f'\n{BOLD}== link =={RESET}  {DIM}{snap.window_s:.1f}s window{RESET}')
     for mt, c in sorted(snap.msg_counts.items(), key=lambda kv: -kv[1]):
         note = ''
