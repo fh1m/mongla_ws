@@ -1,0 +1,25 @@
+docs/assets/diagrams/precedence.svg
+  s_b4c45e3235679b::t_8e4c42491d6847 1-45,47
+  s_b4c45e3235679b::t_63c7b0bc792b02 46
+tools/make_diagrams.py
+  s_b4c45e3235679b::t_8e4c42491d6847 362-417,419-423,425-426
+  s_b4c45e3235679b::t_63c7b0bc792b02 418
+.claude/context/platform/launch-combinations.md
+  s_b4c45e3235679b::t_bb5a9fa7f542ab 92-97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "76611222e092884f0e9c312fded259d6152c9d40",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
