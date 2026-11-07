@@ -1,0 +1,24 @@
+docs/index.html
+  s_b4c45e3235679b::t_587c3f15ae93f6 113,1806
+README.md
+  s_b4c45e3235679b::t_587c3f15ae93f6 13,111,577-578,581,787-788,793,813
+  s_b4c45e3235679b::t_092b228d92e084 133-135,150
+docs/stats.json
+  s_b4c45e3235679b::t_587c3f15ae93f6 2-4,15,17,20,53-54,57,61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "771882e0b9e444351e68c947791add2ce54e2702",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
