@@ -21,6 +21,7 @@ fails as a core dump or a silent stall rather than an exception:
 
 `hailo_platform` is stubbed; the stub raises where the hardware would crash.
 """
+import subprocess
 import sys
 import threading
 import time
@@ -208,9 +209,10 @@ def hailo(tmp_path, monkeypatch):
     global CHIP
     CHIP = _Chip()
     import importlib
-    from mongla_vision.detection import hailo as mod
+    from mongla_vision.detection import hailo as mod, hailo_device
+    importlib.reload(hailo_device)
     importlib.reload(mod)
-    monkeypatch.setattr(mod, '_DEVICE', None, raising=False)
+    monkeypatch.setattr(hailo_device, '_DEVICE', None, raising=False)
     return mod
 
 
@@ -338,9 +340,8 @@ def test_a_closed_detector_stops_inferring(hailo, tmp_path):
 #  The baked NMS floor
 # --------------------------------------------------------------------------- #
 def _stub_parse_hef(monkeypatch, mod, text):
-    import subprocess
     monkeypatch.setattr(
-        mod.subprocess, 'run',
+        subprocess, 'run',
         lambda *a, **k: subprocess.CompletedProcess(a[0], 0, stdout=text,
                                                     stderr=''))
 
@@ -361,7 +362,7 @@ def test_the_baked_floor_is_read_from_the_hef(hailo, tmp_path, monkeypatch):
 def test_an_unreadable_floor_is_None_not_a_guess(hailo, monkeypatch):
     """A default would be worse than nothing: it would let the warning below
     fire, or not fire, on a number nobody measured."""
-    monkeypatch.setattr(hailo.subprocess, 'run',
+    monkeypatch.setattr(subprocess, 'run',
                         lambda *a, **k: (_ for _ in ()).throw(OSError('no tool')))
     assert hailo.baked_score_threshold('x.hef') is None
 

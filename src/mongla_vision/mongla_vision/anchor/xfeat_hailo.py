@@ -71,13 +71,13 @@ class XFeatHailo:
                  det_thresh: float = 0.05, semi_dense: bool = False):
         # The process's one VDevice (B-62): a VDevice of its own gave
         # HAILO_OUT_OF_PHYSICAL_DEVICES(74). The device runs HailoRT's
-        # ROUND_ROBIN scheduler (see `detection/hailo.py`), so this group and
+        # ROUND_ROBIN scheduler (see `detection/hailo_device.py`), so this group and
         # the detectors' share the chip with no Python lock around an
         # inference: measured, two detectors keep 44.4 Hz each with both
         # anchors running ~5 Hz beside them.
-        from ..detection import hailo as _hd
+        from ..detection import hailo_device
 
-        self._hd = _hd
+        self._hd = hailo_device
         # This anchor's own buffers only -- never the chip.
         self._lock = threading.Lock()
         self.top_k, self.det_thresh = int(top_k), float(det_thresh)
@@ -96,11 +96,11 @@ class XFeatHailo:
         # loop closure moves the vehicle.
         self.semi_dense = bool(semi_dense)
         self.path = hef_path
-        self._target = _hd._shared_device()
+        self._target = hailo_device.shared_device()
         self._model = self._target.create_infer_model(hef_path)
         # One registry for every network group on the chip, so the exit hook
-        # in `detection/hailo.py` hands this one back too (see `close_all`).
-        _hd._register(self)
+        # in `detection/hailo_device.py` hands this one back too (see `close_all`).
+        hailo_device.register(self)
         self._closed = False
         self._cim = None
         self._bindings = None
@@ -170,7 +170,7 @@ class XFeatHailo:
             self._model.input().set_format_type(FormatType.UINT8)
             for name in self._out_names():
                 self._model.output(name).set_format_type(FormatType.FLOAT32)
-            with self._hd._DEVICE_LOCK:
+            with self._hd.DEVICE_LOCK:
                 self._cim = self._model.configure()
                 self._cim.__enter__()
             self._in_buf = np.zeros((self.h, self.w, 1), np.uint8)

@@ -16,7 +16,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from mongla_vision.detection import hailo as hd          # noqa: E402
+from mongla_vision.detection import hailo as det          # noqa: E402
+from mongla_vision.detection import hailo_device as hd   # noqa: E402
 from mongla_vision.anchor.xfeat_hailo import XFeatHailo  # noqa: E402
 
 
@@ -35,7 +36,7 @@ def _with_fakes(monkeypatch, log, names):
     monkeypatch.setattr(hd, '_CLAIMANTS', hd.weakref.WeakSet())
     keep = [_Claimant(n, log) for n in names]
     for c in keep:
-        hd._register(c)
+        hd.register(c)
     return keep
 
 
@@ -65,7 +66,7 @@ def test_one_failing_close_does_not_strand_the_rest(monkeypatch):
     class _Bad:
         def close(self): raise RuntimeError('boom')
     bad = _Bad()
-    hd._register(bad)
+    hd.register(bad)
     hd.close_all()
     assert 'device' in log and {'a', 'b'} <= set(log)
     del keep, bad
@@ -85,10 +86,10 @@ def test_both_backends_register_themselves():
     """A backend that configures a group and is not in the registry is a
     group the exit hook cannot hand back."""
     import inspect
-    det = inspect.getsource(hd.HailoDetector.__init__)
+    det_init = inspect.getsource(det.HailoDetector.__init__)
     xf = inspect.getsource(XFeatHailo.__init__)
-    assert '_register(self)' in det
-    assert '_hd._register(self)' in xf
+    assert 'hailo_device.register(self)' in det_init
+    assert 'hailo_device.register(self)' in xf
 
 
 def test_a_closed_anchor_answers_empty_and_does_not_reconfigure():
