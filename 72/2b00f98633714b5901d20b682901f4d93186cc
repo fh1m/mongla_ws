@@ -1,0 +1,32 @@
+docs/index.html
+  s_b4c45e3235679b::t_b326654c887b63 3705
+  s_b4c45e3235679b::t_ff309c6f562cbe 1197,1272,1856
+src/mongla_control/test/test_srot_protocol_drift.py
+  s_b4c45e3235679b::t_fb789b116445b6 249-250,260-262
+README.md
+  s_b4c45e3235679b::t_159b71f743f3b0 916,919
+  s_b4c45e3235679b::t_5a59a69370a279 520
+  s_b4c45e3235679b::t_cd4e8558e0b6ed 920
+  s_b4c45e3235679b::t_16a9d576898ba7 37-38,177
+  s_b4c45e3235679b::t_143c658d469326 634-635
+  s_b4c45e3235679b::t_a693f8df829f1a 288
+  s_b4c45e3235679b::t_b326654c887b63 426-427,970-971,1020-1021,1181,1216-1217
+docs/the-shift.md
+  s_b4c45e3235679b::t_b326654c887b63 90-92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "722b00f98633714b5901d20b682901f4d93186cc",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
