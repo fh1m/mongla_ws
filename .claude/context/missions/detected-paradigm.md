@@ -982,7 +982,7 @@ takes the steps as a declaration, decides between them from the live clock
 - Implementation: `src/mongla_planner/mongla_planner/mongla_dsl.py` (`detected()` method, `_on_detections()` callback)
 - Two-verb vision DSL: `src/mongla_planner/mongla_planner/vision_dsl.py` (`vision.align` / `vision.move`)
 - Detection topic source: `src/mongla_vision/mongla_vision/detector_node.py` (publishes `Detection2DArray`)
-- Vision state (manager side): `src/mongla_manager/mongla_manager/vision_state.py` (`bbox_error()`, used by vision verbs, NOT by `detected()`)
+- Vision state (manager side): `src/mongla_manager/mongla_manager/vision_state.py`, with `bbox_error()` in `vision_choice.py` (used by vision verbs, NOT by `detected()`)
 - Mission samples: `src/mongla_planner/mongla_planner/missions/task_gate.py` (search → align → move), `pool_day_practice.py` (full two-verb run + fallbacks)
 - Mission cookbook: `.claude/context/missions/mission-cookbook.md` §7.6
 - Client/DSL API: `.claude/context/missions/client-and-dsl-api.md` §2.5

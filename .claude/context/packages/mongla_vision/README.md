@@ -74,12 +74,15 @@ a confident zero.
 | `depth_estimation_node` | `vis_range` | monocular proximity, off by default |
 | `mission_web_node` | — | the pool-day browser console |
 
-`lock_node` is one class in four files. `lock_node.py` holds the per-frame loop (detection in,
-rung chosen, anchor run). The other three are mixins of the same class, each with one job:
-`lock_setup.py` (parameters, the anchor model and the checkpoint bank), `lock_inputs.py`
-(the IMU, state, odometry and floor-height callbacks, each with its freshness check) and
-`lock_publish.py` (every topic the node writes, plus the health log). To find where a
-`self._x` is defined, grep the four files together: `grep -n "def _x" lock_*.py`.
+`lock_node` is one class in seven files. `lock_node.py` holds the per-frame loop (detection
+in, rung chosen, anchor run) and the list of files. The other six are mixins of the same class,
+each with one job: `lock_setup.py` (parameters, the anchor model and the checkpoint bank, live
+retuning), `lock_wiring.py` (the steps `__init__` runs, in order: state, publishers,
+subscriptions), `lock_frames.py` (the image and detection callbacks), `lock_inputs.py` (the
+IMU, state, odometry and floor-height callbacks, each with its freshness check),
+`lock_anchor.py` (the anchor rung) and `lock_publish.py` (every topic the node writes, plus the
+health log). To find where a `self._x` is defined, grep them together:
+`grep -n "def _x" lock_*.py`.
 
 `flow_node` is split the same way, under `flow/`: `flow_node.py` (the per-frame pipeline),
 `flow_setup.py` (parameters, intrinsics, input callbacks), `flow_checks.py` (every check that

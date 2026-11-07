@@ -19,7 +19,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 ROOT = Path(__file__).resolve().parents[2]
-VS = (ROOT / 'mongla_manager' / 'mongla_manager' / 'vision_state.py').read_text()
+sys.path.insert(0, str(ROOT.parent / 'tools'))
+from code_text import source_of  # noqa: E402  (vision_state.py and its mixin)
+VS = source_of(ROOT / 'mongla_manager' / 'mongla_manager' / 'vision_state.py')
 MV = '\n'.join(f.read_text() for f in sorted(
     (ROOT / 'mongla_control' / 'mongla_control' / 'motion_vision').glob('*.py')))
 TUN = (ROOT / 'mongla_manager' / 'mongla_manager'

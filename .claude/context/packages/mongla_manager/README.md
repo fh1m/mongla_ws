@@ -117,7 +117,8 @@ to decide.
 | `srot_connect.py` · `srot_format.py` · `srot_changes.py` | reading the board, formatting it, showing what changed |
 | `srot_autotune.py` | the operator's front end to the board's tuning routine |
 | `srot_recorder.py` | raw MAVLink capture for later analysis |
-| `vision_state.py` | per-camera detection cache; turns a detection into a pixel error |
+| `vision_state.py` | per-camera detection cache: the subscriptions and what they last said |
+| `vision_choice.py` | which box to steer on, turned into a pixel error (`bbox_error`, `Sample`) |
 | `distance_state.py` | distance travelled, from the downward camera |
 | `vision_tunables.py` | the live-tunable vision gains, in one place; set on the deck under `nodes:` in `bringup.yaml` |
 | `dispatch_policy.py` | which goals the action server accepts while busy: only `disarm`, `stop` and `surface`, which pre-empt the running verb |
@@ -190,6 +191,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `srot_connect.py` | ``ros2 run mongla_manager connect`` -- point at the SROT board, see the vehicle. |
 | `srot_format.py` | One place that decides how a SROT value is rendered. Pure, no I/O, no pymavlink. |
 | `srot_recorder.py` | Record the raw MAVLink stream so a dive can be replayed after the fact. |
+| `vision_choice.py` | Which box the control loop steers on, and the Sample it is turned into. |
 | `vision_state.py` | per-camera subscriber that the vision motion loop reads. |
 | `vision_tunables.py` | ROS-param defaults for every vision_* command. |
 | `yaw_source.py` | Heading, read off the board's own fused attitude. |
