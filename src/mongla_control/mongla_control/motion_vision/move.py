@@ -23,7 +23,6 @@ from .control import (
     VISION_BRAKE_GAIN,
     _PASSTHROUGH_COMMIT_S,
     _VisionLoop,
-    _authority,
     _brake_axis,
     _camera_ready,
     _clamp,
@@ -31,9 +30,14 @@ from .control import (
     _fill,
     _present,
     _range_gain,
-    _srot_drive,
     _tick,
+)
+from .freshness import (
+    _authority,
     _warn_low_fps,
+)
+from .srot_drive import (
+    _srot_drive,
 )
 
 # ---------------------------------------------------------------------- #
