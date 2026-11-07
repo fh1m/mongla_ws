@@ -101,7 +101,8 @@ def test_bearing_to_returns_none_for_an_unseen_prop():
 
 def test_bearing_to_uses_the_WATER_field_of_view_of_THAT_camera():
     # Water, not air (air would stretch every bearing by ~37 %), and per camera:
-    # forward is the Fantech at 53.6 deg, downward the global shutter at 46.7.
+    # forward is the Fantech at 53.6 deg, downward the global shutter at 46.7
+    # (both computed by Snell from the air calibration).
     fake = _fake(seen={'gate': 1.0}, heading=0.0)
     fake.bearing_to = MonglaMission.bearing_to.__get__(fake)
     fake.where_offset.side_effect = lambda cls, camera=None: 1.0

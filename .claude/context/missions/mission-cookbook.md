@@ -1507,7 +1507,7 @@ puts every outcome on the scorecard.
 ros2 run mongla_planner mission task_gate
 ros2 run mongla_planner mission task_return
 
-# ⏳ logic test (model missing — verify search + timeout + abort flow)
+# pending: logic test (model missing — verify search + timeout + abort flow)
 ros2 run mongla_planner mission task_slalom
 ros2 run mongla_planner mission task_bin
 ros2 run mongla_planner mission task_torpedo

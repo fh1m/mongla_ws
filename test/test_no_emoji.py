@@ -9,10 +9,12 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-TEXT = re.compile(r'\.(py|md|html|ya?ml|sh|txt|js|css|json|toml|cfg)$')
+TEXT = re.compile(r'\.(py|md|html|ya?ml|sh|txt|js|css|json|toml|cfg'
+                  r'|action|msg|srv|cpp|hpp|h|rules)$')
 # Pictographs, dingbats, misc symbols and the emoji variation selector. Box
 # drawing, arrows, maths and the degree sign are typography and stay.
-EMOJI = re.compile(r'[\u2600-\u27BF\u2B00-\u2BFF\U0001F000-\U0001FAFF\uFE0F]')
+EMOJI = re.compile(r'[\u231A\u231B\u23E9-\u23FA\u2600-\u27BF\u2B00-\u2BFF'
+                   r'\U0001F000-\U0001FAFF\uFE0F]')
 
 
 def _tracked():

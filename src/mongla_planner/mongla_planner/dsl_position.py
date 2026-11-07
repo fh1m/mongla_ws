@@ -41,7 +41,7 @@ class WhereMixin:
 
         A flat port has no single focal length. The in-water focal grows with
         field angle (forward camera at 640 px: ~567 px at the centre, ~634 at the
-        edge), so ANY one focal -- the old shared 46.7 deg, or a per-camera FOV --
+        edge), so ANY one focal -- the old shared 46.7 deg (Snell), or a per-camera FOV --
         is wrong by up to ~12 % somewhere in the frame. Rectified pixels ARE a
         pinhole at `K_rect`, which is the model `lock_node` and `pnp_node` use;
         the DSL now uses the same one instead of a second copy.

@@ -119,7 +119,7 @@ def missions_table() -> list[str]:
         stems |= {consts[c] for c in re.findall(r"set_model\(\s*([A-Z_]+)\b", text)
                   if c in consts}
         stems = sorted(stems)
-        models = ', '.join(f'`{m}`' if m in shipped else f'`{m}` ⏳ not shipped'
+        models = ', '.join(f'`{m}`' if m in shipped else f'`{m}` (not shipped)'
                            for m in stems) or '—'
         calls = sorted({n.func.attr for n in ast.walk(tree)
                         if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
@@ -296,7 +296,7 @@ def render() -> str:
             last = rel
         L.append(f'| `{name}` | `{default}` | {desc} |')
     L += ['', '## 3b. Missions — `mongla_planner/missions/`', '',
-          'Run with `ros2 run mongla_planner mission <name>`. A model marked ⏳ is '
+          'Run with `ros2 run mongla_planner mission <name>`. A model marked *not shipped* is '
           'not in `src/mongla_vision/models/`: it arrives on a water day, and until '
           'then the mission refuses at `set_model`. A board move enters AUTO, which '
           'closes the depth loop: every one is gated on the two armed bench checks '

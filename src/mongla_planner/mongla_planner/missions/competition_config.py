@@ -215,7 +215,7 @@ SAUVC_QUAL_MAX_DEPTH_M   = -1.0   # 0.2 m under the hull at the wall
 SAUVC_QUAL_GATE_ALIGN_S  = 60.0   # centre on the gate, creeping forward to find it
 SAUVC_QUAL_GATE_MOVE_S   = 75.0   # ~10 m out, plus the commit window
 # After the forward pass the hull is barely through. A 1.5 m gate overfills a
-# 46.7° in-water frame inside ~2.5 m (1.5 / (2 tan 23.35°) / 0.7), so turning
+# 46.7° in-water frame (Snell, from the air calibration) inside ~2.5 m (1.5 / (2 tan 23.35°) / 0.7), so turning
 # in place leaves an align with no whole gate to centre on. Swim on first.
 SAUVC_QUAL_STANDOFF_S    = 8.0    # UNMEASURED. ~2.8 m at ~0.35 m/s
 SAUVC_QUAL_TURN_DEG      = 180.0  # yaw_right: CLOCKWISE, which is also the turn

@@ -1,7 +1,7 @@
 # The OUTLINE of each detection, in image pixels. One message for a box and a
 # mask alike.
 #
-# ⛔ WHY A CONTOUR AND NOT A BITMAP, AND WHY IT IS THE SAME MESSAGE FOR BOTH.
+# WARNING: WHY A CONTOUR AND NOT A BITMAP, AND WHY IT IS THE SAME MESSAGE FOR BOTH.
 # This is the format the 2025/2026 RoboSub champions ship: their
 # `DetectedObject2D` carries `uint16[] contour` with the note "2D bounding box
 # OR contour surrounding the object", plus area, centre and bbox size marked
@@ -29,7 +29,7 @@ std_msgs/Header header      # stamp = the CAPTURE instant of the frame
 
 string camera               # e.g. 'forward'
 
-# ⛔ THE PIXEL FRAME THESE POINTS ARE IN, for the same reason
+# WARNING: THE PIXEL FRAME THESE POINTS ARE IN, for the same reason
 # TargetCorrespondences carries it: a producer may work at a reduced
 # resolution, and scaling a contour by the wrong factor yields a plausible
 # polygon in the wrong place. Zero means "same as the matching CameraInfo".
@@ -52,7 +52,7 @@ int16[] angle_deg
 # the kind of cost that is invisible until it is not.
 uint32[] area_px
 
-# ⛔ RAGGED ARRAYS, FLATTENED. Contour i occupies
+# WARNING: RAGGED ARRAYS, FLATTENED. Contour i occupies
 # points[2*offset[i] : 2*offset[i+1]], as x,y pairs. `offset` therefore has
 # ONE MORE entry than `class_name`: the final element is the total point
 # count, so the last contour needs no special case. A consumer that assumes
