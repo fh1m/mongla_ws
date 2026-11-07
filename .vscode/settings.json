@@ -15,7 +15,6 @@
     "**/*.engine": true,
     "**/*.pt": true,
     "**/*.onnx": true,
-    "**/graphify-out/**": true
   },
 
   // Keep search fast + relevant (results from src/ + docs, not generated code).
@@ -26,7 +25,6 @@
     "**/__pycache__": true,
     "**/*.engine": true,
     "**/*.pt": true,
-    "**/graphify-out": true
   },
 
   // Hide the generated colcon trees from the Explorer to declutter.
