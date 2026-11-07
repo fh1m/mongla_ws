@@ -1,0 +1,22 @@
+.claude/context/ROADMAP.md
+  s_b4c45e3235679b::t_f67142837c9b3c 97,99-103
+  s_b4c45e3235679b::t_874a1725dbcb6d 59
+CLAUDE.md
+  s_b4c45e3235679b::t_874a1725dbcb6d 26-28,82-89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "5cf65ff8e159e4833764be7efd9235de7cd31cc4",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
