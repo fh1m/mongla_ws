@@ -7,7 +7,7 @@
 #     ros2 launch mongla_manager bringup.launch.py
 # uses them. `name:=value` on the command line still wins over this file.
 # A key that is not listed here stops the launch (a typo cannot vanish).
-# How it works: src/mongla_manager/mongla_manager/launch_defaults.py
+# How it works: src/mongla_localization/mongla_localization/launch_defaults.py
 #
 # Each line shows the repository default.
 
@@ -277,6 +277,174 @@
 
 #   (passed to vision_pi.launch.py, which sets the default)
 # dwn_device_path: ''
+
+# ---- other launch files ----------------------------------------------
+# `ros2 launch mongla_vision <name>.launch.py` reads `launch: <name>:`.
+# A section applies ONLY to the file typed on the command line: when
+# bringup includes vision_pi, set those arguments at the top level above.
+# What each argument does: .claude/context/reference/commands.md.
+#
+# launch:
+#   mission_web:
+#     cameras: both
+#     web_port: 8090
+#     video_port: 8080
+#     no_browser: false
+#     paused: false
+#     debug_image_hz: 15.0
+#     viewer: false
+#     fwd_device: 0
+#     dwn_device: 4
+#     fwd_device_path: ''
+#     dwn_device_path: ''
+#     fwd_model: gate_sharks
+#     fwd_models: ''
+#     fwd_classes: 'gate,shark,shaw_fish'
+#     fwd_conf: 0.35
+#     fwd_model_conf: ''
+#     dwn_model: bin_fire_blood
+#     dwn_models: ''
+#     dwn_classes: 'fire,blood'
+#     dwn_conf: 0.35
+#     dwn_model_conf: ''
+#     fwd_video: ''
+#     dwn_video: ''
+#     imgsz: 640
+#     max_det: 100
+#     tracking: true
+#   video:
+#     fwd_video: ''
+#     dwn_video: ''
+#     fwd_model: gate_sharks
+#     fwd_classes: 'gate,shark,shaw_fish'
+#     dwn_model: bin_fire_blood
+#     dwn_classes: 'fire,blood'
+#     conf: 0.35
+#     loop: true
+#     viewer: true
+#     tracking: true
+#     imgsz: 640
+#     max_det: 100
+#   vision:
+#     profile: ''
+#     lock: false
+#     lock_class: ''
+#     camera: forward
+#     device: -1
+#     device_path: ''
+#     width: 640
+#     height: 480
+#     fps: 0
+#     video_file: ''
+#     topic: ''
+#     loop: true
+#     model: yolov11n
+#     models: ''
+#     active_model: ''
+#     classes: ''
+#     conf: 0.35
+#     iou: 0.5
+#     device_cls: auto
+#     imgsz: 640
+#     max_det: 100
+#     paused: false
+#     debug_image_hz: 10.0
+#     viewer: true
+#     tracking: true
+#     tracker_type: ocsort
+#     track_buffer: 30
+#     min_hits: 1
+#     max_predict_s: 1.5
+#     depth: false
+#     depth_model: ''
+#     flow: false
+#     pool_depth_m: nan
+#     hud_distance: true
+#   vision_dual:
+#     fwd_device: 0
+#     dwn_device: 4
+#     fwd_device_path: ''
+#     dwn_device_path: ''
+#     fwd_model: gate_sharks
+#     fwd_models: ''
+#     fwd_classes: 'gate,shark,shaw_fish'
+#     dwn_model: bin_fire_blood
+#     dwn_models: ''
+#     dwn_classes: 'fire,blood'
+#     fwd_conf: 0.35
+#     dwn_conf: 0.35
+#     fwd_model_conf: ''
+#     dwn_model_conf: ''
+#     device_cls: auto
+#     imgsz: 640
+#     max_det: 100
+#     paused: true
+#     debug_image_hz: 10.0
+#     viewer: true
+#     tracking: true
+#     tracker_type: ocsort
+#     fwd_topic: ''
+#     dwn_topic: ''
+#     fwd_video: ''
+#     dwn_video: ''
+#     fwd_loop: true
+#     dwn_loop: true
+#     flow: false
+#     pool_depth_m: nan
+#     hud_distance: true
+#   vision_pi:
+#     fwd_profile: pi_forward
+#     dwn_profile: pi_downward
+#     fwd_model: gate_sharks
+#     dwn_model: bin_fire_blood
+#     fwd_models: ''
+#     dwn_models: ''
+#     fwd_active: ''
+#     dwn_active: ''
+#     contours: true
+#     fwd_classes: ''
+#     dwn_classes: ''
+#     conf: 0.45
+#     max_det: 100
+#     vision: fast
+#     preprocess: auto
+#     range_crop: -1
+#     preprocess_clip: 0.0
+#     imgsz: 640
+#     paused: true
+#     viewer: false
+#     tracking: true
+#     tracker_type: ocsort
+#     kalman_adaptive_noise: true
+#     fwd_frame_rate: 30.0
+#     dwn_frame_rate: 32.0
+#     dwn_calibration: ''
+#     fwd_calibration: ''
+#     flow: false
+#     lock: false
+#     act_conf: 0.45
+#     anchor_xfeat_hef: true
+#     anchor_semi_dense: false
+#     target_width_m_forward: 0.0
+#     target_width_m_downward: 0.0
+#     lock_class: ''
+#     dwn_lock_class: ''
+#     pool_depth_m: nan
+#     pool_depth_min_m: nan
+#     pool_depth_max_m: nan
+#     tile_m: 0.0
+#     caustics: true
+#     bank_forward: ''
+#     bank_downward: ''
+#     lane_lines: false
+#     medium: water
+#     fwd_fps: 0
+#     dwn_fps: 0
+#     fwd_publish_hz: 40
+#     dwn_publish_hz: 0
+#     replay: false
+#     fwd_device_path: ''
+#     dwn_device_path: ''
 
 # ---- node parameters -------------------------------------------------
 # Every knob that is not a launch argument is a node parameter, and it

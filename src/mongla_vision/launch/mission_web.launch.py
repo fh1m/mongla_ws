@@ -44,6 +44,7 @@ from launch.substitutions      import LaunchConfiguration, PythonExpression
 from launch_ros.actions        import Node
 from ament_index_python.packages import (get_package_share_directory,
                                           PackageNotFoundError)
+from mongla_localization import launch_defaults
 
 
 # Pass-through args forwarded to vision_dual (curated subset -- power users can
@@ -172,5 +173,9 @@ def generate_launch_description():
         'MISSION_WEB_NO_BROWSER', '1',
         condition=IfCondition(LaunchConfiguration('no_browser')))
 
-    return LaunchDescription(args + [no_browser_env, vision_both, vision_fwd,
+    # `launch: mission_web:` in ~/.mongla/bringup.yaml re-defaults these, and its
+    # `nodes:` reach the nodes below -- only when this file is the one typed.
+    args, settings = launch_defaults.for_launch_file(args, __file__)
+
+    return LaunchDescription(args + settings + [no_browser_env, vision_both, vision_fwd,
                                      vision_dwn] + video_actions + [console])

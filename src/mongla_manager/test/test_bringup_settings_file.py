@@ -8,7 +8,7 @@ import pytest
 from launch import LaunchContext
 from launch.actions import DeclareLaunchArgument
 
-from mongla_manager import launch_defaults as LD
+from mongla_localization import launch_defaults as LD
 
 
 def _args():

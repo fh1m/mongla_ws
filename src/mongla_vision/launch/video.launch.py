@@ -53,6 +53,8 @@ from launch.actions import (
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 
+from mongla_localization import launch_defaults
+
 
 def _setup(context, *_args, **_kwargs):
     fwd = LaunchConfiguration('fwd_video').perform(context).strip()
@@ -90,7 +92,7 @@ def _setup(context, *_args, **_kwargs):
 
 
 def generate_launch_description():
-    return LaunchDescription([
+    args = [
         DeclareLaunchArgument('fwd_video',   default_value='',
                               description='Forward-camera video (e.g. a gate dataset clip). '
                                           'At least one of fwd_video / dwn_video is required.'),
@@ -116,5 +118,9 @@ def generate_launch_description():
         DeclareLaunchArgument('tracking',    default_value='true'),
         DeclareLaunchArgument('imgsz',       default_value='640'),
         DeclareLaunchArgument('max_det',     default_value='100'),
-        OpaqueFunction(function=_setup),
-    ])
+    ]
+    # `launch: video:` in ~/.mongla/bringup.yaml re-defaults these, and its
+    # `nodes:` reach the nodes below -- only when this file is the one typed.
+    args, settings = launch_defaults.for_launch_file(args, __file__)
+
+    return LaunchDescription(args + settings + [OpaqueFunction(function=_setup)])

@@ -8,7 +8,7 @@ The deck has ONE settings file. Its top level holds launch arguments; its
       mongla_manager:
         vision.kp_yaw: 80.0         # a parameter of the manager node
 
-Bringup (`mongla_manager/launch_defaults.py`) writes `nodes:` out as an
+Bringup (`mongla_localization/launch_defaults.py`) writes `nodes:` out as an
 ordinary ROS parameter file and hands it to every node it starts. ROS then
 does two silent things this module exists to make loud:
 

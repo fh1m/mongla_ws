@@ -60,6 +60,7 @@ from launch.events           import Shutdown
 from launch.substitutions    import LaunchConfiguration, PythonExpression
 from launch_ros.actions      import Node
 from launch_ros.parameter_descriptions import ParameterValue
+from mongla_localization import launch_defaults
 
 _QUIET = ['--log-level', 'warn']
 
@@ -292,7 +293,11 @@ def generate_launch_description():
         OnProcessExit(target_action=viewer, on_exit=[EmitEvent(event=Shutdown())])
     )
 
-    return LaunchDescription(args + [
+    # `launch: vision_dual:` in ~/.mongla/bringup.yaml re-defaults these, and its
+    # `nodes:` reach the nodes below -- only when this file is the one typed.
+    args, settings = launch_defaults.for_launch_file(args, __file__)
+
+    return LaunchDescription(args + settings + [
         camera('forward',  'fwd_device', 'fwd_video', 'fwd_loop', 'fwd_device_path',
                'fwd_topic'),
         camera('downward', 'dwn_device', 'dwn_video', 'dwn_loop', 'dwn_device_path',

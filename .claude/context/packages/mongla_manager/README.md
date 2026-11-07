@@ -118,12 +118,12 @@ to decide.
 | `srot_autotune.py` | the operator's front end to the board's tuning routine |
 | `srot_recorder.py` | raw MAVLink capture for later analysis |
 | `vision_state.py` | per-camera detection cache; turns a detection into a pixel error |
-| `distance_state.py` · `flow_position.py` | distance travelled, from the downward camera |
+| `distance_state.py` | distance travelled, from the downward camera |
 | `vision_tunables.py` | the live-tunable vision gains, in one place; set on the deck under `nodes:` in `bringup.yaml` |
 | `dispatch_policy.py` | which goals the action server accepts while busy: only `disarm`, `stop` and `surface`, which pre-empt the running verb |
 | `health.py` · `health_reporters.py` | subsystem health, reported rather than assumed |
 | `connection_config.py` | connection profiles and network constants |
-| `launch_defaults.py` | reads `~/.mongla/bringup.yaml`, so a pool day is a file rather than a long command line |
+| `mongla_localization/launch_defaults.py` | reads `~/.mongla/bringup.yaml` for bringup and every other launch file (it lives in the package they all depend on) |
 | `yaw_source.py` | heading, read off the board's own fused attitude |
 | `estimator/thrust_model.py` | eight signed ESC RPMs to a body-frame acceleration, for the estimator |
 | `flare_order_send.py` | `ros2 run mongla_manager flare_order R-B-Y` -- tells the vehicle the flare order |
@@ -180,7 +180,6 @@ with no summary line shows as *(no summary)* until it gets one.
 | `flare_order_send.py` | ``ros2 run mongla_manager flare_order R-B-Y --port /dev/ttyACM0`` -- tell the vehicle. |
 | `health.py` | One health surface. Four states, and UNKNOWN is not OK. |
 | `health_reporters.py` | Each subsystem's private dialect, translated once. |
-| `launch_defaults.py` | Bringup settings from a file, so a pool day is a file and not a long command. |
 | `node_health.py` | Is the node alive, and is the mission: the health report and the three watchdogs (executor, mission, kill switch). |
 | `node_setup.py` | Bringing the node up: parameters, the board link, the recorder, the preflight reads. |
 | `node_support.py` | The manager node's shared constants: one home, read by every part of the node. |

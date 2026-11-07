@@ -205,7 +205,8 @@ automatically.
   there is no backend selector. Launch defaults can come from `~/.mongla/bringup.yaml`
   (`$MONGLA_BRINGUP`); anything typed as `name:=value` still wins. **Node parameters
   go in the same file, under `nodes:`** -- one file for the deck, and every node
-  refuses a misspelt key or one a launch argument already sets.
+  refuses a misspelt key or one a launch argument already sets. The vision launch
+  files read it too, each from `launch: <file>:`, only when typed themselves.
 
 Older context files mention `/mongla/arm`, `/mongla/depth_cmd`, `Attitude.msg`,
 `RCOverride.msg`. **None of these exist.**
