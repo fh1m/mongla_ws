@@ -54,7 +54,7 @@ _PUB = re.compile(r'create_publisher\(\s*[\w.]+\s*,\s*([\'"f][^,]*?)\s*,', re.S)
 _SUB = re.compile(r'create_subscription\(\s*[\w.]+\s*,\s*([\'"f][^,]*?)\s*,', re.S)
 
 # A topic held in a variable is still a topic, and missing that cost three
-# passes. `dsl_position._wait_fused_pose` writes
+# passes. `dsl_heading._wait_fused_pose` writes
 #     topic = f'/mongla/vision/{camera}/target_pose_fused'
 #     ...create_subscription(TargetPose, topic, ...)
 # so the patterns above -- which require the second argument to START with a

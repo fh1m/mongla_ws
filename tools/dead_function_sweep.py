@@ -76,7 +76,7 @@ _EXEMPT_PREFIX = ('test_', '__')
 # holds what); its mixins carry the same API, so they are listed with it. A new
 # part has to be added here, which is the moment to decide it is mission API.
 _EXEMPT_PUBLIC_METHODS_OF = {'MonglaMission',
-                             'SeeMixin', 'WhereMixin', 'CameraMixin', 'DetectorMixin',
+                             'SeeMixin', 'WhereMixin', 'HeadingMixin', 'CameraMixin', 'DetectorMixin',
                              'PlanMixin', 'ReportMixin'}
 # A ROS node's own plumbing: a timer or subscription callback is passed as a
 # reference, which the AST scan DOES see -- so these are not exempted. Only
