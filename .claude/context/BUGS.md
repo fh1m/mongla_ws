@@ -171,6 +171,33 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 
 ## 2. HIGH
 
+### B-91: the floor's yaw bound is applied on arrival, against the heading now `READ 2026-11-07` **OPEN**
+
+**What.** `flow_node` publishes `floor_grid_deg` and `lane_heading_deg` as bare
+`std_msgs/Float32`: no stamp. `localization_inputs._bound_yaw` snaps the
+current filter yaw to that angle and applies the update with `_apply(None, ...)`,
+that is, at arrival. Every other aiding measurement carries a stamp and is
+replayed at the instant it describes. These two compare a frame taken some tens
+of milliseconds ago with the heading of now, so during a turn the bound pulls
+yaw toward where the hull was, and folds that into `_yaw_offset_deg`.
+
+**Why not fixed yet.** The fix is a stamped message (a `FloorHeading` with a
+header, or the frame's stamp carried some other way) and `_apply(stamp, ...)`
+with the snap computed inside the replayed update against the yaw *at the
+stamp*. The offset fold then has to move with it. That changes the filter's
+yaw path, and a yaw-drift bound cannot be validated on a bench. It goes with
+the first water session that has the floor grid in view (`workbench/POOL.md`),
+so the before and after are both measured. Until then the size of the error is
+the yaw rate times the frame-to-publish latency; at the slow turns these
+bounds run during, it is small, but it is not zero and it is not measured.
+
+**Found by** the `std_msgs` inventory (bead `jxt`). The other eight primitive
+topics stay: `mission_alive` and `distance_control` are a liveness signal and a
+command whose arrival time is the point; `localization/motion` is a latched
+state label; `distance_traveled` is read as a start-to-stop difference;
+`flow_quality` and the three `video_*` topics are operator and bench
+diagnostics.
+
 ### B-88: flow_node held a height from before the depth stopped `READ 2026-11-07` **FIXED 2026-11-07**
 
 **What.** B10 gave the old `distance_estimation_node` a clock on its height:
