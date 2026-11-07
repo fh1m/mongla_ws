@@ -52,7 +52,7 @@ LEDGER_BOUND = {
                         'cut; generous on purpose so ordinary parallax does '
                         'not trip it'),
     },
-    'mongla_vision.flow.flow_node': {
+    'mongla_vision.flow.flow_constants': {
         'FLOW_SCALE_SIGMA_FRAC': (0.036, '1.09 cm on 30 cm — 3.6 %',
                                   'worst of three taped slides; the scale '
                                   'term of the published flow sigma (#23)'),

@@ -24,9 +24,10 @@ pytest.importorskip('cv_bridge')
 
 from rclpy.parameter import Parameter                      # noqa: E402
 
-from mongla_vision.flow.flow_node import (             # noqa: E402
-    _F_AIR_PX, _F_WATER_PX, _GYRO_GAIN_DEFAULT, FlowVelocityNode,
+from mongla_vision.flow.flow_constants import (        # noqa: E402
+    _F_AIR_PX, _F_WATER_PX, _GYRO_GAIN_X_DEFAULT, _GYRO_GAIN_Y_DEFAULT,
 )
+from mongla_vision.flow.flow_node import FlowVelocityNode  # noqa: E402
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -154,14 +155,14 @@ class TestGyroGainDefault:
         error at 0.638 rad/s, which is a yawing vehicle and most of a
         mission. Re-enabling needs a high-rotation test at the pivot the
         vehicle actually turns about."""
-        assert _GYRO_GAIN_DEFAULT == 0.0
+        assert (_GYRO_GAIN_X_DEFAULT, _GYRO_GAIN_Y_DEFAULT) == (0.0, 0.0)
 
     def test_the_lens_pivot_gains_are_kept_so_nobody_re_derives_them(self):
         """The measurement survives even though it is not the default: the
         coupling about the LENS is S = -1.058 / -0.830, and the node cancels
         at g = -S. Deleting these would mean re-running the tilt calibration
         to learn something already known."""
-        from mongla_vision.flow.flow_node import _GYRO_GAIN_LENS_PIVOT
+        from mongla_vision.flow.flow_constants import _GYRO_GAIN_LENS_PIVOT
         assert _GYRO_GAIN_LENS_PIVOT == pytest.approx((1.058, 0.830))
 
     def test_the_bench_gain_is_still_settable(self):
@@ -792,7 +793,7 @@ class TestSunOnABareFloorRefuses:
             n._is_ripe = lambda *a, **k: True
             n._anchor(tc._frame(0, 2.0, 1.0, sun), 0.0)
             n._frame_i = 5
-            with mock.patch('mongla_vision.flow.flow_node.patch_ncc_median',
+            with mock.patch('mongla_vision.flow.flow_checks.patch_ncc_median',
                             return_value=ncc):
                 n._process(tc._frame(5, 2.0, 1.0, sun), 0.5, 1)
         finally:
@@ -967,7 +968,7 @@ def test_an_unreadable_calibration_falls_back_to_the_whole_no_calibration_path(t
     while the no-calibration branch, a few lines up, did scale it.
     INJECTION-VERIFIED: delete the `_scale_focal_params` call in the except
     branch and this fails."""
-    from mongla_vision.flow.flow_node import FOCAL_PARAMS_WIDTH
+    from mongla_vision.flow.flow_constants import FOCAL_PARAMS_WIDTH
     bad = tmp_path / 'broken.json'
     bad.write_text('{ not json')
     a = _make(medium='air', pool_depth_m=4.0)

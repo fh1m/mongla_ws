@@ -81,6 +81,12 @@ rung chosen, anchor run). The other three are mixins of the same class, each wit
 `lock_publish.py` (every topic the node writes, plus the health log). To find where a
 `self._x` is defined, grep the four files together: `grep -n "def _x" lock_*.py`.
 
+`flow_node` is split the same way, under `flow/`: `flow_node.py` (the per-frame pipeline),
+`flow_setup.py` (parameters, intrinsics, input callbacks), `flow_checks.py` (every check that
+may refuse a frame), `flow_floor.py` (tile-grid heading and lane lines), `flow_publish.py`
+(topics and the log) and `flow_constants.py` (the measured constants, each in
+`measured-bars.md`).
+
 ## Tools
 
 ```bash
