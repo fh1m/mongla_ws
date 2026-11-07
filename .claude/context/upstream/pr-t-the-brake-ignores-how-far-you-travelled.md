@@ -1,7 +1,7 @@
 # PR T — the brake's impulse does not depend on the leg's duration, so short legs reverse
 
 **Target:** `srot-control-board` · **File as an ISSUE**
-**Status:** ⏳ NOT SENT — read-only GitHub access this session.
+**Status:** filed 2026-11-07 as issue [#37](https://github.com/RakibulIslam1/srot-control-board/issues/37).
 
 `PH_BRAKE` applies a fixed reverse thrust for a fixed time, both derived from the
 **commanded** cruise speed and neither from how long the vehicle actually

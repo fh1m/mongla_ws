@@ -1,15 +1,16 @@
 # PR P — the geometric allocator, written
 
 **Target:** `srot-control-board` · **Branch:** `duburi-ws/geometric-allocator`
-**Status:** ⏳ **CODE READY, NOT SENT** — this session has read-only GitHub access to
-`srot-control-board` (branch creation, issue creation and PR creation all return
-`403 Resource not accessible by integration`). The patch is in
+**Status:** opened 2026-11-07 as PR [#39](https://github.com/RakibulIslam1/srot-control-board/pull/39), five commits. The fourth fixes a call the
+patch had left stale: its native tests passed, but the ESP32 build failed because
+`mixer.cpp` still passed the `avail` argument the second commit removed. The fifth
+replaces glyph markers in comments with plain labels.
 [`patches/srot-geometric-allocator.patch`](patches/srot-geometric-allocator.patch)
-and applies cleanly to their `main` at `f1d3ba9`.
+is the PR, exported with `git format-patch`.
 
     git -C srot-control-board checkout -b duburi-ws/geometric-allocator main
     git -C srot-control-board am .claude/context/upstream/patches/srot-geometric-allocator.patch
-    cd srot-control-board && ./tools/run_native_tests.sh    # 85 checks, no board needed
+    cd srot-control-board && ./tools/run_native_tests.sh    # 83 checks, no board needed
 
 **Supersedes the ASK half of [PR K](pr-k-the-mixer-is-for-a-different-hull.md) /
 their #25.** PR K asked for the mixer to become a function of geometry (its §4.2)

@@ -48,18 +48,12 @@ PR P **implements** what PR K asked for, and in the course of measuring the hull
 properly it found that **PR K's own geometry is wrong** — 346.6 / 520.4 mm read off
 the decimated web-viewer asset, against a true 350.00 / 519.00 from the CAD. Our
 own `hull_geometry.yaml` retracted those figures the day after PR K was sent and
-nobody went back to the PR. It is still the document the firmware team would
-implement from, and it is in a different axis frame from our shipped constants
-with nothing saying so. **Post the correction on their #25 before anyone builds
-from it.** This is the `one truth, two copies is the bug` failure arriving across a
-repo boundary, where no test of ours can reach it.
+nobody went back to the PR. **Corrected on #25 on 2026-11-07**, in the same comment
+that says the final hull is seven thrusters.
 
-⏳ **ALL SIX ARE UNSENT.** The session that wrote them had read-only GitHub access
-to `srot-control-board` (`403 Resource not accessible by integration` on branch,
-issue and PR creation). Everything needed to send them is here: the four issue
-bodies above, and PR P's firmware patch in
-[`patches/srot-geometric-allocator.patch`](patches/srot-geometric-allocator.patch),
-which applies to their `main` at `f1d3ba9`.
+All six were sent on 2026-11-07: P as PR [#39](https://github.com/RakibulIslam1/srot-control-board/pull/39), and Q, R, S, T, U
+as issues [#34](https://github.com/RakibulIslam1/srot-control-board/issues/34) to [#38](https://github.com/RakibulIslam1/srot-control-board/issues/38). They were written in a
+session whose GitHub access was read-only, and they sat unsent for six weeks.
 
 **2026-09-22 — PR I's table is now MEASURED, and PR F outranks a board we were going to build.**
 Predicting all eleven points of a demand ladder from their own source agreed with the live board to
@@ -99,8 +93,15 @@ this table exists so that cannot happen silently again. Every row is a live URL 
 | **O** | PR [**#28**](https://github.com/RakibulIslam1/srot-control-board/pull/28) | **2026-09-24** |
 | doc rename `JETSON_*` → `COMPANION_*` | PR [**#31**](https://github.com/RakibulIslam1/srot-control-board/pull/31) | **2026-11-06** |
 | **V** | PR [**#32**](https://github.com/RakibulIslam1/srot-control-board/pull/32) | **2026-11-06** |
+| **P** | PR [**#39**](https://github.com/RakibulIslam1/srot-control-board/pull/39) | **2026-11-07** |
+| **Q** | issue [**#34**](https://github.com/RakibulIslam1/srot-control-board/issues/34) | **2026-11-07** |
+| **R** | issue [**#35**](https://github.com/RakibulIslam1/srot-control-board/issues/35) | **2026-11-07** |
+| **S** | issue [**#36**](https://github.com/RakibulIslam1/srot-control-board/issues/36) | **2026-11-07** |
+| **T** | issue [**#37**](https://github.com/RakibulIslam1/srot-control-board/issues/37) | **2026-11-07** |
+| **U** | issue [**#38**](https://github.com/RakibulIslam1/srot-control-board/issues/38) | **2026-11-07** |
+| demand echo `DEM_FWD` / `DEM_LAT` | PR [**#33**](https://github.com/RakibulIslam1/srot-control-board/pull/33) | **2026-11-07** |
 
-Each of the four adds exactly one document at their repo root and changes no code,
+K, M, N and O each add exactly one document at their repo root and change no code,
 so none of them needs a `SROT_FW_BEHAVIOUR_REV` bump to merge — the bump each *ask*
 would require is named inside the document, per the reciprocal rule below.
 
@@ -108,9 +109,9 @@ would require is named inside the document, per the reciprocal rule below.
 mode and asks them to decline it rather than ship it unmarked. File it only when
 somebody is ready to own that conversation.
 
-Their repos are also checked out locally, beside this workspace, under
-`Mongla_others/{srot-control-board,srot-ground-station,srot-esc-flasher}`.
-Read the firmware there; still never commit to it.
+Read their firmware from a fresh clone of their `main`
+(`git clone https://github.com/RakibulIslam1/srot-control-board`), not from an older
+copy on disk; still never commit to it except through a pull request.
 
 **The 2026-09-24 ecosystem review** — every issue, patch and research note filed
 across all three SROT repositories in one pass, with its evidence:

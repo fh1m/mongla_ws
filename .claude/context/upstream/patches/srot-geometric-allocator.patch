@@ -1,7 +1,7 @@
-From a128b30743a7ae81585c61068563e8227163ef48 Mon Sep 17 00:00:00 2001
+From 120848f007615003e846abfa0565950ba16fcabc Mon Sep 17 00:00:00 2001
 From: Fahim Faisal <fahim.2002.faisal@gmail.com>
 Date: Fri, 25 Sep 2026 15:14:22 +0000
-Subject: [PATCH 1/3] control: allocate thrust from GEOMETRY, and make the six
+Subject: [PATCH 1/5] control: allocate thrust from GEOMETRY, and make the six
  axes commensurate
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -66,7 +66,6 @@ Every asserted number was derived independently from the CAD stations rather tha
 recorded from this code. Injection-verified -- zeroing the 8.06 mm offset, using
 PR #25's retracted 0.1732 m station, removing the roll refusal, disabling the
 headroom reservation and replacing the minimum-norm solve each fail it.
-
 ---
  include/config.h               |   7 +
  src/comms/params.cpp           |   4 +
@@ -1341,13 +1340,13 @@ index 0000000..98c5b94
 +done
 +exit $fail
 -- 
-2.43.0
+2.34.1
 
 
-From 096514484f7551eae44a4c980a6231934330f1d6 Mon Sep 17 00:00:00 2001
+From 1df5bbedf3b2956b0acda417c965628a4925be45 Mon Sep 17 00:00:00 2001
 From: Fahim Faisal <fahim.2002.faisal@gmail.com>
 Date: Fri, 25 Sep 2026 15:56:56 +0000
-Subject: [PATCH 2/3] control: delete the allocator API nothing called, and put
+Subject: [PATCH 2/5] control: delete the allocator API nothing called, and put
  authority on the wire
 
 Self-audit of the previous commit against this repo's own hardest rule -- a
@@ -1411,7 +1410,6 @@ allocator without computing the wrench its outputs produce -- and it is the
 readback an anti-windup needs when #20 lands.
 
 85 checks still pass.
-
 ---
  src/comms/mav_stream.cpp       |  36 ++++++++-
  src/control/allocator.cpp      |  45 +++--------
@@ -1938,13 +1936,13 @@ index 0f299c2..08dcc2b 100644
      test_vectored8_geom_builds();
      test_legacy_class_is_refused();
 -- 
-2.43.0
+2.34.1
 
 
-From add32cc6ae732ee4d8a021b2117748230f019840 Mon Sep 17 00:00:00 2001
+From fa871e80fca2d488a20cf4a10854782742a7ea0b Mon Sep 17 00:00:00 2001
 From: Fahim Faisal <fahim.2002.faisal@gmail.com>
 Date: Fri, 25 Sep 2026 16:02:28 +0000
-Subject: [PATCH 3/3] control: measure QP and RPI against the shipped
+Subject: [PATCH 3/5] control: measure QP and RPI against the shipped
  allocator, and prove no axis reverses
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -1994,7 +1992,6 @@ deleted, and an unsafe allocator would ship behind it.
 ⭐ The 39.9 % attitude error under the default is real and no allocator can remove
 it -- the thrust does not exist. The fix is to tell the controllers, which is what
 upstream #20 asks for, and achieved() is that number.
-
 ---
  src/control/allocator.h        | 42 +++++++++++++++++++++
  test/native/test_allocator.cpp | 67 ++++++++++++++++++++++++++++++++++
@@ -2139,5 +2136,456 @@ index 08dcc2b..358c124 100644
      test_legacy_class_is_refused();
      printf("\n=== %s ===\n", g_fail == 0 ? "ALL PASS" : "FAILURES PRESENT");
 -- 
-2.43.0
+2.34.1
+
+
+From 382a41ce582c539fdfb9d9fcf1180489d0835eb5 Mon Sep 17 00:00:00 2001
+From: Fahim Faisal <fahim.2002.faisal@gmail.com>
+Date: Sun, 8 Nov 2026 01:47:15 +0600
+Subject: [PATCH 4/5] control: mixer calls allocate() with the signature it now
+ has
+
+The second commit removed the avail mask from allocate(), and the native
+tests do not compile mixer.cpp, so the ESP32 build was the only thing that
+could see the stale call. Builds clean for esp32doit-devkit-v1.
+---
+ src/control/mixer.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/control/mixer.cpp b/src/control/mixer.cpp
+index 1560cbf..b0d03cf 100644
+--- a/src/control/mixer.cpp
++++ b/src/control/mixer.cpp
+@@ -113,7 +113,7 @@ void mix(float roll, float pitch, float yaw,
+         float u[ALLOC_MAX_THRUSTERS];
+         const int prio = (g_params.alloc_prio >= 0.5f) ? allocator::PRIO_ATTITUDE
+                                                        : allocator::PRIO_UNIFORM;
+-        allocator::allocate(d, nullptr, prio, u);
++        allocator::allocate(d, prio, u);
+         for (int m = 0; m < NUM_THRUSTERS; ++m)
+             out[m] = (m < allocator::thrusterCount()) ? u[m] : 0.0f;
+         return;
+-- 
+2.34.1
+
+
+From 7054b2f123a515a039ceca95314daebf3629c3b5 Mon Sep 17 00:00:00 2001
+From: Fahim Faisal <fahim.2002.faisal@gmail.com>
+Date: Sun, 8 Nov 2026 01:47:40 +0600
+Subject: [PATCH 5/5] comments: plain labels instead of glyphs
+
+---
+ include/config.h               |  8 ++++----
+ src/comms/mav_stream.cpp       |  4 ++--
+ src/comms/params.h             |  2 +-
+ src/control/allocator.cpp      |  8 ++++----
+ src/control/allocator.h        | 18 +++++++++---------
+ src/control/frames.h           | 16 ++++++++--------
+ src/control/mixer.cpp          |  4 ++--
+ test/native/test_allocator.cpp | 22 +++++++++++-----------
+ tools/run_native_tests.sh      |  2 +-
+ 9 files changed, 42 insertions(+), 42 deletions(-)
+
+diff --git a/include/config.h b/include/config.h
+index b1baa0e..f80ea9a 100644
+--- a/include/config.h
++++ b/include/config.h
+@@ -249,7 +249,7 @@
+ // Driven by Task_UI_Status (Core 0) from AuxState. Controllable from QGC via
+ // MAV_CMD_DO_SET_SERVO (servo) and MAV_CMD_DO_SET_RELAY (switch).
+ //
+-// ⚠ ROLES ARE PER-CHANNEL PARAMS, NOT A COMPILE-TIME MAP. Set SERVOn_ROLE (Bondor
++// Caution: ROLES ARE PER-CHANNEL PARAMS, NOT A COMPILE-TIME MAP. Set SERVOn_ROLE (Bondor
+ // or PARAM_SET); the default is (channel < 8) ? SERVO : SWITCH, applied in
+ // params.cpp buildTable(). PCA_CH_ROLE_INIT below has NO consumer -- see the note
+ // on it. An earlier version of this comment said "edit PCA_CH_ROLE to match how
+@@ -277,7 +277,7 @@
+ #define PCA_LIGHTS2_CH          7    // servo-role channel for lights 2
+ #define PCA_PAYLOAD_SERVO_CH    0    // servo-role channel for payload-release servo
+ 
+-// ⚠ DEAD -- no consumer anywhere in src/ or include/. The real defaults come from
++// Caution: DEAD -- no consumer anywhere in src/ or include/. The real defaults come from
+ // the param table row `(c < 8) ? 1.0f : 2.0f` in params.cpp buildTable(). Kept only
+ // because it documents the intended shipping layout; do NOT edit it expecting an
+ // effect, and do not treat it as a description of the harness.
+@@ -303,7 +303,7 @@
+ // re-roles a channel -- and the failure mode of a stale payload map is firing the
+ // manipulator arm during a drop. Stored here, the identity travels with the hull.
+ //
+-// ⚠ APPEND-ONLY, for the same reason movement::Type is: these numbers are mirrored
++// Caution: APPEND-ONLY, for the same reason movement::Type is: these numbers are mirrored
+ // by hand in duburi_ws (fc/srot_protocol.py) and Bondor (src/shared/protocol.ts).
+ // Inserting a value silently renames every payload after it. 0 must stay NONE so an
+ // unconfigured board (param default 0.0f) reads "unassigned" rather than a device.
+@@ -782,7 +782,7 @@
+ // roll and pitch read correctly. Measured in water 2026-08-07: turning right made yaw
+ // DECREASE; MANUAL was fine (open loop) and STABILIZE/DEPTH_HOLD span the hull.
+ //
+-// ⚠ ANY HEADING RECORDED AGAINST REV <= 9 HAS THE OPPOSITE SENSE, including absolute
++// Caution: ANY HEADING RECORDED AGAINST REV <= 9 HAS THE OPPOSITE SENSE, including absolute
+ // MOVE_TURN targets. Re-run the mag alignment after flashing.
+ //
+ // Also: MOTOR_DETECT decides on the projection of the gyro onto the expected angular
+diff --git a/src/comms/mav_stream.cpp b/src/comms/mav_stream.cpp
+index 5c9dc22..9eda7d6 100644
+--- a/src/comms/mav_stream.cpp
++++ b/src/comms/mav_stream.cpp
+@@ -738,7 +738,7 @@ static void configBanner(uint32_t now) {
+         // MUST fit 50 chars -- STATUSTEXT.text is char[50]. The rev-9 wording
+         // ("CFG rev10 FRAME_REVERSE=1 MOT_DIR=-1,1,1,1,1,1,1,-1") was 51 and lost its final
+         // digit on the wire, which is worse than a shorter label: a truncated -1 reads as -.
+-        // ⭐ FC = the allocation actually IN FORCE, from mixer::activeFrameClass(),
++        // Key point: FC = the allocation actually IN FORCE, from mixer::activeFrameClass(),
+         // NOT the FRAME_CLASS param. selectFrame() falls back to 0 when a geometry
+         // will not solve, so the param says what was ASKED for and this says what
+         // the vehicle is doing. A host reading the param would believe the wrong
+@@ -754,7 +754,7 @@ static void configBanner(uint32_t now) {
+                  (int)lroundf(g_params.mot_dir[6]) * d[6], (int)lroundf(g_params.mot_dir[7]) * d[7]);
+         queueStatusText(MAV_SEVERITY_INFO, buf);
+ 
+-        // ⭐ PER-AXIS AUTHORITY, on a geometric frame only.
++        // Key point: PER-AXIS AUTHORITY, on a geometric frame only.
+         //
+         // A +-1 mixer calls every axis "1.0". On the mongla-5 hull the axes differ
+         // by 5.71x -- sway 2.000 against yaw 0.350, which is exactly the reduced
+diff --git a/src/comms/params.h b/src/comms/params.h
+index 72027a3..70e1d93 100644
+--- a/src/comms/params.h
++++ b/src/comms/params.h
+@@ -71,7 +71,7 @@ struct Params {
+     //   0 = the legacy +-1 vectored-8 matrix compiled into mixer.cpp (DEFAULT, unchanged)
+     //   1 = mongla-5, allocated from measured geometry
+     //   2 = vectored-8 from geometry (placeholder arms — measure before use)
+-    // ⛔ Default 0 on purpose: adopting the geometric allocator must never be the reason
++    // WARNING: Default 0 on purpose: adopting the geometric allocator must never be the reason
+     // a vehicle that flies today stops flying. A class whose geometry will not solve is
+     // refused at boot and the vehicle falls back to 0 with a STATUSTEXT saying so.
+     float frame_class;
+diff --git a/src/control/allocator.cpp b/src/control/allocator.cpp
+index a055b3f..962a691 100644
+--- a/src/control/allocator.cpp
++++ b/src/control/allocator.cpp
+@@ -19,7 +19,7 @@
+ //   allocate()   u = Ainv * (demand .* auth), split into an attitude part and a
+ //                translation part, then scaled to fit. No matrix work.
+ //
+-//  ⛔ THE ONE THING TO GET RIGHT: every loop here is bounded by a compile-time
++//  WARNING: THE ONE THING TO GET RIGHT: every loop here is bounded by a compile-time
+ //  constant and there is no dynamic allocation, no recursion, and no iteration
+ //  whose count depends on the data. begin() is off the flight loop; allocate() is
+ //  on it, and it is straight-line code.
+@@ -102,7 +102,7 @@ static void cross3(const float a[3], const float b[3], float out[3]) {
+ 
+ // Solve the geometry: s_B -> s_A and s_auth. Called once, from begin().
+ //
+-// ⚠ NOT CALLABLE FROM THE FLIGHT LOOP. It solves a linear system.
++// Caution: NOT CALLABLE FROM THE FLIGHT LOOP. It solves a linear system.
+ static bool build() {
+     memset(s_A, 0, sizeof(s_A));
+     for (int k = 0; k < AX_COUNT; ++k) s_auth[k] = 0.0f;
+@@ -192,7 +192,7 @@ bool begin(int cls) {
+     for (int j = 0; j < s_n; ++j) {
+         const float* a = f->t[j].axis;
+         const float  n = sqrtf(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]);
+-        // ⛔ A non-unit axis is a table error, not something to normalise away
++        // WARNING: A non-unit axis is a table error, not something to normalise away
+         // quietly: it usually means somebody wrote a force vector where a
+         // direction belongs, and the magnitude they intended is then lost.
+         if (!(n > 0.9f) || !(n < 1.1f)) return false;
+@@ -254,7 +254,7 @@ Result allocate(const float demand[AX_COUNT], int priority,
+     for (int j = 0; j < ALLOC_MAX_THRUSTERS; ++j) out[j] = 0.0f;
+     if (!s_ready) return r;
+ 
+-    // ⛔ REFUSE, DO NOT ROUND. An unactuated axis with a live demand on it is a
++    // WARNING: REFUSE, DO NOT ROUND. An unactuated axis with a live demand on it is a
+     // caller believing something false about the vehicle, and the only useful
+     // response is to say so. A non-finite demand is refused the same way rather
+     // than propagated: one NaN here would reach every thruster.
+diff --git a/src/control/allocator.h b/src/control/allocator.h
+index 98ee77f..828e666 100644
+--- a/src/control/allocator.h
++++ b/src/control/allocator.h
+@@ -19,7 +19,7 @@
+ //      sits 8.06 mm off the Z centreline, so surge carries a real pitch moment;
+ //      under the old mixer that arrived as an unexplained pitch disturbance.
+ //
+-//  ⛔ WHAT THIS DELIBERATELY DOES NOT DO: tolerate a dead thruster. An earlier
++//  WARNING: WHAT THIS DELIBERATELY DOES NOT DO: tolerate a dead thruster. An earlier
+ //  version carried `rebuild(avail)` and an `avail` mask on `allocate()`. Both are
+ //  DELETED, because on this hull they cannot help and nothing could have called
+ //  them:
+@@ -35,13 +35,13 @@
+ //  is asserted directly against the matrix in the test, which is a stronger claim
+ //  than a function nobody called.
+ //
+-//  ⛔ UNACTUATED AXES ARE REFUSED, NOT ROUNDED TO ZERO. On mongla-5 every
++//  WARNING: UNACTUATED AXES ARE REFUSED, NOT ROUNDED TO ZERO. On mongla-5 every
+ //  thruster's line of action passes through the long axis, so no combination
+ //  produces roll. That is computed from the geometry, never declared. A roll
+ //  demand comes back in `refused` so a caller cannot believe the vehicle is
+ //  holding an attitude it physically cannot hold.
+ //
+-//  ⚠ THE UNITS ARE NOT NEWTONS AND THIS MODULE WILL NOT PRETEND OTHERWISE.
++//  Caution: THE UNITS ARE NOT NEWTONS AND THIS MODULE WILL NOT PRETEND OTHERWISE.
+ //  Output is a signed fraction of ONE thruster's full output, -1..1 -- the same
+ //  quantity `mixer::toDshot()` already consumes. Converting to force needs a
+ //  thrust coefficient that has been measured for this thruster, and there is no
+@@ -67,7 +67,7 @@
+ //    RPI                    8.01 deg                  69.7 %            0
+ //    QP (bounded LSQ)       8.01 deg                  69.7 %            0
+ //
+-//  ⛔ QP AND RPI ARE WORSE HERE, ON BOTH METRICS THAT MATTER TO A HULL. They
++//  WARNING: QP AND RPI ARE WORSE HERE, ON BOTH METRICS THAT MATTER TO A HULL. They
+ //  minimise ||Bu - w||, and on an L2 score they do beat uniform scaling in 81 % of
+ //  these cases -- which is exactly why L2 is the wrong objective. Being "closest"
+ //  is allowed to rotate the wrench: 8 deg of mean direction error, 12.5 deg worst.
+@@ -81,18 +81,18 @@
+ //  all four methods return the identical u. QP only differs where the demand
+ //  cannot be met, and there it differs for the worse.
+ //
+-//  ⚠ THIS CONCLUSION IS FRAME-SPECIFIC. The 8-thruster frame has a 2-dimensional
++//  Caution: THIS CONCLUSION IS FRAME-SPECIFIC. The 8-thruster frame has a 2-dimensional
+ //  null space, and there a QP could genuinely trade thruster effort at no cost to
+ //  the wrench. If that frame is ever flown, re-measure before assuming this row of
+ //  the table transfers -- it will not.
+ //
+-//  ⭐ THE RESIDUAL IS NOT AN ALLOCATION PROBLEM. 39.9 % attitude error while
++//  Key point: THE RESIDUAL IS NOT AN ALLOCATION PROBLEM. 39.9 % attitude error while
+ //  saturating is real, and no allocator can remove it: the thrust does not exist.
+ //  The fix is to TELL THE CONTROLLERS, which is what upstream #20 asks for -- the
+ //  difference between demanded and achieved is precisely the charge the PID
+ //  integrators must not accumulate. `achieved()` is that number, ready for it.
+ //
+-//  ⚠ NO ARDUINO, NO PARAMS, NO GLOBALS IN THE MATH. This file compiles on a host
++//  Caution: NO ARDUINO, NO PARAMS, NO GLOBALS IN THE MATH. This file compiles on a host
+ //  with nothing but <math.h>, which is what makes `test/test_allocator` possible.
+ //  A 500 Hz allocator that can only be checked by flying it is not checkable.
+ // =============================================================================
+@@ -137,7 +137,7 @@ struct Result {
+     float scale_translation;   // 1.0 = translation demand met in full
+     int   limiting_thruster;   // index of the thruster that ran out first, or -1
+     // Axes that carry a non-zero demand this frame but cannot be produced by the
+-    // geometry at all. Bit i = Axis i. ⛔ Never silently zero -- report.
++    // geometry at all. Bit i = Axis i. WARNING: Never silently zero -- report.
+     unsigned refused_mask;
+ };
+ 
+@@ -179,7 +179,7 @@ Result allocate(const float demand[AX_COUNT], int priority,
+ // The wrench a set of outputs actually produces, in the same units `authority()`
+ // reports.
+ //
+-// ⚠ NO FLIGHT CONSUMER, ON PURPOSE, AND THAT IS NOT AN ORPHAN. This is the
++// Caution: NO FLIGHT CONSUMER, ON PURPOSE, AND THAT IS NOT AN ORPHAN. This is the
+ // correctness oracle the native test allocates against: you cannot check an
+ // allocator without computing the wrench its outputs produce, and asserting
+ // against recorded outputs instead would only prove the code still does what it
+diff --git a/src/control/frames.h b/src/control/frames.h
+index 2a2219a..dc83fdd 100644
+--- a/src/control/frames.h
++++ b/src/control/frames.h
+@@ -9,14 +9,14 @@
+ //  and its inverse, at boot, so a hull change is a table edit rather than a
+ //  hand-derived matrix.
+ //
+-//  ⛔ WHY THIS FILE IS SEPARATE FROM allocator.cpp. Data and algorithm have
++//  WARNING: WHY THIS FILE IS SEPARATE FROM allocator.cpp. Data and algorithm have
+ //  different review rules. A number in here is checked against a CAD model or a
+ //  tape measure; a line in there is checked against linear algebra. Mixing them
+ //  is how `mixer.cpp` ended up with a hard-coded matrix that nobody could tell
+ //  was for a different vehicle -- the matrix WAS the geometry, so there was
+ //  nothing to compare it against.
+ //
+-//  ⚠ BODY FRAME, and it is the CAD's, stated once here so nothing downstream
++//  Caution: BODY FRAME, and it is the CAD's, stated once here so nothing downstream
+ //  has to guess:
+ //        +X  starboard   (the lateral tunnels' bore)
+ //        +Y  forward      (the long, 702 mm axis; the axial unit lies on it)
+@@ -26,7 +26,7 @@
+ //  This is a right-handed frame with +Z up, so a POSITIVE heave force ascends,
+ //  which is the same convention `depth_control` works in.
+ //
+-//  ⛔⛔ THE VERTICAL SIGN CONVENTION IS NOT THE LEGACY MIXER'S, AND THIS IS THE
++//  WARNING: WARNING: THE VERTICAL SIGN CONVENTION IS NOT THE LEGACY MIXER'S, AND THIS IS THE
+ //  ONE THING THAT CAN SINK THE VEHICLE ON THE FIRST DIVE WITH FRAME_CLASS != 0.
+ //
+ //  `mixer.cpp`'s literal matrix gives every vertical motor a throttle column of
+@@ -41,14 +41,14 @@
+ //  a depth loop wired the wrong way round is POSITIVE FEEDBACK: measured deeper
+ //  than target -> command descend -> deeper. It does not oscillate, it dives.
+ //
+-//  ⛔ BEFORE ANY ARMED DIVE ON FRAME_CLASS != 0: set MOT_n_DIRECTION for the
++//  WARNING: BEFORE ANY ARMED DIVE ON FRAME_CLASS != 0: set MOT_n_DIRECTION for the
+ //  vertical pair so that a positive command ascends, and CONFIRM it with the
+ //  Motor Test tab and a hand on the hull -- not by reasoning about this comment.
+ //  `depth::preview()` exists precisely so the sign can be read off telemetry
+ //  while disarmed; use it. The reason this is a comment and not code is that only
+ //  the vehicle knows which way its props are on.
+ //
+-//  ⚠ THE SIGNS OF THE AXES ARE A DECISION, NOT A MEASUREMENT. Which end of Y is
++//  Caution: THE SIGNS OF THE AXES ARE A DECISION, NOT A MEASUREMENT. Which end of Y is
+ //  the bow, and whether the axial unit is a tractor or a pusher, are settled
+ //  against the vehicle -- in water, one thruster at a time -- not from a part
+ //  list. Everything a sign error does here is invisible on a bench and violent
+@@ -103,7 +103,7 @@ struct Frame {
+ // Separations are therefore 350.00 mm and 519.00 mm EXACTLY, which is what the
+ // vehicle documentation has said all along.
+ //
+-// ⚠ THE AXIAL UNIT IS 8.06 mm OFF THE Z CENTRELINE, and that is not noise -- it
++// Caution: THE AXIAL UNIT IS 8.06 mm OFF THE Z CENTRELINE, and that is not noise -- it
+ // is a real pitch moment of 0.00806 N.m per newton of surge. The +-1 mixer could
+ // not express it at all, so surge used to arrive as an uncorrected pitch-up
+ // disturbance for the attitude loop (and then for the CoB auto-trim) to absorb.
+@@ -121,14 +121,14 @@ static const Thruster MONGLA5_T[5] = {
+ // ── FRAME 2: VECTORED-8, as GEOMETRY ─────────────────────────────────────────
+ //
+ // The competition vehicle: four horizontal T200s at 45 degrees and four vertical.
+-// ⚠ THIS IS NOT THE FRAME THE VEHICLE FLIES ON TODAY. Today's path is the
++// Caution: THIS IS NOT THE FRAME THE VEHICLE FLIES ON TODAY. Today's path is the
+ // literal +-1 matrix in `mixer.cpp`, preserved bit-identically as FRAME_CLASS 0,
+ // and it stays the default. This entry exists so the same vehicle can be flown
+ // through the geometric allocator and the two compared on a bench, because a
+ // +-1 matrix and a geometric one are NOT the same map: the +-1 form overstates
+ // surge and sway by 1/cos(45 deg) = 41 % and carries no moment arms at all.
+ //
+-// ⛔ THE ARM LENGTHS BELOW ARE PLACEHOLDERS AND MUST BE MEASURED BEFORE USE.
++// WARNING: THE ARM LENGTHS BELOW ARE PLACEHOLDERS AND MUST BE MEASURED BEFORE USE.
+ // 0.220 / 0.120 / 0.150 m is a plausible BlueROV2-Heavy-like layout, not this
+ // vehicle. `allocator::begin()` refuses this frame unless FRAME_ARMS_OK is set,
+ // precisely so a guess cannot fly by default. Replace them with tape-measure
+diff --git a/src/control/mixer.cpp b/src/control/mixer.cpp
+index b0d03cf..d4ff7f4 100644
+--- a/src/control/mixer.cpp
++++ b/src/control/mixer.cpp
+@@ -71,7 +71,7 @@ void selectFrame(int frame_class) {
+         }
+         mav_stream::queueStatusText(MAV_SEVERITY_INFO, b);
+ 
+-        // ⚠ ONE MESSAGE, NOT THREE. queueStatusText holds QCAP = 4 slots and
++        // Caution: ONE MESSAGE, NOT THREE. queueStatusText holds QCAP = 4 slots and
+         // nothing drains them until Task_MAVLink starts, so this runs with the
+         // queue cold and params::init() may already have used one. Three lines
+         // here could silently drop the third. The per-axis AUTHORITY -- the
+@@ -80,7 +80,7 @@ void selectFrame(int frame_class) {
+         // after boot ever sees it.
+         return;
+     }
+-    // ⛔ FALL BACK LOUDLY. A geometry that will not solve is a configuration error, and
++    // WARNING: FALL BACK LOUDLY. A geometry that will not solve is a configuration error, and
+     // the safe thing is the matrix that has flown -- but silently flying a different
+     // allocation than the operator asked for is how a mixer for the wrong hull survives.
+     s_frame_class = 0;
+diff --git a/test/native/test_allocator.cpp b/test/native/test_allocator.cpp
+index 358c124..addedea 100644
+--- a/test/native/test_allocator.cpp
++++ b/test/native/test_allocator.cpp
+@@ -1,7 +1,7 @@
+ // =============================================================================
+ //  test/native/test_allocator — the allocator, checked on a host.
+ //
+-//  ⛔ WHY THIS EXISTS. A 500 Hz allocator whose only test is a water test is not
++//  WARNING: WHY THIS EXISTS. A 500 Hz allocator whose only test is a water test is not
+ //  tested; it is trusted. `allocator.cpp` deliberately includes nothing but
+ //  <math.h> and <string.h> so it compiles here, and every number asserted below
+ //  was derived independently (exact rational arithmetic on the CAD geometry)
+@@ -66,7 +66,7 @@ static void test_geometry() {
+     near(w[AX_YAW],   0.0f,      1e-7f, "axial    Mz");
+ }
+ 
+-// ⛔ ROLL. Unactuated must be COMPUTED, and a roll demand must be REFUSED.
++// WARNING: ROLL. Unactuated must be COMPUTED, and a roll demand must be REFUSED.
+ static void test_roll_is_refused() {
+     printf("\nROLL is unactuated, and that is computed from the table\n");
+     check(begin(frames::CLASS_MONGLA5), "begin");
+@@ -129,7 +129,7 @@ static void test_unit_demand_is_exactly_full() {
+     }
+ }
+ 
+-// ⭐ THE COUPLING THE OLD MIXER COULD NOT EXPRESS. Pure surge on this hull needs
++// Key point: THE COUPLING THE OLD MIXER COULD NOT EXPRESS. Pure surge on this hull needs
+ // the vertical pair to cancel the axial unit's pitch moment: 0.00806 / 0.519 =
+ // 0.01553 of one thruster each, in opposite directions. Under the +-1 mixer that
+ // moment was simply left on the vehicle.
+@@ -173,7 +173,7 @@ static void test_priority_modes() {
+     printf("        ^ both are correct. The pair cannot do both, and neither mode pretends it can.\n");
+ }
+ 
+-// ⛔ MECHANICAL INDEPENDENCE. PR #25 asked for the per-group behaviour to survive
++// WARNING: MECHANICAL INDEPENDENCE. PR #25 asked for the per-group behaviour to survive
+ // whatever replaced the matrix. It does, and for a better reason than before: the
+ // solution operator is block-diagonal because the GEOMETRY is, so a saturating
+ // surge cannot reach the lateral pair. Checked by driving surge to the rail and
+@@ -192,7 +192,7 @@ static void test_groups_stay_independent() {
+            (double)o1[0], (double)o1[1], (double)o2[0], (double)o2[1]);
+ }
+ 
+-// ⛔ THIS HULL HAS NO REDUNDANCY, asserted against the GEOMETRY rather than
++// WARNING: THIS HULL HAS NO REDUNDANCY, asserted against the GEOMETRY rather than
+ // against a fault-tolerance API.
+ //
+ // An earlier version proved this through `rebuild(avail)` and an `avail` mask on
+@@ -259,19 +259,19 @@ static void test_no_redundancy_is_a_property_of_the_geometry() {
+         if (r >= full5) every_loss_costs_an_axis = false;
+     }
+     check(every_loss_costs_an_axis,
+-          "⛔ EVERY single-thruster loss costs a whole DOF -- zero redundancy");
++          "WARNING: EVERY single-thruster loss costs a whole DOF -- zero redundancy");
+ 
+     check(begin(frames::CLASS_VECTORED8_GEOM), "begin(vectored8_geom)");
+     const int full8 = rank_without(-1, 8);
+     check(full8 == 6, "eight thrusters -> full 6-DOF rank");
+     bool survives_any_loss = true;
+     for (int j = 0; j < 8; ++j) if (rank_without(j, 8) < full8) survives_any_loss = false;
+-    check(survives_any_loss, "⭐ and it keeps all six axes after ANY single loss");
++    check(survives_any_loss, "Key point: and it keeps all six axes after ANY single loss");
+     printf("        ^ THAT is what redundancy buys. mongla-5 has none of it, so a\n"
+            "          thruster failure is a surface-now event, not a degrade-and-continue one.\n");
+ }
+ 
+-// ⭐ NO DEMANDED AXIS IS EVER DRIVEN BACKWARDS. The invariant that makes both
++// Key point: NO DEMANDED AXIS IS EVER DRIVEN BACKWARDS. The invariant that makes both
+ // priority modes safe to ship, and it is provable rather than lucky:
+ //
+ //   uniform   u = A*w / max(1, max|A*w|)  -> achieved = w * s, s in (0,1].
+@@ -283,7 +283,7 @@ static void test_no_redundancy_is_a_property_of_the_geometry() {
+ //             NON-NEGATIVE scalar. A non-negative multiple of a vector cannot
+ //             oppose it, so translation is degraded but never reversed.
+ //
+-// ⚠ THIS TEST EXISTS BECAUSE THE FIRST MEASUREMENT OF IT WAS WRONG. A sweep that
++// Caution: THIS TEST EXISTS BECAUSE THE FIRST MEASUREMENT OF IT WAS WRONG. A sweep that
+ // compared sign(achieved) against sign(demand) reported reversals on 41.9 % of
+ // saturating demands -- and every one was a floating-point +0.0 scored against a
+ // negative demand. sign(+0.0) is 0.0, but the value that actually came out was
+@@ -319,7 +319,7 @@ static void test_no_axis_is_ever_driven_backwards() {
+                 ++reversals;
+                 const float ratio = fabsf(wr[i]) / fabsf(want);
+                 if (ratio > worst_ratio) worst_ratio = ratio;
+-                printf("        ⛔ %s: want %+.4f got %+.4f (prio %d)\n",
++                printf("        WARNING: %s: want %+.4f got %+.4f (prio %d)\n",
+                        AXIS_NAME[i], (double)want, (double)wr[i], prio);
+             }
+         }
+@@ -381,7 +381,7 @@ static void test_vectored8_geom_builds() {
+     printf("        authority: sway %.3f surge %.3f heave %.3f pitch %.3f roll %.3f yaw %.3f\n",
+            (double)authority(AX_SWAY), (double)authority(AX_SURGE), (double)authority(AX_HEAVE),
+            (double)authority(AX_PITCH), (double)authority(AX_ROLL), (double)authority(AX_YAW));
+-    printf("        ⛔ PLACEHOLDER ARMS. Measure them before flying this frame.\n");
++    printf("        WARNING: PLACEHOLDER ARMS. Measure them before flying this frame.\n");
+     // Minimum-norm property: the redundant frame must produce the wrench EXACTLY.
+     float d[AX_COUNT] = {0}, out[ALLOC_MAX_THRUSTERS], wr[AX_COUNT];
+     d[AX_YAW] = 0.5f; d[AX_SURGE] = 0.5f;
+diff --git a/tools/run_native_tests.sh b/tools/run_native_tests.sh
+index 98c5b94..af3353e 100755
+--- a/tools/run_native_tests.sh
++++ b/tools/run_native_tests.sh
+@@ -1,7 +1,7 @@
+ #!/usr/bin/env bash
+ # Compile and run the host-side firmware tests.
+ #
+-# ⛔ WHY NOT PlatformIO's test runner. These tests exist so a control algorithm
++# WARNING: WHY NOT PlatformIO's test runner. These tests exist so a control algorithm
+ # can be checked WITHOUT a board, a toolchain download, or a water test. Adding a
+ # platform dependency to reach them would defeat that. Anything under
+ # test/native/ must compile with a plain C++ compiler against src/ alone.
+-- 
+2.34.1
 

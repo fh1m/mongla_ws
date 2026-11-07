@@ -1,7 +1,7 @@
 # PR U — two mission stores, both fully working, and nothing reads either
 
 **Target:** `srot-control-board` · **File as an ISSUE**
-**Status:** ⏳ NOT SENT — read-only GitHub access this session (403 on issue creation).
+**Status:** filed 2026-11-07 as issue [#38](https://github.com/RakibulIslam1/srot-control-board/issues/38).
 
 The board implements **two** complete mission-upload paths. Both parse, validate
 and store. Neither is read by anything. And the LoRa one **ACKs every chunk**, so

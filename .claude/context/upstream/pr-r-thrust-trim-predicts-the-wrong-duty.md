@@ -1,7 +1,7 @@
 # PR R — `thrust_trim` learns against a prediction that ignores the shaping it applies
 
 **Target:** `srot-control-board` · **File as an ISSUE**
-**Status:** ⏳ NOT SENT — read-only GitHub access this session.
+**Status:** filed 2026-11-07 as issue [#35](https://github.com/RakibulIslam1/srot-control-board/issues/35).
 
 `THR_TRIM_EN = 1` does not normalise thrust. With the shipped defaults it drives
 **every** thruster gain to its `-25 %` clamp on **every** dive, and calls that a
