@@ -23,7 +23,7 @@ These are not tests, they are permissions. A NO here ends the day.
 | 0.1 | board talks, firmware rev at or above the floor | `ros2 run mongla_manager connect --watch` | `behaviour rev` ≥ `FW_BEHAVIOUR_REV_REQUIRED` |
 | 0.2 | **barometer healthy** | same screen | **NOT** "not initialised" |
 | 0.3 | leak dry, kill clear | same screen | `leak dry`, `kill switch clear` |
-| 0.4 | subsystem grade | `ros2 run mongla_manager bringup_check --srot` | exits 0 |
+| 0.4 | subsystem grade | `ros2 run mongla_manager bringup_check` | exits 0 |
 | 0.5 | propellers clear, human on the kill switch | — | stated aloud |
 
 **Warning: 0.2 gates most of this document.** An unhealthy barometer refuses
@@ -34,10 +34,13 @@ altitude, so **loop closure cannot fire at all** (§39). On the bench on
 
 ---
 
-## 1 — The depth loop, closed, for the first time (G1)
+## 1 — The depth loop, closed in `AUTO` for the first time (G1)
 
 **Why first:** every move verb on srot enters `AUTO`, which closes the depth
-loop. Until this passes, §2 onward cannot run at all.
+loop. Until this passes, §2 onward cannot run at all. The board has closed depth
+before, in `DEPTH_HOLD` on the old hull (the firmware team's 2026-08-06/07
+tests, which settled on `D` 0.01 and crashed going from `DEPTH_HOLD` to `AUTO`), so
+watch that transition first.
 
 Follow the two armed bench checks in
 [`srot-integration.md`](srot-integration.md). An in-air move is **not**
@@ -173,7 +176,7 @@ deliberate-damage test in this document, and the cheapest.
 | **Approach band** (§46) | confidence peaks mid-range on archive. Does the peak sit at the same apparent size in this water? |
 | **Fine-tuned XFeat** | only if the checkpoint sweep says it wins on the held-out venue |
 | **Time-to-contact from scale** (§62) | tau swings as much as its own value (p50 2.5 s, frame-to-frame p90 27.2 s). Needs ONE run approaching a fixed prop at a **known constant speed from a known start range** — that makes true tau a straight line, so the filter becomes a fit instead of a guess. Cheapest item on this list and it unblocks `time_to_contact.py` |
-| **`gate_sharks` vs the shipped graph** (§59) | +84.2 points of separation at 0.30 on archive against **+0.0** for `gate_rescue_repair`. Confirm on this pool's water before trusting either, and decide whether both run (`fwd_models:=`) or one does |
+| **`gate_sharks` in this water** (§59) | +84.2 points of separation at 0.30 on archive, against **+0.0** for `gate_rescue_repair`, which was retired on 2026-09-28 for it. Confirm the separation on this pool's water before trusting it, and swap in the day's model if it does not hold |
 | **Orange flare chroma** (§60) | direction (+a*, +b*) held in every run; magnitude collapsed 20.2 → 0.8 between two SIM lighting setups. Only worth re-measuring with a real flare in frame, and only as a diagnostic |
 | **The trackability floor** (§58) | `Follower.reset` now refuses below 2.0 grey levels. Measured on a GRID of boxes, mostly water and wall — so the 19.4 % refusal rate is an upper bound. What water decides is the rate on REAL detection boxes |
 

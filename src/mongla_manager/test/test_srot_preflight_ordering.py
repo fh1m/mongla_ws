@@ -13,7 +13,7 @@ rev 4 in 0.1 s. Transport-independent -- it failed on direct USB serial too.
 
 That failure mode is worse than a missing read: its warning claims the firmware may
 predate rev 2, i.e. that MOVE_STOP coasts with no host-side brake. The one bring-up
-check meant to catch an un-brakeable 20 kg hull cried wolf every time, which trains
+check meant to catch an un-brakeable hull cried wolf every time, which trains
 an operator to ignore it -- and it is the same warning a genuinely too-old board
 would produce.
 

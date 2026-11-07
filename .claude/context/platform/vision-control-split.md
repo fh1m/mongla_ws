@@ -28,7 +28,7 @@ error and pushing it down a USB link, while closing over a **50 Hz `ATTITUDE`** 
 SROT board runs a **500 Hz** loop, owns all 8 thrusters, and is told nothing about the target.
 
 Control authority and perception are on opposite sides of a cable, and the loop is closed on
-the wrong side of it. That is why alignment fights inertia on a 20 kg hull: a correction
+the wrong side of it. That is why alignment fights inertia on a hull of ten kilograms or more: a correction
 derived from a 50 Hz observation, transported over serial, arrives after the hull has moved.
 
 Raising gains does not fix this — it is a loop-rate and latency problem, not a tuning problem.

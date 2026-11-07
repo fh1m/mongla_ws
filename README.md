@@ -10,7 +10,7 @@
 for, a neural accelerator that does nothing but see, and a rule that no number appears anywhere
 in this repository without the measurement that produced it.**
 
-[![tests](https://img.shields.io/badge/tests-4%20579%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![in water](https://img.shields.io/badge/in%20water-never-critical)](#what-is-true-today) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
+[![tests](https://img.shields.io/badge/tests-4%20586%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![in water](https://img.shields.io/badge/in%20water-never-critical)](#what-is-true-today) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
 
 **[The Shift](https://fh1m.github.io/mongla_ws/the-shift.html)** · **[Capability map](https://fh1m.github.io/mongla_ws/capability-map.html)** · **[The site](https://fh1m.github.io/mongla_ws/)** · [Run it](#run-it) · [Fundamentals](#the-fundamentals) · [Docs](#every-document-in-this-repository) · [Story](#three-acts)
 
@@ -95,7 +95,7 @@ propellers on anything:
 
 ```bash
 ros2 run mongla_manager connect --watch        # everything the board is saying, no ROS graph needed
-ros2 run mongla_manager bringup_check --srot   # grades every subsystem, exits non-zero on a fault
+ros2 run mongla_manager bringup_check   # grades every subsystem, exits non-zero on a fault
 ```
 
 The first **reports**. The second **grades and gates** — it is the one that refuses.
@@ -108,7 +108,7 @@ git clone https://github.com/fh1m/mongla_ws && cd mongla_ws
 ./build_mongla.sh                      # colcon build, six packages
 source install/setup.bash
 
-# the tests (6 suites, 4 587 of them, ~5 minutes)
+# the tests (6 suites, 4 594 of them, ~5 minutes)
 python3 -m pytest -q                   # all six; a full run rewrites docs/stats.json
 ```
 </details>
@@ -161,13 +161,13 @@ Combinations worth knowing: [`launch-combinations.md`](.claude/context/platform/
 
 ## Before anything spins
 
-`bringup_check --srot` is the program that is allowed to say no. It grades each subsystem and
+`bringup_check` is the program that is allowed to say no. It grades each subsystem and
 exits non-zero on a fault, and it exists because every one of these gates has, at least once,
 been the reason a run did not happen.
 
 ```mermaid
 flowchart TB
-    START(["bringup_check --srot"]) --> LINK{"board answering<br/>on the cable?"}
+    START(["bringup_check"]) --> LINK{"board answering<br/>on the cable?"}
     LINK -->|no| F1["FAIL — check the USB-C cable<br/>and that the board is powered"]
     LINK -->|yes| REV{"firmware behaviour<br/>revision ≥ the floor?"}
     REV -->|no| F2["REFUSE — rev 10 inverted yaw.<br/>An older board turns every corner backwards"]
@@ -577,13 +577,13 @@ What it is, what was wrong with it, and the eight steps from a blank SD card:
 | package | what it owns | Python LOC | test files |
 |---|---|---:|---:|
 | [`mongla_vision`](.claude/context/packages/mongla_vision/README.md) | cameras, Hailo detection, the lock ladder, optical flow, optics | 27 518 | 125 |
-| [`mongla_control`](.claude/context/packages/mongla_control/README.md) | the verbs and the board driver — a pure library, **zero entry points** | 10 513 | 64 |
-| [`mongla_planner`](.claude/context/packages/mongla_planner/README.md) | the `mongla` CLI, the mission DSL, the missions | 7 678 | 41 |
-| [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | `auv_manager_node` — the one node that talks to the board | 7 791 | 67 |
+| [`mongla_control`](.claude/context/packages/mongla_control/README.md) | the verbs and the board driver — a pure library, **zero entry points** | 10 521 | 64 |
+| [`mongla_planner`](.claude/context/packages/mongla_planner/README.md) | the `mongla` CLI, the mission DSL, the missions | 7 706 | 42 |
+| [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | `auv_manager_node` — the one node that talks to the board | 7 796 | 67 |
 | [`mongla_localization`](.claude/context/packages/mongla_localization/README.md) | the right-invariant EKF, retrodiction, course priors | 5 063 | 31 |
 | [`mongla_interfaces`](.claude/context/packages/mongla_interfaces/README.md) | one action, one state topic — the entire ROS surface | IDL | — |
 
-**328 test files against the source.** The ROS surface really is that small: one action
+**329 test files against the source.** The ROS surface really is that small: one action
 `/mongla/move` carrying one verb per goal, and one topic `/mongla/state` publishing on change,
 where an absent value is `NaN` and never `0.0`.
 
@@ -792,11 +792,11 @@ is how a team finds out at the venue.
 mongla_control       1 176 passed        the verbs, the wire, the refusals
 mongla_vision        1 537 passed        detection, the lock ladder, optics, flow
 mongla_manager         790 passed        the node, bring-up gates, the docs contract
-mongla_planner         440 passed        the CLI, the DSL, the missions
+mongla_planner         447 passed        the CLI, the DSL, the missions
 mongla_localization    412 passed        the filter, retrodiction, course priors
 test/ (repo-wide)      224 passed        nothing unreachable, the retired stack stays retired
                      ─────────────
-                     4 579 passed, 0 failed
+                     4 586 passed, 0 failed
 ```
 <!-- stats:table:end -->
 
@@ -816,7 +816,7 @@ Some of those tests are unusual enough to be worth naming:
 ```mermaid
 flowchart LR
     DEV["a change"] --> HOOK["editor hooks<br/>py_compile + the matching test file<br/>+ the doc guards on a doc edit"]
-    HOOK --> UNIT["6 suites · 4 579 tests"]
+    HOOK --> UNIT["6 suites · 4 586 tests"]
     UNIT --> GUARD["the drift guards"]
     GUARD --> G1["test_doc_drift<br/>docs vs code"]
     GUARD --> G2["test_srot_protocol_drift<br/>our wire copy vs THEIR headers"]
@@ -1247,6 +1247,6 @@ of the same repository and the same licence.
 
 **[The site](https://fh1m.github.io/mongla_ws/)** · **[The Shift](https://fh1m.github.io/mongla_ws/the-shift.html)** · **[Capability map](https://fh1m.github.io/mongla_ws/capability-map.html)**
 
-<sub>Nothing on this platform has been in water. Every number above says where it was taken.</sub>
+<sub>This stack and this hull have never been in water. Every number above says where it was taken.</sub>
 
 </div>

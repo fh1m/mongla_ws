@@ -110,8 +110,8 @@
       <div class="tape" aria-hidden="true"><i></i><em>0</em><em>30 cm</em></div>
       <b>1.09 cm</b><span>worst error over a 30 cm slide, against a tape measure. The red sliver on the tape is that error, to scale.</span>
     </div>
-    <div class="f"><span class="silk">Tests</span><b>4 579</b><span>passing, none failing</span></div>
-    <div class="g warn"><span class="silk">In water</span><b>0 dives</b><span>Nothing on this platform has been in water. Every number here says where it was taken.</span></div>
+    <div class="f"><span class="silk">Tests</span><b>4 586</b><span>passing, none failing</span></div>
+    <div class="g warn"><span class="silk">In water</span><b>0 dives</b><span>This stack and this hull have never been in water. Every number here says where it was taken.</span></div>
   </div>
  </div>
 </section>
@@ -1199,7 +1199,7 @@
     <tr><td>Hold the lock</td><td>Live box, then tracker coast, then a geometric anchor matching image structure</td>
         <td class="numr">175 frames</td><td>Refuses rather than inventing. The ladder ends in a stated loss</td></tr>
     <tr><td>Drive through</td><td>One <code>SROT_MOVE</code>; the board runs and brakes the primitive itself</td>
-        <td class="numr">500 Hz board</td><td>The automatic mode closes the depth loop under <em>every</em> primitive, and that loop has never run closed</td></tr>
+        <td class="numr">500 Hz board</td><td>The automatic mode closes the depth loop under <em>every</em> primitive, and that mode has never run closed in water</td></tr>
     <tr><td>Know where it went</td><td>A right-invariant filter on board IMU, depth, and velocity from the downward camera; late measurements replayed at the instant they describe</td>
         <td class="num">—</td><td>No GPS, no DVL. The downward camera is the only velocity there is</td></tr>
    </tbody>
@@ -1806,7 +1806,7 @@
     <div><span class="silk">Blind</span><b>175</b><span>frames held with no detector</span></div>
     <div><span class="silk">Velocity</span><b>1.09 cm</b><span>worst error, 30 cm slide</span></div>
     <div><span class="silk">Mesh</span><b>0.9 mm</b><span>hull tessellation in the viewer</span></div>
-    <div class="wide"><span class="silk silk--lit">Suites</span><b>4 579</b><span>passing across six suites; 0 failed</span></div>
+    <div class="wide"><span class="silk silk--lit">Suites</span><b>4 586</b><span>passing across six suites; 0 failed</span></div>
   </div>
   <p class="col quiet" style="margin-top:34px">Each of these lives in a ledger with its method, its
     conditions and the bar it had to clear — and the tests read that file, so a number cannot drift
@@ -2068,8 +2068,8 @@
   <h2 class="col">Nothing here has been in water yet.</h2>
   <p class="lede col quiet">The honest list of what stands between this and a vehicle that swims:</p>
   <ol class="board" aria-label="What stands between this and a vehicle that swims">
-   <li class="board--water"><b>The board's depth loop has never run closed</b>
-     <span>two armed bench checks, then water</span><em>water</em></li>
+   <li class="board--water"><b>The board's automatic mode has never held depth in water</b>
+     <span>its depth hold was tuned in water once, on the old hull; two armed bench checks, then water</span><em>water</em></li>
    <li class="board--fw"><b>Thruster health cannot tell eight healthy motors from none</b>
      <span>the firmware already computes it and drops it one line early</span><em>one-line merge</em></li>
    <li class="board--fw"><b>There is no move by measured distance</b>
@@ -2130,7 +2130,7 @@
   </div>
   <p class="colophon__note">Hull geometry read from the project CAD. Photographs show vehicles
      built by a university programme the author has since left, and appear here as history.
-     Nothing on this platform has been in water.</p>
+     This stack and this hull have never been in water.</p>
 </footer>
 
 <script src="assets/hull-viewer.js" defer></script>

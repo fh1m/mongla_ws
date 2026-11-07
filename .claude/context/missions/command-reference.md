@@ -37,7 +37,8 @@ There is no third group. A verb the board cannot run does not exist: the manager
 pull request ([`upstream/`](../upstream/README.md)), not a host emulation.
 
 > **Warning: A board-side move can still be denied.** Every on-board primitive runs in the board's
-> automatic mode, which closes the depth loop — and that loop has never run closed in water.
+> automatic mode, which closes the depth loop — and that mode has never run closed in water
+> (the board's 2026-08-06/07 water tests closed `DEPTH_HOLD`, on the old hull, and crashed going to `AUTO`).
 > Until the two bench checks pass, the board may refuse these moves outright. That includes
 > the search creep a vision verb falls back on. See
 > [`srot-integration.md`](../platform/srot-integration.md).
@@ -67,7 +68,7 @@ Required fields have no default.
 | `set_depth` | `target`, `timeout`→30 s, `settle` | hold a depth (negative metres) |
 | `style_roll` | `flips`→1, `timeout`→20 s | N full rolls, run by the board |
 | `fire` | `fire_channel` (board channel 1–16) | actuate a payload channel |
-| `motor_test` | `target`→1 (thruster 1–8), `gain`→20, `duration`→2 s | spin one thruster; requires ARMED |
+| `motor_test` | `target`→1 (board motor output 1–8), `gain`→20, `duration`→2 s | spin one thruster; requires ARMED |
 | `vision_align` | see below | hold a target at a chosen pixel offset |
 | `vision_move` | see below | drive toward or through a target |
 
@@ -239,6 +240,6 @@ floor's texture rather than any detection.
 
 - [`client-and-dsl-api.md`](client-and-dsl-api.md) — the mission language around these verbs
 - [`vision-results.md`](vision-results.md) — reading a vision result, and recovery patterns
-- [`precision-alignment.md`](precision-alignment.md) — holding a 20 kg hull still enough to fire
+- [`precision-alignment.md`](precision-alignment.md) — holding the hull still enough to fire
 - [`packages/mongla_control`](../packages/mongla_control/README.md) — where each verb is implemented
 - [Capability Map](../capability-map.md) — what is verified, and what is not

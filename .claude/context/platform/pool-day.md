@@ -9,7 +9,7 @@ ritual: every step exists because skipping it cost a run.
 
 ```bash
 source scripts/pool_session.sh <label>     # SOURCE it in every terminal — one folder per run
-ros2 run mongla_manager bringup_check --srot
+ros2 run mongla_manager bringup_check
 ```
 
 `bringup_check` grades each subsystem and exits non-zero on a real fault. Read the three
@@ -22,8 +22,10 @@ lines that matter:
   still arming.
 - **Depth loop settled** — refuses to arm while the depth controller is saturated.
 
-**Warning: The board's depth loop has never run closed in water.** Two armed bench checks gate every
-on-board move, including `move_forward`. Until they pass, expect the board to deny moves. This
+**Warning: The board's automatic-mode depth loop has never run closed in water.** It closed
+in `DEPTH_HOLD`, on the old hull, in the firmware team's 2026-08-06/07 tests, and the switch from
+there to `AUTO` crashed the board. Two armed bench checks gate every on-board move, including
+`move_forward`. Until they pass, expect the board to deny moves. This
 is the single most likely reason a session goes nowhere.
 
 ## Watch what the board is actually saying

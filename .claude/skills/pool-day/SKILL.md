@@ -12,7 +12,7 @@ surface any failure with the specific fix. **Never arm thrusters from this skill
 
 1. **The gate** — on the Pi (`fh1m@mongla.local`)
    ```bash
-   ros2 run mongla_manager bringup_check --srot --strict
+   ros2 run mongla_manager bringup_check --strict
    ```
    Grades compute, vision deps, the CH340 driver (and brltty absent), the SROT board link,
    HEARTBEAT, firmware behaviour revision, barometer, failsafe, the board's yaw source,

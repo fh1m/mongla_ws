@@ -471,7 +471,7 @@ def main(argv=None) -> int:
                     help='skip the PCA9685 role read (16 param round-trips)')
     args = ap.parse_args(argv)
 
-    # Same resolver the manager uses, so `connect`, `bringup_check --srot` and
+    # Same resolver the manager uses, so `connect`, `bringup_check` and
     # `start` can never disagree about WHERE the board is -- a tool that looks in a
     # different place than the node it is meant to diagnose is worse than no tool.
     if args.path:

@@ -70,7 +70,7 @@ and why the split exists.
 | Flight modes | **eleven**, including two tuning modes and a pattern runner | fw `include/state_types.h` | BENCH |
 | Movement primitives | **ten**, run and braked on the board: forward, back, strafe L/R, turn, dive, stop, hold, style, arc | `srot_protocol.py` (`CMD_SROT_MOVE = 31000`); fw `src/comms/mav_commands.cpp` | BUILT |
 | Automatic gain tuning | a relay self-tune on the board, driven from an operator command | fw `src/control/autotune.h`; host `mongla_manager/srot_autotune.py` | BUILT |
-| Depth hold | implemented, **never closed in water** — two bench checks gate every automatic move until it is | fw `src/control/depth_control.cpp`; `.claude/context/platform/srot-integration.md` | BLOCKED |
+| Depth hold | implemented. `DEPTH_HOLD` was tuned in water on the old hull (2026-08-06/07, firmware team); **`AUTO` has never held depth in water** — two bench checks gate every automatic move until it does | fw `src/control/depth_control.cpp`; `.claude/context/platform/srot-integration.md` | BLOCKED |
 | Link budget | one USB-C cable at **18.8 %** of capacity; heartbeat margin **10×** the failsafe | `measured-bars.md` §4 | BENCH |
 
 ### Failsafes — the vehicle protects itself without the Pi
@@ -102,7 +102,7 @@ already inside the board and had nowhere to go until we asked.
 | Thruster presence | computed on the board and dropped before the wire — a one-line ask, open | `.claude/context/upstream/pr-f-esc-presence-on-the-wire.md`; 958/958 frames read zero with nothing attached | BLOCKED |
 | Trustworthy timestamps | stamped on the board's own clock: period **100.000 ms, sd 0.000** at the source, against **sd 4.741 ms** by arrival | `measured-bars.md` §14 | BENCH |
 | Reading the board live | `ros2 run mongla_manager connect` prints everything the board sends — no ROS graph, no built workspace needed | `mongla_manager/srot_connect.py` | BENCH |
-| A preflight that gates rather than guesses | `bringup_check --srot` grades each subsystem and exits non-zero on a real fault | `mongla_manager/bringup_check.py` | BENCH |
+| A preflight that gates rather than guesses | `bringup_check` grades each subsystem and exits non-zero on a real fault | `mongla_manager/bringup_check.py` | BENCH |
 
 ---
 
@@ -190,7 +190,7 @@ change every layer, including the one that keeps the vehicle level:
 
 | Blocked | Why | Unblocked by |
 |---|---|---|
-| Depth hold in water | the board's depth loop has never run closed, and it gates every automatic move | two armed bench checks, in water |
+| Depth hold in water | `AUTO`'s depth loop has never run closed in water, and it gates every automatic move | two armed bench checks, in water |
 | Thruster health | presence is computed then dropped before the wire, so "eight healthy" and "none attached" look identical | a one-line firmware merge |
 | Distance moves on srot | `move_*_dist` are refused; they need a board-side measured move | firmware PR #23 |
 | Velocity and position sent to the board | the board has no velocity ingest of any kind today | a firmware merge accepting the standard optical-flow message |

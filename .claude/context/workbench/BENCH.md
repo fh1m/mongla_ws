@@ -32,7 +32,7 @@ of equivalent depth.
 at all, the preview path is not wired as the firmware document says and everything above is
 unproven.
 
-**Result:** _(not yet run)_ · **Lands in:** `bringup_check --srot`, `measured-bars.md`
+**Result:** _(not yet run)_ · **Lands in:** `bringup_check`, `measured-bars.md`
 
 ---
 

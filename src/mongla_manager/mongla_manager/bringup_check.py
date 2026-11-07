@@ -28,7 +28,7 @@ THE FILES. The checks live by what they look at:
 
     bringup_check.py   this: the sections, in order, and the exit code
     bringup_host.py    the computer: ROS, disk, drivers, cameras, models, Hailo, power
-    bringup_board.py   the SROT board (--srot): firmware, barometer, depth loop, memory
+    bringup_board.py   the SROT board: firmware, barometer, depth loop, memory
     bringup_grade.py   PASS / WARN / FAIL and the one-line report format
 """
 
@@ -222,7 +222,7 @@ def _print_launch_hint() -> None:
     print('    ros2 run mongla_planner mongla move_forward --duration 5 --gain 40')
     print('    ros2 run mongla_planner mongla stop')
     print()
-    print('  ERROR: BEFORE WATER -- the depth loop has never run closed, and it runs')
+    print('  ERROR: BEFORE WATER -- AUTO has never held depth in water, and depth runs')
     print('     under EVERY AUTO move (move_forward included), not just set_depth:')
     print('    ros2 run mongla_planner mongla set_mode --target_name DEPTH_HOLD')
     print('      1. hand-raise/lower the sub -> verticals must push BACK toward depth')

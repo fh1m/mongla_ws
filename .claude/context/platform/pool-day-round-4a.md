@@ -32,7 +32,7 @@ mode and **every** primitive there closes the depth loop — including a plain
 measurement agree.
 
 ```bash
-ros2 run mongla_manager bringup_check --srot     # grades and gates; exits non-zero
+ros2 run mongla_manager bringup_check     # grades and gates; exits non-zero
 ```
 
 **Caution: An unhealthy barometer refuses `DEPTH_HOLD`/`AUTO`/`PATTERN`** — and since

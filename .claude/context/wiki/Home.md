@@ -90,7 +90,7 @@ missions run against the real mission language in the tests. Only the verbs need
 ./build_mongla.sh && source install/setup.bash
 
 ros2 run mongla_manager connect --watch        # everything the board says; no ROS graph needed
-ros2 run mongla_manager bringup_check --srot   # grades every subsystem; exits non-zero on a fault
+ros2 run mongla_manager bringup_check   # grades every subsystem; exits non-zero on a fault
 
 ros2 launch mongla_manager bringup.launch.py vision:=true
 ros2 run mongla_planner mongla arm

@@ -18,7 +18,7 @@ This is the operator guide for the close-in robustness layer added after the
 1. **Last-moment misclassification** — just before firing, the detector makes a
    *different* box the control target (a second hole on the board, or a spurious
    box), the hull yaws/strafes to it, and the torpedo misses.
-2. **Can't hold a 20 kg hull still on the hole** — the AUV oscillates / overshoots
+2. **Can't hold a hull of ten kilograms or more still on the hole** — the AUV oscillates / overshoots
    the small target at the 0.72 m standoff, and a steady pool current pushes it
    off-centre.
 
@@ -182,7 +182,7 @@ one verb** — there is no verb seam where the hull drifts forward/back between
 **Why omit `yaw` at the hole.** An `align` without the `yaw` axis sends a zero yaw
 stick, and in STABILIZE the board hands any yaw stick below its gate to its own
 **heading hold** on the board's AHRS at 500 Hz. That is a steadier heading than a
-vision-yaw loop at camera rate can give a 20 kg hull while it strafes. **Null the
+vision-yaw loop at camera rate can give a hull of ten kilograms or more while it strafes. **Null the
 heading during COARSE** (`yaw=0`), so the hold captures the heading that points
 the launcher at the board, then drop `yaw` for the terminal phase.
 

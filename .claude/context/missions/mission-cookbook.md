@@ -232,7 +232,8 @@ Every verb is a method on the `MonglaMission` you receive in
 what runs here: [`reference/commands.md`](../reference/commands.md).
 
 **Warning: Every motion verb below enters the board's AUTO mode, and AUTO closes the
-depth loop -- which has never run closed in water.** Two armed bench checks
+depth loop -- and AUTO has never run closed in water.** (The board's 2026-08-06/07
+water tests closed DEPTH_HOLD on the old hull, and crashed going to AUTO.) Two armed bench checks
 gate them all (CLAUDE.md §2). The vision verbs run in STABILIZE and are not
 gated.
 
@@ -275,7 +276,7 @@ The board holds the depth afterwards; there is no `lock_depth`.
 
 **Warning:** An unhealthy barometer makes the board refuse DEPTH_HOLD and AUTO, so every
 motion verb is denied: the vehicle arms and does not move.
-`ros2 run mongla_manager bringup_check --srot` reads this off `SYS_STATUS`.
+`ros2 run mongla_manager bringup_check` reads this off `SYS_STATUS`.
 
 #### Turns
 
@@ -388,7 +389,7 @@ if never seen; `saw_target`) so a missed align can run tested open-loop recovery
 You branch on it directly:
 
 ```python
-# yaw_gain low -> slow, stable yaw so the 20 kg hull holds the hole steady to fire.
+# yaw_gain low -> slow, stable yaw so the hull holds the hole steady to fire.
 # brake=False on the fire path: the arrival brake can emit a 0.2s kick on a fast
 # snap-in, nudging the hull off-aim between lock-confirm and fire(). No benefit
 # when firing from a lock (you are not moving away), so disable it.

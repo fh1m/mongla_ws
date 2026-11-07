@@ -107,7 +107,7 @@ def _ema_step(ema: float, value: float, dt_s: float) -> float:
 # --- Range-adaptive gain schedule (Layer 1) -------------------------------- #
 # The law is P on NORMALIZED pixel error, so the image shift per unit hull
 # motion grows ~1/range (~ bbox fill): a kp critically damped far-field is
-# OVER-gained close-in, oscillating the 20 kg hull off a small target. Scale the
+# OVER-gained close-in, oscillating the hull off a small target. Scale the
 # lat/surge kp DOWN as fill grows -- 1.0 below FILL_LO (far, full gain), ramping
 # linearly to `floor` at/above FILL_HI (close, gentle). `floor` is the only deck
 # knob (vision.range_gain_floor; 1.0 = off); the ramp endpoints stay constants.
@@ -171,7 +171,7 @@ def _lock_gate(dt_s: float) -> float:
     return max(VISION_LOCK_GATE_MIN, min(VISION_LOCK_GATE_NORM, scaled))
 
 # --- Minimum achievable deadband ------------------------------------------- #
-# A 20 kg hull on open-loop lateral thrust against a bbox that itself jitters a few
+# a hull of ten kilograms or more on open-loop lateral thrust against a bbox that itself jitters a few
 # px per frame cannot hold a literal 0 px error -- and `err=0` from the operator
 # means "use the default" anyway (the rosidl-0 = unset live-tuning convention in
 # commands.fields_for, NOT a literal zero deadband). So clamp the EFFECTIVE

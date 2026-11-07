@@ -15,7 +15,7 @@
 #
 #     rsync      144 MB after the excludes below (3.8 GB before them)
 #     colcon     7 packages finished [42.1s], zero failures
-#     gate       bringup_check --srot ran and correctly FAILED on the absent Bar30
+#     gate       bringup_check ran and correctly FAILED on the absent Bar30
 #
 # Usage:
 #     kutum/deploy.sh fh1m@mongla.local
@@ -134,7 +134,7 @@ set +e
 r bash -lc "'cd ~/$REMOTE_DIR
   source /opt/ros/$ROS_DISTRO_WANT/setup.bash
   source install/setup.bash
-  timeout 120 ros2 run mongla_manager bringup_check --srot'"
+  timeout 120 ros2 run mongla_manager bringup_check'"
 GATE=$?
 set -e
 
