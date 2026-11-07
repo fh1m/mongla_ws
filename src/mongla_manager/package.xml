@@ -25,7 +25,14 @@
   <exec_depend>foxglove_bridge</exec_depend>
   <exec_depend>rosbag2_storage_mcap</exec_depend>
 
-  <buildtool_depend>ament_python</buildtool_depend>
+  <!-- imported by the code; test_package_xml_declares_imports.py keeps these true -->
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>python3-serial</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+
 
   <test_depend>ament_pep257</test_depend>
   <test_depend>ament_flake8</test_depend>

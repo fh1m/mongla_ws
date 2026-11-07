@@ -49,8 +49,11 @@ The Pi 5 has a real-time clock; the official RTC battery keeps it running
 through a power-off, so a vehicle booted at a pool with no network still knows
 the date. `setup.sh --system` turns on the battery's trickle charge
 (`dtparam=rtc_bbat_vchg=3000000` in `/boot/firmware/config.txt`; rechargeable
-ML-2020 cells only). The doctor reads the charge voltage and whether network
-time has synchronised since boot.
+ML-2020 cells only). The doctor reads the charge setting, the cell's own
+voltage (`vcgencmd pmic_read_adc BATT_V`; below 2.5 V is a WARNING), whether the
+RTC agrees with the system clock, and whether network time has synchronised
+since boot. Timing measured on Kutum, and why it stays on `systemd-timesyncd`:
+measured-bars §68.
 
 ## Every day
 
@@ -99,6 +102,10 @@ that. From a blank SD card to a gated vehicle:
    the dev box's copy). It builds and runs `bringup_check --srot`.
 8. **Plug in the board** and pin it once:
    `~/mongla_ws/kutum/system/udev/make_srot_rule.sh`.
+
+`setup.sh --system` also initialises rosdep, and the doctor runs `rosdep check`
+against the package.xml files, so a dependency the code imports and nothing
+declares shows up before it is an ImportError.
 
 **State:** steps 4, 6 and 7 RUN TODAY. Step 5 is the hand-built procedure of 2026-08-28
 written as one script, and has not yet run on a blank card. When it does, note what broke

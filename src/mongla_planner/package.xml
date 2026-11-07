@@ -20,7 +20,15 @@
   <depend>mongla_manager</depend>
   <depend>vision_msgs</depend>
 
-  <buildtool_depend>ament_python</buildtool_depend>
+  <!-- imported by the code; test_package_xml_declares_imports.py keeps these true -->
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>rcl_interfaces</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+
 
   <test_depend>ament_pep257</test_depend>
   <test_depend>ament_flake8</test_depend>

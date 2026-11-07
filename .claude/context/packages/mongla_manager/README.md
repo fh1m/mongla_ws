@@ -181,7 +181,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `health.py` | One health surface. Four states, and UNKNOWN is not OK. |
 | `health_reporters.py` | Each subsystem's private dialect, translated once. |
 | `launch_defaults.py` | Bringup settings from a file, so a pool day is a file and not a long command. |
-| `node_health.py` | Is the node alive, and is the mission: the health report and the two watchdogs. |
+| `node_health.py` | Is the node alive, and is the mission: the health report and the three watchdogs (executor, mission, kill switch). |
 | `node_setup.py` | Bringing the node up: parameters, the board link, the recorder, the preflight reads. |
 | `node_support.py` | The manager node's shared constants: one home, read by every part of the node. |
 | `node_telemetry.py` | What the node publishes about the vehicle: state, IMU, demand, and the console blocks. |

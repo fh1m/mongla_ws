@@ -131,6 +131,7 @@ is how `recommend()` happened.
 - [65. THE MIRROR-BRANCH TEST — slope 0 against slope 2, gated on its own standard error](#65-the-mirror-branch-test--slope-0-against-slope-2-gated-on-its-own-standard-error)
 - [66. THE SHIPPED GATE HEF WAS DEGRADED BY ITS OWN FINE-TUNE — level 2 lost 0.34 of confidence that level 0 kept (B-82, issue #47)](#66-the-shipped-gate-hef-was-degraded-by-its-own-fine-tune--level-2-lost-034-of-confidence-that-level-0-kept-b-82-issue-47)
 - [67. PLACING A PROP FROM SIGHTINGS — the hull's error enters once, and it is the one that matters](#67-placing-a-prop-from-sightings--the-hulls-error-enters-once-and-it-is-the-one-that-matters)
+- [68. THE VEHICLE'S LOOPS HOLD THEIR RATES — and a relative sleep does not](#68-the-vehicles-loops-hold-their-rates--and-a-relative-sleep-does-not)
 <!-- contents:end -->
 
 ---
@@ -6997,3 +6998,50 @@ disagreement gate uses the exact 2-dof chi-square quantile, 9.210.
 noise (optimistic for a YOLO box, as `range_to` states), and the pose covariance is the
 filter's own, which has never been checked against water truth. A placement is only as
 honest as the covariance it is handed.
+
+
+## 68. THE VEHICLE'S LOOPS HOLD THEIR RATES — and a relative sleep does not
+
+**2026-11-07, Kutum (Pi 5, Ubuntu 24.04 `6.8.0-1065-raspi`, `preempt=full` by
+default, `performance` governor, idle).** The scorer was the period error of
+each loop against its declared period, and a deadline loop against a
+relative-sleep loop doing the same work.
+
+| loop | result |
+|---|---:|
+| `time.sleep(0.001 / 0.005 / 0.02)` overshoot, p50 / max | **0.055 / 0.061 ms** |
+| rclpy timer 50 Hz (`MultiThreadedExecutor`, own callback group), period error p50 / p99 / max | 0.007 / 0.040 / 0.248 ms, **50.00 Hz** achieved |
+| rclpy timer 20 Hz, same | 0.009 / 0.031 / 0.043 ms, **20.00 Hz** |
+| rclpy timer 2 Hz, same | 0.005 / 0.225 / 0.225 ms, **2.00 Hz** |
+| 50 ticks of 0.1 s with 2 ms of work: relative `sleep(period)` | **+105.5 ms** drift |
+| the same on monotonic deadlines | **+0.06 ms** |
+
+Bar: a periodic loop that does work runs on deadlines (`countdown`, the
+motor-test keep-alive); a drain that only empties a buffer may sleep
+relatively. The ROS timers need nothing: rcl schedules them on deadlines
+already.
+
+The clock, same day: RTC `rpi-rtc` on the official cell, charging at 3.0 V,
+cell **2.906 V** (`vcgencmd pmic_read_adc BATT_V`), RTC and system clock
+within **0 s** after network sync. `uvcvideo` stamps frames on
+`CLOCK_MONOTONIC` with `hwtimestamps=0`, which is what `v4l2_mailbox` assumes.
+Kept `systemd-timesyncd` over chrony: every duration here is monotonic, every
+stamp conversion tolerates a step (`stamps.capture_monotonic`,
+`ClockMap.STEP_*`), and untethered there is no time source to step to; the RTC
+removes the hours-long first-sync step that made those guards necessary.
+
+**A half turn has no direction on the board.** A relative TURN aims at
+`wrapPi(cur + angle)` and turns by the sign of `wrapPi(target - yaw)`
+(`movement.cpp`). Simulated in float32 the way the ESP32 computes it, over
+20 000 starting headings: `yaw_right(180)` turned clockwise **0.601** of the
+time with no noise and **0.498** with 0.2 deg of yaw noise on the first tick
+(0.500 at 0.05 deg, 0.498 at 1 deg); 170, 175 and 179 deg turned clockwise
+**1.000** of the time. Bar: no relative leg reaches 180, so the facade splits
+anything over `MAX_TURN_LEG_DEG` = 120 into equal legs
+(`test_half_turn_has_a_direction.py`, injection-verified at 180).
+NOT MEASURED on the board: the simulation reads the firmware's arithmetic, not
+a turn in water.
+
+**Caution:** NOT MEASURED: these loops under the full graph (vision + Hailo).
+The idle numbers are the floor, not the bar for a loaded vehicle.
+

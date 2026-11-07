@@ -53,6 +53,11 @@ if [ "${1:-}" = "--system" ]; then
   done
   if [ -n "$MISSING" ]; then apt-get install -y -q $MISSING
   else echo "  all present"; fi
+  # rosdep reads the package.xml files, so it is the check that they are
+  # complete (test_package_xml_declares_imports.py keeps them so). The doctor
+  # runs `rosdep check`; it needs the index initialised once.
+  [ -e /etc/ros/rosdep/sources.list.d/20-default.list ] || rosdep init
+  sudo -u "$OWNER" -H rosdep update -q
 
   # brltty claims every CH340 (1a86:7523) as a braille display and holds it
   # through usbfs, so the SROT board never gets a /dev/ttyUSB* node (E5).
