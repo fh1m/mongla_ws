@@ -130,7 +130,9 @@ with no summary line shows as *(no summary)* until it gets one.
 | `dsl_cameras.py` | Which camera is live: one detector at a time, because the Hailo holds one model. |
 | `dsl_detections.py` | What the cameras see: detected(), wait_for(), where(), outline(). |
 | `dsl_detector.py` | Tuning the detectors and the manager mid-mission: models, classes, confidence, parameters. |
+| `dsl_plan.py` | How a mission is budgeted: tasks with deadlines, the run budget, and run_plan. |
 | `dsl_position.py` | Where the vehicle is: bearings, ranges, position fixes, the fused pose, the anchored heading. |
+| `dsl_report.py` | What a run leaves behind: vision evidence, the countdown, the scoreboard. |
 | `dsl_support.py` | What the mission DSL's parts share: parsing detection messages, and small helpers. |
 | `mission.py` | argparse runner that dispatches into missions/<name>.run. |
 | `model_context.py` | typed model/class handles for the mission DSL. |

@@ -76,7 +76,7 @@ def test_the_align_verb_appends_the_fire_outcome_to_its_result():
 
 
 def test_an_evidence_frame_is_written_as_a_viewable_ppm(tmp_path):
-    from mongla_planner.mongla_dsl import _write_ppm
+    from mongla_planner.dsl_support import _write_ppm
     img = SimpleNamespace(encoding='bgr8', width=2, height=1, step=6,
                           data=bytes([1, 2, 3, 4, 5, 6]))
     path = _write_ppm(img, str(tmp_path), 'align_gate_forward')

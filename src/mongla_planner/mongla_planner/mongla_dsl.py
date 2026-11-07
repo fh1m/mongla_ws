@@ -133,8 +133,9 @@ Tunable live (between runs, no rebuild):
 Where each part lives. `MonglaMission` is one class assembled from one file per
 concern, so a mission author reads one class and a bug report names a file:
 
-  mongla_dsl.py      the verbs, arm/disarm, tasks and the run budget, run_plan,
-                     the countdown and the scoreboard
+  mongla_dsl.py      the verbs, arm/disarm, set_mode, fire
+  dsl_plan.py        task(), use_budget(), worth_attempting(), step(), run_plan()
+  dsl_report.py      vision evidence, the countdown, the scoreboard, the run folder
   dsl_detections.py  what the cameras see: detected(), wait_for(), where(), outline()
   dsl_position.py    where the vehicle is: bearing_to(), range_to(), fix_position(),
                      pose(), anchor_heading()
@@ -148,25 +149,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import contextlib
-import json
 import math
 import os
-import subprocess
-import sys
 import time as _time
-
-import rclpy
 
 from .model_context import ModelRegistry
 from .dsl_cameras import CameraMixin
 from .dsl_detections import SeeMixin
 from .dsl_detector import DetectorMixin
 from .dsl_position import WhereMixin
-from .dsl_support import _to_float, _write_ppm
+from .dsl_support import _to_float
 from .vision_dsl import _VisionDSL  # noqa: F401 -- re-exported; used by MonglaMission
 
-from .client import MoveFailed, MoveRejected, TaskAbandoned  # arm() raises MoveFailed; task() raises TaskAbandoned
+from .client import MoveFailed, MoveRejected
+from .dsl_plan import PlanMixin
+from .dsl_report import ReportMixin
 
 
 def _format_outcome(cmd: str, result) -> str:
@@ -181,31 +178,10 @@ def _format_outcome(cmd: str, result) -> str:
 # MONGLA_RUN_DIR (pool_record.sh writes bags into the same tree). Default
 # ~/mongla_runs so a scorecard never litters the CWD the operator launched from.
 
-_RUN_DIR_ENV     = 'MONGLA_RUN_DIR'
-_DEFAULT_RUN_DIR = '~/mongla_runs'
 
 
-def _run_dir() -> str:
-    """Return the per-run artifact folder, creating it if absent."""
-    base = os.path.expanduser(os.environ.get(_RUN_DIR_ENV) or _DEFAULT_RUN_DIR)
-    os.makedirs(base, exist_ok=True)
-    return base
 
 
-def _git_sha() -> str:
-    """Best-effort short git SHA of the workspace (which code ran this run).
-
-    Returns '' if git/the repo is unavailable -- traceability is a nice-to-have,
-    never a reason to raise on pool day.
-    """
-    try:
-        out = subprocess.run(
-            ['git', 'rev-parse', '--short', 'HEAD'],
-            cwd=os.path.dirname(os.path.abspath(__file__)),
-            capture_output=True, text=True, timeout=2.0)
-        return out.stdout.strip() if out.returncode == 0 else ''
-    except Exception:
-        return ''
 
 
 @dataclass(frozen=True)
@@ -219,7 +195,7 @@ class FireOutcome:
         return self.fired
 
 
-class MonglaMission(SeeMixin, WhereMixin, CameraMixin, DetectorMixin):
+class MonglaMission(PlanMixin, ReportMixin, SeeMixin, WhereMixin, CameraMixin, DetectorMixin):
     """Mission-author API. Wraps MonglaClient with human verbs + sticky context.
 
     Parameters
@@ -429,276 +405,6 @@ class MonglaMission(SeeMixin, WhereMixin, CameraMixin, DetectorMixin):
     # ================================================================== #
     #  Run budget -- OPT-IN (Tier 5.1)                                    #
     # ================================================================== #
-
-    def _record_vision(self, verb: str, target: str, camera: str, res) -> None:
-        """Put WHERE and HOW a vision verb ended on its scoreboard row.
-
-        The scorecard used to carry only cmd/success/elapsed/msg, and the vision
-        server always reports success -- so a run that never saw the gate and
-        one that centred it looked identical afterwards. Updates the verb's own
-        row (the last `vision_<verb>`); adds one if the verb never reached the
-        server.
-        """
-        import math as _math
-        info = self.__dict__.get('_vinfo', {}).get(camera)
-        evidence = {
-            'target': str(target), 'camera': str(camera),
-            'outcome': res.reason, 'saw_target': bool(res.saw_target),
-            'x_px': None if _math.isnan(res.x_px) else round(res.x_px, 1),
-            'y_px': None if _math.isnan(res.y_px) else round(res.y_px, 1),
-            'fill': round(float(res.fill), 3), 'fired': res.fired,
-            'model': list(info[0]) if info else None,
-        }
-        board = self.__dict__.setdefault('_scoreboard', [])
-        for row in reversed(board):
-            if row.get('cmd') == f'vision_{verb}' and 'vision' not in row:
-                row['vision'] = evidence
-                return
-        board.append({'cmd': f'vision_{verb}', 'success': bool(res.ok),
-                      'elapsed': round(float(res.elapsed_s), 2),
-                      'msg': res.reason, 'vision': evidence})
-
-    def save_evidence(self, camera: str | None = None, tag: str = 'evidence', *,
-                      timeout: float = 2.0):
-        """Save the next `image_debug` frame (boxes drawn) into the run folder.
-
-        OPT-IN. Returns the file path, or None when no frame arrived. Written as
-        binary PPM: no OpenCV or cv_bridge needed (both fail under numpy 2), and
-        any viewer opens it. The path goes on the scoreboard so the scorecard row
-        and the picture of how the task ended travel together.
-        """
-        import time as _t
-        from sensor_msgs.msg import Image
-        cam = camera or self.camera
-        node = self.client.node
-        got = {}
-        sub = node.create_subscription(
-            Image, f'/mongla/vision/{cam}/image_debug',
-            lambda m: got.setdefault('img', m), 1)
-        try:
-            deadline = _t.monotonic() + float(timeout)
-            while 'img' not in got and _t.monotonic() < deadline:
-                rclpy.spin_once(node, timeout_sec=0.05)
-        finally:
-            node.destroy_subscription(sub)
-        img = got.get('img')
-        path = _write_ppm(img, _run_dir(), f'{tag}_{cam}') if img is not None else None
-        self.__dict__.setdefault('_scoreboard', []).append(
-            {'cmd': f'evidence:{tag}', 'success': path is not None,
-             'elapsed': 0.0, 'msg': path or f'no image_debug frame from {cam}'})
-        return path
-
-    @contextlib.contextmanager
-    def task(self, name: str, *, deadline_s: float | None = None):
-        """Bound a block of verbs by time, and abandon it cleanly when it runs out.
-
-        OPT-IN. When the deadline passes, the goal in flight is CANCELLED (the
-        manager brakes and neutralises as for any cancel) and `TaskAbandoned`
-        is raised out of the block, so the mission takes its fallback::
-
-            try:
-                with mongla.task('torpedo', deadline_s=90):
-                    mongla.vision.align('hole', ...)
-            except TaskAbandoned:
-                mongla.fire(1)                      # blind shot, keep the points
-
-        With no `deadline_s` and a budget on (`use_budget`), the deadline is what
-        the budget has left. With neither, the block only records its outcome.
-        Nested tasks keep the EARLIER deadline. `stop`/`surface`/`disarm`/`pause`
-        are never blocked by a passed deadline.
-        """
-        import time as _t
-        from mongla_planner.client import TaskAbandoned
-        budget = getattr(self, '_budget', None)
-        if deadline_s is None and budget is not None and budget.started:
-            deadline_s = budget.remaining_s()
-        start = _t.monotonic()
-        outer = getattr(self.client, '_task_deadline', None)
-        mine = start + float(deadline_s) if deadline_s is not None else None
-        eff = mine if outer is None else (outer if mine is None else min(outer, mine))
-        self.client._task_deadline = eff
-        outcome = 'done'
-        try:
-            yield
-        except TaskAbandoned:
-            outcome = 'abandoned'
-            self.log.warning(f'[TASK ] {name}: ABANDONED at deadline '
-                             f'({_t.monotonic() - start:.1f} s)')
-            raise
-        except Exception as exc:
-            outcome = f'failed: {exc}'
-            raise
-        finally:
-            self.client._task_deadline = outer
-            self.__dict__.setdefault('_scoreboard', []).append({
-                'cmd': f'task:{name}', 'success': outcome == 'done',
-                'elapsed': round(_t.monotonic() - start, 2), 'msg': outcome})
-
-    def use_budget(self, total_s: float = 900.0, *, reserve_s: float = 45.0):
-        """Ration the run by the clock. OPT-IN: nothing is rationed until this is called.
-
-        The clock starts on a SUCCESSFUL `arm()`, not on script start -- time
-        spent waiting for a tether to come off is not run time. `reserve_s` is
-        the surface-and-disarm allowance and is never offered to a task.
-        Returns the `RunBudget` so a mission can also call `plan()` on it.
-
-            mongla.use_budget(900, reserve_s=60)
-            v = mongla.worth_attempting('torpedo', points=300, worst_case_s=120,
-                                        fallback_s=25, fallback_points=100)
-            if v.mode == 'full': ...
-            elif v.mode == 'fallback': ...          # e.g. blind fire
-        """
-        from mongla_planner.run_budget import RunBudget
-        self._budget = RunBudget(float(total_s), reserve_s=float(reserve_s))
-        self.log.info(f'[BUDG ] run budget ON: {total_s:.0f} s total, '
-                      f'{reserve_s:.0f} s reserve, clock starts on arm')
-        return self._budget
-
-    def note(self, name: str, msg: str, *, success: bool = True) -> None:
-        """Put a mission-level fact on the scoreboard that no verb reports.
-
-        e.g. `note('navigation', 'unconfirmed: blind transit', success=False)` --
-        a run that proceeds on an attempt must not read as a confirmed pass.
-        """
-        (self.log.info if success else self.log.warning)(f'[NOTE ] {name}: {msg}')
-        self._scoreboard.append({'cmd': f'note:{name}', 'success': bool(success),
-                                 'elapsed': 0.0, 'msg': str(msg)})
-
-    def worth_attempting(self, name: str, *, points: int, worst_case_s: float,
-                         fallback_s: float = 0.0, fallback_points: int = 0):
-        """`Verdict(attempt, mode='full'|'fallback'|'skip', reason, remaining_s)`.
-
-        With no `use_budget()` the answer is always attempt/full -- the opt-out
-        IS not calling `use_budget`. The verdict goes on the scoreboard, so a
-        skipped task explains itself after the run.
-        """
-        from mongla_planner.run_budget import Task, Verdict
-        budget = getattr(self, '_budget', None)
-        if budget is None:
-            v = Verdict(True, 'full', 'no run budget configured', float('inf'))
-        else:
-            v = budget.verdict(Task(str(name), int(points), float(worst_case_s),
-                                    fallback_s=float(fallback_s),
-                                    fallback_points=int(fallback_points)))
-            (self.log.info if v.attempt else self.log.warning)(
-                f'[BUDG ] {name}: {v.mode} -- {v.reason}')
-        self._scoreboard.append({'cmd': f'budget:{name}', 'success': bool(v.attempt),
-                                 'elapsed': 0.0, 'msg': f'{v.mode}: {v.reason}'})
-        return v
-
-    def step(self, name: str, *, points: int, worst_case_s: float,
-             run, fallback=None, fallback_s: float = 0.0,
-             fallback_points: int = 0):
-        """One declared piece of a run. Pairs with `run_plan()`.
-
-        `run` and `fallback` are CALLABLES taking `(mongla)` -- never verb
-        names, the same rule `resilience.py` holds: a mechanism that accepts a
-        verb name can be pointed at `disarm` by a config edit.
-        """
-        return {'name': str(name), 'points': int(points),
-                'worst_case_s': float(worst_case_s), 'run': run,
-                'fallback': fallback, 'fallback_s': float(fallback_s),
-                'fallback_points': int(fallback_points)}
-
-    def run_plan(self, steps, *, order: str = 'as_written'):
-        """Execute a declared plan, re-deciding from the LIVE clock each time.
-
-        This is the whole point: a mission stops being a hand-ordered script
-        that hopes it fits, and becomes a declaration of what each task is worth
-        and what it costs. Between steps the clock has moved and the world has
-        changed, so the verdict is asked again -- never precomputed once.
-
-            mongla.use_budget(900, reserve_s=60)
-            mongla.run_plan([
-                mongla.step('gate',   points=100, worst_case_s=120,
-                            run=gate, fallback=blind_transit,
-                            fallback_s=25, fallback_points=40),
-                mongla.step('bins',   points=200, worst_case_s=180, run=bins),
-                mongla.step('flares', points=50,  worst_case_s=90, run=flares),
-            ])
-
-        What it handles so the author does not:
-          * the budget verdict per step (full / fallback / skip),
-          * a deadline per step, so an overrun is abandoned rather than eating
-            the run -- `TaskAbandoned` is caught here and the plan continues,
-          * every outcome on the scorecard.
-
-        `order='by_value'` sorts by points per second first. It ignores where
-        the props are -- `by_points_per_second` says so itself -- so it is for
-        deciding what to DROP, not the order to swim. Default is as written.
-
-        Returns the list of `(name, outcome)` actually executed.
-        """
-        from mongla_planner.run_budget import Task, by_points_per_second
-
-        steps = list(steps)
-        if order == 'by_value':
-            ranked = by_points_per_second([
-                Task(s['name'], s['points'], s['worst_case_s'],
-                     fallback_s=s['fallback_s'],
-                     fallback_points=s['fallback_points']) for s in steps])
-            by_name = {s['name']: s for s in steps}
-            steps = [by_name[t.name] for t in ranked]
-            self.log.info('[PLAN ] order by value: '
-                          + ' > '.join(s['name'] for s in steps))
-
-        results = []
-        for s in steps:
-            name = s['name']
-
-            verdict = self.worth_attempting(
-                name, points=s['points'], worst_case_s=s['worst_case_s'],
-                fallback_s=s['fallback_s'], fallback_points=s['fallback_points'])
-
-            if not verdict.attempt:
-                results.append((name, 'skipped'))
-                continue
-
-            use_fallback = verdict.mode == 'fallback'
-            body = s['fallback'] if use_fallback else s['run']
-            if body is None:
-                self.note(name, 'no fallback authored for this step',
-                          success=False)
-                results.append((name, 'skipped'))
-                continue
-
-            deadline = s['fallback_s'] if use_fallback else s['worst_case_s']
-            try:
-                with self.task(name, deadline_s=deadline):
-                    body(self)
-                results.append((name, verdict.mode))
-            except TaskAbandoned:
-                # A task that cannot be finished must not cost the run. The
-                # deadline already cancelled the goal in flight; keep swimming.
-                results.append((name, 'abandoned'))
-            except (MoveFailed, MoveRejected) as exc:
-                # Issue #16: One failed verb used to end the run. Only
-                # TaskAbandoned was caught, so a stall or one busy reply inside
-                # a step left run_plan, the runner disarmed, and the
-                # higher-value steps after it never ran -- while the vision
-                # verbs shrugged off the very same fault. Same policy now: a
-                # step's failure costs that step.
-                #
-                # Unless the vehicle cannot take a stop. Whether the failure was
-                # one task's or the vehicle's is MEASURED, not read from the
-                # error text: brake, and if the stop itself is refused or times
-                # out, the link or the vehicle is gone -- re-raise and let the
-                # runner's shutdown take over. Ctrl-C is not
-                # caught here.
-                try:
-                    self.stop()
-                except (MoveFailed, MoveRejected) as stop_exc:
-                    self.log.error(f'[PLAN ] {name}: {exc} -- and the vehicle '
-                                   f'refused a stop ({stop_exc}): ending the run')
-                    raise exc from stop_exc
-                self.log.warning(f'[PLAN ] {name} FAILED ({exc}); braked, '
-                                 f'moving on to the next step')
-                results.append((name, f'failed: {exc}'))
-
-        done = [n for n, o in results if o in ('full', 'fallback')]
-        self.log.info(f'[PLAN ] {len(done)}/{len(steps)} steps carried out: '
-                      + ', '.join(f'{n}={o}' for n, o in results))
-        return results
 
     def disarm(self, *, timeout: float = 20.0):
         return self._send('disarm', timeout=timeout)
@@ -927,127 +633,9 @@ class MonglaMission(SeeMixin, WhereMixin, CameraMixin, DetectorMixin):
     #  Mission countdown                                                   #
     # ================================================================== #
 
-    def countdown(self, seconds: int = 10, *,
-                  message: str = "Wire removed  --  Mongla is now autonomous. Good luck."):
-        """Print a tether-removal countdown and return."""
-        width = 66
-        border_h = '━' * width
-        tl, tr, bl, br = '┏', '┓', '┗', '┛'
-        vb = '┃'
-
-        def _box(lines):
-            print(f'{tl}{border_h}{tr}')
-            for line in lines:
-                pad = width - len(line)
-                lp  = pad // 2
-                rp  = pad - lp
-                print(f'{vb}{" " * lp}{line}{" " * rp}{vb}')
-            print(f'{bl}{border_h}{br}')
-
-        print()
-        _box([
-            '',
-            'TETHER REMOVAL WINDOW',
-            '',
-            'Disconnect the tether now.',
-            f'Mission starts in {seconds} seconds.',
-            '',
-        ])
-        print()
-
-        for remaining in range(seconds, 0, -1):
-            bar_total = 40
-            filled    = int(bar_total * (seconds - remaining) / seconds)
-            bar       = '█' * filled + '░' * (bar_total - filled)
-            sys.stdout.write(f'\r  T-{remaining:3d}s  [{bar}]  ')
-            sys.stdout.flush()
-            _time.sleep(1)
-
-        sys.stdout.write('\r' + ' ' * 60 + '\r')
-        sys.stdout.flush()
-        print()
-        _box(['', message, ''])
-        print()
-
     # ================================================================== #
     #  Mission scoreboard                                                  #
     # ================================================================== #
-
-    def log_scoreboard(self, *, json_path: str | None = None,
-                       mission: str | None = None) -> None:
-        """Print a structured per-verb mission summary and optionally write JSON.
-
-        Called automatically by `mission.py` on exit (normal or exception).
-        Can also be called manually at any point during a mission.
-
-        Parameters
-        ----------
-        json_path : str | None
-            If given, write the scoreboard JSON to this path in addition to
-            printing to stdout.  Pass ``'auto'`` to write a timestamped
-            ``<mission>_<ts>.json`` into the dedicated run folder (``_run_dir``,
-            default ``~/mongla_runs``, override with ``MONGLA_RUN_DIR``).
-        mission : str | None
-            Mission name, recorded in the JSON and used in the ``'auto'``
-            filename so a pool session's scorecards are traceable per run.
-
-        Example output::
-
-            ╔══════════════════════════════════════════════════════════════════╗
-            ║  MISSION SCOREBOARD                         total: 47.3 s       ║
-            ╠══════════╦══════════╦═══════╦═══════════════════════════════════╣
-            ║  #  verb ║ success  ║  time ║  message                          ║
-            ╠══════════╬══════════╬═══════╬═══════════════════════════════════╣
-            ║  1  arm  ║        ║  2.1s ║  armed                            ║
-            ║  ...                                                             ║
-            ╚══════════════════════════════════════════════════════════════════╝
-        """
-        total_s = round(_time.monotonic() - self._mission_start, 1)
-        width   = 68
-        hb      = '═' * width
-
-        def _row(n, entry):
-            tick = 'ok' if entry['success'] else 'FAIL'
-            cmd  = entry['cmd'][:18]
-            t    = f"{entry['elapsed']:.1f}s"
-            msg  = entry['msg'][:30]
-            return f"  {n:>2d}  {cmd:<18s}  {tick}   {t:>5s}   {msg}"
-
-        print(f'\n╔{hb}╗')
-        print(f'║  MISSION SCOREBOARD{" " * (width - 20 - len(str(total_s)) - 12)}total: {total_s} s  ║')
-        print(f'╠{hb}╣')
-        print(f'║  {"#":>2s}  {"verb":<18s}  {"ok"}   {"time":>5s}   {"message":<30s}  ║')
-        print(f'╠{hb}╣')
-        for i, entry in enumerate(self._scoreboard, 1):
-            row = _row(i, entry)
-            pad = width - len(row)
-            print(f'║{row}{" " * pad}║')
-        print(f'╚{hb}╝\n')
-
-        if json_path:
-            payload = {
-                'mission':       mission or '',
-                'timestamp':     _time.strftime('%Y-%m-%dT%H:%M:%S'),
-                'git_sha':       _git_sha(),
-                'total_s':       total_s,
-                'success_count': sum(1 for e in self._scoreboard if e['success']),
-                'fail_count':    sum(1 for e in self._scoreboard if not e['success']),
-                'phases':        self._scoreboard,
-            }
-            # Whole write is best-effort: log_scoreboard runs in mission.py's
-            # finally, so a run-dir mkdir / write failure must never mask the
-            # mission outcome. Resolve the auto path INSIDE the guard too
-            # (_run_dir mkdir can raise on a read-only / full disk).
-            try:
-                if json_path == 'auto':
-                    ts   = _time.strftime('%Y%m%d_%H%M%S')
-                    name = (mission or 'mission').replace('/', '_')
-                    json_path = os.path.join(_run_dir(), f'{name}_{ts}.json')
-                with open(json_path, 'w') as fh:
-                    json.dump(payload, fh, indent=2)
-                self.log.info(f'[DSL  ] scoreboard → {json_path}')
-            except OSError as exc:
-                self.log.warning(f'[DSL  ] scoreboard write failed ({exc})')
 
     # ================================================================== #
     #  Escape hatch -- unknown verbs fall through to raw client           #
