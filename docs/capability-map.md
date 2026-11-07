@@ -137,6 +137,7 @@ IMU, the depth sensor and the downward camera. Without it, a distance move is a 
 | Pose filter | a right-invariant EKF over IMU, depth, flow, heading and fixes | `mongla_localization/inekf.py` | 🟡 BUILT |
 | Late measurements | replayed at the instant they describe, with the tail re-run | `mongla_localization/retro.py`, `test_retro.py` | 🟡 BUILT |
 | Absolute position | a fix from a prop whose location is known, or resection from two bearings | `course_map.py`, `resection.py`, `pnp_node.py` | 🟡 BUILT |
+| Prop positions | where each prop really stands, from the vehicle's own sightings, written to the deck course file (`mission survey_course`) | `prop_placement.py`, `place_prop` | 🟡 BUILT |
 | Absolute heading | from a prop of known bearing, from pool lane lines, or from the floor tile grating | `heading_anchor.py`, `pool_lines.py`, `tile_grating.py` | 🟡 BUILT |
 | Venue priors | a course file per competition, overridable on the deck without a rebuild, plus a tool to survey the real venue | `mongla_localization/courses/*.yaml`, `course_survey.py` | 🟡 BUILT |
 | Frame tree | FRD/NED inside, REP-103 FLU/ENU at the boundary through a published TF tree; the pool frame is unreachable until anchored | `mongla_localization/frames.py`, `test_frame_tree.py`; live on the board: `odom → base_link` yaw −58.95° ENU against a 148.6° NED heading (90 − 148.6 = −58.6) | 🟣 BENCH |

@@ -61,6 +61,7 @@ measurement is, not with the length of the log.
 | `pnp_node.py` | the pose of a prop, from its detected corners |
 | `course_map.py` + `courses/*.yaml` | what the venue contains, and where |
 | `course_survey.py` | measure the real venue and write it into your own copy |
+| `prop_placement.py` | where a prop really is, from several sightings; the hull's error enters once, not divided by the count ([ledger §67](../../measured-bars.md)) |
 
 ## Venue priors, without hard-coding a pool
 
@@ -74,6 +75,24 @@ ros2 run mongla_localization course_survey --course sauvc26 --prop gate --x 3.5 
 ```
 
 Positions that were never measured are left empty rather than invented, and marked as such.
+
+### Or let the vehicle place them
+
+A tape is not the only way in. `mission survey_course` anchors the heading, turns to each prop
+from one station, and calls `place_prop(commit=True)`: several range-and-bearing sightings,
+fused by `prop_placement.place`, written into the same deck copy. The one subtlety is the
+whole design. Every sighting in a pass is taken from the same pose, so the pose's error is
+**common** to all of them and does not shrink with more sightings; only the range and bearing
+noise does. Divide both by the count and the ellipse looks tight and is wrong two times in
+three:
+
+![One pass, top view: eight sight lines from a drifted pose land around a point offset from the true prop; the shipped ellipse contains the prop, the ellipse that divides every error by eight does not.](../../../../docs/imgs/readme/prop-placement.webp)
+
+The same common error is why **spacing** comes out far better than position: two props placed
+in one pass share it, and it cancels in their difference (median 0.019 m against 0.356 m,
+[ledger §67](../../measured-bars.md)). A `measured: true` prop is only *checked* against the
+sightings and never overwritten, so a run from a drifted pose cannot rewrite the survey that
+would correct it. Figure: `python3 tools/fig_prop_placement.py`, computed by the shipped code.
 
 ## Running it
 

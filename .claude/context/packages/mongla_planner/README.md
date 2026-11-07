@@ -46,7 +46,7 @@ Grouped by what you are doing:
 |---|---|
 | **Move** | `arm` `disarm` `set_depth` `move_forward/back/left/right` `yaw_left/right` `turn` `surface` `stop` `pause` `fire` |
 | **See** | `vision.align` `vision.move` · `detected` `wait_for` `where` `can_see` `side_on` `outline` |
-| **Measure** | `range_to` `bearing_to` `floor_range` `floor_height` `pose` `motion` `fix_from_prop` `standoff_for_prop` |
+| **Measure** | `range_to` `bearing_to` `floor_range` `floor_height` `pose` `motion` `fix_from_prop` `place_prop` `standoff_for_prop` |
 | **Navigate to something known** | `use_course` `acquire` `goto_prop` `anchor_on` `absolute_heading` |
 | **Manage the run** | `task` `use_budget` `worth_attempting` `note` `countdown` `log_scoreboard` |
 | **Configure vision live** | `use_camera` `set_model` `set_classes` `set_conf` `set_vision_param` `pause_detector` `resume_detector` |

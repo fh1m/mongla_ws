@@ -260,3 +260,99 @@ def test_a_prop_not_in_the_course_is_refused():
     got = MonglaMission.fix_from_prop(_prop_fixer(_course(gate=(1.0, 1.0))),
                                       'slalom')
     assert not got.ok and 'slalom' in got.reason
+
+
+# --------------------------------------------------------------------------- #
+#  place_prop(): the inverse -- trust the hull, place the prop                 #
+# --------------------------------------------------------------------------- #
+class _Cov:
+    """An Odometry whose pose covariance says 0.2 m and 1 deg."""
+    def __init__(self):
+        c = [0.0] * 36
+        c[0] = c[7] = 0.04
+        c[35] = math.radians(1.0) ** 2
+        self.pose = type('P', (), {'covariance': c})()
+
+
+def _placer(course, *, hull=(2.0, 0.0), bearing=0.0, rng=(4.0, 0.1)):
+    m = _prop_fixer(course, bearing=bearing, rng=rng)
+    m._odom = _Cov()
+    m.pose.return_value = (hull[0], hull[1], -0.5, 0.0)
+    frames = iter(range(1000))
+    m.__dict__['_det_capture'] = {}
+
+    def _bearing(*a, **k):
+        m.__dict__['_det_capture']['forward'] = (next(frames), 0)
+        return bearing
+    m.bearing_to.side_effect = _bearing
+    return m
+
+
+def _unmeasured(name, xy=None):
+    return Course('t', {name: Prop(name, x_m=None if xy is None else xy[0],
+                                   y_m=None if xy is None else xy[1],
+                                   detect_class=name, measured=False)})
+
+
+def test_an_unset_prop_is_PLACED_from_sightings():
+    course = _unmeasured('bucket')
+    m = _placer(course, hull=(2.0, 0.0), bearing=0.0, rng=(4.0, 0.1))
+    got = MonglaMission.place_prop(m, 'bucket', samples=4, timeout=2.0)
+    assert got.ok, got.reason
+    assert (got.x_m, got.y_m) == (pytest.approx(6.0), pytest.approx(0.0))
+    # The run now dead-reckons to it.
+    assert course.position_of('bucket') == (pytest.approx(6.0), pytest.approx(0.0))
+    # And the hull's 0.2 m is in the answer once, not divided by four.
+    assert got.sigma_m >= 0.2
+
+
+def test_a_nominal_one_metre_off_is_moved_and_the_move_is_reported():
+    course = _unmeasured('bucket', xy=(7.0, 0.0))
+    m = _placer(course)
+    got = MonglaMission.place_prop(m, 'bucket', samples=4, timeout=2.0)
+    assert got.ok and got.prior_offset_m == pytest.approx(1.0)
+    assert course.position_of('bucket')[0] == pytest.approx(6.0)
+
+
+def test_a_SURVEYED_prop_is_checked_and_never_overwritten():
+    """A drifted pose must not rewrite the one thing that can correct it."""
+    course = _course(bucket=(7.0, 0.0))
+    m = _placer(course)
+    got = MonglaMission.place_prop(m, 'bucket', samples=4, timeout=2.0)
+    assert got.ok and got.prior_disagrees
+    assert course.position_of('bucket') == (7.0, 0.0)
+    assert any('SURVEYED' in str(c) for c in m.log.warning.call_args_list)
+
+
+def test_place_prop_refuses_an_unanchored_heading():
+    m = _placer(_unmeasured('bucket'))
+    m._heading_offset = None
+    got = MonglaMission.place_prop(m, 'bucket', samples=4, timeout=0.5)
+    assert not got.ok and 'anchor' in got.reason
+
+
+def test_one_frame_seen_many_times_counts_once(monkeypatch):
+    """The same detection read on several loop passes is ONE sighting; counting
+    it again would shrink the noise term with data that does not exist."""
+    import mongla_planner.dsl_position as dp
+    monkeypatch.setattr(dp.rclpy, 'spin_once', lambda *a, **k: None)
+    m = _placer(_unmeasured('bucket'))
+    m.__dict__['_det_capture'] = {'forward': (1, 0)}
+    m.bearing_to.side_effect = None
+    m.bearing_to.return_value = 0.0
+    got = MonglaMission.place_prop(m, 'bucket', samples=4, timeout=0.3)
+    assert not got.ok and '1 usable' in got.reason
+
+
+def test_commit_writes_the_deck_course(tmp_path, monkeypatch):
+    monkeypatch.setenv('MONGLA_COURSE_DIR', str(tmp_path))
+    from mongla_localization import course_map
+    pkg = tmp_path / 'pkg'
+    pkg.mkdir()
+    (pkg / 't.yaml').write_text('props:\n  bucket:\n    detect_class: bucket\n')
+    monkeypatch.setattr(course_map, '_PKG_COURSES', pkg)
+    m = _placer(_unmeasured('bucket'))
+    got = MonglaMission.place_prop(m, 'bucket', samples=4, timeout=2.0, commit=True)
+    assert got.ok
+    back = course_map.load_course('t').prop('bucket')
+    assert back.measured and back.x_m == pytest.approx(6.0)

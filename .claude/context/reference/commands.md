@@ -349,6 +349,7 @@ Run with `ros2 run mongla_planner mission <name>`. A model marked ⏳ is not in 
 | `sauvc_navigation` | SAUVC 2026 Navigation — swim through the red/green gate. THE mandatory task. | `sauvc_sim` | `move_forward`, `pause`, `set_depth` |
 | `sauvc_qualification` | SAUVC Qualification — through the hanging gate, U-turn, back through it. | `sauvc_sim` | `move_forward`, `pause`, `set_depth`, `yaw_right` |
 | `sauvc_target_acquisition` | SAUVC 2026 Target Acquisition — drop the ball into the BLUE drum. 30 points. | `sauvc_sim` | `move_forward`, `pause`, `set_depth` |
+| `survey_course` | put the props where the vehicle actually sees them. | — | `set_depth` |
 | `task_bin` | Bin drop task — DOWNWARD camera, hover over the bin, drop a marker. | `bin_fire_blood` | `move_forward`, `pause`, `set_depth`, `turn` |
 | `task_full_2026` | Full RoboSub 2026 competition run: Gate → Slalom → Bin → Torpedo → Return+Roll. | — | `pause`, `set_depth` |
 | `task_gate` | Gate task — find the gate and drive through it. | `gate_sharks` | `move_forward`, `pause`, `set_depth` |

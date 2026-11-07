@@ -109,6 +109,7 @@ mongla.floor_height()              # height above the floor
 mongla.pose()                      # the filter's current estimate
 mongla.motion()                    # is the hull actually moving?
 mongla.fix_from_prop('gate')       # a position fix from something we recognise
+mongla.place_prop('bucket')        # the inverse: where that prop really is
 mongla.standoff_for_prop('board')  # how far back to sit for this prop
 mongla.hfov_water_deg()            # this camera's real field of view, in water
 ```
