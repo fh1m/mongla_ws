@@ -150,6 +150,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `factory.py` | Single dispatch point: source-name -> Camera instance. |
 | `identity.py` | Take GEOMETRY from the structure, IDENTITY from the symbol on it. |
 | `ladder_config.py` | One deck file for the ladder's switches, read by the node itself. |
+| `lock_anchor.py` | The anchor rung: enrol a reference or locate against the bank, and box what it found. |
 | `lock_inputs.py` | LockNode's inputs besides images and detections: attitude, odometry, |
 | `lock_node.py` | run the ladder, publish one target position. |
 | `lock_publish.py` | LockNode's outputs: the /lock box, its decomposition, the pose |
