@@ -117,8 +117,11 @@ launch:                      # under launch: each other launch file, by name
     fwd_video: /footage/gate.mp4
 ```
 
-Every capability starts **off**. Bring the vehicle up bare, switch one thing on, and measure
-what it costs. If you misspell a key, the launch stops and names the closest real one. ROS on
+Every capability is a switch with a default we can defend. The expensive or unproven ones
+(`vision`, `flow`, `retrodict`, the uplinks to the board) start **off**; the cheap ones the
+filter leans on (`localization`, `lock`, `zupt`, `demand_aid`) start on. Bring the vehicle up
+with the defaults, switch one thing on, and measure what it costs. Every default is listed in
+[the command reference](../reference/commands.md). If you misspell a key, the launch stops and names the closest real one. ROS on
 its own would ignore the typo and run on the default, without a word.
 
 ### Tell it what to do
