@@ -16,8 +16,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from mongla_manager.bringup_check import (            # noqa: E402
-    FAIL, PASS, WARN, _throttled_verdict)
+from mongla_manager.bringup_grade import FAIL, PASS, WARN   # noqa: E402
+from mongla_manager.bringup_host import _throttled_verdict  # noqa: E402
 import sys as _sys_ct
 import pathlib as _pl_ct
 _sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))

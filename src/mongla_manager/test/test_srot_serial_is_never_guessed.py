@@ -68,7 +68,7 @@ def test_nothing_attached_is_None_not_an_error(monkeypatch):
 
 
 def test_bringup_check_FAILS_the_section_instead_of_crashing(monkeypatch):
-    from mongla_manager import bringup_check as bc
+    from mongla_manager import bringup_board as bc
     _fs(monkeypatch, links=[BOARD, OTHER],
         real={BOARD: '/dev/ttyUSB0', OTHER: '/dev/ttyUSB1'})
     conn, state = bc._resolve_srot_for_check('')

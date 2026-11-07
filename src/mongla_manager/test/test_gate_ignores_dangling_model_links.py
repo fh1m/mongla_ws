@@ -6,7 +6,8 @@ dangling sidecar, while nothing could load it.
 """
 import os
 
-from mongla_manager.bringup_check import FAIL, PASS, WARN, _check_models_hailo
+from mongla_manager.bringup_grade import FAIL, PASS, WARN
+from mongla_manager.bringup_host import _check_models_hailo
 
 
 def _touch(p, text='x'):
@@ -15,7 +16,7 @@ def _touch(p, text='x'):
 
 
 def test_dangling_links_are_named_not_counted(tmp_path, monkeypatch):
-    import mongla_manager.bringup_check as bc
+    import mongla_manager.bringup_host as bc
     monkeypatch.setattr(bc, '_baked_floor', lambda p: None)
     d = tmp_path / 'models'
     d.mkdir()
@@ -29,7 +30,7 @@ def test_dangling_links_are_named_not_counted(tmp_path, monkeypatch):
 
 
 def test_a_real_hef_without_its_sidecar_still_fails(tmp_path, monkeypatch):
-    import mongla_manager.bringup_check as bc
+    import mongla_manager.bringup_host as bc
     monkeypatch.setattr(bc, '_baked_floor', lambda p: None)
     d = tmp_path / 'models'
     d.mkdir()
@@ -39,7 +40,7 @@ def test_a_real_hef_without_its_sidecar_still_fails(tmp_path, monkeypatch):
 
 
 def test_a_clean_tree_passes(tmp_path, monkeypatch):
-    import mongla_manager.bringup_check as bc
+    import mongla_manager.bringup_host as bc
     monkeypatch.setattr(bc, '_baked_floor', lambda p: None)
     d = tmp_path / 'models'
     d.mkdir()

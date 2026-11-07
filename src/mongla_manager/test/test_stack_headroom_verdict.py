@@ -9,9 +9,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from mongla_manager.bringup_check import (                    # noqa: E402
-    FAIL, PASS, WARN, _stack_headroom_verdict,
-)
+from mongla_manager.bringup_grade import FAIL, PASS, WARN   # noqa: E402
+from mongla_manager.bringup_board import _stack_headroom_verdict  # noqa: E402
 
 # The values measured live on the board, 2026-09-11.
 MEASURED = {'STK_CTL': 4980.0, 'STK_DSH': 2868.0, 'STK_LORA': 4208.0,
@@ -57,7 +56,7 @@ def test_the_implausible_depth_line_uses_the_telemetry_sign():
     "board reads -1.22 m" -- the same baro offset in two sign conventions. The
     board is positive-down internally; the operator's convention is negative =
     submerged. A baro that thinks it is ABOVE zero must print a POSITIVE number."""
-    from mongla_manager.bringup_check import _depth_loop_verdict
+    from mongla_manager.bringup_board import _depth_loop_verdict
 
     # DEPTH_CMD -0.66 at DEPTH_P 0.5 is the live reading: board depth -1.22 m
     # positive-down, i.e. 1.22 m above zero.
@@ -69,7 +68,7 @@ def test_the_implausible_depth_line_uses_the_telemetry_sign():
 # --------------------------------------------------------------------------- #
 #  free heap, beside the stacks
 # --------------------------------------------------------------------------- #
-from mongla_manager.bringup_check import (                    # noqa: E402
+from mongla_manager.bringup_board import (                    # noqa: E402
     HEAP_BASELINE_BYTES, HEAP_FAIL_BYTES, _heap_verdict,
 )
 import sys as _sys_ct
@@ -98,5 +97,5 @@ def test_no_heap_is_unknown_not_healthy():
 
 def test_the_heap_verdict_is_actually_graded_in_the_srot_section():
     src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_manager'
-           / 'bringup_check.py')
+           / 'bringup_board.py')
     assert 'out.append(_heap_verdict(named))' in src

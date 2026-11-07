@@ -10,7 +10,7 @@ pytest.importorskip('pymavlink')
 
 
 def test_a_held_port_fails_the_board_section(monkeypatch):
-    import mongla_manager.bringup_check as bc
+    import mongla_manager.bringup_board as bc
     from mongla_control.fc import port_guard
 
     class _Held:
