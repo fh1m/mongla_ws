@@ -70,8 +70,8 @@ today.
 ## 3. The mixer computed from geometry at boot — and why it blocks us now
 
 **Warning: The finding that reframes [ask K](upstream/pr-k-the-mixer-is-for-a-different-hull.md).**
-`geometric_allocation.py` exists, is tested, proved the hull is **rank 5 of 6 with
-roll unactuated** — and has **zero production callers.**
+`geometric_allocation.py` exists, is tested, proved the current five-thruster CAD is **rank 5
+of 6 with roll unactuated** (the final hull adds a roll pair) — and has **zero production callers.**
 
 It cannot have any. `_srot_drive` sends `MANUAL_CONTROL` with four axes and **the
 board does the mixing**. The host never addresses a thruster. So a geometric

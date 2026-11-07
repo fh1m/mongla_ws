@@ -591,9 +591,10 @@ evaluation:**
    frame-to-frame with LK's drift. `time_to_contact.py` and `approach.py` are
    both DEFERRED for want of exactly this signal.
 2. **`theta` is an in-plane rotation** measured against a fixed reference. On a
-   hull whose roll is unactuated (five thrusters, 5 of 6 DOF) that is a direct
-   observation of the one attitude the controller cannot command, and the
-   RIEKF has no visual roll aiding at all.
+   hull whose roll is unactuated (the five thrusters in the current CAD) that is
+   a direct observation of the one attitude the controller cannot command, and
+   the RIEKF has no visual roll aiding at all. The final hull adds a roll pair,
+   which turns it into a check on a commanded axis instead.
 
 **Caution: Neither is wired here, and neither should be on this evidence.** `scale` is
 metric only if the reference patch's true width is known (`target_width_m`,

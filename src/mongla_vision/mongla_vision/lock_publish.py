@@ -215,9 +215,10 @@ class LockPublishMixin:
             # the error is INVISIBLE -- the bearing is perfectly
             # self-consistent, just in the wrong frame.
             #
-            # Roll is unactuated on this five-thruster hull (5 of 6 DOF),
-            # so it cannot be nulled by the controller and must be
-            # compensated here.
+            # Roll is unactuated on the current five-thruster CAD, so the
+            # controller cannot null it. The final hull adds a roll pair, and
+            # a rolled hull still rotates the image, so it is compensated here
+            # either way.
             #
             # NaN roll leaves the bearing ALONE rather than assuming level.
             # Assuming zero is a confident claim that the hull is flat, which

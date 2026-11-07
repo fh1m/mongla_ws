@@ -165,7 +165,7 @@ class LookupMixin:
         """Largest per-axis attitude difference, wrapped. NaN if either is unknown.
 
         Per-axis rather than a single rotation angle: the axes fail for
-        different reasons -- roll is unactuated on this hull, yaw is where the
+        different reasons -- roll is unactuated on the five-thruster CAD, yaw is where the
         board's rev-10 inversion lived -- and a combined magnitude would hide
         which one disagrees.
         """

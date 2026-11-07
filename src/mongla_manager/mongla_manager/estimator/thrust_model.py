@@ -1,5 +1,15 @@
 """Eight signed ESC RPMs -> a body-frame acceleration for the estimator.
 
+Caution: the geometry below is the old Dubomini vehicle's, not Mongla's. The
+signs are the firmware's `vectored_6dof` columns, four horizontal thrusters at
+45 deg, because that is the matrix the board mixes for today. The Mongla hull
+has five thrusters in the CAD and seven when finished (the two added are roll
+thrusters), none of them at 45 deg. Before this gets a caller, replace
+`_FWD_SIGN`, `_LAT_SIGN` and `_HORIZ_COS` with the columns of
+`mongla_control.geometric_allocation.THRUSTERS`. The parts that do not depend
+on the hull (T = k n^2, `REVERSE_EFFICIENCY`, the bollard-pull bias below)
+carry over unchanged.
+
 Its consumer is the RIEKF's velocity aiding in `mongla_localization` (the
 private `NavEstimator` that once took it as `accel_body` is gone), and nothing
 has ever supplied it. It is a PURE function of numbers already on our wire,
@@ -36,7 +46,7 @@ from __future__ import annotations
 import math
 from typing import Optional, Sequence, Tuple
 
-# Mongla_others/srot-control-board/src/control/mixer.cpp:25, columns 4 (fwd)
+# srot-control-board src/control/mixer.cpp:25, columns 4 (fwd)
 # and 5 (lat). Motors 1-4 are the horizontal ring; 5-8 are vertical and
 # contribute nothing to surge or sway, which is why they are absent here.
 _FWD_SIGN = (-1.0, -1.0, +1.0, +1.0)

@@ -65,7 +65,7 @@ and why the split exists.
 | Inner control loop | **500 Hz**, our source, on a core reserved for it | fw `include/config.h` (`CONTROL_LOOP_HZ 500`), core pinning in `src/main.cpp` | BENCH |
 | Attitude and heading hold | ours: angle → rate → torque, with gains we can change | fw `src/control/attitude.*`, `task_control_loop.cpp` | BENCH |
 | Heading stability at rest | drift **< 0.01 °/min**, peak-to-peak **< 0.08° over 8 min** | `measured-bars.md` (srot heading, 2026-09-07, at rest) | BENCH |
-| Thruster mixing | vectored-8 geometry, and we can read the matrix (the current CAD hull has five thrusters — see `vehicle-spec.md`) | fw `src/control/mixer.h`, `docs/THRUSTER_MAP.md` | BENCH |
+| Thruster mixing | the board mixes for vectored-8, the old Dubomini matrix, and we can read it. The Mongla hull has five thrusters in the CAD and seven when finished (see `vehicle-spec.md`); a geometry-driven mixer is open as srot-control-board#39 | fw `src/control/mixer.h`, `docs/THRUSTER_MAP.md` | BENCH |
 | Saturation behaviour | the whole demand scales together so the *shape* of the move survives; the host also fits the demand yaw-first before sending | fw `mixer.h`; host `mongla_control/allocation.py` | BUILT |
 | Flight modes | **eleven**, including two tuning modes and a pattern runner | fw `include/state_types.h` | BENCH |
 | Movement primitives | **ten**, run and braked on the board: forward, back, strafe L/R, turn, dive, stop, hold, style, arc | `srot_protocol.py` (`CMD_SROT_MOVE = 31000`); fw `src/comms/mav_commands.cpp` | BUILT |

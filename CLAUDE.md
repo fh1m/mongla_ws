@@ -36,26 +36,23 @@ hardware, water, or a firmware merge). Nothing on this platform has been in wate
 | Companion | **Raspberry Pi 5 + Hailo-8 AI HAT** (ROS 2 Jazzy on the vehicle; Humble on dev boxes) |
 | Link | **one USB-C cable**, MAVLink 2 at 115200, compid **191** (`MAV_COMP_ID_ONBOARD_COMPUTER`) |
 | IMU / depth / leak / kill / batteries / ESC RPM | all **on the board** |
-| Thrusters | **two answers — see below.** Firmware mixes for 8 × T200 vectored (M1–M4 horizontal at 45°, M5–M8 vertical); the **current CAD is a 5-thruster hull**. Bluejay ESCs, bidirectional DShot either way |
+| Thrusters | **final hull: 7** — the 5 in the current CAD (lateral pair, vertical pair, axial nose unit) plus **2 roll thrusters, one per side** (CAD pending). The firmware still mixes for 8 × T200 vectored: that matrix is from the old Dubomini vehicle (firmware PR #39 replaces it with geometry). Bluejay ESCs, bidirectional DShot |
 | Cameras | forward + downward USB; measured calibration in `mongla_vision/config/calibration/` |
 | Velocity / distance | **the downward camera** — no DVL is fitted, and none has ever been validated in water |
 | Payload | board channels over MAVLink (`fire(N)` = **board channel N**, 1–16) |
 
 
-> **The hull in CAD is not the hull the mixer was written for.** Measured off the CAD
-> geometry on 2026-09-20 and validated against Onshape to 0.08 %: the vehicle is
-> **702.0 × 176.1 × 172.1 mm**, fineness **3.99**, with **four ⌀84 mm tunnel thrusters**
-> (lateral pair 350 mm apart, vertical pair 519 mm apart) plus **one axial unit in the nose** —
-> five thrusters, giving **5 of 6 DOF with roll unactuated**. The firmware's mixer is
-> `vectored_6dof` for **eight** T200s. Both statements are true of *something*; they are not
-> true of the same vehicle.
+> **Three thruster counts, one vehicle.** Say which one a number belongs to.
 >
-> Until that is settled, **say which hull a number belongs to.** The 8-thruster figures come
-> from the competition vehicles (RoboSub 2023/2025); the geometry above comes from the CAD that
-> is being built now. Full read, including what is deliberately *not* concluded (net buoyancy,
-> CoB above CoM, drag coefficient, thrust per tunnel — Onshape reports **no material assigned
-> to any part**, so mass genuinely cannot be computed): the *body* section of the site, and
-> `tools/pack_hull.py`, which reads the geometry rather than quoting it.
+> | count | what it is | where it lives |
+> |---|---|---|
+> | **7** | **the final Mongla hull.** The five below plus two roll thrusters, one on each side, so all six axes are actuated | the CAD for the roll pair is not done; positions come from it, never from an estimate |
+> | **5** | the current CAD: **702.0 × 176.1 × 172.1 mm**, fineness **3.99**, four ⌀84 mm tunnels (lateral pair 350 mm apart, vertical pair 519 mm apart) and one axial unit in the nose; roll unactuated | `mongla_control/config/hull_geometry.yaml`, `geometric_allocation.py`, `tools/pack_hull.py` |
+> | **8** | the old Dubomini vehicle. Its `vectored_6dof` matrix (8 × T200 at 45°) is **still what the firmware mixes for**, so `allocation.py` mirrors it for as long as the board flies it | firmware `mixer.cpp`; replaced by geometry in [srot-control-board#39](https://github.com/RakibulIslam1/srot-control-board/pull/39) |
+>
+> The 8-thruster figures in older docs (RoboSub 2023/2025) belong to the old vehicle. Mass,
+> net buoyancy and drag are not concluded: Onshape assigns **no material to any part**, and a
+> float test measures net buoyancy better than CAD can (`hull_geometry.yaml`, `unknown:`).
 
 Full hardware detail: [`vehicle-spec.md`](.claude/context/platform/vehicle-spec.md) ·
 [`srot-architecture.md`](.claude/context/platform/srot-architecture.md) ·
@@ -269,7 +266,7 @@ ros2 run mongla_planner mongla arm                           # one verb
 ros2 run mongla_planner mission --list                       # missions
 ```
 
-**Every capability is an opt-in switch with a defensible default** (ROADMAP §9): `vision`,
+**Every capability is a switch with a defensible default** (ROADMAP §9): `vision`,
 `localization`, `flow`, `lock`, `retrodict`, `zupt`, `demand_aid`, `use_yaw`, `tile_m`,
 `lane_lines`, `caustics`, `mixer_aware`, `velocity_uplink`, `position_uplink`. Bring the
 vehicle up bare, then add one at a time and measure what it costs.
@@ -278,6 +275,32 @@ vehicle up bare, then add one at a time and measure what it costs.
 **Operator tooling** (off the mission path): `scripts/pool_session.sh` pins one folder per
 run; `scripts/pool_record.sh` records and replays a bag; scorecards land in `MONGLA_RUN_DIR`.
 [`foxglove-and-bags.md`](.claude/context/platform/foxglove-and-bags.md) · [`pool-day.md`](.claude/context/platform/pool-day.md)
+
+### Kutum, the vehicle's computer
+
+Kutum is the Pi 5 + Hailo-8 AI HAT+ on the vehicle: Ubuntu 24.04, ROS 2 Jazzy, answering as
+**`mongla.local`** on Ethernet and Wi-Fi alike. `kutum/` is that machine as files, and
+[`kutum/README.md`](kutum/README.md) is the runbook (network, clock, rebuilding from a blank
+card). The chapter is [`.claude/context/kutum/`](.claude/context/kutum/README.md).
+
+| script | runs on | what it does |
+|---|---|---|
+| `setup.sh --system` | the Pi, with sudo, **once per machine** | Hailo driver, firmware and runtime from source; udev, systemd, netplan; passwordless sudo for `fh1m`; then the user half and the doctor. The operator runs it, because it asks for the Wi-Fi password |
+| `deploy.sh fh1m@mongla.local` | the dev box, after every change | sync the tree, run the doctor, clean build, run `bringup_check --srot`. Stops on a doctor `FAIL`, exits non-zero if the gate refuses, and refuses while a `mongla_manager` runs there |
+| `doctor.sh` | either (read-only) | `ok` / `WARNING` / `FAIL` for every assumption the stack makes about the machine; exits 1 on `FAIL` |
+| `backup.sh fh1m@mongla.local` | the dev box | pull what only the vehicle has, into `~/kutum-backup/mongla/` (`--runs` adds runs and footage) |
+| `env.sh` | every shell on the Pi | ROS and the workspace, already sourced |
+
+**Caution:** the Pi's Python must keep **NumPy 1.x**. `cv_bridge` and the system `cv2` are
+built against it, and a NumPy 2 pulled in by any `pip install` kills every vision node at
+import. `kutum/constraints.txt` pins it for every install, and the doctor checks it. The
+other environment traps (shadowed OpenCV, the empty `trackers 2.5.0` wheel, the board with
+no `/dev/ttyUSB*`) are in [`pi-and-env-traps.md`](.claude/context/kutum/pi-and-env-traps.md).
+
+Scripts reach the Pi with `ssh -o BatchMode=yes`, by key, never by password. Run long
+sessions inside **mosh + tmux**
+([`remote-access.md`](.claude/context/kutum/remote-access.md)), so a run outlives a dropped
+tether.
 
 ---
 
