@@ -81,7 +81,7 @@ def test_the_reseed_bar_is_stricter_than_the_report_bar():
     """The bar is the point. A box good enough to report (100 inliers) is
     not automatically good enough to restart the fast rung on, because a
     reseeded follower carries full authority for the rest of the gap."""
-    from mongla_vision.lock_node import _ANCHOR_RESEED_INLIERS
+    from mongla_vision.lock_anchor import _ANCHOR_RESEED_INLIERS
 
     assert _ANCHOR_RESEED_INLIERS > 100, \
         'the reseed bar must exceed the anchor trust bar'
@@ -98,7 +98,7 @@ def test_the_heal_is_wired_into_the_ladder_loop():
     import ast
 
     src_path = (Path(__file__).resolve().parents[1] / 'mongla_vision'
-                / 'lock_node.py')
+                / 'lock_anchor.py')
     tree = ast.parse(src_path.read_text())
 
     # Ast, not a substring. A substring check passed when the call was
