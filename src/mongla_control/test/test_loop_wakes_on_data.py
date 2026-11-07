@@ -94,13 +94,15 @@ def test_a_state_without_the_method_falls_back_rather_than_raising():
 
 
 def test_no_fixed_rate_sleep_survives_in_the_loops():
-    """All six sites, not five. A single missed one is a path that still pays
-    the old wait -- and it would be the searching path, where reaction time
-    matters most."""
+    """Every path waits on data, not a fixed period. Each loop now has ONE
+    wait, at the end of its `run`, after whichever stage the tick took -- so
+    the searching path (where reaction time matters most) cannot keep the old
+    sleep by accident. Three sites: align, move, and the post-stop verify."""
     src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_control'
            / 'motion_vision.py')
     assert 'time.sleep(1.0 / LOOP_HZ' not in src
-    assert src.count('_tick(vision_state)') >= 6
+    assert src.count('_tick(self.c.vision_state)') == 2
+    assert src.count('_tick(vision_state)') >= 1
 
 
 def test_dt_is_measured_not_assumed():
@@ -109,5 +111,5 @@ def test_dt_is_measured_not_assumed():
     period overstates both by up to 1.5x."""
     src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_control'
            / 'motion_vision.py')
-    assert 'dt = min(max(now - _last_pass' in src, \
+    assert 'dt = min(max(now - self._last_pass' in src, \
         'dt is not derived from the clock'

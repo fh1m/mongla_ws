@@ -67,7 +67,6 @@ from mongla_vision.flow.flow_math import (
     solve_planar_motion,
 )
 from mongla_vision.flow.flow_velocity import flow_velocity
-from mongla_vision.optics import N_WATER
 from mongla_vision.stamps import capture_monotonic
 
 # Shi-Tomasi + LK. Bucketing is applied on top of goodFeaturesToTrack so the
@@ -295,7 +294,7 @@ class FlowVelocityNode(Node):
         # it "a clean 2x error nobody sees". The first frame's shape now decides
         # (`_on_image`), and a frame of any other size later is refused.
         self._cal_path = str(self.get_parameter('calibration').value or '').strip()
-        self._f_air, self._f_water = f_air, f_water
+        self._f_water = f_water
         self._intr_wh = None
         self._n_wrong_size = 0
         self._n_median_fallback = 0
@@ -600,15 +599,9 @@ class FlowVelocityNode(Node):
     # ── capture -> mailbox (callback thread, must never block) ──────────────
     def _load_intrinsics(self, width: int, height: int) -> None:
         """Scale the calibration -- or the focal parameters -- to WxH (#32)."""
-        cal, f_air, f_water = self._cal_path, self._f_air, self._f_water
+        cal, f_water = self._cal_path, self._f_water
         if not cal:
-            # No calibration: the focal parameters are for FOCAL_PARAMS_WIDTH.
-            k = float(width) / FOCAL_PARAMS_WIDTH
-            self._f_px *= k
-            self.get_logger().warning(
-                f'[FLOW ] no calibration: focal parameters scaled x{k:.3f} '
-                f'from {FOCAL_PARAMS_WIDTH:.0f} px wide to the {width}x{height} '
-                f'frames actually arriving')
+            self._scale_focal_params(width, height, 'no calibration')
             return
         if cal:
             try:
@@ -653,9 +646,27 @@ class FlowVelocityNode(Node):
                     f'[FLOW ] calibration {cal!r} unreadable ({exc}); falling '
                     f'back to a single focal length and the frame centre, '
                     f'which measured a 3 % axis asymmetry on the bench')
+                # ⛔ THE FALLBACK IS THE NO-CALIBRATION PATH, ALL OF IT. It used
+                # to leave whatever had been built before the failure -- an
+                # `_intr` with no rectifier behind it -- and an `_f_px` still at
+                # FOCAL_PARAMS_WIDTH, so a 640-wide stream read a focal length
+                # for some other width and every velocity came out scaled by
+                # the ratio. (Cloud audit, 2026-11-07.)
+                self._intr = None
+                self._refract = None
+                self._scale_focal_params(width, height, 'calibration unreadable')
         if self._intr is not None:
             self.get_logger().info(f'[FLOW ] intrinsics scaled to the first '
                                    f'frame, {width}x{height}: {self._intr}')
+
+    def _scale_focal_params(self, width: int, height: int, why: str) -> None:
+        """No usable calibration: the focal parameters are for FOCAL_PARAMS_WIDTH."""
+        k = float(width) / FOCAL_PARAMS_WIDTH
+        self._f_px *= k
+        self.get_logger().warning(
+            f'[FLOW ] {why}: focal parameters scaled x{k:.3f} '
+            f'from {FOCAL_PARAMS_WIDTH:.0f} px wide to the {width}x{height} '
+            f'frames actually arriving')
 
     def _admit_frame_size(self, wh) -> bool:
         """First frame: scale the intrinsics to it. Later: refuse any other size.
@@ -938,84 +949,14 @@ class FlowVelocityNode(Node):
             self._n_tracks = n_used
             return
 
-        # FORWARD-BACKWARD, and ONLY NOW. It is a second full LK pass, so
-        # running it on every arriving frame doubles the cost of the frame
-        # path to decide something the ripeness check does not need -- the
-        # ripeness check only asks "has enough displacement accumulated", and
-        # a mistracked point cannot fake that at the scale that matters.
-        # Culling belongs immediately before the estimate, which is here.
-        #
-        # It is the defence against the failure a pool invites: over a
-        # repetitive tile lattice LK converges confidently one tile away and
-        # reports status=1, returning a clean multiple of the tile pitch --
-        # indistinguishable from a correct match by residual or status alone.
-        if self._fb_px > 0.0 and nxt is not None and status is not None:
-            fb = forward_backward_error(self._anchor_gray, track,
-                                        self._anchor_pts, nxt, _LK_PARAMS)
-            if fb is not None:
-                st = np.asarray(status).reshape(-1).astype(bool)
-                st &= (fb <= self._fb_px)
-                status = st.astype(np.uint8).reshape(-1, 1)
-                n_used = int(st.sum())
-
-        # ⛔ SUN ON A BARE FLOOR. Erosion strips the filaments, but on a floor
-        # with no dark texture of its own what is left are the caustic CELLS,
-        # which boil between frames and still move with the waves. A rigid
-        # floor keeps its patches; cells do not. Refuse rather than publish
-        # the waves' speed as the hull's.
-        if getattr(self, '_anchor_caustic', False) and nxt is not None:
-            keep = np.asarray(status).reshape(-1).astype(bool)
-            ncc = patch_ncc_median(self._anchor_gray, track,
-                                   np.asarray(self._anchor_pts).reshape(-1, 2)[keep],
-                                   np.asarray(nxt).reshape(-1, 2)[keep])
-            if ncc < CAUSTIC_NCC_MIN:
-                self._anchor(gray, t)
-                self._refuse(f'sun caustics over a floor with no texture of its '
-                             f'own (patch NCC {ncc:.2f} < {CAUSTIC_NCC_MIN}): the '
-                             f'motion is the waves, not the hull')
-                return
+        status, n_used = self._drop_inconsistent_tracks(track, nxt, status, n_used)
+        if self._caustics_fooled_us(gray, t, track, nxt, status):
+            return
 
         disp = flow_dispersion(self._anchor_pts, nxt, status)
 
-        # THE RIGID FIT, with the median kept as a VISIBLE fallback. A floor
-        # too bare to give 8 agreeing points cannot support a 4-DOF fit, and
-        # in that regime a median of what little there is beats refusing
-        # outright -- but the fallback is counted and logged, because a sensor
-        # that silently degrades to its weaker estimator is one that reports
-        # phantom translation under rotation without ever saying so.
-        if self._use_planar:
-            h_, w_ = gray.shape[:2]
-            a_pts, n_pts = self._anchor_pts, nxt
-            if self._intr is not None and self._undistort:
-                # Remove the lens BEFORE fitting. Distortion scales a
-                # displacement by a factor that depends on RADIUS, and a
-                # 640x360 frame is 1.8x wider than tall -- so the horizontal
-                # axis samples a radial range the vertical one never reaches.
-                # Measured shift at the frame edge: 3.37 px in x, 1.62 px in y.
-                a_pts = self._intr.undistort_points(self._anchor_pts)
-                n_pts = self._intr.undistort_points(nxt)
-            cx_ = self._intr.cx if self._intr is not None else w_ / 2.0
-            cy_ = self._intr.cy if self._intr is not None else h_ / 2.0
-            if self._refract is not None:
-                # Rectify AFTER undistortion and BEFORE the fit. Order is
-                # forced: undistort removes the LENS (an air-side property),
-                # rectify removes the PORT (a water-side one), and the port
-                # sees rays the lens has already been accounted for. The
-                # principal point is a fixed point of the rectification, so
-                # cx_/cy_ carry through unchanged.
-                a_pts = self._refract.rectify(a_pts)
-                n_pts = self._refract.rectify(n_pts)
-            pm = solve_planar_motion(a_pts, n_pts, status, dt,
-                                     cx=cx_, cy=cy_,
-                                     ransac_px=self._ransac_px)
-            if pm.ok:
-                flow = (pm.dx_px, pm.dy_px)
-                n_used = pm.n_inliers
-                disp = pm.residual_px
-                self._last_yaw_img = self._yaw_sign * pm.yaw_rate
-                self._last_scale_rate = pm.scale_rate
-            else:
-                self._n_median_fallback += 1
+        flow, n_used, disp = self._planar_refit(gray, nxt, status, dt,
+                                                flow, n_used, disp)
 
         self._n_tracks = n_used
         # ⛔ THE ANCHOR ADVANCES UNCONDITIONALLY, SO A REFUSAL DISCARDS THE
@@ -1057,6 +998,102 @@ class FlowVelocityNode(Node):
             self._evaluate(flow, disp, dt, t, n_used)
         else:
             self._refuse('non-positive baseline')
+
+    # ── the checks inside one `_process` interval ────────────────────────────
+    # Each was a span of `_process` until 2026-11-07; code and comments moved
+    # verbatim.
+
+    def _drop_inconsistent_tracks(self, track, nxt, status, n_used):
+        """Tracks that do not come back to where they started are not counted.
+
+        -> (status, n_used)"""
+        # FORWARD-BACKWARD, and ONLY NOW. It is a second full LK pass, so
+        # running it on every arriving frame doubles the cost of the frame
+        # path to decide something the ripeness check does not need -- the
+        # ripeness check only asks "has enough displacement accumulated", and
+        # a mistracked point cannot fake that at the scale that matters.
+        # Culling belongs immediately before the estimate, which is here.
+        #
+        # It is the defence against the failure a pool invites: over a
+        # repetitive tile lattice LK converges confidently one tile away and
+        # reports status=1, returning a clean multiple of the tile pitch --
+        # indistinguishable from a correct match by residual or status alone.
+        if self._fb_px > 0.0 and nxt is not None and status is not None:
+            fb = forward_backward_error(self._anchor_gray, track,
+                                        self._anchor_pts, nxt, _LK_PARAMS)
+            if fb is not None:
+                st = np.asarray(status).reshape(-1).astype(bool)
+                st &= (fb <= self._fb_px)
+                status = st.astype(np.uint8).reshape(-1, 1)
+                n_used = int(st.sum())
+        return status, n_used
+
+    def _caustics_fooled_us(self, gray, t, track, nxt, status) -> bool:
+        """True when the motion is the light on the floor, not the hull.
+
+        The interval is then refused and the anchor retaken."""
+        # ⛔ SUN ON A BARE FLOOR. Erosion strips the filaments, but on a floor
+        # with no dark texture of its own what is left are the caustic CELLS,
+        # which boil between frames and still move with the waves. A rigid
+        # floor keeps its patches; cells do not. Refuse rather than publish
+        # the waves' speed as the hull's.
+        if getattr(self, '_anchor_caustic', False) and nxt is not None:
+            keep = np.asarray(status).reshape(-1).astype(bool)
+            ncc = patch_ncc_median(self._anchor_gray, track,
+                                   np.asarray(self._anchor_pts).reshape(-1, 2)[keep],
+                                   np.asarray(nxt).reshape(-1, 2)[keep])
+            if ncc < CAUSTIC_NCC_MIN:
+                self._anchor(gray, t)
+                self._refuse(f'sun caustics over a floor with no texture of its '
+                             f'own (patch NCC {ncc:.2f} < {CAUSTIC_NCC_MIN}): the '
+                             f'motion is the waves, not the hull')
+                return True
+        return False
+
+    def _planar_refit(self, gray, nxt, status, dt, flow, n_used, disp):
+        """Translation, yaw and scale fitted together, when enabled.
+
+        -> (flow, n_used, disp)"""
+        # THE RIGID FIT, with the median kept as a VISIBLE fallback. A floor
+        # too bare to give 8 agreeing points cannot support a 4-DOF fit, and
+        # in that regime a median of what little there is beats refusing
+        # outright -- but the fallback is counted and logged, because a sensor
+        # that silently degrades to its weaker estimator is one that reports
+        # phantom translation under rotation without ever saying so.
+        if self._use_planar:
+            h_, w_ = gray.shape[:2]
+            a_pts, n_pts = self._anchor_pts, nxt
+            if self._intr is not None and self._undistort:
+                # Remove the lens BEFORE fitting. Distortion scales a
+                # displacement by a factor that depends on RADIUS, and a
+                # 640x360 frame is 1.8x wider than tall -- so the horizontal
+                # axis samples a radial range the vertical one never reaches.
+                # Measured shift at the frame edge: 3.37 px in x, 1.62 px in y.
+                a_pts = self._intr.undistort_points(self._anchor_pts)
+                n_pts = self._intr.undistort_points(nxt)
+            cx_ = self._intr.cx if self._intr is not None else w_ / 2.0
+            cy_ = self._intr.cy if self._intr is not None else h_ / 2.0
+            if self._refract is not None:
+                # Rectify AFTER undistortion and BEFORE the fit. Order is
+                # forced: undistort removes the LENS (an air-side property),
+                # rectify removes the PORT (a water-side one), and the port
+                # sees rays the lens has already been accounted for. The
+                # principal point is a fixed point of the rectification, so
+                # cx_/cy_ carry through unchanged.
+                a_pts = self._refract.rectify(a_pts)
+                n_pts = self._refract.rectify(n_pts)
+            pm = solve_planar_motion(a_pts, n_pts, status, dt,
+                                     cx=cx_, cy=cy_,
+                                     ransac_px=self._ransac_px)
+            if pm.ok:
+                flow = (pm.dx_px, pm.dy_px)
+                n_used = pm.n_inliers
+                disp = pm.residual_px
+                self._last_yaw_img = self._yaw_sign * pm.yaw_rate
+                self._last_scale_rate = pm.scale_rate
+            else:
+                self._n_median_fallback += 1
+        return flow, n_used, disp
 
     def _anchor(self, gray, t) -> None:
         # Sun caustics: decided once per anchor (see flow_math.CAUSTIC_*).

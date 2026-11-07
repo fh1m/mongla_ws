@@ -54,7 +54,7 @@ def test_it_degrades_to_NOT_saturated_rather_than_raising():
 def test_the_integrator_actually_consults_it():
     """Reachability: the check must be IN the accumulate condition, not merely
     defined. A knob wired to nothing is this repo's recurring defect."""
-    cond = SRC[SRC.index('if ki_lat > 0.0 and aligned_at is not None'):]
+    cond = SRC[SRC.index('if c.ki_lat > 0.0 and self.aligned_at is not None'):]
     cond = cond[:cond.index('lat_pct = _clamp')]
     assert 'was_saturated' in cond
 
@@ -63,8 +63,9 @@ def test_the_flag_is_computed_from_what_was_actually_SENT():
     """Not from the pre-clamp values: the demand that reaches the mixer is the
     clamped one, and predicting saturation from a larger number would refuse
     to integrate in cases that are perfectly fine."""
-    assert '_mixer_saturated(lat_pct, yaw_pct, fwd_pct)' in SRC
-    assert SRC.index('_mixer_saturated(lat_pct, yaw_pct, fwd_pct)') < SRC.index('_drive(lat_pct, yaw_pct, fwd_pct)')
+    assert '_mixer_saturated(lat_pct, cmd.yaw_pct, fwd_pct)' in SRC
+    assert (SRC.index('_mixer_saturated(lat_pct, cmd.yaw_pct, fwd_pct)')
+            < SRC.index('self.drive(lat_pct, cmd.yaw_pct, fwd_pct)'))
 
 
 def test_the_flag_starts_false():

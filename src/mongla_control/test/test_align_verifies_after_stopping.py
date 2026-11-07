@@ -113,7 +113,7 @@ def test_the_verification_and_the_controller_ask_the_SAME_question():
     re-measurement uses. Falsified if either inlines its own formula again."""
     import inspect
     from mongla_control import motion_vision as mv
-    src = code_of(mv.align_loop)
+    src = code_of(mv._Align)   # align_loop runs its tick in _Align
     # one per controlled axis: lat, yaw, and the downward camera's surge
     assert src.count('_axis_ctrl(') >= 3, 'the control law must use the helper'
     assert '_verify_after_stop(' in src, 'align must re-measure after stopping'

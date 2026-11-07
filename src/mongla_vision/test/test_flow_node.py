@@ -958,3 +958,27 @@ def test_the_time_offset_starts_from_the_measured_value():
         assert n._td == pytest.approx(-0.0113)
     finally:
         n.destroy_node()
+
+
+def test_an_unreadable_calibration_falls_back_to_the_whole_no_calibration_path(tmp_path):
+    """⛔ Cloud audit, 2026-11-07. The except branch logged "falling back to a
+    single focal length" and then left `_f_px` at the FOCAL_PARAMS_WIDTH value,
+    so a stream of any other width measured velocity scaled by the ratio --
+    while the no-calibration branch, a few lines up, did scale it.
+    INJECTION-VERIFIED: delete the `_scale_focal_params` call in the except
+    branch and this fails."""
+    from mongla_vision.flow.flow_node import FOCAL_PARAMS_WIDTH
+    bad = tmp_path / 'broken.json'
+    bad.write_text('{ not json')
+    a = _make(medium='air', pool_depth_m=4.0)
+    b = _make(calibration=str(bad), medium='air', pool_depth_m=4.0)
+    try:
+        width = int(FOCAL_PARAMS_WIDTH) // 2
+        a._load_intrinsics(width, width * 9 // 16)
+        b._load_intrinsics(width, width * 9 // 16)
+        assert b._intr is None and b._refract is None
+        assert b._f_px == pytest.approx(a._f_px), \
+            'a broken calibration must land exactly where no calibration does'
+    finally:
+        a.destroy_node()
+        b.destroy_node()
