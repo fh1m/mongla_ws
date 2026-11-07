@@ -1,6 +1,6 @@
 """Record the raw MAVLink stream so a dive can be replayed after the fact.
 
-WHY RAW BYTES, AND ONLY RAW BYTES
+Why raw bytes, and only raw bytes
 ---------------------------------
 Everything the live console shows -- attitude, depth, the 24 multiplexed named
 values, ESC telemetry, link rates, the filters -- is DERIVED from this stream.
@@ -30,7 +30,7 @@ repeated -- and it costs nothing to gain a lot:
     check rather than a wish
   * no new dependency on a control host
 
-THE RULE THIS FILE EXISTS TO NOT BREAK
+The rule this file exists to not break
 --------------------------------------
 Whoever consumes must not set the pace of whoever produces. That has now
 appeared three times in this stack -- the JPEG encoder pacing the control loop

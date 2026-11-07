@@ -22,7 +22,7 @@ is how `recommend()` happened.
 
 ## 1. Vision — detection
 
-> ⛔ **Every `conf` figure below 0.20 is a no-op on `gate_rescue_repair`.**
+> **Warning: Every `conf` figure below 0.20 is a no-op on `gate_rescue_repair`.**
 > Each HEF bakes its NMS score threshold at compile time, and parsing all four
 > found one custom model compiled at the stock bar: `sauvc_sim` 0.050,
 > `bin_fire_blood` 0.050, **`gate_rescue_repair` 0.200**, stock `yolov11n`
@@ -67,10 +67,10 @@ footage rather than against the next rung up.
 
 | quantity | shipped | measured | bar |
 |---|---|---|---|
-| photon → detections | — | **18.0 ms** median (round 32) ⚠ B-61 | ≤ 25 ms |
-| detection rate, Hailo-8 | — | **80.9 Hz** standalone, **53.9 Hz** through the ROS graph ⚠ B-61 | ≥ 30 Hz |
+| photon → detections | — | **18.0 ms** median (round 32) B-61 | ≤ 25 ms |
+| detection rate, Hailo-8 | — | **80.9 Hz** standalone, **53.9 Hz** through the ROS graph B-61 | ≥ 30 Hz |
 
-> ⚠ **The two rows above, and the INT8 confidence figure below, were all
+> **Caution: The two rows above, and the INT8 confidence figure below, were all
 > taken through the HEF path while it fed the chip BGR where the model
 > expects RGB (B-61, fixed 2026-09-25).** Timing is probably unaffected —
 > a colour swap costs no cycles — but nothing was measured to confirm
@@ -79,7 +79,7 @@ footage rather than against the next rung up.
 > quoting. Every figure measured through the `.pt`/ONNX path is
 > unaffected, because ultralytics converts internally.
 >
-> ⭐ **RE-TAKEN 2026-09-25 on the fixed path**, `hailo_latency.py`, the
+> **Key point: RE-TAKEN 2026-09-25 on the fixed path**, `hailo_latency.py`, the
 > 1 038-frame HEF, on the vehicle:
 >
 > | queue depth | throughput | box age median | p95 | max |
@@ -96,7 +96,7 @@ footage rather than against the next rung up.
 > HEF is if anything faster. The through-the-graph number (was 53.9 Hz) has
 > NOT been re-taken and still carries the B-61 caveat.
 >
-> ⭐ **HEF vs `.pt` AGREEMENT, re-measured 2026-09-25** on whole clips rather
+> **Key point: HEF vs `.pt` AGREEMENT, re-measured 2026-09-25** on whole clips rather
 > than the three frames B-61 was confirmed with — 200 frames each, conf 0.05,
 > best detection per frame:
 >
@@ -106,22 +106,22 @@ footage rather than against the next rung up.
 > | `torpedo.mkv` | 100 % det, `gate` x200, p50 **0.59** | 100 % det, `gate` x200, p50 **0.55** |
 >
 > Same class, same detection rate, and **INT8 costs 0.04–0.06 of confidence**.
-> ⭐ That replaces the retracted "INT8 costs ~0.08" figure, which was measured
+> **Key point:** That replaces the retracted "INT8 costs ~0.08" figure, which was measured
 > on the swapped-colour path and meant nothing. The two `rescue` frames out of
 > 200 are the only class disagreement.
 >
-> ⛔ It also confirms **B-60 on the accelerator**, not just on the `.pt`:
+> **Warning:** It also confirms **B-60 on the accelerator**, not just on the `.pt`:
 > `torpedo.mkv` contains no gate and the HEF reports one on **200/200 frames**
 > at p50 0.55. The detector's learned concept is wrong on both paths, which is
 > what makes it a model problem rather than a quantisation one.
 >
-> ⛔ **Attempted 2026-09-25 and BLOCKED ON HARDWARE, not on effort.**
+> **Warning: Attempted 2026-09-25 and BLOCKED ON HARDWARE, not on effort.**
 > `vision_pi.launch.py` starts `detector_dual_node`, which opens BOTH cameras;
 > only one is currently plugged into the vehicle (a single Sonix USB camera,
 > `/dev/v4l/by-id/usb-Sonix_Technology_Co.__Ltd._USB_2.0_Camera_SN0001-*`).
 > The forward camera opened; the downward retried five times on a
 > `/dev/mongla_cam_downward` symlink that does not exist, and no detections
-> were ever published. ⚠ Note the udev rules are also absent — the launch's
+> were ever published. Note the udev rules are also absent — the launch's
 > documented `device_path:=/dev/mongla_cam_<forward|downward>` names symlinks
 > this Pi does not have, which is a second thing to fix before a pool day.
 >
@@ -137,8 +137,8 @@ footage rather than against the next rung up.
 |---|---|---|---|
 | GCS heartbeat | 2 Hz | vs `GCS_FAILSAFE_MS` 5000 → **10× margin** | ≥ 3× margin |
 | `ATTITUDE` rate | 50 Hz | firmware floor `RATE_MIN_MS` 20 ms | ≥ 20 Hz |
-| `HEARTBEAT` in rate | 10 Hz (was the board's 1 Hz default) | ⚠ **computed, not measured**: MODE and ARMED reach the host only on HEARTBEAT, so at 1 Hz a failsafe SURFACE is invisible for up to a second — long enough for the next leg's `SROT_MOVE` to force AUTO and re-dive | fresh enough for `SrotFC.move` to refuse a leg in SURFACE |
-| serial load | — | **18.8 %** of 11520 B/s measured; ⚠ **+1.6 % computed** for HEARTBEAT 1 → 10 Hz (9 extra frames/s × 21 B = 189 B/s), so ≈ **20.4 %** until it is re-measured on the board | ≤ 60 % |
+| `HEARTBEAT` in rate | 10 Hz (was the board's 1 Hz default) | **Caution: computed, not measured**: MODE and ARMED reach the host only on HEARTBEAT, so at 1 Hz a failsafe SURFACE is invisible for up to a second — long enough for the next leg's `SROT_MOVE` to force AUTO and re-dive | fresh enough for `SrotFC.move` to refuse a leg in SURFACE |
+| serial load | — | **18.8 %** of 11520 B/s measured; **+1.6 % computed** for HEARTBEAT 1 → 10 Hz (9 extra frames/s × 21 B = 189 B/s), so ≈ **20.4 %** until it is re-measured on the board | ≤ 60 % |
 | `MANUAL_CONTROL` resend | ≥ 10 Hz | authority ramps to zero between `MANUAL_FRESH_MS` 1000 and `MANUAL_DECAY_MS` 1500 | ≥ 10 Hz |
 | `DEPTH_P` | 0.5 (read from board) | board answers 0.5; a stale 3.0 fallback **failed open by 6×** on the arming guard | must be READ, never assumed |
 | `FW_BEHAVIOUR_REV` | ≥ 10 required | board reports **14** | ≥ 10 |
@@ -551,7 +551,7 @@ the sensor (a 5 cm error is 10 %), and slow ramp-in/ramp-out below the
 velocity as calibrated until this is closed** — the error is a clean multiplier
 and will be invisible downstream.
 
-### ⛔ A gate justified on contaminated evidence
+### A gate justified on contaminated evidence
 
 `MAX_DISPERSION_RATIO` was set to 0.5 to exclude 21 large-flow intervals from a
 "static" run. The operator had knocked the camera during it — those were REAL
@@ -585,7 +585,7 @@ live board rather than inferred from the firmware docs.
 | `ATTITUDE` | 10.0 Hz | **51.6 Hz** |
 | `SCALED_PRESSURE2` | 5.0 Hz | **51.6 Hz** |
 
-⛔ **A 100 Hz request ACKed `ACCEPTED` and delivered 50** — the firmware's
+**Warning: A 100 Hz request ACKed `ACCEPTED` and delivered 50** — the firmware's
 `RATE_MIN_MS = 20` floor. The ACK is a claim; the arrival rate is the fact.
 Same shape as `REQUEST_MESSAGE` accepting all 190 ids and emitting 7.
 
@@ -688,7 +688,7 @@ disagreed by 2x and swapped which one was well-explained between runs (dx 0.641
 fit the pooled data.** Least squares never refuses: with no excitation it
 returns plausible +-1 coefficients and no error.
 
-**⚠ The gains are −1.12, not −1.00, and the cause is OPEN.** Rotation about
+**The gains are −1.12, not −1.00, and the cause is OPEN.** Rotation about
 the lens gives exactly `f·ω·dt`, so a 12 % excess needs an owner. Recorded here
 because it is a real 12 % and the wrong explanation is easy to reach for:
 
@@ -732,7 +732,7 @@ time-sync error leaves uncorrected flow proportional to ω**: 5 ms costs 1.6 px
 at 0.64 rad/s and 2.9 px at 1.13. **The residual is time-sync-limited, not
 mapping-limited** — which is where to look for the next improvement.
 
-### ⚠ `ROT_FRACTION_MAX = 0.80` is miscalibrated
+### `ROT_FRACTION_MAX = 0.80` is miscalibrated
 
 `flow_velocity.py` refused **533/670** intervals of the 0.638 rad/s run
 (rotation fraction median 99 %) — accepting 16 % — while de-rotation on that
@@ -818,7 +818,7 @@ diagonal slide and reported its magnitude correctly.
 30.02 cm, max error **0.02 cm**. The gap between 0.02 cm synthetic and 1.09 cm
 physical is the hand, the tape and the height — not the algorithm.
 
-### ⚠ THREE INSTRUMENT DEFECTS, ALL REPORTING A CORRECT SENSOR AS SHORT
+### THREE INSTRUMENT DEFECTS, ALL REPORTING A CORRECT SENSOR AS SHORT
 
 Recorded because the pattern is the lesson, not any one bug. In every case the
 console's own live trace showed the slide tracked correctly while the CAPTURE
@@ -857,7 +857,7 @@ short enough to be responsive can distinguish a slow hand from a still rig.
 
 ---
 
-### ⛔ WHAT IS AND IS NOT VERIFIED ABOUT THE RECTIFIED PATH
+### WHAT IS AND IS NOT VERIFIED ABOUT THE RECTIFIED PATH
 
 Every velocity number above -- the 30 cm result, the 0.000 % synthetic
 recovery -- was taken with **`medium='air'`** or through simulated physics.
@@ -900,7 +900,7 @@ all**; the mapped stamp is 11× inside it. The board's own interval is
 **exactly 20.000 ms, sd 0.000** across all 4400 frames — its 500 Hz FreeRTOS
 loop has no jitter to give, so every millisecond of the 6.4 was transport.
 
-### ⛔ The number this REPLACES, and why the first one was wrong
+### The number this REPLACES, and why the first one was wrong
 
 A first run held the fit out for 65 s and reported **sd 0.334 ms** — better,
 and misleading. `to_host()` is **affine**, so once fitted it adds no
@@ -931,12 +931,12 @@ The three other corrections — interval midpoint, half-exposure, and the `td`
 estimate — are wired and unit-tested and **still unmeasured on hardware**.
 `td` in particular has no in-water value: every number for it is
 injected-offset recovery, which is why it is now bounded (`time_offset_max_s`
-0.15) rather than trusted. ⚠ The half-exposure term had its **sign** wrong
+0.15) rather than trusted. The half-exposure term had its **sign** wrong
 (issue #34, fixed 2026-10-02): it subtracted, as if every buffer stamp marked
 the end of exposure, while `uvcvideo` stamps the START — read as
 `V4L2_BUF_FLAG_TSTAMP_SRC_SOE` off a live uvcvideo stream on the dev box. It
 was latent only because `exposure_us` defaults to 0 and no launch sets it.
-⚠ And with `retrodict` off (the default) a flow stamp was **ignored** — a
+**Caution:** And with `retrodict` off (the default) a flow stamp was **ignored** — a
 sample up to 375 ms old was compared with the present (issue #31). On a
 constructed truth (0.3 m/s current, 0.5 rad/s yaw, flow 300 ms stale at the
 real 1 mm/s σ) that left **4.50 cm/s** of velocity error, exactly |v||ω|·age.
@@ -989,7 +989,7 @@ firing its ordinary `gate` class on a gate seen from behind. That is genuine
 generalisation and the ledger's 0.0 % erased it.
 
 **But at the SHIPPED operating point it is ~26 %.** The Hailo path runs
-`conf 0.15` and INT8 scores ~0.08 lower than fp32 (round 24 — ⚠ RETRACTED,
+`conf 0.15` and INT8 scores ~0.08 lower than fp32 (round 24 — RETRACTED,
 measured on the swapped-colour HEF path, see B-61), so the
 fp32-equivalent bar is ≈0.23 — the 0.25 row. **A scoring task that works one
 run in four is not a working scoring task.**
@@ -1112,7 +1112,7 @@ Survival and translation error vs accumulated rotation, real frames:
 Graceful to ~10°, then a knee. **`max_rotation_deg = 6.0`** sits inside the
 graceful region with margin.
 
-### ⛔ The reassuring argument that turned out to be FALSE
+### The reassuring argument that turned out to be FALSE
 
 The obvious objection is that rotation inflates the median, so
 displacement-ripeness fires anyway — round 38 measured a median inventing
@@ -1264,7 +1264,7 @@ four dead ends are the useful part.
 number in §13 came from `flow_console.py` passing the calibration by hand.
 `BUGS.md` items 22 and 23's dry half are closed by this.
 
-**⚠ AMENDED once there were more slides.** That 106.5 % is ONE slide, taken
+**AMENDED once there were more slides.** That 106.5 % is ONE slide, taken
 with the then-default gyro gains of `(-1, -1)`. Three later slides put that
 configuration at a median of **122.3 %**, so 106.5 % was the favourable end
 of its own spread — a single hand slide is not a bar. The configuration that
@@ -1282,7 +1282,7 @@ motion, never a distance. The +1.94 cm sits just outside a hand slide's own
 ±1 cm, and `h = 0.72` is a tape figure the optics dispute (§13 implied
 0.7025, which would scale this to 31.05).
 
-### ⛔ THE CAUSE: two `/mongla/state` publishers, disagreeing by 180°
+### THE CAUSE: two `/mongla/state` publishers, disagreeing by 180°
 
 `flow_launch_check` publishes a synthetic `/mongla/state` so the node has a
 height on a bench with no barometer, and it filled in `yaw_deg = 0.0`. The
@@ -1356,7 +1356,7 @@ where camera and IMU were rigidly coupled in a known orientation; **the IMU
 is now the SROT BOARD** and nothing had re-checked its orientation relative
 to this camera.
 
-### ⛔ RETRACTED WITHIN THE HOUR: "the gyro is noisy at rest"
+### RETRACTED WITHIN THE HOUR: "the gyro is noisy at rest"
 
 I measured `/mongla/imu_rates` for 30 s and reported pitch sd **0.083 rad/s**,
 which at a 0.4 s baseline is **17 px** of phantom shift against an 8 px
@@ -1423,7 +1423,7 @@ indeed wrong** — but the prediction missed that **B beats both**, which the
 sign hypothesis alone does not explain. A wrong sign would make C good, not
 make zero good.
 
-### ⛔ DO NOT READ THIS AS "TURN DE-ROTATION OFF"
+### DO NOT READ THIS AS "TURN DE-ROTATION OFF"
 
 This slide is **translation-dominated**. §12 measured de-rotation *halving*
 the error at 0.638 rad/s (139 % → 85.5 % of truth), and that regime is a
@@ -1466,7 +1466,7 @@ fitted through the origin with k-fold held-out scoring.
 unity, which is what a correct focal length predicts; both are POSITIVE where
 the shipped pair is negative.
 
-### ⛔ CORRECTION, made before this was acted on: I explained the flip wrongly
+### CORRECTION, made before this was acted on: I explained the flip wrongly
 
 This entry first said "the mount changed when the IMU became the srot board".
 **§12's own opening refutes that**: *"The srot board carries the downward
@@ -1507,7 +1507,7 @@ A is doubly wrong, B half wrong, C nearly right — which is why A stood out
 and B/C were close on a slide where rotation is small. Two independent
 experiments, one number.
 
-⚠ **A gain that FITS better is not yet a gain that MEASURES better.** These
+**Caution: A gain that FITS better is not yet a gain that MEASURES better.** These
 are fitted against image flow during a tilt; the thing that matters is
 distance error on a slide. Validation A/B: shipped vs derived vs off, and
 the default does not change until derived wins there. `BUGS.md` §11 item 24.
@@ -1554,7 +1554,7 @@ reconciled — **different pivots, not different physics.**
 - `−1.0` was measurably the **worst available value** on this hull, so
   leaving it untouched was the one indefensible option.
 
-### ⚠ This is NOT "de-rotation does not work"
+### This is NOT "de-rotation does not work"
 
 §12 measured it **halving** the error at 0.638 rad/s, and that regime — a
 yawing vehicle — is most of a mission, while every slide here is
@@ -1562,7 +1562,7 @@ translation-dominated. Re-enabling needs a **high-rotation test on this
 hull, excited at the pivot the vehicle actually turns about**. `BUGS.md` §11
 item 24.
 
-### ⛔ THE EXPERIMENT'S OWN ERROR FLOOR IS ~8 %, SO 9.9 % RESOLVES ALMOST NOTHING
+### THE EXPERIMENT'S OWN ERROR FLOOR IS ~8 %, SO 9.9 % RESOLVES ALMOST NOTHING
 
 Stated so the winning arm is not over-read. On a 30 cm hand slide:
 
@@ -1703,7 +1703,7 @@ vehicle's expected `max_rate_rad_s`, because a static bound cannot lag the
 motion it is bounding. **The live-gyro version is the obvious next step** —
 we publish body rates at 50 Hz and the flow node already consumes them.
 
-### ⚠ AND THE FRAME RATE IS THE CAMERA, NOT THE SOFTWARE
+### AND THE FRAME RATE IS THE CAMERA, NOT THE SOFTWARE
 
 Reported as "10 fps, detect 1568 ms" after the exposure fix, which looked
 like the fix had backfired. Two hypotheses, both mine, both refuted by
@@ -1760,7 +1760,7 @@ scores 15.3 % and the detector scores **9.7 %: worse than guessing "the whole
 frame"**. The `gate` class specifically is 0.0 % everywhere. The structure is
 not being localised; large sloppy `repair` boxes are.
 
-⛔ **Three measurements, three different answers, two of them mine.**
+**Warning: Three measurements, three different answers, two of them mine.**
 
 1. `tools/return_check.py` reported **0.0 %** — right, but by accident. It
    name-matches `gate_backward`, which no 2025 model has, so 0.0 % was
@@ -1906,7 +1906,7 @@ to put the thruster pack on the wire. It is already there, on instance 1, and we
 already demux by id. "What is already there that we are not using" beat "what do
 we need them to add" for the second round running.
 
-### ⛔ `KILL = 0` MEANS "LIVE" **OR** "NOBODY IS TELLING US"
+### `KILL = 0` MEANS "LIVE" **OR** "NOBODY IS TELLING US"
 
 ```cpp
 kill = f ? s_kill : false;   // link lost -> don't assert kill (display-only)
@@ -2015,7 +2015,7 @@ quantisation is **downstream of every gain we own**. Do not re-attempt a
 host-side gain softener against this actuator; the lever is duty or axis
 selection, not amplitude. Filed upstream as `srot-control-board#13`.
 
-## 27. Heading — ⛔ THE EARLIER ENTRY WAS CONTAMINATED
+## 27. Heading — THE EARLIER ENTRY WAS CONTAMINATED
 
 **Retracted.** The captures behind the previous version of this section were
 taken while the board was being handled — the operator confirmed it. Every number
@@ -2023,11 +2023,11 @@ in it is void, including the one it led with.
 
 | claim | status |
 |---|---|
-| ❌ "6.36 ° p2p wander on a motionless board, reproducible to 9 %" | **RETRACTED** — board was not motionless |
-| ❌ "≈ 10 ° of heading uncertainty over a 15-min run" | **RETRACTED** — built on the above |
-| ❌ drift +0.027 / +0.377 / +0.306 °/min | **RETRACTED** — contaminated captures |
-| ❌ "the sign flips between sessions" | retracted earlier the same round (estimator noise) |
-| ❌ "quarters measure bias, halves measure wander" | retracted earlier the same round (backwards) |
+| "6.36 ° p2p wander on a motionless board, reproducible to 9 %" | **RETRACTED** — board was not motionless |
+| "≈ 10 ° of heading uncertainty over a 15-min run" | **RETRACTED** — built on the above |
+| drift +0.027 / +0.377 / +0.306 °/min | **RETRACTED** — contaminated captures |
+| "the sign flips between sessions" | retracted earlier the same round (estimator noise) |
+| "quarters measure bias, halves measure wander" | retracted earlier the same round (backwards) |
 
 **Verified still** — three 480 s captures, gyro-gated:
 
@@ -2045,14 +2045,14 @@ stated 0.5-3 °/min.
 drift, excluded on a single 0.215 rad/s excursion. On average it looked clean,
 which is exactly how the contaminated captures got published.
 
-⚠ **AT REST ONLY, and the distinction matters.** A stationary MEMS fusion can
+**Caution: AT REST ONLY, and the distinction matters.** A stationary MEMS fusion can
 estimate and cancel its own gyro bias, and the BNO085's fusion is a black box to
 us — the stillness that makes this clean may be what enables a correction that
 will not operate under way. **Drift under motion is NOT established** and needs a
 pool run with periodic returns to a known heading. Do not use this bar to justify
 trusting an absolute heading late in a mission.
 
-⛔ **THE RULE THIS COST US.** Three separate drift measurements in this project
+**Warning: THE RULE THIS COST US.** Three separate drift measurements in this project
 have been ruined by treating *"it is on a bench"* as evidence of stillness. The
 board publishes its own gyro at 50 Hz inside ATTITUDE and we already republish it
 as `/mongla/imu_rates` — **stillness was always measurable and was assumed
@@ -2152,7 +2152,7 @@ A torpedo opening is r = 4.75 cm (small) / 7.0 cm (large), so a 10 cm offset
 **always** misses. The correction is `du = fx*x/Z` -- **range-dependent, LARGE
 up close**: 68.7 px at 1.5 m vs 128.7 px at 0.8 m for the same mount.
 
-⚠ **Every tool in `tool_geometry.yaml` ships `unmeasured: true`, reading as
+**Caution: Every tool in `tool_geometry.yaml` ships `unmeasured: true`, reading as
 zero** = today's behaviour. The numbers do not exist in the repo. Measuring is
 a tape-measure job: camera optical centre to tool bore centre, hull upright, mm.
 
@@ -2168,7 +2168,7 @@ Built for `esp32doit-devkit-v1`, `-O2`, `gnu++17`:
 | Hengla rev 14 baseline | 935,429 B = **29.7 %** of the 3 MB partition |
 | with Ruckig | **43.0 %** -- it fits |
 
-⛔ **But Ruckig is `double` and the Xtensa LX6 FPU is single-precision only.**
+**Warning: But Ruckig is `double` and the Xtensa LX6 FPU is single-precision only.**
 From `xtensa-esp32-elf-nm` on a hot-path object: the complete libgcc soft-double
 set (`__adddf3 __subdf3 __muldf3 __divdf3 __eqdf2 __nedf2 __ltdf2 __ledf2
 __gtdf2 __gedf2`) and **zero** `*sf*` hardware helpers. **The paper's 19.8 µs
@@ -2187,14 +2187,14 @@ Three reasons it is that and not raw area: scalar; **rotation invariant**
 (decouples roll from Z); and it "has the dimension of length ... thus a similar
 magnitude control gain" as the pixel features.
 
-⚠ **Dropping the sqrt makes the feature ~1/Z^2 instead of ~1/Z** and squares the
+**Caution: Dropping the sqrt makes the feature ~1/Z^2 instead of ~1/Z** and squares the
 loop gain across an approach -- calm at 3 m, unstable at 1 m.
 
 **Bar (theirs, not ours): valid while the target normal is within ±35° of the
 optical axis.** Past it the area under-reads and a one-sided forward term drives
 CLOSER, past the standoff. Guarded by `standoff_max_tilt_deg` (0 = off).
 
-⛔ Its fail direction is the OPPOSITE of `fire_max_tilt_deg`: **no pose =
+**Warning:** Its fail direction is the OPPOSITE of `fire_max_tilt_deg`: **no pose =
 unguarded**, not blocked. A pose needs lock_node + calibration + a committed
 width, so "no pose" is the ordinary case and failing closed would disable
 forward drive on every mission without one.
@@ -2234,7 +2234,7 @@ Hull idle, disarmed, nothing commanded.
 | headroom | 5551 B/s ~= **93 LANDING_TARGET/s** | under what a 500 Hz consumer needs |
 | at 1 Mbaud | same telemetry = 6.0 %; 74 B frame 6.4 ms -> 0.8 ms | firmware PR #17 |
 
-⚠ **Baud is a TWO-SIDED constant.** Changing it on one side does not raise — the
+**Caution: Baud is a TWO-SIDED constant.** Changing it on one side does not raise — the
 port opens, the UART clocks in noise, every frame fails CRC, and the symptom is
 `BAD_DATA` with no heartbeat. Host pins `SROT_BAUD` against the firmware's
 `MAVLINK_BAUD` by parsing the header, failing in both directions
@@ -2257,7 +2257,7 @@ A board sample older than **0.2 s** (10 periods at 50 Hz) is refused rather than
 applied to a fresh message.
 
 **Pi power.** `vcgencmd get_throttled` = **0x0** across a 12 h uptime spanning
-dual-camera + Hailo load. The map's `0x50000` is stale. ⚠ A clean reading is
+dual-camera + Hailo load. The map's `0x50000` is stale. A clean reading is
 **not a load test** — the thrusters were not drawing, and the sticky bits only
 record what has already happened. Graded by `bringup_check` section L2.
 
@@ -2305,7 +2305,7 @@ later mistakes a derivation for a bar.
 
 | constant | value | derivation |
 |---|---|---|
-> ⛔ **RE-DERIVED 2026-11-05.** The rulebook published 30 Oct 2026 moved the
+> **Warning: RE-DERIVED 2026-11-05.** The rulebook published 30 Oct 2026 moved the
 > venue from the one-off 25 × 16 m pool to an olympic 50 × 25 m pool (floor
 > 1.28 m for 1.8 m off the qualification wall, 2.0 m from 17.5 m; field
 > dimensions ±5 %). Superseded values, kept on record: `SAUVC_MAX_DEPTH_M`
@@ -2320,9 +2320,9 @@ later mistakes a derivation for a bar.
 | `SAUVC_DRUM_HOVER_DEPTH_M` | −0.7 m | drum mouth now ~1.7 m down (0.30 m drum on the 2 m floor) → ~1.0 m above it. Unchanged from the old venue, where it was 0.2 m above the mouth's depth margin; lowering it waits on the downward camera's in-water footprint |
 | `SAUVC_QUAL_PASS_DEPTH_M` | −0.5 m | qualification gate hangs ~1.00 m (0.95 m worst) from the surface; surfacing and a bar touch both FAIL, so centred: ~0.41 m to the surface, ~0.36 m to the bar |
 | `SAUVC_QUAL_MAX_DEPTH_M` | −1.0 m | the lane is the pool's shallowest water: 1.28 m at the wall, 1.22 m less 5 %; 0.2 m clearance |
-| `SAUVC_NAV_BUDGET_S` | 300 s | `(900 − RUN_TIME) × 0.03` → 18 bonus points at 300 s, more than the 15-point task. ⛔ The bonus needs **two** tasks completed, and `sauvc_navigation.run()` surfaces and disarms, so navigation alone scores 20 with **no** bonus — the 18 becomes earnable only with the Round 7 combinator. Mission budgets currently sum to **255 s of 300**. |
+| `SAUVC_NAV_BUDGET_S` | 300 s | `(900 − RUN_TIME) × 0.03` → 18 bonus points at 300 s, more than the 15-point task. The bonus needs **two** tasks completed, and `sauvc_navigation.run()` surfaces and disarms, so navigation alone scores 20 with **no** bonus — the 18 becomes earnable only with the Round 7 combinator. Mission budgets currently sum to **255 s of 300**. |
 
-**⛔ NOT measured — do not treat these as bars:**
+**NOT measured — do not treat these as bars:**
 
 1. **`SAUVC_BLIND_TRANSIT_S = 40`** (was 45 for the old venue's 16 m), and
    the qualification legs **`SAUVC_QUAL_BLIND_OUT_S = 32`**,
@@ -2389,7 +2389,7 @@ Taken now, against `heading_down_test_vid.mp4` — real downward camera, 640×48
 0 of 898.** The worst frame in the clip carries 185 corners — 23× the
 threshold, not marginal.
 
-⚠ **Scope, stated so it is not overclaimed:** one clip, one environment, real
+**Caution: Scope, stated so it is not overclaimed:** one clip, one environment, real
 water but not a competition pool floor. If a venue floor is ever measured to
 push `solve_planar_motion` into its `only N tracked points, need min_points`
 refusal, that refusal is the trigger to reconsider — and the reconsideration
@@ -2415,7 +2415,7 @@ The last row lifts every Hailo backend, not just segmentation: the detection
 path measured 85.4 Hz before it and 95.3 Hz after. The two end-to-end rows
 above are the post-fix figures; pre-fix they were 77.1 and 103.5 Hz.
 
-⚠ **Mask cost is LINEAR in detection count and the figures above are SIX
+**Caution: Mask cost is LINEAR in detection count and the figures above are SIX
 detections.** Measured on the same frame: 1 detection 10.2 ms end to end,
 6 detections 12.5 ms, i.e. ≈0.45 ms per mask on this image. `max_det` defaults
 to 100, so a cluttered scene costs proportionally more. Never quote 2.98 ms
@@ -2445,7 +2445,7 @@ frame pairs. Agreement with that path, not with ground truth.
 | reference: LK + RANSAC similarity | — | 11.89 ms |
 
 **The prototype-as-free-descriptor hypothesis is disproved by its own
-control**: 0.38 px better for 9.5× the wall time. ⚠ Phase correlation is
+control**: 0.38 px better for 9.5× the wall time. Phase correlation is
 TRANSLATION ONLY and this clip has median |image rotation| 0.270°, max 0.970°
 — the rotation limitation is untested, not cleared. Do not treat the 1.551 ms
 figure as a replacement for the similarity fit, which also returns yaw rate
@@ -2467,13 +2467,13 @@ against across-object **0.65–0.82**, on every row.
 | 120 px | 0.50 | **1.00** |
 | 200 px | 0.50 | **1.00** |
 
-⚠ With 2–4 same-class candidates per row, **chance is 0.50** — the same value
+**Caution:** With 2–4 same-class candidates per row, **chance is 0.50** — the same value
 IoU scores when it fails. Read the rank-1 column as beating a coin flip, not a
 strong baseline. The gap survives
 +5° rotation, ×1.15 scale, ×0.85 exposure, noise and JPEG 70 — the control
 that matters, because a pixel-identical translated copy matches trivially.
 
-⚠ **n = 2–4 pairs per row, one scene, street imagery.** A demonstration that
+**Caution: n = 2–4 pairs per row, one scene, street imagery.** A demonstration that
 the mechanism works, not a statistic, and the COCO head is not our head. The
 gate on using it for association is one clip with two instances of the SAME
 prop visible together for ≥100 frames.
@@ -2494,12 +2494,12 @@ Median error, worst case in the swept range (shift 30 px, rotate 15°, zoom ×1.
 | Fourier-Mellin, grid 256 | as above | as above | as above | 48.30 ms | dx dy yaw scale |
 | grey 160×160 phase correlation | 0.4–0.8 px shift only; **10.5 px at 5°, 13.8 px at ×1.05** | — | — | 2.86 ms | dx dy only |
 
-⛔ **Fourier-Mellin is BOTH slower and less accurate than what ships.** The
+**Warning: Fourier-Mellin is BOTH slower and less accurate than what ships.** The
 idea was that rotation and scale are a translation in the log-polar magnitude
 spectrum, so one cheap estimator could replace the whole fit. It works — and
 at 16.87 ms against 12.34 ms it costs more for 10–30× the error. **Closed.**
 
-⛔ **RETRACTS round 1's side result.** That round reported grey-160 phase
+**Warning: RETRACTS round 1's side result.** That round reported grey-160 phase
 correlation as agreeing with the flow fit "to ~1.4 px at 7.6× cheaper" and
 framed it as a candidate front-end. Against truth the shipped fit is accurate
 to **0.01 px**, so that 1.4 px was the phase correlation's OWN error, not a
@@ -2509,7 +2509,7 @@ the flow node uses. It is ~40× less accurate, not comparably accurate.
 **And the shipped estimator is vindicated**: sub-0.4 px and sub-0.05° through
 15° of image rotation and 20 % of zoom, where both challengers fail.
 
-⛔ **DO NOT QUOTE 0.006 px AS LK's ACCURACY.** `warpAffine` resamples the SAME
+**Warning: DO NOT QUOTE 0.006 px AS LK's ACCURACY.** `warpAffine` resamples the SAME
 pixels that LK then tracks, so the correspondence is noise-free by
 construction — no new content entering frame, no motion blur, no parallax off
 a non-planar floor, no illumination change. That figure measures the absence
@@ -2517,7 +2517,7 @@ of independent noise in the test, not the error the estimator achieves on
 consecutive real frames. The table RANKS the three and proves each stage
 works; it does not give any of them a field accuracy.
 
-⚠ Synthetic warps are the EASY case — no new content entering frame, no
+**Caution:** Synthetic warps are the EASY case — no new content entering frame, no
 illumination change, no motion blur, no parallax off a non-planar floor. Read
 these as a RANKING and as proof that the rotation/scale stages work, not as
 the error either estimator achieves on consecutive real frames.
@@ -2547,7 +2547,7 @@ Live A/B through the real launch, `contours:=true` twice and `false` once:
 
 The parameter works (0 contour topics when off) and nothing regressed.
 
-⚠ **THAT A/B PROVES LESS THAN IT LOOKS.** All three arms sat at 15.09–15.13 Hz
+**Caution: THAT A/B PROVES LESS THAN IT LOOKS.** All three arms sat at 15.09–15.13 Hz
 because the bench camera caps there — a **66 ms** frame period against a
 1.21 ms worst case. There was ~55 ms of slack, so the run could not have
 detected a 50 ms cost, never mind a sub-millisecond one. It shows the switch
@@ -2561,7 +2561,7 @@ works and nothing broke; the in-process column below carries the verdict.
 | 3 masks | 0.297 ms | 0.464 ms | 4.4 % | 1.7 % |
 | 8 masks | 0.779 ms | 1.210 ms | 11.5 % | **4.5 %** |
 
-⛔ **Read the right budget.** 10.5 ms is the DETECTOR-ALONE frame. Masks only
+**Warning: Read the right budget.** 10.5 ms is the DETECTOR-ALONE frame. Masks only
 exist when a segmentation model is loaded, and the merged two-model frame is
 **26.74 ms** — so the mask rows should be read against that column. Quoting
 11.5 % for eight masks is pessimistic by 2.5x.
@@ -2593,7 +2593,7 @@ commit (`ba44858`), so it was never a deliberate flip. `vision_dual.launch.py`
 said `true` all along, and `test_camera_exclusivity.py` calls `paused:=false`
 "a stray launch" — three files agreeing against the one that runs on the hull.
 
-⛔ **AND THE DEFAULT COULD NOT SIMPLY BE FLIPPED**, which is the part worth
+**Warning: AND THE DEFAULT COULD NOT SIMPLY BE FLIPPED**, which is the part worth
 keeping. Every query — `detected()`, `wait_for()`, `where()`,
 `where_offset()` — funnels through `_pump_detections`, and none of them reached
 `_activate_camera`; only `use_camera` and the vision verbs did. So against a
@@ -2629,7 +2629,7 @@ Two sets of 100 real 640x480 frames (`~/hailo_bench/frames`, `~/hailo_bench/eval
 
 **The flow front end would not have refused once on either set.** That matters
 because it is the exact failure another team reported as their showstopper
-(below). ⚠ These are bench frames, not a pool floor -- the texture that
+(below). These are bench frames, not a pool floor -- the texture that
 defeats optical flow is a repeating tile pattern under water, and this archive
 does not contain one. The number says our front end is healthy on this
 texture, not that it is healthy on the venue's.
@@ -2694,7 +2694,7 @@ all four survivors sat at conf 0.21-0.28 against a 0.20 threshold. So ~10 px of
 box width is the physical floor and detecting AT it is a coin toss, which is
 why a standoff aims at 4x that.
 
-⚠ Measured on `person` with a COCO model. Each competition model needs its own
+**Caution:** Measured on `person` with a COCO model. Each competition model needs its own
 run; the METHOD is the deliverable, not the constant.
 
 **What it implies, and the second number is the surprise.** A prop of width `w`
@@ -2731,14 +2731,14 @@ wide, derived from the 46.7 deg FOV and independently reported by `flow_node`):
 > course priors, not from a detection at range. The 10 px floor itself was measured
 > on COCO `person` and must be re-run per competition model.
 
-★ **A slalom pipe is detectable from 1.7 m and no further, whatever the water
+**Key point: A slalom pipe is detectable from 1.7 m and no further, whatever the water
 does.** No prior map can put a hull "in detection range" of one from across the
 pool: you arrive nearly on top of it or you do not see it at all. That is very
 likely why the team that wins dead-reckons past the slalom rather than
 perceiving their way through it, and it is a mission-design fact rather than a
 tuning problem.
 
-★ **And for anything large the detector is not what runs out first, the water
+**Key point: And for anything large the detector is not what runs out first, the water
 is.** A standoff chosen from optics alone parks a gate approach 38 m out. The
 crossover between the two regimes is computable per prop: take the minimum
 of the two, with a visibility figure that is NOT ours to assume. 6 m is an
@@ -2809,7 +2809,7 @@ Final run: `imu=2924 att=2924 zupt=58 depth=1540 gaps=0`, yaw held at
 
 **The bar: a stationary hull must stay under 5 cm.** Each row is one change.
 
-⛔ **AND THE CONTROL, WHICH OVERTURNS THE OBVIOUS READING OF THE TABLE.** The
+**Warning: AND THE CONTROL, WHICH OVERTURNS THE OBVIOUS READING OF THE TABLE.** The
 same 95 s run with `zupt:=false`, everything else identical:
 
 | | horizontal position after 95 s | rejects |
@@ -2856,7 +2856,7 @@ ZUPT fired 58 times in 95 s with flow absent. Stillness is measured from the
 gyro and the peak-to-peak of specific force, never from mission intent — a
 hull station-keeping against a current is commanded still and is not.
 
-⚠ **But the IMU test alone also passes a hull cruising at constant velocity**
+**Caution: But the IMU test alone also passes a hull cruising at constant velocity**
 (issue #25, 2026-10-02): heading held, no acceleration, |a| = g — and flow
 drops out mid-transit. Since then the thruster demand is a **veto**: the ZUPT
 needs it known and centred (the board's own `CENTRE_EPS` 0.005) for
@@ -2865,7 +2865,7 @@ board runs a move. A disarmed board now reports its demand as a known (0, 0),
 so the bench run above (disarmed, demand streaming) keeps its ZUPT. The 3 τ
 is a chosen settle, not a measurement.
 
-⚠ **`pkill -f auv_manager` matches nothing**; the executable is `start`. An
+**Caution: `pkill -f auv_manager` matches nothing**; the executable is `start`. An
 orphaned manager held `/dev/ttyUSB0` and kept publishing the pre-attitude
 message format, so new code read as broken while never having run. Same family
 as the orphaned trackers: `ros2 run`'s child outlives its parent.
@@ -2927,7 +2927,7 @@ Raw: `workbench/data/mixer_ladder.json`, `workbench/data/mixer_armed.json`.
 
 ### What it retracts
 
-⛔ **`VISION_YAW_MIN_PCT = 5.0` is not an under-measured constant. It is the wrong
+**Warning: `VISION_YAW_MIN_PCT = 5.0` is not an under-measured constant. It is the wrong
 shape.** It exists to push a demand across an assumed ESC deadband. There is no
 deadband: `mixer.cpp:127` lifts every non-zero demand into `[spin_min, 1]` on
 purpose, so output cannot go *below* 15 % at all. A 5 % demand does not produce
@@ -2940,7 +2940,7 @@ conclusion stands; this is the mechanism behind it.
 
 ### What it does NOT give
 
-⚠ **No newtons.** Every number here is a DShot command fraction. `k_n_per_rpm2`
+**Caution: No newtons.** Every number here is a DShot command fraction. `k_n_per_rpm2`
 still has no value, so nothing here converts to force, and no column of that
 matrix is a thrust. The *physical* stiction floor — where a real motor starts
 turning — is a different measurement and still needs a motor ([`BENCH` B-2](workbench/BENCH.md)).
@@ -2983,7 +2983,7 @@ that the arithmetic is self-consistent.
 | `yolov11n` stock | 80 | 92.53 | 7.794 ms |
 | `yolov11s` stock | 80 | 42.65 | 19.727 ms |
 
-⚠ **No end-to-end ladder is claimed from this.** `hw_only` excludes host pre- and
+**Caution: No end-to-end ladder is claimed from this.** `hw_only` excludes host pre- and
 post-processing; the 80.9 Hz standalone and 53.9 Hz through-the-graph numbers
 elsewhere in this tree were measured in another session on an unrecorded model
 and harness. Chaining them into "the graph costs 45 % of the chip" would compare
@@ -2996,7 +2996,7 @@ backbone size dominates (n → s halves it). Our three models clustering within
 0.5 % is **not** a pipeline ceiling — `yolov11s` demonstrates the silicon scales
 with model cost.
 
-⛔ **Discarded:** `yolov8s.hef` reported 466 FPS at the same input and output
+**Warning: Discarded:** `yolov8s.hef` reported 466 FPS at the same input and output
 shapes as `yolov11s` at 42.65. Not physically consistent; the artifact is suspect
 and the number is used nowhere.
 
@@ -3016,7 +3016,7 @@ stabilize / acro   FIRMWARE, compiled from the checkout   attitude -> torque
   -> gyro + AHRS                                          motion  -> back in
 ```
 
-⛔ **The firmware mixer is deliberately NOT in that chain.** `mixer.cpp` allocates
+**Warning: The firmware mixer is deliberately NOT in that chain.** `mixer.cpp` allocates
 for `vectored_6dof` — eight T200s at 45° — and the CAD hull has five orthogonal
 thrusters. Pushing one through the other simulates a vehicle that does not exist.
 `stabilize`/`acro` (attitude error → torque, no geometry) and `oneToDshot` (one
@@ -3027,7 +3027,7 @@ from an argument into a number.
 
 ### 11.1 What the plant is validated against
 
-⚠ **Nothing in the plant is validated against the vehicle, because the vehicle has
+**Caution: Nothing in the plant is validated against the vehicle, because the vehicle has
 never been wet.** It is validated against the exact analytic properties the
 equations of motion are *required* to have:
 
@@ -3038,13 +3038,13 @@ equations of motion are *required* to have:
 | roll period `= 2π√(I/(BG·W))` | small-angle restoring pendulum |
 | undamped principal-axis spin is held | Euler's equations |
 
-⭐ **And one that rehearses a pool day.** `test_free_decay_recovers_the_drag_we_put
+**Key point: And one that rehearses a pool day.** `test_free_decay_recovers_the_drag_we_put
 _in` runs the planned Round 4a experiment against a plant whose drag we *chose*,
 and checks the fit returns it (to 1 %). If the procedure cannot recover a known
 answer on a noiseless plant it will not recover an unknown one in a pool — and it
 would return a plausible number while failing.
 
-### 11.2 ⛔ The frame seam, and the runaway it caused
+### 11.2 The frame seam, and the runaway it caused
 
 The allocator reads `hull_geometry.yaml` and therefore works in the **CAD frame**;
 the plant is **Fossen** (x fwd, y stbd, z DOWN). The map `body = (cad.y, cad.x,
@@ -3052,12 +3052,12 @@ the plant is **Fossen** (x fwd, y stbd, z DOWN). The map `body = (cad.y, cad.x,
 axes negate: heave and yaw.**
 
 The first wiring missed it. Yaw feedback became positive and the hull ran to
-**−1988° in six seconds.** ⚠ A runaway was the *lucky* outcome — at a lower gain
+**−1988° in six seconds.** A runaway was the *lucky* outcome — at a lower gain
 the same sign error gives slow convergence that looks like a tuning problem, and
 costs a pool day. The conversion is now a named function with a test;
 injection-verified, its removal fails 7 tests.
 
-### 11.3 ⭐ What `MOT_SPIN_MIN` costs in closed loop — and a correction to our own ask
+### 11.3 What `MOT_SPIN_MIN` costs in closed loop — and a correction to our own ask
 
 Yaw hold, live board gains, CAD hull, `MOT_SPIN_MIN` inside the loop. Steady state,
 last 2 s of a 10 s hold, peak-to-peak:
@@ -3077,13 +3077,13 @@ independent of step size.**
 
 | term | effect on the limit cycle |
 |---|---|
-| drag, `Cd` 0.15/0.80 → 0.30/1.20 | ⭐ **none, to 1e-6.** The cycle lives near zero velocity where quadratic damping vanishes. The plant's *largest* unknown does not touch this result |
-| thrust 8→40 N, mass 8→13.6 kg | ⚠ **0.0022° … 0.1520°, a 70× spread** |
+| drag, `Cd` 0.15/0.80 → 0.30/1.20 | **Key point: none, to 1e-6.** The cycle lives near zero velocity where quadratic damping vanishes. The plant's *largest* unknown does not touch this result |
+| thrust 8→40 N, mass 8→13.6 kg | **Caution: 0.0022° … 0.1520°, a 70× spread** |
 
 So the honest number is an **order of magnitude — a tenth of a degree — not a
 measurement.** Quoting three significant figures off this bench would be wrong.
 
-⛔ **AND IT PARTLY REFUTES OUR OWN UPSTREAM ARGUMENT.** [Ask I](upstream/pr-i-spin-min-relay.md)
+**Warning: AND IT PARTLY REFUTES OUR OWN UPSTREAM ARGUMENT.** [Ask I](upstream/pr-i-spin-min-relay.md)
 and [ask M](upstream/pr-m-thruster-requirements-from-control.md) both lean on
 `MOT_SPIN_MIN` hurting precision alignment. At ~0.1° peak-to-peak that is **3.5 mm
 at 2 m range**, far below the pixel tolerances the vision servo works to. The
@@ -3110,7 +3110,7 @@ Both controllers tuned on the nominal plant, then the plant changed and **nothin
 | drag ×0.3 | 0.466 / 0.394 | 0.364 / 1.423 |
 | mass ×1.6 | 0.432 / 0.390 | 0.392 / 0.680 |
 | drag ×3 + mass ×1.6 | 0.492 / 0.389 | 0.400 / 0.680 |
-| **drag ×0.3 + mass ×0.6** | 0.470 / 0.394 | ⛔ **NEVER** / 2.506 |
+| **drag ×0.3 + mass ×0.6** | 0.470 / 0.394 | **Warning: NEVER** / 2.506 |
 
 **Where INDI wins:** the clean step. ~24 % faster settling (0.364 vs 0.480) and a 2.4×
 smaller limit cycle. It is also barely affected by the `MOT_SPIN_MIN` quantiser (0.366
@@ -3118,9 +3118,9 @@ quantised vs 0.364 ideal) where the cascade degrades 0.370 → 0.480.
 
 **Where it loses, and why that decides it:**
 
-1. ⛔ **Disturbance rejection is 3.6× worse** (1.423° vs 0.394°) — the *opposite* of the
+1. **Warning: Disturbance rejection is 3.6× worse** (1.423° vs 0.394°) — the *opposite* of the
    quadrotor result that motivated trying it (7× lower gust deviation).
-2. ⛔ **It destabilises when the inertia estimate is wrong.** At mass ×0.6 — controller `I`
+2. **Warning: It destabilises when the inertia estimate is wrong.** At mass ×0.6 — controller `I`
    1.7× too large — it never settles. The cascade is fine at every corner, moving 21 %
    end to end across a 10× drag and 2.7× mass swing.
 3. **Its headline advantage does not pay here.** INDI needs no drag model; neither does the
@@ -3128,7 +3128,7 @@ quantised vs 0.364 ideal) where the cascade degrades 0.370 → 0.480.
    **rate-limited**, not drag-limited. Swing drag 10× and the cascade moves < 7 %. An
    advantage over a problem we do not have is not an advantage.
 
-### 12.1 ⭐ The blocker was misidentified, and that is the durable finding
+### 12.1 The blocker was misidentified, and that is the durable finding
 
 The plan listed INDI's third prerequisite as *"increments the actuator can express — blocked
 on PR I; the 15.8 % floor means there is no such thing as a small increment."* **Measured,
@@ -3142,11 +3142,11 @@ resolution.**
 
 ### 12.2 Two INDI design rules this bench discovered by breaking them
 
-- ⛔ **Never point an incremental law at an unactuated axis.** Run INDI on roll — which this
+- **Warning: Never point an incremental law at an unactuated axis.** Run INDI on roll — which this
   hull cannot actuate, B being rank 5 of 6 — and the increment winds to its clamp because no
   acceleration is ever coming, then Euler coupling drags yaw off target. A cascade survives
   the same mistake because its output is a bounded PID the allocator simply refuses.
-- ⛔ **Limit the increment to ACHIEVABLE torque, not ±1.** The allocator delivers 0.35 in yaw;
+- **Warning: Limit the increment to ACHIEVABLE torque, not ±1.** The allocator delivers 0.35 in yaw;
   clamping at 1.0 lets the increment run 3× past anything the hull can do.
 
 ### 12.3 What would reopen this
@@ -3163,14 +3163,14 @@ it is worth running anyway, because §12's failure mode is specifically an inert
 
 Run with the board on USB and the Pi + Hailo up, while the operator was away.
 
-### 13.1 ⭐ The parameter capture has not drifted
+### 13.1 The parameter capture has not drifted
 
 All **37 of 37** parameters re-read off the board and compared against
 `workbench/data/board_params_20260923.json`: **every value identical**, live
 `GAIN` still 1.0. So §11 and §12's bench results keep their footing — the
 capture they were computed against is still what the vehicle runs.
 
-### 13.2 ⛔ Two traps that produced a false catastrophe
+### 13.2 Two traps that produced a false catastrophe
 
 A script was written to feed the board's own `SCALED_IMU2` straight into the
 filter. It reported a position of **2.8 × 10¹⁵ m** and the observability gate
@@ -3182,12 +3182,12 @@ to repeat:
 | **the accel is in SENSOR axes** | `SrotFC._accel_in_vehicle_frame` rotates it 180° about x=y before anyone should use it. At rest the raw message reads `zacc = +989.8 mG`, while the filter expects `-GRAVITY`. Fed raw, the filter **falls upward** — exactly what `RIEKF.predict`'s docstring warns about |
 | **`SCALED_IMU2` defaults to 10.1 Hz** | the documented 50.05 Hz is a rate the MANAGER requests (`auv_manager_node.py:127`, `SET_MESSAGE_INTERVAL`). Without the manager running, the board sends its own default |
 
-⭐ **Neither is a defect, and the chatter was a symptom of the first.** Reproduced
+**Key point: Neither is a defect, and the chatter was a symptom of the first.** Reproduced
 on the bench: with the correct accel, ZUPT at 50/20/10/5 Hz gives **zero** gate
 flips; with the sign inverted it flips. The 110 flips were the inverted sign
 compounding on real noise.
 
-⚠ **The lesson is about method, not about the filter.** A bespoke MAVLink script
+**Caution: The lesson is about method, not about the filter.** A bespoke MAVLink script
 that bypasses `SrotFC` bypasses every frame convention the stack has established,
 and it will produce numbers that look like findings. Read the IMU through
 `/mongla/imu` with the manager running, or through `SrotFC.imu()` — not off the
@@ -3199,7 +3199,7 @@ The observability gate (B-56) remains validated **only against synthetic noise**
 Validating it properly needs the manager and localization node running together
 so the rate and frame are the stack's own. That is a bring-up task, not a script.
 
-⚠ **It could latch shut** (issue #28, 2026-10-02). It summed all three velocity
+**Caution: It could latch shut** (issue #28, 2026-10-02). It summed all three velocity
 variances, but only depth observes z and depth was refused while the gate was
 shut, so after a long enough flow dropout (120 s from a settled filter) it never
 reopened. It now gates on the **horizontal** pair only. Bench, 30 s, 1 m launch
@@ -3218,7 +3218,7 @@ at 50 Hz for 600.0 s, 29 953 samples, no reboot:
 | roll | — | 0.091 deg | 0.0026 / 0.0077 / 0.0057 / 0.0047 / 0.0029 deg |
 | pitch | — | 0.078 deg | 0.0022 / 0.0059 / 0.0032 / 0.0031 / 0.0019 deg |
 
-⚠ **This does NOT size the attitude update's sigma, and must not be quoted as
+**Caution: This does NOT size the attitude update's sigma, and must not be quoted as
 if it did.** At rest the BNO's own stillness handling holds heading; the 0.5 deg
 per-sample sigma is two orders above this noise either way. #36's defect is a
 CORRELATED error -- a magnetic disturbance, an unlocked yaw reference, error
@@ -3240,7 +3240,7 @@ and refuses a steady turn. Image yaw matched **gyro z, sign -**, peak 0.86-0.95.
 | B, auto exposure | **-11.86 ms** | -13.44 / -9.49 / -8.40 / -10.39 | 5.04 ms |
 | C, exposure LOCKED 10 ms | **-11.57 ms** | -12.44 / -11.58 / -9.91 / -13.41 | 3.49 ms |
 
-⚠ **NOT MEASURED by the bar written before the run** (every 15 s window
+**Caution: NOT MEASURED by the bar written before the run** (every 15 s window
 within 2.0 ms), and the bar is not moved after the fact. What the data does
 say: (1) locking exposure did NOT shrink the scatter -- the auto-exposure
 hypothesis is falsified; (2) the scatter falls as 1/sqrt(window): sd 1.83 /
@@ -3249,7 +3249,7 @@ estimator noise around a CONSTANT offset, not a drifting one. Best estimate
 **td = -11.3 ms, sd 0.84 ms over three 60 s runs**. To clear a 2 ms bar per
 window, a window needs roughly a minute of motion, not 15 s.
 
-⭐ **The sign is physical evidence.** td < 0 means the scene in a frame appears
+**Key point: The sign is physical evidence.** td < 0 means the scene in a frame appears
 ~11 ms AFTER its stamp. A camera cannot record ahead, so it is the GYRO path
 that is late: the board's ATTITUDE rates (BNO fusion) are stamped after the
 motion they describe. The flow node estimates td online and stays inside its
@@ -3266,7 +3266,7 @@ B-56 numbers unchanged (healthy 0.1015 → 0.1022 m).
 
 ---
 
-## 14. ⛔ "The Hailo is running our models at a fifth of its capability" — RETRACTED the same hour
+## 14. "The Hailo is running our models at a fifth of its capability" — RETRACTED the same hour
 
 **Claimed, then refuted, both on 2026-09-23.** Kept in full because the way it
 was wrong is more useful than the claim was.
@@ -3287,7 +3287,7 @@ weights swap three times per inference. Ours is *smaller* (7.1 MB against
 11.3 MB) and needs *more* passes. The conclusion drawn was a **4.9× throughput
 opportunity** in the compilation step.
 
-### 14.2 ⛔ Why it is wrong
+### 14.2 Why it is wrong
 
 Run end to end — frame → letterbox → chip → NMS decode → boxes, batch 1:
 
@@ -3301,36 +3301,36 @@ in flight. At batch 1 both are dominated by the **PCIe round trip, ~9.3 ms**, an
 the multi-context penalty is invisible because the host is waiting on the round
 trip anyway.
 
-⚠ **`hw_only` FPS is not a rate a vehicle can have**, and the bench script's own
+**Caution: `hw_only` FPS is not a rate a vehicle can have**, and the bench script's own
 docstring says so: *"Batch 1 because a live AUV cannot batch; batching is exactly
 how the published figures flatter this chip."* It was read after the claim was
 written.
 
-### 14.3 ⭐ What actually survives, measured end to end at batch 1
+### 14.3 What actually survives, measured end to end at batch 1
 
 | model | loop | Hz | |
 |---|---|---|---|
-| `yolov8n` — stock | 7.99 ms | **125.14** | ⭐ 28 % faster than ours |
+| `yolov8n` — stock | 7.99 ms | **125.14** | **Key point:** 28 % faster than ours |
 | `yolov8s` — stock | 10.03 ms | 99.73 | |
 | `grr_lowth` — **ours** | 10.20 ms | 98.01 | |
 | `sauvc_sim` — **ours** | 10.26 ms | 97.47 | |
 | `yolov11n` — stock | 12.11 ms | 82.61 | |
-| `yolov11s` — stock | 23.49 ms | **42.57** | ⛔ below the graph's current rate |
+| `yolov11s` — stock | 23.49 ms | **42.57** | **Warning:** below the graph's current rate |
 
 **1. The ROS graph is the lever, not the model.** Ours run at ~98 Hz standalone
 against **53.9 Hz through the ROS graph** — the graph costs **45 %**, and that
 dwarfs anything model choice offers.
 
-**2. ⭐ A yolov8n-class model would buy ~28 %** (125 vs 98 Hz), and that is a real
+**2. A yolov8n-class model would buy ~28 %** (125 vs 98 Hz), and that is a real
 accuracy trade rather than free throughput. It is the only model-side lever worth
 discussing.
 
-**3. ⛔ yolov11 is refuted, and this part was right for the right reason.**
+**3. yolov11 is refuted, and this part was right for the right reason.**
 `yolov11s` measures **42.57 Hz end to end** — *below* the 53.9 Hz the graph
 already achieves — so it would cap the pipeline in hardware beneath where it runs
 today. `yolov11n` at 82.61 Hz is also slower than what we fly.
 
-### 14.4 ⛔⛔ THE RETRACTION IS ITSELF RETRACTED — §14.1 was right
+### 14.4 THE RETRACTION IS ITSELF RETRACTED — §14.1 was right
 
 **Measured again, 2026-09-23, through HailoRT's modern `create_infer_model` API
 instead of the older `InferVStreams` path `e2e.py` uses:**
@@ -3344,7 +3344,7 @@ instead of the older `InferVStreams` path `e2e.py` uses:**
 | `yolov11n` | **3** | 91.16 Hz | 92.78 Hz | 1.02× |
 | `yolov11s` | **3** | 43.02 Hz | 43.02 Hz | 1.00× |
 
-⭐ **The correlation with context count is perfect.** Single-context models
+**Key point: The correlation with context count is perfect.** Single-context models
 pipeline 2.7–4.3×; every multi-context model is flat at 1.00×. That is the
 mechanism: a multi-context network must swap weights between contexts, so it
 serialises and there is nothing to overlap. A single-context network keeps its
@@ -3358,7 +3358,7 @@ them all to ~98 Hz and looked exactly like a shared PCIe bound. It was not.
 **So the standing conclusion is §14.1's: our models are multi-context and that is
 a real 4.3× penalty in chip time** — 10.16 ms against yolov8n's 2.38 ms.
 
-### 14.5 ⭐ And the value is LATENCY and HEADROOM, not frame rate
+### 14.5 And the value is LATENCY and HEADROOM, not frame rate
 
 We do not need 480 Hz detection — the camera tops out at 210 Hz and the control
 loop wants ~50. What single-context compilation actually buys:
@@ -3370,11 +3370,11 @@ loop wants ~50. What single-context compilation actually buys:
 
 1. **Photon-to-decision drops by ~7.8 ms**, which is the number the control loop
    feels.
-2. ⭐ **~7.8 ms of free chip time per frame is room for a SECOND network** — an
+2. **Key point: ~7.8 ms of free chip time per frame is room for a SECOND network** — an
    XFeat, a depth model, a flow network — on the same accelerator. That is the
    difference between "we have one detector" and "we have a perception stack".
 
-⚠ **Still not attempted.** The lever is the compilation step, and whether our
+**Caution: Still not attempted.** The lever is the compilation step, and whether our
 network *can* be made single-context depends on its architecture — but `yolov8s`
 is larger, has 80 classes, and is single-context on this same chip.
 
@@ -3387,14 +3387,14 @@ Three corrections in one session, and the third corrected the second.
 problem was that the *measuring tool* (`InferVStreams`) added 7 ms and hid the
 difference.
 
-⭐ **The lesson is not "distrust benchmarks" — it is that a measurement is only
+**Key point: The lesson is not "distrust benchmarks" — it is that a measurement is only
 as good as the API path it went through.** `hw_only` was flattering because it
 batches; `e2e.py` was flattening because its API is slow. Neither described the
 chip. The one that did was the API the production code would actually use.
 
 ---
 
-## 15. ⭐ The depth loop, closed for the first time
+## 15. The depth loop, closed for the first time
 
 **2026-09-23.** CLAUDE.md's largest standing unknown is *"the depth loop has
 never run closed"* — every `SROT_MOVE` primitive closes it, including a plain
@@ -3402,7 +3402,7 @@ never run closed"* — every `SROT_MOVE` primitive closes it, including a plain
 the measurement agree. The board's own `depth_control.cpp` now runs against the
 Fossen plant. **Not water, but the first time the code has run with feedback.**
 
-### 15.1 ⛔ The sign convention flips at the MAVLink boundary
+### 15.1 The sign convention flips at the MAVLink boundary
 
 Three attempts flew the hull to **+20 m** before this was found:
 
@@ -3416,7 +3416,7 @@ So a caller of `depth::update` must pass **positive-down**, while everything it
 reads off the wire is negative-down. Passing the outward convention inward makes
 every sub-surface target unreachable and drives the hull straight up.
 
-⭐ The firmware's own comment corroborates the output sense three independent
+**Key point:** The firmware's own comment corroborates the output sense three independent
 ways — `THRUSTER_MAP.md`'s axis table, `DEPTH_LOST_ASCENT` applied positive, and
 MANUAL passing the pilot's throttle through — and records that this exact sign
 was inverted once before.
@@ -3429,11 +3429,11 @@ was inverted once before.
 | 1.5 m | 1.517 m | 17 mm |
 | 3.0 m | 3.016 m | 16 mm |
 
-⭐ **`DEPTH_I` rejects net buoyancy completely.** A real hull is never exactly
+**Key point: `DEPTH_I` rejects net buoyancy completely.** A real hull is never exactly
 neutral; at **±2 N** of standing force the loop still settles at **1.500 m, error
 0.000 m**.
 
-### 15.3 ⭐ THE MISSION NUMBER: overshoot is a fixed DISTANCE, not a percentage
+### 15.3 THE MISSION NUMBER: overshoot is a fixed DISTANCE, not a percentage
 
 | target | overshoot | peak descent |
 |---|---|---|
@@ -3449,14 +3449,14 @@ undershoots that because it never reaches terminal descent.
 **Across the whole unmeasured band** — drag `Cd` 0.80–1.20, thrust 8–40 N, mass
 8–13.6 kg, 18 corners — the overshoot is **0.263 … 0.391 m**, a 1.5× spread.
 
-> ⛔ **Leave at least 0.4 m of clearance below any commanded depth**, and the
+> **Warning: Leave at least 0.4 m of clearance below any commanded depth**, and the
 > same above it when rising. A `set_depth` that lands 0.3 m from the floor will
 > touch it.
 
-⚠ Settling to ±0.05 m takes **7.5 s at 0.5 m and 11–16 s at 1.5–5 m.** A mission
+**Caution:** Settling to ±0.05 m takes **7.5 s at 0.5 m and 11–16 s at 1.5–5 m.** A mission
 that commands a depth and immediately acts on it is acting during the overshoot.
 
-### 15.4 ⭐ A forward move does NOT disturb the depth hold
+### 15.4 A forward move does NOT disturb the depth hold
 
 The scenario CLAUDE.md warns about directly: `SROT_MOVE` enters AUTO and **every**
 primitive there closes the depth loop, including a plain `move_forward`. Held at
@@ -3472,7 +3472,7 @@ primitive there closes the depth loop, including a plain `move_forward`. Held at
 **Depth error is unchanged from the stationary case at every surge tried, and
 pitch stays under 1°.**
 
-⚠ **And the allocator's parasitic-pitch compensation is NOT why.** *(Retracted
+**Caution: And the allocator's parasitic-pitch compensation is NOT why.** *(Retracted
 2026-10-02, issue #9: the 8.1 mm was the A2212's bounding box, pulled by its
 bracket; the prop hub is at +0.12 mm, so on the real geometry there is almost
 nothing to compensate. The finding below stands for an off-axis thruster.)* The
@@ -3482,11 +3482,11 @@ compensation deliberately removed — the axial demand passed straight through �
 the result is **identical**: 0.0250 m and 0.906°. The attitude cascade and the
 depth PID absorb it either way.
 
-⭐ So the open-loop compensation is correct and worth almost nothing here. **The
+**Key point:** So the open-loop compensation is correct and worth almost nothing here. **The
 closed loops dominate**, which is the more useful thing to know: do not spend
 effort on feed-forward corrections the feedback already handles.
 
-⛔ **This says nothing about the shipped firmware.** The run uses our geometric
+**Warning: This says nothing about the shipped firmware.** The run uses our geometric
 allocator on the CAD hull. `mixer.cpp` allocates for eight T200s at 45° and would
 distribute a surge command completely differently — so *"a forward move holds
 depth"* is established for the hull in CAD and the allocator in
@@ -3503,14 +3503,14 @@ with a depth well clear of the floor.
 
 ---
 
-## 16. ⭐ `DEPTH_LOST_ASCENT` — the escape, and the ballast limit it implies
+## 16. `DEPTH_LOST_ASCENT` — the escape, and the ballast limit it implies
 
 **2026-09-23, on the closed-loop bench.** When the Bar30 goes unhealthy the board
 abandons the depth PID and pushes an open-loop `DEPTH_LOST_ASCENT = 0.35` heave
-(`config.h:621`, applied at `task_control_loop.cpp:219`). ⚠ **This failure is live
+(`config.h:621`, applied at `task_control_loop.cpp:219`). **This failure is live
 on the bench right now** — `bringup_check` reports the Bar30 unhealthy.
 
-⭐ **And `config.h:647` independently confirms §15.1's sign finding**, in its own
+**Key point: And `config.h:647` independently confirms §15.1's sign finding**, in its own
 words: `#define FS_SURFACE_DEPTH_M 0.25f // m — "at the surface" (positive-down)`.
 
 ### 16.1 It works, and the rate is reasonable
@@ -3523,9 +3523,9 @@ From 3.0 m to the `FS_SURFACE_DEPTH_M` threshold of 0.25 m:
 | 5 N buoyant | 4.97 s | 0.597 m/s |
 | 5 N heavy | 6.76 s | 0.439 m/s |
 | 15 N heavy | 17.57 s | 0.169 m/s |
-| **25 N heavy** | ⛔ **never** | — |
+| **25 N heavy** | **Warning: never** | — |
 
-### 16.2 ⭐ THE BALLAST LIMIT, and it is a simple law
+### 16.2 THE BALLAST LIMIT, and it is a simple law
 
 Bisected on the maximum negative buoyancy the escape can still overcome:
 
@@ -3538,11 +3538,11 @@ Bisected on the maximum negative buoyancy the escape can still overcome:
 **The limit is ≈ 83 % of one thruster's maximum thrust**, across the whole range —
 so it is a property of the `0.35` command and the thrust curve, not of the hull.
 
-> ⛔ **With 20 N thrusters the vehicle can escape a depth-sensor failure while up
+> **Warning: With 20 N thrusters the vehicle can escape a depth-sensor failure while up
 > to ~1.7 kgf heavy. Beyond that it cannot surface and will sit on the bottom
 > with its thrusters running.**
 
-### 16.3 ⚠ The two failures are correlated, which is the part that matters
+### 16.3 The two failures are correlated, which is the part that matters
 
 A flood that kills the Bar30 is also what makes the hull heavy. **1.7 kgf is
 1.7 L of water inside the pressure vessel** — not an implausible ingress for a
@@ -3551,7 +3551,7 @@ the *specific* failure that triggers the escape in the first place.
 
 Two consequences worth acting on:
 
-1. ⭐ **This is a third argument for thruster sizing**, alongside
+1. **Key point: This is a third argument for thruster sizing**, alongside
    [ask M §2.1](upstream/pr-m-thruster-requirements-from-control.md) (resolution)
    and §6.1 (cruise throttle). Escape margin scales **linearly** with thruster
    thrust: 8 N buys 0.67 kgf of margin, 40 N buys 3.40 kgf. It is not a
@@ -3571,7 +3571,7 @@ the vehicle's actual net buoyancy — the very number this margin is consumed by
 
 ---
 
-## 17. ⭐ The camera chain, measured end to end — and "the ROS graph costs 45 %" RETRACTED
+## 17. The camera chain, measured end to end — and "the ROS graph costs 45 %" RETRACTED
 
 **2026-09-23**, Sonix global-shutter USB camera on the vehicle, Hailo-8 live.
 
@@ -3579,17 +3579,17 @@ the vehicle's actual net buoyancy — the very number this margin is consumed by
 
 | mode | raw `v4l2-ctl` | **our `V4L2MailboxCamera`** | OpenCV `webcam` |
 |---|---|---|---|
-| 640×360 MJPG @210 | — | **211.0 Hz** ✅ | 118 Hz |
+| 640×360 MJPG @210 | — | **211.0 Hz** | 118 Hz |
 | 640×400 MJPG @210 | 204.98 Hz | — | 118 Hz |
-| 1280×720 MJPG @120 | 118.99 Hz | **120.4 Hz** ✅ | 60.3 Hz |
+| 1280×720 MJPG @120 | 118.99 Hz | **120.4 Hz** | 60.3 Hz |
 
-⭐ **Our own mailbox class gets the full rate.** That is the path both vehicle
+**Key point: Our own mailbox class gets the full rate.** That is the path both vehicle
 profiles use (`source: 'v4l2'`), so the flight path is not losing frames.
 
-⚠ **YUYV is not an option**: 10 fps at 720p against MJPG's 120. The
+**Caution: YUYV is not an option**: 10 fps at 720p against MJPG's 120. The
 `config.py` note that "MJPG is not a preference, it is 6×" is confirmed.
 
-### 17.2 ⛔ But the OpenCV fallback halves the rate, and the cause is one line
+### 17.2 But the OpenCV fallback halves the rate, and the cause is one line
 
 `cameras/webcam.py:87` sets `CAP_PROP_BUFFERSIZE = 1` with the comment
 *"avoid stale frames"*. Measured, same camera, same mode:
@@ -3603,17 +3603,17 @@ profiles use (`source: 'v4l2'`), so the flight path is not losing frames.
 matches `grab()`-only (which does not) at 4 buffers, and CPU sits at 22 % of one
 core.
 
-⚠ `v4l2_mailbox.py` already says *"BUFFER COUNT IS NOT A LEVER"*, and that is
+**Caution:** `v4l2_mailbox.py` already says *"BUFFER COUNT IS NOT A LEVER"*, and that is
 **not a contradiction**: it measured **staleness** (flat across 2–8 buffers) at a
 62.5 Hz camera mode. This measures **throughput**, at 120–210 Hz. Both hold. The
 pump fixes staleness; the buffer count decides whether frames arrive at all.
 
-⛔ **The risk is the fallback path.** `_build_v4l2` falls back to `webcam` when
+**Warning: The risk is the fallback path.** `_build_v4l2` falls back to `webcam` when
 the device is not a real V4L2 node — and a vehicle camera that fell back would
 run at **half rate, silently**, since nothing downstream checks the achieved
 frame rate against the profile's request.
 
-### 17.3 ⛔ RETRACTED: "the ROS graph costs 45 %"
+### 17.3 RETRACTED: "the ROS graph costs 45 %"
 
 §14.3 concluded the ROS graph was the lever, from ~98 Hz standalone against a
 recorded 53.9 Hz through the graph. **Measured with a real ROS node, real camera,
@@ -3630,13 +3630,13 @@ node**, not in ROS — which is a completely different and much more tractable
 problem. The 53.9 Hz figure needs re-measuring against the current code before
 anything is built on it.
 
-### 17.4 ⚠ And a number in `config.py` that deserves a second look
+### 17.4 And a number in `config.py` that deserves a second look
 
 `pi_forward` records *"fps 60 → image 30.03 Hz, detections 27.11 Hz"* and reads
 it as *"the request saturates at the ceiling"* — i.e. that 30 Hz **is** the
 camera's limit. That is exactly the 2:1 pattern measured above.
 
-⚠ **It may still be correct**: `pi_forward` is a different unit from the Sonix
+**Caution: It may still be correct**: `pi_forward` is a different unit from the Sonix
 (the note says the forward camera "is indifferent to" format), and only the
 Sonix is connected. **But it should be re-checked with `v4l2-ctl --stream-mmap`
 before 30 Hz is accepted as that camera's ceiling**, because the same reading has
@@ -3644,7 +3644,7 @@ now been wrong once.
 
 ---
 
-## 18. ⭐ DINOv2 on the Pi, finally measured — 3 seconds per frame
+## 18. DINOv2 on the Pi, finally measured — 3 seconds per frame
 
 **2026-09-23.** Every DINO verdict in the SOTA sweep was an estimate, and one
 dossier flagged why that was avoidable: **`depth_anything_v2_small.onnx` has been
@@ -3658,16 +3658,16 @@ ViT-S/14 encoder, and **nobody had ever timed it.**
 | 1 | **5263.6 ms** | 0.19 Hz |
 | 4 | **3064.4 ms** | **0.33 Hz** |
 
-⛔ **Three seconds per inference.** For scale, our detector does 640×640 on the
+**Warning: Three seconds per inference.** For scale, our detector does 640×640 on the
 Hailo in **10.16 ms** — DINOv2 ViT-S on this CPU is **~300× slower**, against a
 control loop that ticks at 50 Hz.
 
-⭐ **This is not "DINO is marginal on edge hardware". It is closed**, and it is
+**Key point: This is not "DINO is marginal on edge hardware". It is closed**, and it is
 now closed by a measurement on our own hardware with our own runtime rather than
 by reading Jetson figures. Any future proposal involving a ViT-S-class backbone
 on the Pi CPU starts from 3 s/frame.
 
-⚠ **What it does NOT close**: the Hailo route. The dossier's separate evidence
+**Caution: What it does NOT close**: the Hailo route. The dossier's separate evidence
 there is the Hailo zoo's own table — `vit_small` 309 FPS against `resnet50`
 1372 at batch 8, a **4.4× attention penalty on the same silicon**, and those are
 PCIe ×4 batch-8 numbers we cannot have. Different argument, same verdict.
@@ -3686,16 +3686,16 @@ median of 20 after a warm-up.
 | **Shi-Tomasi — what our LK uses** | **6.79 ms** | **147.4 Hz** | 483 |
 | *XFeat, for reference* | *33.1 ms @ 320×240* | *30.2 Hz* | — |
 
-⭐ **The incumbent is 15× faster than ROOT-SIFT and 1.5× faster than ORB**, while
+**Key point: The incumbent is 15× faster than ROOT-SIFT and 1.5× faster than ORB**, while
 returning a comparable keypoint count — consistent with §28's 165–185 tracked
 points on real footage. **ROOT-SIFT at 9.6 Hz is below the 50 Hz consumer**, so
 it is not a candidate on this vehicle whatever its accuracy.
 
-⚠ **Every published feature timing needs repricing before it is quoted here.**
+**Caution: Every published feature timing needs repricing before it is quoted here.**
 The XFeat paper's CPU figure is an i5-1135G7 at VGA, and this Pi measures
 **2.4–4× slower than it** on the same graph.
 
-### 19.1 ⭐ The accuracy control, finally run — the murky clips are NOT easy
+### 19.1 The accuracy control, finally run — the murky clips are NOT easy
 
 **2026-09-23.** The reason to bench ROOT-SIFT was never speed. It was a
 **control**: if the literature's best classical underwater front-end also scores
@@ -3734,18 +3734,18 @@ cap, so they depend on the pixels and nothing else:
 | Mirpur torpedo_1 | 4/4 | **0/4** | **3** | 0, 0, 0, 0 |
 | Mirpur gate | 4/4 | **2/4** | 51 | 21, 6, 25, 5 |
 
-⭐ **The control fails to reproduce XFeat's score, so XFeat's win is real.** On
+**Key point: The control fails to reproduce XFeat's score, so XFeat's win is real.** On
 the murkiest clip ROOT-SIFT finds **three keypoints in an entire 640×480 frame**
 — fewer than ORB's seven. The 4/4 is not the clips being easy; it is a property
 of the descriptor, and the published *ROOT-SIFT > SIFT > ORB* underwater ranking
 does not carry to this water.
 
-⚠ **It also does not rescue ROOT-SIFT on speed**, which was already settled at
+**Caution: It also does not rescue ROOT-SIFT on speed**, which was already settled at
 9.6 Hz against a 50 Hz consumer. Nothing about the shipped anchor changes. What
 changes is what we are entitled to claim: previously "XFeat beats ORB", now
 "XFeat beats the best classical underwater front-end on our own turbid frames".
 
-#### ⭐ And the XFeat column, regenerated rather than quoted
+#### And the XFeat column, regenerated rather than quoted
 
 The comparison above rests on a **recorded** XFeat column. On 2026-09-24 that column was
 re-measured on the same frames, through the shipped `anchor/xfeat_onnx.py` at the shipping
@@ -3754,25 +3754,25 @@ re-measured on the same frames, through the shipped `anchor/xfeat_onnx.py` at th
 | clip | +1 s | +3 s | +5 s | **+8 s** | today | recorded |
 |---|---|---|---|---|---|---|
 | Mirpur torpedo | 189 | 65 | 134 | **24** | 4/4 | 4/4 |
-| Mirpur torpedo_1 | 69 | 43 | 51 | **12** | **3/4** | ⚠ 4/4 |
+| Mirpur torpedo_1 | 69 | 43 | 51 | **12** | **3/4** | **Caution:** 4/4 |
 | Mirpur gate | 195 | 36 | 237 | **31** | 4/4 | 4/4 |
-| octagon | 182 | 115 | 73 | **18** | 4/4 | ⚠ 3/4 |
+| octagon | 182 | 115 | 73 | **18** | 4/4 | **Caution:** 3/4 |
 | torpedo (clear) | 355 | 199 | 121 | **88** | 4/4 | 4/4 |
 
-⚠ **`torpedo_1` is 3/4, not the recorded 4/4** — its +8 s frame carries **12 inliers against the
+**Caution: `torpedo_1` is 3/4, not the recorded 4/4** — its +8 s frame carries **12 inliers against the
 15-inlier bar**. The margin on the murkiest clip is thinner than the stored table implies, and
 that is now the number of record. `octagon` moves the other way, 3/4 → 4/4.
 
-⭐ **The stronger finding is the shape of the rows, not the pass counts.** Every clip's minimum
+**Key point: The stronger finding is the shape of the rows, not the pass counts.** Every clip's minimum
 is its **+8 s** column, and the worst case falls **189 → 24** on `torpedo`. A reference does not
 fail suddenly; it decays with elapsed time, and at 8 s it is close to worthless.
 
-⛔ **That was a defect in `lock_node.py` — the single-reference snap the checkpoint bank later replaced — and this is its measurement.** The anchor reference
+**Warning: That was a defect in `lock_node.py` — the single-reference snap the checkpoint bank later replaced — and this is its measurement.** The anchor reference
 is snapped once — the guard is literally `not self._anchor.has_reference` — and is never
 refreshed while a reference exists. The decay above is what that costs. It is not an XFeat
 limitation: the same frames, matched against a *fresh* reference, are the +1 s column.
 
-#### ⛔ Two rows that did NOT fingerprint, and are therefore not comparable
+#### Two rows that did NOT fingerprint, and are therefore not comparable
 
 The `octagon` and clear-control `torpedo` rows read 4096 and 2152 ORB reference
 keypoints today against 1205 and 1260 recorded. Nine candidate octagon/torpedo
@@ -3786,7 +3786,7 @@ and those three fingerprint exactly.
 
 ---
 
-## 20. ⭐ How big can the checkpoint bank get? Measured, not assumed
+## 20. How big can the checkpoint bank get? Measured, not assumed
 
 **2026-09-24.** `CheckpointBank` shipped a capacity of **5**, ported from a
 prototype gallery (`dino_idea_v12.py:463`) rather than measured. The operator
@@ -3807,15 +3807,15 @@ Each reference is one 1024×1024×64 similarity matrix plus a mutual-NN pass.
 | 50 | 509.8 ms | 345.1 ms | **49.1 ms** | 13.1 MB |
 | 100 | 853.2 ms | 582.4 ms | **57.0 ms** | 26.2 MB |
 
-⛔ **Memory was never the constraint** — 100 references is 26 MB. **Looped
+**Warning: Memory was never the constraint** — 100 references is 26 MB. **Looped
 matching blows the anchor's 333 ms budget at ~30 references**, and batching the
 bank into one GEMM buys only 1.5–1.7× and still blows it at ~55. Both are
 linear; batching changes the constant, not the shape.
 
-⭐ **A shortlist is flat.** Rank references by a cheap signature, match only the
+**Key point: A shortlist is flat.** Rank references by a cheap signature, match only the
 top 5, and 100 references cost what 10 do.
 
-### 20.2 ⭐ But does the shortlist retrieve the RIGHT reference?
+### 20.2 But does the shortlist retrieve the RIGHT reference?
 
 The above is a speed result on random descriptors and proves nothing about
 correctness. `tools/bank_shortlist_accuracy.py` answers the other half on the
@@ -3838,8 +3838,8 @@ network. (DINOv2 is closed here at 3064 ms/frame, §18.)
 | torpedo (clear) | 33.3 % | 70.8 % | 91.7 % | 2.9 % |
 | **all, 120 queries** | **50.8 %** | **78.3 %** | **91.7 %** | **1.9 %** |
 
-⚠ **Recall@1 is 50.8 %, and that is fine** — because ranking the single best
-reference is not the job. ⭐ **The load-bearing number is the last column: when
+**Caution: Recall@1 is 50.8 %, and that is fine** — because ranking the single best
+reference is not the job. **The load-bearing number is the last column: when
 the shortlist does not contain the true best, the best of its top-5 still
 returns 98.1 % of the true best's inliers.** Several references are nearly as
 good, so being "wrong" costs ~2 % of yield rather than the lock.
@@ -3851,7 +3851,7 @@ signature shortlist**, at a measured cost of **~57 ms at 100 references** and
 **1.9 % of inlier yield**. The capacity of 5 is withdrawn as a *limit*; it
 survives only as a default.
 
-⚠ **Not yet measured:** these are dev-box timings. The Pi is 2.4–4× slower on
+**Caution: Not yet measured:** these are dev-box timings. The Pi is 2.4–4× slower on
 this class of work (§19), so the Pi's own curve is owed before a large bank
 ships. And the signature was tested on FORWARD-camera clips; on a tiled floor
 the sweep expects place recognition to alias badly, so the downward camera
@@ -3859,12 +3859,12 @@ needs its own number rather than this one.
 
 ---
 
-## 21. ⚠ A reference does NOT decay to death — and a correction
+## 21. A reference does NOT decay to death — and a correction
 
 **2026-09-24.** §20 and the bank's own docstring were written around a claim
 that needs withdrawing.
 
-### 21.1 ⛔ The withdrawal
+### 21.1 The withdrawal
 
 §19.1 sampled four offsets (+1/3/5/8 s), found every clip's minimum at +8 s, and
 I read that as *"a reference decays with elapsed time; by 8 s it is close to
@@ -3879,13 +3879,13 @@ median over four start times per clip:
 | octagon | 6.0 s | 6.0 s | **never** | 56, 56, 16, 20, 16 |
 | torpedo (clear) | 7.0 s | never | **never** | 318, 243, 102, 120, 68 |
 
-⛔ **No clip's reference ever falls below the 15-inlier bar and stays there,
+**Warning: No clip's reference ever falls below the 15-inlier bar and stays there,
 out to 30 seconds.** The curves oscillate — `mirpur_torpedo` reads 114 → 26 →
 98 → 35 → 38 — because the target leaves and re-enters view as the vehicle
 moves. **The +8 s column was a trough, not a trend**, and the decay claim is
 withdrawn.
 
-### 21.2 ⭐ What is true instead, and it is a better reason for the bank
+### 21.2 What is true instead, and it is a better reason for the bank
 
 At any *instant* a single reference can sit deep in a trough (24 inliers), and a
 different viewpoint would not be. So the bank's value is **viewpoint diversity,
@@ -3894,13 +3894,13 @@ result that the best of a 5-wide shortlist loses just **1.9 %** of inlier yield.
 If references decayed, the newest would dominate and a shortlist would be
 lossy; it is not.
 
-⚠ **Consequence for the meta-updater:** refreshing on a decay *trend* would fire
+**Caution: Consequence for the meta-updater:** refreshing on a decay *trend* would fire
 on troughs and churn the bank. `T(<40)` is 6–30 s, so the cadence is slow, and
 what a new checkpoint should buy is a viewpoint the bank does not already hold.
 The shipped `REFRESH_INLIERS = 40` trigger is therefore **over-eager on this
 evidence** and is flagged for re-derivation against a diversity criterion.
 
-### 21.3 ⭐ Can the bank be PRELOADED from practice? Yes — for props
+### 21.3 Can the bank be PRELOADED from practice? Yes — for props
 
 The operator's question: references taken before the run, reused on it. The
 archive holds pairs of separate runs over one venue and prop, which is the
@@ -3914,12 +3914,12 @@ A matched against 12 frames of clip B:
 | torpedo_up_1 | torpedo_up_1 | 280 | 123 | 100 % *(control)* |
 | torpedo_up_1 | **torpedo_up_2** | 155 | 27 | **100 %** |
 | octagon_1 | octagon_1 | 53 | 25 | 100 % *(control)* |
-| octagon_1 | **octagon_2** | 11 | 10 | ⛔ **8 %** |
+| octagon_1 | **octagon_2** | 11 | 10 | **Warning: 8 %** |
 
-⭐ **A reference from one run locks a different run of the same prop**, at 92 %
+**Key point: A reference from one run locks a different run of the same prop**, at 92 %
 and 100 % of frames over the trust bar. That is the evidence preloading needed.
 
-⛔ **And it fails on `octagon`, at 8 %** — a generic structural view rather than
+**Warning: And it fails on `octagon`, at 8 %** — a generic structural view rather than
 a distinctive rigid prop, which is the self-similarity case the feature sweep
 predicted would alias. **So preloading is a per-target capability, not a
 per-vehicle one**, and a preloaded bank must prove itself through the same
@@ -3931,13 +3931,13 @@ inlier bar as a live one rather than being trusted because it was prepared.
 live one.** Preloading changes where a checkpoint comes from, never what it has
 to prove.
 
-⚠ **What this does NOT establish:** both runs in each pair share a day, water
+**Caution: What this does NOT establish:** both runs in each pair share a day, water
 and lighting. A practice session on another day, or another pool, is a larger
 domain shift than this measures. Necessary evidence, not sufficient.
 
 ---
 
-## 22. ⛔ A preloaded bank said "torpedo" while looking at the gate
+## 22. A preloaded bank said "torpedo" while looking at the gate
 
 **2026-09-24.** §21.3 measured that a bank built on one run locks a different
 run of the same prop (92 %, 100 %). That test only ever asked *same prop vs
@@ -3950,10 +3950,10 @@ same prop*. Running the negative it never ran:
 |---|---|---|---|---|---|
 | torpedo.mkv — same run | 76 | 266 | 93 % | 71 % | 43 % |
 | torpedo_1 — **same prop, other run** | 63 | 77 | 100 % | 64 % | 7 % |
-| gate.mkv — ⛔ **OTHER PROP, same venue** | 23 | 36 | **100 %** | 14 % | 0 % |
+| gate.mkv — **OTHER PROP, same venue** | 23 | 36 | **100 %** | 14 % | 0 % |
 | octagon — other venue | 8 | 10 | **0 %** | 0 % | 0 % |
 
-⛔ **The torpedo bank cleared the trust bar on 100 % of GATE frames and
+**Warning: The torpedo bank cleared the trust bar on 100 % of GATE frames and
 reported `label='torpedo'`.** A rung that names the wrong prop with confidence
 is worse than one that reports LOST, because LOST is honest.
 
@@ -3971,37 +3971,37 @@ Same-prop-other-run (true) against other-prop-same-venue (false):
 
 | bar | keeps of true | admits of false |
 |---|---|---|
-| 15 *(shipped `MIN_INLIERS`)* | 100 % | ⛔ **100 %** |
+| 15 *(shipped `MIN_INLIERS`)* | 100 % | **Warning: 100 %** |
 | 25 | 86 % | 36 % |
 | 40 | 64 % | 14 % |
-| **60** | **57 %** | ✅ **0 %** |
+| **60** | **57 %** | **0 %** |
 | 80 | 7 % | 0 % |
 
 ### Two bars, because they answer two different questions
 
-⭐ **`MIN_INLIERS = 15` is correct for what it does** — "is this the same scene
+**Key point: `MIN_INLIERS = 15` is correct for what it does** — "is this the same scene
 as the reference", which is the tracking question, asked of a reference that a
 live detection just supplied. It is **not** an identity test and must stop being
 used as one.
 
-⛔ **A bar of 60 is required wherever the bank ASSERTS AN IDENTITY** — a
+**Warning: A bar of 60 is required wherever the bank ASSERTS AN IDENTITY** — a
 preloaded reference, or a reacquisition from LOST. That is 4× `MIN_INLIERS`,
 where the plan had guessed 3×.
 
-⚠ **57 % of true frames rejected is the price**, and it is the right trade: a
+**Caution: 57 % of true frames rejected is the price**, and it is the right trade: a
 missed re-acquisition costs a second, a false one costs the run.
 
 ### What must change in the tooling
 
-⛔ **A practice bank built with `roi=None` encodes the venue.** References for a
+**Warning: A practice bank built with `roi=None` encodes the venue.** References for a
 prop must be cropped to the prop. `tools/build_practice_bank.py` warns and
 records the ROI state so a whole-frame bank cannot be mistaken for a prop bank.
 
-⚠ **Still owed:** the same sweep with ROI-cropped references, which should move
+**Caution: Still owed:** the same sweep with ROI-cropped references, which should move
 both columns and may lower the 60. The number above is for whole-frame
 references and is the conservative case.
 
-### 22.1 ⭐ The fix: identity is the DETECTOR's job, position is the bank's
+### 22.1 The fix: identity is the DETECTOR's job, position is the bank's
 
 `CheckpointBank.recognise()` asserts an identity only when three checks that
 fail for **unrelated reasons** agree — turbidity blinds the detector and the
@@ -4013,13 +4013,13 @@ matcher together and moves the IMU not at all:
 | semantics | a detector hypothesis of the same class | within **3.0 s** |
 | kinematics | vehicle attitude vs the checkpoint's | within **45°** |
 
-⭐ **The detector is the identity authority even when it is useless as a
+**Key point: The detector is the identity authority even when it is useless as a
 position.** Its failure mode is semantic — it *misses* — not confusing a gate
 for a torpedo, so a hypothesis far below the control-confidence gate is strong
 evidence of WHAT is in frame. That division is the whole design: identity from
 the detector, position from the bank.
 
-⛔ **Unknown is not agreement.** A check whose input is absent is skipped and
+**Warning: Unknown is not agreement.** A check whose input is absent is skipped and
 says so in `identity_why`; it is never counted as a pass.
 
 **Verified against the footage that produced the defect**, same 8 whole-frame
@@ -4027,15 +4027,15 @@ torpedo references:
 
 | clip | `locate().ok` | `identity_ok` | wanted |
 |---|---|---|---|
-| torpedo_1 — same prop, other run | 100 % | **57 %** | ACCEPT ✅ |
-| gate.mkv — other prop | 100 % | ⛔ **0 %** | REJECT ✅ |
+| torpedo_1 — same prop, other run | 100 % | **57 %** | ACCEPT |
+| gate.mkv — other prop | 100 % | **Warning: 0 %** | REJECT |
 
 Geometry alone accepted the gate on **every** frame; the gate rejects it on
 every frame, and keeps exactly the 57 % of true frames the sweep predicted.
 
 ---
 
-## 23. ⭐ Approach-driven acquisition: the premise holds, but not monotonically
+## 23. Approach-driven acquisition: the premise holds, but not monotonically
 
 **2026-09-24.** The operator's proposal: take a *faint* detection, let the
 anchor hold it, drive closer, and the detection strengthens until it can be
@@ -4053,24 +4053,24 @@ Size is √area, which is linear in 1/range for a fixed object:
 | gate · 2 | 547 | 0.27 | 0.335 → 0.370 → 0.431 → **0.510** |
 | octagon · 2 | 1834 | 0.32 | 0.337 → 0.519 → 0.490 → **0.610** |
 | octagon · 1 | 50 | 0.46 | 0.215 → 0.543 → 0.715 → 0.550 |
-| gate · 0 | 963 | 0.24 | 0.193 → **0.525** → 0.493 → ⚠ 0.413 |
+| gate · 0 | 963 | 0.24 | 0.193 → **0.525** → 0.493 → 0.413 |
 | gate · 1 | 583 | 0.11 | 0.252 → 0.280 → 0.285 → 0.293 |
-| torpedo · 0 | 756 | ⛔ **0.05** | 0.094 → 0.096 → 0.127 → 0.099 |
+| torpedo · 0 | 756 | **Warning: 0.05** | 0.094 → 0.096 → 0.127 → 0.099 |
 
 ### What this licenses
 
-⭐ **Closing distance roughly doubles confidence on the classes where it works**
+**Key point: Closing distance roughly doubles confidence on the classes where it works**
 — torpedo class 2 goes 0.260 → 0.521 across the size range. An anchor that holds
 a 0.26 detection while the vehicle closes is buying a 0.52 one, and 0.52 clears
 thresholds that 0.26 does not. **The loop is real.**
 
 ### Two qualifications, and the second changes the control law
 
-⛔ **It is flat on some classes** — torpedo class 0 at Spearman 0.05 and 0.094 →
+**Warning: It is flat on some classes** — torpedo class 0 at Spearman 0.05 and 0.094 →
 0.099 across the whole range. For those, closing buys nothing and the approach
 must be justified by something else or abandoned.
 
-⭐⭐ **Confidence is NOT monotonic in size.** `gate` class 0 peaks in the
+**Key point:** **Confidence is NOT monotonic in size.** `gate` class 0 peaks in the
 *second* quartile (0.525) and falls to 0.413 in the largest — and octagon
 class 1 peaks in the third (0.715 → 0.550). Too close is worse than
 well-placed, which is consistent with partial views and lost context at short
@@ -4087,23 +4087,23 @@ gives per class.
 confidence-vs-size correlation is measured positive**, and it must target the
 measured peak band rather than minimum range.
 
-⚠ **Confound, stated:** a closer target is also better lit, less
+**Caution: Confound, stated:** a closer target is also better lit, less
 backscattered and more centred, so this measures the whole approach rather than
 scale alone. That is the right quantity for "does driving closer help?" and the
 wrong one for a claim about scale sensitivity in isolation.
-⚠ Class ids are this graph's, and the per-class numbers do not transfer to a
+**Caution:** Class ids are this graph's, and the per-class numbers do not transfer to a
 different model without re-measuring.
 
 ---
 
-## 24. ⭐ The downward camera CAN recognise a place — three bars, not one
+## 24. The downward camera CAN recognise a place — three bars, not one
 
 **2026-09-24.** The operator asked whether the downward camera plus XFeat could
 remember places, giving the localiser waypoints and loop closures — the one
 correction a dead-reckoning filter with no GPS and no DVL cannot generate for
 itself.
 
-⚠ **The standing prediction was that this fails.** `vision-features-and-matching.md`
+**Caution: The standing prediction was that this fails.** `vision-features-and-matching.md`
 holds that place recognition over a tiled floor is defeated by aliasing
 ("nothing on a tiled floor — aliasing is total"), and §22 measured a generic
 structural view matching a different run of itself on only 8 % of frames.
@@ -4119,7 +4119,7 @@ unless the floor aliases:
 | octagon_Bottom | 276 | **168** | 9 | 20 | 92 % | 17 % | SEPARATES |
 | bin | 276 | **192** | 16 | 81 | 100 % | 55 % | SEPARATES |
 
-⭐ **Same place separates from different place on all three floors, including
+**Key point: Same place separates from different place on all three floors, including
 the caustic-lit one.** The near median is 6–19× the far median.
 
 ### The prediction was about a different thing, and that is the lesson
@@ -4128,19 +4128,19 @@ The aliasing claim came from **NetVLAD/CosPlace-class GLOBAL descriptors**,
 which pool a whole image into one vector and therefore cannot tell one tile from
 an identical tile. XFeat matches **local** features with a geometric
 verification on top, so a repeating pattern produces many candidate
-correspondences that MAGSAC then fails to fit to a single homography. ⭐ The
+correspondences that MAGSAC then fails to fit to a single homography. The
 aliasing prediction stands for the method it was made about and **does not
 transfer** to this one. Recorded because inheriting it would have closed a
 capability we turn out to have.
 
-### ⛔ But the bar cannot be 15
+### But the bar cannot be 15
 
 The far tail clears `MIN_INLIERS` on **17–55 %** of pairs. A loop closure is a
 hard constraint injected into an EKF; accepting a wrong one is far worse than
 missing a right one, because the filter will then confidently converge on a
 false position. Far p90 is 20–81 against a near p50 of 76–192.
 
-⭐ **Three bars, three questions** — and they are not the same number:
+**Key point: Three bars, three questions** — and they are not the same number:
 
 | question | bar | source |
 |---|---|---|
@@ -4148,7 +4148,7 @@ false position. Far p90 is 20–81 against a near p50 of 76–192.
 | is this that prop? (identity, reacquire) | **60** | §22, swept |
 | am I where I was before? (loop closure) | **~100** | this table, far p90 |
 
-⚠ **What this does NOT establish.** A far pair that matches may be a genuine
+**Caution: What this does NOT establish.** A far pair that matches may be a genuine
 REVISIT rather than an alias, and without trajectory ground truth these are
 indistinguishable — so the far tail is a reason to set the bar high, not a
 proof of aliasing. And these are three clips from one archive: the bar of 100 is
@@ -4156,7 +4156,7 @@ a starting point that a pool day with known positions should replace.
 
 ---
 
-## 25. ⛔ The identity bar was derived on a configuration production does not use
+## 25. The identity bar was derived on a configuration production does not use
 
 **2026-09-24.** §22 swept the identity bar to **60** inliers. That sweep used
 **whole-frame** references — 1024 keypoints spread over water, pool edge and
@@ -4185,13 +4185,13 @@ Swept, true = same prop other run, false = other prop:
 | 25 | 79 % | 50 % |
 | 30 | 64 % | 21 % |
 | **40** | **64 %** | **7 %** |
-| 60 *(was shipped)* | ⛔ **14 %** | 0 % |
+| 60 *(was shipped)* | **Warning: 14 %** | 0 % |
 
-⛔ **At 60, a true re-acquisition fires on 14 % of frames — effectively never,
+**Warning: At 60, a true re-acquisition fires on 14 % of frames — effectively never,
 and nothing would log a fault.** That is the failure direction that hides: a
 capability that silently does not work. The bar is now **40**.
 
-⚠ **40 admits 7 % of other-prop frames rather than 0 %, deliberately.**
+**Caution: 40 admits 7 % of other-prop frames rather than 0 %, deliberately.**
 `recognise()` does not decide on geometry alone: the detector must also agree on
 the class, and its failure mode is *missing* things rather than confusing them,
 so a 7 % geometric false rate meets a semantic check uncorrelated with it. The
@@ -4211,7 +4211,7 @@ mismatch is visible at the point of use.
 
 ---
 
-## 26. ⭐ XFeat's settings, chosen on our own water — and the benchmark that lied
+## 26. XFeat's settings, chosen on our own water — and the benchmark that lied
 
 **2026-09-24.** The shipped settings were inherited rather than chosen:
 `top_k=1024` because the anchor could afford it, `det_thresh=0.05` because it is
@@ -4232,18 +4232,18 @@ because it fit the rate budget.
 
 Two facts worth keeping:
 
-⭐ **`top_k` and `det_thresh` are coupled.** The threshold *gates*, `top_k`
+**Key point: `top_k` and `det_thresh` are coupled.** The threshold *gates*, `top_k`
 *caps*, so 2048 only pays with a low threshold — at 2048/0.10 it collapses to
 78, indistinguishable from 1024.
 
-⛔ **640×480 is WORSE than 320×240 on murky water, everywhere** — 33 vs 69
+**Warning: 640×480 is WORSE than 320×240 on murky water, everywhere** — 33 vs 69
 murky p50 at top_k 1024, for 2× the detect cost. More pixels spread the same
 keypoint budget over four times the area, and downscaling appears to act as a
-denoiser in turbid water. ⚠ This is an INLIER result; pose *precision* is a
+denoiser in turbid water. This is an INLIER result; pose *precision* is a
 different metric and 640 may still help there. But 640 is not free and is not
 an automatic upgrade.
 
-### 26.2 ⛔ And the sweep's headline does not survive the system
+### 26.2 And the sweep's headline does not survive the system
 
 `top_k=2048` costs **125.0 ms per match on the Pi** against 31.4 ms at 1024 —
 4×, because the similarity matrix is O(N²) in keypoints. At a fixed ~125 ms
@@ -4258,7 +4258,7 @@ that is the comparison that matters:
 | **all, median** | **40** | 32 |
 | floor | **6** | 5 |
 
-⭐ **Bank breadth beats keypoint density at equal cost.** The setting that
+**Key point: Bank breadth beats keypoint density at equal cost.** The setting that
 doubled inliers in isolation loses by 25 % once its time is spent on the system
 it lives in.
 
@@ -4269,7 +4269,7 @@ were right by luck, but because the alternatives were measured and lose.
 
 ### The method note
 
-⚠ **An isolated benchmark can favour a setting that loses in the system.** The
+**Caution: An isolated benchmark can favour a setting that loses in the system.** The
 +1/3/5 s pair sweep is a fair measurement of one match and a misleading
 measurement of the rung, because the rung spends its budget on a *bank*. Price a
 setting in the currency the system actually spends — here, milliseconds against
@@ -4277,12 +4277,12 @@ a 333 ms period — before adopting it.
 
 ---
 
-## 27. ⭐ Preloading across SESSIONS: works for position, not for identity
+## 27. Preloading across SESSIONS: works for position, not for identity
 
 **2026-09-24.** §21.3 measured preloading across two runs *on one day* (92 %,
 100 % over the trust bar). Two harder cases now, both on the 2026 archive.
 
-### 27.1 ⛔ Across YEARS it fails completely — and that is the props changing
+### 27.1 Across YEARS it fails completely — and that is the props changing
 
 Bank from 2025 footage, queried on 2026 footage of the "same" prop:
 
@@ -4292,21 +4292,21 @@ Bank from 2025 footage, queried on 2026 footage of the "same" prop:
 | gate | 327 | **11** | 0 % | 0 % |
 | octagon | 54 | **10** | 0 % | 0 % |
 
-⚠ **This is not a preloading result.** The props are rebuilt between years, so
+**Caution: This is not a preloading result.** The props are rebuilt between years, so
 this measures how different they are, and the answer is *completely* — the
 cross-year score is indistinguishable from the wrong-prop score. **Operational
 rule: a preloaded bank is year- and venue-specific and must be rebuilt.**
 
-### 27.2 ⭐ Same prop, same year, different session — the real practice case
+### 27.2 Same prop, same year, different session — the real practice case
 
 Bank from one 2026 session, queried on a *different* 2026 session:
 
 | prop | same session | other session p50 | p90 | ≥15 | ≥40 | other prop p50 / ≥40 |
 |---|---|---|---|---|---|---|
-| torpedo | 150 | **23** | 31 | **100 %** | ⛔ 12 % | 12 / 0 % |
-| gate | 167 | **25** | 26 | **100 %** | ⛔ 0 % | 9 / 0 % |
+| torpedo | 150 | **23** | 31 | **100 %** | **Warning:** 12 % | 12 / 0 % |
+| gate | 167 | **25** | 26 | **100 %** | **Warning:** 0 % | 9 / 0 % |
 
-⭐ **Every frame clears the TRACKING bar (15). Almost none clears the IDENTITY
+**Key point: Every frame clears the TRACKING bar (15). Almost none clears the IDENTITY
 bar (40).** And the wrong prop is rejected outright — p50 9–12, 0 % over 40.
 
 ### The bar, and it confirms the architecture rather than changing it
@@ -4318,26 +4318,26 @@ attitude. A preloaded reference will normally fail the geometry half across
 sessions, so the detector's opinion is not a nicety — it is the only thing that
 can license an identity on a preloaded checkpoint.
 
-⚠ **Degradation is graded, not binary**: same run p50 150–167, same day other
+**Caution: Degradation is graded, not binary**: same run p50 150–167, same day other
 run 57 (§21.3), other session 23–25, other year 11–12. Each step of domain
 shift costs roughly half. Useful for deciding how fresh a practice bank has to
 be: **same day is worth a great deal; last year is worth nothing.**
 
 ---
 
-## 28. ⭐⭐ XFeat runs on the Hailo-8 — 701 FPS, and the bottleneck moves
+## 28. XFeat runs on the Hailo-8 — 701 FPS, and the bottleneck moves
 
 **2026-09-24.** The chip arm, measured. No FPS figure for XFeat on Hailo-8 is
 published anywhere we could find, so this is a new number.
 
 ### 28.1 Getting it to compile
 
-⛔ **Stock XFeat does not parse**: `UnsupportedShuffleLayerError` on 71
+**Warning: Stock XFeat does not parse**: `UnsupportedShuffleLayerError` on 71
 Transposes. The graph carries 71 Transposes, 72 Slices and 70 Unsqueezes, all
 5-D — and they are **one operation**, `XFeatModel._unfold2d(x, ws=8)`, written
 with `Tensor.unfold`, which torch traces as a pile of 5-D slicing.
 
-⭐ **That operation is space-to-depth**, which torch has as `pixel_unshuffle`
+**Key point: That operation is space-to-depth**, which torch has as `pixel_unshuffle`
 and Hailo supports natively. The substitution is **not an approximation**:
 
 | check | result |
@@ -4361,11 +4361,11 @@ Quantised INT8 on the **320 real pool calibration frames** (never sim imagery).
 | XFeat 320×240 **on the Hailo-8** | **701.22 FPS** | **1.43 ms** |
 | XFeat 320×240 on the Pi CPU (§19) | 30.2 Hz | 33.1 ms |
 
-⭐ **23× the Pi's CPU.** And ⭐ **it compiled SINGLE-CONTEXT** — which is the
+**Key point: 23× the Pi's CPU.** And **it compiled SINGLE-CONTEXT** — which is the
 condition §14 said the chip arm needed: single-context pipelines measured
 2.74–4.25× while multi-context was flat at 1.00×.
 
-### 28.3 ⛔ What it does NOT buy, which is most of it
+### 28.3 What it does NOT buy, which is most of it
 
 **Only the backbone is on the chip.** Keypoint decoding, NMS, top-k sampling,
 descriptor interpolation and **the matcher** all run in numpy on the CPU. The
@@ -4377,10 +4377,10 @@ untouched.
 | one `locate()`, 1 reference | 33.1 + 31.4 = **64.5 ms** | 1.4 + 31.4 = **32.8 ms** |
 | bank, shortlist k=4 | 33.1 + 125.6 = **158.7 ms** | 1.4 + 125.6 = **127.0 ms** |
 
-⭐ **The saving is a fixed ~31.7 ms regardless of bank size**, so the larger the
+**Key point: The saving is a fixed ~31.7 ms regardless of bank size**, so the larger the
 shortlist, the smaller the relative win: 2.0× at one reference, 1.25× at four.
 
-⚠ **The bottleneck has moved from the detector to the MATCHER.** Any further
+**Caution: The bottleneck has moved from the detector to the MATCHER.** Any further
 speed comes from the similarity matmul, not the network. That reframes the next
 optimisation entirely.
 
@@ -4398,12 +4398,12 @@ and `XFeatONNX.match()` as shipped, 320×240, real and synthetic frames:
 | one `locate()`, 1 reference | 41.5 ms | **17.1 ms** |
 | bank, shortlist k=4 | 135.7 ms | **38.3 ms** |
 
-⛔ **The 1.43 ms of §28.2 is `hailortcli` throughput, not a call.** One
+**Warning: The 1.43 ms of §28.2 is `hailortcli` throughput, not a call.** One
 blocking call in a Python process is 4.44 ms on the chip and its output copy,
 and 10.06 ms with the host post-processing. §28.3's "1.4 + 31.4 = 32.8 ms"
 used the throughput figure as a latency; the real pre-fix sum was 41.5 ms.
 
-⭐ **The matcher was BLAS-bound, not compute-bound.** numpy on the Pi linked
+**Key point: The matcher was BLAS-bound, not compute-bound.** numpy on the Pi linked
 Debian's `libblas3` — the Netlib reference BLAS. The 1024×1024×64 similarity
 matmul: **58.6 ms there, 6.4 ms on OpenBLAS (one thread)**. Correspondences on
 34 real frame pairs from both cameras: 22 352 matches, symmetric difference
@@ -4424,13 +4424,13 @@ thread; sampling descriptors on the HWC layout is bit-identical and no faster
 errors**. So the composed stack (one lock ladder per camera) fits; the swap
 costs ~1.3–2 ms per claimant change.
 
-⛔ **Every Hailo process crashed at exit.** Left to interpreter teardown, the
+**Warning: Every Hailo process crashed at exit.** Left to interpreter teardown, the
 same four-group process exits SIGSEGV (rc 139, sometimes "corrupted
 double-linked list") or hangs; no node ever called `close()`. Closing each
 group and then releasing the VDevice exits 0 in 1.2 s. `detection/hailo.py`
 now does that from `atexit` for every registered claimant.
 
-### 28.6 ⭐ Composed: XFeat runs on the chip in the live graph (2026-10-03)
+### 28.6 Composed: XFeat runs on the chip in the live graph (2026-10-03)
 
 Composing each camera's lock ladder into `detector_dual_node` (the only
 process that may own the Hailo) was first measured as a REGRESSION. Detection
@@ -4471,25 +4471,25 @@ checkpoints enrolled, detections 29.9 Hz, rungs detection 20 % / follow 49 % /
 anchor 0 % / lost 31 %, exit 0. Falsifier (`--cpu-anchor`): backend
 `XFeatONNX`, criterion 1 FAILS, as it must.
 
-⛔ **The harness's first latency bar (15 ms) FAILED at 17.73 ms** and is kept
+**Warning: The harness's first latency bar (15 ms) FAILED at 17.73 ms** and is kept
 on record. It assumed the call has the chip to itself; under the scheduler an
 XFeat call queues behind a detector inference (~10.5 ms) by design. The bar is
 now the CPU path it replaces, 32.9 ms.
 
-⚠ Not shown here: the anchor RUNG taking over (0 % on this clip, whose gaps
+**Caution:** Not shown here: the anchor RUNG taking over (0 % on this clip, whose gaps
 the follower covered). That needs footage with a longer detection gap.
 
 ### 28.4 Owed before this is usable
 
-- ⛔ **Accuracy through INT8 is UNMEASURED.** A HEF that compiles is not a
+- **Warning: Accuracy through INT8 is UNMEASURED.** A HEF that compiles is not a
   result; a HEF that still reads 4/4 on the murky clips is. `torpedo_1` at 12
   inliers against a bar of 15 (§19.1) is the canary.
-- ⚠ `hailortcli run` is a synthetic throughput test with no host work and no
+- **Caution:** `hailortcli run` is a synthetic throughput test with no host work and no
   competing load. **Sharing the chip with the detector is unmeasured** — the
   detector must stay above 90 Hz.
-- ⚠ 701 FPS is throughput, not latency under our own pipeline.
+- **Caution:** 701 FPS is throughput, not latency under our own pipeline.
 
-### 28.5 ⭐ INT8 SURVIVES — the gate, passed
+### 28.5 INT8 SURVIVES — the gate, passed
 
 **2026-09-24.** "A HEF that compiles is not a result; a HEF that still reads
 4/4 on the murky clips is." `tools/hef_vs_cpu.py`, run **on the vehicle**, both
@@ -4504,12 +4504,12 @@ only difference is float32-on-CPU against INT8-on-Hailo:
 | octagon | 184, 113, 74, 25 | 139, 99, 80, **35** | 4/4 → **4/4** |
 | torpedo (clear) | 362, 199, 123, 98 | 344, 197, 108, 89 | 4/4 → **4/4** |
 
-⭐ **Every pass count is identical**, reference keypoints are 1024 on both, and
+**Key point: Every pass count is identical**, reference keypoints are 1024 on both, and
 inliers sit within ~10 % — sometimes above (octagon +8 s: 35 vs 25). The canary
 held: `torpedo_1` at +8 s reads 12 against 13 on CPU, i.e. it was already under
 the bar in float32 and INT8 did not cause it.
 
-### 28.6 ⚠ And the rate claim needs narrowing
+### 28.6 And the rate claim needs narrowing
 
 | measurement | number |
 |---|---|
@@ -4517,19 +4517,19 @@ the bar in float32 and INT8 did not cause it.
 | **single-shot `detect()` through `InferVStreams`** | **13.4 ms** |
 | same on the Pi CPU, same script | 20.0 ms |
 
-⛔ **701 FPS is throughput, not what our pipeline gets.** Single-shot is
+**Warning: 701 FPS is throughput, not what our pipeline gets.** Single-shot is
 **1.5× the CPU**, not 23×. The gap is the host API: `hailo-vision.md` measured
 `InferVStreams` at ~7 ms of per-call overhead against `create_infer_model` /
 `AsyncInferJob`, and this harness uses the old one — plus it re-activates the
 network group per call.
 
 So the honest figure today is **13.4 ms with headroom**, and the next move is
-the modern API rather than anything about the model. ⚠ Quote 701 FPS only as
+the modern API rather than anything about the model. Quote 701 FPS only as
 "the chip can sustain this"; quote 13.4 ms as "what a call costs us".
 
 ---
 
-## 29. ⛔ The bank was building ONE reference — three defects, found by looking
+## 29. The bank was building ONE reference — three defects, found by looking
 
 **2026-09-24.** Every number in §20–§28 is an inlier count, and an inlier count
 says a match is good without saying good **at what**.
@@ -4546,7 +4546,7 @@ screen. The number said "no match"; the picture said *"the prop is unmistakable
 and we had nothing at that scale to compare it to"* — and close-range partial
 views are what a torpedo run actually fires from.
 
-### 29.2 ⛔ Three defects behind it
+### 29.2 Three defects behind it
 
 | # | defect | evidence |
 |---|---|---|
@@ -4554,14 +4554,14 @@ views are what a torpedo run actually fires from.
 | 2 | `enrol` demanded agreement from a bank too thin to judge — **a second bootstrap deadlock** | 10 of 13 refused `'disagrees'`; bank ended the clip at **1 reference** |
 | 3 | `stale` only fires when the match is **bad**, so a healthy bank never grows | 1 reference, identity asserted on **0 %** of later frames |
 
-⭐ **Defect 2 is the same failure I ported a fix for and then half-applied.**
+**Key point: Defect 2 is the same failure I ported a fix for and then half-applied.**
 `dino_idea_v12.py:458` rejects only `if score < THRESH **and
 len(templates) > 2**` — the gate switches on once three templates exist. I
 ported the first-reference bootstrap and missed the thin-bank one.
 
 ### 29.3 The fixes, and what they bought
 
-- `CONF_FLOOR` **0.60 → 0.25**. ⚠ A fixed absolute floor is the wrong *shape*
+- `CONF_FLOOR` **0.60 → 0.25**. A fixed absolute floor is the wrong *shape*
   as well as the wrong number: §6b records our recall swinging
   **29.2 / 72.7 / 68.3 %** across venues. The checks that discriminate are
   elsewhere and measured — geometric agreement at enrol, eviction by yield, and
@@ -4577,12 +4577,12 @@ the rest:
 
 | policy | references | identity asserted | median inliers |
 |---|---|---|---|
-| as shipped this morning | **1** | ⛔ **0 %** | 0 |
+| as shipped this morning | **1** | **Warning: 0 %** | 0 |
 | stale only, after the fixes | 5 | 26 % | 23 |
 | stale + scale coverage | 5 | 26 % | 23 |
 | **while there is room** | **11** | **33 %** | **27** |
 
-### 29.4 ⚠ And a scale-coverage result that was mine to get wrong
+### 29.4 And a scale-coverage result that was mine to get wrong
 
 A first A/B showed scale coverage *halving* performance — 14 references and
 3/8 down to 3 references and 0/8. That measured an **inverted policy**: the
@@ -4599,7 +4599,7 @@ this file and died within minutes of drawing the quad on the image.
 
 ---
 
-## 30. ⛔ XFeat cannot arbitrate weak detections yet — and the reason names the fix
+## 30. XFeat cannot arbitrate weak detections yet — and the reason names the fix
 
 **2026-09-24.** The operator's proposal, and it is a good one: a detector
 confidence is a semantic opinion with no geometry behind it, and the bank's
@@ -4620,16 +4620,16 @@ detection in the second half of that clip (TRUE) and of `gate.mkv`
 
 | | n | inliers p50 | inliers p90 | quad inside the box, p50 |
 |---|---|---|---|---|
-| TRUE | 23 | **20** | 55 | ⛔ **0 %** |
-| DISTRACTOR | 25 | ⛔ **26** | 43 | ⛔ **0 %** |
+| TRUE | 23 | **20** | 55 | **Warning: 0 %** |
+| DISTRACTOR | 25 | **26** | 43 | **Warning: 0 %** |
 
-⛔ **The distractor scores HIGHER than the true clip**, and the warped quad
+**Warning: The distractor scores HIGHER than the true clip**, and the warped quad
 almost never lands inside the detector's box. Swept across bars:
 
 | inlier bar | overlap | TRUE | DISTRACTOR |
 |---|---|---|---|
-| 15 | 0 % | 57 % | ⛔ 96 % |
-| 25 | 0 % | 35 % | ⛔ 64 % |
+| 15 | 0 % | 57 % | **Warning:** 96 % |
+| 25 | 0 % | 35 % | **Warning:** 64 % |
 | 40 | 0 % | 22 % | 16 % |
 | any | 30 % | 4 % | 4 % |
 
@@ -4643,7 +4643,7 @@ features are in every Mirpur frame, so the bank matches the *venue* and scores
 the gate clip as well as the torpedo clip. The 0 % quad overlap says the same
 thing from the other side: the homography is not fitting the prop.
 
-### ⭐ The fix is masks, not thresholds — and it is already priced
+### The fix is masks, not thresholds — and it is already priced
 
 §6c records `floor_plane.py` taking its contact point from a **box bottom
 edge**, where a segmentation mask would *measure* it, and notes **`yolov8n_seg`
@@ -4652,7 +4652,7 @@ capability solves this: **enrol from a MASK, so the reference contains the prop
 and nothing else.**
 
 Until then `corroborate()` ships **refusing** rather than guessing, and is
-documented as not yet discriminating. ⚠ It must not be wired into any control
+documented as not yet discriminating. It must not be wired into any control
 path: at the tracking bar it corroborates 96 % of distractor frames.
 
 ### The bar
@@ -4663,7 +4663,7 @@ by appearance — is gated on mask-based enrolment, not on a threshold sweep.
 
 ---
 
-## 31. ⛔ §30 WITHDRAWN — the failure was the wrong detector, not the bounding box
+## 31. §30 WITHDRAWN — the failure was the wrong detector, not the bounding box
 
 **2026-09-24.** §30 concluded that `corroborate()` could not discriminate
 because a *box* reference encodes its venue, and named mask-based enrolment as
@@ -4677,7 +4677,7 @@ footage it produces weak, badly-placed boxes: confidence **p50 0.49**, and it
 fires on the gate clip as readily as the torpedo clip. The crops fed to the bank
 were therefore not of the prop, and the bank learned what was in them: water.
 
-⚠ **`~/Music/detect` holds 118 trained model directories**, including
+**Caution: `~/Music/detect` holds 118 trained model directories**, including
 per-prop torpedo, gate, octagon and bin models. Measured over four torpedo
 models on the same frames:
 
@@ -4697,13 +4697,13 @@ of the torpedo clip (TRUE) and the gate clip (DISTRACTOR):
 |---|---|---|---|---|
 | **box crop, correct model** | 10 | 10 | **0** | **9.5×** |
 | GrabCut mask, correct model | 4 | 0 | 0 | 0.0× |
-| box crop, §30's wrong model | 16 | 20 | ⛔ 26 | ⛔ 0.8× |
+| box crop, §30's wrong model | 16 | 20 | 26 | **Warning:** 0.8× |
 
-⭐ **The distractor drops to p50 0.** The venue-contamination story was real in
+**Key point: The distractor drops to p50 0.** The venue-contamination story was real in
 §22 (whole-frame references) and **false here** — a box from a model that
 actually localises the prop contains the prop.
 
-### ⛔ And masks-from-detections made it WORSE
+### And masks-from-detections made it WORSE
 
 The operator's idea — derive masks from detections so mask-based enrolment can
 be tested before any segmentation model is trained — is a good one and was
@@ -4712,7 +4712,7 @@ references and TRUE p50 0**. A tight prop box leaves little to segment, and
 GrabCut strips enough that too few keypoints survive. **Masking is not the
 lever.**
 
-### ⚠ What is still wrong
+### What is still wrong
 
 TRUE p50 is **10**, below `MIN_INLIERS = 15`. Separation is excellent and
 absolute strength is poor, because this model's boxes are tight on the
@@ -4729,7 +4729,7 @@ available the whole time.
 
 ---
 
-## 32. ⭐ XFeat and the detector CAN share the chip — and the anchor's 3 Hz is obsolete
+## 32. XFeat and the detector CAN share the chip — and the anchor's 3 Hz is obsolete
 
 **2026-09-24.** §28.4 listed chip contention as unmeasured. Measured now, on the
 vehicle.
@@ -4739,7 +4739,7 @@ vehicle.
 A second client against the same Hailo-8 fails outright with
 **`HAILO_OUT_OF_PHYSICAL_DEVICES(74)`** while the first keeps its full rate. And
 two network groups cannot both be `activate()`d — that raises
-`HailoRTInvalidOperationException`. ⭐ **Sharing must happen inside one process,
+`HailoRTInvalidOperationException`. **Sharing must happen inside one process,
 with the HailoRT scheduler**, which owns activation itself.
 
 ### 32.2 Naive round-robin halves the detector
@@ -4749,10 +4749,10 @@ with the HailoRT scheduler**, which owns activation itself.
 | detector (`sauvc_sim`, 3 contexts) | 95.1 Hz | **48.7 Hz** | 51 % |
 | XFeat (single context) | 245.7 Hz | 48.4 Hz | 20 % |
 
-⛔ **Fails the ≥ 90 Hz bar.** Round-robin gives each model an equal share, and
+**Warning: Fails the ≥ 90 Hz bar.** Round-robin gives each model an equal share, and
 XFeat takes 48 Hz it has no use for.
 
-### 32.3 ⭐ Throttled to what the anchor wants, it is nearly free
+### 32.3 Throttled to what the anchor wants, it is nearly free
 
 | XFeat target | detector Hz | XFeat Hz | detector keeps |
 |---|---|---|---|
@@ -4762,7 +4762,7 @@ XFeat takes 48 Hz it has no use for.
 | **10 Hz** | 85.3 | 9.5 | **90 %** |
 | 30 Hz | 71.7 | 24.0 | 75 % |
 
-### 32.4 ⛔ And the anchor's 3 Hz was a CPU constraint that no longer exists
+### 32.4 And the anchor's 3 Hz was a CPU constraint that no longer exists
 
 `lock_node` evaluates the anchor at **3 Hz** because §14 measured 8 Hz costing
 **+42 % of frame age for no extra coverage** — with XFeat costing **33.1 ms on
@@ -4771,7 +4771,7 @@ the CPU and blocking the loop**. On the chip the call is **4.1 ms**
 produced 3 Hz is gone**, and the table above prices its replacement directly:
 10 Hz of anchor for 10 % of detector rate.
 
-⚠ **The new ceiling is the MATCHER, not the backbone.** The similarity matmul
+**Caution: The new ceiling is the MATCHER, not the backbone.** The similarity matmul
 is still CPU-side at **31.4 ms per reference** (§20), so a 4-wide shortlist
 costs ~126 ms and the anchor tops out near **8 Hz** however fast the backbone
 runs. Raising `anchor_hz` past that buys nothing.
@@ -4780,15 +4780,15 @@ runs. Raising `anchor_hz` past that buys nothing.
 
 **XFeat may share the chip at up to ~10 Hz**, costing the detector ≤ 10 % — but
 only inside the vision process, only with the scheduler enabled, and only
-throttled. ⛔ Unthrottled sharing costs half the detector and must not ship.
+throttled. Unthrottled sharing costs half the detector and must not ship.
 
-⚠ **Owed:** this is synthetic load on both sides. The real `lock_node` does
+**Caution: Owed:** this is synthetic load on both sides. The real `lock_node` does
 host work between inferences, which may change the sharing profile in either
 direction.
 
 ---
 
-## 33. ⭐ The bank ran the backbone FIVE TIMES per lookup
+## 33. The bank ran the backbone FIVE TIMES per lookup
 
 **2026-09-24.** Chasing the matcher bottleneck (§32.4) turned up a defect worth
 more than the optimisation being chased.
@@ -4807,7 +4807,7 @@ Trading keypoints for bank breadth at a fixed budget gave a per-match cost that
 A quarter of the multiply-accumulates should have been far cheaper than 86 % of
 the time. **That flatness was a fixed overhead, not the matmul.**
 
-### ⛔ The defect
+### The defect
 
 `Anchor.locate()` detects internally — `k1, d1 = self._be.detect(gray)`. But
 `CheckpointBank.locate()` asks *several* references about **one frame**, so a
@@ -4826,10 +4826,10 @@ detects once and hands them to every reference.
 | **4** | **51** | 6 | **169.1** | **94.4** |
 | 8 | 51 | 6 | — | 140.7 |
 
-⭐ **1.8× at the shipping width, with no accuracy cost** — the numbers are
+**Key point: 1.8× at the shipping width, with no accuracy cost** — the numbers are
 identical arithmetic, just not repeated.
 
-### ⭐ And it changes what the chip is worth
+### And it changes what the chip is worth
 
 §28.3 concluded the chip saves "a fixed ~31.7 ms regardless of bank size,"
 because detection was assumed to happen once. It was happening **k+1 times**, so
@@ -4853,28 +4853,28 @@ being attempted (PCA to 32-D, spatial gating) would have bought 1.1× while an
 
 ---
 
-## 34. ⭐ The bank runs on the VEHICLE — and two defects only hardware could find
+## 34. The bank runs on the VEHICLE — and two defects only hardware could find
 
 **2026-09-24.** Everything in §20–§33 was bench and archive. The bank had never
 run on the Pi. It has now, and the first two attempts failed for reasons **1 031
 passing tests could not see**, because nothing in the suite constructs a ROS
 node.
 
-### 34.1 ⛔ `_load_bank` was called and never defined
+### 34.1 `_load_bank` was called and never defined
 
     [WARN] [LOCK ] anchor DISABLED: AttributeError: 'LockNode' object has no
            attribute '_load_bank' -- the follower rung still runs
 
 A patch matched on `def _frame_for(self, header)` when the real signature is
 `det_header`, so the insertion **silently did nothing** while the call site
-landed. ⚠ And the node **degraded exactly as designed** — a WARN, not a crash —
+landed. And the node **degraded exactly as designed** — a WARN, not a crash —
 so it would have run a whole pool day with the anchor rung off.
 
 Guarded by `test_lock_node_methods_exist.py`, which parses the source with
 `ast` (no rclpy needed) and asserts every `self.<method>()` call resolves.
 Injection-verified: deleting the definition fails it, restoring passes.
 
-### 34.2 ⛔ `device_path:=` was read, logged, and ignored
+### 34.2 `device_path:=` was read, logged, and ignored
 
     [CAM  ] device_path (port-stable) → /dev/video0
     [CAM  ] v4l2 mailbox failed on '/dev/mongla_cam_forward'
@@ -4885,19 +4885,19 @@ overrode `profile['device']` only — a different key. The v4l2 mailbox reads
 `device_path`, so it kept opening a udev symlink that does not exist on this
 host, while the log line directly above said the override had applied.
 
-⭐ **A parameter that is read, logged and then ignored is worse than an
+**Key point: A parameter that is read, logged and then ignored is worse than an
 unsupported one: every log says it worked.** The whole graph produced no images,
 no detections and no lock, and every rung reported 0 %.
 
 Fixed by writing both keys; guarded by
 `test_device_path_override_reaches_the_camera.py`.
 
-### 34.3 ⭐ And then it worked — with no detector at all
+### 34.3 And then it worked — with no detector at all
 
 With the camera fixed: **`pub=37.0 Hz, sent=74, dropped=0`**, detections at
 **33.4 Hz**.
 
-⚠ The detector found no `person`: the live frame is an extreme face close-up,
+**Caution:** The detector found no `person`: the live frame is an extreme face close-up,
 monochrome, **mean 204/255 — blown out**. That is a legitimate miss, not a bug,
 and it is exactly the condition the anchor exists for.
 
@@ -4906,13 +4906,13 @@ for 12 s on the vehicle camera:
 
 | | |
 |---|---|
-| scene held | ⭐ **100 % of 32 frames** |
+| scene held | **Key point: 100 % of 32 frames** |
 | inliers | **467–595** |
 | offsets | sub-pixel, scale 1.00 |
 | match cost | **29.8 ms** (§20 predicted 31.4) |
 | full `locate()` at 4-wide | **134 ms ≈ 7.5 Hz** (§32.4 predicted ~8 Hz) |
 
-⚠ **The scene was static**, so this demonstrates station-keeping rather than
+**Caution: The scene was static**, so this demonstrates station-keeping rather than
 tracking through motion. The dx/dy of ~0 is the operator standing still, not a
 tracking result.
 
@@ -4924,7 +4924,7 @@ parameter, survived the entire suite and died in the first two launches.
 
 ---
 
-## 35. ⭐⭐ THE WHOLE LADDER, ON THE VEHICLE, LOSING NOTHING
+## 35. THE WHOLE LADDER, ON THE VEHICLE, LOSING NOTHING
 
 **2026-09-24.** `vision_pi.launch.py` with the forward camera, `yolov11n` on the
 Hailo, `lock_class:=person`, a person moving in frame. Every rung fired:
@@ -4936,7 +4936,7 @@ Hailo, `lock_class:=person`, a person moving in frame. Every rung fired:
 [LOCK ] detection=77%   follow=10%  anchor=14%  lost=0%
 ```
 
-⭐ **`lost=0 %` for the whole run.** When the detector dropped to 77 %, the
+**Key point: `lost=0 %` for the whole run.** When the detector dropped to 77 %, the
 follower took 10 % and **the anchor took 14 %** — the ladder covering a real gap
 on real hardware, which is the entire point of the rung.
 
@@ -4958,17 +4958,17 @@ size is changing, then room-filling.
 
 | owed | state |
 |---|---|
-| §34: "a rung is not verified until it has run on the vehicle" | ✅ all four rungs exercised |
-| §29: enrolment policy fixes (1 ref → 11) | ✅ 6 checkpoints from a 70 s run |
-| §32: anchor sharing the chip with the detector | ✅ both ran together, detector kept inferring |
+| §34: "a rung is not verified until it has run on the vehicle" | all four rungs exercised |
+| §29: enrolment policy fixes (1 ref → 11) | 6 checkpoints from a 70 s run |
+| §32: anchor sharing the chip with the detector | both ran together, detector kept inferring |
 
-⚠ **Still bench-only:** the loop-closure path (§24), the preloaded bank
+**Caution: Still bench-only:** the loop-closure path (§24), the preloaded bank
 (`bank_forward`), `corroborate()` (§30/§31), and anything underwater. This was
 a person in air, in a room.
 
 ---
 
-## 36. ⭐⭐ THE LADDER ON HARD INPUT — AND A FIXTURE THAT REPLACES A PERSON
+## 36. THE LADDER ON HARD INPUT — AND A FIXTURE THAT REPLACES A PERSON
 
 **2026-09-24.** Until today every vision measurement needed a human standing in
 front of the camera while the measurement ran, so no two numbers were ever
@@ -5001,10 +5001,10 @@ The same bag played back through the real graph with no camera attached:
 | dark | 42 % | 44 % |
 | lock held | 72 % | 68 % |
 
-⭐ That agreement is what makes the fixture worth having: a number taken today
+**Key point:** That agreement is what makes the fixture worth having: a number taken today
 and a number taken after a change now mean the same thing.
 
-### ⭐ The ladder, measured on input that is actually hard
+### The ladder, measured on input that is actually hard
 
 Forward node, windows where the ladder was doing anything:
 
@@ -5013,7 +5013,7 @@ detection 46.7%   follow 14.2%   anchor 8.2%   lost 30.9%
 anchor fires in 27% of windows, carrying 30% on average (max 58%)
 ```
 
-⛔ **CORRECTION, same day: those are REPLAY numbers, and the replay is
+**Warning: CORRECTION, same day: those are REPLAY numbers, and the replay is
 pessimistic about the ladder.** The live run's own log, on the same footage:
 
 | | live | replay @1.0 | replay @0.5 |
@@ -5024,12 +5024,12 @@ pessimistic about the ladder.** The live run's own log, on the same footage:
 | **lost** | **25.2 %** | 30.9 % | 39.8 % |
 | anchor fired in | **42 %** of windows | 27 % | 21 % |
 
-⭐ **The ladder's real bar is `lost` = 25.2 %**, against 0 % on the easy live
+**Key point: The ladder's real bar is `lost` = 25.2 %**, against 0 % on the easy live
 run (§35). §35 is not wrong, it is *unrepresentative* — the target was present
 almost throughout — and the gap between 0 % and 25.2 % is the entire value of
 recording a hard session.
 
-⛔ **And slowing the playback makes it WORSE, not better.** The obvious theory
+**Warning: And slowing the playback makes it WORSE, not better.** The obvious theory
 was that the Pi cannot both play a 4.7 GB bag and infer at full rate (20.5 Hz
 of detections replayed against 41.2 Hz live), so halving the rate should let it
 keep up. It does not: `lost` goes 30.9 % → **39.8 %**. The ladder decays
@@ -5038,7 +5038,7 @@ slowing playback *widens* the real interval between detections. The two cannot
 be traded off, and there is no rate at which the fixture reproduces live ladder
 occupancy.
 
-⭐ **So the fixture's scope is bounded, and that is a result rather than a
+**Key point: So the fixture's scope is bounded, and that is a result rather than a
 disappointment:** it is faithful for **detector-level** quantities (51 % vs
 52 % of messages carrying a box) and systematically **pessimistic for ladder
 occupancy** at any rate. Use it to compare detectors, thresholds and models;
@@ -5055,7 +5055,7 @@ The anchor is genuinely load-bearing: live, it fires in **42 %** of windows.
 2. **"anchor = 0 % everywhere"** — true of the windows I happened to read, false
    of the run: 14 of 51 windows have anchor > 0.
 
-### ⛔ A defect in the recorder itself, fixed
+### A defect in the recorder itself, fixed
 
 A backgrounded child of a **non-interactive** shell inherits `SIGINT` set to
 IGNORE, and an ignored disposition survives `exec` — no later `trap` undoes it.
@@ -5084,13 +5084,13 @@ Raw `/mongla/imu` is recorded alongside the derived `imu_rates` on purpose: a
 noise fixture holding only the derived signal cannot be re-derived differently
 later.
 
-⚠ **`baro health: not initialised`** during this record, so it carries **no
+**Caution: `baro health: not initialised`** during this record, so it carries **no
 depth noise**. Per the board contract that also means every move verb would be
 refused — the vehicle would arm and not move.
 
 ---
 
-## 37. ⭐⭐ WHAT THE BOARD'S IMU SAYS WHEN NOTHING IS MOVING
+## 37. WHAT THE BOARD'S IMU SAYS WHEN NOTHING IS MOVING
 
 **2026-09-24.** SROT board on the bench, disarmed, untouched for 30 minutes.
 A vehicle at rest is the only condition outside water where truth is known
@@ -5110,12 +5110,12 @@ bench, so these are sensor statistics and not desk statistics.
 | y | +0.000321 | 0.0994 | 0.0136 | 0.000328 | 660 s |
 | z | −0.000018 | 0.0987 | 0.0152 | 0.000907 | 858 s |
 
-⭐ **Every gyro bias is under 0.0004 deg/s** — three orders of magnitude below
+**Key point: Every gyro bias is under 0.0004 deg/s** — three orders of magnitude below
 the per-sample noise. The board is already estimating and removing gyro bias,
 so what `/mongla/imu` carries is a bias-corrected rate, not a raw sensor. Our
 filter must not estimate that bias a second time.
 
-⭐ **Residual yaw drift: 0.1 deg/hour.** That is the drift left *after* the
+**Key point: Residual yaw drift: 0.1 deg/hour.** That is the drift left *after* the
 board's own correction, and it is small enough that heading error on any
 realistic run is dominated by something other than gyro bias.
 
@@ -5132,18 +5132,18 @@ can be averaged before bias drift takes over. These gyros keep improving out to
 | y | +0.0022 | 0.00426 | 0.00185 | 0.000165 |
 | z | −9.6880 | 0.00533 | 0.00254 | 0.000852 |
 
-⚠ **The x mean is NOT a bias.** `asin(0.8718 / 9.727) = 5.1°`, and `connect`
+**Caution: The x mean is NOT a bias.** `asin(0.8718 / 9.727) = 5.1°`, and `connect`
 read the board at **pitch −4.15°** in the same session: this is gravity
 projected onto a tilted board. Reading it as an accelerometer offset and
 removing it would inject a real 5° error the moment the vehicle is level.
 
-⚠ **|accel| is 0.81 % low** (0.9919 g). Over half an hour with 5 mm/s² of
+**Caution: |accel| is 0.81 % low** (0.9919 g). Over half an hour with 5 mm/s² of
 scatter that is a scale-factor observation, not noise — worth carrying to the
 firmware team rather than compensating for on our side.
 
 ### What this does NOT contain
 
-⛔ **No depth noise.** `baro health: not initialised` throughout. Per the board
+**Warning: No depth noise.** `baro health: not initialised` throughout. Per the board
 contract an unhealthy barometer also refuses `DEPTH_HOLD`/`AUTO`/`PATTERN`, and
 since `SROT_MOVE` enters `AUTO` that means every move verb would have been
 denied — the vehicle would arm and not move. The depth half of this
@@ -5151,7 +5151,7 @@ characterisation is **blocked on a working barometer**, not on time.
 
 ---
 
-## 38. ⭐⭐ XFEAT SURVIVES INT8 ON THE HAILO-8 — THE ARM CLOSES YES
+## 38. XFEAT SURVIVES INT8 ON THE HAILO-8 — THE ARM CLOSES YES
 
 **2026-09-24, on the vehicle.** A HEF that compiles is not a result. The bar
 was §19.1's murky table re-run with the chip as the backbone and **everything
@@ -5170,17 +5170,17 @@ octagon           1024/1024   [184, 113,  74, 25]   [139,  99,  80, 35]  4/4 -> 
 torpedo_clear     1024/1024   [362, 199, 123, 98]   [344, 197, 108, 89]  4/4 -> 4/4
 ```
 
-⭐ **Every clip scores exactly what it scored on CPU.** Quantisation costs a
+**Key point: Every clip scores exactly what it scored on CPU.** Quantisation costs a
 **median −7.7 %** of inliers (mean −5.4 %, worst −24.5 %), and in 5 of 20
 columns INT8 read *higher* — best +40 %, which is MAGSAC's own scatter, not the
 chip being better.
 
-⭐ **The number that decides the arm: zero columns crossed the bar.** 19 of 20
+**Key point: The number that decides the arm: zero columns crossed the bar.** 19 of 20
 columns clear 15 inliers on CPU and **19 of 20 on the chip** — and it is the
 same column that fails, `mirpur_torpedo_1` at +8 s, which read **13 on CPU**
 before INT8 ever touched it.
 
-⚠ **The canary was mis-stated in the plan.** It said "`torpedo_1` at 12 is the
+**Caution: The canary was mis-stated in the plan.** It said "`torpedo_1` at 12 is the
 canary — INT8 must not drop a murky clip below 15". That column was **already
 below 15 on float32**. The real test was whether quantisation pushed any
 *passing* column under, and none did. A canary that was already dead cannot
@@ -5189,11 +5189,11 @@ a working arm.
 
 ### What this closes and what it does not
 
-✅ **Round 1d: YES.** INT8 XFeat matches as well as float32 on our own turbid
+**Round 1d: YES.** INT8 XFeat matches as well as float32 on our own turbid
 water, at **1.56×** the speed on the detect path.
-⛔ It does **not** free the chip: `HAILO_OUT_OF_PHYSICAL_DEVICES` if anything
+**Warning:** It does **not** free the chip: `HAILO_OUT_OF_PHYSICAL_DEVICES` if anything
 else holds the device (see below). Sharing was measured separately in §32.
-⛔ It does **not** transfer to fine-tuned weights. New weights are a new
+**Warning:** It does **not** transfer to fine-tuned weights. New weights are a new
 quantisation and this table must be **re-measured, not assumed** (Round 7e).
 
 ### The trap that blocked this run for an hour
@@ -5202,7 +5202,7 @@ quantisation and this table must be **re-measured, not assumed** (Round 7e).
 (§36), so killing the launcher **orphans its nodes**. Five of them —
 `detector_dual_node`, two trackers, two lock nodes — outlived the replay and
 kept the Hailo claimed, and the only symptom was `HAILO_OUT_OF_PHYSICAL_DEVICES`
-from a tool that has nothing to do with the vision graph. ⛔ **Before blaming
+from a tool that has nothing to do with the vision graph. **Before blaming
 the chip, check who already owns it.**
 
 Two fixes for this were measured and **both failed**, which is worth recording
@@ -5213,21 +5213,21 @@ because each looked correct:
    does **not** forward. Nodes orphaned anyway.
 2. **`setsid cmd &`, then signal the process group.** `os.setsid()` failed in
    this context and the shim died immediately, so `$!` named a pid that had
-   never existed and `stop()` silently signalled nothing. ⛔ The failure was
+   never existed and `stop()` silently signalled nothing. The failure was
    invisible: `stop()` returned success having done nothing at all.
 
-⭐ What works asks nobody to forward anything: **walk the process tree and
+**Key point:** What works asks nobody to forward anything: **walk the process tree and
 signal every descendant directly** (`kill_tree`/`stop_tree` in
 `tools/_record_lib.sh`). `ros2 launch` starts each node as its own child, so
 the tree *is* the node list. Verified on the vehicle:
 `graph stopped; no surviving vision nodes`, count **0**, where all three
 previous attempts left **5**.
 
-⚠ And `stop_tree` now reports **surviving nodes**, not launcher exit. "Launcher
+**Caution:** And `stop_tree` now reports **surviving nodes**, not launcher exit. "Launcher
 stopped" was true during every single run that left five nodes holding the
 chip, so it was the wrong thing to report.
 
-⛔ **A fourth defect, found by the test rather than by the vehicle.** Writing
+**Warning: A fourth defect, found by the test rather than by the vehicle.** Writing
 the guard exposed one the hardware had hidden: `kill_tree` re-walked
 `pgrep -P` at each escalation, and **once the parent exits its children are
 reparented to init**, so the walk can never find them again. Children that
@@ -5247,14 +5247,14 @@ before escalating (never what is signalled), taking the guard from 68 s to
 
 ---
 
-## 39. ⭐ THE LOOP-CLOSURE DECISION LAYER — BUILT, GUARDED, NEVER FLOWN
+## 39. THE LOOP-CLOSURE DECISION LAYER — BUILT, GUARDED, NEVER FLOWN
 
 **2026-09-24.** `mongla_vision/anchor/loop_closure.py` decides when a bank
 match may become a position fix, and `inekf.update_position` takes exactly what
-it emits. ⚠ **It is not wired into `lock_node` yet** — see "what is still
+it emits. **It is not wired into `lock_node` yet** — see "what is still
 owed". What exists is the decision and its guards, pure and tested.
 
-### ⛔ The blocker found first: the machinery was unreachable
+### The blocker found first: the machinery was unreachable
 
 `lock_node` calls `bank.enrol(...)` with **no `position=`**, and subscribes to
 no odometry at all. So every reference carries `ref_position=None`, and
@@ -5264,7 +5264,7 @@ to reach it.
 
 ### What is claimed, and what deliberately is not
 
-⭐ **Proximity, not displacement.** Resolving the homography's offset into
+**Key point: Proximity, not displacement.** Resolving the homography's offset into
 world x and y needs **yaw** as well as altitude, and a yaw error rotates the
 fix into a confidently wrong place. So the fix is the *stored* position, and
 the apparent offset is folded into **sigma** instead.
@@ -5279,11 +5279,11 @@ altitude** · no homography · offset too large. A closure that silently never
 fires is indistinguishable from one that was never wired up, which is exactly
 the state above.
 
-⛔ **No altitude, no closure.** Pixels become metres only with a height above
+**Warning: No altitude, no closure.** Pixels become metres only with a height above
 the floor, and the barometer reports "not initialised" (§37). A constant there
 would put a plausible number where a measurement is missing.
 
-### ⭐ A defect the test caught in my own module
+### A defect the test caught in my own module
 
 The first `offset_metres` warped the **origin** — and `H @ [0,0,1]` *is* H's
 third column, so it was precisely the `H[0,2]/H[1,2]` read the file forbids,
@@ -5291,7 +5291,7 @@ wearing a hat. The offset is now the displacement of the frame **centre**, and
 a test proves a 30° rotation about the centre reads **0.00 m** where the naive
 read would call it a large translation.
 
-### ⭐⭐ What a closure does to the real filter — and the regime that matters
+### What a closure does to the real filter — and the regime that matters
 
 | | fix at the truth |
 |---|---|
@@ -5300,7 +5300,7 @@ read would call it a large translation.
 | 200 repeats of one fix | variance unchanged to 4 figures |
 | a fix 40 m away | **believed**, and covariance shrinks |
 
-⛔ **But only when velocity is aided.** With depth and yaw alone, velocity
+**Warning: But only when velocity is aided.** With depth and yaw alone, velocity
 sigma reaches **21 m/s**, and there a position fix spends its innovation
 **rotating attitude**: `_inject` corrects on the left, so `p ← dR·p + dp`, and
 a 1.50 m error became **2.91 m on the far side**. `update_position` documents
@@ -5309,11 +5309,11 @@ vehicle's downward camera feeds `update_body_velocity_xy` — but it means **a
 loop closure into an unaided filter can make things worse**, and the fixture
 had to be the vehicle's regime before any of these numbers meant anything.
 
-⚠ Depth and yaw aiding do **not** bound horizontal drift (sigma_x 2576 m
+**Caution:** Depth and yaw aiding do **not** bound horizontal drift (sigma_x 2576 m
 unaided, 2572 m aided): x and y are unobservable without a position or
 velocity measurement. That is the case for loop closure, stated as a test.
 
-### ⛔ The trap that cost an hour: `install/` is not `src/`
+### The trap that cost an hour: `install/` is not `src/`
 
 A script that sources `install/setup.bash` imports
 `install/…/mongla_localization/inekf.py`; pytest imports `src/…/inekf.py`.
@@ -5325,20 +5325,20 @@ code.** Worth auditing every tool that does.
 
 ### What is still owed
 
-⛔ `lock_node` wiring: subscribe to `/mongla/odom`, pass `position=` and the
+**Warning:** `lock_node` wiring: subscribe to `/mongla/odom`, pass `position=` and the
 filter's own sigma at enrol, add a **whole-frame** `place:*` enrolment path for
 the downward camera (the ~100 bar was derived on whole-frame references, so
 ROI-cropping would repeat §25), and publish the fix on
 `/mongla/localization/fix` stamped with the **matched frame's** header.
 Default **off**.
-⛔ Truth tests on downward archive footage: a same-clip revisit must fire at
+**Warning:** Truth tests on downward archive footage: a same-clip revisit must fire at
 the revisit and nowhere else; a bank from clip A against clip B must give zero.
-⛔ Neither of today's bags can test any of this: the vehicle has one camera, the
+**Warning:** Neither of today's bags can test any of this: the vehicle has one camera, the
 downward lock published zeros, and there is no altitude.
 
 ---
 
-## 40. ⭐ EVERY SENSOR'S ROLE, WRITTEN DOWN WHERE IT CAN FAIL
+## 40. EVERY SENSOR'S ROLE, WRITTEN DOWN WHERE IT CAN FAIL
 
 **2026-09-24.** "All the sensors are helping" is a claim, so it is now a test:
 `test_every_sensor_is_accounted_for.py` requires each subscribed signal to be
@@ -5358,7 +5358,7 @@ forced when the signal appears rather than remembered later.
 | `/mongla/demand` | the motion-model aid |
 | `floor_grid_deg`, `lane_heading_deg` | **yaw drift bound from the floor** |
 
-### ⭐ Heading needs no magnetometer, and the design says so
+### Heading needs no magnetometer, and the design says so
 
 Heading is taken as an **earth reference once at the start** and held by the
 gyro. The magnetometer is not trusted — a hull full of thrusters is a poor
@@ -5368,7 +5368,7 @@ drift at **0.1 °/hour** with the board's own bias estimate removed, which is
 what makes that affordable. A test pins it so the design cannot be quietly
 changed.
 
-⚠ Note the tension to keep in view: `connect` reports the board's heading as
+**Caution:** Note the tension to keep in view: `connect` reports the board's heading as
 **"ABSOLUTE magnetic from rev 4"**. Our *filter* does not depend on it, because
 the latched heading and the floor geometry define the pool frame — but the
 number on the board's own display is magnetic, and the two should not be
@@ -5383,7 +5383,7 @@ of an input already used; feeding it back double-counts) · `distance_traveled`
 a TARGET, not the vehicle) · `low_quality` (a flag, which belongs in a
 measurement's sigma, not as a measurement).
 
-### ⭐ `floor_height` was the altitude we were missing
+### `floor_height` was the altitude we were missing
 
 `flow_node` publishes it from the **tile grating** and deliberately refuses to
 publish `pool_depth_m − |depth|` under that name, because a typed constant
@@ -5392,12 +5392,12 @@ the grating and requires it to be **fresh** (≤ 2 s); `pool_depth_m` remains as
 an operator fallback that **says what it is**, once. With neither, every
 closure is refused.
 
-⚠ And the two are **different frames** — bottom-referenced altitude versus
+**Caution:** And the two are **different frames** — bottom-referenced altitude versus
 surface-referenced depth. Fusing one as the other is the exact frame confusion
 flagged in the prototype this idea was ported from, so `floor_height` scales
 the closure and is **not** fed to the filter as depth.
 
-### ⛔ Configured WITHOUT launch plumbing — and why
+### Configured WITHOUT launch plumbing — and why
 
 Loop closure was first wired into `vision_pi.launch.py`. **`bringup` includes
 `vision.launch.py`**, so it was unreachable from the documented mission
@@ -5421,13 +5421,13 @@ today's replay exercised both (`lock_node-4` and `-5`). What is new is that the
 
 ---
 
-## 41. ⭐⭐ THE LOOP-CLOSURE TRUTH TEST — THE BAR HOLDS ON REAL WATER
+## 41. THE LOOP-CLOSURE TRUTH TEST — THE BAR HOLDS ON REAL WATER
 
 **2026-09-24.** `tools/loop_closure_truth.py`, three real downward clips
 (`octagon_1`, `octagon_Bottom`, `bin`), the shipped bank and the shipped
 `consider()`. Two arms, because a closure has two opposite ways to be wrong.
 
-### ⛔ The arm that sets the bar: cross-clip
+### The arm that sets the bar: cross-clip
 
 A bank built from clip A, replayed against clip B. **Every closure here is
 false by construction** — the vehicle has never been in venue B's pool holding
@@ -5439,9 +5439,9 @@ worst FALSE closures, per bar, over all six ordered pairs
    15: 24     40: 2     60: 0     80: 0     100: 0     120: 0     150: 0
 ```
 
-⭐ **Zero false closures at 60 and above. The shipped bar is 100**, clean with
+**Key point: Zero false closures at 60 and above. The shipped bar is 100**, clean with
 **1.67× margin.**
-⛔ **The 15-inlier TRACKING bar would have produced 24 false position fixes.**
+**Warning: The 15-inlier TRACKING bar would have produced 24 false position fixes.**
 That is the whole argument for a separate bar, measured rather than asserted:
 §24 predicted it from the far-tail distribution, and this is it happening.
 
@@ -5453,12 +5453,12 @@ That is the whole argument for a separate bar, measured rather than asserted:
 | `octagon_Bottom` | 643 | **4** |
 | `octagon_1` | 511 | **1** |
 
-⚠ **A same-clip closure cannot be proven to be a real revisit** — there is no
+**Caution: A same-clip closure cannot be proven to be a real revisit** — there is no
 ground-truth trajectory for this footage, and a revisit and an alias produce
 the same evidence. So this arm reports a rate, not a verdict. What it does show
 is that the bar is not so high that nothing ever fires.
 
-### ⛔ A defect in the test itself, caught by an impossible number
+### A defect in the test itself, caught by an impossible number
 
 The first run reported `octagon_1: best=511` and **zero** closures at bar 40 —
 impossible, since 511 clears 40. The cause was `EXCLUDE_NEWEST = 2` against a
@@ -5467,14 +5467,14 @@ after its bank was built are precisely the references the frames resemble. The
 self-closure guard is right in production (a 64-slot bank grown over a run) and
 wrong as a harness default, so the evidence arm now stands it down and says so.
 
-⚠ **Worth carrying forward:** `exclude_newest` is a fraction of a small bank.
+**Caution: Worth carrying forward:** `exclude_newest` is a fraction of a small bank.
 At 64 references it removes 3 %; at 12 it removes 17 % and the most relevant
 ones. If a pool day starts with a nearly-empty bank, this is the gate that will
 make it look like loop closure does not work.
 
 ---
 
-## 42. ⭐⭐ POSE PRECISION: 640 IS 2.74× MORE PRECISE THAN 320 — AND §19 STILL STANDS
+## 42. POSE PRECISION: 640 IS 2.74× MORE PRECISE THAN 320 — AND §19 STILL STANDS
 
 **2026-09-24.** `tools/pose_precision.py`. A **known** homography is applied to
 a real frame and the estimate compared against it, so truth is constructed
@@ -5484,13 +5484,13 @@ agreement and cannot rank them.
 ```
                 n     mean      median     p90     (source-frame px)
 320x240        64     3.21       2.43      4.70
-640x480        64     1.17       0.98      2.04     ⭐ 2.74x more precise
+640x480        64     1.17       0.98      2.04     2.74x more precise
 ```
 
 Zero failures at either resolution, across three warp types (drift, rotate,
 close) on `octagon` and `bin`.
 
-⭐ **This does not contradict §19, and the pair together is the finding.**
+**Key point: This does not contradict §19, and the pair together is the finding.**
 §19 measured 640 **worse on RECALL** (33 inliers against 69 on murky water).
 This measures 640 **better on PRECISION by 2.74×**. Both are true because they
 are different questions — *how often does it match* versus *how exactly does it
@@ -5504,19 +5504,19 @@ error in any range or position derived from it. A future metric path (PnP,
 loop-closure offset) has a measured reason to run at 640, and now a number to
 justify the cost with.
 
-⚠ Measured on a **synthetic** warp of real frames. It isolates the estimator
+**Caution:** Measured on a **synthetic** warp of real frames. It isolates the estimator
 from detection failure, which is the point, but it is not a water measurement
 of end-to-end pose.
 
 ---
 
-## 43. ⭐ TIME TO CONTACT, FOR A VEHICLE THAT IS ITSELF MOVING
+## 43. TIME TO CONTACT, FOR A VEHICLE THAT IS ITSELF MOVING
 
 `mongla_vision/time_to_contact.py`. The prototype solved
 `|rel_pos + t·rel_vel|² = r²` exactly — a real quadratic, not `range/speed` —
 and then assumed a **stationary observer**, which its own comment admits.
 
-⭐ **One subtraction away**, because we have an ego-velocity it did not: the
+**Key point: One subtraction away**, because we have an ego-velocity it did not: the
 downward camera, verified to **1.09 cm over 30 cm**. Subtract the vehicle's own
 velocity and the answer is correct for the only case that ever occurs.
 
@@ -5524,7 +5524,7 @@ Measured consequence, pinned as a test: a vehicle closing at 1 m/s on a fixed
 prop 10 m away has **TTC 9.5 s**; the stationary-observer form returns
 **never**, because the prop is not moving.
 
-⛔ **It refuses rather than extrapolating.** Below a closing-rate noise floor
+**Warning: It refuses rather than extrapolating.** Below a closing-rate noise floor
 the answer is "never", not a large finite number — a TTC of 900 s and "not
 approaching" are different decisions, and a controller cannot tell them apart
 if both arrive as floats. It also reports **closest approach** even when
@@ -5534,7 +5534,7 @@ alongside — is exactly what `range/speed` calls an imminent collision.
 
 ---
 
-## 44. ⭐ THE FLOW SCALE HAS TWO INDEPENDENT WITNESSES — AND THEY HAD NEVER BEEN COMPARED
+## 44. THE FLOW SCALE HAS TWO INDEPENDENT WITNESSES — AND THEY HAD NEVER BEEN COMPARED
 
 `mongla_vision/flow/scale_check.py`. Height above the floor multiplies **every**
 flow velocity, so a 20 % height error is a 20 % velocity error integrated into
@@ -5542,7 +5542,7 @@ position with no symptom anywhere. We have two estimates that **share no
 sensor**: the tile grating (`floor_height`) and `pool_depth_m − |depth|` from
 the barometer.
 
-⛔ **It reports; it does not pick.** A divergence says the two disagree, never
+**Warning: It reports; it does not pick.** A divergence says the two disagree, never
 which is wrong — and `pool_depth_m` is the one nobody measures. The prototype
 this came from flagged **its own** frame confusion here (bottom-referenced
 altitude fused as surface-referenced depth); this module compares two estimates
@@ -5556,7 +5556,7 @@ so the sample count cannot be met by data that cannot answer.
 
 ---
 
-## 45. ⚠ TURBIDITY AS CONFIDENCE CALIBRATION — BUILT, OFF, AND HONEST ABOUT ITS CONSTANT
+## 45. TURBIDITY AS CONFIDENCE CALIBRATION — BUILT, OFF, AND HONEST ABOUT ITS CONSTANT
 
 `mongla_vision/detection/confidence_calibration.py`. Detector recall swings
 **29.2 / 72.7 / 68.3 %** across venues, so one shipped threshold cannot be right
@@ -5564,19 +5564,19 @@ in all three — and nothing in the stack knows which water it is in. XFeat's
 match quality is a turbidity proxy computed on every anchor evaluation and
 currently discarded.
 
-⛔ **The risk is that a calibration invents confidence in exactly the conditions
+**Warning: The risk is that a calibration invents confidence in exactly the conditions
 where the stack can least check it.** So the gain is **capped at 0.15**, it can
 never promote a detection the detector did not make (conf 0 stays 0), and with
 no turbidity estimate it returns the input **unchanged** rather than treating
 "unknown" as "clear".
 
-⚠ **The gain is DECLARED, not measured.** Relating match quality to the recall
+**Caution: The gain is DECLARED, not measured.** Relating match quality to the recall
 curve needs a labelled per-venue set we do not have. What *is* measured is the
 recall spread that motivates it. **It ships OFF.**
 
 ---
 
-## 46. ⭐ THE APPROACH SETPOINT IS A BAND, NOT A MINIMUM RANGE
+## 46. THE APPROACH SETPOINT IS A BAND, NOT A MINIMUM RANGE
 
 `mongla_vision/approach.py`. §23 measured confidence against apparent size and
 found it rises **0.260 → 0.521 and then falls** — very close, the prop overflows
@@ -5584,7 +5584,7 @@ the frame and context is lost. So a controller told to *minimise range* drives
 through the best band and out the far side. The advisor can therefore say
 **BACK OFF**, which is the half a "get closer" loop cannot express.
 
-⭐ **Evidence accumulates across VIEWPOINTS, not frames.** Fifty frames from a
+**Key point: Evidence accumulates across VIEWPOINTS, not frames.** Fifty frames from a
 stationary vehicle are one observation seen fifty times, and multiplying their
 likelihoods manufactures certainty from a single look. The bank already knows
 whether the viewpoint moved (high inliers against the last reference = the same
@@ -5592,7 +5592,7 @@ look), so that is the gate: 50 identical looks leave the estimate at **0.5**.
 
 ---
 
-## 47. ⭐⭐ ROUND 7 — XFEAT FINE-TUNED ON OUR OWN WATER, AND THE CANARY FLIPPED
+## 47. ROUND 7 — XFEAT FINE-TUNED ON OUR OWN WATER, AND THE CANARY FLIPPED
 
 **2026-09-24.** Every XFeat number this project has ever taken — the 4/4 murky
 table, the ROOT-SIFT control, the INT8 survival — was **stock weights trained
@@ -5606,7 +5606,7 @@ measurement with weights that have seen our water.
 `xfeat_synthetic` scheme warps each frame (homography + thin-plate spline) and
 keeps the warp as exact correspondence ground truth.
 
-⭐ **The second half is a physics model, not more jitter.** Beer-Lambert
+**Key point: The second half is a physics model, not more jitter.** Beer-Lambert
 per-channel attenuation `exp(-k·d)` — red removed fastest, blue last — plus a
 backscatter veil that lifts the blacks. A brightness or contrast jitter cannot
 produce that colour cast, and would teach the network the wrong invariance.
@@ -5614,7 +5614,7 @@ Randomising `k` and depth generates the turbidity range our archive does not
 happen to contain. **Leaving the veil out** would make turbid frames merely
 dark, which is the half contrast enhancement can undo — the easy half.
 
-⛔ **`mirpur` was held out entirely**, verified by count (**0 mirpur frames in
+**Warning: `mirpur` was held out entirely**, verified by count (**0 mirpur frames in
 the training set**), because the murky table's two hardest clips come from
 there and our own detector recall swings 29.2 / 72.7 / 68.3 % across venues.
 
@@ -5623,21 +5623,21 @@ there and our own detector recall swings 29.2 / 72.7 / 68.3 % across venues.
 ```
                        stock                    fine-tuned
 mirpur_torpedo    [210, 133, 222, 41]  4/4   [272, 104, 175, 42]  4/4
-mirpur_torpedo_1  [135,  91,  78, 11]  3/4   [130,  88,  86, 15]  4/4   ⭐
+mirpur_torpedo_1  [135,  91,  78, 11]  3/4   [130,  88,  86, 15]  4/4   
 mirpur_gate       [245,  67, 296, 39]  4/4   [229,  52, 292, 40]  4/4
 total passing            11/12                      12/12
 ```
 
-⚠ **At 2 000 steps the canary appeared to flip** — `mirpur_torpedo_1` at +8 s
+**Caution: At 2 000 steps the canary appeared to flip** — `mirpur_torpedo_1` at +8 s
 reading 15 where it has always been below the bar. **This was retracted the
 same night; see below.** It did not survive a sweep of the other checkpoints,
 and the training set turned out to be contaminated.
 
-⚠ **Read this narrowly.** It is one column crossing by one inlier, at 2 000 of
+**Caution: Read this narrowly.** It is one column crossing by one inlier, at 2 000 of
 12 000 steps. What it is *not* is noise: the arms are bit-identical on stock
 weights (verified stock-against-stock), so the only difference is the weights.
 
-### ⚠ Three honest limits
+### Three honest limits
 
 1. **The scorer is the TORCH path, not the shipped ONNX one.** Absolute
    inliers here (`[210, 133, 222, 41]`) are not comparable to §19.1's
@@ -5648,7 +5648,7 @@ weights (verified stock-against-stock), so the only difference is the weights.
    reaches the chip.
 3. **One held-out venue.** `mirpur` is three clips from one day.
 
-### ⛔⛔ RETRACTED THE SAME NIGHT — THE TRAINING SET WAS CONTAMINATED
+### RETRACTED THE SAME NIGHT — THE TRAINING SET WAS CONTAMINATED
 
 Sweeping **every** checkpoint instead of reporting the best one killed the
 result:
@@ -5659,7 +5659,7 @@ canary:     15     10     11     10      10       8
 passing:    12     11     11     11      11      11
 ```
 
-⭐ **The canary DEGRADES monotonically with training.** The 2 000-step "flip"
+**Key point: The canary DEGRADES monotonically with training.** The 2 000-step "flip"
 was a lucky checkpoint, not a finding. Reporting it alone would have been the
 most flattering number in the project — which is exactly the trap the sweep
 exists to catch.
@@ -5672,7 +5672,7 @@ shape:
 | held-out | 99.0 → 80.0 (**−19.0**) | 95.1 → 97.2 % |
 | trained-on | 113.5 → 95.0 (**−18.5**) | 95.3 → 93.8 % |
 
-⛔ **The median falls by ~19 on BOTH sets, near-identically.** That is not
+**Warning: The median falls by ~19 on BOTH sets, near-identically.** That is not
 overfitting — overfitting is better-on-trained, worse-on-held-out. Uniform
 degradation points at the **data**, and it was there:
 
@@ -5690,7 +5690,7 @@ generating water **300× more red-starved than anything ever recorded**, on top
 of footage already blue. It now samples the *target ratio* from the measured
 distribution and derives the attenuation.
 
-### ⛔ AND BOTH AUTOMATIC CONTAMINATION DETECTORS WERE WRONG
+### AND BOTH AUTOMATIC CONTAMINATION DETECTORS WERE WRONG
 
 Worth recording because the second failure repeated the first:
 
@@ -5702,7 +5702,7 @@ Worth recording because the second failure repeated the first:
   All six were **confirmed clean by eye**: pool tile borders, lane markers and
   wall edges are axis-aligned when the camera is level.
 
-⭐ **The only verification that has ever worked here is looking at the
+**Key point: The only verification that has ever worked here is looking at the
 frames.** `tools/footage_inventory.py` renders every clip; all 40 in
 `raw_videos` + `2026` were verified visually. The defence is now structural —
 the contaminated archive is **not read at all** — rather than a detector.
@@ -5729,7 +5729,7 @@ overfitting to one's own pool — is the one every AUV team has.
 
 ---
 
-## 48. ⛔ THE STANDING RULE: NO CAPABILITY SHIPS UNREACHABLE
+## 48. THE STANDING RULE: NO CAPABILITY SHIPS UNREACHABLE
 
 **2026-09-24.** A repo-wide scan for modules that **nothing imports**, excluding
 nodes (launched, not imported), `console_scripts` entry points, and the
@@ -5750,13 +5750,13 @@ nodes (launched, not imported), `console_scripts` entry points, and the
 | `detection/confidence_calibration.py` | 85 | **today** |
 | `approach.py` | 83 | **today** |
 
-⭐ **This is the project's oldest and most expensive defect**, and the register
+**Key point: This is the project's oldest and most expensive defect**, and the register
 of prior instances was already long: the lock ladder built and in no launch
 file · `lock_s` held at 0 so nothing read the ladder · the bank storing a
 position nothing passed · `device_path` read and ignored · loop closure wired
 into `vision_pi.launch.py` while `bringup` includes `vision.launch.py`.
 
-⛔ **Every one looked finished.** Correct code, passing tests, and the
+**Warning: Every one looked finished.** Correct code, passing tests, and the
 capability did not exist on the vehicle. It is invisible to every check except
 one that asks "does anything import this".
 
@@ -5770,7 +5770,7 @@ Enforced by `test_no_capability_is_built_and_unreachable.py`: a module in
 neither register fails the suite, and a DEFERRED module that later gets
 imported must be promoted, so the register cannot decay into fiction.
 
-⚠ Deciding at write time is the point — that is the only moment anyone knows
+**Caution:** Deciding at write time is the point — that is the only moment anyone knows
 whether a consumer exists.
 
 ### Wired this session
@@ -5782,7 +5782,7 @@ its thresholds are declared, not measured.
 
 ---
 
-## 49. ⭐ TWO TRAINING RUNS KILLED SILENTLY — `/tmp` IS A RAM DISK
+## 49. TWO TRAINING RUNS KILLED SILENTLY — `/tmp` IS A RAM DISK
 
 Two fine-tune runs died mid-epoch with **no traceback, no CUDA error and no
 exit message**: the process simply vanished at step 1998 and step 326.
@@ -5791,7 +5791,7 @@ exit message**: the process simply vanished at step 1998 and step 326.
 a 15 GB machine, while upstream's `AugmentationPipe` cached 3 000 images at
 800×608×3 — about **4.4 GB more**. The OOM killer took the trainer.
 
-⛔ **Batch size was never the problem.** VRAM peaked at **2.6 of 6.1 GB** while
+**Warning: Batch size was never the problem.** VRAM peaked at **2.6 of 6.1 GB** while
 the job was being killed for system memory. Raising the batch to use "the full
 GPU" made it die *sooner*, because it is the wrong resource.
 
@@ -5803,14 +5803,14 @@ GPU" made it die *sooner*, because it is the wrong resource.
 | loader cache 3 000 → 1 200 images, reload 4 000 → 1 200 steps | ~2.7 GB less RAM, same variety per unit memory |
 | batch 4 → 6 | **GPU 61 % → 78 %, VRAM 2.6 → 5.0 GB** |
 
-⚠ **For every future training run on this box: never put a dataset under
+**Caution: For every future training run on this box: never put a dataset under
 `/tmp`.** It is 7.8 GB of RAM wearing a directory's clothes, and it fails by
 killing the thing you are trying to measure rather than by refusing to store
 the file.
 
 ---
 
-## 50. ⭐⭐ HOW LONG A REAL GAP LASTS — THE NUMBER THE LADDER WAS NEVER SIZED ON
+## 50. HOW LONG A REAL GAP LASTS — THE NUMBER THE LADDER WAS NEVER SIZED ON
 
 **2026-09-24.** `mongla_vision/continuity.py` opens by stating that six
 constants protect a target lock — the freshness ramp, `coast_s` (0.8),
@@ -5828,21 +5828,21 @@ vehicle session (§36):
     p50   116 ms      p90  1 124 ms      p99  3 044 ms      max  7 645 ms
 
 gaps NOT covered by each rung
-    freshness zero (0.20 s)   117     ⛔ 35 % of gaps outrun it
+    freshness zero (0.20 s)   117     35 % of gaps outrun it
     coast_s        (0.80 s)    42        12.4 %
     lost_grace_s   (1.00 s)    37        10.9 %
     kalman predict (1.50 s)    23         6.8 %
     track_buffer   (5.00 s)     1         0.3 %
 ```
 
-### ⭐ The ladder's sizing is broadly VINDICATED — one rung is measurably tight
+### The ladder's sizing is broadly VINDICATED — one rung is measurably tight
 
 Read as coverage, the rungs land at 65 % / 87.6 % / 89.1 % / 93.2 % / **99.7 %**
 of real gaps. That is a sensible escalation, and it was arrived at without ever
 seeing this distribution — worth saying, because the honest outcome of a
 measurement is often that the guess was good.
 
-⛔ **The exception is the 0.20 s freshness zero: 117 of 338 gaps exceed it.**
+**Warning: The exception is the 0.20 s freshness zero: 117 of 338 gaps exceed it.**
 A third of real losses outrun the rung meant to absorb the ordinary ones.
 
 ### What the measured distribution implies, per rung
@@ -5859,7 +5859,7 @@ A third of real losses outrun the rung meant to absorb the ordinary ones.
 A ladder derived from the data rather than from itself would read roughly
 0.33 / 1.12 / 1.84 / 3.04 / 7.64 s.
 
-### ⛔ NOT SHIPPED, AND THE REASON MATTERS
+### NOT SHIPPED, AND THE REASON MATTERS
 
 **These constants are unchanged.** The recording is a **person walking in and
 out of a room**, not a prop in water. Gap *durations* are a property of the
@@ -5872,7 +5872,7 @@ other retractions today were about.
 **What it does license:** the 0.20 s rung is worth re-examining the moment
 water footage exists, and the method is now a one-line rerun against any bag.
 
-### ⚠ Three limits in this run
+### Three limits in this run
 
 1. `track_id` is not published on `/detections`, so `switches = 0` is **the
    absence of a measurement, not a clean result**.
@@ -5885,7 +5885,7 @@ water footage exists, and the method is now a one-line rerun against any bag.
 
 ---
 
-## 51. ⭐⭐ THE SAME MEASUREMENT ON REAL WATER — AND §50'S CANDIDATE IS WITHDRAWN
+## 51. THE SAME MEASUREMENT ON REAL WATER — AND §50'S CANDIDATE IS WITHDRAWN
 
 **2026-09-24.** §50 measured the gap distribution on a person walking in and
 out of a room and shipped a five-constant candidate from it. Real underwater
@@ -5902,7 +5902,7 @@ REAL WATER, real props, 45 gaps over 180 s
     bin      (final_run) 98.9 %             7 gaps   max 0.20 s
 ```
 
-### ⭐ Two datasets, opposite biases, one agreement
+### Two datasets, opposite biases, one agreement
 
 | rung | person in a room | props in water |
 |---|---|---|
@@ -5918,17 +5918,17 @@ the prop, which a mission does not. They fail in opposite directions and
 **agree to within 1.3 points on the lowest rung**: a third of real gaps outrun
 the reflex meant to absorb ordinary ones.
 
-⭐ **That agreement is the finding.** The candidate shrinks from five changes to
+**Key point: That agreement is the finding.** The candidate shrinks from five changes to
 **one**: `freshness_zero 0.20 → 0.47 s` (p90 in water). The other four are
 right and stay.
 
-⛔ **§50's candidate is WITHDRAWN.** It read 0.33 / 1.12 / 1.84 / 3.04 / 7.64 s,
+**Warning: §50's candidate is WITHDRAWN.** It read 0.33 / 1.12 / 1.84 / 3.04 / 7.64 s,
 sized on the person alone. In water p99 is **0.47 s**, so coasting 1.12 s would
 hold a dead target more than twice as long as any real gap — and a coast that
 outlives the target is how a vehicle steers confidently at nothing. Shipped
 two commits before real footage refuted it.
 
-### ⛔ And a contaminated number caught before it was published
+### And a contaminated number caught before it was published
 
 The first pooled run read `507 gaps, p50 0.01 s` and would have been written up
 as *"real water says the ladder is generous"*. It was wrong: the Mirpur MKVs
@@ -5938,7 +5938,7 @@ here is a *duration*, so a fictional clock does not produce small gaps, it
 produces no measurement at all.
 
 `continuity_from_video.py` now **refuses** any clip outside 5–120 fps and says
-so. ⚠ The Mirpur clips remain valid for everything **frame-based** (the murky
+so. The Mirpur clips remain valid for everything **frame-based** (the murky
 table, inlier counts); only their *time* axis is unusable.
 
 ### What water still has to settle
@@ -5950,7 +5950,7 @@ or whether the upper rungs matter after all.
 
 ---
 
-## 52. ⭐⭐⭐ WHY THE FINE-TUNE FAILED: WE TRAINED AT A RESOLUTION WE NEVER RUN
+## 52. WHY THE FINE-TUNE FAILED: WE TRAINED AT A RESOLUTION WE NEVER RUN
 
 **2026-09-25.** Round 7's second run, on the verified 4 834-frame set, was
 scored across all eight checkpoints and read as another failure: the median
@@ -5962,14 +5962,14 @@ of the result flipped.
 
 ```
                               held-out            trained-on
-  320x240  (we INFER here)   median  -4.5        median  -9.0    ⛔ loses
-  800x608  (we TRAINED here) median  +4.0        median  +8.5    ⭐ wins
+  320x240  (we INFER here)   median  -4.5        median  -9.0    loses
+  800x608  (we TRAINED here) median  +4.0        median  +8.5    wins
 ```
 
 n = 144 held-out, 192 trained-on, one checkpoint (6 000), identical code path
 for both arms.
 
-⭐ **The fine-tune worked. It improved the descriptor at the resolution it was
+**Key point: The fine-tune worked. It improved the descriptor at the resolution it was
 trained at, and that gain does not survive the trip down to 320×240.**
 
 ### Why this was invisible for two runs
@@ -5982,7 +5982,7 @@ the held-out venue). A convolutional descriptor's keypoint density and
 effective receptive field both scale with input size, so weights tuned at
 800×608 are tuned for a different feature geometry than the one that flies.
 
-⛔ **And the first attempt to see this MISSED it.** A coarse "passing columns"
+**Warning: And the first attempt to see this MISSED it.** A coarse "passing columns"
 score (12 columns, stock already at 10–11) has a ceiling and read as scatter:
 750 won at 320, 6 000 won at 800, everything else tied. The claim was made on
 that metric and immediately withdrawn. The effect is only visible with the
@@ -5997,7 +5997,7 @@ flies. Early signal is consistent with the diagnosis: the coarse-match head
 reaches `acc_c0` **0.77** at 320×240 against 0.3–0.4 at 800×608 — it is
 learning a geometry it will be asked about.
 
-⚠ **Round 7 is NOT closed by this.** What is established is the *cause* of two
+**Caution: Round 7 is NOT closed by this.** What is established is the *cause* of two
 failures, not a win. The retrained weights must still beat stock **at 320×240
 on the held-out venue**, and if they do not, Round 7 closes NO with the cause
 understood — which is a better outcome than two unexplained failures.
@@ -6014,7 +6014,7 @@ understood — which is a better outcome than two unexplained failures.
 
 ---
 
-## 53. ⛔⛔ ROUND 7 CLOSES **NO** — AND THE SCORER WAS THE DEFECT
+## 53. ROUND 7 CLOSES **NO** — AND THE SCORER WAS THE DEFECT
 
 **2026-09-25.** The 320×240 retrain looked like the win: all eight checkpoints
 scored at or above stock, and the wide metric read held-out median **+17.0,
@@ -6033,7 +6033,7 @@ total inliers     2237                      2052        -8.3 %
 passing columns   19/20                     19/20       identical
 ```
 
-⛔ **No improvement. A small loss. Round 7 closes NO and stock weights stay.**
+**Warning: No improvement. A small loss. Round 7 closes NO and stock weights stay.**
 
 ### The defect was my measuring instrument
 
@@ -6042,7 +6042,7 @@ extraction — top-k on the heatmap, nearest-neighbour descriptor sampling — n
 `xfeat_onnx.py`'s NMS, bilinear sampling and reliability weighting. It was a
 different algorithm wearing the same name.
 
-⭐ **The tell was visible from the first run and I read past it.** The scorer's
+**Key point: The tell was visible from the first run and I read past it.** The scorer's
 stock arm reported `[210, 133, 222, 41]`; §19.1's recorded table, produced by
 the shipped path, reads `[189, 65, 134, 24]`. Two stock numbers for one stock
 model. I noted the discrepancy, attributed it to "different post-processing",
@@ -6073,14 +6073,14 @@ retrain.
 > scorer, make its control arm reproduce a recorded number — and if it cannot,
 > that is the finding.
 
-⚠ Four retractions in two days, and this is the only one where the *instrument*
+**Caution:** Four retractions in two days, and this is the only one where the *instrument*
 was wrong rather than the data or the interpretation. It is also the most
 expensive: two training runs, ~3 GPU-hours, and a published §52 that read as a
 breakthrough.
 
 ---
 
-## 54. ⭐⭐⭐ 179 IDENTITY SWITCHES — AND WHY XFEAT IS THE FIX, NOT THE FAILURE
+## 54. 179 IDENTITY SWITCHES — AND WHY XFEAT IS THE FIX, NOT THE FAILURE
 
 **2026-09-25.** Round 7 closed NO, so the question became: *if fine-tuning is
 not where XFeat pays, where is?* The answer came from fixing a different
@@ -6110,7 +6110,7 @@ Across a real gap the prediction decays and the overlap is gone, so a returning
 target cannot be matched to the track it came from and a new id is minted.
 That is not a bug in ByteTrack; it is the boundary of what motion can say.
 
-### ⭐ The SOTA names the fix and names the price
+### The SOTA names the fix and names the price
 
 **BoT-SORT** unifies motion prediction with **appearance modelling** and
 explicit camera-motion compensation "to maintain stable object identities".
@@ -6120,7 +6120,7 @@ re-identification to a tracking-by-detection pipeline, training-free.
 The standard objection is cost: *"a dedicated Re-ID embedding network... an
 extra **15–25 ms per frame**"* — which is why embedded trackers skip it.
 
-### ⭐⭐ We do not pay that price, because we already built the network
+### We do not pay that price, because we already built the network
 
 XFeat is **already loaded and already running** for the anchor rung —
 **701 FPS** on the Hailo-8 (§38), sharing the chip with the detector for ~10 %
@@ -6132,7 +6132,7 @@ answer to where XFeat pays, after fine-tuning said it was not the weights.
 `tracking/reid.py`: a short-term appearance memory of identities that just
 left, using **§25's measured 40-inlier identity bar** — not a new constant.
 
-⛔ **The failure modes are asymmetric, so the gates are.** A missed
+**Warning: The failure modes are asymmetric, so the gates are.** A missed
 re-identification costs one extra id. A **wrong** one welds two objects into
 one identity and every consumer downstream believes the target teleported. So
 it refuses on: a weak match, a **1.5× margin** against the runner-up (two
@@ -6140,14 +6140,14 @@ identities matching moderately is exactly where a wrong merge happens, and an
 absolute bar cannot see it), a different class label, a stale identity, or an
 empty descriptor set. Every refusal is counted and named.
 
-⚠ **Not yet wired.** It waits on `tracker_node` supplying crop descriptors at
+**Caution: Not yet wired.** It waits on `tracker_node` supplying crop descriptors at
 track birth and death — a change to the tracker's hot path, whose rate must be
 measured on the vehicle before it ships. Registered in the capability register
 with that consumer named.
 
 ---
 
-## 55. ⭐⭐ NEVER LOSING THE TARGET: THE CASCADE, AND THE ONE STAGE NOBODY ELSE HAS
+## 55. NEVER LOSING THE TARGET: THE CASCADE, AND THE ONE STAGE NOBODY ELSE HAS
 
 **2026-09-25.** Three SOTA sources, read rather than cited, converge on one
 architecture — and one of its stages is something this vehicle can do and a
@@ -6160,7 +6160,7 @@ surveillance tracker cannot.
 | McByte++, 2026 | **+6.1 IDF1** from training-free online re-identification |
 | the standard objection | a dedicated Re-ID network costs **15–25 ms/frame** |
 
-### ⭐ The cascade is what makes appearance affordable
+### The cascade is what makes appearance affordable
 
 Re-ID on every track is unaffordable on an embedded budget. Re-ID on the
 **handful that motion could not explain** is nearly free — and the cascade is
@@ -6170,7 +6170,7 @@ detector fires on a cloud of silt.
 Combined with §54: XFeat is **already loaded** at 701 FPS on the Hailo, so the
 stage everyone else pays 15–25 ms for costs us almost nothing.
 
-### ⭐⭐ Stage 2 is not in any of those papers
+### Stage 2 is not in any of those papers
 
 BoT-SORT estimates camera motion by **fitting an affine transform between
 images** — a surveillance camera has no other way to know it moved. This
@@ -6185,25 +6185,25 @@ in question** — two cues that do not share a failure mode. A target that
 "moved" because the *vehicle* moved is explained before appearance is ever
 consulted.
 
-⛔ **And it is skipped, never assumed.** With no altitude there is no
+**Warning: And it is skipped, never assumed.** With no altitude there is no
 metres-per-pixel, so `ego_pixel_shift` returns **NaN** and the stage does not
 run. A vehicle that cannot measure its own motion must not claim it did not
 move — the same rule as every other absent measurement here.
 
-### ⛔ Nothing is fabricated
+### Nothing is fabricated
 
 A detection no stage explains becomes a **new track**, honestly. The ladder
 already refuses to invent a position; the cascade does not change that, it
 reduces how often the question has to be asked. Every outcome names the cue
 that decided it.
 
-⚠ **Not wired.** `tracker_node` calls its tracker library directly; inserting a
+**Caution: Not wired.** `tracker_node` calls its tracker library directly; inserting a
 cascade changes the association hot path, and its rate must be measured on the
 vehicle before it ships. Registered with that consumer named.
 
 ---
 
-## 56. ⭐⭐⭐ THE DETECTOR SEES THE TARGET DURING 100 % OF ITS OWN GAPS
+## 56. THE DETECTOR SEES THE TARGET DURING 100 % OF ITS OWN GAPS
 
 **2026-09-25.** Measured on the recorded vehicle session (§36) — not on a
 benchmark, not on synthetic data.
@@ -6214,7 +6214,7 @@ expected pixel location"; detection–tracking feedback means "when search
 regions fall within predicted regions, the detector reduces the threshold";
 ByteTrack recovers **low-score** boxes by matching them to tracklets.
 
-⛔ **None of that was evidence for our pipeline.** The mechanism only pays if
+**Warning: None of that was evidence for our pipeline.** The mechanism only pays if
 weak detections actually exist inside OUR gaps, and only if they sit where the
 target is. Both were measured.
 
@@ -6228,12 +6228,12 @@ gap frames with a weak detection      521/5 523       9 %
 their scores            p50 0.247   p90 0.389   max 0.488
 ```
 
-⭐ **The detector saw something in every single gap.** A "lost" target was not
+**Key point: The detector saw something in every single gap.** A "lost" target was not
 invisible — it was **below the bar**.
 
 ### And it is where the target is, not scattered
 
-⛔ *"Near the last sighting"* means nothing without knowing how near a **random**
+**Warning:** *"Near the last sighting"* means nothing without knowing how near a **random**
 box would be, so the same distance was computed against uniformly-drawn points:
 
 | | weak boxes | random control |
@@ -6243,7 +6243,7 @@ box would be, so the same distance was computed against uniformly-drawn points:
 | p90 | **198 px** | 393 px |
 | within a 160 px prior radius | **84 %** | 28 % |
 
-⭐⭐ **3.00× more of the discarded boxes fall near the last sighting than
+**Key point:** **3.00× more of the discarded boxes fall near the last sighting than
 chance.** A region-aware bar admits targets three times faster than it admits
 noise. Had the two distributions agreed, the mechanism would have been worse
 than useless — feeding the tracker exactly the false positives the bar exists
@@ -6257,22 +6257,22 @@ pixel depends on its bearing, not its range — and range is what we are least
 sure of). `region_conf_bar()` then applies the detector's own floor inside that
 region and the strict bar outside.
 
-⛔ **The bar is RAISED outside, never lowered inside.** Our HEF bakes an NMS
+**Warning: The bar is RAISED outside, never lowered inside.** Our HEF bakes an NMS
 floor of 0.200 and nothing at runtime brings back what the chip already
 discarded — so the honest implementation keeps the detector at its floor and is
 stricter everywhere the target is not expected.
 
-⛔ **With no prior, everything gets the strict bar.** An absent prediction must
+**Warning: With no prior, everything gets the strict bar.** An absent prediction must
 never be read as a permissive one.
 
-⚠ **Measured on a person in a room**, where "the target left the frame" is the
+**Caution: Measured on a person in a room**, where "the target left the frame" is the
 dominant gap cause. A prop that dims into turbidity may produce a different
 weak-box distribution, and the 3.00× wants re-measuring in water. The tools
 (`gap_recovery_potential.py`, `weak_box_locality.py`) run against any bag.
 
 ---
 
-## 57. ⭐⭐ BEFORE THE MODEL RUNS: THE CAMERA IS ARGUING WITH ITSELF
+## 57. BEFORE THE MODEL RUNS: THE CAMERA IS ARGUING WITH ITSELF
 
 **2026-09-25, live on the vehicle.** Every measurement in this repo — detector
 confidence, XFeat inliers, the turbidity proxy, bank references — is computed
@@ -6287,7 +6287,7 @@ auto_exposure                value=3     Aperture Priority, NOT manual
 exposure_dynamic_framerate   value=1     the camera may change FRAME RATE
 ```
 
-⛔ **Nothing in `mongla_vision` touches white balance at all**, and
+**Warning: Nothing in `mongla_vision` touches white balance at all**, and
 `exposure_dynamic_framerate=1` lets the camera silently drop frame rate in dim
 water — while every rung of the lock ladder is sized in **seconds**, so a
 halved rate halves how many detections fit inside `coast_s`.
@@ -6299,12 +6299,12 @@ halved rate halves how many detections fit inside `coast_s`.
 | **auto** | **2.42** | 0.0000 | 35.4 (min 30.5) |
 | **fixed** | **0.16** | 0.0000 | 35.3 (min 30.2) |
 
-⭐ **Auto-exposure injects 15.5× more luma drift into a scene that is not
+**Key point: Auto-exposure injects 15.5× more luma drift into a scene that is not
 moving.** XFeat descriptors are intensity-derived, so a bank reference that
 never moved still changes appearance frame to frame. That is noise entering
 every intensity-derived number we take, from a source none of them account for.
 
-### ⛔ And the run answered a different question than it asked
+### And the run answered a different question than it asked
 
 **R/B is exactly 1.0000 with zero variance in both arms — the forward camera is
 delivering MONO.** AWB is therefore moot on this camera: there is no colour to
@@ -6312,12 +6312,12 @@ balance. That is consistent with the standing finding that the forward camera
 needs a colour variant, and it means the AWB half of this concern is
 **unfalsifiable on the current hardware**, not disproven.
 
-⚠ **The luma number is from a static indoor scene, which is the easy case.**
+**Caution: The luma number is from a static indoor scene, which is the easy case.**
 Under a moving vehicle in changing water, an auto-exposure loop has far more to
 chase. The claim that it matters *underwater* is unmeasured, and
 `tools/camera_auto_loops.py` re-runs against any camera to settle it.
 
-⚠ Also note `FIXED` read luma 59.55 against `AUTO`'s 119.27 — manual mode
+**Caution:** Also note `FIXED` read luma 59.55 against `AUTO`'s 119.27 — manual mode
 inherited `exposure_time_absolute=157` and simply underexposed. A shipped fix
 must set the exposure, not merely disable the loop;
 `webcam.blur_capped_exposure()` already computes the right value and is the
@@ -6325,14 +6325,14 @@ place to do it.
 
 ### What this earns
 
-⭐ **The class of question is the finding.** Every measurement so far has been
+**Key point: The class of question is the finding.** Every measurement so far has been
 taken *downstream* of acquisition, and acquisition has its own control loops
 with their own objectives — objectives that are not ours. Before trusting any
 pixel-derived number, ask what the camera decided before handing it over.
 
 ---
 
-## 58. ⭐⭐⭐ THE MODEL-FREE RUNG THAT CANNOT EXIST — four families REJECTED, one reason
+## 58. THE MODEL-FREE RUNG THAT CANNOT EXIST — four families REJECTED, one reason
 
 **2026-09-28.** The standing ask was a **third ladder rung that needs no model
 and no training data**, on the Bumblebee reflex that redundancy beats
@@ -6356,7 +6356,7 @@ standard deviation of the patch, LK seeded then run 30 frames:
 | 10 – 20 | 20 | 23 | 0.83 |
 | 20 + | 19 | 21 | 0.95 |
 
-⛔ **`goodFeaturesToTrack` returns ninety-eight corners from a patch with two
+**Warning: `goodFeaturesToTrack` returns ninety-eight corners from a patch with two
 grey levels of variation** — more than from a richly textured one, because
 sensor noise in a flat region makes plenty of local maxima — and 88 % of them
 are gone in 30 frames. Dead boxes carry **0.92 bits** of entropy; live ones
@@ -6371,7 +6371,7 @@ are gone in 30 frames. Dead boxes carry **0.92 bits** of entropy; live ones
 | ECC direct photometric alignment | dense, gradient, corner-free | converges on **17.6 %** of LK-dead boxes (40.4 % overall); correlation 0.324 there vs 0.804 where it works; 6.1 ms/patch |
 | vanishing point (least-squares null vector) | geometry | gate.mkv: **no VP in 200 frames**. octagon_Bottom: VP at **(−19532, −25301)**, frame-to-frame jitter **20 227 px** p50 |
 
-### ⛔⭐ The finding that is worth more than the rung would have been
+### The finding that is worth more than the rung would have been
 
 **Every one of the four reported high confidence while being wrong.** NCC
 returned 0.891. The vanishing point's singular-value quality read **0.958**
@@ -6386,25 +6386,25 @@ observation, not a self-reported score.**
 
 ### The bar
 
-⛔ **No appearance-based rung may be proposed for the LK-dead regime again
+**Warning: No appearance-based rung may be proposed for the LK-dead regime again
 without first showing it beats a decoy box on real footage.** The failure is
 information-theoretic, not algorithmic; three independent method families
 (generative, discriminative, direct) confirm it, and the fourth shows geometry
 from a single forward camera does not substitute.
 
-⭐ **What shipped instead is a refusal.** `Follower.reset()` now rejects a patch
+**Key point: What shipped instead is a refusal.** `Follower.reset()` now rejects a patch
 below **2.0** grey levels before running the corner detector — the
 highest-precision operating point measured (19.4 % refused, **86.7 %** of those
 genuinely untrackable, against 49.7 % / 64.9 % at a bar of 4.0). The ladder now
 learns at seed time what it used to discover thirty frames later while holding
 a box it believed in.
 
-⚠ **Population caveat, stated:** those 155 boxes are a grid, mostly water and
+**Caution: Population caveat, stated:** those 155 boxes are a grid, mostly water and
 wall. A real detection box sits on a prop and is textured, so 19.4 % is an
 upper bound on the cost measured on the worst possible sample. The cliff is
 what transfers, not the rate.
 
-⭐ **Where the real redundancy already is.** The model-free navigation layer
+**Key point: Where the real redundancy already is.** The model-free navigation layer
 exists and is wired — it is just not a *tracking* rung: the tile grating (floor
 height and heading), `pool_lines` (lane heading, 0.17°), optical flow velocity
 (verified 1.09 cm over 30 cm), and the barometer. All four need no model and no
@@ -6417,7 +6417,7 @@ printing the joint failure rate beside what independence would predict.
 
 ---
 
-## 59. ⛔⛔⛔ THE VEHICLE SHIPS THE HALLUCINATING GATE MODEL, AND THE GOOD ONE IS ON DISK
+## 59. THE VEHICLE SHIPS THE HALLUCINATING GATE MODEL, AND THE GOOD ONE IS ON DISK
 
 **2026-09-28.** B-59 recorded that `gate_rescue_repair` claims a gate on
 **90.8 %** of gate-free frames at the shipped bar, drawing half-frame boxes
@@ -6425,7 +6425,7 @@ over empty turquoise at 0.44–0.56, with **+0.0 points** of separation between
 gate-present and gate-absent footage at both 0.15 and 0.30. That defect has
 been open since 2026-09-25 and is the blocker on `tracking/presence.py`.
 
-⭐ **B-59 IS MODEL-SPECIFIC, AND NOBODY RE-CHECKED IT AFTER B-60 WAS RESOLVED
+**Key point: B-59 IS MODEL-SPECIFIC, AND NOBODY RE-CHECKED IT AFTER B-60 WAS RESOLVED
 BY SWITCHING MODELS.** Re-run today with `tools/negative_clip_check.py`, same
 clips, same tool, `gate_sharks.pt` instead:
 
@@ -6440,12 +6440,12 @@ clips, same tool, `gate_sharks.pt` instead:
 Against `gate_rescue_repair`'s **+0.0 at every bar measured**. Same venue, same
 negatives, same instrument.
 
-⛔ **AND THE VEHICLE LAUNCHES THE BAD ONE.** `vision_pi.launch.py:86` and
+**Warning: AND THE VEHICLE LAUNCHES THE BAD ONE.** `vision_pi.launch.py:86` and
 `bringup.launch.py:160` both declare `fwd_model` default
 **`gate_rescue_repair`**. `gate_sharks.pt` and `gate_sharks.hef` are both in
 `src/mongla_vision/models/`, compiled and ready, and nothing points at them.
 
-⚠ **IT IS NOT A ONE-LINE SWAP, and that is why it has not happened.** The two
+**Caution: IT IS NOT A ONE-LINE SWAP, and that is why it has not happened.** The two
 graphs carry different class sets:
 
     gate_rescue_repair   gate · rescue · repair
@@ -6456,7 +6456,7 @@ Switching the default silently drops `rescue` and `repair`, which missions name
 works and two other classes, and it must be made deliberately rather than by a
 default nobody revisited.
 
-⭐ **THE THIRD OPTION IS ALREADY BUILT AND EMPTY.** `detector_dual_node` takes
+**Key point: THE THIRD OPTION IS ALREADY BUILT AND EMPTY.** `detector_dual_node` takes
 `models` (plural) and runs several graphs off ONE decode — Bumblebee reflex 5,
 "single multi-model YOLO node: one subscription and one decode feeding both
 models". `vision_pi.launch.py:88` declares `fwd_models` with
@@ -6466,27 +6466,27 @@ and the argument is blank.**
 
 ### The bar
 
-⛔ **No gate mission may run on `gate_rescue_repair` alone.** The model that
+**Warning: No gate mission may run on `gate_rescue_repair` alone.** The model that
 detects gates on this footage is `gate_sharks` at a bar of **0.30 or above**;
 0.45 buys +96.8 points for no measured loss on the positive clip.
 
-⚠ **`rescue` and `repair` still need a model**, so the resolution is
+**Caution: `rescue` and `repair` still need a model**, so the resolution is
 `fwd_models:=gate_sharks,gate_rescue_repair` with the gate class taken from the
 first — not a swap, and not the status quo.
 
-⚠ **Per-frame rate on named clips, not recall.** A frame where the prop is out
+**Caution: Per-frame rate on named clips, not recall.** A frame where the prop is out
 of view counts against the positive column, so 100 % positive means the clip is
 gate-dominated rather than that recall is perfect. Confirm by rendering boxes
 before believing either column.
 
-### ✅ RESOLVED the same day, and not the way this section proposed
+### Right: RESOLVED the same day, and not the way this section proposed
 
 The operator's call was to **retire `gate_rescue_repair` outright** rather than
 run both. `gate_sharks` is now the default on both launch paths and the weights
 are at `~/models/retired/`, so the `fwd_models:=gate_sharks,gate_rescue_repair`
 form prescribed above is no longer available — read it as history.
 
-⛔ **AND THE SWAP WAS INITIALLY WRONG IN A WAY THE SEPARATION TABLE HIDES.**
+**Warning: AND THE SWAP WAS INITIALLY WRONG IN A WAY THE SEPARATION TABLE HIDES.**
 The model changed and `conf` did not: both launch files still defaulted to
 **0.15**, where `gate_sharks` measures a worst negative of **40.8 %** — not the
 3.2 % at 0.45 that justified the whole change. The sidecar said
@@ -6496,13 +6496,13 @@ fresh-context review, not by the tests. Both defaults are now 0.45, and
 `at_0_15: [100.0, 40.8, 59.2]` is recorded in the sidecar — **omitting the
 flown bar while keeping the flattering ones is the absent-number pattern.**
 
-⚠ Two live missions (`task_gate`, `pool_day_practice`) were also left steering
+**Caution:** Two live missions (`task_gate`, `pool_day_practice`) were also left steering
 on `rescue` by the same substitution; see the note in `CLAUDE.md` §9 and
 `test_missions_only_name_classes_a_model_emits.py`.
 
 ---
 
-## 60. ⛔ COLOUR IS NOT A RUNG, EVEN WHEN THE RULEBOOK FIXES IT — built, measured, DELETED
+## 60. COLOUR IS NOT A RUNG, EVEN WHEN THE RULEBOOK FIXES IT — built, measured, DELETED
 
 **2026-09-28.** The SAUVC rulebook names the colour of eight of the eleven
 props — "orange in color", "red in color", "striped red and green markings on
@@ -6536,7 +6536,7 @@ both saturated and opposed. **Red dies to absorption within ~2 m. Blue matches
 the water it floats in. The gates are thin structures whose box is mostly
 water.** So seven of the eight rulebook colours are not usable at all.
 
-### ⛔ And the eighth does not survive a second venue
+### And the eighth does not survive a second venue
 
 A blob-labelling implementation found the flare on **0/60** frames: on a
 surface view the sky is warmer than the water, so a whole-frame reference sat
@@ -6559,20 +6559,20 @@ that reach the sensor.
 
 ### The bar
 
-⛔ **Colour may not gate, filter or steer anything on this vehicle.** It may be
+**Warning: Colour may not gate, filter or steer anything on this vehicle.** It may be
 reported as a diagnostic beside a measurement that does not depend on it.
 `mongla_vision/chromatic.py` was written, measured and **deleted** rather than
 shipped behind a default-off switch, because a switch invites someone to turn
 it on at a venue where nobody re-measured.
 
-⚠ **The direction survives even though the magnitude does not.** Orange is
+**Caution: The direction survives even though the magnitude does not.** Orange is
 +a*, +b* against pool water in every run measured. If a future pool session with
 an orange flare in frame establishes a stable margin, `tools/
 chromatic_prior_check.py` is the harness that re-derives it against labels.
 
 ---
 
-## 61. ⚠ REDUNDANCY IS NOT UNCONDITIONAL — the ensemble was measured and not chosen
+## 61. REDUNDANCY IS NOT UNCONDITIONAL — the ensemble was measured and not chosen
 
 **2026-09-28.** Bumblebee reflex 1 says "when you cannot pick a threshold, RUN
 BOTH". We ship two graphs that detect `gate`, so the intersection was measured
@@ -6585,7 +6585,7 @@ frames per clip, one positive and two negative clips):
 | `gate_rescue_repair` alone | 54.8 % | 41.2 % | +13.6 pts |
 | both, boxes agreeing | 45.6 % | 2.4 % | +43.2 pts |
 
-⛔ **The ensemble is worse than the good model alone.** The AND removes 4.0
+**Warning: The ensemble is worse than the good model alone.** The AND removes 4.0
 points of false positive and costs **14.8 points of true detection**, because
 an intersection inherits the misses of its weakest member — and
 `gate_rescue_repair` is not a peer, it is a model with +13.6 points of
@@ -6593,23 +6593,23 @@ separation against +54.0.
 
 ### The bar
 
-⭐ **Run both when the sources are COMPARABLE. Run the better one when they are
+**Key point: Run both when the sources are COMPARABLE. Run the better one when they are
 not.** Redundancy pays for uncorrelated errors of similar size; against a much
 weaker source the intersection is a recall tax. Measure the pair before
 committing, which is what this tool is for.
 
-⚠ This does not weaken reflex 1 — Bumblebee's five gate estimators are five
+**Caution:** This does not weaken reflex 1 — Bumblebee's five gate estimators are five
 *good* estimators. It bounds it.
 
 ---
 
-## 62. ⚠ TIME-TO-CONTACT FROM SCALE — the metres cancel, and the noise does not
+## 62. TIME-TO-CONTACT FROM SCALE — the metres cancel, and the noise does not
 
 **2026-09-28.** `time_to_contact.py` has sat orphaned since it was written, and
 its stated blocker is that its inputs are METRES — a relative position and two
 velocities — which a monocular vehicle with no DVL does not have.
 
-⭐ The literature's form does not need them. TTC is *"the ratio of an object's
+**Key point:** The literature's form does not need them. TTC is *"the ratio of an object's
 visual scale to its rate of expansion over time"*, `tau = s / (ds/dt)`, and the
 metres cancel by construction. **We already compute that scale in three
 independent places and discard all three**: the follower's similarity fit
@@ -6630,7 +6630,7 @@ own box height (the honest reference, since the follower's scale is pinned at
 | frame-to-frame \|Δtau\|, p50 | **2.4 s** |
 | frame-to-frame \|Δtau\|, p90 | **27.2 s** |
 
-⛔ **The frame-to-frame swing is as large as the value.** A tau of 2.5 s that
+**Warning: The frame-to-frame swing is as large as the value.** A tau of 2.5 s that
 moves 2.4 s between frames is not a time, it is noise with a unit. And half the
 frames give a negative tau because the box is shrinking — which is correct
 (the target is receding) and means any consumer must handle "not approaching"
@@ -6644,18 +6644,18 @@ reference-dependent in exactly the same way.
 
 ### The bar
 
-⚠ **The scale-based form is the right one and it is NOT wired**, because a
+**Caution: The scale-based form is the right one and it is NOT wired**, because a
 filter that makes tau usable has to be validated against something, and nothing
 here measures true time-to-contact. `time_to_contact.py` stays deferred, with
 its blocker CORRECTED: not "we have no metres" (we do not need them) but "the
 per-frame scale rate is too noisy and no ground truth exists to tune a filter
 against".
 
-⭐ **What would close it:** one pool run approaching a fixed prop at a known
+**Key point: What would close it:** one pool run approaching a fixed prop at a known
 constant speed from a known start range. That makes true tau a straight line
 and the filter a fit rather than a guess. It belongs on the first-pool list.
 
-⚠ **And a side finding worth its own line:** `Follower.scale` reads exactly
+**Caution: And a side finding worth its own line:** `Follower.scale` reads exactly
 1.0000 at p10, p50 and p90 across 600 frames, because a continuous detector
 re-seeds every frame and `step()` never runs. Every measurement of the
 follower's scale must therefore be taken across a real DETECTION GAP, not a
@@ -6663,7 +6663,7 @@ clip where the detector is healthy.
 
 ---
 
-## 63. ⛔ THE APPROACH BAND MATCHED NO CLASS — RETRACTED, a citation around an invented number
+## 63. THE APPROACH BAND MATCHED NO CLASS — RETRACTED, a citation around an invented number
 
 **2026-09-28.** `approach.py` shipped `BAND_LO = 0.25, BAND_HI = 0.45` and
 cited section 23 for it. Section 23 is real and its measurement is sound — but
@@ -6682,23 +6682,23 @@ binned by box_h / frame_h):
 | rescue | 1 729 | **0.10 - 0.20** | 0.278 |
 | repair | 4 351 | **0.80 - 1.20** | 0.526 |
 
-⛔ **The shipped band matched none of them, and the three disagree by a factor
+**Warning: The shipped band matched none of them, and the three disagree by a factor
 of five on where to stop.** For `repair` it was wrong in the exact way the
 module exists to prevent: confidence rises all the way to the frame edge, so
 0.25-0.45 would have commanded **BACK OFF from the best view the detector ever
 gets**.
 
-⚠ `repair`'s upper bound is "we never saw it get worse", not a measured fall.
-⚠ Class bands belong to ONE graph; re-run the tool when the model changes.
+**Caution:** `repair`'s upper bound is "we never saw it get worse", not a measured fall.
+**Caution:** Class bands belong to ONE graph; re-run the tool when the model changes.
 
 ### The bar
 
-⭐ **The band is per class, and a class with no measurement gets no advice.**
+**Key point: The band is per class, and a class with no measurement gets no advice.**
 `advise()` takes the class name and returns HOLD with a reason naming the tool
 for anything not in the table — never a default, because a default is what was
 wrong.
 
-⛔ **And the general rule, which is why this entry exists at all:** a citation
+**Warning: And the general rule, which is why this entry exists at all:** a citation
 is not a measurement. Section 23 was cited correctly and the number was still
 invented. `test_shipped_constants_match_the_ledger.py` now compares shipped
 constants against the digits recorded here, in both directions — it was written
@@ -6706,7 +6706,7 @@ after this and **caught this entry missing on its first run**.
 
 ---
 
-## 64. ⛔ THE LOOP-CLOSURE EVIDENCE WAS MEASURED ON A FILTER IN FREE FALL — RETRACTED AND RE-MEASURED
+## 64. THE LOOP-CLOSURE EVIDENCE WAS MEASURED ON A FILTER IN FREE FALL — RETRACTED AND RE-MEASURED
 
 **2026-09-30.** `test_loop_closure_bounds_drift.py` set `ACCEL = [0, 0, +9.80665]`.
 `RIEKF.predict` computes `a_world = R @ a + GRAVITY` with `GRAVITY = +z` because
@@ -6721,7 +6721,7 @@ what `_board_at` in `test_localization_node.py` has always used. `+9.80665` is
 | along-track error | 4.547 m | **0.99999 m** = `FLOW_BIAS × SECONDS` exactly |
 | NIS lockout breaks | **14** (depth) | **0**, in every channel |
 
-⚠ **`test_the_setup_actually_drifts` passed throughout.** It asserted
+**Caution: `test_the_setup_actually_drifts` passed throughout.** It asserted
 `_err > 1.0` and only ever looked at x, so it certified a 2 g free fall as "a real
 drift" for as long as the file existed. It now pins the analytic value and asserts
 `|z| < 0.01` with the reason named.
@@ -6733,7 +6733,7 @@ drift" for as long as the file existed. It now pins the analytic value and asser
 | a repeated identical fix leaves position variance *"unchanged to four figures"* | **pos_var 0.170803 → 0.005235 over 200 repeats — 33×.** Measured at 1/2/5/10/50/200 repeats: 0.170803 · 0.091136 · 0.039978 · 0.022317 · 0.007954 · 0.005235 |
 | a closure **50 m** wrong is believed | at 50 m the chi-square gate **rejects** it. Accepts **0.5–4.0 m**, rejects from **5.0 m**; an accepted 4 m fix takes pos_var **2.0365 → 0.0256, 80×** |
 
-⭐ **The conclusion is unchanged and the reason is better.** The gate catches the
+**Key point: The conclusion is unchanged and the reason is better.** The gate catches the
 absurd closure and waves through the **plausible** one — the only kind a real
 place-recognition false positive produces. So the age and travel gates in
 `loop_closure.py` are **load-bearing**, not defensive decoration: they are the
@@ -6753,7 +6753,7 @@ because the falling filter's P was enormous.
 
 ---
 
-## 65. ⭐ THE MIRROR-BRANCH TEST — slope 0 against slope 2, gated on its own standard error
+## 65. THE MIRROR-BRANCH TEST — slope 0 against slope 2, gated on its own standard error
 
 **2026-10-01, issue #55, B-81.** A planar target's two PnP branches, expressed in
 the world (pose yaw + hull yaw) and regressed against the world bearing to the
@@ -6774,7 +6774,7 @@ lateral 0.1–0.6 m, corner noise 0.5–3.0 px: **0 wrong decisions in 16 000 tr
 Decision rate scales with the evidence — 200/200 at 0.3 m / 0.5 px, 94/200 at
 0.3 m / 1 px, 17/200 at 0.6 m / 3 px.
 
-⚠ **Retracted alternative:** a fixed bearing-excursion floor. At 3.8° it still made
+**Caution: Retracted alternative:** a fixed bearing-excursion floor. At 3.8° it still made
 5 wrong decisions in 200 at 2 px. The noise, not the excursion, is what has to be
 beaten, and the standard error measures exactly that.
 
@@ -6782,11 +6782,11 @@ beaten, and the standard error measures exactly that.
 of it. **`LEGACY_RIVAL_MIN = 2`** — one-branch producers only: two frames agreeing
 elsewhere are a second hypothesis, one is a stray; #55's failing case was a 7/3 split.
 
-⚠ **Corner noise on real footage is unmeasured.** These numbers fix the rule's error
+**Caution: Corner noise on real footage is unmeasured.** These numbers fix the rule's error
 rate, not its decision rate on the vehicle — that needs the forward camera on a
 textured target, translating.
 
-## 66. ⛔ THE SHIPPED GATE HEF WAS DEGRADED BY ITS OWN FINE-TUNE — level 2 lost 0.34 of confidence that level 0 kept (B-82, issue #47)
+## 66. THE SHIPPED GATE HEF WAS DEGRADED BY ITS OWN FINE-TUNE — level 2 lost 0.34 of confidence that level 0 kept (B-82, issue #47)
 
 **2026-11-06, dev box, no Hailo device: the Dataflow Compiler's emulator.**
 `tools/hailo_int8_shift.py` runs an optimised `.har` as float
@@ -6809,7 +6809,7 @@ frames per clip:
 Float p50 is identical (0.638 / 0.124) in all three, so the float graph is the
 same and only the quantised one differs.
 
-⛔ **The full build is the bad one.** Its own compile log shows why. The
+**Warning: The full build is the bad one.** Its own compile log shows why. The
 Quantization-Aware Fine-Tuning distill losses ROSE across epochs (conv47
 0.128 → 0.244 → 0.260, conv51 0.111 → 0.256 → 0.231), and conv54 stayed
 pinned at 1.000. The fine-tune diverged and nothing warned. The healthy
@@ -6833,12 +6833,12 @@ on frames it was NOT calibrated on. It refuses to compile above
 emulator; 0.04–0.06 chip vs `.pt` on `gate_rescue_repair`) and the diverged
 one (0.34). Fewer than 16 scored frames is reported as UNVERIFIED, not as a pass.
 
-⚠ **The emulator is not the chip.** These rank builds against each other.
+**Caution: The emulator is not the chip.** These rank builds against each other.
 **Owed when the Pi is back:** `hailortcli parse-hef` (expect score threshold
 0.050, 3 classes); the md5 on the vehicle; the composed harness re-run on the
 same clip. The bar: detection-rung share well above the old 20 %.
 
-⚠ `torpedo.mkv` holds no gate. Its float detections are B-60 false positives,
+**Caution:** `torpedo.mkv` holds no gate. Its float detections are B-60 false positives,
 and the larger INT8 drop there reads as INT8 suppressing them. That is not a
 reason to keep the bad build: it lost the true positives too.
 
@@ -6851,7 +6851,7 @@ level is a reason to measure, not proof of damage, and here it did no harm. It
 stays. `bin_fire_blood.hef` matches no surviving HAR, so it can only be measured
 on the chip or after a rebuild.
 
-## 67. ⭐ PLACING A PROP FROM SIGHTINGS — the hull's error enters once, and it is the one that matters
+## 67. PLACING A PROP FROM SIGHTINGS — the hull's error enters once, and it is the one that matters
 
 **2026-11-07, dev box, synthetic passes whose truth was chosen.** `prop_placement.place`
 fuses several range-and-bearing sightings of one prop into a position and a covariance.
@@ -6878,7 +6878,7 @@ between buckets one spacing apart.
 `MIN_SIGHTINGS = 3` is not tuned: a sample covariance from two points is rank one. The 99 %
 disagreement gate uses the exact 2-dof chi-square quantile, 9.210.
 
-⚠ NOT MEASURED: real sightings. Range σ comes from the pinhole model with one pixel of box
+**Caution:** NOT MEASURED: real sightings. Range σ comes from the pinhole model with one pixel of box
 noise (optimistic for a YOLO box, as `range_to` states), and the pose covariance is the
 filter's own, which has never been checked against water truth. A placement is only as
 honest as the covariance it is handed.

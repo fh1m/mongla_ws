@@ -1,6 +1,6 @@
 """One health surface. Four states, and UNKNOWN is not OK.
 
-WHAT THIS FIXES. The vehicle already knows a great deal about itself and says
+What this fixes. The vehicle already knows a great deal about itself and says
 it in a dozen private dialects: `link_alive()` returns a bool, `esc_status_rpm()`
 returns a list that is empty both when the thrusters are fine and when nothing
 is listening, `BARO_HEALTH` is an enum where 0 is good and 3 means "not
@@ -9,7 +9,7 @@ initialised", `YAW_REF` is an enum where only 2 means the heading is absolute,
 Each is correct. Together they are unreadable, and no two of them degrade the
 vehicle the same way.
 
-⛔ THE RULE THAT EARNED THIS FILE: **absence is not zero.** It has cost this
+The rule that earned this file: **absence is not zero.** It has cost this
 project real time, repeatedly and always in the same direction -- a subsystem
 that says nothing gets read as a subsystem that is fine:
 
@@ -24,7 +24,7 @@ that says nothing gets read as a subsystem that is fine:
 So there is no boolean here. A subsystem reports `Health(state, evidence, age)`
 and the only way to be OK is to say so with fresh evidence.
 
-WHAT IT DELIBERATELY DOES NOT DO. It does not stop the vehicle, refuse a
+What it deliberately does not do. It does not stop the vehicle, refuse a
 command, or surface the hull. It is a REPORT. Every existing guard keeps its
 own decision -- the arming checks, the fire gate, the DVL refusal -- because a
 central authority that can veto anything becomes the thing everybody works

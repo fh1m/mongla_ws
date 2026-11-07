@@ -1,6 +1,6 @@
 """Can this camera see at all? A blinded camera and an empty scene look alike.
 
-⛔ THE FAILURE THIS NAMES. The detector returns no boxes for two very
+The failure this names. The detector returns no boxes for two very
 different reasons: nothing is there, or the camera cannot show anything --
 a covered or fouled port, a washed-out veil, sun glare, a frozen driver. A
 mission reads both as "keep searching" and searches until its budget runs
@@ -8,7 +8,7 @@ out. CCTV solved the same problem as "camera tampering detection" (defocus,
 occlusion, freeze; e.g. arXiv 1608.02385), and this borrows its cheapest
 signals.
 
-MEASURED ON THE REAL ARCHIVE, NOT SIM. 3,385 frames at 1 frame/s from all 35
+Measured on the real archive, not sim. 3,385 frames at 1 frame/s from all 35
 clips in ~/Work/Projects/Mongla/2025/raw_videos (Mirpur murky, RoboSub 2025,
 final run), metrics on a 160x120 grey thumbnail. Synthetic faults were applied
 to 64 real frames drawn from those clips. Scripts + raw JSONL:
@@ -20,12 +20,12 @@ bumblebee-study/rounds/seeing/.
     clipped > 0.25    0 / 3385 (max 0.175)  glare +140 64/64, +90 62/64
     frozen x5         0 identical consecutive frames in 2,400 read
 
-WHAT IT CANNOT DO, measured and stated rather than discovered:
-  * DEFOCUS / MILD FOG. A sigma-4 blur leaves edge energy at 0.70 of the
+What it cannot do, measured and stated rather than discovered:
+  * defocus / mild fog. A sigma-4 blur leaves edge energy at 0.70 of the
     frame's own value (median), and 1 % of real frames already dip to 0.52 of
     their 30 s baseline on scene change alone. Any rule that caught it would
     fire on ordinary footage.
-  * A LIGHT VEIL (0.6) is caught 12/64. Murky Mirpur water sits at std ~20,
+  * a light veil (0.6) is caught 12/64. Murky Mirpur water sits at std ~20,
     so the washout margin is thin (12.4 real vs < 10) and is the first number
     to re-measure at a new venue.
 So `ok` means "none of these faults", not "the image is good".

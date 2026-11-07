@@ -4,7 +4,7 @@
 * Owns MAVLink connection + reader thread (only thread calling recv_match).
 * Exposes /mongla/move as a ROS2 ActionServer.
 * Publishes /mongla/state (typed MonglaState message) EVERY telemetry tick.
-  ⚠ NOT "on change", which this line said and four other places repeated. The
+  NOT "on change", which this line said and four other places repeated. The
   on-change logic (`_maybe_print_state`, with YAW/DEPTH/BAT_CHANGE_THRESH) gates
   the CONSOLE PRINT; `_publish_state` is called unconditionally from
   `telemetry_tick` and publishes at the timer rate on a depth-10 VOLATILE
@@ -20,7 +20,7 @@ maps to a same-named method on `Mongla`. Adding a new command means a
 row in commands.py and a method on Mongla -- this file does not need
 to change.
 
-WHERE EACH PART LIVES. `AUVManagerNode` is one class in six files; the parts
+Where each part lives. `AUVManagerNode` is one class in six files; the parts
 are mixins, so `self` is the same node everywhere and nothing is passed
 between them:
 
@@ -222,7 +222,7 @@ class AUVManagerNode(SetupMixin, HealthMixin, VisionLinkMixin, TelemetryMixin, N
         self.action_group = ReentrantCallbackGroup()
         self.timer_group  = MutuallyExclusiveCallbackGroup()
 
-        # ⛔ THE GATE IS CLAIMED IN goal_callback, NOT IN execute_callback.
+        # The gate is claimed in goal_callback, not in execute_callback.
         #
         # It used to be a plain bool READ in `goal_callback` (the accept/reject
         # decision) and WRITTEN in `execute_callback` (the start of the motion
@@ -364,7 +364,7 @@ class AUVManagerNode(SetupMixin, HealthMixin, VisionLinkMixin, TelemetryMixin, N
         # rotation-comp is ~1:1 with the signal, so publish at full rate.
         self.create_timer(0.02, self._imu_rates_tick, callback_group=self.fast_group)
 
-        # ⛔ THE TIMER IS UNCONDITIONAL, and that is the fix. It used to be
+        # The timer is unconditional, and that is the fix. It used to be
         # created only if `vision_uplink_camera` was already set AT STARTUP, so
         # `ros2 param set ... vision_uplink_camera downward` mid-run reported
         # success and did nothing -- the timer did not exist and never would.
@@ -431,7 +431,7 @@ class AUVManagerNode(SetupMixin, HealthMixin, VisionLinkMixin, TelemetryMixin, N
         # were repeats and 42.4 of the board's 44.0 Hz got out, with 40 ms holes.
         # Queued: 2160 of 2160 unique, 44.0 Hz, largest interval 30 ms (the
         # board's own 20/30 ms cadence).
-        # ⛔ Created HERE, not in __init__: this thread starts before __init__
+        # Created HERE, not in __init__: this thread starts before __init__
         # reaches the IMU publisher, and a later reassignment would orphan the
         # bound `append` captured below. Filled here (deque.append is atomic),
         # drained by the 50 Hz tick; maxlen bounds a stalled executor to ~1.3 s.
@@ -440,7 +440,7 @@ class AUVManagerNode(SetupMixin, HealthMixin, VisionLinkMixin, TelemetryMixin, N
         if getattr(self.fc, 'get_imu', None) is not None:
             _DEMUX['SCALED_IMU2'] = self._imu_q.append
             _DEMUX['ATTITUDE'] = self._att_q.append
-        # ⛔ THE BODY IS GUARDED, AND THE THREAD'S DEATH IS OBSERVABLE (B40).
+        # The body is guarded, and the thread's death is observable (B40).
         #
         # This is a bare `threading.Thread` target and it is the ONLY thing
         # draining the link. An exception anywhere below -- a recorder write, a
@@ -571,7 +571,7 @@ class AUVManagerNode(SetupMixin, HealthMixin, VisionLinkMixin, TelemetryMixin, N
         # own finally neutralises lock-aware), and free the active gate so a
         # queued safety verb (disarm) gets through. Then a backstop neutral.
         self.mongla.request_abort()
-        # ⚠ Releasing here is deliberate (a queued `disarm` must get through) and
+        # Releasing here is deliberate (a queued `disarm` must get through) and
         # it is ALSO how a cancel let an ordinary `move_*` in while the cancelled
         # loop was still winding down: the gate is freed for every verb, not just
         # the safety ones. Keep the release -- a stuck gate is worse -- but mark it
@@ -650,7 +650,7 @@ class AUVManagerNode(SetupMixin, HealthMixin, VisionLinkMixin, TelemetryMixin, N
                 self.get_logger().info(
                     f'[ACT  ] {cmd} -> DONE ({result.message})')
             elif self._was_cancelled(goal_handle):
-                # ⛔ A CANCELLED GOAL ENDS CANCELED, not ABORTED (issue #22's
+                # A cancelled goal ends canceled, not ABORTED (issue #22's
                 # executor test found it). The action contract has two terminal
                 # failure states for a reason: "you asked me to stop" and "I
                 # could not do it" are different facts, and a bag or a tool
@@ -783,7 +783,7 @@ def _emergency_stop(node) -> None:
             print(f'  {label:<22s} {fail_sym}  ({exc!r})', file=sys.stderr)
             return None
 
-    # ⛔ STEP 0: SIGNAL ABORT, BEFORE ANY HARDWARE STEP. Every host loop
+    # Step 0: Signal abort, before any hardware step. Every host loop
     # (`vision_align`/`vision_move` at 20-50 Hz, `style_roll`, a queued
     # `_fire_async` shot) exits only on `_abort_event`, and this path never set
     # it: the thrusters were braked and disarmed while an action thread kept
@@ -791,7 +791,7 @@ def _emergency_stop(node) -> None:
     # first because it cannot fail on the wire and every later step can.
     _step('signal abort',       lambda: node.mongla.request_abort())
 
-    # ⛔ BRAKE A RUNNING LEG FIRST, AND ON SROT `send_neutral` CANNOT DO IT (B42).
+    # Brake a running leg first, and on SROT `send_neutral` cannot do it (B42).
     #
     # Ctrl-C most often arrives DURING a move. A SROT_MOVE leaves the board in
     # AUTO, and in AUTO the firmware overwrites every pilot axis from the
@@ -809,7 +809,7 @@ def _emergency_stop(node) -> None:
 
     ok, reason = None, 'not attempted'
     try:
-        # ⛔ BOUNDED UNDER THE LAUNCH'S GRACE (issue #21). `disarm()` polls up
+        # Bounded under the launch's grace (issue #21). `disarm()` polls up
         # to 15 s by default, and `ros2 launch` escalates SIGINT to SIGTERM
         # after its grace -- 5 s unless set -- so a slow confirmation was
         # killed mid-poll and the operator never saw whether it took.
@@ -851,7 +851,7 @@ def _set_parent_death_signal(sig) -> bool:
 def _orphan_guard(node, executor, parent_pid: int):
     """Handler for the parent-death signal: stop if the parent really is gone.
 
-    ⛔ AN ORPHANED MANAGER IS THE WORST PROCESS ON THE VEHICLE (2026-10-03, on
+    An orphaned manager is the worst process on the vehicle (2026-10-03, on
     the Pi). `ros2 launch` died on SIGTERM and left every child running: the
     manager kept the board's port AND kept its heartbeat going, so the board's
     companion-loss failsafe never fired, with nothing attached that could stop

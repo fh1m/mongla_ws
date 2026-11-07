@@ -91,7 +91,7 @@ def test_the_rebuild_is_attempted_ONCE_not_every_frame():
 
 
 def test_it_EXITS_when_the_rebuild_did_not_help(monkeypatch):
-    """THE FIX. Staying up is the failure mode, not the recovery -- the node
+    """The fix. Staying up is the failure mode, not the recovery -- the node
     was indistinguishable from a healthy one to every check we have."""
     n = _node(rebuild_works=False)
     codes = []

@@ -2,7 +2,7 @@
 
 Measured on the vehicle with the downward camera fitted and no manager running:
 
-    [FLOW ] REFUSING: no depth yet, so no height above the floor  (q=0, 5
+    [flow ] refusing: no depth yet, so no height above the floor  (q=0, 5
             refused / 0 used)
 
 quality 0, zero velocity messages, no fabricated number. That is the behaviour

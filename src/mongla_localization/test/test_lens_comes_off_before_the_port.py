@@ -136,7 +136,7 @@ def test_the_pose_node_recovers_an_off_axis_board(medium):
     tp = _solve(medium)
     assert tp.range_m == pytest.approx(RANGE_M, rel=0.02)
     assert abs(tp.bearing_deg) == pytest.approx(BEARING_DEG[medium], abs=0.5)
-    # ⚠ 0.25, not the issue's 0.5: the ORDER is what this has to catch. At
+    # 0.25, not the issue's 0.5: the ORDER is what this has to catch. At
     # f_ref = n * fx the port map is nearly the identity in pixels, so running
     # it BEFORE the lens moves an edge point only ~3 px -- measured here as yaw
     # -0.49 and reprojection 0.10 px, against -0.135 and 0.012 in order.

@@ -254,7 +254,7 @@ class MonglaClient:
                 rclpy.spin_until_future_complete(
                     self.node, result_future, timeout_sec=deadline)
             except KeyboardInterrupt:
-                # ⛔ Ctrl-C is an OPERATOR ABORT, not a failed verb. It used to
+                # Ctrl-C is an OPERATOR ABORT, not a failed verb. It used to
                 # become `MoveFailed` -- an ordinary Exception -- which
                 # `retry`/`selector`/`never_fails` and the vision verbs all
                 # contain by design, so Ctrl-C during an align skipped ONE step

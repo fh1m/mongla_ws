@@ -8,7 +8,7 @@ the node module itself.
 import cv2
 
 
-# WINDOW 31, MEASURED. On this camera over a real ~16-frame baseline, with
+# Window 31, measured. On this camera over a real ~16-frame baseline, with
 # 172 candidate corners:
 #
 #     window   fb<=1px   RANSAC inliers   residual   ms
@@ -47,7 +47,7 @@ _F_AIR_PX = 513.94
 _F_WATER_PX = 741.0
 
 
-# ⛔ THE DE-ROTATION GAINS DEFAULT TO THE CANONICAL -1.0, DELIBERATELY.
+# The de-rotation gains default to the canonical -1.0, deliberately.
 #
 # The bench rig measured -1.150 (dx<-gx) and -1.095 (dy<-gy), cond(MtM) 27.7,
 # and cut false velocity under pure rotation by 90 %. But rotation about the
@@ -58,7 +58,7 @@ _F_WATER_PX = 741.0
 # the method carry over; THIS GAIN DOES NOT, whatever its cause. Re-derive it
 # on the hull."
 #
-# ⛔ THE SIGN WAS WRONG, AND -1.0 WAS THE WORST AVAILABLE CHOICE. 2026-09-07.
+# The sign was wrong, and -1.0 was the worst available choice. 2026-09-07.
 #
 # Re-derived on the hull, which is what the §12 note above asked for. Two
 # independent measurements, neither of which alone would have been enough:
@@ -67,7 +67,7 @@ _F_WATER_PX = 741.0
 #     origin with k-fold held-out scoring: the coupling is S = -1.058 (roll)
 #     and -0.830 (pitch). Held-out rms 4.23 px against 14.42 for predicting
 #     zero, R2 0.913, fold sd 0.008.
-#  2. OFFLINE AND EXACT, driving this node with a synthetic rotation whose
+#  2. Offline and exact, driving this node with a synthetic rotation whose
 #     ground truth is chosen rather than measured, the residual is linear in
 #     (S + g) and vanishes at g = -S:
 #
@@ -78,7 +78,7 @@ _F_WATER_PX = 741.0
 # DOUBLED the error against applying no correction at all. That is the
 # "a bad correction is worse than none" rule biting the default itself.
 #
-# ⛔ AND THEN THE VALIDATION A/B REFUTED THE FITTED GAINS. Read this before
+# And then the validation a/B refuted the fitted gains. Read this before
 # "fixing" the default back to the fitted numbers.
 #
 # Shipping 1.058/0.830 was the obvious next step and it is WRONG. Three
@@ -92,7 +92,7 @@ _F_WATER_PX = 741.0
 # under-reads. A over-reads by as much in the other direction. The zero
 # crossing is near g = 0.
 #
-# THE RECONCILIATION IS PHYSICAL AND §12 ALREADY NAMED IT: the effective gain
+# The reconciliation is physical and §12 already named it: the effective gain
 # depends on WHERE THE PIVOT IS -- `f * (1 - r/h)` -- so a gain fitted while
 # tilting about the lens does not transfer to a slide pivoting about the
 # operator's shoulder, and no single constant serves both. That is also the
@@ -107,12 +107,12 @@ _F_WATER_PX = 741.0
 #   * -1.0 is measurably the WORST available value on this hull, so leaving
 #     it would have been the one indefensible option.
 #
-# ⚠ THIS IS NOT "de-rotation does not work". §12 measured it HALVING the
+# This is not "de-rotation does not work". §12 measured it HALVING the
 # error at 0.638 rad/s, and that regime -- a yawing vehicle -- is most of a
 # mission, while every slide here is translation-dominated. Re-enabling it
 # needs a HIGH-ROTATION test on this hull, with the gain excited at the pivot
 # the vehicle actually rotates about. BUGS.md §11 item 24.
-# ⛔ WHAT THE FIT'S OWN ERROR CANNOT SEE (issue #23). The published variance
+# What the fit's own error cannot see (issue #23). The published variance
 # was the standard error of the mean of the fit residual alone -- ~1 mm/s --
 # while the measured error of this sensor is centimetres. Two terms are added,
 # each from a measurement in measured-bars.md, not a guess:

@@ -22,7 +22,7 @@ def _a(rpm, k=K, mass=M):
 # ── refusals: absence is never zero ──────────────────────────────────────── #
 
 def test_an_UNSET_k_REFUSES_rather_than_guessing():
-    """⛔ The load-bearing refusal. No absolute N-per-RPM^2 figure exists in our
+    """The load-bearing refusal. No absolute N-per-RPM^2 figure exists in our
     stack OR the firmware, so a default would be invented, and it multiplies
     every acceleration the estimator sees."""
     assert _a([1000] * 8, k=None) is None
@@ -48,7 +48,7 @@ def test_a_ZERO_ring_is_ZERO_acceleration_not_a_refusal():
 # ── geometry ─────────────────────────────────────────────────────────────── #
 
 def test_the_45_DEGREE_PROJECTION_is_applied_not_the_mixer_S_PLUS_MINUS_ONE():
-    """⛔ The sqrt(2) trap. mixer.cpp's matrix is a normalised DEMAND mix whose
+    """The sqrt(2) trap. mixer.cpp's matrix is a normalised DEMAND mix whose
     entries are +/-1; the thrusters sit at 45 deg. A force sum that reuses the
     matrix entries overreads surge and sway by 41 % and looks fine.
 

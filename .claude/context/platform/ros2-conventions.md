@@ -250,7 +250,7 @@ read; the underscore is for genuinely internal helpers.
 
 ## 8. QoS — one table, both ends
 
-⛔ **A RELIABLE subscriber against a BEST_EFFORT publisher receives nothing**, and rclpy says
+**Warning: A RELIABLE subscriber against a BEST_EFFORT publisher receives nothing**, and rclpy says
 so once, at construction. It happened twice on `image_raw`. So the vision links do not
 construct their own profiles: they import [`mongla_vision/qos.py`](../../../src/mongla_vision/mongla_vision/qos.py),
 and `test_qos_contract.py` checks every pairing *and* scans the source for a file that builds

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Three de-rotation settings, ONE slide, measured simultaneously.
 
-⛔ WHY. Four launch-path slides of a 30 cm truth read -8.17, +3.98, +3.38 cm
+WHY. Four launch-path slides of a 30 cm truth read -8.17, +3.98, +3.38 cm
 -- short, and one with the sign wrong. The refusals name a suspect:
 `rotation-dominated (1.43 of the flow)` means the de-rotation term the node
 subtracted was LARGER than the total flow it measured. That is the recorded
@@ -14,7 +14,7 @@ now the SROT BOARD. Nothing has re-checked that the board sits the same way
 round relative to this camera, and a swapped or sign-flipped axis subtracts
 real translation while looking like a working correction.
 
-ONE SLIDE, THREE ARMS. `flow_node` reads its frames off a TOPIC, so extra
+One slide, three ARMS. `flow_node` reads its frames off a TOPIC, so extra
 instances can watch the same camera at no cost and be driven by the same
 `distance_control` message. Every arm therefore sees the IDENTICAL motion --
 which is the only way to compare, since a hand slide is not repeatable to
@@ -58,7 +58,7 @@ from mongla_interfaces.msg import MonglaState
 # Arms are (name, {param: value}). Everything not named here is left at the
 # node's own default, so an arm differs from the reference in exactly one way.
 #
-# ⛔ THE FIRST DE-ROTATION A/B IS WITHDRAWN. It ran on a tool whose fake
+# The first de-rotation a/B is withdrawn. It ran on a tool whose fake
 # /mongla/state published yaw_deg = 0.0 against the manager's ~180, which
 # flipped the projection sign every interval and cancelled the travel in
 # EVERY arm equally -- so "all three alike" was the bug, not a result.
@@ -91,7 +91,7 @@ class AB(Node):
                                            ctrl_qos)
         self._state = self.create_publisher(MonglaState, '/mongla/state', 10)
         self.dist = {}
-        # ⛔ COUNT THE INTERVALS PER ARM. An arm reading 0.00 cm is either
+        # Count the intervals per ARM. An arm reading 0.00 cm is either
         # "measured, and it did not move" or "measured nothing at all", and
         # those are opposite conclusions that print identically. Absence is
         # not zero -- the rule that has already caught the barometer, the ESC
@@ -131,7 +131,7 @@ class AB(Node):
         m = MonglaState()
         m.header.stamp = self.get_clock().now().to_msg()
         m.depth_m = 0.0
-        # ⛔ YAW MUST BE NaN, NOT ZERO. The manager also publishes
+        # Yaw must be NaN, NOT ZERO. The manager also publishes
         # /mongla/state, with the board's real heading (~180 deg here). The
         # node keeps whichever arrived last, and `DistanceAccumulator`
         # projects with `e = yaw - axis_yaw`: with two publishers disagreeing
@@ -168,7 +168,7 @@ def spawn(name, params, cam, cal, height, medium):
     for topic in ('distance_traveled', 'velocity', 'flow_quality',
                   'distance_debug'):
         cmd += ['-r', f'{ns}/{topic}:=/ab/{name}/{topic}']
-    # ⛔ OWN THE PROCESS GROUP. `ros2 run` is a launcher: it execs the node
+    # Own the process group. `ros2 run` is a launcher: it execs the node
     # as a CHILD, so Popen.terminate() kills the wrapper and leaves the node
     # running. Measured: after three invocations there were THREE live copies
     # of every arm, all publishing to the same remapped topic, and the tool

@@ -1,6 +1,6 @@
 """A2 -- RETURN: 2,882 raw frames + 302 labelled.
 
-⛔ THIS TOOL'S ORIGINAL ANSWER (0.0 %) WAS RIGHT BY ACCIDENT AND IS NOT
+This tool's original answer (0.0 %) was right by accident and is not
 EVIDENCE. Two defects, both of which produce a confident number:
 
 1. It NAME-MATCHES `gate_backward`, a class no 2025 model has, so 0.0 % is
@@ -41,7 +41,7 @@ for tag,d in (('final_fun/RETURN    ',f'{R}/final_fun/RETURN'),
           f'  contr {a.contrast:5.1f}  bright {a.brightness:5.1f}  cast {a.cast:+6.1f}')
 
 print('\n  === A2. RETURN -- is there a model that reads it? ===')
-print('  ⛔ the name-matched sweep below CANNOT answer this -- see the module')
+print('  ERROR: the name-matched sweep below CANNOT answer this -- see the module')
 print('     docstring. It is kept only to show what it actually measures.')
 cands=[d for d in os.listdir(M) if os.path.isdir(f'{M}/{d}/weights')]
 gate=[d for d in cands if 'gate' in d]

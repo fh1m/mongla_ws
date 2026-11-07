@@ -1,19 +1,19 @@
 """Recover an ABSOLUTE heading from a prop whose world bearing is known.
 
-⛔ THE PROBLEM. Our BNO is deliberately magnetometer-free, so its yaw is
+The problem. Our BNO is deliberately magnetometer-free, so its yaw is
 relative to wherever the board happened to boot: a one-shot offset, and an
 arbitrary zero. Measured drift is under 0.01 deg/min at rest, which is
 excellent and does not help at all with the zero being unknown. Every mission
 that says "turn to 90" means 90 from boot, so a hull powered on at a different
 angle flies a different course from the same mission file.
 
-⛔ WHY THIS, AND NOT A MAGNETOMETER. A compass inside an aluminium hull sitting
+Why this, and not a magnetometer. A compass inside an aluminium hull sitting
 on eight thrusters is the sensor this stack already decided not to trust, and
 adding one is a hardware change we cannot test in water this week. A prop whose
 orientation the rulebook fixes is a heading reference that is already in the
 pool, costs nothing, and is read by a camera we already run.
 
-⛔ AND WHY IT MUST CONSUME A FUSED POSE, NEVER A RAW ONE. The planar flip puts
+And why it must consume a fused pose, never a raw one. The planar flip puts
 the mirrored branch at roughly -yaw, so re-anchoring on a flipped frame writes
 an absolute heading that is wrong by TWICE the off-axis angle -- and then every
 later turn inherits it. A wrong heading zero is worse than no heading zero,
@@ -117,7 +117,7 @@ def anchor_from(fused, hull_relative_yaw_deg: float,
     support = int(getattr(fused, 'support', 0))
     spread = float(getattr(fused, 'spread_deg', float('nan')))
     rule = str(getattr(fused, 'rule', ''))
-    # ⛔ ONLY A GEOMETRIC RESOLUTION REDEFINES A HEADING (issue #55). A pose
+    # Only a geometric resolution redefines a heading (issue #55). A pose
     # decided by counting can be the mirror branch: a 7/3 wrong-branch majority
     # was accepted and anchored 54 deg against a true 9. The mirror is wrong by
     # twice the off-axis angle, and every later turn would inherit it.

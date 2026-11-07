@@ -35,13 +35,13 @@ def run(mongla, log=None):
         err=ALIGN_ERR_PX, gain=ALIGN_GAIN, duration=30,
         fallback=creep_forward)
 
-    # ⛔ THE rescue/repair SLIDE PHASE WAS REMOVED 2026-09-28, not renamed.
+    # THE rescue/repair SLIDE PHASE WAS REMOVED 2026-09-28, not renamed.
     # `gate_rescue_repair` was retired (+0.0 points of separation between
     # gate-present and gate-absent footage; measured-bars section 59) and no
     # shipped model emits `rescue` or `repair`. The phase used to slide onto
     # the marker to pick a scoring side.
     #
-    # ⚠ Deleting it beats leaving it: `hailo.py` LOGS AN ERROR AND IGNORES an
+    # Deleting it beats leaving it: `hailo.py` LOGS AN ERROR AND IGNORES an
     # allowlist whose every name is unknown, so the detector keeps emitting
     # gate/shark/shaw_fish, `align('rescue')` never matches, the fallback
     # thrusts open-loop for its full duration, and the verb returns normally.

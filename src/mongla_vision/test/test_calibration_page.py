@@ -1,6 +1,6 @@
 """The calibration page's JavaScript must PARSE.
 
-⛔ THIS CAUGHT A SHIPPED DEFECT. Commit `1e27851` published a page whose
+This caught a shipped defect. Commit `1e27851` published a page whose
 entire `<script>` block was a JavaScript SyntaxError, so **nothing on the
 page worked** -- no status polling, no camera list, no buttons. It looked
 like a page that had simply stopped updating, and every Python test passed,

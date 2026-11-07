@@ -1,13 +1,13 @@
 """Where the props are, per course. The prior half of perceive-then-move.
 
-⛔ WHAT THIS IS FOR. A mission that searches for every prop from scratch spends
+What this is for. A mission that searches for every prop from scratch spends
 its run turning. BumblebeeAS do not: their mothers dead-reckon to roughly where
 a prop should be and let perception take over for the last few metres -- and on
 the task where perception was hardest, the slalom, they shipped plain waypoints
 and never ran the 3,000-line particle filter they had built. A prior map is the
 cheapest autonomy in the sport.
 
-⛔ AND WHAT MAKES IT SAFE HERE. Every number in a course file is a claim about a
+And what makes it safe here. Every number in a course file is a claim about a
 pool we may not have measured. So a course entry is INCOMPLETE BY DEFAULT: the
 loader refuses to answer for a prop whose position was never set, rather than
 handing back a zero that a mission would drive to. `measured: false` is a
@@ -15,7 +15,7 @@ statement that the value is a rulebook nominal, not our pool -- our props are
 not the venue's, and a range or a bearing off by a metre is a mission that
 arrives somewhere else with total confidence.
 
-⛔ ONE NUMBER, ONE PLACE. A prop's `bearing_deg` -- the compass direction its
+One number, one place. A prop's `bearing_deg` -- the compass direction its
 face points -- is what `mongla.anchor_heading()` needs to turn a landmark into
 an absolute heading, AND what a waypoint needs to approach it from the front.
 Writing it twice is how the two come to disagree, so the course file is the

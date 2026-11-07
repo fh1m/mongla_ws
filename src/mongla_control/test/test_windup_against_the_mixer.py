@@ -1,6 +1,6 @@
 """The lateral integrator must not wind up against a limit it cannot see.
 
-⛔ THE GAP THIS CLOSES. `motion_vision` already had anti-windup:
+The gap this closes. `motion_vision` already had anti-windup:
 `abs(p_lat + lat_i) < g_lat`. That watches the SOFTWARE gain cap. The board
 scales a whole thruster group down whenever any motor in it passes full, and
 never reports it -- so with yaw already spending horizontal authority the hull
@@ -28,7 +28,7 @@ def test_a_modest_demand_is_not_saturated():
 
 
 def test_lateral_plus_yaw_saturates_below_either_axis_cap():
-    """⛔ THE WHOLE POINT. Neither axis is near 100 %, and the hull is still
+    """The whole point. Neither axis is near 100 %, and the hull is still
     clipping -- because motor 1 carries yaw AND forward AND lateral, and their
     sum is what passes full. No single-axis cap can see this."""
     assert _mixer_saturated(lat_pct=60.0, yaw_pct=60.0, fwd_pct=0.0) is True

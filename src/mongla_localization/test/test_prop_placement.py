@@ -1,6 +1,6 @@
 """Placing a prop from sightings: truth tests, written before the code.
 
-WHAT WOULD FALSIFY IT. The claim is not "the estimate is close" -- any average
+What would falsify it. The claim is not "the estimate is close" -- any average
 is close on a good day. The claim is that the COVARIANCE it reports is honest
 when the hull's own position is wrong, because that is the error that does not
 average away: every sighting in a pass is taken from the same drifted pose.

@@ -5,13 +5,13 @@ If it can, the bank becomes a waypoint memory: revisit a spot, recognise it,
 and hand the localiser a loop closure -- the one correction a dead-reckoning
 filter with no GPS and no DVL cannot generate for itself.
 
-⚠ THE STANDING PREDICTION IS THAT THIS FAILS. The feature sweep holds that
+The standing prediction is that this fails. The feature sweep holds that
 place recognition over a tiled floor is defeated by aliasing ("nothing on a
 tiled floor -- aliasing is total"), and §22 measured a generic structural view
 matching a different run of itself on only 8 % of frames. This measures it
 rather than inheriting it.
 
-THE METHOD. Sample N frames along a downward clip and match every pair. Then
+The method. Sample N frames along a downward clip and match every pair. Then
 split the pairs by how far apart in TIME they are:
 
     near pairs   |dt| <= near_s      -- should match: overlapping ground
@@ -23,7 +23,7 @@ usable place recogniser needs a threshold that keeps near pairs and rejects far
 ones; if the far distribution sits on top of the near one, the floor is a
 repeating pattern and no threshold exists.
 
-⛔ A REVISIT IS INDISTINGUISHABLE FROM AN ALIAS HERE, and that is honest: both
+A revisit is indistinguishable from an alias here, and that is honest: both
 produce a far pair that matches. So a high far-tail is a REASON TO LOOK, not a
 proof of aliasing. The clip's own trajectory decides which, and we do not have
 ground truth for it -- stated rather than glossed.

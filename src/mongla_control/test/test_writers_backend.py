@@ -1,6 +1,6 @@
 """B30 -- every Writers callable must work on the board, and carry the right value.
 
-WHAT WENT WRONG. `make_writers` once closed over RC-override methods SrotFC never
+What went wrong. `make_writers` once closed over RC-override methods SrotFC never
 implemented. The vision arrival brake (`motion_vision._brake_axis`) is the one
 path that calls `writers.forward` / `writers.lateral`, and it is ON BY DEFAULT,
 so a plain `vision_align(lat=0)` raised AttributeError on arrival -- but only on

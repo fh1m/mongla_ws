@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Rank the four scale sources against a KNOWN-CONSTANT-SPEED approach.
 
-⭐ WHY THIS TOOL EXISTS BEFORE THE RUN. `tau = s / (ds/dt)` is the only
+Why this tool exists before the run. `tau = s / (ds/dt)` is the only
 model-free candidate of six that survived section 58/60/61, and it survived for
 a structural reason: the others answer the wrong question or answer it with no
 information, while tau answers the right one and is merely NOISY (section 62 --
@@ -23,7 +23,7 @@ That turns every open question into a fit rather than a taste:
     start ranges and check the two agree. That two-snap control is what caught
     the plane-tilt estimator reporting a smooth, confident, WRONG number.
 
-⛔ DO NOT SKIP THE CONTROL. `anchor/geometry.py` already paid this bill: a
+Do not skip the control. `anchor/geometry.py` already paid this bill: a
 31-frame rolling median took the tilt's p90 swing from 39 deg to 1.3, and two
 independent snaps of the same board still disagreed by 17.5 deg at p90.
 Smoothing bought smoothness, NOT accuracy. A filtered tau will look excellent
@@ -32,7 +32,7 @@ on a plot for exactly the same reason.
     # after the run
     python3 tools/tau_from_scale.py --bag <dir> --r0 4.0 --speed 0.3
 
-⚠ `--r0` and `--speed` are MEASURED, not commanded. A commanded 0.3 m/s that
+`--r0` and `--speed` are MEASURED, not commanded. A commanded 0.3 m/s that
 was really 0.26 makes every source look 15 % biased in the same direction,
 which is the one error this design cannot detect from inside.
 """
@@ -54,7 +54,7 @@ def true_tau(t, r0, v):
 def tau_from_series(t, s):
     """tau = s / (ds/dt), central differences, NaN where ds/dt ~ 0.
 
-    ⚠ NO SMOOTHING HERE, deliberately. The point of the run is to measure how
+    No smoothing here, deliberately. The point of the run is to measure how
     much smoothing is needed; applying some first would answer the question
     with its own assumption.
     """
@@ -110,7 +110,7 @@ def main() -> int:
         return 2
 
     if a.self_test:
-        # ⭐ THE SCORER IS TESTED BEFORE THE POOL, against sources whose bias
+        # The scorer is tested before the pool, against sources whose bias
         # we CHOSE -- so a bug in the scorer cannot be mistaken for a bias in a
         # sensor on the day, when re-running costs a pool session.
         import numpy as np
@@ -135,12 +135,12 @@ def main() -> int:
                 continue
             print(f'{name:<18}{r["n"]:>5}{r["bias"]:>+9.2f}{r["spread"]:>10.2f}'
                   f'{r["slope"]:>+8.2f}{r["jitter"]:>10.2f}')
-        print('\n⭐ A CONSTANT SCALE BIAS SCORES IDENTICAL TO PERFECT, and '
+        print('\nRESULT: A CONSTANT SCALE BIAS SCORES IDENTICAL TO PERFECT, and '
               'that is not a bug in the scorer -- it is the whole reason tau '
               'is the right quantity. tau is SCALE-INVARIANT, so a source that '
               'is 20 % off everywhere cancels exactly. No calibration is '
               'needed and none can help.')
-        print('⭐⭐ SO ONLY TWO THINGS CAN GO WRONG, and each has its own '
+        print('RESULT: SO ONLY TWO THINGS CAN GO WRONG, and each has its own '
               'column:')
         print('   NOISE  -- 2 % scale noise gives 23.3 s of tau jitter here, '
               'against the 27.2 s p90 measured on real footage (section 62). '

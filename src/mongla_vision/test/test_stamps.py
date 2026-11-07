@@ -96,7 +96,7 @@ from mongla_vision.tracking.lock_state import Rung            # noqa: E402
 
 
 def test_the_ANCHOR_rung_is_stamped_with_the_frame_IT_ran_on():
-    """THE DEFECT. The anchor runs at 3 Hz while the loop runs at frame rate,
+    """The defect. The anchor runs at 3 Hz while the loop runs at frame rate,
     so between evaluations its pose is REUSED -- up to 333 ms old. Publishing
     it under the current frame's header reported that third of a second as
     ~18 ms, and it did so only on the lower rungs: correct-looking exactly

@@ -19,7 +19,7 @@ from mongla_vision import detector_dual_node as dn
 def _run(camera_factory, replay=False, lock=False):
     """Drive main() with fake nodes; return (launcher, built camera names).
 
-    ⛔ `replay` must be set explicitly. A bare MagicMock returns a truthy
+    `replay` must be set explicitly. A bare MagicMock returns a truthy
     object for EVERY parameter, so `get_parameter('replay').value` reads as
     True and the loop builds no cameras at all -- the fake silently answers a
     question it was never told about, and every assertion here then measures

@@ -1,6 +1,6 @@
 name: Proof of Contribution Check
 
-# ⛔ The PR body is attacker-controlled. Anyone who can open a pull request
+# The PR body is attacker-controlled. Anyone who can open a pull request
 # writes it, including a first-time contributor from a fork.
 #
 # Until 2026-09-30 this workflow did:
@@ -45,22 +45,22 @@ jobs:
 
           if printf '%s' "$PR_BODY" | grep -qi "100% human-written"; then
             echo "status=exempt" >> "$GITHUB_OUTPUT"
-            echo "✔ PR marked as 100% human-written — skipping provenance check."
+            echo "PR marked as 100% human-written — skipping provenance check."
             exit 0
           fi
 
-          if printf '%s' "$PR_BODY" | grep -q "## 🤖 AI Provenance"; then
+          if printf '%s' "$PR_BODY" | grep -qE "^## .*AI Provenance"; then
             if printf '%s' "$PR_BODY" | grep -qP "\|\s+\d+\s+\|\s+\S"; then
               echo "status=pass" >> "$GITHUB_OUTPUT"
-              echo "✔ AI Provenance section found and populated."
+              echo "AI Provenance section found and populated."
             else
               echo "status=empty" >> "$GITHUB_OUTPUT"
-              echo "✘ AI Provenance section exists but table appears empty."
+              echo "AI Provenance section exists but table appears empty."
               exit 1
             fi
           else
             echo "status=missing" >> "$GITHUB_OUTPUT"
-            echo "✘ No AI Provenance section found in PR description."
+            echo "No AI Provenance section found in PR description."
             exit 1
           fi
 
@@ -74,14 +74,14 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: [
-                "## ⚠️ Proof of Contribution Check Failed",
+                "## Proof of Contribution Check Failed",
                 "",
                 "This PR appears to contain AI-assisted code but is missing an **AI Provenance** section.",
                 "",
                 "Please add the following to your PR description:",
                 "",
                 "```",
-                "## 🤖 AI Provenance",
+                "## AI Provenance",
                 "| # | Author / Handle | Source URL | What came from this person |",
                 "|---|----------------|------------|---------------------------|",
                 "| 1 | @handle        | https://... | Specific insight used     |",

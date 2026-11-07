@@ -9,7 +9,7 @@
 `tools/record_session.sh`. A number nobody can replay is a number nobody can
 check, and three results were retracted this week for exactly that.
 
-⛔ **`/tmp` is a RAM disk on the dev box.** Bags land in `MONGLA_RUN_DIR`
+**Warning: `/tmp` is a RAM disk on the dev box.** Bags land in `MONGLA_RUN_DIR`
 (`~/mongla_runs`), never `/tmp`.
 
 ---
@@ -26,7 +26,7 @@ These are not tests, they are permissions. A NO here ends the day.
 | 0.4 | subsystem grade | `ros2 run mongla_manager bringup_check --srot` | exits 0 |
 | 0.5 | propellers clear, human on the kill switch | — | stated aloud |
 
-⛔ **0.2 gates most of this document.** An unhealthy barometer refuses
+**Warning: 0.2 gates most of this document.** An unhealthy barometer refuses
 `DEPTH_HOLD`/`AUTO`/`PATTERN`, and since `SROT_MOVE` enters `AUTO` **every move
 verb is denied** — the vehicle arms and does not move. It also means no
 altitude, so **loop closure cannot fire at all** (§39). On the bench on
@@ -40,7 +40,7 @@ altitude, so **loop closure cannot fire at all** (§39). On the bench on
 loop. Until this passes, §2 onward cannot run at all.
 
 Follow the two armed bench checks in
-[`srot-integration.md`](srot-integration.md). ⛔ An in-air move is **not**
+[`srot-integration.md`](srot-integration.md). An in-air move is **not**
 partial validation — at ~0 m, target and measurement agree.
 
 **Pass:** commanded depth held within a stated band, no runaway, `DEPTH_OUT`
@@ -54,7 +54,7 @@ Everything above the detector assumes it fires. Our recall has swung
 **29.2 / 72.7 / 68.3 %** across venues, so this is measured per venue, not
 assumed.
 
-- run `vision_pi.launch.py` with `paused:=false` ⛔ (the launch default is
+- run `vision_pi.launch.py` with `paused:=false` (the launch default is
   `true`, which consumes frames and publishes nothing — the defect that cost a
   day; it now warns)
 - point at each prop at 1 m, 2 m, 3 m, 5 m
@@ -67,7 +67,7 @@ needs. **Report:** per-prop, per-range detection rate and confidence.
 
 ## 3 — The gap distribution, in water (closes §50)
 
-⭐ **The measurement the whole lock ladder is sized on, and it has only ever
+**Key point: The measurement the whole lock ladder is sized on, and it has only ever
 been taken on a person in a room.**
 
 Same runs as §2 — no extra work, just the analysis:
@@ -82,7 +82,7 @@ p99 3.04 s, max 7.64 s.
 **Then, and only then**, the A/B in `config/ladder_candidate.yaml`: run the
 same approach twice, once on `shipped` and once on `candidate`, and score
 `lost` occupancy from `/lock`. **Pass for the candidate:** lower `lost` with no
-increase in false holds. ⛔ If it is not better in water, the shipped values
+increase in false holds. If it is not better in water, the shipped values
 stay — the candidate exists to be refuted.
 
 ---
@@ -94,7 +94,7 @@ Air numbers to beat, from the live run (§36): `detection 48.1 % · follow
 
 **Pass:** the anchor rung carries real gaps on a prop, i.e. `anchor > 0` in a
 meaningful fraction of windows and `lost` below the air figure.
-⚠ Do not expect the air numbers — a prop that leaves the frame is a harder
+**Caution:** Do not expect the air numbers — a prop that leaves the frame is a harder
 target than a person who walks back in.
 
 ---
@@ -104,7 +104,7 @@ target than a person who walks back in.
 - enrol on approach, then leave and return
 - **Pass:** the bank re-identifies the same prop; `identity_ok` fires at the
   40-inlier bar (§25) and does **not** fire on a different prop.
-- ⛔ **The known failure to hunt:** a preloaded bank said "torpedo" while
+- **Warning: The known failure to hunt:** a preloaded bank said "torpedo" while
   looking at the gate (§22). Point at the *wrong* prop deliberately and confirm
   it refuses.
 
@@ -112,7 +112,7 @@ target than a person who walks back in.
 
 ## 6 — Loop closure: the first fix that ever reaches the filter
 
-⛔ **Never fired. Not once, anywhere.** Needs the downward camera, a working
+**Warning: Never fired. Not once, anywhere.** Needs the downward camera, a working
 baro (0.2) and `floor_height` from the tile grating.
 
 ```
@@ -122,13 +122,13 @@ baro (0.2) and `floor_height` from the tile grating.
 - swim a loop that genuinely revisits a spot, 30 s+ apart and 1.5 m+ travelled
 - **Pass:** a closure fires **at the revisit and nowhere else**, with sigma
   composed from the stored checkpoint's own uncertainty.
-- ⛔ **Watch for the opposite failure:** `/mongla/odom` jumping to a place the
+- **Warning: Watch for the opposite failure:** `/mongla/odom` jumping to a place the
   vehicle never was. A wrong fix is **believed** — the filter shrinks its
   covariance around it (§39) — so a single false closure fails this test.
 - **Record:** `/mongla/localization/fix`, `/mongla/odom`, and the lock log's
   `loop closure N:` lines.
 
-⚠ Bar derived on archive: **zero** false closures at 100 inliers across six
+**Caution:** Bar derived on archive: **zero** false closures at 100 inliers across six
 cross-venue pairs (§41). If water produces any false closure at 100, raise the
 bar rather than keeping it.
 
@@ -141,7 +141,7 @@ compared**, because the barometer has never worked at the same time as the
 grating.
 
 - measure the real pool depth with a tape, set `pool_depth_m`
-- **Pass:** the two agree within 20 %. ⛔ If they disagree, the module reports
+- **Pass:** the two agree within 20 %. If they disagree, the module reports
   it and **does not pick a winner** — `pool_depth_m` is the one nobody
   measures. Resolve it with the tape, not with code.
 
@@ -157,7 +157,7 @@ deliberate-damage test in this document, and the cheapest.
 - then **occlude the target instead**, port clean
 - **Pass:** it says `the VIEW changed, the camera is fine`
 
-⛔ If both read the same, the separator is not a separator and its thresholds
+**Warning:** If both read the same, the separator is not a separator and its thresholds
 (`COLLAPSE_FRACTION`, `FOULED_FRACTION`) need measuring rather than declaring.
 
 ---
@@ -171,7 +171,7 @@ deliberate-damage test in this document, and the cheapest.
 | **Downward camera as a DVL** | verified to 1.09 cm over 30 cm **in air**. No in-water velocity number exists at all |
 | **Approach band** (§46) | confidence peaks mid-range on archive. Does the peak sit at the same apparent size in this water? |
 | **Fine-tuned XFeat** | only if the checkpoint sweep says it wins on the held-out venue |
-| **Time-to-contact from scale** (§62) | tau swings as much as its own value (p50 2.5 s, frame-to-frame p90 27.2 s). ⭐ Needs ONE run approaching a fixed prop at a **known constant speed from a known start range** — that makes true tau a straight line, so the filter becomes a fit instead of a guess. Cheapest item on this list and it unblocks `time_to_contact.py` |
+| **Time-to-contact from scale** (§62) | tau swings as much as its own value (p50 2.5 s, frame-to-frame p90 27.2 s). Needs ONE run approaching a fixed prop at a **known constant speed from a known start range** — that makes true tau a straight line, so the filter becomes a fit instead of a guess. Cheapest item on this list and it unblocks `time_to_contact.py` |
 | **`gate_sharks` vs the shipped graph** (§59) | +84.2 points of separation at 0.30 on archive against **+0.0** for `gate_rescue_repair`. Confirm on this pool's water before trusting either, and decide whether both run (`fwd_models:=`) or one does |
 | **Orange flare chroma** (§60) | direction (+a*, +b*) held in every run; magnitude collapsed 20.2 → 0.8 between two SIM lighting setups. Only worth re-measuring with a real flare in frame, and only as a diagnostic |
 | **The trackability floor** (§58) | `Follower.reset` now refuses below 2.0 grey levels. Measured on a GRID of boxes, mostly water and wall — so the 19.4 % refusal rate is an upper bound. What water decides is the rate on REAL detection boxes |
@@ -184,5 +184,5 @@ deliberate-damage test in this document, and the cheapest.
    down.
 2. **The `continuity_from_bag.py` output** for each prop.
 3. **A yes/no per section above** — not a narrative.
-4. ⭐ **Any number that contradicts this file.** Three results were retracted
+4. **Key point: Any number that contradicts this file.** Three results were retracted
    this week; the ones that hurt were the ones nobody went looking to refute.

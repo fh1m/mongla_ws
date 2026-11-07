@@ -1,6 +1,6 @@
 """A mailbox, not a queue: always the newest frame, with the kernel's timestamp.
 
-WHY THIS EXISTS, IN ONE MEASUREMENT
+Why this exists, in one measurement
 -----------------------------------
 Ask the driver for a frame after the consumer has been busy for 400 ms and this
 is what four policies return (Sonix 640x360@60, 4 buffers, kernel timestamps):
@@ -14,8 +14,8 @@ is what four policies return (Sonix 640x360@60, 4 buffers, kernel timestamps):
 the staleness.** The reason is a fact about V4L2 that the advice does not
 account for, and that this code was written after measuring:
 
-    WHEN THE BUFFERS ARE FULL THE DRIVER KEEPS THE OLDEST FRAMES AND DROPS
-    EVERY NEW ONE.
+    When the buffers are full the driver keeps the oldest frames and drops
+    Every new one.
 
 Verified off the driver's own `sequence` counter, on two cameras from different
 vendors: stall 400 ms at 60 fps and the queue holds sequence +1..+4 -- the four
@@ -27,8 +27,8 @@ and hands you the least-old fossil.
 
 That leaves two ways to be fresh, and only one of them is free:
 
-  * DRAIN AND THEN WAIT (C). Correct, and it blocks a frame period.
-  * NEVER LET THE QUEUE FILL (D, this class). A thread that dequeues
+  * drain and then wait (C). Correct, and it blocks a frame period.
+  * never let the queue fill (D, this class). A thread that dequeues
     continuously and requeues immediately means the driver ALWAYS has a free
     buffer, so it never drops a frame and the newest one is always about one
     frame old. Nothing blocks.
@@ -38,21 +38,21 @@ inference): 22.4 ms median, 31.95 ms p95 -- bounded, no tail -- with the
 consumer's own tick at 33.39/33.40 ms median/p95, i.e. no GIL starvation. The
 pump held the camera's full 62.5 Hz with 0 sequence gaps.
 
-WHAT THIS IS NOT
+What this is not
 ----------------
 It is not a faster camera. The frame is ~1.0-1.5 frame periods old no matter
 what, because that is how long the sensor and the USB isochronous transfer
 take. This removes the QUEUEING on top of that, which is the part that grows
 without bound when the consumer is slow.
 
-BUFFER COUNT IS NOT A LEVER, which is worth stating because the code this
+Buffer count is not a lever, which is worth stating because the code this
 replaces set `CAP_PROP_BUFFERSIZE = 1` with the comment "avoid stale frames".
 Measured under this class at 2/3/4/6/8 buffers: 26.4-26.6 ms median and
 35.3-35.5 ms p95, flat within noise, 1 dropped frame in ~400 at every setting.
 The pump is what fixes staleness; the buffer count only decides how much slack
 there is before the driver starts dropping. Four is plenty.
 
-THE TIMESTAMP IS THE OTHER HALF
+The timestamp is the other half
 -------------------------------
 `FrameMeta.stamp_monotonic` is the kernel's capture time, not the time this
 code got around to looking. Everything downstream that reasons about age --
@@ -154,7 +154,7 @@ class _Pix(ctypes.Structure):
 
 
 class _Format(ctypes.Structure):
-    # THE UNION IS 8-BYTE ALIGNED, so the kernel pads 4 bytes after `type`.
+    # The union is 8-BYTE aligned, so the kernel pads 4 bytes after `type`.
     # Without the c_uint64 member ctypes packs the union at offset 4 and every
     # field reads four bytes early -- width lands in the padding and reads 0,
     # height reads what was really width. A `sizeof` check does NOT catch it:
@@ -208,7 +208,7 @@ class V4L2MailboxCamera(Camera):
 
     # Four buffers. Measured flat from 2 to 8 under this design (26.4-26.6 ms
     # median), so this is slack for a scheduling hiccup, not a tuning knob.
-    # BUFFERS ARE SLACK FOR THE PUMP, AND 4 WAS NOT ENOUGH.
+    # Buffers are slack for the pump, and 4 was not enough.
     #
     # Round 30 measured buffer count as irrelevant to latency (26.4-26.6 ms
     # flat from 2 to 8) and that measurement stands -- for a pump that is
@@ -252,7 +252,7 @@ class V4L2MailboxCamera(Camera):
         self._decoder = (self._decode_mjpeg if self._fourcc == 'MJPG'
                          else self._decode_yuyv)
 
-        # THE MAILBOX -- LOCK-FREE, by an atomic reference store.
+        # The mailbox -- lock-free, by an atomic reference store.
         #
         # `self._slot = (payload, cap_t, seq)` is ONE `STORE_ATTR`, and the
         # tuple it publishes is immutable. So a reader's `s = self._slot` is
@@ -260,7 +260,7 @@ class V4L2MailboxCamera(Camera):
         # new one -- there is no state in which it can see half of each. That
         # is the atomic pointer swap; nothing else is needed for correctness.
         #
-        # THE BUFFERING IS BY REFCOUNT, WHICH IS BETTER THAN DOUBLE BUFFERING.
+        # The buffering is by refcount, which is better than double buffering.
         # A consumer that is mid-decode holds a reference to its tuple, so the
         # pump's next store cannot touch that memory -- the old payload stays
         # alive exactly as long as someone is reading it and is freed the
@@ -269,7 +269,7 @@ class V4L2MailboxCamera(Camera):
         # back onto it; refcounting answers that by construction, and the
         # depth is "however many are actually in use" rather than two.
         #
-        # THE LOCK IT REPLACES WAS MEASURED, not assumed away: 0.198 us per
+        # The lock it replaces was measured, not assumed away: 0.198 us per
         # store, 2.0x the bare store, which is 0.001 % of a 16 ms frame. So
         # this is not a latency change and is not claimed as one. It is a
         # scheduling one: a lock is a place where the pump can be made to WAIT
@@ -393,8 +393,8 @@ class V4L2MailboxCamera(Camera):
         (memcpy, not a decode) and the decode happens in the consumer, where
         the cost is paid only for frames actually used.
 
-        THE SKIP IS NOT AN OPTIMISATION, IT IS THE SAME MAILBOX RULE ONE LEVEL
-        DOWN, AND LEAVING IT OUT COST 13.7 ms.
+        The skip is not an optimisation, it is the same mailbox rule one level
+        Down, and leaving it out cost 13.7 ms.
 
         This loop used to take exactly one buffer per iteration. That is fine
         while it keeps up, and it does not keep up: it is a Python thread, and
@@ -448,7 +448,7 @@ class V4L2MailboxCamera(Camera):
                     break
                 # Give the older buffer straight back, uncopied.
                 #
-                # B23: THIS RE-QUEUE USED TO SIT OUTSIDE THE try. `_pump_loop`
+                # B23: This re-queue used to sit outside the try. `_pump_loop`
                 # is a bare Thread target, so an OSError here did not skip a
                 # frame -- it killed the pump thread and leaked the buffer. The
                 # only thing that noticed was `is_healthy()`'s 2 s freshness
@@ -522,7 +522,7 @@ class V4L2MailboxCamera(Camera):
                 # design that should be ~0; a rising count means the pump
                 # itself is being starved of CPU.
                 #
-                # MINUS OUR OWN SKIPS. The sequence gap left by deliberately
+                # Minus our own skips. The sequence gap left by deliberately
                 # discarding older buffers looks identical to a kernel drop,
                 # and counting them made this number mirror `skipped` almost
                 # exactly -- which read as "the kernel is dropping 1688
@@ -554,7 +554,7 @@ class V4L2MailboxCamera(Camera):
     def wait_new(self, timeout: float) -> None:
         """Sleep until the pump stores a frame, instead of polling.
 
-        ⛔ MEASURED, 2026-10-03: a consumer that wants every frame (the
+        MEASURED, 2026-10-03: a consumer that wants every frame (the
         composed lock ladder) turned the capture loop's 1 ms poll into ~1000
         GIL acquisitions a second per camera, and the two detector workers in
         the same process lost a third of their rate to the convoy. Cleared
@@ -590,7 +590,7 @@ class V4L2MailboxCamera(Camera):
         self._served = seq
         self._idx += 1
         meta.fresh = True
-        # THE KERNEL'S CAPTURE TIME, not now(). Everything downstream that
+        # The kernel's capture time, not now(). Everything downstream that
         # reasons about age is only as honest as this field.
         meta.stamp_monotonic = cap_t
         meta.stamp_wall = time.time() - (time.monotonic() - cap_t)
@@ -614,7 +614,7 @@ class V4L2MailboxCamera(Camera):
                             cv2.COLOR_YUV2BGR_YUYV)
 
     def is_healthy(self) -> bool:
-        # ⛔ A NON-MONOTONIC CLOCK IS A FAULT, NOT A WARNING (issue #34). Every
+        # A non-monotonic clock is a fault, not a warning (issue #34). Every
         # frame age is `time.monotonic() - cap_t`; on any other clock that is a
         # plausible, meaningless number, and the freshness gates and the fire
         # gate would keep acting on it. Unhealthy is how the camera node and

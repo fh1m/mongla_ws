@@ -7,22 +7,22 @@ and places it from several sightings with `place_prop(commit=True)`. The
 placement goes into the deck course file, so the next run dead-reckons to
 where the prop stood today, not where a rulebook said it might.
 
-⛔ IT TRUSTS THE HULL, SO THE HULL MUST BE TRUSTWORTHY. Run it from a known
+It trusts the hull, so the hull must be trustworthy. Run it from a known
 station, right after `anchor_on`, before the pose has had time to drift. A
 surveyed (`measured: true`) prop is only ever checked, never overwritten, so
 a run from a bad pose cannot rewrite a good survey -- it logs a disagreement
 instead.
 
 It never translates: arm, one depth, then turns and alignments in place.
-Fill the four ★ tunables, then:
+Fill the four tunables, then:
 
     ros2 run mongla_planner mission survey_course
 """
 
-COURSE = None          # ★ course name, e.g. the file stem under ~/.mongla/courses
-ANCHOR_PROP = None     # ★ a prop with a measured bearing, visible from the station
-MODEL = None           # ★ a detector model that emits every surveyed prop's class
-SURVEY_PROPS = ()      # ★ prop names in the order to turn to them
+COURSE = None          # course name, e.g. the file stem under ~/.mongla/courses
+ANCHOR_PROP = None     # a prop with a measured bearing, visible from the station
+MODEL = None           # a detector model that emits every surveyed prop's class
+SURVEY_PROPS = ()      # prop names in the order to turn to them
 
 DEPTH_M = -0.5         # negative = below the surface
 SAMPLES = 8            # sightings per prop

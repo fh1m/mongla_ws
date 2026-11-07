@@ -43,7 +43,7 @@ def test_no_course_is_refused_by_name():
 
 
 def test_an_unanchored_heading_is_refused_because_the_frames_would_mix():
-    # THE LOAD-BEARING ONE. Bearings relative to boot, positions in pool terms:
+    # The load-bearing one. Bearings relative to boot, positions in pool terms:
     # the solve succeeds and the answer is in a rotated frame.
     fake = _fake(course=_course(gate=(0.0, 0.0), slalom=(8.0, 2.0)), offset=None)
     got = MonglaMission.fix_position(fake)

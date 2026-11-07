@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fit a free-decay rotation: the drag-to-inertia ratio the controller needs.
 
-⛔ WHAT IT IDENTIFIES, AND WHAT IT DOES NOT. Spin the hull about an axis, cut
+What it identifies, and what it does not. Spin the hull about an axis, cut
 the command, and the rate decays under its own drag. For pure QUADRATIC damping
 with no restoring term the decay has a closed form and it is a STRAIGHT LINE in
 1/omega:
@@ -10,14 +10,14 @@ with no restoring term the decay has a closed form and it is a STRAIGHT LINE in
 
 so a least-squares line through 1/omega gives **q/I** directly.
 
-⚠ THAT RATIO IS THE ANSWER, NOT q. Turning it into a drag coefficient needs I,
+That ratio is the answer, not q. Turning it into a drag coefficient needs I,
 and ours is a uniform-body guess -- a real hull is a shell with its battery
 placed somewhere deliberate. The good news is that q/I is exactly what the
 closed-loop time constant depends on, so the controller needs the ratio and not
 either term. Say "q/I" wherever this is quoted, and do not silently multiply by
 a guessed inertia.
 
-⭐ THE PROCEDURE IS REHEARSED BEFORE THE POOL. `tools/control_bench/test_plant.py
+The procedure is rehearsed before the pool. `tools/control_bench/test_plant.py
 ::test_free_decay_recovers_the_drag_we_put_in` runs this fit against a plant
 whose drag we CHOSE and checks it comes back to 1 %. An identification that
 cannot recover a known answer on a noiseless plant will return a plausible one
@@ -104,7 +104,7 @@ def fit_decay(t, omega, *, min_rate_frac: float = 0.10) -> DecayFit:
 
 
 def looks_linear_instead(t, omega) -> bool:
-    """⚠ IS THE DAMPING ACTUALLY QUADRATIC? A LINEAR-damped decay is exponential,
+    """Is the damping actually quadratic? A LINEAR-damped decay is exponential,
     so `ln(omega)` is the straight line and `1/omega` is not.
 
     Returns True when the log fit is clearly better, which means the quadratic
@@ -148,7 +148,7 @@ def main(argv) -> int:
             w.append(float(parts[1]))
     print(fit_decay(t, w))
     if looks_linear_instead(t, w):
-        print('\n⚠ A LOG FIT IS BETTER THAN 1/omega HERE. The damping looks '
+        print('\nWARNING: A LOG FIT IS BETTER THAN 1/omega HERE. The damping looks '
               'LINEAR, not quadratic, so the q/I above is the wrong model for '
               'this trace. Re-spin faster, or fit a linear coefficient.')
     return 0

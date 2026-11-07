@@ -13,7 +13,7 @@ Use this to verify:
   - 90-degree yaw_right turns the bow right, not left.
   - move_forward does not crab (if it does, check thruster spin directions).
 
-⛔ Every verb here is a SROT_MOVE, which closes the depth loop -- see
+Every verb here is a SROT_MOVE, which closes the depth loop -- see
 CLAUDE.md §2 for the two armed bench checks that gate it.
 
 Run: ros2 run mongla_planner mission demo_square

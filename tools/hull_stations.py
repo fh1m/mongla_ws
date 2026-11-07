@@ -3,7 +3,7 @@
 
     python3 tools/hull_stations.py <Part_Studio.glb> [--bore 84] [--yaml]
 
-⛔ WHY THIS EXISTS, AND WHAT IT REPLACES. Hull geometry has been measured two ways
+Why this exists, and what it replaces. Hull geometry has been measured two ways
 in this tree and both had a problem:
 
   1. `tools/pack_hull.py` + `docs/assets/cad/hull.mgla`. That asset is vertex-
@@ -19,7 +19,7 @@ in this tree and both had a problem:
      element id. It cannot run in CI, it cannot run offline, and it cannot be
      re-run by anyone who does not have the CAD open.
 
-⭐ THE THIRD WAY, AND IT WAS IN THE FILE ALL ALONG. glTF requires every POSITION
+The third way, and it was in the file all along. glTF requires every POSITION
 accessor to carry exact `min` and `max` -- that is the spec's own axis-aligned
 bounding box, in metres, written by the exporter from the CAD. It is present even
 when the vertex data is Draco-compressed, because the bounds live in the JSON
@@ -32,12 +32,12 @@ never saw these numbers: it tries to DECODE the mesh, and Onshape emits
 `KHR_draco_mesh_compression` unless you go out of your way. Geometry never needed
 the mesh.
 
-⚠ WHAT THIS DOES NOT GIVE YOU. Mass, centre of mass, centre of buoyancy, net
+What this does not give you. Mass, centre of mass, centre of buoyancy, net
 buoyancy, thrust per RPM. A bounding box is a box. See `hull_geometry.yaml` for
 which of those are computable from shape alone (added-mass coefficients are) and
 which need water (net buoyancy does).
 
-⚠ THE FRAME. Onshape's glTF exporter writes glTF's Y-up convention, so the CAD's
+The frame. Onshape's glTF exporter writes glTF's Y-up convention, so the CAD's
 long axis Y lands on the export's Z. Measured against this hull, the mapping is
 
     cad = (mesh_x, -mesh_z, mesh_y)
@@ -106,7 +106,7 @@ def node_matrix(node: dict):
 def _xform_box(m, lo, hi):
     """The AABB of a transformed AABB: all eight corners, re-bounded.
 
-    ⚠ NOT the transform of the two corners. Under a rotation that is simply wrong,
+    NOT the transform of the two corners. Under a rotation that is simply wrong,
     and it is wrong in a way that looks plausible -- a slightly small box. Onshape
     bakes part placement into the coordinates and emits no node transforms at all
     (asserted below), so on this file the distinction never bites; it is here so
@@ -142,7 +142,7 @@ def parts(gltf: dict):
             hi = [float('-inf')] * 3
             for prim in gltf['meshes'][node['mesh']]['primitives']:
                 acc = gltf['accessors'][prim['attributes']['POSITION']]
-                # ⛔ The spec REQUIRES min/max on a POSITION accessor. If an
+                # The spec REQUIRES min/max on a POSITION accessor. If an
                 # exporter omits them, say so rather than guessing: a missing
                 # bound silently shrinks a part and moves its centre.
                 if 'min' not in acc or 'max' not in acc:
@@ -232,7 +232,7 @@ def main(argv=None) -> int:
                   + ', '.join(f'{s:+.2f}' for s in stations)
                   + (f'   separation {stations[-1] - stations[0]:.2f} mm'
                      if len(stations) == 2 else ''))
-        print('\n⚠ Compare a separation against the documented value BEFORE using it.'
+        print('\nWARNING: Compare a separation against the documented value BEFORE using it.'
               '\n  A decimated mesh gave 346.6 / 520.4 here; the CAD gives 350.0 / 519.0.')
 
     if args.yaml:
@@ -250,7 +250,7 @@ def main(argv=None) -> int:
                   f'    position_m: [{p[0]:.5f}, {p[1]:.5f}, {p[2]:.5f}]\n'
                   f'    axis: [{ax[0]}, {ax[1]}, {ax[2]}]\n'
                   f'    bore_mm: {args.bore:.0f}')
-        print('# ⛔ The AXIAL unit is a motor, not a tunnel, so it is NOT in this list.'
+        print('# ERROR: The AXIAL unit is a motor, not a tunnel, so it is NOT in this list.'
               '\n#   Identify it by POSITION (on the long axis, past the last tunnel,'
               '\n#   with a duct ring just outboard). See hull_geometry.yaml.')
     return 0

@@ -1,6 +1,6 @@
 """The fast rung: carry a box across the frames the detector has nothing for.
 
-WHERE IT SITS. Three timescales, each bounding the one below:
+Where it sits. Three timescales, each bounding the one below:
 
     ~50 Hz    THIS -- sparse LK inside the last box   frame-to-frame, DRIFTS
     ~5-10 Hz  the anchor (XFeat homography)           frame-to-reference, bounded
@@ -10,19 +10,19 @@ Measured detection gaps on real competition footage are p50 0.155 s / p90
 0.651 s / p99 2.418 s. At 50 Hz that is a median of ~8 frames with no target
 position at all, and the control loop's authority decays through every one.
 
-WHY OPTICAL FLOW AND NOT A BIGGER DETECTOR. `goodFeaturesToTrack` +
+Why optical flow and not a bigger detector. `goodFeaturesToTrack` +
 `calcOpticalFlowPyrLK` on a 320x240 ROI measured **8.0 ms on ONE core of the
 Pi** with the full vision stack running -- 125 Hz for something the loop needs
 at 50. It is the cheapest possible way to answer "where did the box go" and it
 runs on cores the detector is not using.
 
-WHY IT MUST BE RESET, AND CANNOT STAND ALONE. Frame-to-frame tracking
+Why it must be reset, and cannot stand alone. Frame-to-frame tracking
 accumulates error without bound -- that is not a tuning problem, it is what
 integrating a noisy displacement does. Every accepted detection resets it, and
 the anchor bounds it in between. A follower left running on its own is a
 confident lie with a growing error bar.
 
-THE QUALITY SIGNAL IS FORWARD-BACKWARD ERROR. Track the points forward, then
+The quality signal is forward-backward error. Track the points forward, then
 track them back; a point that does not return to where it started was not
 tracked, it was guessed. This is what lets the follower REFUSE rather than
 publish a drifting box, and refusing is the whole reason it is safe to act on.
@@ -48,7 +48,7 @@ MIN_POINTS = 8
 # most likely background that happened to be inside the box.
 MIN_SURVIVAL = 0.30
 
-# ⛔ A CORNER COUNT IS NOT EVIDENCE THE PATCH IS TRACKABLE, and this is the
+# A corner count is not evidence the patch is trackable, and this is the
 # measurement that says so. Over 155 boxes on four archive clips, binned by the
 # grey-level standard deviation of the patch:
 #
@@ -76,14 +76,14 @@ MIN_SURVIVAL = 0.30
 #     2.0    19.4 %          86.7 %                   25.6 %
 #     4.0    49.7 %          64.9 %                   10.3 %
 #
-# ⚠ THE POPULATION IS NOT REAL DETECTION BOXES. Those 155 boxes are a GRID
+# The population is not real detection boxes. Those 155 boxes are a GRID
 # across the frame, so most are water and wall. A real detection sits on a prop
 # and is textured, so the 19.4 % refusal rate does NOT transfer -- it is an
 # upper bound on the cost, measured on the worst possible sample. What does
 # transfer is the cliff: below ~2 grey levels there is no information to track,
 # and no appearance-based rung can change that.
 #
-# ⛔ MEASURED AND REJECTED, so nobody re-derives them: a colour back-projection
+# Measured and rejected, so nobody re-derives them: a colour back-projection
 # rung (HSV hue+saturation) and NCC template matching were both tried as a
 # third, model-free rung for exactly these frames. The histogram LOSES to a
 # decoy box on 69 % of gate.mkv frames (margin -0.049), and NCC scores a
@@ -212,7 +212,7 @@ class Follower:
         b = p1.reshape(-1, 2)[good]
         x1, y1, x2, y2 = self._box
 
-        # ⭐ SIMILARITY FIT, NOT TRANSLATION ALONE. Median translation carries
+        # Similarity fit, not translation alone. Median translation carries
         # the box but cannot express SCALE or ROTATION, so an approaching
         # target kept a fixed-size box while it grew on screen -- and section
         # 23 measured that apparent SIZE is exactly what the approach
@@ -226,7 +226,7 @@ class Follower:
         # (optical flow RMSE 10.79 px at 30 fps against CSRT's 252.35 px at
         # 4 fps). We had the first two.
         #
-        # ⛔ RANSAC, and it must be able to FAIL. A similarity fit on points
+        # RANSAC, and it must be able to FAIL. A similarity fit on points
         # that have partly latched onto the background silently reports a
         # scale change that is really parallax, so a failed or degenerate fit
         # falls back to the median translation rather than being trusted.
@@ -241,7 +241,7 @@ class Follower:
                     and int(inl.sum()) >= self._min_fit_pts:
                 # A similarity matrix is [[s*cos, -s*sin, tx], [s*sin, s*cos, ty]]
                 s_fit = float(np.hypot(M[0, 0], M[1, 0]))
-                # ⛔ A scale jump per frame is a fit failure, not a target that
+                # A scale jump per frame is a fit failure, not a target that
                 # doubled in one frame. Clamp rather than trust.
                 if self._scale_lo <= s_fit <= self._scale_hi:
                     cx, cy = 0.5 * (x1 + x2), 0.5 * (y1 + y2)

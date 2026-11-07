@@ -1,6 +1,6 @@
 """An expired Kalman filter must be REVIVED by a real detection.
 
-THE BUG THIS PINS. `tracker_node._on_detections` had:
+The bug this pins. `tracker_node._on_detections` had:
 
     if self._kalman.is_expired(td.track_id):
         continue
@@ -18,7 +18,7 @@ are a dead zone where a reacquired target is silently missing from `/tracks`.
 The control coast follows `locked_id`, so it sees nothing -- in the exact path
 whose job is to survive a gap.
 
-WHY THE EXISTING SUITE COULD NOT SEE IT. `test_roboflow_tracker.py:107`
+Why the existing suite could not see it. `test_roboflow_tracker.py:107`
 composes the tracker and the smoother and then *reimplements* the node's
 publish logic in a local helper. It therefore tests a copy of the code, and
 the copy did not have the bug. These tests drive `TrackKalmanSmoother` through
@@ -50,7 +50,7 @@ def _TD(track_id, cx, cy, predicted, size=20.0):
 
 
 def _node_pass(kal, tracked, frame_t):
-    """THE SHIPPING FUNCTION, imported -- not a copy of it. That distinction
+    """The shipping function, imported -- not a copy of it. That distinction
     is the whole reason this bug survived: the existing suite reimplemented
     this loop, so it tested a copy that did not have the defect."""
     out = kalman_pass(kal, tracked, frame_t)
@@ -63,7 +63,7 @@ def _smoother(max_predict=5):
 
 
 def test_a_real_detection_revives_an_expired_track():
-    """THE ASSERTION. Coast past the predict horizon with the id still alive,
+    """The assertion. Coast past the predict horizon with the id still alive,
     then deliver a REAL box with that id. It must reach the output."""
     kal = _smoother(max_predict=5)
     t = 0.0

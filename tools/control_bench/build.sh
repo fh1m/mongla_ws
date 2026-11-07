@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Compile the board's control code for the host, as a shared library.
 #
-# ⛔ IT COMPILES THE FIRMWARE CHECKOUT IN PLACE and copies nothing. If the
+# It compiles the firmware checkout in place and copies nothing. If the
 # firmware moves, this fails loudly rather than building a stale copy that would
 # silently disagree with the board. A bench built from a copy is a bench that
 # drifts, and a drifting bench is worse than none.

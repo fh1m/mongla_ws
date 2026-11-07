@@ -28,7 +28,7 @@ Nothing raised anything, ever, because a tracker with no tracks still
 publishes an empty array and every node looks healthy. Same family as the
 truncated-coast bug in `test_tracker_rate.py`.
 
-THE FIX IS STRUCTURAL, NOT A TUNED NUMBER: a detection the DETECTOR chose to
+The fix is structural, not a tuned number: a detection the DETECTOR chose to
 publish must be allowed to start a track. Anything else silently discards
 work the chip already did. The gates are clamped to the detector's live
 `conf`, so the two move together and cannot drift apart again.
@@ -68,7 +68,7 @@ def test_the_shipped_gates_emit_NOTHING_at_real_underwater_scores():
 
 
 def test_clamping_to_the_detector_floor_restores_tracking():
-    """THE FIX. Same detections, same 0.6 request, clamped."""
+    """The fix. Same detections, same 0.6 request, clamped."""
     assert _emitted(detector_conf=0.15, score=0.258) > 25
 
 

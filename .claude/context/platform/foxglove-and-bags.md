@@ -100,7 +100,7 @@ panel-config schema is Foxglove-version-sensitive; if a panel loads blank, add i
 (Image → `/mongla/vision/forward/image_debug`, Plot → the `_action/feedback` err fields)
 and re-save the JSON.
 
-### ⚠ Gate A — prove FPS is unperturbed (mandatory before trusting it in-water)
+### Gate A — prove FPS is unperturbed (mandatory before trusting it in-water)
 
 Mongla is **FPS-coupled** (the vision loop freshness-decays the translational command by
 frame age). `foxglove_bridge` viewing raw images from two cameras over FathomX is real
@@ -117,7 +117,7 @@ camera at a time**; prefer the `image_debug` overlay over `image_raw`; if Hz sti
 un-check the image panels and keep only `detections` / `state` / `move` feedback — still
 very useful, near-zero cost.
 
-### ⚠ Gate B — prove the OFFLINE path this week, not on run day
+### Gate B — prove the OFFLINE path this week, not on run day
 
 A team abroad on venue Wi-Fi cannot depend on a cloud login. We resolved this by
 standardizing on **Lichtblick** (the offline-safe fork — see §4), which has no account
@@ -226,7 +226,7 @@ sudo apt install -y ros-humble-rosbag2-storage-mcap
 tether/switch — it needs **no** matching `ROS_DOMAIN_ID` and **no** DDS discovery on the
 dev box (that's why it's robust across the network).
 
-> **⚠ Viewer-vs-bridge protocol version (real gotcha).** `foxglove_bridge` 3.4.x is the
+> **Viewer-vs-bridge protocol version (real gotcha).** `foxglove_bridge` 3.4.x is the
 > new Foxglove-SDK server and requires the WebSocket subprotocol **`foxglove.sdk.v1`**; the
 > *classic* `foxglove.websocket.v1` gets a silent **HTTP 400 "handshake failed"**.
 > **Lichtblick 1.27.0 speaks `foxglove.sdk.v1`** (verified — it negotiates and connects), so

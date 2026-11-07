@@ -37,7 +37,7 @@ class FlowSetupMixin:
         # 50-vs-72 cm height error that produced an 83 % scale gap on the
         # bench. Absence must refuse, not guess.
         self.declare_parameter('pool_depth_m', float('nan'))
-        # ⛔ THE FLOOR IS NOT ONE NUMBER (issue #35). `pool_depth_m` multiplies
+        # The floor is not one number (issue #35). `pool_depth_m` multiplies
         # every velocity, and real venues slope (TRANSDEC ~1.2 -> 5 m) or step.
         # State the venue's shallowest and deepest floor and the published
         # sigma carries the scale error that range implies; left at NaN, the
@@ -57,7 +57,7 @@ class FlowSetupMixin:
         # than the whole error budget for a pool leg. Verified to recover the
         # true velocity to 0.000 % against forward-simulated port physics.
         self.declare_parameter('refractive_rectify', True)
-        # ⛔ NO `water_refractive_index` PARAMETER HERE (issue #37, B22's rule).
+        # No `water_refractive_index` parameter here (issue #37, B22's rule).
         # Flow had its own; PnP, the lock and the DSL read `optics.N_WATER`.
         # Overriding it at the pool for salt water made flow and pose disagree
         # about the same port. One constant, `optics.N_WATER`, read by all.
@@ -65,16 +65,16 @@ class FlowSetupMixin:
         self.declare_parameter('max_dispersion_ratio', 5.0)
         self.declare_parameter('grid_buckets', 4)
         self.declare_parameter('want_points', 80)
-        # ADAPTIVE KEYFRAME BASELINE. Emit a velocity once this much image
+        # Adaptive keyframe baseline. Emit a velocity once this much image
         # displacement has accumulated against the anchor, rather than once
         # per frame. See `_track` for why, and measured-bars for the numbers.
         self.declare_parameter('target_px', 8.0)
         self.declare_parameter('max_px', 25.0)
         self.declare_parameter('max_baseline_s', 0.75)
-        # RE-ANCHOR ON ACCUMULATED ROTATION, not only on displacement and
+        # Re-anchor on accumulated rotation, not only on displacement and
         # time. Measured on this camera's own floor texture (see below).
         self.declare_parameter('max_rotation_deg', 6.0)
-        # PLANAR RIGID FIT. A downward camera on a flat floor sees ONE body
+        # Planar rigid fit. A downward camera on a flat floor sees ONE body
         # move, so all the points measure the same four numbers. Measured
         # against a median, truth exact: with 1.5 deg of rotation in an
         # interval the median reports 4.79 px of translation that did not
@@ -105,7 +105,7 @@ class FlowSetupMixin:
         self.declare_parameter('stamp_at_midpoint', True)
         self.declare_parameter('estimate_time_offset', True)
         self.declare_parameter('time_offset_s', FLOW_TD_MEASURED_S)
-        # A BOUND ON td, because it is no longer only a diagnostic. Once td
+        # A bound on td, because it is no longer only a diagnostic. Once td
         # shifts every velocity stamp, a spurious correlation peak actively
         # CORRUPTS the output instead of logging a warning -- and the slew
         # makes a wrong value persist across windows. The plausible range is
@@ -114,7 +114,7 @@ class FlowSetupMixin:
         # past 150 ms is not a link delay, it is a bad peak.
         self.declare_parameter('time_offset_max_s', 0.15)
         self.declare_parameter('time_offset_min_quality', 0.5)
-        # ⛔ THE FLOOR'S OWN TILE, AS A THIRD HEIGHT SOURCE. `pool_depth_m` is,
+        # The floor's own tile, as a third height source. `pool_depth_m` is,
         # by this node's own admission below, "the one input nobody measures
         # carefully" -- and height is a clean multiplier on every velocity we
         # emit. A tiled floor carries its own scale: `h = f * tile_m / pitch_px`
@@ -160,7 +160,7 @@ class FlowSetupMixin:
                 if self._medium != 'water':
                     self._f_px = self._intr.fx
                 elif self._want_refract:
-                    # ⛔ THE INTRINSICS STAY IN AIR, DELIBERATELY. The lens and
+                    # The intrinsics stay in air, deliberately. The lens and
                     # its distortion coefficients are AIR-SIDE properties,
                     # calibrated with the camera dry; the water is in front of
                     # the port, not inside the lens. Scaling K to f_water
@@ -197,7 +197,7 @@ class FlowSetupMixin:
                     f'[FLOW ] calibration {cal!r} unreadable ({exc}); falling '
                     f'back to a single focal length and the frame centre, '
                     f'which measured a 3 % axis asymmetry on the bench')
-                # ⛔ THE FALLBACK IS THE NO-CALIBRATION PATH, ALL OF IT. It used
+                # The fallback is the no-calibration path, all of it. It used
                 # to leave whatever had been built before the failure -- an
                 # `_intr` with no rectifier behind it -- and an `_f_px` still at
                 # FOCAL_PARAMS_WIDTH, so a 640-wide stream read a focal length
@@ -258,7 +258,7 @@ class FlowSetupMixin:
     def _on_state(self, msg: MonglaState) -> None:
         """Depth, stamped when it was MEASURED rather than when it arrived.
 
-        ⛔ THE SIXTH INSTANCE, in the package that owns the fix. `stamps.py`
+        The sixth instance, in the package that owns the fix. `stamps.py`
         records four prior cases of "the clock was read at the wrong place";
         `flow_position` integrating on arrival time was the fifth. This is the
         same defect on the depth series: `_vz_down` differences these instants,
@@ -309,7 +309,7 @@ class FlowSetupMixin:
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         if not self._admit_frame_size((int(gray.shape[1]), int(gray.shape[0]))):
             return
-        # THE CAPTURE STAMP, never `now()`. dt is the denominator of every
+        # The capture stamp, never `now()`. dt is the denominator of every
         # velocity here, and re-stamping on arrival makes it the scheduler's
         # jitter rather than the shutter interval. This stack has shipped that
         # bug three times.

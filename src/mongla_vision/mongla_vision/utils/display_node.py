@@ -500,7 +500,7 @@ def _send_seek_frame(node: VisionDisplayNode, frames: int) -> None:
         node._seek_frame_pub.publish(Int32(data=int(frames)))
 
 
-# ⛔ THE LADDER LIVES WITH THE CAMERA THAT OWNS PLAYBACK SPEED. This file used
+# The ladder lives with the camera that owns playback speed. This file used
 # to carry its own identical copy, and `VideoFileCamera` carried step-up and
 # step-down methods that nothing called -- two copies of one tuple, in two
 # processes, with a comment in the camera admitting it ("same values understood

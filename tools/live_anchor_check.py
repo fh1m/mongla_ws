@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The anchor holding a target on the LIVE vehicle camera, with no detector.
 
-⭐ This is the rung's whole purpose, exercised in the one condition that makes
+This is the rung's whole purpose, exercised in the one condition that makes
 it necessary: the detector reports nothing, so a box-based tracker has nothing
 to carry forward. The bank does not need one -- it is handed a frame, and it
 says where the remembered scene went.

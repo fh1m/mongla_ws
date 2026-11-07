@@ -19,7 +19,7 @@ yourself.
    of six model-free vision candidates built in one session, the four with a
    pass/fail criterion written down first were each settled in one run; the two
    scored afterwards both produced a confident number that was wrong.
-   ⛔ A quality number a method computes from the data it just fit is **not**
+   **Warning:** A quality number a method computes from the data it just fit is **not**
    evidence — a vanishing point scored 0.958 on its own metric while jittering
    20 227 px. Cross-check against a second, independent observation or against
    synthetic input whose answer you chose. `tools/tau_from_scale.py --self-test`

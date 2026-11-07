@@ -1,6 +1,6 @@
 """`check_yaw_authority` -- refuse a yaw axis that cannot produce thrust.
 
-⛔ THE COUPLING. Two firmware literals stand between a host yaw demand and a
+The coupling. Two firmware literals stand between a host yaw demand and a
 turning propeller: the `0.02f` stick gate in `attitude_control.cpp:87` and the
 `0.005f` centre gap in `mixer.cpp:102`. Crossing the first is only useful if it
 also crosses the second, and whether it does depends on two parameters an
@@ -41,7 +41,7 @@ def test_this_board_passes():
 
 
 def test_the_config_h_default_is_refused():
-    """⛔ 45 deg/s is what a params reset restores, silently. At that rate a
+    """45 deg/s is what a params reset restores, silently. At that rate a
     demand past the stick gate produces exactly zero thrust."""
     ok, msg = _check(45.0, 0.18)
     assert ok is False
@@ -61,7 +61,7 @@ def test_the_break_even_is_where_the_arithmetic_says():
 
 
 def test_a_low_rate_gain_opens_the_same_band():
-    """⚠ It is not only PILOT_YAW_RATE. Detuning ATC_RAT_YAW_P does it too, and
+    """It is not only PILOT_YAW_RATE. Detuning ATC_RAT_YAW_P does it too, and
     that is a thing anyone tuning the rate loop will try."""
     assert _check(160.0, 0.18)[0] is True
     assert _check(160.0, 0.05)[0] is False

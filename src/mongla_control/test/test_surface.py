@@ -74,7 +74,7 @@ def test_it_brakes_before_it_changes_mode():
 
 
 def test_the_abort_that_brought_surface_here_stays_set():
-    """SURFACE IS THE ABORT. Clearing the flag would let a vision loop
+    """Surface is the abort. Clearing the flag would let a vision loop
     streaming MANUAL_CONTROL (and a queued fire) keep going after the operator
     said surface. The next verb clears it at its own entry."""
     m, _ = _run(_FC())

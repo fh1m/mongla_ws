@@ -18,7 +18,7 @@ correction to the numbers PR K itself carried.
 
 ---
 
-## 1. ⚠ FIRST: PR K's geometry is wrong, and it is the document they would build from
+## 1. FIRST: PR K's geometry is wrong, and it is the document they would build from
 
 PR K's table gives the two pair separations as **346.6 mm** and **520.4 mm**, and
 states the matrix in a frame where `Fy = heave`, `Fz = surge`, `My = yaw`,
@@ -47,11 +47,11 @@ Part 3, a ⌀87.99 mm ring, 2 mm thick, at +351.00        <- its duct, exit side
 The hull bounding box reproduces our documentation to 0.01 mm, which is why we
 trust the rest.
 
-⭐ **And PR K said the axial unit was "absent from the GLB export" and marked
+**Key point: And PR K said the axial unit was "absent from the GLB export" and marked
 UNKNOWN. It is not absent** — it is at +330.60 with its duct ring at +351.00, and
 its **8.06 mm offset from the Z centreline is a real pitch moment**. See §3.
 
-> ⛔ **RETRACTED 2026-10-02 (mongla_ws issue #9).** The 8.06 mm is the A2212's
+> **Warning: RETRACTED 2026-10-02 (mongla_ws issue #9).** The 8.06 mm is the A2212's
 > *bounding box*, pulled sideways by its mount bracket. The prop hub in the same
 > export sits at **+0.12 mm** and the duct ring at 0.00, so the thrust line is on
 > the axis and pure surge does not pitch the hull. Use z = 0.00012 m. The
@@ -79,7 +79,7 @@ no test can reach it.
 ```
 FRAME_CLASS = 0   the existing ±1 vectored-8 matrix in mixer.cpp, bit for bit.  DEFAULT.
 FRAME_CLASS = 1   mongla-5, allocated from the measured geometry above.
-FRAME_CLASS = 2   vectored-8 as geometry (⛔ placeholder arms; measure before use).
+FRAME_CLASS = 2   vectored-8 as geometry (placeholder arms; measure before use).
 ALLOC_PRIO  = 0   uniform scale-down — what mix() does today.  DEFAULT.
 ALLOC_PRIO  = 1   attitude met in full, translation takes the headroom left.
 ```
@@ -98,7 +98,7 @@ ALLOC_PRIO  = 1   attitude met in full, translation takes the headroom left.
   three equal ±1s** (see §5).
 - `tools/run_native_tests.sh` + `test/native/test_allocator.cpp` — see §6.
 
-⭐ **Their §3 request is honoured, with a better guarantee.** PR K asked them to
+**Key point: Their §3 request is honoured, with a better guarantee.** PR K asked them to
 keep the per-group saturation scaling. It survives — and not because it was
 re-implemented, but because the solution operator is **block-diagonal wherever the
 geometry is**: the lateral pair depends only on {sway, yaw}, the vertical pair on
@@ -116,7 +116,7 @@ cannot reach the lateral pair, asserted **bit-identical** in the test.
 | surge | **1.000** | the axial unit (there is only one) |
 | pitch | **0.519** | the vertical pair's 519 mm arm |
 | yaw | **0.350** | the lateral pair's 350 mm arm |
-| roll | **0** | ⛔ unactuated |
+| roll | **0** | **Warning:** unactuated |
 
 Sway and yaw differ by **5.714×**, which is *exactly* the reduced matrix's
 condition number. A `±1` mixer calls both of them "1.0", so every per-axis gain
@@ -136,7 +136,7 @@ pure surge command is zero.
 
 **It cannot express a dead thruster, and here that matters more than usual.** The
 reduced matrix is **5×5, determinant 0.1817, condition number 5.714** — exactly
-determined. ⛔ **There is no redundancy at all.** Losing one thruster does not
+determined. **There is no redundancy at all.** Losing one thruster does not
 degrade the solution, it removes an axis. `rebuild()` therefore **refuses** and
 keeps the previous solution, because there is no allocation to fall back to; a
 caller that reads `false` as "keep flying" is wrong, and the correct response is
@@ -144,7 +144,7 @@ to surface. The 8-thruster frame *can* re-solve around a loss, and the test show
 both side by side. **That contrast is an argument for the hardware team**, not
 just a code property.
 
-## 4. ⛔ The one thing that can sink the vehicle, stated plainly
+## 4. The one thing that can sink the vehicle, stated plainly
 
 **The vertical sign convention in `frames.h` is NOT `mixer.cpp`'s.**
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run `continuity.analyse` on a RECORDED session -- the measurement it waits for.
 
-⛔ WHY THIS EXISTS. `mongla_vision/continuity.py` says, in its own docstring,
+Why this exists. `mongla_vision/continuity.py` says, in its own docstring,
 that six constants protect a target lock -- the freshness ramp, `coast_s`,
 `lost_grace_s`, the Kalman `max_predict_s` and the tracker's `track_buffer` --
 and that every one is sized from the detection RATE and from the others'
@@ -12,7 +12,7 @@ The module has sat unimported ever since, because the measurement did not
 exist. As of 2026-09-24 it does: a 253 s vehicle recording with 108 real
 detection gaps. This is the adapter between them.
 
-⚠ ONE HONEST LIMIT, STATED UP FRONT. The recording is a PERSON walking in and
+One honest limit, stated up front. The recording is a PERSON walking in and
 out of a room, not a prop in water. Gap DURATIONS are set by how long the
 target was actually absent, which is a property of the subject and the
 occlusions, not of the detector's underwater performance. So this sizes the
@@ -34,7 +34,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), 'src', 'mongla_vision'))
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument('bag')
-    # ⭐ `/tracks` by default, not `/detections`. Identity switches are a
+    # `/tracks` by default, not `/detections`. Identity switches are a
     # TRACKER property and /detections carries no id at all, so scoring the
     # detector topic reported `switches = 0` -- which is the absence of a
     # measurement, not a clean result. Pass --topic to score the raw detector.
@@ -58,7 +58,7 @@ def main() -> int:
         if topic != args.topic:
             continue
         m = deserialize_message(data, Detection2DArray)
-        # ⛔ THE FRAME'S OWN STAMP, not the bag's receive time. A gap measured
+        # The frame's own stamp, not the bag's receive time. A gap measured
         # on arrival times folds transport jitter into the very quantity the
         # ladder is sized from.
         h = m.header.stamp
@@ -98,7 +98,7 @@ def main() -> int:
     rep = analyse(obs, args.label or os.path.basename(args.bag))
     print(rep.text())
 
-    # ⭐ THE POINT: what each constant would have to be to cover a stated
+    # The point: what each constant would have to be to cover a stated
     # fraction of the REAL gaps, instead of being sized against the others.
     d = sorted(g.duration for g in rep.gaps)
     if d:

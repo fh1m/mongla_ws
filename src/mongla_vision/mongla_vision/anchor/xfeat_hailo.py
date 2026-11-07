@@ -1,6 +1,6 @@
 """XFeat on the Hailo-8, so the anchor rung stops burning the Pi's CPU.
 
-⛔ WHAT THIS FIXES (B-62). `lock_node` resolves an empty `anchor_model` by
+What this fixes (B-62). `lock_node` resolves an empty `anchor_model` by
 globbing `xfeat_*.onnx`, so the `.hef` sitting beside it in `~/hailo_models/`
 was never a candidate, and `xfeat_onnx.py` hardcodes
 `providers=['CPUExecutionProvider']`. Measured on the vehicle, 320x240:
@@ -12,17 +12,17 @@ A 23x gap, and the anchor was on the wrong side of it -- spending 32.9 ms per
 call on the CPU that the camera pump and the rclpy executor need, which is the
 exact contention the async detector API exists to avoid.
 
-⭐ IT ALSO UNBLOCKS RE-ID. `tracking/reid.py` is deferred on the premise that
+It also unblocks RE-ID. `tracking/reid.py` is deferred on the premise that
 "XFeat is ALREADY loaded at 701 FPS, so identity is nearly free". That premise
 was false while this ran on the CPU; it becomes true here.
 
-THE POST-PROCESSING IS NOT REWRITTEN. `_pixel_shuffle_scores`, `_nms` and
+The post-processing is not rewritten. `_pixel_shuffle_scores`, `_nms` and
 `match` are reused from `xfeat_onnx`, because two copies of the descriptor
 maths is how the two backends come to disagree about what a feature is -- and
 the whole point of the anchor is that a checkpoint stored by one path is
 matchable by the other. The ONLY thing that differs here is the transport.
 
-⚠ THE CHIP IS SHARED WITH THE DETECTOR. Both graphs contend for one device and
+The chip is shared with the detector. Both graphs contend for one device and
 HailoRT serialises them; the detector must keep priority, because a late
 detection costs a lock while a late anchor costs only a slower re-anchor.
 Measure the contention before trusting the 1.43 ms figure in a live graph --
@@ -43,14 +43,14 @@ from . import xfeat_onnx as _x
 # network, so they are what this keys on.
 _FEAT_CH, _KPT_CH, _REL_CH = 64, 65, 1
 
-# ⭐ THE THIRD HEAD. The XFeat paper emits a keypoint heatmap, a 64-D
+# The third head. The XFeat paper emits a keypoint heatmap, a 64-D
 # descriptor map AND a reliability heatmap; `hailortcli parse-hef` confirms
 # our own HEF carries all three (conv20 30x40x64, conv27 30x40x65,
 # conv23 30x40x1). We computed the reliability on-chip and dropped it on the
 # floor, while `min_cossim = 0.82` did the same job as ONE GLOBAL CONSTANT for
 # every keypoint in every frame.
 #
-# ⚠ It is exposed as `last_reliability` rather than being applied here: the
+# It is exposed as `last_reliability` rather than being applied here: the
 # matcher is shared with the ONNX path, and changing what a match means on one
 # backend only is how the two would come to disagree. Measure what it buys
 # before any rung acts on it.
@@ -69,7 +69,7 @@ class XFeatHailo:
 
     def __init__(self, hef_path: str, *, top_k: int = 1024,
                  det_thresh: float = 0.05, semi_dense: bool = False):
-        # ⛔ THE PROCESS'S ONE VDevice (B-62): a VDevice of its own gave
+        # The process's one VDevice (B-62): a VDevice of its own gave
         # HAILO_OUT_OF_PHYSICAL_DEVICES(74). The device runs HailoRT's
         # ROUND_ROBIN scheduler (see `detection/hailo.py`), so this group and
         # the detectors' share the chip with no Python lock around an
@@ -81,14 +81,14 @@ class XFeatHailo:
         # This anchor's own buffers only -- never the chip.
         self._lock = threading.Lock()
         self.top_k, self.det_thresh = int(top_k), float(det_thresh)
-        # ⭐ SEMI-DENSE: every grid cell as a keypoint instead of NMS-selecting
+        # SEMI-DENSE: every grid cell as a keypoint instead of NMS-selecting
         # 1024 from the same map. Measured on the vehicle, four frame pairs:
         # 589/210/218/202 inliers against sparse 229/80/105/92 -- 2.1-2.6x,
         # for +37 % match cost (45.85 ms vs 33.50). The number that matters:
         # the anchor's trust bar is 100 inliers, and on the weakest pair
         # sparse scores 80 and FAILS it while dense scores 210.
         #
-        # ⚠ DEFAULT OFF until two things are measured: frame-to-REFERENCE
+        # DEFAULT OFF until two things are measured: frame-to-REFERENCE
         # behaviour (this tested consecutive frames; the anchor matches a
         # checkpoint stored seconds ago from another viewpoint) and whether
         # the extra inliers are CORRECT rather than merely numerous. MAGSAC
@@ -111,7 +111,7 @@ class XFeatHailo:
         import cv2
         if gray.shape[:2] != (self.h, self.w):
             gray = cv2.resize(gray, (self.w, self.h))
-        # ⚠ GREY, normalised to [0, 1] exactly as the ONNX path does. XFeat
+        # GREY, normalised to [0, 1] exactly as the ONNX path does. XFeat
         # takes one channel, which is why B-61's BGR/RGB defect in the
         # DETECTOR path does not touch this one.
         # This anchor's lock only: its bound buffers would be overwritten by
@@ -160,7 +160,7 @@ class XFeatHailo:
         from hailo_platform import FormatType
 
         if self._cim is None:
-            # ⛔ UINT8 IN, NOT FLOAT32. Measured: binding a float32 input gave
+            # UINT8 in, not FLOAT32. Measured: binding a float32 input gave
             #     Input buffer size 307200 is different than expected 76800
             # -- exactly 4x, which is the whole diagnosis. The HEF's input is
             # quantised uint8 (320*240*1 = 76 800 bytes) and HailoRT scales on
@@ -176,7 +176,7 @@ class XFeatHailo:
             self._in_buf = np.zeros((self.h, self.w, 1), np.uint8)
             self._bindings = self._cim.create_bindings()
             self._bindings.input().set_buffer(self._in_buf)
-            # ⚠ ONE BUFFER PER OUTPUT, keyed by name. XFeat emits three heads
+            # One buffer per output, keyed by name. XFeat emits three heads
             # where the detector emits one, so the single-output binding the
             # detector uses does not transfer.
             for name in self._out_names():
@@ -246,7 +246,7 @@ class XFeatHailo:
         n[n == 0] = 1
         return k.astype(np.float32), (d / n).astype(np.float32)
 
-    # ⭐ THE SAME MATCHER, DELIBERATELY. A checkpoint enrolled through one
+    # The same matcher, deliberately. A checkpoint enrolled through one
     # backend must be matchable through the other, or the bank silently
     # partitions by whichever transport happened to store each entry.
     match = staticmethod(_x.XFeatONNX.match)

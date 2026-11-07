@@ -58,7 +58,7 @@ def test_ESPNOW_EN_off_names_the_FOUR_features_that_go_dark_together():
 
 
 def test_an_UNREADABLE_param_is_a_FINDING_not_a_pass():
-    """⛔ Absence is not zero and it is not OK either. A parameter that never
+    """Absence is not zero and it is not OK either. A parameter that never
     answered is the case where we know least, so it must not read as healthy."""
     v = _all_good(); v['LEAK_EN'] = None
     f = [x for x in sp.safety_gate_findings(v) if x[1] == 'LEAK_EN']

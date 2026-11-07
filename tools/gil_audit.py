@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Every C extension this pipeline calls at rate, checked for GIL behaviour.
 
-THE RULE THIS ENFORCES
+The rule this enforces
 ----------------------
 A C extension that does not release the GIL blocks EVERY other Python thread
 in its process for as long as it runs. At 70 Hz that is not a slow function,
@@ -13,14 +13,14 @@ symptom was a camera whose frames looked 13.8 ms stale. Two hypotheses about
 the camera died before anyone looked at the inference call. So: audit the
 callers, do not wait for the symptom.
 
-WHAT COUNTS AS A PROBLEM
+What counts as a problem
 ------------------------
 `hold x rate` is the fraction of wall time the process is frozen. A 2 ms call
 at 77 Hz is 15 % -- tolerable. A 10 ms call at 77 Hz is 77 %, which is a
 process that barely runs anything else. The ranking is by that product, not by
 duration, because duration alone says nothing without the rate.
 
-THE CONTROLS ARE NOT OPTIONAL
+The controls are not optional
 -----------------------------
 A gap number cannot distinguish "this call holds the GIL" from "this machine
 schedules badly". The first version of this probe used a SPINNING sampler --

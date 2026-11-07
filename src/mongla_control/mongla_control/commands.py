@@ -266,7 +266,7 @@ COMMANDS = {
     },
     # ---- Per-thruster identification ------------------------------- #
     #
-    # ⭐ The board has implemented MAV_CMD_DO_MOTOR_TEST the whole time and
+    # The board has implemented MAV_CMD_DO_MOTOR_TEST the whole time and
     # `SrotFC.motor_test` has driven it since 2026-09-07, but there was no verb,
     # so the one procedure that can turn ONE thruster and watch what happens was
     # reachable from the ground station and not from a mission, a script or the
@@ -274,7 +274,7 @@ COMMANDS = {
     # (k_n_per_rpm2 is still null), dead-thruster detection, and checking that a
     # motor turns the way the mixer believes it does.
     #
-    # ⛔ THIS TURNS A THRUSTER. Props off, or the vehicle restrained.
+    # This turns a thruster. Props off, or the vehicle restrained.
     'motor_test': {
         'help':     'Spin ONE thruster (1-8) at `gain` percent for `duration` s. '
                     'Requires ARMED. The board expires the test and '
@@ -300,7 +300,7 @@ COMMANDS = {
 
 
 # Field names that carry a string instead of a float (everything else is float).
-# ⛔ THIS MIRRORS THE TYPES IN Move.action AND MUST NOT DRIFT FROM IT. The CLI
+# This mirrors the types in Move.action AND MUST NOT DRIFT FROM IT. The CLI
 # builds `--flags` from this: a `string` field missing here is typed as a FLOAT
 # and the flag becomes unusable -- `--tool torpedo` died with
 # "invalid _float_or_head value: 'torpedo'", which only running it revealed,
@@ -338,7 +338,7 @@ def fields_for(cmd, request, *, runtime_defaults=None):
     spec = COMMANDS[cmd]
     spec_defaults    = spec['defaults']
     runtime_defaults = runtime_defaults or {}
-    # ⛔ ISSUE #14. When the sender says which fields it SET, that list decides
+    # ISSUE #14. When the sender says which fields it SET, that list decides
     # -- a given 0.0 is a zero. Only a legacy sender (empty list) falls back to
     # inferring "unset" from the value, where 0.0 cannot be requested.
     given = set(getattr(request, 'set_fields', None) or ())

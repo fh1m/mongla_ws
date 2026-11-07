@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Functions and methods nothing calls -- the defect class inside a LIVE file.
 
-⛔ THE FOURTH FACE OF THE SAME DEFECT, and the one the other three cannot see.
+The fourth face of the same defect, and the one the other three cannot see.
 `orphan_sweep.py` finds MODULES nothing imports. `topic_wiring_sweep.py` finds
 TOPICS nothing reads. `launch_param_sweep.py` finds PARAMETERS no launch file
 passes. All three work at the file or graph level, so a dead FUNCTION inside a
 module that is imported, tested and running is invisible to every one of them.
 
-⭐ FOUND ON ITS FIRST RUN: `pool_lines._dominant_angle` -- 50 lines of correct
+Found on its first run: `pool_lines._dominant_angle` -- 50 lines of correct
 axial statistics, with the wraparound trap documented, born in the commit that
 added the file and called by nothing ever. It was residue of a first design the
 module's own docstring records as REJECTED ("a line detector that prefers the
@@ -15,7 +15,7 @@ background to the foreground is not a line detector"), left behind when the
 implementation moved to second moments. Two module constants existed only to
 serve it, and `MIN_SEGMENTS` not even that.
 
-⚠ WHAT IS *NOT* A DEFECT, so the output is not over-read:
+What is *not* a defect, so the output is not over-read:
 
   * ROS and framework callbacks, `main`, and anything a `setup.py` entry point
     or a launch file names. Called by name from outside Python.
@@ -56,7 +56,7 @@ SEARCH = ('src', 'tools', 'missions', 'scripts')
 # Called by the language, a framework, or the ROS graph -- never by name here.
 _EXEMPT_EXACT = {'main', 'setup', 'teardown', 'generate_launch_description'}
 _EXEMPT_PREFIX = ('test_', '__')
-# ⛔ `on_` AND `_on_` WERE EXEMPT HERE AND MUST NOT BE. A ROS callback is PASSED
+# `on_` and `_on_` were exempt here and must not be. A ROS callback is PASSED
 # as a reference to `create_subscription`, `create_timer` or `add_on_set_
 # parameters_callback`, and the AST scan below sees that reference -- so a
 # subscribed callback is found by the ordinary path. Exempting the prefix hid
@@ -64,7 +64,7 @@ _EXEMPT_PREFIX = ('test_', '__')
 # never subscribed, or whose subscription was later removed. Framework
 # lifecycle hooks that really are called by name from outside go in
 # `_EXEMPT_EXACT`, one name at a time.
-# ⛔ CLASSES WHOSE PUBLIC METHODS ARE AN API FOR CODE OUTSIDE THIS REPO.
+# Classes whose public methods are an API for code outside this repo.
 # `MonglaMission` is the mission DSL: operators write mission scripts under
 # `~/missions`, which `build_mongla.sh` mirrors in and which are deliberately
 # NOT in git (a course re-measured at a venue beats one committed months ago).
@@ -119,7 +119,7 @@ def _defs_and_refs():
         # launch file. Those are consumers, not capabilities.
         shipped = (rel.parts[0] == 'src' and '/test' not in str(rel)
                    and 'launch' not in rel.parts and rel.name != 'setup.py')
-        # ⛔ A TEST IS NOT A CALLER. Counting test references let a function
+        # A test is not a caller. Counting test references let a function
         # that only its own test ever ran read as live: 24 of them on
         # 2026-11-06, among them `pct_to_mc`, "the old percent API", kept alive
         # by the test that pinned its rounding. Nothing on the vehicle reaches
@@ -139,7 +139,7 @@ def _defs_and_refs():
                 if shipped and node.name not in api:
                     defs.setdefault(node.name, []).append(
                         (str(rel), node.lineno, node in methods))
-                # ⛔ A DECORATED FUNCTION IS REFERENCED BY ITS DECORATOR, and a
+                # A decorated function is referenced by its decorator, and a
                 # `@property` or `@x.setter` is called through attribute access
                 # that never spells the name as a call.
                 for dec in node.decorator_list:
@@ -157,7 +157,7 @@ def _defs_and_refs():
                     leaf = (al.asname or al.name).split('.')[-1]
                     imported.setdefault(leaf, set()).add(str(rel))
             elif isinstance(node, ast.Call):
-                # ⛔ A NAME REACHED BY STRING IS STILL A CALLER, and the first
+                # A name reached by string is still a caller, and the first
                 # version of this sweep called `srot_fc.leak_state` dead when
                 # `auv_manager_node` reaches it as
                 # `getattr(fc, 'leak_state', lambda: (None, None))()` -- the
@@ -178,7 +178,7 @@ def _defs_and_refs():
 def _verb_refs():
     """Every verb in the command registry, which is dispatched BY NAME.
 
-    ⛔ `commands.py` is the repo's one dynamic-dispatch table:
+    `commands.py` is the repo's one dynamic-dispatch table:
     `getattr(mongla, cmd)(**kwargs)`, where `cmd` is a key of `COMMANDS`. So a
     facade method's caller is a dict key, and nothing in the source ever spells
     it as a call. Adding a verb is documented as "a row in `commands.py` and a
@@ -202,7 +202,7 @@ def _verb_refs():
 def _text_refs():
     """Names spelled in NON-Python files: entry points, launch YAML, configs.
 
-    ⚠ NOT the context docs. A name in a design document is a discussion of a
+    NOT the context docs. A name in a design document is a discussion of a
     capability, not a caller, and counting it would hide exactly the defect
     this looks for.
     """
@@ -253,7 +253,7 @@ def _unreachable_modules() -> set:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument('--package', default='')
-    # ⚠ `--root` exists for the INJECTION TEST, which must plant a dead
+    # `--root` exists for the INJECTION TEST, which must plant a dead
     # function in a COPY of the tree. Planting in the real `src/` and undoing
     # it in a `finally` is not safe: the suite runs under `timeout`, and a
     # killed run would leave the plant in the source, failing `--private` on
@@ -269,7 +269,7 @@ def main() -> int:
     defs, refs, imported = _defs_and_refs()
     refs |= _text_refs() | _verb_refs()
 
-    # ⚠ A FUNCTION INSIDE AN UNREACHABLE MODULE IS ALREADY ACCOUNTED FOR.
+    # A function inside an unreachable module is already accounted for.
     # `orphan_sweep.py` lists those modules, each with the consumer it waits
     # for, so reporting their contents here would say the same thing twice and
     # bury the hits that are NOT explained.
@@ -313,7 +313,7 @@ def main() -> int:
         return 0
     print(f'\n{len(rows)} function(s) with no reference anywhere in '
           f'{", ".join(SEARCH)}.\n'
-          '⚠ Not a delete list. Callbacks named by a framework, entry points '
+          'WARNING: Not a delete list. Callbacks named by a framework, entry points '
           'and interface methods land here legitimately. For each, NAME THE '
           'CALLER out loud -- if there is none it gets one now or it goes. '
           '`pool_lines._dominant_angle` was found exactly that way.')

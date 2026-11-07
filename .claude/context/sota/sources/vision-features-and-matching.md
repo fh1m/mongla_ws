@@ -102,7 +102,7 @@ LighterGlue on MegaDepth-1500 (repo README): 0.444/0.610/0.746 AUC@5/10/20 at 64
 | SuperPoint | 3.0 ± 0.07 | 1.0× |
 | DISK | 1.2 ± 0.01 | 0.4× |
 
-⚠ **That i5 is not our Pi.** Our own measurement of the same network at the same VGA
+**Caution: That i5 is not our Pi.** Our own measurement of the same network at the same VGA
 resolution is **145.6 ms (1 thread) / 88.0 ms (3)** = 6.9–11.4 FPS, i.e. the Pi 5 is
 **2.4–4× slower than the paper's laptop CPU**. Read every laptop-CPU figure in this document
 through that factor.
@@ -155,7 +155,7 @@ ReduceMean 1 · InstanceNormalization 1     IN (1,3,224,320) -> OUT (1,1,224,320
 i.e. the *only* thing the Hailo cannot swallow is XFeat's **input normalisation** (RGB→mean→
 instance-norm). Everything else — the whole backbone, both heads — compiles.
 
-⚠ **Read the filename the right way round.** `without_pixel_unshuffle_normilize_softmax_slice`
+**Caution: Read the filename the right way round.** `without_pixel_unshuffle_normilize_softmax_slice`
 means *pixel_unshuffle removed, normalise+softmax+slice **added in***. Stock XFeat does
 `F.normalize` and the 65-channel softmax in its **Python wrapper**; this fork pulled them into
 the graph. I verified the node positions: `ReduceL2`/`Clip`/`Expand`/`Div` sit at 64–67 and
@@ -163,7 +163,7 @@ the graph. I verified the node positions: `ReduceL2`/`Clip`/`Expand`/`Div` sit a
 *are* the graph outputs. **Nothing is stripped at the tail. Those ops are inside the HEF.**
 That is also why `OUTPUT_2` has 64 channels and not 65: the dustbin is already dropped on-chip.
 
-⛔ **This sharpens the INT8 risk rather than softening it.** In the fork's HEF the 64-D
+**Warning: This sharpens the INT8 risk rather than softening it.** In the fork's HEF the 64-D
 descriptor is **L2-normalised in INT8, on-chip**, and the keypoint map is **softmaxed in
 INT8**. A softmax over 65 channels and an L2 normalise are both operations whose whole job is
 to resolve small differences; 8-bit is the worst place to do them.
@@ -197,7 +197,7 @@ by taking a PCIe slot and NPU duty cycle away from the detector that is currentl
 - The HEFs are a **third-party artifact, last real commit 2024-07-22** (the 2025-06-16 commit
   only adds `split_onnx.py`). They are RGB 3-channel; ours is grayscale. Treat them as a
   worked example, not as a drop-in.
-- ⛔ **INT8 is the risk, and it lands exactly on the thing we care about.** The Hailo quantises
+- **Warning: INT8 is the risk, and it lands exactly on the thing we care about.** The Hailo quantises
   to INT8/UINT8. XFeat's output is a 64-D **L2-normalised descriptor**; quantising the
   descriptor head is the single most plausible way to lose murky-water matching while every
   health metric still looks fine. **No Hailo XFeat verdict is admissible until the 4/4 murky
@@ -247,7 +247,7 @@ that is relevant to us. What *is* relevant is the distilled family it produced:
   "to accommodate varying compute constraints". `convnext_tiny.dinov3_lvd1689m` is published
   on timm ([HF](https://huggingface.co/timm/convnext_tiny.dinov3_lvd1689m)).
 
-⛔ **The ConvNeXt distillations are the only serious Hailo candidates, and that is the whole
+**Warning: The ConvNeXt distillations are the only serious Hailo candidates, and that is the whole
 point of them.** The Hailo-8 is a dataflow CNN accelerator. Convolutions map onto it; attention
 does not, and the model zoo numbers below show the penalty directly.
 
@@ -266,7 +266,7 @@ does not, and the model zoo numbers below show the penalty directly.
 | vit_base | 108 | 83.2 |
 | deit_small | 309 | 77.0 |
 
-⚠ **Two corrections before anyone quotes 309 FPS.**
+**Caution: Two corrections before anyone quotes 309 FPS.**
 1. Those are **batch 8 on a PCIe Gen3 ×4** host. The
    [Hailo forum states plainly](https://community.hailo.ai/t/official-fps-benchmark-on-hailo-8-using-raspberry-pi-5/18873)
    that "official benchmarks are recorded while running on a four-lane PCIe interface, while
@@ -283,7 +283,7 @@ top of that. Our own anchor data point is that a **2.7 MB** conv net costs 88 ms
 3 threads; a 21.6 M-param ViT at 7× the tokens is orders above that.
 **Single-digit FPS at best, and that is without the detector running.**
 
-⚠ **We have a nearby model and have never timed its encoder.**
+**Caution: We have a nearby model and have never timed its encoder.**
 `mongla_vision/depth/models/depth_anything_v2_small.onnx` (see
 [`perception/depth-estimation.md`](../../perception/depth-estimation.md)) **is a
 DINOv2 ViT-S/14 encoder** with a DPT head. It is in the repo, it runs through onnxruntime, and
@@ -309,11 +309,11 @@ Three plausible uses. They are not equally plausible.
   518×518 — a non-trivial CPU cost on its own, and a distortion of aspect ratio.
 - A second Hailo network = a second ~9.3 ms round trip **plus** contention with the 98 Hz
   detector, which is our only actually-working perception capability.
-- ⛔ **INT8 on a self-supervised embedding space has no label to defend it.** A classifier that
+- **Warning: INT8 on a self-supervised embedding space has no label to defend it.** A classifier that
   loses 1 % top-1 is still a classifier. An embedding whose cosine geometry has been squashed
   to 8 bits fails silently — which is the exact failure class this codebase's safety rules name
   ("a plausible number standing in for an absent measurement").
-- ⚠ Nobody has published DINOv2/v3 on a Hailo-8. The 309 FPS above is **supervised ViT-S/16
+- **Caution:** Nobody has published DINOv2/v3 on a Hailo-8. The 309 FPS above is **supervised ViT-S/16
   with a classification head**, not a DINOv2 backbone, and I am extrapolating between them.
 
 > **Verdict: NO for the current campaign.** DINOv3-ConvNeXt-T is the only variant that is even
@@ -339,7 +339,7 @@ specifically to get it onto an edge board — so it is the fairest available tes
 | accuracy | 92.29 % MOTA / 96.15 % IDF1; −1.68 / −0.84 pp vs the SAM 3 teacher |
 | FPS / latency | **not stated in the abstract** |
 
-⛔ **Read the hardware line.** After distillation, and after cutting VRAM by two thirds, the
+**Warning: Read the hardware line.** After distillation, and after cutting VRAM by two thirds, the
 result still targets a **Jetson Orin NX with 16 GB** and consumes **6.49 GB**. The Raspberry
 Pi 5 has **8 GB of LPDDR4X shared with the entire ROS 2 graph, both cameras and the detector**,
 and the Hailo-8 has no usable DRAM of its own for a model of this shape. Note also that the
@@ -373,7 +373,7 @@ apples-to-apples CPU table I found. Applying our own measured Pi-5-vs-that-lapto
 GPU: **ALIKED 8.89 ms, SuperPoint 6.46 ms, DeDoDe-v2 42.76 ms — all on an NVIDIA A100**
 ([Mismatched, arXiv 2408.16445](https://arxiv.org/pdf/2408.16445)). An A100 figure tells us
 nothing about a Pi except the ordering, and the ordering already says ALIKED sits with ALIKE.
-⚠ ALIKED's deformable convolutions are also **not Hailo-friendly** — the offsets are
+**Caution:** ALIKED's deformable convolutions are also **not Hailo-friendly** — the offsets are
 data-dependent gathers, which a static dataflow compiler cannot schedule.
 
 ### 3.2 The matchers
@@ -384,15 +384,15 @@ than SuperGlue**. Published numbers: **SuperPoint+LightGlue ≈ 44 ms per image 
 one tracking application reports **LightGlue 38 ms init / 25 ms per frame vs SuperGlue 250 ms
 / 120 ms** ([SuperPose, arXiv 2409.19986](https://arxiv.org/pdf/2409.19986)).
 
-⛔ **Every one of those is a GPU number for a transformer.** We have no GPU, our ONNX runtime is
+**Warning: Every one of those is a GPU number for a transformer.** We have no GPU, our ONNX runtime is
 CPU, and the Hailo compiles convolutions. A 9-layer cross/self-attention stack over up to 2048
 keypoints is the single worst-shaped workload on this board.
 
-⭐ **And we already have the CPU number, from our own sibling doc.**
+**Key point: And we already have the CPU number, from our own sibling doc.**
 [`sota/vision.md`](../vision.md) records **LightGlue on CPU at 0.31 pairs/s ≈ 3.2 s per pair** —
 "unusable inside a 2 s gap". That is the number to quote, not the 44 ms GPU figure.
 
-⛔ **And the Hailo route for matchers is closed, with named errors.**
+**Warning: And the Hailo route for matchers is closed, with named errors.**
 [`vision-velocity-and-odometry.md`](vision-velocity-and-odometry.md) §3b records a Hailo forum
 thread (Jul 2026) on SuperGlue: *"keypoint encoder produces shape/layout errors"*, *"GNN
 attention layers use unsupported **einsum**"*, *"`ReduceLogSumExp` crashes the parser"*; the
@@ -442,7 +442,7 @@ global descriptors over non-overlapping place groups), **EigenPlaces**
 
 ### 4.1 The geometric argument, which settles it before any benchmark
 
-⛔ **A periodic floor aliases at the tile pitch for *every* appearance-based global descriptor.
+**Warning: A periodic floor aliases at the tile pitch for *every* appearance-based global descriptor.
 This is a property of the scene, not a weakness of the method.** A global descriptor answers
 "have I seen this image before?". Over a uniform tiled floor at fixed altitude, **every** image
 is the same image up to a sub-tile phase shift. There is no descriptor — learned, foundational
@@ -498,7 +498,7 @@ exactly 2.5 m) rather than learned weights, so they need no venue training data.
 
 ## 6. Underwater-specific feature matching: what survives turbidity and caustics
 
-⚠ *Placed before §5 deliberately: §5's verdict on the downward camera depends on what §6.2
+**Caution:** *Placed before §5 deliberately: §5's verdict on the downward camera depends on what §6.2
 measures about caustics. Read in file order, not in number order.*
 
 ### 6.1 Our own evidence is the strongest evidence we have
@@ -506,7 +506,7 @@ measures about caustics. Read in file order, not in number order.*
 The clip table in §0 is a controlled, same-footage, same-protocol comparison on **our** water:
 ORB **0/4** where XFeat is **4/4**; ORB finds **7 keypoints in an entire Mirpur frame**. And
 EdgePoint2 — published as faster-than-XFeat with competitive IMC2022 results — collapses to
-**1/4** on the same murky clip. ⛔ **Published rankings on clear natural imagery do not survive
+**1/4** on the same murky clip. **Published rankings on clear natural imagery do not survive
 the move to turbid water.** Treat every number in this section accordingly.
 
 ### 6.2 What the literature says, and where it agrees with us
@@ -515,20 +515,20 @@ the move to turbid water.** Treat every number in this section accordingly.
 [Image-Based Relocalization and Alignment for Long-Term Monitoring of Dynamic Underwater
 Environments (arXiv 2503.04096)](https://arxiv.org/abs/2503.04096) — Gorry, Fischer, Milford,
 Fontan; submitted 2025-03-06, v2 2025-12-02; it combines VPR, feature matching and segmentation
-and introduces the **SQUIDLE+ VPR Benchmark** (⭐ the one underwater VPR benchmark I found, and
+and introduces the **SQUIDLE+ VPR Benchmark** (the one underwater VPR benchmark I found, and
 relevant to §4 if we ever revisit it). The finding attributed to it is that among conventional
 features **ROOT-SIFT and SIFT perform best, significantly better than ORB**, while
 **SuperPoint "had highly variable performance across different sequences with lower mean number
 of inlier matches than other conventional features."** That is the same shape as our EdgePoint2
 result, from an independent group on different water.
 
-⚠ **Attribution hedge, stated rather than hidden.** That quote reached me through a search
+**Caution: Attribution hedge, stated rather than hidden.** That quote reached me through a search
 summary; the PDF exceeded the fetch limit and **the abstract does not contain it**. The quote
 is real; *which* paper it belongs to is my inference. **The claim is therefore listed below as
 unverified** — but it does not change action #1, because benching ROOT-SIFT on our own clips
 is cheap and settles the question with our own number regardless of who said what.
 
-⭐ **Note what this implies for us, and I checked rather than assumed: SIFT has never been
+**Key point: Note what this implies for us, and I checked rather than assumed: SIFT has never been
 benched on this vehicle.** `grep -i 'sift\|akaze\|brisk' measured-bars.md` returns **one**
 line, and it is about auto-exposure (DRL-AE, "+38 % SIFT..."), not about our footage;
 `grep -i sift src/mongla_vision/` returns **nothing**. Our comparison was
@@ -537,7 +537,7 @@ is ROOT-SIFT, and OpenCV ships it (patent expired 2020, `cv2.SIFT_create` is in 
 build). **That is a cheap, genuinely missing data point** — one afternoon, same five clips,
 same 40 %-reference / +1/3/5/8 s / `USAC_MAGSAC` / ≥15-inlier protocol.
 
-⚠ It will very likely lose to XFeat on **speed** regardless (SIFT at VGA is tens of ms on a
+**Caution:** It will very likely lose to XFeat on **speed** regardless (SIFT at VGA is tens of ms on a
 Pi), so this is not a candidate to adopt — **it is a control**. If ROOT-SIFT also reads 4/4 on
 the murky clips, then our 4/4 is telling us the clips are easier than we think, not that XFeat
 is special. That is worth knowing either way, and it is the kind of check this codebase's own
@@ -561,7 +561,7 @@ And the systems-level result, which is the damning one: **every enhanced video c
 tracking loss and ZERO loop closures across all five runs, while the original video achieved
 loop closure.**
 
-⛔ **This is independent, published confirmation of our own standing rule** — *"image
+**Warning: This is independent, published confirmation of our own standing rule** — *"image
 preprocessing stays off; measured in 17 configurations across four props and three venues:
 never positive; on the gate it destroyed 95 % of detections."* Two groups, different water,
 different detectors, same conclusion. The test that keeps preprocessing off should cite this.
@@ -569,7 +569,7 @@ different detectors, same conclusion. The test that keeps preprocessing off shou
 **Caustics specifically.** The enhancement paper does **not** address caustics. The one source
 that does, [UKDM (arXiv 2504.11063, Apr 2025)](https://arxiv.org/pdf/2504.11063), reports that
 in caustic environments **FSpiral-GAN was best on precision and repeatability, ORB achieved
-the highest AUC but struggled on repeatability, and SIFT gave a moderate balance.** ⚠ I could
+the highest AUC but struggled on repeatability, and SIFT gave a moderate balance.** I could
 not verify the absolute numbers; treat this as a direction, not a measurement.
 
 **The mechanism matters more than the ranking.** A caustic is a moving, high-contrast pattern
@@ -585,7 +585,7 @@ not verify the absolute numbers; treat this as a direction, not a measurement.
   caustic looks like repeatable structure for the ~100 ms it persists.
   `vision-velocity-and-odometry.md` §3c reaches the same conclusion about XFeat specifically.
 
-⭐ **And we have already measured all of this, on real caustics, with a shipped fix.**
+**Key point: And we have already measured all of this, on real caustics, with a shipped fix.**
 `measured-bars.md`, *"Sun caustics on the floor: flow tracks the waves"* (2026-09-15): real
 RoboSub sun caustics composited over three real floors, moved by a **known 13.4 px baseline**,
 27 pairs per row, through the production `detect_corners` + LK + `robust_flow`:
@@ -601,19 +601,19 @@ RoboSub sun caustics composited over three real floors, moved by a **known 13.4 
 top-hat(9×9) mean / frame mean, threshold **0.07**, **4.73 ms on the Pi** per 640×480, downward
 camera only). Plus a provisional refusal at **median patch NCC < 0.71, in sun only**.
 
-⛔ **This corrects a claim I was about to make.** I had written that the physical prior fixes
+**Warning: This corrects a claim I was about to make.** I had written that the physical prior fixes
 caustics. The measurement says something sharper and less comfortable:
 
 1. **On a floor with dark texture of its own, caustics are already solved** — 11.19 px of
    error → **0.09 px** on tiles. A morphological erosion, not a better detector, and not a
    learned anything. **Nothing in this entire document improves on that.**
-2. ⛔ **On a floor with NO dark texture of its own (slalom, plain concrete), it is NOT fixed**
+2. **Warning: On a floor with NO dark texture of its own (slalom, plain concrete), it is NOT fixed**
    — **12.47 px of error survives erosion 7**, i.e. the estimator still reports the waves at
    ~93 % of the true baseline. That is the open problem, and it is the single most concrete
    perception gap this document has touched.
 3. **Does the FFT grating read through it?** It *should* — a caustic is broadband where the
    tile pitch is narrowband — but **that is my argument, not a measurement**, and the erosion
-   table shows the tiled case is already solved without it. ⚠ The case where the grating would
+   table shows the tiled case is already solved without it. The case where the grating would
    matter is case 2, **and a floor with no dark texture also has no tile grating to demodulate**.
    The prior does not obviously rescue the regime that actually needs rescuing. **Listed as
    unverified; do not quote it as a reason.**
@@ -652,13 +652,13 @@ pitch**. On this vehicle:
   de-rotated (measured: de-rotation takes pure-rotation error **575.7 → 57.1 mm/s**).
 - The floor is **flat and horizontal by survey**, and depth is measured. So n and d are known
   *a priori*, not things we need vision to estimate.
-- ⚠ **A 46.7° in-water FOV is narrow.** Perspective effects — the signal the extra DoF live
+- **Caution: A 46.7° in-water FOV is narrow.** Perspective effects — the signal the extra DoF live
   on — grow with field angle. In a narrow-FOV, near-nadir, small-tilt view the homography is
   numerically **close to degenerate** with the similarity: you are asking RANSAC to estimate
   4 more parameters from the same noisy points, in a regime where they are barely observable.
   The predictable outcome is **higher variance, not higher accuracy**.
 
-⛔ **And a homography does not give metric translation either.** It recovers **t/d** — the
+**Warning: And a homography does not give metric translation either.** It recovers **t/d** — the
 translation *scaled by plane distance*. Height is still required, exactly as now. The premise
 that a homography "gives translation directly" means *image* translation, which the similarity
 already gives.
@@ -671,7 +671,7 @@ and the UAV ego-motion line recover **scaled** linear + angular velocity from th
 homography constraint, then **fuse with the IMU to retrieve metric scale**. One reported result:
 vertical distance, velocity vector and feature position to **5 cm in under 30 s**.
 
-⚠ **5 cm is worse than our measured 1.09 cm worst error over three 30 cm slides.** Different
+**Caution: 5 cm is worse than our measured 1.09 cm worst error over three 30 cm slides.** Different
 setup, different scale — but it is not a number that argues for switching.
 
 The production counter-example is instructive: [PX4's optical-flow
@@ -689,12 +689,12 @@ height*, not *estimate more DoF*.
 | **XFeat correspondences instead of LK, on the downward camera** | 18.2 ms @320×240 (3 threads), **+18 ms on top of the 12.34** | **robust correspondences where LK has none** — the bare-floor and murky cases where LK fails outright | needs the §1.2 Hailo path to be affordable at rate; needs a murky-clip re-measurement on *downward* footage, which we have never done | **worth an experiment — this is the real §5 idea** |
 | **`tile_grating.py` phase** | RUNS TODAY | height, absolute heading mod 90°, drift-bounded sub-tile phase | already paid | **keep, extend** — but see §6.2: caustics on a *tiled* floor are already fixed by a 4.73 ms erosion, so this is not the caustic answer |
 
-⭐ **`vision-velocity-and-odometry.md` §3d reached the identical conclusion independently**,
+**Key point: `vision-velocity-and-odometry.md` §3d reached the identical conclusion independently**,
 and in the same words: recover *"the **similarity** (not homography — the floor is a known
 plane and the full 8-DOF fit is over-parameterised and less stable)"*. Two separate passes,
 same answer. That is as close to settled as this gets without a measurement.
 
-⛔ **And there is a measured ceiling that closes the door properly.** Scored against
+**Warning: And there is a measured ceiling that closes the door properly.** Scored against
 constructed truth — a real downward frame warped by a known (dx, dy, θ, scale), 25 frames per
 case, worst of the swept range (30 px shift, 15° rotation, ×1.20 zoom) — the incumbent LK +
 RANSAC similarity returns **0.006–0.40 px translation, 0.002–0.05° angle, ≤0.001 scale**
@@ -732,7 +732,7 @@ refraction — and no matcher and no extra degree of freedom touches any of thos
 
 ### The three things actually worth doing, in order
 
-1. ✅ **DONE 2026-09-23 — and the published underwater ranking did NOT transfer.**
+1. **DONE 2026-09-23 — and the published underwater ranking did NOT transfer.**
    `tools/feature_murky_control.py`, exactly that protocol. On the three murky Mirpur
    clips — frames proven identical by reproducing ORB's recorded reference keypoint
    counts to the unit (71 / 7 / 111) — ROOT-SIFT scores **0/4, 0/4, 2/4** against
@@ -740,7 +740,7 @@ refraction — and no matcher and no extra degree of freedom touches any of thos
    one. §6.2's *ROOT-SIFT > SIFT > ORB* holds in its own paper's water, not in ours.
    The XFeat result is therefore a descriptor property, not easy footage.
    `measured-bars.md` §19.1.
-2. ⚠ **DEMOTED — see §8.1.** *Compile XFeat to a HEF with a calibration set drawn from our
+2. **Caution: DEMOTED — see §8.1.** *Compile XFeat to a HEF with a calibration set drawn from our
    turbid footage, then re-run the murky clip table through it.* The recipe is three lines and
    published, and the finding that **it compiles** (§1.2) closes a standing unknown. But the Pi
    is **72.8 % idle** with both rungs running, so this spends scarce Hailo duty cycle to buy
@@ -754,7 +754,7 @@ refraction — and no matcher and no extra degree of freedom touches any of thos
    `vision-velocity-and-odometry.md` §3c has already scoped it, down to the right first
    experiment: **keypoint and inlier counts, Shi-Tomasi vs XFeat, on the existing downward
    30 cm-slide recordings.** It also names the gap honestly — Shi-Tomasi was never benched, so
-   "it fails where ORB fails" is reasoned, not measured. ⛔ **Note the scope cut: not caustics.**
+   "it fails where ORB fails" is reasoned, not measured. **Note the scope cut: not caustics.**
    §6.2 shows XFeat matches caustic structure as readily as LK tracks it, and on a *tiled* floor
    the shipped 7×7 erosion already takes 11.19 px → 0.09 px. The bare-floor case is the one
    worth the 18 ms.
@@ -765,7 +765,7 @@ the published ranking was measured on a GPU, on clear natural imagery, against a
 
 ---
 
-## 8. ⛔ Where this document DISAGREES with its siblings
+## 8. Where this document DISAGREES with its siblings
 
 One truth, two copies is the bug. These are named rather than left to be discovered.
 
@@ -775,7 +775,7 @@ That doc concludes: *"putting the extractor on the Hailo costs a 9.3 ms round tr
 chip time from the detector, against 33.1 ms saved. **Marginal at best, and it fights the
 detector. Keep XFeat on the CPU.**"*
 
-⛔ **On re-reading it, that doc wins, and its winning argument is one I did not have.** It does
+**Warning: On re-reading it, that doc wins, and its winning argument is one I did not have.** It does
 not rest on the millisecond arithmetic. It says: *"the reason is not the millisecond
 arithmetic, it is that **we are not short of CPU**. The Pi is **72.8 % idle** with both rungs
 running. Moving the extractor to the Hailo would spend the detector's chip time to buy back a
@@ -788,7 +788,7 @@ only working perception capability at 98 Hz) for an abundant one (idle CPU).
 **What survives of my position, narrowed to what it can carry:** the Hailo path is interesting
 **only** if we want XFeat on the **downward camera at VGA simultaneously with the forward
 anchor** — i.e. only if §7 action #3 succeeds *and* 320×240 proves insufficient there. Two
-conditionals deep. ⚠ It also **doubles the input bytes** over the ×1 link (§1.2, three graph
+conditionals deep. It also **doubles the input bytes** over the ×1 link (§1.2, three graph
 inputs), which eats into the 6–8× before anything else does.
 
 **Resolution: `vision-velocity-and-odometry.md` §3b stands — keep XFeat on the CPU.** I am
@@ -797,7 +797,7 @@ demoting §7 action #2 accordingly (see the note there). The genuinely new contr
 which two nodes come off"** — which closes that doc's own unverified item *"whether XFeat even
 compiles under `hailomz` is unknown"*.
 
-### 8.2 XFeat★ — "NO, no measured need" (here) vs "a measured free lunch" (`vision.md` V-7)
+### 8.2 XFeat— "NO, no measured need" (here) vs "a measured free lunch" (`vision.md` V-7)
 
 `vision.md` calls **XFeat → XFeat\*** *"the one published free-lunch axis in that family —
 **+111 % inliers (892 → 1 885) and +10.2 Acc@10°** for **1.4× the time**"*, and lists it as
@@ -808,11 +808,11 @@ published. My **NO** is a *cost* judgement on *this vehicle*: 1.4× of 18.2 ms i
 our worst murky clip already clears the ≥15-inlier bar at **4/4 with 56–260 inliers**. More
 inliers on a homography that is already trusted buys nothing we can point at.
 
-⚠ **But `vision.md` notes the caveat that decides it, and I should repeat it here**: *"MegaDepth
+**Caution: But `vision.md` notes the caveat that decides it, and I should repeat it here**: *"MegaDepth
 and HPatches measure wide-baseline pose between image pairs, not planar-anchor survival across
 a blackout. The ranking transfers; the absolutes do not."*
 
-⛔ **Resolution — and I have to correct myself here too: XFeat\* is NOT "just a flag" for us.**
+**Warning: Resolution — and I have to correct myself here too: XFeat\* is NOT "just a flag" for us.**
 In the upstream PyTorch API it nearly is. In *our* deployment it is not, because
 `tools/xfeat_export.py` exports **only `net`** — the three heads. XFeat\*'s gain comes from the
 **match-refinement MLP**, which is a *separate module* that is **not in our ONNX graph at all**.
@@ -832,7 +832,7 @@ category → 88.5 %, level with a fully-supervised ConvNeXt at 88.9 %.
 **No conflict, and it is worth being precise about why.** That is **offline, desk-side
 few-shot labelling** — DINOv3 as a *label-efficiency tool on a workstation*. My **NO** in §2 is
 about running DINOv3 **on the vehicle, in the loop, at rate**. Those are different machines and
-different budgets. ⭐ The offline use is genuinely attractive and is an
+different budgets. The offline use is genuinely attractive and is an
 [`sota-autolabel.md`](sota-autolabel.md) matter, not a runtime one.
 
 ### 8.4 Agreements worth recording
@@ -873,17 +873,17 @@ different budgets. ⭐ The offline use is genuinely attractive and is an
   numbers scaled by our own measured 2.4–4× Pi-vs-i5 penalty on XFeat. Plausible, not measured.
 - **UKDM's caustic numbers** (FSpiral-GAN / ORB / SIFT) — I have the direction from a search
   summary, not the table.
-- ⚠ **The ROOT-SIFT > SIFT > ORB / SuperPoint-variable finding of §6.2.** Attributed to
+- **Caution: The ROOT-SIFT > SIFT > ORB / SuperPoint-variable finding of §6.2.** Attributed to
   arXiv 2503.04096 on the strength of a search summary; the PDF fetch failed (>10 MB) and the
   abstract does not carry it. The paper's title, authors, date and subject matter are verified
   and consistent with the claim; the sentence itself is not.
-  ⭐ **Superseded where it matters, 2026-09-23:** whatever that paper says, on OUR turbid
+  **Key point: Superseded where it matters, 2026-09-23:** whatever that paper says, on OUR turbid
   frames ROOT-SIFT finds 3–66 keypoints and scores 0/4, 0/4, 2/4. The citation no longer
   needs verifying to act on — it has been out-measured on the only water we care about.
   `measured-bars.md` §19.1.
 - ~~2026 edge distillations of DINOv3 — not fetched.~~ **Fetched; see §2.5. It makes §2's NO
   stronger, not weaker.**
-- ⛔ **That the FFT grating reads through caustics.** Argued from the spectra (broadband noise
+- **Warning: That the FFT grating reads through caustics.** Argued from the spectra (broadband noise
   on a narrowband carrier), never measured. And the regime that needs it — a floor with no dark
   texture, where erosion leaves 12.47 px of error — is a floor with no grating to demodulate.
   **This argument may not survive contact with the case it was invented for.**
@@ -892,7 +892,7 @@ different budgets. ⭐ The offline use is genuinely attractive and is an
   have not measured the conditioning on our own data.
 - **arXiv 2603.13917 is dated 2026** and postdates my training cutoff; the specific
   CosPlace-aliasing quote comes from a search summary rather than a fetch of the paper body.
-  ⚠ Note that §4's verdict does **not** rest on it — it rests on the geometric argument in
+  **Caution:** Note that §4's verdict does **not** rest on it — it rests on the geometric argument in
   §4.1, which needs no citation.
 - **Pi 5 latency of `depth_anything_v2_small.onnx`** — a DINOv2 ViT-S/14 encoder sitting in
   our own tree, never timed. The cheapest possible way to replace every estimate in §2.

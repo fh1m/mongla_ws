@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Did fine-tuning on our water actually help? Scored on a HELD-OUT venue.
 
-⛔ THE ONLY NUMBER THAT COUNTS IS THE HELD-OUT ONE. Our detector's recall
+The only number that counts is the held-out one. Our detector's recall
 swings 29.2 / 72.7 / 68.3 % across venues, so a descriptor fine-tuned on our
 archive can overfit to OUR POOLS. `mirpur` was excluded from training
 entirely; the murky table's two hardest clips come from it. A fine-tune scored
 on its training venues would be the most flattering and least true number in
 this project.
 
-THE PROTOCOL IS §19.1's, UNCHANGED: reference at 40 % of the clip, queries at
+The protocol is §19.1's, unchanged: reference at 40 % of the clip, queries at
 +1/3/5/8 s, mutual-NN with min_cossim, USAC_MAGSAC, a pass at 15 inliers. Only
 the weights differ, so a difference in the table is a difference in the
 weights.
@@ -37,7 +37,7 @@ A = archive_root()
 BAR = 15
 OFFS = (1, 3, 5, 8)
 
-# ⭐ HELD OUT of training. `mirpur_torpedo_1` is the canary: it reads 3/4 on
+# HELD OUT of training. `mirpur_torpedo_1` is the canary: it reads 3/4 on
 # stock weights, and its +8 s column is the one already below the bar.
 # Paths taken from `feature_murky_control.py`, which is the harness that
 # produced the recorded table -- so the same three files are scored.
@@ -61,8 +61,8 @@ class Torch320:
     """The SHIPPED geometry by default -- 320x240, top_k 1024 -- driven by
     torch weights, so stock and fine-tuned go through one identical path.
 
-    ⭐ `w`/`h` are settable because TRAINING RESOLUTION AND INFERENCE
-    RESOLUTION ARE NOT THE SAME HERE. Upstream trains at 800x608 and infers
+    `w`/`h` are settable because TRAINING RESOLUTION AND INFERENCE
+    Resolution are not the same here. Upstream trains at 800x608 and infers
     near it; we infer at 320x240. A convolutional descriptor's keypoint
     density and effective receptive field both scale with input size, so a
     fine-tune could genuinely improve the weights at 800x608 and still lose at
@@ -188,11 +188,11 @@ def main():
         print(f'worst column (the canary):  '
               f'stock {min(worst["stock"])}   tuned {min(worst["tuned"])}')
     if tot['tuned'] > tot['stock']:
-        print('\n⭐ THE FINE-TUNE WINS on a venue it never saw.')
+        print('\nRESULT: THE FINE-TUNE WINS on a venue it never saw.')
     elif tot['tuned'] == tot['stock']:
-        print('\n⚠ NO DIFFERENCE in passing columns -- compare the raw inliers.')
+        print('\nWARNING: NO DIFFERENCE in passing columns -- compare the raw inliers.')
     else:
-        print('\n⛔ THE FINE-TUNE LOSES. Round 7 closes NO; keep stock weights.')
+        print('\nERROR: THE FINE-TUNE LOSES. Round 7 closes NO; keep stock weights.')
     return 0
 
 

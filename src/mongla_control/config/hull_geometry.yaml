@@ -1,6 +1,6 @@
 # Where the thrusters actually are.
 #
-# ⛔ NOT LOADED AT RUNTIME. Nothing on the vehicle opens this file. The numbers
+# NOTE: NOT LOADED AT RUNTIME. Nothing on the vehicle opens this file. The numbers
 # below are transcribed into `geometric_allocation.py` and `hydrodynamics.py`
 # as module constants, and those constants are what fly. Only two tests read
 # this file, and they read it to prove the constants still match it.
@@ -12,7 +12,7 @@
 # above will fail until both agree, which is the whole point of keeping the
 # file.
 #
-# ⛔ WHY THIS FILE EXISTS. The allocator works in DEMAND space: `allocation.py`
+# Why this file exists. The allocator works in DEMAND space: `allocation.py`
 # holds an 8x6 matrix of exactly 0 and +-1 -- a sign pattern with no geometry in
 # it. Used as a force sum those +-1 entries overstate surge and sway by
 # 1/cos(45 deg) = 41 %, and they cannot express a dead thruster at all. The fix
@@ -24,7 +24,7 @@
 # document 7254e77c / workspace 1ac100c7 / Part Studio 290dbcab. These are CAD
 # part bounding boxes in millimetres, not an export and not an inference.
 #
-# ⚠ A FIRST PASS USED THE RENDER MESH AND WAS WRONG. `docs/assets/cad/hull.mgla`
+# A first pass used the render mesh and was wrong. `docs/assets/cad/hull.mgla`
 # is decimated and int16-quantised, and it gave 346.6 mm and 520.4 mm for the
 # two pair separations against a documented 350 and 519. Those 3.4 mm were
 # recorded as an unreconciled discrepancy. The CAD says 350.0 and 519.0
@@ -32,11 +32,11 @@
 # Kept here because the retraction is the useful part -- a decimated render
 # asset is not a metrology source.
 #
-# ⚠ THE CAD FRAME IS NOT THE MESH FRAME. In the CAD the long axis is Y; the
+# The CAD frame is not the mesh frame. In the CAD the long axis is Y; the
 # glTF exporter rotated it to Z for the web viewer (glTF is Y-up). Everything
 # below is in the CAD's own frame.
 #
-# ⭐ 2026-09-25 — RE-MEASURED OFFLINE, AND THE NUMBERS HOLD EXACTLY.
+# 2026-09-25 — re-measured offline, and the numbers hold exactly.
 # `tools/hull_stations.py` reads each body's bounding box out of the GLB's own
 # POSITION accessor `min`/`max`, which glTF requires the exporter to write from
 # the CAD. Those bounds are in the JSON chunk, so Draco compression does not
@@ -53,19 +53,19 @@
 # a path at all: `pack_hull.py` now refuses a compressed export with a message
 # naming both alternatives instead of dying on `KeyError: 'bufferView'`.
 #
-# ⚠ THE MESH->CAD TRANSFORM, WRITTEN DOWN. Measured against this hull:
+# The mesh->cad transform, written down. Measured against this hull:
 #     cad = (mesh_x, -mesh_z, mesh_y)
 # i.e. CAD +Y (forward) is the export's -Z. Verified three ways: the axial motor
 # at mesh +330.60 -> CAD y -0.3306 as recorded below; its 8.06 mm lands on CAD z
 # as recorded below; and both pair separations are sign-independent. Getting this
 # backwards flips SURGE, which is why it is here and not remembered.
 #
-# ⚠ AND UPSTREAM PR srot-control-board#25 STILL CARRIES THE RETRACTED FIGURES --
+# And upstream PR srot-control-board#25 still carries the retracted figures --
 # 346.6 / 520.4 mm, in the MESH frame, with the axial unit marked UNKNOWN. It is
 # the document the firmware team would implement a mixer from. See
 # `.claude/context/upstream/pr-p-the-allocator-they-asked-for.md` §1.
 
-# ⚠ THE ONSHAPE MCP COULD NOT DO THIS. It exposes FeatureScript authoring:
+# The onshape mcp could not do this. It exposes FeatureScript authoring:
 # `test_featurescript` runs in a scratch document and takes no document id, and
 # this document holds no Feature Studios. The browser session could, because the
 # page is authenticated and the REST API answers it.
@@ -75,7 +75,7 @@ frame:
   #   Y  the 702 mm axis. The axial thruster lies on it -> SURGE.
   #   Z  the vertical tunnels' bore                     -> HEAVE.
   #   X  the lateral tunnels' bore                      -> SWAY.
-  # ⚠ The +/- SENSE of each axis (which end is the bow, which way is up) is a
+  # The +/- SENSE of each axis (which end is the bow, which way is up) is a
   # separate decision and is NOT settled here. Magnitudes and moment arms below
   # are measured; signs are a convention that must be fixed against the vehicle,
   # not guessed from a part list.
@@ -88,7 +88,7 @@ frame:
 
 # ── the five thrusters, measured ─────────────────────────────────────────────
 #
-# ⚠ ALL FIVE SIT ON THE CENTRELINE -- every centre is at x = 0, and the only
+# All five sit on the centreline -- every centre is at x = 0, and the only
 # off-axis figure was the axial motor's 8.1 mm in Z, and that was its bracket
 # (the prop hub is at +0.12 mm; see `axial` below). They are
 # distributed along Y ONLY. That is what makes the vehicle's actuation legible:
@@ -128,11 +128,11 @@ thrusters:
     axis: [0, 0, 1]
     bore_mm: 84
     extent_mm: [84, 84, 130.2]
-  # ⭐ THE AXIAL UNIT, FOUND. An A2212 brushless motor at the nose, on the long
+  # The axial unit, found. An A2212 brushless motor at the nose, on the long
   # axis, with no tunnel near it -- and an 88 mm duct ring at y = -351 just
   # beyond it. It is the vehicle's ONLY source of surge.
   #
-  # ⚠ Identified by POSITION, not by bounding-box shape. Its box is
+  # Identified by POSITION, not by bounding-box shape. Its box is
   # [27.8, 40, 43.9] and the largest extent is Z, which would suggest a Z axis;
   # but two identical A2212 motors sit at y = +-267.6 immediately beside the
   # vertical tunnels at y = +-259.5, i.e. those are the tunnel DRIVES, and an
@@ -140,7 +140,7 @@ thrusters:
   # Position is the reliable signal here and the shape is not.
   - name: axial
     part: A2212
-    # ⛔ z = PROP HUB, +0.12 mm -- NOT the motor box's +8.06 mm (issue #9).
+    # z = PROP HUB, +0.12 mm -- NOT the motor box's +8.06 mm (issue #9).
     # Re-read 2026-10-02 with tools/hull_stations.py from the same export:
     #   A2212        27.80 x 43.88 x 40.00   centre z +8.06   <- bracket pulls it
     #   prop (Pt 1)  36.95 x 36.73 x 21.00   centre z +0.12   <- the thrust line
@@ -166,7 +166,7 @@ axial:
   # not a pair: the part list holds exactly three A2212 motors, and the other
   # two are the vertical-tunnel drives.
   #
-  # ⚠ STILL OPEN: the SIGN convention -- which end of Y is the bow, and whether
+  # Still open: the SIGN convention -- which end of Y is the bow, and whether
   # the axial is a tractor or a pusher. An 88 mm duct ring sits at y = -351,
   # just outboard of the motor, which is where a propeller would exhaust. That
   # is suggestive, not decisive, and a sign error here reverses surge.
@@ -177,7 +177,7 @@ axial:
 # geometric B built from the columns above is exact in its directions and its
 # moment arms, and silent about newtons.
 unknown:
-  # ⚠ RETRACTED 2026-09-23: "mass cannot be computed" was WRONG, and it blocked
+  # RETRACTED 2026-09-23: "mass cannot be computed" was WRONG, and it blocked
   # the whole force domain for nothing. Two facts kill it. Volume is pure
   # geometry -- a material assignment turns volume into mass, it is not needed
   # to HAVE a volume. And a neutrally ballasted vehicle's mass EQUALS its
@@ -188,11 +188,11 @@ unknown:
   # `mongla_control/hydrodynamics.py` computes it. Band 8.0 .. 13.6 kg fresh,
   # best estimate 10.2 kg for a faired hull with a parallel mid-body.
   #
-  # ⛔ THE FOUR TUNNELS ARE FREE-FLOODING AND DO NOT DISPLACE -- 3.106 L, which
+  # The four tunnels are free-flooding and do not displace -- 3.106 L, which
   # is 23 % of the hull. A first pass omitted them and published a band whose
   # LOWER bound (11.1 kg) was above the corrected best estimate (10.2 kg).
   #
-  # ⭐ AND THE CAD IS THE WRONG INSTRUMENT FOR THIS ANYWAY. What control needs
+  # And the CAD is the wrong instrument for this anyway. What control needs
   # is NET BUOYANCY -- the few newtons the vertical pair must fight to hold
   # depth -- and that is a difference between two large numbers, so a 2 % error
   # in either swamps it. A float test measures it directly: put the sealed hull
@@ -200,7 +200,7 @@ unknown:
   # it also gives the roll righting moment BG that the unactuated roll axis
   # depends on. That is the experiment; a CAD volume only narrows the band.
   mass_kg: null                 # 8.0 .. 13.6 kg computed -- see hydrodynamics.py
-  centre_of_mass_m: null        # ⛔ still genuinely unknown: a shell with placed
+  centre_of_mass_m: null        # still genuinely unknown: a shell with placed
                                 #    parts is not a uniform body, and no envelope
                                 #    calculation can recover where the battery is
   centre_of_buoyancy_m: null    # BG decides the passive roll stability the
@@ -208,7 +208,7 @@ unknown:
   k_n_per_rpm2: null            # thrust per RPM^2. No default anywhere, on
                                 #    purpose (BENCH B-3: a thruster + load cell)
 
-# ── ⭐ what the SHAPE alone settles, with no mass and no material ─────────────
+# ── what the SHAPE alone settles, with no mass and no material ─────────────
 #
 # Lamb's added-mass coefficients are functions of the fineness ratio ONLY --
 # dimensionless, mass-free, volume-free, and exact for a body of revolution,
@@ -221,25 +221,25 @@ added_mass:
   k1_axial: 0.0806            # surge  -> effective mass 1.081 m
   k2_transverse: 0.8611       # sway, heave -> effective mass 1.861 m
   kp_rotational: 0.6115       # pitch, yaw  -> +61 % moment of inertia
-  k_roll: null                # ⚠ NOT ZERO, and an earlier version said it was.
+  k_roll: null                # NOT ZERO, and an earlier version said it was.
                               # A SMOOTH body of revolution has exactly zero
                               # roll added inertia; ours has four transverse
                               # bores, which is something for the fluid to grip.
                               # Small but unknown -- and it would be a false
                               # claim about the one axis we cannot actuate.
-  # ⚠ ALL OF THE ABOVE DESCRIBE THE SEALED FAIRED ENVELOPE. The tunnels break
+  # All of the above describe the sealed faired envelope. The tunnels break
   # the axisymmetry the formulas assume, so k2 and kp are over-estimates of the
   # potential-flow part and the entrained tunnel water is a term they do not
   # model at all. Good to maybe 10-20 % transversely; free-decay measures truth.
   transverse_to_axial_ratio: 1.722
   # 72 % more INERTIA laterally than axially, from geometry alone.
-  # ⛔ INERTIA ONLY. It does NOT follow that strafing beats pointing-and-driving
+  # Inertia only. It does NOT follow that strafing beats pointing-and-driving
   # (an earlier version claimed that). This hull has TWO lateral thrusters
   # against ONE axial unit, so the heavier axis may also be the better actuated
   # one, and drag has not entered yet. Settle it with the allocator and a
   # measured drag coefficient, not with this ratio.
   #
-  # ⛔ DO NOT SEED FROM sim/.../mongla_heavy/model.sdf. Those are BlueROV2
+  # Do not seed from sim/.../mongla_heavy/model.sdf. Those are BlueROV2
   # Heavy's coefficients and the plan already called them "a seed for a bench,
   # never a shipped value". It is worse: a boxy ROV is a different SHAPE CLASS,
   # its axial ratio is 0.471 against our 0.081 -- out by 5.8x -- and its heave

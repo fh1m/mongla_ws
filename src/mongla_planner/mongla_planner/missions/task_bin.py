@@ -13,7 +13,7 @@ bin in both horizontal axes (two-sided + braked), while the board holds
 ``BIN_DEPTH_M``. The verb switches the live detector to 'downward' (pausing
 forward -- one detector at a time on the Hailo) and flips the HUD.
 
-★ Before an armed run, VERIFY the surge sign DISARMED:
+Before an armed run, VERIFY the surge sign DISARMED:
     ros2 run mongla_vision vision_thrust_check --camera downward
   A bin AHEAD in the image must drive the hull FORWARD. If it reverses, set
   `vision.surge_sign` the other way. A wrong sign is positive feedback.
@@ -41,7 +41,7 @@ def run(mongla, log=None):
         mongla.turn(BIN_HEADING_DEG)
     mongla.set_depth(BIN_DEPTH_M, timeout=30)
 
-    # ⛔ THE EYE THIS TASK NEEDS MAY NOT BE THERE. A camera that fails to open
+    # The eye this task needs may not be there. A camera that fails to open
     # no longer takes the vision stack down with it -- the other camera keeps
     # running and this one's detector is simply absent. Calling a vision verb
     # anyway makes `_ensure_detector` abort the WHOLE run over one dead camera,

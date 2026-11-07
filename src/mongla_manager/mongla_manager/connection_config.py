@@ -80,7 +80,7 @@ def _distinct(paths) -> list:
 def find_srot_serial() -> str | None:
     """The SROT board's serial path, None if absent -- and REFUSES to guess.
 
-    ⛔ ISSUE #20. The board's bridge is a plain CH340 with NO serial number, so
+    ISSUE #20. The board's bridge is a plain CH340 with NO serial number, so
     its by-id name is shared by every CH340 on the machine -- an ESC flasher, a
     LoRa dongle, a spare ESP32 DevKit. This used to return the FIRST match, and
     opening the wrong one resets whatever it is (DTR) and then hung in

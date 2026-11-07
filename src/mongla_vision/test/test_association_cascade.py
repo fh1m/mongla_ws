@@ -47,7 +47,7 @@ def test_a_distant_detection_is_not_matched_by_motion():
 #  Stage 2 -- our own motion, measured
 # --------------------------------------------------------------------------- #
 def test_ego_motion_explains_a_box_that_motion_alone_could_not():
-    """⭐ The vehicle moved, so the scene moved. BoT-SORT has to fit this from
+    """The vehicle moved, so the scene moved. BoT-SORT has to fit this from
     image content; we read it from a verified velocity sensor."""
     c = AssociationCascade()
     out = c.associate([box(200, 100)], {7: box(100, 100)}, ego_shift=(100, 0))
@@ -55,7 +55,7 @@ def test_ego_motion_explains_a_box_that_motion_alone_could_not():
 
 
 def test_an_unknown_ego_shift_SKIPS_the_stage(  ):
-    """⛔ A vehicle that cannot measure its own motion must not claim it did
+    """A vehicle that cannot measure its own motion must not claim it did
     not move. NaN means unknown, and unknown is not zero."""
     c = AssociationCascade()
     out = c.associate([box(200, 100)], {7: box(100, 100)},
@@ -94,7 +94,7 @@ def test_yaw_rate_contributes_to_the_shift():
 #  Stage 3 -- appearance, and its cost bound
 # --------------------------------------------------------------------------- #
 def test_appearance_runs_only_on_what_the_cheap_stages_missed():
-    """⭐ THE COST ARGUMENT. A Re-ID network at 15-25 ms/frame is unaffordable
+    """The cost argument. A Re-ID network at 15-25 ms/frame is unaffordable
     on every track and nearly free on the few motion could not explain."""
     calls = []
 
@@ -165,7 +165,7 @@ def test_iou_and_shift_are_sane():
 
 
 def test_association_does_not_depend_on_detection_order():
-    """⛔ Cloud audit, 2026-11-07. Greedy in detection order let the first
+    """Cloud audit, 2026-11-07. Greedy in detection order let the first
     detection take the track the second overlapped far better; the second then
     became a NEW identity. Truth is constructed: track 7 sits exactly on
     detection B, and A only grazes it.

@@ -39,14 +39,14 @@ class SrotParams:
         DENIED rather than accepted-and-ignored. `hz <= 0` restores the board's
         compiled default for that stream.
 
-        VERIFIED ON HARDWARE 2026-09-03 (fw rev 14), and one result is a trap:
+        Verified on hardware 2026-09-03 (fw rev 14), and one result is a trap:
 
             baseline            10.17 Hz  (100.0 ms)   the compiled default
             ask 50 Hz           50.17 Hz  ( 20.0 ms)   ACK ACCEPTED
             ask 100 Hz          50.00 Hz  ( 20.0 ms)   ACK *ACCEPTED*, clamped
             restore (hz<=0)     10.25 Hz  (100.0 ms)   ACK ACCEPTED
 
-        A BELOW-FLOOR REQUEST IS ACCEPTED, NOT DENIED. The ACK says nothing about
+        A below-floor request is accepted, not denied. The ACK says nothing about
         the rate you actually got, so a host that asks for 100 Hz and believes the
         ACCEPTED will size its loop for 10 ms of feedback and get 20. The only way
         to know the delivered rate is to measure the arrivals. (DENIED is reserved
@@ -80,7 +80,7 @@ class SrotParams:
     def note_param_value(self, msg) -> None:
         """Hook for the manager's MAVLink reader: EVERY PARAM_VALUE, by name.
 
-        ⛔ ONE SLOT, SEVERAL THREADS. get_param / set_param / set_default_gain
+        One slot, several threads. get_param / set_param / set_default_gain
         each POPPED pymavlink's single PARAM_VALUE slot and polled it -- so the
         telemetry timer's `set_default_gain` could erase an action thread's
         `channel_role` reply (or overwrite it before it was read), and the loser
@@ -191,7 +191,7 @@ class SrotParams:
     def check_yaw_authority(self, timeout: float = 3.0):
         """Can a visual-servo yaw correction produce thrust at all? (ok, message)
 
-        ⛔ THE COUPLING THIS GUARDS, measured on `tools/control_bench` against
+        The coupling this guards, measured on `tools/control_bench` against
         this board's own parameters. Two independent thresholds stand between a
         host yaw demand and a turning propeller:
 
@@ -212,7 +212,7 @@ class SrotParams:
         the failure mode this codebase exists to refuse loudly. Break-even is
         around **80 deg/s** at the shipped rate gain.
 
-        ⚠ A params reset restores the 45 deg/s default silently, which is
+        A params reset restores the 45 deg/s default silently, which is
         exactly how this would come back.
 
         Best-effort, like `check_move_cruise_max`: a parameter that will not read
@@ -258,7 +258,7 @@ class SrotParams:
         is aiming at a number that means nothing, and silently: the move completes
         normally, on the wrong heading.
 
-        ⚠ Do NOT substitute MAGACC. The board's alignment is protected by the |B| band
+        Do NOT substitute MAGACC. The board's alignment is protected by the |B| band
         and a sample-agreement test, neither of which depends on the sensor's opinion of
         itself, and with a stored calibration the accuracy requirement drops to 0 -- so
         accuracy stops correlating with the outcome entirely. We read MAGACC 2 on a hull

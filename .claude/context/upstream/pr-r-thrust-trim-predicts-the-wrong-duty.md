@@ -8,7 +8,7 @@
 calibration. Latent today only because `THR_TRIM_EN` defaults to 0 — which is also
 why it has never been caught.
 
-Computed from their own source and their own defaults. ⚠ Not bench-verified: it
+Computed from their own source and their own defaults. Not bench-verified: it
 needs thrusters, which is our G2.
 
 ---
@@ -82,7 +82,7 @@ number is being maintained that cannot reach a motor.
 tracking error* rather than a thrust curve — a different quantity again, learned
 into the same variable.
 
-⚠ **Separately, and worth a decision of its own:** with `RPM_LOOP = 1` the whole of
+**Caution: Separately, and worth a decision of its own:** with `RPM_LOOP = 1` the whole of
 `MOT_THST_EXPO`, `MOT_SPIN_MIN` and the `MOT_BAT_V_*` feedforward is bypassed,
 because none of it is in the RPM path. Closing on RPM makes the voltage
 feedforward redundant (correctly), but it also makes command→thrust quadratic
@@ -94,7 +94,7 @@ absent. That may be intended; it is not written down anywhere.
 The honest prediction is the duty that was actually sent, and `mixer.cpp` is the
 only place that knows it. Either:
 
-1. ⭐ Have `oneToDshot()` publish the `shaped` value it computed (a
+1. **Key point:** Have `oneToDshot()` publish the `shaped` value it computed (a
    `float mixer::lastShaped(int m)`, or fill a `shaped[NUM_THRUSTERS]` out-param on
    `toDshot()`), and feed **that** to `thrust_trim::update()` in place of `nrm`.
    One truth, one copy, and it keeps working when the shaping changes.
@@ -104,7 +104,7 @@ only place that knows it. Either:
 Then exclude `rpm_mode` from `allow`, so a gain is only learned where it can be
 applied.
 
-⭐ **And whichever way: a test that drives a demand ladder through
+**Key point: And whichever way: a test that drives a demand ladder through
 `oneToDshot()` and asserts the learned gain stays at 1.0 for an ideal thruster.**
 That is the property the module claims, it is checkable on a host with no
 hardware, and it would have failed on day one.

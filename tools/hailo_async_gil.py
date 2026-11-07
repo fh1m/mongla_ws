@@ -79,7 +79,7 @@ def main():
     ap.add_argument('--hef', default=os.path.expanduser(
         '~/hailo_models/gate_sharks.hef'))
     ap.add_argument('--seconds', type=float, default=5.0)
-    # ONE MODE PER PROCESS. Configuring a network group the blocking way and
+    # One mode per process. Configuring a network group the blocking way and
     # then asking the same VDevice for an InferModel raises
     # HAILO_STREAM_NOT_ACTIVATED (72) -- the chip holds one activation and the
     # two APIs each want to own it. Same family as the two-VDevice and

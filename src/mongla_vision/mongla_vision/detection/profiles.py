@@ -1,6 +1,6 @@
 """ONE WORD instead of five knobs, because competition day is not the time.
 
-THE PROBLEM THIS SOLVES. The vision path now has four independent settings
+The problem this solves. The vision path now has four independent settings
 that interact -- `conf`, `preprocess`, `preprocess_clip`, `range_crop` --
 and each was added because a measurement justified it. Individually correct;
 collectively a configuration puzzle to solve while a run clock is going.
@@ -19,7 +19,7 @@ So: `vision:=<profile>`. One word, from what the water looks like.
     close      manipulation, docking -- nothing on, conf 0.15
     fast       the pipeline at full rate, everything off
 
-EVERY VALUE HERE IS MEASURED, and the measurement is named beside it. A
+Every value here is measured, and the measurement is named beside it. A
 profile that bundles a guess is worse than four honest knobs, because it
 hides the guess.
 

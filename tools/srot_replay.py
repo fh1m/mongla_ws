@@ -7,7 +7,7 @@ the point: a panel that cannot be rebuilt from the file names a field the log
 is missing, and a panel rebuilt by different code proves nothing about the
 live one.
 
-WHAT IT REPORTS, and why each earns its place
+What it reports, and why each earns its place
 ---------------------------------------------
   rates     per message type over the run, plus the LONGEST GAP. A mean rate
             hides a stream that stopped; the gap is what a dropout looks like.

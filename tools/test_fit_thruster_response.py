@@ -1,6 +1,6 @@
 """The step fit, checked against traces whose answer we CHOSE.
 
-⛔ SAME DISCIPLINE AS THE FREE-DECAY FIT. We are asking the hardware team to
+Same discipline as the free-decay fit. We are asking the hardware team to
 spend an afternoon producing data. If the analysis cannot recover a known
 answer from a synthetic trace, it will return a plausible number from a real one
 and nobody will know.
@@ -34,7 +34,7 @@ def test_it_recovers_a_time_constant_we_chose(tau):
 
 
 def test_it_recovers_dead_time_separately_from_tau():
-    """⚠ THE TWO MUST NOT BE CONFLATED. A first-order lag can be compensated by
+    """The two must not be conflated. A first-order lag can be compensated by
     a controller; pure dead time cannot. A fit that folds one into the other
     would hide the difference that decides what is fixable."""
     f = fit_step(*synth(tau=0.060, t_dead=0.035, ss=15.0, seconds=1.0))
@@ -59,7 +59,7 @@ def test_a_reverse_step_fits_the_same_way():
 
 
 def test_break_away_is_the_difference_between_two_steps():
-    """⭐ What section 2.1 is really asking. A stopped propeller costs extra
+    """What section 2.1 is really asking. A stopped propeller costs extra
     lag; that extra IS the break-away, and it is the justification for
     MOT_SPIN_MIN existing at all."""
     running = fit_step(*synth(tau=0.070, t_dead=0.005, ss=20.0))
@@ -68,7 +68,7 @@ def test_break_away_is_the_difference_between_two_steps():
 
 
 def test_too_short_a_record_is_refused():
-    """⛔ REFUSE, DO NOT EXTRAPOLATE. Stopping at 2 tau leaves the plateau
+    """Refuse, do not extrapolate. Stopping at 2 tau leaves the plateau
     unreached, so 'steady thrust' would be an extrapolation presented as a
     measurement -- and every derived number would inherit it."""
     with pytest.raises(ValueError):

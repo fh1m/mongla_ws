@@ -2,9 +2,9 @@
 """srot_format + srot_changes -- the rendering contract, pinned.
 
 These guard two rules the hardware taught us:
-  * MATCH THE BOARD -- a heading is 0..360 everywhere, because the SROT OLED,
+  * match the board -- a heading is 0..360 everywhere, because the SROT OLED,
     VFR_HUD.heading and /mongla/state all use 0..360.
-  * ABSENCE IS NOT ZERO -- the board suppresses what it cannot stand behind.
+  * absence is not zero -- the board suppresses what it cannot stand behind.
 """
 import math
 
@@ -75,7 +75,7 @@ def test_the_mavlink_no_data_sentinels_are_not_readings():
 
 
 def test_an_all_zero_esc_row_is_absent_not_eight_idle_escs():
-    """BARE-BOARD BENCH, 2026-08-03: no Pico, no ESCs. `0 0 0 0 0 0 0 0` is what an
+    """Bare-board bench, 2026-08-03: no Pico, no ESCs. `0 0 0 0 0 0 0 0` is what an
     attached-but-idle ESC sends AND what arrives with nothing connected; an ESC
     reporting 0 C is implausible, so an all-zero temp row means nothing is there."""
     assert sfmt.esc_temp_row([0] * 8) == '--'
@@ -170,7 +170,7 @@ class _AV:
 
 
 def test_an_unanswered_version_request_renders_dashes_not_v0_0_0():
-    """⛔ THE DEFECT THIS CLOSES. AUTOPILOT_VERSION is one-shot and must be
+    """The defect this closes. AUTOPILOT_VERSION is one-shot and must be
     ASKED for, so an unanswered request is the ordinary case for the first
     second of every session. `render` unpacked the bit-fields inline, so a
     missing message left the packed word at 0 and the shifts turned it into
@@ -193,7 +193,7 @@ def test_a_real_version_still_renders(capsys):
 
 
 def test_the_formatter_is_the_one_copy():
-    """⛔ ONE TRUTH, TWO COPIES IS THE BUG. If the bit-shifts come back into
+    """One truth, two copies is the bug. If the bit-shifts come back into
     the renderer the two will drift, and the suppression above is lost again."""
     from pathlib import Path
 

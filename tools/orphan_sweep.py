@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Every package's unreachable modules, not just `mongla_vision`'s.
 
-⛔ WHY THIS EXISTS. `test_no_capability_is_built_and_unreachable.py` is the
+Why this exists. `test_no_capability_is_built_and_unreachable.py` is the
 repo's guard against its oldest and most expensive defect -- a module that is
 written, tested, and imported by nothing -- and it covers **one package**.
 Five others had never been swept: `mongla_control` (1 283 tests),
@@ -14,7 +14,7 @@ Swept for the first time on 2026-09-25, it found four:
     mongla_control/nav_filter.py             138 lines
     mongla_manager/estimator/thrust_model.py 107 lines
 
-⚠ AN ORPHAN IS NOT AUTOMATICALLY A DEFECT, and this tool does not pretend
+An orphan is not automatically a defect, and this tool does not pretend
 otherwise. `thrust_model.py` is unreachable because **no non-zero ESC RPM has
 ever crossed our wire** -- it waits on the thruster pack, says so in its own
 docstring, and wiring it to a signal that is always 0 would be worse than
@@ -22,13 +22,13 @@ leaving it. That is a debt with a name, which is the standard CLAUDE.md §9
 asks for. The defect is a module with NO stated reason, and the deeper defect
 is nobody looking.
 
-⭐ THE CLASS OF BUG THIS CATCHES is the one that cost this session a day: the
+The class of bug this catches is the one that cost this session a day: the
 lock ladder never subscribed to `/mongla/state`, so vision did not know the
 hull's heading and the object-permanence rung was unreachable for want of one
 number the board already published. That is invisible to every test, because
 each piece works perfectly alone.
 
-⚠ Three exemptions, each a real reachability path an import grep cannot see:
+Three exemptions, each a real reachability path an import grep cannot see:
 ROS nodes are LAUNCHED not imported, `console_scripts` are invoked by name,
 and `missions/` is loaded dynamically.
 
@@ -140,12 +140,12 @@ def importers(target: pathlib.Path, *, tools: bool = True) -> list:
     """Files that IMPORT this exact module -- not ones that mention it, and not
     a different module that happens to share its file name.
 
-    ⛔ THE STEM MATCH THIS REPLACES HID A WHOLE MODULE. It matched on the file
+    The stem match this replaces hid a whole module. It matched on the file
     name, and `mongla_vision` has two `draw.py`: the HUD one is imported, so
     `anchor/draw.py` -- 143 lines nothing on the vehicle ever ran -- read as
     imported for its whole life (removed 2026-11-06). Resolving the dotted name is the only answer.
 
-    ⛔ `tools/` IS SCANNED TOO by default. Scanning only `src/` reported
+    `tools/` is scanned too by default. Scanning only `src/` reported
     `draw_strip.py` as unreachable, and `tools/render_real_stills.py` imports it
     to render the site's HUD imagery. A sweep that recommends deleting live
     code is worse than no sweep. Guards about the VEHICLE pass `tools=False`.
@@ -205,7 +205,7 @@ def main() -> int:
         print('no unreachable capability modules')
         return 0
     print(f'\n{total} unreachable module(s).\n'
-          '⚠ An orphan is not automatically a defect -- some wait on hardware '
+          'WARNING: An orphan is not automatically a defect -- some wait on hardware '
           'that does not exist yet, and say so in their own docstring. The '
           'defect is one with NO stated reason. Give each a named blocker or '
           'a consumer; there is no third state (CLAUDE.md §9).')

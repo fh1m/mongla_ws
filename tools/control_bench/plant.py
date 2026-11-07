@@ -1,6 +1,6 @@
 """A Fossen 6-DOF plant, so the board's control code can be flown off-vehicle.
 
-⛔ WHAT THIS IS FOR. Until now the bench was OPEN LOOP: stick in, DShot out,
+What this is for. Until now the bench was OPEN LOOP: stick in, DShot out,
 nothing fed back. It could say what the board commands and nothing about what
 the vehicle then does, so every closed-loop question -- does the feedforward
 layer help, does INDI beat the cascade, is 500 Hz justified -- still cost a pool
@@ -8,7 +8,7 @@ session. This closes the loop.
 
     M nu_dot + C(nu) nu + D(nu) nu + g(eta) = tau            Fossen 2011, 7.3
 
-⚠ AND WHAT IT IS NOT. It is not the water. The bench's OTHER half runs the
+And what it is not. It is not the water. The bench's OTHER half runs the
 board's real compiled control code and is validated against live captures to
 under one DShot count; NOTHING in this file is validated against anything,
 because the vehicle has never been wet. Added mass here is computed from hull
@@ -16,7 +16,7 @@ geometry and is the honest part. DRAG IS NOT MEASURED AND HAS NO DEFAULT -- see
 `Damping`. A plant result is a statement about a MODEL, and every number this
 file produces carries that.
 
-⭐ THE DISCIPLINE THAT MAKES IT USEFUL ANYWAY. An unidentified plant still
+The discipline that makes it useful anyway. An unidentified plant still
 answers COMPARATIVE questions, provided the answer survives the uncertainty.
 `sweep_drag` exists for exactly that: run the comparison across the whole
 plausible drag band and report the conclusion only if it holds throughout. A
@@ -27,7 +27,7 @@ FRAME. Fossen body-fixed: x forward, y starboard, z DOWN, so depth is +z and
 heave is positive downward.
     nu  = [u v w p q r]   body-frame linear and angular velocity
     eta = [x y z phi theta psi]
-⚠ The CAD frame is not this frame: there the long axis is Y. The mapping is
+The CAD frame is not this frame: there the long axis is Y. The mapping is
 CAD +Y -> body +x, and `hull_geometry.yaml` says so at the top. A sign error
 here is the kind that looks like a tuning problem for a whole pool day.
 """
@@ -44,13 +44,13 @@ _CONTROL = Path(__file__).resolve().parents[2] / 'src' / 'mongla_control'
 def _load_pure(name: str):
     """Import one module out of `mongla_control` WITHOUT importing the package.
 
-    ⚠ A PLAIN IMPORT DOES NOT WORK AND THE REASON IS WORTH RECORDING.
+    A plain import does not work and the reason is worth recording.
     `mongla_control/__init__.py` imports the whole stack down to
     `mongla_interfaces.action.Move`, so `from mongla_control import
     hydrodynamics` pulls in ROS -- and the bench exists precisely so that
     control questions need no ROS, no vehicle and no built workspace.
 
-    ⭐ Same shape as the finding we sent the firmware team about
+    Same shape as the finding we sent the firmware team about
     `state_types.h` dragging in FreeRTOS: a pure module made unusable by what
     its neighbours import. Ours is the cheaper fix -- a lazy `__getattr__` in
     `__init__` -- and it should be made.
@@ -75,7 +75,7 @@ G = 9.80665
 
 @dataclass(frozen=True)
 class Damping:
-    """Hydrodynamic damping. ⛔ THERE IS NO DEFAULT AND THERE MUST NOT BE ONE.
+    """Hydrodynamic damping. THERE IS NO DEFAULT AND THERE MUST NOT BE ONE.
 
     Added mass is potential flow and computable from the hull's shape; drag is
     viscous and no closed form gets it to better than tens of percent. The
@@ -110,7 +110,7 @@ class Damping:
                 provenance: str) -> 'Damping':
         """Quadratic damping from drag coefficients and the hull's own areas.
 
-        ⚠ THE COEFFICIENTS ARE THE GUESS. For a faired body of revolution at
+        The coefficients are the guess. For a faired body of revolution at
         fineness 4 the published range is roughly:
             axial       0.15 .. 0.30 on frontal area   (streamlined)
             transverse  0.80 .. 1.20 on planform area  (a bluff cylinder)
@@ -135,7 +135,7 @@ class Inertia:
     """Mass and inertia, rigid plus added.
 
     Defaults come from `hydrodynamics.py`: the mass from the neutral-buoyancy
-    argument and the added-mass coefficients from Lamb. ⚠ The rigid INERTIA is
+    argument and the added-mass coefficients from Lamb. The rigid INERTIA is
     the weak one -- it assumes a uniform body, and a real hull is a shell with
     its battery placed somewhere deliberate. Free-decay measures the truth.
     """
@@ -149,7 +149,7 @@ class Inertia:
     def mass_matrix(self) -> tuple[float, ...]:
         """The diagonal of M = M_RB + M_A, in Fossen body axes.
 
-        ⛔ ROLL ADDED INERTIA IS TAKEN AS ZERO HERE AND THAT IS OPTIMISTIC.
+        Roll added inertia is taken as zero here and that is optimistic.
         Potential flow gives exactly zero for a smooth body of revolution, but
         this hull has four transverse bores for the fluid to grip, so the true
         value is small and positive. Zero makes roll look MORE agile than it
@@ -173,7 +173,7 @@ class Inertia:
 class Thruster:
     """One thruster: where it is, which way it pushes, how hard.
 
-    ⛔ `max_thrust_n` IS UNMEASURED ON THIS VEHICLE. `k_n_per_rpm2` is null and
+    `max_thrust_n` is unmeasured on this vehicle. `k_n_per_rpm2` is null and
     `MOT_THST_EXPO = 0.65` is fitted to a T200 we are not flying. Every force
     the plant produces scales linearly with it, so an absolute result (a
     settling time in seconds, a distance in metres) is only as good as this
@@ -189,7 +189,7 @@ class Thruster:
 def cad_hull_thrusters(max_thrust_n: float) -> tuple[Thruster, ...]:
     """The five-thruster CAD hull, in FOSSEN body axes.
 
-    ⚠ THE AXIS REMAP IS THE WHOLE POINT OF THIS FUNCTION. `hull_geometry.yaml`
+    The axis remap is the whole point of this function. `hull_geometry.yaml`
     is in the CAD frame, where the long axis is Y and Z is up-ish. Fossen is
     x-forward, y-starboard, z-DOWN. The mapping applied here is
 
@@ -197,7 +197,7 @@ def cad_hull_thrusters(max_thrust_n: float) -> tuple[Thruster, ...]:
         CAD +X -> body +y      (lateral bore -> starboard)
         CAD -Z -> body +z      (vertical bore -> DOWN)
 
-    ⛔ THE BOW DIRECTION IS STILL A CONVENTION, NOT A MEASUREMENT.
+    The bow direction is still a convention, not a measurement.
     `hull_geometry.yaml` says so explicitly: the axial unit sits at CAD
     y = -0.3306 with a duct ring just beyond it at y = -351, which suggests
     that end is the stern. Taken here as bow = CAD +Y. If that is backwards,
@@ -274,7 +274,7 @@ class Plant:
     def restoring(self, eta) -> list:
         """g(eta) -- the righting moment from CG sitting below CB.
 
-        ⭐ THIS IS WHY ROLL CAN BE LEFT UNACTUATED. With no roll thruster the
+        This is why roll can be left unactuated. With no roll thruster the
         only thing returning the hull to upright is BG, and the bench can now
         say whether it is enough. Assumes neutral buoyancy, so the
         force rows are zero and only the moments survive.
@@ -301,7 +301,7 @@ class Plant:
         phi, th, psi = eta[3], eta[4], eta[5]
         cf, sf, ct, st, cp, sp = (math.cos(phi), math.sin(phi), math.cos(th),
                                   math.sin(th), math.cos(psi), math.sin(psi))
-        # ⚠ A pitch of exactly +-90 deg makes the Euler Jacobian singular. This
+        # A pitch of exactly +-90 deg makes the Euler Jacobian singular. This
         # hull cannot pitch there under its own restoring moment, and guarding
         # would hide a plant that had gone somewhere it should not -- so it is
         # left to blow up loudly instead of being silently clamped.
@@ -353,7 +353,7 @@ class Plant:
 
     @property
     def depth_m(self) -> float:
-        """⚠ NEGATIVE BELOW THE SURFACE, matching what the board reports over
+        """Negative below the surface, matching what the board reports over
         `VFR_HUD`. Fossen's z is positive DOWN, so this is a deliberate sign
         flip and not a bug -- see CLAUDE.md section 2."""
         return -self.eta[2]

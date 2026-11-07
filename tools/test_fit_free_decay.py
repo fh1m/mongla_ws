@@ -42,7 +42,7 @@ def test_either_spin_direction_fits():
 
 
 def test_a_hull_still_under_power_is_refused():
-    """⛔ THE POOL-DAY MISTAKE THIS CATCHES. If the command was not really cut
+    """The pool-day mistake this catches. If the command was not really cut
     -- AUTO re-engaging, a heading hold still running -- the rate does not
     decay, and a fit would return a small positive number that looks like very
     low drag. Refuse instead."""
@@ -61,7 +61,7 @@ def test_a_record_cut_short_is_refused():
 
 
 def test_linear_damping_is_detected_rather_than_mis_fitted():
-    """⚠ THE MODEL CHECK. A linear-damped decay is exponential, so ln(omega) is
+    """The model check. A linear-damped decay is exponential, so ln(omega) is
     the straight line and 1/omega is not. Quoting q/I off an exponential decay
     would be a confident wrong answer -- and with four open tunnels at low
     rates, linear damping is a real possibility, not an academic one."""

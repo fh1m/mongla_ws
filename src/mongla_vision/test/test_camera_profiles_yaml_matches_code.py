@@ -1,6 +1,6 @@
 """cameras.yaml and CAMERA_PROFILES are two copies of one truth.
 
-⛔ WHY THIS FILE EXISTS. `config/cameras.yaml` says it "mirrors
+Why this file exists. `config/cameras.yaml` says it "mirrors
 CAMERA_PROFILES in config.py". Only the Python dict is ever LOADED -- the
 YAML is documentation. Nothing checked that they agree.
 

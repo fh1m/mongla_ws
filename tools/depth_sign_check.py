@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Prove the depth loop's SIGN on the bench, disarmed, with nothing spinning.
 
-⛔ WHY THIS EXISTS. `depth_control.cpp` carries this, verbatim:
+Why this exists. `depth_control.cpp` carries this, verbatim:
 
     "AUDIT R1 has stood since the beginning: this loop has NEVER run closed,
      because the Bar30 was not fitted during development."
@@ -26,7 +26,7 @@ reported "inverted" for a loop that is correct).
     measured SHALLOWER than target -> DEPTH_CMD NEGATIVE -> descend (correct)
     demand moves AWAY from the target -> STILL INVERTED. DO NOT DIVE.
 
-⚠ In AIR you cannot do this by lifting the vehicle: a whole metre of altitude is
+In AIR you cannot do this by lifting the vehicle: a whole metre of altitude is
 ~0.12 mbar, about 1.2 mm of equivalent depth. That is why the documented bench
 check ("enter DEPTH_HOLD and hand-move the vehicle") could never actually be
 performed, and a large part of why it never was. PRESSURISE THE PORT INSTEAD --
@@ -64,7 +64,7 @@ MIN_DELTA = 0.05
 # +1.21 m on the bench (DEPTH_CMD +0.555, still 0.445 of headroom). A larger
 # offset would sit at the rail.
 #
-# ⚠ The zero offset itself is HARMLESS here -- this test measures a DELTA, so a
+# The zero offset itself is HARMLESS here -- this test measures a DELTA, so a
 # constant offset cancels and calibration is irrelevant to the sign. Only
 # proximity to the clamp matters.
 SATURATION_HEADROOM = 0.10
@@ -77,7 +77,7 @@ def sign_verdict(baseline, pressed):
     no thumb. Pressurising the port raises the pressure, so the board reads
     DEEPER; deeper than target must command ASCEND, which is POSITIVE.
 
-    ⚠ An absent reading is never a pass. The board SUPPRESSES DEPTH_CMD when the
+    An absent reading is never a pass. The board SUPPRESSES DEPTH_CMD when the
     barometer is unhealthy, so `None` is a finding, not a missing sample.
     """
     if baseline is None or pressed is None:

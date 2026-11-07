@@ -63,7 +63,7 @@ def _labels(path, w, h):
             continue
         vals = [float(v) for v in p[1:]]
         if len(vals) >= 8:
-            # ORIENTED BOXES (YOLO-OBB): 4 corner points, not xywh. Parsing
+            # Oriented boxes (yolo-obb): 4 corner points, not xywh. Parsing
             # them as xywh does not raise -- it yields a plausible-looking
             # box, sometimes with NEGATIVE area, and reports the model as
             # having 3.6 % recall when it really has ~69 %. Found because a
@@ -139,7 +139,7 @@ def conf_sweep(model, root, imgsz, k, thresholds, floor=0.02,
                iou_thresh=0.3, preprocess=None):
     """PRECISION and recall vs confidence, from ONE inference pass.
 
-    WHY THIS EXISTS. The shipped floor went 0.15 -> 0.10 on measured
+    Why this exists. The shipped floor went 0.15 -> 0.10 on measured
     PRESENCE, jitter and multi-box rate. Presence cannot see a false
     positive -- it counts frames with a box, and a wrong box is a box. So
     the one cost of lowering a confidence floor is the one quantity that
@@ -149,7 +149,7 @@ def conf_sweep(model, root, imgsz, k, thresholds, floor=0.02,
     `evaluate()` above has computed tp/fp/fn the whole time. This just asks
     it the conf question.
 
-    ONE PASS, RE-THRESHOLDED. Inference runs once at `floor` and every
+    One pass, re-thresholded. Inference runs once at `floor` and every
     higher threshold is applied to those boxes offline. A detector's boxes
     at conf c are exactly its boxes at conf < c filtered to score >= c
     (NMS is per-class and score-ordered, so suppression does not change),

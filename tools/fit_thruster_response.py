@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fit a thruster's step response: dead time, time constant, steady thrust.
 
-⛔ WHY THIS SHIPS WITH THE ASK. `pr-o-thruster-step-response.md` asks the
+Why this ships with the ask. `pr-o-thruster-step-response.md` asks the
 hardware team for a step-response test. An ask that says "measure the response
 time" and leaves the analysis unstated gets back a number nobody can reproduce
 and nobody can argue with. This is the analysis, written down, so the deliverable
@@ -10,7 +10,7 @@ is a CSV and the interpretation is not up for negotiation.
     thrust(t) = 0                                      t <  t_dead
     thrust(t) = T_ss * (1 - exp(-(t - t_dead) / tau))  t >= t_dead
 
-⭐ VALIDATED AGAINST SYNTHETIC DATA WITH A KNOWN ANSWER, the same discipline the
+Validated against synthetic data with a known answer, the same discipline the
 free-decay fit gets: if it cannot recover a tau we chose, from a trace we
 generated, it will not recover one from a load cell.
 
@@ -35,7 +35,7 @@ class StepFit:
     rms_residual_n: float
 
     def total_lag_s(self) -> float:
-        """⭐ THE NUMBER THE CONTROL LOOP ACTUALLY FEELS.
+        """The number the control loop actually feels.
 
         Dead time and time constant are not interchangeable: a first-order lag
         can be compensated, pure dead time cannot. But for ranking one design
@@ -56,7 +56,7 @@ class StepFit:
 def fit_step(t, y, *, settle_frac: float = 0.8) -> StepFit:
     """Fit the model above to one step. `t` seconds, `y` thrust (either sign).
 
-    ⚠ SIGN-AGNOSTIC ON PURPOSE. A reverse step is the same experiment with a
+    Sign-agnostic on purpose. A reverse step is the same experiment with a
     negative plateau, and PR M section 2.2 needs both directions from the same
     rig. Working on |y| means one analysis covers both.
     """
@@ -75,7 +75,7 @@ def fit_step(t, y, *, settle_frac: float = 0.8) -> StepFit:
     if ss <= 0.0:
         raise ValueError('the plateau is not distinguishable from zero')
 
-    # ⛔ DEAD TIME COMES OUT OF THE REGRESSION, NOT OUT OF A THRESHOLD.
+    # Dead time comes out of the regression, not out of a threshold.
     # The first version found t_dead as "first sample above a noise floor", and
     # estimated that floor from the opening 5 % of the record -- which, for a
     # step at 10 ms in a 1 s trace, is mostly POST-step data. The floor came out
@@ -109,7 +109,7 @@ def fit_step(t, y, *, settle_frac: float = 0.8) -> StepFit:
     tau = -1.0 / slope
     t_dead = (my - slope * mx) * tau
 
-    # ⛔ REFUSE A RECORD THAT NEVER REACHED THE PLATEAU. Stopping at 2 tau makes
+    # Refuse a record that never reached the plateau. Stopping at 2 tau makes
     # "steady thrust" an extrapolation presented as a measurement, and every
     # derived number -- the thrust curve, REVERSE_EFFICIENCY, tau itself --
     # would inherit it silently.
@@ -136,7 +136,7 @@ def _stdev(xs) -> float:
 
 
 def break_away_cost(from_stopped: StepFit, from_running: StepFit) -> float:
-    """⭐ THE NUMBER PR M SECTION 2.1 IS REALLY ASKING FOR.
+    """THE NUMBER PR M SECTION 2.1 IS REALLY ASKING FOR.
 
     The extra lag a STOPPED propeller costs over one already turning. That
     difference is the break-away -- cogging, seal stiction, sensorless ESC

@@ -22,7 +22,7 @@ class WhereMixin:
     # files through the flat port (`optics.fov_air_to_water`):
     #   downward  Microdia global shutter, fx 1027.87 @1280: 63.8 air -> 46.7 water
     #   forward   Fantech Luminous C30,    fx  851.23 @1280: 73.9 air -> 53.6 water
-    # ⛔ This was ONE constant, 46.7, measured on the global-shutter unit when it
+    # This was ONE constant, 46.7, measured on the global-shutter unit when it
     # was still called "forward". The cameras were re-assigned on 2026-09-07 and
     # the constant stayed, so every forward-camera range read 17 % long and every
     # forward bearing 13 % short, with nothing logging a fault.
@@ -42,7 +42,7 @@ class WhereMixin:
     def _water_camera(self, camera):
         """(rectifier, K_rect) for `camera` from its live CameraInfo, or None.
 
-        ⛔ A FLAT PORT HAS NO SINGLE FOCAL LENGTH. The in-water focal grows with
+        A flat port has no single focal length. The in-water focal grows with
         field angle (forward camera at 640 px: ~567 px at the centre, ~634 at the
         edge), so ANY one focal -- the old shared 46.7 deg, or a per-camera FOV --
         is wrong by up to ~12 % somewhere in the frame. Rectified pixels ARE a
@@ -111,7 +111,7 @@ class WhereMixin:
             rect, K_rect = wc
             w = WhereMixin._optics(self, cam)[4]
             u = (float(off) + 1.0) * w / 2.0
-            # ⛔ THE BOX'S OWN ROW, NOT THE PRINCIPAL ROW (issue #24). Lens and
+            # The box's own row, not the principal row (issue #24). Lens and
             # port are both RADIAL, so where a point lands horizontally depends
             # on how far it is from the centre in BOTH axes. Reading every box
             # on row cy undid them for a point that was not there.
@@ -119,7 +119,7 @@ class WhereMixin:
             u_r = float(rect.rectify([[u, v]])[0][0])
             # Azimuth of a pinhole ray is atan(x/f) whatever its height.
             rel = _math.degrees(_math.atan((u_r - K_rect[0][2]) / K_rect[0][0]))
-            # ⛔ THE HEADING OF THAT FRAME, not of now (issue #37): mid-turn
+            # The heading of that frame, not of now (issue #37): mid-turn
             # the detection is a detector latency old, and the hull has
             # turned since by yaw_rate x latency.
             then = self.absolute_heading() - SeeMixin._turned_since(self, cam)
@@ -132,7 +132,7 @@ class WhereMixin:
                      camera: str | None = None) -> object:
         """Where we are in the pool, from bearings to props we can see.
 
-        ⛔ THE COURSE IS THE LANDMARK FIELD. A team that could not localise
+        The course is the landmark field. A team that could not localise
         underwater added obstacles to their pool to make features, and wrote
         the approach off because a venue will not let you. That is backwards:
         the competition course is the densest set of surveyed, known-size,
@@ -168,7 +168,7 @@ class WhereMixin:
             sightings[name] = bearing
         got = fix_from_bearings(sightings, positions)
         if got.ok:
-            # FEED THE FILTER, not just the log. `update_position` is the only
+            # Feed the filter, not just the log. `update_position` is the only
             # channel that bounds horizontal drift, and until this line the fix
             # was computed, printed, and thrown away -- the filter had no
             # caller for the one measurement it cannot replace. Best-effort:
@@ -193,16 +193,16 @@ class WhereMixin:
             if here and here[0] > 4.0:
                 mongla.turn(180)
 
-        ⛔ NONE IS ALSO THE ANSWER FOR A POSITION THAT EXISTS AND IS WRONG.
+        None is also the answer for a position that exists and is wrong.
         Two ways that happens, and neither looks any different from a good
         reading at this interface:
 
-          * BEFORE THE HEADING IS ANCHORED the estimate is in the board's boot
+          * before the heading is anchored the estimate is in the board's boot
             frame, so comparing it against a course coordinate is a comparison
             in a rotated frame. The node says so in `header.frame_id` -- it
             publishes `odom` until an anchor arrives and `pool` after -- and
             this reads that field rather than trusting the numbers.
-          * WITH NO VELOCITY AIDING the position runs away. Measured on the
+          * with no velocity aiding the position runs away. Measured on the
             vehicle with flow absent and ZUPT off: 635 m in 95 s, while the
             node published a healthy-looking pose at 10 Hz throughout. The
             node warns in ITS log; a mission holding a bare tuple cannot hear
@@ -263,7 +263,7 @@ class WhereMixin:
             if mongla.motion() == 'blocked':
                 mongla.move_back(duration=2)
 
-        ⛔ A TIMED MOVE REPORTS SUCCESS WHETHER OR NOT THE HULL WENT ANYWHERE.
+        A timed move reports success whether or not the hull went anywhere.
         This is the only reading that can tell them apart without a detection.
         `'unknown'` is common and honest: no flow, no learned model, or a board
         primitive running (the host does not know its demand). Treat unknown as
@@ -376,7 +376,7 @@ class WhereMixin:
         which we already have -- `target_geometry` is the measured width table
         and the detector gives the box.
 
-        ⛔ THE SIGMA IS DERIVED, NOT CHOSEN. Differentiating gives
+        The sigma is derived, not chosen. Differentiating gives
         `dZ/dw = -Z^2 / (f W)`, so range error grows with the SQUARE of range:
         one pixel of box-width noise is 6 mm at 1 m and 15 cm at 5 m for a gate.
         A constant sigma would tell the filter a far reading is as good as a
@@ -439,14 +439,14 @@ class WhereMixin:
         sigma is smaller when both answer. Detail and failure modes:
         `mongla_localization.floor_plane`.
 
-        ⛔ BOTH GEOMETRY ARGUMENTS ARE REQUIRED, ON PURPOSE. Pitch is the
+        Both geometry arguments are required, on purpose. Pitch is the
         dominant error term (17 cm per degree at h 1 m, R 3 m), and the bench
         hull read +1.77 deg nose-up, so a silent level-camera default would be
         a ~30 cm bias no test sees. `pitch_deg` is the optical axis BELOW
         horizontal: mount pitch minus the hull's nose-up pitch (forward camera
         on a hull pitched 1.77 deg nose-up: `pitch_deg=-1.77`).
 
-        ⛔ SIGNS. Depths here are negative below the surface, and getting the
+        SIGNS. Depths here are negative below the surface, and getting the
         subtraction backwards yields a NEGATIVE plane, which is read as a
         surface-hung target -- a confident wrong answer, not a refusal:
 
@@ -456,7 +456,7 @@ class WhereMixin:
         Pixels are assumed square (`focal_px` is fx and is passed as fy too),
         which holds for the cameras we fly.
 
-        ⛔ A box touching the frame edge on the side we read is REFUSED: the
+        A box touching the frame edge on the side we read is REFUSED: the
         foot is outside the image and the box edge is not the foot, which would
         return a confident range to the frame border.
         """
@@ -498,7 +498,7 @@ class WhereMixin:
     def fix_from_prop(self, prop: str, *, camera: str | None = None):
         """Pool position from ONE surveyed prop: range and bearing together.
 
-        ⛔ THIS IS THE DVL WE DO NOT HAVE. `fix_position()` needs TWO props
+        This is the DVL we do not have. `fix_position()` needs TWO props
         with 12 degrees between them, because bearings alone cannot fix a
         range -- and two props are visible together far less often than one.
         Adding the range collapses that requirement: a single prop of known
@@ -559,7 +559,7 @@ class WhereMixin:
         `prop_placement.place`. That keeps the hull's own error out of the
         average: it is common to every sighting, so it enters once.
 
-        ⛔ A MEASURED PROP IS CHECKED, NEVER OVERWRITTEN. A surveyed position
+        A measured prop is checked, never overwritten. A surveyed position
         that disagrees with the placement beyond its 99 % ellipse is logged as
         a disagreement and left alone. Overwriting would let a drifted pose
         rewrite the one thing that can correct it, and the next `fix_from_prop`
@@ -714,7 +714,7 @@ class WhereMixin:
                   timeout: float = 6.0):
         """Anchor the heading on a course prop, taking its bearing from the map.
 
-        ⛔ ONE NUMBER, ONE PLACE. A prop's face bearing is what an absolute
+        One number, one place. A prop's face bearing is what an absolute
         heading needs AND what approaching it from the front needs. Passing it
         by hand at each call site is how the two come to disagree, so this
         reads it from the loaded course and refuses if it was never measured --
@@ -733,7 +733,7 @@ class WhereMixin:
                        timeout: float = 6.0) -> object:
         """Re-zero the heading against a prop whose world bearing is known.
 
-        ⛔ WHAT THIS BUYS. The BNO is deliberately magnetometer-free, so its yaw
+        What this buys. The BNO is deliberately magnetometer-free, so its yaw
         is relative to wherever the board booted: drift under 0.01 deg/min, and
         an arbitrary zero. Every mission that says `turn(90)` means 90 from
         boot, so a hull powered on at a different angle flies a different course
@@ -766,7 +766,7 @@ class WhereMixin:
         got = anchor_from(fused, self.head(), float(bearing_deg))
         if got.ok:
             self._heading_offset = got.offset_deg
-            # TELL THE FILTER. Until this line the anchor was a mission-local
+            # Tell the filter. Until this line the anchor was a mission-local
             # variable: `absolute_heading()` used it, `bearing_to()` used it,
             # and the estimator -- the one component whose whole output is
             # labelled with a frame -- never heard about it. Its attitude came
@@ -854,7 +854,7 @@ class WhereMixin:
         def fresh():
             """The cached message if it arrived within FUSED_POSE_MAX_AGE_S.
 
-            ⛔ ISSUE #57: this returned whatever was cached, however old. After
+            ISSUE #57: this returned whatever was cached, however old. After
             the camera or solver stopped, `anchor_heading` paired a fused yaw
             from minutes ago with the hull's heading NOW -- a heading zero off
             by however far the hull had turned since.
@@ -875,7 +875,7 @@ class WhereMixin:
                              support=int(msg.n_points),
                              spread_deg=float(msg.yaw_spread_deg),
                              rule=str(msg.reason))
-        # ⛔ A REFUSAL IS AN ANSWER. The fuser publishes ok=False WITH the
+        # A refusal is an answer. The fuser publishes ok=False WITH the
         # reason -- for a mirror pair, both candidate yaws (issue #55). Timing
         # out as "no fused pose" would throw that away; hand it back instead.
         msg = fresh()

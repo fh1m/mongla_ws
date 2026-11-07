@@ -1,6 +1,6 @@
 """One target position, from whichever rung can still supply it.
 
-THE GOLDEN RULE this serves: the vehicle should always have a target position,
+The golden rule this serves: the vehicle should always have a target position,
 and a detection is only the BEST of several ways to get one. Measured gaps on
 real competition footage are p50 0.155 s / p90 0.651 s / p99 2.418 s, so a stack
 with one source spends a real fraction of every run with nothing at all.
@@ -15,7 +15,7 @@ The rungs fail for DECORRELATED reasons, which is the entire argument for
 having more than one: the detector fails on appearance, the follower on texture
 motion, the anchor on texture loss.
 
-TWO RULES, AND THEY ARE WHAT MAKE IT SAFE TO ACT ON
+Two rules, and they are what make it safe to act on
 
 1. **Authority decays on its own schedule, whatever rung is talking.** A lower
    rung buys TIME, never certainty. `age_s` is measured from the last real
@@ -59,7 +59,7 @@ class Rung(Enum):
 FULL_AUTHORITY_S = 0.70
 ZERO_AUTHORITY_S = 2.50
 
-# ⛔ HOW OLD A DETECTION MAY BE AND STILL OUTRANK A RUNG COMPUTED ON THIS FRAME
+# How old a detection may be and still outrank a rung computed on this frame
 # (issue #33). Inside `FULL_AUTHORITY_S` a detection used to win outright and
 # report `age_s=0.0`: a 0.69 s-old box beat a follower tracking the target in
 # the current frame, and said it was fresh. During a 0.3 rad/s turn that is
@@ -92,13 +92,13 @@ def live_window(detection_interval_s: Optional[float]) -> float:
 MIN_RUNG_CONF = 0.10
 
 
-# ⛔ HOW FAR TWO INDEPENDENT ESTIMATES MAY SEPARATE BEFORE THE LADDER STOPS
+# How far two independent estimates may separate before the ladder stops
 # TRUSTING EITHER. 64 px on a 640-wide frame is a tenth of the image: wide
 # enough that ordinary parallax between a frame-to-frame and a
 # frame-to-reference fit does not trip it, tight enough that a follower which
 # has slid onto the background beside a prop does.
 #
-# ⚠ NOT MEASURED ON WATER YET. It is a geometric argument, not a number off a
+# Not measured on water yet. It is a geometric argument, not a number off a
 # clip, and it is deliberately generous -- the cost of tripping late is a
 # slower demotion, while the cost of tripping early is a hull that hesitates
 # whenever a fish crosses the frame.
@@ -108,7 +108,7 @@ DISAGREE_PX = 64.0
 # are treated as corroborating rather than merely not-conflicting.
 _AGREE_FRAC = 0.25
 
-# ⚠ 1.15, not the 1.3 of the R&D code. There the boost was applied to a
+# 1.15, not the 1.3 of the R&D code. There the boost was applied to a
 # DISPLAY confidence; here it scales AUTHORITY, which is how hard the hull
 # pushes. A rung that is right deserves a little more reach, not a third more.
 _AGREE_BOOST = 1.15
@@ -121,7 +121,7 @@ class LockState:
     rung_conf: float = 0.0        # how much THIS rung trusts itself
     authority: float = 0.0        # how much the loop should act, 0..1
     age_s: float = float('inf')   # since the last real DETECTION
-    # ⭐ HOW FAR APART THE TWO INDEPENDENT ESTIMATES ARE, in px of centre
+    # How far apart the two independent estimates are, in px of centre
     # separation, or NaN when only one rung answered. See `arbitrate`.
     disagreement_px: float = float('nan')
 
@@ -187,7 +187,7 @@ def arbitrate(*, now: float, last_detection_t: float,
         # it holds full authority. Its age is REPORTED, never zeroed: absence
         # is not zero, and neither is 40 ms (issue #33).
         #
-        # ⛔ `age <= full_s` IS LOad-BEARING, and its absence was measured on
+        # `age <= full_s` IS LOad-BEARING, and its absence was measured on
         # the vehicle. The caller hands in its LAST detection box, and it only
         # clears that cache when a message arrives carrying no match --
         # `lock_node._on_det` cannot run at all during a TOTAL detector
@@ -218,12 +218,12 @@ def arbitrate(*, now: float, last_detection_t: float,
         # point: recovery races the decay, it never delays it.
         return LockState(rung=Rung.LOST, age_s=age)
 
-    # ⭐⭐⭐ THE CROSS-CHECK. Until this, `follow` won outright whenever its
+    # The cross-check. Until this, `follow` won outright whenever its
     # own confidence cleared the bar and the anchor box was never looked at --
     # two independent estimates of one target, in one function, never
     # compared.
     #
-    # ⛔ WHY THAT MATTERS, AND WHY THE FOLLOWER CANNOT CATCH IT ALONE. Its two
+    # Why that matters, and why the follower cannot catch it alone. Its two
     # quality signals -- forward-backward error and point survival -- are both
     # SELF-REFERENTIAL: they measure whether LK tracked ITS OWN POINTS
     # consistently, not whether those points are on the target. A follower
@@ -237,7 +237,7 @@ def arbitrate(*, now: float, last_detection_t: float,
     # against a stored patch, so its errors are uncorrelated with LK's -- it
     # cannot drift with the follower, because it never integrates.
     #
-    # ⚠ DISAGREEMENT DEMOTES, IT DOES NOT SWAP. When the two centres separate
+    # Disagreement demotes, it does not swap. When the two centres separate
     # by more than `disagree_px`, we know one of them is wrong and NOT which:
     # the follower may have drifted, or the anchor may have matched a repeated
     # texture. Preferring the anchor would be a guess. So the ladder keeps the
@@ -253,7 +253,7 @@ def arbitrate(*, now: float, last_detection_t: float,
 
     if follow is not None and follow_conf >= min_rung_conf:
         a = auth
-        # ⭐ AGREEMENT IS EVIDENCE TOO, not merely the absence of a fault.
+        # Agreement is evidence too, not merely the absence of a fault.
         #
         # From the operator's own R&D fusion code (`r_&_d/features_v9.py`,
         # `fuse_visual_imu_guidance`), which had this and the shipped ladder
@@ -268,14 +268,14 @@ def arbitrate(*, now: float, last_detection_t: float,
         # claim. The first version of this cross-check only punished
         # disagreement, which threw half the information away.
         #
-        # ⚠ THE GUARD IS THE OPERATOR'S TOO, AND IT IS THE SUBTLE PART.
+        # The guard is the operator's too, and it is the subtle part.
         # `abs(ekf_dx) > 5` in that code refuses to read agreement out of a
         # near-zero signal: two estimators both saying "about here" agree on
         # nothing. Here the same idea is a MINIMUM SEPARATION SCALE -- the
         # agreement bonus needs both boxes to be real and close, not two
         # degenerate boxes sitting on top of each other.
         #
-        # ⛔ CAPPED AT 1.0. Authority is a fraction of what the CONTROL LOOP
+        # Capped at 1.0. Authority is a fraction of what the CONTROL LOOP
         # may do, and boosting past full would let a carried rung outrank a
         # fresh detection.
         if (disagree == disagree and disagree <= disagree_px * _AGREE_FRAC

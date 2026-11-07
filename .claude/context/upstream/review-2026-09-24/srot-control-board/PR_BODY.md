@@ -10,7 +10,7 @@ Five fixes, one commit each, on top of `f1d3ba9`. They come from the 2026-09-24 
 | 4 `mav:` refuse reboot / param reset / calibration while armed | `disarmedGate()` returns `MAV_RESULT_TEMPORARILY_REJECTED` plus a STATUSTEXT. A 5 ms lock miss refuses too, rather than guessing. | `PREFLIGHT_REBOOT` did `ESP.restart()` mid-dive. `PREFLIGHT_STORAGE` p1=2 reset FRAME_REVERSE and the motor directions live. BARO_ZERO at depth made the surface-disarm logic disarm **at depth**. Gyro calibration averaged motion. |
 | 5 `arming:` refuse to arm into a manoeuvre mode | `canArm` refuses STUNT, PATTERN, AUTOTUNE, MOTOR_TUNE, MOTOR_DETECT and a pending `autotune_active`, each with its own PreArm reason. `ATUNE=0` now clears a pending trigger while disarmed. | USER_1..5 queue these modes while disarmed, so a yaw spin fired at full rate the moment the vehicle armed. |
 
-## ⚠ Behaviour changes to check
+## Behaviour changes to check
 - **MOTOR_TUNE is now "arm, then select"**; the old flow was "select, then arm". The OLED hint says so. mongla_ws `autotune` and `motor_tune` already arm first. **Check Bondor's Setup flow**, which was not checked.
 - While the IMU is lost, a running STUNT, PATTERN or TURN cannot finish. It sits at zero attitude demand until its timeout or a mode change.
 

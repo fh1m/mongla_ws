@@ -111,7 +111,7 @@ def test_resolve_returns_a_COPY():
 
 
 def test_unset_is_a_SENTINEL_not_a_comparison_to_the_default():
-    """THE DEFECT THE UNIT TESTS COULD NOT SEE, found on hardware.
+    """The defect the unit tests could not see, found on hardware.
 
     A launch file always passes every parameter. The first version decided
     "did the operator set this?" by comparing against the declared default,

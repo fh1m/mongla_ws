@@ -14,10 +14,10 @@ class FlowPublishMixin:
     def _stamp_for(self, t_end: float, dt: float) -> float:
         """When this velocity actually happened, in host time.
 
-        ⛔ THREE CORRECTIONS, and the first is the biggest error in the whole
+        THREE CORRECTIONS, and the first is the biggest error in the whole
         pipeline:
 
-        1. THE MIDPOINT. Flow measures DISPLACEMENT over an interval, so
+        1. The midpoint. Flow measures DISPLACEMENT over an interval, so
            dividing by dt gives the AVERAGE velocity across it -- which belongs
            at the middle. PX4 defines its own flow delay parameter exactly so:
            "to the middle of the optical flow integration interval". Our
@@ -25,7 +25,7 @@ class FlowPublishMixin:
            so stamping at the END is wrong by up to 375 ms, and worst precisely
            during station-keeping.
 
-        2. HALF THE EXPOSURE. The standard image timestamp is mid-exposure.
+        2. Half the exposure. The standard image timestamp is mid-exposure.
            Ours reads 15.7 ms on AUTO exposure -- 7.85 ms, larger on its own
            than the 6 ms tolerance, and it MOVES with the light. Its SIGN is
            the driver's stamp source: uvcvideo stamps the START, so this ADDS
@@ -47,7 +47,7 @@ class FlowPublishMixin:
         m.twist.twist.linear.x = float(v.vx)
         m.twist.twist.linear.y = float(v.vy)
 
-        # COVARIANCE FROM THE DATA, not a constant. velocity = scale * mean
+        # Covariance from the data, not a constant. velocity = scale * mean
         # flow, so var(v) = scale^2 * var(flow) / N -- the standard error of
         # the mean, which is the honest statement of how well N noisy points
         # pinned one displacement. A constant here would tell a filter the

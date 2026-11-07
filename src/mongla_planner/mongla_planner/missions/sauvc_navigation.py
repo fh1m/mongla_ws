@@ -24,12 +24,12 @@ Run it:
 Navigation is currently the whole run. A future SAUVC combinator should call
 `navigate()` instead and own arming itself.
 
-⚠ NOT FLOWN. Verified only that it imports, that its class names match the
+Not flown. Verified only that it imports, that its class names match the
 shipped sauvc_sim model, that its depths respect the sloping floor and that its
 durations fit the run budget. The detector is sim-trained and unvalidated on
 real water; SAUVC_BLIND_TRANSIT_S is an unmeasured guess.
 
-⛔ ON SROT, `move_*`, `set_depth`, `pause` and `stop` are SROT_MOVE primitives: they
+ON SROT, `move_*`, `set_depth`, `pause` and `stop` are SROT_MOVE primitives: they
 enter AUTO, which closes the never-closed depth loop, so the board denies them until
 the two bench checks pass. That includes the search creep fallback. The vision
 verbs themselves run in STABILIZE and are not gated (test_sauvc_srot_port.py).
@@ -119,7 +119,7 @@ def navigate(mongla, log=None):
     # ("approximately 16m away from the starting zone"), which is exactly enough
     # to dead-reckon the leg. This is a PARAMETER, not a branch to comment out.
     #
-    # ⛔ PRECONDITION, and it is not a comfortable one. This reaches the gate only
+    # PRECONDITION, and it is not a comfortable one. This reaches the gate only
     # if the hull started inside the starting zone pointing at it and the heading
     # lock held the line. Perception failure and heading error are CORRELATED --
     # murky water or a bad start pose causes both -- so this branch fires exactly

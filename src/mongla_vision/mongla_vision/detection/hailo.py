@@ -25,7 +25,7 @@ Four things differ from a `.pt`, and each is silent if missed
 
 3. **Run at conf 0.10-0.15, not the .pt path's 0.45.**
 
-   MEASURED ON REAL COMPETITION FOOTAGE (2026-09-04), which the round-24
+   Measured on real competition footage (2026-09-04), which the round-24
    figure below was not -- that one was a score DISTRIBUTION with the camera
    pointed at a room. 1830 frames of the RoboSub 2025 gate approach, through
    the model trained on that footage, tracker clamped to follow the floor:
@@ -129,20 +129,20 @@ def letterbox(im: np.ndarray, size: int):
     nh, nw = int(round(h * s)), int(round(w * s))
     out = np.full((size, size, 3), 114, np.uint8)
     px, py = (size - nw) // 2, (size - nh) // 2
-    # ⛔ BGR -> RGB. THE MODEL WAS TRAINED ON RGB AND cv2 HANDS US BGR (B-61).
+    # BGR -> RGB. The model was trained on RGB and cv2 hands us BGR (B-61).
     # This step was missing, so the chip ran on colour-swapped frames -- red
     # and blue exchanged in every pixel -- for as long as this backend has
     # existed. It never raised, never dropped a frame and never slowed down;
     # it just answered a different question.
     #
-    # ⚠ Reproduced WITHOUT Hailo, which is what settles it: feeding the .pt
+    # Reproduced WITHOUT Hailo, which is what settles it: feeding the .pt
     # the same swap turns `gate=0.78 @56,246` into `repair=0.92 @0,0` -- the
     # HEF's exact signature, class and origin box included. Two wrong
     # diagnoses came first (a decode stride bug, then the DFC's calibration
     # cliff) because both were consistent with the symptom; only the
     # side-by-side comparison against the .pt on identical frames named it.
     #
-    # ⭐ ultralytics does this conversion internally, which is why the .pt
+    # ultralytics does this conversion internally, which is why the .pt
     # path always looked healthy and every measurement taken through it
     # remains valid.
     out[py:py + nh, px:px + nw] = cv2.cvtColor(
@@ -183,7 +183,7 @@ def baked_score_threshold(hef_path: str) -> Optional[float]:
 def emits_raw_heads(hef_path: str) -> bool:
     """True when the HEF post-processes NOTHING and the host must decode.
 
-    THE TEST IS THE OUTPUT COUNT, NOT THE FILE NAME. A HEF whose NMS ran
+    The test is the output count, not the file name. A HEF whose NMS ran
     on-chip has exactly ONE output -- the HAILO_NMS buffer. A raw head has one
     tensor per scale per branch (ten for YOLOv8-seg). Naming the seg models by
     convention instead would put the two decodes one typo apart, and picking
@@ -200,7 +200,7 @@ def emits_raw_heads(hef_path: str) -> bool:
 
 
 # --------------------------------------------------------------------------- #
-#  ONE DEVICE PER PROCESS, AND HAILORT'S SCHEDULER SHARES IT                  #
+#  One device per process, and hailort's scheduler shares it                  #
 # --------------------------------------------------------------------------- #
 # Measured on this hardware:
 #
@@ -212,7 +212,7 @@ def emits_raw_heads(hef_path: str) -> bool:
 #   ONE process, activation handed back and forth by hand (what shipped until
 #   2026-10-03)                      -> works: 73.8 Hz across two detectors
 #                                      swapping every frame, 4.15 ms a swap.
-#   ⭐ ONE process, ROUND_ROBIN scheduler (now) -> 46.1 + 46.1 = 92.2 Hz for the
+#   ONE process, ROUND_ROBIN scheduler (now) -> 46.1 + 46.1 = 92.2 Hz for the
 #                                      same two detectors, and with both XFeat
 #                                      anchors added at a realistic duty
 #                                      (~5 Hz each) the detectors keep 44.4 Hz
@@ -220,7 +220,7 @@ def emits_raw_heads(hef_path: str) -> bool:
 #                                      itself, in C++, with NO Python lock held
 #                                      around an inference.
 #
-# ⛔ RETRACTED: "ROUND_ROBIN scheduler, one process -> SIGSEGV". Re-measured
+# RETRACTED: "ROUND_ROBIN scheduler, one process -> SIGSEGV". Re-measured
 # 2026-10-03 on HailoRT 4.24: four network groups, four threads, a group
 # configured while the others were mid-inference and one closed mid-run --
 # zero errors, exit 0, three runs out of three. What DOES segfault is
@@ -228,7 +228,7 @@ def emits_raw_heads(hef_path: str) -> bool:
 # every bench of that era hit on the way out because none released the device.
 # The crash was real; the attribution was wrong.
 #
-# ⭐ WHY THE HAND-OFF HAD TO GO, measured live (measured-bars §28.6): the
+# Why the hand-off had to go, measured live (measured-bars §28.6): the
 # hand-off held `_DEVICE_LOCK` across Python code -- letterbox, the
 # `run_async` wrapper, the activation swap -- so whenever the holder lost the
 # GIL to another thread the CHIP sat idle and the other detector waited for
@@ -253,7 +253,7 @@ def _register(claimant) -> None:
 def close_all() -> None:
     """Release every configured network group, THEN the VDevice. At exit.
 
-    ⛔ MEASURED ON THE VEHICLE, 2026-10-03: two detectors and two XFeat
+    Measured on the vehicle, 2026-10-03: two detectors and two XFeat
     anchors in one process, left to interpreter teardown, die with SIGSEGV
     (rc 139, sometimes "corrupted double-linked list") or hang there -- the
     garbage collector frees the VDevice and the ConfiguredInferModels in
@@ -292,9 +292,9 @@ def _shared_device():
     holds a network group configured on it is how you turn a clean shutdown
     into a segfault, and the process is about to exit anyway.
 
-    ⛔ THE CREATION IS LOCKED, AND THAT IS NOT DEFENSIVE. `detector_node` builds
+    The creation is locked, and that is not defensive. `detector_node` builds
     a registry in a `ThreadPoolExecutor`, so two detectors are constructed
-    GENUINELY CONCURRENTLY. Unlocked, both threads saw `_DEVICE is None` and
+    Genuinely concurrently. Unlocked, both threads saw `_DEVICE is None` and
     both called `VDevice()` -- and the note above this function already records
     what a second VDevice does. Measured on the vehicle: sequential
     construction of `gate_sharks` and `bin_fire_blood` gives OK/OK,
@@ -371,7 +371,7 @@ class HailoDetector(Detector):
         self._target = _shared_device()
         _register(self)
 
-        # THE ASYNC API, AND THE REASON IS THE GIL, NOT SPEED.
+        # The async API, and the reason is the GIL, not speed.
         #
         # The blocking `InferVStreams.infer()` HOLDS THE GIL for its entire
         # ~10 ms. Measured against two controls that separate cleanly
@@ -430,7 +430,7 @@ class HailoDetector(Detector):
             self._model.input().set_format_type(FormatType.UINT8)
             self._configure_outputs()
 
-        # CONFIGURED ON FIRST USE, never activated: the scheduler owns
+        # Configured on first use, never activated: the scheduler owns
         # activation. `_infer_lock` guards only THIS detector's bound buffers
         # (a second infer on the same detector would overwrite them); it is
         # never shared, so it never makes another model wait.
@@ -498,7 +498,7 @@ class HailoDetector(Detector):
             self._log.warn(
                 f'[HAILO] class(es) {sorted(unknown)} are not in this model. '
                 f'Available: {sorted(self._names.values())[:10]}')
-        # ⛔ NOT NONE OF THEM. If every requested name is unknown, `ids` is
+        # Not none of them. If every requested name is unknown, `ids` is
         # EMPTY -- and an empty allowlist filters every detection away, so the
         # detector returns [] on every frame while the graph looks healthy.
         # That is the silent-[] failure this codebase already has a rule
@@ -620,7 +620,7 @@ class HailoDetector(Detector):
         where the host time actually goes: 9.66 ms end to end against 6.28 ms
         of chip and 0.93 ms of decode.
 
-        ⛔ REPAINTING THE BARS IS NOT OPTIONAL. Only the interior is written
+        Repainting the bars is not optional. Only the interior is written
         each frame, so a frame of a different shape would otherwise be
         surrounded by the PREVIOUS geometry's image data instead of grey --
         a border of stale pixels the detector is free to find objects in.
@@ -639,7 +639,7 @@ class HailoDetector(Detector):
         roi = self._in_buf[py:py + nh, px:px + nw]
         cv2.resize(frame_bgr, (nw, nh), dst=roi,
                    interpolation=cv2.INTER_LINEAR)
-        # ⛔ BGR -> RGB, IN PLACE (B-61). Same defect as `letterbox`, and this
+        # BGR -> RGB, in place (B-61). Same defect as `letterbox`, and this
         # is the path that actually flies -- the async one. Converting with
         # `dst=roi` keeps the zero-copy write the 1.265 ms measurement above
         # depends on, so the fix costs a colour swap on the resized ROI rather
@@ -683,7 +683,7 @@ class HailoDetector(Detector):
         then every inference failing forever at 98 % CPU). Four groups -- two
         detectors and two XFeat anchors -- were measured resident together.
 
-        ⛔ NO `activate()`. With the scheduler enabled it is invalid, and the
+        NO `activate()`. With the scheduler enabled it is invalid, and the
         scheduler switches groups itself.
         """
         if self._blocking:
@@ -712,7 +712,7 @@ class HailoDetector(Detector):
         if not self._ready or frame_bgr is None:
             return []
         h, w = frame_bgr.shape[:2]
-        # `job.wait()` RELEASES THE GIL: the camera pump and the executor run
+        # `job.wait()` releases the GIL: the camera pump and the executor run
         # during the ~10 ms this waits, where the blocking API froze them.
         # And no lock but this detector's own is held, so another model's
         # inference proceeds on the chip whatever this thread is doing.
@@ -736,8 +736,8 @@ class HailoDetector(Detector):
             cim.wait_for_async_ready(timeout_ms=_ASYNC_READY_MS)
             job = cim.run_async([self._bindings])
             job.wait(_ASYNC_WAIT_MS)
-            # THE ASYNC PATH HANDS BACK A FLAT BUFFER, AND THIS IS THE ONE
-            # PLACE THE TWO APIs GENUINELY DIFFER.
+            # The async path hands back a flat buffer, and this is the one
+            # Place the two APIs GENUINELY DIFFER.
             #
             # `InferVStreams` returned a dict keyed by vstream name holding a
             # ragged per-class object array. `InferModel` writes into the
@@ -807,7 +807,7 @@ class HailoDetector(Detector):
     def _decode_nms(self, raw) -> list:
         """Flat HAILO_NMS buffer -> a list of (N, 5) arrays, one per class.
 
-        THE LAYOUT IS PACKED, NOT FIXED-STRIDE, AND THE DIFFERENCE IS SILENT.
+        The layout is packed, not fixed-stride, and the difference is silent.
 
             [ count_0, (y1 x1 y2 x2 score) * count_0,
               count_1, (y1 x1 y2 x2 score) * count_1, ... ]
@@ -891,7 +891,7 @@ class HailoSegDetector(HailoDetector):
     decode. `seg_decode` is that decode and holds the reasoning; this class is
     only the wiring -- which output is which, and the un-letterboxing.
 
-    MEASURED ON THE VEHICLE, 2026-09-11 (`yolov8n_seg`, 640x640, Hailo-8):
+    Measured on the vehicle, 2026-09-11 (`yolov8n_seg`, 640x640, Hailo-8):
 
         chip inference                        6.28 ms
         host decode, 80 classes, with masks   2.98 ms
@@ -951,7 +951,7 @@ class HailoSegDetector(HailoDetector):
     def _configure_outputs(self) -> None:
         """Read the ten outputs into a `SegLayout`, and ask for UINT8.
 
-        ⛔ UINT8, NOT FLOAT32, AND THAT IS THE WHOLE OPTIMISATION. Asking
+        UINT8, not FLOAT32, and that is the whole optimisation. Asking
         HailoRT for FLOAT32 makes it dequantise 672,000 class bytes plus
         819,200 prototype bytes on the host before our code sees them -- work
         that `seg_decode` then proves is unnecessary, because both the class

@@ -20,7 +20,7 @@ class SrotUplink:
 
     # LANDING_TARGET (149) -- the vision uplink `VISION_API.md` specifies.
     #
-    # THE BOARD DOES NOT CONSUME THIS YET. Verified in the firmware source:
+    # The board does not consume this yet. Verified in the firmware source:
     # `mav_commands::handle()` has no MAVLINK_MSG_ID_LANDING_TARGET case, so the
     # message is parsed and silently dropped, and `MAV_CMD_SROT_VISION` (31001)
     # returns MAV_RESULT_UNSUPPORTED. Their spec says so itself: "Status:
@@ -40,7 +40,7 @@ class SrotUplink:
                             board_capture_s: Optional[float] = None) -> None:
         """Publish one selected target as a body-frame bearing. Fire-and-forget.
 
-        ⛔ `board_capture_s`: WHEN THE FRAME WAS EXPOSED, ON THE BOARD'S CLOCK.
+        `board_capture_s`: When the frame was exposed, on the board's clock.
         A bearing is already tens of ms old when it lands, and the link adds a
         variable delay on top (arrival jitter measured at 6.67 ms sd, 35 ms
         p2p). The board holds its gyro at 500 Hz, so given the capture instant
@@ -58,7 +58,7 @@ class SrotUplink:
         the host's job and it is where the class filter, the coast and the
         continuity lock live.
 
-        ABSENCE OF A MESSAGE IS THE ONLY LOSS SIGNAL. There is no "lost" flag in
+        Absence of a message is the only loss signal. There is no "lost" flag in
         the spec: a detector that sees nothing simply stops sending, and the
         board ages the last one out. So a caller must NOT keep re-sending a
         stale bearing to "hold" a target -- that is indistinguishable from a
@@ -108,7 +108,7 @@ class SrotUplink:
                             var_y: float, board_s: Optional[float]) -> bool:
         """Our filtered BODY velocity to the board, as VISION_SPEED_ESTIMATE (103).
 
-        ⛔ THE PI MEASURES, THE BOARD CLOSES THE LOOP. A distance move is an
+        The PI measures, the board closes the loop. A distance move is an
         integral of velocity along the leg. The board can integrate at 500 Hz
         against its own fused heading between our 10 Hz updates; the host
         cannot close that loop through a 115200-baud link with 35 ms p2p

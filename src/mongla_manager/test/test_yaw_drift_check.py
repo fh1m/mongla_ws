@@ -57,7 +57,7 @@ def test_a_quiescent_board_is_STILL():
 
 
 def test_a_HANDLED_board_is_NOT_STILL():
-    """⛔ The case that invalidated a headline finding. A board being moved must
+    """The case that invalidated a headline finding. A board being moved must
     never be graded as a clean measurement."""
     m = _load()
     v, txt = m.stillness_verdict(g_rms=0.35, g_max=1.20, quiet_frac=0.41)

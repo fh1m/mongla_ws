@@ -118,7 +118,7 @@ def test_the_filter_reports_what_it_rejected():
 
 
 def test_every_floor_instrument_is_published_AND_consumed():
-    """⛔ `pool_lines` shipped with 28 tests and no caller, the same round the
+    """`pool_lines` shipped with 28 tests and no caller, the same round the
     guard above was written. A floor instrument counts only if the flow node
     runs it, publishes it, the launch can turn it on, and the filter reads it."""
     flow = code_of_file(ROOT / 'src' / 'mongla_vision' / 'mongla_vision' / 'flow'

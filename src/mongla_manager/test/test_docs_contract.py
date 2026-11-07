@@ -1,6 +1,6 @@
 """The documentation contract: what must be true of the docs, not of the prose.
 
-⛔ WHY THIS EXISTS. Three defects this repo actually shipped, none of which any
+Why this exists. Three defects this repo actually shipped, none of which any
 test could see:
 
   1. `.claude/context` accumulated SEVEN dead links (`esp32c3_bno085.md`,

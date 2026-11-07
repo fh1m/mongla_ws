@@ -51,7 +51,7 @@ def test_the_tile_height_is_PREFERRED_over_the_pool_depth_path():
 
 
 def test_tile_m_defaults_to_OFF():
-    """⛔ A tile size is a venue constant. Defaulting it to any number would
+    """A tile size is a venue constant. Defaulting it to any number would
     silently rescale every velocity in a pool that does not match."""
     assert "declare_parameter('tile_m', 0.0)" in SRC
 
@@ -159,7 +159,7 @@ def test_both_OFF_by_default_publish_nothing():
 
 
 def test_one_bad_grating_read_no_longer_latches_a_warning():
-    """⛔ THE DEFECT THIS CLOSES. The height comparison in `_read_the_floor`
+    """The defect this closes. The height comparison in `_read_the_floor`
     was one sample and a bare `d > 0.20`, with a `_tile_warned` latch. So a
     SINGLE bad grating read -- a caustic, a drain cover, one frame of a passing
     shadow -- printed "the FLOOR says ..." once and then never spoke again,
@@ -181,7 +181,7 @@ def test_one_bad_grating_read_no_longer_latches_a_warning():
 
 
 def test_a_sustained_disagreement_is_still_reported():
-    """⚠ AND THE OTHER HALF. A filter that never warns is not an improvement
+    """And the other half. A filter that never warns is not an improvement
     on a filter that warns once; height multiplies EVERY velocity."""
     from mongla_vision.flow.scale_check import ScaleCrossCheck
 
@@ -203,7 +203,7 @@ def test_too_few_pairs_says_so_rather_than_answering():
 
 
 def test_the_cross_check_is_wired_into_the_floor_read():
-    """⛔ THE §9 CHECK, INLINE. `scale_check` was correct, tested and imported
+    """The §9 check, inline. `scale_check` was correct, tested and imported
     by nothing for its whole life. Assert the CALL exists in `_read_the_floor`
     and that the old one-sample test is gone."""
     import ast

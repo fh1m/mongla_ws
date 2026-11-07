@@ -18,7 +18,7 @@ Several start times per clip, because a reference snapped during a fast turn
 and one snapped during a hold are different questions, and one start time would
 answer whichever happened to be sampled.
 
-⚠ This is an ARCHIVE measurement: it describes footage from a moving vehicle
+This is an ARCHIVE measurement: it describes footage from a moving vehicle
 with a moving target, so what decays is the combination. It is the right number
 for setting a refresh cadence and the wrong one for claiming anything about
 XFeat in isolation.

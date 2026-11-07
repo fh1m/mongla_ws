@@ -234,7 +234,7 @@ underwater set — the same recipe, without metric ground truth.
 [`stereonet` stereo model, Hailo-8 only](https://github.com/hailo-ai/hailo_model_zoo/blob/master/docs/public_models/HAILO8/HAILO8_stereo_depth_estimation.rst)
 with a [C++ reference app](https://github.com/hailo-ai/hailo-apps/blob/main/hailo_apps/cpp/depth_estimation_stereo/README.md).
 
-⚠ **But these are the small self-supervised models, not the foundation models that scored
+**Caution: But these are the small self-supervised models, not the foundation models that scored
 well underwater.** `scdepthv3` is 14.8 M params; UniDepth V2 ViT-L — the only model that
 survived water — is a ViT-Large, roughly 20–25× larger. **I did not find it in the Hailo-8
 depth-estimation model list, and I did not audit the whole zoo** — treat "not available on
@@ -273,7 +273,7 @@ Ours, implicitly: `h` from the Bar30 plus a known pool depth ⇒ height above fl
 scale. Measured: implied height **0.72 / 0.69 / 0.70 m against a 0.72 m tape**, i.e. worst
 spread **3 cm on 0.72 m = 4.2 %**.
 
-⚠ **That 4.2 % is not independent confirmation of the 3.4 % scale bias — it is the same
+**Caution: That 4.2 % is not independent confirmation of the 3.4 % scale bias — it is the same
 measurement read backwards.** The implied heights are an *output* of the flow pipeline
 (invert the scale equation against known motion), so citing them as agreement with the bias
 that produced them is circular. One number, two views, not two agreeing measurements.
@@ -427,7 +427,7 @@ removal network**, not a filter:
   supervised by monocular SLAM on ordinary underwater video. Reports better downstream
   **SfM keypoint matching** than a wide range of methods, evaluated on the **R-CAUSTICS**
   benchmark (**712 image pairs/triplets across 7 scenes**) and on COLMAP reconstruction.
-  ⚠ The same source notes that networks trained on R-CAUSTICS **transfer poorly to novel
+  **Caution:** The same source notes that networks trained on R-CAUSTICS **transfer poorly to novel
   field data** — which is why the self-supervised formulation matters.
 - [RecGS: Removing Water Caustic with Recurrent Gaussian Splatting (arXiv 2407.10318)](https://arxiv.org/html/2407.10318)
   — decomposes caustics by building 3DGS recurrently with a low-pass filter each iteration.
@@ -497,7 +497,7 @@ Four mechanisms appear repeatedly, in rough order of sophistication:
    *abundant but geometrically degenerate* — "a corridor textured with a repetitive coplanar
    pattern" — so a **structural degeneracy measure is needed to replace raw-count proxies**.
 
-   ⚠ **This warning does *not* straightforwardly apply to us, and it is worth being precise
+   **Caution: This warning does *not* straightforwardly apply to us, and it is worth being precise
    about why**, because a tiled pool floor is superficially the textbook degenerate case.
    The warning is about **pose/structure estimation from repetitive texture**: self-similar
    geometry admits wrong data association across widely separated views, and a wrong
@@ -535,7 +535,7 @@ Four mechanisms appear repeatedly, in rough order of sophistication:
 | Ensemble uncertainty | model-domain novelty | 8× inference | training data | only if we adopt a learned velocity model |
 | Independent 2nd estimator (PDR/DeepVL analogue) | *silent wrongness* — the plausible-number failure | a whole model | labelled velocity data | the only mechanism that catches a confident wrong answer |
 
-⚠ The last row is the one our own rules care about. Every mechanism above except #5 detects
+**Caution:** The last row is the one our own rules care about. Every mechanism above except #5 detects
 *absence* of signal. Our measured caustics failure is **presence of a confident wrong
 signal** — caustics tracked as motion. None of the count- or covariance-based checks catch
 that, because the tracking is healthy; it is tracking the wrong thing. Only an independent

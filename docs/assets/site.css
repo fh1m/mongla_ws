@@ -1436,7 +1436,7 @@ body > footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
   color:var(--ink-3)}
 .tally__key b{font-family:var(--data);font-size:14px;letter-spacing:0;color:#fff;margin-right:4px}
 .tally figcaption{margin-top:10px}
-/* colours follow the page's OWN emoji legend (🟣 bench, 🟡 built), not the
+/* colours follow the page's OWN emoji legend (bench, built), not the
    front page's state tokens -- a bar that disagrees with the key printed
    three lines above it is worse than no bar */
 .t--water{--c:var(--state-water)} .t--bench{--c:var(--state-soft)}

@@ -1,6 +1,6 @@
 """Keep the target in frame — and know where it went if it leaves anyway.
 
-⛔ THE GAP THIS CLOSES, AND IT IS THE LARGEST ONE LEFT. Every rung of the
+The gap this closes, and it is the largest one left. Every rung of the
 ladder, every cue in the cascade, every re-identification — all of it operates
 in the IMAGE PLANE, and all of it is downstream of a decision the vehicle makes
 about where to point. Grepped: there is **no field-of-view guard anywhere in
@@ -8,7 +8,7 @@ about where to point. Grepped: there is **no field-of-view guard anywhere in
 and no tracker survives that. The perception stack can be perfect and still lose
 the lock because the vehicle turned away.
 
-⭐ THE STATE OF THE ART SAYS THE SAME THING TWICE.
+The state of the art says the same thing twice.
 A 2026 safety-critical visual-servoing result observes that occlusion of the
 camera–target line "cause[s] visual-servoing failure **even when the robot
 remains physically safe**", and that maintaining visual contact "can conflict
@@ -28,7 +28,7 @@ splitting strategy makes it "robust to bounded distance estimation errors",
 which matters here because we are monocular with no DVL and range is the thing
 we are least sure of.
 
-⭐⭐ AND THE SECOND HALF, FOR WHEN THE GUARD IS NOT ENOUGH.
+And the second half, for when the guard is not enough.
 A target that leaves the frame is forgotten by anything that tracks in pixels.
 The fix is old and is stated most plainly in a robot-behaviour patent: store
 target position "**not on a sensor coordinate system but on a world coordinate
@@ -37,7 +37,7 @@ however the vehicle moves. Then losing sight stops being a perception failure
 and becomes a navigation problem — the vehicle still knows the bearing to turn
 back to.
 
-⛔ WHAT THIS IS NOT. It never invents a detection. `WorldTarget` holds where
+What this is not. It never invents a detection. `WorldTarget` holds where
 the target WAS and how stale that is; it refuses to answer once the estimate is
 older than its own horizon, and it carries no confidence that could be mistaken
 for a sighting. The ladder's rule is unchanged: no rung fabricates.
@@ -58,7 +58,7 @@ MARGIN_ENTER = 0.18
 # outright rather than merely damped.
 MARGIN_CRITICAL = 0.06
 
-# ⛔ SOFT, NOT HARD. Visibility yields to collision avoidance, always. The
+# Soft, not hard. Visibility yields to collision avoidance, always. The
 # 2026 result is explicit: collision constraints stay hard, field-of-view gets
 # slack. A vehicle that holds a lock into a wall has optimised the wrong thing.
 SLACK = True
@@ -86,7 +86,7 @@ class Visibility:
         """Multiplier the controller should apply to motion that makes the
         bearing WORSE. 1.0 free, 0.0 refused, tapered between.
 
-        ⚠ Only ever applied to the component that increases bearing. Damping
+        Only ever applied to the component that increases bearing. Damping
         everything would stop the vehicle approaching a target that is dead
         centre, which is the opposite of the intent.
         """
@@ -104,7 +104,7 @@ def bearing_from_pixel(cx: float, cy: float, w: float, h: float,
                        fx: float, fy: float) -> Tuple[float, float, float]:
     """Unit bearing to a pixel, in CAMERA frame (optical axis = +z).
 
-    ⚠ Use the RECTIFIED intrinsics underwater. The air focal length gives a
+    Use the RECTIFIED intrinsics underwater. The air focal length gives a
     clean 1/n bearing error, which is the same defect `optics.py` exists to
     prevent everywhere else.
     """
@@ -122,8 +122,8 @@ def assess(cx: float, cy: float, w: float, h: float, fx: float, fy: float,
            critical: float = MARGIN_CRITICAL) -> Visibility:
     """How close is this box to leaving the frame? **No range required.**
 
-    ⛔ THE BARRIER IS RECTANGULAR, NOT CONICAL, AND THAT IS A DELIBERATE
-    DEPARTURE FROM THE PAPER. The published CBF uses
+    The barrier is rectangular, not conical, and that is a deliberate
+    Departure from the paper. The published CBF uses
     `h = beta . (R e_c) - cos(psi_F)`, a cone, because it models a sensor with
     a conical field of view. A camera's image is a RECTANGLE, and the two
     disagree exactly where it matters: measured on our own geometry, a target
@@ -168,11 +168,11 @@ def assess(cx: float, cy: float, w: float, h: float, fx: float, fy: float,
 class WorldTarget:
     """Where the target is in the WORLD, so leaving frame is not forgetting.
 
-    ⭐ Image-plane tracking forgets the instant the box leaves. Holding the
+    Image-plane tracking forgets the instant the box leaves. Holding the
     target in world coordinates turns that from a perception failure into a
     navigation problem: the vehicle still knows which way to turn back.
 
-    ⛔ It stores a MEMORY, never a sighting. `bearing_from` answers only while
+    It stores a MEMORY, never a sighting. `bearing_from` answers only while
     the estimate is fresher than `max_age_s`, and there is no confidence field
     that downstream could mistake for a detection.
     """
@@ -187,11 +187,11 @@ class WorldTarget:
                 range_m: float, now: float) -> bool:
         """Project a sighting into the world and remember it.
 
-        ⛔ Range is the weakest number we have, so a non-finite or absurd one
+        Range is the weakest number we have, so a non-finite or absurd one
         is refused rather than stored. A remembered position built from a
         guessed range would send the vehicle confidently to the wrong place.
         """
-        # ⛔ `> 0.0` is True for inf. A memory built from an infinite range
+        # `> 0.0` is True for inf. A memory built from an infinite range
         # is a point at infinity, and the bearing to it is meaningless.
         if vehicle_xy is None or not math.isfinite(range_m) or range_m <= 0.0:
             return False
@@ -233,14 +233,14 @@ class WorldTarget:
 
 
 # --------------------------------------------------------------------------- #
-#  ⭐ PRIOR-GUIDED DETECTION -- vision stops fighting alone
+#  PRIOR-GUIDED DETECTION -- vision stops fighting alone
 # --------------------------------------------------------------------------- #
-# ⛔ THE DETECTOR CURRENTLY SEARCHES THE WHOLE FRAME AT ONE THRESHOLD, and so
+# The detector currently searches the whole frame at one threshold, and so
 # treats a weak blob in the corner exactly like a weak blob where the target
 # was a moment ago. It has no idea where the vehicle is, where the target was,
 # or which way either of them has moved -- although the stack knows all three.
 #
-# ⭐ THE STATE OF THE ART DOES TWO THINGS WITH THAT KNOWLEDGE.
+# The state of the art does two things with that knowledge.
 # Pose priors from inertial prediction "initialize feature search by projecting
 # 3D landmarks to the current image, shrinking the search region around the
 # expected pixel location", improving robustness under fast motion and blur.
@@ -251,13 +251,13 @@ class WorldTarget:
 # existing tracklets is what lets a LOW-SCORE box be recovered rather than
 # discarded.
 #
-# ⭐⭐ WE ALREADY HOLD EVERY INPUT. `WorldTarget` has the target in pool
+# We already hold every input. `WorldTarget` has the target in pool
 # coordinates, the localiser has the vehicle pose, and `optics` has the
 # intrinsics. Projecting one through the others gives the predicted pixel --
 # which is the sonar-substitute of section 4, built from geometry instead of a
 # second sensor.
 #
-# ⛔ AND THE BAR IS NEVER LOWERED BELOW WHAT THE DETECTOR CAN PRODUCE. Our HEF
+# And the bar is never lowered below what the detector can produce. Our HEF
 # bakes an NMS floor of 0.200; nothing at runtime brings back what the chip
 # already discarded. So this RAISES the bar outside the predicted region rather
 # than lowering it inside -- identical in effect, and honest about the floor.
@@ -299,7 +299,7 @@ def region_conf_bar(px: Optional[Tuple[float, float]],
     """The confidence a detection at (cx, cy) must clear.
 
     Inside the predicted region the detector's own floor is enough; outside it
-    the usual bar applies. ⛔ With no prediction, EVERYTHING gets the strict
+    the usual bar applies. With no prediction, EVERYTHING gets the strict
     bar -- an absent prior must never be read as a permissive one.
     """
     if px is None:

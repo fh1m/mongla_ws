@@ -9,7 +9,7 @@
 | # | item | gate to continue |
 |---|---|---|
 | 1 | **Deck checks** — `bringup_check --srot`, the depth-sign check (B-1), arm/disarm, kill switch | all green, or the day becomes a bench day at the poolside |
-| 2 | **The two armed depth checks** | ⛔ until these pass, every `SROT_MOVE` verb is denied by the board — nothing below is reachable |
+| 2 | **The two armed depth checks** | **Warning:** until these pass, every `SROT_MOVE` verb is denied by the board — nothing below is reachable |
 | 3 | **Closed-loop depth hold**, logged | depth holds within a stated band; `DEPTH_ERR` vs depth captured for the deferred near-surface question |
 | 4 | **Velocity truth run** — known distances on a line, filmed from outside, several speeds | this is both the flow-scale check and the label set a learned velocity model needs |
 | 5 | **Flow validation** at taped range; `floor_range` truth | the numbers agree with tape, or the refusals are correct |

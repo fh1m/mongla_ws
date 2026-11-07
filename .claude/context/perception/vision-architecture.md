@@ -227,7 +227,7 @@ canary line the detector logs at startup:
 [YOLO ] backend=yolo      (gate_sharks.pt)      ← a dev box fallback
 ```
 
-⛔ **A model's `<stem>.yaml` sidecar must ship beside the artifact.** Without it
+**Warning: A model's `<stem>.yaml` sidecar must ship beside the artifact.** Without it
 the class allowlist is empty and every frame returns a silent `[]`, with the
 pipeline looking perfectly healthy.
 

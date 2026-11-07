@@ -4,13 +4,13 @@ MEASURED on the vehicle 2026-09-10: `/mongla/vision/downward/lock` ran at
 **132.4 Hz** while `/detections` ran at 30.5 Hz, and the ladder costs 16 points
 of CPU idle (53.4 % -> 37.4 %).
 
-⛔ THAT RATE IS INTENDED, and the limiter therefore DEFAULTS TO OFF. The
+That rate is intended, and the limiter therefore DEFAULTS TO OFF. The
 control loop is **500 Hz on the srot board**; the host's 20-50 Hz is a
 limitation of the un-ported vision uplink, not the requirement. Capping this
 publisher would throttle the stream the uplink exists to feed. The knob exists
 for a CPU-bound bench only.
 
-⛔ The one thing a rate limit here must NOT do is delay a RUNG CHANGE.
+The one thing a rate limit here must NOT do is delay a RUNG CHANGE.
 detection -> follow is the information; a limiter that swallowed it for 25 ms
 would be hiding the transition the whole ladder exists to expose.
 """

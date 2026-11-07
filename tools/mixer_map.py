@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Measure what the mixer ACTUALLY does, using the Pico's console as readback.
 
-⛔ WHY THIS EXISTS. `srot_fc.py` states plainly that this backend has no output
+Why this exists. `srot_fc.py` states plainly that this backend has no output
 readback -- "SROT has no RC-channel readback (MANUAL_CONTROL only)" -- and the
 SOTA ledger rates the allocation gap BLOCKED on that: the achieved wrench is
 computed on the board every tick and, as far as the MAVLink wire is concerned,
@@ -23,13 +23,13 @@ enough to measure the mixer on a bench with NO THRUSTERS ATTACHED, because a
 mixer is a linear map from six axis demands to eight motor commands and none of
 that involves force.
 
-WHAT THIS MEASURES (no thrusters, no water, no load cell):
+What this measures (no thrusters, no water, no load cell):
     * the mixer matrix B, column by column: drive one axis, read eight outputs
     * the effective sign of every motor -- the product of CAL_MDIRn,
       MOT_n_DIRECTION and FRAME_REVERSE, which no display anywhere shows
     * the COMMAND deadband: the demand below which `out` stays 0
 
-WHAT IT CANNOT MEASURE. Force. Thrust per RPM, the physical stiction floor, and
+What it cannot measure. Force. Thrust per RPM, the physical stiction floor, and
 the current signature of a dead thruster all need a motor on the end of the
 wire. Do not read a column of this matrix as newtons.
 
@@ -49,7 +49,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-# ⚠ BY-ID, NOT THE NUMBERED NODE. Measured on 2026-09-22: the CH340 re-enumerates
+# By-id, not the numbered node. Measured on 2026-09-22: the CH340 re-enumerates
 # spontaneously -- it vanished mid-sweep, came back as /dev/ttyUSB1, then as
 # /dev/ttyUSB0 again. A tool holding the number loses the board, or later opens
 # whatever takes the freed number. These names are stable across re-enumeration,
@@ -80,7 +80,7 @@ _MOTOR = re.compile(
 _HEAD = re.compile(r'link=(\d+) armed=(\d+) bidir=(\d+) rpm_mode=(\d+) loop=(\d+)')
 
 
-# ⚠ BIDIRECTIONAL DSHOT IS TWO HALVES, NOT A SIGNED RANGE AROUND A MIDPOINT.
+# Bidirectional DSHOT is two halves, not a signed range around a midpoint.
 #
 #     48 .. 1047    direction A, magnitude = v - 48
 #   1048 .. 2047    direction B, magnitude = v - 1048
@@ -94,7 +94,7 @@ _HEAD = re.compile(r'link=(\d+) armed=(\d+) bidir=(\d+) rpm_mode=(\d+) loop=(\d+
 # does not exist. Measured 2026-09-22.
 DSHOT_A_MIN, DSHOT_B_MIN, DSHOT_SPAN = 48, 1048, 999
 
-# ⚠ THIS IS A SECOND COPY, DELIBERATELY. The decoder also lives in
+# This is a second copy, deliberately. The decoder also lives in
 # `mongla_control.actuation_model`, which is where it belongs -- but this tool is
 # scp'd to the vehicle and run from /tmp, where the workspace is not importable,
 # and it needs the vectorised (numpy) form that the scalar module does not
@@ -192,7 +192,7 @@ class Board:
         self._hb.start()
 
     def _beat(self) -> None:
-        """⛔ The board surfaces after 5 s of silence. Nothing in this tool may
+        """The board surfaces after 5 s of silence. Nothing in this tool may
         block long enough to break this."""
         while not self._stop.is_set():
             try:
@@ -326,14 +326,14 @@ MODE_STABILIZE, MODE_DEPTH_HOLD, MODE_AUTO = 0, 2, 23
 
 
 def verify_mode_refusal(b: Board, pico: PicoConsole) -> dict:
-    """⛔ With no barometer, DEPTH_HOLD and AUTO must be REFUSED.
+    """With no barometer, DEPTH_HOLD and AUTO must be REFUSED.
 
     The contract: an unhealthy baro refuses DEPTH_HOLD/AUTO/PATTERN, and since
     `SROT_MOVE` enters AUTO, that means every move verb is denied -- the vehicle
     arms and simply will not move. The Bar30 is not connected on this bench, so
     the refusal is testable directly.
 
-    ⚠ This is the interlock, not a nicety. If AUTO were accepted with no
+    This is the interlock, not a nicety. If AUTO were accepted with no
     barometer, `depth::update()` would close a loop on a measurement that does
     not exist, and the SURFACE failsafe routes through the same loop.
     """
@@ -351,9 +351,9 @@ def verify_mode_refusal(b: Board, pico: PicoConsole) -> dict:
         verdict = 'ACCEPTED' if took else 'refused'
         flag = ''
         if name in ('DEPTH_HOLD', 'AUTO') and took:
-            flag = '   ⛔ ACCEPTED WITH NO BAROMETER -- the interlock did not hold'
+            flag = '   ERROR: ACCEPTED WITH NO BAROMETER -- the interlock did not hold'
         if name == 'STABILIZE' and not took:
-            flag = '   ⛔ the control mode itself was refused; nothing below is valid'
+            flag = '   ERROR: the control mode itself was refused; nothing below is valid'
         print(f'  {name:<11} requested {want:>2} -> observed {got}   {verdict}{flag}',
               flush=True)
     b.set_mode(MODE_STABILIZE)
@@ -420,7 +420,7 @@ def summarise(rows: list[dict]) -> None:
         print(f'{r["axis"]:>5} {r["level"]:+6.2f}  '
               + ' '.join(str(v).rjust(6) for v in last))
     if not moved:
-        print('\n⛔ EVERY motor command stayed 0 for every axis. Either the mode '
+        print('\nERROR: EVERY motor command stayed 0 for every axis. Either the mode '
               'discards MANUAL_CONTROL (AUTO and SURFACE both do, silently), or '
               'the mixer does not run while disarmed. This is a refusal, not a '
               'measurement: nothing here says what the mixer would do.')
@@ -450,7 +450,7 @@ def main() -> int:
         with pico:
             time.sleep(2.0)
             if not pico.since(0):
-                print(f'⛔ no motor reports on {pico.port} in 2 s -- is this the '
+                print(f'ERROR: no motor reports on {pico.port} in 2 s -- is this the '
                       f'Pico console? Refusing to guess.')
                 return 2
             result['config'] = read_config(b)
@@ -473,7 +473,7 @@ def main() -> int:
                 state = armed_now[-1]['armed'] if armed_now else None
                 print(f'  Pico reports armed={state}')
                 if state != 1:
-                    print('⛔ the board did not arm. Not sweeping: a sweep that '
+                    print('ERROR: the board did not arm. Not sweeping: a sweep that '
                           'reads zeros because arming failed looks exactly like '
                           'a mixer that does nothing.')
                 elif a.ladder:
@@ -488,7 +488,7 @@ def main() -> int:
                     result['armed'] = sweep(b, pico, armed=True)
                     summarise(result['armed'])
     finally:
-        # ⛔ SAFETY RULE 1: always have a disarm path. This runs on every exit,
+        # Safety rule 1: always have a disarm path. This runs on every exit,
         # including an exception and a Ctrl-C.
         try:
             b.stream(0.5)
@@ -496,7 +496,7 @@ def main() -> int:
             time.sleep(0.5)
             print('\ndisarmed')
         except Exception as exc:
-            print(f'⚠ DISARM FAILED: {exc} -- kill the board power')
+            print(f'WARNING: DISARM FAILED: {exc} -- kill the board power')
         b.close()
 
     Path(a.out).write_text(json.dumps(result, indent=2))

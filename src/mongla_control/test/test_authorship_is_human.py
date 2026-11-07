@@ -106,7 +106,7 @@ SELF = pathlib.Path(__file__).name
 
 
 def test_no_checked_in_file_carries_an_agent_attribution():
-    """⛔ THE GAP THE OTHER TWO TESTS LEFT, found on 2026-09-30.
+    """The gap the other two tests left, found on 2026-09-30.
 
     They read `git log`, so they see trailers in COMMITS. They cannot see a
     trailer sitting inside a checked-in FILE -- and PR #43 carried five
@@ -116,8 +116,8 @@ def test_no_checked_in_file_carries_an_agent_attribution():
         ...
         Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 
-    plus a ready-to-paste pull request body ending in the `🤖 Generated with`
-    line. ⛔ Those are OUTGOING: `git am` would have authored them as an agent
+    plus a ready-to-paste pull request body ending in the `Generated with`
+    line. Those are OUTGOING: `git am` would have authored them as an agent
     in a sibling team's repository, where this repo's settings do not reach and
     nobody here would see the result. A `.patch` is a commit message that a test
     reading `git log` cannot reach.

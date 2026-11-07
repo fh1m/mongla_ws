@@ -37,7 +37,7 @@ class SrotTelemetry:
         # (fw sends alt = -depth), so pass it through -- see get_attitude().
         # Stays NaN until VFR_HUD arrives (5 Hz).
         #
-        # ⚠ GATED ON BARO HEALTH, and that gate is not optional. Unlike
+        # Gated on baro health, and that gate is not optional. Unlike
         # SCALED_PRESSURE2 and WTEMP -- which the firmware SUPPRESSES when the
         # barometer is unhealthy or stale -- VFR_HUD is sent unconditionally
         # (fw mav_stream.cpp:258). So a board with NO Bar30 fitted at all still
@@ -61,7 +61,7 @@ class SrotTelemetry:
             t.battery_voltage = main['voltage']
         # Per-thruster RPM (Bluejay bidirectional DShot).
         #
-        # ⚠ THIS IS ALWAYS EMPTY on pymavlink 2.4.49: upstream MAVLink removed the
+        # This is always empty on pymavlink 2.4.49: upstream MAVLink removed the
         # WIP messages 290/291 from `common`, so ESC_STATUS (291) is in NO dialect we
         # ship (checked common / ardupilotmega / all / development). pymavlink drops
         # any msgid missing from its CRC-extra table SILENTLY -- no error, no callback
@@ -127,7 +127,7 @@ class SrotTelemetry:
         comp = self._named_value('COMP_SEEN')
         if comp is not None:
             t.companion_seen = comp >= 0.5
-        # ⛔ KILL = 0 IS NOT "CLEAR". The kill switch is a rotary knob on the
+        # Kill = 0 is not "clear". The kill switch is a rotary knob on the
         # SECOND board and its state crosses to this one over ESP-NOW; on link
         # loss the firmware reports kill=false on purpose --
         # `kill = f ? s_kill : false;  // link lost -> don't assert kill
@@ -160,7 +160,7 @@ class SrotTelemetry:
 
         yaw in degrees (ATTITUDE is radians).
 
-        DEPTH SIGN: this stack's convention -- MonglaState.msg, set_depth's input
+        Depth sign: this stack's convention -- MonglaState.msg, set_depth's input
         -- is NEGATIVE below the surface. The board is positive-DOWN internally
         but already negates
         on the wire (`VFR_HUD.alt = -depth`, fw mav_stream.cpp:210-218), so alt is
@@ -169,7 +169,7 @@ class SrotTelemetry:
         inverted every one of those guards (they all compare against a negative
         constant, so each just stopped firing).
 
-        ⛔ STALE IS ABSENT. pymavlink keeps the last ATTITUDE forever, so after a
+        Stale is absent. pymavlink keeps the last ATTITUDE forever, so after a
         USB drop this kept returning the final yaw/depth the board ever sent, and
         /mongla/state published a frozen, confident vehicle at 2 Hz -- exactly the
         "plausible number standing in for an absent measurement" of safety rule 6.
@@ -223,7 +223,7 @@ class SrotTelemetry:
     def _fresh(self, name):
         """The cached `name` message, or None once it is older than _LINK_STALE_S.
 
-        ⛔ pymavlink keeps the last message of each type forever. ATTITUDE is
+        pymavlink keeps the last message of each type forever. ATTITUDE is
         pinned at 50 Hz and VFR_HUD at 5 Hz, so one older than the link window
         means the stream stopped -- and its last value is a plausible number
         standing in for an absent measurement (safety rule 6). VFR_HUD in
@@ -238,7 +238,7 @@ class SrotTelemetry:
     def note_battery(self, msg):
         """Hook for the manager's MAVLink reader thread -- de-multiplex by instance id.
 
-        MEASURED ON THE VEHICLE (2026-08-02): the board streams BATTERY_STATUS id 0
+        Measured on the vehicle (2026-08-02): the board streams BATTERY_STATUS id 0
         (PM1, electronics) and id 1 (PM2, thruster pack) at 2 Hz EACH. pymavlink keys
         its cache by msgid, so `master.messages['BATTERY_STATUS']` alternates between
         them -- a live sample showed the slot flipping between **1.35 V and 14.74 V**.
@@ -271,7 +271,7 @@ class SrotTelemetry:
     def battery_trusted(self, bid: int) -> bool:
         """Is this instance reporting a battery, or an unwired pin?
 
-        ⛔ MEASURED ON THE VEHICLE 2026-09-22, exclusive port, 41 frames of
+        Measured on the vehicle 2026-09-22, exclusive port, 41 frames of
         instance 0, nothing else reading:
 
             span 1.39 .. 25.05 V, sd 8.72 V
@@ -288,7 +288,7 @@ class SrotTelemetry:
         one manager run, **2939 of 2939 state-change log lines were this pin**.
         Real state changes were buried under a floating input.
 
-        ⚠ CORRECTED: this said "`/mongla/state` publishes ON CHANGE". It does not
+        CORRECTED: this said "`/mongla/state` publishes ON CHANGE". It does not
         -- `_publish_state` is called unconditionally from `telemetry_tick`, and
         the change threshold belongs to `_maybe_print_state`, a console printer.
         The guard below is unaffected (a floating pin must not reach
@@ -326,7 +326,7 @@ class SrotTelemetry:
         The exact tri-state shape as `_baro_healthy`, and for the same reason: a
         board that has not sent SYS_STATUS yet has not said the IMU is bad.
 
-        ⛔ MEASURED ON THE VEHICLE 2026-09-11, which is why this exists. After a
+        Measured on the vehicle 2026-09-11, which is why this exists. After a
         bad boot the board reported `present=0x80203c0b health=0x2408` -- 3D_GYRO
         (0x01) and 3D_ACCEL (0x02) present and NOT healthy -- with MAGACC 0.0,
         COMP_SEEN 0.0, YAW_REF 0.0, and it kept streaming ATTITUDE at 10 Hz with
@@ -409,9 +409,9 @@ class SrotTelemetry:
         _imu_rates_tick reads the *_rate keys, so they MUST match exactly.
 
         Also returns `board_ms` -- ATTITUDE.time_boot_ms, THE BOARD'S OWN
-        CAPTURE TIME.
+        Capture time.
 
-        ⛔ WHY THAT FIELD MATTERS AND WHY IT WAS BEING WASTED. Measured on this
+        Why that field matters and why it was being wasted. Measured on this
         vehicle at 50 Hz: the BOARD's interval is 20.00 ms with sd 0.00, and
         the HOST's arrival interval is 20.00 ms with sd 6.67 and p2p 35.12.
         The board's clock is exact; every bit of that jitter is transport
@@ -456,7 +456,7 @@ class SrotTelemetry:
         {'gyro': (x,y,z) rad/s, 'accel': (x,y,z) m/s^2 INCLUDING gravity,
          'board_ms': int|None, 'host_recv_s': float|None}
 
-        ⛔ THIS DATA WAS ALREADY ON THE WIRE AND ENTIRELY THROWN AWAY. The board
+        This data was already on the wire and entirely thrown away. The board
         streams SCALED_IMU2 at 50 Hz (60 messages in 6 s, measured) and this
         stack read exactly ONE field off it -- `temperature`, for the water-temp
         readout. Accel and gyro were decoded by pymavlink and discarded every
@@ -504,7 +504,7 @@ class SrotTelemetry:
     def _accel_in_vehicle_frame(self, raw, rpy):
         """SCALED_IMU2 accel, rotated into the frame its own gyro and ATTITUDE use.
 
-        ⛔ THE BOARD SENDS THEM IN TWO DIFFERENT FRAMES. `bno085.cpp` (under
+        The board sends them in two different frames. `bno085.cpp` (under
         `BNO_SWAP_ROLL_PITCH`) maps the attitude and the gyro from the sensor's
         axes into the vehicle's FRD frame with (x, y, z) -> (y, x, -z), a proper
         180 deg rotation about x=y. The gravity and linear-acceleration reports
@@ -519,7 +519,7 @@ class SrotTelemetry:
         Fed unmapped to the localization filter, 50 s of that board at rest
         ran to 583 m with 39 of 40 ZUPTs rejected; mapped, 0.036 m and 0 of 40.
 
-        ⛔ NOT HARD-CODED, PROVEN AT RUNTIME. If the firmware ever remaps the
+        Not hard-coded, proven at runtime. If the firmware ever remaps the
         accel too, applying the swap again would put gravity UP -- 180 deg off,
         and exactly as silent. So both hypotheses are scored against the
         gravity direction the board's own attitude predicts, and the frame is

@@ -1,6 +1,6 @@
 """A model that LOADS is not a model that WORKS.
 
-⛔ THE HOLE THIS CLOSED. Every model check in `bringup_check` asked whether
+The hole this closed. Every model check in `bringup_check` asked whether
 weights are present and whether an engine exists. None asked whether the graph
 can tell the prop from the water -- and the vehicle's default forward graph,
 `gate_rescue_repair`, claimed a gate on 90.8 % of gate-free frames, with **+0.0
@@ -14,7 +14,7 @@ That graph was retired on 2026-09-28 and its weights moved to
 to keep working when no bad model is installed, which is the normal state and
 the one a regression would hide in.
 
-⚠ THE VERDICT LIVES IN THE SIDECAR, beside the weights it describes, so a copy
+The verdict lives in the sidecar, beside the weights it describes, so a copy
 or a rename cannot separate them. `recommended_conf: null` means MEASURED AND
 FOUND UNUSABLE, which is a different state from absent, and the check must not
 collapse them.
@@ -69,10 +69,10 @@ def test_the_bar_records_how_and_where_it_was_measured():
 
 
 def test_the_retired_graph_is_really_gone():
-    """⛔ It measured +0.0 points and it does not fly. Its WEIGHTS are kept at
+    """It measured +0.0 points and it does not fly. Its WEIGHTS are kept at
     ~/models/retired/ so the measurement stays reproducible, but nothing in the
     shipped model set may resolve to it."""
-    # ⛔ ANY EXTENSION, not just .yaml and .pt. The first version checked
+    # ANY EXTENSION, not just .yaml and .pt. The first version checked
     # those two and would have stayed green on a stale `.hef`: `build_mongla.
     # sh`'s sync is ADDITIVE, so weights left in the Pi's ~/models copy back
     # into the tree on the next vehicle-side build. Caught by a fresh-context
@@ -95,7 +95,7 @@ def test_the_real_model_set_passes_the_check():
 
 
 def test_a_graph_measured_unusable_FAILS_the_preflight(fake_models):
-    """⛔ IT MUST FAIL, NOT WARN. A hallucinating detector is worse than no
+    """It must fail, not warn. A hallucinating detector is worse than no
     detector, because the mission acts on it."""
     _write(fake_models, 'good', {'gate': {'measured': '2026-01-01',
                                           'recommended_conf': 0.45}})
@@ -118,7 +118,7 @@ def test_the_failure_names_the_usable_graph_and_the_way_out(fake_models):
 
 
 def test_an_unmeasured_graph_is_UNKNOWN_rather_than_bad(fake_models):
-    """⚠ Most graphs have not been through the tool. Reporting them as
+    """Most graphs have not been through the tool. Reporting them as
     failures would train the operator to ignore this line."""
     _write(fake_models, 'never_tested', None)
     st, det = _check_model_separation()
@@ -128,7 +128,7 @@ def test_an_unmeasured_graph_is_UNKNOWN_rather_than_bad(fake_models):
 
 
 def test_a_measured_class_does_not_condemn_its_siblings(fake_models):
-    """⚠ The verdict is PER CLASS. `rescue` and `repair` were never tested on
+    """The verdict is PER CLASS. `rescue` and `repair` were never tested on
     the retired graph, and condemning them on the gate's evidence would be the
     same unmeasured confidence this check exists to stop, pointed the other
     way."""

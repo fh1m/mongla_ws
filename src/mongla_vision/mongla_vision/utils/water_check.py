@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Which water is this? Characterise the pool before trusting a model in it.
 
-⛔ THIS TOOL USED TO ANSWER "SHOULD CLAHE BE ON?" AND IT WAS BROKEN FOR BOTH
-REASONS AT ONCE. The answer itself was wrong: the CLAHE rule was fitted to two
+This tool used to answer "should CLAHE be on?" and it was broken for both
+Reasons at once. The answer itself was wrong: the CLAHE rule was fitted to two
 clips, and re-measured on raw detection rate across 17 configurations -- 4
 props, 3 venues, a 39x sharpness range -- preprocessing was NEVER positive, and
 on the gate it took detection from 30.4 % to 1.2 %. So `underwater.recommend()`
@@ -14,7 +14,7 @@ a console entry point in `setup.py`, dead on arrival, and nothing noticed
 because no test imports an entry point. `test_every_entry_point_imports.py` now
 does.
 
-WHAT IT REPORTS, WHICH IS A FACT ABOUT THE POOL AND REPRODUCED ACROSS ALL THREE
+What it reports, which is a fact about the pool and reproduced ACROSS all three
 VENUES:
 
                   blur (lapvar)   contrast   saturation   cast (B-R)
@@ -105,7 +105,7 @@ def main():
     print(f'    colour cast (B-R)    {st.cast:+8.1f}   '
           f'(green/murky water is strongly positive)')
     print(f'    brightness           {bright:8.1f}')
-    # ⚠ NO VERDICT LINE, AND NO "NEAREST REGIME" EITHER. The first rewrite of
+    # No verdict line, and no "nearest regime" either. The first rewrite of
     # this function scored the frame against the three reference rows with a
     # log-ratio distance -- which is a new metric fitted to three points, the
     # exact move that produced `recommend()`. Each line above already prints

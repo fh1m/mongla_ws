@@ -1,6 +1,6 @@
 """One process owns the srot serial port. Everything else is refused, loudly.
 
-WHY THIS EXISTS -- measured on the bench, 2026-09-03
+Why this exists -- measured on the bench, 2026-09-03
 ----------------------------------------------------
 Opening `/dev/ttyUSB0` REBOOTS the flight controller. The ESP32 DevKit's
 USB-UART bridge wires DTR/RTS to the EN/IO0 auto-reset circuit, so the tty
@@ -30,7 +30,7 @@ The kernel will not stop the second open, so we must. This is an advisory
 `flock` on a lock FILE, not on the device: taking a lock on the device itself
 would require opening it, which is the very thing that causes the reset.
 
-WHAT THIS IS NOT
+What this is not
 ----------------
 It cannot stop a process that does not use it (`cat /dev/ttyUSB0`, `pio device
 monitor`, Bondor pointed at the same port). It is a guard against our own

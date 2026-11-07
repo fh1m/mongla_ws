@@ -127,7 +127,7 @@ class WebcamCamera(Camera):
                       max_rate_rad_s):
         """Pin the shutter, because AUTO CHOOSES BLUR.
 
-        ⛔ MEASURED ON THIS VEHICLE. Nothing here touched exposure, so both
+        Measured on this vehicle. Nothing here touched exposure, so both
         cameras ran on whatever the driver picked. On the forward Fantech
         that was Aperture Priority with `exposure_time_absolute = 2000` -- a
         **200 ms shutter**. Frames came out at mean 26.6 with every hand
@@ -146,7 +146,7 @@ class WebcamCamera(Camera):
         vehicle's expected `max_rate_rad_s`, because a static bound needs no
         feedback loop and so cannot lag the motion it is bounding.
 
-        ⚠ GAIN IS DELIBERATELY NOT OFFERED, and that is measured: on the
+        Gain is deliberately not offered, and that is measured: on the
         Fantech, gain 20 / 50 / 100 give identical frames. It is inert on
         this unit, so exposing it would be a knob that does nothing -- this
         package already has four of those on its record.

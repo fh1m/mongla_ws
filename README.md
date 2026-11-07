@@ -10,7 +10,7 @@
 for, a neural accelerator that does nothing but see, and a rule that no number appears anywhere
 in this repository without the measurement that produced it.**
 
-[![tests](https://img.shields.io/badge/tests-4%20153%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![in water](https://img.shields.io/badge/in%20water-never-critical)](#what-is-true-today) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
+[![tests](https://img.shields.io/badge/tests-4%20154%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![in water](https://img.shields.io/badge/in%20water-never-critical)](#what-is-true-today) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
 
 **[The Shift](https://fh1m.github.io/mongla_ws/the-shift.html)** · **[Capability map](https://fh1m.github.io/mongla_ws/capability-map.html)** · **[The site](https://fh1m.github.io/mongla_ws/)** · [Run it](#run-it) · [Fundamentals](#the-fundamentals) · [Docs](#every-document-in-this-repository) · [Story](#three-acts)
 
@@ -38,12 +38,12 @@ Read this before anything else on the page. This project sorts every claim into 
 never blurs them, because the failure that ends competition runs is a vehicle that reports
 success while doing nothing.
 
-| | state | what it means | how much of this repo |
-|:--:|---|---|---|
-| 🟣 | **BENCH** | verified on hardware, on recorded footage, or against the live board | most of it |
-| 🟡 | **BUILT** | implemented, covered by tests, never flown | a lot of it |
-| 🔴 | **BLOCKED** | waiting on water, a firmware merge, or hardware | seven things, [listed](#what-stands-in-the-way) |
-| 🟢 | **WATER** | verified with the vehicle swimming | **nothing. not one row.** |
+| state | what it means | how much of this repo |
+|---|---|---|
+| **BENCH** | verified on hardware, on recorded footage, or against the live board | most of it |
+| **BUILT** | implemented, covered by tests, never flown | a lot of it |
+| **BLOCKED** | waiting on water, a firmware merge, or hardware | seven things, [listed](#what-stands-in-the-way) |
+| **WATER** | verified with the vehicle swimming | **nothing. not one row.** |
 
 > **This vehicle has never been in water.** Every number in this README was measured on a bench,
 > on real recorded footage, or on the live board over a cable. The depth loop has never once run
@@ -108,7 +108,7 @@ git clone https://github.com/fh1m/mongla_ws && cd mongla_ws
 ./build_mongla.sh                      # colcon build, six packages
 source install/setup.bash
 
-# the tests (6 suites, 4 161 of them, ~5 minutes)
+# the tests (6 suites, 4 162 of them, ~5 minutes)
 python3 -m pytest -q                   # all six; a full run rewrites docs/stats.json
 ```
 </details>
@@ -176,7 +176,7 @@ flowchart TB
     BATT -->|yes| OK(["ready to arm — propellers clear,<br/>human on the kill switch"])
 ```
 
-⚠ **`VFR_HUD` is not gated on barometer health**, and it is where depth is read. Never infer
+**Caution: `VFR_HUD` is not gated on barometer health**, and it is where depth is read. Never infer
 sensor health from the presence of a depth value — that is exactly how a broken sensor looks
 healthy.
 
@@ -239,7 +239,7 @@ flowchart LR
     H -.->|"never commits here"| M
 ```
 
-⛔ **We never commit to their repositories; they never commit to ours.** A handful of constants
+**Warning: We never commit to their repositories; they never commit to ours.** A handful of constants
 are shared — the custom command's number, the flight-mode integers, the fact that depth is
 reported negative below the surface. Those are frozen on both sides, and
 [`test_srot_protocol_drift.py`](src/mongla_control/test/) reads the firmware's own headers to
@@ -452,7 +452,7 @@ so **1000 ÷ 10.20 = 98.0 Hz**. The vendor's own benchmark of the bare chip says
 no software left to optimise; the chip is the ceiling. Through the ROS graph the rest of the
 vehicle sees **53.9 Hz**, and photon to detection is **18.0 ms** median.
 
-⛔ A model's `<stem>.yaml` sidecar must ship beside it. Without it the class allowlist is empty
+**Warning:** A model's `<stem>.yaml` sidecar must ship beside it. Without it the class allowlist is empty
 and every frame returns a silent `[]` — with the pipeline looking perfectly healthy.
 
 **See it yourself:** `python3 tools/hailo_stages.py` on the Pi ·
@@ -500,7 +500,7 @@ than it can see.
 | blocks radio | telemetry, GPS, rescue | no link below the surface |
 | moves while you decide | dead reckoning | 0.12 m/s current → **1.374 m** of drift in 40 s |
 
-⛔ **Image enhancement** — the first fix every underwater tutorial suggests — was measured
+**Warning: Image enhancement** — the first fix every underwater tutorial suggests — was measured
 across 17 configurations, four props and three venues and was **never once positive**: on the
 gate it took detection from 30.4 % of frames to **1.2 %**. It ships disabled, and a test keeps
 it that way.
@@ -521,7 +521,7 @@ it that way.
 | companion | **Raspberry Pi 5 + Hailo-8 AI HAT** — ROS 2 Jazzy on the vehicle, Humble on dev boxes |
 | link | **one USB-C cable**, MAVLink 2 at 115200, compid **191** (`MAV_COMP_ID_ONBOARD_COMPUTER`) |
 | sensors | IMU, depth, leak, kill switch, both battery packs, per-motor RPM — **all on the board**, one clock |
-| thrusters | ⚠ **two answers — see below** |
+| thrusters | **Caution: two answers — see below** |
 | cameras | forward + downward USB; per-camera calibration measured *in water* |
 | velocity | the **downward camera**. No DVL is fitted, and none has ever been validated in water |
 
@@ -532,7 +532,7 @@ The hull, measured off the CAD and validated against Onshape to **0.08 %**: **70
 pair 519 mm apart) plus one axial unit in the nose — five thrusters, **5 of 6 DOF with roll
 unactuated**.
 
-> ⚠ **The hull in CAD is not the hull the mixer was written for.** The firmware mixes for eight
+> **Caution: The hull in CAD is not the hull the mixer was written for.** The firmware mixes for eight
 > vectored T200s; the current CAD is a five-thruster hull. Both statements are true of
 > *something*; they are not true of the same vehicle, and until that is settled every number
 > here says which hull it belongs to. Onshape reports **no material assigned to any part**, so
@@ -575,7 +575,7 @@ where an absent value is `NaN` and never `0.0`.
 The CLI, the action server and the Python client all read that one table, so `--help`, argument
 parsing and dispatch follow automatically. **23 verbs** today.
 
-⛔ **There is no verb the board cannot run.** A host heading lock and distance-closed moves
+**Warning: There is no verb the board cannot run.** A host heading lock and distance-closed moves
 existed for the old backend; the board holds heading itself
 and there is no DVL to close a distance on, so they were deleted rather than refused. Faking one
 host-side is how a mission comes to believe it moved a metre it never moved.
@@ -728,7 +728,7 @@ present on this hull.
 
 The site lets you [pick a failure and watch which link takes it](https://fh1m.github.io/mongla_ws/#safety).
 
-⛔ **Firmware revision is a hull-safety interlock**, checked at connect *and inside* `arm()`.
+**Warning: Firmware revision is a hull-safety interlock**, checked at connect *and inside* `arm()`.
 Revision 10 inverted yaw; a board below the floor takes every turn backwards. The floor lives in
 `srot_protocol.py` and is deliberately not quoted here, because a number in a README is exactly
 the kind of thing that goes stale — `test_doc_drift.py` fails any doc that states it.
@@ -766,9 +766,9 @@ mongla_vision        1 518 passed        detection, the lock ladder, optics, flo
 mongla_manager         581 passed        the node, bring-up gates, the docs contract
 mongla_planner         427 passed        the CLI, the DSL, the missions
 mongla_localization    412 passed        the filter, retrodiction, course priors
-test/ (repo-wide)       49 passed        nothing unreachable, the retired stack stays retired
+test/ (repo-wide)       50 passed        nothing unreachable, the retired stack stays retired
                      ─────────────
-                     4 153 passed, 0 failed
+                     4 154 passed, 0 failed
 ```
 <!-- stats:table:end -->
 
@@ -788,7 +788,7 @@ Some of those tests are unusual enough to be worth naming:
 ```mermaid
 flowchart LR
     DEV["a change"] --> HOOK["editor hooks<br/>py_compile + the matching test file<br/>+ the doc guards on a doc edit"]
-    HOOK --> UNIT["6 suites · 4 153 tests"]
+    HOOK --> UNIT["6 suites · 4 154 tests"]
     UNIT --> GUARD["the drift guards"]
     GUARD --> G1["test_doc_drift<br/>docs vs code"]
     GUARD --> G2["test_srot_protocol_drift<br/>our wire copy vs THEIR headers"]
@@ -800,7 +800,7 @@ flowchart LR
     G4 --> REPLAY
     REPLAY --> BENCH["the bench: the real board,<br/>armed, propellers off"]
     BENCH --> POOL["a pool day — four hours,<br/>and the only thing that settles it"]
-    POOL -.->|"has not happened yet"| WATER["🟢 WATER"]
+    POOL -.->|"has not happened yet"| WATER["WATER"]
 ```
 
 And the rule behind them: **a test that has never failed against a real defect is not a guard.**
@@ -1185,7 +1185,7 @@ help, in order:
 Before a pull request: `python3 -m pytest src/*/test -q` should stay green, and anything that
 ships a constant needs a row in `measured-bars.md` saying how it was measured.
 
-⛔ **Do not send us firmware.** The board, its firmware and the ground station live in
+**Warning: Do not send us firmware.** The board, its firmware and the ground station live in
 [their own repositories](#four-repositories-one-wire) and belong to the firmware team. Ask there,
 with evidence — that is what we do.
 

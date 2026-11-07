@@ -1,6 +1,6 @@
 """Flat-port refraction -- the ONE place the water refractive index lives.
 
-WHY THIS MODULE EXISTS (B22). `N_WATER` was declared in `calibration/solver.py`
+Why this module exists (B22). `N_WATER` was declared in `calibration/solver.py`
 as "the single source of truth" and then the literal `1.333` was written out by
 hand at five more sites -- including `fov_for_medium`, the INVERSE transform, in
 the same file as the forward one. Forward and inverse read the index from two
@@ -63,7 +63,7 @@ def fov_water_to_air(fov_water_deg: float, n: float | None = None) -> float:
     return 2.0 * math.degrees(math.asin(min(1.0, n * math.sin(half))))
 
 
-# WHY `n=None` AND NOT `n=N_WATER` AS A DEFAULT. A default argument is evaluated
+# Why `n=None` and not `n=N_WATER` as a default. A default argument is evaluated
 # ONCE, when the function is defined, so `n: float = N_WATER` would freeze the
 # index at import time: changing `N_WATER` afterwards -- which is the documented
 # way to try salt water -- would silently keep using 1.333. It also makes the
@@ -74,7 +74,7 @@ def fov_water_to_air(fov_water_deg: float, n: float | None = None) -> float:
 class RefractiveRectifier:
     """Undo a FLAT PORT, so one focal length is exact instead of a compromise.
 
-    ⛔ THE DEFECT THIS FIXES, and it is invisible in air. `f_water = 741` was
+    The defect this fixes, and it is invisible in air. `f_water = 741` was
     measured from the in-water FOV and is therefore exact AT THE FRAME EDGE.
     A flat port is not a pinhole: the ray from a point at water angle `tw`
     leaves the port at air angle `ta` with `sin ta = n * sin tw`, and lands at
@@ -92,7 +92,7 @@ class RefractiveRectifier:
     corners happened to land that interval. That is worse than a fixed bias --
     it is a bias that moves with the texture.
 
-    THE SAME ARITHMETIC ALSO EXPLAINS 1.44 vs THE TEXTBOOK 1.33. The refractive
+    The same arithmetic also explains 1.44 vs THE TEXTBOOK 1.33. The refractive
     index scales SINES; a focal length is about TANGENTS. At a 63.8 deg air
     FOV the tangent ratio is 1.4416 while the sine ratio is 1.333 by
     definition, and our measured water FOV matches Snell's prediction to
@@ -113,7 +113,7 @@ class RefractiveRectifier:
     on coordinates where equal ground displacement means equal pixel
     displacement wherever it happens in the frame.
 
-    ⛔ WHAT THIS DOES **NOT** MODEL, stated so it is not assumed away. A flat
+    What this does **not** model, stated so it is not assumed away. A flat
     port is strictly an AXIAL camera: rays do not pass through one centre,
     they are displaced by the port glass, and the residual depends on OBJECT
     DISTANCE. This correction is the single-viewpoint limit, valid while the
@@ -134,7 +134,7 @@ class RefractiveRectifier:
         # frame centre is a fixed point of the rectification -- a point at the
         # principal point does not move, which makes the transform inspectable.
         self.f_ref = float(f_ref) if f_ref else float(fx) * self.n
-        # ⛔ THE ASPECT MUST SURVIVE. Writing both output axes through one
+        # The aspect must survive. Writing both output axes through one
         # f_ref silently rescales y by fx/fy -- 513.94/516.93 = 0.9942, a
         # 0.58 % error on the vertical axis. That is precisely the fx!=fy
         # defect round 38 measured as part of a 3.08 % axis asymmetry and
@@ -179,7 +179,7 @@ class RefractiveRectifier:
 class LensUndistorter:
     """Remove the LENS: distorted pixels -> ideal pinhole pixels at the same K.
 
-    ⛔ THE LENS IS AIR-SIDE, SO IT COMES OFF FIRST (issue #24). The forward
+    The lens is air-side, so it comes off first (issue #24). The forward
     camera's k1 = -0.363 bends the frame edge by several degrees, and the
     flat-port model above assumes an ideal pinhole behind the glass. Feeding it
     distorted pixels makes it start from the wrong ray: computed on the forward
@@ -242,12 +242,12 @@ def rectifier_for(K, medium: str, D=None):
     and no distortion. `note` is a one-line description a node can log, so
     every consumer says the same thing about the same optics.
 
-    ⛔ PASS `D`. Every metric forward path once read only K, so a strongly
+    PASS `D`. Every metric forward path once read only K, so a strongly
     barrel-distorted lens went straight into the port model and from there
     into PnP, the lock anchor and every bearing (issue #24). `D` stays
     optional only so a caller with a genuinely undistorted source can say so.
 
-    ⛔ THE RECTIFIED POINTS NEED THE RECTIFIED K, and that pairing is the whole
+    The rectified points need the rectified K, and that pairing is the whole
     reason this returns both instead of just the rectifier. `rectify`
     re-projects each ray through `f_ref` (which defaults to `fx * n`), so a
     point at water angle tw lands at radius `f_ref * tan(tw)` -- a true pinhole

@@ -25,14 +25,14 @@ Yaw hold against a 1.5 N·m torque burst, first-order thruster lag τ swept, con
 For scale: dropping the **control loop from 500 Hz to 50 Hz** — a tenfold change — cost
 **21 %**. **Thruster response time beats control rate by one to two orders of magnitude.**
 
-⚠ **And we do not know ours.** Every number in that table is a sweep parameter. `k_n_per_rpm2`
+**Caution: And we do not know ours.** Every number in that table is a sweep parameter. `k_n_per_rpm2`
 is `null`, `MOT_THST_EXPO = 0.65` is fitted to a T200 we are not flying, and
 `REVERSE_EFFICIENCY = 0.77` is a vendor figure for a different propeller. This test replaces
 all of it.
 
 ---
 
-## 2. ⭐ The same rig answers four separate asks at once
+## 2. The same rig answers four separate asks at once
 
 We had been asking for these in different places. They are all the same experiment.
 
@@ -64,14 +64,14 @@ time_s, thrust_n [, rpm]
 | supply voltage | logged, and **held** | the vendor's own reverse ratio drifts 0.787 → 0.754 across 12–20 V; a single-voltage curve is not enough |
 | water | submerged, and say fresh or salt | a bench-air run measures a different machine entirely |
 
-⚠ **Submerged, not in air.** §1's whole point is the water column: `τ = L·√(ρA/T)`. In air ρ
+**Caution: Submerged, not in air.** §1's whole point is the water column: `τ = L·√(ρA/T)`. In air ρ
 is 1/800th and the number means nothing.
 
 ---
 
 ## 4. The steps to run
 
-### 4.1 ⭐ The break-away pair — the one that decides `MOT_SPIN_MIN`
+### 4.1 The break-away pair — the one that decides `MOT_SPIN_MIN`
 
 Two steps to the **same** final command, differing only in where they start:
 
@@ -85,7 +85,7 @@ stopped propeller costs nothing to start, `MOT_SPIN_MIN` can go to 0, and the 16
 quantum disappears along with it. If it is large, the floor is doing real work and we stop
 asking for it to be removed.
 
-⭐ **This single pair is the most valuable measurement in the document.**
+**Key point: This single pair is the most valuable measurement in the document.**
 
 ### 4.2 The curve, and the reverse asymmetry
 
@@ -99,7 +99,7 @@ in reverse. Sixteen steps, a few seconds each.
 
 ### 4.3 If there is time: the duct-length check
 
-⭐ Our model says **duct length is the biggest lever on response time**, `τ ∝ L`, and it is a
+**Key point:** Our model says **duct length is the biggest lever on response time**, `τ ∝ L`, and it is a
 CAD change rather than a motor or firmware change. If two duct lengths can be printed — say
 150 mm and 75 mm — running 4.1 on both tests that prediction directly. If τ does not halve,
 our model is wrong and we would very much like to know.
@@ -123,11 +123,11 @@ It reports dead time, τ, total lag, 10–90 % rise, steady thrust, **and its ow
 — so a response that is *not* first-order shows up as a bad fit rather than as a confident
 number.
 
-⚠ **Dead time and τ are reported separately and must not be added carelessly.** A first-order
+**Caution: Dead time and τ are reported separately and must not be added carelessly.** A first-order
 lag can be compensated by a controller; pure dead time cannot. Their sum is the right figure
 for *ranking two prototypes*, and the wrong figure for deciding what is fixable in software.
 
-⭐ **The analysis is validated against traces whose answer we chose** — synthetic steps at
+**Key point: The analysis is validated against traces whose answer we chose** — synthetic steps at
 τ = 20/79/200/590 ms, with and without load-cell noise, forward and reverse — the same
 discipline we apply to the free-decay fit. If it could not recover a known τ from a generated
 trace, it would return a plausible one from a real trace and nobody would know.
@@ -148,7 +148,7 @@ From momentum theory on the CAD tunnel geometry, at 20 N:
 | vertical tunnel, 84 mm bore × 130 mm | **68 ms** |
 | rotor spin-up alone (bell + resin prop) | ~15 ms |
 
-⭐ **That is already about seven times faster than the ~0.59 s reported for a T100-class
+**Key point: That is already about seven times faster than the ~0.59 s reported for a T100-class
 unit** — short tunnel thrusters are inherently quick, and the figure that alarmed us is a
 large open propeller, not a tunnel.
 
@@ -156,5 +156,5 @@ large open propeller, not a tunnel.
 real.** If it comes back at 300 ms, something we have not modelled dominates — wall friction,
 inlet contraction, ESC ramp limiting — and that is worth far more to us than a confirmation.
 
-⚠ Momentum theory ignores all three of those, so treat §6 as a prediction to be falsified, not
+**Caution:** Momentum theory ignores all three of those, so treat §6 as a prediction to be falsified, not
 as a target to match.

@@ -5,7 +5,7 @@ The prior-guided idea says: lower the bar where the target is expected, and
 weak detections that were being discarded become recovered targets. Every
 paper that proposes it reports a gain.
 
-⛔ NONE OF THAT IS EVIDENCE FOR OUR PIPELINE. The idea only pays if weak
+None of that is evidence for our pipeline. The idea only pays if weak
 detections ACTUALLY EXIST during our gaps. If the detector produces literally
 nothing while the target is out of view, a lower bar recovers nothing and the
 whole mechanism is decoration.
@@ -105,11 +105,11 @@ def main() -> int:
               f'p90 {best_weak[int(0.9 * (n - 1))]:.3f}   '
               f'max {best_weak[-1]:.3f}')
         print()
-        print('⭐ There IS something to recover: a region-aware bar could '
+        print('RESULT: There IS something to recover: a region-aware bar could '
               'accept these where the target was expected.')
     else:
         print()
-        print('⛔ NOTHING to recover. The detector produced no weak box at '
+        print('ERROR: NOTHING to recover. The detector produced no weak box at '
               'all inside the gaps, so a lower bar recovers nothing and the '
               'prior-guided idea does not apply to this pipeline.')
     return 0

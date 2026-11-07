@@ -1,6 +1,6 @@
 """The Fossen plant, checked where truth is KNOWN.
 
-⛔ A PLANT CANNOT BE VALIDATED AGAINST THE VEHICLE -- the vehicle has never been
+A plant cannot be validated against the vehicle -- the vehicle has never been
 wet. So it is validated against the exact analytic properties the equations of
 motion are REQUIRED to have, every one of which is a closed form:
 
@@ -9,7 +9,7 @@ motion are REQUIRED to have, every one of which is a closed form:
     roll period      small-angle restoring pendulum -> 2 pi sqrt(I / (BG W))
     free rotation    no damping, no restoring -> a principal-axis spin is held
 
-⭐ AND ONE THAT EARNS ITS KEEP TWICE. `test_free_decay_recovers_the_drag_we_put
+And one that earns its keep twice. `test_free_decay_recovers_the_drag_we_put
 _in` runs the Round 4a pool experiment against a plant whose drag we CHOSE, and
 checks that the identification returns it. That validates the EXPERIMENT DESIGN
 before anybody gets wet -- if the procedure cannot recover a known answer on a
@@ -42,7 +42,7 @@ def _plant(damping=FREE, bg=0.0) -> Plant:
     (0.1, 0.1, 0.1, 0.1, 0.1, 0.1),
 ])
 def test_coriolis_does_no_work(nu):
-    """⭐ THE STRONGEST TEST IN THIS FILE. C(nu) is skew-symmetric, so
+    """The strongest test in this file. C(nu) is skew-symmetric, so
     nu' C(nu) nu is identically zero: Coriolis moves energy BETWEEN axes and
     can neither create nor destroy it. It is an algebraic identity, so any
     sign slip or transposed index in `coriolis` breaks it -- and a Coriolis
@@ -76,7 +76,7 @@ def test_terminal_speed_matches_the_closed_form():
 
 
 def test_the_roll_restoring_moment_is_a_pendulum():
-    """⭐ THE ONE THAT DECIDES WHETHER ROLL CAN STAY UNACTUATED. With no roll
+    """The one that decides whether roll can stay unactuated. With no roll
     thruster the only thing righting this hull is BG, and a small-angle release
     must oscillate at 2 pi sqrt(I / (BG W)). If the period the bench reports is
     not that, the restoring term is wrong and every claim about passive roll
@@ -116,7 +116,7 @@ def test_an_undamped_pendulum_conserves_energy():
 
 
 # ═══════════════════════════════════════════════════════════════════════════ #
-#  ⭐ Validating the POOL EXPERIMENT before the pool
+#  Validating the POOL EXPERIMENT before the pool
 # ═══════════════════════════════════════════════════════════════════════════ #
 
 def test_free_decay_recovers_the_drag_we_put_in():
@@ -130,7 +130,7 @@ def test_free_decay_recovers_the_drag_we_put_in():
     form -- 1/w is linear in time with slope q/I -- so the fit is a straight
     line and the slope IS the coefficient.
 
-    ⛔ IF THIS FAILED, THE POOL DAY WOULD BE WASTED and nobody would know: the
+    If this failed, the pool day would be wasted and nobody would know: the
     experiment would return a number, it would look reasonable, and it would be
     wrong. That is the failure mode this whole codebase is arranged against.
     """
@@ -157,7 +157,7 @@ def test_free_decay_recovers_the_drag_we_put_in():
 
 
 def test_the_fit_needs_the_inertia_and_that_is_the_catch():
-    """⚠ WHAT THE POOL EXPERIMENT CANNOT DO ALONE. The fit above recovers q/I,
+    """What the pool experiment cannot do alone. The fit above recovers q/I,
     a RATIO. Turning it into a drag coefficient needs I, and our I is a uniform
     -body guess -- a real hull is a shell with its battery placed somewhere.
 
@@ -177,7 +177,7 @@ def test_the_fit_needs_the_inertia_and_that_is_the_catch():
 # ═══════════════════════════════════════════════════════════════════════════ #
 
 def test_the_wrench_matrix_says_roll_is_unactuated():
-    """⭐ AN INDEPENDENT CONFIRMATION, not a restatement. `geometric_allocation`
+    """An independent confirmation, not a restatement. `geometric_allocation`
     already found rank 5 of 6 with roll the unactuated axis. This builds B from
     the same CAD file through completely different code and reaches the same
     conclusion -- every roll entry exactly zero. Two derivations agreeing is
@@ -199,7 +199,7 @@ def test_the_axial_thrust_line_is_on_the_axis():
 
 
 def test_the_frame_remap_puts_the_long_axis_on_surge():
-    """⚠ THE CAD LONG AXIS IS Y AND FOSSEN'S IS X. A remap error here would be
+    """The CAD long axis is Y AND FOSSEN'S IS X. A remap error here would be
     invisible until the vehicle drove sideways on a surge command."""
     t = {x.name: x for x in cad_hull_thrusters(20.0)}
     assert t['axial'].axis[0] == pytest.approx(1.0)
@@ -215,7 +215,7 @@ def test_the_frame_remap_puts_the_long_axis_on_surge():
 # ═══════════════════════════════════════════════════════════════════════════ #
 
 def test_damping_cannot_be_constructed_without_saying_where_it_came_from():
-    """⛔ THE POINT OF THE WHOLE FILE. Drag is the one term that is NOT
+    """The point of the whole file. Drag is the one term that is NOT
     computable from geometry, and 'a plausible number standing in for an absent
     measurement' is this project's named recurring defect. There is no default
     and there is no anonymous constructor."""

@@ -3,7 +3,7 @@
 Modelled on `cameras/factory.py`, which already solves the same problem for
 camera sources.
 
-WHY THE EXTENSION DECIDES, NOT A `backend=` PARAMETER
+Why the extension decides, not a `backend=` parameter
 -----------------------------------------------------
 Model identity in this stack is the **stem** -- `gate_sharks`, not
 `gate_sharks.pt`. That is load-bearing: `mongla.use('gate_sharks')`,
@@ -63,7 +63,7 @@ def make_detector(*, model_path: str, logger=None, **kwargs) -> Detector:
         cls = HailoSegDetector if emits_raw_heads(resolved) else HailoDetector
         return cls(model_path=resolved, logger=logger, **kwargs)
 
-    # ⛔ NAME WHAT IS MISSING (2026-10-03, on the vehicle). A Pi has no torch;
+    # Name what is missing (2026-10-03, on the vehicle). A Pi has no torch;
     # when a model has no .hef there, the resolver falls
     # back to the .pt and the failure read "No module named 'torch'" -- true,
     # and useless to an operator on a pool deck. The missing thing is the

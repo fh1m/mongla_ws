@@ -34,7 +34,7 @@ def test_a_live_detection_wins_and_RESETS_the_clock():
     """A detection is the confirmation the decay counts time since, so it
     restores full authority -- when its CLOCK says it is live.
 
-    ⛔ PREMISE CORRECTED 2026-09-09. This used to read "however old the
+    Premise corrected 2026-09-09. This used to read "however old the
     previous lock was" and passed `last_detection_t=1.0` with `now=100.0` --
     a 99 s old clock alongside a present box. Those two inputs are
     inconsistent for the real caller, which sets `_det_box` and `_det_t`

@@ -1,6 +1,6 @@
 """The mixer's scale-down, computed host-side -- and pinned to the firmware.
 
-⛔ WHY THIS MATTERS TO AUTONOMY, not just to telemetry. The board scales a
+Why this matters to autonomy, not just to telemetry. The board scales a
 saturating demand and never reports it, so the host commands a demand the hull
 does not receive, sees no response, and pushes harder. That is integrator
 wind-up against an actuator limit, and it bites worst in a close-in vision
@@ -44,7 +44,7 @@ FW = _firmware_mixer()
 #  one truth, two copies
 # --------------------------------------------------------------------------- #
 def test_the_matrix_matches_the_firmware_source():
-    """⛔ TWO COPIES OF ONE FACT. The frame mix lives in the firmware and here.
+    """Two copies of one fact. The frame mix lives in the firmware and here.
     A silent divergence would make every prediction in this module confidently
     wrong, in the same way a drifted wire constant would -- which is why
     `test_srot_protocol_drift.py` exists for those. Same discipline."""
@@ -96,7 +96,7 @@ def test_the_firmwares_own_worked_example():
 
 
 def test_saturation_STEALS_FROM_THE_NEIGHBOURING_AXIS():
-    """⛔ THE PROPERTY A CONTROLLER MUST KNOW. The scale is applied to the whole
+    """The property a controller must know. The scale is applied to the whole
     GROUP, so an over-large lateral demand does not merely clip itself -- it
     shrinks the yaw a heading lock is relying on, in the same frame."""
     a = allocate(yaw=0.5, lateral=1.0)
@@ -185,7 +185,7 @@ def test_an_unknown_axis_raises_rather_than_returning_a_number():
 #  prioritised allocation: sacrifice the least important axis, not all of them
 # --------------------------------------------------------------------------- #
 def test_uniform_scaling_COSTS_MORE_THAN_HALF_THE_YAW():
-    """⛔ THE MEASUREMENT THAT JUSTIFIES THE WHOLE IDEA.
+    """The measurement that justifies the whole idea.
 
     Ask for forward 0.9, lateral 0.9, yaw 0.3 -- a hard corner with a heading
     to hold. The board scales the group uniformly by 0.476, so yaw arrives at

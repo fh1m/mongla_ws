@@ -51,7 +51,7 @@ def _parse_channels(csv: str):
     `SERVO{n}_ROLE` -- not host-side indices. Preserves order so a mission fires
     them one-by-one in the order given.
 
-    ⚠ The range was 1-4 while a host-side fire map existed. Left at 1-4 after the
+    The range was 1-4 while a host-side fire map existed. Left at 1-4 after the
     map was removed it would silently DROP every real payload channel on the
     default role layout (switches are 9-16 there), i.e. `fire=[9,10]` would parse
     to `[]` and the mission would sail past the target having fired nothing, with
@@ -66,7 +66,7 @@ def _parse_channels(csv: str):
             ch = int(float(token))
         except ValueError:
             continue
-        # ⛔ KEEP OUT-OF-RANGE NUMBERS -- above all 0, which is "NOT ASSIGNED"
+        # Keep out-of-range numbers -- above all 0, which is "NOT ASSIGNED"
         # in `competition_config` (B53). Dropping them here turned an unassigned
         # torpedo into an align that fired nothing, with no error anywhere -- the
         # same silent-drop this docstring records for the old 1-4 range. Passed
@@ -83,7 +83,7 @@ _DEROTATE_RATE_MAX_AGE_S = 0.04
 def _derotation_inputs(fc, vstate):
     """`(yaw_rate rad/s, px_per_rad)` for `align_loop`, or None.
 
-    ABSENCE IS NOT ZERO. `get_angular_rates()` already returns None for an
+    Absence is not zero. `get_angular_rates()` already returns None for an
     unhealthy BNO (whose rates read exactly 0.0), and a stale sample is the
     same claim with an extra delay -- so both mean "no correction".
     """
@@ -124,7 +124,7 @@ _SROT_VISION_MODES = ('STABILIZE',)
 # The mode that made this check necessary. SURFACE is a FAILSAFE DESTINATION,
 # and the firmware deliberately zeroes translation and yaw in it:
 #
-#   "TRANSLATION AND YAW ARE ZEROED. SURFACE is a failsafe destination --
+#   "translation and yaw are zeroed. Surface is a failsafe destination --
 #    reached on leak, low thruster battery, or GCS loss ... A vehicle that has
 #    lost its operator should not still be driving somewhere."
 #       -- srot task_control_loop.cpp, FlightMode::SURFACE
@@ -146,7 +146,7 @@ def _require_srot_vision_mode(fc, log, verb: str) -> None:
     sends no ACK), so a request that is silently refused looks identical to one
     that worked.
 
-    ⛔ SURFACE IS NEVER SWITCHED OUT OF -- ONLY REFUSED. It used to be treated
+    Surface is never switched out of -- only refused. It used to be treated
     like any other wrong mode and "corrected" to STABILIZE, which let a vision
     verb pull the hull out of a leak / low-battery / GCS-loss failsafe, or out
     of the operator's own `surface`, and drive it back down. The board reached
@@ -366,7 +366,7 @@ class VisionVerbs:
                 f'gain={float(gain):.0f}% dur={float(duration):.0f}s '
                 f'hold={float(hold_s):.0f}s{fire_note}')
 
-            # ⛔ SAY IT BEFORE THE SHOT, NOT AFTER. An unmeasured tool reads as
+            # Say it before the shot, not after. An unmeasured tool reads as
             # ZERO offset -- byte-identical to aiming the camera, and therefore
             # silent. But it is exactly the case that misses: the round leaves
             # a parallel axis and the miss equals the offset at every range.
@@ -392,7 +392,7 @@ class VisionVerbs:
                 ki_lat=float(ki_lat),
                 coast_s=float(coast_s),
                 mixer_aware=bool(getattr(self, 'vision_mixer_aware', True)),
-                # ⛔ WITHOUT THIS LINE THE LADDER IS UNREACHABLE: `align_loop`
+                # Without this line the ladder is unreachable: `align_loop`
                 # accepted `lock_s` for weeks while no caller passed it.
                 lock_s=float(lock_s),
                 fwd_fill=float(fwd_fill) / 100.0,   # % -> fraction (like move)

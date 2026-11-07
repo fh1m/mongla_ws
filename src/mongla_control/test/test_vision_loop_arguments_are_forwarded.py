@@ -1,6 +1,6 @@
 """Every tunable a vision loop accepts must actually be PASSED to it.
 
-⛔ THE DEFECT THIS EXISTS FOR. `align_loop` and `move_loop` have accepted
+The defect this exists for. `align_loop` and `move_loop` have accepted
 `lock_s` since the lock ladder was built, and **no caller ever passed it**. It
 kept its `0.0` default, `bbox_error(lock_s=0.0)` never consulted the follower
 or the anchor, and the ladder was therefore unreachable from any mission --
@@ -24,7 +24,7 @@ _MV = ast.parse('\n'.join(f.read_text() for f in sorted((_PKG / 'motion_vision')
 _VV_SRC = (_PKG / 'vision_verbs.py').read_text()
 _VV = ast.parse(_VV_SRC)
 
-# WHAT MAKES AN UNPASSED ARGUMENT A DEFECT. Not simply being unpassed -- some
+# What makes an unpassed argument a defect. Not simply being unpassed -- some
 # loop arguments are injection seams with a module-constant default and no
 # outside surface at all (`i_lat_max` is one: used once to clamp the integral,
 # named in no deck param, no action field and no doc). Those are fine.

@@ -115,7 +115,7 @@ def test_device_path_in_a_profile_reaches_the_builder(monkeypatch):
         def info(self):
             return {}
 
-    # ⛔ THE RESTORE USED TO NEVER RUN, AND IT LEAKED INTO THE WHOLE SESSION.
+    # The restore used to never run, and it leaked into the whole session.
     # `orig` was read from `F._build_v4l2.__globals__`, but factory imports
     # V4L2MailboxCamera INSIDE the builder, so the name is not in module globals
     # and `.get()` returned None -- making `if orig is not None:` permanently
@@ -228,7 +228,7 @@ def test_the_pi_profiles_carry_the_MEASURED_rate(name, expect_fps):
     FORWARD one. Asking pi_downward for 90 was asking the wrong camera for a
     rate neither of them has.
 
-    ⛔ pi_forward's 15 IS RETRACTED (2026-09-09). This test asserted 15 was
+    pi_forward's 15 is retracted (2026-09-09). This test asserted 15 was
     "the MEASURED rate" and config.py's comment called it the camera's
     ceiling; the 15 was the config line itself, and each defended the other.
     Re-measured on the vehicle by counting DISTINCT header stamps -- a topic

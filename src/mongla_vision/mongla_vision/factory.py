@@ -9,7 +9,7 @@ changes.
 def _build_webcam(*, device=None, device_path=None, width=640, height=480,
                   fps=30, frame_id='laptop_cam', name='laptop', logger=None,
                   fourcc='MJPG', **_):
-    # `device_path` WAS SILENTLY IGNORED. Every profile that names one -- the
+    # `device_path` was silently ignored. Every profile that names one -- the
     # two Pi cameras and both vehicle cameras -- passed it in as a kwarg, it
     # landed in `**_`, and the builder used `device`, which those profiles do
     # not set. So they all resolved to index 0: whichever camera_node started

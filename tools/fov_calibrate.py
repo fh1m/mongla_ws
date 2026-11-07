@@ -8,7 +8,7 @@ that turns a pixel into an ANGLE (a bearing, a LANDING_TARGET, a range estimate)
 needs a measured focal length. The simulator has a calibrated 57.7 deg; the
 vehicle has nothing.
 
-NOTE ON THE BOARD: square size does NOT affect the intrinsics. It only scales
+Note on the board: square size does NOT affect the intrinsics. It only scales
 translation, which we do not use. So no ruler is needed for FOV -- pass the
 default and the focal lengths and angles are still correct.
 
@@ -32,7 +32,7 @@ except ImportError:                                    # pragma: no cover
     from mongla_vision.optics import N_WATER, fov_air_to_water
 
 
-# INNER corners. ⛔ THIS MUST MATCH THE BOARD AND `fov_solve.py`, which
+# INNER corners. THIS MUST MATCH THE BOARD AND `fov_solve.py`, which
 # defaults to 8x6 -- the grid the shipped downward calibration was actually
 # measured on (`pi_downward_1280x720.json: grid [8, 6]`). This file said 9x6,
 # so `capture` would have found NOTHING with the board we own and reported it

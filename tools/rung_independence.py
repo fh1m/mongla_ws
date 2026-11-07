@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Do the ladder's two carried rungs fail TOGETHER? Redundancy of two, or of one?
 
-⛔ THE QUESTION NOBODY ASKED. The lock ladder carries two rungs when the
+The question nobody asked. The lock ladder carries two rungs when the
 detector has nothing: the LK follower (sparse corners, frame-to-frame) and the
 XFeat anchor (learned descriptors, frame-to-reference). They are treated as
 independent -- `arbitrate` cross-checks them precisely because their errors are
@@ -27,7 +27,7 @@ they are dead AT THE SAME TIME versus what independence would predict.
     python3 tools/rung_independence.py --video clip.mkv --box cx,cy,w,h
     python3 tools/rung_independence.py --video clip.mkv     # centre box
 
-⚠ A JOINT-FAILURE RATE ABOVE THE INDEPENDENT PREDICTION IS THE FINDING. It does
+A joint-failure rate above the independent prediction is the finding. It does
 not prove a third rung helps; it proves the existing two do not cover each
 other. Whether `hist` survives those frames is the separate column.
 """
@@ -54,7 +54,7 @@ def hist_model(bgr, box):
     x1, y1, x2, y2 = box
     roi = bgr[y1:y2, x1:x2]
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-    # ⛔ HUE ALONE IS WRONG UNDERWATER. Everything is one hue -- measured cast
+    # Hue alone is wrong underwater. Everything is one hue -- measured cast
     # B-R of +90 to +124 across the archive -- so a hue histogram cannot
     # separate a prop from the water it floats in. Hue AND saturation, which
     # is what actually differs: props are painted, water is not.
@@ -173,7 +173,7 @@ def main() -> int:
         print(f'  HIST alive while LK dead      : '
               f'{float((lk_dead & ~hist_dead).sum()) / max(lk_dead.sum(), 1):6.1%} '
               f'of the frames LK could not carry')
-    print('\n⚠ Joint failure ABOVE the independent prediction means the rungs '
+    print('\nWARNING: Joint failure ABOVE the independent prediction means the rungs '
           'share a failure mode, so the ladder\'s redundancy is smaller than '
           'its rung count suggests.')
     return 0

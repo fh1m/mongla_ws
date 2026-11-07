@@ -151,7 +151,7 @@ class TestGyroGainDefault:
         whatever the sign of S. -1.0 was measurably the worst available
         value on this hull.
 
-        ⚠ NOT "de-rotation does not work" -- §12 measured it halving the
+        NOT "de-rotation does not work" -- §12 measured it halving the
         error at 0.638 rad/s, which is a yawing vehicle and most of a
         mission. Re-enabling needs a high-rotation test at the pivot the
         vehicle actually turns about."""
@@ -259,7 +259,7 @@ class TestTimingCorrections:
         """Mid-exposure is the convention. Ours is 15.7 ms on AUTO -- 7.85 ms,
         bigger on its own than Qin & Shen's 6 ms tolerance.
 
-        ⛔ ITS SIGN IS THE DRIVER'S (issue #34). This test used to assert
+        Its sign is the driver's (issue #34). This test used to assert
         `100.0 - 0.00785` for every camera, i.e. that every stamp marks the END
         of exposure. uvcvideo stamps the START (read off a live stream), so
         the default ADDS; an EOF driver subtracts."""
@@ -526,7 +526,7 @@ class TestRectifyDisabledFallback:
 class TestDeRotationSignConvention:
     """WHICH SIGN of `gyro_gain` actually cancels a rotation, in the NODE.
 
-    ⛔ WHY THIS IS A TEST AND NOT A FIELD MEASUREMENT. Two measurements on the
+    Why this is a test and not a field measurement. Two measurements on the
     same board and the same camera disagreed about this:
 
       * §12 fitted `-1.150` and measured it WORKING -- false velocity under
@@ -635,7 +635,7 @@ class TestDeRotationSignConvention:
 class TestRefusalTravelIsThePriceOfRefusing:
     """Holding the anchor across a refusal makes it WORSE. Measured, offline.
 
-    ⛔ A FIX OF MINE, REFUTED BY ITS OWN MEASUREMENT. `_process` advances the
+    A fix of mine, refuted by its own measurement. `_process` advances the
     anchor before `_evaluate` decides, so a refused interval discards the
     travel it covered. I "fixed" that behind a `reanchor_on_refusal`
     parameter, reasoning that refusals cluster in the fast part of a move and
@@ -962,7 +962,7 @@ def test_the_time_offset_starts_from_the_measured_value():
 
 
 def test_an_unreadable_calibration_falls_back_to_the_whole_no_calibration_path(tmp_path):
-    """⛔ Cloud audit, 2026-11-07. The except branch logged "falling back to a
+    """Cloud audit, 2026-11-07. The except branch logged "falling back to a
     single focal length" and then left `_f_px` at the FOCAL_PARAMS_WIDTH value,
     so a stream of any other width measured velocity scaled by the ratio --
     while the no-calibration branch, a few lines up, did scale it.

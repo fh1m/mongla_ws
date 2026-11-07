@@ -244,7 +244,7 @@ class SrotHealth:
         Verified against two recorded BENCH sessions: 958 of 958 frames decode,
         CRC-valid, across both index blocks.
 
-        ⛔ THAT IS DECODABILITY, NOT DATA. Every one of those 958 frames carries
+        That is decodability, not data. Every one of those 958 frames carries
         rpm EXACTLY 0 in all eight slots, because no ESC was attached -- the
         board fills the whole block regardless. Read as "the telemetry is real"
         this line would justify a health gate that reports OK on a hull with no
@@ -258,7 +258,7 @@ class SrotHealth:
         tell a prop spun backwards by the wash from one driven backwards, and it
         says nothing at all when the vehicle is idle. Signed RPM can.
 
-        ⚠ WE MUST CHECK THE CRC OURSELVES. That early return happens BEFORE
+        We must check the CRC ourselves. That early return happens BEFORE
         pymavlink validates the checksum, so an unknown message is handed over
         unvalidated -- a corrupted frame would otherwise read as plausible RPM.
         `crc_extra` for ESC_STATUS is 10.
@@ -349,7 +349,7 @@ class SrotHealth:
     def _sys_status_ext_bits(self):
         """`(present, enabled, health)` from SYS_STATUS's extended bitfields, or None.
 
-        THE PADDING IS LOAD-BEARING and this is the only copy of it. MAVLink v2
+        The padding is load-bearing and this is the only copy of it. MAVLink v2
         truncates trailing zero bytes, so the payload is not its declared 43:
         measured off the live board it arrives at 40, with `health_extended` cut
         to a SINGLE byte. Unpacking four bytes at offset 39 without padding reads
@@ -391,7 +391,7 @@ class SrotHealth:
             35  onboard_control_sensors_enabled_extended
             39  onboard_control_sensors_health_extended
 
-        THE PADDING IS LOAD-BEARING. MAVLink v2 truncates trailing zero bytes, so
+        The padding is load-bearing. MAVLink v2 truncates trailing zero bytes, so
         the payload is not its declared 43: measured off the live board it arrives
         at 40, with `health_extended` cut to a SINGLE byte. Unpacking four bytes at
         39 without padding reads past the end. A truncated field is zero by
@@ -424,7 +424,7 @@ class SrotHealth:
         the mechanism exists to remove.
 
         `health_reporters.leak_sensor()` was written to render that distinction
-        (`LEAK_EN=0 -> FAILED, NOTHING IS WATCHING`) and needs the two signals
+        (`LEAK_EN=0 -> failed, nothing is watching`) and needs the two signals
         separately. It could not be wired to anything until this existed, which
         is why it sat unregistered.
 

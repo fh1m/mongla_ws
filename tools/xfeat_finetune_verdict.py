@@ -9,11 +9,11 @@ lucky checkpoint cannot carry the verdict:
     of a change.
   * TOTAL INLIERS, not just passing columns -- the pass/fail count throws away
     how much better or worse each pair got.
-  * BOTH venue sets. ⭐ THIS IS THE ONE THAT MATTERS: if the fine-tune wins on
+  * BOTH venue sets. THIS IS THE ONE THAT MATTERS: if the fine-tune wins on
     venues it trained on and loses on the held-out venue, that is overfitting,
     and it is the failure the whole held-out split exists to catch.
 
-⛔ No pass/fail verdict is printed from one number here. The point is to see
+No pass/fail verdict is printed from one number here. The point is to see
 the shape.
 """
 from __future__ import annotations
@@ -90,7 +90,7 @@ def main():
                                          'weights', 'xfeat.pt'))
     ap.add_argument('--tuned', required=True)
     ap.add_argument('--bar', type=int, default=15)
-    # ⭐ Training happens at 800x608, inference at 320x240. A
+    # Training happens at 800x608, inference at 320x240. A
     # convolutional descriptor's keypoint density and receptive
     # field both scale with input size, so 'the fine-tune is bad'
     # and 'the fine-tune is for the wrong size' are different

@@ -1,6 +1,6 @@
 """One deck file for the ladder's switches, read by the node itself.
 
-⛔ WHY NOT LAUNCH ARGUMENTS. A switch threaded through launch is only read by
+Why not launch arguments. A switch threaded through launch is only read by
 the launch files that DECLARE it, and this package has shipped capabilities
 reachable from one launch path and not the one `bringup` includes -- place
 recognition was wired into `vision_pi.launch.py` while `bringup` included
@@ -8,7 +8,7 @@ recognition was wired into `vision_pi.launch.py` while `bringup` included
 argument is a fresh chance to make that mistake, and a second source of truth
 for a value the node already has a default for.
 
-⭐ `anchor/loop_closure.py` already solved this, and carries a guard test that
+`anchor/loop_closure.py` already solved this, and carries a guard test that
 fails if launch plumbing comes back. This is that pattern generalised, so the
 rest of the ladder's switches gain the same property: **the node behaves
 identically whichever launch started it, and an operator changes one file on
@@ -18,12 +18,12 @@ the deck.**
         act_conf: 0.60            # raise the acting bar for a murky venue
         anchor_semi_dense: true   # try the 2.1-2.6x inlier mode
 
-⚠ EVERY FAILURE DEGRADES TO THE DEFAULTS *AND SAYS SO*. A malformed file must
+Every failure degrades to the defaults *and says so*. A malformed file must
 not take the vision stack down on a pool deck -- but silently ignoring a file
 the operator just edited is the worse failure, because they would then watch
 for a behaviour change that was never loaded.
 
-⚠ AN UNKNOWN KEY IS REPORTED, NOT IGNORED. A typo'd switch is indistinguishable
+An unknown key is reported, not ignored. A typo'd switch is indistinguishable
 from a switch that does nothing, and the operator cannot tell which they are
 looking at.
 """

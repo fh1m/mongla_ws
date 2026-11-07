@@ -1,6 +1,6 @@
 """Fly the plant, synthesise the sensors, and score the EKF against TRUTH.
 
-⛔ WHY THIS EXISTS. `mongla_localization`'s filter has 21 tests and every one of
+Why this exists. `mongla_localization`'s filter has 21 tests and every one of
 them is a unit or property test: exp/log round-trip, covariance symmetry,
 positive-definiteness, the sign of a single update. Not one drives it along a
 DYNAMIC TRAJECTORY and asks how far it drifted -- because until the Fossen plant
@@ -12,13 +12,13 @@ where truth is known."* The plant IS that case. It produces exact position,
 attitude and velocity at every tick, so the drift it measures is real error and
 not disagreement.
 
-⚠ WHAT A NUMBER FROM HERE MEANS. The plant is a model: its drag is a guess and
+What a number from here means. The plant is a model: its drag is a guess and
 it has no currents, no thermal drift and no vibration. So a drift figure is a
 LOWER BOUND on what the water will do, and its value is COMPARATIVE -- which
 sensor dropout hurts most, whether an update helps at all, how error grows with
 time. Never quote it as the vehicle's navigation accuracy.
 
-⭐ ONE CONVENTION WE GOT FOR FREE. The filter's world is NED with z DOWN and its
+One convention we got for free. The filter's world is NED with z DOWN and its
 body is FRD; Fossen is x-forward, y-starboard, z-DOWN. They are the same frame,
 so nothing is remapped here -- and `test_the_plant_and_the_filter_share_a_frame`
 pins that rather than trusting it.
@@ -50,7 +50,7 @@ IMU_HZ = 50.0
 FLOW_HZ = 50.0
 DEPTH_HZ = 10.0
 YAW_HZ = 10.0
-# ⚠ A LANDMARK FIX IS INTERMITTENT BY NATURE -- it exists only while a prop is
+# A landmark fix is intermittent by nature -- it exists only while a prop is
 # in view and resects. 2 Hz while visible is generous.
 FIX_HZ = 2.0
 
@@ -67,7 +67,7 @@ def rot_ned(phi: float, theta: float, psi: float) -> np.ndarray:
 
 @dataclass
 class Sensors:
-    """What the vehicle would report. ⚠ Noise levels are PLAUSIBLE, not
+    """What the vehicle would report. Noise levels are PLAUSIBLE, not
     measured on this IMU -- treat them as a knob, and sweep them."""
     gyro_noise: float = 0.002          # rad/s
     accel_noise: float = 0.02          # m/s^2
@@ -120,7 +120,7 @@ def run(*, seconds: float = 60.0, sensors: Sensors | None = None,
     update is withheld -- the question the pool cannot answer cheaply: how far
     does it drift when the bottom camera loses the floor?
 
-    ⭐ `gate_world_updates` withholds the DEPTH and YAW updates during the same
+    `gate_world_updates` withholds the DEPTH and YAW updates during the same
     window. That sounds backwards -- throwing away good measurements -- and it
     is the mitigation the failure mechanism implies. `update_depth`'s Jacobian
     carries `-skew(p)`, an attitude coupling that grows LINEARLY with distance
@@ -140,7 +140,7 @@ def run(*, seconds: float = 60.0, sensors: Sensors | None = None,
     v.plant.eta = [0.0] * 6
     v.board.reset()
 
-    # ⛔ A HARNESS THAT STARTS THE FILTER AT TRUTH IS CHEATING, and the first
+    # A harness that starts the filter at truth is cheating, and the first
     # version of this file did. The filter is constructed believing +-1 m of
     # position uncertainty (P0_position); handing it a perfect origin gives it
     # an accuracy it has no way to know it has, and then any landmark fix looks
@@ -181,7 +181,7 @@ def run(*, seconds: float = 60.0, sensors: Sensors | None = None,
 
         # ── synthesise the IMU ────────────────────────────────────────────
         # Specific force: inertial acceleration in body frame, less gravity.
-        # ⛔ The transport term omega x v is NOT optional -- without it a turning
+        # The transport term omega x v is NOT optional -- without it a turning
         # vehicle's accelerometer is wrong by exactly the centripetal term, and
         # the filter would be fed a lie that looks like a bias.
         w = np.array(nu[3:6])
@@ -207,7 +207,7 @@ def run(*, seconds: float = 60.0, sensors: Sensors | None = None,
         if use_yaw and not gated and k % max(1, int(IMU_HZ / YAW_HZ)) == 0:
             f.update_yaw(math.degrees(eta[5]) + rnd.gauss(0, s.yaw_noise_deg),
                          sigma_deg=max(s.yaw_noise_deg, 0.1))
-        # ⭐ The landmark position fix. `update_position` carries the SAME
+        # The landmark position fix. `update_position` carries the SAME
         # `-skew(p)` attitude coupling as `update_depth` (B-56), so whether it
         # bounds drift or feeds the same loop is a question, not an assumption.
         if use_fix and (not fix_windows

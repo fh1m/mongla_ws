@@ -43,7 +43,7 @@ class CameraMixin:
     def camera_available(self, name: str | None = None) -> bool:
         """Is ``name``'s detector actually on the graph? Cached per camera.
 
-        THE BRANCH A MISSION NEEDS BEFORE IT COMMITS TO AN EYE. A camera that
+        The branch a mission needs before it commits to an eye. A camera that
         fails to open no longer kills the vision stack -- the other camera keeps
         running and that camera's detector is simply absent (see
         `detector_dual_node`). That is the right behaviour for the vehicle and

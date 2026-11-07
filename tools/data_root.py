@@ -1,6 +1,6 @@
 """Where training artifacts go, and why it is never `/tmp`.
 
-⛔ `/tmp` ON THIS BOX IS A RAM DISK. `df -h /tmp` reports **tmpfs, 7.8 G**, so
+`/tmp` on this box is a ram disk. `df -h /tmp` reports **tmpfs, 7.8 G**, so
 everything written there competes with the training process for the same
 memory and none of it survives a reboot. It has cost this project twice:
 
@@ -15,7 +15,7 @@ The second is the expensive kind of mistake, because nothing failed. The run
 completed, the numbers were printed, and the artifacts evaporated hours later
 with no error anywhere.
 
-⚠ A MEMORY NOTE IS NOT A FIX. "use mongla_data/" was already written down and
+A memory note is not a fix. "use mongla_data/" was already written down and
 the tools still defaulted to `/tmp`, so the default kept winning. The default
 is the fix; this module is that default, in one place, so the next tool that
 needs a data root cannot quietly reintroduce a sixth copy.

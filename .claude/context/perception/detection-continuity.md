@@ -277,7 +277,7 @@ the target for 25 s; CLAHE without the clamp would feed a tracker that emits
 nothing.
 
 
-## 9. ⛔ CLAHE IS NOT UNIVERSALLY GOOD — the counter-example
+## 9. CLAHE IS NOT UNIVERSALLY GOOD — the counter-example
 
 A second target, the torpedo model over the bin clip, goes the other way:
 
@@ -299,7 +299,7 @@ them harder than blur**:
 | gate | 315 | 27.7 | **159.9** |
 | bin / torpedo | 1241 | 36.1 | **27.9** |
 
-⛔ **THE RULE THIS SECTION USED TO STATE IS RETRACTED.** It read "CLAHE helps
+**Warning: THE RULE THIS SECTION USED TO STATE IS RETRACTED.** It read "CLAHE helps
 blurry, low-contrast, SATURATED water and hurts sharp, desaturated water",
 fitted to the two clips above and physically plausible. A third venue (Mirpur —
 sharpness 33, saturation 148) is exactly what those thresholds call CLAHE ON,

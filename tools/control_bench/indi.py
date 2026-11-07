@@ -1,6 +1,6 @@
 """INDI attitude control, for the bench only.
 
-⛔ THIS IS NOT FIRMWARE AND MUST NOT BE MISTAKEN FOR IT. Everything else the
+This is not firmware and must not be mistaken for it. Everything else the
 bench runs is the board's own compiled code. This is a HOST-SIDE
 reimplementation of a controller the board does not have, written to answer one
 question before we ever propose it: **does INDI beat the tuned cascade on our
@@ -8,7 +8,7 @@ own plant?** If it cannot win here it does not fly, and that is a publishable
 result either way -- the sweep found zero underwater INDI applications until
 Cuttlefish (DFKI, IROS 2024).
 
-THE LAW. Incremental Nonlinear Dynamic Inversion takes the plant's own measured
+The law. Incremental Nonlinear Dynamic Inversion takes the plant's own measured
 acceleration as the model, so it needs no drag model at all:
 
     omega_dot_des  = K (omega_des - omega)              the rate loop
@@ -20,7 +20,7 @@ without ever being modelled. That is the whole claim, and it is why the DFKI
 work states INDI "requires only a 6x6 mass-inertia matrix and an actuation
 model".
 
-⚠ TWO THINGS MAKE OR BREAK IT, and both are modelled here rather than assumed:
+Two things make or break it, and both are modelled here rather than assumed:
 
   1. `tau_applied` must be the torque the actuators ACTUALLY produced, not the
      torque that was asked for. With `MOT_SPIN_MIN` quantising every output,
@@ -28,13 +28,13 @@ model".
      ask B (the achieved wrench on the wire) exists to provide, and INDI is
      blocked on it. `use_achieved=False` measures what happens without it.
 
-  2. THE INCREMENT MUST BE LIMITED TO ACHIEVABLE TORQUE. An incremental law
+  2. The increment must be limited to achievable torque. An incremental law
      keeps adding until it sees the acceleration it asked for. Point it at a
      torque the allocator cannot deliver and it winds up without bound -- there
      is no acceleration coming, so the increment never stops. A PID gets away
      with a loose output clamp; INDI does not.
 
-  3. IT MUST NOT BE POINTED AT AN UNACTUATED AXIS AT ALL. Discovered on this
+  3. It must not be pointed at an unactuated axis at all. Discovered on this
      bench: running INDI on roll -- which this hull cannot actuate, the
      allocator's B having rank 5 of 6 -- wound the roll increment to its clamp,
      and the Euler coupling then dragged yaw off target while the yaw axis
@@ -88,7 +88,7 @@ class IndiRate:
         alpha = dt / (dt + 1.0 / (2.0 * math.pi * self.fc))
         self._wdot_f += alpha * (wdot_raw - self._wdot_f)
 
-        # ⭐ THE SYNCHRONISATION. `tau_applied` goes through an IDENTICAL filter
+        # THE SYNCHRONISATION. `tau_applied` goes through an IDENTICAL filter
         # so the increment is taken between two quantities with the same lag.
         # Comparing a filtered acceleration against an unfiltered torque is the
         # standard way to make INDI oscillate while looking like bad gains.
@@ -116,7 +116,7 @@ class IndiAttitude:
                  tau_limits=(1.0, 1.0, 1.0), axes=(False, True, True)):
         """`axes` -- which of (roll, pitch, yaw) this controller may drive.
 
-        ⛔ ROLL DEFAULTS TO OFF because this hull cannot actuate it. That is not
+        Roll defaults to off because this hull cannot actuate it. That is not
         a tuning choice, it is the geometry: `geometric_allocation` finds B to
         be rank 5 of 6 with roll the null axis, and the plant's own wrench
         matrix reaches the same conclusion independently. Roll is held by the

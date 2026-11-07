@@ -1,6 +1,6 @@
 """B47 -- bringup's camera hardware must be the vehicle's camera.
 
-⛔ WHY THIS FILE EXISTS. `bringup.launch.py` starts the Pi + SROT vehicle, but
+Why this file exists. `bringup.launch.py` starts the Pi + SROT vehicle, but
 `camera` used to default to `forward` -- a generic USB profile with no fourcc
 and no calibration. Nothing tied the hardware profile to the vehicle, and the
 mismatch is silent.
@@ -17,7 +17,7 @@ Measured on the Pi, running the documented bringup line:
 A frame rate reads as "vision is laggy" and a zero K only bites when the
 srot vision uplink is switched on, so neither surfaces as a fault.
 
-THE ROLE IS NOT THE HARDWARE, AND THIS IS THE WHOLE POINT. `camera` names the
+The role is not the hardware, and this is the whole point. `camera` names the
 topics (/mongla/vision/<camera>/...) and the nodes (mongla_detector_<camera>)
 that ~96 call sites and the mission DSL's own `camera='forward'` default bind
 to. Renaming it to `pi_forward` to fix the hardware would have moved every

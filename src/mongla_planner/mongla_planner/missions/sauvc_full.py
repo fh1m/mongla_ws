@@ -23,9 +23,9 @@ detection range is measured in water.
 Run it:
     ros2 run mongla_planner mission sauvc_full
 
-⚠ NOT FLOWN. Tests execute the sequencing against a recorder.
+Not flown. Tests execute the sequencing against a recorder.
 
-⛔ `move_*`, `set_depth`, `pause` and `stop` are SROT_MOVE primitives: they
+`move_*`, `set_depth`, `pause` and `stop` are SROT_MOVE primitives: they
 enter AUTO, which closes the never-closed depth loop, so the board denies them until
 the two bench checks pass. That includes the search creep fallback. The vision
 verbs themselves run in STABILIZE and are not gated (test_sauvc_srot_port.py).

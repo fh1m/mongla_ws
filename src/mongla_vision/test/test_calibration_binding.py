@@ -1,6 +1,6 @@
 """A calibration must name the camera it describes, and the launch must agree.
 
-⛔ WHY THIS FILE EXISTS. The only calibration we hold was named
+Why this file exists. The only calibration we hold was named
 `pi_forward_1280x720.json` and wired to the FORWARD camera, while its own
 metadata read `pi_test_global_shutter (Microdia USB)` -- USB vendor 0c45, the
 SONIX unit, which is the DOWNWARD camera. It was captured 2026-09-03, four
@@ -23,7 +23,7 @@ This is the FOURTH config in this package measured to reach nothing
 (`device_path` into `**_`, the unloaded YAML profile table, `ros2 param set`
 on construction-time params), and the round-32 plan predicted a fourth.
 
-READS THE FILES, NEVER IMPORTS THEM: a test that imports in a worktree
+Reads the files, never imports them: a test that imports in a worktree
 resolves against the main workspace's stale `install/` tree, which is how the
 CLAHE retraction nearly went the wrong way.
 """
@@ -76,7 +76,7 @@ def test_the_launch_wires_each_calibration_to_a_camera_it_CLAIMS():
             continue                      # '' = deliberately uncalibrated
         f = _CAL_DIR / fname
         if not f.exists():
-            # ⛔ A NAMED-BUT-ABSENT FILE IS THE PENDING STATE, NOT A BUG.
+            # A named-but-absent file is the pending state, not a bug.
             # `_calib()` returns '' when the file is missing, so wiring a
             # camera by NAME before it is calibrated is inert today and goes
             # live the moment the file lands. That is deliberate: it removes

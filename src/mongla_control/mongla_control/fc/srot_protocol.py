@@ -77,7 +77,7 @@ ACK_CANCELLED   = 6
 # deadline and reporting a bogus TIMEOUT for a move that was simply refused.
 # Retrying is the caller's call, not this layer's.
 #
-# ⚠ FIXED 2026-08-03: this was 3, which is MAV_RESULT_UNSUPPORTED, not
+# FIXED 2026-08-03: this was 3, which is MAV_RESULT_UNSUPPORTED, not
 # TEMPORARILY_REJECTED. Verified against the firmware's own vendored enum,
 # `lib/mavlink/common/common.h:1151` -> TEMPORARILY_REJECTED=1. The old value
 # broke the move path in BOTH directions and neither was visible in a log:
@@ -175,12 +175,12 @@ def parse_flare_order(text: str) -> tuple:
 #
 # THREE PRECONDITIONS, all enforced by the firmware and all worth knowing before
 # calling it (mav_commands.cpp:366-402):
-#   * MOTORS MUST BE ARMED. Disarmed returns MAV_RESULT_FAILED with
+#   * motors must be armed. Disarmed returns MAV_RESULT_FAILED with
 #     "Arm motors before testing motors."
-#   * IT IS A KEEP-ALIVE, NOT A ONE-SHOT. The board expires the test when the
+#   * it is a keep-alive, not a one-shot. The board expires the test when the
 #     resends stop -- and expiry AUTO-DISARMS. That is by design, so "the vehicle disarmed when I let go" is
 #     the feature, not a fault.
-#   * THE WINDOW IS CLAMPED to 600..3000 ms whatever p4 says, and p4 = 0 gives
+#   * the window is clamped to 600..3000 ms whatever p4 says, and p4 = 0 gives
 #     600. Bondor asks for 1 s and refreshes every 300 ms.
 CMD_DO_MOTOR_TEST = 209
 MOTOR_TEST_THROTTLE_PERCENT = 0
@@ -295,7 +295,7 @@ def mode_int(name) -> int | None:
 #   enum { PH_IDLE = 0, PH_CRUISE, PH_BRAKE, PH_TURN, PH_DIVE, PH_STYLE,
 #          PH_HOLD, PH_DONE };                       (fw movement.cpp:12)
 #
-# ⚠ 6 is HOLD and 7 is DONE. Both this file and JETSON_COMMS.md previously stopped
+# 6 is HOLD and 7 is DONE. Both this file and JETSON_COMMS.md previously stopped
 # at `6: done`, so a station-keeping HOLD leg was named 'done' while the vehicle was
 # still holding -- and DONE itself fell through to the 'mv7' fallback. Corrected
 # 2026-08-01 against the firmware source (fw changelog §6/§10).
@@ -331,7 +331,7 @@ MC_Z_NEUTRAL = 500    # z centre = hold depth
 def _clamp(v: float, lo: float, hi: float) -> float:
     """Clamp to [lo, hi]. NaN passes THROUGH -- callers must handle it.
 
-    ⛔ DO NOT "fix" this by clamping NaN to `lo`. Comparisons against NaN are all
+    DO NOT "fix" this by clamping NaN to `lo`. Comparisons against NaN are all
     False, so NaN does fall through both branches -- but `lo` is only the safe
     answer where lo happens to BE the neutral value. For `unit_to_mc` lo is
     -1.0, i.e. FULL REVERSE THRUST, and for `unit_to_mc_z` it is full descend.
@@ -374,7 +374,7 @@ MOVE_YAW_RATE   = 45.0    # deg/s default turn rate when p3=0
 MOVE_DEPTH_RATE = 0.20    # m/s dive/ascend ramp
 GAIN_FOR_AUTONOMY = 1.0   # MANUAL_CONTROL is halved until GAIN=1.0 (boots at 0.5)
 
-# ⛔ TWO FIRMWARE LITERALS THAT ARE NOT PARAMETERS, so we carry copies and have
+# Two firmware literals that are not parameters, so we carry copies and have
 # asked for them to become readable (upstream ask N section 3). Both stand
 # between a host yaw demand and a turning propeller:
 #
@@ -414,13 +414,13 @@ MIXER_CENTRE_EPS = 0.005
 #  LANDING_TARGET uplink: the class map and the timeout ladder                 #
 # --------------------------------------------------------------------------- #
 #
-# ⚠ APPEND-ONLY, and 0 is reserved. Same discipline as the firmware's
+# APPEND-ONLY, and 0 is reserved. Same discipline as the firmware's
 # `SROT_SERVO_FUNC_*` and `movement::Type`: these numbers cross a repo boundary
 # by hand, so INSERTING a value silently renames every class after it. 0 must
 # stay UNSPECIFIED so an unconfigured sender reads as "unassigned" rather than
 # as whichever class happens to be first.
 #
-# WHY THIS EXISTS AT ALL: our two senders disagreed. `auv_manager_node`'s uplink
+# Why this exists at all: our two senders disagreed. `auv_manager_node`'s uplink
 # tick sent a hardcoded `target_num=0` while `tools/srot_uplink_check.py` sent
 # `d.class_id` -- the detector's own index, which is a property of whichever
 # model happens to be loaded and means something different for every one. So
@@ -536,7 +536,7 @@ DEPTH_ERR_ARM_LIMIT_M = 0.30
 # perfectly-zeroed barometer sitting in air still reads -0.10 m of "error".
 #
 # That matters because the quantity this guard actually wants is HOW FAR THE BAROMETER
-# IS FROM ZERO at the surface, not how far it is from the preview's target. Comparing
+# Is from zero at the surface, not how far it is from the preview's target. Comparing
 # the raw error against 0.30 m spends a third of the budget on a constant offset --
 # measured on the vehicle 2026-08-07, a healthy board at +0.15 m of baro offset read
 # -0.25 m and sat 0.05 m from a FAIL it did not deserve.
@@ -572,7 +572,7 @@ DEPTH_P_DEFAULT = 0.5
 # is absolute; anything else and ATTITUDE.yaw is relative to wherever the BNO booted,
 # which makes an absolute MOVE_TURN (p4=1) turn to a meaningless number.
 #
-# MAGACC IS NOT A PROXY FOR THIS and must not be used as one: the alignment is
+# Magacc is not a proxy for this and must not be used as one: the alignment is
 # protected by the |B| band and the sample-agreement test, neither of which depends
 # on the sensor's self-assessment, and with a stored calibration `need_acc` drops to
 # 0 so accuracy stops correlating with the outcome entirely.
@@ -652,7 +652,7 @@ YAW_REF_NAMES = {
 #      board. Rev 7 emits STATUSTEXT "Params saved to flash" (MAV_SEVERITY_INFO) on the
 #      success path: if you ever automate a save, wait for the statustext, NOT the ACK.
 #
-#      ⚠ THE REV NUMBER UNDER-COUNTS THIS RELEASE. Five other commits shipped inside rev 7
+#      The rev number under-counts this release. Five other commits shipped inside rev 7
 #      without a bump of their own, and two change behaviour we care about:
 #        * 83ef62e FRAME_REVERSE -- a new param that negates all six axis demands after the
 #          controllers and before the mixer. DEFAULT 0, so a stock board is unchanged and
@@ -671,7 +671,7 @@ YAW_REF_NAMES = {
 #      leaving the frame left-handed and SILENTLY INVERTING YAW while roll and pitch read
 #      correctly. Measured in water 2026-08-07: turning right made yaw DECREASE. MANUAL was
 #      fine (open loop); STABILIZE and DEPTH_HOLD span the hull.
-#      *** ANY HEADING RECORDED AGAINST REV <= 9 HAS THE OPPOSITE SENSE ***, absolute
+#      *** any heading recorded against rev <= 9 has the opposite sense ***, absolute
 #      MOVE_TURN targets included. Every heading constant, pool-day note and recorded
 #      competition_config heading taken before this is negated. The mag alignment must be
 #      re-run after flashing. This is why the constant below is not merely "bumped".
@@ -708,7 +708,7 @@ FW_BEHAVIOUR_REV = 14
 # still the right question to ask of every future rev.
 FW_BEHAVIOUR_REV_REQUIRED = 10
 
-# WHERE THE BOARD REPORTS IT: `AUTOPILOT_VERSION.middleware_sw_version`. The board has
+# Where the board reports it: `AUTOPILOT_VERSION.middleware_sw_version`. The board has
 # no middleware, so that field was zero and free; request the message with
 # MAV_CMD_REQUEST_MESSAGE(148). `SrotFC.check_behaviour_rev()` reads it and REFUSES TO
 # ARM below the requirement. Verified on hardware: the board answers 2.
@@ -746,7 +746,7 @@ MSG_ID_ESC_STATUS = 291
 BATTERY_ID_MAIN     = 0   # PM1, electronics rail -> MonglaState.battery_voltage
 BATTERY_ID_THRUSTER = 1   # PM2, thruster pack, via ESP-NOW
 
-# ⛔ NAMED_VALUE_FLOAT's `name` field is 10 CHARS and the board does not shorten its
+# NAMED_VALUE_FLOAT's `name` field is 10 CHARS and the board does not shorten its
 # own strings -- so "BARO_HEALTH" arrives as "BARO_HEALT", truncated silently. Looking
 # up the full name finds nothing and returns None, which is indistinguishable from
 # "the board did not send it". This is the same 10-char trap that produced our worst
@@ -789,7 +789,7 @@ def baro_health_text(value):
 # probabilistic. The board did it (fw rev 3), and it is verified on the wire:
 # present_extended = health_extended = 0x02.
 #
-# WE STILL CANNOT READ IT, and this is the trap:
+# We still cannot read it, and this is the trap:
 #
 #   pymavlink 2.4.49's SYS_STATUS message has THIRTEEN fields and no extensions.
 #   `MAVLink_sys_status_message.fieldnames` ends at `errors_count4`. The board sends 40
@@ -848,7 +848,7 @@ PCA_RELAY_BASE_CH   = 8     # first MOSFET/switch channel (0-based)
 # rather than keeping a host-side copy of the wiring, which goes stale SILENTLY the
 # moment a channel is re-roled on the board.
 #
-# ⚠ THE 1-8 / 9-16 SPLIT IS A DEFAULT, NOT THE WIRING. It is only the initial value
+# The 1-8 / 9-16 split is a default, not the wiring. It is only the initial value
 # of the per-channel param (`(c < 8) ? 1.0f : 2.0f`, fw params.cpp), freely re-rolled
 # from Bondor. Nothing in this file or above it may assume it -- read the role. It is
 # recorded here only because it is what this hull happened to read on 2026-08-02, and
@@ -879,7 +879,7 @@ PCA_SWITCH_OFF_US   = 1000
 # hull -- instead of in a host-side table that goes stale the moment someone re-wires
 # a channel, whose failure mode is firing the manipulator arm during a drop.
 #
-# ⚠ APPEND-ONLY. Canonical numbers are `SROT_SERVO_FUNC_*` in the firmware's
+# APPEND-ONLY. Canonical numbers are `SROT_SERVO_FUNC_*` in the firmware's
 # include/config.h; Bondor mirrors them in src/shared/protocol.ts. Inserting a value
 # silently renames every payload after it. test_srot_protocol_drift pins all three.
 PCA_FUNC_PARAM_FMT  = 'SERVO{}_FUNCTION'
@@ -927,7 +927,7 @@ MOTOR_DETECT_TIMEOUT_S = 60.0
 #   Severity 'CRIT' = a safety behaviour is off; 'WARN' = behaviour differs from
 #   what a mission author would assume.
 #
-# ⛔ THIS TABLE IS NOT A SET OF DEFAULTS TO WRITE. It is what to READ and report.
+# This table is not a set of defaults to write. It is what to READ and report.
 # Enabling a motor-spinning mode or a failsafe threshold is an operator decision
 # on a specific hull, and a host that quietly set them would be worse than one
 # that never looked.
@@ -941,7 +941,7 @@ SAFETY_GATES = (
     # battery failsafe all go dark together (fw second_board/main.cpp:29-31).
     ('ESPNOW_EN',     1.0, 'CRIT', '2nd-board link: thruster volts, kill state, '
                                    'mixer compensation, battery failsafe'),
-    # ⛔ ARMING_CHECK == 0 makes canArm() return true immediately
+    # ARMING_CHECK == 0 makes canArm() return true immediately
     # (fw arming.cpp:13-14) -- EVERY board-side pre-arm check is skipped,
     # including the leak and battery refusals above.
     ('ARMING_CHECK',  1.0, 'CRIT', 'ALL board-side pre-arm checks'),
@@ -996,7 +996,7 @@ AUTOTUNE_TIMEOUT_S   = 150.0
 # 8 motors x (ramp + level holds + relay), and it averages across motors.
 MOTOR_TUNE_TIMEOUT_S = 300.0
 
-# ⛔ MOTOR_TUNE IS GATED ON A PARAM THAT DEFAULTS TO ZERO.
+# MOTOR_TUNE is gated on a param that defaults to zero.
 # `mt_active = (mode == MOTOR_TUNE) && (g_params.mtune_en > 0.5f) && armed`
 # (fw task_control_loop.cpp:509), and `DEF_MTUNE_EN = 0.0f`
 # (fw config.h:588). So SET_MODE alone enters the mode and the tuner never

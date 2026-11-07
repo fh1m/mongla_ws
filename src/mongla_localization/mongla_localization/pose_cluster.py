@@ -1,6 +1,6 @@
 """Fuse a stream of single-frame poses into one answer, with its support.
 
-⛔ THE DEFECT THIS EXISTS TO PREVENT, and it is the one this repo keeps
+The defect this exists to prevent, and it is the one this repo keeps
 finding: a plausible number standing in for an absent measurement. A planar
 target's PnP solution is AMBIGUOUS -- two poses reproject almost equally well,
 mirrored about the board normal, so a stream of per-frame answers is BIMODAL at
@@ -77,7 +77,7 @@ class PoseSample:
     bearing_deg: Optional[float] = None
 
 
-# ⛔ THE RULE THAT DECIDES A MIRROR PAIR (issue #55). A planar target's two PnP
+# The rule that decides a mirror pair (issue #55). A planar target's two PnP
 # branches are reflections about the VIEWING RAY: for yaw, the alternate sits
 # at about `2*beta - theta`, beta the bearing to the target and theta its true
 # normal. Expressed in the WORLD (pose yaw + hull yaw):
@@ -89,7 +89,7 @@ class PoseSample:
 # (`test_pose_mirror_truth.py`): 0.00 and +2.00 exactly, in EITHER translation
 # direction, surviving 10 deg of pitch and 0.5 px noise (0.14 / 1.86).
 #
-# ⛔ ONLY A CHANGE OF VIEWPOINT SEPARATES THEM. A hull that only ROTATES keeps
+# Only a change of viewpoint separates them. A hull that only ROTATES keeps
 # beta_world fixed, so both branches are constant in the world and both fit
 # every frame. That pair is unresolvable from this target alone, and the fuser
 # says so -- it does not count, and it does not guess.
@@ -154,7 +154,7 @@ def _median(xs: list[float]) -> float:
 def _range_at(samples: list, t_now: float) -> float:
     """Range AT `t_now`, from a robust straight line through the window.
 
-    ⛔ NOT THE WINDOW MEDIAN (#56). A 15 s window on an approach reports the
+    Not the window median (#56). A 15 s window on an approach reports the
     range from its MIDDLE -- metres long at the end of a run in -- and stamps
     it as current. Theil-Sen (the median of pairwise slopes, then the median
     intercept) fits range against capture time and is evaluated at `t_now`:
@@ -291,7 +291,7 @@ class PoseCluster:
         fitted = [s for s in live
                   if s.reproj_px <= self.max_reproj_px or s.reproj_px <= 0.0]
 
-        # ⭐ BOTH BRANCHES, WHEN THE PRODUCER SENT THEM. Then the solver's own
+        # Both branches, when the producer sent them. Then the solver's own
         # preference never votes, and the viewpoint decides (`resolve_mirror`).
         paired = [s for s in fitted
                   if None not in (s.alt_yaw_deg, s.bearing_deg, s.vehicle_yaw_deg)
@@ -312,7 +312,7 @@ class PoseCluster:
             return Fused(False, considered=0,
                          reason=f'all {len(live)} poses failed the '
                                 f'ambiguity/reprojection gates')
-        # ⛔ IN THE WORLD FRAME WHEN THE HEADINGS EXIST (#56). A camera-frame
+        # In the world frame when the headings exist (#56). A camera-frame
         # median over a turning hull mixes frames taken from different
         # headings and stamps the result as now: a 1 deg/s turn over 15 s gave
         # 13 deg against a true 6. Each frame's pose yaw plus the hull's yaw at
@@ -342,7 +342,7 @@ class PoseCluster:
             return Fused(False, considered=len(kept), support=support,
                          rival=rival, reason=f'largest cluster has {support} '
                                              f'poses, needs {self.min_poses}')
-        # ⛔ A SECOND SUPPORTED CLUSTER IS A MIRROR PAIR, and a majority does
+        # A second supported cluster is a mirror pair, and a majority does
         # not resolve it (#55: a 7/3 wrong-branch majority was accepted and
         # anchored a heading 54 deg against a true 9). Without the second
         # branch and the bearing there is no geometric test, so: refuse.

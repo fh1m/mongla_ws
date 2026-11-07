@@ -4,7 +4,7 @@ Built for the return leg (does the gate detector see the gate from BEHIND?)
 and kept general, because the trap it exists to avoid is not specific to
 that question.
 
-⛔ ALWAYS SCORE THE TRIVIAL MODEL. When ground-truth boxes are a large
+Always score the trivial model. When ground-truth boxes are a large
 fraction of the frame -- 41.9 % on the return set -- a single box covering
 the whole image clears IoU 0.3 on EVERY target. Measured: the null model
 scores 100 % at IoU 0.3, and the shipping detector scored 73.6 % there and

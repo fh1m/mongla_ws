@@ -1,6 +1,6 @@
 """Right-invariant EKF on SE_2(3): where the hull is, from what it can feel.
 
-⛔ WHY INVARIANT AND NOT A QUATERNION EKF. The error dynamics of a filter whose
+Why invariant and not a quaternion EKF. The error dynamics of a filter whose
 state lives on a matrix Lie group satisfy a LOG-LINEAR differential equation, so
 the linearisation carries minimal approximation error and -- the part that
 matters -- DOES NOT DEPEND ON THE CURRENT ESTIMATE. A standard EKF linearised
@@ -10,7 +10,7 @@ anyway. Potokar et al., RA-L 2021, show it directly for underwater navigation
 with our sensor set: IMU plus body-frame velocity, with depth as a singleton
 measurement.
 
-⛔ HANDEDNESS: RIGHT-INVARIANT -- AND THE ORIGINAL REASON WRITTEN HERE WAS
+Handedness: Right-invariant -- and the original reason written here was
 WRONG, so it is corrected rather than quietly deleted. This paragraph used to
 argue "three of our five measurements are body-frame, therefore right-
 invariant". The convention runs the other way: a BODY-frame observation (DVL
@@ -33,15 +33,15 @@ al. say the same of depth as a singleton. It is not an oversight, and it is
 also not the carefully-reasoned frame-counting decision this file used to
 claim.
 
-⛔ AND THE TRAP THE LITERATURE NAMES. Autonomous error propagation survives ONLY
-IF VELOCITY IS HELD IN THE WORLD FRAME. Store body velocity instead and
+And the trap the literature names. Autonomous error propagation survives ONLY
+If velocity is held in the world frame. Store body velocity instead and
 state-dependent Coriolis and curvature terms appear and log-linearity is gone --
 the filter still runs, still produces a pose, and has quietly lost the property
 it was chosen for. So `v` here is world-frame, always, and the body-frame
 measurement is converted at the update rather than the state being stored the
 convenient way.
 
-⚠ TWO HONEST CAVEATS, carried not glossed:
+Two honest caveats, carried not glossed:
   1. **Bias states break exactness.** With noise and bias the log-linear error
      system is only approximate. The convergence behaviour is still better than
      a quaternion EKF's, but the theoretical guarantee is weaker than the
@@ -68,7 +68,7 @@ from typing import Optional, Tuple
 
 import numpy as np
 
-# ⛔ WORLD IS NED (z DOWN), BODY IS FRD. The board's ATTITUDE is aerospace
+# WORLD IS NED (z DOWN), BODY IS FRD. The board's ATTITUDE is aerospace
 # Z-Y-X Euler in NED, its gyro and (host-mapped) accel are FRD, flow's +y is
 # starboard. This was z-up until 2026-09-15 while the rotation fed in was NED:
 # replayed through 50 s of real board data at rest, that ran to 583 m; NED,
@@ -145,7 +145,7 @@ class State:
 # raises a KeyError instead of silently picking a wrong threshold.
 CHI2_99 = {1: 6.635, 2: 9.210, 3: 11.345}
 
-# ⛔ THE GATE'S OWN FAILURE MODE, and it is worse than no gate.
+# The gate's own failure mode, and it is worse than no gate.
 # A filter that has become CONFIDENTLY WRONG rejects every measurement that
 # disagrees with it -- and the more wrong it is, the larger the innovation and
 # the more certain the rejection. It locks itself out of the one channel that
@@ -193,7 +193,7 @@ class RIEKF:
         # measurements looks identical to one that is merely drifting.
         self.accepted = 0
         self.rejected = 0
-        # ⛔ ONE STREAK PER MEASUREMENT KIND, keyed by `_apply(kind=)`. This
+        # One streak per measurement kind, keyed by `_apply(kind=)`. This
         # was a single counter that ANY accepted update reset -- and the
         # board's attitude is accepted 50 times a second, so a filter
         # confidently wrong in POSITION rejected every fix for ever: the
@@ -208,12 +208,12 @@ class RIEKF:
         # `update_body_velocity_xy`). Raw, not bias-corrected: the bias is
         # subtracted at use, with the estimate current at that moment.
         self._gyro = np.zeros(3)
-        # ⛔ THE OBSERVABILITY GATE -- see `_velocity_is_observed` (B-56).
+        # The observability gate -- see `_velocity_is_observed` (B-56).
         self.vel_sigma_gate = float(vel_sigma_gate)
         self.gated = 0
 
     # ── replay ───────────────────────────────────────────────────────────────
-    # ⛔ EVERY ATTRIBUTE A PREDICT OR AN UPDATE CAN CHANGE, named in one place
+    # Every attribute a predict or an update can change, named in one place
     # (issue #31). The retrodictor's snapshot was a hand-kept tuple, and `gated`
     # -- added later -- was not in it, so a replay that re-ran a gated update
     # counted it twice. Everything else on the filter is CONFIGURATION (`Q`,
@@ -250,7 +250,7 @@ class RIEKF:
         a = np.asarray(accel, dtype=float).reshape(3) - self.X.ba
 
         R = self.X.R
-        # ⚠ The PRE-STEP v and p, for A and for the noise map alike (issue
+        # The PRE-STEP v and p, for A and for the noise map alike (issue
         # #26). They were read after the state advanced, mixing two instants in
         # one first-order step.
         v0, p0 = self.X.v.copy(), self.X.p.copy()
@@ -291,7 +291,7 @@ class RIEKF:
     def _adapt_noise(self, R, v, p) -> np.ndarray:
         """IMU noise is BODY frame; the right-invariant error is not.
 
-        ⛔ THROUGH THE ADJOINT, NOT A ROTATION OF TWO BLOCKS (issue #26).
+        Through the adjoint, not a rotation of two blocks (issue #26).
         Body-frame noise w enters the right-invariant error as Ad_X w
         (Barrau & Bonnabel 2017; Hartley et al. 2020):
 
@@ -320,7 +320,7 @@ class RIEKF:
                              kind: str = 'velocity') -> bool:
         """The flow DVL: velocity measured in the BODY frame.
 
-        ⛔ NO ATTITUDE TERM. Under this filter's error (`_inject`: R <- dR R,
+        No attitude term. Under this filter's error (`_inject`: R <- dR R,
         v <- dR v + dv) the prediction R^T v is (dR R)^T (dR v + dv) =
         R^T v + R^T dR^T dv: the attitude error cancels exactly. An
         `R^T [v]x` block used to sit here and made every flow innovation
@@ -372,7 +372,7 @@ class RIEKF:
                                 lever_arm=None) -> bool:
         """Downward optical flow: body x and y ONLY.
 
-        ⛔ A BOTTOM-LOOKING CAMERA CANNOT MEASURE VERTICAL VELOCITY, and the
+        A bottom-looking camera cannot measure vertical velocity, and the
         flow node says so -- it marks `twist.covariance[14]` as -1.0, the ROS
         convention for an unobserved component. Passing its `linear.z` (which
         is 0.0, because nothing set it) into the 3-D update states that the
@@ -384,7 +384,7 @@ class RIEKF:
         and a bare one do not deserve the same weight, and a constant sigma
         here would throw that away.
 
-        ⛔ THE CAMERA IS NOT AT THE IMU (issue #27). The state is the IMU's
+        The camera is not at the IMU (issue #27). The state is the IMU's
         velocity; the flow node measures the CAMERA's, and rigid-body
         kinematics says exactly
 
@@ -434,7 +434,7 @@ class RIEKF:
     def _velocity_is_observed(self) -> bool:
         """Is velocity being measured, or is it free to wander?
 
-        ⛔ WHY EVERY WORLD-FRAME UPDATE ASKS THIS. `update_depth`,
+        Why every world-frame update asks this. `update_depth`,
         `update_yaw` and `update_position` all carry an attitude block --
         `-skew(p)` for the position-like ones -- because in a right-invariant
         filter a correction acts on the whole state. While velocity is measured
@@ -454,7 +454,7 @@ class RIEKF:
         exists rather than a tuning change. With the gate, the same case is
         0.109 m.
 
-        ⚠ THE THRESHOLD SITS IN A NARROW BAND AND THAT IS DELIBERATE, not
+        The threshold sits in a narrow band and that is deliberate, not
         sloppy. A cold filter's own sigma_vel is `sqrt(3) * P0_velocity` =
         0.866, so the gate must exceed that or it fires on construction and
         refuses everything. And it must be under about 1.2, because the damage
@@ -463,12 +463,12 @@ class RIEKF:
         sits in it. `test_the_gate_clears_a_cold_filter` fails if P0_velocity is
         ever raised past it, rather than leaving that as a comment nobody reads.
 
-        ⚠ A TIME-SINCE-LAST-VELOCITY GATE WAS TRIED AND IS WORSE. It has no
+        A time-since-last-velocity gate was tried and is worse. It has no
         cold-start conflict, which is appealing, but even a 0.2 s timeout lets
         through enough to reach 27 m against this gate's 4.9 m -- the damage is
         faster than any timeout can be.
         """
-        # ⛔ HORIZONTAL ONLY (issue #28). The gate summed all three axes, but
+        # HORIZONTAL ONLY (issue #28). The gate summed all three axes, but
         # flow observes x and y and only DEPTH observes z -- and depth is
         # refused while the gate is shut. So once it closed, vertical variance
         # grew with nothing to shrink it, flow's return could not bring the
@@ -478,8 +478,8 @@ class RIEKF:
         # Bench numbers unchanged: no-flow 4.935 m, fixes 0.199 / 0.003 m,
         # healthy 0.1015 m.
         #
-        # ⚠ APPLYING DEPTH UNCOUPLED WHILE SHUT -- `update_position`'s rule --
-        # WAS TRIED AND DIVERGES: 1.4e14 m on the same no-flow bench run, with
+        # Applying depth uncoupled while shut -- `update_position`'s rule --
+        # Was tried and diverges: 1.4e14 m on the same no-flow bench run, with
         # either gate. The attitude coupling it drops from H survives in P, and
         # with nothing observing horizontal velocity that is enough. Depth
         # stays refused while this is shut; the fix is that the gate can open.
@@ -490,11 +490,11 @@ class RIEKF:
 
         World z is DOWN (NED), so the state holds +depth: z = -depth_m.
 
-        ⚠ An IMPERFECT measurement for a right-invariant filter -- world-frame,
+        An IMPERFECT measurement for a right-invariant filter -- world-frame,
         so the log-linear property is approximate here. Accepted, and named, as
         Potokar does for the same singleton.
         """
-        # ⛔ REFUSED while velocity is unobserved (B-56): a depth update then
+        # REFUSED while velocity is unobserved (B-56): a depth update then
         # injects attitude error and buys nothing horizontal.
         if not self._velocity_is_observed():
             self.gated += 1
@@ -511,10 +511,10 @@ class RIEKF:
     def update_yaw(self, yaw_deg: float, sigma_deg: float = 2.0) -> bool:
         """The landmark heading anchor: an absolute world yaw.
 
-        ⚠ Also imperfect, and worth more than it looks: it is the only source
+        Also imperfect, and worth more than it looks: it is the only source
         here that can remove a heading error the vehicle cannot feel.
         """
-        # ⛔ Refused while velocity is unobserved, for the same reason as
+        # Refused while velocity is unobserved, for the same reason as
         # depth: it is an attitude correction, and an attitude correction
         # rotates the velocity nothing is watching.
         if not self._velocity_is_observed():
@@ -539,7 +539,7 @@ class RIEKF:
     def update_position(self, xy, sigma: float = 0.5) -> bool:
         """A pool fix from prop resection: world x and y.
 
-        ⚠ Imperfect, like depth. This is the measurement that bounds the
+        Imperfect, like depth. This is the measurement that bounds the
         dead-reckoning drift, and it exists because the course is a landmark
         field -- see `resection`.
         """
@@ -547,13 +547,13 @@ class RIEKF:
         H = np.zeros((2, self.DIM))
         H[0, 6] = 1.0
         H[1, 7] = 1.0
-        # ⭐ NOT refused when velocity is unobserved -- APPLIED WITHOUT THE
+        # NOT refused when velocity is unobserved -- APPLIED WITHOUT THE
         # COUPLING. A landmark fix is the one measurement that can still pin
         # position out there, and dropping its attitude block lets it do most
         # of that job. Measured on the bench: refusing it outright gives 2.46 m,
         # applying it uncoupled gives 0.109 m.
         #
-        # ⚠ IT DOES NOT MAKE THE UPDATE ATTITUDE-FREE, and an earlier comment
+        # It does not make the update attitude-free, and an earlier comment
         # here wrongly said it did. The cross-covariance P[0:3,6:9] still
         # couples position to attitude, so the correction reaches attitude
         # through P even with H's block zeroed -- measured at 0.18 rad in a
@@ -583,7 +583,7 @@ class RIEKF:
     def rotate_world_yaw(self, delta_deg: float) -> None:
         """Re-express the whole estimate in a world frame yawed by `delta_deg`.
 
-        ⛔ NOT A MEASUREMENT, AND IT MUST NOT BE ONE. The heading anchor does
+        Not a measurement, and it must not be one. The heading anchor does
         not tell the filter something uncertain about the hull -- it tells it
         that the AXES everything has been written in were boot-relative, and by
         exactly how much. Feeding that through `update_yaw` puts a frame change
@@ -619,7 +619,7 @@ class RIEKF:
     def _apply(self, H, y, R_noise, *, kind: str) -> bool:
         """One correction. Returns False if the measurement was REJECTED.
 
-        ⛔ THE GATE IS NOT OPTIONAL FOR A VISION-FED FILTER. Every measurement
+        The gate is not optional for a vision-fed filter. Every measurement
         here except depth comes from a detector, and a detector's failure mode
         is not noise -- it is a confident answer about the wrong object. One
         mirrored PnP branch or one mislabelled prop is a metre-scale
@@ -630,7 +630,7 @@ class RIEKF:
         consistent. Rejecting above the 99th percentile is the standard
         ellipsoidal validation gate.
 
-        ⚠ AND THE CAVEAT, because it is easy to fool yourself with this:
+        And the caveat, because it is easy to fool yourself with this:
         gating TRUNCATES the innovation distribution, so post-gate NIS
         statistics are contracted by a factor gamma(tau, m) < 1 that depends
         only on the threshold and the dimension. A gated filter therefore
@@ -661,7 +661,7 @@ class RIEKF:
             # and leave the filter just as stuck next time.
             self.lockout_breaks += 1
             self.reject_streak[kind] = 0
-            # ⛔ ONLY THE STATES THIS MEASUREMENT OBSERVES (issue #29). All of
+            # Only the states this measurement observes (issue #29). All of
             # P x4 also quadrupled the bias variances -- undoing minutes of
             # bias learning -- and the velocity block, which could push it
             # over the observability gate and shut depth and heading out.
@@ -682,7 +682,7 @@ class RIEKF:
         self._inject(dx)
         I_KH = np.eye(self.DIM) - K @ H
         # Joseph form, for numerical robustness under a suboptimal gain.
-        # ⚠ HONESTLY LABELLED: swapping this for the short form `I_KH @ P`
+        # Honestly labelled: swapping this for the short form `I_KH @ P`
         # does NOT fail any test here, so this is standard practice rather
         # than a measured guard in this codebase. The difference shows up as
         # loss of positive-definiteness over long runs with mismatched noise,

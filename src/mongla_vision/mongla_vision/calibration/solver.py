@@ -22,18 +22,18 @@ specific:
 
 So this tool answers the question the way it has to be answered:
 
-  1. HELD-OUT VALIDATION. K-fold: fit on most views, then for each held-out
+  1. Held-out validation. K-fold: fit on most views, then for each held-out
      view re-fit ONLY the pose (solvePnP) and reproject. The extra parameters
      get no second chance on data they never saw, so a shape that is real
      geometry transfers and a shape that absorbed noise does not. This is the
      only test here that can distinguish the two.
-  2. CONDITIONING DIAGNOSTIC. Re-fit with the principal point pinned to frame
+  2. Conditioning diagnostic. Re-fit with the principal point pinned to frame
      centre. If fx barely moves, fx is well determined by the data; if it
      swings, the solve is under-determined and no residual will tell you.
-  3. FOLD SPREAD AS UNCERTAINTY. The scatter of fx across folds is an honest
+  3. Fold spread as uncertainty. The scatter of fx across folds is an honest
      error bar. A single number with no uncertainty is what produced three
      mutually contradictory answers.
-  4. AN EXTERNAL CHECK (`--external W_m Z_m`). Everything above is internal to
+  4. An external check (`--external W_m Z_m`). Everything above is internal to
      the optimizer and can be self-consistently wrong. One measurement that
      does not come from the optimizer -- a board of known width at a tape-
      measured distance -- catches a gross error. It is only ~1 % accurate, so
@@ -82,7 +82,7 @@ SUBPIX_WIN = (11, 11)
 try:
     from ..optics import N_WATER, fov_air_to_water, fov_water_to_air  # noqa: E402
 except ImportError:                                                    # pragma: no cover
-    # ⛔ THIS FILE IS DELIBERATELY LOADABLE BY PATH (see guide._solver), so the
+    # This file is deliberately loadable by path (see guide._solver), so the
     # calibration tool runs on a dev box with no ROS. A relative import here is
     # the trap from the other side -- it broke three tests when this module
     # first collapsed the refraction constant. `optics.py` has no dependencies
@@ -274,7 +274,7 @@ def fov_for_medium(v, medium):
 def calibration_filename(applies_to, w, h, medium='air'):
     """The one place a calibration's filename is decided.
 
-    ⛔ THE MEDIUM IS PART OF THE NAME. Air and water differ by ~1.44x on this
+    The medium is part of the name. Air and water differ by ~1.44x on this
     hull, so a water calibration that overwrote the air one would be a
     silent 44 % scale error on every range and velocity downstream -- the
     size that still looks plausible. Two files for one camera is the point:
@@ -291,7 +291,7 @@ def calibration_filename(applies_to, w, h, medium='air'):
 def max_ere(samples, w, h, grid=5, depth_m=1.0):
     """AprilCal's MAX EXPECTED REPROJECTION ERROR (Richardson et al., IROS 2013).
 
-    ⛔ WHY THIS AND NOT REPROJECTION RMS. RMS is an average over the points
+    Why this and not reprojection RMS. RMS is an average over the points
     you happened to photograph, so it is quiet exactly where you have no
     data -- and calib.io says the same thing in one line: "low reprojection
     error does not equal a good camera calibration". This project has three
@@ -404,7 +404,7 @@ def synth_view(objp, K, D, rvec, tvec, w, h, noise_px=0.3, rng=None):
 def suggest_next_pose(objp, ips, size, candidates, i_fixed=0, k=4):
     """AprilCal's next-best-pose, scored by predicted Max ERE.
 
-    ⛔ THIS IS THE PART THAT MAKES A NOVICE'S CALIBRATION GOOD. Richardson et
+    This is the part that makes a novice's calibration good. Richardson et
     al. (IROS 2013) measured novices using guided suggestion against novices
     using plain OpenCV: mean reprojection error 0.229 vs 0.728 px, and
     WORST-case 1.651 vs 38.646 px -- a 23x difference on the number that
@@ -542,7 +542,7 @@ def main() -> int:
     if ere >= 1.0:
         print(f"  the worst point is at ray ({worst[0]:+.2f}, {worst[1]:+.2f}) "
               f"-- more views THERE constrain it fastest")
-    print(f"  ⚠ our posterior is {len(samples)} k-fold draws, not a sampled "
+    print(f"  WARNING: our posterior is {len(samples)} k-fold draws, not a sampled "
           f"covariance, so read this as a LOWER bound on the spread")
 
     fxs = np.array([r['ro_fx' if use_ro else 'std_fx'] for r in recs])
@@ -589,7 +589,7 @@ def main() -> int:
     # ---- 5. external sanity check ----
     fit = ro if use_ro else std
     v = fov_from_K(fit['K'], w, h)
-    # ⛔ CORRECT THE MEDIUM BEFORE ANYTHING PRINTS OR IS WRITTEN.
+    # Correct the medium before anything prints or is written.
     # `fov_from_K` assumes the board was in AIR and derives water by Snell.
     # In water mode the FITTED figure IS the water one, so the roles swap and
     # air becomes the derivation. Doing this after the ANSWER block -- which
@@ -661,7 +661,7 @@ def main() -> int:
         # -- it silently logs HFOV=0.0 forever.
         **{f"{key.split('_')[0]}_deg_{key.split('_')[1]}": float(val)
            for key, val in v.items()},
-        # ⛔ THE MEDIUM IS NOT METADATA, IT IS PART OF THE ANSWER. An in-water
+        # The medium is not metadata, it is part of the answer. An in-water
         # calibration and an in-air one for the same lens differ by ~1.44x in
         # effective focal length, so applying one where the other is expected
         # is a 44 % scale error on every range and velocity -- silent, and
@@ -676,7 +676,7 @@ def main() -> int:
         'note': ('FOV is invariant to square size; board bow figure is not. '
                  'Water FOV is Snell through a flat port, n=1.333.'),
     }
-    # ⛔ `applies_to` IS NOT OPTIONAL METADATA -- IT IS THE GUARD.
+    # `applies_to` is not optional metadata -- it is the guard.
     # The one calibration this project held was named for the wrong camera
     # and wired to the wrong camera for four days, in both directions, and
     # nothing could catch it because the file did not say what it described.
@@ -694,7 +694,7 @@ def main() -> int:
         if camera_desc:
             out['camera'] = camera_desc
         out['captured'] = time.strftime('%Y-%m-%d')
-        # ⛔ WHICH PHYSICAL UNIT THIS CAME FROM. `applies_to` fixed the wiring
+        # Which physical unit this came from. `applies_to` fixed the wiring
         # half of the wrong-camera bug; this fixes the provenance half. With
         # it a swapped camera is DETECTABLE, and without it the best any tool
         # can honestly say about a calibration is "unverified".

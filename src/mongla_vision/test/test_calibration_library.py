@@ -1,13 +1,13 @@
 """The calibration LIBRARY: keep every calibration, and re-apply one.
 
-⛔ WHY THIS EXISTS. A calibration costs an operator ten minutes, a printed
+Why this exists. A calibration costs an operator ten minutes, a printed
 board and a lit room. On competition ground it costs those at the worst
 possible moment. So every calibration this vehicle has ever produced is kept
 in `mongla_vision/config/calibration/`, listed by the tool, and re-appliable
 to a connected camera in one click.
 
 Two invariants are the whole point of the tests below, and both are about
-NOT LYING IN A FILE:
+Not lying in a file:
 
 1. **Applying is an assertion, not a measurement.** The operator is saying
    "this is the same physical unit". The file must record that as
@@ -148,7 +148,7 @@ def test_the_shipped_calibrations_are_all_loadable_and_named_by_medium(g):
 
 
 def test_the_guide_never_imports_its_own_PACKAGE(g):
-    """⛔ The calibration tool must run without a ROS environment.
+    """The calibration tool must run without a ROS environment.
 
     `tools/fov_calibrate_web.py` loads this module BY PATH for exactly that
     reason. A `from mongla_vision...` anywhere in it -- including inside a
@@ -191,7 +191,7 @@ def _fake_ws(root):
 
 def test_the_calibration_dir_is_never_inside_a_GENERATED_tree(
         g, tmp_path, monkeypatch):
-    """⛔ Reproduces the failure measured on the vehicle, 2026-09-07.
+    """Reproduces the failure measured on the vehicle, 2026-09-07.
 
     Under `ros2 run` the resolver returned
     `<ws>/build/mongla_vision/mongla_vision/src/mongla_vision/config/

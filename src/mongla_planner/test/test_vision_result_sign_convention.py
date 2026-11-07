@@ -1,6 +1,6 @@
 """The recovery sign in the DSL docstring must match the authoritative doc.
 
-⛔ B33. `VisionResult`'s docstring is the first thing a mission author reads --
+B33. `VisionResult`'s docstring is the first thing a mission author reads --
 it is on the class they are holding. Until 2026-09-08 its worked example had the
 recovery inverted:
 

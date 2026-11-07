@@ -44,7 +44,7 @@ def test_pure_TRANSLATION_is_recovered():
 
 
 def test_pure_ROTATION_reads_as_NO_VELOCITY():
-    """THE POINT OF THE GYRO. A vehicle rotating on the spot produces large
+    """The point of the gyro. A vehicle rotating on the spot produces large
     image flow and is not moving. Without the subtraction this reads as metres
     per second of translation that never happened -- and it would be integrated
     by whatever consumes it."""

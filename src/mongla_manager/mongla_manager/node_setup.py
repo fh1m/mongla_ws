@@ -71,7 +71,7 @@ class SetupMixin:
         # it cannot send a shot to the wrong channel, which is exactly why the
         # routing map it replaces is gone.
         #
-        # ⚠ MOSTLY SUPERSEDED by SERVO{n}_FUNCTION on the board, which mongla_ws now
+        # MOSTLY SUPERSEDED by SERVO{n}_FUNCTION on the board, which mongla_ws now
         # reads at bring-up (SrotPayload.preflight_roles). Prefer setting Function in
         # Bondor: it is stored in the board's NVS, so the payload map travels with the
         # hull instead of living in a launch file that goes stale on a re-wire.
@@ -144,7 +144,7 @@ class SetupMixin:
         # kernel does not lock a tty; this does. A non-serial endpoint is a no-op.
         self._port_guard = PortGuard(self._profile['conn'], log=self.get_logger())
         self._port_guard.acquire()
-        # ⛔ A PULLED CABLE USED TO BE PERMANENT (issue #12, item 1). The reader
+        # A pulled cable used to be permanent (issue #12, item 1). The reader
         # caught the SerialException and retried the dead handle forever;
         # nothing reopened the port. pymavlink's `autoreconnect` reopens a serial
         # device IN PLACE (`mavserial.reset()`, same object, so every holder of
@@ -154,7 +154,7 @@ class SetupMixin:
         if str(self._profile['conn']).startswith('/dev/'):
             baud_kw['autoreconnect'] = True
         self.master  = mavutil.mavlink_connection(self._profile['conn'], **baud_kw)
-        # ⛔ BOUNDED, AND SAID OUT LOUD (issue #12, item 3). wait_heartbeat() with
+        # Bounded, and said out loud (issue #12, item 3). wait_heartbeat() with
         # no timeout hung the node forever after "Connecting" on a powered-but-
         # silent board or the wrong device, with no further log line.
         _hb_deadline = time.monotonic() + HEARTBEAT_WAIT_S
@@ -168,7 +168,7 @@ class SetupMixin:
                 f'[NET  ] still waiting for a HEARTBEAT on '
                 f'{self._profile["conn"]} ...')
         self.fc = SrotFC(self.master, log=self.get_logger())
-        # HEARTBEAT FROM HERE ON, before a single slow bring-up step -- see
+        # Heartbeat from here on, before a single slow bring-up step -- see
         # _HeartbeatThread for why it is not a timer.
         self._hb_thread = _HeartbeatThread(
             self.fc.send_heartbeat, log=self.get_logger(),

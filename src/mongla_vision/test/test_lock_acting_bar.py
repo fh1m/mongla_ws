@@ -1,6 +1,6 @@
 """The ladder must not act on a detection it would not bet the hull on.
 
-⛔ B-59. `lock_node._on_det` accepted the highest-scoring box with `score > 0`
+B-59. `lock_node._on_det` accepted the highest-scoring box with `score > 0`
 as THE target, at full authority. Measured on real Mirpur footage,
 `gate_sharks` claims a `gate` on **90.8 % of gate-free frames** at conf
 0.15 -- half-frame boxes over empty turquoise at 0.44-0.56, confirmed by
@@ -8,7 +8,7 @@ rendering them. So on open water the ladder locked onto nothing: the follower
 seeded on it, the anchor enrolled against it, and the vision verbs drove the
 hull at it.
 
-⚠ WHY THE BAR IS HERE AND NOT ONLY IN THE DETECTOR. The detector's `conf` is
+Why the bar is here and not only in the detector. The detector's `conf` is
 deliberately permissive because the tracker needs low-scoring boxes to keep
 association across a gap. What may be ASSOCIATED and what may be ACTED ON are
 different questions; conflating them turned a 0.15 detector bar into a 0.15
@@ -82,7 +82,7 @@ def _msg(*dets) -> Detection2DArray:
 
 
 def test_a_box_below_the_acting_bar_is_not_acted_on():
-    """⭐ THE HALLUCINATION CASE, at its measured score. An open-water `gate`
+    """The hallucination case, at its measured score. An open-water `gate`
     at 0.44-0.56 must not become the target when the bar is 0.60."""
     s = _Stub(act_conf=0.60)
     _on_det(s, _msg(_det(0.52)))
@@ -143,7 +143,7 @@ def test_an_empty_frame_clears_the_target():
 
 
 def test_a_frame_with_only_sub_bar_boxes_also_clears_the_target():
-    """⛔ The regression that would reintroduce B-59 quietly: if a sub-bar
+    """The regression that would reintroduce B-59 quietly: if a sub-bar
     frame left the previous box standing, the ladder would keep acting on a
     target the detector has stopped confirming."""
     s = _Stub(act_conf=0.60)
@@ -167,7 +167,7 @@ def _yawnode(**kw):
 
 
 def test_vision_now_knows_the_hull_heading():
-    """⭐ THE HARMONY GAP. The ladder had odometry (where) and floor height
+    """The harmony gap. The ladder had odometry (where) and floor height
     (how high) but never yaw, so a target leaving frame could not be turned
     into a world bearing -- WorldTarget was unreachable for want of one number
     the board already publishes."""
@@ -179,7 +179,7 @@ def test_vision_now_knows_the_hull_heading():
 
 
 def test_an_absent_yaw_stays_NaN_and_is_never_coerced_to_zero():
-    """⛔ THE RECURRING DEFECT. The board suppresses a yaw it cannot stand
+    """The recurring defect. The board suppresses a yaw it cannot stand
     behind. Coercing NaN to 0.0 would hand every rung a confident heading of
     due north -- a plausible number standing in for an absent measurement."""
     LockNode, s = _yawnode(yaw=float('nan'))
@@ -237,7 +237,7 @@ def _imunode(**kw):
 
 
 def test_roll_is_read_from_the_imu_quaternion():
-    """⭐ The de-rotation the operator's R&D fusion does and the ladder did
+    """The de-rotation the operator's R&D fusion does and the ladder did
     not. On a five-thruster hull roll is UNACTUATED, so it is the one attitude
     the controller cannot null and a visual estimate must compensate for."""
     LockNode, s = _imunode(roll_rad=0.35)
@@ -245,7 +245,7 @@ def test_roll_is_read_from_the_imu_quaternion():
 
 
 def test_the_minus_one_covariance_convention_is_obeyed():
-    """⛔ THE LOAD-BEARING CHECK. auv_manager_node publishes a valid Imu with
+    """The load-bearing check. auv_manager_node publishes a valid Imu with
     orientation_covariance[0] = -1.0 when the board cannot supply attitude.
     Reading the quaternion anyway would take (0,0,0,1) as LEVEL -- a confident
     wrong answer on a rolled hull, and exactly what that convention exists to
@@ -269,7 +269,7 @@ def test_roll_is_NaN_before_any_imu_arrives():
 
 
 def test_the_derotation_is_actually_applied_to_the_bearing():
-    """⛔ §9 INLINE: reading roll and never using it would be the defect this
+    """§9 INLINE: reading roll and never using it would be the defect this
     repo keeps finding. The world-frame bearing must be rotated by it."""
     from pathlib import Path
     src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision'

@@ -8,7 +8,7 @@ reaches, both end by the global timeout and are reported to the companion as
 `MAV_RESULT_ACCEPTED` with progress 100 — **indistinguishable from success.** These
 are the two closed-loop verbs, i.e. the two a mission most needs to trust.
 
-⚠ Distinct from their **#8** (`ACCEPTED at 100 % while still running`), which is a
+**Caution:** Distinct from their **#8** (`ACCEPTED at 100 % while still running`), which is a
 timing problem. This one fires *after* the move has correctly finished — having
 failed.
 
@@ -52,7 +52,7 @@ Nothing anywhere carries *why* the move ended.
   there. Note `progress()` is honest right up to the end — capped at 0.99 — and then
   the terminal ACK overwrites it with 100.
 - **TURN.** Completion needs `|err| < 0.03 rad`. A saturated or failed yaw axis, or
-  a current, leaves it short. ⛔ **On our hull yaw is the scarcest axis by 5.7×**
+  a current, leaves it short. **On our hull yaw is the scarcest axis by 5.7×**
   (see [PR P](pr-p-the-allocator-they-asked-for.md) §3), so it is the most likely
   one to run out of authority.
 - **Any translate leg** whose timeout is shorter than its duration.
@@ -79,10 +79,10 @@ ends competition runs.
    (`s_remain`, already maintained by `update()` for `progress()` — so the number is
    in scope at the site).
 
-⭐ **The residual is the valuable half.** "Timed out 0.4 m short" is actionable in a
+**Key point: The residual is the valuable half.** "Timed out 0.4 m short" is actionable in a
 mission; "failed" is only slightly better than "succeeded".
 
-⚠ **Wire compatibility:** we currently treat any terminal ACK as success, so
+**Caution: Wire compatibility:** we currently treat any terminal ACK as success, so
 sending `FAILED` will change our behaviour — which is the point, but it wants the
 same-PR update on our side. We will take `srot_protocol.py` in step; say the word
 and we will land ours first so a firmware merge cannot break a running mission.

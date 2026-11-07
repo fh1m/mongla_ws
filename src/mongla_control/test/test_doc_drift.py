@@ -1,6 +1,6 @@
 """Docs that state a SHIPPED CONSTANT must not disagree with the source.
 
-⛔ WHY THIS EXISTS. `srot-integration.md` asserted "`FW_BEHAVIOUR_REV_REQUIRED`
+Why this exists. `srot-integration.md` asserted "`FW_BEHAVIOUR_REV_REQUIRED`
 stays at 2, deliberately", with a paragraph of reasoning, while the code had
 said **10** since round 26. That is the dangerous kind of stale: it names a
 SAFETY FLOOR, and its reasoning ("rev 3's changes are additive") is exactly
@@ -13,7 +13,7 @@ commands with the wrong sign.
 This is the same idea pointed at the srot docs, where the constants are
 safety interlocks rather than tuning values.
 
-READ AS TEXT, NEVER IMPORTED. In a worktree `import mongla_control` resolves
+Read as text, never imported. In a worktree `import mongla_control` resolves
 to the MAIN workspace's `install/` tree -- a different commit -- which once
 reported a constant's value from code this branch does not contain.
 """
@@ -52,7 +52,7 @@ def _live_lines(doc):
     """(lineno, text) for lines that are ASSERTIONS, not preserved history.
 
     Skips blockquotes (a correction quoting what it corrects) and
-    strikethrough. ⛔ STRIKETHROUGH IS A BLOCK, NOT A LINE: `~~` opens on one
+    strikethrough. STRIKETHROUGH IS A BLOCK, NOT A LINE: `~~` opens on one
     line and closes paragraphs later, so a per-line `'~~' in line` test
     exempts only the first line and then flags the rest -- which is exactly
     what this guard did to a correction written twenty minutes earlier.
@@ -147,7 +147,7 @@ def test_system_harmony_exists_and_states_the_four_rules():
 
 
 def test_the_health_states_it_documents_are_the_states_that_SHIP():
-    """⛔ The ladder's ORDER is the design, not decoration.
+    """The ladder's ORDER is the design, not decoration.
 
     `UNKNOWN` ranking below `DEGRADED` is what makes "nothing is watching"
     worse than "watching, and bad" -- the rule that caught `BARO_HEALTH = 3`
@@ -173,7 +173,7 @@ def test_the_documented_loop_rate_matches_the_shipped_one():
     m = re.search(r'^VISION_LOOP_HZ\s*=\s*([0-9.]+)', rates, re.M)
     assert m, 'VISION_LOOP_HZ not found'
     shipped = float(m.group(1))
-    # ⛔ NOT a bare `str(shipped) in text` -- "35" appears in a dozen
+    # NOT a bare `str(shipped) in text` -- "35" appears in a dozen
     # unrelated numbers, so that form passed with the constant changed from
     # 50 to 35, which is the exact drift it was written to catch. Read the
     # control-loop ROW and compare the number IN it.

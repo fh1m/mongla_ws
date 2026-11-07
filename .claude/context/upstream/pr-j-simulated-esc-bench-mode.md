@@ -55,7 +55,7 @@ documents this as the correct reading for "nothing coming back at all".
 
 ## 4. The part we care about more than the feature
 
-⛔ **A simulated number must be impossible to mistake for a measured one.**
+**Warning: A simulated number must be impossible to mistake for a measured one.**
 
 This is the failure mode our own codebase is worst at — the recurring defect on
 our side is a plausible value standing in for an absent measurement, and a sim

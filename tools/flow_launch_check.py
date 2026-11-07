@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Measure a hand slide THROUGH THE LAUNCH. The operator's button is the gate.
 
-⛔ WHY THIS EXISTS. Every number in `measured-bars.md` §13 -- including the
+Why this exists. Every number in `measured-bars.md` §13 -- including the
 30 cm result -- came from `flow_console.py --calibration <path>`, a tool that
 passed the calibration by hand. The launch was never in that loop, and when
 it was finally looked at, it had the calibration wired to the WRONG CAMERA
@@ -17,7 +17,7 @@ running and the node REFUSES without a depth (height multiplies every
 velocity it emits, so refusing is correct). `--height` is the tape measure
 from the lens to the floor.
 
-THE BUTTON IS THE DESIGN, not a convenience. Three separate captures last
+The button is the design, not a convenience. Three separate captures last
 session read a correct sensor as short -- 19.6 cm for a 30.3 cm slide, and
 worse -- every one of them from an automatic start/stop heuristic treating
 "I could not measure" as "it did not move". No window short enough to be
@@ -51,7 +51,7 @@ class Check(Node):
     def __init__(self, cam, height, lateral):
         super().__init__('flow_launch_check')
         ns = f'/mongla/vision/{cam}'
-        # ⛔ MUST MATCH THE NODE'S SUBSCRIPTION, which is RELIABLE +
+        # Must match the node's subscription, which is RELIABLE +
         # TRANSIENT_LOCAL. A plain depth-10 publisher is VOLATILE, and rclpy
         # answers a durability mismatch with ONE warning and then silence --
         # `start` is accepted by the publisher and delivered to nobody. That
@@ -79,7 +79,7 @@ class Check(Node):
                                  QoSProfile(depth=64,
                                             reliability=QoSReliabilityPolicy
                                             .RELIABLE))
-        # ⛔ REPORT BOTH BODY AXES, ALWAYS. `DistanceAccumulator` projects
+        # Report both body axes, always. `DistanceAccumulator` projects
         # onto ONE axis latched at start: axial accumulates vx, lateral
         # accumulates vy. `flow_velocity` derives vx from the image's Y
         # component, so a slide along image X lands entirely in vy and the
@@ -105,7 +105,7 @@ class Check(Node):
         m = MonglaState()
         m.header.stamp = self.get_clock().now().to_msg()
         m.depth_m = 0.0
-        # ⛔ YAW MUST BE NaN, NOT ZERO. The manager also publishes
+        # Yaw must be NaN, NOT ZERO. The manager also publishes
         # /mongla/state, with the board's real heading (~180 deg here). The
         # node keeps whichever arrived last, and `DistanceAccumulator`
         # projects with `e = yaw - axis_yaw`: with two publishers disagreeing
@@ -222,7 +222,7 @@ def main():
         big = 'vy / LATERAL' if abs(n.ivy) > abs(n.ivx) else 'vx / AXIAL'
         used = 'lateral' if a.lateral else 'axial'
         if big.split(' / ')[1].lower() != used:
-            print(f'  ⚠ the motion is mostly on {big}, but this run projected '
+            print(f'  WARNING: the motion is mostly on {big}, but this run projected '
                   f'onto {used.upper()}.\n    Re-run with '
                   f'{"--lateral" if used == "axial" else "no --lateral"} -- '
                   f'the reading above is a\n    PROJECTION artefact, not the '

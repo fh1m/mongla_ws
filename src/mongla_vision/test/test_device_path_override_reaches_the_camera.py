@@ -1,6 +1,6 @@
 """`device_path:=` must actually change the device the camera opens.
 
-⛔ THE DEFECT. A profile carries its own `device_path` key (pi_forward is
+The defect. A profile carries its own `device_path` key (pi_forward is
 `/dev/mongla_cam_forward`). `camera_node` overrode `profile['device']` only, so
 the v4l2 mailbox -- which reads `device_path` -- kept opening the profile's udev
 symlink, on a host where that symlink does not exist. Measured on the vehicle:

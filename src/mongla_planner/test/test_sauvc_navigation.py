@@ -146,7 +146,7 @@ def test_the_mission_fits_its_share_of_the_run_budget():
     """`Bonus points = (900 - RUN_TIME) * 0.03` -- at 300 s that is 18 points,
     more than the 15-point task. Navigation may not eat the whole run.
 
-    ⛔ The bonus is paid only "when completing at least 2 tasks", and this
+    The bonus is paid only "when completing at least 2 tasks", and this
     mission surfaces and disarms at the end -- so a navigation-only run earns
     NO bonus. The 300 s ceiling is what makes the bonus reachable once a
     combinator chains navigation into a second task on one dive.

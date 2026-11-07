@@ -1,6 +1,6 @@
 """`yaw_at` must not raise when the hull's yaw is absent.
 
-⛔ THE DEFECT. `pose_fuse_node.yaw_at` did `sorted(self._yaw_hist, key=lambda h: h[0])` on a deque of
+THE DEFECT. `pose_fuse_node.yaw_at` did `sorted(self._yaw_hist, key=lambda h: h[0])` on a deque of
 `(capture_t, yaw_or_None)`. On a stamp TIE, Python falls through to comparing the
 second element, and that element is `None` whenever `/mongla/state` carries
 `yaw_deg = NaN` -- this stack's documented "absent" value, which `_on_state`
@@ -44,7 +44,7 @@ NAN = float('nan')
 
 
 def test_a_stamp_tie_with_an_absent_yaw_does_not_raise():
-    """⛔ The regression, in the shape that reproduced it."""
+    """The regression, in the shape that reproduced it."""
     h = _Hist()
     h.add(100.0, 12.5)
     h.add(100.5, NAN)        # yaw absent

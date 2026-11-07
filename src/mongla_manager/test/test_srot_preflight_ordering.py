@@ -1,6 +1,6 @@
 """The SROT bring-up reads must happen AFTER the MAVLink reader thread starts.
 
-WHY THIS TEST EXISTS. `check_behaviour_rev()` and `set_default_gain()` do not call
+Why this test exists. `check_behaviour_rev()` and `set_default_gain()` do not call
 `recv_*` -- they send, then poll `master.messages`, which pymavlink only fills while
 something else drains the link. They used to run inside `_setup_mavlink()`, where
 nothing between `wait_heartbeat()` and `_setup_reader_and_warmup()` drains anything.

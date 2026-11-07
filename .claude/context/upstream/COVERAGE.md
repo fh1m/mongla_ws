@@ -109,7 +109,7 @@ a laptop.
 **Vehicle parity, measured:** 579 collected / 579 passed / 0 skipped, matching
 the dev box exactly. It was 553 passed + 25 skipped when this round started.
 
-⚠ **`colcon build` on the Pi COPIES rather than symlinks** — `--symlink-install`
+**Caution: `colcon build` on the Pi COPIES rather than symlinks** — `--symlink-install`
 notwithstanding, `build/<pkg>/<pkg>/*.py` are regular files. So editing `src/`
 does not change what runs until a rebuild, and a test run can pass against
 source while `ros2 run` serves the previous version. Rebuild after any sync.

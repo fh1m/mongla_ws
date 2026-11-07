@@ -66,7 +66,7 @@ Building the geometric allocation matrix from those four tunnels — `B[0:3] = a
 all** — the axial nose unit is the vehicle's only forward thrust, and roll is unactuated
 by design.
 
-⛔ **Run the firmware's `M` against this hull and the columns do not describe it.** The
+**Warning: Run the firmware's `M` against this hull and the columns do not describe it.** The
 mixer's `fwd` column asks all four horizontals for surge; on this hull the horizontals are
 the *lateral* pair and produce none. The mixer's `lat` column asks the same four for sway
 with a 45° component; here sway comes from two tunnels at unity. Roll is a real column in
@@ -79,7 +79,7 @@ a compiled-in constant for one frame:
 
 1. **A frame selector**, so `vectored_6dof` is one option rather than the only one — and a
    second entry for a straight orthogonal frame (tunnels on body axes, one axial).
-2. ⭐ **Better, if you are willing: make `M` a function of GEOMETRY rather than a literal.**
+2. **Key point: Better, if you are willing: make `M` a function of GEOMETRY rather than a literal.**
    Per thruster, a position and an axis, with `B[0:3] = axis` and `B[3:6] = r × axis`
    computed once at boot. That is ~25 multiply-accumulates for eight thrusters, done once,
    and it makes a hull change a parameter change instead of a firmware change. It also
@@ -94,7 +94,7 @@ a compiled-in constant for one frame:
 
 - The measured geometry, in the frame above, as a file
   (`src/mongla_control/config/hull_geometry.yaml`) rather than prose.
-- ⚠ The axial unit is currently marked **UNKNOWN** in it, because it is absent from the GLB
+- **Caution:** The axial unit is currently marked **UNKNOWN** in it, because it is absent from the GLB
   export. Its position, axis and count are being read off the CAD directly. We are not
   sending you a matrix with a guessed column in it.
 - A host-side bench that runs **your** `mixer.cpp` compiled natively against captured board

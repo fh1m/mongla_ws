@@ -39,7 +39,7 @@ def test_the_gate_scales_with_the_filters_own_uncertainty():
 
 
 def test_a_persistently_disagreeing_world_breaks_the_lockout():
-    """⛔ THE GATE'S OWN FAILURE MODE.
+    """The gate's own failure mode.
 
     A filter that is confidently wrong rejects exactly the measurements that
     would fix it, and the more wrong it is the more certain the rejection. It
@@ -59,7 +59,7 @@ def test_a_persistently_disagreeing_world_breaks_the_lockout():
 
 
 def test_the_lockout_breaks_while_ANOTHER_channel_is_being_accepted():
-    """⛔ TRUTH: the hull is at (1, 2), level. The filter is confidently wrong
+    """TRUTH: the hull is at (1, 2), level. The filter is confidently wrong
     at (5, 5) with a 5 cm sigma. The board's attitude -- correct, accepted --
     arrives at 50 Hz, and a correct fix at 5 Hz.
 

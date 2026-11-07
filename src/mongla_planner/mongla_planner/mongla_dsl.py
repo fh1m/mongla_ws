@@ -130,7 +130,7 @@ Tunable live (between runs, no rebuild):
     ros2 param set /mongla_manager vision.kp_lat 60.0
     ros2 param set /mongla_manager vision.lost_grace_s 1.0
 
-WHERE EACH PART LIVES. `MonglaMission` is one class assembled from one file per
+Where each part lives. `MonglaMission` is one class assembled from one file per
 concern, so a mission author reads one class and a bug report names a file:
 
   mongla_dsl.py      the verbs, arm/disarm, tasks and the run budget, run_plan,
@@ -310,7 +310,7 @@ class MonglaMission(SeeMixin, WhereMixin, CameraMixin, DetectorMixin):
         t0     = _time.monotonic()
         result = self.client.send(cmd, **fields)
         elapsed = _time.monotonic() - t0
-        # LEVEL BY OUTCOME. Every verb used to log at INFO, so a failure and a
+        # Level by outcome. Every verb used to log at INFO, so a failure and a
         # success were visually identical in a pool scrollback and differed only
         # in the message text -- with the commonest failure (a move stall) buried
         # among the successes. The operator's eye is the last line of defence
@@ -391,7 +391,7 @@ class MonglaMission(SeeMixin, WhereMixin, CameraMixin, DetectorMixin):
     def arm(self, *, timeout: float = 15.0, required: bool = True):
         """Arm the vehicle. RAISES on failure unless `required=False`.
 
-        ⛔ THIS IS THE ONE VERB WHERE CONTINUING AFTER FAILURE IS ALWAYS WRONG.
+        This is the one verb where continuing after failure is always wrong.
         Every subsequent move is refused by the board ("SROT_MOVE refused: arm
         first"), so a mission that arms unsuccessfully and carries on runs its
         entire sequence disarmed: the hull sits still, every verb logs a failure,
@@ -623,7 +623,7 @@ class MonglaMission(SeeMixin, WhereMixin, CameraMixin, DetectorMixin):
             the run -- `TaskAbandoned` is caught here and the plan continues,
           * every outcome on the scorecard.
 
-        `order='by_value'` sorts by points per second first. ⚠ It ignores where
+        `order='by_value'` sorts by points per second first. It ignores where
         the props are -- `by_points_per_second` says so itself -- so it is for
         deciding what to DROP, not the order to swim. Default is as written.
 
@@ -672,14 +672,14 @@ class MonglaMission(SeeMixin, WhereMixin, CameraMixin, DetectorMixin):
                 # deadline already cancelled the goal in flight; keep swimming.
                 results.append((name, 'abandoned'))
             except (MoveFailed, MoveRejected) as exc:
-                # ⛔ ISSUE #16: ONE FAILED VERB USED TO END THE RUN. Only
+                # Issue #16: One failed verb used to end the run. Only
                 # TaskAbandoned was caught, so a stall or one busy reply inside
                 # a step left run_plan, the runner disarmed, and the
                 # higher-value steps after it never ran -- while the vision
                 # verbs shrugged off the very same fault. Same policy now: a
                 # step's failure costs that step.
                 #
-                # UNLESS THE VEHICLE CANNOT TAKE A STOP. Whether the failure was
+                # Unless the vehicle cannot take a stop. Whether the failure was
                 # one task's or the vehicle's is MEASURED, not read from the
                 # error text: brake, and if the stop itself is refused or times
                 # out, the link or the vehicle is gone -- re-raise and let the
@@ -747,7 +747,7 @@ class MonglaMission(SeeMixin, WhereMixin, CameraMixin, DetectorMixin):
         launcher or dropper actually releasing, so a jammed one still reads
         truthy. Score a shot on what the camera sees afterwards, not on this.
 
-        ⛔ A REFUSAL IS A TASK OUTCOME, NOT A MISSION FAILURE. A refused shot
+        A refusal is a task outcome, not a mission failure. A refused shot
         sets success=False, which the client raises as MoveFailed -- so the
         docstring's promise that "a mission can tell refused from link-down"
         was never true: the mission saw an exception, and a practice run with
@@ -998,7 +998,7 @@ class MonglaMission(SeeMixin, WhereMixin, CameraMixin, DetectorMixin):
             ╠══════════╦══════════╦═══════╦═══════════════════════════════════╣
             ║  #  verb ║ success  ║  time ║  message                          ║
             ╠══════════╬══════════╬═══════╬═══════════════════════════════════╣
-            ║  1  arm  ║    ✓     ║  2.1s ║  armed                            ║
+            ║  1  arm  ║        ║  2.1s ║  armed                            ║
             ║  ...                                                             ║
             ╚══════════════════════════════════════════════════════════════════╝
         """
@@ -1007,7 +1007,7 @@ class MonglaMission(SeeMixin, WhereMixin, CameraMixin, DetectorMixin):
         hb      = '═' * width
 
         def _row(n, entry):
-            tick = '✓' if entry['success'] else '✗'
+            tick = 'ok' if entry['success'] else 'FAIL'
             cmd  = entry['cmd'][:18]
             t    = f"{entry['elapsed']:.1f}s"
             msg  = entry['msg'][:30]

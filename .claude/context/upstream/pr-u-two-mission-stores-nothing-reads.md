@@ -31,7 +31,7 @@ What *does* work is the whole handshake: `MISSION_COUNT` → `MISSION_REQUEST_IN
 `sendItem`). So QGC can upload a mission, read it back item-for-item, and draw it
 on the map. Every signal says success.
 
-⛔ **And this actively misleads, rather than merely doing nothing.** Implementing
+**Warning: And this actively misleads, rather than merely doing nothing.** Implementing
 `MISSION_*` is how a vehicle announces "I am a waypoint-following autopilot". This
 one is not: `AUTO` runs the `SROT_MOVE` primitive machine, which has no concept of
 a waypoint. An operator who uploads a mission and selects AUTO gets timed
@@ -57,7 +57,7 @@ $ # qualified uses of lora_mission:: outside the driver
 `s_wp[seq]`, sets `s_have[seq]`, computes `s_ready` when the set is complete, and
 calls `sendAck(seq)` — which transmits `0xA5, seq` back to the ground station.
 
-⛔ **So the board explicitly acknowledges each waypoint it will never use.** That
+**Warning: So the board explicitly acknowledges each waypoint it will never use.** That
 is the strongest possible false-success signal: not silence, a per-chunk ACK. Our
 own doctrine calls a verb that reports success while the vehicle does nothing the
 failure mode that ends competition runs; this is that, at the protocol layer.
@@ -72,7 +72,7 @@ That is exactly why we are filing it as a question rather than a patch.
 
 ## 4. What we suggest, and we would take any of the three
 
-1. ⭐ **Say so on the wire.** Cheapest and it removes the lie: refuse the upload.
+1. **Key point: Say so on the wire.** Cheapest and it removes the lie: refuse the upload.
    `MISSION_COUNT` → `sendAck(MAV_MISSION_UNSUPPORTED)`, which is already written
    and already used for the wrong `mission_type`, and drop the LoRa mission-chunk
    branch (or NAK it) so Bondor stops being told yes. An operator then learns in
@@ -86,10 +86,10 @@ That is exactly why we are filing it as a question rather than a patch.
    is the standard we hold ourselves to (`test_no_capability_is_built_and_
    unreachable.py`), and it is the least work of the three.
 
-⚠ We are not asking for a waypoint follower. On a hull with no position estimate
+**Caution:** We are not asking for a waypoint follower. On a hull with no position estimate
 that would be a worse thing to have than nothing.
 
-## 5. ⭐ The general ask, which is worth more than either of the above
+## 5. The general ask, which is worth more than either of the above
 
 **The firmware has no unreachable-capability guard at all.** We checked: nothing
 in the repo tests that an exported symbol has a caller.
@@ -106,7 +106,7 @@ the defining module. It took one shell loop and it also surfaced:
 | `bno085::healthy()` | second copy beside `attitudeValid()`, which is the one used |
 | `mission::count/getItem`, `lora_mission::missionReady/waypointCount/getWaypoint` | §1 and §2 |
 
-⛔ **`thrust_trim::learned()` is the one to look at first**, because it is not just
+**Warning: `thrust_trim::learned()` is the one to look at first**, because it is not just
 dead — it is the *observability* for a live defect. PR R shows the trim learning
 against a prediction that ignores the mixer's own shaping, driving every gain to
 its −25 % clamp. There is no way to see that happen, because the only accessor

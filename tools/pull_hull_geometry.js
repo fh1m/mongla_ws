@@ -1,6 +1,6 @@
 // Re-read the hull's thruster geometry from Onshape, in the browser.
 //
-// ⛔ WHY THIS IS A TOOL AND NOT A ONE-OFF. The CAD is a moving design: custom
+// WHY THIS IS A TOOL AND NOT A ONE-OFF. The CAD is a moving design: custom
 // thrusters are being designed, not all of them are fitted yet, and materials
 // are not assigned. `hull_geometry.yaml` is therefore a SNAPSHOT, and a
 // hand-maintained snapshot of a moving design goes stale silently. Re-run this
@@ -12,17 +12,17 @@
 // page's own session: no API key, no OAuth app, and it does NOT consume the
 // FeatureScript MCP's API allocation.
 //
-// ⚠ WHY NOT THE ONSHAPE MCP. That server exposes FeatureScript authoring:
+// WHY NOT THE ONSHAPE MCP. That server exposes FeatureScript authoring:
 // `test_featurescript` runs in a scratch document and takes no document id, and
 // this document holds no Feature Studios. It cannot read part geometry. The
 // browser can, because the page is already authenticated.
 //
-// ⚠ WHY BOUNDING BOXES AND NOT MASS PROPERTIES. `/massproperties` returns
+// WHY BOUNDING BOXES AND NOT MASS PROPERTIES. `/massproperties` returns
 // `hasMass:false`, `massMissingCount:1` and a centroid of exactly [0,0,0] for
 // every part, because no part has a material assigned. A zero centroid is not a
 // measurement -- it is the absence of one, and it would put the whole vehicle at
 // the origin. Bounding boxes are pure geometry and need no material.
-// ⭐ WHEN MATERIALS ARE ASSIGNED, switch to /massproperties: it gives true
+// WHEN MATERIALS ARE ASSIGNED, switch to /massproperties: it gives true
 // centroids, the total mass, and the inertia tensor -- which unblocks the entire
 // force domain (BENCH B-5) and the 6x6 mass-inertia matrix INDI needs.
 
@@ -56,7 +56,7 @@ async function pull({ d, w, e } = DOC) {
   const BORE_MM = 84;
   const tunnels = rows.filter((r) => r.size_mm.some((v) => Math.abs(v - BORE_MM) < 3));
 
-  // ⚠ A MOTOR IS IDENTIFIED BY POSITION, NOT BY SHAPE. A brushless can's
+  // A MOTOR IS IDENTIFIED BY POSITION, NOT BY SHAPE. A brushless can's
   // bounding box includes its shaft and mount, so its longest extent does NOT
   // reliably give its axis: the axial unit's box is [27.8, 40, 43.9], whose
   // largest value points the wrong way. What identifies it is that it sits on
@@ -68,7 +68,7 @@ async function pull({ d, w, e } = DOC) {
   const standalone = motors.filter((m) => !nearTunnel(m));
 
   return {
-    // ⚠ Filter non-finite first. At least one part in this document returns a
+    // Filter non-finite first. At least one part in this document returns a
     // bounding box that does not reduce to a number, and a single NaN
     // propagates through Math.max to make the whole extent null -- which reads
     // as "no hull" rather than as "one bad part".
@@ -86,7 +86,7 @@ async function pull({ d, w, e } = DOC) {
     motors_standalone: standalone,   // candidates for the axial unit
     motors_on_tunnels: motors.filter(nearTunnel),
     n_parts: rows.length,
-    // ⚠ Check this every time. If it is ever true, STOP using bounding boxes and
+    // Check this every time. If it is ever true, STOP using bounding boxes and
     // switch to /massproperties -- and re-open BENCH B-5, because mass is then
     // computable and every force-domain row unblocks.
     materials_assigned: await j(

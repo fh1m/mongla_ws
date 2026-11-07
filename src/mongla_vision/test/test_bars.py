@@ -5,7 +5,7 @@ quoted, and eventually shipped. Round 34 produced four retractions in one round
 from exactly that, so each shipped constant now has a measurement behind it and
 this file is what notices when the two part company.
 
-EVERY CONSTANT IS READ FROM SOURCE, NEVER IMPORTED. In a git worktree
+Every constant is read from source, never imported. In a git worktree
 `import mongla_control` resolves to the MAIN workspace's `install/` tree -- a
 different commit. That is not hypothetical: it reported `VISION_FRESH_ZERO_S`
 as 0.4 against a source saying 0.20, which reads exactly like a drift bug in

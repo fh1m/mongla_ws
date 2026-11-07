@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """Node parameters that NO launch file passes.
 
-⛔ THE THIRD FACE OF THE SAME DEFECT. `orphan_sweep.py` finds modules nothing
+The third face of the same defect. `orphan_sweep.py` finds modules nothing
 imports. `topic_wiring_sweep.py` finds topics nothing reads. This finds the
 one they both miss: a parameter a node declares, with a sensible default and
 working code behind it, that **no launch argument reaches** -- so the only way
 to change it is `ros2 param set` after the node is already running.
 
-⭐ FOUND ON ITS FIRST RUN, in work from the same session that wrote it:
+Found on its first run, in work from the same session that wrote it:
 `lock_node` declares `act_conf` -- the B-59 acting bar, the thing that stops
 the ladder locking onto open water -- and `vision_pi.launch.py` passed six
 parameters, none of them that one. The bar a pool day would want to raise was
 the bar a pool day could not reach. `anchor_xfeat_hef` and
 `anchor_semi_dense` were in the same state.
 
-⚠ WHAT IS *NOT* A DEFECT, so the output is not over-read:
+What is *not* a defect, so the output is not over-read:
 
   * a parameter that is deliberately runtime-only. Some exist to be tuned live
     (`ros2 param set /mongla_manager vision.<name>`) and were never meant to
@@ -30,7 +30,7 @@ argument; if no, say so where the parameter is declared.
     python3 tools/launch_param_sweep.py
     python3 tools/launch_param_sweep.py --node lock_node
 
-⛔ TRIAGED 2026-09-28, AND DELIBERATELY NOT MADE A TEST. The other three
+Triaged 2026-09-28, and deliberately not made a test. The other three
 reachability sweeps now fail the build -- modules, functions and topics each
 have a guard with a named-exemption list. This one does not, and that is a
 decision rather than an omission.
@@ -43,7 +43,7 @@ test means writing a 102-row exemption registry that nobody will read and that
 will rot -- the failure mode this repo keeps naming. A question list that a
 human runs occasionally is the right instrument here.
 
-⚠ ONE ASYMMETRY FOUND AND LEFT ALONE, so it is not re-discovered as a defect:
+One asymmetry found and left alone, so it is not re-discovered as a defect:
 `allow_saturated_depth_arm` has no launch argument while its sibling
 `allow_fw_behaviour_mismatch` does. Both are arming overrides. It is NOT
 broken -- the value is read once at construction and
@@ -121,7 +121,7 @@ def main() -> int:
         print('every declared parameter is reachable from a launch file')
         return 0
     print(f'\n{total} parameter(s) with no launch argument.\n'
-          '⚠ Not a defect list. Some are deliberately runtime-only (ROADMAP '
+          'WARNING: Not a defect list. Some are deliberately runtime-only (ROADMAP '
           'section 9) and some exist to be read rather than set. For each, say '
           'out loud whether an operator should be able to set it BEFORE the '
           'node starts -- if yes it needs a launch argument, if no say so '

@@ -9,7 +9,7 @@ topics). The method (given, not reinvented):
     flow_trans_px    = flow_measured_px - flow_rot_px
     d += project(flow_trans_px, axis_dir) * height_m / f_px
 
-ONE AXIS ONLY: we integrate the flow component along a latched world direction
+One axis only: we integrate the flow component along a latched world direction
 (axis_yaw). This is deliberately NOT 2D dead reckoning -- that needs an EKF and is
 out of scope. Do not generalize the projection to accumulate both components.
 """
@@ -42,7 +42,7 @@ def height_above_floor(pool_depth_m: float, depth_m: float,
     depth / bad pool_depth) so the caller holds the last good height instead of
     scaling by a garbage number.
 
-    ⛔ THAT IS THE BAROMETER'S HEIGHT, NOT THE LENS'S (issue #27). The docstring
+    That is the barometer's height, not the lens's (issue #27). The docstring
     said "camera height" for years while the arithmetic had no camera in it.
     Flow scale is `h / (f * dt)`, so any vertical gap between the Bar30 port and
     the lens is a fixed SCALE error on every velocity and every distance: a lens
@@ -160,7 +160,7 @@ def interp_rate(buffer: Sequence[Tuple[float, float, float]],
 
 
 # ── sun caustics ─────────────────────────────────────────────────────────────
-# ⛔ AN OUTDOOR POOL LIGHTS ITS FLOOR THROUGH A MOVING LENS. Refracted sunlight
+# An outdoor pool lights its floor through a moving lens. Refracted sunlight
 # draws bright filaments that sweep across the floor at the surface waves'
 # speed, independent of the hull -- and a corner detector prefers exactly those
 # filaments. Measured 2026-09-15 on REAL caustics (RoboSub 2025 downward
@@ -241,7 +241,7 @@ def detect_corners(gray, *, want: int = 80, max_corners: int = 200,
     """Corners, spread over a grid, with the quality bar LOWERED until there
     are enough of them.
 
-    ⛔ A FIXED `qualityLevel` IS A FIXED ASSUMPTION ABOUT THE FLOOR, and it is
+    A fixed `qualityLevel` is a fixed assumption about the floor, and it is
     the wrong one for the surface we actually fly over. Shi-Tomasi's threshold
     is RELATIVE to the strongest corner in the frame, so 0.01 keeps only
     features within 100x of the best one -- fine over gravel or a tiled grout
@@ -262,7 +262,7 @@ def detect_corners(gray, *, want: int = 80, max_corners: int = 200,
     rotation from a translation -- the two are separated by how the flow field
     VARIES across the frame.
 
-    ⚠ THE LADDER IS A TRADE, MEASURED, NOT A FREE WIN. On this bench, static
+    The ladder is a trade, measured, not a free win. On this bench, static
     frames, forward-backward error as the score:
 
         quality   corners   fb p50   fb p90   survive <=1px
@@ -315,7 +315,7 @@ def forward_backward_error(prev_gray, next_gray, prev_pts, next_pts,
                            lk_params) -> Optional["np.ndarray"]:
     """Per-point round-trip error in px: track forward, then track back.
 
-    ⛔ LK DOES NOT REPORT ITS OWN FAILURES HONESTLY. `status=1` means the
+    LK does not report its own failures honestly. `status=1` means the
     solver converged, not that it converged on the RIGHT patch. Over a
     repetitive texture -- a tiled pool floor is the worst case we will
     actually fly over -- it converges confidently one tile away, and the
@@ -364,7 +364,7 @@ class PlanarMotion:
 class Intrinsics:
     """fx, fy, cx, cy and distortion, at the resolution actually in use.
 
-    ⛔ THREE THINGS THE FLOW PATH WAS GETTING WRONG BY ASSUMING, and the
+    Three things the flow path was getting wrong by assuming, and the
     vehicle's own runs are what exposed them. Three real 30 cm slides:
 
         lateral   30.13 cm   ratio 1.0044
@@ -376,13 +376,13 @@ class Intrinsics:
     something axis-dependent was wrong, and there were three candidates, all
     of them real:
 
-    1. ONE FOCAL LENGTH FOR BOTH AXES. Pixels are not square here: fx 513.94,
+    1. One focal length for both axes. Pixels are not square here: fx 513.94,
        fy 516.93 at 640 px. The axis riding image-y reads 0.58 % high.
-    2. THE PRINCIPAL POINT ASSUMED TO BE THE FRAME CENTRE. It is (308.7,
+    2. The principal point assumed to be the frame centre. It is (308.7,
        186.5) at 640x360, not (320, 180) -- 11.4 px out in x. The rigid fit
        evaluates its translation AT that point, so under any rotation the
        error is a lever arm about the wrong pivot.
-    3. NO UNDISTORTION AT ALL, with k2 = 0.098 and k3 = -0.207. Distortion
+    3. No undistortion at all, with k2 = 0.098 and k3 = -0.207. Distortion
        scales displacement by a factor that depends on RADIUS, and a 640x360
        frame is 1.8x wider than tall -- so the horizontal axis samples a
        radial range the vertical one never reaches. That asymmetry is
@@ -466,7 +466,7 @@ def solve_planar_motion(prev_pts, next_pts, status, dt: float, *,
                         ransac_px: float = 2.0) -> PlanarMotion:
     """Fit ONE rigid motion to all the correspondences at once.
 
-    ⛔ WHY THIS BEATS A MEDIAN, and it is not "the papers do it". A camera
+    Why this beats a median, and it is not "the papers do it". A camera
     pointed at a plane does not see N independent displacements -- it sees ONE
     body moving, so the flow field is a single similarity transform and every
     point is a measurement of the same four numbers. A component-wise median
@@ -481,14 +481,14 @@ def solve_planar_motion(prev_pts, next_pts, status, dt: float, *,
       * SCALE CHANGE is thrown away. Divergence of the field is range rate: a
         second opinion on altitude, against a barometer that a wake or a
         thruster transient can disturb.
-      * THE GLOBAL CONSTRAINT is thrown away, and this is the one that matters
+      * the global constraint is thrown away, and this is the one that matters
         in a pool. A median is a per-point vote, so if half the points lock one
         tile off over a repetitive floor the median follows them. A single
         transform cannot be satisfied by a mixture of correct and one-tile-off
         matches -- they are geometrically inconsistent -- so RANSAC rejects
         them as outliers instead of averaging them in.
 
-    ⚠ RANSAC, NOT `USAC_MAGSAC` -- and this CORRECTS a recorded plan note.
+    RANSAC, NOT `USAC_MAGSAC` -- and this CORRECTS a recorded plan note.
     The note said MAGSAC was "already in OpenCV 4.6 on the Pi, a free upgrade".
     It is, for `findHomography` and `findFundamentalMat`. It is NOT accepted by
     `estimateAffinePartial2D`, which raises "Unknown or unsupported robust
@@ -498,12 +498,12 @@ def solve_planar_motion(prev_pts, next_pts, status, dt: float, *,
     homography fitted to a marginal point set. This model is 4 DOF and is
     over-determined by ~100 points, so the threshold is far less critical.
 
-    A SIMILARITY (4 DOF) IS ALSO THE RIGHT MODEL, not merely the available one.
+    A similarity (4 DOF) is also the right model, not merely the available one.
     A full homography has 8 and would happily spend the extra four on fitting
     noise as a phantom tilt; a camera looking straight down at a flat floor
     genuinely has only translation, rotation and scale to offer.
 
-    ⚠ THE TRANSLATION IS EVALUATED AT THE PRINCIPAL POINT, not read out of the
+    The translation is evaluated at the principal point, not read out of the
     matrix. `estimateAffinePartial2D` returns tx/ty about the ORIGIN (the
     top-left corner), so under any rotation those include a lever term of
     `theta * |c|` -- at 640x360 and a 1 deg rotation that is 3.3 px of pure
@@ -562,7 +562,7 @@ def integrate_rate(buffer: Sequence[Tuple[float, float, float]],
                    t0: float, t1: float) -> Optional[Tuple[float, float]]:
     """Mean (pitch_rate, roll_rate) over [t0, t1], trapezoidally integrated.
 
-    ⛔ WHY NOT `interp_rate` AT THE MIDPOINT. Sampling the middle of an
+    Why not `interp_rate` at the midpoint. Sampling the middle of an
     interval assumes the rate is linear across it, which is fine over one
     frame period and wrong over an adaptive keyframe baseline: at 2 cm/s the
     baseline stretches to ~0.5 s, and a hull that yaws through half a swing in
@@ -605,7 +605,7 @@ def integrate_rate(buffer: Sequence[Tuple[float, float, float]],
 class HeightFromDivergence:
     """Height above the floor from the image, WITHOUT a hand-typed pool depth.
 
-    ⛔ THE ERROR THIS ATTACKS IS THE BIGGEST ONE WE HAVE. Flow velocity is
+    The error this attacks is the biggest one we have. Flow velocity is
     `v = h * flow / (f * dt)`, so height is a CLEAN MULTIPLIER on every number
     the sensor produces. Today it comes from `pool_depth_m - |depth|`, and
     `pool_depth_m` is typed in by a human who paced out a pool. A 7 % error
@@ -613,7 +613,7 @@ class HeightFromDivergence:
     integrated by everything downstream. The whole reason `flow_node` REFUSES
     without it is that there is no safe default.
 
-    THE OBSERVATION NOBODY WAS USING. The planar fit already returns
+    The observation nobody was using. The planar fit already returns
     `scale_rate` -- the divergence of the flow field, which for a downward
     camera is the rate the floor grows in the image. Geometrically:
 
@@ -627,7 +627,7 @@ class HeightFromDivergence:
     barometer, with no pool depth in it at all. Both quantities are already
     computed and one of them was being discarded.
 
-    ⚠ IT IS ONLY OBSERVABLE WHILE THE VEHICLE CHANGES DEPTH. In level flight
+    It is only observable while the vehicle changes depth. In level flight
     `scale_rate` is zero and this says nothing -- dividing by it would turn
     noise into a confident height. So it gates hard on both terms being
     meaningfully non-zero, accumulates a robust median rather than trusting any
@@ -741,7 +741,7 @@ class DistanceAccumulator:
         pixel path exists because the old node only ever had pixels; going
         velocity -> pixels -> metres to reuse it means re-deriving an axis
         convention on every call, and the first attempt at exactly that
-        SWAPPED THE AXES: `flow_velocity` returns `vx` from the image's y
+        Swapped the axes: `flow_velocity` returns `vx` from the image's y
         component, so the obvious tuple is reversed and the error is a plausible
         number rather than a crash.
 

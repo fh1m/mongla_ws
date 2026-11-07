@@ -10,14 +10,14 @@ one we can afford -- the L2-normalised MEAN of a reference's XFeat descriptors,
 64 numbers, already computed. No new network, no DINOv2 (measured 3064 ms on
 our Pi), no NetVLAD.
 
-THE PROTOCOL. Snap references across a clip at a fixed stride. For each query
+The protocol. Snap references across a clip at a fixed stride. For each query
 frame, match it against EVERY reference to find which one truly yields the most
 inliers -- that is ground truth, obtained the expensive way. Then rank the
 references by signature similarity and ask whether the true best is inside the
 top-k. That is recall@k, and it is the number that decides whether the bank can
 grow.
 
-⚠ WHY THE FLOOR MATTERS MORE THAN THE MEAN. A shortlist that is right 90 % of
+Why the floor matters more than the mean. A shortlist that is right 90 % of
 the time and catastrophically wrong 10 % of the time is not 90 % as good: the
 misses are where the lock breaks. So this reports recall@1/3/5 AND how much
 inlier yield is lost when the shortlist is wrong, which is the quantity the

@@ -5,7 +5,7 @@ We use 5 of MAVLink's 193 commands and 36 of its 190 messages. The useful
 question is not which of the rest exist -- it is which of them this firmware
 will answer, and that is a measurement.
 
-WHY NOT JUST READ `AUTOPILOT_VERSION.capabilities`
+Why not just read `AUTOPILOT_VERSION.capabilities`
 --------------------------------------------------
 Because it is a claim. The board advertises 8206 (MAVLINK2, COMMAND_INT,
 MISSION_INT, PARAM_FLOAT) and that is neither a floor nor a ceiling:
@@ -14,7 +14,7 @@ returns UNSUPPORTED, while things it never advertises may work fine. The
 calibration round cost four wrong answers to trusting a plausible number over
 an experiment; this asks the board.
 
-TWO INDEPENDENT SIGNALS PER PROBE, and the gap between them is the finding
+Two independent signals per probe, and the gap between them is the finding
 -------------------------------------------------------------------------
   ack       what COMMAND_ACK says
   arrived   whether the thing actually turned up on the wire
@@ -24,12 +24,12 @@ every silent-success defect in this project, from the pre-rev-13 disarmed
 SROT_MOVE to a vision verb running in SURFACE. Reporting only the ACK would
 reproduce it.
 
-MESSAGES ARE REQUESTED ONE-SHOT (`MAV_CMD_REQUEST_MESSAGE`), never by raising
+Messages are requested one-shot (`MAV_CMD_REQUEST_MESSAGE`), never by raising
 a stream rate: a rate sweep across 190 ids would flood a 115200 line that is
 already carrying 5.5 kB/s, and would leave the board reconfigured afterwards.
 One-shot is self-limiting and leaves no state behind.
 
-SAFE BY CONSTRUCTION: nothing here arms, moves, writes a parameter, reboots or
+Safe by construction: nothing here arms, moves, writes a parameter, reboots or
 calibrates. The command list is an allowlist, and the two commands that would
 disturb the vehicle (PREFLIGHT_REBOOT_SHUTDOWN, PREFLIGHT_CALIBRATION) are
 deliberately absent.

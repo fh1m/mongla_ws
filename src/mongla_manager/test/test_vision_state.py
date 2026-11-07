@@ -209,7 +209,7 @@ def _bare_vstate(log=None):
 
 
 def test_age_reflects_the_capture_instant_not_the_arrival():
-    """THE FIX. A frame captured 250 ms ago must report ~250 ms of age even
+    """The fix. A frame captured 250 ms ago must report ~250 ms of age even
     though the message arrives now -- that delay is exactly what the freshness
     decay exists to respond to."""
     vs = _bare_vstate()

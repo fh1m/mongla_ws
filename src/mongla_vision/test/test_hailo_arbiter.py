@@ -127,7 +127,7 @@ class _InferModel:
         return types.SimpleNamespace(set_format_type=lambda t: None)
 
     def output(self):
-        # MEASURED ON THE CHIP, not assumed. A HailoRT NMS output bound
+        # Measured on the chip, not assumed. A HailoRT NMS output bound
         # through InferModel is a FLAT float32 buffer:
         #
         #     [ count_0, (y1 x1 y2 x2 score) * CAP, count_1, ... ]
@@ -271,7 +271,7 @@ def test_each_group_is_configured_ONCE(hailo, tmp_path):
 
 
 def test_two_models_infer_AT_ONCE_and_neither_waits_on_the_other(hailo, tmp_path):
-    """THE PROPERTY THAT WAS MISSING. Detector A is held mid-inference; B must
+    """The property that was missing. Detector A is held mid-inference; B must
     still complete. Under the old process-wide lock, B waited for A -- and on
     the vehicle A was often waiting for the GIL, not the chip."""
     a, b = _pair(hailo, tmp_path)

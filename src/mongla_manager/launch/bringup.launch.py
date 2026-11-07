@@ -202,7 +202,7 @@ def generate_launch_description():
                                           'camera to the floor. Required: without '
                                           'it flow_node publishes quality 0 and '
                                           'refuses, by design.'),
-        # --- FEATURE SWITCHES: every one defaults to what the node ships, so a
+        # --- feature switches: every one defaults to what the node ships, so a
         # plain launch is unchanged; flip one at a time to test it alone. The
         # full list and what each one gates: .claude/context/ROADMAP.md §9.
         DeclareLaunchArgument('velocity_uplink', default_value='false',
@@ -249,7 +249,7 @@ def generate_launch_description():
         DeclareLaunchArgument('lock',        default_value='true',
                               description='vision_stack:=pi -- start lock_node '
                                           '(follower + XFeat anchor continuity ladder).'),
-        # ⛔ EXPOSED BECAUSE THE MISSION PATH IS THE ONE THAT PAYS FOR IT. Two
+        # Exposed because the mission path is the one that pays for it. Two
         # live detectors alternate on one Hailo: measured 37.5 Hz per pair
         # against 95.3 Hz for a single resident model, and the chip logs
         # 'has taken the activation N times'. The mission resumes the detector
@@ -264,7 +264,7 @@ def generate_launch_description():
                               description='Camera ROLE -- names the topics and nodes '
                                           '(forward|downward). Change `camera_profile`, '
                                           'not this, to point a role at other hardware.'),
-        # ⛔ THIS DEFAULT IS THE PI'S CAMERA. `camera` once defaulted to a
+        # This default is the PI'S camera. `camera` once defaulted to a
         # generic USB profile, which is not the camera on the vehicle.
         # Measured on the Pi running the documented bringup line: 5.00 Hz and
         # CameraInfo.k all zero, because the `forward` profile carries no
@@ -336,7 +336,7 @@ def generate_launch_description():
         executable='start',
         name='mongla_manager',
         output='screen',
-        # ⛔ Ctrl-C must outlive the disarm confirmation (issue #21). ros2
+        # Ctrl-C must outlive the disarm confirmation (issue #21). ros2
         # launch sends SIGTERM 5 s after SIGINT by default, then SIGKILL; the
         # manager's emergency disarm waits up to EMERGENCY_DISARM_S (8 s).
         sigterm_timeout=str(MANAGER_SIGTERM_TIMEOUT_S),
@@ -366,7 +366,7 @@ def generate_launch_description():
         get_package_share_directory('mongla_vision'),
         'launch', 'vision.launch.py')
 
-    # ⛔ SCOPED, and the scope is load-bearing. `IncludeLaunchDescription` does
+    # SCOPED, and the scope is load-bearing. `IncludeLaunchDescription` does
     # NOT scope launch configurations: every `name:=value` given to this file
     # leaks into the included one and overrides its default for any argument of
     # the same name. `vision` is a BOOLEAN here and a PROFILE STRING ('fast')
@@ -484,7 +484,7 @@ def generate_launch_description():
     params = launch_defaults.node_actions()
 
     return LaunchDescription(args + file_note + params + [
-        # ⛔ ONE BLAS THREAD PER CALL, set before any node imports numpy.
+        # One BLAS thread per call, set before any node imports numpy.
         # The vehicle runs OpenBLAS (provision_vehicle.sh checks for it), whose pool
         # defaults to every core in EVERY process. The XFeat matcher already
         # splits its matmul across `MATCH_THREADS` = 2 Python threads on purpose;

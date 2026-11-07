@@ -5,13 +5,13 @@ around service calls, 37 `FailureIsSuccess` on cleanup and on whole tasks, and
 every task tree ending `Selector[precise_sequence, blind_fire]` -- *"fire both
 torpedoes blindly so the score doesn't go to zero on a perception miss."*
 
-⛔ WHY NOT py_trees. Our missions are imperative `detected()` scripts and the
+Why not py_trees. Our missions are imperative `detected()` scripts and the
 FSM layer wraps those same verbs as states. Adopting a tree library to get
 three guarantees would be a new layer for behaviour we can express in three
 functions, and the guarantees are what matter: retry the flaky thing, never let
 cleanup kill a run, and always leave a scoring attempt on the table.
 
-⛔ AND THE ONE THING THAT MUST NOT BE WRAPPED. A safety verb -- disarm, stop,
+And the one thing that must not be wrapped. A safety verb -- disarm, stop,
 surface -- is not a step that may fail quietly. `never_fails` is for cleanup
 that would otherwise mask an exit, not for the abort path, and wrapping the
 latter would turn a failed disarm into a clean-looking finish. That is why this
@@ -43,7 +43,7 @@ def retry(fn: Callable[[], object], *, times: int = 3,
           name: str = '') -> Attempt:
     """Run `fn` until it returns truthy, up to `times`.
 
-    ⛔ RETRIES ARE FOR FLAKY, NOT FOR WRONG. Their 2026 gate cut retries from 3
+    Retries are for flaky, not for wrong. Their 2026 gate cut retries from 3
     to 1 and lengthened the settle from 3 s to 15 s, which is the lesson: a
     step that fails because the hull has not stopped moving does not need
     another go, it needs time. So `settle_s` waits BETWEEN tries and the
@@ -80,7 +80,7 @@ def never_fails(fn: Callable[[], object], *, log: Optional[Callable] = None,
     `finally` masks the real exit; a bin task that raises takes the torpedo
     task down with it. Neither is worth a run.
 
-    ⚠ Never wrap an abort path in this. A failed disarm that reports success is
+    Never wrap an abort path in this. A failed disarm that reports success is
     the one failure this stack cannot tolerate.
     """
     t0 = time.monotonic()
@@ -100,7 +100,7 @@ def selector(branches: Sequence, *, log: Optional[Callable] = None,
              name: str = '') -> Attempt:
     """First branch that succeeds wins. `branches` is [(label, callable), ...].
 
-    ⛔ THE LAST BRANCH IS THE POINT. Their every task tree ends
+    The last branch is the point. Their every task tree ends
     `Selector[precise_sequence, blind_fire]`, and the reason is scoring, not
     elegance: a perception miss should cost the precision points, not all of
     them. Put the aimed shot first and the unaimed one last, and the run stops

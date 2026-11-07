@@ -122,7 +122,7 @@ downward-camera bottom-track velocity, our only real speed sensor) versus time, 
 
 ---
 
-## 3. ⭐ Added mass analytically from geometry — **[DESK]**, needs no water
+## 3. Added mass analytically from geometry — **[DESK]**, needs no water
 
 This is the highest-value item for us because it needs zero pool time.
 
@@ -384,7 +384,7 @@ https://pmc.ncbi.nlm.nih.gov/articles/PMC6749442/
 
 ---
 
-## 6. ⭐ What does a model measurably buy? (honest comparison, with numbers)
+## 6. What does a model measurably buy? (honest comparison, with numbers)
 
 **Best real-vehicle, real-pool number found this session:**
 

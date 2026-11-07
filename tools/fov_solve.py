@@ -4,7 +4,7 @@
     ros2 run mongla_vision calibrate         # the guided capture
     ros2 run mongla_vision calibrate_solve   # the solver alone
 
-⛔ LOADS BY PATH, NOT BY PACKAGE IMPORT. The first version did
+Loads by path, not by package import. The first version did
 `from mongla_vision.calibration.solver import main` after putting the source
 tree on sys.path, which drags in `mongla_vision/__init__.py` -> `preflight`
 -> `rclpy`. Without a sourced ROS that is a ModuleNotFoundError, and it hit

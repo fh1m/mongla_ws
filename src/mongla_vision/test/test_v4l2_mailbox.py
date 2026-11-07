@@ -15,12 +15,12 @@ The three invariants:
      frame as two would let a single lucky detection satisfy a gate that exists
      to require several.
 
-  2. THE TIMESTAMP IS THE CAPTURE TIME, not the read time. `_freshness` decays
+  2. The timestamp is the capture time, not the read time. `_freshness` decays
      the lateral command by frame age and the coast ladder is measured in it,
      so a stamp taken when we got around to looking makes every one of those
      measure the wrong thing -- silently, since the number stays plausible.
 
-  3. THE STRUCT LAYOUT. Two ctypes bugs were found the hard way on this
+  3. The struct layout. Two ctypes bugs were found the hard way on this
      hardware, and one of them (`v4l2_format`'s 8-byte-aligned union) survived
      a `sizeof` assertion because moving 4 bytes of padding from the back to
      the front leaves the same total.

@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # _record_lib.sh -- signal handling shared by the session recorders.
 #
-# ⛔ A backgrounded child of a NON-INTERACTIVE shell inherits SIGINT set to
+# A backgrounded child of a NON-INTERACTIVE shell inherits SIGINT set to
 # IGNORE, and an ignored disposition survives exec -- no later `trap` can undo
 # it. Started over ssh or with `nohup ... &`, `ros2 bag record` therefore
 # ignores every `kill -INT`, `wait` never returns, and the bag is never
@@ -18,7 +18,7 @@
 # recorder: `ros2 launch` forwards SIGINT to its nodes, and a launcher that
 # cannot receive one cannot forward it.
 
-# ⛔ AND RESETTING THE DISPOSITION IS NOT ENOUGH ON ITS OWN. Measured: with the
+# And resetting the disposition is not enough on its own. Measured: with the
 # shim in place, `ros2 launch` still did not exit on SIGINT within 20 s, so the
 # escalation sent SIGTERM -- which the launcher does NOT forward, orphaning
 # every node it started. Signalling the launcher relies on the launcher
@@ -30,7 +30,7 @@
 
 # Start a command in its own process group, with default signal dispositions.
 # Echoes the pid, which is also the process-GROUP id.
-# ⛔ TWO APPROACHES TRIED AND REJECTED, because signalling the LAUNCHER only
+# Two approaches tried and rejected, because signalling the LAUNCHER only
 # works if the launcher cooperates:
 #   1. `run_resettable ros2 launch` -- measured: still did not exit within 20 s
 #      of SIGINT, so the escalation sent SIGTERM, which ros2 launch does NOT
@@ -42,7 +42,7 @@
 # What works is not asking anyone to forward anything: walk the process tree
 # and signal every descendant directly. `ros2 launch` starts each node as its
 # own child, so the tree IS the node list.
-# ⛔ AND THE TREE MUST BE SNAPSHOT BEFORE ANYTHING DIES. Re-walking `pgrep -P`
+# And the tree must be snapshot before anything dies. Re-walking `pgrep -P`
 # at each escalation looks equivalent and is not: the moment the parent exits,
 # its children are REPARENTED to init and the walk can never find them again.
 # Children that ignore SIGINT therefore outlive the parent and are never
@@ -100,7 +100,7 @@ stop_tree() {
   local nodes
   nodes="$(pgrep -f '[d]etector_dual_node|[t]racker_node|[l]ock_node' 2>/dev/null | wc -l)"
   if [ "$left" -gt 0 ] || [ "$nodes" -gt 0 ]; then
-    echo "  ⛔ $name: $left tree process(es) and $nodes vision node(s) SURVIVE" >&2
+    echo "  $name: $left tree process(es) and $nodes vision node(s) SURVIVE" >&2
   else
     echo "  $name stopped; no surviving processes"
   fi

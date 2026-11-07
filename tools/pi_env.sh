@@ -1,7 +1,7 @@
 # Mongla vision box -- Raspberry Pi 5 + AI HAT+ (Hailo-8), Ubuntu 24.04 / ROS 2 Jazzy
 # Source this in every terminal.  `source ~/pi_env.sh`
 #
-# THIS FILE IS THE SETUP, NOT A CONVENIENCE. Two of the three lines below exist
+# This file is the setup, not a convenience. Two of the three lines below exist
 # because of failures that are silent, not loud.
 
 source /opt/ros/jazzy/setup.bash
@@ -24,6 +24,6 @@ export MONGLA_HAILO_CONF=0.15
 #     corr 0.98) and the net input is a 640x640 letterbox either way, so 720p
 #     was being downscaled to 640x360 anyway -- it cost half the frame rate
 #     for nothing.
-#   - THESE NUMBERS CAME FROM THE BENCH MICRODIA. The vehicle's Blue Robotics
+#   - these numbers came from the bench microdia. The vehicle's Blue Robotics
 #     cameras are unmeasured; re-measure before trusting 210 there.
 export MONGLA_CAM_W=640 MONGLA_CAM_H=360 MONGLA_CAM_FPS=210

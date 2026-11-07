@@ -1,6 +1,6 @@
 """`lock_s` enables the ladder; its magnitude does nothing.
 
-⚠ The name reads as seconds and an operator will treat it as reach. It is not:
+The name reads as seconds and an operator will treat it as reach. It is not:
 `vision_state.bbox_error` tests `lock_s > 0.0` and never compares the value to
 an age. That is the RIGHT behaviour -- the ladder decays its own authority from
 the last real detection and stops publishing at zero, so a second numeric

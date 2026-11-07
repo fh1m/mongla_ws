@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Does the Hailo inference call hold the GIL for its whole duration?
 
-WHY IT MATTERS
+Why it matters
 --------------
 The composed vision process measured a frame WAITING 13.82 ms in the camera's
 slot with only 1.93 ms of that being our decode. The loop period is 12.16 ms

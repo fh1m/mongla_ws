@@ -4,7 +4,7 @@ Both detectors must share a process because the chip allows one VDevice per
 process (below). Once they do, putting the CAMERAS in the same process costs
 nothing and removes the last soft target in the frame path.
 
-WHY THIS EXECUTABLE EXISTS
+Why this executable exists
 --------------------------
 `vision_dual.launch.py` starts two `detector_node` PROCESSES. On a CUDA dev
 box that is fine. On the Pi + AI HAT+ the second
@@ -20,7 +20,7 @@ look like they should work and do not:
 So: one process, two `DetectorNode` objects, the shared device and activation
 arbiter in `detection/hailo.py`.
 
-WHY THE CAMERAS JOINED THEM
+Why the cameras joined them
 ---------------------------
 With them in the same process the detector no longer receives frames on a
 topic. It gets the decoded array handed straight across, which removes:
@@ -43,13 +43,13 @@ The image topic is still published, throttled, for the HUD, the console,
 `web_video_server` and recorders. Composition takes the topic out of the
 CONTROL path; it does not delete it.
 
-WHAT IS DELIBERATELY UNCHANGED, PART TWO
+What is deliberately unchanged, part two
 ----------------------------------------
 The camera nodes keep their names (`mongla_camera_forward` / `_downward`) and
 their topics, so `vision_display`, `mission_web` and `preflight` see exactly
 what they saw before.
 
-WHAT IS DELIBERATELY UNCHANGED
+What is deliberately unchanged
 ------------------------------
 The node NAMES (`mongla_detector_forward` / `mongla_detector_downward`), every
 topic, and every parameter. Missions, `ClassRef`, `vision_state`, the mission
@@ -94,7 +94,7 @@ _SHARED = ('device', 'half', 'iou', 'imgsz', 'max_det', 'publish_contours',
 # The camera half. Same prefixing scheme, same reason: launch cannot address
 # two nodes in one process.
 #
-# `device` IS IN THIS LIST BECAUSE OF A NAME COLLISION, not because anyone
+# `device` is in this list because of a name collision, not because anyone
 # needs to set it. Launch parameters are PROCESS-wide, and `device` means two
 # different things to the two kinds of node in this process: the detector's
 # backend (`'cpu'`, a string) and the camera's V4L2 index (`-1`, an integer).
@@ -158,7 +158,7 @@ class _Launcher(Node):
         for cam in ('fwd', 'dwn'):
             for key in _CAM_PER_CAMERA:
                 self.declare_parameter(f'{cam}_cam_{key}', _CAM_DEFAULTS[key])
-        # ⭐ THE LOCK LADDER, COMPOSED (2026-10-03). `lock` builds a LockNode
+        # The lock ladder, composed (2026-10-03). `lock` builds a LockNode
         # beside each live camera's detector, in THIS process -- the only
         # place XFeat can run on the Hailo, because the chip allows one
         # VDevice per process, shared by HailoRT's ROUND_ROBIN scheduler. A
@@ -216,7 +216,7 @@ class _Launcher(Node):
 def _make_failure_hook(launcher, live: list, failed: list, state: dict):
     """What a composed detector does when its model will not load.
 
-    ⛔ ONE DEAD MODEL USED TO KILL BOTH (2026-10-03, on the vehicle): the
+    One dead model used to kill both (2026-10-03, on the vehicle): the
     forward detector was live on gate_sharks.hef, the downward model had no
     .hef, and the downward load's exit took the forward detector with it. Same
     rule as a missing camera: keep the eye that works, say LOUDLY which one is
@@ -247,7 +247,7 @@ class _Tee:
     detector, whose slot is newest-wins: an idle worker takes it at once, a
     busy one finds the newest waiting when it frees up.
 
-    ⛔ MEASURED, 2026-10-03: handing the detector a frame only "if it wants
+    MEASURED, 2026-10-03: handing the detector a frame only "if it wants
     one right now" starved it. The frame decoded for the lock drained the
     mailbox, and a detector freeing up 1 ms later waited for the NEXT
     capture -- py-spy put the workers 18-39 % of wall time there. `spare=True`
@@ -324,7 +324,7 @@ def main():
             # sink. `frame_sink=det` is the whole composition -- one Python
             # reference where a topic used to be.
             #
-            # ⛔ ONE ABSENT CAMERA USED TO KILL BOTH. CameraNode raises after
+            # One absent camera used to kill both. CameraNode raises after
             # its five open retries, and the raise walked straight out of this
             # loop: an unplugged downward USB took the FORWARD detector down
             # with it, and the process exited 1. Measured on the vehicle --

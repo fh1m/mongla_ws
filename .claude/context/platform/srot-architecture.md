@@ -57,7 +57,7 @@ overrun cannot pile up behind stale data.
 loop is tick-exact and `CONTROL_LOOP_DT` is honest. "400 Hz" would still run at
 2 ms but with a `dt` that lies to every integrator.
 
-> ⚠ **DOC DRIFT (READ).** `config.h:323`, the §6 header, says *"Rates: control
+> **Caution: DOC DRIFT (READ).** `config.h:323`, the §6 header, says *"Rates: control
 > loop 200 Hz; sensor read 200 Hz; DShot output 200 Hz."* All three are 500.
 > Already filed upstream.
 
@@ -127,7 +127,7 @@ Two places, both ours to work around today:
 
 ---
 
-## 3. ⛔ THE ACTUATOR IS A RELAY. This is the finding that matters most to us.
+## 3. THE ACTUATOR IS A RELAY. This is the finding that matters most to us.
 
 **MEASURED, on the vehicle's own board, 2026-09-07.** Not defaults — read back
 over MAVLink with the manager stopped:
@@ -236,7 +236,7 @@ removes it exactly where precision matters — during a hold, when the thrusters
 are already active. It is a few lines, it needs no new wire, and it uses a signal
 they already have and currently spend on nothing but a warning.
 
-> ⛔ **The fallback is not optional, and it sequences this behind PR #10.**
+> **Warning: The fallback is not optional, and it sequences this behind PR #10.**
 > On this vehicle RPM has been **exactly 0 in 958/958 recorded frames**
 > (MEASURED). A floor gated on `rpm > threshold` is therefore a **no-op on any
 > hull whose bidirectional-DShot telemetry is not working** — which per
@@ -272,7 +272,7 @@ is tuning a number the hardware cannot deliver.
 
 ---
 
-## 3b. ⛔ WORSE THAN THE STEP: the deadband bends the DIRECTION of the thrust
+## 3b. WORSE THAN THE STEP: the deadband bends the DIRECTION of the thrust
 
 §3 is a *magnitude* problem. Mixed-axis commands — which is every real vision
 align, since `lat` and `yaw` are corrected together — have a *direction* problem,
@@ -460,7 +460,7 @@ would flap the reported heading; `MAG_ALIGN` is the explicit retry.
   359→0 crossing.
 - **Never align while armed**, because the thrusters are the interference source.
 
-### ⛔ The cost, and it is large for a competition run
+### The cost, and it is large for a competition run
 
 **The offset is a constant, captured once, and never revisited. The 6-axis yaw
 underneath it free-runs.** Their own comment states the consequence
@@ -530,7 +530,7 @@ this; **it is now justified by the firmware rather than by observed wobble.**
 `depth_step` logic steps the *setpoint* host-side, which is the right shape — but
 any attempt to trim depth by holding a small throttle offset does nothing.
 
-### 6c. ⚠ The depth loop has NEVER RUN CLOSED — and its sign was inverted
+### 6c. The depth loop has NEVER RUN CLOSED — and its sign was inverted
 
 `depth_control.cpp` carries this, verbatim (READ):
 
@@ -553,8 +553,8 @@ proportional-only instance and publishes it as **`DEPTH_CMD`**, readable
 
 ```
 thumb over the Bar30 port (pressurise = "deeper")
-  measured DEEPER than target   → DEPTH_CMD POSITIVE → ascend   ✓ correct
-  measured SHALLOWER than target → DEPTH_CMD NEGATIVE → descend ✓ correct
+  measured DEEPER than target   → DEPTH_CMD POSITIVE → ascend   correct
+  measured SHALLOWER than target → DEPTH_CMD NEGATIVE → descend correct
   demand moves AWAY from target  → STILL INVERTED — DO NOT DIVE
 ```
 
@@ -567,7 +567,7 @@ consequence unvalidated sign in the stack.** It belongs in `bringup_check`.
 
 ---
 
-## 5b. Heading — ⛔ EVERY NUMBER IN THIS SECTION WAS CONTAMINATED. Corrected.
+## 5b. Heading — EVERY NUMBER IN THIS SECTION WAS CONTAMINATED. Corrected.
 
 **The operator told us the board was NOT still during the captures I reported as
 "motionless". They were right, and it invalidates the headline this section
@@ -606,10 +606,10 @@ near the bench — not a sensor property.
 
 ### RETRACTED, in full
 
-- ❌ *"6.36 ° p2p of heading wander on a motionless board, reproducible to 9 %."*
+- *"6.36 ° p2p of heading wander on a motionless board, reproducible to 9 %."*
   The board was not motionless. Verified-still p2p is **0.029 ° / 60 s**.
-- ❌ *"≈ 10 ° of heading uncertainty over a 15-minute run."* Built on the above.
-- ❌ The drift figures from those captures (+0.027 / +0.377 / +0.306) — all taken
+- *"≈ 10 ° of heading uncertainty over a 15-minute run."* Built on the above.
+- The drift figures from those captures (+0.027 / +0.377 / +0.306) — all taken
   while the board was being disturbed.
 
 Also still retracted from earlier in this round: the claimed **sign flip**
@@ -644,7 +644,7 @@ p2p wander over eight minutes.**
 | wander p2p / 8 min | 6.36° | **0.077°** | **~80× better** |
 | firmware's own stated figure | 0.5-3 °/min | | ~60× better than the low end |
 
-### ⛔ This OVERTURNS §5's conclusion — but read the caveat before relying on it
+### This OVERTURNS §5's conclusion — but read the caveat before relying on it
 
 §5 said absolute heading is *"a decaying asset"* worth 7.5-45° of error over a
 15-minute run, on the firmware's stated 0.5-3 °/min. **At the measured rate that
@@ -716,7 +716,7 @@ this; **it is now justified by the firmware rather than by observed wobble.**
 `depth_step` logic steps the *setpoint* host-side, which is the right shape — but
 any attempt to trim depth by holding a small throttle offset does nothing.
 
-### 6c. ⚠ The depth loop has NEVER RUN CLOSED — and its sign was inverted
+### 6c. The depth loop has NEVER RUN CLOSED — and its sign was inverted
 
 `depth_control.cpp` carries this, verbatim (READ):
 
@@ -739,8 +739,8 @@ proportional-only instance and publishes it as **`DEPTH_CMD`**, readable
 
 ```
 thumb over the Bar30 port (pressurise = "deeper")
-  measured DEEPER than target   → DEPTH_CMD POSITIVE → ascend   ✓ correct
-  measured SHALLOWER than target → DEPTH_CMD NEGATIVE → descend ✓ correct
+  measured DEEPER than target   → DEPTH_CMD POSITIVE → ascend   correct
+  measured SHALLOWER than target → DEPTH_CMD NEGATIVE → descend correct
   demand moves AWAY from target  → STILL INVERTED — DO NOT DIVE
 ```
 
@@ -767,7 +767,7 @@ claim an earlier version of this section made and got wrong.
 | C2 | 480 s | **+0.377** | 1.890 | 6.18° |
 | C3 | 480 s | **+0.306** | 1.231 | 6.97° |
 
-### ⛔ RETRACTED: the sign does not flip. That was estimator noise.
+### RETRACTED: the sign does not flip. That was estimator noise.
 
 An earlier commit in this round claimed session-varying bias on the strength of
 A (−0.386) against B (+0.360), and the memory entry said so. **The three
@@ -870,7 +870,7 @@ this; **it is now justified by the firmware rather than by observed wobble.**
 `depth_step` logic steps the *setpoint* host-side, which is the right shape — but
 any attempt to trim depth by holding a small throttle offset does nothing.
 
-### 6c. ⚠ The depth loop has NEVER RUN CLOSED — and its sign was inverted
+### 6c. The depth loop has NEVER RUN CLOSED — and its sign was inverted
 
 `depth_control.cpp` carries this, verbatim (READ):
 
@@ -893,8 +893,8 @@ proportional-only instance and publishes it as **`DEPTH_CMD`**, readable
 
 ```
 thumb over the Bar30 port (pressurise = "deeper")
-  measured DEEPER than target   → DEPTH_CMD POSITIVE → ascend   ✓ correct
-  measured SHALLOWER than target → DEPTH_CMD NEGATIVE → descend ✓ correct
+  measured DEEPER than target   → DEPTH_CMD POSITIVE → ascend   correct
+  measured SHALLOWER than target → DEPTH_CMD NEGATIVE → descend correct
   demand moves AWAY from target  → STILL INVERTED — DO NOT DIVE
 ```
 
@@ -920,7 +920,7 @@ owns the port and we read what it publishes), 22 Hz:
 **Magnitude ≈ 0.4 °/min — better than the firmware's own stated 0.5–3 °/min**, and
 at the good end of the BNO08X datasheet figure.
 
-### ⚠ The two runs differ in SIGN — but that is NOT yet established as real
+### The two runs differ in SIGN — but that is NOT yet established as real
 
 −0.386 then +0.36. The tempting reading is session-varying gyro bias. **We are not
 entitled to that claim yet, and an earlier version of this section made it.**
@@ -951,7 +951,7 @@ should use:**
 
 Sign stability: **OPEN.**
 
-### ⛔ 9.16° peak-to-peak of wander on a STATIONARY board
+### 9.16° peak-to-peak of wander on a STATIONARY board
 
 Recorded separately because it is arguably the more actionable of the two numbers
 and is easy to lose behind the drift figure. Over 8 minutes, motionless on a
@@ -1039,7 +1039,7 @@ flashed with **Bluejay** (BB21, v0.21.0 `_H_` builds), and then:
 - **3D mode is mandatory**, because `levelToDshotRaw()` emits 3D bands;
 - DShot300, signal → Pico GP6…GP13, common ground.
 
-### ⛔ The test that decides our open question, and it needs no motors
+### The test that decides our open question, and it needs no motors
 
 > *"You do **not** need motors attached. Bidirectional DShot telemetry comes from
 > the ESC's own MCU in response to every frame, so a powered ESC with just signal
@@ -1066,7 +1066,7 @@ link=1 armed=0 bidir=1 rpm_mode=0 loop=1 | M1[rpm=0 pres=1 e=812 d=0 c=0 n=3] ..
 decidable bench test, and it is a prerequisite for both PR #10 (presence on the
 wire) and issue #13 (the hysteretic floor) being anything other than inert here.
 
-### ⚠ One instruction in that guide is harmful — filed as `srot-esc-flasher#2`
+### One instruction in that guide is harmful — filed as `srot-esc-flasher#2`
 
 Step 4 tells the operator to set **`RPM_LOOP = 1`** and states that it "already
 defaults to 1". The firmware defaults it to **0** and argues at length for that:

@@ -32,7 +32,7 @@ def src():
 
 
 def test_enrolment_passes_a_position(src):
-    """⛔ THE ORIGINAL DEFECT. Without this every reference is unlocalised and
+    """The original defect. Without this every reference is unlocalised and
     the closure can never fire."""
     assert re.search(r'enrol\([^)]*position=', src, re.S), (
         'place enrolment no longer passes position= -- every reference will '
@@ -133,7 +133,7 @@ def test_refusals_are_counted_not_dropped(src):
 
 
 def test_it_is_configured_WITHOUT_launch_plumbing():
-    """⛔ DELIBERATELY NOT A LAUNCH ARGUMENT.
+    """Deliberately not a launch argument.
 
     A switch threaded through launch must be declared in every launch file
     that starts the node, and this package has shipped capabilities reachable

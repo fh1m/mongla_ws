@@ -239,7 +239,7 @@ class Mongla(VisionVerbs):
                    f'{float(timeout):.0f} s -- the board is still ascending',
             final_value=math.nan if depth is None else depth)
 
-    # Depth within this of zero counts as surfaced. ⚠ UNMEASURED: 0.20 m is a
+    # Depth within this of zero counts as surfaced. UNMEASURED: 0.20 m is a
     # margin for the sensor sitting below the waterline of a floating hull, not
     # a measurement of where it sits. Read the depth on the first surfacing and
     # replace this with that number.
@@ -257,7 +257,7 @@ class Mongla(VisionVerbs):
         return self._make_result(accepted, f'arm: {reason}')
 
     def disarm(self, timeout=20.0):
-        """⛔ SIGNALS ABORT FIRST. Without it a `vision_align` kept streaming
+        """Signals abort first. Without it a `vision_align` kept streaming
         MANUAL_CONTROL into a board that would re-arm under it, and a queued
         shot still left the tube -- the one thing a disarm must prevent."""
         self.request_abort()
@@ -277,7 +277,7 @@ class Mongla(VisionVerbs):
         """Spin ONE thruster, by index 1..8, at `gain` percent (negative =
         reverse) for `duration` s.
 
-        ⛔ THIS TURNS A THRUSTER. Props off or the vehicle restrained, and a
+        This turns a thruster. Props off or the vehicle restrained, and a
         human on the kill switch.
 
         It is the primitive under every per-thruster question: the thrust
@@ -317,7 +317,7 @@ class Mongla(VisionVerbs):
     def _thruster_fault(self):
         """The reason to REFUSE a shot, or None to allow it.
 
-        ⛔ REFUSE ONLY ON A KNOWN-BAD THRUSTER. `thruster_health()` returns None
+        Refuse only on a known-bad thruster. `thruster_health()` returns None
         -- UNKNOWN -- whenever the board has not announced presence, which is
         every disarmed session. Refusing on UNKNOWN would make `fire()` a silent
         no-op at competition. UNKNOWN is logged loudly and allowed through; a

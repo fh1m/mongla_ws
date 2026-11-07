@@ -41,7 +41,7 @@ Final 6DOF pose estimate → motion planner
 - **What it is**: Local keypoint descriptor (position + 64-D feature vector)
 - **What it is NOT**: A multi-object re-ID model, a bounding box tracker, a class classifier
 - **How Bumblebee uses it**: template image (dock-side) ↔ live bbox crop → 2D-2D correspondences → PnP
-- **Speed**: ~27 fps on CPU (x86), ~100 fps on Orin Nano GPU via TensorRT/ONNX. ⚠ Bumblebee's
+- **Speed**: ~27 fps on CPU (x86), ~100 fps on Orin Nano GPU via TensorRT/ONNX. Bumblebee's
   own figure, for their Jetson Orin Nano — not our platform. Our companion is the Raspberry
   Pi 5 + Hailo-8 AI HAT (Jetson/TensorRT retired here); Hailo-8 needs its own HEF compilation
   via the Hailo Dataflow Compiler, a different deployment path with unmeasured feasibility.
@@ -52,7 +52,7 @@ Final 6DOF pose estimate → motion planner
 
 - **What it is**: ViT-based monocular depth estimation → relative depth map per pixel
 - **Calibration**: 1-point calibration (measure distance to object at known range → scale factor)
-- **Speed**: Small model (25M params), TensorRT fp16 → ~15 fps on Orin Nano GPU. ⚠ Same
+- **Speed**: Small model (25M params), TensorRT fp16 → ~15 fps on Orin Nano GPU. Same
   caveat as XFeat above — this is Bumblebee's Jetson figure, not measured for our Pi 5 +
   Hailo-8 companion.
 - **Use case**: Distance estimate without known object geometry (bbox area proxy is fragile)
@@ -75,13 +75,13 @@ Final 6DOF pose estimate → motion planner
 
 | Capability | Mongla (current) | Bumblebee (2025 winner) |
 |------------|-----------------|------------------------|
-| Detection | YOLO11 ✓ | YOLO11 ✓ |
-| Tracking | ByteTrack + KF ✓ | ByteTrack (implied) |
-| Distance estimate | bbox area proxy ⚠️ | XFeat+PnP (metric) + DepthAnything ✓ |
-| Approach angle | unknown ✗ | XFeat+PnP 6DOF ✓ |
-| Multi-instance | one bbox per class ⚠️ | HDBSCAN 3D clustering ✓ |
+| Detection | YOLO11 | YOLO11 |
+| Tracking | ByteTrack + KF | ByteTrack (implied) |
+| Distance estimate | bbox area proxy | XFeat+PnP (metric) + DepthAnything |
+| Approach angle | unknown | XFeat+PnP 6DOF |
+| Multi-instance | one bbox per class | HDBSCAN 3D clustering |
 | Sensor fusion | P-controller on err_x/err_y | UKF over all sources |
-| Monocular depth | None ✗ | DepthAnything V2 ✓ |
+| Monocular depth | None | DepthAnything V2 |
 
 ---
 
@@ -119,7 +119,7 @@ GATE_POINTS_3D = np.array([
 
 **Dock-side calibration checklist**:
 1. Place AUV 1m from gate, centered, camera level
-2. Save one forward frame as `templates/gate_front.jpg` (⚠ no `capture_template` executable exists -- this checklist is the scouted proposal, not a shipped tool)
+2. Save one forward frame as `templates/gate_front.jpg` (no `capture_template` executable exists -- this checklist is the scouted proposal, not a shipped tool)
 3. Confirm template captures both poles and crossbar clearly
 
 ### P1 — Competition day: XFeat Re-ID Gallery
@@ -192,7 +192,7 @@ from sklearn.cluster import HDBSCAN
 ## Open Questions
 
 - Does RoboSub 2026 use the same gate geometry? Check official task manual each year.
-- Which YOLO model does Bumblebee use with XFeat? Paper says YOLO11 — same as us ✓
+- Which YOLO model does Bumblebee use with XFeat? Paper says YOLO11 — same as us 
 - Their DVL model: unknown. We have never fitted a DVL —
   `mongla_sensors/sources/nucleus_dvl.py`/`nucleus_parser.py` target a Nortek Nucleus1000
   protocol, but no Nucleus1000 (or any DVL) has ever been mounted or validated in water.

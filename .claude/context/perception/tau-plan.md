@@ -31,7 +31,7 @@ i.e. until contact. **The metres cancel**, which is why it works on a monocular
 vehicle with no DVL — and why `time_to_contact.py`'s stated blocker ("needs
 metres we do not have") was the wrong blocker for nine months.
 
-## ⭐ We compute the scale in FOUR places and use none of them for this
+## We compute the scale in FOUR places and use none of them for this
 
 | source | field | rate | independent of |
 |---|---|---|---|
@@ -59,13 +59,13 @@ The swing is the size of the value. And half the frames give a *negative* tau,
 correctly — the target is receding — so "not approaching" is a state the
 consumer must handle, not a large number.
 
-⚠ **Do not fix this by smoothing and shipping.** `anchor/geometry.py` already
+**Caution: Do not fix this by smoothing and shipping.** `anchor/geometry.py` already
 paid that bill: a 31-frame rolling median took the plane tilt's p90 swing from
 39° to 1.3°, and two independent snaps of the same board still disagreed by
 17.5° at p90. **Smoothing bought smoothness, not accuracy.** A filtered tau
 would look excellent on a plot and be wrong in the same reference-dependent way.
 
-## ⭐⭐ The scorer is already written, and it changed the problem statement
+## The scorer is already written, and it changed the problem statement
 
 `tools/tau_from_scale.py --self-test` runs the ranking against synthetic
 sources whose bias we chose, so a bug in the scorer cannot be mistaken for a
@@ -79,13 +79,13 @@ two things before any water:
 | scale noise 2 % | −2.23 | −0.66 | **23.28 s** |
 | wrong exponent (r^−1.15) | −0.96 | −0.87 | 0.03 s |
 
-⭐ **A constant scale bias scores IDENTICAL to perfect.** tau is
+**Key point: A constant scale bias scores IDENTICAL to perfect.** tau is
 scale-invariant, so a source that is 20 % off everywhere cancels exactly. **No
 calibration is needed and none can help** — which is precisely why this is the
 right quantity for a vehicle with no DVL, and why it does not inherit the
 flow path's dependence on a height nobody measures.
 
-⭐⭐ **So only two things can go wrong, and the run distinguishes them:**
+**Key point:** **So only two things can go wrong, and the run distinguishes them:**
 
 * **NOISE.** 2 % scale noise produces **23.3 s** of tau jitter here, against
   the **27.2 s** p90 measured on real footage. **Our problem is therefore
@@ -121,7 +121,7 @@ Then, offline and against that line:
   caught the tilt estimator;
 * **where the negative-tau boundary sits** in practice.
 
-⚠ The whole run is a few minutes of pool time and needs no new hardware. It is
+**Caution:** The whole run is a few minutes of pool time and needs no new hardware. It is
 the cheapest item on `first-pool-verification.md`.
 
 ## What ships after it
@@ -135,10 +135,10 @@ opening, and neither is the other.**
 
 ## What NOT to do
 
-⛔ Do not wire tau to a control law before the run. A time-to-contact that is
+**Warning:** Do not wire tau to a control law before the run. A time-to-contact that is
 wrong by a factor of two commands a brake at the wrong moment, and the failure
 is a collision rather than a missed detection.
-⛔ Do not take tau from the follower's scale on a clip where the detector is
+**Warning:** Do not take tau from the follower's scale on a clip where the detector is
 healthy. Measured: `Follower.scale` reads exactly 1.0000 at p10, p50 and p90
 across 600 frames, because a continuous detector re-seeds every frame and
 `step()` never runs. **Any follower-scale measurement must be taken across a

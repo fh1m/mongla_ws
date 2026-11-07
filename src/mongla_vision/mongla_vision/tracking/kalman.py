@@ -53,7 +53,7 @@ def _q_for_dt(dt: float, process_noise: float) -> "np.ndarray":
     with the state ordered [x, y, vx, vy], so each axis's block is spread across
     (0,2) and (1,3) rather than being contiguous.
 
-    WHY THE REFERENCE SCALING, which is the part worth reading. `Q` used to be
+    Why the reference scaling, which is the part worth reading. `Q` used to be
     `np.eye(4) * process_noise` -- constant, therefore correct at exactly one dt.
     Simply substituting the WNA form fixes the dt-dependence but also moves the
     operating point by ~10^6 at a typical interval, because `process_noise` was

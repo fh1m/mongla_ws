@@ -57,7 +57,7 @@ def test_anchored_absolute_heading_applies_the_offset():
 
 
 def test_absolute_to_relative_is_the_identity_when_unanchored():
-    # THE LOAD-BEARING ONE. A mission written in world headings still runs on a
+    # The load-bearing one. A mission written in world headings still runs on a
     # hull that never saw its landmark -- just without the correction.
     assert MonglaMission.absolute_to_relative(_fake(), 90.0) == pytest.approx(90.0)
 

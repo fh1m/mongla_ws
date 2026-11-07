@@ -1,6 +1,6 @@
 """Allocate a wrench to thrusters using the hull's real geometry.
 
-⛔ WHY THIS EXISTS, AND WHY IT IS NOT `allocation.py`. That module mirrors the
+Why this exists, and why it is not `allocation.py`. That module mirrors the
 BOARD's mixer -- an 8x6 matrix of +-1 for a vectored-6DOF frame -- to predict
 what the firmware will do to a demand we already composed. This module does the
 opposite job for a different vehicle: given a wrench we WANT, it solves for the
@@ -10,25 +10,25 @@ The two describe different vehicles and both are correct about theirs. Keeping
 them apart is deliberate; merging them would produce one matrix that is wrong
 about both.
 
-WHAT A +-1 MIXER COSTS. Used as a force sum, +-1 entries overstate surge and
+What a +-1 mixer costs. Used as a force sum, +-1 entries overstate surge and
 sway by 1/cos(45 deg) = 41 %, they carry no moment arms at all, and they cannot
 express a dead thruster. Here the moment arms are measured: 0.1750 m for yaw,
 0.2595 m for pitch, read off the CAD.
 
-⚠ THE UNITS ARE NOT NEWTONS, AND THIS MODULE WILL NOT PRETEND OTHERWISE.
+The units are not newtons, and this module will not pretend otherwise.
 `thrust` is a signed fraction of one thruster's full output, -1..1. Converting
 that to force needs `k_n_per_rpm2`, which has no value anywhere in this tree on
 purpose, and predicting motion needs a mass the CAD cannot give (no material is
 assigned to any part). So the wrench rows are "force-like" and "moment-like" in
 consistent units, exact in DIRECTION and RATIO, and silent about magnitude.
 
-⚠ THE FRAME IS THE CAD'S, AND ITS SIGNS ARE NOT SETTLED. Y is the long axis, X
+The frame is the CAD'S, and its signs are not settled. Y is the long axis, X
 the lateral tunnels' bore, Z the vertical tunnels'. Which end of Y is the bow,
 and whether the axial unit is a tractor or a pusher, are open questions
 (`hull_geometry.yaml`). Magnitudes and moment arms below are measured; a sign
 convention is a decision, and this module does not invent one.
 
-⛔ ROLL IS UNACTUATED AND A ROLL DEMAND IS REFUSED, NOT ROUNDED TO ZERO. Every
+Roll is unactuated and a roll demand is refused, not rounded to zero. Every
 thruster's line of action passes through the roll axis, so no combination of
 them produces roll -- it is a property of the geometry, not a tuning limit.
 Silently dropping a roll request would let a caller believe the vehicle is
@@ -39,13 +39,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence, Tuple
 
-# ⚠ ONE TRUTH, TWO COPIES -- handled the way `MIXER` handles it. These mirror
+# One truth, two copies -- handled the way `MIXER` handles it. These mirror
 # `config/hull_geometry.yaml`, which was read off the Onshape model on
 # 2026-09-23. `mongla_control` deliberately depends on nothing but pyserial, so
 # the file is not parsed at runtime; `test_geometric_allocation.py` asserts the
 # two agree instead of trusting them to.
 #
-# ⚠ AND THE CAD IS A MOVING DESIGN: custom thrusters are being designed and not
+# And the CAD is a moving design: custom thrusters are being designed and not
 # all are fitted. Re-run `tools/pull_hull_geometry.js` when it changes.
 #
 #   name          position (m, CAD frame)        axis
@@ -54,7 +54,7 @@ THRUSTERS: Tuple[Tuple[str, Tuple[float, float, float], Tuple[float, float, floa
     ('lateral_b',  (0.0,  0.1750, 0.0),    (1.0, 0.0, 0.0)),
     ('vertical_a', (0.0, -0.2595, 0.0),    (0.0, 0.0, 1.0)),
     ('vertical_b', (0.0,  0.2595, 0.0),    (0.0, 0.0, 1.0)),
-    # ⛔ z IS THE PROP HUB, NOT THE MOTOR (issue #9). The A2212's bounding box
+    # z IS THE PROP HUB, NOT THE MOTOR (issue #9). The A2212's bounding box
     # centres 8.06 mm off the axis because its mount bracket pulls the box
     # sideways; the prop hub in the same export sits at +0.12 mm and the duct
     # ring at 0.00. A thruster's position is its THRUST LINE. The 8.06 mm
@@ -81,8 +81,8 @@ def _cross(a: Sequence[float], b: Sequence[float]) -> Tuple[float, float, float]
 
 # Moments are taken about this point, in the CAD frame.
 #
-# ⛔ IT IS THE BOUNDING-BOX CENTRE BECAUSE THE CENTRE OF MASS IS UNKNOWN, NOT
-# BECAUSE THE TWO ARE THE SAME (issue #9). Onshape has no material on any part,
+# It is the bounding-box centre because the centre of mass is unknown, not
+# Because the two are the same (issue #9). Onshape has no material on any part,
 # so `hull_geometry.yaml` holds `unknown.centre_of_mass_m: null`, and a test
 # keeps this constant at the origin until that entry gets a value -- then
 # requires the two to agree. What it moves when set: a CoM `h` below the
@@ -124,7 +124,7 @@ UNACTUATED = unactuated_axes()
 
 # ── who wins when the thrusters run out ─────────────────────────────────────
 #
-# ⛔ ONE LAW, TWO VOCABULARIES. The ORDER is `allocation.HORIZONTAL_PRIORITY`
+# One law, two vocabularies. The ORDER is `allocation.HORIZONTAL_PRIORITY`
 # and `allocation.VERTICAL_PRIORITY` -- yaw before lateral before forward, and
 # attitude before throttle -- renamed into this module's axes. It is restated
 # rather than imported because `tools/control_bench` loads this file without
@@ -274,7 +274,7 @@ class GeometricAllocator:
                  limit: float = 1.0, prioritise: bool = True) -> Allocation:
         """Solve for thruster outputs producing the requested wrench.
 
-        ⛔ AN UNACTUATED AXIS IS REFUSED, NOT SILENTLY DROPPED. Asking for roll
+        An unactuated axis is refused, not silently dropped. Asking for roll
         on this hull is not a small request -- it is an impossible one, and a
         caller that cannot tell the difference will integrate against it
         forever.
@@ -338,7 +338,7 @@ class GeometricAllocator:
     def _prioritise(self, want, limit):
         """Grant each axis the most it can have, in `priority_order`.
 
-        ⛔ WHY NOT LEAST SQUARES OVER THE SATURATED SET (issue #44). The first
+        Why not least squares over the saturated set (issue #44). The first
         version pinned the thrusters that ran out and re-solved the rest for
         minimum TOTAL error. Total error over these rows adds a force-like
         residual (fraction of one thruster) to a moment-like one (fraction x
@@ -349,7 +349,7 @@ class GeometricAllocator:
         mixed units; there is only an ORDER, and the order is a control
         decision already made in `allocation.py`.
 
-        ⭐ AND ON THIS HULL NOTHING IS LOST BY IT. With all five live, B over the
+        And on this hull nothing is lost by it. With all five live, B over the
         five actuated axes is square and invertible: there is no null space, so
         a saturating demand can only choose WHICH axis comes up short. This
         makes that choice explicitly.
@@ -371,7 +371,7 @@ class GeometricAllocator:
             dirs[k] = self._least_squares(single, list(range(n)))
         granted = {k: 0.0 for k in order}
 
-        # ⚠ MORE THAN ONE PASS, AND WHY. Where the geometry couples axes, a
+        # More than one pass, and why. Where the geometry couples axes, a
         # LOWER axis can move a thruster AWAY from its stop: any off-axis
         # thruster's moment compensation, or the cross-terms a dead tunnel
         # leaves behind, can pull a pinned pair inward after a higher axis

@@ -100,7 +100,7 @@ def test_the_first_working_branch_wins_and_the_rest_do_not_run():
 
 
 def test_a_perception_miss_falls_through_to_the_scoring_branch():
-    # THE POINT. A miss should cost the precision points, not all of them.
+    # The point. A miss should cost the precision points, not all of them.
     got = selector([('precise', lambda: False),
                     ('blind_fire', lambda: True)])
     assert got.ok and got.branch == 'blind_fire'

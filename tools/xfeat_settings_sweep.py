@@ -10,7 +10,7 @@ This sweeps the three against the thing that actually matters here -- inliers
 surviving MAGSAC on the murky archive clips at a realistic time offset -- and
 prices each setting in milliseconds on this box.
 
-⚠ MORE INLIERS IS NOT AUTOMATICALLY BETTER. A setting that doubles inliers and
+More inliers is not automatically better. A setting that doubles inliers and
 triples latency is a loss for a rung that must answer inside a 333 ms period,
 and one that raises inliers on the CLEAR clip while lowering them on the murky
 ones is tuned to the wrong water. Both columns are reported per clip so the

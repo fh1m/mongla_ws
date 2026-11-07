@@ -226,7 +226,7 @@ def _err_ms(cm, board_s, host_truth):
 
 @pytest.mark.parametrize('step_s', [-3600.0, -5.0, +5.0, +3600.0])
 def test_a_HOST_clock_step_is_not_mapped_through_stale_pairs(step_s):
-    """⛔ Measured 2026-09-14: the Pi's first NTP sync stepped CLOCK_REALTIME
+    """Measured 2026-09-14: the Pi's first NTP sync stepped CLOCK_REALTIME
     mid-run. A BACKWARD step pruned nothing -- pruning is by host age -- so
     pre- and post-step pairs mixed for the step plus 20 s, i.e. HOURS for an
     hour-sized step, and every mapped stamp was wrong for all of it."""

@@ -1,25 +1,25 @@
 """Hold a target with NO detection at all.
 
-THE GOAL THIS SERVES: the vehicle should always have a target position, and a
+The goal this serves: the vehicle should always have a target position, and a
 detection is only the *best* of several ways to get one. Measured gaps on real
 competition footage are p50 0.155 s / p90 0.651 s / p99 2.418 s -- so a stack
 whose only source of truth is the detector spends a real fraction of every run
 blind.
 
-WHY A FEATURE ANCHOR IS NOT REDUNDANT WITH A BETTER DETECTOR. The detector
+Why a feature anchor is not redundant with a better detector. The detector
 answers a SEMANTIC question -- "is there a gate here?" -- and fails on domain
 shift, blur, unusual pose, low contrast. Matching answers a GEOMETRIC one --
 "where did THIS patch of texture go?" -- and fails on texture loss and large
 viewpoint change. **The failure modes are decorrelated.** That is the whole
 value, and it is why this belongs beside the detector rather than behind it.
 
-FRAME-TO-REFERENCE, NEVER FRAME-TO-FRAME. Every live frame is matched against
+Frame-to-reference, never frame-to-frame. Every live frame is matched against
 the STORED reference, so error is bounded by match quality and does not
 accumulate. Optical flow (the fast rung) is frame-to-frame and drifts without
 bound; this is what bounds it. Two rungs, two timescales, and the distinction is
 the reason both exist.
 
-WHAT IT PRODUCES. A homography from reference to live gives more than a bbox
+What it produces. A homography from reference to live gives more than a bbox
 centre ever could:
 
     tx, ty    where the reference view sits in the live frame  -> lat / depth
@@ -28,7 +28,7 @@ centre ever could:
     scale     how much bigger the reference has become         -> RANGE change
     inliers   how much to believe any of it                    -> the gate
 
-SIGN CONVENTION, LOAD-BEARING. `H` maps REFERENCE -> LIVE, so pushing the
+Sign convention, load-bearing. `H` maps REFERENCE -> LIVE, so pushing the
 reference centre through it answers "where does the reference appear now",
 which has the SAME sign as a detection's offset-from-centre (`+x` = right).
 That makes the control laws identical to the pool-verified vision loop.
@@ -260,7 +260,7 @@ class Anchor:
     def locate_features(self, k1, d1) -> AnchorPose:
         """`locate()` against features ALREADY extracted from the frame.
 
-        ⛔ WHY THIS EXISTS. `CheckpointBank` asks several references about one
+        Why this exists. `CheckpointBank` asks several references about one
         frame, and `locate()` detects internally -- so a 4-wide shortlist ran
         the backbone FOUR times on the same pixels, plus once more for the
         signature. Measured on the dev box that is ~20 ms of detection repeated

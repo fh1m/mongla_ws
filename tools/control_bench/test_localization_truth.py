@@ -1,12 +1,12 @@
 """The EKF against ground truth -- the first such test this package has had.
 
-⛔ WHY IT DID NOT EXIST BEFORE. `mongla_localization` has 21 filter tests and
+Why it did not exist before. `mongla_localization` has 21 filter tests and
 every one is a unit or property test: exp/log round-trip, covariance symmetry,
 positive-definiteness, the sign of a single update. Not one drives the filter
 along a dynamic trajectory and asks how far it drifted -- because there was no
 truth to drive it against until the Fossen plant existed.
 
-⚠ A NUMBER FROM HERE IS A LOWER BOUND, NOT NAVIGATION ACCURACY. The plant has
+A number from here is a lower bound, not navigation accuracy. The plant has
 no currents, no thermal drift, no vibration, and its drag is a guess. The value
 of these tests is COMPARATIVE: which sensor matters, how long a dropout is
 survivable, whether an update helps at all.
@@ -22,7 +22,7 @@ from localization_truth import Sensors, rot_ned, run   # noqa: E402
 
 
 def test_the_plant_and_the_filter_share_a_frame():
-    """⭐ PINNED RATHER THAN TRUSTED. The filter's world is NED with z DOWN and
+    """Pinned rather than trusted. The filter's world is NED with z DOWN and
     its body is FRD; Fossen is x-forward, y-starboard, z-DOWN. They are the same
     frame, so this harness remaps nothing -- and a frame seam is exactly what
     produced a -1988 degree runaway when the allocator met the plant."""
@@ -45,7 +45,7 @@ def test_with_every_sensor_the_filter_tracks_truth():
 
 
 def test_optical_flow_is_the_load_bearing_sensor():
-    """⭐ WHICH SENSOR ACTUALLY MATTERS, measured rather than assumed. Removing
+    """Which sensor actually matters, measured rather than assumed. Removing
     depth or yaw changes almost nothing. Removing flow is catastrophic --
     velocity is what pins position, and nothing else here observes it."""
     full = run(seconds=30.0).pos_final_m
@@ -55,7 +55,7 @@ def test_optical_flow_is_the_load_bearing_sensor():
 
 
 def test_the_observability_gate_removed_the_B56_pathology():
-    """⭐ THESE SIX ASSERTIONS USED TO DOCUMENT A DEFECT AND NOW DOCUMENT ITS
+    """These six assertions used to document a defect and now document its
     FIX -- which is the correct way for them to fail.
 
     Before `RIEKF._velocity_is_observed` existed, world-frame updates without
@@ -72,7 +72,7 @@ def test_the_observability_gate_removed_the_B56_pathology():
 
 
 def test_a_tighter_fix_is_no_longer_catastrophic_without_flow():
-    """⛔ THE SIGNATURE THAT DEFINED B-56: sigma 0.5 -> 0.01 took the error from
+    """The signature that defined B-56: sigma 0.5 -> 0.01 took the error from
     183 m to 564 m, a measurement trusted more producing an estimate that was
     worse. After the gate both land under a metre, and the inversion that
     remains is mild rather than divergent."""
@@ -98,7 +98,7 @@ def test_a_tighter_fix_still_helps_monotonically_when_flow_is_healthy():
 
 
 def test_the_gate_costs_nothing_when_flow_is_healthy():
-    """⭐ THE REGRESSION THAT MATTERS MOST. A fix that degrades the normal case
+    """The regression that matters most. A fix that degrades the normal case
     to rescue the degraded one is not a fix. Measured: bit-identical."""
     for err in (0.0, 0.5, 1.0, 2.0):
         with_fix = run(seconds=30.0, initial_pos_error_m=err,
@@ -116,7 +116,7 @@ def test_dropouts_are_survivable_after_the_gate(gap_s, bound_m):
 
 
 def test_fix_TIMING_is_irrelevant_when_flow_is_healthy():
-    """⭐ AND AN EARLIER DRAFT OF B-57 CLAIMED THE OPPOSITE. It follows directly
+    """And an earlier draft of B-57 claimed the opposite. It follows directly
     from B-57's own content: if dead-reckoning error does not grow, a late fix
     is worth exactly as much as an early one."""
     ends = [run(seconds=60.0, initial_pos_error_m=1.0, use_fix=True,

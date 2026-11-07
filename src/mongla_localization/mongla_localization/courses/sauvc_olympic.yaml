@@ -3,7 +3,7 @@
 # the 50 x 25 m pool the rulebook published 30 Oct 2026 describes. The two
 # share prop classes and almost nothing else, which is why they are two files.
 #
-# ⛔ EVERY POSITION HERE IS UNSET, AND THAT IS THE SHIPPED STATE.
+# Every position here is unset, and that is the shipped state.
 # The rulebook gives ZONES, not points: the gate "may be located anywhere on a
 # horizontal line ... approximately 12m away from the starting zone", the
 # orange flare "anywhere in a rectangular zone 4m-8m from side of the arena,
@@ -19,7 +19,7 @@
 # which writes ~/.mongla/courses/sauvc_olympic.yaml (or $MONGLA_COURSE_DIR)
 # with measured: true. The loader reads that copy first.
 #
-# ⛔ FRAME, STATED ONCE. Origin: the centre of the starting zone. +x runs from
+# Frame, stated once. Origin: the centre of the starting zone. +x runs from
 # the starting zone toward the gate (ACROSS the pool's 25 m width, not along
 # its 50 m length) and is bearing 0. +y is to the right of it and is bearing
 # 90. `depth_m` is NEGATIVE below the surface. `bearing_deg` is the compass

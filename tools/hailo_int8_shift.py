@@ -32,7 +32,7 @@ PASS CRITERIA, written before the first run (2026-11-06):
      (>= 0.07), keep the lowered runtime threshold and close with that
      number.
 
-  ⛔ The emulator is not the chip. Hailo documents SDK_QUANTIZED as
+  The emulator is not the chip. Hailo documents SDK_QUANTIZED as
   emulating the hardware's quantised arithmetic, not as bit-exact. The
   chip-side number (0.04-0.06, measured-bars, HEF vs .pt) stays the one
   shipped thresholds rest on; this ranks builds against each other.
@@ -65,7 +65,7 @@ def shift_stats(fp, q, floor=ACT_FLOOR):
 def verdict(level0: dict, level2: dict) -> str:
     """Criteria 2 and 3, from per-clip median shifts {clip: median}.
 
-    ⛔ As first written this had no case for level 2 being WORSE than level 0,
+    As first written this had no case for level 2 being WORSE than level 0,
     and the first real run (2026-11-06) was exactly that -- level 2 lost 0.34
     where level 0 lost -0.01 -- which it then labelled "REFUTED: optimisation
     level does not change the INT8 loss". A difference of 0.35 is a change.

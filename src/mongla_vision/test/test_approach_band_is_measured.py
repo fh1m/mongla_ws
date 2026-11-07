@@ -1,6 +1,6 @@
 """The approach band is per class, and an unmeasured class gets no advice.
 
-⛔ THE DEFECT THIS CLOSES. `approach.py` shipped `BAND_LO = 0.25, BAND_HI =
+The defect this closes. `approach.py` shipped `BAND_LO = 0.25, BAND_HI =
 0.45` and cited section 23 for it. Section 23 measured confidence against
 sqrt(box area) IN PIXELS, by quartile; this module compares `box_height /
 frame_height`. Different quantities, no recorded conversion -- so the shipped
@@ -29,7 +29,7 @@ def _at(frac, cls):
 
 
 def test_the_old_global_band_is_gone():
-    """⛔ A module-level BAND_LO/BAND_HI is the defect itself: one band cannot
+    """A module-level BAND_LO/BAND_HI is the defect itself: one band cannot
     be right for three classes whose peaks are 0.15, 0.52 and 0.80+."""
     import mongla_vision.approach as m
 
@@ -46,7 +46,7 @@ def test_every_shipped_band_is_a_measured_peak():
 
 
 def test_repair_is_not_told_to_back_off_from_its_best_view():
-    """⭐⭐ THE CASE THE OLD BAND GOT BACKWARDS. `repair` confidence rises to
+    """The case the old band got backwards. `repair` confidence rises to
     0.526 in the 0.80-1.20 bin -- the largest the archive shows. Under the old
     global 0.25-0.45 band, 0.90 of frame read as BACK OFF."""
     assert _at(0.90, 'repair').action == HOLD
@@ -54,7 +54,7 @@ def test_repair_is_not_told_to_back_off_from_its_best_view():
 
 
 def test_gate_backs_off_past_its_own_peak():
-    """⚠ AND THE COUNTER-INTUITIVE HALF IS STILL EXPRESSED, for the class that
+    """And the counter-intuitive half is still expressed, for the class that
     actually measured a fall."""
     assert _at(0.80, 'gate').action == BACK_OFF
     assert _at(0.50, 'gate').action == HOLD
@@ -69,7 +69,7 @@ def test_rescue_holds_far_earlier_than_gate():
 
 
 def test_an_unmeasured_class_holds_and_says_why():
-    """⛔ NO DEFAULT BAND. A default is exactly what was wrong, so an unknown
+    """No default band. A default is exactly what was wrong, so an unknown
     class must not silently inherit one."""
     r = _at(0.50, 'shark')
     assert r.action == HOLD

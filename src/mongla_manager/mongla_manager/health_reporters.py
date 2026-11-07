@@ -16,7 +16,7 @@ from typing import Optional
 
 from .health import Health, degraded, failed, ok, unknown
 
-# ⛔ ONE COPY. The autonomy bar for the pilot gain lives in the wire-constant
+# One copy. The autonomy bar for the pilot gain lives in the wire-constant
 # module beside the firmware's own literals, and is imported rather than
 # retyped -- `srot_protocol.GAIN_FOR_AUTONOMY`.
 try:
@@ -64,7 +64,7 @@ def board_link(fc) -> Health:
 def mavlink_reader(is_alive, fault_count, last_fault) -> Health:
     """Is the HOST's MAVLink reader thread still running? (B40)
 
-    ⛔ THIS EXISTS TO STOP ONE SPECIFIC MISDIAGNOSIS. `reader_loop` is a bare
+    This exists to stop one specific misdiagnosis. `reader_loop` is a bare
     `threading.Thread` target and the only thing draining the link. If it dies,
     `master.messages` stops updating, every reading ages out, and `board_link`
     above reports "no heartbeat within the stale window" -- i.e. a host-side
@@ -109,7 +109,7 @@ def heading_reference(named_value) -> Health:
 
 
 def leak_sensor(leak_enabled: Optional[bool], leaking: Optional[bool]) -> Health:
-    """⛔ `LEAK_EN = 0` reads DRY, and that is the trap.
+    """`LEAK_EN = 0` reads DRY, and that is the trap.
 
     With the failsafe disabled the sensor still answers "no leak", so the
     vehicle looks safe precisely when nothing is watching. Measured on this
@@ -130,7 +130,7 @@ def leak_sensor(leak_enabled: Optional[bool], leaking: Optional[bool]) -> Health
 def pilot_gain(gain: Optional[float]) -> Health:
     """The live pilot gain, which scales EVERY MANUAL_CONTROL demand.
 
-    ⛔ THE BOARD BOOTS AT 0.5 AND THE PARAMETER CANNOT CHANGE IT. The firmware
+    The board boots at 0.5 and the parameter cannot change it. The firmware
     keeps the live gain in `s_gain_live`, which adopts `JS_GAIN_DEFAULT` "on
     first use" -- and the telemetry loop reads `pilotGain()` from boot, so the
     latch has always happened before a companion finishes connecting. Measured
@@ -143,7 +143,7 @@ def pilot_gain(gain: Optional[float]) -> Health:
     reports healthy and obeys -- at half the authority the host computed. Every
     vision correction is halved, and sluggish water looks identical.
 
-    ⚠ DEGRADED, NOT FAILED, and deliberately. `vision_align` still converges at
+    Degraded, not failed, and deliberately. `vision_align` still converges at
     half gain, just slower, and health is a REPORT rather than a veto (see
     `health.py`). The in-session fix is the joystick button edge, not a
     parameter write: verified live, 0.5 -> 1.0 in five presses.
@@ -162,7 +162,7 @@ def pilot_gain(gain: Optional[float]) -> Health:
 def sensor_offsets(offsets) -> Health:
     """Are the sensors' positions relative to the IMU known? (issues #19, #27)
 
-    ⚠ DEGRADED, NOT FAILED. An unmeasured offset leaves its correction OFF,
+    Degraded, not failed. An unmeasured offset leaves its correction OFF,
     which is exactly the behaviour before the correction existed -- the vehicle
     flies as it always has, and this line says what that costs. Refusing flow
     until a tape is run would disable the only velocity sensor before first
@@ -196,7 +196,7 @@ def allocator(sat) -> Health:
     `sat` is `fc.allocator_saturation()` -- `(horizontal, vertical)`, each the
     DELIVERED fraction of that group's demand, or None when unseen.
 
-    ⛔ WHY THIS IS WORTH A LINE. `mixer::mix()` scales a group down uniformly
+    Why this is worth a line. `mixer::mix()` scales a group down uniformly
     when the mix exceeds unity, and then discards the factor. Downstream, a
     vehicle that is not turning looks the same whether the water is pushing
     back or the allocator quietly binned a third of the yaw command. Worse, the
@@ -204,7 +204,7 @@ def allocator(sat) -> Health:
     own clamp, so an axis inside its clamp but scaled to 0.667 keeps
     integrating against a limit it cannot observe.
 
-    ⛔ ABSENT IS UNKNOWN, NOT OK. Until #20 merges these names never arrive,
+    Absent is unknown, not OK. Until #20 merges these names never arrive,
     and reporting OK would assert the one thing we cannot see. Same rule as the
     thruster reporter: a silent allocator and a saturating one are
     indistinguishable, so say so.
@@ -231,7 +231,7 @@ def allocator(sat) -> Health:
                         f'SATURATED -- {(1.0 - worst) * 100:.0f} % of a group\'s '
                         f'demand discarded ({detail}). The axis is not achieving '
                         f'its command and the board\'s PID cannot see that.')
-    # ⛔ ONE GROUP READING CLEAN DOES NOT CLEAR THE OTHER. Reporting OK here
+    # One group reading clean does not clear the other. Reporting OK here
     # would assert that the vertical stack is delivering when we never heard
     # from it -- the same false-OK the thruster reporter exists to avoid.
     if h is None or v is None:
@@ -242,7 +242,7 @@ def allocator(sat) -> Health:
 def thrusters(health) -> Health:
     """Grade the DRIVER's own presence verdict. Never a message count.
 
-    ⛔ THE OBVIOUS GATE IS A FALSE OK. The board streams `ESC_STATUS` for all
+    The obvious gate is a false OK. The board streams `ESC_STATUS` for all
     eight slots whether or not an ESC is attached -- measured, 958 CRC-valid
     frames across two recorded sessions with NOTHING plugged in, every rpm
     exactly 0. So "frames are arriving" and "len(rpm) == 8" are both TRUE on a
@@ -268,7 +268,7 @@ def thrusters(health) -> Health:
 def thruster_power(kill) -> Health:
     """The 2nd-board rotary kill switch. Three states, because the wire has three.
 
-    ⛔ UNKNOWN IS NOT OK HERE, AND IT IS NOT FAILED EITHER. The switch lives on
+    Unknown is not OK here, and it is not failed either. The switch lives on
     the second board and reaches this one over ESP-NOW; the firmware reports
     kill=false on link loss on purpose (`espnow_link.cpp:49`, justified as
     "display-only" -- but it is not, it goes onto the wire as NAMED_VALUE_FLOAT
@@ -316,7 +316,7 @@ def target_lock(authority: Optional[float], rung: str = '') -> Health:
 def target_pose(pose_msg, max_tilt_deg: float = 0.0) -> Health:
     """The 6-DoF pose, judged against the aim gate that would use it.
 
-    NO POSE IS NOT SQUARE. And the WORSE flip branch is what counts -- the
+    No pose is not square. And the WORSE flip branch is what counts -- the
     point estimate alone is the lucky branch.
     """
     if pose_msg is None:

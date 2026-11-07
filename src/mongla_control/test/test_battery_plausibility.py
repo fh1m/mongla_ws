@@ -1,6 +1,6 @@
 """An unwired sense pin must not be reported as a battery.
 
-⛔ MEASURED ON THE VEHICLE, 2026-09-22, exclusive port, 41 consecutive frames of
+Measured on the vehicle, 2026-09-22, exclusive port, 41 consecutive frames of
 BATTERY_STATUS instance 0 with nothing else reading the link:
 
     span 1.39 .. 25.05 V      sd 8.72 V

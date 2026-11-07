@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Is the WATER ITSELF a rangefinder? Turbidity as signal, not noise.
 
-⛔ THE FIRST-PRINCIPLES ARGUMENT. Every method this repo has tried for holding
+The first-principles argument. Every method this repo has tried for holding
 a target needs local image structure -- LK corners, XFeat descriptors, NCC
 patches, ECC gradients. Section 58 measured all four failing together in the
 same regime, because the failure is information-theoretic: a flat patch carries
@@ -16,23 +16,23 @@ transmission t is a function of RANGE ALONE. So range is encoded in the haze,
 per pixel, with **no texture required** -- and the signal is STRONGEST exactly
 where texture is weakest, because both come from turbidity.
 
-⭐ That makes it the first candidate whose failure mode is genuinely
+That makes it the first candidate whose failure mode is genuinely
 ANTI-correlated with the ladder's rungs, rather than merely different. Bumblebee
 reflex 1 wants redundancy; redundancy is worth most when the new source fails
 where the old ones succeed and vice versa.
 
-⚠ AND IT IS NOT THE THING P4 REJECTED. That was `depth_anything_v2_small.onnx`
+And it is not the thing P4 rejected. That was `depth_anything_v2_small.onnx`
 -- 99 MB, a learned model, measured at 1 211 ms/frame on the Pi. This is a dark
 channel and a percentile: no model, no training data, no accelerator.
 
-THE TEST. A detected box gives apparent size, which is proportional to 1/range
+The test. A detected box gives apparent size, which is proportional to 1/range
 for a fixed object. If the transmission inside that box tracks it, the prior
 carries range. Spearman rather than Pearson -- the relation only has to be
 monotonic to be useful, and beta is unknown.
 
     python3 tools/attenuation_range.py --model M.onnx --video A.mkv
 
-⛔ WHAT WOULD FALSIFY IT: a correlation near zero, or a sign that flips between
+What would falsify it: a correlation near zero, or a sign that flips between
 clips. Both are reported rather than summarised away.
 """
 from __future__ import annotations
@@ -56,7 +56,7 @@ DCP_PATCH = 15
 def dark_channel(bgr, patch=DCP_PATCH):
     """Per-pixel min over colour channels, then a spatial min-filter.
 
-    ⚠ UNDERWATER THE RED CHANNEL IS USUALLY THE DARK ONE -- it is absorbed
+    Underwater the red channel is usually the dark one -- it is absorbed
     within a couple of metres, which is precisely why the prior carries range
     here. Keeping all three channels rather than assuming red makes it work in
     green and in blue water without a switch.
@@ -112,7 +112,7 @@ def main() -> int:
             if not ok:
                 continue
             H, W = f.shape[:2]
-            # ⚠ DECIMATE. Transmission is a smooth field -- it has no
+            # DECIMATE. Transmission is a smooth field -- it has no
             # high-frequency content to lose -- and the min-filter is the cost.
             # Full 1080p measured 40 ms/frame, which is a whole frame budget.
             small = cv2.resize(f, (W // a.decimate, H // a.decimate),
@@ -130,7 +130,7 @@ def main() -> int:
                 box_t = tmap[y1:y2, x1:x2]
                 if box_t.size < 4:
                     continue
-                # ⭐ THE BOX AGAINST THE FRAME, not the box alone. Absolute
+                # The box against the frame, not the box alone. Absolute
                 # transmission moves with the water and the exposure; what
                 # range changes is how much LESS hazy the target is than the
                 # scene behind it. That contrast is the range signal.
@@ -150,7 +150,7 @@ def main() -> int:
             print(f'  cls {c}  n={len(v):4d}   spearman(size, t_box) '
                   f'{s_abs:+.2f}   spearman(size, t_box - t_frame) '
                   f'{s_rel:+.2f}')
-    print('\n⚠ A correlation near zero, or a SIGN THAT FLIPS between clips, '
+    print('\nWARNING: A correlation near zero, or a SIGN THAT FLIPS between clips, '
           'falsifies the prior as a rangefinder here.')
     return 0
 

@@ -1,6 +1,6 @@
 """Every long-running node dies with its parent.
 
-⛔ WHY (2026-10-03, on the vehicle). `ros2 launch` died on SIGTERM and left
+WHY (2026-10-03, on the vehicle). `ros2 launch` died on SIGTERM and left
 every child running. An orphaned detector keeps the camera open and the
 Hailo VDevice -- the chip allows ONE per process -- so the next launch cannot
 open either, and fails as the "previous process still holding the device"

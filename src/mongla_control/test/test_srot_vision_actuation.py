@@ -324,9 +324,9 @@ def test_vision_align_SETS_the_mode_when_the_board_will_take_it():
 
 
 # =========================================================================== #
-#  B30 -- THE LOOPS, END TO END, THROUGH THE **REAL** WRITERS                  #
+#  B30 -- the loops, end to end, through the **real** writers                  #
 # =========================================================================== #
-# ⛔ WHY THIS BLOCK EXISTS, AND WHY THE TESTS ABOVE DID NOT CATCH B30.
+# Why this block exists, and why the tests above did not catch B30.
 #
 # Everything above passes `writers=_FakeWriters()`. `_FakeSrot` is correctly
 # strict -- it deliberately lacks `send_rc_override` -- but the WRITERS were

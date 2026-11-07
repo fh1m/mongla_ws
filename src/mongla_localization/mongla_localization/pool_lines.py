@@ -1,6 +1,6 @@
 """The lane line is a surveyed straight edge. Read a heading off it.
 
-⛔ WHY THIS EXISTS BESIDE `tile_grating`, AND NOT INSTEAD OF IT. Both read the
+Why this exists beside `tile_grating`, and not instead of it. Both read the
 pool floor as a survey, but a lane line cannot be read by the grating method
 and the arithmetic says so plainly. World Aquatics fixes lane centres at
 exactly 2.5 m; five cycles of a 2.5 m pitch must fit in frame for an FFT to
@@ -9,7 +9,7 @@ needs an altitude of **26.8 m**. A pool is 2 m deep. So the periodic method is
 structurally unable to see lane lines, and the instrument for them is a LINE
 detector -- you see one at a time, not a pattern.
 
-WHAT THE RULEBOOK GUARANTEES, which is the whole reason this is worth
+What the rulebook guarantees, which is the whole reason this is worth
 building. World Aquatics' pool certification fixes every number:
 
     lane centres      exactly 2.5 m apart
@@ -23,7 +23,7 @@ worldwide published standard, so unlike `tile_m` this instrument needs no
 venue calibration. And the lines run the length of the pool, which means their
 direction IS the pool's long axis.
 
-WHAT ONE LINE BUYS:
+What one line buys:
 
   HEADING      the line's direction, absolute in the pool frame, modulo 180
                degrees. That is a TWO-fold ambiguity against the tile grid's
@@ -32,13 +32,13 @@ WHAT ONE LINE BUYS:
   CROSS-TRACK  the line's offset from the image centre, which is a lateral
                position relative to a surveyed feature.
 
-AND IT SURVIVES WHAT KILLS THE REST. A lane line is 0.2-0.3 m of high-contrast
+And it survives what kills the rest. A lane line is 0.2-0.3 m of high-contrast
 dark against pale tile, spanning the whole frame. That is the single most
 robust feature in a swimming pool: it outlives the turbidity that erases props,
 the blur that erases corners, and the distance that shrinks every detection
 below the 10 px floor we measured.
 
-⚠ AND WHAT IT IS NOT. A line gives no ALONG-track information -- sliding along
+And what it is not. A line gives no ALONG-track information -- sliding along
 a lane line looks identical at every point. Only the end cross line breaks
 that, and only near the wall. Stated so nobody reads "position" into this.
 """
@@ -128,7 +128,7 @@ def detect(gray: np.ndarray, *, min_span: float = MIN_LINE_SPAN
     h, w = a.shape
     diag = math.hypot(h, w)
 
-    # ⛔ THE FIRST DESIGN READ THE TILES, NOT THE LINE, AND SAID 0.00 DEGREES
+    # The first design read the tiles, not the line, and said 0.00 degrees
     # CONFIDENTLY. Hough-on-edges votes per edge pixel, and a tiled floor has
     # dozens of tile joints against the lane line's two sides -- so the grid
     # won every vote. Measured on the control: a frame containing ONLY tiles
@@ -143,7 +143,7 @@ def detect(gray: np.ndarray, *, min_span: float = MIN_LINE_SPAN
     if thresh is None:
         return None
 
-    # ⛔ A GRADIENT MIMICS A WIDE LANE LINE, AND EVERY SHAPE TEST PASSES IT.
+    # A gradient mimics a wide lane line, and every shape test passes it.
     # Measured on a plain illumination ramp: the darkest band is 101x480 px,
     # elongated 4.75:1, spanning the frame and high-contrast. Elongation, span
     # and contrast all say "line". This is the same negative control that
@@ -175,7 +175,7 @@ def detect(gray: np.ndarray, *, min_span: float = MIN_LINE_SPAN
         # It has to CROSS the frame: a lane line runs the length of the pool,
         # so in any view containing one it reaches two edges.
         #
-        # ⚠ HONESTLY LABELLED: UNPROVEN DEFENCE IN DEPTH. Every negative
+        # Honestly labelled: Unproven defence in depth. Every negative
         # control that reaches this line is already rejected by the contrast,
         # edge-sharpness or elongation gates, so removing this one breaks no
         # test. It is kept because it states a real physical property of a lane
@@ -211,7 +211,7 @@ def detect(gray: np.ndarray, *, min_span: float = MIN_LINE_SPAN
 def _dark_threshold(a: np.ndarray):
     """The cut that separates the line from the floor, from the frame itself.
 
-    ⛔ NEVER AN ABSOLUTE LEVEL. Depth, turbidity and the dive light move the
+    Never an absolute level. Depth, turbidity and the dive light move the
     absolute brightness by far more than the line-to-tile contrast does, so a
     fixed cut is calibrated to one pool at one depth and nowhere else.
 

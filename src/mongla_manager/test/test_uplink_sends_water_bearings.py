@@ -5,7 +5,7 @@ knob-wired-to-nothing defect: `vision.lock_s` was declared, documented, mapped
 and never passed, so the ladder was unreachable for the life of the feature.
 This pins the uplink call site itself.
 
-⛔ AND the index must come from `mongla_vision.optics`, which exists to be "the
+AND the index must come from `mongla_vision.optics`, which exists to be "the
 ONE place the water refractive index lives" (B22, where the literal 1.333 was
 written out at five more sites and forward/inverse stopped being inverses).
 `mongla_control` must NOT depend on `mongla_vision`, so the CALLER supplies it

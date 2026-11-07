@@ -1,6 +1,6 @@
 """The pre-flight gate must not PASS on hardware that is not there.
 
-⛔ WHY THIS FILE EXISTS. Measured on the vehicle on 2026-09-22, with **both
+Why this file exists. Measured on the vehicle on 2026-09-22, with **both
 cameras physically removed and sitting in the lab**, `bringup_check`
 reported:
 
@@ -47,7 +47,7 @@ def _with_nodes(monkeypatch, nodes):
 # ── J. cameras ───────────────────────────────────────────────────────────────
 
 def test_the_pi_codec_and_isp_are_not_cameras(monkeypatch):
-    """THE REGRESSION. These two nodes are present on every Pi 5, always."""
+    """The regression. These two nodes are present on every Pi 5, always."""
     _with_nodes(monkeypatch, PI_PLATFORM_NODES)
 
     assert bc._physical_cameras() == []
@@ -147,7 +147,7 @@ def _freshness(monkeypatch, ws):
 
 def test_a_build_copy_older_than_its_source_fails_the_gate(
         tmp_path, monkeypatch):
-    """⛔ THE NEAR-MISS THIS GUARDS (B-61). The fix was rsynced into src/ and
+    """The near-miss this guards (B-61). The fix was rsynced into src/ and
     reported "verified on the vehicle" while the flight path still imported
     the broken copy out of build/. `mongla_vision` resolves to
     build/mongla_vision/..., so an rsync into src/ proves nothing."""
@@ -198,13 +198,13 @@ def _hefs(tmp_path, floors):
 
 def test_a_baked_floor_above_the_configured_conf_fails_the_gate(
         tmp_path, monkeypatch):
-    """⛔ B-58. A HEF compiles its NMS score threshold on-chip and nothing at
+    """B-58. A HEF compiles its NMS score threshold on-chip and nothing at
     runtime can go below it. `gate_rescue_repair` shipped baked at 0.200
     against a launch default of conf=0.15, so the configured threshold was a
     no-op and the faintest detections -- measured underwater p10 0.167 -- were
     discarded in silicon.
 
-    ⚠ The backend ALREADY warned: `HailoDetector._warn_conf` fires at
+    The backend ALREADY warned: `HailoDetector._warn_conf` fires at
     construction with a logger correctly wired from `detector_node`. It
     printed on every boot for weeks and nobody read it. A warning only a human
     scrolling a log can catch is not a gate, which is why the same fact now
@@ -221,7 +221,7 @@ def test_a_baked_floor_above_the_configured_conf_fails_the_gate(
 
 
 def test_one_bad_model_among_good_ones_still_fails(tmp_path, monkeypatch):
-    """⭐ THE ACTUAL SHAPE OF B-58: two models were correct at 0.050 and one
+    """The actual shape of B-58: two models were correct at 0.050 and one
     was not, which is exactly why a spot check of the others confirmed the
     intent and missed the outlier."""
     floors = {'sauvc_sim': 0.05, 'bin_fire_blood': 0.05,
@@ -250,7 +250,7 @@ def test_the_floor_guard_bites_only_because_of_the_floor(
 
 def test_a_stock_model_above_the_bar_warns_rather_than_fails(
         tmp_path, monkeypatch):
-    """⚠ `yolov11n` is Hailo's own Model Zoo build -- "ROBOSUB-tested
+    """`yolov11n` is Hailo's own Model Zoo build -- "ROBOSUB-tested
     pretrained, sim/bench" per bringup.launch.py. Its 0.200 floor is correct
     for what it is and it is not flown, so failing a dive over it would train
     the operator to ignore this gate, which is worse than not having it."""
@@ -288,7 +288,7 @@ def test_an_unreadable_floor_does_not_fail_the_dive(tmp_path, monkeypatch):
 
 
 def test_the_conf_default_is_read_from_the_launch_file():
-    """⛔ One truth, two copies is the bug -- AND THIS TEST WAS THE SECOND COPY.
+    """One truth, two copies is the bug -- AND THIS TEST WAS THE SECOND COPY.
 
     Its docstring already said "a literal here would keep passing after
     someone changed the launch default", and then asserted against the literal

@@ -9,7 +9,7 @@ every one of them is UINT8. The chip runs `yolov8n_seg` in 6.28 ms; the host
 decode is what decides whether segmentation is usable, and the naive decode
 measured 31.5 ms on this Pi. So the decode is the whole problem.
 
-⛔ THE CLASS HEAD IS ALREADY A PROBABILITY, AND THAT IS THE LEVER.
+The class head is already a probability, and that is the lever.
 Measured on the vehicle 2026-09-11, `hailortcli`/`quant_info` for all three
 class heads (conv74/conv61/conv45):
 
@@ -205,8 +205,8 @@ def masks_for(coeff: np.ndarray, proto_u8: np.ndarray, quant: Quant,
               boxes_net: np.ndarray, *, size: int) -> List[np.ndarray]:
     """Per-detection binary masks, each cropped to its own box.
 
-    ⛔ NEITHER THE SIGMOID NOR THE DEQUANTISATION IS COMPUTED, AND BOTH
-    OMISSIONS ARE EXACT.
+    Neither the sigmoid nor the dequantisation is computed, and both
+    Omissions are exact.
 
     A prototype mask is `sigmoid(proto . coeff)` thresholded at 0.5. Two
     monotone maps sit between the bytes and that decision, and a threshold

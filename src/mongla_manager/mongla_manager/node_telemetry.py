@@ -68,7 +68,7 @@ class TelemetryMixin:
             return                       # backend has no demand funnel
         d = demand()
         m = self._Vector3Stamped()
-        # ⛔ INFORMATIONAL ONLY. This is REALTIME, which can step (first NTP
+        # Informational only. This is REALTIME, which can step (first NTP
         # sync on the Pi did, mid-run). The consumer times the lag on its own
         # arrival monotonic() and must never subtract these stamps.
         m.header.stamp = self.get_clock().now().to_msg()
@@ -83,7 +83,7 @@ class TelemetryMixin:
         these and interpolates to each frame-pair for rotation compensation.
         Skips when ATTITUDE hasn't arrived (no stream / pre-connect).
 
-        ⛔ THE STAMP IS THE SENDER'S CAPTURE TIME, NOT `now()`. This tick is a
+        The stamp is the sender's capture time, not `now()`. This tick is a
         50 Hz timer polling a cache, so it is ASYNCHRONOUS to arrival: stamping
         `now()` added a uniform 0-20 ms of quantisation on top of transport
         delay, and de-rotation subtracts `f*omega*dt`, so that lands directly
@@ -132,7 +132,7 @@ class TelemetryMixin:
                 stamp_s = self._imu_clock.to_host(board_s)
                 # Share it with `/mongla/state`, which carries the SAME board
                 # sample (yaw, depth) and was stamped on host publish time.
-                # ⛔ CACHED HERE, INSIDE the ready branch, and not after the
+                # Cached here, inside the ready branch, and not after the
                 # fallback below: past that point `stamp_s` may be the ARRIVAL
                 # time, and caching that as a board stamp would relabel the
                 # jitter instead of removing it -- the same lie in a better
@@ -204,7 +204,7 @@ class TelemetryMixin:
     def _publish_imu(self, stamp_s: float, imu_msg=None, att_msg=None) -> None:
         """Publish the 6-DoF sample on `/mongla/imu`, on the SAME mapped stamp.
 
-        ⛔ FRAME: body FRD, world NED -- MAVLink's and the board's, NOT ROS
+        FRAME: body FRD, world NED -- MAVLink's and the board's, NOT ROS
         REP-103 (FLU/ENU). Everything that meets this topic is FRD already:
         flow velocity (+y right), the command model (starboard), course
         bearings, MANUAL_CONTROL. One convention end to end beats a REP-103
@@ -234,7 +234,7 @@ class TelemetryMixin:
         msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z = imu['gyro']
         (msg.linear_acceleration.x, msg.linear_acceleration.y,
          msg.linear_acceleration.z) = imu['accel']
-        # THE BOARD'S OWN ATTITUDE, and this is the whole point of the split.
+        # The board's own attitude, and this is the whole point of the split.
         # It fuses the BNO085 at 500 Hz with the sensor on its own I2C bus and
         # holds heading to under 0.01 deg/min at rest (measured). Propagating
         # attitude again on the companion, from a gyro arriving at 50 Hz over a
@@ -250,7 +250,7 @@ class TelemetryMixin:
         rpy = imu.get('rpy')
         if rpy is None:
             msg.orientation_covariance[0] = -1.0
-            # SAY SO, ONCE. Without the board's attitude the filter propagates
+            # Say so, once. Without the board's attitude the filter propagates
             # its own from a 50 Hz gyro with nothing aiding it, and that was
             # MEASURED to diverge to 7.1e6 m in 35 s. Publishing a valid
             # message with the orientation quietly marked absent is exactly
@@ -276,7 +276,7 @@ class TelemetryMixin:
         """Return ``(yaw_deg, label)`` -- the SAME yaw the verbs read:
         ``yaw_source.read_yaw()``, or ``(None, 'N/A')`` when it is stale.
 
-        ⛔ NO FALLBACK TO THE CACHED ATTITUDE. None is how the source says
+        No fallback to the cached attitude. None is how the source says
         STALE (250 ms). Falling through to ``attitude['yaw']`` undid that gate
         one line later: after a USB drop /mongla/state kept publishing the
         last yaw pymavlink ever cached. Absent is absent -- NaN downstream.
@@ -395,7 +395,7 @@ class TelemetryMixin:
             self.get_logger().debug(f'[TELEM] srot telemetry read failed: {exc!r}')
             return
 
-        # ⛔ ABSENCE, NOT ZEROS. `tel.rpm` is a tuple of eight, so `if tel.rpm`
+        # Absence, not zeros. `tel.rpm` is a tuple of eight, so `if tel.rpm`
         # is TRUE even when every slot is 0 -- and the board fills all eight
         # slots whether or not an ESC is attached (measured: 958 CRC-valid
         # frames, no ESCs, every rpm exactly 0). This topic was therefore

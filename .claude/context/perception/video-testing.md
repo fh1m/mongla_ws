@@ -190,7 +190,7 @@ ros2 topic hz /mongla/vision/forward/detections      # what detected() will see
 Joining the two halves -- a mission thrusting against recorded frames -- needs the board on
 the bench, props clear and a human on the kill switch (CLAUDE.md §8).
 
-> **⚠️ Video testing is OPEN-LOOP on vision — know what it does and does NOT
+> **Video testing is OPEN-LOOP on vision — know what it does and does NOT
 > validate.** The clip plays on its own timeline and does **not** react to
 > commanded thrust. So it validates: detections firing on real imagery
 > (model / conf / class tuning); mission **logic** — `detected()` transitions,

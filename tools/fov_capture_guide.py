@@ -177,7 +177,7 @@ def worker():
     while state['run']:
         ok, f = cap.read()
         if not ok: continue
-        # DETECT SMALL, SAVE BIG. findChessboardCorners at 1280x720 is so slow
+        # Detect small, save big. findChessboardCorners at 1280x720 is so slow
         # on this Pi that it made the guide unusable -- and the guidance only
         # needs the corner QUAD to classify a pose, not sub-pixel accuracy.
         # The saved frame is still full resolution, and `solve` re-detects it

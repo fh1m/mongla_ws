@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """Topics that are PUBLISHED and nobody subscribes -- and vice versa.
 
-⛔ THE GAP THIS CLOSES. `orphan_sweep.py` finds modules nothing imports. It
+The gap this closes. `orphan_sweep.py` finds modules nothing imports. It
 cannot see the other half of the same defect: a node that publishes something
 no node reads, or -- worse -- a node that never subscribes to something it
 needs. Both pieces work perfectly alone, every test passes, and the capability
 does not exist.
 
-⭐ THE CASE THAT MOTIVATED IT. `lock_node` had odometry and floor height but
+The case that motivated it. `lock_node` had odometry and floor height but
 never subscribed `/mongla/state`, so vision did not know the hull's HEADING.
 `visibility.WorldTarget` -- object permanence, the thing that turns "target
 left the frame" from a perception failure into a navigation problem -- was
 unreachable for want of one number the board already published. No import was
 missing. No test failed. Nothing in the module graph showed it.
 
-⚠ WHAT THIS TOOL CANNOT DO, said plainly so its output is not over-read:
+What this tool cannot do, said plainly so its output is not over-read:
 
   * a topic with no subscriber is not automatically a defect. `/mongla/state`
     is consumed by the CLI, by Foxglove, and by an operator watching a
@@ -24,7 +24,7 @@ missing. No test failed. Nothing in the module graph showed it.
     looks unmatched may be wired under another.
   * it reads string literals, so a topic built by f-string interpolation is
     matched on its literal suffix only.
-  * ⛔ a topic passed as a VARIABLE is invisible. `pnp_node` does
+  * a topic passed as a VARIABLE is invisible. `pnp_node` does
     `topic = f'{ns}/target_pose' + ...` then `create_publisher(T, topic, 10)`,
     so `/target_pose` is reported as having no publisher although two nodes
     depend on it and it is produced. Resolving that needs real dataflow
@@ -53,7 +53,7 @@ SRC = ROOT / 'src'
 _PUB = re.compile(r'create_publisher\(\s*[\w.]+\s*,\s*([\'"f][^,]*?)\s*,', re.S)
 _SUB = re.compile(r'create_subscription\(\s*[\w.]+\s*,\s*([\'"f][^,]*?)\s*,', re.S)
 
-# ⛔ A TOPIC HELD IN A VARIABLE IS STILL A TOPIC, and missing that cost three
+# A topic held in a variable is still a topic, and missing that cost three
 # passes. `mongla_dsl._wait_fused_pose` writes
 #     topic = f'/mongla/vision/{camera}/target_pose_fused'
 #     ...create_subscription(TargetPose, topic, ...)
@@ -79,7 +79,7 @@ def _assignments(txt: str) -> dict:
             out[m.group(1)] = m.group(2)
     return out
 
-# ⛔ AN EXPLICIT LIST, NOT "any _suffix". `pnp_node` publishes
+# An explicit list, not "any _suffix". `pnp_node` publishes
 # `f'{ns}/target_pose' + (f'_{variant}' if variant else '')`, so the scanner
 # sees `/target_pose` while the node may publish `/target_pose_near`. A
 # permissive "anything after an underscore is a variant" rule ALSO swallowed
@@ -141,7 +141,7 @@ def main() -> int:
         """A topic is matched if either name is a suffix of the other, OR one
         extends the other with a `_variant` suffix.
 
-        ⚠ THE VARIANT RULE IS NOT COSMETIC. `pnp_node` builds its topic as
+        The variant rule is not cosmetic. `pnp_node` builds its topic as
         `f'{ns}/target_pose' + (f'_{variant}' if variant else '')`, so the
         scanner records `/target_pose` while the node may publish
         `/target_pose_near`. Without this the tool reported `/target_pose` as
@@ -168,7 +168,7 @@ def main() -> int:
         for t in orphan_sub:
             print(f'   {t:<44} {", ".join(sorted(subs[t]))[:70]}')
 
-    print('\n⚠ Neither list is a defect list. A published topic with no '
+    print('\nWARNING: Neither list is a defect list. A published topic with no '
           'in-graph reader is often a DIAGNOSTIC (the CLI, Foxglove and an '
           'operator are all real consumers this cannot see), and a subscribed '
           'topic with no in-graph publisher is usually one the BOARD or a '

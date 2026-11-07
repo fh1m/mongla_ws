@@ -17,7 +17,7 @@ plus mean confidence by size quartile. Spearman rather than Pearson because the
 relationship only has to be MONOTONIC to make the loop work -- it does not have
 to be linear.
 
-⚠ CONFOUND, STATED. A closer target is also better lit, less backscattered and
+Confound, stated. A closer target is also better lit, less backscattered and
 more centred, so this measures the whole approach, not size alone. That is the
 right quantity for the decision at hand -- "does driving closer help?" -- and
 the wrong one for a claim about scale sensitivity in isolation.
@@ -74,7 +74,7 @@ def detect(sess, name, img, conf_th):
     out = []
     for i in np.nonzero(keep)[0]:
         cx, cy, bw, bh = boxes[:, i] / r
-        # ⚠ cx, cy ARE RETURNED TOO, and they were not for a long time. Any
+        # cx, cy ARE RETURNED TOO, and they were not for a long time. Any
         # measurement that needs to sample the IMAGE inside the box -- the
         # attenuation prior, a colour check, a texture gate -- cannot do it
         # from a size alone, and the first version of `attenuation_range.py`

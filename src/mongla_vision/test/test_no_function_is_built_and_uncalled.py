@@ -1,6 +1,6 @@
 """The same rule as `test_no_capability_is_built_and_unreachable`, one level down.
 
-⛔ THAT TEST CHECKS MODULES. A dead FUNCTION inside a module that is imported,
+That test checks modules. A dead FUNCTION inside a module that is imported,
 tested and running is invisible to it -- and to the topic sweep and the launch
 sweep, which work on the ROS graph and on launch files. Found this way, every
 one real:
@@ -20,7 +20,7 @@ one real:
     -- each an accessor whose live path either duplicated it inline or hid the
     number it exposes.
 
-⚠ WHY `--private` IS THE MODE THAT MUST READ ZERO. Nothing outside a module can
+Why `--private` is the mode that must read zero. Nothing outside a module can
 reach an underscore name, so a private function with no caller in its own
 package is a certainty, not a question. Public names have legitimate reasons to
 look unused -- the mission DSL is called from scripts that are deliberately not
@@ -47,7 +47,7 @@ _ROOT = pathlib.Path(__file__).resolve().parents[3]
 _TOOL = _ROOT / 'tools' / 'dead_function_sweep.py'
 
 
-# ⚠ FUNCTIONS THAT ONLY A TEST CALLS, ON PURPOSE, each with the consumer it
+# Functions that only a test calls, on purpose, each with the consumer it
 # waits for. Same contract as the module registers: a row is a debt with a
 # name, not a silent gap. Until 2026-11-06 the sweep counted a TEST as a
 # caller, so every one of these read as live -- and so did ten that were
@@ -143,7 +143,7 @@ def test_the_sweep_exists_and_runs():
 
 
 def test_no_private_function_is_uncalled():
-    """⛔ THE ENFORCED HALF. An underscore name is unreachable from outside its
+    """The enforced half. An underscore name is unreachable from outside its
     module, so one with no caller is dead with certainty -- there is no
     external consumer it could be waiting for."""
     out = _run('--private')
@@ -156,7 +156,7 @@ def test_no_private_function_is_uncalled():
 
 
 def test_the_public_list_is_only_the_two_deferred_modules():
-    """⚠ REPORTED, NOT POLICED, except that it must not GROW silently. The two
+    """Reported, not policed, except that it must not GROW silently. The two
     remaining entries live in modules `orphan_sweep` already lists with the
     consumer they wait for, so the sweep files them separately. A third entry
     appearing here is a question to answer, not automatically a defect -- but
@@ -173,10 +173,10 @@ def test_the_public_list_is_only_the_two_deferred_modules():
 
 
 def test_the_sweep_catches_a_planted_dead_function(tmp_path):
-    """⛔ INJECTION-VERIFY THE GUARD ITSELF. A sweep that has never found a real
+    """Injection-verify the guard itself. A sweep that has never found a real
     defect is not a guard.
 
-    ⚠ THE PLANT GOES IN A COPY, and that is not tidiness. The first version
+    The plant goes in a copy, and that is not tidiness. The first version
     wrote into the real `ladder_config.py` and undid it in a `finally` --
     which does not run on SIGTERM, and this suite is run under `timeout`. A
     killed run would have left the plant in the source and failed `--private`

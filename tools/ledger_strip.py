@@ -11,7 +11,7 @@ left to right in that order:
                            DELETED / CONTAMINATED
             said no     -- the idea was measured and the answer was to leave it
                            off (leave it off / OFF wins / not chosen /
-                           UNSUPPORTED / ADOPT NOTHING)
+                           Unsupported / adopt nothing)
             stands      -- everything else
 
 The rule is deliberately crude and printed on the page: it counts what each
@@ -65,8 +65,8 @@ def read_ledger(text: str) -> list[Entry]:
 
 
 def _plain(title: str) -> str:
-    """Heading text for a tooltip: markdown backticks and the ⛔ marker dropped."""
-    return re.sub(r'[`⛔]', '', title).strip()
+    """Heading text for a tooltip: markdown backticks dropped."""
+    return title.replace('`', '').strip()
 
 
 def render(entries: list[Entry]) -> str:

@@ -5,7 +5,7 @@
      30 cm deep. Blue 30 points, the red drum carrying the pinger 50, any other
      red 10.  https://sauvc.org/rulebook/
 
-⛔ WE DO NOT CHASE THE 50-POINT DRUM. It is identified acoustically -- "RJE
+We do not chase the 50-POINT drum. It is identified acoustically -- "RJE
 International Pinger Model No. ULB-362B/45 kHz" -- and the rulebook gives it NO
 visual marking. The `drum_red_pinger` class in sauvc_sim.yaml is separable only
 because the simulator paints a yellow band on that model that no real drum has,
@@ -14,7 +14,7 @@ as the 50-pointer and drop into a 10-point one. No hydrophone is fitted. Blue is
 the only drum a camera can actually tell apart, so blue is the target, and
 test_sauvc_target_acquisition.py fails if any mission ever steers on the pinger.
 
-⛔ Navigation must be completed first: "The first task, Navigation, is mandatory
+Navigation must be completed first: "The first task, Navigation, is mandatory
 and must be completed before attempting any other task." This chunk assumes the
 gate is behind us -- run `sauvc_navigation` first, or a combinator that does.
 
@@ -23,15 +23,15 @@ Downward-camera axes (full table: .claude/context/perception/downward-camera.md)
     image-Y   -> SURGE fore/aft   -- align `fwd`
 The board holds SAUVC_DRUM_HOVER_DEPTH_M throughout; no vision axis moves depth.
 
-★ Before an armed run, VERIFY the surge sign DISARMED:
+Before an armed run, VERIFY the surge sign DISARMED:
     ros2 run mongla_vision vision_thrust_check --camera downward
 
 Run it:
     ros2 run mongla_planner mission sauvc_target_acquisition
 
-⚠ NOT FLOWN. Guards check names, depths and budgets only.
+Not flown. Guards check names, depths and budgets only.
 
-⛔ ON SROT, `move_*`, `set_depth`, `pause` and `stop` are SROT_MOVE primitives: they
+ON SROT, `move_*`, `set_depth`, `pause` and `stop` are SROT_MOVE primitives: they
 enter AUTO, which closes the never-closed depth loop, so the board denies them until
 the two bench checks pass. That includes the search creep fallback. The vision
 verbs themselves run in STABILIZE and are not gated (test_sauvc_srot_port.py).

@@ -217,7 +217,7 @@ def _physical_cameras() -> list[str]:
     ports: dict[str, str] = {}
     for link in sorted(glob('/dev/v4l/by-path/*-video-index0')):
         base = os.path.basename(link)
-        # ⛔ ONLY USB. A Raspberry Pi exposes its hardware video codec and its
+        # ONLY USB. A Raspberry Pi exposes its hardware video codec and its
         # ISP backend as by-path video nodes that exist whether or not a camera
         # is plugged in -- `platform-1000800000.codec-video-index0` and
         # `platform-1000880000.pisp_be-video-index0`. Measured on the vehicle
@@ -318,7 +318,7 @@ def _check_models() -> tuple[str, str]:
 def _check_sensor_offsets() -> tuple[str, str]:
     """Are the sensors' positions relative to the IMU measured? (#19, #27)
 
-    ⚠ WARN, NEVER FAIL. An unmeasured offset leaves its correction OFF -- the
+    Warn, never fail. An unmeasured offset leaves its correction OFF -- the
     behaviour before the correction existed -- and the vehicle flies as it
     always has. This line exists so the cost is SEEN at the pool, where the
     only fix (a tape measure) is available, rather than inferred later from a
@@ -337,7 +337,7 @@ def _check_sensor_offsets() -> tuple[str, str]:
 def _check_model_separation() -> tuple[str, str]:
     """Can the model you are about to fly TELL THE PROP FROM THE WATER?
 
-    ⛔ THE DEFECT THIS EXISTS FOR. Every other check in this file asks whether
+    The defect this exists for. Every other check in this file asks whether
     a model LOADS. None asked whether it WORKS, and for eight months the
     vehicle's default forward graph was one that claims a gate on 90.8 % of
     gate-free frames -- +0.0 points of separation between gate-present and
@@ -346,12 +346,12 @@ def _check_model_separation() -> tuple[str, str]:
 
     A graph that hallucinates is worse than no graph: the mission acts on it.
 
-    ⭐ THE MEASUREMENT LIVES IN THE SIDECAR, beside the weights it describes,
+    The measurement lives in the sidecar, beside the weights it describes,
     so it cannot be separated from them by a copy or a rename. Written by
     `tools/negative_clip_check.py`; `recommended_conf: null` means MEASURED AND
     FOUND UNUSABLE for that class, which is different from absent.
 
-    ⚠ A MODEL WITH NO `separation:` BLOCK IS UNKNOWN, NOT BAD. Most graphs have
+    A model with no `separation:` block is unknown, not bad. Most graphs have
     not been through the tool yet, and reporting them as failures would train
     the operator to ignore this line. Unknown is a WARN naming the tool.
     """
@@ -407,7 +407,7 @@ def _check_model_separation() -> tuple[str, str]:
 def _check_build_freshness() -> tuple[str, str]:
     """Is the vehicle running the code that is in `src/`?
 
-    ⛔ IT USUALLY IS NOT, AND NOTHING SAID SO. `mongla_vision` resolves to
+    It usually is not, and nothing said so. `mongla_vision` resolves to
     `build/mongla_vision/mongla_vision/...`, not `src/`. On 2026-09-25 the
     B-61 fix was rsynced into `src/`, verified by a probe that inserts `src/`
     on `sys.path`, and reported as "verified on the vehicle" -- while the
@@ -417,7 +417,7 @@ def _check_build_freshness() -> tuple[str, str]:
     That is the same shape as every §9 defect: the code was correct, the test
     passed, and the vehicle was running something else.
 
-    ⚠ A source file NEWER than its build copy is the signal, not file
+    A source file NEWER than its build copy is the signal, not file
     contents: `--symlink-install` makes many packages share an inode, in
     which case the mtimes match and this passes trivially, which is correct --
     a symlinked package cannot go stale.
@@ -452,7 +452,7 @@ def _check_build_freshness() -> tuple[str, str]:
     return PASS, 'build tree matches src'
 
 
-# ⚠ Stock Model Zoo builds. Not ours to recompile, not flown: `yolov11n` is
+# Stock Model Zoo builds. Not ours to recompile, not flown: `yolov11n` is
 # documented in bringup.launch.py as "ROBOSUB-tested pretrained, sim/bench".
 # Its 0.200 floor is correct for what it is, and failing a dive over it is how
 # a gate gets ignored.
@@ -479,7 +479,7 @@ def _baked_floor(hef_path: str) -> 'float | None':
 def _launch_conf_default() -> float:
     """Read the shipped `conf` default out of the launch file.
 
-    ⛔ NOT a literal here. One truth, two copies is the bug: a hardcoded 0.15
+    NOT a literal here. One truth, two copies is the bug: a hardcoded 0.15
     would keep passing after someone changed the launch default, which is
     exactly the drift this check exists to catch.
     """
@@ -506,13 +506,13 @@ _CONF_DEFAULT = _launch_conf_default()
 def _check_models_hailo(dirs: list[str]) -> tuple[str, str]:
     """On Hailo the accelerated artifact is a `.hef`, compiled offline.
 
-    ⛔ A `.hef` WITHOUT ITS `<stem>.yaml` SIDECAR IS WORSE THAN NO MODEL. The
+    A `.hef` without its `<stem>.yaml` sidecar is worse than no model. The
     sidecar carries the class allowlist; missing, the allowlist is empty and the
     detector returns `[]` every frame while the whole pipeline looks healthy.
     That is a silent failure, so it is reported as a FAIL rather than a warning.
     """
     hefs: dict[str, bool] = {}
-    # ⛔ A LINK TO NOTHING IS NOT A MODEL (2026-10-03, on the vehicle). A
+    # A link to nothing is not a model (2026-10-03, on the vehicle). A
     # symlink-install tree keeps links to models deleted from source; counted
     # as engines they made a retired model fail this gate while nothing could
     # load it. They are named instead, so the stale tree is visible.
@@ -540,7 +540,7 @@ def _check_models_hailo(dirs: list[str]) -> tuple[str, str]:
                       f'sidecar ({", ".join(orphans)}) -- the class allowlist '
                       f'is empty, so the detector returns [] every frame while '
                       f'looking healthy')
-    # ⛔ THE BAKED NMS FLOOR vs THE CONFIGURED conf. A HEF compiles its NMS
+    # The baked NMS floor vs THE CONFIGURED conf. A HEF compiles its NMS
     # score threshold on-chip; nothing at runtime can go below it. The Hailo
     # backend already WARNS about this at construction -- and that warning
     # fired on every boot for `gate_rescue_repair`, baked at 0.200 against a
@@ -554,7 +554,7 @@ def _check_models_hailo(dirs: list[str]) -> tuple[str, str]:
             th = _baked_floor(p)
             if th is not None:
                 floors[os.path.splitext(os.path.basename(p))[0]] = th
-    # ⚠ STOCK MODELS ARE NOT OURS TO RECOMPILE, and failing a dive over one is
+    # Stock models are not ours to recompile, and failing a dive over one is
     # how a gate gets ignored. `yolov11n` is Hailo's own Model Zoo build,
     # documented in bringup.launch.py as "ROBOSUB-tested pretrained,
     # sim/bench" -- it is not a flight model, and its 0.200 floor is correct
@@ -613,7 +613,7 @@ _THROTTLE_BITS = {
 def _throttled_verdict(raw: int) -> tuple[str, str]:
     """Grade a `get_throttled` bitmask. Pure, so it is testable without a Pi.
 
-    ⛔ A CLEAN READING IS NOT A CERTIFICATE. The load that matters -- eight
+    A clean reading is not a certificate. The load that matters -- eight
     thrusters drawing while both cameras and the Hailo run -- cannot be applied
     on a bench, and the sticky bits only record what has ALREADY happened. This
     reports; it does not clear the hull for water.
@@ -760,7 +760,7 @@ def _gcs_failsafe_verdict(enable: float | None,
 def _baro_health_verdict(health: int | None, present: int | None) -> tuple[str, str, str]:
     """Grade the Bar30 from SYS_STATUS's health bitfield. Pure, testable without a board.
 
-    WHY THIS IS A PREFLIGHT LINE AND NOT A CURIOSITY. Since fw behaviour rev 3 the board
+    Why this is a preflight line and not a curiosity. Since fw behaviour rev 3 the board
     validates the Bar30's calibration PROM (CRC-4) and refuses DEPTH_HOLD / AUTO / PATTERN
     when the baro is unhealthy or its sample is stale. `SROT_MOVE` auto-enters AUTO. So an
     unhealthy Bar30 means EVERY move verb is refused -- `move_forward` included -- and on
@@ -834,7 +834,7 @@ def _depth_loop_verdict(depth_cmd: float | None,
                         depth_p: float | None = None) -> tuple[str, str, str]:
     """Grade the DISARMED depth chain from DEPTH_CMD. Pure and testable.
 
-    ⚠ THIS USED TO READ `DEPTH_OUT` AND THAT STOPPED WORKING AT fw REV 8, silently.
+    This used to read `DEPTH_OUT` and that stopped working at fw REV 8, silently.
     Rev 8 suppresses DEPTH_OUT while the controller is not running -- the honest-absence
     fix we asked for -- and this probe only ever runs disarmed, when it never runs. So
     the old code hit its `None` -> WARN branch every time on a perfectly healthy board,
@@ -868,7 +868,7 @@ def _depth_loop_verdict(depth_cmd: float | None,
     # far is the barometer from zero" -- which is the question, and which stops a
     # healthy in-air board from spending a third of the budget on a constant.
     depth_m = depth_cmd / gain + sp.DEPTH_PREVIEW_TARGET_M
-    # ⛔ REPORT IN THIS STACK'S SIGN, NOT THE BOARD'S. `depth_m` is the board's
+    # Report in this stack's sign, not the board's. `depth_m` is the board's
     # internal POSITIVE-DOWN depth; everything an operator reads here -- the
     # `depth telemetry` line printed a few rows above, MonglaState, set_depth -- is
     # NEGATIVE below the surface. Measured on the vehicle 2026-09-14, the same
@@ -924,7 +924,7 @@ STACK_WARN_BYTES = 1024
 def _stack_headroom_verdict(named: dict) -> tuple[str, str, str]:
     """Is any board task close to overflowing its stack?
 
-    ⛔ THE BOARD HAS ALWAYS SENT THIS AND NOTHING READ IT. Six per-task high-water
+    The board has always sent this and nothing read it. Six per-task high-water
     marks go out as NAMED_VALUE_FLOAT; a stack overflow on the ESP32 is a hard
     reset of the control board -- thrusters stop mid-run -- and it is the one crash
     that announces itself in advance, in a number we were already receiving.
@@ -973,7 +973,7 @@ HEAP_FAIL_BYTES = 32768
 def _heap_verdict(named: dict) -> tuple[str, str, str]:
     """Is the control board running out of heap?
 
-    ⛔ SENT SINCE THE TELEMETRY EXISTED, READ BY NOTHING BUT A PRINTOUT. Same
+    Sent since the telemetry existed, read by nothing but a printout. Same
     story as the stack marks beside it. Limit: this is CURRENT free heap, so a
     leak that recovers between reads is invisible -- the right instrument is
     ESP.getMinFreeHeap(), the heap's own high-water mark, which is a one-line
@@ -1075,7 +1075,7 @@ def _check_srot(skip_mav: bool, device: str = '') -> list[tuple[str, str, str]]:
     # so running bringup_check against a live manager silently disarms the
     # vehicle and wipes its configured stream rates. Not doing it is right.
     #
-    # ⛔ BUT NOT CHECKED IS NOT PASSED (2026-10-03, on the vehicle). This was a
+    # But not checked is not passed (2026-10-03, on the vehicle). This was a
     # WARN, so with a manager holding the port the whole board section --
     # barometer, kill, leak, firmware rev -- was skipped and the gate EXITED 0:
     # it passed over a Bar30 it FAILS with the port free. The question this
@@ -1384,7 +1384,7 @@ def _print_launch_hint() -> None:
     print('    ros2 run mongla_planner mongla move_forward --duration 5 --gain 40')
     print('    ros2 run mongla_planner mongla stop')
     print()
-    print('  ⛔ BEFORE WATER -- the depth loop has never run closed, and it runs')
+    print('  ERROR: BEFORE WATER -- the depth loop has never run closed, and it runs')
     print('     under EVERY AUTO move (move_forward included), not just set_depth:')
     print('    ros2 run mongla_planner mongla set_mode --target_name DEPTH_HOLD')
     print('      1. hand-raise/lower the sub -> verticals must push BACK toward depth')

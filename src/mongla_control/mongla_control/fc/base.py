@@ -75,7 +75,7 @@ class FireResult:
     ``channel`` is the BOARD channel that was addressed (MAVLink `DO_SET_SERVO`
     param1, 1-based) -- not an index into any host-side table. There is no table.
 
-    ⚠ ``FIRED`` MEANS THE BOARD ACCEPTED THE COMMAND, NOT THAT A SOLENOID MOVED.
+    ``FIRED`` means the board accepted the command, not that a solenoid moved.
     The firmware streams no actuator readback at all (no `SERVO_OUTPUT_RAW`, no
     `ACTUATOR_OUTPUT_STATUS`; `g_state.aux` is never telemetered) and its PCA9685
     driver sets its health flag unconditionally with no I2C probe, so a physically
@@ -139,7 +139,7 @@ class Telemetry:
     #   0 healthy | 1 jitter | 2 read failures | 3 not initialised
     # NaN = the board has not said, which is distinct from 0 = healthy.
     baro_health:      float = math.nan
-    # ⛔ TRI-STATE. Has the board heard the companion its GCS failsafe is SCOPED TO
+    # TRI-STATE. Has the board heard the companion its GCS failsafe is SCOPED TO
     # (FS_GCS_SYSID/FS_GCS_COMPID, default 255/191 = us) since boot?
     #   None  = the board has not said (older firmware, or no telemetry yet)
     #   False = configured companion NEVER seen -> our heartbeat is not matching, so
@@ -149,7 +149,7 @@ class Telemetry:
     # means the failsafe scoping is wrong, and the vehicle's protection against a dead
     # companion is not actually watching the companion.
     companion_seen:   Optional[bool] = None
-    # ⛔ TRI-STATE, AND THE THIRD STATE IS THE POINT. None = the board cannot
+    # Tri-state, and the third state is the point. None = the board cannot
     # know. The thruster kill switch is a rotary knob on the SECOND board and
     # its state reaches the control board only over ESP-NOW; on link loss the
     # firmware reports kill=false, justified in its own comment as

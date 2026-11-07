@@ -53,7 +53,7 @@ def test_a_missing_task_is_named_in_a_pass():
 
 
 def test_the_implausible_depth_line_uses_the_telemetry_sign():
-    """⛔ Measured 2026-09-14: one preflight printed "depth telemetry +1.19 m" and
+    """Measured 2026-09-14: one preflight printed "depth telemetry +1.19 m" and
     "board reads -1.22 m" -- the same baro offset in two sign conventions. The
     board is positive-down internally; the operator's convention is negative =
     submerged. A baro that thinks it is ABOVE zero must print a POSITIVE number."""

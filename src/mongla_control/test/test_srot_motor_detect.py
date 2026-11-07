@@ -3,14 +3,14 @@ signs every controller downstream depends on.
 
 Three things make it different from `motor_test`, and each has a test here:
 
-  * IT PULSES ALL EIGHT THRUSTERS, unattended, and then writes. So the
+  * it pulses all eight thrusters, unattended, and then writes. So the
     confirmation is not decoration -- a bool `force=True` default would put an
     accidental full-thruster run one keystroke from a typo.
-  * THE ANSWER IT PRODUCES IS SPLIT ACROSS THREE PLACES. `CAL_MDIRn` multiplies
+  * the answer it produces is split ACROSS three places. `CAL_MDIRn` multiplies
     with `MOT_n_DIRECTION`, and `FRAME_REVERSE` negates all six axes after the
     mix. No display anywhere shows the product, which is precisely how the
     2026-08-07 confusion happened (fw `mav_stream.cpp:457`).
-  * ITS SUCCESS STATE LOOKS LIKE A FAULT. The board finishes MANUAL and
+  * its success state looks like a fault. The board finishes MANUAL and
     DISARMED on purpose (`task_control_loop.cpp:383-406`): handing an armed
     hull to a closed-loop controller straight after an unverified sign change
     flipped the vehicle in water.

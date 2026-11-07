@@ -42,7 +42,7 @@ _ABORT_BANNER = """\
 ║   Ctrl-C received — cancelling, stopping thrusters, disarming.║
 ╚══════════════════════════════════════════════════════════════╝\033[0m"""
 
-# ⛔ NOT "Mongla will surface". This used to print a three-second "Surfacing
+# NOT "Mongla will surface". This used to print a three-second "Surfacing
 # in 3 ... 2 ... 1 ... done" countdown that waited on nothing and measured
 # nothing, under a line promising the hull would rise on positive buoyancy. The
 # net buoyancy of this hull has never been measured (CLAUDE.md §1: no material is
@@ -175,7 +175,7 @@ def main(args=None):
               file=sys.stderr)
         sys.exit(2)
 
-    # ⛔ NO rclpy SIGINT handler. rclpy's default one SHUTS THE CONTEXT DOWN on
+    # NO rclpy SIGINT handler. rclpy's default one SHUTS THE CONTEXT DOWN on
     # Ctrl-C, so the abort path below cannot publish a cancel, stop or
     # disarm -- measured: `publisher's context is invalid`. Python's own
     # handler still raises KeyboardInterrupt; the context stays usable.

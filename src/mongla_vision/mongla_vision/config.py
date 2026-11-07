@@ -1,7 +1,7 @@
 """Named camera profiles. THIS DICT IS THE ONE THE CODE READS.
 
 `config/cameras.yaml` is the operator-facing copy with the full rationale, and
-NOTHING LOADS IT -- `get_profile` resolves against this dict. That is a trap
+Nothing loads it -- `get_profile` resolves against this dict. That is a trap
 worth stating plainly, because it has already been walked into: switching the
 Pi profiles to the low-latency source by editing only the YAML changed nothing
 at all, and the launch came up on the old source with no error anywhere.
@@ -40,7 +40,7 @@ CAMERA_PROFILES = {
     # 'forward' profile the ROS graph published 29.2 Hz, camera-capped.
     # 210 is a property of the MICRODIA global-shutter unit on this bench, not
     # of the Pi and not of the vehicle's cameras.
-    # ⛔ THESE TWO WERE SWAPPED, and the fps figures belonged to each other.
+    # These two were swapped, and the fps figures belonged to each other.
     # The global-shutter Sonix is the BOTTOM camera and the Fantech is the
     # FORWARD one; the udev rules bound the names the other way round (one of
     # them to a port that matched no device at all), so `pi_forward` opened
@@ -53,7 +53,7 @@ CAMERA_PROFILES = {
     'pi_forward': {
         # The FANTECH.
         #
-        # ⛔ RETRACTED 2026-09-09: "a flat 15.00 Hz ... this is the CAMERA's
+        # RETRACTED 2026-09-09: "a flat 15.00 Hz ... this is the CAMERA's
         # ceiling ... nothing in software will raise it." The 15 was THIS
         # LINE, and the comment then defended it. Re-measured on the vehicle
         # by counting DISTINCT header stamps -- a topic `hz` cannot tell a

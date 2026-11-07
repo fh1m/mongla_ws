@@ -1,5 +1,5 @@
 # ============================================================================
-#  ⚠  THIS FILE IS NOT LOADED AT RUNTIME.  (B49)
+#  NOTE: THIS FILE IS NOT LOADED AT RUNTIME.  (B49)
 #
 #  This is the file that already burned us once: switching the Pi cameras to the
 #  low-latency source by editing it changed NOTHING -- the launch came up on the
@@ -40,7 +40,7 @@ mongla_vision:
     # ── Raspberry Pi 5 + AI HAT+ ────────────────────────────────────────────
     # MEASURED on the vehicle 2026-09-07, not requested and not assumed.
     #
-    # ⛔ THE TWO PI PROFILES USED TO BE SWAPPED. The global-shutter Sonix is
+    # The two PI profiles used to be swapped. The global-shutter Sonix is
     # the BOTTOM camera and the Fantech is the FORWARD one; the udev rules
     # bound the names the other way (and the `forward` rule named a USB port
     # that matched no device at all, so that symlink was hand-made and stale).
@@ -59,7 +59,7 @@ mongla_vision:
     pi_forward:
       # The FANTECH -- forward, detection.
       #
-      # ⛔ "15.00 Hz is the CAMERA's ceiling ... Nothing in software raises
+      # "15.00 Hz is the CAMERA's ceiling ... Nothing in software raises
       # this" IS RETRACTED. It was this profile's own `fps: 15` doing the
       # capping, and the claim then justified keeping it. Re-measured
       # 2026-09-09 on the vehicle, counting DISTINCT header stamps (a topic

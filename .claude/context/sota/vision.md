@@ -21,8 +21,8 @@
 | **track** | `tracking/roboflow_tracker.py` | OC-SORT (default), ByteTrack fallback, + a CV Kalman output smoother whose `_DT_REF_S = 0.0325` is the **measured** p50 detection interval |
 | **lock ladder** | `tracking/lock_state.py:8-169` | DETECTION → FOLLOW (LK, 8.0 ms on one core) → ANCHOR (XFeat homography, 33.1 ms at 320×240) → LOST. Strict priority, **never blending**. Authority ramps linearly 0.70 s → 2.50 s, sized on 71 real gaps (p50 0.155, p90 0.651, p99 2.418, max 4.00 s) |
 | **optics** | `optics.py:74-209` | flat-port Pinax rectification. Local focal grows with field angle: **685.1 px on axis vs 757.7 at r=367 — 10.6 % centre to corner**. Skipping refraction reads a 4 m gate at **5.15 m (+29 %)** |
-| **metric** | `target_geometry.py` + `config/target_geometry.yaml` | `m_per_px = width_m / w_px` from a table of real prop widths. ⛔ the metric branch **has never run on the vehicle** |
-| **pose** | `anchor/pose.py` | IPPE for the interval, **SQPnP** for the point estimate (p90 yaw 1.40° vs 3.38° at our 1.55 px noise). ⛔ planar **flip ambiguity is worst head-on**, which is the firing geometry |
+| **metric** | `target_geometry.py` + `config/target_geometry.yaml` | `m_per_px = width_m / w_px` from a table of real prop widths. the metric branch **has never run on the vehicle** |
+| **pose** | `anchor/pose.py` | IPPE for the interval, **SQPnP** for the point estimate (p90 yaw 1.40° vs 3.38° at our 1.55 px noise). planar **flip ambiguity is worst head-on**, which is the firing geometry |
 | **flow** | `flow/flow_node.py` (1 405 lines) | the downward camera as the DVL substitute. `v = h·(flow_px/dt − f·ω)/f` — rotation subtracted **before** scaling. Measured: 3 × 30 cm slides, worst error **1.09 cm**; noise floor 0.57 mm/s; de-rotation **575.7 → 57.1 mm/s** on pure rotation |
 
 Measured end to end: **18.0 ms** photon → detection; **80.9 Hz** standalone, **53.9 Hz** through
@@ -51,7 +51,7 @@ The entire training doctrine is `.claude/skills/train-model/SKILL.md`, **40 line
   frames.
 - Then: a hand-written `<stem>.yaml` sidecar (**the Hailo backend refuses to construct without
   it**), and a row in `config/target_geometry.yaml` or every metric consumer loses range.
-- ⛔ **No compiled artifact exists in the repo**: five `.pt`, eight `.yaml`, **zero `.hef`**.
+- **Warning: No compiled artifact exists in the repo**: five `.pt`, eight `.yaml`, **zero `.hef`**.
 - **How long any of this takes is recorded nowhere.**
 
 What we *do* have, and it is unusual: an evaluation fleet. `tools/model_select.py` shows three
@@ -118,7 +118,7 @@ The one place gains are reported is **per-image oracle selection** (CUPDD, mAP 0
 fact*, not deployable without a selector nobody has built. The other is **joint
 enhancement-plus-detection training**, which is a second training pipeline, not a filter.
 
-✅ **Our retraction stands, and it is now the better-evidenced position.** `preprocess.py` shipping
+**Our retraction stands, and it is now the better-evidenced position.** `preprocess.py` shipping
 off is not conservatism; it is what 98–133 retrained models say.
 
 ### 2.2 Sim-to-real detection: expect about half
@@ -136,7 +136,7 @@ Synthetic-only reaches **43 % of real-trained mAP50 and 27 % of mAP50-95** — a
 column is the one alignment lives in. The authors: *"models trained on simulated data fall short
 on being able to identify objects under heavy underwater degradation."*
 
-✅ The published version of our own "sim imagery is too clean" finding, with a number. Note what
+The published version of our own "sim imagery is too clean" finding, with a number. Note what
 the top teams do instead: **CMU and ITU both use synthetic only as a supplement** for conditions
 real data under-represents (extreme angles, high turbidity) — never alone.
 
@@ -164,7 +164,7 @@ The cost: **OSNet is 2.2 M params and 979 MFLOPs *per crop, per frame***
 `N_tracks × 979 MFLOPs` on top of a graph already at 53.9 Hz. And there is **no Re-ID model of any
 kind in the Hailo-8 model zoo**.
 
-⛔ **Zero of the five RoboSub TDRs read use re-identification, appearance embeddings or
+**Warning: Zero of the five RoboSub TDRs read use re-identification, appearance embeddings or
 cross-camera association.** Identity comes from **class + geometry**. **Re-ID is the lowest-value
 addition on this list for this vehicle.**
 
@@ -187,7 +187,7 @@ from the image, which is what the XFeat homography anchor does.
 | **XFeat** (ours) | **27.1** | 74.9 | **892** | **81.1 — best in the table** |
 | **XFeat\*** semi-dense | **19.2** | **85.1** | **1 885** | — |
 
-✅ **The 2025 RoboSub champion runs the same anchor.** NUS Bumblebee's BBAUV 4.5 pipeline is
+**The 2025 RoboSub champion runs the same anchor.** NUS Bumblebee's BBAUV 4.5 pipeline is
 **YOLO11 → XFeat → PnP** ([RS25 TDR](https://robonation.org/app/uploads/sites/4/2025/07/RS25_TDR_National-University-of-Singapore-Bumblebee-compressed.pdf));
 their 2023 stack was YOLOv8 + **SIFT** + PnP, so 2023→2025 is literally SIFT → XFeat.
 
@@ -195,7 +195,7 @@ The one published free-lunch axis in that family: **XFeat → XFeat\*** — **+1
 (892 → 1 885) and +10.2 Acc@10°** for **1.4× the time**. A dead end worth naming:
 **LightGlue on CPU is 0.31 pairs/s ≈ 3.2 s per pair** — unusable inside a 2 s gap.
 
-⚠ Benchmark mismatch, stated: MegaDepth and HPatches measure wide-baseline pose between image
+**Caution:** Benchmark mismatch, stated: MegaDepth and HPatches measure wide-baseline pose between image
 *pairs*, not planar-anchor survival across a blackout. The ranking transfers; the absolutes do not.
 
 ### 2.5 Segmentation is cheap on our chip — and unproven for our purpose
@@ -213,9 +213,9 @@ Official [Hailo-8 model zoo](https://github.com/hailo-ai/hailo_model_zoo/blob/ma
 **Instance masks are not the bottleneck** — `yolov8n_seg` runs ~10× our graph rate. Two hard
 constraints follow:
 
-⛔ **No SAM variant — FastSAM, MobileSAM, EdgeSAM — exists in the Hailo-8 zoo**, and no Hailo-8
+**Warning: No SAM variant — FastSAM, MobileSAM, EdgeSAM — exists in the Hailo-8 zoo**, and no Hailo-8
 compilation of one is published. Their quoted speeds are iPhone 14 and 2080 Ti numbers.
-⛔ **No controlled study compares masks against boxes for *alignment* error.** The field routes
+**Warning: No controlled study compares masks against boxes for *alignment* error.** The field routes
 around it: oriented boxes (Cornell YOLO-7D), keypoints (CMU yolo26-pose), features + PnP
 (Bumblebee). **The published route to alignment precision is geometry, not mask boundaries** —
 which is the route our lock ladder already takes.
@@ -234,7 +234,7 @@ images, 5 YOLO variants, mAP@50:
 
 **Noise is catastrophic, blur is serious, colour is nearly free.** A short shutter is paid for in
 gain and gain in noise, so **the noise penalty is ~2.5× the blur penalty** — shortening exposure is
-only defensible while noise stays low, which makes lighting part of the same decision. ⚠ The
+only defensible while noise stays low, which makes lighting part of the same decision. The
 degradations are *synthetic*; a real shutter/gain sweep on our own footage would be **new
 evidence, not a replication**. This independently reinforces §2.1: colour is not where wins are.
 
@@ -258,7 +258,7 @@ evidence, not a replication**. This independently reinforces §2.1: colour is no
    moving the Kalman filter Python → C++/Eigen (**~10× CPU cut**), both purely to buy frames back
    for YOLO. Our Pi 5 + Hailo-8 split is the same strategy, in hardware.
 
-⛔ **The one thing they have that we do not: sonar.** Bumblebee carries an Oculus M750d; ITU a
+**Warning: The one thing they have that we do not: sonar.** Bumblebee carries an Oculus M750d; ITU a
 360° plus a Ping 1D. Both use it as the **modality fallback when optics fail** — exactly our 2–4 s
 blackout regime. No team publishes a detection number for it, and **there is no software
 substitute in the literature**.
@@ -278,7 +278,7 @@ detector on auto-labels and on human labels:
 | **LVIS** | **< 0.10 mAP, F1 0.215** | — |
 
 The cost side is not close: **3.4 M objects labelled in 1.27 h for $1.18** on one L40S against
-**6 703 h / $124 092** of human time — ~5 000× faster, ~100 000× cheaper. ⛔ But **LVIS is the
+**6 703 h / $124 092** of human time — ~5 000× faster, ~100 000× cheaper. But **LVIS is the
 long-tail regime, and a torpedo board lives there**, not in VOC's twenty everyday classes.
 
 **The escape from that collapse is image exemplars, not text prompts.** SAM 3 on SA-Co:
@@ -299,7 +299,7 @@ fully-supervised**; at 1 % labels, 25.06 against a 10.70 baseline.
 **And underwater specifically**, with frozen DINOv3 features
 ([arXiv 2604.00313](https://arxiv.org/abs/2604.00313)): **13 labelled images per category (≈4 %)
 → 81.8 % macro F1**; 144 per category → 88.5 %, level with a fully-supervised ConvNeXt at 88.9 %.
-⚠ Classification, not detection — carried as an indication, not a promise.
+**Caution:** Classification, not detection — carried as an indication, not a promise.
 
 **Our accelerator arbitrates the whole decision, and it says the bottleneck is labels.** Hailo-8
 Model Zoo measured: `yolov11n` **39.0 float → 37.5 INT8 at 185 FPS**; `yolo26n` **40.0 → 38.4 at
@@ -309,7 +309,7 @@ enormous. **The whole decision is labels, not inference.**
 
 **The six-step manual compile path is obsolete.** `model.export(format="hailo")` landed in
 ultralytics **8.4.97** — one call to a `.hef`, covering YOLOv8 / YOLO11 / YOLO26 including custom
-models. ⛔ **It requires ≥1 024 in-domain calibration images, and with none supplied it silently
+models. **It requires ≥1 024 in-domain calibration images, and with none supplied it silently
 falls back to COCO128** — precisely the silent-failure shape this codebase keeps finding, and the
 same class of trap as our missing-sidecar-means-empty-allowlist rule.
 
@@ -327,7 +327,7 @@ same class of trap as our missing-sidecar-means-empty-allowlist rule.
    empty cell across the 2026 literature — so if we measure it on our own pipeline, that number
    does not currently exist anywhere.
 
-⛔ **The standing gap in the entire field:** *nothing in this literature measures held-out-session
+**Warning: The standing gap in the entire field:** *nothing in this literature measures held-out-session
 recall.* Every headline number is an i.i.d. split. **We already measure the thing the field does
 not** (`tools/model_select.py`, `tools/domain_gap.py`, `tools/detector_viewpoint_check.py`) — that
 is not a deficiency of ours, it is a lead.
@@ -366,7 +366,7 @@ the **Hessian of KLT tracking** — *the same matrix Shi-Tomasi already computes
 We are one eigenvalue away from a published health metric. It disables a modality when its
 contribution stays below **10 % for 2–4 s** — the hysteresis matters as much as the threshold.
 
-⛔ **But every published mechanism except an independent second estimator detects the *absence* of
+**Warning: But every published mechanism except an independent second estimator detects the *absence* of
 signal.** Our measured caustics failure is the opposite: **a confident wrong signal** — tracking is
 healthy, it is tracking the wrong thing. **Only a disagreeing independent estimator catches that.**
 That is the real argument for a DeepVL-shaped model: not a fallback, a **second opinion**.

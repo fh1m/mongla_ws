@@ -1,6 +1,6 @@
 """The align loop's yaw axis, through `_srot_drive`, at loop level.
 
-⛔ WHY THIS FILE EXISTS. The srot yaw law once shipped rounding corrections
+Why this file exists. The srot yaw law once shipped rounding corrections
 DOWN to zero, which stalls the hole-lock just outside `err_px` -- the exact
 failure the yaw floor was written for -- and nothing at loop level caught it.
 This file drives `align_loop` against a board that records the MANUAL_CONTROL
@@ -30,7 +30,7 @@ class _FakeSrot:
         return {'depth': -0.5}
 
     def manual(self, fwd, lat, up, yaw):
-        # ⚠ MANUAL_CONTROL carries -1..1 UNITS, not percent. `_srot_drive`
+        # MANUAL_CONTROL carries -1..1 UNITS, not percent. `_srot_drive`
         # divides by 100 on the way out, so everything recorded here is a unit
         # and every comparison against a *_PCT constant must scale by 100.
         self.frames.append((fwd, lat, up, yaw))
@@ -64,7 +64,7 @@ def _yaws_pct(fc):
 # --------------------------------------------------------------------------- #
 
 def test_a_close_small_residual_still_actuates():
-    """⭐ THE FALSIFIER FOR THE ROUND-DOWN BUG. Big bbox (close, so the floor is
+    """The falsifier for the round-down bug. Big bbox (close, so the floor is
     armed), a residual just outside the deadband, and a kp low enough that pure
     proportional lands under the gate -- which is what `range_gain_floor` does
     close in. The snap actuates here; rounding down does not."""
@@ -81,7 +81,7 @@ def test_a_close_small_residual_still_actuates():
 
 
 def test_a_zero_yaw_gain_commands_no_yaw_close_in():
-    """⛔ THE DEFECT THE DELETED TAPER CARRIED. Close in, outside the deadband,
+    """The defect the deleted taper carried. Close in, outside the deadband,
     with kp_yaw=0 the operator has switched yaw OFF. The taper still produced a
     floor from the pixel error alone, and the snap lifted it to 17 % of full
     scale -- yaw nobody asked for. Proportional to zero is zero."""
@@ -99,7 +99,7 @@ def test_nothing_is_commanded_inside_the_deadband():
 
 
 def test_the_far_field_is_left_pure_proportional():
-    """⛔ THE OPPOSITE RULE, and it must survive the snap. A small bbox means the
+    """The opposite rule, and it must survive the snap. A small bbox means the
     target is distant; a minimum on a rate channel out there is a relay that
     limit-cycles the hull (the far-field wobble). The fill gate suppresses the
     floor, and the snap lives INSIDE that gate, so a far-field residual is never

@@ -130,7 +130,7 @@ function renderCam(cam, c, isLive) {
 
   // controls reflect authoritative state
   refs.actBtn.classList.toggle('is-live', isLive);
-  refs.actBtn.textContent = isLive ? 'Live cam ✓' : 'Make live cam';
+  refs.actBtn.textContent = isLive ? 'Live cam ' : 'Make live cam';
   refs.pauseBtn.classList.toggle('is-paused', c.paused === true);
   refs.pauseBtn.textContent = c.paused ? 'Resume' : 'Pause';
   if (document.activeElement !== refs.conf && c.conf !== null) {
@@ -167,7 +167,7 @@ function renderClasses(cam, c) {
   for (const cls of c.classes) {
     const chip = document.createElement('span');
     chip.className = 'chip';
-    chip.innerHTML = `${esc(cls)} <span class="x" title="remove">✕</span>`;
+    chip.innerHTML = `${esc(cls)} <span class="x" title="remove"></span>`;
     chip.querySelector('.x').onclick = () => {
       const rest = c.classes.filter((x) => x !== cls);
       post(`/api/detector/${cam}/param`, { name: 'classes', value: rest.join(',') });

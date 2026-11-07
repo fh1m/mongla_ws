@@ -13,7 +13,7 @@ files with the same **stem**, side by side in `src/mongla_vision/models/`
 |---|---|---|
 | `<stem>.pt` | the trained weights (dev box, CUDA) | nothing to compile |
 | `<stem>.hef` | the compiled model the Hailo-8 runs | the Pi falls back to CPU, ~1 Hz |
-| `<stem>.yaml` | **the sidecar**: class names, `recommended_conf` | ⛔ empty allowlist, a silent `[]` every frame |
+| `<stem>.yaml` | **the sidecar**: class names, `recommended_conf` | **Warning:** empty allowlist, a silent `[]` every frame |
 
 The models in the repo are **development harnesses**. Real ones are trained
 and swapped on water days, so never hard-code a class list in more than one
@@ -33,7 +33,7 @@ datasets/<task>/
 
 Split by **session, not by frame** — neighbouring frames of one clip in both
 train and val make validation recall meaningless. Keep datasets out of
-`/tmp` (a RAM disk here; training is OOM-killed). ⛔ Do not add image
+`/tmp` (a RAM disk here; training is OOM-killed). Do not add image
 "enhancement" (CLAHE, dehaze) to the pipeline: measured in 17 configurations,
 never positive.
 

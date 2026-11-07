@@ -98,7 +98,7 @@ selector and no `_is_srot` branch to add. The Pixhawk path lives on the tag
 
 ---
 
-## ⚖ Ownership, settled 2026-08-07 after the water test
+## Ownership, settled 2026-08-07 after the water test
 
 **We develop `mongla_ws` only.** No agent working in this repo writes code in
 `srot-control-board`, `srot-ground-station` or `srot-esc-flasher` any more — the firmware and
@@ -119,7 +119,7 @@ us breaks that. Work on a `mongla-ws/<topic>` branch, then **return the mirror t
 and re-run the drift suite** — a checked-out feature branch would make the mirror lie about
 what is flashed, which is the one thing it exists to tell the truth about.
 
-⚠ **Cite line numbers against a commit, and re-verify them at write time.** Round 8 inherited
+**Caution: Cite line numbers against a commit, and re-verify them at write time.** Round 8 inherited
 `task_control_loop.cpp:236-237` from an earlier round; the depth call had moved to `:240-241`.
 A stale citation in a cross-repo PR sends someone to the wrong function in their own code.
 
@@ -131,7 +131,7 @@ SROT_FW_DIR=$PWD/Mongla_others/srot-control-board python -m pytest src/mongla_co
 # then bump FW_BEHAVIOUR_REV in srot_protocol.py to the new rev and document what it means
 ```
 
-⚠ **A green drift suite proves the wire matches, not that the vehicle behaves the same.**
+**Caution: A green drift suite proves the wire matches, not that the vehicle behaves the same.**
 Rev 7 passed clean while shipping `FRAME_REVERSE`, which inverts every axis on our hull —
 a *param*, invisible to a header-reading test. Read the release's commits, not only its rev
 number, and record any behaviour delta in the `FW_BEHAVIOUR_REV` comment block.
@@ -145,7 +145,7 @@ number, and record any behaviour delta in the `FW_BEHAVIOUR_REV` comment block.
 4. If it is a firmware defect we cannot fix here, add it to `JETSON_FEEDBACK.md` with a
    `file:line` and a concrete suggested fix, not just a complaint.
 
-## ⛔ Standing safety gate
+## Standing safety gate
 
 The board's **depth loop has never run closed** — the sign was inverted until 2026-07-30 and
 the Bar30 was not fitted while it was written. Two bench checks

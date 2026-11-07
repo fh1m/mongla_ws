@@ -27,7 +27,7 @@ TETHER_REMOVE_PAUSE_S    = 5.0   # seconds to remove tether before thrusters arm
 GATE_SEARCH_DEPTH_M      = -0.4  # initial descent for whole run
 GATE_PASS_DEPTH_M        = -0.6  # descend here before driving through gate
 SLALOM_DEPTH_M           = -0.6  # depth to hold while weaving slalom
-TORPEDO_DEPTH_M          = -0.7  # ★ FILL AT POOL — align with hole height
+TORPEDO_DEPTH_M          = -0.7  # FILL AT POOL — align with hole height
 BIN_DEPTH_M              = -1.0  # deep enough for downward cam to see bin
 
 # ── HEADINGS (degrees) — fill after compass survey, or leave None ──────────────
@@ -51,7 +51,7 @@ GATE_PASS_FWD_FILL       = 80    # gate height % = "through gate"
 SLALOM_FWD_FILL          = 60    # pipe height % at closest pass
 TORPEDO_BLOOD_FWD_FILL   = 30    # blood height % at end of approach
 
-# ── PER-PHASE TIME BUDGETS (seconds) ──────────────────────────────────────────
+# ── per-phase time budgets (seconds) ──────────────────────────────────────────
 GATE_ALIGN_DURATION_S    = 30
 GATE_RESCUE_ALIGN_S      = 10
 GATE_APPROACH_DURATION_S = 25
@@ -106,13 +106,13 @@ def run(mongla, log=None):
             err=ALIGN_ERR_PX, gain=ALIGN_GAIN,
             duration=GATE_ALIGN_DURATION_S, fallback=creep_forward)
 
-        # ⛔ THE rescue/repair SLIDE PHASE WAS REMOVED 2026-09-28, not renamed.
+        # THE rescue/repair SLIDE PHASE WAS REMOVED 2026-09-28, not renamed.
         # `gate_rescue_repair` was retired (+0.0 points of separation between
         # gate-present and gate-absent footage; measured-bars section 59) and no
         # shipped model emits `rescue` or `repair`. The phase used to slide onto
         # the marker to pick a scoring side.
         #
-        # ⚠ Deleting it beats leaving it: `hailo.py` LOGS AN ERROR AND IGNORES an
+        # Deleting it beats leaving it: `hailo.py` LOGS AN ERROR AND IGNORES an
         # allowlist whose every name is unknown, so the detector keeps emitting
         # gate/shark/shaw_fish, `align('rescue')` never matches, the fallback
         # thrusts open-loop for its full duration, and the verb returns normally.

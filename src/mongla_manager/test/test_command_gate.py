@@ -1,6 +1,6 @@
 """The /mongla/move busy gate must be a test-and-SET, not a test then a set.
 
-⛔ THE DEFECT THIS EXISTS FOR. `command_active` was a plain bool, READ in
+The defect this exists for. `command_active` was a plain bool, READ in
 `goal_callback` (the accept/reject decision) and WRITTEN in `execute_callback`
 (the start of the motion loop). Those are two callbacks on a
 `ReentrantCallbackGroup` under a `MultiThreadedExecutor`, and nothing held a lock
@@ -54,7 +54,7 @@ def _run_goal(gate, cmd, hand_off_s, tally):
 
 @pytest.mark.parametrize('hand_off_s', [0.020, 0.005, 0.001])
 def test_two_goals_cannot_both_claim(hand_off_s):
-    """⛔ The regression. Two ordinary motion verbs, arriving back-to-back as a
+    """The regression. Two ordinary motion verbs, arriving back-to-back as a
     mission sequences them, must never both reach the motion loop."""
     for _ in range(40):
         gate = _CommandGate()
@@ -137,7 +137,7 @@ def test_the_policy_itself_is_untouched():
 
 
 def test_a_preempted_loop_cannot_free_its_preemptors_claim():
-    """⛔ The cloud audit's HIGH finding, 2026-11-07. `disarm` pre-empts a running
+    """The cloud audit's HIGH finding, 2026-11-07. `disarm` pre-empts a running
     `move_forward`; the move's `finally` releases the gate on its way out. Before
     the token, that release cleared `disarm`'s claim too, and an ordinary verb
     could then start while `disarm` was still executing.

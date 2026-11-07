@@ -272,7 +272,7 @@ def test_esc_status_291_is_absent_from_our_dialect():
     If this test starts FAILING, pymavlink gained the message: delete the
     ESC_TELEMETRY fallback in SrotFC.telemetry() and read 291 directly.
 
-    ASSERTED AGAINST THE RUNTIME DIALECT, not against `dialects.v20.ardupilotmega`.
+    Asserted against the runtime dialect, not against `dialects.v20.ardupilotmega`.
     This test used to import the v20 module directly and check ITS map -- which is a
     different object from the one the vehicle decodes with. pymavlink binds ONE dialect
     at import time from the environment, and the DEFAULT is `dialects.v10.ardupilotmega`
@@ -456,7 +456,7 @@ def test_the_named_values_we_read_are_still_emitted():
     None forever and `telemetry()` reports the sensor as absent. LEAK is in this
     list -- "no leak reported" and "we stopped listening for leaks" look identical.
 
-    ⚠ This asserts on SOURCE TEXT, which this file's preamble argues against. The
+    This asserts on SOURCE TEXT, which this file's preamble argues against. The
     exception is deliberate and narrow: for message NAMES there is no runtime value
     to compare -- a rename IS a source-text change, and grep is the only instrument
     that can see it. It does not assert the value is ever SENT (DEPTH_ERR/DEPTH_OUT
@@ -655,7 +655,7 @@ def test_depth_p_default_matches_the_firmware():
 def test_the_companion_link_baud_matches_the_firmware():
     """Baud is a WIRE constant, and the two sides must move together.
 
-    ⛔ THE FAILURE IS A DEAD LINK WITH NO ERROR. Opening the port at a baud the
+    The failure is a dead link with no error. Opening the port at a baud the
     board is not using does not raise: `pymavlink` connects, the UART clocks in
     garbage, and every frame fails its CRC. The symptom is `BAD_DATA` and a
     vehicle that never heartbeats -- which reads as a broken cable, a dead

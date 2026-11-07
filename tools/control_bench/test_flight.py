@@ -1,12 +1,12 @@
 """The closed loop: firmware cascade + our allocator + the Fossen plant.
 
-⛔ THE TEST THIS FILE EXISTS FOR IS THE FRAME SEAM. The allocator reads
+The test this file exists for is the frame seam. The allocator reads
 `hull_geometry.yaml` and therefore works in the CAD frame; the plant is Fossen.
 The first version of `flight.py` wired them together without converting, the
 yaw loop had POSITIVE feedback, and the hull ran to -1988 degrees in six
 seconds.
 
-⚠ And a runaway was the LUCKY outcome. Had the loop gain been lower the same
+And a runaway was the LUCKY outcome. Had the loop gain been lower the same
 sign error would have produced slow convergence that looked like a tuning
 problem -- and someone would have spent a pool day retuning a sign.
 """
@@ -47,7 +47,7 @@ def test_the_conversion_is_its_own_inverse():
 
 
 def test_yaw_feedback_is_NEGATIVE():
-    """⭐ THE REGRESSION TEST. Drop the frame conversion and this is the one
+    """The regression test. Drop the frame conversion and this is the one
     that screams: the hull must approach the commanded heading, not flee it."""
     v = Vehicle(damping=BAND)
     tr = v.fly(seconds=4.0, hold_yaw=math.radians(20.0))
@@ -77,7 +77,7 @@ def test_roll_is_never_commanded_because_it_cannot_be():
 
 
 def test_the_hull_rights_itself_in_roll_without_a_thruster():
-    """⭐ THE QUESTION THAT DECIDES WHETHER ROLL CAN STAY UNACTUATED. Knocked
+    """The question that decides whether roll can stay unactuated. Knocked
     over and left alone, does BG bring it back? Nothing actuates roll, so the
     answer is entirely the restoring moment's."""
     v = Vehicle(damping=BAND)
@@ -87,7 +87,7 @@ def test_the_hull_rights_itself_in_roll_without_a_thruster():
 
 
 # ═══════════════════════════════════════════════════════════════════════════ #
-#  ⭐ What MOT_SPIN_MIN costs, and what it does NOT cost
+#  What MOT_SPIN_MIN costs, and what it does NOT cost
 # ═══════════════════════════════════════════════════════════════════════════ #
 
 def _limit_cycle_pp_deg(quantise: bool, **kw) -> float:
@@ -104,7 +104,7 @@ def test_the_spin_min_floor_causes_a_yaw_limit_cycle():
 
 
 def test_the_limit_cycle_is_a_TENTH_OF_A_DEGREE_and_that_matters():
-    """⛔ A CORRECTION TO OUR OWN UPSTREAM ARGUMENT, and it belongs in a test so
+    """A correction to our own upstream argument, and it belongs in a test so
     it is not quietly forgotten. Asks I and M lean on MOT_SPIN_MIN hurting
     precision alignment. Measured in closed loop, the steady-state cost is of
     order a TENTH OF A DEGREE peak-to-peak -- about 3.5 mm at 2 m range, which
@@ -118,7 +118,7 @@ def test_the_limit_cycle_is_a_TENTH_OF_A_DEGREE_and_that_matters():
 
 
 def test_drag_does_not_change_the_limit_cycle():
-    """⭐ THE UNCERTAINTY THAT DOES NOT MATTER HERE. Drag is the plant's
+    """The uncertainty that does not matter here. Drag is the plant's
     largest unknown, and the limit cycle is a small oscillation about zero
     velocity where quadratic damping vanishes -- so this conclusion survives
     the whole plausible drag band unchanged. Worth pinning: it is the reason
@@ -135,9 +135,9 @@ def test_drag_does_not_change_the_limit_cycle():
 
 
 def test_the_limit_cycle_DOES_depend_on_unmeasured_thrust_and_mass():
-    """⚠ THE UNCERTAINTY THAT DOES. Across the plausible thrust and mass band
+    """The uncertainty that does. Across the plausible thrust and mass band
     the amplitude moves by more than an order of magnitude, so the number is an
-    ORDER OF MAGNITUDE and not a measurement. Recorded so nobody quotes three
+    Order of magnitude and not a measurement. Recorded so nobody quotes three
     significant figures off this bench."""
     lo = _limit_cycle_pp_deg(True, max_thrust_n=40.0,
                              inertia=Inertia(mass_kg=8.0))
@@ -147,7 +147,7 @@ def test_the_limit_cycle_DOES_depend_on_unmeasured_thrust_and_mass():
 
 
 def test_each_run_starts_from_rest():
-    """⛔ A BENCH THAT CARRIES STATE BETWEEN RUNS IS WORSE THAN NO BENCH,
+    """A bench that carries state between runs is worse than no bench,
     because its output is plausible. `fly` once reset the controller and not the
     plant, so a reused Vehicle began each run from the previous run's attitude
     -- and the artefact read as a feedforward effect."""
@@ -160,11 +160,11 @@ def test_each_run_starts_from_rest():
 
 
 # ═══════════════════════════════════════════════════════════════════════════ #
-#  ⭐ Round 3a -- the feedforward gains, and the row the bench KILLED
+#  Round 3a -- the feedforward gains, and the row the bench KILLED
 # ═══════════════════════════════════════════════════════════════════════════ #
 
 def test_the_feedforward_layer_is_actually_reached():
-    """⛔ THE BUG THAT MADE THE FIRST 3a RUN MEANINGLESS. `feedforward::apply`
+    """The bug that made the first 3a run meaningless. `feedforward::apply`
     returns the demands untouched unless `mode` is one of its `stabilized` set,
     and FlightMode::STABILIZE is 0 -- an earlier run passed 3, which is not a
     FlightMode at all. Every gain then measured identically, which reads as
@@ -193,7 +193,7 @@ def test_a_drag_gain_far_above_ideal_is_destabilising():
 
 
 def test_the_yaw_axis_is_RATE_limited_not_drag_limited():
-    """⭐ THE RESULT THAT KILLS ROUND 3a's YAW ROW.
+    """The result that kills round 3a's yaw row.
 
     A 90 deg slew peaks at 98.7 % of `PILOT_YAW_RATE`, so the axis spends the
     manoeuvre against its own rate CAP -- a parameter -- rather than against
@@ -206,7 +206,7 @@ def test_the_yaw_axis_is_RATE_limited_not_drag_limited():
 
 
 def test_there_is_no_regime_where_drag_feedforward_matters():
-    """⭐ AND THE REASON IT IS A CLEAN KILL RATHER THAN A SMALL EFFECT.
+    """And the reason it is a clean kill rather than a small effect.
 
         max_yaw_rate / ATC_ANG_YAW_P = 2.793 / 6.0 = 0.4655 rad = 26.7 deg
 
@@ -228,7 +228,7 @@ def test_there_is_no_regime_where_drag_feedforward_matters():
 
 
 def test_the_hull_can_sustain_more_yaw_rate_than_the_cap_allows():
-    """⭐ ROBUST ACROSS EVERY UNMEASURED TERM, which is what makes it sayable.
+    """Robust ACROSS every unmeasured term, which is what makes it sayable.
     Steady state is allocator-max torque against quadratic drag. At every
     corner of the plausible drag and thrust band the hull sustains MORE than
     PILOT_YAW_RATE = 160 deg/s -- worst case 1.10x, best 3.69x. The cap is a
@@ -248,7 +248,7 @@ def test_the_hull_can_sustain_more_yaw_rate_than_the_cap_allows():
 
 
 # ═══════════════════════════════════════════════════════════════════════════ #
-#  ⭐ Round 6 / B-13 -- is 500 Hz justified?
+#  Round 6 / B-13 -- is 500 Hz justified?
 # ═══════════════════════════════════════════════════════════════════════════ #
 
 def _burst(t):
@@ -263,7 +263,7 @@ def _peak_dev_deg(hz, tau=0.0):
 
 
 def test_decimation_holds_the_controller_output_rather_than_stretching_dt():
-    """⛔ THE TWO ARE DIFFERENT EXPERIMENTS. The plant always integrates at the
+    """The two are different experiments. The plant always integrates at the
     full rate; only the controller runs less often, and its output is HELD
     between updates. Passing a bigger dt to the plant would measure the
     integrator, and would flatter the slow rates by deleting the zero-order
@@ -278,7 +278,7 @@ def test_decimation_holds_the_controller_output_rather_than_stretching_dt():
 
 
 def test_a_quiet_slew_does_not_care_about_loop_rate_at_all():
-    """⭐ PART ONE OF THE B-13 ANSWER. Settle time on a 90 deg slew is flat
+    """Part one of the B-13 answer. Settle time on a 90 deg slew is flat
     from 500 Hz to 10 Hz, because the axis is rate-limited: it spends the
     manoeuvre against PILOT_YAW_RATE, and a cap does not care how often you
     recompute it."""
@@ -290,7 +290,7 @@ def test_a_quiet_slew_does_not_care_about_loop_rate_at_all():
 
 
 def test_disturbance_rejection_is_where_loop_rate_shows_up():
-    """⭐ PART TWO, and the number the field does not have. Measured against a
+    """PART TWO, and the number the field does not have. Measured against a
     torque burst, with no actuator lag:
 
         500 -> 250 Hz   +2 %
@@ -309,7 +309,7 @@ def test_disturbance_rejection_is_where_loop_rate_shows_up():
 
 
 def test_actuator_lag_dominates_loop_rate_by_two_orders_of_magnitude():
-    """⭐⭐ THE RESULT THAT REFRAMES THE WHOLE QUESTION, and it refutes our own
+    """The result that reframes the whole question, and it refutes our own
     upstream ask M section 3.
 
     Against the same burst, at 500 Hz throughout, thruster first-order lag:

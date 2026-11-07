@@ -1,6 +1,6 @@
 """Where a tool's web page can actually be reached, resolved at RUN time.
 
-⛔ NEVER PRINT A HARDCODED IP. Five tools in this directory printed
+Never print a hardcoded ip. Five tools in this directory printed
 `http://10.42.0.28:<port>`, which is the Pi's address on one particular
 NetworkManager shared link and changes whenever the link is rebuilt or the
 vehicle is plugged into a venue network. An operator following a printed URL

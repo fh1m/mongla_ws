@@ -58,7 +58,7 @@ class VisionLinkMixin:
             if cache_key not in self._vision_states:
                 self._vision_states[cache_key] = vstate
             winner = self._vision_states[cache_key]
-        # ⛔ THE LOSER IS CLOSED, NOT DROPPED (issue #21). Two concurrent first
+        # The loser is closed, not dropped (issue #21). Two concurrent first
         # goals for one camera each built a VisionState; the second was simply
         # not inserted, and its subscriptions stayed alive for the life of the
         # process.
@@ -74,7 +74,7 @@ class VisionLinkMixin:
     def _live_vision_state(self):
         """A VisionState from the pool, or None before any vision goal has run.
 
-        ⛔ THIS EXISTS BECAUSE `self.vision` NEVER DID. `_detection_rate_hz`
+        This exists because `self.vision` never did. `_detection_rate_hz`
         read `getattr(self, 'vision', None)` and nothing on this class ever
         assigns `self.vision` -- VisionStates live in the `_vision_states` pool,
         keyed by camera. So the read always missed, the rate was always None,
@@ -99,7 +99,7 @@ class VisionLinkMixin:
     def _detection_rate_hz(self):
         """Detections per second, or None if we are not subscribed at all.
 
-        THE SIGNAL D16 NEEDED. A detector that aborts stays alive with every
+        The signal D16 needed. A detector that aborts stays alive with every
         topic present; the rate is the only thing that changes, and nothing was
         watching it.
         """
@@ -140,7 +140,7 @@ class VisionLinkMixin:
     def _vision_uplink_tick(self) -> None:
         """Send ONE LANDING_TARGET for the currently selected target, or nothing.
 
-        SENDING NOTHING IS THE LOSS SIGNAL. `VISION_API.md` §1 has no "lost"
+        Sending nothing is the loss signal. `VISION_API.md` §1 has no "lost"
         flag -- a detector that sees nothing simply stops sending, and the board
         ages the last bearing out. So this must not re-send a stale sample to
         "hold" a target: that is indistinguishable from a live one on the wire
@@ -168,7 +168,7 @@ class VisionLinkMixin:
             return
         w, h = vstate.image_size()
         K, D = vstate.calibration()
-        # ⛔ The index comes from `mongla_vision.optics`, which exists to be
+        # The index comes from `mongla_vision.optics`, which exists to be
         # "the ONE place the water refractive index lives" (B22). `bearing.py`
         # lives in mongla_control, which must NOT depend on mongla_vision -- so
         # the caller supplies it rather than the library holding a second copy.

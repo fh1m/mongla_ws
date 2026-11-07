@@ -67,7 +67,7 @@ def main(argv=None):
         ids_this_frame = set()
         has_track = False
         for d in msg.detections:
-            # ⛔ `d.id`, NOT `d.tracking_id`. vision_msgs/Detection2D has
+            # `d.id`, NOT `d.tracking_id`. vision_msgs/Detection2D has
             # fields (header, results, bbox, id) -- there is no tracking_id,
             # so this line raised AttributeError on the FIRST track of every
             # run. A shipped diagnostic that cannot ever have worked: it only
@@ -151,7 +151,7 @@ def main(argv=None):
         print()
         print("[FAIL]")
         for f in failures:
-            print(f"  ✗  {f}")
+            print(f"  FAIL {f}")
         node.destroy_node()
         rclpy.shutdown()
         sys.exit(1)

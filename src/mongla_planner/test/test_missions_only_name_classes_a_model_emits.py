@@ -1,12 +1,12 @@
 """A mission may only steer on a class the model IT LOADS actually emits.
 
-⛔ THE DEFECT THIS CLOSES, AND IT SURVIVED AN 85-FILE SWEEP AND A GREEN SUITE.
+The defect this closes, and it survived an 85-FILE sweep and a green suite.
 Retiring `gate_rescue_repair` renamed the model everywhere and renamed the
 class list in most places — but `task_gate.py` and `pool_day_practice.py` kept
 `set_classes('rescue,repair')` and `vision.align('rescue', ...)` further down.
 Both missions RUN, and `task_full_2026` chunks `task_gate`.
 
-⛔⛔ IT FAILS SILENTLY, WHICH IS WHY A TEST IS THE ONLY DEFENCE.
+It fails silently, which is why a test is the only defence.
 `detection/hailo.py` logs an ERROR and **ignores** an allowlist whose names are
 all unknown, so the detector keeps emitting its real classes. `align('rescue')`
 then never matches, `fallback=creep_forward` thrusts **open loop for the full
@@ -14,12 +14,12 @@ duration**, the verb returns normally, and the mission reports success. That is
 the "reports success while the vehicle does nothing" failure CLAUDE.md section
 8.6 names as the one that ends runs.
 
-⭐ IT FOLLOWS `set_model`, NOT A GLOBAL UNION, and that is the whole design.
+It follows `set_model`, not a global union, and that is the whole design.
 Checking against every class in every sidecar is too weak to have caught this:
 `octagon.yaml` legitimately lists `rescue`, so the union says the class exists
 and the mission looks fine while loading a graph that never emits it.
 
-⚠ AND THIS MATTERS BECAUSE MODELS CHANGE DAILY during water testing. The
+And this matters because models change daily during water testing. The
 shipped weights are development harnesses; the real ones arrive on the day and
 get swapped. So the check keys on the ONE line a mission already writes —
 `set_model(...)` — and reads that model's sidecar. **Swapping a model means
@@ -73,7 +73,7 @@ def _kw(call, name):
 def _steered_classes_by_model(path):
     """[(model_stem, {classes named under it}, lineno)].
 
-    ⛔ KEYED ON THE NODE, not on program order, and that was a real bug in the
+    Keyed on the node, not on program order, and that was a real bug in the
     first version of this test. A dual-camera mission runs TWO detectors:
     `set_model('gate_sharks', node=_FWD)` and
     `set_model('bin_fire_blood', node=_DWN)` are both live at once, so a
@@ -144,7 +144,7 @@ def test_there_are_sidecars_to_check_against():
 
 
 def test_at_least_one_mission_is_actually_checked():
-    """⛔ The check is worthless if no mission pairs a `set_model` with a
+    """The check is worthless if no mission pairs a `set_model` with a
     class. If this fails, the AST walk stopped matching the DSL."""
     checkable = [p.name for p in _missions()
                  if any(cs and classes_of(m) is not None
@@ -164,7 +164,7 @@ def test_every_class_is_emitted_by_the_model_loaded_for_it(path):
                        f'(emits {sorted(emits)}) then steers on {c!r}')
     assert not bad, (
         '\n  '.join([''] + bad) +
-        '\n  ⛔ This does NOT fail loudly at runtime: the detector ignores an '
+        '\n  ERROR: This does NOT fail loudly at runtime: the detector ignores an '
         'all-unknown allowlist and keeps emitting its real classes, so the '
         'verb never matches, the fallback thrusts open loop for its full '
         'duration, and the mission reports success.\n'
@@ -174,12 +174,12 @@ def test_every_class_is_emitted_by_the_model_loaded_for_it(path):
 
 # ── models a mission names that do not ship yet ─────────────────────────────
 
-# ⚠ THIS IS NOT A DEFECT LIST. The weights in `models/` are development
+# This is not a defect list. The weights in `models/` are development
 # harnesses; the models that matter are trained and swapped ON THE DAY during
 # water testing. A mission naming a model that has not been trained yet is
 # normal planning, not a bug.
 #
-# ⛔ BUT A TYPO IN A MODEL NAME LOOKS EXACTLY THE SAME -- both give "no
+# But a typo in a model name looks exactly the same -- both give "no
 # sidecar, cannot check", and the class check above then SILENTLY SKIPS the
 # whole mission. So the future models are declared here by name: a stem that
 # is neither shipped nor declared is a typo, and it fails.
@@ -205,7 +205,7 @@ def test_no_mission_names_a_model_that_is_neither_shipped_nor_declared():
 
 
 def test_the_awaiting_training_list_does_not_rot():
-    """⚠ Once a model ships, its entry must go -- otherwise the class check
+    """Once a model ships, its entry must go -- otherwise the class check
     stays skipped for every mission that loads it, which is the silent state
     this pair exists to prevent."""
     shipped = {m: classes_of(m) for m in AWAITING_TRAINING}

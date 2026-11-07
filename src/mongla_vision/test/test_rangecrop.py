@@ -149,7 +149,7 @@ def test_a_full_approach_crops_once_and_releases_once():
 #  The wiring, not just the policy
 # --------------------------------------------------------------------------- #
 def test_the_detector_maps_cropped_boxes_back_before_publishing():
-    """THE SILENT FAILURE. A box found in crop coordinates and published
+    """The silent failure. A box found in crop coordinates and published
     without the offset points at the wrong place by (x0, y0) -- 160 px
     horizontally on a 640-wide frame. Nothing raises; the vehicle steers at a
     displaced point and it reads as a calibration fault.

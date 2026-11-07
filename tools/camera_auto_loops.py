@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """What do the camera's OWN automatic loops do to our pixels?
 
-⛔ THE QUESTION NOBODY ASKS. Every measurement in this repo -- detector
+The question nobody asks. Every measurement in this repo -- detector
 confidence, XFeat inliers, the turbidity proxy, bank references -- is computed
 on pixels the CAMERA decided the values of. If auto white balance and auto
 exposure are running, those pixels change for reasons that have nothing to do
@@ -96,7 +96,7 @@ def main() -> int:
     ap.add_argument('--warm', type=float, default=2.0)
     args = ap.parse_args()
 
-    print('⚠ Keep the camera STILL and the scene UNCHANGED for this run.')
+    print('WARNING: Keep the camera STILL and the scene UNCHANGED for this run.')
     print('   Anything that moves below is the camera arguing with itself.\n')
 
     before = {k: ctl(args.dev, k) for k in
@@ -132,12 +132,12 @@ def main() -> int:
             print(f'{name:<28} auto {a:8.4f}   fixed {b:8.4f}   '
                   f'{"x%.1f" % (a / b) if b > 1e-9 else "--"}')
         if auto['rb_ptp'] > max(3 * fixed['rb_ptp'], 0.01):
-            print('\n⭐ AWB IS MOVING THE PIXELS on a static scene. Every '
+            print('\nRESULT: AWB IS MOVING THE PIXELS on a static scene. Every '
                   'intensity-derived measurement downstream -- XFeat '
                   'descriptors, the turbidity proxy, bank references -- is '
                   'carrying that drift.')
         else:
-            print('\n⚠ No large AWB drift on THIS scene. A static indoor '
+            print('\nWARNING: No large AWB drift on THIS scene. A static indoor '
                   'view is the easy case; the claim needs water.')
     return 0
 

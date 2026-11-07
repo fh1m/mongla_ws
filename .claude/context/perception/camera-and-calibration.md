@@ -92,7 +92,7 @@ the data has *not* constrained, which is the part that silently ruins a
 bearing. Measured on our own 19 frames: **37.18 px**, while σ(fx) said
 "HIGH" and the tilt check said "OK".
 
-⚠ Our posterior is the k-fold fits rather than a sampled covariance, so it is
+**Caution:** Our posterior is the k-fold fits rather than a sampled covariance, so it is
 a **lower bound** on the spread, and is recorded as such.
 
 ---
@@ -212,7 +212,7 @@ instead of ten with a printed board in a lit room. The apply button is only
 offered for cameras `/cameras` currently sees — applying to an absent device
 would write a file claiming a unit nobody can check.
 
-⛔ **APPLYING IS AN ASSERTION, AND THE FILE SAYS SO.** The operator is
+**Warning: APPLYING IS AN ASSERTION, AND THE FILE SAYS SO.** The operator is
 claiming "this is the same physical unit". The written file records
 `identity_source: operator asserted at apply time` plus `applied_from` and
 `applied_on`, and never pretends the calibration was captured on that
@@ -261,7 +261,7 @@ Three consequences, all implemented and tested:
    replacement, and the solver says so on install rather than implying the
    file goes live.
 
-## 10. ⛔ THE WHOLE PAGE WAS INERT, AND EVERY TEST WAS GREEN
+## 10. THE WHOLE PAGE WAS INERT, AND EVERY TEST WAS GREEN
 
 Commit `1e27851` shipped a calibration page whose entire `<script>` block was
 a **JavaScript SyntaxError**. Not one line of it ran: no status polling, no

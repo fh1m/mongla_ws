@@ -4,20 +4,20 @@
 resolves a tool name to an offset in metres and to the pixel correction that
 puts the TARGET ON THE TOOL'S AXIS instead of the camera's.
 
-⛔ THE DEFECT THIS EXISTS FOR. Every vision align centres the target on the
+The defect this exists for. Every vision align centres the target on the
 CAMERA axis and then actuates a device mounted somewhere else. The axes are
 parallel, so **the miss equals the offset at every range** -- it does not shrink
 as you close in. A 10 cm offset misses a 4.75 cm-radius torpedo opening from
 1 m and from 3 m alike, and nothing logged a fault because from the camera's
 point of view the shot was perfectly centred.
 
-⛔ WHY THIS IS A TABLE AND NOT AN OPERATOR PARAMETER -- the `target_width_m`
+Why this is a table and not an operator parameter -- the `target_width_m`
 lesson, which shipped a metric path that had never once run because the number
 defaulted to 0.0. A quantity that must be typed correctly, per mission, under
 pressure, for an answer whose wrongness is invisible is not a parameter. Same
 reasoning, same shape, same file layout.
 
-⛔ THE CORRECTION IS RANGE-DEPENDENT, which is the part that makes this more
+The correction is range-dependent, which is the part that makes this more
 than a constant. To sit on the tool's axis the target must appear at
 
     u = cx + fx * x / Z        v = cy + fy * y / Z
@@ -74,7 +74,7 @@ def offset_m(tool: str):
 def is_measured(tool: str) -> bool:
     """False when the entry is a placeholder reading zero.
 
-    ⛔ A ZERO OFFSET AND AN UNMEASURED ONE ARE THE SAME NUMBER AND NOT THE SAME
+    A zero offset and an unmeasured one are the same number and not the same
     CLAIM. `camera_forward` is exactly zero from itself; `torpedo` is zero
     because nobody has held a tape to it. Collapsing those would make the
     warning that matters unprintable.

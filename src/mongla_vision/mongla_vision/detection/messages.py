@@ -130,7 +130,7 @@ _CLASS_INDEX: dict = {}
 def class_index(class_name: str) -> int:
     """A stable integer for a class LABEL. Never 0 for everything.
 
-    ⛔ WHAT THIS FIXES, MEASURED. `array_to_detections` used to hard-code
+    What this fixes, measured. `array_to_detections` used to hard-code
     `class_id=0` with the note "integer class_id not preserved". It is not a
     cosmetic loss. Round-tripping `blood`(3) and `fire`(7) returns
     `blood`(0) and `fire`(0), and `tracking/*.py::_name_from(cid, dets)`
@@ -140,7 +140,7 @@ def class_index(class_name: str) -> int:
     receive one single class for everything, so class-aware association cannot
     keep two different objects apart.
 
-    ⛔ AND WHY THIS IS NOT "PUT THE ORIGINAL INTEGER ON THE WIRE". A detector's
+    And why this is not "put the original integer on the wire". A detector's
     integer index is a property of WHICHEVER MODEL produced it -- `gate` is 0
     in `gate_sharks` and something else in the next model -- so the
     integer is only meaningful alongside the model that minted it, which the

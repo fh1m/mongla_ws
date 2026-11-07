@@ -1,6 +1,6 @@
 """Detection confidence as the vehicle's measure of how much to trust a box.
 
-WHY THIS MODULE EXISTS -- the measurement, not the intuition.
+Why this module exists -- the measurement, not the intuition.
 
 Round 35 set out to measure `vision.range_gain_floor`, on the physics argument
 in its own comment: a pixel-normalised P-loop's gain rises ~1/range, so a kp
@@ -21,7 +21,7 @@ the worst jitter (4.1x).
 So confidence is the quality signal the stack already computes on every frame
 and then throws away everywhere except a hard threshold.
 
-WHAT THE FIELD DOES: the NSA Kalman filter (GIAOTracker, adopted by StrongSORT)
+What the field does: the NSA Kalman filter (GIAOTracker, adopted by StrongSORT)
 scales the measurement noise covariance by the detection score,
 
     R_tilde = (1 - c) * R
@@ -29,7 +29,7 @@ scales the measurement noise covariance by the detection score,
 so a confident detection is trusted and a doubtful one lets the filter coast on
 its own prediction instead of being yanked by a bad box.
 
-WHY WE CANNOT USE THAT FORMULA AS PUBLISHED. It assumes a detector whose scores
+Why we cannot use that formula as published. It assumes a detector whose scores
 live high. Measured against our own distributions:
 
     MOT benchmark   conf p10 0.55  -> p90 0.95   R factor 0.450 -> 0.050  9.00x

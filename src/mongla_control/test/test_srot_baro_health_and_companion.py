@@ -16,7 +16,7 @@ until they matter:
                   to (FS_GCS_SYSID/FS_GCS_COMPID, default 255/191 = us)?
                   (fw mav_stream.cpp:894, mav_commands.cpp:91-99.)
 
-⛔ THE TRAP IN THE FIRST ONE. `NAMED_VALUE_FLOAT.name` is TEN CHARACTERS and the
+The trap in the first one. `NAMED_VALUE_FLOAT.name` is TEN CHARACTERS and the
 firmware does not shorten its own strings, so "BARO_HEALTH" arrives as
 "BARO_HEALT". Looking up the full name returns None -- which is
 indistinguishable from "the board never sent it", so the bug is silent. This is
@@ -67,7 +67,7 @@ def _tel(**named):
 #  BARO_HEALTH — and the 10-char truncation
 # --------------------------------------------------------------------------- #
 def test_the_wire_name_is_the_TRUNCATED_one():
-    """⛔ Reading 'BARO_HEALTH' finds nothing, for ever, and says nothing."""
+    """Reading 'BARO_HEALTH' finds nothing, for ever, and says nothing."""
     assert sp.NAME_BARO_HEALTH == 'BARO_HEALT'
     assert len(sp.NAME_BARO_HEALTH) <= 10, \
         'NAMED_VALUE_FLOAT.name is 10 chars; a longer key can never match'

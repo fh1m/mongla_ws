@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """How often do we lose the target in real water, and for how long?
 
-THE QUESTION NOBODY HAS ANSWERED. Six constants protect a lock -- the
+The question nobody has answered. Six constants protect a lock -- the
 freshness ramp, `coast_s` (0.8), `lost_grace_s` (1.0), `_STALE_LIMIT_S` (1.0),
 the Kalman `max_predict_s` (1.5), the tracker's `track_buffer` (5.0 s) -- and
 every one is sized from detection RATE and from the others' ordering. None is

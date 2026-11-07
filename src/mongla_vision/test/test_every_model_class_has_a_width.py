@@ -31,7 +31,7 @@ _MODELS = os.path.join(_PKG, 'models')
 # models, and the whole point of the sim-vs-handbook rule is that we do not
 # take prop sizes from the simulator.
 #
-# ⛔ THIS LIST IS A LEGACY FALLBACK, NOT THE MECHANISM. A stem named here is
+# This list is a legacy fallback, not the mechanism. A stem named here is
 # excused by editing the TEST, which is the exact move the census exists to
 # prevent -- `no_published_dimension` lives beside the number for that reason.
 # The mechanism is `competition: false` in the sidecar itself: the exclusion
@@ -339,7 +339,7 @@ def test_an_override_displaces_the_shipped_entry_it_replaces(monkeypatch):
 def _lock_node():
     """A LockNode with no ROS graph, for driving its class-change paths.
 
-    ⛔ rclpy CONTEXT IS PROCESS-GLOBAL, so leaving it initialised breaks other
+    rclpy CONTEXT IS PROCESS-GLOBAL, so leaving it initialised breaks other
     files. The first draft called `rclpy.init()` and only destroyed the node;
     `test_flow_node`'s module fixture then called `rclpy.init()` again and ALL
     31 of its tests errored -- a file this round never touched, which passed

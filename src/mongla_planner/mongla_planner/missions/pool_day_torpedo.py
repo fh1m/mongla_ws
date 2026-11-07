@@ -17,7 +17,7 @@ Live gain tuning (between runs, no rebuild):
 (The coarse board align uses a per-call settle= to exit squared-up; the terminal
 fire-lock deliberately does NOT -- settle would gate the mid-hold fire.)
 
-⚠ The vertical aim is TORPEDO_DEPTH_M: the board owns depth, so no vision axis
+The vertical aim is TORPEDO_DEPTH_M: the board owns depth, so no vision axis
 moves the hull up or down. Read the terminal align's end_y_px and correct it.
 
 Ctrl-C at any time → AUV stops and disarms cleanly.
@@ -33,7 +33,7 @@ import time
 TETHER_REMOVE_PAUSE_S  = 5.0    # remove tether before AUV arms
 
 # ── DEPTH + HEADING ───────────────────────────────────────────────────────────
-TORPEDO_DEPTH_M        = None   # ★ SET AT POOL — e.g. -0.8 (negative = below surface)
+TORPEDO_DEPTH_M        = None   # SET AT POOL — e.g. -0.8 (negative = below surface)
 TORPEDO_HEADING_DEG    = None   # None = skip, or compass bearing to face the board
 
 # ── LAUNCH DRIVE (open-loop, puts AUV into starting range) ───────────────────
@@ -127,7 +127,7 @@ def run(mongla, log=None):
             gain=APPROACH_GAIN, duration=BLOOD_APPROACH_S, brake=False,
             fallback=creep_forward)
 
-        # ── 5. STANDOFF SHOT: forward-standoff + lat + hold + fire ────────────
+        # ── 5. Standoff shot: forward-standoff + lat + hold + fire ────────────
         #     ONE verb drives to the firing standoff (fwd=, height), centres lat
         #     (no yaw axis -- the board holds heading), continuity-locks the hole,
         #     and fires MID-HOLD while parked at the standoff. brake=False.

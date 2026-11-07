@@ -1,4 +1,4 @@
-# PR Q — ⛔ CRITICAL: MOTOR_DETECT and `FRAME_REVERSE` cannot both be right, and detect wins
+# PR Q — CRITICAL: MOTOR_DETECT and `FRAME_REVERSE` cannot both be right, and detect wins
 
 **Target:** `srot-control-board` · **File as an ISSUE** (the fix is theirs to choose)
 **Status:** ⏳ NOT SENT — read-only GitHub access this session (403 on issue creation).
@@ -8,7 +8,7 @@ individually correct, that were added separately, and that neither one mentions.
 On this hull — where `FRAME_REVERSE = 1` — running MOTOR_DETECT to completion leaves
 the vehicle with **every axis inverted in every closed-loop mode**.
 
-Read from source only. ⚠ **Not reproduced on hardware** — it needs a board, water,
+Read from source only. **Not reproduced on hardware** — it needs a board, water,
 and thrusters free to rotate. It is a short read and we would rather be wrong in
 public than quiet.
 
@@ -117,7 +117,7 @@ against a reversed reference.
 Whatever the fix, the invariant to hold is: **the polarity a calibration routine
 measures through must be the polarity flight uses.**
 
-1. ⭐ **Cheapest, and it fixes Motor Test in the same line.** Apply `FRAME_REVERSE`
+1. **Key point: Cheapest, and it fixes Motor Test in the same line.** Apply `FRAME_REVERSE`
    inside `mixer::oneToDshot()`, or pass an already-reversed direction to it, so
    every single-motor path inherits it. One multiply, three call sites.
 2. **Or** fold it into `motorAngular()`, so detect's expected direction is
@@ -136,7 +136,7 @@ measures through must be the polarity flight uses.**
 that keeps it fixed** — this is a cross-feature invariant, so it will not stay
 fixed by review alone.
 
-## 6. ⚠ What this is not
+## 6. What this is not
 
 Not a claim that either feature is wrong. `FRAME_REVERSE` is the right knob and
 compose-not-overwrite is the right detect. It is a claim that **no code path knows

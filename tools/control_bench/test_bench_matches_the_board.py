@@ -1,6 +1,6 @@
-"""THE FALSIFIER: does the bench reproduce the real board, count for count?
+"""The falsifier: does the bench reproduce the real board, count for count?
 
-⛔ THIS IS THE ONLY THING THAT MAKES THE BENCH EVIDENCE. Compiled firmware that
+This is the only thing that makes the bench evidence. Compiled firmware that
 has never been checked against the hardware is just a second opinion with better
 marketing. Every conclusion drawn on this bench -- every gain, every allocation
 experiment, every INDI increment -- inherits its credibility from this file.
@@ -9,7 +9,7 @@ THE DATA. `.claude/context/workbench/data/*.json`, captured 2026-09-22 off the
 live vehicle: board armed, STABILIZE, nothing attached to any ESC, demands held
 at 20 Hz on one axis at a time, per-motor DShot read off the RP2350's console.
 
-⚠ THE ONE HONEST COMPLICATION. Those captures are of the WHOLE BOARD, and the
+The one honest complication. Those captures are of the WHOLE BOARD, and the
 bench links the mixer only. In STABILIZE the attitude controller is always
 contributing something -- in the horizontal rows of `mixer_armed.json` the
 vertical group sat at a constant non-zero trim throughout. So:
@@ -38,7 +38,7 @@ DATA = Path(__file__).resolve().parents[2] / '.claude/context/workbench/data'
 LADDER = DATA / 'mixer_ladder.json'
 SWEEP = DATA / 'mixer_armed.json'
 
-# ⛔ THE DECODE, FROM THE ONE COPY. Both DShot bands count upward from their own
+# The decode, from the one copy. Both DShot bands count upward from their own
 # floor; 48 and 1048 are each a zero, and decoding this as a deviation from 1048
 # is what made the mixer look asymmetric on the first reading. This file used to
 # carry its own copy of that arithmetic, which is how `flight.py` came to use 47
@@ -73,7 +73,7 @@ def _ladder_rows():
 # ── the headline check ───────────────────────────────────────────────────────
 
 def test_the_bench_IS_the_board_where_the_attitude_loop_is_quiet(board):
-    """⭐ THE HEADLINE. On the one captured row where the attitude controller
+    """The headline. On the one captured row where the attitude controller
     happened to be contributing nothing, the bench must reproduce the board
     EXACTLY -- not closely, exactly, all four motors, count for count.
 

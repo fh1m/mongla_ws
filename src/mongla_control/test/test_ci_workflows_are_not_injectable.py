@@ -74,7 +74,7 @@ def test_every_workflow_declares_least_privilege_permissions():
 
 
 HOSTILE = (
-    '## \U0001f916 AI Provenance\n'
+    '## AI Provenance\n'
     '| 1 | @someone | https://x | insight |\n'
     '"; touch /tmp/mongla_poc_injection_marker; echo "'
     "'; touch /tmp/mongla_poc_injection_marker2; echo '"

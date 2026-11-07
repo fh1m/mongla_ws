@@ -1,8 +1,8 @@
 """B35 -- hammer the verb table and the wire converters with hostile floats.
 
-FOUND BY EXECUTION, NOT BY READING -- and the first write-up of it was WRONG.
+Found by execution, not by reading -- and the first write-up of it was WRONG.
 
-⚠ NaN NEVER REACHED THE WIRE. `SrotFC.move()` has always refused a non-finite
+NaN NEVER REACHED THE WIRE. `SrotFC.move()` has always refused a non-finite
 frame (`if not _finite(p1..p5): return MoveResult(DENIED, ...)`) and
 `test_move_denied_on_nonfinite_param` has always proved it. The claim that it did
 is retracted in BUGS.md B35. What these tests pin is narrower and real: a
@@ -27,7 +27,7 @@ The hull was never at risk -- the firmware refuses every non-finite parameter
 mid-mission DENIED and a STATUSTEXT to decode, when the host knows which field
 was bad and can say so before anything leaves.
 
-⛔ THE NEUTRALITY ASSERTIONS ARE NOT DECORATION. The first fix made `_clamp` map
+The neutrality assertions are not decoration. The first fix made `_clamp` map
 NaN to `lo` -- which for `unit_to_mc` is -1.0, i.e. **-1000, full reverse
 thrust**. A range check accepts that happily, and the range-only version of this
 test passed it. Each converter must fail to ITS OWN neutral.

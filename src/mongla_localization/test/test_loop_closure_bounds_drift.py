@@ -5,7 +5,7 @@ ALLOWED. This covers what one DOES to the filter, which is the half that
 matters: `update_position` shrinks the covariance, so a closure that should not
 have fired is not merely wrong, it is BELIEVED.
 
-⛔ AND EVERY NUMBER IN THIS FILE WAS ONCE MEASURED ON A FILTER IN FREE FALL.
+And every number in this file was once measured on a filter in free fall.
 `ACCEL` read `+9.80665` until 2026-09-30. `predict` computes
 `a_world = R @ a + GRAVITY` with `GRAVITY = +z` (world z is DOWN), so a level
 stationary hull reports `-9.80665`; `+9.80665` is **2 g downward**. Measured:
@@ -15,14 +15,14 @@ kilometres. `test_the_setup_actually_drifts` passed throughout, because it check
 only x. So the file's own docstring numbers, and two of its assertions, described
 a vehicle 3.9 km under the pool.
 
-⚠ Fixing the sign changed two things this file BELIEVED, and both are now
+Fixing the sign changed two things this file BELIEVED, and both are now
 measured rather than asserted -- see
 `test_a_wrong_closure_within_the_gate_is_believed` and
 `test_repeating_one_closure_DOES_shrink_the_covariance`. It also removed the
 only evidence for a narrowing of the NIS lockout break that was shipped and then
 reverted on the same day (B-77).
 
-⛔ THE FIXTURE AIDS VELOCITY, AND THAT IS LOAD-BEARING. An earlier version
+The fixture aids velocity, and that is load-bearing. An earlier version
 aided only depth and yaw. Those do not observe x or y -- which is true, and is
 exactly why loop closure is worth having -- but the resulting velocity sigma
 reached 21 m/s, and in that regime a position fix spends most of its
@@ -74,7 +74,7 @@ def _drifted(seconds: float = SECONDS, flow_bias: float = FLOW_BIAS):
 def _err(f, seconds: float = SECONDS):
     """Along-track error against the truth for THIS run's duration.
 
-    ⚠ It used to compare every run against `TRUTH_X`, the 20 s truth, so a 10 s
+    It used to compare every run against `TRUTH_X`, the 20 s truth, so a 10 s
     run scored 2.5 m of "drift" that was simply 3 m of unflown distance. With
     the duration passed in, the number is the flow bias integrated:
     0.05 m/s * t, which is what actually moves a flow-aided hull off truth.
@@ -131,7 +131,7 @@ def test_a_closure_removes_the_drift():
     f = _drifted()
     before = _err(f)
     assert f.update_position((TRUTH_X, 0.0), sigma=0.30)
-    # ⚠ NOT zero, and it should not be. sigma 0.30 against a position variance
+    # NOT zero, and it should not be. sigma 0.30 against a position variance
     # of 2.04 leaves the measurement about 87 % of the weight, so 1.000 m of
     # drift becomes 0.082 m of residual -- measured. The old bar was < 0.01,
     # which the free-falling fixture met only because its P was enormous and
@@ -159,7 +159,7 @@ def test_a_looser_closure_never_corrects_more_than_a_tighter_one():
     """Sigma must not be decoration: composing it in the closure layer only
     means something if the filter orders corrections by it.
 
-    ⚠ Weakly, here. With position sigma around 20 m, every sigma from 0.05 to
+    Weakly, here. With position sigma around 20 m, every sigma from 0.05 to
     1.0 lands on the truth; only 5.0 leaves a visible residual. So this
     asserts MONOTONICITY, which is what is actually true, rather than a
     separation the measurement does not support.
@@ -175,7 +175,7 @@ def test_a_looser_closure_never_corrects_more_than_a_tighter_one():
 
 
 def test_repeating_one_closure_DOES_shrink_the_covariance():
-    """⛔ THE OPPOSITE OF WHAT THIS FILE USED TO CLAIM, and the correction
+    """The opposite of what this file used to claim, and the correction
     matters, because the claim was used to argue the gates were belt-and-braces.
 
     It asserted that the 2nd through 200th identical fix "leave the position
@@ -215,7 +215,7 @@ def test_a_wrong_closure_within_the_gate_is_believed():
     """Not a bug report -- the justification for every refusal in
     `mongla_vision/anchor/loop_closure.py`, pinned so it cannot be argued away.
 
-    ⚠ CORRECTED 2026-09-30. This used to offer a fix 50 m away and assert the
+    CORRECTED 2026-09-30. This used to offer a fix 50 m away and assert the
     filter took it. On a level hull the chi-square gate REJECTS that outright,
     which would have read as "the innovation gate protects us" -- and it does
     not, because a place-recognition false positive does not land 50 m away.
@@ -224,7 +224,7 @@ def test_a_wrong_closure_within_the_gate_is_believed():
         offset 0.5 .. 4.0 m   ACCEPTED, and pos_var 2.0365 -> 0.0256  (80x)
         offset 5.0 m and out  rejected
 
-    ⛔ So the gate catches the absurd closure and waves through the PLAUSIBLE
+    So the gate catches the absurd closure and waves through the PLAUSIBLE
     one -- the only kind a real false positive produces. A fix at a place the
     vehicle never was moves the estimate there AND makes it 80x more certain.
     Nothing downstream recovers from that, so the only defence is not emitting

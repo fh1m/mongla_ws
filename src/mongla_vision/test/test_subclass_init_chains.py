@@ -1,6 +1,6 @@
 """A subclass __init__ must call super().__init__.
 
-⛔ WHAT THIS CATCHES, and it reached the vehicle. A `set_masks` method was
+What this catches, and it reached the vehicle. A `set_masks` method was
 inserted directly after `self._want_masks = bool(masks)` -- a line of
 `HailoSegDetector.__init__`. At method indentation that ENDS the constructor,
 so everything after it (including `super().__init__(iou=iou, **kwargs)`) became

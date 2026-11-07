@@ -1,6 +1,6 @@
 """A lane line is the most reliable feature in a swimming pool. Read it.
 
-⛔ THE FIRST DESIGN READ THE TILES AND REPORTED 0.00 DEGREES CONFIDENTLY.
+The first design read the tiles and reported 0.00 degrees confidently.
 Hough-on-edges votes per edge pixel, and a tiled floor offers dozens of tile
 joints against a lane line's two sides -- so the grid won every vote and the
 answer was always 0 or 90. The control that proved it is
@@ -56,7 +56,7 @@ def pool(n=480, angle_deg=0.0, offset_px=0.0, width_px=40, tile=32,
 #  NEGATIVE CONTROLS -- the first one killed the first design
 # --------------------------------------------------------------------------- #
 def test_a_tiled_floor_with_NO_line_is_refused():
-    """⛔ THE CONTROL THAT MATTERS. The Hough version ACCEPTED this and
+    """The control that matters. The Hough version ACCEPTED this and
     returned 0.00 degrees. A line detector that prefers the numerous background
     to the single foreground is not a line detector."""
     assert detect(pool(width_px=0)) is None
@@ -152,7 +152,7 @@ def test_the_rulebook_constants_are_the_published_ones():
 
 
 def test_a_SHORT_dark_streak_is_refused():
-    """⛔ THE SPAN GATE, and it had no control until this test.
+    """The span gate, and it had no control until this test.
 
     A lane line runs the full length of the pool, so in any view containing one
     it reaches two edges of the frame. A short dark streak is a shadow, a
@@ -165,7 +165,7 @@ def test_a_SHORT_dark_streak_is_refused():
 
 
 def test_a_frame_with_NO_dark_minority_is_refused():
-    """⛔ THE CONTRAST GATE, likewise previously untested.
+    """The contrast gate, likewise previously untested.
 
     Thresholding on a percentile ALWAYS returns pixels -- the darkest 8 % of a
     uniform field is still 8 % of it. Without a gap between that minority and
@@ -185,7 +185,7 @@ def test_a_gentle_gradient_is_not_a_lane_line():
 
 
 def test_a_LARGE_round_dark_region_is_refused():
-    """⛔ ISOLATES THE ELONGATION GATE. The small blob above is caught by the
+    """Isolates the elongation gate. The small blob above is caught by the
     span test, so it proves nothing about elongation. This one SPANS the frame
     and has sharp edges -- it passes every other gate, and only "a lane line is
     long and narrow" rejects it. A big dark patch on the floor, a shadow under

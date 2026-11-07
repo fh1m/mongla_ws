@@ -78,7 +78,7 @@ def test_the_shipped_course_loads():
 
 
 def test_the_shipped_course_ships_NO_invented_coordinates():
-    # THE LOAD-BEARING ONE. We have not measured a RoboSub pool. A file with
+    # The load-bearing one. We have not measured a RoboSub pool. A file with
     # plausible coordinates would send the vehicle somewhere nobody measured.
     c = load_course('robosub26')
     placed = [n for n, p in c.props.items() if p.has_position]

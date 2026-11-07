@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The GitHub wiki is where Mongla's docs are read and edited. This keeps it and the repo one.
 
-THE ARRANGEMENT. People read, organise and edit the docs in the wiki. Each
+The arrangement. People read, organise and edit the docs in the wiki. Each
 document also lives in this repo, as the file the wiki page was built from,
 because the guards that keep the docs true run here, against files, in the
 same commit as the code they describe: `test_docs_contract.py` (every page
@@ -17,7 +17,7 @@ relative paths, the generated footer off -- the doc guards run, and the change
 is committed to main under the editor's name. `test_the_wiki_is_built_from_the_book.py`
 proves the round trip loses nothing: every page, built and pulled, is its file.
 
-WHAT THE WIKI HOLDS
+What the wiki holds
   * Home        the front page, `.claude/context/wiki/Home.md`: what Mongla is, in pictures
   * the book    the contents page, `.claude/context/README.md`, every chapter in order
   * _Sidebar    the book, part by part, on every page

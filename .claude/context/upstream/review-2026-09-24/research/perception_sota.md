@@ -99,7 +99,7 @@ There is no OBB model and no optical-flow model in the Hailo-8 Zoo. CLIP and Sig
 - **3b. yolov8s-pose with 4–8 keypoints per rigid prop** (torpedo board corners, gate top/bottom, bin rim corners), fed straight to the existing SQPnP/IPPE interval.
   - This is CMU's 2026 route. It needs no template, which XFeat does, and the keypoint visibility flag gives an occlusion state for free.
   - Apply doctrine reflex 2 when labelling: order corners by a second feature so the board's symmetry does not become a flip.
-  - ⚠ Quantisation pitfall [E, verify]: 8-bit keypoint regression over 640 px may exceed our 1.55 px PnP noise. Compile the keypoint output layers at 16-bit (`quantization_param(..., precision_mode=a16_w16)` in the `.alls`) and **measure reprojection before and after**.
+  - **Caution:** Quantisation pitfall [E, verify]: 8-bit keypoint regression over 640 px may exceed our 1.55 px PnP noise. Compile the keypoint output layers at 16-bit (`quantization_param(..., precision_mode=a16_w16)` in the `.alls`) and **measure reprojection before and after**.
   - Keep XFeat as the refinement stage and blackout anchor. Doctrine reflex 1: publish both frames.
   - Falsifier: pose p90 yaw on constructed truth, keypoints against XFeat, at 1–3 m. If keypoints are worse than XFeat's 1.40°, they are only an initialiser.
 - **3c. Recompile at full optimisation level.** Use ≥1024 in-domain RGB frames, on a GPU box, and assert in CI that the log contains no "Reducing optimization level" warning. This is the G-15 guard broadened to cover the second silent downgrade.

@@ -62,7 +62,7 @@ def _parse_model_conf(s: str) -> Dict[str, float]:
     return result
 
 
-# "NOT SET BY THE OPERATOR". A launch file passes every parameter, so the
+# "not set by the operator". A launch file passes every parameter, so the
 # only way to tell a deliberate choice from a filled-in default is a value
 # that means nothing on its own. Each is outside the setting's real range.
 _UNSET = {

@@ -20,7 +20,7 @@ Measured with a yield in the window (which is what the real logging call is):
 That readout is the line an operator uses to decide the pipeline is healthy, so
 under-reporting DROPS is precisely the wrong direction to be wrong in.
 
-FIXED BY STRUCTURE, NOT BY A LOCK. The counters are cumulative with exactly ONE
+Fixed by structure, not by a lock. The counters are cumulative with exactly ONE
 writer (the capture thread); the reader keeps its own high-water marks. Single
 writer + private reader state needs no mutual exclusion, costs nothing in the
 publish path, and stays correct on a free-threaded build (PEP 703), where `+=` is

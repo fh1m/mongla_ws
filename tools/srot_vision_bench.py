@@ -7,7 +7,7 @@ MANUAL_CONTROL axes going out, and the board's own ESC RPM coming back. If the
 loop is wired correctly, moving right makes the lateral command go positive and
 the horizontal thrusters change together.
 
-WHY A PAGE AND NOT A LOG. The claim being tested is "vision drives thrusters",
+Why a page and not a log. The claim being tested is "vision drives thrusters",
 and that is a claim about a CORRELATION between two things that move. A log of
 numbers cannot show you that; two columns updating side by side while you move
 can, and a disagreement is obvious rather than something you reconstruct
@@ -270,7 +270,7 @@ def worker():
         state['armed'], state['mode'] = bool(t.armed), t.mode or '?'
         state['depth'], state['yaw'] = t.depth_m, t.yaw_deg
 
-        # DRAWING IS NOT IN THIS LOOP. Measured: with the 2x resize, overlay
+        # Drawing is not in this loop. Measured: with the 2x resize, overlay
         # and JPEG encode inline, a 50 Hz request delivered 31.9 Hz -- the
         # control rate was being set by the image encoder. That is exactly
         # backwards, and it is the kind of coupling that only shows up as

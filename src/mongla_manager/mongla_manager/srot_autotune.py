@@ -1,7 +1,7 @@
 """``ros2 run mongla_manager autotune`` -- run the board's relay AUTOTUNE, deliberately.
 
 The board tunes its rate, angle and depth loops by a relay limit cycle and
-WRITES AND PERSISTS every PID it tunes, driving all thrusters at full authority.
+Writes and persists every PID it tunes, driving all thrusters at full authority.
 `SrotFC.autotune` implements it carefully and had no entry point at all. This is
 that entry point, and it is an OPERATOR tool, not a mission verb: a mission that
 could retune the vehicle mid-run is a mission that can un-tune it.

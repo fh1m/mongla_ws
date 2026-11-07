@@ -78,7 +78,7 @@ def test_a_task_that_fits_is_attempted_fully():
 
 
 def test_the_fallback_is_reached_instead_of_a_skip():
-    # THE POINT. No room to do it properly is exactly when the cheap points
+    # The point. No room to do it properly is exactly when the cheap points
     # matter, and skipping straight past them is how a run scores zero on a
     # task it could have half-scored.
     b, clock = _budget(total=200.0, reserve=45.0)

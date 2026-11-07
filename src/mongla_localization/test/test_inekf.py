@@ -176,7 +176,7 @@ def test_covariance_stays_positive_definite_through_updates():
 
 
 def test_the_attitude_block_of_the_transition_does_not_depend_on_attitude():
-    # THE PROPERTY THE FILTER WAS CHOSEN FOR. Build the same step at two very
+    # The property the filter was chosen for. Build the same step at two very
     # different attitudes and compare the state-independent block.
     a = RIEKF(state=State(R=np.eye(3)))
     b = RIEKF(state=State(R=_rz(137.0)))
@@ -198,7 +198,7 @@ def test_velocity_is_stored_in_the_WORLD_frame():
 
 
 def test_the_correction_is_injected_on_the_LEFT():
-    """⛔ THE PROPERTY NO TEST OF THE OUTPUTS WOULD HAVE CAUGHT.
+    """The property no test of the outputs would have caught.
 
     Right-invariant error is `eta = X_hat X^-1`, so a correction multiplies
     from the LEFT and carries v and p with it: correcting the attitude
@@ -233,7 +233,7 @@ def test_the_correction_carries_velocity_too():
 # ═══════════════════════════════════════════════════════════════════════════ #
 
 def test_the_gate_clears_a_cold_filter():
-    """⛔ THE FRAGILITY, AS A TEST RATHER THAN A COMMENT. A freshly built filter
+    """The fragility, as a test rather than a comment. A freshly built filter
     has a horizontal sigma_vel of sqrt(2) * P0_velocity = 0.707 (the gate is
     horizontal since issue #28), and the gate must sit ABOVE that or it fires
     on construction and refuses every world-frame update.
@@ -285,7 +285,7 @@ def test_depth_and_yaw_are_REFUSED_while_velocity_is_unobserved():
 
 
 def test_a_position_fix_is_STILL_APPLIED_when_velocity_is_unobserved():
-    """⭐ AND THIS IS THE ASYMMETRY THAT MAKES THE GATE WORK. A landmark fix is
+    """And this is the asymmetry that makes the gate work. A landmark fix is
     the one measurement that can still pin position out there, so it is applied
     rather than refused -- with its attitude block dropped, so it cannot rotate
     the state. Measured: refusing it gives 2.46 m, applying it uncoupled gives
@@ -302,7 +302,7 @@ def test_a_position_fix_is_STILL_APPLIED_when_velocity_is_unobserved():
 
 
 def test_dropping_the_attitude_block_does_NOT_make_the_update_attitude_free():
-    """⚠ A CLAIM THIS FILE BRIEFLY MADE AND HAD TO WITHDRAW, kept as a test.
+    """A claim this file briefly made and had to withdraw, kept as a test.
 
     Zeroing `H[:, 0:3]` does not stop a position fix moving attitude, because
     the CROSS-COVARIANCE `P[0:3, 6:9]` still couples them -- the correction
@@ -329,7 +329,7 @@ def test_the_coupling_is_kept_when_velocity_IS_observed():
     taken while the hull believes it is far from the origin DOES correct
     attitude.
 
-    ⚠ TWO WAYS TO WRITE THIS TEST AND GET A FALSE PASS, both met while writing
+    Two ways to write this test and get a false pass, both met while writing
     it. The innovation must stay small or the filter's own OUTLIER gate rejects
     the update -- a different mechanism entirely. And the innovation must be
     ASYMMETRIC: at p = [d, d, 0] the yaw column of H is -d on one row and +d on
@@ -348,8 +348,8 @@ def test_the_coupling_is_kept_when_velocity_IS_observed():
 
 
 def test_the_gate_counter_is_published_not_silent():
-    """⛔ A FILTER THAT SILENTLY DROPS MEASUREMENTS LOOKS IDENTICAL TO ONE THAT
-    IS MERELY DRIFTING -- the reason `accepted`/`rejected` already exist. The
+    """A filter that silently drops measurements looks identical to one that
+    Is merely drifting -- the reason `accepted`/`rejected` already exist. The
     gate needs the same treatment, and `localization_node._diagnose` prints it.
 
     A rising `gated` count while flow is healthy means the threshold is wrong

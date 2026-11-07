@@ -27,20 +27,20 @@ affordable.
 
 ## 2. What we have that they do not
 
-### ⭐ XFeat is already loaded
+### XFeat is already loaded
 A dedicated Re-ID network costs 15–25 ms/frame, which is why embedded trackers
 skip appearance. Ours runs at **701 FPS on the Hailo-8** (§38) and shares the
 chip with the detector for ~10 % of its throughput (§32) — because we built it
 for the anchor rung. **We get the one expensive ingredient for free.**
 
-### ⭐⭐ Ego-motion is MEASURED, not fitted
+### Ego-motion is MEASURED, not fitted
 BoT-SORT estimates camera motion by fitting an affine transform *between
 images* — a surveillance camera has no other way. This vehicle has a **verified
 velocity sensor** (downward camera, 1.09 cm over 30 cm) and attitude at 50 Hz
 with **gyro bias already removed** (0.1 °/hour residual, §37). Two cues that do
 not share a failure mode with the pixels being tracked.
 
-### ⭐ One number, four jobs
+### One number, four jobs
 XFeat's inlier count is simultaneously an **identity score** (re-ID), a
 **turbidity proxy** (confidence calibration), a **memory-health signal**
 (fouled lens vs changed world), and a **viewpoint-change detector** (evidence
@@ -48,7 +48,7 @@ accumulation). It is computed on every bank lookup and was being discarded.
 
 ---
 
-## 3. ⛔ What the champions have that we do not
+## 3. What the champions have that we do not
 
 From **Bumblebee's own RoboSub 2026 paper**, read directly:
 
@@ -61,7 +61,7 @@ From **Bumblebee's own RoboSub 2026 paper**, read directly:
 modality and we have nothing equivalent. At long range in bad water, they see
 and we do not. That is the honest gap.
 
-### ⭐ And the weakness they state themselves
+### And the weakness they state themselves
 
 > "the Doppler Velocity Log (DVL) experiences acoustic beam reflection…"
 > during high-rate angular manoeuvres such as a barrel roll, or **"when
@@ -84,7 +84,7 @@ without vision — but we can get **expectation**:
 
 - the course map holds where props are (per venue, deck-overridable)
 - the localiser holds where the vehicle is
-- ⭐ therefore the stack can say **where a prop should appear in frame** before
+- **Key point:** therefore the stack can say **where a prop should appear in frame** before
   the detector has seen anything
 
 A detector searching a predicted region is more sensitive than one searching a
@@ -92,7 +92,7 @@ whole frame — the same argument `range_crop` already makes for size, driven by
 **position** instead. `CheckpointBank.locate(near=…, radius_m=…)` already takes
 the prior; nothing supplies it yet.
 
-⚠ Unmeasured. Recorded as the plan, not as a result.
+**Caution:** Unmeasured. Recorded as the plan, not as a result.
 
 ---
 
@@ -101,14 +101,14 @@ the prior; nothing supplies it yet.
 | module | state |
 |---|---|
 | `anchor/health.py` — fouled lens vs changed world | **wired** into `lock_node` |
-| `anchor/bank.py` contamination guard — refuses to remember a view of the fault | ⭐ **wired into `enrol()`**, the DAM4SAM principle without a second bank |
+| `anchor/bank.py` contamination guard — refuses to remember a view of the fault | **Key point: wired into `enrol()`**, the DAM4SAM principle without a second bank |
 | `tracking/reid.py` — XFeat short-term identity memory, §25's 40-inlier bar, 1.5× margin | built, 13 tests, **deferred**: needs crop descriptors |
 | `tracking/cascade.py` — motion → **measured ego-motion** → appearance, capped at 4 calls | built, 17 tests, **deferred**: touches the association hot path |
 | `detection/confidence_calibration.py` — turbidity-aware, ships OFF | built; DQR-RTDETR validates the idea, our gain is still declared |
 
 ---
 
-## 6. ⛔ What none of this fixes
+## 6. What none of this fixes
 
 Nothing here creates a detection where there is none. Every mechanism above
 **holds an identity across a gap** or **stops a bad memory forming**; none
@@ -128,7 +128,7 @@ detection at all. §4 is the only vision-only answer, and it is unmeasured.
 **Grounding DINO** — the promise is a detector that needs no training for a
 new prop.
 
-⛔ **They are not robust where we operate.** *Open-Vocabulary Object Detectors:
+**Warning: They are not robust where we operate.** *Open-Vocabulary Object Detectors:
 Robustness Challenges under Distribution Shifts* evaluates all three against
 COCO-O / COCO-DC / COCO-C and finds they **"exhibit significant deviations in
 performance"** under information loss, corruption and geometric deformation.
@@ -137,10 +137,10 @@ own closed-set recall already swings **29.2 / 72.7 / 68.3 %** across venues on
 models trained *for* this water. An open-vocabulary model would start worse and
 degrade faster.
 
-⚠ OWL-ViT additionally needs image↔text embedding interaction **at inference**,
+**Caution:** OWL-ViT additionally needs image↔text embedding interaction **at inference**,
 which is why NanoOWL exists and why it targets an NVIDIA GPU rather than a Hailo.
 
-⭐ **Where they do belong: labelling, not flying.** An open-vocabulary detector
+**Key point: Where they do belong: labelling, not flying.** An open-vocabulary detector
 is good enough on the EASY frames of our archive to pre-label them, and those
 labels train the closed-set model that actually flies the hard ones. That is
 ROADMAP **M6** (real-pool auto-labelling), still open, and this is the tool for
@@ -149,7 +149,7 @@ labels, and a wrong one costs a correction rather than a run.
 
 ---
 
-## 8. ⛔ Corrections to our own backlog, found by reading our own measurements
+## 8. Corrections to our own backlog, found by reading our own measurements
 
 **The Hailo async API is DONE, and it was measured as buying nothing.**
 It was carried on the "open work" list as *13.4 ms → ~7 ms*. `hailo.py` already
@@ -160,7 +160,7 @@ async depth 2      225 Hz raw (1.60x)   ->   98.2 Hz end-to-end (1.00x)
 async depth 4      292 Hz raw (2.07x)   ->   98.2 Hz end-to-end (1.00x)
 ```
 
-⭐ **2x raw throughput, zero end-to-end gain.** It was adopted for a completely
+**Key point: 2x raw throughput, zero end-to-end gain.** It was adopted for a completely
 different reason, which is the part worth remembering:
 
 ```
@@ -171,14 +171,14 @@ InferModel run_async + wait  0.05 ms late,  0.0 %
 The win was **the GIL, not the chip**. Anyone who re-opens this item looking
 for throughput will re-measure 1.00x.
 
-⚠ The real remaining gap is the graph, not the accelerator: **80.9 Hz
+**Caution:** The real remaining gap is the graph, not the accelerator: **80.9 Hz
 standalone against 53.9 Hz through the ROS graph**. That is where the
 throughput went, and it has not been attacked.
 
 
 ---
 
-## 9. ⭐⭐⭐ THE GOLDEN GOAL NEEDS ANTICIPATION, NOT BETTER RECOVERY
+## 9. THE GOLDEN GOAL NEEDS ANTICIPATION, NOT BETTER RECOVERY
 
 Everything in sections 1-8 makes the ladder **recover** better. None of it
 changes the fact that **every rung fires after the detection is already gone**:
@@ -198,7 +198,7 @@ in an unknown environment".
 
 What it requires is a **per-frame quality signal that needs no label**.
 
-### ⭐⭐ We already compute one and were throwing it away
+### We already compute one and were throwing it away
 
 XFeat's inlier count against the bank falls as the water thickens, as the
 target turns away, as range opens — **all the things that precede a lost
@@ -211,17 +211,17 @@ earlier half — not a slope, because a slope is dominated by its endpoints and
 one catastrophic frame would swing it; halves are what a gap actually looks
 like.
 
-⭐ **Wired**: a falling trend is now a fourth reason to enrol, beside stale /
+**Key point: Wired**: a falling trend is now a fourth reason to enrol, beside stale /
 uncovered / room. It is the only one of the four that is **predictive** — the
 others describe the bank, this describes where the view is heading.
 
-⛔ **And it licenses exactly one action.** It says *prepare*, never *the target
+**Warning: And it licenses exactly one action.** It says *prepare*, never *the target
 is gone*. Snapping a reference early is cheap and reversible; snapping late
 costs the very view it needed. A test asserts the trend object carries no
 `lost` or `target_gone` field, because the moment this becomes a control input
 the ladder's rule — no rung fabricates a position — is gone.
 
-⚠ `TREND_FALL = 0.70` is **declared, not measured**. What is measured is that
+**Caution:** `TREND_FALL = 0.70` is **declared, not measured**. What is measured is that
 the signal exists and moves the right way. The bar wants a pool day with real
 gaps either side of it.
 
@@ -247,14 +247,14 @@ coming.
 
 ---
 
-## 11. ⭐⭐⭐ THE LAST PIECE: THE VEHICLE IS THE LARGEST CAUSE OF LOSING THE TARGET
+## 11. THE LAST PIECE: THE VEHICLE IS THE LARGEST CAUSE OF LOSING THE TARGET
 
 Sections 1–10 are all **perception**. Every one of them — the cascade, the
 re-identification, the contamination guard, the anticipation — operates in the
 **image plane**, downstream of a decision the vehicle has already made about
 where to point.
 
-⛔ **Grepped `mongla_control`: there is no field-of-view guard anywhere.**
+**Warning: Grepped `mongla_control`: there is no field-of-view guard anywhere.**
 Nothing stops the controller yawing the target out of frame, and **no tracker
 survives that**. The perception stack can be perfect and still lose the lock.
 
@@ -272,7 +272,7 @@ The barrier is `h = β·(R e_c) − cos(ψ_F)`, and the property that matters he
 is that a published splitting strategy makes it **robust to bounded distance
 error** — it needs **bearing, not range**, which is exactly our situation.
 
-### ⛔ And a real departure from the paper, forced by measurement
+### And a real departure from the paper, forced by measurement
 
 The published barrier is **conical**. A camera's image is a **rectangle**, and
 they disagree precisely where it matters. Measured on our own geometry
@@ -281,7 +281,7 @@ they disagree precisely where it matters. Measured on our own geometry
 one pixel from gone. The cone closes only at the diagonal **corner**, so a
 target can walk out of the left edge with margin reported the whole way.
 
-⭐ So the shipped barrier is the fraction of half-width/half-height remaining,
+**Key point:** So the shipped barrier is the fraction of half-width/half-height remaining,
 whichever is smaller: **1.0 dead centre, 0.0 on any edge**. Bearing is still
 reported because it is what a controller acts on; it is not what the barrier is
 made of.
@@ -294,7 +294,7 @@ dx=310  critical   h=0.031  scale=0.00
 dx=320  lost       h=0.000  scale=0.00
 ```
 
-### ⭐⭐ The second half: leaving the frame must not mean forgetting
+### The second half: leaving the frame must not mean forgetting
 
 Image-plane tracking forgets the instant the box leaves. The fix is old and a
 robot-behaviour patent states it plainly: store target position **"not on a
@@ -305,7 +305,7 @@ identical from the behaviour control perspective" however the vehicle moves.
 pose. Losing sight then stops being a perception failure and becomes a
 **navigation** one — the vehicle still knows the bearing to turn back to.
 
-⛔ It stores a **memory, never a sighting**: it refuses a non-finite or absurd
+**Warning:** It stores a **memory, never a sighting**: it refuses a non-finite or absurd
 range rather than storing a guess, it answers `None` once the estimate is
 staler than its horizon (a position from a minute ago is a rumour, not
 knowledge), and a test asserts it carries **no `score`, `confidence` or
@@ -323,7 +323,7 @@ knowledge), and a test asserts it carries **no `score`, `confidence` or
 | target approaches or recedes | similarity fit tracks scale | **wired** |
 | **the controller steers it out of frame** | **visibility guard** | built |
 | **it leaves anyway** | **world-frame memory** | built |
-| no detection at all, long range, bad water | ⛔ **sonar's job — still open** | §3 |
+| no detection at all, long range, bad water | **Warning: sonar's job — still open** | §3 |
 
 ---
 
@@ -359,7 +359,7 @@ saturated at 0.995 across all 25 archived runs (this is why
 `model_select.py` exists), and then **recall itself saturated at 1.0**, which
 is why `model_select.py` in turn ranked the wrong model.
 
-⛔ **The pattern, and it is the durable lesson.** Each time we replaced a
+**Warning: The pattern, and it is the durable lesson.** Each time we replaced a
 saturated metric we replaced it with another metric measured **only where the
 answer is yes**. mAP → recall → nothing, until a negative set was introduced.
 The ladder was never the weak link; the instrument that told us the detector
@@ -375,7 +375,7 @@ positives are isolated in time" does not transfer — ours persist 400 frames of
 6.69 real vs 6.82 and 9.40 hallucinated — turbid water is not smooth, and what
 a human reads as "nothing there" is semantic, not photometric).
 
-⭐ **The fix was not an algorithm.** It was looking at 34 clips' worth of
+**Key point: The fix was not an algorithm.** It was looking at 34 clips' worth of
 rendered boxes, and then searching the archive: **208 `.pt` on this box, 96
 unique, 29 with a gate class**, against the 4 that ship. The better model had
 been sitting there the whole time.
@@ -404,7 +404,7 @@ and it removes *training* from the list of ways to improve the anchor. It does
 not remove the others, and this session found that the largest one had nothing
 to do with the network at all.
 
-### ⭐ 1. It was running on the wrong processor (B-62, the big one)
+### 1. It was running on the wrong processor (B-62, the big one)
 
 Measured on the vehicle, 320×240, 30 runs:
 
@@ -420,7 +420,7 @@ directory** was never a candidate. No amount of retraining would have closed a
 ### 2. What the literature actually offers
 
 **xfeatSLAM** (`udaysankar01/xfeatSLAM`) — XFeat as the front end of ORB-SLAM3,
-real-time. ⚠ Not something to adopt: a full SLAM system is a much larger claim
+real-time. Not something to adopt: a full SLAM system is a much larger claim
 than our anchor rung makes, and we have no loop-closure budget on a 15-minute
 run. What IS worth taking is the demonstration that **XFeat descriptors are
 good enough to carry a map**, which is a stronger statement than "good enough
@@ -433,7 +433,7 @@ holds up as the front end of a **tightly-coupled inertial** system. We already
 have the IMU and the RIEKF; the anchor currently feeds neither.
 
 **The XFeat paper itself** — it emits three heads: a keypoint heatmap, a 64-D
-dense descriptor map, **and a reliability heatmap**. ⚠ We use two. The
+dense descriptor map, **and a reliability heatmap**. We use two. The
 reliability head is exactly a per-keypoint confidence, and our `min_cossim`
 0.82 is a global constant doing that job badly. Worth measuring.
 
@@ -448,7 +448,7 @@ inliers, and we have never tried it.
    per-keypoint one, using an output we already compute and discard;
 3. **semi-dense mode** when sparse falls below the inlier bar — turbidity is
    exactly the case it was built for;
-4. ✅ **ALREADY DONE — this item was wrong.** Checked 2026-09-25: the anchor
+4. **ALREADY DONE — this item was wrong.** Checked 2026-09-25: the anchor
    DOES feed the filter. `lock_node` publishes `/mongla/localization/fix`
    (a `PointStamped` carrying the closure position with the producer's own
    sigma in `z`), `localization_node.py:182` subscribes it, and
@@ -456,16 +456,16 @@ inliers, and we have never tried it.
    resection AND loop closure". The route is **loop closure**, not per-frame
    descriptor aiding, which is the right granularity: a bounded absolute fix
    rather than a stream the filter would have to de-weight.
-   ⚠ What XfeatVINS does beyond this is tightly-coupled PER-FRAME feature
+   **Caution:** What XfeatVINS does beyond this is tightly-coupled PER-FRAME feature
    aiding, which would need the forward metric range we do not have. That
    distinction is real; the claim "the anchor feeds neither" was not;
-5. ⛔ **more training** — measured, closed, do not reopen without a new idea.
+5. **Warning: more training** — measured, closed, do not reopen without a new idea.
 
-⚠ Items 2 and 3 are RESEARCH NOTES, not findings. Neither has been measured on
+**Caution:** Items 2 and 3 are RESEARCH NOTES, not findings. Neither has been measured on
 our footage, and §57's lesson is that an idea consistent with the symptom is
 not evidence.
 
-### ⛔ The reliability head does NOT predict which keypoints survive a match
+### The reliability head does NOT predict which keypoints survive a match
 
 §58 listed "use the reliability head" as the second-best remaining XFeat idea:
 the paper emits one, we compute it on-chip, and `min_cossim = 0.82` was doing
@@ -479,12 +479,12 @@ three consecutive frame pairs of `gate.mkv`:
 | 1 | 359 | 0.17 | 665 | 0.15 | **1.137** |
 | 2 | 493 | 0.17 | 531 | 0.17 | **1.050** |
 
-⛔ **A 5–29 % separation, decaying toward 1.0.** Keypoints that survive a match
+**Warning: A 5–29 % separation, decaying toward 1.0.** Keypoints that survive a match
 score barely above those that do not, and by the third pair the two
 populations are indistinguishable. That cannot replace a cosine bar which
 currently rejects on a real similarity.
 
-⚠ **Why the idea was still worth testing, and what the failure teaches.** The
+**Caution: Why the idea was still worth testing, and what the failure teaches.** The
 reasoning was sound — a per-keypoint confidence should beat a global constant
 — and it is the same shape as §57's lesson: *an idea consistent with the
 symptom is not evidence*. Three ideas have now died this way (temporal
@@ -492,13 +492,13 @@ persistence, box geometry, edge energy) and this is the fourth. The decode
 stays, because it costs nothing and a future consumer may want it; the
 `min_cossim` bar stays as the thing that actually decides a match.
 
-⚠ One caveat stated honestly: this measured reliability against
+**Caution:** One caveat stated honestly: this measured reliability against
 **frame-to-frame** matching on clear-ish pool footage. The anchor's real job is
 frame-to-REFERENCE across seconds and viewpoint change, where the two
 populations may separate differently. That is a different experiment and it
 has not been run — but on the evidence here, nothing should act on this head.
 
-### ⭐⭐⭐ Semi-dense matching: 2.1–2.6x more inliers, and it needs no new model
+### Semi-dense matching: 2.1–2.6x more inliers, and it needs no new model
 
 §58 listed semi-dense as the third remaining XFeat idea. It is the first one to
 survive measurement, and it is the largest single improvement to the anchor
@@ -513,19 +513,19 @@ found in this campaign.
 | `gate` 0 | 382 | 105 | 686 | **218** | **2.08x** |
 | `gate` 1 | 359 | 92 | 624 | **202** | **2.20x** |
 
-⭐ **It costs nothing extra to compute.** The network already emits the full
+**Key point: It costs nothing extra to compute.** The network already emits the full
 `30x40x64` descriptor map — 1 200 cells — and the sparse path NMS-selects
 1 024 keypoints *from that same map*. So this is a matching-strategy change,
 not a model change: no retraining, no re-export, no new HEF. Sparse throws
 away a map it already paid for.
 
-⛔ **WHY IT MATTERS FOR THE LADDER, IN ONE NUMBER.** The anchor's trust bar is
+**Warning: WHY IT MATTERS FOR THE LADDER, IN ONE NUMBER.** The anchor's trust bar is
 **100 inliers**. On `torpedo` pair 1 — the weakest pair measured — sparse
 scores **80 and FAILS the bar**; dense scores **210 and clears it comfortably**.
 That is the difference between the anchor rung holding a lock and dropping it,
 on real footage, with no new model.
 
-⚠ **What is NOT yet measured, and must be before this ships:**
+**Caution: What is NOT yet measured, and must be before this ships:**
 - **cost.** 1 200 descriptors vs 1 024 is a bigger match matrix; the pairwise
   cosine is O(N*M). The 17 % more descriptors is not the issue — the match
   itself is, and it runs on the CPU in `XFeatONNX.match`.
@@ -541,7 +541,7 @@ on real footage, with no new model.
 the Hailo port that is already done. Next step is the cost measurement, then a
 frame-to-reference test on the archive, then wire it behind a switch.
 
-**⭐ The cost, measured — and it moves the bottleneck.** `XFeatONNX.match` on
+**The cost, measured — and it moves the bottleneck.** `XFeatONNX.match` on
 the vehicle's CPU:
 
 | | per match | |
@@ -552,20 +552,20 @@ the vehicle's CPU:
 **+37 % for 2.1-2.6x the inliers is a good trade**, and it is affordable at the
 anchor's 3 Hz cadence (45.85 ms of a 333 ms budget).
 
-⛔ **But look at the sparse number.** The MATCH costs **33.50 ms** while the
+**Warning: But look at the sparse number.** The MATCH costs **33.50 ms** while the
 inference now costs **10.89 ms** on the chip (B-62). **The anchor's bottleneck
 was never the network — it is the pairwise cosine on the CPU**, and it always
 was: even before the Hailo port, 32.9 ms of inference sat beside 33.5 ms of
 matching and only the inference was ever profiled or optimised.
 
-⭐ That reframes the remaining work. The next 2-3x in the anchor is not a
+**Key point:** That reframes the remaining work. The next 2-3x in the anchor is not a
 better descriptor or a faster backend; it is the matcher — a mutual-nearest
 check on a 1200x1200 float32 matrix, in numpy, single-threaded. Options worth
 measuring, in order of expected return: a coarse-to-fine grid (match at 15x20
 first, refine locally), `float16` accumulation, or handing the matrix to the
 chip. None of these needs a new model either.
 
-### ⛔ The anchor computes ROTATION and RANGE-CHANGE, and only the overlay reads them
+### The anchor computes ROTATION and RANGE-CHANGE, and only the overlay reads them
 
 `AnchorPose` (anchor/anchor.py:63-75) carries five numbers out of every
 homography fit:
@@ -575,7 +575,7 @@ homography fit:
     scale       >1 = the reference appears LARGER, i.e. we are CLOSER
     corners     the warped quad
 
-⭐ The ladder uses **`corners` only** — to build the anchor rung's bounding
+**Key point:** The ladder uses **`corners` only** — to build the anchor rung's bounding
 box. Grepping the whole tree for consumers of `.theta` and `.scale` finds
 none (the one debug overlay that printed `scale`, `anchor/draw.py`, was removed
 on 2026-11-06 because nothing on the vehicle ever ran it).
@@ -594,7 +594,7 @@ evaluation:**
    observation of the one attitude the controller cannot command, and the
    RIEKF has no visual roll aiding at all.
 
-⚠ **Neither is wired here, and neither should be on this evidence.** `scale` is
+**Caution: Neither is wired here, and neither should be on this evidence.** `scale` is
 metric only if the reference patch's true width is known (`target_width_m`,
 which is why that parameter now reaches the node), and `theta` is in-plane
 camera rotation which is only hull roll for the DOWNWARD camera. Both are

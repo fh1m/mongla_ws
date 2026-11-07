@@ -128,7 +128,7 @@ def align_loop(*,
     points shot when full alignment was not reached. Never fires when the target was
     never seen or only coasted.
 
-    ``downward`` -- DOWNWARD-CAMERA FRAME REMAP (bottom-mounted cam, looks at the
+    ``downward`` -- downward-camera frame remap (bottom-mounted cam, looks at the
     pool floor). The bin task hovers ABOVE the target, so the body axes rotate:
       * ``lat`` (image-X) -> lateral strafe  -- SAME as forward.
       * ``depth`` (image-Y) -> SURGE fore/aft -- REMAPPED. Two-sided P-on-pixel
@@ -229,7 +229,7 @@ class _Align(_VisionLoop):
         self.lat_ema = 0.0     # trailing EMA of the signed lateral command -> brake proxy
         self.surge_ema = 0.0   # downward: trailing EMA of the signed surge command -> brake proxy
         self.lat_i = 0.0       # lateral integral accumulator (Layer 2; 0 unless ki_lat>0)
-        # ⛔ THE MIXER'S OWN LIMIT, WHICH THE EXISTING ANTI-WINDUP CANNOT SEE.
+        # The mixer's own limit, which the existing anti-windup cannot see.
         # `abs(p_lat + lat_i) < g_lat` watches the SOFTWARE gain cap. The board
         # scales a whole thruster group down when any motor in it passes full
         # (`mixer.cpp`), and it never reports that -- so with yaw already spending
@@ -576,7 +576,7 @@ class _Align(_VisionLoop):
         reconnect can't stall the 20 Hz station-keep. fire_t is clamped
         < hold_s upstream, so this trips while still holding.
 
-        FRESHNESS GUARD: fire ONLY on the tick a genuinely NEW, non-coasted
+        Freshness guard: fire ONLY on the tick a genuinely NEW, non-coasted
         detection lands (is_new_frame -- the same distinct-frame signal that
         gates `stable`). This guarantees freshness at ANY detector FPS (a new
         frame is by definition current), fixing the low-FPS miss where the old

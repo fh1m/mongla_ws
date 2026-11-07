@@ -85,7 +85,7 @@ def main():
             continue
         age_at_read.append((t1 - meta.stamp_monotonic) * 1000.0)
         if meta.stamp_store:
-            # OF THE FRAME ACTUALLY CONSUMED -- a mean over all stores is
+            # Of the frame actually consumed -- a mean over all stores is
             # a different quantity, and the two differ because the pump is
             # descheduled precisely while the consumer is inferring.
             pump_side.append((meta.stamp_store - meta.stamp_monotonic) * 1000.0)

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Turn a bare Raspberry Pi 5 + Hailo-8 into a Mongla vehicle, repeatably.
 #
-# ⛔ WHY THIS EXISTS. On 2026-09-22 the vehicle was found running a workspace
+# Why this exists. On 2026-09-22 the vehicle was found running a workspace
 # 122 commits behind and on the far side of the project rename, so its package
 # names no longer matched the ones the repo ships. The current stack had NEVER
 # been built on the vehicle. A deploy path that has never been exercised is the
@@ -107,12 +107,12 @@ fi
 # --------------------------------------------------------------------------- #
 say "2. Sync the tree"
 
-# ⚠ THE EXCLUDES ARE LOAD-BEARING. The first real deploy shipped 3.8 GB of
+# The excludes are load-bearing. The first real deploy shipped 3.8 GB of
 # `logs/` and two .tlog captures to the vehicle before anyone looked. Anything
 # that is generated, huge, or belongs to the dev box stays here.
 rsync -az --delete --info=stats1 \
   --exclude 'build/' --exclude 'install/' --exclude 'log/' --exclude 'logs/' \
-  --exclude '.git/' --exclude 'graphify-out/' \
+  --exclude '.git/' \
   --exclude 'docs/' --exclude '__pycache__/' --exclude '*.pyc' \
   --exclude '*.tlog' --exclude '*.tlog.raw' --exclude '*.tar.gz' \
   --exclude '.pytest_cache/' \
@@ -122,7 +122,7 @@ ok "synced to $TARGET:~/$REMOTE_DIR"
 # --------------------------------------------------------------------------- #
 say "3. Build"
 
-# ⛔ NOT UNDER A RUNNING MANAGER (2026-10-03). The build wipes install/, so a
+# Not under a running manager (2026-10-03). The build wipes install/, so a
 # manager left running keeps executing code that is no longer on disk, and it
 # holds the board's port -- the gate below then cannot read the board.
 if r "pgrep -f '[l]ib/mongla_manager/start' >/dev/null"; then  # [l]: not match this ssh command line itself
@@ -132,7 +132,7 @@ fi
 r bash -lc "'set -e
   cd ~/$REMOTE_DIR
   source /opt/ros/$ROS_DISTRO_WANT/setup.bash
-  # ⛔ ALWAYS A CLEAN BUILD. An incremental symlink-install tree keeps what
+  # Always a clean build. An incremental symlink-install tree keeps what
   # source no longer has: links to a deleted model broke the build on
   # 2026-10-03 and the gate then counted the retired model as installed.
   # 42 s buys a vehicle that runs exactly this tree and nothing older.
@@ -151,7 +151,7 @@ ok "colcon build finished"
 # --------------------------------------------------------------------------- #
 say "4. Gate it -- the vehicle grades itself"
 
-# ⛔ bringup_check EXITS NON-ZERO ON A FAULT, and that is the point. We do not
+# bringup_check exits non-zero on a fault, and that is the point. We do not
 # swallow it: a provisioning script that reports success on a vehicle its own
 # gate refuses would be the exact defect this repo keeps finding.
 set +e
@@ -177,7 +177,7 @@ else
 
   One that IS a provisioning gap, and has no fix inside this repo:
     * "Hailo present but NO .hef"
-      ⛔ THE COMPILED MODELS ARE NOT IN THE TREE. They are gitignored, so a
+      THE COMPILED MODELS ARE NOT IN THE TREE. They are gitignored, so a
       fresh vehicle provisioned from this repo has nothing to fly. Copy them in
       beside their <stem>.yaml sidecars:
 

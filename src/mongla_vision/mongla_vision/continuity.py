@@ -1,6 +1,6 @@
 """Detection continuity: the statistics the whole lock ladder is tuned on.
 
-WHY THIS MODULE EXISTS
+Why this module exists
 ----------------------
 Six constants protect a target lock -- the freshness ramp, `coast_s` (0.8),
 `lost_grace_s` (1.0), `_STALE_LIMIT_S` (1.0), the Kalman `max_predict_s` (1.5)
@@ -13,7 +13,7 @@ and collapses it to a scalar -- a 5 % "predicted ratio" is one 400 ms blackout
 or a hundred single-frame flickers, and it reports the same number for both.
 That distinction is the entire question.
 
-WHAT IS MEASURED, AND WHY EACH ONE
+What is measured, and why each one
 ----------------------------------
 `gaps`        every interval where the target was absent, as a DISTRIBUTION.
               A mean hides a stream that stopped; `srot_replay.py:13` already
@@ -83,7 +83,7 @@ def _pct(values: Sequence[float], q: float) -> float:
 def find_gaps(obs: Sequence[Obs]) -> List[Gap]:
     """Every absence BETWEEN two sightings.
 
-    THE GAP IS MEASURED FROM THE LAST SIGHTING, not from the first missing
+    The gap is measured from the last sighting, not from the first missing
     frame, because that is what the control loop compares against: `coast_s`
     is checked as `monotonic() - _last_real[track_id]` (`vision_state.py:483`)
     and `_last_real` is stamped on the last REAL detection. Measuring from the

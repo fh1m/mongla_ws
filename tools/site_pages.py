@@ -29,20 +29,22 @@ from _site_splice import splice  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / 'docs'
-STATES = [('🟢', 'WATER', 'water', 'verified in water'),
-          ('🟣', 'BENCH', 'bench', 'verified on the bench or on real footage'),
-          ('🟡', 'BUILT', 'built', 'built and tested, never flown'),
-          ('🔴', 'BLOCKED', 'blocked', 'waiting on hardware or a firmware merge')]
+STATES = [('WATER', 'water', 'verified in water'),
+          ('BENCH', 'bench', 'verified on the bench or on real footage'),
+          ('BUILT', 'built', 'built and tested, never flown'),
+          ('BLOCKED', 'blocked', 'waiting on hardware or a firmware merge')]
 
 
 def capability_tally() -> tuple[list[tuple], int]:
     """Count the state cell of every table row, by the same rule the page's own
-    script uses -- one rule, two readers, so the two tallies cannot disagree."""
+    script uses -- one rule, two readers, so the two tallies cannot disagree.
+
+    A row counts when its LAST cell starts with a state word (`BENCH`, ...)."""
     text = (DOCS / 'capability-map.md').read_text(encoding='utf-8')
     rows = [ln for ln in text.splitlines() if ln.startswith('|')]
     out = []
-    for glyph, word, cls, blurb in STATES:
-        n = sum(1 for ln in rows if glyph in ln.rsplit('|', 2)[-2] and word in ln)
+    for word, cls, blurb in STATES:
+        n = sum(1 for ln in rows if ln.rsplit('|', 2)[-2].strip().startswith(word))
         out.append((word, cls, blurb, n))
     return out, sum(n for *_, n in out)
 

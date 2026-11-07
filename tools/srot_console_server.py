@@ -6,7 +6,7 @@ that touches hardware, and it is the only thing that must never be paced by the
 view. The 31.9-vs-50 Hz lesson from the bench applies to every panel added
 here: rendering and encoding belong off the control path.
 
-WHAT IS COLLECTED, and where each number comes from
+What is collected, and where each number comes from
 ---------------------------------------------------
   vision   camera grab / Hailo infer / decode timing, detection rate, the
            target, raw and filtered bearing

@@ -79,7 +79,7 @@ ground truth, per dataset:
 
 Diagonal 81–100 %, everything off-diagonal 0–24 %.
 
-**⛔ MY FIRST READING OF THIS TABLE WAS WRONG, and the correction is the more
+**MY FIRST READING OF THIS TABLE WAS WRONG, and the correction is the more
 useful result.** I concluded "these models learned their dataset, not their
 object". That is not what the table shows: **each column is a DIFFERENT PROP**,
 so a bin model scoring 1.4 % on octagon images is behaving correctly. The

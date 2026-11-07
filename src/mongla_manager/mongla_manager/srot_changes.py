@@ -5,7 +5,7 @@ The dashboard answers "what is the board doing now"; this answers "what changed 
 was not looking". They are different questions and a scrolling dump answers neither: it
 buries a mode flip or a failsafe under two hundred identical lines.
 
-THREE THINGS COUNT AS A CHANGE, and the third is the one that is usually missed:
+Three things count as a change, and the third is the one that is usually missed:
 
   1. a discrete value flipping           (mode, armed, leak, kill)
   2. a continuous value moving far enough to matter   (per-field thresholds below)

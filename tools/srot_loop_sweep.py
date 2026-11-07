@@ -7,7 +7,7 @@ binding constraint on the behaviours that actually hurt -- terminal alignment
 and the close-in torpedo lock. This finds the real ceiling instead of guessing
 a new number.
 
-WHAT IS MEASURED AT EACH RATE
+What is measured at each rate
   achieved     median loop Hz against the requested rate. The gap IS the answer.
   latency      frame captured -> MANUAL_CONTROL byte on the wire, per tick.
                Not "inference time": the whole path, which is what a control
@@ -19,11 +19,11 @@ WHAT IS MEASURED AT EACH RATE
   link         TX bytes/s against 11520 B/s. Full duplex, so this is a separate
                budget from the ~4.2 kB/s of telemetry coming back.
 
-WHY EVERY NUMBER IS A MEDIAN over a sustained window: a mean folds in the
+Why every number is a median over a sustained window: a mean folds in the
 startup transient and a peak is not a rate anything can rely on. This project
 has already published one headline (82.3 Hz) that was a single run.
 
-REPORTED HONESTLY: a rate that is requested and not achieved is reported as
+Reported honestly: a rate that is requested and not achieved is reported as
 not achieved. The temptation at the end of a sweep is to quote the highest
 number that appeared anywhere.
 """
@@ -101,7 +101,7 @@ def main() -> int:
     fc = SrotFC(conn, log=None)
     fc.set_message_rate(mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE, 50)
 
-    # B28: REFUSE TO MEASURE INTO A BOARD THAT DISCARDS THE COMMAND.
+    # B28: Refuse to measure into a board that discards the command.
     # `SROT_MOVE` leaves the board latched in AUTO, and in AUTO the firmware
     # throws away every axis of MANUAL_CONTROL and reports nothing. A sweep run
     # in that state drives zero thrust and still prints a full set of numbers --

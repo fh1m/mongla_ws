@@ -151,8 +151,8 @@ class TestMasksMatchTheNaivePath:
             proto[:, :, k] = 128 + 110 * np.sin(fx * xx + fy * yy + ph)
         proto = np.clip(proto, 0, 255).astype(np.uint8)
         coeff = rng.normal(0, 0.4, (3, MASK_DIM)).astype(np.float32)
-        # ⛔ TWO FIXTURE DEFECTS WERE FOUND HERE BY INJECTION, IN OPPOSITE
-        # DIRECTIONS, AND THE SECOND WAS CAUSED BY FIXING THE FIRST.
+        # Two fixture defects were found here by injection, in opposite
+        # Directions, and the second was caused by fixing the first.
         #
         # White noise first: it crosses the threshold at nearly every pixel, so
         # comparing two thresholdings of it measures noise, not arithmetic.

@@ -1,6 +1,6 @@
 """Camera -> detector by REFERENCE, in one process, with the header attached.
 
-WHAT COMPOSITION ACTUALLY BUYS
+What composition actually buys
 ------------------------------
 Removing the topic between the two removes, per frame:
 
@@ -18,7 +18,7 @@ picture is the newest one that exists.
 comms, so composed Python nodes still traverse rmw. The gain is the direct
 Python reference.
 
-WHAT THESE TESTS PIN
+What these tests pin
 --------------------
 The three things that would each fail SILENTLY:
 
@@ -129,7 +129,7 @@ def _camera(sink, publish_hz=40):
 
 
 def test_an_idle_sink_is_fed_regardless_of_the_publish_clock():
-    """THE POINT. At 5 Hz publish an always-idle detector must still be fed
+    """The point. At 5 Hz publish an always-idle detector must still be fed
     far faster than 5 Hz, or composition bought nothing."""
     sink = _Sink(wants=True)
     node = _camera(sink, publish_hz=5)
@@ -211,7 +211,7 @@ def test_a_paused_detector_wants_nothing():
 
 
 def test_submit_replaces_rather_than_queues():
-    """A MAILBOX. Two submissions while the worker is busy must leave the
+    """A mailbox. Two submissions while the worker is busy must leave the
     NEWEST, or composition reintroduces exactly the queue it removed."""
     import queue as _q
     det = object.__new__(DN.DetectorNode)

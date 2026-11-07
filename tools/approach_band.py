@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Where does confidence actually peak, in the unit the CONTROLLER uses?
 
-⛔ THE GAP THIS CLOSES. Section 23 measured detector confidence against apparent
+The gap this closes. Section 23 measured detector confidence against apparent
 size in PIXELS (sqrt of box area) and reported it by quartile -- a real
 measurement, and the one that established the peak is not at minimum range.
 `mongla_vision/approach.py` then shipped a band of **0.25-0.45 fraction of
@@ -22,12 +22,12 @@ the vehicle.
     python3 tools/approach_band.py --model src/mongla_vision/models/<m>.onnx \
         --video A.mkv --video B.mkv
 
-⚠ SAME CONFOUND AS SECTION 23, RESTATED: a closer target is also better lit,
+Same confound as section 23, restated: a closer target is also better lit,
 less backscattered and more centred, so this measures the whole approach rather
 than scale alone. That is the right quantity for "where should the controller
 stop?" and the wrong one for a claim about scale sensitivity in isolation.
 
-⚠ A BIN WITH FEW SAMPLES IS NOT AN ANSWER. Bins below `--min-bin` print `--`
+A bin with few samples is not an answer. Bins below `--min-bin` print `--`
 rather than a mean, because one lucky detection in an empty bin is how a peak
 gets invented.
 """
@@ -116,7 +116,7 @@ def main() -> int:
     if not any_row:
         print('  no class had enough detections to bin -- lower --conf, add '
               'clips, or this model sees nothing here')
-    print('\n⚠ Report the PEAK BIN, not a band you liked the look of. '
+    print('\nWARNING: Report the PEAK BIN, not a band you liked the look of. '
           'approach.py ships BAND_LO/BAND_HI and they must come from here.')
     return 0
 

@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Build a checkpoint bank BEFORE the run, from practice footage or stills.
 
-⭐ WHY. On the run there may be no confident detection to enrol a checkpoint
+WHY. On the run there may be no confident detection to enrol a checkpoint
 from at the moment the anchor is needed -- which is exactly when the detector
 is failing, i.e. the case the anchor rung exists for. A bank prepared in advance
 does not have that dependency.
 
 Measured 2026-09-24 (`measured-bars.md` §21.3): references snapped on one run
 clear the trust bar on 92 % and 100 % of frames of a DIFFERENT run of the same
-prop. ⛔ And on a generic structural view, 8 %. So this is worth doing for a
-DISTINCTIVE RIGID PROP and is not worth doing for "the pool".
+prop. And on a generic structural view, 8 %. So this is worth doing for a
+Distinctive rigid prop and is not worth doing for "the pool".
 
     python3 tools/build_practice_bank.py --model ~/hailo_models/xfeat_320x240.onnx \
         --label gate --out ~/missions/banks/gate.npz \
@@ -18,7 +18,7 @@ DISTINCTIVE RIGID PROP and is not worth doing for "the pool".
     python3 tools/build_practice_bank.py --model ... --label torpedo \
         --out torpedo.npz --images practice/torpedo/*.png
 
-⛔ THE BANK IS SAVED AT THE BACKEND'S RESOLUTION and refuses to load into a
+The bank is saved at the backend's resolution and refuses to load into a
 different one, because keypoints are stored in backend pixels. Build it with
 the model the vehicle runs.
 """
@@ -123,7 +123,7 @@ def main() -> int:
     n = bank.save(a.out)
     size = os.path.getsize(a.out) / 1e6
     print(f'\n  wrote {n} references to {a.out} ({size:.1f} MB)')
-    print('  ⚠ a preloaded reference still has to clear MIN_INLIERS on the '
+    print('  WARNING: a preloaded reference still has to clear MIN_INLIERS on the '
           'run; it is not trusted because it was prepared.')
     return 0
 

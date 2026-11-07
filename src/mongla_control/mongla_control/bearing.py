@@ -1,6 +1,6 @@
 """Pixels to bearings. The conversion that gives our vision gains units.
 
-WHY THIS EXISTS
+Why this exists
 ---------------
 Every vision gain in this stack is tuned against `ex = (cx - W/2)/(W/2)` -- a
 dimensionless number that is **not physical**. It depends on resolution, lens
@@ -13,7 +13,7 @@ change. It is also the wire format the srot board's `VISION_API.md` specifies
 for `LANDING_TARGET`, so the same function serves the uplink and any host-side
 loop.
 
-TWO WAYS TO DO IT, AND THEY DISAGREE BY MORE THAN YOU WOULD GUESS
+Two ways to do it, and they disagree by more than you would guess
 -----------------------------------------------------------------
 `VISION_API.md` gives the linear form, which is what you use when all you have
 is an FOV number::
@@ -108,7 +108,7 @@ def _undistort(xn: float, yn: float, dist: Sequence[float],
 def _refract(angle_rad: float, n: float) -> float:
     """In-air ray angle -> the TRUE direction to the object, through a flat port.
 
-    ⛔ WITHOUT THIS EVERY BEARING IS ~n TIMES TOO LARGE. A flat port refracts:
+    Without this every bearing is ~n TIMES TOO LARGE. A flat port refracts:
     a ray arriving from water angle `tw` reaches the sensor at air angle `ta`
     with `sin(ta) = n * sin(tw)`. The pinhole model recovers `ta` -- the angle
     INSIDE the housing -- and the vehicle needs `tw`.
@@ -139,7 +139,7 @@ def _refract(angle_rad: float, n: float) -> float:
 def _refract_point(xu: float, yu: float, n: float) -> Tuple[float, float]:
     """Normalised air ray (xu, yu, 1) -> the water ray's (x, y), through a flat port.
 
-    ⛔ A FLAT PORT REFRACTS THE POLAR ANGLE, NOT EACH AXIS. Snell bends the ray
+    A flat port refracts the polar angle, not each axis. Snell bends the ray
     in the plane containing it and the port normal, so the azimuth is kept and
     only `r = hypot(x, y)` shrinks: `r_w = tan(asin(sin(atan r) / n))`. Refracting
     x and y as two independent angles (what this module used to do) over-reads
@@ -184,7 +184,7 @@ def bearing_from_pixels(u: float, v: float, w_px: float, h_px: float,
         fx, fy, cx, cy = float(K[0]), float(K[4]), float(K[2]), float(K[5])
 
     if fx > 0.0 and fy > 0.0:
-        # NO RESOLUTION SCALING HAPPENS HERE, AND NONE SHOULD (B16). This
+        # No resolution scaling happens here, and none should (B16). This
         # comment used to promise to "scale defensively", which was false --
         # nothing scaled, and the function takes no calibration resolution to
         # scale against. The defence is real but lives one layer up, where the
@@ -275,7 +275,7 @@ def bearing_from_normalised(ex: float, ey: float, w_frac: float, h_frac: float,
 class BearingFilter:
     """Alpha-beta smoother for a bearing stream. Chosen on measurement.
 
-    THE PROBLEM, MEASURED on the Pi + Hailo with a `person` target held still:
+    The problem, measured on the Pi + Hailo with a `person` target held still:
 
         bearing jitter        sd 3.83 deg/frame, range 14.8 deg
         bbox centre           sd 32.5 px   -- and box WIDTH sd 86.8 px
@@ -287,7 +287,7 @@ class BearingFilter:
     between "head and torso" and "whole body", which is why the noise is
     heavy-tailed (kurtosis 4.3) rather than Gaussian.
 
-    WHY ALPHA-BETA AND NOT AN EMA. Measured on that real noise, plus the same
+    Why alpha-beta and not an EMA. Measured on that real noise, plus the same
     noise added to a 30 deg/s slew:
 
         filter          jitter sd   reduction   lag
@@ -303,7 +303,7 @@ class BearingFilter:
     terminal lock, lag is the error that turns into a miss, so that difference
     is the whole decision.
 
-    THE GATE IS NOT OPTIONAL. A velocity state keeps extrapolating across a
+    The gate is not optional. A velocity state keeps extrapolating across a
     discontinuity, so a reacquire onto a different box makes the filter fly
     PAST it: a 12 deg step overshoots 1.51 deg and takes 21 frames to settle.
     Treating a large residual as a NEW target instead of a large error removes

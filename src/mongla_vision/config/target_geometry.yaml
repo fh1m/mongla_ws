@@ -1,7 +1,7 @@
 # Committed prop geometry — the one piece of world knowledge that makes a
 # monocular answer METRIC.
 #
-# ⛔ WHAT THE NUMBER MEANS. `width_m` is the true width of WHAT THE DETECTOR
+# What the number means. `width_m` is the true width of WHAT THE DETECTOR
 # BOXES, not the prop's largest dimension. `lock_node` snaps its anchor
 # reference to the detection bbox (`self._anchor.snap(gray, roi=det_box)`) and
 # `anchor/pose.py::target_pose` scales that region by
@@ -14,7 +14,7 @@
 # default is why the 6-DoF path publishes `ok=false, reason='target_width_m
 # unset'` today: the metric branch has never run on the vehicle.
 #
-# ⛔ WHAT THIS FILE IS. Only the per-DETECTION-CLASS widths the pose solver
+# What this file is. Only the per-DETECTION-CLASS widths the pose solver
 # consumes, keyed by the class names our models actually emit -- not an arena
 # description. The one copy of each number; nothing else in the stack states it.
 #
@@ -22,7 +22,7 @@
 # competition prop and that number wins over the rulebook's nominal, which is
 # what the SAUVC tolerance (+/- 5 %) exists to allow for.
 #
-# ★ OUR POOL IS NOT THE VENUE, SO THESE ARE DEFAULTS, NOT HARDCODINGS.
+# Our pool is not the venue, so these are defaults, not hardcodings.
 # We practise against props we built, and ours are not the handbook's sizes. A
 # range is `m_per_px = width_m / w_px`, so a home-cut gate 40 % narrower than
 # the venue's makes every range 40 % wrong -- in whichever direction, silently.
@@ -46,14 +46,14 @@
 # A malformed override file is IGNORED rather than obeyed -- failing to the
 # handbook is recoverable, failing to 0.0 stops the mission with no reason.
 #
-# ⛔ AND THE DEFAULTS COME FROM THE ORGANISERS, NEVER FROM OUR SIMULATOR.
+# And the defaults come from the organisers, never from our simulator.
 # RoboSub: the team handbook (robonation.gitbook.io). SAUVC: sauvc.org/rulebook.
 # Two SAUVC entries are read off a rulebook FIGURE rather than quoted prose and
 # carry `unquoted: true` for exactly that reason -- pinned by
 # test_every_model_class_has_a_width.py. A simulator prop's size is our own
 # guess wearing a number's clothes; it never sources an entry here.
 #
-# ⛔ WHO LOADS THIS. No launch file does. `mongla_vision/target_geometry.py`
+# Who loads this. No launch file does. `mongla_vision/target_geometry.py`
 # opens it directly out of the installed share directory at call time, and
 # `lock_node` calls `width_for()` when `target_width_m` is unset. So editing it
 # DOES take effect on the deck -- but only after a colcon build, because the
@@ -71,7 +71,7 @@ sauvc:
     #  orange markings on both port and starboard sides." (It no longer spans
     #  to the floor: the opening is the top ~1 m of water.)
     #
-    # ⛔ 1.50 is the SPAN BETWEEN THE POSTS, and it is the right number only if
+    # 1.50 is the SPAN BETWEEN THE POSTS, and it is the right number only if
     # the detector boxes the whole gate. Our `qual_gate` class does exactly
     # that -- the training labels enclose both posts -- so the bbox width is
     # the span. If a future model is retrained to box a SINGLE POST, this must
@@ -102,7 +102,7 @@ sauvc:
   flare_red:    &bump_flare
     # "80cm tall, ~1.6cm in diameter" -- the coloured bump flares.
     #
-    # ⛔ 16 mm is SMALL. At 640 px wide and a 73.9 deg HFOV, a 1.6 cm pole is
+    # 16 mm is SMALL. At 640 px wide and a 73.9 deg HFOV, a 1.6 cm pole is
     # under 2 px beyond ~3 m, so a metric answer from this class is only
     # defensible up close. The pose solver's own reprojection and ambiguity
     # gates are what refuse it; this note is here so a wide range is not
@@ -125,7 +125,7 @@ sauvc:
     source: "SAUVC rulebook, target acquisition task"
   drum_blue:       *drum
   drum_red_pinger: *drum
-  # ⛔ `drum_red_pinger` IS NOT A VISUAL CLASS. Verified against the rulebook
+  # `drum_red_pinger` is not a visual class. Verified against the rulebook
   # 2026-09-09: the pinger is identified ACOUSTICALLY -- "Drum Pinger: RJE
   # International Pinger Model No. ULB-362B/45 kHz" -- and the rulebook
   # describes NO visual marking separating it from the other red drums. Its
@@ -183,9 +183,9 @@ robosub:
     source: "RoboSub 2026 handbook, bins task"
 
   # ------------------------------------------------------------------ #
-  #  THE SYMBOLS OUR REAL MODELS EMIT.                                    #
+  #  The symbols our real models emit.                                    #
   #                                                                       #
-  #  ⛔ The table was keyed by RULEBOOK PROP names while the detectors    #
+  #  The table was keyed by RULEBOOK PROP names while the detectors    #
   #  emit MODEL CLASS names, and the two had never been compared. Of the  #
   #  five classes the two competition models actually produce             #
   #  (gate_rescue_repair -> gate/rescue/repair, bin_fire_blood ->   #
@@ -200,7 +200,7 @@ robosub:
   #  against the model sidecars, so a new model cannot arrive uncovered.  #
   # ------------------------------------------------------------------ #
 
-  # ⚠ `rescue` and `repair` ARE NO LONGER EMITTED BY ANY SHIPPED MODEL.
+  # `rescue` and `repair` ARE NO LONGER EMITTED BY ANY SHIPPED MODEL.
   # `gate_rescue_repair` was retired on 2026-09-28 -- it measured +0.0 points
   # of separation between gate-present and gate-absent footage while
   # `gate_sharks` measured +84.2 at 0.30 (section 59), and the weights moved to
@@ -263,7 +263,7 @@ robosub:
     # name the DETECTOR uses -- which is the entire defect this round fixed, so
     # both names are spelled out rather than left to be inferred.
     #
-    # ⛔ It is the PIPE DIAMETER, not the gap between pipes. The header's
+    # It is the PIPE DIAMETER, not the gap between pipes. The header's
     # pole-diameter warning is about exactly this class: boxing one pipe and
     # scaling by the span would make every slalom range wrong by ~10x, in the
     # flattering direction, with nothing logging a fault.
@@ -272,7 +272,7 @@ robosub:
     source: "RoboSub 2026 handbook (1 in nominal PVC = 33.4 mm OD)"
 
   hole:
-    # ⛔ NO WIDTH, DELIBERATELY. `torpedo_blood_hole.pt` emits `hole`, and the
+    # No width, deliberately. `torpedo_blood_hole.pt` emits `hole`, and the
     # handbook dimensions the BOARD (2 ft x 2 ft) but NOT its two opening sizes.
     # We have no organiser figure, and this file does not invent one: a guessed
     # width here would silently rescale every range on the one shot where the
@@ -288,7 +288,7 @@ robosub:
     source: "RoboSub 2025/26 handbook 3.2: the board is dimensioned, its openings are not"
 
   torpedo_board: &torpedo_board
-    # ⛔ THIS WAS 0.52 AND `boxes: whole-board`, WHICH CONTRADICTED ITSELF.
+    # This was 0.52 and `boxes: whole-board`, WHICH CONTRADICTED ITSELF.
     # 0.52 is the printed board's USABLE FACE, taken from our own sim arena
     # spec -- not from the handbook, and not what a whole-board box measures.
     # The handbook is explicit: "2 ft x 2 ft (0.6m x 0.6m)". A detector boxing
@@ -296,7 +296,7 @@ robosub:
     # 0.52 made every range read ~13 % SHORT (m_per_px = width_m / w_px), i.e.
     # the hull believed it was closer than it was.
     #
-    # ⚠ IF a model is ever trained to box only the printed artwork rather than
+    # IF a model is ever trained to box only the printed artwork rather than
     # the board, this must go back to 0.52 AND `boxes` must say so. The two
     # fields have to agree -- that disagreement is what hid this.
     width_m: 0.6096
@@ -312,7 +312,7 @@ robosub:
 
   # ── gate_sharks (the model that can tell a gate from an empty pool) ──────
   #
-  # ⛔ THESE TWO ARE ROBOSUB TORPEDO-BOARD ARTWORK, not SAUVC props, and the
+  # These two are ROBOSUB torpedo-board artwork, not SAUVC props, and the
   # width is the SAME BOARD both classes sit on. `gate_sharks` was promoted
   # for its `gate` class (0 % false positives across 150 frames of gate-free
   # footage against the shipped model's 100 %); it happens to carry these two
@@ -321,7 +321,7 @@ robosub:
   shark:
     # The 2 ft x 2 ft board, exactly as `torpedo_board` above -- these classes
     # label the ARTWORK, and the artwork's own size is not in the handbook.
-    # ⚠ So this is the board's width, and it is right ONLY IF the detector
+    # So this is the board's width, and it is right ONLY IF the detector
     # boxes the board rather than the printed shark. If a future model is
     # retrained to box the artwork alone, this becomes wrong in the flattering
     # direction: a smaller true width reads as a nearer target.

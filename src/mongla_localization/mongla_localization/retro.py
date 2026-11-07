@@ -1,6 +1,6 @@
 """Apply every filter event at the instant it describes, not the instant it arrived.
 
-⛔ THE DEFECT THIS FIXES. The invariant filter predicted on the IMU at its board
+The defect this fixes. The invariant filter predicted on the IMU at its board
 stamp but applied flow, depth, fixes and headings ON ARRIVAL. Flow is stamped at
 the exposure midpoint and lands 30-60 ms later; a prop fix is computed from a
 detection and lands later still. Applying either to the CURRENT state compares a
@@ -88,7 +88,7 @@ class Retrodictor:
         self.late += 1
         first = tail[0]
         if make is None and first.make is not None and first.t - first.span < t:
-            # ⛔ THE LATE EVENT LANDS INSIDE A PROPAGATION (issue #31). Applying
+            # The late event lands inside a propagation (issue #31). Applying
             # it before that step evaluated it at the PREVIOUS IMU sample, up
             # to one step (20 ms at 50 Hz) earlier than it happened. Split the
             # step at `t`: propagate to `t`, apply, propagate the rest. The

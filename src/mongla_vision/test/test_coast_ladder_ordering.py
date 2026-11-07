@@ -42,7 +42,7 @@ _TUNABLES = (_PKG.parents[0] / 'mongla_manager' / 'mongla_manager'
 #     forward   30.23 Hz (lock off)   23.14 Hz (lock on)
 #     downward  42.71 Hz (lock off)   29.82 Hz (lock on)
 #
-# ⛔ These were briefly seeded with the values the launch was set to, which
+# These were briefly seeded with the values the launch was set to, which
 # made the check circular -- it compared the config against itself and passed
 # for that reason alone. They are measurements now.
 _MEASURED_HZ = {'fwd': 30.23, 'dwn': 42.71}
@@ -84,7 +84,7 @@ def test_the_outermost_rung_outlasts_the_control_coast_at_measured_rates():
 
 
 def test_the_ordering_holds_with_MARGIN_not_just_barely():
-    """⛔ RETRACTED AND REPLACED: this used to assert
+    """Retracted and replaced: this used to assert
     `frame_rate >= measured_rate`, which is stronger than the real invariant
     and FALSE on true data -- downward runs at 42.71 Hz against a frame_rate
     of 32 and the ladder is still correctly ordered (1.12 s of coast against

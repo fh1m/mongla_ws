@@ -1,13 +1,13 @@
 """The ladder's switches come from a deck file, not from launch plumbing.
 
-⛔ THE DEFECT THIS AVOIDS. A switch threaded through launch is only read by the
+The defect this avoids. A switch threaded through launch is only read by the
 launch files that DECLARE it, and this package has shipped capabilities
 reachable from one launch path and not the one `bringup` includes -- five
 times. `anchor/loop_closure.py` fixed that for itself and carries a guard test
 that fails if the plumbing returns; `ladder_config.py` is that pattern
 generalised so the node behaves identically whichever launch started it.
 
-⚠ THE DEFAULTS EXIST IN TWO PLACES -- the node's `declare_parameter` and
+The defaults exist in two places -- the node's `declare_parameter` and
 `_KEYS` here -- because the node must work with no deck file at all. Two
 copies of a default is exactly how they drift, so one test below compares
 them directly rather than trusting a comment.
@@ -59,7 +59,7 @@ def test_a_string_bool_is_accepted(tmp_path):
 
 
 def test_a_malformed_file_degrades_to_defaults_AND_SAYS_SO(tmp_path):
-    """⛔ BOTH HALVES MATTER. Taking the vision stack down over a typo on a
+    """Both halves matter. Taking the vision stack down over a typo on a
     pool deck is unacceptable; so is silently ignoring a file the operator
     just edited, because they would then watch for a behaviour change that
     was never loaded."""
@@ -95,7 +95,7 @@ def test_what_was_loaded_is_logged(tmp_path):
 
 
 def test_the_two_copies_of_every_default_agree():
-    """⛔ THE DRIFT GUARD. `lock_node.declare_parameter` and `_KEYS` both hold
+    """The drift guard. `lock_node.declare_parameter` and `_KEYS` both hold
     a default because the node must work with no deck file. When they
     disagree, the node's behaviour depends on whether a file exists -- which
     is the worst possible way to discover a mismatch."""

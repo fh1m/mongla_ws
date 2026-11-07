@@ -36,13 +36,13 @@ hardware, water, or a firmware merge). Nothing on this platform has been in wate
 | Companion | **Raspberry Pi 5 + Hailo-8 AI HAT** (ROS 2 Jazzy on the vehicle; Humble on dev boxes) |
 | Link | **one USB-C cable**, MAVLink 2 at 115200, compid **191** (`MAV_COMP_ID_ONBOARD_COMPUTER`) |
 | IMU / depth / leak / kill / batteries / ESC RPM | all **on the board** |
-| Thrusters | **⚠ two answers — see below.** Firmware mixes for 8 × T200 vectored (M1–M4 horizontal at 45°, M5–M8 vertical); the **current CAD is a 5-thruster hull**. Bluejay ESCs, bidirectional DShot either way |
+| Thrusters | **two answers — see below.** Firmware mixes for 8 × T200 vectored (M1–M4 horizontal at 45°, M5–M8 vertical); the **current CAD is a 5-thruster hull**. Bluejay ESCs, bidirectional DShot either way |
 | Cameras | forward + downward USB; measured calibration in `mongla_vision/config/calibration/` |
 | Velocity / distance | **the downward camera** — no DVL is fitted, and none has ever been validated in water |
 | Payload | board channels over MAVLink (`fire(N)` = **board channel N**, 1–16) |
 
 
-> **⚠ The hull in CAD is not the hull the mixer was written for.** Measured off the CAD
+> **The hull in CAD is not the hull the mixer was written for.** Measured off the CAD
 > geometry on 2026-09-20 and validated against Onshape to 0.08 %: the vehicle is
 > **702.0 × 176.1 × 172.1 mm**, fineness **3.99**, with **four ⌀84 mm tunnel thrusters**
 > (lateral pair 350 mm apart, vertical pair 519 mm apart) plus **one axial unit in the nose** —
@@ -67,7 +67,7 @@ Full hardware detail: [`vehicle-spec.md`](.claude/context/platform/vehicle-spec.
 LoRa bridge) · `srot-esc-flasher` (bench tool). **Firmware development team lead: Rakibul
 Islam.**
 
-⛔ **We never commit to their repos; they never commit here.** Pull requests only. The shared
+**Warning: We never commit to their repos; they never commit here.** Pull requests only. The shared
 wire constants are frozen on both sides, `fc/srot_protocol.py` is our **single copy**, and
 `test_srot_protocol_drift.py` reads the firmware headers to prove it has not drifted.
 Asks we have sent: [`upstream/`](.claude/context/upstream/README.md). Rules:
@@ -80,30 +80,30 @@ final either — a capability that needs a new sensor is a conversation with the
 
 ## 2. Working with the board — the traps that cost us runs
 
-⛔ **The depth loop has never run closed.** `SROT_MOVE` enters the board's automatic mode and
+**Warning: The depth loop has never run closed.** `SROT_MOVE` enters the board's automatic mode and
 **every** primitive there closes the depth loop — including a plain `move_forward`. Two armed
 bench checks gate all of them. An in-air move is *not* partial validation (at ~0 m, target and
 measurement agree). [`srot-integration.md`](.claude/context/platform/srot-integration.md)
 
-⛔ **Firmware version is a hull-safety interlock.** The board reports `SROT_FW_BEHAVIOUR_REV`;
+**Warning: Firmware version is a hull-safety interlock.** The board reports `SROT_FW_BEHAVIOUR_REV`;
 `SrotFC.check_behaviour_rev()` runs at connect **and inside `arm()`**. The floor is
 `FW_BEHAVIOUR_REV_REQUIRED` in `srot_protocol.py` — **not** a number to quote from memory,
 because revision 10 **inverted yaw** and a board below the floor takes every turn backwards.
 The board currently reports rev 14. `test_doc_drift.py` fails any doc that states a stale
 value. Override (knowing all this): `allow_fw_behaviour_mismatch:=true`.
 
-⛔ **Rev 7 shipped `FRAME_REVERSE`** — a parameter, default 0 but **set to 1 on our hull**,
+**Warning: Rev 7 shipped `FRAME_REVERSE`** — a parameter, default 0 but **set to 1 on our hull**,
 that negates all six axis demands before the mixer. It fixes "every axis is backwards" at the
 axis layer, so the `[-1] × 8` motor directions restored on 2026-08-06 are **no longer the
 intended configuration** and would cancel it. Read the parameters before arming.
 
-⛔ **An unhealthy barometer refuses `DEPTH_HOLD`/`AUTO`/`PATTERN`** — and since `SROT_MOVE`
+**Warning: An unhealthy barometer refuses `DEPTH_HOLD`/`AUTO`/`PATTERN`** — and since `SROT_MOVE`
 enters `AUTO`, that means **every move verb is denied**: the vehicle arms and simply will not
-move. `bringup_check --srot` reads this off `SYS_STATUS`. ⚠ `VFR_HUD` is *not* gated on baro
+move. `bringup_check --srot` reads this off `SYS_STATUS`. `VFR_HUD` is *not* gated on baro
 health and is where we read depth, so **never infer sensor health from the presence of a depth
 value**.
 
-⛔ **`AUTO` never exits by itself.** After a move, MANUAL_CONTROL frames are discarded until
+**Warning: `AUTO` never exits by itself.** After a move, MANUAL_CONTROL frames are discarded until
 the mode changes. The vision verbs handle this by setting the mode and **verifying it took**
 (`set_mode` is best-effort on this wire — a silent refusal looks exactly like success).
 
@@ -144,11 +144,11 @@ look, the second to decide.
 The board holds heading and depth at 500 Hz, so there is no host heading lock and no
 distance-closed move: those verbs needed a host-side heading source or a DVL and went with the
 old backend. `vision_align` / `vision_move` actuate through `MANUAL_CONTROL` in STABILIZE.
-⛔ **The vision loops never command depth**: the forward camera's image-Y axis and a
+**Warning: The vision loops never command depth**: the forward camera's image-Y axis and a
 fill-driven descent both raise `ValueError` — `set_depth` first, then align. Downward lat +
 surge runs normally.
 
-⛔ **`surface()` is the last motion.** Every board verb — `stop` included — is a `SROT_MOVE`,
+**Warning: `surface()` is the last motion.** Every board verb — `stop` included — is a `SROT_MOVE`,
 which enters AUTO and so takes the hull back out of SURFACE. A cleanup that ends
 `surface(); stop()` holds the vehicle at depth; `test_sauvc_srot_port.py` refuses it.
 
@@ -220,10 +220,10 @@ photon-to-detection), a camera **mailbox** that keeps the newest frame (16.9 ms 
 63.8° in air), flat-port refraction correction in `optics.py`, and a lock ladder sized against
 **71 real detection gaps**.
 
-⛔ **Image preprocessing stays off.** Measured in 17 configurations across four props and three
+**Warning: Image preprocessing stays off.** Measured in 17 configurations across four props and three
 venues: never positive; on the gate it destroyed 95 % of detections. A test keeps it off.
 
-⛔ **A model's `<stem>.yaml` sidecar must ship beside the artifact.** Missing sidecar → empty
+**Warning: A model's `<stem>.yaml` sidecar must ship beside the artifact.** Missing sidecar → empty
 allowlist → a silent `[]` every frame, with the pipeline looking healthy.
 
 Detail: [`hailo-vision.md`](.claude/context/perception/hailo-vision.md) ·
@@ -305,6 +305,14 @@ not port it back. A capability that needs something from it is rebuilt against t
 
 ## 9. How we work
 
+- **How code and docs are written.** Plain words, no emojis: in docs a marker that matters is a
+  label (**Warning:**, **Caution:**, **Key point:**); in operator output it is `WARNING:` /
+  `ERROR:` / `ok` / `FAIL`. Comments are sentence case and say *why the code is this way
+  now*; the history (what a value used to be, who found the bug, on which day) belongs in
+  `BUGS.md`, `measured-bars.md` and the git log, with a pointer (`measured-bars §21`) where
+  the reader needs it. A class too long for one file is split into mixins named by job
+  (`lock_setup.py`, `lock_inputs.py`, `lock_publish.py`), with a file map in the node's
+  docstring; tests read it whole through `tools/code_text.py:source_of`.
 - **Write the scorer BEFORE the run, and say what would falsify it.** Measured
   the hard way this session: six model-free candidates were built, and the four
   whose pass/fail criterion was written down first were each settled in one
@@ -315,7 +323,7 @@ not port it back. A capability that needs something from it is rebuilt against t
   is the shape to copy: it runs the ranking against synthetic sources whose
   bias was chosen, so a bug in the scorer cannot be mistaken for a defect in a
   sensor on the day — and it corrected its own author before any water.
-  ⛔ **A quality number a method computes from the data it just fit is not
+  **Warning: A quality number a method computes from the data it just fit is not
   evidence.** The only trustworthy check is a second, independent observation.
 - **A citation is not a measurement.** `approach.py` shipped a band citing
   §23, correctly, around numbers §23 never states — §23 measured pixels of
@@ -323,7 +331,7 @@ not port it back. A capability that needs something from it is rebuilt against t
   `test_shipped_constants_match_the_ledger.py` now compares shipped constants
   against the digits in `measured-bars.md`, in **both** directions, and caught
   a missing entry on its first run.
-- ⛔ **THE MODELS IN `models/` ARE DEVELOPMENT HARNESSES.** They exercise
+- **Warning: THE MODELS IN `models/` ARE DEVELOPMENT HARNESSES.** They exercise
   logic and pipelines; the models that matter are chosen and swapped **on the
   day** during water testing, and verified against archive footage. So **never
   hard-code a class list in more than one place.** Retiring one model on
@@ -339,7 +347,7 @@ not port it back. A capability that needs something from it is rebuilt against t
   the bar it must clear — including the numbers we later retracted. Tests read that file.
 - **Injection-verify a guard.** A test that has never failed against a real defect is not a
   guard. Break it deliberately, watch it fail, restore it.
-- ⛔ **No capability ships unreachable.** A module is either **imported by something that
+- **Warning: No capability ships unreachable.** A module is either **imported by something that
   runs**, or it carries a written reason naming the consumer it waits for. There is no third
   state. This is the repo's oldest and most expensive defect — the lock ladder in no launch
   file, `lock_s` held at 0, the bank storing a position nothing passed, `device_path` read and
@@ -359,7 +367,7 @@ not port it back. A capability that needs something from it is rebuilt against t
   keeps them the same: a wiki edit is committed back here after the doc guards pass, and a push
   to main rebuilds the wiki. So editing the file here *is* editing the wiki; do that when the edit
   goes with a code change. `tools/wiki_build.py` says how, and its test proves the round trip.
-- ⛔ **Docs change in the same commit as the code they describe — not after.** A
+- **Warning: Docs change in the same commit as the code they describe — not after.** A
   removal is not finished until every file that names the removed thing says what
   is true now: docs, skills, agents, launch comments, test docstrings, the site.
   This rule exists because the 2026-11-06 backend removal deleted the code in one
@@ -396,7 +404,7 @@ entry points and because tests read them:
 
 Everything else is shelved by subject under `platform/`, `perception/`, `missions/`,
 `packages/` (one page per package), `upstream/` (asks sent to the firmware team), `scouting/`
-and `future/` — `ls` them. Start with ⭐ **`platform/first-pool-verification.md`**: what water
+and `future/` — `ls` them. Start with **`platform/first-pool-verification.md`**: what water
 has to decide, in order.
 
 ## 11. Claude automations

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Set FS_GCS_SYSID/FS_GCS_COMPID to 255/191 and PROVE it reached flash.
 
-WHY THIS IS A SCRIPT AND NOT TWO CLICKS. This param has now reverted to the bench
+Why this is a script and not two clicks. This param has now reverted to the bench
 wildcard (COMPID=0) twice, each time after being "set". 0 means any station satisfies
 the GCS failsafe, so a dead companion looks like a live GCS and the hull station-keeps
 instead of surfacing. The failure is silent in both directions -- a PARAM_SET that
@@ -176,7 +176,7 @@ good = (final['FS_GCS_COMPID'] is not None
 print('\n' + ('OK -- ' + ('bench wildcard restored' if args.revert else
                           'failsafe scoped to the companion (191)')
              if good else 'FAILED -- value did not stick'))
-print('⚠ POWER-CYCLE THE BOARD AND RUN THIS AGAIN (read-only) TO PROVE IT PERSISTED.')
+print('WARNING: POWER-CYCLE THE BOARD AND RUN THIS AGAIN (read-only) TO PROVE IT PERSISTED.')
 print('   This param has silently reverted twice; a readback before a power cycle')
 print('   only proves RAM, not NVS.')
 sys.exit(0 if good else 1)

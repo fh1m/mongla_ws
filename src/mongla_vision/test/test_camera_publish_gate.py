@@ -89,7 +89,7 @@ def _loop_for(seconds, *, publish_hz):
 
 
 def test_a_throttled_node_decodes_ONLY_what_it_publishes():
-    """THE FIX. The camera can hand over a frame every 4.8 ms; at 40 Hz we
+    """The fix. The camera can hand over a frame every 4.8 ms; at 40 Hz we
     want ~40 decodes a second, not ~210."""
     reads, published = _loop_for(1.0, publish_hz=40)
     assert published >= 25, f'only {published} publishes -- the gate is stuck'

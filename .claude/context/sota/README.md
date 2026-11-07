@@ -8,7 +8,7 @@ subsystem:
 
 | | |
 |---|---|
-| [`VERDICT.md`](VERDICT.md) | ⭐ **start here** — the whole-system answer: where we stand, subsystem by subsystem, and the five moves that matter |
+| [`VERDICT.md`](VERDICT.md) | **Key point: start here** — the whole-system answer: where we stand, subsystem by subsystem, and the five moves that matter |
 | [`control.md`](control.md) | the loops, the allocation, the vehicle model |
 | [`vision.md`](vision.md) | perception, and the model-production pipeline |
 | [`localization.md`](localization.md) | the estimator, its sources, and what happens when it is lost |

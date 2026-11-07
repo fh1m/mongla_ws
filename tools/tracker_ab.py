@@ -5,7 +5,7 @@ The question this settles, with numbers rather than an argument: the coast
 layer exists to bridge detection gaps, and nobody has ever measured how much
 of a real gap any tracker actually bridges.
 
-DETERMINISTIC BY CONSTRUCTION. Inference runs ONCE and the detections are
+Deterministic by construction. Inference runs ONCE and the detections are
 cached; every tracker then sees byte-identical input. No camera, no GIL, no
 dropped frames -- so the tracker is the only variable, which is exactly what
 a rosbag replay cannot give (`ros2 bag play` is wall-clock paced and the

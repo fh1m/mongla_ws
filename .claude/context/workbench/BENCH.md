@@ -19,14 +19,14 @@ vehicle down**.
 prints a verdict. It reads `DEPTH_CMD`, which `depth::preview()` computes through a separate
 **proportional-only** instance, live while disarmed. Pressurise the Bar30 port with a thumb.
 
-⚠ You cannot do this by lifting the vehicle: a whole metre of air is ~0.12 mbar, about **1.2 mm**
+**Caution:** You cannot do this by lifting the vehicle: a whole metre of air is ~0.12 mbar, about **1.2 mm**
 of equivalent depth.
 
 | thumb says | `DEPTH_CMD` | verdict |
 |---|---|---|
 | deeper than target | **positive** → ascend | correct |
 | shallower than target | **negative** → descend | correct |
-| demand moves *away* from target | — | ⛔ **still inverted — do not dive** |
+| demand moves *away* from target | — | **Warning: still inverted — do not dive** |
 
 **Expected before running:** positive under pressure. **Falsifier:** if `DEPTH_CMD` does not move
 at all, the preview path is not wired as the firmware document says and everything above is
@@ -49,7 +49,7 @@ clamp) as the witness. Find where motion actually starts, both directions.
 **Expected:** motion starts somewhere near ±25 µs. **Falsifier:** if it starts below 5 % of range,
 the floor is fine — and we still replace an assumption with a measurement.
 
-**Result, command domain, 2026-09-22.** ⛔ **The premise was wrong. There is no deadband — there is
+**Result, command domain, 2026-09-22.** **The premise was wrong. There is no deadband — there is
 a FLOOR, and it is three times higher than our constant.** `MOT_SPIN_MIN = 0.15` lifts every
 non-zero demand into `[spin_min, 1]` deliberately (`mixer.cpp:127`), so the smallest output this
 vehicle can command is **15 % of full scale**. Measured on the board, nothing attached, armed, a
@@ -82,7 +82,7 @@ origin**. Record voltage alongside: the vendor's own reverse ratio drifts 0.787 
 does not pass through the origin within its residual, `T = k·n²` is the wrong form for this
 thruster and the model is *replaced*, not tuned.
 
-⚠ **Write it down as a bollard number.** K_T falls with advance ratio, so this `k` **flatters us at
+**Caution: Write it down as a bollard number.** K_T falls with advance ratio, so this `k` **flatters us at
 cruise** — the four-quadrant literature is explicit that a manufacturer's bollard figure can only
 scale `c_T`, never supply its J-dependence.
 
@@ -96,7 +96,7 @@ scale `c_T`, never supply its J-dependence.
 channel read **0 in 958/958 frames with nothing attached** — an RPM-based detector reports a
 *healthy zero* for a missing thruster.
 
-⚠ **2026-09-22: the premise moved.** Presence is already measured — it just never reaches us.
+**Caution: 2026-09-22: the premise moved.** Presence is already measured — it just never reaches us.
 The Pico decodes a `TL_ST_PRESENT` bit and four per-motor counters (`e` eRPM frames, `d` extended
 telemetry, `c` CRC failures, `n` nothing-came-back), prints them on its own USB console
 (`src/pico/main.cpp:405`), and publishes `status[]` to the ESP32 — where `sendEscStatus`
@@ -150,11 +150,11 @@ and undisturbed, then `--analyse` on the `.npz` it writes. The tool is built and
 τ = 1 s intercept — the number that becomes `sigma_gyro` — recovers a known white-noise level to
 **0.11 %**.
 
-⚠ It **refuses** to report a bias instability when the curve has not turned (the minimum sitting at
+**Caution:** It **refuses** to report a bias instability when the curve has not turned (the minimum sitting at
 the longest τ means the log was too short, not that a floor was found) — which is the standard way
 this measurement is published wrongly. Verified: pure white noise comes back UNRESOLVED.
 
-⚠ The vehicle must be **still** for the whole run. A door slam is a rate-random-walk artefact no
+**Caution:** The vehicle must be **still** for the whole run. A door slam is a rate-random-walk artefact no
 analysis can remove.
 
 **Expected:** numbers in the consumer-MEMS band. **Falsifier:** if measured noise is far from the
@@ -273,7 +273,7 @@ paper the sweep reached ran at **10–100 Hz**, and the 400 Hz common in hobby a
 **Expected:** unknown — that is the point. **Falsifier:** if nothing degrades until 50 Hz, the
 claim "500 Hz is why it works" is retired and replaced with what 500 Hz actually buys.
 
-⚠ Needs water, or at least a hull in motion, to mean anything; listed here because the logging half
+**Caution:** Needs water, or at least a hull in motion, to mean anything; listed here because the logging half
 is bench work.
 
 **Result:** _(not yet run)_ · **Lands in:** `measured-bars.md`, and the honest version of our own
@@ -311,7 +311,7 @@ Exactly ±1, reproducing the firmware's `M[8][6]` (`mixer.cpp:26`) negated by `F
 **The ledger's 41 % surge/sway overstatement (1/cos 45° = 1.414) was read off the firmware; it is
 now measured on the board.**
 
-⚠ **Two traps, each of which returned a confident wrong answer first.**
+**Caution: Two traps, each of which returned a confident wrong answer first.**
 - **Bidirectional DShot is two half-bands, not a signed range.** 48–1047 and 1048–2047 each count
   upward from their own floor, so there are two zeros and no midpoint. Decoded as a deviation from
   1048, a 0.02 demand reads −819 on M1 when the truth is −181, and the heave row grows a 3 %
@@ -347,7 +347,7 @@ classes is +5.8 %, via output bandwidth); **backbone size dominates** (n → s h
 models sitting within 0.5 % of each other is not a pipeline ceiling — `yolov11s` proves the
 silicon scales with model cost.
 
-⚠ **What this does NOT establish.** `hw_only` deliberately excludes host pre- and
+**Caution: What this does NOT establish.** `hw_only` deliberately excludes host pre- and
 post-processing, and the 80.9 Hz standalone / 53.9 Hz through-the-graph figures in `CLAUDE.md`
 were measured separately, under conditions and on a model this run did not record. Lining the
 three up as "98 → 80.9 → 53.9, so the graph costs 45 %" would be comparing three measurements of
@@ -355,7 +355,7 @@ different things — the same inconsistency that got the `yolov8s` number discar
 up. **The 45 % is not claimed.** Attributing the gap needs one run that measures all three stages
 on one model in one session; until then, 98 Hz is the silicon figure and nothing more.
 
-⛔ **Discarded, not explained away:** `yolov8s.hef` reported **466 FPS** at the same 640×640 input
+**Warning: Discarded, not explained away:** `yolov8s.hef` reported **466 FPS** at the same 640×640 input
 and the same 80-class NMS output as `yolov11s` at 42.65. That is not physically consistent; the
 artifact is suspect and the number is not used anywhere.
 
@@ -437,7 +437,7 @@ live; it is a pure MAVLink read.
 | SERVO — the on-board arm, must not be driven | 1, 2, 3, 5, 6, 7, 8 |
 | NONE — unroled | **4, 11** |
 
-⛔ **Every channel the missions use (1 and 3) is SERVO here**, so all five real `fire()` call sites
+**Warning: Every channel the missions use (1 and 3) is SERVO here**, so all five real `fire()` call sites
 would be refused. Full analysis and the two competing explanations: [`BUGS.md` B53](../BUGS.md).
 
 **What this row does NOT settle:** whether this bench board's roles match the competition hull's.
