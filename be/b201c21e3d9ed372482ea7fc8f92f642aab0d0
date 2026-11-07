@@ -1,0 +1,31 @@
+docs/capability-map.md
+  s_b4c45e3235679b::t_ef22fa82bc42cd 114
+.claude/context/perception/never-lose-the-target.md
+  s_b4c45e3235679b::t_ef22fa82bc42cd 174-177
+docs/index.html
+  s_b4c45e3235679b::t_ef22fa82bc42cd 1790-1793,3680-3681,3899,3902-3903
+.claude/context/packages/mongla_vision/README.md
+  s_b4c45e3235679b::t_ef22fa82bc42cd 41-42
+.claude/context/platform/system-harmony.md
+  s_b4c45e3235679b::t_ef22fa82bc42cd 90-91
+.claude/context/sota/vision.md
+  s_b4c45e3235679b::t_ef22fa82bc42cd 28-29
+CLAUDE.md
+  s_b4c45e3235679b::t_ef22fa82bc42cd 218-219
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "beb201c21e3d9ed372482ea7fc8f92f642aab0d0",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
