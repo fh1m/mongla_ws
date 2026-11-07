@@ -59,7 +59,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from sensor_msgs.msg import Image
 
-from mongla_vision.flow.flow_math import detect_corners
+from mongla_vision.flow.flow_features import detect_corners
 
 _MIN_SAMPLES = 60
 _MIN_ROT_SPREAD_PX = 3.0      # sd of the rotation regressor, in pixels

@@ -68,17 +68,19 @@ from geometry_msgs.msg import TwistWithCovarianceStamped, Vector3Stamped
 from mongla_interfaces.msg import MonglaState
 from mongla_vision.flow.flow_timing import TimeOffset
 from mongla_vision.flow.flow_math import (
-    CAUSTIC_TOPHAT_MAX,
     DistanceAccumulator,
     HeightFromDivergence,
-    caustic_score,
-    detect_corners,
-    suppress_caustics,
     flow_dispersion,
     height_above_floor,
     integrate_rate,
     interp_rate,
     robust_flow,
+)
+from mongla_vision.flow.flow_features import (
+    CAUSTIC_TOPHAT_MAX,
+    caustic_score,
+    detect_corners,
+    suppress_caustics,
 )
 from mongla_vision.flow.flow_velocity import flow_velocity
 from .flow_constants import _LK_PARAMS, HEIGHT_STALE_S
@@ -319,7 +321,7 @@ class FlowVelocityNode(FlowSetupMixin, FlowChecksMixin, FlowFloorMixin, FlowPubl
     def _bucketed_corners(self, gray):
         """Corners for the anchor: spread over a grid, quality bar adaptive.
 
-        See `flow_math.detect_corners`. A fixed Shi-Tomasi threshold is a fixed
+        See `flow_features.detect_corners`. A fixed Shi-Tomasi threshold is a fixed
         assumption about the floor, and it fails quietly on the smooth ones --
         measured 150 points on a textured surface and 19 on a plain one, with
         no refusal from either, because 19 still clears the fit's 8-point
@@ -593,7 +595,7 @@ class FlowVelocityNode(FlowSetupMixin, FlowChecksMixin, FlowFloorMixin, FlowPubl
     # verbatim.
 
     def _anchor(self, gray, t) -> None:
-        # Sun caustics: decided once per anchor (see flow_math.CAUSTIC_*).
+        # Sun caustics: decided once per anchor (see flow_features.CAUSTIC_*).
         score = caustic_score(gray)
         caustic = score > CAUSTIC_TOPHAT_MAX and bool(
             self.get_parameter('caustic_suppression').value)

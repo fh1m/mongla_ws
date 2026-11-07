@@ -743,7 +743,7 @@ class TestSunCausticsReachTheNode:
     a helper nobody calls fixes nothing (see test_flow_sun_caustics)."""
 
     def test_a_caustic_anchor_and_its_partner_are_both_eroded(self):
-        from mongla_vision.flow.flow_math import suppress_caustics
+        from mongla_vision.flow.flow_features import suppress_caustics
         import test_flow_sun_caustics as tc
         n = _make(pool_depth_m=4.0)
         try:

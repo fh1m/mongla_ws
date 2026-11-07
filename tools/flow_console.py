@@ -44,6 +44,7 @@ _ROOT = os.path.dirname(_HERE)
 sys.path.insert(0, os.path.join(_ROOT, 'src', 'mongla_vision'))
 from mongla_vision.flow import flow_math as _fm          # noqa: E402
 from mongla_vision.flow import flow_velocity as _fv      # noqa: E402
+from mongla_vision.flow import flow_features as _ff      # noqa: E402
 
 _FEATURE_PARAMS = dict(maxCorners=160, qualityLevel=0.01, minDistance=8,
                        blockSize=7)
@@ -252,7 +253,7 @@ def worker(args):
 
         if anchor is None or anchor_pts is None or len(anchor_pts) < _MIN_TRACKS:
             anchor, anchor_t = gray, t
-            anchor_pts = _fm.detect_corners(gray, want=args.want_points)
+            anchor_pts = _ff.detect_corners(gray, want=args.want_points)
             _publish(vis, anchor_pts, None, STATE)
             continue
 
@@ -262,7 +263,7 @@ def worker(args):
         draw = (anchor_pts, nxt, status)
         if flow is None:
             anchor, anchor_t = gray, t
-            anchor_pts = _fm.detect_corners(gray, want=args.want_points)
+            anchor_pts = _ff.detect_corners(gray, want=args.want_points)
             refused += 1
             reason = 'LK lost the anchor'
             _publish(vis, anchor_pts, None, STATE)
@@ -279,7 +280,7 @@ def worker(args):
         # ripeness check above does not need it. Cull immediately before the
         # estimate.
         if args.fb_px > 0 and nxt is not None and status is not None:
-            fb = _fm.forward_backward_error(anchor, gray, anchor_pts, nxt,
+            fb = _ff.forward_backward_error(anchor, gray, anchor_pts, nxt,
                                             _LK_PARAMS)
             if fb is not None:
                 st = np.asarray(status).reshape(-1).astype(bool)
@@ -313,7 +314,7 @@ def worker(args):
             if r:
                 pr, rr = r
         anchor, anchor_t = gray, t
-        anchor_pts = _fm.detect_corners(gray, want=args.want_points)
+        anchor_pts = _ff.detect_corners(gray, want=args.want_points)
 
         v = _fv.flow_velocity(flow[0], flow[1], dt, f_px=f_px,
                               fy_px=(intr.fy if intr is not None else None),

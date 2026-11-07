@@ -21,7 +21,7 @@ an index deliberately DIFFERENT from the shipped one -- because at n = 1.333 the
 broken code round-trips too, and a test that cannot tell the two states apart is
 not a test.
 
-NO cv2, NO numpy, NO ROS. `distance/flow_math.py` is deliberately
+NO cv2, NO numpy, NO ROS. `flow/flow_math.py` is deliberately
 dependency-light (math + numpy only) and could not import `solver`, which is
 part of how the literal got copied there in the first place.
 """
