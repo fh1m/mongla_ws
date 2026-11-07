@@ -9,6 +9,7 @@ pytest.importorskip('rclpy')
 
 def test_the_loser_of_a_concurrent_first_build_is_closed(monkeypatch):
     import mongla_manager.auv_manager_node as amn
+    import mongla_manager.node_vision as node_vision
     built, closed = [], []
     gate = threading.Barrier(2)
 
@@ -22,8 +23,8 @@ def test_the_loser_of_a_concurrent_first_build_is_closed(monkeypatch):
     def _ready(vstate, **k):
         gate.wait(2.0)                # both builders are past the first lock
 
-    monkeypatch.setattr(amn, 'VisionState', _VS)
-    monkeypatch.setattr(amn, 'wait_vision_state_ready', _ready)
+    monkeypatch.setattr(node_vision, 'VisionState', _VS)
+    monkeypatch.setattr(node_vision, 'wait_vision_state_ready', _ready)
     log = types.SimpleNamespace(info=lambda *a, **k: None,
                                 warning=lambda *a, **k: None)
     node = types.SimpleNamespace(_vision_lock=threading.Lock(),

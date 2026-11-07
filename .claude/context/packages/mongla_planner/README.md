@@ -74,7 +74,12 @@ of overrunning into the next task.
 
 | File | Role |
 |---|---|
-| `mongla_dsl.py` | the mission language |
+| `mongla_dsl.py` | the mission language: the verbs, the session, the run report |
+| `dsl_detections.py` | what the cameras see: `detected()`, `wait_for()`, `where()`, `outline()` |
+| `dsl_position.py` | where the vehicle is: bearings, ranges, position fixes, the fused pose, the anchored heading |
+| `dsl_cameras.py` | which camera is live (`use_camera`, `camera_usable`), and `calc_distance` |
+| `dsl_detector.py` | tuning the detectors mid-mission: `set_model`, `set_classes`, `set_conf`, `lock_class`, pause/resume |
+| `dsl_support.py` | parsing detections; the helpers the parts share |
 | `vision_dsl.py` | `mongla.vision.align` and `.move`, and their results |
 | `client.py` | the blocking action client: deadlines, cancellation, goal ids |
 | `cli.py` | the `mongla` command, generated from the registry |

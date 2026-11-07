@@ -21,7 +21,7 @@ import re
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _PKG  = os.path.abspath(os.path.join(_HERE, '..'))
 _LAUNCH = os.path.join(_PKG, 'launch', 'bringup.launch.py')
-_NODE   = os.path.join(_PKG, 'mongla_manager', 'auv_manager_node.py')
+_NODE   = os.path.join(_PKG, 'mongla_manager', 'node_setup.py')   # every declare_parameter
 
 
 # Deliberate differences, each with its reason. Adding an entry here is a

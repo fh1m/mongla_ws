@@ -3,6 +3,8 @@
 Every test here is one of those, or the machinery that keeps them from
 recurring. None of it is about plumbing.
 """
+import os
+os.environ['MAVLINK20'] = '1'   # before pymavlink, or ESC/v2 frames decode as UNKNOWN (fc/_srot_base.py)
 import sys
 import time
 from pathlib import Path
@@ -267,7 +269,7 @@ def test_the_gyro_is_actually_REQUESTED_from_the_board():
     flow does not depend on range, so a wrong omega is subtracted at full
     strength before the translation is ever scaled."""
     from pymavlink import mavutil
-    from mongla_manager.auv_manager_node import SROT_MESSAGE_RATES
+    from mongla_manager.node_support import SROT_MESSAGE_RATES
     mid = mavutil.mavlink.MAVLINK_MSG_ID_SCALED_IMU2
     assert mid in SROT_MESSAGE_RATES, 'the estimator has no gyro'
     assert SROT_MESSAGE_RATES[mid] >= 50, 'gyro below the camera rate'
@@ -291,7 +293,7 @@ def _registered_names():
     """
     import ast
     src = (Path(__file__).resolve().parents[1]
-           / 'mongla_manager' / 'auv_manager_node.py').read_text()
+           / 'mongla_manager' / 'node_health.py').read_text()
     names = set()
     for node in ast.walk(ast.parse(src)):
         if (isinstance(node, ast.Call)

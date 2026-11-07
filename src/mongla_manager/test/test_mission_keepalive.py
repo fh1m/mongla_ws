@@ -14,6 +14,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import mongla_manager.auv_manager_node as M
+import mongla_manager.node_support as node_support
 
 
 # ── the decision, pure ───────────────────────────────────────────────────────
@@ -25,13 +26,13 @@ import mongla_manager.auv_manager_node as M
 ])
 def test_the_watchdog_rule(attached, silent, armed, want):
     now = 100.0
-    assert M.mission_watchdog(attached, now - silent, now, armed) == want
+    assert node_support.mission_watchdog(attached, now - silent, now, armed) == want
 
 
 # ── the heartbeat gate ───────────────────────────────────────────────────────
 def _beats(alive_fn, seconds=0.35):
     sent = []
-    hb = M._HeartbeatThread(lambda: sent.append(time.monotonic()), period_s=0.05,
+    hb = node_support._HeartbeatThread(lambda: sent.append(time.monotonic()), period_s=0.05,
                             log=MagicMock(), alive_fn=alive_fn).start()
     time.sleep(seconds)
     hb.stop()

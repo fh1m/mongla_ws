@@ -13,6 +13,8 @@ import time
 from types import SimpleNamespace
 
 import pytest
+import os
+os.environ['MAVLINK20'] = '1'   # before pymavlink, or ESC/v2 frames decode as UNKNOWN (fc/_srot_base.py)
 from pymavlink import mavutil
 
 from mongla_control.fc import srot_protocol as sp
@@ -125,6 +127,6 @@ def test_a_genuinely_completed_move_still_succeeds():
 
 
 def test_the_manager_asks_for_a_fast_heartbeat():
-    from mongla_manager.auv_manager_node import SROT_MESSAGE_RATES
+    from mongla_manager.node_support import SROT_MESSAGE_RATES
     hz = SROT_MESSAGE_RATES.get(mavutil.mavlink.MAVLINK_MSG_ID_HEARTBEAT, 1)
     assert hz >= 10, 'at 1 Hz a failsafe SURFACE is invisible for up to a second'

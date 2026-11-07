@@ -92,7 +92,7 @@ def test_both_state_publishers_use_the_helper():
     path). One left on the host clock would make the topic's time base depend
     on which code path produced the message."""
     src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_manager'
-           / 'auv_manager_node.py')
+           / 'node_telemetry.py')
     assert src.count('msg.header.stamp = self._state_stamp()') == 2
     assert 'msg.header.stamp    = self.get_clock().now().to_msg()' not in src
 
@@ -111,7 +111,7 @@ def test_the_board_stamp_is_cached_ONLY_when_the_mapping_SUCCEEDED():
     the fallback.
     """
     src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_manager'
-           / 'auv_manager_node.py')
+           / 'node_telemetry.py')
     assert 'self._board_stamp = (stamp_s, time.monotonic())' in src
     cache = src.index('self._board_stamp = (stamp_s, time.monotonic())')
     ready = src.index('if self._imu_clock.ready:')

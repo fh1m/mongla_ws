@@ -21,7 +21,7 @@ def test_an_unreadable_file_is_unknown_not_ok():
 
 def test_the_shipped_file_is_what_the_vehicle_reports():
     """The live line reads the real file; today that is DEGRADED."""
-    from mongla_manager.auv_manager_node import _load_sensor_offsets
+    from mongla_manager.node_support import _load_sensor_offsets
     o = _load_sensor_offsets()
     assert o is not None, 'the manager cannot read frames.yaml'
     assert hr.sensor_offsets(o).state in (State.OK, State.DEGRADED)

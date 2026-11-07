@@ -15,7 +15,8 @@ from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy
 from vision_msgs.msg import VisionInfo
 from mongla_interfaces.msg import TargetContours
 
-from mongla_planner.mongla_dsl import MonglaMission, _pick_outline
+from mongla_planner.mongla_dsl import MonglaMission
+from mongla_planner.dsl_support import _pick_outline
 from mongla_planner.run_budget import RunBudget
 
 
@@ -188,9 +189,9 @@ def test_set_model_without_confirm_never_waits_or_flushes():
 def test_side_on_with_an_outline_uses_the_symbols_visible_pixels():
     """A placard half occluded: its BOX straddles the gate midline ('centre'),
     its visible outline sits right of it."""
-    from mongla_planner.mongla_dsl import _outline_view
+    from mongla_planner.dsl_support import _outline_view
     from mongla_vision.identity import identify
-    import mongla_planner.mongla_dsl as d
+    import mongla_planner.dsl_support as d
     Outline = SimpleNamespace
     o = Outline(class_name='rescue', score=0.9, angle_deg=0, area_px=100,
                 points=[(55, 40), (70, 40), (70, 60), (55, 60)])

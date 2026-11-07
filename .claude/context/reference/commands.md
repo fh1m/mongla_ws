@@ -409,7 +409,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `max_ambiguity` | `0.9` |
 | `max_reproj_px` | `10.0` |
 
-**`mongla_manager/auv_manager_node.py`** — 14 parameters
+**`mongla_manager/node_setup.py`** — 14 parameters
 
 | parameter | default |
 |---|---|
