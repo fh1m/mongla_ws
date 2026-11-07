@@ -45,7 +45,7 @@ Every argument, its default and its meaning:
 from launch                     import LaunchDescription
 from launch.actions             import (DeclareLaunchArgument, GroupAction,
                                         IncludeLaunchDescription, LogInfo,
-                                        SetEnvironmentVariable)
+                                        OpaqueFunction, SetEnvironmentVariable)
 from launch.conditions          import IfCondition
 from launch.substitutions       import PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -81,6 +81,30 @@ VISION_PI_PASSTHROUGH = (
     'fwd_fps', 'dwn_fps', 'fwd_publish_hz', 'dwn_publish_hz', 'replay',
     'fwd_device_path', 'dwn_device_path',
 )
+
+
+# Switches that START something inside the vision stack, so they do nothing
+# while `vision` is false. Typed alone they used to be accepted without a word:
+# `flow:=true` gave a vehicle with no velocity and no message.
+VISION_ONLY = {'flow': 'true', 'viewer': 'true', 'replay': 'true'}
+
+
+def vision_only_ignored(cfg: dict) -> list:
+    """The vision-only switches that are on while `vision` is off."""
+    if str(cfg.get('vision', 'false')).lower() in ('true', '1'):
+        return []
+    on = [f'{k}:={v}' for k, v in VISION_ONLY.items() if str(cfg.get(k, '')).lower() == v]
+    if str(cfg.get('lock_class', '')).strip():
+        on.append(f"lock_class:={cfg['lock_class']}")
+    return on
+
+
+def _warn_vision_only(context):
+    ignored = vision_only_ignored(context.launch_configurations)
+    if not ignored:
+        return []
+    return [LogInfo(msg=f"WARNING: {' '.join(ignored)} has no effect: vision is off. "
+                        f"Add vision:=true (or `vision: true` in bringup.yaml).")]
 
 
 def _vision_pi_arguments(path: str) -> list:
@@ -468,6 +492,7 @@ def generate_launch_description():
         # detectors and the control loop. Measured on the Pi, 1024x1024x64:
         # 4.76 ms at blas=1/split=2 against 5.33 ms at blas=4/split=2.
         SetEnvironmentVariable('OPENBLAS_NUM_THREADS', '1'),
+        OpaqueFunction(function=_warn_vision_only),
         manager_node,
         localization_node,
         # scoped=True keeps anything set INSIDE from escaping. It does not stop

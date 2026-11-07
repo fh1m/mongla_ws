@@ -1,6 +1,10 @@
 # The operator runbook — every command, verified
 
-Every command on this page is checked by `tools/command_lint.py`: the launch
+**Tested two ways.** Every switch alone and every pair of switches (1200
+pairs) is rendered the way `ros2 launch` would run it, conditions and includes
+and all, with no process started: `test_every_switch_combination_renders.py`.
+A pair that raises, or a switch that no longer starts the node it names, fails
+the build. And every command on this page is checked by `tools/command_lint.py`: the launch
 file exists, every `name:=value` is a declared argument (`ros2 launch` ignores
 an undeclared one **silently**), choices are respected, every model has its
 `<stem>.yaml` sidecar, every verb flag is a real field, every mission exists.
@@ -63,6 +67,11 @@ one capability at a time.
 | on the bench, in air | `ros2 launch mongla_manager bringup.launch.py vision:=true medium:=air` |
 
 Notes that cost runs when forgotten:
+
+- **`flow`, `viewer`, `replay` and `lock_class` live inside the vision stack.**
+  Without `vision:=true` they start nothing. The launch prints
+  `WARNING: flow:=true has no effect: vision is off` rather than going ahead
+  silently, but it does not stop.
 
 - `pool_depth_m` is metres **from the downward camera to the floor**. Without
   it `flow_node` publishes quality 0 and refuses — by design.
