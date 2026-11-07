@@ -123,7 +123,7 @@ def test_every_ladder_rung_is_a_real_constant():
         assert m, f'{name} not found in vision_tunables.py'
         return float(m.group(1))
 
-    fresh_zero = _const('mongla_control/mongla_control/motion_vision/control.py',
+    fresh_zero = _const('mongla_control/mongla_control/motion_vision/freshness.py',
                         'VISION_FRESH_ZERO_S')
     values = [v for _n, v in LADDER]
     for expect, what in ((fresh_zero, 'freshness zero'),

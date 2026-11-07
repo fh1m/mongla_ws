@@ -173,5 +173,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `fc/srot_uplink.py` | What the host tells the board it sees: a vision target, a speed, a position. |
 | `motion_vision/align.py` | `align_loop`: centre a target on the chosen axes and hold it there. |
 | `motion_vision/control.py` | What both vision loops share: outcome codes, tuned constants, pure helpers, |
+| `motion_vision/freshness.py` | How much a bounding box may still steer, from how old it is. |
 | `motion_vision/move.py` | `move_loop`: drive toward a target until it fills the frame, or through it. |
+| `motion_vision/srot_drive.py` | Turning a vision demand into one MANUAL_CONTROL frame the board can act on. |
 <!-- modules:end -->
