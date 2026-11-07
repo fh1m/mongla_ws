@@ -225,6 +225,8 @@ with no summary line shows as *(no summary)* until it gets one.
 | `utils/check_pipeline.py` | standalone health probe for the perception pipeline. |
 | `utils/check_thrust.py` | end-to-end smoke test: detection -> a thrust command. |
 | `utils/check_tracker.py` | health probe for the tracking pipeline. |
+| `utils/display_draw.py` | What the vision display draws besides the frame: the splash, the |
+| `utils/display_keys.py` | Keyboard handling for the vision display: camera switching and video playback. |
 | `utils/display_node.py` | smooth OpenCV viewer for the perception pipeline. |
 | `utils/switch_camera.py` | resume ONE detector, pause the others (CLI exclusivity). |
 | `utils/water_check.py` | Which water is this? Characterise the pool before trusting a model in it. |

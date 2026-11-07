@@ -64,6 +64,10 @@ ROS2 parameters
   max_display_hz   float    30.0         display refresh cap (0 = unlimited)
 
 Press Q or Ctrl-C to exit. Child processes are terminated on exit.
+
+Where each part lives: this file is the node and the display loop;
+`display_draw.py` draws the splash and the panels; `display_keys.py` turns
+keys into camera switches and playback calls.
 """
 
 from __future__ import annotations
@@ -90,7 +94,11 @@ from mongla_vision import draw, qos
 from mongla_vision.config import CAMERA_PROFILES
 from mongla_vision.detection.detector import Detection, largest
 from mongla_vision.detection.messages import array_to_detections
-from mongla_vision.draw_widgets import pil_text, pil_text_size
+from .display_draw import (
+    _SWITCH_WAIT_S, _draw_distance_panel, _draw_mission_panel, _render_splash,
+    _render_switching,
+)
+from .display_keys import _handle_camera_keys, _handle_video_keys, _send_pause
 
 _WAIT_LOG_INTERVAL = 5.0
 _WINDOW_NAME       = 'mongla  //  mission control'
@@ -98,13 +106,6 @@ _WINDOW_NAME       = 'mongla  //  mission control'
 # Target display width. Frames are resized to this width (single step, no
 # intermediate scale) so draw_strip's sf=max(0.6, w/1920) resolves to 1.0.
 _RENDER_W = 1920
-
-# Arrow key codes from cv2.waitKey on Linux (after & 0xFF they become 81-84).
-# Use waitKeyEx() codes instead — waitKeyEx returns full 32-bit extended codes.
-_KEY_LEFT  = 0xFF51  # left  arrow (XK_Left)
-_KEY_RIGHT = 0xFF53  # right arrow (XK_Right)
-_KEY_UP    = 0xFF52  # up    arrow (XK_Up)
-_KEY_DOWN  = 0xFF54  # down  arrow (XK_Down)
 
 
 def _start_pipeline(camera: str, model: str, classes: str,
@@ -485,290 +486,6 @@ class VisionDisplayNode(Node):
                 proc.kill()
         self._pipeline_procs.clear()
 
-
-# ---------------------------------------------------------------------------
-# Video playback helpers
-# ---------------------------------------------------------------------------
-
-def _send_seek(node: VisionDisplayNode, seconds: float) -> None:
-    if node._seek_pub is not None:
-        node._seek_pub.publish(Float32(data=float(seconds)))
-
-
-def _send_seek_frame(node: VisionDisplayNode, frames: int) -> None:
-    if node._seek_frame_pub is not None:
-        node._seek_frame_pub.publish(Int32(data=int(frames)))
-
-
-# The ladder lives with the camera that owns playback speed. This file used
-# to carry its own identical copy, and `VideoFileCamera` carried step-up and
-# step-down methods that nothing called -- two copies of one tuple, in two
-# processes, with a comment in the camera admitting it ("same values understood
-# by display_node keybinds"). The STEPPING has to happen here, because the
-# camera is a different process and the keypress arrives here; the LADDER does
-# not.
-from mongla_vision.cameras.video_file import SPEED_STEPS as _SPEED_STEPS
-
-
-def _speed_step_up(cur: float) -> float:
-    for s in _SPEED_STEPS:
-        if s > cur + 0.01:
-            return s
-    return _SPEED_STEPS[-1]
-
-
-def _speed_step_down(cur: float) -> float:
-    for s in reversed(_SPEED_STEPS):
-        if s < cur - 0.01:
-            return s
-    return _SPEED_STEPS[0]
-
-
-def _send_speed(node: VisionDisplayNode, speed: float) -> None:
-    node._video_speed = speed
-    if node._speed_pub is not None:
-        node._speed_pub.publish(Float32(data=float(speed)))
-
-
-def _send_pause(node: VisionDisplayNode, pause: bool) -> None:
-    """Update pause state optimistically then fire service call."""
-    node._is_paused = pause          # update now — don't wait for service ACK
-    if node._pause_client is None or not node._pause_client.service_is_ready():
-        return
-    req = SetBool.Request()
-    req.data = pause
-    node._pause_client.call_async(req)
-
-
-def _handle_camera_keys(node: VisionDisplayNode, key: int) -> None:
-    """Handle runtime camera switching keys.
-
-    Subscription create/destroy is deferred to _process_pending_sub_action (timer cb on
-    the executor thread) to avoid wait-set races with rclpy.spin on the daemon thread.
-    """
-    if key < 0:
-        return
-    if key == ord('f'):
-        node._pending_sub_action = 'forward'
-    elif key == ord('d'):
-        node._pending_sub_action = 'downward'
-    elif key == ord('D'):
-        node._show_depth_map = not node._show_depth_map
-
-
-def _handle_video_keys(node: VisionDisplayNode, key: int) -> None:
-    """Process video playback keyboard shortcuts — called in BOTH empty and frame paths."""
-    if key < 0 or not node._video_mode:
-        return
-    if key == ord(' '):
-        _send_pause(node, not node._is_paused)
-    elif key == _KEY_LEFT:
-        _send_seek(node, -1.0)
-    elif key == _KEY_RIGHT:
-        _send_seek(node, 1.0)
-    elif key == _KEY_UP:
-        _send_seek(node, 10.0)
-    elif key == _KEY_DOWN:
-        _send_seek(node, -10.0)
-    elif key == ord(','):
-        _send_seek_frame(node, -1)
-    elif key == ord('.'):
-        _send_seek_frame(node, 1)
-    elif key == ord('['):
-        _send_speed(node, _speed_step_down(node._video_speed))
-    elif key == ord(']'):
-        _send_speed(node, _speed_step_up(node._video_speed))
-
-
-# ---------------------------------------------------------------------------
-# Splash screen
-# ---------------------------------------------------------------------------
-
-# Blue theme: dark navy background, sky-blue accent (OpenCV BGR order)
-# RGB equivalents: BG=(5,15,55) navy  ACCENT=(0,160,255) sky-blue
-_C_SP_BG     = (55, 15, 5)       # dark navy  — B=55 G=15 R=5
-_C_SP_ACCENT = (255, 160, 0)     # sky blue   — B=255 G=160 R=0
-_C_SP_TEXT   = (240, 235, 220)   # bright warm white
-_C_SP_DIM    = (130, 95, 65)     # muted slate
-
-
-def _draw_mission_panel(out, *, camera, fps, primary, native_w, native_h,
-                        deadband, state) -> None:
-    """Compact top-left mission-status panel: what the AUV sees + how well it's on it.
-
-    Answers the operator's questions at a glance: which camera frame is live
-    (FORWARD/DOWNWARD, colour-coded), the target class + confidence, the signed
-    alignment offset in px + IN-BAND/OFF, live FPS, and depth/armed. On the
-    downward frame it also prints the rotated axis legend (Y->surge, X->lat) so the
-    offset numbers are unambiguous. Cheap: one ROI blend + a few text lines --
-    drawn in the display node (off the detector/GPU path), no FPS cost."""
-    h, w = out.shape[:2]
-    sf = max(0.9, w / 1920.0)
-    downward = camera == 'downward'
-    badge = 'DOWNWARD' if downward else 'FORWARD'
-    badge_col = (255, 210, 40) if downward else (60, 230, 120)   # cyan-ish / green (BGR)
-
-    # Build the info lines.
-    if primary is not None:
-        dx = primary.cx - native_w / 2.0
-        dy = primary.cy - native_h / 2.0
-        ex = dx / max(native_w / 2.0, 1.0)
-        ey = dy / max(native_h / 2.0, 1.0)
-        in_band = abs(ex) < deadband and abs(ey) < deadband
-        tgt_line = f'{primary.class_name}  {int(primary.score * 100)}%'
-        off_line = f'dx {dx:+.0f}  dy {dy:+.0f} px'
-        status, status_col = (('ON TARGET', (60, 230, 120)) if in_band
-                              else ('OFF  ', (40, 190, 255)))
-    else:
-        tgt_line = 'no target'
-        off_line = 'searching...'
-        status, status_col = 'LOST', (60, 60, 235)
-
-    lines = [
-        (tgt_line, (235, 235, 235)),
-        (off_line, (200, 200, 200)),
-        (status,   status_col),
-        (f'FPS {fps:4.1f}', (200, 200, 200)),
-    ]
-    if downward:
-        lines.append(('axes: Y->surge  X->lat', (180, 180, 120)))
-    if state is not None:
-        arm = 'ARMED' if getattr(state, 'armed', False) else 'safe'
-        lines.append((f'{state.depth_m:+.2f} m   {arm}',
-                      (60, 60, 235) if getattr(state, 'armed', False) else (170, 170, 170)))
-
-    fs_badge = 0.95 * sf
-    fs_line  = 0.62 * sf
-    pad      = int(14 * sf)
-    line_h   = int(pil_text_size('Ag', fs_line)[1] * 1.5)
-    bw_badge = pil_text_size(badge, fs_badge)[0]
-    box_w = max(bw_badge, max(pil_text_size(t, fs_line)[0] for t, _ in lines)) + pad * 2
-    box_h = pad * 2 + int(pil_text_size(badge, fs_badge)[1] * 1.6) + line_h * len(lines)
-    box_w = min(box_w, w - 4)
-
-    # Semi-transparent dark panel background (single ROI blend).
-    x0, y0 = 4, 4
-    x1, y1 = min(x0 + box_w, w - 1), min(y0 + box_h, h - 1)
-    roi = out[y0:y1, x0:x1]
-    if roi.size:
-        dark = np.full_like(roi, 15)
-        cv2.addWeighted(dark, 0.62, roi, 0.38, 0, roi)
-        cv2.rectangle(out, (x0, y0), (x1, y1), badge_col, max(1, int(2 * sf)), cv2.LINE_AA)
-
-    yy = y0 + pad + int(pil_text_size(badge, fs_badge)[1])
-    pil_text(out, badge, (x0 + pad, yy), fs_badge, badge_col)
-    yy += int(pil_text_size(badge, fs_badge)[1] * 0.6)
-    for text, col in lines:
-        yy += line_h
-        pil_text(out, text, (x0 + pad, yy), fs_line, col)
-
-
-def _render_switching(w: int, h: int, camera: str) -> np.ndarray:
-    """Dark 'switching camera' screen shown between a switch and the first frame
-    of the new camera -- so the HUD never silently shows the frozen OLD frame."""
-    img = np.full((h, w, 3), (35, 20, 8), dtype=np.uint8)   # dark navy (BGR)
-    cx, cy = w // 2, h // 2
-    sf = max(0.6, w / 1280.0)
-    title = f'CAMERA -> {str(camera).upper()}'
-    tw, th = pil_text_size(title, 0.9 * sf)
-    pil_text(img, title, (cx - tw // 2, cy - th), 0.9 * sf, (255, 200, 60))
-    sub = 'waiting for stream...'
-    sw, _ = pil_text_size(sub, 0.5 * sf)
-    pil_text(img, sub, (cx - sw // 2, cy + int(30 * sf)), 0.5 * sf, (170, 170, 170))
-    return img
-
-
-# How long after a switch to keep showing the "waiting for stream" screen while
-# the new camera has produced no frame (past this it's a real stall, not a switch).
-_SWITCH_WAIT_S = 3.0
-
-
-def _draw_distance_panel(out, dbg) -> None:
-    """Top-right ODOMETRY panel while the distance estimator is ACTIVE.
-
-    `dbg` = [dist_m, height_m, n_tracks, active] from distance_debug, or None.
-    Drawn only when active>0.5 so it never clutters normal vision missions.
-    """
-    if not dbg or len(dbg) < 4 or dbg[3] < 0.5:
-        return
-    dist, height, tracks = dbg[0], dbg[1], int(dbg[2])
-    h, w = out.shape[:2]
-    sf = max(0.9, w / 1920.0)
-    lines = [
-        ('ODOMETRY', (40, 210, 255)),
-        (f'dist  {dist:+.3f} m', (235, 235, 235)),
-        (f'height {height:.2f} m', (200, 200, 200)),
-        (f'tracks {tracks}', (60, 230, 120) if tracks >= 6 else (60, 60, 235)),
-    ]
-    fs = 0.62 * sf
-    line_h = int(pil_text_size('Ag', fs)[1] * 1.5)
-    pad = int(12 * sf)
-    box_w = max(pil_text_size(t, fs)[0] for t, _ in lines) + pad * 2
-    box_h = pad * 2 + line_h * len(lines)
-    x1, y0 = w - 4, 4
-    x0, y1 = max(0, x1 - box_w), min(h - 1, y0 + box_h)
-    roi = out[y0:y1, x0:x1]
-    if roi.size:
-        dark = np.full_like(roi, 15)
-        cv2.addWeighted(dark, 0.62, roi, 0.38, 0, roi)
-        cv2.rectangle(out, (x0, y0), (x1, y1), (40, 210, 255), max(1, int(2 * sf)), cv2.LINE_AA)
-    yy = y0 + pad
-    for text, col in lines:
-        yy += line_h
-        pil_text(out, text, (x0 + pad, yy), fs, col)
-
-
-def _render_splash(w: int, h: int, elapsed: float, camera: str,
-                   fade: float = 1.0) -> np.ndarray:
-    """Blue 'Initializing Vision System' splash. fade=1.0 fully opaque, 0.0 transparent."""
-    img = np.full((h, w, 3), _C_SP_BG, dtype=np.uint8)
-    cx, cy = w // 2, h // 2
-    sf  = max(0.5, w / 1280.0)
-
-    # Brand header
-    brand = '───  MONGLA  ───'
-    fs_b  = 0.85 * sf
-    bw, bh = pil_text_size(brand, fs_b)
-    bx = cx - bw // 2
-    pil_text(img, brand, (bx, cy - 58), fs_b, _C_SP_ACCENT)
-
-    # Accent separator line under brand
-    cv2.line(img, (bx, cy - 58 + bh + 6), (bx + bw, cy - 58 + bh + 6), _C_SP_ACCENT, 1)
-
-    # Main status
-    status = 'INITIALIZING VISION SYSTEM'
-    fs_s   = 0.65 * sf
-    sw, _ = pil_text_size(status, fs_s)
-    pil_text(img, status, (cx - sw // 2, cy + 22), fs_s, _C_SP_TEXT)
-
-    # Sub-status
-    sub    = 'Loading model  ·  video will play automatically when ready'
-    fs_sub = 0.38 * sf
-    subw, _ = pil_text_size(sub, fs_sub)
-    pil_text(img, sub, (cx - subw // 2, cy + 58), fs_sub, _C_SP_DIM)
-
-    # Animated ping-pong progress bar
-    bar_len = int(w * 0.48)
-    bar_x0  = cx - bar_len // 2
-    bar_y0  = cy + 86
-    cv2.rectangle(img, (bar_x0, bar_y0), (bar_x0 + bar_len, bar_y0 + 4), (90, 35, 12), -1)
-    t    = (elapsed % 2.0) / 2.0
-    prog = t * 2 if t < 0.5 else (1.0 - t) * 2
-    fill = max(bar_len // 8, int(bar_len * prog))
-    cv2.rectangle(img, (bar_x0, bar_y0), (bar_x0 + fill, bar_y0 + 4), _C_SP_ACCENT, -1)
-
-    # Footer
-    fs_info = 0.33 * sf
-    cam_lbl = f'camera: {camera}'
-    pil_text(img, cam_lbl, (16, h - 20), fs_info, _C_SP_DIM)
-    ts = f'{int(elapsed)}s'
-    tw, _ = pil_text_size(ts, fs_info)
-    pil_text(img, ts, (w - tw - 16, h - 20), fs_info, _C_SP_DIM)
-
-    # Apply fade: blend toward black at fade < 1
-    if fade < 0.999:
-        img = (img * max(0.0, fade)).astype(np.uint8)
-    return img
 
 
 # ---------------------------------------------------------------------------
