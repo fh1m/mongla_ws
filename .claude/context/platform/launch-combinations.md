@@ -14,6 +14,12 @@ The complete generated list of arguments, defaults, verbs, missions and node
 parameters is [`reference/commands.md`](../reference/commands.md). This page is
 the **order you run them in**.
 
+![Which processes each bringup switch starts: a dot matrix of nine launch lines against twelve processes, with the seventeen switches that only change a parameter listed beside it.](../../../docs/imgs/readme/launch-switches.webp)
+
+The figure is rendered from the same walk the test does, so it cannot drift
+from the launch files: `python3 tools/fig_launch_switches.py` (after a
+launch-file change).
+
 The vehicle: SROT board (Hengla) over one USB-C cable, Raspberry Pi 5 with a
 Hailo-8, forward and downward cameras.
 
