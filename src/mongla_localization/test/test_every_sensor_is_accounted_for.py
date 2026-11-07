@@ -17,11 +17,14 @@ measurement is any good.
 """
 import pathlib
 import re
+import sys
 
 import pytest
 
 _NODE = (pathlib.Path(__file__).resolve().parents[1] / 'mongla_localization'
          / 'localization_node.py')
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import source_of  # noqa: E402  (the node and its mixins)
 
 # ---- used, and what for ---------------------------------------------------
 USED = {
@@ -68,7 +71,7 @@ EXCLUDED = {
 
 @pytest.fixture(scope='module')
 def src():
-    return _NODE.read_text()
+    return source_of(_NODE)
 
 
 @pytest.mark.parametrize('topic,role', sorted(USED.items()))

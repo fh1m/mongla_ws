@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 
 from mongla_localization.inekf import RIEKF
-from mongla_localization.localization_node import _R_from_quat
+from mongla_localization.localization_inputs import _R_from_quat
 
 DATA = Path(__file__).parent / 'data' / 'board_still_2026-09-15.json'
 
