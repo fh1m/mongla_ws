@@ -10,6 +10,8 @@ Every claim in these documents is either read in their source (file and line) or
 measured on the live board on 2026-09-03. Where the two disagreed, the board
 won and the document says so.
 
+**Start here for the first swim:** [The control-only swim — what the board has to get right](control-only-swim.md) ranks the open items by whether they can end a board-only run.
+
 | file | ask | cost to them |
 |---|---|---|
 | [`pr-a-vision-api.md`](pr-a-vision-api.md) | the measured camera FOV that was blocking `LANDING_TARGET`; the pinhole bearing model; **the `31001` id allocated twice**; the missing `coasted`/gap-age fields | a doc fix and one decision |

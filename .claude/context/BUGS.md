@@ -62,6 +62,38 @@ logic right?" would have passed all three.
 
 ## 1. CRITICAL
 
+### B-89: five missions moved the board before arming it `READ 2026-11-07` **FIXED 2026-11-07**
+
+**What.** The board refuses every SROT_MOVE while disarmed (firmware
+`mav_commands.cpp`, "SROT_MOVE refused: arm first", on their `main` since
+`139d943`), and `pause` is a SROT_MOVE. `pool_day_practice`, `sauvc_full`,
+`sauvc_navigation`, `sauvc_qualification` and `task_full_2026` all took their
+tether window as `pause(N)` before `arm()` -- correct on the old backend, where
+`pause` was a host sleep, and a refusal on this one. Each would have failed at
+its first line, surfaced and disarmed, at the pool.
+
+**Fix.** The tether window is `countdown()`, on the host: monotonic deadlines
+per tick (a `sleep(1)` per tick ran ~2 ms long each, measured-bars §68), and a
+refusal on an ssh session outside tmux or screen, because pulling the tether
+kills that session and the mission with it. Guard:
+`test_no_board_verb_before_arm.py` reads every mission's calls and fails on a
+board verb before `arm()`; injection-verified against the old missions.
+
+### B-90: a kill switch engaged mid-run left the vehicle armed `READ 2026-11-07` **FIXED 2026-11-07 (host)**
+
+**What.** The kill switch cuts thruster power on the second board; the
+control board treats its state as display-only (`arming.h`) and stays armed,
+still running the move. Turning the knob back powers the ESCs into whatever
+the board is commanding, under a diver's hands. Upstream issue #12 asks the
+board to refuse arming when killed; nothing on either side acted on a kill
+DURING a run.
+
+**Fix.** The manager disarms on the edge to ENGAGED while armed
+(`node_support.kill_watch`, polled with the mission watchdog at 2 Hz). Only a
+True reading acts: `None` is "no second-board link". Disarm aborts the
+mission's verb, so its own cleanup runs. The firmware should do this itself,
+at 500 Hz; added to #12. Test: `test_mission_keepalive.py`, injection-verified.
+
 ### B53 — every payload channel the missions use is REFUSED by this board `MEASURED 2026-09-22, re-read 2026-10-01` **MAP REMOVED 2026-10-01** — channels await the wired payload
 **`missions/competition_config.py` vs the board's `SERVOn_ROLE` params**
 
