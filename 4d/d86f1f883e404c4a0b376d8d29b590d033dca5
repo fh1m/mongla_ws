@@ -1,0 +1,64 @@
+docs/index.html
+  s_b4c45e3235679b::t_845f8e8387d08d 113,1806
+src/mongla_vision/test/test_composed_vision.py
+  s_b4c45e3235679b::t_18f96bfd8d7933 50
+  s_b4c45e3235679b::t_31ffa4b0667650 46,59,61
+src/mongla_vision/test/test_contours_and_multi_model.py
+  s_b4c45e3235679b::t_18f96bfd8d7933 21
+  s_b4c45e3235679b::t_31ffa4b0667650 16-17,252
+README.md
+  s_b4c45e3235679b::t_845f8e8387d08d 13,111,552,765-766,771,791
+src/mongla_vision/mongla_vision/detector_params.py
+  s_b4c45e3235679b::t_022f6f236b157c 6-7,9-64,95,98,100,106
+  s_b4c45e3235679b::t_39996bc2249683 8
+  s_b4c45e3235679b::t_116f23b458f89e 1-5,65-94,96-97,99,101-105
+src/mongla_vision/mongla_vision/detector_setup.py
+  s_b4c45e3235679b::t_39996bc2249683 8
+  s_b4c45e3235679b::t_022f6f236b157c 1-7,9-404
+src/mongla_vision/test/test_model_conf.py
+  s_b4c45e3235679b::t_31ffa4b0667650 1,8-9
+src/mongla_vision/test/test_model_identity.py
+  s_b4c45e3235679b::t_31ffa4b0667650 8-9
+src/mongla_vision/test/test_a_paused_detector_says_so.py
+  s_b4c45e3235679b::t_bb8106b61cd4c7 14-16,26
+  s_b4c45e3235679b::t_9c78fa88777500 17
+src/mongla_vision/mongla_vision/detector_node.py
+  s_b4c45e3235679b::t_022f6f236b157c 71,78,89-91,94
+  s_b4c45e3235679b::t_845f8e8387d08d 43-50
+  s_b4c45e3235679b::t_39996bc2249683 86-88
+src/mongla_vision/test/test_vision_info.py
+  s_b4c45e3235679b::t_bb8106b61cd4c7 13-15,72
+.claude/context/packages/mongla_vision/README.md
+  s_b4c45e3235679b::t_845f8e8387d08d 90-94
+docs/stats.json
+  s_b4c45e3235679b::t_845f8e8387d08d 2-4,15,20-22,41
+src/mongla_vision/mongla_vision/detector_frames.py
+  s_b4c45e3235679b::t_022f6f236b157c 1-8,10-180
+  s_b4c45e3235679b::t_39996bc2249683 9
+src/mongla_vision/test/test_profiles.py
+  s_b4c45e3235679b::t_9c78fa88777500 26,152
+  s_b4c45e3235679b::t_31ffa4b0667650 125,153
+src/mongla_vision/launch/vision_pi.launch.py
+  s_b4c45e3235679b::t_845f8e8387d08d 51
+src/mongla_vision/mongla_vision/detector_publish.py
+  s_b4c45e3235679b::t_022f6f236b157c 1-182
+src/mongla_vision/test/test_detector_recovery.py
+  s_b4c45e3235679b::t_31ffa4b0667650 22,149,170,243,260
+  s_b4c45e3235679b::t_a8febc88cf0979 10-12,216-217
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "4dd86f1f883e404c4a0b376d8d29b590d033dca5",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
