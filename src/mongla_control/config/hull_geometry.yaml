@@ -88,6 +88,11 @@ frame:
 
 # ── the five thrusters, measured ─────────────────────────────────────────────
 #
+# The final hull has SEVEN: these five plus a roll thruster on each side. The
+# roll pair is not in the CAD yet, so it is not listed. Add it from the CAD, the
+# way the five were read, never from an estimate. Until then everything below
+# describes the five-thruster hull, and "roll unactuated" is true of it only.
+#
 # All five sit on the centreline -- every centre is at x = 0, and the only
 # off-axis figure was the axial motor's 8.1 mm in Z, and that was its bracket
 # (the prop hub is at +0.12 mm; see `axial` below). They are

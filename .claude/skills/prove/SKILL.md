@@ -45,7 +45,7 @@ Attack these first — every one is a defect that has already happened here:
   camera. Anything that assumes messages arrive in the order they describe.
 - **Sign and frame conventions.** Depth is negative below the surface. `FRAME_REVERSE`
   negates all six axis demands before the mixer. Rev 10 inverted yaw. Which hull is
-  this number about — the 8-thruster competition vehicle, or the 5-thruster CAD?
+  this number about — the old 8-thruster Dubomini, the 5-thruster CAD, or the final 7-thruster hull?
 - **Reachability.** Is the new code imported by anything that runs? A module with
   correct code, passing tests, and no consumer is the most expensive bug in this repo.
 - **Thresholds without measurement.** Is the constant in `measured-bars.md` with a

@@ -432,7 +432,7 @@
 <!-- 04 ──────────────────────────────────────────────────────────────── -->
 <section id="body" data-chapter="the body">
  <div class="wrap">
-  <p class="mark">The body <i>//</i> 702 mm, five thrusters, one uncontrolled axis</p>
+  <p class="mark">The body <i>//</i> 702 mm, five thrusters in the CAD, seven on the final hull</p>
   <h2 class="col">A red machine, lit by the water it has to survive.</h2>
   <p class="lede col quiet">Drag it to turn it; take it apart with the fader, or jump to a stop.
     Every number below was read off the CAD geometry itself — 84,248 triangles at 0.9 mm
@@ -707,9 +707,10 @@
       (<a href="https://github.com/fh1m/mongla_ws/blob/main/src/mongla_control/mongla_control/allocation.py"><code>allocation.py</code></a>),
       on the view that a heading you did not ask for is the most expensive thing to be given.</p>
     <p class="quiet">One honest caveat: the mixer above is the firmware's eight-thruster
-      geometry, of which four are horizontal. The hull currently in CAD has five thrusters in a
-      different arrangement. Both are true of <em>something</em>; they are not true of the same
-      vehicle, and this figure says which one it is drawing.</p>
+      geometry, of which four are horizontal, and it comes from the old Dubomini vehicle. The
+      Mongla hull has five thrusters in the CAD today and seven when it is finished: the same
+      five plus a roll thruster on each side. This figure draws the eight, because that is the
+      matrix the board still runs.</p>
    </div>
   </div>
    <blockquote class="pull">Saturation is where a vehicle stops doing what it was told and starts doing <em>arithmetic</em>.
@@ -2077,8 +2078,8 @@
      <span>we have one, good to 1.09 cm over 30 cm, and nowhere to send it</span><em>pull request</em></li>
    <li class="board--hw"><b>The competition radio cannot reach through an aluminium hull</b>
      <span>an external antenna, not a software fix</span><em>hardware</em></li>
-   <li class="board--hw"><b>Three of five thrusters are populated in the CAD</b>
-     <span>and the firmware's mixer is written for eight</span><em>hardware</em></li>
+   <li class="board--hw"><b>The roll thrusters are not in the CAD yet</b>
+     <span>the final hull has seven; the firmware's mixer is still written for eight</span><em>hardware</em></li>
    <li class="board--water"><b>No mission has been flown on this platform</b>
      <span>every number on this page says bench, footage, or board</span><em>water</em></li>
   </ol>
@@ -3708,9 +3709,9 @@
       theory: 'Two separate results say this rate is the right shape. Sampling says a loop can only answer disturbances up to half its rate, so 500 Hz buys authority to 250; scheduling says a fixed set of periodic tasks on one core is schedulable under rate-monotonic priorities up to a utilisation bound. Together they are the argument for a core that runs three jobs and refuses everything else.',
       cite: ['Liu & Layland, 1973 — hard-real-time scheduling', 'https://doi.org/10.1145/321738.321743'],
       src: 'Hengla (firmware) · src/control/attitude.*', state: 'bench' },
-    { n: 'the mixer', num: '5', unit: 'axes', lab: 'of six, on this hull', ms: 0,
-      title: 'Six wishes, five thrusters',
-      body: 'Surge, sway, heave, roll, pitch, yaw become one command per thruster through a fixed matrix. The honest part: the firmware mixes for <b>eight</b> vectored T200s, and the hull in CAD has <b>five</b> tunnel units with roll unactuated. Both are true of something; they are not true of the same vehicle.',
+    { n: 'the mixer', num: '7', unit: 'thrusters', lab: 'on the final hull', ms: 0,
+      title: 'Six wishes, seven thrusters',
+      body: 'Surge, sway, heave, roll, pitch, yaw become one command per thruster through a fixed matrix. The honest part: the firmware still mixes for <b>eight</b> vectored T200s, a matrix from the old Dubomini vehicle. The Mongla hull has <b>five</b> thrusters in the CAD today, with roll unactuated, and <b>seven</b> when it is finished: a roll thruster is added on each side. A geometry-driven mixer, where that pair is two rows of a table, is open as a firmware pull request.',
       theory: 'Allocation is the pseudo-inverse of the thruster configuration matrix — the least-norm set of thrusts that produces the demanded wrench. It is exact only while every thruster is inside its limit; past that the answer must be scaled, not clipped, or the direction of the result changes. That distinction has its own figure further up this page.',
       cite: ['Fossen — Handbook of Marine Craft Hydrodynamics', 'https://doi.org/10.1002/9781119994138'],
       src: 'Hengla · src/control/mixer.h · docs/THRUSTER_MAP.md', state: 'blocked' },

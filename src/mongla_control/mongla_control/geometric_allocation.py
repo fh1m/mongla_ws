@@ -4,7 +4,10 @@ Why this exists, and why it is not `allocation.py`. That module mirrors the
 BOARD's mixer -- an 8x6 matrix of +-1 for a vectored-6DOF frame -- to predict
 what the firmware will do to a demand we already composed. This module does the
 opposite job for a different vehicle: given a wrench we WANT, it solves for the
-thruster commands that produce it, on the five-thruster hull now in fabrication.
+thruster commands that produce it, on the five thrusters in the current CAD.
+The final hull has seven: the same five plus a roll thruster on each side. When
+the CAD has the roll pair, they are two more rows of `THRUSTERS`, and the roll
+refusal below stops applying because the geometry then actuates roll.
 
 The two describe different vehicles and both are correct about theirs. Keeping
 them apart is deliberate; merging them would produce one matrix that is wrong

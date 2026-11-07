@@ -529,23 +529,24 @@ it that way.
 | companion | **Kutum**: Raspberry Pi 5 + Hailo-8 AI HAT — ROS 2 Jazzy on the vehicle, Humble on dev boxes |
 | link | **one USB-C cable**, MAVLink 2 at 115200, compid **191** (`MAV_COMP_ID_ONBOARD_COMPUTER`) |
 | sensors | IMU, depth, leak, kill switch, both battery packs, per-motor RPM — **all on the board**, one clock |
-| thrusters | **Caution: two answers — see below** |
-| cameras | forward + downward USB; per-camera calibration measured *in water* |
+| thrusters | **7 on the final hull**; the board still mixes for 8 (see below) |
+| cameras | forward + downward USB; per-camera calibration measured in air, carried into water by Snell's law |
 | velocity | the **downward camera**. No DVL is fitted, and none has ever been validated in water |
 
 <p align="center"><img src="docs/imgs/readme/cores.webp" alt="The ESP32 two cores as orbits: core 1 runs sensors, control and DShot at 500 Hz; core 0 runs MAVLink, the display, LoRa and the SD card." width="46%"></p>
 
 The hull, measured off the CAD and validated against Onshape to **0.08 %**: **702.0 × 176.1 ×
 172.1 mm**, fineness **3.99**, four ⌀84 mm tunnel thrusters (lateral pair 350 mm apart, vertical
-pair 519 mm apart) plus one axial unit in the nose — five thrusters, **5 of 6 DOF with roll
-unactuated**.
+pair 519 mm apart) plus one axial unit in the nose. That is five thrusters, with roll
+unactuated. **The final hull adds two roll thrusters, one on each side: seven thrusters, all six
+axes actuated.** The CAD for that pair is not finished, so no number here describes it yet.
 
-> **Caution: The hull in CAD is not the hull the mixer was written for.** The firmware mixes for eight
-> vectored T200s; the current CAD is a five-thruster hull. Both statements are true of
-> *something*; they are not true of the same vehicle, and until that is settled every number
-> here says which hull it belongs to. Onshape reports **no material assigned to any part**, so
-> mass, centre of buoyancy and drag genuinely cannot be computed yet — and are therefore not
-> quoted.
+> **Caution: The board still mixes for a different vehicle.** The firmware's matrix is for eight
+> vectored T200s, from the old Dubomini vehicle. A geometry-driven replacement is open as
+> [srot-control-board#39](https://github.com/RakibulIslam1/srot-control-board/pull/39), where
+> the roll pair is two rows of a table. Until it lands, every number here says which hull it
+> belongs to. Onshape reports **no material assigned to any part**, so mass, centre of buoyancy
+> and drag cannot be computed yet, and are therefore not quoted.
 
 You can take the hull apart yourself on the [front page](https://fh1m.github.io/mongla_ws/#body):
 a 0.9 mm-tessellated WebGL model, 40 bodies, with a fader that takes it apart at your pace and

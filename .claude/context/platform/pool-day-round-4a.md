@@ -84,7 +84,9 @@ ros2 bag record /mongla/imu /mongla/state -o roll_decay
 ```
 
 Release from ~20°, let it settle completely. This is the only direct evidence
-that **passive roll stability is sufficient**, and roll is unactuated by design.
+that **passive roll stability is sufficient** on the five-thruster hull, where roll is
+unactuated. The final hull adds a roll thruster on each side; this test still measures the
+righting moment that pair will work against.
 
 ---
 
