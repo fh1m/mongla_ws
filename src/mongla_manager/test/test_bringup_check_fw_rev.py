@@ -10,7 +10,8 @@ misgrade here is a silent failure in the water, not an error anyone would see.
 
 import pytest
 
-from mongla_manager.bringup_check import _behaviour_rev_verdict, PASS, WARN, FAIL
+from mongla_manager.bringup_board import _behaviour_rev_verdict
+from mongla_manager.bringup_grade import PASS, WARN, FAIL
 from mongla_control.fc import srot_protocol as sp
 
 
@@ -69,7 +70,7 @@ def test_no_too_old_revision_is_ever_a_mere_warning(rev):
 #  Bar30 health -- since fw rev 3 this decides whether ANY move verb runs      #
 # --------------------------------------------------------------------------- #
 
-from mongla_manager.bringup_check import _baro_health_verdict          # noqa: E402
+from mongla_manager.bringup_board import _baro_health_verdict          # noqa: E402
 import os
 os.environ['MAVLINK20'] = '1'   # before pymavlink, or ESC/v2 frames decode as UNKNOWN (fc/_srot_base.py)
 from pymavlink import mavutil                                          # noqa: E402
@@ -106,7 +107,7 @@ def test_baro_not_present_warns():
 #  Barometer NOISE + a saturated depth loop -- both measured on the vehicle    #
 # --------------------------------------------------------------------------- #
 
-from mongla_manager.bringup_check import (                            # noqa: E402
+from mongla_manager.bringup_board import (                            # noqa: E402
     _baro_noise_verdict, _depth_loop_verdict)
 
 
@@ -194,7 +195,7 @@ def test_only_a_locked_yaw_reference_passes():
     """Only LOCKED means ATTITUDE.yaw is a magnetic heading. Anything else and an
     absolute turn aims at a boot-relative number -- silently, since the move
     completes normally on the wrong bearing."""
-    from mongla_manager.bringup_check import _yaw_ref_verdict
+    from mongla_manager.bringup_board import _yaw_ref_verdict
     import mongla_control.fc.srot_protocol as sp
     assert _yaw_ref_verdict(float(sp.YAW_REF_LOCKED))[0] == PASS
     for bad in (sp.YAW_REF_IDLE, sp.YAW_REF_SAMPLING, sp.YAW_REF_REFUSED_CAL,
@@ -235,7 +236,7 @@ def test_wildcarded_gcs_failsafe_is_a_hard_fail():
     0 is the wildcard, so any station -- Bondor on the bench -- keeps the failsafe fed.
     In water a dead companion then looks like a live GCS and the hull station-keeps
     instead of surfacing. That is the failure this line exists to catch."""
-    from mongla_manager.bringup_check import _gcs_failsafe_verdict
+    from mongla_manager.bringup_board import _gcs_failsafe_verdict
     status, label, detail = _gcs_failsafe_verdict(1.0, 0.0)
     assert status == FAIL
     assert 'bench' in label.lower() or 'wildcard' in label.lower()
@@ -243,7 +244,7 @@ def test_wildcarded_gcs_failsafe_is_a_hard_fail():
 
 
 def test_failsafe_scoped_to_our_compid_passes():
-    from mongla_manager.bringup_check import _gcs_failsafe_verdict
+    from mongla_manager.bringup_board import _gcs_failsafe_verdict
     import mongla_control.fc.srot_protocol as sp
     assert _gcs_failsafe_verdict(1.0, float(sp.SOURCE_COMPID))[0] == PASS
 
@@ -251,13 +252,13 @@ def test_failsafe_scoped_to_our_compid_passes():
 def test_a_disabled_failsafe_is_not_silently_a_pass():
     """FS_GCS_ENABLE=0 makes the compid moot, so the scope check would pass
     vacuously -- but nothing surfaces the vehicle either. Report it separately."""
-    from mongla_manager.bringup_check import _gcs_failsafe_verdict
+    from mongla_manager.bringup_board import _gcs_failsafe_verdict
     assert _gcs_failsafe_verdict(0.0, 191.0)[0] == WARN
 
 
 def test_unreadable_params_warn_rather_than_pass():
     """A bridge that drops the reply must never read as 'scoped correctly'."""
-    from mongla_manager.bringup_check import _gcs_failsafe_verdict
+    from mongla_manager.bringup_board import _gcs_failsafe_verdict
     assert _gcs_failsafe_verdict(None, None)[0] == WARN
     assert _gcs_failsafe_verdict(1.0, None)[0] == WARN
 

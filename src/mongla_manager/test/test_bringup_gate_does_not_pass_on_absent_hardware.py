@@ -25,7 +25,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from mongla_manager import bringup_check as bc  # noqa: E402
+from mongla_manager import bringup_host as bc  # noqa: E402
 
 # Exactly what `ls /dev/v4l/by-path/` printed on the vehicle, cameras removed.
 PI_PLATFORM_NODES = [

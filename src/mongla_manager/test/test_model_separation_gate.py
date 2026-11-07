@@ -26,8 +26,8 @@ import pathlib
 import pytest
 import yaml
 
-from mongla_manager.bringup_check import (FAIL, PASS, WARN,
-                                          _check_model_separation)
+from mongla_manager.bringup_grade import FAIL, PASS, WARN
+from mongla_manager.bringup_host import _check_model_separation
 
 _MODELS = (pathlib.Path(__file__).resolve().parents[3]
            / 'src' / 'mongla_vision' / 'models')
@@ -44,7 +44,7 @@ def _write(d, stem, sep):
 def fake_models(tmp_path, monkeypatch):
     """A models dir we control, so the check is tested rather than the
     contents of the real one -- which changes when a model is retired."""
-    import mongla_manager.bringup_check as bc
+    import mongla_manager.bringup_host as bc
     monkeypatch.setattr(bc, '_models_dirs', lambda: [str(tmp_path)])
     return tmp_path
 
