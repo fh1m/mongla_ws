@@ -38,8 +38,8 @@ can fix.
 
 ### 3. Detect, on a chip built for it
 
-The Hailo-8 runs the network. Measured: **80.9 Hz** standalone, **53.9 Hz** through the live
-ROS graph, **18.0 ms** from photon to detection. Segmentation masks are decoded without ever
+The Hailo-8 runs the network. Measured: **99.0 Hz** standalone (re-taken after the B-61
+colour fix), **53.9 Hz** through the live ROS graph (older, not yet re-taken), **18.0 ms** from photon to detection. Segmentation masks are decoded without ever
 leaving integer arithmetic — 31.5 ms down to **0.93 ms**, bit-for-bit identical.
 
 The detector picks its runtime from the artifact it is given: a Hailo binary (`.hef`) on the

@@ -1787,10 +1787,10 @@
       <span>23× fresher, by keeping only the newest frame instead of every frame in order.</span>
     </div>
     <div class="pair">
-      <span class="silk">Detection · what ROS costs</span>
-      <div class="bar was"><i style="--w:100%"></i><b>80.9 Hz</b><em>Hailo-8, standalone</em></div>
-      <div class="bar"><i style="--w:66.6%"></i><b>53.9 Hz</b><em>through the live graph</em></div>
-      <span>A third of the chip's rate is spent getting frames through the graph.</span>
+      <span class="silk">Detection · two rates, one run owed</span>
+      <div class="bar was"><i style="--w:100%"></i><b>99.0 Hz</b><em>Hailo-8, standalone</em></div>
+      <div class="bar"><i style="--w:54.4%"></i><b>53.9 Hz</b><em>through the live graph, an older run</em></div>
+      <span>Taken in different sessions on different models, so the gap is not yet a cost. One run measuring both is owed.</span>
     </div>
     <div class="pair">
       <span class="silk">Field of view · what water does</span>
@@ -3677,8 +3677,8 @@
       cite: ['Jacob et al., 2017 — integer-arithmetic-only inference', 'https://arxiv.org/abs/1712.05877'],
       src: 'mongla_vision/detector_node.py · perception/hailo-vision.md', state: 'bench' },
     { n: 'the graph', num: '53.9', unit: 'Hz', lab: 'detections, through ROS', ms: 0,
-      title: 'A third of the rate goes on moving results',
-      body: 'Standalone the detector runs at <b>80.9 Hz</b>. Wired into the ROS graph — serialise, publish, deliver — it reaches the rest of the vehicle at <b>53.9</b>. Nothing is broken: that is what it costs to hand a result to another process.',
+      title: 'Two rates, not yet one cost',
+      body: 'Standalone the detector runs at <b>99.0 Hz</b>. Through the ROS graph — serialise, publish, deliver — the rest of the vehicle saw <b>53.9</b>, but in an older run on another model. The gap is probably the cost of handing a result to another process; until one run measures both on one model, it is not a measured cost.',
       theory: 'ROS 2 publishes over DDS, and the measured cost of that hop is not noise — it is the dominant term for small, frequent messages, and it grows with the number of subscribers. Knowing the shape of that curve is why the vehicle publishes detections once and lets consumers filter, rather than publishing per-consumer.',
       cite: ['Maruyama et al., 2016 — exploring the performance of ROS 2', 'https://doi.org/10.1145/2968478.2968502'],
       src: 'mongla_vision/detector_node.py → /mongla/detections', state: 'bench' },
@@ -3896,11 +3896,11 @@
     ctx.moveTo(490, 185); ctx.lineTo(690, 185); ctx.stroke();
     txt('serialise', 230, 170, INK3, 10); txt('deliver', 560, 170, INK3, 10);
     // the two rates
-    txt('80.9 Hz standalone', 120, 290, INK3, 12);
+    txt('99.0 Hz standalone', 120, 290, INK3, 12);
     ctx.fillStyle = 'rgba(255,255,255,.10)'; ctx.fillRect(120, 300, 640, 12);
     txt('53.9 Hz through the graph', 120, 342, RED, 12, 700);
-    ctx.fillStyle = RED; ctx.fillRect(120, 352, 640 * (53.9 / 80.9), 12);
-    txt('a third of the chip’s rate is spent handing the result to another process',
+    ctx.fillStyle = RED; ctx.fillRect(120, 352, 640 * (53.9 / 99.0), 12);
+    txt('two runs, two models: what the hop costs is still owed',
         120, 392, INK3, 11);
   }
 

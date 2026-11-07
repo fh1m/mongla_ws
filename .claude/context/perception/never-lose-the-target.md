@@ -171,9 +171,10 @@ InferModel run_async + wait  0.05 ms late,  0.0 %
 The win was **the GIL, not the chip**. Anyone who re-opens this item looking
 for throughput will re-measure 1.00x.
 
-**Caution:** The real remaining gap is the graph, not the accelerator: **80.9 Hz
-standalone against 53.9 Hz through the ROS graph**. That is where the
-throughput went, and it has not been attacked.
+**Caution:** The likely remaining gap is the graph, not the accelerator: **99.0 Hz
+standalone against 53.9 Hz through the ROS graph**. The two were taken in different
+sessions on different models, so the gap is not yet a measured cost: one run taking
+both on one model is owed (measured-bars §3), and nothing has attacked it.
 
 
 ---
