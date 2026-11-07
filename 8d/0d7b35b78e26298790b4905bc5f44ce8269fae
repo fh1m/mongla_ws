@@ -1,0 +1,27 @@
+docs/assets/site.css
+  s_b4c45e3235679b::t_7787f5dd449f19 1804
+src/mongla_planner/mongla_planner/vision_dsl.py
+  s_b4c45e3235679b::t_15b2f396fbb15e 57,104
+.claude/context/platform/ros2-conventions.md
+  s_b4c45e3235679b::t_ff309c6f562cbe 32
+src/mongla_control/mongla_control/motion_vision/control.py
+  s_b4c45e3235679b::t_15b2f396fbb15e 33
+.claude/context/wiki/Home.md
+  s_b4c45e3235679b::t_8b06940681e1f0 136-137
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "8d0d7b35b78e26298790b4905bc5f44ce8269fae",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
