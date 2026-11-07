@@ -191,6 +191,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `detection/factory.py` | Pick a detector backend from the resolved model path. One seam, three callers. |
 | `detection/gpu.py` | single decision point for the .pt path on a dev box. |
 | `detection/hailo.py` | Hailo-8 detector backend: a compiled ``.hef`` behind the same `Detector` API. |
+| `detection/hailo_seg.py` | `HailoSegDetector`: a raw segmentation HEF behind the same `Detector` API. |
 | `detection/messages.py` | Convert internal Detection objects to vision_msgs. |
 | `detection/preprocess.py` | Contrast preprocessing for underwater frames, measured on real footage. |
 | `detection/profiles.py` | ONE WORD instead of five knobs, because competition day is not the time. |
