@@ -111,7 +111,7 @@ already inside the board and had nowhere to go until we asked.
 | Capability | How it works | Evidence | State |
 |---|---|---|---|
 | Detection hardware | a **Hailo-8** that does nothing else | `mongla_vision/detection/hailo.py` | BENCH |
-| Detection rate | **80.9 Hz** standalone, **53.9 Hz** through the live ROS graph | `measured-bars.md` §3 | BENCH |
+| Detection rate | **99.0 Hz** standalone (re-taken after B-61), **53.9 Hz** through the live ROS graph (older, not re-taken) | `measured-bars.md` §3 | BENCH |
 | Photon to detection | **18.0 ms** median | `measured-bars.md` §3 | BENCH |
 | Frame freshness | a mailbox that keeps the newest: **16.9 ms** stale against 396 ms | `measured-bars.md` §3; `cameras/v4l2_mailbox.py` | BENCH |
 | Segmentation | decoded without leaving the quantised domain: 31.5 ms → **0.93 ms**, bit-exact | `measured-bars.md` (Hailo segmentation); `detection/seg_decode.py` | BENCH |

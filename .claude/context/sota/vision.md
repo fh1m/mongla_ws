@@ -25,8 +25,8 @@
 | **pose** | `anchor/pose.py` | IPPE for the interval, **SQPnP** for the point estimate (p90 yaw 1.40° vs 3.38° at our 1.55 px noise). planar **flip ambiguity is worst head-on**, which is the firing geometry |
 | **flow** | `flow/flow_node.py` (1 405 lines) | the downward camera as the DVL substitute. `v = h·(flow_px/dt − f·ω)/f` — rotation subtracted **before** scaling. Measured: 3 × 30 cm slides, worst error **1.09 cm**; noise floor 0.57 mm/s; de-rotation **575.7 → 57.1 mm/s** on pure rotation |
 
-Measured end to end: **18.0 ms** photon → detection; **80.9 Hz** standalone, **53.9 Hz** through
-the ROS graph; **98.0 Hz** pipeline against `hailortcli --hw-only` at 97.9 FPS — the host is at
+Measured end to end: **18.0 ms** photon → detection; **99.0 Hz** standalone, **53.9 Hz** through
+the ROS graph (an older run, on another model); **98.0 Hz** pipeline against `hailortcli --hw-only` at 97.9 FPS — the host is at
 100 % of the chip.
 
 ### 1.2 The model-production path — the part never examined

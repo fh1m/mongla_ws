@@ -87,8 +87,8 @@ Every row measured on this vehicle. Cite the round before reusing one.
 |---|---|---|
 | capture → frame available (mailbox) | **16.9 ms** staleness (vs **396 ms** on a plain queue) | round 30 |
 | photon → detections, end to end | **18.0 ms** median | round 32 |
-| detector, Hailo-8, standalone | **80.9 Hz** | round 26 |
-| detector, through the ROS graph | **53.9 Hz** | round 26 |
+| detector, Hailo-8, standalone | **99.0 Hz** (was 80.9 before the B-61 colour fix) | measured-bars §3, re-taken 2026-09-25 |
+| detector, through the ROS graph | **53.9 Hz** (not re-taken; another model, another session) | round 26 |
 | control loop, srot | **49.86 Hz** soaked 90 s, 0.00 % late ticks | round 26 |
 | `ATTITUDE` feedback | **50 Hz** (firmware floor `RATE_MIN_MS` = 20 ms) | round 26 |
 | `MANUAL_CONTROL` uplink | ≥ 10 Hz required; authority ramps to zero between `MANUAL_FRESH_MS` 1000 and `MANUAL_DECAY_MS` 1500 | firmware |

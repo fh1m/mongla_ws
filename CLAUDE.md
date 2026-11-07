@@ -215,8 +215,8 @@ Older context files mention `/mongla/arm`, `/mongla/depth_cmd`, `Attitude.msg`,
 
 ## 4. Vision, in brief
 
-Hailo-8 detection (measured **80.9 Hz** standalone, **53.9 Hz** through the ROS graph, 18.0 ms
-photon-to-detection), a camera **mailbox** that keeps the newest frame (16.9 ms stale vs
+Hailo-8 detection (measured **99.0 Hz** standalone on the fixed colour path; **53.9 Hz** through
+the ROS graph, an older figure not yet re-taken; 18.0 ms photon-to-detection -- measured-bars §3), a camera **mailbox** that keeps the newest frame (16.9 ms stale vs
 396 ms for a queue), per-camera calibration measured in water (**46.7°**, not the datasheet's
 63.8° in air), flat-port refraction correction in `optics.py`, and a lock ladder sized against
 **71 real detection gaps**.
