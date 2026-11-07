@@ -1,0 +1,35 @@
+.claude/context/upstream/README.md
+  s_b4c45e3235679b::t_31e6bb8e4af735 13-14
+src/mongla_manager/test/test_mission_keepalive.py
+  s_b4c45e3235679b::t_6d29ea84597378 76-78,82,122-154
+src/mongla_manager/mongla_manager/node_support.py
+  s_b4c45e3235679b::t_0f1e659b9d9acf 124-136
+src/mongla_control/test/test_half_turn_has_a_direction.py
+  s_b4c45e3235679b::t_831dff23e02ea3 1-95
+.claude/context/upstream/control-only-swim.md
+  s_b4c45e3235679b::t_31e6bb8e4af735 1-27
+src/mongla_control/mongla_control/mongla.py
+  s_b4c45e3235679b::t_72e963918aa519 54-58,172,175-212
+src/mongla_manager/mongla_manager/node_health.py
+  s_b4c45e3235679b::t_0f1e659b9d9acf 11-12,48,72-89
+  s_b4c45e3235679b::t_ad1dda805a4de2 1
+  s_b4c45e3235679b::t_30dbdc803c231d 90
+.claude/context/BUGS.md
+  s_b4c45e3235679b::t_976d1da4a93a77 65-96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "66089326345f275a00a9ed0c82d8e25c6a4d4dfb",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
