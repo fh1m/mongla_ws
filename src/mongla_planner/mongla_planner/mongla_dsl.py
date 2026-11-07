@@ -157,6 +157,7 @@ from .model_context import ModelRegistry
 from .dsl_cameras import CameraMixin
 from .dsl_detections import SeeMixin
 from .dsl_detector import DetectorMixin
+from .dsl_heading import HeadingMixin
 from .dsl_position import WhereMixin
 from .dsl_support import _to_float
 from .vision_dsl import _VisionDSL  # noqa: F401 -- re-exported; used by MonglaMission
@@ -195,7 +196,7 @@ class FireOutcome:
         return self.fired
 
 
-class MonglaMission(PlanMixin, ReportMixin, SeeMixin, WhereMixin, CameraMixin, DetectorMixin):
+class MonglaMission(PlanMixin, ReportMixin, SeeMixin, WhereMixin, HeadingMixin, CameraMixin, DetectorMixin):
     """Mission-author API. Wraps MonglaClient with human verbs + sticky context.
 
     Parameters
