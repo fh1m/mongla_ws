@@ -234,6 +234,27 @@ client.last_goal_id                    # the same 8 hex characters the manager l
 | `MoveTimeout` | no result inside the budget |
 | `TaskAbandoned` | a task deadline passed; the goal was cancelled |
 
+`MoveFailed` (and `MoveTimeout`, which is one) carries **how** it ended, as `exc.code` and
+`exc.code_name`, the same values as `Move.Result.code`:
+
+| code | means | what a mission usually does |
+|---|---|---|
+| `DENIED` | refused before it started: an unknown verb, a bad field | a bug in the mission; stop |
+| `FAILED` | could not be done: the board's FAILED (often the barometer), or an exception | read `connect --watch`; surface |
+| `TIMEOUT` | a deadline passed with no answer | retry once, or move on |
+| `ABORTED` | cancelled, by the operator or an abort | stop; someone meant it |
+| `PREEMPTED` | a newer goal took over | usually expected |
+
+```python
+try:
+    mongla.move_forward(4.0, gain=40)
+except MoveFailed as exc:
+    if exc.code == Move.Result.TIMEOUT:
+        mongla.move_forward(4.0, gain=40)        # one retry
+    else:
+        raise
+```
+
 The client blocks on purpose. A mission is a script, and a script that reads top to bottom is
 one a tired person can debug at the poolside at midnight.
 

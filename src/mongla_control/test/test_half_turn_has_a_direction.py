@@ -38,7 +38,7 @@ class _Facade:
         ok = self._fail_leg is None or len(self.legs) != self._fail_leg
         return SimpleNamespace(success=ok, message='done' if ok else 'stalled')
 
-    def _make_result(self, success, message, final_value=None):
+    def _make_result(self, success, message, final_value=None, code=None):
         return SimpleNamespace(success=success, message=message)
 
 

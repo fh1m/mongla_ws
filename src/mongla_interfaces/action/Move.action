@@ -77,8 +77,8 @@ bool    lock_target        # vision_align: once a target is acquired, steer to t
 float32 ctrl_conf          # vision_align: control-side min detection score to accept a box as
                            #   the target (0 = off; distinct from the detector's global conf)
 float32 range_gain_floor   # vision_align/move: lat/depth kp multiplier when the bbox FILLS the
-                           #   frame (close) -- softens gain to stop the close-in overshoot of a
-                           #   20 kg hull (1.0 = off, ~0.3 = gentle; 0 = use vision.range_gain_floor)
+                           #   frame (close) -- softens gain to stop the close-in overshoot of the
+                           #   hull (1.0 = off, ~0.3 = gentle; 0 = use vision.range_gain_floor)
 float32 ki_lat             # vision_align: lateral integral gain, cancels the steady-current
                            #   offset of the open-loop lateral axis during the hold (0 = off)
 float32 settle_px          # vision_align: settle gate -- only declare aligned once the hull is
@@ -166,7 +166,19 @@ float32 fire_gap           # vision_align: seconds BETWEEN channels when firing 
 #                         seen frame (+x = right, +y = below); NaN = never seen.
 #   fill_frac           = bbox fill fraction at exit [0..1] (vision_move; 0 align).
 #   elapsed_s           = verb duration. (Non-vision verbs leave these NaN/0.)
+# HOW it ended, for a mission to branch on: a refusal by the board, a deadline
+# and a cancel are different facts, and `success` alone cannot tell them apart.
+# The values are mongla_control/fc/base.py's, and a test holds the two equal.
+# The vision verbs report SUCCEEDED here (the verb ran) and their own outcome
+# in final_value, as above.
+uint8 SUCCEEDED=0   # the board, or the host, did what was asked
+uint8 PREEMPTED=1   # a newer goal displaced this one before or while it ran
+uint8 FAILED=2      # it could not be done (the board's FAILED, or an exception)
+uint8 DENIED=3      # refused before it started: unknown verb, bad field
+uint8 TIMEOUT=4     # a deadline passed with no terminal answer
+uint8 ABORTED=5     # cancelled, by the operator or an abort
 bool    success
+uint8   code
 string  message
 float32 final_value
 float32 error_value
