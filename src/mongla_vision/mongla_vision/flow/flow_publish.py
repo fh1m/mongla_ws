@@ -73,7 +73,8 @@ class FlowPublishMixin:
         m.data = float(dist)
         self._pub_dist.publish(m)
         dbg = Float32MultiArray()
-        dbg.data = [float(dist), float(self._last_height or 0.0),
+        dbg.data = [float(dist), (float('nan') if self._last_height is None
+                                     else float(self._last_height)),
                     float(self._n_tracks), 1.0 if self._acc.active else 0.0,
                     float(self._last_quality)]
         self._pub_debug.publish(dbg)

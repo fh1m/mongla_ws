@@ -201,7 +201,6 @@ with no summary line shows as *(no summary)* until it gets one.
 | `detection/rangecrop.py` | Trade field of view for range, automatically, when the target is far. |
 | `detection/seg_decode.py` | Host-side decode of a RAW YOLOv8/v11-seg head, in the QUANTISED domain. |
 | `detection/yolo.py` | Ultralytics YOLO11 (or any compatible model file). |
-| `flow/distance_estimation_node.py` | downward-camera optical-flow distance (DVL-free). |
 | `flow/flow_checks.py` | FlowVelocityNode, part 2 of 5: the checks that decide a measurement may be published. |
 | `flow/flow_constants.py` | Measured constants shared by `flow_node` and its mixins. |
 | `flow/flow_floor.py` | FlowVelocityNode, part 3 of 5: what the floor itself says -- tile grid heading and lane lines. |

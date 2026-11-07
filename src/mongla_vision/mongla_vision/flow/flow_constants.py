@@ -153,3 +153,10 @@ FOCAL_PARAMS_WIDTH = 640.0
 # coupling is S = -1.058 (roll) / -0.830 (pitch) about the LENS, and the node
 # cancels at g = -S (pinned by TestDeRotationSignConvention, exactly, offline).
 _GYRO_GAIN_LENS_PIVOT = (1.058, 0.830)
+
+
+# A depth older than this gives no height (BUGS B10). Height multiplies every
+# velocity, and a held height from before the link stalled is a wrong scale
+# the caller cannot see. Two seconds is the bar the earlier distance node
+# shipped with (git history), and well above ordinary depth jitter.
+HEIGHT_STALE_S = 2.0

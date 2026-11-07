@@ -30,11 +30,10 @@ def test_an_offset_that_puts_the_lens_under_the_floor_is_refused():
     assert height_above_floor(1.0, -0.95, 0.10) is None
 
 
-def test_both_flow_nodes_read_the_offset_from_the_one_frames_file():
+def test_flow_node_reads_the_offset_from_the_one_frames_file():
     """No capability ships unreachable: both callers must pass it."""
     import pathlib
     root = pathlib.Path(__file__).resolve().parents[1] / 'mongla_vision' / 'flow'
-    for name in ('flow_node.py', 'distance_estimation_node.py'):
-        src = (root / name).read_text(encoding='utf-8')
-        assert 'baro_to_downward_cam_z()' in src, name
-        assert 'self._lens_below_baro)' in src, name
+    src = (root / 'flow_node.py').read_text(encoding='utf-8')
+    assert 'baro_to_downward_cam_z()' in src
+    assert 'self._lens_below_baro)' in src

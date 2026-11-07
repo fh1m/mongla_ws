@@ -1,6 +1,6 @@
 """Optical flow -> BODY VELOCITY. The observation an estimator can actually use.
 
-Why velocity and not distance. `distance_estimation_node` accumulates metres
+Why velocity and not distance. A distance accumulator (`flow_math`) sums metres
 travelled, which is an INTEGRAL: its error grows without bound and it cannot be
 fused as a measurement, because a filter needs a quantity with a stationary
 error, not a running sum of one. Velocity is that quantity. This module

@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """flow_node -- the bottom camera AS A VELOCITY SENSOR. Our DVL substitute.
 
-On the vehicle (`vision_pi.launch.py`, `flow:=true`) this replaces
-`distance_estimation_node`, which only the generic stack still starts
-(`vision.launch.py distance:=true`). It folds the two flow paths that had
-grown apart: the one that was WIRED but had no refusals (`distance_traveled`,
+Started by `flow:=true` in every vision launch (`vision_pi`, `vision`,
+`vision_dual`). It replaced `distance_estimation_node` (in git history) and
+folds the two flow paths that had grown apart: the one that was WIRED but had no refusals (`distance_traveled`,
 a scalar integral) and the one that had every refusal and NO CONSUMERS
 (`flow_velocity`). Neither was usable alone.
 
@@ -82,7 +81,7 @@ from mongla_vision.flow.flow_math import (
     robust_flow,
 )
 from mongla_vision.flow.flow_velocity import flow_velocity
-from .flow_constants import _LK_PARAMS
+from .flow_constants import _LK_PARAMS, HEIGHT_STALE_S
 from .flow_setup import FlowSetupMixin
 from .flow_checks import FlowChecksMixin
 from .flow_floor import FlowFloorMixin
@@ -232,6 +231,7 @@ class FlowVelocityNode(FlowSetupMixin, FlowChecksMixin, FlowFloorMixin, FlowPubl
         self._rate_buf: deque = deque(maxlen=128)
         self._yaw_rate_buf: deque = deque(maxlen=128)
         self._depth_m = None
+        self._depth_t = None
         self._yaw_deg = None
         self._last_height = None
         self._tile_m = float(self.get_parameter('tile_m').value)
@@ -610,18 +610,27 @@ class FlowVelocityNode(FlowSetupMixin, FlowChecksMixin, FlowFloorMixin, FlowPubl
         self._anchor_pts = self._bucketed_corners(gray)
         self._anchor_t = t
 
+    def _fresh_height(self, now: float):
+        """Height above the floor from a depth measured no more than
+        HEIGHT_STALE_S before `now` (host monotonic), else None. None is the
+        honest answer: the caller refuses the frame rather than scaling it by
+        a height from before the link stalled."""
+        if self._depth_m is None or self._depth_t is None:
+            return None
+        if now - self._depth_t > HEIGHT_STALE_S:
+            return None
+        return height_above_floor(self._pool_depth, self._depth_m,
+                                  self._lens_below_baro)
+
     def _evaluate(self, flow, disp, dt, t, n_used) -> None:
         ok, why = self._scale_ready()
         if not ok:
             self._refuse(why)
             return
 
-        height = None
-        if self._depth_m is not None:
-            height = height_above_floor(self._pool_depth, self._depth_m,
-                                        self._lens_below_baro)
-        if height is not None:
-            self._last_height = height
+        # Recomputed every frame from a FRESH depth, never held: when depth
+        # stops arriving the height goes with it (B10).
+        self._last_height = self._fresh_height(time.monotonic())
         h = self._last_height
         # The floor's own answer, when it has one. Preferred over the
         # pool-depth path because it is a direct measurement of the quantity we
@@ -632,7 +641,7 @@ class FlowVelocityNode(FlowSetupMixin, FlowChecksMixin, FlowFloorMixin, FlowPubl
         if self._tile_height is not None:
             h = self._tile_height
         if h is None:
-            self._refuse('no depth yet, so no height above the floor')
+            self._refuse('no fresh depth, so no height above the floor')
             return
 
         # The MEAN rate over the baseline, not a midpoint sample: with an

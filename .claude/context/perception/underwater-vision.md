@@ -192,7 +192,8 @@ Ranked by measured evidence, not by novelty.
    any (`degrees: 0.0`, `perspective: 0.0`, no blur). The models have never
    seen a blurred frame, and §2 says most of our water is blurry.
 5. **Ego-motion compensation.** EMAP cuts ID switches 73 % on OC-SORT — our
-   tracker. We publish the body rates and `rotation_flow_px()` already exists.
+   tracker. We publish the body rates, and the image shift is `f * rate * dt` (as `flow_node`
+   de-rotates).
 
 ## 6. Disproved, and kept
 

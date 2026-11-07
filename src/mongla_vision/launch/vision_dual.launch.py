@@ -59,6 +59,7 @@ from launch.event_handlers   import OnProcessExit
 from launch.events           import Shutdown
 from launch.substitutions    import LaunchConfiguration, PythonExpression
 from launch_ros.actions      import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 _QUIET = ['--log-level', 'warn']
 
@@ -160,18 +161,15 @@ def generate_launch_description():
                               description='Loop the forward video at EOF (video source only).'),
         DeclareLaunchArgument('dwn_loop',     default_value='true',
                               description='Loop the downward video at EOF (video source only).'),
-        # Downward optical-flow distance estimator (DVL-free odometry). Off by
-        # default; distance:=true starts the node so calc_distance('start'/'stop')
-        # works. LK flow is CPU (does not fight the detector for GPU); it runs on
-        # the downward camera stream with the detectors paused (calc_distance owns
-        # that switch, then auto-restores the prior camera for vision missions).
-        DeclareLaunchArgument('distance',        default_value='false',
-                              description='Start the downward optical-flow distance node '
-                                          '(enables calc_distance start/stop).'),
-        DeclareLaunchArgument('pool_depth_m',    default_value='4.0',
-                              description='Water column surface->floor (m); metric scale for flow.'),
-        DeclareLaunchArgument('camera_focal_px', default_value='500.0',
-                              description='Downward camera f_px (intrinsics calibration; scale rides on it).'),
+        # The downward camera as a velocity sensor (flow_node, the same node
+        # vision_pi starts). flow:=true is what makes calc_distance('start' /
+        # 'stop') answer: it publishes distance_traveled from GATED velocity.
+        DeclareLaunchArgument('flow',            default_value='false',
+                              description='Start flow_node on the downward camera '
+                                          '(velocity, and calc_distance start/stop).'),
+        DeclareLaunchArgument('pool_depth_m',    default_value='nan',
+                              description='Water depth in metres. REQUIRED with flow:=true -- '
+                                          'the node refuses to publish without it.'),
         # HUD readiness: pre-subscribe the distance topics so the panel is live the
         # instant calc_distance('start') fires (no first-switch lag), then the HUD
         # auto-follows back to the last active camera on stop.
@@ -280,15 +278,14 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('viewer')),
     )
 
-    distance_node = Node(
-        package='mongla_vision', executable='distance_estimation_node',
-        name='mongla_distance_estimator', output='screen', ros_arguments=_QUIET,
+    flow_node = Node(
+        package='mongla_vision', executable='flow_node',
+        name='mongla_flow_velocity', output='screen', ros_arguments=_QUIET,
         parameters=[{
-            'camera':          'downward',
-            'pool_depth_m':    LaunchConfiguration('pool_depth_m'),
-            'camera_focal_px': LaunchConfiguration('camera_focal_px'),
+            'camera':       'downward',
+            'pool_depth_m': ParameterValue(LaunchConfiguration('pool_depth_m'), value_type=float),
         }],
-        condition=IfCondition(LaunchConfiguration('distance')),
+        condition=IfCondition(LaunchConfiguration('flow')),
     )
 
     shutdown_on_exit = RegisterEventHandler(
@@ -306,7 +303,7 @@ def generate_launch_description():
                  'dwn_conf', 'dwn_model_conf'),
         tracker('forward',  'fwd_conf'),
         tracker('downward', 'dwn_conf'),
-        distance_node,
+        flow_node,
         viewer,
         shutdown_on_exit,
     ])

@@ -64,7 +64,6 @@
 | `ros2 run mongla_vision calibrate` | `mongla_vision.calibration.guide:main` |
 | `ros2 run mongla_vision calibrate_solve` | `mongla_vision.calibration.solver:main` |
 | `ros2 run mongla_vision depth_estimation_node` | `mongla_vision.depth.depth_estimation_node:main` |
-| `ros2 run mongla_vision distance_estimation_node` | `mongla_vision.flow.distance_estimation_node:main` |
 | `ros2 run mongla_vision flow_node` | `mongla_vision.flow.flow_node:main` |
 | `ros2 run mongla_vision mission_web` | `mongla_vision.web.mission_web_node:main` |
 
@@ -233,9 +232,8 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `max_predict_s` | `1.5` |  |
 | `depth` | `false` | Start depth_estimation_node (monocular vis_range) |
 | `depth_model` | `` | DA V2-Small ONNX path; empty = bbox-area fallback |
-| `distance` | `false` | Start the optical-flow distance node (calc_distance). |
-| `pool_depth_m` | `4.0` | Water column surface->floor (m); metric scale for flow. |
-| `camera_focal_px` | `500.0` | Camera f_px (intrinsics calibration; distance scale rides on it). |
+| `flow` | `false` | Start flow_node on the downward camera (velocity, and calc_distance start/stop). |
+| `pool_depth_m` | `nan` | Water depth in metres. REQUIRED with flow:=true -- the node refuses to publish without it. |
 | `hud_distance` | `true` | HUD pre-arms the distance panel. |
 
 ### `mongla_vision/vision_dual.launch.py`
@@ -270,9 +268,8 @@ WARNING: `ros2 launch` **silently ignores** a `name:=value` the file does not de
 | `dwn_video` | `` | Video file for the DOWNWARD camera (e.g. a bin clip). Set => downward runs off the file; empty => live webcam. |
 | `fwd_loop` | `true` | Loop the forward video at EOF (video source only). |
 | `dwn_loop` | `true` | Loop the downward video at EOF (video source only). |
-| `distance` | `false` | Start the downward optical-flow distance node (enables calc_distance start/stop). |
-| `pool_depth_m` | `4.0` | Water column surface->floor (m); metric scale for flow. |
-| `camera_focal_px` | `500.0` | Downward camera f_px (intrinsics calibration; scale rides on it). |
+| `flow` | `false` | Start flow_node on the downward camera (velocity, and calc_distance start/stop). |
+| `pool_depth_m` | `nan` | Water depth in metres. REQUIRED with flow:=true -- the node refuses to publish without it. |
 | `hud_distance` | `true` | HUD pre-arms the distance panel (shows on calc_distance). |
 
 ### `mongla_vision/vision_pi.launch.py`
@@ -497,17 +494,6 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `preprocess_clip` | `0.0` |
 | `range_crop` | `-1` |
 | `vision_profile` | `''` |
-
-**`mongla_vision/flow/distance_estimation_node.py`** — 6 parameters
-
-| parameter | default |
-|---|---|
-| `camera` | `'downward'` |
-| `pool_depth_m` | `4.0` |
-| `camera_focal_px` | `500.0` |
-| `rot_sign_x` | `1.0` |
-| `rot_sign_y` | `1.0` |
-| `flow_smooth_alpha` | `0.4` |
 
 **`mongla_vision/flow/flow_node.py`** — 38 parameters
 

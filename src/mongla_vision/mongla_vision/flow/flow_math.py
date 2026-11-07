@@ -1,8 +1,7 @@
 """flow_math -- pure functions for downward-camera optical-flow distance.
 
 No ROS, no OpenCV imports here -- just the metric/geometry so it is unit-testable
-in isolation (the node in distance_estimation_node.py wires these to LK flow +
-topics). The method (given, not reinvented):
+in isolation (flow_node.py wires these to LK flow and topics). The method (given, not reinvented):
 
     height_m         = pool_depth_m + depth_m          # depth_m < 0 below surface
     flow_rot_px      = f_px * [pitch_rate, roll_rate] * dt
@@ -59,28 +58,6 @@ def height_above_floor(pool_depth_m: float, depth_m: float,
     if lens_below_baro_m is not None:
         h -= float(lens_below_baro_m)
     return h if h > 1e-3 else None
-
-
-def rotation_flow_px(f_px: float, pitch_rate: float, roll_rate: float,
-                     dt: float) -> Tuple[float, float]:
-    """Rotation-induced image shift (px) over `dt` for a downward camera.
-
-    A pitch about the body Y-axis sweeps the ground vertically in the image;
-    a roll about the body X-axis sweeps it horizontally. Small-angle:
-    shift = f_px * rate * dt. Returns (dx_px, dy_px) = (roll term, pitch term)
-    in image axes -- x horizontal, y vertical. The node subtracts this from the
-    measured flow BEFORE projecting, so residual is pure translation.
-
-    NOTE the camera<->body axis mapping (which body rate drives which image
-    axis, and the signs) is mount-specific and CALIBRATED by the static-tilt
-    test; this returns the canonical mapping (image-y<-pitch, image-x<-roll),
-    the node applies a configured sign/swap on top.
-    """
-    dx = f_px * roll_rate  * dt
-    dy = f_px * pitch_rate * dt
-    return dx, dy
-
-
 
 
 def axis_unit(axis_yaw_rad: float, lateral: bool = False) -> Tuple[float, float]:

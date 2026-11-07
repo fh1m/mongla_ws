@@ -190,7 +190,8 @@ now.
 - **Ego-motion compensation.** [EMAP](https://arxiv.org/abs/2404.03110) cuts ID
   switches **73 %** on OC-SORT — our tracker — by decoupling camera motion from
   object trajectories. We publish body rates at 50 Hz (`/mongla/imu_rates`) and
-  `rotation_flow_px()` already computes the image shift. Not yet connected.
+  the image shift is `f * rate * dt`, the same sum `flow_node` de-rotates with.
+  Not yet connected.
   **Recorded so it is not re-derived: an IMM filter bank is the wrong tool** —
   our targets are static props and all apparent motion is ours.
 - ~~**Low-confidence second association.**~~ **MEASURED — see §7.** The

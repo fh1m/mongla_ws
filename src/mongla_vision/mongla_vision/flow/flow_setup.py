@@ -279,6 +279,9 @@ class FlowSetupMixin:
                 f'happening.')
         if not np.isnan(msg.depth_m):
             self._depth_m = float(msg.depth_m)
+            # The measurement's own instant, already on this host's monotonic
+            # clock: a depth's age is now minus when the board took it.
+            self._depth_t = t
             self._depth_hist.append((t, self._depth_m))
         if not np.isnan(msg.yaw_deg):
             self._yaw_deg = float(msg.yaw_deg)

@@ -178,14 +178,15 @@ def generate_launch_description():
                               description='Start depth_estimation_node (monocular vis_range)'),
         DeclareLaunchArgument('depth_model',   default_value='',
                               description='DA V2-Small ONNX path; empty = bbox-area fallback'),
-        # Downward optical-flow distance estimator (DVL-free). distance:=true starts
-        # it so calc_distance('start'/'stop') works (use with camera:=downward).
-        DeclareLaunchArgument('distance',        default_value='false',
-                              description='Start the optical-flow distance node (calc_distance).'),
-        DeclareLaunchArgument('pool_depth_m',    default_value='4.0',
-                              description='Water column surface->floor (m); metric scale for flow.'),
-        DeclareLaunchArgument('camera_focal_px', default_value='500.0',
-                              description='Camera f_px (intrinsics calibration; distance scale rides on it).'),
+        # The downward camera as a velocity sensor (flow_node, the same node
+        # vision_pi starts). flow:=true is what makes calc_distance('start' /
+        # 'stop') answer: it publishes distance_traveled from GATED velocity.
+        DeclareLaunchArgument('flow',            default_value='false',
+                              description='Start flow_node on the downward camera '
+                                          '(velocity, and calc_distance start/stop).'),
+        DeclareLaunchArgument('pool_depth_m',    default_value='nan',
+                              description='Water depth in metres. REQUIRED with flow:=true -- '
+                                          'the node refuses to publish without it.'),
         DeclareLaunchArgument('hud_distance',    default_value='true',
                               description='HUD pre-arms the distance panel.'),
     ]
@@ -292,16 +293,15 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('depth')),
     )
 
-    distance_node = Node(
-        package='mongla_vision', executable='distance_estimation_node',
-        name='mongla_distance_estimator', output='screen', ros_arguments=_QUIET,
+    flow_node = Node(
+        package='mongla_vision', executable='flow_node',
+        name='mongla_flow_velocity', output='screen', ros_arguments=_QUIET,
         additional_env=_QUIET_ENV,
         parameters=[{
-            'camera':          cam,
-            'pool_depth_m':    LaunchConfiguration('pool_depth_m'),
-            'camera_focal_px': LaunchConfiguration('camera_focal_px'),
+            'camera':       cam,
+            'pool_depth_m': ParameterValue(LaunchConfiguration('pool_depth_m'), value_type=float),
         }],
-        condition=IfCondition(LaunchConfiguration('distance')),
+        condition=IfCondition(LaunchConfiguration('flow')),
     )
 
     lock_node = Node(
@@ -338,5 +338,5 @@ def generate_launch_description():
 
     return LaunchDescription(
         args + [camera_node, detector_node, tracker_node, lock_node, depth_node,
-                distance_node, image_viewer, shutdown_on_viewer_exit]
+                flow_node, image_viewer, shutdown_on_viewer_exit]
     )

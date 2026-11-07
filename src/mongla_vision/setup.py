@@ -52,7 +52,6 @@ setup(
             'calibrate           = mongla_vision.calibration.guide:main',
             'calibrate_solve     = mongla_vision.calibration.solver:main',
             'depth_estimation_node = mongla_vision.depth.depth_estimation_node:main',
-            'distance_estimation_node = mongla_vision.flow.distance_estimation_node:main',
             'flow_node = mongla_vision.flow.flow_node:main',
             'mission_web         = mongla_vision.web.mission_web_node:main',
         ],

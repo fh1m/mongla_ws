@@ -426,6 +426,8 @@ def generate_launch_description():
             'viewer':        LaunchConfiguration('viewer'),
             'lock':          LaunchConfiguration('lock'),
             'lock_class':    LaunchConfiguration('lock_class'),
+            # Same meaning in both: start flow_node on the downward camera.
+            'flow':          LaunchConfiguration('flow'),
             'pool_depth_m':  LaunchConfiguration('pool_depth_m'),
             # Forwarded EXPLICITLY: both launches declare `paused`, so leaving
             # it out does not keep it out -- an include inherits every parent

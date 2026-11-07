@@ -15,7 +15,9 @@ this" was turned into a number that means "we measured zero".
        scale, with a plausible number and no warning.
 
 These test the accumulator contract and the freshness rule directly; the node's
-own wiring is covered by test_flow_node.py.
+own wiring is covered by test_flow_node.py. The node these were written
+against (distance_estimation_node) was retired for flow_node; the B10 tests
+now guard flow_node, which had lost the fix.
 """
 import sys
 from pathlib import Path
@@ -76,28 +78,47 @@ def test_a_real_height_integrates_proportionally():
 # --------------------------------------------------------------------------- #
 #  B10 -- the latch expires
 # --------------------------------------------------------------------------- #
-def test_the_height_latch_expires():
-    """`_fresh_height` returns the height while fresh and None once stale."""
-    from mongla_vision.flow import distance_estimation_node as dn
+def _flow_stub(depth_m, rx):
+    from mongla_vision.flow.flow_node import FlowVelocityNode
 
     class _Stub:
-        _last_height = 0.9
-        _last_height_t = 100.0
-        _fresh_height = dn.DistanceEstimationNode._fresh_height
+        _pool_depth = 1.6
+        _lens_below_baro = 0.0
+        _depth_m = depth_m
+        _depth_t = rx
+        _fresh_height = FlowVelocityNode._fresh_height
+    return _Stub()
 
-    s = _Stub()
-    assert s._fresh_height(100.0) == 0.9                        # same instant
-    assert s._fresh_height(100.0 + dn.HEIGHT_STALE_S - 0.01) == 0.9
-    assert s._fresh_height(100.0 + dn.HEIGHT_STALE_S + 0.01) is None
-    assert dn.HEIGHT_STALE_S > 1.0, 'must not gate on ordinary depth jitter'
+
+def test_the_height_latch_expires():
+    """flow_node's `_fresh_height` gives the height while the depth is fresh
+    and None once it is stale -- the B10 fix, carried over when the old
+    distance node was retired."""
+    from mongla_vision.flow.flow_constants import HEIGHT_STALE_S
+    s = _flow_stub(-0.7, 100.0)
+    assert s._fresh_height(100.0) == pytest.approx(0.9)          # same instant
+    assert s._fresh_height(100.0 + HEIGHT_STALE_S - 0.01) == pytest.approx(0.9)
+    assert s._fresh_height(100.0 + HEIGHT_STALE_S + 0.01) is None
+    assert HEIGHT_STALE_S > 1.0, 'must not gate on ordinary depth jitter'
 
 
 def test_a_height_that_never_arrived_is_None_not_zero():
-    from mongla_vision.flow import distance_estimation_node as dn
+    assert _flow_stub(None, None)._fresh_height(1.0) is None
 
-    class _Stub:
-        _last_height = None
-        _last_height_t = None
-        _fresh_height = dn.DistanceEstimationNode._fresh_height
 
-    assert _Stub()._fresh_height(1.0) is None
+def test_the_evaluation_asks_for_a_fresh_height_every_frame():
+    """The guard is only a guard if the frame path uses it: the height must
+    be recomputed from `_fresh_height`, never held from an earlier frame."""
+    import inspect
+    from mongla_vision.flow.flow_node import FlowVelocityNode
+    src = inspect.getsource(FlowVelocityNode._evaluate)
+    assert 'self._last_height = self._fresh_height(time.monotonic())' in src
+
+
+def test_the_debug_topic_reports_an_absent_height_as_nan():
+    """B05's rule on the output side: no height is NaN, not 0.0."""
+    import inspect
+    from mongla_vision.flow.flow_publish import FlowPublishMixin
+    src = inspect.getsource(FlowPublishMixin._publish_distance)
+    assert "float('nan') if self._last_height is None" in src
+    assert 'self._last_height or 0.0' not in src

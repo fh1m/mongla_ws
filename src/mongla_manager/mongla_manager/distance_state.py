@@ -3,7 +3,7 @@
 Mirrors VisionState's role: a manager-process ROS resource injected into the
 `Mongla` facade (as `distance_provider`) so the control package stays rclpy-free.
 The heavy optical-flow integration runs in
-`mongla_vision.flow.distance_estimation_node`; this just:
+`mongla_vision.flow.flow_node` (launch with flow:=true); this just:
   * subscribes /mongla/vision/<cam>/distance_traveled  (running metres, cached)
   * publishes /mongla/vision/<cam>/distance_control     (LATCHED String:
     'start_axial' | 'start_lateral' | 'stop')
@@ -81,5 +81,5 @@ class DistanceState:
             alive = self._last_rx >= self._start_t and self._last_rx > 0.0
         if not alive:
             return False, ('distance estimator not publishing '
-                           '(is distance_estimation_node running? launch distance:=true)'), dist
+                           '(is flow_node running? launch flow:=true pool_depth_m:=<m>)'), dist
         return True, 'stop', dist
