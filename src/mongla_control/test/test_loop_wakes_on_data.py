@@ -99,7 +99,7 @@ def test_no_fixed_rate_sleep_survives_in_the_loops():
     the searching path (where reaction time matters most) cannot keep the old
     sleep by accident. Three sites: align, move, and the post-stop verify."""
     src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_control'
-           / 'motion_vision.py')
+           / 'motion_vision')
     assert 'time.sleep(1.0 / LOOP_HZ' not in src
     assert src.count('_tick(self.c.vision_state)') == 2
     assert src.count('_tick(vision_state)') >= 1
@@ -110,6 +110,6 @@ def test_dt_is_measured_not_assumed():
     loop runs at detection rate instead of its nominal tick, a hard-coded
     period overstates both by up to 1.5x."""
     src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_control'
-           / 'motion_vision.py')
+           / 'motion_vision')
     assert 'dt = min(max(now - self._last_pass' in src, \
         'dt is not derived from the clock'

@@ -698,7 +698,7 @@ behave identically with `video_file` as with a live camera.
 
 ## 4. The math, in 30 lines
 
-The control engine is two P-loops on **pixel error** (`motion_vision.py`).
+The control engine is two P-loops on **pixel error** (`motion_vision/`).
 `gain` clamps every output; `err` (px) is the settle tolerance.
 
 **`align_loop`** — one tick @ 50 Hz:
@@ -741,7 +741,7 @@ if maintain_on:                     # optional lateral hold while driving
 - `gain` is a hard clamp on every output — the AUV never exceeds it.
 
 Reference implementation:
-[`src/mongla_control/mongla_control/motion_vision.py`](../../../src/mongla_control/mongla_control/motion_vision.py).
+[`src/mongla_control/mongla_control/motion_vision/`](../../../src/mongla_control/mongla_control/motion_vision/).
 
 ---
 
@@ -1549,7 +1549,7 @@ See `packages/README.md §3` for per-chunk expected outputs and `models/README.m
 
 - Board verbs (one `SROT_MOVE` each): `src/mongla_control/mongla_control/fc/srot_fc.py`
 - The verb registry:              `src/mongla_control/mongla_control/commands.py`
-- Vision loop body:               `src/mongla_control/mongla_control/motion_vision.py`
+- Vision loop body:               `src/mongla_control/mongla_control/motion_vision/`
 - Vision state cache:             `src/mongla_manager/mongla_manager/vision_state.py`
 - DSL surface:                    `src/mongla_planner/mongla_planner/mongla_dsl.py`
 - ROS param defaults:             `src/mongla_manager/mongla_manager/vision_tunables.py`; set them under `nodes:` in `~/.mongla/bringup.yaml`

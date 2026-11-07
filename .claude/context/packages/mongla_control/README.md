@@ -63,7 +63,8 @@ guessing. They actuate through `MANUAL_CONTROL` in STABILIZE at 50 Hz.
 
 ### One tick of `vision_align`
 
-Both loops are classes in `motion_vision.py`, `_Align` and `_Move`, over a shared `_VisionLoop`
+Both loops are classes in the `motion_vision/` package: `_Align` in `align.py` and `_Move` in
+`move.py`, over a shared `_VisionLoop` in `control.py`
 that owns the outcome, the frame clock, the lost-target ladder and the promise that every exit
 leaves the thrusters neutral. Each tick is a fixed sequence of named stages, so a stage can be
 read, and tested, on its own:
@@ -101,7 +102,7 @@ exception anywhere in a stage still stops the thrusters.
 | `fc/srot_params.py` · `fc/srot_bench.py` · `fc/srot_uplink.py` | parameters and the preflight checks; bench-only motor test / detect / tune; what the host sends the board it sees |
 | `fc/srot_payload.py` · `fc/_srot_base.py` | `SrotPayload` (fire(N) on board channel N); the shared names and the one MAVLink 2 import |
 | `fc/srot_protocol.py` · `fc/base.py` · `fc/port_guard.py` | wire constants, typed outcomes, one owner per port |
-| `motion_vision.py` · `motion_writers.py` · `motion_rates.py` | the two vision loops, what they write, and their tick rate |
+| `motion_vision/` · `motion_writers.py` · `motion_rates.py` | the two vision loops, what they write, and their tick rate |
 | `vision_verbs.py` | the verbs on top of those loops: mode gating, firing, evidence |
 | `allocation.py` · `actuation_model.py` | what the mixer will *actually* deliver, and what the board does with a demand |
 | `geometric_allocation.py` · `hydrodynamics.py` | the hull's real thruster geometry and what its shape implies |

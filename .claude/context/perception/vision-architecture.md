@@ -370,9 +370,9 @@ box.
 The control loop owns thrust; the planner asks for an outcome. Vision
 verbs are the bridge. The 2026-06 rewrite replaced the old 9-verb axis API
 with **exactly two** pixel-native verbs, `vision_align` and `vision_move`,
-backed by two loops in `mongla_control/motion_vision.py`:
+backed by two loops in `mongla_control/motion_vision/`:
 
-| Loop (`motion_vision.py`) | Action verb | Facade (`vision_verbs.py`) | DSL (`vision_dsl.py`) |
+| Loop (`motion_vision/`) | Action verb | Facade (`vision_verbs.py`) | DSL (`vision_dsl.py`) |
 |---------------------------|-------------|----------------------------|-----------------------|
 | `align_loop` | `vision_align` | `VisionVerbs.vision_align` | `mongla.vision.align` |
 | `move_loop`  | `vision_move`  | `VisionVerbs.vision_move`  | `mongla.vision.move`  |

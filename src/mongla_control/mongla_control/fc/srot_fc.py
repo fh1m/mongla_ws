@@ -914,21 +914,6 @@ class SrotFC(SrotHealth, SrotTelemetry, SrotBench, SrotUplink, SrotParams):
         self._command_long(sp.CMD_DO_SET_SERVO, p1=float(int(channel_1based)),
                             p2=float(clamped))
 
-    def set_relay(self, instance_0based: int, on: bool) -> None:
-        """DO_SET_RELAY (181): switch PCA9685 MOSFET `instance_0based` (0-based ->
-        PCA ch PCA_RELAY_BASE_CH + instance) on/off. Raw firmware match.
-
-        NOT used by the payload path: this is instance-addressed rather than
-        channel-addressed, it shares its mapping with the joystick relay buttons,
-        and its `PCA_RELAY_BASE_CH + param1` arithmetic is only bounds-checked on
-        the RESULT, so a negative instance silently reaches channels 1-8 (fw
-        `mav_commands.cpp:487-488`). `DO_SET_SERVO` addresses every channel by its
-        own number whatever its role, which is the honest primitive. Kept because
-        it is a truthful wrapper of a real command.
-        """
-        self._command_long(sp.CMD_DO_SET_RELAY, p1=float(int(instance_0based)),
-                            p2=(1.0 if on else 0.0))
-
     def set_servo_acked(self, channel_1based: int, us: int, timeout: float):
         """`set_servo` + the board's COMMAND_ACK result, or None if it never answered.
 

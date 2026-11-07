@@ -66,10 +66,6 @@ DEFERRED_FUNCTIONS = {
         'mixer headroom before clipping; the lateral I-term in motion_vision '
         'clamps on COMMAND saturation instead, and would consult this only once '
         'the mixer model is validated against the hull being built',
-    'src/mongla_control/mongla_control/fc/srot_fc.py:set_relay':
-        'raw DO_SET_RELAY, deliberately NOT the payload path (its own docstring: '
-        'instance-addressed, and a negative instance reaches channels 1-8); kept '
-        'for a bench relay test, never for fire()',
     'src/mongla_control/mongla_control/fc/srot_bench.py:motor_tune':
         'the board\'s MOTOR_TUNE; same shape as autotune(), which has '
         '`ros2 run mongla_manager autotune`. It needs the same entry point, and '

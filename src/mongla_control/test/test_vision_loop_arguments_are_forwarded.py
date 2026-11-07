@@ -20,7 +20,7 @@ import pathlib
 import pytest
 
 _PKG = pathlib.Path(__file__).resolve().parents[1] / 'mongla_control'
-_MV = ast.parse((_PKG / 'motion_vision.py').read_text())
+_MV = ast.parse('\n'.join(f.read_text() for f in sorted((_PKG / 'motion_vision').glob('*.py'))))
 _VV_SRC = (_PKG / 'vision_verbs.py').read_text()
 _VV = ast.parse(_VV_SRC)
 

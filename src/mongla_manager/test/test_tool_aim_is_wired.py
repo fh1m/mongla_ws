@@ -17,7 +17,7 @@ import pathlib as _pl_ct
 _sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
 from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 _VV = code_of_file(_CTL / 'vision_verbs.py')
-_MV = code_of_file(_CTL / 'motion_vision.py')
+_MV = code_of_file(_CTL / 'motion_vision')
 _VS = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_manager'
        / 'vision_state.py')
 
@@ -69,7 +69,7 @@ def test_absent_correction_means_previous_behaviour_not_a_refusal():
     The fallback must be the historical behaviour: aim the camera."""
     # RAW text on purpose: what is checked here IS the explanation, the
     # resolver's own docstring.
-    raw = (_CTL / 'motion_vision.py').read_text()
+    raw = (_CTL / 'motion_vision' / 'control.py').read_text()
     i = raw.index('def _tool_offset(')
     why = ' '.join(raw[i:i + 1400].split())
     assert 'previous behaviour' in why and 'aiming the camera' in why

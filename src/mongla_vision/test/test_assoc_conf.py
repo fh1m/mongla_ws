@@ -113,7 +113,7 @@ def test_control_still_gates_on_ctrl_conf():
     control loop has its own floor -- if that gate ever disappears, this change
     becomes "feed low-confidence boxes to the thrusters"."""
     mv = code_of_file(Path(__file__).resolve().parents[2] / 'mongla_control'
-          / 'mongla_control' / 'motion_vision.py')
+          / 'mongla_control' / 'motion_vision')
     assert 'min_score=ctrl_conf' in mv, (
         'the control-side confidence gate is gone -- assoc_conf must not ship '
         'without it')

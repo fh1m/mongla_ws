@@ -1,7 +1,7 @@
 # Operator tooling — Foxglove, rosbag record/replay, scorecards
 
 > **What this is:** pool-day debugging + practice quality-of-life. **Everything here is
-> off the live mission path** — no node in `auv_manager_node` / `motion_vision.py` /
+> off the live mission path** — no node in `auv_manager_node` / `motion_vision/` /
 > detector / camera / tracker / missions is touched. Foxglove and rosbag are opt-in;
 > the scorecard already ran (this just gives it a home). Nothing here can slow or
 > perturb a mission unless you explicitly turn it on.

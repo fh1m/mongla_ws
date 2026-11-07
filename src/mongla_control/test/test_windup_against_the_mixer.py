@@ -20,7 +20,7 @@ from mongla_control.allocation import allocate                  # noqa: E402
 from mongla_control.motion_vision import _mixer_saturated       # noqa: E402
 
 SRC = (Path(__file__).resolve().parents[1]
-       / 'mongla_control' / 'motion_vision.py').read_text()
+       / 'mongla_control' / 'motion_vision' / 'align.py').read_text()
 
 
 def test_a_modest_demand_is_not_saturated():

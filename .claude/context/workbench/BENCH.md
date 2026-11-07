@@ -63,7 +63,7 @@ source-derived table in [`upstream/pr-i`](../upstream/pr-i-spin-min-relay.md) §
 **Still open:** the *physical* stiction floor — where a real motor starts turning — which needs a
 motor. The command-domain number above says nothing about force.
 
-**Lands in:** `actuation_model.py` (done), `motion_vision.py` floor constants (not yet wired —
+**Lands in:** `actuation_model.py` (done), `motion_vision/` floor constants (not yet wired —
 that is a flight-behaviour change), `measured-bars.md`
 
 ---

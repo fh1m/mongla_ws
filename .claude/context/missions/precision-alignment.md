@@ -70,7 +70,7 @@ position hold, so a steady current leaves a standing offset pure-P can't null.
   stiction *floor* that deliberately *adds* authority; and at the hole yaw is
   left to the board's heading hold entirely (see §4).
 
-Code-tunable constants (rarely touched; edit `motion_vision.py` if a target
+Code-tunable constants (rarely touched; edit `motion_vision/` if a target
 legitimately moves faster than the gate or the ramp window is wrong):
 `VISION_RANGE_GAIN_FILL_LO=0.25`, `VISION_RANGE_GAIN_FILL_HI=0.60`,
 `VISION_I_LAT_MAX=15.0`, `VISION_LOCK_GATE_NORM=0.30`.

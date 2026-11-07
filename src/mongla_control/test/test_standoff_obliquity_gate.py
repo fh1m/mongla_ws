@@ -26,7 +26,7 @@ import pytest
 
 from mongla_control import motion_vision as mv
 
-_SRC = pathlib.Path(mv.__file__).read_text()
+_SRC = '\n'.join(f.read_text() for f in sorted(pathlib.Path(mv.__file__).parent.glob('*.py')))
 
 
 class _S:

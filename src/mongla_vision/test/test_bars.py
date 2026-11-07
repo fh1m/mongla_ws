@@ -49,7 +49,7 @@ def _deck(name):
     return float(m.group(1))
 
 
-MV = 'mongla_control/mongla_control/motion_vision.py'
+MV = 'mongla_control/mongla_control/motion_vision/control.py'
 
 
 # --------------------------------------------------------------------------- #
