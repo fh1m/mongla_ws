@@ -1,0 +1,59 @@
+src/mongla_manager/test/test_bringup_settings_file.py
+  s_b4c45e3235679b::t_71b8b1511967aa 11
+CLAUDE.md
+  s_b4c45e3235679b::t_092b228d92e084 208-209
+src/mongla_vision/launch/vision_dual.launch.py
+  s_b4c45e3235679b::t_b15b573415f92d 63,296-300
+src/mongla_localization/mongla_localization/launch_defaults.py
+  s_b4c45e3235679b::t_3643cfa98edde1 45-63,72,77-80,108-123,128-145,155,222-248
+src/mongla_localization/mongla_localization/params_file.py
+  s_b4c45e3235679b::t_71b8b1511967aa 11
+tools/gen_reference.py
+  s_b4c45e3235679b::t_71b8b1511967aa 149
+  s_b4c45e3235679b::t_995f6657fb3e02 159,164-182
+  s_b4c45e3235679b::t_2d7338b108e5f3 183-184
+src/mongla_manager/config/bringup.example.yaml
+  s_b4c45e3235679b::t_995f6657fb3e02 281-447
+  s_b4c45e3235679b::t_71b8b1511967aa 10
+  s_b4c45e3235679b::t_451f7c9330ff7d 448
+.claude/context/wiki/Home.md
+  s_b4c45e3235679b::t_092b228d92e084 115-117
+.claude/context/packages/mongla_localization/README.md
+  s_b4c45e3235679b::t_995f6657fb3e02 134
+src/mongla_manager/launch/bringup.launch.py
+  s_b4c45e3235679b::t_71b8b1511967aa 27,58
+src/mongla_vision/launch/mission_web.launch.py
+  s_b4c45e3235679b::t_b15b573415f92d 47,176-180
+src/mongla_manager/test/test_every_launch_file_reads_the_settings_file.py
+  s_b4c45e3235679b::t_ac965945a4874f 1-100
+  s_b4c45e3235679b::t_231108c2f25f2b 101-118
+src/mongla_vision/test/test_vehicle_blas_is_pinned.py
+  s_b4c45e3235679b::t_04bab8c5d43784 25-27
+.claude/context/packages/mongla_manager/README.md
+  s_b4c45e3235679b::t_69f31fb69b469f 126
+  s_b4c45e3235679b::t_587c3f15ae93f6 121
+src/mongla_vision/launch/vision.launch.py
+  s_b4c45e3235679b::t_b15b573415f92d 47,340-343,345
+.claude/context/platform/launch-combinations.md
+  s_b4c45e3235679b::t_092b228d92e084 132-156,163
+src/mongla_vision/launch/video.launch.py
+  s_b4c45e3235679b::t_4be207b08ca7aa 56-57,95,121-126
+src/mongla_vision/launch/vision_pi.launch.py
+  s_b4c45e3235679b::t_b15b573415f92d 40,605-609
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "0008346d504225b650bc2a869b378591acb72711",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
