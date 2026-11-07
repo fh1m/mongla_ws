@@ -8,9 +8,13 @@ knob wired to nothing -- `ros2 launch ... zupt:=false` would run WITH ZUPT and
 say nothing. Text-level on purpose, like `test_launch_and_node_defaults_agree`.
 """
 import os
+import sys
 import re
 
 import pytest
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'tools'))
+from code_text import source_of  # noqa: E402
 
 _SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 _BRINGUP = os.path.join(_SRC, 'mongla_manager', 'launch', 'bringup.launch.py')
@@ -38,7 +42,7 @@ def _launch_default(path, arg):
 
 
 def _node_default(rel, param):
-    src = open(os.path.join(_SRC, rel)).read()
+    src = source_of(os.path.join(_SRC, rel))   # a node with its mixins
     m = (re.search(rf"declare_parameter\(\s*'{re.escape(param)}'\s*,\s*([^),\n]+)", src)
          or re.search(rf"'{re.escape(param)}'\s*:\s*([^,\n]+),", src))
     assert m, f'{param} not declared in {rel}'

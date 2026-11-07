@@ -17,9 +17,16 @@ import pathlib
 import sys as _sys_ct
 import pathlib as _pl_ct
 _sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
-from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
+from code_text import code_of_file  # noqa: E402  (issue #22)
 SRC = code_of_file(pathlib.Path(__file__).resolve().parents[1]
        / 'mongla_vision' / 'flow' / 'flow_node.py')
+
+
+def _body(name):
+    """One method's text, wherever in the node's files it lives."""
+    i = SRC.index(f'def {name}')
+    j = SRC.find('\n    def ', i + 1)
+    return SRC[i:j if j > 0 else None]
 
 
 def test_the_floor_reader_exists_and_is_CALLED():
@@ -52,18 +59,18 @@ def test_tile_m_defaults_to_OFF():
 def test_an_untiled_floor_CLEARS_the_height_rather_than_holding_it():
     """A stale height is worse than none: the caller cannot tell it is stale,
     and height multiplies every velocity."""
-    block = SRC[SRC.index('def _read_the_floor'):SRC.index('def _cross_check_height')]
+    block = _body('_read_the_floor')
     assert 'self._tile_height = None' in block
 
 
 def test_a_disagreement_is_REPORTED_not_silently_resolved():
-    block = SRC[SRC.index('def _read_the_floor'):SRC.index('def _cross_check_height')]
+    block = _body('_read_the_floor')
     assert 'the FLOOR says' in block
 
 
 def test_a_missing_localization_package_disables_it_instead_of_crashing():
     """The flow node must still run if the estimation package is absent."""
-    block = SRC[SRC.index('def _read_the_floor'):SRC.index('def _cross_check_height')]
+    block = _body('_read_the_floor')
     assert 'self._tile_m = 0.0' in block
 
 
@@ -200,11 +207,8 @@ def test_the_cross_check_is_wired_into_the_floor_read():
     by nothing for its whole life. Assert the CALL exists in `_read_the_floor`
     and that the old one-sample test is gone."""
     import ast
-    from pathlib import Path
 
-    src = (Path(__file__).resolve().parents[1] / 'mongla_vision' / 'flow'
-           / 'flow_node.py')
-    tree = ast.parse(src.read_text())
+    tree = ast.parse(SRC)
     fn = next((n for n in ast.walk(tree)
                if isinstance(n, ast.FunctionDef) and n.name == '_read_the_floor'),
               None)

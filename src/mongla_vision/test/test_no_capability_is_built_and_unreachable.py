@@ -60,7 +60,7 @@ WIRED = {
     'mongla_vision/mongla_vision/tracking/visibility.py': 'lock_node.py',
     # Promoted 2026-09-28. Its deferral said "the barometer reports 'not
     # initialised' on this hull, so the comparison has one side" -- but the
-    # side it needs is not the barometer directly: `flow_node._read_the_floor`
+    # side it needs is not the barometer directly: `FlowVelocityNode._read_the_floor`
     # already had BOTH heights in hand (the tile grating and the pool_depth
     # path) and was comparing them with a one-sample `d > 0.20` and a latch.
     # One bad grating read therefore fired the warning once, forever, and a

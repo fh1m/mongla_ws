@@ -59,7 +59,7 @@ failure mode that cannot be tuned out.
 
 ## 3. ⭐ But mono is the RIGHT sensor for the downward camera — keep it
 
-`flow_node.py:568` and `distance_estimation_node.py:164` both do
+The flow node's `_on_image` (`flow/flow_setup.py`) and the distance node's frame callback both do
 `cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)` **as their first act**. Optical flow
 never sees colour.
 
