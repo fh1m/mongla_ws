@@ -12,7 +12,8 @@ The scene is the issue's own failure scenario, replayed against the clock.
 import threading
 import time
 
-import mongla_control.fc.srot_fc as srot_mod
+import mongla_control.fc.srot_moves as srot_mod
+from mongla_control.fc import base
 import mongla_control.fc.srot_protocol as sp
 from test_srot_fc import _ack, _fc
 
@@ -41,7 +42,7 @@ def test_an_aborted_move_consumes_the_acks_its_stop_set_in_flight():
     abort = threading.Event()
     threading.Timer(0.2, abort.set).start()
     res = fc.move('move_forward', duration=5.0, gain=50, abort_fn=abort.is_set)
-    assert res.code == srot_mod.ABORTED
+    assert res.code == base.ABORTED
     assert stop_sent.is_set()
     # Wait PAST the late ACKs (0.1 s and 0.18 s after the STOP): checking at
     # once would pass before they had even arrived, drain or no drain.
@@ -74,7 +75,7 @@ def test_the_NEXT_move_is_not_fooled_by_a_stop_s_accepted():
     t0 = time.monotonic()
     res = fc.move('yaw_right', target=90.0)
     took = time.monotonic() - t0
-    assert res.code == srot_mod.SUCCEEDED
+    assert res.code == base.SUCCEEDED
     assert took > 0.5, f'SUCCEEDED in {took * 1000:.0f} ms -- that was the STOP\'s ACK'
 
 
@@ -84,5 +85,5 @@ def test_a_board_that_never_answers_the_stop_does_not_hang_the_abort():
     threading.Timer(0.1, abort.set).start()
     t0 = time.monotonic()
     res = fc.move('move_forward', duration=5.0, gain=50, abort_fn=abort.is_set)
-    assert res.code == srot_mod.ABORTED
+    assert res.code == base.ABORTED
     assert time.monotonic() - t0 < 0.1 + srot_mod.MOVE_ACK_DRAIN_S + 0.5

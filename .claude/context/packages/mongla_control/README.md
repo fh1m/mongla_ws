@@ -97,7 +97,10 @@ exception anywhere in a stage still stops the thrusters.
 |---|---|
 | `commands.py` | the registry: one row per verb, the single source of truth |
 | `mongla.py` | the facade: locking, dispatch, and the safety verbs |
-| `fc/srot_fc.py` | the board driver `SrotFC`: the link, arming, modes, the `SROT_MOVE` verbs, `manual()` |
+| `fc/srot_fc.py` | the board driver `SrotFC`: the link, arming, modes; one class assembled from the `srot_*` parts below |
+| `fc/srot_motion.py` | `move()`: one `SROT_MOVE` and its ACK relay; `manual()`, `demand()` |
+| `fc/srot_moves.py` | the move envelope, the ACK budget, the `SROT_MOVE` parameter builders |
+| `fc/srot_arming.py` | the arming interlocks: firmware revision, thruster power, the depth loop |
 | `fc/srot_telemetry.py` · `fc/srot_health.py` | what the board reports: attitude, IMU, batteries; STATUSTEXT, the boot burst, reboots, ESC and leak health |
 | `fc/srot_params.py` · `fc/srot_bench.py` · `fc/srot_uplink.py` | parameters and the preflight checks; bench-only motor test / detect / tune; what the host sends the board it sees |
 | `fc/srot_payload.py` · `fc/_srot_base.py` | `SrotPayload` (fire(N) on board channel N); the shared names and the one MAVLink 2 import |
@@ -157,9 +160,12 @@ with no summary line shows as *(no summary)* until it gets one.
 | `fc/_srot_base.py` | The few names every part of the SROT driver shares. |
 | `fc/base.py` | The result types every board call returns, and the vehicle snapshot. |
 | `fc/port_guard.py` | One process owns the srot serial port. Everything else is refused, loudly. |
+| `fc/srot_arming.py` | The arming interlocks: firmware behaviour revision, thruster power, the depth loop. |
 | `fc/srot_bench.py` | Bench verbs: motor test, motor detect, autotune and motor tune. |
 | `fc/srot_fc.py` | the host side of the SROT board (firmware Hengla). |
 | `fc/srot_health.py` | What the board says about itself: its announcements, reboots, thrusters and leak. |
+| `fc/srot_motion.py` | Motion: the SROT_MOVE verbs, their ACK relay, and MANUAL_CONTROL. |
+| `fc/srot_moves.py` | What one SROT_MOVE may ask for, and how long to wait for its answer. |
 | `fc/srot_params.py` | Board parameters and the preflight checks that read them. |
 | `fc/srot_payload.py` | SrotPayload: fire(N) on board channel N, over MAVLink. Split out of srot_fc.py. |
 | `fc/srot_protocol.py` | SROT wire protocol -- the SINGLE source of the SROT/Hengla MAVLink constants. |

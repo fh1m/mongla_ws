@@ -15,7 +15,8 @@ import os
 os.environ['MAVLINK20'] = '1'   # before pymavlink, or ESC/v2 frames decode as UNKNOWN (fc/_srot_base.py)
 from pymavlink import mavutil
 
-from mongla_control.fc.srot_fc import SrotFC, _build_params, MOVE_VERBS
+from mongla_control.fc.srot_fc import SrotFC, MOVE_VERBS
+from mongla_control.fc.srot_moves import _build_params
 from mongla_control.fc.base import (FIRE_FIRED, FIRE_REJECTED_ARM, FIRE_DISABLED,
                                     FIRE_DENIED, FIRE_NO_ACK, FIRE_NOT_READY,
                                     FIRE_BUSY)
@@ -105,7 +106,7 @@ def _fast_deadlines(monkeypatch):
     (The BRAKE_* patches are gone with the host-side brake -- fw behaviour rev 2
     brakes on-board.)
     """
-    import mongla_control.fc.srot_fc as mod
+    import mongla_control.fc.srot_moves as mod
     monkeypatch.setattr(mod, '_ACK_MIN_BUDGET_S', 0.3)
     monkeypatch.setattr(mod, '_ACK_MARGIN_S', 0.2)
     import mongla_control.fc.srot_payload as pay
@@ -572,8 +573,8 @@ def test_ack_deadline_tracks_the_leg_not_the_60s_board_default():
     3 s move used to hold the action thread 65 s on a stall. That matters because
     the host deadline is the ONLY terminator: a failsafe mid-leg takes the board
     out of AUTO and it streams IN_PROGRESS forever (fw task_control_loop.cpp:731)."""
-    import mongla_control.fc.srot_fc as mod
-    from mongla_control.fc.srot_fc import _ack_budget_s
+    import mongla_control.fc.srot_moves as mod
+    from mongla_control.fc.srot_moves import _ack_budget_s
     floor = mod._ACK_MIN_BUDGET_S          # the autouse fixture shrinks this
     short = _ack_budget_s('move_forward', sp.MOVE_FORWARD, 3.0, 0.0)
     assert short < 20.0
@@ -593,7 +594,7 @@ def test_shipped_ack_floor_is_generous_enough_for_a_slow_board():
     Guards the fixture from hiding a regression: if someone drops the real floor to
     something like 0.5 s, a healthy-but-busy board would be reported as a stall and
     the vehicle braked mid-leg for no reason."""
-    import mongla_control.fc.srot_fc as mod
+    import mongla_control.fc.srot_moves as mod
     import importlib
     fresh = importlib.reload(mod)          # fixture patches are not applied here
     try:

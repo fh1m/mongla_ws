@@ -28,7 +28,8 @@ import time
 
 import pytest
 
-import mongla_control.fc.srot_fc as srot_mod
+import mongla_control.fc.srot_moves as srot_mod
+from mongla_control.fc import base
 import mongla_control.fc.srot_protocol as sp
 from test_srot_fc import _ack, _fc
 
@@ -49,7 +50,7 @@ def _move_while(fc, feeder):
 def test_a_silent_board_still_stalls():
     """The backstop must survive the fix: no ACKs at all is still a stall."""
     res = _move_while(_fc(), lambda fc: None)
-    assert res.code == srot_mod.TIMEOUT
+    assert res.code == base.TIMEOUT
 
 
 def test_a_single_stale_in_progress_still_stalls():
@@ -62,7 +63,7 @@ def test_a_single_stale_in_progress_still_stalls():
     res = _move_while(_fc(), one_then_silence)
     elapsed = time.monotonic() - t0
 
-    assert res.code == srot_mod.TIMEOUT
+    assert res.code == base.TIMEOUT
     # Checking the code alone does not catch this, and the first version of this
     # test did exactly that. If the deadline is refreshed on every SIGHTING of the
     # cached ACK, it is held open for ever and the run is terminated by the HARD
@@ -87,7 +88,7 @@ def test_a_slow_but_PROGRESSING_move_is_no_longer_braked():
     res = _move_while(_fc(), slow_but_alive)
     elapsed = time.monotonic() - t0
 
-    assert res.code == srot_mod.SUCCEEDED, \
+    assert res.code == base.SUCCEEDED, \
         'a board reporting real progress must not be declared stalled'
     assert elapsed > 2.0, \
         'this test is only meaningful if it ran PAST the original budget'
@@ -106,7 +107,7 @@ def test_endless_progress_is_still_bounded_by_the_hard_cap():
     res = _move_while(_fc(), forever)
     elapsed = time.monotonic() - t0
 
-    assert res.code == srot_mod.TIMEOUT
+    assert res.code == base.TIMEOUT
     assert elapsed < 30.0, 'the absolute ceiling must bound the worst case'
 
 

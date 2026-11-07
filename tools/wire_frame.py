@@ -2,7 +2,7 @@
 """One verb, on the wire -- the byte figure on the site, generated, not drawn.
 
 `mongla move_forward 3 --gain 40` leaves the Pi as ONE MAVLink 2 frame. This
-tool builds that frame with the project's own verb table (`srot_fc._build_params`)
+tool builds that frame with the project's own verb table (`srot_moves._build_params`)
 and its own wire constants (`srot_protocol`), packs it with pymavlink exactly as
 `SrotFC._command_long` does, decodes it back field by field, and writes the
 figure into docs/index.html between the `wire:begin` / `wire:end` markers.
@@ -43,8 +43,8 @@ def _load_fc():
     pkg = types.ModuleType('mongla_control')
     pkg.__path__ = [str(PKG)]
     sys.modules.setdefault('mongla_control', pkg)
-    from mongla_control.fc import srot_fc, srot_protocol
-    return srot_fc, srot_protocol
+    from mongla_control.fc import srot_moves, srot_protocol
+    return srot_moves, srot_protocol
 
 
 def build_frame():

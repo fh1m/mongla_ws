@@ -3,12 +3,13 @@
 `_build_params` checked finiteness only: -50 m went to the board as a dive to
 50 m, 3600 as ten turns, -30 as a negative duration. Each bound below catches a
 UNITS BUG or a TYPO and restricts no real request; the reasons live beside the
-constants in srot_fc.py.
+constants in srot_moves.py.
 """
 import pytest
 
-import mongla_control.fc.srot_fc as mod
-from mongla_control.fc.srot_fc import _build_params
+import mongla_control.fc.srot_moves as mod
+from mongla_control.fc.base import MoveResult, SUCCEEDED
+from mongla_control.fc.srot_moves import _build_params
 
 
 @pytest.mark.parametrize('verb, kw, why', [
@@ -49,7 +50,7 @@ def test_an_unlocked_turn_is_WARNED_not_refused():
     warned = []
     fc._log_warn = warned.append
     fc.check_yaw_reference = lambda: (False, 'yaw reference NOT LOCKED: SAMPLING')
-    fc._relay_move_ack = lambda *a, **k: mod.MoveResult(mod.SUCCEEDED, 'ok')
+    fc._relay_move_ack = lambda *a, **k: MoveResult(SUCCEEDED, 'ok')
     res = fc.move('turn', target=90.0)
-    assert res.code == mod.SUCCEEDED
+    assert res.code == SUCCEEDED
     assert warned and 'NOT LOCKED' in warned[0] and 'compass heading' in warned[0]
