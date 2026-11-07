@@ -1,0 +1,48 @@
+src/mongla_manager/mongla_manager/estimator/thrust_model.py
+  s_b4c45e3235679b::t_48fff6e0b44c94 3-12,49
+src/mongla_control/mongla_control/geometric_allocation.py
+  s_b4c45e3235679b::t_48fff6e0b44c94 7-10
+.claude/context/the-whole-chain.md
+  s_b4c45e3235679b::t_b59da6a49204a8 73-74
+.claude/skills/prove/SKILL.md
+  s_b4c45e3235679b::t_48fff6e0b44c94 48
+src/mongla_vision/mongla_vision/lock_publish.py
+  s_b4c45e3235679b::t_48fff6e0b44c94 218-221
+src/mongla_control/config/hull_geometry.yaml
+  s_b4c45e3235679b::t_48fff6e0b44c94 91-95
+.claude/context/platform/vehicle-spec.md
+  s_b4c45e3235679b::t_17e99ae6713113 12-13,45,47-58
+.claude/context/platform/pool-day-round-4a.md
+  s_b4c45e3235679b::t_b59da6a49204a8 87-89
+README.md
+  s_b4c45e3235679b::t_64d84784025125 532-533,540-549
+src/mongla_vision/mongla_vision/anchor/bank_lookup.py
+  s_b4c45e3235679b::t_b59da6a49204a8 168
+CLAUDE.md
+  s_b4c45e3235679b::t_f70a9272c46f32 45,47-50,52-55
+  s_b4c45e3235679b::t_61da537debc63c 269,279-303
+  s_b4c45e3235679b::t_633620393d24f9 39,51
+  s_b4c45e3235679b::t_2c847094343678 304
+.claude/context/perception/never-lose-the-target.md
+  s_b4c45e3235679b::t_48fff6e0b44c94 594-597
+docs/capability-map.md
+  s_b4c45e3235679b::t_48fff6e0b44c94 68
+docs/index.html
+  s_b4c45e3235679b::t_1fac50718f5371 435,710-713,2081-2082,3712-3714
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "0dd5040c9feaf712d2d2b5552ab4b2c8dfcd8111",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
