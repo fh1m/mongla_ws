@@ -70,6 +70,8 @@ def test_no_too_old_revision_is_ever_a_mere_warning(rev):
 # --------------------------------------------------------------------------- #
 
 from mongla_manager.bringup_check import _baro_health_verdict          # noqa: E402
+import os
+os.environ['MAVLINK20'] = '1'   # before pymavlink, or ESC/v2 frames decode as UNKNOWN (fc/_srot_base.py)
 from pymavlink import mavutil                                          # noqa: E402
 
 _BARO = mavutil.mavlink.MAV_SYS_STATUS_SENSOR_ABSOLUTE_PRESSURE

@@ -8,6 +8,8 @@ never been verified against hardware. Also probes the floor itself: asking for
 """
 import sys, time, statistics as st
 sys.path.insert(0, '/home/fh1m/mongla_ws/src/mongla_control')
+import os
+os.environ['MAVLINK20'] = '1'   # before pymavlink, or ESC/v2 frames decode as UNKNOWN (fc/_srot_base.py)
 from pymavlink import mavutil
 from mongla_control.fc import srot_protocol as sp
 from mongla_control.fc.port_guard import PortGuard

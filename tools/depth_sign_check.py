@@ -40,6 +40,8 @@ protocol measures an untouched rig.
 
 This tool is READ-ONLY: it sends nothing but parameter/telemetry requests.
 """
+import os
+os.environ['MAVLINK20'] = '1'   # before pymavlink, or ESC/v2 frames decode as UNKNOWN (fc/_srot_base.py)
 import sys
 import time
 

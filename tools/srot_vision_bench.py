@@ -30,6 +30,7 @@ import argparse
 import json
 import math
 import os
+os.environ['MAVLINK20'] = '1'   # before pymavlink, or ESC/v2 frames decode as UNKNOWN (fc/_srot_base.py)
 import sys
 import threading
 import time
