@@ -571,7 +571,7 @@ What it is, what was wrong with it, and the eight steps from a blank SD card:
 | [`mongla_control`](.claude/context/packages/mongla_control/README.md) | the verbs and the board driver — a pure library, **zero entry points** | 10 598 | 64 |
 | [`mongla_planner`](.claude/context/packages/mongla_planner/README.md) | the `mongla` CLI, the mission DSL, the missions | 7 675 | 41 |
 | [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | `auv_manager_node` — the one node that talks to the board | 7 951 | 65 |
-| [`mongla_localization`](.claude/context/packages/mongla_localization/README.md) | the right-invariant EKF, retrodiction, course priors | 4 763 | 31 |
+| [`mongla_localization`](.claude/context/packages/mongla_localization/README.md) | the right-invariant EKF, retrodiction, course priors | 4 815 | 31 |
 | [`mongla_interfaces`](.claude/context/packages/mongla_interfaces/README.md) | one action, one state topic — the entire ROS surface | IDL | — |
 
 **326 test files against the source.** The ROS surface really is that small: one action
@@ -892,7 +892,7 @@ constant the code no longer holds. The [command reference](.claude/context/refer
 is generated from the code, and the test counts on this page and the site are rewritten by
 every full test run ([`tools/published_counts.py`](tools/published_counts.py)).
 
-Read them in order as **[the Mongla book](.claude/context/README.md)** — 65 chapters in nine parts,
+Read them in order as **[the Mongla book](.claude/context/README.md)** — 66 chapters in nine parts,
 from why the vehicle exists to every number it has measured. Or dip in:
 
 **Start here**
