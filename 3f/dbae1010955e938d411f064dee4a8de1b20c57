@@ -1,0 +1,27 @@
+.claude/context/packages/mongla_vision/README.md
+  s_b4c45e3235679b::t_9d3f7925663d3c 153
+src/mongla_vision/mongla_vision/lock_node.py
+  s_b4c45e3235679b::t_9d3f7925663d3c 26-32
+  s_b4c45e3235679b::t_f3174f42461880 82,122
+src/mongla_vision/test/test_anchor_heals_the_follower.py
+  s_b4c45e3235679b::t_f4519a5b29844a 84,101
+src/mongla_vision/mongla_vision/lock_anchor.py
+  s_b4c45e3235679b::t_f3174f42461880 1-7,9,19-247
+  s_b4c45e3235679b::t_f4519a5b29844a 8,10-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "3fdbae1010955e938d411f064dee4a8de1b20c57",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
