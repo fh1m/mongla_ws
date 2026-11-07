@@ -1,18 +1,7 @@
 """LockNode's setup: parameters, the anchor and the bank, and live retuning.
 """
 import os
-try:                                   # noqa: SIM105
-    from mongla_interfaces.msg import TargetCorrespondences
-except ImportError:                    # message not built in this workspace
-    # The LADDER must survive it. Correspondences are an addition to what this
-    # node does, not a precondition, so an unbuilt interface costs the 6-DoF
-    # path and nothing else -- the follower and anchor rungs still publish
-    # `/lock`, which is what the control loop steers on.
-    TargetCorrespondences = None
-try:
-    from mongla_interfaces.msg import MonglaState
-except ImportError:                                              # noqa: BLE001
-    MonglaState = None
+
 from mongla_vision.anchor import loop_closure as _lc
 from mongla_vision.tracking.lock_state import FULL_AUTHORITY_S, ZERO_AUTHORITY_S
 
@@ -24,7 +13,7 @@ class LockSetupMixin:
         """The ROS parameters this node reads, with their defaults.
 
         Three more are declared where they are read, beside the reasoning about
-        them: `target_width_m`, `medium` and `direct_feed` (in __init__).
+        them: `target_width_m`, `medium` and `direct_feed` (in lock_wiring.py).
         """
         self.declare_parameter('camera', 'forward')
         self.declare_parameter('target_class', '')

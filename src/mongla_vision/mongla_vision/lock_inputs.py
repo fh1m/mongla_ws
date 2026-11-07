@@ -4,14 +4,6 @@ floor height and camera info, each with the freshness rule it is read under.
 import math
 import time
 import numpy as np
-try:                                   # noqa: SIM105
-    from mongla_interfaces.msg import TargetCorrespondences
-except ImportError:                    # message not built in this workspace
-    # The LADDER must survive it. Correspondences are an addition to what this
-    # node does, not a precondition, so an unbuilt interface costs the 6-DoF
-    # path and nothing else -- the follower and anchor rungs still publish
-    # `/lock`, which is what the control loop steers on.
-    TargetCorrespondences = None
 try:
     from mongla_interfaces.msg import MonglaState
 except ImportError:                                              # noqa: BLE001

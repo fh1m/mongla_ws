@@ -543,9 +543,6 @@ manager's `vision.*` gains are declared from a table and are listed in
 
 | parameter | default |
 |---|---|
-| `target_width_m` | `0.0` |
-| `medium` | `'water'` |
-| `direct_feed` | `False` |
 | `camera` | `'forward'` |
 | `target_class` | `''` |
 | `follow` | `True` |
@@ -563,6 +560,9 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `anchor_hz` | `4.5` |
 | `full_authority_s` | `FULL_AUTHORITY_S` |
 | `zero_authority_s` | `ZERO_AUTHORITY_S` |
+| `target_width_m` | `0.0` |
+| `medium` | `'water'` |
+| `direct_feed` | `False` |
 
 **`mongla_vision/tracker_node.py`** — 16 parameters
 

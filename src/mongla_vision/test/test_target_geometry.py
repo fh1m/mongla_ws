@@ -104,7 +104,7 @@ def test_lock_node_ACTUALLY_consults_the_table():
     assert 'target_geometry' in src, (
         'lock_node never consults the committed table, so target_width_m '
         'still defaults to 0.0 and the 6-DoF path stays refused.')
-    i = src.index('target_width_m')
+    i = src.index("declare_parameter('target_width_m'")   # where the width is decided
     window = src[i:i + 1500]
     # Assert the CALL and the ASSIGNMENT, not the name. Injecting
     # `w = 0.0` in place of `w = width_for(self._cls)` left the import line
@@ -125,7 +125,7 @@ def test_an_explicit_parameter_still_WINS():
     +/- 5 % tolerance exists to allow for. The fallback must not overwrite an
     operator's measurement."""
     src = code_of_file(_PKG / 'mongla_vision' / 'lock_node.py')
-    i = src.index('target_width_m')
+    i = src.index("declare_parameter('target_width_m'")   # where the width is decided
     window = src[i:i + 1500]
     assert 'self._target_w_m <= 0.0' in window, (
         'the table is consulted unconditionally, so it overrides an explicit '
