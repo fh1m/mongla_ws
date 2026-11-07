@@ -167,6 +167,8 @@ with no summary line shows as *(no summary)* until it gets one.
 | `vision_node.py` | single-process diagnostic for camera + detector. |
 | `anchor/anchor.py` | Hold a target with NO detection at all. |
 | `anchor/bank.py` | Several references instead of one, and a policy for when to add another. |
+| `anchor/bank_lookup.py` | Asking the bank where the vehicle is: locate, recognise, corroborate, verify. |
+| `anchor/bank_store.py` | Saving the bank to disk and loading it back (a practice bank, or the last run). |
 | `anchor/geometry.py` | The half of the homography we were throwing away. |
 | `anchor/health.py` | A fouled lens and a changed world look identical, and need opposite answers. |
 | `anchor/loop_closure.py` | When may a recognised place become a position fix? |

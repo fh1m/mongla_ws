@@ -100,7 +100,7 @@ DEFERRED_FUNCTIONS = {
     'src/mongla_vision/mongla_vision/anchor/bank.py:wants_refresh':
         'decay-triggered enrolment; lock_node enrols on scale coverage '
         '(covers_scale) instead, and this costs a full locate() per ask',
-    'src/mongla_vision/mongla_vision/anchor/bank.py:corroborate':
+    'src/mongla_vision/mongla_vision/anchor/bank_lookup.py:corroborate':
         'XFeat arbitration of weak detections; blocked by the reason in its own '
         'commit (be051dec): the bank cannot yet arbitrate, and the fix is named there',
     'src/mongla_vision/mongla_vision/qos.py:is_compatible':
