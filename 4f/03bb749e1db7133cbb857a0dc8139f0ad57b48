@@ -1,0 +1,25 @@
+src/mongla_manager/mongla_manager/auv_manager_node.py
+  s_b4c45e3235679b::t_717b0b4b2f7a67 27-29
+  s_b4c45e3235679b::t_2555e67c65abd1 215
+  s_b4c45e3235679b::t_df3779b113f678 31-32
+  s_b4c45e3235679b::t_7a8f3c9689312d 205-208
+src/mongla_manager/mongla_manager/node_setup.py
+  s_b4c45e3235679b::t_2555e67c65abd1 12-15,23
+  s_b4c45e3235679b::t_0d19065c2a41e6 413-564
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "4f03bb749e1db7133cbb857a0dc8139f0ad57b48",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
