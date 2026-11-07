@@ -16,75 +16,32 @@ from __future__ import annotations
 
 import itertools
 import pathlib
+import sys
 
 import pytest
 from launch import LaunchContext
-from launch.actions import DeclareLaunchArgument, ExecuteProcess
+from launch.actions import ExecuteProcess
 from launch.launch_description_sources import get_launch_description_from_python_launch_file
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
-BRINGUP = ROOT / 'src' / 'mongla_manager' / 'launch' / 'bringup.launch.py'
+sys.path.insert(0, str(ROOT / 'tools'))
+from launch_render import BRINGUP, render, source_tree, switches  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
-def _source_tree(monkeypatch):
-    """Resolve packages to src/, not install/.
+def _source_tree():
+    """Resolve packages to src/, not install/ (see tools/launch_render.py).
 
-    Launch files are COPIED into install/ by colcon, so without this the test
-    renders the last build and an edit to a launch file is invisible until the
-    next one. Injection-verified: deleting the flow node's condition in
+    Injection-verified: deleting the flow node's condition in
     vision_pi.launch.py passed against install/ and fails here.
     """
-    import ament_index_python.packages as aip
-    real = aip.get_package_share_directory
-
-    def share(pkg, *a, **k):
-        src = ROOT / 'src' / pkg
-        return str(src) if (src / 'launch').is_dir() else real(pkg, *a, **k)
-    monkeypatch.setattr(aip, 'get_package_share_directory', share)
-
-
-def _declared():
-    ld = get_launch_description_from_python_launch_file(str(BRINGUP))
-    return {a.name: a for a in ld.entities if isinstance(a, DeclareLaunchArgument)}
-
-
-def render(args: dict) -> list:
-    """Node names `ros2 launch bringup.launch.py <args>` would start."""
-    ctx = LaunchContext()
-    ctx.launch_configurations.update({k: str(v) for k, v in args.items()})
-    started = []
-
-    def walk(entities):
-        for e in entities or ():
-            cond = getattr(e, 'condition', None)
-            if cond is not None and not cond.evaluate(ctx):
-                continue
-            if isinstance(e, ExecuteProcess):
-                # Node._perform_substitutions resolves name, executable and the
-                # parameter files exactly as execute() would, minus the spawn.
-                if hasattr(e, '_perform_substitutions'):
-                    e._perform_substitutions(ctx)
-                started.append(f"{getattr(e, 'node_package', '?')}/"
-                               f"{getattr(e, 'node_executable', e.__class__.__name__)}")
-                continue
-            walk(e.visit(ctx))
-
-    walk([get_launch_description_from_python_launch_file(str(BRINGUP))])
-    return started
+    with source_tree():
+        yield
 
 
 def _switches():
-    """Every boolean switch and every choice argument, with its values."""
-    out = {}
-    for name, a in _declared().items():
-        if a.choices:
-            out[name] = list(a.choices)
-        else:
-            d = ''.join(getattr(s, 'text', '') for s in (a.default_value or []))
-            if d in ('true', 'false'):
-                out[name] = ['true', 'false']
-    return out
+    with source_tree():
+        return switches()
 
 
 SWITCHES = _switches()
