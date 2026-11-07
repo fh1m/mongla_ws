@@ -147,6 +147,13 @@ class HealthMixin:
         self._health.register('target_pose', lambda: _hr.target_pose(
             (lambda vs: vs.target_pose() if vs is not None else None)(
                 self._live_vision_state())))
+        # `target_lock` stays UNREGISTERED, deliberately. It wants the ladder's
+        # decayed `authority` (0..1); `/lock` carries the rung name and a
+        # CONFIDENCE in class_id/score, which is a different quantity. Deriving
+        # one from the other would publish an invented number in a health line --
+        # the exact failure this board exists to catch. It needs a real accessor
+        # on VisionState first. Tracked in DEFERRED_FUNCTIONS
+        # (mongla_vision/test/test_no_function_is_built_and_uncalled.py).
 
     def _health_tick(self) -> None:
         self._health.poll()

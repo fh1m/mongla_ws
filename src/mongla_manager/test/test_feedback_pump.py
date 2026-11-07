@@ -9,7 +9,7 @@ A fake board + goal_handle keep it ROS-free.
 import math
 import time
 
-from mongla_manager.auv_manager_node import FeedbackPump
+from mongla_manager.node_action import FeedbackPump
 
 
 class _FakeBoard:

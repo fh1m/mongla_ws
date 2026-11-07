@@ -182,6 +182,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `flare_order_send.py` | ``ros2 run mongla_manager flare_order R-B-Y --port /dev/ttyACM0`` -- tell the vehicle. |
 | `health.py` | One health surface. Four states, and UNKNOWN is not OK. |
 | `health_reporters.py` | Each subsystem's private dialect, translated once. |
+| `node_action.py` | The /mongla/move action server: which goals run, how they stop, what they report. |
 | `node_health.py` | Is the node alive, and is the mission: the health report and the three watchdogs (executor, mission, kill switch). |
 | `node_setup.py` | Bringing the node up: parameters, the board link, the recorder, the preflight reads. |
 | `node_support.py` | The manager node's shared constants: one home, read by every part of the node. |
