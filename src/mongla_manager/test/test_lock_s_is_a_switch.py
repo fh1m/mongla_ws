@@ -12,14 +12,18 @@ to do it deliberately, and so the misleading name cannot quietly become a
 misleading behaviour.
 """
 import ast
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import source_of  # noqa: E402  (vision_state.py and its mixin)
 
 SRC = (Path(__file__).resolve().parents[2] / 'mongla_manager'
        / 'mongla_manager' / 'vision_state.py')
 
 
 def test_lock_s_is_only_ever_compared_to_zero():
-    tree = ast.parse(SRC.read_text())
+    tree = ast.parse(source_of(SRC))
     comparisons = []
     for node in ast.walk(tree):
         if (isinstance(node, ast.Compare)
@@ -36,6 +40,6 @@ def test_lock_s_is_only_ever_compared_to_zero():
 
 
 def test_the_ladder_is_still_reachable_from_bbox_error():
-    src = SRC.read_text()
+    src = source_of(SRC)
     assert 'if lock_s > 0.0:' in src
     assert '_lock_sample(' in src
