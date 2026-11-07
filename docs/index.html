@@ -394,7 +394,7 @@
   <p class="quiet">Four things worth meeting by hand. <strong>P
     alone</strong> overshoots and rings: nothing is braking it, so at the moment it is finally
     pointing the right way it is still turning. <strong>Add D</strong> and the ringing dies,
-    because it now pushes back against its own approach speed. At three seconds a
+    because it now pushes back against its own approach speed. At four seconds a
     <strong>current</strong> starts pushing, and the PD controller parks a degree or two short of
     the target for ever — it is pushing exactly hard enough to hold station and not hard enough to
     close the last degree. Only <strong>I</strong> fixes that, by remembering what is still
@@ -659,7 +659,7 @@
     <label class="knob"><span class="silk silk--b">sway — sideways</span>
       <input type="range" id="mix-l" min="-1" max="1" step="0.01" value="0.35">
       <output id="mix-l-o">+0.35</output>
-      <em>Free on this hull, because the thrusters sit at 45°. Free, but not free of
+      <em>Free on the eight-thruster mixer, because its horizontal thrusters sit at 45°. Free, but not free of
         consequences.</em></label>
     <label class="knob"><span class="silk silk--b">yaw — turn</span>
       <input type="range" id="mix-y" min="-1" max="1" step="0.01" value="0.4">
@@ -720,7 +720,7 @@
 <!-- 05 ──────────────────────────────────────────────────────────────── -->
 <section id="repos" data-chapter="the suite">
  <div class="wrap">
-  <p class="mark">The suite <i>//</i> three repositories, one wire</p>
+  <p class="mark">The suite <i>//</i> four repositories, one wire</p>
   <h2 class="col">Mongla is the soul. It does not own the body.</h2>
   <p class="lede col quiet">Four repositories, two authors, and a rule that is easy to state and
     hard to keep: <strong>we never commit to theirs, they never commit to ours.</strong> Anything
@@ -1463,9 +1463,9 @@
     <p class="col quiet">Three real slides of 30 cm on the bench rig, downward camera at 0.72 m
       lens-to-floor, <code>f = 513.94 px</code>. The honest part is the third column: the
       <em>height the measurement implies</em>, recovered from the slide it got wrong.</p>
-    <p class="col quiet">Worst error <span class="nr">1.09 cm on 30 cm</span> — 3.6 %. Nortek
-      quote 0.5–1 % for a real DVL's bottom track, so this is several times worse than the
-      instrument we cannot afford, and the same order as published monocular visual odometry in
+    <p class="col quiet">Worst error <span class="nr">1.09 cm on 30 cm</span> — 3.6 %. A low-cost DVL
+      quotes about 1 % for its bottom track and a survey-grade one such as Nortek's ±0.1 %, so this
+      is several times worse than even the cheap instrument we cannot afford, and the same order as published monocular visual odometry in
       turbid water. It was measured <em>in air, on a hand slide</em> whose own precision is about
       ±1 cm: the operator's tape is inside our error bar, so it is an upper bound on the error,
       not a measurement of it.</p>
@@ -1818,7 +1818,7 @@
  <div class="wrap">
   <p class="mark">The language <i>//</i> how a machine is asked to do something</p>
   <h2 class="col">A mission should read like an instruction, not a state machine.</h2>
-  <p class="lede col quiet">One action, thirty verbs, two vision primitives. The vision verbs never
+  <p class="lede col quiet">One action, twenty-three verbs, two of them vision primitives. The vision verbs never
     raise — they return where and how they finished, so a mission branches on reality instead of on
     an exception.</p>
   <div class="split">
@@ -2016,7 +2016,7 @@
     <p class="go"><a href="https://github.com/RakibulIslam1/srot-control-board">srot-control-board</a> · <a href="https://github.com/RakibulIslam1/srot-ground-station">srot-ground-station</a></p>
    </li>
    <li>
-    <span class="silk">The competition this is aimed at</span>
+    <span class="silk">The competitions these tasks come from</span>
     <p class="why">The rulebooks are the specification every prop and every mission is measured against</p>
     <p class="go"><a href="https://robonation.org/programs/robosub/">RoboSub</a> · <a href="https://sauvc.org/">SAUVC</a></p>
    </li>
@@ -2069,8 +2069,8 @@
      <span>two armed bench checks, then water</span><em>water</em></li>
    <li class="board--fw"><b>Thruster health cannot tell eight healthy motors from none</b>
      <span>the firmware already computes it and drops it one line early</span><em>one-line merge</em></li>
-   <li class="board--fw"><b>Moves by measured distance are refused</b>
-     <span>no such primitive on the board; refused before dispatch, never faked</span><em>pull request</em></li>
+   <li class="board--fw"><b>There is no move by measured distance</b>
+     <span>no such primitive on the board, so no such verb; a timed move is all there is, never a faked metre</span><em>pull request</em></li>
    <li class="board--fw"><b>The board cannot yet accept a velocity measurement</b>
      <span>we have one, good to 1.09 cm over 30 cm, and nowhere to send it</span><em>pull request</em></li>
    <li class="board--hw"><b>The competition radio cannot reach through an aluminium hull</b>
@@ -2101,7 +2101,7 @@
    <div class="colophon__who">
     <span class="silk">Written by</span>
     <p><strong>Muhammad Fahim Faisal</strong> — autonomy: perception, localization, control
-       integration, the mission language, the simulator, and this page.</p>
+       integration, the mission language, the earlier simulator, and this page.</p>
     <p class="colophon__links"><a href="https://github.com/fh1m">@fh1m</a> ·
        <a href="https://fh1m.github.io/">fh1m.github.io</a> ·
        <a href="https://fh1m.github.io/log/">the log</a> ·
