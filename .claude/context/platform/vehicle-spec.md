@@ -61,7 +61,7 @@ the `/mongla/*` namespace are kept for the test vehicle's tooling and are not re
 
 A measured constant lives in [`measured-bars.md`](../measured-bars.md) with its method and its
 bar, and tests read that file. A per-camera optical number belongs to the **physical camera**,
-not to the role it is playing — the two were swapped once, and a 46.7° figure sat on the wrong
+not to the role it is playing — the two were swapped once, and a 46.7° figure (Snell, from the air value) sat on the wrong
 camera for nine days (17 % range error).
 
 Related: [`srot-architecture.md`](srot-architecture.md) ·

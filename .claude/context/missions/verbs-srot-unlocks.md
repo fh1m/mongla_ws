@@ -16,11 +16,11 @@ listed in §3 with the ask that carries it.
 | verb | what it does | what it unblocks | state |
 |---|---|---|---|
 | **`motor_test`** | spin ONE thruster (1–8) at a signed percentage for N s | **Key point:** thrust curve (`k_n_per_rpm2` is `null`), dead-thruster identification, motor-direction verification, and the bollard curve ask M §2.4 needs. A **signed** throttle runs it backwards, which is how `REVERSE_EFFICIENCY = 0.77` stops being a quoted number | **shipped** `f594ecf` |
-| **`get_param` / `set_param`** | read/write one board parameter by MAVLink name | every tuning experiment becomes a one-liner instead of a Python session. `SrotFC.get_param` already exists; today the only way to set one is a script | ⏳ next |
-| **`rate`** | body-rate command in **ACRO** | **Key point:** free-decay rotation identification (Round 4a → `ATC_DRAG_*`), and the command shape INDI needs. See §2 | ⏳ needs a host loop |
-| **`style_pitch`** | N × 360° pitch spin | `MAV_CMD_USER_2` is implemented on the board and has no verb, while `style_roll` (USER_3) does. A pure symmetry gap | ⏳ trivial |
-| **`autotune`** | board-side relay autotune | `CMD_USER_5` plus progress readback both exist. It tunes the rate PIDs *on the vehicle*, which is the loop we cannot tune from here | ⏳ |
-| **`pattern`** | the board's multi-step pattern | `CMD_USER_4` exists | ⏳ low value |
+| **`get_param` / `set_param`** | read/write one board parameter by MAVLink name | every tuning experiment becomes a one-liner instead of a Python session. `SrotFC.get_param` already exists; today the only way to set one is a script | pending: next |
+| **`rate`** | body-rate command in **ACRO** | **Key point:** free-decay rotation identification (Round 4a → `ATC_DRAG_*`), and the command shape INDI needs. See §2 | pending: needs a host loop |
+| **`style_pitch`** | N × 360° pitch spin | `MAV_CMD_USER_2` is implemented on the board and has no verb, while `style_roll` (USER_3) does. A pure symmetry gap | pending: trivial |
+| **`autotune`** | board-side relay autotune | `CMD_USER_5` plus progress readback both exist. It tunes the rate PIDs *on the vehicle*, which is the loop we cannot tune from here | pending: |
+| **`pattern`** | the board's multi-step pattern | `CMD_USER_4` exists | pending: low value |
 
 ---
 

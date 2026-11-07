@@ -33,7 +33,7 @@ uint16 n_points             # RANSAC inliers the pose was fitted from
 # two branches are mirror images about the viewing ray; carrying both lets the
 # fuser decide between them by a change of viewpoint, not by which one the
 # solver happened to prefer.
-# ⛔ `branches_valid` is the only thing that says these were filled. A float32
+# WARNING: `branches_valid` is the only thing that says these were filled. A float32
 # defaults to 0.0, and a 0 deg mirror or a 0 deg bearing is a plausible lie.
 bool branches_valid
 float32 alt_yaw_deg         # the other branch's yaw, same convention as yaw_deg

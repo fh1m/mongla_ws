@@ -10,7 +10,7 @@ float32 duration     # seconds  (move_*, pause, motor_test, vision_*)
 float32 gain         # 0-100 %  (move_*, motor_test; vision_*: hard max-speed cap)
 float32 target       # metres   (set_depth, negative below the surface),
                      # degrees  (yaw_*, turn), or the motor index (motor_test)
-# ⛔ WHICH FIELDS THE SENDER ACTUALLY SET (issue #14). A float field defaults
+# WARNING: WHICH FIELDS THE SENDER ACTUALLY SET (issue #14). A float field defaults
 # to 0.0, so "0.0" could not be told from "not given": `move_forward(gain=0)`
 # became 80 % thrust and `turn` with no target turned to NORTH. The client lists
 # every field it was given; when this is NON-EMPTY it is authoritative -- a
@@ -52,7 +52,7 @@ bool    hold_through_loss  # true = coast/hold on target loss until duration (no
 float32 fire_channel       # BOARD channel to fire mid-hold, 1..16 (= SERVO{n}_ROLE); 0 = NOT ASSIGNED, refused
 # vision_align mid-hold fire: actuate payload WHILE the hold loop still corrects, so
 # the shot leaves while glued to the target (no align-then-fire drift gap).
-# ⛔ "fire" HERE MEANS ACTUATE A BOARD CHANNEL -- it is NOT a torpedo verb.
+# WARNING: "fire" HERE MEANS ACTUATE A BOARD CHANNEL -- it is NOT a torpedo verb.
 # The channel number IS the board's `SERVO{n}_ROLE` (1..16, no host-side map), so
 # the same field drives a dropper solenoid, a torpedo launcher, a grabber release
 # or anything else wired to the PCA9685. Nothing in this action, and nothing in
@@ -122,7 +122,7 @@ float32 fire_max_tilt_deg  # vision_align: HOLD the payload shot unless the targ
                            # gate the fail-safe direction is do not fire.
 string  tool               # vision_align: WHICH TOOL is being aimed, from config/tool_geometry.yaml
                            #   ('torpedo', 'dropper', 'grabber', 'camera_forward', ...).
-                           #   ⛔ The align centres the target on the CAMERA axis. A tool mounted
+                           #   WARNING: The align centres the target on the CAMERA axis. A tool mounted
                            #   elsewhere fires along a PARALLEL axis, so the miss EQUALS THE OFFSET
                            #   AT EVERY RANGE -- it does not shrink as you close in. A 10 cm offset
                            #   misses a 4.75 cm-radius torpedo opening from 1 m and from 3 m alike,
@@ -138,7 +138,7 @@ float32 standoff_max_tilt_deg  # vision_align: HOLD THE APPROACH while the targe
                            #   causes the camera to initially approach the target". Approaching is
                            #   the dangerous direction: past the standoff into whatever we were
                            #   standing off FROM. 0 (default) = no gate, byte-identical to before.
-                           #   ⛔ NO POSE MEANS UNGUARDED -- the OPPOSITE of fire_max_tilt_deg, and
+                           #   WARNING: NO POSE MEANS UNGUARDED -- the OPPOSITE of fire_max_tilt_deg, and
                            #   deliberate: a pose needs lock_node + a calibration + a committed
                            #   width, so "no pose" is the ordinary case and failing closed would
                            #   disable forward drive on every mission without one.

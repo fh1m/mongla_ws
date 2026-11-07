@@ -36,7 +36,7 @@ N_WATER = 1.333
 NG, DG, D0 = 1.49, 0.006, 0.015      # acrylic index, glass thickness, air gap
 
 RANGE_M = 3.0
-# The issue's 30 deg is past the edge of the in-water field (53.6 deg wide), so
+# The issue's 30 deg is past the edge of the in-water field (53.6 deg wide, by Snell), so
 # water uses 20 deg -- the board's far edge still lands in the outer tenth.
 BEARING_DEG = {'air': 30.0, 'water': 20.0}
 

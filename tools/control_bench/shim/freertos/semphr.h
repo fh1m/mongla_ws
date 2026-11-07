@@ -3,7 +3,7 @@
 // structs with mutexes, and the control code reaches that header only for the
 // `FlightMode` enum.
 //
-// ⛔ THESE ARE DELIBERATELY NOT FUNCTIONAL. `xSemaphoreTake` always succeeds and
+// WARNING: THESE ARE DELIBERATELY NOT FUNCTIONAL. `xSemaphoreTake` always succeeds and
 // takes nothing. That is safe here ONLY because the bench is single-threaded and
 // the linked control modules never call it -- they are pure functions over their
 // arguments. If a future bench links a module that really does take a lock, this

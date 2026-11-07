@@ -1,6 +1,6 @@
 // A host stub for FreeRTOS, so the board's PURE control code can compile.
 //
-// ⚠ READ THIS BEFORE ASSUMING IT IS A CHEAT. `feedforward.cpp` contains no
+// Caution: READ THIS BEFORE ASSUMING IT IS A CHEAT. `feedforward.cpp` contains no
 // RTOS call of any kind -- it is arithmetic on six floats. It needs FreeRTOS
 // only TRANSITIVELY: it includes `control/feedforward.h`, which includes
 // `state_types.h` for the `FlightMode` enum, and `state_types.h` includes
@@ -16,7 +16,7 @@
 // the linked code is doing something the bench has no business modelling, and
 // the right response is to stop rather than to flesh this out.
 //
-// ⭐ AND IT IS A FINDING WORTH SENDING UPSTREAM. A pure, side-effect-free
+// Key point: AND IT IS A FINDING WORTH SENDING UPSTREAM. A pure, side-effect-free
 // control module cannot be compiled or unit-tested on a host because a types
 // header drags in the RTOS. Splitting the enums out of `state_types.h` would
 // make `mixer`, `attitude_control` and `feedforward` testable off-target with

@@ -1,7 +1,7 @@
 // =============================================================================
 //  A host shim for Arduino.h, so the board's control code compiles natively.
 //
-//  ⛔ WHY THIS EXISTS. Until now a Hengla control change was testable NOWHERE
+//  WARNING: WHY THIS EXISTS. Until now a Hengla control change was testable NOWHERE
 //  but the vehicle: nothing on the host runs the board's own control laws. Every
 //  control question therefore cost a pool session, and you do not out-tune a serious competitor at
 //  one experiment per pool day.
@@ -13,7 +13,7 @@
 //  of defines (`config.h`, which includes nothing at all), and the seven symbols
 //  below.
 //
-//  ⚠ THIS FILE IS NOT A REIMPLEMENTATION AND MUST NEVER BECOME ONE. The whole
+//  Caution: THIS FILE IS NOT A REIMPLEMENTATION AND MUST NEVER BECOME ONE. The whole
 //  value of the bench is that it runs THEIR code, unmodified, straight out of
 //  the firmware checkout. The moment we copy a control law in here to "make it
 //  build", the bench stops being evidence about the board. If a firmware file
@@ -61,7 +61,7 @@
 #define max(a, b) ((a) > (b) ? (a) : (b))
 #endif
 
-// ⚠ TIME IS SETTABLE, NOT WALL-CLOCK. `depth_control.cpp` calls millis() to
+// Caution: TIME IS SETTABLE, NOT WALL-CLOCK. `depth_control.cpp` calls millis() to
 // stamp its last run and to age its output. Wiring that to the host clock would
 // make every bench run depend on how fast the machine happens to be, and a
 // freshness check would pass or fail by luck. The bench ADVANCES time

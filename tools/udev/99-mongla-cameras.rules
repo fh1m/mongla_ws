@@ -31,7 +31,7 @@
 SUBSYSTEM!="video4linux", GOTO="mongla_cam_end"
 ATTR{index}!="0", GOTO="mongla_cam_end"
 
-# ⛔ BOTH LINES WERE WRONG, and they failed in two different ways.
+# WARNING: BOTH LINES WERE WRONG, and they failed in two different ways.
 #
 # MEASURED on the vehicle 2026-09-07 (`udevadm info -n /dev/videoN`):
 #

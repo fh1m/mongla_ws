@@ -21,7 +21,7 @@ string camera               # whose camera_info gives K, e.g. 'forward'
 string target_label         # the class/target these points lie on
 string source               # what produced them, e.g. 'anchor' -- for a bag
 
-# ⛔ WHICH OPTICS THE PIXELS ARE IN. Underwater a flat port is not a pinhole,
+# WARNING: WHICH OPTICS THE PIXELS ARE IN. Underwater a flat port is not a pinhole,
 # so `image_points` and the K they are solved against must BOTH be rectified
 # or NEITHER. Rectifying one side compares water geometry against air geometry
 # and puts the whole error into the pose, silently -- so the publisher states
@@ -32,7 +32,7 @@ uint8 OPTICS_RAW=1          # straight off the camera; the solver rectifies
 uint8 OPTICS_RECTIFIED=2    # publisher already applied optics.rectifier_for (lens, then port)
 uint8 optics
 
-# ⛔ WHICH PIXEL FRAME `image_points` ARE IN. A producer may work at a reduced
+# WARNING: WHICH PIXEL FRAME `image_points` ARE IN. A producer may work at a reduced
 # resolution -- the anchor matches in its backend's 320x240, not the camera's
 # full frame -- and CameraInfo describes the FULL frame. Solving reduced pixels
 # against a full-resolution K scales every recovered angle and range, silently,

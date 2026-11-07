@@ -43,7 +43,7 @@ int bench_num_thrusters(void) { return NUM_THRUSTERS; }
 // thrust curve and the bench would disagree with the board for a reason nobody
 // could see.
 //
-// ⚠ DEF_MOT_BAT_V_MAX is 0.0, which means battery compensation is OFF in the
+// Caution: DEF_MOT_BAT_V_MAX is 0.0, which means battery compensation is OFF in the
 // COMPILED DEFAULTS. It is NOT off on the vehicle: the board reads back 16.8
 // (2026-09-23), so compensation is configured there. An earlier version of this
 // comment claimed the 0.0 default "matches the board's measured behaviour",
@@ -74,7 +74,7 @@ void bench_params_defaults(void) {
     g_params.rat_pit_d = DEF_RAT_PIT_D; g_params.rat_pit_ff = DEF_RAT_PIT_FF;
     g_params.rat_yaw_p = DEF_RAT_YAW_P; g_params.rat_yaw_i = DEF_RAT_YAW_I;
     g_params.rat_yaw_d = DEF_RAT_YAW_D; g_params.rat_yaw_ff = DEF_RAT_YAW_FF;
-    // ⚠ THE IMAX MEMBERS ARE NOT OPTIONAL HERE. `attitude::loadGains` reads
+    // Caution: THE IMAX MEMBERS ARE NOT OPTIONAL HERE. `attitude::loadGains` reads
     // `rat_*_imax` and falls back to 0.5 when the value is 0 -- so a memset
     // leaves the bench integrating to 0.5 while the live board integrates to
     // its own stored value (0.222 on yaw, read 2026-09-23). Write them.
@@ -83,7 +83,7 @@ void bench_params_defaults(void) {
     g_params.rat_yaw_imax = 0.222f;
     g_params.pilot_expo = DEF_PILOT_EXPO;
     g_params.pilot_yaw_rate = DEF_PILOT_YAW_RATE;
-    // ⚠ The five feedforward gains stay at ZERO, because that is what the
+    // Caution: The five feedforward gains stay at ZERO, because that is what the
     // vehicle ships and what the live board reads back. Seeding them here would
     // make the bench quietly disagree with the hardware.
     g_params.atc_drag_rll = DEF_ATC_DRAG_RLL;
@@ -99,7 +99,7 @@ void bench_set_millis(unsigned long ms) { bench_millis_value = ms; }
 
 // ---- the depth controller, verbatim ------------------------------------- //
 //
-// ⛔ THE LOOP CLAUDE.md CALLS THE BIGGEST UNKNOWN ON THIS VEHICLE: "The depth
+// WARNING: THE LOOP CLAUDE.md CALLS THE BIGGEST UNKNOWN ON THIS VEHICLE: "The depth
 // loop has never run closed." Every `SROT_MOVE` primitive closes it, and an
 // in-air move is not partial validation because at ~0 m target and measurement
 // agree. The bench can close it against a plant, which is not water but is the
@@ -114,7 +114,7 @@ float bench_depth_update(float stick_throttle, float meas_depth, float dt,
 
 // ---- parameters BY MAVLINK NAME ------------------------------------------ //
 //
-// ⛔ WHY THIS EXISTS, AND IT IS THE MOST EXPENSIVE LESSON THE BENCH HAS TAUGHT.
+// WARNING: WHY THIS EXISTS, AND IT IS THE MOST EXPENSIVE LESSON THE BENCH HAS TAUGHT.
 // On 2026-09-23 a whole session of yaw numbers was produced against
 // `bench_params_defaults()`. The board does not run the defaults: `config.h`
 // ships `DEF_PILOT_YAW_RATE = 45.0` and the vehicle reads back **160.0**. Every
@@ -126,7 +126,7 @@ float bench_depth_update(float stick_throttle, float meas_depth, float dt,
 // MAVLink uses, and a yaw claim made under the defaults is not a claim about
 // this vehicle.
 //
-// ⚠ THIS TABLE IS A SECOND COPY OF THEIRS (`comms/params.cpp`), which is the
+// Caution: THIS TABLE IS A SECOND COPY OF THEIRS (`comms/params.cpp`), which is the
 // bug this codebase names "one truth, two copies". It is here only because
 // linking their table would drag in MAVLink, NVS and the comms stack.
 // `test_bench_params_match_the_firmware.py` parses their file and fails if any
