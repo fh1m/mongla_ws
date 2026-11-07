@@ -269,7 +269,7 @@ def test_the_DSL_hands_back_the_refusal_with_both_candidates():
     import time as _t
     m._fused_pose = {'forward': (out[-1], _t.monotonic())}
     m.client = type('C', (), {'node': None})()
-    import mongla_planner.mongla_dsl as D
+    import mongla_planner.dsl_position as D      # where _wait_fused_pose spins
     real = D.rclpy.spin_once
     D.rclpy.spin_once = lambda *a, **k: None
     try:
@@ -286,7 +286,7 @@ def _wait(msg, arrived_ago):
     """`_wait_fused_pose` against one cached message of a given age."""
     import time as _t
     from mongla_planner.mongla_dsl import MonglaMission
-    import mongla_planner.mongla_dsl as D
+    import mongla_planner.dsl_position as D      # where _wait_fused_pose spins
     m = MonglaMission.__new__(MonglaMission)
     m._fused_subs = {'forward': object()}
     m._fused_pose = {'forward': (msg, _t.monotonic() - arrived_ago)}

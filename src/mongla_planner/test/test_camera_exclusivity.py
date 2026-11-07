@@ -137,7 +137,7 @@ def _present_fake(names_over_time):
 def test_presence_waits_for_discovery_when_asked():
     # First read is empty (discovery not settled), second finds the node.
     fake = _present_fake([[], ['mongla_detector_forward']])
-    with patch('mongla_planner.mongla_dsl.rclpy.spin_once'):
+    with patch('mongla_planner.dsl_report.rclpy.spin_once'):
         got = MonglaMission._detector_present(fake, 'forward', settle=1.0)
     assert got is True
 
@@ -146,7 +146,7 @@ def test_presence_without_settle_does_not_spin():
     # The exclusivity loop keeps the instant read: a false absent only skips a
     # pause it can redo, and the 5 s service wait is what it exists to avoid.
     fake = _present_fake([[]])
-    with patch('mongla_planner.mongla_dsl.rclpy.spin_once') as spin:
+    with patch('mongla_planner.dsl_report.rclpy.spin_once') as spin:
         got = MonglaMission._detector_present(fake, 'forward')
     assert got is False
     spin.assert_not_called()
@@ -154,7 +154,7 @@ def test_presence_without_settle_does_not_spin():
 
 def test_presence_gives_up_at_the_budget():
     fake = _present_fake([[], [], [], [], [], [], [], [], [], [], [], []])
-    with patch('mongla_planner.mongla_dsl.rclpy.spin_once'):
+    with patch('mongla_planner.dsl_report.rclpy.spin_once'):
         got = MonglaMission._detector_present(fake, 'forward', settle=0.05)
     assert got is False
 

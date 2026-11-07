@@ -11,8 +11,9 @@ import json
 import time as _time
 from types import SimpleNamespace
 
-from mongla_planner import mongla_dsl
-from mongla_planner.mongla_dsl import MonglaMission, _run_dir
+from mongla_planner import dsl_report
+from mongla_planner.dsl_report import _run_dir
+from mongla_planner.mongla_dsl import MonglaMission
 
 
 def _board(entries):
@@ -71,5 +72,5 @@ def test_git_sha_never_raises(monkeypatch):
     # Even if git is missing, the helper returns '' rather than raising.
     def _boom(*a, **k):
         raise FileNotFoundError('git')
-    monkeypatch.setattr(mongla_dsl.subprocess, 'run', _boom)
-    assert mongla_dsl._git_sha() == ''
+    monkeypatch.setattr(dsl_report.subprocess, 'run', _boom)
+    assert dsl_report._git_sha() == ''

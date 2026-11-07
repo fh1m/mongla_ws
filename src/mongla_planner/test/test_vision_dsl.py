@@ -15,6 +15,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+import rclpy
 
 from mongla_planner.vision_dsl import _VisionDSL, VisionResult
 from mongla_planner.client import MoveFailed
@@ -505,7 +506,7 @@ def test_set_detector_param_sends_typed_param(monkeypatch):
     cli.call_async.return_value.result.return_value = SimpleNamespace(
         results=[SimpleNamespace(successful=True, reason='')])
     client.node.create_client.return_value = cli
-    monkeypatch.setattr(dd.rclpy, 'spin_until_future_complete', lambda *a, **k: None)
+    monkeypatch.setattr(rclpy, 'spin_until_future_complete', lambda *a, **k: None)
 
     m._set_detector_param('/mongla_detector_forward', 'conf', 0.6)
 
@@ -527,7 +528,7 @@ def test_set_detector_param_raises_on_rejection(monkeypatch):
     cli.call_async.return_value.result.return_value = SimpleNamespace(
         results=[SimpleNamespace(successful=False, reason='not in registry')])
     client.node.create_client.return_value = cli
-    monkeypatch.setattr(dd.rclpy, 'spin_until_future_complete', lambda *a, **k: None)
+    monkeypatch.setattr(rclpy, 'spin_until_future_complete', lambda *a, **k: None)
 
     with pytest.raises(RuntimeError, match='registry'):
         m.set_model('bogus_model')
