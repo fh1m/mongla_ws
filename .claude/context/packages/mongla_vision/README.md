@@ -184,6 +184,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `calibration/binding.py` | Which calibration belongs to which camera -- resolved ONCE, from the data. |
 | `calibration/guide.py` | Step-by-step guided camera calibration in a browser. |
 | `calibration/guide_capture.py` | The capture half of the guided calibration: the pose script and its threads. |
+| `calibration/guide_files.py` | Where calibrations and captures live on disk, and which camera is which. |
 | `calibration/guide_page.py` | The calibration page `guide.py` serves at `/`: one HTML document, inline |
 | `calibration/solver.py` | Camera calibration that PROVES its own answer instead of asserting it. |
 | `cameras/camera.py` | Abstract Camera — every image source implements this. |

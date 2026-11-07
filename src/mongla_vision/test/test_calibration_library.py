@@ -78,7 +78,7 @@ def test_apply_stamps_the_identity_as_OPERATOR_ASSERTED(g, tmp_path,
                                                         monkeypatch):
     d = str(tmp_path)
     _write(d, 'pi_forward_1280x720.json')
-    monkeypatch.setattr(g, 'camera_identity', lambda dev: {
+    monkeypatch.setattr(g.files, 'camera_identity', lambda dev: {
         'usb_vid': '1bcf', 'usb_pid': '2c99', 'usb_serial': 'X1',
         'card': 'Other Cam', 'bus': 'usb-xhci-1'})
     name, err = g.apply_calibration(d, 'pi_forward_1280x720.json',
@@ -97,7 +97,7 @@ def test_apply_refuses_a_camera_with_no_usb_identity(g, tmp_path,
                                                      monkeypatch):
     d = str(tmp_path)
     _write(d, 'pi_forward_1280x720.json')
-    monkeypatch.setattr(g, 'camera_identity', lambda dev: {})
+    monkeypatch.setattr(g.files, 'camera_identity', lambda dev: {})
     name, err = g.apply_calibration(d, 'pi_forward_1280x720.json',
                                     '/dev/video7', 'pi_downward')
     assert name is None and 'identity' in err
@@ -110,7 +110,7 @@ def test_apply_keeps_the_medium_in_the_destination_name(g, tmp_path,
                                                         monkeypatch):
     d = str(tmp_path)
     _write(d, 'pi_forward_1280x720_water.json', medium='water')
-    monkeypatch.setattr(g, 'camera_identity', lambda dev: {'usb_vid': 'a'})
+    monkeypatch.setattr(g.files, 'camera_identity', lambda dev: {'usb_vid': 'a'})
     name, _ = g.apply_calibration(d, 'pi_forward_1280x720_water.json',
                                   '/dev/video7', 'pi_downward')
     assert name == 'pi_downward_1280x720_water.json'
@@ -123,7 +123,7 @@ def test_apply_backs_up_rather_than_destroying_an_existing_calibration(
     _write(d, 'pi_downward_1280x720.json',
            applies_to=['pi_downward'],
            camera_matrix=[[111.0, 0, 1], [0, 111.0, 1], [0, 0, 1]])
-    monkeypatch.setattr(g, 'camera_identity', lambda dev: {'usb_vid': 'a'})
+    monkeypatch.setattr(g.files, 'camera_identity', lambda dev: {'usb_vid': 'a'})
     g.apply_calibration(d, 'src_1280x720.json', '/dev/video7', 'pi_downward')
     baks = [f for f in os.listdir(d) if '.bak-' in f]
     assert len(baks) == 1
@@ -161,9 +161,9 @@ def test_the_guide_never_imports_its_own_PACKAGE(g):
     Parsed, not grepped -- a substring search matches this docstring.
     """
     import ast
-    tree = ast.parse(open(g.__file__).read())
     bad = []
-    for node in ast.walk(tree):
+    for node in (n for f in (g.__file__, g.files.__file__)
+                 for n in ast.walk(ast.parse(open(f).read()))):
         if isinstance(node, ast.Import):
             bad += [n.name for n in node.names
                     if n.name.split('.')[0] == 'mongla_vision']
@@ -206,7 +206,7 @@ def test_the_calibration_dir_is_never_inside_a_GENERATED_tree(
     """
     root = str(tmp_path / 'mongla_ws')
     real, guide_home = _fake_ws(root)
-    monkeypatch.setattr(g, '__file__', os.path.join(guide_home, 'guide.py'))
+    monkeypatch.setattr(g.files, '__file__', os.path.join(guide_home, 'guide_files.py'))
     monkeypatch.chdir(tmp_path)
     got = g.default_calibration_dir()
     assert os.path.realpath(got) == os.path.realpath(real), got
@@ -222,7 +222,7 @@ def test_the_installed_layout_finds_the_source_tree(g, tmp_path, monkeypatch):
                         'python3.12', 'site-packages', 'mongla_vision',
                         'calibration')
     os.makedirs(home)
-    monkeypatch.setattr(g, '__file__', os.path.join(home, 'guide.py'))
+    monkeypatch.setattr(g.files, '__file__', os.path.join(home, 'guide_files.py'))
     monkeypatch.chdir(tmp_path)
     assert os.path.realpath(g.default_calibration_dir()) == \
         os.path.realpath(real)
