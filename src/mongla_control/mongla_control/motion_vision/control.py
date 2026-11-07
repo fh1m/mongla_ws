@@ -30,7 +30,7 @@ NO_CAMERA = 3   # camera_info never seen -- pipeline not up
 ABORTED   = 4   # cooperative abort (goal cancelled)
 DRIFTED   = 5   # align: centred while driving, OUT of band once stopped and re-measured
 
-_CODE_NAME = {ALIGNED: 'OK', LOST: 'LOST', TIMEOUT: 'TIMEOUT',
+_CODE_NAME = {ALIGNED: 'ALIGNED', LOST: 'LOST', TIMEOUT: 'TIMEOUT',
               NO_CAMERA: 'NO_CAMERA', ABORTED: 'ABORTED', DRIFTED: 'DRIFTED'}
 
 
