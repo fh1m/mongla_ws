@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'src' / 'mongla_localization'))
-from mongla_localization.inekf import RIEKF, skew          # noqa: E402
+from mongla_localization.inekf import RIEKF          # noqa: E402
 
 # With flow the filter holds sigma_vel at 0.012 m/s; without it, it passes 2 m/s
 # within one second. Anything in 0.1 .. 1.0 separates them cleanly. 0.5 m/s is

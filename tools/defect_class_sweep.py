@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Sweep the whole stack for the defect CLASSES this audit has actually found."""
-import ast, pathlib, re, sys, collections
+import ast, pathlib, re, collections
 
 # "Absence is the signal" -- the project's own recurring defect (B05, B10, B25).
 ABSENCE = re.compile(r'\bor\s+0\.0\b|\bor\s+0\b(?!\s*[.\w])|getattr\([^)]+,\s*0(\.0)?\)')

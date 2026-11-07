@@ -36,7 +36,6 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-import numpy as np
 
 WS = os.path.expanduser('~/mongla_ws/src')
 for pkg in ('mongla_control', 'mongla_vision', 'mongla_manager'):

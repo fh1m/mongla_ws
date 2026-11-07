@@ -39,7 +39,6 @@ which is the one error this design cannot detect from inside.
 from __future__ import annotations
 
 import argparse
-import math
 import sys
 
 

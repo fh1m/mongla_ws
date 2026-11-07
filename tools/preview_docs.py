@@ -5,7 +5,7 @@ gitignored - it exists to be looked at, not published.
 
 Usage:  python3 tools/preview_docs.py   (from the repo root)
 """
-import re,markdown,pathlib,sys
+import re,markdown,pathlib
 lay=pathlib.Path('docs/_layouts/default.html').read_text()
 for name in ('the-shift','capability-map'):
     src=pathlib.Path(f'docs/{name}.md').read_text()

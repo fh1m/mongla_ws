@@ -10,7 +10,7 @@ Finds functions that report failure -- either `return False, ...` /
 `return (False, ...)`, or `MoveResult(...)` -- and then finds call sites that
 DISCARD the result: a bare `obj.method(...)` as its own statement (ast.Expr).
 """
-import ast, pathlib, collections, sys
+import ast, pathlib, collections
 
 # 1) which functions report failure in their return value?
 reporters = {}          # name -> (file, lineno, kind)

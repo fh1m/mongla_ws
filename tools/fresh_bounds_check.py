@@ -22,7 +22,6 @@ reading of the constants.
 """
 import argparse
 import statistics as st
-import sys
 import time
 
 import rclpy

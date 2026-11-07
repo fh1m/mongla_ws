@@ -215,7 +215,7 @@ def main():
               f'    err {err:+6.2f} cm    {100*got/a.truth_cm:6.1f} %')
         print(f'  quality: {n.q_seen} intervals, {n.q_zero} refused '
               f'({100.0*n.q_zero/max(1,n.q_seen):.0f} %)')
-        print(f'\n  body axes integrated independently of the projection:')
+        print('\n  body axes integrated independently of the projection:')
         print(f'    vx (AXIAL, image-Y)    {n.ivx*100:+8.2f} cm')
         print(f'    vy (LATERAL, image-X)  {n.ivy*100:+8.2f} cm')
         print(f'    path length |v|        {n.path*100:8.2f} cm')

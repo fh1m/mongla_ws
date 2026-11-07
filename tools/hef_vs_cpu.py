@@ -9,7 +9,7 @@ post-processing (the numpy port in xfeat_onnx.py), same MAGSAC, same
 Both arms run on the Pi so the only difference is float32-on-CPU versus
 INT8-on-Hailo.
 """
-import sys, glob, os, time
+import sys, os, time
 import numpy as np, cv2
 
 sys.path.insert(0, '/home/fh1m/mongla_ws/src/mongla_vision')

@@ -47,7 +47,6 @@ Usage, one axis at a time:
 """
 import argparse
 import json
-import math
 import sys
 import time
 

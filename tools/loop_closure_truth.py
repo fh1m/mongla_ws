@@ -157,7 +157,7 @@ def main():
         print(f'RESULT: lowest bar with ZERO false closures: {min(clean)}   '
               f'(shipped bar is {lc.CLOSURE_INLIERS})')
         if min(clean) > lc.CLOSURE_INLIERS:
-            print(f'ERROR: THE SHIPPED BAR IS TOO LOW on this footage.')
+            print('ERROR: THE SHIPPED BAR IS TOO LOW on this footage.')
     else:
         print('ERROR: NO BAR TESTED reaches zero false closures.')
     return 0

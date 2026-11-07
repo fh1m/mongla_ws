@@ -36,7 +36,7 @@ with the dustbin dropped, pixel-shuffled 8x8, is not something to guess at.
 from __future__ import annotations
 
 import os
-from typing import Optional, Tuple
+from typing import Tuple
 
 import numpy as np
 

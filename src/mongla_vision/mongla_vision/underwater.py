@@ -42,7 +42,7 @@ not.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, List, Sequence
+from typing import Iterable, List
 
 import cv2
 import numpy as np

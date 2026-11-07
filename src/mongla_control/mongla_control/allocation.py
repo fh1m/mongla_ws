@@ -125,7 +125,6 @@ def headroom(roll: float = 0.0, pitch: float = 0.0, yaw: float = 0.0,
     more when headroom is 1.0 buys nothing and winds the integrator up against
     a wall it cannot see.
     """
-    a = allocate(roll, pitch, yaw, throttle, forward, lateral)
     demand = (roll, pitch, yaw, throttle, forward, lateral)
     max_h = max((abs(sum(MIXER[m][c] * demand[c] for c in range(6)))
                  for m in range(N_HORIZ)), default=0.0)

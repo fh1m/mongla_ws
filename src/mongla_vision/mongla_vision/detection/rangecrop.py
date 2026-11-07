@@ -39,7 +39,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
-import cv2
 
 # Sized from the measurement above. Below ENTER the full frame is losing
 # targets (65.9 % at 0.25); above EXIT the crop is losing them (69.0 % at

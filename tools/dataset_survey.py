@@ -90,7 +90,7 @@ def main():
         print(f'  {rel[:45]:<46}{st.sharpness:8.0f}{st.contrast:7.1f}'
               f'{st.saturation:7.1f}{st.cast:+7.1f}{st.brightness:8.1f}  {v}')
 
-    print(f'\n  === WHAT THE ARCHIVE COVERS ===')
+    print('\n  === WHAT THE ARCHIVE COVERS ===')
     for v in (ON, UNKNOWN, OFF):
         print(f'    {v:<14} {len(buckets[v]):3d} datasets')
     print()

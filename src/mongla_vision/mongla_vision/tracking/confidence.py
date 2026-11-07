@@ -53,7 +53,7 @@ from the stream itself and adapts to whatever pool the vehicle is in.
 from __future__ import annotations
 
 from collections import deque
-from typing import Deque, Optional, Tuple
+from typing import Deque, Tuple
 
 # NSA's floor. R is never scaled to zero: a confidence of 1.0 does not mean the
 # box is exact, and a zero-noise measurement makes the filter discard its own
