@@ -127,25 +127,61 @@ else warn "numpy runs on the reference BLAS -- the anchor matcher is ~4.5x slowe
 say "The board's serial link"
 id -nG | tr ' ' '\n' | grep -qx dialout && ok "$USER is in dialout" \
   || fail "$USER is not in dialout -- the board will not open"
-dpkg -s brltty >/dev/null 2>&1 && warn "brltty installed -- it steals the board's CH340 (E5)" || ok "brltty absent"
+[ "$(dpkg-query -W -f='${Status}' brltty 2>/dev/null)" = "install ok installed" ] && warn "brltty installed -- it steals the board's CH340 (E5)" || ok "brltty absent"
 modinfo ch341 >/dev/null 2>&1 && ok "ch341 driver present" || fail "no ch341 module -- the board gets no /dev/ttyUSB* (E5)"
 
 # --------------------------------------------------------------------------- #
 say "System files (kutum/system/)"
 same() {   # declared file, installed path, what it is
-  if [ ! -f "$2" ]; then warn "$3 not installed ($2)"
+  # A root-only file (netplan is 0600) is compared through sudo -n, which
+  # never prompts: Kutum's owner has passwordless sudo (setup.sh --system).
+  if [ ! -e "$2" ]; then warn "$3 not installed ($2)"
   elif [ ! -f "$1" ]; then ok "$3 installed (no repo copy here to compare)"
-  elif cmp -s "$1" "$2"; then ok "$3 matches the repo"
+  elif [ ! -r "$2" ] && ! sudo -n true 2>/dev/null; then ok "$3 installed (root-only; not compared without sudo)"
+  elif { [ -r "$2" ] && cmp -s "$1" "$2"; } || { [ ! -r "$2" ] && sudo -n cmp -s "$1" "$2"; }; then
+    ok "$3 matches the repo"
   else warn "$3 differs from kutum/system ($2) -- run kutum/setup.sh --system"; fi
 }
 same "$KUTUM/system/udev/99-mongla-cameras.rules" /etc/udev/rules.d/99-mongla-cameras.rules "camera names"
 same "$KUTUM/system/udev/51-hailo-udev.rules"     /etc/udev/rules.d/51-hailo-udev.rules     "Hailo device permissions"
 same "$KUTUM/system/systemd/set-cpu-performance"  /usr/local/sbin/set-cpu-performance      "governor script"
 same "$KUTUM/system/systemd/cpu-performance.service" /etc/systemd/system/cpu-performance.service "cpu-performance.service"
+same "$KUTUM/system/netplan/60-kutum-eth.yaml"  /etc/netplan/60-kutum-eth.yaml          "Ethernet link-local"
 systemctl is-enabled cpu-performance.service >/dev/null 2>&1 && ok "cpu-performance.service enabled" \
   || warn "cpu-performance.service not enabled"
 [ -e /dev/srot ] && ok "/dev/srot (the board, pinned to its port)" \
   || warn "no /dev/srot -- the board is found by searching (kutum/system/udev/make_srot_rule.sh pins it)"
+
+# --------------------------------------------------------------------------- #
+say "Network"
+for i in eth0 wlan0; do
+  addr="$(ip -4 -br addr show "$i" 2>/dev/null | awk '{print $3}')"
+  if [ -n "$addr" ]; then ok "$i $addr"
+  elif [ "$i" = eth0 ]; then warn "eth0 has no IPv4 address (no cable, or no DHCP and no link-local)"
+  else warn "wlan0 has no address -- not joined (kutum/setup.sh --system asks for a network)"; fi
+done
+systemctl is-active avahi-daemon >/dev/null 2>&1 && ok "avahi-daemon: answers as $(hostname).local" \
+  || fail "avahi-daemon not running -- $(hostname).local will not resolve from the laptop"
+installed() { [ "$(dpkg-query -W -f='${Status}' "$1" 2>/dev/null)" = "install ok installed" ]; }
+installed wpasupplicant && ok "wpasupplicant installed" \
+  || warn "wpasupplicant missing -- Wi-Fi cannot join anything"
+
+# --------------------------------------------------------------------------- #
+say "The clock"
+# The Pi 5 RTC keeps time through a power-off only on its battery. Without
+# it, a vehicle booted at a pool with no network starts in the past, and every
+# log, bag and run folder is stamped with the wrong day.
+if [ -e /sys/class/rtc/rtc0 ]; then
+  ok "RTC: $(cat /sys/class/rtc/rtc0/name)"
+  chg=/sys/class/rtc/rtc0/charging_voltage
+  v="$(cat "$chg" 2>/dev/null || echo 0)"
+  if [ "${v:-0}" -gt 0 ]; then ok "RTC battery charging at $((v / 1000)) mV"
+  else warn "RTC battery not charged (dtparam=rtc_bbat_vchg) -- a rechargeable cell runs flat"; fi
+else
+  warn "no RTC -- time after a power-off comes only from the network"
+fi
+if timedatectl show -p NTPSynchronized --value 2>/dev/null | grep -qx yes; then ok "system clock synchronised"
+else warn "system clock NOT synchronised (no network time since boot; running on the RTC)"; fi
 
 # --------------------------------------------------------------------------- #
 say "What boots"
