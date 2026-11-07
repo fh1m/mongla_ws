@@ -1,7 +1,7 @@
 # PR Q — CRITICAL: MOTOR_DETECT and `FRAME_REVERSE` cannot both be right, and detect wins
 
 **Target:** `srot-control-board` · **File as an ISSUE** (the fix is theirs to choose)
-**Status:** ⏳ NOT SENT — read-only GitHub access this session (403 on issue creation).
+**Status:** filed 2026-11-07 as issue [#34](https://github.com/RakibulIslam1/srot-control-board/issues/34).
 
 **This outranks everything else in this batch.** Two features that are each
 individually correct, that were added separately, and that neither one mentions.

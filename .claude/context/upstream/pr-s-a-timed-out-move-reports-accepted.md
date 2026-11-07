@@ -1,7 +1,7 @@
 # PR S — a move that gives up reports `ACCEPTED` at 100 %
 
 **Target:** `srot-control-board` · **File as an ISSUE**
-**Status:** ⏳ NOT SENT — read-only GitHub access this session.
+**Status:** filed 2026-11-07 as issue [#36](https://github.com/RakibulIslam1/srot-control-board/issues/36).
 
 `MOVE_DIVE` to a depth it never reaches, and `MOVE_TURN` to a heading it never
 reaches, both end by the global timeout and are reported to the companion as
