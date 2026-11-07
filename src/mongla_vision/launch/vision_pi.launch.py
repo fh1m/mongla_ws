@@ -21,7 +21,7 @@ of which is a thing that was silently wrong before:
    so `CameraInfo.k` publishes all-zero and every pixel->bearing conversion
    silently falls back to a GUESSED field of view -- on a stack whose whole
    uplink contract is bearings. The measured intrinsics
-   (63.8 deg air / 46.7 deg water, +-0.7) exist as a file and were reaching
+   (63.8 deg in air; 46.7 deg in water by Snell) exist as a file and were reaching
    nothing.
 
     ros2 launch mongla_vision vision_pi.launch.py \\

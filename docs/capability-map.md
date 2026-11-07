@@ -117,7 +117,7 @@ already inside the board and had nowhere to go until we asked.
 | Segmentation | decoded without leaving the quantised domain: 31.5 ms → **0.93 ms**, bit-exact | `measured-bars.md` (Hailo segmentation); `detection/seg_decode.py` | BENCH |
 | Holding a target between detections | a **lock ladder** — tracker, optical-flow follower, then a feature anchor that held **175 consecutive frames** the detector had lost | `measured-bars.md` §2; `mongla_vision/lock_node.py` | BENCH |
 | Continuity budget | measured from 71 real gaps: the coast covers **91.5 %**, the track buffer **100 %** | `measured-bars.md` §2 | BENCH |
-| Lens geometry | measured per camera: **63.8° air, 46.7° water ±0.7°**, 25 views, held-out validated | `measured-bars.md` §3; `config/calibration/*.json` | BENCH |
+| Lens geometry | measured per camera in air (downward **63.8°**, 25 views, held-out validated); water figures (**46.7°**) computed by Snell, not yet checked in water | `measured-bars.md` §3; `config/calibration/*.json` | BENCH |
 | Refraction through a flat port | corrected radially, by the same rectifier every metric consumer uses | `mongla_vision/optics.py` | BENCH |
 | Image preprocessing | measured in **17 configurations** and never positive; on the gate it destroyed 95 % of detections. Ships **off**, and a test keeps it off | `measured-bars.md` §1 | BENCH |
 

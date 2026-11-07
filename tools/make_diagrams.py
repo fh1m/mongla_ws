@@ -94,16 +94,16 @@ def loop_rate():
 def fov():
     W, H = 1160, 470
     cx, cy = 150, H / 2
-    o = [head(W, H, 'The camera sees 46.7 degrees in water, not the 63.8 the datasheet states')]
-    o.append(txt(0, 22, 'The lens the datasheet describes is not the lens you have', 'h'))
-    o.append(txt(0, 42, 'FLAT PORT · SNELL REFRACTION · MEASURED IN WATER, ±0.7°'))
+    o = [head(W, H, 'The camera sees 46.7 degrees in water, not the 63.8 it measures in air')]
+    o.append(txt(0, 22, 'The lens you calibrate in air is not the lens you swim with', 'h'))
+    o.append(txt(0, 42, 'FLAT PORT · SNELL REFRACTION · AIR MEASURED, WATER COMPUTED, NOT YET CHECKED IN WATER'))
 
     # the cone has to FIT: derive reach from the half-height available rather
     # than picking a length and discovering it overruns the frame
     avail = (H - 150) / 2
     for ang, col, lit, lab, dash in (
-        (63.8, SEA, SEA_L, '63.8°  in air — the datasheet', '4 5'),
-        (46.7, RED, RED_L, '46.7°  in water — measured', None),
+        (63.8, SEA, SEA_L, '63.8°  in air — measured', '4 5'),
+        (46.7, RED, RED_L, '46.7°  in water — by Snell', None),
     ):
         reach = min(avail / math.tan(math.radians(ang / 2)), W - cx - 330)
         half = math.radians(ang / 2)
@@ -136,7 +136,7 @@ def fov():
 
     o.append(f'<line x1="0" y1="{H - 74}" x2="{W}" y2="{H - 74}" stroke="{RULE}"/>')
     o.append(txt(0, H - 40, '27%', 'big'))
-    o.append(txt(86, H - 48, 'less world than the datasheet promises.', 'v'))
+    o.append(txt(86, H - 48, 'less world than the air figure promises.', 'v'))
     o.append(txt(86, H - 32, 'Every search pattern tuned against the air figure sweeps a view that does not exist.'))
     o.append('</svg>')
     return '\n'.join(o)

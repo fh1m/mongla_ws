@@ -29,8 +29,9 @@ newest wins — measured at **16.9 ms** stale against **396 ms** for a plain que
 ### 2. Know what the lens does
 
 A camera behind a flat window is not the camera in the datasheet: water bends every ray, and
-the effect grows toward the edges of the frame. Our forward camera is **63.8° in air and
-46.7° in water**, measured over 25 views rather than taken from a spec sheet, and every metric
+the effect grows toward the edges of the frame. Our downward camera measured **63.8° in
+air** over 25 views, and Snell's law puts it at **46.7° in water** (computed; no camera has
+been calibrated underwater yet). The forward camera is 73.9° in air and 53.6° in water the same way, and every metric
 consumer goes through the same refraction correction (`optics.py`).
 
 Skip that and a gate 4 m away reports as 5.15 m — a 29 % error no amount of control tuning
@@ -99,7 +100,7 @@ and direct feed), `detector_publish.py` (topics and operator log lines) and
 
 ```bash
 ros2 run mongla_vision vision_check          # is the pipeline alive and seeing?
-ros2 run mongla_vision calibrate             # measure this camera, in water
+ros2 run mongla_vision calibrate             # measure this camera, in air or in water
 ros2 run mongla_vision vision_thrust_check   # detection → thrust, disarmed and safe
 ros2 launch mongla_vision mission_web.launch.py   # both cameras in a browser
 ```

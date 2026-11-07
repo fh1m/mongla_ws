@@ -231,8 +231,8 @@ def test_a_camera_switch_still_keeps_the_current_medium():
 def test_the_refraction_matches_OUR_OWN_measured_pair(fs):
     """Tie the conversion to a measurement, not to itself.
 
-    Round 25 measured this camera at 63.8 deg air / 46.7 deg water +/-0.7,
-    held-out validated. Feeding the water figure in must give the air one
+    This camera measured 63.8 deg in air (held out, checked against a tape),
+    and 46.7 deg is that figure carried into water by Snell's law. Feeding the water figure in must give the air one
     back. A sign flip or a wrong refractive index fails here and nowhere
     else -- the synthetic 70/43 pair above only checks the code against
     itself.

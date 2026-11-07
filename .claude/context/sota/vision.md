@@ -356,8 +356,8 @@ are 30–300× worse, and **nothing in this survey closes that gap without acous
 | **Pool-floor terrain nav** | barely exists — "terrain-aided navigation" underwater means **sonar bathymetry**. Closest number: **1.04 % relative distance error** for pool beacon ranging (PMC9611530) | — | a cooperative beacon | our tile/lane work is ahead of the literature here, not behind it |
 
 **Refraction, independently confirmed:** underwater photogrammetry loses **~5× precision without
-in-water recalibration and ~2× with it** (PMC4570311). Our 46.7° measured water FOV against the
-63.8° air datasheet was **not optional** — and any metric-depth model carrying an in-air focal
+in-water recalibration and ~2× with it** (PMC4570311). Our 46.7° water FOV, computed by Snell from the
+63.8° we measured in air, was **not optional** — and any metric-depth model carrying an in-air focal
 starts with a **27 % focal error** before attenuation is considered.
 
 **The sharpest finding — failure detection.** Super Odometry 2.0
