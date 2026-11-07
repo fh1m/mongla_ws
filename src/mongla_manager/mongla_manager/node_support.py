@@ -121,6 +121,19 @@ def mission_watchdog(attached: bool, last_seen: float, now: float,
     return 'surface' if armed else 'detach'
 
 
+
+def kill_watch(was_killed, killed, armed: bool) -> bool:
+    """True on the instant the kill switch turns to ENGAGED with the vehicle armed.
+
+    The switch cuts thruster power on the second board, and the control board
+    treats it as display-only (firmware `arming.h`, issue #12): it stays armed
+    and keeps running the move. Turning the knob back would resume that move
+    under a diver's hands. So the host disarms on the edge. Only a True
+    reading acts -- `None` is "no second-board link", which says nothing about
+    the switch.
+    """
+    return bool(armed) and killed is True and was_killed is not True
+
 class _HeartbeatThread:
     """The companion HEARTBEAT on its own daemon thread -- nothing may starve it.
 

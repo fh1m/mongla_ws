@@ -51,6 +51,11 @@ _BOARD_AXIS = {
 # reports the depth after.
 _HEADING_VERBS = frozenset({'yaw_left', 'yaw_right', 'turn'})
 
+# A relative turn wider than this is split into equal legs (`_relative_turn`):
+# at 180 deg the board cannot tell which way to go. 120 makes 180 two 90s and
+# 360 three 120s.
+MAX_TURN_LEG_DEG = 120.0
+
 # Depth readings older than this are not "the depth now". 2.0 s catches a real
 # freeze with ~8x margin over 4 Hz jitter and never trips on normal telemetry.
 _ATTITUDE_STALE_S = 2.0
@@ -164,12 +169,47 @@ class Mongla(VisionVerbs):
                            gain=gain, settle=settle)
 
     def yaw_left(self, target, timeout=30.0, settle=0.0, on_progress=None):
-        return self._board('yaw_left', on_progress, target=target,
-                           timeout=timeout, settle=settle)
+        return self._relative_turn('yaw_left', target, timeout, settle, on_progress)
 
     def yaw_right(self, target, timeout=30.0, settle=0.0, on_progress=None):
-        return self._board('yaw_right', on_progress, target=target,
-                           timeout=timeout, settle=settle)
+        return self._relative_turn('yaw_right', target, timeout, settle, on_progress)
+
+    def _relative_turn(self, verb, target, timeout, settle, on_progress):
+        """A relative turn, in legs of at most MAX_TURN_LEG_DEG.
+
+        The board picks a relative turn's direction from the sign of
+        `wrapPi(target - yaw)`, which at 180 deg is +pi or -pi by float
+        rounding and yaw noise: `yaw_right(180)` went clockwise half the time
+        in a float32 simulation of the firmware (measured-bars §68). Past 180
+        it goes the other way, and 360 completes at once. Equal legs, each
+        well under 180, keep the direction the verb names.
+
+        `timeout` applies to each leg. Only the last leg settles. A leg that
+        fails ends the turn and says which leg; an abort between legs is
+        honoured, because the next leg's command scope would clear it.
+        """
+        try:
+            total = float(target)
+        except (TypeError, ValueError):
+            total = math.nan
+        if not math.isfinite(total) or abs(total) <= MAX_TURN_LEG_DEG or abs(total) > 360.0:
+            # One leg, or a bad target the verb table refuses with its own reason.
+            return self._board(verb, on_progress, target=target,
+                               timeout=timeout, settle=settle)
+        n = math.ceil(abs(total) / MAX_TURN_LEG_DEG)
+        res = None
+        for k in range(n):
+            if k and self._abort_event.is_set():
+                return self._make_result(False, f'{verb} {total:+.0f} deg: aborted '
+                                                f'after leg {k}/{n}')
+            prog = None if on_progress is None else \
+                (lambda f, k=k: on_progress((k + f) / n))
+            res = self._board(verb, prog, target=total / n, timeout=timeout,
+                              settle=settle if k == n - 1 else 0.0)
+            if not res.success:
+                res.message = f'{verb} {total:+.0f} deg, leg {k + 1}/{n}: {res.message}'
+                return res
+        return res
 
     def turn(self, target, timeout=30.0, settle=0.0, on_progress=None):
         return self._board('turn', on_progress, target=target,

@@ -73,10 +73,13 @@ def _node(armed):
     n = SimpleNamespace()
     n._mission = {'attached': True, 'name': 'pool_day_practice',
                   'seen': time.monotonic() - 10.0}
-    n.fc = SimpleNamespace(is_armed=lambda: armed)
+    n.kill = None
+    n.fc = SimpleNamespace(is_armed=lambda: armed,
+                           telemetry=lambda: SimpleNamespace(kill_switch=n.kill))
     n.mongla = MagicMock()
     n.mongla.surface.return_value = SimpleNamespace(message='SURFACE engaged')
     n.get_logger = lambda: MagicMock()
+    n._kill_watch_tick = lambda armed: M.AUVManagerNode._kill_watch_tick(n, armed)
     return n
 
 
@@ -116,3 +119,36 @@ def test_the_runner_beats_its_name_and_detaches_on_stop():
     datas = [c.args[0].data for c in pub.publish.call_args_list]
     assert datas.count('demo') >= 2
     assert datas[-1] == '' and 'demo' not in datas[-3:], 'detach must come last'
+
+
+# ── the kill switch: disarm on the edge to ENGAGED ───────────────────────────
+@pytest.mark.parametrize('was, now, armed, want', [
+    (False, True, True, True),     # turned while armed: act
+    (None, True, True, True),      # first reading is engaged: act
+    (True, True, True, False),     # still engaged: acted already
+    (False, True, False, False),   # disarmed: nothing to do
+    (False, None, True, False),    # link lost: says nothing about the switch
+    (True, False, True, False),    # power back: never re-arm or resume
+])
+def test_the_kill_rule(was, now, armed, want):
+    assert node_support.kill_watch(was, now, armed) is want
+
+
+def test_engaging_the_kill_switch_disarms_once():
+    n = _node(armed=True)
+    n._mission['attached'] = False
+    n.kill = False
+    M.AUVManagerNode._mission_watchdog_tick(n)
+    n.mongla.disarm.assert_not_called()
+    n.kill = True
+    M.AUVManagerNode._mission_watchdog_tick(n)
+    M.AUVManagerNode._mission_watchdog_tick(n)
+    n.mongla.disarm.assert_called_once_with(timeout=2.0)
+
+
+def test_no_second_board_never_disarms():
+    n = _node(armed=True)
+    n._mission['attached'] = False
+    for _ in range(3):
+        M.AUVManagerNode._mission_watchdog_tick(n)
+    n.mongla.disarm.assert_not_called()

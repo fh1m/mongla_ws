@@ -1,4 +1,4 @@
-"""Is the node alive, and is the mission: the health report and the two watchdogs.
+"""Is the node alive, and is the mission: the health report and the three watchdogs (executor, mission, kill switch).
 
 Mixed into `AUVManagerNode` (auv_manager_node.py), which owns the board,
 the publishers and the state these methods read.
@@ -8,7 +8,8 @@ from __future__ import annotations
 import time
 
 from . import health as _health, health_reporters as _hr
-from .node_support import EXECUTOR_STALE_S, MISSION_SILENT_S, _load_sensor_offsets, mission_watchdog
+from .node_support import (EXECUTOR_STALE_S, MISSION_SILENT_S, _load_sensor_offsets,
+                           kill_watch, mission_watchdog)
 
 
 class HealthMixin:
@@ -44,6 +45,7 @@ class HealthMixin:
             armed = bool(self.fc.is_armed())
         except Exception:                          # noqa: BLE001 -- unknown = act
             armed = True
+        self._kill_watch_tick(armed)
         action = mission_watchdog(m['attached'], m['seen'], time.monotonic(), armed)
         if action == 'none':
             return
@@ -66,6 +68,25 @@ class HealthMixin:
         except Exception as exc:                   # noqa: BLE001
             self.get_logger().error(f'[MISSN] SURFACE FAILED: {exc!r} -- the '
                                     f"board's own failsafe is the backstop")
+
+    def _kill_watch_tick(self, armed: bool) -> None:
+        """Disarm on the edge to ENGAGED; see `node_support.kill_watch`."""
+        try:
+            killed = getattr(self.fc.telemetry(), 'kill_switch', None)
+        except Exception:                          # noqa: BLE001 -- no reading, no edge
+            return
+        was = getattr(self, '_kill_was', None)
+        self._kill_was = killed
+        if not kill_watch(was, killed, armed):
+            return
+        self.get_logger().error('[KILL ] kill switch ENGAGED while armed -- thruster '
+                                'power is cut. Abort the mission and DISARM, so '
+                                'restoring power cannot resume a move.')
+        try:
+            res = self.mongla.disarm(timeout=2.0)
+            self.get_logger().error(f'[KILL ] {getattr(res, "message", res)}')
+        except Exception as exc:                   # noqa: BLE001
+            self.get_logger().error(f'[KILL ] DISARM FAILED: {exc!r}')
 
     def _register_health(self) -> None:
         """Translate what each subsystem already knows into one vocabulary.
