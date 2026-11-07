@@ -102,7 +102,7 @@
         <polygon class="air" points="60,88 6.5,2 113.5,2"/>
         <polygon class="water" points="60,88 22.9,2 97.1,2"/>
       </svg>
-      <b>46.7°</b><span>measured in water. The datasheet's 63.8° (dashed) is the same lens in air.</span>
+      <b>46.7°</b><span>in water, by Snell's law, from the 63.8° we measured in air (dashed). Not yet checked in water.</span>
     </div>
     <div class="d"><span class="silk">Detection</span><b>53.9 Hz</b><span>through the live ROS graph, not a benchmark</span></div>
     <div class="e">
@@ -148,8 +148,8 @@
    <tbody>
     <tr><td data-l="the medium does this">Absorbs red first, then everything</td><td data-l="so this breaks">Colour thresholds, contrast tricks</td>
         <td class="num" data-l="what we measured">17 preprocessing configs, never once positive</td></tr>
-    <tr><td data-l="the medium does this">Bends light at the port glass</td><td data-l="so this breaks">Any angle taken from a datasheet</td>
-        <td class="num" data-l="what we measured">63.8° in air → 46.7° in water</td></tr>
+    <tr><td data-l="the medium does this">Bends light at the port glass</td><td data-l="so this breaks">Any angle taken in air</td>
+        <td class="num" data-l="what we measured">63.8° measured in air → 46.7° in water by Snell</td></tr>
     <tr><td data-l="the medium does this">Blocks radio entirely</td><td data-l="so this breaks">Telemetry, GPS, remote intervention</td>
         <td class="num" data-l="what we measured">no link below the surface</td></tr>
     <tr><td data-l="the medium does this">Carries 800× the mass of air</td><td data-l="so this breaks">Any controller tuned for a drone</td>
@@ -168,8 +168,8 @@
   <!-- colour:end -->
 
   <figure class="panel scrollable">
-   <img src="assets/diagrams/field-of-view.svg" alt="Two cones from one lens: 63.8 degrees in air, 46.7 measured in water through a flat port" loading="lazy">
-   <figcaption>One lens, two fields of view. The datasheet measures in air; the vehicle swims
+   <img src="assets/diagrams/field-of-view.svg" alt="Two cones from one lens: 63.8 degrees measured in air, 46.7 in water through a flat port by Snell's law" loading="lazy">
+   <figcaption>One lens, two fields of view. We calibrated it in air; the vehicle swims
      in water, and a flat port refracts. The 27 % the water takes is 27 % of the course a
      search pattern believes it is sweeping.</figcaption>
   </figure>
@@ -1365,7 +1365,7 @@
     <label class="knob"><span class="silk silk--b">refractive index of the medium</span>
       <input type="range" id="snell-n" min="1" max="1.34" step="0.001" value="1.333">
       <output id="snell-n-o">1.333 — sea water</output>
-      <em>Drag it to 1.000 and you are back in the lab, holding the datasheet. Every value in
+      <em>Drag it to 1.000 and you are back in the lab, holding the air calibration. Every value in
         between is the same camera, the same lens, a different world.</em></label>
     <div class="lab__presets">
       <button class="key" type="button" data-snell="2,1.2,1.333">in the water</button>
@@ -1393,12 +1393,14 @@
       and it is applied before any pixel becomes a direction.</p>
    </div>
    <div>
-    <h3>What we measured, and what it cost</h3>
-    <p class="quiet">The datasheet says <span class="num">63.8°</span>. In water we measured
-      <span class="num">46.7°</span> — and Snell, from the index of water alone, predicts
-      <span class="num">46.71°</span>. Two independent routes to the same number is the strongest
-      form of "this is right" available on a bench.</p>
-    <p class="quiet">The cost of having believed the datasheet is not a blurry picture. It is
+    <h3>What we measured, and what is still owed</h3>
+    <p class="quiet">We measured the lens in air: <span class="num">63.8°</span>, from 25 views,
+      with the result checked against a tape before it was trusted. Snell, from the index of water
+      alone, puts it at <span class="num">46.7°</span> behind a flat port. That second number is
+      computed, not measured: no camera of ours has been calibrated underwater yet, and until one
+      is, the air calibration and the physics are all that stand behind it. The underwater check
+      is on the first pool day's list.</p>
+    <p class="quiet">The cost of using the air figure is not a blurry picture. It is
       every bearing being wrong by a growing amount toward the edges, every range estimate built
       on that bearing being wrong with it, and a standoff distance chosen so that a prop
       <em>fits</em> — computed against a cone <span class="num">37&#8239;%</span> wider than the
@@ -1794,8 +1796,8 @@
     </div>
     <div class="pair">
       <span class="silk">Field of view · what water does</span>
-      <div class="bar was"><i style="--w:100%"></i><b>63.8°</b><em>the datasheet, in air</em></div>
-      <div class="bar"><i style="--w:73.2%"></i><b>46.7°</b><em>measured, in water</em></div>
+      <div class="bar was"><i style="--w:100%"></i><b>63.8°</b><em>measured, in air</em></div>
+      <div class="bar"><i style="--w:73.2%"></i><b>46.7°</b><em>in water, by Snell</em></div>
       <span>A flat port bends light. Use the air number and every range estimate is wrong.</span>
     </div>
     <div><span class="silk">Loop</span><b>500 Hz</b><span>board, dedicated core</span></div>
@@ -2731,9 +2733,9 @@
 
 (function(){
   /* Snell's window: the same camera, in two media, drawn to scale.
-     Nothing here is fitted -- the air half-angle is the datasheet's 63.8/2,
-     the water cone is Snell's law applied to it, and the caption's 46.7 deg is
-     the value measured in water (.claude/context/measured-bars.md). Drag n to
+     Nothing here is fitted -- the air half-angle is our air calibration's
+     63.8/2, and the water cone, the caption's 46.7 deg included, is Snell's law
+     applied to it (.claude/context/measured-bars.md section 3). Drag n to
      1.000 and the two cones must coincide; that is the built-in check. */
   var cv = document.getElementById('snell-view');
   if (!cv) return;
@@ -2776,7 +2778,7 @@
       ctx.setLineDash(dash || []); ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke();
       ctx.setLineDash([]);
     }
-    cone(half, 'rgba(255,255,255,.045)', 'rgba(255,255,255,.28)', [5, 5]);   // the datasheet
+    cone(half, 'rgba(255,255,255,.045)', 'rgba(255,255,255,.28)', [5, 5]);   // the air calibration
     cone(halfW, 'rgba(90,160,255,.13)', '#5aa0ff');                          // the real one
 
     // the prop, drawn at its true width at this range
@@ -2797,7 +2799,7 @@
     ctx.fillStyle = INK3; ctx.font = '10px ui-monospace, monospace';
     ctx.fillText('camera', ox - 30, oy + 30);
     ctx.fillStyle = 'rgba(255,255,255,.34)';
-    ctx.fillText('datasheet, in air', ox + 300, oy - 96);
+    ctx.fillText('measured, in air', ox + 300, oy - 96);
     ctx.fillStyle = '#5aa0ff';
     ctx.fillText('what the water leaves', ox + 300, oy + 96);
 

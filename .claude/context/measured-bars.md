@@ -244,7 +244,7 @@ footage rather than against the next rung up.
 > **The figure therefore stays unmeasured.** It needs both cameras attached;
 > substituting a one-camera number would not be the same quantity.
 | `VISION_LOOP_HZ` | 50 — `motion_vision/` | soaked 90 s: **49.86 Hz**, 0.00 % late ticks | ≥ 25 Hz sustained |
-| camera FOV | 63.8° air / **46.7° water** ±0.7 | 25 views, `calibrateCameraRO`, held-out validated | ±1.5° |
+| camera FOV | 63.8° air / **46.7° water** ±0.7 | air: 25 views, `calibrateCameraRO`, held-out validated, tape-checked. **Water: Snell from the air figure, n = 1.333 — computed, never measured in water** | ±1.5° |
 | frame staleness | — | mailbox **16.9 ms** vs 396 ms on a plain queue | ≤ 50 ms |
 
 ## 4. Control — srot link

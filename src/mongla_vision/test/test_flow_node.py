@@ -112,9 +112,9 @@ class TestScaleRefusal:
 
 
 class TestMediumSelectsFocalLength:
-    """Round 25 measured BOTH: 63.8 deg air / 46.7 deg water, +-0.7, held-out
-    validated against an external tape. At 640 px that is 514 and 741 -- a
-    ratio of 1.44. Using the air number underwater is a 44 % multiplier on
+    """63.8 deg measured in air (held out, checked against a tape); 46.7 deg in
+    water by Snell's law, not yet checked in water. At 640 px that is 514 and
+    741 -- a ratio of 1.44. Using the air number underwater is a 44 % multiplier on
     every velocity, which is the single most dangerous mistake available in
     this node."""
 

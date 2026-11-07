@@ -487,21 +487,24 @@ quietly shrinks the camera's view.
 <p align="center"><img src="docs/imgs/readme/colour-loss.webp" alt="Mean red, green and blue per venue over 119 real frames: red falls to 36 percent of the strongest channel at RoboSub and 44 percent at Mirpur." width="100%"></p>
 
 Colour first: over 119 real frames red falls to **36 %** of the strongest channel at RoboSub and
-**44 %** at Mirpur. Then geometry, which is the one worth checking by hand. The datasheet says
-63.8°. Through a flat port, Snell's law predicts
+**44 %** at Mirpur. Then geometry, which is the one worth checking by hand. We calibrated the
+downward camera in air: **63.8°**, from 25 views, with the result checked against a tape
+before it was trusted. Behind a flat port in water, Snell's law says the same lens sees
 
 ```
 2 · asin( sin(63.8° / 2) / 1.333 )  =  46.7°
 ```
 
-and we **measured 46.7° ± 0.7°** in water. The theory and the bench agree to the tenth of a
-degree — and a search pattern using the datasheet figure believes it sweeps 27 % more course
-than it can see.
+**Caution:** 46.7° is computed, not measured. No camera of ours has been calibrated underwater
+yet; that check is on [the first pool day's list](.claude/context/platform/first-pool-verification.md).
+Until then the number is as good as the air calibration and the physics, which is good, but it
+is not a water measurement. A search pattern that used the air figure would believe it sweeps
+37 % more course than it can see.
 
 | the water does this | so this breaks | measured |
 |---|---|---|
 | absorbs red first | colour thresholds, contrast tricks | red at 36–44 % of the strongest channel |
-| bends light at a flat port | any angle from a datasheet | 63.8° → **46.7°** |
+| bends light at a flat port | any angle taken in air | 63.8° in air → **46.7°** by Snell (not yet checked in water) |
 | blocks radio | telemetry, GPS, rescue | no link below the surface |
 | moves while you decide | dead reckoning | 0.12 m/s current → **1.374 m** of drift in 40 s |
 

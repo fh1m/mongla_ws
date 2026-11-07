@@ -27,7 +27,7 @@ the bug. Architecture and reasoning: [The Shift](../../../docs/the-shift.md).
 
 | Quantity | Value | Where |
 |---|---|---|
-| Forward camera field of view | **63.8° air · 46.7° water ±0.7°** | `measured-bars.md` §3 |
+| Camera field of view | downward (Microdia global shutter): **63.8° air**, measured; **46.7° water** by Snell, not yet checked in water · forward (Fantech): 73.9° air, 53.6° water the same way | `measured-bars.md` §3; `src/mongla_vision/config/calibration/` |
 | Heading drift at rest | **< 0.01 °/min**, p2p < 0.08° over 8 min | `measured-bars.md` |
 | Downward camera as a velocity sensor | 30 cm slides, worst error **1.09 cm** | `measured-bars.md` §13 |
 | Link load | **18.8 %** of the serial budget | `measured-bars.md` §4 |

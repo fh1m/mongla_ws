@@ -133,8 +133,8 @@ any stereo as a bonus to be measured, not assumed.
 **Key point: Prefer the narrowest option offered** for the forward mount. Wide FOV sounds
 like more information and is fewer pixels on the thing you must hit.
 
-**3. Every calibration is per-lens.** Our measured **46.7° in water** belongs to
-one specific lens; `measured-bars.md` already records a live mix-up of which
+**3. Every calibration is per-lens.** Our **46.7° in water** (63.8° measured in air,
+carried through Snell) belongs to one specific lens; `measured-bars.md` already records a live mix-up of which
 intrinsics belonged to which camera. A new lens means a new calibration before
 any pose or standoff number is trusted.
 

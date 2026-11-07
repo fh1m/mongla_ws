@@ -30,12 +30,12 @@ _LK_PARAMS = dict(winSize=(31, 31), maxLevel=3,
                             30, 0.01))
 
 
-# The FOCAL LENGTHS ARE MEASURED, and there are two of them because a flat port
-# is a lens. Round 25: 63.8 deg in air / 46.7 deg in water, +-0.7, 25 views,
-# calibrateCameraRO, held-out validated with an external tape check. At 640 px
-# that is 514 and 741 -- a ratio of 1.44, where the flat-port literature says
-# 25-33 %. The discrepancy is expected (port thickness and geometry) and the
-# MEASUREMENT wins; the literature only explains why the two differ.
+# There are two focal lengths because a flat port is a lens. The air one is
+# measured: 63.8 deg over 25 views, calibrateCameraRO, held out and checked
+# against a tape (measured-bars section 3). The water one is Snell's law
+# applied to it, 46.7 deg, and has not yet been checked in water. At 640 px
+# that is 514 and 741 px, a ratio of 1.44. The literature's 25-33 % is a ratio
+# of sines, this is a ratio of tangents; the two agree (camera-and-calibration).
 #
 # Using the air number underwater is the single most dangerous mistake
 # available here: a clean 44 % multiplier on every velocity, invisible in every

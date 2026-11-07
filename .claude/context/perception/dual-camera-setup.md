@@ -47,8 +47,9 @@ surplus frames are cost without value.
 ## Calibration belongs to the camera, not the role
 
 Each physical camera has its own measured calibration in
-`mongla_vision/config/calibration/`, including its field of view in water (**46.7°** for the
-forward camera, against 63.8° in air). A calibration file follows the **lens**, never the role
+`mongla_vision/config/calibration/`, including its field of view in air, measured, and in water, computed by Snell's law
+(**63.8° → 46.7°** for the downward camera, 73.9° → 53.6° for the forward one; neither yet
+checked in water). A calibration file follows the **lens**, never the role
 it is playing — that is the mistake the role swap made expensive.
 
 ## Running both
