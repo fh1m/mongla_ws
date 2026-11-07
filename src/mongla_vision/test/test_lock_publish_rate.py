@@ -14,13 +14,16 @@ for a CPU-bound bench only.
 detection -> follow is the information; a limiter that swallowed it for 25 ms
 would be hiding the transition the whole ladder exists to expose.
 """
+import sys as _sys_ct
+_sys_ct.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import source_of  # noqa: E402
 import ast
 import pathlib
 import re
 
 _NODE = (pathlib.Path(__file__).resolve().parents[1] / 'mongla_vision'
          / 'lock_node.py')
-_SRC = _NODE.read_text()
+_SRC = source_of(_NODE)
 
 
 def test_publish_hz_is_declared_AND_read():

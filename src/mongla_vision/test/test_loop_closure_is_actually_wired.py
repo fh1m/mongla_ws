@@ -12,6 +12,9 @@ That is a real limitation: these prove the wiring exists, not that it works.
 What it does once reached is covered by `test_loop_closure_refuses.py` and
 `mongla_localization/test/test_loop_closure_bounds_drift.py`.
 """
+import sys as _sys_ct
+_sys_ct.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import source_of  # noqa: E402
 import pathlib
 import re
 
@@ -25,7 +28,7 @@ LAUNCH = (pathlib.Path(__file__).resolve().parents[1] / 'launch'
 
 @pytest.fixture(scope='module')
 def src():
-    return SRC.read_text()
+    return source_of(SRC)
 
 
 def test_enrolment_passes_a_position(src):

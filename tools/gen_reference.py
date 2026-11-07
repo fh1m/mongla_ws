@@ -195,8 +195,17 @@ def node_params() -> dict[str, list[tuple[str, str]]]:
     out: dict[str, list[tuple[str, str]]] = {}
     # Every module of every package, nested ones included (flow/, depth/, web/
     # hold nodes too), and never a test: a probe node there is not the vehicle's.
-    for py in sorted((ROOT / 'src').glob('mongla_*/mongla_*/**/*.py')):
-        src = py.read_text(encoding='utf-8', errors='ignore')
+    # A node split into mixins is listed under the node's own file: that is
+    # the file an operator goes looking for.
+    sys.path.insert(0, str(ROOT / 'tools'))
+    from code_text import mixin_files
+    files = sorted((ROOT / 'src').glob('mongla_*/mongla_*/**/*.py'))
+    mixins = {m: py for py in files for m in mixin_files(py)}
+    for py in files:
+        if py in mixins:
+            continue
+        src = ''.join(f.read_text(encoding='utf-8', errors='ignore')
+                      for f in [py] + mixin_files(py))
         if 'declare_parameter' not in src:
             continue
         found = [(m.group(1), re.sub(r'\s+', ' ', m.group(2)).strip())

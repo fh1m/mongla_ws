@@ -15,6 +15,9 @@ than a crash and could have run a whole pool day like that.
 This reads the source with `ast` instead of importing it, so it needs no ROS
 and cannot be defeated by an import guard.
 """
+import sys as _sys_ct
+_sys_ct.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import source_of  # noqa: E402
 import ast
 from pathlib import Path
 
@@ -22,11 +25,13 @@ SRC = (Path(__file__).resolve().parents[1] / 'mongla_vision' / 'lock_node.py')
 
 
 def _lock_node_class():
-    tree = ast.parse(SRC.read_text())
-    for node in tree.body:
-        if isinstance(node, ast.ClassDef) and node.name == 'LockNode':
-            return node
-    raise AssertionError('LockNode class not found in lock_node.py')
+    # LockNode is one class in several files: the node and its mixins.
+    tree = ast.parse(source_of(SRC))
+    parts = [n for n in tree.body if isinstance(n, ast.ClassDef)
+             and (n.name == 'LockNode' or n.name.endswith('Mixin'))]
+    if not any(n.name == 'LockNode' for n in parts):
+        raise AssertionError('LockNode class not found in lock_node.py')
+    return ast.Module(body=parts, type_ignores=[])
 
 
 def test_every_self_method_called_is_defined():
