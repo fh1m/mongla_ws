@@ -1,0 +1,42 @@
+.claude/context/sota/vision.md
+  s_b4c45e3235679b::t_eae1cbce061861 18
+src/mongla_vision/mongla_vision/detection/hailo_device.py
+  s_b4c45e3235679b::t_795e721ac047fb 1-136
+src/mongla_vision/mongla_vision/detection/factory.py
+  s_b4c45e3235679b::t_795e721ac047fb 62-63
+src/mongla_vision/test/test_hailo_arbiter.py
+  s_b4c45e3235679b::t_4fdb58eeb09311 24
+  s_b4c45e3235679b::t_1a7c36146afe5c 365
+  s_b4c45e3235679b::t_795e721ac047fb 212-213,215,344
+src/mongla_vision/test/test_hailo_releases_at_exit.py
+  s_b4c45e3235679b::t_1a7c36146afe5c 91-92
+  s_b4c45e3235679b::t_795e721ac047fb 19-20,39,69,89
+.claude/context/packages/mongla_vision/README.md
+  s_b4c45e3235679b::t_eae1cbce061861 197,199
+tools/hailo_async_gil.py
+  s_b4c45e3235679b::t_eae1cbce061861 85
+src/mongla_vision/mongla_vision/detection/hailo.py
+  s_b4c45e3235679b::t_795e721ac047fb 77,79,159,178-179,483,498,504
+src/mongla_vision/mongla_vision/anchor/xfeat_hailo.py
+  s_b4c45e3235679b::t_795e721ac047fb 74,78,80,99,102-103,173
+src/mongla_vision/mongla_vision/detection/hailo_seg.py
+  s_b4c45e3235679b::t_795e721ac047fb 5
+src/mongla_vision/mongla_vision/detection/hef_file.py
+  s_b4c45e3235679b::t_795e721ac047fb 1-79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "7df60697909d55a8f1b27a6c5c35850ab9f218b8",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
