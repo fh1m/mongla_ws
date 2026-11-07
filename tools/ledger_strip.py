@@ -104,12 +104,33 @@ def render(entries: list[Entry]) -> str:
     return lede + '\n' + fig
 
 
+def _anchor(title: str, seen: dict) -> str:
+    """The id GitHub (and the wiki) give a heading: lower case, punctuation
+    other than '-' and '_' dropped, spaces to '-', a repeat numbered."""
+    a = re.sub(r'[^\w\- ]', '', title.lower()).replace(' ', '-')
+    n = seen.get(a, 0)
+    seen[a] = n + 1
+    return a if n == 0 else f'{a}-{n}'
+
+
+def contents(entries: list[Entry]) -> str:
+    """The ledger's own contents list: every entry, linked, its outcome marked."""
+    seen: dict = {}
+    tag = {'back': ' — *taken back*', 'no': ' — *measured, not adopted*', 'ok': ''}
+    lines = ['**Contents.** Every entry, in order. *Taken back* marks a number later retracted;',
+             '*measured, not adopted* marks an option the measurement said no to.', '']
+    for x in entries:
+        lines.append(f'- [{x.title}](#{_anchor(x.title, seen)}){tag[x.kind]}')
+    return '\n'.join(lines)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--check', action='store_true', help='exit 1 if the page has drifted')
     args = ap.parse_args()
     entries = read_ledger(LEDGER.read_text(encoding='utf-8'))
     rc = splice('ledger', render(entries), args.check)
+    rc = rc or splice('contents', contents(entries), args.check, target=LEDGER, indent='')
     if rc == 0:
         kinds = {k: sum(1 for x in entries if x.kind == k) for k in ('back', 'no', 'ok')}
         print(f'{len(entries)} entries, {sum(x.rows for x in entries)} rows, {kinds}')

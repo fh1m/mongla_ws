@@ -18,6 +18,121 @@ not a measurement. Every row says what it was measured on, because the same
 quantity has different values on different footage, and pretending otherwise
 is how `recommend()` happened.
 
+<!-- contents:begin -->
+**Contents.** Every entry, in order. *Taken back* marks a number later retracted;
+*measured, not adopted* marks an option the measurement said no to.
+
+- [1. Vision — detection](#1-vision--detection)
+- [2. Vision — continuity (the lock ladder)](#2-vision--continuity-the-lock-ladder)
+- [3. Vision — pipeline](#3-vision--pipeline)
+- [4. Control — srot link](#4-control--srot-link)
+- [5. Known gaps — measured, and open](#5-known-gaps--measured-and-open)
+- [Method rules these bars encode](#method-rules-these-bars-encode)
+- [6. `range_gain_floor` — measured, and the answer is "leave it off"](#6-range_gain_floor--measured-and-the-answer-is-leave-it-off) — *measured, not adopted*
+- [7. Confidence-adaptive measurement noise — measured, live and on real data](#7-confidence-adaptive-measurement-noise--measured-live-and-on-real-data)
+- [8. The feature backend for the anchor rung — benched, not chosen](#8-the-feature-backend-for-the-anchor-rung--benched-not-chosen) — *measured, not adopted*
+- [9. Plane tilt from the anchor homography — correct, and only COARSE on real water](#9-plane-tilt-from-the-anchor-homography--correct-and-only-coarse-on-real-water)
+- [10. Optical-flow velocity — measured on the bench, global-shutter camera](#10-optical-flow-velocity--measured-on-the-bench-global-shutter-camera)
+- [11. The inertial data the board actually gives — measured, not assumed](#11-the-inertial-data-the-board-actually-gives--measured-not-assumed)
+- [12. De-rotation, calibrated on the rigid camera+IMU rig](#12-de-rotation-calibrated-on-the-rigid-cameraimu-rig)
+- [13. The bottom camera AS A DVL — verified live against a tape, 2026-09-07](#13-the-bottom-camera-as-a-dvl--verified-live-against-a-tape-2026-09-07)
+- [14. Board-clock stamping — measured on the vehicle, 2026-09-07](#14-board-clock-stamping--measured-on-the-vehicle-2026-09-07)
+- [15. The return leg — RETRACTING "0.0 %", in both directions, 2026-09-07](#15-the-return-leg--retracting-00--in-both-directions-2026-09-07) — *taken back*
+- [16. Gyro-aided LK: MEASURED AND REJECTED. Rotation ripeness instead. 2026-09-07](#16-gyro-aided-lk-measured-and-rejected-rotation-ripeness-instead-2026-09-07) — *taken back*
+- [17. The calibration was wired to the WRONG CAMERA, both ways. 2026-09-07](#17-the-calibration-was-wired-to-the-wrong-camera-both-ways-2026-09-07) — *taken back*
+- [18. The launch path reads 106.5 % of truth. Four wrong causes first. 2026-09-07](#18-the-launch-path-reads-1065--of-truth-four-wrong-causes-first-2026-09-07)
+- [18b. The original in-progress entry, kept](#18b-the-original-in-progress-entry-kept)
+- [19. De-rotation measured THREE WAYS on the vehicle: OFF wins. 2026-09-07](#19-de-rotation-measured-three-ways-on-the-vehicle-off-wins-2026-09-07) — *measured, not adopted*
+- [20. The de-rotation gains, re-derived on this mount. THE SIGN WAS WRONG. 2026-09-07](#20-the-de-rotation-gains-re-derived-on-this-mount-the-sign-was-wrong-2026-09-07) — *taken back*
+- [21. The fitted gains were REFUTED by the validation A/B. Default is 0. 2026-09-07](#21-the-fitted-gains-were-refuted-by-the-validation-ab-default-is-0-2026-09-07) — *taken back*
+- [22. My own "refused intervals lose travel" fix — MEASURED AND WITHDRAWN. 2026-09-07](#22-my-own-refused-intervals-lose-travel-fix--measured-and-withdrawn-2026-09-07) — *taken back*
+- [23. Motion blur: the shutter, not the detector. Measured + SOTA. 2026-09-07](#23-motion-blur-the-shutter-not-the-detector-measured--sota-2026-09-07)
+- [§24. THE RETURN LEG IS VISUALLY UNSUPPORTED — and three measurements said three different things](#24-the-return-leg-is-visually-unsupported--and-three-measurements-said-three-different-things) — *measured, not adopted*
+- [§25. THRUSTER TELEMETRY: 958 frames, every one exactly zero. 2026-09-07](#25-thruster-telemetry-958-frames-every-one-exactly-zero-2026-09-07)
+- [§26. THE SECOND BOARD, AND `KILL = 0` MEANING TWO THINGS. 2026-09-07](#26-the-second-board-and-kill--0-meaning-two-things-2026-09-07)
+- [26. The actuator quantum — the bar every control gain is really tuned against](#26-the-actuator-quantum--the-bar-every-control-gain-is-really-tuned-against)
+- [27. Heading — THE EARLIER ENTRY WAS CONTAMINATED](#27-heading--the-earlier-entry-was-contaminated) — *taken back*
+- [Forward camera rate — `pi_forward.fps` 15 → 60 (2026-09-09)](#forward-camera-rate--pi_forwardfps-15--60-2026-09-09)
+- [Tool aim, and the Ruckig feasibility numbers (2026-09-10)](#tool-aim-and-the-ruckig-feasibility-numbers-2026-09-10)
+- [The standoff feature and its validity bound (2026-09-10)](#the-standoff-feature-and-its-validity-bound-2026-09-10)
+- [The UPLINK bearing is a WATER bearing (2026-09-10)](#the-uplink-bearing-is-a-water-bearing-2026-09-10)
+- [The companion link and the board clock (2026-09-10)](#the-companion-link-and-the-board-clock-2026-09-10)
+- [Flat-port refraction in the METRIC POSE path (2026-09-09)](#flat-port-refraction-in-the-metric-pose-path-2026-09-09)
+- [SAUVC constants — DERIVED FROM THE RULEBOOK, and two that are NOT measured (2026-09-09)](#sauvc-constants--derived-from-the-rulebook-and-two-that-are-not-measured-2026-09-09)
+- [§28. Phase correlation DELETED — the low-texture regime does not exist on real water (2026-09-09)](#28-phase-correlation-deleted--the-low-texture-regime-does-not-exist-on-real-water-2026-09-09) — *taken back*
+- [Hailo segmentation decode (2026-09-11, vehicle, `yolov8n_seg` 640×640)](#hailo-segmentation-decode-2026-09-11-vehicle-yolov8n_seg-640640)
+- [Dense-field motion estimation (2026-09-11, vehicle, 300 pairs)](#dense-field-motion-estimation-2026-09-11-vehicle-300-pairs)
+- [Mask coefficients as an identity descriptor (2026-09-11, vehicle)](#mask-coefficients-as-an-identity-descriptor-2026-09-11-vehicle)
+- [Flow front-end: three estimators against TRUTH (2026-09-11, vehicle)](#flow-front-end-three-estimators-against-truth-2026-09-11-vehicle)
+- [Do contours cost the pipeline anything? (2026-09-11, vehicle)](#do-contours-cost-the-pipeline-anything-2026-09-11-vehicle)
+- [The mission launch ran BOTH detectors (2026-09-11, vehicle)](#the-mission-launch-ran-both-detectors-2026-09-11-vehicle)
+- [The stack over the real frame archive (2026-09-11, vehicle, 200 frames)](#the-stack-over-the-real-frame-archive-2026-09-11-vehicle-200-frames)
+- [Scouting: nemo_auv (2026-09-11) -- ADOPT NOTHING, KEEP THE FAILURES](#scouting-nemo_auv-2026-09-11----adopt-nothing-keep-the-failures) — *measured, not adopted*
+- [The detector's floor, and where the standoff should be (2026-09-11, vehicle)](#the-detectors-floor-and-where-the-standoff-should-be-2026-09-11-vehicle)
+- [SROT sensor health: the zeros that are not a reading (2026-09-11)](#srot-sensor-health-the-zeros-that-are-not-a-reading-2026-09-11)
+- [The invariant filter on the vehicle, stationary rig (2026-09-11)](#the-invariant-filter-on-the-vehicle-stationary-rig-2026-09-11)
+- [Sun caustics on the floor: flow tracks the waves (2026-09-15, real archive)](#sun-caustics-on-the-floor-flow-tracks-the-waves-2026-09-15-real-archive)
+- [10. The actuation chain — measured on the board, and `VISION_YAW_MIN_PCT` is the WRONG MODEL](#10-the-actuation-chain--measured-on-the-board-and-vision_yaw_min_pct-is-the-wrong-model) — *taken back*
+- [11. Hailo-8 throughput — the models we actually fly](#11-hailo-8-throughput--the-models-we-actually-fly)
+- [11. The closed-loop bench — the plant, and what `MOT_SPIN_MIN` really costs](#11-the-closed-loop-bench--the-plant-and-what-mot_spin_min-really-costs)
+- [12. Round 5 — INDI measured against the tuned cascade, and NOT CHOSEN](#12-round-5--indi-measured-against-the-tuned-cascade-and-not-chosen) — *measured, not adopted*
+- [13. Live-board checks, 2026-09-23 — a reported catastrophe RETRACTED, and two IMU traps](#13-live-board-checks-2026-09-23--a-reported-catastrophe-retracted-and-two-imu-traps) — *taken back*
+- [14. "The Hailo is running our models at a fifth of its capability" — RETRACTED the same hour](#14-the-hailo-is-running-our-models-at-a-fifth-of-its-capability--retracted-the-same-hour) — *taken back*
+- [15. The depth loop, closed for the first time](#15-the-depth-loop-closed-for-the-first-time)
+- [16. `DEPTH_LOST_ASCENT` — the escape, and the ballast limit it implies](#16-depth_lost_ascent--the-escape-and-the-ballast-limit-it-implies)
+- [17. The camera chain, measured end to end — and "the ROS graph costs 45 %" RETRACTED](#17-the-camera-chain-measured-end-to-end--and-the-ros-graph-costs-45--retracted) — *taken back*
+- [18. DINOv2 on the Pi, finally measured — 3 seconds per frame](#18-dinov2-on-the-pi-finally-measured--3-seconds-per-frame)
+- [19. Feature front-ends priced on OUR hardware — the incumbent wins on speed](#19-feature-front-ends-priced-on-our-hardware--the-incumbent-wins-on-speed)
+- [20. How big can the checkpoint bank get? Measured, not assumed](#20-how-big-can-the-checkpoint-bank-get-measured-not-assumed)
+- [21. A reference does NOT decay to death — and a correction](#21-a-reference-does-not-decay-to-death--and-a-correction)
+- [22. A preloaded bank said "torpedo" while looking at the gate](#22-a-preloaded-bank-said-torpedo-while-looking-at-the-gate)
+- [23. Approach-driven acquisition: the premise holds, but not monotonically](#23-approach-driven-acquisition-the-premise-holds-but-not-monotonically)
+- [24. The downward camera CAN recognise a place — three bars, not one](#24-the-downward-camera-can-recognise-a-place--three-bars-not-one)
+- [25. The identity bar was derived on a configuration production does not use](#25-the-identity-bar-was-derived-on-a-configuration-production-does-not-use)
+- [26. XFeat's settings, chosen on our own water — and the benchmark that lied](#26-xfeats-settings-chosen-on-our-own-water--and-the-benchmark-that-lied)
+- [27. Preloading across SESSIONS: works for position, not for identity](#27-preloading-across-sessions-works-for-position-not-for-identity)
+- [28. XFeat runs on the Hailo-8 — 701 FPS, and the bottleneck moves](#28-xfeat-runs-on-the-hailo-8--701-fps-and-the-bottleneck-moves)
+- [29. The bank was building ONE reference — three defects, found by looking](#29-the-bank-was-building-one-reference--three-defects-found-by-looking)
+- [30. XFeat cannot arbitrate weak detections yet — and the reason names the fix](#30-xfeat-cannot-arbitrate-weak-detections-yet--and-the-reason-names-the-fix)
+- [31. §30 WITHDRAWN — the failure was the wrong detector, not the bounding box](#31-30-withdrawn--the-failure-was-the-wrong-detector-not-the-bounding-box) — *taken back*
+- [32. XFeat and the detector CAN share the chip — and the anchor's 3 Hz is obsolete](#32-xfeat-and-the-detector-can-share-the-chip--and-the-anchors-3-hz-is-obsolete)
+- [33. The bank ran the backbone FIVE TIMES per lookup](#33-the-bank-ran-the-backbone-five-times-per-lookup)
+- [34. The bank runs on the VEHICLE — and two defects only hardware could find](#34-the-bank-runs-on-the-vehicle--and-two-defects-only-hardware-could-find)
+- [35. THE WHOLE LADDER, ON THE VEHICLE, LOSING NOTHING](#35-the-whole-ladder-on-the-vehicle-losing-nothing)
+- [36. THE LADDER ON HARD INPUT — AND A FIXTURE THAT REPLACES A PERSON](#36-the-ladder-on-hard-input--and-a-fixture-that-replaces-a-person)
+- [37. WHAT THE BOARD'S IMU SAYS WHEN NOTHING IS MOVING](#37-what-the-boards-imu-says-when-nothing-is-moving)
+- [38. XFEAT SURVIVES INT8 ON THE HAILO-8 — THE ARM CLOSES YES](#38-xfeat-survives-int8-on-the-hailo-8--the-arm-closes-yes)
+- [39. THE LOOP-CLOSURE DECISION LAYER — BUILT, GUARDED, NEVER FLOWN](#39-the-loop-closure-decision-layer--built-guarded-never-flown)
+- [40. EVERY SENSOR'S ROLE, WRITTEN DOWN WHERE IT CAN FAIL](#40-every-sensors-role-written-down-where-it-can-fail)
+- [41. THE LOOP-CLOSURE TRUTH TEST — THE BAR HOLDS ON REAL WATER](#41-the-loop-closure-truth-test--the-bar-holds-on-real-water)
+- [42. POSE PRECISION: 640 IS 2.74× MORE PRECISE THAN 320 — AND §19 STILL STANDS](#42-pose-precision-640-is-274-more-precise-than-320--and-19-still-stands)
+- [43. TIME TO CONTACT, FOR A VEHICLE THAT IS ITSELF MOVING](#43-time-to-contact-for-a-vehicle-that-is-itself-moving)
+- [44. THE FLOW SCALE HAS TWO INDEPENDENT WITNESSES — AND THEY HAD NEVER BEEN COMPARED](#44-the-flow-scale-has-two-independent-witnesses--and-they-had-never-been-compared)
+- [45. TURBIDITY AS CONFIDENCE CALIBRATION — BUILT, OFF, AND HONEST ABOUT ITS CONSTANT](#45-turbidity-as-confidence-calibration--built-off-and-honest-about-its-constant)
+- [46. THE APPROACH SETPOINT IS A BAND, NOT A MINIMUM RANGE](#46-the-approach-setpoint-is-a-band-not-a-minimum-range)
+- [47. ROUND 7 — XFEAT FINE-TUNED ON OUR OWN WATER, AND THE CANARY FLIPPED](#47-round-7--xfeat-fine-tuned-on-our-own-water-and-the-canary-flipped)
+- [48. THE STANDING RULE: NO CAPABILITY SHIPS UNREACHABLE](#48-the-standing-rule-no-capability-ships-unreachable)
+- [49. TWO TRAINING RUNS KILLED SILENTLY — `/tmp` IS A RAM DISK](#49-two-training-runs-killed-silently--tmp-is-a-ram-disk)
+- [50. HOW LONG A REAL GAP LASTS — THE NUMBER THE LADDER WAS NEVER SIZED ON](#50-how-long-a-real-gap-lasts--the-number-the-ladder-was-never-sized-on)
+- [51. THE SAME MEASUREMENT ON REAL WATER — AND §50'S CANDIDATE IS WITHDRAWN](#51-the-same-measurement-on-real-water--and-50s-candidate-is-withdrawn) — *taken back*
+- [52. WHY THE FINE-TUNE FAILED: WE TRAINED AT A RESOLUTION WE NEVER RUN](#52-why-the-fine-tune-failed-we-trained-at-a-resolution-we-never-run)
+- [53. ROUND 7 CLOSES **NO** — AND THE SCORER WAS THE DEFECT](#53-round-7-closes-no--and-the-scorer-was-the-defect)
+- [54. 179 IDENTITY SWITCHES — AND WHY XFEAT IS THE FIX, NOT THE FAILURE](#54-179-identity-switches--and-why-xfeat-is-the-fix-not-the-failure)
+- [55. NEVER LOSING THE TARGET: THE CASCADE, AND THE ONE STAGE NOBODY ELSE HAS](#55-never-losing-the-target-the-cascade-and-the-one-stage-nobody-else-has)
+- [56. THE DETECTOR SEES THE TARGET DURING 100 % OF ITS OWN GAPS](#56-the-detector-sees-the-target-during-100--of-its-own-gaps)
+- [57. BEFORE THE MODEL RUNS: THE CAMERA IS ARGUING WITH ITSELF](#57-before-the-model-runs-the-camera-is-arguing-with-itself)
+- [58. THE MODEL-FREE RUNG THAT CANNOT EXIST — four families REJECTED, one reason](#58-the-model-free-rung-that-cannot-exist--four-families-rejected-one-reason) — *taken back*
+- [59. THE VEHICLE SHIPS THE HALLUCINATING GATE MODEL, AND THE GOOD ONE IS ON DISK](#59-the-vehicle-ships-the-hallucinating-gate-model-and-the-good-one-is-on-disk)
+- [60. COLOUR IS NOT A RUNG, EVEN WHEN THE RULEBOOK FIXES IT — built, measured, DELETED](#60-colour-is-not-a-rung-even-when-the-rulebook-fixes-it--built-measured-deleted) — *taken back*
+- [61. REDUNDANCY IS NOT UNCONDITIONAL — the ensemble was measured and not chosen](#61-redundancy-is-not-unconditional--the-ensemble-was-measured-and-not-chosen) — *measured, not adopted*
+- [62. TIME-TO-CONTACT FROM SCALE — the metres cancel, and the noise does not](#62-time-to-contact-from-scale--the-metres-cancel-and-the-noise-does-not)
+- [63. THE APPROACH BAND MATCHED NO CLASS — RETRACTED, a citation around an invented number](#63-the-approach-band-matched-no-class--retracted-a-citation-around-an-invented-number) — *taken back*
+- [64. THE LOOP-CLOSURE EVIDENCE WAS MEASURED ON A FILTER IN FREE FALL — RETRACTED AND RE-MEASURED](#64-the-loop-closure-evidence-was-measured-on-a-filter-in-free-fall--retracted-and-re-measured) — *taken back*
+- [65. THE MIRROR-BRANCH TEST — slope 0 against slope 2, gated on its own standard error](#65-the-mirror-branch-test--slope-0-against-slope-2-gated-on-its-own-standard-error)
+- [66. THE SHIPPED GATE HEF WAS DEGRADED BY ITS OWN FINE-TUNE — level 2 lost 0.34 of confidence that level 0 kept (B-82, issue #47)](#66-the-shipped-gate-hef-was-degraded-by-its-own-fine-tune--level-2-lost-034-of-confidence-that-level-0-kept-b-82-issue-47)
+- [67. PLACING A PROP FROM SIGHTINGS — the hull's error enters once, and it is the one that matters](#67-placing-a-prop-from-sightings--the-hulls-error-enters-once-and-it-is-the-one-that-matters)
+<!-- contents:end -->
+
 ---
 
 ## 1. Vision — detection
