@@ -1,0 +1,22 @@
+src/mongla_manager/mongla_manager/srot_connect.py
+  s_b4c45e3235679b::t_45a4130475e435 346-356,370,427,452,480,546,578
+  s_b4c45e3235679b::t_6a5323ca25204a 40,42
+  s_b4c45e3235679b::t_6fd45f8b302d6e 404-407,409-411,413-426,428-431,450,453,455-457,479,482,484-487,522-523,525,527-531,577,580,582-583,605-606,608,610,641,643-644,646-648,660-661,663,665,689,691-692,694-695
+  s_b4c45e3235679b::t_a32bfb15e8784b 454,483,526,581,609,645,664,693
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "3117e2a8af67d05cb9e27e8233efb0a04334c54d",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
