@@ -23,6 +23,8 @@ KUTUM="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # One version for the driver, the firmware, the runtime and the Python
 # bindings. They must match exactly; the doctor fails a machine where they do not.
 HAILORT_V=4.24.0
+# Wi-Fi regulatory domain (ISO 3166). Bangladesh; change it where the vehicle goes.
+KUTUM_WIFI_COUNTRY="${KUTUM_WIFI_COUNTRY:-BD}"
 say() { printf '\n== %s\n' "$*"; }
 
 # =========================================================================== #
@@ -32,7 +34,7 @@ if [ "${1:-}" = "--system" ]; then
   OWNER_HOME="$(getent passwd "$OWNER" | cut -d: -f6)"
   STAMP="$(date +%F)"
 
-  say "1/6  apt: exactly what the package.xml files declare, plus operator tools"
+  say "1/8  apt: exactly what the package.xml files declare, plus operator tools"
   # A stale entry here is a package the vehicle installs and nothing imports.
   # mosh and tmux are off the mission path: a mission runs inside tmux over
   # mosh so a dropped tether never kills it (kutum/remote-access.md).
@@ -40,18 +42,36 @@ if [ "${1:-}" = "--system" ]; then
         ros-jazzy-rosbag2-storage-mcap ros-jazzy-web-video-server
         python3-numpy python3-opencv python3-pil python3-serial python3-yaml
         python3-colcon-common-extensions python3-rosdep
-        libopenblas0-pthread mosh tmux"
+        libopenblas0-pthread mosh tmux wpasupplicant avahi-daemon"
   MISSING=""
-  for p in $PKGS; do dpkg -s "$p" >/dev/null 2>&1 || MISSING="$MISSING $p"; done
+  # dpkg-query, not `dpkg -s`: a removed package that left its config files
+  # behind ("deinstall ok config-files") passes `dpkg -s`, and wpasupplicant
+  # stayed missing that way on 2026-11-07.
+  for p in $PKGS; do
+    [ "$(dpkg-query -W -f='${Status}' "$p" 2>/dev/null)" = "install ok installed" ] \
+      || MISSING="$MISSING $p"
+  done
   if [ -n "$MISSING" ]; then apt-get install -y -q $MISSING
   else echo "  all present"; fi
 
   # brltty claims every CH340 (1a86:7523) as a braille display and holds it
   # through usbfs, so the SROT board never gets a /dev/ttyUSB* node (E5).
-  if dpkg -s brltty >/dev/null 2>&1; then apt-get purge -y -q brltty; fi
+  if [ "$(dpkg-query -W -f='${Status}' brltty 2>/dev/null)" = "install ok installed" ]; then
+    apt-get purge -y -q brltty
+  fi
   id -nG "$OWNER" | tr ' ' '\n' | grep -qx dialout || usermod -aG dialout "$OWNER"
 
-  say "2/6  the Hailo-8: driver, firmware, runtime ($HAILORT_V, from source)"
+  say "2/8  sudo without a password for $OWNER"
+  # The owner's decision (2026-11-07): this is a single-purpose compute module
+  # on the vehicle's own network, and a password prompt in the middle of a
+  # pool session costs more than it protects. Delete the file to undo it.
+  rule="/etc/sudoers.d/90-kutum-$OWNER"
+  echo "$OWNER ALL=(ALL) NOPASSWD: ALL" > "$rule.tmp"
+  chmod 0440 "$rule.tmp"
+  if visudo -cf "$rule.tmp" >/dev/null; then mv "$rule.tmp" "$rule"; echo "  $rule"
+  else rm -f "$rule.tmp"; echo "  visudo refused the rule; nothing changed" >&2; exit 1; fi
+
+  say "3/8  the Hailo-8: driver, firmware, runtime ($HAILORT_V, from source)"
   # All three come from Hailo's public repositories, so a replacement Pi
   # needs no Developer Zone login. This is how the current vehicle was built
   # (by hand, 2026-08-28); as one script it has not yet run on a fresh card.
@@ -77,7 +97,7 @@ if [ "${1:-}" = "--system" ]; then
     ldconfig
   else echo "  HailoRT $HAILORT_V present"; fi
 
-  say "3/6  kutum/system/ -> the machine"
+  say "4/8  kutum/system/ -> the machine"
   install -m 0644 "$KUTUM/system/udev/99-mongla-cameras.rules" /etc/udev/rules.d/
   install -m 0644 "$KUTUM/system/udev/51-hailo-udev.rules"     /etc/udev/rules.d/
   install -m 0755 "$KUTUM/system/systemd/set-cpu-performance"  /usr/local/sbin/
@@ -87,12 +107,16 @@ if [ "${1:-}" = "--system" ]; then
   systemctl daemon-reload
   systemctl enable --now cpu-performance.service
 
-  say "4/6  units that start a program that no longer exists"
+  say "5/8  units that start a program that no longer exists"
   # hailo-web.service (a model switcher from before this repo) pointed into
   # ~/hailo, which is gone: it failed with 203/EXEC and was restarted every
   # 3 s for ever, and its ExecStop kills whatever holds /dev/video0 and
   # /dev/hailo0. Disabled and moved aside, not deleted.
   for unit in /etc/systemd/system/*.service; do
+    # Only unit files written here. The rest are symlinks into /usr/lib --
+    # aliases, some dangling once their package is removed -- and reading a
+    # dangling one under `set -e` stopped this script on 2026-11-07.
+    [ -f "$unit" ] && [ ! -L "$unit" ] || continue
     exe="$(sed -n 's/^ExecStart=-\{0,1\}\([^ ]*\).*/\1/p' "$unit" | head -1)"
     case "$exe" in
       "$OWNER_HOME"/*)
@@ -109,17 +133,46 @@ if [ "${1:-}" = "--system" ]; then
   systemctl daemon-reload
   systemctl reset-failed
 
-  say "5/6  sudo without a password for $OWNER"
-  # The owner's decision (2026-11-07): this is a single-purpose compute module
-  # on the vehicle's own network, and a password prompt in the middle of a
-  # pool session costs more than it protects. Delete the file to undo it.
-  rule="/etc/sudoers.d/90-kutum-$OWNER"
-  echo "$OWNER ALL=(ALL) NOPASSWD: ALL" > "$rule.tmp"
-  chmod 0440 "$rule.tmp"
-  if visudo -cf "$rule.tmp" >/dev/null; then mv "$rule.tmp" "$rule"; echo "  $rule"
-  else rm -f "$rule.tmp"; echo "  visudo refused the rule; nothing changed" >&2; exit 1; fi
+  say "6/8  network: Wi-Fi on boot, and mongla.local on every interface"
+  # Ethernet stays as cloud-init wrote it (DHCP); 60-kutum-eth.yaml only adds a
+  # link-local address, so a cable straight to a laptop with no DHCP server
+  # still answers on mongla.local. A laptop sharing its internet over that
+  # cable (NetworkManager: IPv4 "Shared to other computers") hands out an
+  # address by DHCP, and the Pi takes it like any router's.
+  install -m 0600 "$KUTUM/system/netplan/60-kutum-eth.yaml" /etc/netplan/
+  # The Wi-Fi password is typed here, by whoever runs this, and lands only in
+  # /etc/netplan (mode 0600) -- never in the repo. Rerun to change networks.
+  wifi=/etc/netplan/61-kutum-wifi.yaml
+  if [ ! -f "$wifi" ] && [ -t 0 ]; then
+    read -r -p "  Wi-Fi network to join on boot (empty: skip): " ssid
+    if [ -n "$ssid" ]; then
+      read -r -s -p "  password for $ssid: " psk; echo
+      umask 077
+      printf 'network:\n  version: 2\n  wifis:\n    wlan0:\n      optional: true\n      dhcp4: true\n      regulatory-domain: "%s"\n      access-points:\n        "%s":\n          password: "%s"\n' \
+        "$KUTUM_WIFI_COUNTRY" "$ssid" "$psk" > "$wifi"
+      umask 022
+      unset psk
+    fi
+  fi
+  rfkill unblock wifi 2>/dev/null || true
+  netplan generate
+  # apply re-reads every interface; on eth0 that can drop this ssh session
+  # for a second or two. It comes back on the same address.
+  netplan apply || echo "  netplan apply failed: the change takes effect on reboot"
+  systemctl enable --now avahi-daemon
 
-  say "6/6  the user half, as $OWNER"
+  say "7/8  the RTC: keep its battery charged"
+  # The Pi 5's clock keeps time through a power-off only on its battery, and
+  # the firmware leaves charging off. The official RTC battery (a rechargeable
+  # ML-2020) is charged at 3.0 V, Raspberry Pi's documented value. Do NOT
+  # leave this on with a non-rechargeable cell. Takes effect on the next boot.
+  cfg=/boot/firmware/config.txt
+  if ! grep -q '^dtparam=rtc_bbat_vchg=' "$cfg"; then
+    printf '\n# kutum: charge the RTC battery (rechargeable ML-2020 only)\ndtparam=rtc_bbat_vchg=3000000\n' >> "$cfg"
+    echo "  charging enabled in $cfg; reboot to apply"
+  else echo "  already set: $(grep '^dtparam=rtc_bbat_vchg=' "$cfg")"; fi
+
+  say "8/8  the user half, as $OWNER"
   sudo -u "$OWNER" -H bash "$KUTUM/setup.sh"
   sudo -u "$OWNER" -H bash "$KUTUM/doctor.sh" || true
   exit 0

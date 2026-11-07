@@ -1,0 +1,12 @@
+# Kutum: Ethernet. Merged with cloud-init's 50-cloud-init.yaml, which already
+# asks for DHCP on eth0. This adds the two things that file does not:
+#   link-local   an address with no DHCP server at all (a cable straight to a
+#                laptop), so mongla.local still resolves over it
+#   optional     boot does not wait for a cable that is not plugged in
+network:
+  version: 2
+  ethernets:
+    eth0:
+      dhcp4: true
+      optional: true
+      link-local: [ipv4, ipv6]

@@ -23,7 +23,34 @@ kutum/
     udev/51-hailo-udev.rules       /dev/hailo0 readable without root
     udev/make_srot_rule.sh         pin the SROT board to /dev/srot (once per board)
     systemd/cpu-performance.service + set-cpu-performance   CPU governor at boot
+    netplan/60-kutum-eth.yaml      Ethernet: DHCP plus a link-local fallback
 ```
+
+## The network
+
+Kutum answers as **`mongla.local`** on every interface (avahi), so the address
+never matters:
+
+| Link | How it gets an address |
+|---|---|
+| Ethernet to a router | DHCP |
+| Ethernet straight to a laptop sharing its internet | DHCP from the laptop. On a NetworkManager laptop: `nmcli connection modify "<wired connection>" ipv4.method shared`, then reconnect |
+| Ethernet straight to a laptop, no sharing | a link-local address (169.254.x.x); `mongla.local` still resolves |
+| Wi-Fi | joins the network `setup.sh --system` asked for, on every boot when it is in range |
+
+The Wi-Fi password is typed into `setup.sh --system` by whoever runs it and
+lives only in `/etc/netplan/61-kutum-wifi.yaml` (root, mode 0600). To change
+networks: `sudo rm /etc/netplan/61-kutum-wifi.yaml`, then rerun
+`sudo ~/mongla_ws/kutum/setup.sh --system`.
+
+## The clock
+
+The Pi 5 has a real-time clock; the official RTC battery keeps it running
+through a power-off, so a vehicle booted at a pool with no network still knows
+the date. `setup.sh --system` turns on the battery's trickle charge
+(`dtparam=rtc_bbat_vchg=3000000` in `/boot/firmware/config.txt`; rechargeable
+ML-2020 cells only). The doctor reads the charge voltage and whether network
+time has synchronised since boot.
 
 ## Every day
 
