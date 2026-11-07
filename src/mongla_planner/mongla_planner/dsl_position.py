@@ -549,6 +549,95 @@ class WhereMixin:
         return Fix(True, x_m=x, y_m=y, used=1, residual_m=0.0,
                    separation_deg=0.0)
 
+    def place_prop(self, prop: str, *, samples: int = 8, timeout: float = 8.0,
+                   camera: str | None = None, commit: bool = False):
+        """Where `prop` actually is, from repeated sightings. The inverse of
+        `fix_from_prop`: trust the hull, place the prop.
+
+        Collects up to `samples` sightings (one per new detection frame) of
+        range, bearing and the filter's pose, and fuses them with
+        `prop_placement.place`. That keeps the hull's own error out of the
+        average: it is common to every sighting, so it enters once.
+
+        ⛔ A MEASURED PROP IS CHECKED, NEVER OVERWRITTEN. A surveyed position
+        that disagrees with the placement beyond its 99 % ellipse is logged as
+        a disagreement and left alone. Overwriting would let a drifted pose
+        rewrite the one thing that can correct it, and the next `fix_from_prop`
+        would agree with the drift. An UNMEASURED prop (unset, or a rulebook
+        nominal) takes the placement for the rest of the run. With
+        `commit=True` it is also written to the deck course file through
+        `course_survey`, so the next run starts from it.
+
+        Returns a `Placement` (`ok`, `x_m`, `y_m`, `cov`, `sigma_m`,
+        `prior_offset_m`, `prior_disagrees`, `reason`).
+        """
+        import dataclasses
+        import math as _m
+        import time as _t
+
+        from mongla_localization.prop_placement import Placement, Sighting, place
+
+        course = getattr(self, '_course', None)
+        if course is None:
+            return Placement(False, reason='no course loaded: call use_course(<name>)')
+        if getattr(self, '_heading_offset', None) is None:
+            return Placement(False, reason='heading is not anchored, so bearings '
+                                           'are relative to boot. anchor_on(<prop>) first.')
+        key = str(prop).strip().lower()
+        p = course.props.get(key)
+        if p is None:
+            return Placement(False, reason=f'{prop!r} is not in course {course.name!r}')
+        cls = p.detect_class or key
+        cam = camera or self.camera
+        sightings, last_frame, cov_xy, yaw_sd = [], None, None, None
+        deadline = _t.monotonic() + float(timeout)
+        # Commands nothing, so it needs no abort check: it only reads, and the
+        # timeout bounds it.
+        while len(sightings) < int(samples) and _t.monotonic() < deadline:
+            here = self.pose(timeout=0.2)
+            bearing = self.bearing_to(cls, camera=cam)
+            got = self.range_to(cls, camera=cam)
+            frame = self.__dict__.get('_det_capture', {}).get(cam)
+            if here is None or bearing is None or got is None or frame == last_frame:
+                rclpy.spin_once(self.client.node, timeout_sec=0.05)
+                continue
+            last_frame = frame
+            c = self._odom.pose.covariance
+            cov_xy = ((c[0], c[1]), (c[6], c[7]))
+            yaw_sd = _m.degrees(_m.sqrt(max(float(c[35]), 0.0)))
+            sightings.append(Sighting(hull_xy=(here[0], here[1]), range_m=got[0],
+                                      range_sigma_m=got[1], bearing_deg=bearing))
+        if cov_xy is None:
+            return Placement(False, reason=f'{cls!r} was never seen with a pool-frame '
+                                           f'pose in {timeout:.0f} s')
+        prior = (float(p.x_m), float(p.y_m)) if p.has_position else None
+        res = place(sightings, hull_cov_xy=cov_xy, yaw_sigma_deg=yaw_sd, prior_xy=prior)
+        if not res.ok:
+            self.log.warning(f'[PLACE] {key}: {res.reason}')
+            return res
+        where = (f'({res.x_m:+.2f}, {res.y_m:+.2f}) m, sigma {res.sigma_m:.2f} m '
+                 f'from {res.n} sightings')
+        if p.measured:
+            if res.prior_disagrees:
+                self.log.warning(
+                    f'[PLACE] {key}: seen at {where}, {res.prior_offset_m:.2f} m from '
+                    f'its SURVEYED position -- beyond the 99 % ellipse. Kept the '
+                    f'survey; either the pose has drifted or the survey is wrong.')
+            else:
+                self.log.info(f'[PLACE] {key}: seen at {where}; agrees with the survey')
+            return res
+        course.props[key] = dataclasses.replace(
+            p, x_m=res.x_m, y_m=res.y_m,
+            note=f'placed from {res.n} sightings, sigma {res.sigma_m:.2f} m')
+        moved = ('' if prior is None else
+                 f', {res.prior_offset_m:.2f} m from the nominal')
+        self.log.info(f'[PLACE] {key}: placed at {where}{moved}')
+        if commit:
+            from mongla_localization.course_survey import survey
+            path = survey(course.name, key, {'x': res.x_m, 'y': res.y_m})
+            self.log.info(f'[PLACE] {key}: written to {path}')
+        return res
+
     def _publish_fix(self, x_m: float, y_m: float,
                      sigma: float | None = None, camera: str | None = None) -> None:
         """Hand a resected pool position to the invariant filter.

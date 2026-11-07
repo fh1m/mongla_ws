@@ -6850,3 +6850,35 @@ and **+0.016** (p90 +0.071, n=148): healthy, inside the 0.10 bar. A reduced
 level is a reason to measure, not proof of damage, and here it did no harm. It
 stays. `bin_fire_blood.hef` matches no surviving HAR, so it can only be measured
 on the chip or after a rebuild.
+
+## 67. ⭐ PLACING A PROP FROM SIGHTINGS — the hull's error enters once, and it is the one that matters
+
+**2026-11-07, dev box, synthetic passes whose truth was chosen.** `prop_placement.place`
+fuses several range-and-bearing sightings of one prop into a position and a covariance.
+The scorer was written first (`test_prop_placement.py`): **coverage**, the fraction of
+passes in which the true prop falls inside the reported 95 % ellipse. Each pass has ONE
+hull offset and ONE heading bias shared by all its sightings, because that is what a
+drifted pose does, plus fresh range and bearing noise per sighting.
+
+| setting (2000 passes, 8 sightings each) | coverage of the 95 % ellipse |
+|---|---:|
+| hull σ 0.30 m, heading σ 1.5°, range σ 0.15 m, bearing σ 1.0°: **shipped** (hull error added once) | **0.958** |
+| the same sightings, everything divided by the count (the naive average) | **0.336** |
+
+Bar: coverage in [0.92, 0.995], and the naive ellipse below 0.60 so the scorer is shown to
+tell them apart. Injection-verified: dividing the common term by n fails both this test
+and the prior-disagreement test.
+
+**Spacing beats position.** Two props placed from one pass share its hull error, so it
+cancels in their difference: over 500 passes with hull σ 0.30 m, the median position error
+was **0.356 m** and the median error in the 1.0 m spacing between them **0.019 m**. Bar:
+spacing median below a third of position median. That is the number that decides a drop
+between buckets one spacing apart.
+
+`MIN_SIGHTINGS = 3` is not tuned: a sample covariance from two points is rank one. The 99 %
+disagreement gate uses the exact 2-dof chi-square quantile, 9.210.
+
+⚠ NOT MEASURED: real sightings. Range σ comes from the pinhole model with one pixel of box
+noise (optimistic for a YOLO box, as `range_to` states), and the pose covariance is the
+filter's own, which has never been checked against water truth. A placement is only as
+honest as the covariance it is handed.

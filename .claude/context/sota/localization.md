@@ -45,7 +45,9 @@
 
 ⛔ **Grid and lane are inert until an anchor arrives** (`localization_node.py:495-507`), and the
 course files ship with **every position unset and `measured: false`**, so `fix_position`,
-`fix_from_prop` and `anchor_on` all refuse on an unsurveyed venue.
+`fix_from_prop` and `anchor_on` all refuse on an unsurveyed venue. `place_prop` (and the
+`survey_course` mission around it) fills an unset or nominal position from the vehicle's own
+sightings; a `measured: true` prop is only checked against them, never overwritten.
 
 ### 1.3 Retrodiction
 
