@@ -1194,7 +1194,7 @@
     <tr><td>Decide it is there</td><td><code>detected('gate')</code> asks whether the class was seen inside a recency window, not whether it is in this exact frame</td>
         <td class="num">1.0 s window</td><td>A flicker does not count as absence. An <code>if</code> here runs once — a moving search needs a loop</td></tr>
     <tr><td>Centre it</td><td><code>vision.align</code> drives lateral and yaw on the signed pixel offset from frame centre</td>
-        <td class="num">50 Hz host</td><td>Never raises. Returns <span class="num">ALIGNED</span>, <span class="num">LOST</span>, <span class="num">TIMEOUT</span>, <span class="num">NO_CAMERA</span> or <span class="num">ABORTED</span> — and where it ended</td></tr>
+        <td class="num">50 Hz host</td><td>Never raises. Returns <span class="num">ALIGNED</span>, <span class="num">LOST</span>, <span class="num">TIMEOUT</span>, <span class="num">NO_CAMERA</span>, <span class="num">ABORTED</span> or <span class="num">DRIFTED</span> — and where it ended</td></tr>
     <tr><td>Hold the lock</td><td>Live box, then tracker coast, then a geometric anchor matching image structure</td>
         <td class="numr">175 frames</td><td>Refuses rather than inventing. The ladder ends in a stated loss</td></tr>
     <tr><td>Drive through</td><td>One <code>SROT_MOVE</code>; the board runs and brakes the primitive itself</td>
@@ -1269,7 +1269,7 @@
       offset, which rung of the lock ladder it is on, the verb in flight, and the outcome —
       <span class="num">ALIGNED</span>, <span class="num">LOST</span>,
       <span class="num">TIMEOUT</span>, <span class="num">NO_CAMERA</span>,
-      <span class="num">ABORTED</span>. There is no line in here that the vehicle could not have
+      <span class="num">ABORTED</span>, <span class="num">DRIFTED</span>. There is no line in here that the vehicle could not have
       written itself, because a narration that knows more than the vehicle is a story, not a
       readout.</p>
    </div>
@@ -1853,6 +1853,7 @@
       <li><b>TIMEOUT</b>out of time</li>
       <li><b>NO_CAMERA</b>nothing to look with</li>
       <li><b>ABORTED</b>stopped on purpose</li>
+      <li><b>DRIFTED</b>centred, then off once stopped</li>
       <li class="bad"><b>FAILED</b>refused or errored — never raised</li>
     </ol>
   </figure>
@@ -3701,7 +3702,7 @@
       src: 'mongla_control/fc/srot_fc.py:711 · manual()', state: 'bench' },
     { n: 'the board', num: '500', unit: 'Hz', lab: 'one pass every 2 ms', ms: 0,
       title: 'Two milliseconds, for ever',
-      body: 'On the other end, core 1 of an ESP32 does three things and nothing else: read the sensors, run the control loop, drive the motors. It holds attitude and heading itself and adds our demand on top — about <b>25</b> corrections for every command we send.',
+      body: 'On the other end, core 1 of an ESP32 does three things and nothing else: read the sensors, run the control loop, drive the motors. It holds attitude and heading itself and adds our demand on top — about <b>10</b> corrections for every command we stream at 50 Hz.',
       theory: 'Two separate results say this rate is the right shape. Sampling says a loop can only answer disturbances up to half its rate, so 500 Hz buys authority to 250; scheduling says a fixed set of periodic tasks on one core is schedulable under rate-monotonic priorities up to a utilisation bound. Together they are the argument for a core that runs three jobs and refuses everything else.',
       cite: ['Liu & Layland, 1973 — hard-real-time scheduling', 'https://doi.org/10.1145/321738.321743'],
       src: 'Hengla (firmware) · src/control/attitude.*', state: 'bench' },

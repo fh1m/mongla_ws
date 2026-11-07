@@ -246,8 +246,8 @@ def test_our_known_current_rev_matches_the_firmware():
     changing what TEMPORARILY_REJECTED means on the wire. Both are behaviour a
     consumer must branch on, and both were invisible here for five revisions.
 
-    Bumping this constant is not bookkeeping: the block beside it in
-    srot_protocol.py is where each revision's meaning is written down, and this
+    Bumping this constant is not bookkeeping: each revision's meaning is
+    written down in .claude/context/platform/firmware-revisions.md, and this
     assertion is what forces someone to read the firmware's ladder and write it.
     """
     src = _read('include', 'config.h')
@@ -257,8 +257,9 @@ def test_our_known_current_rev_matches_the_firmware():
     assert rev == sp.FW_BEHAVIOUR_REV, (
         f'firmware is at behaviour rev {rev}, srot_protocol.FW_BEHAVIOUR_REV says '
         f'{sp.FW_BEHAVIOUR_REV}. Read include/config.h\'s revision ladder for '
-        f'{sp.FW_BEHAVIOUR_REV + 1}..{rev}, record what each one changes in the '
-        f'block beside FW_BEHAVIOUR_REV, and branch on anything a consumer feels.')
+        f'{sp.FW_BEHAVIOUR_REV + 1}..{rev}, record what each one changes in '
+        f'.claude/context/platform/firmware-revisions.md, and branch on anything '
+        f'a consumer feels.')
 
 
 def test_esc_status_291_is_absent_from_our_dialect():

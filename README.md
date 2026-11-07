@@ -34,8 +34,8 @@ this workspace was called **Duburi** (ডুবুরি), which means "diver".
 
 ## What is true today
 
-Read this before anything else on the page. This project sorts every claim into three states and
-never blurs them, because the failure that ends competition runs is a vehicle that reports
+Read this before anything else on the page. This project sorts every claim into one of the states
+below and never blurs them, because the failure that ends competition runs is a vehicle that reports
 success while doing nothing.
 
 | state | what it means | how much of this repo |
@@ -174,7 +174,7 @@ flowchart TB
     REV -->|yes| BARO{"barometer<br/>healthy?"}
     BARO -->|no| F3["FAIL — an unhealthy baro denies<br/>DEPTH_HOLD, AUTO and PATTERN,<br/>so every move verb is denied"]
     BARO -->|yes| KILL{"kill switch<br/>readable and live?"}
-    KILL -->|no| F4["FAIL — KILL = 0 once meant two things.<br/>See BUGS.md §26"]
+    KILL -->|no| F4["FAIL — KILL = 0 once meant two things.<br/>See measured-bars §26"]
     KILL -->|yes| BATT{"both packs<br/>above their floor?"}
     BATT -->|no| F5["FAIL — and they are separate packs:<br/>electronics ~1.35 V, thrusters ~14.7 V"]
     BATT -->|yes| OK(["ready to arm — propellers clear,<br/>human on the kill switch"])
@@ -285,7 +285,7 @@ sequenceDiagram
         AS-->>CLI: feedback
     end
     BD-->>FC: ACCEPTED / TEMPORARILY_REJECTED / DENIED / UNSUPPORTED
-    FC-->>AS: MoveResult(SUCCEEDED | PREEMPTED | DENIED | TIMEOUT | ABORTED)
+    FC-->>AS: MoveResult(SUCCEEDED | PREEMPTED | FAILED | DENIED | TIMEOUT | ABORTED)
     AS-->>Op: the outcome, and where it ended
 ```
 
@@ -423,7 +423,8 @@ Against a tape, three real 30 cm slides:
 | back | 31.04 cm | +1.04 | 0.70 m |
 | *the tape* | — | — | **0.72 m** |
 
-Worst **3.6 %** — several times a real DVL's 0.5–1 %, measured in air on a hand slide whose own
+Worst **3.6 %** — several times a low-cost DVL's ~1 % and far from a survey-grade unit's
+±0.1 %, measured in air on a hand slide whose own
 precision is about ±1 cm, so it is an upper bound. The last column is the part to trust: the
 height recovered from each slide lands on the tape's.
 
@@ -516,7 +517,7 @@ it that way.
 
 ## The machine
 
-<p align="center"><img src="docs/imgs/banners/machine.png" alt="Act two, the machine: the hull in profile, dimensioned 702.0 mm with its three tunnel thrusters and the axial unit in the nose, read off the CAD." width="100%"></p>
+<p align="center"><img src="docs/imgs/banners/machine.png" alt="Act two, the machine: the hull in profile, dimensioned 702.0 mm with its tunnel thrusters and the axial unit in the nose, read off the CAD." width="100%"></p>
 
 | part | what |
 |---|---|
@@ -630,7 +631,8 @@ if res.x_px > 0:               # it ended right of centre, so recover right
 
 That comment on line 8 is the whole philosophy compressed: **a result that is absent must never
 be mistaken for a result that is zero.** Outcomes are `ALIGNED`, `LOST`, `TIMEOUT`, `NO_CAMERA`,
-`ABORTED`, `FAILED` — and `FAILED` is what a refused axis comes back as, rather than an
+`ABORTED`, `DRIFTED` (centred while driving, off centre once stopped and re-measured),
+`FAILED` — and `FAILED` is what a refused axis comes back as, rather than an
 exception that would unwind a mission mid-dive.
 
 ### What a task actually looks like
@@ -911,10 +913,11 @@ from why the vehicle exists to every number it has measured. Or dip in:
 | [`reference/commands.md`](.claude/context/reference/commands.md) | **generated from the code**: all 23 verbs with their fields and defaults, which ones run on the board, every executable, launch argument, node parameter and wire constant |
 
 <details>
-<summary>**The platform** — [`.claude/context/platform/`](.claude/context/platform/) · 13 documents</summary>
+<summary>**The platform** — [`.claude/context/platform/`](.claude/context/platform/) · 15 documents</summary>
 
 `srot-architecture` · `srot-integration` (the traps that cost us runs) · `srot-board-soul` · `cross-repo-contract` ·
-`vision-control-split` · `vehicle-spec` · `launch-combinations` · `first-pool-verification` ·
+`firmware-revisions` (what each board revision changed) · `vision-control-split` · `vehicle-spec` ·
+`launch-combinations` · `first-pool-verification` · `first-swim` (the first route, control only, as a script) ·
 `pool-day` · `pool-day-round-4a` · `foxglove-and-bags` · `ros2-conventions` · `system-harmony`
 
 </details>
@@ -964,7 +967,8 @@ It placed, and it had a ceiling.
 boundary moved. The firmware team built a board we could write the control loop for, a Pi with a chip
 that does nothing but see took the thinking, and the vehicle became two computers. Our own loop
 got *slower* — and the vehicle got steadier, because the fast loop moved to where it belongs:
-about **25 control corrections for every command we send**.
+**10 control corrections for every command we stream at 50 Hz**, and 1 500 for a 3-second
+primitive sent once.
 
 **Act III — open.** In September 2026 the author left the university, on principle, and Mongla
 continues independently. The vehicles, the team name and the university's materials stayed
@@ -1013,8 +1017,8 @@ is no third category, and nothing here is owned by an institution.
 <div>
   <img src="https://avatars.githubusercontent.com/u/132839265?v=4" width="180" height="180" align="left" alt="Muhammad Fahim Faisal"/>
   <strong>Muhammad Fahim Faisal</strong> — author<br>
-  Autonomy: perception, localization, control integration, the mission language, the simulator,
-  and this repository.<br><br>
+  Autonomy: perception, localization, control integration, the mission language, the earlier
+  simulator (kept at the tag `last-with-pixhawk-and-sim`), and this repository.<br><br>
   Previously engineering team lead for the RoboSub 2026 campaign, AI &amp; Machine Vision sub-team
   lead (2025), and a junior member of that team from 2024 — the year after the programme's
   2nd place at RoboSub 2023, which predates him. His vision stack flew at
@@ -1174,7 +1178,7 @@ fetching, that is noted rather than hidden.
 
 | | |
 |---|---|
-| [Nortek DVL1000-300m](https://www.nortekgroup.com/products/dvl-1000-300m) | a real DVL's specification — ±0.1 % — which is the bar our camera misses by several times |
+| [Nortek DVL1000-300m](https://www.nortekgroup.com/products/dvl-1000-300m) | a survey-grade DVL's specification — ±0.1 % — against our camera's worst 3.6 % in air |
 | [Teledyne Tasman DVL](https://www.teledynemarine.com/en-us/products/SiteAssets/RD%20Instruments/Tasman_DVL.pdf) · [PathFinder DVL Guide](https://www.teledynemarine.com/en-us/resources/Documents/Brand%20Support/RD%20INSTRUMENTS/Technical%20Resources/Manuals%20and%20Guides/Pathfinder/PathFinder%20DVL%20Guide_Apr22.pdf) | bottom tracking and the Janus beam geometry, explained by the manufacturer |
 | [RoboSub](https://robosub.org/) · [2026 programme](https://robosub.org/programs/2026/) · [Team Handbook](https://robonation.org/app/uploads/sites/4/2026/07/RoboSub-2026_Team-Handbook_20260711-compressed.pdf) | the competition these tasks come from |
 
@@ -1196,8 +1200,6 @@ search rather than by reading the page.</sub>
 
 ---
 
----
-
 ## Contributing
 
 This is a two-person project that would be better with more people in it. The useful shapes of
@@ -1211,7 +1213,8 @@ help, in order:
 3. **Add a verb, a mission, or a test.** Adding a verb is [two edits](#adding-a-verb-is-two-edits).
 4. **Improve the docs you had to read twice.** If a page confused you, it is wrong.
 
-Before a pull request: `python3 -m pytest src/*/test -q` should stay green, and anything that
+Before a pull request, with ROS sourced and the workspace built (`./build_mongla.sh`, then
+`source install/setup.bash`), `python3 -m pytest -q src/*/test test` should stay green, and anything that
 ships a constant needs a row in `measured-bars.md` saying how it was measured.
 
 **Warning: Do not send us firmware.** The board, its firmware and the ground station live in

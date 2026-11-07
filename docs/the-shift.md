@@ -87,8 +87,9 @@ running the position filter, and deciding what the mission does next.
 
 No network, no router, nothing in between. A single USB-C cable carrying MAVLink. The Pi
 sends *intent* — "strafe left a little", or a whole primitive such as "forward 3 seconds at
-40 %" — and the board turns that into thrust 500 times a second underneath it: roughly
-**25 control corrections for every command we send**.
+40 %" — and the board turns that into thrust 500 times a second underneath it: **10 control
+corrections for every command the Pi streams at 50 Hz**, and 1 500 for a 3-second primitive
+it sends once.
 
 That ratio is the point of the design. The loop we write on the Pi is *slow* on purpose, and
 the vehicle is steady anyway, because the fast loop lives where it belongs.
