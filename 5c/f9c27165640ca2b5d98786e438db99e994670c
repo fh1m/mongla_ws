@@ -1,0 +1,29 @@
+.claude/context/packages/mongla_vision/README.md
+  s_b4c45e3235679b::t_e196d46be8e678 187
+src/mongla_vision/test/test_calibration_library.py
+  s_b4c45e3235679b::t_ebaae8b997c0c6 165-166,209,225
+  s_b4c45e3235679b::t_742c435a015773 81,100,113,126
+src/mongla_vision/mongla_vision/calibration/guide_files.py
+  s_b4c45e3235679b::t_ebaae8b997c0c6 1-14,25-290
+  s_b4c45e3235679b::t_904a31f339eeb9 15-24
+src/mongla_vision/mongla_vision/calibration/guide.py
+  s_b4c45e3235679b::t_ebaae8b997c0c6 32-33,75,79,83-85
+src/mongla_vision/test/test_no_capability_is_built_and_unreachable.py
+  s_b4c45e3235679b::t_ebaae8b997c0c6 71-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "5cf9c27165640ca2b5d98786e438db99e994670c",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
