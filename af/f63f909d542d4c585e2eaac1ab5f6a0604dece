@@ -1,0 +1,23 @@
+.claude/context/packages/mongla_control/README.md
+  s_b4c45e3235679b::t_f700bbd3e2e33a 64-92
+.claude/context/packages/mongla_manager/README.md
+  s_b4c45e3235679b::t_06e958d34647b5 41-42
+  s_b4c45e3235679b::t_f700bbd3e2e33a 36-40,43-60,67,71-90
+  s_b4c45e3235679b::t_7f954965d41dd2 91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "aff63f909d542d4c585e2eaac1ab5f6a0604dece",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
