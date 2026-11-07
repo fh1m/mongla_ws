@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from mongla_vision.flow.flow_math import (
-    height_above_floor, rotation_flow_px, axis_unit, project, robust_flow,
+    height_above_floor, axis_unit, project, robust_flow,
     interp_rate, integrate_rate, solve_planar_motion, DistanceAccumulator,
     HeightFromDivergence, Intrinsics,
 )
@@ -23,13 +23,6 @@ def test_height_none_when_nonphysical():
     # depth below the floor / bad pool_depth -> None (caller holds last).
     assert height_above_floor(1.0, -2.0) is None
     assert height_above_floor(0.0, 0.0) is None
-
-
-# ── rotation compensation ────────────────────────────────────────────────────
-def test_rotation_flow_scales_with_f_and_rate_and_dt():
-    dx, dy = rotation_flow_px(500.0, pitch_rate=0.2, roll_rate=0.1, dt=0.02)
-    assert dy == pytest.approx(500.0 * 0.2 * 0.02)   # image-y <- pitch
-    assert dx == pytest.approx(500.0 * 0.1 * 0.02)   # image-x <- roll
 
 
 # ── axis projection (one axis only) ──────────────────────────────────────────

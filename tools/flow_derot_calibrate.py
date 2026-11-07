@@ -5,9 +5,9 @@ This was owed and written down. `measured-bars.md` §12, verbatim: "For the
 vehicle: the axis mapping and the method carry over; **this gain does not**,
 whatever its cause. Re-derive it on the hull." The gains were fitted on a rig
 where the camera and IMU were rigidly coupled in a known orientation; the IMU
-is now the SROT BOARD. `rotation_flow_px`'s own docstring says the mapping is
-"mount-specific and CALIBRATED by the static-tilt test", so this is the
-designed procedure, not a workaround.
+is now the SROT BOARD. The camera<->body axis mapping is mount-specific and
+calibrated by a static-tilt test, so this is the designed procedure, not a
+workaround.
 
 Measured consequence of skipping it: a 30 cm slide read 124 % with
 de-rotation ON and 104 % with it OFF -- the correction ADDS error, which is
@@ -16,7 +16,7 @@ travel with it on, against 0.15 cm off.
 
 THE ARITHMETIC, so the fitted number is checkable rather than trusted.
 Let `S_x` be the true coupling, `measured_dx = S_x * (f * roll * dt)`. The
-node passes `roll_rate = -gx * roll` into `rotation_flow_px` and SUBTRACTS
+node scales the roll rate by `-gx` and SUBTRACTS
 `f * roll_rate * dt`, so
 
     corrected_dx = S_x*f*roll*dt + gx*f*roll*dt = (S_x + gx) * f*roll*dt

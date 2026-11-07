@@ -45,7 +45,6 @@ src/mongla_vision/mongla_vision/
     seg_decode.py         # Host-side decode of a RAW YOLOv8/v11-seg head, in the QUANTISED domain.
     yolo.py               # YoloDetector — Ultralytics YOLO11 (or any compatible model file).
   flow/
-    distance_estimation_node.py # distance_estimation_node -- downward-camera optical-flow distance (DVL-free).
     flow_math.py          # flow_math -- pure functions for downward-camera optical-flow distance.
     flow_node.py          # flow_node -- the bottom camera AS A VELOCITY SENSOR. Our DVL substitute.
     flow_timing.py        # Timing. The thing that decides whether de-rotation helps or hurts.

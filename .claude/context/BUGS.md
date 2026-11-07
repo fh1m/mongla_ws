@@ -139,6 +139,23 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 
 ## 2. HIGH
 
+### B-88: flow_node held a height from before the depth stopped `READ 2026-11-07` **FIXED 2026-11-07**
+
+**What.** B10 gave the old `distance_estimation_node` a clock on its height:
+a depth older than 2 s gave no height, so a stalled link refused frames
+instead of scaling them by a stale number. `flow_node` replaced that node on
+the vehicle and never had the fix. It kept `_last_height` from the last depth
+it saw, for ever, and every velocity it published is proportional to that
+height. Its debug topic also published an absent height as `0.0` (B05's rule,
+on the output side).
+
+**Fix.** `flow_node._fresh_height` recomputes the height every frame from a
+depth no older than `HEIGHT_STALE_S` (2.0 s, `flow_constants.py`), aged from
+the board's own measurement instant; absent, the frame is refused. The debug
+topic reports NaN. The old node is deleted (git history) and every launch
+starts `flow_node` with `flow:=true`. Test: `test_distance_height_gate.py`,
+injection-verified.
+
 ### B-84: a pre-empted verb freed the gate its pre-emptor held `READ 2026-11-07 (cloud audit)` **FIXED 2026-11-07**
 
 **What.** `disarm` pre-empts a running `move_forward`: it claims the command gate

@@ -42,6 +42,15 @@ def _node(**params):
     return FlowVelocityNode.__new__(FlowVelocityNode), overrides
 
 
+def _give_depth(n, depth_m):
+    """A depth reading as `_on_state` stores it: the value and its instant.
+    The instant is set an hour ahead so it stays fresh for the whole test -- the
+    node refuses a height from a depth older than HEIGHT_STALE_S (B10)."""
+    import time
+    n._depth_m = depth_m
+    n._depth_t = time.monotonic() + 3600.0
+
+
 def _make(**params):
     """A real node, with only the parameters under test overridden."""
     import rclpy.node
@@ -573,7 +582,7 @@ class TestDeRotationSignConvention:
                   estimate_time_offset=False,
                   gyro_gain_x=gain, gyro_gain_y=gain)
         try:
-            n._depth_m = 0.0
+            _give_depth(n, 0.0)
             rng = np.random.default_rng(5)
             g = rng.integers(0, 255, (360, 640), dtype=np.uint8)
             shift = s_true * self.F * self.OMEGA * self.DT
@@ -677,7 +686,7 @@ class TestRefusalTravelIsThePriceOfRefusing:
                   estimate_time_offset=False,
                   gyro_gain_x=1.0, gyro_gain_y=1.0)
         try:
-            n._depth_m = 0.0
+            _give_depth(n, 0.0)
             rng = np.random.default_rng(17)
             g = rng.integers(0, 255, (360, 640), dtype=np.uint8)
             n._acc.start(0.0, True)          # lateral axis <- image x
