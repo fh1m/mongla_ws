@@ -13,6 +13,8 @@ import pytest
 
 from mongla_localization import frames
 from mongla_localization import localization_node as ln
+from mongla_localization import localization_inputs as li
+from mongla_localization import localization_publish as lp
 from mongla_localization.inekf import RIEKF, State
 import sys as _sys_ct
 import pathlib as _pl_ct
@@ -195,7 +197,7 @@ def test_quaternion_round_trips_through_180_degrees():
         R = np.array([[math.cos(r), -math.sin(r), 0.0],
                       [math.sin(r), math.cos(r), 0.0],
                       [0.0, 0.0, 1.0]])
-        w, x, y, z = ln._quat_from_R(R)
+        w, x, y, z = lp._quat_from_R(R)
         assert math.isfinite(w) and math.isfinite(z)
         assert pytest.approx(1.0, abs=1e-9) == w * w + x * x + y * y + z * z
         got = math.degrees(math.atan2(2.0 * (w * z + x * y),
@@ -267,15 +269,15 @@ def test_quaternion_matrix_round_trip():
         R = np.array([[math.cos(r), -math.sin(r), 0.0],
                       [math.sin(r), math.cos(r), 0.0],
                       [0.0, 0.0, 1.0]])
-        q = ln._quat_from_R(R)
-        assert np.allclose(ln._R_from_quat(*q), R, atol=1e-9)
+        q = lp._quat_from_R(R)
+        assert np.allclose(li._R_from_quat(*q), R, atol=1e-9)
 
 
 def test_a_non_unit_quaternion_is_normalised():
     """An off-unit quaternion gives a matrix with det != 1, and `so3_log` of
     that is not a rotation vector -- the filter would take the result as a
     real innovation."""
-    R = ln._R_from_quat(2.0, 0.0, 0.0, 0.0)
+    R = li._R_from_quat(2.0, 0.0, 0.0, 0.0)
     assert np.allclose(R, np.eye(3))
     assert pytest.approx(1.0, abs=1e-12) == np.linalg.det(R)
 
@@ -301,7 +303,7 @@ def test_a_TILTED_hull_at_rest_does_not_accelerate():
     R_true = _R_pitch(pitch)
     # What an accelerometer on that hull reads: gravity in BODY axes.
     a_body = R_true.T @ np.array([0.0, 0.0, -9.80665])
-    qw, qx, qy, qz = ln._quat_from_R(R_true)
+    qw, qx, qy, qz = lp._quat_from_R(R_true)
 
     n = _node(disarmed=True)
     t = 100.0
@@ -435,7 +437,7 @@ def test_the_first_attitude_is_ADOPTED_not_corrected_into():
     R_true = np.array([[math.cos(yaw), -math.sin(yaw), 0.0],
                        [math.sin(yaw), math.cos(yaw), 0.0],
                        [0.0, 0.0, 1.0]])
-    qw, qx, qy, qz = ln._quat_from_R(R_true)
+    qw, qx, qy, qz = lp._quat_from_R(R_true)
     a_body = R_true.T @ np.array([0.0, 0.0, -9.80665])
 
     def sample(tt):
@@ -553,7 +555,7 @@ def _board_at(t, yaw_deg, accel_x=0.0, yaw_rate=0.0):
     a = math.radians(yaw_deg)
     Rz = np.array([[math.cos(a), -math.sin(a), 0.0],
                    [math.sin(a), math.cos(a), 0.0], [0.0, 0.0, 1.0]])
-    qw, qx, qy, qz = ln._quat_from_R(Rz)
+    qw, qx, qy, qz = lp._quat_from_R(Rz)
     m.orientation.w, m.orientation.x = qw, qx
     m.orientation.y, m.orientation.z = qy, qz
     return m
@@ -808,7 +810,7 @@ def test_the_model_aids_ONLY_when_flow_is_stale():
     n._last_flow_t = time.monotonic()          # flow live
     n._maybe_model_aid()
     assert n._n['model'] == 0
-    n._last_flow_t = time.monotonic() - 2.0 * ln.FLOW_FRESH_S
+    n._last_flow_t = time.monotonic() - 2.0 * li.FLOW_FRESH_S
     n._maybe_model_aid()
     assert n._n['model'] == 1
 
@@ -890,7 +892,7 @@ def test_twist_covariance_is_in_the_body_frame_like_the_twist():
     import numpy as np
     from nav_msgs.msg import Odometry
     from mongla_localization.inekf import RIEKF
-    from mongla_localization.localization_node import _fill_covariance
+    from mongla_localization.localization_publish import _fill_covariance
     f = RIEKF()
     c, s = 0.0, 1.0
     f.X.R = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
@@ -1020,7 +1022,7 @@ def test_a_late_sample_inside_a_step_is_applied_at_its_own_instant():
             f.predict(g, acc, 0.008)
             ref._last_imu_t = t
             # ...and the board attitude that `_on_imu` applies at t51.
-            f.update_attitude(ln._Rz(ref._yaw_offset_deg) @ ref._board_R,
+            f.update_attitude(li._Rz(ref._yaw_offset_deg) @ ref._board_R,
                               sigma_deg=ref._attitude_sigma_deg)
             continue
         ref._on_imu(_Imu(t, accel=(0.3, 0.0, -9.80665)))
@@ -1056,7 +1058,7 @@ def test_aiding_flips_to_unaided_when_velocity_stops_being_observed():
     n._pub_aiding = _Recorder()
     n._report_aiding()
     for _ in range(200):
-        n._filter.predict([0, 0, 0], -ln.np.array([0.0, 0.0, 9.80665]), 0.02)
+        n._filter.predict([0, 0, 0], -np.array([0.0, 0.0, 9.80665]), 0.02)
     n._report_aiding()
     assert n._pub_aiding.sent == ['aided', 'unaided']
 
@@ -1076,7 +1078,7 @@ def test_aiding_recovers_when_velocity_is_measured_again():
     n._pub_aiding = _Recorder()
     n._report_aiding()
     for _ in range(200):
-        n._filter.predict([0, 0, 0], -ln.np.array([0.0, 0.0, 9.80665]), 0.02)
+        n._filter.predict([0, 0, 0], -np.array([0.0, 0.0, 9.80665]), 0.02)
     n._report_aiding()
     for _ in range(50):
         n._filter.update_body_velocity([0.0, 0.0, 0.0], sigma=0.01)
@@ -1107,7 +1109,7 @@ def test_the_aiding_topic_is_not_the_motion_topic():
     n = _node()
     n._pub_aiding, n._pub_motion = _Recorder(), _Recorder()
     for _ in range(200):
-        n._filter.predict([0, 0, 0], -ln.np.array([0.0, 0.0, 9.80665]), 0.02)
+        n._filter.predict([0, 0, 0], -np.array([0.0, 0.0, 9.80665]), 0.02)
     n._report_aiding()
     assert n._pub_aiding.sent == ['unaided']
     assert n._pub_motion.sent == [], 'the motion topic must be untouched'
@@ -1232,7 +1234,7 @@ def test_centred_is_the_boards_own_test():
     """Restated from `actuation_model.CENTRE_EPS` (this package does not
     depend on mongla_control); one truth, two copies, compared."""
     am = pytest.importorskip('mongla_control.actuation_model')
-    assert ln.DEMAND_CENTRE_EPS == am.CENTRE_EPS
+    assert li.DEMAND_CENTRE_EPS == am.CENTRE_EPS
 
 
 # --------------------------------------------------------------------------- #
@@ -1259,7 +1261,7 @@ def _sampled_truth(f, n=20000, seed=30):
 
 def _published(f):
     from nav_msgs.msg import Odometry
-    from mongla_localization.localization_node import _fill_covariance
+    from mongla_localization.localization_publish import _fill_covariance
     m = Odometry()
     _fill_covariance(m, f)
     return (np.array(m.pose.covariance).reshape(6, 6),
