@@ -133,8 +133,8 @@ mongla.move_forward(duration=4, gain=40)
 ```
 
 The vision verbs never raise an exception. They come back saying *how* they finished
-(`ALIGNED`, `LOST`, `TIMEOUT`, `NO_CAMERA`), so a mission branches on what happened, not on
-a crash.
+(`ALIGNED`, `LOST`, `TIMEOUT`, `NO_CAMERA`, `ABORTED`, `DRIFTED`, `FAILED`), so a mission
+branches on what happened, not on a crash.
 
 ---
 

@@ -54,7 +54,7 @@ from .model_context import ClassRef
 
 # Outcome codes are the single source of truth in the control engine.
 from mongla_control.motion_vision import (
-    ALIGNED, LOST, TIMEOUT, NO_CAMERA, ABORTED, DRIFTED,
+    ALIGNED, LOST, TIMEOUT, NO_CAMERA, ABORTED, DRIFTED, _CODE_NAME,
 )
 
 if TYPE_CHECKING:
@@ -73,16 +73,6 @@ def _shot_left(fired) -> bool:
     if fired == 'pending':
         return True
     return any(tok.endswith((':FIRED', ':RAISED')) for tok in fired.split(','))
-
-
-_CODE_NAME = {
-    ALIGNED:   'ALIGNED',
-    LOST:      'LOST',
-    TIMEOUT:   'TIMEOUT',
-    NO_CAMERA: 'NO_CAMERA',
-    ABORTED:   'ABORTED',
-    DRIFTED:   'DRIFTED',
-}
 
 
 @dataclass
@@ -111,7 +101,7 @@ class VisionResult:
     Fields:
       ``ok``          -- True iff aligned (align) / reached fill (move).
       ``reason``/``status`` -- outcome name ('ALIGNED','LOST','TIMEOUT',
-                          'NO_CAMERA','ABORTED','FAILED').
+                          'NO_CAMERA','ABORTED','DRIFTED','FAILED').
       ``code``        -- the raw integer code from the server.
       ``x_px``/``y_px`` -- SIGNED px of the target from frame CENTRE at the last
                           seen frame (+x = right, +y = below). ``nan`` when the

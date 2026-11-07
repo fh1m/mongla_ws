@@ -29,7 +29,7 @@ external client goes through this one endpoint, one verb per goal.
   "unset" (issue #14).
 - **Result:** `success`, `message`, `final_value`, `error_value`; the vision verbs add
   `end_x_px` / `end_y_px` (signed, `NaN` = never seen), `fill_frac` and `elapsed_s`, and carry
-  their outcome (`ALIGNED`, `LOST`, `TIMEOUT`, `NO_CAMERA`, `ABORTED`) as an integer in
+  their outcome (`ALIGNED`, `LOST`, `TIMEOUT`, `NO_CAMERA`, `ABORTED`, `DRIFTED`) as an integer in
   `final_value`.
 - **Feedback:** `phase`, `current_value`, `error_value`, live `err_x_px` / `err_y_px`,
   `status_line`.

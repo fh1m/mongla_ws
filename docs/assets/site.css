@@ -1801,6 +1801,7 @@ body > footer p+p{opacity:.78;max-width:88ch;line-height:1.6}
   font-size:11px;color:var(--ink-3);line-height:1.35}
 .codes b{display:block;font-family:var(--data);font-size:11.5px;color:#fff;margin-bottom:2px}
 .codes .ok b{color:var(--state-water)} .codes .bad b{color:var(--signal-text)}
+.codes li:last-child:nth-child(odd){grid-column:1/-1}
 
 /* every horizontal scroller on the page gets the page's own scrollbar, not
    the browser's white default */
