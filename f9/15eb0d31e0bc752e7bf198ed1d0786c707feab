@@ -1,0 +1,53 @@
+src/mongla_manager/mongla_manager/bringup_grade.py
+  s_b4c45e3235679b::t_5bafbdf74c0b63 1-16
+src/mongla_manager/test/test_health_reporters_sensor_offsets.py
+  s_b4c45e3235679b::t_367562e8875762 33
+src/mongla_manager/mongla_manager/bringup_host.py
+  s_b4c45e3235679b::t_5bafbdf74c0b63 1-359,364-608
+  s_b4c45e3235679b::t_b2aaa121abeafa 361-363
+  s_b4c45e3235679b::t_d827c4bbb6e584 360
+src/mongla_manager/test/test_gate_ignores_dangling_model_links.py
+  s_b4c45e3235679b::t_7aa6633fc36d48 9-10
+  s_b4c45e3235679b::t_367562e8875762 19,33,43
+src/mongla_manager/test/test_pi_power_check.py
+  s_b4c45e3235679b::t_995f62ac33446b 19-20
+src/mongla_manager/test/test_bringup_check_fw_rev.py
+  s_b4c45e3235679b::t_8f8d1ae07241c7 13-14,73,198,239,247,255,261
+  s_b4c45e3235679b::t_995f62ac33446b 110
+src/mongla_manager/mongla_manager/bringup_check.py
+  s_b4c45e3235679b::t_0bb8b9788a5312 39-40,43-46
+  s_b4c45e3235679b::t_5bafbdf74c0b63 41-42
+  s_b4c45e3235679b::t_b2aaa121abeafa 26-32
+src/mongla_manager/test/test_srot_serial_is_never_guessed.py
+  s_b4c45e3235679b::t_367562e8875762 71
+src/mongla_manager/test/test_model_separation_gate.py
+  s_b4c45e3235679b::t_7aa6633fc36d48 29-30
+  s_b4c45e3235679b::t_367562e8875762 47
+src/mongla_manager/mongla_manager/bringup_board.py
+  s_b4c45e3235679b::t_5bafbdf74c0b63 1-6,12-592
+  s_b4c45e3235679b::t_47004c76e2a0e6 7-11
+src/mongla_manager/test/test_stack_headroom_verdict.py
+  s_b4c45e3235679b::t_8f8d1ae07241c7 59
+  s_b4c45e3235679b::t_d827c4bbb6e584 100
+  s_b4c45e3235679b::t_995f62ac33446b 12-13,71
+src/mongla_manager/test/test_gate_fails_when_the_board_is_unread.py
+  s_b4c45e3235679b::t_367562e8875762 13
+src/mongla_manager/test/test_bringup_gate_does_not_pass_on_absent_hardware.py
+  s_b4c45e3235679b::t_367562e8875762 28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "f915eb0d31e0bc752e7bf198ed1d0786c707feab",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
