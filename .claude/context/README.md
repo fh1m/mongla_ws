@@ -1,15 +1,19 @@
 # The Mongla book
 
-Every document in this folder, in the order a newcomer should read them. Each chapter is
-titled by its own first heading, so this contents page cannot describe a document as
-something it is not — `test_docs_contract.py` checks the titles, and fails on any document
-here that no link from this page reaches. Code beats docs; a measurement beats both — see
-[`measured-bars.md`](measured-bars.md).
+Every chapter of Mongla's documentation, in the order a newcomer should read it. It starts
+with why the vehicle is built the way it is, then goes through the machine, how it sees, how it
+decides and how to run it, and ends with the record of what we measured and got wrong. New
+here? Read [the front page](wiki/Home.md) first; it covers the whole thing in pictures.
 
-**Read and edit this book in [the wiki](https://github.com/fh1m/mongla_ws/wiki).** Each chapter
-there is built from the file here, and an edit made there is committed back here, where the doc
-tests run (`tools/wiki_build.py`). A new chapter written in the wiki lands in `wiki/`; add it to
-this contents page, or the contract test fails on a page nobody can reach.
+Two rules hold throughout. The code beats the docs, and a measurement beats both, so every
+threshold the code ships with is in [the ledger](measured-bars.md), with how it was measured.
+Each chapter's name here is its own first heading, so this page cannot describe a chapter as
+something it is not.
+
+**Read and edit it in [the wiki](https://github.com/fh1m/mongla_ws/wiki).** An edit made there
+is committed back to the file here, where the doc tests run ([how](reference/how-the-docs-stay-true.md)).
+A new page written in the wiki lands in `wiki/`. Add it to this contents page, or the tests
+fail on a page nobody can reach.
 
 The earlier stack (Pixhawk / ArduSub, the Jetson, the simulator) is not documented here. It
 lives, whole, at the tag `last-with-pixhawk-and-sim`.

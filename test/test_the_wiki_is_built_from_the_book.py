@@ -90,3 +90,24 @@ def test_a_link_inside_a_code_fence_is_left_alone():
     text = '```\n[x](ROADMAP.md)\n```\n[y](ROADMAP.md)\n'
     out = wb._map_links(text, lambda t: wb._to_wiki(wb.BOOK, t, names))
     assert '[x](ROADMAP.md)' in out and '[y](ROADMAP)' in out
+
+
+def test_no_page_shows_the_site_s_own_machinery(tmp_path):
+    """The site's pages open with Jekyll front matter and the capability map
+    carries a script. The wiki printed both as text ('layout: default title:
+    The Shift ...' at the top of a page). Built pages must hold neither; the
+    round-trip test above proves `pull` puts them back."""
+    wiki = _build(tmp_path)
+    shown = [n for n, t in wiki.items()
+             if t.startswith('---\n') or re.search(r'^(layout:|<script)', t, re.M)]
+    assert not shown, shown
+    assert (ROOT / 'docs/capability-map.md').read_text().count('<script') == 1, \
+        'the fence test is only meaningful while the site page still has its script'
+
+
+def test_home_is_the_front_page_and_the_book_is_its_own_page(tmp_path):
+    wiki = _build(tmp_path)
+    names = wb.pages()
+    assert names[wb.HOME] == 'Home' and names[wb.BOOK] != 'Home'
+    assert '](' + names[wb.BOOK] + ')' in wiki['Home'], 'Home does not lead to the book'
+    assert 'blob/main/docs/imgs/' in wiki['Home'], 'Home lost its pictures'

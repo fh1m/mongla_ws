@@ -11,7 +11,9 @@ name: Wiki
 #
 # If a wiki edit breaks a guard (a link to no page, a stale constant), it is not
 # committed to main: it goes to a branch and a pull request says what failed.
-# The edit stays in the wiki meanwhile.
+# The edit stays in the wiki meanwhile. Opening that pull request needs the repo
+# setting Actions -> General -> "Allow GitHub Actions to create and approve pull
+# requests"; without it the branch is still pushed and the run says so.
 #
 # How the conversion works and what it guarantees: tools/wiki_build.py.
 #
@@ -86,7 +88,7 @@ jobs:
         if: steps.pull.outputs.any == '1'
         continue-on-error: true
         run: |
-          pip install -q pytest pyyaml
+          pip install -q pytest pyyaml numpy   # numpy: the banner check imports it
           python3 -m pytest -q -p no:cacheprovider $GUARDS 2>&1 | tee "$RUNNER_TEMP/guards"
           exit "${PIPESTATUS[0]}"
 
@@ -113,7 +115,9 @@ jobs:
             { echo "A wiki edit (${PAGES}) fails the doc guards, so it was not committed to main."
               echo "The edit is still in the wiki. Fix it there or here; merging this applies it."
               echo; echo '```'; tail -40 "$RUNNER_TEMP/guards"; echo '```'; } > "$RUNNER_TEMP/body"
-            gh pr create --base main --head "$branch" --title "docs(wiki): ${PAGES}" --body-file "$RUNNER_TEMP/body"
+            gh pr create --base main --head "$branch" --title "docs(wiki): ${PAGES}" --body-file "$RUNNER_TEMP/body" \
+              || echo "::error::The edit is on branch ${branch}, but Actions may not open pull requests here (repo Settings -> Actions -> General). Open one from that branch."
+            exit 1
           fi
 
   publish:

@@ -21,6 +21,7 @@ date — and a **state**. The states are not blurred:
 A capability map that hides the last two is marketing. The blocked rows are listed in full at
 the bottom, and **no row in this document is 🟢 yet** — this platform has not been in water.
 
+<!-- site-only: the site runs this; the wiki leaves it out (tools/wiki_build.py) -->
 <figure class="tally" id="tally" aria-live="polite">
   <noscript>The tally below counts this page's rows by state; it needs JavaScript.</noscript>
 </figure>
@@ -50,6 +51,7 @@ the bottom, and **no row in this document is 🟢 yet** — this platform has no
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
 })();
 </script>
+<!-- /site-only -->
 
 New here? Read **[The Shift](the-shift.html)** first — it explains the two halves of the system
 and why the split exists.
