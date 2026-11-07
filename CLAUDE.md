@@ -231,7 +231,7 @@ Detail: [`hailo-vision.md`](.claude/context/perception/hailo-vision.md) ·
 [`underwater-vision.md`](.claude/context/perception/underwater-vision.md) ·
 [`camera-and-calibration.md`](.claude/context/perception/camera-and-calibration.md) ·
 [`downward-camera.md`](.claude/context/perception/downward-camera.md) (the axis remap) ·
-environment pins: [`pi-and-env-traps.md`](.claude/context/platform/pi-and-env-traps.md).
+environment pins: [`pi-and-env-traps.md`](.claude/context/kutum/pi-and-env-traps.md).
 
 ---
 
@@ -252,12 +252,12 @@ Verified: the downward camera as a velocity sensor — three 30 cm slides, worst
 ## 6. Running it
 
 ```bash
-# Provision a vehicle from scratch -- any Pi 5 + Hailo-8. Idempotent: run it
-# again after any change. It refuses a machine that is not one (wrong ROS
-# distro, no Hailo, no dialout, < 5 GB free) and exits NON-ZERO if the
-# vehicle's own bringup gate refuses.
-./scripts/provision_vehicle.sh fh1m@mongla.local            # sync + build + gate
-./scripts/provision_vehicle.sh fh1m@mongla.local --check-only
+# Kutum, the vehicle's Pi 5 + Hailo-8 (kutum/README.md). The machine is made
+# once with `sudo kutum/setup.sh --system` on it; deploy after every change.
+# Deploy stops on a doctor FAIL and exits NON-ZERO if the vehicle's own gate refuses.
+kutum/deploy.sh fh1m@mongla.local              # sync + doctor + build + gate
+kutum/deploy.sh fh1m@mongla.local --check-only # the doctor alone
+kutum/backup.sh fh1m@mongla.local              # pull what only the vehicle has
 
 ./build_mongla.sh                 # mirrors ~/models and ~/missions in, then builds
 source install/setup.bash

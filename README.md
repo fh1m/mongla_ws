@@ -10,7 +10,7 @@
 for, a neural accelerator that does nothing but see, and a rule that no number appears anywhere
 in this repository without the measurement that produced it.**
 
-[![tests](https://img.shields.io/badge/tests-4%20154%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![in water](https://img.shields.io/badge/in%20water-never-critical)](#what-is-true-today) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
+[![tests](https://img.shields.io/badge/tests-4%20170%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![in water](https://img.shields.io/badge/in%20water-never-critical)](#what-is-true-today) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
 
 **[The Shift](https://fh1m.github.io/mongla_ws/the-shift.html)** · **[Capability map](https://fh1m.github.io/mongla_ws/capability-map.html)** · **[The site](https://fh1m.github.io/mongla_ws/)** · [Run it](#run-it) · [Fundamentals](#the-fundamentals) · [Docs](#every-document-in-this-repository) · [Story](#three-acts)
 
@@ -108,7 +108,7 @@ git clone https://github.com/fh1m/mongla_ws && cd mongla_ws
 ./build_mongla.sh                      # colcon build, six packages
 source install/setup.bash
 
-# the tests (6 suites, 4 162 of them, ~5 minutes)
+# the tests (6 suites, 4 178 of them, ~5 minutes)
 python3 -m pytest -q                   # all six; a full run rewrites docs/stats.json
 ```
 </details>
@@ -518,7 +518,7 @@ it that way.
 |---|---|
 | flight controller | **SROT board**, firmware **Hengla** — ESP32 (dual core) + RP2350 |
 | control loop | **500 Hz** on ESP32 core 1 (sensors, control, DShot). Core 0: MAVLink 100 Hz, LoRa/SD 20 Hz, display 30 Hz |
-| companion | **Raspberry Pi 5 + Hailo-8 AI HAT** — ROS 2 Jazzy on the vehicle, Humble on dev boxes |
+| companion | **Kutum**: Raspberry Pi 5 + Hailo-8 AI HAT — ROS 2 Jazzy on the vehicle, Humble on dev boxes |
 | link | **one USB-C cable**, MAVLink 2 at 115200, compid **191** (`MAV_COMP_ID_ONBOARD_COMPUTER`) |
 | sensors | IMU, depth, leak, kill switch, both battery packs, per-motor RPM — **all on the board**, one clock |
 | thrusters | **Caution: two answers — see below** |
@@ -543,16 +543,34 @@ You can take the hull apart yourself on the [front page](https://fh1m.github.io/
 a 0.9 mm-tessellated WebGL model, 40 bodies, with a fader that takes it apart at your pace and
 five stops — fairings, pressure can, thrusters, handle — you can jump straight to.
 
+### The computer inside: Kutum
+
+The Pi and its Hailo are called **Kutum**, after Abanindranath Tagore's *Kutum Katam*:
+figures made from branches other people threw away. The last companion computer burned at
+RoboSub 2025 and took its setup with it, because the setup was never written down. This one
+is a folder, [`kutum/`](kutum/README.md), and the machine can be rebuilt from it.
+
+<p align="center"><img src="docs/imgs/readme/kutum-stack.webp" alt="Kutum, layer by layer: Mongla, Python, ROS 2, the Hailo stack and Ubuntu, each owned by one file in kutum/, on a Raspberry Pi 5 and a Hailo-8 owned by a screwdriver." width="100%"></p>
+
+```bash
+kutum/deploy.sh fh1m@mongla.local      # sync, check the machine, clean build, gate the vehicle
+kutum/backup.sh fh1m@mongla.local      # pull what only the vehicle has, before the card dies
+ssh fh1m@mongla.local bash -s < kutum/doctor.sh   # is it still Kutum? read-only
+```
+
+What it is, what was wrong with it, and the eight steps from a blank SD card:
+[the Kutum chapter](.claude/context/kutum/README.md).
+
 ---
 
 ## The six packages
 
 | package | what it owns | Python LOC | test files |
 |---|---|---:|---:|
-| [`mongla_vision`](.claude/context/packages/mongla_vision/README.md) | cameras, Hailo detection, the lock ladder, optical flow, optics | 27 575 | 125 |
-| [`mongla_control`](.claude/context/packages/mongla_control/README.md) | the verbs and the board driver — a pure library, **zero entry points** | 10 441 | 63 |
-| [`mongla_planner`](.claude/context/packages/mongla_planner/README.md) | the `mongla` CLI, the mission DSL, the missions | 7 545 | 39 |
-| [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | `auv_manager_node` — the one node that talks to the board | 7 806 | 64 |
+| [`mongla_vision`](.claude/context/packages/mongla_vision/README.md) | cameras, Hailo detection, the lock ladder, optical flow, optics | 27 664 | 125 |
+| [`mongla_control`](.claude/context/packages/mongla_control/README.md) | the verbs and the board driver — a pure library, **zero entry points** | 10 511 | 63 |
+| [`mongla_planner`](.claude/context/packages/mongla_planner/README.md) | the `mongla` CLI, the mission DSL, the missions | 7 577 | 39 |
+| [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | `auv_manager_node` — the one node that talks to the board | 7 860 | 64 |
 | [`mongla_localization`](.claude/context/packages/mongla_localization/README.md) | the right-invariant EKF, retrodiction, course priors | 4 763 | 31 |
 | [`mongla_interfaces`](.claude/context/packages/mongla_interfaces/README.md) | one action, one state topic — the entire ROS surface | IDL | — |
 
@@ -762,13 +780,13 @@ is how a team finds out at the venue.
 <!-- stats:table:begin -->
 ```
 mongla_control       1 166 passed        the verbs, the wire, the refusals
-mongla_vision        1 518 passed        detection, the lock ladder, optics, flow
+mongla_vision        1 526 passed        detection, the lock ladder, optics, flow
 mongla_manager         581 passed        the node, bring-up gates, the docs contract
 mongla_planner         427 passed        the CLI, the DSL, the missions
 mongla_localization    412 passed        the filter, retrodiction, course priors
-test/ (repo-wide)       50 passed        nothing unreachable, the retired stack stays retired
+test/ (repo-wide)       58 passed        nothing unreachable, the retired stack stays retired
                      ─────────────
-                     4 154 passed, 0 failed
+                     4 170 passed, 0 failed
 ```
 <!-- stats:table:end -->
 
@@ -788,7 +806,7 @@ Some of those tests are unusual enough to be worth naming:
 ```mermaid
 flowchart LR
     DEV["a change"] --> HOOK["editor hooks<br/>py_compile + the matching test file<br/>+ the doc guards on a doc edit"]
-    HOOK --> UNIT["6 suites · 4 154 tests"]
+    HOOK --> UNIT["6 suites · 4 170 tests"]
     UNIT --> GUARD["the drift guards"]
     GUARD --> G1["test_doc_drift<br/>docs vs code"]
     GUARD --> G2["test_srot_protocol_drift<br/>our wire copy vs THEIR headers"]
@@ -874,7 +892,7 @@ constant the code no longer holds. The [command reference](.claude/context/refer
 is generated from the code, and the test counts on this page and the site are rewritten by
 every full test run ([`tools/published_counts.py`](tools/published_counts.py)).
 
-Read them in order as **[the Mongla book](.claude/context/README.md)** — 64 chapters in nine parts,
+Read them in order as **[the Mongla book](.claude/context/README.md)** — 65 chapters in nine parts,
 from why the vehicle exists to every number it has measured. Or dip in:
 
 **Start here**
@@ -889,12 +907,19 @@ from why the vehicle exists to every number it has measured. Or dip in:
 | [`reference/commands.md`](.claude/context/reference/commands.md) | **generated from the code**: all 23 verbs with their fields and defaults, which ones run on the board, every executable, launch argument, node parameter and wire constant |
 
 <details>
-<summary>**The platform** — [`.claude/context/platform/`](.claude/context/platform/) · 16 documents</summary>
+<summary>**The platform** — [`.claude/context/platform/`](.claude/context/platform/) · 13 documents</summary>
 
 `srot-architecture` · `srot-integration` (the traps that cost us runs) · `srot-board-soul` · `cross-repo-contract` ·
-`vision-control-split` · `vehicle-spec` · `pi-hailo-vision-box` · `pi-and-env-traps` ·
-`launch-combinations` · `first-pool-verification` · `pool-day` · `pool-day-round-4a` ·
-`remote-access` · `foxglove-and-bags` · `ros2-conventions` · `system-harmony`
+`vision-control-split` · `vehicle-spec` · `launch-combinations` · `first-pool-verification` ·
+`pool-day` · `pool-day-round-4a` · `foxglove-and-bags` · `ros2-conventions` · `system-harmony`
+
+</details>
+
+<details>
+<summary>**Kutum, the compute module** — [`.claude/context/kutum/`](.claude/context/kutum/README.md) · 4 documents</summary>
+
+`README` (the chapter: what it is, the home folder, when it burns) · `pi-hailo-vision-box` (the measurement that chose it) ·
+`pi-and-env-traps` · `remote-access`
 
 </details>
 

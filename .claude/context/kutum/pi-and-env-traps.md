@@ -5,8 +5,8 @@
 >
 > E1–E3 were first hit on the old companion computer and are **still live on the Pi**: they
 > are Python packaging traps (NumPy ABI, a shadowed OpenCV, a broken wheel), not properties of
-> any one board. `tools/setup_pi_hailo.sh` and
-> [`pi-hailo-vision-box.md`](pi-hailo-vision-box.md) both point here.
+> any one board. `kutum/setup.sh` avoids each one, `kutum/doctor.sh` checks for each one, and
+> [`pi-hailo-vision-box.md`](pi-hailo-vision-box.md) points here. Kutum itself: [README.md](README.md).
 
 ### E1. NumPy 2.x ABI break kills every vision node (`_ARRAY_API not found`)
 - **Symptom:** every node (`camera_node`/`detector_node`/`vision_display`) crashes at
@@ -83,7 +83,7 @@
   teammate's local VSCode.
 - **Better on the vehicle:** don't open a window at all. The annotated
   `…/image_debug` topic is served by `web_video_server` and Foxglove
-  ([`foxglove-and-bags.md`](foxglove-and-bags.md)), viewable in a browser over
+  ([`foxglove-and-bags.md`](../platform/foxglove-and-bags.md)), viewable in a browser over
   VSCode's port-forward.
 
 ### E5. The SROT board has no `/dev/ttyUSB*` — `brltty` or a missing `ch341`
@@ -92,7 +92,7 @@ driver. Two independent faults leave it on the bus (`lsusb` shows it) with no tt
 node, so `find_srot_serial()` finds nothing:
 1. **`brltty` steals it.** Ubuntu's braille-display daemon claims every `1a86:7523`
    through a udev rule and holds it via `usbfs`, blocking `ch341`. Ubuntu 24.04
-   ships it by default. `tools/setup_pi_hailo.sh` purges it.
+   ships it by default. `sudo kutum/setup.sh --system` purges it.
 2. **The kernel has no `ch341`.** A custom or vendor kernel can ship with
    `CONFIG_USB_SERIAL_CH341` unset; `modinfo ch341` says whether this one has it.
 `bringup_check --srot` grades both (section C) and prints the fix.

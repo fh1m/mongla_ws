@@ -244,7 +244,7 @@ class XFeatONNX:
         paths agreeing is not a ceiling. On OpenBLAS the same matmul is
         6.4 ms on ONE thread, and the whole match 31.6 -> 7.0 ms, with the
         correspondences identical on 34 real frame pairs (22 352 matches,
-        symmetric difference 0). `provision_vehicle.sh` now checks for it.
+        symmetric difference 0). `kutum/doctor.sh` checks for it.
         numpy releases the GIL inside `matmul`, so the row split still runs
         on real cores (6.19 -> 4.76 ms at 2), and the launch files pin
         OPENBLAS_NUM_THREADS=1 so the split is the ONLY parallelism.

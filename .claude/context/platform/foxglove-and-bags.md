@@ -199,7 +199,7 @@ gives you the exact colored terminal output too. (Manual equivalent, no helper:
 
 > **How you reach the Pi at all** (the mosh + tmux terminal that a dropped tether cannot
 > kill) is its own guide:
-> [`remote-access.md`](remote-access.md). This section is just the **viewer**.
+> [`remote-access.md`](../kutum/remote-access.md). This section is just the **viewer**.
 
 The Pi runs the **bridge** (server); the dev box / operator laptop runs the **viewer**
 (client) and **replays bags**. The viewer we standardized on is **Lichtblick** — Bosch's

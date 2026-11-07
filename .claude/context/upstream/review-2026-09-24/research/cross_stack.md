@@ -27,7 +27,7 @@ RPN = S×O×D. "FS" = board failsafe path `task_control_loop.cpp:636-747`. GCS_F
 |---|---|---|---|---|---|---|---|---|
 | USB-C unplug | companion HB silence, **5 s** (`mav_commands.cpp:107-110`) | reader faults at once, logged as "link may be FINE"; `link_alive` 3 s (`srot_fc.py:90,487`) | FS → SURFACE → disarm 5 s after reaching < 0.25 m | no reconnect. Reconnecting resets the FC (E). With no baro, pushes up at 0.35 forever, by design (`:219,720-724`), with no time bound | 7 | 4 | 3 | 84 |
 | Pi brownout | same, 5 s | none (host is dead) | same | **common cause**: a 5 V dip also resets the Pico (C) and the bridge. Electronics pack is unmonitored (PM1 reads ~1.35 V per CLAUDE.md), so there is no warning | 7 | 5 | 6 | 210 |
-| Pi kernel panic | 5 s | none | same | no Pi hardware watchdog in `provision_vehicle.sh` | 6 | 2 | 3 | 36 |
+| Pi kernel panic | 5 s | none | same | no Pi hardware watchdog in `kutum/setup.sh` | 6 | 2 | 3 | 36 |
 | Manager crash | 5 s (HB comes from `heartbeat_tick`, 2 Hz, `auv_manager_node.py:1549`) | none; not respawned | same | a restart opens the port → **FC reboot** (E) | 6 | 3 | 3 | 54 |
 | Mission crash | nothing: the manager keeps the HB alive | action goal runs to its end | AUTO station-keeps, **stays armed** | already found (no mission keep-alive) | 7 | 4 | 7 | 196 |
 | Hailo hang | n/a | no inference watchdog. Verb zeroes lateral/forward by ≤0.8 s, LOST at 1.0 s (`motion_vision.py:315-318,359`) | DSL runs its LOST fallback (search) blind | `seeing` is latched, so it stays `ok` (`detector_node.py:550-559`). "Pipeline dead" reads as "target absent" | 5 | 3 | 6 | 90 |

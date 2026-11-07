@@ -485,7 +485,7 @@ def generate_launch_description():
 
     return LaunchDescription(args + file_note + params + [
         # One BLAS thread per call, set before any node imports numpy.
-        # The vehicle runs OpenBLAS (provision_vehicle.sh checks for it), whose pool
+        # The vehicle runs OpenBLAS (kutum/doctor.sh checks for it), whose pool
         # defaults to every core in EVERY process. The XFeat matcher already
         # splits its matmul across `MATCH_THREADS` = 2 Python threads on purpose;
         # an OpenBLAS pool under each makes 8 threads on 4 cores beside two

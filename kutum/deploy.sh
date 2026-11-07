@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Turn a bare Raspberry Pi 5 + Hailo-8 into a Mongla vehicle, repeatably.
+# Put this tree on Kutum (the vehicle's Pi 5 + Hailo-8), build it, and gate it.
+#
+# The machine itself is made once by kutum/setup.sh; this is the part you run
+# after every change.
 #
 # Why this exists. On 2026-09-22 the vehicle was found running a workspace
 # 122 commits behind and on the far side of the project rename, so its package
@@ -15,8 +18,8 @@
 #     gate       bringup_check --srot ran and correctly FAILED on the absent Bar30
 #
 # Usage:
-#     scripts/provision_vehicle.sh fh1m@192.168.0.103
-#     scripts/provision_vehicle.sh fh1m@mongla.local --check-only
+#     kutum/deploy.sh fh1m@mongla.local
+#     kutum/deploy.sh fh1m@mongla.local --check-only     # the doctor, nothing changed
 #
 # It is IDEMPOTENT: run it again after any change and it re-syncs and rebuilds.
 set -euo pipefail
@@ -42,66 +45,19 @@ die()  { printf '  \033[31m[STOP]\033[0m %s\n' "$*" >&2; exit 1; }
 r() { ssh -o BatchMode=yes -o ConnectTimeout=10 "$TARGET" "$@"; }
 
 # --------------------------------------------------------------------------- #
-say "1. Can we reach it, and is it the right kind of machine?"
+say "1. Can we reach it?"
 
 r true 2>/dev/null || die "cannot ssh to $TARGET with BatchMode (key auth). \
 Copy a key first: ssh-copy-id $TARGET"
 ok "ssh to $TARGET"
-
-# ROS. `bash -lc` because a non-interactive ssh gets no profile, and colcon and
-# rclpy both live behind it -- the first attempt at this failed silently for
-# exactly that reason.
-DISTRO="$(r bash -lc "'source /opt/ros/$ROS_DISTRO_WANT/setup.bash 2>/dev/null && echo \$ROS_DISTRO'" || true)"
-[[ "$DISTRO" == "$ROS_DISTRO_WANT" ]] \
-  || die "ROS 2 $ROS_DISTRO_WANT not found (got '${DISTRO:-nothing}'). \
-The vehicle runs Jazzy; dev boxes run Humble, and the two do not interoperate."
-ok "ROS 2 $DISTRO"
-
-r bash -lc "'source /opt/ros/$ROS_DISTRO_WANT/setup.bash && python3 -c \"import rclpy\"'" >/dev/null 2>&1 \
-  || die "rclpy does not import under the sourced environment"
-ok "rclpy imports"
-
-r "command -v colcon" >/dev/null 2>&1 || die "colcon is not installed"
-ok "colcon present"
-
-# The accelerator. Without it the detector has no flight path at all, so this is
-# a refusal rather than a warning.
-if r "ls /dev/hailo* >/dev/null 2>&1 || command -v hailortcli >/dev/null 2>&1"; then
-  ok "Hailo accelerator present"
-else
-  die "no Hailo device and no hailortcli. This provisions a Pi + Hailo-8 vehicle."
-fi
-
-# Serial access. The board is a CH340; without dialout the manager cannot open
-# it, and the failure looks like a dead board rather than a permissions problem.
-if r "id -nG | tr ' ' '\n' | grep -qx dialout"; then
-  ok "user is in dialout (can open the board)"
-else
-  warn "user is NOT in dialout -- the board will not open. Fix with:
-           sudo usermod -aG dialout \$USER   (then log out and back in)"
-fi
-
-# The BLAS numpy links. Debian's default `libblas3` is the Netlib REFERENCE
-# implementation: measured on the Pi 5, one 1024x1024x64 similarity matmul --
-# the XFeat anchor's matcher -- took 58.6 ms there and 6.4 ms on OpenBLAS, and
-# the whole match 31.6 -> 7.0 ms with identical correspondences. The vehicle
-# runs; it just spends the cores the detectors and the control loop need.
-# Warned, not refused: nothing is wrong, only slow. The launch files pin
-# OPENBLAS_NUM_THREADS=1 once it is there.
-if r "readlink -f /usr/lib/aarch64-linux-gnu/libblas.so.3 | grep -q openblas"; then
-  ok "numpy BLAS is OpenBLAS"
-else
-  warn "numpy runs on the REFERENCE BLAS -- the anchor matcher is ~4.5x slower. Fix with:
-           sudo apt-get install -y libopenblas0-pthread"
-fi
-
-FREE_GB="$(r "df -BG --output=avail \$HOME | tail -1 | tr -dc '0-9'")"
-[[ "${FREE_GB:-0}" -ge 5 ]] || die "only ${FREE_GB}G free in \$HOME; need >= 5G"
-ok "${FREE_GB}G free"
+r test -f /opt/ros/$ROS_DISTRO_WANT/setup.bash \
+  || die "no ROS 2 $ROS_DISTRO_WANT on $TARGET -- install it, then kutum/setup.sh"
+ok "ROS 2 $ROS_DISTRO_WANT"
 
 if [[ "$MODE" == "--check-only" ]]; then
-  say "check-only: stopping before any change"
-  exit 0
+  say "check-only: the doctor, nothing changed"
+  r bash -s < "$REPO_ROOT/kutum/doctor.sh"
+  exit $?
 fi
 
 # --------------------------------------------------------------------------- #
@@ -109,15 +65,29 @@ say "2. Sync the tree"
 
 # The excludes are load-bearing. The first real deploy shipped 3.8 GB of
 # `logs/` and two .tlog captures to the vehicle before anyone looked. Anything
-# that is generated, huge, or belongs to the dev box stays here.
+# that is generated, huge, or belongs to the dev box stays here: the vehicle
+# carries the book (.claude/context) for reading at the pool, not agent tooling,
+# CI or editor settings.
 rsync -az --delete --info=stats1 \
   --exclude 'build/' --exclude 'install/' --exclude 'log/' --exclude 'logs/' \
   --exclude '.git/' \
   --exclude 'docs/' --exclude '__pycache__/' --exclude '*.pyc' \
   --exclude '*.tlog' --exclude '*.tlog.raw' --exclude '*.tar.gz' \
-  --exclude '.pytest_cache/' \
+  --exclude '.pytest_cache/' --exclude '.kutum-deployed' \
+  --exclude '.claude/skills/' --exclude '.claude/agents/' --exclude '.claude/hooks/' \
+  --exclude '.claude/settings*.json' --exclude '.understand-anything/' \
+  --exclude '.github/' --exclude '.vscode/' --exclude '.beads/' --exclude 'wiki/' \
   ./ "$TARGET:~/$REMOTE_DIR/"
 ok "synced to $TARGET:~/$REMOTE_DIR"
+
+# --------------------------------------------------------------------------- #
+say "3. Is it Kutum? (kutum/doctor.sh, from the copy just synced)"
+
+# After the sync, not before: a FAIL that only `setup.sh --system` can fix
+# needs kutum/ on the machine first. Run from the synced copy, the doctor also
+# compares the installed system files with the repo byte for byte.
+r "bash ~/$REMOTE_DIR/kutum/doctor.sh" || die "the doctor refuses this machine (FAIL lines above). \
+Most are fixed by, on the vehicle: sudo ~/$REMOTE_DIR/kutum/setup.sh --system -- then rerun"
 
 # --------------------------------------------------------------------------- #
 say "3. Build"
@@ -147,6 +117,12 @@ r bash -lc "'set -e
     die "colcon build failed"
   }
 ok "colcon build finished"
+
+# What is on the vehicle, in one line the doctor prints: the commit, whether
+# the tree had uncommitted changes, and when.
+sha="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+dirty="$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null | grep -q . && echo ' +uncommitted' || true)"
+r "echo '$sha$dirty $(date -u +%FT%TZ) from $(hostname)' > ~/$REMOTE_DIR/.kutum-deployed"
 
 # --------------------------------------------------------------------------- #
 say "4. Gate it -- the vehicle grades itself"

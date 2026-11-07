@@ -1,0 +1,9 @@
+#!/bin/sh
+# Pin every core's governor to performance. The default (ondemand) ramps the
+# clock after load arrives, and a detector frame is exactly that load: the
+# first milliseconds of each frame then run at the idle clock.
+# Installed to /usr/local/sbin by kutum/setup.sh; run at boot by
+# cpu-performance.service.
+for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+  echo performance > "$f"
+done

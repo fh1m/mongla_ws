@@ -1,0 +1,11 @@
+[Unit]
+Description=Keep Raspberry Pi CPU governors at performance
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/set-cpu-performance
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

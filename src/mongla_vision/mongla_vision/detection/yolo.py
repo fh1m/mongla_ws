@@ -107,7 +107,7 @@ def _resolve_model_path(name: str) -> str:
     if os.sep in name or name.endswith('.pt') or name.endswith('.hef'):
         return name
 
-    # MONGLA_HEF_DIR FIRST, when it is set. `tools/pi_env.sh` has exported it
+    # MONGLA_HEF_DIR FIRST, when it is set. `kutum/env.sh` exports it
     # since the Pi was set up and NOTHING read it, so the export was a lie: a
     # HEF that lived only there resolved to nothing, or worse to a stale .pt of
     # the same stem sitting in the source tree. Env beats tree because a
