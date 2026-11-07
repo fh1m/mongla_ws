@@ -1,0 +1,1362 @@
+src/mongla_control/mongla_control/fc/srot_protocol.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 80,298,334,377,417,655,749,851,882,930,944,999
+  s_b4c45e3235679b::t_d3834fbe78a859 178,180,183,423,539,575,674,711,792
+tools/bank_shortlist_accuracy.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 13,20
+conftest.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,34
+src/mongla_vision/test/test_hailo_channel_order.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 22
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,10,44,85
+src/mongla_vision/mongla_vision/flow/flow_checks.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 55,149
+  s_b4c45e3235679b::t_d3834fbe78a859 77,201
+.claude/context/reference/commands.md
+  s_b4c45e3235679b::t_7b07ff15dcd0f1 3,73,669
+src/mongla_localization/test/test_course_map.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 81
+src/mongla_vision/mongla_vision/tracking/kalman.py
+  s_b4c45e3235679b::t_d3834fbe78a859 56
+src/mongla_vision/mongla_vision/detection/contours.py
+  s_b4c45e3235679b::t_d3834fbe78a859 102
+  s_b4c45e3235679b::t_9e972e6a8fa250 101
+src/mongla_vision/mongla_vision/tracking/lock_state.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 62,95,101,111,190,226,240,271,278
+  s_b4c45e3235679b::t_d3834fbe78a859 3,18,124,221,256
+tools/control_bench/gate_variants.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,6,161
+  s_b4c45e3235679b::t_9e972e6a8fa250 106,159,174
+src/mongla_control/test/test_loop_wakes_on_data.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 16,58
+src/mongla_vision/test/test_target_geometry.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+tools/yaw_drift_check.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+src/mongla_control/mongla_control/fc/srot_payload.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 133,157
+  s_b4c45e3235679b::t_d3834fbe78a859 12
+src/mongla_manager/test/test_bringup_camera_matches_the_vehicle.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,20
+tools/srot_fix_gcs_id.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 179
+  s_b4c45e3235679b::t_9a4826ea1a3394 4
+src/mongla_control/mongla_control/geometric_allocation.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,18,25,31,42,48,57,84,127,277,341,374
+  s_b4c45e3235679b::t_d3834fbe78a859 13,85,352
+tools/srot_replay.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 10
+.claude/context/platform/pool-day-round-4a.md
+  s_b4c45e3235679b::t_a53a110e586386 20,38,75,93,119,126,167
+  s_b4c45e3235679b::t_9e972e6a8fa250 12,27,50,59,86,99,131
+src/mongla_vision/mongla_vision/calibration/__init__.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3
+src/mongla_vision/test/test_dual_node_degrades.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 22
+src/mongla_control/test/test_srot_protocol_drift.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 459
+  s_b4c45e3235679b::t_9a4826ea1a3394 275,658
+src/mongla_planner/test/test_vision_result_sign_convention.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3
+tools/fit_free_decay.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,13,20,107
+  s_b4c45e3235679b::t_9e972e6a8fa250 151
+src/mongla_vision/mongla_vision/flow/flow_floor.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 14,66,95
+.claude/context/perception/camera-and-calibration.md
+  s_b4c45e3235679b::t_a53a110e586386 95,215
+  s_b4c45e3235679b::t_9e972e6a8fa250 264
+src/mongla_vision/test/test_seeing.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 99
+.claude/skills/train-model/SKILL.md
+  s_b4c45e3235679b::t_a53a110e586386 16
+  s_b4c45e3235679b::t_9e972e6a8fa250 36
+src/mongla_vision/test/test_approach_band_is_measured.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 32
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,49,57,72
+.claude/context/upstream/pr-m-thruster-requirements-from-control.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 48,63,120,179,183,209,265,274,318,383,397
+  s_b4c45e3235679b::t_a53a110e586386 95,133,192,198,219,239,244,250,309,370,378,380,391
+.claude/context/platform/foxglove-and-bags.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 103,120,229
+src/mongla_control/test/test_srot_tunes.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 156,170,219,247,281
+  s_b4c45e3235679b::t_9a4826ea1a3394 6,9,12,16
+src/mongla_planner/mongla_planner/missions/task_full_2026.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 66,71
+.claude/context/upstream/review-2026-09-24/research/perception_sota.md
+  s_b4c45e3235679b::t_a53a110e586386 102
+src/mongla_localization/test/test_camera_lever_arm.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 127
+  s_b4c45e3235679b::t_9a4826ea1a3394 14,22
+src/mongla_control/test/test_srot_move_respects_surface.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 99
+test/test_the_retired_stack_stays_retired.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+tools/hailo_int8_shift.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 35,68
+tools/continuity_from_bag.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,15,61,101
+  s_b4c45e3235679b::t_9e972e6a8fa250 37
+tools/fov_solve.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 7
+src/mongla_vision/test/test_device_path_override_reaches_the_camera.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+src/mongla_planner/mongla_planner/dsl_detector.py
+  s_b4c45e3235679b::t_d3834fbe78a859 100
+  s_b4c45e3235679b::t_9e972e6a8fa250 50,99,192,246,349
+src/mongla_vision/test/test_bench_tools.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,18,22
+tools/attenuation_range.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,24,28,35,59,133
+  s_b4c45e3235679b::t_9e972e6a8fa250 19,115,153
+tools/data_root.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,18
+src/mongla_planner/test/test_missions_only_name_classes_a_model_emits.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 147,167,208
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,9,17,22,76,177,182
+.claude/context/perception/vision-what-to-do-next.md
+  s_b4c45e3235679b::t_7a461e8a870191 248
+  s_b4c45e3235679b::t_a53a110e586386 21,25,46,52,58,61,81,84,104,118,125,132,135,153-165,179,182,208,216,236-237,239,241,255,257,273,277,290,295,312,325,329,344,355,358,380
+  s_b4c45e3235679b::t_9e972e6a8fa250 13,31,90,100,102,149,169,192,221,246,264,283,302,336,364
+src/mongla_manager/test/test_paused_default_is_one_truth.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+src/mongla_manager/mongla_manager/srot_changes.py
+  s_b4c45e3235679b::t_d3834fbe78a859 8
+.claude/context/perception/detection-continuity.md
+  s_b4c45e3235679b::t_a53a110e586386 302
+  s_b4c45e3235679b::t_9e972e6a8fa250 280
+src/mongla_vision/mongla_vision/detection/rangecrop.py
+  s_b4c45e3235679b::t_d3834fbe78a859 3,18,22,32
+src/mongla_vision/test/test_lock_node_methods_exist.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+tools/floor_place_recognition.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 8,14,26
+src/mongla_planner/mongla_planner/missions/survey_course.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 10,17,22-25
+.claude/context/platform/srot-architecture.md
+  s_b4c45e3235679b::t_7a461e8a870191 556-557,609,611-612,742-743,896-897
+  s_b4c45e3235679b::t_a53a110e586386 60,239
+  s_b4c45e3235679b::t_9e972e6a8fa250 130,275,463,533,570,647,719,770,873,923,954,1042,1069
+.claude/context/missions/verbs-srot-unlocks.md
+  s_b4c45e3235679b::t_a53a110e586386 18,20,46,63,71
+  s_b4c45e3235679b::t_9e972e6a8fa250 27
+src/mongla_control/mongla_control/fc/srot_health.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 247,261
+  s_b4c45e3235679b::t_d3834fbe78a859 352,394,427
+src/mongla_manager/test/test_thrust_model.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 25,51
+.claude/context/upstream/pr-t-the-brake-ignores-how-far-you-travelled.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 11,52,58
+  s_b4c45e3235679b::t_a53a110e586386 67,95,102
+src/mongla_vision/mongla_vision/flow/scale_check.py
+  s_b4c45e3235679b::t_d3834fbe78a859 8
+  s_b4c45e3235679b::t_9e972e6a8fa250 14,24,69
+tools/control_bench/test_localization_truth.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,9,25,48,58,75,101,119
+src/mongla_vision/test/test_unknown_class_does_not_blind_the_detector.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3
+tools/wiki_build.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,20
+src/mongla_control/mongla_control/fc/srot_fc.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 22,269,515,544,659,776,798,810,841,925,930,971,987,1025,1157,1178
+  s_b4c45e3235679b::t_d3834fbe78a859 9,25,235,365-366,413,534,586,709,974,1137
+tools/conf_vs_range.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 77
+  s_b4c45e3235679b::t_9a4826ea1a3394 20
+src/mongla_vision/launch/vision.launch.py
+  s_b4c45e3235679b::t_d3834fbe78a859 93
+src/mongla_vision/mongla_vision/identity.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3
+src/mongla_vision/test/test_calibration_water.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+  s_b4c45e3235679b::t_9e972e6a8fa250 205
+src/mongla_localization/test/test_every_sensor_is_accounted_for.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4
+  s_b4c45e3235679b::t_9e972e6a8fa250 15,39,107
+src/mongla_manager/mongla_manager/auv_manager_node.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 7,225,367,434,443,574,653,786,794,812,854
+  s_b4c45e3235679b::t_d3834fbe78a859 23
+src/mongla_vision/test/test_profiles.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 114
+src/mongla_control/test/test_srot_yaw_gate.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 98,124
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,112
+src/mongla_localization/test/test_prop_placement.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+src/mongla_control/mongla_control/mongla.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 242,260,280,320
+.claude/context/perception/camera-colour-decision.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 11,26,38,60,79,101,109,111,120,124,136
+  s_b4c45e3235679b::t_a53a110e586386 50,53,75,90,133,145,155
+src/mongla_vision/mongla_vision/detection/preprocess.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 81
+  s_b4c45e3235679b::t_d3834fbe78a859 3,21-22,43,50,57,66
+src/mongla_vision/test/test_presence.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 51
+  s_b4c45e3235679b::t_9e972e6a8fa250 132
+src/mongla_vision/test/test_a_paused_detector_says_so.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3
+src/mongla_vision/mongla_vision/lock_inputs.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 30,64,93,110,148,151,239,300
+  s_b4c45e3235679b::t_d3834fbe78a859 141,190,214,254
+src/mongla_manager/test/test_stack_headroom_verdict.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 56
+src/mongla_vision/mongla_vision/flow/flow_velocity.py
+  s_b4c45e3235679b::t_d3834fbe78a859 3,38,63,69,77,89
+  s_b4c45e3235679b::t_9e972e6a8fa250 10,31,59,134
+.claude/context/perception/underwater-vision.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 82
+tools/xfeat_export.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 6,13,19
+.claude/context/sota/README.md
+  s_b4c45e3235679b::t_a53a110e586386 11
+src/mongla_localization/mongla_localization/frames.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,96,124,135
+src/mongla_control/test/test_standoff_obliquity_gate.py
+  s_b4c45e3235679b::t_7ed716bc9a67c8 88
+src/mongla_localization/mongla_localization/tile_grating.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,36,41,128,168,212,271,300,344,421
+  s_b4c45e3235679b::t_d3834fbe78a859 61,129,345
+tools/flow_console.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 8,168,242,353,380
+  s_b4c45e3235679b::t_9e972e6a8fa250 18
+src/mongla_vision/test/test_kalman_revival.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,21,53,66
+.claude/context/perception/tau-plan.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 34,68
+  s_b4c45e3235679b::t_a53a110e586386 62,82,88,124,138,141
+scripts/provision_vehicle.sh
+  s_b4c45e3235679b::t_52b3ca07d8c819 4,110,125,135,154
+  s_b4c45e3235679b::t_9e972e6a8fa250 180
+  s_b4c45e3235679b::t_72bc86e32225b4 115
+tools/_record_lib.sh
+  s_b4c45e3235679b::t_52b3ca07d8c819 21,33,45
+  s_b4c45e3235679b::t_9e972e6a8fa250 4,103
+src/mongla_vision/mongla_vision/ladder_config.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,21,26
+  s_b4c45e3235679b::t_d3834fbe78a859 11
+src/mongla_manager/mongla_manager/node_health.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 106,117
+src/mongla_control/test/test_srot_fc.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 834,902
+  s_b4c45e3235679b::t_9e972e6a8fa250 1634
+tools/hull_stations.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 6,22,35,40
+  s_b4c45e3235679b::t_9e972e6a8fa250 109,145,235,253
+.github/PULL_REQUEST_TEMPLATE.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 9
+docs/capability-map.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 16-19,22,65-74,80-86,97-105,113-122,133-144,152-161
+  s_b4c45e3235679b::t_7b07ff15dcd0f1 14-15,33,38,43-45
+tools/vision_stage_profile.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 88
+src/mongla_control/test/test_allocation.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,47,99,188
+tools/fit_thruster_response.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 139
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,13,38,59,78,112
+src/mongla_vision/test/test_lock_acting_bar.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,146,240,272
+  s_b4c45e3235679b::t_9a4826ea1a3394 11,85,170,182,248
+src/mongla_planner/mongla_planner/mongla_dsl.py
+  s_b4c45e3235679b::t_7a461e8a870191 1001
+  s_b4c45e3235679b::t_d3834fbe78a859 133,313,682
+  s_b4c45e3235679b::t_9e972e6a8fa250 394,626,675,750,1010
+src/mongla_manager/test/test_vision_state.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 212
+src/mongla_manager/mongla_manager/node_support.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 51,95,127
+tools/camera_auto_loops.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4
+  s_b4c45e3235679b::t_9e972e6a8fa250 99,135,140
+src/mongla_vision/mongla_vision/anchor/geometry.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 33,63
+  s_b4c45e3235679b::t_d3834fbe78a859 10,41,95,196
+src/mongla_control/test/test_dshot_decode.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 70
+.claude/context/workbench/BENCH.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 52
+  s_b4c45e3235679b::t_a53a110e586386 22,29,85,99,153,157,276,314,350,358,440
+test/test_no_capability_is_unreachable_anywhere.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,23,29,34,75,235
+  s_b4c45e3235679b::t_9e972e6a8fa250 86,90,113,129
+tools/model_select.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 44
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,22,37
+tools/hailo_compile.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,10,35,176,239,259,320,342,438
+  s_b4c45e3235679b::t_9e972e6a8fa250 83,138,250,274,335,357
+src/mongla_vision/test/test_flow_node.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 154,965
+  s_b4c45e3235679b::t_9a4826ea1a3394 262,529,638
+src/mongla_control/mongla_control/vision_verbs.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 54,69,149,369,395
+  s_b4c45e3235679b::t_d3834fbe78a859 86,127
+.claude/context/platform/srot-board-soul.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 211,252,285
+src/mongla_manager/mongla_manager/connection_config.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 83
+src/mongla_vision/test/test_fouled_lens_vs_changed_world.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 9,46,134,207,237
+  s_b4c45e3235679b::t_9a4826ea1a3394 67
+src/mongla_planner/mongla_planner/missions/task_bin.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 16,44
+src/mongla_manager/test/test_health.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 202,246,352
+  s_b4c45e3235679b::t_9e972e6a8fa250 136
+src/mongla_localization/mongla_localization/prop_placement.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 9
+src/mongla_localization/mongla_localization/courses/sauvc26.yaml
+  s_b4c45e3235679b::t_52b3ca07d8c819 3,19
+src/mongla_control/test/test_hydrodynamics.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 30,125,148,202,219,245
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,48,73,94,133,170,283
+tools/topic_wiring_sweep.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,10,17,56,82,144
+  s_b4c45e3235679b::t_9e972e6a8fa250 27,171
+src/mongla_vision/mongla_vision/target_geometry.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 6,16,25,49,57,69,215
+src/mongla_vision/mongla_vision/tracking/visibility.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,40,61,89,107,125,175,190,194,238,260,302
+  s_b4c45e3235679b::t_d3834fbe78a859 11,31,126,171,236,243,254
+tools/control_bench/indi.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,11,23,31,37,119
+  s_b4c45e3235679b::t_9e972e6a8fa250 91
+src/mongla_vision/mongla_vision/lock_node.py
+  s_b4c45e3235679b::t_d3834fbe78a859 16,132,225,246-247,276,389,395,424,494,617,708,783,824,843,892,901,927,939
+  s_b4c45e3235679b::t_9e972e6a8fa250 57,77,239,256,329,376,403,430,544,586,589,601,762,794,810,957,1024
+.claude/context/upstream/pr-u-two-mission-stores-nothing-reads.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 92
+  s_b4c45e3235679b::t_a53a110e586386 34,60,75,89,109
+src/mongla_vision/test/test_every_model_class_has_a_width.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 342
+  s_b4c45e3235679b::t_9a4826ea1a3394 34
+tools/srot_console_server.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 9
+src/mongla_vision/mongla_vision/cameras/webcam.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 130,149
+tools/xfeat_finetune_score.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 40,64,191,193,195
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,11,65
+src/mongla_manager/launch/bringup.launch.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 252,267,339,369,487
+  s_b4c45e3235679b::t_d3834fbe78a859 205
+tools/control_bench/test_flight.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,50,80,107,121,138,140,150,167,196,209,231,266,281,312
+  s_b4c45e3235679b::t_9e972e6a8fa250 9,90,163,251,293
+src/mongla_vision/test/test_visibility_guard.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,9,33,58,102
+  s_b4c45e3235679b::t_9e972e6a8fa250 31,76,118,139,148,165,173,192
+src/mongla_vision/test/test_lock_publish_rate.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 7
+  s_b4c45e3235679b::t_9e972e6a8fa250 13
+src/mongla_planner/test/test_heading_anchor_dsl.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 60
+src/mongla_vision/mongla_vision/tracking/follower.py
+  s_b4c45e3235679b::t_d3834fbe78a859 3,13,19,25,215
+  s_b4c45e3235679b::t_9e972e6a8fa250 51,79,86,229,244
+src/mongla_manager/mongla_manager/node_vision.py
+  s_b4c45e3235679b::t_d3834fbe78a859 102,143
+  s_b4c45e3235679b::t_9e972e6a8fa250 61,77,171
+src/mongla_vision/test/test_association_cascade.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 97
+  s_b4c45e3235679b::t_9e972e6a8fa250 50,58,168
+src/mongla_control/mongla_control/fc/base.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 78,142,152
+src/mongla_localization/test/test_inekf.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 179,201,236,288,305,332,351-352
+tools/control_bench/test_depth_loop.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 1,3,49
+  s_b4c45e3235679b::t_9a4826ea1a3394 11,70,79,111
+src/mongla_vision/test/test_no_topic_is_published_and_unread.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,10,86,108
+  s_b4c45e3235679b::t_9e972e6a8fa250 18
+tools/srot_loop_sweep.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 10,22,26,104
+src/mongla_control/mongla_control/fc/srot_params.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 83,194,215,261
+  s_b4c45e3235679b::t_d3834fbe78a859 42,49
+src/mongla_vision/mongla_vision/underwater.py
+  s_b4c45e3235679b::t_d3834fbe78a859 3,9,37
+src/mongla_vision/mongla_vision/tool_geometry.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 7,14,20,77
+src/mongla_vision/mongla_vision/detection/factory.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 66
+  s_b4c45e3235679b::t_d3834fbe78a859 6
+src/mongla_vision/mongla_vision/calibration/binding.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3
+  s_b4c45e3235679b::t_d3834fbe78a859 24
+.claude/context/upstream/pr-j-simulated-esc-bench-mode.md
+  s_b4c45e3235679b::t_a53a110e586386 58
+tools/control_bench/test_plant.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 119
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,12,45,79,133,160,180,202,218
+tools/flow_bench.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 8,13,21,25,281,454,456,463,566
+.claude/context/sota/sources/sota-vo-depth.md
+  s_b4c45e3235679b::t_a53a110e586386 237,276,430,500,538
+.claude/context/measured-bars.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 70-71,124,141,554,691,735,821,860,903,934,992,1115,1267,1285,1359,1426,1469,1557,1565,1706,1909,2018,2260,2323,2325,2448,2632,3047,3055,3060,3131,3166,3173,3269,3290,3309,3324,3328,3333,3361,3397,3405,3436,3459,3506,3510,3528,3545,3574,3592,3616,3633,3647,3698,3748,3775,3789,3818,3842,3862,3867,3888,3903,3940,3953,4004,4038,4056,4099,4131,4136,4159,4214,4242,4246,4280,4285,4300,4328,4368,4433,4492,4512,4527,4532,4549,4564,4585,4602,4646,4655,4666,4706,4715,4732,4742,4755,4765,4783,4791,4810,4832,4856,4863,4870,4877,4895,4927,4971,5007,5058,5093,5154,5205,5216,5250,5254,5257,5286,5294,5316,5341,5361,5386,5400,5424,5430,5461,5477,5487,5513,5537,5559,5579,5595,5626,5640,5651,5693,5732,5785,5813,5831,5838,5862,5875,5888,5905,5931,5941,5953,5965-5966,6017,6083,6113,6123,6150,6163,6173,6193,6206,6275,6307,6335,6374,6420,6482,6505,6539,6575,6606,6666,6709,6756,6789,6854
+  s_b4c45e3235679b::t_a53a110e586386 25,73,82,99,109,113,118,140,588,939,1510,1763,2048,2055,2155,2171,2190,2197,2237,2308,2392,2418,2470,2476,2497,2502,2512,2520,2550,2564,2596,2697,2734,2741,2812,2859,2868,2930,2943,2986,2999,3019,3030,3041,3080-3081,3086,3113,3121,3123,3145,3149,3185,3190,3202,3221,3243,3252,3304,3313,3318,3347,3373,3377,3390,3419,3432,3452,3456,3475,3485,3489,3513,3526,3541,3554,3586,3589,3606,3611,3639,3661,3665,3670,3689,3694,3737,3743,3757,3759,3762,3766,3770,3810,3815,3841,3854,3882,3897,3917,3919,3922,3934,3956,3974,3982,3987,3991,3996,4000,4016,4022,4031,4058,4062,4069,4073,4090,4094,4106,4122,4143,4151,4188,4190,4194,4235,4239,4261,4272,4295,4306-4307,4309,4321,4335,4340,4364,4380,4383,4401,4406,4427,4474,4479,4484,4487,4490,4507,4520,4557,4580,4623-4624,4626,4631-4632,4680,4700,4702,4752,4774,4785,4829,4888,4900,4909,4915,4939,4965,5004,5016,5027,5032,5041,5087,5113,5118,5135,5140,5146,5173,5178,5183,5194,5196,5219,5226,5230,5267,5282,5303,5312,5328,5334,5336,5371,5395,5442,5444,5456,5470,5493,5507,5519,5527,5545,5567,5573,5587,5609,5617,5631,5636,5662,5675,5705,5753,5759,5773,5794,5806,5845,5921,5925,5972,5985,6000,6036,6045,6076,6135,6143,6188,6200,6217,6231,6236,6246,6260,6265,6268,6290,6302,6315,6320,6328,6359,6389,6395,6402,6407,6428,6443,6448,6459,6469,6473,6477,6489,6499,6562,6568,6588,6596,6601,6612,6633,6647,6654,6658,6685,6691-6692,6696,6701,6724,6736,6777,6785,6812,6836,6841,6881
+  s_b4c45e3235679b::t_7a461e8a870191 2026-2030,3582,3584,3977,4030,4961-4963,5192
+src/mongla_control/test/test_motor_test_verb.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 104,120
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+tools/_where.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+src/mongla_vision/test/test_tool_geometry.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 49
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,6
+src/mongla_control/config/hull_geometry.yaml
+  s_b4c45e3235679b::t_9e972e6a8fa250 78,135,143,180,203,211,224
+  s_b4c45e3235679b::t_bc0bb9a9b43ca5 3
+  s_b4c45e3235679b::t_52b3ca07d8c819 15,27,35,39,56,63,68,91,131,169,191,195,230,236,242
+src/mongla_vision/test/test_calibration_binding.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,26,79
+src/mongla_control/test/test_srot_vision_actuation.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 327,329
+src/mongla_control/mongla_control/commands.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 277,303,341
+  s_b4c45e3235679b::t_d3834fbe78a859 269
+src/mongla_manager/mongla_manager/bringup_check.py
+  s_b4c45e3235679b::t_d3834fbe78a859 349,763
+  s_b4c45e3235679b::t_9e972e6a8fa250 220,321,340,354,410,420,455,482,509,515,543,557,616,837,871,927,976,1078,1387
+src/mongla_vision/test/test_flow_timing.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 229
+src/mongla_vision/mongla_vision/anchor/pose.py
+  s_b4c45e3235679b::t_d3834fbe78a859 3,124,279
+  s_b4c45e3235679b::t_9e972e6a8fa250 13,47,66,170,212,269,312
+tools/feature_murky_control.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 15
+.claude/context/upstream/README.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 25-26,32,38,43,111
+  s_b4c45e3235679b::t_a53a110e586386 27-30,34,79,105
+tools/detector_viewpoint_check.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 7
+src/mongla_manager/mongla_manager/srot_format.py
+  s_b4c45e3235679b::t_d3834fbe78a859 4
+tools/chip_share_bench.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,8
+src/mongla_vision/models/gate_sharks.yaml
+  s_b4c45e3235679b::t_9e972e6a8fa250 16
+.claude/context/sota/sources/vision-features-and-matching.md
+  s_b4c45e3235679b::t_a53a110e586386 105,158,166,200,250,269,286,312,316,342,376,387,391,395,445,501,525,531,540,564,588,604,610,655,661,674,692,697,743,778,811,815,876,880,886,895
+  s_b4c45e3235679b::t_7a461e8a870191 735
+  s_b4c45e3235679b::t_9e972e6a8fa250 509,518,572,616,757,768,791,800,835
+src/mongla_vision/test/test_flow_reads_the_floor.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 54
+  s_b4c45e3235679b::t_9a4826ea1a3394 162,184,206
+tools/control_bench/test_indi.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,46,86,99,115
+  s_b4c45e3235679b::t_9e972e6a8fa250 71
+src/mongla_localization/mongla_localization/courses/sauvc_olympic.yaml
+  s_b4c45e3235679b::t_52b3ca07d8c819 6,22
+.claude/context/platform/pool-day.md
+  s_b4c45e3235679b::t_a53a110e586386 25
+tools/depth_sign_check.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4
+  s_b4c45e3235679b::t_9e972e6a8fa250 29,67,80
+tools/allan_variance.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,21,35,194,288,399
+  s_b4c45e3235679b::t_9e972e6a8fa250 204,298,313,318,339,387
+src/mongla_planner/mongla_planner/dsl_detections.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 126,134,272,352
+.claude/context/sota/sources/sota-underwater-perception.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 265,268
+src/mongla_vision/config/tool_geometry.yaml
+  s_b4c45e3235679b::t_52b3ca07d8c819 1,3,7,14,30,42
+  s_b4c45e3235679b::t_9e972e6a8fa250 25
+tools/test_fit_thruster_response.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,37,71
+  s_b4c45e3235679b::t_9e972e6a8fa250 62
+tools/pipeline_visual_check.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 147
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,166
+.claude/context/BUGS.md
+  s_b4c45e3235679b::t_7a461e8a870191 65,94,142,159,177,187,205,226
+  s_b4c45e3235679b::t_a53a110e586386 32,37,91,99,125
+src/mongla_manager/test/test_lock_s_is_a_switch.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3
+src/mongla_localization/mongla_localization/frames.yaml
+  s_b4c45e3235679b::t_52b3ca07d8c819 7,13
+src/mongla_vision/test/test_stamps.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 99
+tools/test_fit_free_decay.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 45,64
+src/mongla_control/mongla_control/fc/srot_telemetry.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 40,64,130,172,226,274,291,329,414,459,507,522
+  s_b4c45e3235679b::t_d3834fbe78a859 163,241,412
+.claude/context/upstream/pr-k-the-mixer-is-for-a-different-hull.md
+  s_b4c45e3235679b::t_a53a110e586386 69,82,97
+tools/site_pages.py
+  s_b4c45e3235679b::t_fddadd4bf6a595 32-35,40-42,46-47
+tools/composed_lock_harness.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 27
+docs/assets/site.css
+  s_b4c45e3235679b::t_9e972e6a8fa250 1439
+tools/flow_derot_calibrate.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 213
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,27
+src/mongla_vision/test/test_track_reid.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 7,55
+src/mongla_vision/test/test_no_function_is_built_and_uncalled.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,23,50,146,159,176,179
+src/mongla_control/test/test_prefire_thruster_gate.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 61
+src/mongla_control/mongla_control/nav_filter.py
+  s_b4c45e3235679b::t_d3834fbe78a859 3,22,24,28,35
+tools/td_measure.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 8
+  s_b4c45e3235679b::t_9a4826ea1a3394 15,21
+src/mongla_vision/test/test_anchor.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 16
+src/mongla_control/test/test_surface.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 77
+src/mongla_control/test/test_srot_leak_bit.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 73
+src/mongla_control/mongla_control/hydrodynamics.py
+  s_b4c45e3235679b::t_d3834fbe78a859 20,26,171,193,226,253,263
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,46,62,81,89,139,156,173,199,214,274
+src/mongla_planner/mongla_planner/missions/pool_day_practice.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 30,109,115
+  s_b4c45e3235679b::t_d3834fbe78a859 54
+.claude/context/upstream/pr-o-thruster-step-response.md
+  s_b4c45e3235679b::t_a53a110e586386 28,67,88,102,126,130,151,159
+  s_b4c45e3235679b::t_9e972e6a8fa250 35,74
+src/mongla_localization/mongla_localization/orphan.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3
+tools/imu_rest_stats.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 101
+src/mongla_vision/mongla_vision/flow/flow_publish.py
+  s_b4c45e3235679b::t_d3834fbe78a859 20,28,50
+  s_b4c45e3235679b::t_9e972e6a8fa250 17
+src/mongla_manager/test/test_srot_preflight_ordering.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+src/mongla_vision/mongla_vision/detection/messages.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 133,143
+.claude/context/wiki/Home.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 32,38,60-63
+  s_b4c45e3235679b::t_7b07ff15dcd0f1 58-59
+tools/negative_clip_check.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 129,143-144
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,21,25
+tools/hailo_async_gil.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 82
+src/mongla_vision/mongla_vision/detector_setup.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 115,154,192
+  s_b4c45e3235679b::t_d3834fbe78a859 61,81,93
+src/mongla_control/test/test_srot_kill_switch.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 39
+  s_b4c45e3235679b::t_9e972e6a8fa250 20,84,128
+src/mongla_control/mongla_control/actuation_model.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,30,38,65,130,139,153,168,203,227
+  s_b4c45e3235679b::t_d3834fbe78a859 25
+tools/label_contact_sheet.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 22,56,141
+  s_b4c45e3235679b::t_9a4826ea1a3394 4
+tools/srot_mav_probe.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 8,17,27,32
+src/mongla_vision/mongla_vision/time_to_contact.py
+  s_b4c45e3235679b::t_d3834fbe78a859 8,14,68
+  s_b4c45e3235679b::t_9e972e6a8fa250 20
+src/mongla_manager/mongla_manager/srot_autotune.py
+  s_b4c45e3235679b::t_d3834fbe78a859 4
+src/mongla_vision/mongla_vision/anchor/loop_closure.py
+  s_b4c45e3235679b::t_d3834fbe78a859 15,21,240
+  s_b4c45e3235679b::t_9e972e6a8fa250 6,39,60,101,156,160,223,259,287,301
+build_mongla.sh
+  s_b4c45e3235679b::t_52b3ca07d8c819 95
+src/mongla_control/test/test_vision_verbs.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 65
+.claude/context/sota/VERDICT.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 43
+  s_b4c45e3235679b::t_a53a110e586386 42,49,62,71
+src/mongla_planner/mongla_planner/resilience.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 8,14,46,83,103
+.claude/context/platform/srot-integration.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 43,48,83,147,170,172,211,251,336,361,364,396,413,449,479,492,531,546,650,665,756,834,867,877,988,1012
+  s_b4c45e3235679b::t_7a461e8a870191 183,937-940
+  s_b4c45e3235679b::t_a53a110e586386 3,15,70,131,190,295,353,356,445,467,563,616,670,702,708,845,850,861,912,942,960
+tools/xfeat_finetune_verdict.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 12,16,93
+.claude/context/sota/planning.md
+  s_b4c45e3235679b::t_a53a110e586386 107,179
+  s_b4c45e3235679b::t_7a461e8a870191 43,62
+  s_b4c45e3235679b::t_9e972e6a8fa250 48,77,106
+tools/tracker_ab.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 8
+src/mongla_localization/mongla_localization/pose_cluster.py
+  s_b4c45e3235679b::t_d3834fbe78a859 294
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,80,92,157,315,345
+tools/srot_loop_soak.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 38
+src/mongla_manager/test/test_uplink_sends_water_bearings.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 8
+src/mongla_manager/test/test_yaw_drift_check.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 60
+src/mongla_vision/test/test_composed_vision.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,21,132,214
+tools/srot_axis_snapshot.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 14
+  s_b4c45e3235679b::t_9e972e6a8fa250 156,162
+src/mongla_control/test/test_yaw_authority_check.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 44,64
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+.claude/context/sota/sources/vision-velocity-and-odometry.md
+  s_b4c45e3235679b::t_7a461e8a870191 513
+  s_b4c45e3235679b::t_a53a110e586386 17,24,34,50,60,64,70,78,98,105,118,124,130,164,172,183,191,206,208,214,227,237,261,278-281,283,301,306,312,334,344,351,364-365,368,382,389,396,401,407,411,421,431,437,446,450,461,467,477,487,501,517,521,526,531,541,560,576,581,600,605,613,620,654,672,685,719,740,756,773,787,796-801,803-814,818,825-827,829,833,840,848,852,859,867,873,877,885,895,905,920-921,923,928,938,943,947,951,954,956,958-959,962,972,985,1019,1028,1035,1048,1059
+  s_b4c45e3235679b::t_9e972e6a8fa250 28-30,47-48,65,101,132,136,146,176,197,221,238,263,293,322,330,366-367,385,403,418,423,440,451,455,465,469,481,484,489,502,511,522,538,555,566,570,575,589,601,631,635,652,662,665,669,680,689,702,705,721,727,734,737,750,752,771,775,779,782,802,843,863,881,886,891-892,910,964,975,982,986,994,998,1001,1004,1006,1011,1020,1026,1032,1044,1052,1056
+src/mongla_vision/test/test_camera_profiles.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 118,231
+src/mongla_vision/mongla_vision/anchor/health.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 12,24,110,128
+  s_b4c45e3235679b::t_d3834fbe78a859 108,116,122,154
+src/mongla_vision/test/test_ladder_config.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,10,62,98
+src/mongla_localization/mongla_localization/pool_lines.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,41,131,146,178,214
+  s_b4c45e3235679b::t_d3834fbe78a859 12,26,35
+src/mongla_vision/test/test_anchor_bank.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,57,100,178,545
+  s_b4c45e3235679b::t_9e972e6a8fa250 41,167,324,416,508,586,662,712,739,766
+src/mongla_localization/mongla_localization/command_velocity.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,57,119,192
+  s_b4c45e3235679b::t_d3834fbe78a859 19,26,31
+src/mongla_planner/mongla_planner/missions/sauvc_navigation.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 27,32,122
+src/mongla_localization/mongla_localization/floor_plane.py
+  s_b4c45e3235679b::t_d3834fbe78a859 8
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,14,24,30
+src/mongla_vision/test/test_qos_contract.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+src/mongla_manager/mongla_manager/health_reporters.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 19,67,112,133,146,165,199,207,234,245,271
+  s_b4c45e3235679b::t_d3834fbe78a859 319
+tools/fov_calibrate_web.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 7
+src/mongla_vision/mongla_vision/detector_params.py
+  s_b4c45e3235679b::t_d3834fbe78a859 65
+tools/build_practice_bank.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 12,21
+  s_b4c45e3235679b::t_9e972e6a8fa250 4,11,126
+src/mongla_planner/mongla_planner/missions/demo_square.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 16
+src/mongla_vision/mongla_vision/approach.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,10,46,56,112
+  s_b4c45e3235679b::t_d3834fbe78a859 28,34,92
+src/mongla_vision/test/test_flow_refuses_cleanly.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 5
+src/mongla_vision/mongla_vision/anchor/bank.py
+  s_b4c45e3235679b::t_d3834fbe78a859 21,28,35,46,62,161,220,426,460,516,602,730,739,761,779,852,858,866,909,937
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,38,74,94,107,113,126,142,179,198,208,212,455,527,609,612,652,749,845,949,956,962
+.beads/README.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 43,48,53,81
+tools/flow_launch_check.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 225
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,20,54,82,108
+src/mongla_localization/mongla_localization/inekf.py
+  s_b4c45e3235679b::t_d3834fbe78a859 37,482,550
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,13,36,44,71,148,196,211,216,253,294,323,375,387,437,457,466,471,481,493,497,514,517,542,556,586,622,633,664,685
+tools/dead_function_sweep.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 181,205,256,316
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,10,18,59,67,122,142,160,272
+src/mongla_vision/test/test_camera_exposure.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3
+  s_b4c45e3235679b::t_9a4826ea1a3394 30
+tools/gap_distribution.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 11,21,24
+src/mongla_vision/mongla_vision/flow/flow_constants.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 50,61,81,110,115
+  s_b4c45e3235679b::t_d3834fbe78a859 11,70,95
+tools/control_bench/test_bench_matches_the_board.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 1,3,12,41,76
+src/mongla_manager/mongla_manager/vision_tunables.py
+  s_b4c45e3235679b::t_d3834fbe78a859 117
+src/mongla_vision/test/test_detector_recovery.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 94
+.claude/context/upstream/pr-n-caps-literals-and-the-heading-hold-setpoint.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 50,104,124,199
+  s_b4c45e3235679b::t_a53a110e586386 16,56,74,157-158,171,215,220,243
+  s_b4c45e3235679b::t_7a461e8a870191 168,176
+.github/workflows/poc-check.yml
+  s_b4c45e3235679b::t_7a461e8a870191 48,55,58,63
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,77,84
+  s_b4c45e3235679b::t_bc0bb9a9b43ca5 52
+.claude/context/upstream/review-2026-09-24/README.md
+  s_b4c45e3235679b::t_a53a110e586386 60
+  s_b4c45e3235679b::t_9e972e6a8fa250 21
+tools/replay_check.sh
+  s_b4c45e3235679b::t_52b3ca07d8c819 20
+src/mongla_localization/test/test_package_is_built.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+src/mongla_localization/mongla_localization/pnp_node.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 19,60,97
+  s_b4c45e3235679b::t_d3834fbe78a859 3
+src/mongla_vision/test/test_rangecrop.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 152
+.claude/context/platform/vehicle-spec.md
+  s_b4c45e3235679b::t_a53a110e586386 23
+src/mongla_vision/mongla_vision/utils/water_check.py
+  s_b4c45e3235679b::t_d3834fbe78a859 5,17
+  s_b4c45e3235679b::t_9e972e6a8fa250 4,108
+README.md
+  s_b4c45e3235679b::t_7b07ff15dcd0f1 41-42
+  s_b4c45e3235679b::t_9e972e6a8fa250 43-46,803
+  s_b4c45e3235679b::t_a53a110e586386 179,242,455,503,524,535,578,731,1188
+  s_b4c45e3235679b::t_c7ec76adcc8fe9 13,111,769,771,791
+src/mongla_control/mongla_control/allocation.py
+  s_b4c45e3235679b::t_d3834fbe78a859 26
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,16,42,143,175
+src/mongla_manager/test/test_srot_format.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 5,7,78,173,196
+src/mongla_control/mongla_control/bearing.py
+  s_b4c45e3235679b::t_d3834fbe78a859 3,16,187,278,290,306
+  s_b4c45e3235679b::t_9e972e6a8fa250 111,142
+src/mongla_vision/mongla_vision/tracking/reid.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,31,55,109,167
+  s_b4c45e3235679b::t_d3834fbe78a859 9,16,24,41
+tools/xfeat_settings_sweep.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 13
+src/mongla_vision/mongla_vision/flow/flow_node.py
+  s_b4c45e3235679b::t_d3834fbe78a859 216,262,451,481,527,550,624
+  s_b4c45e3235679b::t_9e972e6a8fa250 9,31,174,343,431,509,549,640
+tools/gap_recovery_potential.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 8
+  s_b4c45e3235679b::t_9e972e6a8fa250 108,112
+src/mongla_planner/mongla_planner/cli.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 127
+src/mongla_planner/mongla_planner/missions/sauvc_qualification.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 25,30
+src/mongla_localization/test/test_localization_node.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 289,725,752,1051,1103
+  s_b4c45e3235679b::t_9e972e6a8fa250 505,606,645,688,714,926,981,1088,1155
+.claude/context/upstream/pr-s-a-timed-out-move-reports-accepted.md
+  s_b4c45e3235679b::t_a53a110e586386 11,82,85
+  s_b4c45e3235679b::t_9e972e6a8fa250 55
+src/mongla_vision/mongla_vision/detection/profiles.py
+  s_b4c45e3235679b::t_d3834fbe78a859 3,22
+tools/pose_precision.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,11,16
+  s_b4c45e3235679b::t_9e972e6a8fa250 142
+tools/footage_inventory.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 234
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,18,28,36,67,82,96,171
+src/mongla_planner/test/test_resilience.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 103
+src/mongla_control/test/test_field_types_match_the_action.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+src/mongla_vision/mongla_vision/cameras/v4l2_mailbox.py
+  s_b4c45e3235679b::t_d3834fbe78a859 3,17-18,30-31,41,48,55,157,211,255,263,272,396-397,451,525,593
+  s_b4c45e3235679b::t_9e972e6a8fa250 557,617
+tools/approach_band.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 119
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,25,30
+src/mongla_planner/mongla_planner/vision_dsl.py
+  s_b4c45e3235679b::t_d3834fbe78a859 336
+  s_b4c45e3235679b::t_9e972e6a8fa250 548,553
+.claude/context/upstream/review-2026-09-24/research/control_sota.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 32,34,46,62,68,76,107,113,146,188,198,238,272,276
+  s_b4c45e3235679b::t_7a461e8a870191 5,14-19,173
+  s_b4c45e3235679b::t_a53a110e586386 177
+src/mongla_vision/test/test_semi_dense.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,58
+  s_b4c45e3235679b::t_9e972e6a8fa250 13,94
+src/mongla_vision/test/test_tracker_rate.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 166
+.claude/context/platform/ros2-conventions.md
+  s_b4c45e3235679b::t_a53a110e586386 253
+src/mongla_vision/mongla_vision/tracking/confidence.py
+  s_b4c45e3235679b::t_d3834fbe78a859 3,24,32
+src/mongla_planner/mongla_planner/missions/sauvc_target_acquisition.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 8,17,26,32,34
+src/mongla_localization/mongla_localization/retro.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,91
+.claude/context/sota/localization.md
+  s_b4c45e3235679b::t_a53a110e586386 28,46,58,102,129,151
+  s_b4c45e3235679b::t_9e972e6a8fa250 87,111
+.claude/context/perception/vision-architecture.md
+  s_b4c45e3235679b::t_a53a110e586386 230
+.claude/context/perception/ladder-register.md
+  s_b4c45e3235679b::t_7a461e8a870191 101,109,114,164,228-231
+  s_b4c45e3235679b::t_9e972e6a8fa250 39,118,136,168,194,200,248
+  s_b4c45e3235679b::t_a53a110e586386 7,89,139,184,205,232,234,240
+tools/mixer_map.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,26,32,52,83,97,491
+  s_b4c45e3235679b::t_9e972e6a8fa250 195,329,336,354,356,423,453,476,499
+.claude/context/sota/sources/system-id-no-basin.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 125,387
+src/mongla_vision/mongla_vision/tracking/presence.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 35,50,177,215
+  s_b4c45e3235679b::t_d3834fbe78a859 3,6,15,17,22,44,71
+src/mongla_planner/test/test_pose_and_prop_fix.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 54
+  s_b4c45e3235679b::t_9a4826ea1a3394 199
+.claude/context/upstream/pr-p-the-allocator-they-asked-for.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 21,82,139,147
+  s_b4c45e3235679b::t_a53a110e586386 50,54,101,119
+src/mongla_vision/test/test_every_entry_point_imports.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,16,20
+  s_b4c45e3235679b::t_9e972e6a8fa250 80
+tools/launch_param_sweep.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,10,17,33,46
+  s_b4c45e3235679b::t_9e972e6a8fa250 124
+src/mongla_vision/test/test_contours_and_multi_model.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 238,270
+tools/live_anchor_check.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 4
+src/mongla_vision/test/test_bars.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 8
+src/mongla_control/test/test_writers_backend.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+src/mongla_vision/mongla_vision/calibration/solver.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 85,277,294,407,545,592,664,679,697
+  s_b4c45e3235679b::t_d3834fbe78a859 25,30,33,36
+src/mongla_vision/mongla_vision/factory.py
+  s_b4c45e3235679b::t_d3834fbe78a859 12
+tools/gil_audit.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,16,23
+src/mongla_manager/test/test_docs_contract.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+src/mongla_planner/mongla_planner/mission.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 45,178
+src/mongla_manager/mongla_manager/health.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 12
+  s_b4c45e3235679b::t_d3834fbe78a859 3,27
+src/mongla_vision/config/target_geometry.yaml
+  s_b4c45e3235679b::t_9e972e6a8fa250 74,105,188,203,266,299,324
+  s_b4c45e3235679b::t_52b3ca07d8c819 4,17,25,49,56,128,186,275,291,315
+src/mongla_vision/test/test_seg_decode.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 154-155
+.claude/context/sota/sources/sota-autolabel.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 84,531
+  s_b4c45e3235679b::t_a53a110e586386 117,132,146,170,240,290,296,371,414,468,541
+tools/control_bench/control_bench.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,8,12,41,156,251,308,337,342,354,399
+  s_b4c45e3235679b::t_9e972e6a8fa250 74,213,274,292,381
+src/mongla_manager/test/test_model_separation_gate.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,17,98
+  s_b4c45e3235679b::t_9e972e6a8fa250 72,75,121,131
+src/mongla_vision/test/test_no_capability_is_built_and_unreachable.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,245
+  s_b4c45e3235679b::t_9e972e6a8fa250 72,93,106,112,138,152,165,182
+.claude/context/upstream/review-2026-09-24/srot-control-board/PR_BODY.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 13
+.claude/context/perception/hailo-vision.md
+  s_b4c45e3235679b::t_a53a110e586386 61,730,962,988,1011,1032,1063,1080
+  s_b4c45e3235679b::t_9e972e6a8fa250 1,454
+src/mongla_planner/mongla_planner/run_budget.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,9,20,72,118,140
+src/mongla_control/test/test_windup_against_the_mixer.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,31
+src/mongla_vision/mongla_vision/utils/check_tracker.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 70
+  s_b4c45e3235679b::t_7a461e8a870191 154
+tools/pack_hull.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 76,82
+tools/pi_env.sh
+  s_b4c45e3235679b::t_52b3ca07d8c819 4,27
+src/mongla_vision/mongla_vision/detection/confidence_calibration.py
+  s_b4c45e3235679b::t_d3834fbe78a859 8,12
+  s_b4c45e3235679b::t_9e972e6a8fa250 18,24,36,76
+src/mongla_vision/test/test_scale_turbidity_and_approach.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 39,142
+  s_b4c45e3235679b::t_9a4826ea1a3394 107,129
+.claude/context/perception/never-lose-the-target.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 30,36,43,51,64,111,152,181,201,250,275,297,407,423,436,468,501,544,568
+  s_b4c45e3235679b::t_7a461e8a870191 451
+  s_b4c45e3235679b::t_a53a110e586386 87,95,104,131,140,143,163,174,214,218,224,257,284,308,326,362,378,459,462,464,482,487,495,516,522,528,555,561,578,597
+tools/detection_continuity.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4
+src/mongla_vision/mongla_vision/detection/seg_decode.py
+  s_b4c45e3235679b::t_d3834fbe78a859 209
+  s_b4c45e3235679b::t_9e972e6a8fa250 12,208
+.claude/context/sota/control.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 81,304,341,392
+  s_b4c45e3235679b::t_7a461e8a870191 196
+  s_b4c45e3235679b::t_a53a110e586386 58,149,182,200,231,260,285,308,328,375,405
+src/mongla_localization/mongla_localization/courses/robosub26.yaml
+  s_b4c45e3235679b::t_52b3ca07d8c819 3,19
+src/mongla_vision/test/test_refraction_in_the_pose_path.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 260
+tools/orphan_sweep.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,17,25,143,148
+  s_b4c45e3235679b::t_9e972e6a8fa250 31,208
+.claude/context/upstream/pr-i-spin-min-relay.md
+  s_b4c45e3235679b::t_a53a110e586386 53
+  s_b4c45e3235679b::t_9e972e6a8fa250 139,212,320,344,366,378
+src/mongla_manager/mongla_manager/node_setup.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 74,147,157
+  s_b4c45e3235679b::t_d3834fbe78a859 171
+src/mongla_manager/mongla_manager/dispatch_policy.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 30,44,139,155
+src/mongla_vision/test/test_camera_profiles_yaml_matches_code.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+tools/flow_derot_ab.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 17,61,94,134,171
+  s_b4c45e3235679b::t_9e972e6a8fa250 4
+tools/recall_matrix.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 66,142,152
+src/mongla_localization/test/test_yaw_at_survives_absent_yaw.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,47
+src/mongla_control/test/test_align_loop_on_srot.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 33
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,67,84,102
+tools/cross_model_gate.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,17,22
+  s_b4c45e3235679b::t_9e972e6a8fa250 33,135
+src/mongla_control/mongla_control/fc/_srot_base.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 42
+src/mongla_localization/mongla_localization/pose_fuse_node.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 72,126
+.claude/context/missions/command-reference.md
+  s_b4c45e3235679b::t_a53a110e586386 39,102,179
+tools/vision_latency_bench.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 10,22
+tools/weak_box_persistence.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 12,24,29,100,282
+  s_b4c45e3235679b::t_9e972e6a8fa250 136,298,305
+src/mongla_vision/test/test_anchor_heals_the_follower.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,15,81,93,104
+  s_b4c45e3235679b::t_9e972e6a8fa250 10,61,72
+src/mongla_control/test/test_doc_drift.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,16
+  s_b4c45e3235679b::t_9e972e6a8fa250 55,150,176
+src/mongla_vision/test/test_loop_closure_is_actually_wired.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 35,136
+src/mongla_vision/test/test_lock_state.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 37
+src/mongla_localization/mongla_localization/course_map.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,10,18
+src/mongla_planner/mongla_planner/missions/sauvc_full.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 26,28
+.claude/context/perception/dual-camera-setup.md
+  s_b4c45e3235679b::t_a53a110e586386 15
+docs/stats.json
+  s_b4c45e3235679b::t_c7ec76adcc8fe9 2-3,33
+src/mongla_vision/mongla_vision/qos.py
+  s_b4c45e3235679b::t_d3834fbe78a859 3,21
+src/mongla_control/mongla_control/motion_vision/control.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 19,88,102,303,455,677,699,706,714,720,760,789,812
+  s_b4c45e3235679b::t_d3834fbe78a859 76,90,195,234,265,311,435,629,820
+tools/xfeat_export_hailo.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 5,17,22,59
+  s_b4c45e3235679b::t_9e972e6a8fa250 94
+src/mongla_vision/mongla_vision/stamps.py
+  s_b4c45e3235679b::t_d3834fbe78a859 3,18,25
+tools/mine_hard_negatives.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,21,111
+  s_b4c45e3235679b::t_9e972e6a8fa250 15,128
+src/mongla_manager/mongla_manager/estimator/thrust_model.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 9,45,67
+  s_b4c45e3235679b::t_d3834fbe78a859 16
+src/mongla_planner/test/test_run_budget.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 81
+src/mongla_vision/mongla_vision/detector_dual_node.py
+  s_b4c45e3235679b::t_d3834fbe78a859 7,23,46,52,97,161
+  s_b4c45e3235679b::t_9e972e6a8fa250 219,250,327
+tools/anchor_lifetime.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 21
+tools/control_bench/build.sh
+  s_b4c45e3235679b::t_52b3ca07d8c819 4
+src/mongla_control/test/test_srot_safety_gates.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 61
+src/mongla_manager/test/test_depth_sign_check.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 39,88
+.claude/context/sota/sources/vision-never-lose-the-target.md
+  s_b4c45e3235679b::t_a53a110e586386 29,31,44,59,99,151,156,186,216,253,265,286,291,303,324,350,366,418,424,429,440,454,466,490,513,555,619,640,675,689,712,720,733,735,741,748,755,779,792,812,849,863-865,868,873,875,915,938,951
+  s_b4c45e3235679b::t_9e972e6a8fa250 66,85,87,127,161,301,308,325,345,446,456,474,481,496,499,530,564,587,634,657,664,666,705-706,728,744,793,832,841,871,884
+tools/control_bench/plant.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 30,53,78,138,304
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,11,19,47,113,152,176,192,200,277,356
+src/mongla_manager/test/test_stale_telemetry_is_absent.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 92
+src/mongla_control/test/test_srot_motor_detect.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 6,9,13
+src/mongla_localization/mongla_localization/resection.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,93,149,182
+  s_b4c45e3235679b::t_d3834fbe78a859 6,15
+src/mongla_manager/mongla_manager/srot_connect.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 285,418,506,576
+  s_b4c45e3235679b::t_d3834fbe78a859 7,614
+src/mongla_control/mongla_control/fc/srot_bench.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 42,333,409,452,491,495
+  s_b4c45e3235679b::t_d3834fbe78a859 30,168,174,343
+tools/model_inventory.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,14,20
+  s_b4c45e3235679b::t_9e972e6a8fa250 47,54,126,172
+src/mongla_localization/test/test_nis_gate.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 42
+  s_b4c45e3235679b::t_9e972e6a8fa250 62
+tools/flow_port_bench.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,23
+  s_b4c45e3235679b::t_9e972e6a8fa250 193
+src/mongla_vision/test/test_coast_ladder_ordering.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 45
+  s_b4c45e3235679b::t_9a4826ea1a3394 87
+src/mongla_vision/mongla_vision/utils/display_node.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 503
+tools/ledger_strip.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 14
+  s_b4c45e3235679b::t_fddadd4bf6a595 68-69
+src/mongla_vision/test/test_hailo_arbiter.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 130,274
+src/mongla_vision/mongla_vision/tracking/roboflow_tracker.py
+  s_b4c45e3235679b::t_d3834fbe78a859 93
+tools/xfeat_finetune.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 9,14,20,25,55,59,65,81,110,116,149,160
+  s_b4c45e3235679b::t_9e972e6a8fa250 87,247
+src/mongla_vision/test/test_lock_ladder_is_wired_and_consumed.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 141
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,14
+src/mongla_planner/mongla_planner/dsl_cameras.py
+  s_b4c45e3235679b::t_d3834fbe78a859 46
+src/mongla_vision/mongla_vision/anchor/anchor.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 263
+  s_b4c45e3235679b::t_d3834fbe78a859 3,9,16,22,31
+src/mongla_vision/mongla_vision/lock_setup.py
+  s_b4c45e3235679b::t_d3834fbe78a859 34,57,103,133,143,212,239
+  s_b4c45e3235679b::t_9e972e6a8fa250 50,70,74,109,122,152,201,208,244
+src/mongla_vision/mongla_vision/flow/flow_timing.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,47,75,91,214,242,253,270,289,344
+  s_b4c45e3235679b::t_d3834fbe78a859 5,20,218,306,367,387,417
+tools/srot_vision_bench.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 10,273
+config/ladder_candidate.yaml
+  s_b4c45e3235679b::t_52b3ca07d8c819 3,6,30,53,63
+  s_b4c45e3235679b::t_9e972e6a8fa250 1,26
+src/mongla_localization/test/test_pose_cluster.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 32
+tools/v4l2_latency.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,26,114,121
+src/mongla_localization/test/test_the_filter_has_a_caller.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 121
+src/mongla_vision/test/test_v4l2_mailbox.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 18,23
+src/mongla_vision/mongla_vision/detector_node.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 369,467,528,545,599
+  s_b4c45e3235679b::t_d3834fbe78a859 148,300,360,432,664
+src/mongla_localization/mongla_localization/heading_anchor.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,10,16,120
+src/mongla_vision/test/test_camera_counters_lose_no_frames.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 23
+src/mongla_manager/mongla_manager/node_telemetry.py
+  s_b4c45e3235679b::t_d3834fbe78a859 237,253
+  s_b4c45e3235679b::t_9e972e6a8fa250 71,86,135,207,279,398
+src/mongla_vision/mongla_vision/detection/hailo.py
+  s_b4c45e3235679b::t_d3834fbe78a859 28,145,186,203,215,231,297,374,433,715,739-740,810,894
+  s_b4c45e3235679b::t_9e972e6a8fa250 132,138,223,256,295,501,623,642,686,954
+src/mongla_vision/test/test_optics.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4-5
+tools/chromatic_prior_check.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 57,133
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,20,24,32,39
+src/mongla_control/test/test_ci_workflows_are_not_injectable.py
+  s_b4c45e3235679b::t_bc0bb9a9b43ca5 77
+tools/pull_hull_geometry.js
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,15,20,25,59,71,89
+.claude/context/platform/first-pool-verification.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 43,57,85,144,174
+  s_b4c45e3235679b::t_a53a110e586386 12,29,70,97,107,115,125,131,160,187
+src/mongla_vision/test/test_a_corner_count_is_not_trackability.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,18,54,74,91
+src/mongla_planner/mongla_planner/missions/task_torpedo.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 16
+  s_b4c45e3235679b::t_d3834fbe78a859 86
+.claude/context/workbench/RESEARCH-OWED.md
+  s_b4c45e3235679b::t_a53a110e586386 18,22,26
+src/mongla_vision/test/test_calibration_page.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+tools/rung_independence.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 176
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,30,57
+src/mongla_vision/test/test_camera_publish_gate.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 92
+src/mongla_vision/mongla_vision/camera_node.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 269,645
+  s_b4c45e3235679b::t_d3834fbe78a859 130,375,481
+test/test_no_emoji.py
+  s_b4c45e3235679b::t_f68e88db3d4780 1-33
+.claude/context/the-whole-chain.md
+  s_b4c45e3235679b::t_a53a110e586386 9,33,38,56,63,72,95,131,137
+  s_b4c45e3235679b::t_9e972e6a8fa250 15,43,70,112,121
+src/mongla_localization/test/conftest.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,70
+  s_b4c45e3235679b::t_9a4826ea1a3394 9,12
+.claude/context/upstream/pr-q-motor-detect-and-frame-reverse.md
+  s_b4c45e3235679b::t_a53a110e586386 120
+  s_b4c45e3235679b::t_9e972e6a8fa250 1,11,139
+src/mongla_vision/test/test_rung_disagreement.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 12,85,112,151,160
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,19,57,135
+src/mongla_vision/test/test_time_to_contact.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 48
+  s_b4c45e3235679b::t_9a4826ea1a3394 18
+tools/code_text.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3
+src/mongla_vision/test/test_aprilcal.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 136
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,172,234,294
+src/mongla_control/test/test_bearing_refraction.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 133-134
+src/mongla_localization/test/test_pool_lines.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,59,155,168,188
+tools/bank_scaling_bench.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 24
+src/mongla_planner/mongla_planner/missions/task_gate.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 38,44
+.claude/context/upstream/pr-r-thrust-trim-predicts-the-wrong-duty.md
+  s_b4c45e3235679b::t_a53a110e586386 85,97,107
+  s_b4c45e3235679b::t_9e972e6a8fa250 11
+docs/index.html
+  s_b4c45e3235679b::t_7b07ff15dcd0f1 1732
+  s_b4c45e3235679b::t_9e972e6a8fa250 709
+  s_b4c45e3235679b::t_c7ec76adcc8fe9 113,1806
+tools/fov_calibrate.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 11
+  s_b4c45e3235679b::t_9e972e6a8fa250 35
+src/mongla_vision/test/test_subclass_init_chains.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+tools/control_bench/localization_truth.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,15,21,53,143
+  s_b4c45e3235679b::t_9e972e6a8fa250 70,123,184,210
+.claude/context/workbench/POOL.md
+  s_b4c45e3235679b::t_a53a110e586386 12
+.claude/context/scouting/bumblebee-2025.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 44,55,122
+  s_b4c45e3235679b::t_7a461e8a870191 78-82,84,195
+src/mongla_vision/test/test_tracker_conf_clamp.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 31,71
+src/mongla_vision/test/test_calibration_library.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,10
+  s_b4c45e3235679b::t_9e972e6a8fa250 151,194
+tools/weak_box_locality.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 97,101
+  s_b4c45e3235679b::t_9a4826ea1a3394 11
+src/mongla_planner/mongla_planner/missions/competition_config.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 20,69,117,130,187,220,228-229,239,251,266,273-274,277-278,282
+tools/control_bench/test_bench_params_match_the_board.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,25,210,230
+  s_b4c45e3235679b::t_9e972e6a8fa250 71,95,174,246
+src/mongla_manager/mongla_manager/srot_recorder.py
+  s_b4c45e3235679b::t_d3834fbe78a859 3,33
+src/mongla_planner/mongla_planner/client.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 257
+tools/hailo_compile.sh
+  s_b4c45e3235679b::t_52b3ca07d8c819 10,27
+  s_b4c45e3235679b::t_9e972e6a8fa250 17,46
+src/mongla_vision/test/test_flow_velocity.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 47
+src/mongla_vision/mongla_vision/optics.py
+  s_b4c45e3235679b::t_d3834fbe78a859 3,66,95
+  s_b4c45e3235679b::t_9e972e6a8fa250 77,116,137,182,245,250
+src/mongla_vision/mongla_vision/lock_publish.py
+  s_b4c45e3235679b::t_d3834fbe78a859 121,151,179,209,248
+  s_b4c45e3235679b::t_9e972e6a8fa250 37,130,136,171,186,218,222,254
+tools/domain_gap.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4
+tools/return_check.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+  s_b4c45e3235679b::t_9e972e6a8fa250 44
+src/mongla_control/mongla_control/fc/port_guard.py
+  s_b4c45e3235679b::t_d3834fbe78a859 3,33
+src/mongla_control/mongla_control/motion_vision/align.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 232
+  s_b4c45e3235679b::t_d3834fbe78a859 131,579
+src/mongla_manager/test/test_ledger_claims.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 112
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,19,38
+src/mongla_vision/test/test_continuity.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 99
+src/mongla_vision/launch/vision_pi.launch.py
+  s_b4c45e3235679b::t_d3834fbe78a859 6,20,138,261,273,372,400,442,448,494
+  s_b4c45e3235679b::t_9e972e6a8fa250 109,121,198,223,268,605
+src/mongla_vision/test/test_the_package_imports_without_ros.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 86
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,14,66
+.claude/context/platform/vision-control-split.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 224
+src/mongla_localization/test/test_tile_grating.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,104,115,170,225,295
+tools/control_bench/flight.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 9,20,24,42,64,79,192,214,236,313
+  s_b4c45e3235679b::t_9e972e6a8fa250 52,153,160,186,226,251,262
+src/mongla_vision/test/test_follower_tracks_scale.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 69
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,9,47
+tools/fov_capture_guide.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 180
+.claude/context/platform/cross-repo-contract.md
+  s_b4c45e3235679b::t_a53a110e586386 122,134
+  s_b4c45e3235679b::t_9e972e6a8fa250 101,148
+src/mongla_vision/mongla_vision/continuity.py
+  s_b4c45e3235679b::t_d3834fbe78a859 3,16,86
+.claude/context/missions/mission-cookbook.md
+  s_b4c45e3235679b::t_a53a110e586386 234,276,298,576
+  s_b4c45e3235679b::t_7a461e8a870191 1240
+  s_b4c45e3235679b::t_9e972e6a8fa250 16,1001,1226,1230,1234,1480
+src/mongla_manager/mongla_manager/vision_state.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 379,549
+  s_b4c45e3235679b::t_d3834fbe78a859 190,284,359,364
+src/mongla_control/mongla_control/fc/srot_uplink.py
+  s_b4c45e3235679b::t_d3834fbe78a859 23,61
+  s_b4c45e3235679b::t_9e972e6a8fa250 43,111
+src/mongla_vision/mongla_vision/anchor/xfeat_onnx.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 196,240
+  s_b4c45e3235679b::t_d3834fbe78a859 3,21,30,160
+src/mongla_localization/mongla_localization/localization_node.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,78,145,157,259,266,320,340,357,364,419,427,447,562,587,626,637,652,662,681,697,736,742,775,791,825,921,939
+  s_b4c45e3235679b::t_d3834fbe78a859 23,138,257
+.claude/context/sota/vision.md
+  s_b4c45e3235679b::t_7a461e8a870191 121,139,190
+  s_b4c45e3235679b::t_9e972e6a8fa250 24-25,237,281,312
+  s_b4c45e3235679b::t_a53a110e586386 54,167,198,216,218,261,302,330,369
+src/mongla_control/test/test_vision_rate_scaling.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 46,146
+tools/loop_closure_truth.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 21,39
+  s_b4c45e3235679b::t_9e972e6a8fa250 17,108,157,160,162
+.claude/context/upstream/pr-a-vision-api.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 61
+.claude/context/perception/video-testing.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 193
+.claude/context/ROADMAP.md
+  s_b4c45e3235679b::t_9e972e6a8fa250 108,115,139,152,173,185
+  s_b4c45e3235679b::t_a53a110e586386 60,107
+src/mongla_localization/test/test_command_velocity.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 202
+src/mongla_vision/mongla_vision/calibration/guide.py
+  s_b4c45e3235679b::t_d3834fbe78a859 99
+  s_b4c45e3235679b::t_9e972e6a8fa250 4,76,209,278,328,385,393,441,945,1049,1130,1156,1216,1234,1266,1320,1371,1386,1518
+tools/anchor_cross_run.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 9,18
+  s_b4c45e3235679b::t_9e972e6a8fa250 116
+src/mongla_control/test/test_stall_is_silence_not_slowness.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 18,66
+src/mongla_planner/mongla_planner/missions/test.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3
+src/mongla_vision/mongla_vision/detector_frames.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 115
+src/mongla_control/test/test_srot_ahrs_health.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+.claude/skills/go/SKILL.md
+  s_b4c45e3235679b::t_a53a110e586386 22
+src/mongla_control/test/test_authorship_is_human.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 109
+  s_b4c45e3235679b::t_9e972e6a8fa250 119-120
+src/mongla_control/test/test_geometric_allocation.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 158,281,362,385
+  s_b4c45e3235679b::t_9e972e6a8fa250 9,194,219,428
+tools/anchor_roi_bars.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,12
+src/mongla_manager/test/test_command_gate.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+  s_b4c45e3235679b::t_9e972e6a8fa250 57,140
+src/mongla_vision/config/cameras.yaml
+  s_b4c45e3235679b::t_52b3ca07d8c819 43
+  s_b4c45e3235679b::t_bc0bb9a9b43ca5 2
+  s_b4c45e3235679b::t_9e972e6a8fa250 62
+src/mongla_localization/test/test_loop_closure_bounds_drift.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 8,25,178
+  s_b4c45e3235679b::t_9e972e6a8fa250 18,77,134,162,218,227
+src/mongla_planner/mongla_planner/dsl_position.py
+  s_b4c45e3235679b::t_d3834fbe78a859 171,200,205,769
+  s_b4c45e3235679b::t_9e972e6a8fa250 25,45,114,122,135,196,266,379,442,449,459,501,562,717,736,857,878
+.claude/context/missions/detected-paradigm.md
+  s_b4c45e3235679b::t_7a461e8a870191 59,65,270,274,312,322,354
+  s_b4c45e3235679b::t_9e972e6a8fa250 189,193,287,291,358,362,375,379,384,506,514,521,532,539,546
+  s_b4c45e3235679b::t_a53a110e586386 971
+src/mongla_control/test/test_wire_params_are_never_nonfinite.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,30
+  s_b4c45e3235679b::t_9e972e6a8fa250 5
+tools/continuity_from_video.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 67,91
+  s_b4c45e3235679b::t_9e972e6a8fa250 75
+tools/srot_gate0.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 21
+  s_b4c45e3235679b::t_9a4826ea1a3394 15
+src/mongla_vision/mongla_vision/web/static/app.js
+  s_b4c45e3235679b::t_7a461e8a870191 133,170
+CLAUDE.md
+  s_b4c45e3235679b::t_ea634d8579852e 308-315
+  s_b4c45e3235679b::t_9e972e6a8fa250 39,45,102,407
+  s_b4c45e3235679b::t_a53a110e586386 70,83,88,95,100,106,147,151,223,226,326,334,350,370
+src/mongla_vision/mongla_vision/flow/flow_math.py
+  s_b4c45e3235679b::t_d3834fbe78a859 12,379,381,385,484,501,616,744
+  s_b4c45e3235679b::t_9e972e6a8fa250 45,163,244,265,318,367,469,491,506,565,608,630
+src/mongla_planner/test/test_sauvc_navigation.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 149
+tools/tau_from_scale.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 35,138,143
+  s_b4c45e3235679b::t_9a4826ea1a3394 4,26,57,113
+src/mongla_vision/mongla_vision/tracking/cascade.py
+  s_b4c45e3235679b::t_d3834fbe78a859 8,18,87
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,27,50,92,156,173,201
+src/mongla_control/test/test_battery_plausibility.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3
+src/mongla_localization/test/test_lens_comes_off_before_the_port.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 139
+.claude/skills/bumblebee-doctrine/SKILL.md
+  s_b4c45e3235679b::t_a53a110e586386 54
+tools/gil_probe.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 4
+src/mongla_planner/mongla_planner/missions/pool_day_torpedo.py
+  s_b4c45e3235679b::t_d3834fbe78a859 130
+  s_b4c45e3235679b::t_9e972e6a8fa250 20,36
+.claude/context/upstream/COVERAGE.md
+  s_b4c45e3235679b::t_a53a110e586386 112
+src/mongla_vision/mongla_vision/flow/flow_setup.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 40,60,117,163,200,261
+  s_b4c45e3235679b::t_d3834fbe78a859 68,74,77,108,312
+src/mongla_control/test/test_srot_baro_health_and_companion.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 70
+  s_b4c45e3235679b::t_9a4826ea1a3394 19
+src/mongla_vision/mongla_vision/config.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 43,56
+  s_b4c45e3235679b::t_d3834fbe78a859 4
+.claude/context/sota/sources/sota-planning.md
+  s_b4c45e3235679b::t_a53a110e586386 13
+  s_b4c45e3235679b::t_9e972e6a8fa250 274
+src/mongla_vision/mongla_vision/preflight.py
+  s_b4c45e3235679b::t_d3834fbe78a859 77
+  s_b4c45e3235679b::t_9e972e6a8fa250 7,13,17
+src/mongla_control/test/test_vision_loop_arguments_are_forwarded.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,27
+tools/gen_reference.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 240,265,308
+src/mongla_vision/test/test_shipped_constants_match_the_ledger.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 109,130
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,17,21,26,72,92
+src/mongla_vision/mongla_vision/anchor/xfeat_hailo.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3,25,53,72,91,114,163,179
+  s_b4c45e3235679b::t_d3834fbe78a859 15,19,46,84,249
+src/mongla_vision/mongla_vision/seeing.py
+  s_b4c45e3235679b::t_9e972e6a8fa250 3
+  s_b4c45e3235679b::t_d3834fbe78a859 11,23-24,28
+.claude/context/sota/SOTA-GAPS.md
+  s_b4c45e3235679b::t_a53a110e586386 23,96,269
+  s_b4c45e3235679b::t_9e972e6a8fa250 299
+src/mongla_vision/mongla_vision/tracker_node.py
+  s_b4c45e3235679b::t_d3834fbe78a859 112,118
+  s_b4c45e3235679b::t_9e972e6a8fa250 7
+src/mongla_manager/test/test_bringup_gate_does_not_pass_on_absent_hardware.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 3,50,150,224
+  s_b4c45e3235679b::t_9e972e6a8fa250 201,207,253,291
+src/mongla_planner/test/test_fix_position.py
+  s_b4c45e3235679b::t_9a4826ea1a3394 46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "f4cb33cd2ae2c7dafc75e8f18125308f6eca2e46",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
