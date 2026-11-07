@@ -1,0 +1,118 @@
+.claude/context/kutum/README.md
+  s_b4c45e3235679b::t_1bc2ac44c8bb0a 30-31
+  s_b4c45e3235679b::t_7a14f403a809e2 1-21,24-29,32-108,110-148
+  s_b4c45e3235679b::t_256bdde282c210 22-23,109
+docs/stats.json
+  s_b4c45e3235679b::t_cd0e345375d194 2-3,15,33,41,45,49,53,62
+kutum/env.sh
+  s_b4c45e3235679b::t_5b3f8576054209 1
+  s_b4c45e3235679b::t_fd4e2499475704 2
+  s_b4c45e3235679b::t_9084e43bc8b465 3-23
+src/mongla_vision/test/test_vehicle_blas_is_pinned.py
+  s_b4c45e3235679b::t_db66e603cafdfb 50-55
+src/mongla_manager/mongla_manager/connection_config.py
+  s_b4c45e3235679b::t_db66e603cafdfb 61,113
+kutum/system/udev/make_srot_rule.sh
+  s_b4c45e3235679b::t_083c31885b7ff0 16-19
+  s_b4c45e3235679b::t_6e4397b275f57b 1-15,20-34
+.claude/context/platform/foxglove-and-bags.md
+  s_b4c45e3235679b::t_69ebbff6ca1717 202
+.claude/context/kutum/remote-access.md
+  s_b4c45e3235679b::t_69ebbff6ca1717 1-43,45-53,55-56
+  s_b4c45e3235679b::t_329b7c790774fc 44,54
+.claude/context/kutum/pi-and-env-traps.md
+  s_b4c45e3235679b::t_329b7c790774fc 86
+  s_b4c45e3235679b::t_69ebbff6ca1717 1-85,87-101
+kutum/doctor.sh
+  s_b4c45e3235679b::t_f08bd28021d636 1-156,165-171,173-176
+  s_b4c45e3235679b::t_3b40aa1cb662b0 157-164,172
+test/test_kutum.py
+  s_b4c45e3235679b::t_52ce956aca7484 93-95
+  s_b4c45e3235679b::t_c35f491a9af09a 1-53,55-56,59,61-71,73,75,81-92,96-109
+  s_b4c45e3235679b::t_d9e0d9ff6633aa 54,57-58,60
+  s_b4c45e3235679b::t_effd489d9f6d62 72,74,76-80
+src/mongla_vision/launch/vision_pi.launch.py
+  s_b4c45e3235679b::t_db66e603cafdfb 606
+requirements.txt
+  s_b4c45e3235679b::t_1e47007d450628 9-11
+  s_b4c45e3235679b::t_db66e603cafdfb 16
+tools/fig_kutum.py
+  s_b4c45e3235679b::t_31d6bb6e37f3c7 2,33,35,37,39-40,43-44,48,50-51,61,63,78-79,82
+  s_b4c45e3235679b::t_696e86b906ad7f 1,3-32,34,36,38,41-42,45-47,49,52-60,62,64-77,80-81,83-96
+kutum/system/systemd/set-cpu-performance
+  s_b4c45e3235679b::t_bc45acc37fa7ad 2-6,8
+  s_b4c45e3235679b::t_5e3178ea455631 1,7,9
+docs/index.html
+  s_b4c45e3235679b::t_cd0e345375d194 113,1806
+.claude/context/kutum/pi-hailo-vision-box.md
+  s_b4c45e3235679b::t_69ebbff6ca1717 1-180
+src/mongla_vision/test/test_model_resolution.py
+  s_b4c45e3235679b::t_db66e603cafdfb 56-57,94
+kutum/deploy.sh
+  s_b4c45e3235679b::t_1a71770d690414 22,48,53-55,58-60,76,82-90
+  s_b4c45e3235679b::t_9f4f030977438d 68-70,77-79
+  s_b4c45e3235679b::t_5b3f8576054209 1-21,23-47,49-52,56-57,61-67,71-75,80-81,91-168
+kutum/setup.sh
+  s_b4c45e3235679b::t_c0e60e3dde4c43 5-10,23-25,35,54-80,90,112,122-124,148-153,172-173
+  s_b4c45e3235679b::t_1e47007d450628 41
+  s_b4c45e3235679b::t_f326930b009439 42
+  s_b4c45e3235679b::t_8d9480849d9c2b 2-4,11-22,26-34,36-40,43-53,81-89,91-111,113-121,125-147,155-171
+kutum/system/systemd/cpu-performance.service
+  s_b4c45e3235679b::t_5e3178ea455631 1-11
+kutum/backup.sh
+  s_b4c45e3235679b::t_1dc8b7e3b85d1d 1-39
+src/mongla_vision/mongla_vision/anchor/xfeat_onnx.py
+  s_b4c45e3235679b::t_db66e603cafdfb 247
+kutum/requirements.txt
+  s_b4c45e3235679b::t_083c31885b7ff0 8-9,12
+  s_b4c45e3235679b::t_f326930b009439 1-7,10-11,13
+kutum/constraints.txt
+  s_b4c45e3235679b::t_f326930b009439 1
+README.md
+  s_b4c45e3235679b::t_4627976302d28c 521,546-563,910,913-922
+  s_b4c45e3235679b::t_cd0e345375d194 13,111,570-573,783,787,789,809,895
+kutum/system/udev/99-mongla-cameras.rules
+  s_b4c45e3235679b::t_5e3178ea455631 1-2,4,6-7,9-11,13,15-16,18-23,26-33,35,37-40,43,46,48-51,53-55,57,60-68,70-74
+  s_b4c45e3235679b::t_bc45acc37fa7ad 41,47,69
+  s_b4c45e3235679b::t_966df30695932b 3,8,12,14
+  s_b4c45e3235679b::t_6e4397b275f57b 5,17,24-25,34,36,42,45,52,56,59
+  s_b4c45e3235679b::t_210cac26ea189d 44,58
+.claude/context/upstream/review-2026-09-24/research/cross_stack.md
+  s_b4c45e3235679b::t_db66e603cafdfb 30
+CLAUDE.md
+  s_b4c45e3235679b::t_4627976302d28c 234,258-260
+  s_b4c45e3235679b::t_7f9db019412a42 255-257
+test/test_the_retired_stack_stays_retired.py
+  s_b4c45e3235679b::t_bf3c98c421e315 68
+.claude/context/measured-bars.md
+  s_b4c45e3235679b::t_db66e603cafdfb 4526
+kutum/system/udev/51-hailo-udev.rules
+  s_b4c45e3235679b::t_5e3178ea455631 1-3
+.claude/context/platform/vehicle-spec.md
+  s_b4c45e3235679b::t_69ebbff6ca1717 60
+src/mongla_manager/launch/bringup.launch.py
+  s_b4c45e3235679b::t_db66e603cafdfb 488
+kutum/README.md
+  s_b4c45e3235679b::t_acf849b33f1f6a 1-84
+  s_b4c45e3235679b::t_145093946d70b8 85-86
+src/mongla_vision/mongla_vision/detection/yolo.py
+  s_b4c45e3235679b::t_db66e603cafdfb 110
+.claude/context/README.md
+  s_b4c45e3235679b::t_61081227677b60 36-38,42-57,61-67,71-78,82-84,88-91,95-101,105-108,112-114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "5a07ee5254cc7defc1cc9e9456623726e77cc299",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
