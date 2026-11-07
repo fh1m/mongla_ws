@@ -20,7 +20,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 ROOT = Path(__file__).resolve().parents[2]
 VS = (ROOT / 'mongla_manager' / 'mongla_manager' / 'vision_state.py').read_text()
-MV = (ROOT / 'mongla_control' / 'mongla_control' / 'motion_vision.py').read_text()
+MV = '\n'.join(f.read_text() for f in sorted(
+    (ROOT / 'mongla_control' / 'mongla_control' / 'motion_vision').glob('*.py')))
 TUN = (ROOT / 'mongla_manager' / 'mongla_manager'
        / 'vision_tunables.py').read_text()
 

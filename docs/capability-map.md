@@ -149,11 +149,11 @@ IMU, the depth sensor and the downward camera. Without it, a distance move is a 
 
 | Capability | How it works | Evidence | State |
 |---|---|---|---|
-| Vision alignment | the same two verbs, now **50 Hz** on the srot path (soaked 90 s at 49.86 Hz, zero late ticks) over a hull the board stabilises at 500 Hz | `motion_vision.py`; `measured-bars.md` §3 | 🟣 BENCH |
+| Vision alignment | the same two verbs, now **50 Hz** on the srot path (soaked 90 s at 49.86 Hz, zero late ticks) over a hull the board stabilises at 500 Hz | `motion_vision/`; `measured-bars.md` §3 | 🟣 BENCH |
 | Downward-camera work | the same, and now without a streamed depth setpoint: the axes that need one are refused explicitly instead of silently doing nothing | `mongla_control/vision_verbs.py`, `test_srot_vision_actuation.py` | 🟡 BUILT |
 | Driving through a target | unchanged — the verb is backend-independent | `motion_vision.move_loop` | 🟡 BUILT |
 | Payload | MAVLink to the board's own outputs, with a typed outcome per shot: fired, refused, denied, no-ack, busy | `fc/base.py`, `fc/srot_fc.py` | 🟡 BUILT |
-| Firing on a *fresh* frame | gated on a new live detection, so a frozen or predicted box can never trigger a shot | `motion_vision.py` | 🟡 BUILT |
+| Firing on a *fresh* frame | gated on a new live detection, so a frozen or predicted box can never trigger a shot | `motion_vision/` | 🟡 BUILT |
 | Knowing whether it fired | the board's own answer is carried back into the mission result | `mongla_control/vision_verbs.py` | 🟡 BUILT |
 | Rationing a run | an opt-in budget: every task is asked whether it is still worth attempting, and the verdict is recorded | `mongla_planner/run_budget.py`, `missions/sauvc_full.py` | 🟡 BUILT |
 | Giving up cleanly | a task deadline that cancels the goal in flight and hands the mission its fallback | `mongla_planner/client.py`, `mongla_dsl.task()` | 🟡 BUILT |

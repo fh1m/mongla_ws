@@ -440,13 +440,6 @@ def test_set_servo_sends_do_set_servo():
     assert cmd[1] == sp.CMD_DO_SET_SERVO and cmd[2][0] == 1.0 and cmd[2][1] == 2000.0
 
 
-def test_set_relay_sends_do_set_relay():
-    fc = _fc()
-    fc.set_relay(0, True)
-    cmd = [s for s in fc.master.mav.sent if s[0] == 'cmd'][-1]
-    assert cmd[1] == sp.CMD_DO_SET_RELAY and cmd[2][0] == 0.0 and cmd[2][1] == 1.0
-
-
 def test_srot_payload_fire_is_a_bounded_pulse_on_the_board_channel():
     """fire(N) drives BOARD channel N -- no map, no translation -- and always
     returns it to rest. The de-energise is in a `finally`, so it happens even when

@@ -51,6 +51,18 @@ def code_of(obj) -> str:
     return code_only(inspect.getsource(obj))
 
 
+def source_of(path) -> str:
+    """Raw text of a `.py` file, or of every `.py` file in a package directory.
+
+    A module that grows into a package (motion_vision.py -> motion_vision/)
+    keeps working for every test that reads it by path.
+    """
+    p = pathlib.Path(path)
+    if p.is_dir():
+        return '\n'.join(f.read_text(encoding='utf-8') for f in sorted(p.glob('*.py')))
+    return p.read_text(encoding='utf-8')
+
+
 def code_of_file(path) -> str:
-    """`code_only` of a `.py` file."""
-    return code_only(pathlib.Path(path).read_text(encoding='utf-8'))
+    """`code_only` of a `.py` file or a package directory."""
+    return code_only(source_of(path))

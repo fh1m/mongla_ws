@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # PostToolUse hook: run the matching pytest file for an edited source file.
 #
-# Targeted + fast: editing motion_vision.py runs only test_motion_vision.py (if it
+# Targeted + fast: editing motion_vision/ runs only test_motion_vision/ (if it
 # exists); editing a test file runs that test. Editing a DOC (or a skill, agent,
 # launch file or config) runs the two doc guards instead, because docs drift from
 # code silently: the retired-stack sweep and the book's reachability/title checks.

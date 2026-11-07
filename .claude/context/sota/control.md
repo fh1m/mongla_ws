@@ -51,7 +51,7 @@ raise `ValueError`. Output is `fc.manual(fwd, lat, up, yaw)`, each axis −1..1,
   (yaw, lateral, forward), vertical order (roll, pitch, throttle). Each axis takes
   `min(|want|, room)` against what is already granted.
 
-Consumed from exactly two places, both in the vision path: `motion_vision.py:629-645`
+Consumed from exactly two places, both in the vision path: `motion_vision/control.py`
 (`_mixer_saturated` → lateral anti-windup) and `:648-692` (`_srot_drive` → priority fit before the
 frame leaves).
 

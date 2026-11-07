@@ -51,7 +51,7 @@ conf 0.10 — 71 real gaps. A *sampled* sweep cannot measure this at all
 
 | rung | shipped | covers | bar |
 |---|---|---|---|
-| `VISION_FRESH_ZERO_S` | 0.20 s — `motion_vision.py` | 56.3 % of gaps | ≥ p50 (0.155 s) |
+| `VISION_FRESH_ZERO_S` | 0.20 s — `motion_vision/` | 56.3 % of gaps | ≥ p50 (0.155 s) |
 | `vision.coast_s` | 0.80 s — `vision_tunables.py` | **91.5 %** | **≥ p90 (0.651 s)** — currently 23 % margin |
 | `vision.lost_grace_s` | 1.00 s — `vision_tunables.py` | 91.5 % | > `coast_s` |
 | kalman `max_predict_s` | 1.50 s — `tracker_node.py` | 94.4 % | > `lost_grace_s` |
@@ -127,7 +127,7 @@ footage rather than against the next rung up.
 >
 > **The figure therefore stays unmeasured.** It needs both cameras attached;
 > substituting a one-camera number would not be the same quantity.
-| `VISION_LOOP_HZ` | 50 — `motion_vision.py` | soaked 90 s: **49.86 Hz**, 0.00 % late ticks | ≥ 25 Hz sustained |
+| `VISION_LOOP_HZ` | 50 — `motion_vision/` | soaked 90 s: **49.86 Hz**, 0.00 % late ticks | ≥ 25 Hz sustained |
 | camera FOV | 63.8° air / **46.7° water** ±0.7 | 25 views, `calibrateCameraRO`, held-out validated | ±1.5° |
 | frame staleness | — | mailbox **16.9 ms** vs 396 ms on a plain queue | ≤ 50 ms |
 
