@@ -1,0 +1,43 @@
+.claude/context/packages/mongla_planner/README.md
+  s_b4c45e3235679b::t_d84f4a2cd93bb0 133,135
+src/mongla_planner/mongla_planner/dsl_plan.py
+  s_b4c45e3235679b::t_a3c7b1d55bb539 1-223
+src/mongla_planner/test/test_vision_dsl.py
+  s_b4c45e3235679b::t_8eb525a86d5f3a 18
+  s_b4c45e3235679b::t_cebc55ef52508e 509,531
+src/mongla_vision/test/test_pose_mirror_truth.py
+  s_b4c45e3235679b::t_ceddc22ec4d84d 272,289
+src/mongla_planner/test/test_camera_exclusivity.py
+  s_b4c45e3235679b::t_3626abe59251b0 140,149,157
+tools/dead_function_sweep.py
+  s_b4c45e3235679b::t_632d2c44cf7e78 79-80
+src/mongla_planner/mongla_planner/dsl_report.py
+  s_b4c45e3235679b::t_a3c7b1d55bb539 1-7,9-10,12,14,42-221
+  s_b4c45e3235679b::t_e7232d9fda4ea3 8,11,13,15-19,21-25,27-41
+  s_b4c45e3235679b::t_c082b96be3d706 20,26
+tools/topic_wiring_sweep.py
+  s_b4c45e3235679b::t_ceddc22ec4d84d 57
+src/mongla_planner/test/test_scoreboard.py
+  s_b4c45e3235679b::t_45a353c796b27b 14-16,75-76
+src/mongla_planner/mongla_planner/mongla_dsl.py
+  s_b4c45e3235679b::t_a3c7b1d55bb539 161,164-166,198
+  s_b4c45e3235679b::t_c082b96be3d706 136-138
+src/mongla_planner/test/test_vision_evidence.py
+  s_b4c45e3235679b::t_3626abe59251b0 79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "ffb028d6ff6704b4bdb4205b64b4cd227b82c554",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
