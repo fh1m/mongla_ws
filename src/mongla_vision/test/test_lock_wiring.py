@@ -98,7 +98,7 @@ def test_both_control_loops_pass_it_through():
     has shipped repeatedly -- `device_path` into `**_`, the unloaded YAML
     table, `ros2 param set` on a construction-time param."""
     assert MV.count('lock_s: float = 0.0,') == 2      # align_loop and move_loop
-    assert MV.count('lock_s=lock_s') == 2
+    assert MV.count('lock_s=c.lock_s') == 2
 
 
 def test_the_deck_exposes_it_for_live_tuning():

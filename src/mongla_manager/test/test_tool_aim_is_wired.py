@@ -33,25 +33,29 @@ def test_the_loop_applies_it_to_EVERY_centring_axis():
     # The error lives in ONE helper (`_axis_ctrl`, Block 1C) shared by the
     # control law and the post-stop re-measurement; the tool offset must be
     # handed to it on every centring axis.
-    assert _MV.count("_axis_ctrl(ex_now, offsets.get('lat', 0.0), tool_du,") == 1
-    assert _MV.count("_axis_ctrl(ex_now, offsets.get('yaw', 0.0), tool_du,") == 1
-    # TWO, read off the code: the image-Y control branch (downward surge -- the
+    assert _MV.count("_axis_ctrl(ex_now, c.offsets.get('lat', 0.0), tool_du,") == 1
+    assert _MV.count("_axis_ctrl(ex_now, c.offsets.get('yaw', 0.0), tool_du,") == 1
+    # Read off the code: the image-Y control branch (downward surge -- the
     # forward camera's depth axis is refused on srot) AND the post-stop
     # re-measurement, which is wrapped across lines and only counts on code text.
-    assert _MV.count("_axis_ctrl(sample.ey, offsets.get('depth', 0.0), tool_dv,") == 2, \
-        'the image-Y branch and the re-measurement must both be corrected'
+    assert _MV.count("_axis_ctrl(sample.ey, c.offsets.get('depth', 0.0), tool_dv,") == 1, \
+        'the image-Y control branch must be corrected'
+    assert _MV.count("_axis_ctrl(sample.ey, offsets.get('depth', 0.0), tool_dv,") == 1, \
+        'the re-measurement must be corrected'
     assert 'return e_norm - (offset_px + tool_px) / half' in _MV
 
 
 def test_it_is_resolved_PER_TICK_because_the_range_moves():
     """A constant offset computed once would be right at one range only -- and
     the correction is largest exactly where a mission spends its final second."""
-    i = _MV.index('(tool_du, tool_dv) = _tool_offset(tool_offset_fn, log)')
-    j = _MV.index("_axis_ctrl(ex_now, offsets.get('lat', 0.0), tool_du,")
+    i = _MV.index('(tool_du, tool_dv) = _tool_offset(c.tool_offset_fn, self.log)')
+    j = _MV.index("_axis_ctrl(ex_now, c.offsets.get('lat', 0.0), tool_du,")
     assert i < j, 'the offset is resolved after it is used'
-    # inside the loop body: same indent as the axis blocks that follow it
-    line = _MV[_MV.rindex('\n', 0, i) + 1:i]
-    assert len(line) - len(line.lstrip()) == 12, 'not inside the per-tick loop'
+    # Inside `_Align.command`, which `_Align.step` calls once per tick.
+    assert _MV.rindex('def command(', 0, i) > _MV.rindex('def step(', 0, i)
+    step = _MV[_MV.index('def step(', _MV.index('class _Align(')):]
+    assert 'self.command(sample)' in step[:step.index('def drive(')], \
+        'not resolved on every tick'
 
 
 def test_a_raising_resolver_does_not_take_the_hull_with_it():

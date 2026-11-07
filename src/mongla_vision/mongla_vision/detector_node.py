@@ -999,139 +999,38 @@ class DetectorNode(Node):
                 time.sleep(0.05)
 
     def _infer_loop(self):
-        """Worker thread: decode + infer + publish (never touches the ROS executor)."""
+        """Worker thread: decode + infer + publish (never touches the ROS executor).
+
+        One frame per pass, in the order the steps are written. Each step that
+        can drop the frame returns None, and the loop moves on to the next one."""
         while rclpy.ok():
-            try:
-                self._want.set()
-                item = self._infer_q.get(timeout=0.5)
-            except _queue.Empty:
+            item = self._next_frame()
+            if item is None:
                 continue
-            finally:
-                self._want.clear()
-
-            if self.get_parameter('paused').value:
-                # ⛔ SAY SO. A paused detector consumes frames and publishes
-                # NOTHING: the camera runs, `image_raw` flows, the
-                # `/detections` publisher is registered and live, and zero
-                # messages ever appear. Every liveness check passes.
-                #
-                # `vision_pi.launch.py` declares `paused` default TRUE, so this
-                # is the SHIPPED state until an operator says otherwise -- and
-                # it cost hours on the vehicle (B-XF1) being mistaken for a
-                # broken model, a wrong threshold, a bad allowlist and a dead
-                # worker thread, because the one thing the node never mentioned
-                # was that it had been told not to work.
-                self._paused_logged = getattr(self, '_paused_logged', 0) + 1
-                if self._paused_logged == 1 or self._paused_logged % 300 == 0:
-                    self.get_logger().warn(
-                        f'[DET  ] PAUSED -- consuming frames and publishing '
-                        f'NOTHING ({self._paused_logged} so far). '
-                        f'`paused:=false` to infer.')
-                continue  # frame consumed from queue; skip decode + infer
-
-            if isinstance(item, _DirectFrame):
-                # Already decoded, in this process, by the camera that captured
-                # it. No serialise, no transport, no second copy.
-                frame, header = item.frame, item.header
-            else:
-                header = item.header
-                try:
-                    frame = self._bridge.imgmsg_to_cv2(
-                        item, desired_encoding='bgr8')
-                except Exception as exc:
-                    self.get_logger().warning(
-                        f"[DET  ] cv_bridge decode failed: {exc!r}")
-                    continue
-
+            got = self._decode(item)
+            if got is None:
+                continue
+            frame, header = got
             self._report_seeing(frame)
             t0 = time.monotonic()
-            # Age of this frame at the instant the chip starts on it. The
-            # floor is capture->available plus the decode; anything beyond
-            # that is the chip being fed something it should not be.
-            try:
-                cap = header.stamp.sec + header.stamp.nanosec * 1e-9
-                age = time.time() - cap
-                # Gated on HAVING a detector: this counter is reported as
-                # "inferences", and with `_det` None the loop drops the frame a
-                # few lines below. It reported "300 inferences" during a run in
-                # which zero inferences happened, which is worse than no
-                # counter -- it was the reason a dead detector looked busy.
-                if 0.0 <= age < 5.0 and self._det is not None:
-                    self._infers += 1
-                    self._stale_sum += age
-                    self._stale_max = max(self._stale_max, age)
-            except AttributeError:
-                pass
-            if self._pre is not None:
-                try:
-                    frame = self._pre(frame)
-                except Exception as exc:
-                    # Never let a preprocessing fault stop detection: a
-                    # degraded frame beats no frame.
-                    self.get_logger().warning(
-                        f'[DET  ] preprocess failed, using the raw frame: '
-                        f'{exc!r}')
-                    self._pre = None
+            self._note_frame_age(header)
+            frame = self._preprocess(frame)
             det = self._det  # atomic ref read under CPython GIL
             if det is None:
                 continue  # model still loading — drop frame, keep queue drained
-            # RANGE CROP, decided from the PREVIOUS frame's target size --
-            # the only size available before inferring this one.
-            crop_state = None
-            infer_frame = frame
-            if self._crop is not None:
-                infer_frame, crop_state = self._crop.apply(frame)
-            try:
-                detections = det.infer(infer_frame)
-                # B-XF1 diagnostic: what the model returned AT THE SOURCE,
-                # before any merge, crop remap or filtering. Throttled -- hot
-                # path.
-                self._infer_dbg = getattr(self, '_infer_dbg', 0) + 1
-                if self._infer_dbg % 150 == 1:
-                    self.get_logger().info(
-                        f'[DET  ] infer() returned {len(detections)} raw '
-                        f'detection(s) on {infer_frame.shape[1]}x'
-                        f'{infer_frame.shape[0]}'
-                        + (f', best {max(d.score for d in detections):.3f}'
-                           if detections else ''))
-                self._infer_fails = 0
-            except Exception as exc:
-                self._on_infer_failure(exc)
+            out = self._run_detector(det, frame)
+            if out is None:
                 continue
-            # ⛔ AFTER the counter is cleared, and outside this try. The
-            # failure counter escalates to REBUILDING THE PRIMARY DETECTOR,
-            # and the primary just succeeded -- letting a secondary model's
-            # exception land in the same counter would tear down a healthy
-            # model because a different one misbehaved. Caught by
-            # `test_a_SUCCESSFUL_inference_in_the_LOOP_resets_the_counter`,
-            # which went from 0 failures to 5.
+            detections, infer_frame, crop_state = out
+        # ⛔ AFTER the counter is cleared, and outside this try. The
+        # failure counter escalates to REBUILDING THE PRIMARY DETECTOR,
+        # and the primary just succeeded -- letting a secondary model's
+        # exception land in the same counter would tear down a healthy
+        # model because a different one misbehaved. Caught by
+        # `test_a_SUCCESSFUL_inference_in_the_LOOP_resets_the_counter`,
+        # which went from 0 failures to 5.
             detections = self._merge_extra(infer_frame, detections)
-
-            if crop_state is not None and crop_state.active and detections:
-                # BACK TO FULL-FRAME COORDINATES. Everything downstream -- the
-                # pixel error, the bearing, the HUD -- is full-frame, and a
-                # missed offset does not raise: it steers at a point displaced
-                # by the crop origin, which reads as a calibration fault.
-                detections = [
-                    replace(d, xyxy=crop_state.to_full(d.xyxy))
-                    for d in detections]
-            if self._crop is not None:
-                # Feed back the largest target's area as a fraction of the
-                # frame the DETECTOR ACTUALLY SAW -- cropped or not. That is
-                # the quantity the exit threshold is defined against: while
-                # cropped, a target filling the crop is close even though it
-                # is a small fraction of the full frame.
-                big = largest(detections)
-                frac = None
-                if big is not None:
-                    area = ((big.xyxy[2] - big.xyxy[0])
-                            * (big.xyxy[3] - big.xyxy[1]))
-                    if crop_state is not None and crop_state.active:
-                        seen = crop_state.w * crop_state.h
-                    else:
-                        seen = frame.shape[1] * frame.shape[0]
-                    frac = area / float(max(seen, 1))
-                self._crop.observe(frac, time.monotonic())
+            detections = self._back_to_full_frame(frame, detections, crop_state)
             dt = time.monotonic() - t0
 
             self._frames        += 1
@@ -1148,42 +1047,186 @@ class DetectorNode(Node):
                 self._pub_det.publish(det_msg)
             except Exception:
                 return  # node being destroyed; exit thread cleanly
+            self._publish_contours(frame, detections, header)
+            self._publish_debug_image(frame, detections, header, dt, primary)
 
-            if self._pub_contours is not None and detections:
-                # Built from the SAME list on the SAME header, so a consumer
-                # can pair them by stamp and index without a second lookup.
-                try:
-                    from mongla_vision.detection.messages import (
-                        detections_to_contours)
-                    h, w = frame.shape[:2]
-                    self._pub_contours.publish(detections_to_contours(
-                        detections, header, camera=self._cam_name,
-                        width=w, height=h))
-                except Exception as exc:                    # noqa: BLE001
-                    # An outline is evidence, not control. Losing it must never
-                    # cost the detection that is steering the vehicle.
-                    self.get_logger().warning(
-                        f'[DET  ] contour publish failed: {exc!r}', once=True)
+    # ── the steps of one inference pass ─────────────────────────────────────
+    # Each was a span of `_infer_loop` until 2026-11-07; code and comments
+    # moved verbatim.
 
-            # Skip the overlay render + encode + publish entirely when no one is
-            # subscribed to image_debug (autonomous runs with viewer:=false). This
-            # is pure overhead on the inference thread otherwise -- a free win.
-            if (self._publish_dbg
-                    and self._pub_dbg.get_subscription_count() > 0
-                    and (time.monotonic() - self._last_dbg) >= self._dbg_min_dt):
-                try:
-                    fps = 1.0 / dt if dt > 1e-6 else 0.0
-                    overlay = draw.render_all(
-                        frame, detections,
-                        source=self._cam_name, fps=fps,
-                        healthy=True, deadband=self._deadband, primary=primary)
-                    dbg = self._bridge.cv2_to_imgmsg(overlay, encoding='bgr8')
-                    dbg.header = header
-                    self._pub_dbg.publish(dbg)
-                    self._last_dbg = time.monotonic()
-                except Exception as exc:
-                    if rclpy.ok():
-                        self.get_logger().warning(f"[DET  ] debug image failed: {exc!r}")
+    def _next_frame(self):
+        """The next queued frame, or None (queue empty, or the detector paused)."""
+        try:
+            self._want.set()
+            item = self._infer_q.get(timeout=0.5)
+        except _queue.Empty:
+            return None
+        finally:
+            self._want.clear()
+        if self.get_parameter('paused').value:
+            # ⛔ SAY SO. A paused detector consumes frames and publishes
+            # NOTHING: the camera runs, `image_raw` flows, the
+            # `/detections` publisher is registered and live, and zero
+            # messages ever appear. Every liveness check passes.
+            #
+            # `vision_pi.launch.py` declares `paused` default TRUE, so this
+            # is the SHIPPED state until an operator says otherwise -- and
+            # it cost hours on the vehicle (B-XF1) being mistaken for a
+            # broken model, a wrong threshold, a bad allowlist and a dead
+            # worker thread, because the one thing the node never mentioned
+            # was that it had been told not to work.
+            self._paused_logged = getattr(self, '_paused_logged', 0) + 1
+            if self._paused_logged == 1 or self._paused_logged % 300 == 0:
+                self.get_logger().warn(
+                    f'[DET  ] PAUSED -- consuming frames and publishing '
+                    f'NOTHING ({self._paused_logged} so far). '
+                    f'`paused:=false` to infer.')
+            return None  # frame consumed from queue; skip decode + infer
+        return item
+
+    def _decode(self, item):
+        """(frame, header) from a queued item, or None when it cannot be decoded."""
+        if isinstance(item, _DirectFrame):
+            # Already decoded, in this process, by the camera that captured
+            # it. No serialise, no transport, no second copy.
+            return item.frame, item.header
+        try:
+            frame = self._bridge.imgmsg_to_cv2(item, desired_encoding='bgr8')
+        except Exception as exc:
+            self.get_logger().warning(
+                f"[DET  ] cv_bridge decode failed: {exc!r}")
+            return None
+        return frame, item.header
+
+    def _note_frame_age(self, header) -> None:
+        # Age of this frame at the instant the chip starts on it. The
+        # floor is capture->available plus the decode; anything beyond
+        # that is the chip being fed something it should not be.
+        try:
+            cap = header.stamp.sec + header.stamp.nanosec * 1e-9
+            age = time.time() - cap
+            # Gated on HAVING a detector: this counter is reported as
+            # "inferences", and with `_det` None the loop drops the frame a
+            # few lines below. It reported "300 inferences" during a run in
+            # which zero inferences happened, which is worse than no
+            # counter -- it was the reason a dead detector looked busy.
+            if 0.0 <= age < 5.0 and self._det is not None:
+                self._infers += 1
+                self._stale_sum += age
+                self._stale_max = max(self._stale_max, age)
+        except AttributeError:
+            pass
+
+    def _preprocess(self, frame):
+        """The optional preprocessor; on a fault, the raw frame and no more preprocessing."""
+        if self._pre is not None:
+            try:
+                frame = self._pre(frame)
+            except Exception as exc:
+                # Never let a preprocessing fault stop detection: a
+                # degraded frame beats no frame.
+                self.get_logger().warning(
+                    f'[DET  ] preprocess failed, using the raw frame: '
+                    f'{exc!r}')
+                self._pre = None
+        return frame
+
+    def _run_detector(self, det, frame):
+        """Infer, inside the range crop when one is active.
+
+        -> (detections, the frame the model saw, the crop state), or None on a
+        failed inference (counted by `_on_infer_failure`)."""
+        # RANGE CROP, decided from the PREVIOUS frame's target size --
+        # the only size available before inferring this one.
+        crop_state = None
+        infer_frame = frame
+        if self._crop is not None:
+            infer_frame, crop_state = self._crop.apply(frame)
+        try:
+            detections = det.infer(infer_frame)
+            # B-XF1 diagnostic: what the model returned AT THE SOURCE,
+            # before any merge, crop remap or filtering. Throttled -- hot
+            # path.
+            self._infer_dbg = getattr(self, '_infer_dbg', 0) + 1
+            if self._infer_dbg % 150 == 1:
+                self.get_logger().info(
+                    f'[DET  ] infer() returned {len(detections)} raw '
+                    f'detection(s) on {infer_frame.shape[1]}x'
+                    f'{infer_frame.shape[0]}'
+                    + (f', best {max(d.score for d in detections):.3f}'
+                       if detections else ''))
+            self._infer_fails = 0
+        except Exception as exc:
+            self._on_infer_failure(exc)
+            return None
+        return detections, infer_frame, crop_state
+
+    def _back_to_full_frame(self, frame, detections, crop_state):
+        """Detections in full-frame pixels, and the crop told how big the target was."""
+        if crop_state is not None and crop_state.active and detections:
+            # BACK TO FULL-FRAME COORDINATES. Everything downstream -- the
+            # pixel error, the bearing, the HUD -- is full-frame, and a
+            # missed offset does not raise: it steers at a point displaced
+            # by the crop origin, which reads as a calibration fault.
+            detections = [
+                replace(d, xyxy=crop_state.to_full(d.xyxy))
+                for d in detections]
+        if self._crop is not None:
+            # Feed back the largest target's area as a fraction of the
+            # frame the DETECTOR ACTUALLY SAW -- cropped or not. That is
+            # the quantity the exit threshold is defined against: while
+            # cropped, a target filling the crop is close even though it
+            # is a small fraction of the full frame.
+            big = largest(detections)
+            frac = None
+            if big is not None:
+                area = ((big.xyxy[2] - big.xyxy[0])
+                        * (big.xyxy[3] - big.xyxy[1]))
+                if crop_state is not None and crop_state.active:
+                    seen = crop_state.w * crop_state.h
+                else:
+                    seen = frame.shape[1] * frame.shape[0]
+                frac = area / float(max(seen, 1))
+            self._crop.observe(frac, time.monotonic())
+        return detections
+
+    def _publish_contours(self, frame, detections, header) -> None:
+        if self._pub_contours is not None and detections:
+            # Built from the SAME list on the SAME header, so a consumer
+            # can pair them by stamp and index without a second lookup.
+            try:
+                from mongla_vision.detection.messages import (
+                    detections_to_contours)
+                h, w = frame.shape[:2]
+                self._pub_contours.publish(detections_to_contours(
+                    detections, header, camera=self._cam_name,
+                    width=w, height=h))
+            except Exception as exc:                    # noqa: BLE001
+                # An outline is evidence, not control. Losing it must never
+                # cost the detection that is steering the vehicle.
+                self.get_logger().warning(
+                    f'[DET  ] contour publish failed: {exc!r}', once=True)
+
+    def _publish_debug_image(self, frame, detections, header, dt, primary) -> None:
+        # Skip the overlay render + encode + publish entirely when no one is
+        # subscribed to image_debug (autonomous runs with viewer:=false). This
+        # is pure overhead on the inference thread otherwise -- a free win.
+        if (self._publish_dbg
+                and self._pub_dbg.get_subscription_count() > 0
+                and (time.monotonic() - self._last_dbg) >= self._dbg_min_dt):
+            try:
+                fps = 1.0 / dt if dt > 1e-6 else 0.0
+                overlay = draw.render_all(
+                    frame, detections,
+                    source=self._cam_name, fps=fps,
+                    healthy=True, deadband=self._deadband, primary=primary)
+                dbg = self._bridge.cv2_to_imgmsg(overlay, encoding='bgr8')
+                dbg.header = header
+                self._pub_dbg.publish(dbg)
+                self._last_dbg = time.monotonic()
+            except Exception as exc:
+                if rclpy.ok():
+                    self.get_logger().warning(f"[DET  ] debug image failed: {exc!r}")
 
     def _apply_model_conf(self, value: str) -> None:
         """Apply per-model conf overrides (CSV 'name=conf') to the registry.

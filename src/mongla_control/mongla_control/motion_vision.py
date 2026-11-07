@@ -42,7 +42,8 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass
-from typing import Dict, Optional, Set, Tuple
+from types import SimpleNamespace
+from typing import Dict, NamedTuple, Optional, Set, Tuple
 
 from .motion_rates import VISION_LOOP_HZ as LOOP_HZ
 from .motion_rates import LOG_THROTTLE_S
@@ -51,6 +52,10 @@ from . import actuation_model
 
 
 # ---- Outcome codes (copied to Move.Result.final_value) --------------- #
+# ⚠ A SEPARATE CODE SPACE from `fc.base` (SUCCEEDED, TIMEOUT = 4, ABORTED = 5,
+# ...), which grades a board verb. Same names, different numbers: compare an
+# `Outcome.code` only against the names below, and a `MoveResult.code` only
+# against fc.base's. No module imports both sets today; keep it that way.
 ALIGNED   = 0   # align: centred; move: bbox reached fwd_fill
 LOST      = 1   # target gone past lost_grace_s (DSL runs fallback)
 TIMEOUT   = 2   # duration elapsed without success
@@ -937,6 +942,125 @@ def _verify_after_stop(vision_state, target_class, *, near, gate_norm,
                    v_worst, fill, elapsed, end_x_px, end_y_px)
 
 
+class _VisionLoop:
+    """What `align_loop` and `move_loop` share: the clock, the loss rule, the report.
+
+    One verb call is one instance. ``c`` holds the verb's arguments exactly as
+    they were passed, and the attributes are the state the loop carries from
+    one tick to the next. Each subclass's ``run`` reads top to bottom as the
+    stages of one tick.
+    """
+
+    verb = 'vision'
+
+    def __init__(self, c) -> None:
+        self.c = c
+        self.log = c.log
+        width, height = c.vision_state.image_size()
+        self.half_w, self.half_h = width * 0.5, height * 0.5
+        self.seen = False      # any frame yielded the target -> distinguishes
+                               #   "never detected" (wrong model/classes/view)
+                               #   from "seen but couldn't converge" at exit.
+        self.lost_since: Optional[float] = None
+        self.last_log = 0.0
+        self.residual_px = 0.0  # the residual the Outcome reports
+        self.fill = 0.0        # the bbox fill the Outcome reports
+        self.end_x_px = math.nan   # signed from-centre px of target at last seen frame
+        self.end_y_px = math.nan
+        self.locked_id = -1    # tracker id of the target -> coast follows this id
+        # Observed detection interval, EMA. The freshness thresholds scale with
+        # it, because "~1 frame" is 13 ms on the forward camera and 32 ms on the
+        # downward one and a fixed constant cannot be both. 0 until two distinct
+        # frames have been seen, which yields the floors -- the unscaled
+        # behaviour -- rather than a wild guess from one sample.
+        self.det_interval = 0.0
+        # Observed pipeline latency: the sample's age at the instant it FIRST
+        # appears, i.e. capture -> the loop seeing it. EMA'd, and only sampled on
+        # a genuinely new frame -- a re-read's age has grown by however long the
+        # loop took and would inflate it without bound.
+        self.pipe_age = 0.0
+        self.last_frame_at = float('-inf')   # arrival time of the last COUNTED frame
+        self.started = time.monotonic()
+        self.deadline = self.started + max(c.duration, 0.0)
+
+    def outcome(self, code: int, reason: str, now: float) -> Outcome:
+        return Outcome(code, reason, self.residual_px, self.fill, now - self.started,
+                       self.end_x_px, self.end_y_px)
+
+    def never_seen(self) -> str:
+        return (f"target {self.c.target_class!r} NEVER detected -- check "
+                f"model/classes/camera view")
+
+    def log_due(self, now: float) -> bool:
+        """True at most once per LOG_THROTTLE_S."""
+        if (now - self.last_log) < LOG_THROTTLE_S:
+            return False
+        self.last_log = now
+        return True
+
+    def lost(self, now: float) -> Optional[Outcome]:
+        """No target this tick: start the grace clock, and give up after it.
+
+        The caller has already commanded neutral and reset its own per-axis
+        state; this owns only the rule both verbs share.
+        """
+        c = self.c
+        if self.lost_since is None:
+            self.lost_since = now
+        if (not c.hold_through_loss) and (now - self.lost_since) >= c.lost_grace_s:
+            reason = (f"target {c.target_class!r} lost" if self.seen
+                      else self.never_seen())
+            return self.outcome(LOST, reason, now)
+        if self.log_due(now):
+            live = _live_classes(c.vision_state)
+            if live:
+                self.log.debug(
+                    f"[VIS  ] {self.verb}: {c.target_class!r} not among live "
+                    f"detections {live} -- check classes filter / model")
+            else:
+                self.log.debug(f"[VIS  ] {self.verb} LOST "
+                               f"{now - self.lost_since:.1f}s "
+                               f"(grace {c.lost_grace_s:.1f}s)")
+        return None
+
+    def note_frame(self, sample, now: float) -> Tuple[float, bool]:
+        """``(sampled_at, is_new)`` for this sample; a new frame updates the EMAs.
+
+        ``sampled_at`` is the frame's arrival time -- constant across re-reads
+        of one detection -- so only a genuinely new frame (see _FRAME_EPS_S)
+        moves the latency, the interval, or anything counted in frames.
+        """
+        sampled_at = now - sample.age_s
+        is_new = sampled_at > self.last_frame_at + _FRAME_EPS_S
+        if is_new:
+            self.pipe_age = (sample.age_s if self.pipe_age <= 0.0
+                             else self.pipe_age + 0.2 * (sample.age_s - self.pipe_age))
+            if self.last_frame_at > 0.0:
+                gap = sampled_at - self.last_frame_at
+                # Ignore absurd gaps: a dropout is not a slower camera, and
+                # letting one widen the interval would loosen the freshness
+                # thresholds exactly when the target is lost.
+                if 0.0 < gap <= 0.5:
+                    self.det_interval = (
+                        gap if self.det_interval <= 0.0
+                        else self.det_interval + 0.2 * (gap - self.det_interval))
+            self.last_frame_at = sampled_at
+        return sampled_at, is_new
+
+    def report(self, sample) -> None:
+        """Remember where the target is THIS tick, and stream it to feedback."""
+        self.end_x_px = sample.ex * self.half_w
+        self.end_y_px = sample.ey * self.half_h
+        if self.c.report_fn is not None:
+            self.c.report_fn(self.end_x_px, self.end_y_px)
+
+    def neutral_on_exit(self) -> None:
+        try:
+            self.c.writers.neutral()
+        except Exception as exc:   # noqa: BLE001
+            self.log.warning(f"[VIS  ] {self.verb} cleanup neutral raised: {exc!r}")
+
+
 def align_loop(*,
                fc,
                vision_state,
@@ -1057,7 +1181,10 @@ def align_loop(*,
       neutral at/past it. Forward joins the in-band stable/fire gate, so a mid-hold
       fire only leaves once lat/yaw AND the standoff range are all satisfied. With
       ``fwd_fill`` = 0 (default) there is no forward axis and behaviour is unchanged.
+
+    How one tick runs: `_Align.run`, one method per stage.
     """
+    c = SimpleNamespace(**locals())   # every argument, by name, for _Align
     bad = axes - VALID_AXES
     if bad:
         raise ValueError(f"align_loop: unknown axes {sorted(bad)}")
@@ -1074,483 +1201,501 @@ def align_loop(*,
     if not _camera_ready(vision_state):
         return Outcome(NO_CAMERA, "camera pipeline not up (no camera_info)",
                        elapsed_s=0.0)
-    width, height = vision_state.image_size()
-    half_w, half_h = width * 0.5, height * 0.5
+    return _Align(c).run()
 
-    # Per-axis speed caps: each falls back to the global `gain` when unset, so
-    # `align(gain=30)` caps every axis at 30% while `align(gain=40, yaw_gain=15)`
-    # slows only yaw. (Mirrors the kp_* `or DEFAULT` idiom at the call site.)
-    g_lat   = gain if gain_lat   is None else gain_lat
-    g_yaw   = gain if gain_yaw   is None else gain_yaw
-    g_fwd   = gain                       # forward range-hold capped by the global gain
-    use_fwd = float(fwd_fill) > 0.0      # optional forward standoff / downward-descent axis
 
-    use_surge = 'depth' in axes          # downward image-Y -> surge fore/aft
+class _Command(NamedTuple):
+    """What one align tick asks of the thrusters, before freshness decay."""
+    lat_pct: float
+    yaw_pct: float
+    fwd_pct: float
+    p_lat: float          # the proportional part of lat_pct -> the brake proxy
+    in_band: list         # one bool per active axis
+    worst: float          # worst per-axis error, px
 
-    def _drive(lat_pct: float, yaw_pct: float, fwd_pct: float = 0.0) -> None:
+
+class _Align(_VisionLoop):
+    """`align_loop`'s state, and one method per stage of a tick."""
+
+    verb = 'align'
+
+    def __init__(self, c) -> None:
+        super().__init__(c)
+        # Per-axis speed caps: each falls back to the global `gain` when unset, so
+        # `align(gain=30)` caps every axis at 30% while `align(gain=40, yaw_gain=15)`
+        # slows only yaw. (Mirrors the kp_* `or DEFAULT` idiom at the call site.)
+        self.g_lat = c.gain if c.gain_lat is None else c.gain_lat
+        self.g_yaw = c.gain if c.gain_yaw is None else c.gain_yaw
+        self.g_fwd = c.gain                      # forward range-hold capped by the global gain
+        self.use_fwd = float(c.fwd_fill) > 0.0   # optional forward standoff axis
+        self.use_surge = 'depth' in c.axes       # downward image-Y -> surge fore/aft
+
+        self.residual_px = float('inf')
+        self.stable = 0
+        self.aligned_at: Optional[float] = None   # monotonic of FIRST stable -> hold-window start
+        self.fired = False          # on_locked fired once at fire_t into the hold (payload mid-hold)
+        self.sq_warned = False      # one line per command, not one per tick
+        self.standoff_held = False
+        self.prev_worst: Optional[float] = None   # settle gate: worst error last NEW frame
+        self.stable_since = float('inf')          # arrival of the FIRST frame of the current in-band run
+        self.last_live_at = float('-inf')         # last LIVE (non-coasted) sighting -> fire_pass gate
+        self.lat_ema = 0.0     # trailing EMA of the signed lateral command -> brake proxy
+        self.surge_ema = 0.0   # downward: trailing EMA of the signed surge command -> brake proxy
+        self.lat_i = 0.0       # lateral integral accumulator (Layer 2; 0 unless ki_lat>0)
+        # ⛔ THE MIXER'S OWN LIMIT, WHICH THE EXISTING ANTI-WINDUP CANNOT SEE.
+        # `abs(p_lat + lat_i) < g_lat` watches the SOFTWARE gain cap. The board
+        # scales a whole thruster group down when any motor in it passes full
+        # (`mixer.cpp`), and it never reports that -- so with yaw already spending
+        # horizontal authority the hull can be clipping at an effective lateral
+        # well below `g_lat`, while the integrator happily winds against a wall it
+        # has no way to detect. Carried from the previous tick because yaw is
+        # computed after lateral in this loop; one tick of lag on a limit that
+        # persists for many is immaterial.
+        self.was_saturated = False
+        # Nominal tick. Used to SEED the measured dt below and as its ceiling;
+        # the loop no longer sleeps a fixed period (see `_tick`), so treating this
+        # as the real interval would misstate both the lock gate and the integral
+        # term the moment the loop starts running at detection rate.
+        self.dt_nominal = 1.0 / LOOP_HZ
+        self.dt = self.dt_nominal
+        self._last_pass = time.monotonic()
+        # Seeded at the control period -- the shortest gap possible, so the gate
+        # starts at its tightest and widens to the real detection interval once one
+        # has been observed. Erring tight before acquisition is safe: there is no
+        # lock to drop yet.
+        self.gate_norm = _lock_gate(self.dt) if c.lock_on else 0.0
+        self.last_accept_t: Optional[float] = None
+        self.locked_ex: Optional[float] = None   # last-accepted centre -> continuity lock
+        self.locked_ey: Optional[float] = None
+
+        # Effective deadband: clamp to a physical floor so an over-tight err can't
+        # perpetually TIMEOUT on bbox jitter. err_px here is already post-coercion
+        # (commands.fields_for turned a rosidl-0 "unset" into the default/param), so
+        # this only ever floors a genuinely tiny positive request -- logged, never
+        # silent, so 'aligned (Npx)' is always read against the real deadband.
+        self.eff_err = max(float(c.err_px), MIN_ALIGN_ERR_PX)
+        floored = self.eff_err > float(c.err_px)
+        fwd_note = (f" fwd>={c.fwd_fill * 100:.0f}%({c.fwd_mode})"
+                    if self.use_fwd else "")
+        self.log.info(
+            f"[VIS  ] align class={c.target_class!r} axes={sorted(c.axes)}{fwd_note} "
+            f"err={self.eff_err:.0f}px"
+            f"{' (floored from %.0f)' % c.err_px if floored else ''} "
+            f"gain={c.gain:.0f}% dur={c.duration:.0f}s hold={c.hold_s:.0f}s")
+        if c.downward:
+            # Loudly announce the rotated frame so the operator never mistakes a
+            # downward align's axis meanings for the forward ones (see docstring).
+            self.log.info(f"[VIS  ] downward frame: image-X->lateral, image-Y->surge "
+                          f"(sign {c.surge_sign:+d}); depth held by the board")
+        # The hold, the deadline and the log throttle count from here.
+        self.started = time.monotonic()
+        self.deadline = self.started + max(c.duration, 0.0)
+
+    # -- the loop ------------------------------------------------------- #
+
+    def run(self) -> Outcome:
+        try:
+            while True:
+                out = self.step(time.monotonic())
+                if out is not None:
+                    return out
+                _tick(self.c.vision_state)
+        finally:
+            self.neutral_on_exit()
+
+    def step(self, now: float) -> Optional[Outcome]:
+        """One tick: check the clock, sense, command, count, and maybe finish."""
+        c = self.c
+        # MEASURED, not assumed. The loop wakes on a new detection now, so
+        # the interval is the detection interval when targets are visible
+        # and the tick timeout when they are not. `dt` feeds the
+        # continuity-lock gate and the lateral integral; holding it at the
+        # nominal period would overstate both by up to 1.5x once the loop
+        # starts running at 77 Hz instead of 50.
+        #
+        # Clamped: a debugger pause or a scheduling stall must not inject a
+        # huge dt into an integrator. The floor keeps a burst of two
+        # detections in the same millisecond from collapsing it to zero.
+        self.dt = min(max(now - self._last_pass, 1e-3), self.dt_nominal * 4.0)
+        self._last_pass = now
+        if c.abort_fn and c.abort_fn():
+            return self.outcome(ABORTED, "aborted", now)
+        if now >= self.deadline:
+            reason = ("not aligned (duration elapsed)" if self.seen
+                      else self.never_seen())
+            self.pass_fire()   # opt-in guaranteed shot if the target was seen live
+            return self.outcome(TIMEOUT, reason, now)
+
+        sample = self.sense()
+        if not _present(sample):
+            self.stable = 0
+            self.lat_i = 0.0   # bleed integral windup while blind
+            self.drive(0.0, 0.0)
+            return self.lost(now)
+
+        self.acquire(sample, now)
+        cmd = self.command(sample)
+        self.residual_px = cmd.worst
+        # Freshness-decay: pace LATERAL authority to measurement freshness so
+        # the loop doesn't blind-drive on a stale bbox between slow frames
+        # (yaw excluded; the board holds depth). At healthy
+        # FPS fresh==1.0 so this is a no-op. A COASTED sample decays on the
+        # coast curve instead (gap decay), not freshness -- see _authority.
+        fresh = _authority(sample, c.coast_s, self.det_interval, self.pipe_age)
+        _warn_low_fps(self.log, fresh, sample)   # F3: surface FPS-starvation, don't stall silently
+        lat_pct = cmd.lat_pct * fresh
+        fwd_pct = cmd.fwd_pct * fresh   # forward shares the freshness/coast decay (never braked)
+        # What the mixer will do to what we just asked for. Computed from
+        # OUR demand and the frame's published matrix, so it needs nothing
+        # from the board -- which is the only reason it is available at all.
+        self.was_saturated = (_mixer_saturated(lat_pct, cmd.yaw_pct, fwd_pct)
+                              if c.mixer_aware else False)
+        self.drive(lat_pct, cmd.yaw_pct, fwd_pct)
+        # Brake EMA tracks the PROPORTIONAL command only (a travel-momentum
+        # proxy), NOT the full lat_pct: a hull holding STILL against a steady
+        # current carries a nonzero integral (lat_i) but ~0 motion, so
+        # including it would make the arrival brake reverse-kick a stationary
+        # hull off the spot it was holding. Exclude lat_i here.
+        self.lat_ema = _ema_step(self.lat_ema, cmd.p_lat * fresh, self.dt)
+        if self.use_surge:
+            # Downward surge is open-loop timed thrust (like lateral) -- track
+            # its EMA so the arrival brake bleeds the fore/aft coast, or the hull
+            # sails past the bin. fwd_pct already carries the signed, fresh-decayed
+            # surge command, so the EMA is the true momentum proxy and the brake
+            # reverse-kicks opposite it regardless of surge_sign.
+            self.surge_ema = _ema_step(self.surge_ema, fwd_pct, self.dt)
+
+        is_new_frame = self.count_frame(sample, now, cmd)
+        if self.held_long_enough():
+            out = self.hold(sample, now, is_new_frame, cmd.worst)
+            if out is not None:
+                return out
+
+        if self.log_due(now):
+            # The detector node owns the always-on operator bearing line, so
+            # this per-verb copy is demoted to debug to avoid a duplicate in
+            # the mission terminal. Worded as live offset, not a verdict.
+            x_off = sample.ex * self.half_w
+            y_off = sample.ey * self.half_h
+            self.log.debug(
+                f"[ offset lat={x_off:+.0f} depth={y_off:+.0f}px ] "
+                f"'{c.target_class}' -> err {cmd.worst:.0f}/{self.eff_err:.0f}px")
+        return None
+
+    # -- the stages ----------------------------------------------------- #
+
+    def drive(self, lat_pct: float, yaw_pct: float, fwd_pct: float = 0.0) -> None:
         """One MANUAL_CONTROL frame. ``fwd_pct`` is the forward range-hold
         (or the downward surge); 0 unless that axis is active."""
-        _srot_drive(fc, fwd_pct=fwd_pct, lat_pct=lat_pct, yaw_pct=yaw_pct,
-                    prioritise=mixer_aware)
+        _srot_drive(self.c.fc, fwd_pct=fwd_pct, lat_pct=lat_pct, yaw_pct=yaw_pct,
+                    prioritise=self.c.mixer_aware)
 
-    def _pass_fire() -> None:
+    def sense(self):
+        """The target box this tick.
+
+        Continuity lock: once acquired, prefer the box NEAREST the last
+        centre (within gate_norm) over the largest, so a 2nd hole / spurious
+        box can't steal the aim. near=None (pre-acquire) or gate_norm=0
+        (lock_on off) -> largest-area, unchanged. ctrl_conf gates low-score
+        boxes out of the control target.
+        """
+        c = self.c
+        near = (self.locked_ex, self.locked_ey) if self.locked_ex is not None else None
+        return c.vision_state.bbox_error(
+            c.target_class, near=near, gate_norm=self.gate_norm,
+            min_score=c.ctrl_conf, locked_id=self.locked_id, coast_s=c.coast_s,
+            lock_s=c.lock_s)
+
+    def acquire(self, sample, now: float) -> None:
+        """The target is present: remember which one, and where it is."""
+        self.seen = True
+        self.lost_since = None
+        if not sample.coasted:
+            self.last_live_at = now   # last LIVE sighting -> fire_pass recency gate
+        # Re-arm the continuity lock on the accepted box (used as `near` next
+        # tick) ONLY when lock_on -- otherwise leave near=None so selection
+        # stays largest-area. After a real loss the loop exits LOST, so a
+        # fresh verb call re-acquires largest -- no stale lock survives.
+        if self.c.lock_on:
+            self.locked_ex, self.locked_ey = sample.ex, sample.ey
+        # Capture the tracker id of a LIVE box so a later gap coasts the right
+        # target (VisionState only fills track_id when coast_s>0; a coasted
+        # sample keeps the existing id). No-op when coasting is off.
+        if not sample.coasted and sample.track_id >= 0:
+            self.locked_id = sample.track_id
+        # Signed from-centre offset of the target THIS tick: the end-position
+        # the verb returns, and the live value report_fn streams to feedback.
+        self.report(sample)
+
+    def command(self, sample) -> _Command:
+        """The per-axis P(+I) law: what each active axis asks for, and is it in band."""
+        c = self.c
+        half_w, half_h = self.half_w, self.half_h
+        # Range-adaptive gain: soften lat/surge kp as the bbox fills the frame
+        # (close) so the 20 kg hull doesn't overshoot a small target.
+        rgain = _range_gain(_fill(sample, 'area'), c.range_gain_floor)
+        yaw_pct = lat_pct = p_lat = fwd_pct = 0.0
+        in_band = []
+        worst = 0.0
+
+        # Where the TOOL points, not the camera (see _tool_offset).
+        tool_du, tool_dv = _tool_offset(c.tool_offset_fn, self.log)
+
+        # Horizontal bearing NOW, not at capture. Forward camera only: a
+        # yaw spins the downward image about its centre rather than
+        # shifting it. Never on a coasted box -- the tracker already
+        # extrapolated it. Absent rate or focal = the historical behaviour.
+        ex_now = sample.ex
+        if c.derotate_fn is not None and not c.downward and not sample.coasted:
+            try:
+                _dr = c.derotate_fn()
+            except Exception:                             # noqa: BLE001
+                _dr = None
+            if _dr is not None:
+                ex_now = _derotated_ex(sample.ex, sample.age_s,
+                                       float(_dr[0]), float(_dr[1]), half_w)
+
+        if 'lat' in c.axes:
+            ctrl = _axis_ctrl(ex_now, c.offsets.get('lat', 0.0), tool_du, half_w)
+            epx = abs(ctrl) * half_w
+            worst = max(worst, epx)
+            p_lat = ctrl * c.kp_lat * rgain
+            # Lateral integral (Layer 2): Lateral is open-loop, so only the
+            # integral nulls a steady-current offset. Accumulate ONLY during
+            # the hold (aligned_at set), conditional on the output not being
+            # saturated (anti-windup), clamped. ki_lat=0 -> exactly P.
+            if c.ki_lat > 0.0 and self.aligned_at is not None \
+                    and abs(p_lat + self.lat_i) < self.g_lat \
+                    and not self.was_saturated:
+                self.lat_i = _clamp(self.lat_i + c.ki_lat * ctrl * self.dt,
+                                    -c.i_lat_max, c.i_lat_max)
+            lat_pct = _clamp(p_lat + self.lat_i, -self.g_lat, self.g_lat)
+            in_band.append(epx <= self.eff_err)
+
+        if 'yaw' in c.axes:
+            ctrl = _axis_ctrl(ex_now, c.offsets.get('yaw', 0.0), tool_du, half_w)
+            epx = abs(ctrl) * half_w
+            worst = max(worst, epx)
+            yaw_pct = _yaw_command(ctrl, epx, self.eff_err, c.kp_yaw, self.g_yaw,
+                                   _fill(sample, 'area'))
+            in_band.append(epx <= self.eff_err)
+
+        if self.use_surge:
+            # DOWNWARD: the 'depth' axis (image-Y) drives SURGE fore/aft.
+            # Two-sided P modelled on the lat axis (same kp/cap/rgain), so the
+            # hull drives forward when the bin is ahead and BACK when behind --
+            # the one-sided fwd/fill law can't back up and would never centre.
+            # surge_sign flips polarity for the physical mount (verify disarmed).
+            ctrl = _axis_ctrl(sample.ey, c.offsets.get('depth', 0.0), tool_dv, half_h)
+            epx = abs(ctrl) * half_h
+            worst = max(worst, epx)
+            p_surge = ctrl * c.kp_lat * rgain
+            fwd_pct = _clamp(p_surge, -self.g_fwd, self.g_fwd) * c.surge_sign
+            in_band.append(epx <= self.eff_err)
+        if self.use_fwd:
+            fwd_pct, fwd_ok, self.fill, self.standoff_held = _forward_range_hold(
+                sample, fwd_fill=c.fwd_fill, fwd_mode=c.fwd_mode,
+                kp_forward=c.kp_forward, g_fwd=self.g_fwd,
+                standoff_max_tilt_deg=c.standoff_max_tilt_deg,
+                obliquity_fn=c.obliquity_fn, standoff_held=self.standoff_held,
+                log=self.log)
+            in_band.append(fwd_ok)
+        return _Command(lat_pct, yaw_pct, fwd_pct, p_lat, in_band, worst)
+
+    def count_frame(self, sample, now: float, cmd: _Command) -> bool:
+        """Advance the stable-frame counter on a NEW frame; True if this was one.
+
+        Distinct-detection gate: advance the stable-frame counter on new
+        DETECTIONS, not loop ticks (see _FRAME_EPS_S). A re-read HOLDS the
+        counter (neither advances nor resets) and only a genuinely new frame
+        moves it. This makes align_stable_frames mean "N distinct in-band
+        frames", FPS-independent, so a lucky single frame can't declare
+        ALIGNED (or arm the fire) at low detector FPS.
+
+        Settle gate (opt-in): require the hull to also be barely MOVING, not
+        just in-band, before a frame counts toward the stable-frame exit -- so
+        align ends settled on target (like move's held lateral) instead of
+        mid-pass through the band. Keyed on |Δworst| (error velocity), so a
+        steady current that holds a non-zero command at a perfect lock does
+        NOT block it. settle_px=0 -> settled always True -> legacy behaviour.
+        """
+        c = self.c
+        sampled_at, is_new_frame = self.note_frame(sample, now)
+        if not is_new_frame:
+            return False
+        if c.lock_on:
+            # Widen (or tighten) the gate to the interval actually
+            # observed between accepted frames, floored at the control
+            # period so a duplicate timestamp cannot collapse it to 0.
+            if self.last_accept_t is not None:
+                self.gate_norm = _lock_gate(
+                    max(self.dt, sampled_at - self.last_accept_t))
+            self.last_accept_t = sampled_at
+        if self.stable == 0:
+            # Start of a fresh in-band run. Stamped on the FRAME's own
+            # arrival, not on `now`: `now` is a control tick and at
+            # 50 Hz control over a 15 Hz camera the two differ by most
+            # of a frame period, which would credit the dwell with time
+            # the target was not actually in band.
+            self.stable_since = sampled_at
+        # Compared against the previous NEW frame's error (re-reads are
+        # numerically identical and would trivially pass), so |Δworst| is a
+        # real cross-frame error velocity.
+        settled = (c.settle_px <= 0.0 or self.prev_worst is None
+                   or abs(cmd.worst - self.prev_worst) <= c.settle_px)
+        self.prev_worst = cmd.worst
+        self.stable = self.stable + 1 if (all(cmd.in_band) and settled) else 0
+        return True
+
+    def held_long_enough(self) -> bool:
+        """Both gates, for the reasons at _ALIGN_STABLE_MIN_S: enough distinct
+        frames AND enough elapsed time across them."""
+        return (self.stable >= self.c.align_stable_frames
+                and self.last_frame_at - self.stable_since >= _ALIGN_STABLE_MIN_S)
+
+    def hold(self, sample, now: float, is_new_frame: bool,
+             worst: float) -> Optional[Outcome]:
+        """Centred: open the hold window, fire if due, and finish when it closes.
+
+        First confirmed-centred tick opens the hold window. With hold_s>0 we
+        keep the loop ALIVE and correcting for hold_s -- the ACTIVE
+        station-keep the operator needs to hold steady against water inertia
+        while a payload fires (passive neutral would just drift). hold_s<=0
+        keeps the original exit-on-stable behaviour bit-for-bit.
+
+        ponytail: aligned_at is set ONCE and never reset (unlike move_loop's
+        reached_at). Align drift is transient jitter the loop corrects;
+        resetting on a drift-out tick would risk never completing the hold
+        under a steady current. The in-band gate on this stage still
+        guarantees we exit centred. Do NOT "fix" this to match move.
+        """
+        c = self.c
+        if self.aligned_at is None:
+            self.aligned_at = now
+            if c.hold_s > 0.0:
+                self.log.info(f"[VIS  ] align HELD -- station-keeping "
+                              f"{c.hold_s:.1f}s ({worst:.0f}px)")
+        self.fire_if_due(sample, now, is_new_frame)
+        if c.hold_s <= 0.0 or (now - self.aligned_at) >= c.hold_s:
+            return self.finish(now, worst)
+        # Inside the hold window: keep correcting (this tick's drive already ran).
+        return None
+
+    def fire_if_due(self, sample, now: float, is_new_frame: bool) -> None:
+        """The mid-hold payload shot, BEFORE the exit check.
+
+        Fires while the loop is still correcting (not on the drifting exit
+        tick). on_locked is non-blocking (spawns a thread) so a slow payload
+        reconnect can't stall the 20 Hz station-keep. fire_t is clamped
+        < hold_s upstream, so this trips while still holding.
+
+        FRESHNESS GUARD: fire ONLY on the tick a genuinely NEW, non-coasted
+        detection lands (is_new_frame -- the same distinct-frame signal that
+        gates `stable`). This guarantees freshness at ANY detector FPS (a new
+        frame is by definition current), fixing the low-FPS miss where the old
+        `age_s <= 0.10s` window rarely coincided with the aligned tick at
+        3-4 Hz. It is ALSO strictly safer: a FROZEN detector never produces a
+        new frame, so a stale cached box (or a Kalman-coasted one) can never
+        fire even while `stable` stands held at threshold through a mid-hold
+        freeze. A torpedo leaves on a real live sighting.
+        """
+        c = self.c
+        fire_fresh = is_new_frame and not sample.coasted
+        # AIM GATE (opt-in; 0.0 = off = byte-identical to before).
+        # `fire_max_tilt_deg` is how far the TARGET'S FACE may be
+        # tilted from square to our shot axis and still allow a shot --
+        # not a vehicle attitude, and not a pixel error.
+        # A round leaves along the hull's axis, so a centred box is not
+        # enough -- fired 30 deg off-normal it misses an opening it was
+        # perfectly centred on. `tilt_gate_fn` must account for the planar
+        # FLIP AMBIGUITY (both branches inside tolerance), and it
+        # answers False when there is no pose at all: for a firing gate
+        # the fail-safe direction is DO NOT FIRE.
+        #
+        # Deliberately does NOT set `fired`: a refusal here is "not
+        # yet", so a hull that squares up later in the hold still gets
+        # its shot.
+        square_ok = True
+        if c.fire_max_tilt_deg > 0.0 and fire_fresh and not self.fired:
+            try:
+                square_ok = bool(c.tilt_gate_fn and c.tilt_gate_fn(c.fire_max_tilt_deg))
+            except Exception as exc:   # noqa: BLE001
+                self.log.error(f"[VIS  ] tilt_gate_fn raised {exc!r} -- refusing")
+                square_ok = False
+            if not square_ok and not self.sq_warned:
+                self.sq_warned = True
+                self.log.info(f"[VIS  ] fire HELD: target not square within "
+                              f"{c.fire_max_tilt_deg:.0f} deg (or no pose)")
+        if c.on_locked is not None and not self.fired and fire_fresh and \
+                square_ok and \
+                (now - self.aligned_at) >= c.fire_t:
+            self.fired = True
+            try:
+                c.on_locked()
+            except Exception as exc:   # noqa: BLE001 -- fire must not kill the loop
+                self.log.error(f"[VIS  ] on_locked (fire) raised {exc!r}")
+
+    def pass_fire(self) -> None:
         """fire_pass fallback: on a NATURAL exit (TIMEOUT / hold-complete) without a
         strict mid-hold fire, actuate the payload anyway so a detected-but-not-fully-
         aligned run still scores. Gated on a LIVE (non-coasted) sighting within
         lost_grace_s -- never fires into empty water or on a Kalman ghost. One-shot
         (guarded by ``fired``). Opt-in via fire_pass; no-op when off."""
-        nonlocal fired
-        if (not fire_pass or on_locked is None or fired
-                or (time.monotonic() - last_live_at) > lost_grace_s):
+        c = self.c
+        if (not c.fire_pass or c.on_locked is None or self.fired
+                or (time.monotonic() - self.last_live_at) > c.lost_grace_s):
             return
-        fired = True
-        log.info("[VIS  ] fire_pass -- target seen; firing at command end "
-                 "(alignment not required)")
+        self.fired = True
+        self.log.info("[VIS  ] fire_pass -- target seen; firing at command end "
+                      "(alignment not required)")
         try:
-            on_locked()
+            c.on_locked()
         except Exception as exc:   # noqa: BLE001 -- fire must not kill the loop
-            log.error(f"[VIS  ] on_locked (fire_pass) raised {exc!r}")
+            self.log.error(f"[VIS  ] on_locked (fire_pass) raised {exc!r}")
 
-    stable      = 0
-    lost_since: Optional[float] = None
-    aligned_at: Optional[float] = None   # monotonic of FIRST stable -> hold-window start
-    fired       = False  # on_locked fired once at fire_t into the hold (payload mid-hold)
-    _sq_warned  = [False]  # one line per command, not one per tick
-    last_log    = 0.0
-    last_err_px = float('inf')
-    standoff_held = False
-    last_fill   = 0.0    # bbox fill on the forward axis (0 unless use_fwd) -> Outcome.fill
-    prev_worst: Optional[float] = None   # settle gate: worst error last NEW frame (for |Δworst|)
-    last_frame_at = float('-inf')        # arrival time of the last COUNTED detection frame
-    stable_since  = float('inf')         # arrival of the FIRST frame of the current in-band run
-    last_live_at  = float('-inf')        # monotonic of the last LIVE (non-coasted) sighting -> fire_pass gate
-    end_x_px    = math.nan  # signed from-centre px of target at last seen frame
-    end_y_px    = math.nan
-    lat_ema     = 0.0   # trailing EMA of the signed lateral command -> brake proxy
-    surge_ema   = 0.0   # downward: trailing EMA of the signed surge command -> brake proxy
-    lat_i       = 0.0   # lateral integral accumulator (Layer 2; 0 unless ki_lat>0)
-    # ⛔ THE MIXER'S OWN LIMIT, WHICH THE EXISTING ANTI-WINDUP CANNOT SEE.
-    # `abs(p_lat + lat_i) < g_lat` watches the SOFTWARE gain cap. The board
-    # scales a whole thruster group down when any motor in it passes full
-    # (`mixer.cpp`), and it never reports that -- so with yaw already spending
-    # horizontal authority the hull can be clipping at an effective lateral
-    # well below `g_lat`, while the integrator happily winds against a wall it
-    # has no way to detect. Carried from the previous tick because yaw is
-    # computed after lateral in this loop; one tick of lag on a limit that
-    # persists for many is immaterial.
-    was_saturated = False
-    loop_hz     = LOOP_HZ
-    # Nominal tick. Used to SEED the measured dt below and as its ceiling;
-    # the loop no longer sleeps a fixed period (see `_tick`), so treating this
-    # as the real interval would misstate both the lock gate and the integral
-    # term the moment the loop starts running at detection rate.
-    dt          = 1.0 / loop_hz
-    _dt_nominal = dt
-    _last_pass  = time.monotonic()
-    # Observed detection interval, EMA. The freshness thresholds scale with
-    # it, because "~1 frame" is 13 ms on the forward camera and 32 ms on the
-    # downward one and a fixed constant cannot be both. 0 until two distinct
-    # frames have been seen, which yields the floors -- the unscaled
-    # behaviour -- rather than a wild guess from one sample.
-    det_interval = 0.0
-    # Observed pipeline latency: the sample's age at the instant it FIRST
-    # appears, i.e. capture -> the loop seeing it. EMA'd, and only sampled on
-    # a genuinely new frame -- a re-read's age has grown by however long the
-    # loop took and would inflate it without bound.
-    pipe_age = 0.0
-    # Seeded at the control period -- the shortest gap possible, so the gate
-    # starts at its tightest and widens to the real detection interval once one
-    # has been observed. Erring tight before acquisition is safe: there is no
-    # lock to drop yet.
-    gate_norm   = _lock_gate(dt) if lock_on else 0.0
-    last_accept_t: Optional[float] = None
-    locked_ex: Optional[float] = None        # last-accepted centre -> continuity lock
-    locked_ey: Optional[float] = None
-    locked_id   = -1     # tracker id of the locked target -> coast follows this id
-    saw_target  = False  # True once any frame yields the target -> distinguishes
-                         #   "never detected" (wrong model/classes/view) from
-                         #   "seen but couldn't converge" at exit.
+    def finish(self, now: float, worst: float) -> Outcome:
+        """Arrival / hold complete: brake, stop, and grade the result.
 
-    # Effective deadband: clamp to a physical floor so an over-tight err can't
-    # perpetually TIMEOUT on bbox jitter. err_px here is already post-coercion
-    # (commands.fields_for turned a rosidl-0 "unset" into the default/param), so
-    # this only ever floors a genuinely tiny positive request -- logged, never
-    # silent, so 'aligned (Npx)' is always read against the real deadband.
-    eff_err = max(float(err_px), MIN_ALIGN_ERR_PX)
-    floored = eff_err > float(err_px)
-    fwd_note = f" fwd>={fwd_fill * 100:.0f}%({fwd_mode})" if use_fwd else ""
-    log.info(
-        f"[VIS  ] align class={target_class!r} axes={sorted(axes)}{fwd_note} "
-        f"err={eff_err:.0f}px"
-        f"{' (floored from %.0f)' % err_px if floored else ''} "
-        f"gain={gain:.0f}% dur={duration:.0f}s hold={hold_s:.0f}s")
-    if downward:
-        # Loudly announce the rotated frame so the operator never mistakes a
-        # downward align's axis meanings for the forward ones (see docstring).
-        log.info(f"[VIS  ] downward frame: image-X->lateral, image-Y->surge "
-                 f"(sign {surge_sign:+d}); depth held by the board")
-
-    started  = time.monotonic()
-    deadline = started + max(duration, 0.0)
-    try:
-        while True:
-            now     = time.monotonic()
-            # MEASURED, not assumed. The loop wakes on a new detection now, so
-            # the interval is the detection interval when targets are visible
-            # and the tick timeout when they are not. `dt` feeds the
-            # continuity-lock gate and the lateral integral; holding it at the
-            # nominal period would overstate both by up to 1.5x once the loop
-            # starts running at 77 Hz instead of 50.
-            #
-            # Clamped: a debugger pause or a scheduling stall must not inject a
-            # huge dt into an integrator. The floor keeps a burst of two
-            # detections in the same millisecond from collapsing it to zero.
-            dt = min(max(now - _last_pass, 1e-3), _dt_nominal * 4.0)
-            _last_pass = now
-            elapsed = now - started
-            if abort_fn and abort_fn():
-                return Outcome(ABORTED, "aborted", last_err_px, last_fill, elapsed,
-                               end_x_px, end_y_px)
-            if now >= deadline:
-                reason = ("not aligned (duration elapsed)" if saw_target else
-                          f"target {target_class!r} NEVER detected -- check "
-                          f"model/classes/camera view")
-                _pass_fire()   # opt-in guaranteed shot if the target was seen live
-                return Outcome(TIMEOUT, reason, last_err_px, last_fill, elapsed,
-                               end_x_px, end_y_px)
-
-            # Continuity lock: once acquired, prefer the box NEAREST the last
-            # centre (within gate_norm) over the largest, so a 2nd hole / spurious
-            # box can't steal the aim. near=None (pre-acquire) or gate_norm=0
-            # (lock_on off) -> largest-area, unchanged. ctrl_conf gates low-score
-            # boxes out of the control target.
-            near = (locked_ex, locked_ey) if locked_ex is not None else None
-            sample = vision_state.bbox_error(
-                target_class, near=near, gate_norm=gate_norm, min_score=ctrl_conf,
-                locked_id=locked_id, coast_s=coast_s, lock_s=lock_s)
-            if not _present(sample):
-                stable = 0
-                lat_i = 0.0   # bleed integral windup while blind
-                _drive(0.0, 0.0)
-                if lost_since is None:
-                    lost_since = now
-                if (not hold_through_loss) and (now - lost_since) >= lost_grace_s:
-                    reason = (f"target {target_class!r} lost" if saw_target else
-                              f"target {target_class!r} NEVER detected -- check "
-                              f"model/classes/camera view")
-                    return Outcome(LOST, reason, last_err_px, last_fill, elapsed,
-                                   end_x_px, end_y_px)
-                if (now - last_log) >= LOG_THROTTLE_S:
-                    live = _live_classes(vision_state)
-                    if live:
-                        log.debug(
-                            f"[VIS  ] align: {target_class!r} not among live "
-                            f"detections {live} -- check classes filter / model")
-                    else:
-                        log.debug(f"[VIS  ] align LOST {now - lost_since:.1f}s "
-                                  f"(grace {lost_grace_s:.1f}s)")
-                    last_log = now
-                _tick(vision_state)
-                continue
-
-            saw_target = True
-            lost_since = None
-            if not sample.coasted:
-                last_live_at = now   # last LIVE sighting -> fire_pass recency gate
-            # Re-arm the continuity lock on the accepted box (used as `near` next
-            # tick) ONLY when lock_on -- otherwise leave near=None so selection
-            # stays largest-area. After a real loss the loop exits LOST, so a
-            # fresh verb call re-acquires largest -- no stale lock survives.
-            if lock_on:
-                locked_ex, locked_ey = sample.ex, sample.ey
-            # Capture the tracker id of a LIVE box so a later gap coasts the right
-            # target (VisionState only fills track_id when coast_s>0; a coasted
-            # sample keeps the existing id). No-op when coasting is off.
-            if not sample.coasted and sample.track_id >= 0:
-                locked_id = sample.track_id
-            # Range-adaptive gain: soften lat/surge kp as the bbox fills the frame
-            # (close) so the 20 kg hull doesn't overshoot a small target.
-            rgain = _range_gain(_fill(sample, 'area'), range_gain_floor)
-            # Signed from-centre offset of the target THIS tick: the end-position
-            # the verb returns, and the live value report_fn streams to feedback.
-            end_x_px = sample.ex * half_w
-            end_y_px = sample.ey * half_h
-            if report_fn is not None:
-                report_fn(end_x_px, end_y_px)
-            yaw_pct = lat_pct = p_lat = fwd_pct = 0.0
-            in_band = []
-            worst   = 0.0
-
-            # Where the TOOL points, not the camera (see _tool_offset).
-            tool_du, tool_dv = _tool_offset(tool_offset_fn, log)
-
-            # Horizontal bearing NOW, not at capture. Forward camera only: a
-            # yaw spins the downward image about its centre rather than
-            # shifting it. Never on a coasted box -- the tracker already
-            # extrapolated it. Absent rate or focal = the historical behaviour.
-            ex_now = sample.ex
-            if derotate_fn is not None and not downward and not sample.coasted:
-                try:
-                    _dr = derotate_fn()
-                except Exception:                             # noqa: BLE001
-                    _dr = None
-                if _dr is not None:
-                    ex_now = _derotated_ex(sample.ex, sample.age_s,
-                                           float(_dr[0]), float(_dr[1]), half_w)
-
-            if 'lat' in axes:
-                ctrl = _axis_ctrl(ex_now, offsets.get('lat', 0.0), tool_du, half_w)
-                epx  = abs(ctrl) * half_w
-                worst = max(worst, epx)
-                p_lat = ctrl * kp_lat * rgain
-                # Lateral integral (Layer 2): Lateral is open-loop, so only the
-                # integral nulls a steady-current offset. Accumulate ONLY during
-                # the hold (aligned_at set), conditional on the output not being
-                # saturated (anti-windup), clamped. ki_lat=0 -> exactly P.
-                if ki_lat > 0.0 and aligned_at is not None \
-                        and abs(p_lat + lat_i) < g_lat \
-                        and not was_saturated:
-                    lat_i = _clamp(lat_i + ki_lat * ctrl * dt,
-                                   -i_lat_max, i_lat_max)
-                lat_pct = _clamp(p_lat + lat_i, -g_lat, g_lat)
-                in_band.append(epx <= eff_err)
-
-            if 'yaw' in axes:
-                ctrl = _axis_ctrl(ex_now, offsets.get('yaw', 0.0), tool_du, half_w)
-                epx  = abs(ctrl) * half_w
-                worst = max(worst, epx)
-                yaw_pct = _yaw_command(ctrl, epx, eff_err, kp_yaw, g_yaw,
-                                       _fill(sample, 'area'))
-                in_band.append(epx <= eff_err)
-
-            if use_surge:
-                # DOWNWARD: the 'depth' axis (image-Y) drives SURGE fore/aft.
-                # Two-sided P modelled on the lat axis (same kp/cap/rgain), so the
-                # hull drives forward when the bin is ahead and BACK when behind --
-                # the one-sided fwd/fill law can't back up and would never centre.
-                # surge_sign flips polarity for the physical mount (verify disarmed).
-                ctrl = _axis_ctrl(sample.ey, offsets.get('depth', 0.0), tool_dv, half_h)
-                epx  = abs(ctrl) * half_h
-                worst = max(worst, epx)
-                p_surge = ctrl * kp_lat * rgain
-                fwd_pct = _clamp(p_surge, -g_fwd, g_fwd) * surge_sign
-                in_band.append(epx <= eff_err)
-            if use_fwd:
-                fwd_pct, fwd_ok, last_fill, standoff_held = _forward_range_hold(
-                    sample, fwd_fill=fwd_fill, fwd_mode=fwd_mode,
-                    kp_forward=kp_forward, g_fwd=g_fwd,
-                    standoff_max_tilt_deg=standoff_max_tilt_deg,
-                    obliquity_fn=obliquity_fn, standoff_held=standoff_held,
-                    log=log)
-                in_band.append(fwd_ok)
-
-            last_err_px = worst
-            # Freshness-decay: pace LATERAL authority to measurement freshness so
-            # the loop doesn't blind-drive on a stale bbox between slow frames
-            # (yaw excluded; the board holds depth). At healthy
-            # FPS fresh==1.0 so this is a no-op. A COASTED sample decays on the
-            # coast curve instead (gap decay), not freshness -- see _authority.
-            fresh = _authority(sample, coast_s, det_interval, pipe_age)
-            _warn_low_fps(log, fresh, sample)   # F3: surface FPS-starvation, don't stall silently
-            lat_pct *= fresh
-            fwd_pct *= fresh   # forward shares the freshness/coast decay (never braked)
-            # What the mixer will do to what we just asked for. Computed from
-            # OUR demand and the frame's published matrix, so it needs nothing
-            # from the board -- which is the only reason it is available at all.
-            was_saturated = (_mixer_saturated(lat_pct, yaw_pct, fwd_pct)
-                             if mixer_aware else False)
-            _drive(lat_pct, yaw_pct, fwd_pct)
-            # Brake EMA tracks the PROPORTIONAL command only (a travel-momentum
-            # proxy), NOT the full lat_pct: a hull holding STILL against a steady
-            # current carries a nonzero integral (lat_i) but ~0 motion, so
-            # including it would make the arrival brake reverse-kick a stationary
-            # hull off the spot it was holding. Exclude lat_i here.
-            lat_ema = _ema_step(lat_ema, p_lat * fresh, dt)
-            if use_surge:
-                # Downward surge is open-loop timed thrust (like lateral) -- track
-                # its EMA so the arrival brake bleeds the fore/aft coast, or the hull
-                # sails past the bin. fwd_pct already carries the signed, fresh-decayed
-                # surge command, so the EMA is the true momentum proxy and the brake
-                # reverse-kicks opposite it regardless of surge_sign.
-                surge_ema = _ema_step(surge_ema, fwd_pct, dt)
-            # Settle gate (opt-in): require the hull to also be barely MOVING, not
-            # just in-band, before a tick counts toward the stable-frame exit -- so
-            # align ends settled on target (like move's held lateral) instead of
-            # mid-pass through the band. Keyed on |Δworst| (error velocity), so a
-            # steady current that holds a non-zero command at a perfect lock does
-            # NOT block it. settle_px=0 -> settled always True -> legacy behaviour.
-            # Distinct-detection gate: advance the stable-frame counter on new
-            # DETECTIONS, not loop ticks (see _FRAME_EPS_S). sampled_at is the
-            # frame's arrival time -- constant across re-reads of one detection,
-            # so a re-read HOLDS the counter (neither advances nor resets) and
-            # only a genuinely new frame moves it. This makes align_stable_frames
-            # mean "N distinct in-band frames", FPS-independent, so a lucky single
-            # frame can't declare ALIGNED (or arm the fire) at low detector FPS.
-            sampled_at   = now - sample.age_s
-            is_new_frame = sampled_at > last_frame_at + _FRAME_EPS_S
-            if is_new_frame:
-                if lock_on:
-                    # Widen (or tighten) the gate to the interval actually
-                    # observed between accepted frames, floored at the control
-                    # period so a duplicate timestamp cannot collapse it to 0.
-                    if last_accept_t is not None:
-                        gate_norm = _lock_gate(
-                            max(dt, sampled_at - last_accept_t))
-                    last_accept_t = sampled_at
-                pipe_age = (sample.age_s if pipe_age <= 0.0
-                            else pipe_age + 0.2 * (sample.age_s - pipe_age))
-                if last_frame_at > 0.0:
-                    gap = sampled_at - last_frame_at
-                    # Ignore absurd gaps: a dropout is not a slower camera,
-                    # and letting one widen the interval would loosen the
-                    # freshness thresholds exactly when the target is lost.
-                    if 0.0 < gap <= 0.5:
-                        det_interval = (gap if det_interval <= 0.0
-                                        else det_interval + 0.2 * (gap - det_interval))
-                last_frame_at = sampled_at
-                if stable == 0:
-                    # Start of a fresh in-band run. Stamped on the FRAME's own
-                    # arrival, not on `now`: `now` is a control tick and at
-                    # 50 Hz control over a 15 Hz camera the two differ by most
-                    # of a frame period, which would credit the dwell with time
-                    # the target was not actually in band.
-                    stable_since = sampled_at
-                # Settle gate compares against the previous NEW frame's error
-                # (re-reads are numerically identical and would trivially pass),
-                # so |Δworst| is a real cross-frame error velocity.
-                settled = (settle_px <= 0.0 or prev_worst is None
-                           or abs(worst - prev_worst) <= settle_px)
-                prev_worst = worst
-                stable = stable + 1 if (all(in_band) and settled) else 0
-            # Both gates, for the reasons at _ALIGN_STABLE_MIN_S: enough
-            # distinct frames AND enough elapsed time across them.
-            if (stable >= align_stable_frames
-                    and last_frame_at - stable_since >= _ALIGN_STABLE_MIN_S):
-                # First confirmed-centred tick opens the hold window. With
-                # hold_s>0 we keep the loop ALIVE and correcting for hold_s --
-                # the ACTIVE station-keep the operator needs to hold steady
-                # against water inertia while a payload fires (passive neutral
-                # would just drift). hold_s<=0 keeps the original exit-on-stable
-                # behaviour bit-for-bit.
-                if aligned_at is None:
-                    aligned_at = now
-                    if hold_s > 0.0:
-                        log.info(f"[VIS  ] align HELD -- station-keeping "
-                                 f"{hold_s:.1f}s ({worst:.0f}px)")
-                # Mid-hold fire: BEFORE the exit check so the payload actuates
-                # while the loop is still correcting (not on the drifting exit
-                # tick). on_locked is non-blocking (spawns a thread) so a slow
-                # payload reconnect can't stall the 20 Hz station-keep. fire_t is
-                # clamped < hold_s upstream, so this trips while still holding.
-                # FRESHNESS GUARD: fire ONLY on the tick a genuinely NEW, non-coasted
-                # detection lands (is_new_frame -- the same distinct-frame signal that
-                # gates `stable`). This guarantees freshness at ANY detector FPS (a
-                # new frame is by definition current), fixing the low-FPS miss where
-                # the old `age_s <= 0.10s` window rarely coincided with the aligned
-                # tick at 3-4 Hz. It is ALSO strictly safer: a FROZEN detector never
-                # produces a new frame, so a stale cached box (or a Kalman-coasted
-                # one) can never fire even while `stable` stands held at threshold
-                # through a mid-hold freeze. A torpedo leaves on a real live sighting.
-                fire_fresh = is_new_frame and not sample.coasted
-                # AIM GATE (opt-in; 0.0 = off = byte-identical to before).
-                # `fire_max_tilt_deg` is how far the TARGET'S FACE may be
-                # tilted from square to our shot axis and still allow a shot --
-                # not a vehicle attitude, and not a pixel error.
-                # A round leaves along the hull's axis, so a centred box is not
-                # enough -- fired 30 deg off-normal it misses an opening it was
-                # perfectly centred on. `tilt_gate_fn` must account for the planar
-                # FLIP AMBIGUITY (both branches inside tolerance), and it
-                # answers False when there is no pose at all: for a firing gate
-                # the fail-safe direction is DO NOT FIRE.
-                #
-                # Deliberately does NOT set `fired`: a refusal here is "not
-                # yet", so a hull that squares up later in the hold still gets
-                # its shot.
-                square_ok = True
-                if fire_max_tilt_deg > 0.0 and fire_fresh and not fired:
-                    try:
-                        square_ok = bool(tilt_gate_fn and tilt_gate_fn(fire_max_tilt_deg))
-                    except Exception as exc:   # noqa: BLE001
-                        log.error(f"[VIS  ] tilt_gate_fn raised {exc!r} -- refusing")
-                        square_ok = False
-                    if not square_ok and not _sq_warned[0]:
-                        _sq_warned[0] = True
-                        log.info(f"[VIS  ] fire HELD: target not square within "
-                                 f"{fire_max_tilt_deg:.0f} deg (or no pose)")
-                if on_locked is not None and not fired and fire_fresh and \
-                        square_ok and \
-                        (now - aligned_at) >= fire_t:
-                    fired = True
-                    try:
-                        on_locked()
-                    except Exception as exc:   # noqa: BLE001 -- fire must not kill the loop
-                        log.error(f"[VIS  ] on_locked (fire) raised {exc!r}")
-                if hold_s <= 0.0 or (now - aligned_at) >= hold_s:
-                    # Arrival / hold complete: bleed lateral inertia so the hull
-                    # stops square and the next mission step starts from the
-                    # planned position. Gated on the EMA, so a gently-converged
-                    # lock (hole-lock) exits with ~0 EMA and is NOT kicked.
-                    # Yaw never brakes.
-                    if brake and 'lat' in axes:
-                        _brake_axis(writers.lateral, lat_ema, brake_gain,
-                                    abort_fn=abort_fn, log=log, label='VBRK')
-                    # Downward: also bleed the SURGE coast (fore/aft) so the hull
-                    # stops square over the bin instead of sailing past. Surge is open-loop
-                    # timed thrust coasts exactly like lateral -- same self-gating brake.
-                    if brake and use_surge:
-                        _brake_axis(writers.forward, surge_ema, brake_gain,
-                                    abort_fn=abort_fn, log=log, label='VBRK')
-                    writers.neutral()
-                    # State the deadband next to the residual so 'aligned
-                    # (Npx)' is never misread as "should have been 0" -- N is
-                    # within the eff_err deadband by construction.
-                    # If a mid-hold strict fire never landed (e.g. hold completed but
-                    # freshness never coincided), fire_pass still actuates here on a
-                    # live+recent sighting. No-op when off or already fired.
-                    _pass_fire()
-                    reason = (f"held {hold_s:.1f}s ({worst:.0f}/{eff_err:.0f}px)"
-                              if hold_s > 0.0
-                              else f"aligned ({worst:.0f}/{eff_err:.0f}px)")
-                    if not verify:
-                        return Outcome(ALIGNED, reason, worst, last_fill, elapsed,
-                                       end_x_px, end_y_px)
-                    return _verify_after_stop(
-                        vision_state, target_class,
-                        near=((locked_ex, locked_ey)
-                              if locked_ex is not None else None),
-                        gate_norm=gate_norm, ctrl_conf=ctrl_conf,
-                        locked_id=locked_id, tool_offset_fn=tool_offset_fn,
-                        axes=axes, offsets=offsets, half_w=half_w,
-                        half_h=half_h, depth_axis=use_surge,
-                        frames_needed=align_stable_frames, eff_err=eff_err,
-                        worst=worst, fill=last_fill, started=started,
-                        end_px=(end_x_px, end_y_px), reason=reason,
-                        abort_fn=abort_fn, log=log)
-                # else: inside the hold window -- fall through to the loop tail
-                # and keep correcting (the per-tick _drive above already ran).
-                # ponytail: aligned_at is set ONCE and never reset (unlike
-                # move_loop's reached_at ~L660). Align drift is transient jitter
-                # the loop corrects; resetting on a drift-out tick would risk
-                # never completing the hold under a steady current. The in-band
-                # gate on this block still guarantees we exit centred. Do NOT
-                # "fix" this to match move.
-
-            if (now - last_log) >= LOG_THROTTLE_S:
-                # The detector node owns the always-on operator bearing line, so
-                # this per-verb copy is demoted to debug to avoid a duplicate in
-                # the mission terminal. Worded as live offset, not a verdict.
-                x_off = sample.ex * half_w
-                y_off = sample.ey * half_h
-                log.debug(
-                    f"[ offset lat={x_off:+.0f} depth={y_off:+.0f}px ] "
-                    f"'{target_class}' -> err {worst:.0f}/{eff_err:.0f}px")
-                last_log = now
-            _tick(vision_state)
-    finally:
-        try:
-            writers.neutral()
-        except Exception as exc:   # noqa: BLE001
-            log.warning(f"[VIS  ] align cleanup neutral raised: {exc!r}")
+        Bleed lateral inertia so the hull stops square and the next mission
+        step starts from the planned position. Gated on the EMA, so a
+        gently-converged lock (hole-lock) exits with ~0 EMA and is NOT kicked.
+        Yaw never brakes.
+        """
+        c = self.c
+        if c.brake and 'lat' in c.axes:
+            _brake_axis(c.writers.lateral, self.lat_ema, c.brake_gain,
+                        abort_fn=c.abort_fn, log=self.log, label='VBRK')
+        # Downward: also bleed the SURGE coast (fore/aft) so the hull
+        # stops square over the bin instead of sailing past. Surge is open-loop
+        # timed thrust coasts exactly like lateral -- same self-gating brake.
+        if c.brake and self.use_surge:
+            _brake_axis(c.writers.forward, self.surge_ema, c.brake_gain,
+                        abort_fn=c.abort_fn, log=self.log, label='VBRK')
+        c.writers.neutral()
+        # If a mid-hold strict fire never landed (e.g. hold completed but
+        # freshness never coincided), fire_pass still actuates here on a
+        # live+recent sighting. No-op when off or already fired.
+        self.pass_fire()
+        # State the deadband next to the residual so 'aligned (Npx)' is never
+        # misread as "should have been 0" -- N is within the eff_err deadband
+        # by construction.
+        reason = (f"held {c.hold_s:.1f}s ({worst:.0f}/{self.eff_err:.0f}px)"
+                  if c.hold_s > 0.0
+                  else f"aligned ({worst:.0f}/{self.eff_err:.0f}px)")
+        if not c.verify:
+            return self.outcome(ALIGNED, reason, now)
+        return _verify_after_stop(
+            c.vision_state, c.target_class,
+            near=((self.locked_ex, self.locked_ey)
+                  if self.locked_ex is not None else None),
+            gate_norm=self.gate_norm, ctrl_conf=c.ctrl_conf,
+            locked_id=self.locked_id, tool_offset_fn=c.tool_offset_fn,
+            axes=c.axes, offsets=c.offsets, half_w=self.half_w,
+            half_h=self.half_h, depth_axis=self.use_surge,
+            frames_needed=c.align_stable_frames, eff_err=self.eff_err,
+            worst=worst, fill=self.fill, started=self.started,
+            end_px=(self.end_x_px, self.end_y_px), reason=reason,
+            abort_fn=c.abort_fn, log=self.log)
 
 
 # ---------------------------------------------------------------------- #
@@ -1606,218 +1751,201 @@ def move_loop(*,
     ``report_fn`` (if given) is called every PRESENT tick with the signed
     from-centre pixel offset ``(x_off, y_off)`` -- the live-telemetry sink for
     action feedback (same contract as align_loop).
+
+    How one tick runs: `_Move.run`, one method per stage.
     """
+    c = SimpleNamespace(**locals())   # every argument, by name, for _Move
     if mode not in VALID_MODES:
         raise ValueError(f"move_loop: mode must be one of {sorted(VALID_MODES)}")
 
     if not _camera_ready(vision_state):
         return Outcome(NO_CAMERA, "camera pipeline not up (no camera_info)",
                        elapsed_s=0.0)
-    width, height = vision_state.image_size()
-    half_w = width * 0.5
-    half_h = height * 0.5
+    return _Move(c).run()
 
-    # Lateral 'maintain' strafe gets its own cap; forward stays capped by `gain`.
-    g_lat = gain if gain_lat is None else gain_lat
 
-    def _drive(fwd_pct: float, lat_pct: float) -> None:
-        # move never commands yaw: the board holds heading.
-        _srot_drive(fc, fwd_pct=fwd_pct, lat_pct=lat_pct, yaw_pct=0.0,
-                    prioritise=mixer_aware)
+class _Move(_VisionLoop):
+    """`move_loop`'s state, and one method per stage of a tick."""
 
-    seen_once    = False
-    lost_since:   Optional[float] = None
-    reached_at:   Optional[float] = None
-    commit_until: Optional[float] = None
-    last_log     = 0.0
-    last_fill    = 0.0
-    last_lat_err = 0.0
-    end_x_px     = math.nan   # signed from-centre px of target at last seen frame
-    end_y_px     = math.nan
-    fwd_ema      = 0.0   # trailing EMA of forward command -> brake proxy (fill-stop)
-    lat_ema      = 0.0   # trailing EMA of the maintain strafe command -> brake proxy
-    locked_id    = -1    # tracker id of the target -> coast follows this id
+    verb = 'move'
 
-    # Pass-through commit window: hold_s overrides the module default.
-    commit_s = hold_s if hold_s > 0.0 else _PASSTHROUGH_COMMIT_S
+    def __init__(self, c) -> None:
+        super().__init__(c)
+        # Lateral 'maintain' strafe gets its own cap; forward stays capped by `gain`.
+        self.g_lat = c.gain if c.gain_lat is None else c.gain_lat
+        self.reached_at: Optional[float] = None
+        self.commit_until: Optional[float] = None
+        self.fwd_ema = 0.0   # trailing EMA of forward command -> brake proxy (fill-stop)
+        self.lat_ema = 0.0   # trailing EMA of the maintain strafe command -> brake proxy
+        # Pass-through commit window: hold_s overrides the module default.
+        self.commit_s = c.hold_s if c.hold_s > 0.0 else _PASSTHROUGH_COMMIT_S
+        self.log.debug(
+            f"[VIS  ] move class={c.target_class!r} "
+            f"{'PASS-THROUGH commit=%.1fs' % self.commit_s if c.passthrough else 'fwd_fill=%.0f%%' % (c.fwd_fill * 100)} "
+            f"mode={c.mode} maintain={'%+.0fpx' % c.maintain_px if c.maintain_on else 'off'} "
+            f"gain={c.gain:.0f}% dur={c.duration:.0f}s")
+        self.started = time.monotonic()
+        self.deadline = self.started + max(c.duration, 0.0)
+        self._last_pass = self.started
+        self.dt = 1.0 / LOOP_HZ
 
-    log.debug(
-        f"[VIS  ] move class={target_class!r} "
-        f"{'PASS-THROUGH commit=%.1fs' % commit_s if passthrough else 'fwd_fill=%.0f%%' % (fwd_fill * 100)} "
-        f"mode={mode} maintain={'%+.0fpx' % maintain_px if maintain_on else 'off'} "
-        f"gain={gain:.0f}% dur={duration:.0f}s")
+    # -- the loop ------------------------------------------------------- #
 
-    started  = time.monotonic()
-    deadline = started + max(duration, 0.0)
-    # Observed detection interval, EMA -- the freshness thresholds scale with
-    # it (see `_fresh_bounds`). `move_loop` has no distinct-frame machinery of
-    # its own, so it derives arrivals from the sample's own capture time,
-    # which is constant across re-reads of one detection.
-    det_interval  = 0.0
-    last_seen_at  = 0.0
-    pipe_age      = 0.0
-    _last_pass    = started
-    try:
-        while True:
-            now     = time.monotonic()
-            # Seconds since the last pass, for the brake EMA. Clamped like
-            # align_loop's: a stall must not dump a huge step into it.
-            dt = min(max(now - _last_pass, 1e-3), 4.0 / LOOP_HZ)
-            _last_pass = now
-            elapsed = now - started
-            if abort_fn and abort_fn():
-                return Outcome(ABORTED, "aborted", last_lat_err, last_fill, elapsed,
-                               end_x_px, end_y_px)
-            if now >= deadline:
-                if not seen_once:
-                    reason = (f"target {target_class!r} NEVER detected -- check "
-                              f"model/classes/camera view")
-                else:
-                    reason = ("passed-through window not closed (duration elapsed)"
-                              if passthrough else "fill not reached (duration elapsed)")
-                return Outcome(TIMEOUT, reason, last_lat_err, last_fill, elapsed,
-                               end_x_px, end_y_px)
-
-            # Pass-through (fwd=None) must DETECT "target gone" to fire its commit
-            # window, so it deliberately does NOT coast -- a coasted box would
-            # keep present=True and delay the commit by up to coast_s. Fill-stop
-            # moves coast normally.
-            eff_coast = 0.0 if passthrough else coast_s
-            sample  = vision_state.bbox_error(
-                target_class, locked_id=locked_id, coast_s=eff_coast,
-                lock_s=lock_s)
-            present = _present(sample)
-            if present and not sample.coasted and sample.track_id >= 0:
-                locked_id = sample.track_id   # follow this id when a gap coasts
-
-            # Pass-through trigger: the target was seen and has now left the
-            # frame -- keep driving straight for the commit window so the hull
-            # clears the gate, then report success.
-            if passthrough and seen_once and not present:
-                reached_at = None
-                if commit_until is None:
-                    commit_until = now + commit_s
-                    log.debug(f"[VIS  ] move: {target_class!r} cleared frame -- "
-                              f"committing {commit_s:.1f}s to pass through")
-                if now >= commit_until:
-                    writers.neutral()
-                    return Outcome(ALIGNED, "passed through", last_lat_err,
-                                   last_fill, elapsed, end_x_px, end_y_px)
-                _drive(gain, 0.0)   # no detection -> no lateral, just drive on
-                _tick(vision_state)
-                continue
-
-            if not present:
-                reached_at = None
-                _drive(0.0, 0.0)
-                if lost_since is None:
-                    lost_since = now
-                if (not hold_through_loss) and (now - lost_since) >= lost_grace_s:
-                    reason = (f"target {target_class!r} lost" if seen_once else
-                              f"target {target_class!r} NEVER detected -- check "
-                              f"model/classes/camera view")
-                    return Outcome(LOST, reason, last_lat_err, last_fill, elapsed,
-                                   end_x_px, end_y_px)
-                if (now - last_log) >= LOG_THROTTLE_S:
-                    live = _live_classes(vision_state)
-                    if live:
-                        log.debug(
-                            f"[VIS  ] move: {target_class!r} not among live "
-                            f"detections {live} -- check classes filter / model")
-                    else:
-                        log.debug(f"[VIS  ] move LOST {now - lost_since:.1f}s "
-                                  f"(grace {lost_grace_s:.1f}s)")
-                    last_log = now
-                _tick(vision_state)
-                continue
-
-            seen_once    = True
-            lost_since   = None
-            commit_until = None
-            fill = _fill(sample, mode)
-            last_fill = fill
-            sampled_at = now - sample.age_s
-            if sampled_at > last_seen_at + _FRAME_EPS_S or last_seen_at <= 0.0:
-                # A NEW frame: its age is the pipeline latency. A re-read's is
-                # not -- it has grown by however long this loop took.
-                pipe_age = (sample.age_s if pipe_age <= 0.0
-                            else pipe_age + 0.2 * (sample.age_s - pipe_age))
-            if last_seen_at > 0.0 and sampled_at > last_seen_at + _FRAME_EPS_S:
-                gap = sampled_at - last_seen_at
-                # A dropout is not a slower camera. Letting one widen the
-                # interval would loosen the freshness thresholds exactly when
-                # the target has been lost.
-                if gap <= 0.5:
-                    det_interval = (gap if det_interval <= 0.0
-                                    else det_interval + 0.2 * (gap - det_interval))
-            if sampled_at > last_seen_at:
-                last_seen_at = sampled_at
-            fresh = _authority(sample, coast_s, det_interval, pipe_age)  # FPS staleness / coast decay
-            _warn_low_fps(log, fresh, sample)     # F3: surface FPS-starvation, don't stall silently
-
-            x_off = sample.ex * half_w         # signed horizontal offset (operator px)
-            # End-position (returned) + live feedback sink.
-            end_x_px = x_off
-            end_y_px = sample.ey * half_h
-            if report_fn is not None:
-                report_fn(end_x_px, end_y_px)
-            lat_pct = 0.0
-            if maintain_on:
-                ctrl = sample.ex - maintain_px / half_w
-                last_lat_err = abs(ctrl) * half_w
-                rgain = _range_gain(_fill(sample, mode), range_gain_floor)
-                lat_pct = _clamp(ctrl * kp_lat * rgain, -g_lat, g_lat) * fresh
-            lat_ema = _ema_step(lat_ema, lat_pct, dt)
-
-            if passthrough:
-                # Drive forward at the speed cap until the target leaves frame.
-                # Pass-through is defined to COAST through the gate -- never braked,
-                # and forward is NOT freshness-decayed (it must clear the gate).
-                _drive(gain, lat_pct)
-                if (now - last_log) >= LOG_THROTTLE_S:
-                    log.info(f"[ move PASS-THROUGH fill={fill * 100:.0f}% "
-                             f"lat={x_off:+.0f}px ] ['{target_class}'] -> clear gate")
-                    last_log = now
-                _tick(vision_state)
-                continue
-
-            if fill >= fwd_fill:
-                if reached_at is None:
-                    reached_at = now
-                # Station-keep: zero forward, keep correcting lateral if asked.
-                _drive(0.0, lat_pct)
-                fwd_ema = _ema_step(fwd_ema, 0.0, dt)   # forward decays while holding
-                if hold_s <= 0.0 or (now - reached_at) >= hold_s:
-                    # Arrival: bleed the forward (and maintain-strafe) inertia so the
-                    # hull halts in front of the target instead of creeping into it.
-                    if brake:
-                        _brake_axis(writers.forward, fwd_ema, brake_gain,
-                                    abort_fn=abort_fn, log=log, label='VBRK')
-                        if maintain_on:
-                            _brake_axis(writers.lateral, lat_ema, brake_gain,
-                                        abort_fn=abort_fn, log=log, label='VBRK')
-                    writers.neutral()
-                    return Outcome(ALIGNED,
-                                   f"reached fill={fill * 100:.0f}%",
-                                   last_lat_err, fill, elapsed, end_x_px, end_y_px)
-            else:
-                reached_at = None
-                # Freshness-decay forward so a stale frame doesn't blind-drive the
-                # approach past the fill target (yaw/depth untouched).
-                fwd_pct = _clamp((fwd_fill - fill) * kp_forward, 0.0, gain) * fresh
-                _drive(fwd_pct, lat_pct)
-                fwd_ema = _ema_step(fwd_ema, fwd_pct, dt)
-
-            if (now - last_log) >= LOG_THROTTLE_S:
-                hold_tag = ("" if reached_at is None
-                            else f" hold={now - reached_at:.1f}/{hold_s:.0f}s")
-                log.info(
-                    f"[ move fill={fill * 100:.0f}% -> {fwd_fill * 100:.0f}% "
-                    f"lat={x_off:+.0f}px ] ['{target_class}']{hold_tag}")
-                last_log = now
-            _tick(vision_state)
-    finally:
+    def run(self) -> Outcome:
         try:
-            writers.neutral()
-        except Exception as exc:   # noqa: BLE001
-            log.warning(f"[VIS  ] move cleanup neutral raised: {exc!r}")
+            while True:
+                out = self.step(time.monotonic())
+                if out is not None:
+                    return out
+                _tick(self.c.vision_state)
+        finally:
+            self.neutral_on_exit()
+
+    def step(self, now: float) -> Optional[Outcome]:
+        """One tick: check the clock, sense, then commit, give up, or drive."""
+        c = self.c
+        # Seconds since the last pass, for the brake EMA. Clamped like
+        # align_loop's: a stall must not dump a huge step into it.
+        self.dt = min(max(now - self._last_pass, 1e-3), 4.0 / LOOP_HZ)
+        self._last_pass = now
+        if c.abort_fn and c.abort_fn():
+            return self.outcome(ABORTED, "aborted", now)
+        if now >= self.deadline:
+            if not self.seen:
+                reason = self.never_seen()
+            else:
+                reason = ("passed-through window not closed (duration elapsed)"
+                          if c.passthrough else "fill not reached (duration elapsed)")
+            return self.outcome(TIMEOUT, reason, now)
+
+        sample = self.sense()
+        present = _present(sample)
+        if present and not sample.coasted and sample.track_id >= 0:
+            self.locked_id = sample.track_id   # follow this id when a gap coasts
+
+        if c.passthrough and self.seen and not present:
+            return self.commit(now)
+        if not present:
+            self.reached_at = None
+            self.drive(0.0, 0.0)
+            return self.lost(now)
+
+        fill, fresh = self.acquire(sample, now)
+        lat_pct = self.maintain(sample, fresh)
+        x_off = sample.ex * self.half_w   # signed horizontal offset (operator px)
+        if c.passthrough:
+            # Drive forward at the speed cap until the target leaves frame.
+            # Pass-through is defined to COAST through the gate -- never braked,
+            # and forward is NOT freshness-decayed (it must clear the gate).
+            self.drive(c.gain, lat_pct)
+            if self.log_due(now):
+                self.log.info(f"[ move PASS-THROUGH fill={fill * 100:.0f}% "
+                              f"lat={x_off:+.0f}px ] ['{c.target_class}'] -> clear gate")
+            return None
+
+        out = self.approach(now, fill, fresh, lat_pct)
+        if out is not None:
+            return out
+        if self.log_due(now):
+            hold_tag = ("" if self.reached_at is None
+                        else f" hold={now - self.reached_at:.1f}/{c.hold_s:.0f}s")
+            self.log.info(
+                f"[ move fill={fill * 100:.0f}% -> {c.fwd_fill * 100:.0f}% "
+                f"lat={x_off:+.0f}px ] ['{c.target_class}']{hold_tag}")
+        return None
+
+    # -- the stages ----------------------------------------------------- #
+
+    def drive(self, fwd_pct: float, lat_pct: float) -> None:
+        # move never commands yaw: the board holds heading.
+        _srot_drive(self.c.fc, fwd_pct=fwd_pct, lat_pct=lat_pct, yaw_pct=0.0,
+                    prioritise=self.c.mixer_aware)
+
+    def sense(self):
+        """The target box this tick.
+
+        Pass-through (fwd=None) must DETECT "target gone" to fire its commit
+        window, so it deliberately does NOT coast -- a coasted box would
+        keep present=True and delay the commit by up to coast_s. Fill-stop
+        moves coast normally.
+        """
+        c = self.c
+        eff_coast = 0.0 if c.passthrough else c.coast_s
+        return c.vision_state.bbox_error(
+            c.target_class, locked_id=self.locked_id, coast_s=eff_coast,
+            lock_s=c.lock_s)
+
+    def commit(self, now: float) -> Optional[Outcome]:
+        """Pass-through trigger: the target was seen and has now left the frame.
+
+        Keep driving straight for the commit window so the hull clears the
+        gate, then report success.
+        """
+        c = self.c
+        self.reached_at = None
+        if self.commit_until is None:
+            self.commit_until = now + self.commit_s
+            self.log.debug(f"[VIS  ] move: {c.target_class!r} cleared frame -- "
+                           f"committing {self.commit_s:.1f}s to pass through")
+        if now >= self.commit_until:
+            c.writers.neutral()
+            return self.outcome(ALIGNED, "passed through", now)
+        self.drive(c.gain, 0.0)   # no detection -> no lateral, just drive on
+        return None
+
+    def acquire(self, sample, now: float) -> Tuple[float, float]:
+        """The target is present: ``(fill, freshness)`` for this tick."""
+        c = self.c
+        self.seen = True
+        self.lost_since = None
+        self.commit_until = None
+        fill = _fill(sample, c.mode)
+        self.fill = fill
+        self.note_frame(sample, now)
+        fresh = _authority(sample, c.coast_s, self.det_interval, self.pipe_age)  # FPS staleness / coast decay
+        _warn_low_fps(self.log, fresh, sample)     # F3: surface FPS-starvation, don't stall silently
+        # End-position (returned) + live feedback sink.
+        self.report(sample)
+        return fill, fresh
+
+    def maintain(self, sample, fresh: float) -> float:
+        """The lateral strafe that holds ``maintain_px``; 0 when maintain is off."""
+        c = self.c
+        lat_pct = 0.0
+        if c.maintain_on:
+            ctrl = sample.ex - c.maintain_px / self.half_w
+            self.residual_px = abs(ctrl) * self.half_w
+            rgain = _range_gain(_fill(sample, c.mode), c.range_gain_floor)
+            lat_pct = _clamp(ctrl * c.kp_lat * rgain, -self.g_lat, self.g_lat) * fresh
+        self.lat_ema = _ema_step(self.lat_ema, lat_pct, self.dt)
+        return lat_pct
+
+    def approach(self, now: float, fill: float, fresh: float,
+                 lat_pct: float) -> Optional[Outcome]:
+        """Fill-stop: drive toward ``fwd_fill``, then hold and brake on arrival."""
+        c = self.c
+        if fill < c.fwd_fill:
+            self.reached_at = None
+            # Freshness-decay forward so a stale frame doesn't blind-drive the
+            # approach past the fill target (yaw/depth untouched).
+            fwd_pct = _clamp((c.fwd_fill - fill) * c.kp_forward, 0.0, c.gain) * fresh
+            self.drive(fwd_pct, lat_pct)
+            self.fwd_ema = _ema_step(self.fwd_ema, fwd_pct, self.dt)
+            return None
+        if self.reached_at is None:
+            self.reached_at = now
+        # Station-keep: zero forward, keep correcting lateral if asked.
+        self.drive(0.0, lat_pct)
+        self.fwd_ema = _ema_step(self.fwd_ema, 0.0, self.dt)   # forward decays while holding
+        if c.hold_s > 0.0 and (now - self.reached_at) < c.hold_s:
+            return None
+        # Arrival: bleed the forward (and maintain-strafe) inertia so the
+        # hull halts in front of the target instead of creeping into it.
+        if c.brake:
+            _brake_axis(c.writers.forward, self.fwd_ema, c.brake_gain,
+                        abort_fn=c.abort_fn, log=self.log, label='VBRK')
+            if c.maintain_on:
+                _brake_axis(c.writers.lateral, self.lat_ema, c.brake_gain,
+                            abort_fn=c.abort_fn, log=self.log, label='VBRK')
+        c.writers.neutral()
+        return self.outcome(ALIGNED, f"reached fill={fill * 100:.0f}%", now)
