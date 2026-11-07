@@ -1,0 +1,27 @@
+src/mongla_manager/mongla_manager/dispatch_policy.py
+  s_b4c45e3235679b::t_5d89ac1296323e 4
+.claude/agents/mission-reviewer.md
+  s_b4c45e3235679b::t_cecab5ca561775 52-53
+src/mongla_vision/mongla_vision/utils/check_thrust.py
+  s_b4c45e3235679b::t_11323fbea30850 2,8-12,82,106-108
+.claude/skills/add-command/SKILL.md
+  s_b4c45e3235679b::t_6e1942d7007321 18-21,24-30,45
+tools/gen_reference.py
+  s_b4c45e3235679b::t_d729a205daca31 313-351,356
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "9d0635fee14b6056ea3e33675810d03dc9f25bf8",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
