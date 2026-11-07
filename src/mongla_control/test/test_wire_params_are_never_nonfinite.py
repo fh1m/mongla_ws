@@ -39,7 +39,8 @@ import math
 import pytest
 
 import mongla_control.fc.srot_protocol as sp
-from mongla_control.fc.srot_fc import MOVE_VERBS, _build_params, _depth_to_dive
+from mongla_control.fc.srot_fc import MOVE_VERBS
+from mongla_control.fc.srot_moves import _build_params, _depth_to_dive
 
 HOSTILE = [float('nan'), float('inf'), float('-inf')]
 FINITE = [0.0, -0.0, 1e-12, 0.5, 1.0, -1.0, 100.0, -100.0, 1e9, -1e9]
@@ -69,7 +70,7 @@ def test_a_non_finite_gain_is_REFUSED_not_coerced_to_zero():
     the safe tick. A one-shot verb must refuse. Both are "fail safe"; only one is
     right per context.
     """
-    from mongla_control.fc.srot_fc import _speed_from_gain
+    from mongla_control.fc.srot_moves import _speed_from_gain
     for bad in HOSTILE:
         with pytest.raises(ValueError):
             _speed_from_gain({'gain': bad})

@@ -28,10 +28,11 @@ _ARMED = mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED
 
 @pytest.fixture(autouse=True)
 def _fast(monkeypatch):
-    import mongla_control.fc.srot_fc as mod
-    monkeypatch.setattr(mod, '_ACK_MIN_BUDGET_S', 0.3)
-    monkeypatch.setattr(mod, '_ACK_MARGIN_S', 0.2)
-    monkeypatch.setattr(mod, '_POST_ACK_HB_WAIT_S', 0.1)
+    import mongla_control.fc.srot_motion as motion
+    import mongla_control.fc.srot_moves as moves
+    monkeypatch.setattr(moves, '_ACK_MIN_BUDGET_S', 0.3)
+    monkeypatch.setattr(moves, '_ACK_MARGIN_S', 0.2)
+    monkeypatch.setattr(motion, '_POST_ACK_HB_WAIT_S', 0.1)   # read by move()
 
 
 def _hb(mode, armed=True, t=None):

@@ -341,7 +341,7 @@ def _reason(result, statustext=None, verb='move_forward'):
     if statustext is not None:
         fc.master.messages['STATUSTEXT'] = type(
             'ST', (), {'text': statustext.encode()})()
-    from mongla_control.fc.srot_fc import DENIED
+    from mongla_control.fc.base import DENIED
     return fc._terminal_reason(verb, DENIED, result)
 
 

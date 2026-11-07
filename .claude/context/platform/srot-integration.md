@@ -586,7 +586,7 @@ fc/port_guard.py    one process per serial port
 `manual()` is the streamed axis demand the vision loops use; `move()` is one on-board
 `SROT_MOVE` and its four-terminal ACK relay. There is one backend, so there is no selector.
 
-## The verb table (`fc/srot_fc.py:_build_params` + `MOVE_VERBS`)
+## The verb table (`fc/srot_moves.py:_build_params` + `srot_fc.MOVE_VERBS`)
 
 **One `SROT_MOVE` (31000) each** — `move()` sends one command and relays the ACK:
 

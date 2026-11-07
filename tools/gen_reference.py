@@ -6,7 +6,7 @@ drifting the moment someone edited the code beside it. This one is derived:
 
   * the verbs come from `mongla_control/commands.py` -- the single table the
     CLI, the action server and the Python client all read;
-  * whether a verb runs ON THE BOARD or on the host comes from `fc/srot_fc.py`
+  * whether a verb runs ON THE BOARD or on the host comes from `fc/srot_moves.py`
     (which verbs `_build_params` actually maps to a SROT_MOVE primitive);
   * the executables come from each package's `setup.py` console_scripts;
   * the launch arguments come from `DeclareLaunchArgument` in the launch files;
@@ -49,8 +49,8 @@ def verbs() -> dict:
 
 
 def board_verbs() -> set:
-    """Verb names the board runs as one SROT_MOVE, read out of srot_fc.py."""
-    src = (PKG / 'fc' / 'srot_fc.py').read_text()
+    """Verb names the board runs as one SROT_MOVE, read out of srot_moves.py."""
+    src = (PKG / 'fc' / 'srot_moves.py').read_text()
     body = src[src.index('def _build_params'):]
     nxt = body.find('\ndef ', 1)
     if nxt > 0:
