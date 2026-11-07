@@ -102,8 +102,11 @@ def test_the_two_copies_of_every_default_agree():
     import re
     from pathlib import Path
 
-    src = (Path(__file__).resolve().parents[1] / 'mongla_vision'
-           / 'lock_node.py').read_text()
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'tools'))
+    from code_text import source_of
+    src = source_of(Path(__file__).resolve().parents[1] / 'mongla_vision'
+                    / 'lock_node.py')
     for name, (_coerce, want) in _KEYS.items():
         m = re.search(rf"declare_parameter\(\s*'{name}'\s*,\s*([^)]+)\)", src)
         if not m:

@@ -1,6 +1,6 @@
 {
-  "collected": 4147,
-  "passed": 4139,
+  "collected": 4151,
+  "passed": 4143,
   "failed": 0,
   "skipped": 7,
   "xfailed": 1,
@@ -12,7 +12,7 @@
       "failed": 0
     },
     "mongla_vision": {
-      "passed": 1504,
+      "passed": 1508,
       "skipped": 2,
       "failed": 0
     },
@@ -38,7 +38,7 @@
   "code": {
     "packages": {
       "mongla_vision": {
-        "loc": 27339,
+        "loc": 27407,
         "test_files": 125
       },
       "mongla_control": {

@@ -74,6 +74,13 @@ a confident zero.
 | `depth_estimation_node` | `vis_range` | monocular proximity, off by default |
 | `mission_web_node` | — | the pool-day browser console |
 
+`lock_node` is one class in four files. `lock_node.py` holds the per-frame loop (detection in,
+rung chosen, anchor run). The other three are mixins of the same class, each with one job:
+`lock_setup.py` (parameters, the anchor model and the checkpoint bank), `lock_inputs.py`
+(the IMU, state, odometry and floor-height callbacks, each with its freshness check) and
+`lock_publish.py` (every topic the node writes, plus the health log). To find where a
+`self._x` is defined, grep the four files together: `grep -n "def _x" lock_*.py`.
+
 ## Tools
 
 ```bash

@@ -51,16 +51,38 @@ def code_of(obj) -> str:
     return code_only(inspect.getsource(obj))
 
 
-def source_of(path) -> str:
-    """Raw text of a `.py` file, or of every `.py` file in a package directory.
+def mixin_files(path: pathlib.Path) -> list:
+    """Sibling modules that hold MIXINS of a class defined in `path`.
 
-    A module that grows into a package (motion_vision.py -> motion_vision/)
-    keeps working for every test that reads it by path.
+    A node too long for one file is one class in several: `class LockNode(
+    LockSetupMixin, ..., Node)` with each mixin imported `from .lock_setup
+    import LockSetupMixin`. Those files are part of the class, so a test reading
+    the class reads them too.
+    """
+    tree = ast.parse(path.read_text(encoding='utf-8'))
+    bases = {b.id for n in tree.body if isinstance(n, ast.ClassDef)
+             for b in n.bases if isinstance(b, ast.Name)}
+    out = []
+    for n in tree.body:
+        if isinstance(n, ast.ImportFrom) and n.level == 1 and n.module:
+            if any(a.name in bases for a in n.names):
+                f = path.parent / (n.module.replace('.', '/') + '.py')
+                if f.is_file():
+                    out.append(f)
+    return out
+
+
+def source_of(path) -> str:
+    """Raw text of a `.py` file and its mixin modules, or of a package directory.
+
+    A module that grows into a package (motion_vision.py -> motion_vision/), or a
+    class that grows into mixins (lock_node.py + lock_setup.py ...), keeps
+    working for every test that reads it by path.
     """
     p = pathlib.Path(path)
     if p.is_dir():
         return '\n'.join(f.read_text(encoding='utf-8') for f in sorted(p.glob('*.py')))
-    return p.read_text(encoding='utf-8')
+    return '\n'.join(f.read_text(encoding='utf-8') for f in [p] + mixin_files(p))
 
 
 def code_of_file(path) -> str:

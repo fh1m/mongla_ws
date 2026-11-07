@@ -22,6 +22,9 @@ No Hailo hardware required: `_post_dense` is pure numpy.
 """
 from __future__ import annotations
 
+import sys as _sys_ct
+_sys_ct.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import source_of  # noqa: E402
 import numpy as np
 import pytest
 
@@ -98,6 +101,6 @@ def test_the_default_is_OFF():
     assert sig.parameters['semi_dense'].default is False
 
     src = Path(__file__).resolve().parents[1] / 'mongla_vision' / 'lock_node.py'
-    txt = src.read_text()
+    txt = source_of(src)
     assert "declare_parameter('anchor_semi_dense', False)" in txt, \
         'the lock_node parameter default drifted on'

@@ -3767,7 +3767,7 @@ that is now the number of record. `octagon` moves the other way, 3/4 → 4/4.
 is its **+8 s** column, and the worst case falls **189 → 24** on `torpedo`. A reference does not
 fail suddenly; it decays with elapsed time, and at 8 s it is close to worthless.
 
-⛔ **That is a defect in `lock_node.py:633`, and this is its measurement.** The anchor reference
+⛔ **That was a defect in `lock_node.py` — the single-reference snap the checkpoint bank later replaced — and this is its measurement.** The anchor reference
 is snapped once — the guard is literally `not self._anchor.has_reference` — and is never
 refreshed while a reference exists. The decay above is what that costs. It is not an XFeat
 limitation: the same frames, matched against a *fresh* reference, are the +1 s column.

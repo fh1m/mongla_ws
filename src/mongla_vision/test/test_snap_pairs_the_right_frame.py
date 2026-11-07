@@ -110,8 +110,11 @@ def test_the_snap_site_uses_the_paired_frame():
     from pathlib import Path
     src = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_vision'
            / 'lock_node.py')
-    i = src.index('def _loop')
-    body = src[i:]
+    # The detection snap lives in `_enrol_or_locate`. A place checkpoint
+    # (`_place_tick`) enrols the current frame on purpose -- it has no box.
+    i = src.index('def _enrol_or_locate')
+    j = src.find('\n    def ', i + 1)
+    body = src[i:j if j > 0 else None]
     # The call is `enrol` since the checkpoint bank replaced the single
     # reference (2026-09-24); the property it guards is unchanged and is the
     # whole point -- a reference built from the newest frame rather than the
