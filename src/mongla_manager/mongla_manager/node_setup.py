@@ -9,6 +9,10 @@ import math
 import threading
 import time
 
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+
+from mongla_interfaces.msg import MonglaState
+
 from mongla_control import Mongla
 from mongla_control.fc._srot_base import mavutil
 from mongla_control.fc.port_guard import PortGuard
@@ -16,6 +20,7 @@ from mongla_control.fc.srot_fc import SrotFC
 from mongla_control.fc.srot_payload import SrotPayload
 from mongla_control.fc.srot_protocol import SOURCE_COMPID as SROT_SOURCE_COMPID, SOURCE_SYSID as SROT_SOURCE_SYSID
 
+from . import health as _health
 from .connection_config import resolve_srot_profile
 from .vision_tunables import declare_vision_params
 from .yaw_source import BoardYaw
@@ -405,3 +410,155 @@ class SetupMixin:
             self._distance_state = DistanceState(self, camera='downward')
             self.get_logger().info('[DIST ] DistanceState bridge built (downward)')
         return self._distance_state
+
+    def _setup_publishers(self) -> None:
+        """Every topic the node publishes about the vehicle, and the IMU clock map."""
+        self.state_publisher = self.create_publisher(
+            MonglaState, '/mongla/state', 10)
+
+        # Body-frame angular rates for the downward optical-flow distance
+        # estimator (rotation compensation). Vector3Stamped: x=pitch_rate,
+        # y=roll_rate, z=yaw_rate (rad/s); header.stamp = sample time so the
+        # vision node can interpolate the rate to each flow frame-pair. Sourced
+        # from the board's ATTITUDE (pinned 50 Hz) -- see get_angular_rates.
+        from geometry_msgs.msg import Vector3Stamped
+        self._Vector3Stamped = Vector3Stamped
+        self.imu_rates_publisher = self.create_publisher(
+            Vector3Stamped, '/mongla/imu_rates', 10)
+        # The FULL inertial sample, for the invariant filter in
+        # mongla_localization. A SEPARATE topic from `/mongla/imu_rates`
+        # deliberately: that one is the flow node's de-rotation feed, shaped
+        # (pitch, roll, yaw) for its interpolator, and re-shaping it would
+        # break a working consumer to save one publisher. This one is standard
+        # `sensor_msgs/Imu` in body axes, which is what every estimator and
+        # every ROS tool already expects.
+        from sensor_msgs.msg import Imu
+        self._Imu = Imu
+        self.imu_publisher = self.create_publisher(Imu, '/mongla/imu', 10)
+        # The demand last SENT to the thrusters (srot only): x = forward,
+        # y = lateral, in [-1, 1]; NaN = unknown (a board primitive owns it, or
+        # no frame is in force). The command-velocity model in
+        # mongla_localization learns speed from it while flow works and aids
+        # the filter with it when flow refuses. Unknown must reach the consumer
+        # as unknown -- silence would read as "the last value still holds".
+        self.demand_publisher = self.create_publisher(
+            Vector3Stamped, '/mongla/demand', 10)
+        self._imu_rpy_warned = False
+        self._imu_last_ms = None
+        # Board-clock -> host-clock mapping for the IMU stamp. See
+        # _imu_rates_tick: the board's own interval has sd 0.00 ms where
+        # arrival has sd 6.67, so the sender's clock is the better time base.
+        from mongla_vision.flow.flow_timing import ClockMap
+        self._imu_clock = ClockMap(window_s=20.0, min_pairs=40)
+        self._imu_clock_fit_t = 0.0
+        # (mapped board time, monotonic instant it was computed) or None.
+        self._board_stamp = None
+        self._imu_clock_ok = False
+        self._imu_clock_warned = False
+
+        # Per-thruster RPM, srot only. The bench runbook's step 1 asks for this and
+        # it did not exist: SrotFC.telemetry() decoded RPM but had no production
+        # caller, so `leak`, `water_temp_c` and `rpm` never reached ROS at all.
+        #
+        # It was also unreachable until firmware behaviour rev 2. ESC_STATUS (291)
+        # was removed from upstream `common`, and pymavlink SILENTLY discards any
+        # msgid missing from its CRC-extra table -- so the board could stream RPM
+        # perfectly while the host read nothing, indistinguishable from an ESC
+        # fault. Rev 2 emits ESC_TELEMETRY_1_TO_4 / _5_TO_8, which do decode, and
+        # SrotFC.telemetry() already had the fallback written and waiting.
+        #
+        # int32 rather than uint16: the board sends magnitude (the ESC_TELEMETRY
+        # field is unsigned) and direction lives in the commanded value, so a
+        # consumer must not read these as signed velocity.
+        self._leak_latched = False
+        self._srot_block_last = 0.0
+        self._srot_prev_fields = None
+        self._srot_block_period = float(
+            self.get_parameter('srot_telemetry_period_s').value)
+        from std_msgs.msg import Int32MultiArray
+        self._Int32MultiArray = Int32MultiArray
+        self.esc_rpm_publisher = self.create_publisher(
+            Int32MultiArray, '/mongla/esc_rpm', 10)
+        # The flare order the operator sent over LoRa (fw comms/flare_order.h).
+        # TRANSIENT_LOCAL so a mission that subscribes late still gets the last one;
+        # the JSON carries latched_at, so a late reader can refuse an old order.
+        from std_msgs.msg import String
+        from rclpy.qos import QoSProfile, DurabilityPolicy
+        self._String = String
+        self.flare_order_publisher = self.create_publisher(
+            String, '/mongla/flare_order',
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        self._flare_key = None
+
+    def _setup_health_and_watchdogs(self) -> None:
+        """The health board, the executor liveness stamp and the mission keep-alive."""
+        # HEALTH. 1 Hz, and it only speaks when the vehicle's overall state
+        # CHANGES -- a board that logs every second is a board nobody reads,
+        # and the transition is the event worth seeing.
+        self._health = _health.HealthBoard()
+        self._register_health()
+        self._publish_static_frames()
+        self._health_last = None
+        self.create_timer(1.0, self._health_tick, callback_group=self.timer_group)
+        # Issue #13: executor liveness (gates the heartbeat) and the mission
+        # keep-alive watchdog. Each in its OWN group, so neither the blocking
+        # timer_group callbacks nor a slow SURFACE mode change can stall the
+        # liveness stamp.
+        self._liveness_group = MutuallyExclusiveCallbackGroup()
+        self._watchdog_group = MutuallyExclusiveCallbackGroup()
+        self.create_timer(0.2, self._stamp_executor_alive,
+                          callback_group=self._liveness_group)
+        self._mission = {'attached': False, 'name': '', 'seen': 0.0}
+        from std_msgs.msg import String as _String
+        self.create_subscription(_String, '/mongla/mission_alive',
+                                 self._on_mission_alive, 10,
+                                 callback_group=self._watchdog_group)
+        self.create_timer(0.5, self._mission_watchdog_tick,
+                          callback_group=self._watchdog_group)
+        # (No heartbeat timer: it runs on `_hb_thread`, started in _setup_mavlink,
+        #  because this group also holds callbacks that block for seconds.)
+
+    def _setup_telemetry_timers(self) -> None:
+        """The 2 Hz telemetry tick, the 20 Hz state tick and the 50 Hz IMU tick."""
+        self.create_timer(0.5,  self.telemetry_tick,   callback_group=self.timer_group)
+        # Fast tick: 20 Hz HUD compass + depth (ATTITUDE pinned to 50 Hz).
+        # Separate callback group so it can fire between telemetry ticks.
+        self.fast_group = MutuallyExclusiveCallbackGroup()
+        self.create_timer(0.05, self._fast_state_tick, callback_group=self.fast_group)
+        # IMU rates at 50 Hz (matches the ATTITUDE stream pin) -- the flow
+        # rotation-comp is ~1:1 with the signal, so publish at full rate.
+        self.create_timer(0.02, self._imu_rates_tick, callback_group=self.fast_group)
+
+    def _setup_uplinks(self) -> None:
+        """What the host tells the board: the vision target, the velocity and the position."""
+        # The timer is unconditional, and that is the fix. It used to be
+        # created only if `vision_uplink_camera` was already set AT STARTUP, so
+        # `ros2 param set ... vision_uplink_camera downward` mid-run reported
+        # success and did nothing -- the timer did not exist and never would.
+        # Measured on the vehicle: the parameter took, and not one uplink tick
+        # ever ran. That is the same shape as `vision.lock_s`, which was
+        # declared, documented, mapped and never passed.
+        #
+        # The tick already early-returns on an empty camera, so an idle timer
+        # costs one comparison at `vision_uplink_hz`. A mission can now aim the
+        # uplink the way it aims everything else, without a relaunch.
+        hz = max(1.0, float(self.get_parameter('vision_uplink_hz').value))
+        self._uplink_cam_logged = None
+        self.create_timer(1.0 / hz, self._vision_uplink_tick,
+                          callback_group=self.timer_group)
+        cam0 = str(self.get_parameter('vision_uplink_camera').value).strip()
+        self.get_logger().info(
+            f'[VIS  ] LANDING_TARGET uplink armed @ {hz:.0f} Hz, '
+            f'camera={cam0 or "(none -- idle until set)"} '
+            f'(the board does not consume msgid 149 yet -- producer only)')
+        # Subscribed unconditionally, gated per message on the parameter, so
+        # `ros2 param set ... velocity_uplink true` works mid-run -- the
+        # startup-only-timer defect this file has already had once.
+        from nav_msgs.msg import Odometry
+        self._vel_uplink_n = 0
+        self._pos_uplink_n = 0
+        self._pos_reset = 0
+        self._pos_last = None
+        self.create_subscription(Odometry, '/mongla/odom',
+                                 self._on_odom_uplink, 10,
+                                 callback_group=self.timer_group)
