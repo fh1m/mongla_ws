@@ -1,0 +1,29 @@
+src/mongla_vision/mongla_vision/lock_wiring.py
+  s_b4c45e3235679b::t_748eee692d0a35 359-361
+.claude/context/BUGS.md
+  s_b4c45e3235679b::t_2ae780aea60d9d 305-324
+src/mongla_vision/mongla_vision/detection/hailo.py
+  s_b4c45e3235679b::t_748eee692d0a35 111-115
+src/mongla_planner/mongla_planner/dsl_position.py
+  s_b4c45e3235679b::t_748eee692d0a35 23-25,168-171
+src/mongla_vision/launch/vision_pi.launch.py
+  s_b4c45e3235679b::t_748eee692d0a35 262
+src/mongla_control/mongla_control/fc/srot_protocol.py
+  s_b4c45e3235679b::t_748eee692d0a35 480-481
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "738150a80ce0db97bdb2c7d2234170680566f5e1",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
