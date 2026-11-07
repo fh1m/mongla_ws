@@ -2,7 +2,8 @@
 """
 import math
 from sensor_msgs.msg import Range
-from std_msgs.msg import Float32
+
+from mongla_interfaces.msg import FloorHeading
 
 
 class FlowFloorMixin:
@@ -27,7 +28,7 @@ class FlowFloorMixin:
             return
         self._tile_next_t = t + self._tile_period_s
         if self._lane_lines:
-            self._read_the_lane(gray)
+            self._read_the_lane(gray, t)
         if self._tile_m <= 0.0:
             return
         try:
@@ -58,7 +59,7 @@ class FlowFloorMixin:
             r.max_range = float('inf')
             r.range = float(self._tile_height)
             self._pub_floor_h.publish(r)
-        self._pub_grid.publish(Float32(data=float(self._tile_angle)))
+        self._pub_grid.publish(_floor_heading(t, self._cam, self._tile_angle))
         # Report the disagreement, never silently pick. Same rule the existing
         # optical cross-check follows: a divergence does not say WHICH input is
         # wrong, and `pool_depth_m` is the one nobody measures.
@@ -85,7 +86,7 @@ class FlowFloorMixin:
                     f'and is preferred -- check pool_depth_m and the tile_m '
                     f'you set.')
 
-    def _read_the_lane(self, gray) -> None:
+    def _read_the_lane(self, gray, t: float) -> None:
         """Publish the lane line's heading, modulo 180, or nothing.
 
         Decimated by `tile_decimate`: 27.5 ms full-frame at 720p against
@@ -114,4 +115,14 @@ class FlowFloorMixin:
             self._lane_angle = None             # bare floor: say nothing
             return
         self._lane_angle = line.heading_deg()
-        self._pub_lane.publish(Float32(data=float(self._lane_angle)))
+        self._pub_lane.publish(_floor_heading(t, self._cam, self._lane_angle))
+
+
+def _floor_heading(t: float, cam: str, angle_deg: float) -> FloorHeading:
+    """A floor heading stamped with the frame it was read from (BUGS B-91)."""
+    m = FloorHeading()
+    m.header.stamp.sec = int(t)
+    m.header.stamp.nanosec = int((t - int(t)) * 1e9)
+    m.header.frame_id = f'{cam}_cam'
+    m.heading_deg = float(angle_deg)
+    return m

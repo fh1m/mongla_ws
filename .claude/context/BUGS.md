@@ -171,25 +171,27 @@ update `test_the_channels_are_unassigned_until_someone_confirms_them`.
 
 ## 2. HIGH
 
-### B-91: the floor's yaw bound is applied on arrival, against the heading now `READ 2026-11-07` **OPEN**
+### B-91: the floor's yaw bound was applied on arrival, against the heading now `READ 2026-11-07` **FIXED 2026-11-07**
 
-**What.** `flow_node` publishes `floor_grid_deg` and `lane_heading_deg` as bare
-`std_msgs/Float32`: no stamp. `localization_inputs._bound_yaw` snaps the
-current filter yaw to that angle and applies the update with `_apply(None, ...)`,
-that is, at arrival. Every other aiding measurement carries a stamp and is
-replayed at the instant it describes. These two compare a frame taken some tens
-of milliseconds ago with the heading of now, so during a turn the bound pulls
-yaw toward where the hull was, and folds that into `_yaw_offset_deg`.
+**What.** `flow_node` published `floor_grid_deg` and `lane_heading_deg` as bare
+`std_msgs/Float32`: no stamp. `localization_inputs._bound_yaw` snapped the
+current filter yaw to that angle and applied the update at arrival. With
+`retrodict:=true` every other aiding measurement is replayed at the instant it
+describes, so these two alone compared a frame taken some time ago with the
+heading of now: during a turn the bound pulled yaw toward where the hull was,
+and folded that into `_yaw_offset_deg`. With `retrodict` off (the default)
+every measurement lands on arrival, so this one was no worse than the rest.
 
-**Why not fixed yet.** The fix is a stamped message (a `FloorHeading` with a
-header, or the frame's stamp carried some other way) and `_apply(stamp, ...)`
-with the snap computed inside the replayed update against the yaw *at the
-stamp*. The offset fold then has to move with it. That changes the filter's
-yaw path, and a yaw-drift bound cannot be validated on a bench. It goes with
-the first water session that has the floor grid in view (`workbench/POOL.md`),
-so the before and after are both measured. Until then the size of the error is
-the yaw rate times the frame-to-publish latency; at the slow turns these
-bounds run during, it is small, but it is not zero and it is not measured.
+**Fix.** Both topics are `mongla_interfaces/FloorHeading`, a header stamped
+with the camera frame plus `heading_deg`. `_bound_yaw` passes that stamp to
+`_apply`, and the snap is computed inside the replayed update against the yaw
+*at the stamp*; the offset fold uses the change the replay made.
+
+**Measured** (bench, synthetic): a 10 deg/s turn, grid seen with 0.3 s
+latency, replay on. Judged on arrival the filter ended 1.55 deg off the board;
+replayed, 0.01 deg. `test_a_late_floor_heading_is_judged_against_the_yaw_of_its_frame`
+holds it and fails (by the 1.55 deg) when the stamp is dropped. The in-water
+size of the effect is still not measured (`workbench/POOL.md`).
 
 **Found by** the `std_msgs` inventory (bead `jxt`). The other eight primitive
 topics stay: `mission_alive` and `distance_control` are a liveness signal and a

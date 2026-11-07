@@ -16,7 +16,7 @@ from geometry_msgs.msg import (PointStamped, TwistWithCovarianceStamped)
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Float32, String
 
-from mongla_interfaces.msg import MonglaState
+from mongla_interfaces.msg import FloorHeading, MonglaState
 
 from mongla_localization.command_velocity import (BLOCKED)
 from mongla_localization import frames
@@ -520,7 +520,7 @@ class LocalizationInputsMixin:
                 f'{board_yaw:+.1f}, offset {offset:+.1f}): the output frame is '
                 f'the POOL from here on.')
 
-    def _on_floor_grid(self, msg: Float32) -> None:
+    def _on_floor_grid(self, msg: FloorHeading) -> None:
         """The floor's tile grid: a DRIFT BOUND on yaw, not a heading source.
 
         What this can and cannot do. A square grid is identical from four
@@ -540,36 +540,50 @@ class LocalizationInputsMixin:
         frame, and pulling a boot-frame heading onto a pool-frame grid would
         combine two unrelated angles into a confident wrong one.
         """
-        self._bound_yaw(float(msg.data), 90.0, 'grid')
+        self._bound_yaw(float(msg.heading_deg), 90.0, 'grid', _opt_stamp(msg))
 
-    def _on_lane_line(self, msg: Float32) -> None:
+    def _on_lane_line(self, msg: FloorHeading) -> None:
         """The lane line's heading, modulo 180: the grid's drift bound, but
         a line is identical from two ends rather than four, so a wrong branch
         is 180 degrees away instead of 90 -- the bound is far harder to alias.
         """
-        self._bound_yaw(float(msg.data), 180.0, 'lane')
+        self._bound_yaw(float(msg.heading_deg), 180.0, 'lane', _opt_stamp(msg))
 
-    def _bound_yaw(self, angle_deg: float, period_deg: float, key: str) -> None:
-        """Pull yaw onto a floor feature of symmetry `period_deg`, or refuse."""
+    def _bound_yaw(self, angle_deg: float, period_deg: float, key: str,
+                   t=None) -> None:
+        """Pull yaw onto a floor feature of symmetry `period_deg`, or refuse.
+
+        `t` is the camera frame the angle was read from. The snap runs INSIDE
+        the replayed update, against the yaw the filter had at that instant:
+        during a turn the heading of now is somewhere else, and comparing the
+        two pulled yaw toward where the hull had been (BUGS B-91).
+        """
         if not self._anchored:
             return
-        snapped = snap_to_grid(self._filter.X.yaw_deg(), angle_deg,
-                               max_correction_deg=self._grid_max_corr_deg,
-                               period_deg=period_deg)
-        if snapped is None:
+        refused = []
+
+        def bound(f, a=angle_deg, s=self._grid_sigma_deg):
+            snapped = snap_to_grid(f.X.yaw_deg(), a,
+                                   max_correction_deg=self._grid_max_corr_deg,
+                                   period_deg=period_deg)
+            if snapped is None:
+                refused.append(True)
+                return
+            f.update_yaw(snapped, sigma_deg=s)
+
+        before = self._filter.X.yaw_deg()
+        if not self._apply(t, bound) or refused:
+            # Older than the replay horizon, or a disagreement too large to be
+            # drift: the wrong grid line, never applied.
             self._n[f'{key}_refused'] += 1
             return
-        before = self._filter.X.yaw_deg()
-        self._apply(None, lambda f, y=snapped, s=self._grid_sigma_deg:
-                    f.update_yaw(y, sigma_deg=s))
         # What the floor moved goes into the offset, or it is undone. The
         # next board attitude, 20 ms later, would pull yaw straight back to
         # board + offset: a drift bound that bounds nothing. Folding the
         # accepted correction (the filter's own gain, so a 1 deg floor against
         # a 0.2 deg board moves a few percent a sample) into the offset makes
-        # the board agree with it from then on. A refused update moves 0.
-        # Taken once, at arrival: a retrodicted replay re-runs the update
-        # and may move yaw by a slightly different amount than was folded in.
+        # the board agree with it from then on. `moved` is measured on the
+        # yaw of NOW, after the replay, which is what the offset is added to.
         moved = _wrap180(self._filter.X.yaw_deg() - before)
         self._yaw_offset_deg = _wrap180(self._yaw_offset_deg + moved)
         self._n[key] += 1

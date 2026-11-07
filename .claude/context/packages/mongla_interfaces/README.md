@@ -64,6 +64,7 @@ suppresses values it cannot stand behind rather than sending a plausible number.
 | `msg/TargetPose.msg` | the pose of a recognised prop |
 | `msg/TargetContours.msg` | outlines from segmentation |
 | `msg/TargetCorrespondences.msg` | image points matched to model points, for pose solving |
+| `msg/FloorHeading.msg` | a heading read off the pool floor (tile grid or lane line), stamped with its camera frame so localization can replay it there (BUGS B-91) |
 
 ---
 

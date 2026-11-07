@@ -52,7 +52,7 @@ from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu
 from std_msgs.msg import Float32, String
 
-from mongla_interfaces.msg import MonglaState
+from mongla_interfaces.msg import FloorHeading, MonglaState
 
 from mongla_localization.command_velocity import (CommandVelocityModel,
                                                   MotionCheck)
@@ -182,13 +182,13 @@ class LocalizationNode(LocalizationInputsMixin, LocalizationPublishMixin, Node):
                                  self._on_demand, sensor_qos)
         # The floor's grid, which BOUNDS yaw drift without a magnetometer.
         self.create_subscription(
-            Float32, f'/mongla/vision/{cam}/floor_grid_deg',
+            FloorHeading, f'/mongla/vision/{cam}/floor_grid_deg',
             self._on_floor_grid, 10)
         # The lane line: the same drift bound with HALF the aliasing (a line
         # is identical from two directions, a grid from four). Shares the
         # grid's sigma and correction bound -- one floor-geometry pair, not two.
         self.create_subscription(
-            Float32, f'/mongla/vision/{cam}/lane_heading_deg',
+            FloorHeading, f'/mongla/vision/{cam}/lane_heading_deg',
             self._on_lane_line, 10)
 
         self._pub = self.create_publisher(Odometry, '/mongla/odom', 10)
