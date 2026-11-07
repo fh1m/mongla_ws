@@ -112,16 +112,21 @@ to decide.
 | `node_vision.py` | the vision state the verbs read, and the uplinks to the board |
 | `node_health.py` | the health report and the two watchdogs |
 | `node_support.py` | the node's shared constants and the heartbeat thread |
-| `bringup_check.py` | the preflight, section by section |
+| `bringup_check.py` | the preflight: its sections in order, and the exit code |
+| `bringup_host.py` · `bringup_board.py` · `bringup_grade.py` | the checks of the computer, the checks of the board (`--srot`), and the PASS/WARN/FAIL line they all report in |
 | `srot_connect.py` · `srot_format.py` · `srot_changes.py` | reading the board, formatting it, showing what changed |
 | `srot_autotune.py` | the operator's front end to the board's tuning routine |
 | `srot_recorder.py` | raw MAVLink capture for later analysis |
 | `vision_state.py` | per-camera detection cache; turns a detection into a pixel error |
 | `distance_state.py` · `flow_position.py` | distance travelled, from the downward camera |
 | `vision_tunables.py` | the live-tunable vision gains, in one place; set on the deck under `nodes:` in `bringup.yaml` |
-| `dispatch_policy.py` | which verbs go where, on a given backend |
+| `dispatch_policy.py` | which goals the action server accepts while busy: only `disarm`, `stop` and `surface`, which pre-empt the running verb |
 | `health.py` · `health_reporters.py` | subsystem health, reported rather than assumed |
 | `connection_config.py` | connection profiles and network constants |
+| `launch_defaults.py` | reads `~/.mongla/bringup.yaml`, so a pool day is a file rather than a long command line |
+| `yaw_source.py` | heading, read off the board's own fused attitude |
+| `estimator/thrust_model.py` | eight signed ESC RPMs to a body-frame acceleration, for the estimator |
+| `flare_order_send.py` | `ros2 run mongla_manager flare_order R-B-Y` -- tells the vehicle the flare order |
 | `launch/bringup.launch.py` | the whole vehicle: control, optional vision, optional localization |
 
 ## Running it
@@ -155,3 +160,39 @@ when a documented constant no longer matches the code.
 Related: [`mongla_control`](../mongla_control/README.md) (what the verbs actually do) ·
 [`mongla_interfaces`](../mongla_interfaces/README.md) (the action) ·
 [The Shift](../../the-shift.md)
+
+## Every module
+
+<!-- modules:begin -->
+Generated from each module's docstring by `tools/gen_reference.py`; a module
+with no summary line shows as *(no summary)* until it gets one.
+
+| module | what it is |
+|---|---|
+| `auv_manager_node.py` | AUV Manager Node -- Terminal 1. |
+| `bringup_board.py` | Bringup checks of the SROT board (`bringup_check --srot`): firmware, barometer, depth loop, failsafe, memory. |
+| `bringup_check.py` | the pre-flight gate for the SROT vehicle. |
+| `bringup_grade.py` | How every bringup check reports: a grade and one aligned line. |
+| `bringup_host.py` | Bringup checks of the computer itself: ROS, disk, drivers, cameras, models, the Hailo, power. |
+| `connection_config.py` | How the manager finds the SROT board. |
+| `dispatch_policy.py` | Pure goal-acceptance policy for the /mongla/move action server. |
+| `distance_state.py` | manager-side bridge to the downward distance estimator. |
+| `flare_order_send.py` | ``ros2 run mongla_manager flare_order R-B-Y --port /dev/ttyACM0`` -- tell the vehicle. |
+| `health.py` | One health surface. Four states, and UNKNOWN is not OK. |
+| `health_reporters.py` | Each subsystem's private dialect, translated once. |
+| `launch_defaults.py` | Bringup settings from a file, so a pool day is a file and not a long command. |
+| `node_health.py` | Is the node alive, and is the mission: the health report and the two watchdogs. |
+| `node_setup.py` | Bringing the node up: parameters, the board link, the recorder, the preflight reads. |
+| `node_support.py` | The manager node's shared constants: one home, read by every part of the node. |
+| `node_telemetry.py` | What the node publishes about the vehicle: state, IMU, demand, and the console blocks. |
+| `node_vision.py` | The vision side of the node: the vision state the verbs read, and the uplinks to the board. |
+| `srot_autotune.py` | ``ros2 run mongla_manager autotune`` -- run the board's relay AUTOTUNE, deliberately. |
+| `srot_changes.py` | Detect what CHANGED between two SROT telemetry snapshots. Pure, no I/O. |
+| `srot_connect.py` | ``ros2 run mongla_manager connect`` -- point at the SROT board, see the vehicle. |
+| `srot_format.py` | One place that decides how a SROT value is rendered. Pure, no I/O, no pymavlink. |
+| `srot_recorder.py` | Record the raw MAVLink stream so a dive can be replayed after the fact. |
+| `vision_state.py` | per-camera subscriber that the vision motion loop reads. |
+| `vision_tunables.py` | ROS-param defaults for every vision_* command. |
+| `yaw_source.py` | Heading, read off the board's own fused attitude. |
+| `estimator/thrust_model.py` | Eight signed ESC RPMs -> a body-frame acceleration for the estimator. |
+<!-- modules:end -->

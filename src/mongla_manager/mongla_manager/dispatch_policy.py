@@ -1,7 +1,7 @@
 """Pure goal-acceptance policy for the /mongla/move action server.
 
 Extracted from `auv_manager_node.goal_callback` so the safety-bypass rule is
-unit-testable without spinning a live ROS2 node. The rule (CLAUDE.md §13 safety):
+unit-testable without spinning a live ROS2 node. The rule (CLAUDE.md §8, safety):
 the **safety verbs** (`disarm` / `stop` / `surface`) bypass the `command_active`
 gate so they always execute even while another command runs — and accepting one
 while busy signals a cooperative abort to the running loop so it releases the lock.

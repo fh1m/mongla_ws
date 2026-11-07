@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""vision_thrust_check -- end-to-end smoke test: detection -> RC channel.
+"""vision_thrust_check -- end-to-end smoke test: detection -> a thrust command.
 
 Sends a short `vision_align` (yaw axis) goal via /mongla/move and reports
 what came back. Use BEFORE pool tests so a wiring mistake doesn't waste
 pool time.
 
-Watch the manager log for `[VIS  ]` lines (loop is running) and
-`[RC   ] Yaw:NNN` lines (thrust has actually moved). If both appear
-the detection -> thrust chain is intact.
+What it proves, and what it cannot. The result says whether the loop ran,
+saw the target and closed the pixel error -- that is the detection -> command
+half. Whether thrust reached the water is visible only with the vehicle ARMED:
+`ros2 topic echo /mongla/esc_rpm` shows the thrusters turning. Disarmed, the
+board drives nothing and reports a zero demand, so there is nothing to see.
 
 Examples
 --------
@@ -77,7 +79,7 @@ def main(argv=None):
     print(f'[VTHR ] sending vision_align (yaw)  camera={args.camera}  '
           f'class={args.target_class}  duration={args.duration:.1f}s  '
           f'err={args.err_px:.0f}px gain={args.gain:.0f}%')
-    print('[VTHR ] watch the manager log for [VIS  ] lines and [RC   ] Yaw:NNN')
+    print('[VTHR ] armed? `ros2 topic echo /mongla/esc_rpm` shows the thrusters respond')
 
     send_future = client.send_goal_async(goal)
     rclpy.spin_until_future_complete(node, send_future)
@@ -101,9 +103,9 @@ def main(argv=None):
     print(f'  outcome            : {_OUTCOME.get(code, code)}')
     print(f'  last pixel error   : {result.error_value:.1f}px')
     print()
-    print('[VTHR ] If you saw [RC   ] Yaw:... in the manager log, the loop '
-          'is closed end-to-end. If not, run `vision_check` first to confirm '
-          'the detector is publishing.')
+    print('[VTHR ] An outcome of LOST or NO_CAMERA means the detector is not '
+          'publishing this class: run `vision_check` first. Thrust itself is '
+          'visible only armed, on /mongla/esc_rpm.')
 
     node.destroy_node()
     rclpy.shutdown()
