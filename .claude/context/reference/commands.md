@@ -340,15 +340,16 @@ Run with `ros2 run mongla_planner mission <name>`. A model marked ⏳ is not in 
 | `demo_move_see` | minimal open-loop + vision demo (two-verb). | — | `move_back`, `move_forward`, `set_depth`, `yaw_left` |
 | `demo_pursue` | torpedo-style approach using align() then move(). | — | `move_back`, `move_forward`, `set_depth`, `stop`, `yaw_right` |
 | `demo_square` | the classic shakedown mission. | — | `move_forward`, `pause`, `set_depth`, `yaw_right` |
+| `out_and_back` | dive, swim straight, turn clockwise, swim back. Control only. | — | `move_forward`, `set_depth`, `yaw_right` |
 | `pool_day_practice` | Pool day practice run: Gate → Slalom → Torpedo → Bin. | `bin_fire_blood`, `gate_sharks`, `slalom_red_pipe` ⏳ not shipped, `torpedo_blood_hole` ⏳ not shipped | `move_forward`, `pause`, `set_depth`, `stop`, `turn` |
 | `pool_day_torpedo` | Pool day torpedo practice: align → approach → fine-lock → fire. | `torpedo_blood_hole` ⏳ not shipped | `move_forward`, `set_depth`, `stop`, `turn` |
-| `sauvc_full` | SAUVC 2026 full run: Navigation, Target Acquisition, then (opt-in) the flares. | `sauvc_sim` | `move_back`, `move_forward`, `pause`, `set_depth` |
-| `sauvc_navigation` | SAUVC 2026 Navigation — swim through the red/green gate. THE mandatory task. | `sauvc_sim` | `move_forward`, `pause`, `set_depth` |
-| `sauvc_qualification` | SAUVC Qualification — through the hanging gate, U-turn, back through it. | `sauvc_sim` | `move_forward`, `pause`, `set_depth`, `yaw_right` |
+| `sauvc_full` | SAUVC 2026 full run: Navigation, Target Acquisition, then (opt-in) the flares. | `sauvc_sim` | `move_back`, `move_forward`, `set_depth` |
+| `sauvc_navigation` | SAUVC 2026 Navigation — swim through the red/green gate. THE mandatory task. | `sauvc_sim` | `move_forward`, `set_depth` |
+| `sauvc_qualification` | SAUVC Qualification — through the hanging gate, U-turn, back through it. | `sauvc_sim` | `move_forward`, `set_depth`, `yaw_right` |
 | `sauvc_target_acquisition` | SAUVC 2026 Target Acquisition — drop the ball into the BLUE drum. 30 points. | `sauvc_sim` | `move_forward`, `pause`, `set_depth` |
 | `survey_course` | put the props where the vehicle actually sees them. | — | `set_depth` |
 | `task_bin` | Bin drop task — DOWNWARD camera, hover over the bin, drop a marker. | `bin_fire_blood` | `move_forward`, `pause`, `set_depth`, `turn` |
-| `task_full_2026` | Full RoboSub 2026 competition run: Gate → Slalom → Bin → Torpedo → Return+Roll. | — | `pause`, `set_depth` |
+| `task_full_2026` | Full RoboSub 2026 competition run: Gate → Slalom → Bin → Torpedo → Return+Roll. | — | `set_depth` |
 | `task_gate` | Gate task — find the gate and drive through it. | `gate_sharks` | `move_forward`, `pause`, `set_depth` |
 | `task_return` | Return task — find gate again, pass back through, style roll. | `gate_sharks` | `move_forward`, `pause`, `set_depth`, `style_roll`, `turn` |
 | `task_slalom` | Slalom task — weave through red pipes. | `slalom_red_pipe` ⏳ not shipped | `move_forward`, `pause`, `turn` |

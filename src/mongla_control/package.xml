@@ -8,7 +8,6 @@
   <maintainer email="fh1m.dev@gmail.com">Muhammad Fahim Faisal</maintainer>
   <license>MIT</license>
 
-  <buildtool_depend>ament_python</buildtool_depend>
 
   <depend>mongla_interfaces</depend>
   <exec_depend>python3-serial</exec_depend>

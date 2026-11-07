@@ -42,6 +42,8 @@ working, and nobody could have rebuilt it:
 | `~/mongla_ws` was a hand-rsynced copy | it still carried a deleted package, old tools and agent tooling; nothing said which commit it was | `deploy.sh` is the only way in: clean sync, clean build, and a stamp naming the commit |
 | HailoRT, its driver and its firmware were built by hand | from public source at v4.24.0, but nothing recorded how | `setup.sh --system` step 2, one version pinned in one place |
 | The compiled XFeat artifacts existed only on the vehicle | one dead card and they were gone | `backup.sh` pulls them, and everything else made on the vehicle, to the dev box |
+| `wpasupplicant` had been removed | Wi-Fi could not join anything | `setup.sh --system` installs it and writes the network you name; `mongla.local` answers on Wi-Fi and Ethernet |
+| The RTC battery was fitted but its charging was off | a rechargeable cell runs flat, and then the clock forgets the date at every power-off | `setup.sh --system` turns charging on at 3.0 V; the doctor reads it back |
 | Scripts in `~` from the retired workspace, two HailoRT logs, three stale repo clones | each one a wrong answer waiting to be run | moved to `~/attic/2026-11-07/home/`, nothing deleted |
 
 ## Five verbs
@@ -79,7 +81,9 @@ Read by the doctor, `lscpu` and `hailortcli` on 2026-11-07.
 | ROS | ROS 2 Jazzy (`ros-base`), 225 `ros-jazzy-*` packages |
 | Hailo | driver `hailo_pci` 4.24.0 (DKMS), firmware 4.24.0, HailoRT 4.24.0, `hailo_platform` 4.24.0 |
 | Python | numpy 1.26.4 and cv2 from apt, OpenBLAS; pip: pymavlink 2.4.49, filterpy 1.4.5, scipy 1.17.1, onnxruntime 1.29.0, supervision 0.26.1, trackers 2.4.0 |
-| Health | never throttled since boot, 38–50 °C |
+| Clock | Pi 5 RTC on the official battery, charging at 3.0 V; network time when there is a network |
+| Network | Ethernet (DHCP, link-local fallback) and Wi-Fi, both as `mongla.local` |
+| Health | never throttled since boot, 38–51 °C |
 | Build | 6 packages, clean `colcon build` in **44.4 s** |
 
 **Warning:** every one of those Python versions is a pin for a reason. numpy 2 breaks

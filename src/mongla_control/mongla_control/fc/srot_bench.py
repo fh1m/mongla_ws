@@ -57,6 +57,7 @@ class SrotBench:
                        min(sp.MOTOR_TEST_WINDOW_MAX_MS, 1000.0)) / 1000.0
         period = 1.0 / sp.MOTOR_TEST_KEEPALIVE_HZ
         deadline = time.monotonic() + max(0.0, float(seconds))
+        next_t = time.monotonic()
         sent = 0
         try:
             while time.monotonic() < deadline:
@@ -69,7 +70,10 @@ class SrotBench:
                                    p3=pct,
                                    p4=window_s)
                 sent += 1
-                time.sleep(period)
+                # On a deadline, not sleep(period) after the send: the send's
+                # own time would otherwise stretch every interval.
+                next_t += period
+                time.sleep(max(0.0, next_t - time.monotonic()))
                 # Check for a refusal AFTER the sleep, not by blocking on one.
                 # A refusal is a property of the request rather than of any
                 # single keep-alive, so it only has to be noticed once -- and

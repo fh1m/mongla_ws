@@ -10,7 +10,7 @@
 for, a neural accelerator that does nothing but see, and a rule that no number appears anywhere
 in this repository without the measurement that produced it.**
 
-[![tests](https://img.shields.io/badge/tests-4%20169%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![in water](https://img.shields.io/badge/in%20water-never-critical)](#what-is-true-today) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
+[![tests](https://img.shields.io/badge/tests-4%20201%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![in water](https://img.shields.io/badge/in%20water-never-critical)](#what-is-true-today) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
 
 **[The Shift](https://fh1m.github.io/mongla_ws/the-shift.html)** · **[Capability map](https://fh1m.github.io/mongla_ws/capability-map.html)** · **[The site](https://fh1m.github.io/mongla_ws/)** · [Run it](#run-it) · [Fundamentals](#the-fundamentals) · [Docs](#every-document-in-this-repository) · [Story](#three-acts)
 
@@ -108,7 +108,7 @@ git clone https://github.com/fh1m/mongla_ws && cd mongla_ws
 ./build_mongla.sh                      # colcon build, six packages
 source install/setup.bash
 
-# the tests (6 suites, 4 177 of them, ~5 minutes)
+# the tests (6 suites, 4 209 of them, ~5 minutes)
 python3 -m pytest -q                   # all six; a full run rewrites docs/stats.json
 ```
 </details>
@@ -568,13 +568,13 @@ What it is, what was wrong with it, and the eight steps from a blank SD card:
 | package | what it owns | Python LOC | test files |
 |---|---|---:|---:|
 | [`mongla_vision`](.claude/context/packages/mongla_vision/README.md) | cameras, Hailo detection, the lock ladder, optical flow, optics | 27 371 | 125 |
-| [`mongla_control`](.claude/context/packages/mongla_control/README.md) | the verbs and the board driver — a pure library, **zero entry points** | 10 511 | 63 |
-| [`mongla_planner`](.claude/context/packages/mongla_planner/README.md) | the `mongla` CLI, the mission DSL, the missions | 7 577 | 39 |
-| [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | `auv_manager_node` — the one node that talks to the board | 7 860 | 64 |
+| [`mongla_control`](.claude/context/packages/mongla_control/README.md) | the verbs and the board driver — a pure library, **zero entry points** | 10 555 | 64 |
+| [`mongla_planner`](.claude/context/packages/mongla_planner/README.md) | the `mongla` CLI, the mission DSL, the missions | 7 675 | 41 |
+| [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | `auv_manager_node` — the one node that talks to the board | 7 894 | 64 |
 | [`mongla_localization`](.claude/context/packages/mongla_localization/README.md) | the right-invariant EKF, retrodiction, course priors | 4 763 | 31 |
 | [`mongla_interfaces`](.claude/context/packages/mongla_interfaces/README.md) | one action, one state topic — the entire ROS surface | IDL | — |
 
-**322 test files against the source.** The ROS surface really is that small: one action
+**325 test files against the source.** The ROS surface really is that small: one action
 `/mongla/move` carrying one verb per goal, and one topic `/mongla/state` publishing on change,
 where an absent value is `NaN` and never `0.0`.
 
@@ -761,10 +761,10 @@ the kind of thing that goes stale — `test_doc_drift.py` fails any doc that sta
 > it's wrong."* — Richard Feynman
 
 [`measured-bars.md`](.claude/context/measured-bars.md) is the file this project is really built
-on: **109 entries, 853 rows of numbers**, each with the method, the conditions and the bar it had
+on: **110 entries, 860 rows of numbers**, each with the method, the conditions and the bar it had
 to clear. Tests read it. A constant that drifts from it fails CI.
 
-**18 of those 109 entries say in their own title that they took an earlier result back.** 7
+**18 of those 110 entries say in their own title that they took an earlier result back.** 7
 more measured an idea and concluded it should stay switched off. The retractions live in the
 same file as the results that stand, in the middle rather than in an appendix:
 
@@ -779,14 +779,14 @@ is how a team finds out at the venue.
 
 <!-- stats:table:begin -->
 ```
-mongla_control       1 166 passed        the verbs, the wire, the refusals
+mongla_control       1 176 passed        the verbs, the wire, the refusals
 mongla_vision        1 525 passed        detection, the lock ladder, optics, flow
-mongla_manager         581 passed        the node, bring-up gates, the docs contract
-mongla_planner         427 passed        the CLI, the DSL, the missions
+mongla_manager         589 passed        the node, bring-up gates, the docs contract
+mongla_planner         440 passed        the CLI, the DSL, the missions
 mongla_localization    412 passed        the filter, retrodiction, course priors
-test/ (repo-wide)       58 passed        nothing unreachable, the retired stack stays retired
+test/ (repo-wide)       59 passed        nothing unreachable, the retired stack stays retired
                      ─────────────
-                     4 169 passed, 0 failed
+                     4 201 passed, 0 failed
 ```
 <!-- stats:table:end -->
 
@@ -806,7 +806,7 @@ Some of those tests are unusual enough to be worth naming:
 ```mermaid
 flowchart LR
     DEV["a change"] --> HOOK["editor hooks<br/>py_compile + the matching test file<br/>+ the doc guards on a doc edit"]
-    HOOK --> UNIT["6 suites · 4 169 tests"]
+    HOOK --> UNIT["6 suites · 4 201 tests"]
     UNIT --> GUARD["the drift guards"]
     GUARD --> G1["test_doc_drift<br/>docs vs code"]
     GUARD --> G2["test_srot_protocol_drift<br/>our wire copy vs THEIR headers"]

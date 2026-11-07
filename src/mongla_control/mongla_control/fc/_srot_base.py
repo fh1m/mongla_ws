@@ -40,8 +40,8 @@ def _rx_age(msg) -> float:
     """Seconds since `msg` ARRIVED, on the monotonic clock (issue #18).
 
     Ages were wall minus wall. pymavlink stamps `_timestamp` with
-    `time.time()`, and the Pi has no RTC: the first NTP sync at the pool STEPS
-    the clock. A step back of 20 s made a value that stopped arriving 20 s ago
+    `time.time()`, and wall time can STEP: an NTP sync at the pool, or (before
+    the RTC battery was fitted, 2026-11-07) the first sync after every boot. A step back of 20 s made a value that stopped arriving 20 s ago
     read FRESH for 20 s -- LEAK and KILL last-known-good standing in for a
     silent sensor -- and a step forward made every live value read absent at
     once. The manager's reader thread now stamps `msg._mono` with

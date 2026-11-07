@@ -177,6 +177,20 @@ if [ -e /sys/class/rtc/rtc0 ]; then
   v="$(cat "$chg" 2>/dev/null || echo 0)"
   if [ "${v:-0}" -gt 0 ]; then ok "RTC battery charging at $((v / 1000)) mV"
   else warn "RTC battery not charged (dtparam=rtc_bbat_vchg) -- a rechargeable cell runs flat"; fi
+  # The cell itself, read by the PMIC. 2.88 V on 2026-11-07, charging to 3.0.
+  bv="$(vcgencmd pmic_read_adc BATT_V 2>/dev/null | sed -n 's/.*=\([0-9.]*\)V.*/\1/p')"
+  if [ -z "$bv" ]; then warn "RTC battery voltage unreadable (vcgencmd pmic_read_adc BATT_V)"
+  elif awk -v v="$bv" 'BEGIN{exit !(v < 2.5)}'; then
+    warn "RTC battery at $(printf %.2f "$bv") V -- below 2.5 V the clock may not survive a power-off"
+  else ok "RTC battery at $(printf %.2f "$bv") V"; fi
+  # Once network time has set the clock, the kernel writes it to the RTC every
+  # 11 minutes, so the two should agree to a second.
+  rtc_s="$(cat /sys/class/rtc/rtc0/since_epoch 2>/dev/null || echo)"
+  if [ -n "$rtc_s" ]; then
+    d=$(( $(date +%s) - rtc_s )); d=${d#-}
+    if [ "$d" -le 2 ]; then ok "RTC and system clock agree (${d} s)"
+    else warn "RTC is ${d} s from the system clock"; fi
+  fi
 else
   warn "no RTC -- time after a power-off comes only from the network"
 fi
@@ -206,6 +220,12 @@ stamp="$HOME/mongla_ws/.kutum-deployed"
 if [ -f "$stamp" ]; then ok "deployed: $(cat "$stamp")"
 else warn "no deploy stamp -- ~/mongla_ws was not put there by kutum/deploy.sh"; fi
 [ -f "$HOME/mongla_ws/install/setup.bash" ] && ok "workspace built" || fail "$HOME/mongla_ws is not built"
+# Everything the package.xml files declare is installed (rosdep reads them).
+if [ -d "$HOME/mongla_ws/src" ] && command -v rosdep >/dev/null; then
+  if rd="$(rosdep check --rosdistro jazzy --from-paths "$HOME/mongla_ws/src" --ignore-src 2>&1)"; then
+    ok "rosdep: every package.xml dependency installed"
+  else warn "rosdep: $(echo "$rd" | grep -m1 -iE 'apt|missing|init|update' | cut -c1-90)"; fi
+fi
 
 echo
 if [ "$FAILS" -eq 0 ]; then echo "Kutum: no FAIL."; exit 0; fi
