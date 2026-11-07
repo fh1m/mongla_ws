@@ -33,9 +33,34 @@ class MoveRejected(RuntimeError):
     is already active)."""
 
 
+_CODE_NAME = {Move.Result.SUCCEEDED: 'SUCCEEDED', Move.Result.PREEMPTED: 'PREEMPTED',
+              Move.Result.FAILED: 'FAILED', Move.Result.DENIED: 'DENIED',
+              Move.Result.TIMEOUT: 'TIMEOUT', Move.Result.ABORTED: 'ABORTED'}
+
+
 class MoveFailed(RuntimeError):
     """Action server accepted the goal but Move.Result.success was False
-    (timeout, mode rejected, exception, ...)."""
+    (timeout, mode rejected, exception, ...).
+
+    `code` is the result's `Move.Result.<NAME>`, so a mission can tell a board
+    refusal (DENIED, FAILED) from a deadline (TIMEOUT) from a cancel (ABORTED)
+    without reading the message. A failure raised before any result exists
+    (no goal handle) is FAILED.
+    """
+
+    def __init__(self, message: str, code: int = Move.Result.FAILED):
+        super().__init__(message)
+        self.code = int(code)
+
+    @property
+    def code_name(self) -> str:
+        return _CODE_NAME.get(self.code, str(self.code))
+
+
+def _failed(cmd: str, result) -> 'MoveFailed':
+    code = int(getattr(result, 'code', Move.Result.FAILED))
+    name = _CODE_NAME.get(code, str(code))
+    return MoveFailed(f'Goal "{cmd}" {name}: {result.message}', code=code)
 
 
 class TaskAbandoned(RuntimeError):
@@ -63,6 +88,9 @@ class MoveTimeout(MoveFailed):
     cancelled. Subclasses ``MoveFailed`` so every existing
     ``except (MoveFailed, MoveRejected)`` handler treats a stall as a
     (non-fatal, bounded) failure -- the mission never hangs forever."""
+
+    def __init__(self, message: str):
+        super().__init__(message, code=Move.Result.TIMEOUT)
 
 
 # Client-side backstops so a wedged/crashed action server can never hang a
@@ -244,7 +272,7 @@ class MonglaClient:
                     return self._search_interrupted_result(cmd)
                 result = result_future.result().result
                 if not result.success:
-                    raise MoveFailed(f'Goal "{cmd}" FAILED: {result.message}')
+                    raise _failed(cmd, result)
                 return result
             try:
                 # Bounded RESULT wait: a server that accepts then wedges (or a
@@ -282,7 +310,7 @@ class MonglaClient:
             self._active_goal_handle = None
 
         if not result.success:
-            raise MoveFailed(f'Goal "{cmd}" FAILED: {result.message}')
+            raise _failed(cmd, result)
         return result
 
     # ------------------------------------------------------------------ #

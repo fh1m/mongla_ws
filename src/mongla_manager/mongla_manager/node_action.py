@@ -223,6 +223,7 @@ class ActionMixin:
         if cmd not in COMMANDS:
             result = Move.Result()
             result.success = False
+            result.code = Move.Result.DENIED
             result.message = f'Unknown command: {cmd}'
             goal_handle.abort()
             return result
@@ -237,6 +238,7 @@ class ActionMixin:
             # drive the board with nothing guarding it.
             result = Move.Result()
             result.success = False
+            result.code = Move.Result.PREEMPTED
             result.message = f'{cmd}: superseded before it started -- not run'
             goal_handle.abort()
             self.get_logger().warn(f'[ACT  ] {cmd} -> NOT RUN (gate held by a later claim)')
@@ -274,6 +276,8 @@ class ActionMixin:
                 # could not do it" are different facts, and a bag or a tool
                 # reading the status could not tell an operator's cancel from a
                 # failed verb.
+                if result.code not in (Move.Result.ABORTED, Move.Result.PREEMPTED):
+                    result.code = Move.Result.ABORTED
                 goal_handle.canceled()
                 self.get_logger().warning(
                     f'[ACT  ] {cmd} -> CANCELED ({result.message})')
@@ -290,6 +294,7 @@ class ActionMixin:
             attitude = self.fc.get_attitude()
             result = Move.Result()
             result.success     = False
+            result.code        = Move.Result.FAILED
             result.message     = f'{cmd}: exception -- {exc}'
             result.final_value = float(attitude['depth']) if attitude else math.nan
             result.error_value = 0.0

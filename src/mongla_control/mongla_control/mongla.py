@@ -29,6 +29,7 @@ from mongla_interfaces.action import Move
 
 from .vision_verbs import VisionVerbs
 from .fc.base      import FireResult, FIRE_NOT_READY, FIRE_THRUSTER_FAULT
+from .fc.base      import SUCCEEDED, FAILED, ABORTED
 from .errors       import NotArmedError
 from .motion_writers import make_writers, _interruptible_sleep
 
@@ -150,7 +151,8 @@ class Mongla(VisionVerbs):
             res = self.fc.move(cmd, on_progress=on_progress,
                                abort_fn=self._abort_fn, **kwargs)
             final = self._current_heading() if cmd in _HEADING_VERBS else None
-            return self._make_result(res.ok, res.reason, final_value=final)
+            return self._make_result(res.ok, res.reason, final_value=final,
+                                     code=res.code)
 
     def move_forward(self, duration, gain=80.0, settle=0.0, on_progress=None):
         return self._board('move_forward', on_progress, duration=duration,
@@ -201,7 +203,7 @@ class Mongla(VisionVerbs):
         for k in range(n):
             if k and self._abort_event.is_set():
                 return self._make_result(False, f'{verb} {total:+.0f} deg: aborted '
-                                                f'after leg {k}/{n}')
+                                                f'after leg {k}/{n}', code=ABORTED)
             prog = None if on_progress is None else \
                 (lambda f, k=k: on_progress((k + f) / n))
             res = self._board(verb, prog, target=total / n, timeout=timeout,
@@ -552,11 +554,17 @@ class Mongla(VisionVerbs):
 
     def _make_result(self, success, message, final_value=None, error_value=0.0,
                      end_x_px=math.nan, end_y_px=math.nan,
-                     fill_frac=0.0, elapsed_s=0.0):
+                     fill_frac=0.0, elapsed_s=0.0, code=None):
         """A `Move.Result`; `final_value` defaults to the depth now (NaN when
-        there is none -- absence is never 0.0, which is the surface)."""
+        there is none -- absence is never 0.0, which is the surface).
+
+        `code` says how it ended (`fc.base`: SUCCEEDED .. ABORTED). A board
+        move passes the board's own; everything else is SUCCEEDED or FAILED by
+        `success`, which is all a host verb knows about itself."""
         result = Move.Result()
         result.success     = bool(success)
+        result.code        = int(code if code is not None
+                                 else (SUCCEEDED if success else FAILED))
         result.message     = str(message)
         result.final_value = float(
             final_value if final_value is not None else self._current_depth())
