@@ -5,7 +5,8 @@ missions/ClassRef send) as well as the registry KEY, so a plain single-model
 launch and an alias-keyed registry both switch by the same name a mission uses.
 """
 
-from mongla_vision.detector_node import _model_stem, DetectorNode
+from mongla_vision.detector_node import DetectorNode
+from mongla_vision.detector_params import _model_stem
 
 
 def test_model_stem_bare_and_path_and_ext():

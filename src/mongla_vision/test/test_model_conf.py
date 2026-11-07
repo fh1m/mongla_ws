@@ -1,11 +1,12 @@
-"""Per-model conf parsing (detector_node._parse_model_conf).
+"""Per-model conf parsing (detector_params._parse_model_conf).
 
 The parser feeds the live 'model_conf' param: a CSV of name=conf pairs that
 override individual registry models. It must be crash-proof on junk (a
 live-tuned param must never take down the node) and numeric-strict.
 """
 
-from mongla_vision.detector_node import _parse_model_conf, DetectorNode
+from mongla_vision.detector_node import DetectorNode
+from mongla_vision.detector_params import _parse_model_conf
 
 
 def test_single_pair():

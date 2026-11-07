@@ -38,16 +38,16 @@ import threading
 import time
 from pathlib import Path
 
-import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mongla_vision import camera_node as CN                    # noqa: E402
 from mongla_vision import detector_node as DN                  # noqa: E402
+from mongla_vision.detector_frames import _DirectFrame          # noqa: E402
 import sys as _sys_ct
 import pathlib as _pl_ct
 _sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
-from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
+from code_text import code_of_file  # noqa: E402  (issue #22)
 
 
 # --------------------------------------------------------------------------- #
@@ -56,9 +56,9 @@ from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
 def test_the_direct_payload_carries_the_header_not_just_pixels():
     """A bare ndarray would compile and run and be wrong -- `detections` would
     be stamped with whatever the detector felt like."""
-    f = DN._DirectFrame(frame='PIXELS', header='HEADER')
+    f = _DirectFrame(frame='PIXELS', header='HEADER')
     assert f.frame == 'PIXELS' and f.header == 'HEADER'
-    assert set(DN._DirectFrame._fields) == {'frame', 'header'}
+    assert set(_DirectFrame._fields) == {'frame', 'header'}
 
 
 # --------------------------------------------------------------------------- #

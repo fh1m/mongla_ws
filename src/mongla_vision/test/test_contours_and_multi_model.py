@@ -13,11 +13,12 @@ from mongla_vision.detection.contours import (
     obb_angle_deg, polygon_area_px,
 )
 from mongla_vision.detection.detector import Detection
-from mongla_vision.detector_node import _split_active
+from mongla_vision.detector_frames import _DirectFrame
+from mongla_vision.detector_params import _split_active
 import sys as _sys_ct
 import pathlib as _pl_ct
 _sys_ct.path.insert(0, str(_pl_ct.Path(__file__).resolve().parents[3] / 'tools'))
-from code_text import code_of, code_of_file  # noqa: E402  (issue #22)
+from code_text import code_of  # noqa: E402  (issue #22)
 
 
 class TestSplitActive:
@@ -248,7 +249,7 @@ class TestASecondaryModelCannotTearDownThePrimary:
         n._merge_extra = explode
 
         for _ in range(4):
-            n._infer_q.put(D._DirectFrame(frame=object(), header=None))
+            n._infer_q.put(_DirectFrame(frame=object(), header=None))
         try:
             n._infer_loop()
         except Exception:
@@ -280,7 +281,6 @@ def test_the_STARTUP_path_splits_the_csv_too(monkeypatch):
     property that keeps a launch argument and a mid-mission switch meaning the
     same thing.
     """
-    import inspect
     import mongla_vision.detector_node as D
     src = code_of(D.DetectorNode.__init__)
     assert '_split_active(active_model)' in src, (

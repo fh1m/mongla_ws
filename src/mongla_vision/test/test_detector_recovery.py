@@ -7,6 +7,9 @@ publishing nothing, indefinitely. Every liveness check we own passed.
 These drive the SHIPPING handler on a bare instance, so they test the escalation
 that runs rather than a copy of it.
 """
+import sys as _sys_ct
+_sys_ct.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parents[3] / 'tools'))
+from code_text import source_of  # noqa: E402
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,6 +19,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mongla_vision import detector_node as D          # noqa: E402
+from mongla_vision.detector_frames import _DirectFrame  # noqa: E402
 
 
 class _Log:
@@ -142,7 +146,7 @@ def test_the_LOOP_actually_calls_the_failure_handler(monkeypatch):
     n = _loop_node(lambda _f: (_ for _ in ()).throw(RuntimeError('abort')),
                    monkeypatch)
     for _ in range(4):
-        n._infer_q.put(D._DirectFrame(frame=object(), header=None))
+        n._infer_q.put(_DirectFrame(frame=object(), header=None))
     try:
         n._infer_loop()
     except Exception:
@@ -163,7 +167,7 @@ def test_a_SUCCESSFUL_inference_in_the_LOOP_resets_the_counter(monkeypatch):
 
     n = _loop_node(flaky, monkeypatch)
     for _ in range(5):
-        n._infer_q.put(D._DirectFrame(frame=object(), header=None))
+        n._infer_q.put(_DirectFrame(frame=object(), header=None))
     try:
         n._infer_loop()
     except Exception:
@@ -209,8 +213,8 @@ def test_the_inference_counter_does_not_count_frames_it_never_inferred():
     """It reported "300 inferences" during a run in which zero inferences
     happened -- the single reason the dead detector looked busy. A counter
     named for something it does not count is worse than no counter."""
-    src = (Path(__file__).resolve().parents[1]
-           / 'mongla_vision' / 'detector_node.py').read_text()
+    src = source_of(Path(__file__).resolve().parents[1]
+                    / 'mongla_vision' / 'detector_node.py')
     i = src.index('self._infers += 1')
     guard = src[max(0, i - 260):i]
     assert 'self._det is not None' in guard, \
@@ -236,7 +240,7 @@ def test_the_LOOP_reports_a_blind_camera(monkeypatch):
     rng = np.random.default_rng(0)
     for _ in range(4):
         dark = rng.integers(0, 4, (480, 640, 3), dtype=np.uint8)
-        n._infer_q.put(D._DirectFrame(frame=dark, header=None))
+        n._infer_q.put(_DirectFrame(frame=dark, header=None))
     try:
         n._infer_loop()
     except Exception:
@@ -253,7 +257,7 @@ def test_a_FAULT_in_the_seeing_check_never_stops_detection(monkeypatch):
     n._seeing = SimpleNamespace(observe=lambda _f: (_ for _ in ()).throw(ValueError('boom')))
     n._seeing_state = None
     for _ in range(4):
-        n._infer_q.put(D._DirectFrame(frame=np.zeros((4, 4, 3), np.uint8), header=None))
+        n._infer_q.put(_DirectFrame(frame=np.zeros((4, 4, 3), np.uint8), header=None))
     try:
         n._infer_loop()
     except Exception:

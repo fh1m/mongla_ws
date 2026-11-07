@@ -48,7 +48,7 @@ from launch_ros.parameter_descriptions import ParameterValue
 #
 #   * the always-on `[ offset lat=.. depth=..px ]` alignment readout, which is
 #     the pool-day bearing telemetry and is emitted at INFO by
-#     `detector_node._log_alignment`
+#     `DetectorNode._log_alignment` (detector_publish.py)
 #   * the 0.1 Hz chip-efficiency line, which reports whether the chip is only
 #     ever seeing the freshest frame -- visible ONLY when it was broken,
 #     because the healthy case logs at info and the failure at warn
