@@ -28,6 +28,12 @@ there, so the downscale costs nothing.
 ThreadingHTTPServer, not HTTPServer: an MJPEG handler never returns and would
 starve every other route.
 
+The files:
+    guide.py           the HTTP server, camera discovery, paths, `main`
+    guide_capture.py   the pose script, the capture/detect threads, `assess`
+    guide_page.py      the page served at `/`
+    solver.py          the fit; also run as a subprocess by the Solve button
+
 Usage (stop the vision launch first -- it holds the cameras):
     python3 tools/fov_calibrate_web.py --device 3 --out ~/fantech_cal
 """
@@ -44,477 +50,33 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-import cv2
-import numpy as np
 
-def _load_solver():
-    """The solver, as a sibling module.
+def _sibling(stem):
+    """A module beside this file, loaded by path.
 
-    It used to be loaded by file path because both halves lived in `tools/`.
-    Inside the package it is an ordinary import, and the point stands either
-    way: ONE implementation, two callers. A second copy of the geometry is
-    how the simulator's scorer came to grade a board that no longer existed.
+    `tools/fov_calibrate_web.py` runs this file without a sourced ROS or an
+    installed package, where a relative import has no parent to resolve
+    against. Loading the sibling by path keeps that entry point ROS-free.
     """
-    try:
-        from . import solver                      # installed package
-    except ImportError:
-        # Running the file directly (the tools/ shim): load the sibling by
-        # path rather than by package, so the calibration maths never needs
-        # a sourced ROS to run.
-        import importlib.util
-        here = os.path.dirname(os.path.abspath(__file__))
-        spec = importlib.util.spec_from_file_location(
-            'mongla_calib_solver', os.path.join(here, 'solver.py'))
-        solver = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(solver)
-    return solver
+    import importlib.util
+    here = os.path.dirname(os.path.abspath(__file__))
+    spec = importlib.util.spec_from_file_location(
+        f'mongla_calib_{stem}', os.path.join(here, f'{stem}.py'))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
-FIND = cv2.CALIB_CB_ADAPTIVE_THRESH | cv2.CALIB_CB_NORMALIZE_IMAGE
-CRIT = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-GRID = 3
-# Tilt bands are ros's skew, and the old metric was broken.
-#
-# The first version compared the board's two DIAGONALS. That is zero for the
-# motion an operator actually makes: tilting about a horizontal or vertical
-# axis projects a rectangle to a SYMMETRIC TRAPEZOID, whose diagonals are
-# equal by symmetry. Measured on synthetic ground truth:
-#
-#     tilt     old diagonal metric      ROS skew
-#      15 deg        0.0000              0.054
-#      30 deg        0.0000              0.115
-#      55 deg        0.0000              0.284
-#
-# EXACTLY ZERO at 55 degrees. The operator reported being unable to reach
-# "steeply tilted" no matter how far they tilted, and they were right -- the
-# band was unreachable by construction, not by technique.
-#
-# The replacement is the measure `ros-perception/image_pipeline`'s
-# `camera_calibration` has used for years: how far a corner of the projected
-# quad departs from 90 degrees,
-#     skew = min(1, 2*|pi/2 - angle(up_left, up_right, down_right)|)
-# which is sensitive to exactly the symmetric tilt the diagonals cannot see.
-#
-# The band edges come from that mapping, and the top band stops at ~45 deg
-# On purpose. calib.io's guidance is explicit: use up to +/-45 degrees,
-# because "tilting more is usually not a good idea as feature localization
-# accuracy suffers and can become biased". Asking for "as steep as you can"
-# is asking for a worse calibration.
-#
-#     skew  0.03 = 10 deg    0.075 = 20 deg    0.13 = 33 deg    0.20 = 45 deg
-TILT_BINS = (0.00, 0.03, 0.075, 0.13, 1.00)
-TILT_NAME = ('square-on', 'slightly tilted (~15 deg)',
-             'clearly tilted (~25 deg)', 'steeply tilted (~40 deg)')
-CELL_NAME = (('top-left', 'top-centre', 'top-right'),
-             ('middle-left', 'CENTRE', 'middle-right'),
-             ('bottom-left', 'bottom-centre', 'bottom-right'))
-# OpenCV's own chessboard sharpness metric; its documented target is < 3 px.
-# Measured on 21 frames captured under the old auto-exposure: median 7.30 px,
-# and only 3 of 13 under target. That is the blur, quantified by the
-# library's own yardstick rather than by eye.
-MAX_SHARPNESS_PX = 3.0
-# AprilCal's stopping bar: they reach it in 6-8 guided images.
-ERE_BAR_PX = 1.0
-HOLD_S = 0.5          # the pose must persist this long before it is taken
-
-
-def build_steps():
-    """The pose script. Coverage x tilt by construction, not by hope.
-
-    Ordered so the easy poses come first and the operator learns the
-    interaction before being asked for a steep corner. Every one of the nine
-    regions appears at two different tilts, then the extremes are swept: the
-    four corners steeply (where distortion has its only evidence) and the
-    centre square-on twice (which anchors the principal point).
-    """
-    cells = [(y, x) for y in range(GRID) for x in range(GRID)]
-    steps = []
-    for band in (1, 2):                       # slight, then clear
-        for (y, x) in cells:
-            steps.append((y, x, band))
-    for (y, x) in ((0, 0), (0, 2), (2, 0), (2, 2)):
-        steps.append((y, x, 3))               # corners, steep
-    steps.append((1, 1, 0))                   # centre, square-on
-    steps.append((1, 1, 0))
-    return steps
-
-
-class State:
-    def __init__(self, cols, rows, outdir, steps):
-        self.lock = threading.Lock()
-        self.cols, self.rows, self.outdir = cols, rows, outdir
-        self.square = None
-        self.steps = steps
-        self.i = 0                     # current step index
-        self.frame = None
-        self.raw = None
-        self.corners = None
-        self.taken = []                # (y, x, band) actually captured
-        self.msg = 'starting...'
-        self.err = None
-        self.fps = 0.0
-        self.det_ms = 0.0
-        self.cell = None               # live: which cell the board is in
-        self.band = None               # live: which tilt band
-        self.hold = 0.0                # 0..1 progress of the hold timer
-        self.sharp = None              # OpenCV chessboard sharpness, px
-        self.device = None
-        # AIR or WATER. Recorded, shown, and part of the filename, because
-        # the two differ by ~1.44x and mixing them is a silent 44 % scale
-        # error on every range the vehicle computes.
-        self.medium = 'air'
-        self.undistort = False     # preview the correction, live
-        self.K = self.D = None     # latest fit, for that preview
-        self.solve = 'idle'
-        self.solve_out = ''
-        # AprilCal state: how uncertain the calibration still is, and where
-        # to point the operator next.
-        self.ere = None            # Max ERE, px
-        self.ere_pred = None       # predicted Max ERE after the suggestion
-        self.suggest = None        # (cell, tilt_deg) the solver wants next
-        self.assessed_n = 0
-        self.n_boards = 0
-        self.assess_err = None
-        self.fx = self.fy = self.cx = self.cy = None
-        self.fx_sd = self.hfov_air = self.hfov_water = None
-        self.worst_px = None
-
-
-def tilt_of(corners, cols):
-    """Foreshortening as ROS `camera_calibration` measures it.
-
-    How far the corner at `up_right` departs from a right angle. Scale-free,
-    so it does not confuse "further away" with "more tilted", and -- unlike
-    the diagonal comparison this replaces -- it responds to tilt about a
-    horizontal or vertical axis, which is the tilt a person actually makes.
-    """
-    c = corners.reshape(-1, 2)
-    up_left, up_right, down_right = c[0], c[cols - 1], c[-1]
-    ab = up_left - up_right
-    cb = down_right - up_right
-    na, nc = np.linalg.norm(ab), np.linalg.norm(cb)
-    if na < 1e-6 or nc < 1e-6:
-        return 0.0
-    ang = np.arccos(np.clip(float(np.dot(ab, cb)) / (na * nc), -1.0, 1.0))
-    return float(min(1.0, 2.0 * abs(np.pi / 2.0 - ang)))
-
-
-def band_of(t):
-    return max(0, min(len(TILT_NAME) - 1, int(np.digitize(t, TILT_BINS) - 1)))
-
-
-def set_camera(dev, exposure, brightness):
-    """Force a SHORT manual exposure. This is the motion-blur fix.
-
-    Measured, and it is not a preference. The camera sits in Aperture
-    Priority auto by default, and in this room that chose
-    `exposure_time_absolute = 2000` -- a 200 ms shutter. Every hand movement
-    smears, the board stops being findable, and the operator concludes the
-    detector is bad. It is not: on 21 real frames captured under that
-    exposure, redetection was only 76 % at the BEST setting and 29-43 % with
-    every alternative detector tried.
-
-    Measured on this camera, manual, by shutter (mean brightness / clipped
-    pixels / Laplacian sharpness):
-
-        auto (exp 2000)                    26.6 mean          163 sharp
-        exp 50, brightness 150            135.0 mean  6.5 %   122 sharp
-        exp 50, brightness 255            220.2 mean 53.5 %    57 sharp
-
-    So exp 50 (5 ms) with brightness 150 is the operating point: bright
-    enough, barely clipping, sharp, and a shutter 40x shorter than auto
-    chose. `gain` is INERT on this unit -- 20, 50 and 100 give identical
-    frames -- so it is not offered as a knob.
-
-    Applied with v4l2-ctl rather than cv2 properties because the ordering
-    matters: `exposure_time_absolute` is ignored while auto is engaged, so
-    auto must be turned off FIRST.
-    """
-    ok = True
-    for k, v in (('auto_exposure', 1),
-                 ('exposure_time_absolute', exposure),
-                 ('brightness', brightness)):
-        r = subprocess.run(['v4l2-ctl', '-d', f'/dev/video{dev}',
-                            '-c', f'{k}={v}'], capture_output=True)
-        ok = ok and r.returncode == 0
-    return ok
-
-
-def capture_loop(st, dev, width, height, jpeg_w, exposure, brightness):
-    """Read and stream only. Detection lives in its own thread, deliberately."""
-    cap = cv2.VideoCapture(dev, cv2.CAP_V4L2)
-    if not cap.isOpened():
-        with st.lock:
-            st.err = (f'cannot open camera {dev} -- the vision launch holds '
-                      f'the cameras, stop it first.')
-        return
-    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    # AFTER opening: cv2 resets the controls when it configures the stream,
-    # so setting them before this point is silently undone.
-    if exposure:
-        set_camera(dev, exposure, brightness)
-        time.sleep(0.5)
-        for _ in range(5):
-            cap.read()
-    n, t0 = 0, time.time()
-    while True:
-        ok, f = cap.read()
-        if not ok:
-            time.sleep(0.01)
-            continue
-        with st.lock:
-            st.raw = f
-            corners = st.corners
-            i = st.i
-            worst = st.worst_px
-            undist = st.undistort
-            K, D = st.K, st.D
-        shown = f
-        if undist and K is not None:
-            # The only check an operator can make with their eyes. Every
-            # other number here is a statistic; this is the calibration doing
-            # its job. Straight edges in the world must come out straight --
-            # if the frame edges still bow, the distortion model is wrong and
-            # no reprojection RMS will say so.
-            try:
-                shown = cv2.undistort(f, K, D)
-            except Exception:
-                shown = f
-        vis = cv2.resize(shown, (jpeg_w, int(jpeg_w * h / w)))
-        vh = vis.shape[0]
-        sc = jpeg_w / w
-        if corners is not None:
-            cv2.drawChessboardCorners(vis, (st.cols, st.rows),
-                                      (corners * sc).astype(np.float32), True)
-        # Only the TARGET region is drawn. Nine boxes was a puzzle to read;
-        # one box is an instruction.
-        if i < len(st.steps):
-            ty, tx, _ = st.steps[i]
-            x0, y0 = int(tx * jpeg_w / GRID), int(ty * vh / GRID)
-            x1, y1 = int((tx + 1) * jpeg_w / GRID), int((ty + 1) * vh / GRID)
-            cv2.rectangle(vis, (x0 + 3, y0 + 3), (x1 - 3, y1 - 3),
-                          (80, 220, 255), 3)
-        # The least-certain point, drawn. Max ERE says WHERE the model is
-        # weakest; a number in a sidebar is a fact, a target on the video is
-        # an instruction.
-        if worst is not None:
-            wx, wy = int(worst[0] * sc), int(worst[1] * sc)
-            if 0 <= wx < jpeg_w and 0 <= wy < vh:
-                cv2.circle(vis, (wx, wy), 16, (60, 120, 255), 2)
-                cv2.line(vis, (wx - 22, wy), (wx - 8, wy), (60, 120, 255), 2)
-                cv2.line(vis, (wx + 8, wy), (wx + 22, wy), (60, 120, 255), 2)
-                cv2.putText(vis, 'least certain', (wx - 44, wy - 22),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (60, 120, 255), 1)
-        if undist and K is not None:
-            cv2.putText(vis, 'UNDISTORTED', (10, 22),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (60, 220, 60), 2)
-        ok, jpg = cv2.imencode('.jpg', vis, [cv2.IMWRITE_JPEG_QUALITY, 70])
-        n += 1
-        if ok:
-            with st.lock:
-                st.frame = jpg.tobytes()
-                if time.time() - t0 >= 1.0:
-                    st.fps = n / (time.time() - t0)
-                    n, t0 = 0, time.time()
-
-
-def detect_loop(st, det_w):
-    """Match the live pose against the current step, and take it when held.
-
-    Three measurements that settle how this is tuned, so the next person
-    does not re-derive them:
-
-    **480 px is the optimum, not a compromise.** Hit rate on 21 real board
-    frames, with the per-frame cost:
-
-        280px  38.1 %   41.5 ms      480px  76.2 %   49.9 ms   <- shipped
-        320px  42.9 %   45.9 ms      560px  71.4 %   65.6 ms
-        400px  47.6 %   61.7 ms     1280px  61.9 %  223.5 ms
-
-    It beats everything smaller AND everything larger. Going finer to "see
-    more detail" halves the hit rate.
-
-    **Limiting OpenCV threads does nothing, MEASURED.** Detection at ~1.5 s
-    on a busy scene looked like it was starving the capture loop of all four
-    cores. A/B with `cv2.setNumThreads(2)`: **15.0 fps in both arms**. The
-    hypothesis was wrong and the change is not shipped.
-
-    **The frame rate is the CAMERA.** Raw capture with nothing else running
-    at all is **15.0 fps** while the driver advertises 30 -- the Fantech's
-    rate wanders (30.3 / 15.0 / 7.5 measured across sessions) and a replug is
-    the known remedy. Carried ledger item 9. No amount of tuning here moves
-    it.
-
-    **`CALIB_CB_FAST_CHECK` is a wash**: 306.8 vs 307.4 ms on no-board
-    frames at an identical 76.2 % hit rate. Not used -- a flag that buys
-    nothing still costs the next reader an explanation.
-    """
-    held_since = None
-    while True:
-        with st.lock:
-            f = st.raw
-            i = st.i
-        if f is None or i >= len(st.steps):
-            time.sleep(0.05)
-            continue
-        w, h = f.shape[1], f.shape[0]
-        small = cv2.resize(f, (det_w, int(det_w * h / w)))
-        gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-        t1 = time.time()
-        found, c = cv2.findChessboardCorners(gray, (st.cols, st.rows), FIND)
-        dt = time.time() - t1
-        ty, tx, tb = st.steps[i]
-        if not found:
-            held_since = None
-            with st.lock:
-                st.corners, st.cell, st.band, st.hold = None, None, None, 0.0
-                st.msg = 'show the whole board to the camera'
-                st.det_ms = 1000 * dt
-            continue
-        c = cv2.cornerSubPix(gray, c, (7, 7), (-1, -1), CRIT)
-        full = c / (det_w / w)
-        cc = full.reshape(-1, 2)
-        cx, cy = float(cc[:, 0].mean()), float(cc[:, 1].mean())
-        band = band_of(tilt_of(full, st.cols))
-        gx = min(GRID - 1, int(cx / w * GRID))
-        gy = min(GRID - 1, int(cy / h * GRID))
-        # Tilt is "at least", not "exactly". Demanding an exact band made
-        # the steps very fiddly to satisfy -- the operator reported being
-        # rejected repeatedly -- without buying anything: the script asks for
-        # increasing tilt as it goes, so accepting MORE tilt than asked still
-        # yields the spread the fit needs. The square-on steps stay exact,
-        # because for those "more" is precisely what must not be accepted.
-        okc = (gy, gx) == (ty, tx)
-        okt = (band == 0) if tb == 0 else (band >= tb)
-        # Sharpness is a capture gate, not something to discover in the
-        # solve. Measured on 21 frames taken under the old auto-exposure:
-        # median 7.30 px against OpenCV's documented < 3 px target, only 3
-        # of 13 in spec. A blurred view is not a cheap view -- it biases the
-        # corner positions the whole calibration is built from, and nothing
-        # downstream can tell it apart from a good one.
-        sharp = None
-        if okc and okt:
-            try:
-                sharp = float(cv2.estimateChessboardSharpness(
-                    gray, (st.cols, st.rows), c)[0])
-            except Exception:
-                sharp = None
-        oks = sharp is None or sharp <= MAX_SHARPNESS_PX
-        with st.lock:
-            st.sharp = sharp
-        if okc and okt and not oks:
-            held_since = None
-            prog = 0.0
-            msg = (f'too blurred ({sharp:.1f} px, want <{MAX_SHARPNESS_PX:.0f})'
-                   f' -- hold still, or add light')
-        elif okc and okt:
-            held_since = held_since or time.time()
-            prog = min(1.0, (time.time() - held_since) / HOLD_S)
-            msg = 'hold it...'
-            if prog >= 1.0:
-                fn = os.path.join(st.outdir, f'cal_{i:03d}.png')
-                cv2.imwrite(fn, f)
-                held_since = None
-                prog = 0.0
-                with st.lock:
-                    st.taken.append((ty, tx, tb))
-                    st.i += 1
-                    msg = 'got it'
-        else:
-            held_since = None
-            prog = 0.0
-            msg = ('move the board to the highlighted box' if not okc
-                   else ('tilt it MORE' if band < tb else
-                         'hold it FLATTER (square-on to the camera)'))
-        with st.lock:
-            st.corners, st.cell, st.band = full, (gy, gx), band
-            st.hold, st.msg, st.det_ms = prog, msg, 1000 * dt
-
-
-def assess(st, cols, rows, square, size):
-    """Refit from what is captured, report Max ERE, and suggest the next pose.
-
-    This is the aprilcal loop, and it replaces "capture 24 poses because a
-    script says so" with "capture until the calibration stops being
-    uncertain". Their measured result is 6-8 images to under 1 px, so a fixed
-    24 is both slower than necessary and no guarantee.
-
-    Runs in a thread: a fit plus ~12 candidate evaluations is ~6 s on the Pi,
-    and the video must not stall for it.
-    """
-    fs = _load_solver()
-    objp = fs.board_points(cols, rows, square)
-    while True:
-        with st.lock:
-            files = sorted(glob.glob(os.path.join(st.outdir, 'cal_*.png')))
-            n_seen = st.assessed_n
-        if len(files) < 6 or len(files) == n_seen:
-            time.sleep(1.0)
-            continue
-        try:
-            ips, _, sz = fs.detect(files, cols, rows)
-            if len(ips) < 6:
-                raise ValueError('too few boards')
-            samples = fs.kfold_std(objp, ips, sz, 4)
-            ere, worst = fs.max_ere(samples, sz[0], sz[1])
-            # Live intrinsics + the conditioning checks, so the operator can
-            # see the answer FORM rather than waiting for a verdict at the
-            # end. A calibration that is going wrong is visible early: fx
-            # wandering between folds is the tell.
-            fit = fs.fit_standard(objp, ips, sz)
-            Kf = fit['K']
-            fxs = np.array([K[0, 0] for K, _ in samples])
-            v = fs.fov_from_K(Kf, sz[0], sz[1])
-            # Where the model is least certain, as a PIXEL, so it can be
-            # drawn. A metric you can point at is an instruction.
-            wpx = None
-            if worst is not None:
-                wpx = (float(worst[0] * Kf[0, 0] + Kf[0, 2]),
-                       float(worst[1] * Kf[1, 1] + Kf[1, 2]))
-            cands = [((y, x), t) for y in range(GRID) for x in range(GRID)
-                     for t in (10, 25, 40)]
-            best, pred, _ = fs.suggest_next_pose(objp, ips, sz, cands)
-            with st.lock:
-                st.ere, st.ere_pred = ere, pred
-                st.K, st.D = Kf, fit['D']
-                st.fx, st.fy = float(Kf[0, 0]), float(Kf[1, 1])
-                st.cx, st.cy = float(Kf[0, 2]), float(Kf[1, 2])
-                st.fx_sd = float(fxs.std(ddof=1)) if len(fxs) > 1 else None
-                st.hfov_air = float(v['hfov_air'])
-                st.hfov_water = float(v['hfov_water'])
-                st.worst_px = wpx
-                st.assessed_n = len(files)
-                st.n_boards = len(ips)
-                if best is not None:
-                    st.suggest = best
-        except Exception as exc:
-            with st.lock:
-                st.assessed_n = len(files)
-                st.assess_err = str(exc)[:120]
-        time.sleep(0.5)
-
-
-def resume(st):
-    """Continue from frames already on disk, so a restart is not destructive.
-
-    The files ARE the state -- `cal_<step>.png` is named for the step that
-    produced it, so resuming is just "which step numbers exist". Without
-    this, a restart begins at step 0 and overwrites the operator's work one
-    frame at a time while the page counts up from zero, with no error.
-    """
-    done = {int(os.path.basename(p)[4:7])
-            for p in glob.glob(os.path.join(st.outdir, 'cal_*.png'))}
-    i = 0
-    while i in done:
-        i += 1
-    with st.lock:
-        st.i = i
-        if i:
-            st.msg = f'resumed at step {i + 1}'
+# One implementation, two callers: `solver.py` is also what the Solve button
+# runs as a subprocess, so the naming rule and the geometry exist once.
+try:
+    from . import guide_capture as capture          # the installed package
+    from . import guide_page, solver
+except ImportError:                                  # run as a file (tools/)
+    capture = _sibling('guide_capture')
+    guide_page = _sibling('guide_page')
+    solver = _sibling('solver')
+PAGE = guide_page.PAGE
 
 
 def run_solve(st, argv, dest):
@@ -532,307 +94,6 @@ def run_solve(st, argv, dest):
             st.solve, st.solve_out = 'failed', str(exc)
 
 
-PAGE = """<!doctype html><meta charset=utf-8>
-<title>Camera calibration</title>
-<style>
- :root{--bg:#0e1116;--fg:#e6edf3;--dim:#8b949e;--ok:#3fb950;--no:#f85149;
-       --line:#21262d;--acc:#58a6ff;--warn:#d29922}
- *{box-sizing:border-box}
- body{margin:0;background:var(--bg);color:var(--fg);
-      font:14px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
- header{padding:12px 20px;border-bottom:1px solid var(--line);display:flex;
-        gap:16px;align-items:baseline}
- h1{font-size:14px;margin:0;letter-spacing:.09em;text-transform:uppercase}
- .sub{color:var(--dim);font-size:12px}
- main{display:grid;grid-template-columns:minmax(0,1fr) 340px}
- .vid{padding:16px}
- img{width:100%;display:block;border:1px solid var(--line);border-radius:4px}
- aside{padding:18px;border-left:1px solid var(--line)}
- .step{font-size:12px;color:var(--dim);letter-spacing:.1em;
-       text-transform:uppercase}
- .todo{font-size:21px;line-height:1.35;margin:6px 0 14px}
- .todo b{color:var(--acc)}
- .chk{display:flex;gap:10px;align-items:center;margin:6px 0;font-size:13px}
- .dot{width:9px;height:9px;border-radius:50%;background:#30363d;flex:none}
- .dot.on{background:var(--ok)} .dot.off{background:var(--no)}
- .msg{margin:14px 0;padding:9px 11px;border-radius:4px;background:#161b22;
-      border-left:3px solid var(--warn);font-size:13px;min-height:38px}
- .bar{height:6px;background:#161b22;border-radius:3px;overflow:hidden;
-      margin:10px 0 4px}
- .bar i{display:block;height:100%;background:var(--acc);width:0;
-        transition:width .12s linear}
- .prog{height:6px;background:#161b22;border-radius:3px;overflow:hidden}
- .prog i{display:block;height:100%;background:var(--ok);width:0}
- button{width:100%;padding:10px;border:0;border-radius:4px;background:var(--acc);
-        color:#04121f;font:inherit;font-weight:700;cursor:pointer;margin-top:6px}
- button:disabled{background:#21262d;color:var(--dim);cursor:not-allowed}
- button.ghost{background:#21262d;color:var(--dim);font-weight:400}
- table#ans{width:100%;border-collapse:collapse;font-size:12px}
- table#ans td{padding:2px 0;vertical-align:top}
- table#ans td:first-child{color:var(--dim);white-space:nowrap;padding-right:10px}
- table#ans td:last-child{text-align:right;font-variant-numeric:tabular-nums}
- .good{color:var(--ok)} .bad{color:var(--no)} .warn2{color:var(--warn)}
- .med{font:700 15px/1.6 ui-monospace,monospace;letter-spacing:.16em;
- padding:6px 10px;border-radius:6px;text-align:center;margin-bottom:8px}
-.med.air{background:#12331e;color:#7fe3a1;border:1px solid #2c6b41}
-.med.water{background:#0d2740;color:#79c6ff;border:1px solid #2b5f8c}
-.lib{border:1px solid #333;border-radius:6px;padding:7px 9px;margin:6px 0}
-.cam{border:1px solid var(--line);border-radius:4px;padding:8px 10px;
-      margin-bottom:8px;font-size:12px}
- .cam.act{border-color:var(--acc)}
- .cam b{font-weight:600} .cam .d{color:var(--dim)}
- .cam button{width:auto;padding:4px 10px;margin-top:6px;font-size:11px}
- .btnrow{display:flex;gap:6px;margin-top:6px}
- .btnrow button{margin-top:0}
- .btnrow a{flex:1;text-decoration:none}
- .btnrow input{flex:1;min-width:0;background:#161b22;border:1px solid var(--line);
-               color:var(--fg);border-radius:4px;padding:6px;font:inherit;font-size:12px}
- pre{background:#161b22;padding:10px;border-radius:4px;font-size:11px;
-     max-height:34vh;overflow:auto;white-space:pre-wrap;margin-top:8px}
- h2{font-size:11px;letter-spacing:.12em;text-transform:uppercase;
-    color:var(--dim);margin:20px 0 6px}
-</style>
-<header><h1>Calibration</h1>
- <span class=sub>each step is checked before it counts</span>
- <span class=sub id=perf style="margin-left:auto"></span></header>
-<main>
- <div class=vid><img src="/video"></div>
- <aside>
-  <div class=step id=stepno></div>
-  <div class=todo id=todo></div>
-  <div class=chk><span class=dot id=dc></span><span id=tc></span></div>
-  <div class=chk><span class=dot id=dt></span><span id=tt></span></div>
-  <div class=chk><span class=dot id=ds></span><span id=ts></span></div>
-  <div class=prog><i id=hold></i></div>
-  <div class=msg id=msg></div>
-  <h2>Medium</h2>
-  <div id=medbar class=med>AIR</div>
-  <div class=btnrow>
-    <button class=ghost id=mair>Calibrate in AIR</button>
-    <button class=ghost id=mwat>Calibrate in WATER</button>
-  </div>
-  <div class=sub>air and water differ by ~1.44&times; on this hull. The
-   medium is written into the file and onto its name, so the two can never
-   be confused. Calibrate in air unless you are validating.</div>
-  <h2>Cameras on this vehicle</h2>
-  <div id=cams class=sub>scanning…</div>
-  <h2>Saved calibrations</h2>
-  <div class=d id=libdir></div>
-  <div id=lib class=sub>scanning…</div>
-  <h2>The answer so far</h2>
-  <table id=ans><tr><td colspan=2 class=sub>needs 6 usable views</td></tr></table>
-  <h2>Certainty <span class=sub>(AprilCal Max ERE)</span></h2>
-  <div class=bar><i id=eb></i></div>
-  <div class=sub id=et></div>
-  <div class=sub id=sg style="margin-top:6px"></div>
-  <h2>Progress</h2>
-  <div class=bar><i id=pb></i></div>
-  <div class=sub id=pt></div>
-  <button class=ghost id=skip>Skip this pose</button>
-  <div class=btnrow>
-    <button class=ghost id=undo>Delete last</button>
-    <button class=ghost id=undist>Undistorted view</button>
-  </div>
-  <h2>Board</h2>
-  <div class=btnrow>
-    <input id=gr size=6 title="inner corners, e.g. 8x6">
-    <input id=sq size=7 title="square size in metres">
-    <button class=ghost id=setb>Apply</button>
-  </div>
-  <div class=sub>a wrong grid detects NOTHING and looks like bad lighting</div>
-  <h2>Finish</h2>
-  <button id=go>Run calibration</button>
-  <div class=btnrow>
-    <a id=dl href="/calibration.json" download><button class=ghost
-       style="width:100%">Download result</button></a>
-    <button class=ghost id=rst>Reset all captures</button>
-  </div>
-  <div class=sub id=sv style="margin-top:6px"></div>
-  <pre id=out></pre>
- </aside>
-</main>
-<script>
-const $=i=>document.getElementById(i);
-async function tick(){
- try{
-  const s=await (await fetch('/status')).json();
-  $('perf').textContent=s.fps.toFixed(0)+' fps · detect '+s.det_ms.toFixed(0)+' ms';
-  if(s.done){
-    $('stepno').textContent='all poses captured';
-    $('todo').innerHTML='Press <b>Run calibration</b>.';
-    $('tc').textContent='';$('tt').textContent='';$('ts').textContent='';
-  }else{
-    $('stepno').textContent='Step '+(s.i+1)+' of '+s.n;
-    $('todo').innerHTML='Put the board in the <b>'+s.want_cell+
-      '</b> of the frame,<br>and hold it <b>'+s.want_tilt+'</b>.';
-    $('tc').textContent='position: '+(s.cell? s.cell : 'no board');
-    $('tt').textContent='tilt: '+(s.band!==null? s.band : '-');
-    $('ts').textContent = s.sharp===null ? 'sharpness: -'
-        : 'sharpness: '+s.sharp.toFixed(1)+' px (want <'+s.sharp_max+')';
-    $('ds').className='dot '+(s.sharp===null?'':(s.sharp<=s.sharp_max?'on':'off'));
-    $('dc').className='dot '+(s.ok_cell?'on':'off');
-    $('dt').className='dot '+(s.ok_tilt?'on':'off');
-  }
-  $('hold').style.width=(100*s.hold)+'%';
-  $('msg').textContent=s.err||s.msg;
-  $('pb').style.width=(100*s.i/s.n)+'%';
-  $('pt').textContent=s.i+' of '+s.n+' poses captured ('+s.n_boards+' usable)';
-  // Certainty bar: full when Max ERE is under the bar. Log scale, because
-  // it starts in the tens of pixels and the last factor of two is the part
-  // that matters.
-  let pct=0, txt='need 6 usable views before this can be computed';
-  if (s.ere!==null && isFinite(s.ere)) {
-    pct = Math.max(0, Math.min(100, 100*(1 - Math.log10(Math.max(s.ere,s.ere_bar))
-                                          /Math.log10(40))));
-    txt = 'Max ERE '+s.ere.toFixed(2)+' px  (bar <'+s.ere_bar.toFixed(1)+')';
-    if (s.ere<=s.ere_bar) txt += '  — DONE, calibration is certain';
-  }
-  $('eb').style.width=pct+'%';
-  $('et').textContent=txt;
-  // The answer as it forms, with a verdict per line, so a calibration that
-  // is going wrong is visible EARLY rather than at the end.
-  const rows=[];
-  if (s.fx!==null){
-    const sdpct = s.fx_sd!==null ? 100*s.fx_sd/s.fx : null;
-    const cls = sdpct===null ? '' : (sdpct<0.5?'good':(sdpct<1.5?'warn2':'bad'));
-    rows.push(['focal fx / fy', s.fx.toFixed(1)+' / '+s.fy.toFixed(1)+' px','']);
-    rows.push(['centre cx / cy', s.cx.toFixed(0)+' / '+s.cy.toFixed(0)+' px','']);
-    if (sdpct!==null)
-      rows.push(['fx spread across folds', sdpct.toFixed(2)+' %', cls]);
-    rows.push(['HFOV in air', s.hfov_air.toFixed(2)+'°','']);
-    rows.push(['HFOV in water', s.hfov_water.toFixed(2)+'°','good']);
-    rows.push(['usable views', s.n_boards, s.n_boards>=10?'good':'warn2']);
-  }
-  $('ans').innerHTML = rows.length
-    ? rows.map(r=>'<tr><td>'+r[0]+'</td><td class="'+r[2]+'">'+r[1]+'</td></tr>').join('')
-    : '<tr><td colspan=2 class=sub>needs 6 usable views</td></tr>';
-  $('sg').textContent = s.suggest
-      ? 'solver suggests next: '+s.suggest+
-        (s.ere_pred? '  (predicts '+s.ere_pred.toFixed(1)+' px)':'')
-      : '';
-  const enough = (s.ere!==null && isFinite(s.ere) && s.ere<=s.ere_bar) || s.done;
-  const b=$('go'); b.disabled=(s.solve==='running')||!enough;
-  b.textContent=s.solve==='running'?'solving...':
-    (!enough?'keep capturing — not certain yet':
-     (s.solve==='done'?'Re-run calibration':'Run calibration'));
-  $('sv').textContent = s.solve==='done'?'installed — rebuild to use it':
-    s.solve==='failed'?'solve failed, see below':'';
-  $('out').textContent=s.solve_out||'';
-  $('skip').style.display=s.done?'none':'block';
-  const mb=$('medbar'); mb.textContent=(s.medium||'air').toUpperCase();
-  mb.className='med '+(s.medium||'air');
-  $('undist').textContent = s.undistort?'Raw view':'Undistorted view';
-  $('undist').disabled = s.fx===null;
-  $('dl').style.pointerEvents = s.have_result?'auto':'none';
-  $('dl').style.opacity = s.have_result?1:0.4;
-  if(!$('gr').matches(':focus') && !$('gr').value) $('gr').value=s.grid;
-  if(!$('sq').matches(':focus') && !$('sq').value) $('sq').value=s.square||'';
- }catch(e){}
-}
-$('go').onclick=async()=>{await fetch('/solve',{method:'POST'});tick();};
-$('undo').onclick=async()=>{await fetch('/undo',{method:'POST'});tick();};
-$('undist').onclick=async()=>{await fetch('/undistort',{method:'POST'});tick();};
-$('rst').onclick=async()=>{
-  if(confirm('Delete every capture and start over?')){
-    await fetch('/reset',{method:'POST'});tick();}};
-$('setb').onclick=async()=>{
-  const g=$('gr').value.trim(), q=$('sq').value.trim();
-  if(!g&&!q) return;
-  $('msg').textContent='restarting with the new board…';
-  await fetch('/board?grid='+encodeURIComponent(g)+'&square='+encodeURIComponent(q),
-              {method:'POST'});
-  setTimeout(()=>location.reload(), 5000);};
-$('skip').onclick=async()=>{await fetch('/skip',{method:'POST'});tick();};
-async function cams(){
- try{
-  const r=await (await fetch('/cameras')).json();
-  window._cams=r.cameras;
-  document.getElementById('cams').innerHTML = r.cameras.length ? r.cameras.map(c=>{
-    const active = String(c.device).endsWith(String(r.active));
-    const cal=c.calibration;
-    let line, cls;
-    if(!cal){ line='<span class=bad>NO CALIBRATION</span>'; cls='bad'; }
-    else if(c.match==='confirmed'){
-      line='<span class=good>calibrated</span> · fx '+cal.fx.toFixed(0)+
-           ' · HFOV '+cal.hfov_air.toFixed(1)+'° air / '+cal.hfov_water.toFixed(1)+'° water'+
-           (cal.max_ere_px?' · ERE '+cal.max_ere_px.toFixed(1)+'px':'')+
-           ' · '+(cal.captured||'?'); }
-    else { line='<span class=warn2>UNVERIFIED</span> — '+cal.file+
-           ' fits by name but records no camera identity, so it cannot be'+
-           ' proven to be this unit'; }
-    const prof = cal && cal.applies_to ? cal.applies_to[0]
-               : (String(c.card||'').toLowerCase().includes('fantech')
-                  ? 'pi_forward' : 'pi_downward');
-    return '<div class="cam'+(active?' act':'')+'">'+
-      '<b>'+(c.card||c.device)+'</b> <span class=d>'+c.device+
-      ' · usb '+(c.usb_vid||'?')+':'+(c.usb_pid||'?')+
-      (active?' · ACTIVE':'')+'</span><br>'+line+
-      (active?'':'<button onclick="sw(\\''+c.device+'\\',\\''+prof+'\\')">'+
-        (cal?'Re-calibrate':'Calibrate')+' this camera</button>')+'</div>';
-  }).join('') : '<span class=bad>no USB cameras found</span>';
- }catch(e){}
-}
-$('mair').onclick=()=>setmed('air');
-$('mwat').onclick=()=>setmed('water');
-async function setmed(m){
-  if(m==='water' && !confirm(
-     'Calibrate IN WATER?\\n\\nThe normal path is to calibrate in air once '+
-     'and correct refraction analytically. An in-water calibration is a '+
-     'VALIDATION of that correction. It is saved separately and never '+
-     'overwrites the air one.')) return;
-  $('msg').textContent='restarting in '+m+'…';
-  await fetch('/switch?medium='+m,{method:'POST'});
-  setTimeout(()=>location.reload(), 5000);
-}
-window._cams=[];
-async function lib(){
- try{
-  const r=await (await fetch('/library')).json();
-  document.getElementById('lib').innerHTML = r.library.length ? r.library.map(c=>{
-    // Only offer to apply a calibration to a camera that is actually here.
-    // Applying to an absent device would write a file claiming a unit
-    // nobody can check.
-    const btns=(window._cams||[]).map(cam=>
-      '<button onclick="ap(\\''+c.file+'\\',\\''+cam.device+'\\',\\''+
-      ((c.applies_to&&c.applies_to[0])||'pi_forward')+'\\')">apply to '+
-      (cam.card||cam.device)+'</button>').join(' ');
-    return '<div class=lib><b>'+c.file+'</b> <span class=d>'+
-      (c.medium||'air').toUpperCase()+' · '+c.width+'x'+c.height+
-      (c.fx?' · fx '+c.fx.toFixed(0):'')+
-      (c.views?' · '+c.views+' views':'')+
-      (c.max_ere_px?' · ERE '+c.max_ere_px.toFixed(1)+'px':'')+
-      '</span><br><span class=sub>'+(c.camera||'no camera recorded')+
-      ' · '+(c.captured||'?')+'</span><br>'+btns+'</div>';
-  }).join('') : '<span class=sub>none saved yet</span>';
-  // Name the directory on the page. It is resolved by walking up for
-  // `src/mongla_vision/config/calibration`, and if that walk ever fails the
-  // fallback is a folder OUTSIDE the package -- which would look exactly
-  // like an empty library.
-  document.getElementById('libdir').textContent = r.dir;
- }catch(e){}
-}
-async function ap(file,dev,prof){
-  if(!confirm('Apply '+file+' to '+dev+'?\\n\\nThis asserts they are the SAME '+
-    'physical camera. The file records that YOU asserted it, not that it '+
-    'was measured here.')) return;
-  await fetch('/apply?file='+encodeURIComponent(file)+'&device='+
-    encodeURIComponent(dev)+'&applies_to='+encodeURIComponent(prof),
-    {method:'POST'});
-  setTimeout(()=>{lib();cams();}, 500);
-}
-async function sw(dev,prof){
-  const n=dev.replace(/\\D+/g,'');
-  document.getElementById('cams').innerHTML='<span class=warn2>switching to '+dev+'…</span>';
-  await fetch('/switch?device='+n+'&applies_to='+prof,{method:'POST'});
-  setTimeout(()=>location.reload(), 5000);
-}
-setInterval(tick,300);tick();
-setInterval(cams,4000);cams();
-setInterval(lib,6000);lib();
-</script>
-"""
-
-
 def make_handler(st, solve_argv, solve_dest, cal_dir, restart):
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a):
@@ -846,23 +107,23 @@ def make_handler(st, solve_argv, solve_dest, cal_dir, restart):
                 cell, band = st.cell, st.band
                 d = {
                     'i': i, 'n': n, 'done': done,
-                    'want_cell': CELL_NAME[ty][tx], 'want_tilt': TILT_NAME[tb],
-                    'cell': CELL_NAME[cell[0]][cell[1]] if cell else None,
-                    'band': TILT_NAME[band] if band is not None else None,
+                    'want_cell': capture.CELL_NAME[ty][tx], 'want_tilt': capture.TILT_NAME[tb],
+                    'cell': capture.CELL_NAME[cell[0]][cell[1]] if cell else None,
+                    'band': capture.TILT_NAME[band] if band is not None else None,
                     'ok_cell': bool(cell == (ty, tx)),
                     'ok_tilt': bool(band == tb),
                     'hold': st.hold, 'msg': st.msg, 'err': st.err,
-                    'sharp': st.sharp, 'sharp_max': MAX_SHARPNESS_PX,
+                    'sharp': st.sharp, 'sharp_max': capture.MAX_SHARPNESS_PX,
                     'undistort': st.undistort, 'medium': st.medium,
                     'grid': f'{st.cols}x{st.rows}',
                     'square': st.square,
                     'have_result': os.path.exists(solve_dest),
                     'ere': st.ere, 'ere_pred': st.ere_pred,
-                    'ere_bar': ERE_BAR_PX, 'n_boards': st.n_boards,
+                    'ere_bar': capture.ERE_BAR_PX, 'n_boards': st.n_boards,
                     'fx': st.fx, 'fy': st.fy, 'cx': st.cx, 'cy': st.cy,
                     'fx_sd': st.fx_sd, 'hfov_air': st.hfov_air,
                     'hfov_water': st.hfov_water,
-                    'suggest': (f'{CELL_NAME[st.suggest[0][0]][st.suggest[0][1]]}'
+                    'suggest': (f'{capture.CELL_NAME[st.suggest[0][0]][st.suggest[0][1]]}'
                                 f' at ~{st.suggest[1]} deg'
                                 if st.suggest else None),
                     'fps': round(st.fps, 1), 'det_ms': round(st.det_ms, 1),
@@ -1260,28 +521,6 @@ def restart_argv(argv, cur_profile, cur_medium, device=None,
     return new
 
 
-def _solver():
-    """The solver module, loaded BY PATH.
-
-    NOT `from mongla_vision.calibration.solver import ...`. `tools/` loads
-    this file by path precisely so the calibration tool does not need a ROS
-    environment, and does not need this package installed either.
-
-    It also used to be that a package import re-entered
-    `mongla_vision/__init__.py` -> `preflight` -> `rclpy` and the tool died
-    with `ModuleNotFoundError: rclpy`. That chain ended on 2026-09-26 with the
-    dead `assert_vision_ready`, and `test_the_package_imports_without_ros.py`
-    fails if any import puts rclpy back -- so this is now one reason, not two.
-    """
-    import importlib.util
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        'solver.py')
-    spec = importlib.util.spec_from_file_location('_calib_solver', path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
 def library(cal_dir):
     """Every calibration this vehicle holds, with what it is good for.
 
@@ -1355,7 +594,7 @@ def apply_calibration(cal_dir, src_file, dev, applies_to):
     d['identity_source'] = 'operator asserted at apply time'
     d['applied_from'] = os.path.basename(src_file)
     d['applied_on'] = time.strftime('%Y-%m-%d %H:%M')
-    dest = os.path.join(cal_dir, _solver().calibration_filename(
+    dest = os.path.join(cal_dir, solver.calibration_filename(
         applies_to, d.get('image_width'), d.get('image_height'), medium))
     if os.path.exists(dest) and os.path.abspath(dest) != os.path.abspath(src):
         # Never overwrite a calibration without keeping the old one. It cost
@@ -1502,9 +741,9 @@ def main():
     if a.out is None:
         a.out = capture_dir(a.applies_to, a.medium)
     os.makedirs(a.out, exist_ok=True)
-    st = State(cols, rows, a.out, build_steps())
+    st = capture.State(cols, rows, a.out, capture.build_steps())
     st.square = a.square
-    resume(st)
+    capture.resume(st)
 
     here = os.path.dirname(os.path.abspath(__file__))
     install = os.path.abspath(a.install or default_calibration_dir())
@@ -1513,7 +752,7 @@ def main():
     st.medium = a.medium
     # Same rule the solver installs by -- imported, not restated, so the
     # Download button can never serve a different file than Solve wrote.
-    dest = os.path.join(install, _solver().calibration_filename(
+    dest = os.path.join(install, solver.calibration_filename(
         a.applies_to, a.width, a.height, a.medium))
     # `solver.py`, NOT `fov_solve.py`. The name changed when calibration
     # moved into the package and this path did not, so the Solve button would
@@ -1526,14 +765,15 @@ def main():
             '--medium', a.medium,
             '--identity', json.dumps(camera_identity(f'/dev/video{a.device}'))]
 
-    threading.Thread(target=capture_loop,
+    threading.Thread(target=capture.capture_loop,
                      args=(st, a.device, a.width, a.height, a.stream_width,
                            a.exposure, a.brightness),
                      daemon=True).start()
-    threading.Thread(target=detect_loop, args=(st, a.detect_width),
+    threading.Thread(target=capture.detect_loop, args=(st, a.detect_width),
                      daemon=True).start()
-    threading.Thread(target=assess,
-                     args=(st, cols, rows, a.square, (a.width, a.height)),
+    threading.Thread(target=capture.assess,
+                     args=(st, cols, rows, a.square, (a.width, a.height),
+                           solver),
                      daemon=True).start()
 
     st.device = a.device
