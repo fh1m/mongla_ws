@@ -15,7 +15,7 @@
 |---|---|---|
 | **capture** | `cameras/v4l2_mailbox.py:180-216` | raw V4L2 ioctl + mmap **mailbox**, one deep, newest wins. Measured: plain `read()` 396.1 ms stale → mailbox **16.9 ms**, blocking 0 ms. `FrameMeta.fresh=False` rather than repeating a frame |
 | **preprocess** | `detection/preprocess.py:21-41` | present and **off everywhere**. The file's own header retracts the original claim: 17 configurations, 4 props, 3 venues, never meaningfully positive; on the gate **30.4 % → 1.2 %** |
-| **detect** | `detection/hailo.py` (1 082 lines) | Hailo-8, one process-wide `VDevice`, **configure once / activate many** (4.15 ms swap vs a 10.18 ms frame), async `run_async` chosen because it releases the GIL (another thread woke 9.21 ms late on the blocking API, 0.05 ms on async) |
+| **detect** | `detection/hailo.py`, with `hailo_device.py` and `hef_file.py` | Hailo-8, one process-wide `VDevice` under HailoRT's ROUND_ROBIN scheduler (`hailo_device.py`: two detectors 46.1 + 46.1 Hz, no Python lock around an inference); async `run_async` chosen because it releases the GIL (another thread woke 9.21 ms late on the blocking API, 0.05 ms on async) |
 | **decode** | `detection/seg_decode.py:12-32` | raw seg heads decoded **in the quantised domain** — the class head is `zp=0, scale=1/255`, so thresholding bytes is bit-exact with thresholding floats. **31.5 ms → 0.93 ms** |
 | **range crop** | `detection/rangecrop.py:1-56` | hysteresis crop because `imgsz` is baked into the HEF. Measured recall: apparent size 0.25 → **65.9 % full frame / 100 % cropped** |
 | **track** | `tracking/roboflow_tracker.py` | OC-SORT (default), ByteTrack fallback, + a CV Kalman output smoother whose `_DT_REF_S = 0.0325` is the **measured** p50 detection interval |

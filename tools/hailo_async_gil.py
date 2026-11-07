@@ -82,7 +82,7 @@ def main():
     # then asking the same VDevice for an InferModel raises
     # HAILO_STREAM_NOT_ACTIVATED (72) -- the chip holds one activation and the
     # two APIs each want to own it. Same family as the two-VDevice and
-    # ROUND_ROBIN failures already recorded in `detection/hailo.py`.
+    # ROUND_ROBIN failures already recorded in `detection/hailo_device.py`.
     ap.add_argument('--mode', choices=('blocking', 'async'), required=True)
     a = ap.parse_args()
 

@@ -2,7 +2,7 @@
 
 The chip work is `HailoDetector`'s; this subclass maps the ten raw output
 tensors to their roles and un-letterboxes what `seg_decode` returns.
-`factory.make_detector` picks it when `hailo.emits_raw_heads` says the HEF
+`factory.make_detector` picks it when `hef_file.emits_raw_heads` says the HEF
 carries no NMS.
 """
 from __future__ import annotations

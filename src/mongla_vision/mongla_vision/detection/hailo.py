@@ -67,18 +67,16 @@ vision-servoed hull means driving away from the target.
 """
 from __future__ import annotations
 
-import atexit
 import os
-import re
-import subprocess
 import threading
-import weakref
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
 import numpy as np
 
+from . import hailo_device
 from .detector import Detection, Detector
+from .hef_file import baked_score_threshold, load_class_index
 
 _INPUT_FALLBACK = 640
 
@@ -95,25 +93,6 @@ _ASYNC_WAIT_MS = 1000
 # number.
 _INT8_OPERATING_POINT_MIN = 0.12
 _INT8_OPERATING_POINT_MAX = 0.15
-
-
-def _load_class_index(model_path: str) -> Optional[Dict[int, str]]:
-    """{id: name} from the sidecar YAML beside the model, or None.
-
-    Same suffix-swap convention as the YOLO backend, so a stem resolves the
-    same sidecar whatever backend loads it -- that is what keeps missions,
-    `ClassRef` and `mongla.use('<stem>')` backend-agnostic.
-    """
-    yaml_path = Path(model_path).with_suffix('.yaml')
-    if not yaml_path.exists():
-        return None
-    try:
-        import yaml
-        data = yaml.safe_load(yaml_path.read_text())
-        names = data.get('names', {}) if isinstance(data, dict) else {}
-        return {int(k): str(v) for k, v in names.items()}
-    except Exception:
-        return None
 
 
 def letterbox(im: np.ndarray, size: int):
@@ -151,178 +130,6 @@ def letterbox(im: np.ndarray, size: int):
     return out, s, px, py
 
 
-
-def baked_score_threshold(hef_path: str) -> Optional[float]:
-    """The NMS floor compiled INTO the HEF, or None if it cannot be read.
-
-    There is no Python API for this -- `HEF` exposes stream infos and nothing
-    about the post-process, and the configured network group has only
-    `set_scheduler_threshold`, which is a different thing entirely. So this
-    shells out to `hailortcli parse-hef`, which prints it and costs 15 ms once
-    per detector.
-
-    It matters because the floor is INVISIBLE otherwise: the HEF's NMS layer
-    drops everything below it before the host sees a byte, so a mission that
-    sets conf=0.03 gets 0.05 and is told nothing. Ours are 0.050 and the stock
-    Model Zoo models are 0.200 -- which is why the 0.12-0.15 operating point
-    this backend recommends is reachable on our models and NOT on a stock one.
-
-    Best effort by design. `hailortcli` may not be on PATH, and a detector that
-    refused to start over a diagnostic would be worse than one that says it
-    could not read it.
-    """
-    try:
-        out = subprocess.run(['hailortcli', 'parse-hef', hef_path],
-                             capture_output=True, text=True, timeout=10).stdout
-    except Exception:                                            # noqa: BLE001
-        return None
-    m = re.search(r'Score threshold:\s*([0-9.]+)', out)
-    return float(m.group(1)) if m else None
-
-
-def emits_raw_heads(hef_path: str) -> bool:
-    """True when the HEF post-processes NOTHING and the host must decode.
-
-    The test is the output count, not the file name. A HEF whose NMS ran
-    on-chip has exactly ONE output -- the HAILO_NMS buffer. A raw head has one
-    tensor per scale per branch (ten for YOLOv8-seg). Naming the seg models by
-    convention instead would put the two decodes one typo apart, and picking
-    the wrong one does not raise: an NMS decode of a raw head reads
-    convolution activations as box coordinates.
-
-    Cheap: reads the HEF's metadata, no device and no configure.
-    """
-    try:
-        from hailo_platform import HEF
-        return len(HEF(str(hef_path)).get_output_vstream_infos()) > 1
-    except Exception:                                            # noqa: BLE001
-        return False
-
-
-# --------------------------------------------------------------------------- #
-#  One device per process, and hailort's scheduler shares it                  #
-# --------------------------------------------------------------------------- #
-# Measured on this hardware:
-#
-#   two PROCESSES, a VDevice each   -> HAILO_OUT_OF_PHYSICAL_DEVICES (74) on the
-#                                      second. Sharing happens in ONE process.
-#   multi_process_service + scheduler -> HailoRTInvalidOperationException. The
-#                                      API accepts the flag; the `hailort_service`
-#                                      daemon it needs is not installed.
-#   ONE process, activation handed back and forth by hand (what shipped until
-#   2026-10-03)                      -> works: 73.8 Hz across two detectors
-#                                      swapping every frame, 4.15 ms a swap.
-#   ONE process, ROUND_ROBIN scheduler (now) -> 46.1 + 46.1 = 92.2 Hz for the
-#                                      same two detectors, and with both XFeat
-#                                      anchors added at a realistic duty
-#                                      (~5 Hz each) the detectors keep 44.4 Hz
-#                                      each. HailoRT switches network groups
-#                                      itself, in C++, with NO Python lock held
-#                                      around an inference.
-#
-# RETRACTED: "ROUND_ROBIN scheduler, one process -> SIGSEGV". Re-measured
-# 2026-10-03 on HailoRT 4.24: four network groups, four threads, a group
-# configured while the others were mid-inference and one closed mid-run --
-# zero errors, exit 0, three runs out of three. What DOES segfault is
-# interpreter teardown with groups still configured (see `close_all`), which
-# every bench of that era hit on the way out because none released the device.
-# The crash was real; the attribution was wrong.
-#
-# Why the hand-off had to go, measured live (measured-bars §28.6): the
-# hand-off held `_DEVICE_LOCK` across Python code -- letterbox, the
-# `run_async` wrapper, the activation swap -- so whenever the holder lost the
-# GIL to another thread the CHIP sat idle and the other detector waited for
-# a lock whose owner was not even running. With the lock ladders composed
-# into the same process, two detectors fell from 69 to 47 Hz combined at an
-# unchanged ~10.5 ms of chip time per call. A scheduler holds no Python lock,
-# so a thread starved of the GIL delays only itself.
-_DEVICE = None
-# Guards device CREATION and every network-group CONFIGURE. Never held
-# around an inference: the scheduler arbitrates the chip.
-_DEVICE_LOCK = threading.Lock()
-# Everything that configured a network group on `_DEVICE`: the detectors AND
-# the XFeat anchors. Weak, so a dropped object is not kept alive by this.
-_CLAIMANTS: 'weakref.WeakSet' = weakref.WeakSet()
-
-
-def _register(claimant) -> None:
-    """Record a network-group owner so `close_all` can hand it back."""
-    _CLAIMANTS.add(claimant)
-
-
-def close_all() -> None:
-    """Release every configured network group, THEN the VDevice. At exit.
-
-    Measured on the vehicle, 2026-10-03: two detectors and two XFeat
-    anchors in one process, left to interpreter teardown, die with SIGSEGV
-    (rc 139, sometimes "corrupted double-linked list") or hang there -- the
-    garbage collector frees the VDevice and the ConfiguredInferModels in
-    whatever order it likes. The same process closing each group and then
-    releasing the device exits 0 in 1.2 s. No node called `close()`, so every
-    Hailo process on the vehicle crashed on the way out, and a SIGINT'd
-    detector that hangs instead is a process holding the chip that the next
-    launch cannot open.
-
-    Registered with `atexit`, so no node has to remember it. Safe to call
-    twice. A worker thread still inside an infer holds `_DEVICE_LOCK`, and
-    `close()` waits for it rather than pulling the stream out from under it.
-    """
-    global _DEVICE
-    for c in list(_CLAIMANTS):
-        try:
-            c.close()
-        except Exception:                                    # noqa: BLE001
-            pass
-    with _DEVICE_LOCK:
-        dev, _DEVICE = _DEVICE, None
-    if dev is not None:
-        try:
-            dev.release()
-        except Exception:                                    # noqa: BLE001
-            pass
-
-
-atexit.register(close_all)
-
-
-def _shared_device():
-    """The process's single VDevice. Created on first use, never released.
-
-    Not released on close() either: releasing it while a second detector still
-    holds a network group configured on it is how you turn a clean shutdown
-    into a segfault, and the process is about to exit anyway.
-
-    The creation is locked, and that is not defensive. `detector_node` builds
-    a registry in a `ThreadPoolExecutor`, so two detectors are constructed
-    Genuinely concurrently. Unlocked, both threads saw `_DEVICE is None` and
-    both called `VDevice()` -- and the note above this function already records
-    what a second VDevice does. Measured on the vehicle: sequential
-    construction of `gate_sharks` and `bin_fire_blood` gives OK/OK,
-    while the same two in parallel HANG -- no exception, no core dump, the
-    process simply never finishes loading. An earlier run of the same launch
-    instead reported `HAILO_OUT_OF_PHYSICAL_DEVICES` and dropped one model, so
-    the race has two faces and one of them looks like a model that failed to
-    compile.
-
-    Consequence, stated because it is the whole point: two models CAN be
-    resident on one VDevice and take turns -- that is what the block above
-    measured at 98.2 Hz -- and this race is what stopped any registry launch
-    from getting there.
-    """
-    global _DEVICE
-    if _DEVICE is not None:
-        return _DEVICE
-    with _DEVICE_LOCK:
-        # Re-checked inside: the thread that waited here must see the device
-        # the winner made, not make a second one.
-        if _DEVICE is None:
-            from hailo_platform import HailoSchedulingAlgorithm, VDevice
-            params = VDevice.create_params()
-            params.scheduling_algorithm = HailoSchedulingAlgorithm.ROUND_ROBIN
-            _DEVICE = VDevice(params)
-    return _DEVICE
-
-
 class HailoDetector(Detector):
     name = 'hailo'
 
@@ -349,7 +156,7 @@ class HailoDetector(Detector):
         # hailo_platform" for a model that is ALSO missing its class index --
         # you fix the runtime, then hit the real problem. Report the thing the
         # operator can act on.
-        names = _load_class_index(self._path)
+        names = load_class_index(self._path)
         if not names:
             raise FileNotFoundError(
                 f'{self._path}: no class-index sidecar. A .hef carries NO class '
@@ -368,8 +175,8 @@ class HailoDetector(Detector):
         shape = tuple(in_info.shape)
         self._size = int(shape[0]) if len(shape) >= 2 else _INPUT_FALLBACK
 
-        self._target = _shared_device()
-        _register(self)
+        self._target = hailo_device.shared_device()
+        hailo_device.register(self)
 
         # The async API, and the reason is the GIL, not speed.
         #
@@ -673,7 +480,7 @@ class HailoDetector(Detector):
     def _configured(self):
         """This detector's network group, configured on first use. NOT activated.
 
-        Caller holds `self._infer_lock`. `_DEVICE_LOCK` is taken for the
+        Caller holds `self._infer_lock`. `hailo_device.DEVICE_LOCK` is taken for the
         configure only -- configuration touches the device -- and never for an
         inference.
 
@@ -688,13 +495,13 @@ class HailoDetector(Detector):
         """
         if self._blocking:
             if self._pipe is None:
-                with _DEVICE_LOCK:
+                with hailo_device.DEVICE_LOCK:
                     self._pipe = self._InferVStreams(self._ng, self._ivp,
                                                      self._ovp)
                     self._pipe.__enter__()
             return self._pipe
         if self._cim is None:
-            with _DEVICE_LOCK:
+            with hailo_device.DEVICE_LOCK:
                 self._cim = self._model.configure()
                 self._cim.__enter__()
             # Buffers allocated ONCE and reused. `set_buffer` binds the array,
