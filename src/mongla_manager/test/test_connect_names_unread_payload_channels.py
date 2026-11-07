@@ -12,11 +12,11 @@ pytest.importorskip('pymavlink')
 
 
 def _payload_lines(roles):
-    from mongla_manager import srot_connect as sc
+    from mongla_manager import connect_report, srot_connect as sc
     snap = sc.Snapshot()
     snap.roles = roles
     try:
-        lines = sc.render(snap, None)
+        lines = connect_report.render(snap, None)
     except Exception as exc:                  # pragma: no cover
         pytest.skip(f'render needs more of a snapshot here: {exc!r}')
     text = re.sub(r'\x1b\[[0-9;]*m', '', '\n'.join(lines))

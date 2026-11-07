@@ -175,6 +175,7 @@ with no summary line shows as *(no summary)* until it gets one.
 | `bringup_check.py` | the pre-flight gate for the SROT vehicle. |
 | `bringup_grade.py` | How every bringup check reports: a grade and one aligned line. |
 | `bringup_host.py` | Bringup checks of the computer itself: ROS, disk, drivers, cameras, models, the Hailo, power. |
+| `connect_report.py` | What `connect` prints: the vehicle, one section per subsystem. |
 | `connection_config.py` | How the manager finds the SROT board. |
 | `dispatch_policy.py` | Pure goal-acceptance policy for the /mongla/move action server. |
 | `distance_state.py` | manager-side bridge to the downward distance estimator. |
