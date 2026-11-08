@@ -131,38 +131,46 @@ say "4. Gate it -- the vehicle grades itself"
 # swallow it: a provisioning script that reports success on a vehicle its own
 # gate refuses would be the exact defect this repo keeps finding.
 set +e
+GATE_LOG="$(mktemp)"
 r bash -lc "'cd ~/$REMOTE_DIR
   source /opt/ros/$ROS_DISTRO_WANT/setup.bash
   source install/setup.bash
-  timeout 120 ros2 run mongla_manager bringup_check'"
-GATE=$?
+  timeout 120 ros2 run mongla_manager bringup_check'" | tee "$GATE_LOG"
+GATE=${PIPESTATUS[0]}
 set -e
+
+# Explain only the FAIL lines this run printed. A fixed list explained faults
+# the vehicle did not have and missed the one it did.
+saw() { grep -q -- "$1" "$GATE_LOG"; }
 
 echo
 if [[ $GATE -eq 0 ]]; then
   say "PROVISIONED, and the gate passes."
 else
   say "PROVISIONED, but THE GATE REFUSES (exit $GATE)."
-  cat <<'NOTE'
-  The build is good; the vehicle is not flight-ready. Read the FAIL lines above.
-
-  Two that are expected on a bare bench, and are NOT provisioning faults:
-    * Bar30 unhealthy        no depth sensor connected -> DEPTH_HOLD/AUTO, and
-                             therefore every move verb, are refused by design.
-    * NO USB cameras         cameras unplugged.
-
-  One that IS a provisioning gap, and has no fix inside this repo:
-    * "Hailo present but NO .hef"
-      THE COMPILED MODELS ARE NOT IN THE TREE. They are gitignored, so a
-      fresh vehicle provisioned from this repo has nothing to fly. Copy them in
-      beside their <stem>.yaml sidecars:
+  echo "  The build is good; the vehicle is not flight-ready. Read the FAIL lines above."
+  echo
+  saw 'no vehicle HEARTBEAT' && cat <<'NOTE'
+  * no vehicle HEARTBEAT    the board is not connected or not powered. Expected
+                            on a bare bench; plug in the Type-C cable and re-run
+                            `ros2 run mongla_manager bringup_check`.
+NOTE
+  saw 'Bar30 unhealthy' && cat <<'NOTE'
+  * Bar30 unhealthy         no working depth sensor, so DEPTH_HOLD/AUTO and
+                            therefore every move verb are refused by design.
+NOTE
+  saw 'NO .hef' && cat <<'NOTE'
+  * Hailo present but NO .hef   a provisioning gap with no fix inside this repo.
+      The compiled models are gitignored, so copy them in beside their
+      <stem>.yaml sidecars:
 
           rsync -a ~/models/*.hef ~/models/*.yaml \
                 TARGET:~/mongla_ws/src/mongla_vision/models/
 
-      A .hef WITHOUT its .yaml sidecar is worse than no model: the class
+      A .hef without its .yaml sidecar is worse than no model: the class
       allowlist comes back empty and the detector returns [] every frame while
-      the whole pipeline looks healthy. The gate fails on that deliberately.
+      the pipeline looks healthy. The gate fails on that deliberately.
 NOTE
 fi
+rm -f "$GATE_LOG"
 exit $GATE
