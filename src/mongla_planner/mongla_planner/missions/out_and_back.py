@@ -5,13 +5,17 @@ board verb, timed and braked on the board, with the board holding depth and
 heading at 500 Hz. So the run depends on four things only -- the board, Kutum,
 the thrusters and the kill switch -- and a vision fault cannot end it.
 
-    dive -> forward OUT_S -> clockwise turn -> forward BACK_S -> hold, thrusting
+    dive -> forward OUT_S -> clockwise turn -> forward BACK_S -> stationary HOLD
 
-The last leg is a slow forward HOLD_S long, so the thrusters are visibly
-running when a diver turns the kill switch; the mission then surfaces and
-disarms. If the kill comes first, the manager aborts the mission and disarms
-(`node_health._kill_watch_tick`), so turning the knob back does not resume a
-move.
+At the end, HOLD is a depth/heading station-keep, NOT another blind forward
+leg. An additional 20 s of open-loop translation after the return leg could
+hit a pool wall. The hold gives the diver an underwater kill-switch window;
+its actual thruster activity depends on buoyancy and the depth/attitude error.
+The physical kill cuts thruster power. If it is operated underwater, SURFACE
+cannot propel the AUV until power is deliberately and safely restored; a
+diver must recover the vehicle. This is a VIDEO demonstration, not proof of a
+fully autonomous post-kill surfacing manoeuvre. Do not restore power on an
+armed board just to make SURFACE work (see kill-latch audit).
 
 The turn is `yaw_right`: clockwise seen from above, which is the board's
 positive yaw. `TURN = 'square'` swaps the in-place half turn for two right
@@ -42,8 +46,7 @@ TURN_DEG      = 180.0
 TURN_TIMEOUT  = 30.0
 SQUARE_SIDE_S = 3.0      # the short leg between the two right angles
 SETTLE_S      = 1.0      # let the hull coast still after each turn
-HOLD_S        = 20.0     # slow forward at the end, for the kill-switch shot
-HOLD_GAIN     = 25.0
+KILL_WINDOW_S = 10.0     # stationary depth/heading hold for underwater kill shot
 
 
 def run(mongla, log=None):
@@ -56,13 +59,18 @@ def run(mongla, log=None):
         _turn_round(mongla)
         mongla.move_forward(BACK_S, gain=GAIN)
         if log:
-            log(f'[OUT  ] back leg done -- holding {HOLD_S:.0f}s for the kill switch')
-        mongla.move_forward(HOLD_S, gain=HOLD_GAIN)
+            log(f'[OUT  ] back leg done -- station-keeping {KILL_WINDOW_S:.0f}s for kill shot')
+        mongla.pause(KILL_WINDOW_S)
     finally:
-        # surface() is the last motion: any board verb after it re-enters AUTO
-        # and holds the hull at depth.
-        mongla.surface()
-        mongla.disarm()
+        # SURFACE is the last requested motion. Never send STOP afterwards:
+        # SROT_MOVE would re-enter AUTO, undoing an operator-requested SURFACE.
+        # An unplugged or faulty board may make SURFACE raise; still ATTEMPT
+        # disarm. If the physical kill already cut power, SURFACE cannot thrust;
+        # recover by diver, never by blindly re-enabling an armed thruster pack.
+        try:
+            mongla.surface()
+        finally:
+            mongla.disarm()
 
 
 def _turn_round(mongla):
