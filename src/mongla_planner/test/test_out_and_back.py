@@ -56,6 +56,23 @@ def test_requests_at_least_20_s_of_underwater_forward_legs(monkeypatch):
         assert swim >= 20.0, (turn, swim)
 
 
+def test_the_dive_and_clockwise_turn_have_real_board_holds(monkeypatch):
+    for turn in ('yaw', 'square'):
+        r = _run(monkeypatch, TURN=turn)
+        calls = r.sent
+        names = r.names()
+        pauses = [(i, a[0]) for i, (n, a, _) in enumerate(calls) if n == 'pause']
+        assert [t for _, t in pauses] == [
+            M.DIVE_HOLD_S, M.TURN_HOLD_S, M.KILL_WINDOW_S
+        ]
+        # Explicit SROT_MOVE HOLDs, not an ignored `settle=` keyword.
+        assert pauses[0][0] == names.index('set_depth') + 1
+        last_turn = max(i for i, n in enumerate(names) if n == 'yaw_right')
+        assert pauses[1][0] == last_turn + 1
+        assert calls[pauses[0][0] + 1][0] == 'move_forward'
+        assert calls[pauses[1][0] + 1][0] == 'move_forward'
+
+
 def test_kill_window_is_stationary_hold_not_an_unbounded_forward_leg(monkeypatch):
     r = _run(monkeypatch)
     names = r.names()
