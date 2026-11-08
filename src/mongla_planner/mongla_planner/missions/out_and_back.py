@@ -5,10 +5,11 @@ board verb, timed and braked on the board, with the board holding depth and
 heading at 500 Hz. So the run depends on four things only -- the board, Kutum,
 the thrusters and the kill switch -- and a vision fault cannot end it.
 
-    dive -> forward OUT_S -> clockwise turn -> forward BACK_S -> stationary HOLD
+    dive -> forward OUT_S -> clockwise turn -> forward BACK_S -> zero-translation-demand HOLD
 
-At the end, HOLD is a depth/heading station-keep, NOT another blind forward
-leg. An additional 20 s of open-loop translation after the return leg could
+At the end, HOLD sends zero commanded surge/sway, while the board holds
+depth and heading; it is NOT XY position-hold and the hull can drift in a
+current. It is also NOT another blind forward leg. An additional 20 s of open-loop translation after the return leg could
 hit a pool wall. The hold gives the diver an underwater kill-switch window;
 its actual thruster activity depends on buoyancy and the depth/attitude error.
 The physical kill cuts thruster power. If it is operated underwater, SURFACE
@@ -59,7 +60,7 @@ def run(mongla, log=None):
         _turn_round(mongla)
         mongla.move_forward(BACK_S, gain=GAIN)
         if log:
-            log(f'[OUT  ] back leg done -- station-keeping {KILL_WINDOW_S:.0f}s for kill shot')
+            log(f'[OUT  ] back leg done -- holding depth/heading {KILL_WINDOW_S:.0f}s for kill shot')
         mongla.pause(KILL_WINDOW_S)
     finally:
         # SURFACE is the last requested motion. Never send STOP afterwards:
