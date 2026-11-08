@@ -1,9 +1,8 @@
 """The control-only swim: its shape, executed against a recorder.
 
-Checks the run against what it has to show: at least 20 s of swimming after
-the dive, a CLOCKWISE half turn, a leg back, thrusters running when the kill
-switch is turned, and `surface()` as the last motion. Nothing here proves it
-flies; the durations are unmeasured.
+Checks the run's requested leg durations (not measured swimming distance or
+wet motion), clockwise half turn, stationary kill-switch window, and that
+SURFACE is the last requested motion. Nothing here proves it flies.
 """
 import pytest
 
@@ -50,16 +49,22 @@ def test_it_turns_clockwise_through_180(monkeypatch):
         assert sum(a[0] for _, a in turns) == pytest.approx(180.0)
 
 
-def test_swims_at_least_20_s_after_the_dive(monkeypatch):
+def test_requests_at_least_20_s_of_underwater_forward_legs(monkeypatch):
     for turn in ('yaw', 'square'):
         r = _run(monkeypatch, TURN=turn)
         swim = sum(a[0] for n, a, _ in r.sent if n in SWIM_VERBS)
         assert swim >= 20.0, (turn, swim)
 
 
-def test_thrusters_run_at_the_end_for_the_kill_switch(monkeypatch):
-    names = _run(monkeypatch).names()
-    assert names[-3] == 'move_forward' and M.HOLD_S >= 10.0
+def test_kill_window_is_stationary_hold_not_an_unbounded_forward_leg(monkeypatch):
+    r = _run(monkeypatch)
+    names = r.names()
+    assert names[-3:] == ['pause', 'surface', 'disarm']
+    assert M.KILL_WINDOW_S > 0.0
+    pause = r.sent[-3]
+    assert pause[1] == (M.KILL_WINDOW_S,)
+    # Once the back leg is over, no further translation can be commanded.
+    assert not any(n in SWIM_VERBS for n in names[names.index('pause') + 1:])
 
 
 def test_surface_is_the_last_motion_even_on_failure(monkeypatch):
@@ -76,3 +81,17 @@ def test_an_unknown_turn_is_refused(monkeypatch):
     with pytest.raises(ValueError, match='circle'):
         M.run(r)
     assert r.names()[-2:] == ['surface', 'disarm']
+
+
+def test_disarm_is_attempted_even_if_surface_raises():
+    r = _Recorder(fail_on='surface')
+    with pytest.raises(RuntimeError, match='surface failed'):
+        M.run(r)
+    assert r.names()[-2:] == ['surface', 'disarm']
+
+
+def test_failed_stationary_hold_attempts_surface_and_disarm():
+    r = _Recorder(fail_on='pause')
+    with pytest.raises(RuntimeError, match='pause failed'):
+        M.run(r)
+    assert r.names()[-3:] == ['pause', 'surface', 'disarm']
