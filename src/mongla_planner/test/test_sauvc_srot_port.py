@@ -1,6 +1,6 @@
 """What the SAUVC missions ask the board for -- frozen, so a change is a diff.
 
-Every verb that enters AUTO closes the depth loop, which has never run closed:
+Every verb that enters AUTO closes the depth loop, which has never run closed in AUTO:
 with the two bench checks not passed, the board denies them. The list below is
 which of those each mission calls.
 """

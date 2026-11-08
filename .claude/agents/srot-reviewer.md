@@ -28,7 +28,8 @@ finding.
   is best-effort on this wire (no ACK), so a change of mode must be **re-read and verified**.
   AUTO does not exit by itself.
 - **The depth gate.** Anything entering the board's automatic mode runs the depth loop, which
-  has never run closed. Flag a new code path that reaches it without the bench-check gate, or
+  has never run closed in AUTO (it closed in DEPTH_HOLD only in the firmware team's 2026-08-06/07
+  water test, on the old hull). Flag a new code path that reaches it without the bench-check gate, or
   a comment claiming depth hold is verified.
 - **Absent versus zero.** A missing telemetry value must stay absent (`None`/`NaN`/`--`).
   Flag any default of `0.0` for a reading, and any health decision inferred from the *presence*

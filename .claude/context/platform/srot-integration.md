@@ -671,7 +671,7 @@ otherwise unrecoverable).
 3. **`manual()` per axis:** each of fwd/lat/up/yaw **individually**, direction checked against
    the firmware's `docs/THRUSTER_MAP.md`. A wrong sign is positive feedback — fix it on the
    board (`FRAME_REVERSE` / `MOT_n_DIRECTION`), never in code.
-4. **DEPTH LOOP — MANDATORY, the depth loop has NEVER run closed (AUDIT R1):**
+4. **DEPTH LOOP — MANDATORY, the depth loop has never run closed in `AUTO` (AUDIT R1; see *IN-WATER 2026-08-06* for the one `DEPTH_HOLD` run):**
    - Enter `DEPTH_HOLD`, raise & lower the hull by hand: verticals must push **back toward**
      the latched depth, not away.
    - Force SURFACE (trip the leak input) at depth: the demand must be **ascend**.
@@ -701,7 +701,7 @@ Rev 3 landed with the board **in the vehicle**, and its theme is that the firmwa
    the PROM while the sensor was still reloading it. The coefficients were boot-time luck.
    That is not a display bug: `dT` feeds `offset` and `sens`, so a bad PROM corrupted
    **pressure and depth** silently, by an amount whose sign you cannot predict. On a vehicle
-   whose depth loop has never run closed, that is what the first dive would have flown on.
+   whose depth loop had never run closed, that is what the first dive would have flown on.
 2. **An unhealthy or stale baro now refuses `DEPTH_HOLD`/`AUTO`/`PATTERN`.** `SROT_MOVE`
    enters `AUTO`, so this means **every move verb is denied** — `move_forward` included.
    `bringup_check` reads it via `_baro_health_verdict` off `SYS_STATUS`, because on

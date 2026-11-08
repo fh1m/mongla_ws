@@ -147,8 +147,10 @@ number, and record any behaviour delta in the `FW_BEHAVIOUR_REV` comment block.
 
 ## Standing safety gate
 
-The board's **depth loop has never run closed** — the sign was inverted until 2026-07-30 and
-the Bar30 was not fitted while it was written. Two bench checks
+The board's **depth loop has never run closed in `AUTO`**, the mode every move verb enters. It
+closed in `DEPTH_HOLD` once, in the firmware team's 2026-08-06/07 water test on the old hull,
+where the `DEPTH_HOLD` to `AUTO` transition crashed the board. The sign was inverted until
+2026-07-30 and the Bar30 was not fitted while it was written. Two bench checks
 (`DUBURI_WS_INTEGRATION.md:295-301`) gate every dive-dependent verb: DEPTH_HOLD must push back
 toward the latched depth when the sensor is hand-moved, and a forced leak failsafe must
 **ascend**. A successful in-air `move_forward` does not count as partial validation.

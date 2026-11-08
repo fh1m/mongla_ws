@@ -1,6 +1,7 @@
 """The depth-loop SIGN verdict — the check the SURFACE failsafe depends on.
 
-`depth_control.cpp` says the loop "has NEVER run closed", and its sign WAS
+`depth_control.cpp` says the loop "has NEVER run closed" (older than the
+firmware team's 2026-08-06/07 water test, where it closed in DEPTH_HOLD), and its sign WAS
 inverted once ("commanded the opposite of what it wanted, on every axis"). The
 fix is unvalidated. A leak, a low thruster battery and a GCS loss all route to
 SURFACE, which calls `depth::update()` — so if the sign were still wrong, the

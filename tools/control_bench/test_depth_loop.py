@@ -1,6 +1,6 @@
 """The depth loop, closed for the first time.
 
-CLAUDE.md's largest standing unknown: *"The depth loop has never run closed.
+CLAUDE.md's largest standing unknown, as it read when this was written: *"The depth loop has never run closed.
 `SROT_MOVE` enters the board's automatic mode and EVERY primitive there closes
 the depth loop -- including a plain `move_forward`. An in-air move is not
 partial validation (at ~0 m, target and measurement agree)."*

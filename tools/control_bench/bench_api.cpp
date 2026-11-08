@@ -99,8 +99,9 @@ void bench_set_millis(unsigned long ms) { bench_millis_value = ms; }
 
 // ---- the depth controller, verbatim ------------------------------------- //
 //
-// WARNING: THE LOOP CLAUDE.md CALLS THE BIGGEST UNKNOWN ON THIS VEHICLE: "The depth
-// loop has never run closed." Every `SROT_MOVE` primitive closes it, and an
+// WARNING: THE LOOP CLAUDE.md CALLS THE BIGGEST UNKNOWN ON THIS VEHICLE: the depth
+// loop has never run closed in AUTO (only in DEPTH_HOLD, in the firmware team's
+// 2026-08-06/07 water test on the old hull). Every `SROT_MOVE` primitive closes it, and an
 // in-air move is not partial validation because at ~0 m target and measurement
 // agree. The bench can close it against a plant, which is not water but is the
 // first time the code has run with feedback at all.
