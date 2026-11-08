@@ -46,8 +46,9 @@ TURN          = 'yaw'    # 'yaw' = half turn in place, 'square' = two right angl
 TURN_DEG      = 180.0
 TURN_TIMEOUT  = 30.0
 SQUARE_SIDE_S = 3.0      # the short leg between the two right angles
-SETTLE_S      = 1.0      # let the hull coast still after each turn
-KILL_WINDOW_S = 10.0     # stationary depth/heading hold for underwater kill shot
+DIVE_HOLD_S   = 1.5      # SROT ignores `settle=`; explicit depth/heading HOLD after dive
+TURN_HOLD_S   = 1.5      # explicit hold after both 90-degree clockwise legs
+KILL_WINDOW_S = 10.0     # depth/heading hold with zero translation demand for underwater kill shot
 
 
 def run(mongla, log=None):
@@ -56,8 +57,16 @@ def run(mongla, log=None):
         mongla.countdown(TETHER_S)
         mongla.arm()
         mongla.set_depth(DEPTH_M, timeout=DEPTH_TIMEOUT)
+        # The board DIVE terminal ACK only proves the depth entered its error
+        # band, not that vertical velocity settled. The backend accepts a
+        # `settle` argument but does not use it: request a real HOLD verb.
+        mongla.pause(DIVE_HOLD_S)
         mongla.move_forward(OUT_S, gain=GAIN)
         _turn_round(mongla)
+        # Two 90-degree turns avoid the ±180 ambiguity. Their ACKs do not
+        # guarantee hydrodynamic settling; keep heading/depth neutral before
+        # translating back toward the gate.
+        mongla.pause(TURN_HOLD_S)
         mongla.move_forward(BACK_S, gain=GAIN)
         if log:
             log(f'[OUT  ] back leg done -- holding depth/heading {KILL_WINDOW_S:.0f}s for kill shot')
@@ -76,9 +85,9 @@ def run(mongla, log=None):
 
 def _turn_round(mongla):
     if TURN == 'yaw':
-        mongla.yaw_right(TURN_DEG, timeout=TURN_TIMEOUT, settle=SETTLE_S)
+        mongla.yaw_right(TURN_DEG, timeout=TURN_TIMEOUT)
     elif TURN == 'square':
-        mongla.yaw_right(TURN_DEG / 2, timeout=TURN_TIMEOUT, settle=SETTLE_S)
+        mongla.yaw_right(TURN_DEG / 2, timeout=TURN_TIMEOUT)
         mongla.move_forward(SQUARE_SIDE_S, gain=GAIN)
         mongla.yaw_right(TURN_DEG / 2, timeout=TURN_TIMEOUT, settle=SETTLE_S)
     else:
