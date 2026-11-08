@@ -168,7 +168,7 @@ Not the hardware — the *verbs*. Six things that follow from being able to read
 change every layer, including the one that keeps the vehicle level:
 
 1. **We can measure inside the loop.** The board publishes its own depth error, output and
-   command. That is how we know the depth loop has never truly run — something a closed
+   command. That is how we know the automatic mode's depth loop has never truly run — something a closed
    autopilot would never have told us.
 2. **We can prove firmware and host agree.** A test here reads the firmware's headers
    directly and fails if our copy of a shared constant drifts. Two codebases, one truth.

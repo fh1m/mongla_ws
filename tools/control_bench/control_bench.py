@@ -334,7 +334,7 @@ class Board:
                      dt: float = 0.002) -> tuple:
         """One tick of `depth::update`. Returns (throttle_demand, target_m).
 
-        The loop that has never run closed on the vehicle. `SROT_MOVE`
+        The loop that has never run closed in AUTO. `SROT_MOVE`
         enters AUTO and every primitive there closes this, including a plain
         `move_forward` -- and an in-air move proves nothing, because at ~0 m the
         target and the measurement agree.

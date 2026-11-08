@@ -6,6 +6,9 @@ Why this exists. `depth_control.cpp` carries this, verbatim:
     "AUDIT R1 has stood since the beginning: this loop has NEVER run closed,
      because the Bar30 was not fitted during development."
 
+That comment predates the firmware team's 2026-08-06/07 water test, where the
+loop did close in DEPTH_HOLD on the old hull. It has never closed in AUTO.
+
 The sign WAS inverted -- the old code ran the PID in depth while its output lives
 in altitude, so it "commanded the opposite of what it wanted, on every axis of
 the depth loop". It is fixed, the fix is well argued and cross-checked against

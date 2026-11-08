@@ -19,8 +19,9 @@ What the board does NOT have, so nothing here pretends to:
   * no RC heartbeat -- only the >=1 Hz MAVLink HEARTBEAT matters (5 s of silence
     and the board surfaces).
 
-The board's depth loop has never run closed (AUDIT R1) -- DIVE/DEPTH_HOLD are
-bench-unverified. The facade gates dive-dependent verbs; this layer just sends them.
+The board's depth loop has never run closed in AUTO (AUDIT R1); it closed in
+DEPTH_HOLD only in the firmware team's 2026-08-06/07 water test, on the old hull,
+and is bench-unverified under this stack. The facade gates dive-dependent verbs; this layer just sends them.
 
 Where each part lives. `SrotFC` is one class assembled from one file per concern,
 so a bug report names a file:

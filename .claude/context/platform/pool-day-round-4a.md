@@ -26,7 +26,7 @@ Three of the four are settled without ever arming a thruster (§2).
 
 ## 1. Before anything: the two armed bench checks
 
-**The depth loop has never run closed.** `SROT_MOVE` enters the board's automatic
+**The depth loop has never run closed in `AUTO`.** `SROT_MOVE` enters the board's automatic
 mode and **every** primitive there closes the depth loop — including a plain
 `move_forward`. An in-air move is *not* partial validation: at ~0 m, target and
 measurement agree.

@@ -99,6 +99,7 @@ this table exists so that cannot happen silently again. Every row is a live URL 
 | **S** | issue [**#36**](https://github.com/RakibulIslam1/srot-control-board/issues/36) | **2026-11-07** |
 | **T** | issue [**#37**](https://github.com/RakibulIslam1/srot-control-board/issues/37) | **2026-11-07** |
 | **U** | issue [**#38**](https://github.com/RakibulIslam1/srot-control-board/issues/38) | **2026-11-07** |
+| comments: the depth loop closed in `DEPTH_HOLD` on 2026-08-06/07, never in `AUTO` | issue [**#40**](https://github.com/RakibulIslam1/srot-control-board/issues/40) | **2026-11-08** |
 | demand echo `DEM_FWD` / `DEM_LAT` | PR [**#33**](https://github.com/RakibulIslam1/srot-control-board/pull/33) | **2026-11-07** |
 
 K, M, N and O each add exactly one document at their repo root and change no code,

@@ -8,7 +8,8 @@
 
 ## B-1 · Depth-sign check  `[ ]`
 
-**Why it is first.** The board's depth loop **has never run closed** and its sign **was inverted
+**Why it is first.** The board's depth loop **has never run closed in `AUTO`** (it closed in `DEPTH_HOLD` once, in
+the firmware team's 2026-08-06/07 water test on the old hull) and its sign **was inverted
 once**. The SURFACE failsafe routes through the same loop — a leak, a flat thruster pack or a lost
 GCS all call `depth::update()`. If the sign is still wrong, the first emergency **drives the
 vehicle down**.

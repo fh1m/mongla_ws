@@ -128,7 +128,7 @@ def waterline() -> str:
             f'<rect x="9" y="-11" width="6" height="22" rx="2" fill="{INK}"/>'
             f'<circle cx="16" cy="0" r="2.4" fill="{RED}"/></g>')
     return (f'<g><path d="{wave}" fill="none" stroke="{INK2}" stroke-width="2"/>{rungs}{boat}'
-            f'<text x="20" y="176" class="tiny">the depth loop has never closed · '
+            f'<text x="20" y="176" class="tiny">AUTO has never held depth · '
             f'<tspan fill="{RED}">two armed bench checks stand between here and 3 m</tspan></text></g>')
 
 
@@ -140,8 +140,8 @@ BANNERS = [
      '84,248', '△', 'triangles, read off the CAD itself', hull),
     ('ledger', 'The evidence // the ledger', 'Every number, and what it cost.',
      ledger_rows(), 'rows', 'measurements, with the ones we took back', ledger),
-    ('open', 'Act three // open', 'Nothing here has been in water.',
-     '0', 'm', 'depth reached by this platform, to date', waterline),
+    ('open', 'Act three // open', 'This stack has never been in water.',
+     '0', 'm', 'depth reached by this stack and hull, to date', waterline),
 ]
 
 
