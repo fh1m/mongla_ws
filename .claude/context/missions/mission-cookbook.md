@@ -261,7 +261,7 @@ mongla.move_right  (seconds, gain=80, settle=0.0)
 |---|---|
 | `seconds` | how long to push. Time, **not** distance: there is no DVL. |
 | `gain` | % thrust ceiling, 0..100. ~30 on the bench, 50-80 in the pool. |
-| `settle` | extra still time after the move. |
+| `settle` | seconds of board HOLD after the move ends: a second `SROT_MOVE` that station-keeps. Abortable; time held, not a measured stop. |
 
 Each is one `SROT_MOVE`: the board runs it **and brakes** at the end itself.
 

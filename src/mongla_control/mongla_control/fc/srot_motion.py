@@ -239,6 +239,13 @@ class SrotMotion:
             return MoveResult(DENIED, f'{verb}: {exc}')
         if not _finite(p1, p2, p3, p4, p5):
             return MoveResult(DENIED, f'{verb}: non-finite parameter -- refused host-side')
+        try:
+            settle = float(kw.get('settle') or 0.0)
+        except (TypeError, ValueError):
+            settle = math.nan
+        if not (math.isfinite(settle) and settle >= 0.0):
+            return MoveResult(DENIED, f'{verb}: settle={kw.get("settle")!r} -- '
+                              f'refused host-side (seconds, >= 0)')
         # An absolute turn is only a compass heading with a locked yaw
         # REFERENCE (#15). Checked HERE, not once at startup: YAW_REF is a live
         # state machine that restarts at SAMPLING after every board reboot.
@@ -275,8 +282,33 @@ class SrotMotion:
         self._clear_ack()
         self._command_long(sp.CMD_SROT_MOVE, p1=p1, p2=p2, p3=p3, p4=p4, p5=p5)
         self._last_leg = None
-        return self._relay_move_ack(verb, on_progress, abort_fn,
-                                    _ack_budget_s(verb, p1, p2, p5))
+        res = self._relay_move_ack(verb, on_progress, abort_fn,
+                                   _ack_budget_s(verb, p1, p2, p5))
+        return self._hold_after(verb, res, settle, abort_fn)
+
+    def _hold_after(self, verb, res, settle, abort_fn) -> MoveResult:
+        """`settle=N`: a board HOLD for N s after the move's ACK (issue #86).
+
+        The board ends a turn or a dive on ONE sample inside its error band,
+        not after the hull has stopped, so a mission that asked for a settle
+        used to start its next leg mid-rotation: the keyword was accepted and
+        dropped here. The HOLD is the board's own station-keep (the `pause`
+        mapping), sent as a second SROT_MOVE through this same path, so an
+        abort brakes it and SURFACE refuses it like any other move.
+
+        It is time held, not a measured stop. The result says "held N s" and
+        never "settled".
+        """
+        if settle <= 0.0 or verb in ('stop', 'pause') or not res.ok:
+            return res
+        if abort_fn is not None and abort_fn():
+            return MoveResult(PREEMPTED, f'{res.reason} -- hold {settle:g} s '
+                                         f'not started: aborted')
+        hold = self.move('pause', duration=settle, abort_fn=abort_fn)
+        if hold.ok:
+            return MoveResult(res.code, f'{res.reason} -- held {settle:g} s')
+        return MoveResult(hold.code, f'{res.reason} -- hold {settle:g} s did not '
+                                     f'complete: {hold.reason}')
 
     def _relay_move_ack(self, verb, on_progress, abort_fn, budget) -> MoveResult:
         """Wait for the terminal ACK. A STALL IS SILENCE, not slowness (B39).
