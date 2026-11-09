@@ -1,6 +1,6 @@
 {
-  "collected": 4644,
-  "passed": 4636,
+  "collected": 4651,
+  "passed": 4643,
   "failed": 0,
   "skipped": 7,
   "xfailed": 1,
@@ -17,7 +17,7 @@
       "failed": 0
     },
     "mongla_manager": {
-      "passed": 795,
+      "passed": 802,
       "skipped": 4,
       "failed": 0
     },
@@ -50,7 +50,7 @@
         "test_files": 42
       },
       "mongla_manager": {
-        "loc": 7954,
+        "loc": 8021,
         "test_files": 67
       },
       "mongla_localization": {
