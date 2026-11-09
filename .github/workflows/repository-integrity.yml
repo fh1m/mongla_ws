@@ -28,7 +28,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install policy-test dependencies
-        run: python -m pip install --disable-pip-version-check 'pytest>=8.2,<10' 'PyYAML>=6,<7' 'numpy>=1.26,<2'
+        run: python -m pip install --disable-pip-version-check 'pytest>=8.2,<10' 'PyYAML>=6,<7' 'numpy>=1.26,<2' 'pymavlink==2.4.49'
       # The guard list lives in that one file; tools/ci_contract.py allows
       # this exact command and nothing else here, and the provenance job
       # runs the same contract, so skipping this job is caught there (#93).

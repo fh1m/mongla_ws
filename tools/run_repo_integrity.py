@@ -34,8 +34,13 @@ GUARDS = (
     'src/mongla_vision/test/test_no_capability_is_built_and_unreachable.py',
     'src/mongla_vision/test/test_no_function_is_built_and_uncalled.py',
     'src/mongla_manager/test/test_docs_contract.py',
-    'src/mongla_manager/test/test_ledger_claims.py',
 )
+
+# Guards that read something outside the repository cannot run in CI, and the
+# gate fails on a skip rather than let them pass unseen. They stay in the full
+# local suite:
+#   src/mongla_manager/test/test_ledger_claims.py -- reads the carried-work
+#   ledger in ../../.claude/plans, which no clone has.
 
 
 class _Outcomes:
