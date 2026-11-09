@@ -11,10 +11,13 @@ both automatic (`.github/workflows/wiki.yml`):
 
     repo -> wiki   on every push to main:   python3 tools/wiki_build.py build OUT
     wiki -> repo   on every wiki edit:      python3 tools/wiki_build.py pull WIKI
+    before publishing:                      python3 tools/wiki_build.py check WIKI [PAGE ...]
 
 `pull` turns each edited page back into its file -- wiki links back into
 relative paths, the generated footer off -- the doc guards run, and the change
-is committed to main under the editor's name. `test_the_wiki_is_built_from_the_book.py`
+goes to a review branch and pull request under the editor's name. `check` is
+`pull` without writing: the publisher runs it first and refuses while the wiki
+holds an edit main does not have, so a page is never rebuilt over it (#68). `test_the_wiki_is_built_from_the_book.py`
 proves the round trip loses nothing: every page, built and pulled, is its file.
 
 What the wiki holds
@@ -333,8 +336,14 @@ def build(out: Path) -> int:
     return 0
 
 
-def pull(wiki: Path) -> list[str]:
-    """Write every wiki page back to its file. Returns the files that changed."""
+def pull(wiki: Path, *, write: bool = True, only=None) -> list[str]:
+    """Write every wiki page back to its file. Returns the files that changed.
+
+    `write=False` writes nothing and only answers which files the wiki holds
+    edits for: the publisher's question before it replaces the pages (#68).
+    `only` limits it to those page names -- the ones people changed since the
+    last publish -- so a page whose file was deleted from the book does not
+    read as an edit."""
     names = pages()
     # The manifest says which file each page was built from. A wiki that was
     # never built (its first page made by hand) has none: use the repo's names.
@@ -347,18 +356,30 @@ def pull(wiki: Path) -> list[str]:
         name = page.stem
         if name in ('_Sidebar', '_Footer'):
             continue                          # generated from the book, never edited
+        if only is not None and name not in only:
+            continue
         rel = manifest.get(name)
         path = ROOT / rel if rel else NEW_PAGES / f'{name}.md'
         names.setdefault(path, name)
         text = unrender(page.read_text(encoding='utf-8'), path, names)
         if not path.is_file() or path.read_text(encoding='utf-8') != text:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(text, encoding='utf-8')
+            if write:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text, encoding='utf-8')
             changed.append(path.relative_to(ROOT).as_posix())
     return changed
 
 
 def main(argv: list[str]) -> int:
+    if argv[:1] == ['check'] and len(argv) >= 2:
+        # Pages people changed since the last publish (none named: every page)
+        # whose text main does not have yet: an edit still in review, or one
+        # made while this run was queued. Publishing would erase it.
+        only = {Path(a).stem for a in argv[2:]} or None
+        pending = pull(Path(argv[1]), write=False, only=only)
+        for rel in pending:
+            print(rel)
+        return 1 if pending else 0
     if len(argv) != 2 or argv[0] not in ('build', 'pull'):
         print(__doc__, file=sys.stderr)
         return 2

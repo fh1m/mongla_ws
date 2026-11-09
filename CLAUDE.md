@@ -408,8 +408,11 @@ not port it back. A capability that needs something from it is rebuilt against t
   straight to `main`, even when its own doc guards pass. If GitHub suppresses CI on a PR created
   with its workflow token, edit the PR description to trigger the integrity/provenance checks.
   If Actions cannot create the PR, the branch remains and must be reviewed manually. Editing
-  the file here updates the wiki only after that PR merges. `tools/wiki_build.py` defines
-  conversion; `test/test_wiki_edits_pass_pr_gate.py` protects the workflow contract.
+  the file here updates the wiki only after that PR merges. Publishing refuses while the
+  wiki holds an edit `main` does not have, builds on the wiki's own history and never
+  force-pushes, so a page saved mid-run rejects the push instead of vanishing.
+  `tools/wiki_build.py` defines conversion; `test/test_wiki_edits_pass_pr_gate.py` and
+  `test/test_wiki_publish_never_overwrites_an_edit.py` protect the workflow contract.
 - **Warning: Docs change in the same commit as the code they describe — not after.** A
   removal is not finished until every file that names the removed thing says what
   is true now: docs, skills, agents, launch comments, test docstrings, the site.
