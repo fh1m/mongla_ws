@@ -74,8 +74,11 @@ def test_countdown_runs_inside_tmux_on_deadlines(monkeypatch):
     def sleep(s):
         slept.append(s)
         clock['t'] += s + 0.05          # every tick overshoots by 50 ms
-    monkeypatch.setattr(dr._time, 'monotonic', lambda: clock['t'])
-    monkeypatch.setattr(dr._time, 'sleep', sleep)
+    # Replace the module's handle, not attributes of `time` itself: patching
+    # time.sleep moved this fake clock whenever another test's thread slept.
+    from types import SimpleNamespace
+    monkeypatch.setattr(dr, '_time', SimpleNamespace(
+        monotonic=lambda: clock['t'], sleep=sleep, strftime=dr._time.strftime))
     rm.countdown(5)
     assert len(slept) == 5
     assert clock['t'] - 100.0 == pytest.approx(5.05, abs=1e-9)   # one overshoot, not five

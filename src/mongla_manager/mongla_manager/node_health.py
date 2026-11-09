@@ -8,7 +8,7 @@ from __future__ import annotations
 import time
 
 from . import health as _health, health_reporters as _hr
-from .node_support import (EXECUTOR_STALE_S, KILL_MAX_TRIES, MISSION_SILENT_S,
+from .node_support import (EXECUTOR_STALE_S, KILL_MAX_TRIES, MISSION_SILENT_S, boot_latch,
                            SURFACE_MAX_TRIES, _load_sensor_offsets, kill_latch,
                            mission_recovery, mission_watchdog)
 
@@ -56,17 +56,21 @@ class HealthMixin:
             return None, None
 
     def _heartbeat_allowed(self) -> bool:
-        """The heartbeat thread's gate: a stuck executor or an unconfirmed
-        mission recovery both stop it, so the board's own failsafe fires."""
+        """The heartbeat thread's gate: a stuck executor, an unconfirmed
+        mission recovery or an unconfirmed kill disarm each stop it, so the
+        board's own failsafe fires."""
         rec = getattr(self, '_recovery', None)
-        return self._executor_alive() and not (rec and rec.get('withholding'))
+        kill = getattr(self, '_kill_latch', None)
+        return (self._executor_alive() and not (rec and rec.get('withholding'))
+                and not (kill and kill.get('withholding')))
 
     def safety_latch_reason(self) -> str:
         """Why ordinary verbs are refused right now; '' when they are not.
 
-        Both latches clear only when the board itself reports the safe state.
-        A manager restart also clears them, which is the operator's way out
-        when the board cannot be heard at all.
+        Every latch clears only when the board itself reports the safe state.
+        A manager restart does not clear them: a board heard ARMED at start-up
+        latches the new manager too (#98), so the way out is a confirmed
+        DISARM, never a reboot.
         """
         rec = getattr(self, '_recovery', None)
         if rec is not None:
@@ -75,12 +79,25 @@ class HealthMixin:
         if getattr(self, '_kill_latch', None) is not None:
             return ('the kill switch was engaged while armed and the board has '
                     'not yet confirmed DISARMED')
+        # Decide the boot latch now, not on the next watchdog tick: an arm
+        # sent before that tick would otherwise be read as a board that was
+        # armed before this manager started.
+        if getattr(self, '_boot_latch', None) == 'pending':
+            self._boot_tick(self._armed_now())
+        boot = getattr(self, '_boot_latch', None)
+        if boot == 'armed':
+            return ('the board was ARMED when this manager started, so a move '
+                    'from before may still be running; disarm it first')
+        if boot == 'pending':
+            return ('no heartbeat from the board yet, so this manager cannot '
+                    'tell whether a move from before is still running')
         return ''
 
     def _mission_watchdog_tick(self) -> None:
         now = time.monotonic()
         m = self._mission
         armed = self._armed_now()
+        self._boot_tick(armed)
         self._kill_watch_tick(armed, now)
         self._recovery_tick(now)
         # Unknown is treated as armed: acting on a disarmed vehicle is noise,
@@ -134,6 +151,19 @@ class HealthMixin:
                       f'{SURFACE_MAX_TRIES} requests -- heartbeat WITHHELD so the '
                       f"board's own link-loss failsafe surfaces the vehicle")
 
+    def _boot_tick(self, armed) -> None:
+        """Latch a board heard ARMED at start-up (see `node_support.boot_latch`)."""
+        self._boot_latch, action = boot_latch(getattr(self, '_boot_latch', None),
+                                              armed)
+        if action == 'latched':
+            self.get_logger().error(
+                '[BOOT ] the board is ARMED and this manager just started: a move '
+                'from before may still be running. Ordinary verbs are refused '
+                'until the board reports DISARMED (disarm, stop and surface work).')
+        elif action == 'resolved':
+            self.get_logger().warning('[BOOT ] the board reports DISARMED -- '
+                                      'ordinary verbs allowed')
+
     def _kill_watch_tick(self, armed, now: float = None) -> None:
         """Disarm on the kill switch and keep at it until the board confirms.
 
@@ -151,15 +181,19 @@ class HealthMixin:
             log.warning('[KILL ] the board reports DISARMED. Arming again is a '
                         'deliberate act, and refused while the switch is engaged.')
             return
-        if action != 'disarm':
+        if action not in ('disarm', 'withhold'):
             return
-        if latch is None:
+        if action == 'withhold':
+            log.error(f'[KILL ] !! DISARM still unconfirmed after {KILL_MAX_TRIES} '
+                      f"attempts -- heartbeat WITHHELD so the board's own link-loss "
+                      f'failsafe ends the move; still re-sending DISARM')
+        elif latch is None:
             log.error('[KILL ] kill switch ENGAGED while armed -- thruster power is '
                       'cut. Abort the mission and DISARM, so restoring power '
                       'cannot resume a move.')
         else:
             log.error(f'[KILL ] disarm not yet confirmed -- attempt '
-                      f'{self._kill_latch["tries"]}/{KILL_MAX_TRIES}')
+                      f'{self._kill_latch["tries"]}')
         try:
             self.mongla.request_abort()
         except Exception:                          # noqa: BLE001
