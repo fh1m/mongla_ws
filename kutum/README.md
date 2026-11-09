@@ -13,6 +13,9 @@ and how it is laid out:
 kutum/
   setup.sh            make a Pi into Kutum            (--system: the machine; plain: your account)
   deploy.sh           put this tree on it, build, gate   (run from the dev box)
+  release.sh          releases on the vehicle: build, switch, roll back (deploy.sh drives it)
+  release_manifest.py what a release is: commit, models, calibration, packages
+  armed_probe.py      is the board armed? read-only; deploy refuses if it cannot tell
   doctor.sh           is it still Kutum?                 (read-only, exits 1 on FAIL)
   backup.sh           pull what only the vehicle has     (run from the dev box)
   env.sh              what every terminal on the vehicle sources
@@ -60,6 +63,8 @@ measured-bars §68.
 ```bash
 kutum/deploy.sh fh1m@mongla.local               # after any change: sync, doctor, build, gate
 kutum/deploy.sh fh1m@mongla.local --check-only  # the doctor, nothing changed
+kutum/deploy.sh fh1m@mongla.local --list        # the releases on the vehicle
+kutum/deploy.sh fh1m@mongla.local --rollback    # back to the release before this one
 kutum/backup.sh fh1m@mongla.local               # after anything is made on the vehicle
 kutum/backup.sh fh1m@mongla.local --runs        # ... and the runs and footage (gigabytes)
 ssh fh1m@mongla.local bash -s < kutum/doctor.sh # the doctor, from here
@@ -72,8 +77,29 @@ On the vehicle, every shell already has ROS and the workspace (`env.sh`), so:
 ros2 run mongla_manager bringup_check
 ```
 
-**Caution:** `deploy.sh` does a clean build, which deletes `install/`. It refuses while a
-`mongla_manager` is running on the vehicle: stop it with Ctrl-C, so it disarms, and rerun.
+### Releases
+
+Every deploy is a new release, `~/mongla/releases/<commit>-<time>/`, and `~/mongla_ws` is
+a symlink to the active one, so every path and habit keeps working. In order, a deploy:
+
+1. **refuses before it writes anything** if a manager, a launch, a mission or the planner
+   is running, or if the board says ARMED, or if a board is attached and cannot be read.
+   Stop the stack with Ctrl-C, so it disarms, and rerun;
+2. stages the new tree beside the live one (unchanged files are hard links, so a release
+   costs what changed), runs the doctor from it, and builds it from clean in place;
+3. switches only if the build succeeded, with one rename. A failed build, a cut tether or
+   a doctor FAIL leaves the active release exactly as it was;
+4. writes `release.json` (the commit, the firmware floor the code demands, every model
+   and calibration by hash, the hull geometry, the apt and pip versions under it), keeps
+   the five newest releases, and records the gate's verdict in the manifest.
+
+`--rollback` goes back to the previous release after the same safety checks, and again
+goes forward. The first deploy keeps the old plain workspace as `legacy-<time>`; it is
+never pruned and never a rollback target, because its `install/` was built at the old path.
+On the vehicle, `bash ~/mongla_ws/kutum/release.sh list` shows them all.
+
+A release is never edited in place. A model or a calibration copied into one vanishes
+with it: put it in the dev box's tree and deploy again.
 
 The doctor's three words: `ok` as declared, `WARNING` runs but worse than declared,
 `FAIL` the stack cannot run here. Deploy stops on a FAIL and builds through a WARNING.
@@ -89,9 +115,11 @@ that. From a blank SD card to a gated vehicle:
    `ssh fh1m@mongla.local`.
 3. **Install ROS 2 Jazzy** `ros-base`, following the official
    [Ubuntu (deb packages) instructions](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html).
-4. From the dev box: `kutum/deploy.sh fh1m@mongla.local`. It syncs the tree, then the
-   doctor stops it, because there is no Hailo stack yet. That stop is expected.
-5. On the vehicle: `sudo ~/mongla_ws/kutum/setup.sh --system`. This builds the Hailo
+4. From the dev box: `kutum/deploy.sh fh1m@mongla.local`. It stages the tree, then the
+   doctor stops it, because there is no Hailo stack yet. That stop is expected, and it
+   prints the staged path.
+5. On the vehicle: `sudo ~/mongla/releases/<staged>/kutum/setup.sh --system`, with the
+   path the doctor printed (nothing is active yet, so `~/mongla_ws` does not exist). This builds the Hailo
    driver, firmware and runtime from source (the runtime build is the long part), installs
    `system/`, gives `fh1m` passwordless sudo, runs the user half, and ends with the doctor.
    Its exit code is the doctor's verdict: `0` ready; `1` a FAIL, fix it and rerun; `3` a
