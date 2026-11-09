@@ -446,7 +446,7 @@ def _tool_offset(tool_offset_fn, log) -> Tuple[float, float]:
 
 
 def _yaw_command(ctrl: float, epx: float, eff_err: float, kp_yaw: float,
-                 g_yaw: float, fill: float) -> float:
+                 g_yaw: float, fill: float, authority: float = 1.0) -> float:
     """The yaw demand, %, for one tick.
 
     Polarity un-negated, same as lateral (ex > 0 -> target RIGHT -> yaw RIGHT).
@@ -458,10 +458,19 @@ def _yaw_command(ctrl: float, epx: float, eff_err: float, kp_yaw: float,
     so the hole-lock does not stall just outside err_px. Far away the rule is
     the opposite: a minimum on a rate channel is a relay that limit-cycles the
     hull, which is the far-field wobble VISION_YAW_FLOOR_FILL fixed.
+
+    `authority` is the box's own (`_authority`), applied BEFORE the snap
+    (#77). A rate demand from a stale bearing keeps the hull turning past a
+    target it already reached, so yaw fades with the same authority as the
+    other axes -- and fading it after the snap would land it in the band
+    where the board produces nothing, a stall instead of a fade. At zero it is
+    exactly zero; at a healthy frame rate it is 1.0 and nothing changes.
     """
     if epx <= eff_err:
         return 0.0
-    mag = min(abs(ctrl * kp_yaw), g_yaw)
+    mag = min(abs(ctrl * kp_yaw), g_yaw) * max(0.0, min(1.0, authority))
+    if mag <= 0.0:
+        return 0.0
     if fill >= VISION_YAW_FLOOR_FILL:
         mag = _srot_yaw_expressible(mag, g_yaw)
     return math.copysign(mag, ctrl) if mag > 0.0 else 0.0

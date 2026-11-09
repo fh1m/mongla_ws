@@ -45,7 +45,7 @@ class _Lock(LockPublishMixin):
 
 def _ladder(rung, **ids):
     lk = _Lock(**ids)
-    st = SimpleNamespace(have_target=True, rung=rung, confidence=0.8,
+    st = SimpleNamespace(have_target=True, rung=rung, confidence=0.8, authority=0.8,
                          xyxy=(300.0, 200.0, 380.0, 280.0))
     lk._publish(st, Header())
     return lk.sent[-1]
