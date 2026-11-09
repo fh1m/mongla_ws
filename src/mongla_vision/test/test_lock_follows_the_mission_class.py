@@ -39,13 +39,26 @@ class _Log:
 
 
 class _Fake:
-    """Only what the handler touches."""
+    """Only what the handler touches, with the REAL switch bound in: a fake
+    that stubbed the reset would test the stub."""
     def __init__(self, pinned='', width=0.0, cls=''):
+        import threading
+        from mongla_vision.tracking.follower import Follower
         self._cls_pinned = pinned
         self._cls = cls
         self._target_w_m = 0.0
         self._width_param = width
         self._log = _Log()
+        self._lock = threading.Lock()
+        self._gen = 0
+        self._det_box, self._det_conf, self._det_cls = None, 0.0, ''
+        self._det_t, self._det_header = 0.0, None
+        self._follower = Follower()
+        self._anchor_pose = self._anchor_header = self._anchor_best = None
+        self._anchor_label, self._anchor_inliers = '', 0
+        self._world = None
+        for name in ('_switch_target', '_forget_target_locked', '_retarget_width'):
+            setattr(self, name, types.MethodType(getattr(LockNode, name), self))
     def get_parameter(self, name):
         assert name == 'target_width_m', name
         return types.SimpleNamespace(value=self._width_param)
@@ -175,3 +188,69 @@ def test_a_negative_publish_hz_is_refused_not_silently_clamped():
     f._pub_min_dt = 0.0
     res = LockNode._on_param_change(f, [_param('publish_hz', -5.0)])
     assert res.successful is False and 'publish_hz' in res.reason
+
+
+# --------------------------------------------------------------------------
+#  A switch forgets the old target (#75)
+# --------------------------------------------------------------------------
+
+def _holding_gate(f):
+    """A ladder mid-follow on a gate: a detection, a seeded follower, an
+    anchor pose and label, world memory."""
+    import numpy as np
+    from mongla_vision.tracking.visibility import WorldTarget
+    f._det_box, f._det_conf, f._det_cls, f._det_t = (100, 100, 200, 200), 0.9, 'gate', 5.0
+    g = np.zeros((240, 320), np.uint8)
+    g[100:200:4, 100:200:4] = 255                  # texture for the follower
+    f._follower.reset(g, (100, 100, 200, 200))
+    f._anchor_pose, f._anchor_label, f._anchor_inliers = object(), 'gate', 40
+    f._world = WorldTarget()
+
+
+def test_a_switch_forgets_every_trace_of_the_old_target():
+    f = _Fake(cls='gate')
+    _holding_gate(f)
+    assert f._follower.active, 'the fixture must start with a live follower'
+    _feed(f, 'torpedo_board')
+    assert f._cls == 'torpedo_board' and f._gen == 1
+    assert f._det_box is None and f._det_cls == '' and f._det_t == 0.0
+    assert not f._follower.active
+    assert f._anchor_pose is None and f._anchor_label == '' and f._anchor_inliers == 0
+
+
+def test_a_live_pin_is_a_switch_too():
+    f = _Fake(cls='gate')
+    _holding_gate(f)
+    LockNode._on_param_change(f, [_param('target_class', 'torpedo_board')])
+    assert f._gen == 1 and f._det_box is None and not f._follower.active
+
+
+def test_the_same_class_again_is_not_a_switch():
+    """A latched filter re-delivered must not throw away a good lock."""
+    f = _Fake(cls='gate')
+    _holding_gate(f)
+    _feed(f, 'gate')
+    assert f._gen == 0 and f._det_box is not None and f._follower.active
+
+
+def test_a_tick_that_started_on_the_old_target_publishes_nothing():
+    """In-flight work from before the switch is dropped and cleared again:
+    the anchor may have written the old label while the tick ran."""
+    f = _Fake(cls='gate')
+    _holding_gate(f)
+    published = []
+    tick = types.SimpleNamespace(gen=0, gray=None, header=None, now=0.0)
+    f._take_frame = lambda: tick
+    f._follow_rung = lambda t: (None, None)
+    f._anchor = types.SimpleNamespace()
+    def anchor_runs_then_mission_switches(t):
+        f._switch_target('torpedo_board')
+        f._anchor_label = 'gate'                 # the old evaluation lands late
+        return True
+    f._enrol_or_locate = anchor_runs_then_mission_switches
+    f._anchor_box = lambda gray, ran: (None, None)
+    f._closer_on = False
+    f._arbitrate_and_publish = lambda *a: published.append(a)
+    LockNode._ladder_tick(f)
+    assert published == []
+    assert f._anchor_label == '', 'a stale evaluation survived the switch'

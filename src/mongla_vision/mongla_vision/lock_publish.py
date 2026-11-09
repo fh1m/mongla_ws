@@ -1,5 +1,8 @@
 """LockNode's outputs: the /lock box, its decomposition, the pose
 correspondences, and what the node remembers about where the target was.
+
+The /lock box names its rung in the hypothesis and the class it follows in
+`Detection2D.id`, so a consumer can refuse a box for another target (#74).
 """
 import math
 import time
@@ -115,7 +118,21 @@ class LockPublishMixin:
             self._note_visibility(x1, y1, x2, y2)
             self._remember_world(x1, y1, x2, y2)
         if header is not None:
-            self._pub.publish(detections_to_array(dets, header))
+            arr = detections_to_array(dets, header)
+            # The class the ladder is following, beside the rung name: the
+            # consumer refuses a box whose identity is not the class it asked
+            # for (#74). The anchor answers for what it enrolled on; the
+            # detection and follow rungs for the last real detection.
+            for d in arr.detections:
+                d.id = self._lock_identity(st)
+            self._pub.publish(arr)
+
+    def _lock_identity(self, st) -> str:
+        """What was OBSERVED, never what was asked for: a pinned class the
+        ladder has not seen is not evidence that it holds one."""
+        if st.rung.value == 'anchor':
+            return self._anchor_label or ''
+        return self._det_cls or ''
 
     def _publish_decomposition(self, pose, header) -> None:
         """theta, scale and the range they imply -- the anchor's other outputs.
