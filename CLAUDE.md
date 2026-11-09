@@ -108,6 +108,13 @@ move. `bringup_check` reads this off `SYS_STATUS`. `VFR_HUD` is *not* gated on b
 health and is where we read depth, so **never infer sensor health from the presence of a depth
 value**.
 
+**Warning: An UNKNOWN kill switch refuses arming.** The kill state comes from the second
+board over ESP-NOW; with no link it is UNKNOWN, and `arm` is refused unless
+`allow_unknown_kill_switch` is set (bench only, under `nodes:` in `~/.mongla/bringup.yaml`). A
+kill while armed, or a mission that dies armed, latches: the manager keeps disarming or
+surfacing until the board confirms it, and refuses every verb but `disarm`, `stop` and
+`surface` meanwhile (`BUGS.md` B-93, B-94).
+
 **Warning: `AUTO` never exits by itself.** After a move, MANUAL_CONTROL frames are discarded until
 the mode changes. The vision verbs handle this by setting the mode and **verifying it took**
 (`set_mode` is best-effort on this wire — a silent refusal looks exactly like success).

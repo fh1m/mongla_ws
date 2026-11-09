@@ -54,7 +54,10 @@ def rig():
 
     def patched(self, name, **kw):
         kw['parameter_overrides'] = list(kw.get('parameter_overrides', [])) + [
-            Parameter('mav_device', value=f'udpin:127.0.0.1:{port}')]
+            Parameter('mav_device', value=f'udpin:127.0.0.1:{port}'),
+            # The fake board has no second board, so the kill switch is
+            # UNKNOWN: the bench case (issue #71).
+            Parameter('allow_unknown_kill_switch', value=True)]
         orig(self, name, **kw)
 
     Node.__init__ = patched

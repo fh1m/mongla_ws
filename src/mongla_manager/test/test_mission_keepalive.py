@@ -69,18 +69,41 @@ def test_bring_up_before_the_executor_spins_still_beats():
 
 
 # ── the watchdog, acting ─────────────────────────────────────────────────────
-def _node(armed):
+def _node(armed, surface_heard=None):
+    """`armed` is what a fresh heartbeat says (True / False / None = unknown).
+    `surface_heard` is the (armed, mode) a heartbeat heard after the first
+    SURFACE request shows; None scripts a board that never answers."""
     n = SimpleNamespace()
     n._mission = {'attached': True, 'name': 'pool_day_practice',
                   'seen': time.monotonic() - 10.0}
     n.kill = None
-    n.fc = SimpleNamespace(is_armed=lambda: armed,
-                           telemetry=lambda: SimpleNamespace(kill_switch=n.kill))
+    n.heard = surface_heard
+    n.fc = SimpleNamespace(
+        armed_state=lambda: n.armed, is_armed=lambda: bool(n.armed),
+        telemetry=lambda: SimpleNamespace(kill_switch=n.kill),
+        armed_heard_since=lambda t: n.heard[0] if n.heard else None,
+        mode_heard_since=lambda t: n.heard[1] if n.heard else None)
+    n.armed = armed
     n.mongla = MagicMock()
     n.mongla.surface.return_value = SimpleNamespace(message='SURFACE engaged')
+    n.mongla.disarm.return_value = SimpleNamespace(success=False,
+                                                   message='UNCONFIRMED')
     n.get_logger = lambda: MagicMock()
-    n._kill_watch_tick = lambda armed: M.AUVManagerNode._kill_watch_tick(n, armed)
+    for name in ('_kill_watch_tick', '_recovery_tick', '_request_surface',
+                 '_heard_since', '_armed_now', '_executor_alive',
+                 '_heartbeat_allowed', 'safety_latch_reason'):
+        setattr(n, name, getattr(M.AUVManagerNode, name).__get__(n))
     return n
+
+
+def _tick(n, at):
+    """One watchdog tick at monotonic time `at` (the rules take `now`)."""
+    real = time.monotonic
+    try:
+        time.monotonic = lambda: at
+        M.AUVManagerNode._mission_watchdog_tick(n)
+    finally:
+        time.monotonic = real
 
 
 def test_a_dead_mission_on_an_armed_vehicle_is_aborted_and_SURFACED():
@@ -89,7 +112,8 @@ def test_a_dead_mission_on_an_armed_vehicle_is_aborted_and_SURFACED():
     n.mongla.request_abort.assert_called_once()
     # wait=False: the watchdog runs on a timer and must not block it
     n.mongla.surface.assert_called_once_with(wait=False)
-    assert n._mission['attached'] is False, 'it must act once, not every tick'
+    assert n._mission['attached'] is False
+    assert n._recovery is not None, 'the recovery is latched, not forgotten'
 
 
 def test_a_dead_mission_on_a_disarmed_vehicle_is_only_detached():
@@ -97,6 +121,53 @@ def test_a_dead_mission_on_a_disarmed_vehicle_is_only_detached():
     M.AUVManagerNode._mission_watchdog_tick(n)
     n.mongla.surface.assert_not_called()
     assert n._mission['attached'] is False
+
+
+def test_unknown_armed_state_is_treated_as_armed():
+    n = _node(armed=None)
+    M.AUVManagerNode._mission_watchdog_tick(n)
+    n.mongla.surface.assert_called_once_with(wait=False)
+
+
+def test_an_unanswered_SURFACE_is_retried_then_the_heartbeat_is_withheld():
+    """Issue #72: one SURFACE, then nothing, while the heartbeat kept the
+    board's own failsafe from firing."""
+    n = _node(armed=True)
+    t0 = time.monotonic()
+    _tick(n, t0)
+    assert n.mongla.surface.call_count == 1 and n._heartbeat_allowed()
+    _tick(n, t0 + 1.0)                       # inside the retry gap
+    assert n.mongla.surface.call_count == 1
+    _tick(n, t0 + 2.1)
+    _tick(n, t0 + 4.2)
+    assert n.mongla.surface.call_count == 3, 'bounded retries'
+    assert n._heartbeat_allowed()
+    _tick(n, t0 + 6.3)
+    assert n.mongla.surface.call_count == 3
+    assert not n._heartbeat_allowed(), "then silence, so the board's failsafe fires"
+    assert n.safety_latch_reason()
+
+
+def test_a_confirmed_SURFACE_resolves_the_recovery_and_resumes_the_heartbeat():
+    n = _node(armed=True)
+    t0 = time.monotonic()
+    _tick(n, t0)
+    for k in (1, 2, 3):
+        _tick(n, t0 + 2.1 * k)
+    assert not n._heartbeat_allowed()
+    n.heard = (True, 'SURFACE')
+    _tick(n, t0 + 9.0)
+    assert n._recovery is None and n._heartbeat_allowed()
+    assert n.safety_latch_reason() == ''
+
+
+def test_a_SURFACE_request_that_raises_is_retried():
+    n = _node(armed=True)
+    n.mongla.surface.side_effect = RuntimeError('USB gone')
+    t0 = time.monotonic()
+    _tick(n, t0)
+    _tick(n, t0 + 2.1)
+    assert n.mongla.surface.call_count == 2
 
 
 def test_an_empty_beat_is_a_clean_detach():
@@ -121,29 +192,59 @@ def test_the_runner_beats_its_name_and_detaches_on_stop():
     assert datas[-1] == '' and 'demo' not in datas[-3:], 'detach must come last'
 
 
-# ── the kill switch: disarm on the edge to ENGAGED ───────────────────────────
-@pytest.mark.parametrize('was, now, armed, want', [
-    (False, True, True, True),     # turned while armed: act
-    (None, True, True, True),      # first reading is engaged: act
-    (True, True, True, False),     # still engaged: acted already
-    (False, True, False, False),   # disarmed: nothing to do
-    (False, None, True, False),    # link lost: says nothing about the switch
-    (True, False, True, False),    # power back: never re-arm or resume
+# ── the kill switch: disarm, and hold it until the board confirms ───────────
+@pytest.mark.parametrize('killed, armed, want', [
+    (True, True, 'disarm'),        # turned while armed: act
+    (True, None, 'disarm'),        # armed state unknown: act anyway
+    (True, False, 'none'),         # disarmed already: nothing to do
+    (None, True, 'none'),          # link lost: says nothing about the switch
+    (False, True, 'none'),         # power on: nothing to do
 ])
-def test_the_kill_rule(was, now, armed, want):
-    assert node_support.kill_watch(was, now, armed) is want
+def test_the_kill_rule_from_clear(killed, armed, want):
+    latch, action = node_support.kill_latch(None, killed, armed, now=10.0)
+    assert action == want and (latch is not None) == (want == 'disarm')
 
 
-def test_engaging_the_kill_switch_disarms_once():
+def test_the_kill_latch_holds_until_the_board_says_disarmed():
+    latch, _ = node_support.kill_latch(None, True, True, now=0.0)
+    # still armed, inside the retry gap: wait
+    assert node_support.kill_latch(latch, True, True, now=1.0)[1] == 'none'
+    # the knob turned back ON, board still armed: keep disarming
+    latch, action = node_support.kill_latch(latch, False, True, now=3.1)
+    assert action == 'disarm' and latch['tries'] == 2
+    # link quiet: unknown is not disarmed
+    assert node_support.kill_latch(latch, None, None, now=4.0)[0] is not None
+    # a fresh heartbeat says DISARMED: resolved
+    assert node_support.kill_latch(latch, True, False, now=5.0) == (None, 'resolved')
+
+
+def test_the_kill_retries_are_bounded():
+    latch = {'tries': node_support.KILL_MAX_TRIES, 'last': 0.0}
+    assert node_support.kill_latch(latch, True, True, now=100.0) == (latch, 'none')
+
+
+def test_a_failed_kill_disarm_is_retried_on_a_later_tick():
+    """Issue #71: clear -> engaged -> failed disarm -> still engaged ->
+    restored. The first version disarmed exactly once and forgot."""
     n = _node(armed=True)
     n._mission['attached'] = False
+    t0 = time.monotonic()
     n.kill = False
-    M.AUVManagerNode._mission_watchdog_tick(n)
+    _tick(n, t0)
     n.mongla.disarm.assert_not_called()
     n.kill = True
-    M.AUVManagerNode._mission_watchdog_tick(n)
-    M.AUVManagerNode._mission_watchdog_tick(n)
-    n.mongla.disarm.assert_called_once_with(timeout=2.0)
+    _tick(n, t0 + 0.5)
+    _tick(n, t0 + 1.0)
+    assert n.mongla.disarm.call_count == 1
+    _tick(n, t0 + 3.6)                       # still armed: try again
+    assert n.mongla.disarm.call_count == 2
+    n.kill = False                           # power restored, board still armed
+    _tick(n, t0 + 6.7)
+    assert n.mongla.disarm.call_count == 3
+    assert n.safety_latch_reason(), 'ordinary verbs stay refused'
+    n.armed = False                          # the board confirms
+    _tick(n, t0 + 7.0)
+    assert n._kill_latch is None and n.safety_latch_reason() == ''
 
 
 def test_no_second_board_never_disarms():

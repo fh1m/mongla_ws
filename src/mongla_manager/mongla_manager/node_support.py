@@ -122,17 +122,74 @@ def mission_watchdog(attached: bool, last_seen: float, now: float,
 
 
 
-def kill_watch(was_killed, killed, armed: bool) -> bool:
-    """True on the instant the kill switch turns to ENGAGED with the vehicle armed.
+# A kill disarm that is not confirmed is retried this often. One attempt waits
+# up to 2 s for the board's 1 Hz heartbeat; the gap keeps attempts from
+# overlapping on the wire.
+KILL_RETRY_S = 3.0
+KILL_MAX_TRIES = 10
 
-    The switch cuts thruster power on the second board, and the control board
-    treats it as display-only (firmware `arming.h`, issue #12): it stays armed
-    and keeps running the move. Turning the knob back would resume that move
-    under a diver's hands. So the host disarms on the edge. Only a True
-    reading acts -- `None` is "no second-board link", which says nothing about
-    the switch.
+
+def kill_latch(latch, killed, armed, now: float,
+               retry_s: float = KILL_RETRY_S, max_tries: int = KILL_MAX_TRIES):
+    """(latch, action) for the kill switch; pure, so the rule is tested without ROS.
+
+    `armed` is True / False / None, where None is "no fresh heartbeat" and is
+    treated as possibly armed. `latch` is None, or a dict of attempts.
+    Actions: 'disarm' (send one), 'resolved' (a fresh heartbeat says disarmed),
+    'none'.
+
+    Why the host acts at all: the switch cuts thruster power on the second
+    board, and the control board treats it as display-only (firmware
+    `arming.h`, issue #12): it stays armed and keeps running the move, so
+    turning the knob back would resume it under a diver's hands. `None` for
+    `killed` is "no second-board link", which says nothing about the switch.
+
+    Issue #71. The first version disarmed once, on the edge, and forgot: a
+    refused or unanswered disarm left the vehicle armed while the switch was
+    engaged, and restoring power would resume the move. The latch holds until
+    the board itself reports DISARMED, whatever the knob does in between.
     """
-    return bool(armed) and killed is True and was_killed is not True
+    if latch is None:
+        if killed is True and armed is not False:
+            return {'tries': 1, 'last': now}, 'disarm'
+        return None, 'none'
+    if armed is False:
+        return None, 'resolved'
+    if latch['tries'] < max_tries and now - latch['last'] >= retry_s:
+        return {'tries': latch['tries'] + 1, 'last': now}, 'disarm'
+    return latch, 'none'
+
+
+# A SURFACE the board has not confirmed is re-requested this often, this many
+# times; then the heartbeat is withheld so the board's own link-loss failsafe
+# surfaces it (issue #72; owner decision 2026-11-09).
+SURFACE_RETRY_S = 2.0
+SURFACE_MAX_TRIES = 3
+
+
+def mission_recovery(rec, now: float, armed, mode,
+                     retry_s: float = SURFACE_RETRY_S,
+                     max_tries: int = SURFACE_MAX_TRIES):
+    """(rec, action) once a mission died on an armed vehicle; pure.
+
+    `armed` and `mode` come from a heartbeat heard after the first SURFACE
+    request (None when there is none). Actions: 'surface' (request again),
+    'withhold' (stop heartbeating), 'resolved', 'none'.
+
+    Issue #72. The first version detached the mission, sent one SURFACE and
+    forgot. A refused or lost request left the vehicle armed at depth, and the
+    manager's heartbeat kept the board's own failsafe from ever firing.
+    """
+    if armed is False or mode == 'SURFACE':
+        return None, 'resolved'
+    if now - rec['last'] < retry_s:
+        return rec, 'none'
+    if rec['tries'] < max_tries:
+        return dict(rec, tries=rec['tries'] + 1, last=now), 'surface'
+    if not rec.get('withholding'):
+        return dict(rec, withholding=True), 'withhold'
+    return rec, 'none'
+
 
 class _HeartbeatThread:
     """The companion HEARTBEAT on its own daemon thread -- nothing may starve it.
@@ -189,8 +246,9 @@ class _HeartbeatThread:
             if not alive:
                 if not self._withholding and self._log is not None:
                     self._log.error(
-                        '[NET  ] !! EXECUTOR STUCK -- heartbeat WITHHELD so the '
-                        "board's GCS failsafe surfaces the vehicle (issue #13).")
+                        '[NET  ] !! heartbeat WITHHELD (executor stuck, or a '
+                        'mission recovery the board has not confirmed) so the '
+                        "board's GCS failsafe surfaces the vehicle (issues #13, #72).")
                 self._withholding = True
             elif self._withholding:
                 self._withholding = False

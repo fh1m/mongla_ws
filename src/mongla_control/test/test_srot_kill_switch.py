@@ -108,8 +108,10 @@ def test_the_default_Telemetry_is_UNKNOWN_not_CLEAR():
 #  The arm gate
 # --------------------------------------------------------------------------- #
 class _ArmFC(SrotFC):
-    def __init__(self, kill):
+    def __init__(self, kill, allow_unknown=False):
         self._kill = kill
+        self._log = None
+        self.allow_unknown_kill_switch = allow_unknown
 
     def telemetry(self):
         from mongla_control.fc.base import Telemetry
@@ -124,19 +126,28 @@ def test_arm_REFUSES_when_power_is_KNOWN_cut():
     assert 'CUT' in why and '2nd-board' in why
 
 
-def test_arm_ALLOWS_on_UNKNOWN():
-    """The asymmetry. A vehicle with no second board is an ordinary bench
-    configuration; refusing on unknown would make arm() unreachable there --
-    the same trap as refusing a torpedo on UNKNOWN thruster health."""
+def test_arm_REFUSES_on_UNKNOWN_by_default():
+    """Issue #71, owner decision 2026-11-09. No second-board link means the host
+    cannot see the diver's kill, so an untethered vehicle must not arm on it."""
     ok, why = _ArmFC(None).check_thruster_power()
-    assert ok is True, why
+    assert ok is False
+    assert 'UNKNOWN' in why and 'allow_unknown_kill_switch' in why
+
+
+def test_the_bench_override_allows_UNKNOWN():
+    ok, why = _ArmFC(None, allow_unknown=True).check_thruster_power()
+    assert ok is True and 'OVERRIDDEN' in why
+
+
+def test_the_override_never_allows_KNOWN_cut():
+    assert _ArmFC(True, allow_unknown=True).check_thruster_power()[0] is False
 
 
 def test_arm_ALLOWS_when_power_is_live():
     assert _ArmFC(False).check_thruster_power()[0] is True
 
 
-def test_a_RAISING_probe_does_not_ground_the_vehicle():
+def test_a_RAISING_probe_is_UNKNOWN_and_refuses():
     class _Boom(SrotFC):
         def __init__(self):
             pass
@@ -145,7 +156,7 @@ def test_a_RAISING_probe_does_not_ground_the_vehicle():
             raise RuntimeError('link down')
 
     ok, why = _Boom().check_thruster_power()
-    assert ok is True and 'unreadable' in why
+    assert ok is False and 'unreadable' in why
 
 
 def test_the_gate_is_WIRED_INTO_arm():

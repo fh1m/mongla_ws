@@ -107,6 +107,7 @@ class SetupMixin:
         # than reusing allow_fw_behaviour_mismatch: accepting an unknown firmware
         # revision and accepting full uncommanded heave are different decisions.
         self.declare_parameter('allow_saturated_depth_arm', False)
+        self.declare_parameter('allow_unknown_kill_switch', False)
         declare_vision_params(self)
 
         mav_device          = str(self.get_parameter('mav_device').value).strip()
@@ -177,11 +178,13 @@ class SetupMixin:
         # _HeartbeatThread for why it is not a timer.
         self._hb_thread = _HeartbeatThread(
             self.fc.send_heartbeat, log=self.get_logger(),
-            alive_fn=self._executor_alive).start()
+            alive_fn=self._heartbeat_allowed).start()
         self.fc.allow_saturated_depth_arm = bool(
             self.get_parameter('allow_saturated_depth_arm').value)
         self.fc.allow_fw_behaviour_mismatch = bool(
             self.get_parameter('allow_fw_behaviour_mismatch').value)
+        self.fc.allow_unknown_kill_switch = bool(
+            self.get_parameter('allow_unknown_kill_switch').value)
         # The round-trip READS (behaviour rev, JS_GAIN_DEFAULT, ...) cannot run
         # here: their replies land in `master.messages`, which only fills while
         # the reader thread drains the link, and it has not started yet. Run

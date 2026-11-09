@@ -23,7 +23,8 @@ def _node():
     node = types.SimpleNamespace(
         _gate=_CommandGate(),
         get_logger=lambda: log,
-        mongla=types.SimpleNamespace(request_abort=lambda: None))
+        mongla=types.SimpleNamespace(request_abort=lambda: None),
+        safety_latch_reason=lambda: '')
     return amn, node
 
 

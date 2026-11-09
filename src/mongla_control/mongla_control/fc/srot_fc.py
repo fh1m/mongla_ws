@@ -128,6 +128,11 @@ class SrotFC(SrotArming, SrotMotion, SrotHealth, SrotTelemetry, SrotBench, SrotU
         # depth loop is currently demanding full heave". They are different risks and
         # an operator who needs one must not be forced to silence the other.
         self.allow_saturated_depth_arm = False
+        # Bench escape hatch (ROS param `allow_unknown_kill_switch`). With it off,
+        # arm() refuses while the kill switch state is UNKNOWN -- no second-board
+        # link -- because an untethered vehicle must not arm on a kill it cannot
+        # see (issue #71, owner decision 2026-11-09).
+        self.allow_unknown_kill_switch = False
 
     def _vehicle_hb(self):
         """Latest HEARTBEAT from the vehicle, ignoring GCS/loopback frames.
@@ -294,8 +299,36 @@ class SrotFC(SrotArming, SrotMotion, SrotHealth, SrotTelemetry, SrotBench, SrotU
         return age <= _LINK_STALE_S
 
     def is_armed(self) -> bool:
+        """The armed bit of the last vehicle heartbeat, however old.
+
+        For a decision that must not act on stale or missing state, use
+        `armed_state()`, which says when it does not know."""
         hb = self._vehicle_hb()
         return bool(hb and (hb.base_mode & _ARMED_FLAG))
+
+    def armed_state(self, max_age_s: float = _LINK_STALE_S):
+        """True / False from a heartbeat younger than `max_age_s`, else None.
+
+        None means UNKNOWN: no heartbeat yet, or the link went quiet. A safety
+        decision must treat it as "may be armed", never as disarmed (issue #70).
+        """
+        hb = self._vehicle_hb()
+        if hb is None or _rx_age(hb) > max_age_s:
+            return None
+        return bool(hb.base_mode & _ARMED_FLAG)
+
+    def armed_heard_since(self, sent: float):
+        """The armed bit of a vehicle heartbeat RECEIVED after `sent`, else None.
+
+        pymavlink keeps the last heartbeat for ever, so the cached one can be
+        minutes old and from before the command. Only a heartbeat heard after
+        the command can confirm what the command did (the same rule `set_mode`
+        follows).
+        """
+        hb = self._vehicle_hb()
+        if hb is None or _rx_age(hb) >= time.monotonic() - sent:
+            return None
+        return bool(hb.base_mode & _ARMED_FLAG)
 
     # ------------------------------------------------------------------ #
     #  Arm / disarm / mode                                               #
@@ -322,24 +355,35 @@ class SrotFC(SrotArming, SrotMotion, SrotHealth, SrotTelemetry, SrotBench, SrotU
     def disarm(self, timeout: float = 15.0):
         return self._arm_disarm(False, timeout, abort=None)
 
+    def mode_heard_since(self, sent: float):
+        """The mode name of a vehicle heartbeat RECEIVED after `sent`, else None."""
+        hb = self._vehicle_hb()
+        if hb is None or _rx_age(hb) >= time.monotonic() - sent:
+            return None
+        return sp.mode_name(int(hb.custom_mode))
+
+    # The board heartbeats at 1 Hz (fw mav_stream.cpp, HEARTBEAT 1000 ms). A
+    # confirmation needs a heartbeat sent after the command, so any wait for
+    # one must be longer than a period, with a margin for one dropped frame.
+    _CONFIRM_DISARM_S = 2.5
+
     def _arm_disarm(self, arm: bool, timeout: float, abort):
+        """Send ARM or DISARM and confirm it from a heartbeat heard afterwards.
+
+        Success means the board said so after the command. No heartbeat since
+        the command is UNCONFIRMED, not success: before issue #70 a disarm with
+        no heartbeat at all, or with a cached DISARMED one from before the
+        command, returned (True, 'DISARMED') without hearing the board.
+        """
         want = 1.0 if arm else 0.0
         self._clear_ack()
+        sent = time.monotonic()
         self._command_long(mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
                             p1=want)
-        deadline = time.monotonic() + timeout
+        deadline = sent + timeout
         while time.monotonic() < deadline:
             if abort is not None and abort():
-                # Cancelled mid-arm: disarm and VERIFY it took (a dropped frame must
-                # not strand the hull armed while the caller believes it aborted).
-                # Fail-closed: re-send a few times, require is_armed()==False to hold.
-                for _ in range(6):
-                    self._command_long(
-                        mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, p1=0.0)
-                    time.sleep(_POLL_S)
-                    if not self.is_armed():
-                        return False, 'ABORTED'
-                return False, 'ABORTED_DISARM_UNCONFIRMED'
+                return self._disarm_after_abort()
             ack = self._cache('COMMAND_ACK')
             if ack is not None and ack.command == mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM:
                 if ack.result == sp.ACK_FAILED:
@@ -347,10 +391,31 @@ class SrotFC(SrotArming, SrotMotion, SrotHealth, SrotTelemetry, SrotBench, SrotU
                     return False, f'PREARM_REJECTED: {st}' if st else 'PREARM_REJECTED'
                 if ack.result == sp.ACK_DENIED:
                     return False, 'DENIED'
-            if self.is_armed() == arm:
+            if self.armed_heard_since(sent) == arm:
                 return True, 'ARMED' if arm else 'DISARMED'
             time.sleep(_POLL_S)
+        if self.armed_heard_since(sent) is None:
+            return False, 'UNCONFIRMED (no vehicle heartbeat since the command)'
         return False, 'NO_STATE_CHANGE (timeout)'
+
+    def _disarm_after_abort(self):
+        """Cancelled mid-arm: disarm, and only call it done once the board says so.
+
+        A dropped frame must not strand the hull armed while the caller believes
+        it aborted. The disarm is re-sent every half second until a heartbeat
+        heard after the first one shows DISARMED, or the window closes.
+        """
+        sent = time.monotonic()
+        deadline = sent + self._CONFIRM_DISARM_S
+        next_send = sent
+        while time.monotonic() < deadline:
+            if time.monotonic() >= next_send:
+                self._command_long(mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, p1=0.0)
+                next_send = time.monotonic() + 0.5
+            time.sleep(_POLL_S)
+            if self.armed_heard_since(sent) is False:
+                return False, 'ABORTED'
+        return False, 'ABORTED_DISARM_UNCONFIRMED'
 
     def set_mode(self, mode: str, timeout: float = 8.0):
         """DO_SET_MODE (176) with custom_mode. Refusal (e.g. DEPTH_HOLD/AUTO with no
