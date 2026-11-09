@@ -1,0 +1,26 @@
+.github/dependabot.yml
+  h_f1b9066eb9899c 22-23,25,28-29,41-62
+.github/workflows/poc-check.yml
+  h_f1b9066eb9899c 45
+CLAUDE.md
+  h_f1b9066eb9899c 425-427
+test/test_provenance_check.py
+  h_f1b9066eb9899c 96-117
+test/test_repository_integrity_workflow.py
+  h_f1b9066eb9899c 127-129
+tools/ci_contract.py
+  h_f1b9066eb9899c 40-41,167-169
+tools/provenance_check.py
+  h_f1b9066eb9899c 4,21-25,85-91,105,115,120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "8eec9dd1e9d4ac1e2fe0db265b3e4b11d4259734",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
