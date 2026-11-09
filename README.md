@@ -637,7 +637,8 @@ if res.x_px > 0:               # it ended right of centre, so recover right
 That comment on line 8 is the whole philosophy compressed: **a result that is absent must never
 be mistaken for a result that is zero.** Outcomes are `ALIGNED`, `LOST`, `TIMEOUT`, `NO_CAMERA`,
 `ABORTED`, `DRIFTED` (centred while driving, off centre once stopped and re-measured),
-`FAILED` — and `FAILED` is what a refused axis comes back as, rather than an
+`ESTIMATED_CROSSING` and `COMMIT_UNVERIFIED` (a gate pass-through: losing the gate is
+not seeing the hull cross it), `FAILED` — and `FAILED` is what a refused axis comes back as, rather than an
 exception that would unwind a mission mid-dive.
 
 ### What a task actually looks like
