@@ -408,6 +408,8 @@ else:
 | 3      | `NO_CAMERA` | camera pipeline not up (no `camera_info`)              |
 | 4      | `ABORTED`   | goal cancelled (cooperative abort)                     |
 | 5      | `DRIFTED`   | align: centred while moving, out of band once stopped and re-measured |
+| 6      | `ESTIMATED_CROSSING` | pass-through move: the gate surrounded the camera axis and ran off the frame, then the commit ran. `ok` is True; it is an estimate, not an observed crossing |
+| 7      | `COMMIT_UNVERIFIED`  | pass-through move: the gate vanished some other way (far dropout, slid out sideways) and the commit ran open-loop. `ok` is False and `committed` is True: do not add a blind leg |
 | —      | `FAILED`    | DSL-side server/setup error (bad camera, disarmed, …)  |
 
 A miss never stops the mission — control falls through to the next step.

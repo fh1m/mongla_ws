@@ -59,10 +59,13 @@ answers, every time, on success **and** failure:
 ```python
 res = mongla.vision.align('hole', yaw=0, lat=0)
 # res is a VisionResult:
-res.ok           # bool  — True only when ALIGNED (move: reached fill / passed through)
-res.status       # str   — 'ALIGNED'|'LOST'|'TIMEOUT'|'NO_CAMERA'|'ABORTED'|'DRIFTED'|'FAILED'
+res.ok           # bool  — True only when ALIGNED (move: reached fill / ESTIMATED_CROSSING)
+res.status       # str   — 'ALIGNED'|'LOST'|'TIMEOUT'|'NO_CAMERA'|'ABORTED'|'DRIFTED'|'FAILED',
+                 #         a pass-through: 'ESTIMATED_CROSSING'|'COMMIT_UNVERIFIED'
 res.reason       # str   — same string as status (alias)
-res.code         # int   — raw outcome code (ALIGNED=0,LOST=1,TIMEOUT=2,NO_CAMERA=3,ABORTED=4,DRIFTED=5)
+res.code         # int   — raw outcome code (ALIGNED=0,LOST=1,TIMEOUT=2,NO_CAMERA=3,ABORTED=4,DRIFTED=5,
+                 #         ESTIMATED_CROSSING=6,COMMIT_UNVERIFIED=7)
+res.committed    # bool  — a pass-through drove its commit leg; never add a blind leg after one
 res.x_px         # float — SIGNED px of target from frame CENTRE at the LAST SEEN frame
 res.y_px         # float —   (+x = target ended RIGHT, +y = target ended BELOW); NaN if never seen
 res.saw_target   # bool  — was the target detected at least once during the verb
