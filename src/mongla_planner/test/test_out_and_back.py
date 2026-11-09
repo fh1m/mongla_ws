@@ -65,7 +65,7 @@ def test_the_dive_and_clockwise_turn_have_real_board_holds(monkeypatch):
         assert [t for _, t in pauses] == [
             M.DIVE_HOLD_S, M.TURN_HOLD_S, M.KILL_WINDOW_S
         ]
-        # Explicit SROT_MOVE HOLDs, not an ignored `settle=` keyword.
+        # Explicit SROT_MOVE HOLDs, visible in the mission (settle= is the same HOLD, #86).
         assert pauses[0][0] == names.index('set_depth') + 1
         last_turn = max(i for i, n in enumerate(names) if n == 'yaw_right')
         assert pauses[1][0] == last_turn + 1
@@ -80,8 +80,12 @@ def test_kill_window_is_stationary_hold_not_an_unbounded_forward_leg(monkeypatch
     assert M.KILL_WINDOW_S > 0.0
     pause = r.sent[-3]
     assert pause[1] == (M.KILL_WINDOW_S,)
-    # Once the back leg is over, no further translation can be commanded.
-    assert not any(n in SWIM_VERBS for n in names[names.index('pause') + 1:])
+    # The kill window follows the back leg directly, and once it starts no
+    # further translation can be commanded. (The FIRST pause is the dive hold,
+    # which forward legs rightly follow.)
+    kill = len(names) - 3
+    assert names[kill - 1] == 'move_forward'
+    assert not any(n in SWIM_VERBS for n in names[kill + 1:])
 
 
 def test_surface_is_the_last_motion_even_on_failure(monkeypatch):
