@@ -1,0 +1,16 @@
+.github/dependabot.yml
+  h_f1b9066eb9899c 36-41
+test/test_dependabot_respects_numpy_one.py
+  h_f1b9066eb9899c 49-59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "67ed7672d53f517d6cfa62f4c5079e20fff90dfa",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
