@@ -10,6 +10,7 @@ import logging
 import math
 import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -392,3 +393,91 @@ def test_disarm_does_not_poison_the_next_arm():
     assert m._abort_event.is_set()
     assert m.arm().success is True
     assert not m._abort_event.is_set()
+
+
+# ── a queued shot stays cancelled after the next verb clears the flag (#73) ──
+def _shot(ch):
+    return SimpleNamespace(ok=True, code_name='FIRED', reason=f'ch{ch}')
+
+
+def _two_shot_sequence(m, gap_s=0.5, first=None):
+    """Start fire=[1,2] and return (thread, fired, outcomes) once ch1 is out."""
+    fired, outcomes, out = [], [], threading.Event()
+
+    def fake(ch):
+        if first is not None and ch == 1:
+            first()
+        fired.append(ch)
+        out.set()
+        return _shot(ch)
+    m._fire_payload = fake
+    th = m._fire_async([1, 2], gap_s, outcomes=outcomes)
+    assert out.wait(1.0), 'the first shot never left'
+    return th, fired, outcomes
+
+
+def test_an_aborted_shot_is_not_revived_by_the_next_verb():
+    """Issue #73's sequence: ch1 fires, ch2 waits out the gap, an emergency
+    abort lands, and the next verb clears the shared abort flag before the
+    fire thread polls again. Clearing the flag must not let ch2 leave."""
+    m = _mongla()
+    th, fired, outcomes = _two_shot_sequence(m)
+    m.request_abort()
+    m.mission_reset()                      # the next verb: a clean abort slate
+    assert not m._abort_event.is_set()
+    th.join(2.0)
+    assert not th.is_alive()
+    assert fired == [1]
+    assert outcomes == ['ch1:FIRED', 'ch2:CANCELLED']
+
+
+def test_a_blocked_write_cannot_launch_an_aborted_channel():
+    """`payload.fire` can sleep ~2 s on a reconnect. An abort AND the next
+    verb's clear both land inside that sleep; the channel after it was never
+    dispatched and must never be."""
+    m = _mongla()
+    release = threading.Event()
+    blocked = threading.Event()
+
+    def hold():
+        blocked.set()
+        release.wait(2.0)
+    fired, outcomes = [], []
+
+    def fake(ch):
+        if ch == 1:
+            hold()
+        fired.append(ch)
+        return _shot(ch)
+    m._fire_payload = fake
+    th = m._fire_async([1, 2], 0.0, outcomes=outcomes)
+    assert blocked.wait(1.0)
+    m.request_abort()
+    m.mission_reset()
+    release.set()
+    th.join(2.0)
+    assert fired == [1], 'ch2 left after the abort'
+    assert outcomes[-1] == 'ch2:CANCELLED'
+
+
+@pytest.mark.parametrize('verb', ['stop', 'surface'])
+def test_a_safety_verb_cancels_shots_queued_by_a_finished_align(verb):
+    """The align has returned, so there is nothing running for the action
+    gate to abort -- `stop` and `surface` still cancel what it queued."""
+    m = _mongla(armed=True)
+    th, fired, outcomes = _two_shot_sequence(m)
+    m.stop() if verb == 'stop' else m.surface(wait=False)
+    th.join(2.0)
+    assert fired == [1]
+    assert outcomes[-1] == 'ch2:CANCELLED'
+
+
+def test_an_unaborted_sequence_still_outlives_its_align():
+    """The shot is non-blocking on purpose: a later ordinary verb (which clears
+    the flag but aborts nothing) must not cancel it."""
+    m = _mongla(armed=True)
+    th, fired, outcomes = _two_shot_sequence(m, gap_s=0.2)
+    m.mission_reset()
+    th.join(2.0)
+    assert fired == [1, 2]
+    assert outcomes == ['ch1:FIRED', 'ch2:FIRED']

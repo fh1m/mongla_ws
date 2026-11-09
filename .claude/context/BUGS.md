@@ -141,6 +141,35 @@ board reports SURFACE or DISARMED; until then ordinary verbs are refused and
 health reads `safety_latch FAILED`. A manager restart clears both latches,
 which is the way out when the board cannot be heard at all.
 
+### B-95: an aborted torpedo shot could be revived by the next verb `READ 2026-11-08` **FIXED 2026-11-09 (host)**
+
+**What.** `vision_align`'s fire thread polled the shared abort event, which
+the next verb clears at its own entry. An abort that landed in the gap
+between two shots, followed quickly by any verb, let the second shot leave.
+After the align returned, `stop` and `surface` cancelled nothing, because
+there was no running verb for the action gate to abort. GitHub #73.
+
+**Fix.** `Mongla._abort_generation` counts aborts and is never reset;
+`request_abort`, `stop` and `surface` bump it. A fire sequence captures it
+when scheduled and cancels every channel not yet dispatched once it moves,
+reported as `chN:CANCELLED`. The check runs again after the gap, right before
+the write. A sequence nobody aborted still outlives its align. A write
+already blocked inside `payload.fire` cannot be recalled.
+
+### B-96: `settle=` was accepted by every board verb and dropped at the wire `READ 2026-11-08` **FIXED 2026-11-09**
+
+**What.** The DSL and the facade forwarded `settle`, and `_relative_turn`
+put it on the last leg, but `SrotMotion.move` never read it. The board ends
+a turn or a dive on one sample inside its error band, so the next leg
+started while the hull was still turning. GitHub #86.
+
+**Fix.** After a successful ACK, `settle=N` sends a board HOLD
+(`MOVE_HOLD`, the `pause` mapping) for N s through the same path (owner
+decision 2026-11-09). An abort brakes it, SURFACE refuses it, a hold the
+board cuts short fails the verb, and the result says "held N s", never
+"settled": it is time held, not a measured stop. A bad value is refused
+before anything is sent.
+
 ### B53 — every payload channel the missions use is REFUSED by this board `MEASURED 2026-09-22, re-read 2026-10-01` **MAP REMOVED 2026-10-01** — channels await the wired payload
 **`missions/competition_config.py` vs the board's `SERVOn_ROLE` params**
 
