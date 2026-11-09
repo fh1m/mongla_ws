@@ -25,6 +25,7 @@ Two tests, because each catches a different mistake:
 import pathlib
 import re
 import subprocess
+import sys
 
 import pytest
 
@@ -75,6 +76,8 @@ def test_every_workflow_declares_least_privilege_permissions():
 
 HOSTILE = (
     '## AI Provenance\n'
+    '| # | Author / Handle | Source URL | What came from this person |\n'
+    '|---|---|---|---|\n'
     '| 1 | @someone | https://x | insight |\n'
     '"; touch /tmp/mongla_poc_injection_marker; echo "'
     "'; touch /tmp/mongla_poc_injection_marker2; echo '"
@@ -102,8 +105,9 @@ def test_the_provenance_script_treats_a_hostile_body_as_data(tmp_path):
     out.touch()
 
     r = subprocess.run(
-        ['bash', str(script)], capture_output=True, text=True,
-        env={'PATH': '/usr/bin:/bin', 'PR_BODY': body, 'GITHUB_OUTPUT': str(out)})
+        ['bash', str(script)], capture_output=True, text=True, cwd=ROOT,
+        env={'PATH': f'{pathlib.Path(sys.executable).parent}:/usr/bin:/bin',
+             'PR_BODY': body, 'GITHUB_OUTPUT': str(out)})
 
     fired = [m.name for m in markers if m.exists()]
     assert not fired, f'the hostile body EXECUTED: {fired} created. stderr={r.stderr}'

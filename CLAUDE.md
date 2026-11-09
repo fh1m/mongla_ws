@@ -415,6 +415,13 @@ not port it back. A capability that needs something from it is rebuilt against t
   force-pushes, so a page saved mid-run rejects the push instead of vanishing.
   `tools/wiki_build.py` defines conversion; `test/test_wiki_edits_pass_pr_gate.py` and
   `test/test_wiki_publish_never_overwrites_an_edit.py` protect the workflow contract.
+- **Two required checks, and neither may be talked past.** The integrity gate runs
+  `tools/run_repo_integrity.py`, the one list of guards: a new guard is a line there, and
+  any skip or a guard file with no passing test fails it. Both workflows' shape is an
+  allowlist in `tools/ci_contract.py` (no `if:`, known actions, exact commands), which the
+  provenance job also runs, because GitHub counts a skipped required job as passed. A PR
+  description passes provenance with a filled `## AI Provenance` table, or the line
+  `Provenance: 100% human-written` on its own (`tools/provenance_check.py`).
 - **Warning: Docs change in the same commit as the code they describe — not after.** A
   removal is not finished until every file that names the removed thing says what
   is true now: docs, skills, agents, launch comments, test docstrings, the site.

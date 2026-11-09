@@ -125,6 +125,14 @@ jobs:
             echo "This branch must pass the same repository integrity and provenance"
             echo "checks as a normal code PR before merging into main."
             echo
+            # The wiki editor is the human source; tools/provenance_check.py
+            # reads this table (test_provenance_check.py runs this block).
+            echo "## AI Provenance"
+            echo
+            echo "| # | Author / Handle | Source URL | What came from this person |"
+            echo "|---|---|---|---|"
+            echo "| 1 | ${WHO} | https://github.com/${GITHUB_REPOSITORY}/wiki | The wiki edit to: ${PAGES} |"
+            echo
             if [ "$GUARDS_OK" != "true" ]; then
               echo "Local wiki guards failed; do not merge until they pass."
               echo
