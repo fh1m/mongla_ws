@@ -20,7 +20,9 @@ echo "== ROS $distro at $(git rev-parse --short HEAD 2>/dev/null || echo unknown
 apt-get update -qq
 # The distro's own pytest: ROS's launch_testing plugin is built against it,
 # and pip's newest (9) no longer accepts the hook argument it declares.
-apt-get install -y -qq python3-venv python3-pip python3-pytest > /dev/null
+# procps (pgrep) and iproute2 (ss): the manager's process-tree teardown and
+# port checks shell out to them, and ros-base ships neither.
+apt-get install -y -qq python3-venv python3-pip python3-pytest procps iproute2 > /dev/null
 
 echo "== the dependencies the package.xml files declare (rosdep)"
 rosdep update --rosdistro "$distro" > /dev/null

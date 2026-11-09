@@ -63,3 +63,20 @@ def test_the_script_never_turns_a_failure_into_a_pass():
 def test_numpy_stays_below_two_in_ci_too():
     assert '-c kutum/constraints.txt' in SCRIPT
     assert "numpy 2 would break cv_bridge" in SCRIPT
+
+
+def _pin(path, name):
+    for line in (ROOT / path).read_text().splitlines():
+        m = re.match(rf'{name}\s*==\s*([\w.]+)', line.strip())
+        if m:
+            return m.group(1)
+    return None
+
+
+def test_ci_resolves_the_vehicles_pymavlink():
+    """The decoding tests pin pymavlink's behaviour. An open `>=` let CI pull a
+    newer release that decodes SYS_STATUS extended health, so the suite there
+    described a library the vehicle does not run. One pin, read from both."""
+    vehicle = _pin('kutum/requirements.txt', 'pymavlink')
+    assert vehicle, 'kutum/requirements.txt no longer pins pymavlink'
+    assert _pin('requirements.txt', 'pymavlink') == vehicle

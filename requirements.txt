@@ -21,7 +21,10 @@
 
 # The board link: MAVLink 2 over the SROT board's USB serial.
 # fc/srot_fc.py and every tools/srot_*.py.
-pymavlink>=2.4.41
+# Pinned to what the vehicle runs (kutum/requirements.txt): the decoding traps
+# in CLAUDE.md -- SYS_STATUS extended health, ESC_STATUS -- are properties of
+# this version, and the tests that pin them must test the vehicle's copy.
+pymavlink==2.4.49
 # serial port probing in the manager and the bench tools
 pyserial>=3.5
 

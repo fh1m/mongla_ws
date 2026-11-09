@@ -13,6 +13,11 @@ docstrings gone and the layout normalised by `ast.unparse`, so:
 Strings that are not docstrings stay -- they are code, and several guards are
 about exactly which literal is passed.
 
+`ast.unparse` is not stable across Python versions: 3.10 writes a tuple
+target as `(a, b) = f()` and 3.12 -- the vehicle's Jazzy -- as `a, b = f()`.
+Pin the part of a line that cannot vary (the call, the literal), not its
+punctuation; the ROS CI runs both versions and catches the difference.
+
 A substring check is still weaker than driving the behaviour; where a test
 CAN run the code, it should. This makes the ones that cannot honest.
 """
