@@ -1,0 +1,38 @@
+.github/CODEOWNERS
+  h_f1b9066eb9899c 1-21
+.github/ISSUE_TEMPLATE/bug.yml
+  h_f1b9066eb9899c 1-32
+.github/ISSUE_TEMPLATE/config.yml
+  h_f1b9066eb9899c 1-5
+.github/ISSUE_TEMPLATE/evidence.yml
+  h_f1b9066eb9899c 1-30
+.github/ISSUE_TEMPLATE/qualification.yml
+  h_f1b9066eb9899c 1-28
+.github/dependabot.yml
+  h_f1b9066eb9899c 1-37
+.github/workflows/poc-check.yml
+  h_f1b9066eb9899c 36,50
+.github/workflows/repository-integrity.yml
+  h_f1b9066eb9899c 23,27
+.github/workflows/wiki.yml
+  h_f1b9066eb9899c 20-25,89,132-133,172
+CLAUDE.md
+  h_f1b9066eb9899c 410-412
+SECURITY.md
+  h_f1b9066eb9899c 1-35
+test/test_repository_integrity_workflow.py
+  h_f1b9066eb9899c 100-102,112
+tools/ci_contract.py
+  h_f1b9066eb9899c 98-109,178-180
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "47ed80f53c4fe092f58619e97cbf71134848d14d",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
