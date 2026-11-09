@@ -1,0 +1,36 @@
+.github/PULL_REQUEST_TEMPLATE.md
+  h_f1b9066eb9899c 10-14
+.github/workflows/poc-check.yml
+  h_f1b9066eb9899c 3-6,8-11,13-15,17-19,32-33,35-40,45-48,53-79
+.github/workflows/repository-integrity.yml
+  h_f1b9066eb9899c 6,32-36
+.github/workflows/wiki.yml
+  h_f1b9066eb9899c 128-135
+CLAUDE.md
+  h_f1b9066eb9899c 418-424
+src/mongla_control/test/test_ci_workflows_are_not_injectable.py
+  h_f1b9066eb9899c 28,79-80,108-110
+test/test_no_capability_is_unreachable_anywhere.py
+  h_f1b9066eb9899c 191-199
+test/test_provenance_check.py
+  h_f1b9066eb9899c 1-95
+test/test_repository_integrity_workflow.py
+  h_f1b9066eb9899c 1,3-6,8,12-14,17,21-180,184-187
+tools/ci_contract.py
+  h_f1b9066eb9899c 1-187
+tools/provenance_check.py
+  h_f1b9066eb9899c 1-115
+tools/run_repo_integrity.py
+  h_f1b9066eb9899c 1-81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "9e676a93ce47c64c3dfc3bc3a627e10d70636e05",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
