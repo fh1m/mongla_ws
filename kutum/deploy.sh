@@ -87,7 +87,10 @@ fi
 say "3. Stage a new release beside the live one"
 
 sha="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
-dirty="$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null | grep -q . && echo '-dirty' || true)"
+# Dirty means the vehicle gets something no commit has. Untracked tool state
+# that the excludes below never send (.codegraph/) does not count.
+dirty="$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null | grep -v '^?? \.codegraph/' \
+         | grep -q . && echo '-dirty' || true)"
 ID="${sha}${dirty}-$(date -u +%Y%m%dT%H%M%S)"
 DESC="$sha${dirty:+ +uncommitted} from $(hostname)"
 REL="mongla/releases/$ID"
