@@ -205,6 +205,41 @@ and an unchecked file name in `tools/upload_sink.py`.
 anything else. `/apply` refuses before it reads the camera. The console stays
 open by decision (#66); what it may write is now bounded.
 
+### B-99: the ladder fallback steered on any class `READ 2026-11-09` **FIXED 2026-11-09**
+
+**What.** With no live box of the requested class, `bbox_error(class, lock_s>0)`
+returned the first `/lock` box without looking at what it was. `/lock` names
+the rung (detection, follow, anchor) in its hypothesis and carried no class at
+all, so a ladder pinned or stale on prop B steered an align asked for prop A
+(#74). The existing test checked that the ladder's own class changed, not that
+the consumer refused a wrong one.
+
+**Fix.** `lock_node` puts the class it follows in `Detection2D.id`: the anchor's
+enrolment label on the anchor rung, the last real detection's class on the
+others. `_lock_sample` refuses a box whose id is not the requested class, and
+an empty id, which cannot be verified. With no class asked, the single-target
+fallback is unchanged. `test_lock_fallback_checks_identity.py` runs the real
+publisher, subscriber callback and `bbox_error`; four of its cases fail on the
+old consumer.
+
+### B-100: a new target class kept the old target's box, follower and pose `READ 2026-11-09` **FIXED 2026-11-09**
+
+**What.** A mission switching the ladder's class (through `classes_filter` or
+a live `target_class`) changed `_cls` and the committed width, and nothing
+else. The last detection box, the follower's points, the anchor's pose and
+label and the world memory all stayed, so until a detection of the new class
+arrived the ladder kept publishing the old target, its range now computed with
+the new class's width (#75). A ladder tick already running at the switch could
+also publish, or write the old anchor label, after it.
+
+**Fix.** `_switch_target` bumps a generation and forgets all per-target state
+under the lock; the anchor's bank keeps its references, which are labelled by
+class. Each tick carries the generation it started under, and a tick that
+finishes under a newer one publishes nothing and clears what it wrote. The
+same class re-delivered (the filter is latched) is not a switch. With B-99, a
+box published in the instant between the check and the publish still names
+the old class and is refused by the consumer.
+
 ### B53 — every payload channel the missions use is REFUSED by this board `MEASURED 2026-09-22, re-read 2026-10-01` **MAP REMOVED 2026-10-01** — channels await the wired payload
 **`missions/competition_config.py` vs the board's `SERVOn_ROLE` params**
 

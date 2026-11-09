@@ -37,8 +37,16 @@ class Sample:
 class ChoiceMixin:
     """Methods of `VisionState`; see vision_state.py for the subscriptions."""
 
-    def _lock_sample(self, image_width: float, image_height: float):
+    def _lock_sample(self, image_width: float, image_height: float,
+                     class_name: str = ''):
         """A Sample from the ladder, or None.
+
+        Identity first (#74). The box's hypothesis names the RUNG (detection,
+        follow, anchor); the physical class it follows rides in
+        `Detection2D.id`, set by `lock_node`. A loop that asked for one class
+        never steers on a ladder holding another, and a box that does not say
+        what it is (an older lock_node, an empty id) is refused for the same
+        reason: an unverifiable identity is not a match.
 
         The ladder has ALREADY applied its own decay -- `score` is rung trust
         times time-since-the-last-real-detection -- so this must not decay it
@@ -54,6 +62,8 @@ class ChoiceMixin:
         d = arr.detections[0]
         if not d.results:
             return None
+        if class_name and d.id != class_name:
+            return None
         score = _hypothesis_score(d)
         if score <= 0.0:
             return None
@@ -65,7 +75,7 @@ class ChoiceMixin:
             h_frac=float(b.size_y) / max(image_height, 1.0),
             w_frac=float(b.size_x) / max(image_width, 1.0),
             age_s=max(0.0, time.monotonic() - stamp) if stamp else 0.0,
-            class_id=_hypothesis_class_id(d), score=score,
+            class_id=d.id or _hypothesis_class_id(d), score=score,
             vis_range=0.0, track_id=-1, coasted=True)
 
     def bbox_error(self, class_name: str = '', *,
@@ -166,7 +176,7 @@ class ChoiceMixin:
             # same quantity in two places -- and the shorter of the two would
             # silently win. The name is the defect, not the behaviour.
             if lock_s > 0.0:
-                return self._lock_sample(image_width, image_height)
+                return self._lock_sample(image_width, image_height, class_name)
             return None
 
         vis_range = (float(vis_range_vals[best_index])
