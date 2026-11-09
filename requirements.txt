@@ -36,26 +36,26 @@ numpy>=1.24,<2.0
 trackers>=2.4.0,<2.5.0
 # supervision: <=0.26.1 on numpy 1.x (0.30 uses np.long, which is numpy-2 only)
 supervision>=0.18.0,<=0.26.1
-filterpy>=1.4.5
+filterpy>=2.0.0
 
 # HUD text rendering (_text_engine.py)
-Pillow>=9.0
+Pillow>=13.0.0
 
 # OPTIONAL. ONNX runtime for the XFeat matcher (anchor/xfeat_onnx.py) and the
 # monocular depth node (depth/depth_estimation_node.py). Imported lazily; the
 # Hailo path (anchor/xfeat_hailo.py) does not need it.
-onnxruntime>=1.16
+onnxruntime>=1.31.1
 
 # ===================== dev box only ====================================
 
 # .pt models: replaying archive footage on a desktop GPU (detection/yolo.py).
 # The vehicle runs .hef on the Hailo-8 and never imports these.
-ultralytics>=8.1.0; platform_machine == "x86_64"
+ultralytics>=8.4.203; platform_machine == "x86_64"
 # pip OpenCV is fine on x86 dev boxes; on the Pi see the OpenCV rule above.
 opencv-python>=4.8; platform_machine == "x86_64"
 
 # plots in tools/ (scorers, sweeps)
-matplotlib>=3.5; platform_machine == "x86_64"
+matplotlib>=3.11.2; platform_machine == "x86_64"
 
 # tests
-pytest>=7.0
+pytest>=9.2.0
