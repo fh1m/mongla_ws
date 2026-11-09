@@ -1,8 +1,8 @@
 {
-  "collected": 4651,
-  "passed": 4643,
+  "collected": 4709,
+  "passed": 4702,
   "failed": 0,
-  "skipped": 7,
+  "skipped": 6,
   "xfailed": 1,
   "xpassed": 0,
   "suites": {
@@ -30,8 +30,7 @@
       "failed": 0
     },
     "test/": {
-      "passed": 243,
-      "skipped": 1,
+      "passed": 302,
       "failed": 0
     }
   },

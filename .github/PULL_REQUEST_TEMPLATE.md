@@ -7,8 +7,11 @@
 ---
 
 ## AI Provenance
-<!-- Required if any code in this PR was AI-assisted.
-     Delete this section only if 100% human-written. -->
+<!-- Required if any code in this PR was AI-assisted: at least one numbered,
+     fully filled row. If the PR is entirely human-written, delete this
+     section and put this line, alone, anywhere in the description:
+     Provenance: 100% human-written
+     tools/provenance_check.py decides; quoted or fenced text does not count. -->
 
 **AI model used:** <!-- e.g. claude-sonnet-4, gpt-4o -->
 
