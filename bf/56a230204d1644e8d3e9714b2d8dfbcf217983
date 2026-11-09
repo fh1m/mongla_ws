@@ -1,0 +1,20 @@
+.github/workflows/repository-integrity.yml
+  h_f1b9066eb9899c 4
+test/test_ros_ci_workflow.py
+  h_f1b9066eb9899c 1-65
+tools/ci_contract.py
+  h_f1b9066eb9899c 33,37-41,75,96,164-192,218-219
+tools/run_repo_integrity.py
+  h_f1b9066eb9899c 26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "bf56a230204d1644e8d3e9714b2d8dfbcf217983",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
