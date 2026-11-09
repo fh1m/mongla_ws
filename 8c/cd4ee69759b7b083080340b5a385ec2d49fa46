@@ -1,0 +1,18 @@
+README.md
+  h_f1b9066eb9899c 13,112,798,800,820
+docs/index.html
+  h_f1b9066eb9899c 113,1809
+docs/stats.json
+  h_f1b9066eb9899c 2-3,5,33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "8ccd4ee69759b7b083080340b5a385ec2d49fa46",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
