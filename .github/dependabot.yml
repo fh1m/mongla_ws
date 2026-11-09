@@ -19,11 +19,14 @@ updates:
     commit-message:
       prefix: ci
 
+  # The dev-box ranges. Only raise a lower bound when a new version needs
+  # it; the default strategy rewrote every minimum to the newest release.
   - package-ecosystem: pip
-    directories: [/, /kutum]
+    directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 2
+    versioning-strategy: increase-if-necessary
     groups:
       python:
         patterns: ['*']
@@ -35,3 +38,25 @@ updates:
       - dependency-name: supervision
     commit-message:
       prefix: deps
+
+  # The vehicle's exact pins. Minor and patch only: a major version changes
+  # behaviour on the vehicle and is proposed by hand after a Kutum build.
+  # Even these merge only after kutum/deploy.sh passes on the vehicle.
+  - package-ecosystem: pip
+    directory: /kutum
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+    groups:
+      kutum:
+        patterns: ['*']
+    ignore:
+      - dependency-name: numpy
+      - dependency-name: opencv-python
+      - dependency-name: pymavlink
+      - dependency-name: trackers
+      - dependency-name: supervision
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
+    commit-message:
+      prefix: deps(kutum)

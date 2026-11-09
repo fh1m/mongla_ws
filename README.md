@@ -795,7 +795,7 @@ mongla_vision        1 544 passed        detection, the lock ladder, optics, flo
 mongla_manager         802 passed        the node, bring-up gates, the docs contract
 mongla_planner         447 passed        the CLI, the DSL, the missions
 mongla_localization    413 passed        the filter, retrodiction, course priors
-test/ (repo-wide)      303 passed        nothing unreachable, the retired stack stays retired
+test/ (repo-wide)      310 passed        nothing unreachable, the retired stack stays retired
                      ─────────────
                      4 710 passed, 0 failed
 ```
