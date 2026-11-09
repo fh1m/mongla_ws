@@ -395,10 +395,14 @@ not port it back. A capability that needs something from it is rebuilt against t
   (`tools/orphan_sweep.py`); a deliberate wait goes in `DEFERRED_FUNCTIONS`
   with its consumer named.
 - **The docs are read and edited in the [GitHub wiki](https://github.com/fh1m/mongla_ws/wiki).**
-  Each page is also a file under `.claude/context/` (or `docs/`), and `.github/workflows/wiki.yml`
-  keeps them the same: a wiki edit is committed back here after the doc guards pass, and a push
-  to main rebuilds the wiki. So editing the file here *is* editing the wiki; do that when the edit
-  goes with a code change. `tools/wiki_build.py` says how, and its test proves the round trip.
+  Each page is also a file under `.claude/context/` (or `docs/`). The wiki workflow turns
+  every wiki edit into a **review branch and pull request**; only a merged, checked PR reaches
+  `main`. A push to `main` rebuilds the wiki. The bot must never push an unreviewed wiki edit
+  straight to `main`, even when its own doc guards pass. If GitHub suppresses CI on a PR created
+  with its workflow token, edit the PR description to trigger the integrity/provenance checks.
+  If Actions cannot create the PR, the branch remains and must be reviewed manually. Editing
+  the file here updates the wiki only after that PR merges. `tools/wiki_build.py` defines
+  conversion; `test/test_wiki_edits_pass_pr_gate.py` protects the workflow contract.
 - **Warning: Docs change in the same commit as the code they describe — not after.** A
   removal is not finished until every file that names the removed thing says what
   is true now: docs, skills, agents, launch comments, test docstrings, the site.
