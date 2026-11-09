@@ -152,6 +152,8 @@ the real outcome is a code:
 | `NO_CAMERA` (3) | the camera pipeline never came up |
 | `ABORTED` (4) | the goal was cancelled |
 | `DRIFTED` (5) | `align` centred while moving, then re-measured out of band once stopped |
+| `ESTIMATED_CROSSING` (6) | a pass-through `move` lost the gate the way crossing loses it (it surrounded the camera axis and ran off the frame), then committed |
+| `COMMIT_UNVERIFIED` (7) | a pass-through `move` committed after losing the gate some other way; not a pass |
 
 "I could not see it" is a normal outcome for a mission to branch on, not an exception to crash
 into. The DSL wraps the code in a result that also carries **where the target was** when the
