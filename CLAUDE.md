@@ -113,7 +113,9 @@ board over ESP-NOW; with no link it is UNKNOWN, and `arm` is refused unless
 `allow_unknown_kill_switch` is set (bench only, under `nodes:` in `~/.mongla/bringup.yaml`). A
 kill while armed, or a mission that dies armed, latches: the manager keeps disarming or
 surfacing until the board confirms it, and refuses every verb but `disarm`, `stop` and
-`surface` meanwhile (`BUGS.md` B-93, B-94).
+`surface` meanwhile. Unconfirmed after three tries, it also withholds the heartbeat so the
+board's link-loss failsafe acts. A restart does not clear this: a board heard ARMED at
+start-up latches the new manager until DISARMED (`BUGS.md` B-93, B-94, B-97).
 
 **Warning: `AUTO` never exits by itself.** After a move, MANUAL_CONTROL frames are discarded until
 the mode changes. The vision verbs handle this by setting the mode and **verifying it took**
