@@ -1,0 +1,20 @@
+.gitignore
+  h_f1b9066eb9899c 42-43
+CLAUDE.md
+  h_f1b9066eb9899c 428-435
+test/test_workspace_stays_clean.py
+  h_f1b9066eb9899c 1-69
+tools/run_repo_integrity.py
+  h_f1b9066eb9899c 33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "6d250b09da59f18cd686c573137a178d2c4cdbc1",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
