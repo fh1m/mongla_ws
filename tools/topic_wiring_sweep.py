@@ -71,9 +71,11 @@ def _assignments(txt: str) -> dict:
     # A COMPLETE quoted string on one line, and one that looks like a topic.
     # Without the closing-quote anchor this matched the tail of `pnp_node`'s
     # multi-line `f'{ns}/target_pose' + (f'_{variant}' if variant else '')` and
-    # reported a row spelled `' if variant else ''`.
+    # reported a row spelled `' if variant else ''`. A backslash belongs to
+    # the escape branch only: letting both branches take it made a long line
+    # of backslashes backtrack exponentially (CodeQL py/redos).
     for m in re.finditer(
-            r'^\s*([A-Za-z_]\w*)\s*=\s*(f?([\'"])(?:[^\'"\n]|\\.)*\3)\s*$',
+            r'^\s*([A-Za-z_]\w*)\s*=\s*(f?([\'"])(?:[^\'"\\\n]|\\.)*\3)\s*$',
             txt, re.M):
         if '/' in m.group(2):
             out[m.group(1)] = m.group(2)

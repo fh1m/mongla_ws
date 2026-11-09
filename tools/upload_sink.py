@@ -4,13 +4,17 @@ on 127.0.0.1:8778 and writes each frame as a PNG. A 2800px dataURL is far too
 large to hand back through a browser-automation return value, so the rig posts
 it here instead. Binds loopback only.
 """
-import http.server, base64, pathlib
+import http.server, base64, pathlib, re
 OUT = pathlib.Path('/tmp/claude-1000/renders'); OUT.mkdir(exist_ok=True)
 class H(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         n = int(self.headers['Content-Length'])
         body = self.rfile.read(n).decode()
         name, _, data = body.partition('|')
+        # A plain file name only: the name arrives in the request body, and a
+        # '../' in it would write outside OUT (CodeQL py/path-injection).
+        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,99}', name) or '..' in name:
+            self.send_response(400); self.end_headers(); return
         raw = base64.b64decode(data.split(',',1)[1])
         (OUT/f'{name}.png').write_bytes(raw)
         self.send_response(200)
