@@ -1,0 +1,50 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 229-263,264-299
+src/mongla_manager/mongla_manager/vision_choice.py
+  h_f1b9066eb9899c 34-41,47-48,51-57,58-62,72-73,79-82,84,88,89,189,341-342
+src/mongla_manager/mongla_manager/vision_state.py
+  h_f1b9066eb9899c 316-317
+src/mongla_manager/test/test_lock_fallback_checks_identity.py
+  h_f1b9066eb9899c 1-47,48,49-100
+src/mongla_vision/mongla_vision/lock_node.py
+  h_f1b9066eb9899c 91,172-180,199,230
+src/mongla_vision/mongla_vision/lock_publish.py
+  h_f1b9066eb9899c 3-5,116,120-124,126-140
+src/mongla_vision/mongla_vision/lock_setup.py
+  h_f1b9066eb9899c 315,345,349-375
+src/mongla_vision/mongla_vision/lock_wiring.py
+  h_f1b9066eb9899c 214-216
+src/mongla_vision/mongla_vision/tracking/follower.py
+  h_f1b9066eb9899c 150-154
+src/mongla_vision/test/test_lock_follows_the_mission_class.py
+  h_f1b9066eb9899c 42-43,45-46,52-61,191-256
+src/mongla_control/mongla_control/motion_vision/align.py
+  h_f1b9066eb9899c 48,329-333,336-337,360-361,423-427,476,501-502,518-522,549-552
+src/mongla_control/mongla_control/motion_vision/control.py
+  h_f1b9066eb9899c 449,461-467,471-473
+src/mongla_control/mongla_control/motion_vision/freshness.py
+  h_f1b9066eb9899c 6-15,30-33,208-231,234,237,242-244,250-261
+src/mongla_control/mongla_control/motion_vision/move.py
+  h_f1b9066eb9899c 37,189-190,268-274,284-287
+src/mongla_control/test/test_motion_vision.py
+  h_f1b9066eb9899c 557-562,564-569
+src/mongla_control/test/test_vision_authority_by_source.py
+  h_f1b9066eb9899c 1-133
+src/mongla_manager/test/test_tool_aim_is_wired.py
+  h_f1b9066eb9899c 59
+src/mongla_vision/mongla_vision/tracking/lock_state.py
+  h_f1b9066eb9899c 28-29,134-137
+src/mongla_vision/test/test_lock_wiring.py
+  h_f1b9066eb9899c 92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "83a6ecfa9301fe4ae445d6f360018cd340587725",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
