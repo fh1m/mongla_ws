@@ -78,6 +78,8 @@ def test_a_release_builds_beside_the_live_tree_and_switches_atomically(pi):
     assert doc['release'] == 'aaa-1' and doc['board_firmware_rev_required'] == 14
     assert doc['software'] == 'built and active' and doc['vehicle_gate'] == 'not run'
     assert (home / 'mongla_ws/.kutum-deployed').read_text().startswith('aaa-1 from test')
+    listed = rel(env, 'list').stdout
+    assert '* aaa-1' in listed and 'gate: not run' in listed, listed
 
 
 def test_the_first_deploy_keeps_the_old_workspace_whole(pi):
@@ -132,7 +134,7 @@ def test_a_running_stack_refuses_without_touching_anything(pi):
 def test_preflight_does_not_refuse_itself(pi):
     """On the vehicle a bare pgrep matched the ssh shell running it, whose
     command line names the workspace."""
-    home, env = pi
+    _, env = pi
     r = subprocess.run(['bash', '-c', f'echo mongla_manager >/dev/null; '
                                       f'bash {KUTUM / "release.sh"} preflight'],
                        env=env, capture_output=True, text=True)
@@ -165,7 +167,7 @@ def test_prune_keeps_active_previous_legacy_and_the_newest(pi):
 
 
 def test_a_bad_release_id_is_refused(pi):
-    home, env = pi
+    _, env = pi
     for bad in ('../x', '', '-rf'):
         assert rel(env, 'build', bad).returncode != 0
 
@@ -173,6 +175,7 @@ def test_a_bad_release_id_is_refused(pi):
 def _probe():
     import importlib.util
     spec = importlib.util.spec_from_file_location('armed_probe', KUTUM / 'armed_probe.py')
+    assert spec is not None and spec.loader is not None
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
     return m
@@ -190,7 +193,7 @@ class _HB:
     (['/dev/srot'], None, 2),                     # attached but silent: cannot tell
     (['/dev/srot'], RuntimeError('busy'), 2),     # held by another process
 ])
-def test_the_armed_probe(monkeypatch, capsys, devs, hb, code):
+def test_the_armed_probe(monkeypatch, devs, hb, code):
     pytest.importorskip('pymavlink')
     m = _probe()
     monkeypatch.setattr(m, 'candidates', lambda: devs)

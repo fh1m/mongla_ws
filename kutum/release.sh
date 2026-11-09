@@ -141,8 +141,8 @@ list() {
     if [[ -e "$RELEASES/$id/.build-ok" ]]; then state=built
     elif [[ "$id" == legacy-* ]]; then state=legacy
     else state=incomplete; fi
-    printf '  %s%-48s %s %s\n' "$mark" "$id" "$state" \
-      "$(cat "$RELEASES/$id/.kutum-deployed" 2>/dev/null | cut -d' ' -f1-2 || true)"
+    printf '  %s%-40s %-10s gate: %s\n' "$mark" "$id" "$state" \
+      "$(grep -o '"vehicle_gate": "[^"]*"' "$RELEASES/$id/release.json" 2>/dev/null | cut -d'"' -f4 || true)"
   done
   echo "  (* active, p previous)"
 }

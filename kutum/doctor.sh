@@ -229,7 +229,13 @@ else
     ok "active release: $(basename "$(readlink -f "$HOME/mongla_ws")") (kutum/release.sh list)"
     gate="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("vehicle_gate","?"))' \
             "$HOME/mongla_ws/release.json" 2>/dev/null)"
-    [ -n "$gate" ] && ok "its vehicle gate: $gate"
+    # The machine can be sound while the vehicle is not; that is the gate's
+    # verdict to give, so it is a WARNING here, never a FAIL.
+    case "$gate" in
+      pass) ok "its vehicle gate passed" ;;
+      "")   ;;
+      *)    warn "its vehicle gate: $gate -- run ros2 run mongla_manager bringup_check" ;;
+    esac
   else
     warn "$HOME/mongla_ws is a plain directory -- the next deploy keeps it as a legacy release"
   fi
