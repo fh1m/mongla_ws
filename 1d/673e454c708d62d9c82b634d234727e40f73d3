@@ -1,0 +1,22 @@
+requirements.txt
+  h_f1b9066eb9899c 24-27
+src/mongla_manager/test/test_tool_aim_is_wired.py
+  h_f1b9066eb9899c 53-55
+test/test_ros_ci_workflow.py
+  h_f1b9066eb9899c 66-82
+tools/ci_ros.sh
+  h_f1b9066eb9899c 23-25
+tools/code_text.py
+  h_f1b9066eb9899c 16-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "1d673e454c708d62d9c82b634d234727e40f73d3",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}

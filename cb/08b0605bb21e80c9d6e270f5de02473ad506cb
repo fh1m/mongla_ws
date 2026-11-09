@@ -1,0 +1,16 @@
+.github/workflows/ros.yml
+  h_f1b9066eb9899c 1-38
+tools/ci_ros.sh
+  h_f1b9066eb9899c 1-75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "cb08b0605bb21e80c9d6e270f5de02473ad506cb",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
