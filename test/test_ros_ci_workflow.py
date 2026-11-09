@@ -51,7 +51,7 @@ def test_the_script_never_turns_a_failure_into_a_pass():
     code = '\n'.join(l for l in SCRIPT.splitlines() if not l.lstrip().startswith('#'))
     assert 'set -euo pipefail' in code
     assert '|| true' not in code and '|| :' not in code
-    pytest_lines = [l for l in code.splitlines() if 'pytest' in l and 'pip' not in l]
+    pytest_lines = [l for l in code.splitlines() if re.search(r'-m pytest\b', l)]
     assert len(pytest_lines) == 1, pytest_lines
     run = pytest_lines[0].split('pytest', 1)[1]      # pytest's own arguments
     assert 'src/*/test test' in run
