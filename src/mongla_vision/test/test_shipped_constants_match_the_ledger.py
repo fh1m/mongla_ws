@@ -56,6 +56,10 @@ LEDGER_BOUND = {
         'FLOW_SCALE_SIGMA_FRAC': (0.036, '1.09 cm on 30 cm — 3.6 %',
                                   'worst of three taped slides; the scale '
                                   'term of the published flow sigma (#23)'),
+        'FLOW_UNCALIBRATED_SCALE_SIGMA_FRAC': (0.0308, '3.08 % axis asymmetry',
+                                               'the uncalibrated state, measured '
+                                               'on the downward camera; added '
+                                               'only under allow_uncalibrated (#80)'),
         'FLOW_TD_MEASURED_S': (-0.0113, 'td = -11.3 ms, sd 0.84 ms',
                                'camera<->gyro offset the online estimator '
                                'starts from, three 60 s runs on the vehicle'),

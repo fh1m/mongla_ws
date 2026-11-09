@@ -36,6 +36,8 @@ USED = {
     '/mongla/demand':                   'the motion model aid',
     'floor_grid_deg':                   'yaw drift bound from the floor grid',
     'lane_heading_deg':                 'yaw drift bound from a lane line',
+    'flow_calibration':                 "whether flow's scale is calibrated, "
+                                        'reported in the aiding state (#80)',
 }
 
 # ---- deliberately NOT a localisation input, with the reason ---------------

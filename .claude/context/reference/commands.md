@@ -497,7 +497,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `range_crop` | `-1` |
 | `vision_profile` | `''` |
 
-**`mongla_vision/flow/flow_node.py`** — 38 parameters
+**`mongla_vision/flow/flow_node.py`** — 40 parameters
 
 | parameter | default |
 |---|---|
@@ -526,6 +526,8 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `yaw_image_sign` | `-1.0` |
 | `yaw_cross_check_tol` | `0.25` |
 | `calibration` | `''` |
+| `profile` | `''` |
+| `allow_uncalibrated` | `False` |
 | `undistort` | `True` |
 | `exposure_us` | `0.0` |
 | `stamp_source` | `'soe'` |
