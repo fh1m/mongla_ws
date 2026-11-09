@@ -422,7 +422,9 @@ not port it back. A capability that needs something from it is rebuilt against t
   allowlist in `tools/ci_contract.py` (no `if:`, known actions, exact commands), which the
   provenance job also runs, because GitHub counts a skipped required job as passed. A PR
   description passes provenance with a filled `## AI Provenance` table, or the line
-  `Provenance: 100% human-written` on its own (`tools/provenance_check.py`).
+  `Provenance: 100% human-written` on its own (`tools/provenance_check.py`); a PR the
+  Dependabot app opened passes by its author. Dependabot proposes weekly and never
+  merges itself; a `/kutum` pin moves only after `kutum/deploy.sh` passes on the vehicle.
 - **Warning: Docs change in the same commit as the code they describe — not after.** A
   removal is not finished until every file that names the removed thing says what
   is true now: docs, skills, agents, launch comments, test docstrings, the site.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Decide the provenance check from a pull request body.
 
-    PR_BODY="$(cat body.md)" python3 tools/provenance_check.py
+    PR_BODY="$(cat body.md)" PR_AUTHOR=login python3 tools/provenance_check.py
 
 The body arrives in the environment, never as shell source: it is written by
 whoever opens the pull request. Exit 0 passes, 1 fails; the verdict word is
@@ -17,6 +17,11 @@ fences and quotes:
 * a `## AI Provenance` heading followed by its table: the header
   `| # | Author / Handle | Source URL | What came from this person |`, the
   separator, and at least one row numbered from 1 with every cell filled.
+
+A pull request opened by Dependabot passes as `bot`: it bumps declared
+dependencies and carries no authored code. The author comes from the event
+(`PR_AUTHOR`), not the body, and GitHub reserves `[bot]` logins for apps, so
+a person cannot claim it.
 
 The old check passed any body that contained the phrase anywhere, so
 "this PR is NOT 100% human-written" passed as exempt (#97). Both forms are
@@ -77,8 +82,13 @@ def _table_ok(lines: list[str]) -> bool:
         [r[0] for r in data] == [str(k) for k in range(1, len(data) + 1)]
 
 
-def verdict(body: str) -> str:
-    """'exempt', 'pass', 'empty', 'missing' or 'contradictory'."""
+BOTS = frozenset({'dependabot[bot]'})
+
+
+def verdict(body: str, author: str = '') -> str:
+    """'bot', 'exempt', 'pass', 'empty', 'missing' or 'contradictory'."""
+    if author in BOTS:
+        return 'bot'
     lines = _plain_lines(body or '')
     declared = DECLARATION in lines
     at = [i for i, line in enumerate(lines) if HEADING.fullmatch(line)]
@@ -92,6 +102,7 @@ def verdict(body: str) -> str:
 
 
 MESSAGES = {
+    'bot': 'Opened by Dependabot: a dependency bump, no authored code.',
     'exempt': 'Declared 100% human-written.',
     'pass': 'AI Provenance section found and populated.',
     'empty': 'AI Provenance heading found, but its table is missing, malformed or empty.',
@@ -101,12 +112,12 @@ MESSAGES = {
 
 
 def main() -> int:
-    status = verdict(os.environ.get('PR_BODY', ''))
+    status = verdict(os.environ.get('PR_BODY', ''), os.environ.get('PR_AUTHOR', ''))
     out = os.environ.get('GITHUB_OUTPUT')
     if out:
         with open(out, 'a', encoding='utf-8') as f:
             f.write(f'status={status}\n')
-    ok = status in ('exempt', 'pass')
+    ok = status in ('bot', 'exempt', 'pass')
     print(('ok ' if ok else 'FAIL ') + MESSAGES[status])
     return 0 if ok else 1
 

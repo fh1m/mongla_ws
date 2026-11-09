@@ -37,7 +37,8 @@ PROVENANCE_JOB = ('poc-check', 'Verify AI Provenance')
 RUN_GATE = 'python tools/run_repo_integrity.py'
 RUN_PROVENANCE = 'python3 tools/provenance_check.py'
 RUN_CONTRACT = 'python3 tools/ci_contract.py'
-PR_BODY = '${{ github.event.pull_request.body }}'
+PROVENANCE_ENV = {'PR_BODY': '${{ github.event.pull_request.body }}',
+                  'PR_AUTHOR': '${{ github.event.pull_request.user.login }}'}
 # A pip install of quoted requirement specifiers and nothing else: no
 # `;`, `&&` or `||` can sit outside the quotes.
 PIP = re.compile(r"python3? -m pip install --disable-pip-version-check( '[^']+')+")
@@ -163,8 +164,9 @@ def provenance_errors(text: str) -> list[str]:
     for step in steps:
         run = str(step.get('run', '')).strip()
         env = step.get('env')
-        if env is not None and not (run == RUN_PROVENANCE and env == {'PR_BODY': PR_BODY}):
-            errs.append('only the provenance step takes env, and only PR_BODY')
+        if env is not None and not (run == RUN_PROVENANCE and env == PROVENANCE_ENV):
+            errs.append('only the provenance step takes env: PR_BODY and PR_AUTHOR, '
+                        'from the event')
         _check_step(step, {RUN_PROVENANCE, RUN_CONTRACT}, errs, allow_failure_comment=True)
     runs = [str(s.get('run', '')).strip() for s in steps]
     for need in (RUN_PROVENANCE, RUN_CONTRACT):

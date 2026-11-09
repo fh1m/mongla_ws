@@ -93,3 +93,25 @@ def test_the_unfilled_template_fails_and_a_filled_one_passes():
                               '| 1 | fh1m | https://github.com/fh1m | The idea |', 1)
     filled = filled.replace('| 2 |                |            |                           |\n', '')
     assert pc.verdict(filled) == 'pass'
+
+
+@pytest.mark.parametrize('author, want', [
+    ('dependabot[bot]', 'bot'),
+    ('dependabot', 'missing'),          # a person's login, not the app
+    ('Dependabot[bot]', 'missing'),
+    ('fh1m', 'missing'),
+    ('', 'missing'),
+])
+def test_only_the_dependabot_app_is_exempt_by_author(author, want):
+    """The author comes from the event, not the body, and GitHub reserves
+    `[bot]` logins for apps; a body claiming to be Dependabot proves nothing."""
+    assert pc.verdict('Bumps numpy. dependabot[bot]', author) == want
+
+
+def test_the_workflow_passes_the_author_from_the_event():
+    import yaml
+    doc = yaml.load((ROOT / '.github/workflows/poc-check.yml').read_text(),
+                    Loader=yaml.BaseLoader)
+    step = next(s for s in doc['jobs']['poc-check']['steps']
+                if s.get('run', '').strip() == 'python3 tools/provenance_check.py')
+    assert step['env']['PR_AUTHOR'] == '${{ github.event.pull_request.user.login }}'
