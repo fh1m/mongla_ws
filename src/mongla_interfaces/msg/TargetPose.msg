@@ -12,6 +12,9 @@
 # reference implementation of that test.
 
 std_msgs/Header header      # stamp = the CAPTURE instant of the frame matched
+string target_label         # the class the pose was solved for, as OBSERVED by
+                            # the producer; empty = unknown, which a firing gate
+                            # refuses (#76)
 
 bool ok                     # false => every field below is meaningless
 string reason               # why not, when ok is false

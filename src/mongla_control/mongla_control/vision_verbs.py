@@ -209,7 +209,7 @@ class VisionVerbs:
     # ================================================================== #
     _tool_warned = None
 
-    def _warn_tool_geometry(self, tool, vstate):
+    def _warn_tool_geometry(self, tool, vstate, target_class=''):
         """One line, once per tool, when the aim correction cannot be trusted.
 
         Three distinguishable states, and collapsing them would hide the one
@@ -245,7 +245,8 @@ class VisionVerbs:
                 f'closing in does not help. Measure it into '
                 f'config/tool_geometry.yaml.')
             return
-        if getattr(vstate, 'tool_offset_px', None) and vstate.tool_offset_px(tool) is None:
+        if getattr(vstate, 'tool_offset_px', None) and vstate.tool_offset_px(
+                tool, class_name=target_class) is None:
             self.log.warning(
                 f'[VIS  ] tool {tool!r} is measured but there is no live '
                 f'target_pose, so the range-dependent aim correction cannot be '
@@ -369,7 +370,7 @@ class VisionVerbs:
             # ZERO offset -- byte-identical to aiming the camera, and therefore
             # silent. But it is exactly the case that misses: the round leaves
             # a parallel axis and the miss equals the offset at every range.
-            self._warn_tool_geometry(tool, vstate)
+            self._warn_tool_geometry(tool, vstate, target_class)
             outcome = align_loop(
                 fc=self.fc, vision_state=vstate,
                 target_class=target_class, axes=axis_set, offsets=offsets,
@@ -400,16 +401,22 @@ class VisionVerbs:
                 settle_px=float(settle_px),
                 verify=not bool(verify_off),
                 fire_max_tilt_deg=float(fire_max_tilt_deg),
-                # Bound to THIS camera's state: the pose is per-camera.
-                tilt_gate_fn=getattr(vstate, 'square_within', None),
+                # Bound to THIS camera's state (the pose is per-camera) and
+                # to THIS target: a square pose of the last prop must not
+                # clear a shot at this one (#76).
+                tilt_gate_fn=((lambda tol: vstate.square_within(
+                                  tol, class_name=target_class))
+                              if hasattr(vstate, 'square_within') else None),
                 # The APPROACH guard. Distinct from `square_within`, which
                 # folds "no pose" into "not square" -- right for a shot,
                 # wrong for an approach.
                 standoff_max_tilt_deg=float(standoff_max_tilt_deg),
-                obliquity_fn=getattr(vstate, 'obliquity_deg', None),
+                obliquity_fn=((lambda: vstate.obliquity_deg(class_name=target_class))
+                              if hasattr(vstate, 'obliquity_deg') else None),
                 # Aim the TOOL. Resolved by the manager, which is the layer
                 # allowed to import mongla_vision.
-                tool_offset_fn=((lambda: vstate.tool_offset_px(tool))
+                tool_offset_fn=((lambda: vstate.tool_offset_px(
+                                    tool, class_name=target_class))
                                 if tool and hasattr(vstate, 'tool_offset_px')
                                 else None),
                 # Steer on where the target is NOW: gyro rate x box age.

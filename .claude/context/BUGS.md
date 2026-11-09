@@ -189,6 +189,27 @@ yet also refuses. The latch is decided when a goal arrives, not only on the
 watchdog tick, or the manager's own first arm would read as an armed board.
 The board-side kill latch is upstream (srot-control-board#41).
 
+### B-101: a pose of one prop could clear a shot at another `READ 2026-11-09` **FIXED 2026-11-09**
+
+**What.** `TargetPose` had no field saying which target it was solved for.
+`square_within`, `obliquity_deg` and `tool_offset_px` checked only `ok` and
+age, so for up to a second after a mission switched from the gate to the
+torpedo board, the gate's fresh, square pose cleared the board's firing gate
+and supplied its tool-range correction (#76). Walking the rest of the chain
+found two neighbours on the same field: the fuse node voted poses of different
+targets into one answer, and `anchor_on('gate')` took any fused pose and wrote
+the gate's surveyed bearing against it, putting the world heading off by the
+angle between the two faces.
+
+**Fix.** `TargetPose.target_label` carries the class the producer OBSERVED
+(the anchor's enrolment label, not the class asked for), copied by PnP on
+success and refusal. The fuse node starts a new vote on a new label. Every
+pose gate takes the class it acts on, and `vision_align` binds its closures to
+`target_class`; an unlabelled pose cannot clear a named shot. `anchor_on`
+passes the course's `detect_class`, and a pose of another prop is refused with
+that reason. `test_pose_belongs_to_the_target.py`: four cases fail without the
+gate and the vote reset.
+
 ### B-98: the calibration guide wrote a file wherever a request pointed `READ 2026-11-09` **FIXED 2026-11-09**
 
 **What.** The guide's `/apply` built the destination file name from the
