@@ -13,6 +13,9 @@ distro="${ROS_DISTRO:?run inside a ros:<distro> container}"
 export DEBIAN_FRONTEND=noninteractive PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_PROGRESS_BAR=off
 summary="${GITHUB_STEP_SUMMARY:-/dev/null}"
 
+# The checkout belongs to the runner's user and this container runs as root;
+# without this, git refuses the tree and every git-reading test skips.
+git config --global --add safe.directory "$PWD"
 echo "== ROS $distro at $(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 apt-get update -qq
 # The distro's own pytest: ROS's launch_testing plugin is built against it,
@@ -22,6 +25,17 @@ apt-get install -y -qq python3-venv python3-pip python3-pytest > /dev/null
 echo "== the dependencies the package.xml files declare (rosdep)"
 rosdep update --rosdistro "$distro" > /dev/null
 rosdep install --from-paths src --ignore-src -y -q --rosdistro "$distro"
+
+# Built with the SYSTEM Python, as on the vehicle, before any pip package
+# exists: torch drags a new setuptools into the venv, and that broke the
+# interface package's egg build against the system's packaging (Humble).
+echo "== clean colcon build"
+set +u
+# shellcheck source=/dev/null
+source "/opt/ros/$distro/setup.bash"
+set -u
+rm -rf build install log
+colcon build --symlink-install --event-handlers console_cohesion+
 
 # A venv that still sees the system's ROS and apt Python packages. On Noble
 # pip may not touch the system site (PEP 668), and numpy must stay the one
@@ -47,19 +61,17 @@ print(f'python {sys.version.split()[0]}, numpy {numpy.__version__}')
 assert int(numpy.__version__.split('.')[0]) < 2, 'numpy 2 would break cv_bridge'
 EOF
 
-echo "== clean colcon build"
-set +u
-# shellcheck source=/dev/null
-source "/opt/ros/$distro/setup.bash"
-set -u
-rm -rf build install log
-colcon build --symlink-install --event-handlers console_cohesion+
+
 set +u
 # shellcheck source=/dev/null
 source install/setup.bash
 set -u
 
 echo "== every test"
+# No autoloaded plugins, as in the integrity gate: Jazzy's apt pytest loads
+# ROS's launch_testing plugins, and the first run collected one module of
+# 4759 tests. Nothing here uses a third-party plugin.
+export PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
 report="$(mktemp)"
 set +e
 python3 -m pytest -q -p no:cacheprovider -rs src/*/test test 2>&1 | tee "$report"
