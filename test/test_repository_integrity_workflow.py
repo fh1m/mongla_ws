@@ -125,3 +125,16 @@ def test_injection_a_suppressed_test_failure_is_detected():
     )
     assert bad != original
     assert any("ignore failures" in e for e in contract_errors(bad))
+
+
+def test_ai_provenance_rechecks_when_pr_body_is_edited():
+    """A contributor can repair a missing AI Provenance section without a code push.
+
+    A CI check required by branch protection that only runs on 'opened' and
+    'synchronize' stays permanently red after the PR description is fixed.
+    """
+    policy = ROOT / ".github/workflows/poc-check.yml"
+    assert policy.is_file()
+    doc = yaml.load(policy.read_text(), Loader=yaml.BaseLoader)
+    events = doc["on"]["pull_request"]["types"]
+    assert {"opened", "synchronize", "reopened", "edited"} <= set(events)
