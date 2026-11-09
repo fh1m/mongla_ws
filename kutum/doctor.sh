@@ -19,6 +19,9 @@
 # this script (on the vehicle, ~/mongla_ws/kutum/). Piped over ssh there is no
 # repo, so those checks compare against the deployed copy instead.
 set -uo pipefail
+# hailortcli below would otherwise leave hailort.log in the caller's directory
+# (env.sh sets the same path for interactive shells).
+export HAILORT_LOGGER_PATH="${HAILORT_LOGGER_PATH:-$HOME/.hailo/hailort}"
 
 FAILS=0
 ok()   { printf '  ok        %s\n' "$*"; }
@@ -217,9 +220,29 @@ done
 # --------------------------------------------------------------------------- #
 say "The deployed tree"
 stamp="$HOME/mongla_ws/.kutum-deployed"
-if [ -f "$stamp" ]; then ok "deployed: $(cat "$stamp")"
-else warn "no deploy stamp -- ~/mongla_ws was not put there by kutum/deploy.sh"; fi
-[ -f "$HOME/mongla_ws/install/setup.bash" ] && ok "workspace built" || fail "$HOME/mongla_ws is not built"
+if [ ! -e "$HOME/mongla_ws" ]; then
+  # A rebuilt card: deploy runs this doctor before it builds the first release,
+  # so a FAIL here would stop the one command that fixes it.
+  warn "no release is active yet -- kutum/deploy.sh builds and activates one"
+else
+  if [ -L "$HOME/mongla_ws" ]; then
+    ok "active release: $(basename "$(readlink -f "$HOME/mongla_ws")") (kutum/release.sh list)"
+    gate="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("vehicle_gate","?"))' \
+            "$HOME/mongla_ws/release.json" 2>/dev/null)"
+    # The machine can be sound while the vehicle is not; that is the gate's
+    # verdict to give, so it is a WARNING here, never a FAIL.
+    case "$gate" in
+      pass) ok "its vehicle gate passed" ;;
+      "")   ;;
+      *)    warn "its vehicle gate: $gate -- run ros2 run mongla_manager bringup_check" ;;
+    esac
+  else
+    warn "$HOME/mongla_ws is a plain directory -- the next deploy keeps it as a legacy release"
+  fi
+  if [ -f "$stamp" ]; then ok "deployed: $(cat "$stamp")"
+  else warn "no deploy stamp -- ~/mongla_ws was not put there by kutum/deploy.sh"; fi
+  [ -f "$HOME/mongla_ws/install/setup.bash" ] && ok "workspace built" || fail "$HOME/mongla_ws is not built"
+fi
 # Everything the package.xml files declare is installed (rosdep reads them).
 if [ -d "$HOME/mongla_ws/src" ] && command -v rosdep >/dev/null; then
   if rd="$(rosdep check --rosdistro jazzy --from-paths "$HOME/mongla_ws/src" --ignore-src 2>&1)"; then
