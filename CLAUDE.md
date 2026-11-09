@@ -424,7 +424,9 @@ not port it back. A capability that needs something from it is rebuilt against t
   description passes provenance with a filled `## AI Provenance` table, or the line
   `Provenance: 100% human-written` on its own (`tools/provenance_check.py`); a PR the
   Dependabot app opened passes by its author. Dependabot proposes weekly and never
-  merges itself; a `/kutum` pin moves only after `kutum/deploy.sh` passes on the vehicle.
+  merges itself; a `/kutum` pin moves only after `kutum/deploy.sh` passes on the vehicle,
+  and nothing that needs numpy 2 or is a major version is proposed at all
+  (`test_dependabot_respects_numpy_one.py`).
 - **Warning: Docs change in the same commit as the code they describe — not after.** A
   removal is not finished until every file that names the removed thing says what
   is true now: docs, skills, agents, launch comments, test docstrings, the site.
