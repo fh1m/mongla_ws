@@ -577,7 +577,7 @@ What it is, what was wrong with it, and the eight steps from a blank SD card:
 
 | package | what it owns | Python LOC | test files |
 |---|---|---:|---:|
-| [`mongla_vision`](.claude/context/packages/mongla_vision/README.md) | cameras, Hailo detection, the lock ladder, optical flow, optics | 27 532 | 125 |
+| [`mongla_vision`](.claude/context/packages/mongla_vision/README.md) | cameras, Hailo detection, the lock ladder, optical flow, optics | 27 561 | 125 |
 | [`mongla_control`](.claude/context/packages/mongla_control/README.md) | the verbs and the board driver — a pure library, **zero entry points** | 10 645 | 65 |
 | [`mongla_planner`](.claude/context/packages/mongla_planner/README.md) | the `mongla` CLI, the mission DSL, the missions | 7 706 | 42 |
 | [`mongla_manager`](.claude/context/packages/mongla_manager/README.md) | `auv_manager_node` — the one node that talks to the board | 8 021 | 67 |
@@ -791,7 +791,7 @@ is how a team finds out at the venue.
 <!-- stats:table:begin -->
 ```
 mongla_control       1 201 passed        the verbs, the wire, the refusals
-mongla_vision        1 537 passed        detection, the lock ladder, optics, flow
+mongla_vision        1 544 passed        detection, the lock ladder, optics, flow
 mongla_manager         802 passed        the node, bring-up gates, the docs contract
 mongla_planner         447 passed        the CLI, the DSL, the missions
 mongla_localization    413 passed        the filter, retrodiction, course priors

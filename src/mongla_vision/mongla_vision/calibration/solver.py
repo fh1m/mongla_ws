@@ -61,6 +61,7 @@ import glob
 import json
 import math
 import os
+import re
 import time
 import sys
 
@@ -271,6 +272,25 @@ def fov_for_medium(v, medium):
                'not measured in air')
 
 
+MEDIA = ('air', 'water')
+_PROFILE = re.compile(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
+
+
+def check_profile(applies_to, medium='air'):
+    """Refuse a camera profile or medium that is not a plain name.
+
+    Both become part of a path, and both can arrive from the calibration
+    guide's web page, which listens on every interface with no login. A
+    profile of '../../x' would put a file outside the calibration folder
+    (CodeQL py/path-injection).
+    """
+    if not isinstance(applies_to, str) or not _PROFILE.fullmatch(applies_to):
+        raise ValueError(f'camera profile {applies_to!r} is not a plain name '
+                         f'(letters, digits, _ and -)')
+    if medium not in MEDIA:
+        raise ValueError(f'medium {medium!r} is not one of {MEDIA}')
+
+
 def calibration_filename(applies_to, w, h, medium='air'):
     """The one place a calibration's filename is decided.
 
@@ -284,8 +304,9 @@ def calibration_filename(applies_to, w, h, medium='air'):
     what `/calibration.json` serves), because a second copy of a naming rule
     is how a calibration once outlived the camera it was named for.
     """
+    check_profile(applies_to, medium)
     suffix = '' if medium == 'air' else f'_{medium}'
-    return f'{applies_to}_{w}x{h}{suffix}.json'
+    return f'{applies_to}_{int(w)}x{int(h)}{suffix}.json'
 
 
 def max_ere(samples, w, h, grid=5, depth_m=1.0):
