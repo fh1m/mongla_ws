@@ -1,0 +1,20 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 192-208
+src/mongla_manager/test/test_stop_tree_leaves_nothing_running.py
+  h_f1b9066eb9899c 37-40
+src/mongla_vision/test/test_device_holders_die_with_their_parent.py
+  h_f1b9066eb9899c 17-31,56
+tools/_record_lib.sh
+  h_f1b9066eb9899c 61-73,87,101,112,149,155
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "468adcc0a080b9b172e7b9f2660cc7fe951d1ca1",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
