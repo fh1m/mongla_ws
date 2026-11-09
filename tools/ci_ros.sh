@@ -15,7 +15,9 @@ summary="${GITHUB_STEP_SUMMARY:-/dev/null}"
 
 echo "== ROS $distro at $(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 apt-get update -qq
-apt-get install -y -qq python3-venv python3-pip > /dev/null
+# The distro's own pytest: ROS's launch_testing plugin is built against it,
+# and pip's newest (9) no longer accepts the hook argument it declares.
+apt-get install -y -qq python3-venv python3-pip python3-pytest > /dev/null
 
 echo "== the dependencies the package.xml files declare (rosdep)"
 rosdep update --rosdistro "$distro" > /dev/null
@@ -36,7 +38,7 @@ python3 -m pip install -q --index-url https://download.pytorch.org/whl/cpu torch
 # clean machine (first seen by this job). The vehicle installs it --no-deps
 # (kutum/setup.sh, pi-and-env-traps.md E3); so does this, from the same range.
 req="$(mktemp)"
-grep -v -E '^trackers' requirements.txt > "$req"
+grep -v -E '^(trackers|pytest)' requirements.txt > "$req"
 python3 -m pip install -q -r "$req" -c kutum/constraints.txt
 python3 -m pip install -q --no-deps "$(grep -E '^trackers' requirements.txt | cut -d'#' -f1 | tr -d ' ')"
 python3 - <<'EOF'
