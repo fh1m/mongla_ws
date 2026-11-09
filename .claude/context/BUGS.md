@@ -119,7 +119,8 @@ every later tick did nothing; turning the knob back would resume the move.
 GitHub #71.
 
 **Fix.** `node_support.kill_latch` holds until a fresh heartbeat says
-DISARMED, re-sending every 3 s (at most 10 times) whatever the knob does,
+DISARMED, re-sending every 3 s whatever the knob does (B-97 adds the
+heartbeat withhold and removes the cap),
 and acts on an unknown armed state too. While latched, the action server
 refuses every verb but `disarm`, `stop` and `surface`, and health reads
 `safety_latch FAILED`. Arming now refuses an UNKNOWN kill switch (no
@@ -138,8 +139,8 @@ re-requested every 2 s, three times, each judged by a heartbeat heard after
 the first request. Still unconfirmed, the heartbeat is withheld so the board's
 failsafe surfaces the vehicle (owner decision 2026-11-09). It resolves when the
 board reports SURFACE or DISARMED; until then ordinary verbs are refused and
-health reads `safety_latch FAILED`. A manager restart clears both latches,
-which is the way out when the board cannot be heard at all.
+health reads `safety_latch FAILED`. A manager restart no longer clears
+either latch (B-97).
 
 ### B-95: an aborted torpedo shot could be revived by the next verb `READ 2026-11-08` **FIXED 2026-11-09 (host)**
 
@@ -169,6 +170,24 @@ decision 2026-11-09). An abort brakes it, SURFACE refuses it, a hold the
 board cuts short fails the verb, and the result says "held N s", never
 "settled": it is time held, not a measured stop. A bad value is refused
 before anything is sent.
+
+### B-97: an unconfirmed kill disarm went quiet, and a restart cleared every latch `READ 2026-11-09` **FIXED 2026-11-09 (host)**
+
+**What.** B-93's kill latch stopped re-sending after ten tries and then did
+nothing, while the manager's heartbeat stayed healthy, so the board's own
+link-loss failsafe never fired and an armed move could continue. Separately,
+both latches lived only in the manager's memory: restarting it cleared them
+while the board could still be armed and moving. GitHub #98.
+
+**Fix.** `node_support.kill_latch` withholds the heartbeat on its third
+unconfirmed try (`KILL_MAX_TRIES`, about 6 s) and keeps re-sending DISARM
+every 3 s after that, so the board's link-loss failsafe ends the move.
+`node_support.boot_latch` decides on the first fresh heartbeat after start-up:
+a board heard ARMED latches the new manager, refusing every verb but
+`disarm`, `stop` and `surface` until the board reports DISARMED; no heartbeat
+yet also refuses. The latch is decided when a goal arrives, not only on the
+watchdog tick, or the manager's own first arm would read as an armed board.
+The board-side kill latch is upstream (srot-control-board#41).
 
 ### B53 — every payload channel the missions use is REFUSED by this board `MEASURED 2026-09-22, re-read 2026-10-01` **MAP REMOVED 2026-10-01** — channels await the wired payload
 **`missions/competition_config.py` vs the board's `SERVOn_ROLE` params**
