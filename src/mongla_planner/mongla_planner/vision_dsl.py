@@ -55,6 +55,7 @@ from .model_context import ClassRef
 # Outcome codes are the single source of truth in the control engine.
 from mongla_control.motion_vision import (
     ALIGNED, LOST, TIMEOUT, NO_CAMERA, ABORTED, DRIFTED, _CODE_NAME,
+    ESTIMATED_CROSSING, COMMIT_UNVERIFIED,
 )
 
 if TYPE_CHECKING:
@@ -99,9 +100,15 @@ class VisionResult:
             search(mongla)            # the mission's own fallback (DSL has none)
 
     Fields:
-      ``ok``          -- True iff aligned (align) / reached fill (move).
+      ``ok``          -- True iff aligned (align) / reached fill (move) /
+                          a pass-through ESTIMATED_CROSSING.
       ``reason``/``status`` -- outcome name ('ALIGNED','LOST','TIMEOUT',
-                          'NO_CAMERA','ABORTED','DRIFTED','FAILED').
+                          'NO_CAMERA','ABORTED','DRIFTED','FAILED', and for a
+                          pass-through 'ESTIMATED_CROSSING' or
+                          'COMMIT_UNVERIFIED').
+      ``committed``   -- a pass-through drove its commit leg, crossing
+                          estimated or not. A mission must not add a blind
+                          transit on top of one.
       ``code``        -- the raw integer code from the server.
       ``x_px``/``y_px`` -- SIGNED px of the target from frame CENTRE at the last
                           seen frame (+x = right, +y = below). ``nan`` when the
@@ -128,6 +135,11 @@ class VisionResult:
     @property
     def status(self) -> str:
         return self.reason
+
+    @property
+    def committed(self) -> bool:
+        """The hull already drove a pass-through commit leg (#79)."""
+        return self.code in (ESTIMATED_CROSSING, COMMIT_UNVERIFIED)
 
     def __bool__(self) -> bool:           # ``if mongla.vision.align(...):``
         return self.ok
@@ -524,6 +536,19 @@ class _VisionDSL:
                     f"[VIS  ] {verb} {target!r}: ALIGNED -- {pos} "
                     f"err={err_px:.0f}px{' fill=%.0f%%' % (fill * 100) if verb == 'move' else ''}")
                 return _mk(True, 'ALIGNED')
+
+            # Pass-through verdicts (#79). Losing the gate is not seeing the
+            # hull cross it: the estimate is a success the mission may act on,
+            # the unverified commit is not -- and neither is re-entered, since
+            # the hull is already past where the gate was last seen.
+            if code == ESTIMATED_CROSSING:
+                self.log.info(f"[VIS  ] {verb} {target!r}: ESTIMATED_CROSSING -- "
+                              f"{getattr(result, 'message', '')}")
+                return _mk(True, 'ESTIMATED_CROSSING')
+            if code == COMMIT_UNVERIFIED:
+                self.log.warning(f"[VIS  ] {verb} {target!r}: COMMIT_UNVERIFIED -- "
+                                 f"{getattr(result, 'message', '')}")
+                return _mk(False, 'COMMIT_UNVERIFIED')
 
             if code == ABORTED:
                 self.log.warning(f"[VIS  ] {verb} {target!r}: ABORTED -- {pos}")

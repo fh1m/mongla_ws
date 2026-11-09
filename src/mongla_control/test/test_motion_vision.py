@@ -19,7 +19,7 @@ from mongla_control.motion_vision import (
     VISION_FRESH_FULL_S, VISION_FRESH_ZERO_S, VISION_FRESH_ZERO_MAX_S,
     VISION_RANGE_GAIN_FILL_LO, VISION_RANGE_GAIN_FILL_HI, VISION_LOCK_GATE_NORM,
     FWD_BAND,
-    ALIGNED, LOST, TIMEOUT, NO_CAMERA,
+    ALIGNED, LOST, TIMEOUT, NO_CAMERA, COMMIT_UNVERIFIED,
 )
 
 
@@ -819,13 +819,13 @@ def test_move_brake_fires_forward_on_fill_stop():
 
 
 def test_move_passthrough_never_brakes():
-    # Pass-through is defined to COAST through the gate: seen then gone -> ALIGNED
-    # with NO brake kick (a brake would defeat carrying the hull through).
+    # Pass-through is defined to COAST through the gate: seen then gone -> a
+    # commit with NO brake kick (a brake would defeat carrying the hull through).
     seen = _sample(w_frac=0.5, h_frac=0.5)
     vis = _FakeVision([seen, seen, None])
     out, _, writers = _move(vis, passthrough=True, hold_s=0.1,
                             lost_grace_s=5.0, duration=1.0)
-    assert out.code == ALIGNED
+    assert out.code == COMMIT_UNVERIFIED
     assert not writers.forwards, 'pass-through must never brake -- it must coast'
 
 
@@ -860,14 +860,15 @@ def test_move_hold_through_loss_never_reports_lost():
 # --------------------------------------------------------------------------- #
 #  move_loop -- pass-through (fwd=None / fwd_fill<=0)                          #
 # --------------------------------------------------------------------------- #
-def test_move_passthrough_seen_then_lost_reaches():
-    # Gate is seen for a couple of ticks, then leaves the frame -> after the
-    # commit window the verb reports ALIGNED ("passed through").
+def test_move_passthrough_seen_then_lost_commits_but_never_claims_aligned():
+    # Gate is seen for a couple of ticks, then vanishes while still inside the
+    # frame -> the commit runs, and the verdict says it was not a crossing
+    # (#79; test_pass_through_crossing.py has the five sequences).
     seen = _sample(w_frac=0.5, h_frac=0.5)
     vis = _FakeVision([seen, seen, None])   # present, present, then gone
     out, _, writers = _move(vis, passthrough=True, hold_s=0.1,
                             lost_grace_s=5.0, duration=1.0)
-    assert out.code == ALIGNED
+    assert out.code == COMMIT_UNVERIFIED
     assert writers.neutralised >= 1
 
 

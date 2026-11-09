@@ -1270,7 +1270,8 @@
       offset, which rung of the lock ladder it is on, the verb in flight, and the outcome —
       <span class="num">ALIGNED</span>, <span class="num">LOST</span>,
       <span class="num">TIMEOUT</span>, <span class="num">NO_CAMERA</span>,
-      <span class="num">ABORTED</span>, <span class="num">DRIFTED</span>. There is no line in here that the vehicle could not have
+      <span class="num">ABORTED</span>, <span class="num">DRIFTED</span>, and for a gate
+      <span class="num">ESTIMATED_CROSSING</span> or <span class="num">COMMIT_UNVERIFIED</span>. There is no line in here that the vehicle could not have
       written itself, because a narration that knows more than the vehicle is a story, not a
       readout.</p>
    </div>
@@ -1857,6 +1858,8 @@
       <li><b>NO_CAMERA</b>nothing to look with</li>
       <li><b>ABORTED</b>stopped on purpose</li>
       <li><b>DRIFTED</b>centred, then off once stopped</li>
+      <li class="ok"><b>ESTIMATED_CROSSING</b>the gate ran off the frame around us</li>
+      <li><b>COMMIT_UNVERIFIED</b>drove on after losing the gate some other way</li>
       <li class="bad"><b>FAILED</b>refused or errored — never raised</li>
     </ol>
   </figure>

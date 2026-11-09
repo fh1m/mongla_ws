@@ -158,7 +158,9 @@ float32 fire_gap           # vision_align: seconds BETWEEN channels when firing 
 #                                         3=NO_CAMERA,4=ABORTED,5=DRIFTED)
 #                           error_value = worst per-axis residual px from the goal
 #   vision_move          :  success     = True (the verb ran)
-#                           final_value = outcome code (0=REACHED, see above)
+#                           final_value = outcome code (0=REACHED, see above;
+#                                         a pass-through ends 6=ESTIMATED_CROSSING
+#                                         or 7=COMMIT_UNVERIFIED, never 0)
 #                           error_value = lateral residual px (maintain) at exit
 # vision_align / vision_move ALSO set the rich end-state fields below so a mission
 # can branch on WHERE/HOW the verb finished (hybrid vision+control recovery):

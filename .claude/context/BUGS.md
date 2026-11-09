@@ -297,6 +297,36 @@ count and holds forward drive at the fill without completing the arrival.
 `test_vision_authority_by_source.py` drives both loops; 14 of its 24 cases fail
 on the old code.
 
+### B-104: a gate that vanished for any reason was reported as passed `READ 2026-11-09` **FIXED 2026-11-09**
+
+**What.** A pass-through `move` reported ALIGNED ("passed through") once a gate it
+had seen left the frame and the commit ran (#79). Losing a gate is not seeing
+the hull cross it: a far gate blinking out in turbidity, one sliding out
+sideways and a camera outage all scored the same pass. Neighbours on the same
+path: the lock ladder kept the gate "present" for up to its 2.5 s horizon after
+the detector lost it, so the commit started late (pass-through already
+refused the tracker's coast for this reason, but not the ladder). And both
+navigation missions ran their blind transit on `not passed`, which once the
+verdict is honest would stack a second open-loop leg on a commit that had
+already driven past the gate.
+
+**Fix.** The verdict comes from the last live box. A gate the hull is entering
+surrounds the camera axis and runs off the frame: ESTIMATED_CROSSING, `ok`.
+Anything else: COMMIT_UNVERIFIED, not `ok`. Neither is ALIGNED, and the reason
+says which box decided it. The commit stays bounded by `duration`, and a
+commit cut short still gets a verdict. Pass-through ignores the ladder as it
+ignores the coast. `VisionResult.committed` tells a mission a commit leg was
+driven, and the blind transit runs only without one.
+`test_pass_through_crossing.py` replays the five sequences the issue names,
+the DSL mapping and both missions; breaking the verdict, the blind-leg guard
+or the ladder exclusion fails 7, 2 and 1 of its cases.
+
+**Compromise, and the data that would remove it.** This is an estimate from
+one camera. Confirming a crossing needs distance travelled after the loss
+compared against the range at the loss, and the chain already has that
+data: the downward camera's flow velocity (worst error 1.09 cm over 30 cm)
+reaches `/mongla/odom`. TRAVERSAL_CONFIRMED is left for that, tracked on #79.
+
 ### B53 — every payload channel the missions use is REFUSED by this board `MEASURED 2026-09-22, re-read 2026-10-01` **MAP REMOVED 2026-10-01** — channels await the wired payload
 **`missions/competition_config.py` vs the board's `SERVOn_ROLE` params**
 

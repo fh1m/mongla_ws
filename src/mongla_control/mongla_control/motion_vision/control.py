@@ -29,9 +29,14 @@ TIMEOUT   = 2   # duration elapsed without success
 NO_CAMERA = 3   # camera_info never seen -- pipeline not up
 ABORTED   = 4   # cooperative abort (goal cancelled)
 DRIFTED   = 5   # align: centred while driving, OUT of band once stopped and re-measured
+# Pass-through move only. Losing a gate is not seeing the hull cross it (#79):
+ESTIMATED_CROSSING = 6   # the last live box surrounded the camera axis and ran off the frame
+COMMIT_UNVERIFIED  = 7   # the commit ran, but the gate vanished in a way crossing does not explain
 
 _CODE_NAME = {ALIGNED: 'ALIGNED', LOST: 'LOST', TIMEOUT: 'TIMEOUT',
-              NO_CAMERA: 'NO_CAMERA', ABORTED: 'ABORTED', DRIFTED: 'DRIFTED'}
+              NO_CAMERA: 'NO_CAMERA', ABORTED: 'ABORTED', DRIFTED: 'DRIFTED',
+              ESTIMATED_CROSSING: 'ESTIMATED_CROSSING',
+              COMMIT_UNVERIFIED: 'COMMIT_UNVERIFIED'}
 
 
 # ---- Tunable defaults (P-gains live as ROS params; these are the floor) #
@@ -267,6 +272,29 @@ _STALE_LIMIT_S = 1.0
 # leaves the frame, so the hull fully clears the gate. Overridable per
 # call via move(..., hold=<s>).
 _PASSTHROUGH_COMMIT_S = 2.0
+
+# How close to the frame edge a box must reach to have "run off" it, in
+# half-widths. Detector boxes are clipped to the image, so a gate the hull is
+# entering ends at the edge exactly; 0.02 (~6 px of 640) absorbs NMS rounding.
+# Geometry, not tuning: it does not move with water or model.
+_EDGE_MARGIN = 0.02
+
+
+def _crossing_evidence(ex: float, w_frac: float) -> bool:
+    """Did the gate leave the frame the way it does when the hull goes through?
+
+    Passing through, the frame sits INSIDE the gate: the box surrounds the
+    optical axis and grows until its sides run off the frame. Every other way
+    of losing it looks different -- a far gate that blinks out (a dropout, a
+    blur, a model miss) is still small and inside the frame; one that slid out
+    sideways no longer surrounds the axis. Neither is evidence of crossing.
+
+    An estimate, never proof: it says the hull was aimed into the gate and
+    close when it lost it. It cannot see the posts go past (#79).
+    """
+    left, right = ex - w_frac, ex + w_frac        # box edges, half-width units
+    runs_off = left <= -1.0 + _EDGE_MARGIN or right >= 1.0 - _EDGE_MARGIN
+    return runs_off and left < 0.0 < right
 
 VALID_AXES = {'lat', 'yaw', 'depth'}
 VALID_MODES = {'area', 'width', 'height'}

@@ -393,6 +393,7 @@ mongla_control.motion_vision.align_loop   (move_loop for vision_move)
   +-- 50 Hz  fc.manual(fwd, lat, yaw) -- one MANUAL_CONTROL frame, STABILIZE
   +-- gain clamps every axis (hard max-speed cap)
   +-- returns Outcome code: ALIGNED / LOST / TIMEOUT / NO_CAMERA / ABORTED / DRIFTED
+      (a pass-through move: ESTIMATED_CROSSING / COMMIT_UNVERIFIED, never ALIGNED)
 ```
 
 Why the loop is in the manager, not the client:
