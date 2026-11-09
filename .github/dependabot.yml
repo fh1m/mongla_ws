@@ -33,6 +33,12 @@ updates:
       interval: weekly
     open-pull-requests-limit: 2
     versioning-strategy: increase-if-necessary
+    # The vehicle's pins have their own entry below. Without this the root
+    # scan finds kutum/requirements.txt too, and every vehicle bump arrives
+    # as two identical PRs (#115 and #116).
+    exclude-paths:
+      - kutum
+      - 'kutum/**'
     groups:
       python:
         patterns: ['*']

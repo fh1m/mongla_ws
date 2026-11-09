@@ -46,3 +46,14 @@ def test_every_pip_update_holds_the_numpy_one_ceiling():
         assert any(i['dependency-name'] == '*'
                    and i.get('update-types') == ['version-update:semver-major']
                    for i in ign), u['directory']
+
+
+def test_each_requirements_file_has_exactly_one_scanner():
+    """The root `pip` entry scans subdirectories: without an exclusion it found
+    kutum/requirements.txt as well, and every vehicle bump arrived twice
+    (#115, #116) -- two PRs to verify on Kutum for one change."""
+    doc = yaml.safe_load((ROOT / '.github/dependabot.yml').read_text())
+    pips = [u for u in doc['updates'] if u['package-ecosystem'] == 'pip']
+    root = next(u for u in pips if u['directory'] == '/')
+    assert any(u['directory'] == '/kutum' for u in pips)
+    assert 'kutum/**' in root.get('exclude-paths', [])
