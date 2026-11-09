@@ -1,0 +1,61 @@
+src/mongla_manager/mongla_manager/node_support.py
+  s_b4c45e3235679b::t_626cf7f03e7c48 249-251
+  s_b4c45e3235679b::t_65ad69698f120e 125-139,146-150,152-192
+  s_b4c45e3235679b::t_7279800fdc1716 140-145
+src/mongla_manager/mongla_manager/node_health.py
+  s_b4c45e3235679b::t_626cf7f03e7c48 11-13,43-79,81,83-88,100-103,110-111,113-138,140-142,145-152,154,156-166,169-171,173,211-215
+src/mongla_control/mongla_control/fc/srot_arming.py
+  s_b4c45e3235679b::t_278f7447356741 104,109-122,126-129,133-139
+src/mongla_manager/mongla_manager/node_setup.py
+  s_b4c45e3235679b::t_626cf7f03e7c48 110,181,186-187
+src/mongla_manager/test/test_heartbeat_cannot_be_starved.py
+  s_b4c45e3235679b::t_016aeef5c59079 60
+src/mongla_manager/mongla_manager/node_action.py
+  s_b4c45e3235679b::t_eb21aa3c09f4bb 24
+  s_b4c45e3235679b::t_626cf7f03e7c48 165-172
+src/mongla_control/test/test_srot_fc.py
+  s_b4c45e3235679b::t_7b4d048525cf94 764,797
+  s_b4c45e3235679b::t_8a5666d2bbf984 51-54,84,101-106,240,242,247-283,286,293,295,303-319
+  s_b4c45e3235679b::t_d9221ad38f68be 94-98
+  s_b4c45e3235679b::t_f072761d63d7e5 99-100,320-321
+src/mongla_manager/test/test_manager_end_to_end.py
+  s_b4c45e3235679b::t_016aeef5c59079 57-60
+src/mongla_manager/test/test_unknown_verbs_never_claim_the_gate.py
+  s_b4c45e3235679b::t_016aeef5c59079 26-27
+.claude/context/BUGS.md
+  s_b4c45e3235679b::t_53cdb67e5b0548 91-142
+src/mongla_control/mongla_control/fc/srot_fc.py
+  s_b4c45e3235679b::t_689a3e6fbc9c1e 405-406,410,412-414
+  s_b4c45e3235679b::t_278f7447356741 131-135,358-363
+  s_b4c45e3235679b::t_626cf7f03e7c48 320,394,397,416
+  s_b4c45e3235679b::t_6e32c7f345d4e4 302-305,309-319,321-331,364-369,371-377,380,383,386,398,401-404,407-409,411,415,417-418
+  s_b4c45e3235679b::t_59e7d05e1e297c 332,419
+.claude/context/platform/ros2-conventions.md
+  s_b4c45e3235679b::t_53cdb67e5b0548 62-64
+src/mongla_manager/test/test_mission_keepalive.py
+  s_b4c45e3235679b::t_7279800fdc1716 72-75,80-86,89-90,92-95,99-108,115-116,126-172,195-201,203-218,221-228,231,233,236-247
+src/mongla_control/test/test_srot_kill_switch.py
+  s_b4c45e3235679b::t_771227cc6f4dc5 111,113-114,129-131,133-143,150,159
+.claude/context/reference/commands.md
+  s_b4c45e3235679b::t_3a6feca2e6d870 411,429
+CLAUDE.md
+  s_b4c45e3235679b::t_53cdb67e5b0548 111-117
+docs/index.html
+  s_b4c45e3235679b::t_f580296a253967 3605
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "beaef9429f577b50d735e4ccf859eb6e6fd728cf",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
