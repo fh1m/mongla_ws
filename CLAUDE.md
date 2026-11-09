@@ -425,6 +425,14 @@ not port it back. A capability that needs something from it is rebuilt against t
   `Provenance: 100% human-written` on its own (`tools/provenance_check.py`); a PR the
   Dependabot app opened passes by its author. Dependabot proposes weekly and never
   merges itself; a `/kutum` pin moves only after `kutum/deploy.sh` passes on the vehicle.
+- **The workspace stays clean.** A clone looks like the project, not like the last
+  machine that touched it: the top level is a fixed list, nothing generated or
+  left behind by a tool is tracked, and every directory a local tool creates is
+  in `.gitignore` (`test/test_workspace_stays_clean.py`, in the integrity gate).
+  A merged or abandoned branch is deleted, with an `archive/<what>` tag first if
+  any of its commits are not on `main`; a worktree is removed when its work lands.
+  On Kutum, `kutum/release.sh prune` keeps the releases tidy, and anything else
+  that is stale moves to `~/attic/<date>/`, never deleted.
 - **Warning: Docs change in the same commit as the code they describe — not after.** A
   removal is not finished until every file that names the removed thing says what
   is true now: docs, skills, agents, launch comments, test docstrings, the site.
