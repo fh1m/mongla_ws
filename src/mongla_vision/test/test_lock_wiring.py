@@ -101,7 +101,11 @@ def test_both_control_loops_pass_it_through():
     has shipped repeatedly -- `device_path` into `**_`, the unloaded YAML
     table, `ros2 param set` on a construction-time param."""
     assert MV.count('lock_s: float = 0.0,') == 2      # align_loop and move_loop
-    assert MV.count('lock_s=c.lock_s') == 2
+    assert MV.count('lock_s=c.lock_s') == 1           # align
+    # move threads it too, except through a gate: a ladder box would hold the
+    # gate "present" and start the pass-through commit late (#79).
+    assert 'eff_lock = 0.0 if c.passthrough else c.lock_s' in MV
+    assert MV.count('lock_s=eff_lock') == 1
 
 
 def test_the_deck_exposes_it_for_live_tuning():

@@ -88,6 +88,7 @@ carries what the camera last saw:
 ```python
 res = mongla.vision.align('hole', lat=0, duration=25)
 res.status        # 'ALIGNED' | 'LOST' | 'TIMEOUT' | 'NO_CAMERA' | 'ABORTED' | 'DRIFTED' | 'FAILED'
+                  # a pass-through move: 'ESTIMATED_CROSSING' | 'COMMIT_UNVERIFIED'
 res.saw_target    # was it ever seen?
 res.x_px, res.y_px  # signed pixels from centre at the last sighting; NaN if never seen
 res.last_err_px   # residual from the goal
