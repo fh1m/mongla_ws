@@ -20,13 +20,19 @@
 # Usage:
 #     kutum/deploy.sh fh1m@mongla.local
 #     kutum/deploy.sh fh1m@mongla.local --check-only     # the doctor, nothing changed
+#     kutum/deploy.sh fh1m@mongla.local --list           # the releases on the vehicle
+#     kutum/deploy.sh fh1m@mongla.local --rollback       # back to the previous release
 #
-# It is IDEMPOTENT: run it again after any change and it re-syncs and rebuilds.
+# Each deploy is a new release beside the live one (kutum/release.sh, #64):
+# nothing on the vehicle is touched until the stack is confirmed stopped and
+# the board not armed, nothing switches until the new tree has built, and the
+# switch is one rename. A failed or interrupted deploy leaves the active
+# release exactly as it was.
 set -euo pipefail
 
 TARGET="${1:-}"
 MODE="${2:-full}"
-REMOTE_DIR="mongla_ws"
+REMOTE_DIR="mongla_ws"            # a symlink to the active release
 ROS_DISTRO_WANT="jazzy"
 
 if [[ -z "$TARGET" ]]; then
@@ -59,73 +65,80 @@ if [[ "$MODE" == "--check-only" ]]; then
   r bash -s < "$REPO_ROOT/kutum/doctor.sh"
   exit $?
 fi
+if [[ "$MODE" == "--list" ]]; then
+  r bash -s -- list < "$REPO_ROOT/kutum/release.sh"
+  exit $?
+fi
 
 # --------------------------------------------------------------------------- #
-say "2. Sync the tree"
+say "2. Is it safe to touch? (before anything on the vehicle changes)"
+
+# Both checks are piped from this tree, so they run before a single file is
+# synced. "Could not tell" stops the deploy the same as "armed".
+r bash -s -- preflight < "$REPO_ROOT/kutum/release.sh" || exit 1
+r python3 - < "$REPO_ROOT/kutum/armed_probe.py" || die "the board is armed, or its state cannot be read -- disarm it, or unplug it, and rerun"
+
+if [[ "$MODE" == "--rollback" ]]; then
+  r bash -s -- rollback < "$REPO_ROOT/kutum/release.sh"
+  exit $?
+fi
+
+# --------------------------------------------------------------------------- #
+say "3. Stage a new release beside the live one"
+
+sha="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+dirty="$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null | grep -q . && echo '-dirty' || true)"
+ID="${sha}${dirty}-$(date -u +%Y%m%dT%H%M%S)"
+DESC="$sha${dirty:+ +uncommitted} from $(hostname)"
+REL="mongla/releases/$ID"
+
+# Unchanged files are hard links to the active release, so a release costs
+# what changed, not 150 MB. rsync replaces a file by renaming a new copy into
+# place, so a link is never written through into the release it came from.
+LIVE_REAL="$(r 'readlink -f ~/mongla_ws 2>/dev/null || true')"
+LINK=()
+[[ -n "$LIVE_REAL" ]] && r test -d "$LIVE_REAL/src" && LINK=(--link-dest="$LIVE_REAL/")
+r mkdir -p "$REL"
 
 # The excludes are load-bearing. The first real deploy shipped 3.8 GB of
 # `logs/` and two .tlog captures to the vehicle before anyone looked. Anything
 # that is generated, huge, or belongs to the dev box stays here: the vehicle
 # carries the book (.claude/context) for reading at the pool, not agent tooling,
 # CI or editor settings.
-rsync -az --delete --info=stats1 \
+rsync -az --delete --info=stats1 "${LINK[@]}" \
   --exclude 'build/' --exclude 'install/' --exclude 'log/' --exclude 'logs/' \
   --exclude '.git/' \
   --exclude 'docs/' --exclude '__pycache__/' --exclude '*.pyc' \
   --exclude '*.tlog' --exclude '*.tlog.raw' --exclude '*.tar.gz' \
-  --exclude '.pytest_cache/' --exclude '.kutum-deployed' \
+  --exclude '.pytest_cache/' --exclude '.kutum-deployed' --exclude 'release.json' \
+  --exclude '.build-ok' \
   --exclude '.claude/skills/' --exclude '.claude/agents/' --exclude '.claude/hooks/' \
   --exclude '.claude/settings*.json' --exclude '.understand-anything/' \
   --exclude '.github/' --exclude '.vscode/' --exclude '.beads/' --exclude 'wiki/' \
-  ./ "$TARGET:~/$REMOTE_DIR/"
-ok "synced to $TARGET:~/$REMOTE_DIR"
+  --exclude '.codegraph/' \
+  ./ "$TARGET:~/$REL/"
+ok "staged $ID"
 
 # --------------------------------------------------------------------------- #
-say "3. Is it Kutum? (kutum/doctor.sh, from the copy just synced)"
+say "4. Is it Kutum? (kutum/doctor.sh, from the release just staged)"
 
 # After the sync, not before: a FAIL that only `setup.sh --system` can fix
-# needs kutum/ on the machine first. Run from the synced copy, the doctor also
+# needs kutum/ on the machine first. Run from the staged copy, the doctor also
 # compares the installed system files with the repo byte for byte.
-r "bash ~/$REMOTE_DIR/kutum/doctor.sh" || die "the doctor refuses this machine (FAIL lines above). \
-Most are fixed by, on the vehicle: sudo ~/$REMOTE_DIR/kutum/setup.sh --system -- then rerun"
+r "bash ~/$REL/kutum/doctor.sh" || die "the doctor refuses this machine (FAIL lines above). \
+Most are fixed by, on the vehicle: sudo ~/$REL/kutum/setup.sh --system -- then rerun"
 
 # --------------------------------------------------------------------------- #
-say "3. Build"
+say "5. Build the release, then switch to it"
 
-# Not under a running manager (2026-10-03). The build wipes install/, so a
-# manager left running keeps executing code that is no longer on disk, and it
-# holds the board's port -- the gate below then cannot read the board.
-if r "pgrep -f '[l]ib/mongla_manager/start' >/dev/null"; then  # [l]: not match this ssh command line itself
-  die "a mongla_manager is RUNNING on the vehicle -- stop it (Ctrl-C, so it disarms) and rerun"
-fi
-
-r bash -lc "'set -e
-  cd ~/$REMOTE_DIR
-  source /opt/ros/$ROS_DISTRO_WANT/setup.bash
-  # Always a clean build. An incremental symlink-install tree keeps what
-  # source no longer has: links to a deleted model broke the build on
-  # 2026-10-03 and the gate then counted the retired model as installed.
-  # 42 s buys a vehicle that runs exactly this tree and nothing older.
-  rm -rf build install log .pytest_cache
-  find src -name __pycache__ -type d -prune -exec rm -rf {} +
-  rm -rf ~/.ros/log
-  colcon build --symlink-install > build.log 2>&1
-  tail -1 build.log'" || {
-    echo
-    warn "build failed; last 25 lines:"
-    r "tail -25 ~/$REMOTE_DIR/build.log" || true
-    die "colcon build failed"
-  }
-ok "colcon build finished"
-
-# What is on the vehicle, in one line the doctor prints: the commit, whether
-# the tree had uncommitted changes, and when.
-sha="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
-dirty="$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null | grep -q . && echo ' +uncommitted' || true)"
-r "echo '$sha$dirty $(date -u +%FT%TZ) from $(hostname)' > ~/$REMOTE_DIR/.kutum-deployed"
+# Built in its own directory, so the live release keeps running whatever
+# happens here; always from clean, since the directory is new.
+r "bash ~/$REL/kutum/release.sh build $ID" || die "build failed; the active release is unchanged"
+r "bash ~/$REL/kutum/release.sh activate $ID '$DESC'" || die "not activated; the active release is unchanged"
+r "bash ~/$REL/kutum/release.sh prune 5" || warn "prune failed (nothing active was touched)"
 
 # --------------------------------------------------------------------------- #
-say "4. Gate it -- the vehicle grades itself"
+say "6. Gate it -- the vehicle grades itself"
 
 # bringup_check exits non-zero on a fault, and that is the point. We do not
 # swallow it: a provisioning script that reports success on a vehicle its own
@@ -138,6 +151,9 @@ r bash -lc "'cd ~/$REMOTE_DIR
   timeout 120 ros2 run mongla_manager bringup_check'" | tee "$GATE_LOG"
 GATE=${PIPESTATUS[0]}
 set -e
+# Recorded beside the release: "deployed" and "the vehicle's gate passed"
+# are different facts, and a release must say which it has.
+r "python3 ~/$REL/kutum/release_manifest.py gate ~/$REL $GATE" || warn "could not record the gate verdict"
 
 # Explain only the FAIL lines this run printed. A fixed list explained faults
 # the vehicle did not have and missed the one it did.
@@ -161,11 +177,10 @@ NOTE
 NOTE
   saw 'NO .hef' && cat <<'NOTE'
   * Hailo present but NO .hef   a provisioning gap with no fix inside this repo.
-      The compiled models are gitignored, so copy them in beside their
-      <stem>.yaml sidecars:
-
-          rsync -a ~/models/*.hef ~/models/*.yaml \
-                TARGET:~/mongla_ws/src/mongla_vision/models/
+      The compiled models are gitignored and travel with this tree, so put
+      them in THIS dev box's src/mongla_vision/models/, beside their
+      <stem>.yaml sidecars, and deploy again. (A release on the vehicle is
+      never edited in place; a model copied into it would vanish with it.)
 
       A .hef without its .yaml sidecar is worse than no model: the class
       allowlist comes back empty and the detector returns [] every frame while
