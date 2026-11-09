@@ -1,0 +1,22 @@
+kutum/armed_probe.py
+  h_f1b9066eb9899c 1-95
+kutum/deploy.sh
+  h_f1b9066eb9899c 23-24,26-30,35,68-84,87-101,108,113-114,118-120,123,126,128-129,132,134-138,141,154-156,180-183
+kutum/release.sh
+  h_f1b9066eb9899c 1-178
+kutum/release_manifest.py
+  h_f1b9066eb9899c 1-144
+test/test_kutum_releases.py
+  h_f1b9066eb9899c 1-213
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "c917e5cdc121e9d63f102cdd092b53592f14d9ce",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
