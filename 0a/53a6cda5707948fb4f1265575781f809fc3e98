@@ -1,0 +1,32 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 208-242
+src/mongla_manager/mongla_manager/vision_choice.py
+  h_f1b9066eb9899c 40-41,44-50,65-66,78,179
+src/mongla_manager/mongla_manager/vision_state.py
+  h_f1b9066eb9899c 316-317
+src/mongla_manager/test/test_lock_fallback_checks_identity.py
+  h_f1b9066eb9899c 1-100
+src/mongla_vision/mongla_vision/lock_node.py
+  h_f1b9066eb9899c 91,172-180,199,230
+src/mongla_vision/mongla_vision/lock_publish.py
+  h_f1b9066eb9899c 3-5,119-133
+src/mongla_vision/mongla_vision/lock_setup.py
+  h_f1b9066eb9899c 315,345,349-375
+src/mongla_vision/mongla_vision/lock_wiring.py
+  h_f1b9066eb9899c 214-216
+src/mongla_vision/mongla_vision/tracking/follower.py
+  h_f1b9066eb9899c 150-154
+src/mongla_vision/test/test_lock_follows_the_mission_class.py
+  h_f1b9066eb9899c 42-43,45-46,52-61,191-256
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "0a53a6cda5707948fb4f1265575781f809fc3e98",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
