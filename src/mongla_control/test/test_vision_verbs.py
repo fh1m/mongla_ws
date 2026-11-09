@@ -23,6 +23,7 @@ class _FireHarness(VisionVerbs):
         self.log = _Log()
         self.fired = []
         self._abort = abort
+        self._abort_generation = 0
 
     def _abort_fn(self):
         return self._abort

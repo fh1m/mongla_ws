@@ -1,13 +1,13 @@
 {
-  "collected": 4603,
-  "passed": 4587,
+  "collected": 4634,
+  "passed": 4626,
   "failed": 0,
   "skipped": 7,
   "xfailed": 1,
   "xpassed": 0,
   "suites": {
     "mongla_control": {
-      "passed": 1176,
+      "passed": 1201,
       "xfailed": 1,
       "failed": 0
     },
@@ -17,7 +17,7 @@
       "failed": 0
     },
     "mongla_manager": {
-      "passed": 790,
+      "passed": 795,
       "skipped": 4,
       "failed": 0
     },
@@ -30,7 +30,7 @@
       "failed": 0
     },
     "test/": {
-      "passed": 224,
+      "passed": 233,
       "skipped": 1,
       "failed": 0
     }
@@ -42,15 +42,15 @@
         "test_files": 125
       },
       "mongla_control": {
-        "loc": 10522,
-        "test_files": 64
+        "loc": 10645,
+        "test_files": 65
       },
       "mongla_planner": {
         "loc": 7706,
         "test_files": 42
       },
       "mongla_manager": {
-        "loc": 7796,
+        "loc": 7954,
         "test_files": 67
       },
       "mongla_localization": {
@@ -58,7 +58,7 @@
         "test_files": 31
       }
     },
-    "test_files": 329,
+    "test_files": 330,
     "chapters": 67,
     "parts": 9
   }

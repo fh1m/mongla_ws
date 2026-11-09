@@ -101,6 +101,11 @@ class Mongla(VisionVerbs):
         # Cooperative abort: set by request_abort(), checked every loop tick,
         # cleared at the start of each verb so each starts fresh.
         self._abort_event          = threading.Event()
+        # Counts aborts and is never reset. A payload sequence captures it when
+        # scheduled and is cancelled once it moves, so a shot outlives an abort
+        # only if no abort happened -- clearing `_abort_event` for the next verb
+        # cannot revive it (issue #73).
+        self._abort_generation     = 0
         # Live vision telemetry: the align/move loop writes the signed
         # from-centre px here each tick; the feedback pump reads it.
         self._vis_x = math.nan
@@ -126,7 +131,9 @@ class Mongla(VisionVerbs):
 
     def request_abort(self):
         """Make every running loop exit at its next tick (called from the
-        action server's cancel path, on another thread)."""
+        action server's cancel path, on another thread). Also cancels every
+        payload shot not yet dispatched, for good."""
+        self._abort_generation += 1
         self._abort_event.set()
 
     @property
@@ -222,6 +229,9 @@ class Mongla(VisionVerbs):
                            timeout=timeout, settle=settle)
 
     def stop(self, on_progress=None):
+        # A stop is a safety verb: shots still queued from the last align are
+        # cancelled even when nothing was running for the gate to abort.
+        self._abort_generation += 1
         return self._board('stop', on_progress)
 
     def pause(self, duration=2.0, on_progress=None):
@@ -252,6 +262,7 @@ class Mongla(VisionVerbs):
         abort flag -- it is bounded by `timeout` alone.
         """
         import time
+        self._abort_generation += 1          # cancels queued shots (issue #73)
         self.fc.stop_motion()
         ok, reason = self.fc.set_mode('SURFACE')
         if not ok:

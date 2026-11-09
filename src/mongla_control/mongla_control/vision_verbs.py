@@ -451,34 +451,41 @@ class VisionVerbs:
         interruptible in gap_s slices so an emergency stop still cancels promptly.
         """
         abort_fn = self._abort_fn
+        # The shared abort event is cleared by the NEXT verb, so on its own it
+        # let a shot queued in the gap leave after an emergency stop (issue
+        # #73). The generation is never reset: once any abort, stop or surface
+        # bumps it, this sequence is cancelled for good. A sequence nobody
+        # aborted still outlives the align that scheduled it, by design.
+        gen = self._abort_generation
 
-        # ponytail: CTRL-14 residual -- this thread reads the SHARED _abort_event,
-        # which the NEXT command clears. In the narrow window where an emergency
-        # abort is set during the inter-shot gap and a new command clears it before
-        # this thread's next 0.1 s poll, a queued shot could still leave. A full fix
-        # needs a per-fire cancel token, but the fire is deliberately non-blocking so
-        # a delayed shot OUTLIVES the align scope (payload.fire can sleep ~2 s) -- so
-        # "abort when the scope exits" would wrongly cancel a legit delayed shot.
-        # Deferred rather than risk the fire path pre-competition; the gap is 0.1 s.
+        def cancelled():
+            return ((abort_fn is not None and abort_fn())
+                    or self._abort_generation != gen)
+
+        def cancel_rest(rest, why):
+            self.log.warning(f'[FIRE ] {why} -- {rest} cancelled, never sent')
+            if outcomes is not None:
+                outcomes.extend(f'ch{c}:CANCELLED' for c in rest)
+
         def _run():
             for i, ch in enumerate(channels):
-                if abort_fn is not None and abort_fn():
-                    self.log.warning(
-                        f'[FIRE ] abort signalled -- skipping ch={ch} '
-                        f'(remaining {channels[i:]} cancelled)')
+                if cancelled():
+                    cancel_rest(channels[i:], 'abort signalled')
                     return
                 # Space multi-channel shots apart (not before the first).
                 if i > 0 and gap_s > 0.0:
                     self.log.info(f'[FIRE ] waiting {gap_s:.1f}s before ch={ch} '
                                   f'(solenoid needs the gap)')
-                    waited = 0.0
-                    while waited < gap_s:
-                        if abort_fn is not None and abort_fn():
-                            self.log.warning('[FIRE ] abort during inter-shot gap '
-                                             f'-- {channels[i:]} cancelled')
-                            return
-                        time.sleep(min(0.1, gap_s - waited))
-                        waited += 0.1
+                    end = time.monotonic() + gap_s
+                    while time.monotonic() < end:
+                        if cancelled():
+                            break
+                        time.sleep(min(0.05, max(0.0, end - time.monotonic())))
+                    # Checked again AFTER the wait: the last slice used to run
+                    # straight into the write.
+                    if cancelled():
+                        cancel_rest(channels[i:], 'abort during inter-shot gap')
+                        return
                 try:
                     res = self._fire_payload(ch)
                     if outcomes is not None:
