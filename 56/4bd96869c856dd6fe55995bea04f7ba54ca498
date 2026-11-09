@@ -1,0 +1,16 @@
+requirements.txt
+  h_f1b9066eb9899c 36-37
+tools/ci_ros.sh
+  h_f1b9066eb9899c 34-41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "564bd96869c856dd6fe55995bea04f7ba54ca498",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
