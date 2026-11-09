@@ -88,11 +88,58 @@ the board is commanding, under a diver's hands. Upstream issue #12 asks the
 board to refuse arming when killed; nothing on either side acted on a kill
 DURING a run.
 
-**Fix.** The manager disarms on the edge to ENGAGED while armed
-(`node_support.kill_watch`, polled with the mission watchdog at 2 Hz). Only a
-True reading acts: `None` is "no second-board link". Disarm aborts the
-mission's verb, so its own cleanup runs. The firmware should do this itself,
-at 500 Hz; added to #12. Test: `test_mission_keepalive.py`, injection-verified.
+**Fix.** The manager disarms on the edge to ENGAGED while armed, polled with
+the mission watchdog at 2 Hz. Only a True reading acts: `None` is "no
+second-board link". Disarm aborts the mission's verb, so its own cleanup runs.
+The firmware should do this itself, at 500 Hz; added to #12. The edge-only
+disarm forgot a failed attempt; B-93 replaced it with a latch.
+
+### B-92: arm and disarm were confirmed from a heartbeat older than the command `READ 2026-11-08` **FIXED 2026-11-09**
+
+**What.** `_arm_disarm` sent the command and returned success as soon as
+`is_armed()` matched, and `is_armed()` read the last cached heartbeat however
+old, with no heartbeat at all reading as disarmed. A disarm on a silent link
+returned `(True, 'DISARMED')` without hearing the board; a cached ARMED
+heartbeat confirmed a new arm at once; an aborted arm called itself disarmed
+on no evidence. GitHub #70.
+
+**Fix.** Arm and disarm are confirmed only by a heartbeat received after the
+command (`armed_heard_since`), the rule `set_mode` already followed. Silence
+is `UNCONFIRMED`, never success. The abort path re-sends DISARM every 0.5 s for
+2.5 s, longer than the board's 1 Hz heartbeat period. `armed_state()` reads
+True / False / None, and the watchdogs treat None as possibly armed. Tests in
+`test_srot_fc.py`; four fail against the old code.
+
+### B-93: a kill-switch disarm that failed was never retried `READ 2026-11-08` **FIXED 2026-11-09 (host)**
+
+**What.** The B-90 watchdog stored the new kill state before disarming,
+called disarm once and logged the result without reading it. A refused or
+unanswered disarm left the vehicle armed while the switch stayed engaged, and
+every later tick did nothing; turning the knob back would resume the move.
+GitHub #71.
+
+**Fix.** `node_support.kill_latch` holds until a fresh heartbeat says
+DISARMED, re-sending every 3 s (at most 10 times) whatever the knob does,
+and acts on an unknown armed state too. While latched, the action server
+refuses every verb but `disarm`, `stop` and `surface`, and health reads
+`safety_latch FAILED`. Arming now refuses an UNKNOWN kill switch (no
+second-board link) unless `allow_unknown_kill_switch` is set, for the bench
+(owner decision 2026-11-09). The board-side latch is upstream (GitHub #83).
+
+### B-94: a mission that died armed got one SURFACE request and was forgotten `READ 2026-11-08` **FIXED 2026-11-09**
+
+**What.** The mission watchdog detached the dead mission, sent one
+`surface(wait=False)` and never checked it. A refused or lost request left
+the vehicle armed at depth, and the manager's healthy heartbeat kept the
+board's own 5 s link-loss failsafe from firing. GitHub #72.
+
+**Fix.** `node_support.mission_recovery` latches the recovery: SURFACE is
+re-requested every 2 s, three times, each judged by a heartbeat heard after
+the first request. Still unconfirmed, the heartbeat is withheld so the board's
+failsafe surfaces the vehicle (owner decision 2026-11-09). It resolves when the
+board reports SURFACE or DISARMED; until then ordinary verbs are refused and
+health reads `safety_latch FAILED`. A manager restart clears both latches,
+which is the way out when the board cannot be heard at all.
 
 ### B53 — every payload channel the missions use is REFUSED by this board `MEASURED 2026-09-22, re-read 2026-10-01` **MAP REMOVED 2026-10-01** — channels await the wired payload
 **`missions/competition_config.py` vs the board's `SERVOn_ROLE` params**

@@ -3602,7 +3602,7 @@
     baro:  ['baro',   'barometer health', 'on every automatic move', 'It arms — and then simply will not move: every move verb enters AUTO, and the board refuses AUTO on bad depth.'],
     dead:  ['nan',    'absence is not zero', 'on every reading', 'The value renders as -- on the board and NaN here, so nothing downstream mistakes silence for a measurement of zero.'],
     leak:  ['leak',   'the leak failsafe', 'at the wet contact', 'The sensor reads present, enabled and healthy on the board right now, and reports dry. It was OFF on 2026-09-07 (LEAK_EN = 0) and was switched on before the 2026-09-15 bench session; this figure is the live reading, not the old one.'],
-    kill:  ['kill',   'only partly — the kill link is ambiguous', 'at arm, if the state is known', 'KILL reads 0 for "live" and for "not talking". The host shows UNKNOWN and refuses to arm only on a known-engaged switch.']
+    kill:  ['kill',   'only partly — the kill link is ambiguous', 'at arm; an unknown state refuses too', 'KILL reads 0 for "live" and for "not talking". The host shows UNKNOWN and refuses to arm on it too, unless the bench override is set.']
   };
   function pick(k){
     var f = F[k];

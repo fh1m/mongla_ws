@@ -57,6 +57,7 @@ class _StubNode:
     # The REAL liveness gate (issue #13). Never stamped here -- there is no
     # executor -- which is the bring-up case: the heartbeat must keep flowing.
     _executor_alive = amn.AUVManagerNode._executor_alive
+    _heartbeat_allowed = amn.AUVManagerNode._heartbeat_allowed
 
     def __init__(self):
         self._profile = {'conn': '/dev/null-mongla-test', 'baud': 115200}

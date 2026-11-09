@@ -48,6 +48,10 @@ class _FakeMav:
         if self._m.auto_status is not None:
             self._m.messages['STATUSTEXT'] = SimpleNamespace(
                 text=self._m.auto_status)
+        # The board's next heartbeat, heard after this command: `reply_armed`
+        # True/False scripts what it shows, None scripts silence.
+        if cmd == _ARM_CMD and self._m.reply_armed is not None:
+            self._m.messages['HEARTBEAT'] = _hb(self._m.reply_armed)
 
     def manual_control_send(self, target, x, y, z, r, buttons):
         self.sent.append(('manual', x, y, z, r, buttons))
@@ -77,6 +81,7 @@ class _FakeMaster:
         self.auto_ack = None       # SimpleNamespace(command=, result=, progress=)
         self.auto_status = None    # bytes: STATUSTEXT the board sends in reply
         self.roles = {}            # 'SERVOn_ROLE' -> int; default 2 (SWITCH)
+        self.reply_armed = None    # heartbeat the board sends after ARM/DISARM
         self.mav = _FakeMav(self)
 
 
@@ -86,7 +91,19 @@ def _fc():
     m = _FakeMaster()
     m.messages['AUTOPILOT_VERSION'] = SimpleNamespace(
         middleware_sw_version=sp.FW_BEHAVIOUR_REV, flight_sw_version=131072)
-    return SrotFC(m)
+    fc = SrotFC(m)
+    # This double has no second board, so the kill switch reads UNKNOWN: the
+    # bench case. The refusal itself is tested in test_srot_kill_switch.py.
+    fc.allow_unknown_kill_switch = True
+    return fc
+
+
+def _hb(armed, age_s=0.0):
+    """A vehicle heartbeat received `age_s` seconds ago (monotonic, as the
+    manager's reader stamps it)."""
+    return SimpleNamespace(base_mode=_ARMED if armed else 0,
+                           custom_mode=sp.MODE_AUTO, _timestamp=time.time() - age_s,
+                           _mono=time.monotonic() - age_s)
 
 
 def _ack(result, command=sp.CMD_SROT_MOVE, progress=100):
@@ -220,33 +237,86 @@ def test_a_stall_brakes_the_vehicle_and_not_only_the_caller():
 # --------------------------------------------------------------------------- #
 #  arm / disarm / mode                                                          #
 # --------------------------------------------------------------------------- #
-def test_arm_succeeds_when_heartbeat_shows_armed():
+def test_arm_succeeds_when_the_board_answers_armed():
     fc = _fc()
-    fc.master.messages['HEARTBEAT'] = SimpleNamespace(
-        base_mode=_ARMED, custom_mode=sp.MODE_AUTO, _timestamp=time.time())
+    fc.master.reply_armed = True
     ok, reason = fc.arm(timeout=1.0)
     assert ok and reason == 'ARMED'
 
 
+def test_arm_is_not_confirmed_by_a_heartbeat_from_before_the_command():
+    """Issue #70. A cached ARMED heartbeat already in the slot used to confirm a
+    new arm at once, without the board saying anything after the command."""
+    fc = _fc()
+    fc.master.messages['HEARTBEAT'] = _hb(True, age_s=0.5)
+    ok, reason = fc.arm(timeout=0.2)
+    assert not ok and reason.startswith('UNCONFIRMED'), reason
+
+
+def test_disarm_with_no_heartbeat_at_all_is_unconfirmed_not_success():
+    """Issue #70: no heartbeat read as DISARMED, so this returned success."""
+    ok, reason = _fc().disarm(timeout=0.2)
+    assert not ok and reason.startswith('UNCONFIRMED'), reason
+
+
+def test_disarm_is_not_confirmed_by_a_stale_disarmed_heartbeat():
+    fc = _fc()
+    fc.master.messages['HEARTBEAT'] = _hb(False, age_s=30.0)
+    ok, reason = fc.disarm(timeout=0.2)
+    assert not ok and reason.startswith('UNCONFIRMED'), reason
+
+
+def test_disarm_succeeds_when_the_board_answers_disarmed():
+    fc = _fc()
+    fc.master.messages['HEARTBEAT'] = _hb(True, age_s=0.5)
+    fc.master.reply_armed = False
+    ok, reason = fc.disarm(timeout=1.0)
+    assert ok and reason == 'DISARMED'
+
+
+def test_a_board_that_answers_the_wrong_state_times_out():
+    fc = _fc()
+    fc.master.reply_armed = True        # still armed after a disarm
+    ok, reason = fc.disarm(timeout=0.2)
+    assert not ok and reason == 'NO_STATE_CHANGE (timeout)'
+
+
 def test_arm_rejected_surfaces_prearm_statustext():
     fc = _fc()
-    fc.master.messages['HEARTBEAT'] = SimpleNamespace(
-        base_mode=0, custom_mode=sp.MODE_STABILIZE, _timestamp=time.time())
+    fc.master.messages['HEARTBEAT'] = _hb(False)
     fc.master.auto_status = b'PreArm: gyro cal'
     fc.master.auto_ack = _ack(sp.ACK_FAILED, command=_ARM_CMD)
     ok, reason = fc.arm(timeout=0.3)
     assert not ok and 'PreArm: gyro cal' in reason
 
 
-def test_arm_abort_disarms_and_returns_aborted():
+def test_arm_abort_disarms_and_returns_aborted_once_the_board_says_so():
     fc = _fc()
-    fc.master.messages['HEARTBEAT'] = SimpleNamespace(
-        base_mode=0, custom_mode=0, _timestamp=time.time())
+    fc.master.reply_armed = False
     ok, reason = fc.arm(timeout=1.0, abort=lambda: True)
     assert not ok and reason == 'ABORTED'
     disarms = [s for s in fc.master.mav.sent
                if s[0] == 'cmd' and s[1] == _ARM_CMD and s[2][0] == 0.0]
     assert disarms, 'an aborted arm must command a disarm (never strand armed)'
+
+
+def test_an_aborted_arm_with_a_silent_board_is_not_called_disarmed(monkeypatch):
+    """Issue #70: 'not is_armed()' was read as a confirmed disarm, and with no
+    heartbeat it always was."""
+    monkeypatch.setattr(SrotFC, '_CONFIRM_DISARM_S', 0.3)
+    ok, reason = _fc().arm(timeout=1.0, abort=lambda: True)
+    assert not ok and reason == 'ABORTED_DISARM_UNCONFIRMED'
+
+
+def test_armed_state_is_unknown_without_a_fresh_heartbeat():
+    fc = _fc()
+    assert fc.armed_state() is None
+    fc.master.messages['HEARTBEAT'] = _hb(True, age_s=30.0)
+    assert fc.armed_state() is None
+    fc.master.messages['HEARTBEAT'] = _hb(True)
+    assert fc.armed_state() is True
+    fc.master.messages['HEARTBEAT'] = _hb(False)
+    assert fc.armed_state() is False
 
 
 def test_set_mode_unknown_name_fails_fast():
@@ -691,8 +761,7 @@ def test_current_firmware_rev_arms_normally():
     fc = _fc_reporting_rev(sp.FW_BEHAVIOUR_REV_REQUIRED)
     fc.master.auto_ack = SimpleNamespace(
         command=_ARM_CMD, result=sp.ACK_ACCEPTED, progress=0)
-    fc.master.messages['HEARTBEAT'] = SimpleNamespace(
-        base_mode=_ARMED, autopilot=0, custom_mode=0, _timestamp=time.time())
+    fc.master.reply_armed = True
     ok, _reason = fc.arm(timeout=1.0)
     assert ok is True
 
@@ -725,8 +794,7 @@ def test_a_silent_board_arms_only_with_the_override():
     fc.allow_fw_behaviour_mismatch = True
     fc.master.auto_ack = SimpleNamespace(
         command=_ARM_CMD, result=sp.ACK_ACCEPTED, progress=0)
-    fc.master.messages['HEARTBEAT'] = SimpleNamespace(
-        base_mode=_ARMED, autopilot=0, custom_mode=0, _timestamp=time.time())
+    fc.master.reply_armed = True
     ok, _reason = fc.arm(timeout=1.0)
     assert ok is True
     assert any('OVERRIDDEN' in w for w in warnings), 'an override must still shout'

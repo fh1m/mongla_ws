@@ -21,7 +21,7 @@ from mongla_interfaces.action import Move
 from mongla_control import COMMANDS, fields_for
 from mongla_control.fc.srot_fc import MOVE_VERBS as _BOARD_VERBS_WITH_PROGRESS
 
-from .dispatch_policy import goal_acceptance, _CommandGate
+from .dispatch_policy import SAFETY_VERBS, goal_acceptance, _CommandGate
 from .vision_tunables import runtime_defaults_for_command, snapshot_from_node
 
 
@@ -161,6 +161,14 @@ class ActionMixin:
         # for COMMAND_GATE_STALE_S and every real verb in that window bounced.
         if goal_request.cmd not in COMMANDS:
             self.get_logger().warn(f'[ACT  ] Rejected unknown command {goal_request.cmd!r}')
+            return GoalResponse.REJECT
+        # A latched safety fault refuses everything but the safety verbs, so no
+        # ordinary move can overwrite a recovery the board has not confirmed
+        # (issues #71, #72). Refused here, before the claim, so it never holds
+        # the gate.
+        latch = self.safety_latch_reason()
+        if latch and goal_request.cmd not in SAFETY_VERBS:
+            self.get_logger().error(f'[ACT  ] Rejected {goal_request.cmd} -- {latch}')
             return GoalResponse.REJECT
         # ONE atomic operation: decide and claim together. `goal_acceptance` stays
         # the pure policy (and stays unit-testable); the gate applies it under its

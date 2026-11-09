@@ -8,8 +8,9 @@ from __future__ import annotations
 import time
 
 from . import health as _health, health_reporters as _hr
-from .node_support import (EXECUTOR_STALE_S, MISSION_SILENT_S, _load_sensor_offsets,
-                           kill_watch, mission_watchdog)
+from .node_support import (EXECUTOR_STALE_S, KILL_MAX_TRIES, MISSION_SILENT_S,
+                           SURFACE_MAX_TRIES, _load_sensor_offsets, kill_latch,
+                           mission_recovery, mission_watchdog)
 
 
 class HealthMixin:
@@ -39,14 +40,52 @@ class HealthMixin:
                                        f'detached cleanly')
             self._mission.update(attached=False, name='')
 
-    def _mission_watchdog_tick(self) -> None:
-        m = self._mission
+    def _armed_now(self):
+        """True / False from a fresh vehicle heartbeat; None when unknown."""
         try:
-            armed = bool(self.fc.is_armed())
-        except Exception:                          # noqa: BLE001 -- unknown = act
-            armed = True
-        self._kill_watch_tick(armed)
-        action = mission_watchdog(m['attached'], m['seen'], time.monotonic(), armed)
+            fn = getattr(self.fc, 'armed_state', None)
+            return fn() if fn is not None else bool(self.fc.is_armed())
+        except Exception:                          # noqa: BLE001 -- unknown
+            return None
+
+    def _heard_since(self, t: float):
+        """(armed, mode) from a heartbeat received after `t`; (None, None) if none."""
+        try:
+            return self.fc.armed_heard_since(t), self.fc.mode_heard_since(t)
+        except Exception:                          # noqa: BLE001 -- unknown
+            return None, None
+
+    def _heartbeat_allowed(self) -> bool:
+        """The heartbeat thread's gate: a stuck executor or an unconfirmed
+        mission recovery both stop it, so the board's own failsafe fires."""
+        rec = getattr(self, '_recovery', None)
+        return self._executor_alive() and not (rec and rec.get('withholding'))
+
+    def safety_latch_reason(self) -> str:
+        """Why ordinary verbs are refused right now; '' when they are not.
+
+        Both latches clear only when the board itself reports the safe state.
+        A manager restart also clears them, which is the operator's way out
+        when the board cannot be heard at all.
+        """
+        rec = getattr(self, '_recovery', None)
+        if rec is not None:
+            return (f'mission {rec["name"]!r} died with the vehicle armed; SURFACE '
+                    f'is not yet confirmed by the board')
+        if getattr(self, '_kill_latch', None) is not None:
+            return ('the kill switch was engaged while armed and the board has '
+                    'not yet confirmed DISARMED')
+        return ''
+
+    def _mission_watchdog_tick(self) -> None:
+        now = time.monotonic()
+        m = self._mission
+        armed = self._armed_now()
+        self._kill_watch_tick(armed, now)
+        self._recovery_tick(now)
+        # Unknown is treated as armed: acting on a disarmed vehicle is noise,
+        # not acting on an armed one is the failure.
+        action = mission_watchdog(m['attached'], m['seen'], now, armed is not False)
         if action == 'none':
             return
         name = m['name']
@@ -58,35 +97,80 @@ class HealthMixin:
         self.get_logger().error(
             f'[MISSN] !! mission {name!r} SILENT {MISSION_SILENT_S:.0f}s+ with the '
             f'vehicle ARMED -- the mission process is gone. Abort, brake, SURFACE.')
+        self._recovery = {'name': name, 'first': now, 'last': now, 'tries': 1}
+        self._request_surface()
+
+    def _request_surface(self) -> None:
         try:
             self.mongla.request_abort()
         except Exception as exc:                   # noqa: BLE001
             self.get_logger().error(f'[MISSN] abort raised {exc!r}')
         try:
             res = self.mongla.surface(wait=False)
-            self.get_logger().error(f'[MISSN] surface: {getattr(res, "message", res)}')
+            self.get_logger().error(f'[MISSN] surface requested: '
+                                    f'{getattr(res, "message", res)}')
         except Exception as exc:                   # noqa: BLE001
-            self.get_logger().error(f'[MISSN] SURFACE FAILED: {exc!r} -- the '
-                                    f"board's own failsafe is the backstop")
+            self.get_logger().error(f'[MISSN] SURFACE request FAILED: {exc!r} -- '
+                                    f'will retry')
 
-    def _kill_watch_tick(self, armed: bool) -> None:
-        """Disarm on the edge to ENGAGED; see `node_support.kill_watch`."""
+    def _recovery_tick(self, now: float) -> None:
+        """Hold the mission-loss recovery until the board confirms it (issue #72)."""
+        rec = getattr(self, '_recovery', None)
+        if rec is None:
+            return
+        armed, mode = self._heard_since(rec['first'])
+        self._recovery, action = mission_recovery(rec, now, armed, mode)
+        log = self.get_logger()
+        if action == 'resolved':
+            what = 'DISARMED' if armed is False else 'in SURFACE'
+            log.warning(f'[MISSN] recovery confirmed: the board reports {what}'
+                        + (' -- heartbeat resumed' if rec.get('withholding') else ''))
+        elif action == 'surface':
+            log.error(f'[MISSN] SURFACE not confirmed -- request '
+                      f'{self._recovery["tries"]}/{SURFACE_MAX_TRIES}')
+            self._request_surface()
+        elif action == 'withhold':
+            log.error(f'[MISSN] !! SURFACE still unconfirmed after '
+                      f'{SURFACE_MAX_TRIES} requests -- heartbeat WITHHELD so the '
+                      f"board's own link-loss failsafe surfaces the vehicle")
+
+    def _kill_watch_tick(self, armed, now: float = None) -> None:
+        """Disarm on the kill switch and keep at it until the board confirms.
+
+        See `node_support.kill_latch` (issue #71).
+        """
+        now = time.monotonic() if now is None else now
         try:
             killed = getattr(self.fc.telemetry(), 'kill_switch', None)
-        except Exception:                          # noqa: BLE001 -- no reading, no edge
+        except Exception:                          # noqa: BLE001 -- unknown
+            killed = None
+        latch = getattr(self, '_kill_latch', None)
+        self._kill_latch, action = kill_latch(latch, killed, armed, now)
+        log = self.get_logger()
+        if action == 'resolved':
+            log.warning('[KILL ] the board reports DISARMED. Arming again is a '
+                        'deliberate act, and refused while the switch is engaged.')
             return
-        was = getattr(self, '_kill_was', None)
-        self._kill_was = killed
-        if not kill_watch(was, killed, armed):
+        if action != 'disarm':
             return
-        self.get_logger().error('[KILL ] kill switch ENGAGED while armed -- thruster '
-                                'power is cut. Abort the mission and DISARM, so '
-                                'restoring power cannot resume a move.')
+        if latch is None:
+            log.error('[KILL ] kill switch ENGAGED while armed -- thruster power is '
+                      'cut. Abort the mission and DISARM, so restoring power '
+                      'cannot resume a move.')
+        else:
+            log.error(f'[KILL ] disarm not yet confirmed -- attempt '
+                      f'{self._kill_latch["tries"]}/{KILL_MAX_TRIES}')
+        try:
+            self.mongla.request_abort()
+        except Exception:                          # noqa: BLE001
+            pass
         try:
             res = self.mongla.disarm(timeout=2.0)
-            self.get_logger().error(f'[KILL ] {getattr(res, "message", res)}')
+            ok = getattr(res, 'success', None)
+            log.error(f'[KILL ] {getattr(res, "message", res)}'
+                      + ('' if ok else ' -- will retry until the board confirms'))
         except Exception as exc:                   # noqa: BLE001
-            self.get_logger().error(f'[KILL ] DISARM FAILED: {exc!r}')
+            log.error(f'[KILL ] DISARM FAILED: {exc!r} -- will retry')
 
     def _register_health(self) -> None:
         """Translate what each subsystem already knows into one vocabulary.
@@ -124,6 +208,11 @@ class HealthMixin:
             getattr(fc, 'thruster_health', lambda: None)()))
         self._health.register('thruster_power', lambda: _hr.thruster_power(
             getattr(fc.telemetry(), 'kill_switch', None)))
+        # The two latches (issues #71, #72): FAILED until the board confirms.
+        self._health.register('safety_latch', lambda: (
+            _health.failed('safety_latch', self.safety_latch_reason())
+            if self.safety_latch_reason()
+            else _health.ok('safety_latch', 'no unconfirmed recovery')))
         # Pilot gain. The board boots at 0.5, the parameter write cannot reach
         # the live value, and at 0.5 every MANUAL_CONTROL demand -- which is how
         # both vision verbs actuate -- is halved with nothing to indicate it.
