@@ -1,0 +1,56 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 300-329
+.claude/context/missions/client-and-dsl-api.md
+  h_f1b9066eb9899c 91
+.claude/context/missions/command-reference.md
+  h_f1b9066eb9899c 155-156
+.claude/context/missions/mission-cookbook.md
+  h_f1b9066eb9899c 411-412
+.claude/context/missions/vision-results.md
+  h_f1b9066eb9899c 62-64,66-68
+.claude/context/perception/vision-architecture.md
+  h_f1b9066eb9899c 396
+.claude/context/platform/ros2-conventions.md
+  h_f1b9066eb9899c 32
+.claude/context/wiki/Home.md
+  h_f1b9066eb9899c 139-140
+README.md
+  h_f1b9066eb9899c 640-641
+docs/index.html
+  h_f1b9066eb9899c 1273-1274,1861-1862
+src/mongla_control/mongla_control/commands.py
+  h_f1b9066eb9899c 172
+src/mongla_control/mongla_control/motion_vision/__init__.py
+  h_f1b9066eb9899c 46,48
+src/mongla_control/mongla_control/motion_vision/control.py
+  h_f1b9066eb9899c 32-34,37-39,276-298
+src/mongla_control/mongla_control/motion_vision/move.py
+  h_f1b9066eb9899c 17-18,31,89-95,128-129,166-169,230-232,234,237,252,256-275,282-283
+src/mongla_control/test/test_motion_vision.py
+  h_f1b9066eb9899c 22,822-823,828,863-866,871
+src/mongla_control/test/test_pass_through_crossing.py
+  h_f1b9066eb9899c 1-157
+src/mongla_interfaces/action/Move.action
+  h_f1b9066eb9899c 161-163
+src/mongla_planner/mongla_planner/missions/sauvc_navigation.py
+  h_f1b9066eb9899c 128-131
+src/mongla_planner/mongla_planner/missions/sauvc_qualification.py
+  h_f1b9066eb9899c 128-131
+src/mongla_planner/mongla_planner/vision_dsl.py
+  h_f1b9066eb9899c 58,103-104,106-111,139-143,540-552
+src/mongla_vision/mongla_vision/utils/check_thrust.py
+  h_f1b9066eb9899c 97
+src/mongla_vision/test/test_lock_wiring.py
+  h_f1b9066eb9899c 104-108
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "3c05e07bb3b4c2980b2ab04080f49fd2c571d171",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
