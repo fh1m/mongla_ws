@@ -148,9 +148,10 @@ say "6. Gate it -- the vehicle grades itself"
 # gate refuses would be the exact defect this repo keeps finding.
 set +e
 GATE_LOG="$(mktemp)"
+# Through env.sh, so the gate runs in the same environment as every terminal
+# on the vehicle (and HailoRT logs to ~/.hailo, not into ~).
 r bash -lc "'cd ~/$REMOTE_DIR
-  source /opt/ros/$ROS_DISTRO_WANT/setup.bash
-  source install/setup.bash
+  source kutum/env.sh
   timeout 120 ros2 run mongla_manager bringup_check'" | tee "$GATE_LOG"
 GATE=${PIPESTATUS[0]}
 set -e

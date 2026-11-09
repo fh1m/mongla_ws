@@ -31,6 +31,8 @@ RELEASES="$BASE/releases"
 LIVE="$HOME_DIR/mongla_ws"
 PREVIOUS="$BASE/previous"
 ROS_SETUP="${KUTUM_ROS_SETUP:-/opt/ros/jazzy/setup.bash}"
+# The manifest runs hailortcli; keep its log out of the release and out of ~.
+export HAILORT_LOGGER_PATH="${HAILORT_LOGGER_PATH:-$HOME_DIR/.hailo/hailort}"
 
 ok()  { printf '  ok   %s\n' "$*"; }
 die() { printf '  FAIL %s\n' "$*" >&2; exit 1; }
