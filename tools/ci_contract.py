@@ -30,9 +30,15 @@ import yaml
 
 INTEGRITY = '.github/workflows/repository-integrity.yml'
 PROVENANCE = '.github/workflows/poc-check.yml'
+ROS = '.github/workflows/ros.yml'
 
 INTEGRITY_JOB = ('source-integrity', 'Source integrity / active-code and documentation')
 PROVENANCE_JOB = ('poc-check', 'Verify AI Provenance')
+# One job, two required checks: 'ROS humble' and 'ROS jazzy' (#65).
+ROS_JOB = ('ros', 'ROS ${{ matrix.distro }}')
+ROS_STRATEGY = {'fail-fast': 'false', 'matrix': {'distro': ['humble', 'jazzy']}}
+ROS_CONTAINER = 'ros:${{ matrix.distro }}-ros-base'
+RUN_ROS = 'bash tools/ci_ros.sh'
 
 RUN_GATE = 'python tools/run_repo_integrity.py'
 RUN_PROVENANCE = 'python3 tools/provenance_check.py'
@@ -66,7 +72,7 @@ def _load(text: str):
     return doc, []
 
 
-def _common(doc, job_id, job_name, pr_types):
+def _common(doc, job_id, job_name, pr_types, job_keys=JOB_KEYS):
     """Errors shared by both workflows; returns (errors, steps)."""
     errs = [f'top-level key {k!r} is not allowed' for k in sorted(set(doc) - TOP_KEYS)]
     on = doc.get('on')
@@ -87,7 +93,7 @@ def _common(doc, job_id, job_name, pr_types):
     if not isinstance(job, dict):
         return errs + [f'{job_id} must be a mapping'], []
     errs += [f'job key {k!r} is not allowed (no if:, no continue-on-error)'
-             for k in sorted(set(job) - JOB_KEYS)]
+             for k in sorted(set(job) - job_keys)]
     if job.get('name') != job_name:
         errs.append(f'job name must stay {job_name!r}: it is the required check')
     steps = job.get('steps')
@@ -155,6 +161,35 @@ def integrity_errors(text: str) -> list[str]:
     return errs
 
 
+def ros_errors(text: str) -> list[str]:
+    """The ROS build-and-test job (#65): both distros, every time, one command."""
+    doc, errs = _load(text)
+    if doc is None:
+        return errs
+    errs, steps = _common(doc, *ROS_JOB, ('opened', 'synchronize', 'reopened'),
+                          job_keys=JOB_KEYS | {'strategy', 'container'})
+    push = (doc.get('on') or {}).get('push')
+    if not isinstance(push, dict) or push != {'branches': ['main']}:
+        errs.append("push must be exactly 'branches: [main]'")
+    if doc.get('permissions') != {'contents': 'read'}:
+        errs.append('permissions must be exactly contents: read')
+    job = (doc.get('jobs') or {}).get(ROS_JOB[0]) or {}
+    if isinstance(job, dict):
+        if job.get('strategy') != ROS_STRATEGY:
+            errs.append('strategy must be exactly fail-fast: false over [humble, jazzy]: '
+                        'a dropped distro or a cancelled sibling is a check that never ran')
+        if job.get('container') != ROS_CONTAINER:
+            errs.append(f'container must be exactly {ROS_CONTAINER!r}')
+    for step in steps:
+        if 'env' in step:
+            errs.append('no env on a gating step (PYTEST_ADDOPTS can deselect)')
+        _check_step(step, {RUN_ROS}, errs)
+    runs = [str(s.get('run', '')).strip() for s in steps]
+    if runs.count(RUN_ROS) != 1:
+        errs.append(f'exactly one step must run {RUN_ROS!r}')
+    return errs
+
+
 def provenance_errors(text: str) -> list[str]:
     doc, errs = _load(text)
     if doc is None:
@@ -180,7 +215,8 @@ def errors(root: Path) -> list[str]:
     for path in sorted((root / '.github/workflows').glob('*.y*ml')):
         rel = path.relative_to(root)
         out += [f'{rel}: {e}' for e in pin_errors(path.read_text())]
-    for rel, check in ((INTEGRITY, integrity_errors), (PROVENANCE, provenance_errors)):
+    for rel, check in ((INTEGRITY, integrity_errors), (PROVENANCE, provenance_errors),
+                       (ROS, ros_errors)):
         path = root / rel
         if not path.is_file():
             out.append(f'{rel}: missing')

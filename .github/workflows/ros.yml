@@ -1,0 +1,38 @@
+name: ROS
+
+# The whole stack on both ROS distros it runs on, from a clean container: the
+# dependencies the package.xml files declare, a clean colcon build, and every
+# test (#65). Jazzy is the vehicle; Humble is the dev box. Both are required.
+#
+# Hardware is not here and is never faked as present: the board, the Hailo
+# and the cameras are exercised on Kutum, and a test that needs one skips and
+# is listed by name in the job summary, never counted as a pass.
+#
+# Everything the job does is tools/ci_ros.sh; tools/ci_contract.py allows this
+# file's shape and nothing else (no if:, no continue-on-error, one command).
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ros:
+    name: ROS ${{ matrix.distro }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [humble, jazzy]
+    container: ros:${{ matrix.distro }}-ros-base
+    steps:
+      - name: Check out the candidate commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+      - name: Dependencies, clean build and every test
+        run: bash tools/ci_ros.sh
