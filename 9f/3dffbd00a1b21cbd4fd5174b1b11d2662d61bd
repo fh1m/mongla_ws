@@ -1,0 +1,24 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 192-207
+src/mongla_vision/mongla_vision/calibration/guide_files.py
+  h_f1b9066eb9899c 206,268-271,288-292
+src/mongla_vision/mongla_vision/calibration/solver.py
+  h_f1b9066eb9899c 64,275-293,307,309
+src/mongla_vision/test/test_calibration_library.py
+  h_f1b9066eb9899c 229-260
+tools/topic_wiring_sweep.py
+  h_f1b9066eb9899c 74-76,78
+tools/upload_sink.py
+  h_f1b9066eb9899c 7,14-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "9f3dffbd00a1b21cbd4fd5174b1b11d2662d61bd",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
