@@ -189,6 +189,27 @@ yet also refuses. The latch is decided when a goal arrives, not only on the
 watchdog tick, or the manager's own first arm would read as an armed board.
 The board-side kill latch is upstream (srot-control-board#41).
 
+### B-101: a pose of one prop could clear a shot at another `READ 2026-11-09` **FIXED 2026-11-09**
+
+**What.** `TargetPose` had no field saying which target it was solved for.
+`square_within`, `obliquity_deg` and `tool_offset_px` checked only `ok` and
+age, so for up to a second after a mission switched from the gate to the
+torpedo board, the gate's fresh, square pose cleared the board's firing gate
+and supplied its tool-range correction (#76). Walking the rest of the chain
+found two neighbours on the same field: the fuse node voted poses of different
+targets into one answer, and `anchor_on('gate')` took any fused pose and wrote
+the gate's surveyed bearing against it, putting the world heading off by the
+angle between the two faces.
+
+**Fix.** `TargetPose.target_label` carries the class the producer OBSERVED
+(the anchor's enrolment label, not the class asked for), copied by PnP on
+success and refusal. The fuse node starts a new vote on a new label. Every
+pose gate takes the class it acts on, and `vision_align` binds its closures to
+`target_class`; an unlabelled pose cannot clear a named shot. `anchor_on`
+passes the course's `detect_class`, and a pose of another prop is refused with
+that reason. `test_pose_belongs_to_the_target.py`: four cases fail without the
+gate and the vote reset.
+
 ### B-98: the calibration guide wrote a file wherever a request pointed `READ 2026-11-09` **FIXED 2026-11-09**
 
 **What.** The guide's `/apply` built the destination file name from the
@@ -204,6 +225,107 @@ and an unchecked file name in `tools/upload_sink.py`.
 (`calibration_filename`, `capture_dir`) call it, so no path is built from
 anything else. `/apply` refuses before it reads the camera. The console stays
 open by decision (#66); what it may write is now bounded.
+
+### B-99: the ladder fallback steered on any class `READ 2026-11-09` **FIXED 2026-11-09**
+
+**What.** With no live box of the requested class, `bbox_error(class, lock_s>0)`
+returned the first `/lock` box without looking at what it was. `/lock` names
+the rung (detection, follow, anchor) in its hypothesis and carried no class at
+all, so a ladder pinned or stale on prop B steered an align asked for prop A
+(#74). The existing test checked that the ladder's own class changed, not that
+the consumer refused a wrong one.
+
+**Fix.** `lock_node` puts the class it follows in `Detection2D.id`: the anchor's
+enrolment label on the anchor rung, the last real detection's class on the
+others. `_lock_sample` refuses a box whose id is not the requested class, and
+an empty id, which cannot be verified. With no class asked, the single-target
+fallback is unchanged. `test_lock_fallback_checks_identity.py` runs the real
+publisher, subscriber callback and `bbox_error`; four of its cases fail on the
+old consumer.
+
+### B-100: a new target class kept the old target's box, follower and pose `READ 2026-11-09` **FIXED 2026-11-09**
+
+**What.** A mission switching the ladder's class (through `classes_filter` or
+a live `target_class`) changed `_cls` and the committed width, and nothing
+else. The last detection box, the follower's points, the anchor's pose and
+label and the world memory all stayed, so until a detection of the new class
+arrived the ladder kept publishing the old target, its range now computed with
+the new class's width (#75). A ladder tick already running at the switch could
+also publish, or write the old anchor label, after it.
+
+**Fix.** `_switch_target` bumps a generation and forgets all per-target state
+under the lock; the anchor's bank keeps its references, which are labelled by
+class. Each tick carries the generation it started under, and a tick that
+finishes under a newer one publishes nothing and clears what it wrote. The
+same class re-delivered (the filter is latched) is not a switch. With B-99, a
+box published in the instant between the check and the publish still names
+the old class and is refused by the consumer.
+
+### B-102: a stale bearing kept the hull turning `READ 2026-11-09` **FIXED 2026-11-09**
+
+**What.** `align` scaled lateral and forward by the box's authority and sent
+yaw at full strength whatever its age, on the argument that the board's
+heading hold absorbs a rate demand (#77). It does the opposite: a rate demand
+from a bearing 0.8 s old, re-sent every tick, keeps turning the hull past a
+target it already faces, and a blind frame still yawed at the cap. The test
+that pinned the old behaviour asserted full yaw on a 0.30 s-old frame.
+
+**Fix.** `_yaw_command` takes the same authority as the other axes and applies
+it before the stiction snap, so a fading demand stays producible down to the
+board's floor and then goes to exactly zero, instead of falling into the band
+where the board produces nothing. At a healthy frame rate authority is 1.0 and
+nothing changes.
+
+### B-103: the ladder's authority came from the tracker's knob, and a box nothing steered on could end a verb `READ 2026-11-09` **FIXED 2026-11-09**
+
+**What.** Every ladder box was marked coasted and so decayed on the tracker's
+`coast_s` (#78): with `lock_s=1, coast_s=0` a healthy follower box could not
+move the hull at all, and the default `coast_s=0.8` cut the ladder's own 2.5 s
+horizon to 0.8 s. The ladder also published rung trust times authority as its
+score, so a carried detection at an underwater score of 0.3 steered at 30 %
+on a lock it trusted fully. Neighbours on the same chain: a zero-authority
+box, or a Kalman prediction, sitting in band advanced `align`'s stable-frame
+counter toward ALIGNED, and a predicted box at the fill ended a fill-stop
+`move` as reached.
+
+**Fix.** `Sample.source` says which of detector, tracker and ladder made the
+box. A ladder box takes the ladder's authority (now what `/lock` publishes;
+rung trust is a gate, as a detector score is) times the age of its own frame,
+independent of `coast_s`. `_is_evidence` decides what may end a verb: a box
+with authority left that is not a prediction. Anything else holds the stable
+count and holds forward drive at the fill without completing the arrival.
+`test_vision_authority_by_source.py` drives both loops; 14 of its 24 cases fail
+on the old code.
+
+### B-104: a gate that vanished for any reason was reported as passed `READ 2026-11-09` **FIXED 2026-11-09**
+
+**What.** A pass-through `move` reported ALIGNED ("passed through") once a gate it
+had seen left the frame and the commit ran (#79). Losing a gate is not seeing
+the hull cross it: a far gate blinking out in turbidity, one sliding out
+sideways and a camera outage all scored the same pass. Neighbours on the same
+path: the lock ladder kept the gate "present" for up to its 2.5 s horizon after
+the detector lost it, so the commit started late (pass-through already
+refused the tracker's coast for this reason, but not the ladder). And both
+navigation missions ran their blind transit on `not passed`, which once the
+verdict is honest would stack a second open-loop leg on a commit that had
+already driven past the gate.
+
+**Fix.** The verdict comes from the last live box. A gate the hull is entering
+surrounds the camera axis and runs off the frame: ESTIMATED_CROSSING, `ok`.
+Anything else: COMMIT_UNVERIFIED, not `ok`. Neither is ALIGNED, and the reason
+says which box decided it. The commit stays bounded by `duration`, and a
+commit cut short still gets a verdict. Pass-through ignores the ladder as it
+ignores the coast. `VisionResult.committed` tells a mission a commit leg was
+driven, and the blind transit runs only without one.
+`test_pass_through_crossing.py` replays the five sequences the issue names,
+the DSL mapping and both missions; breaking the verdict, the blind-leg guard
+or the ladder exclusion fails 7, 2 and 1 of its cases.
+
+**Compromise, and the data that would remove it.** This is an estimate from
+one camera. Confirming a crossing needs distance travelled after the loss
+compared against the range at the loss, and the chain already has that
+data: the downward camera's flow velocity (worst error 1.09 cm over 30 cm)
+reaches `/mongla/odom`. TRAVERSAL_CONFIRMED is left for that, tracked on #79.
 
 ### B53 — every payload channel the missions use is REFUSED by this board `MEASURED 2026-09-22, re-read 2026-10-01` **MAP REMOVED 2026-10-01** — channels await the wired payload
 **`missions/competition_config.py` vs the board's `SERVOn_ROLE` params**

@@ -45,6 +45,7 @@ from .control import (
 from .freshness import (
     _authority,
     _derotated_ex,
+    _is_evidence,
     _warn_low_fps,
 )
 from .srot_drive import (
@@ -325,15 +326,15 @@ class _Align(_VisionLoop):
             return self.lost(now)
 
         self.acquire(sample, now)
-        cmd = self.command(sample)
-        self.residual_px = cmd.worst
-        # Freshness-decay: pace LATERAL authority to measurement freshness so
-        # the loop doesn't blind-drive on a stale bbox between slow frames
-        # (yaw excluded; the board holds depth). At healthy
-        # FPS fresh==1.0 so this is a no-op. A COASTED sample decays on the
-        # coast curve instead (gap decay), not freshness -- see _authority.
+        # One authority for every axis, from the source that made the box:
+        # freshness for a live box, the coast curve for a tracker prediction,
+        # the ladder's own horizon for a ladder box (#78). Lateral, forward
+        # AND yaw take it (#77), so control never acts harder than vision
+        # can stand behind. At a healthy frame rate it is 1.0: no change.
         fresh = _authority(sample, c.coast_s, self.det_interval, self.pipe_age)
         _warn_low_fps(self.log, fresh, sample)   # F3: surface FPS-starvation, don't stall silently
+        cmd = self.command(sample, fresh)
+        self.residual_px = cmd.worst
         lat_pct = cmd.lat_pct * fresh
         fwd_pct = cmd.fwd_pct * fresh   # forward shares the freshness/coast decay (never braked)
         # What the mixer will do to what we just asked for. Computed from
@@ -356,7 +357,8 @@ class _Align(_VisionLoop):
             # reverse-kicks opposite it regardless of surge_sign.
             self.surge_ema = _ema_step(self.surge_ema, fwd_pct, self.dt)
 
-        is_new_frame = self.count_frame(sample, now, cmd)
+        is_new_frame = self.count_frame(sample, now, cmd,
+                                        evidence=_is_evidence(sample, fresh))
         if self.held_long_enough():
             out = self.hold(sample, now, is_new_frame, cmd.worst)
             if out is not None:
@@ -418,8 +420,11 @@ class _Align(_VisionLoop):
         # the verb returns, and the live value report_fn streams to feedback.
         self.report(sample)
 
-    def command(self, sample) -> _Command:
-        """The per-axis P(+I) law: what each active axis asks for, and is it in band."""
+    def command(self, sample, authority: float = 1.0) -> _Command:
+        """The per-axis P(+I) law: what each active axis asks for, and is it in band.
+
+        `authority` reaches yaw here, before its stiction snap; lateral and
+        forward take it in `step`, where their EMAs are fed."""
         c = self.c
         half_w, half_h = self.half_w, self.half_h
         # Range-adaptive gain: soften lat/surge kp as the bbox fills the frame
@@ -468,7 +473,7 @@ class _Align(_VisionLoop):
             epx = abs(ctrl) * half_w
             worst = max(worst, epx)
             yaw_pct = _yaw_command(ctrl, epx, self.eff_err, c.kp_yaw, self.g_yaw,
-                                   _fill(sample, 'area'))
+                                   _fill(sample, 'area'), authority)
             in_band.append(epx <= self.eff_err)
 
         if self.use_surge:
@@ -493,7 +498,8 @@ class _Align(_VisionLoop):
             in_band.append(fwd_ok)
         return _Command(lat_pct, yaw_pct, fwd_pct, p_lat, in_band, worst)
 
-    def count_frame(self, sample, now: float, cmd: _Command) -> bool:
+    def count_frame(self, sample, now: float, cmd: _Command,
+                    evidence: bool = True) -> bool:
         """Advance the stable-frame counter on a NEW frame; True if this was one.
 
         Distinct-detection gate: advance the stable-frame counter on new
@@ -509,6 +515,11 @@ class _Align(_VisionLoop):
         mid-pass through the band. Keyed on |Δworst| (error velocity), so a
         steady current that holds a non-zero command at a perfect lock does
         NOT block it. settle_px=0 -> settled always True -> legacy behaviour.
+
+        Evidence gate (#78): a frame that is not evidence (`_is_evidence`: no
+        authority left, or a Kalman prediction) HOLDS an in-band run -- it
+        neither advances nor resets it. Otherwise a box nothing is steering
+        on, sitting in band because nothing moved it, could declare ALIGNED.
         """
         c = self.c
         sampled_at, is_new_frame = self.note_frame(sample, now)
@@ -535,7 +546,10 @@ class _Align(_VisionLoop):
         settled = (c.settle_px <= 0.0 or self.prev_worst is None
                    or abs(cmd.worst - self.prev_worst) <= c.settle_px)
         self.prev_worst = cmd.worst
-        self.stable = self.stable + 1 if (all(cmd.in_band) and settled) else 0
+        if not (all(cmd.in_band) and settled):
+            self.stable = 0
+        elif evidence:
+            self.stable += 1
         return True
 
     def held_long_enough(self) -> bool:
