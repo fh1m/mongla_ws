@@ -1,0 +1,20 @@
+.claude/context/ROADMAP.md
+  h_f1b9066eb9899c 22-24,65
+.github/workflows/backlog-drift.yml
+  h_f1b9066eb9899c 1-35
+test/test_backlog_drift.py
+  h_f1b9066eb9899c 1-133
+tools/backlog_drift.py
+  h_f1b9066eb9899c 1-247
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "1e4eda4e30074967dbb0364d38a727f78f326fcc",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
