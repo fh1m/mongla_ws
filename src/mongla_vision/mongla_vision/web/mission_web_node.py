@@ -487,6 +487,9 @@ def main(argv=None):
     executor = MultiThreadedExecutor(num_threads=4)
     executor.add_node(node)
 
+    # Every interface and no login, on purpose: at the pool anyone on the
+    # vehicle's network is the team and may change things from any device
+    # (owner's call, GitHub #66; kutum/README.md "Security, on purpose").
     server = ThreadingHTTPServer(('0.0.0.0', node.web_port), _make_handler(node))
     threading.Thread(target=server.serve_forever, daemon=True).start()
 

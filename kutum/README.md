@@ -94,7 +94,9 @@ that. From a blank SD card to a gated vehicle:
 5. On the vehicle: `sudo ~/mongla_ws/kutum/setup.sh --system`. This builds the Hailo
    driver, firmware and runtime from source (the runtime build is the long part), installs
    `system/`, gives `fh1m` passwordless sudo, runs the user half, and ends with the doctor.
-   Log out and back in, so the `dialout` group applies.
+   Its exit code is the doctor's verdict: `0` ready; `1` a FAIL, fix it and rerun; `3` a
+   FAIL while a change waits for a reboot, so reboot and run `kutum/doctor.sh`, and a FAIL
+   then is real. Log out and back in, so the `dialout` group applies.
 6. From the dev box, put back what only the old vehicle had:
    `rsync -a --exclude .backed-up ~/kutum-backup/mongla/ fh1m@mongla.local:~/`
 7. From the dev box: `kutum/deploy.sh fh1m@mongla.local`. The detector models travel with
@@ -118,3 +120,31 @@ a single-purpose machine on the vehicle's own network, and a password prompt in 
 of a pool session costs more than it protects (the owner's call, 2026-11-07). Delete that
 file to undo it. `deploy.sh` and `backup.sh` run ssh in `BatchMode`: they need a key
 (`ssh-copy-id fh1m@mongla.local`, once) and never prompt for a password.
+
+What each job actually needs (GitHub #67). Only provisioning and machine
+maintenance use root; nothing on the mission path does.
+
+| job | runs as | needs |
+|---|---|---|
+| provisioning (`setup.sh --system`) | root, through sudo | everything it installs |
+| OS update, shutdown, a system file | root, through sudo | the operator's `NOPASSWD` |
+| deploy, build (`deploy.sh`) | `fh1m`, over a key | the workspace; no sudo |
+| ROS launch, mission, recording | `fh1m` | `dialout` for the board (setup adds it), the camera nodes, the Hailo node (udev makes it 0666) |
+| model switching | `fh1m` | `~/models`; no sudo |
+| doctor | `fh1m` | read-only; `sudo -n` only to compare the root-only netplan file |
+| emergency stop | nobody | the board's kill switch, and Ctrl-C on the manager; no privilege on the path |
+
+The one root unit Kutum installs, `cpu-performance.service`, is a oneshot that
+sets the CPU governor and exits; it listens on nothing. A unit that listens on
+the network (a future deck service) runs as its own user, never root, with
+`NoNewPrivileges=`, `ProtectSystem=strict` and `PrivateTmp=`, so a compromised
+service cannot reach the operator's sudo. `test_kutum.py` refuses a unit that
+does not. The operator account keeps `NOPASSWD` (the owner's call, 2026-11-09).
+
+The mission web console (`ros2 launch mongla_vision mission_web.launch.py`)
+listens on every interface with no login, and its POST routes change detector
+parameters and the active camera. That is deliberate (the owner's call,
+2026-11-09, GitHub #66): at the pool everyone on the vehicle's network is the
+team, and any of them may need to change something from any device. It is off
+unless launched, and it never touches the board, which only `auv_manager_node`
+owns. Revisit this if the console is ever served beyond the team's network.
