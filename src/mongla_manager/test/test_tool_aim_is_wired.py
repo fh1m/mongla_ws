@@ -24,7 +24,9 @@ _VS = code_of_file(Path(__file__).resolve().parents[1] / 'mongla_manager'
 
 def test_the_verb_passes_the_tool_offset_into_the_loop():
     assert 'tool_offset_fn=' in _VV, 'align_loop is called without the tool aim'
-    assert 'vstate.tool_offset_px(tool)' in _VV
+    # ...and for THIS target: a pose of the last prop is not a range to this one (#76)
+    import re
+    assert re.search(r'vstate\.tool_offset_px\(\s*tool,\s*class_name=target_class\)', _VV)
 
 
 def test_the_loop_applies_it_to_EVERY_centring_axis():
@@ -137,7 +139,7 @@ class _Self:
 
 class _VState:
     def __init__(self, px=None): self._px = px
-    def tool_offset_px(self, tool): return self._px
+    def tool_offset_px(self, tool, **_kw): return self._px
 
 
 def _warn(fake, tool, vstate=None):
