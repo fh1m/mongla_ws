@@ -1,7 +1,7 @@
 name: Repository Integrity
 
 # A fast policy gate on every PR and main push. This is deliberately ROS-free:
-# generated interfaces must be built by the separate Jazzy job tracked in #65.
+# the colcon build and the whole suite are ros.yml, on Humble and Jazzy (#65).
 # No skip/continue-on-error: a violated invariant makes this check red.
 # Its shape is an allowlist in tools/ci_contract.py.
 on:

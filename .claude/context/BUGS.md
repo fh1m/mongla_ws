@@ -189,6 +189,23 @@ yet also refuses. The latch is decided when a goal arrives, not only on the
 watchdog tick, or the manager's own first arm would read as an armed board.
 The board-side kill latch is upstream (srot-control-board#41).
 
+### B-105: process teardown counted zombies as survivors `REPRODUCED 2026-11-09 (CI container)` **FIXED 2026-11-09**
+
+**What.** `stop_tree` and `stop` in `tools/_record_lib.sh` asked `kill -0` whether
+a process was still running. `kill -0` succeeds on a zombie, and wherever
+orphans are not reaped -- a container whose pid 1 is not an init, which is the
+dev box's docker and CI -- every process `stop_tree` killed stayed a zombie. It
+then waited out its whole grace period and reported dead processes as
+SURVIVORS. The two tests that guard teardown carried the same check, and they
+failed on both ROS CI distros. On the vehicle, systemd reaps orphans, which
+hid it.
+
+**Fix.** `running` in the library treats a zombie as dead, falls back to
+`kill -0` when `/proc` cannot be read (unsure means alive), and every check in
+the library uses it. The stop-tree test asks the library's own `running`, so
+the test covers that function too. Checked against a real zombie:
+`kill -0` reported it alive and `running` reported it dead.
+
 ### B-101: a pose of one prop could clear a shot at another `READ 2026-11-09` **FIXED 2026-11-09**
 
 **What.** `TargetPose` had no field saying which target it was solved for.

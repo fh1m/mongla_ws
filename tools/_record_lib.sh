@@ -58,6 +58,19 @@ descendants() {          # every descendant pid, deepest first
   done
 }
 
+# running <pid> -- true while the process is RUNNING. `kill -0` alone is not
+# that: it succeeds on a zombie, and wherever orphans are not reaped (a
+# container whose pid 1 is not an init: the dev box's docker, CI) a killed
+# child stays a zombie. Counting those made stop_tree wait out its whole grace
+# period and then report processes that had died as SURVIVORS. Without a
+# readable /proc it falls back to `kill -0`: unsure means alive.
+running() {
+  kill -0 "$1" 2>/dev/null || return 1
+  local state
+  state="$(sed 's/.*) //' "/proc/$1/stat" 2>/dev/null | cut -c1)"
+  [ "$state" != Z ] && [ "$state" != X ]
+}
+
 kill_tree() {            # kill_tree <sig> <pid>...
   local sig="$1" pid
   shift
@@ -71,7 +84,7 @@ kill_tree() {            # kill_tree <sig> <pid>...
 stop_tree() {
   local pid="$1" name="$2" i tree alive left
   [ -n "$pid" ] || { echo "  $name: no pid recorded"; return 0; }
-  if ! kill -0 "$pid" 2>/dev/null; then
+  if ! running "$pid"; then
     echo "  $name: already gone"
     return 0
   fi
@@ -85,7 +98,7 @@ stop_tree() {
   # too slow to run habitually is not a guard.
   for i in $(seq "${STOP_TREE_GRACE_S:-20}"); do
     alive=0
-    for p in $tree; do kill -0 "$p" 2>/dev/null && alive=1 && break; done
+    for p in $tree; do running "$p" && alive=1 && break; done
     [ "$alive" = 0 ] && break
     sleep 1
   done
@@ -96,7 +109,7 @@ stop_tree() {
   # Report what SURVIVES, not that the launcher exited -- "launcher stopped"
   # was true during every run that left five nodes holding the Hailo.
   left=0
-  for p in $tree; do kill -0 "$p" 2>/dev/null && left=$((left + 1)); done
+  for p in $tree; do running "$p" && left=$((left + 1)); done
   local nodes
   nodes="$(pgrep -f '[d]etector_dual_node|[t]racker_node|[l]ock_node' 2>/dev/null | wc -l)"
   if [ "$left" -gt 0 ] || [ "$nodes" -gt 0 ]; then
@@ -133,13 +146,13 @@ stop() {
     return 0
   fi
   for i in $(seq 20); do
-    kill -0 "$pid" 2>/dev/null || { echo "  $name stopped cleanly"; return 0; }
+    running "$pid" || { echo "  $name stopped cleanly"; return 0; }
     sleep 1
   done
   echo "  $name ignored SIGINT -- sending SIGTERM"
   kill -TERM "$target" 2>/dev/null
   for i in $(seq 15); do
-    kill -0 "$pid" 2>/dev/null || { echo "  $name stopped on SIGTERM"; return 0; }
+    running "$pid" || { echo "  $name stopped on SIGTERM"; return 0; }
     sleep 1
   done
   echo "  $name ignored SIGTERM -- SIGKILL (the bag may be unfinalized)" >&2

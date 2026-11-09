@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 GUARDS = (
     'test/test_repository_integrity_workflow.py',
+    'test/test_ros_ci_workflow.py',
     'test/test_provenance_check.py',
     'test/test_wiki_edits_pass_pr_gate.py',
     'test/test_claims_say_where_they_came_from.py',
