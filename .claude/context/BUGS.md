@@ -189,6 +189,22 @@ yet also refuses. The latch is decided when a goal arrives, not only on the
 watchdog tick, or the manager's own first arm would read as an armed board.
 The board-side kill latch is upstream (srot-control-board#41).
 
+### B-98: the calibration guide wrote a file wherever a request pointed `READ 2026-11-09` **FIXED 2026-11-09**
+
+**What.** The guide's `/apply` built the destination file name from the
+request's `applies_to`, and the medium from the source file's contents, with
+no check. The guide listens on every interface with no login, so a profile of
+`../../x` wrote a calibration JSON outside the calibration folder; with the
+check disabled the test really wrote one in `/tmp`. Found by CodeQL's first
+analysis (py/path-injection), with a ReDoS in `tools/topic_wiring_sweep.py`
+and an unchecked file name in `tools/upload_sink.py`.
+
+**Fix.** `solver.check_profile` accepts a plain name (letters, digits, `_`,
+`-`) and a medium of `air` or `water`, and both naming functions
+(`calibration_filename`, `capture_dir`) call it, so no path is built from
+anything else. `/apply` refuses before it reads the camera. The console stays
+open by decision (#66); what it may write is now bounded.
+
 ### B53 — every payload channel the missions use is REFUSED by this board `MEASURED 2026-09-22, re-read 2026-10-01` **MAP REMOVED 2026-10-01** — channels await the wired payload
 **`missions/competition_config.py` vs the board's `SERVOn_ROLE` params**
 
