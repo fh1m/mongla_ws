@@ -5,8 +5,6 @@ Documentation can make the same mistake: a page that was right when it was writt
 still read after the code moved. This page explains where the documents live, how you edit
 them, and what fails when one of them stops being true.
 
-Test edit for the wiki review path (#94); it is removed by the next edit.
-
 ## Where to read and edit
 
 **In the [wiki](https://github.com/fh1m/mongla_ws/wiki).** The book is its sidebar, each chapter
