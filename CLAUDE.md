@@ -407,8 +407,9 @@ not port it back. A capability that needs something from it is rebuilt against t
   Each page is also a file under `.claude/context/` (or `docs/`). The wiki workflow turns
   every wiki edit into a **review branch and pull request**; only a merged, checked PR reaches
   `main`. A push to `main` rebuilds the wiki. The bot must never push an unreviewed wiki edit
-  straight to `main`, even when its own doc guards pass. If GitHub suppresses CI on a PR created
-  with its workflow token, edit the PR description to trigger the integrity/provenance checks.
+  straight to `main`, even when its own doc guards pass. That PR is opened with the workflow
+  token, so its checks wait until someone with write access presses **Approve workflows to
+  run**; editing the description does not start them.
   If Actions cannot create the PR, the branch remains and must be reviewed manually. Editing
   the file here updates the wiki only after that PR merges. Publishing refuses while the
   wiki holds an edit `main` does not have, builds on the wiki's own history and never

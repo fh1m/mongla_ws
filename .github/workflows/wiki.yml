@@ -17,6 +17,12 @@ name: Wiki
 # setting Actions -> General -> "Allow GitHub Actions to create and approve pull
 # requests"; without it the branch is still pushed and the run says so.
 #
+# That pull request is opened with GITHUB_TOKEN, so GitHub creates its checks
+# in an approval-required state: someone with write access opens the PR and
+# presses "Approve workflows to run". Editing the description does not start
+# them (GitHub docs, "Triggering a workflow from a workflow"; #94). Owner
+# decision 2026-11-09: approve by hand, no app or personal token.
+#
 # How the conversion works and what it guarantees: tools/wiki_build.py.
 #
 # The wiki's git repository exists only after its first page is created by hand
@@ -80,7 +86,7 @@ jobs:
             exit 1 ;;
           esac
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with: { ref: main, fetch-depth: 0 }
 
       - name: Fetch the wiki
@@ -123,7 +129,8 @@ jobs:
             echo "Wiki edit by ${WHO}: ${PAGES}."
             echo
             echo "This branch must pass the same repository integrity and provenance"
-            echo "checks as a normal code PR before merging into main."
+            echo "checks as a normal code PR before merging into main. They wait for"
+            echo "approval: open the Checks tab and press **Approve workflows to run**."
             echo
             # The wiki editor is the human source; tools/provenance_check.py
             # reads this table (test_provenance_check.py runs this block).
@@ -162,7 +169,7 @@ jobs:
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with: { ref: main }
 
       # The wiki as it is NOW, history and all. Building on top of it, rather

@@ -95,6 +95,18 @@ def _common(doc, job_id, job_name, pr_types):
     return errs, steps
 
 
+# Every action is pinned to a full commit SHA: a tag can be moved to other
+# code after review, a SHA cannot. Dependabot proposes the updates (#95).
+PINNED = re.compile(r'[^@\s]+@[0-9a-f]{40}')
+
+
+def pin_errors(text: str) -> list[str]:
+    """Any `uses:` in any workflow that is not pinned to a commit SHA."""
+    return [f'action not pinned to a commit SHA: {u}'
+            for u in re.findall(r'^\s*-?\s*uses:\s*(\S+)', text, re.M)
+            if not PINNED.fullmatch(u)]
+
+
 def _action(step):
     uses = step.get('uses', '')
     return uses.split('@', 1)[0] if uses else ''
@@ -163,6 +175,9 @@ def provenance_errors(text: str) -> list[str]:
 
 def errors(root: Path) -> list[str]:
     out = []
+    for path in sorted((root / '.github/workflows').glob('*.y*ml')):
+        rel = path.relative_to(root)
+        out += [f'{rel}: {e}' for e in pin_errors(path.read_text())]
     for rel, check in ((INTEGRITY, integrity_errors), (PROVENANCE, provenance_errors)):
         path = root / rel
         if not path.is_file():
