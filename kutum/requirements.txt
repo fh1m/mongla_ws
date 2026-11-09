@@ -9,5 +9,5 @@
 # package it is a dependency of; test/test_kutum.py checks that.
 pymavlink==2.4.49
 filterpy==1.4.5
-scipy==1.17.1          # dependency of filterpy; pinned so a fresh machine resolves the same
-onnxruntime==1.29.0
+scipy==1.18.1          # dependency of filterpy; pinned so a fresh machine resolves the same
+onnxruntime==1.31.1
