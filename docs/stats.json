@@ -1,6 +1,6 @@
 {
-  "collected": 4710,
-  "passed": 4703,
+  "collected": 4717,
+  "passed": 4710,
   "failed": 0,
   "skipped": 6,
   "xfailed": 1,
@@ -30,7 +30,7 @@
       "failed": 0
     },
     "test/": {
-      "passed": 303,
+      "passed": 310,
       "failed": 0
     }
   },
