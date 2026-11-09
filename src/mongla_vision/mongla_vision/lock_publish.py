@@ -75,7 +75,9 @@ class LockPublishMixin:
         if header is not None:
             m.header = header
         m.camera = self._cam
-        m.target_label = self._cls or ''
+        # What the anchor enrolled on, not the class the mission asked for:
+        # the pose downstream is trusted as a pose OF this label (#76).
+        m.target_label = self._anchor_label or ''
         m.source = 'anchor'
         m.optics = TargetCorrespondences.OPTICS_RAW
         # The anchor matches in its BACKEND's pixels, not the camera's full
