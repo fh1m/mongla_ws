@@ -89,7 +89,7 @@ def test_an_absent_ladder_is_a_LOSS_not_a_hold():
 
 
 def test_a_zero_score_ladder_message_is_refused():
-    """Score is the arbiter's confidence. Zero means it does not stand behind
+    """Score is the ladder's authority (#78). Zero means it does not stand behind
     the position, and publishing the box anyway would be the one thing the
     ladder promises never to do."""
     seg = VS[VS.index('def _lock_sample'):VS.index('def bbox_error')]

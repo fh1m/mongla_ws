@@ -261,6 +261,42 @@ same class re-delivered (the filter is latched) is not a switch. With B-99, a
 box published in the instant between the check and the publish still names
 the old class and is refused by the consumer.
 
+### B-102: a stale bearing kept the hull turning `READ 2026-11-09` **FIXED 2026-11-09**
+
+**What.** `align` scaled lateral and forward by the box's authority and sent
+yaw at full strength whatever its age, on the argument that the board's
+heading hold absorbs a rate demand (#77). It does the opposite: a rate demand
+from a bearing 0.8 s old, re-sent every tick, keeps turning the hull past a
+target it already faces, and a blind frame still yawed at the cap. The test
+that pinned the old behaviour asserted full yaw on a 0.30 s-old frame.
+
+**Fix.** `_yaw_command` takes the same authority as the other axes and applies
+it before the stiction snap, so a fading demand stays producible down to the
+board's floor and then goes to exactly zero, instead of falling into the band
+where the board produces nothing. At a healthy frame rate authority is 1.0 and
+nothing changes.
+
+### B-103: the ladder's authority came from the tracker's knob, and a box nothing steered on could end a verb `READ 2026-11-09` **FIXED 2026-11-09**
+
+**What.** Every ladder box was marked coasted and so decayed on the tracker's
+`coast_s` (#78): with `lock_s=1, coast_s=0` a healthy follower box could not
+move the hull at all, and the default `coast_s=0.8` cut the ladder's own 2.5 s
+horizon to 0.8 s. The ladder also published rung trust times authority as its
+score, so a carried detection at an underwater score of 0.3 steered at 30 %
+on a lock it trusted fully. Neighbours on the same chain: a zero-authority
+box, or a Kalman prediction, sitting in band advanced `align`'s stable-frame
+counter toward ALIGNED, and a predicted box at the fill ended a fill-stop
+`move` as reached.
+
+**Fix.** `Sample.source` says which of detector, tracker and ladder made the
+box. A ladder box takes the ladder's authority (now what `/lock` publishes;
+rung trust is a gate, as a detector score is) times the age of its own frame,
+independent of `coast_s`. `_is_evidence` decides what may end a verb: a box
+with authority left that is not a prediction. Anything else holds the stable
+count and holds forward drive at the fill without completing the arrival.
+`test_vision_authority_by_source.py` drives both loops; 14 of its 24 cases fail
+on the old code.
+
 ### B53 — every payload channel the missions use is REFUSED by this board `MEASURED 2026-09-22, re-read 2026-10-01` **MAP REMOVED 2026-10-01** — channels await the wired payload
 **`missions/competition_config.py` vs the board's `SERVOn_ROLE` params**
 

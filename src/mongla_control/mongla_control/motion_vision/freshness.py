@@ -3,7 +3,16 @@
 The loop runs faster than a slow detector, so one box is read on several
 ticks. These pure functions turn the age of that box -- and, for a coasted
 box, the time since the last real detection -- into a 0..1 authority the
-loops multiply their lateral and forward commands by. Yaw is never scaled.
+loops multiply their lateral, forward and yaw commands by.
+
+One authority per box, from the source that made it (#78):
+
+    detector  `_freshness(age since capture)`
+    tracker   `_coast_authority(time since the last real detection, coast_s)`
+    ladder    the ladder's own authority x `_freshness(age of the box's frame)`
+
+and one rule for what may END a verb: `_is_evidence`. A box with no authority,
+or a Kalman prediction, may hold a counter but never advance it.
 """
 
 from __future__ import annotations
@@ -18,9 +27,10 @@ from ..motion_rates import LOG_THROTTLE_S
 # so the same bbox error is re-used for several ticks. Re-commanding the same P
 # output while the hull drives blind for a whole frame period over-drives by
 # ~Kp*e*T_frame -- the low-FPS twitchiness. Fix: full command authority the
-# instant a frame lands, then decay the LATERAL/FORWARD command toward neutral as
-# the sample ages, hard-zero once we are driving blind. Yaw is NOT decayed: it
-# is a rate demand the board's heading hold absorbs. At healthy FPS frames
+# instant a frame lands, then decay the command toward neutral as the sample
+# ages, hard-zero once we are driving blind. Yaw decays too (#77): it is a RATE
+# demand, so a stale bearing re-commanded every tick keeps the hull turning
+# past a target it has already reached. At healthy FPS frames
 # refresh before VISION_FRESH_FULL_S so the factor stays 1.0 -- zero behaviour
 # change; the decay only engages when detections are slow or drop out. ZERO_S is
 # below _STALE_LIMIT_S so the command zeroes BEFORE "target lost" declares.
@@ -195,18 +205,58 @@ def _coast_authority(coast_age_s: float, coast_s: float) -> float:
     return (coast_s - coast_age_s) / coast_s
 
 
+def _ladder_authority(score: float, age_s: float, interval_s: float = 0.0,
+                      pipe_age_s: float = 0.0) -> float:
+    """Authority [0,1] for a lock-ladder box (#78).
+
+    Two factors, each measuring something the other cannot, so neither is a
+    second discount of the same thing:
+
+      * `score` -- the ladder's authority: time since the last REAL detection
+        (full to 0.70 s, zero at 2.50 s) with the follower/anchor cross-check's
+        demotion. It is what the ladder knows about the LOCK.
+      * `_freshness(age_s)` -- how old the FRAME this box was measured on is.
+        It is what only the loop knows: the follower answers on the newest
+        frame, the anchor on one up to a third of a second old, and a lock
+        node that stalls leaves its last box aging here and nowhere else.
+
+    Independent of `coast_s`, which is the tracker's horizon and says nothing
+    about the ladder. Before this, `coast_s=0` zeroed every ladder box and
+    `coast_s=0.8` cut the ladder's 2.5 s horizon to 0.8 s.
+    """
+    if not (score > 0.0):            # also refuses NaN
+        return 0.0
+    return min(1.0, score) * _freshness(age_s, interval_s, pipe_age_s)
+
+
 def _authority(sample, coast_s: float, interval_s: float = 0.0,
                pipe_age_s: float = 0.0) -> float:
-    """Per-tick translational authority for `sample`.
+    """Per-tick authority for `sample`, from the source that produced it.
 
     Live box  -> ``_freshness(age)``       (per-frame staleness at low FPS).
+    Ladder    -> ``_ladder_authority``     (its own horizon, times frame age).
     Coasted   -> ``_coast_authority(age)``  (gap decay; the box is fresh each
                  tick so freshness must NOT also be applied -- that would
                  double-decay and kill the coast inside ~0.4 s).
     """
+    if getattr(sample, 'source', '') == 'ladder':
+        return _ladder_authority(getattr(sample, 'score', 0.0), sample.age_s,
+                                 interval_s, pipe_age_s)
     if getattr(sample, 'coasted', False):
         return _coast_authority(sample.age_s, coast_s)
     return _freshness(sample.age_s, interval_s, pipe_age_s)
+
+
+def _is_evidence(sample, authority: float) -> bool:
+    """May this box count toward ALIGNED / reached? (#78)
+
+    Only a measurement the loop is still acting on. A box with zero authority
+    is in band only because nothing moved it, and a Kalman prediction is the
+    tracker's guess at where the target went -- either would let a verb report
+    success, and a mission step after it run, on a target nobody saw there.
+    """
+    return authority > 0.0 and getattr(sample, 'source', 'detector') != 'tracker'
+
 
 
 # Below this authority, a LIVE bbox is stale enough that freshness-decay is
