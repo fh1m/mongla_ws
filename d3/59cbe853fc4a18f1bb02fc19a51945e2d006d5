@@ -1,0 +1,21 @@
+src/mongla_planner/mongla_planner/missions/out_and_back.py
+  s_b4c45e3235679b::t_089ad895aaad31 49,61-63,93
+src/mongla_planner/test/test_out_and_back.py
+  s_b4c45e3235679b::t_ba61d3e57a3b10 68,83-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "d359cbe853fc4a18f1bb02fc19a51945e2d006d5",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
