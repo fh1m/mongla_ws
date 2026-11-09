@@ -1,0 +1,38 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 264-299
+src/mongla_control/mongla_control/motion_vision/align.py
+  h_f1b9066eb9899c 48,329-333,336-337,360-361,423-427,476,501-502,518-522,549-552
+src/mongla_control/mongla_control/motion_vision/control.py
+  h_f1b9066eb9899c 449,461-467,471-473
+src/mongla_control/mongla_control/motion_vision/freshness.py
+  h_f1b9066eb9899c 6-15,30-33,208-231,234,237,242-244,250-261
+src/mongla_control/mongla_control/motion_vision/move.py
+  h_f1b9066eb9899c 37,189-190,268-274,284-287
+src/mongla_control/test/test_motion_vision.py
+  h_f1b9066eb9899c 557-562,564-569
+src/mongla_control/test/test_vision_authority_by_source.py
+  h_f1b9066eb9899c 1-133
+src/mongla_manager/mongla_manager/vision_choice.py
+  h_f1b9066eb9899c 34-41,58-62,79-82,84,89,341-342
+src/mongla_manager/test/test_lock_fallback_checks_identity.py
+  h_f1b9066eb9899c 48
+src/mongla_manager/test/test_tool_aim_is_wired.py
+  h_f1b9066eb9899c 59
+src/mongla_vision/mongla_vision/lock_publish.py
+  h_f1b9066eb9899c 116,120-124
+src/mongla_vision/mongla_vision/tracking/lock_state.py
+  h_f1b9066eb9899c 28-29,134-137
+src/mongla_vision/test/test_lock_wiring.py
+  h_f1b9066eb9899c 92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "4e921917611899dbaf43703e4760e9c0bee80992",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
