@@ -456,6 +456,19 @@ not port it back. A capability that needs something from it is rebuilt against t
   mode that ends competition runs.
 - **One truth, two copies is the bug.** When two places state the same constant, make one read
   the other, or have a test compare them.
+- **We own the chain, so we never settle for less data than it can give.** Mongla is ours from
+  firmware to thruster: board, sensors, wire, companion, models. When a design compromises
+  because a measurement is missing, coarse, late or unstamped (a heading we cannot command, a
+  rate guessed from two samples, a camera not triggered by the board), the compromise is not
+  finished until we have asked for the data where it can be produced: a firmware pull request
+  in `upstream/`, a sensor or wiring ask to the hardware team, a new field on our own wire.
+  Ship the interim workaround only beside that ask, name it in the code (`upstream ask N`)
+  and in the PR's **Compromises** section. Data first, then the cleverness that works
+  around its absence.
+- **Fix the chain, not the line.** A defect in vision or control is traced through the whole
+  path it lives on (photons, detection, lock, sample, authority, command, mixer, thrust), and
+  the neighbours on that path are fixed in the same change. Then the same pattern is searched
+  for in every other package, because a mistake made once was usually made twice.
 
 ---
 
