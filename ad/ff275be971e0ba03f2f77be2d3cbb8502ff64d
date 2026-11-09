@@ -1,0 +1,20 @@
+.github/dependabot.yml
+  h_f1b9066eb9899c 9-14,45-48,69-70
+CLAUDE.md
+  h_f1b9066eb9899c 427-429
+test/test_dependabot_respects_numpy_one.py
+  h_f1b9066eb9899c 1-48
+tools/run_repo_integrity.py
+  h_f1b9066eb9899c 33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "adff275be971e0ba03f2f77be2d3cbb8502ff64d",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
