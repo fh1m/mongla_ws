@@ -21,6 +21,7 @@ WORKFLOW = ROOT / ".github/workflows/repository-integrity.yml"
 # contract and CI in the SAME change; a missing test cannot silently disappear.
 REQUIRED_TESTS = frozenset({
     "test/test_repository_integrity_workflow.py",
+    "test/test_wiki_edits_pass_pr_gate.py",
     "test/test_claims_say_where_they_came_from.py",
     "test/test_no_capability_is_unreachable_anywhere.py",
     "test/test_the_retired_stack_stays_retired.py",
