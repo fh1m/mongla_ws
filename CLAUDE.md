@@ -272,6 +272,7 @@ Verified: the downward camera as a velocity sensor — three 30 cm slides, worst
 # Deploy stops on a doctor FAIL and exits NON-ZERO if the vehicle's own gate refuses.
 kutum/deploy.sh fh1m@mongla.local              # sync + doctor + build + gate
 kutum/deploy.sh fh1m@mongla.local --check-only # the doctor alone
+kutum/deploy.sh fh1m@mongla.local --rollback   # back to the previous release
 kutum/backup.sh fh1m@mongla.local              # pull what only the vehicle has
 
 ./build_mongla.sh                 # mirrors ~/models and ~/missions in, then builds
@@ -303,7 +304,7 @@ card). The chapter is [`.claude/context/kutum/`](.claude/context/kutum/README.md
 | script | runs on | what it does |
 |---|---|---|
 | `setup.sh --system` | the Pi, with sudo, **once per machine** | Hailo driver, firmware and runtime from source; udev, systemd, netplan; passwordless sudo for `fh1m`; then the user half and the doctor. The operator runs it, because it asks for the Wi-Fi password |
-| `deploy.sh fh1m@mongla.local` | the dev box, after every change | sync the tree, run the doctor, clean build, run `bringup_check`. Stops on a doctor `FAIL`, exits non-zero if the gate refuses, and refuses while a `mongla_manager` runs there |
+| `deploy.sh fh1m@mongla.local` | the dev box, after every change | refuse before writing anything if the stack runs or the board is armed or unreadable; stage a new release beside the live one, run the doctor, build it, switch with one rename, run `bringup_check`. A failed step leaves the active release as it was; `--rollback` returns to the previous one |
 | `doctor.sh` | either (read-only) | `ok` / `WARNING` / `FAIL` for every assumption the stack makes about the machine; exits 1 on `FAIL` |
 | `backup.sh fh1m@mongla.local` | the dev box | pull what only the vehicle has, into `~/kutum-backup/mongla/` (`--runs` adds runs and footage) |
 | `env.sh` | every shell on the Pi | ROS and the workspace, already sourced |
@@ -427,6 +428,14 @@ not port it back. A capability that needs something from it is rebuilt against t
   merges itself; a `/kutum` pin moves only after `kutum/deploy.sh` passes on the vehicle,
   and nothing that needs numpy 2 or is a major version is proposed at all
   (`test_dependabot_respects_numpy_one.py`).
+- **The workspace stays clean.** A clone looks like the project, not like the last
+  machine that touched it: the top level is a fixed list, nothing generated or
+  left behind by a tool is tracked, and every directory a local tool creates is
+  in `.gitignore` (`test/test_workspace_stays_clean.py`, in the integrity gate).
+  A merged or abandoned branch is deleted, with an `archive/<what>` tag first if
+  any of its commits are not on `main`; a worktree is removed when its work lands.
+  On Kutum, `kutum/release.sh prune` keeps the releases tidy, and anything else
+  that is stale moves to `~/attic/<date>/`, never deleted.
 - **Warning: Docs change in the same commit as the code they describe — not after.** A
   removal is not finished until every file that names the removed thing says what
   is true now: docs, skills, agents, launch comments, test docstrings, the site.

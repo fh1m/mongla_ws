@@ -39,6 +39,8 @@ env/
 
 # ─── Local agent / caches (do NOT commit transient state) ──────────────
 .remember/
+.codegraph/
+.omp/
 .cursor/
 .claude/plugins/
 
