@@ -31,6 +31,7 @@ GUARDS = (
     'test/test_package_xml_declares_imports.py',
     'test/test_tools_point_at_files_that_exist.py',
     'test/test_workspace_stays_clean.py',
+    'test/test_published_test_counts_are_the_last_run.py',
     'src/mongla_control/test/test_doc_drift.py',
     'src/mongla_vision/test/test_no_capability_is_built_and_unreachable.py',
     'src/mongla_vision/test/test_no_function_is_built_and_uncalled.py',
