@@ -1,0 +1,36 @@
+CLAUDE.md
+  s_b4c45e3235679b::t_b768d2edf88ec9 411-415
+kutum/README.md
+  s_b4c45e3235679b::t_935f09e0bde3db 97-99,123-150
+kutum/setup.sh
+  s_b4c45e3235679b::t_935f09e0bde3db 30-50,187-189,201,206-209
+test/test_kutum.py
+  s_b4c45e3235679b::t_935f09e0bde3db 110-174
+tools/wiki_build.py
+  s_b4c45e3235679b::t_18e6f6f031f319 14,339,343-346,359-360,374-382
+  s_b4c45e3235679b::t_31f07b8c2f4ac2 18-20,340-342,366-368
+src/mongla_vision/mongla_vision/web/mission_web_node.py
+  s_b4c45e3235679b::t_935f09e0bde3db 490-492
+.github/workflows/wiki.yml
+  s_b4c45e3235679b::t_18e6f6f031f319 176-184
+  s_b4c45e3235679b::t_6ff52c49eef17c 7-9,36-42,160-175,185-190,192-196,206,208-211
+test/test_wiki_publish_never_overwrites_an_edit.py
+  s_b4c45e3235679b::t_92b6cd82fd2c3f 1-32,40-50,52-66,68-88
+  s_b4c45e3235679b::t_1d500a00021ef0 33-39,51,67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "c3bad65e0f71d856a9d4703f46d230dccc5e7c0e",
+  "prompts": {},
+  "sessions": {
+    "s_b4c45e3235679b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "270a44e7-9516-4e8d-8a99-81d5e8508c78",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
