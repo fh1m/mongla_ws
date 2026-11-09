@@ -1,0 +1,44 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 330-357
+.claude/context/packages/mongla_vision/README.md
+  h_f1b9066eb9899c 74,94-100
+.claude/context/reference/commands.md
+  h_f1b9066eb9899c 500,529-530
+src/mongla_localization/mongla_localization/localization_inputs.py
+  h_f1b9066eb9899c 338-342,457-464
+src/mongla_localization/mongla_localization/localization_node.py
+  h_f1b9066eb9899c 90-92,184-185
+src/mongla_localization/test/test_every_sensor_is_accounted_for.py
+  h_f1b9066eb9899c 39-40
+src/mongla_localization/test/test_localization_node.py
+  h_f1b9066eb9899c 1337-1363
+src/mongla_vision/launch/vision.launch.py
+  h_f1b9066eb9899c 303-308
+src/mongla_vision/launch/vision_pi.launch.py
+  h_f1b9066eb9899c 633
+src/mongla_vision/mongla_vision/flow/flow_checks.py
+  h_f1b9066eb9899c 18,256-259
+src/mongla_vision/mongla_vision/flow/flow_constants.py
+  h_f1b9066eb9899c 134-141
+src/mongla_vision/mongla_vision/flow/flow_node.py
+  h_f1b9066eb9899c 163-173,220-224,299-304
+src/mongla_vision/mongla_vision/flow/flow_setup.py
+  h_f1b9066eb9899c 97-107,159-162,165-206,211-215,268-270,275-297
+src/mongla_vision/test/test_flow_calibration_is_valid_or_refused.py
+  h_f1b9066eb9899c 1-147
+src/mongla_vision/test/test_flow_node.py
+  h_f1b9066eb9899c 98,582,687
+src/mongla_vision/test/test_shipped_constants_match_the_ledger.py
+  h_f1b9066eb9899c 59-62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "3922f1277cbb19de2eab838787da04fa5bcabf50",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
