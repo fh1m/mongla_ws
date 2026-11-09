@@ -425,7 +425,9 @@ not port it back. A capability that needs something from it is rebuilt against t
   description passes provenance with a filled `## AI Provenance` table, or the line
   `Provenance: 100% human-written` on its own (`tools/provenance_check.py`); a PR the
   Dependabot app opened passes by its author. Dependabot proposes weekly and never
-  merges itself; a `/kutum` pin moves only after `kutum/deploy.sh` passes on the vehicle.
+  merges itself; a `/kutum` pin moves only after `kutum/deploy.sh` passes on the vehicle,
+  and nothing that needs numpy 2 or is a major version is proposed at all
+  (`test_dependabot_respects_numpy_one.py`).
 - **The workspace stays clean.** A clone looks like the project, not like the last
   machine that touched it: the top level is a fixed list, nothing generated or
   left behind by a tool is tracked, and every directory a local tool creates is

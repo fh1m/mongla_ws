@@ -6,6 +6,12 @@
 # broken wheel. Those are ignored here and move only after a measured build
 # on Kutum (kutum/requirements.txt, pi-and-env-traps.md). Every other update
 # arrives as one grouped PR a week and goes through the required checks.
+#
+# A version that needs numpy 2 is the same trap by another door: scipy 1.18
+# requires numpy>=2.0 and Python 3.12 (PyPI metadata, checked 2026-11-09), so
+# scipy stays below 1.18 while the vehicle is on numpy 1.x. A major version of
+# a library the estimators call (filterpy 2.0 came after eight years of 1.4.5)
+# is an evaluation by hand, not a weekly merge.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -36,6 +42,10 @@ updates:
       - dependency-name: pymavlink
       - dependency-name: trackers
       - dependency-name: supervision
+      - dependency-name: scipy
+        versions: ['>=1.18']
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
     commit-message:
       prefix: deps
 
@@ -56,6 +66,8 @@ updates:
       - dependency-name: pymavlink
       - dependency-name: trackers
       - dependency-name: supervision
+      - dependency-name: scipy
+        versions: ['>=1.18']
       - dependency-name: '*'
         update-types: [version-update:semver-major]
     commit-message:
