@@ -97,6 +97,9 @@ INTEGRITY_MUTATIONS = {
                        '          persist-credentials: false\n          ref: main\n'),
     'unknown action replaces the gate':
         lambda t: _sub(t, GATE_RUN, '        uses: someone/always-green@v1\n'),
+    'action by tag, not SHA':
+        lambda t: _sub(t, 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1',
+                       'actions/checkout@v7'),
     'write permission':
         lambda t: _sub(t, '  contents: read\n', '  contents: write\n'),
 }
@@ -106,7 +109,7 @@ INTEGRITY_MUTATIONS = {
 def test_each_way_to_quietly_disable_the_gate_is_refused(name):
     bad = INTEGRITY_MUTATIONS[name](INTEGRITY)
     assert bad != INTEGRITY
-    assert contract.integrity_errors(bad), f'{name}: accepted'
+    assert contract.integrity_errors(bad) + contract.pin_errors(bad), f'{name}: accepted'
 
 
 PROVENANCE_MUTATIONS = {
