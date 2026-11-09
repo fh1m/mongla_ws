@@ -1,26 +1,22 @@
 name: Proof of Contribution Check
 
-# The PR body is attacker-controlled. Anyone who can open a pull request
-# writes it, including a first-time contributor from a fork.
+# The PR body is attacker-controlled: anyone who can open a pull request
+# writes it. It reaches the checker through `env:`, which is data, never
+# through `${{ }}` inside a script, which the runner pastes into the shell as
+# source text before bash runs (issue #54).
 #
-# Until 2026-09-30 this workflow did:
+# The decision is tools/provenance_check.py, with its tests in the integrity
+# job: an exact declaration line or a populated AI Provenance table, outside
+# code fences and quotes (#97). It records what the author declares; it does
+# not verify how the code was made.
 #
-#     PR_BODY="${{ github.event.pull_request.body }}"
+# This job also runs tools/ci_contract.py over both required workflows. A
+# job skipped by `if:` reports Success to branch protection, so the
+# integrity job cannot be trusted to check its own shape (#93).
 #
-# `${{ }}` is substituted by the Actions runner BEFORE bash ever sees the
-# script, so the body is pasted into the shell as source text. A description
-# containing a quote and a semicolon runs commands on the runner with the job's
-# `GITHUB_TOKEN` in its environment. This is GitHub's own documented script
-# injection (issue #54).
-#
-# The fix is to pass the body through `env:`. An environment variable is data:
-# the runner sets it, bash never parses it, and `"$PR_BODY"` expands to exactly
-# the bytes the author typed no matter what they are.
-#
-# `permissions` is least-privilege and explicit, because the default token
-# depends on a repository setting that is not visible in this file. The failure
-# comment needs `pull-requests: write`; nothing here needs anything else. There
-# is no checkout, because no step reads the repository.
+# `permissions` is explicit, because the default token depends on a
+# repository setting not visible here. The failure comment needs
+# `pull-requests: write`; nothing else needs more than read.
 
 on:
   pull_request:
@@ -33,63 +29,51 @@ permissions:
 jobs:
   poc-check:
     name: Verify AI Provenance
-    runs-on: ubuntu-latest
-
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
+      - name: Check out the candidate commit
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install the contract's YAML parser
+        run: python3 -m pip install --disable-pip-version-check 'PyYAML>=6,<7'
       - name: Check for AI Provenance section
         id: poc
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
-        run: |
-          set -euo pipefail
-
-          if printf '%s' "$PR_BODY" | grep -qi "100% human-written"; then
-            echo "status=exempt" >> "$GITHUB_OUTPUT"
-            echo "PR marked as 100% human-written — skipping provenance check."
-            exit 0
-          fi
-
-          if printf '%s' "$PR_BODY" | grep -qE "^## .*AI Provenance"; then
-            if printf '%s' "$PR_BODY" | grep -qP "\|\s+\d+\s+\|\s+\S"; then
-              echo "status=pass" >> "$GITHUB_OUTPUT"
-              echo "AI Provenance section found and populated."
-            else
-              echo "status=empty" >> "$GITHUB_OUTPUT"
-              echo "AI Provenance section exists but table appears empty."
-              exit 1
-            fi
-          else
-            echo "status=missing" >> "$GITHUB_OUTPUT"
-            echo "No AI Provenance section found in PR description."
-            exit 1
-          fi
-
-      - name: Post status comment (on failure)
+        run: python3 tools/provenance_check.py
+      - name: Check the required workflows keep their shape
+        run: python3 tools/ci_contract.py
+      - name: Post or update the status comment (on failure)
         if: failure()
         uses: actions/github-script@v7
         with:
           script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: [
-                "## Proof of Contribution Check Failed",
-                "",
-                "This PR appears to contain AI-assisted code but is missing an **AI Provenance** section.",
-                "",
-                "Please add the following to your PR description:",
-                "",
-                "```",
-                "## AI Provenance",
-                "| # | Author / Handle | Source URL | What came from this person |",
-                "|---|----------------|------------|---------------------------|",
-                "| 1 | @handle        | https://... | Specific insight used     |",
-                "```",
-                "",
-                "Not sure what to write? Run `python poc.py trace <filepath>` locally.",
-                "",
-                "> _If this PR is 100% human-written with no AI assistance, add the phrase_",
-                "> _`100% human-written` anywhere in your PR description to skip this check._"
-              ].join("\n")
-            })
+            const marker = '<!-- poc-check -->';
+            const body = [
+              marker,
+              '## Proof of Contribution Check Failed',
+              '',
+              'The run log says which part failed. For provenance, the description needs either',
+              'a line that reads exactly `Provenance: 100% human-written`, or:',
+              '',
+              '```',
+              '## AI Provenance',
+              '| # | Author / Handle | Source URL | What came from this person |',
+              '|---|---|---|---|',
+              '| 1 | handle | https://... | Specific insight used |',
+              '```',
+              '',
+              'Neither may sit inside a code block or a quote. Editing the description re-runs this check.',
+            ].join('\n');
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(
+              github.rest.issues.listComments, { owner, repo, issue_number });
+            const old = comments.find(c => c.user.type === 'Bot' && c.body.includes(marker));
+            if (old) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: old.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }

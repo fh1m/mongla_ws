@@ -188,13 +188,15 @@ def test_the_two_registers_do_not_overlap():
         assert f"'{rel}'" not in vision, f'{rel} is registered in BOTH guards'
 
 
-@pytest.mark.parametrize('rel,consumer', sorted(WIRED.items()))
-def test_a_wired_capability_really_is_imported(rel, consumer):
-    hits = _imported_by(rel)
-    assert hits, (
-        f'{rel} is listed as wired into {consumer} but NOTHING imports it. '
-        f"That is this repo's oldest defect: the code is correct, the tests "
-        f'pass, and the capability does not exist on the vehicle.')
+def test_a_wired_capability_really_is_imported():
+    # One loop, not a parametrize: an empty register must pass as true, not
+    # skip, because the integrity gate fails on any skip (#93).
+    unwired = [f'{rel} (listed as wired into {consumer})'
+               for rel, consumer in sorted(WIRED.items()) if not _imported_by(rel)]
+    assert not unwired, (
+        'NOTHING imports: ' + ', '.join(unwired) + ". That is this repo's oldest "
+        'defect: the code is correct, the tests pass, and the capability does '
+        'not exist on the vehicle.')
 
 
 @pytest.mark.parametrize('rel,reason', sorted(DEFERRED.items()))
