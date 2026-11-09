@@ -6,8 +6,8 @@ name: Wiki
 #
 #   push to main  -> publish: build the pages from the files, force-push the wiki
 #   wiki edit     -> pull:    turn the edited pages back into files, run the doc
-#                             guards, commit to main under the editor's name, then
-#                             publish (so the sidebar and page names follow)
+#                             guards, commit to a review branch and open a PR.
+#   merge PR      -> publish: regenerate wiki from the approved main branch
 #
 # If a wiki edit breaks a guard (a link to no page, a stale constant), it is not
 # committed to main: it goes to a branch and a pull request says what failed.
@@ -55,7 +55,7 @@ jobs:
     if: github.event_name == 'gollum' && github.event.sender.type != 'Bot'
     runs-on: ubuntu-latest
     outputs:
-      committed: ${{ steps.commit.outputs.committed }}
+      proposed: ${{ steps.commit.outputs.proposed }}
     steps:
       # A public wiki can be open to any GitHub user (repo Settings -> Wiki ->
       # "Restrict editing to users in teams with push access"). Only someone who
@@ -92,7 +92,7 @@ jobs:
           python3 -m pytest -q -p no:cacheprovider $GUARDS 2>&1 | tee "$RUNNER_TEMP/guards"
           exit "${PIPESTATUS[0]}"
 
-      - name: Commit under the editor's name
+      - name: Propose wiki edit as a reviewable pull request
         id: commit
         if: steps.pull.outputs.any == '1'
         env:
@@ -102,30 +102,47 @@ jobs:
           PAGES: ${{ join(github.event.pages.*.title, ', ') }}
           GUARDS_OK: ${{ steps.guards.outcome == 'success' }}
         run: |
-          git config user.name  "$WHO"
+          git config user.name "$WHO"
           git config user.email "${WHO_ID}+${WHO}@users.noreply.github.com"
           git add -A .claude/context docs
           git commit -q -m "docs(wiki): ${PAGES}" -m "Edited in the wiki by ${WHO}."
-          if [ "$GUARDS_OK" = "true" ]; then
-            git push -q origin HEAD:main
-            echo "committed=1" >> "$GITHUB_OUTPUT"
-          else
-            branch="wiki-edit/${GITHUB_RUN_ID}"
-            git push -q origin "HEAD:refs/heads/${branch}"
-            { echo "A wiki edit (${PAGES}) fails the doc guards, so it was not committed to main."
-              echo "The edit is still in the wiki. Fix it there or here; merging this applies it."
-              echo; echo '```'; tail -40 "$RUNNER_TEMP/guards"; echo '```'; } > "$RUNNER_TEMP/body"
-            gh pr create --base main --head "$branch" --title "docs(wiki): ${PAGES}" --body-file "$RUNNER_TEMP/body" \
-              || echo "::error::The edit is on branch ${branch}, but Actions may not open pull requests here (repo Settings -> Actions -> General). Open one from that branch."
+          branch="wiki-edit/${GITHUB_RUN_ID}"
+          # Never bypass the code, documentation, and evidence PR gates with
+          # a direct commit to main, even when local doc-only guards pass.
+          git push -q origin "HEAD:refs/heads/${branch}"
+          {
+            echo "Wiki edit by ${WHO}: ${PAGES}."
+            echo
+            echo "This branch must pass the same repository integrity and provenance"
+            echo "checks as a normal code PR before merging into main."
+            echo
+            if [ "$GUARDS_OK" != "true" ]; then
+              echo "Local wiki guards failed; do not merge until they pass."
+              echo
+              echo '~~~'
+              tail -40 "$RUNNER_TEMP/guards"
+              echo '~~~'
+            fi
+          } > "$RUNNER_TEMP/body"
+          if ! gh pr create --base main --head "$branch" \
+                  --title "docs(wiki): ${PAGES}" --body-file "$RUNNER_TEMP/body"; then
+            echo "::error::Wiki edit is on branch ${branch}; Actions cannot open a PR. Enable Actions > General > Allow GitHub Actions to create pull requests, or create one manually."
+            exit 1
+          fi
+          echo "proposed=1" >> "$GITHUB_OUTPUT"
+          # A broken edit must be visible as a failing workflow even when a PR
+          # exists to repair it. The wiki itself keeps the human's edit.
+          if [ "$GUARDS_OK" != "true" ]; then
             exit 1
           fi
 
   publish:
     needs: pull
-    # After a wiki edit was committed, or on a push / manual run.
+    # Never overwrite an unreviewed wiki edit. Publish only after the
+    # corresponding PR merges to main, or during an explicit manual publish.
     if: >-
       always() &&
-      (github.event_name != 'gollum' || needs.pull.outputs.committed == '1')
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
