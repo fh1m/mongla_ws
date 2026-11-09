@@ -1,0 +1,24 @@
+.claude/context/kutum/README.md
+  h_f1b9066eb9899c 42,57,100-102
+CLAUDE.md
+  h_f1b9066eb9899c 275,307
+kutum/README.md
+  h_f1b9066eb9899c 16-18,66-67,80-102,118-122
+kutum/deploy.sh
+  h_f1b9066eb9899c 151-152,154
+kutum/doctor.sh
+  h_f1b9066eb9899c 22-24,223-239
+kutum/release.sh
+  h_f1b9066eb9899c 34-35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "3af415d7ea98a833e714e764c7ec96250c5408cd",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
