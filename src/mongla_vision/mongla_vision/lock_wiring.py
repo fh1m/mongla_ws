@@ -211,6 +211,9 @@ class LockWiringMixin:
         self._det_conf = 0.0
         self._det_cls = ''
         self._det_t = 0.0
+        # Bumped on every change of target class (#75). A ladder tick that
+        # started under an older one publishes nothing.
+        self._gen = 0
         # The detector's own cadence, from capture stamps of EVERY detection
         # message (a frame with no match still proves the detector ran). It
         # sizes how long a detection counts as live -- see `live_window`.

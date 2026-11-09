@@ -313,8 +313,8 @@ class VisionState(ChoiceMixin):
 
     def _on_lock(self, msg) -> None:
         """Latest ladder output. Kept whole; the rung name and confidence ride
-        in `class_id`/`score`, so nothing here needs to know how many rungs
-        exist."""
+        in `class_id`/`score` and the followed class in `Detection2D.id`
+        (#74), so nothing here needs to know how many rungs exist."""
         with self._lock:
             self._lock_array = msg
             self._lock_stamp = self._capture_monotonic(msg)
