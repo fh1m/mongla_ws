@@ -1,0 +1,19 @@
+kutum/release.sh
+  h_f1b9066eb9899c 144-145
+kutum/doctor.sh
+  h_f1b9066eb9899c 232-238
+test/test_kutum_releases.py
+  h_f1b9066eb9899c 81-82,137,170,196
+  h_f1b9066eb9899c 178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "c900e63be9d20a6787a89b542c5dd1b4e0ec8315",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
