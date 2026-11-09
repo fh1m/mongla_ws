@@ -101,34 +101,42 @@ class SrotArming:
         return False, f'FW_BEHAVIOUR_REV_TOO_OLD: {detail}'
 
     def check_thruster_power(self):
-        """(ok, reason). Refuse to arm when thruster power is KNOWN to be cut.
+        """(ok, reason). Refuse to arm unless thruster power is KNOWN to be on.
 
         The thruster pack is switched by a rotary knob on the SECOND board (an
         AS5600 magnetic encoder driving a MOSFET). Outside its two ON windows the
         propulsion battery is physically disconnected -- the ESCs are unpowered
-        and the hull cannot move at all.
+        and the hull cannot move at all. The firmware's own `canArm()` checks
+        IMU, leak and pack voltage and never looks at the kill state, so this
+        is the only refusal.
 
-        Nothing refuses this today, on either side: the firmware's own `canArm()`
-        checks IMU, leak and pack voltage and never looks at the kill state. So
-        arming succeeds, every motion verb runs its full profile against dead
-        thrusters, the payload fires, and the mission advances to completion on a
-        motionless vehicle -- the silent-success shape that has already cost this
-        project a round in SURFACE mode and a disarmed `SROT_MOVE`.
+        Known engaged: refused, always. Arming would run the whole mission
+        against dead thrusters, the silent-success shape this project keeps
+        paying for.
 
-        Refuses only on known-engaged, and that asymmetry is deliberate.
-        `kill_switch is None` means the second board is not talking (unpowered,
-        out of range, `ESPNOW_EN = 0`, or simply not built), which is a perfectly
-        ordinary bench configuration. Refusing on unknown would make `arm()`
-        unreachable on every vehicle without a second board -- the same trap as
-        refusing a torpedo on UNKNOWN thruster health.
+        UNKNOWN (`kill_switch is None`: the second board is not talking, or the
+        probe failed): refused unless `allow_unknown_kill_switch` is set. An
+        untethered vehicle that cannot see its kill switch cannot be stopped by
+        it from the host's side, and a diver's kill is the competition's safety
+        stop. The bench, where the second board is often off, sets the flag
+        (issue #71; owner decision 2026-11-09).
         """
         try:
             kill = self.telemetry().kill_switch
-        except Exception as exc:                  # a probe fault is not a hull fault
-            return True, f'thruster power unreadable ({exc}) -- allowing'
+        except Exception as exc:                  # noqa: BLE001 -- unreadable is unknown
+            kill, why = None, f'kill switch unreadable ({exc})'
+        else:
+            why = 'kill switch state UNKNOWN (no second-board link)'
         if kill is True:
             return False, ('thruster power is CUT at the 2nd-board rotary switch -- '
                            'arming would run the whole mission against dead thrusters')
+        if kill is None:
+            if getattr(self, 'allow_unknown_kill_switch', False):
+                self._log_warn(f'[SROT ] !! OVERRIDDEN: {why}')
+                return True, f'KILL_SWITCH_UNKNOWN_OVERRIDDEN'
+            return False, (f'{why}. Arming is refused because the kill switch '
+                           f'could not stop this vehicle as far as the host can '
+                           f'tell. On the bench, set allow_unknown_kill_switch:=true.')
         return True, ''
 
     def check_depth_loop_settled(self):

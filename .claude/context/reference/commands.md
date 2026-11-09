@@ -408,7 +408,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `max_ambiguity` | `0.9` |
 | `max_reproj_px` | `10.0` |
 
-**`mongla_manager/auv_manager_node.py`** — 14 parameters
+**`mongla_manager/auv_manager_node.py`** — 15 parameters
 
 | parameter | default |
 |---|---|
@@ -426,6 +426,7 @@ manager's `vision.*` gains are declared from a table and are listed in
 | `allow_fw_behaviour_mismatch` | `False` |
 | `srot_telemetry_period_s` | `2.0` |
 | `allow_saturated_depth_arm` | `False` |
+| `allow_unknown_kill_switch` | `False` |
 
 **`mongla_vision/camera_node.py`** — 15 parameters
 

@@ -59,8 +59,9 @@ guard downstream compares with `<` or `>`.
 `mav_device` (empty = find the board on USB), `payload_channels` / `payload_fire_map`
 (cosmetic names for board channels — they never route a shot), `velocity_uplink` /
 `position_uplink`, the `vision_uplink_*` group, `record`, `debug`,
-`srot_telemetry_period_s`, and two overrides that must be typed deliberately:
-`allow_fw_behaviour_mismatch` and `allow_saturated_depth_arm`. Plus the `vision.*` tuning
+`srot_telemetry_period_s`, and three overrides that must be typed deliberately:
+`allow_fw_behaviour_mismatch`, `allow_saturated_depth_arm` and
+`allow_unknown_kill_switch` (the bench, with no second board). Plus the `vision.*` tuning
 layer in [`vision_tunables.py`](../../../src/mongla_manager/mongla_manager/vision_tunables.py).
 Types and defaults: [`reference/commands.md` §4](../reference/commands.md).
 
