@@ -124,6 +124,9 @@ PROVENANCE_MUTATIONS = {
                        '        run: echo "${{ github.event.pull_request.body }}"\n'),
     'comment step widened to always':
         lambda t: _sub(t, '        if: failure()\n', '        if: always()\n'),
+    'author taken from the body':
+        lambda t: _sub(t, 'PR_AUTHOR: ${{ github.event.pull_request.user.login }}',
+                       'PR_AUTHOR: ${{ github.event.pull_request.body }}'),
     'edited trigger dropped':
         lambda t: _sub(t, 'reopened, edited,', 'reopened,'),
 }
