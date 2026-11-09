@@ -56,7 +56,7 @@ def test_it_is_resolved_PER_TICK_because_the_range_moves():
     # Inside `_Align.command`, which `_Align.step` calls once per tick.
     assert _MV.rindex('def command(', 0, i) > _MV.rindex('def step(', 0, i)
     step = _MV[_MV.index('def step(', _MV.index('class _Align(')):]
-    assert 'self.command(sample)' in step[:step.index('def drive(')], \
+    assert 'self.command(sample, fresh)' in step[:step.index('def drive(')], \
         'not resolved on every tick'
 
 

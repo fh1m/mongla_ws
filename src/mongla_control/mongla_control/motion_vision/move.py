@@ -34,6 +34,7 @@ from .control import (
 )
 from .freshness import (
     _authority,
+    _is_evidence,
     _warn_low_fps,
 )
 from .srot_drive import (
@@ -185,7 +186,8 @@ class _Move(_VisionLoop):
                               f"lat={x_off:+.0f}px ] ['{c.target_class}'] -> clear gate")
             return None
 
-        out = self.approach(now, fill, fresh, lat_pct)
+        out = self.approach(now, fill, fresh, lat_pct,
+                            evidence=_is_evidence(sample, fresh))
         if out is not None:
             return out
         if self.log_due(now):
@@ -263,8 +265,13 @@ class _Move(_VisionLoop):
         return lat_pct
 
     def approach(self, now: float, fill: float, fresh: float,
-                 lat_pct: float) -> Optional[Outcome]:
-        """Fill-stop: drive toward ``fwd_fill``, then hold and brake on arrival."""
+                 lat_pct: float, evidence: bool = True) -> Optional[Outcome]:
+        """Fill-stop: drive toward ``fwd_fill``, then hold and brake on arrival.
+
+        Arrival needs evidence (#78). A predicted or zero-authority box at the
+        fill stops forward drive -- never closer on a guess -- but neither
+        starts nor completes the arrival hold; the next real sighting does.
+        """
         c = self.c
         if fill < c.fwd_fill:
             self.reached_at = None
@@ -273,6 +280,10 @@ class _Move(_VisionLoop):
             fwd_pct = _clamp((c.fwd_fill - fill) * c.kp_forward, 0.0, c.gain) * fresh
             self.drive(fwd_pct, lat_pct)
             self.fwd_ema = _ema_step(self.fwd_ema, fwd_pct, self.dt)
+            return None
+        if not evidence:
+            self.drive(0.0, lat_pct)
+            self.fwd_ema = _ema_step(self.fwd_ema, 0.0, self.dt)
             return None
         if self.reached_at is None:
             self.reached_at = now
