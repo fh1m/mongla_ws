@@ -1,0 +1,30 @@
+name: Evidence or measurement
+description: A measured number for the ledger, or a claim in the docs that a measurement contradicts.
+labels: [documentation]
+body:
+  - type: textarea
+    id: number
+    attributes:
+      label: The measurement
+      description: Value, method, conditions, and how many samples.
+    validations:
+      required: true
+  - type: dropdown
+    id: level
+    attributes:
+      label: Evidence level
+      options: [SIM, BENCH, ARCHIVE_FOOTAGE, HISTORICAL_WATER, CURRENT_WATER]
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: Raw data
+      description: Bag, log, run folder or footage path, and the commit that produced it.
+    validations:
+      required: true
+  - type: textarea
+    id: docs
+    attributes:
+      label: What it changes
+      description: The measured-bars.md section or doc claim it confirms or contradicts.

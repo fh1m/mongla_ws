@@ -33,7 +33,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Check out the candidate commit
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
       - name: Install the contract's YAML parser
@@ -47,7 +47,7 @@ jobs:
         run: python3 tools/ci_contract.py
       - name: Post or update the status comment (on failure)
         if: failure()
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7
         with:
           script: |
             const marker = '<!-- poc-check -->';
