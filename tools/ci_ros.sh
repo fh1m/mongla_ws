@@ -31,7 +31,14 @@ source /opt/ci-venv/bin/activate
 # torch only backs test_detector's tensor shims; the CPU wheel is a tenth of
 # the default one and needs no GPU.
 python3 -m pip install -q --index-url https://download.pytorch.org/whl/cpu torch torchvision
-python3 -m pip install -q -r requirements.txt -c kutum/constraints.txt
+# trackers 2.4.0 declares numpy>=2.0.2, which is spurious and unsatisfiable
+# beside numpy<2, so `pip install -r requirements.txt` cannot resolve on a
+# clean machine (first seen by this job). The vehicle installs it --no-deps
+# (kutum/setup.sh, pi-and-env-traps.md E3); so does this, from the same range.
+req="$(mktemp)"
+grep -v -E '^trackers' requirements.txt > "$req"
+python3 -m pip install -q -r "$req" -c kutum/constraints.txt
+python3 -m pip install -q --no-deps "$(grep -E '^trackers' requirements.txt | cut -d'#' -f1 | tr -d ' ')"
 python3 - <<'EOF'
 import numpy, sys
 print(f'python {sys.version.split()[0]}, numpy {numpy.__version__}')

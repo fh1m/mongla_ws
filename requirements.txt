@@ -33,6 +33,8 @@ numpy>=1.24,<2.0
 # trackers: 2.4.0 exactly. The 2.5.0 wheel on PyPI contains no module, and its
 # numpy>=2 requirement is spurious, so on the Pi install it with --no-deps:
 #     pip install --no-deps "trackers==2.4.0"
+# so `pip install -r` on this file alone cannot resolve; tools/ci_ros.sh shows
+# the two-step install.
 trackers>=2.4.0,<2.5.0
 # supervision: <=0.26.1 on numpy 1.x (0.30 uses np.long, which is numpy-2 only)
 supervision>=0.18.0,<=0.26.1
