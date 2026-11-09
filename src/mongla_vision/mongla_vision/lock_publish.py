@@ -113,10 +113,15 @@ class LockPublishMixin:
         if st.have_target:
             x1, y1, x2, y2 = st.xyxy
             dets.append(Detection(class_id=0, class_name=st.rung.value,
-                                  score=float(st.confidence),
+                                  score=float(st.authority),
                                   xyxy=(x1, y1, x2, y2)))
             self._note_visibility(x1, y1, x2, y2)
             self._remember_world(x1, y1, x2, y2)
+        # The score is the AUTHORITY, not rung trust times authority (#78).
+        # A rung's own confidence is a gate (`MIN_RUNG_CONF`, applied in
+        # `arbitrate`), the same job a live detection's score does against
+        # `ctrl_conf`. Multiplied in, a carried detection at an underwater
+        # score of 0.3 steered at 30 % on a lock the ladder trusted fully.
         if header is not None:
             arr = detections_to_array(dets, header)
             # The class the ladder is following, beside the rung name: the
