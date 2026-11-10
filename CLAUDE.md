@@ -23,10 +23,14 @@ measurement, the measurement wins — and both belong in
 
 **Three states, never blurred.** Say which one you mean:
 **RUNS TODAY** (on the bench / on footage) · **BUILT, NEVER FLOWN** · **BLOCKED** (on
-hardware, water, or a firmware merge). **This stack and the Mongla hull have never been in
-water.** The SROT board has: on 2026-08-06 and 2026-08-07, in the old Dubomini hull, driven by the
-firmware team's own tools (their commits `09d0033`, `f533bd2`; our record is
-`srot-integration.md`, *IN-WATER 2026-08-06*).
+hardware, water, or a firmware merge). **The current platform, this stack on the SROT board and
+Kutum in the Mongla hull, has never been in water.** The SROT board has: on 2026-08-06 and
+2026-08-07, in the old Dubomini hull, driven by the firmware team's own tools (their commits
+`09d0033`, `f533bd2`; our record is `srot-integration.md`, *IN-WATER 2026-08-06*). So has the
+Duburi stack this repository began as, at RoboSub 2026 on a Pixhawk vehicle (kept at the tag
+`last-with-pixhawk-and-sim`). Each event and its
+evidence is in `docs/evidence/water.json` (the page is `lineage.md`, generated); a water status
+belongs to the platform it was earned on and is never inherited.
 
 ---
 

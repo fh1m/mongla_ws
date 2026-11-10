@@ -142,8 +142,8 @@ BANNERS = [
      '84,248', '△', 'triangles, read off the CAD itself', hull),
     ('ledger', 'The evidence // the ledger', 'Every number, and what it cost.',
      ledger_rows(), 'rows', 'measurements, with the ones we took back', ledger),
-    ('open', 'Act three // open', 'This stack has never been in water.',
-     '0', 'm', 'depth reached by this stack and hull, to date', waterline),
+    ('open', 'Act three // open', 'This platform has never been in water.',
+     '0', 'm', 'depth reached by the SROT and Kutum platform, to date', waterline),
 ]
 
 

@@ -109,6 +109,7 @@ For the checks and generators CI runs, and the audits behind them.
 | `command_lint.py` | Check every `ros2 run` / `ros2 launch` line written anywhere in the repo. |
 | `dead_function_sweep.py` | Functions and methods nothing calls -- the defect class inside a LIVE file. |
 | `defect_class_sweep.py` | Sweep the whole stack for the defect CLASSES this audit has actually found. |
+| `gen_lineage.py` | Write docs/evidence/lineage.md from docs/evidence/water.json (#87). |
 | `gen_reference.py` | The command reference, generated from the code that decides it. |
 | `gen_tools_index.py` | Write tools/README.md: every tool, by folder, with the first sentence of its own description. |
 | `launch_param_sweep.py` | Node parameters that NO launch file passes. |

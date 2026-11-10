@@ -8,7 +8,10 @@ we wrote the firmware for to do it, five hundred times a second. This wiki expla
 that works and how to drive it. It also says how much of it is proven, because most of it is
 not proven yet.
 
-> **This vehicle has never been in water.** Everything here was measured on a bench, on
+> **The current platform has never been in water: this stack, on the SROT board and Kutum, in
+> the Mongla hull.** Its predecessors competed at RoboSub 2025 and 2026 on another vehicle; what
+> ran there and the evidence is in the water lineage (`docs/evidence/lineage.md`), and none of it
+> carries over to code that has changed since. Everything here was measured on a bench, on
 > real footage from past competitions, or on the live board over a cable. Where a page says
 > something works, it says *where* it worked. That habit is the most useful thing in this
 > project, and the rest of this page explains why.

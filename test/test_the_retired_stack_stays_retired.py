@@ -59,6 +59,7 @@ EXEMPT = {
     '.claude/context/upstream/': 'asks sent to the firmware team, quoted as sent',
     '.claude/context/scouting/': 'what other teams run is a fact about them',
     '.claude/context/BUGS.md': 'the defect history, including the retired backend',
+    'docs/evidence/': 'the water lineage: which vehicle, autopilot and stack was in water (#87)',
     '.claude/context/measured-bars.md': 'the ledger keeps every number with where it was measured',
     '.claude/context/the-shift.md': 'the platform change, before and after',
     'docs/the-shift.md': 'the platform change, before and after',
