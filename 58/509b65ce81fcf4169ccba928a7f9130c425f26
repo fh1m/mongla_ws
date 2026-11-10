@@ -1,0 +1,44 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 424-455
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 135,7049-7099
+.claude/context/packages/mongla_localization/README.md
+  h_f1b9066eb9899c 135
+.claude/context/packages/mongla_vision/README.md
+  h_f1b9066eb9899c 193
+.claude/context/platform/launch-combinations.md
+  h_f1b9066eb9899c 338-363
+src/mongla_localization/mongla_localization/launch_respawn.py
+  h_f1b9066eb9899c 1-74
+src/mongla_localization/test/test_a_dead_process_restarts_three_times.py
+  h_f1b9066eb9899c 1-62
+src/mongla_manager/launch/bringup.launch.py
+  h_f1b9066eb9899c 45-46,61,337-338,448-449,471-472,504-513,522
+src/mongla_vision/launch/vision.launch.py
+  h_f1b9066eb9899c 39-40,50,222-223,250-251,272-273,290-291,304-305,316-317,354-364
+src/mongla_vision/launch/vision_pi.launch.py
+  h_f1b9066eb9899c 41,453-482,484-493,495-525,605-629,643-649,652-657
+src/mongla_vision/mongla_vision/camera_node.py
+  h_f1b9066eb9899c 52,374-376,379-383,448-508
+src/mongla_vision/mongla_vision/cameras/reopen.py
+  h_f1b9066eb9899c 1-82
+src/mongla_vision/test/test_a_lost_camera_is_reopened_three_times.py
+  h_f1b9066eb9899c 1-178
+src/mongla_vision/test/test_shipped_constants_match_the_ledger.py
+  h_f1b9066eb9899c 71-82
+test/test_every_launched_process_restarts.py
+  h_f1b9066eb9899c 1-61
+tools/restart_blind_time.py
+  h_f1b9066eb9899c 1-191
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "58509b65ce81fcf4169ccba928a7f9130c425f26",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
