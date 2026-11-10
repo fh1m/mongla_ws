@@ -76,7 +76,7 @@ MANAGER_SIGTERM_TIMEOUT_S = 12
 # `test_bringup_settings_file` fails if this list and the two files disagree.
 VISION_PI_PASSTHROUGH = (
     'fwd_profile', 'dwn_profile', 'fwd_models', 'dwn_models', 'fwd_active',
-    'dwn_active', 'contours', 'preprocess', 'range_crop', 'preprocess_clip',
+    'dwn_active', 'contours', 'assoc_conf', 'preprocess', 'range_crop', 'preprocess_clip',
     'tracking', 'tracker_type', 'kalman_adaptive_noise', 'fwd_frame_rate',
     'dwn_frame_rate', 'dwn_calibration', 'fwd_calibration', 'act_conf',
     'anchor_xfeat_hef', 'anchor_semi_dense', 'target_width_m_forward',
