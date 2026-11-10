@@ -50,7 +50,9 @@ def test_the_loop_applies_it_to_EVERY_centring_axis():
 def test_it_is_resolved_PER_TICK_because_the_range_moves():
     """A constant offset computed once would be right at one range only -- and
     the correction is largest exactly where a mission spends its final second."""
-    i = _MV.index('(tool_du, tool_dv) = _tool_offset(c.tool_offset_fn, self.log)')
+    # The call, not the assignment: `ast.unparse` writes a tuple target as
+    # `(a, b) =` on Python 3.10 and `a, b =` on 3.12 (the vehicle's Jazzy).
+    i = _MV.index('= _tool_offset(c.tool_offset_fn, self.log)')
     j = _MV.index("_axis_ctrl(ex_now, c.offsets.get('lat', 0.0), tool_du,")
     assert i < j, 'the offset is resolved after it is used'
     # Inside `_Align.command`, which `_Align.step` calls once per tick.
