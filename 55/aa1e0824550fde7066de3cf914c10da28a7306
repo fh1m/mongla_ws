@@ -1,0 +1,72 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 192-211,412-429
+.claude/context/README.md
+  h_f1b9066eb9899c 45-59,63-69,73-81,85-87,91-94,98-104,108-111,115-117
+.claude/context/missions/client-and-dsl-api.md
+  h_f1b9066eb9899c 119-122
+.claude/context/perception/hailo-frontier.md
+  h_f1b9066eb9899c 1-255
+.claude/context/perception/hailo-vision.md
+  h_f1b9066eb9899c 17-25,38,41-43
+.claude/context/platform/foxglove-and-bags.md
+  h_f1b9066eb9899c 19-22
+.claude/context/wiki/Home.md
+  h_f1b9066eb9899c 11-14
+.claude/context/workbench/POOL.md
+  h_f1b9066eb9899c 28-29
+CLAUDE.md
+  h_f1b9066eb9899c 26-33
+README.md
+  h_f1b9066eb9899c 13-20,53,55-58,585-594,1273
+docs/evidence/lineage.md
+  h_f1b9066eb9899c 1-35
+docs/evidence/water.json
+  h_f1b9066eb9899c 1-99
+docs/index.html
+  h_f1b9066eb9899c 114,2136-2137
+kutum/README.md
+  h_f1b9066eb9899c 94-98
+kutum/cut_release.sh
+  h_f1b9066eb9899c 1-63
+kutum/deploy.sh
+  h_f1b9066eb9899c 162-171
+src/mongla_planner/mongla_planner/dsl_position.py
+  h_f1b9066eb9899c 16-21,33,46-64,66,73-75,77,93-96,122-126,140,435-445,449,479-481,504-515,565-572,577,580,646-651
+src/mongla_planner/test/test_an_uncalibrated_camera_is_modelled_not_trusted.py
+  h_f1b9066eb9899c 1-141
+src/mongla_planner/test/test_floor_range.py
+  h_f1b9066eb9899c 15-19,111,126
+src/mongla_planner/test/test_pose_and_prop_fix.py
+  h_f1b9066eb9899c 113-116,198-199
+src/mongla_vision/test/test_shipped_constants_match_the_ledger.py
+  h_f1b9066eb9899c 96-100
+test/test_a_release_is_cut_only_from_a_passed_gate.py
+  h_f1b9066eb9899c 1-100
+test/test_a_run_records_its_software.py
+  h_f1b9066eb9899c 1-52
+test/test_the_retired_stack_stays_retired.py
+  h_f1b9066eb9899c 62
+test/test_water_claims_have_a_scope.py
+  h_f1b9066eb9899c 1-215
+tools/README.md
+  h_f1b9066eb9899c 112
+tools/ci/gen_lineage.py
+  h_f1b9066eb9899c 1-95
+tools/ci/run_repo_integrity.py
+  h_f1b9066eb9899c 30
+tools/pool/pool_session.sh
+  h_f1b9066eb9899c 50-74,78,81
+tools/site/section_banners.py
+  h_f1b9066eb9899c 145-146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "55aa1e0824550fde7066de3cf914c10da28a7306",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
