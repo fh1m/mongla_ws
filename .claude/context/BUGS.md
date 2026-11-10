@@ -546,7 +546,8 @@ that cache as the board's answer:
 | `get_mode` | a minutes-old heartbeat's mode, as current | `UNKNOWN` |
 
 The payload ACK wait also moved from the wall clock to the reader's monotonic
-stamp; the Pi has no RTC and the first NTP sync steps it. Tests in
+stamp; the wall clock steps when network time first syncs (the Pi 5 RTC
+sets it at boot, but not to the millisecond). Tests in
 `test_srot_fc.py`, `test_srot_move_respects_surface.py`,
 `test_stale_telemetry_is_absent.py`. The test fakes gained what a real board
 does: a 10 Hz heartbeat, and arrival stamps.
