@@ -62,6 +62,15 @@ ATTR{index}!="0", GOTO="mongla_cam_end"
 # port-independent: moving a camera to another socket keeps it correct instead
 # of silently renaming it.
 ENV{ID_MODEL}=="Fantech_Luminous_C30", SYMLINK+="mongla_cam_forward"
+
+# One exception to the model rule: the Sonix plugged into the FORWARD port is
+# the forward camera. The Fantech delivers 15.0 fps whatever is asked and its
+# exposure controls are inert (Kutum, 2026-11-10), so until a board-triggered
+# sensor arrives (upstream pr-w) the global-shutter unit may move forward and
+# run `fwd_profile:=pi_forward_global_shutter`. Here the port does the
+# discriminating, so this line must come before the generic one below, which
+# it skips. The port is the Fantech's measured ID_PATH above.
+ENV{ID_MODEL}=="USB_2.0_Camera", ENV{ID_PATH}=="platform-xhci-hcd.0-usb-0:1:1.0", SYMLINK+="mongla_cam_forward", GOTO="mongla_cam_end"
 ENV{ID_MODEL}=="USB_2.0_Camera",       SYMLINK+="mongla_cam_downward"
 
 # When the two identical Blue Robotics cameras land, the model stops
