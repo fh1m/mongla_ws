@@ -134,8 +134,15 @@ def arguments() -> list:
         DeclareLaunchArgument('dwn_classes', default_value=''),
         DeclareLaunchArgument(
             'conf', default_value='0.45',
-            description='INT8 operating point. NOT the CUDA path\'s 0.35-0.45 '
-                        '-- see the module docstring.'),
+            description="The acting bar: gate_sharks' measured bar. Another "
+                        "model's bar is in its <stem>.yaml; see the module "
+                        'docstring.'),
+        # Boxes from here up to `conf` go to the tracker and the lock ladder
+        # only (`candidates`), where they can keep a target and never start
+        # one. On by the owner's decision; the HELD rung they feed passes its
+        # accuracy bar and misses its safety bar (measured-bars section 72).
+        # 0.0 turns it off. Below the HEF's baked 0.05 nothing exists.
+        DeclareLaunchArgument('assoc_conf', default_value='0.10'),
         DeclareLaunchArgument('max_det',   default_value='100'),
         # Underwater contrast preprocessing -- 'clahe' or 'off'.
         # Measured on real RoboSub 2025 footage: target presence 10.7 % ->
@@ -466,6 +473,8 @@ def generate_launch_description():
                 'dwn_classes':    LaunchConfiguration('dwn_classes'),
                 'fwd_conf':       LaunchConfiguration('conf'),
                 'dwn_conf':       LaunchConfiguration('conf'),
+                'fwd_assoc_conf': LaunchConfiguration('assoc_conf'),
+                'dwn_assoc_conf': LaunchConfiguration('assoc_conf'),
                 'imgsz':          LaunchConfiguration('imgsz'),
                 'max_det':        LaunchConfiguration('max_det'),
                 'vision_profile':  LaunchConfiguration('vision'),
