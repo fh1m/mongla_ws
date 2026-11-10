@@ -61,8 +61,8 @@ success while doing nothing.
 > automatic mode every move uses. If you are here to judge whether the software works underwater, the honest answer is
 > that nobody knows yet, and this page will not pretend otherwise.
 
-That is also why there is a [ledger of retractions](#the-ledger): 50 measurement entries, of
-which 8 say in their own title that they took an earlier result back, and 5 more measured an idea
+That is also why there is a [ledger of retractions](#the-ledger): 115 measurement entries, of
+which 18 say in their own title that they took an earlier result back, and 7 more measured an idea
 and concluded it should stay switched off.
 
 ---
