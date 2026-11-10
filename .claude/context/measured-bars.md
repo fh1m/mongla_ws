@@ -2185,6 +2185,24 @@ evidence of stillness.
 
 ## Forward camera rate — `pi_forward.fps` 15 → 60 (2026-09-09)
 
+> **NOT REPRODUCED 2026-11-10.** On Kutum, raw `v4l2-ctl --stream-mmap` (no
+> OpenCV, no ROS) gave the Fantech **14.97-15.06 fps** at MJPG 640×360,
+> requested at 30 or 60, in auto exposure and in manual 5, 30 and 100 ms, with
+> the controls set before or during streaming; re-checked once more before
+> this note at **14.98**. The driver reports 30/1 back each time, so the
+> reported rate is not evidence. The exposure controls are accepted and read
+> back but inert: mean brightness **124.5-124.8** at every setting. The 30.18
+> below is kept as the record of what was measured then, not as what the
+> camera does. Whatever produced it (a different unit on that port, or a
+> state of the camera we cannot set) is not known.
+>
+> What survives is the request: `fps 60` costs nothing when ignored and takes
+> what a better unit offers, so the test pins the request, not a delivery.
+> A forward camera that delivers more is the Sonix on the forward port
+> (`fwd_profile:=pi_forward_global_shutter`, MJPG 640×360 @ 210 measured on
+> the same unit downward), and in the end a board-triggered global-shutter
+> sensor (`upstream/pr-w`).
+
 **Bar: the forward camera must not be capped below its measured ceiling.**
 `CAMERA_PROFILES['pi_forward']['fps'] >= 30`, pinned by
 `test_camera_profiles.py::test_the_pi_profiles_carry_the_MEASURED_rate` and
@@ -2900,8 +2918,8 @@ Bar30 is independent and is usually fine); `get_angular_rates()` and
 `_effective_yaw_deg`, which used to pass NaN straight through on srot because
 that backend has no second AHRS to fall back to.
 
-Requested upstream as
-`Mongla_others/srot-control-board/PR_SENSOR_HEALTH_AND_TIME_2026-09-11.md`.
+Requested upstream as `upstream/pr-x-sensor-health-and-time.md`, filed as
+[srot-control-board#76](https://github.com/RakibulIslam1/srot-control-board/issues/76).
 
 ### Inertial data we had been discarding
 
