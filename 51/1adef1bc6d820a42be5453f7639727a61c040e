@@ -1,0 +1,26 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 549-550
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 137,7136-7158
+.claude/context/packages/mongla_manager/README.md
+  h_f1b9066eb9899c 126
+README.md
+  h_f1b9066eb9899c 777,780
+docs/index.html
+  h_f1b9066eb9899c 1734-1736,1738
+src/mongla_manager/mongla_manager/kutum_health.py
+  h_f1b9066eb9899c 15-16,53-67,109-147,251-268,286-290
+src/mongla_manager/test/test_kutum_is_in_the_health_report.py
+  h_f1b9066eb9899c 46,52-53,97-103,135-216
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "511adef1bc6d820a42be5453f7639727a61c040e",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
