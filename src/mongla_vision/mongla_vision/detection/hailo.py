@@ -76,7 +76,7 @@ import numpy as np
 
 from . import hailo_device
 from .detector import Detection, Detector
-from .hef_file import baked_score_threshold, load_class_index
+from .hef_file import baked_score_threshold, load_class_index, measured_bars
 
 _INPUT_FALLBACK = 640
 
@@ -85,14 +85,6 @@ _INPUT_FALLBACK = 640
 # and a tight bound here would turn a slow frame into an exception.
 _ASYNC_READY_MS = 1000
 _ASYNC_WAIT_MS = 1000
-
-# The operating point this backend is compiled FOR. Round 24 measured INT8
-# costing ~0.08 of confidence at the 0.20 point while NOT moving the box centre
-# (2.5 px against a 2.72 px fp32-vs-fp32 noise floor), so the detections are
-# there and score lower. Every launch path ships 0.35-0.45, which is the .pt
-# number.
-_INT8_OPERATING_POINT_MIN = 0.12
-_INT8_OPERATING_POINT_MAX = 0.15
 
 
 def letterbox(im: np.ndarray, size: int):
@@ -333,6 +325,9 @@ class HailoDetector(Detector):
             self._assoc_conf = self._conf
         self._warn_conf(self._conf)
 
+    def acting_conf(self) -> float:
+        return self._conf
+
     def update_assoc_conf(self, assoc_conf: float) -> None:
         """Lower the PUBLISH floor below the control floor (BYTE).
 
@@ -359,27 +354,54 @@ class HailoDetector(Detector):
         the bar and be silently overruled by a graph compiled hours earlier on
         an x86 box.
         """
-        if self._log is None or self._baked_conf is None:
+        if self._log is None:
             return
-        if conf < self._baked_conf - 1e-6:
+        if self._baked_conf is not None and conf < self._baked_conf - 1e-6:
             self._log.warn(
                 f'[HAILO] conf={conf:.3f} is BELOW this HEF\'s baked NMS floor '
                 f'of {self._baked_conf:.3f} -- everything under the floor was '
                 f'discarded on-chip and no runtime value brings it back. The '
                 f'effective threshold is {self._baked_conf:.3f}. Recompile the '
                 f'model if you need lower.')
-        elif conf > _INT8_OPERATING_POINT_MAX and self._baked_conf <= 0.1:
-            # Not an error -- a mission may want a tight gate -- but this is the
-            # single most likely cause of "the Hailo model misses things": INT8
-            # costs ~0.08 of score without moving the box, so a CUDA-path 0.45
-            # is roughly three times the intended operating point here.
-            self._log.warn(
-                f'[HAILO] conf={conf:.3f} on an INT8 graph. INT8 costs ~0.08 of '
-                f'score without moving the box centre, so the CUDA path\'s '
-                f'0.35-0.45 is ~3x the intended operating point. This model is '
-                f'baked at {self._baked_conf:.3f} precisely so '
-                f'{_INT8_OPERATING_POINT_MIN:.2f}-{_INT8_OPERATING_POINT_MAX:.2f} '
-                f'is available.')
+        self._warn_against_measured_bar(conf)
+
+    def _warn_against_measured_bar(self, conf: float) -> None:
+        """Compare `conf` with the bar the model's own sidecar measured.
+
+        The bar is where empty water stops reading as the prop, so it belongs
+        to the weights and is read from beside them, never from a constant
+        here. This replaced a warning that called 0.45 "three times the
+        intended operating point" on the strength of an INT8 cost that was
+        later retracted (measured-bars section 1: 0.04-0.06, not 0.08) and
+        that fired on every launch of the bar gate_sharks measured.
+
+        Below the bar, the detector publishes boxes on empty water. Above it,
+        it throws away detections it was right about. Neither is an error --
+        a mission may want either -- but each is said once, with the number.
+        """
+        if self._log is None:
+            return
+        wanted = None if self._allow_ids is None else {
+            self._names[i].lower() for i in self._allow_ids}
+        for cls, bar in measured_bars(self._path).items():
+            if wanted is not None and cls.lower() not in wanted:
+                continue
+            if bar is None:
+                self._log.warn(
+                    f'[HAILO] {cls}: this model was measured and found '
+                    f'unable to tell {cls} from empty water at any bar -- '
+                    f'its {cls} detections are not evidence.')
+            elif conf < bar - 1e-6:
+                self._log.warn(
+                    f'[HAILO] conf={conf:.3f} is under {cls}\'s measured bar '
+                    f'{bar:.2f}; below it this model reports {cls} on empty '
+                    f'water. Lower the association floor (assoc_conf) instead, '
+                    f'which keeps a target without acquiring a false one.')
+            elif conf > bar + 1e-6:
+                self._log.warn(
+                    f'[HAILO] conf={conf:.3f} is over {cls}\'s measured bar '
+                    f'{bar:.2f}; detections between the two are real and are '
+                    f'being discarded.')
 
     def update_max_det(self, max_det: int) -> None:
         self._max_det = int(max_det)
@@ -568,15 +590,12 @@ class HailoDetector(Detector):
             for b in boxes:
                 score = float(b[4])
                 # BYTE (ByteTrack): boxes between `assoc_conf` and `conf` are
-                # PUBLISHED but are association-only fodder -- the tracker's
-                # second stage matches them against motion predictions, and the
-                # control path ignores them via `vision.ctrl_conf`. Measured on
-                # real footage: presence on hard clips 8.3 -> 34.8 % with no
-                # change at all on clips that already work.
-                #
-                # No flag is needed on the wire because THE SCORE IS THE FLAG --
-                # anything below the control floor is by definition low-conf,
-                # and a parallel boolean would be a second copy of that fact.
+                # association-only. The node publishes them on `candidates`
+                # (the tracker and the lock ladder) and never on `detections`,
+                # so a consumer that acts on `detections` cannot steer on one
+                # whatever its own floor is (`acting_conf`). Measured on real
+                # footage: presence on hard clips 8.3 -> 34.8 % with no change
+                # at all on clips that already work.
                 if score < self._assoc_conf:
                     continue
                 # HailoRT emits (y1, x1, y2, x2) NORMALISED to the letterboxed
