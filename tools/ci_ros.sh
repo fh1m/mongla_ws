@@ -17,11 +17,17 @@ summary="${GITHUB_STEP_SUMMARY:-/dev/null}"
 # without this, git refuses the tree and every git-reading test skips.
 git config --global --add safe.directory "$PWD"
 echo "== ROS $distro at $(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-# A dropped connection to the Ubuntu mirror failed a required check once
-# (iproute2, 2026-11-10). apt retries the download itself; a package that
-# still cannot be fetched fails the job as before.
+# The Ubuntu mirror failed required checks twice on 2026-11-10: a dropped
+# connection mid-download (iproute2), and an index that changed size during a
+# mirror sync. apt retries a download itself; the index refresh is retried
+# here, 30 s apart. Either still failing after that fails the job.
 echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
-apt-get update -qq
+for attempt in 1 2 3 4; do
+  if apt-get update -qq; then break; fi
+  if [[ "$attempt" == 4 ]]; then echo "ERROR: apt-get update failed 4 times"; exit 100; fi
+  echo "WARNING: apt-get update failed (attempt $attempt); the mirror may be syncing"
+  sleep 30
+done
 # The distro's own pytest: ROS's launch_testing plugin is built against it,
 # and pip's newest (9) no longer accepts the hook argument it declares.
 # procps (pgrep) and iproute2 (ss): the manager's process-tree teardown and

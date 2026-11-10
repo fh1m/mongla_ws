@@ -67,6 +67,27 @@ def test_a_mirror_blip_is_retried_before_it_fails_a_required_check():
     assert 'Fix-Missing' not in code and '--fix-missing' not in code
 
 
+def test_an_index_refresh_that_never_succeeds_still_fails_the_job(tmp_path):
+    """The retry loop runs for real against an apt-get that always fails: a
+    loop whose last command is `sleep` would exit 0 and pass the check."""
+    import subprocess
+    start = SCRIPT.index('for attempt in')
+    loop = SCRIPT[start:SCRIPT.index('done', start) + 4]
+    fake = tmp_path / 'apt-get'
+    fake.write_text('#!/bin/sh\nexit 100\n')
+    fake.chmod(0o755)
+    (tmp_path / 'sleep').write_text('#!/bin/sh\nexit 0\n')
+    (tmp_path / 'sleep').chmod(0o755)
+    env = {'PATH': f'{tmp_path}:/usr/bin:/bin'}
+    r = subprocess.run(['bash', '-c', loop + '\necho after'], env=env,
+                       capture_output=True, text=True)
+    assert r.returncode == 100 and 'after' not in r.stdout
+    fake.write_text('#!/bin/sh\nexit 0\n')
+    r = subprocess.run(['bash', '-c', loop + '\necho after'], env=env,
+                       capture_output=True, text=True)
+    assert r.returncode == 0 and 'after' in r.stdout
+
+
 def test_numpy_stays_below_two_in_ci_too():
     assert '-c kutum/constraints.txt' in SCRIPT
     assert "numpy 2 would break cv_bridge" in SCRIPT
