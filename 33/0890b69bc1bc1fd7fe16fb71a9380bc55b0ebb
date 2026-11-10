@@ -1,0 +1,28 @@
+.claude/context/packages/mongla_manager/README.md
+  h_f1b9066eb9899c 69
+.claude/context/platform/foxglove-and-bags.md
+  h_f1b9066eb9899c 82-86
+src/mongla_manager/mongla_manager/health.py
+  h_f1b9066eb9899c 159-163,167-173
+src/mongla_manager/mongla_manager/node_health.py
+  h_f1b9066eb9899c 287-310,313
+src/mongla_manager/mongla_manager/node_setup.py
+  h_f1b9066eb9899c 505-507
+src/mongla_manager/package.xml
+  h_f1b9066eb9899c 15
+src/mongla_manager/test/test_health.py
+  h_f1b9066eb9899c 382-431
+tools/pool/pool_record.sh
+  h_f1b9066eb9899c 30-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "330890b69bc1bc1fd7fe16fb71a9380bc55b0ebb",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
