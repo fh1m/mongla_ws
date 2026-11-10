@@ -91,7 +91,11 @@ a symlink to the active one, so every path and habit keeps working. In order, a 
    a doctor FAIL leaves the active release exactly as it was;
 4. writes `release.json` (the commit, the firmware floor the code demands, every model
    and calibration by hash, the hull geometry, the apt and pip versions under it), keeps
-   the five newest releases, and records the gate's verdict in the manifest.
+   the five newest releases, and records the gate's verdict in the manifest;
+5. cuts a GitHub release, `vehicle-<date>-<commit>`, with that `release.json` attached
+   (`cut_release.sh`), but only when the gate passed, the tree was clean and the commit
+   is on `main`. Otherwise it prints why and skips it; a missing release never fails a
+   deploy, and a gate pass is a bench verdict, not a water test.
 
 `--rollback` goes back to the previous release after the same safety checks, and again
 goes forward. The first deploy keeps the old plain workspace as `legacy-<time>`; it is
