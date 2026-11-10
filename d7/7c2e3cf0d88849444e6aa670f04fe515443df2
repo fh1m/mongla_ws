@@ -1,0 +1,44 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 330-347
+.claude/context/platform/foxglove-and-bags.md
+  h_f1b9066eb9899c 19-22
+.claude/context/wiki/Home.md
+  h_f1b9066eb9899c 11-14
+.claude/context/workbench/POOL.md
+  h_f1b9066eb9899c 28-29
+CLAUDE.md
+  h_f1b9066eb9899c 26-33
+README.md
+  h_f1b9066eb9899c 13-20,53,55-58,1262
+docs/evidence/lineage.md
+  h_f1b9066eb9899c 1-35
+docs/evidence/water.json
+  h_f1b9066eb9899c 1-99
+docs/index.html
+  h_f1b9066eb9899c 114,2136-2137
+scripts/pool_session.sh
+  h_f1b9066eb9899c 50-73,77,80
+test/test_a_run_records_its_software.py
+  h_f1b9066eb9899c 1-47
+test/test_the_retired_stack_stays_retired.py
+  h_f1b9066eb9899c 62
+test/test_water_claims_have_a_scope.py
+  h_f1b9066eb9899c 1-215
+tools/gen_lineage.py
+  h_f1b9066eb9899c 1-95
+tools/run_repo_integrity.py
+  h_f1b9066eb9899c 29
+tools/section_banners.py
+  h_f1b9066eb9899c 143-144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "d77c2e3cf0d88849444e6aa670f04fe515443df2",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
