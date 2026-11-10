@@ -30,8 +30,8 @@ def test_the_real_workflow_keeps_the_contract():
 @pytest.mark.parametrize('old, new', [
     ('distro: [humble, jazzy]', 'distro: [jazzy]'),                 # a distro dropped
     ('fail-fast: false', 'fail-fast: true'),                       # a sibling cancelled
-    ('    timeout-minutes: 45\n', '    timeout-minutes: 45\n    if: false\n'),
-    ('    timeout-minutes: 45\n', '    timeout-minutes: 45\n    continue-on-error: true\n'),
+    ('    timeout-minutes: 90\n', '    timeout-minutes: 90\n    if: false\n'),
+    ('    timeout-minutes: 90\n', '    timeout-minutes: 90\n    continue-on-error: true\n'),
     ('run: bash tools/ci_ros.sh', 'run: bash tools/ci_ros.sh || true'),
     ('run: bash tools/ci_ros.sh', 'run: echo bash tools/ci_ros.sh'),
     ('ros:${{ matrix.distro }}-ros-base', 'ros:jazzy-ros-base'),     # one image for both
