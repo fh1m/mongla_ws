@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 from fit_thruster_response import (break_away_cost, fit_step)  # noqa: E402
 
 

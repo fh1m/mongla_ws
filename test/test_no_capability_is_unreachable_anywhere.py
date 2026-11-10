@@ -91,10 +91,11 @@ DEFERRED = {
         'built: measured moment arms, roll refused rather than rounded, a dead '
         'thruster expressible. Nothing that flies imports it -- only its own test '
         'and tools/control_bench, which are off the mission path. The live path is '
-        '`allocation.py`, an 8x6 matrix of +-1 that describes the COMPETITION '
-        'vehicle, and motion_vision imports that one at runtime for its '
-        'anti-windup. Waits on the board reporting FRAME_CLASS on the wire (now in '
-        'the upstream allocator patch, unsent) so srot_fc can read which '
+        '`allocation.py`, an 8x6 matrix of +-1 that mirrors what the firmware '
+        'mixes today (the old Dubomini vehicle), and motion_vision imports that '
+        'one at runtime for its anti-windup. Waits on the board reporting '
+        'FRAME_CLASS on the wire, which srot-control-board#39 adds (open, '
+        're-checked 2026-11-10), so srot_fc can read which '
         'allocation is live and hand motion_vision the matching one. Until then '
         'wiring it would mean GUESSING which hull the board is flying, which is '
         'the whole defect it exists to fix.'),
@@ -107,12 +108,13 @@ DEFERRED = {
         'hull, find the ballast that hovers), after which the measured value is '
         'what gets shipped and this stays a cross-check rather than a source.'),
     'mongla_control/mongla_control/nav_filter.py': (
-        'a complementary/heading filter superseded by mongla_localization: the '
-        'RIEKF in `inekf.py` plus `heading_anchor.py` own fusion now, and '
-        '`yaw_source=mavlink_ahrs` reads the board directly. Kept only because no '
-        'one has confirmed the DVL-era callers are all gone. WARNING: DELETE IT or name '
-        'its consumer -- 138 lines of superseded estimator reads as current and '
-        'gets copied, which is exactly how draw_strip.py became a problem.'),
+        'alpha-beta smoothing for the OPERATOR CONSOLE, not the vehicle: '
+        '`tools/srot_console_server.py` and `tools/srot_replay.py` import its '
+        'DepthFilter and HeadingFilter to steady the displayed readings and to '
+        're-tune them against a recorded dive. No node imports it, so it is not '
+        'WIRED. Vehicle fusion is the RIEKF in mongla_localization and heading '
+        'is the board\'s own (`yaw_source.BoardYaw`); do not reach for this as an '
+        'estimator.'),
     'mongla_manager/mongla_manager/estimator/thrust_model.py': (
         'maps commanded thrust to expected RPM so a demand can be checked against '
         'what the thrusters actually did. Blocked on ROADMAP G2: 958/958 ESC '

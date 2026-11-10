@@ -1,4 +1,5 @@
-"""The shipping config, sustained. A sweep finds a ceiling; a soak finds drift.
+"""Run the board link at the shipping vision-loop rate for minutes and report the
+jitter distribution. A sweep finds a ceiling; a soak finds drift.
 
 VISION_LOOP_HZ is 50, not the 70 the sweep reached, and this checks that
 choice holds over minutes rather than seconds. Jitter is reported as a

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Shim. The real thing is `mongla_vision.calibration.solver`.
+"""Solve a camera calibration from a capture set without a sourced ROS; a shim
+over `mongla_vision.calibration.solver`.
 
     ros2 run mongla_vision calibrate         # the guided capture
     ros2 run mongla_vision calibrate_solve   # the solver alone

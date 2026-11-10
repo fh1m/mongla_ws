@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Shim. The real thing is `mongla_vision.calibration.guide`.
+"""Run the guided calibration capture page without a sourced ROS; a shim over
+`mongla_vision.calibration.guide`.
 
     ros2 run mongla_vision calibrate         # the guided capture
     ros2 run mongla_vision calibrate_solve   # the solver alone
