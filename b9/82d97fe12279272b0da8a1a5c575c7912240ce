@@ -1,0 +1,52 @@
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 137,7154-7209
+.claude/context/packages/mongla_localization/README.md
+  h_f1b9066eb9899c 148
+README.md
+  h_f1b9066eb9899c 797,800
+docs/index.html
+  h_f1b9066eb9899c 1734-1736,1738
+src/mongla_localization/mongla_localization/localization_node.py
+  h_f1b9066eb9899c 240-241
+src/mongla_localization/mongla_localization/pnp_node.py
+  h_f1b9066eb9899c 222-223
+src/mongla_localization/mongla_localization/pose_fuse_node.py
+  h_f1b9066eb9899c 153-154
+src/mongla_localization/mongla_localization/spin.py
+  h_f1b9066eb9899c 1-67
+src/mongla_localization/test/test_every_node_spins_on_the_chosen_executor.py
+  h_f1b9066eb9899c 1-79
+src/mongla_vision/mongla_vision/camera_node.py
+  h_f1b9066eb9899c 765-766
+src/mongla_vision/mongla_vision/depth/depth_estimation_node.py
+  h_f1b9066eb9899c 234-235
+src/mongla_vision/mongla_vision/detector_dual_node.py
+  h_f1b9066eb9899c 66-71,396-398
+src/mongla_vision/mongla_vision/detector_node.py
+  h_f1b9066eb9899c 698-699
+src/mongla_vision/mongla_vision/flow/flow_node.py
+  h_f1b9066eb9899c 333-334
+src/mongla_vision/mongla_vision/lock_node.py
+  h_f1b9066eb9899c 314-315
+src/mongla_vision/mongla_vision/tracker_node.py
+  h_f1b9066eb9899c 478-479
+src/mongla_vision/mongla_vision/vision_node.py
+  h_f1b9066eb9899c 196-197
+tools/README.md
+  h_f1b9066eb9899c 59
+tools/bench/executor_cost.py
+  h_f1b9066eb9899c 1-172
+tools/studies/composed_lock_harness.py
+  h_f1b9066eb9899c 176-179,183,186,212
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "b982d97fe12279272b0da8a1a5c575c7912240ce",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
