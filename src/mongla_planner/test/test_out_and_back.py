@@ -116,3 +116,12 @@ def test_failed_stationary_hold_attempts_surface_and_disarm():
     with pytest.raises(RuntimeError, match='pause failed'):
         M.run(r)
     assert r.names()[-3:] == ['pause', 'surface', 'disarm']
+
+
+def test_every_turn_settles_before_the_hull_translates(monkeypatch):
+    """In 'square' the side leg follows the first right angle directly, so
+    without a settle the hull starts it still swinging."""
+    for turn in ('yaw', 'square'):
+        r = _run(monkeypatch, TURN=turn)
+        turns = [k for n, _, k in r.sent if n == 'yaw_right']
+        assert turns and all(k.get('settle', 0) > 0 for k in turns), (turn, turns)
