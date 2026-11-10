@@ -79,12 +79,9 @@ def test_an_eight_thruster_figure_names_whose_it_is():
 
 UPSTREAM = ROOT / '.claude/context/upstream'
 
-# Written and deliberately held back. Each needs its reason.
-HELD = {
-    'j': 'asks for a simulated-ESC bench mode and asks them to decline it '
-         'rather than ship it unmarked; filed when someone owns that '
-         'conversation (upstream/README.md)',
-}
+# Written and deliberately held back, each with its reason. Empty on purpose:
+# J sat here seven weeks waiting for an owner, which is how an ask goes stale.
+HELD: dict = {}
 
 
 def _asks():

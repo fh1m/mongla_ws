@@ -165,9 +165,24 @@ resolution, MJPG and YUYV, all three anti-flicker settings, exposures from
 1 ms to 200 ms, auto or manual, alone on its own USB bus. So it is **not**
 bandwidth, not exposure, not anti-flicker, and not our software.
 
-The historical "Fantech ran at 30.3 Hz" note is most likely a
-**misattribution**: round 38 found the udev rules had the two cameras
-**swapped**, and the global-shutter unit does 210 fps in MJPG.
+Re-measured on Kutum on 2026-11-10, with the same result: **14.97-15.06
+fps** at MJPG 640×360, requested at 30 or 60, auto or manual 5/30/100 ms,
+with the controls set before or during the stream. **The exposure controls are
+inert too**: they are accepted and read back, and mean brightness stays at
+124.5-124.8 at every setting. So the 200 ms auto shutter above cannot be
+shortened on this unit, and the 66 px smear stands.
+
+The two "Fantech ran at 30 Hz" records (30.3, and the 30.18 of 2026-09-09
+in `measured-bars.md`, which checked the serial) do not reproduce. Neither
+is explained, and neither is what the camera does now.
+
+**What replaces it.** Until a forward camera that can be commanded arrives,
+the Sonix global-shutter unit can move to the forward port: udev names it
+`/dev/mongla_cam_forward` there, and `fwd_profile:=pi_forward_global_shutter`
+runs it at its measured MJPG 640×360 @ 210 with its own calibration (the
+camera node refuses a calibration that names a different profile). The end
+state is a global-shutter sensor that the board triggers:
+[`upstream/pr-w`](../upstream/pr-w-the-board-triggers-the-eyes.md).
 
 **No focus control exists in v4l2** on this camera, despite the marketing
 claiming autofocus. If it does refocus, we cannot lock it — and calib.io's

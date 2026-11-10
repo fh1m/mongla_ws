@@ -57,38 +57,35 @@ mongla_vision:
     # device_path, not device: an index is not port-stable and the two units
     # have already swapped across a reboot.
     pi_forward:
-      # The FANTECH -- forward, detection.
+      # The FANTECH -- forward, detection, rolling shutter.
       #
-      # "15.00 Hz is the CAMERA's ceiling ... Nothing in software raises
-      # this" IS RETRACTED. It was this profile's own `fps: 15` doing the
-      # capping, and the claim then justified keeping it. Re-measured
-      # 2026-09-09 on the vehicle, counting DISTINCT header stamps (a topic
-      # `hz` cannot tell a real frame from a republished one):
+      # It delivers 15.0 fps. Raw `v4l2-ctl --stream-mmap` on Kutum,
+      # 2026-11-10: 14.97-15.06 fps at MJPG 640x360, requested 30 or 60,
+      # auto exposure or manual 5/30/100 ms. The driver reports 30/1 back,
+      # so the reported rate is not evidence, and the exposure controls are
+      # inert (mean 124.5-124.8 at every setting). The 2026-09-09 30.18 Hz
+      # does not reproduce (measured-bars "Forward camera rate").
       #
-      #   requested 15 -> 14.63 Hz    requested 60 -> 30.18 Hz
-      #   requested 30 -> 28.03 Hz    requested 90 -> 30.18 Hz
-      #
-      # Identity confirmed against the calibration's recorded USB VID/PID and
-      # serial (1d6c:0103, YGR80PU1200F23081120), so this is the Fantech and
-      # not the Sonix answering -- the round-38 trap.
-      #
-      # Through the full pipeline (camera+detector+tracker) the request is
-      # worth nearly 2x of DETECTIONS for ~6 points of one core:
-      #
-      #   fps 15 -> image 14.67 Hz, detections 14.67 Hz, CPU 95.5 % idle
-      #   fps 60 -> image 30.03 Hz, detections 27.11 Hz, CPU 89.3 % idle
-      #   (memory unchanged, 683 vs 680 MB)
-      #
-      # 60 rather than 30 because the request saturates at the hardware
-      # ceiling: asking 30 yields 28.03, asking 60 yields the full 30.18.
-      # Detection rate is what the 20 Hz vision loop steers on, and its
-      # translational command decays with sample age -- so this is the
-      # cheapest robustness we have.
+      # Asking for 60 stays: it costs nothing when ignored and takes what a
+      # better unit offers. For more frames, use pi_forward_global_shutter.
       source:      v4l2
       device_path: /dev/mongla_cam_forward
       width:       640
       height:      360
       fps:         60
+      fourcc:      MJPG
+      frame_id:    forward_cam
+
+    # The Sonix global-shutter unit moved to the FORWARD port, until the
+    # board-triggered sensor arrives. `fwd_profile:=pi_forward_global_shutter`;
+    # the Fantech stays the default. udev names a Sonix on the forward port
+    # /dev/mongla_cam_forward. Its lens is pi_downward_1280x720.json.
+    pi_forward_global_shutter:
+      source:      v4l2
+      device_path: /dev/mongla_cam_forward
+      width:       640
+      height:      360
+      fps:         210
       fourcc:      MJPG
       frame_id:    forward_cam
 

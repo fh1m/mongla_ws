@@ -4,11 +4,11 @@
 
 **Who this is for:** the Claude Code session, or the person, that has write access to `RakibulIslam1/srot-control-board`, `srot-ground-station` and `srot-esc-flasher`.
 
-**Why it is a folder here and not PRs and issues there:** the review ran in a session whose GitHub App has no access to the RakibulIslam1 repos. Both `git push` and "create issue" returned **403**. Everything is written out here instead, ready to file, following the same convention as the `pr-*.md` asks one level up.
+**Why it was a folder here first:** the review ran in a session whose GitHub App has no access to the RakibulIslam1 repos. Both `git push` and "create issue" returned **403**. Everything is written out here instead, ready to file, following the same convention as the `pr-*.md` asks one level up.
 
 **Rules carried over** (see `../README.md` and `platform/cross-repo-contract.md`):
 - mongla_ws never commits to their repos. **Pull requests and issues only.**
-- **Written here is not filed.** When you file something, update the "Filed as" table at the bottom.
+- **Written here is not filed.** Everything below is now filed; the table at the bottom has each URL.
 
 ---
 
@@ -93,11 +93,56 @@ File each file in [`srot-ground-station/issues/`](srot-ground-station/issues/) t
 - **Host-side issues** are filed directly on fh1m/mongla_ws; the tracking issue links them all.
 - **Duplicates we deliberately did not refile:** the joystick arm bypass (#6), mixer scale-down / PIDs wind up (#20), REQUEST_MESSAGE (#5), the flasher's SET_ADDRESS abort (flasher #1), and the frame selector (#25; issue 00 builds on it).
 
-## Filed as (update when filed)
+## Filed as
 
-| item | repo | URL |
+All of it was filed on 2026-11-10. The drafts sat here seven weeks because the session
+that wrote them could not reach these repos.
+
+| draft | repo | filed as |
 |---|---|---|
-| safety PR (5 commits) | srot-control-board | — |
-| issues 00–35 | srot-control-board | — |
-| issues 01–09 | srot-ground-station | — |
-| issues 01–03 | srot-esc-flasher | — |
+| safety PR (5 commits) | srot-control-board | PR [#75](https://github.com/RakibulIslam1/srot-control-board/pull/75) |
+| 00 | srot-control-board | [#46](https://github.com/RakibulIslam1/srot-control-board/issues/46) |
+| 01 | srot-control-board | [#47](https://github.com/RakibulIslam1/srot-control-board/issues/47) |
+| 02 | srot-control-board | [#48](https://github.com/RakibulIslam1/srot-control-board/issues/48) |
+| 03 | srot-control-board | [#49](https://github.com/RakibulIslam1/srot-control-board/issues/49) |
+| 04 | srot-control-board | [#50](https://github.com/RakibulIslam1/srot-control-board/issues/50) |
+| 05 | srot-control-board | [#51](https://github.com/RakibulIslam1/srot-control-board/issues/51) |
+| 06 | srot-control-board | [#52](https://github.com/RakibulIslam1/srot-control-board/issues/52) |
+| 07 | srot-control-board | [#53](https://github.com/RakibulIslam1/srot-control-board/issues/53) |
+| 08 | srot-control-board | [#54](https://github.com/RakibulIslam1/srot-control-board/issues/54) |
+| 09 | srot-control-board | [#55](https://github.com/RakibulIslam1/srot-control-board/issues/55) |
+| 10 | srot-control-board | [#56](https://github.com/RakibulIslam1/srot-control-board/issues/56) |
+| 12 | srot-control-board | [#57](https://github.com/RakibulIslam1/srot-control-board/issues/57) |
+| 13 | srot-control-board | [#58](https://github.com/RakibulIslam1/srot-control-board/issues/58) |
+| 14 | srot-control-board | [#59](https://github.com/RakibulIslam1/srot-control-board/issues/59) |
+| 15 | srot-control-board | [#60](https://github.com/RakibulIslam1/srot-control-board/issues/60) |
+| 16 | srot-control-board | [#61](https://github.com/RakibulIslam1/srot-control-board/issues/61) |
+| 17 | srot-control-board | [#62](https://github.com/RakibulIslam1/srot-control-board/issues/62) |
+| 18 | srot-control-board | [#63](https://github.com/RakibulIslam1/srot-control-board/issues/63) |
+| 19 | srot-control-board | [#64](https://github.com/RakibulIslam1/srot-control-board/issues/64) |
+| 20 | srot-control-board | [#65](https://github.com/RakibulIslam1/srot-control-board/issues/65) |
+| 22 | srot-control-board | [#66](https://github.com/RakibulIslam1/srot-control-board/issues/66) |
+| 24 | srot-control-board | [#67](https://github.com/RakibulIslam1/srot-control-board/issues/67) |
+| 25 | srot-control-board | [#68](https://github.com/RakibulIslam1/srot-control-board/issues/68) |
+| 26 | srot-control-board | [#69](https://github.com/RakibulIslam1/srot-control-board/issues/69) |
+| 29 | srot-control-board | [#70](https://github.com/RakibulIslam1/srot-control-board/issues/70) |
+| 30 | srot-control-board | [#71](https://github.com/RakibulIslam1/srot-control-board/issues/71) |
+| 31 | srot-control-board | [#72](https://github.com/RakibulIslam1/srot-control-board/issues/72) |
+| 32 | srot-control-board | [#73](https://github.com/RakibulIslam1/srot-control-board/issues/73) |
+| 35 | srot-control-board | [#74](https://github.com/RakibulIslam1/srot-control-board/issues/74) |
+| 01 | srot-ground-station | [#7](https://github.com/RakibulIslam1/srot-ground-station/issues/7) |
+| 02 | srot-ground-station | [#8](https://github.com/RakibulIslam1/srot-ground-station/issues/8) |
+| 03 | srot-ground-station | [#9](https://github.com/RakibulIslam1/srot-ground-station/issues/9) |
+| 04 | srot-ground-station | [#10](https://github.com/RakibulIslam1/srot-ground-station/issues/10) |
+| 05 | srot-ground-station | [#11](https://github.com/RakibulIslam1/srot-ground-station/issues/11) |
+| 06 | srot-ground-station | [#12](https://github.com/RakibulIslam1/srot-ground-station/issues/12) |
+| 07 | srot-ground-station | [#13](https://github.com/RakibulIslam1/srot-ground-station/issues/13) |
+| 08 | srot-ground-station | [#14](https://github.com/RakibulIslam1/srot-ground-station/issues/14) |
+| 09 | srot-ground-station | [#15](https://github.com/RakibulIslam1/srot-ground-station/issues/15) |
+| 01 | srot-esc-flasher | [#6](https://github.com/RakibulIslam1/srot-esc-flasher/issues/6) |
+| 02 | srot-esc-flasher | [#7](https://github.com/RakibulIslam1/srot-esc-flasher/issues/7) |
+| 03 | srot-esc-flasher | [#8](https://github.com/RakibulIslam1/srot-esc-flasher/issues/8) |
+| 11 | srot-control-board | comment on [#41](https://github.com/RakibulIslam1/srot-control-board/issues/41), the same defect seen from the other side |
+| 23 | srot-control-board | comment on [#34](https://github.com/RakibulIslam1/srot-control-board/issues/34) (PR Q), the same finding |
+| 27 | srot-control-board | comment on [#49](https://github.com/RakibulIslam1/srot-control-board/issues/49), the issue it amends |
+| 28 | srot-control-board | comment on [#50](https://github.com/RakibulIslam1/srot-control-board/issues/50), and pointed at from [#65](https://github.com/RakibulIslam1/srot-control-board/issues/65) |
