@@ -1,0 +1,20 @@
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 7204-7219
+README.md
+  h_f1b9066eb9899c 787
+docs/index.html
+  h_f1b9066eb9899c 1734,1736
+tools/studies/composed_lock_harness.py
+  h_f1b9066eb9899c 109-111,149-150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "c383b77ec5e332b7b4630fc70104959c3e0c8323",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
