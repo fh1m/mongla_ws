@@ -8,7 +8,7 @@ ritual: every step exists because skipping it cost a run.
 ## Before the vehicle gets wet
 
 ```bash
-source scripts/pool_session.sh <label>     # SOURCE it in every terminal — one folder per run
+source tools/pool/pool_session.sh <label>     # SOURCE it in every terminal — one folder per run
 ros2 run mongla_manager bringup_check
 ```
 
@@ -79,7 +79,7 @@ looking healthy.
 - Record the run:
 
 ```bash
-scripts/pool_record.sh record <label>
+tools/pool/pool_record.sh record <label>
 ```
 
 ## After each run
@@ -89,7 +89,7 @@ scripts/pool_record.sh record <label>
 - Replay the bag rather than re-flying the same experiment:
 
 ```bash
-scripts/pool_record.sh replay <bag-dir>
+tools/pool/pool_record.sh replay <bag-dir>
 ```
 
 - **Write the number down.** A measurement that stays in a terminal scrollback becomes an

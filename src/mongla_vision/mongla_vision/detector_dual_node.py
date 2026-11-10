@@ -166,7 +166,7 @@ class _Launcher(Node):
         # won, left the vehicle with no detection at all. Frames reach the
         # ladder by reference (`_Tee`, `direct_feed`): with topic intake the
         # composition cost both detectors 71 -> 21.6 Hz (measured-bars 28.6).
-        # Verify on real footage: tools/composed_lock_harness.py.
+        # Verify on real footage: tools/studies/composed_lock_harness.py.
         #
         # Only the values the launch SETS are forwarded (`fwd_lock_*`,
         # `dwn_lock_*`, shared `lock_*`); the LockNode keeps its own defaults,

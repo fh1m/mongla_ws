@@ -7,7 +7,7 @@ is the one place that decides; these pin each way in.
 import importlib.util
 import pathlib
 
-_TOOL = pathlib.Path(__file__).resolve().parents[3] / 'tools' / 'hailo_compile.py'
+_TOOL = pathlib.Path(__file__).resolve().parents[3] / 'tools' / 'bench' / 'hailo_compile.py'
 _spec = importlib.util.spec_from_file_location('_hailo_compile', _TOOL)
 hc = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(hc)

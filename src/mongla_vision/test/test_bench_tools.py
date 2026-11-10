@@ -36,7 +36,7 @@ def _state_publishers():
     if not _TOOLS.is_dir():
         pytest.skip('tools/ not present')
     out = []
-    for py in sorted(_TOOLS.glob('*.py')):
+    for py in sorted(_TOOLS.rglob('*.py')):
         src = py.read_text()
         if 'MonglaState()' in src and '/mongla/state' in src:
             out.append((py.name, src))

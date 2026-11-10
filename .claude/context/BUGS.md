@@ -195,13 +195,13 @@ The board-side kill latch is upstream (srot-control-board#41).
 `tools/`: two passing (21 tests, the free-decay and thruster-response fits) and
 `test_fov_solve.py`, the calibration solver's only ground-truth check, which
 had broken when `fov_solve.py` became a shim and lost the internals it called.
-A further 94 bench tests sit in `tools/control_bench/`, also uncollected.
+A further 94 bench tests sit in `tools/bench/control_bench/`, also uncollected.
 Separately, 34 tools were named nowhere else in the repository.
 
 **Fix.** The three moved where CI collects them; the solver check now imports
 `mongla_vision.calibration.solver` and runs (36 s), and faking the pose spread
 fails it. `tools/README.md` indexes every tool from its own docstring
-(`tools/gen_tools_index.py`), and `test/test_every_tool_is_indexed.py`, in the
+(`tools/ci/gen_tools_index.py`), and `test/test_every_tool_is_indexed.py`, in the
 integrity gate, fails a stale index, a tool with no description, or a test file
 outside the collected tree. The control bench is the one named exemption: it
 compiles the firmware and needs that checkout in CI (#132).
@@ -251,8 +251,8 @@ request's `applies_to`, and the medium from the source file's contents, with
 no check. The guide listens on every interface with no login, so a profile of
 `../../x` wrote a calibration JSON outside the calibration folder; with the
 check disabled the test really wrote one in `/tmp`. Found by CodeQL's first
-analysis (py/path-injection), with a ReDoS in `tools/topic_wiring_sweep.py`
-and an unchecked file name in `tools/upload_sink.py`.
+analysis (py/path-injection), with a ReDoS in `tools/ci/topic_wiring_sweep.py`
+and an unchecked file name in `tools/site/upload_sink.py`.
 
 **Fix.** `solver.check_profile` accepts a plain name (letters, digits, `_`,
 `-`) and a medium of `air` or `water`, and both naming functions
@@ -656,7 +656,7 @@ the conf sweep on the HEF it asked for was never run.
   bite under injection.
 
 **To close.** With the Pi: sync the model, check the md5 against the provenance,
-run `hailortcli parse-hef`, and re-run `tools/composed_lock_harness.py` on the
+run `hailortcli parse-hef`, and re-run `tools/studies/composed_lock_harness.py` on the
 same gate clip. The detection-rung share must rise well above 20 %.
 
 ### B-61: the Hailo detector ran on colour-swapped frames `REPRODUCED 2026-09-25` **FIXED 2026-09-25**

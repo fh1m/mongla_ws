@@ -293,7 +293,7 @@ def arguments() -> list:
         # ON, and safe, because the lock ladder is COMPOSED into the detector
         # process below: one process, one VDevice, XFeat and the detectors
         # sharing it under HailoRT's scheduler (B-62; in-graph 17.65 ms p50
-        # against 32.9 ms on the CPU, tools/composed_lock_harness.py).
+        # against 32.9 ms on the CPU, tools/studies/composed_lock_harness.py).
         # As a SEPARATE lock_node it raced the detector for the chip and, on
         # 2026-10-03, left the vehicle with no detection at all.
         DeclareLaunchArgument(
@@ -347,7 +347,7 @@ def arguments() -> list:
         DeclareLaunchArgument(
             'bank_forward', default_value='',
             description='checkpoint bank (.npz) preloaded into the FORWARD '
-                        'lock node, from tools/build_practice_bank.py. Empty '
+                        'lock node, from tools/pool/build_practice_bank.py. Empty '
                         'learns live. A preloaded reference is trusted exactly '
                         'like a live one -- it clears MIN_INLIERS or it does '
                         'not answer.'),

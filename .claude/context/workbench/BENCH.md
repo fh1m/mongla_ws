@@ -16,7 +16,7 @@ vehicle down**.
 
 **Needs:** the board, powered, **disarmed**. Nothing else. No thrusters, no water.
 
-**Procedure.** `python3 tools/depth_sign_check.py` — the tool already exists (170 lines) and
+**Procedure.** `python3 tools/pool/depth_sign_check.py` — the tool already exists (170 lines) and
 prints a verdict. It reads `DEPTH_CMD`, which `depth::preview()` computes through a separate
 **proportional-only** instance, live while disarmed. Pressurise the Bar30 port with a thumb.
 
@@ -58,7 +58,7 @@ vehicle can command is **15 % of full scale**. Measured on the board, nothing at
 merely unmeasured; it is the wrong model, and no host-side gain crosses a floor.
 
 The whole chain is now modelled and verified to **0.30 %** worst case
-(`actuation_model.py`, `tools/mixer_map.py --ladder`), and it confirms the
+(`actuation_model.py`, `tools/bench/mixer_map.py --ladder`), and it confirms the
 source-derived table in [`upstream/pr-i`](../upstream/pr-i-spin-min-relay.md) §1.
 
 **Still open:** the *physical* stiction floor — where a real motor starts turning — which needs a
@@ -145,7 +145,7 @@ chi-squared distributed only for an already-tuned filter** — so our χ²-99 % 
 five-rejection lockout break and the ×4 inflation are all built on a statistic that is not valid
 until this run happens.
 
-**Procedure.** `python3 tools/allan_variance.py --log --port /dev/ttyACM0 --hours 12`, board flat
+**Procedure.** `python3 tools/bench/allan_variance.py --log --port /dev/ttyACM0 --hours 12`, board flat
 and undisturbed, then `--analyse` on the `.npz` it writes. The tool is built and its maths is
 **truth-tested** against signals with closed-form answers (`test_allan_variance.py`, 6 tests): the
 τ = 1 s intercept — the number that becomes `sigma_gyro` — recovers a known white-noise level to
@@ -252,7 +252,7 @@ proves every mission sends real verbs with real kwargs.
 **Why.** Measured **21.0 %** of the wire used at 115 200 baud (11 520 B/s). Every uplink we want —
 velocity, position, vision targets — is gated on headroom.
 
-**Procedure.** After the baud change, re-run `tools/board_snapshot.py` and compare bytes/s,
+**Procedure.** After the baud change, re-run `tools/site/board_snapshot.py` and compare bytes/s,
 messages/s and rejected frames against the 2026-09-22 reading.
 
 **Expected:** the same traffic at ~2.4 % of the wire. **Falsifier:** if rejected frames rise, the
@@ -294,7 +294,7 @@ prints every motor's commanded and output value at 2 Hz. That is enough to measu
 **nothing attached to any wire**, because a mixer is a linear map from axis demands to motor
 commands and no part of it involves force.
 
-**Procedure.** `python3 tools/mixer_map.py --arm`. Drives one axis at a time, reads all eight
+**Procedure.** `python3 tools/bench/mixer_map.py --arm`. Drives one axis at a time, reads all eight
 motors, and differences the +demand and −demand runs — which cancels whatever the attitude loop
 was holding (M6 sat at +190 and M7 at −811 in every horizontal row).
 

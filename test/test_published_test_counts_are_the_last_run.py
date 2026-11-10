@@ -2,7 +2,7 @@
 
 They were typed by hand in six places until 2026-11-06. Now the root
 `conftest.py` writes `docs/stats.json` at the end of every full run and
-`tools/published_counts.py` copies it into the pages; this fails if any page
+`tools/ci/published_counts.py` copies it into the pages; this fails if any page
 was edited by hand, or if a pattern stopped matching so a count would freeze.
 """
 import importlib.util
@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 _spec = importlib.util.spec_from_file_location('published_counts',
-                                               ROOT / 'tools' / 'published_counts.py')
+                                               ROOT / 'tools' / 'ci' / 'published_counts.py')
 pc = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(pc)
 

@@ -120,7 +120,7 @@ def run(mongla, log=None):
         # CLAUDE.md section 8.6 names as the one that ends runs.
         #
         # To bring it back: train a model that emits the marker classes AND clears
-        # the separation bar with tools/negative_clip_check.py first.
+        # the separation bar with tools/studies/negative_clip_check.py first.
 
         mongla.set_depth(GATE_PASS_DEPTH_M, timeout=20)
         mongla.set_classes('gate', node=_FWD)

@@ -12,7 +12,7 @@ The firmware fact underneath, `attitude_control.cpp:87`:
     if (fabsf(yaw_stick) > 0.02f)  -> yaw is a RATE COMMAND
     else                           -> the board HOLDS THE LAST HEADING
 
-compared AFTER PILOT_EXPO. Measured through `tools/control_bench` -- the
+compared AFTER PILOT_EXPO. Measured through `tools/bench/control_bench` -- the
 board's own attitude_control.cpp and mixer.cpp compiled natively -- under the
 live vehicle's parameters, 2026-09-23:
 
@@ -131,7 +131,7 @@ def test_a_sub_gate_demand_does_not_disturb_the_boards_heading_hold():
     import math
     import sys
     from pathlib import Path
-    bench = HERE.parents[2] / 'tools' / 'control_bench'
+    bench = HERE.parents[2] / 'tools' / 'bench' / 'control_bench'
     if not (bench / 'libcontrolbench.so').exists():
         pytest.skip('control bench not built')
     sys.path.insert(0, str(bench))

@@ -86,7 +86,7 @@ LEDGER_BOUND = {
     },
     'mongla_vision.approach': {
         # The one that was wrong. Each band is a measured peak bin from
-        # tools/approach_band.py, not a chosen range.
+        # tools/studies/approach_band.py, not a chosen range.
         'BANDS': ({'gate': (0.45, 0.60),
                    'rescue': (0.10, 0.20),
                    'repair': (0.80, 1.20)}, '0.45 - 0.60',

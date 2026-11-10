@@ -16,13 +16,13 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 WIKI_YML = ROOT / '.github/workflows/wiki.yml'
-_spec = importlib.util.spec_from_file_location('wiki_build', ROOT / 'tools/wiki_build.py')
+_spec = importlib.util.spec_from_file_location('wiki_build', ROOT / 'tools/ci/wiki_build.py')
 wb = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(wb)
 
 
 def _check(wiki: Path, *pages: str) -> subprocess.CompletedProcess:
-    return subprocess.run([sys.executable, str(ROOT / 'tools/wiki_build.py'), 'check',
+    return subprocess.run([sys.executable, str(ROOT / 'tools/ci/wiki_build.py'), 'check',
                            str(wiki), *pages], capture_output=True, text=True)
 
 

@@ -50,7 +50,7 @@ firmware team's own tools (their commits `09d0033`, `f533bd2`; our record is
 > | count | what it is | where it lives |
 > |---|---|---|
 > | **7** | **the final Mongla hull.** The five below plus two roll thrusters, one on each side, so all six axes are actuated | the CAD for the roll pair is not done; positions come from it, never from an estimate |
-> | **5** | the current CAD: **702.0 × 176.1 × 172.1 mm**, fineness **3.99**, four ⌀84 mm tunnels (lateral pair 350 mm apart, vertical pair 519 mm apart) and one axial unit in the nose; roll unactuated | `mongla_control/config/hull_geometry.yaml`, `geometric_allocation.py`, `tools/pack_hull.py` |
+> | **5** | the current CAD: **702.0 × 176.1 × 172.1 mm**, fineness **3.99**, four ⌀84 mm tunnels (lateral pair 350 mm apart, vertical pair 519 mm apart) and one axial unit in the nose; roll unactuated | `mongla_control/config/hull_geometry.yaml`, `geometric_allocation.py`, `tools/site/pack_hull.py` |
 > | **8** | the old Dubomini vehicle. Its `vectored_6dof` matrix (8 × T200 at 45°) is **still what the firmware mixes for**, so `allocation.py` mirrors it for as long as the board flies it | firmware `mixer.cpp`; replaced by geometry in [srot-control-board#39](https://github.com/RakibulIslam1/srot-control-board/pull/39) |
 >
 > The 8-thruster figures in older docs (RoboSub 2023/2025) belong to the old vehicle. Mass,
@@ -194,7 +194,7 @@ Six packages, one page each in [`.claude/context/packages/`](.claude/context/pac
 **Every command, generated from the code**:
 [`reference/commands.md`](.claude/context/reference/commands.md) — verbs, fields, defaults, what
 the board runs vs refuses, executables, launch arguments, node parameters and wire constants.
-Regenerate with `python3 tools/gen_reference.py`; a test fails if it drifts.
+Regenerate with `python3 tools/ci/gen_reference.py`; a test fails if it drifts.
 
 **Adding a verb** touches two files: a row in `mongla_control/commands.py` and a method of the
 same name on the facade. The CLI, the action server and the Python client pick it up
@@ -291,8 +291,8 @@ ros2 run mongla_planner mission --list                       # missions
 vehicle up bare, then add one at a time and measure what it costs.
 [`launch-combinations.md`](.claude/context/platform/launch-combinations.md)
 
-**Operator tooling** (off the mission path): `scripts/pool_session.sh` pins one folder per
-run; `scripts/pool_record.sh` records and replays a bag; scorecards land in `MONGLA_RUN_DIR`.
+**Operator tooling** (off the mission path): `tools/pool/pool_session.sh` pins one folder per
+run; `tools/pool/pool_record.sh` records and replays a bag; scorecards land in `MONGLA_RUN_DIR`.
 [`foxglove-and-bags.md`](.claude/context/platform/foxglove-and-bags.md) · [`pool-day.md`](.claude/context/platform/pool-day.md)
 
 ### Kutum, the vehicle's computer
@@ -362,7 +362,7 @@ not port it back. A capability that needs something from it is rebuilt against t
   run. The two scored afterwards both produced a confident number that was
   wrong — a vanishing point jittering 20 227 px while its own quality metric
   read 0.958, and a "top 10 offenders" list that turned out to be measuring
-  base64 on disk rather than context. `tools/tau_from_scale.py --self-test`
+  base64 on disk rather than context. `tools/studies/tau_from_scale.py --self-test`
   is the shape to copy: it runs the ranking against synthetic sources whose
   bias was chosen, so a bug in the scorer cannot be mistaken for a defect in a
   sensor on the day — and it corrected its own author before any water.
@@ -403,7 +403,7 @@ not port it back. A capability that needs something from it is rebuilt against t
   caller**: until 2026-11-06 both counted one, a stem match let `anchor/draw.py`
   pass because a different `draw.py` was imported, and 34 functions only tests
   ever ran read as live. Imports resolve by dotted name now, in one place
-  (`tools/orphan_sweep.py`); a deliberate wait goes in `DEFERRED_FUNCTIONS`
+  (`tools/ci/orphan_sweep.py`); a deliberate wait goes in `DEFERRED_FUNCTIONS`
   with its consumer named.
 - **The docs are read and edited in the [GitHub wiki](https://github.com/fh1m/mongla_ws/wiki).**
   Each page is also a file under `.claude/context/` (or `docs/`). The wiki workflow turns
@@ -416,17 +416,17 @@ not port it back. A capability that needs something from it is rebuilt against t
   the file here updates the wiki only after that PR merges. Publishing refuses while the
   wiki holds an edit `main` does not have, builds on the wiki's own history and never
   force-pushes, so a page saved mid-run rejects the push instead of vanishing.
-  `tools/wiki_build.py` defines conversion; `test/test_wiki_edits_pass_pr_gate.py` and
+  `tools/ci/wiki_build.py` defines conversion; `test/test_wiki_edits_pass_pr_gate.py` and
   `test/test_wiki_publish_never_overwrites_an_edit.py` protect the workflow contract.
 - **Four required checks, and none may be talked past.** `ROS humble` and `ROS jazzy`
   build the whole stack from a clean container and run every test on both distros
-  (`.github/workflows/ros.yml`, all of it in `tools/ci_ros.sh`). The integrity gate runs
-  `tools/run_repo_integrity.py`, the one list of guards: a new guard is a line there, and
+  (`.github/workflows/ros.yml`, all of it in `tools/ci/ci_ros.sh`). The integrity gate runs
+  `tools/ci/run_repo_integrity.py`, the one list of guards: a new guard is a line there, and
   any skip or a guard file with no passing test fails it. Both workflows' shape is an
-  allowlist in `tools/ci_contract.py` (no `if:`, known actions, exact commands), which the
+  allowlist in `tools/ci/ci_contract.py` (no `if:`, known actions, exact commands), which the
   provenance job also runs, because GitHub counts a skipped required job as passed. A PR
   description passes provenance with a filled `## AI Provenance` table, or the line
-  `Provenance: 100% human-written` on its own (`tools/provenance_check.py`); a PR the
+  `Provenance: 100% human-written` on its own (`tools/ci/provenance_check.py`); a PR the
   Dependabot app opened passes by its author. Dependabot proposes weekly and never
   merges itself; a `/kutum` pin moves only after `kutum/deploy.sh` passes on the vehicle,
   and nothing that needs numpy 2 or is a major version is proposed at all
@@ -435,6 +435,10 @@ not port it back. A capability that needs something from it is rebuilt against t
   machine that touched it: the top level is a fixed list, nothing generated or
   left behind by a tool is tracked, and every directory a local tool creates is
   in `.gitignore` (`test/test_workspace_stays_clean.py`, in the integrity gate).
+  A tool goes where the person who needs it under pressure would look: `tools/pool/`
+  (the operator on the day), `tools/bench/`, `tools/ci/`, `tools/site/` or
+  `tools/studies/`, with only shared libraries at the top of `tools/`
+  (`test/test_every_tool_is_indexed.py`; the map is `tools/README.md`).
   A merged or abandoned branch is deleted, with an `archive/<what>` tag first if
   any of its commits are not on `main`; a worktree is removed when its work lands.
   On Kutum, `kutum/release.sh prune` keeps the releases tidy, and anything else
@@ -450,7 +454,7 @@ not port it back. A capability that needs something from it is rebuilt against t
   `test/test_the_retired_stack_stays_retired.py` (every tracked file, every
   retired token, each exemption with its reason), `test_docs_contract.py` (every
   context doc reachable from the book, under its own title; every link resolves),
-  and `tools/gen_reference.py` + `test_operator_commands_are_real.py` (every
+  and `tools/ci/gen_reference.py` + `test_operator_commands_are_real.py` (every
   command a doc tells an operator to type exists). A doc that cannot be made true
   is deleted, not left.
 - **Truth tests, not agreement tests.** Comparing a new estimator against the incumbent
@@ -459,6 +463,19 @@ not port it back. A capability that needs something from it is rebuilt against t
   mode that ends competition runs.
 - **One truth, two copies is the bug.** When two places state the same constant, make one read
   the other, or have a test compare them.
+- **We own the chain, so we never settle for less data than it can give.** Mongla is ours from
+  firmware to thruster: board, sensors, wire, companion, models. When a design compromises
+  because a measurement is missing, coarse, late or unstamped (a heading we cannot command, a
+  rate guessed from two samples, a camera not triggered by the board), the compromise is not
+  finished until we have asked for the data where it can be produced: a firmware pull request
+  in `upstream/`, a sensor or wiring ask to the hardware team, a new field on our own wire.
+  Ship the interim workaround only beside that ask, name it in the code (`upstream ask N`)
+  and in the PR's **Compromises** section. Data first, then the cleverness that works
+  around its absence.
+- **Fix the chain, not the line.** A defect in vision or control is traced through the whole
+  path it lives on (photons, detection, lock, sample, authority, command, mixer, thrust), and
+  the neighbours on that path are fixed in the same change. Then the same pattern is searched
+  for in every other package, because a mistake made once was usually made twice.
 
 ---
 
