@@ -25,8 +25,13 @@ def _head():
 def test_sourcing_it_records_the_commit(tmp_path, shell):
     if shutil.which(shell) is None:
         pytest.skip(f'{shell} is not installed here')
+    # A scratch HOME hides the caller's git config, and with it the
+    # safe.directory that CI's root container needs for a checkout it does not
+    # own; without it git refuses the tree and the commit reads `unknown`.
     env = {'HOME': str(tmp_path), 'PATH': '/usr/bin:/bin',
-           'MONGLA_RUNS_ROOT': str(tmp_path / 'runs')}
+           'MONGLA_RUNS_ROOT': str(tmp_path / 'runs'),
+           'GIT_CONFIG_COUNT': '1', 'GIT_CONFIG_KEY_0': 'safe.directory',
+           'GIT_CONFIG_VALUE_0': str(ROOT.resolve())}
     subprocess.run([shell, '-c', f'source {SCRIPT} t1 >/dev/null'], cwd='/',
                    env=env, check=True)
     text = (tmp_path / 'runs/t1/software.txt').read_text()
