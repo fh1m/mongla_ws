@@ -1,0 +1,30 @@
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 136,7101-7125
+.claude/context/packages/mongla_manager/README.md
+  h_f1b9066eb9899c 126,186
+README.md
+  h_f1b9066eb9899c 777,780
+docs/index.html
+  h_f1b9066eb9899c 1734-1736,1738
+src/mongla_manager/mongla_manager/bringup_host.py
+  h_f1b9066eb9899c 45-62,65,68,610-622,625,628-629
+src/mongla_manager/mongla_manager/host_health.py
+  h_f1b9066eb9899c 1-140
+src/mongla_manager/mongla_manager/node_health.py
+  h_f1b9066eb9899c 10-12,275-277
+src/mongla_manager/test/test_health.py
+  h_f1b9066eb9899c 232-234
+src/mongla_manager/test/test_the_computer_is_in_the_health_report.py
+  h_f1b9066eb9899c 1-101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "565020be201a6af6658977d3acf29f5adfe42cc7",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
