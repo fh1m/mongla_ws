@@ -165,7 +165,7 @@ Related: [`mongla_control`](../mongla_control/README.md) (what the verbs actuall
 ## Every module
 
 <!-- modules:begin -->
-Generated from each module's docstring by `tools/gen_reference.py`; a module
+Generated from each module's docstring by `tools/ci/gen_reference.py`; a module
 with no summary line shows as *(no summary)* until it gets one.
 
 | module | what it is |

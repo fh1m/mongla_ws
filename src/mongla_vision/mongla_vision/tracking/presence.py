@@ -20,7 +20,7 @@ detectability. We apply it to the boxes our own detector already emits and
 then throws away -- it publishes down to 0.202 while the acting bar is 0.45.
 
 Measured on our own footage, not borrowed from the papers
-(`tools/weak_box_persistence.py`, 10 425 frames, bag_person_inout_20260924):
+(`tools/studies/weak_box_persistence.py`, 10 425 frames, bag_person_inout_20260924):
 
     regime               pairs   linked   time-free control   ratio
     in-view dropout         64    0.938               0.090   10.42x
@@ -64,7 +64,7 @@ median gap, so the rung would rarely fire even if it were safe. Precedent for
 holding: `continuity.py`, whose person-in-air constants were also not shipped.
 
 So this module is DEFERRED and stays there until B-59 is fixed, the bar is
-re-derived WITH negative clips (`tools/negative_clip_check.py`), and these
+re-derived WITH negative clips (`tools/studies/negative_clip_check.py`), and these
 constants are re-swept on water. It may turn out never to be wired, and that is
 an acceptable outcome for it.
 

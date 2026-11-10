@@ -113,7 +113,7 @@ ros2 bag record /mongla/imu /mongla/state /mongla/demand -o decay_yaw_1
 **The analysis is written down and already validated:**
 
 ```bash
-python3 tools/fit_free_decay.py decay_yaw_1.csv       # time_s, rate_rad_s
+python3 tools/bench/fit_free_decay.py decay_yaw_1.csv       # time_s, rate_rad_s
 ```
 
 It reports `q/I`, the starting rate, a rate-dependent half-life and its own R².

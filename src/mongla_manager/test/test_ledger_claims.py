@@ -150,7 +150,7 @@ def test_uplink_really_does_send_coasted_and_gap_age():
     tn = kw['target_num']
     assert not isinstance(tn, ast.Constant), (
         'target_num is hardcoded -- that was the original defect: this tick sent '
-        'a literal 0 while tools/srot_uplink_check.py sent d.class_id, so neither '
+        'a literal 0 while tools/pool/srot_uplink_check.py sent d.class_id, so neither '
         'was a wire contract')
     assert any(getattr(f, 'id', None) == 'srot_uplink_class_num'
                for f in ast.walk(tn) if isinstance(f, ast.Name)), (

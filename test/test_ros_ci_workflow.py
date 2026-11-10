@@ -1,7 +1,7 @@
 """The ROS job builds and tests the whole stack on both distros, every time (#65).
 
-`.github/workflows/ros.yml` is held to one shape by `tools/ci_contract.py`,
-and everything it does is `tools/ci_ros.sh`. These tests run the contract on
+`.github/workflows/ros.yml` is held to one shape by `tools/ci/ci_contract.py`,
+and everything it does is `tools/ci/ci_ros.sh`. These tests run the contract on
 the real file, then on each way of quietly weakening it; every mutation must
 be refused. The script is held to never turning a failure into a pass.
 """
@@ -14,13 +14,13 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-_spec = importlib.util.spec_from_file_location('ci_contract', ROOT / 'tools/ci_contract.py')
+_spec = importlib.util.spec_from_file_location('ci_contract', ROOT / 'tools/ci/ci_contract.py')
 assert _spec is not None and _spec.loader is not None
 contract = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(contract)
 
 ROS = (ROOT / contract.ROS).read_text()
-SCRIPT = (ROOT / 'tools/ci_ros.sh').read_text()
+SCRIPT = (ROOT / 'tools/ci/ci_ros.sh').read_text()
 
 
 def test_the_real_workflow_keeps_the_contract():
@@ -32,15 +32,15 @@ def test_the_real_workflow_keeps_the_contract():
     ('fail-fast: false', 'fail-fast: true'),                       # a sibling cancelled
     ('    timeout-minutes: 45\n', '    timeout-minutes: 45\n    if: false\n'),
     ('    timeout-minutes: 45\n', '    timeout-minutes: 45\n    continue-on-error: true\n'),
-    ('run: bash tools/ci_ros.sh', 'run: bash tools/ci_ros.sh || true'),
-    ('run: bash tools/ci_ros.sh', 'run: echo bash tools/ci_ros.sh'),
+    ('run: bash tools/ci/ci_ros.sh', 'run: bash tools/ci/ci_ros.sh || true'),
+    ('run: bash tools/ci/ci_ros.sh', 'run: echo bash tools/ci/ci_ros.sh'),
     ('ros:${{ matrix.distro }}-ros-base', 'ros:jazzy-ros-base'),     # one image for both
     ('  push:\n    branches: [main]\n', ''),                          # main never checked
     ('  contents: read', '  contents: write'),
     ('    types: [opened, synchronize, reopened, ready_for_review]',
      '    types: [opened]'),
-    ('        run: bash tools/ci_ros.sh\n',
-     '        run: bash tools/ci_ros.sh\n        env:\n          PYTEST_ADDOPTS: -k nothing\n'),
+    ('        run: bash tools/ci/ci_ros.sh\n',
+     '        run: bash tools/ci/ci_ros.sh\n        env:\n          PYTEST_ADDOPTS: -k nothing\n'),
 ])
 def test_every_weakening_is_refused(old, new):
     assert old in ROS, old
