@@ -47,9 +47,35 @@ export MONGLA_RUN_DIR
 export ROS_LOG_DIR="$MONGLA_RUN_DIR/logs"
 mkdir -p "$ROS_LOG_DIR"
 
+# --- which software produced this run ----------------------------------------
+# A run is evidence only for the code that ran it, and nothing wrote that down
+# before: the RoboSub 2026 runs can be tied to a commit only by date (water
+# lineage, W-RS26). On Kutum the workspace is a release and carries
+# release.json; anywhere else, the commit and whether it was dirty.
+if [ -n "${ZSH_VERSION:-}" ]; then
+  _dbr_self="${(%):-%x}"
+else
+  _dbr_self="${BASH_SOURCE[0]}"
+fi
+# The script lives in tools/pool/, so the workspace is two levels up.
+_dbr_ws="$(cd "$(dirname "$_dbr_self")/../.." && pwd -P)"
+{
+  echo "workspace: $_dbr_ws"
+  echo "recorded: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if [ -f "$_dbr_ws/release.json" ]; then
+    cat "$_dbr_ws/release.json"
+  else
+    echo "commit: $(git -C "$_dbr_ws" rev-parse HEAD 2>/dev/null || echo unknown)"
+    if ! git -C "$_dbr_ws" diff --quiet HEAD 2>/dev/null; then
+      echo "dirty: yes (the run used code no commit has)"
+    fi
+  fi
+} >> "$MONGLA_RUN_DIR/software.txt"
+
 echo "▸ Mongla run session pinned:"
 echo "    MONGLA_RUN_DIR = $MONGLA_RUN_DIR   (bags + scorecards)"
 echo "    ROS_LOG_DIR    = $ROS_LOG_DIR      (node logs)"
+echo "    software       = $MONGLA_RUN_DIR/software.txt"
 echo "  Source this with the SAME label in every terminal of this run."
 
-unset _dbr_root _dbr_label
+unset _dbr_root _dbr_label _dbr_self _dbr_ws
