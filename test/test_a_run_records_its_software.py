@@ -41,7 +41,7 @@ def test_sourcing_it_records_the_commit(tmp_path, shell):
 
 def test_a_kutum_release_records_its_own_manifest(tmp_path):
     ws = tmp_path / 'release'
-    (ws / 'scripts').mkdir(parents=True)
+    (ws / 'tools/pool').mkdir(parents=True)
     shutil.copy(SCRIPT, ws / 'tools/pool/pool_session.sh')
     (ws / 'release.json').write_text('{"id": "abc1234", "vehicle_gate": "pass"}\n')
     env = {'HOME': str(tmp_path), 'PATH': '/usr/bin:/bin',
