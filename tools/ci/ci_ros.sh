@@ -44,7 +44,17 @@ apt-get install -y -qq python3-venv python3-pip python3-pytest procps iproute2 >
 
 echo "== the dependencies the package.xml files declare (rosdep)"
 rosdep update --rosdistro "$distro" > /dev/null
-rosdep install --from-paths src --ignore-src -y -q --rosdistro "$distro"
+# A package's 404 means the index is older than the pool: the security archive
+# published libgphoto2 mid-run on 2026-11-10 and failed three PRs at once. The
+# index is refreshed and the install tried again; a real missing dependency
+# still fails, after the third try.
+for attempt in 1 2 3; do
+  if rosdep install --from-paths src --ignore-src -y -q --rosdistro "$distro"; then break; fi
+  if [[ "$attempt" == 3 ]]; then echo "ERROR: rosdep install failed 3 times"; exit 100; fi
+  echo "WARNING: rosdep install failed (attempt $attempt); refreshing the package index"
+  sleep 30
+  if ! apt-get update -qq; then echo "WARNING: the index refresh failed too"; fi
+done
 
 # Built with the SYSTEM Python, as on the vehicle, before any pip package
 # exists: torch drags a new setuptools into the venv, and that broke the

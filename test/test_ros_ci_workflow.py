@@ -112,3 +112,14 @@ def test_ci_resolves_the_vehicles_pymavlink():
     vehicle = _pin('kutum/requirements.txt', 'pymavlink')
     assert vehicle, 'kutum/requirements.txt no longer pins pymavlink'
     assert _pin('requirements.txt', 'pymavlink') == vehicle
+
+
+def test_a_stale_package_index_is_refreshed_before_the_install_gives_up():
+    """The security archive published a package mid-run and every job that
+    held the older index failed on a 404. The install refreshes and retries,
+    and still fails for good on the third try."""
+    code = SCRIPT
+    install = code.index('rosdep install --from-paths')
+    block = code[install:code.index('done', install)]
+    assert 'apt-get update' in block, 'no index refresh between attempts'
+    assert 'exit 100' in block, 'the retry must still fail the job in the end'
