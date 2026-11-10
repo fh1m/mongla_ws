@@ -134,6 +134,7 @@ is how `recommend()` happened.
 - [68. THE VEHICLE'S LOOPS HOLD THEIR RATES — and a relative sleep does not](#68-the-vehicles-loops-hold-their-rates--and-a-relative-sleep-does-not)
 - [69. THE RESTART POLICY — two decided numbers, two derived, and the vehicle refuted my first camera design (2026-11-10)](#69-the-restart-policy--two-decided-numbers-two-derived-and-the-vehicle-refuted-my-first-camera-design-2026-11-10)
 - [70. KUTUM IN THE HEALTH REPORT — the Pi and the Hailo-8 as one machine, graded by their own firmware (2026-11-10)](#70-kutum-in-the-health-report--the-pi-and-the-hailo-8-as-one-machine-graded-by-their-own-firmware-2026-11-10)
+- [71. KUTUM'S CLOCK IN THE HEALTH REPORT — the RTC, and a wall clock that moves mid-session (2026-11-10)](#71-kutums-clock-in-the-health-report--the-rtc-and-a-wall-clock-that-moves-mid-session-2026-11-10)
 - [72. THE HELD RUNG — a weak box where the lock is: more accurate, and it failed its own safety bar (2026-11-10)](#72-the-held-rung--a-weak-box-where-the-lock-is-more-accurate-and-it-failed-its-own-safety-bar-2026-11-10)
 - [73. THE EXECUTOR — what delivering one callback costs, and what that is worth in a real node (2026-11-10)](#73-the-executor--what-delivering-one-callback-costs-and-what-that-is-worth-in-a-real-node-2026-11-10)
 - [74. JPEG DECODE — already on the fast path; half-size decode does not apply (2026-11-10)](#74-jpeg-decode--already-on-the-fast-path-half-size-decode-does-not-apply-2026-11-10)
@@ -7153,6 +7154,29 @@ every **1 s**, ten times the shipped rate: forward detections held
 **15.000 Hz** before and **15.000 Hz** during, over 32 reads (slowest 144 ms).
 15 Hz is the camera's rate, so this shows the reads cost no frames; it does not
 show the margin at a detector-bound rate. Idle, no thrusters, no target in view.
+
+## 71. KUTUM'S CLOCK IN THE HEALTH REPORT — the RTC, and a wall clock that moves mid-session (2026-11-10)
+
+A fifth row, `kutum.clock`, beside the four of §70. Untethered there is no
+network, so the wall clock is whatever the Pi 5 RTC said at boot, and bags,
+logs and the run folder are stamped with it. The doctor checks the RTC before
+the hull is wet; nothing watched it during a session. The hazard the row adds
+is not a wrong clock but one that **moves**: network time arriving when the
+tether goes back on steps it, and wall-stamped records on either side stop
+lining up. Monotonic stamps are unaffected.
+
+| constant | value | kind | reason |
+|---|---|---|---|
+| `RTC_CELL_LOW_V` | **2.5 V** | decided | the doctor's bar for the RTC cell; below it the date may not survive a power-off. `test_the_cell_bar_is_the_doctors_bar` reads `kutum/doctor.sh` |
+| `RTC_OFFSET_S` | **2 s** | derived | the kernel writes network time to the RTC every 11 minutes, so a synced pair agrees to a second; the doctor's bar |
+| `CLOCK_STEP_S` | **1 s** | derived | movement of `time.time() - time.monotonic()` since start. A slew at the kernel's 500 ppm cap moves it 1.8 s an hour, which misaligns wall stamps as a step does, so both report; a 50 ppm crystal correction stays under it for an hour. Both cases are tests |
+
+The move is remembered for the session: the bag recorded across it either way.
+
+**Measured on Kutum**, the module run against the real `rpi-rtc`: cell
+**3.00 V** (charging at 3.0 V), RTC within **0 s**, network time synced, row
+OK. One probe **4.15 ms** on the sampler thread.
+
 
 ---
 
