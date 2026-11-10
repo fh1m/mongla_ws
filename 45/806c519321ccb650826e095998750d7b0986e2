@@ -1,0 +1,44 @@
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 7175-7206
+.claude/context/perception/ladder-register.md
+  h_f1b9066eb9899c 28
+.claude/context/reference/commands.md
+  h_f1b9066eb9899c 126,291-292
+README.md
+  h_f1b9066eb9899c 787
+docs/index.html
+  h_f1b9066eb9899c 1734,1736
+src/mongla_manager/config/bringup.example.yaml
+  h_f1b9066eb9899c 186-188,411
+src/mongla_manager/launch/bringup.launch.py
+  h_f1b9066eb9899c 79
+src/mongla_vision/launch/vision_pi.launch.py
+  h_f1b9066eb9899c 137-145,476-477
+src/mongla_vision/mongla_vision/detector_dual_node.py
+  h_f1b9066eb9899c 87,125-127
+src/mongla_vision/mongla_vision/detector_setup.py
+  h_f1b9066eb9899c 30-32
+src/mongla_vision/mongla_vision/lock_frames.py
+  h_f1b9066eb9899c 28-33,191-193,230-231
+src/mongla_vision/mongla_vision/lock_publish.py
+  h_f1b9066eb9899c 104-105
+src/mongla_vision/mongla_vision/lock_setup.py
+  h_f1b9066eb9899c 371
+src/mongla_vision/mongla_vision/lock_wiring.py
+  h_f1b9066eb9899c 219
+src/mongla_vision/test/test_lock_acting_bar.py
+  h_f1b9066eb9899c 312,359-376
+tools/studies/held_rung_score.py
+  h_f1b9066eb9899c 107-108,129,137-138,204-207,227
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "45806c519321ccb650826e095998750d7b0986e2",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
