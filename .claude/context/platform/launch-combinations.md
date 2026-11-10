@@ -189,6 +189,15 @@ A live `ros2 param set` that a node cannot apply is refused rather than
 accepted and ignored. The tracker, for one, reads everything except `classes`
 once at startup.
 
+**Who feeds what.** Most topic names are built at run time, so the wiring is
+checked by launching it: `test_the_launched_graph_is_fed.py` (mongla_manager)
+starts this launch file against a fake board with `vision:=false` and requires
+every subscription to have a publisher, or a row naming the file that
+publishes it and the switch or mission that starts it. Those rows are the
+edges vision, flow and a mission add: prop fixes and the heading anchor come
+from a mission, the downward velocity, grid and lane headings from `flow:=true`
+(with `tile_m` and `lane_lines`), and `mission_alive` from a running mission.
+
 ---
 
 ## 3. One verb at a time — the `mongla` CLI
