@@ -60,6 +60,13 @@ def test_the_script_never_turns_a_failure_into_a_pass():
     assert 'rc=${PIPESTATUS[0]}' in code
 
 
+def test_a_mirror_blip_is_retried_before_it_fails_a_required_check():
+    code = '\n'.join(l for l in SCRIPT.splitlines() if not l.lstrip().startswith('#'))
+    retries = code.index('Acquire::Retries "5"')
+    assert retries < code.index('apt-get update'), 'retries must be set before apt runs'
+    assert 'Fix-Missing' not in code and '--fix-missing' not in code
+
+
 def test_numpy_stays_below_two_in_ci_too():
     assert '-c kutum/constraints.txt' in SCRIPT
     assert "numpy 2 would break cv_bridge" in SCRIPT
