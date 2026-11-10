@@ -80,3 +80,14 @@ def test_ci_resolves_the_vehicles_pymavlink():
     vehicle = _pin('kutum/requirements.txt', 'pymavlink')
     assert vehicle, 'kutum/requirements.txt no longer pins pymavlink'
     assert _pin('requirements.txt', 'pymavlink') == vehicle
+
+
+def test_every_run_publishes_the_bill_of_materials_it_ran_against():
+    """#95: a CI result is evidence for one set of package versions. The job
+    summary carries them: pip at exact versions, and the installed ROS and
+    Python apt packages."""
+    code = SCRIPT[SCRIPT.index('echo "### ROS $distro"'):]
+    assert 'pip freeze --all' in code
+    assert re.search(r"dpkg-query -W .*ros-\$distro-\*.*python3-\*", code)
+    assert "grep -v '=$'" in code, 'uninstalled packages would read as installed'
+    assert '>> "$summary"' in code
