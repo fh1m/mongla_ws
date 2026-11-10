@@ -27,6 +27,7 @@ GUARDS = (
     'test/test_provenance_check.py',
     'test/test_wiki_edits_pass_pr_gate.py',
     'test/test_claims_say_where_they_came_from.py',
+    'test/test_water_claims_have_a_scope.py',
     'test/test_no_capability_is_unreachable_anywhere.py',
     'test/test_the_retired_stack_stays_retired.py',
     'test/test_package_xml_declares_imports.py',

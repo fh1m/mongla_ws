@@ -16,8 +16,10 @@ telemetry, the bag, and the per-verb scorecard together.
 ## 0. The per-run debug workflow (start here) — tested on-device 2026-07-10
 
 Every run becomes fully reviewable: **live** in Foxglove while it happens, and **offline**
-from one folder afterwards (MCAP bag + scorecard + node logs). One helper —
-`scripts/pool_session.sh` — pins that folder so you don't hand-juggle env vars.
+from one folder afterwards (MCAP bag + scorecard + node logs + `software.txt`). One helper —
+`scripts/pool_session.sh` — pins that folder so you don't hand-juggle env vars, and writes
+which software ran into `software.txt`: the Kutum release's `release.json`, or the commit
+and whether it was dirty. A result is evidence only for the code that produced it.
 
 **Pin the run folder in EVERY terminal** (same label = same folder):
 ```bash
