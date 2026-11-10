@@ -35,6 +35,7 @@ won and the document says so.
 | [`pr-t-the-brake-ignores-how-far-you-travelled.md`](pr-t-the-brake-ignores-how-far-you-travelled.md) | `PH_BRAKE`'s impulse is `g·k·v²` -- **no dependence on leg duration at all**. Below ≈0.21 s the brake impulse exceeds the forward impulse and the vehicle ends up **behind** where it started; at 3 s it removes 4.6 %. `abort()` already brakes on the ACHIEVED speed and normal completion on the COMMANDED one, in the same file. Short legs are precision alignment | accumulate `s_cur_speed·dt`, brake against that |
 | [`pr-u-two-mission-stores-nothing-reads.md`](pr-u-two-mission-stores-nothing-reads.md) | **Warning: TWO complete mission stores, neither read by anything** -- `mission::count/getItem` and `lora_mission::missionReady/waypointCount/getWaypoint` all have ZERO callers. The MAVLink handshake round-trips (upload, read back, draw on the QGC map), and the LoRa path **ACKs every chunk**, so Bondor is positively told yes. Neither can simply be wired: the hull has no position estimate. The general ask is bigger than the bug -- **the firmware has no unreachable-capability guard at all**, and the same sweep found `thrust_trim::learned()` orphaned, which is the *observability* for PR R's live defect | refuse on the wire, delete, or name the consumer |
 | [`pr-v-repeat-the-boot-announcements.md`](pr-v-repeat-the-boot-announcements.md) | the boot burst (*"Params reset to build defaults"*, *"NVS reformatted"*, the calibration state) is sent ONCE, and a companion that was not listening never learns it; repeat it on `REQUEST_MESSAGE(STATUSTEXT)`. The host already asks, and says *NOT SEEN* when the board stays silent | a function extracted, one `else if` |
+| [`pr-w-the-board-triggers-the-eyes.md`](pr-w-the-board-triggers-the-eyes.md) | **the board triggers the cameras.** A hardware-timed `CAM_TRIG` on GPIO13 (free and not a strapping pin in the Pico backend), phase-locked to the 500 Hz tick, with an optional strobe input on GPIO14, plus `CAMERA_TRIGGER` (112) carrying board time and `seq`. `SROT_SERVO_FUNC_CAMERA` (`config.h:315`) promises a trigger and has no caller. Plus, to the hardware team: a triggerable global-shutter sensor. The forward Fantech delivers 15.0 fps whatever is asked, and its exposure control is inert | a timer, two parameters, one message (6.25 % of the link at 30 Hz) |
 | [srot-control-board#33](https://github.com/RakibulIslam1/srot-control-board/pull/33) (opened 2026-11-07) | **`DEM_FWD` / `DEM_LAT`: the demand the mixer was handed, in every mode.** In AUTO the board ramps its own demand and reported none, so the command-velocity model went blind for every board verb. Taken before `FRAME_REVERSE`, zero while disarmed, 2 Hz in the NAMED_VALUE_FLOAT block (~0.8 % of the link). Plus `HEAP_MIN`, the low-water mark beside `HEAP`. **Host side already reads it:** `SrotFC.demand()` prefers a fresh echo and falls back to its own MANUAL_CONTROL record on older firmware | additive telemetry, ~38 lines, builds clean |
 
 **Ranked, if only one lands:** **PR Q.** It is safety-critical, it is one
@@ -99,6 +100,8 @@ this table exists so that cannot happen silently again. Every row is a live URL 
 | **S** | issue [**#36**](https://github.com/RakibulIslam1/srot-control-board/issues/36) | **2026-11-07** |
 | **T** | issue [**#37**](https://github.com/RakibulIslam1/srot-control-board/issues/37) | **2026-11-07** |
 | **U** | issue [**#38**](https://github.com/RakibulIslam1/srot-control-board/issues/38) | **2026-11-07** |
+| **W** | issue [**#44**](https://github.com/RakibulIslam1/srot-control-board/issues/44) | **2026-11-10** |
+| **J** | issue [**#45**](https://github.com/RakibulIslam1/srot-control-board/issues/45) | **2026-11-10** |
 | comments: the depth loop closed in `DEPTH_HOLD` on 2026-08-06/07, never in `AUTO` | issue [**#40**](https://github.com/RakibulIslam1/srot-control-board/issues/40) | **2026-11-08** |
 | demand echo `DEM_FWD` / `DEM_LAT` | PR [**#33**](https://github.com/RakibulIslam1/srot-control-board/pull/33) | **2026-11-07** |
 
@@ -106,9 +109,9 @@ K, M, N and O each add exactly one document at their repo root and change no cod
 so none of them needs a `SROT_FW_BEHAVIOUR_REV` bump to merge — the bump each *ask*
 would require is named inside the document, per the reciprocal rule below.
 
-**Caution: J is written and NOT filed**, deliberately: it asks for a simulated-ESC bench
-mode and asks them to decline it rather than ship it unmarked. File it only when
-somebody is ready to own that conversation.
+**J was held for seven weeks** waiting for an owner, and was filed on 2026-11-10 as
+issue #45: an ask kept back goes stale. It still asks them to decline the mode
+rather than ship it unmarked.
 
 Read their firmware from a fresh clone of their `main`
 (`git clone https://github.com/RakibulIslam1/srot-control-board`), not from an older

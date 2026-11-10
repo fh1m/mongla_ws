@@ -51,36 +51,47 @@ CAMERA_PROFILES = {
     # the builder hardcoded MJPG, so a camera that is faster in another format
     # was unconfigurable.
     'pi_forward': {
-        # The FANTECH.
+        # The FANTECH, a rolling-shutter webcam.
         #
-        # RETRACTED 2026-09-09: "a flat 15.00 Hz ... this is the CAMERA's
-        # ceiling ... nothing in software will raise it." The 15 was THIS
-        # LINE, and the comment then defended it. Re-measured on the vehicle
-        # by counting DISTINCT header stamps -- a topic `hz` cannot tell a
-        # real frame from a republished one, which is how a self-imposed cap
-        # reads as a hardware limit:
+        # It delivers 15.0 fps. On Kutum on 2026-11-10, raw `v4l2-ctl
+        # --stream-mmap` (no OpenCV) gave 14.97-15.06 fps at MJPG 640x360,
+        # requested at 30 or 60, in auto exposure and in manual 5, 30 and
+        # 100 ms. The driver accepts the request and reports 30/1 back, so
+        # the reported rate is not evidence. The exposure controls are
+        # accepted and read back, but they are inert: mean brightness was
+        # 124.5-124.8 at every setting.
         #
-        #   requested 15 -> 14.63 Hz     requested 60 -> 30.18 Hz
-        #   requested 30 -> 28.03 Hz     requested 90 -> 30.18 Hz
-        #
-        # Identity checked against the calibration's recorded USB VID/PID and
-        # serial (1d6c:0103, YGR80PU1200F23081120) so this is the Fantech
-        # answering and not the Sonix -- the round-38 trap.
-        #
-        # End to end (camera+detector+tracker) it is worth ~2x of DETECTIONS,
-        # which is what the vision loop steers on, for ~6 points of one core:
-        #
-        #   fps 15 -> image 14.67 Hz, detections 14.67 Hz, CPU 95.5 % idle
-        #   fps 60 -> image 30.03 Hz, detections 27.11 Hz, CPU 89.3 % idle
-        #   (memory 683 vs 680 MB of 3983)
-        #
-        # 60 rather than 30 because the request saturates at the ceiling:
-        # asking 30 returns 28.03, asking 60 returns the full 30.18.
+        # A 2026-09-09 run measured 30.18 Hz here; that does not reproduce
+        # (measured-bars "Forward camera rate"). Asking for 60 stays,
+        # because the request costs nothing when the camera ignores it and
+        # takes whatever a better unit offers. A camera that must deliver
+        # more is the global-shutter profile below, and in the end a
+        # board-triggered sensor (upstream pr-w).
         'source':      'v4l2',
         'device_path': '/dev/mongla_cam_forward',
         'width':       640,
         'height':      360,
         'fps':         60,
+        'fourcc':      'MJPG',
+        'frame_id':    'forward_cam',
+    },
+    'pi_forward_global_shutter': {
+        # The Sonix global-shutter unit, on the FORWARD port, until the
+        # board-triggered sensor arrives (upstream pr-w). Selected with
+        # `fwd_profile:=pi_forward_global_shutter`; the Fantech stays the
+        # default. udev names a Sonix on the forward port
+        # /dev/mongla_cam_forward (99-mongla-cameras.rules), and it runs at
+        # the downward profile's measured MJPG 640x360 @ 210.
+        #
+        # 14x the Fantech's frames, and no rolling-shutter skew while the
+        # hull turns. Its lens is the one in pi_downward_1280x720.json, which
+        # names this profile too; with only one Sonix on the vehicle, the
+        # bottom camera is absent while it sits forward.
+        'source':      'v4l2',
+        'device_path': '/dev/mongla_cam_forward',
+        'width':       640,
+        'height':      360,
+        'fps':         210,
         'fourcc':      'MJPG',
         'frame_id':    'forward_cam',
     },
