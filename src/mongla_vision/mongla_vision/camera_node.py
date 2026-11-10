@@ -626,6 +626,26 @@ class CameraNode(Node):
             import json
             with open(os.path.expanduser(path)) as fh:
                 c = json.load(fh)
+            # A calibration names the profiles it describes. A launch default
+            # passes the Fantech's file for the forward slot whatever camera
+            # sits there, so a global-shutter unit on the forward port would
+            # otherwise publish the Fantech's focal: confident bearings, wrong
+            # by a fixed factor (the round-38 defect, binding.py).
+            applies = c.get('applies_to') or []
+            profile = str(self.get_parameter('profile').value or '').strip()
+            if applies and profile and profile not in applies:
+                own = calibration_for_profile(profile)
+                self.get_logger().warn(
+                    f"[CAM  ] calibration {os.path.basename(path)} applies to "
+                    f"{applies}, not {profile!r}; "
+                    + (f"using {os.path.basename(own)}, which does" if own else
+                       "publishing size-only CameraInfo (k=0) rather than "
+                       "another camera's lens"))
+                if not own:
+                    return None
+                with open(own) as fh:
+                    c = json.load(fh)
+                path = own
             K = c['camera_matrix']; D = c['distortion_coefficients']
             cal = {
                 'K': [float(v) for row in K for v in row],
