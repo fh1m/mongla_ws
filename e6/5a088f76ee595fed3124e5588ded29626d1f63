@@ -1,0 +1,538 @@
+.claude/agents/vision-model-reviewer.md
+  h_f1b9066eb9899c 15,34
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 198,204,254-255,631
+.claude/context/ROADMAP.md
+  h_f1b9066eb9899c 22,65,260
+.claude/context/kutum/remote-access.md
+  h_f1b9066eb9899c 29
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 159,165,1508,1552,1882,2176,3124,3349,3824,3915,3938,3988,4024,4114,4162,4228,4283,4340,4466,4584,4612,4653,5021,5096,5198,5215,5543,5596,5722,5823,5940,6010,6157,6435,6532,6546,6696,6792,6909
+.claude/context/missions/verbs-srot-unlocks.md
+  h_f1b9066eb9899c 3
+.claude/context/packages/mongla_control/README.md
+  h_f1b9066eb9899c 143
+.claude/context/packages/mongla_localization/README.md
+  h_f1b9066eb9899c 95,122
+.claude/context/packages/mongla_manager/README.md
+  h_f1b9066eb9899c 168
+.claude/context/packages/mongla_planner/README.md
+  h_f1b9066eb9899c 123
+.claude/context/packages/mongla_vision/README.md
+  h_f1b9066eb9899c 134
+.claude/context/perception/camera-latency.md
+  h_f1b9066eb9899c 3
+.claude/context/perception/detection-continuity.md
+  h_f1b9066eb9899c 167,322-323
+.claude/context/perception/hailo-vision.md
+  h_f1b9066eb9899c 66,158,180,275,375,736
+.claude/context/perception/ladder-register.md
+  h_f1b9066eb9899c 59-60,109,219
+.claude/context/perception/pipeline-hardening.md
+  h_f1b9066eb9899c 42
+.claude/context/perception/tau-plan.md
+  h_f1b9066eb9899c 70
+.claude/context/perception/underwater-vision.md
+  h_f1b9066eb9899c 251,290,389
+.claude/context/perception/video-testing.md
+  h_f1b9066eb9899c 140-141
+.claude/context/perception/vision-architecture.md
+  h_f1b9066eb9899c 233
+.claude/context/perception/vision-what-to-do-next.md
+  h_f1b9066eb9899c 249
+.claude/context/platform/first-pool-verification.md
+  h_f1b9066eb9899c 8-9,79
+.claude/context/platform/first-swim.md
+  h_f1b9066eb9899c 14
+.claude/context/platform/foxglove-and-bags.md
+  h_f1b9066eb9899c 20,25,41,55,61-62,131,143-146,181,185,242,253
+.claude/context/platform/launch-combinations.md
+  h_f1b9066eb9899c 7,20,32,264-267,317
+.claude/context/platform/pool-day-round-4a.md
+  h_f1b9066eb9899c 116
+.claude/context/platform/pool-day.md
+  h_f1b9066eb9899c 11,82,92
+.claude/context/platform/ros2-conventions.md
+  h_f1b9066eb9899c 13
+.claude/context/platform/srot-architecture.md
+  h_f1b9066eb9899c 541
+.claude/context/platform/srot-board-soul.md
+  h_f1b9066eb9899c 74
+.claude/context/reference/commands.md
+  h_f1b9066eb9899c 4,142,320
+.claude/context/reference/how-the-docs-stay-true.md
+  h_f1b9066eb9899c 28,53,59
+.claude/context/sota/control.md
+  h_f1b9066eb9899c 99
+.claude/context/sota/sources/vision-features-and-matching.md
+  h_f1b9066eb9899c 18,172,736,817
+.claude/context/sota/sources/vision-velocity-and-odometry.md
+  h_f1b9066eb9899c 441,531
+.claude/context/sota/vision.md
+  h_f1b9066eb9899c 39-40,57,60,332
+.claude/context/the-whole-chain.md
+  h_f1b9066eb9899c 114
+.claude/context/upstream/COVERAGE.md
+  h_f1b9066eb9899c 95
+.claude/context/upstream/pr-a-vision-api.md
+  h_f1b9066eb9899c 157
+.claude/context/upstream/pr-b-telemetry-budget.md
+  h_f1b9066eb9899c 86
+.claude/context/upstream/pr-d-protocol-honesty.md
+  h_f1b9066eb9899c 6
+.claude/context/upstream/pr-k-the-mixer-is-for-a-different-hull.md
+  h_f1b9066eb9899c 118
+.claude/context/upstream/pr-m-thruster-requirements-from-control.md
+  h_f1b9066eb9899c 12,117,155
+.claude/context/upstream/pr-n-caps-literals-and-the-heading-hold-setpoint.md
+  h_f1b9066eb9899c 6
+.claude/context/upstream/pr-o-thruster-step-response.md
+  h_f1b9066eb9899c 111,119
+.claude/context/upstream/pr-p-the-allocator-they-asked-for.md
+  h_f1b9066eb9899c 38,221
+.claude/context/upstream/review-2026-09-24/research/cad_review.md
+  h_f1b9066eb9899c 7
+.claude/context/upstream/review-2026-09-24/research/perception_sota.md
+  h_f1b9066eb9899c 98
+.claude/context/workbench/BENCH.md
+  h_f1b9066eb9899c 19,61,148,255,297
+.claude/skills/go/SKILL.md
+  h_f1b9066eb9899c 25,49-50,62,64
+.claude/skills/train-model/SKILL.md
+  h_f1b9066eb9899c 57-58,85
+.github/CODEOWNERS
+  h_f1b9066eb9899c 19-21
+.github/PULL_REQUEST_TEMPLATE.md
+  h_f1b9066eb9899c 19
+.github/workflows/backlog-drift.yml
+  h_f1b9066eb9899c 7,35
+.github/workflows/poc-check.yml
+  h_f1b9066eb9899c 8,13,46,48
+.github/workflows/repository-integrity.yml
+  h_f1b9066eb9899c 6,32,36
+.github/workflows/ros.yml
+  h_f1b9066eb9899c 11,38
+.github/workflows/wiki.yml
+  h_f1b9066eb9899c 26,38,98,135,199,211
+.gitignore
+  h_f1b9066eb9899c 89,97-98,107
+CLAUDE.md
+  h_f1b9066eb9899c 53,197,294-295,365,406,419,423-424,426,429,438-441,457
+README.md
+  h_f1b9066eb9899c 263,465,481,518,745,906,1093
+SECURITY.md
+  h_f1b9066eb9899c 14-15
+conftest.py
+  h_f1b9066eb9899c 99,130-131
+docs/assets/hull-viewer.js
+  h_f1b9066eb9899c 3
+docs/assets/site.css
+  h_f1b9066eb9899c 201,862,1719
+docs/capability-map.md
+  h_f1b9066eb9899c 24
+docs/index.html
+  h_f1b9066eb9899c 166,233,281,325,626,1127,1702,2127
+requirements.txt
+  h_f1b9066eb9899c 39
+src/mongla_control/config/hull_geometry.yaml
+  h_f1b9066eb9899c 10,40,149
+src/mongla_control/mongla_control/fc/srot_params.py
+  h_f1b9066eb9899c 194
+src/mongla_control/mongla_control/fc/srot_protocol.py
+  h_f1b9066eb9899c 424
+src/mongla_control/mongla_control/geometric_allocation.py
+  h_f1b9066eb9899c 52,133
+src/mongla_control/mongla_control/motion_vision/srot_drive.py
+  h_f1b9066eb9899c 25
+src/mongla_control/test/test_dshot_decode.py
+  h_f1b9066eb9899c 17-18,59,73
+src/mongla_control/test/test_srot_yaw_gate.py
+  h_f1b9066eb9899c 15,134
+src/mongla_localization/mongla_localization/inekf.py
+  h_f1b9066eb9899c 446
+src/mongla_localization/mongla_localization/launch_defaults.py
+  h_f1b9066eb9899c 66
+src/mongla_localization/test/test_allan_variance.py
+  h_f1b9066eb9899c 19-20
+src/mongla_manager/config/bringup.example.yaml
+  h_f1b9066eb9899c 1,247-249
+src/mongla_manager/mongla_manager/bringup_host.py
+  h_f1b9066eb9899c 310,362,532
+src/mongla_manager/test/test_depth_sign_check.py
+  h_f1b9066eb9899c 10,17
+src/mongla_manager/test/test_docs_contract.py
+  h_f1b9066eb9899c 198,277,285,293,298,308-309,343,348,355,362,378,385,408,412,419,424,431,436
+src/mongla_manager/test/test_every_documented_launch_renders.py
+  h_f1b9066eb9899c 22-23
+src/mongla_manager/test/test_ledger_claims.py
+  h_f1b9066eb9899c 153
+src/mongla_manager/test/test_yaw_drift_check.py
+  h_f1b9066eb9899c 20
+src/mongla_planner/mongla_planner/missions/pool_day_practice.py
+  h_f1b9066eb9899c 123
+src/mongla_planner/mongla_planner/missions/task_gate.py
+  h_f1b9066eb9899c 52
+src/mongla_planner/test/test_operator_commands_are_real.py
+  h_f1b9066eb9899c 5,15-16
+src/mongla_planner/test/test_sauvc_navigation.py
+  h_f1b9066eb9899c 133
+src/mongla_vision/config/cameras.yaml
+  h_f1b9066eb9899c 48
+src/mongla_vision/launch/vision_pi.launch.py
+  h_f1b9066eb9899c 296,350
+src/mongla_vision/models/gate_sharks.yaml
+  h_f1b9066eb9899c 7,13
+src/mongla_vision/mongla_vision/anchor/bank.py
+  h_f1b9066eb9899c 171,205
+src/mongla_vision/mongla_vision/anchor/xfeat_onnx.py
+  h_f1b9066eb9899c 125
+src/mongla_vision/mongla_vision/approach.py
+  h_f1b9066eb9899c 15,31,43,83
+src/mongla_vision/mongla_vision/calibration/guide.py
+  h_f1b9066eb9899c 39,58
+src/mongla_vision/mongla_vision/camera_node.py
+  h_f1b9066eb9899c 102,598
+src/mongla_vision/mongla_vision/cameras/v4l2_mailbox.py
+  h_f1b9066eb9899c 162,415
+src/mongla_vision/mongla_vision/config.py
+  h_f1b9066eb9899c 47
+src/mongla_vision/mongla_vision/detection/factory.py
+  h_f1b9066eb9899c 79
+src/mongla_vision/mongla_vision/detection/hailo.py
+  h_f1b9066eb9899c 174,198,558,619
+src/mongla_vision/mongla_vision/detection/preprocess.py
+  h_f1b9066eb9899c 104
+src/mongla_vision/mongla_vision/detector_dual_node.py
+  h_f1b9066eb9899c 169
+src/mongla_vision/mongla_vision/lock_node.py
+  h_f1b9066eb9899c 292
+src/mongla_vision/mongla_vision/lock_setup.py
+  h_f1b9066eb9899c 29,53
+src/mongla_vision/mongla_vision/tracking/presence.py
+  h_f1b9066eb9899c 23,67
+src/mongla_vision/mongla_vision/utils/water_check.py
+  h_f1b9066eb9899c 33
+src/mongla_vision/test/test_approach_band_is_measured.py
+  h_f1b9066eb9899c 9,42
+src/mongla_vision/test/test_aprilcal.py
+  h_f1b9066eb9899c 209-211
+src/mongla_vision/test/test_bench_tools.py
+  h_f1b9066eb9899c 39
+src/mongla_vision/test/test_calibration_binding.py
+  h_f1b9066eb9899c 161
+src/mongla_vision/test/test_calibration_library.py
+  h_f1b9066eb9899c 153
+src/mongla_vision/test/test_camera_profiles.py
+  h_f1b9066eb9899c 142
+src/mongla_vision/test/test_composed_lock_harness.py
+  h_f1b9066eb9899c 8
+src/mongla_vision/test/test_composed_lock_intake.py
+  h_f1b9066eb9899c 72
+src/mongla_vision/test/test_flow_node.py
+  h_f1b9066eb9899c 543
+src/mongla_vision/test/test_hailo_compile_refuses_a_downgrade.py
+  h_f1b9066eb9899c 10
+src/mongla_vision/test/test_no_capability_is_built_and_unreachable.py
+  h_f1b9066eb9899c 126,139,158,211,214
+src/mongla_vision/test/test_no_function_is_built_and_uncalled.py
+  h_f1b9066eb9899c 47
+src/mongla_vision/test/test_no_topic_is_published_and_unread.py
+  h_f1b9066eb9899c 33,47
+src/mongla_vision/test/test_pnp_node.py
+  h_f1b9066eb9899c 21
+src/mongla_vision/test/test_shipped_constants_match_the_ledger.py
+  h_f1b9066eb9899c 85
+src/mongla_vision/test/test_td_measure_scorer.py
+  h_f1b9066eb9899c 1,7
+src/mongla_vision/test/test_v4l2_mailbox.py
+  h_f1b9066eb9899c 7
+test/test_backlog_drift.py
+  h_f1b9066eb9899c 15-16,134
+test/test_every_pymavlink_importer_selects_mavlink2.py
+  h_f1b9066eb9899c 26
+test/test_every_tool_is_indexed.py
+  h_f1b9066eb9899c 1,3,11-15,26,40,45-58
+test/test_fit_free_decay.py
+  h_f1b9066eb9899c 9-10
+test/test_fit_thruster_response.py
+  h_f1b9066eb9899c 15-16
+test/test_no_capability_is_unreachable_anywhere.py
+  h_f1b9066eb9899c 93,112,158,161
+test/test_one_lit_red.py
+  h_f1b9066eb9899c 25-27
+test/test_provenance_check.py
+  h_f1b9066eb9899c 19,116
+test/test_published_test_counts_are_the_last_run.py
+  h_f1b9066eb9899c 5,15
+test/test_repository_integrity_workflow.py
+  h_f1b9066eb9899c 3-4,24,36,41,66,68,119,121,123,145,154,182
+test/test_ros_ci_workflow.py
+  h_f1b9066eb9899c 3-4,17,23,35-36,42-43
+test/test_the_retired_stack_stays_retired.py
+  h_f1b9066eb9899c 71
+test/test_the_wiki_is_built_from_the_book.py
+  h_f1b9066eb9899c 3,16
+test/test_tools_point_at_files_that_exist.py
+  h_f1b9066eb9899c 22
+test/test_wiki_publish_never_overwrites_an_edit.py
+  h_f1b9066eb9899c 19,25
+test/test_workspace_stays_clean.py
+  h_f1b9066eb9899c 24
+tools/README.md
+  h_f1b9066eb9899c 8-18,23-54,71,85-114,120-142,148-189,197-211
+tools/bench/allan_variance.py
+  h_f1b9066eb9899c 31-33
+tools/bench/control_bench/build.sh
+  h_f1b9066eb9899c 11
+tools/bench/control_bench/control_bench.py
+  h_f1b9066eb9899c 36
+tools/bench/control_bench/flight.py
+  h_f1b9066eb9899c 37-38
+tools/bench/control_bench/gate_variants.py
+  h_f1b9066eb9899c 27
+tools/bench/control_bench/localization_truth.py
+  h_f1b9066eb9899c 36-37,43
+tools/bench/control_bench/plant.py
+  h_f1b9066eb9899c 41
+tools/bench/control_bench/test_bench_matches_the_board.py
+  h_f1b9066eb9899c 34-35,39
+tools/bench/control_bench/test_bench_params_match_the_board.py
+  h_f1b9066eb9899c 22-23,43
+tools/bench/control_bench/test_depth_loop.py
+  h_f1b9066eb9899c 29-30
+tools/bench/control_bench/test_flight.py
+  h_f1b9066eb9899c 20-21
+tools/bench/control_bench/test_indi.py
+  h_f1b9066eb9899c 18-19
+tools/bench/control_bench/test_localization_truth.py
+  h_f1b9066eb9899c 21-22
+tools/bench/control_bench/test_plant.py
+  h_f1b9066eb9899c 25-26
+tools/bench/dataset_survey.py
+  h_f1b9066eb9899c 17,25
+tools/bench/fit_free_decay.py
+  h_f1b9066eb9899c 20,27
+tools/bench/fit_thruster_response.py
+  h_f1b9066eb9899c 18
+tools/bench/flow_bench.py
+  h_f1b9066eb9899c 16-19,51
+tools/bench/flow_derot_calibrate.py
+  h_f1b9066eb9899c 45-46
+tools/bench/flow_launch_check.py
+  h_f1b9066eb9899c 30
+tools/bench/flow_port_bench.py
+  h_f1b9066eb9899c 36
+tools/bench/footage_inventory.py
+  h_f1b9066eb9899c 45,53,170
+tools/bench/gil_audit.py
+  h_f1b9066eb9899c 41
+tools/bench/gil_probe.py
+  h_f1b9066eb9899c 42
+tools/bench/hailo_api_equivalence.py
+  h_f1b9066eb9899c 18-20,32
+tools/bench/hailo_async_gil.py
+  h_f1b9066eb9899c 5
+tools/bench/hailo_compile.py
+  h_f1b9066eb9899c 4,8,54,183,235
+tools/bench/hailo_compile.sh
+  h_f1b9066eb9899c 7-8
+tools/bench/hailo_int8_shift.py
+  h_f1b9066eb9899c 11
+tools/bench/hull_stations.py
+  h_f1b9066eb9899c 4,9
+tools/bench/label_contact_sheet.py
+  h_f1b9066eb9899c 24,36
+tools/bench/mine_hard_negatives.py
+  h_f1b9066eb9899c 22,28,41
+tools/bench/mixer_map.py
+  h_f1b9066eb9899c 36-37
+tools/bench/model_inventory.py
+  h_f1b9066eb9899c 22,28,43,54,176
+tools/bench/srot_mav_probe.py
+  h_f1b9066eb9899c 49
+tools/bench/srot_vision_bench.py
+  h_f1b9066eb9899c 58
+tools/bench/td_measure.py
+  h_f1b9066eb9899c 4-6,45
+tools/bench/vision_latency_bench.py
+  h_f1b9066eb9899c 35
+tools/bench/vision_stage_profile.py
+  h_f1b9066eb9899c 14,22
+tools/bench/xfeat_export.py
+  h_f1b9066eb9899c 4
+tools/bench/xfeat_export_hailo.py
+  h_f1b9066eb9899c 29
+tools/bench/xfeat_finetune.py
+  h_f1b9066eb9899c 36,49,76
+tools/ci/backlog_drift.py
+  h_f1b9066eb9899c 4-5,34,157,216
+tools/ci/ci_contract.py
+  h_f1b9066eb9899c 4,41,43-45,230
+tools/ci/ci_ros.sh
+  h_f1b9066eb9899c 6
+tools/ci/command_lint.py
+  h_f1b9066eb9899c 23-24,41,118,202
+tools/ci/dead_function_sweep.py
+  h_f1b9066eb9899c 32-34,50,54,72,235,308
+tools/ci/gen_reference.py
+  h_f1b9066eb9899c 19-20,32,140,263,350,383
+tools/ci/gen_tools_index.py
+  h_f1b9066eb9899c 2,4-5,19,24-42,50-53,55-56,115-123,125,128-129,136-140,142-149,153-155,162,167-168
+tools/ci/launch_param_sweep.py
+  h_f1b9066eb9899c 30-31,63
+tools/ci/orphan_sweep.py
+  h_f1b9066eb9899c 35-36,47,149
+tools/ci/provenance_check.py
+  h_f1b9066eb9899c 4
+tools/ci/published_counts.py
+  h_f1b9066eb9899c 15-17,29,153
+tools/ci/run_repo_integrity.py
+  h_f1b9066eb9899c 4,6,22
+tools/ci/topic_wiring_sweep.py
+  h_f1b9066eb9899c 38-39,49
+tools/ci/wiki_build.py
+  h_f1b9066eb9899c 12-14,46
+tools/pool/build_practice_bank.py
+  h_f1b9066eb9899c 14,18,36
+tools/pool/depth_sign_check.py
+  h_f1b9066eb9899c 42
+tools/pool/flow_console.py
+  h_f1b9066eb9899c 15,40
+tools/pool/fov_board_check.py
+  h_f1b9066eb9899c 23
+tools/pool/fov_calibrate.py
+  h_f1b9066eb9899c 31
+tools/pool/fov_calibrate_web.py
+  h_f1b9066eb9899c 23
+tools/pool/fov_capture_guide.py
+  h_f1b9066eb9899c 21
+tools/pool/fov_external_capture.py
+  h_f1b9066eb9899c 34
+tools/pool/fov_quick.py
+  h_f1b9066eb9899c 37
+tools/pool/fov_solve.py
+  h_f1b9066eb9899c 23
+tools/pool/pool_record.sh
+  h_f1b9066eb9899c 8-11,66
+tools/pool/pool_session.sh
+  h_f1b9066eb9899c 6,28
+tools/pool/record_session.sh
+  h_f1b9066eb9899c 12-13,49
+tools/pool/replay_check.sh
+  h_f1b9066eb9899c 9,45,87
+tools/pool/srot_axis_snapshot.py
+  h_f1b9066eb9899c 30
+tools/pool/srot_console.py
+  h_f1b9066eb9899c 37
+tools/pool/srot_fix_gcs_id.py
+  h_f1b9066eb9899c 35
+tools/pool/srot_gate0.py
+  h_f1b9066eb9899c 33
+tools/pool/srot_replay.py
+  h_f1b9066eb9899c 44
+tools/pool/water_check.py
+  h_f1b9066eb9899c 6
+tools/site/board_panel.py
+  h_f1b9066eb9899c 4,13-14,25-26,29,102,104,116
+tools/site/board_snapshot.py
+  h_f1b9066eb9899c 14-16,35
+tools/site/fig_kutum.py
+  h_f1b9066eb9899c 10,24
+tools/site/fig_launch_switches.py
+  h_f1b9066eb9899c 9,23
+tools/site/fig_prop_placement.py
+  h_f1b9066eb9899c 8,25
+tools/site/hull_render_rig.html
+  h_f1b9066eb9899c 7,9
+tools/site/ledger_strip.py
+  h_f1b9066eb9899c 25-26,38-39,42,103
+tools/site/make_banner.py
+  h_f1b9066eb9899c 22-24,37
+tools/site/pack_hull.py
+  h_f1b9066eb9899c 10,27,100
+tools/site/preview_docs.py
+  h_f1b9066eb9899c 6
+tools/site/readme_figures.py
+  h_f1b9066eb9899c 14,34
+tools/site/render_real_stills.py
+  h_f1b9066eb9899c 20,27
+tools/site/robosub_record.py
+  h_f1b9066eb9899c 16-18,32-33,36,142
+tools/site/section_banners.py
+  h_f1b9066eb9899c 17-18,29-30,33
+tools/site/site_pages.py
+  h_f1b9066eb9899c 17-18,28-29,32,101
+tools/site/upload_sink.py
+  h_f1b9066eb9899c 2
+tools/site/wire_frame.py
+  h_f1b9066eb9899c 13-14,28-29,32,127
+tools/studies/anchor_cross_run.py
+  h_f1b9066eb9899c 35,50
+tools/studies/anchor_lifetime.py
+  h_f1b9066eb9899c 38,52
+tools/studies/anchor_roi_bars.py
+  h_f1b9066eb9899c 33,40,81
+tools/studies/approach_band.py
+  h_f1b9066eb9899c 22,44-45
+tools/studies/attenuation_range.py
+  h_f1b9066eb9899c 33,48-49
+tools/studies/bank_scaling_bench.py
+  h_f1b9066eb9899c 26,42
+tools/studies/bank_shortlist_accuracy.py
+  h_f1b9066eb9899c 38,52
+tools/studies/chromatic_prior_check.py
+  h_f1b9066eb9899c 37
+tools/studies/colour_loss.py
+  h_f1b9066eb9899c 24-25,36-37,40,120
+tools/studies/composed_lock_harness.py
+  h_f1b9066eb9899c 10
+tools/studies/continuity_from_bag.py
+  h_f1b9066eb9899c 31
+tools/studies/continuity_from_video.py
+  h_f1b9066eb9899c 28-29
+tools/studies/detection_continuity.py
+  h_f1b9066eb9899c 15,34
+tools/studies/feature_murky_control.py
+  h_f1b9066eb9899c 42,94
+tools/studies/floor_place_recognition.py
+  h_f1b9066eb9899c 43,55
+tools/studies/fresh_bounds_check.py
+  h_f1b9066eb9899c 21
+tools/studies/gap_distribution.py
+  h_f1b9066eb9899c 5,28
+tools/studies/loop_closure_truth.py
+  h_f1b9066eb9899c 36,45
+tools/studies/model_select.py
+  h_f1b9066eb9899c 35,49-50
+tools/studies/negative_clip_check.py
+  h_f1b9066eb9899c 29,43
+tools/studies/pipeline_visual_check.py
+  h_f1b9066eb9899c 32
+tools/studies/pose_precision.py
+  h_f1b9066eb9899c 32-33
+tools/studies/recall_matrix.py
+  h_f1b9066eb9899c 21-22,29
+tools/studies/rung_independence.py
+  h_f1b9066eb9899c 27-29,89
+tools/studies/tau_from_scale.py
+  h_f1b9066eb9899c 33
+tools/studies/tracker_ab.py
+  h_f1b9066eb9899c 15,19,32
+tools/studies/xfeat_finetune_score.py
+  h_f1b9066eb9899c 21,34
+tools/studies/xfeat_finetune_verdict.py
+  h_f1b9066eb9899c 24,37
+tools/studies/xfeat_settings_sweep.py
+  h_f1b9066eb9899c 32,44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "e65a088f76ee595fed3124e5588ded29626d1f63",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
