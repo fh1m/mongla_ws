@@ -133,7 +133,7 @@ is how `recommend()` happened.
 - [67. PLACING A PROP FROM SIGHTINGS — the hull's error enters once, and it is the one that matters](#67-placing-a-prop-from-sightings--the-hulls-error-enters-once-and-it-is-the-one-that-matters)
 - [68. THE VEHICLE'S LOOPS HOLD THEIR RATES — and a relative sleep does not](#68-the-vehicles-loops-hold-their-rates--and-a-relative-sleep-does-not)
 - [69. THE RESTART POLICY — two decided numbers, two derived, and the vehicle refuted my first camera design (2026-11-10)](#69-the-restart-policy--two-decided-numbers-two-derived-and-the-vehicle-refuted-my-first-camera-design-2026-11-10)
-- [70. THE PI IN THE HEALTH REPORT — two vendor numbers, one decided, one measured (2026-11-10)](#70-the-pi-in-the-health-report--two-vendor-numbers-one-decided-one-measured-2026-11-10)
+- [70. KUTUM IN THE HEALTH REPORT — the Pi and the Hailo-8 as one machine, graded by their own firmware (2026-11-10)](#70-kutum-in-the-health-report--the-pi-and-the-hailo-8-as-one-machine-graded-by-their-own-firmware-2026-11-10)
 <!-- contents:end -->
 
 ---
@@ -7099,27 +7099,36 @@ stale camera for the rest of the run. Re-run on the vehicle with the lead out
 v4l2 mailbox with kernel timestamps, **30.0 Hz with 0 dropped**. Logs:
 `~/attic/2026-11-10/reopen_test/` on Kutum.
 
-## 70. THE PI IN THE HEALTH REPORT — two vendor numbers, one decided, one measured (2026-11-10)
+## 70. KUTUM IN THE HEALTH REPORT — the Pi and the Hailo-8 as one machine, graded by their own firmware (2026-11-10)
 
-`mongla_manager/host_health.py` puts the Pi's temperature, throttling and free
-disk in the manager's live health report. Report-only, by the owner's decision.
-Throttling and disk are graded by the preflight's own functions
-(`bringup_host._throttled_verdict`, `_disk_verdict`), so the two cannot disagree.
+`mongla_manager/kutum_health.py` puts Kutum in the manager's live health
+report as four rows: `kutum.pi_temperature`, `kutum.pi_power`, `kutum.hailo`
+and `kutum.disk`. Report-only, by the owner's decision. Pi throttling and disk
+are graded by the preflight's own functions (`bringup_host._throttled_verdict`,
+`_disk_verdict`), so the two cannot disagree.
 
 | constant | value | kind | reason |
 |---|---|---|---|
-| `PI_SOFT_THROTTLE_C` | **80 C** | vendor | the firmware begins throttling the cores here (raspberrypi.com, "Heating and cooling Raspberry Pi 5"); DEGRADED |
-| `PI_MAX_C` | **85 C** | vendor | the firmware maximum, where it throttles further; FAILED |
-| `SAMPLE_S` | **10 s** | decided | slow enough to cost nothing, fast against a thermal rise; `STALE_S` is three samples, so one slow `vcgencmd` is not a fault |
+| `PI_SOFT_THROTTLE_C` | **80 C** | vendor | the Pi firmware begins throttling the cores here (raspberrypi.com, "Heating and cooling Raspberry Pi 5"); DEGRADED |
+| `PI_MAX_C` | **85 C** | vendor | the Pi firmware maximum, where it throttles further; FAILED |
+| Hailo zones | read from the chip | vendor | the Hailo-8 firmware reports its own limits; Kutum's chip said orange at **104 C** (hysteresis 99), red at **120 C** (116), throttling levels at 104 / 108 / 112 / 116 C stepping the NN clock 400 → 350 → 300 → 250 MHz. Nothing here retypes them |
+| `SAMPLE_S` | **10 s** | decided | slow enough to cost nothing, fast against a thermal rise; `STALE_S` is three samples, so one slow read is not a fault |
 
 **Why a thread, derived.** `vcgencmd` runs under a 3 s timeout, and 3 s is
 `EXECUTOR_STALE_S`. Read in the health tick, one slow reading would withhold
 the heartbeat and let the board's link-loss failsafe surface the hull over a
-temperature. `test_the_computer_is_in_the_health_report.py` holds a probe for
-5 s and requires the poll to return in under 0.1 s.
+temperature. `test_kutum_is_in_the_health_report.py` holds a probe for 5 s and
+requires the poll to return in under 0.1 s.
 
-**Measured on Kutum**, the four modules copied to `~/attic/2026-11-10/hosthealth/`
-and run through `register` exactly as the manager does: `pi_temperature` 46 C
-(the zone read 45 750), `pi_power` `0x0`, `host_disk` 10.3 GB free (`df`
-9.7 GiB), and a poll of all three in **0.04 ms**. Idle, no thrusters: not a
-reading under load.
+**Measured on Kutum**, the modules copied to `~/attic/2026-11-10/hosthealth/`
+and run through `register` exactly as the manager does: `pi_temperature` 50 C,
+`pi_power` `0x0`, `hailo` 39 C green at 400 MHz, `disk` 10.3 GB free (`df`
+9.7 GiB). A poll of all four costs **0.08 ms**; one chip read costs 42 ms on the
+sampler thread.
+
+**Measured: reading the chip does not disturb the detector.** `interfere.sh`
+in the same folder ran `vision_pi` (forward Fantech only) and read the chip
+every **1 s**, ten times the shipped rate: forward detections held
+**15.000 Hz** before and **15.000 Hz** during, over 32 reads (slowest 144 ms).
+15 Hz is the camera's rate, so this shows the reads cost no frames; it does not
+show the margin at a detector-bound rate. Idle, no thrusters, no target in view.

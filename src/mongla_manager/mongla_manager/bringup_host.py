@@ -42,7 +42,7 @@ def _check_ros_env() -> list[tuple[str, str, str]]:
     return out
 
 
-# Graded here and by the manager's live health report (host_health.py), so the
+# Graded here and by the manager's live health report (kutum_health.py), so the
 # preflight and the run cannot disagree about the same disk.
 DISK_FAIL_GB = 1.0
 DISK_WARN_GB = 3.0

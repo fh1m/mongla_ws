@@ -229,8 +229,8 @@ def test_a_backend_MISSING_a_method_is_UNKNOWN_not_a_crash():
     m._register_health()
     states = {k: v.state for k, v in m._health.poll().items()}
     assert set(states) >= {'board_link', 'barometer', 'thrusters', 'detector'}
-    # The host rows read this computer, not the backend, so they may be OK.
-    host = {'host_disk', 'pi_temperature', 'pi_power'}
+    # Kutum's rows read this computer, not the backend, so they may be OK.
+    host = {'kutum.disk', 'kutum.pi_temperature', 'kutum.pi_power', 'kutum.hailo'}
     assert all(s is not State.OK for k, s in states.items() if k not in host)
 
 
