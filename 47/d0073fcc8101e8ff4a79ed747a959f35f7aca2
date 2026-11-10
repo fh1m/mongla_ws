@@ -1,0 +1,22 @@
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 138,7239-7271
+README.md
+  h_f1b9066eb9899c 797,800
+docs/index.html
+  h_f1b9066eb9899c 1734-1736,1738
+test/test_every_camera_matrix_reader_removes_the_lens.py
+  h_f1b9066eb9899c 1-67
+tools/ci/run_repo_integrity.py
+  h_f1b9066eb9899c 37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "47d0073fcc8101e8ff4a79ed747a959f35f7aca2",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
