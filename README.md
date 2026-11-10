@@ -572,6 +572,16 @@ ssh fh1m@mongla.local bash -s < kutum/doctor.sh   # is it still Kutum? read-only
 What it is, what was wrong with it, and the eight steps from a blank SD card:
 [the Kutum chapter](.claude/context/kutum/README.md).
 
+**Why a Hailo, and not the obvious thing.** Most robots that see run on NVIDIA. That is a
+reasonable default, and we have nothing against it; we have something against defaults nobody
+can explain. Everything that decides what Mongla does is ours, from the firmware to the
+thruster, so the one part we did not design had to be one we could understand: a chip that only
+multiplies, at about 2.5 W, behind a driver and a runtime we build from source. Its compiler and
+firmware are closed, and we say so instead of hoping nobody asks. We found no other open-source
+AUV stack on a Hailo-8, which makes our measurements some of the few taken on a moving robot
+rather than a desk, so they are written to be reused:
+[the Hailo-8 frontier](.claude/context/perception/hailo-frontier.md).
+
 ---
 
 ## The six packages
