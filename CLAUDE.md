@@ -253,8 +253,9 @@ environment pins: [`pi-and-env-traps.md`](.claude/context/kutum/pi-and-env-traps
 ## 5. Localization
 
 No GPS, no DVL. A right-invariant EKF predicts on the board's IMU and corrects with depth,
-optical-flow velocity, headings and prop fixes; late measurements are **replayed at the
-instant they describe** rather than applied on arrival. Course priors are per venue and
+optical-flow velocity, headings and prop fixes. With `retrodict:=true`, late measurements
+are **replayed at the instant they describe**; by default (`false`) they are applied on
+arrival. Course priors are per venue and
 overridable on the deck (`~/.mongla/courses`) with a survey tool to measure the real thing.
 
 Verified: the downward camera as a velocity sensor — three 30 cm slides, worst error
@@ -458,6 +459,19 @@ not port it back. A capability that needs something from it is rebuilt against t
   mode that ends competition runs.
 - **One truth, two copies is the bug.** When two places state the same constant, make one read
   the other, or have a test compare them.
+- **We own the chain, so we never settle for less data than it can give.** Mongla is ours from
+  firmware to thruster: board, sensors, wire, companion, models. When a design compromises
+  because a measurement is missing, coarse, late or unstamped (a heading we cannot command, a
+  rate guessed from two samples, a camera not triggered by the board), the compromise is not
+  finished until we have asked for the data where it can be produced: a firmware pull request
+  in `upstream/`, a sensor or wiring ask to the hardware team, a new field on our own wire.
+  Ship the interim workaround only beside that ask, name it in the code (`upstream ask N`)
+  and in the PR's **Compromises** section. Data first, then the cleverness that works
+  around its absence.
+- **Fix the chain, not the line.** A defect in vision or control is traced through the whole
+  path it lives on (photons, detection, lock, sample, authority, command, mixer, thrust), and
+  the neighbours on that path are fixed in the same change. Then the same pattern is searched
+  for in every other package, because a mistake made once was usually made twice.
 
 ---
 

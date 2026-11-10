@@ -344,3 +344,29 @@ procedure: the `train-model` skill and [`hailo-vision.md`](../perception/hailo-v
 
 `stop`, `surface` and `disarm` bypass the busy gate: they run even while
 another verb is executing.
+
+### When a process dies on its own
+
+Every process bringup starts comes back by itself: 2 s after it dies, up to
+three times, then it stays down for the run and the log says so. The mission
+keeps running. Ctrl-C and a clean exit restart nothing.
+
+| in the log | what it means |
+|---|---|
+| `WARNING: the forward tracker exited (1); restart 1/3 in 2 s` | it died and is coming back |
+| `ERROR: the flow node exited (1) after 3 restarts; it stays down for this run` | gone until the next launch |
+| `[CAM  ] ERROR: downward: /dev/mongla_cam_downward is GONE` | the lead is out or the hub is re-enumerating; nothing is tried until the device comes back, then it reopens by itself |
+| `[CAM  ] WARNING: downward delivered nothing ...; reopening (1/3)` | the device is there but silent; only that camera is reopened |
+| `[CAM  ] downward reopened (v4l2_mailbox); frames resume` | it is back |
+| `[CAM  ] ERROR: downward LOST: 3 reopens failed` | three real tries failed; that camera is gone for the run, the other keeps running |
+
+One restart of the vision process costs about 4.5 s without detections
+(measured on the vehicle, measured-bars §69); a verb running at that moment
+ends LOST and the mission's fallback takes over.
+
+A restarted manager that finds the board armed refuses every verb except
+`disarm`, `stop` and `surface` until the board reports DISARMED. A restarted
+localization reports no pool position until it is anchored again. The only
+process that does not restart is the operator display. The rule is
+`test/test_every_launched_process_restarts.py`; why each restart is safe is in
+`mongla_localization/launch_respawn.py`.
