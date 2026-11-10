@@ -309,6 +309,7 @@ def _locked_at(cx, cy, act_conf=0.45):
     s = _Stub(act_conf=act_conf)
     s._lock_centre = (cx, cy)
     s._gray = np.zeros((480, 640), np.uint8)
+    s._confirms = 2
     return s
 
 
@@ -355,3 +356,21 @@ def test_a_weak_box_of_another_class_is_not_held():
     s._cls = 'gate'
     _on_det(s, _msg(_det(0.30, name='shark')))
     assert s._held_box is None
+
+
+def test_a_lock_seen_once_is_not_held():
+    """One false strong box was what HELD kept alive on gate-free water
+    (measured-bars section 72). A lock must be seen twice first."""
+    s = _locked_at(320.0, 240.0)
+    s._confirms = 1
+    _on_det(s, _msg(_det(0.20, cx=330.0)))
+    assert s._held_box is None
+
+
+def test_strong_boxes_count_toward_the_confirmation():
+    s = _locked_at(320.0, 240.0)
+    s._confirms = 0
+    _on_det(s, _msg(_det(0.80)))
+    _on_det(s, _msg(_det(0.80)))
+    _on_det(s, _msg(_det(0.20, cx=330.0)))
+    assert s._held_box is not None

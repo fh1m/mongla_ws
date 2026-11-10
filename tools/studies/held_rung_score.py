@@ -104,7 +104,8 @@ def replay(frames, act_conf, held_on, shuffle_rng=None):
     from mongla_vision.lock_frames import LockFramesMixin
     from mongla_vision.tracking.lock_state import arbitrate
 
-    st = SimpleNamespace(_act_conf=act_conf, _lock_centre=None, _gray=None)
+    st = SimpleNamespace(_act_conf=act_conf, _lock_centre=None, _gray=None,
+                         _confirms=0)
     last_t, out = 0.0, []
     for f in frames:
         st._gray = np.zeros((1, int(f['w'])), np.uint8)
@@ -125,6 +126,7 @@ def replay(frames, act_conf, held_on, shuffle_rng=None):
                 st, [(b[0], _bbox(*b[1:])) for b in weak])
         if det is not None:
             last_t = f['t']
+            st._confirms += 1
         r = arbitrate(now=f['t'], last_detection_t=last_t,
                       detection=None if det is None else tuple(det[1:]),
                       detection_conf=0.0 if det is None else det[0],
@@ -132,6 +134,8 @@ def replay(frames, act_conf, held_on, shuffle_rng=None):
                       held_conf=0.0 if held is None else held[1],
                       held_age_s=0.0)
         st._lock_centre = r.centre if r.have_target else None
+        if not r.have_target:
+            st._confirms = 0
         out.append((r.rung.value, r.xyxy, det))
     return out
 
@@ -196,8 +200,11 @@ def score(a) -> int:
         carried_all += c
         s_off, s_on = _shares(off), _shares(on)
         from_det = lambda s: s.get('detection', 0.0) + s.get('held', 0.0)  # noqa: E731
-        det_gain.append(from_det(s_on) - from_det(s_off))
         weak = sum(1 for f in frames for b in f['boxes'] if b[0] < a.act_conf)
+        if weak:
+            # A clip with no weak boxes cannot gain, so it is not asked to
+            # (section 72: the first criterion 3 failed on exactly that).
+            det_gain.append(from_det(s_on) - from_det(s_off))
         print(f'+ {Path(p).name}: {len(frames)} frames, {weak} weak boxes; '
               f'off {_fmt(s_off)} | on {_fmt(s_on)}; scored {len(h)}')
     rise = []
@@ -217,7 +224,7 @@ def score(a) -> int:
          len(held_all) >= MIN_SCORED and med(held_all) < med(carried_all)),
         (f'2 safety: lock on negatives rises <= {SAFETY_POINTS} pt',
          all(r <= SAFETY_POINTS for r in rise)),
-        ('3 value: more of the lock comes from the detector',
+        ('3 value: more of the lock comes from the detector, on every clip with weak boxes',
          bool(det_gain) and all(g > 0.0 for g in det_gain)),
     ]
     for name, ok in checks:

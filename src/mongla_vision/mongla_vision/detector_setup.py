@@ -27,9 +27,9 @@ class DetectorSetupMixin:
         # BYTE association floor: boxes from here up to `conf` go out on
         # `candidates` only (the tracker and the lock ladder), never on
         # `detections`, so nothing that steers can act on one. 0.0 = OFF, and
-        # off is byte-for-byte the previous behaviour. Off by default: the
-        # ladder's HELD rung failed its own safety bar on it (measured-bars
-        # section 72).
+        # off is byte-for-byte the previous behaviour. Off for a bare node;
+        # the vehicle launch turns it on (vision_pi.launch.py `assoc_conf`,
+        # measured-bars section 72).
         #
         # Measured on real footage, publish floor the ONLY variable: presence on
         # hard clips 8.3 -> 34.8 %, and NO change on clips already at 100 %. The

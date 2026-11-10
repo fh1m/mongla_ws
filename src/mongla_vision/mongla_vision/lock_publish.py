@@ -101,6 +101,8 @@ class LockPublishMixin:
         # Set before the rate limit below could return, so a throttled publish
         # still moves the prior.
         self._lock_centre = None
+        if not st.have_target:
+            self._confirms = 0
         if st.have_target:
             x1, y1, x2, y2 = st.xyxy
             self._lock_centre = ((x1 + x2) * 0.5, (y1 + y2) * 0.5)

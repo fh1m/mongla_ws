@@ -216,6 +216,7 @@ class LockWiringMixin:
         self._held_box, self._held_conf, self._held_t = None, 0.0, 0.0
         self._held_header = None
         self._lock_centre = None
+        self._confirms = 0
         # Bumped on every change of target class (#75). A ladder tick that
         # started under an older one publishes nothing.
         self._gen = 0

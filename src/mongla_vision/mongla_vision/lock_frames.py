@@ -25,6 +25,12 @@ def _stamp_key(header):
     return (int(st.sec), int(st.nanosec))
 
 
+
+# Strong detections a lock needs before a weak box may hold it. One false
+# strong box was what HELD extended on gate-free water (measured-bars section
+# 72); two in one lock is a target that was seen twice.
+HELD_MIN_CONFIRMS = 2
+
 class LockFramesMixin:
     """Methods of `LockNode`; see `lock_node.py` for the node."""
 
@@ -182,6 +188,9 @@ class LockFramesMixin:
             self.get_logger().warn(
                 f'[LOCK ] detection {why} -- the authority decay is measuring '
                 f'age since ARRIVAL, not since capture. Check use_sim_time.')
+        if best is not None:
+            # Counted per lock; `_publish` zeroes it when the lock is lost.
+            self._confirms = getattr(self, '_confirms', 0) + 1
         held = None if best is not None else self._held_from(weak)
         with self._lock:
             self._held_box, self._held_conf = (None, 0.0) if held is None else held
@@ -218,7 +227,8 @@ class LockFramesMixin:
         # state (the subscription exists first; see lock_wiring).
         prior = getattr(self, '_lock_centre', None)
         gray = getattr(self, '_gray', None)
-        if prior is None or gray is None or not weak:
+        if (prior is None or gray is None or not weak
+                or getattr(self, '_confirms', 0) < HELD_MIN_CONFIRMS):
             return None
         from .tracking.visibility import region_conf_bar
         w = float(gray.shape[1])

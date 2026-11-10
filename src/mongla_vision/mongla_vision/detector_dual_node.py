@@ -84,7 +84,7 @@ from .detector_node import DetectorNode
 # right for the ones that describe the machine (device, imgsz, half) and for the
 # ones an operator sets globally (max_det, debug_image_hz, paused).
 _PER_CAMERA = ('model_path', 'models', 'active_model', 'classes', 'conf',
-               'model_conf', 'image_topic')
+               'assoc_conf', 'model_conf', 'image_topic')
 _SHARED = ('device', 'half', 'iou', 'imgsz', 'max_det', 'publish_contours',
            'publish_debug_image',
            'debug_image_hz', 'alignment_deadband', 'paused',
@@ -122,6 +122,9 @@ _DEFAULTS = {
     # model's own sidecar and warns when `conf` is off ITS bar, so a model
     # measured differently says so at load.
     'conf': 0.45, 'model_conf': '', 'image_topic': '',
+    # 0.0 here, so a direct `ros2 run` is the single-node behaviour; the
+    # vehicle launch turns it on (vision_pi.launch.py, `assoc_conf`).
+    'assoc_conf': 0.0,
     'device': 'auto', 'half': True, 'iou': 0.5, 'imgsz': 640,
     'max_det': 100, 'publish_contours': True,
     'publish_debug_image': True, 'debug_image_hz': 5.0,

@@ -25,6 +25,7 @@
 | `anchor/health.py` | fouled lens vs changed world; `trend()` anticipates a fall before it happens | `TREND_FALL 0.70`, compares halves not slope |
 | `anchor/loop_closure.py` | place recognition; centre-displacement offset, not origin | bar 100 inliers, `MIN_TRAVEL_M 1.5` |
 | `tracking/lock_state.py` | the ladder state machine, authority decaying from last real detection | gap p50 0.155 s / p90 0.651 s / p99 2.418 s |
+| **HELD rung** (`lock_state.Rung.HELD`, `lock_frames._held_from`) | a weak box near a lock seen twice replaces the follower's guess in a gap: **3.7 px vs 4.6 px** (held-out) against the next strong detection | **ON by the owner's decision** (`assoc_conf` 0.10). Misses its safety bar where the gate model mistakes the torpedo board for a gate, +1.5 points (measured-bars section 72) |
 
 Plus, in the nodes themselves: the camera **mailbox** (16.9 ms stale vs 396 ms
 queued), the follower's **RANSAC similarity fit** (carries SCALE, which the
@@ -39,7 +40,6 @@ approach controller reads), replay mode, and — new — the **acting bar** belo
 | **`tracking/visibility.py`** | **the FOV guard. There is no field-of-view constraint anywhere in `mongla_control`, so perception can be perfect and the lock still dies because the vehicle turned away** | a consumer in the vision verbs: yaw/lateral demand scaled by `Visibility.scale`, and only the component making the bearing WORSE. Control change ⇒ needs a pool day |
 | `tracking/cascade.py` | association cascade; expensive appearance stage only on detections motion cannot explain, with a MEASURED ego-motion stage no published tracker has | `tracker_node` calls its tracker library directly; inserting a cascade touches the association hot path, rate must be measured on the vehicle |
 | `tracking/reid.py` | the 179-switch fix, using XFeat already loaded at 701 FPS instead of a 15–25 ms Re-ID net | crop descriptors at track birth/death |
-| **HELD rung** (`lock_state.Rung.HELD`, `lock_frames._held_from`) | a weak box near the lock replaces the follower's guess in a gap: **4.2 px vs 5.1 px** against the next strong detection | **off** (`assoc_conf` 0.0): it failed its own safety bar, +1.6 points of lock on gate-free water (measured-bars section 72). Built, tested, and reachable by setting `assoc_conf` |
 | `tracking/presence.py` | the rung BELOW detection (track-before-detect) | **B-59 — may never wire.** The band below the bar is confident hallucination, not faint signal |
 | `continuity.py` | gap distribution analyser | offline only; its constants are a person in air |
 | `time_to_contact.py` | τ with ego-velocity subtracted | no approach/standoff controller exists |

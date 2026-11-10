@@ -7172,19 +7172,35 @@ the clips' own timestamps (about 31 fps):
 fail, and it does: **114.7 px** against 4.7. The scorer measures locality, not
 something else.
 
-**Key point:** HELD is the more accurate answer in a gap, but on gate-free water it
-kept one false lock alive about 1.5 s longer. That is the failure the ladder
-is built to refuse, so `assoc_conf` stays **0.0** (off) and HELD is reachable
-only by setting it. Criterion 3 was badly written (an easy clip cannot gain);
-it is recorded as written, not moved.
+**The second variant, run the same day.** HELD may answer only after the lock
+has had two strong detections (`lock_frames.HELD_MIN_CONFIRMS`). Scored on
+clips this rule never saw, class `shark`, criterion 3 counting only clips with
+weak boxes, as written above before the run:
 
-**Caution:** the replay has no follower. On the vehicle FOLLOW would also carry that
-false lock until the decay ends it, so "off" here understates the real
-baseline. That is a reason to measure HELD against FOLLOW on the vehicle, not
-a reason to ship it on this evidence.
+| criterion | measured | verdict |
+|---|---|---|
+| 1 accuracy | **3.7 px vs 4.6 px**, 104 frames; falsifier 119.5 px | **PASS** |
+| 2 safety | 0.0 % → 0.0 % on `octagon_1` and `bin_front_#2` | **PASS, and empty**: neither clip produced a strong false shark, so there was no lock to extend |
+| 3 value | `torpedo_shark_up_1` had one strong frame, so its lock never had two | **FAIL** |
 
-**Next, with its bar written now:** require the lock to have been confirmed by
-at least two strong detections before HELD may answer (a single false strong box
-was what HELD extended). Score it on clips not used here (the `torpedo_shark`
-set, class `shark`), with the same three criteria and criterion 3 restricted
-to clips with weak boxes.
+Rerun on the gate clips with the same rule: accuracy still holds (4.2 vs
+5.1 px), and the gate-free `torpedo` clip still rises **0.6 → 2.1 %**. Two
+confirmations did not fix it: the gate model takes the torpedo board's frame
+for a gate again and again (B-60), so those false locks are confirmed many
+times over. The fault is the model's identity, which no ladder rule can see.
+
+**Warning: the negatives were checked by eye, and two were wrong.** The
+Mirpur `torpedo` and `torpedo_1` clips were picked as shark negatives and
+turned out to hold the shark torpedo board; rendering the boxes caught it.
+Mirpur `gate` was dropped as a shark negative too: its strong shark boxes sit
+on open water, but a shark sign is also in frame. Render before you score.
+
+**Decision (owner, 2026-11-10): HELD ships ON**, `assoc_conf` 0.10 in
+`vision_pi.launch.py`. It is more accurate than what it replaces in every run,
+it cannot acquire, and it cannot add time: the decay still ends every lock
+2.5 s after the last strong box. What it misses is the safety bar on a clip
+where the model is already wrong about identity. 0.0 turns it off.
+
+**Caution:** the replay has no follower. On the vehicle FOLLOW would also carry a
+false lock until the decay ends it, so "off" here understates the baseline.
+The vehicle comparison is HELD against FOLLOW, with the same criteria.
