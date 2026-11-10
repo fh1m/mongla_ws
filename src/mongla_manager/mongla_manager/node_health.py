@@ -284,8 +284,33 @@ class HealthMixin:
         # on VisionState first. Tracked in DEFERRED_FUNCTIONS
         # (mongla_vision/test/test_no_function_is_built_and_uncalled.py).
 
+    def _publish_diagnostics(self) -> None:
+        """The health board on `/diagnostics`, every tick (issue #41).
+
+        The log line speaks only when the overall state changes. This is the
+        whole board, every second, in the message every ROS viewer already
+        draws and a bag keeps, so a run can be read afterwards subsystem by
+        subsystem.
+        """
+        pub = getattr(self, '_diagnostics_pub', None)
+        if pub is None:
+            return
+        from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
+        arr = DiagnosticArray()
+        arr.header.stamp = self.get_clock().now().to_msg()
+        for h in self._health.rows():
+            age = '' if h.at <= 0.0 else f'{h.age_s:.1f}'
+            arr.status.append(DiagnosticStatus(
+                level=bytes([_health.DIAGNOSTIC_LEVEL[h.state]]),
+                name=f'mongla: {h.name}', message=h.evidence,
+                hardware_id='mongla',
+                values=[KeyValue(key='state', value=h.state.name),
+                        KeyValue(key='age_s', value=age)]))
+        pub.publish(arr)
+
     def _health_tick(self) -> None:
         self._health.poll()
+        HealthMixin._publish_diagnostics(self)
         worst = self._health.worst()
         if worst is self._health_last:
             return

@@ -66,6 +66,7 @@ sequenceDiagram
 | `/mongla/imu` · `/mongla/imu_rates` | the board's inertial data | stamped with the board's own clock where available |
 | `/mongla/demand` | the forward and lateral demand in force on the board, `NaN` when unknown | the estimator uses it to predict motion; see *where the demand comes from* below |
 | `/mongla/esc_rpm` | per-thruster RPM | from the board's ESC telemetry; a message count never proves a thruster is alive |
+| `/diagnostics` | the health board, every subsystem every second, as `diagnostic_msgs/DiagnosticArray` | a subsystem that is not reporting is STALE (level 3), never OK; Foxglove's Diagnostics panel draws it and `pool_record.sh` keeps it |
 | `/mongla/flare_order` | the competition order received over the radio | latched |
 
 ### Where the demand comes from
