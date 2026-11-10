@@ -211,6 +211,11 @@ class LockWiringMixin:
         self._det_conf = 0.0
         self._det_cls = ''
         self._det_t = 0.0
+        # HELD (see `_on_det`): a weak box where the lock already is, and the
+        # centre of the last published lock it was judged against.
+        self._held_box, self._held_conf, self._held_t = None, 0.0, 0.0
+        self._held_header = None
+        self._lock_centre = None
         # Bumped on every change of target class (#75). A ladder tick that
         # started under an older one publishes nothing.
         self._gen = 0
@@ -377,7 +382,11 @@ class LockWiringMixin:
         # mismatch is answered by rclpy with one WARN and then silence --
         # clean launch, healthy nodes, zero frames. `mongla_vision.qos` owns
         # these topics and a contract test enforces it.
-        self.create_subscription(Detection2DArray, f'{ns}/detections',
+        # `candidates`, not `detections`: every box down to the detector's
+        # association floor. The acting bar is applied HERE (`act_conf`), and
+        # the boxes under it can only HOLD a target the bar acquired. With no
+        # association floor set, the two topics carry the same boxes.
+        self.create_subscription(Detection2DArray, f'{ns}/candidates',
                                  self._on_det, _qos.DETECTIONS)
         if not self._direct:
             self.create_subscription(Image, f'{ns}/image_raw',

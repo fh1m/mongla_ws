@@ -366,6 +366,8 @@ class LockSetupMixin:
         """Drop all per-target state. Call with `self._lock` held."""
         self._det_box, self._det_conf, self._det_cls = None, 0.0, ''
         self._det_t, self._det_header = 0.0, None
+        self._held_box, self._held_conf, self._held_t = None, 0.0, 0.0
+        self._held_header, self._lock_centre = None, None
         if self._follower is not None:
             self._follower.drop()
         self._anchor_pose, self._anchor_header, self._anchor_label = None, None, ''

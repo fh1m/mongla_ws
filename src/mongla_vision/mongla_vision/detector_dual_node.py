@@ -115,12 +115,13 @@ _CAM_DEFAULTS = {
 
 _DEFAULTS = {
     'model_path': 'yolov11n', 'models': '', 'active_model': '', 'classes': '',
-    # 0.15, NOT the 0.35 every other launch path ships. The HEFs are baked at
-    # 0.05 exactly so this point is reachable, and INT8 costs ~0.08 of score
-    # without moving the box -- so the CUDA number is ~3x too tight here and is
-    # the most likely reason a detection is missed. `hailo.py` warns if it is
-    # raised back.
-    'conf': 0.15, 'model_conf': '', 'image_topic': '',
+    # 0.45: the bar gate_sharks measured, where empty water stops reading as a
+    # gate (3.2 % of gate-free frames, against 40.8 % at the 0.15 this used to
+    # default to on a retracted INT8 allowance; measured-bars sections 59 and
+    # 66). The launches pass the same number. `hailo.py` reads the active
+    # model's own sidecar and warns when `conf` is off ITS bar, so a model
+    # measured differently says so at load.
+    'conf': 0.45, 'model_conf': '', 'image_topic': '',
     'device': 'auto', 'half': True, 'iou': 0.5, 'imgsz': 640,
     'max_det': 100, 'publish_contours': True,
     'publish_debug_image': True, 'debug_image_hz': 5.0,

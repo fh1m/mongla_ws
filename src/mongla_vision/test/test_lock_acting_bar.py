@@ -64,6 +64,14 @@ class _Stub:
         self._det_header = None
         self._det_msg_t = 0.0
         self._det_dt = None
+        self._held_box, self._held_conf, self._held_t = None, 0.0, 0.0
+        self._held_header = None
+        self._lock_centre = None
+        self._gray = None
+
+    def _held_from(self, weak):
+        from mongla_vision.lock_frames import LockFramesMixin
+        return LockFramesMixin._held_from(self, weak)
 
     def get_logger(self):
         return types.SimpleNamespace(warn=lambda *a, **k: None,
@@ -291,3 +299,59 @@ def test_the_detector_cadence_is_read_off_capture_stamps():
         m.header.stamp.sec, m.header.stamp.nanosec = int(s), int((s % 1) * 1e9)
         _on_det(stub, m)
     assert stub._det_dt == pytest.approx(1 / 15.0, rel=0.02)
+
+
+# --------------------------------------------------------------------------- #
+#  HELD: a box under the bar may keep the lock where it is, and nothing else
+# --------------------------------------------------------------------------- #
+def _locked_at(cx, cy, act_conf=0.45):
+    import numpy as np
+    s = _Stub(act_conf=act_conf)
+    s._lock_centre = (cx, cy)
+    s._gray = np.zeros((480, 640), np.uint8)
+    return s
+
+
+def test_a_weak_box_where_the_lock_is_is_held():
+    s = _locked_at(320.0, 240.0)
+    _on_det(s, _msg(_det(0.20, cx=340.0, cy=250.0)))
+    assert s._det_box is None                       # never acted on
+    assert s._held_box is not None and s._held_conf == pytest.approx(0.20)
+
+
+def test_a_weak_box_far_from_the_lock_is_not():
+    """Outside the prior region the acting bar still applies: 0.25 x 640 is
+    160 px, the radius measured in measured-bars section 56."""
+    s = _locked_at(100.0, 240.0)
+    _on_det(s, _msg(_det(0.30, cx=500.0, cy=240.0)))
+    assert s._held_box is None
+
+
+def test_with_no_lock_nothing_is_held():
+    """A weak box keeps a target; it never starts one."""
+    s = _locked_at(320.0, 240.0)
+    s._lock_centre = None
+    _on_det(s, _msg(_det(0.30)))
+    assert s._held_box is None
+
+
+def test_the_nearest_weak_box_is_held_not_the_highest():
+    """Locality is the evidence a weak box is the target; its score is not
+    -- the band under the bar holds confident boxes on empty water (B-59)."""
+    s = _locked_at(320.0, 240.0)
+    _on_det(s, _msg(_det(0.40, cx=420.0), _det(0.15, cx=325.0)))
+    assert s._held_conf == pytest.approx(0.15)
+
+
+def test_a_strong_box_clears_the_held_one():
+    s = _locked_at(320.0, 240.0)
+    _on_det(s, _msg(_det(0.20)))
+    _on_det(s, _msg(_det(0.80)))
+    assert s._held_box is None and s._det_box is not None
+
+
+def test_a_weak_box_of_another_class_is_not_held():
+    s = _locked_at(320.0, 240.0)
+    s._cls = 'gate'
+    _on_det(s, _msg(_det(0.30, name='shark')))
+    assert s._held_box is None

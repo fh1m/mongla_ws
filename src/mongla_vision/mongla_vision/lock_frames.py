@@ -127,6 +127,7 @@ class LockFramesMixin:
     def _on_det(self, msg):
         best = None
         best_name = ''
+        weak = []
         for d in msg.detections:
             if not d.results:
                 continue
@@ -159,6 +160,7 @@ class LockFramesMixin:
             # and conflating them turned a 0.15 detector bar into a 0.15
             # control bar.
             if score < self._act_conf:
+                weak.append((score, d.bbox))
                 continue
             if best is None or score > best[0]:
                 best_name = name
@@ -180,7 +182,11 @@ class LockFramesMixin:
             self.get_logger().warn(
                 f'[LOCK ] detection {why} -- the authority decay is measuring '
                 f'age since ARRIVAL, not since capture. Check use_sim_time.')
+        held = None if best is not None else self._held_from(weak)
         with self._lock:
+            self._held_box, self._held_conf = (None, 0.0) if held is None else held
+            if held is not None:
+                self._held_t, self._held_header = t, msg.header
             if 0.0 < self._det_msg_t < t:
                 dt = t - self._det_msg_t
                 # EMA over ~10 messages: one dropped frame should not swing
@@ -195,5 +201,38 @@ class LockFramesMixin:
                 self._det_cls = best_name
                 self._det_t = t
                 self._det_header = msg.header
+
+    def _held_from(self, weak):
+        """The weak box nearest the lock, if one is near enough, as (box, score).
+
+        A box under the acting bar may keep a target and never start one, so
+        it is judged against where the lock IS: inside the prior region the
+        detector's own floor is enough, outside it the acting bar still
+        applies (`visibility.region_conf_bar`, with the lock's own centre as
+        the prior). The region is a quarter of the frame width -- 160 px at
+        640, the radius at which 84 % of real weak boxes and 28 % of random
+        points fell near the last sighting (measured-bars section 56). With
+        no lock, every box gets the acting bar.
+        """
+        # getattr: `_on_det` can run before __init__ has set the ladder's
+        # state (the subscription exists first; see lock_wiring).
+        prior = getattr(self, '_lock_centre', None)
+        gray = getattr(self, '_gray', None)
+        if prior is None or gray is None or not weak:
+            return None
+        from .tracking.visibility import region_conf_bar
+        w = float(gray.shape[1])
+        best = None
+        for score, b in weak:
+            cx, cy = b.center.position.x, b.center.position.y
+            bar = region_conf_bar(prior, cx, cy, w, inside_bar=0.0,
+                                  outside_bar=self._act_conf)
+            if score < bar:
+                continue
+            dist = (cx - prior[0]) ** 2 + (cy - prior[1]) ** 2
+            if best is None or dist < best[0]:
+                hw, hh = b.size_x * 0.5, b.size_y * 0.5
+                best = (dist, (cx - hw, cy - hh, cx + hw, cy + hh), score)
+        return None if best is None else (best[1], best[2])
 
     # -- the ladder --------------------------------------------------------- #

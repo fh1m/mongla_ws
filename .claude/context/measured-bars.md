@@ -134,6 +134,7 @@ is how `recommend()` happened.
 - [68. THE VEHICLE'S LOOPS HOLD THEIR RATES — and a relative sleep does not](#68-the-vehicles-loops-hold-their-rates--and-a-relative-sleep-does-not)
 - [69. THE RESTART POLICY — two decided numbers, two derived, and the vehicle refuted my first camera design (2026-11-10)](#69-the-restart-policy--two-decided-numbers-two-derived-and-the-vehicle-refuted-my-first-camera-design-2026-11-10)
 - [70. KUTUM IN THE HEALTH REPORT — the Pi and the Hailo-8 as one machine, graded by their own firmware (2026-11-10)](#70-kutum-in-the-health-report--the-pi-and-the-hailo-8-as-one-machine-graded-by-their-own-firmware-2026-11-10)
+- [72. THE HELD RUNG — a weak box where the lock is: more accurate, and it failed its own safety bar (2026-11-10)](#72-the-held-rung--a-weak-box-where-the-lock-is-more-accurate-and-it-failed-its-own-safety-bar-2026-11-10)
 <!-- contents:end -->
 
 ---
@@ -7132,3 +7133,58 @@ every **1 s**, ten times the shipped rate: forward detections held
 **15.000 Hz** before and **15.000 Hz** during, over 32 reads (slowest 144 ms).
 15 Hz is the camera's rate, so this shows the reads cost no frames; it does not
 show the margin at a detector-bound rate. Idle, no thrusters, no target in view.
+
+---
+
+## 72. THE HELD RUNG — a weak box where the lock is: more accurate, and it failed its own safety bar (2026-11-10)
+
+**The idea.** A box under the acting bar may *keep* a lock the bar acquired,
+when it lands near where the lock already is. It is ByteTrack's second stage
+inside the ladder (`Rung.HELD`, `lock_frames._held_from`), judged with
+`visibility.region_conf_bar` against the lock's own centre at the radius
+section 56 measured (a quarter of the frame width). It never acquires and never
+resets the decay clock. The detector sends those boxes on `candidates`, which
+only the tracker and the ladder read, never on `detections`.
+
+**The scorer was written first** (`tools/studies/held_rung_score.py`, its
+docstring). It replays the real `arbitrate` and `_held_from` over every box the
+HEF emitted down to 0.10, with no follower and no anchor, so any change is
+HELD's. Truth for accuracy is the detector's *next* box over the bar within
+0.25 s, which is a later, independent observation.
+
+Collected on Kutum through `gate_sharks.hef`, `act_conf` 0.45, 90 s per clip at
+the clips' own timestamps (about 31 fps):
+
+| clip | weak boxes | lock off | lock with HELD |
+|---|---|---|---|
+| `final_run/gate_back` (gate, hard) | 444 | detection 6.0 % | detection 6.0 %, **held 5.5 %** |
+| `Mirpur/gate` (gate, easy) | 0 | detection 100 % | unchanged |
+| `Mirpur/torpedo` (no gate) | — | lock 0.6 % | lock **2.2 %** |
+| `Mirpur/torpedo_1` (no gate) | — | lock 0.0 % | lock 0.0 % |
+
+| criterion | bar | measured | verdict |
+|---|---|---|---|
+| 1 accuracy | held error < carried error, ≥ 30 frames | **4.2 px vs 5.1 px**, 82 frames | **PASS** |
+| 2 safety | lock on gate-free clips rises ≤ 1.0 point | **+1.6** on `torpedo` | **FAIL** |
+| 3 value | detector-sourced lock rises on every positive clip | `gate_back` 6.0 → 11.5 %; `gate` cannot rise (no weak boxes) | **FAIL as written** |
+
+**Falsifier:** `--shuffle` scatters every weak box at random. Criterion 1 must
+fail, and it does: **114.7 px** against 4.7. The scorer measures locality, not
+something else.
+
+**Key point:** HELD is the more accurate answer in a gap, but on gate-free water it
+kept one false lock alive about 1.5 s longer. That is the failure the ladder
+is built to refuse, so `assoc_conf` stays **0.0** (off) and HELD is reachable
+only by setting it. Criterion 3 was badly written (an easy clip cannot gain);
+it is recorded as written, not moved.
+
+**Caution:** the replay has no follower. On the vehicle FOLLOW would also carry that
+false lock until the decay ends it, so "off" here understates the real
+baseline. That is a reason to measure HELD against FOLLOW on the vehicle, not
+a reason to ship it on this evidence.
+
+**Next, with its bar written now:** require the lock to have been confirmed by
+at least two strong detections before HELD may answer (a single false strong box
+was what HELD extended). Score it on clips not used here (the `torpedo_shark`
+set, class `shark`), with the same three criteria and criterion 3 restricted
+to clips with weak boxes.

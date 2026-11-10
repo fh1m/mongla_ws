@@ -24,9 +24,12 @@ class DetectorSetupMixin:
         self.declare_parameter('device',              'auto')
         self.declare_parameter('half',                True)   # fp16: ~half the VRAM; coerced off on non-CUDA (yolo.py)
         self.declare_parameter('conf',                0.35)
-        # BYTE association floor: PUBLISH down to this, while `conf` stays the
-        # floor the control loop steers on (`vision.ctrl_conf`). 0.0 = OFF, and
-        # off is byte-for-byte the previous behaviour.
+        # BYTE association floor: boxes from here up to `conf` go out on
+        # `candidates` only (the tracker and the lock ladder), never on
+        # `detections`, so nothing that steers can act on one. 0.0 = OFF, and
+        # off is byte-for-byte the previous behaviour. Off by default: the
+        # ladder's HELD rung failed its own safety bar on it (measured-bars
+        # section 72).
         #
         # Measured on real footage, publish floor the ONLY variable: presence on
         # hard clips 8.3 -> 34.8 %, and NO change on clips already at 100 %. The
