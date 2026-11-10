@@ -95,7 +95,7 @@ There is no OBB model and no optical-flow model in the Hailo-8 Zoo. CLIP and Sig
 **Proposals:**
 
 - **3a. Retrain every task model on YOLOv8s** (software, 1–2 days per model on the existing datasets). Expected: ≈4.7× chip rate (98 → ~460 FPS, measured on the stock model), +5.6 COCO mAP over 11n, and much smaller swap and SRAM residency. That cheapens the dual-camera activation turn-taking (`hailo.py:188-208`).
-  - Falsifier: held-out-**session** recall from `tools/model_select.py`. If v8s does not match or beat the current 11n on cross-session recall, keep 11n. A higher FPS number is not a reason to switch.
+  - Falsifier: held-out-**session** recall from `tools/studies/model_select.py`. If v8s does not match or beat the current 11n on cross-session recall, keep 11n. A higher FPS number is not a reason to switch.
 - **3b. yolov8s-pose with 4–8 keypoints per rigid prop** (torpedo board corners, gate top/bottom, bin rim corners), fed straight to the existing SQPnP/IPPE interval.
   - This is CMU's 2026 route. It needs no template, which XFeat does, and the keypoint visibility flag gives an occlusion state for free.
   - Apply doctrine reflex 2 when labelling: order corners by a second feature so the board's symmetry does not become a flip.

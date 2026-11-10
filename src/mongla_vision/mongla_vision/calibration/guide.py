@@ -36,7 +36,7 @@ The files:
     solver.py          the fit; also run as a subprocess by the Solve button
 
 Usage (stop the vision launch first -- it holds the cameras):
-    python3 tools/fov_calibrate_web.py --device 3 --out ~/fantech_cal
+    python3 tools/pool/fov_calibrate_web.py --device 3 --out ~/fantech_cal
 """
 import argparse
 import glob
@@ -55,7 +55,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 def _sibling(stem):
     """A module beside this file, loaded by path.
 
-    `tools/fov_calibrate_web.py` runs this file without a sourced ROS or an
+    `tools/pool/fov_calibrate_web.py` runs this file without a sourced ROS or an
     installed package, where a relative import has no parent to resolve
     against. Loading the sibling by path keeps that entry point ROS-free.
     """

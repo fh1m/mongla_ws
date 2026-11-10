@@ -86,7 +86,7 @@ trt_export.log
 # ─── Knowledge-graph / code-analysis tool artifacts (regenerable) ──────
 .understand-anything/
 
-# rendered doc previews (tools/preview_docs.py) - look at them, never publish them
+# rendered doc previews (tools/site/preview_docs.py) - look at them, never publish them
 docs/_preview_*.html
 
 # rendered README preview (tools/readme_preview.html)
@@ -94,8 +94,8 @@ docs/_readme_preview.html
 docs/__repo__
 
 # control_bench build artefacts (the .so is rebuilt from the firmware checkout)
-tools/control_bench/libcontrolbench.so
-tools/control_bench/.firmware_rev
+tools/bench/control_bench/libcontrolbench.so
+tools/bench/control_bench/.firmware_rev
 
 # ─── Session transcripts ───────────────────────────────────────────────
 # reasoning: a 965 KB Claude Code transcript was committed to this public
@@ -104,7 +104,7 @@ tools/control_bench/.firmware_rev
 *-transcript.txt
 
 # Hailo DFC logs: written into the working directory by the compiler.
-# tools/hailo_compile.py runs it from its --out directory; never commit these.
+# tools/bench/hailo_compile.py runs it from its --out directory; never commit these.
 acceleras.log
 allocator.log
 hailo_sdk.*.log

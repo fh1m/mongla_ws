@@ -12,7 +12,7 @@ You review **YOLO11 training and detection configuration** for the Mongla vision
 - **Detection thresholds** — `conf` and NMS/`iou` vs pool conditions (turbidity, glare).
   Gate/flare default `conf=0.45`; flag over-confident thresholds that drop real targets.
 - **Inference budget** — the vehicle runs a Hailo-8 `.hef` (INT8, compiled by
-  `tools/hailo_compile.sh`); `imgsz` vs camera res; `yolo11n` vs larger against the measured
+  `tools/bench/hailo_compile.sh`); `imgsz` vs camera res; `yolo11n` vs larger against the measured
   frame budget (`hailo-vision.md`). Flag a model too heavy for it, and a compile whose INT8
   output was not checked against float. The HEF's NMS threshold is baked in: `conf` can only
   tighten it.
@@ -31,6 +31,6 @@ You review **YOLO11 training and detection configuration** for the Mongla vision
 
 - `models/<stem>.yaml` (sidecars beside each `.hef`/`.pt`), `src/mongla_vision/config/cameras.yaml`
 - `.claude/context/perception/vision-architecture.md`, `ROADMAP.md`, `depth-estimation.md`
-- `src/mongla_vision/mongla_vision/detection/{hailo,yolo,factory}.py`, `tools/hailo_compile.sh`
+- `src/mongla_vision/mongla_vision/detection/{hailo,yolo,factory}.py`, `tools/bench/hailo_compile.sh`
 
 Report only. Do not edit files.
