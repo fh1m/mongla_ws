@@ -10,7 +10,14 @@
 for, a neural accelerator that does nothing but see, and a rule that no number appears anywhere
 in this repository without the measurement that produced it.**
 
-[![tests](https://img.shields.io/badge/tests-4%20742%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![in water](https://img.shields.io/badge/in%20water-never-critical)](#what-is-true-today) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
+[![tests](https://img.shields.io/badge/tests-4%20742%20passing-brightgreen)](#the-tests-are-the-argument) [![control loop](https://img.shields.io/badge/control%20loop-500%20Hz-ff0000)](#1-a-control-loop-is-a-machine-that-asks-one-question) [![vision](https://img.shields.io/badge/vision-Hailo--8%20%C2%B7%2053.9%20Hz-004eff)](#4-a-neural-network-on-a-chip-that-only-does-that) [![ROS 2](https://img.shields.io/badge/ROS%202-Jazzy%20%C2%B7%20Humble-blue)](#run-it) [![water](https://img.shields.io/badge/water-RoboSub%202025%20%C2%B7%202026%20%7C%20this%20platform%3A%20not%20yet-orange)](docs/evidence/lineage.md) [![licence](https://img.shields.io/badge/licence-MIT-lightgrey)](LICENSE)
+
+**Lineage.** The stack this repository began as competed at **RoboSub 2026** (8th of 58,
+6 234 points) on the programme's Pixhawk vehicle, a year after the author's vision stack did
+at **RoboSub 2025** (8th of 58, 4 083 points). The current platform, this stack on the SROT
+board and Kutum in the Mongla hull, has **not yet been in water**. That earlier stack is kept
+whole at the tag `last-with-pixhawk-and-sim`. Each event, what ran and the evidence for it:
+[the water lineage](docs/evidence/lineage.md).
 
 **[The Shift](https://fh1m.github.io/mongla_ws/the-shift.html)** · **[Capability map](https://fh1m.github.io/mongla_ws/capability-map.html)** · **[The site](https://fh1m.github.io/mongla_ws/)** · [Run it](#run-it) · [Fundamentals](#the-fundamentals) · [Docs](#every-document-in-this-repository) · [Story](#three-acts)
 
@@ -43,9 +50,12 @@ success while doing nothing.
 | **BENCH** | verified on hardware, on recorded footage, or against the live board | most of it |
 | **BUILT** | implemented, covered by tests, never flown | a lot of it |
 | **BLOCKED** | waiting on water, a firmware merge, or hardware | seven things, [listed](#what-stands-in-the-way) |
-| **WATER** | verified with the vehicle swimming | **nothing. not one row.** |
+| **WATER** | verified with the current platform swimming | **nothing yet.** The earlier vehicles' runs are in the [water lineage](docs/evidence/lineage.md) |
 
-> **This vehicle has never been in water.** Every number in this README was measured on a bench,
+> **The current platform has never been in water: this stack, on the SROT board and Kutum, in
+> the Mongla hull.** Its predecessors have, on another vehicle and another autopilot, and none of
+> that water validation carries over to code that has changed since
+> ([lineage](docs/evidence/lineage.md)). Every number in this README was measured on a bench,
 > on real recorded footage, or on the live board over a cable. The board's depth loop has run
 > closed in water only in its own team's 2026-08-06/07 test, on an older hull, and never in the
 > automatic mode every move uses. If you are here to judge whether the software works underwater, the honest answer is
@@ -1260,6 +1270,6 @@ of the same repository and the same licence.
 
 **[The site](https://fh1m.github.io/mongla_ws/)** · **[The Shift](https://fh1m.github.io/mongla_ws/the-shift.html)** · **[Capability map](https://fh1m.github.io/mongla_ws/capability-map.html)**
 
-<sub>This stack and this hull have never been in water. Every number above says where it was taken.</sub>
+<sub>The current platform, this stack on the SROT board and Kutum in the Mongla hull, has never been in water; its predecessors have (<a href="docs/evidence/lineage.md">lineage</a>). Every number above says where it was taken.</sub>
 
 </div>

@@ -159,6 +159,16 @@ set -e
 # are different facts, and a release must say which it has.
 r "python3 ~/$REL/kutum/release_manifest.py gate ~/$REL $GATE" || warn "could not record the gate verdict"
 
+# A passed gate on a clean commit from main becomes a GitHub release, with this
+# release's release.json as its bill of materials (#96). cut_release.sh says why
+# when it does not cut one, and never changes this script's exit code.
+MANIFEST_COPY="$(mktemp)"
+scp -q -o BatchMode=yes "$TARGET:~/$REL/release.json" "$MANIFEST_COPY" 2>/dev/null \
+  || : > "$MANIFEST_COPY"
+(cd "$REPO_ROOT" && bash kutum/cut_release.sh "$GATE" "$dirty" "$MANIFEST_COPY") \
+  || warn "the release step failed; the deploy stands"
+rm -f "$MANIFEST_COPY"
+
 # Explain only the FAIL lines this run printed. A fixed list explained faults
 # the vehicle did not have and missed the one it did.
 saw() { grep -q -- "$1" "$GATE_LOG"; }
