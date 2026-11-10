@@ -65,6 +65,10 @@ def test_a_mirror_blip_is_retried_before_it_fails_a_required_check():
     retries = code.index('Acquire::Retries "5"')
     assert retries < code.index('apt-get update'), 'retries must be set before apt runs'
     assert 'Fix-Missing' not in code and '--fix-missing' not in code
+    mirror = code.index('azure.archive.ubuntu.com')
+    assert mirror < code.index('apt-get update'), 'the mirror must be set before apt runs'
+    # Both layouts: jammy's sources.list (humble) and noble's deb822 (jazzy).
+    assert '/etc/apt/sources.list.d/ubuntu.sources' in code and '/etc/apt/sources.list ' in code
 
 
 def test_an_index_refresh_that_never_succeeds_still_fails_the_job(tmp_path):

@@ -22,6 +22,14 @@ echo "== ROS $distro at $(git rev-parse --short HEAD 2>/dev/null || echo unknown
 # mirror sync. apt retries a download itself; the index refresh is retried
 # here, 30 s apart. Either still failing after that fails the job.
 echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
+# The archive mirror GitHub's own runners use, beside them in Azure: on
+# 2026-11-10 archive.ubuntu.com took 33 of a 45 minute budget to serve the
+# dependencies. Same archive, same packages; only the host changes.
+for f in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+  if [[ -f "$f" ]]; then
+    sed -i 's|http://archive.ubuntu.com/ubuntu|http://azure.archive.ubuntu.com/ubuntu|g' "$f"
+  fi
+done
 for attempt in 1 2 3 4; do
   if apt-get update -qq; then break; fi
   if [[ "$attempt" == 4 ]]; then echo "ERROR: apt-get update failed 4 times"; exit 100; fi
