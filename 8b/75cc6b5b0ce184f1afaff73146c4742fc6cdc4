@@ -1,0 +1,44 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 192-208
+CLAUDE.md
+  h_f1b9066eb9899c 256-258
+README.md
+  h_f1b9066eb9899c 390-393
+docs/capability-map.md
+  h_f1b9066eb9899c 138
+docs/index.html
+  h_f1b9066eb9899c 1203
+src/mongla_vision/test/test_calibration_recovers_ground_truth.py
+  h_f1b9066eb9899c 2,26-27,34,165-168
+test/test_every_tool_is_indexed.py
+  h_f1b9066eb9899c 1-57
+test/test_fit_free_decay.py
+  h_f1b9066eb9899c 9
+test/test_fit_thruster_response.py
+  h_f1b9066eb9899c 15
+test/test_no_capability_is_unreachable_anywhere.py
+  h_f1b9066eb9899c 94-98,111-117
+tools/README.md
+  h_f1b9066eb9899c 1-165
+tools/fov_calibrate_web.py
+  h_f1b9066eb9899c 2-3
+tools/fov_solve.py
+  h_f1b9066eb9899c 2-3
+tools/gen_tools_index.py
+  h_f1b9066eb9899c 1-127
+tools/run_repo_integrity.py
+  h_f1b9066eb9899c 35
+tools/srot_loop_soak.py
+  h_f1b9066eb9899c 1-2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "8b75cc6b5b0ce184f1afaff73146c4742fc6cdc4",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
