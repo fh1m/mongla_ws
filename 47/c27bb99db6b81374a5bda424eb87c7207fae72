@@ -1,0 +1,82 @@
+.claude/context/BUGS.md
+  h_f1b9066eb9899c 192-208,469-500
+.claude/context/ROADMAP.md
+  h_f1b9066eb9899c 22-24,62,65,156,169
+.claude/context/measured-bars.md
+  h_f1b9066eb9899c 135,7049-7099
+.claude/context/packages/mongla_localization/README.md
+  h_f1b9066eb9899c 135
+.claude/context/packages/mongla_vision/README.md
+  h_f1b9066eb9899c 200
+.claude/context/platform/launch-combinations.md
+  h_f1b9066eb9899c 338-363
+.github/workflows/backlog-drift.yml
+  h_f1b9066eb9899c 1-35
+CLAUDE.md
+  h_f1b9066eb9899c 256-258
+README.md
+  h_f1b9066eb9899c 390-393,777,780
+docs/capability-map.md
+  h_f1b9066eb9899c 138
+docs/index.html
+  h_f1b9066eb9899c 1203,1734-1736,1738
+src/mongla_localization/mongla_localization/launch_respawn.py
+  h_f1b9066eb9899c 1-74
+src/mongla_localization/test/test_a_dead_process_restarts_three_times.py
+  h_f1b9066eb9899c 1-62
+src/mongla_manager/launch/bringup.launch.py
+  h_f1b9066eb9899c 45-46,61,337-338,448-449,471-472,504-513,522
+src/mongla_vision/launch/vision.launch.py
+  h_f1b9066eb9899c 39-40,50,222-223,250-251,272-273,290-291,304-305,322-323,360-370
+src/mongla_vision/launch/vision_pi.launch.py
+  h_f1b9066eb9899c 41,453-482,484-493,495-525,605-630,644-650,653-658
+src/mongla_vision/mongla_vision/camera_node.py
+  h_f1b9066eb9899c 52,374-376,379-383,448-508
+src/mongla_vision/mongla_vision/cameras/reopen.py
+  h_f1b9066eb9899c 1-82
+src/mongla_vision/test/test_a_lost_camera_is_reopened_three_times.py
+  h_f1b9066eb9899c 1-178
+src/mongla_vision/test/test_calibration_recovers_ground_truth.py
+  h_f1b9066eb9899c 2,26-27,34,165-168
+src/mongla_vision/test/test_shipped_constants_match_the_ledger.py
+  h_f1b9066eb9899c 75-86
+test/test_backlog_drift.py
+  h_f1b9066eb9899c 1-133
+test/test_every_launched_process_restarts.py
+  h_f1b9066eb9899c 1-61
+test/test_every_tool_is_indexed.py
+  h_f1b9066eb9899c 1-57
+test/test_fit_free_decay.py
+  h_f1b9066eb9899c 9
+test/test_fit_thruster_response.py
+  h_f1b9066eb9899c 15
+test/test_no_capability_is_unreachable_anywhere.py
+  h_f1b9066eb9899c 94-98,111-117
+tools/README.md
+  h_f1b9066eb9899c 1-166
+tools/backlog_drift.py
+  h_f1b9066eb9899c 1-247
+tools/fov_calibrate_web.py
+  h_f1b9066eb9899c 2-3
+tools/fov_solve.py
+  h_f1b9066eb9899c 2-3
+tools/gen_tools_index.py
+  h_f1b9066eb9899c 1-127
+tools/restart_blind_time.py
+  h_f1b9066eb9899c 1-191
+tools/run_repo_integrity.py
+  h_f1b9066eb9899c 35
+tools/srot_loop_soak.py
+  h_f1b9066eb9899c 1-2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "47c27bb99db6b81374a5bda424eb87c7207fae72",
+  "prompts": {},
+  "humans": {
+    "h_f1b9066eb9899c": {
+      "author": "fh1m <fahim.2002.faisal@gmail.com>"
+    }
+  }
+}
