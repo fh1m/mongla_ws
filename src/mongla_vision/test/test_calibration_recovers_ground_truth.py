@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ground-truth verification for fov_solve.
+"""The calibration solver recovers a camera it was given, and refuses a capture that cannot.
 
 Every metric in a calibration is internal to the optimizer, so a calibration
 can be self-consistently wrong -- this camera has already produced fx = 835.7,
@@ -23,14 +23,15 @@ corner noise, and check what comes back.
                          though the residual looks fine. This is the failure
                          that produced fx = 835.7 and it was invisible in RMS.
 
-Run:  python3 test_fov_solve.py
+It ran by hand from tools/ until 2026-11-10, where nothing collected it, and it
+had broken when `fov_solve.py` became a shim. It runs with the suite now.
 """
 from __future__ import annotations
 
 import numpy as np
 import cv2
 
-import fov_solve as fs
+from mongla_vision.calibration import solver as fs
 
 W, H = 1280, 720
 COLS, ROWS, SQ = 8, 6, 0.025
@@ -159,6 +160,10 @@ def main() -> int:
     print("ALL CHECKS PASSED -- pipeline recovers known ground truth,")
     print("resists overfitting on a flat board, and flags a degenerate capture.")
     return 0
+
+
+def test_the_solver_recovers_known_ground_truth():
+    assert main() == 0
 
 
 if __name__ == '__main__':
